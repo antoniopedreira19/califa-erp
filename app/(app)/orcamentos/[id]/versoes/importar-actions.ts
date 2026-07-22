@@ -27,8 +27,6 @@ export type PreviewResult =
         linhas_ignoradas: number;
         arquivo_nome: string;
         arquivo_tamanho: number;
-        /** TEMPORÁRIO: amostras cruas do cell.value pra debug de decimais. */
-        debug_samples?: ParseResultado["debug_samples"];
       };
     }
   | { ok: false; message: string };
@@ -147,7 +145,6 @@ export async function previewImportacao(
     linhas_ignoradas: parsed.linhas_ignoradas,
     arquivo_nome: arq.nome,
     arquivo_tamanho: arq.tamanho,
-    debug_samples: parsed.debug_samples,
   };
 
   return { ok: true, preview };

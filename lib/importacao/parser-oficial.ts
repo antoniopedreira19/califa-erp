@@ -74,18 +74,6 @@ export interface ParseResultado {
   linhas_lidas: number;
   linhas_importadas: number;
   linhas_ignoradas: number;
-  /** TEMPORÁRIO: dump do cell.value bruto para debug de decimais. */
-  debug_samples?: DebugSample[];
-}
-
-export interface DebugSample {
-  linha: number;
-  item: string;
-  colD_raw: string; // JSON.stringify do cell.value original
-  colD_typeof: string;
-  colD_parsed: number;
-  colE_parsed: number;
-  colF_parsed: number;
 }
 
 // ---------- helpers de célula ----------
@@ -220,7 +208,6 @@ export async function parseOficial(
   const grupos: ParseGrupo[] = [];
   let grupoAtual: ParseGrupo | null = null;
   let percentualHonorarios: number | null = null;
-  const debugSamples: DebugSample[] = [];
 
   let headerEncontrado = false;
   let linhasLidas = 0;
@@ -228,9 +215,6 @@ export async function parseOficial(
   let linhasIgnoradas = 0;
 
   ws.eachRow({ includeEmpty: false }, (row, rowNumber) => {
-    // Captura o cell.value BRUTO da col D antes de normalizar (pra debug).
-    const rawColD = row.getCell(4).value;
-
     // Lê colunas A–H (8 colunas).
     const cells: string[] = [];
     for (let c = 1; c <= 8; c++) {
@@ -344,25 +328,6 @@ export async function parseOficial(
         linha_xlsx: rowNumber,
       });
       linhasImportadas++;
-
-      // DEBUG TEMPORÁRIO: captura amostras dos itens com decimal suspeito
-      // (valor não é inteiro OU virou um número redondo grande — provável
-      // vítima do bug). Limite de 10 amostras pra não estourar payload.
-      if (debugSamples.length < 10) {
-        const naoRedondo = valorD.n % 1 !== 0;
-        const suspeitoDeQuebra = valorD.n >= 100 && valorD.n % 5 === 0;
-        if (naoRedondo || suspeitoDeQuebra) {
-          debugSamples.push({
-            linha: rowNumber,
-            item: nomeItem,
-            colD_raw: safeStringify(rawColD),
-            colD_typeof: typeof rawColD,
-            colD_parsed: valorD.n,
-            colE_parsed: qtd.ok ? qtd.n : 1,
-            colF_parsed: dm.ok ? dm.n : 1,
-          });
-        }
-      }
       return;
     }
 
@@ -398,22 +363,5 @@ export async function parseOficial(
     linhas_lidas: linhasLidas,
     linhas_importadas: linhasImportadas,
     linhas_ignoradas: linhasIgnoradas,
-    debug_samples: debugSamples,
   };
-}
-
-/**
- * JSON.stringify seguro para objetos do ExcelJS (que às vezes têm ciclos
- * ou getters). Usado só no debug do preview.
- */
-function safeStringify(v: unknown): string {
-  try {
-    return JSON.stringify(v, (_k, val) => {
-      if (typeof val === "function") return "[fn]";
-      if (typeof val === "bigint") return val.toString();
-      return val;
-    });
-  } catch {
-    return String(v);
-  }
 }
