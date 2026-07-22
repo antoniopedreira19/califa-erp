@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, FileStack, Lock } from "lucide-react";
+import { ArrowLeft, FileStack, Plus, Lock } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { listActiveMembers } from "@/lib/data/members";
@@ -10,15 +10,8 @@ import {
   type Orcamento,
 } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { OrcamentoForm } from "../orcamento-form";
+import { OrcamentoEditorDrawer } from "../orcamento-editor-drawer";
 
 export const dynamic = "force-dynamic";
 
@@ -41,6 +34,12 @@ function statusBadgeClasses(status: Orcamento["status"]): string {
   }
 }
 
+function formatDate(iso: string | null): string {
+  if (!iso) return "—";
+  const [year, month, day] = iso.slice(0, 10).split("-");
+  return `${day}/${month}/${year}`;
+}
+
 export default async function OrcamentoDetailPage({
   params,
 }: {
@@ -52,10 +51,12 @@ export default async function OrcamentoDetailPage({
   const [orcRes, clientesRes, responsaveis] = await Promise.all([
     supabase
       .from("orcamentos")
-      .select("*")
+      .select(
+        "*, cliente:clientes(id, nome_fantasia), responsavel:profiles!responsavel_id(id, nome)",
+      )
       .eq("id", params.id)
       .eq("tenant_id", session.activeTenant.id)
-      .maybeSingle<Orcamento>(),
+      .maybeSingle(),
     supabase
       .from("clientes")
       .select("id, nome_fantasia")
@@ -66,13 +67,36 @@ export default async function OrcamentoDetailPage({
   ]);
 
   if (orcRes.error) console.error("[orcamentos.detail]", orcRes.error.message);
-  const orcamento = orcRes.data;
-  if (!orcamento) notFound();
+  const raw = orcRes.data as any;
+  if (!raw) notFound();
 
+  const orcamento: Orcamento = {
+    id: raw.id,
+    tenant_id: raw.tenant_id,
+    codigo: raw.codigo,
+    nome: raw.nome,
+    cliente_id: raw.cliente_id,
+    responsavel_id: raw.responsavel_id,
+    status: raw.status,
+    tipo: raw.tipo,
+    campanha: raw.campanha,
+    data_inicio_prevista: raw.data_inicio_prevista,
+    data_fim_prevista: raw.data_fim_prevista,
+    created_by: raw.created_by,
+    created_at: raw.created_at,
+    updated_at: raw.updated_at,
+  };
+  const clienteNome: string | null = raw.cliente?.nome_fantasia ?? null;
+  const responsavelNome: string | null = raw.responsavel?.nome ?? null;
   const clientes = (clientesRes.data ?? []) as Pick<Cliente, "id" | "nome_fantasia">[];
 
   const protegido =
     orcamento.status === "aprovado" || orcamento.status === "job_criado";
+
+  const periodo =
+    orcamento.data_inicio_prevista || orcamento.data_fim_prevista
+      ? `${formatDate(orcamento.data_inicio_prevista)} → ${formatDate(orcamento.data_fim_prevista)}`
+      : null;
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
@@ -85,66 +109,117 @@ export default async function OrcamentoDetailPage({
           Voltar para orçamentos
         </Link>
 
-        <div className="mt-3 flex flex-wrap items-center gap-3">
+        <div className="mt-3">
           <p className="font-mono text-xs font-semibold text-muted-foreground">
             {orcamento.codigo}
           </p>
-          <h1 className="text-3xl font-bold tracking-tight">{orcamento.nome}</h1>
-          <Badge className={cn("border", statusBadgeClasses(orcamento.status))}>
-            {orcamentoStatusLabel(orcamento.status)}
-          </Badge>
-        </div>
-      </div>
-
-      {/* Edição / dados */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Dados do orçamento</CardTitle>
-          <CardDescription>
-            Alterações são registradas em auditoria.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {protegido ? (
-            <div className="rounded-xl border border-dashed border-border bg-muted/30 p-6 flex items-start gap-3">
-              <Lock className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
-              <div className="text-sm text-muted-foreground">
-                Este orçamento está em estado protegido (
-                <strong>{orcamentoStatusLabel(orcamento.status)}</strong>).
-                Alterações neste estágio precisam ser feitas pelas rotinas de
-                aprovação (Task 004) ou criação de job (Task 005), que ainda
-                serão implementadas.
-              </div>
-            </div>
-          ) : (
-            <OrcamentoForm
+          <div className="mt-1 flex flex-wrap items-center gap-3">
+            <h1 className="text-3xl font-bold tracking-tight">{orcamento.nome}</h1>
+            <Badge className={cn("border", statusBadgeClasses(orcamento.status))}>
+              {orcamentoStatusLabel(orcamento.status)}
+            </Badge>
+            <OrcamentoEditorDrawer
               orcamento={orcamento}
               clientes={clientes}
               responsaveis={responsaveis}
+              disabled={protegido}
+              disabledReason={
+                protegido
+                  ? `Bloqueado em ${orcamentoStatusLabel(orcamento.status).toLowerCase()} — alterações via fluxo de aprovação/job (Tasks 004/005).`
+                  : undefined
+              }
             />
-          )}
-        </CardContent>
-      </Card>
+          </div>
 
-      {/* Slot de versões — implementação vem na Task 004 */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+          {/* Metadata compactada */}
+          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
+            <span>
+              <span className="text-foreground/60">Cliente:</span>{" "}
+              <span className="text-foreground font-medium">{clienteNome ?? "—"}</span>
+            </span>
+            <span aria-hidden className="text-border">·</span>
+            <span>
+              <span className="text-foreground/60">Responsável:</span>{" "}
+              <span className="text-foreground font-medium">{responsavelNome ?? "—"}</span>
+            </span>
+            {periodo && (
+              <>
+                <span aria-hidden className="text-border">·</span>
+                <span>
+                  <span className="text-foreground/60">Período:</span>{" "}
+                  <span className="text-foreground font-medium">{periodo}</span>
+                </span>
+              </>
+            )}
+            {orcamento.campanha && (
+              <>
+                <span aria-hidden className="text-border">·</span>
+                <span>
+                  <span className="text-foreground/60">Campanha:</span>{" "}
+                  <span className="text-foreground font-medium">
+                    {orcamento.campanha}
+                  </span>
+                </span>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Aviso de estado protegido (só quando aplica) */}
+      {protegido && (
+        <div className="rounded-xl border border-dashed border-border bg-muted/30 p-4 flex items-start gap-3">
+          <Lock className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+          <p className="text-sm text-muted-foreground">
+            Este orçamento está em estado protegido (
+            <strong className="text-foreground">
+              {orcamentoStatusLabel(orcamento.status)}
+            </strong>
+            ). A edição dos dados ficou bloqueada — alterações precisam
+            passar pelo fluxo de aprovação (Task 004) ou criação de job
+            (Task 005).
+          </p>
+        </div>
+      )}
+
+      {/* Versões — conteúdo principal */}
+      <div className="rounded-2xl border border-border bg-card shadow-soft">
+        <div className="flex items-center justify-between border-b border-border p-6">
+          <div className="flex items-center gap-2">
             <FileStack className="h-5 w-5 text-california-red" />
-            Versões do orçamento
-          </CardTitle>
-          <CardDescription>
-            v1, v2, v3... com itens, importação de planilha e aprovação.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="rounded-xl border border-dashed border-border bg-muted/20 p-8 text-center">
+            <div>
+              <h2 className="text-lg font-semibold leading-none tracking-tight">
+                Versões do orçamento
+              </h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                v1, v2, v3... com itens, importação de planilha e aprovação.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            disabled
+            title="Disponível na Task 004"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-california-red px-3 py-2 text-xs font-semibold text-white opacity-50 cursor-not-allowed"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Nova versão
+          </button>
+        </div>
+        <div className="p-6">
+          <div className="rounded-xl border border-dashed border-border bg-muted/20 p-10 text-center">
+            <FileStack className="h-8 w-8 text-muted-foreground/50 mx-auto mb-3" />
             <p className="text-sm text-muted-foreground">
-              Disponível na <span className="font-semibold text-foreground">Task 004</span>.
+              Nenhuma versão ainda.
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Fluxo de versões, itens (tipos A/B/C/D), importação e
+              exportação de planilha, e aprovação vêm na{" "}
+              <span className="font-semibold text-foreground">Task 004</span>.
             </p>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }

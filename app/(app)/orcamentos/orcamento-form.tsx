@@ -32,9 +32,19 @@ interface Props {
   orcamento?: Orcamento;
   clientes: Pick<Cliente, "id" | "nome_fantasia">[];
   responsaveis: Pick<Profile, "id" | "nome">[];
+  /** Callback opcional após salvar com sucesso (útil pra fechar drawer). */
+  onSuccess?: () => void;
+  /** Callback opcional pro botão Cancelar (útil pra fechar drawer). */
+  onCancel?: () => void;
 }
 
-export function OrcamentoForm({ orcamento, clientes, responsaveis }: Props) {
+export function OrcamentoForm({
+  orcamento,
+  clientes,
+  responsaveis,
+  onSuccess,
+  onCancel,
+}: Props) {
   const router = useRouter();
   const isEdit = Boolean(orcamento);
   const [pending, startTransition] = React.useTransition();
@@ -73,7 +83,10 @@ export function OrcamentoForm({ orcamento, clientes, responsaveis }: Props) {
         if (res.fieldErrors) setFieldErrors(res.fieldErrors);
         return;
       }
-      if (isEdit) router.refresh();
+      if (isEdit) {
+        router.refresh();
+        onSuccess?.();
+      }
     });
   }
 
@@ -187,9 +200,6 @@ export function OrcamentoForm({ orcamento, clientes, responsaveis }: Props) {
                 ))}
               </SelectContent>
             </Select>
-            <p className="text-xs text-muted-foreground">
-              &quot;Aprovado&quot; e &quot;Job criado&quot; são setados automaticamente pelas Tasks 004 e 005.
-            </p>
           </Field>
         )}
       </div>
@@ -202,12 +212,22 @@ export function OrcamentoForm({ orcamento, clientes, responsaveis }: Props) {
       )}
 
       <div className="flex items-center justify-end gap-3 pt-2 border-t border-border">
-        <Link
-          href={isEdit ? `/orcamentos/${orcamento!.id}` : "/orcamentos"}
-          className="inline-flex items-center rounded-lg border border-border bg-white px-5 py-2.5 text-sm font-semibold text-foreground hover:bg-accent transition-colors"
-        >
-          Cancelar
-        </Link>
+        {onCancel ? (
+          <button
+            type="button"
+            onClick={onCancel}
+            className="inline-flex items-center rounded-lg border border-border bg-white px-5 py-2.5 text-sm font-semibold text-foreground hover:bg-accent transition-colors"
+          >
+            Cancelar
+          </button>
+        ) : (
+          <Link
+            href={isEdit ? `/orcamentos/${orcamento!.id}` : "/orcamentos"}
+            className="inline-flex items-center rounded-lg border border-border bg-white px-5 py-2.5 text-sm font-semibold text-foreground hover:bg-accent transition-colors"
+          >
+            Cancelar
+          </Link>
+        )}
         <button
           type="submit"
           disabled={pending}
