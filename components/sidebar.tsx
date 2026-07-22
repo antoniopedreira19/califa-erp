@@ -50,8 +50,6 @@ const links: NavLink[] = [
     label: "Administração",
     icon: ShieldCheck,
     adminOnly: true,
-    disabled: true,
-    disabledReason: "Em construção",
   },
 ];
 

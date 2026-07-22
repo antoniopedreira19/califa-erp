@@ -1,10 +1,10 @@
 # Handoff — California ERP
 
-Documento para dar continuidade ao projeto em uma nova sessão de trabalho. Última atualização depois do commit `5a56db3` (sidebar com transição contínua).
+Documento para dar continuidade ao projeto em uma nova sessão de trabalho. Última atualização: fluxo completo de convite implementado — UI de admin em `/admin/usuarios`, page `/definir-senha`, callback `token_hash`. Falta apenas configuração no Supabase Dashboard (template + URL config) e vincular manualmente o admin antonio se ainda não estiver.
 
 ## 1. Onde estamos
 
-**Deploy:** projeto configurado no Vercel (`calif-erp`), branch `main`.
+**Deploy:** projeto no Vercel (`calif-erp`), branch `main`. Domínio de produção: `https://www.sistemacalifa.com.br`.
 Backend: Supabase project `avlwxyknvhlzvnysbzrg` (`https://avlwxyknvhlzvnysbzrg.supabase.co`).
 Admin cadastrado: `antonio@pevetech.com.br` (role `administrador` no tenant `agencia-california`).
 
@@ -67,46 +67,78 @@ Admin cadastrado: `antonio@pevetech.com.br` (role `administrador` no tenant `age
 
 ## 3. Próximos passos (em ordem de prioridade)
 
-### 🔴 Prioridade 1 — Fluxo de convite de usuário (bloqueado hoje)
+### 🟢 Prioridade 1 — Fluxo de convite de usuário (código feito, faltam ajustes no Dashboard)
 
-**Sintoma:** admin envia convite pelo Supabase Dashboard → usuário clica no link do e-mail → cai em `/login` → não consegue criar senha.
+**Estado:** código implementado. Falta apenas: (a) colar o template atualizado no Supabase Dashboard e (b) validar URL Configuration.
 
-**Causa:** o template HTML do e-mail (`docs/email-templates/magic-link-invite.html`) usa `{{ .ConfirmationURL }}`, que é gerado pelo Supabase. Esse URL faz a verificação do token e redireciona para o `Site URL` configurado no Dashboard. Nosso app não tem rota para o usuário definir a senha após aceitar o convite.
+**O que já foi feito no código:**
 
-**O que falta implementar:**
+1. ✅ Página [`app/(auth)/definir-senha/page.tsx`](../app/(auth)/definir-senha/page.tsx):
+   - Valida sessão no mount (`supabase.auth.getUser()`); se não houver, redireciona para `/login?reason=convite_expirado`.
+   - Form com senha + confirmar senha (mín 8 chars, iguais).
+   - Submete via `supabase.auth.updateUser({ password })`.
+   - Sucesso → `/home`. Erro de sessão → mensagem clara.
+   - Mesma identidade visual do login (brand-side + form-side, cores California).
 
-1. **Criar página `/definir-senha`** (client component):
-   - Form com campo "senha" + "confirmar senha" + validação (mín 8 chars, ambos iguais).
-   - Ao submeter, chama `supabase.auth.updateUser({ password })`.
-   - Se sucesso, redireciona para `/home`.
-   - Se falha (ex: sessão expirou), volta pro `/login` com mensagem.
+2. ✅ Callback [`app/api/auth/callback/route.ts`](../app/api/auth/callback/route.ts):
+   - Passou a suportar dois fluxos: `?code=...` (PKCE tradicional) **e** `?token_hash=...&type=invite&next=...` (links de e-mail customizados).
+   - Em qualquer erro de troca de token → redireciona para `/login?reason=convite_expirado`.
 
-2. **Configurar Supabase Dashboard → Authentication → URL Configuration:**
-   - `Site URL`: `https://calif-erp.vercel.app` (ou domínio final)
+3. ✅ Template [`docs/email-templates/magic-link-invite.html`](email-templates/magic-link-invite.html):
+   - `{{ .ConfirmationURL }}` substituído por `{{ .SiteURL }}/api/auth/callback?token_hash={{ .TokenHash }}&type=invite&next=/definir-senha`.
+   - Assim o link do e-mail cai direto no nosso domínio, verifica o token, e vai para `/definir-senha`.
+
+4. ✅ Login: reconhece `?reason=convite_expirado` e mostra mensagem.
+
+**O que ainda precisa ser feito manualmente no Supabase Dashboard:**
+
+1. **Authentication → Email Templates → "Invite user"**:
+   - Colar o HTML atualizado de `docs/email-templates/magic-link-invite.html`.
+
+2. **Authentication → URL Configuration**:
+   - `Site URL`: `https://www.sistemacalifa.com.br` (usada por `{{ .SiteURL }}` no template — precisa apontar para prod).
    - `Redirect URLs` (adicionar todas):
      ```
-     https://calif-erp.vercel.app/definir-senha
-     https://calif-erp.vercel.app/api/auth/callback
-     http://localhost:3000/definir-senha
+     https://www.sistemacalifa.com.br/api/auth/callback
+     https://www.sistemacalifa.com.br/definir-senha
      http://localhost:3000/api/auth/callback
+     http://localhost:3000/definir-senha
      ```
 
-3. **Ajustar template do e-mail** (`docs/email-templates/magic-link-invite.html`):
-   - Trocar `{{ .ConfirmationURL }}` por `{{ .SiteURL }}/api/auth/callback?code={{ .Token }}&next=/definir-senha`
-   - Ou manter `{{ .ConfirmationURL }}` e garantir que o Site URL no dashboard seja `/definir-senha`.
-   - Colar o HTML no Supabase Dashboard → Authentication → Email Templates → **Invite User**.
+3. **Para testar em dev local**, o template usa `{{ .SiteURL }}` (que é o Site URL de produção). Duas opções:
+   - Testar apenas no Vercel após deploy.
+   - Ou, durante teste local, trocar `{{ .SiteURL }}` por `http://localhost:3000` no Dashboard temporariamente.
 
-4. **Ajustar `/api/auth/callback/route.ts`:** já suporta `?next=...`, então funciona com a opção do template acima.
+**Como testar (fluxo completo):**
+1. Deploy dos commits novos para Vercel (ou testar em local com Site URL ajustada).
+2. Colar template no Dashboard e salvar URL Configuration.
+3. Supabase Dashboard → Authentication → Users → **Invite user** com um e-mail de teste.
+4. Verificar entrega via Resend.
+5. Clicar no link → deve cair em `/definir-senha` já com sessão ativa (email visível no topo do form).
+6. Definir senha → cai em `/home`.
+   - ⚠️ **Atenção:** hoje o convite pelo Dashboard **não cria vínculo em `tenant_members`**. O usuário vai definir a senha, mas ao chegar em `/home` o `requireSession()` vai barrar por `sem_tenant` e mandar de volta pro login. Vincular manualmente via SQL até termos a Task 006 (Admin console) com UI de convite.
 
-5. **(Opcional) UI de admin para convidar** (fica pra Task 006 de Administração):
-   - Server action que usa `createServiceClient()` + `supabase.auth.admin.inviteUserByEmail(email, { redirectTo: 'https://.../definir-senha' })`.
-   - Enquanto isso, admin usa o Dashboard do Supabase pra criar/invitar.
+**UI de admin para convidar** — ✅ IMPLEMENTADA (antecipada da Task 006):
+- Menu **Administração** liberado na sidebar (adminOnly).
+- Hub [`app/(app)/admin/page.tsx`](../app/(app)/admin/page.tsx) com card **Usuários** mostrando contagem de vínculos ativos.
+- Página [`app/(app)/admin/usuarios/page.tsx`](../app/(app)/admin/usuarios/page.tsx) lista todos os vínculos do tenant (usa `createServiceClient` — autorização feita por `requireAdmin`). Mostra nome, e-mail, papel e status (perfil ativo × vínculo ativo).
+- Drawer [`convidar-drawer.tsx`](../app/(app)/admin/usuarios/convidar-drawer.tsx) com form (e-mail, nome opcional, papel).
+- Server action [`convidarUsuario`](../app/(app)/admin/usuarios/actions.ts):
+  - Valida sessão + admin.
+  - Se profile com esse e-mail já existe **sem** vínculo → só cria membership (sem novo e-mail).
+  - Se profile já existe **com** vínculo → erro amigável.
+  - Se não existe → `admin.inviteUserByEmail(email, { redirectTo: <origin>/api/auth/callback?next=/definir-senha })` + insert em `tenant_members` com role escolhida.
+  - Origin é resolvido dinamicamente via headers (`x-forwarded-host`/`host`) — funciona em dev e em prod sem mudar código.
+  - Registra `usuario.convidado` ou `usuario.membership_criada` em `audit_events`.
+- Schema Zod: [`lib/validations/convite.ts`](../lib/validations/convite.ts).
+- Auditoria: [`lib/auth/audit.ts`](../lib/auth/audit.ts) ganhou 4 novas ações (`usuario.convidado`, `usuario.membership_criada`, `usuario.membership_atualizada`, `usuario.reenvio_convite`).
 
-**Como testar:**
-1. No Supabase Dashboard → Authentication → Users → convide um email de teste.
-2. Recebe e-mail (SMTP do Resend já configurado ✅).
-3. Clica no link → deve cair em `/definir-senha` já com sessão ativa.
-4. Cria a senha → cai no `/home`.
+**Ainda no backlog da Task 006 (próximos incrementos):**
+- Inativar / reativar membership (soft-delete de vínculo).
+- Trocar papel de um membro existente (drawer/dialog).
+- Reenviar convite (para user que não ativou).
+- Feed de auditoria (audit_events do tenant).
+- MFA obrigatório para admin.
 
 ### 🟡 Prioridade 2 — Fase E da Task 004: Aprovação de versão
 

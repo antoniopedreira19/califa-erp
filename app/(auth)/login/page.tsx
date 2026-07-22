@@ -28,6 +28,8 @@ function reasonToMessage(reason: string | null): string | null {
       return "Sua conta está desativada. Fale com um administrador.";
     case "sem_tenant":
       return "Você ainda não tem acesso ao ERP. Peça a um administrador para liberar seu usuário.";
+    case "convite_expirado":
+      return "Seu link de convite expirou ou já foi usado. Peça um novo convite ao administrador.";
     default:
       return null;
   }

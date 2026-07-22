@@ -5,6 +5,10 @@ export type AuditAction =
   | "auth.logout"
   | "auth.login_negado"
   | "auth.senha_alterada"
+  | "usuario.convidado"
+  | "usuario.membership_criada"
+  | "usuario.membership_atualizada"
+  | "usuario.reenvio_convite"
   // ações reservadas para tasks futuras (registradas aqui para consistência):
   | "cliente.criado"
   | "cliente.editado"
