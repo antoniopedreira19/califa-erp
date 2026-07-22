@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn, initials } from "@/lib/utils";
@@ -106,8 +107,19 @@ export function Sidebar({
         {/* Brand */}
         <div className="px-3 pt-6 pb-5 overflow-hidden">
           <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-california-red text-white text-sm font-bold shrink-0 shadow-brand">
-              CA
+            <div className="relative flex h-12 w-12 items-center justify-center shrink-0">
+              <div
+                className="absolute inset-0 rounded-xl bg-california-red/20 blur-lg"
+                aria-hidden
+              />
+              <Image
+                src="/brand/logo-icon.png"
+                alt="Agência California"
+                width={48}
+                height={48}
+                priority
+                className="relative h-12 w-12 object-contain"
+              />
             </div>
             <div
               className={cn(
@@ -120,8 +132,8 @@ export function Sidebar({
               <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-white/50 whitespace-nowrap">
                 Agência
               </p>
-              <h1 className="text-lg font-bold tracking-tight leading-none mt-0.5 whitespace-nowrap">
-                California · ERP
+              <h1 className="font-display text-xl font-semibold tracking-tight leading-none mt-1 whitespace-nowrap">
+                California
               </h1>
             </div>
           </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Input } from "@/components/ui/input";
@@ -8,9 +9,9 @@ import { Label } from "@/components/ui/label";
 import {
   ArrowRight,
   AlertCircle,
-  ShieldCheck,
+  Briefcase,
   Wallet,
-  LayoutList,
+  Users,
 } from "lucide-react";
 
 export default function LoginPage() {
@@ -92,52 +93,25 @@ function LoginContent() {
           BRAND SIDE — desktop only
           ============================================ */}
       <div className="hidden lg:flex lg:w-[55%] xl:w-1/2 relative bg-california-dark text-white overflow-hidden">
-        <div
-          className="absolute -top-40 -left-40 h-[28rem] w-[28rem] rounded-full bg-california-red/25 blur-[120px]"
-          aria-hidden
-        />
-        <div
-          className="absolute top-1/3 -right-32 h-96 w-96 rounded-full bg-california-red/15 blur-[100px]"
-          aria-hidden
-        />
-        <div
-          className="absolute -bottom-40 left-1/3 h-96 w-96 rounded-full bg-california-red/20 blur-[110px]"
-          aria-hidden
-        />
-
-        <div
-          className="absolute inset-0 opacity-[0.06]"
-          style={{
-            backgroundImage:
-              "radial-gradient(circle, rgba(255,255,255,0.5) 1px, transparent 1px)",
-            backgroundSize: "24px 24px",
-          }}
-          aria-hidden
-        />
-        <div
-          className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-black/30 to-transparent"
-          aria-hidden
-        />
-
         <div className="relative z-10 flex flex-col justify-between p-12 xl:p-16 w-full animate-in fade-in duration-700">
-          <div className="flex items-center gap-4">
-            <div className="relative flex h-14 w-14 items-center justify-center">
+          <div className="flex items-center gap-5">
+            <div className="relative flex h-20 w-20 items-center justify-center shrink-0">
               <div
-                className="absolute inset-0 rounded-2xl bg-california-red/25 blur-xl"
+                className="absolute inset-0 rounded-2xl bg-california-red/30 blur-xl"
                 aria-hidden
               />
-              <div className="relative flex h-14 w-14 items-center justify-center rounded-2xl bg-california-red text-white text-lg font-bold shadow-brand">
-                CA
-              </div>
+              <Image
+                src="/brand/logo-icon.png"
+                alt="Agência California"
+                width={80}
+                height={80}
+                priority
+                className="relative h-20 w-20 object-contain drop-shadow-lg"
+              />
             </div>
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/50">
-                Agência
-              </p>
-              <h1 className="text-xl font-bold tracking-tight leading-none mt-0.5">
-                California
-              </h1>
-            </div>
+            <h1 className="font-display text-3xl xl:text-4xl font-semibold tracking-tight leading-none whitespace-nowrap">
+              Agência California
+            </h1>
           </div>
 
           <div className="space-y-7 max-w-md animate-in fade-in slide-in-from-bottom-4 duration-1000 delay-200 fill-mode-both">
@@ -150,35 +124,35 @@ function LoginContent() {
             </div>
 
             <div className="space-y-4">
-              <h2 className="text-4xl xl:text-5xl font-bold leading-[1.05] tracking-tight text-balance">
-                Do orçamento{" "}
+              <h2 className="font-display text-4xl xl:text-5xl font-semibold leading-[1.05] tracking-tight text-balance">
+                A agência{" "}
                 <span className="relative inline-block">
-                  <span className="relative z-10">ao job</span>
+                  <span className="relative z-10 italic">inteira</span>
                   <span
                     className="absolute -bottom-1 left-0 right-0 h-3 bg-california-red/40 -z-0 -skew-x-6"
                     aria-hidden
                   />
-                </span>
-                , sem perder o fio.
+                </span>{" "}
+                num só lugar.
               </h2>
-              <p className="text-base text-white/65 text-balance leading-relaxed">
-                Um só lugar para criar orçamentos, versionar propostas,
-                aprovar valores e abrir jobs com rastreabilidade.
+              <p className="text-base text-white/70 text-balance leading-relaxed">
+                Comercial, operação, financeiro e pessoas — conectados de
+                ponta a ponta. Menos planilha, mais decisão.
               </p>
             </div>
 
             <ul className="space-y-3 pt-2">
               <Feature
-                icon={LayoutList}
-                text="Orçamentos comerciais com versões controladas"
+                icon={Briefcase}
+                text="Do primeiro orçamento até o encerramento do job"
               />
               <Feature
                 icon={Wallet}
-                text="Aprovação da versão gera o job automaticamente"
+                text="Financeiro sincronizado com a operação real"
               />
               <Feature
-                icon={ShieldCheck}
-                text="Multi-tenant seguro com auditoria de ponta a ponta"
+                icon={Users}
+                text="Colaboradores internos e freelancers no mesmo pipeline"
               />
             </ul>
           </div>
@@ -194,39 +168,34 @@ function LoginContent() {
           FORM SIDE
           ============================================ */}
       <div className="flex-1 flex items-center justify-center p-6 sm:p-12 relative">
-        <div
-          className="absolute top-0 right-0 h-64 w-64 rounded-full bg-california-red/[0.04] blur-3xl"
-          aria-hidden
-        />
-
         <div className="relative w-full max-w-sm animate-in fade-in slide-in-from-bottom-2 duration-700">
           {/* Brand mobile */}
           <div className="lg:hidden mb-10 flex items-center gap-3">
-            <div className="relative flex h-12 w-12 items-center justify-center">
+            <div className="relative flex h-14 w-14 items-center justify-center">
               <div
-                className="absolute inset-0 rounded-xl bg-california-red/20 blur-lg"
+                className="absolute inset-0 rounded-xl bg-california-red/15 blur-lg"
                 aria-hidden
               />
-              <div className="relative flex h-12 w-12 items-center justify-center rounded-xl bg-california-red text-white text-sm font-bold">
-                CA
-              </div>
+              <Image
+                src="/brand/logo-icon.png"
+                alt="Agência California"
+                width={56}
+                height={56}
+                priority
+                className="relative h-14 w-14 object-contain"
+              />
             </div>
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                Agência
-              </p>
-              <h1 className="text-lg font-bold tracking-tight leading-none mt-0.5">
-                California
-              </h1>
-            </div>
+            <h1 className="font-display text-2xl font-semibold tracking-tight leading-none whitespace-nowrap">
+              Agência California
+            </h1>
           </div>
 
           <div className="space-y-2">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-california-red">
               Acesso ao ERP
             </p>
-            <h2 className="text-3xl xl:text-4xl font-bold tracking-tight text-foreground">
-              Bem-vindo de volta
+            <h2 className="font-display text-3xl xl:text-4xl font-semibold tracking-tight text-foreground">
+              Seja Bem-vindo
             </h2>
             <p className="text-sm text-muted-foreground">
               Entre com suas credenciais para continuar.

@@ -1,11 +1,20 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Inter, Fraunces } from "next/font/google";
 import "./globals.css";
 
 const inter = Inter({
   subsets: ["latin"],
   display: "swap",
   variable: "--font-sans",
+});
+
+// Fonte display para títulos com cara de agência (editorial, expressiva).
+// Usada em headings grandes via `font-display` no Tailwind.
+const fraunces = Fraunces({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-display",
+  axes: ["opsz"],
 });
 
 export const metadata: Metadata = {
@@ -20,7 +29,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="pt-BR" className={inter.variable}>
+    <html lang="pt-BR" className={`${inter.variable} ${fraunces.variable}`}>
       <body className="min-h-screen bg-background font-sans antialiased">
         {children}
       </body>
