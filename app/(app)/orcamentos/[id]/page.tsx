@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { OrcamentoEditorDrawer } from "../orcamento-editor-drawer";
 import { NovaVersaoDrawer } from "./versoes/nova-versao-drawer";
 import { VersoesList, type VersaoRow } from "./versoes/versoes-list";
+import { ImportarPlanilhaDrawer } from "./versoes/importar-drawer";
 
 export const dynamic = "force-dynamic";
 
@@ -232,15 +233,26 @@ export default async function OrcamentoDetailPage({
               </p>
             </div>
           </div>
-          <NovaVersaoDrawer
-            orcamentoId={orcamento.id}
-            disabled={!podeCriarVersao}
-            disabledReason={
-              podeCriarVersao
-                ? undefined
-                : `Orçamento ${orcamentoStatusLabel(orcamento.status).toLowerCase()} não aceita novas versões.`
-            }
-          />
+          <div className="flex items-center gap-2">
+            <ImportarPlanilhaDrawer
+              orcamentoId={orcamento.id}
+              disabled={!podeCriarVersao}
+              disabledReason={
+                podeCriarVersao
+                  ? undefined
+                  : `Orçamento ${orcamentoStatusLabel(orcamento.status).toLowerCase()} não aceita novas versões.`
+              }
+            />
+            <NovaVersaoDrawer
+              orcamentoId={orcamento.id}
+              disabled={!podeCriarVersao}
+              disabledReason={
+                podeCriarVersao
+                  ? undefined
+                  : `Orçamento ${orcamentoStatusLabel(orcamento.status).toLowerCase()} não aceita novas versões.`
+              }
+            />
+          </div>
         </div>
 
         {versoes.length === 0 ? (

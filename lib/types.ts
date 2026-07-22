@@ -267,3 +267,34 @@ export function tipoCustoLabel(t: TipoCusto): string {
       return "D · Interno";
   }
 }
+
+// ---------- Task 004 fase F: importação de planilha ----------
+
+export interface OrcamentoImportacao {
+  id: string;
+  tenant_id: string;
+  orcamento_id: string;
+  versao_orcamento_id: string | null;
+  arquivo_path: string;
+  arquivo_nome_original: string;
+  arquivo_tamanho_bytes: number;
+  aba_origem: string | null;
+  linhas_lidas: number;
+  linhas_importadas: number;
+  linhas_ignoradas: number;
+  warnings: ImportacaoWarning[];
+  created_by: string | null;
+  created_at: string;
+}
+
+/** Aviso emitido pelo parser da planilha durante o preview / importação. */
+export interface ImportacaoWarning {
+  /** Linha 1-based do XLSX onde o problema apareceu. */
+  linha: number;
+  /** Coluna (letra) opcional para navegação. */
+  coluna?: string;
+  /** Mensagem legível pelo admin. */
+  motivo: string;
+  /** Severidade: 'ignorada' = linha descartada; 'ajuste' = importada com fallback. */
+  severidade: "ignorada" | "ajuste";
+}

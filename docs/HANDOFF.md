@@ -25,16 +25,20 @@ Admin cadastrado: `antonio@pevetech.com.br` (role `administrador` no tenant `age
 20260724000002  task004_grupos_de_itens
 ```
 
-**Migration pendente de aplicar:**
+**Migrations pendentes de aplicar:**
 
 ```
-20260725000001  grants_service_role   ← APLICAR ANTES DE TESTAR CONVITE
+20260725000001  grants_service_role       ← já aplicada? (usar se convite falhar)
+20260726000001  task004_orcamento_importacoes ← APLICAR ANTES DE TESTAR IMPORT
 ```
 
-Motivo: sem esta migration, qualquer server action que usa
-`createServiceClient()` recebe `permission denied for table X` (42501).
-`service_role` bypassa RLS mas não bypassa GRANT. Aplicar via MCP (write)
-ou copiar o SQL do arquivo para o SQL Editor do Dashboard e rodar.
+- `grants_service_role`: sem esta migration, qualquer server action que usa
+  `createServiceClient()` recebe `permission denied for table X` (42501).
+  `service_role` bypassa RLS mas não bypassa GRANT. Se o convite já
+  funcionou, esta migration já está aplicada.
+- `task004_orcamento_importacoes`: cria `orcamento_importacoes` + bucket
+  `orcamento-importacoes` + policies em `storage.objects`. Sem ela o
+  drawer "Importar planilha" falha ao gravar o registro/arquivo.
 
 ## 2. O que já está pronto (Tasks 001 – 004)
 
@@ -151,6 +155,29 @@ ou copiar o SQL do arquivo para o SQL Editor do Dashboard e rodar.
 - Feed de auditoria (audit_events do tenant).
 - MFA obrigatório para admin.
 
+### ✅ Fase F da Task 004 — Importação de planilha (implementada)
+
+- Migration `20260726000001_task004_orcamento_importacoes.sql`: tabela
+  `orcamento_importacoes` (com warnings JSONB) + bucket privado
+  `orcamento-importacoes` + policies em `storage.objects` isolando por tenant
+  (path prefix = `tenant_id/orcamento_id/importacao_id-nome.xlsx`).
+- Parser [`lib/importacao/parser-oficial.ts`](../lib/importacao/parser-oficial.ts):
+  ExcelJS, detecta aba "Oficial" (fallback: primeira aba), acha o header
+  procurando keywords (PLANILHA/ITEM/R$/QT/D-M/TT), interpreta grupos
+  (A preenchida, B vazia) e itens (B preenchida). Ignora linhas de resumo
+  (SUB-TOTAL/TOTAL/IMPOSTO/HONORÁRIOS/FATURAMENTO) e extrai o `%
+  honorários` do resumo, aplicando na versão criada. Warnings com
+  severidade `ignorada`/`ajuste` acumulam por linha/coluna.
+- Server actions [`importar-actions.ts`](../app/(app)/orcamentos/[id]/versoes/importar-actions.ts):
+  `previewImportacao` (parse sem persistir) e `confirmarImportacao`
+  (reparse + criação da versão em rascunho + grupos + itens em bulk +
+  upload no bucket + registro em `orcamento_importacoes` + auditoria).
+- UI [`importar-drawer.tsx`](../app/(app)/orcamentos/[id]/versoes/importar-drawer.tsx):
+  drawer com upload → tela de preview (grupos, contagens, total bruto,
+  warnings destacados) → botão "Criar versão importada" que persiste e
+  redireciona pra nova versão. Botão fica ao lado de "Nova versão" no
+  card de versões do orçamento.
+
 ### 🟡 Prioridade 2 — Fase E da Task 004: Aprovação de versão
 
 Falta fechar o fluxo comercial. Quando o usuário aprova uma versão:
@@ -172,8 +199,7 @@ Docs de referência: [`tasks/005-criacao-job-orcamento-aprovado.md`](../tasks/00
 
 ### 🟢 Prioridade 4 — Backlog
 
-- **Fase F Task 004** — Importação de planilha (`orcamento_importacoes` + parser da aba "Oficial" da planilha padrão). Fica pra depois pela decisão do usuário.
-- **Task 006 — Administração**: membros do tenant, convite, promoção/rebaixamento, log de auditoria (feed).
+- **Task 006 — Administração** (continuar): inativar/reativar membership, trocar papel, reenviar convite, feed de auditoria.
 - **MFA obrigatório** pra admin — configurar no Supabase Dashboard.
 - **Regras finais de tributação A/B/C/D**: cálculo simplificado hoje. Refinar depois de reunião com o comercial/financeiro. Ver `lib/calculos/versao-totais.ts`.
 - **Botão de aprovar/reprovar orçamento** (transições de status manuais além do que já existe no drawer).
