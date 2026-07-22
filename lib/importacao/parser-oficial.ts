@@ -98,12 +98,48 @@ function normalizar(s: unknown): string {
 function toNumber(v: unknown): { ok: boolean; n: number } {
   if (v === null || v === undefined || v === "") return { ok: false, n: 0 };
   if (typeof v === "number" && Number.isFinite(v)) return { ok: true, n: v };
-  const s = normalizar(v)
-    .replace(/[R$\s]/g, "")
-    .replace(/\./g, "") // milhar pt-BR
-    .replace(",", ".");
-  if (s === "") return { ok: false, n: 0 };
-  const n = Number(s);
+
+  // ExcelJS devolve células com fórmula como { formula, result }. Muitas
+  // planilhas da agência têm R$/QT/TT como fórmula referenciando outra
+  // planilha. Priorize o `result` numérico — evita ir pra rota de string
+  // (que exige heurística de formato) quando não precisa.
+  if (typeof v === "object" && v !== null) {
+    const anyV = v as any;
+    if (typeof anyV.result === "number" && Number.isFinite(anyV.result)) {
+      return { ok: true, n: anyV.result };
+    }
+  }
+
+  const raw = normalizar(v).replace(/[R$\s]/g, "");
+  if (raw === "") return { ok: false, n: 0 };
+
+  // Detecta formato do decimal:
+  //  - "1.234,56" → pt-BR com milhar: remove pontos, troca vírgula por ponto.
+  //  - "11,05"    → pt-BR sem milhar: troca vírgula por ponto.
+  //  - "11.05"    → US ou result-de-fórmula: ponto já é decimal.
+  //  - "1.105"    → ambíguo. Assume MILHAR se a parte pós-ponto tiver
+  //                exatamente 3 dígitos (não pode ser decimal com 3 casas
+  //                em moeda), senão assume DECIMAL. Cobre "1.105" (milhar)
+  //                vs "11.05" (decimal US) sem quebrar nenhum dos dois.
+  //  - "12345"    → inteiro.
+  const temVirgula = raw.includes(",");
+  const temPonto = raw.includes(".");
+  let cleaned = raw;
+
+  if (temVirgula && temPonto) {
+    cleaned = raw.replace(/\./g, "").replace(",", ".");
+  } else if (temVirgula) {
+    cleaned = raw.replace(",", ".");
+  } else if (temPonto) {
+    const partes = raw.split(".");
+    if (partes.length === 2 && partes[1].length === 3 && partes[0] !== "") {
+      // "1.105" — parece milhar pt-BR (3 dígitos após o ponto, sem vírgula).
+      cleaned = raw.replace(/\./g, "");
+    }
+    // senão mantém raw: "11.05" fica "11.05", parse direto.
+  }
+
+  const n = Number(cleaned);
   if (Number.isFinite(n)) return { ok: true, n };
   return { ok: false, n: 0 };
 }
