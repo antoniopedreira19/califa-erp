@@ -107,20 +107,14 @@ export function Sidebar({
         {/* Brand */}
         <div className="px-3 pt-6 pb-5 overflow-hidden">
           <div className="flex items-center gap-3">
-            <div className="relative flex h-12 w-12 items-center justify-center shrink-0">
-              <div
-                className="absolute inset-0 rounded-xl bg-california-red/20 blur-lg"
-                aria-hidden
-              />
-              <Image
-                src="/brand/logo-icon.png"
-                alt="Agência California"
-                width={48}
-                height={48}
-                priority
-                className="relative h-12 w-12 object-contain"
-              />
-            </div>
+            <Image
+              src="/brand/logo-icon.png"
+              alt="Agência California"
+              width={48}
+              height={48}
+              priority
+              className="h-12 w-12 object-contain shrink-0"
+            />
             <div
               className={cn(
                 "min-w-0 transition-[opacity,transform] duration-200",

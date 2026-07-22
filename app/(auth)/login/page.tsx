@@ -95,20 +95,14 @@ function LoginContent() {
       <div className="hidden lg:flex lg:w-[55%] xl:w-1/2 relative bg-california-dark text-white overflow-hidden">
         <div className="relative z-10 flex flex-col justify-between p-12 xl:p-16 w-full animate-in fade-in duration-700">
           <div className="flex items-center gap-5">
-            <div className="relative flex h-20 w-20 items-center justify-center shrink-0">
-              <div
-                className="absolute inset-0 rounded-2xl bg-california-red/30 blur-xl"
-                aria-hidden
-              />
-              <Image
-                src="/brand/logo-icon.png"
-                alt="Agência California"
-                width={80}
-                height={80}
-                priority
-                className="relative h-20 w-20 object-contain drop-shadow-lg"
-              />
-            </div>
+            <Image
+              src="/brand/logo-icon.png"
+              alt="Agência California"
+              width={80}
+              height={80}
+              priority
+              className="h-20 w-20 object-contain shrink-0"
+            />
             <h1 className="font-display text-3xl xl:text-4xl font-semibold tracking-tight leading-none whitespace-nowrap">
               Agência California
             </h1>
@@ -171,20 +165,14 @@ function LoginContent() {
         <div className="relative w-full max-w-sm animate-in fade-in slide-in-from-bottom-2 duration-700">
           {/* Brand mobile */}
           <div className="lg:hidden mb-10 flex items-center gap-3">
-            <div className="relative flex h-14 w-14 items-center justify-center">
-              <div
-                className="absolute inset-0 rounded-xl bg-california-red/15 blur-lg"
-                aria-hidden
-              />
-              <Image
-                src="/brand/logo-icon.png"
-                alt="Agência California"
-                width={56}
-                height={56}
-                priority
-                className="relative h-14 w-14 object-contain"
-              />
-            </div>
+            <Image
+              src="/brand/logo-icon.png"
+              alt="Agência California"
+              width={56}
+              height={56}
+              priority
+              className="h-14 w-14 object-contain shrink-0"
+            />
             <h1 className="font-display text-2xl font-semibold tracking-tight leading-none whitespace-nowrap">
               Agência California
             </h1>
