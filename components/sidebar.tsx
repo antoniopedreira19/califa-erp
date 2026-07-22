@@ -55,6 +55,16 @@ const links: NavLink[] = [
   },
 ];
 
+// Larguras fixas em px pra animação de width funcionar (CSS não interpola auto/full).
+// - Colapsada: 76px total; item bg é 44×44 centrado (76 - 44 = 32 → 16px cada lado).
+// - Expandida: 256px total; item bg ocupa 232px (256 - 12 px de padding cada lado).
+const SIDEBAR_W_COLLAPSED = 76;
+const SIDEBAR_W_EXPANDED = 256;
+const ITEM_W_COLLAPSED = 44; // w-11
+const ITEM_W_EXPANDED = SIDEBAR_W_EXPANDED - 24; // 24 = nav px-3 * 2
+
+const TRANSITION_MS = 300;
+
 export function Sidebar({
   role,
   nome,
@@ -69,6 +79,14 @@ export function Sidebar({
   const expanded = hovered || mobileOpen;
 
   const visibleLinks = links.filter((l) => (l.adminOnly ? isAdmin(role) : true));
+
+  // Largura do bg de cada item — animável porque são valores numéricos px.
+  const itemBgWidth = expanded ? ITEM_W_EXPANDED : ITEM_W_COLLAPSED;
+  const transitionStyle: React.CSSProperties = {
+    transitionProperty: "width, background-color, opacity, transform",
+    transitionDuration: `${TRANSITION_MS}ms`,
+    transitionTimingFunction: "cubic-bezier(0.4, 0, 0.2, 1)", // ease-in-out suave
+  };
 
   return (
     <>
@@ -92,9 +110,13 @@ export function Sidebar({
       <aside
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
+        style={{
+          transitionProperty: "width, transform",
+          transitionDuration: `${TRANSITION_MS}ms`,
+          transitionTimingFunction: "cubic-bezier(0.4, 0, 0.2, 1)",
+        }}
         className={cn(
           "fixed inset-y-0 left-0 z-40 bg-california-dark text-white flex flex-col scrollbar-dark",
-          "transition-[width,transform] duration-300 ease-out",
           "w-64 -translate-x-full",
           mobileOpen && "translate-x-0",
           "md:translate-x-0",
@@ -103,7 +125,7 @@ export function Sidebar({
         )}
       >
         {/* Brand */}
-        <div className="px-3 pt-6 pb-5 overflow-hidden">
+        <div className="px-3 pt-6 pb-5">
           <div className="flex items-center gap-3">
             <Image
               src="/brand/logo-icon.png"
@@ -114,8 +136,9 @@ export function Sidebar({
               className="h-12 w-12 object-contain shrink-0"
             />
             <div
+              style={transitionStyle}
               className={cn(
-                "min-w-0 transition-[opacity,transform] duration-200",
+                "min-w-0 overflow-hidden",
                 expanded
                   ? "opacity-100 translate-x-0"
                   : "opacity-0 -translate-x-2 pointer-events-none",
@@ -136,10 +159,11 @@ export function Sidebar({
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 px-3 py-5 space-y-1 overflow-y-auto scrollbar-dark">
+        <nav className="flex-1 px-3 py-5 space-y-1 overflow-y-auto overflow-x-hidden scrollbar-dark">
           <p
+            style={transitionStyle}
             className={cn(
-              "px-3 mb-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/40 transition-opacity duration-200",
+              "px-3 mb-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/40",
               expanded ? "opacity-100" : "opacity-0",
             )}
           >
@@ -159,55 +183,65 @@ export function Sidebar({
                 ? link.disabledReason
                 : undefined;
 
-            const inner = (
-              <>
-                <Icon
-                  className={cn(
-                    "h-[18px] w-[18px] shrink-0 transition-colors",
-                    isActive && !link.disabled
-                      ? "text-california-red"
-                      : "text-white/50 group-hover:text-white/80",
-                  )}
-                />
-                {expanded && (
-                  <>
-                    <span className="whitespace-nowrap flex-1 animate-in fade-in duration-200">
-                      {link.label}
-                    </span>
-                    {link.disabled && (
-                      <Lock className="h-3 w-3 text-white/30 shrink-0" />
-                    )}
-                  </>
-                )}
-              </>
-            );
-
-            // Wrapper full-width serve como área clicável. O visual
-            // (background arredondado) fica num div interno que colapsa
-            // pra 44×44 quando a sidebar está fechada. A barra vermelha
-            // ativa vive DENTRO do bg com overflow-hidden — o clip
-            // garante que os cantos esquerdos casem com o rounded-lg.
-            const bgClasses = cn(
-              "relative flex items-center h-11 rounded-lg text-sm font-medium transition-colors overflow-hidden",
-              expanded ? "w-full gap-3 px-3" : "w-11 mx-auto justify-center",
-              link.disabled
-                ? "text-white/30 cursor-not-allowed"
-                : isActive
-                  ? "bg-[#3E3E3E] text-white"
-                  : "text-white/60 group-hover:text-white group-hover:bg-white/5",
-            );
-
             const activeBar = isActive && !link.disabled && (
               <span className="absolute inset-y-0 left-0 w-1 bg-california-red" />
             );
 
+            // Estrutura interna:
+            // - Container fixo h-11 com width animável (44 → 232 px)
+            // - Slot de ícone fixo 44px (sempre centrado), garante que o ícone
+            //   fique no mesmo ponto quando colapsado e "no início" quando expandido
+            // - Label ocupa o restante do espaço (só visível quando > 44px)
+            const bg = (
+              <div
+                style={{ ...transitionStyle, width: `${itemBgWidth}px` }}
+                className={cn(
+                  "relative flex items-center h-11 rounded-lg overflow-hidden text-sm font-medium shrink-0",
+                  link.disabled
+                    ? "text-white/30 cursor-not-allowed"
+                    : isActive
+                      ? "bg-[#3E3E3E] text-white"
+                      : "text-white/60 group-hover:text-white group-hover:bg-white/5",
+                )}
+              >
+                {activeBar}
+                {/* Slot do ícone (44px fixos) */}
+                <div className="flex h-full w-11 shrink-0 items-center justify-center">
+                  <Icon
+                    className={cn(
+                      "h-[18px] w-[18px] transition-colors",
+                      isActive && !link.disabled
+                        ? "text-california-red"
+                        : "text-white/50 group-hover:text-white/80",
+                    )}
+                  />
+                </div>
+                {/* Label + lock: sempre renderizados, opacidade transiciona */}
+                <div
+                  style={transitionStyle}
+                  className={cn(
+                    "flex flex-1 items-center gap-2 pr-3 min-w-0",
+                    expanded ? "opacity-100" : "opacity-0",
+                  )}
+                >
+                  <span className="truncate whitespace-nowrap flex-1">
+                    {link.label}
+                  </span>
+                  {link.disabled && (
+                    <Lock className="h-3 w-3 text-white/30 shrink-0" />
+                  )}
+                </div>
+              </div>
+            );
+
             if (link.disabled) {
               return (
-                <div key={link.href} title={tooltipTitle} className="group flex">
-                  <div className={bgClasses}>
-                    {activeBar}
-                    {inner}
-                  </div>
+                <div
+                  key={link.href}
+                  title={tooltipTitle}
+                  className="group flex justify-center"
+                >
+                  {bg}
                 </div>
               );
             }
@@ -218,56 +252,55 @@ export function Sidebar({
                 href={link.href}
                 onClick={() => setMobileOpen(false)}
                 title={tooltipTitle}
-                className="group flex"
+                className="group flex justify-center"
               >
-                <div className={bgClasses}>
-                  {activeBar}
-                  {inner}
-                </div>
+                {bg}
               </Link>
             );
           })}
         </nav>
 
         {/* User footer */}
-        <div className="p-3">
+        <div className="p-3 flex justify-center">
           <div
-            className={cn(
-              "rounded-xl bg-white/5 border border-white/10 overflow-hidden",
-              expanded ? "p-2.5" : "h-11 w-11 mx-auto flex items-center justify-center",
-            )}
+            style={{ ...transitionStyle, width: `${itemBgWidth}px` }}
+            className="flex items-center h-11 rounded-xl bg-white/5 border border-white/10 overflow-hidden shrink-0"
           >
-            {expanded ? (
-              <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-california-red text-white text-xs font-semibold shrink-0">
-                  {initials(nome)}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-white truncate whitespace-nowrap">
-                    {nome}
-                  </p>
-                  <p className="text-[10px] text-white/50 uppercase tracking-wider truncate whitespace-nowrap">
-                    {roleLabel(role)}
-                  </p>
-                </div>
-                <form action="/api/auth/logout" method="post" className="shrink-0">
-                  <button
-                    type="submit"
-                    title="Sair"
-                    className="p-2 rounded-lg text-white/50 hover:text-white hover:bg-white/10 transition-colors"
-                  >
-                    <LogOut className="h-4 w-4" />
-                  </button>
-                </form>
-              </div>
-            ) : (
+            {/* Slot do avatar (44px fixos, centralizado quando colapsado) */}
+            <div className="flex h-full w-11 shrink-0 items-center justify-center">
               <div
                 className="flex h-8 w-8 items-center justify-center rounded-full bg-california-red text-white text-[11px] font-semibold"
                 title={`${nome} · ${roleLabel(role)}`}
               >
                 {initials(nome)}
               </div>
-            )}
+            </div>
+            {/* Nome + role + logout: opacidade transiciona */}
+            <div
+              style={transitionStyle}
+              className={cn(
+                "flex flex-1 items-center gap-2 pr-1 min-w-0",
+                expanded ? "opacity-100" : "opacity-0 pointer-events-none",
+              )}
+            >
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-white truncate whitespace-nowrap">
+                  {nome}
+                </p>
+                <p className="text-[10px] text-white/50 uppercase tracking-wider truncate whitespace-nowrap">
+                  {roleLabel(role)}
+                </p>
+              </div>
+              <form action="/api/auth/logout" method="post" className="shrink-0">
+                <button
+                  type="submit"
+                  title="Sair"
+                  className="p-2 rounded-lg text-white/50 hover:text-white hover:bg-white/10 transition-colors"
+                >
+                  <LogOut className="h-4 w-4" />
+                </button>
+              </form>
+            </div>
           </div>
         </div>
       </aside>
