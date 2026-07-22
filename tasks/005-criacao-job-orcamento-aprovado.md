@@ -20,9 +20,9 @@ Esta task deve ser básica. O foco é fechar o fluxo inicial do gerente de proje
 - `orcamento_id` obrigatório, referenciando `orcamentos.id`.
 - `versao_orcamento_aprovada_id` obrigatório, referenciando `versoes_orcamento.id`.
 - `cliente_id` obrigatório, referenciando `clientes.id`.
-- `gp_responsavel_id` referenciando `profiles.id`, quando definido.
+- `responsavel_id` referenciando `profiles.id`, quando definido.
 - Índice único em `(tenant_id, orcamento_id)` para impedir dois jobs para o mesmo orçamento.
-- Índices para `tenant_id`, `orcamento_id`, `versao_orcamento_aprovada_id`, `cliente_id`, `gp_responsavel_id` e `status`.
+- Índices para `tenant_id`, `orcamento_id`, `versao_orcamento_aprovada_id`, `cliente_id`, `responsavel_id` e `status`.
 - RLS por tenant.
 - Policies de select/insert/update conforme papel do usuário.
 
@@ -39,7 +39,7 @@ Campos mínimos para começar:
 - `orcamento_id`
 - `versao_orcamento_aprovada_id`
 - `cliente_id`
-- `gp_responsavel_id`
+- `responsavel_id`
 - `status`
 - `tipo`
 - `campanha`

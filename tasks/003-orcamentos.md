@@ -9,9 +9,9 @@ Implementar a criação e listagem de orçamentos comerciais, que são a etapa a
 - Tabela `orcamentos`.
 - `tenant_id` obrigatório em `orcamentos`.
 - `cliente_id` obrigatório.
-- `gp_responsavel_id` opcional no começo, mas recomendado.
+- `responsavel_id` opcional no começo, mas recomendado.
 - `versao_aprovada_id` começa nulo.
-- Índices para `tenant_id`, `cliente_id`, `gp_responsavel_id`, `status` e `versao_aprovada_id`.
+- Índices para `tenant_id`, `cliente_id`, `responsavel_id`, `status` e `versao_aprovada_id`.
 
 ## Interface
 

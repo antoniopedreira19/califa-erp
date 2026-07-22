@@ -103,3 +103,60 @@ export interface Fornecedor {
   created_at: string;
   updated_at: string;
 }
+
+// ---------- Task 003: orçamentos ----------
+
+export type OrcamentoStatus =
+  | "rascunho"
+  | "em_revisao"
+  | "enviado_cliente"
+  | "aprovado"
+  | "job_criado"
+  | "recusado"
+  | "cancelado";
+
+export interface Orcamento {
+  id: string;
+  tenant_id: string;
+  codigo: string;
+  nome: string;
+  cliente_id: string;
+  responsavel_id: string;
+  status: OrcamentoStatus;
+  tipo: string | null;
+  campanha: string | null;
+  data_inicio_prevista: string | null;
+  data_fim_prevista: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Status editáveis via UI. `aprovado` e `job_criado` são setados pelo
+ *  sistema em Tasks 004 e 005 e ficam bloqueados aqui. */
+export const ORCAMENTO_STATUS_EDITAVEIS: OrcamentoStatus[] = [
+  "rascunho",
+  "em_revisao",
+  "enviado_cliente",
+  "recusado",
+  "cancelado",
+];
+
+export function orcamentoStatusLabel(s: OrcamentoStatus): string {
+  switch (s) {
+    case "rascunho":
+      return "Rascunho";
+    case "em_revisao":
+      return "Em revisão";
+    case "enviado_cliente":
+      return "Enviado ao cliente";
+    case "aprovado":
+      return "Aprovado";
+    case "job_criado":
+      return "Job criado";
+    case "recusado":
+      return "Recusado";
+    case "cancelado":
+      return "Cancelado";
+  }
+}

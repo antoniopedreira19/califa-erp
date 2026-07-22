@@ -75,7 +75,7 @@ Dados importantes devem ser referenciados por chaves estrangeiras.
 Exemplos:
 
 - `orcamentos.cliente_id` referencia `clientes.id`;
-- `orcamentos.gp_responsavel_id` referencia `profiles.id`;
+- `orcamentos.responsavel_id` referencia `profiles.id`;
 - `versoes_orcamento.orcamento_id` referencia `orcamentos.id`;
 - `versoes_orcamento_itens.versao_orcamento_id` referencia `versoes_orcamento.id`;
 - `versoes_orcamento_itens.fornecedor_id` referencia `fornecedores.id`, quando houver fornecedor definido;

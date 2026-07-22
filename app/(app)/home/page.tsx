@@ -13,11 +13,6 @@ import { FileText, Briefcase, ShieldCheck } from "lucide-react";
 const proximasEntregas = [
   {
     icon: FileText,
-    label: "Orçamentos comerciais",
-    task: "Task 003",
-  },
-  {
-    icon: FileText,
     label: "Versões e importação de planilha",
     task: "Task 004",
   },
@@ -42,8 +37,8 @@ export default async function HomePage() {
           Bem-vindo, {session.profile.nome.split(" ")[0]}
         </h1>
         <p className="text-sm text-muted-foreground max-w-2xl">
-          Fundação de auth e cadastros de clientes e fornecedores no ar. Próximo
-          passo é abrir os orçamentos comerciais.
+          Fundação, cadastros e orçamentos comerciais no ar. Próximos passos:
+          versões de orçamento e criação de job a partir da aprovação.
         </p>
       </header>
 
@@ -77,13 +72,13 @@ export default async function HomePage() {
         <Card>
           <CardHeader className="pb-3">
             <CardDescription>Módulos ativos</CardDescription>
-            <CardTitle>Tasks 001 e 002</CardTitle>
+            <CardTitle>Tasks 001 · 002 · 003</CardTitle>
           </CardHeader>
           <CardContent className="pt-0 flex flex-wrap gap-1.5">
             <Badge variant="soft">Auth</Badge>
             <Badge variant="soft">RLS</Badge>
-            <Badge variant="soft">Clientes</Badge>
-            <Badge variant="soft">Fornecedores</Badge>
+            <Badge variant="soft">Cadastros</Badge>
+            <Badge variant="soft">Orçamentos</Badge>
           </CardContent>
         </Card>
       </div>

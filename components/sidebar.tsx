@@ -36,13 +36,7 @@ const links: NavLink[] = [
     icon: FolderKanban,
     activePathPrefixes: ["/clientes", "/fornecedores"],
   },
-  {
-    href: "/orcamentos",
-    label: "Orçamentos",
-    icon: FileText,
-    disabled: true,
-    disabledReason: "Disponível na Task 003",
-  },
+  { href: "/orcamentos", label: "Orçamentos", icon: FileText },
   {
     href: "/jobs",
     label: "Jobs",

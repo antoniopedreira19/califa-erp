@@ -61,7 +61,7 @@ Exemplos:
 
 - `orcamentos.tenant_id` referencia `tenants.id`;
 - `orcamentos.cliente_id` referencia `clientes.id`;
-- `orcamentos.gp_responsavel_id` referencia `profiles.id`;
+- `orcamentos.responsavel_id` referencia `profiles.id`;
 - `versoes_orcamento.orcamento_id` referencia `orcamentos.id`;
 - `versoes_orcamento_itens.versao_orcamento_id` referencia `versoes_orcamento.id`;
 - `versoes_orcamento_itens.fornecedor_id` referencia `fornecedores.id`, quando definido;
@@ -179,7 +179,7 @@ Campos sugeridos:
 - `codigo`
 - `nome`
 - `cliente_id`
-- `gp_responsavel_id`
+- `responsavel_id`
 - `status`
 - `tipo`
 - `campanha`
@@ -320,7 +320,7 @@ Campos sugeridos:
 - `orcamento_id`
 - `versao_orcamento_aprovada_id`
 - `cliente_id`
-- `gp_responsavel_id`
+- `responsavel_id`
 - `status`
 - `tipo`
 - `campanha`
