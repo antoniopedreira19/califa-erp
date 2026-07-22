@@ -18,7 +18,7 @@ const fraunces = Fraunces({
 });
 
 export const metadata: Metadata = {
-  title: "California ERP",
+  title: "Sistema Califa",
   description:
     "ERP gerencial da Agência California — orçamentos, versões e jobs.",
 };
