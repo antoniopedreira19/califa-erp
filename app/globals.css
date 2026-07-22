@@ -1,0 +1,114 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* ---------- Base (light) — herdada do sistema RH California ---------- */
+    --background: 0 0% 98%; /* #FAFAFA */
+    --foreground: 0 0% 16%; /* #282828 */
+
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 16%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 16%;
+
+    /* Brand primary — #E74B56 */
+    --primary: 355 78% 60%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 0 0% 96%;
+    --secondary-foreground: 0 0% 16%;
+
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 42%;
+
+    --accent: 355 78% 96%;
+    --accent-foreground: 0 0% 16%;
+
+    --destructive: 355 78% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 0 0% 92%;
+    --input: 0 0% 92%;
+    --ring: 355 78% 60%;
+
+    --radius: 0.75rem;
+
+    --brand-red: 355 78% 60%;
+    --brand-red-hover: 355 78% 54%;
+    --brand-dark: 0 0% 16%;
+    --brand-black: 0 0% 0%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    @apply tracking-tight;
+  }
+
+  /* Scrollbars claras */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(0 0% 82%) transparent;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(0 0% 82%);
+    border-radius: 8px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+    transition: background-color 150ms ease;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(355 78% 60% / 0.6);
+    background-clip: padding-box;
+  }
+
+  .scrollbar-dark {
+    scrollbar-color: hsl(0 0% 40%) transparent;
+  }
+  .scrollbar-dark::-webkit-scrollbar-thumb {
+    background: hsl(0 0% 40%);
+    background-clip: padding-box;
+  }
+  .scrollbar-dark::-webkit-scrollbar-thumb:hover {
+    background: hsl(355 78% 60% / 0.8);
+    background-clip: padding-box;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+  .shadow-soft {
+    box-shadow:
+      0 1px 2px 0 rgba(0, 0, 0, 0.02),
+      0 1px 3px 0 rgba(0, 0, 0, 0.04);
+  }
+  .shadow-elevated {
+    box-shadow:
+      0 1px 2px 0 rgba(0, 0, 0, 0.03),
+      0 8px 24px -6px rgba(0, 0, 0, 0.06);
+  }
+}

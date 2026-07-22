@@ -1,0 +1,121 @@
+# CLAUDE.md
+
+Este projeto é o ERP gerencial da Agência California. Ele será construído de forma incremental com Claude Code, GitHub, Next.js, React, TypeScript e Supabase.
+
+## Prioridade do projeto
+
+O sistema deve resolver primeiro o fluxo de gestão de projetos discutido com a California:
+
+1. Login seguro.
+2. Cadastro de clientes e fornecedores.
+3. Criação de orçamentos comerciais.
+4. Criação ou importação de versões do orçamento.
+5. Exportação da versão do orçamento em planilha para envio externo ao cliente.
+6. Aprovação de uma versão do orçamento.
+7. Criação obrigatória do job vinculado ao orçamento e à versão aprovada.
+
+Neste primeiro momento, orçamento usa apenas a visão **Orçado**. As visões **Planejado** e **Realizado** entram depois, quando o job operacional já existir.
+
+## Decisão central de modelagem
+
+O trabalho não nasce como pré-job.
+
+O fluxo correto é:
+
+```text
+Orçamento
+-> versões do orçamento
+-> versão aprovada
+-> job criado
+```
+
+As tabelas centrais são:
+
+- `orcamentos`
+- `versoes_orcamento`
+- `jobs`
+
+Não criar tabela `pre_jobs`. Não criar job antes da aprovação do orçamento.
+
+No MVP, o gerente de projetos conversa com o cliente fora do sistema. O sistema deve permitir exportar a versão do orçamento em planilha. Envio automático por e-mail ou WhatsApp fica para fase futura.
+
+## Regras para desenvolvimento com IA
+
+- Leia `README.md`, `docs/00-visao-geral.md`, `docs/01-stack-e-arquitetura.md` e a task ativa antes de implementar.
+- Não implemente módulos futuros antes da documentação e validação com o setor responsável.
+- Mantenha escopo pequeno por task.
+- Faça alterações com migrations versionadas no Supabase.
+- Crie as tabelas, índices, constraints, policies e funções de banco dentro da task responsável por aquele domínio.
+- Não antecipe tabelas de tasks futuras, exceto quando uma FK mínima for indispensável para concluir a task atual.
+- Nunca exponha `SUPABASE_SERVICE_ROLE_KEY` no navegador.
+- Toda tabela operacional deve nascer com RLS planejado.
+- Toda tabela operacional deve ter `tenant_id`, mesmo que no início exista apenas o tenant Agência California.
+- Regras críticas não devem depender apenas do frontend.
+- Use Server Actions ou Route Handlers para operações sensíveis.
+- Registre auditoria para login, logout, aprovação de orçamento, criação de job e alterações críticas.
+- Trate a base de dados como ativo estratégico da empresa.
+- Antes de criar tabela nova, defina FKs, RLS, permissões, auditoria e índices.
+- Não crie dados soltos sem referência quando houver relação de negócio clara.
+- Antes de concluir uma task, rode lint/build quando o projeto já existir.
+
+## Sequência de banco por task
+
+- Task 001 cria a fundação de auth, tenant, perfis, vínculos, permissões e auditoria.
+- Task 002 cria `clientes` e `fornecedores`.
+- Task 003 cria `orcamentos`.
+- Task 004 cria `versoes_orcamento`, `versoes_orcamento_itens` e `orcamento_importacoes`.
+- Task 005 cria `jobs` e o vínculo obrigatório com orçamento aprovado.
+
+## Stack aprovada
+
+- Next.js App Router.
+- React.
+- TypeScript.
+- Supabase Auth.
+- Supabase Postgres.
+- Supabase RLS.
+- Supabase Storage.
+- Tailwind CSS.
+- shadcn/ui + Radix.
+- lucide-react.
+- React Hook Form + Zod.
+- ExcelJS ou XLSX para importação de planilhas.
+
+## Identidade visual
+
+O ERP deve seguir a mesma identidade visual do projeto `C:\Projects\AgCaliforniaRH`.
+
+Antes de implementar frontend na Task 001, consulte:
+
+- `C:\Projects\AgCaliforniaRH\app\globals.css`
+- `C:\Projects\AgCaliforniaRH\tailwind.config.ts`
+- `C:\Projects\AgCaliforniaRH\components\sidebar.tsx`
+- `C:\Projects\AgCaliforniaRH\app\(auth)\login\page.tsx`
+
+Use a mesma base visual: vermelho California `#E74B56`, fundo claro `#FAFAFA`, texto principal `#282828`, sidebar escura, Inter, shadcn/ui customizado, botões arredondados, cards limpos, tabelas densas e interface profissional de sistema interno.
+
+Não criar uma identidade nova para o ERP. Adaptar a identidade do RH para o contexto financeiro/gestão de projetos.
+
+## GitHub e Vercel
+
+- GitHub é a fonte oficial do código.
+- Vercel é o deploy da aplicação web.
+- Supabase é banco, auth, storage e RLS.
+- Commits devem ser pequenos e descritivos.
+- Features relevantes devem usar branch própria.
+- Migrations devem ser versionadas.
+- Nunca commitar `.env.local` ou secrets.
+- Antes de sugerir deploy, rode lint/build quando disponíveis.
+
+## Fora de escopo inicial
+
+- DRE completo.
+- Planejado e realizado do job.
+- Contas a pagar e contas a receber.
+- Envio automático de orçamento por e-mail ou WhatsApp.
+- Pagamentos automáticos.
+- Emissão automática de nota fiscal.
+- Conciliação bancária.
+- Mídia, RH e produção completos.
+
+Esses pontos devem ser tratados em fases futuras.
