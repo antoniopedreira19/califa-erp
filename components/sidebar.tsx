@@ -58,11 +58,9 @@ const links: NavLink[] = [
 export function Sidebar({
   role,
   nome,
-  tenantNome,
 }: {
   role: AppRole;
   nome: string;
-  tenantNome: string;
 }) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = React.useState(false);
@@ -161,11 +159,8 @@ export function Sidebar({
                 ? link.disabledReason
                 : undefined;
 
-            const content = (
+            const inner = (
               <>
-                {isActive && !link.disabled && (
-                  <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-r-full bg-california-red" />
-                )}
                 <Icon
                   className={cn(
                     "h-[18px] w-[18px] shrink-0 transition-colors",
@@ -174,33 +169,45 @@ export function Sidebar({
                       : "text-white/50 group-hover:text-white/80",
                   )}
                 />
-                <span
-                  className={cn(
-                    "whitespace-nowrap transition-[opacity,transform] duration-200 flex-1",
-                    expanded
-                      ? "opacity-100 translate-x-0"
-                      : "opacity-0 -translate-x-2",
-                  )}
-                >
-                  {link.label}
-                </span>
-                {link.disabled && expanded && (
-                  <Lock className="h-3 w-3 text-white/30 shrink-0" />
+                {expanded && (
+                  <>
+                    <span className="whitespace-nowrap flex-1 animate-in fade-in duration-200">
+                      {link.label}
+                    </span>
+                    {link.disabled && (
+                      <Lock className="h-3 w-3 text-white/30 shrink-0" />
+                    )}
+                  </>
                 )}
               </>
             );
 
+            // Wrapper full-width serve como área clicável. O visual
+            // (background arredondado) fica num div interno que colapsa
+            // pra 44×44 quando a sidebar está fechada. A barra vermelha
+            // ativa vive DENTRO do bg com overflow-hidden — o clip
+            // garante que os cantos esquerdos casem com o rounded-lg.
+            const bgClasses = cn(
+              "relative flex items-center h-11 rounded-lg text-sm font-medium transition-colors overflow-hidden",
+              expanded ? "w-full gap-3 px-3" : "w-11 mx-auto justify-center",
+              link.disabled
+                ? "text-white/30 cursor-not-allowed"
+                : isActive
+                  ? "bg-[#3E3E3E] text-white"
+                  : "text-white/60 group-hover:text-white group-hover:bg-white/5",
+            );
+
+            const activeBar = isActive && !link.disabled && (
+              <span className="absolute inset-y-0 left-0 w-1 bg-california-red" />
+            );
+
             if (link.disabled) {
               return (
-                <div
-                  key={link.href}
-                  title={tooltipTitle}
-                  className={cn(
-                    "group relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium overflow-hidden",
-                    "text-white/30 cursor-not-allowed",
-                  )}
-                >
-                  {content}
+                <div key={link.href} title={tooltipTitle} className="group flex">
+                  <div className={bgClasses}>
+                    {activeBar}
+                    {inner}
+                  </div>
                 </div>
               );
             }
@@ -211,68 +218,56 @@ export function Sidebar({
                 href={link.href}
                 onClick={() => setMobileOpen(false)}
                 title={tooltipTitle}
-                className={cn(
-                  "group relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors overflow-hidden",
-                  isActive
-                    ? "bg-white/10 text-white"
-                    : "text-white/60 hover:text-white hover:bg-white/5",
-                )}
+                className="group flex"
               >
-                {content}
+                <div className={bgClasses}>
+                  {activeBar}
+                  {inner}
+                </div>
               </Link>
             );
           })}
         </nav>
 
-        {/* Tenant + user footer */}
-        <div className="p-3 space-y-2">
+        {/* User footer */}
+        <div className="p-3">
           <div
             className={cn(
-              "rounded-xl bg-white/[0.03] border border-white/10 p-2.5 transition-opacity duration-200",
-              expanded ? "opacity-100" : "opacity-0 pointer-events-none",
+              "rounded-xl bg-white/5 border border-white/10 overflow-hidden",
+              expanded ? "p-2.5" : "h-11 w-11 mx-auto flex items-center justify-center",
             )}
           >
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/40">
-              Tenant ativo
-            </p>
-            <p className="text-sm font-semibold text-white mt-1 truncate">
-              {tenantNome}
-            </p>
-          </div>
-
-          <div className="rounded-xl bg-white/5 border border-white/10 p-2.5 overflow-hidden">
-            <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-california-red text-white text-xs font-semibold shrink-0">
+            {expanded ? (
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-california-red text-white text-xs font-semibold shrink-0">
+                  {initials(nome)}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-white truncate whitespace-nowrap">
+                    {nome}
+                  </p>
+                  <p className="text-[10px] text-white/50 uppercase tracking-wider truncate whitespace-nowrap">
+                    {roleLabel(role)}
+                  </p>
+                </div>
+                <form action="/api/auth/logout" method="post" className="shrink-0">
+                  <button
+                    type="submit"
+                    title="Sair"
+                    className="p-2 rounded-lg text-white/50 hover:text-white hover:bg-white/10 transition-colors"
+                  >
+                    <LogOut className="h-4 w-4" />
+                  </button>
+                </form>
+              </div>
+            ) : (
+              <div
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-california-red text-white text-[11px] font-semibold"
+                title={`${nome} · ${roleLabel(role)}`}
+              >
                 {initials(nome)}
               </div>
-              <div
-                className={cn(
-                  "min-w-0 flex-1 transition-[opacity,transform] duration-200",
-                  expanded
-                    ? "opacity-100 translate-x-0"
-                    : "opacity-0 -translate-x-2 pointer-events-none",
-                )}
-              >
-                <p className="text-sm font-medium text-white truncate whitespace-nowrap">
-                  {nome}
-                </p>
-                <p className="text-[10px] text-white/50 uppercase tracking-wider truncate whitespace-nowrap">
-                  {roleLabel(role)}
-                </p>
-              </div>
-              <form action="/api/auth/logout" method="post" className="shrink-0">
-                <button
-                  type="submit"
-                  title="Sair"
-                  className={cn(
-                    "p-2 rounded-lg text-white/50 hover:text-white hover:bg-white/10 transition-[opacity,colors] duration-200",
-                    expanded ? "opacity-100" : "opacity-0 pointer-events-none",
-                  )}
-                >
-                  <LogOut className="h-4 w-4" />
-                </button>
-              </form>
-            </div>
+            )}
           </div>
         </div>
       </aside>

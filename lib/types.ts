@@ -160,3 +160,110 @@ export function orcamentoStatusLabel(s: OrcamentoStatus): string {
       return "Cancelado";
   }
 }
+
+// ---------- Task 004: versões e itens ----------
+
+export type VersaoOrcamentoStatus =
+  | "rascunho"
+  | "em_revisao"
+  | "enviada_cliente"
+  | "aprovada"
+  | "reprovada"
+  | "substituida"
+  | "cancelada";
+
+export type TipoCusto = "A" | "B" | "C" | "D";
+
+export interface VersaoOrcamento {
+  id: string;
+  tenant_id: string;
+  orcamento_id: string;
+  numero_versao: number;
+  nome: string | null;
+  status: VersaoOrcamentoStatus;
+  moeda: string;
+  taxa_cambio: number;
+  percentual_honorarios: number;
+  percentual_imposto: number;
+  aprovado_em: string | null;
+  aprovado_por: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface VersaoOrcamentoGrupo {
+  id: string;
+  tenant_id: string;
+  versao_orcamento_id: string;
+  nome: string;
+  ordem: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface VersaoOrcamentoItem {
+  id: string;
+  tenant_id: string;
+  versao_orcamento_id: string;
+  grupo_id: string;
+  ordem: number;
+  planilha_origem: string | null;
+  item: string;
+  tipo_custo: TipoCusto;
+  valor_unitario_orcado: number;
+  quantidade_orcada: number;
+  dias_meses_orcado: number;
+  total_orcado: number;
+  /** Legado do modelo antes de haver tabela de fornecedores por item.
+   *  Mantido nullable no banco; não é mais usado nas telas. */
+  fornecedor_id: string | null;
+  /** Legado; não é mais usado nas telas. */
+  observacoes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Status editáveis manualmente. `aprovada` é setada pela ação de
+ *  aprovação (Fase E). */
+export const VERSAO_STATUS_EDITAVEIS: VersaoOrcamentoStatus[] = [
+  "rascunho",
+  "em_revisao",
+  "enviada_cliente",
+  "reprovada",
+  "substituida",
+  "cancelada",
+];
+
+export function versaoStatusLabel(s: VersaoOrcamentoStatus): string {
+  switch (s) {
+    case "rascunho":
+      return "Rascunho";
+    case "em_revisao":
+      return "Em revisão";
+    case "enviada_cliente":
+      return "Enviada ao cliente";
+    case "aprovada":
+      return "Aprovada";
+    case "reprovada":
+      return "Reprovada";
+    case "substituida":
+      return "Substituída";
+    case "cancelada":
+      return "Cancelada";
+  }
+}
+
+/** Rótulos curtos dos tipos de custo (aparecem em tabelas/badges). */
+export function tipoCustoLabel(t: TipoCusto): string {
+  switch (t) {
+    case "A":
+      return "A · Fat. direto";
+    case "B":
+      return "B · Bi-trib.";
+    case "C":
+      return "C · Sem honor.";
+    case "D":
+      return "D · Interno";
+  }
+}

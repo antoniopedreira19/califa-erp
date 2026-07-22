@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, FileStack, Plus, Lock } from "lucide-react";
+import { ArrowLeft, FileStack, Lock } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { listActiveMembers } from "@/lib/data/members";
@@ -8,10 +8,13 @@ import {
   orcamentoStatusLabel,
   type Cliente,
   type Orcamento,
+  type VersaoOrcamentoStatus,
 } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { OrcamentoEditorDrawer } from "../orcamento-editor-drawer";
+import { NovaVersaoDrawer } from "./versoes/nova-versao-drawer";
+import { VersoesList, type VersaoRow } from "./versoes/versoes-list";
 
 export const dynamic = "force-dynamic";
 
@@ -48,7 +51,7 @@ export default async function OrcamentoDetailPage({
   const session = await requireSession();
   const supabase = createClient();
 
-  const [orcRes, clientesRes, responsaveis] = await Promise.all([
+  const [orcRes, clientesRes, responsaveis, versoesRes] = await Promise.all([
     supabase
       .from("orcamentos")
       .select(
@@ -64,6 +67,16 @@ export default async function OrcamentoDetailPage({
       .eq("status", "ativo")
       .order("nome_fantasia"),
     listActiveMembers(session.activeTenant.id),
+    // Versões + agregado de itens em uma query só (embed retorna array
+    // dos itens com total_orcado; a soma acontece no client).
+    supabase
+      .from("versoes_orcamento")
+      .select(
+        "id, numero_versao, nome, status, percentual_honorarios, percentual_imposto, moeda, created_at, itens:versoes_orcamento_itens(total_orcado)",
+      )
+      .eq("orcamento_id", params.id)
+      .eq("tenant_id", session.activeTenant.id)
+      .order("numero_versao", { ascending: false }),
   ]);
 
   if (orcRes.error) console.error("[orcamentos.detail]", orcRes.error.message);
@@ -90,8 +103,31 @@ export default async function OrcamentoDetailPage({
   const responsavelNome: string | null = raw.responsavel?.nome ?? null;
   const clientes = (clientesRes.data ?? []) as Pick<Cliente, "id" | "nome_fantasia">[];
 
+  if (versoesRes.error) console.error("[versoes.list]", versoesRes.error.message);
+  const versoes: VersaoRow[] = ((versoesRes.data ?? []) as any[]).map((v) => {
+    const itens = (v.itens ?? []) as { total_orcado: string | number }[];
+    const total = itens.reduce(
+      (sum, it) => sum + Number(it.total_orcado ?? 0),
+      0,
+    );
+    return {
+      id: v.id,
+      numero_versao: v.numero_versao,
+      nome: v.nome,
+      status: v.status as VersaoOrcamentoStatus,
+      percentual_honorarios: Number(v.percentual_honorarios ?? 0),
+      percentual_imposto: Number(v.percentual_imposto ?? 0),
+      moeda: v.moeda ?? "BRL",
+      itens_count: itens.length,
+      itens_total: total,
+      created_at: v.created_at,
+    };
+  });
+
   const protegido =
     orcamento.status === "aprovado" || orcamento.status === "job_criado";
+  const podeCriarVersao =
+    orcamento.status !== "job_criado" && orcamento.status !== "cancelado";
 
   const periodo =
     orcamento.data_inicio_prevista || orcamento.data_fim_prevista
@@ -192,33 +228,36 @@ export default async function OrcamentoDetailPage({
                 Versões do orçamento
               </h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                v1, v2, v3... com itens, importação de planilha e aprovação.
+                v1, v2, v3… clique para abrir e gerenciar os itens.
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            disabled
-            title="Disponível na Task 004"
-            className="inline-flex items-center gap-1.5 rounded-lg bg-california-red px-3 py-2 text-xs font-semibold text-white opacity-50 cursor-not-allowed"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Nova versão
-          </button>
+          <NovaVersaoDrawer
+            orcamentoId={orcamento.id}
+            disabled={!podeCriarVersao}
+            disabledReason={
+              podeCriarVersao
+                ? undefined
+                : `Orçamento ${orcamentoStatusLabel(orcamento.status).toLowerCase()} não aceita novas versões.`
+            }
+          />
         </div>
-        <div className="p-6">
-          <div className="rounded-xl border border-dashed border-border bg-muted/20 p-10 text-center">
-            <FileStack className="h-8 w-8 text-muted-foreground/50 mx-auto mb-3" />
-            <p className="text-sm text-muted-foreground">
-              Nenhuma versão ainda.
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Fluxo de versões, itens (tipos A/B/C/D), importação e
-              exportação de planilha, e aprovação vêm na{" "}
-              <span className="font-semibold text-foreground">Task 004</span>.
-            </p>
+
+        {versoes.length === 0 ? (
+          <div className="p-6">
+            <div className="rounded-xl border border-dashed border-border bg-muted/20 p-10 text-center">
+              <FileStack className="h-8 w-8 text-muted-foreground/50 mx-auto mb-3" />
+              <p className="text-sm text-muted-foreground">
+                Nenhuma versão ainda.
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Clique em <span className="font-semibold text-foreground">Nova versão</span> para começar.
+              </p>
+            </div>
           </div>
-        </div>
+        ) : (
+          <VersoesList orcamentoId={orcamento.id} versoes={versoes} />
+        )}
       </div>
     </div>
   );

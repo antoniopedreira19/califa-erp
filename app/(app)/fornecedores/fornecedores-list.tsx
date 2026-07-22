@@ -14,6 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { formatDocumento, formatTelefone } from "@/lib/utils";
 import type { Fornecedor } from "@/lib/types";
 import { inativarFornecedor, reativarFornecedor } from "./actions";
@@ -23,6 +24,9 @@ export function FornecedoresList({ fornecedores }: { fornecedores: Fornecedor[] 
   const [busca, setBusca] = React.useState("");
   const [mostrarInativos, setMostrarInativos] = React.useState(false);
   const [pending, startTransition] = React.useTransition();
+  const [askInativar, setAskInativar] = React.useState<
+    { id: string; nome: string } | null
+  >(null);
 
   const filtered = React.useMemo(() => {
     const q = busca.trim().toLowerCase();
@@ -41,11 +45,13 @@ export function FornecedoresList({ fornecedores }: { fornecedores: Fornecedor[] 
   const ativos = fornecedores.filter((f) => f.status === "ativo").length;
   const inativos = fornecedores.length - ativos;
 
-  function handleInativar(id: string, nome: string) {
-    if (!confirm(`Inativar "${nome}"?`)) return;
+  function handleInativarConfirm() {
+    if (!askInativar) return;
+    const target = askInativar;
     startTransition(async () => {
-      const res = await inativarFornecedor(id);
+      const res = await inativarFornecedor(target.id);
       if (!res.ok) alert(res.message);
+      setAskInativar(null);
       router.refresh();
     });
   }
@@ -145,7 +151,9 @@ export function FornecedoresList({ fornecedores }: { fornecedores: Fornecedor[] 
                   {f.status === "ativo" ? (
                     <button
                       type="button"
-                      onClick={() => handleInativar(f.id, f.nome)}
+                      onClick={() =>
+                        setAskInativar({ id: f.id, nome: f.nome })
+                      }
                       disabled={pending}
                       title="Inativar"
                       className="p-2 rounded-lg text-muted-foreground hover:text-california-red hover:bg-accent transition-colors disabled:opacity-50"
@@ -169,6 +177,24 @@ export function FornecedoresList({ fornecedores }: { fornecedores: Fornecedor[] 
           </TableBody>
         </Table>
       </div>
+
+      <ConfirmDialog
+        open={askInativar !== null}
+        onOpenChange={(o) => !o && setAskInativar(null)}
+        title="Inativar fornecedor?"
+        description={
+          <>
+            <strong className="text-foreground">{askInativar?.nome}</strong>{" "}
+            deixa de aparecer nos itens de versão de orçamento. O histórico é
+            preservado e você pode reativar a qualquer momento.
+          </>
+        }
+        confirmLabel="Inativar"
+        cancelLabel="Voltar"
+        variant="destructive"
+        pending={pending}
+        onConfirm={handleInativarConfirm}
+      />
     </div>
   );
 }

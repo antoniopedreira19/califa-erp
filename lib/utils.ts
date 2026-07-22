@@ -5,6 +5,23 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+/**
+ * Formata valor monetário em pt-BR. Aceita number, string numérica ou
+ * null/undefined (retorna "—"). Padrão moeda BRL; outras moedas via arg.
+ */
+export function formatCurrency(
+  value: number | string | null | undefined,
+  currency: string = "BRL",
+): string {
+  if (value === null || value === undefined || value === "") return "—";
+  const num = typeof value === "string" ? parseFloat(value) : value;
+  if (Number.isNaN(num)) return "—";
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency,
+  }).format(num);
+}
+
 export function initials(name: string | null | undefined): string {
   if (!name) return "—";
   return name

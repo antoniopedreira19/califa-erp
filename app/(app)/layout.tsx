@@ -10,11 +10,7 @@ export default async function AppLayout({
 
   return (
     <div className="min-h-screen bg-background">
-      <Sidebar
-        role={session.activeRole}
-        nome={session.profile.nome}
-        tenantNome={session.activeTenant.nome}
-      />
+      <Sidebar role={session.activeRole} nome={session.profile.nome} />
       {/* pl-[76px] = largura colapsada da sidebar.
           Ao hover, ela expande POR CIMA do conteúdo. */}
       <main className="md:pl-[76px]">

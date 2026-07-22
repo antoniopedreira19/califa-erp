@@ -15,6 +15,7 @@ export type AuditAction =
   | "orcamento.criado"
   | "orcamento.editado"
   | "versao_orcamento.criada"
+  | "versao_orcamento.editada"
   | "versao_orcamento.importada"
   | "versao_orcamento.aprovada"
   | "job.criado"

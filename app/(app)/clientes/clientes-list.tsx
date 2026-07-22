@@ -14,6 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { formatCnpj, formatTelefone } from "@/lib/utils";
 import type { Cliente } from "@/lib/types";
 import { inativarCliente, reativarCliente } from "./actions";
@@ -23,6 +24,9 @@ export function ClientesList({ clientes }: { clientes: Cliente[] }) {
   const [busca, setBusca] = React.useState("");
   const [mostrarInativos, setMostrarInativos] = React.useState(false);
   const [pending, startTransition] = React.useTransition();
+  const [askInativar, setAskInativar] = React.useState<
+    { id: string; nome: string } | null
+  >(null);
 
   const filtered = React.useMemo(() => {
     const q = busca.trim().toLowerCase();
@@ -41,11 +45,13 @@ export function ClientesList({ clientes }: { clientes: Cliente[] }) {
   const ativos = clientes.filter((c) => c.status === "ativo").length;
   const inativos = clientes.length - ativos;
 
-  function handleInativar(id: string, nome: string) {
-    if (!confirm(`Inativar "${nome}"?`)) return;
+  function handleInativarConfirm() {
+    if (!askInativar) return;
+    const target = askInativar;
     startTransition(async () => {
-      const res = await inativarCliente(id);
+      const res = await inativarCliente(target.id);
       if (!res.ok) alert(res.message);
+      setAskInativar(null);
       router.refresh();
     });
   }
@@ -139,7 +145,9 @@ export function ClientesList({ clientes }: { clientes: Cliente[] }) {
                   {c.status === "ativo" ? (
                     <button
                       type="button"
-                      onClick={() => handleInativar(c.id, c.nome_fantasia)}
+                      onClick={() =>
+                        setAskInativar({ id: c.id, nome: c.nome_fantasia })
+                      }
                       disabled={pending}
                       title="Inativar"
                       className="p-2 rounded-lg text-muted-foreground hover:text-california-red hover:bg-accent transition-colors disabled:opacity-50"
@@ -163,6 +171,24 @@ export function ClientesList({ clientes }: { clientes: Cliente[] }) {
           </TableBody>
         </Table>
       </div>
+
+      <ConfirmDialog
+        open={askInativar !== null}
+        onOpenChange={(o) => !o && setAskInativar(null)}
+        title="Inativar cliente?"
+        description={
+          <>
+            <strong className="text-foreground">{askInativar?.nome}</strong>{" "}
+            deixa de aparecer nas seleções de orçamento. O histórico é
+            preservado e você pode reativar a qualquer momento.
+          </>
+        }
+        confirmLabel="Inativar"
+        cancelLabel="Voltar"
+        variant="destructive"
+        pending={pending}
+        onConfirm={handleInativarConfirm}
+      />
     </div>
   );
 }
