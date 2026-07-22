@@ -25,6 +25,17 @@ Admin cadastrado: `antonio@pevetech.com.br` (role `administrador` no tenant `age
 20260724000002  task004_grupos_de_itens
 ```
 
+**Migration pendente de aplicar:**
+
+```
+20260725000001  grants_service_role   ← APLICAR ANTES DE TESTAR CONVITE
+```
+
+Motivo: sem esta migration, qualquer server action que usa
+`createServiceClient()` recebe `permission denied for table X` (42501).
+`service_role` bypassa RLS mas não bypassa GRANT. Aplicar via MCP (write)
+ou copiar o SQL do arquivo para o SQL Editor do Dashboard e rodar.
+
 ## 2. O que já está pronto (Tasks 001 – 004)
 
 ### Task 001 — Fundação

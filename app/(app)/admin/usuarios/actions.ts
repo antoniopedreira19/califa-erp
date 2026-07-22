@@ -70,19 +70,48 @@ export async function convidarUsuario(
   const { email, nome, role } = parsed.data;
   const tenantId = session.activeTenant.id;
 
+  // Guard-rail: sem a service_role key não dá pra convidar (a query abaixo
+  // vai falhar com erro genérico e o admin não sabe por quê).
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    console.error(
+      "[admin.usuarios.convidar] SUPABASE_SERVICE_ROLE_KEY ausente no ambiente.",
+    );
+    return {
+      ok: false,
+      message:
+        "Configuração do servidor incompleta (falta service_role key). Fale com o dev.",
+    };
+  }
+
   const service = createServiceClient();
 
   // 1) Já existe profile com esse e-mail?
-  const { data: existingProfile, error: profileErr } = await service
+  //
+  // Usamos ilike em vez de eq porque profiles.email é gravado como o
+  // auth.users.email traz — case-insensitive na prática — e o zod já
+  // normaliza pra lowercase o input do form. Também usamos limit(1) +
+  // array em vez de maybeSingle() para não estourar erro caso alguém
+  // tenha inserido duplicata durante testes.
+  const { data: existingProfiles, error: profileErr } = await service
     .from("profiles")
     .select("id, nome, email")
-    .eq("email", email)
-    .maybeSingle();
+    .ilike("email", email)
+    .limit(1);
 
   if (profileErr) {
-    console.error("[admin.usuarios.convidar.select-profile]", profileErr.message);
+    console.error(
+      "[admin.usuarios.convidar.select-profile]",
+      JSON.stringify({
+        message: profileErr.message,
+        code: profileErr.code,
+        details: profileErr.details,
+        hint: profileErr.hint,
+      }),
+    );
     return { ok: false, message: "Não foi possível verificar o e-mail." };
   }
+
+  const existingProfile = existingProfiles?.[0] ?? null;
 
   // 1a) Se já é membro deste tenant, bloqueia.
   if (existingProfile) {
@@ -94,7 +123,15 @@ export async function convidarUsuario(
       .maybeSingle();
 
     if (memberErr) {
-      console.error("[admin.usuarios.convidar.select-member]", memberErr.message);
+      console.error(
+        "[admin.usuarios.convidar.select-member]",
+        JSON.stringify({
+          message: memberErr.message,
+          code: memberErr.code,
+          details: memberErr.details,
+          hint: memberErr.hint,
+        }),
+      );
       return { ok: false, message: "Não foi possível verificar o vínculo." };
     }
 
