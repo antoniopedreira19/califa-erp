@@ -66,3 +66,37 @@ export function calcularTotaisVersao(
     faturamento,
   };
 }
+
+/**
+ * Rentabilidade simples: soma dos totais orçados menos soma dos totais
+ * planejados. Percentual em relação ao total orçado.
+ *
+ * Retorna `percentualRentabilidade: null` quando não há planejado (não
+ * planejado = mostrar travessão em vez de "100%").
+ *
+ * Fórmula completa (com honor+imposto) fica pra iteração futura.
+ */
+export function calcularTotaisPlanejados(
+  itens: Array<Pick<VersaoOrcamentoItem, "total_orcado" | "total_planejado">>,
+): {
+  totalOrcado: number;
+  totalPlanejado: number;
+  rentabilidade: number;
+  percentualRentabilidade: number | null;
+} {
+  const totalOrcado = itens.reduce(
+    (sum, it) => sum + Number(it.total_orcado ?? 0),
+    0,
+  );
+  const totalPlanejado = itens.reduce(
+    (sum, it) => sum + Number(it.total_planejado ?? 0),
+    0,
+  );
+  const rentabilidade = totalOrcado - totalPlanejado;
+  const percentualRentabilidade =
+    totalPlanejado > 0 && totalOrcado > 0
+      ? (rentabilidade / totalOrcado) * 100
+      : null;
+
+  return { totalOrcado, totalPlanejado, rentabilidade, percentualRentabilidade };
+}
