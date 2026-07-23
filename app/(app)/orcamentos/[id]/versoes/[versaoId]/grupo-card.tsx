@@ -6,7 +6,7 @@ import { Check, Pencil, Trash2, X } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { formatCurrency } from "@/lib/utils";
-import type { VersaoOrcamentoGrupo, VersaoOrcamentoItem } from "@/lib/types";
+import type { VersaoOrcamentoGrupo, VersaoOrcamentoItem, VersaoOrcamentoCategoria } from "@/lib/types";
 import { removerGrupo, renomearGrupo } from "../actions";
 import { ItemEditorDrawer } from "./item-editor-drawer";
 import { ItensTable } from "./itens-table";
@@ -16,9 +16,10 @@ interface Props {
   itens: VersaoOrcamentoItem[];
   moeda: string;
   readOnly?: boolean;
+  categorias: VersaoOrcamentoCategoria[];
 }
 
-export function GrupoCard({ grupo, itens, moeda, readOnly }: Props) {
+export function GrupoCard({ grupo, itens, moeda, readOnly, categorias }: Props) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
   const [renaming, setRenaming] = React.useState(false);
@@ -166,6 +167,7 @@ export function GrupoCard({ grupo, itens, moeda, readOnly }: Props) {
         itens={itens}
         moeda={moeda}
         readOnly={readOnly}
+        categorias={categorias}
       />
 
       <ConfirmDialog
