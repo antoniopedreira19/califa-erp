@@ -294,10 +294,41 @@ export async function duplicarVersao(versaoId: string): Promise<ActionResult> {
     }
   }
 
+  // Duplica categorias e mapeia old_id → new_id (mesmo padrão de grupos).
+  const { data: categoriasOriginais } = await supabase
+    .from("versoes_orcamento_categorias")
+    .select("id, nome")
+    .eq("versao_orcamento_id", versaoId)
+    .eq("tenant_id", session.activeTenant.id);
+
+  const categoriaMap = new Map<string, string>();
+  if (categoriasOriginais && categoriasOriginais.length > 0) {
+    const catRows = categoriasOriginais.map((c: any) => ({
+      tenant_id: session.activeTenant.id,
+      versao_orcamento_id: nova.id,
+      nome: c.nome,
+    }));
+    const { data: novasCategorias, error: cErr } = await supabase
+      .from("versoes_orcamento_categorias")
+      .insert(catRows)
+      .select("id, nome");
+    if (cErr) {
+      console.error("[versoes.duplicar.categorias]", cErr.message);
+    } else if (novasCategorias) {
+      for (const orig of categoriasOriginais as any[]) {
+        const novo = novasCategorias.find((c: any) => c.nome === orig.nome);
+        if (novo) categoriaMap.set(orig.id, novo.id);
+      }
+    }
+  }
+
   const { data: itens } = await supabase
     .from("versoes_orcamento_itens")
     .select(
-      "ordem, grupo_id, planilha_origem, item, tipo_custo, valor_unitario_orcado, quantidade_orcada, dias_meses_orcado, fornecedor_id, observacoes",
+      "ordem, grupo_id, categoria_id, planilha_origem, item, tipo_custo, " +
+      "valor_unitario_orcado, quantidade_orcada, dias_meses_orcado, " +
+      "valor_unitario_planejado, quantidade_planejada, dias_meses_planejado, " +
+      "fornecedor_id, observacoes",
     )
     .eq("versao_orcamento_id", versaoId)
     .eq("tenant_id", session.activeTenant.id);
@@ -312,6 +343,7 @@ export async function duplicarVersao(versaoId: string): Promise<ActionResult> {
           tenant_id: session.activeTenant.id,
           versao_orcamento_id: nova.id,
           grupo_id: novoGrupoId,
+          categoria_id: i.categoria_id ? (categoriaMap.get(i.categoria_id) ?? null) : null,
         };
       })
       .filter((r): r is any => r !== null);
