@@ -101,6 +101,10 @@ export default async function VersaoDetailPage({
     quantidade_orcada: Number(it.quantidade_orcada ?? 1),
     dias_meses_orcado: Number(it.dias_meses_orcado ?? 1),
     total_orcado: Number(it.total_orcado ?? 0),
+    valor_unitario_planejado: Number(it.valor_unitario_planejado ?? 0),
+    quantidade_planejada: Number(it.quantidade_planejada ?? 0),
+    dias_meses_planejado: Number(it.dias_meses_planejado ?? 0),
+    total_planejado: Number(it.total_planejado ?? 0),
   }));
 
   // Agrupa itens por grupo_id para passar para cada GrupoCard.

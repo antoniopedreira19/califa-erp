@@ -77,11 +77,45 @@ export function ItemEditorDrawer({
     item?.tipo_custo ?? "A",
   );
 
+  // Valores dos campos orçado/planejado controlados para calcular
+  // rentabilidade em tempo real dentro do drawer (spec 6.2).
+  const [valorOrc, setValorOrc] = React.useState<string>(
+    item?.valor_unitario_orcado?.toString() ?? "",
+  );
+  const [qtdOrc, setQtdOrc] = React.useState<string>(
+    item?.quantidade_orcada?.toString() ?? "1",
+  );
+  const [dmOrc, setDmOrc] = React.useState<string>(
+    item?.dias_meses_orcado?.toString() ?? "1",
+  );
+  const [valorPlan, setValorPlan] = React.useState<string>(
+    item?.valor_unitario_planejado?.toString() ?? "0",
+  );
+  const [qtdPlan, setQtdPlan] = React.useState<string>(
+    item?.quantidade_planejada?.toString() ?? "0",
+  );
+  const [dmPlan, setDmPlan] = React.useState<string>(
+    item?.dias_meses_planejado?.toString() ?? "0",
+  );
+
   React.useEffect(() => {
     setTipoCusto(item?.tipo_custo ?? "A");
+    setValorOrc(item?.valor_unitario_orcado?.toString() ?? "");
+    setQtdOrc(item?.quantidade_orcada?.toString() ?? "1");
+    setDmOrc(item?.dias_meses_orcado?.toString() ?? "1");
+    setValorPlan(item?.valor_unitario_planejado?.toString() ?? "0");
+    setQtdPlan(item?.quantidade_planejada?.toString() ?? "0");
+    setDmPlan(item?.dias_meses_planejado?.toString() ?? "0");
     setError(null);
     setFieldErrors({});
   }, [item]);
+
+  const totalOrc =
+    (Number(valorOrc) || 0) * (Number(qtdOrc) || 0) * (Number(dmOrc) || 0);
+  const totalPlan =
+    (Number(valorPlan) || 0) * (Number(qtdPlan) || 0) * (Number(dmPlan) || 0);
+  const rentabilidade = totalOrc - totalPlan;
+  const temPlan = totalPlan > 0;
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -202,7 +236,8 @@ export function ItemEditorDrawer({
                   type="number"
                   step="0.01"
                   min="0"
-                  defaultValue={item?.valor_unitario_orcado ?? ""}
+                  value={valorOrc}
+                  onChange={(e) => setValorOrc(e.target.value)}
                   required
                   className="no-spinner"
                 />
@@ -218,7 +253,8 @@ export function ItemEditorDrawer({
                   type="number"
                   step="0.001"
                   min="0.001"
-                  defaultValue={item?.quantidade_orcada ?? "1"}
+                  value={qtdOrc}
+                  onChange={(e) => setQtdOrc(e.target.value)}
                   required
                 />
               </Field>
@@ -233,7 +269,8 @@ export function ItemEditorDrawer({
                   type="number"
                   step="0.001"
                   min="0.001"
-                  defaultValue={item?.dias_meses_orcado ?? "1"}
+                  value={dmOrc}
+                  onChange={(e) => setDmOrc(e.target.value)}
                   required
                 />
               </Field>
@@ -258,7 +295,8 @@ export function ItemEditorDrawer({
                     step="0.01"
                     min="0"
                     className="no-spinner"
-                    defaultValue={item?.valor_unitario_planejado ?? 0}
+                    value={valorPlan}
+                    onChange={(e) => setValorPlan(e.target.value)}
                   />
                 </div>
                 <div className="space-y-2">
@@ -270,7 +308,8 @@ export function ItemEditorDrawer({
                     step="0.001"
                     min="0"
                     className="no-spinner"
-                    defaultValue={item?.quantidade_planejada ?? 0}
+                    value={qtdPlan}
+                    onChange={(e) => setQtdPlan(e.target.value)}
                   />
                 </div>
                 <div className="space-y-2">
@@ -282,9 +321,33 @@ export function ItemEditorDrawer({
                     step="0.001"
                     min="0"
                     className="no-spinner"
-                    defaultValue={item?.dias_meses_planejado ?? 0}
+                    value={dmPlan}
+                    onChange={(e) => setDmPlan(e.target.value)}
                   />
                 </div>
+              </div>
+              {/* Rentabilidade em tempo real */}
+              <div className="flex items-center justify-between border-t border-blue-200 pt-3 text-xs">
+                <span className="font-semibold uppercase tracking-wider text-blue-800">
+                  Rentabilidade
+                </span>
+                {temPlan ? (
+                  <span
+                    className={
+                      "font-mono font-semibold " +
+                      (rentabilidade >= 0
+                        ? "text-emerald-700"
+                        : "text-california-red")
+                    }
+                  >
+                    {rentabilidade.toLocaleString("pt-BR", {
+                      style: "currency",
+                      currency: "BRL",
+                    })}
+                  </span>
+                ) : (
+                  <span className="text-blue-800/60">— não planejado</span>
+                )}
               </div>
             </div>
 
