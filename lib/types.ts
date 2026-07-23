@@ -202,6 +202,15 @@ export interface VersaoOrcamentoGrupo {
   updated_at: string;
 }
 
+export interface VersaoOrcamentoCategoria {
+  id: string;
+  tenant_id: string;
+  versao_orcamento_id: string;
+  nome: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface VersaoOrcamentoItem {
   id: string;
   tenant_id: string;
@@ -215,6 +224,13 @@ export interface VersaoOrcamentoItem {
   quantidade_orcada: number;
   dias_meses_orcado: number;
   total_orcado: number;
+  /** Categoria (opcional). Vive por versão, criada via botão "Nova
+   *  categoria" ou auto-preenchida pelo import da col B da planilha. */
+  categoria_id: string | null;
+  valor_unitario_planejado: number;
+  quantidade_planejada: number;
+  dias_meses_planejado: number;
+  total_planejado: number;
   /** Legado do modelo antes de haver tabela de fornecedores por item.
    *  Mantido nullable no banco; não é mais usado nas telas. */
   fornecedor_id: string | null;
