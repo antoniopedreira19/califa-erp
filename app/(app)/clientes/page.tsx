@@ -6,6 +6,7 @@ import type { Cliente } from "@/lib/types";
 import { EmptyState } from "@/components/empty-state";
 import { ClientesList } from "./clientes-list";
 
+export const dynamic = "force-dynamic";
 
 export default async function ClientesPage() {
   const session = await requireSession();

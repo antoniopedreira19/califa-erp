@@ -17,6 +17,7 @@ import { NovaVersaoDrawer } from "./versoes/nova-versao-drawer";
 import { VersoesList, type VersaoRow } from "./versoes/versoes-list";
 import { ImportarPlanilhaDrawer } from "./versoes/importar-drawer";
 
+export const dynamic = "force-dynamic";
 
 function statusBadgeClasses(status: Orcamento["status"]): string {
   switch (status) {

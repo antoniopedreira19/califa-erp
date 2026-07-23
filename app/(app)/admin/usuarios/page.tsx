@@ -6,6 +6,7 @@ import { roleLabel, type AppRole } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { ConvidarUsuarioDrawer } from "./convidar-drawer";
 
+export const dynamic = "force-dynamic";
 
 interface MemberRow {
   user_id: string;

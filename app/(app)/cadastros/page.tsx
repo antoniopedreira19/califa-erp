@@ -3,6 +3,8 @@ import { Users, Building2, ArrowRight, type LucideIcon } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 
+export const dynamic = "force-dynamic";
+
 export default async function CadastrosPage() {
   const session = await requireSession();
   const supabase = createClient();
