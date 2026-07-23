@@ -1,6 +1,9 @@
 import { Calculator, Info } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
-import { calcularTotaisVersao } from "@/lib/calculos/versao-totais";
+import {
+  calcularTotaisVersao,
+  calcularTotaisPlanejados,
+} from "@/lib/calculos/versao-totais";
 import {
   tipoCustoLabel,
   type TipoCusto,
@@ -29,6 +32,14 @@ export function TotaisCard({
     imposto,
     faturamento,
   } = calcularTotaisVersao(itens, percentualHonorarios, percentualImposto);
+
+  const {
+    totalPlanejado,
+    rentabilidade,
+    percentualRentabilidade,
+  } = calcularTotaisPlanejados(itens);
+
+  const temPlanejado = totalPlanejado > 0;
 
   return (
     <div className="rounded-2xl border border-border bg-card shadow-soft">
@@ -81,6 +92,37 @@ export function TotaisCard({
             value={imposto}
             moeda={moeda}
           />
+          {temPlanejado && (
+            <>
+              <Line
+                label="Total Planejado"
+                value={totalPlanejado}
+                moeda={moeda}
+              />
+              <Line
+                label="Rentabilidade"
+                value={rentabilidade}
+                moeda={moeda}
+                valueClassName={
+                  rentabilidade >= 0 ? "text-emerald-700" : "text-california-red"
+                }
+              />
+              {percentualRentabilidade !== null && (
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">% Rentabilidade</span>
+                  <span
+                    className={`tabular-nums font-medium ${
+                      percentualRentabilidade >= 0
+                        ? "text-emerald-700"
+                        : "text-california-red"
+                    }`}
+                  >
+                    {percentualRentabilidade.toFixed(1).replace(".", ",")}%
+                  </span>
+                </div>
+              )}
+            </>
+          )}
           <div className="pt-3 border-t border-border">
             <div className="flex items-center justify-between">
               <span className="text-sm font-semibold">Faturamento previsto</span>
@@ -135,15 +177,17 @@ function Line({
   label,
   value,
   moeda,
+  valueClassName,
 }: {
   label: string;
   value: number;
   moeda: string;
+  valueClassName?: string;
 }) {
   return (
     <div className="flex items-center justify-between text-sm">
       <span className="text-muted-foreground">{label}</span>
-      <span className="tabular-nums font-medium">
+      <span className={`tabular-nums font-medium${valueClassName ? ` ${valueClassName}` : ""}`}>
         {formatCurrency(value, moeda)}
       </span>
     </div>
