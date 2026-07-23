@@ -750,6 +750,13 @@ function extractItemInput(formData: FormData) {
       formData.get("valor_unitario_orcado")?.toString() ?? "0",
     quantidade_orcada: formData.get("quantidade_orcada")?.toString() ?? "1",
     dias_meses_orcado: formData.get("dias_meses_orcado")?.toString() ?? "1",
+    categoria_id: (formData.get("categoria_id")?.toString() || "") || null,
+    valor_unitario_planejado:
+      formData.get("valor_unitario_planejado")?.toString() ?? "0",
+    quantidade_planejada:
+      formData.get("quantidade_planejada")?.toString() ?? "0",
+    dias_meses_planejado:
+      formData.get("dias_meses_planejado")?.toString() ?? "0",
   };
 }
 
