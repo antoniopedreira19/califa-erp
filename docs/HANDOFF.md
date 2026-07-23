@@ -1,6 +1,6 @@
 # Handoff — California ERP
 
-Documento para dar continuidade ao projeto em uma nova sessão de trabalho. Última atualização: fluxo completo de convite implementado — UI de admin em `/admin/usuarios`, page `/definir-senha`, callback `token_hash`. Falta apenas configuração no Supabase Dashboard (template + URL config) e vincular manualmente o admin antonio se ainda não estiver.
+Documento para dar continuidade ao projeto em uma nova sessão de trabalho. Última atualização: fase G da Task 004 implementada — CATEGORIA por versão (dropdown no item, botão "Nova categoria" no header) + visão PLANEJADO no item (colunas na tabela, bloco no drawer, rentabilidade no card de totais). Parser da planilha lê col B (categoria) e cols I-K (planejado). Duplicar versão copia tudo. Ver spec em `docs/superpowers/specs/2026-07-23-planejado-e-categoria-design.md` e plano em `docs/superpowers/plans/2026-07-23-planejado-e-categoria.md`.
 
 ## 1. Onde estamos
 
@@ -23,22 +23,11 @@ Admin cadastrado: `antonio@pevetech.com.br` (role `administrador` no tenant `age
 20260723000002  rename_gp_responsavel_para_responsavel
 20260724000001  task004_versoes_orcamento
 20260724000002  task004_grupos_de_itens
+20260726000001  task004_orcamento_importacoes
+20260728000001  task004_categoria_e_planejado
 ```
 
-**Migrations pendentes de aplicar:**
-
-```
-20260725000001  grants_service_role       ← já aplicada? (usar se convite falhar)
-20260726000001  task004_orcamento_importacoes ← APLICAR ANTES DE TESTAR IMPORT
-```
-
-- `grants_service_role`: sem esta migration, qualquer server action que usa
-  `createServiceClient()` recebe `permission denied for table X` (42501).
-  `service_role` bypassa RLS mas não bypassa GRANT. Se o convite já
-  funcionou, esta migration já está aplicada.
-- `task004_orcamento_importacoes`: cria `orcamento_importacoes` + bucket
-  `orcamento-importacoes` + policies em `storage.objects`. Sem ela o
-  drawer "Importar planilha" falha ao gravar o registro/arquivo.
+**Todas as migrations aplicadas.** Última: `20260728000001_task004_categoria_e_planejado` (fase G).
 
 ## 2. O que já está pronto (Tasks 001 – 004)
 
@@ -64,7 +53,7 @@ Admin cadastrado: `antonio@pevetech.com.br` (role `administrador` no tenant `age
 - Rename cosmético: `gp_responsavel_id` → `responsavel_id`.
 - Detalhe do orçamento com metadata compacta + drawer editar + card de versões.
 
-### Task 004 — Versões e itens (sem importação)
+### Task 004 — Versões, itens, importação, categoria e planejado
 - `versoes_orcamento`, `versoes_orcamento_grupos`, `versoes_orcamento_itens`.
 - Regras de banco: um grupo por (versão, nome) case-insensitive, uma versão aprovada por orçamento (unique parcial), `total_orcado` GENERATED (valor × qtd × dias/meses).
 - ALTER em `orcamentos`: `versao_aprovada_id`, `aprovado_em`, `aprovado_por`.
@@ -73,6 +62,16 @@ Admin cadastrado: `antonio@pevetech.com.br` (role `administrador` no tenant `age
 - **Cálculos corretos**: Honorários = (A+B+D) × %, Impostos = (B+C+Honor) × taxa/(1-taxa) (gross-up), Faturamento = total + honor + imposto.
 - Helper compartilhado `lib/calculos/versao-totais.ts` — card e export usam o mesmo cálculo.
 - Export XLSX via ExcelJS replicando layout da planilha padrão.
+- **Fase F — Importação de planilha**: drawer com upload/preview/confirmar, parser da aba "Oficial", bucket privado `orcamento-importacoes`, tabela `orcamento_importacoes` com warnings JSONB.
+- **Fase G — Categoria por versão + PLANEJADO**:
+  - Tabela `versoes_orcamento_categorias` (escopo por versão, mesmo padrão de grupos). Botão "Nova categoria" no header ao lado de "Novo grupo".
+  - Item ganha `categoria_id` (opcional) + 4 campos planejados (`valor_unitario_planejado`, `quantidade_planejada`, `dias_meses_planejado`, `total_planejado` GENERATED).
+  - Drawer de item tem dropdown de categoria e bloco Planejado (fundo azul).
+  - Tabela de itens tem 12 colunas (orçado + planejado + categoria + rentabilidade colorida).
+  - Card de totais mostra Total Planejado + Rentabilidade + % Rentabilidade quando `total_planejado > 0`.
+  - Parser lê col B (categoria) e cols I-K (planejado); confirmarImportacao cria categorias em bulk.
+  - Duplicar versão copia categorias (com map old→new) e campos planejados.
+  - Helper `calcularTotaisPlanejados` em `lib/calculos/versao-totais.ts`.
 
 ### UI polish
 - Componentes reusáveis: `Dialog` + `DrawerContent`, `ConfirmDialog`, `Select` (Radix), `Popover`, `Calendar`, `DatePicker`, `MaskedInput` (telefone/CPF/CNPJ), `no-spinner` utility.
