@@ -163,6 +163,20 @@ export async function convidarUsuario(
       };
     }
 
+    // Mantém profiles.role em sincronia com o vínculo criado (MVP tem 1
+    // tenant por usuário — usar a role escolhida como default do profile
+    // evita divergência visual quando se olha a tabela profiles direto).
+    const { error: syncErr } = await service
+      .from("profiles")
+      .update({ role })
+      .eq("id", existingProfile.id);
+    if (syncErr) {
+      console.warn(
+        "[admin.usuarios.convidar.sync-profile-role]",
+        syncErr.message,
+      );
+    }
+
     await logAuditEvent({
       acao: "usuario.membership_criada",
       tenantId,
@@ -209,15 +223,22 @@ export async function convidarUsuario(
 
   const newUserId = inviteData.user.id;
 
-  // Se o "nome" foi informado, atualiza o profile (o trigger usa o email como fallback).
-  if (nome) {
-    const { error: nameErr } = await service
-      .from("profiles")
-      .update({ nome })
-      .eq("id", newUserId);
-    if (nameErr) {
-      console.warn("[admin.usuarios.convidar.update-nome]", nameErr.message);
-    }
+  // Atualiza o profile recém-criado pelo trigger handle_new_user:
+  // - `nome` (opcional): sobrescreve o fallback do split de e-mail.
+  // - `role`: o trigger grava 'gestao_projetos' hardcoded; sincronizamos
+  //   com a role escolhida no drawer pra bater com tenant_members.role.
+  const profileUpdate: Record<string, unknown> = { role };
+  if (nome) profileUpdate.nome = nome;
+
+  const { error: updProfileErr } = await service
+    .from("profiles")
+    .update(profileUpdate)
+    .eq("id", newUserId);
+  if (updProfileErr) {
+    console.warn(
+      "[admin.usuarios.convidar.update-profile]",
+      updProfileErr.message,
+    );
   }
 
   // 3) Cria vínculo com o tenant.
