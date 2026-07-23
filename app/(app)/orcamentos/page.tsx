@@ -7,7 +7,6 @@ import type { Cliente, Orcamento } from "@/lib/types";
 import { EmptyState } from "@/components/empty-state";
 import { OrcamentosList, type OrcamentoRow } from "./orcamentos-list";
 
-export const dynamic = "force-dynamic";
 
 export default async function OrcamentosPage() {
   const session = await requireSession();

@@ -3,8 +3,6 @@ import { ArrowRight, Users, type LucideIcon } from "lucide-react";
 import { requireAdmin } from "@/lib/auth/session";
 import { createServiceClient } from "@/lib/supabase/server";
 
-export const dynamic = "force-dynamic";
-
 export default async function AdminPage() {
   const session = await requireAdmin();
   const service = createServiceClient();

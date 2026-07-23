@@ -7,8 +7,6 @@ import type { Cliente } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { ClienteForm } from "../cliente-form";
 
-export const dynamic = "force-dynamic";
-
 export default async function EditarClientePage({
   params,
 }: {

@@ -16,8 +16,6 @@ import { NovoGrupoDrawer } from "./novo-grupo-drawer";
 import { TotaisCard } from "./totais-card";
 import { VersaoEditorDrawer } from "./versao-editor-drawer";
 
-export const dynamic = "force-dynamic";
-
 function statusBadgeClasses(status: VersaoOrcamento["status"]): string {
   switch (status) {
     case "rascunho":

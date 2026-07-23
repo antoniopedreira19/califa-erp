@@ -7,8 +7,6 @@ import type { Fornecedor } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { FornecedorForm } from "../fornecedor-form";
 
-export const dynamic = "force-dynamic";
-
 export default async function EditarFornecedorPage({
   params,
 }: {

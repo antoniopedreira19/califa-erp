@@ -6,8 +6,6 @@ import { listActiveMembers } from "@/lib/data/members";
 import type { Cliente } from "@/lib/types";
 import { OrcamentoForm } from "../orcamento-form";
 
-export const dynamic = "force-dynamic";
-
 export default async function NovoOrcamentoPage() {
   const session = await requireSession();
   const supabase = createClient();

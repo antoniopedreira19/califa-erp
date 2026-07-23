@@ -6,8 +6,6 @@ import type { Fornecedor } from "@/lib/types";
 import { EmptyState } from "@/components/empty-state";
 import { FornecedoresList } from "./fornecedores-list";
 
-export const dynamic = "force-dynamic";
-
 export default async function FornecedoresPage() {
   const session = await requireSession();
   const supabase = createClient();
