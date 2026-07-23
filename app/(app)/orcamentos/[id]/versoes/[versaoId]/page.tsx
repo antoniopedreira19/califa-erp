@@ -8,11 +8,13 @@ import {
   type VersaoOrcamento,
   type VersaoOrcamentoGrupo,
   type VersaoOrcamentoItem,
+  type VersaoOrcamentoCategoria,
 } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { GrupoCard } from "./grupo-card";
 import { NovoGrupoDrawer } from "./novo-grupo-drawer";
+import { NovaCategoriaDrawer } from "./nova-categoria-drawer";
 import { TotaisCard } from "./totais-card";
 import { VersaoEditorDrawer } from "./versao-editor-drawer";
 
@@ -45,7 +47,7 @@ export default async function VersaoDetailPage({
   const session = await requireSession();
   const supabase = createClient();
 
-  const [versaoRes, orcRes, gruposRes, itensRes] = await Promise.all([
+  const [versaoRes, orcRes, gruposRes, itensRes, categoriasRes] = await Promise.all([
     supabase
       .from("versoes_orcamento")
       .select("*")
@@ -73,17 +75,26 @@ export default async function VersaoDetailPage({
       .eq("tenant_id", session.activeTenant.id)
       .order("ordem", { ascending: true })
       .returns<VersaoOrcamentoItem[]>(),
+    supabase
+      .from("versoes_orcamento_categorias")
+      .select("*")
+      .eq("versao_orcamento_id", params.versaoId)
+      .eq("tenant_id", session.activeTenant.id)
+      .order("nome", { ascending: true })
+      .returns<VersaoOrcamentoCategoria[]>(),
   ]);
 
   if (versaoRes.error) console.error("[versao.detail]", versaoRes.error.message);
   if (gruposRes.error) console.error("[versao.grupos]", gruposRes.error.message);
   if (itensRes.error) console.error("[versao.itens]", itensRes.error.message);
+  if (categoriasRes.error) console.error("[versao.categorias]", categoriasRes.error.message);
 
   const versao = versaoRes.data;
   const orcamento = orcRes.data;
   if (!versao || !orcamento) notFound();
 
   const grupos = (gruposRes.data ?? []) as VersaoOrcamentoGrupo[];
+  const categorias = (categoriasRes.data ?? []) as VersaoOrcamentoCategoria[];
   const itens: VersaoOrcamentoItem[] = (itensRes.data ?? []).map((it: any) => ({
     ...it,
     valor_unitario_orcado: Number(it.valor_unitario_orcado ?? 0),
@@ -184,7 +195,12 @@ export default async function VersaoDetailPage({
             {itens.length} {itens.length === 1 ? "item" : "itens"} no total
           </span>
         </div>
-        {!readOnly && <NovoGrupoDrawer versaoId={versao.id} />}
+        {!readOnly && (
+          <div className="flex items-center gap-2">
+            <NovaCategoriaDrawer versaoId={versao.id} />
+            <NovoGrupoDrawer versaoId={versao.id} />
+          </div>
+        )}
       </div>
 
       {/* Grupos */}
@@ -207,6 +223,7 @@ export default async function VersaoDetailPage({
               itens={itensPorGrupo.get(g.id) ?? []}
               moeda={versao.moeda}
               readOnly={readOnly}
+              categorias={categorias}
             />
           ))}
         </div>
