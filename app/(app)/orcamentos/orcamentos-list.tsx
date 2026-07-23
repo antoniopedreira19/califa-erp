@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -81,6 +82,7 @@ export function OrcamentosList({
   clientes: Pick<Cliente, "id" | "nome_fantasia">[];
   responsaveis: Pick<Profile, "id" | "nome">[];
 }) {
+  const router = useRouter();
   const [busca, setBusca] = React.useState("");
   const [statusFiltro, setStatusFiltro] = React.useState<OrcamentoStatus | "todos">("todos");
   const [clienteFiltro, setClienteFiltro] = React.useState<string>("todos");
@@ -183,23 +185,33 @@ export function OrcamentosList({
                 </TableCell>
               </TableRow>
             )}
-            {filtered.map((o) => (
-              <TableRow key={o.id}>
+            {filtered.map((o) => {
+              const href = `/orcamentos/${o.id}`;
+              return (
+              <TableRow
+                key={o.id}
+                role="link"
+                tabIndex={0}
+                onClick={() => router.push(href)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    router.push(href);
+                  }
+                }}
+                className="cursor-pointer hover:bg-muted/50 focus-visible:outline-none focus-visible:bg-muted/50"
+              >
                 <TableCell>
                   <Link
-                    href={`/orcamentos/${o.id}`}
+                    href={href}
+                    onClick={(e) => e.stopPropagation()}
                     className="font-mono text-xs font-semibold text-foreground hover:text-california-red transition-colors"
                   >
                     {o.codigo}
                   </Link>
                 </TableCell>
                 <TableCell>
-                  <Link
-                    href={`/orcamentos/${o.id}`}
-                    className="font-medium text-foreground hover:text-california-red transition-colors"
-                  >
-                    {o.nome}
-                  </Link>
+                  <span className="font-medium text-foreground">{o.nome}</span>
                   {o.campanha && (
                     <p className="text-xs text-muted-foreground truncate max-w-[280px]">
                       {o.campanha}
@@ -229,7 +241,8 @@ export function OrcamentosList({
                   </Badge>
                 </TableCell>
               </TableRow>
-            ))}
+              );
+            })}
           </TableBody>
         </Table>
       </div>

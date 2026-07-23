@@ -113,11 +113,26 @@ export function FornecedoresList({ fornecedores }: { fornecedores: Fornecedor[] 
                 </TableCell>
               </TableRow>
             )}
-            {filtered.map((f) => (
-              <TableRow key={f.id}>
+            {filtered.map((f) => {
+              const href = `/fornecedores/${f.id}`;
+              return (
+              <TableRow
+                key={f.id}
+                role="link"
+                tabIndex={0}
+                onClick={() => router.push(href)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    router.push(href);
+                  }
+                }}
+                className="cursor-pointer hover:bg-muted/50 focus-visible:outline-none focus-visible:bg-muted/50"
+              >
                 <TableCell>
                   <Link
-                    href={`/fornecedores/${f.id}`}
+                    href={href}
+                    onClick={(e) => e.stopPropagation()}
                     className="font-medium text-foreground hover:text-california-red transition-colors"
                   >
                     {f.nome}
@@ -147,7 +162,7 @@ export function FornecedoresList({ fornecedores }: { fornecedores: Fornecedor[] 
                     <Badge variant="neutral">Inativo</Badge>
                   )}
                 </TableCell>
-                <TableCell>
+                <TableCell onClick={(e) => e.stopPropagation()}>
                   {f.status === "ativo" ? (
                     <button
                       type="button"
@@ -173,7 +188,8 @@ export function FornecedoresList({ fornecedores }: { fornecedores: Fornecedor[] 
                   )}
                 </TableCell>
               </TableRow>
-            ))}
+              );
+            })}
           </TableBody>
         </Table>
       </div>

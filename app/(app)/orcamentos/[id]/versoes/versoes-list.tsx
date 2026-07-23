@@ -85,9 +85,21 @@ export function VersoesList({
         {versoes.map((v) => {
           const podeCancelar =
             v.status !== "aprovada" && v.status !== "cancelada";
+          const href = `/orcamentos/${orcamentoId}/versoes/${v.id}`;
           return (
             <li key={v.id} className="group">
-              <div className="flex items-center gap-4 px-6 py-4 hover:bg-muted/30 transition-colors">
+              <div
+                role="link"
+                tabIndex={0}
+                onClick={() => router.push(href)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    router.push(href);
+                  }
+                }}
+                className="flex items-center gap-4 px-6 py-4 cursor-pointer hover:bg-muted/40 focus-visible:outline-none focus-visible:bg-muted/40 transition-colors"
+              >
                 <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-california-red/10 text-california-red font-mono text-sm font-semibold shrink-0">
                   v{v.numero_versao}
                 </div>
@@ -95,7 +107,8 @@ export function VersoesList({
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <Link
-                      href={`/orcamentos/${orcamentoId}/versoes/${v.id}`}
+                      href={href}
+                      onClick={(e) => e.stopPropagation()}
                       className="font-medium text-foreground hover:text-california-red transition-colors"
                     >
                       {v.nome ?? `Versão ${v.numero_versao}`}
@@ -112,7 +125,10 @@ export function VersoesList({
                   </p>
                 </div>
 
-                <div className="flex items-center gap-1">
+                <div
+                  className="flex items-center gap-1"
+                  onClick={(e) => e.stopPropagation()}
+                >
                   <button
                     type="button"
                     onClick={() =>
@@ -146,7 +162,7 @@ export function VersoesList({
                     </button>
                   )}
                   <Link
-                    href={`/orcamentos/${orcamentoId}/versoes/${v.id}`}
+                    href={href}
                     title="Abrir versão"
                     className="p-2 rounded-lg text-muted-foreground hover:text-california-red hover:bg-accent transition-colors"
                   >

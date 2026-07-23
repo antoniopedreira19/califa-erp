@@ -112,11 +112,26 @@ export function ClientesList({ clientes }: { clientes: Cliente[] }) {
                 </TableCell>
               </TableRow>
             )}
-            {filtered.map((c) => (
-              <TableRow key={c.id}>
+            {filtered.map((c) => {
+              const href = `/clientes/${c.id}`;
+              return (
+              <TableRow
+                key={c.id}
+                role="link"
+                tabIndex={0}
+                onClick={() => router.push(href)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    router.push(href);
+                  }
+                }}
+                className="cursor-pointer hover:bg-muted/50 focus-visible:outline-none focus-visible:bg-muted/50"
+              >
                 <TableCell>
                   <Link
-                    href={`/clientes/${c.id}`}
+                    href={href}
+                    onClick={(e) => e.stopPropagation()}
                     className="font-medium text-foreground hover:text-california-red transition-colors"
                   >
                     {c.nome_fantasia}
@@ -141,7 +156,7 @@ export function ClientesList({ clientes }: { clientes: Cliente[] }) {
                     <Badge variant="neutral">Inativo</Badge>
                   )}
                 </TableCell>
-                <TableCell>
+                <TableCell onClick={(e) => e.stopPropagation()}>
                   {c.status === "ativo" ? (
                     <button
                       type="button"
@@ -167,7 +182,8 @@ export function ClientesList({ clientes }: { clientes: Cliente[] }) {
                   )}
                 </TableCell>
               </TableRow>
-            ))}
+              );
+            })}
           </TableBody>
         </Table>
       </div>
