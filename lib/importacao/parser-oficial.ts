@@ -54,6 +54,11 @@ export interface ParseItem {
   valor_unitario_orcado: number;
   quantidade_orcada: number;
   dias_meses_orcado: number;
+  /** Categoria vinda da col B da planilha, ou null. */
+  categoria: string | null;
+  valor_unitario_planejado: number;
+  quantidade_planejada: number;
+  dias_meses_planejado: number;
   /** Categoria longa vinda da col A (ex.: "INTERNA - Corona - ..."). */
   planilha_origem: string | null;
   /** Linha do XLSX de onde veio (para debug/warnings). */
@@ -215,9 +220,9 @@ export async function parseOficial(
   let linhasIgnoradas = 0;
 
   ws.eachRow({ includeEmpty: false }, (row, rowNumber) => {
-    // Lê colunas A–H (8 colunas).
+    // Lê colunas A–L (12 colunas).
     const cells: string[] = [];
-    for (let c = 1; c <= 8; c++) {
+    for (let c = 1; c <= 12; c++) {
       cells.push(normalizar(row.getCell(c).value));
     }
 
@@ -317,6 +322,18 @@ export async function parseOficial(
         });
       }
 
+      // Categoria (col B): opcional, pode vir vazia.
+      const categoriaLida = cells[1] !== "" ? cells[1] : null;
+
+      // Planejado (cols I=R$, J=QT, K=D/M). Cols L (TT) e M (RENTA) ignoradas.
+      const rawColI = row.getCell(9).value;
+      const rawColJ = row.getCell(10).value;
+      const rawColK = row.getCell(11).value;
+
+      const valorPlanejado = toNumber(rawColI);
+      const qtdPlanejada = toNumber(rawColJ);
+      const dmPlanejado = toNumber(rawColK);
+
       grupoAtual.itens.push({
         ordem: grupoAtual.itens.length + 1,
         item: nomeItem,
@@ -324,6 +341,10 @@ export async function parseOficial(
         valor_unitario_orcado: valorD.n,
         quantidade_orcada: qtd.ok ? qtd.n : 1,
         dias_meses_orcado: dm.ok ? dm.n : 1,
+        categoria: categoriaLida,
+        valor_unitario_planejado: valorPlanejado.ok ? valorPlanejado.n : 0,
+        quantidade_planejada: qtdPlanejada.ok ? qtdPlanejada.n : 0,
+        dias_meses_planejado: dmPlanejado.ok ? dmPlanejado.n : 0,
         planilha_origem: colA !== "" ? colA : null,
         linha_xlsx: rowNumber,
       });
