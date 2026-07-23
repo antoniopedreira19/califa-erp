@@ -139,6 +139,7 @@ export function GrupoCard({ grupo, itens, moeda, readOnly, categorias }: Props) 
                 <ItemEditorDrawer
                   grupoId={grupo.id}
                   grupoNome={grupo.nome}
+                  categorias={categorias}
                 />
                 <button
                   type="button"

@@ -166,6 +166,7 @@ export function ItensTable({ grupoNome, itens, moeda, readOnly, categorias }: Pr
         open={editing !== null}
         onOpenChange={(o) => !o && setEditing(null)}
         showTrigger={false}
+        categorias={categorias}
       />
 
       <ConfirmDialog

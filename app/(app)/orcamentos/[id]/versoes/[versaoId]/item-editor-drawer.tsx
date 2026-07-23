@@ -22,6 +22,7 @@ import {
 import {
   tipoCustoLabel,
   type TipoCusto,
+  type VersaoOrcamentoCategoria,
   type VersaoOrcamentoItem,
 } from "@/lib/types";
 import {
@@ -44,6 +45,7 @@ interface Props {
   showTrigger?: boolean;
   disabled?: boolean;
   disabledReason?: string;
+  categorias?: VersaoOrcamentoCategoria[];
 }
 
 const TIPOS: TipoCusto[] = ["A", "B", "C", "D"];
@@ -57,6 +59,7 @@ export function ItemEditorDrawer({
   showTrigger = true,
   disabled,
   disabledReason,
+  categorias = [],
 }: Props) {
   const [uncontrolledOpen, setUncontrolledOpen] = React.useState(false);
   const isControlled = controlledOpen !== undefined;
@@ -163,6 +166,30 @@ export function ItemEditorDrawer({
               </Select>
             </Field>
 
+            <div className="space-y-2">
+              <Label htmlFor="categoria_id">Categoria (opcional)</Label>
+              <Select
+                name="categoria_id"
+                defaultValue={item?.categoria_id ?? ""}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Nenhuma" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Nenhuma</SelectItem>
+                  {categorias.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.nome}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-muted-foreground">
+                Crie novas categorias pelo botão &ldquo;Nova categoria&rdquo; no
+                topo da versão.
+              </p>
+            </div>
+
             <div className="grid gap-4 md:grid-cols-3">
               <Field
                 label="Valor unitário"
@@ -210,6 +237,55 @@ export function ItemEditorDrawer({
                   required
                 />
               </Field>
+            </div>
+
+            <div className="rounded-xl border border-blue-200 bg-blue-50/40 p-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-blue-800">
+                  Planejado
+                </span>
+                <span className="text-[10px] text-blue-800/70">
+                  (custo real negociado com fornecedor)
+                </span>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="valor_unitario_planejado">Valor unit.</Label>
+                  <Input
+                    id="valor_unitario_planejado"
+                    name="valor_unitario_planejado"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    className="no-spinner"
+                    defaultValue={item?.valor_unitario_planejado ?? 0}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="quantidade_planejada">QT</Label>
+                  <Input
+                    id="quantidade_planejada"
+                    name="quantidade_planejada"
+                    type="number"
+                    step="0.001"
+                    min="0"
+                    className="no-spinner"
+                    defaultValue={item?.quantidade_planejada ?? 0}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="dias_meses_planejado">D/M</Label>
+                  <Input
+                    id="dias_meses_planejado"
+                    name="dias_meses_planejado"
+                    type="number"
+                    step="0.001"
+                    min="0"
+                    className="no-spinner"
+                    defaultValue={item?.dias_meses_planejado ?? 0}
+                  />
+                </div>
+              </div>
             </div>
 
             {error && (
