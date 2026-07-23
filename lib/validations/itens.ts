@@ -26,6 +26,24 @@ export const itemSchema = z.object({
     .number({ invalid_type_error: "Dias/meses inválido." })
     .positive("Dias/meses deve ser maior que zero.")
     .default(1),
+  categoria_id: z
+    .string()
+    .uuid("ID da categoria inválido.")
+    .nullable()
+    .optional()
+    .transform((v) => (v && v.length > 0 ? v : null)),
+  valor_unitario_planejado: z.coerce
+    .number({ invalid_type_error: "Valor planejado inválido." })
+    .nonnegative("Valor planejado não pode ser negativo.")
+    .default(0),
+  quantidade_planejada: z.coerce
+    .number({ invalid_type_error: "Quantidade planejada inválida." })
+    .nonnegative("Quantidade planejada não pode ser negativa.")
+    .default(0),
+  dias_meses_planejado: z.coerce
+    .number({ invalid_type_error: "Dias/meses planejado inválido." })
+    .nonnegative("Dias/meses planejado não pode ser negativo.")
+    .default(0),
 });
 
 export type ItemInput = z.infer<typeof itemSchema>;
