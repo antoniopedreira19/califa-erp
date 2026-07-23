@@ -7,6 +7,7 @@ import type {
   SessionContext,
   Tenant,
   TenantMembership,
+  TenantMemberStatus,
 } from "@/lib/types";
 
 type SessionResult =
@@ -16,64 +17,71 @@ type SessionResult =
   | { kind: "sem_tenant"; profile: Profile };
 
 /**
+ * Formato do JSONB retornado pela RPC public.get_session_context.
+ * A RPC filtra internamente por auth.uid() (SECURITY DEFINER) e retorna
+ * null quando não há usuário autenticado ou profile.
+ */
+interface SessionContextPayload {
+  profile: Profile;
+  memberships: Array<{
+    role: AppRole;
+    status: TenantMemberStatus;
+    tenant: Tenant;
+  }>;
+}
+
+/**
  * Carrega profile + memberships do usuário autenticado.
- * Retorna um discriminated union para que o caller reaja apropriadamente
- * a cada estado — nunca silencia erros do Supabase.
- * React.cache deduplica dentro do mesmo request server-side.
+ *
+ * Estratégia:
+ *   1. Chama a RPC get_session_context (1 round-trip Postgres) que
+ *      consolida o que antes eram 3 queries em série. A RPC lê
+ *      auth.uid() do JWT no cookie, então não é preciso um auth.getUser
+ *      separado aqui — o middleware já revalidou o token nesta request.
+ *   2. Se a RPC retornar null → não há sessão válida no JWT.
+ *
+ * React.cache deduplica dentro do mesmo request server-side (múltiplos
+ * server components chamando requireSession/loadSession compartilham o
+ * mesmo resultado).
+ *
+ * Segurança: nenhum parâmetro é passado à RPC — o caller não consegue
+ * pedir a sessão de outro usuário. A RPC filtra tudo por auth.uid().
  */
 export const loadSession = cache(async (): Promise<SessionResult> => {
   const supabase = createClient();
-  const {
-    data: { user },
-    error: userErr,
-  } = await supabase.auth.getUser();
 
-  if (userErr) {
-    console.error("[session] auth.getUser falhou:", userErr.message);
+  const { data, error } = await supabase.rpc("get_session_context");
+
+  if (error) {
+    console.error("[session] rpc get_session_context falhou:", error.message);
     return { kind: "unauthenticated" };
   }
-  if (!user) return { kind: "unauthenticated" };
 
-  const { data: profile, error: profileErr } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", user.id)
-    .maybeSingle<Profile>();
-
-  if (profileErr) {
-    // Erro real (RLS, GRANT, coluna faltando etc). Loga para diagnóstico.
-    console.error("[session] SELECT profiles falhou:", profileErr.message);
+  if (!data) {
+    // RPC retornou null: auth.uid() é null (sem JWT) ou o profile ainda
+    // não foi criado (trigger handle_new_user pode não ter rodado).
     return { kind: "unauthenticated" };
   }
+
+  const payload = data as SessionContextPayload;
+  const { profile } = payload;
+
   if (!profile) {
     console.warn(
-      "[session] profile não encontrado para user_id",
-      user.id,
-      "(trigger handle_new_user pode não ter rodado)",
+      "[session] rpc retornou sem profile — trigger handle_new_user pode não ter rodado",
     );
     return { kind: "unauthenticated" };
   }
 
   if (!profile.ativo) return { kind: "inativo", profile };
 
-  const { data: rawMemberships, error: memErr } = await supabase
-    .from("tenant_members")
-    .select("role, status, tenant:tenants(*)")
-    .eq("user_id", user.id)
-    .eq("status", "ativo");
-
-  if (memErr) {
-    console.error("[session] SELECT tenant_members falhou:", memErr.message);
-    return { kind: "sem_tenant", profile };
-  }
-
-  const memberships: TenantMembership[] = (rawMemberships ?? [])
-    .map((row: any) => ({
-      role: row.role as AppRole,
-      status: row.status,
-      tenant: row.tenant as Tenant,
-    }))
-    .filter((m) => m.tenant && m.tenant.status === "ativo");
+  const memberships: TenantMembership[] = (payload.memberships ?? [])
+    .filter((m) => m.tenant && m.tenant.status === "ativo")
+    .map((m) => ({
+      role: m.role,
+      status: m.status,
+      tenant: m.tenant,
+    }));
 
   if (memberships.length === 0) return { kind: "sem_tenant", profile };
 
