@@ -1,6 +1,26 @@
 # Handoff — California ERP
 
-Documento para dar continuidade ao projeto em uma nova sessão de trabalho. Última atualização: fase G da Task 004 implementada — CATEGORIA por versão (dropdown no item, botão "Nova categoria" no header) + visão PLANEJADO no item (colunas na tabela, bloco no drawer, rentabilidade no card de totais). Parser da planilha lê col B (categoria) e cols I-K (planejado). Duplicar versão copia tudo. Ver spec em `docs/superpowers/specs/2026-07-23-planejado-e-categoria-design.md` e plano em `docs/superpowers/plans/2026-07-23-planejado-e-categoria.md`.
+Documento para dar continuidade ao projeto em uma nova sessão de trabalho.
+
+**Última atualização** (2026-07-23): documentado `docs/PERFORMANCE.md` como regra transversal do projeto após duas regressões severas de performance na navegação de orçamentos/versões. Fase G da Task 004 completa (categoria + planejado). 5 commits pendentes de push.
+
+## 0. LEIA PRIMEIRO — ação pendente no início da sessão
+
+Antes de qualquer coisa:
+
+1. **`docs/PERFORMANCE.md` é obrigatório**. Toda mudança em `app/(app)/**` ou `lib/supabase/**` passa pelo checklist do guia. Já custamos 2 regressões severas por não respeitar isso — não repita. `CLAUDE.md` também tem as regras não-negociáveis no topo.
+
+2. **Diagnóstico de perf em andamento**: os commits recentes adicionaram `console.log("[<contexto>.timing]", ...)` **temporário** em 3 arquivos pra investigar por que a navegação orçamento→versão ficou lenta. Depois do próximo teste do user em prod, coletar os logs em **Vercel → Functions → Runtime Logs** filtrando por:
+   - `[importacao.preview.timing]` — [`app/(app)/orcamentos/[id]/versoes/importar-actions.ts`](../app/(app)/orcamentos/[id]/versoes/importar-actions.ts)
+   - `[orcamento.detail.timing]` — [`app/(app)/orcamentos/[id]/page.tsx`](../app/(app)/orcamentos/[id]/page.tsx)
+   - `[versao.detail.timing]` — [`app/(app)/orcamentos/[id]/versoes/[versaoId]/page.tsx`](../app/(app)/orcamentos/[id]/versoes/[versaoId]/page.tsx)
+
+   Uma vez que o gargalo real for identificado, **REMOVER esses timings** (blocos `console.log` marcados com `// TEMPORÁRIO`) e commitar como cleanup.
+
+3. **Fixes de perf aplicados neste ciclo (não regride):**
+   - `prefetch={false}` nos `<Link>` das listas de versão, orçamento, cliente e fornecedor.
+   - Página do orçamento não usa mais embed pesado pra calcular totais de versões — trocado por query agregada.
+   - `force-dynamic` permanece nas pages autenticadas (**não remova** — funciona como freio de prefetch descontrolado, ver `docs/PERFORMANCE.md` seção G).
 
 ## 1. Onde estamos
 
@@ -8,9 +28,13 @@ Documento para dar continuidade ao projeto em uma nova sessão de trabalho. Últ
 Backend: Supabase project `avlwxyknvhlzvnysbzrg` (`https://avlwxyknvhlzvnysbzrg.supabase.co`).
 Admin cadastrado: `antonio@pevetech.com.br` (role `administrador` no tenant `agencia-california`).
 
-**Local (Git):**
-- Working tree limpo.
-- Branch `main` está algumas commits à frente do `origin/main` — publicar com `git push origin main` quando quiser.
+**Local (Git):** working tree limpo, sincronizado com `origin/main`.
+
+**Últimos commits relevantes desta sessão:**
+- `a665450` — Documenta performance como regra transversal (PERFORMANCE.md + CLAUDE.md + memória)
+- `7b994f1` — perf: prefetch=false nas listas + query agregada + timing granular temp
+- `b4b1c30` — Preview do import: mostra planejado + rentabilidade + timing debug temp
+- `75e978c` — Fix pós-review Fase G (Number coerção planejado + rentab tempo real no drawer)
 
 **Migrations aplicadas no Supabase (via MCP):**
 
@@ -206,12 +230,13 @@ Docs de referência: [`tasks/005-criacao-job-orcamento-aprovado.md`](../tasks/00
 ## 4. Arquitetura & convenções (leia antes de codar)
 
 ### Regras invioláveis
-1. **RLS ≠ GRANT** — Postgres exige AMBOS. Toda migration nova que cria tabela precisa terminar com `grant select, insert, update on ... to authenticated`. Perdemos horas com isso na Task 001.
-2. **Toda tabela operacional tem `tenant_id`** com FK para `tenants` e RLS via `is_tenant_member(tenant_id)`.
-3. **Sem `DELETE` policy** exceto para tabelas efêmeras (itens). Use `status = 'cancelado' / 'inativo'`.
-4. **`SUPABASE_SERVICE_ROLE_KEY` só em server actions/route handlers.** Nunca no cliente.
-5. **Toda ação sensível vira `audit_events` via RPC `log_audit_event`**.
-6. **Antes de mudar código, ler `lib/types.ts`** — os types espelham as tabelas.
+1. **Performance é feature** — leia [`docs/PERFORMANCE.md`](PERFORMANCE.md) ANTES de tocar `app/(app)/**` ou `lib/supabase/**`. Já pagamos duas regressões severas: `<Link>` sem `prefetch={false}` em listas navegáveis e embed pesado só pra somar totais. Não repita — o guia tem case studies + checklist + anti-padrões proibidos.
+2. **RLS ≠ GRANT** — Postgres exige AMBOS. Toda migration nova que cria tabela precisa terminar com `grant select, insert, update on ... to authenticated`. `service_role` já é coberto por `ALTER DEFAULT PRIVILEGES` da migration `20260725000001`. Perdemos horas com isso na Task 001.
+3. **Toda tabela operacional tem `tenant_id`** com FK para `tenants` e RLS via `is_tenant_member(tenant_id)`. Policies usam `(select auth.uid())`, não `auth.uid()` direto (evita re-avaliar por linha).
+4. **Sem `DELETE` policy** exceto para tabelas efêmeras (itens). Use `status = 'cancelado' / 'inativo'`.
+5. **`SUPABASE_SERVICE_ROLE_KEY` só em server actions/route handlers.** Nunca no cliente.
+6. **Toda ação sensível vira `audit_events` via RPC `log_audit_event`**.
+7. **Antes de mudar código, ler `lib/types.ts`** — os types espelham as tabelas.
 
 ### Padrões UI (não reinvente)
 - `<ConfirmDialog>` para toda confirmação (não use `window.confirm`).
