@@ -247,8 +247,14 @@ function PreviewPanel({
   preview: Preview;
   arquivoNome: string;
 }) {
-  const totalGeral = preview.grupos.reduce((s, g) => s + g.total_bruto, 0);
+  const totalOrcadoGeral = preview.grupos.reduce((s, g) => s + g.total_bruto, 0);
+  const totalPlanejadoGeral = preview.grupos.reduce(
+    (s, g) => s + g.total_planejado,
+    0,
+  );
   const totalItens = preview.grupos.reduce((s, g) => s + g.itens_count, 0);
+  const temPlanejado = totalPlanejadoGeral > 0;
+  const rentabilidadeGeral = totalOrcadoGeral - totalPlanejadoGeral;
   const ajustes = preview.warnings.filter((w) => w.severidade === "ajuste");
   const ignoradas = preview.warnings.filter((w) => w.severidade === "ignorada");
 
@@ -267,10 +273,35 @@ function PreviewPanel({
       </div>
 
       {/* Contagens */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 gap-3">
         <Stat label="Grupos" value={preview.grupos.length} />
         <Stat label="Itens" value={totalItens} />
-        <Stat label="Total bruto" value={formatCurrency(totalGeral, "BRL")} mono />
+      </div>
+      <div className={`grid gap-3 ${temPlanejado ? "grid-cols-3" : "grid-cols-1"}`}>
+        <Stat
+          label="Total orçado"
+          value={formatCurrency(totalOrcadoGeral, "BRL")}
+          mono
+        />
+        {temPlanejado && (
+          <>
+            <Stat
+              label="Total planejado"
+              value={formatCurrency(totalPlanejadoGeral, "BRL")}
+              mono
+            />
+            <Stat
+              label="Rentabilidade"
+              value={formatCurrency(rentabilidadeGeral, "BRL")}
+              mono
+              valueClassName={
+                rentabilidadeGeral >= 0
+                  ? "text-emerald-700"
+                  : "text-california-red"
+              }
+            />
+          </>
+        )}
       </div>
 
       {preview.percentual_honorarios !== null && (
@@ -288,20 +319,57 @@ function PreviewPanel({
           Grupos que serão criados
         </div>
         <ul className="divide-y divide-border">
-          {preview.grupos.map((g) => (
-            <li
-              key={`${g.ordem}-${g.nome}`}
-              className="flex items-center justify-between px-4 py-2.5 text-sm"
-            >
-              <span className="font-medium text-foreground">{g.nome}</span>
-              <span className="text-xs text-muted-foreground">
-                {g.itens_count} {g.itens_count === 1 ? "item" : "itens"} ·{" "}
-                <span className="font-mono">
+          {preview.grupos.map((g) => {
+            const rentab = g.total_bruto - g.total_planejado;
+            const grupoTemPlan = g.total_planejado > 0;
+            return (
+              <li
+                key={`${g.ordem}-${g.nome}`}
+                className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm"
+              >
+                <span className="font-medium text-foreground flex-1 min-w-0 truncate">
+                  {g.nome}
+                </span>
+                <span className="text-xs text-muted-foreground whitespace-nowrap">
+                  {g.itens_count} {g.itens_count === 1 ? "item" : "itens"}
+                </span>
+                <span
+                  className="font-mono text-xs whitespace-nowrap"
+                  title="Total orçado"
+                >
                   {formatCurrency(g.total_bruto, "BRL")}
                 </span>
-              </span>
-            </li>
-          ))}
+                {grupoTemPlan ? (
+                  <>
+                    <span
+                      className="font-mono text-xs whitespace-nowrap text-blue-800"
+                      title="Total planejado"
+                    >
+                      {formatCurrency(g.total_planejado, "BRL")}
+                    </span>
+                    <span
+                      className={
+                        "font-mono text-xs whitespace-nowrap font-semibold " +
+                        (rentab >= 0 ? "text-emerald-700" : "text-california-red")
+                      }
+                      title="Rentabilidade (orçado − planejado)"
+                    >
+                      {formatCurrency(rentab, "BRL")}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-xs text-muted-foreground/60 w-20 text-right">
+                      —
+                    </span>
+                    <span className="text-xs text-muted-foreground/60 w-20 text-right">
+                      —
+                    </span>
+                  </>
+                )}
+              </li>
+            );
+          })}
         </ul>
       </div>
 
@@ -355,10 +423,12 @@ function Stat({
   label,
   value,
   mono = false,
+  valueClassName,
 }: {
   label: string;
   value: number | string;
   mono?: boolean;
+  valueClassName?: string;
 }) {
   return (
     <div className="rounded-xl border border-border bg-card px-4 py-3">
@@ -366,7 +436,9 @@ function Stat({
         {label}
       </p>
       <p
-        className={`mt-1 text-lg font-semibold text-foreground ${mono ? "font-mono" : ""}`}
+        className={`mt-1 text-lg font-semibold ${mono ? "font-mono" : ""} ${
+          valueClassName ?? "text-foreground"
+        }`}
       >
         {value}
       </p>
