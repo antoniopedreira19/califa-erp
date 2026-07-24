@@ -39,9 +39,22 @@ Não criar tabela `pre_jobs`. Não criar job antes da aprovação do orçamento.
 
 No MVP, o gerente de projetos conversa com o cliente fora do sistema. O sistema deve permitir exportar a versão do orçamento em planilha. Envio automático por e-mail ou WhatsApp fica para fase futura.
 
+## Performance é feature (regra transversal)
+
+**Toda mudança de UI ou backend deve ser avaliada contra o guia de performance ANTES de codar.** Leia `docs/PERFORMANCE.md` — é a fonte-verdade sobre o que degrada o sistema, como detectar e como corrigir. Use o checklist do documento como filtro final antes de qualquer commit que toca em `app/(app)/**` ou `lib/supabase/**`.
+
+**Regras não negociáveis:**
+- `<Link>` em lista de 5+ itens navegáveis → `prefetch={false}` por default.
+- Query só para contar/somar → use agregação separada, nunca embed pesado (`select("...embed:tabela(*)")`).
+- Todas as queries independentes num server component → `Promise.all`, nunca em série.
+- Toda migration nova → GRANT explícito para `authenticated` + índice em FK importante + policies RLS usam `(select auth.uid())`.
+- `force-dynamic` não é redundante: funciona como freio de prefetch descontrolado. Só remover com plano de compensação (`prefetch={false}` nos Links relevantes).
+
+Regressões de performance já custaram 2 iterações completas ao projeto — a última travou navegação a 33s. `docs/PERFORMANCE.md` documenta os case studies e os anti-padrões proibidos.
+
 ## Regras para desenvolvimento com IA
 
-- Leia `README.md`, `docs/00-visao-geral.md`, `docs/01-stack-e-arquitetura.md` e a task ativa antes de implementar.
+- Leia `README.md`, `docs/00-visao-geral.md`, `docs/01-stack-e-arquitetura.md`, `docs/PERFORMANCE.md` e a task ativa antes de implementar.
 - Não implemente módulos futuros antes da documentação e validação com o setor responsável.
 - Mantenha escopo pequeno por task.
 - Faça alterações com migrations versionadas no Supabase.
