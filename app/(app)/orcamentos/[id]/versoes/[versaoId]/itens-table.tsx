@@ -41,20 +41,48 @@ export function ItensTable({ grupoNome, itens, moeda, readOnly, categorias }: Pr
     <>
       <div className="overflow-x-auto">
         <table className="w-full text-sm border-collapse">
-          <thead className="bg-muted/40 text-[10px] uppercase tracking-wider text-muted-foreground">
+          <thead className="text-[10px] uppercase tracking-wider text-muted-foreground">
+            {/* Linha 1 — faixas de bloco */}
             <tr>
+              <th colSpan={3} className="bg-muted/40 border-b border-border" />
+              <th
+                colSpan={4}
+                className="text-center px-3 py-2 text-[11px] font-extrabold tracking-[0.1em] normal-case text-foreground bg-[#f1f0ec] border-b-[3px] border-b-[#282828] border-l-2 border-l-[#d7d7d7]"
+              >
+                ORÇADO
+              </th>
+              <th
+                colSpan={4}
+                className="text-center px-3 py-2 text-[11px] font-extrabold tracking-[0.1em] normal-case text-[#1e4fa3] bg-[#e8f0fd] border-b-[3px] border-b-[#2f6fdb] border-l-2 border-l-[#b9d1f4]"
+              >
+                PLANEJADO
+              </th>
+              <th
+                colSpan={1}
+                className="text-center px-3 py-2 text-[11px] font-extrabold tracking-[0.08em] normal-case text-emerald-700 bg-emerald-50 border-b-[3px] border-b-emerald-600 border-l-2 border-l-[#d7d7d7]"
+              >
+                RESULTADO
+              </th>
+              {!readOnly && <th className="bg-muted/40 border-b border-border" />}
+            </tr>
+
+            {/* Linha 2 — sub-cabeçalho de colunas */}
+            <tr className="bg-muted/40">
               <th className="text-left font-semibold px-3 py-2">Item</th>
               <th className="text-left font-semibold px-3 py-2">Tipo</th>
               <th className="text-left font-semibold px-3 py-2">Categoria</th>
-              <th className="text-right font-semibold px-3 py-2">R$ Orç.</th>
+              {/* bloco ORÇADO */}
+              <th className="text-right font-semibold px-3 py-2 border-l-2 border-l-[#e4e2dd]">R$ Unit.</th>
               <th className="text-right font-semibold px-3 py-2">QT</th>
               <th className="text-right font-semibold px-3 py-2">D/M</th>
-              <th className="text-right font-semibold px-3 py-2">Total Orç.</th>
-              <th className="text-right font-semibold px-3 py-2 bg-blue-50/60">R$ Plan.</th>
-              <th className="text-right font-semibold px-3 py-2 bg-blue-50/60">QT</th>
-              <th className="text-right font-semibold px-3 py-2 bg-blue-50/60">D/M</th>
-              <th className="text-right font-semibold px-3 py-2 bg-blue-50/60">Total Plan.</th>
-              <th className="text-right font-semibold px-3 py-2">Rentab.</th>
+              <th className="text-right font-semibold px-3 py-2">Total</th>
+              {/* bloco PLANEJADO */}
+              <th className="text-right font-semibold px-3 py-2 bg-blue-50/60 text-[#5a76a8] border-l-2 border-l-[#cfe0f7]">R$ Unit.</th>
+              <th className="text-right font-semibold px-3 py-2 bg-blue-50/60 text-[#5a76a8]">QT</th>
+              <th className="text-right font-semibold px-3 py-2 bg-blue-50/60 text-[#5a76a8]">D/M</th>
+              <th className="text-right font-semibold px-3 py-2 bg-blue-50/60 text-[#5a76a8]">Total</th>
+              {/* bloco RESULT */}
+              <th className="text-right font-semibold px-3 py-2 border-l border-l-border">Rentab.</th>
               {!readOnly && <th className="w-[80px]"></th>}
             </tr>
           </thead>
@@ -89,19 +117,19 @@ export function ItensTable({ grupoNome, itens, moeda, readOnly, categorias }: Pr
                     );
                   })()}
                 </td>
-                <td className="px-3 py-2 text-right font-mono text-xs">
+                <td className="px-3 py-2 text-right font-mono text-xs bg-black/[0.015] border-l-2 border-l-[#e4e2dd]">
                   {formatCurrency(item.valor_unitario_orcado, moeda)}
                 </td>
-                <td className="px-3 py-2 text-right text-xs">
+                <td className="px-3 py-2 text-right text-xs bg-black/[0.015]">
                   {Number(item.quantidade_orcada)}
                 </td>
-                <td className="px-3 py-2 text-right text-xs">
+                <td className="px-3 py-2 text-right text-xs bg-black/[0.015]">
                   {Number(item.dias_meses_orcado)}
                 </td>
-                <td className="px-3 py-2 text-right font-mono text-xs font-semibold">
+                <td className="px-3 py-2 text-right font-mono text-xs font-semibold bg-black/[0.015]">
                   {formatCurrency(item.total_orcado, moeda)}
                 </td>
-                <td className="px-3 py-2 text-right font-mono text-xs bg-blue-50/40">
+                <td className="px-3 py-2 text-right font-mono text-xs bg-blue-50/40 border-l-2 border-l-[#cfe0f7]">
                   {item.valor_unitario_planejado > 0
                     ? formatCurrency(item.valor_unitario_planejado, moeda)
                     : "—"}
@@ -117,7 +145,7 @@ export function ItensTable({ grupoNome, itens, moeda, readOnly, categorias }: Pr
                     ? formatCurrency(item.total_planejado, moeda)
                     : "—"}
                 </td>
-                <td className="px-3 py-2 text-right font-mono text-xs">
+                <td className="px-3 py-2 text-right font-mono text-xs border-l-2 border-l-[#e4e2dd]">
                   {(() => {
                     if (item.total_planejado <= 0) {
                       return <span className="text-muted-foreground">—</span>;
