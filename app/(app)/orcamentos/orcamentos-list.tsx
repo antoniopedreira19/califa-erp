@@ -204,6 +204,7 @@ export function OrcamentosList({
                 <TableCell>
                   <Link
                     href={href}
+                    prefetch={false}
                     onClick={(e) => e.stopPropagation()}
                     className="font-mono text-xs font-semibold text-foreground hover:text-california-red transition-colors"
                   >

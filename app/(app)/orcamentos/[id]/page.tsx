@@ -49,7 +49,10 @@ export default async function OrcamentoDetailPage({
 }: {
   params: { id: string };
 }) {
+  // TEMPORÁRIO: timing granular para investigar lentidão. Remover após diagnóstico.
+  const t0 = Date.now();
   const session = await requireSession();
+  const tSess = Date.now();
   const supabase = createClient();
 
   const [orcRes, clientesRes, responsaveis, versoesRes] = await Promise.all([
@@ -68,18 +71,20 @@ export default async function OrcamentoDetailPage({
       .eq("status", "ativo")
       .order("nome_fantasia"),
     listActiveMembers(session.activeTenant.id),
-    // Versões + agregado de itens em uma query só (embed retorna array
-    // dos itens com total_orcado; a soma acontece no client).
+    // Versões — SEM embed de itens. O embed puxava todos os itens de
+    // todas as versões (payload grande, serialização lenta). Depois
+    // buscamos só id + total_orcado dos itens agrupando no client.
     supabase
       .from("versoes_orcamento")
       .select(
-        "id, numero_versao, nome, status, percentual_honorarios, percentual_imposto, moeda, created_at, itens:versoes_orcamento_itens(total_orcado)",
+        "id, numero_versao, nome, status, percentual_honorarios, percentual_imposto, moeda, created_at",
       )
       .eq("orcamento_id", params.id)
       .eq("tenant_id", session.activeTenant.id)
       .order("numero_versao", { ascending: false }),
   ]);
 
+  const tQueries = Date.now();
   if (orcRes.error) console.error("[orcamentos.detail]", orcRes.error.message);
   const raw = orcRes.data as any;
   if (!raw) notFound();
@@ -105,12 +110,45 @@ export default async function OrcamentoDetailPage({
   const clientes = (clientesRes.data ?? []) as Pick<Cliente, "id" | "nome_fantasia">[];
 
   if (versoesRes.error) console.error("[versoes.list]", versoesRes.error.message);
-  const versoes: VersaoRow[] = ((versoesRes.data ?? []) as any[]).map((v) => {
-    const itens = (v.itens ?? []) as { total_orcado: string | number }[];
-    const total = itens.reduce(
-      (sum, it) => sum + Number(it.total_orcado ?? 0),
-      0,
-    );
+  const versoesBrutas = (versoesRes.data ?? []) as any[];
+
+  // Query separada para agregar itens (count + sum) por versão.
+  // Puxa apenas versao_orcamento_id + total_orcado — payload mínimo.
+  const versaoIds = versoesBrutas.map((v) => v.id);
+  const agregadoPorVersao = new Map<string, { count: number; total: number }>();
+  if (versaoIds.length > 0) {
+    const { data: itensBrutos, error: itensAggErr } = await supabase
+      .from("versoes_orcamento_itens")
+      .select("versao_orcamento_id, total_orcado")
+      .in("versao_orcamento_id", versaoIds)
+      .eq("tenant_id", session.activeTenant.id);
+
+    if (itensAggErr) console.error("[versoes.agg]", itensAggErr.message);
+    for (const it of (itensBrutos ?? []) as any[]) {
+      const cur = agregadoPorVersao.get(it.versao_orcamento_id) ?? {
+        count: 0,
+        total: 0,
+      };
+      cur.count += 1;
+      cur.total += Number(it.total_orcado ?? 0);
+      agregadoPorVersao.set(it.versao_orcamento_id, cur);
+    }
+  }
+
+  const tAgg = Date.now();
+  console.log(
+    "[orcamento.detail.timing]",
+    JSON.stringify({
+      session: tSess - t0,
+      parallel_queries: tQueries - tSess,
+      agg_itens: tAgg - tQueries,
+      total: tAgg - t0,
+      versoes: versaoIds.length,
+    }),
+  );
+
+  const versoes: VersaoRow[] = versoesBrutas.map((v) => {
+    const agg = agregadoPorVersao.get(v.id) ?? { count: 0, total: 0 };
     return {
       id: v.id,
       numero_versao: v.numero_versao,
@@ -119,8 +157,8 @@ export default async function OrcamentoDetailPage({
       percentual_honorarios: Number(v.percentual_honorarios ?? 0),
       percentual_imposto: Number(v.percentual_imposto ?? 0),
       moeda: v.moeda ?? "BRL",
-      itens_count: itens.length,
-      itens_total: total,
+      itens_count: agg.count,
+      itens_total: agg.total,
       created_at: v.created_at,
     };
   });

@@ -132,6 +132,7 @@ export function FornecedoresList({ fornecedores }: { fornecedores: Fornecedor[] 
                 <TableCell>
                   <Link
                     href={href}
+                    prefetch={false}
                     onClick={(e) => e.stopPropagation()}
                     className="font-medium text-foreground hover:text-california-red transition-colors"
                   >

@@ -108,6 +108,7 @@ export function VersoesList({
                   <div className="flex items-center gap-2 flex-wrap">
                     <Link
                       href={href}
+                      prefetch={false}
                       onClick={(e) => e.stopPropagation()}
                       className="font-medium text-foreground hover:text-california-red transition-colors"
                     >
@@ -163,6 +164,7 @@ export function VersoesList({
                   )}
                   <Link
                     href={href}
+                    prefetch={false}
                     title="Abrir versão"
                     className="p-2 rounded-lg text-muted-foreground hover:text-california-red hover:bg-accent transition-colors"
                   >
