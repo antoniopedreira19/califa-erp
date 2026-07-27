@@ -54,8 +54,6 @@ export interface ParseItem {
   valor_unitario_orcado: number;
   quantidade_orcada: number;
   dias_meses_orcado: number;
-  /** Categoria vinda da col B da planilha, ou null. */
-  categoria: string | null;
   valor_unitario_planejado: number;
   quantidade_planejada: number;
   dias_meses_planejado: number;
@@ -322,9 +320,6 @@ export async function parseOficial(
         });
       }
 
-      // Categoria (col B): opcional, pode vir vazia.
-      const categoriaLida = cells[1] !== "" ? cells[1] : null;
-
       // Planejado (cols I=R$, J=QT, K=D/M). Cols L (TT) e M (RENTA) ignoradas.
       const rawColI = row.getCell(9).value;
       const rawColJ = row.getCell(10).value;
@@ -341,7 +336,6 @@ export async function parseOficial(
         valor_unitario_orcado: valorD.n,
         quantidade_orcada: qtd.ok ? qtd.n : 1,
         dias_meses_orcado: dm.ok ? dm.n : 1,
-        categoria: categoriaLida,
         valor_unitario_planejado: valorPlanejado.ok ? valorPlanejado.n : 0,
         quantidade_planejada: qtdPlanejada.ok ? qtdPlanejada.n : 0,
         dias_meses_planejado: dmPlanejado.ok ? dmPlanejado.n : 0,
