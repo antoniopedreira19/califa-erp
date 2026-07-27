@@ -2,7 +2,7 @@
 
 Documento para dar continuidade ao projeto em uma nova sessão de trabalho.
 
-**Última atualização** (2026-07-23): documentado `docs/PERFORMANCE.md` como regra transversal do projeto após duas regressões severas de performance na navegação de orçamentos/versões. Fase G da Task 004 completa (categoria + planejado). 5 commits pendentes de push.
+**Última atualização** (2026-07-27): migração para catálogo global de categorias (Fase G') concluída — `versoes_orcamento_categorias` substituída por `categorias` (tenant-wide), CRUD em `/categorias` gerenciado pelo hub `/cadastros`, import agnóstico de categoria.
 
 ## 0. LEIA PRIMEIRO — ação pendente no início da sessão
 
@@ -96,6 +96,7 @@ Admin cadastrado: `antonio@pevetech.com.br` (role `administrador` no tenant `age
   - Parser lê col B (categoria) e cols I-K (planejado); confirmarImportacao cria categorias em bulk.
   - Duplicar versão copia categorias (com map old→new) e campos planejados.
   - Helper `calcularTotaisPlanejados` em `lib/calculos/versao-totais.ts`.
+- **Fase G' — Catálogo global de categorias**: substituiu `versoes_orcamento_categorias` (por versão) por `categorias` (tenant), com CRUD em `/categorias` gerenciado pelo hub `/cadastros`. Todos os membros criam/editam; só admin inativa/reativa. Import não lê mais categoria da planilha; classificação é feita pelo GP no drawer de item. Duplicação de versão preserva categoria_id.
 
 ### UI polish
 - Componentes reusáveis: `Dialog` + `DrawerContent`, `ConfirmDialog`, `Select` (Radix), `Popover`, `Calendar`, `DatePicker`, `MaskedInput` (telefone/CPF/CNPJ), `no-spinner` utility.
