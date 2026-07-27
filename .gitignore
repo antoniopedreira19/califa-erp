@@ -43,6 +43,9 @@ next-env.d.ts
 supabase/.branches
 supabase/.temp
 
+# pacote de design recebido do time (referência local, não é código)
+design_handoff_califa/
+
 # IDE
 .idea/
 .vscode/*
