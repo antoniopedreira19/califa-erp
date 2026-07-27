@@ -5,10 +5,8 @@ import { useRouter } from "next/navigation";
 import { Check, Pencil, Trash2, X } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
-import { formatCurrency } from "@/lib/utils";
 import type { VersaoOrcamentoGrupo, VersaoOrcamentoItem, VersaoOrcamentoCategoria } from "@/lib/types";
 import { removerGrupo, renomearGrupo } from "../actions";
-import { ItemEditorDrawer } from "./item-editor-drawer";
 import { ItensTable } from "./itens-table";
 
 interface Props {
@@ -26,11 +24,6 @@ export function GrupoCard({ grupo, itens, moeda, readOnly, categorias }: Props) 
   const [nomeInput, setNomeInput] = React.useState(grupo.nome);
   const [error, setError] = React.useState<string | null>(null);
   const [askRemover, setAskRemover] = React.useState(false);
-
-  const subtotal = itens.reduce(
-    (sum, it) => sum + Number(it.total_orcado ?? 0),
-    0,
-  );
 
   function handleRenameSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -59,9 +52,11 @@ export function GrupoCard({ grupo, itens, moeda, readOnly, categorias }: Props) 
   }
 
   return (
-    <div className="rounded-2xl border border-border bg-card shadow-soft overflow-hidden">
+    // Sem overflow-hidden: a trilha de ações da ItensTable precisa
+    // escapar do frame do card. Os cantos são arredondados por filho.
+    <div className="rounded-2xl border border-border bg-card shadow-soft">
       {/* Header */}
-      <div className="flex items-center justify-between gap-3 border-b border-border bg-muted/40 px-6 py-4">
+      <div className="flex items-center justify-between gap-3 rounded-t-2xl border-b border-border bg-muted/40 px-6 py-4">
         <div className="flex items-center gap-3 flex-1 min-w-0">
           {renaming ? (
             <form
@@ -126,31 +121,18 @@ export function GrupoCard({ grupo, itens, moeda, readOnly, categorias }: Props) 
 
         {!renaming && (
           <div className="flex items-center gap-4 shrink-0">
-            <div className="text-right">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Subtotal
-              </p>
-              <p className="text-sm font-bold text-foreground tabular-nums">
-                {formatCurrency(subtotal, moeda)}
-              </p>
-            </div>
+            {/* Subtotal saiu daqui: agora vive no <tfoot> da tabela,
+                com Orçado, Planejado e Resultado sob as colunas Total. */}
             {!readOnly && (
-              <>
-                <ItemEditorDrawer
-                  grupoId={grupo.id}
-                  grupoNome={grupo.nome}
-                  categorias={categorias}
-                />
-                <button
-                  type="button"
-                  onClick={() => setAskRemover(true)}
-                  disabled={pending}
-                  title="Remover grupo"
-                  className="p-1.5 rounded-md text-muted-foreground hover:text-california-red hover:bg-accent transition-colors disabled:opacity-50"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </>
+              <button
+                type="button"
+                onClick={() => setAskRemover(true)}
+                disabled={pending}
+                title="Remover grupo"
+                className="p-1.5 rounded-md text-muted-foreground hover:text-california-red hover:bg-accent transition-colors disabled:opacity-50"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
             )}
           </div>
         )}
@@ -164,6 +146,7 @@ export function GrupoCard({ grupo, itens, moeda, readOnly, categorias }: Props) 
 
       {/* Tabela de itens */}
       <ItensTable
+        grupoId={grupo.id}
         grupoNome={grupo.nome}
         itens={itens}
         moeda={moeda}

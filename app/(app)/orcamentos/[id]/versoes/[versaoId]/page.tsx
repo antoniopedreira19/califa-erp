@@ -233,7 +233,9 @@ export default async function VersaoDetailPage({
           </p>
         </div>
       ) : (
-        <div className="space-y-4">
+        // pr reserva a calha da trilha de ações (Remover), que fica
+        // fora do frame de cada card, alinhada com as linhas da tabela.
+        <div className={cn("space-y-4", !readOnly && "pr-12")}>
           {grupos.map((g) => (
             <GrupoCard
               key={g.id}

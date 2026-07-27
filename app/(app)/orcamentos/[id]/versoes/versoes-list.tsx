@@ -79,6 +79,11 @@ export function VersoesList({
 
   const isDuplicar = confirm?.type === "duplicar";
 
+  const versaoMaisRecente = React.useMemo(
+    () => versoes.reduce((max, v) => Math.max(max, v.numero_versao), 0),
+    [versoes],
+  );
+
   return (
     <>
       <ul className="divide-y divide-border">
@@ -86,6 +91,14 @@ export function VersoesList({
           const podeCancelar =
             v.status !== "aprovada" && v.status !== "cancelada";
           const href = `/orcamentos/${orcamentoId}/versoes/${v.id}`;
+          const isMaisRecente = v.numero_versao === versaoMaisRecente;
+          // Um passo maiores na linha destacada; o gap-1 do container
+          // mantém a distância igual entre os três ícones.
+          const iconBtn = cn(
+            "rounded-lg text-muted-foreground hover:text-california-red hover:bg-accent transition-colors disabled:opacity-50",
+            isMaisRecente ? "p-2.5" : "p-2",
+          );
+          const iconSize = isMaisRecente ? "h-[18px] w-[18px]" : "h-4 w-4";
           return (
             <li key={v.id} className="group">
               <div
@@ -100,7 +113,14 @@ export function VersoesList({
                 }}
                 className="flex items-center gap-4 px-6 py-4 cursor-pointer hover:bg-muted/40 focus-visible:outline-none focus-visible:bg-muted/40 transition-colors"
               >
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-california-red/10 text-california-red font-mono text-sm font-semibold shrink-0">
+                <div
+                  className={cn(
+                    "flex h-10 w-10 items-center justify-center rounded-lg font-mono text-sm font-semibold shrink-0",
+                    isMaisRecente
+                      ? "bg-california-red text-white shadow-brand"
+                      : "bg-california-red/10 text-california-red",
+                  )}
+                >
                   v{v.numero_versao}
                 </div>
 
@@ -110,10 +130,14 @@ export function VersoesList({
                       href={href}
                       prefetch={false}
                       onClick={(e) => e.stopPropagation()}
-                      className="font-medium text-foreground hover:text-california-red transition-colors"
+                      className={cn(
+                        "text-foreground hover:text-california-red transition-colors",
+                        isMaisRecente ? "font-semibold" : "font-medium",
+                      )}
                     >
                       {v.nome ?? `Versão ${v.numero_versao}`}
                     </Link>
+                    {isMaisRecente && <Badge>Mais recente</Badge>}
                     <Badge className={cn("border", statusBadgeClasses(v.status))}>
                       {versaoStatusLabel(v.status)}
                     </Badge>
@@ -141,9 +165,9 @@ export function VersoesList({
                     }
                     disabled={pending}
                     title="Duplicar versão"
-                    className="p-2 rounded-lg text-muted-foreground hover:text-california-red hover:bg-accent transition-colors disabled:opacity-50"
+                    className={iconBtn}
                   >
-                    <Copy className="h-4 w-4" />
+                    <Copy className={iconSize} />
                   </button>
                   {podeCancelar && (
                     <button
@@ -157,16 +181,16 @@ export function VersoesList({
                       }
                       disabled={pending}
                       title="Cancelar versão"
-                      className="p-2 rounded-lg text-muted-foreground hover:text-california-red hover:bg-accent transition-colors disabled:opacity-50"
+                      className={iconBtn}
                     >
-                      <X className="h-4 w-4" />
+                      <X className={iconSize} />
                     </button>
                   )}
                   <Link
                     href={href}
                     prefetch={false}
                     title="Abrir versão"
-                    className="p-2 rounded-lg text-muted-foreground hover:text-california-red hover:bg-accent transition-colors"
+                    className={cn(iconBtn, isMaisRecente && "text-foreground")}
                   >
                     <ArrowRight className="h-4 w-4" />
                   </Link>

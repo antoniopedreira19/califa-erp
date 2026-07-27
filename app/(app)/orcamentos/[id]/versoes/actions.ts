@@ -6,7 +6,11 @@ import { createClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { versaoSchema } from "@/lib/validations/versoes";
-import { itemSchema } from "@/lib/validations/itens";
+import {
+  itemSchema,
+  camposItemEditaveis,
+  isCampoItemEditavel,
+} from "@/lib/validations/itens";
 import { grupoSchema } from "@/lib/validations/grupos";
 import { categoriaSchema } from "@/lib/validations/categorias";
 import type {
@@ -930,6 +934,71 @@ export async function atualizarItem(
 
   revalidatePath(
     `/orcamentos/${check.orcamento_id}/versoes/${item.versao_orcamento_id}`,
+  );
+  return { ok: true, id: itemId };
+}
+
+/**
+ * Grava UM campo de UM item — usada pela edição inline da planilha.
+ * `campo` chega do cliente, então passa pela allowlist antes de virar
+ * UPDATE. Os totais são colunas GENERATED: o banco recalcula sozinho.
+ */
+export async function atualizarCampoItem(
+  itemId: string,
+  campo: string,
+  valor: string | null,
+): Promise<ActionResult> {
+  const session = await requireSession();
+
+  if (!isCampoItemEditavel(campo)) {
+    return { ok: false, message: "Campo não editável." };
+  }
+
+  const parsed = camposItemEditaveis[campo].safeParse(valor ?? undefined);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      message: parsed.error.errors[0]?.message ?? "Valor inválido.",
+    };
+  }
+
+  const supabase = createClient();
+
+  // Um único round-trip: item + versão (embed to-one, payload mínimo).
+  // Esta é a escrita de maior frequência do app — cada Enter numa célula
+  // chega aqui, então não dá para encadear consultas como no atualizarItem.
+  const { data: item, error: loadError } = await supabase
+    .from("versoes_orcamento_itens")
+    .select("versao_orcamento_id, versao:versoes_orcamento!inner(orcamento_id, status)")
+    .eq("id", itemId)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle<{
+      versao_orcamento_id: string;
+      versao: { orcamento_id: string; status: string };
+    }>();
+
+  if (loadError) {
+    console.error("[itens.atualizarCampo.load]", loadError.message);
+    return { ok: false, message: "Não foi possível carregar o item." };
+  }
+  if (!item?.versao) return { ok: false, message: "Item não encontrado." };
+  if (item.versao.status === "aprovada") {
+    return { ok: false, message: "Versão aprovada não permite alterar itens." };
+  }
+
+  const { error } = await supabase
+    .from("versoes_orcamento_itens")
+    .update({ [campo]: parsed.data })
+    .eq("id", itemId)
+    .eq("tenant_id", session.activeTenant.id);
+
+  if (error) {
+    console.error("[itens.atualizarCampo]", campo, error.message);
+    return { ok: false, message: "Não foi possível salvar a alteração." };
+  }
+
+  revalidatePath(
+    `/orcamentos/${item.versao.orcamento_id}/versoes/${item.versao_orcamento_id}`,
   );
   return { ok: true, id: itemId };
 }

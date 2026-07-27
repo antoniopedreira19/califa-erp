@@ -47,3 +47,27 @@ export const itemSchema = z.object({
 });
 
 export type ItemInput = z.infer<typeof itemSchema>;
+
+/**
+ * Campos que a edição inline da planilha pode gravar, um por vez.
+ * Serve como allowlist do `atualizarCampoItem` — o nome do campo chega
+ * do cliente e nunca pode virar UPDATE de coluna arbitrária.
+ * `total_orcado` e `total_planejado` são GENERATED: não entram aqui.
+ */
+export const camposItemEditaveis = {
+  item: itemSchema.shape.item,
+  tipo_custo: itemSchema.shape.tipo_custo,
+  categoria_id: itemSchema.shape.categoria_id,
+  valor_unitario_orcado: itemSchema.shape.valor_unitario_orcado,
+  quantidade_orcada: itemSchema.shape.quantidade_orcada,
+  dias_meses_orcado: itemSchema.shape.dias_meses_orcado,
+  valor_unitario_planejado: itemSchema.shape.valor_unitario_planejado,
+  quantidade_planejada: itemSchema.shape.quantidade_planejada,
+  dias_meses_planejado: itemSchema.shape.dias_meses_planejado,
+} as const;
+
+export type CampoItemEditavel = keyof typeof camposItemEditaveis;
+
+export function isCampoItemEditavel(campo: string): campo is CampoItemEditavel {
+  return Object.prototype.hasOwnProperty.call(camposItemEditaveis, campo);
+}
