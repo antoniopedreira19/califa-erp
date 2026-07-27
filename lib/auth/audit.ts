@@ -22,6 +22,10 @@ export type AuditAction =
   | "versao_orcamento.editada"
   | "versao_orcamento.importada"
   | "versao_orcamento.aprovada"
+  | "categoria.criada"
+  | "categoria.editada"
+  | "categoria.inativada"
+  | "categoria.reativada"
   | "job.criado"
   | "custo_c.utilizado"
   | "acao_negada";

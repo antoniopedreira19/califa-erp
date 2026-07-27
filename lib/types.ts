@@ -202,13 +202,14 @@ export interface VersaoOrcamentoGrupo {
   updated_at: string;
 }
 
-export interface VersaoOrcamentoCategoria {
+export interface Categoria {
   id: string;
   tenant_id: string;
-  versao_orcamento_id: string;
   nome: string;
+  ativo: boolean;
   created_at: string;
   updated_at: string;
+  created_by: string | null;
 }
 
 export interface VersaoOrcamentoItem {
