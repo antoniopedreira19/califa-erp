@@ -11,8 +11,8 @@ Registro da implementação do design handoff aprovado para o módulo de Orçame
 
 | Entrega | Estado |
 |---|---|
-| **1 — Destaque da versão mais recente** | ✅ commitada e no ar (`6738422`, push na `main`) |
-| **2 — Edição tipo planilha nos itens** | ⚠️ implementada e verificada, **não commitada** |
+| **1 — Destaque da versão mais recente** | ✅ `6738422` |
+| **2 — Edição tipo planilha nos itens** | ✅ `cdb2853` |
 
 `tsc --noEmit` e `next lint` limpos nas duas.
 
@@ -70,6 +70,7 @@ O `IMPLEMENTACAO.md` deixava pontos abertos ou conflitava com o mock. Resolvido 
 3. **"Novo item" sem drawer** — o handoff dizia "usar o trigger do ItemEditorDrawer" *e* "a linha entra em edição". Decisão: **linha em branco na própria grade**, sem drawer. Ela vive no cliente (`draft`) e só vira registro quando a descrição é preenchida, porque o schema exige `item` não vazio. Por isso o drawer inteiro foi apagado.
 4. **Subtotal do header do grupo removido** — ficava duplicado com o `tfoot`.
 5. **Indicador de célula ativa ("B2 · R$ Unit.") do mock não implementado** — não estava descrito em texto e a numeração de coluna não era definida em lugar nenhum.
+6. **Totais não piscam mais em vermelho ao gravar.** O handoff pedia `text-california-red` nas colunas calculadas "enquanto não gravadas". Removido: a gravação é rápida, então nunca se lia como aviso — virava um piscar; e vermelho California é a cor de **erro** do sistema, então o efeito comunicava o oposto do que acontecia. O cenário que o vermelho cobria já está protegido: falha reverte o valor e mostra a faixa de erro. Vermelho na tabela hoje só significa rentabilidade/resultado negativo.
 
 ### Detalhes técnicos que importam
 
@@ -77,6 +78,35 @@ O `IMPLEMENTACAO.md` deixava pontos abertos ou conflitava com o mock. Resolvido 
 - **`atualizarCampoItem(itemId, campo, valor)`** — o nome do campo chega do cliente, então passa pela allowlist `camposItemEditaveis` antes do UPDATE. Sem isso seria escrita em coluna arbitrária.
 - **Otimismo com auto-descarte:** `overrides` guarda o valor otimista por item/campo e um `useEffect` sobre `itens` remove cada override quando o servidor já devolveu o mesmo valor. Evita piscar valor velho e não precisa de flag de "salvando".
 - **Trilha de ações:** `absolute left-full ml-2` dentro de um wrapper `relative`, irmão do container de scroll (`overflow-x-auto`) — se ficasse dentro dele, o scroll horizontal cortaria os botões. O `top` vem de medição do `tbody` via `useLayoutEffect` + `ResizeObserver`. Card perdeu `overflow-hidden`, então os cantos são arredondados por filho (`rounded-t-2xl` no header, `rounded-b-2xl` no rodapé).
+
+---
+
+## 3.1 Verificação feita
+
+**Fluxo de categoria (botão "Nova categoria" → dropdown da grade): funciona.** Cadeia provada ponta a ponta:
+
+1. `criarCategoria` insere e faz `revalidatePath`; o drawer faz `router.refresh()` no sucesso.
+2. Categoria inserida no banco (201).
+3. `ItensTable` recebeu `categorias: ["Logistica (teste)"]` nas props — é o array que monta as opções (`"Nenhuma"` + categorias da versão).
+4. A célula renderizou o badge `variant="neutral"` com o nome, e continua clicável.
+
+Dados de teste removidos depois.
+
+**Edição de célula:** valor unitário gravado com vírgula decimal (`1500,50`), total e subtotal recalculados, persistido após reload. Select de Tipo abriu com as 4 opções, gravou "D · Interno" e o card de Totais migrou o valor de B para D. Total confirmado em `rgb(41,41,41)` sem classe vermelha após gravar.
+
+**Linha nova:** um `Enter` insere exatamente 1 linha (estável após reload) — regressão do loop coberta.
+
+**Embed novo da action:** query testada direto no PostgREST, 200 OK com o objeto aninhado.
+
+**Checklist do `docs/PERFORMANCE.md`:** nenhum `<Link>` novo; embed é to-one de 2 campos (não é o anti-padrão de embed pesado); action começa com `requireSession()` e termina com `revalidatePath`; sem migration nova.
+
+### Fragilidades conhecidas (aceitas)
+
+1. **Modo `readOnly` sem teste de execução** — nenhuma versão está `aprovada`/`cancelada` no banco. Revisado estaticamente: trilha, rodapé e "Novo item" escondidos, células sem `onClick`, `tfoot` preserva os subtotais. **Testar quando existir versão aprovada.**
+2. **Células não acessíveis por teclado** — `<td onClick>` sem `role`/`tabIndex`. Navegação por teclado está fora de escopo no handoff, mas na prática não há como editar sem mouse. Time decidiu não tratar agora.
+3. **`router.refresh()` por célula** — cada `Enter` re-renderiza a página no servidor (necessário: os totais são `GENERATED` e o card de Totais recalcula honorários/impostos). Em digitação rápida, multiplica requests. Mitigação futura se incomodar: debounce ou atualizar só os totais.
+4. **`Esc` na linha nova com Item vazio** fecha a célula e deixa a linha em branco na grade; só o `X` da trilha descarta.
+5. **`<p>` dentro de `SelectContent`** — a mensagem "Nenhuma categoria criada nesta versão" é um nó não-`SelectItem` dentro do Viewport do Radix. Renderiza bem, mas não é o uso canônico.
 
 ---
 
@@ -96,7 +126,7 @@ O `IMPLEMENTACAO.md` deixava pontos abertos ou conflitava com o mock. Resolvido 
 
 ## 5. Próximos passos
 
-1. **Revisar a Entrega 2 no navegador** antes de commitar. Preferir a **v2** (`teste1 (cópia)`, 2 itens) — e ciente de que criar/editar item ali grava em produção.
-2. **Commitar a Entrega 2** como um commit único (os 5 arquivos + a remoção do drawer).
-3. **Remover os `console.log` de timing** temporários — mantidos a pedido, ver `docs/HANDOFF.md` seção 0 item 2. Estão em `[versaoId]/page.tsx`, `[id]/page.tsx` e `importar-actions.ts`.
+1. **Testar o modo `readOnly`** quando existir versão `aprovada` — é o único caminho da Entrega 2 sem prova de execução.
+2. **Remover os `console.log` de timing** temporários — mantidos a pedido, ver `docs/HANDOFF.md` seção 0 item 2. Estão em `[versaoId]/page.tsx`, `[id]/page.tsx` e `importar-actions.ts`.
+3. **Ambiente de desenvolvimento separado no Supabase** — hoje `next dev` escreve em produção (ver seção 4). As migrations em `supabase/migrations/` recriam o schema inteiro.
 4. **Fase 2 da edição inline** (fora de escopo agora): alça de arrastar/preencher, seleção de intervalo, copiar/colar de planilha, navegação por teclado entre células, `⌘Z` global.
