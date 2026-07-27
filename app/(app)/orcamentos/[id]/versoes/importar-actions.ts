@@ -288,44 +288,6 @@ export async function confirmarImportacao(
     grupoIdPorNome.set(`${g.nome}#${g.ordem}`, g.id);
   }
 
-  // 4b) Criar categorias únicas (case-insensitive) a partir dos itens do parse.
-  const categoriaNomes = new Set<string>();
-  for (const grupo of parsed.grupos) {
-    for (const it of grupo.itens) {
-      if (it.categoria && it.categoria.trim().length > 0) {
-        categoriaNomes.add(it.categoria.trim());
-      }
-    }
-  }
-
-  const categoriaIdPorNomeLower = new Map<string, string>();
-
-  if (categoriaNomes.size > 0) {
-    const categoriasParaInserir = Array.from(categoriaNomes).map((nome) => ({
-      tenant_id: tenantId,
-      versao_orcamento_id: versaoId,
-      nome,
-    }));
-
-    const { data: categoriasCriadas, error: catErr } = await service
-      .from("versoes_orcamento_categorias")
-      .insert(categoriasParaInserir)
-      .select("id, nome");
-
-    if (catErr || !categoriasCriadas) {
-      console.error(
-        "[importacao.confirmar.categorias]",
-        catErr?.message ?? "sem retorno",
-      );
-      // Não faz rollback — categorias faltando são recuperáveis; itens
-      // simplesmente ficarão sem categoria vinculada.
-    } else {
-      for (const c of categoriasCriadas as { id: string; nome: string }[]) {
-        categoriaIdPorNomeLower.set(c.nome.toLowerCase(), c.id);
-      }
-    }
-  }
-
   // 5) Criar itens em bulk.
   const itensParaInserir: any[] = [];
   let ordemGlobal = 0;
@@ -335,15 +297,11 @@ export async function confirmarImportacao(
     for (const it of grupo.itens) {
       ordemGlobal++;
 
-      const categoriaId = it.categoria
-        ? categoriaIdPorNomeLower.get(it.categoria.trim().toLowerCase()) ?? null
-        : null;
-
       itensParaInserir.push({
         tenant_id: tenantId,
         versao_orcamento_id: versaoId,
         grupo_id: grupoId,
-        categoria_id: categoriaId,
+        categoria_id: null,
         ordem: ordemGlobal,
         planilha_origem: `linha ${it.linha_xlsx}`,
         item: it.item,
