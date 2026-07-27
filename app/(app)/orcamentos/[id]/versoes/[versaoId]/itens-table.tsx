@@ -712,7 +712,12 @@ export function ItensTable({
                   27/07/2026) — o handoff original pedia acima dele. */}
               {editavel && (
                 <tr>
-                  <td colSpan={12} className="px-3 py-2">
+                  {/* border-t fecha a base da grade: o subtotal é a última
+                      linha da planilha, e o "Novo item" fica fora dela. */}
+                  <td
+                    colSpan={12}
+                    className="border-t border-border px-3 py-2"
+                  >
                     <button
                       type="button"
                       onClick={() => {
