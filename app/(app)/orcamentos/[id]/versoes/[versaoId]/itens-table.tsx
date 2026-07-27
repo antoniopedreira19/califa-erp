@@ -674,24 +674,6 @@ export function ItensTable({
                 />
               )}
 
-              {editavel && (
-                <tr className="border-b border-border">
-                  <td colSpan={12} className="px-3 py-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setDraft(DRAFT_VAZIO);
-                        setAtiva({ rowId: DRAFT_ID, campo: "item" });
-                      }}
-                      disabled={draft !== null || pending}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-california-red/30 bg-california-red/5 px-3 py-1.5 text-xs font-semibold text-california-red hover:bg-california-red hover:text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                      Novo item
-                    </button>
-                  </td>
-                </tr>
-              )}
             </tbody>
 
             <tfoot>
@@ -725,6 +707,27 @@ export function ItensTable({
                   {formatCurrency(resultado, moeda)}
                 </td>
               </tr>
+
+              {/* "Novo item" vem DEPOIS do subtotal (decisão do time,
+                  27/07/2026) — o handoff original pedia acima dele. */}
+              {editavel && (
+                <tr>
+                  <td colSpan={12} className="px-3 py-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDraft(DRAFT_VAZIO);
+                        setAtiva({ rowId: DRAFT_ID, campo: "item" });
+                      }}
+                      disabled={draft !== null || pending}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-california-red/30 bg-california-red/5 px-3 py-1.5 text-xs font-semibold text-california-red hover:bg-california-red hover:text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Novo item
+                    </button>
+                  </td>
+                </tr>
+              )}
             </tfoot>
           </table>
         </div>
