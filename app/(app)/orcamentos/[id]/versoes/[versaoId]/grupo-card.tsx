@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Check, Pencil, Trash2, X } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
-import type { VersaoOrcamentoGrupo, VersaoOrcamentoItem, VersaoOrcamentoCategoria } from "@/lib/types";
+import type { VersaoOrcamentoGrupo, VersaoOrcamentoItem, Categoria } from "@/lib/types";
 import { removerGrupo, renomearGrupo } from "../actions";
 import { ItensTable } from "./itens-table";
 
@@ -14,7 +14,7 @@ interface Props {
   itens: VersaoOrcamentoItem[];
   moeda: string;
   readOnly?: boolean;
-  categorias: VersaoOrcamentoCategoria[];
+  categorias: Categoria[];
 }
 
 export function GrupoCard({ grupo, itens, moeda, readOnly, categorias }: Props) {

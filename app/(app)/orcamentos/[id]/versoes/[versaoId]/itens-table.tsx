@@ -17,7 +17,7 @@ import {
   tipoCustoLabel,
   type TipoCusto,
   type VersaoOrcamentoItem,
-  type VersaoOrcamentoCategoria,
+  type Categoria,
 } from "@/lib/types";
 import { adicionarItem, atualizarCampoItem, removerItem } from "../actions";
 
@@ -27,7 +27,7 @@ interface Props {
   itens: VersaoOrcamentoItem[];
   moeda: string;
   readOnly?: boolean;
-  categorias: VersaoOrcamentoCategoria[];
+  categorias: Categoria[];
 }
 
 /** Campos que a grade edita — espelha o allowlist do server action. */
@@ -498,12 +498,14 @@ export function ItensTable({
                       valor={categoriaId ?? SEM_CATEGORIA}
                       opcoes={[
                         { value: SEM_CATEGORIA, label: "Nenhuma" },
-                        ...categorias.map((c) => ({
-                          value: c.id,
-                          label: c.nome,
-                        })),
+                        ...categorias
+                          .filter((c) => c.ativo || c.id === item.categoria_id)
+                          .map((c) => ({
+                            value: c.id,
+                            label: c.ativo ? c.nome : `${c.nome} (inativa)`,
+                          })),
                       ]}
-                      vazio="Nenhuma categoria criada nesta versão"
+                      vazio="Nenhuma categoria cadastrada em /categorias"
                       onAtivar={() =>
                         setAtiva({ rowId: item.id, campo: "categoria_id" })
                       }
@@ -1031,7 +1033,7 @@ function LinhaDraft({
 }: {
   draft: Draft;
   moeda: string;
-  categorias: VersaoOrcamentoCategoria[];
+  categorias: Categoria[];
   ativa: CelulaAtiva;
   onAtivar: (campo: Campo) => void;
   onFechar: () => void;
@@ -1085,9 +1087,14 @@ function LinhaDraft({
         valor={draft.categoria_id ?? SEM_CATEGORIA}
         opcoes={[
           { value: SEM_CATEGORIA, label: "Nenhuma" },
-          ...categorias.map((c) => ({ value: c.id, label: c.nome })),
+          ...categorias
+            .filter((c) => c.ativo || c.id === draft.categoria_id)
+            .map((c) => ({
+              value: c.id,
+              label: c.ativo ? c.nome : `${c.nome} (inativa)`,
+            })),
         ]}
-        vazio="Nenhuma categoria criada nesta versão"
+        vazio="Nenhuma categoria cadastrada em /categorias"
         onAtivar={() => onAtivar("categoria_id")}
         onConfirmar={(v) =>
           onConfirmarTexto("categoria_id", v === SEM_CATEGORIA ? null : v)
