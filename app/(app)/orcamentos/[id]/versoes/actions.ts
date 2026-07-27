@@ -12,7 +12,6 @@ import {
   isCampoItemEditavel,
 } from "@/lib/validations/itens";
 import { grupoSchema } from "@/lib/validations/grupos";
-import { categoriaSchema } from "@/lib/validations/categorias";
 import type {
   VersaoOrcamento,
   VersaoOrcamentoGrupo,
@@ -298,34 +297,6 @@ export async function duplicarVersao(versaoId: string): Promise<ActionResult> {
     }
   }
 
-  // Duplica categorias e mapeia old_id → new_id (mesmo padrão de grupos).
-  const { data: categoriasOriginais } = await supabase
-    .from("versoes_orcamento_categorias")
-    .select("id, nome")
-    .eq("versao_orcamento_id", versaoId)
-    .eq("tenant_id", session.activeTenant.id);
-
-  const categoriaMap = new Map<string, string>();
-  if (categoriasOriginais && categoriasOriginais.length > 0) {
-    const catRows = categoriasOriginais.map((c: any) => ({
-      tenant_id: session.activeTenant.id,
-      versao_orcamento_id: nova.id,
-      nome: c.nome,
-    }));
-    const { data: novasCategorias, error: cErr } = await supabase
-      .from("versoes_orcamento_categorias")
-      .insert(catRows)
-      .select("id, nome");
-    if (cErr) {
-      console.error("[versoes.duplicar.categorias]", cErr.message);
-    } else if (novasCategorias) {
-      for (const orig of categoriasOriginais as any[]) {
-        const novo = novasCategorias.find((c: any) => c.nome === orig.nome);
-        if (novo) categoriaMap.set(orig.id, novo.id);
-      }
-    }
-  }
-
   const { data: itens } = await supabase
     .from("versoes_orcamento_itens")
     .select(
@@ -347,7 +318,7 @@ export async function duplicarVersao(versaoId: string): Promise<ActionResult> {
           tenant_id: session.activeTenant.id,
           versao_orcamento_id: nova.id,
           grupo_id: novoGrupoId,
-          categoria_id: i.categoria_id ? (categoriaMap.get(i.categoria_id) ?? null) : null,
+          categoria_id: i.categoria_id,
         };
       })
       .filter((r): r is any => r !== null);
@@ -612,166 +583,6 @@ export async function removerGrupo(grupoId: string): Promise<ActionResult> {
     `/orcamentos/${versao.orcamento_id}/versoes/${grupo.versao_orcamento_id}`,
   );
   return { ok: true, id: grupoId };
-}
-
-// ============================================================
-// CATEGORIAS (mesmo padrão de GRUPOS)
-// ============================================================
-
-function mapCategoriaDbError(msg: string): string {
-  if (msg.includes("uniq_categoria_nome_por_versao")) {
-    return "Já existe uma categoria com esse nome nesta versão.";
-  }
-  if (msg.includes("categorias_nome_nao_vazio")) {
-    return "Nome da categoria não pode ficar vazio.";
-  }
-  return "Não foi possível salvar a categoria.";
-}
-
-export async function criarCategoria(
-  versaoId: string,
-  formData: FormData,
-): Promise<ActionResult> {
-  const session = await requireSession();
-  const parsed = categoriaSchema.safeParse({
-    nome: formData.get("nome")?.toString() ?? "",
-  });
-  if (!parsed.success) {
-    return {
-      ok: false,
-      message: "Nome inválido.",
-      fieldErrors: parsed.error.flatten().fieldErrors,
-    };
-  }
-
-  const versao = await loadVersaoParaGrupo(versaoId, session.activeTenant.id);
-  if (!versao) return { ok: false, message: "Versão não encontrada." };
-  if (versao.status === "aprovada") {
-    return {
-      ok: false,
-      message: "Versão aprovada não aceita novas categorias.",
-    };
-  }
-
-  const supabase = createClient();
-  const { data, error } = await supabase
-    .from("versoes_orcamento_categorias")
-    .insert({
-      tenant_id: session.activeTenant.id,
-      versao_orcamento_id: versaoId,
-      nome: parsed.data.nome,
-    })
-    .select("id")
-    .single();
-
-  if (error) {
-    console.error("[categorias.criar]", error.message);
-    return { ok: false, message: mapCategoriaDbError(error.message) };
-  }
-
-  revalidatePath(`/orcamentos/${versao.orcamento_id}/versoes/${versaoId}`);
-  return { ok: true, id: data.id };
-}
-
-export async function renomearCategoria(
-  categoriaId: string,
-  formData: FormData,
-): Promise<ActionResult> {
-  const session = await requireSession();
-  const parsed = categoriaSchema.safeParse({
-    nome: formData.get("nome")?.toString() ?? "",
-  });
-  if (!parsed.success) {
-    return {
-      ok: false,
-      message: "Nome inválido.",
-      fieldErrors: parsed.error.flatten().fieldErrors,
-    };
-  }
-
-  const supabase = createClient();
-  const { data: categoria } = await supabase
-    .from("versoes_orcamento_categorias")
-    .select("versao_orcamento_id")
-    .eq("id", categoriaId)
-    .eq("tenant_id", session.activeTenant.id)
-    .maybeSingle<{ versao_orcamento_id: string }>();
-
-  if (!categoria) return { ok: false, message: "Categoria não encontrada." };
-
-  const versao = await loadVersaoParaGrupo(
-    categoria.versao_orcamento_id,
-    session.activeTenant.id,
-  );
-  if (!versao) return { ok: false, message: "Versão não encontrada." };
-  if (versao.status === "aprovada") {
-    return {
-      ok: false,
-      message: "Versão aprovada não permite renomear categoria.",
-    };
-  }
-
-  const { error } = await supabase
-    .from("versoes_orcamento_categorias")
-    .update({ nome: parsed.data.nome })
-    .eq("id", categoriaId)
-    .eq("tenant_id", session.activeTenant.id);
-
-  if (error) {
-    console.error("[categorias.renomear]", error.message);
-    return { ok: false, message: mapCategoriaDbError(error.message) };
-  }
-
-  revalidatePath(
-    `/orcamentos/${versao.orcamento_id}/versoes/${categoria.versao_orcamento_id}`,
-  );
-  return { ok: true, id: categoriaId };
-}
-
-export async function removerCategoria(
-  categoriaId: string,
-): Promise<ActionResult> {
-  const session = await requireSession();
-  const supabase = createClient();
-
-  const { data: categoria } = await supabase
-    .from("versoes_orcamento_categorias")
-    .select("versao_orcamento_id")
-    .eq("id", categoriaId)
-    .eq("tenant_id", session.activeTenant.id)
-    .maybeSingle<{ versao_orcamento_id: string }>();
-
-  if (!categoria) return { ok: false, message: "Categoria não encontrada." };
-
-  const versao = await loadVersaoParaGrupo(
-    categoria.versao_orcamento_id,
-    session.activeTenant.id,
-  );
-  if (!versao) return { ok: false, message: "Versão não encontrada." };
-  if (versao.status === "aprovada") {
-    return {
-      ok: false,
-      message: "Versão aprovada não permite remover categoria.",
-    };
-  }
-
-  // Diferente de grupo: itens NÃO exigem categoria (opcional).
-  // FK ON DELETE SET NULL cuida do rebaixamento — nada a fazer antes.
-  const { error } = await supabase
-    .from("versoes_orcamento_categorias")
-    .delete()
-    .eq("id", categoriaId)
-    .eq("tenant_id", session.activeTenant.id);
-
-  if (error) {
-    console.error("[categorias.remover]", error.message);
-    return { ok: false, message: "Não foi possível remover a categoria." };
-  }
-
-  revalidatePath(
-    `/orcamentos/${versao.orcamento_id}/versoes/${categoria.versao_orcamento_id}`,
-  );
-  return { ok: true, id: categoriaId };
 }
 
 // ============================================================
