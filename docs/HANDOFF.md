@@ -2,7 +2,7 @@
 
 Documento para dar continuidade ao projeto em uma nova sessão de trabalho.
 
-**Última atualização** (2026-07-27): migração para catálogo global de categorias (Fase G') concluída — `versoes_orcamento_categorias` substituída por `categorias` (tenant-wide), CRUD em `/categorias` gerenciado pelo hub `/cadastros`, import agnóstico de categoria.
+**Última atualização** (2026-07-28): Task 007 — Projetos como guarda-chuva de orçamentos. Nova tabela `projetos` entre cliente e orçamento. Cliente ganha `codigo_curto`. Rotas reestruturadas pra `/orcamentos/[projetoId]/[orcId]/[versaoId]`. Backfill criou 1 projeto "teste" agrupando os 2 orçamentos existentes.
 
 ## 0. LEIA PRIMEIRO — ação pendente no início da sessão
 
@@ -49,9 +49,10 @@ Admin cadastrado: `antonio@pevetech.com.br` (role `administrador` no tenant `age
 20260724000002  task004_grupos_de_itens
 20260726000001  task004_orcamento_importacoes
 20260728000001  task004_categoria_e_planejado
+20260728000002  task007_projetos
 ```
 
-**Todas as migrations aplicadas.** Última: `20260728000001_task004_categoria_e_planejado` (fase G).
+**Todas as migrations aplicadas.** Última: `20260728000002_task007_projetos` (Task 007).
 
 ## 2. O que já está pronto (Tasks 001 – 004)
 
