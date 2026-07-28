@@ -41,7 +41,7 @@ function statusBadgeClasses(status: VersaoOrcamento["status"]): string {
 export default async function VersaoDetailPage({
   params,
 }: {
-  params: { id: string; versaoId: string };
+  params: { projetoId: string; orcId: string; versaoId: string };
 }) {
   // TEMPORÁRIO: timing granular. Remover após diagnóstico.
   const t0 = Date.now();
@@ -54,13 +54,13 @@ export default async function VersaoDetailPage({
       .from("versoes_orcamento")
       .select("*")
       .eq("id", params.versaoId)
-      .eq("orcamento_id", params.id)
+      .eq("orcamento_id", params.orcId)
       .eq("tenant_id", session.activeTenant.id)
       .maybeSingle<VersaoOrcamento>(),
     supabase
       .from("orcamentos")
       .select("id, codigo, nome, status")
-      .eq("id", params.id)
+      .eq("id", params.orcId)
       .eq("tenant_id", session.activeTenant.id)
       .maybeSingle<{ id: string; codigo: string; nome: string; status: string }>(),
     supabase
@@ -133,7 +133,8 @@ export default async function VersaoDetailPage({
     <div className="space-y-6 max-w-6xl mx-auto">
       <div>
         <Link
-          href={`/orcamentos/${orcamento.id}`}
+          href={`/orcamentos/${params.projetoId}/${orcamento.id}`}
+          prefetch={false}
           className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
           <ArrowLeft className="h-3 w-3" />
@@ -160,7 +161,7 @@ export default async function VersaoDetailPage({
             }
           />
           <a
-            href={`/api/orcamentos/${orcamento.id}/versoes/${versao.id}/export`}
+            href={`/api/orcamentos/${params.orcId}/versoes/${versao.id}/export`}
             title="Baixar planilha XLSX"
             className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-semibold text-foreground hover:border-california-red/40 hover:text-california-red transition-colors"
           >

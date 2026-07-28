@@ -48,9 +48,11 @@ function statusBadgeClasses(status: VersaoOrcamentoStatus): string {
 }
 
 export function VersoesList({
+  projetoId,
   orcamentoId,
   versoes,
 }: {
+  projetoId: string;
   orcamentoId: string;
   versoes: VersaoRow[];
 }) {
@@ -90,7 +92,7 @@ export function VersoesList({
         {versoes.map((v) => {
           const podeCancelar =
             v.status !== "aprovada" && v.status !== "cancelada";
-          const href = `/orcamentos/${orcamentoId}/versoes/${v.id}`;
+          const href = `/orcamentos/${projetoId}/${orcamentoId}/versoes/${v.id}`;
           const isMaisRecente = v.numero_versao === versaoMaisRecente;
           // Um passo maiores na linha destacada; o gap-1 do container
           // mantém a distância igual entre os três ícones.

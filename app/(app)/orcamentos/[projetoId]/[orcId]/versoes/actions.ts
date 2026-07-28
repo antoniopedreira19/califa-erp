@@ -133,10 +133,10 @@ export async function criarVersao(
 
   const { data: orc } = await supabase
     .from("orcamentos")
-    .select("id, status")
+    .select("id, status, projeto_id")
     .eq("id", orcamentoId)
     .eq("tenant_id", session.activeTenant.id)
-    .maybeSingle<{ id: string; status: string }>();
+    .maybeSingle<{ id: string; status: string; projeto_id: string }>();
 
   if (!orc) return { ok: false, message: "Orçamento não encontrado." };
   if (orc.status === "job_criado" || orc.status === "cancelado") {
@@ -146,6 +146,7 @@ export async function criarVersao(
     };
   }
 
+  const projetoId = orc.projeto_id;
   const numero = await proximoNumeroVersao(orcamentoId, session.activeTenant.id);
 
   const { data, error } = await supabase
@@ -173,8 +174,8 @@ export async function criarVersao(
     metadata: { orcamento_id: orcamentoId, numero_versao: data.numero_versao },
   });
 
-  revalidatePath(`/orcamentos/${orcamentoId}`);
-  redirect(`/orcamentos/${orcamentoId}/versoes/${data.id}`);
+  revalidatePath(`/orcamentos/${projetoId}/${orcamentoId}`);
+  redirect(`/orcamentos/${projetoId}/${orcamentoId}/versoes/${data.id}`);
 }
 
 export async function atualizarVersao(
@@ -219,8 +220,16 @@ export async function atualizarVersao(
     entidadeId: versaoId,
   });
 
-  revalidatePath(`/orcamentos/${atual.orcamento_id}`);
-  revalidatePath(`/orcamentos/${atual.orcamento_id}/versoes/${versaoId}`);
+  const { data: orcAtual } = await supabase
+    .from("orcamentos")
+    .select("projeto_id")
+    .eq("id", atual.orcamento_id)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle<{ projeto_id: string }>();
+  const projetoIdAtual = orcAtual?.projeto_id;
+
+  revalidatePath(`/orcamentos/${projetoIdAtual}/${atual.orcamento_id}`);
+  revalidatePath(`/orcamentos/${projetoIdAtual}/${atual.orcamento_id}/versoes/${versaoId}`);
   return { ok: true, id: versaoId };
 }
 
@@ -345,8 +354,16 @@ export async function duplicarVersao(versaoId: string): Promise<ActionResult> {
     },
   });
 
-  revalidatePath(`/orcamentos/${original.orcamento_id}`);
-  redirect(`/orcamentos/${original.orcamento_id}/versoes/${nova.id}`);
+  const { data: orcDup } = await supabase
+    .from("orcamentos")
+    .select("projeto_id")
+    .eq("id", original.orcamento_id)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle<{ projeto_id: string }>();
+  const projetoIdDup = orcDup?.projeto_id;
+
+  revalidatePath(`/orcamentos/${projetoIdDup}/${original.orcamento_id}`);
+  redirect(`/orcamentos/${projetoIdDup}/${original.orcamento_id}/versoes/${nova.id}`);
 }
 
 export async function cancelarVersao(versaoId: string): Promise<ActionResult> {
@@ -384,7 +401,15 @@ export async function cancelarVersao(versaoId: string): Promise<ActionResult> {
     metadata: { acao: "cancelada" },
   });
 
-  revalidatePath(`/orcamentos/${atual.orcamento_id}`);
+  const { data: orcCancel } = await supabase
+    .from("orcamentos")
+    .select("projeto_id")
+    .eq("id", atual.orcamento_id)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle<{ projeto_id: string }>();
+  const projetoIdCancel = orcCancel?.projeto_id;
+
+  revalidatePath(`/orcamentos/${projetoIdCancel}/${atual.orcamento_id}`);
   return { ok: true, id: versaoId };
 }
 
@@ -395,15 +420,22 @@ export async function cancelarVersao(versaoId: string): Promise<ActionResult> {
 async function loadVersaoParaGrupo(
   versaoId: string,
   tenantId: string,
-): Promise<{ orcamento_id: string; status: string } | null> {
+): Promise<{ orcamento_id: string; projeto_id: string; status: string } | null> {
   const supabase = createClient();
-  const { data } = await supabase
+  const { data: versao } = await supabase
     .from("versoes_orcamento")
     .select("orcamento_id, status")
     .eq("id", versaoId)
     .eq("tenant_id", tenantId)
     .maybeSingle<{ orcamento_id: string; status: string }>();
-  return data ?? null;
+  if (!versao) return null;
+  const { data: orc } = await supabase
+    .from("orcamentos")
+    .select("projeto_id")
+    .eq("id", versao.orcamento_id)
+    .eq("tenant_id", tenantId)
+    .maybeSingle<{ projeto_id: string }>();
+  return { ...versao, projeto_id: orc?.projeto_id ?? "" };
 }
 
 async function proximaOrdemGrupo(
@@ -476,7 +508,7 @@ export async function criarGrupo(
     return { ok: false, message: mapGrupoDbError(error.message) };
   }
 
-  revalidatePath(`/orcamentos/${versao.orcamento_id}/versoes/${versaoId}`);
+  revalidatePath(`/orcamentos/${versao.projeto_id}/${versao.orcamento_id}/versoes/${versaoId}`);
   return { ok: true, id: data.id };
 }
 
@@ -527,7 +559,7 @@ export async function renomearGrupo(
   }
 
   revalidatePath(
-    `/orcamentos/${versao.orcamento_id}/versoes/${grupo.versao_orcamento_id}`,
+    `/orcamentos/${versao.projeto_id}/${versao.orcamento_id}/versoes/${grupo.versao_orcamento_id}`,
   );
   return { ok: true, id: grupoId };
 }
@@ -580,7 +612,7 @@ export async function removerGrupo(grupoId: string): Promise<ActionResult> {
   }
 
   revalidatePath(
-    `/orcamentos/${versao.orcamento_id}/versoes/${grupo.versao_orcamento_id}`,
+    `/orcamentos/${versao.projeto_id}/${versao.orcamento_id}/versoes/${grupo.versao_orcamento_id}`,
   );
   return { ok: true, id: grupoId };
 }
@@ -626,7 +658,7 @@ async function proximaOrdemItem(
 async function assertVersaoEditavel(
   versaoId: string,
   tenantId: string,
-): Promise<{ orcamento_id: string } | { error: string }> {
+): Promise<{ orcamento_id: string; projeto_id: string } | { error: string }> {
   const supabase = createClient();
   const { data } = await supabase
     .from("versoes_orcamento")
@@ -639,7 +671,13 @@ async function assertVersaoEditavel(
   if (data.status === "aprovada") {
     return { error: "Versão aprovada não permite alterar itens." };
   }
-  return { orcamento_id: data.orcamento_id };
+  const { data: orc } = await supabase
+    .from("orcamentos")
+    .select("projeto_id")
+    .eq("id", data.orcamento_id)
+    .eq("tenant_id", tenantId)
+    .maybeSingle<{ projeto_id: string }>();
+  return { orcamento_id: data.orcamento_id, projeto_id: orc?.projeto_id ?? "" };
 }
 
 export async function adicionarItem(
@@ -696,7 +734,7 @@ export async function adicionarItem(
   }
 
   revalidatePath(
-    `/orcamentos/${check.orcamento_id}/versoes/${grupo.versao_orcamento_id}`,
+    `/orcamentos/${check.projeto_id}/${check.orcamento_id}/versoes/${grupo.versao_orcamento_id}`,
   );
   return { ok: true, id: data.id };
 }
@@ -744,7 +782,7 @@ export async function atualizarItem(
   }
 
   revalidatePath(
-    `/orcamentos/${check.orcamento_id}/versoes/${item.versao_orcamento_id}`,
+    `/orcamentos/${check.projeto_id}/${check.orcamento_id}/versoes/${item.versao_orcamento_id}`,
   );
   return { ok: true, id: itemId };
 }
@@ -808,8 +846,16 @@ export async function atualizarCampoItem(
     return { ok: false, message: "Não foi possível salvar a alteração." };
   }
 
+  const { data: orcCampo } = await supabase
+    .from("orcamentos")
+    .select("projeto_id")
+    .eq("id", item.versao.orcamento_id)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle<{ projeto_id: string }>();
+  const projetoIdCampo = orcCampo?.projeto_id;
+
   revalidatePath(
-    `/orcamentos/${item.versao.orcamento_id}/versoes/${item.versao_orcamento_id}`,
+    `/orcamentos/${projetoIdCampo}/${item.versao.orcamento_id}/versoes/${item.versao_orcamento_id}`,
   );
   return { ok: true, id: itemId };
 }
@@ -845,7 +891,7 @@ export async function removerItem(itemId: string): Promise<ActionResult> {
   }
 
   revalidatePath(
-    `/orcamentos/${check.orcamento_id}/versoes/${item.versao_orcamento_id}`,
+    `/orcamentos/${check.projeto_id}/${check.orcamento_id}/versoes/${item.versao_orcamento_id}`,
   );
   return { ok: true, id: itemId };
 }

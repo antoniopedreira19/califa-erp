@@ -69,14 +69,14 @@ async function extractArquivo(
 async function verificarOrcamento(
   orcamentoId: string,
   tenantId: string,
-): Promise<{ ok: true } | { ok: false; message: string }> {
+): Promise<{ ok: true; projeto_id: string } | { ok: false; message: string }> {
   const supabase = createClient();
   const { data: orc, error } = await supabase
     .from("orcamentos")
-    .select("id, status")
+    .select("id, status, projeto_id")
     .eq("id", orcamentoId)
     .eq("tenant_id", tenantId)
-    .maybeSingle<{ id: string; status: string }>();
+    .maybeSingle<{ id: string; status: string; projeto_id: string }>();
 
   if (error || !orc) {
     return { ok: false, message: "Orçamento não encontrado." };
@@ -87,7 +87,7 @@ async function verificarOrcamento(
       message: `Orçamento em estado ${orc.status} não aceita nova versão.`,
     };
   }
-  return { ok: true };
+  return { ok: true, projeto_id: orc.projeto_id };
 }
 
 /**
@@ -109,6 +109,7 @@ export async function previewImportacao(
   const check = await verificarOrcamento(orcamentoId, session.activeTenant.id);
   timing.verifOrc = Date.now() - t0 - timing.session;
   if (!check.ok) return { ok: false, message: check.message };
+  // projeto_id available as check.projeto_id if needed for future use
 
   const arq = await extractArquivo(formData);
   timing.extractArq = Date.now() - t0 - timing.session - timing.verifOrc;
@@ -193,6 +194,7 @@ export async function confirmarImportacao(
 
   const check = await verificarOrcamento(orcamentoId, session.activeTenant.id);
   if (!check.ok) return { ok: false, message: check.message };
+  const projetoId = check.projeto_id;
 
   const arq = await extractArquivo(formData);
   if (!arq.ok) return { ok: false, message: arq.message };
@@ -384,7 +386,7 @@ export async function confirmarImportacao(
     },
   });
 
-  revalidatePath(`/orcamentos/${orcamentoId}`);
+  revalidatePath(`/orcamentos/${projetoId}/${orcamentoId}`);
   return {
     ok: true,
     versao_id: versaoId,

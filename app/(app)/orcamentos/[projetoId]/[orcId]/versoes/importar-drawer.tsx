@@ -26,6 +26,7 @@ import {
 } from "./importar-actions";
 
 interface Props {
+  projetoId: string;
   orcamentoId: string;
   disabled?: boolean;
   disabledReason?: string;
@@ -36,6 +37,7 @@ type Preview = Extract<PreviewResult, { ok: true }>["preview"];
 type Stage = "select" | "loading" | "preview" | "saving";
 
 export function ImportarPlanilhaDrawer({
+  projetoId,
   orcamentoId,
   disabled,
   disabledReason,
@@ -95,7 +97,7 @@ export function ImportarPlanilhaDrawer({
     // Sucesso: fecha e navega para a nova versão.
     setOpen(false);
     reset();
-    router.push(`/orcamentos/${res.orcamento_id}/versoes/${res.versao_id}`);
+    router.push(`/orcamentos/${projetoId}/${res.orcamento_id}/versoes/${res.versao_id}`);
     router.refresh();
   }
 
