@@ -77,6 +77,7 @@ export interface Cliente {
   id: string;
   tenant_id: string;
   nome_fantasia: string;
+  codigo_curto: string;
   razao_social: string | null;
   cnpj: string | null;
   email: string | null;
@@ -104,6 +105,34 @@ export interface Fornecedor {
   updated_at: string;
 }
 
+// ---------- Task 007: projetos ----------
+
+export type ProjetoStatus = "ativo" | "arquivado";
+
+export interface Projeto {
+  id: string;
+  tenant_id: string;
+  codigo: string;
+  nome: string;
+  campanha: string | null;
+  cliente_id: string;
+  responsavel_id: string;
+  status: ProjetoStatus;
+  data_inicio_prevista: string;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export function projetoStatusLabel(s: ProjetoStatus): string {
+  switch (s) {
+    case "ativo":
+      return "Ativo";
+    case "arquivado":
+      return "Arquivado";
+  }
+}
+
 // ---------- Task 003: orçamentos ----------
 
 export type OrcamentoStatus =
@@ -118,13 +147,11 @@ export type OrcamentoStatus =
 export interface Orcamento {
   id: string;
   tenant_id: string;
+  projeto_id: string;
   codigo: string;
   nome: string;
-  cliente_id: string;
-  responsavel_id: string;
   status: OrcamentoStatus;
   tipo: string | null;
-  campanha: string | null;
   data_inicio_prevista: string | null;
   data_fim_prevista: string | null;
   created_by: string | null;
