@@ -1,26 +1,23 @@
 import Link from "next/link";
-import { FileText, Plus } from "lucide-react";
+import { FolderKanban, Plus } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { listActiveMembers } from "@/lib/data/members";
-import type { Cliente, Orcamento } from "@/lib/types";
+import type { Cliente, Projeto } from "@/lib/types";
 import { EmptyState } from "@/components/empty-state";
-import { OrcamentosList, type OrcamentoRow } from "./orcamentos-list";
+import { ProjetosList, type ProjetoRow } from "./projetos-list";
 
 export const dynamic = "force-dynamic";
 
-export default async function OrcamentosPage() {
+export default async function ProjetosPage() {
   const session = await requireSession();
   const supabase = createClient();
 
-  // Busca em paralelo: orçamentos (com embed em clientes e profiles do
-  // responsável, os dois têm FK direta em orcamentos), clientes ativos
-  // para o filtro e membros ativos do tenant para o filtro de responsável.
-  const [orcRes, clientesRes, responsaveis] = await Promise.all([
+  const [projRes, clientesRes, responsaveis] = await Promise.all([
     supabase
-      .from("orcamentos")
+      .from("projetos")
       .select(
-        "id, codigo, nome, status, cliente_id, responsavel_id, tipo, campanha, data_inicio_prevista, data_fim_prevista, created_at, cliente:clientes(id, nome_fantasia), responsavel:profiles!responsavel_id(id, nome)",
+        "id, codigo, nome, campanha, status, cliente_id, responsavel_id, data_inicio_prevista, created_at, cliente:clientes(id, nome_fantasia), responsavel:profiles!responsavel_id(id, nome)",
       )
       .eq("tenant_id", session.activeTenant.id)
       .order("created_at", { ascending: false }),
@@ -33,23 +30,38 @@ export default async function OrcamentosPage() {
     listActiveMembers(session.activeTenant.id),
   ]);
 
-  if (orcRes.error) console.error("[orcamentos.page]", orcRes.error.message);
-  if (clientesRes.error) console.error("[orcamentos.clientes]", clientesRes.error.message);
+  if (projRes.error) console.error("[projetos.page]", projRes.error.message);
+  if (clientesRes.error) console.error("[projetos.clientes]", clientesRes.error.message);
 
-  const orcamentos: OrcamentoRow[] = ((orcRes.data ?? []) as any[]).map((o) => ({
-    id: o.id,
-    codigo: o.codigo,
-    nome: o.nome,
-    status: o.status as Orcamento["status"],
-    cliente_id: o.cliente_id,
-    responsavel_id: o.responsavel_id,
-    tipo: o.tipo,
-    campanha: o.campanha,
-    data_inicio_prevista: o.data_inicio_prevista,
-    data_fim_prevista: o.data_fim_prevista,
-    created_at: o.created_at,
-    cliente_nome: o.cliente?.nome_fantasia ?? null,
-    responsavel_nome: o.responsavel?.nome ?? null,
+  const projetosBrutos = ((projRes.data ?? []) as any[]);
+  const projetoIds = projetosBrutos.map((p) => p.id);
+
+  // Contagem agregada de orçamentos por projeto (SEM embed pesado).
+  const orcamentosCountMap = new Map<string, number>();
+  if (projetoIds.length > 0) {
+    const { data: orcs } = await supabase
+      .from("orcamentos")
+      .select("projeto_id")
+      .in("projeto_id", projetoIds)
+      .eq("tenant_id", session.activeTenant.id);
+    for (const o of ((orcs ?? []) as any[])) {
+      orcamentosCountMap.set(o.projeto_id, (orcamentosCountMap.get(o.projeto_id) ?? 0) + 1);
+    }
+  }
+
+  const projetos: ProjetoRow[] = projetosBrutos.map((p) => ({
+    id: p.id,
+    codigo: p.codigo,
+    nome: p.nome,
+    campanha: p.campanha,
+    status: p.status as Projeto["status"],
+    cliente_id: p.cliente_id,
+    cliente_nome: p.cliente?.nome_fantasia ?? null,
+    responsavel_id: p.responsavel_id,
+    responsavel_nome: p.responsavel?.nome ?? null,
+    data_inicio_prevista: p.data_inicio_prevista,
+    orcamentos_count: orcamentosCountMap.get(p.id) ?? 0,
+    created_at: p.created_at,
   }));
 
   const clientes = (clientesRes.data ?? []) as Pick<Cliente, "id" | "nome_fantasia">[];
@@ -63,37 +75,39 @@ export default async function OrcamentosPage() {
           </p>
           <h1 className="text-3xl font-bold tracking-tight">Orçamentos</h1>
           <p className="text-sm text-muted-foreground">
-            Oportunidades comerciais em preparação. Cada orçamento vira job
-            quando uma versão for aprovada (fluxo completo nas próximas tasks).
+            Cada projeto agrupa os orçamentos de uma iniciativa do cliente.
+            Clique num projeto para ver seus orçamentos e versões.
           </p>
         </div>
         <Link
           href="/orcamentos/novo"
+          prefetch={false}
           className="inline-flex items-center justify-center gap-2 rounded-lg bg-california-red px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-california-red-hover hover:shadow-brand transition-all"
         >
           <Plus className="h-4 w-4" />
-          Novo orçamento
+          Novo projeto
         </Link>
       </header>
 
-      {orcamentos.length === 0 ? (
+      {projetos.length === 0 ? (
         <EmptyState
-          icon={FileText}
-          title="Nenhum orçamento criado"
-          description="Crie um orçamento para acompanhar a oportunidade comercial até virar job."
+          icon={FolderKanban}
+          title="Nenhum projeto ainda"
+          description="Crie um projeto para começar a organizar seus orçamentos por iniciativa."
           action={
             <Link
               href="/orcamentos/novo"
+              prefetch={false}
               className="inline-flex items-center gap-2 rounded-lg bg-california-red px-5 py-2.5 text-sm font-semibold text-white hover:bg-california-red-hover transition-colors"
             >
               <Plus className="h-4 w-4" />
-              Criar orçamento
+              Criar projeto
             </Link>
           }
         />
       ) : (
-        <OrcamentosList
-          orcamentos={orcamentos}
+        <ProjetosList
+          projetos={projetos}
           clientes={clientes}
           responsaveis={responsaveis}
         />
