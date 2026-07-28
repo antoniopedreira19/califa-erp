@@ -6,7 +6,6 @@ import { createClient } from "@/lib/supabase/server";
 import { listActiveMembers } from "@/lib/data/members";
 import {
   orcamentoStatusLabel,
-  type Cliente,
   type Orcamento,
   type VersaoOrcamentoStatus,
 } from "@/lib/types";
@@ -40,81 +39,55 @@ function statusBadgeClasses(status: Orcamento["status"]): string {
 
 function formatDate(iso: string | null): string {
   if (!iso) return "—";
-  const [year, month, day] = iso.slice(0, 10).split("-");
-  return `${day}/${month}/${year}`;
+  const [y, m, d] = iso.slice(0, 10).split("-");
+  return `${d}/${m}/${y}`;
 }
 
 export default async function OrcamentoDetailPage({
   params,
 }: {
-  params: { id: string };
+  params: { projetoId: string; orcId: string };
 }) {
-  // TEMPORÁRIO: timing granular para investigar lentidão. Remover após diagnóstico.
-  const t0 = Date.now();
   const session = await requireSession();
-  const tSess = Date.now();
   const supabase = createClient();
 
-  const [orcRes, clientesRes, responsaveis, versoesRes] = await Promise.all([
+  const [orcRes, projRes, responsaveis, versoesRes] = await Promise.all([
     supabase
       .from("orcamentos")
-      .select(
-        "*, cliente:clientes(id, nome_fantasia), responsavel:profiles!responsavel_id(id, nome)",
-      )
-      .eq("id", params.id)
+      .select("id, tenant_id, projeto_id, codigo, nome, status, tipo, data_inicio_prevista, data_fim_prevista, created_by, created_at, updated_at")
+      .eq("id", params.orcId)
+      .eq("projeto_id", params.projetoId)
       .eq("tenant_id", session.activeTenant.id)
       .maybeSingle(),
     supabase
-      .from("clientes")
-      .select("id, nome_fantasia")
+      .from("projetos")
+      .select("id, codigo, nome, campanha, cliente:clientes(id, nome_fantasia), responsavel:profiles!responsavel_id(id, nome)")
+      .eq("id", params.projetoId)
       .eq("tenant_id", session.activeTenant.id)
-      .eq("status", "ativo")
-      .order("nome_fantasia"),
+      .maybeSingle(),
     listActiveMembers(session.activeTenant.id),
-    // Versões — SEM embed de itens. O embed puxava todos os itens de
-    // todas as versões (payload grande, serialização lenta). Depois
-    // buscamos só id + total_orcado dos itens agrupando no client.
     supabase
       .from("versoes_orcamento")
-      .select(
-        "id, numero_versao, nome, status, percentual_honorarios, percentual_imposto, moeda, created_at",
-      )
-      .eq("orcamento_id", params.id)
+      .select("id, numero_versao, nome, status, percentual_honorarios, percentual_imposto, moeda, created_at")
+      .eq("orcamento_id", params.orcId)
       .eq("tenant_id", session.activeTenant.id)
       .order("numero_versao", { ascending: false }),
   ]);
 
-  const tQueries = Date.now();
   if (orcRes.error) console.error("[orcamentos.detail]", orcRes.error.message);
-  const raw = orcRes.data as any;
-  if (!raw) notFound();
+  if (projRes.error) console.error("[projetos.detail]", projRes.error.message);
 
-  const orcamento: Orcamento = {
-    id: raw.id,
-    tenant_id: raw.tenant_id,
-    codigo: raw.codigo,
-    nome: raw.nome,
-    cliente_id: raw.cliente_id,
-    responsavel_id: raw.responsavel_id,
-    status: raw.status,
-    tipo: raw.tipo,
-    campanha: raw.campanha,
-    data_inicio_prevista: raw.data_inicio_prevista,
-    data_fim_prevista: raw.data_fim_prevista,
-    created_by: raw.created_by,
-    created_at: raw.created_at,
-    updated_at: raw.updated_at,
-  };
-  const clienteNome: string | null = raw.cliente?.nome_fantasia ?? null;
-  const responsavelNome: string | null = raw.responsavel?.nome ?? null;
-  const clientes = (clientesRes.data ?? []) as Pick<Cliente, "id" | "nome_fantasia">[];
+  const orcamento = orcRes.data as Orcamento | null;
+  const projeto = projRes.data as any;
+  if (!orcamento || !projeto) notFound();
+
+  const clienteNome: string | null = projeto.cliente?.nome_fantasia ?? null;
+  const responsavelNome: string | null = projeto.responsavel?.nome ?? null;
 
   if (versoesRes.error) console.error("[versoes.list]", versoesRes.error.message);
   const versoesBrutas = (versoesRes.data ?? []) as any[];
-
-  // Query separada para agregar itens (count + sum) por versão.
-  // Puxa apenas versao_orcamento_id + total_orcado — payload mínimo.
   const versaoIds = versoesBrutas.map((v) => v.id);
+
   const agregadoPorVersao = new Map<string, { count: number; total: number }>();
   if (versaoIds.length > 0) {
     const { data: itensBrutos, error: itensAggErr } = await supabase
@@ -125,27 +98,12 @@ export default async function OrcamentoDetailPage({
 
     if (itensAggErr) console.error("[versoes.agg]", itensAggErr.message);
     for (const it of (itensBrutos ?? []) as any[]) {
-      const cur = agregadoPorVersao.get(it.versao_orcamento_id) ?? {
-        count: 0,
-        total: 0,
-      };
+      const cur = agregadoPorVersao.get(it.versao_orcamento_id) ?? { count: 0, total: 0 };
       cur.count += 1;
       cur.total += Number(it.total_orcado ?? 0);
       agregadoPorVersao.set(it.versao_orcamento_id, cur);
     }
   }
-
-  const tAgg = Date.now();
-  console.log(
-    "[orcamento.detail.timing]",
-    JSON.stringify({
-      session: tSess - t0,
-      parallel_queries: tQueries - tSess,
-      agg_itens: tAgg - tQueries,
-      total: tAgg - t0,
-      versoes: versaoIds.length,
-    }),
-  );
 
   const versoes: VersaoRow[] = versoesBrutas.map((v) => {
     const agg = agregadoPorVersao.get(v.id) ?? { count: 0, total: 0 };
@@ -163,10 +121,8 @@ export default async function OrcamentoDetailPage({
     };
   });
 
-  const protegido =
-    orcamento.status === "aprovado" || orcamento.status === "job_criado";
-  const podeCriarVersao =
-    orcamento.status !== "job_criado" && orcamento.status !== "cancelado";
+  const protegido = orcamento.status === "aprovado" || orcamento.status === "job_criado";
+  const podeCriarVersao = orcamento.status !== "job_criado" && orcamento.status !== "cancelado";
 
   const periodo =
     orcamento.data_inicio_prevista || orcamento.data_fim_prevista
@@ -177,11 +133,11 @@ export default async function OrcamentoDetailPage({
     <div className="space-y-6 max-w-5xl mx-auto">
       <div>
         <Link
-          href="/orcamentos"
+          href={`/orcamentos/${params.projetoId}`}
           className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
           <ArrowLeft className="h-3 w-3" />
-          Voltar para orçamentos
+          Voltar para {projeto.codigo} · {projeto.nome}
         </Link>
 
         <div className="mt-3">
@@ -194,19 +150,17 @@ export default async function OrcamentoDetailPage({
               {orcamentoStatusLabel(orcamento.status)}
             </Badge>
             <OrcamentoEditorDrawer
+              projetoId={params.projetoId}
               orcamento={orcamento}
-              clientes={clientes}
-              responsaveis={responsaveis}
               disabled={protegido}
               disabledReason={
                 protegido
-                  ? `Bloqueado em ${orcamentoStatusLabel(orcamento.status).toLowerCase()} — alterações via fluxo de aprovação/job (Tasks 004/005).`
+                  ? `Bloqueado em ${orcamentoStatusLabel(orcamento.status).toLowerCase()} — alterações via fluxo de aprovação/job.`
                   : undefined
               }
             />
           </div>
 
-          {/* Metadata compactada */}
           <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
             <span>
               <span className="text-foreground/60">Cliente:</span>{" "}
@@ -226,14 +180,12 @@ export default async function OrcamentoDetailPage({
                 </span>
               </>
             )}
-            {orcamento.campanha && (
+            {projeto.campanha && (
               <>
                 <span aria-hidden className="text-border">·</span>
                 <span>
                   <span className="text-foreground/60">Campanha:</span>{" "}
-                  <span className="text-foreground font-medium">
-                    {orcamento.campanha}
-                  </span>
+                  <span className="text-foreground font-medium">{projeto.campanha}</span>
                 </span>
               </>
             )}
@@ -241,23 +193,17 @@ export default async function OrcamentoDetailPage({
         </div>
       </div>
 
-      {/* Aviso de estado protegido (só quando aplica) */}
       {protegido && (
         <div className="rounded-xl border border-dashed border-border bg-muted/30 p-4 flex items-start gap-3">
           <Lock className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
           <p className="text-sm text-muted-foreground">
             Este orçamento está em estado protegido (
-            <strong className="text-foreground">
-              {orcamentoStatusLabel(orcamento.status)}
-            </strong>
-            ). A edição dos dados ficou bloqueada — alterações precisam
-            passar pelo fluxo de aprovação (Task 004) ou criação de job
-            (Task 005).
+            <strong className="text-foreground">{orcamentoStatusLabel(orcamento.status)}</strong>
+            ). A edição dos dados ficou bloqueada.
           </p>
         </div>
       )}
 
-      {/* Versões — conteúdo principal */}
       <div className="rounded-2xl border border-border bg-card shadow-soft">
         <div className="flex items-center justify-between border-b border-border p-6">
           <div className="flex items-center gap-2">
@@ -273,6 +219,7 @@ export default async function OrcamentoDetailPage({
           </div>
           <div className="flex items-center gap-2">
             <ImportarPlanilhaDrawer
+              projetoId={params.projetoId}
               orcamentoId={orcamento.id}
               disabled={!podeCriarVersao}
               disabledReason={
@@ -282,6 +229,7 @@ export default async function OrcamentoDetailPage({
               }
             />
             <NovaVersaoDrawer
+              projetoId={params.projetoId}
               orcamentoId={orcamento.id}
               disabled={!podeCriarVersao}
               disabledReason={
@@ -297,16 +245,18 @@ export default async function OrcamentoDetailPage({
           <div className="p-6">
             <div className="rounded-xl border border-dashed border-border bg-muted/20 p-10 text-center">
               <FileStack className="h-8 w-8 text-muted-foreground/50 mx-auto mb-3" />
-              <p className="text-sm text-muted-foreground">
-                Nenhuma versão ainda.
-              </p>
+              <p className="text-sm text-muted-foreground">Nenhuma versão ainda.</p>
               <p className="mt-1 text-xs text-muted-foreground">
                 Clique em <span className="font-semibold text-foreground">Nova versão</span> para começar.
               </p>
             </div>
           </div>
         ) : (
-          <VersoesList orcamentoId={orcamento.id} versoes={versoes} />
+          <VersoesList
+            projetoId={params.projetoId}
+            orcamentoId={orcamento.id}
+            versoes={versoes}
+          />
         )}
       </div>
     </div>
