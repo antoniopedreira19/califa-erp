@@ -17,10 +17,8 @@ import { DatePicker } from "@/components/ui/date-picker";
 import {
   ORCAMENTO_STATUS_EDITAVEIS,
   orcamentoStatusLabel,
-  type Cliente,
   type Orcamento,
   type OrcamentoStatus,
-  type Profile,
 } from "@/lib/types";
 import {
   atualizarOrcamento,
@@ -29,34 +27,18 @@ import {
 } from "./actions";
 
 interface Props {
+  projetoId: string;
   orcamento?: Orcamento;
-  clientes: Pick<Cliente, "id" | "nome_fantasia">[];
-  responsaveis: Pick<Profile, "id" | "nome">[];
-  /** Callback opcional após salvar com sucesso (útil pra fechar drawer). */
   onSuccess?: () => void;
-  /** Callback opcional pro botão Cancelar (útil pra fechar drawer). */
   onCancel?: () => void;
 }
 
-export function OrcamentoForm({
-  orcamento,
-  clientes,
-  responsaveis,
-  onSuccess,
-  onCancel,
-}: Props) {
+export function OrcamentoForm({ projetoId, orcamento, onSuccess, onCancel }: Props) {
   const router = useRouter();
   const isEdit = Boolean(orcamento);
   const [pending, startTransition] = React.useTransition();
   const [error, setError] = React.useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = React.useState<Record<string, string[]>>({});
-
-  // Radix Select não integra com FormData automaticamente — mantenho o
-  // valor selecionado em state controlado e injeto no submit.
-  const [clienteId, setClienteId] = React.useState(orcamento?.cliente_id ?? "");
-  const [responsavelId, setResponsavelId] = React.useState(
-    orcamento?.responsavel_id ?? "",
-  );
   const [status, setStatus] = React.useState<OrcamentoStatus>(
     orcamento?.status && ORCAMENTO_STATUS_EDITAVEIS.includes(orcamento.status)
       ? orcamento.status
@@ -67,16 +49,13 @@ export function OrcamentoForm({
     e.preventDefault();
     setError(null);
     setFieldErrors({});
-
     const formData = new FormData(e.currentTarget);
-    formData.set("cliente_id", clienteId);
-    formData.set("responsavel_id", responsavelId);
     if (isEdit) formData.set("status", status);
 
     startTransition(async () => {
       const res: ActionResult = isEdit
-        ? await atualizarOrcamento(orcamento!.id, formData)
-        : await criarOrcamento(formData);
+        ? await atualizarOrcamento(projetoId, orcamento!.id, formData)
+        : await criarOrcamento(projetoId, formData);
 
       if (!res.ok) {
         setError(res.message);
@@ -99,7 +78,7 @@ export function OrcamentoForm({
             defaultValue={orcamento?.nome ?? ""}
             required
             autoFocus
-            placeholder="Ex.: Campanha Q3 · Marca X"
+            placeholder="Ex.: Bebedouros SP"
           />
         </Field>
 
@@ -108,61 +87,17 @@ export function OrcamentoForm({
             <Input
               name="codigo"
               defaultValue={orcamento?.codigo ?? ""}
-              placeholder="ORC-NNNN"
+              placeholder="Auto-gerado"
             />
           </Field>
         )}
-
-        <Field label="Cliente" name="cliente_id" required errors={fieldErrors}>
-          <Select value={clienteId} onValueChange={setClienteId} required>
-            <SelectTrigger>
-              <SelectValue placeholder="Selecione um cliente ativo" />
-            </SelectTrigger>
-            <SelectContent>
-              {clientes.map((c) => (
-                <SelectItem key={c.id} value={c.id}>
-                  {c.nome_fantasia}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </Field>
-
-        <Field label="Responsável" name="responsavel_id" required errors={fieldErrors}>
-          <Select
-            value={responsavelId}
-            onValueChange={setResponsavelId}
-            required
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Selecione um membro do tenant" />
-            </SelectTrigger>
-            <SelectContent>
-              {responsaveis.map((r) => (
-                <SelectItem key={r.id} value={r.id}>
-                  {r.nome}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </Field>
 
         {isEdit && (
           <Field label="Tipo" name="tipo" errors={fieldErrors}>
             <Input
               name="tipo"
               defaultValue={orcamento?.tipo ?? ""}
-              placeholder="Ex.: Campanha, Retainer, Projeto único"
-            />
-          </Field>
-        )}
-
-        {isEdit && (
-          <Field label="Campanha" name="campanha" errors={fieldErrors}>
-            <Input
-              name="campanha"
-              defaultValue={orcamento?.campanha ?? ""}
-              placeholder="Nome da campanha ou ação"
+              placeholder="Ex.: vídeo, foto, ativação"
             />
           </Field>
         )}
@@ -185,18 +120,13 @@ export function OrcamentoForm({
 
         {isEdit && (
           <Field label="Status" name="status" errors={fieldErrors}>
-            <Select
-              value={status}
-              onValueChange={(v) => setStatus(v as OrcamentoStatus)}
-            >
+            <Select value={status} onValueChange={(v) => setStatus(v as OrcamentoStatus)}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 {ORCAMENTO_STATUS_EDITAVEIS.map((s) => (
-                  <SelectItem key={s} value={s}>
-                    {orcamentoStatusLabel(s)}
-                  </SelectItem>
+                  <SelectItem key={s} value={s}>{orcamentoStatusLabel(s)}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -222,7 +152,7 @@ export function OrcamentoForm({
           </button>
         ) : (
           <Link
-            href={isEdit ? `/orcamentos/${orcamento!.id}` : "/orcamentos"}
+            href={isEdit ? `/orcamentos/${projetoId}/${orcamento!.id}` : `/orcamentos/${projetoId}`}
             className="inline-flex items-center rounded-lg border border-border bg-white px-5 py-2.5 text-sm font-semibold text-foreground hover:bg-accent transition-colors"
           >
             Cancelar
@@ -272,9 +202,7 @@ function Field({
       </Label>
       {children}
       {fieldErrors?.map((msg, i) => (
-        <p key={i} className="text-xs text-california-red">
-          {msg}
-        </p>
+        <p key={i} className="text-xs text-california-red">{msg}</p>
       ))}
     </div>
   );
