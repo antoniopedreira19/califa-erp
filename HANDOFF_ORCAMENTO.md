@@ -13,8 +13,9 @@ Registro da implementação do design handoff aprovado para o módulo de Orçame
 |---|---|
 | **1 — Destaque da versão mais recente** | ✅ `6738422` |
 | **2 — Edição tipo planilha nos itens** | ✅ `cdb2853` |
+| **3 — Alinhamento da grade, rentabilidade e card de "Totais"** | ✅ `b2003f7` + `497b8e7` |
 
-`tsc --noEmit` e `next lint` limpos nas duas.
+`tsc --noEmit` e `next lint` limpos nas três.
 
 ---
 
@@ -112,6 +113,90 @@ Dados de teste removidos depois.
 ### Comportamento revisado e aprovado (não alterar sem novo aval)
 
 - **`Esc` na linha nova com Item vazio** fecha a célula e mantém a linha em branco na grade; descartar é pelo `X` da trilha. Levantado como possível inconsistência com "Esc desfaz" e **validado pelo time como correto** — `Esc` desfaz a edição da célula, não a criação da linha.
+
+---
+
+## 3.2 Entrega 3 — alinhamento da grade, rentabilidade e card de "Totais"
+
+Tudo que foi feito neste ciclo, entre o último pull e o push. Duas frentes que se encaixam: a **grade de itens** ganhou alinhamento entre grupos e a coluna de rentabilidade; o **card de Totais** foi reescrito para espelhar orçado × planejado com a mesma linguagem visual. São o mesmo trabalho — a grade e o card não podem divergir.
+
+**Arquivos:** [`itens-table.tsx`](app/(app)/orcamentos/[id]/versoes/[versaoId]/itens-table.tsx) · [`totais-card.tsx`](app/(app)/orcamentos/[id]/versoes/[versaoId]/totais-card.tsx) · [`[versaoId]/page.tsx`](app/(app)/orcamentos/[id]/versoes/[versaoId]/page.tsx)
+**Commits:** `b2003f7` (grade) e `497b8e7` (card de Totais) — sem migration, sem mudança de dados, **sem query nova**.
+**Origem do design do card:** `Totais da Versao.dc.html`, opção `5a`, projeto Claude Design `d509845b-dfa3-486b-ab22-c4918e449aee`.
+
+---
+
+### Parte A — grade de itens
+
+#### Problema
+
+Cada grupo renderiza sua própria `<table>`. Em layout automático, as colunas eram medidas pelo conteúdo de cada card — um grupo com item de nome curto (`teste`) gerava coluna ITEM estreita, outro com nome longo (`INFLUENCIADOR INFLIUENCIADO...`) gerava coluna larga, e os blocos ORÇADO / PLANEJADO começavam em posições diferentes entre os cards da mesma versão.
+
+#### Solução
+
+`table-fixed` + `<ColunasFixas />` (um `<colgroup>`) com larguras **em porcentagem**, não em px. Como todos os cards têm a mesma largura, a mesma proporção alinha todos os grupos — em qualquer versão — e a grade acompanha o container em vez de estourar.
+
+- `LARGURA_MINIMA` (`min-w-[1060px]`) é o piso: abaixo disso o card rola na horizontal em vez de espremer as colunas de moeda.
+- **Larguras em px foram tentadas primeiro e estouraram a largura do card**, empurrando o bloco de rentabilidade para fora da área visível. Não voltar para px.
+- O teto de `max-w-[240px]` na coluna Item saiu — com a coluna já dimensionada pelo `colgroup`, ele só desperdiçava espaço.
+
+Verificado por medição no DOM: nos 9 grupos da versão importada, as bordas dos três blocos ficam todas na mesma posição (`263 | 583 | 891 | 1200` a 1600px de viewport), sem scroll horizontal. A 1024px o piso entra e os 9 grupos rolam juntos, mantendo o alinhamento relativo.
+
+#### Rentabilidade
+
+O bloco `RESULTADO` (1 coluna) virou `RENTABILIDADE` (2 sub-colunas): `R$` e `%`. O percentual é sobre o **orçado** (`rentabilidade / orçado`).
+
+- O cálculo **reusa `calcularTotaisPlanejados`** de [`versao-totais.ts`](lib/calculos/versao-totais.ts), via o helper local `rentabilidadeDe(orcado, planejado)` — mesma fórmula e mesma semântica de travessão do card de Totais. Uma primeira versão duplicou a regra localmente; foi trocada de propósito. **Não reintroduzir o cálculo inline** — a grade e o card de Totais não podem divergir.
+- `CelulasRentabilidade` é compartilhado entre a linha existente e a linha nova (draft), que por isso não saem de sincronia.
+- `colSpan` do estado vazio e do rodapé "Novo item" passaram de 12 para 13.
+
+#### Decisão de layout (não alterar sem novo aval)
+
+O pedido foi *"uma nova linha dentro dela com a % da rentabilidade"*. Implementado como **sub-coluna**, não como segunda linha de texto dentro da célula.
+
+Motivo técnico, além do visual: a altura fixa de linha (`ALTURA_LINHA = h-9`, decisão 2 da Entrega 2) é o que mantém a trilha de lixeiras — que vive **fora** do frame do card — alinhada com cada linha. Empilhar duas linhas dentro da célula quebraria esse alinhamento em toda a grade.
+
+---
+
+### Parte B — card "Totais"
+
+#### O que mudou
+
+O card tinha duas colunas: subtotais por tipo de custo e composição da fatura. Passou a ter **três camadas de leitura**:
+
+| Camada | Conteúdo |
+|---|---|
+| 1 — Tabela de agrupamentos | Uma linha por grupo com Orçado, Planejado, Rentab. R$ e %, fechando em "Total dos custos" |
+| 2 — Fechamento do orçado | A/B/C/D → total dos custos → honorários → impostos → faturamento previsto |
+| 3 — Resultado | Faturamento − impostos − custo planejado = resultado operacional; bloco "Composto por" (honorários + rentabilidade); resultado geral = operacional ÷ faturamento, em destaque |
+
+As fórmulas de honorários, imposto (gross-up) e faturamento não mudaram — continuam vindo de `calcularTotaisVersao`. O que a Entrega 4 acrescenta é a leitura por agrupamento e o fechamento em resultado.
+
+#### Decisões que divergem do mock (não alterar sem novo aval)
+
+1. **Sem planejado lançado, resultado operacional e resultado geral mostram travessão.** O mock assume planejado preenchido. Seguir o mock ao pé da letra daria `faturamento − impostos − 0`, que numa versão recém-criada lê como lucro de ~84% — número inflado que não existe. O `%` por grupo segue a convenção que a grade já usava: `—` quando o grupo não tem planejado.
+2. **No bloco "Composto por", os dois valores ficam em preto** (pedido do time, 28/07): as duas parcelas do resultado operacional se leem juntas. Prejuízo (`rentabilidade < 0`) continua em `text-california-red` — preto sempre esconderia perda.
+3. **A linha de honorários exibe a taxa configurada da versão** (`percentual_honorarios`), no mesmo formato da rentabilidade: `R$ 520,00 · 13,0%`. É a mesma taxa que aparece em "Honorários (13%)" na coluna da esquerda — **não** é honorários ÷ faturamento.
+
+#### Detalhes técnicos que importam
+
+- **As bandas de cor são as mesmas da grade de itens** (`#f1f0ec`/`#282828` no orçado, `#e8f0fd`/`#2f6fdb` no planejado, emerald na rentabilidade). É o ponto do design: a vista de Totais tem que "rimar" com a tela de edição. Mexeu na cor de um, mexa no outro.
+- **`agruparPorGrupo` monta um `Map` numa passada só** pelos itens, em vez de um `filter` por grupo — a lista pode ter centenas de linhas (ver seção 4: uma versão chegou a 5.887).
+- O cálculo de rentabilidade por grupo **reusa `calcularTotaisPlanejados`** de [`versao-totais.ts`](lib/calculos/versao-totais.ts), o mesmo helper da grade. Card, grade e export não podem divergir.
+
+#### Verificação feita
+
+Medido no DOM com dados reais do ORC-0001 (3 grupos, honorários 12%, imposto 19,54%):
+
+- honorários `112.050 × 12% = R$ 13.446,00` (C e D zerados) · imposto gross-up `R$ 11.048,87` · faturamento `R$ 136.544,87`
+- resultado operacional `136.544,87 − 11.048,87 − 104.600 = R$ 20.896,00`, que fecha com honorários + rentabilidade (`13.446 + 7.450`)
+- resultado geral `20.896 ÷ 136.544,87 = 15,3%`
+
+Cores computadas conferidas contra o spec do design: `#f1f0ec`, `#e8f0fd`/`#1e4fa3`, `#ecfdf5`/`#047857`/`#a7f3d0`. Após o pedido de preto no "Composto por", as duas linhas voltaram medidas em `rgb(41,41,41)`.
+
+`tsc --noEmit` e `next lint` limpos — inclusive depois de integrar a Fase G' do Antonio (catálogo global de categorias), que mexeu no mesmo `page.tsx`.
+
+**Sem screenshot:** a aba do preview ficou com `visibilityState: hidden` na sessão e as capturas saíam em branco. A verificação foi por DOM e computed styles.
 
 ---
 

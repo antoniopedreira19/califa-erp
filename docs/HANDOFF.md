@@ -2,7 +2,7 @@
 
 Documento para dar continuidade ao projeto em uma nova sessão de trabalho.
 
-**Última atualização** (2026-07-28): card "Totais" da versão reescrito a partir do design `Totais da Versao.dc.html` (Claude Design) — agora espelha Orçado × Planejado por agrupamento e fecha em resultado operacional / resultado geral. Veio depois da migração para catálogo global de categorias (Fase G', 27/07): `versoes_orcamento_categorias` substituída por `categorias` (tenant-wide), CRUD em `/categorias` gerenciado pelo hub `/cadastros`, import agnóstico de categoria.
+**Última atualização** (2026-07-27): migração para catálogo global de categorias (Fase G') concluída — `versoes_orcamento_categorias` substituída por `categorias` (tenant-wide), CRUD em `/categorias` gerenciado pelo hub `/cadastros`, import agnóstico de categoria.
 
 ## 0. LEIA PRIMEIRO — ação pendente no início da sessão
 
@@ -28,13 +28,9 @@ Antes de qualquer coisa:
 Backend: Supabase project `avlwxyknvhlzvnysbzrg` (`https://avlwxyknvhlzvnysbzrg.supabase.co`).
 Admin cadastrado: `antonio@pevetech.com.br` (role `administrador` no tenant `agencia-california`).
 
-**Local (Git):** working tree limpo, sincronizado com `origin/main`. O `b2003f7`, que estava segurado, subiu junto com o card de Totais.
-
-> **O projeto saiu de `~/Downloads` e mora em `~/Documents/California/Califa-ERP`.** O macOS protege `~/Downloads` via TCC (Transparency, Consent & Control); no meio da sessão de 28/07 a permissão caiu e **todo** acesso ao diretório passou a dar `Operation not permitted` — inclusive `git`, que falha logo no `getcwd()` com a mensagem enganosa `Unable to read current working directory`. O dev server continuou servindo normalmente porque já tinha os arquivos abertos, o que mascara o problema. Se reaparecer, o sintoma é esse e a saída é a pasta, não a ferramenta. `~/Documents` também é protegida por TCC — se um dia der o mesmo, mova para `~/Projects`.
+**Local (Git):** working tree limpo, sincronizado com `origin/main`.
 
 **Últimos commits relevantes desta sessão:**
-- `HEAD` — Espelho orçado × planejado no card de Totais
-- `b2003f7` — Alinha a grade entre grupos e detalha a rentabilidade
 - `a665450` — Documenta performance como regra transversal (PERFORMANCE.md + CLAUDE.md + memória)
 - `7b994f1` — perf: prefetch=false nas listas + query agregada + timing granular temp
 - `b4b1c30` — Preview do import: mostra planejado + rentabilidade + timing debug temp
@@ -53,10 +49,9 @@ Admin cadastrado: `antonio@pevetech.com.br` (role `administrador` no tenant `age
 20260724000002  task004_grupos_de_itens
 20260726000001  task004_orcamento_importacoes
 20260728000001  task004_categoria_e_planejado
-20260729000001  categorias_globais
 ```
 
-**Todas as migrations aplicadas.** Última: `20260729000001_categorias_globais` (fase G').
+**Todas as migrations aplicadas.** Última: `20260728000001_task004_categoria_e_planejado` (fase G).
 
 ## 2. O que já está pronto (Tasks 001 – 004)
 
@@ -96,49 +91,12 @@ Admin cadastrado: `antonio@pevetech.com.br` (role `administrador` no tenant `age
   - Tabela `versoes_orcamento_categorias` (escopo por versão, mesmo padrão de grupos). Botão "Nova categoria" no header ao lado de "Novo grupo".
   - Item ganha `categoria_id` (opcional) + 4 campos planejados (`valor_unitario_planejado`, `quantidade_planejada`, `dias_meses_planejado`, `total_planejado` GENERATED).
   - Drawer de item tem dropdown de categoria e bloco Planejado (fundo azul).
-  - Tabela de itens tem 13 colunas (orçado + planejado + categoria + bloco Rentabilidade em R$ e %) — ver bloco abaixo.
-  - Card de totais reescrito depois (ver bloco "Card Totais — espelho orçado × planejado" abaixo).
+  - Tabela de itens tem 12 colunas (orçado + planejado + categoria + rentabilidade colorida).
+  - Card de totais mostra Total Planejado + Rentabilidade + % Rentabilidade quando `total_planejado > 0`.
   - Parser lê col B (categoria) e cols I-K (planejado); confirmarImportacao cria categorias em bulk.
   - Duplicar versão copia categorias (com map old→new) e campos planejados.
   - Helper `calcularTotaisPlanejados` em `lib/calculos/versao-totais.ts`.
 - **Fase G' — Catálogo global de categorias**: substituiu `versoes_orcamento_categorias` (por versão) por `categorias` (tenant), com CRUD em `/categorias` gerenciado pelo hub `/cadastros`. Todos os membros criam/editam; só admin inativa/reativa. Import não lê mais categoria da planilha; classificação é feita pelo GP no drawer de item. Duplicação de versão preserva categoria_id.
-
-### Alinhamento da grade + coluna de rentabilidade (`b2003f7`, 28/07)
-
-Arquivo: [`itens-table.tsx`](<../app/(app)/orcamentos/[id]/versoes/[versaoId]/itens-table.tsx>).
-
-**Problema:** cada grupo renderiza sua própria `<table>`. Em layout automático, as colunas eram medidas pelo conteúdo de cada card — um grupo com item de nome curto ("teste") gerava coluna ITEM estreita, outro com nome longo gerava coluna larga, e os blocos ORÇADO / PLANEJADO saíam desalinhados entre os cards.
-
-**Solução:** `table-fixed` + `<ColunasFixas />` (um `<colgroup>`) com larguras **em porcentagem**, não em px. Como todos os cards têm a mesma largura, a mesma proporção alinha todos os grupos em qualquer versão, e a grade acompanha o container em vez de estourar. `LARGURA_MINIMA` (`min-w-[1060px]`) é o piso: abaixo disso o card rola na horizontal em vez de espremer as colunas de moeda.
-
-- Larguras em px foram tentadas primeiro e **estouraram a largura do card**, empurrando o bloco de rentabilidade para fora da área visível. Não volte para px.
-- Verificado por medição: nos 9 grupos da versão importada, as bordas dos blocos ficam todas na mesma posição.
-
-**Rentabilidade:** o bloco `RESULTADO` (1 coluna) virou `RENTABILIDADE` (2 colunas): `R$` e `%`. O percentual é sobre o **orçado** (`rentabilidade / orcado`).
-
-- O cálculo **reusa `calcularTotaisPlanejados`** de [`versao-totais.ts`](../lib/calculos/versao-totais.ts) via o helper local `rentabilidadeDe(orcado, planejado)` — mesma fórmula e mesma semântica de travessão do card de Totais. Uma primeira versão duplicou a regra localmente; foi trocada de propósito. **Não reintroduza o cálculo inline** — a grade e o card de Totais não podem divergir.
-- Componente `CelulasRentabilidade` é compartilhado entre a linha existente e a linha nova (draft).
-- Decisão de layout: "% dentro do bloco" foi implementado como **sub-coluna**, não como segunda linha dentro da célula. Motivo técnico: a altura fixa de linha (`ALTURA_LINHA = h-9`) sustenta o alinhamento da trilha de lixeiras que vive fora do card; empilhar duas linhas na célula quebraria esse alinhamento.
-- `colSpan` do estado vazio e do rodapé "Novo item" passaram de 12 para 13.
-
-### Card "Totais" — espelho orçado × planejado (28/07)
-
-Arquivo: [`totais-card.tsx`](<../app/(app)/orcamentos/[id]/versoes/[versaoId]/totais-card.tsx>). Origem: design `Totais da Versao.dc.html` (opção `5a`) no projeto Claude Design `d509845b-dfa3-486b-ab22-c4918e449aee`.
-
-O card antigo tinha duas colunas (subtotais por tipo · composição da fatura). Agora tem **três camadas de leitura**:
-
-1. **Tabela de agrupamentos** — uma linha por grupo com Orçado, Planejado, Rentab. R$ e %, fechando em "Total dos custos". `TotaisCard` passou a receber `grupos` como prop (a page já carregava a lista; não há query nova).
-2. **Fechamento do orçado por tipo de custo** — A/B/C/D → total → honorários → impostos → faturamento previsto.
-3. **Resultado** — faturamento − impostos − custo planejado = **resultado operacional**, decomposto no bloco "Composto por" (honorários + rentabilidade), e **resultado geral** = resultado operacional ÷ faturamento em destaque.
-
-**As bandas de cor são literalmente as mesmas da grade de itens** (`#f1f0ec`/`#282828`, `#e8f0fd`/`#2f6fdb`, emerald) — é o ponto do design: a vista de Totais tem que "rimar" com a tela de edição. Se mexer nas cores de um, mexa no outro.
-
-Decisões que fogem do mock — todas deliberadas, não são bugs:
-
-- **Sem planejado lançado** (`totalPlanejado === 0`), resultado operacional e resultado geral mostram travessão. O mock assume planejado preenchido; seguir o mock ao pé da letra daria `faturamento − impostos − 0`, que lê como lucro fantasma de ~84% numa versão recém-criada. O `%` por grupo segue a convenção que já existia na grade (`—` quando o grupo não tem planejado).
-- **No bloco "Composto por", os dois valores ficam em preto** (pedido do user, 28/07) — as duas parcelas do resultado operacional se leem juntas. Prejuízo (`rentabilidade < 0`) continua em `text-california-red`.
-- **A linha de honorários exibe a taxa configurada da versão** (`percentual_honorarios`), no mesmo formato da rentabilidade (`R$ 520,00 · 13,0%`). É a mesma taxa que aparece em "Honorários (13%)" na coluna da esquerda — **não** é honorários ÷ faturamento.
-- `agruparPorGrupo` monta um `Map` numa passada só pelos itens, em vez de um `filter` por grupo (a lista pode ter centenas de linhas).
 
 ### UI polish
 - Componentes reusáveis: `Dialog` + `DrawerContent`, `ConfirmDialog`, `Select` (Radix), `Popover`, `Calendar`, `DatePicker`, `MaskedInput` (telefone/CPF/CNPJ), `no-spinner` utility.
@@ -301,8 +259,7 @@ Docs de referência: [`tasks/005-criacao-job-orcamento-aprovado.md`](../tasks/00
 
 ### MCP Supabase
 - `.mcp.json` na raiz com dois servers: `supabase` (read-only) e `supabase-write` (para migrations).
-- Precisa de `SUPABASE_ACCESS_TOKEN` no ambiente. Na máquina macOS do Tiago ele vive em `~/.claude/settings.json`, no bloco `env` (arquivo fora do repositório — nunca commite o valor). Em Windows, variável de sistema via `setx`.
-- **Se o MCP responder `Unauthorized` do nada:** o token foi rotacionado e a sessão atual ainda carrega o antigo. O servidor MCP lê a variável **na inicialização da sessão** e não relê o arquivo — abra uma sessão nova. (Aconteceu em 28/07, após rotação do token.)
+- Precisa de `SUPABASE_ACCESS_TOKEN` como variável de sistema Windows (`setx`).
 - Ao aplicar migration nova, **sempre verifique com uma query simulando `antonio` (`set local role authenticated` + JWT claim override)** para pegar problemas de RLS/GRANT antes do frontend.
 
 ### Deploy Vercel
