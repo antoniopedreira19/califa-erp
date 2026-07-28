@@ -249,6 +249,7 @@ export default async function VersaoDetailPage({
 
       {/* Totais */}
       <TotaisCard
+        grupos={grupos}
         itens={itens}
         percentualHonorarios={Number(versao.percentual_honorarios)}
         percentualImposto={Number(versao.percentual_imposto)}

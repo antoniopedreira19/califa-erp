@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn, formatCurrency } from "@/lib/utils";
+import { calcularTotaisPlanejados } from "@/lib/calculos/versao-totais";
 import {
   tipoCustoLabel,
   type TipoCusto,
@@ -57,6 +58,11 @@ const ALTURA_LINHA = "h-9";
 const GRADE_NEUTRA = "border-r border-r-[#f1f1f1]";
 const GRADE_ORCADO = "border-r border-r-[#eceae5]";
 const GRADE_PLANEJADO = "border-r border-r-[#e6eff9]";
+const GRADE_RENTAB = "border-r border-r-[#d9efe3]";
+
+/** Piso para as colunas de moeda não cortarem o valor. Abaixo disso o card
+ *  rola na horizontal em vez de espremer as colunas. */
+const LARGURA_MINIMA = "min-w-[1060px]";
 
 const CAMPO_CLASSES =
   "h-7 w-full rounded-lg border border-california-red bg-white px-2 text-xs text-foreground outline-none ring-2 ring-california-red/15";
@@ -99,6 +105,48 @@ function parseNumero(raw: string): number | null {
 /** Número cru para digitação: vírgula decimal, sem separador de milhar. */
 function paraEdicao(valor: number): string {
   return String(valor).replace(".", ",");
+}
+
+/** Larguras fixas do grid. Sem elas cada card mede as colunas pelo próprio
+ *  conteúdo — um grupo com item de nome curto desalinha os blocos Orçado /
+ *  Planejado / Rentabilidade em relação aos outros grupos e versões.
+ *  Em porcentagem, não em px: os cards têm a mesma largura, então a mesma
+ *  proporção alinha todos e ainda acompanha o container. */
+function ColunasFixas() {
+  return (
+    <colgroup>
+      {/* Item absorve a sobra (16%); as demais são proporcionais. */}
+      <col />
+      <col className="w-[4.5%]" />
+      <col className="w-[8.5%]" />
+      {/* Orçado */}
+      <col className="w-[10%]" />
+      <col className="w-[3.5%]" />
+      <col className="w-[3.5%]" />
+      <col className="w-[11%]" />
+      {/* Planejado */}
+      <col className="w-[10%]" />
+      <col className="w-[3.5%]" />
+      <col className="w-[3.5%]" />
+      <col className="w-[11%]" />
+      {/* Rentabilidade */}
+      <col className="w-[9.5%]" />
+      <col className="w-[5.5%]" />
+    </colgroup>
+  );
+}
+
+/** Rentabilidade de uma linha (ou do subtotal) pela fórmula oficial da
+ *  versão — a mesma que alimenta o card de Totais. */
+function rentabilidadeDe(orcado: number, planejado: number) {
+  return calcularTotaisPlanejados([
+    { total_orcado: orcado, total_planejado: planejado },
+  ]);
+}
+
+/** Mesmo formato do card de Totais: uma casa decimal, vírgula decimal. */
+function formatarPercentual(percentual: number): string {
+  return `${percentual.toFixed(1).replace(".", ",")}%`;
 }
 
 function num(v: ValorCampo): number {
@@ -341,7 +389,8 @@ export function ItensTable({
     (s, it) => s + totaisDoItem(it).planejado,
     0,
   );
-  const resultado = subtotalOrcado - subtotalPlanejado;
+  const { rentabilidade: resultado, percentualRentabilidade: percentualSubtotal } =
+    rentabilidadeDe(subtotalOrcado, subtotalPlanejado);
 
   const editavel = !readOnly;
   const temTrilha = editavel && (itens.length > 0 || draft !== null);
@@ -364,7 +413,10 @@ export function ItensTable({
 
       <div ref={wrapperRef} className="relative">
         <div className={cn("overflow-x-auto", readOnly && "rounded-b-2xl")}>
-          <table className="w-full text-sm border-collapse">
+          <table
+            className={cn("w-full table-fixed text-sm border-collapse", LARGURA_MINIMA)}
+          >
+            <ColunasFixas />
             <thead className="text-[10px] uppercase tracking-wider text-muted-foreground">
               {/* Linha 1 — faixas de bloco */}
               <tr>
@@ -382,10 +434,10 @@ export function ItensTable({
                   PLANEJADO
                 </th>
                 <th
-                  colSpan={1}
+                  colSpan={2}
                   className="text-center px-3 py-2 text-[11px] font-extrabold tracking-[0.08em] normal-case text-emerald-700 bg-emerald-50 border-b-[3px] border-b-emerald-600 border-l-2 border-l-[#d7d7d7]"
                 >
-                  RESULTADO
+                  RENTABILIDADE
                 </th>
               </tr>
 
@@ -422,9 +474,12 @@ export function ItensTable({
                 <th className="text-right font-semibold px-3 py-2 bg-blue-50/60 text-[#5a76a8]">
                   Total
                 </th>
-                {/* bloco RESULTADO */}
-                <th className="text-right font-semibold px-3 py-2 border-l border-l-border">
-                  Rentab.
+                {/* bloco RENTABILIDADE */}
+                <th className="text-right font-semibold px-3 py-2 bg-emerald-50/50 text-emerald-800/70 border-l border-l-border border-r border-r-[#d9efe3]">
+                  R$
+                </th>
+                <th className="text-right font-semibold px-3 py-2 bg-emerald-50/50 text-emerald-800/70">
+                  %
                 </th>
               </tr>
             </thead>
@@ -433,7 +488,7 @@ export function ItensTable({
               {itens.length === 0 && !draft && (
                 <tr>
                   <td
-                    colSpan={12}
+                    colSpan={13}
                     className="py-8 text-center text-sm text-muted-foreground"
                   >
                     Sem itens neste grupo ainda.
@@ -469,7 +524,6 @@ export function ItensTable({
                       onConfirmar={(v) => confirmarCampo(item, "item", v.trim())}
                       onCancelar={() => setAtiva(null)}
                       tdClassName={cn("text-foreground", GRADE_NEUTRA)}
-                      larguraMaxima="max-w-[240px]"
                     />
 
                     <CelulaSelect
@@ -638,24 +692,11 @@ export function ItensTable({
                         : "—"}
                     </td>
 
-                    <td className="px-3 text-right font-mono text-xs border-l-2 border-l-[#e4e2dd] whitespace-nowrap">
-                      {totais.planejado <= 0 ? (
-                        <span className="text-muted-foreground">—</span>
-                      ) : (
-                        <span
-                          className={
-                            totais.orcado - totais.planejado >= 0
-                              ? "text-emerald-700"
-                              : "text-california-red"
-                          }
-                        >
-                          {formatCurrency(
-                            totais.orcado - totais.planejado,
-                            moeda,
-                          )}
-                        </span>
-                      )}
-                    </td>
+                    <CelulasRentabilidade
+                      orcado={totais.orcado}
+                      planejado={totais.planejado}
+                      moeda={moeda}
+                    />
                   </tr>
                 );
               })}
@@ -703,10 +744,23 @@ export function ItensTable({
                 <td
                   className={cn(
                     "px-3 py-3 text-right whitespace-nowrap font-mono text-xs font-semibold bg-emerald-50 border-l-2 border-l-[#d7d7d7] border-t-2 border-t-emerald-600",
+                    GRADE_RENTAB,
                     resultado >= 0 ? "text-emerald-700" : "text-california-red",
                   )}
                 >
                   {formatCurrency(resultado, moeda)}
+                </td>
+                <td
+                  className={cn(
+                    "px-3 py-3 text-right whitespace-nowrap font-mono text-xs font-semibold bg-emerald-50 border-t-2 border-t-emerald-600",
+                    resultado >= 0 ? "text-emerald-700" : "text-california-red",
+                  )}
+                >
+                  {percentualSubtotal === null ? (
+                    <span className="text-muted-foreground">—</span>
+                  ) : (
+                    formatarPercentual(percentualSubtotal)
+                  )}
                 </td>
               </tr>
 
@@ -717,7 +771,7 @@ export function ItensTable({
                   {/* border-t fecha a base da grade: o subtotal é a última
                       linha da planilha, e o "Novo item" fica fora dela. */}
                   <td
-                    colSpan={12}
+                    colSpan={13}
                     className="border-t border-border px-3 py-2"
                   >
                     <button
@@ -826,7 +880,6 @@ function CelulaTexto({
   onConfirmar,
   onCancelar,
   tdClassName,
-  larguraMaxima,
 }: {
   valor: string;
   editando: boolean;
@@ -835,7 +888,6 @@ function CelulaTexto({
   onConfirmar: (valor: string) => void;
   onCancelar: () => void;
   tdClassName?: string;
-  larguraMaxima?: string;
 }) {
   const finalizado = React.useRef(false);
 
@@ -872,7 +924,7 @@ function CelulaTexto({
       className={cn(TD_BASE, tdClassName, "px-3", editavel && "cursor-pointer")}
       onClick={editavel ? onAtivar : undefined}
     >
-      <div className={cn("truncate", larguraMaxima)} title={valor}>
+      <div className="truncate" title={valor}>
         {valor}
       </div>
     </td>
@@ -1067,7 +1119,6 @@ function LinhaDraft({
         onConfirmar={(v) => onConfirmarTexto("item", v.trim())}
         onCancelar={onFechar}
         tdClassName={cn("text-foreground", GRADE_NEUTRA)}
-        larguraMaxima="max-w-[240px]"
       />
       <CelulaSelect
         editando={ativaAqui("tipo_custo")}
@@ -1183,21 +1234,56 @@ function LinhaDraft({
         {totalPlanejado > 0 ? formatCurrency(totalPlanejado, moeda) : "—"}
       </td>
 
-      <td className="px-3 text-right font-mono text-xs border-l-2 border-l-[#e4e2dd] whitespace-nowrap">
-        {totalPlanejado > 0 ? (
-          <span
-            className={
-              totalOrcado - totalPlanejado >= 0
-                ? "text-emerald-700"
-                : "text-california-red"
-            }
-          >
-            {formatCurrency(totalOrcado - totalPlanejado, moeda)}
-          </span>
-        ) : (
+      <CelulasRentabilidade
+        orcado={totalOrcado}
+        planejado={totalPlanejado}
+        moeda={moeda}
+      />
+    </tr>
+  );
+}
+
+/** Rentabilidade da linha: valor absoluto e percentual sobre o orçado.
+ *  Sem planejado ainda não há rentabilidade a mostrar. */
+function CelulasRentabilidade({
+  orcado,
+  planejado,
+  moeda,
+}: {
+  orcado: number;
+  planejado: number;
+  moeda: string;
+}) {
+  const { rentabilidade, percentualRentabilidade } = rentabilidadeDe(
+    orcado,
+    planejado,
+  );
+  const semPlanejado = planejado <= 0;
+  const cor = rentabilidade >= 0 ? "text-emerald-700" : "text-california-red";
+
+  return (
+    <>
+      <td
+        className={cn(
+          "px-3 text-right font-mono text-xs whitespace-nowrap border-l-2 border-l-[#e4e2dd]",
+          GRADE_RENTAB,
+        )}
+      >
+        {semPlanejado ? (
           <span className="text-muted-foreground">—</span>
+        ) : (
+          <span className={cor}>{formatCurrency(rentabilidade, moeda)}</span>
         )}
       </td>
-    </tr>
+      <td className="px-3 text-right font-mono text-xs whitespace-nowrap">
+        {percentualRentabilidade === null ? (
+          <span className="text-muted-foreground">—</span>
+        ) : (
+          <span className={cor}>
+            {formatarPercentual(percentualRentabilidade)}
+          </span>
+        )}
+      </td>
+    </>
   );
 }
