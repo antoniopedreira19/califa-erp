@@ -13,6 +13,11 @@ export const clienteSchema = z.object({
     .trim()
     .min(2, "Informe o nome fantasia (mín. 2 caracteres).")
     .max(200, "Máximo 200 caracteres."),
+  codigo_curto: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .regex(/^[A-Z]{2,6}$/, "2 a 6 letras (sem números/espaços)."),
   razao_social: z
     .string()
     .trim()
