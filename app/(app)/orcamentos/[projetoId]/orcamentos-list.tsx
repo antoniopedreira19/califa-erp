@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { orcamentoStatusLabel, type Orcamento } from "@/lib/types";
@@ -41,6 +42,7 @@ function formatDate(iso: string | null): string {
 }
 
 export function OrcamentosList({ projetoId, orcamentos }: Props) {
+  const router = useRouter();
   return (
     <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-soft">
       <table className="w-full text-sm">
@@ -58,8 +60,16 @@ export function OrcamentosList({ projetoId, orcamentos }: Props) {
           {orcamentos.map((o) => (
             <tr
               key={o.id}
-              className="border-b border-border last:border-0 hover:bg-accent/40 transition-colors cursor-pointer"
-              onClick={() => window.location.assign(`/orcamentos/${projetoId}/${o.id}`)}
+              role="button"
+              tabIndex={0}
+              className="border-b border-border last:border-0 hover:bg-accent/40 transition-colors cursor-pointer focus-visible:outline-none focus-visible:bg-accent/40"
+              onClick={() => router.push(`/orcamentos/${projetoId}/${o.id}`)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  router.push(`/orcamentos/${projetoId}/${o.id}`);
+                }
+              }}
             >
               <td className="px-4 py-3 font-mono text-xs">
                 <Link

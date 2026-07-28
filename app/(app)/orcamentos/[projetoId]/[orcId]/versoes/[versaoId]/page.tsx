@@ -161,7 +161,7 @@ export default async function VersaoDetailPage({
             }
           />
           <a
-            href={`/api/orcamentos/${params.orcId}/versoes/${versao.id}/export`}
+            href={`/api/orcamentos/${params.projetoId}/${params.orcId}/versoes/${versao.id}/export`}
             title="Baixar planilha XLSX"
             className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-semibold text-foreground hover:border-california-red/40 hover:text-california-red transition-colors"
           >

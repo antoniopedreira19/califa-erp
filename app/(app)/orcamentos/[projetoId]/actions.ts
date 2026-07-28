@@ -72,7 +72,7 @@ export async function criarOrcamento(
 
   let codigo: string;
   try {
-    codigo = parsed.data.codigo ?? (await gerarCodigoOrcamento(supabase, projetoId));
+    codigo = parsed.data.codigo ?? (await gerarCodigoOrcamento(supabase, projetoId, session.activeTenant.id));
   } catch (e) {
     return { ok: false, message: (e as Error).message };
   }

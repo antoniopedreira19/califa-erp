@@ -25,8 +25,9 @@ update public.clientes
    set codigo_curto = upper(regexp_replace(substring(nome_fantasia, 1, 6), '[^A-Za-z]', '', 'g'))
  where codigo_curto is null;
 
--- Fallback pra registros que ficaram vazios
-update public.clientes set codigo_curto = 'CLI' where codigo_curto is null or codigo_curto = '';
+-- Fallback pra registros que ficaram vazios ou com menos de 2 letras (violaria o CHECK)
+update public.clientes set codigo_curto = 'CLI'
+ where codigo_curto is null or length(codigo_curto) < 2;
 
 alter table public.clientes
   alter column codigo_curto set not null;

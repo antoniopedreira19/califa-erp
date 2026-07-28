@@ -7,12 +7,14 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 export async function gerarCodigoOrcamento(
   supabase: SupabaseClient,
   projetoId: string,
+  tenantId: string,
 ): Promise<string> {
   // 1) codigo do projeto
   const { data: projeto, error: errProj } = await supabase
     .from("projetos")
     .select("codigo")
     .eq("id", projetoId)
+    .eq("tenant_id", tenantId)
     .maybeSingle<{ codigo: string }>();
 
   if (errProj || !projeto?.codigo) {
@@ -23,7 +25,8 @@ export async function gerarCodigoOrcamento(
   const { count, error: errCount } = await supabase
     .from("orcamentos")
     .select("id", { count: "exact", head: true })
-    .eq("projeto_id", projetoId);
+    .eq("projeto_id", projetoId)
+    .eq("tenant_id", tenantId);
 
   if (errCount) {
     throw new Error(`Falha ao contar orçamentos: ${errCount.message}`);

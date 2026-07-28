@@ -15,14 +15,13 @@ import { Label } from "@/components/ui/label";
 import { criarVersao, type ActionResult } from "./actions";
 
 interface Props {
-  projetoId: string;
   orcamentoId: string;
   /** Bloqueia o botão em orçamentos que não aceitam mais versão. */
   disabled?: boolean;
   disabledReason?: string;
 }
 
-export function NovaVersaoDrawer({ projetoId, orcamentoId, disabled, disabledReason }: Props) {
+export function NovaVersaoDrawer({ orcamentoId, disabled, disabledReason }: Props) {
   const [open, setOpen] = React.useState(false);
   const [pending, startTransition] = React.useTransition();
   const [error, setError] = React.useState<string | null>(null);

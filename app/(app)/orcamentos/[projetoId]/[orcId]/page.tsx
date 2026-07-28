@@ -229,7 +229,6 @@ export default async function OrcamentoDetailPage({
               }
             />
             <NovaVersaoDrawer
-              projetoId={params.projetoId}
               orcamentoId={orcamento.id}
               disabled={!podeCriarVersao}
               disabledReason={

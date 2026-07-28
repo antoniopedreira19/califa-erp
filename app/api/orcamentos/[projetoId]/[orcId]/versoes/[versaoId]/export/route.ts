@@ -28,48 +28,47 @@ const TIPOS: TipoCusto[] = ["A", "B", "C", "D"];
 
 export async function GET(
   _req: Request,
-  { params }: { params: { id: string; versaoId: string } },
+  { params }: { params: { projetoId: string; orcId: string; versaoId: string } },
 ) {
   const session = await requireSession();
   const supabase = createClient();
 
   // ---------- fetch dados ----------
-  const [versaoRes, orcRes, gruposRes, itensRes, clienteRes] =
-    await Promise.all([
-      supabase
-        .from("versoes_orcamento")
-        .select("*")
-        .eq("id", params.versaoId)
-        .eq("orcamento_id", params.id)
-        .eq("tenant_id", session.activeTenant.id)
-        .maybeSingle<VersaoOrcamento>(),
-      supabase
-        .from("orcamentos")
-        .select("id, codigo, nome, cliente_id")
-        .eq("id", params.id)
-        .eq("tenant_id", session.activeTenant.id)
-        .maybeSingle<{ id: string; codigo: string; nome: string; cliente_id: string }>(),
-      supabase
-        .from("versoes_orcamento_grupos")
-        .select("*")
-        .eq("versao_orcamento_id", params.versaoId)
-        .eq("tenant_id", session.activeTenant.id)
-        .order("ordem", { ascending: true })
-        .returns<VersaoOrcamentoGrupo[]>(),
-      supabase
-        .from("versoes_orcamento_itens")
-        .select("*")
-        .eq("versao_orcamento_id", params.versaoId)
-        .eq("tenant_id", session.activeTenant.id)
-        .order("ordem", { ascending: true })
-        .returns<VersaoOrcamentoItem[]>(),
-      supabase
-        .from("clientes")
-        .select("nome_fantasia")
-        .eq("tenant_id", session.activeTenant.id)
-        // Cliente vem do orçamento, resolvo depois com o dado.
-        .limit(1),
-    ]);
+  const [versaoRes, orcRes, gruposRes, itensRes] = await Promise.all([
+    supabase
+      .from("versoes_orcamento")
+      .select("*")
+      .eq("id", params.versaoId)
+      .eq("orcamento_id", params.orcId)
+      .eq("tenant_id", session.activeTenant.id)
+      .maybeSingle<VersaoOrcamento>(),
+    supabase
+      .from("orcamentos")
+      .select("id, codigo, nome, projeto:projetos(cliente:clientes(nome_fantasia))")
+      .eq("id", params.orcId)
+      .eq("projeto_id", params.projetoId)
+      .eq("tenant_id", session.activeTenant.id)
+      .maybeSingle<{
+        id: string;
+        codigo: string;
+        nome: string;
+        projeto: { cliente: { nome_fantasia: string } | null } | null;
+      }>(),
+    supabase
+      .from("versoes_orcamento_grupos")
+      .select("*")
+      .eq("versao_orcamento_id", params.versaoId)
+      .eq("tenant_id", session.activeTenant.id)
+      .order("ordem", { ascending: true })
+      .returns<VersaoOrcamentoGrupo[]>(),
+    supabase
+      .from("versoes_orcamento_itens")
+      .select("*")
+      .eq("versao_orcamento_id", params.versaoId)
+      .eq("tenant_id", session.activeTenant.id)
+      .order("ordem", { ascending: true })
+      .returns<VersaoOrcamentoItem[]>(),
+  ]);
 
   if (versaoRes.error || !versaoRes.data) {
     return NextResponse.json({ error: "Versão não encontrada" }, { status: 404 });
@@ -89,15 +88,8 @@ export async function GET(
     total_orcado: Number(it.total_orcado ?? 0),
   })) as VersaoOrcamentoItem[];
 
-  // Nome do cliente
-  const { data: cli } = await supabase
-    .from("clientes")
-    .select("nome_fantasia")
-    .eq("id", orcamento.cliente_id)
-    .eq("tenant_id", session.activeTenant.id)
-    .maybeSingle<{ nome_fantasia: string }>();
-  const clienteNome = cli?.nome_fantasia ?? "—";
-  void clienteRes; // não usada, pré-fetch reservado se quisermos ampliar depois
+  // Nome do cliente via embed projeto → cliente
+  const clienteNome = orcamento.projeto?.cliente?.nome_fantasia ?? "—";
 
   // ---------- monta workbook ----------
   const wb = new ExcelJS.Workbook();

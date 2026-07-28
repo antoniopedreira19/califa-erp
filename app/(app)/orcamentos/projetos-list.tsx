@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
@@ -50,6 +51,7 @@ function formatDate(iso: string | null): string {
 }
 
 export function ProjetosList({ projetos, clientes, responsaveis }: Props) {
+  const router = useRouter();
   const [busca, setBusca] = React.useState("");
   const [clienteFiltro, setClienteFiltro] = React.useState<string>("todos");
   const [respFiltro, setRespFiltro] = React.useState<string>("todos");
@@ -133,8 +135,16 @@ export function ProjetosList({ projetos, clientes, responsaveis }: Props) {
             {filtrados.map((p) => (
               <tr
                 key={p.id}
-                className="border-b border-border last:border-0 hover:bg-accent/40 transition-colors cursor-pointer"
-                onClick={() => window.location.assign(`/orcamentos/${p.id}`)}
+                role="button"
+                tabIndex={0}
+                className="border-b border-border last:border-0 hover:bg-accent/40 transition-colors cursor-pointer focus-visible:outline-none focus-visible:bg-accent/40"
+                onClick={() => router.push(`/orcamentos/${p.id}`)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    router.push(`/orcamentos/${p.id}`);
+                  }
+                }}
               >
                 <td className="px-4 py-3 font-mono text-xs">
                   <Link

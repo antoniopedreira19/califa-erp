@@ -26,7 +26,7 @@ export async function gerarCodigoProjeto(
   }
 
   const codigoCurto = cliente.codigo_curto;
-  const ano = dataInicio.slice(2, 4); // "2026-07-28" → "26"
+  const ano = new Date(dataInicio).getFullYear().toString().slice(-2); // "2026-07-28" → "26"
 
   // 2) Conta projetos existentes desse cliente cujo código termine em "/<ano>"
   //    Usa LIKE porque não temos coluna separada de ano.

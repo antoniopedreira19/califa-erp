@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { Pencil, Archive, RefreshCw } from "lucide-react";
 import {
   Dialog,
@@ -20,6 +21,7 @@ interface Props {
 }
 
 export function ProjetoEditorDrawer({ projeto, clientes, responsaveis }: Props) {
+  const router = useRouter();
   const [open, setOpen] = React.useState(false);
   const [confirmArquivar, setConfirmArquivar] = React.useState(false);
   const [confirmReativar, setConfirmReativar] = React.useState(false);
@@ -33,6 +35,7 @@ export function ProjetoEditorDrawer({ projeto, clientes, responsaveis }: Props) 
       if (!res.ok) setError(res.message);
       else {
         setConfirmArquivar(false);
+        router.refresh();
         setOpen(false);
       }
     });
@@ -45,6 +48,7 @@ export function ProjetoEditorDrawer({ projeto, clientes, responsaveis }: Props) 
       if (!res.ok) setError(res.message);
       else {
         setConfirmReativar(false);
+        router.refresh();
         setOpen(false);
       }
     });
