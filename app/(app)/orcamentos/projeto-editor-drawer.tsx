@@ -10,7 +10,7 @@ import {
   DrawerContent,
 } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import type { Cliente, Profile, Projeto } from "@/lib/types";
+import type { CategoriaDominio, Cliente, Profile, Projeto } from "@/lib/types";
 import { ProjetoForm } from "./projeto-form";
 import { arquivarProjeto, reativarProjeto } from "./actions";
 
@@ -18,9 +18,10 @@ interface Props {
   projeto: Projeto;
   clientes: Pick<Cliente, "id" | "nome_fantasia" | "codigo_curto">[];
   responsaveis: Pick<Profile, "id" | "nome">[];
+  categorias: Pick<CategoriaDominio, "id" | "nome">[];
 }
 
-export function ProjetoEditorDrawer({ projeto, clientes, responsaveis }: Props) {
+export function ProjetoEditorDrawer({ projeto, clientes, responsaveis, categorias }: Props) {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
   const [confirmArquivar, setConfirmArquivar] = React.useState(false);
@@ -76,6 +77,7 @@ export function ProjetoEditorDrawer({ projeto, clientes, responsaveis }: Props) 
               projeto={projeto}
               clientes={clientes}
               responsaveis={responsaveis}
+              categorias={categorias}
               onSuccess={() => setOpen(false)}
               onCancel={() => setOpen(false)}
             />

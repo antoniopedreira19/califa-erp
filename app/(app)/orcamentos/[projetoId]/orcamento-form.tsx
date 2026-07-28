@@ -17,6 +17,7 @@ import { DatePicker } from "@/components/ui/date-picker";
 import {
   ORCAMENTO_STATUS_EDITAVEIS,
   orcamentoStatusLabel,
+  type CategoriaDominio,
   type Orcamento,
   type OrcamentoStatus,
 } from "@/lib/types";
@@ -29,11 +30,12 @@ import {
 interface Props {
   projetoId: string;
   orcamento?: Orcamento;
+  categorias: Pick<CategoriaDominio, "id" | "nome">[];
   onSuccess?: () => void;
   onCancel?: () => void;
 }
 
-export function OrcamentoForm({ projetoId, orcamento, onSuccess, onCancel }: Props) {
+export function OrcamentoForm({ projetoId, orcamento, categorias, onSuccess, onCancel }: Props) {
   const router = useRouter();
   const isEdit = Boolean(orcamento);
   const [pending, startTransition] = React.useTransition();
@@ -44,6 +46,10 @@ export function OrcamentoForm({ projetoId, orcamento, onSuccess, onCancel }: Pro
       ? orcamento.status
       : "rascunho",
   );
+  const SEM_CATEGORIA = "__none__";
+  const [categoriaId, setCategoriaId] = React.useState(
+    orcamento?.categoria_id ?? SEM_CATEGORIA,
+  );
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -51,6 +57,7 @@ export function OrcamentoForm({ projetoId, orcamento, onSuccess, onCancel }: Pro
     setFieldErrors({});
     const formData = new FormData(e.currentTarget);
     if (isEdit) formData.set("status", status);
+    formData.set("categoria_id", categoriaId === SEM_CATEGORIA ? "" : categoriaId);
 
     startTransition(async () => {
       const res: ActionResult = isEdit
@@ -92,15 +99,21 @@ export function OrcamentoForm({ projetoId, orcamento, onSuccess, onCancel }: Pro
           </Field>
         )}
 
-        {isEdit && (
-          <Field label="Tipo" name="tipo" errors={fieldErrors}>
-            <Input
-              name="tipo"
-              defaultValue={orcamento?.tipo ?? ""}
-              placeholder="Ex.: vídeo, foto, ativação"
-            />
-          </Field>
-        )}
+        <Field label="Categoria" name="categoria_id" errors={fieldErrors}>
+          <Select value={categoriaId} onValueChange={setCategoriaId}>
+            <SelectTrigger>
+              <SelectValue placeholder="Sem categoria" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={SEM_CATEGORIA}>Sem categoria</SelectItem>
+              {categorias.map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.nome}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
 
         <Field label="Início previsto" name="data_inicio_prevista" errors={fieldErrors}>
           <DatePicker

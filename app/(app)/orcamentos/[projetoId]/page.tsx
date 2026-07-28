@@ -4,7 +4,7 @@ import { ArrowLeft, FileText, Plus } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { listActiveMembers } from "@/lib/data/members";
-import type { Cliente, Orcamento, Projeto } from "@/lib/types";
+import type { CategoriaDominio, Cliente, Orcamento, Projeto } from "@/lib/types";
 import { projetoStatusLabel } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -33,18 +33,18 @@ export default async function ProjetoDetailPage({
   const session = await requireSession();
   const supabase = createClient();
 
-  const [projRes, orcsRes, clientesRes, responsaveis] = await Promise.all([
+  const [projRes, orcsRes, clientesRes, responsaveis, categoriasProjRes, categoriasOrcRes] = await Promise.all([
     supabase
       .from("projetos")
       .select(
-        "id, tenant_id, codigo, nome, campanha, status, cliente_id, responsavel_id, data_inicio_prevista, created_by, created_at, updated_at, cliente:clientes(id, nome_fantasia), responsavel:profiles!responsavel_id(id, nome)",
+        "id, tenant_id, codigo, nome, campanha, status, cliente_id, responsavel_id, categoria_id, data_inicio_prevista, created_by, created_at, updated_at, cliente:clientes(id, nome_fantasia), responsavel:profiles!responsavel_id(id, nome), categoria:categorias_dominio(id, nome)",
       )
       .eq("id", params.projetoId)
       .eq("tenant_id", session.activeTenant.id)
       .maybeSingle(),
     supabase
       .from("orcamentos")
-      .select("id, codigo, nome, tipo, status, data_fim_prevista, created_at")
+      .select("id, codigo, nome, status, data_fim_prevista, created_at, categoria:categorias_dominio(nome)")
       .eq("projeto_id", params.projetoId)
       .eq("tenant_id", session.activeTenant.id)
       .order("created_at", { ascending: false }),
@@ -55,6 +55,20 @@ export default async function ProjetoDetailPage({
       .eq("status", "ativo")
       .order("nome_fantasia"),
     listActiveMembers(session.activeTenant.id),
+    supabase
+      .from("categorias_dominio")
+      .select("id, nome")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("escopo", "projeto")
+      .eq("ativo", true)
+      .order("nome"),
+    supabase
+      .from("categorias_dominio")
+      .select("id, nome")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("escopo", "orcamento")
+      .eq("ativo", true)
+      .order("nome"),
   ]);
 
   if (projRes.error) console.error("[projeto.detail]", projRes.error.message);
@@ -70,6 +84,7 @@ export default async function ProjetoDetailPage({
     status: raw.status,
     cliente_id: raw.cliente_id,
     responsavel_id: raw.responsavel_id,
+    categoria_id: raw.categoria_id,
     data_inicio_prevista: raw.data_inicio_prevista,
     created_by: raw.created_by,
     created_at: raw.created_at,
@@ -77,6 +92,10 @@ export default async function ProjetoDetailPage({
   };
   const clienteNome: string | null = raw.cliente?.nome_fantasia ?? null;
   const responsavelNome: string | null = raw.responsavel?.nome ?? null;
+  const categoriaNome: string | null = raw.categoria?.nome ?? null;
+
+  const categoriasProjeto = (categoriasProjRes.data ?? []) as Pick<CategoriaDominio, "id" | "nome">[];
+  const categoriasOrcamento = (categoriasOrcRes.data ?? []) as Pick<CategoriaDominio, "id" | "nome">[];
 
   const orcamentosBrutos = (orcsRes.data ?? []) as any[];
   const orcamentoIds = orcamentosBrutos.map((o) => o.id);
@@ -98,7 +117,7 @@ export default async function ProjetoDetailPage({
     id: o.id,
     codigo: o.codigo,
     nome: o.nome,
-    tipo: o.tipo,
+    categoria_nome: o.categoria?.nome ?? null,
     status: o.status as Orcamento["status"],
     data_fim_prevista: o.data_fim_prevista,
     versoes_count: versoesCountMap.get(o.id) ?? 0,
@@ -134,6 +153,7 @@ export default async function ProjetoDetailPage({
               projeto={projeto}
               clientes={clientes}
               responsaveis={responsaveis}
+              categorias={categoriasProjeto}
             />
           </div>
 
@@ -152,6 +172,15 @@ export default async function ProjetoDetailPage({
               <span className="text-foreground/60">Início previsto:</span>{" "}
               <span className="text-foreground font-medium">{formatDate(projeto.data_inicio_prevista)}</span>
             </span>
+            {categoriaNome && (
+              <>
+                <span aria-hidden className="text-border">·</span>
+                <span>
+                  <span className="text-foreground/60">Categoria:</span>{" "}
+                  <span className="text-foreground font-medium">{categoriaNome}</span>
+                </span>
+              </>
+            )}
             {projeto.campanha && (
               <>
                 <span aria-hidden className="text-border">·</span>

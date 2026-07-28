@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Users, Building2, Tag, ArrowRight, type LucideIcon } from "lucide-react";
+import { Users, Building2, Tag, Layers, ArrowRight, type LucideIcon } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 
@@ -10,7 +10,7 @@ export default async function CadastrosPage() {
   const supabase = createClient();
 
   // Contagens de ativos em paralelo para cada cadastro do hub.
-  const [clientesRes, fornecedoresRes, categoriasRes] = await Promise.all([
+  const [clientesRes, fornecedoresRes, categoriasRes, catDominioRes] = await Promise.all([
     supabase
       .from("clientes")
       .select("*", { count: "exact", head: true })
@@ -26,11 +26,17 @@ export default async function CadastrosPage() {
       .select("*", { count: "exact", head: true })
       .eq("tenant_id", session.activeTenant.id)
       .eq("ativo", true),
+    supabase
+      .from("categorias_dominio")
+      .select("*", { count: "exact", head: true })
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("ativo", true),
   ]);
 
   if (clientesRes.error) console.error("[cadastros.clientes]", clientesRes.error.message);
   if (fornecedoresRes.error) console.error("[cadastros.fornecedores]", fornecedoresRes.error.message);
   if (categoriasRes.error) console.error("[cadastros.categorias]", categoriasRes.error.message);
+  if (catDominioRes.error) console.error("[cadastros.categorias_dominio]", catDominioRes.error.message);
 
   return (
     <div className="space-y-8">
@@ -66,6 +72,13 @@ export default async function CadastrosPage() {
           title="Categorias"
           description="Vocabulário compartilhado para classificar itens de orçamento."
           count={categoriasRes.count ?? 0}
+        />
+        <CadastroCard
+          href="/cadastros/categorias-dominio"
+          icon={Layers}
+          title="Categorias (Projeto/Orçamento)"
+          description="Tipo de iniciativa para classificar projetos (Fee, Evento...) e orçamentos (Always On, Mídia...)."
+          count={catDominioRes.count ?? 0}
         />
       </div>
     </div>

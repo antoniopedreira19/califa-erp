@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
+import type { CategoriaDominio } from "@/lib/types";
 import { OrcamentoForm } from "../orcamento-form";
 
 export const dynamic = "force-dynamic";
@@ -15,14 +16,25 @@ export default async function NovoOrcamentoPage({
   const session = await requireSession();
   const supabase = createClient();
 
-  const { data: projeto } = await supabase
-    .from("projetos")
-    .select("id, codigo, nome")
-    .eq("id", params.projetoId)
-    .eq("tenant_id", session.activeTenant.id)
-    .maybeSingle();
+  const [{ data: projeto }, categoriasRes] = await Promise.all([
+    supabase
+      .from("projetos")
+      .select("id, codigo, nome")
+      .eq("id", params.projetoId)
+      .eq("tenant_id", session.activeTenant.id)
+      .maybeSingle(),
+    supabase
+      .from("categorias_dominio")
+      .select("id, nome")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("escopo", "orcamento")
+      .eq("ativo", true)
+      .order("nome"),
+  ]);
 
   if (!projeto) notFound();
+
+  const categorias = (categoriasRes.data ?? []) as Pick<CategoriaDominio, "id" | "nome">[];
 
   return (
     <div className="space-y-6 max-w-3xl mx-auto">
@@ -42,7 +54,7 @@ export default async function NovoOrcamentoPage({
       </div>
 
       <div className="rounded-2xl border border-border bg-card p-6 shadow-soft">
-        <OrcamentoForm projetoId={params.projetoId} />
+        <OrcamentoForm projetoId={params.projetoId} categorias={categorias} />
       </div>
     </div>
   );

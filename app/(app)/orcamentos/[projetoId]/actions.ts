@@ -17,7 +17,7 @@ function extractInput(formData: FormData) {
     codigo: formData.get("codigo")?.toString() ?? "",
     nome: formData.get("nome")?.toString() ?? "",
     status: (formData.get("status")?.toString() ?? "rascunho") as any,
-    tipo: formData.get("tipo")?.toString() ?? "",
+    categoria_id: formData.get("categoria_id")?.toString() ?? "",
     data_inicio_prevista: formData.get("data_inicio_prevista")?.toString() ?? "",
     data_fim_prevista: formData.get("data_fim_prevista")?.toString() ?? "",
   };

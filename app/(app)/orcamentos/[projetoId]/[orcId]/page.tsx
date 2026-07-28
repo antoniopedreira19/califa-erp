@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { listActiveMembers } from "@/lib/data/members";
 import {
   orcamentoStatusLabel,
+  type CategoriaDominio,
   type Orcamento,
   type VersaoOrcamentoStatus,
 } from "@/lib/types";
@@ -51,10 +52,10 @@ export default async function OrcamentoDetailPage({
   const session = await requireSession();
   const supabase = createClient();
 
-  const [orcRes, projRes, responsaveis, versoesRes] = await Promise.all([
+  const [orcRes, projRes, responsaveis, versoesRes, categoriasOrcRes] = await Promise.all([
     supabase
       .from("orcamentos")
-      .select("id, tenant_id, projeto_id, codigo, nome, status, tipo, data_inicio_prevista, data_fim_prevista, created_by, created_at, updated_at")
+      .select("id, tenant_id, projeto_id, codigo, nome, status, categoria_id, data_inicio_prevista, data_fim_prevista, created_by, created_at, updated_at, categoria:categorias_dominio(nome)")
       .eq("id", params.orcId)
       .eq("projeto_id", params.projetoId)
       .eq("tenant_id", session.activeTenant.id)
@@ -72,17 +73,27 @@ export default async function OrcamentoDetailPage({
       .eq("orcamento_id", params.orcId)
       .eq("tenant_id", session.activeTenant.id)
       .order("numero_versao", { ascending: false }),
+    supabase
+      .from("categorias_dominio")
+      .select("id, nome")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("escopo", "orcamento")
+      .eq("ativo", true)
+      .order("nome"),
   ]);
 
   if (orcRes.error) console.error("[orcamentos.detail]", orcRes.error.message);
   if (projRes.error) console.error("[projetos.detail]", projRes.error.message);
 
-  const orcamento = orcRes.data as Orcamento | null;
+  const orcamentoRaw = orcRes.data as any;
   const projeto = projRes.data as any;
-  if (!orcamento || !projeto) notFound();
+  if (!orcamentoRaw || !projeto) notFound();
 
+  const orcamento = orcamentoRaw as Orcamento;
+  const orcamentoCategoriaNome: string | null = orcamentoRaw.categoria?.nome ?? null;
   const clienteNome: string | null = projeto.cliente?.nome_fantasia ?? null;
   const responsavelNome: string | null = projeto.responsavel?.nome ?? null;
+  const categoriasOrcamento = (categoriasOrcRes.data ?? []) as Pick<CategoriaDominio, "id" | "nome">[];
 
   if (versoesRes.error) console.error("[versoes.list]", versoesRes.error.message);
   const versoesBrutas = (versoesRes.data ?? []) as any[];
@@ -152,6 +163,7 @@ export default async function OrcamentoDetailPage({
             <OrcamentoEditorDrawer
               projetoId={params.projetoId}
               orcamento={orcamento}
+              categorias={categoriasOrcamento}
               disabled={protegido}
               disabledReason={
                 protegido
@@ -186,6 +198,15 @@ export default async function OrcamentoDetailPage({
                 <span>
                   <span className="text-foreground/60">Campanha:</span>{" "}
                   <span className="text-foreground font-medium">{projeto.campanha}</span>
+                </span>
+              </>
+            )}
+            {orcamentoCategoriaNome && (
+              <>
+                <span aria-hidden className="text-border">·</span>
+                <span>
+                  <span className="text-foreground/60">Categoria:</span>{" "}
+                  <span className="text-foreground font-medium">{orcamentoCategoriaNome}</span>
                 </span>
               </>
             )}

@@ -30,6 +30,10 @@ export type AuditAction =
   | "categoria.editada"
   | "categoria.inativada"
   | "categoria.reativada"
+  | "categoria_dominio.criada"
+  | "categoria_dominio.editada"
+  | "categoria_dominio.inativada"
+  | "categoria_dominio.reativada"
   | "job.criado"
   | "custo_c.utilizado"
   | "acao_negada";

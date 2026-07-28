@@ -21,6 +21,12 @@ export const projetoSchema = z.object({
   data_inicio_prevista: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, "Data de início é obrigatória."),
+  categoria_id: z
+    .string()
+    .uuid()
+    .optional()
+    .or(z.literal(""))
+    .transform((v) => (v && v.length > 0 ? v : null)),
 });
 
 export type ProjetoInput = z.infer<typeof projetoSchema>;

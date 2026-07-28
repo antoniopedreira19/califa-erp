@@ -26,11 +26,11 @@ export const orcamentoSchema = z
       .refine((v) => ORCAMENTO_STATUS_EDITAVEIS.includes(v), {
         message: "Status inválido para edição manual.",
       }),
-    tipo: z
+    categoria_id: z
       .string()
-      .trim()
-      .max(80)
+      .uuid()
       .optional()
+      .or(z.literal(""))
       .transform((v) => (v && v.length > 0 ? v : null)),
     data_inicio_prevista: z
       .string()

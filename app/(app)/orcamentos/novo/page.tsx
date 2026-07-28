@@ -3,7 +3,7 @@ import { ArrowLeft } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { listActiveMembers } from "@/lib/data/members";
-import type { Cliente } from "@/lib/types";
+import type { CategoriaDominio, Cliente } from "@/lib/types";
 import { ProjetoForm } from "../projeto-form";
 
 export const dynamic = "force-dynamic";
@@ -12,7 +12,7 @@ export default async function NovoProjetoPage() {
   const session = await requireSession();
   const supabase = createClient();
 
-  const [clientesRes, responsaveis] = await Promise.all([
+  const [clientesRes, responsaveis, categoriasRes] = await Promise.all([
     supabase
       .from("clientes")
       .select("id, nome_fantasia, codigo_curto")
@@ -20,11 +20,22 @@ export default async function NovoProjetoPage() {
       .eq("status", "ativo")
       .order("nome_fantasia"),
     listActiveMembers(session.activeTenant.id),
+    supabase
+      .from("categorias_dominio")
+      .select("id, nome")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("escopo", "projeto")
+      .eq("ativo", true)
+      .order("nome"),
   ]);
 
   const clientes = (clientesRes.data ?? []) as Pick<
     Cliente,
     "id" | "nome_fantasia" | "codigo_curto"
+  >[];
+  const categorias = (categoriasRes.data ?? []) as Pick<
+    CategoriaDominio,
+    "id" | "nome"
   >[];
 
   return (
@@ -45,7 +56,7 @@ export default async function NovoProjetoPage() {
       </div>
 
       <div className="rounded-2xl border border-border bg-card p-6 shadow-soft">
-        <ProjetoForm clientes={clientes} responsaveis={responsaveis} />
+        <ProjetoForm clientes={clientes} responsaveis={responsaveis} categorias={categorias} />
       </div>
     </div>
   );

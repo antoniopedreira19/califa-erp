@@ -115,6 +115,7 @@ export interface Projeto {
   codigo: string;
   nome: string;
   campanha: string | null;
+  categoria_id: string | null;
   cliente_id: string;
   responsavel_id: string;
   status: ProjetoStatus;
@@ -151,7 +152,7 @@ export interface Orcamento {
   codigo: string;
   nome: string;
   status: OrcamentoStatus;
-  tipo: string | null;
+  categoria_id: string | null;
   data_inicio_prevista: string | null;
   data_fim_prevista: string | null;
   created_by: string | null;
@@ -341,4 +342,23 @@ export interface ImportacaoWarning {
   motivo: string;
   /** Severidade: 'ignorada' = linha descartada; 'ajuste' = importada com fallback. */
   severidade: "ignorada" | "ajuste";
+}
+
+// ---------- Categorias de domínio (projeto + orçamento) ----------
+
+export type CategoriaDominioEscopo = "projeto" | "orcamento";
+
+export interface CategoriaDominio {
+  id: string;
+  tenant_id: string;
+  escopo: CategoriaDominioEscopo;
+  nome: string;
+  ativo: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export function categoriaDominioEscopoLabel(e: CategoriaDominioEscopo): string {
+  return e === "projeto" ? "Projeto" : "Orçamento";
 }

@@ -22,6 +22,7 @@ export interface ProjetoRow {
   codigo: string;
   nome: string;
   campanha: string | null;
+  categoria_nome: string | null;
   status: ProjetoStatus;
   cliente_id: string;
   cliente_nome: string | null;
@@ -126,6 +127,7 @@ export function ProjetosList({ projetos, clientes, responsaveis }: Props) {
               <th className="px-4 py-3 font-semibold">Nome</th>
               <th className="px-4 py-3 font-semibold">Cliente</th>
               <th className="px-4 py-3 font-semibold">Responsável</th>
+              <th className="px-4 py-3 font-semibold">Categoria</th>
               <th className="px-4 py-3 font-semibold">Início</th>
               <th className="px-4 py-3 font-semibold text-center">Orçamentos</th>
               <th className="px-4 py-3 font-semibold">Status</th>
@@ -159,6 +161,7 @@ export function ProjetosList({ projetos, clientes, responsaveis }: Props) {
                 <td className="px-4 py-3 font-medium">{p.nome}</td>
                 <td className="px-4 py-3 text-muted-foreground">{p.cliente_nome ?? "—"}</td>
                 <td className="px-4 py-3 text-muted-foreground">{p.responsavel_nome ?? "—"}</td>
+                <td className="px-4 py-3 text-muted-foreground">{p.categoria_nome ?? "—"}</td>
                 <td className="px-4 py-3 text-muted-foreground">{formatDate(p.data_inicio_prevista)}</td>
                 <td className="px-4 py-3 text-center tabular-nums">{p.orcamentos_count}</td>
                 <td className="px-4 py-3">
@@ -170,7 +173,7 @@ export function ProjetosList({ projetos, clientes, responsaveis }: Props) {
             ))}
             {filtrados.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                <td colSpan={8} className="px-4 py-10 text-center text-sm text-muted-foreground">
                   Nenhum projeto encontrado com esses filtros.
                 </td>
               </tr>

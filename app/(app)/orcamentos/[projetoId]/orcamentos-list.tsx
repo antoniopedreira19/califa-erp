@@ -11,7 +11,7 @@ export interface OrcamentoRow {
   id: string;
   codigo: string;
   nome: string;
-  tipo: string | null;
+  categoria_nome: string | null;
   status: Orcamento["status"];
   data_fim_prevista: string | null;
   versoes_count: number;
@@ -50,7 +50,7 @@ export function OrcamentosList({ projetoId, orcamentos }: Props) {
           <tr className="border-b border-border bg-muted/30 text-left text-xs uppercase tracking-wider text-muted-foreground">
             <th className="px-4 py-3 font-semibold">Código</th>
             <th className="px-4 py-3 font-semibold">Nome</th>
-            <th className="px-4 py-3 font-semibold">Tipo</th>
+            <th className="px-4 py-3 font-semibold">Categoria</th>
             <th className="px-4 py-3 font-semibold">Fim previsto</th>
             <th className="px-4 py-3 font-semibold text-center">Versões</th>
             <th className="px-4 py-3 font-semibold">Status</th>
@@ -82,7 +82,7 @@ export function OrcamentosList({ projetoId, orcamentos }: Props) {
                 </Link>
               </td>
               <td className="px-4 py-3 font-medium">{o.nome}</td>
-              <td className="px-4 py-3 text-muted-foreground">{o.tipo ?? "—"}</td>
+              <td className="px-4 py-3 text-muted-foreground">{o.categoria_nome ?? "—"}</td>
               <td className="px-4 py-3 text-muted-foreground">{formatDate(o.data_fim_prevista)}</td>
               <td className="px-4 py-3 text-center tabular-nums">{o.versoes_count}</td>
               <td className="px-4 py-3">

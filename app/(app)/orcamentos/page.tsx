@@ -17,7 +17,7 @@ export default async function ProjetosPage() {
     supabase
       .from("projetos")
       .select(
-        "id, codigo, nome, campanha, status, cliente_id, responsavel_id, data_inicio_prevista, created_at, cliente:clientes(id, nome_fantasia), responsavel:profiles!responsavel_id(id, nome)",
+        "id, codigo, nome, campanha, status, cliente_id, responsavel_id, data_inicio_prevista, created_at, cliente:clientes(id, nome_fantasia), responsavel:profiles!responsavel_id(id, nome), categoria:categorias_dominio(nome)",
       )
       .eq("tenant_id", session.activeTenant.id)
       .order("created_at", { ascending: false }),
@@ -54,6 +54,7 @@ export default async function ProjetosPage() {
     codigo: p.codigo,
     nome: p.nome,
     campanha: p.campanha,
+    categoria_nome: p.categoria?.nome ?? null,
     status: p.status as Projeto["status"],
     cliente_id: p.cliente_id,
     cliente_nome: p.cliente?.nome_fantasia ?? null,

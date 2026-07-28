@@ -19,6 +19,7 @@ function extractInput(formData: FormData) {
     cliente_id: formData.get("cliente_id")?.toString() ?? "",
     responsavel_id: formData.get("responsavel_id")?.toString() ?? "",
     data_inicio_prevista: formData.get("data_inicio_prevista")?.toString() ?? "",
+    categoria_id: formData.get("categoria_id")?.toString() ?? "",
   };
 }
 

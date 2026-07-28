@@ -8,12 +8,13 @@ import {
   DialogTitle,
   DrawerContent,
 } from "@/components/ui/dialog";
-import type { Orcamento } from "@/lib/types";
+import type { CategoriaDominio, Orcamento } from "@/lib/types";
 import { OrcamentoForm } from "./orcamento-form";
 
 interface Props {
   projetoId: string;
   orcamento: Orcamento;
+  categorias: Pick<CategoriaDominio, "id" | "nome">[];
   disabled?: boolean;
   disabledReason?: string;
 }
@@ -21,6 +22,7 @@ interface Props {
 export function OrcamentoEditorDrawer({
   projetoId,
   orcamento,
+  categorias,
   disabled,
   disabledReason,
 }: Props) {
@@ -61,6 +63,7 @@ export function OrcamentoEditorDrawer({
             <OrcamentoForm
               projetoId={projetoId}
               orcamento={orcamento}
+              categorias={categorias}
               onSuccess={() => setOpen(false)}
               onCancel={() => setOpen(false)}
             />

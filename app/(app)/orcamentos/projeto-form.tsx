@@ -14,7 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DatePicker } from "@/components/ui/date-picker";
-import type { Cliente, Profile, Projeto } from "@/lib/types";
+import type { CategoriaDominio, Cliente, Profile, Projeto } from "@/lib/types";
 import {
   atualizarProjeto,
   criarProjeto,
@@ -25,6 +25,7 @@ interface Props {
   projeto?: Projeto;
   clientes: Pick<Cliente, "id" | "nome_fantasia" | "codigo_curto">[];
   responsaveis: Pick<Profile, "id" | "nome">[];
+  categorias: Pick<CategoriaDominio, "id" | "nome">[];
   onSuccess?: () => void;
   onCancel?: () => void;
 }
@@ -33,6 +34,7 @@ export function ProjetoForm({
   projeto,
   clientes,
   responsaveis,
+  categorias,
   onSuccess,
   onCancel,
 }: Props) {
@@ -45,6 +47,10 @@ export function ProjetoForm({
   const [responsavelId, setResponsavelId] = React.useState(
     projeto?.responsavel_id ?? "",
   );
+  const SEM_CATEGORIA = "__none__";
+  const [categoriaId, setCategoriaId] = React.useState(
+    projeto?.categoria_id ?? SEM_CATEGORIA,
+  );
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -54,6 +60,7 @@ export function ProjetoForm({
     const formData = new FormData(e.currentTarget);
     formData.set("cliente_id", clienteId);
     formData.set("responsavel_id", responsavelId);
+    formData.set("categoria_id", categoriaId === SEM_CATEGORIA ? "" : categoriaId);
 
     startTransition(async () => {
       const res: ActionResult = isEdit
@@ -130,6 +137,22 @@ export function ProjetoForm({
             defaultValue={projeto?.data_inicio_prevista ?? ""}
             placeholder="Selecione a data"
           />
+        </Field>
+
+        <Field label="Categoria" name="categoria_id" errors={fieldErrors}>
+          <Select value={categoriaId} onValueChange={setCategoriaId}>
+            <SelectTrigger>
+              <SelectValue placeholder="Sem categoria" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={SEM_CATEGORIA}>Sem categoria</SelectItem>
+              {categorias.map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.nome}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </Field>
       </div>
 
