@@ -152,6 +152,7 @@ export async function atualizarOrcamento(
     .from("orcamentos")
     .update(payload)
     .eq("id", orcId)
+    .eq("projeto_id", projetoId)
     .eq("tenant_id", session.activeTenant.id);
 
   if (error) {
