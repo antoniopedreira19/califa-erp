@@ -37,7 +37,8 @@ export function ClientesList({ clientes }: { clientes: Cliente[] }) {
         c.nome_fantasia.toLowerCase().includes(q) ||
         (c.razao_social?.toLowerCase().includes(q) ?? false) ||
         (c.cnpj?.includes(q.replace(/\D/g, "")) ?? false) ||
-        (c.email?.toLowerCase().includes(q) ?? false)
+        (c.email?.toLowerCase().includes(q) ?? false) ||
+        (c.codigo_curto?.toLowerCase().includes(q) ?? false)
       );
     });
   }, [clientes, busca, mostrarInativos]);
@@ -98,6 +99,7 @@ export function ClientesList({ clientes }: { clientes: Cliente[] }) {
           <TableHeader>
             <TableRow>
               <TableHead>Nome fantasia</TableHead>
+              <TableHead className="px-4 py-3 font-semibold">Código</TableHead>
               <TableHead>CNPJ</TableHead>
               <TableHead>Contato</TableHead>
               <TableHead>Status</TableHead>
@@ -107,7 +109,7 @@ export function ClientesList({ clientes }: { clientes: Cliente[] }) {
           <TableBody>
             {filtered.length === 0 && (
               <TableRow>
-                <TableCell colSpan={5} className="py-10 text-center text-muted-foreground">
+                <TableCell colSpan={6} className="py-10 text-center text-muted-foreground">
                   Nenhum resultado.
                 </TableCell>
               </TableRow>
@@ -142,6 +144,9 @@ export function ClientesList({ clientes }: { clientes: Cliente[] }) {
                       {c.razao_social}
                     </p>
                   )}
+                </TableCell>
+                <TableCell className="px-4 py-3 font-mono text-xs text-muted-foreground">
+                  {c.codigo_curto}
                 </TableCell>
                 <TableCell className="font-mono text-xs text-muted-foreground">
                   {c.cnpj ? formatCnpj(c.cnpj) : "—"}
