@@ -112,7 +112,7 @@ export function DatePicker({
           align="start"
           side="bottom"
           sideOffset={6}
-          avoidCollisions={false}
+          collisionPadding={16}
         >
           <Calendar
             mode="single"
