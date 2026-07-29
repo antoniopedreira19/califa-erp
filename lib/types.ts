@@ -362,3 +362,79 @@ export interface CategoriaDominio {
 export function categoriaDominioEscopoLabel(e: CategoriaDominioEscopo): string {
   return e === "projeto" ? "Projeto" : "Orçamento";
 }
+
+// ---------- Regionais ----------
+
+export interface Regional {
+  id: string;
+  tenant_id: string;
+  nome: string;
+  ativo: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// ---------- Jobs ----------
+
+export type JobStatus =
+  | "aguardando_abertura"
+  | "rejeitado_financeiro"
+  | "aberto"
+  | "em_producao"
+  | "finalizado"
+  | "cancelado";
+
+export interface Job {
+  id: string;
+  tenant_id: string;
+  codigo: string;
+  projeto_id: string;
+  orcamento_id: string;
+  versao_orcamento_aprovada_id: string;
+  nome: string;
+  produto: string | null;
+  regional_id: string | null;
+  cidade: string | null;
+  data_inicio_prevista: string | null;
+  data_fim_prevista: string | null;
+  responsavel_id: string;
+  valor_total: number | null;
+  job_pai_id: string | null;
+  status: JobStatus;
+  motivo_rejeicao: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Transições "livres" (sem role gate). Ações que exigem gate financeiro
+ * (aprovar/rejeitar abertura) OU input adicional (motivo) têm server actions
+ * próprias e NÃO estão nesta tabela.
+ */
+export const JOB_STATUS_TRANSICOES: Record<JobStatus, JobStatus[]> = {
+  aguardando_abertura: ["cancelado"],
+  rejeitado_financeiro: ["cancelado"],
+  aberto: ["em_producao", "cancelado"],
+  em_producao: ["finalizado", "cancelado"],
+  finalizado: [],
+  cancelado: [],
+};
+
+export function jobStatusLabel(s: JobStatus): string {
+  switch (s) {
+    case "aguardando_abertura":
+      return "Aguardando abertura";
+    case "rejeitado_financeiro":
+      return "Rejeitado pelo financeiro";
+    case "aberto":
+      return "Aberto";
+    case "em_producao":
+      return "Em produção";
+    case "finalizado":
+      return "Finalizado";
+    case "cancelado":
+      return "Cancelado";
+  }
+}
