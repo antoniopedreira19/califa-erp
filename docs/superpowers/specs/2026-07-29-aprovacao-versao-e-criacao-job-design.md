@@ -60,7 +60,7 @@ Orçamento A vira status = 'job_criado'
 | Reenvio pós-rejeição | GP clica "Reenviar pra aprovação" → volta pra `aguardando_abertura`, limpa `motivo_rejeicao` | Loop de correção |
 | Central Financeira | Nova rota `/financeiro` (hub) + `/financeiro/jobs-aguardando-abertura` (tabela + drawer aprovar/rejeitar) | Sidebar top-level "Financeiro" visível só pra admin+financeiro |
 
-## 4. Schema — migration `20260728000004_task005_jobs.sql`
+## 4. Schema — migration `20260729000002_task005_jobs.sql`
 
 ### 4.1 Tabela `regionais` (novo cadastro)
 
@@ -591,7 +591,7 @@ if (session.activeRole !== "administrador" && session.activeRole !== "financeiro
 ## 13. Arquivos afetados (checklist)
 
 ### Cria:
-- `supabase/migrations/20260728000004_task005_jobs.sql`
+- `supabase/migrations/20260729000002_task005_jobs.sql`
 - `lib/codigos/jobs.ts`
 - `lib/validations/jobs.ts`
 - `lib/validations/regionais.ts`
