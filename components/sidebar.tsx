@@ -5,12 +5,13 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn, initials } from "@/lib/utils";
-import { isAdmin, roleLabel, type AppRole } from "@/lib/types";
+import { roleLabel, type AppRole } from "@/lib/types";
 import {
   Home,
   FileText,
   FolderKanban,
   Briefcase,
+  Landmark,
   ShieldCheck,
   LogOut,
   Menu,
@@ -26,7 +27,8 @@ type NavLink = {
   activePathPrefixes?: string[];
   disabled?: boolean;
   disabledReason?: string;
-  adminOnly?: boolean;
+  /** Roles que podem ver este item. Undefined = visível para todos. */
+  roles?: AppRole[];
 };
 
 const links: NavLink[] = [
@@ -38,18 +40,18 @@ const links: NavLink[] = [
     activePathPrefixes: ["/clientes", "/fornecedores"],
   },
   { href: "/orcamentos", label: "Orçamentos", icon: FileText },
+  { href: "/jobs", label: "Jobs", icon: Briefcase },
   {
-    href: "/jobs",
-    label: "Jobs",
-    icon: Briefcase,
-    disabled: true,
-    disabledReason: "Disponível na Task 005",
+    href: "/financeiro",
+    label: "Financeiro",
+    icon: Landmark,
+    roles: ["administrador", "financeiro"],
   },
   {
     href: "/admin",
     label: "Administração",
     icon: ShieldCheck,
-    adminOnly: true,
+    roles: ["administrador"],
   },
 ];
 
@@ -76,7 +78,7 @@ export function Sidebar({
 
   const expanded = hovered || mobileOpen;
 
-  const visibleLinks = links.filter((l) => (l.adminOnly ? isAdmin(role) : true));
+  const visibleLinks = links.filter((l) => (!l.roles || l.roles.includes(role)));
 
   // Largura do bg de cada item — animável porque são valores numéricos px.
   const itemBgWidth = expanded ? ITEM_W_EXPANDED : ITEM_W_COLLAPSED;
