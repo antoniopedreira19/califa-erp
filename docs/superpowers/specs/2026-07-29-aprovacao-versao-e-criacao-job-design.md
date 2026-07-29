@@ -53,7 +53,12 @@ Orçamento A vira status = 'job_criado'
 | Desaprovar versão | **Sim, se orçamento não tem job ativo** | Correção de engano |
 | Rota `/jobs` | Placeholder "gestão em breve" | Sem listagem por ora |
 | Rota `/jobs/[jobId]` | Metadata + edição inline via drawer + hierarquia + status | Detalhe funcional |
-| Status do job | **Ciclo completo**: `aberto → em_producao → finalizado` (linear) + `cancelado` (terminal) | Preparado pra evolução |
+| Status do job | **Ciclo com aprovação financeira**: `aguardando_abertura → aberto → em_producao → finalizado` (linear) + `rejeitado_financeiro` (com motivo) + `cancelado` (terminal) | Financeiro aprova/rejeita a abertura antes do job entrar em operação |
+| Status inicial do job | `aguardando_abertura` (não `aberto` direto) | Financeiro precisa dar OK antes |
+| Aprovação/rejeição financeira | Roles `administrador` + `financeiro` | Governança sobre abertura de job |
+| Rejeição | Novo status `rejeitado_financeiro` (não terminal) + coluna `motivo_rejeicao` obrigatório | GP pode corrigir e reenviar; motivo (mín 10 chars) obrigatório |
+| Reenvio pós-rejeição | GP clica "Reenviar pra aprovação" → volta pra `aguardando_abertura`, limpa `motivo_rejeicao` | Loop de correção |
+| Central Financeira | Nova rota `/financeiro` (hub) + `/financeiro/jobs-aguardando-abertura` (tabela + drawer aprovar/rejeitar) | Sidebar top-level "Financeiro" visível só pra admin+financeiro |
 
 ## 4. Schema — migration `20260728000004_task005_jobs.sql`
 
@@ -95,7 +100,14 @@ grant select, insert, update on public.regionais to authenticated;
 do $$
 begin
   if not exists (select 1 from pg_type where typname = 'job_status') then
-    create type public.job_status as enum ('aberto', 'em_producao', 'finalizado', 'cancelado');
+    create type public.job_status as enum (
+      'aguardando_abertura',
+      'rejeitado_financeiro',
+      'aberto',
+      'em_producao',
+      'finalizado',
+      'cancelado'
+    );
   end if;
 end$$;
 ```
@@ -127,7 +139,8 @@ create table public.jobs (
   job_pai_id uuid references public.jobs(id) on delete restrict,
 
   -- Estado
-  status public.job_status not null default 'aberto',
+  status public.job_status not null default 'aguardando_abertura',
+  motivo_rejeicao text,   -- populado quando financeiro rejeita; limpo ao reenviar
 
   -- Auditoria
   created_by uuid references auth.users(id) on delete set null,
@@ -226,7 +239,13 @@ export interface Regional {
 }
 
 // ---------- Jobs ----------
-export type JobStatus = "aberto" | "em_producao" | "finalizado" | "cancelado";
+export type JobStatus =
+  | "aguardando_abertura"
+  | "rejeitado_financeiro"
+  | "aberto"
+  | "em_producao"
+  | "finalizado"
+  | "cancelado";
 
 export interface Job {
   id: string;
@@ -245,12 +264,20 @@ export interface Job {
   valor_total: number | null;
   job_pai_id: string | null;
   status: JobStatus;
+  motivo_rejeicao: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
 }
 
+/**
+ * Transições "livres" (sem role gate). Ações que exigem gate financeiro
+ * (aprovar/rejeitar abertura) OU exigem input adicional (motivo de rejeição)
+ * têm server actions próprias e NÃO estão nesta tabela.
+ */
 export const JOB_STATUS_TRANSICOES: Record<JobStatus, JobStatus[]> = {
+  aguardando_abertura: ["cancelado"], // → aberto e → rejeitado_financeiro têm actions próprias
+  rejeitado_financeiro: ["cancelado"], // → aguardando_abertura tem action própria (reenviar)
   aberto: ["em_producao", "cancelado"],
   em_producao: ["finalizado", "cancelado"],
   finalizado: [],
@@ -259,6 +286,8 @@ export const JOB_STATUS_TRANSICOES: Record<JobStatus, JobStatus[]> = {
 
 export function jobStatusLabel(s: JobStatus): string {
   switch (s) {
+    case "aguardando_abertura": return "Aguardando abertura";
+    case "rejeitado_financeiro": return "Rejeitado pelo financeiro";
     case "aberto": return "Aberto";
     case "em_producao": return "Em produção";
     case "finalizado": return "Finalizado";
@@ -312,6 +341,9 @@ Adicionar na union `AuditAction`:
 - `"regional.criada"`, `"regional.editada"`, `"regional.inativada"`, `"regional.reativada"`
 - `"job.criado"` (já reservado, agora usado)
 - `"job.atualizado"`, `"job.hierarquia_alterada"`, `"job.status_alterado"`
+- `"job.abertura_aprovada"` (financeiro aprovou → aberto)
+- `"job.abertura_rejeitada"` (financeiro rejeitou com motivo)
+- `"job.reenviado_para_aprovacao"` (GP reenvia após correção)
 
 ## 8. Server actions
 
@@ -357,10 +389,32 @@ Novo arquivo: `app/(app)/jobs/actions.ts`
      - Update do principal atual: `job_pai_id = <novo_id>` (vira sub-job do novo; momentaneamente zero principais, constraint aceita)
      - Update do novo job: `job_pai_id = null` (vira principal)
   8. Gera código `JOB-NNNN` (helper `lib/codigos/jobs.ts` com count + 1, padStart 4)
-  9. Insert do job
+  9. Insert do job com `status='aguardando_abertura'` (default do banco)
   10. Update orçamento: `status='job_criado'`
   11. Audit `job.criado`
   12. Revalidate paths, retorna `{ok: true, id}`
+
+- **`aprovarAberturaJob(jobId)`** — role gate: só `administrador` ou `financeiro`. Pré-validações:
+  1. Sessão + role check (retorna erro amigável se GP)
+  2. Fetch job, verifica `status='aguardando_abertura'`
+  3. Update `status='aberto'`, limpa `motivo_rejeicao` (defensivo — deveria já estar null)
+  4. Audit `job.abertura_aprovada`
+  5. Revalidate `/jobs/[id]` + `/financeiro/jobs-aguardando-abertura` + `/orcamentos/[projeto]/[orc]`
+
+- **`rejeitarAberturaJob(jobId, motivo)`** — role gate: só `administrador` ou `financeiro`. Motivo obrigatório (Zod: min 10 chars, max 500).
+  1. Sessão + role check
+  2. Zod parse do motivo
+  3. Fetch job, verifica `status='aguardando_abertura'`
+  4. Update `status='rejeitado_financeiro'`, salva `motivo_rejeicao=motivo`
+  5. Audit `job.abertura_rejeitada` (metadata com motivo)
+  6. Revalidate mesmos paths
+
+- **`reenviarJobParaAprovacao(jobId)`** — sem role gate (GP faz).
+  1. Sessão ativa (qualquer papel)
+  2. Fetch job, verifica `status='rejeitado_financeiro'`
+  3. Update `status='aguardando_abertura'`, limpa `motivo_rejeicao=null`
+  4. Audit `job.reenviado_para_aprovacao`
+  5. Revalidate paths
 
 - **`atualizarJob(id, input)`** — Zod parse do subset editável (campos operacionais, não hierarquia nem status). Server action valida tenant + orcamento. Audit `job.atualizado`.
 
@@ -458,6 +512,45 @@ Mesma estrutura de `/cadastros/categorias-dominio`:
 
 Card novo em `/cadastros` (hub) com ícone `MapPin` + contagem de regionais ativas.
 
+### 9.6 Central Financeira
+
+Nova área do sistema, top-level na sidebar (visível **só** pra roles `administrador` e `financeiro`).
+
+**Rota `/financeiro`** — hub. `app/(app)/financeiro/page.tsx`:
+- Header "Central Financeira" + descrição curta.
+- Grid de cards. Por ora, um único card:
+  - **"Jobs Aguardando Abertura"** (ícone `Clock`) — conta os jobs com `status='aguardando_abertura'` no tenant. Link → `/financeiro/jobs-aguardando-abertura`.
+- Espaço reservado (comentário no código) pra cards futuros: contas a pagar, DRE, aprovação de pagamentos.
+- `dynamic = "force-dynamic"`.
+
+**Rota `/financeiro/jobs-aguardando-abertura`** — tabela + drawer.
+`app/(app)/financeiro/jobs-aguardando-abertura/page.tsx`:
+- Header com breadcrumb "← Central Financeira".
+- Tabela com colunas: Código, Nome, Projeto, Cliente, Responsável, Valor Total, Data Início, Ações.
+- Cada linha:
+  - Clicável (linha) → navega pra `/jobs/[jobId]` (detalhe completo).
+  - Ações inline (stopPropagation): botão verde "Aprovar" (drawer confirmação simples) + botão vermelho "Rejeitar" (drawer com input de motivo).
+- Fetch inicial: todos os jobs do tenant com `status='aguardando_abertura'`, embed projeto (cliente), responsável, regional.
+- Empty state: "Nenhum job aguardando abertura no momento."
+
+Componentes:
+- `app/(app)/financeiro/jobs-aguardando-abertura/aprovar-drawer.tsx` — drawer simples com `ConfirmDialog`, chama `aprovarAberturaJob`.
+- `app/(app)/financeiro/jobs-aguardando-abertura/rejeitar-drawer.tsx` — drawer com textarea `motivo` obrigatório (mín 10 chars), chama `rejeitarAberturaJob`.
+
+**Integração com `/jobs/[jobId]` (detalhe do job):**
+- Se `job.status = 'aguardando_abertura'` E session.activeRole ∈ ('administrador', 'financeiro'): botões "Aprovar" e "Rejeitar" também aparecem no card Status (contextuais). Usam os mesmos drawers reutilizados.
+- Se `job.status = 'rejeitado_financeiro'`:
+  - Card "Motivo da rejeição" em destaque no topo (fundo amarelo/vermelho suave) mostrando `motivo_rejeicao`.
+  - Botão "Reenviar pra aprovação" visível pra qualquer usuário (chama `reenviarJobParaAprovacao`).
+
+**Guard de rota** — server-side em ambas as pages de `/financeiro/**`:
+```typescript
+const session = await requireSession();
+if (session.activeRole !== "administrador" && session.activeRole !== "financeiro") {
+  redirect("/home?reason=sem_permissao_financeira");
+}
+```
+
 ## 10. Regras invioláveis (validadas server-side)
 
 - **Aprovar versão** só se: versão em `rascunho|em_revisao|enviada_cliente` + orçamento não em `job_criado|aprovado|cancelado` + versão tem ≥1 grupo com ≥1 item.
@@ -468,7 +561,9 @@ Card novo em `/cadastros` (hub) com ícone `MapPin` + contagem de regionais ativ
 - **Cancelar único job**: permitido; libera criar novo.
 - **Cancelar principal com sub-jobs ativos**: bloqueado com mensagem clara ("Cancele/transfira os sub-jobs primeiro").
 - **Sub-job só pode apontar pra job do mesmo projeto** — server action valida (não é constraint DB porque exigiria trigger complexo).
-- **Status do job**: transições linear (`aberto → em_producao → finalizado`); qualquer não-terminal pode ir pra `cancelado`.
+- **Status do job**: `aguardando_abertura` é o status inicial (default do banco). Transições linear (`aberto → em_producao → finalizado`); qualquer não-terminal pode ir pra `cancelado`. Transições `aguardando_abertura → aberto` e `aguardando_abertura → rejeitado_financeiro` exigem role `administrador` ou `financeiro`. `rejeitado_financeiro → aguardando_abertura` (reenvio) é acessível a qualquer usuário do tenant.
+- **Motivo de rejeição**: obrigatório (min 10, max 500 chars) ao chamar `rejeitarAberturaJob`. Salvo em `jobs.motivo_rejeicao`, exibido em destaque no detalhe do job, limpo automaticamente ao reenviar.
+- **Guard de rota**: `/financeiro/**` bloqueia usuários sem role `administrador` ou `financeiro` (redirect `/home?reason=sem_permissao_financeira`).
 
 ## 11. Performance (regra CLAUDE.md)
 
@@ -510,6 +605,11 @@ Card novo em `/cadastros` (hub) com ícone `MapPin` + contagem de regionais ativ
 - `app/(app)/cadastros/regionais/regionais-list.tsx`
 - `app/(app)/cadastros/regionais/regional-drawer.tsx`
 - `app/(app)/cadastros/regionais/actions.ts`
+- `app/(app)/financeiro/page.tsx` (hub Central Financeira)
+- `app/(app)/financeiro/jobs-aguardando-abertura/page.tsx`
+- `app/(app)/financeiro/jobs-aguardando-abertura/jobs-aguardando-list.tsx`
+- `app/(app)/financeiro/jobs-aguardando-abertura/aprovar-drawer.tsx`
+- `app/(app)/financeiro/jobs-aguardando-abertura/rejeitar-drawer.tsx`
 
 ### Modifica:
 - `lib/types.ts` — add `JobStatus`, `Job`, `Regional`, `jobStatusLabel`, `JOB_STATUS_TRANSICOES`

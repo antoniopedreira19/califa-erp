@@ -127,10 +127,19 @@ create policy regionais_update on public.regionais
 grant select, insert, update on public.regionais to authenticated;
 
 -- 2) job_status enum ----------------------------------------------------
+-- Ordem dos valores importa pra ordenação; aguardando_abertura vem primeiro
+-- pra listagem "novos jobs" ficar no topo naturalmente.
 do $$
 begin
   if not exists (select 1 from pg_type where typname = 'job_status') then
-    create type public.job_status as enum ('aberto', 'em_producao', 'finalizado', 'cancelado');
+    create type public.job_status as enum (
+      'aguardando_abertura',
+      'rejeitado_financeiro',
+      'aberto',
+      'em_producao',
+      'finalizado',
+      'cancelado'
+    );
   end if;
 end$$;
 
@@ -155,7 +164,8 @@ create table if not exists public.jobs (
 
   job_pai_id uuid references public.jobs(id) on delete restrict,
 
-  status public.job_status not null default 'aberto',
+  status public.job_status not null default 'aguardando_abertura',
+  motivo_rejeicao text,
 
   created_by uuid references auth.users(id) on delete set null,
   created_at timestamptz not null default now(),
@@ -279,7 +289,13 @@ export interface Regional {
 
 // ---------- Jobs ----------
 
-export type JobStatus = "aberto" | "em_producao" | "finalizado" | "cancelado";
+export type JobStatus =
+  | "aguardando_abertura"
+  | "rejeitado_financeiro"
+  | "aberto"
+  | "em_producao"
+  | "finalizado"
+  | "cancelado";
 
 export interface Job {
   id: string;
@@ -298,12 +314,20 @@ export interface Job {
   valor_total: number | null;
   job_pai_id: string | null;
   status: JobStatus;
+  motivo_rejeicao: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
 }
 
+/**
+ * Transições "livres" (sem role gate). Ações que exigem gate financeiro
+ * (aprovar/rejeitar abertura) OU input adicional (motivo) têm server actions
+ * próprias e NÃO estão nesta tabela.
+ */
 export const JOB_STATUS_TRANSICOES: Record<JobStatus, JobStatus[]> = {
+  aguardando_abertura: ["cancelado"],
+  rejeitado_financeiro: ["cancelado"],
   aberto: ["em_producao", "cancelado"],
   em_producao: ["finalizado", "cancelado"],
   finalizado: [],
@@ -312,6 +336,10 @@ export const JOB_STATUS_TRANSICOES: Record<JobStatus, JobStatus[]> = {
 
 export function jobStatusLabel(s: JobStatus): string {
   switch (s) {
+    case "aguardando_abertura":
+      return "Aguardando abertura";
+    case "rejeitado_financeiro":
+      return "Rejeitado pelo financeiro";
     case "aberto":
       return "Aberto";
     case "em_producao":
@@ -424,13 +452,25 @@ export const jobSchema = z
   });
 
 export type JobInput = z.infer<typeof jobSchema>;
+
+// ---------- Rejeição de abertura (financeiro) ----------
+
+export const rejeicaoAberturaSchema = z.object({
+  motivo: z
+    .string()
+    .trim()
+    .min(10, "Motivo precisa ter ao menos 10 caracteres.")
+    .max(500, "Máximo 500 caracteres."),
+});
+
+export type RejeicaoAberturaInput = z.infer<typeof rejeicaoAberturaSchema>;
 ```
 
 - [ ] **Step 3: Commit**
 
 ```bash
 git add lib/validations/regionais.ts lib/validations/jobs.ts
-git commit -m "task005: validations regionais + jobs"
+git commit -m "task005: validations regionais + jobs + rejeicaoAbertura"
 ```
 
 ---
@@ -466,6 +506,9 @@ Após `"job.criado"`:
   | "job.atualizado"
   | "job.hierarquia_alterada"
   | "job.status_alterado"
+  | "job.abertura_aprovada"
+  | "job.abertura_rejeitada"
+  | "job.reenviado_para_aprovacao"
 ```
 
 - [ ] **Step 2: Commit**
@@ -1636,7 +1679,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
-import { jobSchema } from "@/lib/validations/jobs";
+import { jobSchema, rejeicaoAberturaSchema } from "@/lib/validations/jobs";
 import { gerarCodigoJob } from "@/lib/codigos/jobs";
 import { JOB_STATUS_TRANSICOES, type JobStatus } from "@/lib/types";
 
@@ -1777,7 +1820,7 @@ export async function criarJob(
     responsavel_id: parsed.data.responsavel_id,
     valor_total: parsed.data.valor_total,
     job_pai_id: nasceComoSubJob ? principalAtual!.id : jobPaiId,
-    status: "aberto" as JobStatus,
+    // status default do banco = 'aguardando_abertura' — não sobrescreva
     created_by: session.profile.id,
   };
 
@@ -2088,12 +2131,171 @@ export async function atualizarStatusJob(
 }
 ```
 
-- [ ] **Step 2: Verify typecheck + commit**
+- [ ] **Step 2: Adicionar `aprovarAberturaJob`, `rejeitarAberturaJob`, `reenviarJobParaAprovacao`**
+
+Append ao mesmo arquivo `app/(app)/jobs/actions.ts`:
+
+```typescript
+export async function aprovarAberturaJob(jobId: string): Promise<ActionResult> {
+  const session = await requireSession();
+  if (session.activeRole !== "administrador" && session.activeRole !== "financeiro") {
+    return { ok: false, message: "Só administrador ou financeiro pode aprovar aberturas de job." };
+  }
+
+  const supabase = createClient();
+  const { data: job } = await supabase
+    .from("jobs")
+    .select("id, status, projeto_id, orcamento_id")
+    .eq("id", jobId)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle<{ id: string; status: JobStatus; projeto_id: string; orcamento_id: string }>();
+
+  if (!job) return { ok: false, message: "Job não encontrado." };
+  if (job.status !== "aguardando_abertura") {
+    return { ok: false, message: `Job está em status ${job.status} — não é aprovável.` };
+  }
+
+  const { error } = await supabase
+    .from("jobs")
+    .update({ status: "aberto", motivo_rejeicao: null })
+    .eq("id", jobId)
+    .eq("tenant_id", session.activeTenant.id);
+
+  if (error) {
+    console.error("[jobs.aprovarAbertura]", error.message);
+    return { ok: false, message: mapJobDbError(error.message) };
+  }
+
+  await logAuditEvent({
+    acao: "job.abertura_aprovada",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "job",
+    entidadeId: jobId,
+  });
+
+  revalidatePath(`/jobs/${jobId}`);
+  revalidatePath("/jobs");
+  revalidatePath("/financeiro");
+  revalidatePath("/financeiro/jobs-aguardando-abertura");
+  revalidatePath(`/orcamentos/${job.projeto_id}/${job.orcamento_id}`);
+  return { ok: true, id: jobId };
+}
+
+export async function rejeitarAberturaJob(
+  jobId: string,
+  formData: FormData,
+): Promise<ActionResult> {
+  const session = await requireSession();
+  if (session.activeRole !== "administrador" && session.activeRole !== "financeiro") {
+    return { ok: false, message: "Só administrador ou financeiro pode rejeitar aberturas de job." };
+  }
+
+  const parsed = rejeicaoAberturaSchema.safeParse({
+    motivo: formData.get("motivo")?.toString() ?? "",
+  });
+  if (!parsed.success) {
+    return {
+      ok: false,
+      message: "Informe um motivo válido.",
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
+
+  const supabase = createClient();
+  const { data: job } = await supabase
+    .from("jobs")
+    .select("id, status, projeto_id, orcamento_id")
+    .eq("id", jobId)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle<{ id: string; status: JobStatus; projeto_id: string; orcamento_id: string }>();
+
+  if (!job) return { ok: false, message: "Job não encontrado." };
+  if (job.status !== "aguardando_abertura") {
+    return { ok: false, message: `Job está em status ${job.status} — não é rejeitável.` };
+  }
+
+  const { error } = await supabase
+    .from("jobs")
+    .update({
+      status: "rejeitado_financeiro",
+      motivo_rejeicao: parsed.data.motivo,
+    })
+    .eq("id", jobId)
+    .eq("tenant_id", session.activeTenant.id);
+
+  if (error) {
+    console.error("[jobs.rejeitarAbertura]", error.message);
+    return { ok: false, message: mapJobDbError(error.message) };
+  }
+
+  await logAuditEvent({
+    acao: "job.abertura_rejeitada",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "job",
+    entidadeId: jobId,
+    metadata: { motivo: parsed.data.motivo },
+  });
+
+  revalidatePath(`/jobs/${jobId}`);
+  revalidatePath("/jobs");
+  revalidatePath("/financeiro");
+  revalidatePath("/financeiro/jobs-aguardando-abertura");
+  revalidatePath(`/orcamentos/${job.projeto_id}/${job.orcamento_id}`);
+  return { ok: true, id: jobId };
+}
+
+export async function reenviarJobParaAprovacao(jobId: string): Promise<ActionResult> {
+  const session = await requireSession();
+  const supabase = createClient();
+
+  const { data: job } = await supabase
+    .from("jobs")
+    .select("id, status, projeto_id, orcamento_id")
+    .eq("id", jobId)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle<{ id: string; status: JobStatus; projeto_id: string; orcamento_id: string }>();
+
+  if (!job) return { ok: false, message: "Job não encontrado." };
+  if (job.status !== "rejeitado_financeiro") {
+    return { ok: false, message: "Só jobs rejeitados podem ser reenviados." };
+  }
+
+  const { error } = await supabase
+    .from("jobs")
+    .update({
+      status: "aguardando_abertura",
+      motivo_rejeicao: null,
+    })
+    .eq("id", jobId)
+    .eq("tenant_id", session.activeTenant.id);
+
+  if (error) {
+    console.error("[jobs.reenviar]", error.message);
+    return { ok: false, message: mapJobDbError(error.message) };
+  }
+
+  await logAuditEvent({
+    acao: "job.reenviado_para_aprovacao",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "job",
+    entidadeId: jobId,
+  });
+
+  revalidatePath(`/jobs/${jobId}`);
+  revalidatePath("/jobs");
+  revalidatePath("/financeiro");
+  revalidatePath("/financeiro/jobs-aguardando-abertura");
+  revalidatePath(`/orcamentos/${job.projeto_id}/${job.orcamento_id}`);
+  return { ok: true, id: jobId };
+}
+```
+
+- [ ] **Step 3: Verify typecheck + commit**
 
 ```bash
 npm run typecheck
 git add app/(app)/jobs/actions.ts
-git commit -m "task005: server actions criarJob + atualizarJob + hierarquia + status"
+git commit -m "task005: server actions criarJob + atualizarJob + hierarquia + status + aprovacao financeira"
 ```
 
 ---
@@ -2711,10 +2913,15 @@ export default async function JobDetailPage({
     valor_total: raw.valor_total !== null ? Number(raw.valor_total) : null,
     job_pai_id: raw.job_pai_id,
     status: raw.status,
+    motivo_rejeicao: raw.motivo_rejeicao ?? null,
     created_by: null,
     created_at: raw.created_at,
     updated_at: raw.updated_at,
   };
+
+  const podeAprovarRejeitar =
+    session.activeRole === "administrador" ||
+    session.activeRole === "financeiro";
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
@@ -2743,6 +2950,18 @@ export default async function JobDetailPage({
           </div>
         </div>
       </div>
+
+      {job.status === "rejeitado_financeiro" && job.motivo_rejeicao && (
+        <div className="rounded-2xl border border-california-red/30 bg-california-red/5 p-6 shadow-soft">
+          <p className="text-xs font-semibold uppercase tracking-wider text-california-red mb-2">
+            Motivo da rejeição pelo financeiro
+          </p>
+          <p className="text-sm text-foreground whitespace-pre-wrap">{job.motivo_rejeicao}</p>
+          <div className="mt-4">
+            <ReenviarAprovacaoButton jobId={job.id} />
+          </div>
+        </div>
+      )}
 
       <div className="grid gap-4 md:grid-cols-2">
         <div className="rounded-2xl border border-border bg-card p-6 shadow-soft">
@@ -2862,19 +3081,36 @@ export default async function JobDetailPage({
           </dl>
         </div>
 
-        {transicoes.length > 0 && (
+        {(transicoes.length > 0 ||
+          (job.status === "aguardando_abertura" && podeAprovarRejeitar)) && (
           <div className="rounded-2xl border border-border bg-card p-6 shadow-soft md:col-span-2">
             <div className="flex items-center gap-2 mb-4">
               <Circle className="h-4 w-4 text-california-red" />
               <h2 className="text-sm font-semibold uppercase tracking-wider">Status</h2>
             </div>
-            <StatusActions jobId={job.id} transicoes={transicoes} />
+            {job.status === "aguardando_abertura" && podeAprovarRejeitar && (
+              <div className="mb-4 pb-4 border-b border-border">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+                  Aprovação financeira
+                </p>
+                <AprovarRejeitarButtons jobId={job.id} />
+              </div>
+            )}
+            {transicoes.length > 0 && (
+              <StatusActions jobId={job.id} transicoes={transicoes} />
+            )}
           </div>
         )}
       </div>
     </div>
   );
 }
+```
+
+Adicionar imports no topo da página:
+```typescript
+import { ReenviarAprovacaoButton } from "./reenviar-aprovacao-button";
+import { AprovarRejeitarButtons } from "./aprovar-rejeitar-buttons";
 ```
 
 - [ ] **Step 2: Criar `app/(app)/jobs/[jobId]/status-actions.tsx`**
@@ -3244,36 +3480,739 @@ export function EditarHierarquiaDrawer({ jobId, papelAtual }: Props) {
 }
 ```
 
-- [ ] **Step 5: Verify typecheck + commit**
+- [ ] **Step 5: Criar `app/(app)/jobs/[jobId]/aprovar-rejeitar-buttons.tsx`**
+
+Componente client visível só na página quando `podeAprovarRejeitar && job.status='aguardando_abertura'`. Reutiliza `aprovarAberturaJob` e `rejeitarAberturaJob` do actions.
+
+```typescript
+"use client";
+
+import * as React from "react";
+import { useRouter } from "next/navigation";
+import { CheckCircle2, XCircle, AlertCircle } from "lucide-react";
+import {
+  Dialog,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DrawerContent,
+} from "@/components/ui/dialog";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Label } from "@/components/ui/label";
+import {
+  aprovarAberturaJob,
+  rejeitarAberturaJob,
+} from "@/app/(app)/jobs/actions";
+
+interface Props {
+  jobId: string;
+}
+
+export function AprovarRejeitarButtons({ jobId }: Props) {
+  const router = useRouter();
+  const [pending, startTransition] = React.useTransition();
+  const [confirmAprovar, setConfirmAprovar] = React.useState(false);
+  const [rejeitarOpen, setRejeitarOpen] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = React.useState<Record<string, string[]>>({});
+
+  function handleAprovar() {
+    setError(null);
+    startTransition(async () => {
+      const res = await aprovarAberturaJob(jobId);
+      if (!res.ok) {
+        setError(res.message);
+        return;
+      }
+      setConfirmAprovar(false);
+      router.refresh();
+    });
+  }
+
+  function handleRejeitar(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setError(null);
+    setFieldErrors({});
+    const formData = new FormData(e.currentTarget);
+    startTransition(async () => {
+      const res = await rejeitarAberturaJob(jobId, formData);
+      if (!res.ok) {
+        setError(res.message);
+        if (res.fieldErrors) setFieldErrors(res.fieldErrors);
+        return;
+      }
+      setRejeitarOpen(false);
+      router.refresh();
+    });
+  }
+
+  return (
+    <>
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={() => setConfirmAprovar(true)}
+          className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 transition-colors"
+        >
+          <CheckCircle2 className="h-4 w-4" />
+          Aprovar abertura
+        </button>
+        <button
+          type="button"
+          onClick={() => setRejeitarOpen(true)}
+          className="inline-flex items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-sm font-medium text-white hover:bg-california-red-hover transition-colors"
+        >
+          <XCircle className="h-4 w-4" />
+          Rejeitar
+        </button>
+      </div>
+      {error && <p className="mt-2 text-xs text-california-red">{error}</p>}
+
+      <ConfirmDialog
+        open={confirmAprovar}
+        onOpenChange={(o) => !o && setConfirmAprovar(false)}
+        title="Aprovar abertura deste job?"
+        description="O status muda pra 'Aberto'. A partir daí o job entra em operação normal."
+        confirmLabel="Aprovar"
+        onConfirm={handleAprovar}
+        pending={pending}
+      />
+
+      <Dialog open={rejeitarOpen} onOpenChange={setRejeitarOpen}>
+        <DrawerContent>
+          <DialogHeader className="border-b border-border p-6">
+            <DialogTitle>Rejeitar abertura do job</DialogTitle>
+            <DialogDescription>
+              Informe o motivo. O GP verá esse texto no card do job.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleRejeitar} className="flex-1 flex flex-col overflow-hidden">
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="motivo">
+                  Motivo <span className="text-california-red">*</span>
+                </Label>
+                <textarea
+                  id="motivo"
+                  name="motivo"
+                  required
+                  minLength={10}
+                  maxLength={500}
+                  rows={5}
+                  className="w-full rounded-lg border border-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-california-red/30"
+                  placeholder="Ex.: Valor total incompatível com o aprovado pelo cliente..."
+                />
+                {fieldErrors.motivo?.map((m, i) => (
+                  <p key={i} className="text-xs text-california-red">{m}</p>
+                ))}
+                <p className="text-xs text-muted-foreground">
+                  Mín. 10 caracteres, máx. 500.
+                </p>
+              </div>
+              {error && (
+                <div className="flex items-start gap-2 rounded-xl border border-california-red/20 bg-california-red/5 px-4 py-3 text-sm text-california-red">
+                  <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                  <span>{error}</span>
+                </div>
+              )}
+            </div>
+            <div className="flex items-center justify-end gap-3 border-t border-border p-4">
+              <button
+                type="button"
+                onClick={() => setRejeitarOpen(false)}
+                className="rounded-lg px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-muted transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={pending}
+                className="rounded-lg bg-california-red px-4 py-2 text-sm font-medium text-white hover:bg-california-red-hover disabled:opacity-50 transition-colors"
+              >
+                {pending ? "Rejeitando..." : "Rejeitar"}
+              </button>
+            </div>
+          </form>
+        </DrawerContent>
+      </Dialog>
+    </>
+  );
+}
+```
+
+- [ ] **Step 6: Criar `app/(app)/jobs/[jobId]/reenviar-aprovacao-button.tsx`**
+
+```typescript
+"use client";
+
+import * as React from "react";
+import { useRouter } from "next/navigation";
+import { Send } from "lucide-react";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { reenviarJobParaAprovacao } from "@/app/(app)/jobs/actions";
+
+interface Props {
+  jobId: string;
+}
+
+export function ReenviarAprovacaoButton({ jobId }: Props) {
+  const router = useRouter();
+  const [pending, startTransition] = React.useTransition();
+  const [confirmando, setConfirmando] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  function handleReenviar() {
+    setError(null);
+    startTransition(async () => {
+      const res = await reenviarJobParaAprovacao(jobId);
+      if (!res.ok) {
+        setError(res.message);
+        return;
+      }
+      setConfirmando(false);
+      router.refresh();
+    });
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setConfirmando(true)}
+        className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
+      >
+        <Send className="h-4 w-4" />
+        Reenviar pra aprovação
+      </button>
+      {error && <p className="mt-2 text-xs text-california-red">{error}</p>}
+      <ConfirmDialog
+        open={confirmando}
+        onOpenChange={(o) => !o && setConfirmando(false)}
+        title="Reenviar pra aprovação financeira?"
+        description="Ajustes já foram feitos? O job volta pra 'Aguardando abertura' e o motivo anterior será apagado."
+        confirmLabel="Reenviar"
+        onConfirm={handleReenviar}
+        pending={pending}
+      />
+    </>
+  );
+}
+```
+
+- [ ] **Step 7: Verify typecheck + commit**
 
 ```bash
 npm run typecheck
 git add app/(app)/jobs/[jobId]/
-git commit -m "task005: /jobs/[jobId] com metadata + editor drawer + hierarquia drawer + status"
+git commit -m "task005: /jobs/[jobId] com metadata + editor + hierarquia + status + aprovacao financeira contextual"
 ```
 
 ---
 
-### Task 14: Sidebar — adicionar entrada "Jobs"
+### Task 13b: Central Financeira — /financeiro + jobs-aguardando-abertura
+
+**Files:**
+- Create: `app/(app)/financeiro/page.tsx`
+- Create: `app/(app)/financeiro/jobs-aguardando-abertura/page.tsx`
+- Create: `app/(app)/financeiro/jobs-aguardando-abertura/jobs-aguardando-list.tsx`
+- Create: `app/(app)/financeiro/jobs-aguardando-abertura/aprovar-drawer.tsx`
+- Create: `app/(app)/financeiro/jobs-aguardando-abertura/rejeitar-drawer.tsx`
+
+**Interfaces:**
+- Consumes: `aprovarAberturaJob`, `rejeitarAberturaJob` (Task 10)
+- Produces: rota `/financeiro` (hub) + `/financeiro/jobs-aguardando-abertura` (tabela + ações inline)
+
+- [ ] **Step 1: Criar `app/(app)/financeiro/page.tsx` — hub**
+
+```typescript
+import Link from "next/link";
+import { redirect } from "next/navigation";
+import { Landmark, Clock, ArrowRight, type LucideIcon } from "lucide-react";
+import { requireSession } from "@/lib/auth/session";
+import { createClient } from "@/lib/supabase/server";
+
+export const dynamic = "force-dynamic";
+
+export default async function CentralFinanceiraPage() {
+  const session = await requireSession();
+  if (session.activeRole !== "administrador" && session.activeRole !== "financeiro") {
+    redirect("/home?reason=sem_permissao_financeira");
+  }
+
+  const supabase = createClient();
+
+  const { count: aguardandoCount } = await supabase
+    .from("jobs")
+    .select("id", { count: "exact", head: true })
+    .eq("tenant_id", session.activeTenant.id)
+    .eq("status", "aguardando_abertura");
+
+  return (
+    <div className="space-y-8">
+      <header className="space-y-2">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-california-red">
+          Financeiro
+        </p>
+        <div className="flex items-center gap-3">
+          <div className="rounded-lg bg-california-red/10 p-2">
+            <Landmark className="h-5 w-5 text-california-red" />
+          </div>
+          <h1 className="text-3xl font-bold tracking-tight">Central Financeira</h1>
+        </div>
+        <p className="text-sm text-muted-foreground max-w-2xl">
+          Ponto central pra decisões financeiras. Mais cards (contas a pagar, DRE, aprovações) chegam nas próximas fases.
+        </p>
+      </header>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <FinanceiroCard
+          href="/financeiro/jobs-aguardando-abertura"
+          icon={Clock}
+          title="Jobs Aguardando Abertura"
+          description="Aprove ou rejeite a abertura dos jobs recém-criados pelos GPs."
+          count={aguardandoCount ?? 0}
+        />
+        {/* Cards futuros: contas a pagar, DRE, aprovações de pagamentos */}
+      </div>
+    </div>
+  );
+}
+
+function FinanceiroCard({
+  href,
+  icon: Icon,
+  title,
+  description,
+  count,
+}: {
+  href: string;
+  icon: LucideIcon;
+  title: string;
+  description: string;
+  count: number;
+}) {
+  return (
+    <Link
+      href={href}
+      prefetch={false}
+      className="group relative flex flex-col rounded-2xl border border-border bg-card p-6 shadow-soft transition-all hover:border-california-red/30 hover:shadow-elevated"
+    >
+      <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-california-red/10 text-california-red">
+        <Icon className="h-5 w-5" />
+      </div>
+      <h3 className="mt-4 text-lg font-semibold text-foreground group-hover:text-california-red transition-colors">
+        {title}
+      </h3>
+      <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+      <div className="mt-6 flex items-center justify-between border-t border-border pt-4">
+        <p className="text-xs text-muted-foreground">
+          <span className="font-semibold text-foreground">{count}</span>{" "}
+          {count === 1 ? "pendente" : "pendentes"}
+        </p>
+        <span className="inline-flex items-center gap-1 text-xs font-semibold text-california-red">
+          Abrir
+          <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
+        </span>
+      </div>
+    </Link>
+  );
+}
+```
+
+- [ ] **Step 2: Criar `app/(app)/financeiro/jobs-aguardando-abertura/page.tsx`**
+
+```typescript
+import Link from "next/link";
+import { redirect } from "next/navigation";
+import { ChevronRight, Clock } from "lucide-react";
+import { requireSession } from "@/lib/auth/session";
+import { createClient } from "@/lib/supabase/server";
+import { JobsAguardandoList, type JobAguardandoRow } from "./jobs-aguardando-list";
+
+export const dynamic = "force-dynamic";
+
+export default async function JobsAguardandoAberturaPage() {
+  const session = await requireSession();
+  if (session.activeRole !== "administrador" && session.activeRole !== "financeiro") {
+    redirect("/home?reason=sem_permissao_financeira");
+  }
+
+  const supabase = createClient();
+
+  const { data, error } = await supabase
+    .from("jobs")
+    .select(
+      "id, codigo, nome, valor_total, data_inicio_prevista, orcamento_id, projeto_id, responsavel:profiles!responsavel_id(nome), regional:regionais(nome), projeto:projetos(codigo, nome, cliente:clientes(nome_fantasia))",
+    )
+    .eq("tenant_id", session.activeTenant.id)
+    .eq("status", "aguardando_abertura")
+    .order("created_at", { ascending: true });
+
+  if (error) console.error("[jobs-aguardando]", error.message);
+
+  const rows: JobAguardandoRow[] = ((data ?? []) as any[]).map((j) => ({
+    id: j.id,
+    codigo: j.codigo,
+    nome: j.nome,
+    valor_total: j.valor_total !== null ? Number(j.valor_total) : null,
+    data_inicio_prevista: j.data_inicio_prevista,
+    orcamento_id: j.orcamento_id,
+    projeto_id: j.projeto_id,
+    projeto_codigo: j.projeto?.codigo ?? null,
+    projeto_nome: j.projeto?.nome ?? null,
+    cliente_nome: j.projeto?.cliente?.nome_fantasia ?? null,
+    responsavel_nome: j.responsavel?.nome ?? null,
+    regional_nome: j.regional?.nome ?? null,
+  }));
+
+  return (
+    <div className="space-y-6">
+      <header className="space-y-1">
+        <nav className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-muted-foreground">
+          <Link href="/financeiro" className="hover:text-foreground">Central Financeira</Link>
+          <ChevronRight className="h-3 w-3" />
+          <span>Jobs Aguardando Abertura</span>
+        </nav>
+        <div className="flex items-center gap-3">
+          <div className="rounded-lg bg-california-red/10 p-2">
+            <Clock className="h-5 w-5 text-california-red" />
+          </div>
+          <h1 className="text-3xl font-bold tracking-tight">Jobs Aguardando Abertura</h1>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Confira os dados e aprove ou rejeite a abertura de cada job.
+        </p>
+      </header>
+
+      {rows.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-border py-16 text-center">
+          <p className="text-sm text-muted-foreground">Nenhum job aguardando abertura no momento.</p>
+        </div>
+      ) : (
+        <JobsAguardandoList rows={rows} />
+      )}
+    </div>
+  );
+}
+```
+
+- [ ] **Step 3: Criar `app/(app)/financeiro/jobs-aguardando-abertura/jobs-aguardando-list.tsx`**
+
+```typescript
+"use client";
+
+import * as React from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { AprovarDrawer } from "./aprovar-drawer";
+import { RejeitarDrawer } from "./rejeitar-drawer";
+
+export interface JobAguardandoRow {
+  id: string;
+  codigo: string;
+  nome: string;
+  valor_total: number | null;
+  data_inicio_prevista: string | null;
+  orcamento_id: string;
+  projeto_id: string;
+  projeto_codigo: string | null;
+  projeto_nome: string | null;
+  cliente_nome: string | null;
+  responsavel_nome: string | null;
+  regional_nome: string | null;
+}
+
+function formatDate(iso: string | null): string {
+  if (!iso) return "—";
+  const [y, m, d] = iso.slice(0, 10).split("-");
+  return `${d}/${m}/${y}`;
+}
+
+function formatMoney(n: number | null): string {
+  if (n === null || n === undefined) return "—";
+  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+export function JobsAguardandoList({ rows }: { rows: JobAguardandoRow[] }) {
+  const router = useRouter();
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-soft">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-border bg-muted/30 text-left text-xs uppercase tracking-wider text-muted-foreground">
+            <th className="px-4 py-3 font-semibold">Código</th>
+            <th className="px-4 py-3 font-semibold">Nome</th>
+            <th className="px-4 py-3 font-semibold">Projeto</th>
+            <th className="px-4 py-3 font-semibold">Cliente</th>
+            <th className="px-4 py-3 font-semibold">Responsável</th>
+            <th className="px-4 py-3 font-semibold">Início</th>
+            <th className="px-4 py-3 font-semibold text-right">Valor</th>
+            <th className="px-4 py-3 font-semibold text-right">Ações</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr
+              key={r.id}
+              role="button"
+              tabIndex={0}
+              onClick={() => router.push(`/jobs/${r.id}`)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  router.push(`/jobs/${r.id}`);
+                }
+              }}
+              className="border-b border-border last:border-0 hover:bg-accent/40 transition-colors cursor-pointer focus-visible:outline-none focus-visible:bg-accent/40"
+            >
+              <td className="px-4 py-3 font-mono text-xs">
+                <Link
+                  href={`/jobs/${r.id}`}
+                  prefetch={false}
+                  className="hover:text-california-red"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {r.codigo}
+                </Link>
+              </td>
+              <td className="px-4 py-3 font-medium">{r.nome}</td>
+              <td className="px-4 py-3 text-muted-foreground">
+                <span className="font-mono text-xs">{r.projeto_codigo}</span>{" "}
+                <span>{r.projeto_nome ?? ""}</span>
+              </td>
+              <td className="px-4 py-3 text-muted-foreground">{r.cliente_nome ?? "—"}</td>
+              <td className="px-4 py-3 text-muted-foreground">{r.responsavel_nome ?? "—"}</td>
+              <td className="px-4 py-3 text-muted-foreground">{formatDate(r.data_inicio_prevista)}</td>
+              <td className="px-4 py-3 text-right tabular-nums font-semibold">
+                {formatMoney(r.valor_total)}
+              </td>
+              <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
+                <div className="inline-flex items-center gap-2">
+                  <AprovarDrawer jobId={r.id} jobCodigo={r.codigo} />
+                  <RejeitarDrawer jobId={r.id} jobCodigo={r.codigo} />
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+```
+
+- [ ] **Step 4: Criar `app/(app)/financeiro/jobs-aguardando-abertura/aprovar-drawer.tsx`**
+
+Componente client compacto — botão + `ConfirmDialog` (não precisa de drawer completo, só confirmação).
+
+```typescript
+"use client";
+
+import * as React from "react";
+import { useRouter } from "next/navigation";
+import { CheckCircle2 } from "lucide-react";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { aprovarAberturaJob } from "@/app/(app)/jobs/actions";
+
+interface Props {
+  jobId: string;
+  jobCodigo: string;
+}
+
+export function AprovarDrawer({ jobId, jobCodigo }: Props) {
+  const router = useRouter();
+  const [open, setOpen] = React.useState(false);
+  const [pending, startTransition] = React.useTransition();
+  const [error, setError] = React.useState<string | null>(null);
+
+  function handleAprovar() {
+    setError(null);
+    startTransition(async () => {
+      const res = await aprovarAberturaJob(jobId);
+      if (!res.ok) {
+        setError(res.message);
+        return;
+      }
+      setOpen(false);
+      router.refresh();
+    });
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-emerald-700 transition-colors"
+        title="Aprovar abertura"
+      >
+        <CheckCircle2 className="h-3.5 w-3.5" />
+        Aprovar
+      </button>
+      <ConfirmDialog
+        open={open}
+        onOpenChange={setOpen}
+        title={`Aprovar abertura do ${jobCodigo}?`}
+        description="O job muda pra 'Aberto' e entra em operação normal."
+        confirmLabel="Aprovar"
+        onConfirm={handleAprovar}
+        pending={pending}
+      />
+      {error && <p className="text-xs text-california-red mt-1">{error}</p>}
+    </>
+  );
+}
+```
+
+- [ ] **Step 5: Criar `app/(app)/financeiro/jobs-aguardando-abertura/rejeitar-drawer.tsx`**
+
+Drawer com textarea de motivo (reutiliza padrão de `aprovar-rejeitar-buttons.tsx` da Task 13, mas isolado).
+
+```typescript
+"use client";
+
+import * as React from "react";
+import { useRouter } from "next/navigation";
+import { XCircle, AlertCircle } from "lucide-react";
+import {
+  Dialog,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DrawerContent,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { rejeitarAberturaJob } from "@/app/(app)/jobs/actions";
+
+interface Props {
+  jobId: string;
+  jobCodigo: string;
+}
+
+export function RejeitarDrawer({ jobId, jobCodigo }: Props) {
+  const router = useRouter();
+  const [open, setOpen] = React.useState(false);
+  const [pending, startTransition] = React.useTransition();
+  const [error, setError] = React.useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = React.useState<Record<string, string[]>>({});
+
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setError(null);
+    setFieldErrors({});
+    const formData = new FormData(e.currentTarget);
+    startTransition(async () => {
+      const res = await rejeitarAberturaJob(jobId, formData);
+      if (!res.ok) {
+        setError(res.message);
+        if (res.fieldErrors) setFieldErrors(res.fieldErrors);
+        return;
+      }
+      setOpen(false);
+      router.refresh();
+    });
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="inline-flex items-center gap-1 rounded-md bg-california-red px-2.5 py-1 text-xs font-medium text-white hover:bg-california-red-hover transition-colors"
+        title="Rejeitar abertura"
+      >
+        <XCircle className="h-3.5 w-3.5" />
+        Rejeitar
+      </button>
+      <DrawerContent>
+        <DialogHeader className="border-b border-border p-6">
+          <DialogTitle>Rejeitar abertura do {jobCodigo}</DialogTitle>
+          <DialogDescription>
+            Informe o motivo. O GP verá esse texto no card do job.
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="flex-1 flex flex-col overflow-hidden">
+          <div className="flex-1 overflow-y-auto p-6 space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="motivo">
+                Motivo <span className="text-california-red">*</span>
+              </Label>
+              <textarea
+                id="motivo"
+                name="motivo"
+                required
+                minLength={10}
+                maxLength={500}
+                rows={5}
+                className="w-full rounded-lg border border-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-california-red/30"
+                placeholder="Ex.: Valor total incompatível com o aprovado pelo cliente..."
+              />
+              {fieldErrors.motivo?.map((m, i) => (
+                <p key={i} className="text-xs text-california-red">{m}</p>
+              ))}
+              <p className="text-xs text-muted-foreground">Mín. 10, máx. 500 caracteres.</p>
+            </div>
+            {error && (
+              <div className="flex items-start gap-2 rounded-xl border border-california-red/20 bg-california-red/5 px-4 py-3 text-sm text-california-red">
+                <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
+          </div>
+          <div className="flex items-center justify-end gap-3 border-t border-border p-4">
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="rounded-lg px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-muted transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={pending}
+              className="rounded-lg bg-california-red px-4 py-2 text-sm font-medium text-white hover:bg-california-red-hover disabled:opacity-50 transition-colors"
+            >
+              {pending ? "Rejeitando..." : "Rejeitar"}
+            </button>
+          </div>
+        </form>
+      </DrawerContent>
+    </Dialog>
+  );
+}
+```
+
+- [ ] **Step 6: Verify typecheck + commit**
+
+```bash
+npm run typecheck
+git add app/(app)/financeiro/
+git commit -m "task005: Central Financeira + Jobs Aguardando Abertura (page + list + aprovar/rejeitar drawers)"
+```
+
+---
+
+### Task 14: Sidebar — adicionar entradas "Jobs" e "Financeiro"
 
 **Files:**
 - Modify: sidebar component (localizar via grep)
 
 **Interfaces:**
-- Consumes: existing sidebar item pattern
-- Produces: entrada "Jobs" (ícone Briefcase) na sidebar linkando pra `/jobs`
+- Consumes: existing sidebar item pattern (padrão `adminOnly` já existe para o item "Administração")
+- Produces: entrada "Jobs" (ícone Briefcase) + entrada "Financeiro" (ícone Landmark, visível só pra admin+financeiro)
 
-- [ ] **Step 1: Localizar arquivo de sidebar**
+- [ ] **Step 1: Localizar arquivo de sidebar e entender padrão de role gate**
 
 ```bash
 git ls-files "**/sidebar*" "**/nav*"
 ```
 
-Read o arquivo identificado. Localizar a lista de itens (provavelmente estrutura tipo `{ label, href, icon }[]`).
+Read o arquivo identificado. Localizar a lista de itens e identificar como o item "Administração" faz o gate (provavelmente prop `adminOnly` ou similar). Verificar como o sidebar recebe a role (session, props, etc.).
 
-- [ ] **Step 2: Adicionar entrada "Jobs"**
+- [ ] **Step 2: Adicionar entrada "Jobs" (sem gate)**
 
-Adicionar entre "Orçamentos" e "Administração" (ou onde faça sentido logicamente):
+Adicionar entre "Orçamentos" e "Administração":
 
 ```typescript
 {
@@ -3283,18 +4222,36 @@ Adicionar entre "Orçamentos" e "Administração" (ou onde faça sentido logicam
 }
 ```
 
-Se o ícone `Briefcase` não estiver importado ainda:
+- [ ] **Step 3: Adicionar entrada "Financeiro" com gate `admin+financeiro`**
 
+Se o padrão atual do sidebar tem só `adminOnly: boolean`, generalize pra `roles?: AppRole[]`:
+
+- Onde `adminOnly: true`, migrar pra `roles: ["administrador"]`.
+- Nova entrada:
 ```typescript
-import { Briefcase } from "lucide-react";
+{
+  label: "Financeiro",
+  href: "/financeiro",
+  icon: Landmark,
+  roles: ["administrador", "financeiro"],
+}
 ```
 
-- [ ] **Step 3: Verify typecheck + commit**
+Ajustar o filtro de renderização: `items.filter(i => !i.roles || i.roles.includes(session.activeRole))`.
+
+Se o padrão atual não tem role-gating fácil de generalizar, adicione a entrada "Financeiro" seguindo o mesmo mecanismo que o item "Administração" usa e, no lugar do check `activeRole === "administrador"`, use `["administrador", "financeiro"].includes(activeRole)`.
+
+Imports:
+```typescript
+import { Briefcase, Landmark } from "lucide-react";
+```
+
+- [ ] **Step 4: Verify typecheck + commit**
 
 ```bash
 npm run typecheck
 git add <arquivo-sidebar>
-git commit -m "task005: sidebar ganha entrada Jobs"
+git commit -m "task005: sidebar ganha entradas Jobs e Financeiro (com role gate)"
 ```
 
 ---
@@ -3397,6 +4354,8 @@ git commit -m "docs(handoff): registra Fase E aprovacao + Task 005 jobs aplicada
 | §9.3 /jobs placeholder | Task 12 |
 | §9.4 /jobs/[jobId] (detail + editor + hierarquia + status) | Task 13 |
 | §9.5 UI regionais | Task 7 |
+| §9.6 Central Financeira (hub + jobs-aguardando-abertura) | Task 13b |
+| Aprovação/rejeição financeira (drawers + botões contextuais no /jobs/[id]) | Task 10 (server actions) + Task 13 (UI contextual) + Task 13b (UI central) |
 | §10 regras invioláveis | server actions em Tasks 8, 10 |
 | §11 performance | contemplado em cada task (prefetch=false, Promise.all, force-dynamic) |
 | §12 casos borda | validações em Tasks 8, 10 |
