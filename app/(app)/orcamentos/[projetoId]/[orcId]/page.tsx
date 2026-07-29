@@ -137,9 +137,9 @@ export default async function OrcamentoDetailPage({
 
   // Calcular valor de faturamento da versão aprovada para pré-preencher o drawer de criar job
   let valorFaturamento = 0;
-  if (orcamento.status === "aprovado" && (orcamentoRaw as any).versao_aprovada_id) {
+  if (orcamento.status === "aprovado" && orcamento.versao_aprovada_id) {
     const versaoAprovada = versoesBrutas.find(
-      (v) => v.id === (orcamentoRaw as any).versao_aprovada_id,
+      (v) => v.id === orcamento.versao_aprovada_id,
     );
     if (versaoAprovada) {
       const agg = agregadoPorVersao.get(versaoAprovada.id) ?? { count: 0, total: 0 };

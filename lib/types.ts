@@ -152,6 +152,7 @@ export interface Orcamento {
   codigo: string;
   nome: string;
   status: OrcamentoStatus;
+  versao_aprovada_id: string | null;
   categoria_id: string | null;
   data_inicio_prevista: string | null;
   data_fim_prevista: string | null;

@@ -458,6 +458,13 @@ export async function atualizarStatusJob(
 export async function aprovarAberturaJob(jobId: string): Promise<ActionResult> {
   const session = await requireSession();
   if (session.activeRole !== "administrador" && session.activeRole !== "financeiro") {
+    await logAuditEvent({
+      acao: "acao_negada",
+      tenantId: session.activeTenant.id,
+      entidadeTipo: "job",
+      entidadeId: jobId,
+      metadata: { action: "job.aprovarAbertura", role: session.activeRole },
+    });
     return { ok: false, message: "Só administrador ou financeiro pode aprovar aberturas de job." };
   }
 
@@ -506,6 +513,13 @@ export async function rejeitarAberturaJob(
 ): Promise<ActionResult> {
   const session = await requireSession();
   if (session.activeRole !== "administrador" && session.activeRole !== "financeiro") {
+    await logAuditEvent({
+      acao: "acao_negada",
+      tenantId: session.activeTenant.id,
+      entidadeTipo: "job",
+      entidadeId: jobId,
+      metadata: { action: "job.rejeitarAbertura", role: session.activeRole },
+    });
     return { ok: false, message: "Só administrador ou financeiro pode rejeitar aberturas de job." };
   }
 
