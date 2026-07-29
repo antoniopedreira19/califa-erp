@@ -895,3 +895,234 @@ export async function removerItem(itemId: string): Promise<ActionResult> {
   );
   return { ok: true, id: itemId };
 }
+
+// ============================================================
+// APROVAÇÃO
+// ============================================================
+
+export async function aprovarVersao(versaoId: string): Promise<ActionResult> {
+  const session = await requireSession();
+  const supabase = createClient();
+
+  // 1. Fetch versão + orçamento (com projeto_id pra revalidatePath)
+  const { data: versao, error: errVer } = await supabase
+    .from("versoes_orcamento")
+    .select("id, status, orcamento_id, tenant_id")
+    .eq("id", versaoId)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle<{ id: string; status: string; orcamento_id: string; tenant_id: string }>();
+
+  if (errVer || !versao) {
+    return { ok: false, message: "Versão não encontrada." };
+  }
+
+  if (!["rascunho", "em_revisao", "enviada_cliente"].includes(versao.status)) {
+    return {
+      ok: false,
+      message: `Versão em status ${versao.status} não pode ser aprovada.`,
+    };
+  }
+
+  // 2. Fetch orçamento pra validar status + projeto_id
+  const { data: orc } = await supabase
+    .from("orcamentos")
+    .select("status, projeto_id")
+    .eq("id", versao.orcamento_id)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle<{ status: string; projeto_id: string }>();
+
+  if (!orc) {
+    return { ok: false, message: "Orçamento não encontrado." };
+  }
+
+  if (["job_criado", "aprovado", "cancelado"].includes(orc.status)) {
+    return {
+      ok: false,
+      message: `Orçamento em status ${orc.status} não aceita nova aprovação.`,
+    };
+  }
+
+  // 3. Verificar que versão tem ≥1 grupo com ≥1 item
+  const { count: itensCount } = await supabase
+    .from("versoes_orcamento_itens")
+    .select("id", { count: "exact", head: true })
+    .eq("versao_orcamento_id", versaoId)
+    .eq("tenant_id", session.activeTenant.id);
+
+  if ((itensCount ?? 0) === 0) {
+    return {
+      ok: false,
+      message: "Adicione ao menos 1 item antes de aprovar a versão.",
+    };
+  }
+
+  const agora = new Date().toISOString();
+
+  // 4. Update versão (dispara trigger cascata pras outras versões)
+  const { error: errUpdVer } = await supabase
+    .from("versoes_orcamento")
+    .update({
+      status: "aprovada",
+      aprovado_em: agora,
+      aprovado_por: session.profile.id,
+    })
+    .eq("id", versaoId)
+    .eq("tenant_id", session.activeTenant.id);
+
+  if (errUpdVer) {
+    console.error("[versao.aprovar]", errUpdVer.message);
+    return { ok: false, message: "Não foi possível aprovar a versão." };
+  }
+
+  // 5. Update orçamento
+  const { error: errUpdOrc } = await supabase
+    .from("orcamentos")
+    .update({
+      status: "aprovado",
+      versao_aprovada_id: versaoId,
+      aprovado_em: agora,
+      aprovado_por: session.profile.id,
+    })
+    .eq("id", versao.orcamento_id)
+    .eq("tenant_id", session.activeTenant.id);
+
+  if (errUpdOrc) {
+    console.error("[orcamento.aprovar]", errUpdOrc.message);
+    return {
+      ok: false,
+      message: "Versão aprovada mas orçamento não atualizado. Verifique manualmente.",
+    };
+  }
+
+  await logAuditEvent({
+    acao: "versao_orcamento.aprovada",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "versao_orcamento",
+    entidadeId: versaoId,
+    metadata: { orcamento_id: versao.orcamento_id },
+  });
+
+  revalidatePath(`/orcamentos/${orc.projeto_id}`);
+  revalidatePath(`/orcamentos/${orc.projeto_id}/${versao.orcamento_id}`);
+  revalidatePath(`/orcamentos/${orc.projeto_id}/${versao.orcamento_id}/versoes/${versaoId}`);
+  return { ok: true, id: versaoId };
+}
+
+export async function cancelarAprovacaoVersao(
+  versaoId: string,
+): Promise<ActionResult> {
+  const session = await requireSession();
+  const supabase = createClient();
+
+  // 1. Fetch versão
+  const { data: versao } = await supabase
+    .from("versoes_orcamento")
+    .select("id, status, orcamento_id")
+    .eq("id", versaoId)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle<{ id: string; status: string; orcamento_id: string }>();
+
+  if (!versao) {
+    return { ok: false, message: "Versão não encontrada." };
+  }
+
+  if (versao.status !== "aprovada") {
+    return { ok: false, message: "Só versões aprovadas podem ter aprovação cancelada." };
+  }
+
+  // 2. Fetch orçamento (deve estar 'aprovado', não 'job_criado')
+  const { data: orc } = await supabase
+    .from("orcamentos")
+    .select("status, projeto_id")
+    .eq("id", versao.orcamento_id)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle<{ status: string; projeto_id: string }>();
+
+  if (!orc) {
+    return { ok: false, message: "Orçamento não encontrado." };
+  }
+
+  if (orc.status !== "aprovado") {
+    return {
+      ok: false,
+      message: `Orçamento está em status ${orc.status} — desaprovação não permitida.`,
+    };
+  }
+
+  // 3. Verifica que não existe job ativo (não-cancelado) pra este orçamento
+  const { count: jobsAtivos } = await supabase
+    .from("jobs")
+    .select("id", { count: "exact", head: true })
+    .eq("orcamento_id", versao.orcamento_id)
+    .eq("tenant_id", session.activeTenant.id)
+    .neq("status", "cancelado");
+
+  if ((jobsAtivos ?? 0) > 0) {
+    return {
+      ok: false,
+      message: "Cancele o job antes de desaprovar a versão.",
+    };
+  }
+
+  // 4. Update versão: volta pra 'em_revisao', limpa aprovado_em/por
+  const { error: errUpdVer } = await supabase
+    .from("versoes_orcamento")
+    .update({
+      status: "em_revisao",
+      aprovado_em: null,
+      aprovado_por: null,
+    })
+    .eq("id", versaoId)
+    .eq("tenant_id", session.activeTenant.id);
+
+  if (errUpdVer) {
+    console.error("[versao.cancelarAprovacao]", errUpdVer.message);
+    return { ok: false, message: "Não foi possível cancelar a aprovação." };
+  }
+
+  // 5. Reverter cascata: outras versões 'substituida' do orçamento voltam pra 'em_revisao'
+  const { error: errRev } = await supabase
+    .from("versoes_orcamento")
+    .update({ status: "em_revisao" })
+    .eq("orcamento_id", versao.orcamento_id)
+    .eq("tenant_id", session.activeTenant.id)
+    .eq("status", "substituida");
+
+  if (errRev) {
+    console.error("[versao.reverter_cascata]", errRev.message);
+    // não bloqueia; log e segue
+  }
+
+  // 6. Update orçamento
+  const { error: errUpdOrc } = await supabase
+    .from("orcamentos")
+    .update({
+      status: "em_revisao",
+      versao_aprovada_id: null,
+      aprovado_em: null,
+      aprovado_por: null,
+    })
+    .eq("id", versao.orcamento_id)
+    .eq("tenant_id", session.activeTenant.id);
+
+  if (errUpdOrc) {
+    console.error("[orcamento.cancelarAprovacao]", errUpdOrc.message);
+    return {
+      ok: false,
+      message: "Versão desaprovada mas orçamento não atualizado. Verifique manualmente.",
+    };
+  }
+
+  await logAuditEvent({
+    acao: "versao_orcamento.aprovacao_cancelada",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "versao_orcamento",
+    entidadeId: versaoId,
+    metadata: { orcamento_id: versao.orcamento_id },
+  });
+
+  revalidatePath(`/orcamentos/${orc.projeto_id}`);
+  revalidatePath(`/orcamentos/${orc.projeto_id}/${versao.orcamento_id}`);
+  revalidatePath(`/orcamentos/${orc.projeto_id}/${versao.orcamento_id}/versoes/${versaoId}`);
+  return { ok: true, id: versaoId };
+}
