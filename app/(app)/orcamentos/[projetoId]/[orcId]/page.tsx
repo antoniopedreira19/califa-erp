@@ -8,6 +8,8 @@ import {
   orcamentoStatusLabel,
   type CategoriaDominio,
   type Orcamento,
+  type Job,
+  type Regional,
   type VersaoOrcamentoStatus,
 } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +18,7 @@ import { OrcamentoEditorDrawer } from "../orcamento-editor-drawer";
 import { NovaVersaoDrawer } from "./versoes/nova-versao-drawer";
 import { VersoesList, type VersaoRow } from "./versoes/versoes-list";
 import { ImportarPlanilhaDrawer } from "./versoes/importar-drawer";
+import { CriarJobDrawer } from "./criar-job-drawer";
 
 export const dynamic = "force-dynamic";
 
@@ -52,10 +55,10 @@ export default async function OrcamentoDetailPage({
   const session = await requireSession();
   const supabase = createClient();
 
-  const [orcRes, projRes, responsaveis, versoesRes, categoriasOrcRes] = await Promise.all([
+  const [orcRes, projRes, responsaveis, versoesRes, categoriasOrcRes, regionaisRes, jobsProjetoRes] = await Promise.all([
     supabase
       .from("orcamentos")
-      .select("id, tenant_id, projeto_id, codigo, nome, status, categoria_id, data_inicio_prevista, data_fim_prevista, created_by, created_at, updated_at, categoria:categorias_dominio(nome)")
+      .select("id, tenant_id, projeto_id, codigo, nome, status, categoria_id, data_inicio_prevista, data_fim_prevista, versao_aprovada_id, created_by, created_at, updated_at, categoria:categorias_dominio(nome)")
       .eq("id", params.orcId)
       .eq("projeto_id", params.projetoId)
       .eq("tenant_id", session.activeTenant.id)
@@ -80,6 +83,18 @@ export default async function OrcamentoDetailPage({
       .eq("escopo", "orcamento")
       .eq("ativo", true)
       .order("nome"),
+    supabase
+      .from("regionais")
+      .select("id, nome")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("ativo", true)
+      .order("nome"),
+    supabase
+      .from("jobs")
+      .select("id, codigo, nome, job_pai_id, orcamento_id, status")
+      .eq("projeto_id", params.projetoId)
+      .eq("tenant_id", session.activeTenant.id)
+      .neq("status", "cancelado"),
   ]);
 
   if (orcRes.error) console.error("[orcamentos.detail]", orcRes.error.message);
@@ -94,6 +109,10 @@ export default async function OrcamentoDetailPage({
   const clienteNome: string | null = projeto.cliente?.nome_fantasia ?? null;
   const responsavelNome: string | null = projeto.responsavel?.nome ?? null;
   const categoriasOrcamento = (categoriasOrcRes.data ?? []) as Pick<CategoriaDominio, "id" | "nome">[];
+
+  const regionais = (regionaisRes.data ?? []) as Pick<Regional, "id" | "nome">[];
+  const jobsAtivosDoProjeto = (jobsProjetoRes.data ?? []) as Pick<Job, "id" | "codigo" | "nome" | "job_pai_id">[];
+  const jobDoOrcamento = (jobsProjetoRes.data ?? []).find((j: any) => j.orcamento_id === orcamento.id);
 
   if (versoesRes.error) console.error("[versoes.list]", versoesRes.error.message);
   const versoesBrutas = (versoesRes.data ?? []) as any[];
@@ -113,6 +132,21 @@ export default async function OrcamentoDetailPage({
       cur.count += 1;
       cur.total += Number(it.total_orcado ?? 0);
       agregadoPorVersao.set(it.versao_orcamento_id, cur);
+    }
+  }
+
+  // Calcular valor de faturamento da versão aprovada para pré-preencher o drawer de criar job
+  let valorFaturamento = 0;
+  if (orcamento.status === "aprovado" && (orcamentoRaw as any).versao_aprovada_id) {
+    const versaoAprovada = versoesBrutas.find(
+      (v) => v.id === (orcamentoRaw as any).versao_aprovada_id,
+    );
+    if (versaoAprovada) {
+      const agg = agregadoPorVersao.get(versaoAprovada.id) ?? { count: 0, total: 0 };
+      const perc_honor = Number(versaoAprovada.percentual_honorarios ?? 0) / 100;
+      const perc_imp = Number(versaoAprovada.percentual_imposto ?? 0) / 100;
+      const bruto = agg.total * (1 + perc_honor);
+      valorFaturamento = perc_imp > 0 && perc_imp < 1 ? bruto / (1 - perc_imp) : bruto;
     }
   }
 
@@ -171,6 +205,26 @@ export default async function OrcamentoDetailPage({
                   : undefined
               }
             />
+            {orcamento.status === "aprovado" && !jobDoOrcamento && (
+              <CriarJobDrawer
+                orcamentoId={orcamento.id}
+                clienteNome={clienteNome ?? "—"}
+                jobsAtivosDoProjeto={jobsAtivosDoProjeto}
+                regionais={regionais}
+                responsaveis={responsaveis}
+                responsavelDefaultId={(projeto.responsavel as any)?.id ?? ""}
+                valorFaturamento={valorFaturamento}
+              />
+            )}
+            {orcamento.status === "job_criado" && jobDoOrcamento && (
+              <Link
+                href={`/jobs/${(jobDoOrcamento as any).id}`}
+                prefetch={false}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100 transition-colors"
+              >
+                Ver job {(jobDoOrcamento as any).codigo}
+              </Link>
+            )}
           </div>
 
           <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
