@@ -320,7 +320,7 @@ Código pronto + template do email colado no Dashboard + URL Configuration valid
 - `<DrawerContent>` **NÃO** aceita prop `title` — use composition: `<DrawerContent><DialogHeader><DialogTitle>...</DialogTitle></DialogHeader>...</DrawerContent>`. Ver `orcamento-editor-drawer.tsx`, `projeto-editor-drawer.tsx` como referência.
 - `<Select>` (Radix) para dropdowns; `<DatePicker>` para datas; `<MaskedInput>` para telefone/CPF/CNPJ.
 - **Radix `<SelectItem>` NUNCA aceita `value=""`** — crasha em runtime. Use sentinel `"__none__"` e traduza pra `null` no submit. Ver `projeto-form.tsx`, `orcamento-form.tsx`, `criar-job-drawer.tsx` como referência.
-- **Radix `<PopoverContent>` de DatePicker/qualquer popover em form:** aplicar `side="bottom"` + `sideOffset={6}` + `avoidCollisions={false}` + largura fixa (ex `w-[300px]`). Sem isso, popover flippa/reposiciona por colisão e "muda de posição" entre triggers. `<Calendar>` deve receber `fixedWeeks` pra altura constante. Ver `components/ui/date-picker.tsx`.
+- **Radix `<PopoverContent>` de DatePicker/qualquer popover em form:** aplicar `side="bottom"` + `sideOffset={6}` + `collisionPadding={16}` + largura fixa (ex `w-[300px]`) + `<Calendar fixedWeeks>` (altura constante). **NÃO desligar `avoidCollisions`** — em drawers baixos, popover é cortado sem opção de flippar pra cima. Dimensões fixas + padding de colisão eliminam o jitter sem impedir o flip necessário. Ver `components/ui/date-picker.tsx` (commit `95cf49b` explica o ciclo).
 - Formulários: input numérico usa `className="no-spinner"` e vem sem default.
 - Toast/alerta de erro do server action: mostrar como bloco vermelho no topo do form.
 - Toda página de detalhe segue: breadcrumb `← Voltar` → header com título+badges+ações → conteúdo em cards.
