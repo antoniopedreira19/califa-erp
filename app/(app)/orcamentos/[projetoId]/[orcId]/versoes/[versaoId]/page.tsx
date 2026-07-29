@@ -16,6 +16,7 @@ import { GrupoCard } from "./grupo-card";
 import { NovoGrupoDrawer } from "./novo-grupo-drawer";
 import { TotaisCard } from "./totais-card";
 import { VersaoEditorDrawer } from "./versao-editor-drawer";
+import { AprovacaoActions } from "./aprovacao-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -49,7 +50,7 @@ export default async function VersaoDetailPage({
   const tSess = Date.now();
   const supabase = createClient();
 
-  const [versaoRes, orcRes, gruposRes, itensRes, categoriasRes] = await Promise.all([
+  const [versaoRes, orcRes, gruposRes, itensRes, categoriasRes, jobsAtivosRes] = await Promise.all([
     supabase
       .from("versoes_orcamento")
       .select("*")
@@ -83,6 +84,12 @@ export default async function VersaoDetailPage({
       .eq("tenant_id", session.activeTenant.id)
       .order("nome", { ascending: true })
       .returns<Categoria[]>(),
+    supabase
+      .from("jobs")
+      .select("id", { count: "exact", head: true })
+      .eq("orcamento_id", params.orcId)
+      .eq("tenant_id", session.activeTenant.id)
+      .neq("status", "cancelado"),
   ]);
 
   const tQueries = Date.now();
@@ -100,6 +107,8 @@ export default async function VersaoDetailPage({
   if (gruposRes.error) console.error("[versao.grupos]", gruposRes.error.message);
   if (itensRes.error) console.error("[versao.itens]", itensRes.error.message);
   if (categoriasRes.error) console.error("[versao.categorias]", categoriasRes.error.message);
+
+  const temJobAtivo = (jobsAtivosRes.count ?? 0) > 0;
 
   const versao = versaoRes.data;
   const orcamento = orcRes.data;
@@ -159,6 +168,11 @@ export default async function VersaoDetailPage({
                 ? "Versão aprovada não pode ser editada."
                 : undefined
             }
+          />
+          <AprovacaoActions
+            versaoId={versao.id}
+            status={versao.status}
+            temJobAtivo={temJobAtivo}
           />
           <a
             href={`/api/orcamentos/${params.projetoId}/${params.orcId}/versoes/${versao.id}/export`}
