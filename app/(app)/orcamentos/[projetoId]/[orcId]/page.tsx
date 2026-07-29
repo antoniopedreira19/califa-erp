@@ -330,6 +330,11 @@ export default async function OrcamentoDetailPage({
             projetoId={params.projetoId}
             orcamentoId={orcamento.id}
             versoes={versoes}
+            podeAprovarVersao={
+              orcamento.status !== "aprovado" &&
+              orcamento.status !== "job_criado" &&
+              orcamento.status !== "cancelado"
+            }
           />
         )}
       </div>

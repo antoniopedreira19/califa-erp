@@ -3,12 +3,12 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Copy, X } from "lucide-react";
+import { ArrowRight, CheckCircle2, Copy, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { cn, formatCurrency } from "@/lib/utils";
 import { versaoStatusLabel, type VersaoOrcamentoStatus } from "@/lib/types";
-import { cancelarVersao, duplicarVersao } from "./actions";
+import { aprovarVersao, cancelarVersao, duplicarVersao } from "./actions";
 
 export interface VersaoRow {
   id: string;
@@ -26,7 +26,14 @@ export interface VersaoRow {
 type PendingConfirm =
   | { type: "duplicar"; id: string; numero: number }
   | { type: "cancelar"; id: string; numero: number }
+  | { type: "aprovar"; id: string; numero: number }
   | null;
+
+const STATUS_APROVAVEIS: VersaoOrcamentoStatus[] = [
+  "rascunho",
+  "em_revisao",
+  "enviada_cliente",
+];
 
 function statusBadgeClasses(status: VersaoOrcamentoStatus): string {
   switch (status) {
@@ -51,10 +58,13 @@ export function VersoesList({
   projetoId,
   orcamentoId,
   versoes,
+  podeAprovarVersao,
 }: {
   projetoId: string;
   orcamentoId: string;
   versoes: VersaoRow[];
+  /** false quando orçamento está aprovado/job_criado/cancelado — botão aprovar some. */
+  podeAprovarVersao: boolean;
 }) {
   const router = useRouter();
   const [confirm, setConfirm] = React.useState<PendingConfirm>(null);
@@ -67,19 +77,22 @@ export function VersoesList({
       const res =
         current.type === "duplicar"
           ? await duplicarVersao(current.id)
-          : await cancelarVersao(current.id);
+          : current.type === "cancelar"
+            ? await cancelarVersao(current.id)
+            : await aprovarVersao(current.id);
       if (!res.ok) {
         alert(res.message);
         setConfirm(null);
         return;
       }
       setConfirm(null);
-      // duplicar redireciona no server; cancelar fica na mesma tela.
-      if (current.type === "cancelar") router.refresh();
+      // duplicar redireciona no server; cancelar/aprovar ficam na mesma tela.
+      if (current.type !== "duplicar") router.refresh();
     });
   }
 
   const isDuplicar = confirm?.type === "duplicar";
+  const isAprovar = confirm?.type === "aprovar";
 
   const versaoMaisRecente = React.useMemo(
     () => versoes.reduce((max, v) => Math.max(max, v.numero_versao), 0),
@@ -156,6 +169,26 @@ export function VersoesList({
                   className="flex items-center gap-1"
                   onClick={(e) => e.stopPropagation()}
                 >
+                  {podeAprovarVersao && STATUS_APROVAVEIS.includes(v.status) && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setConfirm({
+                          type: "aprovar",
+                          id: v.id,
+                          numero: v.numero_versao,
+                        })
+                      }
+                      disabled={pending}
+                      title="Aprovar versão"
+                      className={cn(
+                        "rounded-lg text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 transition-colors disabled:opacity-50",
+                        isMaisRecente ? "p-2.5" : "p-2",
+                      )}
+                    >
+                      <CheckCircle2 className={iconSize} />
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() =>
@@ -209,7 +242,9 @@ export function VersoesList({
         title={
           isDuplicar
             ? `Duplicar v${confirm?.numero}?`
-            : `Cancelar v${confirm?.numero}?`
+            : isAprovar
+              ? `Aprovar v${confirm?.numero}?`
+              : `Cancelar v${confirm?.numero}?`
         }
         description={
           isDuplicar ? (
@@ -217,6 +252,15 @@ export function VersoesList({
               Uma nova versão será criada em{" "}
               <strong className="text-foreground">rascunho</strong> com
               todos os itens copiados. Você será redirecionado para editá-la.
+            </>
+          ) : isAprovar ? (
+            <>
+              A versão vira{" "}
+              <strong className="text-foreground">aprovada</strong> e as
+              outras versões do orçamento passam automaticamente para{" "}
+              <strong className="text-foreground">substituída</strong>. O
+              orçamento entra em <strong className="text-foreground">aprovado</strong>{" "}
+              e o botão &quot;Criar job&quot; fica disponível.
             </>
           ) : (
             <>
@@ -226,9 +270,11 @@ export function VersoesList({
             </>
           )
         }
-        confirmLabel={isDuplicar ? "Duplicar" : "Cancelar versão"}
+        confirmLabel={
+          isDuplicar ? "Duplicar" : isAprovar ? "Aprovar" : "Cancelar versão"
+        }
         cancelLabel="Voltar"
-        variant={isDuplicar ? "default" : "destructive"}
+        variant={isDuplicar || isAprovar ? "default" : "destructive"}
         pending={pending}
         onConfirm={handleConfirm}
       />
