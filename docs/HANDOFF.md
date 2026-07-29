@@ -2,7 +2,7 @@
 
 Documento para dar continuidade ao projeto em uma nova sessão de trabalho.
 
-**Última atualização** (2026-07-29): Fase E aprovação de versão + Task 005 Jobs — botões aprovar/cancelar na versão, drawer "Criar job" no orçamento aprovado com hierarquia principal/sub-job, tabela `jobs` + `regionais`, Central Financeira em `/financeiro` com aprovação/rejeição de abertura pelo financeiro. Trigger `cascata_versao_aprovada` no banco.
+**Última atualização** (2026-07-29): Fase E aprovação de versão + Task 005 Jobs — botões aprovar/cancelar na versão, botão "Aprovar" direto na lista de versões (ícone verde ao lado de Duplicar), drawer "Criar job" no orçamento aprovado com hierarquia principal/sub-job, tabela `jobs` + `regionais`, Central Financeira em `/financeiro` com aprovação/rejeição de abertura pelo financeiro. Trigger `cascata_versao_aprovada` no banco. Também: DatePicker estabilizado (`avoidCollisions={false}` + `fixedWeeks`), Task 007 Projetos aplicada (nova hierarquia cliente→projeto→orçamento→versão), Categorias de Domínio (`categorias_dominio` com escopo `projeto|orcamento`) para classificar projeto e orçamento.
 
 ## 0. LEIA PRIMEIRO — ação pendente no início da sessão
 
@@ -30,11 +30,20 @@ Admin cadastrado: `antonio@pevetech.com.br` (role `administrador` no tenant `age
 
 **Local (Git):** working tree limpo, sincronizado com `origin/main`.
 
-**Últimos commits relevantes desta sessão:**
-- `a665450` — Documenta performance como regra transversal (PERFORMANCE.md + CLAUDE.md + memória)
-- `7b994f1` — perf: prefetch=false nas listas + query agregada + timing granular temp
-- `b4b1c30` — Preview do import: mostra planejado + rentabilidade + timing debug temp
-- `75e978c` — Fix pós-review Fase G (Number coerção planejado + rentab tempo real no drawer)
+**Últimos commits relevantes (2026-07-29):**
+- `e5be821` — fix(datepicker): popover fixo (`side=bottom`, `avoidCollisions=false`, `w-[300px]`, `fixedWeeks`)
+- `f75d072` — feat(versoes): botão Aprovar direto na lista de versões (ícone `CheckCircle2` verde ao lado de Duplicar)
+- `a4ca8f5` — task005 final review: `Orcamento.versao_aprovada_id` no type + audit `acao_negada` em denials financeiros
+- `9042f86` — task005: sidebar ganha entradas Jobs e Financeiro (com role gate `roles: AppRole[]`)
+- `d5cfc52` — task005: Central Financeira + Jobs Aguardando Abertura
+- `96b4bd3..ab6bab0` — task005: `/jobs/[jobId]` (metadata + editor + hierarquia + status + aprovação contextual) + fix missing `motivo_rejeicao` no select
+- `19e7b9b` — task005: drawer Criar job no orçamento aprovado + link "Ver job"
+- `5eff286` — task005: server actions jobs (CRUD + hierarquia + status + aprovação financeira)
+- `47b2e8e` — task005: server actions `aprovarVersao` + `cancelarAprovacaoVersao`
+- `a772497` — task005: UI aprovar/cancelar aprovação de versão (na página da versão)
+- `41490d9` — feat(categorias): categorias de domínio pra projeto e orçamento
+- `c6ccb75` — merge Task 007 (Projetos como guarda-chuva) + os 4 commits do Tiago (espelho orçado × planejado)
+- `d199df1` — task007 final review: fix export route + code helpers + drawer refresh + list nav
 
 **Migrations aplicadas no Supabase (via MCP):**
 
@@ -100,6 +109,65 @@ Admin cadastrado: `antonio@pevetech.com.br` (role `administrador` no tenant `age
   - Helper `calcularTotaisPlanejados` em `lib/calculos/versao-totais.ts`.
 - **Fase G' — Catálogo global de categorias**: substituiu `versoes_orcamento_categorias` (por versão) por `categorias` (tenant), com CRUD em `/categorias` gerenciado pelo hub `/cadastros`. Todos os membros criam/editam; só admin inativa/reativa. Import não lê mais categoria da planilha; classificação é feita pelo GP no drawer de item. Duplicação de versão preserva categoria_id.
 
+### Task 007 — Projetos como guarda-chuva de orçamentos
+- Nova tabela `projetos` (código formato `AAA-NNNN/YY` — prefixo do cliente + sequencial por cliente/ano + ano 2 dig).
+- `clientes` ganha `codigo_curto` (2-6 letras uppercase, único por tenant, backfill das primeiras 6 letras do `nome_fantasia`).
+- `orcamentos`: adicionou `projeto_id` NOT NULL, removeu `cliente_id`, `responsavel_id`, `campanha` (subiram pro projeto).
+- Cliente e responsável agora vivem no projeto; herdados por embed em orçamentos e jobs.
+- Código do orçamento passa a ser `[CODIGO_PROJETO]-NN` (ex: `AMB-0003/26-01`). Códigos antigos `ORC-0001/0002` mantidos.
+- Rotas reestruturadas: `/orcamentos` = lista de projetos; `/orcamentos/[projetoId]` = detalhe do projeto (com card de orçamentos); `/orcamentos/[projetoId]/[orcId]` = detalhe do orçamento (com versões); `/orcamentos/[projetoId]/[orcId]/versoes/[versaoId]` = detalhe da versão.
+- Sidebar continua com uma entrada só "Orçamentos" — a hierarquia interna é o único que muda.
+- Server actions com defense-in-depth: UPDATE de orçamento filtra por `projeto_id` também (não só `id + tenant_id`).
+- Backfill criou 1 projeto "teste" agrupando os 3 orçamentos existentes (mesmo cliente Pevetech).
+- Migration `20260728000002_task007_projetos.sql`.
+
+### Task 007+ — Categorias de Domínio (projeto e orçamento)
+- Nova tabela `categorias_dominio` (escopo enum `projeto | orcamento`, tenant-wide).
+- Design de tabela única com coluna escopo (não duas tabelas separadas — 1 CRUD, admin unificado, novo escopo = novo enum value).
+- `projetos.categoria_id` (FK nullable) + `orcamentos.categoria_id` (FK nullable). Coluna antiga `orcamentos.tipo` (texto livre) removida.
+- Admin em `/cadastros/categorias-dominio` (tabs Projeto/Orçamento/Todos) — mesmo padrão do CRUD de `categorias` de itens.
+- Seed inicial no tenant Agência California:
+  - Projeto: `Fee`, `Projeto proprietário`, `Ativação`, `Evento`, `Campanha`.
+  - Orçamento: `Always On`, `Mídia`, `Evento`, `Influencer`, `Extra`.
+- Dropdown "Categoria" (com opção "Sem categoria" usando sentinel `__none__` — Radix não aceita `value=""`) em ProjetoForm e OrcamentoForm.
+- Coluna Categoria em `<ProjetosList>` e `<OrcamentosList>`; metadata em ambas as pages de detalhe.
+- Migration `20260728000003_categorias_dominio.sql`.
+
+### Task 005 — Aprovação de versão (Fase E) + Jobs + Central Financeira
+- **Aprovação de versão** (`aprovarVersao(versaoId)`):
+  - Valida versão em `rascunho|em_revisao|enviada_cliente`, orçamento não em `job_criado|aprovado|cancelado`, ≥1 item.
+  - Update versão pra `aprovada` (trigger `cascata_versao_aprovada` no banco cascata as outras versões pra `substituida`).
+  - Update orçamento pra `aprovado` com `versao_aprovada_id`, `aprovado_em`, `aprovado_por`.
+  - Audit `versao_orcamento.aprovada`.
+- **Desaprovação** (`cancelarAprovacaoVersao(versaoId)`):
+  - Só permitido se orçamento `aprovado` E sem job ativo (status != cancelado).
+  - Reverte versão pra `em_revisao`, limpa aprovado_em/por; reverte outras versões `substituida` pra `em_revisao`; reverte orçamento pra `em_revisao`.
+  - Audit `versao_orcamento.aprovacao_cancelada`.
+- **UI de aprovação**:
+  - Botões "Aprovar versão" (verde `emerald`) e "Cancelar aprovação" (borda `california-red`) na tela `/orcamentos/[projetoId]/[orcId]/versoes/[versaoId]` (componente `<AprovacaoActions>`).
+  - **Botão "Aprovar" ícone direto na lista de versões** (`<VersoesList>`) — ao lado de Duplicar, condicional a status aprovável + `podeAprovarVersao` (calculado no server component).
+- **Jobs** (tabela `jobs`):
+  - FK obrigatórias: `projeto_id`, `orcamento_id`, `versao_orcamento_aprovada_id`, `responsavel_id`.
+  - Campos: `nome`, `produto` (texto livre), `regional_id` (FK `regionais`), `cidade`, `data_inicio_prevista`, `data_fim_prevista`, `valor_total` (pre-preenchido do faturamento da versão aprovada com gross-up).
+  - Self-reference `job_pai_id` pra hierarquia principal ↔ sub-job. Constraints: `jobs_nao_pai_de_si_mesmo`, unique parcial `uniq_jobs_principal_por_projeto` (1 principal por projeto entre não-cancelados), unique parcial `uniq_jobs_por_orcamento_ativo` (1 job ativo por orçamento).
+  - Status enum `job_status`: **`aguardando_abertura` → `aberto` → `em_producao` → `finalizado`** (linear) + `rejeitado_financeiro` (não terminal, com `motivo_rejeicao`) + `cancelado` (terminal). Default do banco: `aguardando_abertura` (não `aberto`).
+  - Código: `JOB-NNNN` sequencial por tenant (`lib/codigos/jobs.ts`).
+  - Server actions em `app/(app)/jobs/actions.ts`: `criarJob`, `atualizarJob`, `atualizarHierarquiaJob` (swap atômico com ordering seguro pro unique index), `atualizarStatusJob` (bloqueia cancelar principal com sub-jobs ativos).
+- **Central Financeira** (aprovação da abertura pelo financeiro):
+  - Rota `/financeiro` (hub) + `/financeiro/jobs-aguardando-abertura` (tabela + drawers).
+  - Server actions com role gate `admin | financeiro`: `aprovarAberturaJob(jobId)` (aguardando_abertura → aberto), `rejeitarAberturaJob(jobId, motivo)` (aguardando_abertura → rejeitado_financeiro, motivo mín 10 max 500).
+  - `reenviarJobParaAprovacao(jobId)` — sem role gate (GP faz) — rejeitado_financeiro → aguardando_abertura, limpa motivo.
+  - Guard server-side `redirect("/home?reason=sem_permissao_financeira")` nas 2 pages.
+  - `/jobs/[jobId]` mostra motivo em card destaque + botão `<ReenviarAprovacaoButton>` quando `rejeitado_financeiro`. Botões contextuais aprovar/rejeitar visíveis pra admin/financeiro quando `aguardando_abertura`.
+  - Audit `job.abertura_aprovada` / `job.abertura_rejeitada` / `job.reenviado_para_aprovacao`. Denials registram `acao_negada` com metadata da action tentada.
+- **Regionais** (`regionais` cadastro tenant-wide) — CRUD em `/cadastros/regionais`, mesmo padrão de `/categorias`.
+- **Sidebar** generalizada: `adminOnly: boolean` → `roles?: AppRole[]`; entrada "Jobs" (`Briefcase`, sem gate) + "Financeiro" (`Landmark`, gate `admin|financeiro`).
+- **`/jobs/[jobId]`**: detalhe read-only + drawer `<JobEditorDrawer>` (edição inline) + drawer `<EditarHierarquiaDrawer>` (troca principal↔sub-job) + `<StatusActions>` (transições livres).
+- **Dívidas técnicas registradas** (Task 005 deferred minors, ver `.superpowers/sdd/2026-07-29-.../progress.md`):
+  - Swap principal↔sub-job em `criarJob` e `atualizarHierarquiaJob` não é DB-transacional (3 statements sequenciais). Se falhar entre steps, DB fica em estado parcial (dois sub-jobs sem principal, ou ciclo). Fix futuro: mover pra função Postgres.
+  - `atualizarStatusJob` deixa qualquer role cancelar qualquer status não-terminal (spec-compliant, mas pode virar policy).
+- Migration `20260729000002_task005_jobs.sql`.
+
 ### UI polish
 - Componentes reusáveis: `Dialog` + `DrawerContent`, `ConfirmDialog`, `Select` (Radix), `Popover`, `Calendar`, `DatePicker`, `MaskedInput` (telefone/CPF/CNPJ), `no-spinner` utility.
 - Fonte display **Fraunces** para títulos (cara de agência).
@@ -108,7 +176,28 @@ Admin cadastrado: `antonio@pevetech.com.br` (role `administrador` no tenant `age
 
 ## 3. Próximos passos (em ordem de prioridade)
 
-### 🟢 Prioridade 1 — Fluxo de convite de usuário (código feito, faltam ajustes no Dashboard)
+### 🟢 Prioridade 1 — QA manual do que entrou em prod hoje (Task 005 + polish)
+
+**Antes de qualquer coisa nova, valide o fluxo end-to-end:**
+1. Aprovar uma versão pela **lista** (botão verde ao lado de Duplicar) → outras versões viram "Substituída" (trigger).
+2. Aprovar uma versão pelo **detalhe da versão** também (redundante mas ambos funcionam).
+3. No orçamento aprovado, clicar "Criar job" → drawer com pre-preenchimento; salvar → job nasce `aguardando_abertura`.
+4. Se já tem job no projeto, o drawer mostra o bloco de hierarquia (Sub-job de X | Novo principal).
+5. Se você tem role `financeiro` OU `administrador`, aparece o item "Financeiro" na sidebar → abrir `/financeiro/jobs-aguardando-abertura` → aprovar direto na linha OU clicar no job pra ver detalhe.
+6. Rejeitar um job com motivo curto (menos de 10 chars) → deve barrar.
+7. Como GP, ver o motivo em destaque na `/jobs/[jobId]` + reenviar pra aprovação.
+8. DatePickers de Data Início / Fim: abrir/fechar entre os dois — posição não pode mudar, altura não pode variar entre meses.
+
+**Bugs esperados / edge cases já mapeados:**
+- Se `criarJob` falhar entre steps do swap principal↔sub-job, DB fica em estado parcial (não é transacional). Recovery é manual via SQL — se acontecer, avisa antes de continuar.
+
+### ✅ Fluxo de convite de usuário (FEITO)
+
+Código pronto + template do email colado no Dashboard + URL Configuration validada. Convites funcionam. UI de admin em `/admin/usuarios` cria membership automaticamente.
+
+### 🟢 Prioridade 2 — Fluxo de convite de usuário (código feito, faltam ajustes no Dashboard)
+
+**Estado histórico (mantido pra referência caso quebre):** código implementado no ciclo Task 006.
 
 **Estado:** código implementado. Falta apenas: (a) colar o template atualizado no Supabase Dashboard e (b) validar URL Configuration.
 
@@ -204,13 +293,15 @@ Admin cadastrado: `antonio@pevetech.com.br` (role `administrador` no tenant `age
   redireciona pra nova versão. Botão fica ao lado de "Nova versão" no
   card de versões do orçamento.
 
-### 🟢 Prioridade 2 — Backlog
+### 🟢 Prioridade 3 — Backlog
 
 - **Task 006 — Administração** (continuar): inativar/reativar membership, trocar papel, reenviar convite, feed de auditoria.
 - **MFA obrigatório** pra admin — configurar no Supabase Dashboard.
 - **Regras finais de tributação A/B/C/D**: cálculo simplificado hoje. Refinar depois de reunião com o comercial/financeiro. Ver `lib/calculos/versao-totais.ts`.
-- **Campos operacionais do job**: marcar conclusão, editar status de sub-jobs, integrar com planning do projeto.
+- **Swap principal↔sub-job atômico** (dívida Task 005): mover pra função Postgres pra ser realmente transacional.
+- **Campos operacionais do job**: planejado × realizado, marcar conclusão, editar status de sub-jobs, integrar com planning do projeto.
 - **Dashboard/relatórios**: KPIs por projeto, rentabilidade por fase de job, cash flow.
+- **Próximas rotas em `/financeiro`** (reservadas mentalmente): contas a pagar, DRE, aprovação de pagamentos, conciliação.
 
 ## 4. Arquitetura & convenções (leia antes de codar)
 
@@ -226,10 +317,14 @@ Admin cadastrado: `antonio@pevetech.com.br` (role `administrador` no tenant `age
 ### Padrões UI (não reinvente)
 - `<ConfirmDialog>` para toda confirmação (não use `window.confirm`).
 - `<Dialog>` para modais centrados, `<DrawerContent>` para painéis laterais.
+- `<DrawerContent>` **NÃO** aceita prop `title` — use composition: `<DrawerContent><DialogHeader><DialogTitle>...</DialogTitle></DialogHeader>...</DrawerContent>`. Ver `orcamento-editor-drawer.tsx`, `projeto-editor-drawer.tsx` como referência.
 - `<Select>` (Radix) para dropdowns; `<DatePicker>` para datas; `<MaskedInput>` para telefone/CPF/CNPJ.
+- **Radix `<SelectItem>` NUNCA aceita `value=""`** — crasha em runtime. Use sentinel `"__none__"` e traduza pra `null` no submit. Ver `projeto-form.tsx`, `orcamento-form.tsx`, `criar-job-drawer.tsx` como referência.
+- **Radix `<PopoverContent>` de DatePicker/qualquer popover em form:** aplicar `side="bottom"` + `sideOffset={6}` + `avoidCollisions={false}` + largura fixa (ex `w-[300px]`). Sem isso, popover flippa/reposiciona por colisão e "muda de posição" entre triggers. `<Calendar>` deve receber `fixedWeeks` pra altura constante. Ver `components/ui/date-picker.tsx`.
 - Formulários: input numérico usa `className="no-spinner"` e vem sem default.
 - Toast/alerta de erro do server action: mostrar como bloco vermelho no topo do form.
 - Toda página de detalhe segue: breadcrumb `← Voltar` → header com título+badges+ações → conteúdo em cards.
+- Linha inteira de lista/card clicável = navega; ações secundárias na mesma linha usam `stopPropagation`. `role="button"` + `tabIndex={0}` + `onKeyDown` (Enter/Space) pra acessibilidade. `<Link>` interno da célula "Código" com `prefetch={false}` + `stopPropagation`.
 
 ### Padrões de código
 - Server actions em `app/(app)/*/actions.ts`. Cada uma:
