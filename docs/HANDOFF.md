@@ -2,7 +2,7 @@
 
 Documento para dar continuidade ao projeto em uma nova sessão de trabalho.
 
-**Última atualização** (2026-07-28): Task 007 — Projetos como guarda-chuva de orçamentos. Nova tabela `projetos` entre cliente e orçamento. Cliente ganha `codigo_curto`. Rotas reestruturadas pra `/orcamentos/[projetoId]/[orcId]/[versaoId]`. Backfill criou 1 projeto "teste" agrupando os 2 orçamentos existentes.
+**Última atualização** (2026-07-29): Fase E aprovação de versão + Task 005 Jobs — botões aprovar/cancelar na versão, drawer "Criar job" no orçamento aprovado com hierarquia principal/sub-job, tabela `jobs` + `regionais`, Central Financeira em `/financeiro` com aprovação/rejeição de abertura pelo financeiro. Trigger `cascata_versao_aprovada` no banco.
 
 ## 0. LEIA PRIMEIRO — ação pendente no início da sessão
 
@@ -50,9 +50,10 @@ Admin cadastrado: `antonio@pevetech.com.br` (role `administrador` no tenant `age
 20260726000001  task004_orcamento_importacoes
 20260728000001  task004_categoria_e_planejado
 20260728000002  task007_projetos
+20260729000002  task005_jobs
 ```
 
-**Todas as migrations aplicadas.** Última: `20260728000002_task007_projetos` (Task 007).
+**Todas as migrations aplicadas.** Última: `20260729000002_task005_jobs` (Task 005).
 
 ## 2. O que já está pronto (Tasks 001 – 004)
 
@@ -203,31 +204,13 @@ Admin cadastrado: `antonio@pevetech.com.br` (role `administrador` no tenant `age
   redireciona pra nova versão. Botão fica ao lado de "Nova versão" no
   card de versões do orçamento.
 
-### 🟡 Prioridade 2 — Fase E da Task 004: Aprovação de versão
-
-Falta fechar o fluxo comercial. Quando o usuário aprova uma versão:
-- Server action `aprovarVersao(versaoId)`:
-  - Set `versoes_orcamento.status = 'aprovada'`, `aprovado_em = now()`, `aprovado_por = user`.
-  - Update `orcamentos.status = 'aprovado'`, `versao_aprovada_id = versaoId`, `aprovado_em`, `aprovado_por`.
-  - As outras versões do mesmo orçamento viram `substituida` automaticamente.
-  - Registra `versao_orcamento.aprovada` em `audit_events`.
-- Trigger opcional no banco pra reforçar a regra (só uma aprovada — já garantido pelo unique parcial, mas trigger cascata para as outras é melhor).
-- Botão "Aprovar" no header da versão em `/orcamentos/[id]/versoes/[versaoId]` com `ConfirmDialog`.
-- Aviso na página do orçamento quando aprovado ("Crie o job para seguir com a operação").
-
-### 🟡 Prioridade 3 — Task 005: Criação do Job
-
-Docs de referência: [`tasks/005-criacao-job-orcamento-aprovado.md`](../tasks/005-criacao-job-orcamento-aprovado.md).
-- Migration `jobs`: FK obrigatórias para `orcamento_id` e `versao_orcamento_aprovada_id`, unique `(tenant_id, orcamento_id)` (um job por orçamento).
-- Server action `criarJob(orcamentoId)`: só permite se `orcamento.status = 'aprovado'`; copia dados essenciais; atualiza `orcamentos.status = 'job_criado'`.
-- UI: card "Job criado" no orçamento aprovado + página `/jobs/[id]` (placeholder por enquanto).
-
-### 🟢 Prioridade 4 — Backlog
+### 🟢 Prioridade 2 — Backlog
 
 - **Task 006 — Administração** (continuar): inativar/reativar membership, trocar papel, reenviar convite, feed de auditoria.
 - **MFA obrigatório** pra admin — configurar no Supabase Dashboard.
 - **Regras finais de tributação A/B/C/D**: cálculo simplificado hoje. Refinar depois de reunião com o comercial/financeiro. Ver `lib/calculos/versao-totais.ts`.
-- **Botão de aprovar/reprovar orçamento** (transições de status manuais além do que já existe no drawer).
+- **Campos operacionais do job**: marcar conclusão, editar status de sub-jobs, integrar com planning do projeto.
+- **Dashboard/relatórios**: KPIs por projeto, rentabilidade por fase de job, cash flow.
 
 ## 4. Arquitetura & convenções (leia antes de codar)
 
