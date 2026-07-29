@@ -107,12 +107,19 @@ export function DatePicker({
             )}
           </button>
         </PopoverTrigger>
-        <PopoverContent className="w-auto p-0" align="start">
+        <PopoverContent
+          className="w-[300px] p-0"
+          align="start"
+          side="bottom"
+          sideOffset={6}
+          avoidCollisions={false}
+        >
           <Calendar
             mode="single"
             selected={date ?? undefined}
             onSelect={handleSelect}
             initialFocus
+            fixedWeeks
           />
         </PopoverContent>
       </Popover>
