@@ -463,6 +463,10 @@ function CelulaRealNum({
 }) {
   const finalizado = React.useRef(false);
 
+  React.useEffect(() => {
+    if (editando) finalizado.current = false;
+  }, [editando]);
+
   if (editando) {
     return (
       <td className={cn("text-xs align-middle px-1.5", tdClassName)}>

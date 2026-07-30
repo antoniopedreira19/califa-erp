@@ -67,6 +67,17 @@ export async function upsertItemRealizado(
 
   // 2. Gate de status
   if (job.status !== "aberto" && job.status !== "em_producao") {
+    await logAuditEvent({
+      acao: "acao_negada",
+      tenantId: session.activeTenant.id,
+      entidadeTipo: "job",
+      entidadeId: jobId,
+      metadata: {
+        acao_tentada: "upsertItemRealizado",
+        motivo: "status_bloqueia_edicao",
+        status_atual: job.status,
+      },
+    });
     return {
       ok: false,
       message:
