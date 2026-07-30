@@ -4,7 +4,7 @@ import { ArrowLeft, Briefcase, Layers, Info, Circle } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { listActiveMembers } from "@/lib/data/members";
-import type { Job, JobStatus, Profile, Regional } from "@/lib/types";
+import type { Job, JobStatus, Regional } from "@/lib/types";
 import { jobStatusLabel, JOB_STATUS_TRANSICOES } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -13,6 +13,12 @@ import { EditarHierarquiaDrawer } from "./editar-hierarquia-drawer";
 import { StatusActions } from "./status-actions";
 import { ReenviarAprovacaoButton } from "./reenviar-aprovacao-button";
 import { AprovarRejeitarButtons } from "./aprovar-rejeitar-buttons";
+import { JobRealizadoSection } from "./realizado/job-realizado-section";
+import type {
+  VersaoOrcamentoGrupo,
+  VersaoOrcamentoItem,
+  JobItemRealizado,
+} from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -56,7 +62,7 @@ export default async function JobDetailPage({
     supabase
       .from("jobs")
       .select(
-        "id, tenant_id, codigo, nome, produto, cidade, data_inicio_prevista, data_fim_prevista, responsavel_id, valor_total, status, motivo_rejeicao, projeto_id, orcamento_id, versao_orcamento_aprovada_id, regional_id, job_pai_id, created_at, updated_at, responsavel:profiles!responsavel_id(id, nome), regional:regionais(id, nome), orcamento:orcamentos(id, codigo, nome, projeto_id), versao:versoes_orcamento!versao_orcamento_aprovada_id(id, numero_versao, nome), projeto:projetos(id, codigo, nome), pai:jobs!job_pai_id(id, codigo, nome)",
+        "id, tenant_id, codigo, nome, produto, cidade, data_inicio_prevista, data_fim_prevista, responsavel_id, valor_total, status, motivo_rejeicao, projeto_id, orcamento_id, versao_orcamento_aprovada_id, regional_id, job_pai_id, created_at, updated_at, responsavel:profiles!responsavel_id(id, nome), regional:regionais(id, nome), orcamento:orcamentos(id, codigo, nome, projeto_id), versao:versoes_orcamento!versao_orcamento_aprovada_id(id, numero_versao, nome, moeda, percentual_honorarios, percentual_imposto), projeto:projetos(id, codigo, nome), pai:jobs!job_pai_id(id, codigo, nome)",
       )
       .eq("id", params.jobId)
       .eq("tenant_id", session.activeTenant.id)
@@ -98,6 +104,65 @@ export default async function JobDetailPage({
 
   const podeEditarHierarquia = (outrosAtivos ?? 0) > 0;
   const ehPrincipal = raw.job_pai_id === null;
+
+  // Queries de Realizado (paralelas, dependem de raw ja carregado)
+  const versaoAprovadaId = raw.versao_orcamento_aprovada_id as string;
+
+  const [gruposRes, itensRes, realizadosRes] = await Promise.all([
+    supabase
+      .from("versoes_orcamento_grupos")
+      .select("*")
+      .eq("versao_orcamento_id", versaoAprovadaId)
+      .eq("tenant_id", session.activeTenant.id)
+      .order("ordem", { ascending: true })
+      .returns<VersaoOrcamentoGrupo[]>(),
+    supabase
+      .from("versoes_orcamento_itens")
+      .select("*")
+      .eq("versao_orcamento_id", versaoAprovadaId)
+      .eq("tenant_id", session.activeTenant.id)
+      .order("ordem", { ascending: true })
+      .returns<VersaoOrcamentoItem[]>(),
+    supabase
+      .from("jobs_itens_realizado")
+      .select("*")
+      .eq("job_id", raw.id)
+      .eq("tenant_id", session.activeTenant.id)
+      .returns<JobItemRealizado[]>(),
+  ]);
+
+  const grupos = (gruposRes.data ?? []) as VersaoOrcamentoGrupo[];
+  const itens: VersaoOrcamentoItem[] = (itensRes.data ?? []).map((it: any) => ({
+    ...it,
+    valor_unitario_orcado: Number(it.valor_unitario_orcado ?? 0),
+    quantidade_orcada: Number(it.quantidade_orcada ?? 1),
+    dias_meses_orcado: Number(it.dias_meses_orcado ?? 1),
+    total_orcado: Number(it.total_orcado ?? 0),
+    valor_unitario_planejado: Number(it.valor_unitario_planejado ?? 0),
+    quantidade_planejada: Number(it.quantidade_planejada ?? 0),
+    dias_meses_planejado: Number(it.dias_meses_planejado ?? 0),
+    total_planejado: Number(it.total_planejado ?? 0),
+  }));
+  const realizados = (realizadosRes.data ?? []).map((r: any) => ({
+    ...r,
+    valor_unitario_realizado: Number(r.valor_unitario_realizado ?? 0),
+    quantidade_realizada: Number(r.quantidade_realizada ?? 0),
+    dias_meses_realizado: Number(r.dias_meses_realizado ?? 0),
+    total_realizado: Number(r.total_realizado ?? 0),
+  })) as JobItemRealizado[];
+
+  const realizadosMap = new Map<string, JobItemRealizado>();
+  for (const r of realizados) realizadosMap.set(r.item_id, r);
+
+  const versaoAprovada = raw.versao as {
+    id: string;
+    numero_versao: number;
+    nome: string | null;
+    moeda: string;
+    percentual_honorarios: number;
+    percentual_imposto: number;
+  };
+
   const transicoes = JOB_STATUS_TRANSICOES[raw.status as JobStatus];
 
   const regionais = (regionaisRes.data ?? []) as Pick<Regional, "id" | "nome">[];
@@ -128,6 +193,11 @@ export default async function JobDetailPage({
   const podeAprovarRejeitar =
     session.activeRole === "administrador" ||
     session.activeRole === "financeiro";
+
+  const podeEditarRealizado =
+    (session.activeRole === "administrador" ||
+      job.responsavel_id === session.profile.id) &&
+    (job.status === "aberto" || job.status === "em_producao");
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
@@ -308,6 +378,28 @@ export default async function JobDetailPage({
           </div>
         )}
       </div>
+
+      <JobRealizadoSection
+        job={{
+          id: job.id,
+          status: job.status,
+          projeto_id: job.projeto_id,
+          orcamento_id: job.orcamento_id,
+          versao_orcamento_aprovada_id: job.versao_orcamento_aprovada_id,
+        }}
+        versao={{
+          id: versaoAprovada.id,
+          numero_versao: versaoAprovada.numero_versao,
+          nome: versaoAprovada.nome,
+          moeda: versaoAprovada.moeda,
+          percentual_honorarios: Number(versaoAprovada.percentual_honorarios),
+          percentual_imposto: Number(versaoAprovada.percentual_imposto),
+        }}
+        grupos={grupos}
+        itens={itens}
+        realizadosMap={realizadosMap}
+        editable={podeEditarRealizado}
+      />
     </div>
   );
 }
