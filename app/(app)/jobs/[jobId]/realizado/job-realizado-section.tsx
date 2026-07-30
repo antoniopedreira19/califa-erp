@@ -8,6 +8,7 @@ import type {
   JobItemRealizado,
 } from "@/lib/types";
 import { JobGrupoCard } from "./job-grupo-card";
+import { JobTotaisCard } from "./job-totais-card";
 
 interface Props {
   job: Pick<
@@ -88,19 +89,29 @@ export function JobRealizadoSection({
           </p>
         </div>
       ) : (
-        <div className="space-y-4">
-          {grupos.map((g) => (
-            <JobGrupoCard
-              key={g.id}
-              grupo={g}
-              itens={itensPorGrupo.get(g.id) ?? []}
-              realizadosMap={realizadosMap}
-              moeda={versao.moeda}
-              editable={editable}
-              jobId={job.id}
-            />
-          ))}
-        </div>
+        <>
+          <div className="space-y-4">
+            {grupos.map((g) => (
+              <JobGrupoCard
+                key={g.id}
+                grupo={g}
+                itens={itensPorGrupo.get(g.id) ?? []}
+                realizadosMap={realizadosMap}
+                moeda={versao.moeda}
+                editable={editable}
+                jobId={job.id}
+              />
+            ))}
+          </div>
+          <JobTotaisCard
+            grupos={grupos}
+            itens={itens}
+            realizadosMap={realizadosMap}
+            percentualHonorarios={versao.percentual_honorarios}
+            percentualImposto={versao.percentual_imposto}
+            moeda={versao.moeda}
+          />
+        </>
       )}
     </div>
   );
