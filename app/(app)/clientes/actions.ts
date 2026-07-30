@@ -70,7 +70,7 @@ export async function criarCliente(formData: FormData): Promise<ActionResult> {
   });
 
   revalidatePath("/clientes");
-  redirect(`/clientes/${data.id}`);
+  redirect("/clientes");
 }
 
 export async function atualizarCliente(
