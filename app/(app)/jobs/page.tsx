@@ -33,8 +33,10 @@ export default async function JobsPage() {
     projeto_nome: r.projeto?.nome ?? null,
     cliente_nome: r.projeto?.cliente?.nome_fantasia ?? null,
     responsavel_nome: r.responsavel?.nome ?? null,
-    pai_id: r.pai?.id ?? null,
-    pai_codigo: r.pai?.codigo ?? null,
+    // PostgREST devolve embed self-referential como array — pega o primeiro.
+    pai_id: (Array.isArray(r.pai) ? r.pai[0]?.id : r.pai?.id) ?? null,
+    pai_codigo:
+      (Array.isArray(r.pai) ? r.pai[0]?.codigo : r.pai?.codigo) ?? null,
   }));
 
   return (

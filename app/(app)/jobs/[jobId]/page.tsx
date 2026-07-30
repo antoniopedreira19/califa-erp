@@ -81,6 +81,14 @@ export default async function JobDetailPage({
   const raw = jobRes.data as any;
   if (!raw) notFound();
 
+  // PostgREST devolve embed self-referential ("pai:jobs!job_pai_id") como
+  // array em vez de objeto — normaliza para {id, codigo, nome} | null.
+  const paiEmbed = raw.pai
+    ? Array.isArray(raw.pai)
+      ? raw.pai[0] ?? null
+      : raw.pai
+    : null;
+
   // Fetch sub-jobs se este é principal
   let subJobs: { id: string; codigo: string; nome: string; status: JobStatus }[] = [];
   if (raw.job_pai_id === null) {
@@ -304,14 +312,16 @@ export default async function JobDetailPage({
             <div className="space-y-3 text-sm">
               <p>
                 Sub-job de:{" "}
-                {raw.pai && (
+                {paiEmbed ? (
                   <Link
-                    href={`/jobs/${raw.pai.id}`}
+                    href={`/jobs/${paiEmbed.id}`}
                     prefetch={false}
                     className="font-mono text-california-red hover:underline"
                   >
-                    {raw.pai.codigo} · {raw.pai.nome}
+                    {paiEmbed.codigo} · {paiEmbed.nome}
                   </Link>
+                ) : (
+                  <span className="text-muted-foreground">—</span>
                 )}
               </p>
               {podeEditarHierarquia && job.status !== "cancelado" && (
