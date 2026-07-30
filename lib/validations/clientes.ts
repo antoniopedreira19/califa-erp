@@ -16,10 +16,8 @@ export const clienteSchema = z.object({
   codigo_curto: z
     .string()
     .trim()
-    .min(2, "Código deve ter no mínimo 2 letras.")
-    .max(6, "Código deve ter no máximo 6 letras.")
-    .regex(/^[A-Za-z]{2,6}$/, "Código deve conter apenas letras (A-Z), sem números ou símbolos.")
-    .transform((v) => v.toUpperCase()),
+    .min(1, "Informe o código.")
+    .max(50, "Máximo 50 caracteres."),
   razao_social: z
     .string()
     .trim()

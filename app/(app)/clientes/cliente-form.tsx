@@ -71,7 +71,7 @@ export function ClienteForm({ cliente }: Props) {
             name="codigo_curto"
             defaultValue={cliente?.codigo_curto ?? ""}
             required
-            placeholder="Ex.: AMBEV, COCA, PEPSI"
+            placeholder="Ex.: AMBEV, Coca-Cola 2025"
           />
         </Field>
 
