@@ -66,19 +66,13 @@ export function ClienteForm({ cliente }: Props) {
           />
         </Field>
 
-        <Field label="Código curto" name="codigo_curto" required errors={fieldErrors}>
+        <Field label="Código" name="codigo_curto" required errors={fieldErrors}>
           <Input
             name="codigo_curto"
             defaultValue={cliente?.codigo_curto ?? ""}
             required
-            placeholder="Ex.: AMB, COCA"
-            maxLength={6}
-            style={{ textTransform: "uppercase" }}
-            className="uppercase"
+            placeholder="Ex.: AMBEV, COCA-2025"
           />
-          <p className="mt-1 text-xs text-muted-foreground">
-            2 a 6 letras. Usado como prefixo do código dos projetos deste cliente.
-          </p>
         </Field>
 
         <Field label="Razão social" name="razao_social" errors={fieldErrors}>

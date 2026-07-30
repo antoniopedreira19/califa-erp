@@ -14,6 +14,7 @@ export type ActionResult =
 function extractInput(formData: FormData) {
   return {
     nome_fantasia: formData.get("nome_fantasia")?.toString() ?? "",
+    codigo_curto: formData.get("codigo_curto")?.toString() ?? "",
     razao_social: formData.get("razao_social")?.toString() ?? "",
     cnpj: formData.get("cnpj")?.toString() ?? "",
     email: formData.get("email")?.toString() ?? "",
