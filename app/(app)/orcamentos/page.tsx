@@ -74,7 +74,7 @@ export default async function ProjetosPage() {
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-california-red">
             Comercial
           </p>
-          <h1 className="text-3xl font-bold tracking-tight">Orçamentos</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Projetos &amp; Orçamentos</h1>
           <p className="text-sm text-muted-foreground">
             Cada projeto agrupa os orçamentos de uma iniciativa do cliente.
             Clique num projeto para ver seus orçamentos e versões.
