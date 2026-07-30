@@ -239,7 +239,7 @@ Cores computadas conferidas contra o spec do design: `#f1f0ec`, `#e8f0fd`/`#1e4f
 
 ## 6. Entrega 5 — cadastro de cidades e novos campos do projeto
 
-**2026-07-30** · commit `962be97` · design `Novo projeto.dc.html` · migration `20260730000001_cidades_e_campos_projeto.sql`.
+**2026-07-30** · commit `962be97` · design `Novo projeto.dc.html` · migration `20260730000003_cidades_e_campos_projeto.sql`.
 
 - Nova tabela `cidades` no mesmo padrão de `regionais`: RLS por `is_tenant_member`, grants para `authenticated`, único `(tenant_id, lower(nome))`, trigger de `updated_at`, sem DELETE (soft-delete via `ativo`). CRUD em `/cadastros/cidades`.
 - Seed só com Salvador e São Paulo — carga completa fica para task futura.
