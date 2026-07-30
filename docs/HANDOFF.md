@@ -2,7 +2,7 @@
 
 Documento para dar continuidade ao projeto em uma nova sessão de trabalho.
 
-**Última atualização** (2026-07-29): Fase E aprovação de versão + Task 005 Jobs — botões aprovar/cancelar na versão, botão "Aprovar" direto na lista de versões (ícone verde ao lado de Duplicar), drawer "Criar job" no orçamento aprovado com hierarquia principal/sub-job, tabela `jobs` + `regionais`, Central Financeira em `/financeiro` com aprovação/rejeição de abertura pelo financeiro. Trigger `cascata_versao_aprovada` no banco. Também: DatePicker estabilizado (`avoidCollisions={false}` + `fixedWeeks`), Task 007 Projetos aplicada (nova hierarquia cliente→projeto→orçamento→versão), Categorias de Domínio (`categorias_dominio` com escopo `projeto|orcamento`) para classificar projeto e orçamento.
+**Última atualização** (2026-07-30): Task 008 Jobs + Realizado — /jobs vira lista real com filtros/busca (substitui placeholder); /jobs/[jobId] ganha secao "Planilha do job" com blocos ORCADO/PLANEJADO/REALIZADO editaveis + card de totais com Variacao vs Planejado e Resultado Real. Nova tabela `jobs_itens_realizado` (1:1 job x item da versao aprovada, GENERATED total). Server action `upsertItemRealizado` com gates status/ownership/tenant + audit `job.realizado_atualizado`.
 
 ## 0. LEIA PRIMEIRO — ação pendente no início da sessão
 
@@ -60,9 +60,10 @@ Admin cadastrado: `antonio@pevetech.com.br` (role `administrador` no tenant `age
 20260728000001  task004_categoria_e_planejado
 20260728000002  task007_projetos
 20260729000002  task005_jobs
+20260730000001  task008_jobs_realizado
 ```
 
-**Todas as migrations aplicadas.** Última: `20260729000002_task005_jobs` (Task 005).
+**Todas as migrations aplicadas.** Última: `20260730000001_task008_jobs_realizado` (Task 008).
 
 ## 2. O que já está pronto (Tasks 001 – 004)
 
@@ -132,6 +133,24 @@ Admin cadastrado: `antonio@pevetech.com.br` (role `administrador` no tenant `age
 - Dropdown "Categoria" (com opção "Sem categoria" usando sentinel `__none__` — Radix não aceita `value=""`) em ProjetoForm e OrcamentoForm.
 - Coluna Categoria em `<ProjetosList>` e `<OrcamentosList>`; metadata em ambas as pages de detalhe.
 - Migration `20260728000003_categorias_dominio.sql`.
+
+### Task 008 — Jobs + Realizado
+- **Lista `/jobs`**: substitui placeholder. Colunas Codigo/Nome/Projeto/Cliente/Responsavel/Inicio/Valor/Status. Chips de filtro por status + busca por nome/codigo (client-side). Linha inteira clicavel (regra da memory). Sub-jobs aparecem como linhas separadas com badge `Sub-job → JOB-XXXX`.
+- **Extensao `/jobs/[jobId]`**: depois do card Status, nova secao "Planilha do job · v{N}" com link pra versao aprovada. Se status `aguardando_abertura` ou `rejeitado_financeiro`, card cinza informativo no lugar da planilha.
+- **Tabela do realizado**: cards de grupo (herda da versao aprovada). Grade com 4 blocos:
+  - ORCADO (RO): R$ Unit / QT / D-M / Total (cinza-escuro)
+  - PLANEJADO (RO): R$ Unit / QT / D-M / Total (azul)
+  - REALIZADO (edit): R$ Unit / QT / D-M / Total (ambar novo — `#fef3c7`/`#d97706`)
+  - VARIACAO: R$ / % (verde se economia, vermelho se estouro)
+  Click-to-edit apenas no bloco REALIZADO. `Enter` confirma, `Esc` cancela, `Blur` autosalva. Subtotal por grupo no tfoot.
+- **Regras de edicao**:
+  - Editar: `job.status ∈ {aberto, em_producao}`. Bloqueado em finalizado/cancelado/aguardando/rejeitado.
+  - Ownership: `session.activeRole === 'administrador'` OU `job.responsavel_id === session.profile.id`. Financeiro nao edita realizado (so consulta).
+  - Falha por ownership registra `audit.acao_negada` com metadata da acao tentada.
+- **Card de totais do job**: 3 camadas (por grupo, por Tipo A/B/C/D, resumo Honorarios/Impostos/Faturamento) + camada 4 nova com Total Realizado / Variacao vs Planejado / Resultado Real (Faturamento − Impostos − Realizado). Verde se ≥ 0, vermelho se < 0.
+- **Modelagem**: tabela `jobs_itens_realizado` (1:1 job x item da versao aprovada). Unique parcial `(job_id, item_id)`. `total_realizado` GENERATED. FKs `on delete cascade` (job cancelado nao deleta linha; realizado historico preservado enquanto job existir). Preparada pra virar origem de `pedidos_compra` e `titulos_financeiros` em tasks futuras.
+- **Audit**: `job.realizado_atualizado` com metadata `{ item_id, campo, valor_novo, valor_anterior }`.
+- Migration `20260730000001_task008_jobs_realizado.sql`.
 
 ### Task 005 — Aprovação de versão (Fase E) + Jobs + Central Financeira
 - **Aprovação de versão** (`aprovarVersao(versaoId)`):
