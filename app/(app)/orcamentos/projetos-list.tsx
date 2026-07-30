@@ -101,7 +101,7 @@ export function ProjetosList({ projetos, clientes, responsaveis }: Props) {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="todos">Todos responsáveis</SelectItem>
+            <SelectItem value="todos">Todos os criadores</SelectItem>
             {responsaveis.map((r) => (
               <SelectItem key={r.id} value={r.id}>{r.nome}</SelectItem>
             ))}
@@ -126,7 +126,7 @@ export function ProjetosList({ projetos, clientes, responsaveis }: Props) {
               <th className="px-4 py-3 font-semibold">Código</th>
               <th className="px-4 py-3 font-semibold">Nome</th>
               <th className="px-4 py-3 font-semibold">Cliente</th>
-              <th className="px-4 py-3 font-semibold">Responsável</th>
+              <th className="px-4 py-3 font-semibold">Criado por</th>
               <th className="px-4 py-3 font-semibold">Categoria</th>
               <th className="px-4 py-3 font-semibold">Início</th>
               <th className="px-4 py-3 font-semibold text-center">Orçamentos</th>

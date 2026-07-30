@@ -114,12 +114,19 @@ export interface Projeto {
   tenant_id: string;
   codigo: string;
   nome: string;
+  /** Saiu do formulário no handoff de 30/07/2026; a coluna e os dados
+   *  gravados continuam (a busca da lista ainda casa por campanha). */
   campanha: string | null;
   categoria_id: string | null;
   cliente_id: string;
+  /** Preenchido com quem criou o projeto. Exibido como "Criado por". */
   responsavel_id: string;
+  regional_id: string | null;
+  cidade_id: string | null;
   status: ProjetoStatus;
   data_inicio_prevista: string;
+  data_fim_prevista: string | null;
+  descricao: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -367,6 +374,20 @@ export function categoriaDominioEscopoLabel(e: CategoriaDominioEscopo): string {
 // ---------- Regionais ----------
 
 export interface Regional {
+  id: string;
+  tenant_id: string;
+  nome: string;
+  ativo: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// ---------- Cidades ----------
+
+/** Cadastro próprio (não é o texto livre de `jobs.cidade`): o projeto
+ *  referencia por FK para padronizar o dado. */
+export interface Cidade {
   id: string;
   tenant_id: string;
   nome: string;

@@ -14,7 +14,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DatePicker } from "@/components/ui/date-picker";
-import type { CategoriaDominio, Cliente, Profile, Projeto } from "@/lib/types";
+import { Textarea } from "@/components/ui/textarea";
+import { DESCRICAO_MAX } from "@/lib/validations/projetos";
+import type {
+  CategoriaDominio,
+  Cidade,
+  Cliente,
+  Projeto,
+  Regional,
+} from "@/lib/types";
 import {
   atualizarProjeto,
   criarProjeto,
@@ -24,7 +32,8 @@ import {
 interface Props {
   projeto?: Projeto;
   clientes: Pick<Cliente, "id" | "nome_fantasia" | "codigo_curto">[];
-  responsaveis: Pick<Profile, "id" | "nome">[];
+  regionais: Pick<Regional, "id" | "nome">[];
+  cidades: Pick<Cidade, "id" | "nome">[];
   categorias: Pick<CategoriaDominio, "id" | "nome">[];
   onSuccess?: () => void;
   onCancel?: () => void;
@@ -33,7 +42,8 @@ interface Props {
 export function ProjetoForm({
   projeto,
   clientes,
-  responsaveis,
+  regionais,
+  cidades,
   categorias,
   onSuccess,
   onCancel,
@@ -44,13 +54,19 @@ export function ProjetoForm({
   const [error, setError] = React.useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = React.useState<Record<string, string[]>>({});
   const [clienteId, setClienteId] = React.useState(projeto?.cliente_id ?? "");
-  const [responsavelId, setResponsavelId] = React.useState(
-    projeto?.responsavel_id ?? "",
-  );
-  const SEM_CATEGORIA = "__none__";
-  const [categoriaId, setCategoriaId] = React.useState(
-    projeto?.categoria_id ?? SEM_CATEGORIA,
-  );
+  const [regionalId, setRegionalId] = React.useState(projeto?.regional_id ?? "");
+  const [cidadeId, setCidadeId] = React.useState(projeto?.cidade_id ?? "");
+  const [categoriaId, setCategoriaId] = React.useState(projeto?.categoria_id ?? "");
+  const [descricao, setDescricao] = React.useState(projeto?.descricao ?? "");
+
+  /** Realce do campo com erro, como no handoff: borda vermelha + halo.
+   *  Os Selects NÃO usam `required`: o Radix monta um <select> nativo
+   *  escondido e o navegador barraria o envio com tooltip em inglês,
+   *  antes das mensagens em português do Zod chegarem à tela. */
+  const erroClasses = (name: string) =>
+    fieldErrors[name]?.length
+      ? "border-california-red ring-2 ring-california-red/15"
+      : "";
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -59,8 +75,9 @@ export function ProjetoForm({
 
     const formData = new FormData(e.currentTarget);
     formData.set("cliente_id", clienteId);
-    formData.set("responsavel_id", responsavelId);
-    formData.set("categoria_id", categoriaId === SEM_CATEGORIA ? "" : categoriaId);
+    formData.set("regional_id", regionalId);
+    formData.set("cidade_id", cidadeId);
+    formData.set("categoria_id", categoriaId);
 
     startTransition(async () => {
       const res: ActionResult = isEdit
@@ -82,27 +99,22 @@ export function ProjetoForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <div className="grid gap-4 md:grid-cols-2">
-        <Field label="Nome do projeto" name="nome" required errors={fieldErrors}>
-          <Input
-            name="nome"
-            defaultValue={projeto?.nome ?? ""}
-            required
-            autoFocus
-            placeholder="Ex.: Carnaval Anitta"
-          />
-        </Field>
-
-        <Field label="Campanha" name="campanha" errors={fieldErrors}>
-          <Input
-            name="campanha"
-            defaultValue={projeto?.campanha ?? ""}
-            placeholder="Ex.: Verão 2026"
-          />
-        </Field>
+        {/* Nome ocupa a linha inteira, como no handoff. */}
+        <div className="md:col-span-2">
+          <Field label="Nome do projeto" name="nome" required errors={fieldErrors}>
+            <Input
+              name="nome"
+              defaultValue={projeto?.nome ?? ""}
+              className={erroClasses("nome")}
+              autoFocus
+              placeholder="Ex.: Carnaval Anitta"
+            />
+          </Field>
+        </div>
 
         <Field label="Cliente" name="cliente_id" required errors={fieldErrors}>
-          <Select value={clienteId} onValueChange={setClienteId} required>
-            <SelectTrigger>
+          <Select value={clienteId} onValueChange={setClienteId}>
+            <SelectTrigger className={erroClasses("cliente_id")}>
               <SelectValue placeholder="Selecione um cliente ativo" />
             </SelectTrigger>
             <SelectContent>
@@ -116,13 +128,13 @@ export function ProjetoForm({
           </Select>
         </Field>
 
-        <Field label="Responsável" name="responsavel_id" required errors={fieldErrors}>
-          <Select value={responsavelId} onValueChange={setResponsavelId} required>
-            <SelectTrigger>
-              <SelectValue placeholder="Selecione um membro do tenant" />
+        <Field label="Regional" name="regional_id" required errors={fieldErrors}>
+          <Select value={regionalId} onValueChange={setRegionalId}>
+            <SelectTrigger className={erroClasses("regional_id")}>
+              <SelectValue placeholder="Selecione a regional" />
             </SelectTrigger>
             <SelectContent>
-              {responsaveis.map((r) => (
+              {regionais.map((r) => (
                 <SelectItem key={r.id} value={r.id}>
                   {r.nome}
                 </SelectItem>
@@ -131,21 +143,27 @@ export function ProjetoForm({
           </Select>
         </Field>
 
-        <Field label="Início previsto" name="data_inicio_prevista" required errors={fieldErrors}>
-          <DatePicker
-            name="data_inicio_prevista"
-            defaultValue={projeto?.data_inicio_prevista ?? ""}
-            placeholder="Selecione a data"
-          />
-        </Field>
-
-        <Field label="Categoria" name="categoria_id" errors={fieldErrors}>
-          <Select value={categoriaId} onValueChange={setCategoriaId}>
-            <SelectTrigger>
-              <SelectValue placeholder="Sem categoria" />
+        <Field label="Cidade" name="cidade_id" required errors={fieldErrors}>
+          <Select value={cidadeId} onValueChange={setCidadeId}>
+            <SelectTrigger className={erroClasses("cidade_id")}>
+              <SelectValue placeholder="Selecione a cidade" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value={SEM_CATEGORIA}>Sem categoria</SelectItem>
+              {cidades.map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.nome}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+
+        <Field label="Categoria" name="categoria_id" required errors={fieldErrors}>
+          <Select value={categoriaId} onValueChange={setCategoriaId}>
+            <SelectTrigger className={erroClasses("categoria_id")}>
+              <SelectValue placeholder="Selecione uma categoria" />
+            </SelectTrigger>
+            <SelectContent>
               {categorias.map((c) => (
                 <SelectItem key={c.id} value={c.id}>
                   {c.nome}
@@ -154,6 +172,59 @@ export function ProjetoForm({
             </SelectContent>
           </Select>
         </Field>
+
+        <Field
+          label="Início previsto"
+          name="data_inicio_prevista"
+          required
+          errors={fieldErrors}
+        >
+          <DatePicker
+            name="data_inicio_prevista"
+            defaultValue={projeto?.data_inicio_prevista ?? ""}
+            className={erroClasses("data_inicio_prevista")}
+            placeholder="Selecione a data"
+          />
+        </Field>
+
+        <Field
+          label="Final previsto"
+          name="data_fim_prevista"
+          required
+          errors={fieldErrors}
+        >
+          <DatePicker
+            name="data_fim_prevista"
+            defaultValue={projeto?.data_fim_prevista ?? ""}
+            className={erroClasses("data_fim_prevista")}
+            placeholder="Selecione a data"
+          />
+        </Field>
+
+        <div className="md:col-span-2">
+          <Field
+            label="Descrição"
+            name="descricao"
+            opcional
+            errors={fieldErrors}
+          >
+            <Textarea
+              name="descricao"
+              value={descricao}
+              onChange={(e) => setDescricao(e.target.value)}
+              maxLength={DESCRICAO_MAX}
+              rows={4}
+              className="min-h-[104px] resize-y leading-relaxed"
+              placeholder="Contexto, entregáveis, observações internas sobre o projeto…"
+            />
+            {/* Contador só aparece com texto — não polui o formulário vazio. */}
+            {descricao.length > 0 && (
+              <span className="block self-end text-right text-[11px] text-muted-foreground">
+                {descricao.length} / {DESCRICAO_MAX}
+              </span>
+            )}
+          </Field>
+        </div>
       </div>
 
       {error && (
@@ -206,22 +277,30 @@ function Field({
   label,
   name,
   required,
+  opcional,
   errors,
   children,
 }: {
   label: string;
   name: string;
   required?: boolean;
+  /** Marca "Opcional" à direita do rótulo, como no handoff. */
+  opcional?: boolean;
   errors: Record<string, string[]>;
   children: React.ReactNode;
 }) {
   const fieldErrors = errors[name];
   return (
     <div className="space-y-2">
-      <Label htmlFor={name}>
-        {label}
-        {required && <span className="text-california-red ml-1">*</span>}
-      </Label>
+      <div className="flex items-baseline justify-between gap-3">
+        <Label htmlFor={name}>
+          {label}
+          {required && <span className="text-california-red ml-1">*</span>}
+        </Label>
+        {opcional && (
+          <span className="text-[11px] text-muted-foreground">Opcional</span>
+        )}
+      </div>
       {children}
       {fieldErrors?.map((msg, i) => (
         <p key={i} className="text-xs text-california-red">
