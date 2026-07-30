@@ -3,6 +3,7 @@ import type {
   VersaoOrcamentoItem,
   JobItemRealizado,
 } from "@/lib/types";
+import { JobItemRealizadoTable } from "./job-item-realizado-table";
 
 interface Props {
   grupo: VersaoOrcamentoGrupo;
@@ -16,6 +17,10 @@ interface Props {
 export function JobGrupoCard({
   grupo,
   itens,
+  realizadosMap,
+  moeda,
+  editable,
+  jobId,
 }: Props) {
   return (
     <div className="rounded-2xl border border-border bg-card shadow-soft">
@@ -27,9 +32,13 @@ export function JobGrupoCard({
           {itens.length} {itens.length === 1 ? "item" : "itens"}
         </span>
       </div>
-      <div className="p-6 text-sm text-muted-foreground">
-        Tabela de itens (Orcado / Planejado / Realizado / Variacao) sera renderizada aqui — Task 6.
-      </div>
+      <JobItemRealizadoTable
+        jobId={jobId}
+        itens={itens}
+        realizadosMap={realizadosMap}
+        moeda={moeda}
+        editable={editable}
+      />
     </div>
   );
 }
