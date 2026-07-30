@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Search } from "lucide-react";
+import { CheckCircle2, Briefcase, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -30,6 +30,10 @@ export interface ProjetoRow {
   responsavel_nome: string | null;
   data_inicio_prevista: string;
   orcamentos_count: number;
+  /** Orçamentos com status aprovado OU job_criado. */
+  aprovados_count: number;
+  /** Orçamentos com status job_criado (subset de aprovados). */
+  jobs_count: number;
   created_at: string;
 }
 
@@ -158,7 +162,29 @@ export function ProjetosList({ projetos, clientes, responsaveis }: Props) {
                     {p.codigo}
                   </Link>
                 </td>
-                <td className="px-4 py-3 font-medium">{p.nome}</td>
+                <td className="px-4 py-3">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="font-medium">{p.nome}</span>
+                    {p.aprovados_count > 0 && (
+                      <span
+                        title={`${p.aprovados_count} de ${p.orcamentos_count} orçamento(s) aprovado(s)`}
+                        className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700"
+                      >
+                        <CheckCircle2 className="h-3 w-3" />
+                        {p.aprovados_count} aprovado{p.aprovados_count > 1 ? "s" : ""}
+                      </span>
+                    )}
+                    {p.jobs_count > 0 && (
+                      <span
+                        title={`${p.jobs_count} job(s) criado(s) a partir deste projeto`}
+                        className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700"
+                      >
+                        <Briefcase className="h-3 w-3" />
+                        {p.jobs_count} job{p.jobs_count > 1 ? "s" : ""}
+                      </span>
+                    )}
+                  </div>
+                </td>
                 <td className="px-4 py-3 text-muted-foreground">{p.cliente_nome ?? "—"}</td>
                 <td className="px-4 py-3 text-muted-foreground">{p.responsavel_nome ?? "—"}</td>
                 <td className="px-4 py-3 text-muted-foreground">{p.categoria_nome ?? "—"}</td>

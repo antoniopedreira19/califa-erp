@@ -36,16 +36,28 @@ export default async function ProjetosPage() {
   const projetosBrutos = ((projRes.data ?? []) as any[]);
   const projetoIds = projetosBrutos.map((p) => p.id);
 
-  // Contagem agregada de orçamentos por projeto (SEM embed pesado).
+  // Contagens agregadas de orçamentos por projeto (SEM embed pesado).
+  // Uma query só, split em 3 métricas por status:
+  //   total = todos os orçamentos
+  //   aprovados = status ∈ (aprovado, job_criado)   ← "já foi aceito pelo cliente"
+  //   jobs = status = job_criado                     ← "operação abriu"
   const orcamentosCountMap = new Map<string, number>();
+  const aprovadosCountMap = new Map<string, number>();
+  const jobsCountMap = new Map<string, number>();
   if (projetoIds.length > 0) {
     const { data: orcs } = await supabase
       .from("orcamentos")
-      .select("projeto_id")
+      .select("projeto_id, status")
       .in("projeto_id", projetoIds)
       .eq("tenant_id", session.activeTenant.id);
     for (const o of ((orcs ?? []) as any[])) {
       orcamentosCountMap.set(o.projeto_id, (orcamentosCountMap.get(o.projeto_id) ?? 0) + 1);
+      if (o.status === "aprovado" || o.status === "job_criado") {
+        aprovadosCountMap.set(o.projeto_id, (aprovadosCountMap.get(o.projeto_id) ?? 0) + 1);
+      }
+      if (o.status === "job_criado") {
+        jobsCountMap.set(o.projeto_id, (jobsCountMap.get(o.projeto_id) ?? 0) + 1);
+      }
     }
   }
 
@@ -62,6 +74,8 @@ export default async function ProjetosPage() {
     responsavel_nome: p.responsavel?.nome ?? null,
     data_inicio_prevista: p.data_inicio_prevista,
     orcamentos_count: orcamentosCountMap.get(p.id) ?? 0,
+    aprovados_count: aprovadosCountMap.get(p.id) ?? 0,
+    jobs_count: jobsCountMap.get(p.id) ?? 0,
     created_at: p.created_at,
   }));
 
