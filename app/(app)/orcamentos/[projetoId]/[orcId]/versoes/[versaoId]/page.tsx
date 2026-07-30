@@ -139,7 +139,7 @@ export default async function VersaoDetailPage({
   const readOnly = versao.status === "aprovada" || versao.status === "cancelada";
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto">
+    <div className="space-y-6 max-w-7xl mx-auto">
       <div>
         <Link
           href={`/orcamentos/${params.projetoId}/${orcamento.id}`}

@@ -62,6 +62,27 @@ Na Task 001, criar:
 - cabeçalho simples para contexto da página;
 - estados de loading, vazio e erro.
 
+## Larguras de layout (padrão)
+
+Todo container principal de página usa `mx-auto` + `max-w-*` do Tailwind. Só três larguras são permitidas — mais opções viram inconsistência silenciosa:
+
+| Tipo de página | Classe | Largura | Quando usar |
+|----------------|--------|---------|-------------|
+| Formulário single-column | `max-w-3xl` | ~768px | Formulários verticais de 1 coluna (novo/editar cliente, fornecedor, projeto, orçamento). Inputs longos demais perdem ergonomia. |
+| Detalhe / listagem / planilha | `max-w-7xl` | ~1280px | Detalhe de projeto/orçamento/versão/job, listagens com tabela, planilhas editáveis, layout com grid de 2 cards. Padrão pra qualquer coisa densa. |
+| Texto descritivo (dentro de header/empty state) | `max-w-2xl` | ~672px | Parágrafos de subtítulo, descrição de página, empty states — restringe linha longa pra legibilidade. Não é wrapper de página. |
+
+**Regra prática:** se a página tem tabela com 8+ colunas, grid de cards em 2 colunas, ou planilha editável, `max-w-7xl`. Formulário puro (só campos empilhados), `max-w-3xl`.
+
+**Proibido:** `max-w-4xl`, `max-w-5xl`, `max-w-6xl`. Já custaram retrabalho — cada página escolhia a sua, quebrando consistência entre telas.
+
+**Justificativa das 3 opções:**
+- `max-w-3xl` (form): duas colunas de campo caberiam mas prejudicam scan vertical; single-column é mais rápido de preencher.
+- `max-w-7xl` (denso): cobre a maior planilha atual (`versoes_orcamento_itens` com 13 colunas + `jobs_itens_realizado` com 16) sem scroll horizontal em telas médias (1440px+).
+- `max-w-2xl` (texto): manter linha ≤ ~85 caracteres pra legibilidade.
+
+Case study: em 2026-07-30 (Task 008), a tela de job foi de `max-w-5xl` (1024px) pra `max-w-7xl` (1280px) porque a planilha 16-col forçava scroll horizontal desnecessário; simultaneamente as páginas de projeto/orçamento/versão foram alinhadas ao mesmo padrão pra evitar salto de largura ao navegar entre elas.
+
 ## Componentes
 
 Usar shadcn/ui como base e adaptar ao padrão visual do RH:
