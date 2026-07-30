@@ -21,6 +21,7 @@ import {
   type Categoria,
 } from "@/lib/types";
 import { adicionarItem, atualizarCampoItem, removerItem } from "../actions";
+import { ColunasFixas, LARGURA_MINIMA } from "./grade-colunas";
 
 interface Props {
   grupoId: string;
@@ -29,6 +30,9 @@ interface Props {
   moeda: string;
   readOnly?: boolean;
   categorias: Categoria[];
+  /** Grupo recolhido esconde as linhas, o "Novo item" e a trilha de ações.
+   *  O subtotal continua visível — é o dado que justifica recolher. */
+  aberto?: boolean;
 }
 
 /** Campos que a grade edita — espelha o allowlist do server action. */
@@ -51,8 +55,12 @@ const TIPOS: TipoCusto[] = ["A", "B", "C", "D"];
 /** Radix Select não aceita value="" — sentinela para "sem categoria". */
 const SEM_CATEGORIA = "__nenhuma__";
 const DRAFT_ID = "__draft__";
-/** Altura fixa da linha: mantém a trilha de ações fora do card alinhada. */
-const ALTURA_LINHA = "h-9";
+/** Altura fixa da linha: mantém a trilha de ações fora do card alinhada.
+ *  28px é o meio-termo entre os 36px antigos e os 25px do handoff: é o
+ *  menor valor que ainda comporta o botão da trilha (14px de ícone + 6px
+ *  de padding = 26px) e mantém o alvo de clique acima do mínimo de 24px
+ *  da WCAG 2.5.8. */
+const ALTURA_LINHA = "h-7";
 
 // Grade: linhas verticais discretas, uma cor por bloco.
 const GRADE_NEUTRA = "border-r border-r-[#f1f1f1]";
@@ -60,12 +68,10 @@ const GRADE_ORCADO = "border-r border-r-[#eceae5]";
 const GRADE_PLANEJADO = "border-r border-r-[#e6eff9]";
 const GRADE_RENTAB = "border-r border-r-[#d9efe3]";
 
-/** Piso para as colunas de moeda não cortarem o valor. Abaixo disso o card
- *  rola na horizontal em vez de espremer as colunas. */
-const LARGURA_MINIMA = "min-w-[1060px]";
-
+/** 2px menor que a linha (28px), como no handoff — o campo respira dentro
+ *  da célula em vez de encostar nas bordas. */
 const CAMPO_CLASSES =
-  "h-7 w-full rounded-lg border border-california-red bg-white px-2 text-xs text-foreground outline-none ring-2 ring-california-red/15";
+  "h-[26px] w-full rounded-lg border border-california-red bg-white px-2 text-xs text-foreground outline-none ring-2 ring-california-red/15";
 
 interface Draft {
   item: string;
@@ -79,6 +85,8 @@ interface Draft {
   dias_meses_planejado: number;
 }
 
+/** Planejado nasce igual ao orçado (0 · 1 · 1): a linha nova é uma folha
+ *  em branco simétrica, não um lado preenchido e outro zerado. */
 const DRAFT_VAZIO: Draft = {
   item: "",
   tipo_custo: "A",
@@ -87,8 +95,8 @@ const DRAFT_VAZIO: Draft = {
   quantidade_orcada: 1,
   dias_meses_orcado: 1,
   valor_unitario_planejado: 0,
-  quantidade_planejada: 0,
-  dias_meses_planejado: 0,
+  quantidade_planejada: 1,
+  dias_meses_planejado: 1,
 };
 
 /** Aceita "1.234,56" e "1234.56". Vírgula presente ⇒ ponto é milhar. */
@@ -105,35 +113,6 @@ function parseNumero(raw: string): number | null {
 /** Número cru para digitação: vírgula decimal, sem separador de milhar. */
 function paraEdicao(valor: number): string {
   return String(valor).replace(".", ",");
-}
-
-/** Larguras fixas do grid. Sem elas cada card mede as colunas pelo próprio
- *  conteúdo — um grupo com item de nome curto desalinha os blocos Orçado /
- *  Planejado / Rentabilidade em relação aos outros grupos e versões.
- *  Em porcentagem, não em px: os cards têm a mesma largura, então a mesma
- *  proporção alinha todos e ainda acompanha o container. */
-function ColunasFixas() {
-  return (
-    <colgroup>
-      {/* Item absorve a sobra (16%); as demais são proporcionais. */}
-      <col />
-      <col className="w-[4.5%]" />
-      <col className="w-[8.5%]" />
-      {/* Orçado */}
-      <col className="w-[10%]" />
-      <col className="w-[3.5%]" />
-      <col className="w-[3.5%]" />
-      <col className="w-[11%]" />
-      {/* Planejado */}
-      <col className="w-[10%]" />
-      <col className="w-[3.5%]" />
-      <col className="w-[3.5%]" />
-      <col className="w-[11%]" />
-      {/* Rentabilidade */}
-      <col className="w-[9.5%]" />
-      <col className="w-[5.5%]" />
-    </colgroup>
-  );
 }
 
 /** Rentabilidade de uma linha (ou do subtotal) pela fórmula oficial da
@@ -166,6 +145,7 @@ export function ItensTable({
   moeda,
   readOnly,
   categorias,
+  aberto = true,
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
@@ -197,7 +177,7 @@ export function ItensTable({
     const observer = new ResizeObserver(medir);
     observer.observe(wrapper);
     return () => observer.disconnect();
-  }, [itens.length, readOnly, temDraft]);
+  }, [itens.length, readOnly, temDraft, aberto]);
 
   // Descarta o valor otimista quando o servidor já devolveu o mesmo valor.
   React.useEffect(() => {
@@ -393,7 +373,7 @@ export function ItensTable({
     rentabilidadeDe(subtotalOrcado, subtotalPlanejado);
 
   const editavel = !readOnly;
-  const temTrilha = editavel && (itens.length > 0 || draft !== null);
+  const temTrilha = aberto && editavel && (itens.length > 0 || draft !== null);
 
   return (
     <>
@@ -412,7 +392,14 @@ export function ItensTable({
       )}
 
       <div ref={wrapperRef} className="relative">
-        <div className={cn("overflow-x-auto", readOnly && "rounded-b-2xl")}>
+        {/* Sem a barra de dica embaixo (readOnly ou grupo recolhido), é a
+            própria tabela que fecha o card — precisa arredondar. */}
+        <div
+          className={cn(
+            "overflow-x-auto",
+            (readOnly || !aberto) && "rounded-b-2xl",
+          )}
+        >
           <table
             className={cn("w-full table-fixed text-sm border-collapse", LARGURA_MINIMA)}
           >
@@ -485,7 +472,7 @@ export function ItensTable({
             </thead>
 
             <tbody ref={tbodyRef}>
-              {itens.length === 0 && !draft && (
+              {aberto && itens.length === 0 && !draft && (
                 <tr>
                   <td
                     colSpan={13}
@@ -496,7 +483,7 @@ export function ItensTable({
                 </tr>
               )}
 
-              {itens.map((item) => {
+              {aberto && itens.map((item) => {
                 const totais = totaisDoItem(item);
                 const categoriaId = valorAtual(item, "categoria_id") as
                   | string
@@ -539,9 +526,9 @@ export function ItensTable({
                       }
                       onConfirmar={(v) => confirmarCampo(item, "tipo_custo", v)}
                       onFechar={() => setAtiva(null)}
-                      tdClassName={GRADE_NEUTRA}
+                      tdClassName={cn(GRADE_NEUTRA, "px-2")}
                     >
-                      <Badge variant="outline">
+                      <Badge variant="outline" className="px-1.5">
                         {String(valorAtual(item, "tipo_custo"))}
                       </Badge>
                     </CelulaSelect>
@@ -630,11 +617,13 @@ export function ItensTable({
                       {formatCurrency(totais.orcado, moeda)}
                     </td>
 
+                    {/* Planejado espelha o Orçado: zero é "R$ 0,00 · 0 · 0",
+                        não travessão. Simetria entre os dois blocos, e a
+                        linha nova não muda de cara ao ser salva. */}
                     <CelulaNumero
                       valor={num(valorAtual(item, "valor_unitario_planejado"))}
                       formato="moeda"
                       moeda={moeda}
-                      vazioComoTraco
                       editando={ativaAqui("valor_unitario_planejado")}
                       editavel={editavel}
                       onAtivar={() =>
@@ -654,7 +643,6 @@ export function ItensTable({
                     />
                     <CelulaNumero
                       valor={num(valorAtual(item, "quantidade_planejada"))}
-                      vazioComoTraco
                       editando={ativaAqui("quantidade_planejada")}
                       editavel={editavel}
                       onAtivar={() =>
@@ -671,7 +659,6 @@ export function ItensTable({
                     />
                     <CelulaNumero
                       valor={num(valorAtual(item, "dias_meses_planejado"))}
-                      vazioComoTraco
                       editando={ativaAqui("dias_meses_planejado")}
                       editavel={editavel}
                       onAtivar={() =>
@@ -687,9 +674,7 @@ export function ItensTable({
                       tdClassName={cn("bg-blue-50/40", GRADE_PLANEJADO)}
                     />
                     <td className="px-3 text-right font-mono text-xs font-semibold bg-blue-50/40 whitespace-nowrap">
-                      {totais.planejado > 0
-                        ? formatCurrency(totais.planejado, moeda)
-                        : "—"}
+                      {formatCurrency(totais.planejado, moeda)}
                     </td>
 
                     <CelulasRentabilidade
@@ -702,7 +687,7 @@ export function ItensTable({
               })}
 
               {/* Linha nova — preenchida na própria grade, sem drawer. */}
-              {draft && (
+              {aberto && draft && (
                 <LinhaDraft
                   draft={draft}
                   moeda={moeda}
@@ -721,9 +706,12 @@ export function ItensTable({
 
             <tfoot>
               <tr>
+                {/* py-1.5: o subtotal fecha a planilha, não precisa do
+                    corpo de antes — fica só um degrau acima da linha de
+                    item (28px) em vez de quase o dobro. */}
                 <td
                   colSpan={3}
-                  className="px-3 py-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"
+                  className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"
                 >
                   Subtotal do grupo
                 </td>
@@ -731,19 +719,19 @@ export function ItensTable({
                   colSpan={3}
                   className="bg-[#f1f0ec] border-l-2 border-l-[#d7d7d7] border-t-2 border-t-[#282828]"
                 />
-                <td className="px-3 py-3 text-right whitespace-nowrap font-mono text-[13px] font-bold text-foreground bg-[#f1f0ec] border-t-2 border-t-[#282828]">
+                <td className="px-3 py-1.5 text-right whitespace-nowrap font-mono text-[13px] font-bold text-foreground bg-[#f1f0ec] border-t-2 border-t-[#282828]">
                   {formatCurrency(subtotalOrcado, moeda)}
                 </td>
                 <td
                   colSpan={3}
                   className="bg-[#e8f0fd] border-l-2 border-l-[#b9d1f4] border-t-2 border-t-[#2f6fdb]"
                 />
-                <td className="px-3 py-3 text-right whitespace-nowrap font-mono text-[13px] font-bold text-[#1e4fa3] bg-[#e8f0fd] border-t-2 border-t-[#2f6fdb]">
+                <td className="px-3 py-1.5 text-right whitespace-nowrap font-mono text-[13px] font-bold text-[#1e4fa3] bg-[#e8f0fd] border-t-2 border-t-[#2f6fdb]">
                   {formatCurrency(subtotalPlanejado, moeda)}
                 </td>
                 <td
                   className={cn(
-                    "px-3 py-3 text-right whitespace-nowrap font-mono text-xs font-semibold bg-emerald-50 border-l-2 border-l-[#d7d7d7] border-t-2 border-t-emerald-600",
+                    "px-3 py-1.5 text-right whitespace-nowrap font-mono text-xs font-semibold bg-emerald-50 border-l-2 border-l-[#d7d7d7] border-t-2 border-t-emerald-600",
                     GRADE_RENTAB,
                     resultado >= 0 ? "text-emerald-700" : "text-california-red",
                   )}
@@ -752,7 +740,7 @@ export function ItensTable({
                 </td>
                 <td
                   className={cn(
-                    "px-3 py-3 text-right whitespace-nowrap font-mono text-xs font-semibold bg-emerald-50 border-t-2 border-t-emerald-600",
+                    "px-3 py-1.5 text-right whitespace-nowrap font-mono text-xs font-semibold bg-emerald-50 border-t-2 border-t-emerald-600",
                     resultado >= 0 ? "text-emerald-700" : "text-california-red",
                   )}
                 >
@@ -766,7 +754,7 @@ export function ItensTable({
 
               {/* "Novo item" vem DEPOIS do subtotal (decisão do time,
                   27/07/2026) — o handoff original pedia acima dele. */}
-              {editavel && (
+              {aberto && editavel && (
                 <tr>
                   {/* border-t fecha a base da grade: o subtotal é a última
                       linha da planilha, e o "Novo item" fica fora dela. */}
@@ -793,7 +781,9 @@ export function ItensTable({
           </table>
         </div>
 
-        {editavel && (
+        {/* A dica só faz sentido com células à vista — com o grupo recolhido
+            ela apontaria para uma grade que não está lá. */}
+        {aberto && editavel && (
           <div className="flex items-center justify-between gap-4 border-t border-border bg-muted/40 px-6 py-3 rounded-b-2xl">
             <span className="text-[11px] text-muted-foreground">
               Clique em qualquer célula para editar ·{" "}
@@ -935,7 +925,6 @@ function CelulaNumero({
   valor,
   formato,
   moeda,
-  vazioComoTraco,
   editando,
   editavel,
   onAtivar,
@@ -946,7 +935,6 @@ function CelulaNumero({
   valor: number;
   formato?: "moeda";
   moeda?: string;
-  vazioComoTraco?: boolean;
   editando: boolean;
   editavel: boolean;
   onAtivar: () => void;
@@ -985,24 +973,17 @@ function CelulaNumero({
     );
   }
 
-  const mostrarTraco = vazioComoTraco && valor <= 0;
-
   return (
     <td
       className={cn(
         TD_BASE,
-        tdClassName,
         "px-3 text-right whitespace-nowrap",
+        tdClassName,
         editavel && "cursor-pointer",
-        mostrarTraco && "text-muted-foreground",
       )}
       onClick={editavel ? onAtivar : undefined}
     >
-      {mostrarTraco
-        ? "—"
-        : formato === "moeda"
-          ? formatCurrency(valor, moeda)
-          : valor}
+      {formato === "moeda" ? formatCurrency(valor, moeda) : valor}
     </td>
   );
 }
@@ -1063,8 +1044,10 @@ function CelulaSelect({
   }
 
   return (
+    // px-3 antes de tdClassName: a coluna Tipo tem só 4,5% da largura e
+    // precisa reduzir o padding para o badge não ser cortado.
     <td
-      className={cn(TD_BASE, tdClassName, "px-3", editavel && "cursor-pointer")}
+      className={cn(TD_BASE, "px-3", tdClassName, editavel && "cursor-pointer")}
       onClick={editavel ? onAtivar : undefined}
     >
       <div className="max-w-[160px] truncate">{children}</div>
@@ -1128,9 +1111,11 @@ function LinhaDraft({
         onAtivar={() => onAtivar("tipo_custo")}
         onConfirmar={(v) => onConfirmarTexto("tipo_custo", v)}
         onFechar={onFechar}
-        tdClassName={GRADE_NEUTRA}
+        tdClassName={cn(GRADE_NEUTRA, "px-2")}
       >
-        <Badge variant="outline">{draft.tipo_custo}</Badge>
+        <Badge variant="outline" className="px-1.5">
+          {draft.tipo_custo}
+        </Badge>
       </CelulaSelect>
       <CelulaSelect
         editando={ativaAqui("categoria_id")}
@@ -1195,11 +1180,12 @@ function LinhaDraft({
         {formatCurrency(totalOrcado, moeda)}
       </td>
 
+      {/* Sem vazioComoTraco: na linha nova o planejado espelha o orçado —
+          R$ 0,00 · 1 · 1 em vez de três travessões. */}
       <CelulaNumero
         valor={draft.valor_unitario_planejado}
         formato="moeda"
         moeda={moeda}
-        vazioComoTraco
         editando={ativaAqui("valor_unitario_planejado")}
         editavel
         onAtivar={() => onAtivar("valor_unitario_planejado")}
@@ -1212,7 +1198,6 @@ function LinhaDraft({
       />
       <CelulaNumero
         valor={draft.quantidade_planejada}
-        vazioComoTraco
         editando={ativaAqui("quantidade_planejada")}
         editavel
         onAtivar={() => onAtivar("quantidade_planejada")}
@@ -1222,7 +1207,6 @@ function LinhaDraft({
       />
       <CelulaNumero
         valor={draft.dias_meses_planejado}
-        vazioComoTraco
         editando={ativaAqui("dias_meses_planejado")}
         editavel
         onAtivar={() => onAtivar("dias_meses_planejado")}
@@ -1231,7 +1215,7 @@ function LinhaDraft({
         tdClassName={cn("bg-blue-50/40", GRADE_PLANEJADO)}
       />
       <td className="px-3 text-right font-mono text-xs font-semibold bg-blue-50/40 whitespace-nowrap">
-        {totalPlanejado > 0 ? formatCurrency(totalPlanejado, moeda) : "—"}
+        {formatCurrency(totalPlanejado, moeda)}
       </td>
 
       <CelulasRentabilidade

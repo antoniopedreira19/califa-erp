@@ -3,8 +3,14 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, FileText, Plus } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
-import { listActiveMembers } from "@/lib/data/members";
-import type { CategoriaDominio, Cliente, Orcamento, Projeto } from "@/lib/types";
+import type {
+  CategoriaDominio,
+  Cidade,
+  Cliente,
+  Orcamento,
+  Projeto,
+  Regional,
+} from "@/lib/types";
 import { projetoStatusLabel } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -33,11 +39,11 @@ export default async function ProjetoDetailPage({
   const session = await requireSession();
   const supabase = createClient();
 
-  const [projRes, orcsRes, clientesRes, responsaveis, categoriasProjRes, categoriasOrcRes] = await Promise.all([
+  const [projRes, orcsRes, clientesRes, regionaisRes, cidadesRes, categoriasProjRes, categoriasOrcRes] = await Promise.all([
     supabase
       .from("projetos")
       .select(
-        "id, tenant_id, codigo, nome, campanha, status, cliente_id, responsavel_id, categoria_id, data_inicio_prevista, created_by, created_at, updated_at, cliente:clientes(id, nome_fantasia), responsavel:profiles!responsavel_id(id, nome), categoria:categorias_dominio(id, nome)",
+        "id, tenant_id, codigo, nome, campanha, status, cliente_id, responsavel_id, regional_id, cidade_id, categoria_id, data_inicio_prevista, data_fim_prevista, descricao, created_by, created_at, updated_at, cliente:clientes(id, nome_fantasia), responsavel:profiles!responsavel_id(id, nome), regional:regionais(id, nome), cidade:cidades(id, nome), categoria:categorias_dominio(id, nome)",
       )
       .eq("id", params.projetoId)
       .eq("tenant_id", session.activeTenant.id)
@@ -54,7 +60,18 @@ export default async function ProjetoDetailPage({
       .eq("tenant_id", session.activeTenant.id)
       .eq("status", "ativo")
       .order("nome_fantasia"),
-    listActiveMembers(session.activeTenant.id),
+    supabase
+      .from("regionais")
+      .select("id, nome")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("ativo", true)
+      .order("nome"),
+    supabase
+      .from("cidades")
+      .select("id, nome")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("ativo", true)
+      .order("nome"),
     supabase
       .from("categorias_dominio")
       .select("id, nome")
@@ -84,16 +101,24 @@ export default async function ProjetoDetailPage({
     status: raw.status,
     cliente_id: raw.cliente_id,
     responsavel_id: raw.responsavel_id,
+    regional_id: raw.regional_id,
+    cidade_id: raw.cidade_id,
     categoria_id: raw.categoria_id,
     data_inicio_prevista: raw.data_inicio_prevista,
+    data_fim_prevista: raw.data_fim_prevista,
+    descricao: raw.descricao,
     created_by: raw.created_by,
     created_at: raw.created_at,
     updated_at: raw.updated_at,
   };
   const clienteNome: string | null = raw.cliente?.nome_fantasia ?? null;
   const responsavelNome: string | null = raw.responsavel?.nome ?? null;
+  const regionalNome: string | null = raw.regional?.nome ?? null;
+  const cidadeNome: string | null = raw.cidade?.nome ?? null;
   const categoriaNome: string | null = raw.categoria?.nome ?? null;
 
+  const regionais = (regionaisRes.data ?? []) as Pick<Regional, "id" | "nome">[];
+  const cidades = (cidadesRes.data ?? []) as Pick<Cidade, "id" | "nome">[];
   const categoriasProjeto = (categoriasProjRes.data ?? []) as Pick<CategoriaDominio, "id" | "nome">[];
   const categoriasOrcamento = (categoriasOrcRes.data ?? []) as Pick<CategoriaDominio, "id" | "nome">[];
 
@@ -152,7 +177,8 @@ export default async function ProjetoDetailPage({
             <ProjetoEditorDrawer
               projeto={projeto}
               clientes={clientes}
-              responsaveis={responsaveis}
+              regionais={regionais}
+              cidades={cidades}
               categorias={categoriasProjeto}
             />
           </div>
@@ -163,14 +189,39 @@ export default async function ProjetoDetailPage({
               <span className="text-foreground font-medium">{clienteNome ?? "—"}</span>
             </span>
             <span aria-hidden className="text-border">·</span>
+            {/* "Criado por" e não "Responsável": o campo saiu do formulário
+                e passou a ser preenchido com quem criou o projeto. */}
             <span>
-              <span className="text-foreground/60">Responsável:</span>{" "}
+              <span className="text-foreground/60">Criado por:</span>{" "}
               <span className="text-foreground font-medium">{responsavelNome ?? "—"}</span>
             </span>
+            {regionalNome && (
+              <>
+                <span aria-hidden className="text-border">·</span>
+                <span>
+                  <span className="text-foreground/60">Regional:</span>{" "}
+                  <span className="text-foreground font-medium">{regionalNome}</span>
+                </span>
+              </>
+            )}
+            {cidadeNome && (
+              <>
+                <span aria-hidden className="text-border">·</span>
+                <span>
+                  <span className="text-foreground/60">Cidade:</span>{" "}
+                  <span className="text-foreground font-medium">{cidadeNome}</span>
+                </span>
+              </>
+            )}
             <span aria-hidden className="text-border">·</span>
             <span>
-              <span className="text-foreground/60">Início previsto:</span>{" "}
-              <span className="text-foreground font-medium">{formatDate(projeto.data_inicio_prevista)}</span>
+              <span className="text-foreground/60">Período:</span>{" "}
+              <span className="text-foreground font-medium">
+                {formatDate(projeto.data_inicio_prevista)}
+                {projeto.data_fim_prevista
+                  ? ` — ${formatDate(projeto.data_fim_prevista)}`
+                  : ""}
+              </span>
             </span>
             {categoriaNome && (
               <>

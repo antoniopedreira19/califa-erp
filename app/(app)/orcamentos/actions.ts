@@ -13,14 +13,21 @@ export type ActionResult =
   | { ok: false; message: string; fieldErrors?: Record<string, string[]> };
 
 function extractInput(formData: FormData) {
-  return {
+  const base = {
     nome: formData.get("nome")?.toString() ?? "",
-    campanha: formData.get("campanha")?.toString() ?? "",
     cliente_id: formData.get("cliente_id")?.toString() ?? "",
-    responsavel_id: formData.get("responsavel_id")?.toString() ?? "",
-    data_inicio_prevista: formData.get("data_inicio_prevista")?.toString() ?? "",
+    regional_id: formData.get("regional_id")?.toString() ?? "",
+    cidade_id: formData.get("cidade_id")?.toString() ?? "",
     categoria_id: formData.get("categoria_id")?.toString() ?? "",
+    data_inicio_prevista: formData.get("data_inicio_prevista")?.toString() ?? "",
+    data_fim_prevista: formData.get("data_fim_prevista")?.toString() ?? "",
+    descricao: formData.get("descricao")?.toString() ?? "",
   };
+  // Campanha saiu do formulário (handoff 30/07/2026). Só entra no input
+  // se o form realmente mandar o campo — ver `atualizarProjeto`.
+  return formData.has("campanha")
+    ? { ...base, campanha: formData.get("campanha")?.toString() ?? "" }
+    : base;
 }
 
 function mapDbError(msg: string): string {
@@ -32,6 +39,15 @@ function mapDbError(msg: string): string {
   }
   if (msg.includes("projetos_responsavel_id_fkey")) {
     return "Responsável inválido.";
+  }
+  if (msg.includes("projetos_regional_id_fkey")) {
+    return "Regional inválida.";
+  }
+  if (msg.includes("projetos_cidade_id_fkey")) {
+    return "Cidade inválida.";
+  }
+  if (msg.includes("projetos_fim_apos_inicio")) {
+    return "A data final não pode ser anterior à data de início.";
   }
   return "Não foi possível salvar. Tente novamente.";
 }
@@ -68,6 +84,9 @@ export async function criarProjeto(formData: FormData): Promise<ActionResult> {
       ...parsed.data,
       codigo,
       tenant_id: session.activeTenant.id,
+      // Coluna NOT NULL que saiu da tela: quem cria é o responsável.
+      // `profiles.id` é o próprio id do auth.users, então serve às duas.
+      responsavel_id: session.profile.id,
       created_by: session.profile.id,
     })
     .select("id")
@@ -107,11 +126,19 @@ export async function atualizarProjeto(
 
   const supabase = createClient();
 
+  // Campanha saiu do formulário mas a coluna e os dados continuam.
+  // Não basta o campo ser opcional no Zod: o transform devolve `null`
+  // para entrada ausente, então a chave entraria no UPDATE e zeraria o
+  // valor gravado. Removemos explicitamente quando o form não a envia.
+  // `responsavel_id` nem chega aqui: quem criou o projeto não muda.
+  const { campanha: _campanha, ...semCampanha } = parsed.data;
+  const payload = formData.has("campanha") ? parsed.data : semCampanha;
+
   // Confirma que o projeto pertence ao tenant do usuário (RLS já filtra,
   // mas explicitamos no where pra clareza).
   const { error } = await supabase
     .from("projetos")
-    .update(parsed.data)
+    .update(payload)
     .eq("id", id)
     .eq("tenant_id", session.activeTenant.id);
 
