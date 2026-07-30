@@ -100,3 +100,31 @@ export function calcularTotaisPlanejados(
 
   return { totalOrcado, totalPlanejado, rentabilidade, percentualRentabilidade };
 }
+
+/**
+ * Soma dos totais realizados por item.
+ * Usado pelo card de Totais do job e por subtotal do grupo.
+ */
+export function calcularTotaisRealizado(
+  itens: { total_realizado: number }[],
+): { totalRealizado: number } {
+  const totalRealizado = itens.reduce(
+    (s, i) => s + Number(i.total_realizado ?? 0),
+    0,
+  );
+  return { totalRealizado };
+}
+
+/**
+ * Variacao Realizado vs Planejado.
+ * - variacaoRS: realizado - planejado (positivo = estouro; negativo = economia)
+ * - variacaoPct: relativo ao planejado. null quando planejado eh 0 (sem base).
+ */
+export function calcularVariacao(
+  realizado: number,
+  planejado: number,
+): { variacaoRS: number; variacaoPct: number | null } {
+  const variacaoRS = realizado - planejado;
+  const variacaoPct = planejado > 0 ? (variacaoRS / planejado) * 100 : null;
+  return { variacaoRS, variacaoPct };
+}
