@@ -30,6 +30,12 @@ function mapDbError(msg: string): string {
   if (msg.includes("clientes_cnpj_only_digits")) {
     return "CNPJ deve conter apenas dígitos.";
   }
+  if (msg.includes("chk_clientes_codigo_curto_formato")) {
+    return "Código deve ter 2 a 6 letras maiúsculas (A-Z), sem números ou símbolos.";
+  }
+  if (msg.includes("uniq_clientes_codigo_curto_por_tenant")) {
+    return "Já existe um cliente com este código neste tenant.";
+  }
   return "Não foi possível salvar. Tente novamente.";
 }
 
