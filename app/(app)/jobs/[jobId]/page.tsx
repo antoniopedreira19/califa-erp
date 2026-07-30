@@ -14,6 +14,7 @@ import { StatusActions } from "./status-actions";
 import { ReenviarAprovacaoButton } from "./reenviar-aprovacao-button";
 import { AprovarRejeitarButtons } from "./aprovar-rejeitar-buttons";
 import { JobRealizadoSection } from "./realizado/job-realizado-section";
+import { JobTabs } from "./job-tabs";
 import type {
   VersaoOrcamentoGrupo,
   VersaoOrcamentoItem,
@@ -200,7 +201,7 @@ export default async function JobDetailPage({
     (job.status === "aberto" || job.status === "em_producao");
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
+    <div className="space-y-6 max-w-7xl mx-auto">
       <div>
         <Link
           href={`/orcamentos/${raw.projeto_id}/${raw.orcamento_id}`}
@@ -239,7 +240,9 @@ export default async function JobDetailPage({
         </div>
       )}
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <JobTabs
+        info={
+          <div className="grid gap-4 md:grid-cols-2">
         <div className="rounded-2xl border border-border bg-card p-6 shadow-soft">
           <div className="flex items-center gap-2 mb-4">
             <Info className="h-4 w-4 text-california-red" />
@@ -377,28 +380,31 @@ export default async function JobDetailPage({
             )}
           </div>
         )}
-      </div>
-
-      <JobRealizadoSection
-        job={{
-          id: job.id,
-          status: job.status,
-          projeto_id: job.projeto_id,
-          orcamento_id: job.orcamento_id,
-          versao_orcamento_aprovada_id: job.versao_orcamento_aprovada_id,
-        }}
-        versao={{
-          id: versaoAprovada.id,
-          numero_versao: versaoAprovada.numero_versao,
-          nome: versaoAprovada.nome,
-          moeda: versaoAprovada.moeda,
-          percentual_honorarios: Number(versaoAprovada.percentual_honorarios),
-          percentual_imposto: Number(versaoAprovada.percentual_imposto),
-        }}
-        grupos={grupos}
-        itens={itens}
-        realizadosMap={realizadosMap}
-        editable={podeEditarRealizado}
+          </div>
+        }
+        rentabilidade={
+          <JobRealizadoSection
+            job={{
+              id: job.id,
+              status: job.status,
+              projeto_id: job.projeto_id,
+              orcamento_id: job.orcamento_id,
+              versao_orcamento_aprovada_id: job.versao_orcamento_aprovada_id,
+            }}
+            versao={{
+              id: versaoAprovada.id,
+              numero_versao: versaoAprovada.numero_versao,
+              nome: versaoAprovada.nome,
+              moeda: versaoAprovada.moeda,
+              percentual_honorarios: Number(versaoAprovada.percentual_honorarios),
+              percentual_imposto: Number(versaoAprovada.percentual_imposto),
+            }}
+            grupos={grupos}
+            itens={itens}
+            realizadosMap={realizadosMap}
+            editable={podeEditarRealizado}
+          />
+        }
       />
     </div>
   );

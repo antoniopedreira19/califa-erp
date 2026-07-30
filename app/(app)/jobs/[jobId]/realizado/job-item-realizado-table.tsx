@@ -21,7 +21,7 @@ type CelulaAtiva = { itemId: string; campo: CampoRealizado } | null;
 type Overrides = Record<string, Partial<Record<CampoRealizado, number>>>;
 
 const ALTURA_LINHA = "h-9";
-const LARGURA_MINIMA = "min-w-[1100px]";
+const LARGURA_MINIMA = "min-w-[960px]";
 
 const GRADE_NEUTRA = "border-r border-r-[#f1f1f1]";
 const GRADE_ORCADO = "border-r border-r-[#eceae5]";
@@ -53,25 +53,26 @@ function formatarPercentual(p: number): string {
 function ColunasFixas() {
   return (
     <colgroup>
+      {/* Item absorve o resto (~13%); Tipo estreito; blocos proporcionais. */}
       <col />
-      <col className="w-[5%]" />
+      <col className="w-[4.5%]" />
       {/* Orcado */}
-      <col className="w-[9%]" />
-      <col className="w-[4%]" />
-      <col className="w-[4%]" />
-      <col className="w-[10%]" />
+      <col className="w-[8.5%]" />
+      <col className="w-[3%]" />
+      <col className="w-[3%]" />
+      <col className="w-[9.5%]" />
       {/* Planejado */}
-      <col className="w-[9%]" />
-      <col className="w-[4%]" />
-      <col className="w-[4%]" />
-      <col className="w-[10%]" />
+      <col className="w-[8.5%]" />
+      <col className="w-[3%]" />
+      <col className="w-[3%]" />
+      <col className="w-[9.5%]" />
       {/* Realizado */}
-      <col className="w-[9%]" />
-      <col className="w-[4%]" />
-      <col className="w-[4%]" />
-      <col className="w-[10%]" />
+      <col className="w-[8.5%]" />
+      <col className="w-[3%]" />
+      <col className="w-[3%]" />
+      <col className="w-[9.5%]" />
       {/* Variacao */}
-      <col className="w-[7%]" />
+      <col className="w-[6%]" />
       <col className="w-[6%]" />
     </colgroup>
   );
