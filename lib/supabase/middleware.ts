@@ -12,6 +12,9 @@ export async function updateSession(request: NextRequest) {
 
   const isPublicRoute =
     path === "/login" ||
+    path === "/esqueci-senha" ||
+    path === "/resetar-senha" ||
+    path === "/definir-senha" ||
     path.startsWith("/api/auth/") ||
     path.startsWith("/_next") ||
     path.startsWith("/favicon");
