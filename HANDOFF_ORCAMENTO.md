@@ -1,9 +1,11 @@
-# Handoff — Versão do orçamento: destaque de versão + edição na planilha
+# Handoff — Orçamentos: versão, grade de itens e formulário de projeto
 
-Registro da implementação do design handoff aprovado para o módulo de Orçamentos.
+Registro da implementação dos design handoffs aprovados para o módulo de Orçamentos.
 
-**Data:** 2026-07-27
-**Origem do design:** pacote `design_handoff_califa/` (`Versoes - Destaque v4.dc.html` opção 2a, `Orcamento - Edicao Inline.dc.html` opção 3b, `README.md`, `IMPLEMENTACAO.md`). A pasta fica **só na máquina local** — está no `.gitignore` por ser referência de design, não código.
+**Datas:** 2026-07-27 (entregas 1–3) · 2026-07-30 (entregas 4–5)
+**Origem do design:**
+- Entregas 1–3: pacote `design_handoff_califa/` (`Versoes - Destaque v4.dc.html` opção 2a, `Orcamento - Edicao Inline.dc.html` opção 3b, `README.md`, `IMPLEMENTACAO.md`). A pasta fica **só na máquina local** — está no `.gitignore` por ser referência de design, não código.
+- Entregas 4–5: projeto Claude Design `69342d83-28d9-4bea-a8af-c99e233f5f13` (`Orcamento - Versao -final-.dc.html` e `Novo projeto.dc.html`), lido via MCP `claude_design`.
 
 ---
 
@@ -14,8 +16,11 @@ Registro da implementação do design handoff aprovado para o módulo de Orçame
 | **1 — Destaque da versão mais recente** | ✅ `6738422` |
 | **2 — Edição tipo planilha nos itens** | ✅ `cdb2853` |
 | **3 — Alinhamento da grade, rentabilidade e card de "Totais"** | ✅ `b2003f7` + `497b8e7` |
+| **4 — Recolher grupos, alinhar Totais e densificar a grade** | ✅ `8e0b674` (2026-07-30) |
+| **5 — Cadastro de cidades e novos campos do projeto** | ✅ `962be97` (2026-07-30) |
 
-`tsc --noEmit` e `next lint` limpos nas três.
+`tsc --noEmit` e `next lint` limpos em todas. Entregas 4 e 5 também com
+`next build` completo.
 
 ---
 
@@ -36,7 +41,7 @@ Verificado no DOM: v5 com os estilos de destaque, v1–v4 idênticas à produç�
 
 ---
 
-## 3. Entrega 2 — edição tipo planilha (pendente de commit)
+## 3. Entrega 2 — edição tipo planilha
 
 ### Arquivos
 
@@ -214,9 +219,199 @@ Cores computadas conferidas contra o spec do design: `#f1f0ec`, `#e8f0fd`/`#1e4f
 
 ---
 
-## 5. Próximos passos
+## 5. Entrega 4 — recolher grupos, alinhar Totais, densificar a grade
+
+**Data:** 2026-07-30 · **Commit:** `8e0b674`
+**Origem do design:** projeto Claude Design `69342d83`, arquivo `Orcamento - Versao -final-.dc.html`.
+
+O cabeçalho da página e a grade de itens já batiam com o handoff. As
+diferenças reais eram cinco.
+
+### Arquivos
+
+| Arquivo | Mudança |
+|---|---|
+| [`grupos-section.tsx`](app/(app)/orcamentos/[projetoId]/[orcId]/versoes/[versaoId]/grupos-section.tsx) | **novo** — segura o estado de recolhimento e o botão global |
+| [`grade-colunas.tsx`](app/(app)/orcamentos/[projetoId]/[orcId]/versoes/[versaoId]/grade-colunas.tsx) | **novo** — `ColunasFixas` + `LARGURA_MINIMA` compartilhados |
+| [`grupo-card.tsx`](app/(app)/orcamentos/[projetoId]/[orcId]/versoes/[versaoId]/grupo-card.tsx) | chevron, badge "N itens ocultos", repasse do estado |
+| [`itens-table.tsx`](app/(app)/orcamentos/[projetoId]/[orcId]/versoes/[versaoId]/itens-table.tsx) | prop `aberto`, altura de linha, badge de Tipo, Planejado sem travessão |
+| [`totais-card.tsx`](app/(app)/orcamentos/[projetoId]/[orcId]/versoes/[versaoId]/totais-card.tsx) | tabela de 5 → 13 colunas |
+| [`[versaoId]/page.tsx`](app/(app)/orcamentos/[projetoId]/[orcId]/versoes/[versaoId]/page.tsx) | Totais entra na calha dos grupos; espaçamento 16 → 24px |
+
+### Recolher/expandir
+
+- Chevron de 24px no header, girando −90° quando fechado; badge
+  "N itens ocultos" ao lado do nome.
+- Botão global **à esquerda, logo abaixo da contagem de grupos** — o
+  handoff o punha ao lado de "Novo grupo"; a posição foi pedida pelo time.
+- Rótulo segue *"tem algum aberto?"*: basta um grupo aberto para oferecer
+  "Recolher todos". O handoff tem um grupo só, então não resolvia o
+  estado misto.
+- **Sem persistência**, fiel ao handoff (`state = { aberto: true }`).
+- O estado guarda **quem está fechado**, não quem está aberto. Grupo novo
+  nasce aberto sem precisar sincronizar quando a lista muda.
+- Recolhido esconde linhas, "Novo item" e trilha de ações. **O subtotal
+  continua visível** — é o dado que justifica recolher. O cabeçalho de
+  colunas também fica, senão o subtotal vira número sem coluna.
+
+### Alinhamento do card de Totais
+
+O ponto da entrega: as colunas Total / Rentab. / % do Totais têm que cair
+sob as mesmas colunas dos cards de grupo.
+
+- `ColunasFixas` e `LARGURA_MINIMA` saíram de `itens-table.tsx` para
+  `grade-colunas.tsx` **sem `"use client"`** — a tabela de itens é client
+  e o card de Totais é server; um arquivo neutro serve aos dois.
+- Totais passou de 5 para as mesmas 13 colunas, com `colSpan` vazios nas
+  colunas de detalhe (unitário, QT, D/M).
+- **Totais entrou na calha `pr-12`**, junto com os grupos. Sem isso ele
+  fica 48px mais largo e as colunas nunca alinhariam, por mais que o
+  `colgroup` fosse igual.
+
+Medido no DOM com dados reais — as duas tabelas partem de 263px com
+1102px de largura:
+
+| Coluna | Grupo | Totais |
+|---|---|---|
+| Total (Orçado) | 770→891 | 770→891 |
+| Total (Planejado) | 1078→1200 | 1078→1200 |
+| Rentab. R$ | 1200→1304 | 1200→1304 |
+| % | 1304→1365 | 1304→1365 |
+
+### Densidade e correções
+
+- **Linha 36px → 28px** (`h-7`). O handoff pedia 25px; 28 é o menor valor
+  que ainda comporta o botão da trilha (ícone 14px + padding 6px = 26px) e
+  mantém o alvo de clique acima do mínimo de 24px da WCAG 2.5.8. A 25px o
+  botão estouraria o slot e teria que cair para 22px, abaixo do mínimo.
+  Campo inline acompanhou: 28 → 26px.
+- **Subtotal do grupo** `py-3` → `py-1.5`, de ~46px para 34px — um degrau
+  acima da linha de item, não o dobro.
+- **Badge de Tipo cortado.** A coluna tem 4,5% de 1060px ≈ 48px; a célula
+  usava `px-3` (24px) e o badge `px-2.5` (20px + borda), pedindo ~29px num
+  vão de ~24px. Ajustado para 8px na célula e 6px no badge, como no
+  handoff. Medido depois: badge 448→470 dentro da célula 439→489.
+  Para o override funcionar, `CelulaSelect` passou a aplicar `px-3` **antes**
+  de `tdClassName` — com `tailwind-merge`, a última classe vence.
+- **Planejado espelha o Orçado.** Linha nova nasce `R$ 0,00 · 1 · 1` (era
+  `0 · 0 · 0`) e zero passa a exibir `R$ 0,00` em vez de travessão em
+  **todas** as linhas. Sem isso o R$ Unit. saltaria de "R$ 0,00" para "—"
+  no instante em que a linha fosse salva. `vazioComoTraco` ficou sem
+  chamador e foi removida.
+  **Efeito colateral aceito:** itens antigos sem planejamento perdem o
+  sinal visual de "ainda não planejado" e passam a ler `0 · 0`.
+
+### Divergência assumida do handoff
+
+A barra "Clique em qualquer célula para editar" **some com o grupo
+recolhido**. O handoff a mantém sempre visível, mas ali ela aponta para
+uma grade que não está na tela.
+
+---
+
+## 6. Entrega 5 — cadastro de cidades e novos campos do projeto
+
+**Data:** 2026-07-30 · **Commit:** `962be97`
+**Origem do design:** projeto Claude Design `69342d83`, arquivo `Novo projeto.dc.html`.
+
+Não era mudança cosmética: o handoff pedia campos que não existiam na
+tabela `projetos`.
+
+| Campo | Handoff | Antes | Coluna |
+|---|---|---|---|
+| Nome, Cliente, Início previsto | obrigatórios | já existiam | ✓ |
+| **Regional** | obrigatório | ausente | **criada** |
+| **Cidade** | obrigatório, *select* | ausente | **criada** (FK) |
+| **Final previsto** | obrigatório | ausente | **criada** |
+| **Descrição** | opcional, 600 | ausente | **criada** |
+| Categoria | **obrigatório** | opcional | nullable |
+| Campanha | ausente | no form | mantida no banco |
+| Responsável | ausente | obrigatório | NOT NULL |
+
+### Decisões do time (30/07/2026)
+
+1. **Responsável** → preenchido com o usuário logado, rótulo passa a
+   "Criado por". A coluna continua `responsavel_id`: renomear colidiria
+   com o `created_by` que já existe (aponta para `auth.users`) e
+   obrigaria a tocar toda query que a referencia. `profiles.id` **é** o
+   id do `auth.users`, então o mesmo valor serve às duas colunas.
+2. **Cidade** → cadastro próprio, semeado só com Salvador e São Paulo.
+   A carga completa fica para task futura.
+3. **Campanha** → sai da tela, coluna e dados preservados. A busca da
+   lista de projetos ainda casa por campanha.
+4. **Obrigatoriedade** → só no Zod. As colunas nascem nullable porque já
+   existem projetos gravados e um NOT NULL exigiria backfill.
+
+### Banco — migration `20260730000001_cidades_e_campos_projeto.sql`
+
+- Tabela `cidades` no mesmo padrão de `regionais`: RLS por
+  `is_tenant_member`, grants para `authenticated`, índice único
+  `(tenant_id, lower(nome))`, trigger de `updated_at`, **sem DELETE**
+  (soft-delete via `ativo`).
+- `projetos` ganha `regional_id`, `cidade_id`, `data_fim_prevista` e
+  `descricao`, mais índices nas FKs.
+- CHECKs de `data_fim >= data_inicio` e `descricao <= 600` — regra crítica
+  não pode viver só no formulário.
+
+**Diferença deliberada em relação a `jobs`:** lá `cidade` é texto livre
+(`Input`, máx. 120); no projeto virou FK, para padronizar o dado antes de
+a base crescer. `regional_id` e `data_fim_prevista` já existiam em `jobs`
+e agora sobem para o projeto.
+
+**Aplicação.** Rodada via Supabase Management API
+(`POST /v1/projects/{ref}/database/query`) com o PAT do `mcp.json`, com
+aval explícito. Verificado depois: 2 cidades semeadas, as 4 colunas
+nullable, RLS ativo e grants `SELECT,INSERT,UPDATE` para `authenticated`.
+
+### Arquivos
+
+| Arquivo | Mudança |
+|---|---|
+| [`cadastros/cidades/`](app/(app)/cadastros/cidades/) | **novo** — lista, drawer e actions espelhando regionais |
+| [`lib/validations/cidades.ts`](lib/validations/cidades.ts) | **novo** |
+| [`projeto-form.tsx`](app/(app)/orcamentos/projeto-form.tsx) | layout do handoff, realce de erro, contador |
+| [`orcamentos/actions.ts`](app/(app)/orcamentos/actions.ts) | responsável automático, campanha preservada, novos erros de FK |
+| [`lib/validations/projetos.ts`](lib/validations/projetos.ts) | campos novos + `.refine` das datas |
+| `lib/types.ts`, `lib/auth/audit.ts` | tipo `Cidade`, campos do `Projeto`, 4 ações de auditoria |
+| `novo/page.tsx`, `projeto-editor-drawer.tsx`, `[projetoId]/page.tsx`, `projetos-list.tsx`, `cadastros/page.tsx` | queries de regionais/cidades e rótulo "Criado por" |
+
+### Duas armadilhas que só apareceram na verificação
+
+1. **`campanha` seria zerada em toda edição.** Não bastava o campo ser
+   opcional no Zod: o `transform` devolve `null` para entrada ausente,
+   então a chave **entra** no objeto e iria para o `UPDATE`. A remoção
+   passou a ser explícita em `atualizarProjeto` quando o form não envia o
+   campo. Vale para qualquer campo que saia de um formulário compartilhado
+   entre criar e editar.
+2. **Os Selects mostravam erro em inglês.** O Radix monta um
+   `<select required>` nativo escondido; o navegador barrava o envio com
+   *"Please select an item in the list."* antes das mensagens do Zod
+   chegarem. Sem `required` nos Selects, a validação do servidor chega à
+   tela em português com o realce vermelho do handoff. O Zod e os CHECKs
+   continuam garantindo a regra — ela só saiu do navegador.
+
+### Verificação feita
+
+- Selects carregam do banco: Regional "SP" (1 registro), Cidade
+  Salvador/São Paulo, Categoria as 5 semeadas — sem mais "Sem categoria".
+- Submissão incompleta: 6 campos realçados e as mensagens em português,
+  incluindo "Selecione uma categoria para continuar." (texto idêntico ao
+  handoff).
+- Data final anterior à inicial: "A data final não pode ser anterior à
+  data de início." — o `.refine` só dispara com os demais campos válidos.
+
+**Não verificado:** criação bem-sucedida de ponta a ponta. Ela grava um
+projeto real no banco de produção e projeto não tem exclusão, só
+arquivamento.
+
+---
+
+## 7. Próximos passos
 
 1. **Testar o modo `readOnly`** quando existir versão `aprovada` — é o único caminho da Entrega 2 sem prova de execução.
 2. **Remover os `console.log` de timing** temporários — mantidos a pedido, ver `docs/HANDOFF.md` seção 0 item 2. Estão em `[versaoId]/page.tsx`, `[id]/page.tsx` e `importar-actions.ts`.
 3. **Ambiente de desenvolvimento separado no Supabase** — hoje `next dev` escreve em produção (ver seção 4). As migrations em `supabase/migrations/` recriam o schema inteiro.
 4. **Fase 2 da edição inline** (fora de escopo agora): alça de arrastar/preencher, seleção de intervalo, copiar/colar de planilha, navegação por teclado entre células, `⌘Z` global.
+5. **Carga completa de cidades** — hoje só Salvador e São Paulo (Entrega 5, decisão 2).
+6. **Rotacionar o PAT do Supabase.** O `.mcp.json` esteve versionado no commit `69c521d` e foi removido em `65da0b2`; remover do tracking não apaga do histórico. O repositório inteiro, incluindo `mcp.json`, também foi enviado ao projeto do Claude Design. O token segue legível nos dois lugares.
+7. **Criação de projeto de ponta a ponta** — confirmar a gravação de `regional_id`, `cidade_id`, `data_fim_prevista` e `descricao` (Entrega 5).
