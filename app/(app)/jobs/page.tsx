@@ -39,12 +39,17 @@ export default async function JobsPage() {
 
   return (
     <div className="space-y-8">
-      <header className="space-y-1">
+      <header className="space-y-2">
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-california-red">
           Operacao
         </p>
-        <h1 className="text-3xl font-bold tracking-tight">Jobs</h1>
-        <p className="text-sm text-muted-foreground">
+        <div className="flex items-center gap-3">
+          <div className="rounded-lg bg-california-red/10 p-2">
+            <Briefcase className="h-5 w-5 text-california-red" />
+          </div>
+          <h1 className="text-3xl font-bold tracking-tight">Jobs</h1>
+        </div>
+        <p className="text-sm text-muted-foreground max-w-2xl">
           Todos os jobs criados. Aprovados pelo financeiro liberam a gestao do
           realizado.
         </p>

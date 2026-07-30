@@ -8,7 +8,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { roleLabel } from "@/lib/types";
-import { FileText, Briefcase, ShieldCheck } from "lucide-react";
+import { FileText, Briefcase, ShieldCheck, Home } from "lucide-react";
 
 const proximasEntregas = [
   {
@@ -33,9 +33,14 @@ export default async function HomePage() {
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-california-red">
           California ERP
         </p>
-        <h1 className="text-3xl font-bold tracking-tight text-foreground">
-          Bem-vindo, {session.profile.nome.split(" ")[0]}
-        </h1>
+        <div className="flex items-center gap-3">
+          <div className="rounded-lg bg-california-red/10 p-2">
+            <Home className="h-5 w-5 text-california-red" />
+          </div>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">
+            Bem-vindo, {session.profile.nome.split(" ")[0]}
+          </h1>
+        </div>
         <p className="text-sm text-muted-foreground max-w-2xl">
           Fundação, cadastros e orçamentos comerciais no ar. Próximos passos:
           versões de orçamento e criação de job a partir da aprovação.

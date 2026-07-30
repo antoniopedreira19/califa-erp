@@ -83,6 +83,50 @@ Todo container principal de página usa `mx-auto` + `max-w-*` do Tailwind. Só t
 
 Case study: em 2026-07-30 (Task 008), a tela de job foi de `max-w-5xl` (1024px) pra `max-w-7xl` (1280px) porque a planilha 16-col forçava scroll horizontal desnecessário; simultaneamente as páginas de projeto/orçamento/versão foram alinhadas ao mesmo padrão pra evitar salto de largura ao navegar entre elas.
 
+## Header padrão da página
+
+Toda página do app (`app/(app)/**`) começa com um `<header>` que tem sempre 3 elementos: **kicker** (ou breadcrumb) → **ícone + título** → **descrição**. O ícone fica num quadrado arredondado com fundo `bg-california-red/10` — dá reconhecimento visual imediato à seção, matching a sidebar.
+
+**Padrão canônico** (usado em `/financeiro`, `/home`, `/cadastros`, `/orcamentos`, `/jobs`, `/admin`):
+
+```tsx
+<header className="space-y-2">
+  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-california-red">
+    {KICKER}
+  </p>
+  <div className="flex items-center gap-3">
+    <div className="rounded-lg bg-california-red/10 p-2">
+      <ICON className="h-5 w-5 text-california-red" />
+    </div>
+    <h1 className="text-3xl font-bold tracking-tight">{TITULO}</h1>
+  </div>
+  <p className="text-sm text-muted-foreground max-w-2xl">
+    {DESCRICAO}
+  </p>
+</header>
+```
+
+**Regras por tipo de página:**
+
+| Tipo | Padrão | Kicker/breadcrumb | Icon+title | Descrição |
+|------|--------|-------------------|------------|-----------|
+| Top-level (rota direta da sidebar) | Kicker + icon + title | Kicker (ex: "Comercial", "Operacao", "Financeiro") | ✅ | ✅ curta |
+| Sub-page (rota abaixo de hub) | Breadcrumb + icon + title | Breadcrumb com `Cadastros › X` | ✅ | ✅ curta |
+| Detalhe (entidade específica) | Breadcrumb `← Voltar` + código + nome + badge | `← Voltar para {contexto}` | ❌ | opcional |
+| Formulário `novo`/`editar` | Breadcrumb `← Voltar` + título simples | `← Voltar para {lista}` | ❌ | opcional |
+
+**Escolha do ícone:** usar o MESMO ícone que aparece na sidebar (top-level) ou no card do hub (sub-pages). Consistência sidebar↔header é o que dá o "sentido de lugar" ao usuário.
+
+Mapa atual:
+- `/home` → `Home`
+- `/cadastros` → `FolderKanban` · `/clientes` → `Users` · `/fornecedores` → `Building2` · `/categorias` → `Tag` · `/cadastros/regionais` → `MapPin` · `/cadastros/categorias-dominio` → `Layers`
+- `/orcamentos` → `FileText`
+- `/jobs` → `Briefcase`
+- `/financeiro` → `Landmark` · `/financeiro/jobs-aguardando-abertura` → `Clock`
+- `/admin` → `ShieldCheck` · `/admin/usuarios` → `Users`
+
+**Case study** (2026-07-30): 8 páginas top-level e sub-hub estavam com kicker/breadcrumb + título sem ícone, quebrando o reconhecimento visual. Padronizado em massa; `/financeiro` que já tinha o padrão virou referência.
+
 ## Componentes
 
 Usar shadcn/ui como base e adaptar ao padrão visual do RH:

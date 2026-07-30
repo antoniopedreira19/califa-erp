@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Users, Building2, Tag, Layers, MapPin, ArrowRight, type LucideIcon } from "lucide-react";
+import { Users, Building2, Tag, Layers, MapPin, ArrowRight, FolderKanban, type LucideIcon } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 
@@ -50,7 +50,12 @@ export default async function CadastrosPage() {
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-california-red">
           Cadastros
         </p>
-        <h1 className="text-3xl font-bold tracking-tight">Cadastros da empresa</h1>
+        <div className="flex items-center gap-3">
+          <div className="rounded-lg bg-california-red/10 p-2">
+            <FolderKanban className="h-5 w-5 text-california-red" />
+          </div>
+          <h1 className="text-3xl font-bold tracking-tight">Cadastros da empresa</h1>
+        </div>
         <p className="text-sm text-muted-foreground max-w-2xl">
           Ponto central para gerenciar as entidades do negócio. Novos tipos de
           cadastro aparecem aqui à medida que os módulos vão sendo liberados.

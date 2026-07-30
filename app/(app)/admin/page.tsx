@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, Users, type LucideIcon } from "lucide-react";
+import { ArrowRight, Users, ShieldCheck, type LucideIcon } from "lucide-react";
 import { requireAdmin } from "@/lib/auth/session";
 import { createServiceClient } from "@/lib/supabase/server";
 
@@ -21,9 +21,14 @@ export default async function AdminPage() {
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-california-red">
           Administração
         </p>
-        <h1 className="text-3xl font-bold tracking-tight">
-          Configurações do sistema
-        </h1>
+        <div className="flex items-center gap-3">
+          <div className="rounded-lg bg-california-red/10 p-2">
+            <ShieldCheck className="h-5 w-5 text-california-red" />
+          </div>
+          <h1 className="text-3xl font-bold tracking-tight">
+            Configurações do sistema
+          </h1>
+        </div>
         <p className="text-sm text-muted-foreground max-w-2xl">
           Gestão de acesso, papéis e regras internas do California ERP.
           Disponível apenas para administradores.

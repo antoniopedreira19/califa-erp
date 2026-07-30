@@ -33,7 +33,12 @@ export default async function FornecedoresPage() {
             <ChevronRight className="h-3 w-3" />
             <span className="text-california-red">Fornecedores</span>
           </nav>
-          <h1 className="text-3xl font-bold tracking-tight">Fornecedores</h1>
+          <div className="flex items-center gap-3">
+            <div className="rounded-lg bg-california-red/10 p-2">
+              <Building2 className="h-5 w-5 text-california-red" />
+            </div>
+            <h1 className="text-3xl font-bold tracking-tight">Fornecedores</h1>
+          </div>
           <p className="text-sm text-muted-foreground">
             Pessoas físicas ou jurídicas que aparecem como custo nos itens
             da versão do orçamento.

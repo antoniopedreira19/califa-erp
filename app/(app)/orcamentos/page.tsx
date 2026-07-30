@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { FolderKanban, Plus } from "lucide-react";
+import { FolderKanban, Plus, FileText } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { listActiveMembers } from "@/lib/data/members";
@@ -88,7 +88,12 @@ export default async function ProjetosPage() {
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-california-red">
             Comercial
           </p>
-          <h1 className="text-3xl font-bold tracking-tight">Projetos &amp; Orçamentos</h1>
+          <div className="flex items-center gap-3">
+            <div className="rounded-lg bg-california-red/10 p-2">
+              <FileText className="h-5 w-5 text-california-red" />
+            </div>
+            <h1 className="text-3xl font-bold tracking-tight">Projetos &amp; Orçamentos</h1>
+          </div>
           <p className="text-sm text-muted-foreground">
             Cada projeto agrupa os orçamentos de uma iniciativa do cliente.
             Clique num projeto para ver seus orçamentos e versões.

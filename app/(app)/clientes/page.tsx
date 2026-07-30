@@ -36,7 +36,12 @@ export default async function ClientesPage() {
             <ChevronRight className="h-3 w-3" />
             <span className="text-california-red">Clientes</span>
           </nav>
-          <h1 className="text-3xl font-bold tracking-tight">Clientes</h1>
+          <div className="flex items-center gap-3">
+            <div className="rounded-lg bg-california-red/10 p-2">
+              <Users className="h-5 w-5 text-california-red" />
+            </div>
+            <h1 className="text-3xl font-bold tracking-tight">Clientes</h1>
+          </div>
           <p className="text-sm text-muted-foreground">
             Empresas para as quais a agência produz orçamentos. Cliente ativo
             aparece na criação de orçamento.

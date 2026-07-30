@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft, ShieldCheck, UserPlus } from "lucide-react";
+import { ArrowLeft, ShieldCheck, UserPlus, Users } from "lucide-react";
 import { requireAdmin } from "@/lib/auth/session";
 import { createServiceClient } from "@/lib/supabase/server";
 import { roleLabel, type AppRole } from "@/lib/types";
@@ -72,7 +72,12 @@ export default async function AdminUsuariosPage() {
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-california-red">
             Administração
           </p>
-          <h1 className="text-3xl font-bold tracking-tight">Usuários</h1>
+          <div className="flex items-center gap-3">
+            <div className="rounded-lg bg-california-red/10 p-2">
+              <Users className="h-5 w-5 text-california-red" />
+            </div>
+            <h1 className="text-3xl font-bold tracking-tight">Usuários</h1>
+          </div>
           <p className="text-sm text-muted-foreground max-w-2xl">
             Convide novos membros do time para o California ERP. O usuário
             recebe um e-mail com link para definir a senha e ativar o acesso.
