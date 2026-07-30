@@ -34,6 +34,7 @@ yarn-error.log*
 
 # MCP local config (contém PAT do Supabase inline — nunca commitar)
 .mcp.json
+mcp.json
 
 # vercel
 .vercel
@@ -54,3 +55,6 @@ design_handoff_califa/
 .vscode/*
 !.vscode/settings.json
 !.vscode/extensions.json
+
+# Claude Code local (permissões e dev server da máquina; regenera sozinho)
+.claude/
