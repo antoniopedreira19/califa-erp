@@ -5,19 +5,19 @@ import Image from "next/image";
 import {
   KeyRound,
   ShieldCheck,
-  Sparkles,
+  LogIn,
 } from "lucide-react";
 import { FormNovaSenha, SENHA_MIN } from "@/components/auth/form-nova-senha";
 
-export default function DefinirSenhaPage() {
+export default function ResetarSenhaPage() {
   return (
     <React.Suspense fallback={null}>
-      <DefinirSenhaContent />
+      <ResetarSenhaContent />
     </React.Suspense>
   );
 }
 
-function DefinirSenhaContent() {
+function ResetarSenhaContent() {
   const [emailUsuario, setEmailUsuario] = React.useState<string | null>(null);
   const handleEmailCarregado = React.useCallback((email: string | null) => {
     setEmailUsuario(email);
@@ -50,38 +50,38 @@ function DefinirSenhaContent() {
                 <span className="absolute inline-flex h-full w-full rounded-full bg-california-red opacity-75 animate-ping" />
                 <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-california-red" />
               </span>
-              Ativação de conta
+              Recuperação de acesso
             </div>
 
             <div className="space-y-4">
               <h2 className="font-display text-4xl xl:text-5xl font-semibold leading-[1.05] tracking-tight text-balance">
-                Bem-vindo ao{" "}
+                Uma senha{" "}
                 <span className="relative inline-block">
-                  <span className="relative z-10 italic">time</span>
+                  <span className="relative z-10 italic">nova</span>
                   <span
                     className="absolute -bottom-1 left-0 right-0 h-3 bg-california-red/40 -z-0 -skew-x-6"
                     aria-hidden
                   />
                 </span>
-                .
+                , só sua.
               </h2>
               <p className="text-base text-white/70 text-balance leading-relaxed">
-                Defina sua senha de acesso para começar a usar o California ERP.
+                Escolha uma senha forte e volte a acessar o California ERP em segundos.
               </p>
             </div>
 
             <ul className="space-y-3 pt-2">
               <Feature
                 icon={ShieldCheck}
-                text="Sua senha fica salva apenas no Supabase Auth"
+                text="A senha antiga é descartada assim que a nova é salva"
               />
               <Feature
                 icon={KeyRound}
                 text={`Mínimo de ${SENHA_MIN} caracteres — capriche na força`}
               />
               <Feature
-                icon={Sparkles}
-                text="Nos próximos acessos, entre pelo login normalmente"
+                icon={LogIn}
+                text="Após redefinir, você já entra direto no sistema"
               />
             </ul>
           </div>
@@ -115,34 +115,35 @@ function DefinirSenhaContent() {
 
           <div className="space-y-2">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-california-red">
-              Ativação de conta
+              Recuperação de acesso
             </p>
             <h2 className="font-display text-3xl xl:text-4xl font-semibold tracking-tight text-foreground">
-              Defina sua senha
+              Redefina sua senha
             </h2>
             <p className="text-sm text-muted-foreground">
               {emailUsuario ? (
                 <>
-                  Você está ativando o acesso de{" "}
+                  Você está redefinindo a senha de{" "}
                   <span className="font-medium text-foreground">{emailUsuario}</span>.
                 </>
               ) : (
-                <>Crie uma senha para acessar o California ERP.</>
+                <>Escolha uma nova senha para voltar a acessar o California ERP.</>
               )}
             </p>
           </div>
 
           <FormNovaSenha
-            reasonSemSessao="convite_expirado"
-            labelBotao="Ativar minha conta"
-            labelSucesso="Senha definida! Redirecionando..."
+            reasonSemSessao="recuperacao_expirada"
+            labelBotao="Redefinir senha"
+            labelSucesso="Senha atualizada! Redirecionando..."
             destinoAposSucesso="/home"
+            acaoAuditoria="auth.senha_redefinida"
             onEmailCarregado={handleEmailCarregado}
           />
 
           <div className="mt-10 pt-6 border-t border-border">
             <p className="text-center text-[11px] text-muted-foreground">
-              Problemas para ativar? Fale com o administrador do sistema.
+              Problemas para redefinir? Fale com o administrador do sistema.
             </p>
           </div>
         </div>

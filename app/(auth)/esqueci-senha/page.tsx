@@ -3,93 +3,56 @@
 import * as React from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   ArrowRight,
+  ArrowLeft,
   AlertCircle,
-  Briefcase,
-  Wallet,
-  Users,
+  CheckCircle2,
+  MailCheck,
+  ShieldCheck,
+  Clock,
 } from "lucide-react";
 
-export default function LoginPage() {
+export default function EsqueciSenhaPage() {
   return (
     <React.Suspense fallback={null}>
-      <LoginContent />
+      <EsqueciSenhaContent />
     </React.Suspense>
   );
 }
 
-function reasonToMessage(reason: string | null): string | null {
-  switch (reason) {
-    case "inativo":
-      return "Sua conta está desativada. Fale com um administrador.";
-    case "sem_tenant":
-      return "Você ainda não tem acesso ao ERP. Peça a um administrador para liberar seu usuário.";
-    case "convite_expirado":
-      return "Seu link de convite expirou ou já foi usado. Peça um novo convite ao administrador.";
-    case "recuperacao_expirada":
-      return "Seu link de recuperação expirou ou já foi usado. Solicite um novo abaixo.";
-    default:
-      return null;
-  }
-}
-
-function LoginContent() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
+function EsqueciSenhaContent() {
   const supabase = createClient();
+
   const [email, setEmail] = React.useState("");
-  const [senha, setSenha] = React.useState("");
   const [loading, setLoading] = React.useState(false);
-  const [erro, setErro] = React.useState<string | null>(
-    reasonToMessage(searchParams.get("reason")),
-  );
+  const [enviado, setEnviado] = React.useState(false);
+  const [erro, setErro] = React.useState<string | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setErro(null);
     setLoading(true);
 
-    const { data: signInData, error } = await supabase.auth.signInWithPassword({
-      email,
-      password: senha,
+    const redirectTo = `${window.location.origin}/api/auth/callback?next=/resetar-senha`;
+
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo,
     });
 
-    if (error || !signInData.user) {
-      setErro("E-mail ou senha incorretos.");
+    // Não expõe existência da conta: mesma resposta para sucesso/erro genérico.
+    // Só quebra o silêncio em erros de rede/rate-limit que o usuário precisa ver.
+    if (error && error.status === 429) {
+      setErro("Muitas tentativas em pouco tempo. Aguarde alguns minutos e tente de novo.");
       setLoading(false);
       return;
     }
 
-    // Bloqueia conta inativa imediatamente (RLS permite o próprio profile).
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("ativo")
-      .eq("id", signInData.user.id)
-      .maybeSingle();
-
-    if (profile && profile.ativo === false) {
-      await supabase.auth.signOut();
-      setErro("Sua conta está desativada. Fale com um administrador.");
-      setLoading(false);
-      return;
-    }
-
-    // Auditoria de login (RPC valida auth.uid()).
-    await supabase.rpc("log_audit_event", {
-      p_acao: "auth.login",
-      p_tenant_id: null,
-      p_entidade_tipo: null,
-      p_entidade_id: signInData.user.id,
-      p_metadata: {},
-    });
-
-    router.push("/home");
-    router.refresh();
+    setEnviado(true);
+    setLoading(false);
   }
 
   return (
@@ -119,39 +82,38 @@ function LoginContent() {
                 <span className="absolute inline-flex h-full w-full rounded-full bg-california-red opacity-75 animate-ping" />
                 <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-california-red" />
               </span>
-              Sistema interno · ERP
+              Recuperação de acesso
             </div>
 
             <div className="space-y-4">
               <h2 className="font-display text-4xl xl:text-5xl font-semibold leading-[1.05] tracking-tight text-balance">
-                A agência{" "}
+                Sem drama.{" "}
                 <span className="relative inline-block">
-                  <span className="relative z-10 italic">inteira</span>
+                  <span className="relative z-10 italic">Enviamos</span>
                   <span
                     className="absolute -bottom-1 left-0 right-0 h-3 bg-california-red/40 -z-0 -skew-x-6"
                     aria-hidden
                   />
                 </span>{" "}
-                num só lugar.
+                um link.
               </h2>
               <p className="text-base text-white/70 text-balance leading-relaxed">
-                Comercial, operação, financeiro e pessoas — conectados de
-                ponta a ponta. Menos planilha, mais decisão.
+                Informe o e-mail cadastrado e você receberá um link seguro para criar uma nova senha.
               </p>
             </div>
 
             <ul className="space-y-3 pt-2">
               <Feature
-                icon={Briefcase}
-                text="Do primeiro orçamento até o encerramento do job"
+                icon={MailCheck}
+                text="Chegou um link no seu e-mail — clique para abrir a tela de nova senha"
               />
               <Feature
-                icon={Wallet}
-                text="Financeiro sincronizado com a operação real"
+                icon={Clock}
+                text="Link válido por tempo limitado e pode ser usado só uma vez"
               />
               <Feature
-                icon={Users}
-                text="Colaboradores internos e freelancers no mesmo pipeline"
+                icon={ShieldCheck}
+                text="Sua senha atual continua valendo até você definir uma nova"
               />
             </ul>
           </div>
@@ -185,80 +147,92 @@ function LoginContent() {
 
           <div className="space-y-2">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-california-red">
-              Acesso ao ERP
+              Recuperação de acesso
             </p>
             <h2 className="font-display text-3xl xl:text-4xl font-semibold tracking-tight text-foreground">
-              Seja Bem-vindo
+              Esqueceu a senha?
             </h2>
             <p className="text-sm text-muted-foreground">
-              Entre com suas credenciais para continuar.
+              Informe seu e-mail e enviaremos um link para redefinir.
             </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="mt-9 space-y-5">
-            <div className="space-y-2">
-              <Label htmlFor="email">E-mail</Label>
-              <Input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                autoComplete="email"
-                placeholder="voce@agenciacalifornia.com.br"
-              />
-            </div>
+          {enviado ? (
+            <div className="mt-9 space-y-5">
+              <div className="flex items-start gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-4 text-sm text-emerald-800">
+                <CheckCircle2 className="h-5 w-5 mt-0.5 shrink-0 text-emerald-600" />
+                <div className="space-y-1">
+                  <p className="font-medium">Se o e-mail estiver cadastrado, o link foi enviado.</p>
+                  <p className="text-emerald-800/80">
+                    Verifique sua caixa de entrada (e o spam) e siga as instruções para criar uma nova senha.
+                  </p>
+                </div>
+              </div>
 
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="senha">Senha</Label>
+              <Link
+                href="/login"
+                className="group inline-flex items-center gap-2 text-sm font-medium text-california-red hover:text-california-red-hover transition-colors"
+              >
+                <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" />
+                Voltar para o login
+              </Link>
+            </div>
+          ) : (
+            <form onSubmit={handleSubmit} className="mt-9 space-y-5">
+              <div className="space-y-2">
+                <Label htmlFor="email">E-mail</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  autoComplete="email"
+                  placeholder="voce@agenciacalifornia.com.br"
+                  disabled={loading}
+                />
+              </div>
+
+              {erro && (
+                <div className="flex items-start gap-2 rounded-xl border border-california-red/20 bg-california-red/5 px-4 py-3 text-sm text-california-red animate-in fade-in slide-in-from-top-1 duration-300">
+                  <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                  <span>{erro}</span>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="group relative w-full inline-flex items-center justify-center gap-2 rounded-xl bg-california-red px-6 py-3.5 text-sm font-semibold text-white shadow-brand transition-all hover:bg-california-red-hover hover:shadow-[0_12px_40px_-8px_rgba(231,75,86,0.5)] active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:shadow-brand"
+              >
+                {loading ? (
+                  <>
+                    <span className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                    Enviando...
+                  </>
+                ) : (
+                  <>
+                    Enviar link de recuperação
+                    <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+                  </>
+                )}
+              </button>
+
+              <div className="pt-2">
                 <Link
-                  href="/esqueci-senha"
-                  className="text-[11px] font-medium text-california-red hover:text-california-red-hover transition-colors"
+                  href="/login"
+                  className="group inline-flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
                 >
-                  Esqueci minha senha
+                  <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" />
+                  Voltar para o login
                 </Link>
               </div>
-              <Input
-                id="senha"
-                type="password"
-                value={senha}
-                onChange={(e) => setSenha(e.target.value)}
-                required
-                autoComplete="current-password"
-                placeholder="••••••••"
-              />
-            </div>
-
-            {erro && (
-              <div className="flex items-start gap-2 rounded-xl border border-california-red/20 bg-california-red/5 px-4 py-3 text-sm text-california-red animate-in fade-in slide-in-from-top-1 duration-300">
-                <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
-                <span>{erro}</span>
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="group relative w-full inline-flex items-center justify-center gap-2 rounded-xl bg-california-red px-6 py-3.5 text-sm font-semibold text-white shadow-brand transition-all hover:bg-california-red-hover hover:shadow-[0_12px_40px_-8px_rgba(231,75,86,0.5)] active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:shadow-brand"
-            >
-              {loading ? (
-                <>
-                  <span className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-                  Entrando...
-                </>
-              ) : (
-                <>
-                  Entrar no sistema
-                  <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
-                </>
-              )}
-            </button>
-          </form>
+            </form>
+          )}
 
           <div className="mt-10 pt-6 border-t border-border">
             <p className="text-center text-[11px] text-muted-foreground">
-              Acesso restrito · Solicite a um administrador a criação da sua conta
+              Ainda com problemas? Fale com o administrador do sistema.
             </p>
           </div>
         </div>

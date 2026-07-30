@@ -27,6 +27,9 @@ export async function GET(request: Request) {
 
   const supabase = createClient();
 
+  const failReason =
+    type === "recovery" ? "recuperacao_expirada" : "convite_expirado";
+
   if (tokenHash && type) {
     const { error } = await supabase.auth.verifyOtp({
       type,
@@ -34,14 +37,14 @@ export async function GET(request: Request) {
     });
     if (error) {
       const failUrl = new URL("/login", url.origin);
-      failUrl.searchParams.set("reason", "convite_expirado");
+      failUrl.searchParams.set("reason", failReason);
       return NextResponse.redirect(failUrl);
     }
   } else if (code) {
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (error) {
       const failUrl = new URL("/login", url.origin);
-      failUrl.searchParams.set("reason", "convite_expirado");
+      failUrl.searchParams.set("reason", failReason);
       return NextResponse.redirect(failUrl);
     }
   }
