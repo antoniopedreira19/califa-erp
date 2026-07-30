@@ -2,9 +2,10 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Check, Pencil, Trash2, X } from "lucide-react";
+import { Check, ChevronDown, Pencil, Trash2, X } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import type { VersaoOrcamentoGrupo, VersaoOrcamentoItem, Categoria } from "@/lib/types";
 import { removerGrupo, renomearGrupo } from "../actions";
 import { ItensTable } from "./itens-table";
@@ -15,9 +16,19 @@ interface Props {
   moeda: string;
   readOnly?: boolean;
   categorias: Categoria[];
+  aberto: boolean;
+  onAlternar: () => void;
 }
 
-export function GrupoCard({ grupo, itens, moeda, readOnly, categorias }: Props) {
+export function GrupoCard({
+  grupo,
+  itens,
+  moeda,
+  readOnly,
+  categorias,
+  aberto,
+  onAlternar,
+}: Props) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
   const [renaming, setRenaming] = React.useState(false);
@@ -102,6 +113,20 @@ export function GrupoCard({ grupo, itens, moeda, readOnly, categorias }: Props) 
             </form>
           ) : (
             <>
+              <button
+                type="button"
+                onClick={onAlternar}
+                title={aberto ? "Ocultar itens do grupo" : "Mostrar itens do grupo"}
+                aria-expanded={aberto}
+                className="inline-flex h-6 w-6 flex-none items-center justify-center rounded-md border border-border bg-white text-muted-foreground hover:text-california-red hover:border-california-red/40 transition-colors"
+              >
+                <ChevronDown
+                  className={cn(
+                    "h-3.5 w-3.5 transition-transform duration-150",
+                    !aberto && "-rotate-90",
+                  )}
+                />
+              </button>
               <h3 className="text-base font-semibold text-foreground truncate">
                 {grupo.nome}
               </h3>
@@ -114,6 +139,11 @@ export function GrupoCard({ grupo, itens, moeda, readOnly, categorias }: Props) 
                 >
                   <Pencil className="h-3.5 w-3.5" />
                 </button>
+              )}
+              {!aberto && itens.length > 0 && (
+                <span className="inline-flex flex-none items-center rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-semibold tracking-wide text-muted-foreground">
+                  {itens.length} {itens.length === 1 ? "item oculto" : "itens ocultos"}
+                </span>
               )}
             </>
           )}
@@ -152,6 +182,7 @@ export function GrupoCard({ grupo, itens, moeda, readOnly, categorias }: Props) 
         moeda={moeda}
         readOnly={readOnly}
         categorias={categorias}
+        aberto={aberto}
       />
 
       <ConfirmDialog

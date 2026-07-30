@@ -12,7 +12,7 @@ import {
 } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { GrupoCard } from "./grupo-card";
+import { GruposSection } from "./grupos-section";
 import { NovoGrupoDrawer } from "./novo-grupo-drawer";
 import { TotaisCard } from "./totais-card";
 import { VersaoEditorDrawer } from "./versao-editor-drawer";
@@ -233,42 +233,41 @@ export default async function VersaoDetailPage({
         )}
       </div>
 
-      {/* Grupos */}
-      {grupos.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-border bg-muted/20 p-12 text-center">
-          <FolderTree className="h-10 w-10 text-muted-foreground/50 mx-auto mb-4" />
-          <p className="text-sm text-muted-foreground">
-            Nenhum grupo ainda. Crie o primeiro grupo para começar a adicionar itens.
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Exemplos: Equipe, Ativação, Staff, Logística...
-          </p>
-        </div>
-      ) : (
-        // pr reserva a calha da trilha de ações (Remover), que fica
-        // fora do frame de cada card, alinhada com as linhas da tabela.
-        <div className={cn("space-y-4", !readOnly && "pr-12")}>
-          {grupos.map((g) => (
-            <GrupoCard
-              key={g.id}
-              grupo={g}
-              itens={itensPorGrupo.get(g.id) ?? []}
-              moeda={versao.moeda}
-              readOnly={readOnly}
-              categorias={categorias}
-            />
-          ))}
-        </div>
-      )}
+      {/* Grupos + Totais dividem a mesma calha: é o que faz as colunas
+          Total / Rentab. / % do card de Totais caírem exatamente sob as
+          mesmas colunas dos cards de grupo. O pr reserva a trilha de ações
+          (Remover), que fica fora do frame de cada card. */}
+      <div className={cn("space-y-6", !readOnly && "pr-12")}>
+        {grupos.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-border bg-muted/20 p-12 text-center">
+            <FolderTree className="h-10 w-10 text-muted-foreground/50 mx-auto mb-4" />
+            <p className="text-sm text-muted-foreground">
+              Nenhum grupo ainda. Crie o primeiro grupo para começar a adicionar itens.
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Exemplos: Equipe, Ativação, Staff, Logística...
+            </p>
+          </div>
+        ) : (
+          <GruposSection
+            secoes={grupos.map((g) => ({
+              grupo: g,
+              itens: itensPorGrupo.get(g.id) ?? [],
+            }))}
+            moeda={versao.moeda}
+            readOnly={readOnly}
+            categorias={categorias}
+          />
+        )}
 
-      {/* Totais */}
-      <TotaisCard
-        grupos={grupos}
-        itens={itens}
-        percentualHonorarios={Number(versao.percentual_honorarios)}
-        percentualImposto={Number(versao.percentual_imposto)}
-        moeda={versao.moeda}
-      />
+        <TotaisCard
+          grupos={grupos}
+          itens={itens}
+          percentualHonorarios={Number(versao.percentual_honorarios)}
+          percentualImposto={Number(versao.percentual_imposto)}
+          moeda={versao.moeda}
+        />
+      </div>
     </div>
   );
 }
