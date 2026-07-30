@@ -439,3 +439,17 @@ export function jobStatusLabel(s: JobStatus): string {
       return "Cancelado";
   }
 }
+
+export interface JobItemRealizado {
+  id: string;
+  tenant_id: string;
+  job_id: string;
+  item_id: string;
+  valor_unitario_realizado: number;
+  quantidade_realizada: number;
+  dias_meses_realizado: number;
+  total_realizado: number;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
