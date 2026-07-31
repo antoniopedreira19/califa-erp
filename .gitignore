@@ -58,3 +58,6 @@ design_handoff_califa/
 
 # Claude Code local (permissões e dev server da máquina; regenera sozinho)
 .claude/
+
+# Workspace do processo Subagent-Driven Development (briefs, ledger, reports; regenera sozinho)
+.superpowers/
