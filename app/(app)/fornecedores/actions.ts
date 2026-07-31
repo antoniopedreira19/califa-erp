@@ -6,7 +6,8 @@ import { createClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { fornecedorSchema } from "@/lib/validations/fornecedores";
-import type { TipoPessoa } from "@/lib/types";
+import { getBancoByCodigo } from "@/lib/dados/bancos-febraban";
+import { onlyDigits } from "@/lib/utils";
 
 export type ActionResult =
   | { ok: true; id?: string }
@@ -14,15 +15,63 @@ export type ActionResult =
 
 function extractInput(formData: FormData) {
   return {
-    tipo_pessoa: (formData.get("tipo_pessoa")?.toString() ??
-      "juridica") as TipoPessoa,
-    nome: formData.get("nome")?.toString() ?? "",
-    razao_social: formData.get("razao_social")?.toString() ?? "",
-    cpf_cnpj: formData.get("cpf_cnpj")?.toString() ?? "",
-    email: formData.get("email")?.toString() ?? "",
-    telefone: formData.get("telefone")?.toString() ?? "",
-    observacoes: formData.get("observacoes")?.toString() ?? "",
+    // Campos existentes
+    tipo_pessoa: formData.get("tipo_pessoa"),
+    nome: formData.get("nome"),
+    razao_social: formData.get("razao_social"),
+    cpf_cnpj: formData.get("cpf_cnpj"),
+    email: formData.get("email"),
+    telefone: formData.get("telefone"),
+    observacoes: formData.get("observacoes"),
+
+    // Endereço
+    cep: formData.get("cep"),
+    logradouro: formData.get("logradouro"),
+    numero: formData.get("numero"),
+    complemento: formData.get("complemento"),
+    bairro: formData.get("bairro"),
+    cidade: formData.get("cidade"),
+    uf: formData.get("uf"),
+
+    // Banco
+    banco_codigo: formData.get("banco_codigo"),
+    agencia: formData.get("agencia"),
+    agencia_dv: formData.get("agencia_dv"),
+    conta: formData.get("conta"),
+    conta_dv: formData.get("conta_dv"),
+    tipo_conta: formData.get("tipo_conta"),
+
+    // PIX
+    pix_tipo: formData.get("pix_tipo"),
+    pix_chave: formData.get("pix_chave"),
   };
+}
+
+function deriveBancoNome(
+  banco_codigo: string | null | undefined,
+): { ok: true; banco_nome: string | null } | { ok: false; message: string } {
+  if (!banco_codigo) return { ok: true, banco_nome: null };
+  const banco = getBancoByCodigo(banco_codigo);
+  if (!banco) return { ok: false, message: "Banco selecionado é inválido." };
+  return { ok: true, banco_nome: banco.nome };
+}
+
+function normalizePixChave(
+  pix_tipo: string | null | undefined,
+  pix_chave: string | null | undefined,
+): string | null | undefined {
+  if (!pix_tipo || !pix_chave) return pix_chave;
+  switch (pix_tipo) {
+    case "cpf":
+    case "cnpj":
+    case "telefone":
+      return onlyDigits(pix_chave);
+    case "email":
+    case "aleatoria":
+      return pix_chave.trim().toLowerCase();
+    default:
+      return pix_chave;
+  }
 }
 
 function mapDbError(msg: string): string {
@@ -49,11 +98,23 @@ export async function criarFornecedor(
     };
   }
 
+  const bancoResult = deriveBancoNome(parsed.data.banco_codigo);
+  if (!bancoResult.ok) {
+    return { ok: false, message: bancoResult.message };
+  }
+
+  const pix_chave_normalizada = normalizePixChave(
+    parsed.data.pix_tipo,
+    parsed.data.pix_chave,
+  );
+
   const supabase = createClient();
   const { data, error } = await supabase
     .from("fornecedores")
     .insert({
       ...parsed.data,
+      banco_nome: bancoResult.banco_nome,
+      pix_chave: pix_chave_normalizada,
       tenant_id: session.activeTenant.id,
       created_by: session.profile.id,
     })
@@ -92,10 +153,24 @@ export async function atualizarFornecedor(
     };
   }
 
+  const bancoResult = deriveBancoNome(parsed.data.banco_codigo);
+  if (!bancoResult.ok) {
+    return { ok: false, message: bancoResult.message };
+  }
+
+  const pix_chave_normalizada = normalizePixChave(
+    parsed.data.pix_tipo,
+    parsed.data.pix_chave,
+  );
+
   const supabase = createClient();
   const { error } = await supabase
     .from("fornecedores")
-    .update(parsed.data)
+    .update({
+      ...parsed.data,
+      banco_nome: bancoResult.banco_nome,
+      pix_chave: pix_chave_normalizada,
+    })
     .eq("id", id)
     .eq("tenant_id", session.activeTenant.id);
 
@@ -114,6 +189,31 @@ export async function atualizarFornecedor(
   revalidatePath("/fornecedores");
   revalidatePath(`/fornecedores/${id}`);
   return { ok: true, id };
+}
+
+export async function verificarPixDuplicado(
+  chave: string,
+  excludeId?: string,
+): Promise<{ existe: true; id: string; nome: string } | { existe: false }> {
+  const chaveLimpa = chave.trim();
+  if (!chaveLimpa) return { existe: false };
+
+  const supabase = createClient();
+
+  let query = supabase
+    .from("fornecedores")
+    .select("id, nome")
+    .eq("pix_chave", chaveLimpa)
+    .eq("status", "ativo")
+    .limit(1);
+
+  if (excludeId) {
+    query = query.neq("id", excludeId);
+  }
+
+  const { data, error } = await query.maybeSingle();
+  if (error || !data) return { existe: false };
+  return { existe: true, id: data.id, nome: data.nome };
 }
 
 export async function inativarFornecedor(id: string): Promise<ActionResult> {
