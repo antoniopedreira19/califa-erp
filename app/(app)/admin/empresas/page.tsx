@@ -17,7 +17,9 @@ export default async function AdminEmpresasPage() {
     supabase
       .from("empresas")
       .select(
-        "id, razao_social, nome_fantasia, cnpj, cidade, uf, principal, ativo, regional_id, " +
+        "id, razao_social, nome_fantasia, cnpj, inscricao_estadual, inscricao_municipal, " +
+          "cep, logradouro, numero, complemento, bairro, cidade, uf, telefone, email, " +
+          "local_pagamento, instrucoes_nf, principal, ativo, regional_id, " +
           "regional:regionais(id, nome)",
       )
       .eq("tenant_id", tenantId)
@@ -39,8 +41,19 @@ export default async function AdminEmpresasPage() {
     razao_social: e.razao_social,
     nome_fantasia: e.nome_fantasia,
     cnpj: e.cnpj,
+    inscricao_estadual: e.inscricao_estadual,
+    inscricao_municipal: e.inscricao_municipal,
+    cep: e.cep,
+    logradouro: e.logradouro,
+    numero: e.numero,
+    complemento: e.complemento,
+    bairro: e.bairro,
     cidade: e.cidade,
     uf: e.uf,
+    telefone: e.telefone,
+    email: e.email,
+    local_pagamento: e.local_pagamento,
+    instrucoes_nf: e.instrucoes_nf,
     principal: e.principal,
     ativo: e.ativo,
     regional_id: e.regional_id,

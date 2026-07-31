@@ -152,10 +152,10 @@ export function EmpresaDrawer(props: Props) {
                   />
                 </Field>
                 <Field label="Inscrição estadual" name="inscricao_estadual" errors={fieldErrors}>
-                  <Input name="inscricao_estadual" placeholder="ISENTO ou número" maxLength={30} />
+                  <Input name="inscricao_estadual" defaultValue={empresa?.inscricao_estadual ?? ""} placeholder="ISENTO ou número" maxLength={30} />
                 </Field>
                 <Field label="Inscrição municipal" name="inscricao_municipal" errors={fieldErrors}>
-                  <Input name="inscricao_municipal" maxLength={30} />
+                  <Input name="inscricao_municipal" defaultValue={empresa?.inscricao_municipal ?? ""} maxLength={30} />
                 </Field>
               </div>
             </Section>
@@ -166,6 +166,7 @@ export function EmpresaDrawer(props: Props) {
                   <Field label="CEP" name="cep" required errors={fieldErrors}>
                     <Input
                       name="cep"
+                      defaultValue={formatarCEP(empresa?.cep ?? "")}
                       className={erroClasses("cep")}
                       placeholder="00000-000"
                       onBlur={(e) => {
@@ -176,27 +177,27 @@ export function EmpresaDrawer(props: Props) {
                 </div>
                 <div className="md:col-span-4">
                   <Field label="Logradouro" name="logradouro" required errors={fieldErrors}>
-                    <Input name="logradouro" className={erroClasses("logradouro")} maxLength={200} />
+                    <Input name="logradouro" defaultValue={empresa?.logradouro ?? ""} className={erroClasses("logradouro")} maxLength={200} />
                   </Field>
                 </div>
                 <div className="md:col-span-1">
                   <Field label="Número" name="numero" errors={fieldErrors}>
-                    <Input name="numero" maxLength={20} />
+                    <Input name="numero" defaultValue={empresa?.numero ?? ""} maxLength={20} />
                   </Field>
                 </div>
                 <div className="md:col-span-2">
                   <Field label="Complemento" name="complemento" errors={fieldErrors}>
-                    <Input name="complemento" maxLength={100} />
+                    <Input name="complemento" defaultValue={empresa?.complemento ?? ""} maxLength={100} />
                   </Field>
                 </div>
                 <div className="md:col-span-3">
                   <Field label="Bairro" name="bairro" errors={fieldErrors}>
-                    <Input name="bairro" maxLength={100} />
+                    <Input name="bairro" defaultValue={empresa?.bairro ?? ""} maxLength={100} />
                   </Field>
                 </div>
                 <div className="md:col-span-4">
                   <Field label="Cidade" name="cidade" required errors={fieldErrors}>
-                    <Input name="cidade" className={erroClasses("cidade")} maxLength={100} />
+                    <Input name="cidade" defaultValue={empresa?.cidade ?? ""} className={erroClasses("cidade")} maxLength={100} />
                   </Field>
                 </div>
                 <div className="md:col-span-2">
@@ -225,6 +226,7 @@ export function EmpresaDrawer(props: Props) {
                 <Field label="Telefone" name="telefone" errors={fieldErrors}>
                   <Input
                     name="telefone"
+                    defaultValue={formatarTelefone(empresa?.telefone ?? "")}
                     placeholder="(00) 00000-0000"
                     onBlur={(e) => {
                       e.target.value = formatarTelefone(apenasDigitos(e.target.value));
@@ -232,17 +234,17 @@ export function EmpresaDrawer(props: Props) {
                   />
                 </Field>
                 <Field label="E-mail" name="email" errors={fieldErrors}>
-                  <Input name="email" type="email" maxLength={200} />
+                  <Input name="email" defaultValue={empresa?.email ?? ""} type="email" maxLength={200} />
                 </Field>
               </div>
             </Section>
 
             <Section title="Faturamento">
               <Field label="Local de pagamento" name="local_pagamento" errors={fieldErrors}>
-                <Input name="local_pagamento" placeholder="Ex.: Salvador - BA" maxLength={200} />
+                <Input name="local_pagamento" defaultValue={empresa?.local_pagamento ?? ""} placeholder="Ex.: Salvador - BA" maxLength={200} />
               </Field>
               <Field label="Instruções para nota fiscal" name="instrucoes_nf" errors={fieldErrors}>
-                <Textarea name="instrucoes_nf" rows={3} maxLength={500} />
+                <Textarea name="instrucoes_nf" defaultValue={empresa?.instrucoes_nf ?? ""} rows={3} maxLength={500} />
               </Field>
             </Section>
 
