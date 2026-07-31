@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Plus, Trash2, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { TruncateTooltip } from "@/components/ui/truncate-tooltip";
 import {
   Select,
   SelectContent,
@@ -914,9 +915,7 @@ function CelulaTexto({
       className={cn(TD_BASE, tdClassName, "px-3", editavel && "cursor-pointer")}
       onClick={editavel ? onAtivar : undefined}
     >
-      <div className="truncate" title={valor}>
-        {valor}
-      </div>
+      <TruncateTooltip text={valor} />
     </td>
   );
 }

@@ -18,6 +18,7 @@ import {
   DrawerContent,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import { TruncateTooltip } from "@/components/ui/truncate-tooltip";
 import { formatCurrency } from "@/lib/utils";
 import {
   previewImportacao,
@@ -266,7 +267,11 @@ function PreviewPanel({
       <div className="flex items-start gap-3 rounded-xl border border-border bg-muted/30 p-4">
         <FileSpreadsheet className="h-5 w-5 text-california-red shrink-0 mt-0.5" />
         <div className="flex-1 min-w-0">
-          <p className="font-medium text-foreground truncate">{arquivoNome}</p>
+          <TruncateTooltip
+            as="p"
+            text={arquivoNome}
+            className="font-medium text-foreground"
+          />
           <p className="text-xs text-muted-foreground">
             Aba lida: <b className="text-foreground">{preview.aba}</b> ·{" "}
             {(preview.arquivo_tamanho / 1024).toFixed(0)} KB
@@ -329,9 +334,11 @@ function PreviewPanel({
                 key={`${g.ordem}-${g.nome}`}
                 className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm"
               >
-                <span className="font-medium text-foreground flex-1 min-w-0 truncate">
-                  {g.nome}
-                </span>
+                <TruncateTooltip
+                  as="span"
+                  text={g.nome}
+                  className="font-medium text-foreground flex-1 min-w-0"
+                />
                 <span className="text-xs text-muted-foreground whitespace-nowrap">
                   {g.itens_count} {g.itens_count === 1 ? "item" : "itens"}
                 </span>

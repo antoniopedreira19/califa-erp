@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Check, ChevronDown, Pencil, Trash2, X } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
+import { TruncateTooltip } from "@/components/ui/truncate-tooltip";
 import { cn } from "@/lib/utils";
 import type { VersaoOrcamentoGrupo, VersaoOrcamentoItem, Categoria } from "@/lib/types";
 import { removerGrupo, renomearGrupo } from "../actions";
@@ -127,9 +128,11 @@ export function GrupoCard({
                   )}
                 />
               </button>
-              <h3 className="text-base font-semibold text-foreground truncate">
-                {grupo.nome}
-              </h3>
+              <TruncateTooltip
+                as="h3"
+                text={grupo.nome}
+                className="text-base font-semibold text-foreground"
+              />
               {!readOnly && (
                 <button
                   type="button"

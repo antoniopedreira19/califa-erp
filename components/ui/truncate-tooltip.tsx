@@ -4,14 +4,22 @@ import * as React from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 
+type Tag = "div" | "span" | "p" | "h1" | "h2" | "h3" | "h4" | "h5";
+
 interface Props {
   text: string;
   className?: string;
   maxWidth?: number;
+  as?: Tag;
 }
 
-export function TruncateTooltip({ text, className, maxWidth = 360 }: Props) {
-  const ref = React.useRef<HTMLDivElement>(null);
+export function TruncateTooltip({
+  text,
+  className,
+  maxWidth = 360,
+  as: Component = "div",
+}: Props) {
+  const ref = React.useRef<HTMLElement>(null);
   const [pos, setPos] = React.useState<
     | { top: number; left: number; minWidth: number }
     | null
@@ -41,14 +49,14 @@ export function TruncateTooltip({ text, className, maxWidth = 360 }: Props) {
 
   return (
     <>
-      <div
-        ref={ref}
+      <Component
+        ref={ref as React.RefObject<never>}
         className={cn("truncate", className)}
         onMouseEnter={abrir}
         onMouseLeave={fechar}
       >
         {text}
-      </div>
+      </Component>
       {pos && typeof document !== "undefined"
         ? createPortal(
             <div

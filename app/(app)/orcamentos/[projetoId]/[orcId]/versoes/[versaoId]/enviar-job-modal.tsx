@@ -13,6 +13,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DatePicker } from "@/components/ui/date-picker";
+import { TruncateTooltip } from "@/components/ui/truncate-tooltip";
 import {
   Select,
   SelectContent,
@@ -449,7 +450,7 @@ function Travado({ valor, mono }: { valor: string; mono?: boolean }) {
         mono && "font-mono",
       )}
     >
-      <span className="min-w-0 truncate">{valor}</span>
+      <TruncateTooltip as="span" text={valor} className="min-w-0" />
       <Lock className="h-3.5 w-3.5 shrink-0" />
     </div>
   );

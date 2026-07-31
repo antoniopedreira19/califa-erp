@@ -1,3 +1,4 @@
+import { TruncateTooltip } from "@/components/ui/truncate-tooltip";
 import type {
   VersaoOrcamentoGrupo,
   VersaoOrcamentoItem,
@@ -25,9 +26,11 @@ export function JobGrupoCard({
   return (
     <div className="rounded-2xl border border-border bg-card shadow-soft">
       <div className="flex items-center justify-between gap-3 rounded-t-2xl border-b border-border bg-muted/40 px-6 py-4">
-        <h3 className="text-base font-semibold text-foreground truncate">
-          {grupo.nome}
-        </h3>
+        <TruncateTooltip
+          as="h3"
+          text={grupo.nome}
+          className="text-base font-semibold text-foreground"
+        />
         <span className="text-xs text-muted-foreground">
           {itens.length} {itens.length === 1 ? "item" : "itens"}
         </span>

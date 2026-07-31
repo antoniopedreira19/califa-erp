@@ -15,6 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { TruncateTooltip } from "@/components/ui/truncate-tooltip";
 import { formatDocumento, formatTelefone } from "@/lib/utils";
 import type { Fornecedor } from "@/lib/types";
 import { inativarFornecedor, reativarFornecedor } from "./actions";
@@ -139,9 +140,11 @@ export function FornecedoresList({ fornecedores }: { fornecedores: Fornecedor[] 
                     {f.nome}
                   </Link>
                   {f.razao_social && (
-                    <p className="text-xs text-muted-foreground truncate max-w-[280px]">
-                      {f.razao_social}
-                    </p>
+                    <TruncateTooltip
+                      as="p"
+                      text={f.razao_social}
+                      className="text-xs text-muted-foreground max-w-[280px]"
+                    />
                   )}
                 </TableCell>
                 <TableCell>

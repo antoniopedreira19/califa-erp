@@ -15,6 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { TruncateTooltip } from "@/components/ui/truncate-tooltip";
 import { formatCnpj, formatTelefone } from "@/lib/utils";
 import type { Cliente } from "@/lib/types";
 import { inativarCliente, reativarCliente } from "./actions";
@@ -140,9 +141,11 @@ export function ClientesList({ clientes }: { clientes: Cliente[] }) {
                     {c.nome_fantasia}
                   </Link>
                   {c.razao_social && (
-                    <p className="text-xs text-muted-foreground truncate max-w-[280px]">
-                      {c.razao_social}
-                    </p>
+                    <TruncateTooltip
+                      as="p"
+                      text={c.razao_social}
+                      className="text-xs text-muted-foreground max-w-[280px]"
+                    />
                   )}
                 </TableCell>
                 <TableCell className="px-4 py-3 font-mono text-xs text-muted-foreground">
