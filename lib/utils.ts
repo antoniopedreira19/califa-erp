@@ -82,6 +82,13 @@ export function formatTelefone(tel: string | null | undefined): string {
   return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
 }
 
+export function formatCep(cep: string | null | undefined): string {
+  const d = onlyDigits(cep).slice(0, 8);
+  if (d.length === 0) return "";
+  if (d.length <= 5) return d;
+  return `${d.slice(0, 5)}-${d.slice(5)}`;
+}
+
 /** Validação completa de CPF com dígito verificador. */
 export function isValidCpf(cpf: string): boolean {
   const d = onlyDigits(cpf);

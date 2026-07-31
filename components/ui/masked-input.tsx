@@ -1,9 +1,9 @@
 "use client";
 
 import * as React from "react";
-import { cn, formatCnpj, formatCpf, formatTelefone, onlyDigits } from "@/lib/utils";
+import { cn, formatCep, formatCnpj, formatCpf, formatTelefone, onlyDigits } from "@/lib/utils";
 
-export type Mask = "telefone" | "cpf" | "cnpj";
+export type Mask = "telefone" | "cpf" | "cnpj" | "cep";
 
 const config: Record<
   Mask,
@@ -26,6 +26,12 @@ const config: Record<
     maxLength: 18, // "XX.XXX.XXX/XXXX-XX"
     format: formatCnpj,
     placeholder: "00.000.000/0000-00",
+  },
+  cep: {
+    maxDigits: 8,
+    maxLength: 9, // "XXXXX-XXX"
+    format: formatCep,
+    placeholder: "00000-000",
   },
 };
 
