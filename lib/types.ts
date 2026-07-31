@@ -73,6 +73,16 @@ export function roleLabel(role: AppRole): string {
 export type TipoPessoa = "fisica" | "juridica";
 export type CadastroStatus = "ativo" | "inativo";
 
+// ---------- Task fornecedor-dados-completos: endereço, banco, PIX ----------
+
+export type TipoContaBancaria = "corrente" | "poupanca" | "pagamento";
+export type PixTipoChave = "cpf" | "cnpj" | "email" | "telefone" | "aleatoria";
+
+export type UF =
+  | "AC" | "AL" | "AP" | "AM" | "BA" | "CE" | "DF" | "ES" | "GO"
+  | "MA" | "MT" | "MS" | "MG" | "PA" | "PB" | "PR" | "PE" | "PI"
+  | "RJ" | "RN" | "RS" | "RO" | "RR" | "SC" | "SP" | "SE" | "TO";
+
 export interface Cliente {
   id: string;
   tenant_id: string;
@@ -103,6 +113,28 @@ export interface Fornecedor {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+
+  // Endereço estruturado (Task fornecedor-dados-completos)
+  cep: string | null;
+  logradouro: string | null;
+  numero: string | null;
+  complemento: string | null;
+  bairro: string | null;
+  cidade: string | null;
+  uf: UF | null;
+
+  // Dados bancários
+  banco_codigo: string | null;
+  banco_nome: string | null;
+  agencia: string | null;
+  agencia_dv: string | null;
+  conta: string | null;
+  conta_dv: string | null;
+  tipo_conta: TipoContaBancaria | null;
+
+  // PIX
+  pix_tipo: PixTipoChave | null;
+  pix_chave: string | null;
 }
 
 // ---------- Task 007: projetos ----------
