@@ -98,28 +98,18 @@ export async function previewImportacao(
   orcamentoId: string,
   formData: FormData,
 ): Promise<PreviewResult> {
-  // TEMPORÁRIO: timing granular pra investigar por que o preview demora.
-  // Ver logs em Vercel > Functions > Logs. Remover assim que gargalo mapeado.
-  const t0 = Date.now();
-  const timing: Record<string, number> = {};
-
   const session = await requireSession();
-  timing.session = Date.now() - t0;
 
   const check = await verificarOrcamento(orcamentoId, session.activeTenant.id);
-  timing.verifOrc = Date.now() - t0 - timing.session;
   if (!check.ok) return { ok: false, message: check.message };
   // projeto_id available as check.projeto_id if needed for future use
 
   const arq = await extractArquivo(formData);
-  timing.extractArq = Date.now() - t0 - timing.session - timing.verifOrc;
   if (!arq.ok) return { ok: false, message: arq.message };
 
   let parsed: ParseResultado;
   try {
-    const tParse = Date.now();
     parsed = await parseOficial(arq.buffer);
-    timing.parseOficial = Date.now() - tParse;
   } catch (err) {
     console.error("[importacao.preview.parse]", err);
     return {
@@ -166,17 +156,6 @@ export async function previewImportacao(
     arquivo_nome: arq.nome,
     arquivo_tamanho: arq.tamanho,
   };
-
-  timing.total = Date.now() - t0;
-  console.log(
-    "[importacao.preview.timing]",
-    JSON.stringify({
-      ...timing,
-      arquivo_kb: Math.round(arq.tamanho / 1024),
-      grupos: parsed.grupos.length,
-      itens: parsed.linhas_importadas,
-    }),
-  );
 
   return { ok: true, preview };
 }

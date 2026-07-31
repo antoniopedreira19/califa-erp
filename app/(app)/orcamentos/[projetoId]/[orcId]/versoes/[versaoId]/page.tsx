@@ -50,10 +50,7 @@ export default async function VersaoDetailPage({
 }: {
   params: { projetoId: string; orcId: string; versaoId: string };
 }) {
-  // TEMPORÁRIO: timing granular. Remover após diagnóstico.
-  const t0 = Date.now();
   const session = await requireSession();
-  const tSess = Date.now();
   const supabase = createClient();
 
   const [
@@ -134,17 +131,6 @@ export default async function VersaoDetailPage({
       .order("nome")
       .limit(30),
   ]);
-
-  const tQueries = Date.now();
-  console.log(
-    "[versao.detail.timing]",
-    JSON.stringify({
-      session: tSess - t0,
-      parallel_queries: tQueries - tSess,
-      total: tQueries - t0,
-      itens: (itensRes.data ?? []).length,
-    }),
-  );
 
   if (versaoRes.error) console.error("[versao.detail]", versaoRes.error.message);
   if (gruposRes.error) console.error("[versao.grupos]", gruposRes.error.message);

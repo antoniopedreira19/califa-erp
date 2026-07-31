@@ -2,7 +2,7 @@
 
 Documento para dar continuidade ao projeto em uma nova sessão de trabalho.
 
-**Última atualização** (2026-07-30): Task 008 Jobs + Realizado — /jobs vira lista real com filtros/busca (substitui placeholder); /jobs/[jobId] ganha secao "Planilha do job" com blocos ORCADO/PLANEJADO/REALIZADO editaveis + card de totais com Variacao vs Planejado e Resultado Real. Nova tabela `jobs_itens_realizado` (1:1 job x item da versao aprovada, GENERATED total). Server action `upsertItemRealizado` com gates status/ownership/tenant + audit `job.realizado_atualizado`.
+**Última atualização** (2026-07-31): Task 008 Jobs + Realizado + polish. `/jobs` vira lista real com filtros/busca (substitui placeholder); `/jobs/[jobId]` ganha abas **Informações do Job** / **Rentabilidade** com planilha ORCADO/PLANEJADO/REALIZADO editável + card de totais com Variação vs Planejado e Resultado Real. Nova tabela `jobs_itens_realizado` (1:1 job × item da versão aprovada, GENERATED total). Server action `upsertItemRealizado` com gates status/ownership/tenant + audit `job.realizado_atualizado`. Padronização de largura (`max-w-7xl` em todas telas de detalhe/planilha) e header (icon+kicker+title em 8 páginas) documentada em `docs/09-identidade-visual-ui.md`. Fix embed self-FK do PostgREST (pai vinha como array — "Sub-job de: ·" bug). Timings temporários removidos.
 
 ## 0. LEIA PRIMEIRO — ação pendente no início da sessão
 
@@ -10,17 +10,13 @@ Antes de qualquer coisa:
 
 1. **`docs/PERFORMANCE.md` é obrigatório**. Toda mudança em `app/(app)/**` ou `lib/supabase/**` passa pelo checklist do guia. Já custamos 2 regressões severas por não respeitar isso — não repita. `CLAUDE.md` também tem as regras não-negociáveis no topo.
 
-2. **Diagnóstico de perf em andamento**: os commits recentes adicionaram `console.log("[<contexto>.timing]", ...)` **temporário** em 3 arquivos pra investigar por que a navegação orçamento→versão ficou lenta. Depois do próximo teste do user em prod, coletar os logs em **Vercel → Functions → Runtime Logs** filtrando por:
-   - `[importacao.preview.timing]` — [`app/(app)/orcamentos/[id]/versoes/importar-actions.ts`](../app/(app)/orcamentos/[id]/versoes/importar-actions.ts)
-   - `[orcamento.detail.timing]` — [`app/(app)/orcamentos/[id]/page.tsx`](../app/(app)/orcamentos/[id]/page.tsx)
-   - `[versao.detail.timing]` — [`app/(app)/orcamentos/[id]/versoes/[versaoId]/page.tsx`](../app/(app)/orcamentos/[id]/versoes/[versaoId]/page.tsx)
+2. **`docs/09-identidade-visual-ui.md`**: leia as seções **"Larguras de layout (padrão)"** e **"Header padrão da página"** antes de criar/editar qualquer page. Só 3 larguras permitidas (`max-w-3xl` form / `max-w-7xl` detalhe / `max-w-2xl` texto) e todo header tem icon+kicker/breadcrumb+title. Sair do padrão sem justificativa é dívida técnica.
 
-   Uma vez que o gargalo real for identificado, **REMOVER esses timings** (blocos `console.log` marcados com `// TEMPORÁRIO`) e commitar como cleanup.
-
-3. **Fixes de perf aplicados neste ciclo (não regride):**
-   - `prefetch={false}` nos `<Link>` das listas de versão, orçamento, cliente e fornecedor.
-   - Página do orçamento não usa mais embed pesado pra calcular totais de versões — trocado por query agregada.
+3. **Fixes de perf ainda válidos (não regride):**
+   - `prefetch={false}` nos `<Link>` das listas de versão, orçamento, cliente, fornecedor, job.
+   - Página do orçamento não usa embed pesado pra calcular totais de versões — trocado por query agregada.
    - `force-dynamic` permanece nas pages autenticadas (**não remova** — funciona como freio de prefetch descontrolado, ver `docs/PERFORMANCE.md` seção G).
+   - Timings `console.log("[*.timing]")` que existiam em 3 arquivos foram removidos em 2026-07-31 (diagnóstico concluído).
 
 ## 1. Onde estamos
 
@@ -30,19 +26,31 @@ Admin cadastrado: `antonio@pevetech.com.br` (role `administrador` no tenant `age
 
 **Local (Git):** working tree limpo, sincronizado com `origin/main`.
 
-**Últimos commits relevantes (2026-07-29):**
+**Últimos commits relevantes (2026-07-31, sessão Task 008 + polish):**
+- `4acc3d6` — fix(jobs): PostgREST embed self-referencial de pai retorna array — normaliza pra objeto (bug "Sub-job de: ·")
+- `8123c1d` — ux: header padrão com icone+kicker+titulo em todas as páginas + doc
+- `3b6df06` — ux: padroniza largura max-w-7xl em detalhe/planilha + doc do padrão
+- `34e4bb2` — task008 ux: abas Info/Rentabilidade + largura 7xl + colunas do Item/Tipo
+- `1c2c2ef` — docs(task008): spec + implementation plan for Jobs + Realizado
+- `1787a5c` — task008 fix: reset finalizado ref between edits + audit status denial
+- `922c63f` — task008 final review: QA end-to-end + HANDOFF
+- `d5042aa` — task008: card de totais do job (Orçado × Planejado × Realizado + resultado real)
+- `3fee522` — task008: tabela do realizado com click-to-edit + upsert via server action
+- `9096549` — task008: seção Realizado no /jobs/[jobId] com card por grupo (stub de tabela)
+- `1378a25` — task008: substitui placeholder de /jobs por lista real com filtro e busca
+- `19bf21f` — task008: server action upsertItemRealizado com gates status/ownership
+- `471990d` — task008: helpers calcularTotaisRealizado + calcularVariacao
+- `71f5aec` — task008: migration jobs_itens_realizado + type + audit action
+
+**Commits anteriores (2026-07-29, ciclo Task 005):**
 - `e5be821` — fix(datepicker): popover fixo (`side=bottom`, `avoidCollisions=false`, `w-[300px]`, `fixedWeeks`)
 - `f75d072` — feat(versoes): botão Aprovar direto na lista de versões (ícone `CheckCircle2` verde ao lado de Duplicar)
 - `a4ca8f5` — task005 final review: `Orcamento.versao_aprovada_id` no type + audit `acao_negada` em denials financeiros
 - `9042f86` — task005: sidebar ganha entradas Jobs e Financeiro (com role gate `roles: AppRole[]`)
 - `d5cfc52` — task005: Central Financeira + Jobs Aguardando Abertura
-- `96b4bd3..ab6bab0` — task005: `/jobs/[jobId]` (metadata + editor + hierarquia + status + aprovação contextual) + fix missing `motivo_rejeicao` no select
-- `19e7b9b` — task005: drawer Criar job no orçamento aprovado + link "Ver job"
-- `5eff286` — task005: server actions jobs (CRUD + hierarquia + status + aprovação financeira)
-- `47b2e8e` — task005: server actions `aprovarVersao` + `cancelarAprovacaoVersao`
-- `a772497` — task005: UI aprovar/cancelar aprovação de versão (na página da versão)
+- `96b4bd3..ab6bab0` — task005: `/jobs/[jobId]` (metadata + editor + hierarquia + status + aprovação contextual)
 - `41490d9` — feat(categorias): categorias de domínio pra projeto e orçamento
-- `c6ccb75` — merge Task 007 (Projetos como guarda-chuva) + os 4 commits do Tiago (espelho orçado × planejado)
+- `c6ccb75` — merge Task 007 (Projetos como guarda-chuva)
 - `d199df1` — task007 final review: fix export route + code helpers + drawer refresh + list nav
 
 **Migrations aplicadas no Supabase (via MCP):**
@@ -61,9 +69,11 @@ Admin cadastrado: `antonio@pevetech.com.br` (role `administrador` no tenant `age
 20260728000002  task007_projetos
 20260729000002  task005_jobs
 20260730000001  task008_jobs_realizado
+20260730000003  cidades (cadastro)
+20260730000004  produtos_cliente_e_faturamento_job
 ```
 
-**Todas as migrations aplicadas.** Última: `20260730000001_task008_jobs_realizado` (Task 008).
+**Todas as migrations aplicadas.** Última: `20260730000004_produtos_cliente_e_faturamento_job` (fluxo Abertura de Job).
 
 ## 2. O que já está pronto (Tasks 001 – 004)
 
@@ -205,99 +215,57 @@ Admin cadastrado: `antonio@pevetech.com.br` (role `administrador` no tenant `age
 
 ## 3. Próximos passos (em ordem de prioridade)
 
-### 🟢 Prioridade 1 — QA manual do que entrou em prod hoje (Task 005 + polish)
+### ✅ QA Task 008 + polish (FEITO em 2026-07-31)
 
-**Antes de qualquer coisa nova, valide o fluxo end-to-end:**
-1. Aprovar uma versão pela **lista** (botão verde ao lado de Duplicar) → outras versões viram "Substituída" (trigger).
-2. Aprovar uma versão pelo **detalhe da versão** também (redundante mas ambos funcionam).
-3. No orçamento aprovado, clicar "Criar job" → drawer com pre-preenchimento; salvar → job nasce `aguardando_abertura`.
-4. Se já tem job no projeto, o drawer mostra o bloco de hierarquia (Sub-job de X | Novo principal).
-5. Se você tem role `financeiro` OU `administrador`, aparece o item "Financeiro" na sidebar → abrir `/financeiro/jobs-aguardando-abertura` → aprovar direto na linha OU clicar no job pra ver detalhe.
-6. Rejeitar um job com motivo curto (menos de 10 chars) → deve barrar.
-7. Como GP, ver o motivo em destaque na `/jobs/[jobId]` + reenviar pra aprovação.
-8. DatePickers de Data Início / Fim: abrir/fechar entre os dois — posição não pode mudar, altura não pode variar entre meses.
+Fluxo end-to-end validado em prod: aprovar versão → criar job → aprovar/rejeitar no financeiro → lançar realizado → mudar status → planilha vira read-only em finalizado/cancelado. Bug do "Sub-job de: ·" corrigido no mesmo ciclo. Timings de diagnóstico removidos.
 
-**Bugs esperados / edge cases já mapeados:**
-- Se `criarJob` falhar entre steps do swap principal↔sub-job, DB fica em estado parcial (não é transacional). Recovery é manual via SQL — se acontecer, avisa antes de continuar.
+**Bugs esperados / edge cases ainda mapeados:**
+- Se `criarJob` falhar entre steps do swap principal↔sub-job, DB fica em estado parcial (não é transacional). Recovery é manual via SQL — se acontecer, avisa antes de continuar. Fix pendente em backlog P5.
+
+### 🔴 Prioridade 1 — Task 006 (Administração) — completar
+
+Convite está feito. Backlog:
+- Inativar/reativar membership (soft-delete de vínculo).
+- Trocar papel de membro existente (drawer com Select).
+- Reenviar convite pra user que não ativou.
+- **Feed de auditoria** (`audit_events` do tenant) — dados já são gravados, falta UI de leitura.
+- **MFA obrigatório pra admin** — configuração no Supabase Dashboard.
+
+### 🟡 Prioridade 2 — Pedidos de compra + títulos financeiros
+
+Extensão natural do Realizado. O plano da Task 008 documentou:
+```
+realizado → pedidos_compra → titulos_financeiros → conciliação bancária
+```
+A próxima peça lógica é a tabela `pedidos_compra` (que "consome" um realizado dividindo em N lançamentos com fornecedor, data, NF). Sem isso, o realizado hoje é só um número num item.
+
+### 🟢 Prioridade 3 — Dashboards e relatórios
+
+- KPIs por projeto (rentabilidade real vs orçada).
+- Rentabilidade por fase de job (planejado × realizado ao longo do tempo).
+- Cash flow projetado.
+- Contas a pagar / DRE (dependem de pedidos_compra + títulos).
+
+### 🟢 Prioridade 4 — Dívidas técnicas registradas
+
+- **Swap principal↔sub-job atômico**: hoje são 3 statements sequenciais em `criarJob`/`atualizarHierarquiaJob`. Mover pra função Postgres com transação real. Recovery hoje é SQL manual.
+- **`finalizado` ref stale** também na `versoes/.../itens-table.tsx` — mesmo bug do CelulaRealNum que consertei no realizado (commit `1787a5c`). Aplicar `useEffect(() => { if (editando) finalizado.current = false }, [editando])`.
+- **Regras finais de tributação A/B/C/D** — cálculo simplificado hoje em `lib/calculos/versao-totais.ts`, precisa validação com comercial/financeiro.
+- Minors deferidos da Task 008 (ver `.superpowers/sdd/2026-07-30-jobs-realizado/progress.md`): `select("*")` em pre-fetch, null guard `versao_orcamento_aprovada_id`, `void pending` → destructure, eslint-disable no useMemo de subtotais, GRADE_VARIACAO inconsistente no tfoot.
 
 ### ✅ Fluxo de convite de usuário (FEITO)
 
 Código pronto + template do email colado no Dashboard + URL Configuration validada. Convites funcionam. UI de admin em `/admin/usuarios` cria membership automaticamente.
 
-### 🟢 Prioridade 2 — Fluxo de convite de usuário (código feito, faltam ajustes no Dashboard)
+Detalhes técnicos (referência caso quebre):
+- Página `app/(auth)/definir-senha/page.tsx` valida sessão no mount, form com senha + confirmar (min 8 chars).
+- Callback `app/api/auth/callback/route.ts` suporta 2 fluxos: `?code=...` (PKCE) e `?token_hash=...&type=invite&next=...`.
+- Template `docs/email-templates/magic-link-invite.html` usa `{{ .SiteURL }}/api/auth/callback?token_hash={{ .TokenHash }}&type=invite&next=/definir-senha`.
+- Server action `convidarUsuario` faz distinção entre profile já existente (só cria membership) vs novo (envia convite via `admin.inviteUserByEmail`).
+- Origin resolvido via headers dinamicamente (funciona em dev e prod sem mudar código).
+- Audit: `usuario.convidado`, `usuario.membership_criada`, `usuario.membership_atualizada`, `usuario.reenvio_convite`.
 
-**Estado histórico (mantido pra referência caso quebre):** código implementado no ciclo Task 006.
-
-**Estado:** código implementado. Falta apenas: (a) colar o template atualizado no Supabase Dashboard e (b) validar URL Configuration.
-
-**O que já foi feito no código:**
-
-1. ✅ Página [`app/(auth)/definir-senha/page.tsx`](../app/(auth)/definir-senha/page.tsx):
-   - Valida sessão no mount (`supabase.auth.getUser()`); se não houver, redireciona para `/login?reason=convite_expirado`.
-   - Form com senha + confirmar senha (mín 8 chars, iguais).
-   - Submete via `supabase.auth.updateUser({ password })`.
-   - Sucesso → `/home`. Erro de sessão → mensagem clara.
-   - Mesma identidade visual do login (brand-side + form-side, cores California).
-
-2. ✅ Callback [`app/api/auth/callback/route.ts`](../app/api/auth/callback/route.ts):
-   - Passou a suportar dois fluxos: `?code=...` (PKCE tradicional) **e** `?token_hash=...&type=invite&next=...` (links de e-mail customizados).
-   - Em qualquer erro de troca de token → redireciona para `/login?reason=convite_expirado`.
-
-3. ✅ Template [`docs/email-templates/magic-link-invite.html`](email-templates/magic-link-invite.html):
-   - `{{ .ConfirmationURL }}` substituído por `{{ .SiteURL }}/api/auth/callback?token_hash={{ .TokenHash }}&type=invite&next=/definir-senha`.
-   - Assim o link do e-mail cai direto no nosso domínio, verifica o token, e vai para `/definir-senha`.
-
-4. ✅ Login: reconhece `?reason=convite_expirado` e mostra mensagem.
-
-**O que ainda precisa ser feito manualmente no Supabase Dashboard:**
-
-1. **Authentication → Email Templates → "Invite user"**:
-   - Colar o HTML atualizado de `docs/email-templates/magic-link-invite.html`.
-
-2. **Authentication → URL Configuration**:
-   - `Site URL`: `https://www.sistemacalifa.com.br` (usada por `{{ .SiteURL }}` no template — precisa apontar para prod).
-   - `Redirect URLs` (adicionar todas):
-     ```
-     https://www.sistemacalifa.com.br/api/auth/callback
-     https://www.sistemacalifa.com.br/definir-senha
-     http://localhost:3000/api/auth/callback
-     http://localhost:3000/definir-senha
-     ```
-
-3. **Para testar em dev local**, o template usa `{{ .SiteURL }}` (que é o Site URL de produção). Duas opções:
-   - Testar apenas no Vercel após deploy.
-   - Ou, durante teste local, trocar `{{ .SiteURL }}` por `http://localhost:3000` no Dashboard temporariamente.
-
-**Como testar (fluxo completo):**
-1. Deploy dos commits novos para Vercel (ou testar em local com Site URL ajustada).
-2. Colar template no Dashboard e salvar URL Configuration.
-3. Supabase Dashboard → Authentication → Users → **Invite user** com um e-mail de teste.
-4. Verificar entrega via Resend.
-5. Clicar no link → deve cair em `/definir-senha` já com sessão ativa (email visível no topo do form).
-6. Definir senha → cai em `/home`.
-   - ⚠️ **Atenção:** hoje o convite pelo Dashboard **não cria vínculo em `tenant_members`**. O usuário vai definir a senha, mas ao chegar em `/home` o `requireSession()` vai barrar por `sem_tenant` e mandar de volta pro login. Vincular manualmente via SQL até termos a Task 006 (Admin console) com UI de convite.
-
-**UI de admin para convidar** — ✅ IMPLEMENTADA (antecipada da Task 006):
-- Menu **Administração** liberado na sidebar (adminOnly).
-- Hub [`app/(app)/admin/page.tsx`](../app/(app)/admin/page.tsx) com card **Usuários** mostrando contagem de vínculos ativos.
-- Página [`app/(app)/admin/usuarios/page.tsx`](../app/(app)/admin/usuarios/page.tsx) lista todos os vínculos do tenant (usa `createServiceClient` — autorização feita por `requireAdmin`). Mostra nome, e-mail, papel e status (perfil ativo × vínculo ativo).
-- Drawer [`convidar-drawer.tsx`](../app/(app)/admin/usuarios/convidar-drawer.tsx) com form (e-mail, nome opcional, papel).
-- Server action [`convidarUsuario`](../app/(app)/admin/usuarios/actions.ts):
-  - Valida sessão + admin.
-  - Se profile com esse e-mail já existe **sem** vínculo → só cria membership (sem novo e-mail).
-  - Se profile já existe **com** vínculo → erro amigável.
-  - Se não existe → `admin.inviteUserByEmail(email, { redirectTo: <origin>/api/auth/callback?next=/definir-senha })` + insert em `tenant_members` com role escolhida.
-  - Origin é resolvido dinamicamente via headers (`x-forwarded-host`/`host`) — funciona em dev e em prod sem mudar código.
-  - Registra `usuario.convidado` ou `usuario.membership_criada` em `audit_events`.
-- Schema Zod: [`lib/validations/convite.ts`](../lib/validations/convite.ts).
-- Auditoria: [`lib/auth/audit.ts`](../lib/auth/audit.ts) ganhou 4 novas ações (`usuario.convidado`, `usuario.membership_criada`, `usuario.membership_atualizada`, `usuario.reenvio_convite`).
-
-**Ainda no backlog da Task 006 (próximos incrementos):**
-- Inativar / reativar membership (soft-delete de vínculo).
-- Trocar papel de um membro existente (drawer/dialog).
-- Reenviar convite (para user que não ativou).
-- Feed de auditoria (audit_events do tenant).
-- MFA obrigatório para admin.
+Backlog restante da Task 006 está consolidado na **Prioridade 1** no topo desta seção.
 
 ### ✅ Fase F da Task 004 — Importação de planilha (implementada)
 
@@ -321,16 +289,6 @@ Código pronto + template do email colado no Dashboard + URL Configuration valid
   warnings destacados) → botão "Criar versão importada" que persiste e
   redireciona pra nova versão. Botão fica ao lado de "Nova versão" no
   card de versões do orçamento.
-
-### 🟢 Prioridade 3 — Backlog
-
-- **Task 006 — Administração** (continuar): inativar/reativar membership, trocar papel, reenviar convite, feed de auditoria.
-- **MFA obrigatório** pra admin — configurar no Supabase Dashboard.
-- **Regras finais de tributação A/B/C/D**: cálculo simplificado hoje. Refinar depois de reunião com o comercial/financeiro. Ver `lib/calculos/versao-totais.ts`.
-- **Swap principal↔sub-job atômico** (dívida Task 005): mover pra função Postgres pra ser realmente transacional.
-- **Campos operacionais do job**: planejado × realizado, marcar conclusão, editar status de sub-jobs, integrar com planning do projeto.
-- **Dashboard/relatórios**: KPIs por projeto, rentabilidade por fase de job, cash flow.
-- **Próximas rotas em `/financeiro`** (reservadas mentalmente): contas a pagar, DRE, aprovação de pagamentos, conciliação.
 
 ## 4. Arquitetura & convenções (leia antes de codar)
 
