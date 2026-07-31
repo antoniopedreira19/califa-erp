@@ -53,17 +53,25 @@ function formatMoney(n: number | null): string {
 
 export default async function JobDetailPage({
   params,
+  searchParams,
 }: {
   params: { jobId: string };
+  searchParams?: { from?: string };
 }) {
   const session = await requireSession();
   const supabase = createClient();
+
+  const fromParam = searchParams?.from;
+  const jobLinkSuffix =
+    fromParam === "jobs" || fromParam === "financeiro"
+      ? `?from=${fromParam}`
+      : "";
 
   const [jobRes, regionaisRes, responsaveis] = await Promise.all([
     supabase
       .from("jobs")
       .select(
-        "id, tenant_id, codigo, nome, produto, cidade, data_inicio_prevista, data_fim_prevista, responsavel_id, valor_total, status, motivo_rejeicao, projeto_id, orcamento_id, versao_orcamento_aprovada_id, regional_id, job_pai_id, created_at, updated_at, responsavel:profiles!responsavel_id(id, nome), regional:regionais(id, nome), orcamento:orcamentos(id, codigo, nome, projeto_id), versao:versoes_orcamento!versao_orcamento_aprovada_id(id, numero_versao, nome, moeda, percentual_honorarios, percentual_imposto), projeto:projetos(id, codigo, nome), pai:jobs!job_pai_id(id, codigo, nome)",
+        "id, tenant_id, codigo, nome, produto, cidade, data_inicio_prevista, data_fim_prevista, responsavel_id, valor_total, status, motivo_rejeicao, projeto_id, orcamento_id, versao_orcamento_aprovada_id, regional_id, job_pai_id, created_at, updated_at, responsavel:profiles!responsavel_id(id, nome), regional:regionais(id, nome), orcamento:orcamentos(id, codigo, nome, projeto_id), versao:versoes_orcamento!versao_orcamento_aprovada_id(id, numero_versao, nome, moeda, percentual_honorarios, percentual_imposto), projeto:projetos(id, codigo, nome), pai:job_pai_id(id, codigo, nome)",
       )
       .eq("id", params.jobId)
       .eq("tenant_id", session.activeTenant.id)
@@ -81,13 +89,9 @@ export default async function JobDetailPage({
   const raw = jobRes.data as any;
   if (!raw) notFound();
 
-  // PostgREST devolve embed self-referential ("pai:jobs!job_pai_id") como
-  // array em vez de objeto — normaliza para {id, codigo, nome} | null.
-  const paiEmbed = raw.pai
-    ? Array.isArray(raw.pai)
-      ? raw.pai[0] ?? null
-      : raw.pai
-    : null;
+  const paiEmbed = (raw.pai ?? null) as
+    | { id: string; codigo: string; nome: string }
+    | null;
 
   // Fetch sub-jobs se este é principal
   let subJobs: { id: string; codigo: string; nome: string; status: JobStatus }[] = [];
@@ -208,15 +212,28 @@ export default async function JobDetailPage({
       job.responsavel_id === session.profile.id) &&
     (job.status === "aberto" || job.status === "em_producao");
 
+  const backLink =
+    fromParam === "jobs"
+      ? { href: "/jobs", label: "Voltar para jobs" }
+      : fromParam === "financeiro"
+        ? {
+            href: "/financeiro/jobs-aguardando-abertura",
+            label: "Voltar para aprovações",
+          }
+        : {
+            href: `/orcamentos/${raw.projeto_id}/${raw.orcamento_id}`,
+            label: `Voltar para orçamento ${raw.orcamento?.codigo}`,
+          };
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
       <div>
         <Link
-          href={`/orcamentos/${raw.projeto_id}/${raw.orcamento_id}`}
+          href={backLink.href}
           className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
           <ArrowLeft className="h-3 w-3" />
-          Voltar para orçamento {raw.orcamento?.codigo}
+          {backLink.label}
         </Link>
         <div className="mt-3">
           <p className="font-mono text-xs font-semibold text-muted-foreground">{job.codigo}</p>
@@ -293,7 +310,7 @@ export default async function JobDetailPage({
                     {subJobs.map((s) => (
                       <li key={s.id}>
                         <Link
-                          href={`/jobs/${s.id}`}
+                          href={`/jobs/${s.id}${jobLinkSuffix}`}
                           prefetch={false}
                           className="text-california-red hover:underline"
                         >
@@ -314,7 +331,7 @@ export default async function JobDetailPage({
                 Sub-job de:{" "}
                 {paiEmbed ? (
                   <Link
-                    href={`/jobs/${paiEmbed.id}`}
+                    href={`/jobs/${paiEmbed.id}${jobLinkSuffix}`}
                     prefetch={false}
                     className="font-mono text-california-red hover:underline"
                   >

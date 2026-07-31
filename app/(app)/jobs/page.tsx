@@ -15,7 +15,7 @@ export default async function JobsPage() {
       "id, codigo, nome, status, valor_total, data_inicio_prevista, job_pai_id, " +
         "projeto:projetos(codigo, nome, cliente:clientes(nome_fantasia)), " +
         "responsavel:profiles!responsavel_id(nome), " +
-        "pai:jobs!job_pai_id(id, codigo)",
+        "filhos:jobs!job_pai_id(count)",
     )
     .eq("tenant_id", session.activeTenant.id)
     .order("created_at", { ascending: false });
@@ -33,10 +33,8 @@ export default async function JobsPage() {
     projeto_nome: r.projeto?.nome ?? null,
     cliente_nome: r.projeto?.cliente?.nome_fantasia ?? null,
     responsavel_nome: r.responsavel?.nome ?? null,
-    // PostgREST devolve embed self-referential como array — pega o primeiro.
-    pai_id: (Array.isArray(r.pai) ? r.pai[0]?.id : r.pai?.id) ?? null,
-    pai_codigo:
-      (Array.isArray(r.pai) ? r.pai[0]?.codigo : r.pai?.codigo) ?? null,
+    is_sub_job: r.job_pai_id !== null,
+    tem_filhos: Number(r.filhos?.[0]?.count ?? 0) > 0,
   }));
 
   return (

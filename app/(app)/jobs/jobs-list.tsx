@@ -19,8 +19,8 @@ export interface JobRow {
   projeto_nome: string | null;
   cliente_nome: string | null;
   responsavel_nome: string | null;
-  pai_codigo: string | null;
-  pai_id: string | null;
+  is_sub_job: boolean;
+  tem_filhos: boolean;
 }
 
 const STATUS_FILTROS: JobStatus[] = [
@@ -157,18 +157,18 @@ export function JobsList({ rows }: { rows: JobRow[] }) {
                 key={r.id}
                 role="button"
                 tabIndex={0}
-                onClick={() => router.push(`/jobs/${r.id}`)}
+                onClick={() => router.push(`/jobs/${r.id}?from=jobs`)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();
-                    router.push(`/jobs/${r.id}`);
+                    router.push(`/jobs/${r.id}?from=jobs`);
                   }
                 }}
                 className="border-b border-border last:border-0 hover:bg-accent/40 transition-colors cursor-pointer focus-visible:outline-none focus-visible:bg-accent/40"
               >
                 <td className="px-4 py-3 font-mono text-xs">
                   <Link
-                    href={`/jobs/${r.id}`}
+                    href={`/jobs/${r.id}?from=jobs`}
                     prefetch={false}
                     className="hover:text-california-red"
                     onClick={(e) => e.stopPropagation()}
@@ -179,20 +179,15 @@ export function JobsList({ rows }: { rows: JobRow[] }) {
                 <td className="px-4 py-3">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-medium">{r.nome}</span>
-                    {r.pai_id && (
-                      <span className="inline-flex items-center gap-1">
-                        <Badge variant="neutral" className="text-[10px]">
-                          Sub-job
-                        </Badge>
-                        <Link
-                          href={`/jobs/${r.pai_id}`}
-                          prefetch={false}
-                          onClick={(e) => e.stopPropagation()}
-                          className="font-mono text-[10px] text-muted-foreground hover:text-california-red"
-                        >
-                          {r.pai_codigo}
-                        </Link>
-                      </span>
+                    {r.tem_filhos && (
+                      <Badge variant="neutral" className="text-[10px]">
+                        Job principal
+                      </Badge>
+                    )}
+                    {r.is_sub_job && (
+                      <Badge variant="neutral" className="text-[10px]">
+                        Sub-job
+                      </Badge>
                     )}
                   </div>
                 </td>

@@ -56,18 +56,18 @@ export function JobsAguardandoList({ rows }: { rows: JobAguardandoRow[] }) {
               key={r.id}
               role="button"
               tabIndex={0}
-              onClick={() => router.push(`/jobs/${r.id}`)}
+              onClick={() => router.push(`/jobs/${r.id}?from=financeiro`)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
-                  router.push(`/jobs/${r.id}`);
+                  router.push(`/jobs/${r.id}?from=financeiro`);
                 }
               }}
               className="border-b border-border last:border-0 hover:bg-accent/40 transition-colors cursor-pointer focus-visible:outline-none focus-visible:bg-accent/40"
             >
               <td className="px-4 py-3 font-mono text-xs">
                 <Link
-                  href={`/jobs/${r.id}`}
+                  href={`/jobs/${r.id}?from=financeiro`}
                   prefetch={false}
                   className="hover:text-california-red"
                   onClick={(e) => e.stopPropagation()}
