@@ -136,7 +136,7 @@ export async function criarFornecedor(
   });
 
   revalidatePath("/fornecedores");
-  redirect(`/fornecedores/${data.id}`);
+  redirect("/fornecedores");
 }
 
 export async function atualizarFornecedor(
