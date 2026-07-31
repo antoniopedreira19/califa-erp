@@ -1,5 +1,11 @@
 import Link from "next/link";
-import { ArrowRight, Users, ShieldCheck, type LucideIcon } from "lucide-react";
+import {
+  ArrowRight,
+  Building2,
+  ShieldCheck,
+  Users,
+  type LucideIcon,
+} from "lucide-react";
 import { requireAdmin } from "@/lib/auth/session";
 import { createServiceClient } from "@/lib/supabase/server";
 
@@ -8,12 +14,23 @@ export const dynamic = "force-dynamic";
 export default async function AdminPage() {
   const session = await requireAdmin();
   const service = createServiceClient();
+  const tenantId = session.activeTenant.id;
 
-  const { count: ativosCount } = await service
-    .from("tenant_members")
-    .select("*", { count: "exact", head: true })
-    .eq("tenant_id", session.activeTenant.id)
-    .eq("status", "ativo");
+  const [membersRes, empresasRes] = await Promise.all([
+    service
+      .from("tenant_members")
+      .select("*", { count: "exact", head: true })
+      .eq("tenant_id", tenantId)
+      .eq("status", "ativo"),
+    service
+      .from("empresas")
+      .select("*", { count: "exact", head: true })
+      .eq("tenant_id", tenantId)
+      .eq("ativo", true),
+  ]);
+
+  const ativosCount = membersRes.count ?? 0;
+  const empresasCount = empresasRes.count ?? 0;
 
   return (
     <div className="space-y-8">
@@ -41,8 +58,16 @@ export default async function AdminPage() {
           icon={Users}
           title="Usuários"
           description="Convide novos membros e defina o papel de cada um dentro do tenant."
-          count={ativosCount ?? 0}
-          countLabel={(ativosCount ?? 0) === 1 ? "ativo" : "ativos"}
+          count={ativosCount}
+          countLabel={ativosCount === 1 ? "ativo" : "ativos"}
+        />
+        <AdminCard
+          href="/admin/empresas"
+          icon={Building2}
+          title="Empresas"
+          description="Cadastre as pessoas jurídicas do grupo California."
+          count={empresasCount}
+          countLabel={empresasCount === 1 ? "ativa" : "ativas"}
         />
       </div>
     </div>
