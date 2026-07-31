@@ -60,6 +60,7 @@ function extractInput(formData: FormData) {
     data_fim_prevista: formData.get("data_fim_prevista")?.toString() ?? "",
     data_prevista_faturamento:
       formData.get("data_prevista_faturamento")?.toString() ?? "",
+    observacoes: formData.get("observacoes")?.toString() ?? "",
   };
 }
 
@@ -275,6 +276,9 @@ export async function enviarJobParaAbertura(
       data_inicio_prevista: parsed.data.data_inicio_prevista,
       data_fim_prevista: parsed.data.data_fim_prevista,
       data_prevista_faturamento: parsed.data.data_prevista_faturamento,
+      // Gravado mas ainda não exibido: a leitura entra quando a tela de
+      // abertura do financeiro for refinada (decisão do time, 31/07/2026).
+      observacoes: parsed.data.observacoes,
       responsavel_id: projeto.responsavel_id,
       valor_total: Number(totais.faturamento.toFixed(2)),
       job_pai_id: principalAtual ? principalAtual.id : null,

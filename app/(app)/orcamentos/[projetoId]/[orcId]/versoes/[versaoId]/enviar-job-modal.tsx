@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { DatePicker } from "@/components/ui/date-picker";
 import { TruncateTooltip } from "@/components/ui/truncate-tooltip";
 import {
@@ -22,6 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn, formatCurrency } from "@/lib/utils";
+import { OBSERVACOES_MAX } from "@/lib/validations/abertura-job";
 import { CidadeCombobox, type CidadeOption } from "./cidade-combobox";
 
 export interface ProdutoOption {
@@ -38,20 +40,50 @@ export interface DadosJob {
   dataInicio: string;
   dataFim: string;
   dataFaturamento: string;
+  observacoes: string;
+}
+
+/** Campos que o Zod do servidor valida — as chaves batem com `fieldErrors`. */
+type CampoObrigatorio =
+  | "nome"
+  | "produto_id"
+  | "cidade_id"
+  | "regional_id"
+  | "data_inicio_prevista"
+  | "data_fim_prevista"
+  | "data_prevista_faturamento";
+
+export function faltamCampos(d: DadosJob): Record<CampoObrigatorio, boolean> {
+  return {
+    nome: d.nome.trim().length < 2,
+    produto_id: !d.produtoId,
+    cidade_id: !d.cidade,
+    regional_id: !d.regionalId,
+    data_inicio_prevista: !d.dataInicio,
+    data_fim_prevista: !d.dataFim,
+    data_prevista_faturamento: !d.dataFaturamento,
+  };
 }
 
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Avança para a confirmação final com os dados preenchidos. */
-  onConfirmar: (dados: DadosJob) => void;
+  /** Avança para a confirmação final. O estado vive no pai. */
+  onConfirmar: () => void;
   somenteLeitura?: boolean;
 
+  /** Controlado pelo pai — é o que preserva o preenchimento no "Voltar e revisar". */
+  dados: DadosJob;
+  onChange: (patch: Partial<DadosJob>) => void;
+
   orcamentoCodigo: string;
+  projetoNome: string;
+  projetoCodigo: string;
   clienteId: string;
   clienteNome: string;
   responsavelNome: string;
   codigoJob: string;
+  versaoLabel: string;
   valorTotal: number;
   moeda: string;
 
@@ -59,7 +91,6 @@ interface Props {
   regionais: { id: string; nome: string }[];
   cidadesIniciais: CidadeOption[];
 
-  inicial: DadosJob;
   fieldErrors: Record<string, string[]>;
   erroGeral: string | null;
 }
@@ -69,57 +100,37 @@ export function EnviarJobModal({
   onOpenChange,
   onConfirmar,
   somenteLeitura = false,
+  dados,
+  onChange,
   orcamentoCodigo,
+  projetoNome,
+  projetoCodigo,
   clienteId,
   clienteNome,
   responsavelNome,
   codigoJob,
+  versaoLabel,
   valorTotal,
   moeda,
   produtos,
   regionais,
   cidadesIniciais,
-  inicial,
   fieldErrors,
   erroGeral,
 }: Props) {
-  const [nome, setNome] = React.useState(inicial.nome);
-  const [produtoId, setProdutoId] = React.useState(inicial.produtoId);
-  const [cidade, setCidade] = React.useState<CidadeOption | null>(inicial.cidade);
-  const [regionalId, setRegionalId] = React.useState(inicial.regionalId);
-  const [dataInicio, setDataInicio] = React.useState(inicial.dataInicio);
-  const [dataFim, setDataFim] = React.useState(inicial.dataFim);
-  const [dataFaturamento, setDataFaturamento] = React.useState(
-    inicial.dataFaturamento,
-  );
   const [tentou, setTentou] = React.useState(false);
 
-  // Reabrir o modal recompõe os valores a partir do que veio do servidor.
+  // Cada abertura limpa só o realce de "faltou preencher" — os valores
+  // ficam no pai, então voltar da confirmação preserva o formulário.
   React.useEffect(() => {
-    if (!open) return;
-    setNome(inicial.nome);
-    setProdutoId(inicial.produtoId);
-    setCidade(inicial.cidade);
-    setRegionalId(inicial.regionalId);
-    setDataInicio(inicial.dataInicio);
-    setDataFim(inicial.dataFim);
-    setDataFaturamento(inicial.dataFaturamento);
-    setTentou(false);
-  }, [open, inicial]);
+    if (open) setTentou(false);
+  }, [open]);
 
-  const faltando = {
-    nome: nome.trim().length < 2,
-    produto_id: !produtoId,
-    cidade_id: !cidade,
-    regional_id: !regionalId,
-    data_inicio_prevista: !dataInicio,
-    data_fim_prevista: !dataFim,
-    data_prevista_faturamento: !dataFaturamento,
-  };
+  const faltando = faltamCampos(dados);
   const completo = !Object.values(faltando).some(Boolean);
 
   /** Erro visível: o que o servidor devolveu, ou o que faltou ao tentar. */
-  function erroDe(campo: keyof typeof faltando): string | null {
+  function erroDe(campo: CampoObrigatorio): string | null {
     const doServidor = fieldErrors[campo]?.[0];
     if (doServidor) return doServidor;
     if (tentou && faltando[campo]) return "Campo obrigatório.";
@@ -128,29 +139,23 @@ export function EnviarJobModal({
 
   function handleConfirmar() {
     setTentou(true);
-    if (!completo || !cidade) return;
-    onConfirmar({
-      nome: nome.trim(),
-      produtoId,
-      cidade,
-      regionalId,
-      dataInicio,
-      dataFim,
-      dataFaturamento,
-    });
+    if (!completo) return;
+    onConfirmar();
   }
 
   const semProdutos = produtos.length === 0;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] gap-0 overflow-hidden p-0 sm:max-w-3xl">
+      {/* max-w-5xl: o handoff pede 3 colunas e a regra de larguras do
+          docs/09 vale para container de PÁGINA, não para diálogo. */}
+      <DialogContent className="max-h-[92vh] gap-0 overflow-hidden p-0 sm:max-w-5xl">
         <DialogHeader className="flex-row items-start gap-4 border-b border-border p-6 pr-14">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-california-red/10 text-california-red">
-            <Briefcase className="h-[18px] w-[18px]" />
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-california-red/10 text-california-red">
+            <Briefcase className="h-5 w-5" />
           </div>
           <div className="min-w-0 space-y-1">
-            <DialogTitle className="text-lg">
+            <DialogTitle className="text-xl">
               {somenteLeitura ? "Dados do job" : "Enviar job para abertura"}
             </DialogTitle>
             <DialogDescription>
@@ -161,44 +166,69 @@ export function EnviarJobModal({
           </div>
         </DialogHeader>
 
-        <div className="grid max-h-[60vh] gap-5 overflow-y-auto p-6 md:grid-cols-2">
-          <div className="space-y-2 md:col-span-2">
-            <Label htmlFor="job_nome">
-              Nome do Job <span className="text-california-red">*</span>
-            </Label>
+        <div className="grid max-h-[62vh] gap-x-5 gap-y-4 overflow-y-auto p-6 md:grid-cols-3">
+          {/* Linha 1 — identificação, tudo travado. */}
+          <Campo rotulo="Projeto">
+            <Travado valor={projetoNome} />
+          </Campo>
+          <Campo rotulo="Código do projeto">
+            <Travado valor={projetoCodigo} mono />
+          </Campo>
+          <Campo rotulo="Código do job">
+            <Travado valor={codigoJob} mono />
+          </Campo>
+
+          {/* Linha 2 — nome ocupa 2 colunas, cliente fecha a linha. */}
+          <Campo
+            rotulo="Nome do Job"
+            obrigatorio
+            className="md:col-span-2"
+            erro={erroDe("nome")}
+            apoio="Se alterar, o orçamento é atualizado na confirmação."
+          >
             <Input
-              id="job_nome"
-              value={nome}
+              value={dados.nome}
               disabled={somenteLeitura}
-              onChange={(e) => setNome(e.target.value)}
+              onChange={(e) => onChange({ nome: e.target.value })}
               maxLength={200}
               className={cn(
                 erroDe("nome") && "border-california-red ring-2 ring-california-red/15",
               )}
-              placeholder="Ex.: Carnaval Anitta 2026"
+              placeholder="Ex.: Bebedouros SP"
             />
-            <Campo erro={erroDe("nome")}>
-              Pré-preenchido com o nome do orçamento · se alterar, o orçamento é
-              atualizado na confirmação.
-            </Campo>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Cliente</Label>
+          </Campo>
+          <Campo rotulo="Cliente">
             <Travado valor={clienteNome} />
-          </div>
+          </Campo>
 
-          <div className="space-y-2">
-            <Label htmlFor="job_produto">
-              Produto <span className="text-california-red">*</span>
-            </Label>
+          {/* Linha 3 — produto, cidade, regional. */}
+          <Campo
+            rotulo="Produto"
+            obrigatorio
+            erro={erroDe("produto_id")}
+            apoio={
+              semProdutos ? (
+                <>
+                  Nenhum produto cadastrado para este cliente.{" "}
+                  <Link
+                    href={`/clientes/${clienteId}`}
+                    prefetch={false}
+                    className="font-medium text-california-red hover:underline"
+                  >
+                    Cadastrar agora
+                  </Link>
+                </>
+              ) : (
+                "Opções do cadastro do cliente."
+              )
+            }
+          >
             <Select
-              value={produtoId}
-              onValueChange={setProdutoId}
+              value={dados.produtoId}
+              onValueChange={(v) => onChange({ produtoId: v })}
               disabled={somenteLeitura || semProdutos}
             >
               <SelectTrigger
-                id="job_produto"
                 className={cn(
                   erroDe("produto_id") &&
                     "border-california-red ring-2 ring-california-red/15",
@@ -221,61 +251,28 @@ export function EnviarJobModal({
                 ))}
               </SelectContent>
             </Select>
-            <Campo erro={erroDe("produto_id")}>
-              {semProdutos ? (
-                <>
-                  Nenhum produto cadastrado para este cliente.{" "}
-                  <Link
-                    href={`/clientes/${clienteId}`}
-                    prefetch={false}
-                    className="font-medium text-california-red hover:underline"
-                  >
-                    Cadastrar agora
-                  </Link>
-                </>
-              ) : (
-                <>
-                  Opções do cadastro do cliente.{" "}
-                  <Link
-                    href={`/clientes/${clienteId}`}
-                    prefetch={false}
-                    className="font-medium text-california-red hover:underline"
-                  >
-                    Gerenciar produtos
-                  </Link>
-                </>
-              )}
-            </Campo>
-          </div>
+          </Campo>
 
-          <div className="space-y-2">
-            <Label>
-              Cidade <span className="text-california-red">*</span>
-            </Label>
+          <Campo rotulo="Cidade" obrigatorio erro={erroDe("cidade_id")}>
             {somenteLeitura ? (
-              <Travado valor={cidade?.nome ?? "—"} />
+              <Travado valor={dados.cidade?.nome ?? "—"} />
             ) : (
               <CidadeCombobox
-                value={cidade}
-                onChange={setCidade}
+                value={dados.cidade}
+                onChange={(c) => onChange({ cidade: c })}
                 iniciais={cidadesIniciais}
                 erro={Boolean(erroDe("cidade_id"))}
               />
             )}
-            <Campo erro={erroDe("cidade_id")} />
-          </div>
+          </Campo>
 
-          <div className="space-y-2">
-            <Label htmlFor="job_regional">
-              Regional <span className="text-california-red">*</span>
-            </Label>
+          <Campo rotulo="Regional" obrigatorio erro={erroDe("regional_id")}>
             <Select
-              value={regionalId}
-              onValueChange={setRegionalId}
+              value={dados.regionalId}
+              onValueChange={(v) => onChange({ regionalId: v })}
               disabled={somenteLeitura}
             >
               <SelectTrigger
-                id="job_regional"
                 className={cn(
                   erroDe("regional_id") &&
                     "border-california-red ring-2 ring-california-red/15",
@@ -291,82 +288,68 @@ export function EnviarJobModal({
                 ))}
               </SelectContent>
             </Select>
-            <Campo erro={erroDe("regional_id")} />
-          </div>
+          </Campo>
 
-          <div className="space-y-2">
-            <Label>Responsável</Label>
-            <Travado valor={responsavelNome} />
-          </div>
-
-          <div className="space-y-2">
-            <Label>
-              Data de início <span className="text-california-red">*</span>
-            </Label>
+          {/* Linha 4 — as três datas. */}
+          <Campo
+            rotulo="Data de início"
+            obrigatorio
+            erro={erroDe("data_inicio_prevista")}
+          >
             <DatePicker
+              key={`inicio-${dados.dataInicio}`}
               name="__job_data_inicio"
-              defaultValue={dataInicio}
+              defaultValue={dados.dataInicio}
               disabled={somenteLeitura}
-              onDateChange={(d) =>
-                setDataInicio(d ? toIso(d) : "")
-              }
+              onDateChange={(d) => onChange({ dataInicio: d ? toIso(d) : "" })}
               className={cn(
                 erroDe("data_inicio_prevista") &&
                   "border-california-red ring-2 ring-california-red/15",
               )}
             />
-            <Campo erro={erroDe("data_inicio_prevista")}>
-              Alteração é replicada no orçamento.
-            </Campo>
-          </div>
+          </Campo>
 
-          <div className="space-y-2">
-            <Label>
-              Data de fim <span className="text-california-red">*</span>
-            </Label>
+          <Campo rotulo="Data de fim" obrigatorio erro={erroDe("data_fim_prevista")}>
             <DatePicker
+              key={`fim-${dados.dataFim}`}
               name="__job_data_fim"
-              defaultValue={dataFim}
+              defaultValue={dados.dataFim}
               disabled={somenteLeitura}
-              onDateChange={(d) => setDataFim(d ? toIso(d) : "")}
+              onDateChange={(d) => onChange({ dataFim: d ? toIso(d) : "" })}
               className={cn(
                 erroDe("data_fim_prevista") &&
                   "border-california-red ring-2 ring-california-red/15",
               )}
             />
-            <Campo erro={erroDe("data_fim_prevista")}>
-              Alteração é replicada no orçamento.
-            </Campo>
-          </div>
+          </Campo>
 
-          <div className="space-y-2">
-            <Label>
-              Data prevista para faturamento{" "}
-              <span className="text-california-red">*</span>
-            </Label>
+          <Campo
+            rotulo="Data prevista para faturamento"
+            obrigatorio
+            erro={erroDe("data_prevista_faturamento")}
+          >
             <DatePicker
+              key={`fat-${dados.dataFaturamento}`}
               name="__job_data_faturamento"
-              defaultValue={dataFaturamento}
+              defaultValue={dados.dataFaturamento}
               disabled={somenteLeitura}
-              onDateChange={(d) => setDataFaturamento(d ? toIso(d) : "")}
+              onDateChange={(d) => onChange({ dataFaturamento: d ? toIso(d) : "" })}
               className={cn(
                 erroDe("data_prevista_faturamento") &&
                   "border-california-red ring-2 ring-california-red/15",
               )}
             />
-            <Campo erro={erroDe("data_prevista_faturamento")} />
-          </div>
+          </Campo>
 
-          <div className="space-y-2">
-            <Label>Código do job</Label>
-            <Travado valor={codigoJob} mono />
-          </div>
-
-          <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-border bg-muted/40 p-4 md:col-span-2">
+          {/* Linha 5 — responsável e o valor, que fecha as 2 colunas. */}
+          <Campo rotulo="Responsável">
+            <Travado valor={responsavelNome} />
+          </Campo>
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-muted/40 px-4 py-3 md:col-span-2">
             <div>
               <p className="text-sm font-semibold">Valor total do Job</p>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                Faturamento previsto da versão · custos + honorários + impostos
+                Faturamento previsto da versão {versaoLabel}
               </p>
             </div>
             <span className="whitespace-nowrap font-mono text-2xl font-bold text-california-red">
@@ -374,15 +357,37 @@ export function EnviarJobModal({
             </span>
           </div>
 
+          {/* Linha 6 — observações, linha inteira. */}
+          <Campo
+            rotulo="Observações"
+            opcional
+            className="md:col-span-3"
+            apoio={
+              dados.observacoes.length > 0
+                ? `${dados.observacoes.length} / ${OBSERVACOES_MAX}`
+                : undefined
+            }
+          >
+            <Textarea
+              value={dados.observacoes}
+              disabled={somenteLeitura}
+              onChange={(e) => onChange({ observacoes: e.target.value })}
+              maxLength={OBSERVACOES_MAX}
+              rows={3}
+              className="min-h-[84px] resize-y leading-relaxed"
+              placeholder="Contexto para quem abre o job: condições comerciais, dependências, o que combinamos com o cliente..."
+            />
+          </Campo>
+
           {erroGeral && (
-            <div className="flex items-start gap-2 rounded-xl border border-california-red/20 bg-california-red/5 px-4 py-3 text-sm text-california-red md:col-span-2">
+            <div className="flex items-start gap-2 rounded-xl border border-california-red/20 bg-california-red/5 px-4 py-3 text-sm text-california-red md:col-span-3">
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
               <span>{erroGeral}</span>
             </div>
           )}
         </div>
 
-        <div className="flex items-center justify-between gap-4 border-t border-border bg-muted/30 p-4 px-6">
+        <div className="flex items-center justify-between gap-4 border-t border-border bg-muted/30 px-6 py-4">
           <span className="text-xs text-muted-foreground">
             {somenteLeitura ? (
               "Job já enviado — os dados não podem mais ser alterados por aqui."
@@ -429,17 +434,43 @@ function toIso(d: Date): string {
   return `${d.getFullYear()}-${mes}-${dia}`;
 }
 
-/** Linha de apoio abaixo do campo: vira mensagem de erro quando há erro. */
+/** Rótulo + campo + linha de apoio, que vira mensagem de erro quando há erro. */
 function Campo({
+  rotulo,
+  obrigatorio,
+  opcional,
   erro,
+  apoio,
+  className,
   children,
 }: {
-  erro: string | null;
-  children?: React.ReactNode;
+  rotulo: string;
+  obrigatorio?: boolean;
+  opcional?: boolean;
+  erro?: string | null;
+  apoio?: React.ReactNode;
+  className?: string;
+  children: React.ReactNode;
 }) {
-  if (erro) return <p className="text-xs text-california-red">{erro}</p>;
-  if (!children) return null;
-  return <p className="text-xs text-muted-foreground">{children}</p>;
+  return (
+    <div className={cn("space-y-2", className)}>
+      <Label>
+        {rotulo}
+        {obrigatorio && <span className="ml-1 text-california-red">*</span>}
+        {opcional && (
+          <span className="ml-1.5 font-normal text-muted-foreground">
+            · opcional
+          </span>
+        )}
+      </Label>
+      {children}
+      {erro ? (
+        <p className="text-xs text-california-red">{erro}</p>
+      ) : apoio ? (
+        <p className="text-xs text-muted-foreground">{apoio}</p>
+      ) : null}
+    </div>
+  );
 }
 
 function Travado({ valor, mono }: { valor: string; mono?: boolean }) {

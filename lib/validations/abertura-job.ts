@@ -1,5 +1,8 @@
 import { z } from "zod";
 
+/** Limite do contador de caracteres das observações (UI e CHECK do banco). */
+export const OBSERVACOES_MAX = 500;
+
 /**
  * Modal "Enviar job para abertura" (handoff "Abertura de Job.dc.html").
  *
@@ -33,6 +36,12 @@ export const aberturaJobSchema = z
     data_prevista_faturamento: z
       .string()
       .regex(/^\d{4}-\d{2}-\d{2}$/, "Data prevista para faturamento é obrigatória."),
+    observacoes: z
+      .string()
+      .trim()
+      .max(OBSERVACOES_MAX, `Máximo ${OBSERVACOES_MAX} caracteres.`)
+      .optional()
+      .transform((v) => (v && v.length > 0 ? v : null)),
   })
   .refine((d) => d.data_fim_prevista >= d.data_inicio_prevista, {
     message: "A data de fim não pode ser anterior à data de início.",

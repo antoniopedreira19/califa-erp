@@ -109,7 +109,7 @@ export default async function VersaoDetailPage({
     supabase
       .from("jobs")
       .select(
-        "id, codigo, nome, produto, cidade, regional_id, data_inicio_prevista, data_fim_prevista, data_prevista_faturamento",
+        "id, codigo, nome, produto, cidade, regional_id, data_inicio_prevista, data_fim_prevista, data_prevista_faturamento, observacoes",
       )
       .eq("orcamento_id", params.orcId)
       .eq("tenant_id", session.activeTenant.id)
@@ -173,7 +173,7 @@ export default async function VersaoDetailPage({
   const [projetoRes, jobsCountRes] = await Promise.all([
     supabase
       .from("projetos")
-      .select("id, cliente_id, cliente:clientes(id, nome_fantasia), responsavel:profiles!responsavel_id(nome)")
+      .select("id, codigo, nome, cliente_id, cliente:clientes(id, nome_fantasia), responsavel:profiles!responsavel_id(nome)")
       .eq("id", orcamento.projeto_id)
       .eq("tenant_id", session.activeTenant.id)
       .maybeSingle(),
@@ -187,6 +187,8 @@ export default async function VersaoDetailPage({
   const clienteId: string = projetoRaw?.cliente_id ?? "";
   const clienteNome: string = projetoRaw?.cliente?.nome_fantasia ?? "—";
   const responsavelNome: string = projetoRaw?.responsavel?.nome ?? "—";
+  const projetoNome: string = projetoRaw?.nome ?? "—";
+  const projetoCodigo: string = projetoRaw?.codigo ?? "—";
 
   const produtosRes = clienteId
     ? await supabase
@@ -239,6 +241,7 @@ export default async function VersaoDetailPage({
     dataInicio: job?.data_inicio_prevista ?? orcamento.data_inicio_prevista ?? "",
     dataFim: job?.data_fim_prevista ?? orcamento.data_fim_prevista ?? "",
     dataFaturamento: job?.data_prevista_faturamento ?? "",
+    observacoes: job?.observacoes ?? "",
   };
 
   return (
@@ -394,6 +397,8 @@ export default async function VersaoDetailPage({
         clienteNome={clienteNome}
         responsavelNome={responsavelNome}
         proximoCodigoJob={proximoCodigoJob}
+        projetoNome={projetoNome}
+        projetoCodigo={projetoCodigo}
         produtos={(produtosRes.data ?? []) as { id: string; nome: string; codigo: string }[]}
         regionais={regionais}
         cidadesIniciais={cidadesIniciais}

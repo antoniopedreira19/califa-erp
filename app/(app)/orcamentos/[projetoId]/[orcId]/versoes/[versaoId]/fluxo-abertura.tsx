@@ -12,10 +12,16 @@ import {
   FileText,
 } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { cn, formatCurrency } from "@/lib/utils";
+import { formatCurrency } from "@/lib/utils";
 import { aprovarVersao } from "../actions";
 import { enviarJobParaAbertura } from "./abertura-actions";
-import { EnviarJobModal, type DadosJob, type ProdutoOption } from "./enviar-job-modal";
+import {
+  EnviarJobModal,
+  faltamCampos,
+  type DadosJob,
+  type ProdutoOption,
+} from "./enviar-job-modal";
+import { ConfirmarEnvioModal } from "./confirmar-envio-modal";
 import type { CidadeOption } from "./cidade-combobox";
 
 type Modal = "aprovar" | "form" | "envio" | null;
@@ -29,6 +35,7 @@ export interface JobExistente {
   regional_id: string | null;
   data_inicio_prevista: string | null;
   data_fim_prevista: string | null;
+  observacoes: string | null;
   nome: string;
 }
 
@@ -49,6 +56,8 @@ interface Props {
   clienteNome: string;
   responsavelNome: string;
   proximoCodigoJob: string;
+  projetoNome: string;
+  projetoCodigo: string;
 
   produtos: ProdutoOption[];
   regionais: { id: string; nome: string }[];
@@ -74,6 +83,8 @@ export function FluxoAbertura({
   clienteNome,
   responsavelNome,
   proximoCodigoJob,
+  projetoNome,
+  projetoCodigo,
   produtos,
   regionais,
   cidadesIniciais,
@@ -83,7 +94,9 @@ export function FluxoAbertura({
   const router = useRouter();
   const [modal, setModal] = React.useState<Modal>(null);
   const [pending, startTransition] = React.useTransition();
-  const [dados, setDados] = React.useState<DadosJob | null>(null);
+  // O formulário vive AQUI, não no modal: é o que faz "Voltar e revisar"
+  // reabrir tudo preenchido. Fechar de vez (Cancelar/X) volta ao inicial.
+  const [dados, setDados] = React.useState<DadosJob>(inicial);
   const [erroGeral, setErroGeral] = React.useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = React.useState<Record<string, string[]>>({});
 
@@ -113,8 +126,23 @@ export function FluxoAbertura({
     });
   }
 
+  /** Abre o formulário do zero — descarta rascunho e erros anteriores. */
+  function abrirFormulario() {
+    setDados(inicial);
+    setErroGeral(null);
+    setFieldErrors({});
+    setModal("form");
+  }
+
+  /** Fechar de vez (Cancelar / X / Esc) limpa; "Voltar e revisar" não passa por aqui. */
+  function fecharFormulario() {
+    setModal(null);
+    setDados(inicial);
+    setErroGeral(null);
+    setFieldErrors({});
+  }
+
   function handleEnviar() {
-    if (!dados) return;
     setErroGeral(null);
     setFieldErrors({});
 
@@ -126,6 +154,7 @@ export function FluxoAbertura({
     formData.set("data_inicio_prevista", dados.dataInicio);
     formData.set("data_fim_prevista", dados.dataFim);
     formData.set("data_prevista_faturamento", dados.dataFaturamento);
+    formData.set("observacoes", dados.observacoes);
 
     startTransition(async () => {
       const res = await enviarJobParaAbertura(versaoId, formData);
@@ -142,11 +171,32 @@ export function FluxoAbertura({
   }
 
   const regionalNome =
-    regionais.find((r) => r.id === (dados?.regionalId ?? inicial.regionalId))?.nome ??
-    "—";
+    regionais.find((r) => r.id === dados.regionalId)?.nome ?? "—";
   const produtoNome =
-    produtos.find((p) => p.id === (dados?.produtoId ?? inicial.produtoId))?.nome ??
-    "—";
+    produtos.find((p) => p.id === dados.produtoId)?.nome ?? "— não informado";
+
+  const resumoEnvio = [
+    { rotulo: "Job", valor: dados.nome || "—" },
+    { rotulo: "Código", valor: proximoCodigoJob, mono: true },
+    { rotulo: "Projeto", valor: `${projetoNome} · ${projetoCodigo}` },
+    { rotulo: "Cliente", valor: clienteNome },
+    { rotulo: "Produto", valor: produtoNome },
+    {
+      rotulo: "Cidade · Regional",
+      valor: `${dados.cidade?.nome ?? "—"} · ${regionalNome}`,
+    },
+    { rotulo: "Responsável", valor: responsavelNome },
+    {
+      rotulo: "Início · fim",
+      valor: `${formatarData(dados.dataInicio)} → ${formatarData(dados.dataFim)}`,
+      mono: true,
+    },
+    {
+      rotulo: "Faturamento em",
+      valor: formatarData(dados.dataFaturamento),
+      mono: true,
+    },
+  ];
 
   return (
     <>
@@ -218,11 +268,7 @@ export function FluxoAbertura({
           {etapa === "aprovada" && (
             <button
               type="button"
-              onClick={() => {
-                setErroGeral(null);
-                setFieldErrors({});
-                setModal("form");
-              }}
+              onClick={abrirFormulario}
               className="inline-flex items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-[13px] font-semibold text-white shadow-sm hover:bg-california-red-hover hover:shadow-brand transition-all"
             >
               Enviar Job para Abertura
@@ -287,72 +333,41 @@ export function FluxoAbertura({
       {/* Pop-up 2 — formulário do job */}
       <EnviarJobModal
         open={modal === "form"}
-        onOpenChange={(o) => !o && setModal(null)}
-        onConfirmar={(d) => {
-          setDados(d);
-          setModal("envio");
-        }}
+        onOpenChange={(o) => !o && fecharFormulario()}
+        onConfirmar={() => setModal("envio")}
+        dados={dados}
+        onChange={(patch) => setDados((d) => ({ ...d, ...patch }))}
         somenteLeitura={etapa === "enviada"}
         orcamentoCodigo={orcamentoCodigo}
+        projetoNome={projetoNome}
+        projetoCodigo={projetoCodigo}
         clienteId={clienteId}
         clienteNome={clienteNome}
         responsavelNome={responsavelNome}
         codigoJob={job?.codigo ?? proximoCodigoJob}
+        versaoLabel={versaoLabel}
         valorTotal={faturamento}
         moeda={moeda}
         produtos={produtos}
         regionais={regionais}
         cidadesIniciais={cidadesIniciais}
-        inicial={inicial}
         fieldErrors={fieldErrors}
         erroGeral={erroGeral}
       />
 
-      {/* Pop-up 3 — confirmar envio */}
-      <ConfirmDialog
+      {/* Pop-up 3 — confirmar envio. Voltar NÃO limpa o formulário. */}
+      <ConfirmarEnvioModal
         open={modal === "envio"}
         onOpenChange={(o) => !o && setModal("form")}
-        title="Tem certeza que quer enviar esse job para a abertura?"
-        description={
-          <>
-            O job será criado e enviado ao financeiro. Nome e datas alterados aqui
-            serão gravados no orçamento{" "}
-            <strong className="text-foreground">{orcamentoCodigo}</strong>.
-            <span className="mt-4 flex flex-col gap-2 rounded-xl border border-border px-4 py-3.5">
-              <Resumo rotulo="Job" valor={dados?.nome ?? "—"} />
-              <Resumo rotulo="Código" valor={proximoCodigoJob} mono />
-              <Resumo rotulo="Cliente" valor={clienteNome} />
-              <Resumo rotulo="Produto" valor={produtoNome} />
-              <Resumo
-                rotulo="Cidade · Regional"
-                valor={`${dados?.cidade?.nome ?? "—"} · ${regionalNome}`}
-              />
-              <Resumo rotulo="Responsável" valor={responsavelNome} />
-              <Resumo
-                rotulo="Início · fim"
-                valor={`${formatarData(dados?.dataInicio)} → ${formatarData(dados?.dataFim)}`}
-                mono
-              />
-              <Resumo
-                rotulo="Faturamento em"
-                valor={formatarData(dados?.dataFaturamento)}
-                mono
-              />
-              <span className="flex items-baseline justify-between gap-3 border-t border-border pt-2">
-                <span className="text-[13px] font-semibold text-foreground">
-                  Valor total
-                </span>
-                <span className="font-mono text-[15px] font-bold text-california-red">
-                  {formatCurrency(faturamento, moeda)}
-                </span>
-              </span>
-            </span>
-          </>
-        }
-        confirmLabel="Sim, enviar job"
-        cancelLabel="Voltar e revisar"
+        onVoltar={() => setModal("form")}
+        onConfirmar={handleEnviar}
         pending={pending}
-        onConfirm={handleEnviar}
+        orcamentoCodigo={orcamentoCodigo}
+        linhas={resumoEnvio}
+        valorTotal={faturamento}
+        moeda={moeda}
+        observacoes={dados.observacoes}
+        erro={erroGeral}
       />
     </>
   );
@@ -426,30 +441,6 @@ export function BannersEstado({
         </div>
       )}
     </>
-  );
-}
-
-function Resumo({
-  rotulo,
-  valor,
-  mono,
-}: {
-  rotulo: string;
-  valor: string;
-  mono?: boolean;
-}) {
-  return (
-    <span className="flex items-baseline justify-between gap-3">
-      <span className="shrink-0 text-[13px] text-muted-foreground">{rotulo}</span>
-      <span
-        className={cn(
-          "text-right text-[13px] font-semibold text-foreground",
-          mono && "font-mono",
-        )}
-      >
-        {valor}
-      </span>
-    </span>
   );
 }
 
