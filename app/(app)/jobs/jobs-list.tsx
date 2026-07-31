@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Search } from "lucide-react";
+import { ChevronDown, ChevronRight, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { jobStatusLabel, type JobStatus } from "@/lib/types";
@@ -19,6 +19,7 @@ export interface JobRow {
   projeto_nome: string | null;
   cliente_nome: string | null;
   responsavel_nome: string | null;
+  job_pai_id: string | null;
   is_sub_job: boolean;
   tem_filhos: boolean;
 }
@@ -60,30 +61,100 @@ function formatMoney(n: number | null): string {
   return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
+type DisplayRow = {
+  row: JobRow;
+  isChild: boolean;
+  hasChildren: boolean;
+  expanded: boolean;
+};
+
 export function JobsList({ rows }: { rows: JobRow[] }) {
   const router = useRouter();
   const [statusAtivos, setStatusAtivos] = React.useState<Set<JobStatus>>(
     new Set(),
   );
   const [busca, setBusca] = React.useState("");
+  const [expandedIds, setExpandedIds] = React.useState<Set<string>>(new Set());
 
-  const filtrados = React.useMemo(() => {
+  const childrenByParent = React.useMemo(() => {
+    const map = new Map<string, JobRow[]>();
+    for (const r of rows) {
+      if (r.job_pai_id) {
+        const arr = map.get(r.job_pai_id) ?? [];
+        arr.push(r);
+        map.set(r.job_pai_id, arr);
+      }
+    }
+    return map;
+  }, [rows]);
+
+  const displayRows = React.useMemo<DisplayRow[]>(() => {
     const q = busca.trim().toLowerCase();
-    return rows.filter((r) => {
+    const filterActive = statusAtivos.size > 0 || q !== "";
+
+    function matches(r: JobRow): boolean {
       if (statusAtivos.size > 0 && !statusAtivos.has(r.status)) return false;
       if (q === "") return true;
       return (
         r.codigo.toLowerCase().includes(q) ||
         r.nome.toLowerCase().includes(q)
       );
-    });
-  }, [rows, statusAtivos, busca]);
+    }
+
+    const parents = rows.filter((r) => !r.is_sub_job);
+    const out: DisplayRow[] = [];
+
+    for (const parent of parents) {
+      const kids = childrenByParent.get(parent.id) ?? [];
+      const parentMatches = matches(parent);
+      const matchingKids = kids.filter(matches);
+
+      if (!parentMatches && matchingKids.length === 0) continue;
+
+      const expanded =
+        kids.length > 0 &&
+        (filterActive
+          ? matchingKids.length > 0 || expandedIds.has(parent.id)
+          : expandedIds.has(parent.id));
+
+      out.push({
+        row: parent,
+        isChild: false,
+        hasChildren: kids.length > 0,
+        expanded,
+      });
+
+      if (expanded) {
+        const kidsToShow =
+          filterActive && !parentMatches ? matchingKids : kids;
+        for (const kid of kidsToShow) {
+          out.push({
+            row: kid,
+            isChild: true,
+            hasChildren: false,
+            expanded: false,
+          });
+        }
+      }
+    }
+
+    return out;
+  }, [rows, statusAtivos, busca, expandedIds, childrenByParent]);
 
   function toggleStatus(s: JobStatus) {
     setStatusAtivos((prev) => {
       const next = new Set(prev);
       if (next.has(s)) next.delete(s);
       else next.add(s);
+      return next;
+    });
+  }
+
+  function toggleExpand(id: string) {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   }
@@ -129,6 +200,7 @@ export function JobsList({ rows }: { rows: JobRow[] }) {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/30 text-left text-xs uppercase tracking-wider text-muted-foreground">
+              <th className="w-8 px-2 py-3" aria-label="Expandir" />
               <th className="px-4 py-3 font-semibold">Codigo</th>
               <th className="px-4 py-3 font-semibold">Nome</th>
               <th className="px-4 py-3 font-semibold">Projeto</th>
@@ -140,10 +212,10 @@ export function JobsList({ rows }: { rows: JobRow[] }) {
             </tr>
           </thead>
           <tbody>
-            {filtrados.length === 0 && (
+            {displayRows.length === 0 && (
               <tr>
                 <td
-                  colSpan={8}
+                  colSpan={9}
                   className="px-4 py-12 text-center text-sm text-muted-foreground"
                 >
                   {rows.length === 0
@@ -152,7 +224,7 @@ export function JobsList({ rows }: { rows: JobRow[] }) {
                 </td>
               </tr>
             )}
-            {filtrados.map((r) => (
+            {displayRows.map(({ row: r, isChild, hasChildren, expanded }) => (
               <tr
                 key={r.id}
                 role="button"
@@ -164,8 +236,31 @@ export function JobsList({ rows }: { rows: JobRow[] }) {
                     router.push(`/jobs/${r.id}?from=jobs`);
                   }
                 }}
-                className="border-b border-border last:border-0 hover:bg-accent/40 transition-colors cursor-pointer focus-visible:outline-none focus-visible:bg-accent/40"
+                className={cn(
+                  "border-b border-border last:border-0 hover:bg-accent/40 transition-colors cursor-pointer focus-visible:outline-none focus-visible:bg-accent/40",
+                  isChild && "bg-muted/20",
+                )}
               >
+                <td className="w-8 px-2 py-3 align-middle">
+                  {hasChildren ? (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleExpand(r.id);
+                      }}
+                      aria-label={expanded ? "Colapsar sub-jobs" : "Expandir sub-jobs"}
+                      aria-expanded={expanded}
+                      className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+                    >
+                      {expanded ? (
+                        <ChevronDown className="h-4 w-4" />
+                      ) : (
+                        <ChevronRight className="h-4 w-4" />
+                      )}
+                    </button>
+                  ) : null}
+                </td>
                 <td className="px-4 py-3 font-mono text-xs">
                   <Link
                     href={`/jobs/${r.id}?from=jobs`}
@@ -176,10 +271,18 @@ export function JobsList({ rows }: { rows: JobRow[] }) {
                     {r.codigo}
                   </Link>
                 </td>
-                <td className="px-4 py-3">
+                <td className={cn("px-4 py-3", isChild && "pl-8")}>
                   <div className="flex flex-wrap items-center gap-2">
+                    {isChild && (
+                      <span
+                        aria-hidden="true"
+                        className="text-muted-foreground/60"
+                      >
+                        └
+                      </span>
+                    )}
                     <span className="font-medium">{r.nome}</span>
-                    {r.tem_filhos && (
+                    {hasChildren && (
                       <Badge
                         variant="soft"
                         className="px-1.5 py-0 text-[9px] normal-case tracking-normal"
@@ -187,7 +290,7 @@ export function JobsList({ rows }: { rows: JobRow[] }) {
                         Job principal
                       </Badge>
                     )}
-                    {r.is_sub_job && (
+                    {isChild && (
                       <Badge
                         variant="neutral"
                         className="px-1.5 py-0 text-[9px] normal-case tracking-normal"

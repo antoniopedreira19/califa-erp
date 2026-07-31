@@ -33,6 +33,7 @@ export default async function JobsPage() {
     projeto_nome: r.projeto?.nome ?? null,
     cliente_nome: r.projeto?.cliente?.nome_fantasia ?? null,
     responsavel_nome: r.responsavel?.nome ?? null,
+    job_pai_id: r.job_pai_id ?? null,
     is_sub_job: r.job_pai_id !== null,
     tem_filhos: Number(r.filhos?.[0]?.count ?? 0) > 0,
   }));
