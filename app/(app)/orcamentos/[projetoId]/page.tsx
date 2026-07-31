@@ -44,7 +44,7 @@ export default async function ProjetoDetailPage({
     supabase
       .from("projetos")
       .select(
-        "id, tenant_id, codigo, nome, campanha, status, cliente_id, responsavel_id, regional_id, cidade_id, categoria_id, data_inicio_prevista, data_fim_prevista, descricao, created_by, created_at, updated_at, cliente:clientes(id, nome_fantasia), responsavel:profiles!responsavel_id(id, nome), regional:regionais(id, nome), cidade:cidades(id, nome), categoria:categorias_dominio(id, nome)",
+        "id, tenant_id, empresa_id, codigo, nome, campanha, status, cliente_id, responsavel_id, regional_id, cidade_id, categoria_id, data_inicio_prevista, data_fim_prevista, descricao, created_by, created_at, updated_at, cliente:clientes(id, nome_fantasia), responsavel:profiles!responsavel_id(id, nome), regional:regionais(id, nome), cidade:cidades(id, nome), categoria:categorias_dominio(id, nome)",
       )
       .eq("id", params.projetoId)
       .eq("tenant_id", session.activeTenant.id)
@@ -97,6 +97,7 @@ export default async function ProjetoDetailPage({
   const projeto: Projeto = {
     id: raw.id,
     tenant_id: raw.tenant_id,
+    empresa_id: raw.empresa_id,
     codigo: raw.codigo,
     nome: raw.nome,
     campanha: raw.campanha,
