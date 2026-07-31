@@ -8,6 +8,7 @@ import { logAuditEvent } from "@/lib/auth/audit";
 import { fornecedorSchema } from "@/lib/validations/fornecedores";
 import { getBancoByCodigo } from "@/lib/dados/bancos-febraban";
 import { onlyDigits } from "@/lib/utils";
+import type { PixTipoChave } from "@/lib/types";
 
 export type ActionResult =
   | { ok: true; id?: string }
@@ -193,9 +194,13 @@ export async function atualizarFornecedor(
 
 export async function verificarPixDuplicado(
   chave: string,
+  pixTipo: PixTipoChave | null,
   excludeId?: string,
 ): Promise<{ existe: true; id: string; nome: string } | { existe: false }> {
-  const chaveLimpa = chave.trim();
+  const chaveLimpa =
+    pixTipo && chave
+      ? normalizePixChave(pixTipo, chave) ?? chave.trim()
+      : chave.trim();
   if (!chaveLimpa) return { existe: false };
 
   const supabase = createClient();

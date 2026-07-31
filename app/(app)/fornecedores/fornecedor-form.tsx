@@ -15,7 +15,6 @@ import { onlyDigits, cn } from "@/lib/utils";
 import type {
   Fornecedor,
   TipoPessoa,
-  TipoContaBancaria,
   PixTipoChave,
   UF,
 } from "@/lib/types";
@@ -278,7 +277,7 @@ export function FornecedorForm({ fornecedor }: Props) {
     }
 
     const t = setTimeout(async () => {
-      const res = await verificarPixDuplicado(chaveNormalizada, fornecedor?.id);
+      const res = await verificarPixDuplicado(chaveNormalizada, pixTipo || null, fornecedor?.id);
       if (res.existe) {
         setPixWarning(
           `Já existe fornecedor com esta chave PIX: "${res.nome}". Confirme se está correto.`,

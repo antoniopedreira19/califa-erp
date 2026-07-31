@@ -8,9 +8,6 @@ export interface BancoFebraban {
 }
 
 export const BANCOS_FEBRABAN: readonly BancoFebraban[] = [
-  { codigo: "000", nome: "Sistema do Balcão B3" },
-  { codigo: "000", nome: "Câmara B3" },
-  { codigo: "000", nome: "Câmara de Câmbio B3" },
   { codigo: "001", nome: "Banco do Brasil S.A." },
   { codigo: "003", nome: "BANCO DA AMAZONIA S.A." },
   { codigo: "004", nome: "Banco do Nordeste do Brasil S.A." },

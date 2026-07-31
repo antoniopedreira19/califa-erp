@@ -161,7 +161,9 @@ export const fornecedorSchema = z
     }
 
     // --- Regra final: pelo menos um bloco de pagamento completo ---
-    if (!bancoCompleto && !pixCompleto) {
+    // Só dispara quando nenhum bloco foi sequer iniciado. Quando o usuário
+    // começou mas não terminou um bloco, os erros de campo parcial já guiam.
+    if (!bancoParcial && !pixParcial) {
       ctx.addIssue({
         code: "custom",
         path: ["banco_codigo"],

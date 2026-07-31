@@ -28,7 +28,7 @@ async function main() {
 
   const filtrados = bancos
     .filter((b): b is BrasilApiBank & { code: number; name: string } =>
-      typeof b.code === "number" && !!b.name,
+      typeof b.code === "number" && b.code > 0 && !!b.name,
     )
     .map((b) => ({
       codigo: String(b.code).padStart(3, "0"),

@@ -111,6 +111,16 @@ assertErroEm(
   { ...base, pix_tipo: "telefone", pix_chave: "12345678" },
   "pix_chave",
 );
+assertErroEm(
+  "chave CNPJ com DV inválido",
+  { ...base, pix_tipo: "cnpj", pix_chave: "12345678901234" },
+  "pix_chave",
+);
+assertErroEm(
+  "chave aleatoria muito curta",
+  { ...base, pix_tipo: "aleatoria", pix_chave: "abc123" },
+  "pix_chave",
+);
 
 console.log("\n== Endereço obrigatório ==");
 assertErroEm("sem CEP", { ...base, cep: "", ...pixCompleto }, "cep");
