@@ -62,7 +62,7 @@ export default async function OrcamentoDetailPage({
       .maybeSingle(),
     supabase
       .from("projetos")
-      .select("id, codigo, nome, campanha, cliente:clientes(id, nome_fantasia), responsavel:profiles!responsavel_id(id, nome)")
+      .select("id, codigo, nome, campanha, cliente:clientes(id, nome_fantasia), responsavel:profiles!responsavel_id(id, nome), empresa:empresas(nome_fantasia, razao_social)")
       .eq("id", params.projetoId)
       .eq("tenant_id", session.activeTenant.id)
       .maybeSingle(),
@@ -98,6 +98,7 @@ export default async function OrcamentoDetailPage({
   const orcamentoCategoriaNome: string | null = orcamentoRaw.categoria?.nome ?? null;
   const clienteNome: string | null = projeto.cliente?.nome_fantasia ?? null;
   const responsavelNome: string | null = projeto.responsavel?.nome ?? null;
+  const empresaNome: string | null = projeto.empresa?.nome_fantasia ?? projeto.empresa?.razao_social ?? null;
   const categoriasOrcamento = (categoriasOrcRes.data ?? []) as Pick<CategoriaDominio, "id" | "nome">[];
 
   const jobDoOrcamento = (jobsProjetoRes.data ?? []).find(
@@ -200,6 +201,11 @@ export default async function OrcamentoDetailPage({
             <span>
               <span className="text-foreground/60">Responsável:</span>{" "}
               <span className="text-foreground font-medium">{responsavelNome ?? "—"}</span>
+            </span>
+            <span aria-hidden className="text-border">·</span>
+            <span>
+              <span className="text-foreground/60">Empresa:</span>{" "}
+              <span className="text-foreground font-medium">{empresaNome ?? "—"}</span>
             </span>
             {periodo && (
               <>

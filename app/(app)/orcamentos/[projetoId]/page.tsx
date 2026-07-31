@@ -45,7 +45,7 @@ export default async function ProjetoDetailPage({
     supabase
       .from("projetos")
       .select(
-        "id, tenant_id, empresa_id, codigo, nome, campanha, status, cliente_id, responsavel_id, regional_id, cidade_id, categoria_id, data_inicio_prevista, data_fim_prevista, descricao, created_by, created_at, updated_at, cliente:clientes(id, nome_fantasia), responsavel:profiles!responsavel_id(id, nome), regional:regionais(id, nome), cidade:cidades(id, nome), categoria:categorias_dominio(id, nome)",
+        "id, tenant_id, empresa_id, codigo, nome, campanha, status, cliente_id, responsavel_id, regional_id, cidade_id, categoria_id, data_inicio_prevista, data_fim_prevista, descricao, created_by, created_at, updated_at, cliente:clientes(id, nome_fantasia), responsavel:profiles!responsavel_id(id, nome), regional:regionais(id, nome), cidade:cidades(id, nome), categoria:categorias_dominio(id, nome), empresa:empresas(id, razao_social, nome_fantasia)",
       )
       .eq("id", params.projetoId)
       .eq("tenant_id", session.activeTenant.id)
@@ -121,6 +121,7 @@ export default async function ProjetoDetailPage({
   const regionalNome: string | null = raw.regional?.nome ?? null;
   const cidadeNome: string | null = raw.cidade?.nome ?? null;
   const categoriaNome: string | null = raw.categoria?.nome ?? null;
+  const empresaNome: string | null = raw.empresa?.nome_fantasia ?? raw.empresa?.razao_social ?? null;
 
   const regionais = (regionaisRes.data ?? []) as Pick<Regional, "id" | "nome">[];
   const cidades = (cidadesRes.data ?? []) as Pick<Cidade, "id" | "nome">[];
@@ -199,6 +200,11 @@ export default async function ProjetoDetailPage({
             <span>
               <span className="text-foreground/60">Responsável:</span>{" "}
               <span className="text-foreground font-medium">{responsavelNome ?? "—"}</span>
+            </span>
+            <span aria-hidden className="text-border">·</span>
+            <span>
+              <span className="text-foreground/60">Empresa:</span>{" "}
+              <span className="text-foreground font-medium">{empresaNome ?? "—"}</span>
             </span>
             {regionalNome && (
               <>
