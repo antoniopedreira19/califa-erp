@@ -5,6 +5,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronDown, ChevronRight, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { jobStatusLabel, type JobStatus } from "@/lib/types";
 
@@ -22,6 +29,8 @@ export interface JobRow {
   job_pai_id: string | null;
   is_sub_job: boolean;
   tem_filhos: boolean;
+  empresa_id: string | null;
+  empresa_nome: string | null;
 }
 
 const STATUS_FILTROS: JobStatus[] = [
@@ -68,13 +77,20 @@ type DisplayRow = {
   expanded: boolean;
 };
 
-export function JobsList({ rows }: { rows: JobRow[] }) {
+export function JobsList({
+  rows,
+  empresas,
+}: {
+  rows: JobRow[];
+  empresas: { id: string; razao_social: string; nome_fantasia: string | null }[];
+}) {
   const router = useRouter();
   const [statusAtivos, setStatusAtivos] = React.useState<Set<JobStatus>>(
     new Set(),
   );
   const [busca, setBusca] = React.useState("");
   const [expandedIds, setExpandedIds] = React.useState<Set<string>>(new Set());
+  const [empresaFiltro, setEmpresaFiltro] = React.useState<string>("todas");
 
   const childrenByParent = React.useMemo(() => {
     const map = new Map<string, JobRow[]>();
@@ -90,10 +106,13 @@ export function JobsList({ rows }: { rows: JobRow[] }) {
 
   const displayRows = React.useMemo<DisplayRow[]>(() => {
     const q = busca.trim().toLowerCase();
-    const filterActive = statusAtivos.size > 0 || q !== "";
+    const filterActive =
+      statusAtivos.size > 0 || q !== "" || empresaFiltro !== "todas";
 
     function matches(r: JobRow): boolean {
       if (statusAtivos.size > 0 && !statusAtivos.has(r.status)) return false;
+      if (empresaFiltro !== "todas" && r.empresa_id !== empresaFiltro)
+        return false;
       if (q === "") return true;
       return (
         r.codigo.toLowerCase().includes(q) ||
@@ -139,7 +158,7 @@ export function JobsList({ rows }: { rows: JobRow[] }) {
     }
 
     return out;
-  }, [rows, statusAtivos, busca, expandedIds, childrenByParent]);
+  }, [rows, statusAtivos, busca, empresaFiltro, expandedIds, childrenByParent]);
 
   function toggleStatus(s: JobStatus) {
     setStatusAtivos((prev) => {
@@ -183,15 +202,36 @@ export function JobsList({ rows }: { rows: JobRow[] }) {
             );
           })}
         </div>
-        <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-          <input
-            type="text"
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-            placeholder="Buscar por nome ou codigo"
-            className="rounded-lg border border-border bg-white pl-8 pr-3 py-1.5 text-xs w-64 focus:outline-none focus:border-california-red/40"
-          />
+        <div className="flex items-center gap-2">
+          {empresas.length > 0 && (
+            <Select value={empresaFiltro} onValueChange={setEmpresaFiltro}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent
+                side="bottom"
+                avoidCollisions={false}
+                className="w-[--radix-select-trigger-width]"
+              >
+                <SelectItem value="todas">Todas as empresas</SelectItem>
+                {empresas.map((e) => (
+                  <SelectItem key={e.id} value={e.id}>
+                    {e.nome_fantasia ?? e.razao_social}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <input
+              type="text"
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              placeholder="Buscar por nome ou codigo"
+              className="rounded-lg border border-border bg-white pl-8 pr-3 py-1.5 text-xs w-64 focus:outline-none focus:border-california-red/40"
+            />
+          </div>
         </div>
       </div>
 
@@ -203,6 +243,7 @@ export function JobsList({ rows }: { rows: JobRow[] }) {
               <th className="w-8 px-2 py-3" aria-label="Expandir" />
               <th className="px-4 py-3 font-semibold">Codigo</th>
               <th className="px-4 py-3 font-semibold">Nome</th>
+              <th className="px-4 py-3 font-semibold">Empresa</th>
               <th className="px-4 py-3 font-semibold">Projeto</th>
               <th className="px-4 py-3 font-semibold">Cliente</th>
               <th className="px-4 py-3 font-semibold">Responsavel</th>
@@ -215,7 +256,7 @@ export function JobsList({ rows }: { rows: JobRow[] }) {
             {displayRows.length === 0 && (
               <tr>
                 <td
-                  colSpan={9}
+                  colSpan={10}
                   className="px-4 py-12 text-center text-sm text-muted-foreground"
                 >
                   {rows.length === 0
@@ -299,6 +340,15 @@ export function JobsList({ rows }: { rows: JobRow[] }) {
                       </Badge>
                     )}
                   </div>
+                </td>
+                <td className="px-4 py-3">
+                  {r.empresa_nome ? (
+                    <span className="inline-flex items-center rounded-full border border-border bg-muted/40 px-2 py-0.5 text-[11px] font-medium text-foreground">
+                      {r.empresa_nome}
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">
                   <span className="font-mono text-xs">{r.projeto_codigo}</span>{" "}
