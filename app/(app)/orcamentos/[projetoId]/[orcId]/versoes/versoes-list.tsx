@@ -3,7 +3,14 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, CheckCircle2, Copy, X } from "lucide-react";
+import {
+  ArrowRight,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  Copy,
+  X,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { cn, formatCurrency } from "@/lib/utils";
@@ -99,10 +106,22 @@ export function VersoesList({
     [versoes],
   );
 
+  // Com uma versão aprovada, as demais viram histórico: ficam ocultas por
+  // padrão e o usuário revela sob demanda.
+  const aprovadas = React.useMemo(
+    () => versoes.filter((v) => v.status === "aprovada"),
+    [versoes],
+  );
+  const temAprovada = aprovadas.length > 0;
+  const outras = versoes.length - aprovadas.length;
+  const [mostrarTodas, setMostrarTodas] = React.useState(false);
+  const colapsado = temAprovada && !mostrarTodas;
+  const versoesVisiveis = colapsado ? aprovadas : versoes;
+
   return (
     <>
       <ul className="divide-y divide-border">
-        {versoes.map((v) => {
+        {versoesVisiveis.map((v) => {
           const podeCancelar =
             v.status !== "aprovada" && v.status !== "cancelada";
           const href = `/orcamentos/${projetoId}/${orcamentoId}/versoes/${v.id}`;
@@ -235,6 +254,29 @@ export function VersoesList({
           );
         })}
       </ul>
+
+      {temAprovada && outras > 0 && (
+        <div className="border-t border-border">
+          <button
+            type="button"
+            onClick={() => setMostrarTodas((v) => !v)}
+            aria-expanded={!colapsado}
+            className="flex w-full items-center justify-center gap-1.5 rounded-b-2xl px-6 py-3 text-xs font-semibold text-muted-foreground hover:text-california-red hover:bg-muted/40 transition-colors"
+          >
+            {colapsado ? (
+              <>
+                <ChevronDown className="h-3.5 w-3.5" />
+                Mostrar {outras === 1 ? "a outra versão" : `as outras ${outras} versões`}
+              </>
+            ) : (
+              <>
+                <ChevronUp className="h-3.5 w-3.5" />
+                Ocultar {outras === 1 ? "a outra versão" : "as outras versões"}
+              </>
+            )}
+          </button>
+        </div>
+      )}
 
       <ConfirmDialog
         open={confirm !== null}
