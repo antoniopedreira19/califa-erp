@@ -2,10 +2,11 @@
 
 Registro da implementação dos design handoffs aprovados para o módulo de Orçamentos.
 
-**Datas:** 2026-07-27 (entregas 1–3) · 2026-07-30 (entregas 4–5)
+**Datas:** 2026-07-27 (entregas 1–3) · 2026-07-30 (entregas 4–8)
 **Origem do design:**
 - Entregas 1–3: pacote `design_handoff_califa/` (`Versoes - Destaque v4.dc.html` opção 2a, `Orcamento - Edicao Inline.dc.html` opção 3b, `README.md`, `IMPLEMENTACAO.md`). A pasta fica **só na máquina local** — está no `.gitignore` por ser referência de design, não código.
-- Entregas 4–5: projeto Claude Design `69342d83-28d9-4bea-a8af-c99e233f5f13` (`Orcamento - Versao -final-.dc.html` e `Novo projeto.dc.html`), lido via MCP `claude_design`.
+- Entregas 4–5 e 8: projeto Claude Design `69342d83-28d9-4bea-a8af-c99e233f5f13` (`Orcamento - Versao -final-.dc.html`, `Novo projeto.dc.html` e `Abertura de Job.dc.html`), lido via MCP `claude_design`.
+- Entregas 6–7: pedidos diretos do time, sem handoff de design.
 
 ---
 
@@ -18,9 +19,13 @@ Registro da implementação dos design handoffs aprovados para o módulo de Orç
 | **3 — Alinhamento da grade, rentabilidade e card de "Totais"** | ✅ `b2003f7` + `497b8e7` |
 | **4 — Recolher grupos, alinhar Totais e densificar a grade** | ✅ `8e0b674` (2026-07-30) |
 | **5 — Cadastro de cidades e novos campos do projeto** | ✅ `962be97` (2026-07-30) |
+| **6 — Ocultar versões não aprovadas** | ✅ `f2b882a` (2026-07-30) |
+| **7 — Responsável de volta ao formulário de projeto** | ✅ `2d34b8b` (2026-07-30) |
+| **8 — Abertura de job a partir da versão aprovada** | ✅ `c0dac5e` (2026-07-30) |
 
-`tsc --noEmit` e `next lint` limpos em todas. Entregas 4 e 5 também com
-`next build` completo.
+`tsc --noEmit` e `next lint` limpos em todas. Entregas 4, 5 e 8 também com
+`next build` completo. A Entrega 8 é a única com verificação de ponta a
+ponta contra o banco real — ver seção 9.
 
 ---
 
@@ -255,12 +260,100 @@ Cores computadas conferidas contra o spec do design: `#f1f0ec`, `#e8f0fd`/`#1e4f
 
 ---
 
-## 7. Próximos passos
+## 7. Entrega 6 — ocultar versões não aprovadas
 
-1. **Testar o modo `readOnly`** quando existir versão `aprovada` — é o único caminho da Entrega 2 sem prova de execução.
-2. **Remover os `console.log` de timing** temporários — mantidos a pedido, ver `docs/HANDOFF.md` seção 0 item 2. Estão em `[versaoId]/page.tsx`, `[id]/page.tsx` e `importar-actions.ts`.
-3. **Ambiente de desenvolvimento separado no Supabase** — hoje `next dev` escreve em produção (ver seção 4). As migrations em `supabase/migrations/` recriam o schema inteiro.
-4. **Fase 2 da edição inline** (fora de escopo agora): alça de arrastar/preencher, seleção de intervalo, copiar/colar de planilha, navegação por teclado entre células, `⌘Z` global.
-5. **Carga completa de cidades** — hoje só Salvador e São Paulo (Entrega 5, decisão 2).
-6. **Rotacionar o PAT do Supabase.** O `.mcp.json` esteve versionado no commit `69c521d` e foi removido em `65da0b2`; remover do tracking não apaga do histórico. O repositório inteiro, incluindo `mcp.json`, também foi enviado ao projeto do Claude Design. O token segue legível nos dois lugares.
-7. **Criação de projeto de ponta a ponta** — confirmar a gravação de `regional_id`, `cidade_id`, `data_fim_prevista` e `descricao` (Entrega 5).
+**2026-07-30** · commit `f2b882a` · pedido direto do time, sem handoff de design.
+
+**Arquivo:** [`versoes-list.tsx`](app/(app)/orcamentos/[projetoId]/[orcId]/versoes/versoes-list.tsx) — só visual, 1 arquivo, sem mudança de dados.
+
+- Com uma versão aprovada, as demais viram histórico: a lista mostra só a aprovada e um botão discreto no rodapé revela as outras sob demanda.
+- **O gatilho é existir versão com status `aprovada` na lista**, não o status do orçamento — decisão do time. Assim que qualquer versão é aprovada, as demais somem.
+- Botão só aparece quando há aprovada **e** há o que esconder. Colapsado lê "Mostrar as outras N versões"; expandido, "Ocultar as outras versões".
+- **Sem persistência:** o estado é só da sessão do componente. Recarregar volta a ocultar — decisão do time, para toda visita começar limpa.
+- O badge "Mais recente" segue calculado sobre **todas** as versões, não só as visíveis. Se alguém criar uma v6 depois de aprovar a v5, o estado colapsado mostra a v5 **sem** o badge, sinalizando que existe algo mais novo escondido.
+- Sem versão aprovada nada muda: a lista se comporta como antes e o botão não aparece.
+
+---
+
+## 8. Entrega 7 — Responsável de volta ao formulário de projeto
+
+**2026-07-30** · commit `2d34b8b` · **reverte parcialmente a Entrega 5**.
+
+- A Entrega 5 tirou o campo da tela e passou a preenchê-lo com o usuário logado, exibindo-o como "Criado por". Revertido: quem responde pelo projeto nem sempre é quem o cadastrou, e `created_by` já registra o criador.
+- Select "Responsável" volta **ao lado de "Nome do projeto"**, que deixa de ocupar a linha inteira e passa a meia largura.
+- `responsavel_id` volta ao `projetoSchema` como uuid obrigatório e ao `extractInput`. `criarProjeto` para de sobrescrever com `session.profile.id`. `atualizarProjeto` **agora grava alterações do campo** — antes ele nem chegava ao payload.
+- Rótulos revertidos nos três lugares: coluna "Criado por" → "Responsável", filtro "Todos os criadores" → "Todos responsáveis", detalhe do projeto "Criado por:" → "Responsável:".
+- ⚠️ **Não houve renomeação no banco em nenhum momento.** A coluna sempre foi `projetos.responsavel_id` — a Entrega 5 mudou apenas rótulos de UI. A premissa inicial de que o Supabase teria renomeado o campo para "Criado por" estava incorreta.
+
+---
+
+## 9. Entrega 8 — abertura de job a partir da versão aprovada
+
+**2026-07-30** · commit `c0dac5e` · design `Abertura de Job.dc.html` · migration `20260730000004_produtos_cliente_e_faturamento_job.sql`.
+
+Aprovar versão e abrir job passam a viver na tela da **versão**, num fluxo de três pop-ups: confirmar aprovação → formulário do job → confirmar envio.
+
+### Banco
+
+- **`cliente_produtos`** no padrão de `regionais`/`cidades` (RLS por `is_tenant_member`, grants para `authenticated`, soft-delete via `ativo`, sem DELETE), com uma diferença: **o escopo é o CLIENTE, não o tenant**. Cada cliente tem sua lista, gerenciada dentro da tela dele. Únicos por `(cliente_id, lower(nome))` e `(cliente_id, codigo)`.
+- Código `PRD-NN` é sequencial **por cliente** e gerado na action, não no banco: a numeração é cosmética e um trigger de sequência por cliente custaria mais do que entrega. O unique index captura corrida.
+- **`jobs.data_prevista_faturamento`** nullable de propósito — já existem jobs gravados e um NOT NULL exigiria backfill. A obrigatoriedade vive no Zod.
+
+### Interface
+
+- `<FluxoAbertura>` orquestra a barra `sticky bottom-0` com 3 estados (rascunho / aprovada / enviada) e os três pop-ups.
+- `<BannersEstado>` fica **fora** dele: os banners vão entre o cabeçalho e os totais, e o `sticky bottom-0` exige ser o último filho da página. Foi corrigido na verificação — a primeira versão renderizava os banners abaixo do card de Totais.
+- Barra afinada a pedido do time depois da entrega: `py-4` → `py-2`, botões de `px-5 py-3`/14px-bold para `px-4 py-2`/13px-semibold. Altura 67px → **53px**, botão 48px → 36px. As duas linhas de texto somam 34px, então 53px é praticamente o piso sem cortar informação do design.
+- **Cidade usa busca server-side** (`ilike` + limit 30), não filtro no cliente: o cadastro foi desenhado para receber a lista completa do IBGE. Formato combinado com o time: **`Salvador-BA` num campo só**, sem coluna `uf` — assim o índice único `(tenant_id, lower(nome))` continua valendo mesmo com nomes repetidos entre estados, e a carga futura é só um INSERT.
+- Card "Produtos" em `/clientes/[id]`, abaixo do formulário, no padrão de Cadastros › Regionais.
+- "Aprovar versão" saiu do cabeçalho e vive na barra; `<AprovacaoActions>` ficou só com "Cancelar aprovação".
+
+### Regras que não dependem do frontend
+
+- **`valor_total` é recalculado** dos itens da versão via `calcularTotaisVersao`, nunca vem do formulário.
+- **Produto e cidade são revalidados** contra o cliente e o tenant — não basta serem uuid válido.
+- **Hierarquia decidida no servidor, sem seletor na tela:** primeiro job do projeto vira principal, os seguintes viram sub-job dele. Decisão do time — o projeto é o guarda-chuva e cada orçamento aprovado abre um job debaixo dele. Trocar o principal continua na tela do job.
+- Nome e datas informados no modal são gravados **também no orçamento**, como o modal avisa.
+
+### Remoções
+
+- `<CriarJobDrawer>` da tela do orçamento foi removido — caminho único agora é pela versão. A tela perdeu 2 queries (`regionais` e `listActiveMembers`) que só ele usava.
+- ⚠️ **`criarJob` ficou órfã** em `app/(app)/jobs/actions.ts`. Server action exportada continua sendo endpoint chamável mesmo sem UI, e ela permite criar job pulando produto e data de faturamento. Não é buraco de segurança (valida sessão, tenant e orçamento aprovado), mas é de qualidade de dado. Remoção em task própria, depois do fluxo validado.
+- `ConfirmDialog` ganha `pr-6` no título: sem isso, título longo passa por baixo do botão de fechar, que é absoluto no canto. Afeta todos os diálogos do sistema.
+
+### Verificação de ponta a ponta (2026-07-30)
+
+Única entrega com prova contra o banco real, não só build limpo:
+
+| Etapa | Resultado |
+|---|---|
+| Migration | `cliente_produtos` com 9 colunas, 3 policies, 6 índices; INSERT liberado para `authenticated` |
+| Advisors de segurança | 10 avisos, **todos pré-existentes** — nenhum da tabela nova |
+| Cadastro de produto | `PRD-01 · Ativação de marca` |
+| Aprovar versão | v1 → `aprovada`, barra troca de estado |
+| Busca de cidade | "salv" → Salvador, vindo do servidor |
+| Envio | **JOB-0003**, orçamento → `job_criado` |
+| `valor_total` | R$ 25.503,36, igual ao faturamento previsto |
+| `job_pai_id` | preenchido — nasceu como sub-job do JOB-0001 |
+| Auditoria | `job.enviado_para_abertura` com `valor_total`, `versao_id` e `job_pai_id` |
+| Fila do financeiro | JOB-0003 listado com Aprovar/Rejeitar |
+
+⚠️ O job gravou `Salvador`, não `Salvador-BA` — é o que está no cadastro hoje. Reconciliar quando a lista do IBGE for carregada.
+
+### Nota de infraestrutura
+
+O MCP do Supabase não carregava porque o arquivo na raiz se chamava `mcp.json`; o Claude Code lê `.mcp.json`, **com ponto**. Renomeado nesta sessão. O `.gitignore` já cobria os dois nomes, então o token nunca esteve versionado por esse caminho.
+
+---
+
+## 10. Próximos passos
+
+1. **Carga completa de cidades do IBGE** — hoje só Salvador e São Paulo. Formato acordado: `Salvador-BA` num campo só, sem coluna `uf`. É só uma migration de INSERT: o schema e a busca já estão prontos (Entrega 8). Fonte: `https://servicosdados.ibge.gov.br/api/v1/localidades/municipios`. Ao carregar, reconciliar as 2 linhas atuais, que estão sem o sufixo de UF, e os jobs que já gravaram `Salvador`/`São Paulo`.
+2. **Remover a server action `criarJob`**, órfã desde a Entrega 8. Avaliar junto os campos `posicao_hierarquia` e `job_pai_id` do `jobSchema`, que provavelmente ficam sem uso.
+3. **Rotacionar o PAT do Supabase.** O `.mcp.json` esteve versionado no commit `69c521d` e foi removido em `65da0b2`; remover do tracking não apaga do histórico. O repositório inteiro, incluindo o arquivo, também foi enviado ao projeto do Claude Design. O token segue legível nos dois lugares.
+4. **Remover os `console.log` de timing** temporários — mantidos a pedido, ver `docs/HANDOFF.md` seção 0 item 2. Estão em `[versaoId]/page.tsx`, `[id]/page.tsx` e `importar-actions.ts`.
+5. **Ambiente de desenvolvimento separado no Supabase** — hoje `next dev` escreve em produção (ver seção 4). Ficou evidente na Entrega 8: o teste de ponta a ponta criou o JOB-0003 direto na base real. As migrations em `supabase/migrations/` recriam o schema inteiro.
+6. **Criação de projeto de ponta a ponta** — confirmar a gravação de `regional_id`, `cidade_id`, `data_fim_prevista` e `descricao` (Entrega 5) e do `responsavel_id` escolhido (Entrega 7).
+7. **Fase 2 da edição inline** (fora de escopo agora): alça de arrastar/preencher, seleção de intervalo, copiar/colar de planilha, navegação por teclado entre células, `⌘Z` global.
+
+**Resolvido nesta sessão:** o modo `readOnly` da Entrega 2 ganhou prova de execução — a v1 do ORC-0003 foi aprovada e a grade travou (item 1 da lista anterior).

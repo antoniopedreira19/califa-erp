@@ -187,6 +187,16 @@ Admin cadastrado: `antonio@pevetech.com.br` (role `administrador` no tenant `age
   - `atualizarStatusJob` deixa qualquer role cancelar qualquer status não-terminal (spec-compliant, mas pode virar policy).
 - Migration `20260729000002_task005_jobs.sql`.
 
+### Abertura de Job (handoff "Abertura de Job.dc.html", 30/07/2026)
+- Fluxo de 3 pop-ups na tela da **versão**, orquestrado por `<FluxoAbertura>`: confirmar aprovação → formulário do job → confirmar envio.
+- Barra de ação `sticky bottom-0` com 3 estados (rascunho / versão aprovada / job enviado). "Aprovar versão" saiu do cabeçalho e vive nela; `<AprovacaoActions>` ficou só com "Cancelar aprovação".
+- `<CriarJobDrawer>` da tela do orçamento foi **removido** — caminho único agora é pela versão. A tela do orçamento perdeu 2 queries (`regionais`, `listActiveMembers`) que só ele usava.
+- Nova tabela `cliente_produtos`: escopo **cliente**, não tenant. Gerenciada em `/clientes/[id]` (card "Produtos"), código `PRD-NN` sequencial por cliente gerado na action.
+- Nova coluna `jobs.data_prevista_faturamento` (nullable — já havia jobs gravados).
+- `enviarJobParaAbertura` recalcula `valor_total` a partir dos itens da versão (nunca confia no form), grava nome/datas de volta no orçamento, e decide a hierarquia sozinha: primeiro job do projeto vira principal, os seguintes viram sub-job dele. Sem seletor na tela.
+- Cidade usa busca **server-side** (`buscarCidades`, `ilike` + limit 30): o cadastro foi desenhado pra receber a lista completa do IBGE no formato `Salvador-BA`, sem coluna `uf`. A carga é só um INSERT futuro.
+- Migration `20260730000004_produtos_cliente_e_faturamento_job.sql`.
+
 ### UI polish
 - Componentes reusáveis: `Dialog` + `DrawerContent`, `ConfirmDialog`, `Select` (Radix), `Popover`, `Calendar`, `DatePicker`, `MaskedInput` (telefone/CPF/CNPJ), `no-spinner` utility.
 - Fonte display **Fraunces** para títulos (cara de agência).
