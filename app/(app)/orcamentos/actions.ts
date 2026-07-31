@@ -14,6 +14,7 @@ export type ActionResult =
 
 function extractInput(formData: FormData) {
   const base = {
+    empresa_id: formData.get("empresa_id")?.toString() ?? "",
     nome: formData.get("nome")?.toString() ?? "",
     cliente_id: formData.get("cliente_id")?.toString() ?? "",
     responsavel_id: formData.get("responsavel_id")?.toString() ?? "",
@@ -32,6 +33,9 @@ function extractInput(formData: FormData) {
 }
 
 function mapDbError(msg: string): string {
+  if (msg.includes("projetos_empresa_id_fkey")) {
+    return "Empresa inválida.";
+  }
   if (msg.includes("uniq_projetos_codigo_por_tenant")) {
     return "Já existe um projeto com este código — tente novamente.";
   }

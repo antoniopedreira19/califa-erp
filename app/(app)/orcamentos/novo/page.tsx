@@ -3,6 +3,7 @@ import { ArrowLeft } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { listActiveMembers } from "@/lib/data/members";
+import { listEmpresasAtivas, getEmpresaPrincipal } from "@/lib/data/empresas";
 import type { CategoriaDominio, Cidade, Cliente, Regional } from "@/lib/types";
 import { ProjetoForm } from "../projeto-form";
 
@@ -12,7 +13,7 @@ export default async function NovoProjetoPage() {
   const session = await requireSession();
   const supabase = createClient();
 
-  const [clientesRes, responsaveis, regionaisRes, cidadesRes, categoriasRes] = await Promise.all([
+  const [clientesRes, responsaveis, regionaisRes, cidadesRes, categoriasRes, empresas, principal] = await Promise.all([
     supabase
       .from("clientes")
       .select("id, nome_fantasia, codigo_curto")
@@ -39,6 +40,8 @@ export default async function NovoProjetoPage() {
       .eq("escopo", "projeto")
       .eq("ativo", true)
       .order("nome"),
+    listEmpresasAtivas(session.activeTenant.id),
+    getEmpresaPrincipal(session.activeTenant.id),
   ]);
 
   const clientes = (clientesRes.data ?? []) as Pick<
@@ -71,6 +74,8 @@ export default async function NovoProjetoPage() {
 
       <div className="rounded-2xl border border-border bg-card p-6 shadow-soft">
         <ProjetoForm
+          empresas={empresas}
+          empresaPrincipalId={principal?.id}
           clientes={clientes}
           responsaveis={responsaveis}
           regionais={regionais}

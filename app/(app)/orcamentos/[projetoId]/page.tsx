@@ -4,6 +4,7 @@ import { ArrowLeft, FileText, Plus } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { listActiveMembers } from "@/lib/data/members";
+import { listEmpresasAtivas } from "@/lib/data/empresas";
 import type {
   CategoriaDominio,
   Cidade,
@@ -40,7 +41,7 @@ export default async function ProjetoDetailPage({
   const session = await requireSession();
   const supabase = createClient();
 
-  const [projRes, orcsRes, clientesRes, responsaveis, regionaisRes, cidadesRes, categoriasProjRes, categoriasOrcRes] = await Promise.all([
+  const [projRes, orcsRes, clientesRes, responsaveis, regionaisRes, cidadesRes, categoriasProjRes, categoriasOrcRes, empresas] = await Promise.all([
     supabase
       .from("projetos")
       .select(
@@ -88,6 +89,7 @@ export default async function ProjetoDetailPage({
       .eq("escopo", "orcamento")
       .eq("ativo", true)
       .order("nome"),
+    listEmpresasAtivas(session.activeTenant.id),
   ]);
 
   if (projRes.error) console.error("[projeto.detail]", projRes.error.message);
@@ -179,6 +181,7 @@ export default async function ProjetoDetailPage({
             </Badge>
             <ProjetoEditorDrawer
               projeto={projeto}
+              empresas={empresas}
               clientes={clientes}
               responsaveis={responsaveis}
               regionais={regionais}
