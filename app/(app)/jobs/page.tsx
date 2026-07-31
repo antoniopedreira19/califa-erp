@@ -1,6 +1,7 @@
 import { Briefcase } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
+import { listEmpresasAtivas } from "@/lib/data/empresas";
 import { JobsList, type JobRow } from "./jobs-list";
 
 export const dynamic = "force-dynamic";
@@ -9,20 +10,24 @@ export default async function JobsPage() {
   const session = await requireSession();
   const supabase = createClient();
 
-  const { data, error } = await supabase
-    .from("jobs")
-    .select(
-      "id, codigo, nome, status, valor_total, data_inicio_prevista, job_pai_id, " +
-        "projeto:projetos(codigo, nome, cliente:clientes(nome_fantasia)), " +
-        "responsavel:profiles!responsavel_id(nome), " +
-        "filhos:jobs!job_pai_id(count)",
-    )
-    .eq("tenant_id", session.activeTenant.id)
-    .order("created_at", { ascending: false });
+  const [jobsRes, empresas] = await Promise.all([
+    supabase
+      .from("jobs")
+      .select(
+        "id, codigo, nome, status, valor_total, data_inicio_prevista, job_pai_id, empresa_id, " +
+          "projeto:projetos(codigo, nome, cliente:clientes(nome_fantasia)), " +
+          "responsavel:profiles!responsavel_id(nome), " +
+          "filhos:jobs!job_pai_id(count), " +
+          "empresa:empresas(id, razao_social, nome_fantasia)",
+      )
+      .eq("tenant_id", session.activeTenant.id)
+      .order("created_at", { ascending: false }),
+    listEmpresasAtivas(session.activeTenant.id),
+  ]);
 
-  if (error) console.error("[jobs.list]", error.message);
+  if (jobsRes.error) console.error("[jobs.list]", jobsRes.error.message);
 
-  const rows: JobRow[] = (data ?? []).map((r: any) => ({
+  const rows: JobRow[] = (jobsRes.data ?? []).map((r: any) => ({
     id: r.id,
     codigo: r.codigo,
     nome: r.nome,
@@ -36,6 +41,8 @@ export default async function JobsPage() {
     job_pai_id: r.job_pai_id ?? null,
     is_sub_job: r.job_pai_id !== null,
     tem_filhos: Number(r.filhos?.[0]?.count ?? 0) > 0,
+    empresa_id: r.empresa_id ?? null,
+    empresa_nome: r.empresa?.nome_fantasia ?? r.empresa?.razao_social ?? null,
   }));
 
   return (
@@ -68,7 +75,7 @@ export default async function JobsPage() {
           </p>
         </div>
       ) : (
-        <JobsList rows={rows} />
+        <JobsList rows={rows} empresas={empresas} />
       )}
     </div>
   );
