@@ -20,6 +20,10 @@ import { formatDocumento, formatTelefone } from "@/lib/utils";
 import type { Fornecedor } from "@/lib/types";
 import { inativarFornecedor, reativarFornecedor } from "./actions";
 
+function fornecedorIncompleto(f: Fornecedor): boolean {
+  return !f.cep || (!f.banco_codigo && !f.pix_chave);
+}
+
 export function FornecedoresList({ fornecedores }: { fornecedores: Fornecedor[] }) {
   const router = useRouter();
   const [busca, setBusca] = React.useState("");
@@ -131,14 +135,21 @@ export function FornecedoresList({ fornecedores }: { fornecedores: Fornecedor[] 
                 className="cursor-pointer hover:bg-muted/50 focus-visible:outline-none focus-visible:bg-muted/50"
               >
                 <TableCell>
-                  <Link
-                    href={href}
-                    prefetch={false}
-                    onClick={(e) => e.stopPropagation()}
-                    className="font-medium text-foreground hover:text-california-red transition-colors"
-                  >
-                    {f.nome}
-                  </Link>
+                  <div className="flex items-center gap-2">
+                    <Link
+                      href={href}
+                      prefetch={false}
+                      onClick={(e) => e.stopPropagation()}
+                      className="font-medium text-foreground hover:text-california-red transition-colors"
+                    >
+                      {f.nome}
+                    </Link>
+                    {fornecedorIncompleto(f) && (
+                      <span className="inline-flex items-center rounded-md border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                        Dados incompletos
+                      </span>
+                    )}
+                  </div>
                   {f.razao_social && (
                     <TruncateTooltip
                       as="p"
