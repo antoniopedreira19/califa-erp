@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
+import { listActiveMembers } from "@/lib/data/members";
 import type { CategoriaDominio, Cidade, Cliente, Regional } from "@/lib/types";
 import { ProjetoForm } from "../projeto-form";
 
@@ -11,13 +12,14 @@ export default async function NovoProjetoPage() {
   const session = await requireSession();
   const supabase = createClient();
 
-  const [clientesRes, regionaisRes, cidadesRes, categoriasRes] = await Promise.all([
+  const [clientesRes, responsaveis, regionaisRes, cidadesRes, categoriasRes] = await Promise.all([
     supabase
       .from("clientes")
       .select("id, nome_fantasia, codigo_curto")
       .eq("tenant_id", session.activeTenant.id)
       .eq("status", "ativo")
       .order("nome_fantasia"),
+    listActiveMembers(session.activeTenant.id),
     supabase
       .from("regionais")
       .select("id, nome")
@@ -70,6 +72,7 @@ export default async function NovoProjetoPage() {
       <div className="rounded-2xl border border-border bg-card p-6 shadow-soft">
         <ProjetoForm
           clientes={clientes}
+          responsaveis={responsaveis}
           regionais={regionais}
           cidades={cidades}
           categorias={categorias}

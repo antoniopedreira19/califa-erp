@@ -16,6 +16,7 @@ function extractInput(formData: FormData) {
   const base = {
     nome: formData.get("nome")?.toString() ?? "",
     cliente_id: formData.get("cliente_id")?.toString() ?? "",
+    responsavel_id: formData.get("responsavel_id")?.toString() ?? "",
     regional_id: formData.get("regional_id")?.toString() ?? "",
     cidade_id: formData.get("cidade_id")?.toString() ?? "",
     categoria_id: formData.get("categoria_id")?.toString() ?? "",
@@ -84,9 +85,8 @@ export async function criarProjeto(formData: FormData): Promise<ActionResult> {
       ...parsed.data,
       codigo,
       tenant_id: session.activeTenant.id,
-      // Coluna NOT NULL que saiu da tela: quem cria é o responsável.
-      // `profiles.id` é o próprio id do auth.users, então serve às duas.
-      responsavel_id: session.profile.id,
+      // `responsavel_id` vem do formulário. `created_by` registra quem
+      // cadastrou — os dois podem ser pessoas diferentes.
       created_by: session.profile.id,
     })
     .select("id")
@@ -130,7 +130,6 @@ export async function atualizarProjeto(
   // Não basta o campo ser opcional no Zod: o transform devolve `null`
   // para entrada ausente, então a chave entraria no UPDATE e zeraria o
   // valor gravado. Removemos explicitamente quando o form não a envia.
-  // `responsavel_id` nem chega aqui: quem criou o projeto não muda.
   const { campanha: _campanha, ...semCampanha } = parsed.data;
   const payload = formData.has("campanha") ? parsed.data : semCampanha;
 

@@ -7,11 +7,12 @@ export const DESCRICAO_MAX = 600;
  * Schema de projeto. Código é gerado no server (não vem do form).
  * data_inicio_prevista é NOT NULL — determina o ano do código.
  *
- * `responsavel_id` não está aqui: saiu do formulário no handoff de
- * 30/07/2026 e passou a ser preenchido no server com quem criou o
- * projeto (exibido como "Criado por").
+ * `responsavel_id` voltou ao formulário em 30/07/2026, revertendo o
+ * handoff que o preenchia com o usuário logado. Quem responde pelo
+ * projeto nem sempre é quem o cadastrou — a coluna `created_by` já
+ * registra o criador.
  *
- * `campanha` também saiu do formulário, mas continua opcional no schema:
+ * `campanha` saiu do formulário, mas continua opcional no schema:
  * o update só a inclui no payload quando o form realmente a envia, para
  * não zerar o valor já gravado.
  *
@@ -33,6 +34,7 @@ export const projetoSchema = z
       .optional()
       .transform((v) => (v && v.length > 0 ? v : null)),
     cliente_id: z.string().uuid("Selecione um cliente válido."),
+    responsavel_id: z.string().uuid("Selecione um responsável válido."),
     regional_id: z.string().uuid("Selecione a regional."),
     cidade_id: z.string().uuid("Selecione a cidade."),
     categoria_id: z.string().uuid("Selecione uma categoria para continuar."),

@@ -20,6 +20,7 @@ import type {
   CategoriaDominio,
   Cidade,
   Cliente,
+  Profile,
   Projeto,
   Regional,
 } from "@/lib/types";
@@ -32,6 +33,7 @@ import {
 interface Props {
   projeto?: Projeto;
   clientes: Pick<Cliente, "id" | "nome_fantasia" | "codigo_curto">[];
+  responsaveis: Pick<Profile, "id" | "nome">[];
   regionais: Pick<Regional, "id" | "nome">[];
   cidades: Pick<Cidade, "id" | "nome">[];
   categorias: Pick<CategoriaDominio, "id" | "nome">[];
@@ -42,6 +44,7 @@ interface Props {
 export function ProjetoForm({
   projeto,
   clientes,
+  responsaveis,
   regionais,
   cidades,
   categorias,
@@ -54,6 +57,9 @@ export function ProjetoForm({
   const [error, setError] = React.useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = React.useState<Record<string, string[]>>({});
   const [clienteId, setClienteId] = React.useState(projeto?.cliente_id ?? "");
+  const [responsavelId, setResponsavelId] = React.useState(
+    projeto?.responsavel_id ?? "",
+  );
   const [regionalId, setRegionalId] = React.useState(projeto?.regional_id ?? "");
   const [cidadeId, setCidadeId] = React.useState(projeto?.cidade_id ?? "");
   const [categoriaId, setCategoriaId] = React.useState(projeto?.categoria_id ?? "");
@@ -75,6 +81,7 @@ export function ProjetoForm({
 
     const formData = new FormData(e.currentTarget);
     formData.set("cliente_id", clienteId);
+    formData.set("responsavel_id", responsavelId);
     formData.set("regional_id", regionalId);
     formData.set("cidade_id", cidadeId);
     formData.set("categoria_id", categoriaId);
@@ -99,18 +106,36 @@ export function ProjetoForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <div className="grid gap-4 md:grid-cols-2">
-        {/* Nome ocupa a linha inteira, como no handoff. */}
-        <div className="md:col-span-2">
-          <Field label="Nome do projeto" name="nome" required errors={fieldErrors}>
-            <Input
-              name="nome"
-              defaultValue={projeto?.nome ?? ""}
-              className={erroClasses("nome")}
-              autoFocus
-              placeholder="Ex.: Carnaval Anitta"
-            />
-          </Field>
-        </div>
+        {/* Nome divide a primeira linha com Responsável. */}
+        <Field label="Nome do projeto" name="nome" required errors={fieldErrors}>
+          <Input
+            name="nome"
+            defaultValue={projeto?.nome ?? ""}
+            className={erroClasses("nome")}
+            autoFocus
+            placeholder="Ex.: Carnaval Anitta"
+          />
+        </Field>
+
+        <Field
+          label="Responsável"
+          name="responsavel_id"
+          required
+          errors={fieldErrors}
+        >
+          <Select value={responsavelId} onValueChange={setResponsavelId}>
+            <SelectTrigger className={erroClasses("responsavel_id")}>
+              <SelectValue placeholder="Selecione um membro do tenant" />
+            </SelectTrigger>
+            <SelectContent>
+              {responsaveis.map((r) => (
+                <SelectItem key={r.id} value={r.id}>
+                  {r.nome}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
 
         <Field label="Cliente" name="cliente_id" required errors={fieldErrors}>
           <Select value={clienteId} onValueChange={setClienteId}>

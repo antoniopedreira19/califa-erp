@@ -14,6 +14,7 @@ import type {
   CategoriaDominio,
   Cidade,
   Cliente,
+  Profile,
   Projeto,
   Regional,
 } from "@/lib/types";
@@ -23,6 +24,7 @@ import { arquivarProjeto, reativarProjeto } from "./actions";
 interface Props {
   projeto: Projeto;
   clientes: Pick<Cliente, "id" | "nome_fantasia" | "codigo_curto">[];
+  responsaveis: Pick<Profile, "id" | "nome">[];
   regionais: Pick<Regional, "id" | "nome">[];
   cidades: Pick<Cidade, "id" | "nome">[];
   categorias: Pick<CategoriaDominio, "id" | "nome">[];
@@ -31,6 +33,7 @@ interface Props {
 export function ProjetoEditorDrawer({
   projeto,
   clientes,
+  responsaveis,
   regionais,
   cidades,
   categorias,
@@ -89,6 +92,7 @@ export function ProjetoEditorDrawer({
             <ProjetoForm
               projeto={projeto}
               clientes={clientes}
+              responsaveis={responsaveis}
               regionais={regionais}
               cidades={cidades}
               categorias={categorias}

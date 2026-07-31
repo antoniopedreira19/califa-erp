@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, FileText, Plus } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
+import { listActiveMembers } from "@/lib/data/members";
 import type {
   CategoriaDominio,
   Cidade,
@@ -39,7 +40,7 @@ export default async function ProjetoDetailPage({
   const session = await requireSession();
   const supabase = createClient();
 
-  const [projRes, orcsRes, clientesRes, regionaisRes, cidadesRes, categoriasProjRes, categoriasOrcRes] = await Promise.all([
+  const [projRes, orcsRes, clientesRes, responsaveis, regionaisRes, cidadesRes, categoriasProjRes, categoriasOrcRes] = await Promise.all([
     supabase
       .from("projetos")
       .select(
@@ -60,6 +61,7 @@ export default async function ProjetoDetailPage({
       .eq("tenant_id", session.activeTenant.id)
       .eq("status", "ativo")
       .order("nome_fantasia"),
+    listActiveMembers(session.activeTenant.id),
     supabase
       .from("regionais")
       .select("id, nome")
@@ -177,6 +179,7 @@ export default async function ProjetoDetailPage({
             <ProjetoEditorDrawer
               projeto={projeto}
               clientes={clientes}
+              responsaveis={responsaveis}
               regionais={regionais}
               cidades={cidades}
               categorias={categoriasProjeto}
@@ -189,10 +192,8 @@ export default async function ProjetoDetailPage({
               <span className="text-foreground font-medium">{clienteNome ?? "—"}</span>
             </span>
             <span aria-hidden className="text-border">·</span>
-            {/* "Criado por" e não "Responsável": o campo saiu do formulário
-                e passou a ser preenchido com quem criou o projeto. */}
             <span>
-              <span className="text-foreground/60">Criado por:</span>{" "}
+              <span className="text-foreground/60">Responsável:</span>{" "}
               <span className="text-foreground font-medium">{responsavelNome ?? "—"}</span>
             </span>
             {regionalNome && (
