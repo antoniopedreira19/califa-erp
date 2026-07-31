@@ -21,7 +21,7 @@ type CelulaAtiva = { itemId: string; campo: CampoRealizado } | null;
 type Overrides = Record<string, Partial<Record<CampoRealizado, number>>>;
 
 const ALTURA_LINHA = "h-9";
-const LARGURA_MINIMA = "min-w-[960px]";
+const LARGURA_MINIMA = "min-w-[1040px]";
 
 const GRADE_NEUTRA = "border-r border-r-[#f1f1f1]";
 const GRADE_ORCADO = "border-r border-r-[#eceae5]";
@@ -53,27 +53,27 @@ function formatarPercentual(p: number): string {
 function ColunasFixas() {
   return (
     <colgroup>
-      {/* Item absorve o resto (~13%); Tipo estreito; blocos proporcionais. */}
+      {/* Item absorve o resto (~15%); Tipo estreito; blocos proporcionais. */}
       <col />
-      <col className="w-[4.5%]" />
+      <col className="w-[4%]" />
       {/* Orcado */}
+      <col className="w-[7.5%]" />
+      <col className="w-[3%]" />
+      <col className="w-[3%]" />
       <col className="w-[8.5%]" />
-      <col className="w-[3%]" />
-      <col className="w-[3%]" />
-      <col className="w-[9.5%]" />
       {/* Planejado */}
+      <col className="w-[7.5%]" />
+      <col className="w-[3%]" />
+      <col className="w-[3%]" />
       <col className="w-[8.5%]" />
-      <col className="w-[3%]" />
-      <col className="w-[3%]" />
-      <col className="w-[9.5%]" />
       {/* Realizado */}
+      <col className="w-[7.5%]" />
+      <col className="w-[3%]" />
+      <col className="w-[3%]" />
       <col className="w-[8.5%]" />
-      <col className="w-[3%]" />
-      <col className="w-[3%]" />
-      <col className="w-[9.5%]" />
       {/* Variacao */}
-      <col className="w-[6%]" />
-      <col className="w-[6%]" />
+      <col className="w-[8%]" />
+      <col className="w-[7%]" />
     </colgroup>
   );
 }
@@ -233,7 +233,7 @@ export function JobItemRealizadoTable({
                 colSpan={4}
                 className="text-center px-3 py-2 text-[11px] font-extrabold tracking-[0.1em] normal-case text-foreground bg-[#f1f0ec] border-b-[3px] border-b-[#282828] border-l-2 border-l-[#d7d7d7]"
               >
-                ORCADO
+                ORÇADO
               </th>
               <th
                 colSpan={4}
@@ -251,7 +251,7 @@ export function JobItemRealizadoTable({
                 colSpan={2}
                 className="text-center px-3 py-2 text-[11px] font-extrabold tracking-[0.08em] normal-case text-emerald-700 bg-emerald-50 border-b-[3px] border-b-emerald-600 border-l-2 border-l-[#d7d7d7]"
               >
-                VARIACAO
+                VARIAÇÃO
               </th>
             </tr>
             <tr className="bg-muted/40">
@@ -300,7 +300,7 @@ export function JobItemRealizadoTable({
               return (
                 <tr key={item.id} className={cn(ALTURA_LINHA, "border-b border-border")}>
                   <td className={cn("px-3 text-xs align-middle", GRADE_NEUTRA)}>
-                    <div className="truncate" title={item.item}>{item.item}</div>
+                    <TextoItem texto={item.item} />
                   </td>
                   <td className={cn("px-3 text-xs align-middle", GRADE_NEUTRA)}>
                     <Badge variant="outline">{item.tipo_custo}</Badge>
@@ -438,6 +438,37 @@ export function JobItemRealizadoTable({
         </div>
       )}
     </>
+  );
+}
+
+function TextoItem({ texto }: { texto: string }) {
+  const ref = React.useRef<HTMLDivElement>(null);
+  const [truncado, setTruncado] = React.useState(false);
+
+  React.useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const check = () => setTruncado(el.scrollWidth > el.clientWidth + 1);
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [texto]);
+
+  return (
+    <div className="group relative">
+      <div ref={ref} className="truncate">
+        {texto}
+      </div>
+      {truncado && (
+        <div
+          role="tooltip"
+          className="pointer-events-none absolute left-0 top-full z-30 mt-1 hidden max-w-[320px] whitespace-normal break-words rounded-md border border-border bg-popover px-2.5 py-1.5 text-xs leading-snug text-popover-foreground shadow-md group-hover:block"
+        >
+          {texto}
+        </div>
+      )}
+    </div>
   );
 }
 
