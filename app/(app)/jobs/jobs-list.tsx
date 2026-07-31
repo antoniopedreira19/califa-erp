@@ -180,12 +180,18 @@ export function JobsList({ rows }: { rows: JobRow[] }) {
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-medium">{r.nome}</span>
                     {r.tem_filhos && (
-                      <Badge variant="neutral" className="text-[10px]">
+                      <Badge
+                        variant="soft"
+                        className="px-1.5 py-0 text-[9px] normal-case tracking-normal"
+                      >
                         Job principal
                       </Badge>
                     )}
                     {r.is_sub_job && (
-                      <Badge variant="neutral" className="text-[10px]">
+                      <Badge
+                        variant="neutral"
+                        className="px-1.5 py-0 text-[9px] normal-case tracking-normal"
+                      >
                         Sub-job
                       </Badge>
                     )}
