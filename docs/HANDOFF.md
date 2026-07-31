@@ -71,9 +71,10 @@ Admin cadastrado: `antonio@pevetech.com.br` (role `administrador` no tenant `age
 20260730000001  task008_jobs_realizado
 20260730000003  cidades (cadastro)
 20260730000004  produtos_cliente_e_faturamento_job
+20260731000001  job_observacoes  (+ job_observacoes_limite_500)
 ```
 
-**Todas as migrations aplicadas.** Última: `20260730000004_produtos_cliente_e_faturamento_job` (fluxo Abertura de Job).
+**Todas as migrations aplicadas.** Última: `20260731000001_job_observacoes` (campo Observações do modal de abertura). O ajuste de limite 1000 → 500 foi aplicado no remoto como `job_observacoes_limite_500`; o arquivo versionado já nasce com 500, então uma base recriada do zero fica idêntica.
 
 ## 2. O que já está pronto (Tasks 001 – 004)
 
@@ -206,6 +207,14 @@ Admin cadastrado: `antonio@pevetech.com.br` (role `administrador` no tenant `age
 - `enviarJobParaAbertura` recalcula `valor_total` a partir dos itens da versão (nunca confia no form), grava nome/datas de volta no orçamento, e decide a hierarquia sozinha: primeiro job do projeto vira principal, os seguintes viram sub-job dele. Sem seletor na tela.
 - Cidade usa busca **server-side** (`buscarCidades`, `ilike` + limit 30): o cadastro foi desenhado pra receber a lista completa do IBGE no formato `Salvador-BA`, sem coluna `uf`. A carga é só um INSERT futuro.
 - Migration `20260730000004_produtos_cliente_e_faturamento_job.sql`.
+
+### Abertura de Job — revisão de layout (31/07/2026)
+- Formulário reorganizado em **3 colunas**: linha de identificação travada (Projeto / Código do projeto / Código do job), Nome do Job em 2 colunas ao lado de Cliente, depois Produto/Cidade/Regional, as 3 datas, e Responsável ao lado do Valor total.
+- Diálogo em `sm:max-w-5xl`. A proibição de `max-w-5xl` em `docs/09-identidade-visual-ui.md` vale para container de **página**, não para modal.
+- Campo **Observações** novo (`jobs.observacoes`, CHECK de 500). ⚠️ **Grava mas nenhuma tela lê ainda** — a leitura entra com o refino da tela de abertura do financeiro. Não é bug.
+- Confirmação de envio virou `<ConfirmarEnvioModal>` próprio (ícone de envio, botão vermelho com check, card de resumo com linha "Projeto"). As observações aparecem ali **só para conferência** — zero campo editável no diálogo.
+- **"Voltar e revisar" preserva o formulário**: o estado subiu para `<FluxoAbertura>`. O `useEffect` do modal resetava a cada `open`, e voltar da confirmação disparava `open` de novo. Cancelar/X continua limpando.
+- Migration `20260731000001_job_observacoes.sql`.
 
 ### UI polish
 - Componentes reusáveis: `Dialog` + `DrawerContent`, `ConfirmDialog`, `Select` (Radix), `Popover`, `Calendar`, `DatePicker`, `MaskedInput` (telefone/CPF/CNPJ), `no-spinner` utility.

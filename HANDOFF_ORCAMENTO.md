@@ -2,10 +2,10 @@
 
 Registro da implementação dos design handoffs aprovados para o módulo de Orçamentos.
 
-**Datas:** 2026-07-27 (entregas 1–3) · 2026-07-30 (entregas 4–8)
+**Datas:** 2026-07-27 (entregas 1–3) · 2026-07-30 (entregas 4–8) · 2026-07-31 (entrega 9)
 **Origem do design:**
 - Entregas 1–3: pacote `design_handoff_califa/` (`Versoes - Destaque v4.dc.html` opção 2a, `Orcamento - Edicao Inline.dc.html` opção 3b, `README.md`, `IMPLEMENTACAO.md`). A pasta fica **só na máquina local** — está no `.gitignore` por ser referência de design, não código.
-- Entregas 4–5 e 8: projeto Claude Design `69342d83-28d9-4bea-a8af-c99e233f5f13` (`Orcamento - Versao -final-.dc.html`, `Novo projeto.dc.html` e `Abertura de Job.dc.html`), lido via MCP `claude_design`.
+- Entregas 4–5, 8 e 9: projeto Claude Design `69342d83-28d9-4bea-a8af-c99e233f5f13` (`Orcamento - Versao -final-.dc.html`, `Novo projeto.dc.html` e `Abertura de Job.dc.html`), lido via MCP `claude_design`. A Entrega 9 é a revisão do mesmo `Abertura de Job.dc.html`, relido depois de atualizado.
 - Entregas 6–7: pedidos diretos do time, sem handoff de design.
 
 ---
@@ -22,8 +22,9 @@ Registro da implementação dos design handoffs aprovados para o módulo de Orç
 | **6 — Ocultar versões não aprovadas** | ✅ `f2b882a` (2026-07-30) |
 | **7 — Responsável de volta ao formulário de projeto** | ✅ `2d34b8b` (2026-07-30) |
 | **8 — Abertura de job a partir da versão aprovada** | ✅ `c0dac5e` (2026-07-30) |
+| **9 — Revisão do layout de abertura de job** | ✅ `ab66165` (2026-07-31) |
 
-`tsc --noEmit` e `next lint` limpos em todas. Entregas 4, 5 e 8 também com
+`tsc --noEmit` e `next lint` limpos em todas. Entregas 4, 5, 8 e 9 também com
 `next build` completo. A Entrega 8 é a única com verificação de ponta a
 ponta contra o banco real — ver seção 9.
 
@@ -346,14 +347,55 @@ O MCP do Supabase não carregava porque o arquivo na raiz se chamava `mcp.json`;
 
 ---
 
-## 10. Próximos passos
+## 10. Entrega 9 — revisão do layout de abertura de job
+
+**2026-07-31** · commit `ab66165` · design `Abertura de Job.dc.html` (relido após atualização) · migration `20260731000001_job_observacoes.sql`.
+
+Revisão do fluxo entregue na Entrega 8. Três frentes: layout do formulário, campo novo de Observações e preservação do preenchimento.
+
+### Formulário em 3 colunas
+
+- Linha de identificação nova, toda travada: **Projeto**, **Código do projeto**, **Código do job**.
+- Nome do Job ocupa 2 colunas ao lado de Cliente; depois Produto/Cidade/Regional, as três datas, e Responsável ao lado do box de Valor total.
+- Textos de apoio encurtados. O aviso sob as datas (*"Alteração é replicada no orçamento"*) saiu — a informação já vive no subtítulo do cabeçalho, e o design a removeu.
+- Diálogo em `sm:max-w-5xl`. ⚠️ A regra de larguras de `docs/09-identidade-visual-ui.md` **proíbe** `max-w-5xl`, mas ela vale para container de **página**; um modal não é página. Registrado aqui para não virar discussão depois.
+- Helper `<Campo>` interno (rótulo + campo + linha de apoio que vira mensagem de erro) — evita repetir a mesma estrutura 12 vezes.
+
+### Campo Observações (novo)
+
+- Coluna `jobs.observacoes` com CHECK de **500**, alinhado ao contador `contadorObsFixo` do handoff e ao `OBSERVACOES_MAX` do Zod. Nasceu com 1000 e foi corrigido para 500 na mesma sessão (migration `job_observacoes_limite_500` no remoto; o arquivo versionado já nasce com 500).
+- ⚠️ **Grava mas ainda NÃO é exibido em lugar nenhum.** Decisão do time em 31/07/2026: a leitura entra quando a tela de abertura do financeiro for refinada. Há comentário na action registrando isso — não é bug.
+- Não é editável depois da abertura, também por decisão do time.
+
+### Confirmação de envio vira componente próprio
+
+- `<ConfirmarEnvioModal>` substitui o `ConfirmDialog` genérico: o handoff pede ícone de envio em círculo vermelho, botão de confirmar vermelho com check e card de resumo. O componente compartilhado não faz essa combinação sem virar canivete de props.
+- Linha **Projeto** nova no resumo (`nome · código`).
+- Observações aparecem **para conferência, travadas** — o pop-up não edita nada. Verificado no DOM: zero `input`/`textarea` dentro do diálogo. Vazio mostra travessão, contador em `0/500`.
+- ⚠️ Divergência deliberada do design: o texto de apoio *"Ainda dá para completar — o texto é salvo junto com o envio."* virou *"Para alterar, use 'Voltar e revisar'."*. A frase original ficou falsa quando o campo travou. Aprovado pelo time.
+
+### "Voltar e revisar" preserva o formulário
+
+- O estado do formulário subiu para `<FluxoAbertura>`; `<EnviarJobModal>` virou controlado.
+- **A causa do bug:** o `useEffect` do modal resetava tudo a cada `open`, e voltar da confirmação disparava `open` de novo. Reabrir agora só limpa o realce de "faltou preencher".
+- Fechar de vez (Cancelar / X / Esc) continua limpando — desistir tem que ser previsível.
+- Verificado nos dois sentidos: texto escrito no formulário aparece na confirmação, e o preenchimento sobrevive ao "Voltar e revisar".
+
+### Nota de integração
+
+O commit remoto `0c8c474` (TruncateTooltip) tocou `enviar-job-modal.tsx` em paralelo à reescrita. O rebase juntou os dois: o `TruncateTooltip` sobreviveu dentro do componente `Travado` novo. `tsc`, lint e build revalidados **depois** do rebase, não antes.
+
+---
+
+## 11. Próximos passos
 
 1. **Carga completa de cidades do IBGE** — hoje só Salvador e São Paulo. Formato acordado: `Salvador-BA` num campo só, sem coluna `uf`. É só uma migration de INSERT: o schema e a busca já estão prontos (Entrega 8). Fonte: `https://servicosdados.ibge.gov.br/api/v1/localidades/municipios`. Ao carregar, reconciliar as 2 linhas atuais, que estão sem o sufixo de UF, e os jobs que já gravaram `Salvador`/`São Paulo`.
-2. **Remover a server action `criarJob`**, órfã desde a Entrega 8. Avaliar junto os campos `posicao_hierarquia` e `job_pai_id` do `jobSchema`, que provavelmente ficam sem uso.
-3. **Rotacionar o PAT do Supabase.** O `.mcp.json` esteve versionado no commit `69c521d` e foi removido em `65da0b2`; remover do tracking não apaga do histórico. O repositório inteiro, incluindo o arquivo, também foi enviado ao projeto do Claude Design. O token segue legível nos dois lugares.
-4. **Remover os `console.log` de timing** temporários — mantidos a pedido, ver `docs/HANDOFF.md` seção 0 item 2. Estão em `[versaoId]/page.tsx`, `[id]/page.tsx` e `importar-actions.ts`.
+2. **Exibir as observações do job** — `jobs.observacoes` grava desde a Entrega 9 mas nenhuma tela lê. Entra junto com o refino da tela de abertura do financeiro, onde ela faz sentido: é contexto para quem abre. Enquanto isso, o dado é write-only.
+3. **Remover a server action `criarJob`**, órfã desde a Entrega 8. Avaliar junto os campos `posicao_hierarquia` e `job_pai_id` do `jobSchema`, que provavelmente ficam sem uso.
+4. **Rotacionar o PAT do Supabase.** O `.mcp.json` esteve versionado no commit `69c521d` e foi removido em `65da0b2`; remover do tracking não apaga do histórico. O repositório inteiro, incluindo o arquivo, também foi enviado ao projeto do Claude Design. O token segue legível nos dois lugares.
 5. **Ambiente de desenvolvimento separado no Supabase** — hoje `next dev` escreve em produção (ver seção 4). Ficou evidente na Entrega 8: o teste de ponta a ponta criou o JOB-0003 direto na base real. As migrations em `supabase/migrations/` recriam o schema inteiro.
 6. **Criação de projeto de ponta a ponta** — confirmar a gravação de `regional_id`, `cidade_id`, `data_fim_prevista` e `descricao` (Entrega 5) e do `responsavel_id` escolhido (Entrega 7).
-7. **Fase 2 da edição inline** (fora de escopo agora): alça de arrastar/preencher, seleção de intervalo, copiar/colar de planilha, navegação por teclado entre células, `⌘Z` global.
+7. **Caminhos não exercitados do fluxo de abertura** — a verificação da Entrega 8 cobriu só o caminho feliz. Faltam: rejeição pelo financeiro, cancelamento de aprovação com job existente, e abertura para cliente sem produto cadastrado (a mensagem existe mas nunca rodou).
+8. **Fase 2 da edição inline** (fora de escopo agora): alça de arrastar/preencher, seleção de intervalo, copiar/colar de planilha, navegação por teclado entre células, `⌘Z` global.
 
-**Resolvido nesta sessão:** o modo `readOnly` da Entrega 2 ganhou prova de execução — a v1 do ORC-0003 foi aprovada e a grade travou (item 1 da lista anterior).
+**Resolvido desde a última revisão:** o modo `readOnly` da Entrega 2 ganhou prova de execução (v1 do ORC-0003 aprovada, grade travada), e os `console.log` de timing temporários saíram no commit `3021cff`.
