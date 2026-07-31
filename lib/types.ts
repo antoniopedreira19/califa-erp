@@ -83,6 +83,35 @@ export type UF =
   | "MA" | "MT" | "MS" | "MG" | "PA" | "PB" | "PR" | "PE" | "PI"
   | "RJ" | "RN" | "RS" | "RO" | "RR" | "SC" | "SP" | "SE" | "TO";
 
+// ---------- Task 009: empresas (múltiplos CNPJs por tenant) ----------
+
+export interface Empresa {
+  id: string;
+  tenant_id: string;
+  regional_id: string;
+  razao_social: string;
+  nome_fantasia: string | null;
+  cnpj: string;                  // 14 dígitos
+  inscricao_estadual: string | null;
+  inscricao_municipal: string | null;
+  logradouro: string;
+  numero: string | null;
+  complemento: string | null;
+  bairro: string | null;
+  cidade: string;
+  uf: UF;
+  cep: string;                   // 8 dígitos
+  telefone: string | null;       // 10 ou 11 dígitos
+  email: string | null;
+  local_pagamento: string | null;
+  instrucoes_nf: string | null;
+  principal: boolean;
+  ativo: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Cliente {
   id: string;
   tenant_id: string;
@@ -144,6 +173,7 @@ export type ProjetoStatus = "ativo" | "arquivado";
 export interface Projeto {
   id: string;
   tenant_id: string;
+  empresa_id: string;
   codigo: string;
   nome: string;
   /** Saiu do formulário no handoff de 30/07/2026; a coluna e os dados
@@ -188,6 +218,7 @@ export type OrcamentoStatus =
 export interface Orcamento {
   id: string;
   tenant_id: string;
+  empresa_id: string;
   projeto_id: string;
   codigo: string;
   nome: string;
@@ -459,6 +490,7 @@ export type JobStatus =
 export interface Job {
   id: string;
   tenant_id: string;
+  empresa_id: string;
   codigo: string;
   projeto_id: string;
   orcamento_id: string;
