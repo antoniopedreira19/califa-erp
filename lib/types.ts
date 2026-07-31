@@ -119,7 +119,8 @@ export interface Projeto {
   campanha: string | null;
   categoria_id: string | null;
   cliente_id: string;
-  /** Preenchido com quem criou o projeto. Exibido como "Criado por". */
+  /** Escolhido no formulário. Não confundir com `created_by`, que registra
+   *  quem cadastrou o projeto. */
   responsavel_id: string;
   regional_id: string | null;
   cidade_id: string | null;
@@ -391,6 +392,22 @@ export interface Cidade {
   id: string;
   tenant_id: string;
   nome: string;
+  ativo: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// ---------- Produtos do cliente ----------
+
+/** Escopo é o CLIENTE, não o tenant: cada cliente tem sua própria lista,
+ *  gerenciada dentro da tela dele. O código é sequencial por cliente. */
+export interface ClienteProduto {
+  id: string;
+  tenant_id: string;
+  cliente_id: string;
+  nome: string;
+  codigo: string;
   ativo: boolean;
   created_by: string | null;
   created_at: string;

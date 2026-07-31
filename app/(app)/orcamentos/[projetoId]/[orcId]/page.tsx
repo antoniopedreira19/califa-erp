@@ -3,13 +3,11 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, FileStack, Lock } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
-import { listActiveMembers } from "@/lib/data/members";
 import {
   orcamentoStatusLabel,
   type CategoriaDominio,
   type Orcamento,
   type Job,
-  type Regional,
   type VersaoOrcamentoStatus,
 } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
@@ -18,7 +16,6 @@ import { OrcamentoEditorDrawer } from "../orcamento-editor-drawer";
 import { NovaVersaoDrawer } from "./versoes/nova-versao-drawer";
 import { VersoesList, type VersaoRow } from "./versoes/versoes-list";
 import { ImportarPlanilhaDrawer } from "./versoes/importar-drawer";
-import { CriarJobDrawer } from "./criar-job-drawer";
 
 export const dynamic = "force-dynamic";
 
@@ -55,7 +52,7 @@ export default async function OrcamentoDetailPage({
   const session = await requireSession();
   const supabase = createClient();
 
-  const [orcRes, projRes, responsaveis, versoesRes, categoriasOrcRes, regionaisRes, jobsProjetoRes] = await Promise.all([
+  const [orcRes, projRes, versoesRes, categoriasOrcRes, jobsProjetoRes] = await Promise.all([
     supabase
       .from("orcamentos")
       .select("id, tenant_id, projeto_id, codigo, nome, status, categoria_id, data_inicio_prevista, data_fim_prevista, versao_aprovada_id, created_by, created_at, updated_at, categoria:categorias_dominio(nome)")
@@ -69,7 +66,6 @@ export default async function OrcamentoDetailPage({
       .eq("id", params.projetoId)
       .eq("tenant_id", session.activeTenant.id)
       .maybeSingle(),
-    listActiveMembers(session.activeTenant.id),
     supabase
       .from("versoes_orcamento")
       .select("id, numero_versao, nome, status, percentual_honorarios, percentual_imposto, moeda, created_at")
@@ -84,14 +80,8 @@ export default async function OrcamentoDetailPage({
       .eq("ativo", true)
       .order("nome"),
     supabase
-      .from("regionais")
-      .select("id, nome")
-      .eq("tenant_id", session.activeTenant.id)
-      .eq("ativo", true)
-      .order("nome"),
-    supabase
       .from("jobs")
-      .select("id, codigo, nome, job_pai_id, orcamento_id, status")
+      .select("id, codigo, orcamento_id")
       .eq("projeto_id", params.projetoId)
       .eq("tenant_id", session.activeTenant.id)
       .neq("status", "cancelado"),
@@ -110,9 +100,9 @@ export default async function OrcamentoDetailPage({
   const responsavelNome: string | null = projeto.responsavel?.nome ?? null;
   const categoriasOrcamento = (categoriasOrcRes.data ?? []) as Pick<CategoriaDominio, "id" | "nome">[];
 
-  const regionais = (regionaisRes.data ?? []) as Pick<Regional, "id" | "nome">[];
-  const jobsAtivosDoProjeto = (jobsProjetoRes.data ?? []) as Pick<Job, "id" | "codigo" | "nome" | "job_pai_id">[];
-  const jobDoOrcamento = (jobsProjetoRes.data ?? []).find((j: any) => j.orcamento_id === orcamento.id);
+  const jobDoOrcamento = (jobsProjetoRes.data ?? []).find(
+    (j: any) => j.orcamento_id === orcamento.id,
+  ) as Pick<Job, "id" | "codigo"> | undefined;
 
   if (versoesRes.error) console.error("[versoes.list]", versoesRes.error.message);
   const versoesBrutas = (versoesRes.data ?? []) as any[];
@@ -132,21 +122,6 @@ export default async function OrcamentoDetailPage({
       cur.count += 1;
       cur.total += Number(it.total_orcado ?? 0);
       agregadoPorVersao.set(it.versao_orcamento_id, cur);
-    }
-  }
-
-  // Calcular valor de faturamento da versão aprovada para pré-preencher o drawer de criar job
-  let valorFaturamento = 0;
-  if (orcamento.status === "aprovado" && orcamento.versao_aprovada_id) {
-    const versaoAprovada = versoesBrutas.find(
-      (v) => v.id === orcamento.versao_aprovada_id,
-    );
-    if (versaoAprovada) {
-      const agg = agregadoPorVersao.get(versaoAprovada.id) ?? { count: 0, total: 0 };
-      const perc_honor = Number(versaoAprovada.percentual_honorarios ?? 0) / 100;
-      const perc_imp = Number(versaoAprovada.percentual_imposto ?? 0) / 100;
-      const bruto = agg.total * (1 + perc_honor);
-      valorFaturamento = perc_imp > 0 && perc_imp < 1 ? bruto / (1 - perc_imp) : bruto;
     }
   }
 
@@ -205,17 +180,6 @@ export default async function OrcamentoDetailPage({
                   : undefined
               }
             />
-            {orcamento.status === "aprovado" && !jobDoOrcamento && (
-              <CriarJobDrawer
-                orcamentoId={orcamento.id}
-                clienteNome={clienteNome ?? "—"}
-                jobsAtivosDoProjeto={jobsAtivosDoProjeto}
-                regionais={regionais}
-                responsaveis={responsaveis}
-                responsavelDefaultId={(projeto.responsavel as any)?.id ?? ""}
-                valorFaturamento={valorFaturamento}
-              />
-            )}
             {orcamento.status === "job_criado" && jobDoOrcamento && (
               <Link
                 href={`/jobs/${(jobDoOrcamento as any).id}`}

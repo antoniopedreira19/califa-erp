@@ -2,12 +2,9 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, Undo2 } from "lucide-react";
+import { Undo2 } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import {
-  aprovarVersao,
-  cancelarAprovacaoVersao,
-} from "../actions";
+import { cancelarAprovacaoVersao } from "../actions";
 
 interface Props {
   versaoId: string;
@@ -15,27 +12,17 @@ interface Props {
   temJobAtivo: boolean;
 }
 
+/**
+ * Sobrou só o desfazer. "Aprovar versão" mudou para a barra de ação do
+ * rodapé no handoff "Abertura de Job.dc.html" — ver `FluxoAbertura`.
+ */
 export function AprovacaoActions({ versaoId, status, temJobAtivo }: Props) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
-  const [confirmando, setConfirmando] = React.useState<"aprovar" | "cancelar" | null>(null);
+  const [confirmando, setConfirmando] = React.useState<"cancelar" | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
-  const podeAprovar = ["rascunho", "em_revisao", "enviada_cliente"].includes(status);
   const podeCancelarAprovacao = status === "aprovada" && !temJobAtivo;
-
-  function handleAprovar() {
-    setError(null);
-    startTransition(async () => {
-      const res = await aprovarVersao(versaoId);
-      if (!res.ok) {
-        setError(res.message);
-        return;
-      }
-      setConfirmando(null);
-      router.refresh();
-    });
-  }
 
   function handleCancelar() {
     setError(null);
@@ -50,40 +37,18 @@ export function AprovacaoActions({ versaoId, status, temJobAtivo }: Props) {
     });
   }
 
-  if (!podeAprovar && !podeCancelarAprovacao) return null;
+  if (!podeCancelarAprovacao) return null;
 
   return (
     <>
-      {podeAprovar && (
-        <button
-          type="button"
-          onClick={() => setConfirmando("aprovar")}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors"
-        >
-          <CheckCircle2 className="h-3.5 w-3.5" />
-          Aprovar versão
-        </button>
-      )}
-      {podeCancelarAprovacao && (
-        <button
-          type="button"
-          onClick={() => setConfirmando("cancelar")}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-california-red/40 bg-white px-3 py-1.5 text-xs font-semibold text-california-red hover:bg-california-red/5 transition-colors"
-        >
-          <Undo2 className="h-3.5 w-3.5" />
-          Cancelar aprovação
-        </button>
-      )}
-
-      <ConfirmDialog
-        open={confirmando === "aprovar"}
-        onOpenChange={(o) => !o && setConfirmando(null)}
-        title="Aprovar esta versão?"
-        description="Ao aprovar, as outras versões deste orçamento viram 'substituída' automaticamente. O orçamento entra em status 'aprovado' e o botão 'Criar job' fica disponível."
-        confirmLabel="Aprovar"
-        onConfirm={handleAprovar}
-        pending={pending}
-      />
+      <button
+        type="button"
+        onClick={() => setConfirmando("cancelar")}
+        className="inline-flex items-center gap-1.5 rounded-lg border border-california-red/40 bg-white px-3 py-1.5 text-xs font-semibold text-california-red hover:bg-california-red/5 transition-colors"
+      >
+        <Undo2 className="h-3.5 w-3.5" />
+        Cancelar aprovação
+      </button>
 
       <ConfirmDialog
         open={confirmando === "cancelar"}

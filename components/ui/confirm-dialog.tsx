@@ -62,7 +62,9 @@ export function ConfirmDialog({
                 <AlertTriangle className="h-5 w-5" />
               </div>
             )}
-            <div className="space-y-1 flex-1">
+            {/* pr-6 reserva a trilha do botão de fechar, que é absoluto no
+                canto: sem isso, título longo passa por baixo do X. */}
+            <div className="space-y-1 flex-1 pr-6">
               <DialogTitle>{title}</DialogTitle>
               {description && (
                 <DialogDescription>{description}</DialogDescription>

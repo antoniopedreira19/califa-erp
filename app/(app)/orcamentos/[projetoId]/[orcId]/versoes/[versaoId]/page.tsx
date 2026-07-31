@@ -12,11 +12,17 @@ import {
 } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { calcularTotaisVersao } from "@/lib/calculos/versao-totais";
 import { GruposSection } from "./grupos-section";
 import { NovoGrupoDrawer } from "./novo-grupo-drawer";
 import { TotaisCard } from "./totais-card";
 import { VersaoEditorDrawer } from "./versao-editor-drawer";
 import { AprovacaoActions } from "./aprovacao-actions";
+import {
+  BannersEstado,
+  FluxoAbertura,
+  type JobExistente,
+} from "./fluxo-abertura";
 
 export const dynamic = "force-dynamic";
 
@@ -50,7 +56,16 @@ export default async function VersaoDetailPage({
   const tSess = Date.now();
   const supabase = createClient();
 
-  const [versaoRes, orcRes, gruposRes, itensRes, categoriasRes, jobsAtivosRes] = await Promise.all([
+  const [
+    versaoRes,
+    orcRes,
+    gruposRes,
+    itensRes,
+    categoriasRes,
+    jobRes,
+    regionaisRes,
+    cidadesRes,
+  ] = await Promise.all([
     supabase
       .from("versoes_orcamento")
       .select("*")
@@ -60,10 +75,20 @@ export default async function VersaoDetailPage({
       .maybeSingle<VersaoOrcamento>(),
     supabase
       .from("orcamentos")
-      .select("id, codigo, nome, status")
+      .select(
+        "id, codigo, nome, status, projeto_id, data_inicio_prevista, data_fim_prevista",
+      )
       .eq("id", params.orcId)
       .eq("tenant_id", session.activeTenant.id)
-      .maybeSingle<{ id: string; codigo: string; nome: string; status: string }>(),
+      .maybeSingle<{
+        id: string;
+        codigo: string;
+        nome: string;
+        status: string;
+        projeto_id: string;
+        data_inicio_prevista: string | null;
+        data_fim_prevista: string | null;
+      }>(),
     supabase
       .from("versoes_orcamento_grupos")
       .select("*")
@@ -86,10 +111,28 @@ export default async function VersaoDetailPage({
       .returns<Categoria[]>(),
     supabase
       .from("jobs")
-      .select("id", { count: "exact", head: true })
+      .select(
+        "id, codigo, nome, produto, cidade, regional_id, data_inicio_prevista, data_fim_prevista, data_prevista_faturamento",
+      )
       .eq("orcamento_id", params.orcId)
       .eq("tenant_id", session.activeTenant.id)
-      .neq("status", "cancelado"),
+      .neq("status", "cancelado")
+      .maybeSingle<JobExistente>(),
+    supabase
+      .from("regionais")
+      .select("id, nome")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("ativo", true)
+      .order("nome"),
+    // Primeiras cidades do cadastro. A busca completa roda no servidor,
+    // sob demanda — ver `buscarCidades` em abertura-actions.
+    supabase
+      .from("cidades")
+      .select("id, nome")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("ativo", true)
+      .order("nome")
+      .limit(30),
   ]);
 
   const tQueries = Date.now();
@@ -108,7 +151,8 @@ export default async function VersaoDetailPage({
   if (itensRes.error) console.error("[versao.itens]", itensRes.error.message);
   if (categoriasRes.error) console.error("[versao.categorias]", categoriasRes.error.message);
 
-  const temJobAtivo = (jobsAtivosRes.count ?? 0) > 0;
+  const job = jobRes.data ?? null;
+  const temJobAtivo = job !== null;
 
   const versao = versaoRes.data;
   const orcamento = orcRes.data;
@@ -137,6 +181,79 @@ export default async function VersaoDetailPage({
   }
 
   const readOnly = versao.status === "aprovada" || versao.status === "cancelada";
+
+  // Segunda onda: depende de orcamento.projeto_id, por isso não entra no
+  // Promise.all acima. Só o fluxo de abertura consome esses dados.
+  const [projetoRes, jobsCountRes] = await Promise.all([
+    supabase
+      .from("projetos")
+      .select("id, cliente_id, cliente:clientes(id, nome_fantasia), responsavel:profiles!responsavel_id(nome)")
+      .eq("id", orcamento.projeto_id)
+      .eq("tenant_id", session.activeTenant.id)
+      .maybeSingle(),
+    supabase
+      .from("jobs")
+      .select("id", { count: "exact", head: true })
+      .eq("tenant_id", session.activeTenant.id),
+  ]);
+
+  const projetoRaw = projetoRes.data as any;
+  const clienteId: string = projetoRaw?.cliente_id ?? "";
+  const clienteNome: string = projetoRaw?.cliente?.nome_fantasia ?? "—";
+  const responsavelNome: string = projetoRaw?.responsavel?.nome ?? "—";
+
+  const produtosRes = clienteId
+    ? await supabase
+        .from("cliente_produtos")
+        .select("id, nome, codigo")
+        .eq("cliente_id", clienteId)
+        .eq("tenant_id", session.activeTenant.id)
+        .eq("ativo", true)
+        .order("codigo")
+    : { data: [], error: null };
+
+  if (produtosRes.error) {
+    console.error("[versao.produtos]", produtosRes.error.message);
+  }
+
+  const totais = calcularTotaisVersao(
+    itens,
+    Number(versao.percentual_honorarios),
+    Number(versao.percentual_imposto),
+  );
+  const custoPlanejado = itens.reduce(
+    (s, it) => s + Number(it.total_planejado ?? 0),
+    0,
+  );
+
+  const cidadesIniciais = (cidadesRes.data ?? []) as { id: string; nome: string }[];
+  const regionais = (regionaisRes.data ?? []) as { id: string; nome: string }[];
+
+  // Preview do código: o definitivo é gerado no insert. Serve só pra tela
+  // não mostrar campo vazio — se outro job entrar antes, o número muda.
+  const proximoCodigoJob = `JOB-${((jobsCountRes.count ?? 0) + 1)
+    .toString()
+    .padStart(4, "0")}`;
+
+  const cidadeDoJob = job?.cidade
+    ? cidadesIniciais.find((c) => c.nome === job.cidade) ?? {
+        id: "",
+        nome: job.cidade,
+      }
+    : null;
+
+  const inicialModal = {
+    nome: job?.nome ?? orcamento.nome,
+    produtoId:
+      (job?.produto
+        ? (produtosRes.data ?? []).find((p: any) => p.nome === job.produto)?.id
+        : undefined) ?? "",
+    cidade: cidadeDoJob,
+    regionalId: job?.regional_id ?? "",
+    dataInicio: job?.data_inicio_prevista ?? orcamento.data_inicio_prevista ?? "",
+    dataFim: job?.data_fim_prevista ?? orcamento.data_fim_prevista ?? "",
+    dataFaturamento: job?.data_prevista_faturamento ?? "",
+  };
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
@@ -217,6 +334,13 @@ export default async function VersaoDetailPage({
         </div>
       </div>
 
+      <BannersEstado
+        versaoLabel={`v${versao.numero_versao}`}
+        aprovada={versao.status === "aprovada"}
+        job={job}
+        jobHref={job ? `/jobs/${job.id}` : null}
+      />
+
       {/* Barra de ação — Novo grupo */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -268,6 +392,28 @@ export default async function VersaoDetailPage({
           moeda={versao.moeda}
         />
       </div>
+
+      <FluxoAbertura
+        versaoId={versao.id}
+        versaoLabel={`v${versao.numero_versao}`}
+        versaoStatus={versao.status}
+        orcamentoCodigo={orcamento.codigo}
+        jobHref={job ? `/jobs/${job.id}` : null}
+        qtdGrupos={grupos.length}
+        qtdItens={itens.length}
+        custoPlanejado={custoPlanejado}
+        faturamento={totais.faturamento}
+        moeda={versao.moeda}
+        clienteId={clienteId}
+        clienteNome={clienteNome}
+        responsavelNome={responsavelNome}
+        proximoCodigoJob={proximoCodigoJob}
+        produtos={(produtosRes.data ?? []) as { id: string; nome: string; codigo: string }[]}
+        regionais={regionais}
+        cidadesIniciais={cidadesIniciais}
+        inicial={inicialModal}
+        job={job}
+      />
     </div>
   );
 }

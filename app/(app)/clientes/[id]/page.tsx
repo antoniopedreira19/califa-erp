@@ -3,9 +3,10 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
-import type { Cliente } from "@/lib/types";
+import type { Cliente, ClienteProduto } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { ClienteForm } from "../cliente-form";
+import { ProdutosCard } from "./produtos-card";
 
 export const dynamic = "force-dynamic";
 
@@ -17,15 +18,27 @@ export default async function EditarClientePage({
   const session = await requireSession();
   const supabase = createClient();
 
-  const { data: cliente, error } = await supabase
-    .from("clientes")
-    .select("*")
-    .eq("id", params.id)
-    .eq("tenant_id", session.activeTenant.id)
-    .maybeSingle<Cliente>();
+  const [clienteRes, produtosRes] = await Promise.all([
+    supabase
+      .from("clientes")
+      .select("*")
+      .eq("id", params.id)
+      .eq("tenant_id", session.activeTenant.id)
+      .maybeSingle<Cliente>(),
+    supabase
+      .from("cliente_produtos")
+      .select("*")
+      .eq("cliente_id", params.id)
+      .eq("tenant_id", session.activeTenant.id)
+      .order("codigo"),
+  ]);
 
-  if (error) console.error("[clientes.detail]", error.message);
+  const cliente = clienteRes.data;
+  if (clienteRes.error) console.error("[clientes.detail]", clienteRes.error.message);
+  if (produtosRes.error) console.error("[cliente_produtos.list]", produtosRes.error.message);
   if (!cliente) notFound();
+
+  const produtos = (produtosRes.data ?? []) as ClienteProduto[];
 
   return (
     <div className="space-y-6 max-w-3xl mx-auto">
@@ -52,6 +65,8 @@ export default async function EditarClientePage({
       <div className="rounded-2xl border border-border bg-card p-6 shadow-soft">
         <ClienteForm cliente={cliente} />
       </div>
+
+      <ProdutosCard clienteId={cliente.id} produtos={produtos} />
     </div>
   );
 }
