@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -443,32 +444,62 @@ export function JobItemRealizadoTable({
 
 function TextoItem({ texto }: { texto: string }) {
   const ref = React.useRef<HTMLDivElement>(null);
-  const [truncado, setTruncado] = React.useState(false);
+  const [pos, setPos] = React.useState<
+    | { top: number; left: number; minWidth: number }
+    | null
+  >(null);
 
-  React.useLayoutEffect(() => {
+  function abrir() {
     const el = ref.current;
     if (!el) return;
-    const check = () => setTruncado(el.scrollWidth > el.clientWidth + 1);
-    check();
-    const ro = new ResizeObserver(check);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [texto]);
+    if (el.scrollWidth <= el.clientWidth + 1) return;
+    const r = el.getBoundingClientRect();
+    setPos({ top: r.bottom + 4, left: r.left, minWidth: r.width });
+  }
+
+  function fechar() {
+    setPos(null);
+  }
+
+  React.useEffect(() => {
+    if (!pos) return;
+    window.addEventListener("scroll", fechar, true);
+    window.addEventListener("resize", fechar);
+    return () => {
+      window.removeEventListener("scroll", fechar, true);
+      window.removeEventListener("resize", fechar);
+    };
+  }, [pos]);
 
   return (
-    <div className="group relative">
-      <div ref={ref} className="truncate">
+    <>
+      <div
+        ref={ref}
+        className="truncate"
+        onMouseEnter={abrir}
+        onMouseLeave={fechar}
+      >
         {texto}
       </div>
-      {truncado && (
-        <div
-          role="tooltip"
-          className="pointer-events-none absolute left-0 top-full z-30 mt-1 hidden max-w-[320px] whitespace-normal break-words rounded-md border border-border bg-popover px-2.5 py-1.5 text-xs leading-snug text-popover-foreground shadow-md group-hover:block"
-        >
-          {texto}
-        </div>
-      )}
-    </div>
+      {pos && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              role="tooltip"
+              style={{
+                position: "fixed",
+                top: pos.top,
+                left: pos.left,
+                minWidth: pos.minWidth,
+                maxWidth: 360,
+              }}
+              className="pointer-events-none z-50 whitespace-normal break-words rounded-md border border-border bg-popover px-2.5 py-1.5 text-xs leading-snug text-popover-foreground shadow-md"
+            >
+              {texto}
+            </div>,
+            document.body,
+          )
+        : null}
+    </>
   );
 }
 
