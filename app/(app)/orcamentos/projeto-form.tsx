@@ -32,6 +32,8 @@ import {
 
 interface Props {
   projeto?: Projeto;
+  empresas: { id: string; razao_social: string; nome_fantasia: string | null; principal: boolean }[];
+  empresaPrincipalId?: string;
   clientes: Pick<Cliente, "id" | "nome_fantasia" | "codigo_curto">[];
   responsaveis: Pick<Profile, "id" | "nome">[];
   regionais: Pick<Regional, "id" | "nome">[];
@@ -43,6 +45,8 @@ interface Props {
 
 export function ProjetoForm({
   projeto,
+  empresas,
+  empresaPrincipalId,
   clientes,
   responsaveis,
   regionais,
@@ -56,6 +60,9 @@ export function ProjetoForm({
   const [pending, startTransition] = React.useTransition();
   const [error, setError] = React.useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = React.useState<Record<string, string[]>>({});
+  const [empresaId, setEmpresaId] = React.useState(
+    projeto?.empresa_id ?? empresaPrincipalId ?? "",
+  );
   const [clienteId, setClienteId] = React.useState(projeto?.cliente_id ?? "");
   const [responsavelId, setResponsavelId] = React.useState(
     projeto?.responsavel_id ?? "",
@@ -80,6 +87,7 @@ export function ProjetoForm({
     setFieldErrors({});
 
     const formData = new FormData(e.currentTarget);
+    formData.set("empresa_id", empresaId);
     formData.set("cliente_id", clienteId);
     formData.set("responsavel_id", responsavelId);
     formData.set("regional_id", regionalId);
@@ -106,6 +114,30 @@ export function ProjetoForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <div className="grid gap-4 md:grid-cols-2">
+        <Field label="Empresa" name="empresa_id" required errors={fieldErrors}>
+          <Select value={empresaId} onValueChange={setEmpresaId}>
+            <SelectTrigger className={erroClasses("empresa_id")}>
+              <SelectValue placeholder="Selecione a empresa" />
+            </SelectTrigger>
+            <SelectContent
+              side="bottom"
+              avoidCollisions={false}
+              className="w-[--radix-select-trigger-width]"
+            >
+              {empresas.map((e) => (
+                <SelectItem key={e.id} value={e.id}>
+                  {e.nome_fantasia ?? e.razao_social}
+                  {e.principal && (
+                    <span className="ml-2 text-[10px] uppercase text-muted-foreground">
+                      principal
+                    </span>
+                  )}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+
         {/* Nome divide a primeira linha com Responsável. */}
         <Field label="Nome do projeto" name="nome" required errors={fieldErrors}>
           <Input

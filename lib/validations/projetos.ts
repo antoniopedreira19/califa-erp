@@ -33,6 +33,7 @@ export const projetoSchema = z
       .max(200, "Máximo 200 caracteres.")
       .optional()
       .transform((v) => (v && v.length > 0 ? v : null)),
+    empresa_id: z.string().uuid("Selecione a empresa."),
     cliente_id: z.string().uuid("Selecione um cliente válido."),
     responsavel_id: z.string().uuid("Selecione um responsável válido."),
     regional_id: z.string().uuid("Selecione a regional."),

@@ -23,6 +23,7 @@ import { arquivarProjeto, reativarProjeto } from "./actions";
 
 interface Props {
   projeto: Projeto;
+  empresas: { id: string; razao_social: string; nome_fantasia: string | null; principal: boolean }[];
   clientes: Pick<Cliente, "id" | "nome_fantasia" | "codigo_curto">[];
   responsaveis: Pick<Profile, "id" | "nome">[];
   regionais: Pick<Regional, "id" | "nome">[];
@@ -32,6 +33,7 @@ interface Props {
 
 export function ProjetoEditorDrawer({
   projeto,
+  empresas,
   clientes,
   responsaveis,
   regionais,
@@ -91,6 +93,7 @@ export function ProjetoEditorDrawer({
           <div className="flex-1 overflow-y-auto px-6 py-6">
             <ProjetoForm
               projeto={projeto}
+              empresas={empresas}
               clientes={clientes}
               responsaveis={responsaveis}
               regionais={regionais}
