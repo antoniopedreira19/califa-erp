@@ -469,6 +469,21 @@ export async function abortarReserva(
   const session = await requireSession();
   const supabase = createClient();
 
+  // Guard: se pp_id ja esta persistido em pedidos_compra, e uma PP finalizada.
+  // NAO deve ser tocada por abortarReserva (fix Critical #1 + #2 do final review).
+  const { count: existente, error: countErr } = await supabase
+    .from("pedidos_compra")
+    .select("id", { count: "exact", head: true })
+    .eq("id", pp_id)
+    .eq("tenant_id", session.activeTenant.id);
+  if (countErr) {
+    // Best-effort: se nao consegue checar, aborta operacao pra nao arriscar destruir dados
+    return { ok: false, message: `Falha ao verificar PP: ${countErr.message}` };
+  }
+  if ((existente ?? 0) > 0) {
+    return { ok: true }; // PP finalizada; nao remove nada
+  }
+
   const prefix = `${session.activeTenant.id}/${jobId}/${pp_id}`;
 
   // Remove raiz do prefix (arquivos diretos)
@@ -590,6 +605,10 @@ export async function signedUrlPdf(
     .maybeSingle();
 
   if (!pp) return { ok: false, message: "PP nao encontrada." };
+
+  if (!pp.pdf_path) {
+    return { ok: false, message: "PDF ainda nao disponivel para esta PP." };
+  }
 
   const { data, error } = await supabase.storage
     .from(BUCKET)

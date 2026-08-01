@@ -12,6 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { format } from "date-fns";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
 import { cn, formatCurrency } from "@/lib/utils";
@@ -62,12 +63,11 @@ function iconePorMime(mime: string): typeof FileText {
 function defaultPrazoPagamento(): string {
   const d = new Date();
   d.setDate(d.getDate() + 15);
-  return d.toISOString().slice(0, 10);
+  return format(d, "yyyy-MM-dd");
 }
 
 function dateToIso(date: Date | null): string {
-  if (!date) return "";
-  return date.toISOString().slice(0, 10);
+  return date ? format(date, "yyyy-MM-dd") : "";
 }
 
 export function GerarPPDrawer({
@@ -456,7 +456,7 @@ export function GerarPPDrawer({
             </button>
             <button
               type="submit"
-              disabled={pending || !ppId}
+              disabled={pending || !ppId || anexos.some((a) => a.status === "uploading")}
               className="rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white hover:bg-california-red-hover disabled:opacity-50"
             >
               {pending ? "Gerando..." : "Gerar PP"}
