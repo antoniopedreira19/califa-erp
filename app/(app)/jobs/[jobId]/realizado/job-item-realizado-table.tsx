@@ -503,29 +503,26 @@ export function JobItemRealizadoTable({
         </div>
       )}
 
-      <GerarPPDrawer
-        open={drawerOpen}
-        onOpenChange={setDrawerOpen}
-        itemRealizadoId={itemIdAtual}
-        jobId={jobId}
-        fornecedores={fornecedores.filter((f) => f.status === "ativo")}
-        empresas={empresas.filter((e) => e.ativo)}
-        defaultEmpresaId={jobEmpresaId}
-        itemDescricao={(() => {
-          const it = itens.find((i) => (realizadosMap.get(i.id)?.id ?? "") === itemIdAtual);
-          return it?.item ?? "";
-        })()}
-        valorRealizado={(() => {
-          const it = itens.find((i) => (realizadosMap.get(i.id)?.id ?? "") === itemIdAtual);
-          const r = it ? realizadosMap.get(it.id) : null;
-          return r ? Number(r.total_realizado ?? 0) : 0;
-        })()}
-        quantidadeRealizada={(() => {
-          const it = itens.find((i) => (realizadosMap.get(i.id)?.id ?? "") === itemIdAtual);
-          const r = it ? realizadosMap.get(it.id) : null;
-          return r ? Number(r.quantidade_realizada ?? 0) : 0;
-        })()}
-      />
+      {(() => {
+        const itemAtual = itens.find(
+          (i) => (realizadosMap.get(i.id)?.id ?? "") === itemIdAtual,
+        );
+        const realizadoAtual = itemAtual ? realizadosMap.get(itemAtual.id) : null;
+        return (
+          <GerarPPDrawer
+            open={drawerOpen}
+            onOpenChange={setDrawerOpen}
+            itemRealizadoId={itemIdAtual}
+            jobId={jobId}
+            fornecedores={fornecedores}
+            empresas={empresas}
+            defaultEmpresaId={jobEmpresaId}
+            itemDescricao={itemAtual?.item ?? ""}
+            valorRealizado={realizadoAtual ? Number(realizadoAtual.total_realizado ?? 0) : 0}
+            quantidadeRealizada={realizadoAtual ? Number(realizadoAtual.quantidade_realizada ?? 0) : 0}
+          />
+        );
+      })()}
     </>
   );
 }
