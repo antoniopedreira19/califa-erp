@@ -64,7 +64,7 @@ export function PPActionsCell({
   // Estado: com PP → Ver + Cancelar
   if (pp) {
     return (
-      <div className="flex items-center h-9 gap-1">
+      <div className="relative flex items-center h-9 gap-1">
         <button
           type="button"
           onClick={handleVer}
