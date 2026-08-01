@@ -85,7 +85,7 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
     .maybeSingle();
 
   if (itemErr || !item) {
-    return { ok: false, message: "Item realizado nao encontrado." };
+    return { ok: false, message: "Item realizado não encontrado." };
   }
 
   const { data: job, error: jobErr } = await supabase
@@ -98,7 +98,7 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
     .maybeSingle();
 
   if (jobErr || !job) {
-    return { ok: false, message: "Job nao encontrado." };
+    return { ok: false, message: "Job não encontrado." };
   }
 
   if (job.status !== "aberto" && job.status !== "em_producao") {
@@ -116,7 +116,7 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
     return {
       ok: false,
       message:
-        "PP so pode ser gerada com o job em 'Aberto' ou 'Em producao'.",
+        "PP só pode ser gerada com o job em 'Aberto' ou 'Em produção'.",
     };
   }
 
@@ -137,7 +137,7 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
     });
     return {
       ok: false,
-      message: "Apenas o responsavel do job ou admin pode gerar PP.",
+      message: "Apenas o responsável do job ou admin pode gerar PP.",
     };
   }
 
@@ -157,7 +157,7 @@ export async function reservarPedidoCompra(
   const { item, job, session, supabase } = gate;
 
   if (Number(item.total_realizado ?? 0) <= 0) {
-    return { ok: false, message: "Item ainda nao tem realizado lancado." };
+    return { ok: false, message: "Item ainda não tem realizado lançado." };
   }
 
   // Rejeita se ja existe PP
@@ -172,7 +172,7 @@ export async function reservarPedidoCompra(
     return {
       ok: false,
       message:
-        "Ja existe PP para este item. Cancele a atual antes de gerar outra.",
+        "Já existe PP para este item. Cancele a atual antes de gerar outra.",
     };
   }
 
@@ -201,18 +201,18 @@ export async function finalizarPedidoCompra(
   if (!dadosParsed.success) {
     return {
       ok: false,
-      message: `Dados invalidos: ${dadosParsed.error.issues[0]?.message ?? "erro"}.`,
+      message: `Dados inválidos: ${dadosParsed.error.issues[0]?.message ?? "erro"}.`,
     };
   }
   const d = dadosParsed.data;
 
   // Valida anexos array
   if (anexos.length < 1) {
-    return { ok: false, message: "Pelo menos um anexo e obrigatorio." };
+    return { ok: false, message: "Pelo menos um anexo é obrigatório." };
   }
   const anexosParsed = z.array(anexoUploadedSchema).safeParse(anexos);
   if (!anexosParsed.success) {
-    return { ok: false, message: "Formato de anexo invalido." };
+    return { ok: false, message: "Formato de anexo inválido." };
   }
 
   // Valida tamanhos + prefix
@@ -226,7 +226,7 @@ export async function finalizarPedidoCompra(
       return { ok: false, message: `Anexo ${a.nome_original} > 8 MB.` };
     }
     if (!a.path.startsWith(expectedPrefix)) {
-      return { ok: false, message: "Anexo em path invalido." };
+      return { ok: false, message: "Anexo em path inválido." };
     }
   }
 
@@ -245,7 +245,7 @@ export async function finalizarPedidoCompra(
     if (!nomesNoBucket.has(a.path)) {
       return {
         ok: false,
-        message: `Anexo ${a.nome_original} nao foi encontrado no bucket. Refaca o upload.`,
+        message: `Anexo ${a.nome_original} não foi encontrado no bucket. Refaça o upload.`,
       };
     }
   }
@@ -269,9 +269,9 @@ export async function finalizarPedidoCompra(
   ]);
 
   if (!fornRes.data)
-    return { ok: false, message: "Fornecedor invalido ou inativo." };
+    return { ok: false, message: "Fornecedor inválido ou inativo." };
   if (!empRes.data)
-    return { ok: false, message: "Empresa emissora invalida ou inativa." };
+    return { ok: false, message: "Empresa emissora inválida ou inativa." };
 
   // Gera codigo
   let codigo: string;
@@ -521,11 +521,11 @@ export async function cancelarPedidoCompra(pp_id: string): Promise<Result> {
     .eq("tenant_id", session.activeTenant.id)
     .maybeSingle();
 
-  if (ppErr || !pp) return { ok: false, message: "PP nao encontrada." };
+  if (ppErr || !pp) return { ok: false, message: "PP não encontrada." };
 
   const job = (pp as Record<string, unknown>).jobs as Record<string, unknown>;
   if (job.status !== "aberto" && job.status !== "em_producao") {
-    return { ok: false, message: "Job nao esta em estado editavel." };
+    return { ok: false, message: "Job não está em estado editável." };
   }
 
   const podeCancelar =
@@ -542,7 +542,7 @@ export async function cancelarPedidoCompra(pp_id: string): Promise<Result> {
         motivo: "sem_permissao",
       },
     });
-    return { ok: false, message: "Sem permissao pra cancelar esta PP." };
+    return { ok: false, message: "Sem permissão pra cancelar esta PP." };
   }
 
   const anexosPaths = (
@@ -604,10 +604,10 @@ export async function signedUrlPdf(
     .eq("tenant_id", session.activeTenant.id)
     .maybeSingle();
 
-  if (!pp) return { ok: false, message: "PP nao encontrada." };
+  if (!pp) return { ok: false, message: "PP não encontrada." };
 
   if (!pp.pdf_path) {
-    return { ok: false, message: "PDF ainda nao disponivel para esta PP." };
+    return { ok: false, message: "PDF ainda não disponível para esta PP." };
   }
 
   const { data, error } = await supabase.storage
@@ -632,7 +632,7 @@ export async function signedUrlAnexo(
     .eq("tenant_id", session.activeTenant.id)
     .maybeSingle();
 
-  if (!anexo) return { ok: false, message: "Anexo nao encontrado." };
+  if (!anexo) return { ok: false, message: "Anexo não encontrado." };
 
   const { data, error } = await supabase.storage
     .from(BUCKET)

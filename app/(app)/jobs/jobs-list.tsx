@@ -241,13 +241,13 @@ export function JobsList({
           <thead>
             <tr className="border-b border-border bg-muted/30 text-left text-xs uppercase tracking-wider text-muted-foreground">
               <th className="w-8 px-2 py-3" aria-label="Expandir" />
-              <th className="px-4 py-3 font-semibold">Codigo</th>
+              <th className="px-4 py-3 font-semibold">Código</th>
               <th className="px-4 py-3 font-semibold">Nome</th>
               <th className="px-4 py-3 font-semibold">Empresa</th>
               <th className="px-4 py-3 font-semibold">Projeto</th>
               <th className="px-4 py-3 font-semibold">Cliente</th>
-              <th className="px-4 py-3 font-semibold">Responsavel</th>
-              <th className="px-4 py-3 font-semibold">Inicio</th>
+              <th className="px-4 py-3 font-semibold">Responsável</th>
+              <th className="px-4 py-3 font-semibold">Início</th>
               <th className="px-4 py-3 font-semibold text-right">Valor total</th>
               <th className="px-4 py-3 font-semibold">Status</th>
             </tr>
@@ -260,7 +260,7 @@ export function JobsList({
                   className="px-4 py-12 text-center text-sm text-muted-foreground"
                 >
                   {rows.length === 0
-                    ? "Nenhum job criado ainda. Aprove uma versao de orcamento e crie um job."
+                    ? "Nenhum job criado ainda. Aprove uma versão de orçamento e crie um job."
                     : "Nenhum job encontrado com esses filtros."}
                 </td>
               </tr>

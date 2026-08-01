@@ -49,7 +49,7 @@ export default async function JobsPage() {
     <div className="space-y-8">
       <header className="space-y-2">
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-california-red">
-          Operacao
+          Operação
         </p>
         <div className="flex items-center gap-3">
           <div className="rounded-lg bg-california-red/10 p-2">
@@ -58,7 +58,7 @@ export default async function JobsPage() {
           <h1 className="text-3xl font-bold tracking-tight">Jobs</h1>
         </div>
         <p className="text-sm text-muted-foreground max-w-2xl">
-          Todos os jobs criados. Aprovados pelo financeiro liberam a gestao do
+          Todos os jobs criados. Aprovados pelo financeiro liberam a gestão do
           realizado.
         </p>
       </header>
@@ -70,8 +70,8 @@ export default async function JobsPage() {
           </div>
           <h2 className="mt-6 text-xl font-semibold">Nenhum job criado ainda</h2>
           <p className="mt-2 text-sm text-muted-foreground">
-            Aprove uma versao de orcamento e crie um job pelo drawer no
-            orcamento aprovado.
+            Aprove uma versão de orçamento e crie um job pelo drawer no
+            orçamento aprovado.
           </p>
         </div>
       ) : (
