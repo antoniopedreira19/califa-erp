@@ -61,6 +61,8 @@ export type AuditAction =
   | "job.abertura_rejeitada"
   | "job.reenviado_para_aprovacao"
   | "job.realizado_atualizado"
+  | "pedido_compra.emitida"
+  | "pedido_compra.cancelada"
   | "custo_c.utilizado"
   | "acao_negada";
 
