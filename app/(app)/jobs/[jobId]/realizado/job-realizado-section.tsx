@@ -56,10 +56,10 @@ export function JobRealizadoSection({
           <AlertCircle className="h-5 w-5 text-muted-foreground mt-0.5" />
           <div>
             <h2 className="text-sm font-semibold text-foreground">
-              Realizado indisponivel
+              Realizado indisponível
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Aguarde a aprovacao do financeiro para lancar valores realizados.
+              Aguarde a aprovação do financeiro para lançar valores realizados.
             </p>
           </div>
         </div>
@@ -96,7 +96,7 @@ export function JobRealizadoSection({
       {grupos.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-border bg-muted/20 p-12 text-center">
           <p className="text-sm text-muted-foreground">
-            A versao aprovada nao tem grupos.
+            A versão aprovada não tem grupos.
           </p>
         </div>
       ) : (

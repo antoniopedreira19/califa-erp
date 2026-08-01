@@ -52,6 +52,21 @@ No MVP, o gerente de projetos conversa com o cliente fora do sistema. O sistema 
 
 Regressões de performance já custaram 2 iterações completas ao projeto — a última travou navegação a 33s. `docs/PERFORMANCE.md` documenta os case studies e os anti-padrões proibidos.
 
+## Ortografia em português (regra transversal)
+
+**Toda string que aparece pro usuário DEVE ter ortografia em pt-BR correta — com acentos, cedilha e til.** Sem exceção.
+
+- ✅ "Descrição do serviço", "Especificações (opcional)", "Ação", "Não encontrado", "Você poderá", "É obrigatório"
+- ❌ "Descricao do servico", "Especificacoes", "Acao", "Nao encontrado", "Voce podera", "E obrigatorio"
+
+Vale pra: labels, placeholders, botões, títulos, subtítulos, mensagens de erro/toast, descrições de dialog, empty states, tooltips, mensagens de audit visíveis ao usuário. Vale pra **qualquer string que renderize numa UI ou volte pra um `setErro`/toast**.
+
+Fica de fora (pode ficar sem acento, se preferir): identificadores de código (`nome_funcao`, `variavel`), keys de metadata técnica (`{ acao_tentada: "pedido_compra.emitida" }`), comentários internos (opcional; acento não quebra nada). **Mas SE tiver acento em identificador, TypeScript+webpack aceita — UTF-8 desde o dia 1.** A escolha de manter identificadores sem acento é convenção pra evitar problemas com ferramentas externas (ex: nomes de arquivo no S3), não limitação técnica.
+
+Regra de ouro: **se o usuário lê aquela string, ela é português correto**. Se for interno (código, log, audit metadata), tanto faz — mas prefira consistência.
+
+**Nunca escreva em briefs, specs ou plans "portuguese sem acento em código" pra subagents.** Isso já custou uma tela inteira ter que ser retrabalhada. A instrução correta é: "strings visíveis ao usuário com pt-BR completo; identificadores em código podem ficar sem acento por convenção".
+
 ## Regras para desenvolvimento com IA
 
 - Leia `README.md`, `docs/00-visao-geral.md`, `docs/01-stack-e-arquitetura.md`, `docs/PERFORMANCE.md` e a task ativa antes de implementar.

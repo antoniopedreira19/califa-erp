@@ -17,14 +17,14 @@ export function JobTabs({ info, rentabilidade }: Props) {
     <div className="space-y-6">
       <div
         role="tablist"
-        aria-label="Sec&#245;es do job"
+        aria-label="Seções do job"
         className="flex items-center gap-1 border-b border-border"
       >
         <TabButton
           active={tab === "info"}
           onClick={() => setTab("info")}
         >
-          Informa&#231;&#245;es do Job
+          Informações do Job
         </TabButton>
         <TabButton
           active={tab === "rentabilidade"}

@@ -178,12 +178,12 @@ export function JobItemRealizadoTable({
     const n = parseNumero(raw);
     if (n === null) {
       setAtiva(null);
-      setErro("Valor invalido — a celula foi mantida como estava.");
+      setErro("Valor inválido — a célula foi mantida como estava.");
       return;
     }
     if (n < 0) {
       setAtiva(null);
-      setErro("Valor nao pode ser negativo.");
+      setErro("Valor não pode ser negativo.");
       return;
     }
     if (n === valorRealizado(itemId, campo)) {
@@ -496,7 +496,7 @@ export function JobItemRealizadoTable({
       {editable && (
         <div className="flex items-center justify-between gap-4 border-t border-border bg-muted/40 px-6 py-3 rounded-b-2xl">
           <span className="text-[11px] text-muted-foreground">
-            Clique em qualquer celula do bloco Realizado para editar ·{" "}
+            Clique em qualquer célula do bloco Realizado para editar ·{" "}
             <kbd className="font-mono">Enter</kbd> confirma ·{" "}
             <kbd className="font-mono">Esc</kbd> desfaz
           </span>

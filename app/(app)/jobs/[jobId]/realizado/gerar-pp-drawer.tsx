@@ -150,7 +150,7 @@ export function GerarPPDrawer({
     for (const file of Array.from(files)) {
       // Validacao client
       if (!PP_ANEXO_MIMETYPES_ACEITOS.includes(file.type as PPAnexoMimetype)) {
-        setErro(`${file.name}: tipo nao aceito (${file.type}).`);
+        setErro(`${file.name}: tipo não aceito (${file.type}).`);
         continue;
       }
       if (file.size > PP_ANEXO_TAMANHO_MAX_BYTES) {
@@ -217,20 +217,20 @@ export function GerarPPDrawer({
       return;
     }
     if (!prazoPagamento) {
-      setErro("Prazo de pagamento e obrigatorio.");
+      setErro("Prazo de pagamento é obrigatório.");
       return;
     }
     if (!servico.trim()) {
-      setErro("Servico e obrigatorio.");
+      setErro("Serviço é obrigatório.");
       return;
     }
     const qtdNum = Number(quantidade.replace(",", "."));
     if (!Number.isFinite(qtdNum) || qtdNum <= 0) {
-      setErro("Quantidade deve ser um numero positivo.");
+      setErro("Quantidade deve ser um número positivo.");
       return;
     }
     if (anexos.length === 0) {
-      setErro("Pelo menos um anexo e obrigatorio.");
+      setErro("Pelo menos um anexo é obrigatório.");
       return;
     }
     if (anexos.some((a) => a.status !== "ok")) {
@@ -350,11 +350,11 @@ export function GerarPPDrawer({
             {/* Servico */}
             <div className="space-y-3">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Servico
+                Serviço
               </h3>
 
               <div>
-                <label className="text-xs font-medium">Descricao do servico *</label>
+                <label className="text-xs font-medium">Descrição do serviço *</label>
                 <Input
                   value={servico}
                   onChange={(e) => setServico(e.target.value)}
@@ -373,7 +373,7 @@ export function GerarPPDrawer({
               </div>
 
               <div>
-                <label className="text-xs font-medium">Especificacoes (opcional)</label>
+                <label className="text-xs font-medium">Especificações (opcional)</label>
                 <textarea
                   value={especificacoes}
                   onChange={(e) => setEspecificacoes(e.target.value)}

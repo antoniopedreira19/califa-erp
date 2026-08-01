@@ -100,8 +100,8 @@ export function PPActionsCell({
           title="Cancelar Pedido de Compra?"
           description={
             <>
-              <strong className="text-foreground">{pp.codigo}</strong> sera
-              cancelada e o PDF + anexos apagados definitivamente. Voce podera
+              <strong className="text-foreground">{pp.codigo}</strong> será
+              cancelada e o PDF + anexos apagados definitivamente. Você poderá
               gerar uma nova PP depois.
             </>
           }

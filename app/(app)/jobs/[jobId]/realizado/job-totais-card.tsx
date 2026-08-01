@@ -130,7 +130,7 @@ export function JobTotaisCard({
             <tr>
               <th className="bg-muted/40 border-b border-border" />
               <th className="text-center px-4 py-2 text-[11px] font-extrabold tracking-[0.1em] text-foreground bg-[#f1f0ec] border-b-[3px] border-b-[#282828] border-l-2 border-l-[#d7d7d7]">
-                ORCADO
+                ORÇADO
               </th>
               <th className="text-center px-4 py-2 text-[11px] font-extrabold tracking-[0.1em] text-[#1e4fa3] bg-[#e8f0fd] border-b-[3px] border-b-[#2f6fdb] border-l-2 border-l-[#b9d1f4]">
                 PLANEJADO
@@ -182,7 +182,7 @@ export function JobTotaisCard({
             <tr>
               <th className="bg-muted/20 border-b border-border" />
               <th className="text-center px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground bg-muted/20 border-b border-border">
-                ORCADO
+                ORÇADO
               </th>
               <th className="text-center px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground bg-muted/20 border-b border-border">
                 PLANEJADO
@@ -220,7 +220,7 @@ export function JobTotaisCard({
       {/* Camada 3: honorarios, impostos, faturamento */}
       <div className="border-t border-border grid grid-cols-3 gap-4 p-6 bg-muted/10">
         <div>
-          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Honorarios</p>
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Honorários</p>
           <p className="mt-1 font-mono text-sm font-semibold">
             {formatCurrency(honorarios, moeda)}
           </p>
@@ -248,7 +248,7 @@ export function JobTotaisCard({
           </span>
         </div>
         <div className="flex items-baseline justify-between">
-          <span className="text-sm text-muted-foreground">Variacao vs Planejado</span>
+          <span className="text-sm text-muted-foreground">Variação vs Planejado</span>
           <span className={cn("font-mono text-base font-bold", corVariacao)}>
             {(totalPlanejado <= 0 || totalRealizado === 0) ? (
               <span className="text-muted-foreground">—</span>

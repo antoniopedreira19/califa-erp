@@ -62,7 +62,7 @@ export async function upsertItemRealizado(
     .maybeSingle();
 
   if (jobErr || !job) {
-    return { ok: false, message: "Job nao encontrado." };
+    return { ok: false, message: "Job não encontrado." };
   }
 
   // 2. Gate de status
@@ -81,7 +81,7 @@ export async function upsertItemRealizado(
     return {
       ok: false,
       message:
-        "Realizado so pode ser lancado com o job em 'Aberto' ou 'Em producao'.",
+        "Realizado só pode ser lançado com o job em 'Aberto' ou 'Em produção'.",
     };
   }
 
@@ -103,7 +103,7 @@ export async function upsertItemRealizado(
     });
     return {
       ok: false,
-      message: "Apenas o responsavel do job ou um administrador pode editar o realizado.",
+      message: "Apenas o responsável do job ou um administrador pode editar o realizado.",
     };
   }
 
@@ -116,23 +116,23 @@ export async function upsertItemRealizado(
     .maybeSingle();
 
   if (itemErr || !item) {
-    return { ok: false, message: "Item nao encontrado." };
+    return { ok: false, message: "Item não encontrado." };
   }
 
   if (item.versao_orcamento_id !== job.versao_orcamento_aprovada_id) {
     return {
       ok: false,
-      message: "Item nao pertence a versao aprovada deste job.",
+      message: "Item não pertence à versão aprovada deste job.",
     };
   }
 
   // 5. Parse e valida valor
   const numero = valor === null || valor === "" ? 0 : parseNumero(valor);
   if (numero === null) {
-    return { ok: false, message: "Valor invalido." };
+    return { ok: false, message: "Valor inválido." };
   }
   if (numero < 0) {
-    return { ok: false, message: "Valor nao pode ser negativo." };
+    return { ok: false, message: "Valor não pode ser negativo." };
   }
 
   // 6. Busca linha existente (pra saber valor anterior + decidir insert/update)
