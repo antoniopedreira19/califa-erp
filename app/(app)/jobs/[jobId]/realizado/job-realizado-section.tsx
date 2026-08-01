@@ -6,6 +6,9 @@ import type {
   VersaoOrcamentoGrupo,
   VersaoOrcamentoItem,
   JobItemRealizado,
+  PedidoCompra,
+  Fornecedor,
+  Empresa,
 } from "@/lib/types";
 import { JobGrupoCard } from "./job-grupo-card";
 import { JobTotaisCard } from "./job-totais-card";
@@ -18,12 +21,17 @@ interface Props {
     | "projeto_id"
     | "orcamento_id"
     | "versao_orcamento_aprovada_id"
+    | "empresa_id"
+    | "responsavel_id"
   >;
   versao: Pick<VersaoOrcamento, "id" | "numero_versao" | "nome" | "moeda" | "percentual_honorarios" | "percentual_imposto">;
   grupos: VersaoOrcamentoGrupo[];
   itens: VersaoOrcamentoItem[];
   realizadosMap: Map<string, JobItemRealizado>;
   editable: boolean;
+  ppsPorItemId: Map<string, PedidoCompra>;
+  fornecedores: Array<Pick<Fornecedor, "id" | "nome" | "razao_social" | "status">>;
+  empresas: Array<Pick<Empresa, "id" | "razao_social" | "nome_fantasia" | "ativo" | "principal">>;
 }
 
 export function JobRealizadoSection({
@@ -33,6 +41,9 @@ export function JobRealizadoSection({
   itens,
   realizadosMap,
   editable,
+  ppsPorItemId,
+  fornecedores,
+  empresas,
 }: Props) {
   // Status onde nem mostramos a planilha
   if (
@@ -100,6 +111,11 @@ export function JobRealizadoSection({
                 moeda={versao.moeda}
                 editable={editable}
                 jobId={job.id}
+                ppsPorItemId={ppsPorItemId}
+                fornecedores={fornecedores}
+                empresas={empresas}
+                jobEmpresaId={job.empresa_id ?? ""}
+                jobResponsavelId={job.responsavel_id ?? ""}
               />
             ))}
           </div>
