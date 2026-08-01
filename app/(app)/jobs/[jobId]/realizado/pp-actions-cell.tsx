@@ -4,6 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { FilePlus, Eye, Trash2 } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import type { PedidoCompra } from "@/lib/types";
 import { cancelarPedidoCompra, signedUrlPdf } from "./actions-pp";
@@ -65,25 +66,33 @@ export function PPActionsCell({
   if (pp) {
     return (
       <div className="relative flex items-center h-9 gap-1">
-        <button
-          type="button"
-          onClick={handleVer}
-          disabled={pending}
-          title={`Ver PDF · ${pp.codigo}`}
-          className={BOTAO_CLASSES}
-        >
-          <Eye className="h-3.5 w-3.5" />
-        </button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onClick={handleVer}
+              disabled={pending}
+              className={BOTAO_CLASSES}
+            >
+              <Eye className="h-3.5 w-3.5" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>Ver PDF · {pp.codigo}</TooltipContent>
+        </Tooltip>
         {editable && (
-          <button
-            type="button"
-            onClick={() => setAskCancelar(true)}
-            disabled={pending}
-            title={`Cancelar ${pp.codigo}`}
-            className={BOTAO_CLASSES}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={() => setAskCancelar(true)}
+                disabled={pending}
+                className={BOTAO_CLASSES}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Cancelar {pp.codigo}</TooltipContent>
+          </Tooltip>
         )}
         <ConfirmDialog
           open={askCancelar}
@@ -118,15 +127,19 @@ export function PPActionsCell({
   if (editable) {
     return (
       <div className="flex items-center h-9">
-        <button
-          type="button"
-          onClick={() => onGerar(itemRealizadoId)}
-          disabled={pending}
-          title="Gerar PP"
-          className={cn(BOTAO_CLASSES, "text-california-red")}
-        >
-          <FilePlus className="h-3.5 w-3.5" />
-        </button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onClick={() => onGerar(itemRealizadoId)}
+              disabled={pending}
+              className={cn(BOTAO_CLASSES, "text-california-red")}
+            >
+              <FilePlus className="h-3.5 w-3.5" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>Gerar PP</TooltipContent>
+        </Tooltip>
       </div>
     );
   }
