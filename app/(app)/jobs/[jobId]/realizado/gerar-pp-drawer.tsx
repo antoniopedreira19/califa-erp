@@ -144,6 +144,7 @@ export function GerarPPDrawer({
     if (!files || !uploadPrefix) return;
 
     const somaAtual = anexos.reduce((s, a) => s + a.file.size, 0);
+    let somaAcumulada = somaAtual;
     const novos: AnexoLocal[] = [];
 
     for (const file of Array.from(files)) {
@@ -156,10 +157,11 @@ export function GerarPPDrawer({
         setErro(`${file.name}: excede 8 MB.`);
         continue;
       }
-      if (somaAtual + file.size > PP_ANEXOS_TAMANHO_TOTAL_MAX_BYTES) {
+      if (somaAcumulada + file.size > PP_ANEXOS_TAMANHO_TOTAL_MAX_BYTES) {
         setErro("Total de anexos excederia 25 MB.");
         break;
       }
+      somaAcumulada += file.size;
       const anexo_id = crypto.randomUUID();
       const path = `${uploadPrefix}${anexo_id}-${sanitizeName(file.name)}`;
       novos.push({ anexo_id, file, path, status: "uploading" });
