@@ -284,7 +284,7 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
             {
               text: [
                 { text: "Banco: ", bold: true },
-                `${fornecedor.banco_codigo ?? ""} - ${fornecedor.banco_nome ?? ""}`,
+                [fornecedor.banco_codigo, fornecedor.banco_nome].filter(Boolean).join(" - "),
               ],
               fontSize: 9,
             },
