@@ -2,7 +2,7 @@
 
 Documento para dar continuidade ao projeto em uma nova sessão de trabalho.
 
-**Última atualização** (2026-07-31): Task 008 Jobs + Realizado + polish. `/jobs` vira lista real com filtros/busca (substitui placeholder); `/jobs/[jobId]` ganha abas **Informações do Job** / **Rentabilidade** com planilha ORCADO/PLANEJADO/REALIZADO editável + card de totais com Variação vs Planejado e Resultado Real. Nova tabela `jobs_itens_realizado` (1:1 job × item da versão aprovada, GENERATED total). Server action `upsertItemRealizado` com gates status/ownership/tenant + audit `job.realizado_atualizado`. Padronização de largura (`max-w-7xl` em todas telas de detalhe/planilha) e header (icon+kicker+title em 8 páginas) documentada em `docs/09-identidade-visual-ui.md`. Fix embed self-FK do PostgREST (pai vinha como array — "Sub-job de: ·" bug). Timings temporários removidos.
+**Última atualização** (2026-07-31): Task 010 fase 1 — Pedidos de Compra. Tabela `pedidos_compra` (1:1 com item_realizado, unique constraint) + `pedidos_compra_anexos` + bucket privado `pedidos-compra`. Server actions com fluxo 2-fases (client upload direto pro bucket via `supabase.storage`, depois `finalizarPedidoCompra` persiste rows + gera PDF via `pdfmake`). Trilha lateral na tabela do realizado com 3 estados (Gerar / Ver+Cancelar / vazio). Drawer com fornecedor+empresa+prazo+serviço+especificações+anexos. Cancelamento = hard delete (row + PDF + anexos + `fornecedor_id=null` no realizado). PDF layout fiel ao PDF anexo referência.
 
 ## 0. LEIA PRIMEIRO — ação pendente no início da sessão
 
@@ -72,9 +72,10 @@ Admin cadastrado: `antonio@pevetech.com.br` (role `administrador` no tenant `age
 20260730000003  cidades (cadastro)
 20260730000004  produtos_cliente_e_faturamento_job
 20260731000001  job_observacoes  (+ job_observacoes_limite_500)
+20260731000003  task010_pedidos_compra
 ```
 
-**Todas as migrations aplicadas.** Última: `20260731000001_job_observacoes` (campo Observações do modal de abertura). O ajuste de limite 1000 → 500 foi aplicado no remoto como `job_observacoes_limite_500`; o arquivo versionado já nasce com 500, então uma base recriada do zero fica idêntica.
+**Todas as migrations aplicadas.** Última: `20260731000003_task010_pedidos_compra` (tabelas e bucket de pedidos de compra).
 
 ## 2. O que já está pronto (Tasks 001 – 004)
 
@@ -163,6 +164,20 @@ Admin cadastrado: `antonio@pevetech.com.br` (role `administrador` no tenant `age
 - **Audit**: `job.realizado_atualizado` com metadata `{ item_id, campo, valor_novo, valor_anterior }`.
 - Migration `20260730000001_task008_jobs_realizado.sql`.
 
+### Task 010 — Pedidos de Compra (fase 1: emissão + cancelamento)
+- **Tabela `pedidos_compra`** (1:1 com `jobs_itens_realizado` via unique constraint) + `pedidos_compra_anexos` (N por PP). Snapshot dos dados no ato da emissão (`servico`, `valor`, `quantidade`, `especificacoes`) — realizado mudar depois NÃO altera PP.
+- **Sem coluna `status`** por agora — cancelar = hard delete (row + PDF + anexos + `fornecedor_id=null` no realizado). Fase 2 (fluxo financeiro) reintroduz status quando entrarem `aprovada`/`baixada`/`reprovada`.
+- **Código `PP-NNNNN` sequencial por tenant** via função `gerar_codigo_pp(tenant_id)` com `pg_advisory_xact_lock` (serializa geração concorrente sem penalizar leitura).
+- **Bucket privado `pedidos-compra`** com policies por prefix path = tenant_id (mesmo padrão de `orcamento-importacoes`).
+- **Fluxo 2 fases pra upload**: client faz `supabase.storage.upload` direto pro bucket (evita limite de 4.5 MB do body Vercel), depois `finalizarPedidoCompra` valida paths existentes + persiste rows + gera PDF.
+- **PDF via `pdfmake`** (JS puro, serverless-friendly). Layout fiel ao anexo de referência, EXCETO: sem Espécie/Formato/Cores/Meio/Acabamento; sem Prazo Entrega/Local Entrega; assinatura só do responsável do job.
+- **UI**: trilha lateral fora do card da tabela (mesmo padrão do `itens-table.tsx` da versão). 3 estados: sem realizado (vazio), com realizado sem PP (ícone `FilePlus`), com PP (ícones `Eye` + `Trash2`).
+- **Drawer** com defaults inteligentes: empresa = `job.empresa_id`, prazo = hoje+15 dias, serviço = item.item, quantidade = qtd_realizada.
+- **Permissão**: admin OR responsável do job (mesma regra do editar realizado). Job precisa estar em `aberto` ou `em_producao`.
+- **Anexos**: PDF + imagem, 8 MB/arquivo, 25 MB total, obrigatório ≥1 no ato de gerar.
+- **Audit**: `pedido_compra.emitida` + `pedido_compra.cancelada`. Denials registram `acao_negada`.
+- Migration `20260731000003_task010_pedidos_compra.sql`.
+
 ### Task 005 — Aprovação de versão (Fase E) + Jobs + Central Financeira
 - **Aprovação de versão** (`aprovarVersao(versaoId)`):
   - Valida versão em `rascunho|em_revisao|enviada_cliente`, orçamento não em `job_criado|aprovado|cancelado`, ≥1 item.
@@ -240,22 +255,31 @@ Convite está feito. Backlog:
 - **Feed de auditoria** (`audit_events` do tenant) — dados já são gravados, falta UI de leitura.
 - **MFA obrigatório pra admin** — configuração no Supabase Dashboard.
 
-### 🟡 Prioridade 2 — Pedidos de compra + títulos financeiros
+### 🟡 Prioridade 2 — Pedidos de Compra fase 2 (fluxo financeiro)
 
-Extensão natural do Realizado. O plano da Task 008 documentou:
+Extensão natural da fase 1. Adicionar:
+- Coluna `status pp_status` na tabela `pedidos_compra` (enum: `emitida`, `aprovada`, `baixada`, `reprovada`).
+- Rota `/financeiro/pedidos-compra` com caixa de entrada + tabela de PPs `emitida`.
+- Server actions `aprovarPP`, `reprovarPP` (com motivo), `baixarPP`, `estornarBaixaPP`.
+- Regra: PP `emitida` pode ser cancelada por GP/admin; PP `aprovada` só admin/financeiro cancela (e antes precisa estornar baixa se aplicável).
+- Audit: `pedido_compra.aprovada`, `pedido_compra.reprovada`, `pedido_compra.baixada`, `pedido_compra.estornada`.
+
+### 🟢 Prioridade 3 — Títulos financeiros + conciliação
+
+Próxima peça lógica após fase 2. O plano documentou:
 ```
 realizado → pedidos_compra → titulos_financeiros → conciliação bancária
 ```
-A próxima peça lógica é a tabela `pedidos_compra` (que "consome" um realizado dividindo em N lançamentos com fornecedor, data, NF). Sem isso, o realizado hoje é só um número num item.
+`pedidos_compra` (emitida/aprovada/baixada) gera `titulos_financeiros` com datas de vencimento e valores. Sem isso, o realizado hoje é só um número num item.
 
-### 🟢 Prioridade 3 — Dashboards e relatórios
+### 🟢 Prioridade 4 — Dashboards e relatórios
 
 - KPIs por projeto (rentabilidade real vs orçada).
 - Rentabilidade por fase de job (planejado × realizado ao longo do tempo).
 - Cash flow projetado.
 - Contas a pagar / DRE (dependem de pedidos_compra + títulos).
 
-### 🟢 Prioridade 4 — Dívidas técnicas registradas
+### 🟢 Prioridade 5 — Dívidas técnicas registradas
 
 - **Swap principal↔sub-job atômico**: hoje são 3 statements sequenciais em `criarJob`/`atualizarHierarquiaJob`. Mover pra função Postgres com transação real. Recovery hoje é SQL manual.
 - **`finalizado` ref stale** também na `versoes/.../itens-table.tsx` — mesmo bug do CelulaRealNum que consertei no realizado (commit `1787a5c`). Aplicar `useEffect(() => { if (editando) finalizado.current = false }, [editando])`.
