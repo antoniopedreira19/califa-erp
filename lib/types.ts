@@ -555,3 +555,48 @@ export interface JobItemRealizado {
   created_at: string;
   updated_at: string;
 }
+
+// ---------- Task 010: Pedidos de Compra ----------
+
+export interface PedidoCompra {
+  id: string;
+  tenant_id: string;
+  codigo: string;
+  item_realizado_id: string;
+  job_id: string;
+  fornecedor_id: string;
+  empresa_id: string;
+  servico: string;
+  quantidade: number;
+  especificacoes: string | null;
+  valor: number;
+  prazo_pagamento: string;
+  pdf_path: string;
+  emitida_por: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PedidoCompraAnexo {
+  id: string;
+  tenant_id: string;
+  pedido_compra_id: string;
+  arquivo_path: string;
+  arquivo_nome_original: string;
+  arquivo_tamanho_bytes: number;
+  arquivo_mimetype: string;
+  created_by: string | null;
+  created_at: string;
+}
+
+export const PP_ANEXO_MIMETYPES_ACEITOS = [
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+] as const;
+
+export type PPAnexoMimetype = (typeof PP_ANEXO_MIMETYPES_ACEITOS)[number];
+
+export const PP_ANEXO_TAMANHO_MAX_BYTES = 8 * 1024 * 1024;
+export const PP_ANEXOS_TAMANHO_TOTAL_MAX_BYTES = 25 * 1024 * 1024;
