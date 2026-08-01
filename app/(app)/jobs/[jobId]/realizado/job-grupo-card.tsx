@@ -3,6 +3,9 @@ import type {
   VersaoOrcamentoGrupo,
   VersaoOrcamentoItem,
   JobItemRealizado,
+  PedidoCompra,
+  Fornecedor,
+  Empresa,
 } from "@/lib/types";
 import { JobItemRealizadoTable } from "./job-item-realizado-table";
 
@@ -13,6 +16,11 @@ interface Props {
   moeda: string;
   editable: boolean;
   jobId: string;
+  ppsPorItemId: Map<string, PedidoCompra>;
+  fornecedores: Array<Pick<Fornecedor, "id" | "nome" | "razao_social" | "status">>;
+  empresas: Array<Pick<Empresa, "id" | "razao_social" | "nome_fantasia" | "ativo" | "principal">>;
+  jobEmpresaId: string;
+  jobResponsavelId: string;
 }
 
 export function JobGrupoCard({
@@ -22,6 +30,11 @@ export function JobGrupoCard({
   moeda,
   editable,
   jobId,
+  ppsPorItemId,
+  fornecedores,
+  empresas,
+  jobEmpresaId,
+  jobResponsavelId,
 }: Props) {
   return (
     <div className="rounded-2xl border border-border bg-card shadow-soft">
@@ -41,6 +54,11 @@ export function JobGrupoCard({
         realizadosMap={realizadosMap}
         moeda={moeda}
         editable={editable}
+        ppsPorItemId={ppsPorItemId}
+        fornecedores={fornecedores}
+        empresas={empresas}
+        jobEmpresaId={jobEmpresaId}
+        jobResponsavelId={jobResponsavelId}
       />
     </div>
   );

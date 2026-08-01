@@ -19,6 +19,7 @@ import type {
   VersaoOrcamentoGrupo,
   VersaoOrcamentoItem,
   JobItemRealizado,
+  PedidoCompra,
 } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -121,7 +122,7 @@ export default async function JobDetailPage({
   // Queries de Realizado (paralelas, dependem de raw ja carregado)
   const versaoAprovadaId = raw.versao_orcamento_aprovada_id as string;
 
-  const [gruposRes, itensRes, realizadosRes] = await Promise.all([
+  const [gruposRes, itensRes, realizadosRes, ppsRes, fornecedoresRes, empresasRes] = await Promise.all([
     supabase
       .from("versoes_orcamento_grupos")
       .select("*")
@@ -142,6 +143,24 @@ export default async function JobDetailPage({
       .eq("job_id", raw.id)
       .eq("tenant_id", session.activeTenant.id)
       .returns<JobItemRealizado[]>(),
+    supabase
+      .from("pedidos_compra")
+      .select("*")
+      .eq("job_id", raw.id)
+      .eq("tenant_id", session.activeTenant.id),
+    supabase
+      .from("fornecedores")
+      .select("id, nome, razao_social, status")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("status", "ativo")
+      .order("nome"),
+    supabase
+      .from("empresas")
+      .select("id, razao_social, nome_fantasia, ativo, principal")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("ativo", true)
+      .order("principal", { ascending: false })
+      .order("razao_social"),
   ]);
 
   const grupos = (gruposRes.data ?? []) as VersaoOrcamentoGrupo[];
@@ -166,6 +185,17 @@ export default async function JobDetailPage({
 
   const realizadosMap = new Map<string, JobItemRealizado>();
   for (const r of realizados) realizadosMap.set(r.item_id, r);
+
+  const pps = (ppsRes.data ?? []).map((pp: any) => ({
+    ...pp,
+    quantidade: Number(pp.quantidade),
+    valor: Number(pp.valor),
+  })) as PedidoCompra[];
+  const ppsPorItemId = new Map<string, PedidoCompra>();
+  for (const pp of pps) ppsPorItemId.set(pp.item_realizado_id, pp);
+
+  const fornecedores = (fornecedoresRes.data ?? []) as any[];
+  const empresas = (empresasRes.data ?? []) as any[];
 
   const versaoAprovada = raw.versao as {
     id: string;
@@ -418,6 +448,8 @@ export default async function JobDetailPage({
               projeto_id: job.projeto_id,
               orcamento_id: job.orcamento_id,
               versao_orcamento_aprovada_id: job.versao_orcamento_aprovada_id,
+              empresa_id: job.empresa_id,
+              responsavel_id: job.responsavel_id,
             }}
             versao={{
               id: versaoAprovada.id,
@@ -431,6 +463,9 @@ export default async function JobDetailPage({
             itens={itens}
             realizadosMap={realizadosMap}
             editable={podeEditarRealizado}
+            ppsPorItemId={ppsPorItemId}
+            fornecedores={fornecedores}
+            empresas={empresas}
           />
         }
       />

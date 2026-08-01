@@ -7,8 +7,10 @@ import { Badge } from "@/components/ui/badge";
 import { TruncateTooltip } from "@/components/ui/truncate-tooltip";
 import { cn, formatCurrency } from "@/lib/utils";
 import { calcularVariacao } from "@/lib/calculos/versao-totais";
-import type { VersaoOrcamentoItem, JobItemRealizado } from "@/lib/types";
+import type { VersaoOrcamentoItem, JobItemRealizado, PedidoCompra, Fornecedor, Empresa } from "@/lib/types";
 import { upsertItemRealizado, type CampoRealizado } from "../actions-realizado";
+import { PPActionsCell } from "./pp-actions-cell";
+import { GerarPPDrawer } from "./gerar-pp-drawer";
 
 interface Props {
   jobId: string;
@@ -16,6 +18,12 @@ interface Props {
   realizadosMap: Map<string, JobItemRealizado>;
   moeda: string;
   editable: boolean;
+  // PP rail
+  ppsPorItemId: Map<string, PedidoCompra>;
+  fornecedores: Array<Pick<Fornecedor, "id" | "nome" | "razao_social" | "status">>;
+  empresas: Array<Pick<Empresa, "id" | "razao_social" | "nome_fantasia" | "ativo" | "principal">>;
+  jobEmpresaId: string;
+  jobResponsavelId: string;
 }
 
 type CelulaAtiva = { itemId: string; campo: CampoRealizado } | null;
@@ -85,12 +93,43 @@ export function JobItemRealizadoTable({
   realizadosMap,
   moeda,
   editable,
+  ppsPorItemId,
+  fornecedores,
+  empresas,
+  jobEmpresaId,
+  jobResponsavelId: _jobResponsavelId,
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
   const [ativa, setAtiva] = React.useState<CelulaAtiva>(null);
   const [overrides, setOverrides] = React.useState<Overrides>({});
   const [erro, setErro] = React.useState<string | null>(null);
+
+  // Rail lateral PP
+  const wrapperRef = React.useRef<HTMLDivElement>(null);
+  const tbodyRef = React.useRef<HTMLTableSectionElement>(null);
+  const [railTop, setRailTop] = React.useState(0);
+  const [drawerOpen, setDrawerOpen] = React.useState(false);
+  const [itemIdAtual, setItemIdAtual] = React.useState<string | null>(null);
+
+  React.useLayoutEffect(() => {
+    const wrapper = wrapperRef.current;
+    const tbody = tbodyRef.current;
+    if (!wrapper || !tbody) return;
+    const medir = () =>
+      setRailTop(
+        tbody.getBoundingClientRect().top - wrapper.getBoundingClientRect().top,
+      );
+    medir();
+    const observer = new ResizeObserver(medir);
+    observer.observe(wrapper);
+    return () => observer.disconnect();
+  }, [itens.length, editable]);
+
+  function abrirDrawer(itemRealizadoId: string) {
+    setItemIdAtual(itemRealizadoId);
+    setDrawerOpen(true);
+  }
 
   // Descarta overrides quando o servidor devolve o mesmo valor.
   React.useEffect(() => {
@@ -222,6 +261,7 @@ export function JobItemRealizadoTable({
         </div>
       )}
 
+      <div ref={wrapperRef} className="relative">
       <div className="overflow-x-auto rounded-b-2xl">
         <table
           className={cn("w-full table-fixed text-sm border-collapse", LARGURA_MINIMA)}
@@ -279,7 +319,7 @@ export function JobItemRealizadoTable({
             </tr>
           </thead>
 
-          <tbody>
+          <tbody ref={tbodyRef}>
             {itens.length === 0 && (
               <tr>
                 <td colSpan={16} className="py-8 text-center text-sm text-muted-foreground">
@@ -430,6 +470,30 @@ export function JobItemRealizadoTable({
       </div>
 
       {editable && (
+        <div
+          className="absolute left-full ml-2 flex flex-col"
+          style={{ top: railTop }}
+        >
+          {itens.map((item) => {
+            const realizado = realizadosMap.get(item.id);
+            const total = realizado ? Number(realizado.total_realizado ?? 0) : 0;
+            const pp = ppsPorItemId.get(realizado?.id ?? "") ?? null;
+            return (
+              <PPActionsCell
+                key={item.id}
+                itemRealizadoId={realizado?.id ?? ""}
+                totalRealizado={total}
+                pp={pp}
+                editable={editable}
+                onGerar={abrirDrawer}
+              />
+            );
+          })}
+        </div>
+      )}
+      </div>
+
+      {editable && (
         <div className="flex items-center justify-between gap-4 border-t border-border bg-muted/40 px-6 py-3 rounded-b-2xl">
           <span className="text-[11px] text-muted-foreground">
             Clique em qualquer celula do bloco Realizado para editar ·{" "}
@@ -438,6 +502,30 @@ export function JobItemRealizadoTable({
           </span>
         </div>
       )}
+
+      <GerarPPDrawer
+        open={drawerOpen}
+        onOpenChange={setDrawerOpen}
+        itemRealizadoId={itemIdAtual}
+        jobId={jobId}
+        fornecedores={fornecedores.filter((f) => f.status === "ativo")}
+        empresas={empresas.filter((e) => e.ativo)}
+        defaultEmpresaId={jobEmpresaId}
+        itemDescricao={(() => {
+          const it = itens.find((i) => (realizadosMap.get(i.id)?.id ?? "") === itemIdAtual);
+          return it?.item ?? "";
+        })()}
+        valorRealizado={(() => {
+          const it = itens.find((i) => (realizadosMap.get(i.id)?.id ?? "") === itemIdAtual);
+          const r = it ? realizadosMap.get(it.id) : null;
+          return r ? Number(r.total_realizado ?? 0) : 0;
+        })()}
+        quantidadeRealizada={(() => {
+          const it = itens.find((i) => (realizadosMap.get(i.id)?.id ?? "") === itemIdAtual);
+          const r = it ? realizadosMap.get(it.id) : null;
+          return r ? Number(r.quantidade_realizada ?? 0) : 0;
+        })()}
+      />
     </>
   );
 }
