@@ -266,17 +266,19 @@ export function EmpresaDrawer(props: Props) {
                     </SelectContent>
                   </Select>
                 </Field>
-                <div className="flex items-end">
-                  <label className="inline-flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={principal}
-                      onChange={(e) => setPrincipal(e.target.checked)}
-                      className="h-4 w-4 rounded border-border text-california-red focus:ring-california-red"
-                    />
-                    <span>Marcar como <b>principal</b> do tenant</span>
-                  </label>
-                </div>
+                {props.mode === "create" && (
+                  <div className="flex items-end">
+                    <label className="inline-flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={principal}
+                        onChange={(e) => setPrincipal(e.target.checked)}
+                        className="h-4 w-4 rounded border-border text-california-red focus:ring-california-red"
+                      />
+                      <span>Marcar como <b>principal</b> do tenant</span>
+                    </label>
+                  </div>
+                )}
               </div>
             </Section>
 

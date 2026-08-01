@@ -172,6 +172,7 @@ export async function atualizarEmpresa(
   });
 
   revalidatePath("/admin/empresas");
+  revalidatePath("/admin");
   return { ok: true, id, message: "Empresa atualizada." };
 }
 
