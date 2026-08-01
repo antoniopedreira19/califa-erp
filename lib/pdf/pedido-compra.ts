@@ -1,4 +1,6 @@
-import PdfPrinter from "pdfmake/src/printer";
+// Case-sensitive: em Linux (Vercel) o arquivo eh Printer.js (P maiusculo).
+// Windows dev nao pega o problema porque filesystem eh case-insensitive.
+import PdfPrinter from "pdfmake/src/Printer";
 import type { TDocumentDefinitions, Content } from "pdfmake/interfaces";
 import fs from "node:fs";
 import path from "node:path";

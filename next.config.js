@@ -3,10 +3,10 @@ const nextConfig = {
   reactStrictMode: true,
   experimental: {
     typedRoutes: false,
-    // pdfmake usa submodule pdfmake/src/printer que nao esta exportado
-    // no package.json. Marcamos como external pra Next.js usar o
-    // require nativo do Node em runtime, evitando o resolve do webpack.
-    // pdfkit e dep transitiva (usada pelo printer).
+    // pdfmake + pdfkit sao Node-only e usados em server actions.
+    // serverComponentsExternalPackages tambem cobre server actions via
+    // next-flight-action-entry-loader — evita webpack tentar bundlar
+    // deps nativas e reduz cold start.
     serverComponentsExternalPackages: ["pdfmake", "pdfkit"],
   },
 };

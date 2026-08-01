@@ -1,4 +1,4 @@
-declare module "pdfmake/src/printer" {
+declare module "pdfmake/src/Printer" {
   import type { TDocumentDefinitions } from "pdfmake/interfaces";
 
   interface PdfKitDocument extends NodeJS.ReadableStream {
