@@ -18,6 +18,8 @@ Antes de qualquer coisa:
    - `force-dynamic` permanece nas pages autenticadas (**não remova** — funciona como freio de prefetch descontrolado, ver `docs/PERFORMANCE.md` seção G).
    - Timings `console.log("[*.timing]")` que existiam em 3 arquivos foram removidos em 2026-07-31 (diagnóstico concluído).
 
+4. **Ao adicionar lib Node-only server-side** (PDF, imagem, XLSX, etc): typecheck + lint NÃO é suficiente. RODAR `npm run build` LOCAL antes de pushar — o webpack pode não resolver submódulos que o TS aceita via `.d.ts`. Case study: em 2026-07-31 (Task 010), `pdfmake` foi mergeada sem `npm run build` local, quebrou o build do Vercel porque `pdfmake/src/printer` não está exportado no `package.json` do pacote. Fix foi adicionar `pdfmake` e `pdfkit` em `experimental.serverComponentsExternalPackages` do `next.config.js` (commit `e215d52`).
+
 ## 1. Onde estamos
 
 **Deploy:** projeto no Vercel (`calif-erp`), branch `main`. Domínio de produção: `https://www.sistemacalifa.com.br`.
