@@ -111,6 +111,14 @@ export function JobItemRealizadoTable({
   const [railTop, setRailTop] = React.useState(0);
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [itemIdAtual, setItemIdAtual] = React.useState<string | null>(null);
+  const [toast, setToast] = React.useState<string | null>(null);
+
+  // Auto-dismiss do toast após 4s
+  React.useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 4000);
+    return () => clearTimeout(t);
+  }, [toast]);
 
   React.useLayoutEffect(() => {
     const wrapper = wrapperRef.current;
@@ -520,9 +528,26 @@ export function JobItemRealizadoTable({
             itemDescricao={itemAtual?.item ?? ""}
             valorRealizado={realizadoAtual ? Number(realizadoAtual.total_realizado ?? 0) : 0}
             quantidadeRealizada={realizadoAtual ? Number(realizadoAtual.quantidade_realizada ?? 0) : 0}
+            onSuccess={(codigo) => setToast(`Pedido de Compra ${codigo} gerado com sucesso!`)}
           />
         );
       })()}
+
+      {toast && (
+        <div
+          role="status"
+          className="fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 shadow-elevated animate-in fade-in slide-in-from-bottom-2"
+        >
+          <span className="text-sm font-medium text-emerald-800">{toast}</span>
+          <button
+            type="button"
+            onClick={() => setToast(null)}
+            className="text-emerald-700 hover:text-emerald-900"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
     </>
   );
 }
