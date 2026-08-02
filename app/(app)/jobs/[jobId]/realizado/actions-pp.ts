@@ -217,8 +217,39 @@ export async function finalizarPedidoCompra(
   anexos: z.input<typeof anexoUploadedSchema>[],
   itemRealizadoId: string,
 ): Promise<Result<{ codigo: string }>> {
+  // TEMPORÁRIO — remover após diagnóstico
+  console.log("[pp.finalizar.entrada]", {
+    pp_id,
+    itemRealizadoId,
+    anexosCount: anexos.length,
+    anexosPaths: anexos.map((a) => a.path),
+  });
+  try {
+    const res = await finalizarPedidoCompraImpl(pp_id, dados, anexos, itemRealizadoId);
+    // TEMPORÁRIO — remover após diagnóstico
+    console.log("[pp.finalizar.saida]", res);
+    return res;
+  } catch (err) {
+    console.error("[pp.finalizar.exception]", err);
+    return {
+      ok: false,
+      message: `Falha ao finalizar PP: ${err instanceof Error ? err.message : "erro desconhecido"}.`,
+    };
+  }
+}
+
+async function finalizarPedidoCompraImpl(
+  pp_id: string,
+  dados: z.input<typeof dadosSchema>,
+  anexos: z.input<typeof anexoUploadedSchema>[],
+  itemRealizadoId: string,
+): Promise<Result<{ codigo: string }>> {
   const gate = await checarGatesRealizado(itemRealizadoId);
-  if (!gate.ok) return gate;
+  if (!gate.ok) {
+    // TEMPORÁRIO — remover após diagnóstico
+    console.log("[pp.finalizar.gate_falhou]", gate);
+    return gate;
+  }
   const { session, item, job, supabase } = gate;
 
   // Valida dados
@@ -260,6 +291,14 @@ export async function finalizarPedidoCompra(
     .from(BUCKET)
     .list(expectedPrefix.replace(/\/$/, ""));
 
+  // TEMPORÁRIO — remover após diagnóstico
+  console.log("[pp.finalizar.list_bucket]", {
+    expectedPrefix,
+    listErr: listErr?.message ?? null,
+    arquivosEncontrados: (arquivosNoBucket ?? []).map((f) => f.name),
+    pathsEsperados: anexosParsed.data.map((a) => a.path),
+  });
+
   if (listErr) {
     return { ok: false, message: `Falha ao listar anexos: ${listErr.message}` };
   }
@@ -268,6 +307,11 @@ export async function finalizarPedidoCompra(
   );
   for (const a of anexosParsed.data) {
     if (!nomesNoBucket.has(a.path)) {
+      // TEMPORÁRIO — remover após diagnóstico
+      console.log("[pp.finalizar.arquivo_nao_encontrado]", {
+        pathEsperado: a.path,
+        nomesNoBucket: Array.from(nomesNoBucket),
+      });
       return {
         ok: false,
         message: `Anexo ${a.nome_original} não foi encontrado no bucket. Refaça o upload.`,
