@@ -151,12 +151,17 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
 export async function reservarPedidoCompra(
   itemRealizadoId: string,
 ): Promise<Result<{ pp_id: string; upload_prefix: string }>> {
+  // TEMPORÁRIO — remover após diagnóstico
+  console.log("[pp.reservar.entrada]", { itemRealizadoId });
   try {
-    return await reservarPedidoCompraImpl(itemRealizadoId);
+    const res = await reservarPedidoCompraImpl(itemRealizadoId);
+    // TEMPORÁRIO — remover após diagnóstico
+    console.log("[pp.reservar.saida]", res);
+    return res;
   } catch (err) {
     // Envelope defensivo: qualquer exceção não tratada retorna mensagem
     // amigável em vez de 500 silencioso que trava o drawer.
-    console.error("[reservarPedidoCompra]", err);
+    console.error("[pp.reservar.exception]", err);
     return {
       ok: false,
       message: `Falha ao reservar PP: ${err instanceof Error ? err.message : "erro desconhecido"}.`,
