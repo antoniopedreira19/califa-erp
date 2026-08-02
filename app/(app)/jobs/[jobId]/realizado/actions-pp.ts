@@ -151,6 +151,22 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
 export async function reservarPedidoCompra(
   itemRealizadoId: string,
 ): Promise<Result<{ pp_id: string; upload_prefix: string }>> {
+  try {
+    return await reservarPedidoCompraImpl(itemRealizadoId);
+  } catch (err) {
+    // Envelope defensivo: qualquer exceção não tratada retorna mensagem
+    // amigável em vez de 500 silencioso que trava o drawer.
+    console.error("[reservarPedidoCompra]", err);
+    return {
+      ok: false,
+      message: `Falha ao reservar PP: ${err instanceof Error ? err.message : "erro desconhecido"}.`,
+    };
+  }
+}
+
+async function reservarPedidoCompraImpl(
+  itemRealizadoId: string,
+): Promise<Result<{ pp_id: string; upload_prefix: string }>> {
   const gate = await checarGatesRealizado(itemRealizadoId);
   if (!gate.ok) return gate;
 

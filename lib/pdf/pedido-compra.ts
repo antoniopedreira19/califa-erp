@@ -14,16 +14,25 @@ import type {
   Cliente,
 } from "@/lib/types";
 
-// Fontes stock do pdfmake (bundled com o pacote em vfs_fonts).
-// Usa Helvetica (built-in) — sem custom fonts pra manter bundle enxuto.
-const printer = new PdfPrinter({
-  Helvetica: {
-    normal: "Helvetica",
-    bold: "Helvetica-Bold",
-    italics: "Helvetica-Oblique",
-    bolditalics: "Helvetica-BoldOblique",
-  },
-});
+// Lazy init do PdfPrinter — evita executar top-level side-effect ao
+// importar este módulo. Actions no mesmo bundle (reservarPedidoCompra,
+// cancelarPedidoCompra, signedUrl*) não usam PDF, mas caem junto se a
+// inicialização do PdfPrinter falhar em runtime serverless. Chamar via
+// getPrinter() isola o pdfmake ao momento em que o PDF é gerado.
+// Fontes stock do pdfmake (Helvetica built-in) — sem custom fonts.
+let _printer: PdfPrinter | null = null;
+function getPrinter(): PdfPrinter {
+  if (_printer) return _printer;
+  _printer = new PdfPrinter({
+    Helvetica: {
+      normal: "Helvetica",
+      bold: "Helvetica-Bold",
+      italics: "Helvetica-Oblique",
+      bolditalics: "Helvetica-BoldOblique",
+    },
+  });
+  return _printer;
+}
 
 // Cache do logo em base64 (le do disco 1x por processo)
 let LOGO_BASE64: string | null = null;
@@ -439,7 +448,7 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
 
   return new Promise((resolve, reject) => {
     try {
-      const doc = printer.createPdfKitDocument(docDefinition);
+      const doc = getPrinter().createPdfKitDocument(docDefinition);
       const chunks: Buffer[] = [];
       doc.on("data", (c: Buffer) => chunks.push(c));
       doc.on("end", () => resolve(Buffer.concat(chunks)));
