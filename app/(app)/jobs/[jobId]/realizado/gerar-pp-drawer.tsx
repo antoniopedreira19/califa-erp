@@ -38,6 +38,7 @@ interface Props {
   itemDescricao: string;
   valorRealizado: number;
   quantidadeRealizada: number;
+  onSuccess?: (codigo: string) => void;
 }
 
 interface AnexoLocal {
@@ -80,6 +81,7 @@ export function GerarPPDrawer({
   itemDescricao,
   valorRealizado,
   quantidadeRealizada,
+  onSuccess,
 }: Props) {
   const router = useRouter();
   const supabase = React.useMemo(() => createClient(), []);
@@ -98,6 +100,10 @@ export function GerarPPDrawer({
 
   const [anexos, setAnexos] = React.useState<AnexoLocal[]>([]);
   const abortedRef = React.useRef(false);
+  // Lock sincrono contra double-submit: `pending` do useTransition ativa
+  // 1 render depois, então dois cliques rápidos passam pelo disabled=pending.
+  // Ref é setado ANTES do await → segundo click no mesmo tick é bloqueado.
+  const submittingRef = React.useRef(false);
 
   // Chave para forcar remontagem do DatePicker ao reabrir o drawer
   const [drawerKey, setDrawerKey] = React.useState(0);
@@ -314,35 +320,46 @@ export function GerarPPDrawer({
       return;
     }
 
+    // Lock síncrono contra double-submit (pending do useTransition ativa 1
+    // render depois — clique duplo rápido passa pelo disabled=pending).
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+
     startTransition(async () => {
-      const res = await finalizarPedidoCompra(
-        ppId,
-        {
-          fornecedor_id: fornecedorId,
-          empresa_id: empresaId,
-          prazo_pagamento: prazoPagamento,
-          servico: servico.trim(),
-          quantidade: qtdNum,
-          especificacoes: especificacoes.trim() || null,
-        },
-        anexosOk.map((a) => ({
-          anexo_id: a.anexo_id,
-          path: a.path,
-          nome_original: a.file.name,
-          tamanho_bytes: a.file.size,
-          mimetype: a.file.type as PPAnexoMimetype,
-        })),
-        itemRealizadoId,
-      );
+      try {
+        const res = await finalizarPedidoCompra(
+          ppId,
+          {
+            fornecedor_id: fornecedorId,
+            empresa_id: empresaId,
+            prazo_pagamento: prazoPagamento,
+            servico: servico.trim(),
+            quantidade: qtdNum,
+            especificacoes: especificacoes.trim() || null,
+          },
+          anexosOk.map((a) => ({
+            anexo_id: a.anexo_id,
+            path: a.path,
+            nome_original: a.file.name,
+            tamanho_bytes: a.file.size,
+            mimetype: a.file.type as PPAnexoMimetype,
+          })),
+          itemRealizadoId,
+        );
 
-      if (!res.ok) {
-        setErro(res.message);
-        return;
+        if (!res.ok) {
+          setErro(res.message);
+          return;
+        }
+
+        // Sucesso: sinaliza pro parent + fecha drawer + refresh
+        abortedRef.current = true;
+        onSuccess?.(res.codigo);
+        onOpenChange(false);
+        router.refresh();
+      } finally {
+        submittingRef.current = false;
       }
-
-      abortedRef.current = true;
-      onOpenChange(false);
-      router.refresh();
     });
   }
 

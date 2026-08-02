@@ -370,12 +370,31 @@ async function finalizarPedidoCompraImpl(
   });
 
   if (insertErr) {
-    // TEMPORÁRIO — remover após diagnóstico. Rollback desabilitado pra
-    // isolar quem apaga anexos. Só loga.
-    console.log("[pp.finalizar.rollback.insert_pedidos_compra]", {
-      insertErrMsg: insertErr.message,
-      wouldRemove: anexosParsed.data.map((a) => a.path),
-    });
+    // Idempotência: se a duplicate key é a própria PK do pp_id que já foi
+    // criada por este mesmo user com este mesmo item, é retry silencioso do
+    // client (double-click, refresh no meio, etc). Retorna sucesso da PP
+    // existente em vez de erro.
+    const isDuplicatePk = insertErr.code === "23505";
+    if (isDuplicatePk) {
+      const { data: ppExistente } = await supabase
+        .from("pedidos_compra")
+        .select("codigo, emitida_por, item_realizado_id")
+        .eq("id", pp_id)
+        .eq("tenant_id", session.activeTenant.id)
+        .maybeSingle();
+      if (
+        ppExistente &&
+        ppExistente.emitida_por === session.profile.id &&
+        ppExistente.item_realizado_id === itemRealizadoId
+      ) {
+        revalidatePath(`/jobs/${job.id}`);
+        return { ok: true, codigo: ppExistente.codigo };
+      }
+    }
+    // Rollback: apaga anexos que subiram sem row de dono.
+    await supabase.storage
+      .from(BUCKET)
+      .remove(anexosParsed.data.map((a) => a.path));
     return { ok: false, message: `Falha ao salvar PP: ${insertErr.message}` };
   }
 
@@ -394,11 +413,15 @@ async function finalizarPedidoCompraImpl(
     .from("pedidos_compra_anexos")
     .insert(anexosRows);
   if (anexosErr) {
-    // TEMPORÁRIO — remover após diagnóstico. Rollback desabilitado.
-    console.log("[pp.finalizar.rollback.insert_anexos]", {
-      anexosErrMsg: anexosErr.message,
-      wouldRemove: anexosParsed.data.map((a) => a.path),
-    });
+    // Rollback: apaga row de pedidos_compra + anexos do bucket.
+    await supabase
+      .from("pedidos_compra")
+      .delete()
+      .eq("id", pp_id)
+      .eq("tenant_id", session.activeTenant.id);
+    await supabase.storage
+      .from(BUCKET)
+      .remove(anexosParsed.data.map((a) => a.path));
     return {
       ok: false,
       message: `Falha ao salvar anexos: ${anexosErr.message}`,
@@ -465,12 +488,15 @@ async function finalizarPedidoCompraImpl(
       responsavelNome,
     });
   } catch (err: unknown) {
-    // TEMPORÁRIO — remover após diagnóstico. Rollback desabilitado.
     const msg = err instanceof Error ? err.message : String(err);
-    console.log("[pp.finalizar.rollback.render_pdf]", {
-      err: msg,
-      wouldRemove: anexosParsed.data.map((a) => a.path),
-    });
+    await supabase
+      .from("pedidos_compra")
+      .delete()
+      .eq("id", pp_id)
+      .eq("tenant_id", session.activeTenant.id);
+    await supabase.storage
+      .from(BUCKET)
+      .remove(anexosParsed.data.map((a) => a.path));
     return { ok: false, message: `Falha ao gerar PDF: ${msg}` };
   }
 
@@ -483,11 +509,14 @@ async function finalizarPedidoCompraImpl(
     });
 
   if (uploadErr) {
-    // TEMPORÁRIO — remover após diagnóstico. Rollback desabilitado.
-    console.log("[pp.finalizar.rollback.upload_pdf]", {
-      uploadErrMsg: uploadErr.message,
-      wouldRemove: anexosParsed.data.map((a) => a.path),
-    });
+    await supabase
+      .from("pedidos_compra")
+      .delete()
+      .eq("id", pp_id)
+      .eq("tenant_id", session.activeTenant.id);
+    await supabase.storage
+      .from(BUCKET)
+      .remove(anexosParsed.data.map((a) => a.path));
     return {
       ok: false,
       message: `Falha ao subir PDF: ${uploadErr.message}`,
@@ -505,12 +534,14 @@ async function finalizarPedidoCompraImpl(
   ]);
 
   if (updPP.error || updReal.error) {
-    // TEMPORÁRIO — remover após diagnóstico. Rollback desabilitado.
-    console.log("[pp.finalizar.rollback.update_paths]", {
-      updPPErr: updPP.error?.message ?? null,
-      updRealErr: updReal.error?.message ?? null,
-      wouldRemove: [pdfPath, ...anexosParsed.data.map((a) => a.path)],
-    });
+    await supabase.storage
+      .from(BUCKET)
+      .remove([pdfPath, ...anexosParsed.data.map((a) => a.path)]);
+    await supabase
+      .from("pedidos_compra")
+      .delete()
+      .eq("id", pp_id)
+      .eq("tenant_id", session.activeTenant.id);
     return {
       ok: false,
       message: `Falha ao finalizar: ${updPP.error?.message ?? updReal.error?.message}`,
