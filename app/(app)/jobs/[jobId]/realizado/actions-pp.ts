@@ -6,7 +6,11 @@ import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { gerarCodigoPP } from "@/lib/codigos/pedidos-compra";
-import { renderPedidoCompraPDF } from "@/lib/pdf/pedido-compra";
+// NÃO importar renderPedidoCompraPDF estaticamente. O módulo pedido-compra.ts
+// puxa pdfmake, que tem side-effects de inicialização que falham em runtime
+// serverless Vercel. Se importarmos aqui, TODAS as actions do arquivo caem
+// juntas (reservar, cancelar, signedUrl, etc) mesmo sem usar PDF. Usar
+// `await import(...)` dentro de finalizarPedidoCompra isola o problema.
 import {
   PP_ANEXO_MIMETYPES_ACEITOS,
   PP_ANEXO_TAMANHO_MAX_BYTES,
@@ -389,6 +393,9 @@ export async function finalizarPedidoCompra(
   // Renderiza PDF
   let pdfBuffer: Buffer;
   try {
+    // Import dinâmico: só carrega pdfmake QUANDO vai gerar PDF, isolando
+    // seus side-effects de inicialização do resto do módulo.
+    const { renderPedidoCompraPDF } = await import("@/lib/pdf/pedido-compra");
     pdfBuffer = await renderPedidoCompraPDF({
       pp: {
         codigo,
