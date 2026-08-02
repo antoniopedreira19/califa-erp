@@ -45,7 +45,7 @@ interface AnexoLocal {
   anexo_id: string;
   file: File;
   path: string;
-  status: "uploading" | "ok" | "erro";
+  status: "selecionado" | "uploading" | "ok" | "erro" | "rejeitado";
   mensagem?: string;
 }
 
@@ -121,7 +121,11 @@ export function GerarPPDrawer({
 
     // Reserva pp_id + upload_prefix
     (async () => {
+      // TEMPORÁRIO — remover após diagnóstico
+      console.log("[pp.drawer.reservar.chamando]", { itemRealizadoId });
       const res = await reservarPedidoCompra(itemRealizadoId);
+      // TEMPORÁRIO — remover após diagnóstico
+      console.log("[pp.drawer.reservar.retornou]", res);
       if (!res.ok) {
         setErro(res.message);
         return;
@@ -141,45 +145,112 @@ export function GerarPPDrawer({
   }, [ppId, jobId]);
 
   async function onFileSelect(files: FileList | null) {
-    if (!files || !uploadPrefix) return;
+    // TEMPORÁRIO — remover após diagnóstico
+    console.log("[pp.drawer.onFileSelect.entrou]", {
+      filesCount: files?.length ?? 0,
+      uploadPrefix,
+      ppId,
+    });
+
+    if (!files || files.length === 0) {
+      console.log("[pp.drawer.onFileSelect.saiu]", { motivo: "sem arquivos" });
+      return;
+    }
+
+    if (!uploadPrefix) {
+      setErro(
+        "Aguarde: a preparação da PP ainda não terminou. Tente novamente em 2 segundos.",
+      );
+      console.log("[pp.drawer.onFileSelect.saiu]", {
+        motivo: "uploadPrefix null",
+      });
+      return;
+    }
 
     const somaAtual = anexos.reduce((s, a) => s + a.file.size, 0);
     let somaAcumulada = somaAtual;
+    // Cada arquivo vira uma linha imediatamente — mesmo rejeitados.
+    // User sempre vê feedback do que aconteceu com cada arquivo escolhido.
     const novos: AnexoLocal[] = [];
 
     for (const file of Array.from(files)) {
-      // Validacao client
+      const anexo_id = crypto.randomUUID();
+      const base = { anexo_id, file, path: "" };
+
+      // TEMPORÁRIO — remover após diagnóstico
+      console.log("[pp.drawer.file]", {
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        aceitoMime: PP_ANEXO_MIMETYPES_ACEITOS.includes(
+          file.type as PPAnexoMimetype,
+        ),
+      });
+
       if (!PP_ANEXO_MIMETYPES_ACEITOS.includes(file.type as PPAnexoMimetype)) {
-        setErro(`${file.name}: tipo não aceito (${file.type}).`);
+        novos.push({
+          ...base,
+          status: "rejeitado",
+          mensagem: `Tipo não aceito (${file.type || "sem mimetype"}).`,
+        });
         continue;
       }
       if (file.size > PP_ANEXO_TAMANHO_MAX_BYTES) {
-        setErro(`${file.name}: excede 8 MB.`);
+        novos.push({
+          ...base,
+          status: "rejeitado",
+          mensagem: `Excede 8 MB (${(file.size / 1024 / 1024).toFixed(1)} MB).`,
+        });
         continue;
       }
       if (somaAcumulada + file.size > PP_ANEXOS_TAMANHO_TOTAL_MAX_BYTES) {
-        setErro("Total de anexos excederia 25 MB.");
-        break;
+        novos.push({
+          ...base,
+          status: "rejeitado",
+          mensagem: "Total de anexos excederia 25 MB.",
+        });
+        continue;
       }
       somaAcumulada += file.size;
-      const anexo_id = crypto.randomUUID();
       const path = `${uploadPrefix}${anexo_id}-${sanitizeName(file.name)}`;
-      novos.push({ anexo_id, file, path, status: "uploading" });
+      novos.push({ ...base, path, status: "selecionado" });
     }
 
-    if (novos.length === 0) return;
-
+    // Mostra TODOS (aceitos + rejeitados) na lista imediatamente
     setAnexos((prev) => [...prev, ...novos]);
 
-    // Upload em paralelo
+    const aceitos = novos.filter((n) => n.status === "selecionado");
+    if (aceitos.length === 0) {
+      console.log("[pp.drawer.onFileSelect.saiu]", {
+        motivo: "todos rejeitados",
+      });
+      return;
+    }
+
+    // Marca aceitos como "uploading" e sobe
+    setAnexos((prev) =>
+      prev.map((p) =>
+        aceitos.some((a) => a.anexo_id === p.anexo_id)
+          ? { ...p, status: "uploading" }
+          : p,
+      ),
+    );
+
     await Promise.all(
-      novos.map(async (a) => {
+      aceitos.map(async (a) => {
+        // TEMPORÁRIO — remover após diagnóstico
+        console.log("[pp.drawer.upload.iniciando]", { path: a.path });
         const { error } = await supabase.storage
           .from(BUCKET)
           .upload(a.path, a.file, {
             contentType: a.file.type,
             upsert: false,
           });
+        // TEMPORÁRIO — remover após diagnóstico
+        console.log("[pp.drawer.upload.resposta]", {
+          path: a.path,
+          error: error?.message ?? null,
+        });
         setAnexos((prev) =>
           prev.map((p) =>
             p.anexo_id === a.anexo_id
@@ -199,6 +270,8 @@ export function GerarPPDrawer({
     const alvo = anexos.find((a) => a.anexo_id === anexo_id);
     if (!alvo) return;
     setAnexos((prev) => prev.filter((p) => p.anexo_id !== anexo_id));
+    // Só remove do bucket se o upload chegou lá — "selecionado" e "rejeitado"
+    // ainda não subiram nada; "uploading" tá em voo e pode não ter finalizado.
     if (alvo.status === "ok") {
       await supabase.storage.from(BUCKET).remove([alvo.path]);
     }
@@ -229,12 +302,13 @@ export function GerarPPDrawer({
       setErro("Quantidade deve ser um número positivo.");
       return;
     }
-    if (anexos.length === 0) {
-      setErro("Pelo menos um anexo é obrigatório.");
+    const anexosOk = anexos.filter((a) => a.status === "ok");
+    if (anexosOk.length === 0) {
+      setErro("Pelo menos um anexo com upload concluído é obrigatório.");
       return;
     }
-    if (anexos.some((a) => a.status !== "ok")) {
-      setErro("Aguarde ou remova anexos com falha de upload.");
+    if (anexos.some((a) => a.status === "uploading" || a.status === "selecionado")) {
+      setErro("Aguarde os uploads terminarem antes de gerar a PP.");
       return;
     }
 
@@ -249,7 +323,7 @@ export function GerarPPDrawer({
           quantidade: qtdNum,
           especificacoes: especificacoes.trim() || null,
         },
-        anexos.map((a) => ({
+        anexosOk.map((a) => ({
           anexo_id: a.anexo_id,
           path: a.path,
           nome_original: a.file.name,
@@ -390,32 +464,51 @@ export function GerarPPDrawer({
                 Anexos * (min 1, max 8MB/arquivo, 25MB total)
               </h3>
 
-              <label className="flex cursor-pointer items-center gap-2 rounded border border-dashed border-border p-3 text-sm hover:border-california-red/40">
-                <Upload className="h-4 w-4" />
-                <span>Selecionar arquivos (PDF ou imagem)</span>
-                <input
-                  type="file"
-                  multiple
-                  accept={PP_ANEXO_MIMETYPES_ACEITOS.join(",")}
-                  onChange={(e) => onFileSelect(e.target.files)}
-                  className="hidden"
-                />
-              </label>
+              {uploadPrefix ? (
+                <label className="flex cursor-pointer items-center gap-2 rounded border border-dashed border-border p-3 text-sm hover:border-california-red/40">
+                  <Upload className="h-4 w-4" />
+                  <span>Selecionar arquivos (PDF ou imagem)</span>
+                  <input
+                    type="file"
+                    multiple
+                    accept={PP_ANEXO_MIMETYPES_ACEITOS.join(",")}
+                    onChange={(e) => onFileSelect(e.target.files)}
+                    className="hidden"
+                  />
+                </label>
+              ) : (
+                <div className="flex items-center gap-2 rounded border border-dashed border-border bg-muted/40 p-3 text-sm text-muted-foreground cursor-not-allowed">
+                  <Upload className="h-4 w-4" />
+                  <span>Preparando... aguarde um instante</span>
+                </div>
+              )}
 
               {anexos.length > 0 && (
                 <ul className="space-y-1">
                   {anexos.map((a) => {
                     const Icon = iconePorMime(a.file.type);
+                    const cor =
+                      a.status === "erro" || a.status === "rejeitado"
+                        ? "border-california-red/40 bg-california-red/5"
+                        : a.status === "ok"
+                          ? "border-emerald-200 bg-emerald-50"
+                          : "border-border bg-muted/30";
+                    const label =
+                      a.status === "selecionado"
+                        ? "aguardando..."
+                        : a.status === "uploading"
+                          ? "enviando..."
+                          : a.status === "ok"
+                            ? "ok"
+                            : a.status === "rejeitado"
+                              ? `rejeitado: ${a.mensagem ?? "motivo desconhecido"}`
+                              : (a.mensagem ?? "falha");
                     return (
                       <li
                         key={a.anexo_id}
                         className={cn(
                           "flex items-center gap-2 rounded border p-2 text-xs",
-                          a.status === "erro"
-                            ? "border-california-red/40 bg-california-red/5"
-                            : a.status === "ok"
-                              ? "border-emerald-200 bg-emerald-50"
-                              : "border-border bg-muted/30",
+                          cor,
                         )}
                       >
                         <Icon className="h-4 w-4" />
@@ -423,12 +516,15 @@ export function GerarPPDrawer({
                         <span className="text-muted-foreground">
                           {(a.file.size / 1024).toFixed(0)} KB
                         </span>
-                        <span className="text-muted-foreground">
-                          {a.status === "uploading"
-                            ? "enviando..."
-                            : a.status === "ok"
-                              ? "ok"
-                              : a.mensagem ?? "falha"}
+                        <span
+                          className={cn(
+                            "text-xs",
+                            a.status === "erro" || a.status === "rejeitado"
+                              ? "text-california-red"
+                              : "text-muted-foreground",
+                          )}
+                        >
+                          {label}
                         </span>
                         <button
                           type="button"
