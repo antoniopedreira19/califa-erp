@@ -370,10 +370,12 @@ async function finalizarPedidoCompraImpl(
   });
 
   if (insertErr) {
-    // Limpa anexos do bucket (rollback)
-    await supabase.storage
-      .from(BUCKET)
-      .remove(anexosParsed.data.map((a) => a.path));
+    // TEMPORÁRIO — remover após diagnóstico. Rollback desabilitado pra
+    // isolar quem apaga anexos. Só loga.
+    console.log("[pp.finalizar.rollback.insert_pedidos_compra]", {
+      insertErrMsg: insertErr.message,
+      wouldRemove: anexosParsed.data.map((a) => a.path),
+    });
     return { ok: false, message: `Falha ao salvar PP: ${insertErr.message}` };
   }
 
@@ -392,10 +394,11 @@ async function finalizarPedidoCompraImpl(
     .from("pedidos_compra_anexos")
     .insert(anexosRows);
   if (anexosErr) {
-    await supabase.from("pedidos_compra").delete().eq("id", pp_id);
-    await supabase.storage
-      .from(BUCKET)
-      .remove(anexosParsed.data.map((a) => a.path));
+    // TEMPORÁRIO — remover após diagnóstico. Rollback desabilitado.
+    console.log("[pp.finalizar.rollback.insert_anexos]", {
+      anexosErrMsg: anexosErr.message,
+      wouldRemove: anexosParsed.data.map((a) => a.path),
+    });
     return {
       ok: false,
       message: `Falha ao salvar anexos: ${anexosErr.message}`,
@@ -462,11 +465,12 @@ async function finalizarPedidoCompraImpl(
       responsavelNome,
     });
   } catch (err: unknown) {
-    await supabase.from("pedidos_compra").delete().eq("id", pp_id);
-    await supabase.storage
-      .from(BUCKET)
-      .remove(anexosParsed.data.map((a) => a.path));
+    // TEMPORÁRIO — remover após diagnóstico. Rollback desabilitado.
     const msg = err instanceof Error ? err.message : String(err);
+    console.log("[pp.finalizar.rollback.render_pdf]", {
+      err: msg,
+      wouldRemove: anexosParsed.data.map((a) => a.path),
+    });
     return { ok: false, message: `Falha ao gerar PDF: ${msg}` };
   }
 
@@ -479,10 +483,11 @@ async function finalizarPedidoCompraImpl(
     });
 
   if (uploadErr) {
-    await supabase.from("pedidos_compra").delete().eq("id", pp_id);
-    await supabase.storage
-      .from(BUCKET)
-      .remove(anexosParsed.data.map((a) => a.path));
+    // TEMPORÁRIO — remover após diagnóstico. Rollback desabilitado.
+    console.log("[pp.finalizar.rollback.upload_pdf]", {
+      uploadErrMsg: uploadErr.message,
+      wouldRemove: anexosParsed.data.map((a) => a.path),
+    });
     return {
       ok: false,
       message: `Falha ao subir PDF: ${uploadErr.message}`,
@@ -500,11 +505,12 @@ async function finalizarPedidoCompraImpl(
   ]);
 
   if (updPP.error || updReal.error) {
-    // Cleanup total
-    await supabase.storage
-      .from(BUCKET)
-      .remove([pdfPath, ...anexosParsed.data.map((a) => a.path)]);
-    await supabase.from("pedidos_compra").delete().eq("id", pp_id);
+    // TEMPORÁRIO — remover após diagnóstico. Rollback desabilitado.
+    console.log("[pp.finalizar.rollback.update_paths]", {
+      updPPErr: updPP.error?.message ?? null,
+      updRealErr: updReal.error?.message ?? null,
+      wouldRemove: [pdfPath, ...anexosParsed.data.map((a) => a.path)],
+    });
     return {
       ok: false,
       message: `Falha ao finalizar: ${updPP.error?.message ?? updReal.error?.message}`,
