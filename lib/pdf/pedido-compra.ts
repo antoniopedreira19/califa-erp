@@ -1,6 +1,9 @@
-// Case-sensitive: em Linux (Vercel) o arquivo eh Printer.js (P maiusculo).
-// Windows dev nao pega o problema porque filesystem eh case-insensitive.
-import PdfPrinter from "pdfmake/src/Printer";
+// USAR o path CommonJS transpilado (js/Printer), NÃO o ESM source (src/Printer).
+// O src/ tem `import ...` statements que Node/webpack não conseguem processar
+// (erro: "Cannot use import statement outside a module"). O js/ é a versão
+// transpilada pra CommonJS com require() — é o que o package.json aponta como
+// "main". Case-sensitive: Printer.js com P maiúsculo (Linux/Vercel).
+import PdfPrinter from "pdfmake/js/Printer";
 import type { TDocumentDefinitions, Content } from "pdfmake/interfaces";
 import fs from "node:fs";
 import path from "node:path";
