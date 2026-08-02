@@ -25,7 +25,6 @@ import {
 import {
   reservarPedidoCompra,
   finalizarPedidoCompra,
-  abortarReserva,
 } from "./actions-pp";
 
 interface Props {
@@ -135,14 +134,17 @@ export function GerarPPDrawer({
     })();
   }, [open, itemRealizadoId, defaultEmpresaId, itemDescricao, quantidadeRealizada]);
 
-  // Cleanup ao fechar sem finalizar
-  React.useEffect(() => {
-    return () => {
-      if (!ppId || abortedRef.current) return;
-      // Best-effort — nao aguarda
-      abortarReserva(ppId, jobId).catch(() => {});
-    };
-  }, [ppId, jobId]);
+  // DESABILITADO — o cleanup automatico estava disparando entre upload e
+  // finalizar (quando ppId mudava por qualquer re-render), apagando os
+  // anexos que o user acabou de subir. Arquivos orfaos ficam no bucket ate
+  // cancelamento explicito. Aceitavel no MVP; job de limpeza noturno futuro.
+  //
+  // React.useEffect(() => {
+  //   return () => {
+  //     if (!ppId || abortedRef.current) return;
+  //     abortarReserva(ppId, jobId).catch(() => {});
+  //   };
+  // }, [ppId, jobId]);
 
   async function onFileSelect(files: FileList | null) {
     // TEMPORÁRIO — remover após diagnóstico
