@@ -538,6 +538,8 @@ export async function abortarReserva(
   pp_id: string,
   jobId: string,
 ): Promise<Result> {
+  // TEMPORÁRIO — remover após diagnóstico
+  console.log("[pp.abortar.chamado]", { pp_id, jobId });
   const session = await requireSession();
   const supabase = createClient();
 
