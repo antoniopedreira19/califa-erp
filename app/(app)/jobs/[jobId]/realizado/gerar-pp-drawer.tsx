@@ -352,16 +352,30 @@ export function GerarPPDrawer({
           return;
         }
 
-        // Sucesso: sinaliza pro parent + fecha drawer + refresh
+        // Sucesso: fecha drawer + toast + refresh imediato
+        // router.refresh() PRECISA ficar fora do startTransition atual pra
+        // ser priorizado corretamente pelo React scheduler — dentro dele o
+        // re-render dos server components fica low-priority e demora.
         abortedRef.current = true;
         onSuccess?.(res.codigo);
         onOpenChange(false);
-        router.refresh();
       } finally {
         submittingRef.current = false;
       }
     });
   }
+
+  // Detecta sucesso e dispara refresh FORA do startTransition principal
+  // (via ref pra evitar dep instável no useEffect).
+  React.useEffect(() => {
+    if (!open) {
+      // Se drawer fechou por sucesso (abortedRef=true), refresh a página
+      // pra pegar a nova PP e os ícones Ver/Cancelar aparecerem na trilha.
+      if (abortedRef.current) {
+        router.refresh();
+      }
+    }
+  }, [open, router]);
 
   if (!open || !itemRealizadoId) return null;
 
