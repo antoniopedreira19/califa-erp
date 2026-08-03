@@ -117,7 +117,8 @@ export default async function JobDetailPage({
       .from("pedidos_compra")
       .select("*")
       .eq("job_id", raw.id)
-      .eq("tenant_id", session.activeTenant.id),
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("status", "emitida"),
     supabase
       .from("fornecedores")
       .select("id, nome, razao_social, status")

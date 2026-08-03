@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Landmark, Clock, ArrowRight, type LucideIcon } from "lucide-react";
+import { Landmark, Clock, ArrowRight, FileText, type LucideIcon } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 
@@ -14,11 +14,20 @@ export default async function CentralFinanceiraPage() {
 
   const supabase = createClient();
 
-  const { count: aguardandoCount } = await supabase
-    .from("jobs")
-    .select("id", { count: "exact", head: true })
-    .eq("tenant_id", session.activeTenant.id)
-    .eq("status", "aguardando_abertura");
+  const [aguardandoRes, ppsRes] = await Promise.all([
+    supabase
+      .from("jobs")
+      .select("id", { count: "exact", head: true })
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("status", "aguardando_abertura"),
+    supabase
+      .from("pedidos_compra")
+      .select("id", { count: "exact", head: true })
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("status", "emitida"),
+  ]);
+  const aguardandoCount = aguardandoRes.count;
+  const ppsCount = ppsRes.count;
 
   return (
     <div className="space-y-8">
@@ -44,6 +53,13 @@ export default async function CentralFinanceiraPage() {
           title="Jobs Aguardando Abertura"
           description="Aprove ou rejeite a abertura dos jobs recém-criados pelos GPs."
           count={aguardandoCount ?? 0}
+        />
+        <FinanceiroCard
+          href="/financeiro/pedidos-compra"
+          icon={FileText}
+          title="Pedidos de Compra"
+          description="Visualize, ajuste prazo de pagamento e cancele PPs emitidas."
+          count={ppsCount ?? 0}
         />
         {/* Cards futuros: contas a pagar, DRE, aprovações de pagamentos */}
       </div>
