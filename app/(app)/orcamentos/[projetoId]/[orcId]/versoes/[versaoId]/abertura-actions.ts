@@ -87,10 +87,9 @@ function mapDbError(msg: string): string {
  * Envia o job para abertura a partir da versão aprovada.
  *
  * Diferenças em relação ao antigo `criarJob`:
- * - hierarquia é decidida aqui, sem perguntar: se o projeto já tem um job
- *   principal ativo, o novo nasce como sub-job dele (decisão do time em
- *   30/07/2026 — o projeto é o guarda-chuva, cada orçamento aprovado abre
- *   um job debaixo dele). Trocar o principal continua na tela do job;
+ * - não há mais conceito de principal/sub-job: cada orçamento aprovado
+ *   vira um job independente dentro do projeto — nenhuma hierarquia é
+ *   decidida aqui nem em outro lugar;
  * - `valor_total` é recalculado a partir dos itens da versão, nunca vem
  *   do formulário;
  * - nome e datas informados no modal são gravados TAMBÉM no orçamento.
