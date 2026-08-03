@@ -1,9 +1,7 @@
-// USAR o path CommonJS transpilado (js/Printer), NÃO o ESM source (src/Printer).
-// O src/ tem `import ...` statements que Node/webpack não conseguem processar
-// (erro: "Cannot use import statement outside a module"). O js/ é a versão
-// transpilada pra CommonJS com require() — é o que o package.json aponta como
-// "main". Case-sensitive: Printer.js com P maiúsculo (Linux/Vercel).
-import PdfPrinter from "pdfmake/js/Printer";
+// pdfmake 0.2.10 (LTS estável). A 0.3.x é uma rewrite major com API async
+// que exige urlResolver custom no construtor — não é drop-in do 0.2.x.
+// Path `src/printer` (p minúsculo) — é o "main" no package.json do 0.2.x.
+import PdfPrinter from "pdfmake/src/printer";
 import type { TDocumentDefinitions, Content } from "pdfmake/interfaces";
 import type {
   PedidoCompra,
@@ -445,6 +443,7 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
     }),
   };
 
+  // pdfmake 0.2.x: createPdfKitDocument é síncrono e retorna direto o stream.
   return new Promise((resolve, reject) => {
     try {
       const doc = getPrinter().createPdfKitDocument(docDefinition);
