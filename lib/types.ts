@@ -503,7 +503,6 @@ export interface Job {
   data_fim_prevista: string | null;
   responsavel_id: string;
   valor_total: number | null;
-  job_pai_id: string | null;
   status: JobStatus;
   motivo_rejeicao: string | null;
   created_by: string | null;

@@ -7,6 +7,10 @@ import {
   calcularVariacao,
 } from "@/lib/calculos/versao-totais";
 import {
+  agregarRentabilidadePorProjeto,
+  type JobParaAgregar,
+} from "@/lib/calculos/projeto-totais";
+import {
   tipoCustoLabel,
   type TipoCusto,
   type VersaoOrcamentoGrupo,
@@ -58,29 +62,36 @@ export function JobTotaisCard({
   });
   const { totalRealizado } = calcularTotaisRealizado(itensComRealizado);
 
-  // Agrupamentos por grupo
-  const linhas = grupos.map((g) => {
-    const itensDoGrupo = itens.filter((i) => i.grupo_id === g.id);
-    const orcadoGrp = itensDoGrupo.reduce(
-      (s, i) => s + Number(i.total_orcado ?? 0),
-      0,
-    );
-    const planejadoGrp = itensDoGrupo.reduce(
-      (s, i) => s + Number(i.total_planejado ?? 0),
-      0,
-    );
-    const realizadoGrp = itensDoGrupo.reduce((s, i) => {
-      const r = realizadosMap.get(i.id);
-      return s + (r ? Number(r.total_realizado ?? 0) : 0);
-    }, 0);
-    return {
+  // Agrupamentos por grupo — reusa a mesma funcao usada na pagina de projeto,
+  // garantindo que visao individual e visao agregada calculam da mesma forma.
+  const jobParaAgregar: JobParaAgregar = {
+    grupos: grupos.map((g) => ({
       id: g.id,
       nome: g.nome,
-      orcado: orcadoGrp,
-      planejado: planejadoGrp,
-      realizado: realizadoGrp,
-    };
-  });
+      created_at: g.created_at,
+    })),
+    itens: itens.map((i) => ({
+      id: i.id,
+      grupo_id: i.grupo_id,
+      total_orcado: i.total_orcado,
+      total_planejado: i.total_planejado,
+    })),
+    realizadosPorItemId: realizadosMap as unknown as Map<
+      string,
+      { total_realizado: number | string | null }
+    >,
+  };
+  const { linhas: linhasAgregadas } = agregarRentabilidadePorProjeto(
+    [jobParaAgregar],
+    "primeiroEncontro",
+  );
+  const linhas = linhasAgregadas.map((l) => ({
+    id: l.chaveNormalizada,
+    nome: l.nomeExibicao,
+    orcado: l.orcado,
+    planejado: l.planejado,
+    realizado: l.realizado,
+  }));
 
   const realizadoPorTipo: Record<TipoCusto, number> = { A: 0, B: 0, C: 0, D: 0 };
   for (const it of itens) {
