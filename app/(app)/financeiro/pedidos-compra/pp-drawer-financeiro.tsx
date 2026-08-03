@@ -16,9 +16,11 @@ import {
 import { format, parseISO } from "date-fns";
 import {
   Dialog,
+  DialogContent,
   DrawerContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { DatePicker } from "@/components/ui/date-picker";
 import {
@@ -26,7 +28,6 @@ import {
   TooltipTrigger,
   TooltipContent,
 } from "@/components/ui/tooltip";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Badge } from "@/components/ui/badge";
 import { cn, formatCurrency } from "@/lib/utils";
 import { ppStatusLabel } from "@/lib/types";
@@ -311,6 +312,7 @@ export function PPDrawerFinanceiro({ pp, open, onOpenChange }: Props) {
                   <div className="flex items-center gap-2">
                     <div className="flex-1">
                       <DatePicker
+                        key={pp.id}
                         name="prazo_financeiro"
                         defaultValue={prazoLocal ?? undefined}
                         onDateChange={(date) => setPrazoLocal(isoDateFromDate(date))}
@@ -366,41 +368,58 @@ export function PPDrawerFinanceiro({ pp, open, onOpenChange }: Props) {
       </Dialog>
 
       {/* Confirm cancelar */}
-      <ConfirmDialog
+      <Dialog
         open={askCancelar}
         onOpenChange={(o) => {
           setAskCancelar(o);
           if (!o) setMotivo("");
         }}
-        title={`Cancelar ${pp.codigo}?`}
-        description={
-          <div className="space-y-2">
-            <p>
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Cancelar {pp.codigo}?</DialogTitle>
+            <DialogDescription>
               Esta ação marca a PP como cancelada e libera o item pra gerar uma nova.
               O PDF e anexos permanecem arquivados.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1 px-6 pb-2">
+            <label htmlFor="motivo-cancelar" className="text-xs font-medium">
+              Motivo * (mín 10 caracteres)
+            </label>
+            <textarea
+              id="motivo-cancelar"
+              value={motivo}
+              onChange={(e) => setMotivo(e.target.value)}
+              maxLength={500}
+              rows={3}
+              className="w-full rounded border border-border p-2 text-sm"
+              placeholder="Ex: valor divergente do combinado com o fornecedor..."
+            />
+            <p className="text-[11px] text-muted-foreground">
+              {motivo.trim().length}/500 caracteres
             </p>
-            <div>
-              <label className="text-xs font-medium">Motivo * (mín 10 caracteres)</label>
-              <textarea
-                value={motivo}
-                onChange={(e) => setMotivo(e.target.value)}
-                maxLength={500}
-                rows={3}
-                className="mt-1 w-full rounded border border-border p-2 text-sm"
-                placeholder="Ex: valor divergente do combinado com o fornecedor..."
-              />
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                {motivo.trim().length}/500 caracteres
-              </p>
-            </div>
           </div>
-        }
-        confirmLabel="Confirmar cancelamento"
-        cancelLabel="Voltar"
-        variant="destructive"
-        pending={pending}
-        onConfirm={handleConfirmarCancelar}
-      />
+          <div className="flex justify-end gap-2 px-6 pb-6">
+            <button
+              type="button"
+              onClick={() => setAskCancelar(false)}
+              disabled={pending}
+              className="rounded-lg border border-border px-3 py-2 text-xs font-semibold hover:bg-accent disabled:opacity-50"
+            >
+              Voltar
+            </button>
+            <button
+              type="button"
+              onClick={handleConfirmarCancelar}
+              disabled={pending || motivo.trim().length < 10}
+              className="rounded-lg bg-california-red px-3 py-2 text-xs font-semibold text-white hover:bg-california-red-hover disabled:opacity-50"
+            >
+              Confirmar cancelamento
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Toast */}
       {toast && (
