@@ -12,11 +12,16 @@ import {
 } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { calcularTotaisVersao } from "@/lib/calculos/versao-totais";
+import {
+  calcularTotaisVersao,
+  calcularResultadoOperacional,
+} from "@/lib/calculos/versao-totais";
 import { GruposSection } from "./grupos-section";
 import { NovoGrupoDrawer } from "./novo-grupo-drawer";
+import { ResumoRentabilidade } from "./resumo-rentabilidade";
 import { TotaisCard } from "./totais-card";
 import { VersaoEditorDrawer } from "./versao-editor-drawer";
+import { VersaoTituloInline } from "./versao-titulo-inline";
 import { AprovacaoActions } from "./aprovacao-actions";
 import {
   BannersEstado,
@@ -213,6 +218,11 @@ export default async function VersaoDetailPage({
     (s, it) => s + Number(it.total_planejado ?? 0),
     0,
   );
+  const { resultadoGeral } = calcularResultadoOperacional(
+    totais.faturamento,
+    totais.imposto,
+    custoPlanejado,
+  );
 
   const cidadesIniciais = (cidadesRes.data ?? []) as { id: string; nome: string }[];
   const regionais = (regionaisRes.data ?? []) as { id: string; nome: string }[];
@@ -256,38 +266,58 @@ export default async function VersaoDetailPage({
           Voltar para {orcamento.codigo} · {orcamento.nome}
         </Link>
 
-        <div className="mt-3 flex flex-wrap items-baseline gap-3">
-          <p className="font-mono text-xs font-semibold text-muted-foreground">
-            v{versao.numero_versao}
-          </p>
-          <h1 className="text-3xl font-bold tracking-tight">
-            {versao.nome ?? `Versão ${versao.numero_versao}`}
-          </h1>
-          <Badge className={cn("border", statusBadgeClasses(versao.status))}>
-            {versaoStatusLabel(versao.status)}
-          </Badge>
-          <VersaoEditorDrawer
-            versao={versao}
-            disabled={versao.status === "aprovada"}
-            disabledReason={
-              versao.status === "aprovada"
-                ? "Versão aprovada não pode ser editada."
-                : undefined
-            }
+        {/* O resumo tem largura fixa e fica ancorado à direita: quem cede
+            espaço para nome longo é o grupo do título, que quebra dentro
+            da própria coluna (min-w-0 permite o encolhimento). */}
+        <div className="mt-3 flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
+          <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-3">
+            <p className="font-mono text-xs font-semibold text-muted-foreground">
+              v{versao.numero_versao}
+            </p>
+            <VersaoTituloInline
+              versaoId={versao.id}
+              nome={versao.nome}
+              numeroVersao={versao.numero_versao}
+              disabled={versao.status === "aprovada"}
+              disabledReason={
+                versao.status === "aprovada"
+                  ? "Versão aprovada não pode ser editada."
+                  : undefined
+              }
+            />
+            <Badge className={cn("border", statusBadgeClasses(versao.status))}>
+              {versaoStatusLabel(versao.status)}
+            </Badge>
+            <VersaoEditorDrawer
+              versao={versao}
+              disabled={versao.status === "aprovada"}
+              disabledReason={
+                versao.status === "aprovada"
+                  ? "Versão aprovada não pode ser editada."
+                  : undefined
+              }
+            />
+            <AprovacaoActions
+              versaoId={versao.id}
+              status={versao.status}
+              temJobAtivo={temJobAtivo}
+            />
+            <a
+              href={`/api/orcamentos/${params.projetoId}/${params.orcId}/versoes/${versao.id}/export`}
+              title="Baixar planilha XLSX"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-semibold text-foreground hover:border-california-red/40 hover:text-california-red transition-colors"
+            >
+              <Download className="h-3.5 w-3.5" />
+              Exportar
+            </a>
+          </div>
+
+          <ResumoRentabilidade
+            faturamento={totais.faturamento}
+            custoPlanejado={custoPlanejado}
+            resultadoGeral={resultadoGeral}
+            moeda={versao.moeda}
           />
-          <AprovacaoActions
-            versaoId={versao.id}
-            status={versao.status}
-            temJobAtivo={temJobAtivo}
-          />
-          <a
-            href={`/api/orcamentos/${params.projetoId}/${params.orcId}/versoes/${versao.id}/export`}
-            title="Baixar planilha XLSX"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-semibold text-foreground hover:border-california-red/40 hover:text-california-red transition-colors"
-          >
-            <Download className="h-3.5 w-3.5" />
-            Exportar
-          </a>
         </div>
 
         <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
