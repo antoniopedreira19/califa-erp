@@ -226,16 +226,6 @@ export async function enviarJobParaAbertura(
     Number(versao.percentual_imposto ?? 0),
   );
 
-  // 5. Hierarquia automática: sub-job do principal quando ele já existe.
-  const { data: jobsProjeto } = await supabase
-    .from("jobs")
-    .select("id, job_pai_id")
-    .eq("projeto_id", orc.projeto_id)
-    .eq("tenant_id", session.activeTenant.id)
-    .neq("status", "cancelado");
-
-  const principalAtual = (jobsProjeto ?? []).find((j) => j.job_pai_id === null);
-
   let codigo: string;
   try {
     codigo = await gerarCodigoJob(supabase, session.activeTenant.id);
@@ -243,7 +233,7 @@ export async function enviarJobParaAbertura(
     return { ok: false, message: (e as Error).message };
   }
 
-  // 6. Nome e datas voltam para o orçamento, como avisa o modal.
+  // 5. Nome e datas voltam para o orçamento, como avisa o modal.
   const { error: errOrcDados } = await supabase
     .from("orcamentos")
     .update({
@@ -259,7 +249,7 @@ export async function enviarJobParaAbertura(
     return { ok: false, message: mapDbError(errOrcDados.message) };
   }
 
-  // 7. Cria o job. `cidade` é texto no schema de jobs — gravamos o nome
+  // 6. Cria o job. `cidade` é texto no schema de jobs — gravamos o nome
   //    escolhido no cadastro, que já vem no formato "Salvador-BA".
   const { data: novo, error: errIns } = await supabase
     .from("jobs")
@@ -281,7 +271,6 @@ export async function enviarJobParaAbertura(
       observacoes: parsed.data.observacoes,
       responsavel_id: projeto.responsavel_id,
       valor_total: Number(totais.faturamento.toFixed(2)),
-      job_pai_id: principalAtual ? principalAtual.id : null,
       // status default do banco = 'aguardando_abertura' — não sobrescreva
       created_by: session.profile.id,
     })
@@ -293,7 +282,7 @@ export async function enviarJobParaAbertura(
     return { ok: false, message: mapDbError(errIns.message) };
   }
 
-  // 8. Orçamento passa a 'job_criado'.
+  // 7. Orçamento passa a 'job_criado'.
   const { error: errOrcStatus } = await supabase
     .from("orcamentos")
     .update({ status: "job_criado" })
@@ -320,7 +309,6 @@ export async function enviarJobParaAbertura(
       versao_id: versaoId,
       valor_total: Number(totais.faturamento.toFixed(2)),
       data_prevista_faturamento: parsed.data.data_prevista_faturamento,
-      job_pai_id: principalAtual ? principalAtual.id : null,
     },
   });
 
