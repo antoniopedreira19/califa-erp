@@ -158,8 +158,8 @@ export function JobsList({
         projeto_codigo: primeiro.projeto_codigo,
         projeto_nome: primeiro.projeto_nome,
         cliente_nome: primeiro.cliente_nome,
-        quantidadeJobs: jobs.length,
-        valorTotalGrupo: jobs.reduce(
+        quantidadeJobs: jobsFiltrados.length,
+        valorTotalGrupo: jobsFiltrados.reduce(
           (s, j) => s + (j.valor_total ?? 0),
           0,
         ),
