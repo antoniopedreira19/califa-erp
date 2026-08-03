@@ -38,6 +38,7 @@ function toNumber(v: number | string | null | undefined): number {
 
 export function agregarRentabilidadePorProjeto(
   jobs: JobParaAgregar[],
+  ordenarPor: "nome" | "primeiroEncontro" = "nome",
 ): {
   linhas: LinhaGrupoProjeto[];
   total: Omit<LinhaGrupoProjeto, "chaveNormalizada" | "nomeExibicao">;
@@ -92,15 +93,18 @@ export function agregarRentabilidadePorProjeto(
     }
   }
 
-  const linhas: LinhaGrupoProjeto[] = Array.from(mapa.values())
-    .map((a) => ({
-      chaveNormalizada: a.chaveNormalizada,
-      nomeExibicao: a.nomeMaisRecente,
-      orcado: a.orcado,
-      planejado: a.planejado,
-      realizado: a.realizado,
-    }))
-    .sort((a, b) => a.nomeExibicao.localeCompare(b.nomeExibicao));
+  const linhasBase = Array.from(mapa.values()).map((a) => ({
+    chaveNormalizada: a.chaveNormalizada,
+    nomeExibicao: a.nomeMaisRecente,
+    orcado: a.orcado,
+    planejado: a.planejado,
+    realizado: a.realizado,
+  }));
+
+  const linhas: LinhaGrupoProjeto[] =
+    ordenarPor === "nome"
+      ? linhasBase.sort((a, b) => a.nomeExibicao.localeCompare(b.nomeExibicao))
+      : linhasBase;
 
   const total = linhas.reduce(
     (acc, l) => ({

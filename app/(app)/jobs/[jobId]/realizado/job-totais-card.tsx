@@ -81,9 +81,10 @@ export function JobTotaisCard({
       { total_realizado: number | string | null }
     >,
   };
-  const { linhas: linhasAgregadas } = agregarRentabilidadePorProjeto([
-    jobParaAgregar,
-  ]);
+  const { linhas: linhasAgregadas } = agregarRentabilidadePorProjeto(
+    [jobParaAgregar],
+    "primeiroEncontro",
+  );
   const linhas = linhasAgregadas.map((l) => ({
     id: l.chaveNormalizada,
     nome: l.nomeExibicao,
