@@ -112,6 +112,13 @@ export function JobItemRealizadoTable({
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [itemIdAtual, setItemIdAtual] = React.useState<string | null>(null);
   const [toast, setToast] = React.useState<string | null>(null);
+  // Estado otimista: quando finalizar PP OK, adiciona {itemRealizadoId: codigo}
+  // pra trilha lateral mostrar os ícones Ver/Cancelar IMEDIATAMENTE, sem
+  // esperar o router.refresh() completar. Quando a PP real chega via prop
+  // (ppsPorItemId do server), este state fica redundante mas não conflita.
+  const [ppsOtimistas, setPpsOtimistas] = React.useState<
+    Map<string, { codigo: string }>
+  >(new Map());
 
   // Auto-dismiss do toast após 4s
   React.useEffect(() => {
@@ -485,13 +492,16 @@ export function JobItemRealizadoTable({
           {itens.map((item) => {
             const realizado = realizadosMap.get(item.id);
             const total = realizado ? Number(realizado.total_realizado ?? 0) : 0;
-            const pp = ppsPorItemId.get(realizado?.id ?? "") ?? null;
+            const realizadoId = realizado?.id ?? "";
+            const pp = ppsPorItemId.get(realizadoId) ?? null;
+            const otimista = ppsOtimistas.get(realizadoId) ?? null;
             return (
               <PPActionsCell
                 key={item.id}
-                itemRealizadoId={realizado?.id ?? ""}
+                itemRealizadoId={realizadoId}
                 totalRealizado={total}
                 pp={pp}
+                ppOtimista={pp ? null : otimista}
                 editable={editable}
                 onGerar={abrirDrawer}
               />
@@ -528,7 +538,19 @@ export function JobItemRealizadoTable({
             itemDescricao={itemAtual?.item ?? ""}
             valorRealizado={realizadoAtual ? Number(realizadoAtual.total_realizado ?? 0) : 0}
             quantidadeRealizada={realizadoAtual ? Number(realizadoAtual.quantidade_realizada ?? 0) : 0}
-            onSuccess={(codigo) => setToast(`Pedido de Compra ${codigo} gerado com sucesso!`)}
+            onSuccess={(codigo) => {
+              setToast(`Pedido de Compra ${codigo} gerado com sucesso!`);
+              // Estado otimista: já mostra os ícones Ver/Cancelar antes do
+              // router.refresh() completar. Sem flicker quando a PP real
+              // chega via prop (ppsPorItemId do server).
+              if (itemIdAtual) {
+                setPpsOtimistas((prev) => {
+                  const next = new Map(prev);
+                  next.set(itemIdAtual, { codigo });
+                  return next;
+                });
+              }
+            }}
           />
         );
       })()}

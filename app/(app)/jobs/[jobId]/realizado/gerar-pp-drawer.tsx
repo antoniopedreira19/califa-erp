@@ -126,11 +126,7 @@ export function GerarPPDrawer({
 
     // Reserva pp_id + upload_prefix
     (async () => {
-      // TEMPORÁRIO — remover após diagnóstico
-      console.log("[pp.drawer.reservar.chamando]", { itemRealizadoId });
       const res = await reservarPedidoCompra(itemRealizadoId);
-      // TEMPORÁRIO — remover após diagnóstico
-      console.log("[pp.drawer.reservar.retornou]", res);
       if (!res.ok) {
         setErro(res.message);
         return;
@@ -153,25 +149,12 @@ export function GerarPPDrawer({
   // }, [ppId, jobId]);
 
   async function onFileSelect(files: FileList | null) {
-    // TEMPORÁRIO — remover após diagnóstico
-    console.log("[pp.drawer.onFileSelect.entrou]", {
-      filesCount: files?.length ?? 0,
-      uploadPrefix,
-      ppId,
-    });
-
-    if (!files || files.length === 0) {
-      console.log("[pp.drawer.onFileSelect.saiu]", { motivo: "sem arquivos" });
-      return;
-    }
+    if (!files || files.length === 0) return;
 
     if (!uploadPrefix) {
       setErro(
         "Aguarde: a preparação da PP ainda não terminou. Tente novamente em 2 segundos.",
       );
-      console.log("[pp.drawer.onFileSelect.saiu]", {
-        motivo: "uploadPrefix null",
-      });
       return;
     }
 
@@ -184,16 +167,6 @@ export function GerarPPDrawer({
     for (const file of Array.from(files)) {
       const anexo_id = crypto.randomUUID();
       const base = { anexo_id, file, path: "" };
-
-      // TEMPORÁRIO — remover após diagnóstico
-      console.log("[pp.drawer.file]", {
-        name: file.name,
-        type: file.type,
-        size: file.size,
-        aceitoMime: PP_ANEXO_MIMETYPES_ACEITOS.includes(
-          file.type as PPAnexoMimetype,
-        ),
-      });
 
       if (!PP_ANEXO_MIMETYPES_ACEITOS.includes(file.type as PPAnexoMimetype)) {
         novos.push({
@@ -228,12 +201,7 @@ export function GerarPPDrawer({
     setAnexos((prev) => [...prev, ...novos]);
 
     const aceitos = novos.filter((n) => n.status === "selecionado");
-    if (aceitos.length === 0) {
-      console.log("[pp.drawer.onFileSelect.saiu]", {
-        motivo: "todos rejeitados",
-      });
-      return;
-    }
+    if (aceitos.length === 0) return;
 
     // Marca aceitos como "uploading" e sobe
     setAnexos((prev) =>
@@ -246,19 +214,12 @@ export function GerarPPDrawer({
 
     await Promise.all(
       aceitos.map(async (a) => {
-        // TEMPORÁRIO — remover após diagnóstico
-        console.log("[pp.drawer.upload.iniciando]", { path: a.path });
         const { error } = await supabase.storage
           .from(BUCKET)
           .upload(a.path, a.file, {
             contentType: a.file.type,
             upsert: false,
           });
-        // TEMPORÁRIO — remover após diagnóstico
-        console.log("[pp.drawer.upload.resposta]", {
-          path: a.path,
-          error: error?.message ?? null,
-        });
         setAnexos((prev) =>
           prev.map((p) =>
             p.anexo_id === a.anexo_id

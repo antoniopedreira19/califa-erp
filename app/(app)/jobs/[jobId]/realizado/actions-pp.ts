@@ -155,13 +155,8 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
 export async function reservarPedidoCompra(
   itemRealizadoId: string,
 ): Promise<Result<{ pp_id: string; upload_prefix: string }>> {
-  // TEMPORÁRIO — remover após diagnóstico
-  console.log("[pp.reservar.entrada]", { itemRealizadoId });
   try {
-    const res = await reservarPedidoCompraImpl(itemRealizadoId);
-    // TEMPORÁRIO — remover após diagnóstico
-    console.log("[pp.reservar.saida]", res);
-    return res;
+    return await reservarPedidoCompraImpl(itemRealizadoId);
   } catch (err) {
     // Envelope defensivo: qualquer exceção não tratada retorna mensagem
     // amigável em vez de 500 silencioso que trava o drawer.
@@ -217,18 +212,8 @@ export async function finalizarPedidoCompra(
   anexos: z.input<typeof anexoUploadedSchema>[],
   itemRealizadoId: string,
 ): Promise<Result<{ codigo: string }>> {
-  // TEMPORÁRIO — remover após diagnóstico
-  console.log("[pp.finalizar.entrada]", {
-    pp_id,
-    itemRealizadoId,
-    anexosCount: anexos.length,
-    anexosPaths: anexos.map((a) => a.path),
-  });
   try {
-    const res = await finalizarPedidoCompraImpl(pp_id, dados, anexos, itemRealizadoId);
-    // TEMPORÁRIO — remover após diagnóstico
-    console.log("[pp.finalizar.saida]", res);
-    return res;
+    return await finalizarPedidoCompraImpl(pp_id, dados, anexos, itemRealizadoId);
   } catch (err) {
     console.error("[pp.finalizar.exception]", err);
     return {
@@ -245,11 +230,7 @@ async function finalizarPedidoCompraImpl(
   itemRealizadoId: string,
 ): Promise<Result<{ codigo: string }>> {
   const gate = await checarGatesRealizado(itemRealizadoId);
-  if (!gate.ok) {
-    // TEMPORÁRIO — remover após diagnóstico
-    console.log("[pp.finalizar.gate_falhou]", gate);
-    return gate;
-  }
+  if (!gate.ok) return gate;
   const { session, item, job, supabase } = gate;
 
   // Valida dados
@@ -291,14 +272,6 @@ async function finalizarPedidoCompraImpl(
     .from(BUCKET)
     .list(expectedPrefix.replace(/\/$/, ""));
 
-  // TEMPORÁRIO — remover após diagnóstico
-  console.log("[pp.finalizar.list_bucket]", {
-    expectedPrefix,
-    listErr: listErr?.message ?? null,
-    arquivosEncontrados: (arquivosNoBucket ?? []).map((f) => f.name),
-    pathsEsperados: anexosParsed.data.map((a) => a.path),
-  });
-
   if (listErr) {
     return { ok: false, message: `Falha ao listar anexos: ${listErr.message}` };
   }
@@ -307,11 +280,6 @@ async function finalizarPedidoCompraImpl(
   );
   for (const a of anexosParsed.data) {
     if (!nomesNoBucket.has(a.path)) {
-      // TEMPORÁRIO — remover após diagnóstico
-      console.log("[pp.finalizar.arquivo_nao_encontrado]", {
-        pathEsperado: a.path,
-        nomesNoBucket: Array.from(nomesNoBucket),
-      });
       return {
         ok: false,
         message: `Anexo ${a.nome_original} não foi encontrado no bucket. Refaça o upload.`,
@@ -575,8 +543,6 @@ export async function abortarReserva(
   pp_id: string,
   jobId: string,
 ): Promise<Result> {
-  // TEMPORÁRIO — remover após diagnóstico
-  console.log("[pp.abortar.chamado]", { pp_id, jobId });
   const session = await requireSession();
   const supabase = createClient();
 

@@ -13,6 +13,10 @@ interface Props {
   itemRealizadoId: string;
   totalRealizado: number;
   pp: PedidoCompra | null;
+  /** Placeholder otimista antes do refresh do server chegar. Se pp existe,
+   *  ppOtimista é ignorado. Só tem `codigo` — Ver/Cancelar ficam disabled
+   *  (não temos pp.id ainda pra chamar as actions). Some quando pp chega. */
+  ppOtimista?: { codigo: string } | null;
   editable: boolean;
   onGerar: (itemRealizadoId: string) => void;
 }
@@ -24,6 +28,7 @@ export function PPActionsCell({
   itemRealizadoId,
   totalRealizado,
   pp,
+  ppOtimista,
   editable,
   onGerar,
 }: Props) {
@@ -118,6 +123,42 @@ export function PPActionsCell({
           >
             {erro}
           </div>
+        )}
+      </div>
+    );
+  }
+
+  // Estado otimista: PP recém-gerada, aguardando refresh do server pra
+  // trocar pelos ícones reais. Mostra Ver/Cancelar disabled (não temos
+  // pp.id ainda pra chamar signedUrl/cancelar).
+  if (ppOtimista) {
+    return (
+      <div className="flex items-center h-9 gap-1">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              disabled
+              className={BOTAO_CLASSES}
+            >
+              <Eye className="h-3.5 w-3.5" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>Ver PDF · {ppOtimista.codigo} (atualizando...)</TooltipContent>
+        </Tooltip>
+        {editable && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                disabled
+                className={BOTAO_CLASSES}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Cancelar {ppOtimista.codigo} (atualizando...)</TooltipContent>
+          </Tooltip>
         )}
       </div>
     );
