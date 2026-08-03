@@ -102,6 +102,31 @@ export function calcularTotaisPlanejados(
 }
 
 /**
+ * Resultado da versão sob a ótica do desembolso esperado pela agência.
+ *
+ * - Resultado operacional = faturamento − impostos − custo planejado.
+ * - Resultado geral = resultado operacional ÷ faturamento (em %).
+ *
+ * Sem planejado lançado a conta não existe: retorna `null` nos dois campos
+ * em vez de um número inflado (faturamento inteiro virando "lucro").
+ *
+ * Fonte única do card de Totais e do resumo do cabeçalho da versão.
+ */
+export function calcularResultadoOperacional(
+  faturamento: number,
+  imposto: number,
+  custoPlanejado: number,
+): { resultadoOperacional: number | null; resultadoGeral: number | null } {
+  if (custoPlanejado <= 0) {
+    return { resultadoOperacional: null, resultadoGeral: null };
+  }
+  const resultadoOperacional = faturamento - imposto - custoPlanejado;
+  const resultadoGeral =
+    faturamento > 0 ? (resultadoOperacional / faturamento) * 100 : null;
+  return { resultadoOperacional, resultadoGeral };
+}
+
+/**
  * Soma dos totais realizados por item.
  * Usado pelo card de Totais do job e por subtotal do grupo.
  */

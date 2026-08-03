@@ -3,6 +3,7 @@ import { cn, formatCurrency } from "@/lib/utils";
 import {
   calcularTotaisVersao,
   calcularTotaisPlanejados,
+  calcularResultadoOperacional,
 } from "@/lib/calculos/versao-totais";
 import {
   tipoCustoLabel,
@@ -58,13 +59,11 @@ export function TotaisCard({
   // Resultado operacional = o que sobra depois de pagar imposto e o custo
   // que a agência realmente espera desembolsar (planejado). Sem planejado
   // lançado a conta não existe — mostra travessão em vez de número inflado.
-  const resultadoOperacional = temPlanejado
-    ? faturamento - imposto - totalPlanejado
-    : null;
-  const resultadoGeral =
-    resultadoOperacional !== null && faturamento > 0
-      ? (resultadoOperacional / faturamento) * 100
-      : null;
+  const { resultadoOperacional, resultadoGeral } = calcularResultadoOperacional(
+    faturamento,
+    imposto,
+    totalPlanejado,
+  );
 
   return (
     <div className="rounded-2xl border border-border bg-card shadow-soft">
