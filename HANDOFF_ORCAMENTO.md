@@ -2,11 +2,12 @@
 
 Registro da implementação dos design handoffs aprovados para o módulo de Orçamentos.
 
-**Datas:** 2026-07-27 (entregas 1–3) · 2026-07-30 (entregas 4–8) · 2026-07-31 (entrega 9)
+**Datas:** 2026-07-27 (entregas 1–3) · 2026-07-30 (entregas 4–8) · 2026-07-31 (entrega 9) · 2026-08-03 (entrega 10)
 **Origem do design:**
 - Entregas 1–3: pacote `design_handoff_califa/` (`Versoes - Destaque v4.dc.html` opção 2a, `Orcamento - Edicao Inline.dc.html` opção 3b, `README.md`, `IMPLEMENTACAO.md`). A pasta fica **só na máquina local** — está no `.gitignore` por ser referência de design, não código.
 - Entregas 4–5, 8 e 9: projeto Claude Design `69342d83-28d9-4bea-a8af-c99e233f5f13` (`Orcamento - Versao -final-.dc.html`, `Novo projeto.dc.html` e `Abertura de Job.dc.html`), lido via MCP `claude_design`. A Entrega 9 é a revisão do mesmo `Abertura de Job.dc.html`, relido depois de atualizado.
 - Entregas 6–7: pedidos diretos do time, sem handoff de design.
+- Entrega 10: slide "Título do Orçamento" enviado pelo time (2 pedidos anotados sobre print da tela da versão).
 
 ---
 
@@ -23,10 +24,11 @@ Registro da implementação dos design handoffs aprovados para o módulo de Orç
 | **7 — Responsável de volta ao formulário de projeto** | ✅ `2d34b8b` (2026-07-30) |
 | **8 — Abertura de job a partir da versão aprovada** | ✅ `c0dac5e` (2026-07-30) |
 | **9 — Revisão do layout de abertura de job** | ✅ `ab66165` (2026-07-31) |
+| **10 — Título editável inline + resumo de rentabilidade** | ✅ `75cbb22` (2026-08-03) |
 
-`tsc --noEmit` e `next lint` limpos em todas. Entregas 4, 5, 8 e 9 também com
-`next build` completo. A Entrega 8 é a única com verificação de ponta a
-ponta contra o banco real — ver seção 9.
+`tsc --noEmit` e `next lint` limpos em todas. Entregas 4, 5, 8, 9 e 10 também
+com `next build` completo. As Entregas 8 e 10 são as únicas com verificação
+de ponta a ponta contra o banco real — ver seções 9 e 11.
 
 ---
 
@@ -387,7 +389,57 @@ O commit remoto `0c8c474` (TruncateTooltip) tocou `enviar-job-modal.tsx` em para
 
 ---
 
-## 11. Próximos passos
+## 11. Entrega 10 — título editável inline e resumo de rentabilidade
+
+**2026-08-03** · commit `75cbb22` · slide "Título do Orçamento" (dois pedidos anotados sobre print da tela da versão) · sem migration.
+
+Tela alvo: `/orcamentos/[projetoId]/[orcId]/versoes/[versaoId]`.
+
+### Pedido 1 — clicar no nome e editar ali mesmo
+
+**Arquivo novo:** [`versao-titulo-inline.tsx`](app/(app)/orcamentos/[projetoId]/[orcId]/versoes/[versaoId]/versao-titulo-inline.tsx)
+
+- O `<h1>` virou botão: clique abre o campo no lugar. Lápis aparece no hover, ✓ salva, ✕ e `Esc` cancelam. O `<h1>` continua envolvendo o botão — a heading não sai da árvore de acessibilidade.
+- **Não criou server action nova.** Reaproveita `atualizarVersao` com um `FormData` que leva só `nome`: o `extractVersaoPartial` já preserva os campos ausentes. Auditoria (`versao_orcamento.editada`) e os dois `revalidatePath` continuam idênticos ao caminho do drawer.
+- Nome vazio grava `null` e o título cai no fallback `Versão N` — comportamento que já existia no drawer, não é regressão.
+- **O botão "Editar" fica.** O pedido dizia "ao invés de editar", mas o drawer é o único caminho para moeda, câmbio, honorários, impostos e status. Decisão confirmada com o time antes de codar.
+- Versão **aprovada** não abre o campo: renderiza texto puro com o mesmo `title` de motivo do botão "Editar". A action já barrava no servidor — a UI só deixou de oferecer.
+- ⚠️ **O campo se dimensiona pelo texto** (span medidor invisível dividindo a célula do grid + `size={1}` + `min-w-0` no input). Não troque por largura fixa: com `w-[30rem]` o input empurrava o resumo de rentabilidade para a linha de baixo só por entrar em modo de edição. O `size={1}` é o que impede o input de ditar a largura da coluna do grid — sem ele o medidor não tem efeito.
+
+### Pedido 2 — resumo de receita × custos ao lado do título
+
+**Arquivo novo:** [`resumo-rentabilidade.tsx`](app/(app)/orcamentos/[projetoId]/[orcId]/versoes/[versaoId]/resumo-rentabilidade.tsx) (server component, sem estado)
+
+Três números ancorados à direita do título: **Faturamento previsto · Custo planejado · Resultado geral (%)**.
+
+- "Custos" = **planejado**, escolha do time. Vale registrar o porquê: com custo **orçado**, `faturamento − impostos − custos` dá exatamente os honorários, então a rentabilidade não seria informação nova. É a mesma razão pela qual o card de Totais já calculava o resultado sobre o planejado.
+- Sem planejado lançado: travessão + legenda "sem planejado". Mesma regra do card de Totais, que se recusa a transformar faturamento inteiro em lucro.
+- Faturamento em preto (`text-foreground`) e não em vermelho — ajuste pedido pelo time depois da primeira versão. Só o resultado geral tem cor semântica (verde/vermelho pelo sinal).
+- **Não é sticky**, por decisão do time: rola junto com o cabeçalho.
+
+### Fonte única do cálculo
+
+`calcularResultadoOperacional(faturamento, imposto, custoPlanejado)` entrou em [`lib/calculos/versao-totais.ts`](lib/calculos/versao-totais.ts) e o card de Totais passou a consumi-la no lugar do cálculo inline. Duas telas mostrando o mesmo resultado por fórmulas duplicadas é divergência esperando para acontecer. Retorna `null` nos dois campos quando `custoPlanejado <= 0`.
+
+### Layout do cabeçalho
+
+O grupo do título virou `flex-1 min-w-0` e o resumo ficou ancorado à direita. Quem cede espaço para nome longo é o grupo do título, que quebra dentro da própria coluna — sem isso, um nome comprido derrubava o resumo para a linha de baixo.
+
+### Verificação (2026-08-03)
+
+`tsc --noEmit`, `next lint` e `rm -rf .next && npm run build` limpos (o único warning de lint é o pré-existente de `combobox.tsx`). No navegador, contra o banco real:
+
+- **Números batem com o card de Totais** na mesma tela: R$ 18.514,73 / R$ 12.000,00 / 19,9%.
+- **Rascunho:** título renomeado de ponta a ponta (persistiu no banco, `router.refresh()` propagou) e restaurado ao nome original.
+- **Aprovada:** título é texto puro, sem botão.
+- **Sem planejado:** versão v3 "TESTE IMPORTAÇÃO PLANILHA" (44 itens, planejado zerado) mostra travessão e "sem planejado".
+- Sem erros de console. Conferido também a 768px de largura: resumo se mantém à direita, título e botões quebram embaixo.
+
+⚠️ Como toda sessão deste projeto, o `next dev` escreveu **direto em produção** (ver item 5 dos próximos passos). O rename de teste foi feito na versão v1 do projeto TESTE-0001/26-01 e desfeito na sequência.
+
+---
+
+## 12. Próximos passos
 
 1. **Carga completa de cidades do IBGE** — hoje só Salvador e São Paulo. Formato acordado: `Salvador-BA` num campo só, sem coluna `uf`. É só uma migration de INSERT: o schema e a busca já estão prontos (Entrega 8). Fonte: `https://servicosdados.ibge.gov.br/api/v1/localidades/municipios`. Ao carregar, reconciliar as 2 linhas atuais, que estão sem o sufixo de UF, e os jobs que já gravaram `Salvador`/`São Paulo`.
 2. **Exibir as observações do job** — `jobs.observacoes` grava desde a Entrega 9 mas nenhuma tela lê. Entra junto com o refino da tela de abertura do financeiro, onde ela faz sentido: é contexto para quem abre. Enquanto isso, o dado é write-only.
