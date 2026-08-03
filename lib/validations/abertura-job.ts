@@ -9,8 +9,7 @@ export const OBSERVACOES_MAX = 500;
  * Difere do `jobSchema` em três pontos deliberados:
  * - `produto_id` é FK para `cliente_produtos`, não texto livre;
  * - `cidade_id` é FK para o cadastro `cidades`, não texto livre;
- * - não tem `posicao_hierarquia`: a posição é decidida no servidor
- *   (primeiro job do projeto vira principal, os seguintes viram sub-job).
+ * - não tem `posicao_hierarquia`: não há mais conceito de principal/sub-job.
  *
  * `valor_total` também não está aqui: é recalculado no servidor a partir
  * dos itens da versão aprovada. Valor de faturamento não vem do cliente.

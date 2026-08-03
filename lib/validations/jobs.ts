@@ -35,15 +35,6 @@ export const jobSchema = z
       .transform((v) => (v && v.length > 0 ? v : null)),
     responsavel_id: z.string().uuid("Selecione um responsável válido."),
     valor_total: z.coerce.number().nonnegative().nullable().optional(),
-
-    // Hierarquia (usado só na criação do 2º+ job)
-    posicao_hierarquia: z.enum(["principal", "sub_job"]).optional(),
-    job_pai_id: z
-      .string()
-      .uuid()
-      .optional()
-      .or(z.literal(""))
-      .transform((v) => (v && v.length > 0 ? v : null)),
   })
   .superRefine((data, ctx) => {
     if (

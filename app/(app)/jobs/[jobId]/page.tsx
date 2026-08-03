@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Briefcase, Layers, Info, Circle } from "lucide-react";
+import { ArrowLeft, Briefcase, Info, Circle } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { listActiveMembers } from "@/lib/data/members";
@@ -9,7 +9,6 @@ import { jobStatusLabel, JOB_STATUS_TRANSICOES } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { JobEditorDrawer } from "./job-editor-drawer";
-import { EditarHierarquiaDrawer } from "./editar-hierarquia-drawer";
 import { StatusActions } from "./status-actions";
 import { ReenviarAprovacaoButton } from "./reenviar-aprovacao-button";
 import { AprovarRejeitarButtons } from "./aprovar-rejeitar-buttons";
@@ -72,7 +71,7 @@ export default async function JobDetailPage({
     supabase
       .from("jobs")
       .select(
-        "id, tenant_id, empresa_id, codigo, nome, produto, cidade, data_inicio_prevista, data_fim_prevista, responsavel_id, valor_total, status, motivo_rejeicao, projeto_id, orcamento_id, versao_orcamento_aprovada_id, regional_id, job_pai_id, created_at, updated_at, responsavel:profiles!responsavel_id(id, nome), regional:regionais(id, nome), orcamento:orcamentos(id, codigo, nome, projeto_id), versao:versoes_orcamento!versao_orcamento_aprovada_id(id, numero_versao, nome, moeda, percentual_honorarios, percentual_imposto), projeto:projetos(id, codigo, nome), pai:job_pai_id(id, codigo, nome)",
+        "id, tenant_id, empresa_id, codigo, nome, produto, cidade, data_inicio_prevista, data_fim_prevista, responsavel_id, valor_total, status, motivo_rejeicao, projeto_id, orcamento_id, versao_orcamento_aprovada_id, regional_id, created_at, updated_at, responsavel:profiles!responsavel_id(id, nome), regional:regionais(id, nome), orcamento:orcamentos(id, codigo, nome, projeto_id), versao:versoes_orcamento!versao_orcamento_aprovada_id(id, numero_versao, nome, moeda, percentual_honorarios, percentual_imposto), projeto:projetos(id, codigo, nome)",
       )
       .eq("id", params.jobId)
       .eq("tenant_id", session.activeTenant.id)
@@ -89,35 +88,6 @@ export default async function JobDetailPage({
   if (jobRes.error) console.error("[job.detail]", jobRes.error.message);
   const raw = jobRes.data as any;
   if (!raw) notFound();
-
-  const paiEmbed = (raw.pai ?? null) as
-    | { id: string; codigo: string; nome: string }
-    | null;
-
-  // Fetch sub-jobs se este é principal
-  let subJobs: { id: string; codigo: string; nome: string; status: JobStatus }[] = [];
-  if (raw.job_pai_id === null) {
-    const { data: subs } = await supabase
-      .from("jobs")
-      .select("id, codigo, nome, status")
-      .eq("projeto_id", raw.projeto_id)
-      .eq("job_pai_id", raw.id)
-      .eq("tenant_id", session.activeTenant.id)
-      .order("created_at");
-    subJobs = (subs ?? []) as any[];
-  }
-
-  // Fetch outros jobs ativos do mesmo projeto (pra saber se hierarquia é editável)
-  const { count: outrosAtivos } = await supabase
-    .from("jobs")
-    .select("id", { count: "exact", head: true })
-    .eq("projeto_id", raw.projeto_id)
-    .eq("tenant_id", session.activeTenant.id)
-    .neq("id", raw.id)
-    .neq("status", "cancelado");
-
-  const podeEditarHierarquia = (outrosAtivos ?? 0) > 0;
-  const ehPrincipal = raw.job_pai_id === null;
 
   // Queries de Realizado (paralelas, dependem de raw ja carregado)
   const versaoAprovadaId = raw.versao_orcamento_aprovada_id as string;
@@ -226,7 +196,6 @@ export default async function JobDetailPage({
     data_fim_prevista: raw.data_fim_prevista,
     responsavel_id: raw.responsavel_id,
     valor_total: raw.valor_total !== null ? Number(raw.valor_total) : null,
-    job_pai_id: raw.job_pai_id,
     status: raw.status,
     motivo_rejeicao: raw.motivo_rejeicao ?? null,
     created_by: null,
@@ -322,61 +291,6 @@ export default async function JobDetailPage({
             <dt className="text-muted-foreground">Valor total</dt>
             <dd className="font-semibold">{formatMoney(job.valor_total)}</dd>
           </dl>
-        </div>
-
-        <div className="rounded-2xl border border-border bg-card p-6 shadow-soft">
-          <div className="flex items-center gap-2 mb-4">
-            <Layers className="h-4 w-4 text-california-red" />
-            <h2 className="text-sm font-semibold uppercase tracking-wider">Hierarquia</h2>
-          </div>
-          {ehPrincipal ? (
-            <div className="space-y-3 text-sm">
-              <p>
-                <span className="font-semibold">Este é o job principal</span> do projeto.
-              </p>
-              {subJobs.length > 0 && (
-                <div>
-                  <p className="text-muted-foreground text-xs uppercase tracking-wider mb-2">Sub-jobs</p>
-                  <ul className="space-y-1">
-                    {subJobs.map((s) => (
-                      <li key={s.id}>
-                        <Link
-                          href={`/jobs/${s.id}${jobLinkSuffix}`}
-                          prefetch={false}
-                          className="text-california-red hover:underline"
-                        >
-                          {s.codigo} · {s.nome}
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {podeEditarHierarquia && job.status !== "cancelado" && (
-                <EditarHierarquiaDrawer jobId={job.id} papelAtual="principal" />
-              )}
-            </div>
-          ) : (
-            <div className="space-y-3 text-sm">
-              <p>
-                Sub-job de:{" "}
-                {paiEmbed ? (
-                  <Link
-                    href={`/jobs/${paiEmbed.id}${jobLinkSuffix}`}
-                    prefetch={false}
-                    className="font-mono text-california-red hover:underline"
-                  >
-                    {paiEmbed.codigo} · {paiEmbed.nome}
-                  </Link>
-                ) : (
-                  <span className="text-muted-foreground">—</span>
-                )}
-              </p>
-              {podeEditarHierarquia && job.status !== "cancelado" && (
-                <EditarHierarquiaDrawer jobId={job.id} papelAtual="sub_job" />
-              )}
-            </div>
-          )}
         </div>
 
         <div className="rounded-2xl border border-border bg-card p-6 shadow-soft md:col-span-2">
