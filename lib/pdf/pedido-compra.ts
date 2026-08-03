@@ -5,8 +5,6 @@
 // "main". Case-sensitive: Printer.js com P maiúsculo (Linux/Vercel).
 import PdfPrinter from "pdfmake/js/Printer";
 import type { TDocumentDefinitions, Content } from "pdfmake/interfaces";
-import fs from "node:fs";
-import path from "node:path";
 import type {
   PedidoCompra,
   Empresa,
@@ -16,6 +14,9 @@ import type {
   Orcamento,
   Cliente,
 } from "@/lib/types";
+// Logo embed como base64: em serverless Vercel, `public/` não é copiado
+// pro filesystem da função runtime (ENOENT). Base64 no bundle resolve.
+import { LOGO_ICON_BASE64 } from "./logo-base64";
 
 // Lazy init do PdfPrinter — evita executar top-level side-effect ao
 // importar este módulo. Actions no mesmo bundle (reservarPedidoCompra,
@@ -37,14 +38,9 @@ function getPrinter(): PdfPrinter {
   return _printer;
 }
 
-// Cache do logo em base64 (le do disco 1x por processo)
-let LOGO_BASE64: string | null = null;
+// Logo vem embed como base64 do bundle (ver import no topo).
 function getLogoBase64(): string {
-  if (LOGO_BASE64) return LOGO_BASE64;
-  const logoPath = path.join(process.cwd(), "public", "brand", "logo-icon.png");
-  const buffer = fs.readFileSync(logoPath);
-  LOGO_BASE64 = `data:image/png;base64,${buffer.toString("base64")}`;
-  return LOGO_BASE64;
+  return LOGO_ICON_BASE64;
 }
 
 // Formatters
