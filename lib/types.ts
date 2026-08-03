@@ -572,8 +572,25 @@ export interface PedidoCompra {
   prazo_pagamento: string;
   pdf_path: string;
   emitida_por: string | null;
+  // Fase 2
+  status: PPStatus;
+  prazo_pagamento_financeiro: string | null;
+  cancelada_por: string | null;
+  cancelada_em: string | null;
+  motivo_cancelamento: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export type PPStatus = "emitida" | "cancelada";
+
+export function ppStatusLabel(s: PPStatus): string {
+  switch (s) {
+    case "emitida":
+      return "Emitida";
+    case "cancelada":
+      return "Cancelada";
+  }
 }
 
 export interface PedidoCompraAnexo {
