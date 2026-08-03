@@ -7,27 +7,10 @@ import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { agregarRentabilidadePorProjeto, type JobParaAgregar } from "@/lib/calculos/projeto-totais";
 import { jobStatusLabel, type JobStatus } from "@/lib/types";
-import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { JobsDoProjetoTable } from "./jobs-do-projeto-table";
 
 export const dynamic = "force-dynamic";
-
-function statusBadgeClasses(status: JobStatus): string {
-  switch (status) {
-    case "aberto":
-      return "bg-blue-50 text-blue-700 border-blue-200";
-    case "em_producao":
-      return "bg-amber-50 text-amber-700 border-amber-200";
-    case "finalizado":
-      return "bg-emerald-50 text-emerald-700 border-emerald-200";
-    case "cancelado":
-      return "bg-slate-100 text-slate-500 border-slate-200";
-    case "aguardando_abertura":
-      return "bg-yellow-50 text-yellow-700 border-yellow-200";
-    case "rejeitado_financeiro":
-      return "bg-red-50 text-red-700 border-red-200";
-  }
-}
 
 function formatMoney(n: number): string {
   return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -284,46 +267,7 @@ export default async function ProjetoAgregadoPage({
             {jobs.length} jobs ativos. Clique em um para abrir os detalhes.
           </p>
         </div>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border bg-muted/30 text-left text-xs uppercase tracking-wider text-muted-foreground">
-              <th className="px-4 py-3 font-semibold">Código</th>
-              <th className="px-4 py-3 font-semibold">Nome</th>
-              <th className="px-4 py-3 font-semibold">Responsável</th>
-              <th className="px-4 py-3 font-semibold text-right">Valor</th>
-              <th className="px-4 py-3 font-semibold">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {jobs.map((j) => (
-              <tr key={j.id} className="border-b border-border last:border-0 hover:bg-accent/40 transition-colors">
-                <td className="px-4 py-3 font-mono text-xs">
-                  <Link
-                    href={`/jobs/${j.id}?from=jobs`}
-                    prefetch={false}
-                    className="text-california-red hover:underline"
-                  >
-                    {j.codigo}
-                  </Link>
-                </td>
-                <td className="px-4 py-3 font-medium">{j.nome}</td>
-                <td className="px-4 py-3 text-muted-foreground">
-                  {j.responsavel?.nome ?? "—"}
-                </td>
-                <td className="px-4 py-3 text-right font-mono">
-                  {j.valor_total !== null && j.valor_total !== undefined
-                    ? formatMoney(Number(j.valor_total))
-                    : "—"}
-                </td>
-                <td className="px-4 py-3">
-                  <Badge className={cn("border", statusBadgeClasses(j.status))}>
-                    {jobStatusLabel(j.status)}
-                  </Badge>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <JobsDoProjetoTable jobs={jobs} />
       </div>
     </div>
   );
