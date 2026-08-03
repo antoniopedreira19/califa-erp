@@ -14,14 +14,13 @@ export default async function JobsPage() {
     supabase
       .from("jobs")
       .select(
-        "id, codigo, nome, status, valor_total, data_inicio_prevista, job_pai_id, empresa_id, " +
+        "id, codigo, nome, status, valor_total, data_inicio_prevista, empresa_id, projeto_id, " +
           "projeto:projetos(codigo, nome, cliente:clientes(nome_fantasia)), " +
           "responsavel:profiles!responsavel_id(nome), " +
-          "filhos:jobs!job_pai_id(count), " +
           "empresa:empresas(id, razao_social, nome_fantasia)",
       )
       .eq("tenant_id", session.activeTenant.id)
-      .order("created_at", { ascending: false }),
+      .order("codigo", { ascending: true }),
     listEmpresasAtivas(session.activeTenant.id),
   ]);
 
@@ -34,13 +33,11 @@ export default async function JobsPage() {
     status: r.status,
     valor_total: r.valor_total !== null ? Number(r.valor_total) : null,
     data_inicio_prevista: r.data_inicio_prevista,
+    projeto_id: r.projeto_id,
     projeto_codigo: r.projeto?.codigo ?? null,
     projeto_nome: r.projeto?.nome ?? null,
     cliente_nome: r.projeto?.cliente?.nome_fantasia ?? null,
     responsavel_nome: r.responsavel?.nome ?? null,
-    job_pai_id: r.job_pai_id ?? null,
-    is_sub_job: r.job_pai_id !== null,
-    tem_filhos: Number(r.filhos?.[0]?.count ?? 0) > 0,
     empresa_id: r.empresa_id ?? null,
     empresa_nome: r.empresa?.nome_fantasia ?? r.empresa?.razao_social ?? null,
   }));
