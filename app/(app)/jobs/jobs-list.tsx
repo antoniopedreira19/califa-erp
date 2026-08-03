@@ -295,9 +295,9 @@ export function JobsList({
                         router.push(`/jobs/projeto/${dr.projeto_id}`);
                       }
                     }}
-                    className="border-b border-border bg-muted/30 hover:bg-accent/50 cursor-pointer transition-colors focus-visible:outline-none focus-visible:bg-accent/50"
+                    className="border-b border-border bg-california-red/5 hover:bg-california-red/10 cursor-pointer transition-colors focus-visible:outline-none focus-visible:bg-california-red/10"
                   >
-                    <td className="w-8 px-2 py-3 align-middle">
+                    <td className="w-8 px-2 py-3 align-middle border-l-4 border-l-california-red">
                       <button
                         type="button"
                         onClick={(e) => {
@@ -355,10 +355,15 @@ export function JobsList({
                   }}
                   className={cn(
                     "border-b border-border last:border-0 hover:bg-accent/40 transition-colors cursor-pointer focus-visible:outline-none focus-visible:bg-accent/40",
-                    isChild && "bg-muted/10",
+                    isChild && "bg-california-red/[0.03] hover:bg-california-red/10",
                   )}
                 >
-                  <td className="w-8 px-2 py-3 align-middle" />
+                  <td
+                    className={cn(
+                      "w-8 px-2 py-3 align-middle",
+                      isChild && "border-l-4 border-l-california-red",
+                    )}
+                  />
                   <td className="px-4 py-3 font-mono text-xs">
                     <Link
                       href={`/jobs/${r.id}?from=jobs`}
