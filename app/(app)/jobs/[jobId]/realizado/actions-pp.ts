@@ -592,7 +592,7 @@ export async function cancelarPedidoCompra(pp_id: string): Promise<Result> {
   const { data: pp, error: ppErr } = await supabase
     .from("pedidos_compra")
     .select(
-      "id, tenant_id, codigo, job_id, item_realizado_id, pdf_path, jobs!inner(id, status, responsavel_id), anexos:pedidos_compra_anexos(id, arquivo_path)",
+      "id, tenant_id, codigo, job_id, item_realizado_id, status, jobs!inner(id, status, responsavel_id)",
     )
     .eq("id", pp_id)
     .eq("tenant_id", session.activeTenant.id)
@@ -600,7 +600,15 @@ export async function cancelarPedidoCompra(pp_id: string): Promise<Result> {
 
   if (ppErr || !pp) return { ok: false, message: "PP não encontrada." };
 
-  const job = (pp as Record<string, unknown>).jobs as Record<string, unknown>;
+  // Regra fase 2: só permite cancelar PP emitida.
+  if (pp.status !== "emitida") {
+    return {
+      ok: false,
+      message: `PP já está ${pp.status === "cancelada" ? "cancelada" : "em outro status"}.`,
+    };
+  }
+
+  const job = (pp as unknown as { jobs: { status: string; responsavel_id: string | null } }).jobs;
   if (job.status !== "aberto" && job.status !== "em_producao") {
     return { ok: false, message: "Job não está em estado editável." };
   }
@@ -622,30 +630,24 @@ export async function cancelarPedidoCompra(pp_id: string): Promise<Result> {
     return { ok: false, message: "Sem permissão pra cancelar esta PP." };
   }
 
-  const anexosPaths = (
-    ((pp as Record<string, unknown>).anexos ?? []) as { arquivo_path: string }[]
-  ).map((a) => a.arquivo_path);
-  const paths = [pp.pdf_path, ...anexosPaths].filter(Boolean) as string[];
-
-  if (paths.length > 0) {
-    const { error: rmErr } = await supabase.storage.from(BUCKET).remove(paths);
-    if (rmErr) {
-      // Log mas prossegue — arquivos orfaos sao aceitaveis
-      console.error("[pp.cancelar.storage]", rmErr.message);
-    }
-  }
-
-  // DELETE cascade limpa anexos rows
-  const { error: delErr } = await supabase
+  // Soft delete: marca como cancelada. PDF e anexos ficam no bucket.
+  const agora = new Date().toISOString();
+  const { error: updErr } = await supabase
     .from("pedidos_compra")
-    .delete()
+    .update({
+      status: "cancelada",
+      cancelada_por: session.profile.id,
+      cancelada_em: agora,
+      motivo_cancelamento: null, // GP não justifica
+    })
     .eq("id", pp_id)
     .eq("tenant_id", session.activeTenant.id);
 
-  if (delErr)
-    return { ok: false, message: `Falha ao apagar PP: ${delErr.message}` };
+  if (updErr) {
+    return { ok: false, message: `Falha ao cancelar PP: ${updErr.message}` };
+  }
 
-  // Volta fornecedor_id do realizado pra null
+  // Zera fornecedor_id do realizado (permite gerar nova PP)
   await supabase
     .from("jobs_itens_realizado")
     .update({ fornecedor_id: null })
@@ -661,6 +663,7 @@ export async function cancelarPedidoCompra(pp_id: string): Promise<Result> {
       pp_codigo: pp.codigo,
       item_realizado_id: pp.item_realizado_id,
       job_id: pp.job_id,
+      origem: "gp",
     },
   });
 
