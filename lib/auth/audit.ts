@@ -63,6 +63,7 @@ export type AuditAction =
   | "job.realizado_atualizado"
   | "pedido_compra.emitida"
   | "pedido_compra.cancelada"
+  | "pedido_compra.prazo_financeiro_atualizado"
   | "custo_c.utilizado"
   | "acao_negada";
 
