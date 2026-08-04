@@ -307,6 +307,27 @@ escolha.
 > `"use server"` exige que **todo export seja async** — o build quebra com um
 > helper síncrono ali dentro, e o `tsc` não pega isso.
 
+### Fidelidade ao design
+
+Ajustes feitos numa revisão posterior, comparando lado a lado com o mock:
+
+- **`p-4.5` e `px-4.5` não existem no Tailwind** (a escala pula de 4 para 5), então
+  a lista e o header ficavam com padding **zero** e os cards colavam nas bordas.
+  Trocados por `p-[18px]` / `px-[18px]`.
+- `leading-relaxed` (1.625) substituído pelos valores do design: **1.45** nos
+  resumos, linhas e textarea; **1.5** nos balões. Era o que deixava tudo mais alto.
+- Gaps acertados: 9px entre avatar e balão, 7px na metadata, 9px nas linhas.
+- Fundo da lista fixado em `#FAFAFA`, como no design.
+- **Só a errata mais recente nasce aberta**; o card de abertura fica fechado. Num
+  job sem errata ele sozinho aberto ocupava a thread inteira.
+- Entrou o link **"Abrir na aba Informações →"** dentro do card expandido, que
+  faltava. Como as abas são estado local e não rota, o `JobTabs` expõe um contexto
+  (`useIrParaAbaInformacoes`) para o chat trocar de aba.
+
+A **única** divergência intencional em relação ao mock é o composer: o design tem
+toggle "Enviar como: Produção | Financeiro" e aqui é etiqueta fixa, pelo motivo
+da seção anterior.
+
 ### Não lidas
 
 Soma mensagens **e** erratas de outras pessoas posteriores à última leitura.
