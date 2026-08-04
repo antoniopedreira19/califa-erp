@@ -479,12 +479,19 @@ export interface ClienteProduto {
 
 // ---------- Jobs ----------
 
+/**
+ * `em_producao` continua no enum do banco mas saiu do fluxo: ele nunca
+ * separou nada — todos os gates de negócio aceitavam `aberto` OU
+ * `em_producao` de forma idêntica, e a única diferença era ser um degrau
+ * obrigatório até o encerramento. Job aberto pelo financeiro fica
+ * "Aberto" até ser encerrado.
+ */
 export type JobStatus =
   | "aguardando_abertura"
   | "rejeitado_financeiro"
   | "aberto"
   | "em_producao"
-  | "finalizado"
+  | "encerrado"
   | "cancelado";
 
 export interface Job {
@@ -518,11 +525,22 @@ export interface Job {
 export const JOB_STATUS_TRANSICOES: Record<JobStatus, JobStatus[]> = {
   aguardando_abertura: ["cancelado"],
   rejeitado_financeiro: ["cancelado"],
-  aberto: ["em_producao", "cancelado"],
-  em_producao: ["finalizado", "cancelado"],
-  finalizado: [],
+  aberto: ["cancelado"],
+  // Legado: nenhum job novo entra aqui. Mantido pra não travar quem já
+  // estivesse neste status caso apareça de algum backup.
+  em_producao: ["cancelado"],
+  encerrado: [],
   cancelado: [],
 };
+
+/**
+ * `encerrado` NÃO entra em JOB_STATUS_TRANSICOES de propósito: o fluxo de
+ * encerramento ainda não existe, e a tela renderiza esse botão desabilitado
+ * à parte. Deixá-lo na tabela geraria um botão ativo que encerraria o job
+ * sem nenhum processo por trás.
+ */
+export const ENCERRAMENTO_INDISPONIVEL =
+  "Em breve — o fluxo de encerramento ainda não existe";
 
 export function jobStatusLabel(s: JobStatus): string {
   switch (s) {
@@ -534,8 +552,8 @@ export function jobStatusLabel(s: JobStatus): string {
       return "Aberto";
     case "em_producao":
       return "Em produção";
-    case "finalizado":
-      return "Finalizado";
+    case "encerrado":
+      return "Encerrado";
     case "cancelado":
       return "Cancelado";
   }
