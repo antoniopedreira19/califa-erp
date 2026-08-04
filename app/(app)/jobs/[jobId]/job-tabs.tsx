@@ -16,6 +16,18 @@ interface Props {
 
 type TabKey = "info" | "planilha" | "pps" | "chat";
 
+/**
+ * Deixa o conteúdo das abas trocar de aba. O chat usa pra levar até o card
+ * de Erratas, que mora em Informações — as abas são estado local daqui, não
+ * rota, então não dá pra fazer isso com um link comum.
+ */
+const JobTabsContext = React.createContext<((t: TabKey) => void) | null>(null);
+
+export function useIrParaAbaInformacoes() {
+  const ir = React.useContext(JobTabsContext);
+  return ir ? () => ir("info") : null;
+}
+
 export function JobTabs({
   info,
   planilha,
@@ -27,6 +39,7 @@ export function JobTabs({
   const [tab, setTab] = React.useState<TabKey>("info");
 
   return (
+    <JobTabsContext.Provider value={setTab}>
     <div className="space-y-6">
       <div
         role="tablist"
@@ -94,6 +107,7 @@ export function JobTabs({
         {tab === "chat" && chat}
       </div>
     </div>
+    </JobTabsContext.Provider>
   );
 }
 
