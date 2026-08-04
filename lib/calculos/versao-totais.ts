@@ -34,7 +34,9 @@ export interface VersaoTotais {
  * - Faturamento é a soma dos custos + honorários + imposto.
  */
 export function calcularTotaisVersao(
-  itens: VersaoOrcamentoItem[],
+  // Aceita tanto o item da versão quanto a cópia orçada do job — as duas
+  // têm tipo de custo e total, que é tudo que a conta precisa.
+  itens: Array<Pick<VersaoOrcamentoItem, "tipo_custo" | "total_orcado">>,
   percentualHonorarios: number,
   percentualImposto: number,
 ): VersaoTotais {
@@ -68,6 +70,69 @@ export function calcularTotaisVersao(
 }
 
 /**
+ * Efeito de UM item no faturamento, quando seu total e/ou tipo de custo
+ * mudam por errata.
+ *
+ * Honorários e imposto incidem sobre SOMAS, e as duas fórmulas são
+ * lineares nelas — então o efeito de cada item é exato e a soma dos
+ * efeitos individuais fecha com o delta total da errata. É isso que
+ * permite mostrar "efeito no faturamento" linha a linha.
+ *
+ *   Δcusto      = total_para − total_de
+ *   Δbase_honor = parcela A+B+D depois − antes
+ *   Δhonorários = Δbase_honor × h
+ *   Δbase_imp   = parcela B+C depois − antes + Δhonorários
+ *   Δimposto    = Δbase_imp × t / (1 − t)
+ *   Δfaturamento = Δcusto + Δhonorários + Δimposto
+ */
+export function calcularEfeitoNoFaturamento(
+  de: { total: number; tipoCusto: TipoCusto },
+  para: { total: number; tipoCusto: TipoCusto },
+  percentualHonorarios: number,
+  percentualImposto: number,
+): number {
+  const entraEmHonorarios = (t: TipoCusto) => t === "A" || t === "B" || t === "D";
+  const entraEmImposto = (t: TipoCusto) => t === "B" || t === "C";
+
+  const h = percentualHonorarios / 100;
+  const taxa = Math.max(0, Math.min(0.9999, percentualImposto / 100));
+
+  const deltaCusto = para.total - de.total;
+
+  const deltaBaseHonorarios =
+    (entraEmHonorarios(para.tipoCusto) ? para.total : 0) -
+    (entraEmHonorarios(de.tipoCusto) ? de.total : 0);
+  const deltaHonorarios = deltaBaseHonorarios * h;
+
+  const deltaBaseImposto =
+    (entraEmImposto(para.tipoCusto) ? para.total : 0) -
+    (entraEmImposto(de.tipoCusto) ? de.total : 0) +
+    deltaHonorarios;
+  const deltaImposto = taxa > 0 ? (deltaBaseImposto * taxa) / (1 - taxa) : 0;
+
+  return deltaCusto + deltaHonorarios + deltaImposto;
+}
+
+/**
+ * Rentabilidade de um bloco: o que sobra do orçado depois de descontar o
+ * custo (planejado OU realizado). Percentual sempre sobre o **orçado**, que
+ * é a base usada na tela da versão do orçamento — o mesmo rótulo precisa
+ * significar a mesma coisa nas duas telas.
+ *
+ * Retorna `percentual: null` quando não há custo lançado (sem base =
+ * travessão, em vez de um "100%" que só diz que ninguém preencheu nada).
+ */
+export function calcularRentabilidade(
+  orcado: number,
+  custo: number,
+): { rentabilidade: number; percentual: number | null } {
+  const rentabilidade = orcado - custo;
+  const percentual =
+    custo > 0 && orcado > 0 ? (rentabilidade / orcado) * 100 : null;
+  return { rentabilidade, percentual };
+}
+
+/**
  * Rentabilidade simples: soma dos totais orçados menos soma dos totais
  * planejados. Percentual em relação ao total orçado.
  *
@@ -92,11 +157,8 @@ export function calcularTotaisPlanejados(
     (sum, it) => sum + Number(it.total_planejado ?? 0),
     0,
   );
-  const rentabilidade = totalOrcado - totalPlanejado;
-  const percentualRentabilidade =
-    totalPlanejado > 0 && totalOrcado > 0
-      ? (rentabilidade / totalOrcado) * 100
-      : null;
+  const { rentabilidade, percentual: percentualRentabilidade } =
+    calcularRentabilidade(totalOrcado, totalPlanejado);
 
   return { totalOrcado, totalPlanejado, rentabilidade, percentualRentabilidade };
 }

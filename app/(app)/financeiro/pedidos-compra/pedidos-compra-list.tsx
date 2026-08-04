@@ -18,6 +18,11 @@ export interface PPRow {
   created_at: string;
   cancelada_em: string | null;
   motivo_cancelamento: string | null;
+  rejeitada_em: string | null;
+  motivo_rejeicao: string | null;
+  rejeitada_por_nome: string | null;
+  pago_em: string | null;
+  pago_por_nome: string | null;
   fornecedor_id: string;
   fornecedor_nome: string;
   empresa_id: string;
@@ -42,15 +47,21 @@ export interface PPRow {
 }
 
 const STATUS_FILTROS: Array<{ key: "todas" | PPStatus; label: string }> = [
-  { key: "emitida", label: "Emitida" },
+  { key: "em_avaliacao", label: "Em avaliação" },
+  { key: "pago", label: "Pago" },
+  { key: "rejeitada", label: "Rejeitado" },
   { key: "cancelada", label: "Cancelada" },
   { key: "todas", label: "Todas" },
 ];
 
 function statusBadgeClasses(status: PPStatus): string {
   switch (status) {
-    case "emitida":
+    case "em_avaliacao":
+      return "bg-[#fffbeb] text-[#92400e] border-[#fde68a]";
+    case "pago":
       return "bg-emerald-50 text-emerald-700 border-emerald-200";
+    case "rejeitada":
+      return "bg-red-50 text-red-700 border-red-200";
     case "cancelada":
       return "bg-slate-100 text-slate-500 border-slate-200";
   }
@@ -67,7 +78,7 @@ function formatMoney(n: number): string {
 }
 
 export function PedidosCompraList({ rows }: { rows: PPRow[] }) {
-  const [filtro, setFiltro] = React.useState<"todas" | PPStatus>("emitida");
+  const [filtro, setFiltro] = React.useState<"todas" | PPStatus>("em_avaliacao");
   const [busca, setBusca] = React.useState("");
   const [ppSelecionada, setPpSelecionada] = React.useState<PPRow | null>(null);
 
@@ -139,8 +150,8 @@ export function PedidosCompraList({ rows }: { rows: PPRow[] }) {
               <tr>
                 <td colSpan={8} className="px-4 py-12 text-center text-sm text-muted-foreground">
                   {rows.length === 0
-                    ? "Nenhum Pedido de Compra emitido ainda."
-                    : "Nenhum Pedido de Compra encontrado com esses filtros."}
+                    ? "Nenhum Pedido de Produção emitido ainda."
+                    : "Nenhum Pedido de Produção encontrado com esses filtros."}
                 </td>
               </tr>
             )}

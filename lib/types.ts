@@ -479,12 +479,19 @@ export interface ClienteProduto {
 
 // ---------- Jobs ----------
 
+/**
+ * `em_producao` continua no enum do banco mas saiu do fluxo: ele nunca
+ * separou nada — todos os gates de negócio aceitavam `aberto` OU
+ * `em_producao` de forma idêntica, e a única diferença era ser um degrau
+ * obrigatório até o encerramento. Job aberto pelo financeiro fica
+ * "Aberto" até ser encerrado.
+ */
 export type JobStatus =
   | "aguardando_abertura"
   | "rejeitado_financeiro"
   | "aberto"
   | "em_producao"
-  | "finalizado"
+  | "encerrado"
   | "cancelado";
 
 export interface Job {
@@ -518,11 +525,22 @@ export interface Job {
 export const JOB_STATUS_TRANSICOES: Record<JobStatus, JobStatus[]> = {
   aguardando_abertura: ["cancelado"],
   rejeitado_financeiro: ["cancelado"],
-  aberto: ["em_producao", "cancelado"],
-  em_producao: ["finalizado", "cancelado"],
-  finalizado: [],
+  aberto: ["cancelado"],
+  // Legado: nenhum job novo entra aqui. Mantido pra não travar quem já
+  // estivesse neste status caso apareça de algum backup.
+  em_producao: ["cancelado"],
+  encerrado: [],
   cancelado: [],
 };
+
+/**
+ * `encerrado` NÃO entra em JOB_STATUS_TRANSICOES de propósito: o fluxo de
+ * encerramento ainda não existe, e a tela renderiza esse botão desabilitado
+ * à parte. Deixá-lo na tabela geraria um botão ativo que encerraria o job
+ * sem nenhum processo por trás.
+ */
+export const ENCERRAMENTO_INDISPONIVEL =
+  "Em breve — o fluxo de encerramento ainda não existe";
 
 export function jobStatusLabel(s: JobStatus): string {
   switch (s) {
@@ -534,8 +552,8 @@ export function jobStatusLabel(s: JobStatus): string {
       return "Aberto";
     case "em_producao":
       return "Em produção";
-    case "finalizado":
-      return "Finalizado";
+    case "encerrado":
+      return "Encerrado";
     case "cancelado":
       return "Cancelado";
   }
@@ -555,7 +573,9 @@ export interface JobItemRealizado {
   updated_at: string;
 }
 
-// ---------- Task 010: Pedidos de Compra ----------
+// ---------- Task 010: Pedidos de Produção ----------
+// Tabela e colunas seguem `pedidos_compra` por compatibilidade; o nome
+// visível ao usuário é "Pedido de Produção", igual ao PDF emitido.
 
 export interface PedidoCompra {
   id: string;
@@ -578,19 +598,213 @@ export interface PedidoCompra {
   cancelada_por: string | null;
   cancelada_em: string | null;
   motivo_cancelamento: string | null;
+  // Ciclo de avaliação do financeiro
+  pago_em: string | null;
+  pago_por: string | null;
+  rejeitada_por: string | null;
+  rejeitada_em: string | null;
+  motivo_rejeicao: string | null;
   created_at: string;
   updated_at: string;
 }
 
-export type PPStatus = "emitida" | "cancelada";
+/**
+ * Ciclo de vida da PP. Nasce em `em_avaliacao` (o GP emitiu, o financeiro
+ * ainda não olhou) e termina em `pago`, `rejeitada` ou `cancelada`.
+ *
+ * `rejeitada` não é terminal de verdade: o GP corrige e reenvia, e a PP
+ * volta pra `em_avaliacao`. Por isso o unique parcial por item continua
+ * valendo pra ela — quem libera o item é só o cancelamento.
+ */
+export type PPStatus = "em_avaliacao" | "pago" | "rejeitada" | "cancelada";
 
 export function ppStatusLabel(s: PPStatus): string {
   switch (s) {
-    case "emitida":
-      return "Emitida";
+    case "em_avaliacao":
+      return "Em avaliação";
+    case "pago":
+      return "Pago";
+    case "rejeitada":
+      return "Rejeitado";
     case "cancelada":
       return "Cancelada";
   }
+}
+
+/** Só PP em avaliação ou rejeitada pode ser cancelada — paga, não. */
+export function podeCancelarPP(s: PPStatus): boolean {
+  return s === "em_avaliacao" || s === "rejeitada";
+}
+
+// ---------- Erratas: orçado próprio do job ----------
+
+/**
+ * Cópia do item orçado que pertence ao job. Nasce igual ao item da versão
+ * aprovada e só muda por errata — a versão aprovada em si continua sendo o
+ * registro do que o cliente aprovou.
+ */
+export interface JobItemOrcado {
+  id: string;
+  tenant_id: string;
+  job_id: string;
+  /** Item de origem na versão. Liga com `jobs_itens_realizado.item_id`. */
+  item_versao_id: string;
+  grupo_id: string;
+  ordem: number;
+  item: string;
+  tipo_custo: TipoCusto;
+  categoria_id: string | null;
+  valor_unitario_orcado: number;
+  quantidade_orcada: number;
+  dias_meses_orcado: number;
+  total_orcado: number;
+  valor_unitario_planejado: number;
+  quantidade_planejada: number;
+  dias_meses_planejado: number;
+  total_planejado: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Item como a Planilha Interna consome: os valores vêm da cópia orçada do
+ * job, mas `id` continua sendo o id do item na VERSÃO — é a chave que
+ * `jobs_itens_realizado` e a geração de PP usam. `orcado_id` é o alvo da
+ * errata.
+ */
+export interface ItemPlanilhaJob {
+  id: string;
+  orcado_id: string;
+  grupo_id: string;
+  ordem: number;
+  item: string;
+  tipo_custo: TipoCusto;
+  categoria_id: string | null;
+  valor_unitario_orcado: number;
+  quantidade_orcada: number;
+  dias_meses_orcado: number;
+  total_orcado: number;
+  valor_unitario_planejado: number;
+  quantidade_planejada: number;
+  dias_meses_planejado: number;
+  total_planejado: number;
+}
+
+export interface JobErrata {
+  id: string;
+  tenant_id: string;
+  job_id: string;
+  titulo: string;
+  justificativa: string | null;
+  custo_orcado_antes: number;
+  custo_orcado_depois: number;
+  faturamento_antes: number;
+  faturamento_depois: number;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface JobErrataItem {
+  id: string;
+  tenant_id: string;
+  errata_id: string;
+  job_item_orcado_id: string | null;
+  item_nome: string;
+  grupo_nome: string;
+  tipo_custo_de: TipoCusto;
+  tipo_custo_para: TipoCusto;
+  valor_unitario_de: number;
+  valor_unitario_para: number;
+  total_de: number;
+  total_para: number;
+  efeito_faturamento: number;
+}
+
+/** Errata com os itens e o autor, como o card do histórico precisa. */
+export interface JobErrataComItens extends JobErrata {
+  autor_nome: string | null;
+  itens: JobErrataItem[];
+}
+
+// ---------- Comunicação do job ----------
+
+export type ChatArea = "producao" | "financeiro";
+
+export function chatAreaLabel(a: ChatArea): string {
+  return a === "financeiro" ? "Financeiro" : "Produção";
+}
+
+/**
+ * A área de quem fala vem do papel, nunca do formulário — o rótulo
+ * "Produção"/"Financeiro" só significa algo se ninguém puder se passar
+ * pelo outro time.
+ *
+ * Mora aqui, e não junto das actions, porque arquivo `"use server"` exige
+ * que todo export seja async.
+ */
+export function areaDoPapel(role: string): ChatArea {
+  return role === "financeiro" || role === "administrador"
+    ? "financeiro"
+    : "producao";
+}
+
+export interface JobMensagem {
+  id: string;
+  tenant_id: string;
+  job_id: string;
+  autor_id: string;
+  area: ChatArea;
+  texto: string;
+  created_at: string;
+}
+
+/** Tom do valor exibido no card automático. */
+export type ChatTom = "positivo" | "negativo" | "neutro" | "texto";
+
+export interface ChatLinha {
+  texto: string;
+  valor: string;
+  tom: ChatTom;
+}
+
+/**
+ * Um item da thread. Cards de sistema são montados na leitura a partir de
+ * `jobs` e `jobs_erratas` — não existem como registro.
+ */
+export type ItemChat =
+  | {
+      tipo: "sistema";
+      id: string;
+      icone: "folder-open" | "file-pen-line" | "tags";
+      cor: "azul" | "verde" | "bege" | "vermelho";
+      titulo: string;
+      quando: string;
+      resumo: string;
+      valor: string | null;
+      valorTom: Exclude<ChatTom, "texto">;
+      linhas: ChatLinha[];
+      /** ISO, só pra ordenar a thread. */
+      em: string;
+    }
+  | {
+      tipo: "pessoa";
+      id: string;
+      autor: string;
+      area: ChatArea;
+      quando: string;
+      texto: string;
+      em: string;
+    };
+
+/** PP com os campos que as telas de lista mostram junto. */
+export interface PedidoCompraNaLista extends PedidoCompra {
+  emitida_por_nome: string | null;
+  grupo_nome: string | null;
+  anexos: Array<{
+    id: string;
+    arquivo_nome_original: string;
+    arquivo_tamanho_bytes: number;
+  }>;
 }
 
 export interface PedidoCompraAnexo {

@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { AlertCircle, ClipboardList } from "lucide-react";
+import { cn } from "@/lib/utils";
 import type {
   Job,
   VersaoOrcamento,
   VersaoOrcamentoGrupo,
-  VersaoOrcamentoItem,
+  ItemPlanilhaJob,
   JobItemRealizado,
   PedidoCompra,
   Fornecedor,
@@ -12,6 +13,7 @@ import type {
 } from "@/lib/types";
 import { JobGrupoCard } from "./job-grupo-card";
 import { JobTotaisCard } from "./job-totais-card";
+import { AlterarOrcadoButton } from "./alterar-orcado-button";
 
 interface Props {
   job: Pick<
@@ -26,8 +28,9 @@ interface Props {
   >;
   versao: Pick<VersaoOrcamento, "id" | "numero_versao" | "nome" | "moeda" | "percentual_honorarios" | "percentual_imposto">;
   grupos: VersaoOrcamentoGrupo[];
-  itens: VersaoOrcamentoItem[];
+  itens: ItemPlanilhaJob[];
   realizadosMap: Map<string, JobItemRealizado>;
+  categoriasMap: Map<string, string>;
   editable: boolean;
   ppsPorItemId: Map<string, PedidoCompra>;
   fornecedores: Array<Pick<Fornecedor, "id" | "nome" | "razao_social" | "status">>;
@@ -40,6 +43,7 @@ export function JobRealizadoSection({
   grupos,
   itens,
   realizadosMap,
+  categoriasMap,
   editable,
   ppsPorItemId,
   fornecedores,
@@ -67,7 +71,7 @@ export function JobRealizadoSection({
     );
   }
 
-  const itensPorGrupo = new Map<string, VersaoOrcamentoItem[]>();
+  const itensPorGrupo = new Map<string, ItemPlanilhaJob[]>();
   for (const g of grupos) itensPorGrupo.set(g.id, []);
   for (const it of itens) {
     const list = itensPorGrupo.get(it.grupo_id);
@@ -75,7 +79,16 @@ export function JobRealizadoSection({
   }
 
   return (
-    <div className="space-y-4">
+    // Quando dá pra gerar PP, reserva a calha da direita: a trilha de
+    // "Ver PP" / "Gerar PP" é posicionada fora do card, e sem esse espaço
+    // ela era cortada na borda da página.
+    //
+    // 104px e não 114: a trilha tem 104px de botão + 10px de respiro, e
+    // esses 10px podem invadir o padding do layout (32px) sem encostar na
+    // borda. Devolver os 10px ao card é o que faz a tabela caber inteira —
+    // as bordas de 2px entre os blocos somam ~5px que as porcentagens das
+    // colunas não preveem.
+    <div className={cn("space-y-4", editable && "pr-[104px]")}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <ClipboardList className="h-4 w-4 text-california-red" />
@@ -84,13 +97,25 @@ export function JobRealizadoSection({
             {versao.nome ? ` · ${versao.nome}` : ""}
           </span>
         </div>
-        <Link
-          href={`/orcamentos/${job.projeto_id}/${job.orcamento_id}/versoes/${versao.id}`}
-          prefetch={false}
-          className="text-xs text-california-red hover:underline"
-        >
-          Ver versao aprovada →
-        </Link>
+        <div className="flex items-center gap-3">
+          {editable && (
+            <AlterarOrcadoButton
+              jobId={job.id}
+              itens={itens}
+              grupos={grupos}
+              percentualHonorarios={versao.percentual_honorarios}
+              percentualImposto={versao.percentual_imposto}
+              moeda={versao.moeda}
+            />
+          )}
+          <Link
+            href={`/orcamentos/${job.projeto_id}/${job.orcamento_id}/versoes/${versao.id}`}
+            prefetch={false}
+            className="text-xs text-california-red hover:underline"
+          >
+            Ver versão aprovada →
+          </Link>
+        </div>
       </div>
 
       {grupos.length === 0 ? (
@@ -108,6 +133,7 @@ export function JobRealizadoSection({
                 grupo={g}
                 itens={itensPorGrupo.get(g.id) ?? []}
                 realizadosMap={realizadosMap}
+                categoriasMap={categoriasMap}
                 moeda={versao.moeda}
                 editable={editable}
                 jobId={job.id}
