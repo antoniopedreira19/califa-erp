@@ -19,6 +19,7 @@ import type {
   VersaoOrcamentoItem,
   JobItemRealizado,
   PedidoCompra,
+  Categoria,
 } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -92,7 +93,15 @@ export default async function JobDetailPage({
   // Queries de Realizado (paralelas, dependem de raw ja carregado)
   const versaoAprovadaId = raw.versao_orcamento_aprovada_id as string;
 
-  const [gruposRes, itensRes, realizadosRes, ppsRes, fornecedoresRes, empresasRes] = await Promise.all([
+  const [
+    gruposRes,
+    itensRes,
+    realizadosRes,
+    ppsRes,
+    fornecedoresRes,
+    empresasRes,
+    categoriasRes,
+  ] = await Promise.all([
     supabase
       .from("versoes_orcamento_grupos")
       .select("*")
@@ -132,6 +141,11 @@ export default async function JobDetailPage({
       .eq("ativo", true)
       .order("principal", { ascending: false })
       .order("razao_social"),
+    supabase
+      .from("categorias")
+      .select("id, nome")
+      .eq("tenant_id", session.activeTenant.id)
+      .returns<Pick<Categoria, "id" | "nome">[]>(),
   ]);
 
   const grupos = (gruposRes.data ?? []) as VersaoOrcamentoGrupo[];
@@ -167,6 +181,11 @@ export default async function JobDetailPage({
 
   const fornecedores = (fornecedoresRes.data ?? []) as any[];
   const empresas = (empresasRes.data ?? []) as any[];
+
+  if (categoriasRes.error)
+    console.error("[job.categorias]", categoriasRes.error.message);
+  const categoriasMap = new Map<string, string>();
+  for (const c of categoriasRes.data ?? []) categoriasMap.set(c.id, c.nome);
 
   const versaoAprovada = raw.versao as {
     id: string;
@@ -355,7 +374,7 @@ export default async function JobDetailPage({
         )}
           </div>
         }
-        rentabilidade={
+        planilha={
           <JobRealizadoSection
             job={{
               id: job.id,
@@ -377,6 +396,7 @@ export default async function JobDetailPage({
             grupos={grupos}
             itens={itens}
             realizadosMap={realizadosMap}
+            categoriasMap={categoriasMap}
             editable={podeEditarRealizado}
             ppsPorItemId={ppsPorItemId}
             fornecedores={fornecedores}

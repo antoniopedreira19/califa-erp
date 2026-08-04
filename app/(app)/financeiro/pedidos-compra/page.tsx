@@ -112,13 +112,13 @@ export default async function PedidosCompraFinanceiroPage() {
             Financeiro
           </Link>
           <ChevronRight className="h-3 w-3" />
-          <span className="text-california-red">Pedidos de Compra</span>
+          <span className="text-california-red">Pedidos de Produção</span>
         </nav>
         <div className="flex items-center gap-3">
           <div className="rounded-lg bg-california-red/10 p-2">
             <FileText className="h-5 w-5 text-california-red" />
           </div>
-          <h1 className="text-3xl font-bold tracking-tight">Pedidos de Compra</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Pedidos de Produção</h1>
         </div>
         <p className="text-sm text-muted-foreground max-w-2xl">
           Visualize as PPs emitidas pelos GPs, ajuste o prazo de pagamento financeiro e cancele com motivo justificado.

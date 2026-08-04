@@ -28,6 +28,7 @@ interface Props {
   grupos: VersaoOrcamentoGrupo[];
   itens: VersaoOrcamentoItem[];
   realizadosMap: Map<string, JobItemRealizado>;
+  categoriasMap: Map<string, string>;
   editable: boolean;
   ppsPorItemId: Map<string, PedidoCompra>;
   fornecedores: Array<Pick<Fornecedor, "id" | "nome" | "razao_social" | "status">>;
@@ -40,6 +41,7 @@ export function JobRealizadoSection({
   grupos,
   itens,
   realizadosMap,
+  categoriasMap,
   editable,
   ppsPorItemId,
   fornecedores,
@@ -89,7 +91,7 @@ export function JobRealizadoSection({
           prefetch={false}
           className="text-xs text-california-red hover:underline"
         >
-          Ver versao aprovada →
+          Ver versão aprovada →
         </Link>
       </div>
 
@@ -108,6 +110,7 @@ export function JobRealizadoSection({
                 grupo={g}
                 itens={itensPorGrupo.get(g.id) ?? []}
                 realizadosMap={realizadosMap}
+                categoriasMap={categoriasMap}
                 moeda={versao.moeda}
                 editable={editable}
                 jobId={job.id}

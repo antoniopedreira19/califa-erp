@@ -102,7 +102,7 @@ export function PPActionsCell({
         <ConfirmDialog
           open={askCancelar}
           onOpenChange={setAskCancelar}
-          title="Cancelar Pedido de Compra?"
+          title="Cancelar Pedido de Produção?"
           description={
             <>
               <strong className="text-foreground">{pp.codigo}</strong> será
