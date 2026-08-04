@@ -29,11 +29,12 @@ import {
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Badge } from "@/components/ui/badge";
 import { cn, formatCurrency } from "@/lib/utils";
-import { ppStatusLabel } from "@/lib/types";
+import { ppStatusLabel, type PPStatus } from "@/lib/types";
 import type { PPRow } from "./pedidos-compra-list";
 import {
   salvarPrazoFinanceiro,
-  cancelarPedidoCompraFinanceiro,
+  marcarPagaFinanceiro,
+  rejeitarPedidoCompraFinanceiro,
 } from "./actions";
 import {
   signedUrlPdf,
@@ -61,6 +62,19 @@ function isoDateFromDate(date: Date | null): string | null {
   return date ? format(date, "yyyy-MM-dd") : null;
 }
 
+function statusBadgeClasses(status: PPStatus): string {
+  switch (status) {
+    case "em_avaliacao":
+      return "bg-[#fffbeb] text-[#92400e] border-[#fde68a]";
+    case "pago":
+      return "bg-emerald-50 text-emerald-700 border-emerald-200";
+    case "rejeitada":
+      return "bg-red-50 text-red-700 border-red-200";
+    case "cancelada":
+      return "bg-slate-100 text-slate-500 border-slate-200";
+  }
+}
+
 function iconePorMime(nome: string): typeof FileText {
   const lower = nome.toLowerCase();
   if (/\.(png|jpe?g|webp)$/.test(lower)) return ImageIcon;
@@ -73,8 +87,10 @@ export function PPDrawerFinanceiro({ pp, open, onOpenChange }: Props) {
   const [erro, setErro] = React.useState<string | null>(null);
   const [toast, setToast] = React.useState<string | null>(null);
   const [prazoLocal, setPrazoLocal] = React.useState<string | null>(null);
-  const [askCancelar, setAskCancelar] = React.useState(false);
+  const [askRejeitar, setAskRejeitar] = React.useState(false);
+  const [askPagar, setAskPagar] = React.useState(false);
   const [motivo, setMotivo] = React.useState("");
+  const [pagoEm, setPagoEm] = React.useState<string | null>(null);
 
   // Sincroniza prazo local com o valor da PP ao abrir/trocar
   React.useEffect(() => {
@@ -82,6 +98,7 @@ export function PPDrawerFinanceiro({ pp, open, onOpenChange }: Props) {
     setPrazoLocal(pp.prazo_pagamento_financeiro);
     setErro(null);
     setMotivo("");
+    setPagoEm(format(new Date(), "yyyy-MM-dd"));
   }, [pp]);
 
   React.useEffect(() => {
@@ -92,7 +109,9 @@ export function PPDrawerFinanceiro({ pp, open, onOpenChange }: Props) {
 
   if (!pp) return null;
 
-  const podeEditar = pp.status === "emitida";
+  // Só PP em avaliação aceita ação do financeiro. Paga, rejeitada ou
+  // cancelada viram leitura — o próximo passo é do GP ou de outra fase.
+  const podeEditar = pp.status === "em_avaliacao";
   const prazoMudou = prazoLocal !== pp.prazo_pagamento_financeiro;
 
   function handleVerPDF() {
@@ -131,17 +150,32 @@ export function PPDrawerFinanceiro({ pp, open, onOpenChange }: Props) {
     });
   }
 
-  function handleConfirmarCancelar() {
+  function handleConfirmarRejeitar() {
     if (!pp) return;
     startTransition(async () => {
-      const res = await cancelarPedidoCompraFinanceiro(pp.id, motivo);
+      const res = await rejeitarPedidoCompraFinanceiro(pp.id, motivo);
       if (!res.ok) {
         setErro(res.message);
         return;
       }
-      setAskCancelar(false);
+      setAskRejeitar(false);
       onOpenChange(false);
-      setToast(`${pp.codigo} cancelada.`);
+      setToast(`${pp.codigo} rejeitada. O GP foi liberado pra corrigir.`);
+      router.refresh();
+    });
+  }
+
+  function handleConfirmarPagar() {
+    if (!pp || !pagoEm) return;
+    startTransition(async () => {
+      const res = await marcarPagaFinanceiro(pp.id, pagoEm);
+      if (!res.ok) {
+        setErro(res.message);
+        return;
+      }
+      setAskPagar(false);
+      onOpenChange(false);
+      setToast(`${pp.codigo} marcada como paga.`);
       router.refresh();
     });
   }
@@ -153,14 +187,7 @@ export function PPDrawerFinanceiro({ pp, open, onOpenChange }: Props) {
           <DialogHeader className="px-6 pt-6 pb-4 border-b border-border">
             <DialogTitle className="flex items-center gap-3">
               <span className="font-mono text-lg">{pp.codigo}</span>
-              <Badge
-                className={cn(
-                  "border",
-                  pp.status === "emitida"
-                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                    : "bg-slate-100 text-slate-500 border-slate-200",
-                )}
-              >
+              <Badge className={cn("border", statusBadgeClasses(pp.status))}>
                 {ppStatusLabel(pp.status)}
               </Badge>
               <Tooltip>
@@ -204,6 +231,45 @@ export function PPDrawerFinanceiro({ pp, open, onOpenChange }: Props) {
                 <p className="mt-2 text-sm">
                   <span className="font-medium">Motivo: </span>
                   {pp.motivo_cancelamento ?? "Sem motivo registrado (cancelado pelo GP)."}
+                </p>
+              </div>
+            )}
+
+            {pp.status === "rejeitada" && (
+              <div className="rounded-lg border border-red-200 bg-red-50 p-3">
+                <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-red-700">
+                  Rejeitada
+                </p>
+                <p className="text-sm">
+                  Por{" "}
+                  <span className="font-medium">
+                    {pp.rejeitada_por_nome ?? "—"}
+                  </span>{" "}
+                  em {formatDateTime(pp.rejeitada_em)}
+                </p>
+                <p className="mt-2 text-sm">
+                  <span className="font-medium">Motivo: </span>
+                  {pp.motivo_rejeicao ?? "—"}
+                </p>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Aguardando o gerente do job corrigir e reenviar.
+                </p>
+              </div>
+            )}
+
+            {pp.status === "pago" && (
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+                <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-emerald-700">
+                  Paga
+                </p>
+                <p className="text-sm">
+                  Em {formatDate(pp.pago_em)}
+                  {pp.pago_por_nome ? (
+                    <>
+                      , registrado por{" "}
+                      <span className="font-medium">{pp.pago_por_nome}</span>
+                    </>
+                  ) : null}
                 </p>
               </div>
             )}
@@ -295,7 +361,7 @@ export function PPDrawerFinanceiro({ pp, open, onOpenChange }: Props) {
               </div>
             )}
 
-            {/* Ações financeiras (só se emitida) */}
+            {/* Ações financeiras (só enquanto está em avaliação) */}
             {podeEditar && (
               <div className="space-y-3 rounded-lg border border-border p-4">
                 <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -330,64 +396,59 @@ export function PPDrawerFinanceiro({ pp, open, onOpenChange }: Props) {
             )}
           </div>
 
-          {/* Footer com Baixa (desabilitada) + Cancelar */}
+          {/* Avaliação: aprovar pagando, ou devolver pro GP corrigir.
+              Cancelar não mora aqui — é exclusivo da aba de PPs do job. */}
           {podeEditar && (
-            <div className="flex items-center justify-between gap-2 px-6 py-4 border-t border-border">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span>
-                    <button
-                      type="button"
-                      disabled
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-semibold text-muted-foreground cursor-not-allowed opacity-60"
-                    >
-                      <CreditCard className="h-3.5 w-3.5" />
-                      Dar Baixa
-                    </button>
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent>
-                  Em breve — vira lançamento em contas a pagar (fase 3)
-                </TooltipContent>
-              </Tooltip>
+            <div className="flex items-center justify-between gap-2 border-t border-border px-6 py-4">
+              <button
+                type="button"
+                onClick={() => setAskRejeitar(true)}
+                disabled={pending}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-california-red/30 bg-white px-3 py-2 text-xs font-semibold text-california-red transition-colors hover:bg-california-red hover:text-white disabled:opacity-50"
+              >
+                <Ban className="h-3.5 w-3.5" />
+                Rejeitar
+              </button>
 
               <button
                 type="button"
-                onClick={() => setAskCancelar(true)}
+                onClick={() => setAskPagar(true)}
                 disabled={pending}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-california-red/30 bg-white px-3 py-2 text-xs font-semibold text-california-red hover:bg-california-red hover:text-white transition-colors disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-california-red px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-california-red-hover disabled:opacity-50"
               >
-                <Ban className="h-3.5 w-3.5" />
-                Cancelar PP
+                <CreditCard className="h-3.5 w-3.5" />
+                Marcar como paga
               </button>
             </div>
           )}
         </DrawerContent>
       </Dialog>
 
-      {/* Confirm cancelar */}
+      {/* Confirm rejeitar */}
       <ConfirmDialog
-        open={askCancelar}
+        open={askRejeitar}
         onOpenChange={(o) => {
-          setAskCancelar(o);
+          setAskRejeitar(o);
           if (!o) setMotivo("");
         }}
-        title={`Cancelar ${pp.codigo}?`}
+        title={`Rejeitar ${pp.codigo}?`}
         description={
           <div className="space-y-2">
             <p>
-              Esta ação marca a PP como cancelada e libera o item pra gerar uma nova.
-              O PDF e anexos permanecem arquivados.
+              A PP volta pro gerente do job, que vê o motivo, corrige e reenvia
+              para avaliação. O item continua reservado — não vira uma PP nova.
             </p>
             <div>
-              <label className="text-xs font-medium">Motivo * (mín 10 caracteres)</label>
+              <label className="text-xs font-medium">
+                Motivo * (mín. 10 caracteres)
+              </label>
               <textarea
                 value={motivo}
                 onChange={(e) => setMotivo(e.target.value)}
                 maxLength={500}
                 rows={3}
                 className="mt-1 w-full rounded border border-border p-2 text-sm"
-                placeholder="Ex: valor divergente do combinado com o fornecedor..."
+                placeholder="Ex: valor 3,6% acima do planejado. Renegociar com o fornecedor ou anexar aprovação do cliente antes de reenviar."
               />
               <p className="mt-1 text-[11px] text-muted-foreground">
                 {motivo.trim().length}/500 caracteres
@@ -395,11 +456,46 @@ export function PPDrawerFinanceiro({ pp, open, onOpenChange }: Props) {
             </div>
           </div>
         }
-        confirmLabel="Confirmar cancelamento"
+        confirmLabel="Confirmar rejeição"
         cancelLabel="Voltar"
         variant="destructive"
         pending={pending}
-        onConfirm={handleConfirmarCancelar}
+        onConfirm={handleConfirmarRejeitar}
+      />
+
+      {/* Confirm pagamento */}
+      <ConfirmDialog
+        open={askPagar}
+        onOpenChange={setAskPagar}
+        title={`Marcar ${pp.codigo} como paga?`}
+        description={
+          <div className="space-y-2">
+            <p>
+              Registra o pagamento de{" "}
+              <strong className="text-foreground">
+                {formatCurrency(pp.valor, "BRL")}
+              </strong>{" "}
+              para {pp.fornecedor_nome}.
+            </p>
+            <div>
+              <label className="text-xs font-medium">
+                Data do pagamento *
+              </label>
+              <p className="mb-1 text-[11px] text-muted-foreground">
+                Quando o pagamento efetivamente saiu. Pode ser retroativa.
+              </p>
+              <DatePicker
+                name="pago_em"
+                defaultValue={pagoEm ?? undefined}
+                onDateChange={(date) => setPagoEm(isoDateFromDate(date))}
+              />
+            </div>
+          </div>
+        }
+        confirmLabel="Confirmar pagamento"
+        cancelLabel="Voltar"
+        pending={pending}
+        onConfirm={handleConfirmarPagar}
       />
 
       {/* Toast */}

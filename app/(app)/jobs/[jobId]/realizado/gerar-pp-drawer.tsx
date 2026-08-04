@@ -344,7 +344,7 @@ export function GerarPPDrawer({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DrawerContent className="sm:max-w-2xl">
         <DialogHeader className="px-6 pt-6 pb-4 border-b border-border">
-          <DialogTitle>Gerar Pedido de Compra</DialogTitle>
+          <DialogTitle>Gerar Pedido de Produção</DialogTitle>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
