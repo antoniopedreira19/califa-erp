@@ -17,6 +17,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import {
   chatAreaLabel,
@@ -109,6 +110,37 @@ export function JobChatSection({
   React.useEffect(() => {
     fimRef.current?.scrollIntoView({ block: "end" });
   }, [itens.length]);
+
+  // Realtime: mensagem do outro time aparece sem recarregar. O payload é
+  // ignorado de propósito — a thread é montada no servidor (mistura
+  // mensagens com erratas e a abertura), então o refresh traz tudo já
+  // ordenado em vez de a gente remontar aqui e arriscar divergir.
+  React.useEffect(() => {
+    const supabase = createClient();
+    const canal = supabase
+      .channel(`chat-job-${jobId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "jobs_mensagens",
+          filter: `job_id=eq.${jobId}`,
+        },
+        async () => {
+          // Com a aba aberta a mensagem já está sendo lida agora: marca
+          // antes do refresh, senão o servidor recalcula e o badge sobe
+          // na cara de quem acabou de ler.
+          await marcarChatLido(jobId);
+          router.refresh();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(canal);
+    };
+  }, [jobId, router]);
 
   function handleEnviar() {
     const t = texto.trim();
