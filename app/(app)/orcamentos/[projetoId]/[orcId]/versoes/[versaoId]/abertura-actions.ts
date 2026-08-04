@@ -270,6 +270,9 @@ export async function enviarJobParaAbertura(
       observacoes: parsed.data.observacoes,
       responsavel_id: projeto.responsavel_id,
       valor_total: Number(totais.faturamento.toFixed(2)),
+      // Congelado aqui e nunca mais alterado: é a base de comparação do
+      // card de Erratas ("faturamento na abertura" x "atual").
+      faturamento_abertura: Number(totais.faturamento.toFixed(2)),
       // status default do banco = 'aguardando_abertura' — não sobrescreva
       created_by: session.profile.id,
     })
@@ -279,6 +282,54 @@ export async function enviarJobParaAbertura(
   if (errIns) {
     console.error("[abertura.job_insert]", errIns.message);
     return { ok: false, message: mapDbError(errIns.message) };
+  }
+
+  // 6b. Cópia do orçado que pertence ao job. A partir daqui a Planilha
+  //     Interna lê daqui, e é isso que a errata altera — a versão
+  //     aprovada continua sendo o registro do que o cliente aprovou.
+  const { data: itensDaVersao, error: errItensCopia } = await supabase
+    .from("versoes_orcamento_itens")
+    .select(
+      "id, grupo_id, ordem, item, tipo_custo, categoria_id, valor_unitario_orcado, quantidade_orcada, dias_meses_orcado, valor_unitario_planejado, quantidade_planejada, dias_meses_planejado",
+    )
+    .eq("versao_orcamento_id", versaoId)
+    .eq("tenant_id", session.activeTenant.id);
+
+  if (errItensCopia) {
+    console.error("[abertura.copia_itens_select]", errItensCopia.message);
+    return {
+      ok: false,
+      message: "Job criado, mas a planilha interna não foi montada. Avise o suporte.",
+    };
+  }
+
+  if ((itensDaVersao ?? []).length > 0) {
+    const { error: errCopia } = await supabase.from("jobs_itens_orcado").insert(
+      (itensDaVersao ?? []).map((i: any) => ({
+        tenant_id: session.activeTenant.id,
+        job_id: novo.id,
+        item_versao_id: i.id,
+        grupo_id: i.grupo_id,
+        ordem: i.ordem,
+        item: i.item,
+        tipo_custo: i.tipo_custo,
+        categoria_id: i.categoria_id,
+        valor_unitario_orcado: i.valor_unitario_orcado,
+        quantidade_orcada: i.quantidade_orcada,
+        dias_meses_orcado: i.dias_meses_orcado,
+        valor_unitario_planejado: i.valor_unitario_planejado,
+        quantidade_planejada: i.quantidade_planejada,
+        dias_meses_planejado: i.dias_meses_planejado,
+      })),
+    );
+
+    if (errCopia) {
+      console.error("[abertura.copia_itens_insert]", errCopia.message);
+      return {
+        ok: false,
+        message: "Job criado, mas a planilha interna não foi montada. Avise o suporte.",
+      };
+    }
   }
 
   // 7. Orçamento passa a 'job_criado'.

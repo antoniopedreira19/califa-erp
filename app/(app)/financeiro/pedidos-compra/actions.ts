@@ -61,8 +61,9 @@ async function checarGateFinanceiro(
 }
 
 /**
- * Salva o prazo_pagamento_financeiro (data em que o financeiro vai pagar).
- * Aceita null pra limpar. Só permite se PP está 'emitida'.
+ * Salva o prazo_pagamento_financeiro (data em que o financeiro pretende
+ * pagar — não confundir com `pago_em`, a data em que o pagamento saiu).
+ * Aceita null pra limpar. Só permite enquanto a PP está em avaliação.
  */
 export async function salvarPrazoFinanceiro(
   pp_id: string,
@@ -92,10 +93,10 @@ export async function salvarPrazoFinanceiro(
     .maybeSingle();
 
   if (ppErr || !pp) return { ok: false, message: "PP não encontrada." };
-  if (pp.status !== "emitida") {
+  if (pp.status !== "em_avaliacao") {
     return {
       ok: false,
-      message: "Prazo só pode ser ajustado em PP emitida.",
+      message: "Prazo só pode ser ajustado em PP que está em avaliação.",
     };
   }
 
@@ -128,15 +129,88 @@ export async function salvarPrazoFinanceiro(
 }
 
 /**
- * Cancela PP pelo financeiro. Motivo obrigatório (min 10 chars).
- * Soft delete: marca como cancelada, mantém PDF e anexos.
- * Zera fornecedor_id do realizado pra permitir nova PP.
+ * Marca a PP como paga. A data vem do financeiro e pode ser retroativa —
+ * é comum lançar dias depois do pagamento sair.
+ *
+ * Por enquanto é só uma marcação de status. Contas a pagar de verdade
+ * (`lancamentos_financeiros`, estorno) fica pra uma fase futura e vai
+ * partir daqui.
  */
-export async function cancelarPedidoCompraFinanceiro(
+export async function marcarPagaFinanceiro(
+  pp_id: string,
+  pagoEm: string,
+): Promise<Result> {
+  const gate = await checarGateFinanceiro(pp_id, "pedido_compra.paga");
+  if (!gate.ok) return gate;
+  const { session, supabase } = gate;
+
+  const dataParsed = prazoSchema.safeParse(pagoEm);
+  if (!dataParsed.success) {
+    return {
+      ok: false,
+      message: dataParsed.error.issues[0]?.message ?? "Data inválida.",
+    };
+  }
+
+  const { data: pp, error: ppErr } = await supabase
+    .from("pedidos_compra")
+    .select("id, status, job_id, codigo, valor")
+    .eq("id", pp_id)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle();
+
+  if (ppErr || !pp) return { ok: false, message: "PP não encontrada." };
+  if (pp.status !== "em_avaliacao") {
+    return {
+      ok: false,
+      message:
+        pp.status === "pago"
+          ? "PP já está paga."
+          : "Só PP em avaliação pode ser marcada como paga.",
+    };
+  }
+
+  const { error: updErr } = await supabase
+    .from("pedidos_compra")
+    .update({
+      status: "pago",
+      pago_em: dataParsed.data,
+      pago_por: session.profile.id,
+    })
+    .eq("id", pp_id)
+    .eq("tenant_id", session.activeTenant.id);
+
+  if (updErr) {
+    return { ok: false, message: `Falha ao marcar como paga: ${updErr.message}` };
+  }
+
+  await logAuditEvent({
+    acao: "pedido_compra.paga",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "pedido_compra",
+    entidadeId: pp_id,
+    metadata: {
+      pp_codigo: pp.codigo,
+      valor: Number(pp.valor),
+      pago_em: dataParsed.data,
+      job_id: pp.job_id,
+    },
+  });
+
+  revalidatePath("/financeiro/pedidos-compra");
+  revalidatePath(`/jobs/${pp.job_id}`);
+  return { ok: true };
+}
+
+/**
+ * Rejeita a PP com motivo obrigatório. Não é cancelamento: a PP continua
+ * ocupando o item, e o GP corrige e reenvia pela aba de PPs do job.
+ */
+export async function rejeitarPedidoCompraFinanceiro(
   pp_id: string,
   motivo: string,
 ): Promise<Result> {
-  const gate = await checarGateFinanceiro(pp_id, "pedido_compra.cancelada");
+  const gate = await checarGateFinanceiro(pp_id, "pedido_compra.rejeitada");
   if (!gate.ok) return gate;
   const { session, supabase } = gate;
 
@@ -150,49 +224,45 @@ export async function cancelarPedidoCompraFinanceiro(
 
   const { data: pp, error: ppErr } = await supabase
     .from("pedidos_compra")
-    .select("id, status, job_id, codigo, item_realizado_id")
+    .select("id, status, job_id, codigo")
     .eq("id", pp_id)
     .eq("tenant_id", session.activeTenant.id)
     .maybeSingle();
 
   if (ppErr || !pp) return { ok: false, message: "PP não encontrada." };
-  if (pp.status === "cancelada") {
-    return { ok: false, message: "PP já está cancelada." };
+  if (pp.status !== "em_avaliacao") {
+    return {
+      ok: false,
+      message:
+        pp.status === "rejeitada"
+          ? "PP já está rejeitada."
+          : "Só PP em avaliação pode ser rejeitada.",
+    };
   }
 
-  const agora = new Date().toISOString();
   const { error: updErr } = await supabase
     .from("pedidos_compra")
     .update({
-      status: "cancelada",
-      cancelada_por: session.profile.id,
-      cancelada_em: agora,
-      motivo_cancelamento: motivoParsed.data,
+      status: "rejeitada",
+      rejeitada_por: session.profile.id,
+      rejeitada_em: new Date().toISOString(),
+      motivo_rejeicao: motivoParsed.data,
     })
     .eq("id", pp_id)
     .eq("tenant_id", session.activeTenant.id);
 
   if (updErr) {
-    return { ok: false, message: `Falha ao cancelar PP: ${updErr.message}` };
+    return { ok: false, message: `Falha ao rejeitar PP: ${updErr.message}` };
   }
 
-  // Zera fornecedor_id do realizado
-  await supabase
-    .from("jobs_itens_realizado")
-    .update({ fornecedor_id: null })
-    .eq("id", pp.item_realizado_id)
-    .eq("tenant_id", session.activeTenant.id);
-
   await logAuditEvent({
-    acao: "pedido_compra.cancelada",
+    acao: "pedido_compra.rejeitada",
     tenantId: session.activeTenant.id,
     entidadeTipo: "pedido_compra",
     entidadeId: pp_id,
     metadata: {
       pp_codigo: pp.codigo,
-      item_realizado_id: pp.item_realizado_id,
       job_id: pp.job_id,
-      origem: "financeiro",
       motivo: motivoParsed.data,
     },
   });
