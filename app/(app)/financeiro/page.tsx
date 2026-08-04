@@ -24,7 +24,7 @@ export default async function CentralFinanceiraPage() {
       .from("pedidos_compra")
       .select("id", { count: "exact", head: true })
       .eq("tenant_id", session.activeTenant.id)
-      .eq("status", "emitida"),
+      .eq("status", "em_avaliacao"),
   ]);
   const aguardandoCount = aguardandoRes.count;
   const ppsCount = ppsRes.count;
@@ -58,7 +58,7 @@ export default async function CentralFinanceiraPage() {
           href="/financeiro/pedidos-compra"
           icon={FileText}
           title="Pedidos de Produção"
-          description="Visualize, ajuste prazo de pagamento e cancele PPs emitidas."
+          description="Avalie as PPs dos GPs: ajuste o prazo, marque como paga ou rejeite com motivo."
           count={ppsCount ?? 0}
         />
         {/* Cards futuros: contas a pagar, DRE, aprovações de pagamentos */}

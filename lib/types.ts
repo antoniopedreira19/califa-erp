@@ -555,7 +555,9 @@ export interface JobItemRealizado {
   updated_at: string;
 }
 
-// ---------- Task 010: Pedidos de Compra ----------
+// ---------- Task 010: Pedidos de Produção ----------
+// Tabela e colunas seguem `pedidos_compra` por compatibilidade; o nome
+// visível ao usuário é "Pedido de Produção", igual ao PDF emitido.
 
 export interface PedidoCompra {
   id: string;
@@ -578,19 +580,53 @@ export interface PedidoCompra {
   cancelada_por: string | null;
   cancelada_em: string | null;
   motivo_cancelamento: string | null;
+  // Ciclo de avaliação do financeiro
+  pago_em: string | null;
+  pago_por: string | null;
+  rejeitada_por: string | null;
+  rejeitada_em: string | null;
+  motivo_rejeicao: string | null;
   created_at: string;
   updated_at: string;
 }
 
-export type PPStatus = "emitida" | "cancelada";
+/**
+ * Ciclo de vida da PP. Nasce em `em_avaliacao` (o GP emitiu, o financeiro
+ * ainda não olhou) e termina em `pago`, `rejeitada` ou `cancelada`.
+ *
+ * `rejeitada` não é terminal de verdade: o GP corrige e reenvia, e a PP
+ * volta pra `em_avaliacao`. Por isso o unique parcial por item continua
+ * valendo pra ela — quem libera o item é só o cancelamento.
+ */
+export type PPStatus = "em_avaliacao" | "pago" | "rejeitada" | "cancelada";
 
 export function ppStatusLabel(s: PPStatus): string {
   switch (s) {
-    case "emitida":
-      return "Emitida";
+    case "em_avaliacao":
+      return "Em avaliação";
+    case "pago":
+      return "Pago";
+    case "rejeitada":
+      return "Rejeitado";
     case "cancelada":
       return "Cancelada";
   }
+}
+
+/** Só PP em avaliação ou rejeitada pode ser cancelada — paga, não. */
+export function podeCancelarPP(s: PPStatus): boolean {
+  return s === "em_avaliacao" || s === "rejeitada";
+}
+
+/** PP com os campos que as telas de lista mostram junto. */
+export interface PedidoCompraNaLista extends PedidoCompra {
+  emitida_por_nome: string | null;
+  grupo_nome: string | null;
+  anexos: Array<{
+    id: string;
+    arquivo_nome_original: string;
+    arquivo_tamanho_bytes: number;
+  }>;
 }
 
 export interface PedidoCompraAnexo {

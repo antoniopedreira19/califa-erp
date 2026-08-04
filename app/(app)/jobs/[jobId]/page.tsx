@@ -13,12 +13,14 @@ import { StatusActions } from "./status-actions";
 import { ReenviarAprovacaoButton } from "./reenviar-aprovacao-button";
 import { AprovarRejeitarButtons } from "./aprovar-rejeitar-buttons";
 import { JobRealizadoSection } from "./realizado/job-realizado-section";
+import { JobPPsSection } from "./pps/job-pps-section";
 import { JobTabs } from "./job-tabs";
 import type {
   VersaoOrcamentoGrupo,
   VersaoOrcamentoItem,
   JobItemRealizado,
   PedidoCompra,
+  PedidoCompraNaLista,
   Categoria,
 } from "@/lib/types";
 
@@ -122,12 +124,17 @@ export default async function JobDetailPage({
       .eq("job_id", raw.id)
       .eq("tenant_id", session.activeTenant.id)
       .returns<JobItemRealizado[]>(),
+    // Sem filtro de status: a trilha da Planilha Interna usa só as ativas,
+    // mas a aba de Pedidos de Produção lista as canceladas também. Uma
+    // query só em vez de duas.
     supabase
       .from("pedidos_compra")
-      .select("*")
+      .select(
+        "*, emitido:profiles!emitida_por(nome), anexos:pedidos_compra_anexos(id, arquivo_nome_original, arquivo_tamanho_bytes)",
+      )
       .eq("job_id", raw.id)
       .eq("tenant_id", session.activeTenant.id)
-      .eq("status", "emitida"),
+      .order("created_at", { ascending: false }),
     supabase
       .from("fornecedores")
       .select("id, nome, razao_social, status")
@@ -171,13 +178,37 @@ export default async function JobDetailPage({
   const realizadosMap = new Map<string, JobItemRealizado>();
   for (const r of realizados) realizadosMap.set(r.item_id, r);
 
-  const pps = (ppsRes.data ?? []).map((pp: any) => ({
+  if (ppsRes.error) console.error("[job.pps]", ppsRes.error.message);
+
+  // Nome do grupo por item realizado: o realizado aponta pro item da versão,
+  // que aponta pro grupo. A aba de PPs mostra "{grupo} · emitida em ...".
+  const grupoNomePorId = new Map(grupos.map((g) => [g.id, g.nome]));
+  const grupoPorItemRealizadoId = new Map<string, string>();
+  for (const r of realizados) {
+    const item = itens.find((i) => i.id === r.item_id);
+    const nome = item ? grupoNomePorId.get(item.grupo_id) : undefined;
+    if (nome) grupoPorItemRealizadoId.set(r.id, nome);
+  }
+
+  const ppsDoJob: PedidoCompraNaLista[] = (ppsRes.data ?? []).map((pp: any) => ({
     ...pp,
     quantidade: Number(pp.quantidade),
     valor: Number(pp.valor),
-  })) as PedidoCompra[];
+    emitida_por_nome: pp.emitido?.nome ?? null,
+    grupo_nome: grupoPorItemRealizadoId.get(pp.item_realizado_id) ?? null,
+    anexos: (pp.anexos ?? []).map((a: any) => ({
+      id: a.id,
+      arquivo_nome_original: a.arquivo_nome_original,
+      arquivo_tamanho_bytes: Number(a.arquivo_tamanho_bytes ?? 0),
+    })),
+  }));
+
+  // A trilha da planilha só enxerga PP ativa: cancelada libera o item pra
+  // gerar de novo, então tem que voltar a mostrar "Gerar PP".
   const ppsPorItemId = new Map<string, PedidoCompra>();
-  for (const pp of pps) ppsPorItemId.set(pp.item_realizado_id, pp);
+  for (const pp of ppsDoJob) {
+    if (pp.status !== "cancelada") ppsPorItemId.set(pp.item_realizado_id, pp);
+  }
 
   const fornecedores = (fornecedoresRes.data ?? []) as any[];
   const empresas = (empresasRes.data ?? []) as any[];
@@ -401,6 +432,18 @@ export default async function JobDetailPage({
             ppsPorItemId={ppsPorItemId}
             fornecedores={fornecedores}
             empresas={empresas}
+          />
+        }
+        ppsCount={ppsDoJob.filter((p) => p.status !== "cancelada").length}
+        pps={
+          <JobPPsSection
+            pps={ppsDoJob}
+            fornecedoresPorId={Object.fromEntries(
+              fornecedores.map((f) => [f.id, f.razao_social ?? f.nome]),
+            )}
+            fornecedores={fornecedores}
+            empresas={empresas}
+            editable={podeEditarRealizado}
           />
         }
       />
