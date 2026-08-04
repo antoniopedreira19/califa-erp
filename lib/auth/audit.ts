@@ -64,6 +64,9 @@ export type AuditAction =
   | "pedido_compra.emitida"
   | "pedido_compra.cancelada"
   | "pedido_compra.prazo_financeiro_atualizado"
+  | "pedido_compra.paga"
+  | "pedido_compra.rejeitada"
+  | "pedido_compra.reenviada"
   | "custo_c.utilizado"
   | "acao_negada";
 

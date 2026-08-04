@@ -15,6 +15,8 @@ import {
   PP_ANEXO_MIMETYPES_ACEITOS,
   PP_ANEXO_TAMANHO_MAX_BYTES,
   PP_ANEXOS_TAMANHO_TOTAL_MAX_BYTES,
+  podeCancelarPP,
+  type PPStatus,
 } from "@/lib/types";
 
 const BUCKET = "pedidos-compra";
@@ -600,11 +602,15 @@ export async function cancelarPedidoCompra(pp_id: string): Promise<Result> {
 
   if (ppErr || !pp) return { ok: false, message: "PP não encontrada." };
 
-  // Regra fase 2: só permite cancelar PP emitida.
-  if (pp.status !== "emitida") {
+  // Só PP em avaliação ou rejeitada pode ser cancelada. Paga, não: o
+  // dinheiro já saiu, e desfazer isso é estorno, não cancelamento.
+  if (!podeCancelarPP(pp.status as PPStatus)) {
     return {
       ok: false,
-      message: `PP já está ${pp.status === "cancelada" ? "cancelada" : "em outro status"}.`,
+      message:
+        pp.status === "cancelada"
+          ? "PP já está cancelada."
+          : "PP já foi paga — cancelar exigiria estorno pelo financeiro.",
     };
   }
 
@@ -668,6 +674,333 @@ export async function cancelarPedidoCompra(pp_id: string): Promise<Result> {
   });
 
   revalidatePath(`/jobs/${pp.job_id}`);
+  return { ok: true };
+}
+
+/**
+ * Prefixo do bucket onde o client sobe anexos novos de uma PP existente.
+ * O client não conhece o tenant_id, então quem monta o path é o server —
+ * que de quebra revalida os gates antes de liberar upload.
+ */
+export async function prefixoAnexosPedidoCompra(
+  pp_id: string,
+): Promise<Result<{ upload_prefix: string }>> {
+  const session = await requireSession();
+  const supabase = createClient();
+
+  const { data: pp, error } = await supabase
+    .from("pedidos_compra")
+    .select("id, job_id, item_realizado_id, status")
+    .eq("id", pp_id)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle();
+
+  if (error || !pp) return { ok: false, message: "PP não encontrada." };
+  if (pp.status !== "rejeitada") {
+    return { ok: false, message: "Só PP rejeitada pode receber novos anexos." };
+  }
+
+  const gate = await checarGatesRealizado(pp.item_realizado_id);
+  if (!gate.ok) return gate;
+
+  return {
+    ok: true,
+    upload_prefix: `${session.activeTenant.id}/${pp.job_id}/${pp_id}/anexos/`,
+  };
+}
+
+/**
+ * Corrige uma PP rejeitada pelo financeiro e devolve pra avaliação.
+ *
+ * O PDF é REGERADO e sobrescreve o anterior no mesmo path: ele é o
+ * documento que vai pro fornecedor e é o que o financeiro abre pra
+ * conferir, então não pode contradizer a PP. O código da PP não muda,
+ * logo o path também não.
+ *
+ * `valor` não vem do formulário — continua espelhando o total_realizado
+ * do item, igual na emissão.
+ */
+export async function reenviarPedidoCompra(
+  pp_id: string,
+  dados: z.input<typeof dadosSchema>,
+  anexosNovos: z.input<typeof anexoUploadedSchema>[],
+  anexosRemovidosIds: string[],
+): Promise<Result> {
+  const session = await requireSession();
+  const supabase = createClient();
+
+  const { data: ppRow, error: ppErr } = await supabase
+    .from("pedidos_compra")
+    .select(
+      "id, tenant_id, codigo, job_id, item_realizado_id, status, pdf_path, prazo_pagamento_financeiro",
+    )
+    .eq("id", pp_id)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle();
+
+  if (ppErr || !ppRow) return { ok: false, message: "PP não encontrada." };
+
+  if (ppRow.status !== "rejeitada") {
+    return {
+      ok: false,
+      message: "Só PP rejeitada pelo financeiro pode ser corrigida e reenviada.",
+    };
+  }
+
+  // Reusa os mesmos gates da emissão: job editável + responsável ou admin.
+  const gate = await checarGatesRealizado(ppRow.item_realizado_id);
+  if (!gate.ok) return gate;
+  const { item, job } = gate;
+
+  const dadosParsed = dadosSchema.safeParse(dados);
+  if (!dadosParsed.success) {
+    return {
+      ok: false,
+      message: `Dados inválidos: ${dadosParsed.error.issues[0]?.message ?? "erro"}.`,
+    };
+  }
+  const d = dadosParsed.data;
+
+  // ---- Anexos: valida os novos antes de mexer em qualquer coisa ----
+  const anexosParsed = z.array(anexoUploadedSchema).safeParse(anexosNovos);
+  if (!anexosParsed.success) {
+    return { ok: false, message: "Formato de anexo inválido." };
+  }
+
+  const expectedPrefix = `${session.activeTenant.id}/${job.id}/${pp_id}/anexos/`;
+  for (const a of anexosParsed.data) {
+    if (a.tamanho_bytes > PP_ANEXO_TAMANHO_MAX_BYTES) {
+      return { ok: false, message: `Anexo ${a.nome_original} > 8 MB.` };
+    }
+    if (!a.path.startsWith(expectedPrefix)) {
+      return { ok: false, message: "Anexo em path inválido." };
+    }
+  }
+
+  const { data: anexosAtuais } = await supabase
+    .from("pedidos_compra_anexos")
+    .select("id, arquivo_path, arquivo_tamanho_bytes")
+    .eq("pedido_compra_id", pp_id)
+    .eq("tenant_id", session.activeTenant.id);
+
+  const removidos = new Set(anexosRemovidosIds);
+  const mantidos = (anexosAtuais ?? []).filter((a) => !removidos.has(a.id));
+
+  if (mantidos.length + anexosParsed.data.length < 1) {
+    return { ok: false, message: "Pelo menos um anexo é obrigatório." };
+  }
+
+  const somaBytes =
+    mantidos.reduce((s, a) => s + Number(a.arquivo_tamanho_bytes ?? 0), 0) +
+    anexosParsed.data.reduce((s, a) => s + a.tamanho_bytes, 0);
+  if (somaBytes > PP_ANEXOS_TAMANHO_TOTAL_MAX_BYTES) {
+    return { ok: false, message: "Anexos somam mais que 25 MB." };
+  }
+
+  // Confere no bucket que os novos existem mesmo (metadata pode ser forjada)
+  if (anexosParsed.data.length > 0) {
+    const { data: arquivosNoBucket, error: listErr } = await supabase.storage
+      .from(BUCKET)
+      .list(expectedPrefix.replace(/\/$/, ""));
+    if (listErr) {
+      return { ok: false, message: `Falha ao listar anexos: ${listErr.message}` };
+    }
+    const nomes = new Set(
+      (arquivosNoBucket ?? []).map((f) => `${expectedPrefix}${f.name}`),
+    );
+    for (const a of anexosParsed.data) {
+      if (!nomes.has(a.path)) {
+        return {
+          ok: false,
+          message: `Anexo ${a.nome_original} não foi encontrado no bucket. Refaça o upload.`,
+        };
+      }
+    }
+  }
+
+  // ---- FKs ----
+  const [fornRes, empRes] = await Promise.all([
+    supabase
+      .from("fornecedores")
+      .select("*")
+      .eq("id", d.fornecedor_id)
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("status", "ativo")
+      .maybeSingle(),
+    supabase
+      .from("empresas")
+      .select("*")
+      .eq("id", d.empresa_id)
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("ativo", true)
+      .maybeSingle(),
+  ]);
+
+  if (!fornRes.data)
+    return { ok: false, message: "Fornecedor inválido ou inativo." };
+  if (!empRes.data)
+    return { ok: false, message: "Empresa emissora inválida ou inativa." };
+
+  const [projetoRes, orcRes] = await Promise.all([
+    supabase
+      .from("projetos")
+      .select(
+        "id, codigo, campanha, cliente:clientes(nome_fantasia), responsavel:profiles!responsavel_id(nome)",
+      )
+      .eq("id", job.projeto_id ?? "")
+      .eq("tenant_id", session.activeTenant.id)
+      .maybeSingle(),
+    supabase
+      .from("orcamentos")
+      .select("id, codigo")
+      .eq("id", job.orcamento_id ?? "")
+      .eq("tenant_id", session.activeTenant.id)
+      .maybeSingle(),
+  ]);
+
+  type ProjetoEnriquecido = {
+    codigo: string;
+    campanha: string | null;
+    cliente: { nome_fantasia: string } | null;
+    responsavel: { nome: string } | null;
+  } | null;
+
+  const projeto = projetoRes.data as ProjetoEnriquecido;
+  const orcamento = orcRes.data as { codigo: string } | null;
+  const valor = Number(item.total_realizado ?? 0);
+
+  // ---- PDF novo, sobrescrevendo o antigo ----
+  let pdfBuffer: Buffer;
+  try {
+    const { renderPedidoCompraPDF } = await import("@/lib/pdf/pedido-compra");
+    pdfBuffer = await renderPedidoCompraPDF({
+      pp: {
+        codigo: ppRow.codigo,
+        servico: d.servico,
+        quantidade: d.quantidade,
+        especificacoes: d.especificacoes ?? null,
+        valor,
+        prazo_pagamento: d.prazo_pagamento,
+        created_at: new Date().toISOString(),
+      },
+      empresa: empRes.data as never,
+      fornecedor: fornRes.data as never,
+      job: { nome: job.nome, produto: job.produto ?? "" },
+      projeto: {
+        codigo: projeto?.codigo ?? "",
+        campanha: projeto?.campanha ?? null,
+      },
+      orcamento: { codigo: orcamento?.codigo ?? "" },
+      cliente: { nome_fantasia: projeto?.cliente?.nome_fantasia ?? "" },
+      responsavelNome: projeto?.responsavel?.nome ?? "",
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { ok: false, message: `Falha ao gerar PDF: ${msg}` };
+  }
+
+  const pdfPath =
+    ppRow.pdf_path ||
+    `${session.activeTenant.id}/${job.id}/${pp_id}/pp-${ppRow.codigo}.pdf`;
+
+  const { error: uploadErr } = await supabase.storage
+    .from(BUCKET)
+    .upload(pdfPath, pdfBuffer, {
+      contentType: "application/pdf",
+      upsert: true,
+    });
+
+  if (uploadErr) {
+    return { ok: false, message: `Falha ao subir PDF: ${uploadErr.message}` };
+  }
+
+  // ---- Persiste: PP volta pra avaliação, rejeição some do registro ----
+  const { error: updErr } = await supabase
+    .from("pedidos_compra")
+    .update({
+      fornecedor_id: d.fornecedor_id,
+      empresa_id: d.empresa_id,
+      servico: d.servico,
+      quantidade: d.quantidade,
+      especificacoes: d.especificacoes ?? null,
+      valor,
+      prazo_pagamento: d.prazo_pagamento,
+      pdf_path: pdfPath,
+      status: "em_avaliacao",
+      rejeitada_por: null,
+      rejeitada_em: null,
+      motivo_rejeicao: null,
+    })
+    .eq("id", pp_id)
+    .eq("tenant_id", session.activeTenant.id);
+
+  if (updErr) {
+    return { ok: false, message: `Falha ao reenviar PP: ${updErr.message}` };
+  }
+
+  if (anexosParsed.data.length > 0) {
+    const { error: insAnexoErr } = await supabase
+      .from("pedidos_compra_anexos")
+      .insert(
+        anexosParsed.data.map((a) => ({
+          id: a.anexo_id,
+          tenant_id: session.activeTenant.id,
+          pedido_compra_id: pp_id,
+          arquivo_path: a.path,
+          arquivo_nome_original: a.nome_original,
+          arquivo_tamanho_bytes: a.tamanho_bytes,
+          arquivo_mimetype: a.mimetype,
+          created_by: session.profile.id,
+        })),
+      );
+    if (insAnexoErr) {
+      return {
+        ok: false,
+        message: `PP reenviada, mas falhou ao registrar anexos: ${insAnexoErr.message}`,
+      };
+    }
+  }
+
+  // Remoção dos anexos que o GP tirou. Depois do update: se falhar aqui, o
+  // pior caso é arquivo órfão no bucket, não PP sem anexo.
+  const paraRemover = (anexosAtuais ?? []).filter((a) => removidos.has(a.id));
+  if (paraRemover.length > 0) {
+    await supabase
+      .from("pedidos_compra_anexos")
+      .delete()
+      .in(
+        "id",
+        paraRemover.map((a) => a.id),
+      )
+      .eq("tenant_id", session.activeTenant.id);
+    await supabase.storage
+      .from(BUCKET)
+      .remove(paraRemover.map((a) => a.arquivo_path));
+  }
+
+  await supabase
+    .from("jobs_itens_realizado")
+    .update({ fornecedor_id: d.fornecedor_id })
+    .eq("id", ppRow.item_realizado_id)
+    .eq("tenant_id", session.activeTenant.id);
+
+  await logAuditEvent({
+    acao: "pedido_compra.reenviada",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "pedido_compra",
+    entidadeId: pp_id,
+    metadata: {
+      pp_codigo: ppRow.codigo,
+      valor,
+      fornecedor_id: d.fornecedor_id,
+      job_id: job.id,
+      anexos_adicionados: anexosParsed.data.length,
+      anexos_removidos: paraRemover.length,
+    },
+  });
+
+  revalidatePath(`/jobs/${job.id}`);
+  revalidatePath("/financeiro/pedidos-compra");
   return { ok: true };
 }
 

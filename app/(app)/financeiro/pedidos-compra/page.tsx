@@ -26,10 +26,13 @@ export default async function PedidosCompraFinanceiroPage() {
       id, codigo, status, valor, quantidade, servico, especificacoes,
       prazo_pagamento, prazo_pagamento_financeiro, pdf_path, created_at,
       cancelada_em, motivo_cancelamento,
+      rejeitada_em, motivo_rejeicao, pago_em,
       fornecedor:fornecedores(id, nome, razao_social),
       empresa:empresas(id, razao_social, nome_fantasia),
       cancelada_por_profile:profiles!cancelada_por(nome),
       emitida_por_profile:profiles!emitida_por(nome),
+      rejeitada_por_profile:profiles!rejeitada_por(nome),
+      pago_por_profile:profiles!pago_por(nome),
       job:jobs(
         id, codigo, nome,
         projeto:projetos(codigo, nome, cliente:clientes(nome_fantasia))
@@ -56,10 +59,15 @@ export default async function PedidosCompraFinanceiroPage() {
     created_at: string;
     cancelada_em: string | null;
     motivo_cancelamento: string | null;
+    rejeitada_em: string | null;
+    motivo_rejeicao: string | null;
+    pago_em: string | null;
     fornecedor: { id: string; nome: string; razao_social: string | null } | null;
     empresa: { id: string; razao_social: string; nome_fantasia: string | null } | null;
     cancelada_por_profile: { nome: string } | null;
     emitida_por_profile: { nome: string } | null;
+    rejeitada_por_profile: { nome: string } | null;
+    pago_por_profile: { nome: string } | null;
     job: {
       id: string;
       codigo: string;
@@ -89,6 +97,11 @@ export default async function PedidosCompraFinanceiroPage() {
     created_at: r.created_at,
     cancelada_em: r.cancelada_em,
     motivo_cancelamento: r.motivo_cancelamento,
+    rejeitada_em: r.rejeitada_em,
+    motivo_rejeicao: r.motivo_rejeicao,
+    rejeitada_por_nome: r.rejeitada_por_profile?.nome ?? null,
+    pago_em: r.pago_em,
+    pago_por_nome: r.pago_por_profile?.nome ?? null,
     fornecedor_id: r.fornecedor?.id ?? "",
     fornecedor_nome: r.fornecedor?.razao_social ?? r.fornecedor?.nome ?? "",
     empresa_id: r.empresa?.id ?? "",
@@ -121,7 +134,7 @@ export default async function PedidosCompraFinanceiroPage() {
           <h1 className="text-3xl font-bold tracking-tight">Pedidos de Produção</h1>
         </div>
         <p className="text-sm text-muted-foreground max-w-2xl">
-          Visualize as PPs emitidas pelos GPs, ajuste o prazo de pagamento financeiro e cancele com motivo justificado.
+          Avalie as PPs emitidas pelos GPs: ajuste o prazo de pagamento, marque como paga ou rejeite com motivo justificado.
         </p>
       </header>
 

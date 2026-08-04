@@ -508,9 +508,12 @@ export function JobItemRealizadoTable({
         </table>
       </div>
 
+      {/* Fora do frame do card, como no design. A calha que recebe estes
+          botões é reservada por JobRealizadoSection (pr-[114px]) — sem ela
+          a trilha era cortada na borda direita da página. */}
       {editable && (
         <div
-          className="absolute left-full ml-2 flex flex-col"
+          className="absolute left-full ml-2.5 flex w-[104px] flex-col"
           style={{ top: railTop }}
         >
           {itens.map((item) => {
