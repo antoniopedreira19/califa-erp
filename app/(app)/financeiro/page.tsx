@@ -57,7 +57,7 @@ export default async function CentralFinanceiraPage() {
         <FinanceiroCard
           href="/financeiro/pedidos-compra"
           icon={FileText}
-          title="Pedidos de Compra"
+          title="Pedidos de Produção"
           description="Visualize, ajuste prazo de pagamento e cancele PPs emitidas."
           count={ppsCount ?? 0}
         />

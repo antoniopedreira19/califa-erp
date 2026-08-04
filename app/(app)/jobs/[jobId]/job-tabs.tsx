@@ -5,12 +5,12 @@ import { cn } from "@/lib/utils";
 
 interface Props {
   info: React.ReactNode;
-  rentabilidade: React.ReactNode;
+  planilha: React.ReactNode;
 }
 
-type TabKey = "info" | "rentabilidade";
+type TabKey = "info" | "planilha";
 
-export function JobTabs({ info, rentabilidade }: Props) {
+export function JobTabs({ info, planilha }: Props) {
   const [tab, setTab] = React.useState<TabKey>("info");
 
   return (
@@ -27,10 +27,10 @@ export function JobTabs({ info, rentabilidade }: Props) {
           Informações do Job
         </TabButton>
         <TabButton
-          active={tab === "rentabilidade"}
-          onClick={() => setTab("rentabilidade")}
+          active={tab === "planilha"}
+          onClick={() => setTab("planilha")}
         >
-          Rentabilidade
+          Planilha Interna
         </TabButton>
       </div>
 
@@ -43,10 +43,10 @@ export function JobTabs({ info, rentabilidade }: Props) {
       </div>
       <div
         role="tabpanel"
-        aria-hidden={tab !== "rentabilidade"}
-        className={cn(tab === "rentabilidade" ? "" : "hidden")}
+        aria-hidden={tab !== "planilha"}
+        className={cn(tab === "planilha" ? "" : "hidden")}
       >
-        {rentabilidade}
+        {planilha}
       </div>
     </div>
   );

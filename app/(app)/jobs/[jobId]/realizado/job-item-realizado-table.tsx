@@ -6,7 +6,7 @@ import { X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { TruncateTooltip } from "@/components/ui/truncate-tooltip";
 import { cn, formatCurrency } from "@/lib/utils";
-import { calcularVariacao } from "@/lib/calculos/versao-totais";
+import { calcularRentabilidade } from "@/lib/calculos/versao-totais";
 import type { VersaoOrcamentoItem, JobItemRealizado, PedidoCompra, Fornecedor, Empresa } from "@/lib/types";
 import { upsertItemRealizado, type CampoRealizado } from "../actions-realizado";
 import { PPActionsCell } from "./pp-actions-cell";
@@ -16,6 +16,8 @@ interface Props {
   jobId: string;
   itens: VersaoOrcamentoItem[];
   realizadosMap: Map<string, JobItemRealizado>;
+  /** id da categoria -> nome. Itens sem categoria caem no travessão. */
+  categoriasMap: Map<string, string>;
   moeda: string;
   editable: boolean;
   // PP rail
@@ -29,14 +31,13 @@ interface Props {
 type CelulaAtiva = { itemId: string; campo: CampoRealizado } | null;
 type Overrides = Record<string, Partial<Record<CampoRealizado, number>>>;
 
-const ALTURA_LINHA = "h-9";
-const LARGURA_MINIMA = "min-w-[1040px]";
+const ALTURA_LINHA = "h-[34px]";
+const LARGURA_MINIMA = "min-w-[1280px]";
 
 const GRADE_NEUTRA = "border-r border-r-[#f1f1f1]";
 const GRADE_ORCADO = "border-r border-r-[#eceae5]";
 const GRADE_PLANEJADO = "border-r border-r-[#e6eff9]";
 const GRADE_REALIZADO = "border-r border-r-[#fde8b8]";
-const GRADE_VARIACAO = "border-r border-r-[#d9efe3]";
 
 const CAMPO_CLASSES =
   "h-7 w-full rounded-lg border border-california-red bg-white px-2 text-xs text-foreground outline-none ring-2 ring-california-red/15";
@@ -62,9 +63,10 @@ function formatarPercentual(p: number): string {
 function ColunasFixas() {
   return (
     <colgroup>
-      {/* Item absorve o resto (~15%); Tipo estreito; blocos proporcionais. */}
+      {/* Item absorve o resto; Tipo estreito; blocos proporcionais. */}
       <col />
       <col className="w-[4%]" />
+      <col className="w-[11%]" />
       {/* Orcado */}
       <col className="w-[7.5%]" />
       <col className="w-[3%]" />
@@ -80,10 +82,41 @@ function ColunasFixas() {
       <col className="w-[3%]" />
       <col className="w-[3%]" />
       <col className="w-[8.5%]" />
-      {/* Variacao */}
-      <col className="w-[8%]" />
-      <col className="w-[7%]" />
     </colgroup>
+  );
+}
+
+/** Célula "R$ x,xx / y,y%" usada nas linhas de Rentabilidade do rodapé. */
+function CelulaRentabilidade({
+  orcado,
+  custo,
+  moeda,
+  corValor,
+  corPercentual,
+}: {
+  orcado: number;
+  custo: number;
+  moeda: string;
+  corValor: string;
+  corPercentual: string;
+}) {
+  const { rentabilidade, percentual } = calcularRentabilidade(orcado, custo);
+
+  if (custo <= 0) {
+    return <span className="font-mono text-xs text-muted-foreground">—</span>;
+  }
+
+  return (
+    <div className="flex flex-col items-end gap-0.5">
+      <span className={cn("font-mono text-[12.5px] font-bold", corValor)}>
+        {formatCurrency(rentabilidade, moeda)}
+      </span>
+      {percentual !== null && (
+        <span className={cn("font-mono text-[10.5px]", corPercentual)}>
+          {formatarPercentual(percentual)}
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -91,6 +124,7 @@ export function JobItemRealizadoTable({
   jobId,
   itens,
   realizadosMap,
+  categoriasMap,
   moeda,
   editable,
   ppsPorItemId,
@@ -254,11 +288,6 @@ export function JobItemRealizadoTable({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [itens, overrides, realizadosMap]);
 
-  const { variacaoRS: varSubRS, variacaoPct: varSubPct } = calcularVariacao(
-    subtotais.realizado,
-    subtotais.planejado,
-  );
-
   void pending;
 
   return (
@@ -284,7 +313,7 @@ export function JobItemRealizadoTable({
           <ColunasFixas />
           <thead className="text-[10px] uppercase tracking-wider text-muted-foreground">
             <tr>
-              <th colSpan={2} className="bg-muted/40 border-b border-border" />
+              <th colSpan={3} className="bg-muted/40 border-b border-border" />
               <th
                 colSpan={4}
                 className="text-center px-3 py-2 text-[11px] font-extrabold tracking-[0.1em] normal-case text-foreground bg-[#f1f0ec] border-b-[3px] border-b-[#282828] border-l-2 border-l-[#d7d7d7]"
@@ -303,16 +332,11 @@ export function JobItemRealizadoTable({
               >
                 REALIZADO
               </th>
-              <th
-                colSpan={2}
-                className="text-center px-3 py-2 text-[11px] font-extrabold tracking-[0.08em] normal-case text-emerald-700 bg-emerald-50 border-b-[3px] border-b-emerald-600 border-l-2 border-l-[#d7d7d7]"
-              >
-                VARIAÇÃO
-              </th>
             </tr>
             <tr className="bg-muted/40">
               <th className="text-left font-semibold px-3 py-2 border-r border-r-border">Item</th>
               <th className="text-left font-semibold px-3 py-2 border-r border-r-border">Tipo</th>
+              <th className="text-left font-semibold px-3 py-2 border-r border-r-border">Categoria</th>
               {/* Orcado */}
               <th className="text-right font-semibold px-3 py-2 border-l-2 border-l-[#e4e2dd] border-r border-r-border">R$ Unit.</th>
               <th className="text-right font-semibold px-3 py-2 border-r border-r-border">QT</th>
@@ -328,28 +352,22 @@ export function JobItemRealizadoTable({
               <th className="text-right font-semibold px-3 py-2 bg-[#fef3c7]/70 text-[#92400e] border-r border-r-[#fde8b8]">QT</th>
               <th className="text-right font-semibold px-3 py-2 bg-[#fef3c7]/70 text-[#92400e] border-r border-r-[#fde8b8]">D/M</th>
               <th className="text-right font-semibold px-3 py-2 bg-[#fef3c7]/70 text-[#92400e]">Total</th>
-              {/* Variacao */}
-              <th className="text-right font-semibold px-3 py-2 bg-emerald-50/50 text-emerald-800/70 border-l border-l-border border-r border-r-[#d9efe3]">R$</th>
-              <th className="text-right font-semibold px-3 py-2 bg-emerald-50/50 text-emerald-800/70">%</th>
             </tr>
           </thead>
 
           <tbody ref={tbodyRef}>
             {itens.length === 0 && (
               <tr>
-                <td colSpan={16} className="py-8 text-center text-sm text-muted-foreground">
+                <td colSpan={15} className="py-8 text-center text-sm text-muted-foreground">
                   Sem itens neste grupo.
                 </td>
               </tr>
             )}
             {itens.map((item) => {
               const totalReal = totalRealizadoDe(item.id);
-              const { variacaoRS, variacaoPct } = calcularVariacao(
-                totalReal,
-                Number(item.total_planejado ?? 0),
-              );
-              const semPlanejado = Number(item.total_planejado ?? 0) <= 0;
-              const cor = variacaoRS > 0 ? "text-california-red" : "text-emerald-700";
+              const categoria = item.categoria_id
+                ? categoriasMap.get(item.categoria_id)
+                : null;
               const ativaAqui = (campo: CampoRealizado) =>
                 ativa?.itemId === item.id && ativa.campo === campo;
 
@@ -360,6 +378,15 @@ export function JobItemRealizadoTable({
                   </td>
                   <td className={cn("px-3 text-xs align-middle", GRADE_NEUTRA)}>
                     <Badge variant="outline">{item.tipo_custo}</Badge>
+                  </td>
+                  <td className={cn("px-3 text-xs align-middle", GRADE_NEUTRA)}>
+                    {categoria ? (
+                      <span className="inline-flex max-w-full items-center truncate rounded-full border border-border bg-muted px-2 py-0.5 text-[10.5px] font-medium text-foreground">
+                        {categoria}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
                   </td>
                   {/* Orcado (RO) */}
                   <td className={cn("px-3 text-right text-xs font-mono align-middle bg-black/[0.015] border-l-2 border-l-[#e4e2dd]", GRADE_ORCADO)}>
@@ -428,21 +455,6 @@ export function JobItemRealizadoTable({
                   <td className="px-3 text-right text-xs font-mono font-semibold align-middle bg-[#fef3c7]/40 whitespace-nowrap">
                     {totalReal > 0 ? formatCurrency(totalReal, moeda) : "—"}
                   </td>
-                  {/* Variacao */}
-                  <td className={cn("px-3 text-right text-xs font-mono align-middle whitespace-nowrap border-l-2 border-l-[#e4e2dd]", GRADE_VARIACAO)}>
-                    {semPlanejado ? (
-                      <span className="text-muted-foreground">—</span>
-                    ) : (
-                      <span className={cor}>{formatCurrency(variacaoRS, moeda)}</span>
-                    )}
-                  </td>
-                  <td className="px-3 text-right text-xs font-mono align-middle whitespace-nowrap">
-                    {variacaoPct === null ? (
-                      <span className="text-muted-foreground">—</span>
-                    ) : (
-                      <span className={cor}>{formatarPercentual(variacaoPct)}</span>
-                    )}
-                  </td>
                 </tr>
               );
             })}
@@ -450,7 +462,7 @@ export function JobItemRealizadoTable({
 
           <tfoot>
             <tr>
-              <td colSpan={2} className="px-3 py-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              <td colSpan={3} className="px-3 py-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                 Subtotal do grupo
               </td>
               <td colSpan={3} className="bg-[#f1f0ec] border-l-2 border-l-[#d7d7d7] border-t-2 border-t-[#282828]" />
@@ -465,19 +477,31 @@ export function JobItemRealizadoTable({
               <td className="px-3 py-3 text-right whitespace-nowrap font-mono text-[13px] font-bold text-[#92400e] bg-[#fef3c7] border-t-2 border-t-[#d97706]">
                 {subtotais.realizado > 0 ? formatCurrency(subtotais.realizado, moeda) : "—"}
               </td>
-              <td className={cn("px-3 py-3 text-right whitespace-nowrap font-mono text-xs font-semibold bg-emerald-50 border-l-2 border-l-[#d7d7d7] border-t-2 border-t-emerald-600", varSubRS > 0 ? "text-california-red" : "text-emerald-700")}>
-                {subtotais.planejado <= 0 ? (
-                  <span className="text-muted-foreground">—</span>
-                ) : (
-                  formatCurrency(varSubRS, moeda)
-                )}
+            </tr>
+            <tr>
+              <td colSpan={3} className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground border-t border-t-border">
+                Rentabilidade
               </td>
-              <td className={cn("px-3 py-3 text-right whitespace-nowrap font-mono text-xs font-semibold bg-emerald-50 border-t-2 border-t-emerald-600", varSubRS > 0 ? "text-california-red" : "text-emerald-700")}>
-                {varSubPct === null ? (
-                  <span className="text-muted-foreground">—</span>
-                ) : (
-                  formatarPercentual(varSubPct)
-                )}
+              <td colSpan={4} className="bg-[#f1f0ec] border-l-2 border-l-[#d7d7d7] border-t border-t-[#e4e2dd]" />
+              <td colSpan={3} className="bg-[#e8f0fd] border-l-2 border-l-[#b9d1f4] border-t border-t-[#cfe0f7]" />
+              <td className="px-3 py-2 text-right whitespace-nowrap bg-[#e8f0fd] border-t border-t-[#cfe0f7]">
+                <CelulaRentabilidade
+                  orcado={subtotais.orcado}
+                  custo={subtotais.planejado}
+                  moeda={moeda}
+                  corValor="text-[#1e4fa3]"
+                  corPercentual="text-[#5a76a8]"
+                />
+              </td>
+              <td colSpan={3} className="bg-[#fef3c7] border-l-2 border-l-[#f0c874] border-t border-t-[#f0c874]" />
+              <td className="px-3 py-2 text-right whitespace-nowrap bg-[#fef3c7] border-t border-t-[#f0c874]">
+                <CelulaRentabilidade
+                  orcado={subtotais.orcado}
+                  custo={subtotais.realizado}
+                  moeda={moeda}
+                  corValor="text-[#92400e]"
+                  corPercentual="text-[#a3703a]"
+                />
               </td>
             </tr>
           </tfoot>
@@ -539,7 +563,7 @@ export function JobItemRealizadoTable({
             valorRealizado={realizadoAtual ? Number(realizadoAtual.total_realizado ?? 0) : 0}
             quantidadeRealizada={realizadoAtual ? Number(realizadoAtual.quantidade_realizada ?? 0) : 0}
             onSuccess={(codigo) => {
-              setToast(`Pedido de Compra ${codigo} gerado com sucesso!`);
+              setToast(`Pedido de Produção ${codigo} gerado com sucesso!`);
               // Estado otimista: já mostra os ícones Ver/Cancelar antes do
               // router.refresh() completar. Sem flicker quando a PP real
               // chega via prop (ppsPorItemId do server).

@@ -139,8 +139,8 @@ export function PedidosCompraList({ rows }: { rows: PPRow[] }) {
               <tr>
                 <td colSpan={8} className="px-4 py-12 text-center text-sm text-muted-foreground">
                   {rows.length === 0
-                    ? "Nenhum Pedido de Compra emitido ainda."
-                    : "Nenhum Pedido de Compra encontrado com esses filtros."}
+                    ? "Nenhum Pedido de Produção emitido ainda."
+                    : "Nenhum Pedido de Produção encontrado com esses filtros."}
                 </td>
               </tr>
             )}

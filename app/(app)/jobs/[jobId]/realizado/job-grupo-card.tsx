@@ -13,6 +13,7 @@ interface Props {
   grupo: VersaoOrcamentoGrupo;
   itens: VersaoOrcamentoItem[];
   realizadosMap: Map<string, JobItemRealizado>;
+  categoriasMap: Map<string, string>;
   moeda: string;
   editable: boolean;
   jobId: string;
@@ -27,6 +28,7 @@ export function JobGrupoCard({
   grupo,
   itens,
   realizadosMap,
+  categoriasMap,
   moeda,
   editable,
   jobId,
@@ -38,7 +40,7 @@ export function JobGrupoCard({
 }: Props) {
   return (
     <div className="rounded-2xl border border-border bg-card shadow-soft">
-      <div className="flex items-center justify-between gap-3 rounded-t-2xl border-b border-border bg-muted/40 px-6 py-4">
+      <div className="flex h-[49px] items-center justify-between gap-3 rounded-t-2xl border-b border-border bg-muted/40 px-6">
         <TruncateTooltip
           as="h3"
           text={grupo.nome}
@@ -52,6 +54,7 @@ export function JobGrupoCard({
         jobId={jobId}
         itens={itens}
         realizadosMap={realizadosMap}
+        categoriasMap={categoriasMap}
         moeda={moeda}
         editable={editable}
         ppsPorItemId={ppsPorItemId}

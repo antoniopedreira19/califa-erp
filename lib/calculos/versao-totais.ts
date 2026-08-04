@@ -68,6 +68,25 @@ export function calcularTotaisVersao(
 }
 
 /**
+ * Rentabilidade de um bloco: o que sobra do orçado depois de descontar o
+ * custo (planejado OU realizado). Percentual sempre sobre o **orçado**, que
+ * é a base usada na tela da versão do orçamento — o mesmo rótulo precisa
+ * significar a mesma coisa nas duas telas.
+ *
+ * Retorna `percentual: null` quando não há custo lançado (sem base =
+ * travessão, em vez de um "100%" que só diz que ninguém preencheu nada).
+ */
+export function calcularRentabilidade(
+  orcado: number,
+  custo: number,
+): { rentabilidade: number; percentual: number | null } {
+  const rentabilidade = orcado - custo;
+  const percentual =
+    custo > 0 && orcado > 0 ? (rentabilidade / orcado) * 100 : null;
+  return { rentabilidade, percentual };
+}
+
+/**
  * Rentabilidade simples: soma dos totais orçados menos soma dos totais
  * planejados. Percentual em relação ao total orçado.
  *
@@ -92,11 +111,8 @@ export function calcularTotaisPlanejados(
     (sum, it) => sum + Number(it.total_planejado ?? 0),
     0,
   );
-  const rentabilidade = totalOrcado - totalPlanejado;
-  const percentualRentabilidade =
-    totalPlanejado > 0 && totalOrcado > 0
-      ? (rentabilidade / totalOrcado) * 100
-      : null;
+  const { rentabilidade, percentual: percentualRentabilidade } =
+    calcularRentabilidade(totalOrcado, totalPlanejado);
 
   return { totalOrcado, totalPlanejado, rentabilidade, percentualRentabilidade };
 }
