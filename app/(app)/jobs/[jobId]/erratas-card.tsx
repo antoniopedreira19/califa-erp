@@ -52,10 +52,9 @@ export function ErratasCard({
     if (erratas.length > 0) setAbertas({ [erratas[0].id]: true });
   }, [erratas]);
 
-  if (erratas.length === 0) return null;
-
   const base = faturamentoAbertura ?? faturamentoAtual;
   const delta = faturamentoAtual - base;
+  const vazio = erratas.length === 0;
 
   return (
     <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-soft md:col-span-2">
@@ -68,41 +67,58 @@ export function ErratasCard({
           Alterações de itens orçados e tipos de custo após a abertura do job
         </span>
 
+        {/* Sem errata não há "antes x depois" que faça sentido: mostra só o
+            faturamento atual, e o card fica visível pra funcionalidade não
+            parecer inexistente. */}
         <div className="ml-auto flex items-center gap-4">
+          {!vazio && (
+            <>
+              <div className="text-right">
+                <p className="text-[9.5px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Faturamento na abertura
+                </p>
+                <p className="mt-0.5 font-mono text-[13px] text-muted-foreground">
+                  {formatCurrency(base, moeda)}
+                </p>
+              </div>
+              <ArrowRight className="h-3.5 w-3.5 text-[#c9c9c9]" />
+            </>
+          )}
           <div className="text-right">
             <p className="text-[9.5px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Faturamento na abertura
-            </p>
-            <p className="mt-0.5 font-mono text-[13px] text-muted-foreground">
-              {formatCurrency(base, moeda)}
-            </p>
-          </div>
-          <ArrowRight className="h-3.5 w-3.5 text-[#c9c9c9]" />
-          <div className="text-right">
-            <p className="text-[9.5px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Faturamento atual
+              {vazio ? "Faturamento" : "Faturamento atual"}
             </p>
             <p className="mt-0.5 font-mono text-[13px] font-bold">
               {formatCurrency(faturamentoAtual, moeda)}
             </p>
           </div>
-          <span
-            className={cn(
-              "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 font-mono text-xs font-bold",
-              delta >= 0
-                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                : "border-red-200 bg-red-50 text-red-700",
-            )}
-          >
-            {delta >= 0 ? (
-              <TrendingUp className="h-3 w-3" />
-            ) : (
-              <TrendingDown className="h-3 w-3" />
-            )}
-            {comSinal(delta, moeda)}
-          </span>
+          {!vazio && (
+            <span
+              className={cn(
+                "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 font-mono text-xs font-bold",
+                delta >= 0
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  : "border-red-200 bg-red-50 text-red-700",
+              )}
+            >
+              {delta >= 0 ? (
+                <TrendingUp className="h-3 w-3" />
+              ) : (
+                <TrendingDown className="h-3 w-3" />
+              )}
+              {comSinal(delta, moeda)}
+            </span>
+          )}
         </div>
       </div>
+
+      {vazio && (
+        <p className="px-6 py-5 text-sm text-muted-foreground">
+          Nenhuma errata registrada. Alterações no orçado do job são feitas pelo
+          botão <strong className="text-foreground">Alterar orçado</strong>, na
+          aba Planilha Interna, e aparecem aqui.
+        </p>
+      )}
 
       {erratas.map((e) => {
         const aberta = !!abertas[e.id];

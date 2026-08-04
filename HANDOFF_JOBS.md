@@ -197,6 +197,17 @@ alteração?", que explica as consequências e pede título e justificativa.
 
 O histórico fica no card **Erratas na aba Informações**, conforme o design.
 
+### Layout da aba Informações
+
+Segue o grid do design: **Metadata e Origem lado a lado** (uma coluna cada),
+**Erratas** e **Status** em largura total, nessa ordem. O card de Origem usa
+label estreito (`150px 1fr`) porque os valores ali são links longos, diferente
+do Metadata, que é 50/50.
+
+O card de Erratas **aparece mesmo sem errata nenhuma**, com um estado vazio que
+diz onde fazer a alteração. Antes ele sumia quando a lista estava vazia, e isso
+fez a funcionalidade parecer inexistente nos jobs que nunca tiveram errata.
+
 ### 5.5 Arredondamento
 
 Todo valor monetário é gravado com 2 casas. Antes, `faturamento_abertura`
