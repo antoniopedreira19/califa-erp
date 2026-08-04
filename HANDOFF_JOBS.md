@@ -117,6 +117,11 @@ item**: o GP corrige e reenvia, não duplica. Só o cancelamento libera.
 | [`realizado/actions-pp.ts`](app/(app)/jobs/[jobId]/realizado/actions-pp.ts) | `reenviarPedidoCompra`, `prefixoAnexosPedidoCompra`; cancelamento com a nova regra |
 | [`financeiro/pedidos-compra/actions.ts`](app/(app)/financeiro/pedidos-compra/actions.ts) | `marcarPagaFinanceiro` e `rejeitarPedidoCompraFinanceiro` entram; `cancelarPedidoCompraFinanceiro` **sai** |
 | [`financeiro/pedidos-compra/page.tsx`](app/(app)/financeiro/pedidos-compra/page.tsx) · [`financeiro/page.tsx`](app/(app)/financeiro/page.tsx) | tela renomeada pra "Contas a Pagar" (título, breadcrumb e card do hub) |
+
+No rodapé do drawer, **"Dar Baixa"** é verde (`bg-emerald-600`) e **"Rejeitar"**
+vermelho — as duas saídas da avaliação ficam visualmente opostas. O verde é o
+mesmo tom que o projeto já usava no antigo botão "Finalizado" do card de Status
+do job, removido na Entrega 4.
 | [`realizado/pp-actions-cell.tsx`](app/(app)/jobs/[jobId]/realizado/pp-actions-cell.tsx) | pílulas "Ver PP"/"Gerar PP" com rótulo, sem cancelar |
 
 ### Detalhes que não estão no design

@@ -414,7 +414,7 @@ export function PPDrawerFinanceiro({ pp, open, onOpenChange }: Props) {
                 type="button"
                 onClick={() => setAskPagar(true)}
                 disabled={pending}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-california-red px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-california-red-hover disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
               >
                 <CreditCard className="h-3.5 w-3.5" />
                 Dar Baixa
