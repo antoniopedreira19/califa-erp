@@ -82,7 +82,13 @@ export function JobRealizadoSection({
     // Quando dá pra gerar PP, reserva a calha da direita: a trilha de
     // "Ver PP" / "Gerar PP" é posicionada fora do card, e sem esse espaço
     // ela era cortada na borda da página.
-    <div className={cn("space-y-4", editable && "pr-[114px]")}>
+    //
+    // 104px e não 114: a trilha tem 104px de botão + 10px de respiro, e
+    // esses 10px podem invadir o padding do layout (32px) sem encostar na
+    // borda. Devolver os 10px ao card é o que faz a tabela caber inteira —
+    // as bordas de 2px entre os blocos somam ~5px que as porcentagens das
+    // colunas não preveem.
+    <div className={cn("space-y-4", editable && "pr-[104px]")}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <ClipboardList className="h-4 w-4 text-california-red" />
