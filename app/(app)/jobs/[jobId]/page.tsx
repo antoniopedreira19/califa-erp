@@ -381,8 +381,12 @@ export default async function JobDetailPage({
             label: `Voltar para orçamento ${raw.orcamento?.codigo}`,
           };
 
+  // Mais largo que o padrão do app (max-w-7xl = 1280px): a Planilha Interna
+  // tem tabela de 15 colunas que não cabia em 1280 depois da calha de 116px
+  // reservada pra trilha de PP. 1440 resolve com folga, sem ir ao máximo de
+  // 1600 que o layout permite.
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
+    <div className="space-y-6 max-w-[1440px] mx-auto">
       <div>
         <Link
           href={backLink.href}

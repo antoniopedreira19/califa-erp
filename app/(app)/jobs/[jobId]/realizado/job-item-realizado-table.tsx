@@ -32,7 +32,7 @@ type CelulaAtiva = { itemId: string; campo: CampoRealizado } | null;
 type Overrides = Record<string, Partial<Record<CampoRealizado, number>>>;
 
 const ALTURA_LINHA = "h-[34px]";
-const LARGURA_MINIMA = "min-w-[1280px]";
+const LARGURA_MINIMA = "min-w-[1160px]";
 
 const GRADE_NEUTRA = "border-r border-r-[#f1f1f1]";
 const GRADE_ORCADO = "border-r border-r-[#eceae5]";
@@ -63,10 +63,11 @@ function formatarPercentual(p: number): string {
 function ColunasFixas() {
   return (
     <colgroup>
-      {/* Item absorve o resto; Tipo estreito; blocos proporcionais. */}
-      <col />
+      {/* Item com largura propria: se ficar sem, ele absorve toda folga
+          que eu tirar das outras e a tabela volta a estourar pelas bordas. */}
+      <col className="w-[18%]" />
       <col className="w-[4%]" />
-      <col className="w-[11%]" />
+      <col className="w-[8.5%]" />
       {/* Orcado */}
       <col className="w-[7.5%]" />
       <col className="w-[3%]" />

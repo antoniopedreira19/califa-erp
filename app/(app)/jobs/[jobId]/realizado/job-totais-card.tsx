@@ -195,11 +195,11 @@ export function JobTotaisCard({
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[1280px] table-fixed border-collapse text-sm">
+        <table className="w-full min-w-[1160px] table-fixed border-collapse text-sm">
           <colgroup>
-            <col />
+            <col className="w-[18%]" />
             <col className="w-[4%]" />
-            <col className="w-[11%]" />
+            <col className="w-[8.5%]" />
             <col className="w-[7.5%]" />
             <col className="w-[3%]" />
             <col className="w-[3%]" />

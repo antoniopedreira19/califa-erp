@@ -347,6 +347,30 @@ Na aba de PPs, as linhas têm altura variável (o serviço quebra em 2–3 linha
 então a trilha **mede cada `<tr>`** e posiciona o botão no mesmo offset, em vez
 de assumir altura fixa.
 
+### Largura da Planilha Interna
+
+A tabela de 15 colunas **não cabia em resolução nenhuma**, nem em 1920px. A
+causa não era o monitor: o layout já permite `max-w-[1600px]`, mas a página do
+job se limitava ao padrão `max-w-7xl` (1280px). Descontada a calha da trilha,
+sobravam 1164px para uma tabela que pedia 1280 — 116px cortados sempre.
+
+Três ajustes, medidos no browser:
+
+1. Página do job vai a **`max-w-[1440px]`** — mais que o padrão do app, porque é
+   a tela com tabela de 15 colunas, mas sem ir ao máximo de 1600.
+2. Calha da Planilha Interna: `pr-[114px]` → **`pr-[104px]`**. Os 10px de respiro
+   da trilha podem invadir o padding do layout sem encostar na borda.
+3. Coluna **Item ganha largura própria (18%)**. Antes era `<col />` sem largura,
+   então absorvia toda folga liberada das outras colunas e a tabela voltava a
+   estourar pelas bordas de 2px entre os blocos, que as porcentagens não preveem.
+   Categoria caiu de 11% para 8,5%; o mínimo da tabela, de 1280px para 1160px.
+
+Resultado medido: 0px de corte em 1920, 1680 e 1440 (1px sub-pixel). Abaixo de
+~1400px a tabela volta a rolar horizontalmente, que é o comportamento correto.
+
+> A tela de **versão do orçamento** tem a mesma tabela larga e segue em
+> `max-w-7xl` — provavelmente sofre do mesmo corte. Não foi tocada aqui.
+
 ---
 
 ## 9. Pendências conhecidas
