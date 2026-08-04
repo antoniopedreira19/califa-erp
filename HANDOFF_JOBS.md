@@ -368,6 +368,12 @@ Três ajustes, medidos no browser:
 Resultado medido: 0px de corte em 1920, 1680 e 1440 (1px sub-pixel). Abaixo de
 ~1400px a tabela volta a rolar horizontalmente, que é o comportamento correto.
 
+A página ainda ganha `min-[1600px]:mr-6`: a partir de 1600px, onde passa a
+sobrar folga dos dois lados, o conteúdo desloca 24px pra direita — encosta um
+pouco mais na borda e afasta da sidebar (folga de 226px à esquerda contra 178px
+à direita, em 1920). O breakpoint é necessário: aplicar a margem em telas
+menores roubaria 24px da tabela e ela voltaria a cortar.
+
 > A tela de **versão do orçamento** tem a mesma tabela larga e segue em
 > `max-w-7xl` — provavelmente sofre do mesmo corte. Não foi tocada aqui.
 
