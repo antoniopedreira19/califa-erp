@@ -1,28 +1,29 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
-import { FilePlus, Eye, Trash2 } from "lucide-react";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { FilePlus, Eye } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import type { PedidoCompra } from "@/lib/types";
-import { cancelarPedidoCompra, signedUrlPdf } from "./actions-pp";
+import { signedUrlPdf } from "./actions-pp";
 
 interface Props {
   itemRealizadoId: string;
   totalRealizado: number;
   pp: PedidoCompra | null;
-  /** Placeholder otimista antes do refresh do server chegar. Se pp existe,
-   *  ppOtimista é ignorado. Só tem `codigo` — Ver/Cancelar ficam disabled
-   *  (não temos pp.id ainda pra chamar as actions). Some quando pp chega. */
+  /** Placeholder otimista antes do refresh do server chegar. Só tem
+   *  `codigo` — o botão fica disabled porque ainda não temos pp.id pra
+   *  chamar a action. Some quando a PP real chega via prop. */
   ppOtimista?: { codigo: string } | null;
   editable: boolean;
   onGerar: (itemRealizadoId: string) => void;
 }
 
-const BOTAO_CLASSES =
-  "rounded-md p-1.5 text-muted-foreground hover:text-california-red hover:bg-accent transition-colors disabled:opacity-50";
+/** Altura da linha da planilha — a trilha precisa acompanhar pra alinhar. */
+const ALTURA = "h-[34px]";
+
+const PILULA =
+  "inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border px-2.5 py-1 text-[11px] font-semibold transition-colors disabled:opacity-50";
 
 export function PPActionsCell({
   itemRealizadoId,
@@ -32,9 +33,7 @@ export function PPActionsCell({
   editable,
   onGerar,
 }: Props) {
-  const router = useRouter();
   const [pending, startTransition] = React.useTransition();
-  const [askCancelar, setAskCancelar] = React.useState(false);
   const [erro, setErro] = React.useState<string | null>(null);
 
   function handleVer() {
@@ -49,76 +48,35 @@ export function PPActionsCell({
     });
   }
 
-  function handleCancelarConfirm() {
-    if (!pp) return;
-    startTransition(async () => {
-      const res = await cancelarPedidoCompra(pp.id);
-      setAskCancelar(false);
-      if (!res.ok) {
-        setErro(res.message);
-        return;
-      }
-      router.refresh();
-    });
-  }
-
-  // Estado: sem realizado → trilha vazia (mantem altura)
+  // Sem realizado lançado não há o que pedir: trilha vazia, mantendo altura.
   if (totalRealizado <= 0) {
-    return <div className="h-9" />;
+    return <div className={ALTURA} />;
   }
 
-  // Estado: com PP → Ver + Cancelar
+  // Com PP: só visualizar. Cancelar mora na aba de Pedidos de Produção.
   if (pp) {
     return (
-      <div className="relative flex items-center h-9 gap-1">
+      <div className={cn("relative flex items-center", ALTURA)}>
         <Tooltip>
           <TooltipTrigger asChild>
             <button
               type="button"
               onClick={handleVer}
               disabled={pending}
-              className={BOTAO_CLASSES}
+              className={cn(
+                PILULA,
+                "border-border bg-white text-foreground hover:border-[#d7d7d7] hover:bg-muted",
+              )}
             >
-              <Eye className="h-3.5 w-3.5" />
+              <Eye className="h-3.5 w-3.5 text-muted-foreground" />
+              Ver PP
             </button>
           </TooltipTrigger>
           <TooltipContent>Ver PDF · {pp.codigo}</TooltipContent>
         </Tooltip>
-        {editable && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                onClick={() => setAskCancelar(true)}
-                disabled={pending}
-                className={BOTAO_CLASSES}
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>Cancelar {pp.codigo}</TooltipContent>
-          </Tooltip>
-        )}
-        <ConfirmDialog
-          open={askCancelar}
-          onOpenChange={setAskCancelar}
-          title="Cancelar Pedido de Compra?"
-          description={
-            <>
-              <strong className="text-foreground">{pp.codigo}</strong> será
-              cancelada e o PDF + anexos apagados definitivamente. Você poderá
-              gerar uma nova PP depois.
-            </>
-          }
-          confirmLabel="Cancelar PP"
-          cancelLabel="Voltar"
-          variant="destructive"
-          pending={pending}
-          onConfirm={handleCancelarConfirm}
-        />
         {erro && (
           <div
-            className="absolute right-0 top-full mt-1 whitespace-nowrap rounded border border-california-red/40 bg-white px-2 py-1 text-[10px] text-california-red shadow z-10"
+            className="absolute right-0 top-full z-10 mt-1 whitespace-nowrap rounded border border-california-red/40 bg-white px-2 py-1 text-[10px] text-california-red shadow"
             onClick={() => setErro(null)}
           >
             {erro}
@@ -128,55 +86,48 @@ export function PPActionsCell({
     );
   }
 
-  // Estado otimista: PP recém-gerada, aguardando refresh do server pra
-  // trocar pelos ícones reais. Mostra Ver/Cancelar disabled (não temos
-  // pp.id ainda pra chamar signedUrl/cancelar).
+  // PP recém-gerada, aguardando o refresh do server trazer o id real.
   if (ppOtimista) {
     return (
-      <div className="flex items-center h-9 gap-1">
+      <div className={cn("flex items-center", ALTURA)}>
         <Tooltip>
           <TooltipTrigger asChild>
             <button
               type="button"
               disabled
-              className={BOTAO_CLASSES}
+              className={cn(
+                PILULA,
+                "border-border bg-white text-foreground",
+              )}
             >
-              <Eye className="h-3.5 w-3.5" />
+              <Eye className="h-3.5 w-3.5 text-muted-foreground" />
+              Ver PP
             </button>
           </TooltipTrigger>
-          <TooltipContent>Ver PDF · {ppOtimista.codigo} (atualizando...)</TooltipContent>
+          <TooltipContent>
+            Ver PDF · {ppOtimista.codigo} (atualizando...)
+          </TooltipContent>
         </Tooltip>
-        {editable && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                disabled
-                className={BOTAO_CLASSES}
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>Cancelar {ppOtimista.codigo} (atualizando...)</TooltipContent>
-          </Tooltip>
-        )}
       </div>
     );
   }
 
-  // Estado: sem PP, editable → Gerar
   if (editable) {
     return (
-      <div className="flex items-center h-9">
+      <div className={cn("flex items-center", ALTURA)}>
         <Tooltip>
           <TooltipTrigger asChild>
             <button
               type="button"
               onClick={() => onGerar(itemRealizadoId)}
               disabled={pending}
-              className={cn(BOTAO_CLASSES, "text-california-red")}
+              className={cn(
+                PILULA,
+                "border-border bg-white text-california-red hover:border-california-red/30 hover:bg-california-red/[0.06]",
+              )}
             >
               <FilePlus className="h-3.5 w-3.5" />
+              Gerar PP
             </button>
           </TooltipTrigger>
           <TooltipContent>Gerar PP</TooltipContent>
@@ -185,6 +136,5 @@ export function PPActionsCell({
     );
   }
 
-  // Estado: sem PP, read-only → trilha vazia
-  return <div className="h-9" />;
+  return <div className={ALTURA} />;
 }
