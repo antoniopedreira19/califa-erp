@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/tooltip";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
+import { useIrParaAbaInformacoes } from "../job-tabs";
 import {
   chatAreaLabel,
   type ChatArea,
@@ -94,10 +95,14 @@ export function JobChatSection({
   const fimRef = React.useRef<HTMLDivElement>(null);
   const marcouRef = React.useRef(false);
 
-  // Abre o card automático mais recente, como no design.
+  // Só a ERRATA mais recente nasce aberta, como no design. O card de
+  // abertura fica fechado: é contexto histórico, não novidade — e num job
+  // sem errata ele sozinho aberto ocupava a thread inteira.
   React.useEffect(() => {
-    const ultimoSistema = [...itens].reverse().find((i) => i.tipo === "sistema");
-    if (ultimoSistema) setAbertas({ [ultimoSistema.id]: true });
+    const ultimaErrata = [...itens]
+      .reverse()
+      .find((i) => i.tipo === "sistema" && i.id !== "abertura");
+    setAbertas(ultimaErrata ? { [ultimaErrata.id]: true } : {});
   }, [itens]);
 
   // Marcar como lido é efeito de abrir a aba — roda uma vez só.
@@ -159,7 +164,7 @@ export function JobChatSection({
 
   return (
     <div className="flex h-[620px] flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-soft">
-      <div className="flex flex-none items-center gap-2.5 border-b border-border bg-white px-4.5 py-4">
+      <div className="flex flex-none items-center gap-2.5 border-b border-border bg-white px-[18px] py-4">
         <MessagesSquare className="h-[17px] w-[17px] text-california-red" />
         <div className="min-w-0">
           <h2 className="text-xs font-semibold uppercase tracking-[0.08em]">
@@ -176,7 +181,7 @@ export function JobChatSection({
         )}
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto bg-muted/30 p-4.5">
+      <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto bg-[#FAFAFA] p-[18px]">
         {itens.map((item) =>
           item.tipo === "sistema" ? (
             <CardSistema
@@ -227,7 +232,7 @@ export function JobChatSection({
             }}
             maxLength={2000}
             placeholder="Escreva para o outro time…"
-            className="flex-1 resize-none rounded-[10px] border border-border bg-white px-3 py-2.5 text-[12.5px] leading-relaxed outline-none focus:border-california-red/40"
+            className="flex-1 resize-none rounded-[10px] border border-border bg-white px-[11px] py-[9px] text-[12.5px] leading-[1.45] outline-none focus:border-california-red/40"
           />
           <Tooltip>
             <TooltipTrigger asChild>
@@ -268,6 +273,7 @@ function CardSistema({
   onAlternar: () => void;
 }) {
   const Icone = ICONE_COMPONENTE[item.icone];
+  const irParaInformacoes = useIrParaAbaInformacoes();
   return (
     <div className="flex-none overflow-hidden rounded-xl border border-[#e4e2dd] bg-white">
       <button
@@ -290,7 +296,7 @@ function CardSistema({
               Automático · {item.quando}
             </span>
           </div>
-          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+          <p className="mt-1 text-xs leading-[1.45] text-muted-foreground">
             {item.resumo}
           </p>
         </div>
@@ -313,11 +319,11 @@ function CardSistema({
       </button>
 
       {aberto && item.linhas.length > 0 && (
-        <div className="flex flex-col gap-2.5 border-t border-border bg-muted/40 px-3.5 py-3">
+        <div className="flex flex-col gap-[9px] border-t border-border bg-[#f5f5f5]/50 px-3.5 py-3">
           {item.linhas.map((l, i) => (
             <div
               key={i}
-              className="flex items-baseline gap-2 text-[11.5px] leading-relaxed"
+              className="flex items-baseline gap-2 text-[11.5px] leading-[1.45]"
             >
               <span className="text-[#c9c9c9]">•</span>
               <span className="flex-1">{l.texto}</span>
@@ -326,6 +332,15 @@ function CardSistema({
               </span>
             </div>
           ))}
+          {irParaInformacoes && (
+            <button
+              type="button"
+              onClick={irParaInformacoes}
+              className="self-start text-[11.5px] text-california-red hover:underline"
+            >
+              Abrir na aba Informações →
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -343,7 +358,7 @@ function BalaoPessoa({
   return (
     <div
       className={cn(
-        "flex flex-none items-start gap-2.5",
+        "flex flex-none items-start gap-[9px]",
         direita && "flex-row-reverse",
       )}
     >
@@ -358,7 +373,7 @@ function BalaoPessoa({
       <div className="min-w-0 max-w-[80%]">
         <div
           className={cn(
-            "mb-1 flex items-baseline gap-1.5",
+            "mb-1 flex items-baseline gap-[7px]",
             direita && "flex-row-reverse",
           )}
         >
@@ -369,7 +384,7 @@ function BalaoPessoa({
         </div>
         <div
           className={cn(
-            "rounded-xl border px-3 py-2.5 text-[12.5px] leading-relaxed",
+            "rounded-xl border px-3 py-2.5 text-[12.5px] leading-[1.5]",
             direita
               ? "border-[#f3ced1] bg-[#fef5f5]"
               : "border-border bg-white",
