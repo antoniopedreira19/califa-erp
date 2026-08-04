@@ -40,7 +40,8 @@ perguntas ao time durante a execução.
 | **Rentabilidade %** | Divide pelo **orçado**, não pelo custo. Contraria os percentuais do mockup, mas mantém uma definição só entre a Planilha Interna e a tela de versão do orçamento. |
 | **Bloco VARIAÇÃO** | Removido da planilha, seguindo o design. A comparação passa a ser a linha "Rentabilidade" no rodapé de cada grupo. |
 | **Ciclo da PP** | Criado agora (`em_avaliacao` / `pago` / `rejeitada` / `cancelada`), antecipando o que a spec da Fase 2 tinha jogado pra Fase 3. |
-| **"Pago"** | Flag simples aplicada pelo financeiro, com data informada (pode ser retroativa). Contas a pagar de verdade (`lancamentos_financeiros`, estorno) continua pendente e vai partir daqui. |
+| **"Pago"** | Flag simples aplicada pelo financeiro, com data informada (pode ser retroativa). O botão continua se chamando **"Dar Baixa"** e o status resultante é **Pago**. Contas a pagar de verdade (`lancamentos_financeiros`, estorno) continua pendente e vai partir daqui. |
+| **Nome da tela do financeiro** | `/financeiro/pedidos-compra` passa a se chamar **"Contas a Pagar"** (título, breadcrumb e card do hub). A **rota não mudou**, pra não quebrar links existentes. |
 | **Cancelar PP** | Existe **só na aba de PPs do job**, e só pra PP em avaliação ou rejeitada. Saiu da Planilha Interna e da caixa do financeiro. |
 | **PDF no reenvio** | Regerado sobrescrevendo o anterior no mesmo path. É o documento que vai pro fornecedor e o que o financeiro confere — não pode contradizer a PP. |
 | **Errata: onde grava** | O job ganha **cópia própria** dos itens orçados. A versão aprovada continua sendo o documento que o cliente aprovou e segue read-only. |
@@ -115,6 +116,7 @@ item**: o GP corrige e reenvia, não duplica. Só o cancelamento libera.
 | [`pps/pp-status-chip.tsx`](app/(app)/jobs/[jobId]/pps/pp-status-chip.tsx) | chip de status |
 | [`realizado/actions-pp.ts`](app/(app)/jobs/[jobId]/realizado/actions-pp.ts) | `reenviarPedidoCompra`, `prefixoAnexosPedidoCompra`; cancelamento com a nova regra |
 | [`financeiro/pedidos-compra/actions.ts`](app/(app)/financeiro/pedidos-compra/actions.ts) | `marcarPagaFinanceiro` e `rejeitarPedidoCompraFinanceiro` entram; `cancelarPedidoCompraFinanceiro` **sai** |
+| [`financeiro/pedidos-compra/page.tsx`](app/(app)/financeiro/pedidos-compra/page.tsx) · [`financeiro/page.tsx`](app/(app)/financeiro/page.tsx) | tela renomeada pra "Contas a Pagar" (título, breadcrumb e card do hub) |
 | [`realizado/pp-actions-cell.tsx`](app/(app)/jobs/[jobId]/realizado/pp-actions-cell.tsx) | pílulas "Ver PP"/"Gerar PP" com rótulo, sem cancelar |
 
 ### Detalhes que não estão no design

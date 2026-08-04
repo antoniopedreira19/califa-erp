@@ -42,7 +42,7 @@ export default async function CentralFinanceiraPage() {
           <h1 className="text-3xl font-bold tracking-tight">Central Financeira</h1>
         </div>
         <p className="text-sm text-muted-foreground max-w-2xl">
-          Ponto central pra decisões financeiras. Mais cards (contas a pagar, DRE, aprovações) chegam nas próximas fases.
+          Ponto central pra decisões financeiras. Mais cards (DRE, conciliação, aprovações) chegam nas próximas fases.
         </p>
       </header>
 
@@ -57,11 +57,11 @@ export default async function CentralFinanceiraPage() {
         <FinanceiroCard
           href="/financeiro/pedidos-compra"
           icon={FileText}
-          title="Pedidos de Produção"
-          description="Avalie as PPs dos GPs: ajuste o prazo, marque como paga ou rejeite com motivo."
+          title="Contas a Pagar"
+          description="Avalie os Pedidos de Produção: ajuste o prazo, dê baixa ou rejeite com motivo."
           count={ppsCount ?? 0}
         />
-        {/* Cards futuros: contas a pagar, DRE, aprovações de pagamentos */}
+        {/* Cards futuros: DRE, conciliação bancária, aprovações de pagamentos */}
       </div>
     </div>
   );
