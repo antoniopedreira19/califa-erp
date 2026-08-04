@@ -449,12 +449,15 @@ export default async function JobDetailPage({
           </dl>
         </div>
 
-        <div className="rounded-2xl border border-border bg-card p-6 shadow-soft md:col-span-2">
+        {/* Ao lado do Metadata, como no design — não em largura total. */}
+        <div className="rounded-2xl border border-border bg-card p-6 shadow-soft">
           <div className="flex items-center gap-2 mb-4">
             <Briefcase className="h-4 w-4 text-california-red" />
             <h2 className="text-sm font-semibold uppercase tracking-wider">Origem</h2>
           </div>
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+          {/* Label estreito e valor amplo: os valores aqui são links longos
+              ("PEVETE-0002/26 · Novo Teste rqada"), diferente do Metadata. */}
+          <dl className="grid grid-cols-[150px_1fr] gap-x-4 gap-y-3 text-sm">
             <dt className="text-muted-foreground">Projeto</dt>
             <dd>
               <Link
