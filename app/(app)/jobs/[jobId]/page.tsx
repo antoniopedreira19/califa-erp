@@ -385,8 +385,13 @@ export default async function JobDetailPage({
   // tem tabela de 15 colunas que não cabia em 1280 depois da calha de 116px
   // reservada pra trilha de PP. 1440 resolve com folga, sem ir ao máximo de
   // 1600 que o layout permite.
+  //
+  // O `mr-6` só entra a partir de 1600px, que é onde passa a sobrar folga dos
+  // dois lados: encosta um pouco mais na direita e afasta da sidebar. Abaixo
+  // disso segue centralizado — aplicar a margem ali roubaria 24px da tabela e
+  // ela voltaria a cortar.
   return (
-    <div className="space-y-6 max-w-[1440px] mx-auto">
+    <div className="space-y-6 max-w-[1440px] mx-auto min-[1600px]:mr-6">
       <div>
         <Link
           href={backLink.href}
