@@ -14,13 +14,13 @@ import {
   tipoCustoLabel,
   type TipoCusto,
   type VersaoOrcamentoGrupo,
-  type VersaoOrcamentoItem,
+  type ItemPlanilhaJob,
   type JobItemRealizado,
 } from "@/lib/types";
 
 interface Props {
   grupos: VersaoOrcamentoGrupo[];
-  itens: VersaoOrcamentoItem[];
+  itens: ItemPlanilhaJob[];
   realizadosMap: Map<string, JobItemRealizado>;
   percentualHonorarios: number;
   percentualImposto: number;

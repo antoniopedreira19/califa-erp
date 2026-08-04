@@ -7,14 +7,14 @@ import { Badge } from "@/components/ui/badge";
 import { TruncateTooltip } from "@/components/ui/truncate-tooltip";
 import { cn, formatCurrency } from "@/lib/utils";
 import { calcularRentabilidade } from "@/lib/calculos/versao-totais";
-import type { VersaoOrcamentoItem, JobItemRealizado, PedidoCompra, Fornecedor, Empresa } from "@/lib/types";
+import type { ItemPlanilhaJob, JobItemRealizado, PedidoCompra, Fornecedor, Empresa } from "@/lib/types";
 import { upsertItemRealizado, type CampoRealizado } from "../actions-realizado";
 import { PPActionsCell } from "./pp-actions-cell";
 import { GerarPPDrawer } from "./gerar-pp-drawer";
 
 interface Props {
   jobId: string;
-  itens: VersaoOrcamentoItem[];
+  itens: ItemPlanilhaJob[];
   realizadosMap: Map<string, JobItemRealizado>;
   /** id da categoria -> nome. Itens sem categoria caem no travessão. */
   categoriasMap: Map<string, string>;
@@ -208,7 +208,11 @@ export function JobItemRealizadoTable({
     const override = overrides[itemId]?.[campo];
     if (override !== undefined) return override;
     const r = realizadosMap.get(itemId);
-    return r ? Number(r[campo] ?? 0) : 0;
+    if (r) return Number(r[campo] ?? 0);
+    // Sem lançamento ainda: espelha o default do banco (QT e D/M nascem 1),
+    // pra célula já mostrar o valor que vai valer quando o unitário for
+    // preenchido, em vez de um travessão que sugere "vazio".
+    return campo === "valor_unitario_realizado" ? 0 : 1;
   }
 
   function totalRealizadoDe(itemId: string): number {

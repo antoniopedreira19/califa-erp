@@ -15,10 +15,12 @@ import { AprovarRejeitarButtons } from "./aprovar-rejeitar-buttons";
 import { JobRealizadoSection } from "./realizado/job-realizado-section";
 import { JobPPsSection } from "./pps/job-pps-section";
 import { JobTabs } from "./job-tabs";
+import { ErratasCard } from "./erratas-card";
 import type {
   VersaoOrcamentoGrupo,
-  VersaoOrcamentoItem,
+  ItemPlanilhaJob,
   JobItemRealizado,
+  JobErrataComItens,
   PedidoCompra,
   PedidoCompraNaLista,
   Categoria,
@@ -74,7 +76,7 @@ export default async function JobDetailPage({
     supabase
       .from("jobs")
       .select(
-        "id, tenant_id, empresa_id, codigo, nome, produto, cidade, data_inicio_prevista, data_fim_prevista, responsavel_id, valor_total, status, motivo_rejeicao, projeto_id, orcamento_id, versao_orcamento_aprovada_id, regional_id, created_at, updated_at, responsavel:profiles!responsavel_id(id, nome), regional:regionais(id, nome), orcamento:orcamentos(id, codigo, nome, projeto_id), versao:versoes_orcamento!versao_orcamento_aprovada_id(id, numero_versao, nome, moeda, percentual_honorarios, percentual_imposto), projeto:projetos(id, codigo, nome)",
+        "id, tenant_id, empresa_id, codigo, nome, produto, cidade, data_inicio_prevista, data_fim_prevista, responsavel_id, valor_total, faturamento_abertura, status, motivo_rejeicao, projeto_id, orcamento_id, versao_orcamento_aprovada_id, regional_id, created_at, updated_at, responsavel:profiles!responsavel_id(id, nome), regional:regionais(id, nome), orcamento:orcamentos(id, codigo, nome, projeto_id), versao:versoes_orcamento!versao_orcamento_aprovada_id(id, numero_versao, nome, moeda, percentual_honorarios, percentual_imposto), projeto:projetos(id, codigo, nome)",
       )
       .eq("id", params.jobId)
       .eq("tenant_id", session.activeTenant.id)
@@ -103,6 +105,7 @@ export default async function JobDetailPage({
     fornecedoresRes,
     empresasRes,
     categoriasRes,
+    erratasRes,
   ] = await Promise.all([
     supabase
       .from("versoes_orcamento_grupos")
@@ -111,13 +114,14 @@ export default async function JobDetailPage({
       .eq("tenant_id", session.activeTenant.id)
       .order("ordem", { ascending: true })
       .returns<VersaoOrcamentoGrupo[]>(),
+    // Orçado vem da CÓPIA do job, não da versão: a errata altera a cópia e
+    // a versão aprovada continua sendo o que o cliente aprovou.
     supabase
-      .from("versoes_orcamento_itens")
+      .from("jobs_itens_orcado")
       .select("*")
-      .eq("versao_orcamento_id", versaoAprovadaId)
+      .eq("job_id", params.jobId)
       .eq("tenant_id", session.activeTenant.id)
-      .order("ordem", { ascending: true })
-      .returns<VersaoOrcamentoItem[]>(),
+      .order("ordem", { ascending: true }),
     supabase
       .from("jobs_itens_realizado")
       .select("*")
@@ -153,11 +157,28 @@ export default async function JobDetailPage({
       .select("id, nome")
       .eq("tenant_id", session.activeTenant.id)
       .returns<Pick<Categoria, "id" | "nome">[]>(),
+    supabase
+      .from("jobs_erratas")
+      .select(
+        "*, autor:profiles!created_by(nome), itens:jobs_erratas_itens(*)",
+      )
+      .eq("job_id", params.jobId)
+      .eq("tenant_id", session.activeTenant.id)
+      .order("created_at", { ascending: false }),
   ]);
 
   const grupos = (gruposRes.data ?? []) as VersaoOrcamentoGrupo[];
-  const itens: VersaoOrcamentoItem[] = (itensRes.data ?? []).map((it: any) => ({
-    ...it,
+  if (itensRes.error) console.error("[job.orcado]", itensRes.error.message);
+  // `id` segue sendo o id do item na versão: é a chave que o realizado e a
+  // PP usam. `orcado_id` é o que a errata altera.
+  const itens: ItemPlanilhaJob[] = (itensRes.data ?? []).map((it: any) => ({
+    id: it.item_versao_id,
+    orcado_id: it.id,
+    grupo_id: it.grupo_id,
+    ordem: Number(it.ordem ?? 0),
+    item: it.item,
+    tipo_custo: it.tipo_custo,
+    categoria_id: it.categoria_id ?? null,
     valor_unitario_orcado: Number(it.valor_unitario_orcado ?? 0),
     quantidade_orcada: Number(it.quantidade_orcada ?? 1),
     dias_meses_orcado: Number(it.dias_meses_orcado ?? 1),
@@ -217,6 +238,24 @@ export default async function JobDetailPage({
     console.error("[job.categorias]", categoriasRes.error.message);
   const categoriasMap = new Map<string, string>();
   for (const c of categoriasRes.data ?? []) categoriasMap.set(c.id, c.nome);
+
+  if (erratasRes.error) console.error("[job.erratas]", erratasRes.error.message);
+  const erratas: JobErrataComItens[] = (erratasRes.data ?? []).map((e: any) => ({
+    ...e,
+    custo_orcado_antes: Number(e.custo_orcado_antes ?? 0),
+    custo_orcado_depois: Number(e.custo_orcado_depois ?? 0),
+    faturamento_antes: Number(e.faturamento_antes ?? 0),
+    faturamento_depois: Number(e.faturamento_depois ?? 0),
+    autor_nome: e.autor?.nome ?? null,
+    itens: (e.itens ?? []).map((i: any) => ({
+      ...i,
+      valor_unitario_de: Number(i.valor_unitario_de ?? 0),
+      valor_unitario_para: Number(i.valor_unitario_para ?? 0),
+      total_de: Number(i.total_de ?? 0),
+      total_para: Number(i.total_para ?? 0),
+      efeito_faturamento: Number(i.efeito_faturamento ?? 0),
+    })),
+  }));
 
   const versaoAprovada = raw.versao as {
     id: string;
@@ -380,8 +419,30 @@ export default async function JobDetailPage({
                 v{raw.versao?.numero_versao} {raw.versao?.nome ? `· ${raw.versao.nome}` : ""}
               </Link>
             </dd>
+            <dt className="text-muted-foreground">Valor de faturamento</dt>
+            <dd className="font-mono font-semibold">
+              {formatMoney(job.valor_total)}
+              {erratas.length > 0 && (
+                <span className="ml-1.5 font-sans text-xs font-normal text-muted-foreground">
+                  (após {erratas.length}{" "}
+                  {erratas.length === 1 ? "errata" : "erratas"})
+                </span>
+              )}
+            </dd>
           </dl>
         </div>
+
+        <ErratasCard
+          erratas={erratas}
+          faturamentoAbertura={
+            raw.faturamento_abertura !== null &&
+            raw.faturamento_abertura !== undefined
+              ? Number(raw.faturamento_abertura)
+              : null
+          }
+          faturamentoAtual={job.valor_total ?? 0}
+          moeda={versaoAprovada.moeda}
+        />
 
         {(transicoes.length > 0 ||
           (job.status === "aguardando_abertura" && podeAprovarRejeitar)) && (

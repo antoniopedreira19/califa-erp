@@ -5,7 +5,7 @@ import type {
   Job,
   VersaoOrcamento,
   VersaoOrcamentoGrupo,
-  VersaoOrcamentoItem,
+  ItemPlanilhaJob,
   JobItemRealizado,
   PedidoCompra,
   Fornecedor,
@@ -13,6 +13,7 @@ import type {
 } from "@/lib/types";
 import { JobGrupoCard } from "./job-grupo-card";
 import { JobTotaisCard } from "./job-totais-card";
+import { AlterarOrcadoButton } from "./alterar-orcado-button";
 
 interface Props {
   job: Pick<
@@ -27,7 +28,7 @@ interface Props {
   >;
   versao: Pick<VersaoOrcamento, "id" | "numero_versao" | "nome" | "moeda" | "percentual_honorarios" | "percentual_imposto">;
   grupos: VersaoOrcamentoGrupo[];
-  itens: VersaoOrcamentoItem[];
+  itens: ItemPlanilhaJob[];
   realizadosMap: Map<string, JobItemRealizado>;
   categoriasMap: Map<string, string>;
   editable: boolean;
@@ -70,7 +71,7 @@ export function JobRealizadoSection({
     );
   }
 
-  const itensPorGrupo = new Map<string, VersaoOrcamentoItem[]>();
+  const itensPorGrupo = new Map<string, ItemPlanilhaJob[]>();
   for (const g of grupos) itensPorGrupo.set(g.id, []);
   for (const it of itens) {
     const list = itensPorGrupo.get(it.grupo_id);
@@ -90,13 +91,25 @@ export function JobRealizadoSection({
             {versao.nome ? ` · ${versao.nome}` : ""}
           </span>
         </div>
-        <Link
-          href={`/orcamentos/${job.projeto_id}/${job.orcamento_id}/versoes/${versao.id}`}
-          prefetch={false}
-          className="text-xs text-california-red hover:underline"
-        >
-          Ver versão aprovada →
-        </Link>
+        <div className="flex items-center gap-3">
+          {editable && (
+            <AlterarOrcadoButton
+              jobId={job.id}
+              itens={itens}
+              grupos={grupos}
+              percentualHonorarios={versao.percentual_honorarios}
+              percentualImposto={versao.percentual_imposto}
+              moeda={versao.moeda}
+            />
+          )}
+          <Link
+            href={`/orcamentos/${job.projeto_id}/${job.orcamento_id}/versoes/${versao.id}`}
+            prefetch={false}
+            className="text-xs text-california-red hover:underline"
+          >
+            Ver versão aprovada →
+          </Link>
+        </div>
       </div>
 
       {grupos.length === 0 ? (

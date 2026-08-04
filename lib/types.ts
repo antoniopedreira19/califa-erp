@@ -618,6 +618,96 @@ export function podeCancelarPP(s: PPStatus): boolean {
   return s === "em_avaliacao" || s === "rejeitada";
 }
 
+// ---------- Erratas: orçado próprio do job ----------
+
+/**
+ * Cópia do item orçado que pertence ao job. Nasce igual ao item da versão
+ * aprovada e só muda por errata — a versão aprovada em si continua sendo o
+ * registro do que o cliente aprovou.
+ */
+export interface JobItemOrcado {
+  id: string;
+  tenant_id: string;
+  job_id: string;
+  /** Item de origem na versão. Liga com `jobs_itens_realizado.item_id`. */
+  item_versao_id: string;
+  grupo_id: string;
+  ordem: number;
+  item: string;
+  tipo_custo: TipoCusto;
+  categoria_id: string | null;
+  valor_unitario_orcado: number;
+  quantidade_orcada: number;
+  dias_meses_orcado: number;
+  total_orcado: number;
+  valor_unitario_planejado: number;
+  quantidade_planejada: number;
+  dias_meses_planejado: number;
+  total_planejado: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Item como a Planilha Interna consome: os valores vêm da cópia orçada do
+ * job, mas `id` continua sendo o id do item na VERSÃO — é a chave que
+ * `jobs_itens_realizado` e a geração de PP usam. `orcado_id` é o alvo da
+ * errata.
+ */
+export interface ItemPlanilhaJob {
+  id: string;
+  orcado_id: string;
+  grupo_id: string;
+  ordem: number;
+  item: string;
+  tipo_custo: TipoCusto;
+  categoria_id: string | null;
+  valor_unitario_orcado: number;
+  quantidade_orcada: number;
+  dias_meses_orcado: number;
+  total_orcado: number;
+  valor_unitario_planejado: number;
+  quantidade_planejada: number;
+  dias_meses_planejado: number;
+  total_planejado: number;
+}
+
+export interface JobErrata {
+  id: string;
+  tenant_id: string;
+  job_id: string;
+  titulo: string;
+  justificativa: string | null;
+  custo_orcado_antes: number;
+  custo_orcado_depois: number;
+  faturamento_antes: number;
+  faturamento_depois: number;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface JobErrataItem {
+  id: string;
+  tenant_id: string;
+  errata_id: string;
+  job_item_orcado_id: string | null;
+  item_nome: string;
+  grupo_nome: string;
+  tipo_custo_de: TipoCusto;
+  tipo_custo_para: TipoCusto;
+  valor_unitario_de: number;
+  valor_unitario_para: number;
+  total_de: number;
+  total_para: number;
+  efeito_faturamento: number;
+}
+
+/** Errata com os itens e o autor, como o card do histórico precisa. */
+export interface JobErrataComItens extends JobErrata {
+  autor_nome: string | null;
+  itens: JobErrataItem[];
+}
+
 /** PP com os campos que as telas de lista mostram junto. */
 export interface PedidoCompraNaLista extends PedidoCompra {
   emitida_por_nome: string | null;
