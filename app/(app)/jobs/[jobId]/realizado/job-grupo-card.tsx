@@ -1,7 +1,7 @@
 import { TruncateTooltip } from "@/components/ui/truncate-tooltip";
 import type {
   VersaoOrcamentoGrupo,
-  VersaoOrcamentoItem,
+  ItemPlanilhaJob,
   JobItemRealizado,
   PedidoCompra,
   Fornecedor,
@@ -11,7 +11,7 @@ import { JobItemRealizadoTable } from "./job-item-realizado-table";
 
 interface Props {
   grupo: VersaoOrcamentoGrupo;
-  itens: VersaoOrcamentoItem[];
+  itens: ItemPlanilhaJob[];
   realizadosMap: Map<string, JobItemRealizado>;
   categoriasMap: Map<string, string>;
   moeda: string;
