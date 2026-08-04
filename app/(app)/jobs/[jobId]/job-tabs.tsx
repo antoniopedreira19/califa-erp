@@ -9,11 +9,21 @@ interface Props {
   pps: React.ReactNode;
   /** Quantidade de PPs ativas — vira o badge da aba. */
   ppsCount: number;
+  chat: React.ReactNode;
+  /** Mensagens e erratas ainda não lidas por quem está logado. */
+  chatCount: number;
 }
 
-type TabKey = "info" | "planilha" | "pps";
+type TabKey = "info" | "planilha" | "pps" | "chat";
 
-export function JobTabs({ info, planilha, pps, ppsCount }: Props) {
+export function JobTabs({
+  info,
+  planilha,
+  pps,
+  ppsCount,
+  chat,
+  chatCount,
+}: Props) {
   const [tab, setTab] = React.useState<TabKey>("info");
 
   return (
@@ -43,6 +53,14 @@ export function JobTabs({ info, planilha, pps, ppsCount }: Props) {
             </span>
           )}
         </TabButton>
+        <TabButton active={tab === "chat"} onClick={() => setTab("chat")}>
+          Comunicação
+          {chatCount > 0 && (
+            <span className="ml-1.5 inline-flex h-[17px] min-w-[17px] items-center justify-center rounded-full bg-california-red px-1 text-[10px] font-bold text-white">
+              {chatCount}
+            </span>
+          )}
+        </TabButton>
       </div>
 
       <div
@@ -65,6 +83,15 @@ export function JobTabs({ info, planilha, pps, ppsCount }: Props) {
         className={cn(tab === "pps" ? "" : "hidden")}
       >
         {pps}
+      </div>
+      <div
+        role="tabpanel"
+        aria-hidden={tab !== "chat"}
+        className={cn(tab === "chat" ? "" : "hidden")}
+      >
+        {/* Só monta quando aberta: o chat marca a thread como lida ao
+            montar, e montar escondido zeraria o badge sem ninguém ler. */}
+        {tab === "chat" && chat}
       </div>
     </div>
   );

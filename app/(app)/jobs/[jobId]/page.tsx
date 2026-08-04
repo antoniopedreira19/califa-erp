@@ -5,7 +5,7 @@ import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { listActiveMembers } from "@/lib/data/members";
 import type { Job, JobStatus, Regional } from "@/lib/types";
-import { jobStatusLabel, JOB_STATUS_TRANSICOES } from "@/lib/types";
+import { jobStatusLabel, JOB_STATUS_TRANSICOES, areaDoPapel } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { JobEditorDrawer } from "./job-editor-drawer";
@@ -16,6 +16,9 @@ import { JobRealizadoSection } from "./realizado/job-realizado-section";
 import { JobPPsSection } from "./pps/job-pps-section";
 import { JobTabs } from "./job-tabs";
 import { ErratasCard } from "./erratas-card";
+import { JobChatSection } from "./comunicacao/job-chat-section";
+
+import { montarThreadChat } from "@/lib/data/job-chat";
 import type {
   VersaoOrcamentoGrupo,
   ItemPlanilhaJob,
@@ -106,6 +109,8 @@ export default async function JobDetailPage({
     empresasRes,
     categoriasRes,
     erratasRes,
+    mensagensRes,
+    leituraRes,
   ] = await Promise.all([
     supabase
       .from("versoes_orcamento_grupos")
@@ -165,6 +170,18 @@ export default async function JobDetailPage({
       .eq("job_id", params.jobId)
       .eq("tenant_id", session.activeTenant.id)
       .order("created_at", { ascending: false }),
+    supabase
+      .from("jobs_mensagens")
+      .select("*, autor:profiles!autor_id(nome)")
+      .eq("job_id", params.jobId)
+      .eq("tenant_id", session.activeTenant.id)
+      .order("created_at", { ascending: true }),
+    supabase
+      .from("jobs_chat_leituras")
+      .select("lida_ate")
+      .eq("job_id", params.jobId)
+      .eq("profile_id", session.profile.id)
+      .maybeSingle(),
   ]);
 
   const grupos = (gruposRes.data ?? []) as VersaoOrcamentoGrupo[];
@@ -292,6 +309,55 @@ export default async function JobDetailPage({
     created_at: raw.created_at,
     updated_at: raw.updated_at,
   };
+
+  // ---- Comunicação: thread e contador de não lidas ----
+  if (mensagensRes.error)
+    console.error("[job.mensagens]", mensagensRes.error.message);
+
+  const mensagens = (mensagensRes.data ?? []).map((m: any) => ({
+    ...m,
+    autor_nome: m.autor?.nome ?? null,
+  }));
+
+  const totalOrcadoJob = itens.reduce(
+    (s, i) => s + Number(i.total_orcado ?? 0),
+    0,
+  );
+
+  const threadChat = montarThreadChat(
+    {
+      criadoEm: raw.created_at,
+      orcamentoCodigo: raw.orcamento?.codigo ?? null,
+      versaoNumero: raw.versao?.numero_versao ?? null,
+      versaoNome: raw.versao?.nome ?? null,
+      faturamentoAbertura:
+        raw.faturamento_abertura !== null && raw.faturamento_abertura !== undefined
+          ? Number(raw.faturamento_abertura)
+          : null,
+      totalOrcado: totalOrcadoJob,
+      qtdItens: itens.length,
+      qtdGrupos: grupos.length,
+      responsavelNome: raw.responsavel?.nome ?? null,
+      dataInicio: raw.data_inicio_prevista,
+      dataFim: raw.data_fim_prevista,
+    },
+    erratas,
+    mensagens,
+    versaoAprovada.moeda,
+  );
+
+  // Não lidas = o que chegou de outra pessoa depois da última leitura.
+  // Errata conta junto: é o evento que o outro time mais precisa ver.
+  const lidaAte = (leituraRes.data as { lida_ate: string } | null)?.lida_ate ?? null;
+  const naoLidas =
+    mensagens.filter(
+      (m: any) =>
+        m.autor_id !== session.profile.id &&
+        (!lidaAte || m.created_at > lidaAte),
+    ).length +
+    erratas.filter(
+      (e) => e.created_by !== session.profile.id && (!lidaAte || e.created_at > lidaAte),
+    ).length;
 
   const podeAprovarRejeitar =
     session.activeRole === "administrador" ||
@@ -511,6 +577,16 @@ export default async function JobDetailPage({
             fornecedores={fornecedores}
             empresas={empresas}
             editable={podeEditarRealizado}
+          />
+        }
+        chatCount={naoLidas}
+        chat={
+          <JobChatSection
+            jobId={job.id}
+            jobCodigo={job.codigo}
+            itens={threadChat}
+            naoLidas={naoLidas}
+            minhaArea={areaDoPapel(session.activeRole)}
           />
         }
       />

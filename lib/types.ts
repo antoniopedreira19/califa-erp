@@ -726,6 +726,76 @@ export interface JobErrataComItens extends JobErrata {
   itens: JobErrataItem[];
 }
 
+// ---------- Comunicação do job ----------
+
+export type ChatArea = "producao" | "financeiro";
+
+export function chatAreaLabel(a: ChatArea): string {
+  return a === "financeiro" ? "Financeiro" : "Produção";
+}
+
+/**
+ * A área de quem fala vem do papel, nunca do formulário — o rótulo
+ * "Produção"/"Financeiro" só significa algo se ninguém puder se passar
+ * pelo outro time.
+ *
+ * Mora aqui, e não junto das actions, porque arquivo `"use server"` exige
+ * que todo export seja async.
+ */
+export function areaDoPapel(role: string): ChatArea {
+  return role === "financeiro" || role === "administrador"
+    ? "financeiro"
+    : "producao";
+}
+
+export interface JobMensagem {
+  id: string;
+  tenant_id: string;
+  job_id: string;
+  autor_id: string;
+  area: ChatArea;
+  texto: string;
+  created_at: string;
+}
+
+/** Tom do valor exibido no card automático. */
+export type ChatTom = "positivo" | "negativo" | "neutro" | "texto";
+
+export interface ChatLinha {
+  texto: string;
+  valor: string;
+  tom: ChatTom;
+}
+
+/**
+ * Um item da thread. Cards de sistema são montados na leitura a partir de
+ * `jobs` e `jobs_erratas` — não existem como registro.
+ */
+export type ItemChat =
+  | {
+      tipo: "sistema";
+      id: string;
+      icone: "folder-open" | "file-pen-line" | "tags";
+      cor: "azul" | "verde" | "bege" | "vermelho";
+      titulo: string;
+      quando: string;
+      resumo: string;
+      valor: string | null;
+      valorTom: Exclude<ChatTom, "texto">;
+      linhas: ChatLinha[];
+      /** ISO, só pra ordenar a thread. */
+      em: string;
+    }
+  | {
+      tipo: "pessoa";
+      id: string;
+      autor: string;
+      area: ChatArea;
+      quando: string;
+      texto: string;
+      em: string;
+    };
+
 /** PP com os campos que as telas de lista mostram junto. */
 export interface PedidoCompraNaLista extends PedidoCompra {
   emitida_por_nome: string | null;
