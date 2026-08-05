@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Landmark, Clock, ArrowRight, FileText, type LucideIcon } from "lucide-react";
+import { Landmark, Clock, ArrowRight, FileText, Receipt, type LucideIcon } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 
@@ -61,7 +61,13 @@ export default async function CentralFinanceiraPage() {
           description="Avalie os Pedidos de Produção: ajuste o prazo, dê baixa ou rejeite com motivo."
           count={ppsCount ?? 0}
         />
-        {/* Cards futuros: DRE, conciliação bancária, aprovações de pagamentos */}
+        <FinanceiroCard
+          href="/financeiro/conciliacao"
+          icon={Receipt}
+          title="Conciliação Bancária"
+          description="Extrato por conta bancária. Base pra bater com o extrato do banco e pra o DRE."
+        />
+        {/* Cards futuros: DRE, aprovações de pagamentos */}
       </div>
     </div>
   );
@@ -78,7 +84,7 @@ function FinanceiroCard({
   icon: LucideIcon;
   title: string;
   description: string;
-  count: number;
+  count?: number;
 }) {
   return (
     <Link
@@ -93,16 +99,26 @@ function FinanceiroCard({
         {title}
       </h3>
       <p className="mt-1 text-sm text-muted-foreground">{description}</p>
-      <div className="mt-6 flex items-center justify-between border-t border-border pt-4">
-        <p className="text-xs text-muted-foreground">
-          <span className="font-semibold text-foreground">{count}</span>{" "}
-          {count === 1 ? "pendente" : "pendentes"}
-        </p>
-        <span className="inline-flex items-center gap-1 text-xs font-semibold text-california-red">
-          Abrir
-          <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
-        </span>
-      </div>
+      {count !== undefined && (
+        <div className="mt-6 flex items-center justify-between border-t border-border pt-4">
+          <p className="text-xs text-muted-foreground">
+            <span className="font-semibold text-foreground">{count}</span>{" "}
+            {count === 1 ? "pendente" : "pendentes"}
+          </p>
+          <span className="inline-flex items-center gap-1 text-xs font-semibold text-california-red">
+            Abrir
+            <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
+          </span>
+        </div>
+      )}
+      {count === undefined && (
+        <div className="mt-6 flex items-center justify-end border-t border-border pt-4">
+          <span className="inline-flex items-center gap-1 text-xs font-semibold text-california-red">
+            Abrir
+            <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
+          </span>
+        </div>
+      )}
     </Link>
   );
 }
