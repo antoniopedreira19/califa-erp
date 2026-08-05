@@ -1,0 +1,385 @@
+import Link from "next/link";
+import { Calculator, Info } from "lucide-react";
+import { cn, formatCurrency } from "@/lib/utils";
+import { calcularRentabilidade } from "@/lib/calculos/versao-totais";
+import { PainelResultado } from "@/components/painel-resultado";
+import { tipoCustoLabel, type TipoCusto } from "@/lib/types";
+import type { JobPlanilhaProjeto } from "./tipos";
+
+const TIPOS: TipoCusto[] = ["A", "B", "C", "D"];
+
+function formatarPercentual(p: number): string {
+  return `${p.toFixed(1).replace(".", ",")}%`;
+}
+
+/**
+ * Taxa exibida: 12 -> "12%", 19.53 -> "19,53%". Arredonda em 2 casas porque
+ * aqui o número costuma ser uma média entre jobs, que dizima com facilidade.
+ */
+function formatarTaxa(p: number): string {
+  return `${String(Math.round(p * 100) / 100).replace(".", ",")}%`;
+}
+
+/** Média simples das taxas dos jobs — não ponderada pelo valor de cada um. */
+function media(valores: number[]): number {
+  if (valores.length === 0) return 0;
+  return valores.reduce((s, v) => s + v, 0) / valores.length;
+}
+
+/** Linha "rótulo ......... valor" dos painéis de fechamento e resultado. */
+function LinhaValor({
+  rotulo,
+  valor,
+  destaque,
+}: {
+  rotulo: React.ReactNode;
+  valor: React.ReactNode;
+  destaque?: boolean;
+}) {
+  return (
+    <div className="flex items-baseline justify-between gap-3">
+      <span
+        className={cn(
+          "text-sm",
+          destaque ? "font-semibold text-foreground" : "text-muted-foreground",
+        )}
+      >
+        {rotulo}
+      </span>
+      <span
+        className={cn(
+          "whitespace-nowrap font-mono text-sm",
+          destaque && "font-semibold",
+        )}
+      >
+        {valor}
+      </span>
+    </div>
+  );
+}
+
+/** Célula "R$ x,xx / y,y%" das linhas de Rentabilidade do rodapé. */
+function CelulaRentabilidade({
+  orcado,
+  custo,
+  moeda,
+  corValor,
+  corPercentual,
+}: {
+  orcado: number;
+  custo: number;
+  moeda: string;
+  corValor: string;
+  corPercentual: string;
+}) {
+  const { rentabilidade, percentual } = calcularRentabilidade(orcado, custo);
+
+  if (custo <= 0) {
+    return <span className="font-mono text-sm text-muted-foreground">—</span>;
+  }
+
+  return (
+    <div className="flex flex-col items-end gap-0.5">
+      <span className={cn("font-mono text-[12.5px] font-bold", corValor)}>
+        {formatCurrency(rentabilidade, moeda)}
+      </span>
+      {percentual !== null && (
+        <span className={cn("font-mono text-[10.5px]", corPercentual)}>
+          {formatarPercentual(percentual)}
+        </span>
+      )}
+    </div>
+  );
+}
+
+export function ProjetoTotaisCard({
+  jobs,
+  moeda,
+}: {
+  jobs: JobPlanilhaProjeto[];
+  moeda: string;
+}) {
+  const totalOrcado = jobs.reduce((s, j) => s + j.orcado, 0);
+  const totalPlanejado = jobs.reduce((s, j) => s + j.planejado, 0);
+  const totalRealizado = jobs.reduce((s, j) => s + j.realizado, 0);
+  const honorarios = jobs.reduce((s, j) => s + j.honorarios, 0);
+  const imposto = jobs.reduce((s, j) => s + j.imposto, 0);
+  const faturamento = jobs.reduce((s, j) => s + j.faturamento, 0);
+
+  const subtotaisPorTipo = TIPOS.reduce<Record<TipoCusto, number>>(
+    (acc, t) => {
+      acc[t] = jobs.reduce((s, j) => s + j.subtotaisPorTipo[t], 0);
+      return acc;
+    },
+    { A: 0, B: 0, C: 0, D: 0 },
+  );
+
+  const temRealizado = totalRealizado > 0;
+
+  // Cada versão aprovada tem as suas taxas. O fechamento do projeto mostra a
+  // média delas — os valores em R$ continuam sendo a soma job a job, então o
+  // percentual aqui é só referência, não a taxa que gerou aqueles números.
+  const taxaHonorarios = formatarTaxa(
+    media(jobs.map((j) => j.percentualHonorarios)),
+  );
+  const taxaImpostos = formatarTaxa(
+    media(jobs.map((j) => j.percentualImposto)),
+  );
+
+  return (
+    <div className="rounded-2xl border border-border bg-card shadow-soft">
+      <div className="flex items-start gap-3 border-b border-border p-6">
+        <Calculator className="mt-0.5 h-5 w-5 shrink-0 text-california-red" />
+        <div>
+          <h2 className="text-lg font-semibold leading-none tracking-tight">
+            Totais
+          </h2>
+          <p className="mt-1.5 text-sm text-muted-foreground">
+            Orçado × Planejado × Realizado por job · valores calculados a partir
+            dos itens de cada planilha.
+          </p>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[1320px] border-collapse text-sm">
+          <thead>
+            <tr>
+              <th colSpan={3} className="border-b border-border bg-muted/40" />
+              <th
+                colSpan={4}
+                className="border-b-[3px] border-l-2 border-b-[#282828] border-l-[#d7d7d7] bg-[#f1f0ec] px-3 py-2 text-center text-[11px] font-extrabold tracking-[0.1em] text-foreground"
+              >
+                ORÇADO
+              </th>
+              <th
+                colSpan={4}
+                className="border-b-[3px] border-l-2 border-b-[#2f6fdb] border-l-[#b9d1f4] bg-[#e8f0fd] px-3 py-2 text-center text-[11px] font-extrabold tracking-[0.1em] text-[#1e4fa3]"
+              >
+                PLANEJADO
+              </th>
+              <th
+                colSpan={4}
+                className="border-b-[3px] border-l-2 border-b-[#d97706] border-l-[#f0c874] bg-[#fef3c7] px-3 py-2 text-center text-[11px] font-extrabold tracking-[0.1em] text-[#92400e]"
+              >
+                REALIZADO
+              </th>
+            </tr>
+            <tr className="bg-muted/40">
+              <th
+                colSpan={3}
+                className="w-[320px] px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"
+              >
+                Job
+              </th>
+              <th colSpan={3} className="border-l-2 border-l-[#e4e2dd]" />
+              <th className="min-w-[132px] px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Total
+              </th>
+              <th
+                colSpan={3}
+                className="border-l-2 border-l-[#cfe0f7] bg-blue-50/60"
+              />
+              <th className="min-w-[132px] bg-blue-50/60 px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-wider text-[#5a76a8]">
+                Total
+              </th>
+              <th
+                colSpan={3}
+                className="border-l-2 border-l-[#f0c874] bg-[#fef3c7]/70"
+              />
+              <th className="min-w-[132px] bg-[#fef3c7]/70 px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-wider text-[#92400e]">
+                Total
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {jobs.map((j) => (
+              <tr key={j.id} className="border-b border-border">
+                <td colSpan={3} className="p-3">
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <Link
+                      href={`/jobs/${j.id}?from=jobs`}
+                      prefetch={false}
+                      className="font-mono text-xs font-bold text-california-red hover:text-california-red/80"
+                    >
+                      {j.codigo}
+                    </Link>
+                    <span className="text-[13.5px]">{j.nome}</span>
+                  </div>
+                </td>
+                <td
+                  colSpan={3}
+                  className="border-l-2 border-l-[#e4e2dd] bg-black/[0.015]"
+                />
+                <td className="whitespace-nowrap bg-black/[0.015] p-3 text-right font-mono text-[13px]">
+                  {formatCurrency(j.orcado, moeda)}
+                </td>
+                <td
+                  colSpan={3}
+                  className="border-l-2 border-l-[#cfe0f7] bg-blue-50/40"
+                />
+                <td className="whitespace-nowrap bg-blue-50/40 p-3 text-right font-mono text-[13px]">
+                  {j.planejado > 0 ? formatCurrency(j.planejado, moeda) : "—"}
+                </td>
+                <td
+                  colSpan={3}
+                  className="border-l-2 border-l-[#f0c874] bg-[#fef3c7]/40"
+                />
+                <td className="whitespace-nowrap bg-[#fef3c7]/40 p-3 text-right font-mono text-[13px]">
+                  {j.realizado > 0 ? formatCurrency(j.realizado, moeda) : "—"}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td
+                colSpan={3}
+                className="border-t border-t-border p-3 text-[10px] font-bold uppercase tracking-[0.07em] text-muted-foreground"
+              >
+                Total dos custos · projeto
+              </td>
+              <td
+                colSpan={3}
+                className="border-l-2 border-t-2 border-l-[#d7d7d7] border-t-[#282828] bg-[#f1f0ec]"
+              />
+              <td className="whitespace-nowrap border-t-2 border-t-[#282828] bg-[#f1f0ec] p-3 text-right font-mono text-[13px] font-bold">
+                {formatCurrency(totalOrcado, moeda)}
+              </td>
+              <td
+                colSpan={3}
+                className="border-l-2 border-t-2 border-l-[#b9d1f4] border-t-[#2f6fdb] bg-[#e8f0fd]"
+              />
+              <td className="whitespace-nowrap border-t-2 border-t-[#2f6fdb] bg-[#e8f0fd] p-3 text-right font-mono text-[13px] font-bold text-[#1e4fa3]">
+                {totalPlanejado > 0 ? formatCurrency(totalPlanejado, moeda) : "—"}
+              </td>
+              <td
+                colSpan={3}
+                className="border-l-2 border-t-2 border-l-[#f0c874] border-t-[#d97706] bg-[#fef3c7]"
+              />
+              <td className="whitespace-nowrap border-t-2 border-t-[#d97706] bg-[#fef3c7] p-3 text-right font-mono text-[13px] font-bold text-[#92400e]">
+                {temRealizado ? formatCurrency(totalRealizado, moeda) : "—"}
+              </td>
+            </tr>
+            <tr>
+              <td
+                colSpan={3}
+                className="border-t border-t-border px-3 py-2.5 text-[10px] font-bold uppercase tracking-[0.07em] text-muted-foreground"
+              >
+                Rentabilidade
+              </td>
+              <td
+                colSpan={4}
+                className="border-l-2 border-t border-l-[#d7d7d7] border-t-[#e4e2dd] bg-[#f1f0ec]"
+              />
+              <td
+                colSpan={3}
+                className="border-l-2 border-t border-l-[#b9d1f4] border-t-[#cfe0f7] bg-[#e8f0fd]"
+              />
+              <td className="whitespace-nowrap border-t border-t-[#cfe0f7] bg-[#e8f0fd] px-3 py-2.5 text-right">
+                <CelulaRentabilidade
+                  orcado={totalOrcado}
+                  custo={totalPlanejado}
+                  moeda={moeda}
+                  corValor="text-[#1e4fa3]"
+                  corPercentual="text-[#5a76a8]"
+                />
+              </td>
+              <td
+                colSpan={3}
+                className="border-l-2 border-t border-l-[#f0c874] border-t-[#f0c874] bg-[#fef3c7]"
+              />
+              <td className="whitespace-nowrap border-t border-t-[#f0c874] bg-[#fef3c7] px-3 py-2.5 text-right">
+                <CelulaRentabilidade
+                  orcado={totalOrcado}
+                  custo={totalRealizado}
+                  moeda={moeda}
+                  corValor="text-[#92400e]"
+                  corPercentual="text-[#a3703a]"
+                />
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      <div className="grid grid-cols-1 border-t border-border md:grid-cols-2">
+        <div className="border-b border-border p-6 md:border-b-0 md:border-r">
+          <p className="mb-3.5 text-[13px] font-bold uppercase tracking-wider">
+            Fechamento do orçado · por tipo de custo
+          </p>
+          <div className="flex flex-col gap-1.5">
+            {TIPOS.map((t) => (
+              <LinhaValor
+                key={t}
+                rotulo={tipoCustoLabel(t)}
+                valor={formatCurrency(subtotaisPorTipo[t], moeda)}
+              />
+            ))}
+            <div className="mt-3 border-t border-border pt-3">
+              <LinhaValor
+                rotulo="Total dos custos"
+                valor={formatCurrency(totalOrcado, moeda)}
+                destaque
+              />
+            </div>
+            <LinhaValor
+              rotulo={
+                <>
+                  Honorários <span className="text-xs">({taxaHonorarios})</span>
+                </>
+              }
+              valor={formatCurrency(honorarios, moeda)}
+            />
+            <LinhaValor
+              rotulo={
+                <>
+                  Impostos <span className="text-xs">({taxaImpostos})</span>
+                </>
+              }
+              valor={formatCurrency(imposto, moeda)}
+            />
+            <div className="mt-3 flex items-baseline justify-between gap-3 border-t border-border pt-3.5">
+              <span className="text-sm font-semibold">Faturamento previsto</span>
+              <span className="whitespace-nowrap font-mono text-lg font-bold text-california-red">
+                {formatCurrency(faturamento, moeda)}
+              </span>
+            </div>
+            <p className="mt-2.5 text-[11.5px] text-muted-foreground">
+              Somatório do fechamento de cada job — cada versão aprovada tem
+              suas próprias taxas.
+            </p>
+          </div>
+        </div>
+
+        <PainelResultado
+          faturamento={faturamento}
+          imposto={imposto}
+          orcado={totalOrcado}
+          custoPlanejado={totalPlanejado}
+          custoRealizado={totalRealizado}
+          honorarios={honorarios}
+          moeda={moeda}
+        />
+      </div>
+
+      <div className="flex items-start gap-2 border-t border-border bg-muted/40 px-6 py-4 text-xs leading-relaxed text-muted-foreground">
+        <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+        <p>
+          <strong className="text-foreground">Honorários</strong> sobre A + B + D
+          · <strong className="text-foreground">Impostos</strong> sobre B + C +
+          honorários em <em>gross-up</em> ·{" "}
+          <strong className="text-foreground">Faturamento</strong> = custos +
+          honorários + impostos ·{" "}
+          <strong className="text-foreground">Resultado operacional</strong> =
+          faturamento − impostos − custo (planejado ou realizado) ·{" "}
+          <strong className="text-foreground">Resultado geral</strong> =
+          resultado operacional ÷ faturamento · Os percentuais de{" "}
+          <strong className="text-foreground">honorários</strong> e{" "}
+          <strong className="text-foreground">impostos</strong> no fechamento
+          são a média das taxas dos jobs deste projeto.
+        </p>
+      </div>
+    </div>
+  );
+}
