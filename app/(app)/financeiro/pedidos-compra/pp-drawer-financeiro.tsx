@@ -103,6 +103,8 @@ export function PPDrawerFinanceiro({ pp, open, onOpenChange, contas, tipos, subt
     setPrazoLocal(pp.prazo_pagamento_financeiro);
     setErro(null);
     setMotivo("");
+    setBaixaOpen(false);
+    setCancelarBaixaOpen(false);
   }, [pp]);
 
   React.useEffect(() => {
