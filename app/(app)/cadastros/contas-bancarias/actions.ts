@@ -16,6 +16,20 @@ function temPermissao(role: string): boolean {
   return (ROLES_PERMITIDOS as readonly string[]).includes(role);
 }
 
+async function carregarInfoConta(
+  supabase: ReturnType<typeof createClient>,
+  tenantId: string,
+  id: string,
+) {
+  const { data } = await supabase
+    .from("contas_bancarias")
+    .select("nome, banco, empresa_id")
+    .eq("id", id)
+    .eq("tenant_id", tenantId)
+    .single();
+  return data;
+}
+
 function mapDbError(msg: string): string {
   if (msg.includes("contas_bancarias_nome_empresa_uq")) {
     return "Já existe uma conta bancária com esse nome para esta empresa.";
@@ -157,7 +171,7 @@ export async function editarContaBancaria(
 
     if (atual) {
       const fieldErrors: Record<string, string[]> = {};
-      if (String(d.saldo_inicial) !== String(atual.saldo_inicial)) {
+      if (Number(d.saldo_inicial) !== Number(atual.saldo_inicial)) {
         fieldErrors.saldo_inicial = [
           "Não é possível alterar o saldo inicial de uma conta com lançamentos.",
         ];
@@ -248,6 +262,11 @@ export async function inativarContaBancaria(id: string): Promise<ActionResult> {
     // Tabela ainda não existe — tratar como sem lançamento
   }
 
+  const contaInfo = await carregarInfoConta(supabase, session.activeTenant.id, id);
+  if (!contaInfo) {
+    return { ok: false, message: "Conta não encontrada." };
+  }
+
   const { error } = await supabase
     .from("contas_bancarias")
     .update({ ativo: false })
@@ -264,6 +283,7 @@ export async function inativarContaBancaria(id: string): Promise<ActionResult> {
     tenantId: session.activeTenant.id,
     entidadeTipo: "conta_bancaria",
     entidadeId: id,
+    metadata: { nome: contaInfo.nome, banco: contaInfo.banco, empresa_id: contaInfo.empresa_id },
   });
 
   revalidatePath("/cadastros/contas-bancarias");
@@ -285,6 +305,11 @@ export async function reativarContaBancaria(id: string): Promise<ActionResult> {
 
   const supabase = createClient();
 
+  const contaInfo = await carregarInfoConta(supabase, session.activeTenant.id, id);
+  if (!contaInfo) {
+    return { ok: false, message: "Conta não encontrada." };
+  }
+
   const { error } = await supabase
     .from("contas_bancarias")
     .update({ ativo: true })
@@ -301,6 +326,7 @@ export async function reativarContaBancaria(id: string): Promise<ActionResult> {
     tenantId: session.activeTenant.id,
     entidadeTipo: "conta_bancaria",
     entidadeId: id,
+    metadata: { nome: contaInfo.nome, banco: contaInfo.banco, empresa_id: contaInfo.empresa_id },
   });
 
   revalidatePath("/cadastros/contas-bancarias");
