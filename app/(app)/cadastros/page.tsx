@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Users, Building2, Tag, Layers, MapPin, Building, ArrowRight, FolderKanban, type LucideIcon } from "lucide-react";
+import { Users, Building2, Tag, Layers, MapPin, Building, Wallet, ArrowRight, FolderKanban, type LucideIcon } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 
@@ -10,7 +10,7 @@ export default async function CadastrosPage() {
   const supabase = createClient();
 
   // Contagens de ativos em paralelo para cada cadastro do hub.
-  const [clientesRes, fornecedoresRes, categoriasRes, catDominioRes, regionaisRes, cidadesRes] = await Promise.all([
+  const [clientesRes, fornecedoresRes, categoriasRes, catDominioRes, regionaisRes, cidadesRes, contasBancariasRes] = await Promise.all([
     supabase
       .from("clientes")
       .select("*", { count: "exact", head: true })
@@ -41,6 +41,11 @@ export default async function CadastrosPage() {
       .select("*", { count: "exact", head: true })
       .eq("tenant_id", session.activeTenant.id)
       .eq("ativo", true),
+    supabase
+      .from("contas_bancarias")
+      .select("*", { count: "exact", head: true })
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("ativo", true),
   ]);
 
   if (clientesRes.error) console.error("[cadastros.clientes]", clientesRes.error.message);
@@ -49,6 +54,7 @@ export default async function CadastrosPage() {
   if (catDominioRes.error) console.error("[cadastros.categorias_dominio]", catDominioRes.error.message);
   if (regionaisRes.error) console.error("[cadastros.regionais]", regionaisRes.error.message);
   if (cidadesRes.error) console.error("[cadastros.cidades]", cidadesRes.error.message);
+  if (contasBancariasRes.error) console.error("[cadastros.contas_bancarias]", contasBancariasRes.error.message);
 
   return (
     <div className="space-y-8">
@@ -110,6 +116,13 @@ export default async function CadastrosPage() {
           title="Cidades"
           description="Vocabulário usado ao criar projetos — ex.: Salvador, São Paulo."
           count={cidadesRes.count ?? 0}
+        />
+        <CadastroCard
+          href="/cadastros/contas-bancarias"
+          icon={Wallet}
+          title="Contas bancárias"
+          description="Contas onde os pagamentos entram e saem, com saldo inicial e empresa associada."
+          count={contasBancariasRes.count ?? 0}
         />
       </div>
     </div>
