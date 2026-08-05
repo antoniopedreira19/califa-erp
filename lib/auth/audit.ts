@@ -81,6 +81,9 @@ export type AuditAction =
   | "plano_conta_subtipo.atualizado"
   | "plano_conta_subtipo.inativado"
   | "plano_conta_subtipo.reativado"
+  | "lancamento_financeiro.criado"
+  | "lancamento_financeiro.estornado"
+  | "pedido_compra.baixa_estornada"
   | "acao_negada";
 
 export interface AuditPayload {
