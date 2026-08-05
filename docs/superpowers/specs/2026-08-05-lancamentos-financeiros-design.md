@@ -561,7 +561,7 @@ Ações auditadas via `log_audit_event`:
 - CREATE TYPE `natureza_padrao_tipo`.
 - CREATE TABLE `plano_contas_tipos`, `plano_contas_subtipos`.
 - Índices, RLS, GRANT, triggers `set_updated_at`.
-- **Seed inicial** (dentro de `do $$ ... $$`) — vide seção 10.
+- **Seed inicial dos 15 tipos** (dentro de `do $$ ... $$`), sem subtipos — vide seção 10.
 
 ### 9.3. `20260805000003_lancamentos_financeiros.sql`
 
@@ -605,21 +605,11 @@ Baseado exatamente na imagem fornecida por Antonio.
 | PL | Bonificação | saida | 140 |
 | DL | Distribuição de Lucro | saida | 150 |
 
-### 10.2. Subtipos — DP (14 rows)
+### 10.2. Subtipos
 
-Todos com `tipo_id = (SELECT id FROM plano_contas_tipos WHERE codigo='DP' AND tenant_id=?)`.
+**Sem seed.** Antonio decidiu na rodada 3 que só os tipos entram no seed automático. Todos os subtipos (incluindo DP e DA que ele já tinha me mostrado) são cadastrados via CRUD `/cadastros/plano-de-contas` depois da entrega. Motivo prático: o financeiro pode preferir revisar/renomear antes de virar dado do banco, e cadastro por UI dá controle.
 
-Benefícios (plano de saúde e Total Pass); Bonificação; 13° Salário; Estagiário; Férias; FGTS; INSS; IR Retido; Outros; ProLabore; Processo trabalhista; Rescisão; Salário; Transporte.
-
-### 10.3. Subtipos — DA (11 rows)
-
-Alimentação; Correio; Eventos; Frete; Hospedagem; Manutenção e Conserto de Equipamentos; Material escritório; Motoboy; Outros; Passagem; Tarifas.
-
-### 10.4. Subtipos dos outros 13 tipos
-
-Antonio ainda não forneceu. Cadastro entra via CRUD depois da entrega inicial. Migration não faz seed do que não temos.
-
-### 10.5. Conta bancária
+### 10.3. Conta bancária
 
 **Sem seed.** Antonio cadastra as contas reais via UI após a entrega (com saldos iniciais e datas corretos).
 
@@ -686,8 +676,8 @@ Ficam registradas as decisões finais pra referência histórica.
 
 ## 15. Pendências pra Antonio antes do plano
 
-1. **Subtipos dos outros 13 tipos** (REC, CO, CT, CF, DM, DC, DT, RF, DJ, EMP, IMOB, PL, DL) — Antonio me manda screenshot/lista pra incluir no seed junto com DP e DA. Se não vier, vão no CRUD depois.
+1. **Confirmar imutabilidade do `codigo` do tipo** — opção (A) trava dura após 1º uso vs (B) editável sempre com audit.
 
 ---
 
-**Próximo passo:** Antonio revisa esta versão final da spec. Assumindo que a única pendência é o material do #15 (ou a confirmação de que fica sem seed), invoco `writing-plans` pra gerar o plano de implementação passo a passo.
+**Próximo passo:** Antonio decide o #15. Depois invoco `writing-plans` pra gerar o plano de implementação passo a passo.
