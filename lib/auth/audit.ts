@@ -73,6 +73,14 @@ export type AuditAction =
   | "conta_bancaria.atualizada"
   | "conta_bancaria.inativada"
   | "conta_bancaria.reativada"
+  | "plano_conta_tipo.criado"
+  | "plano_conta_tipo.atualizado"
+  | "plano_conta_tipo.inativado"
+  | "plano_conta_tipo.reativado"
+  | "plano_conta_subtipo.criado"
+  | "plano_conta_subtipo.atualizado"
+  | "plano_conta_subtipo.inativado"
+  | "plano_conta_subtipo.reativado"
   | "acao_negada";
 
 export interface AuditPayload {
