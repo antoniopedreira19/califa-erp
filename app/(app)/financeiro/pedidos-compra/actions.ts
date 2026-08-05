@@ -128,38 +128,35 @@ export async function salvarPrazoFinanceiro(
   return { ok: true };
 }
 
+const baixaSchema = z.object({
+  pp_id: z.string().uuid(),
+  pago_em: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data deve estar em YYYY-MM-DD."),
+  conta_bancaria_id: z.string().uuid("Selecione a conta bancária."),
+  plano_conta_tipo_id: z.string().uuid("Selecione o tipo."),
+  plano_conta_subtipo_id: z.string().uuid("Selecione o subtipo."),
+});
+
 /**
- * Marca a PP como paga. A data vem do financeiro e pode ser retroativa —
- * é comum lançar dias depois do pagamento sair.
- *
- * Por enquanto é só uma marcação de status. Contas a pagar de verdade
- * (`lancamentos_financeiros`, estorno) fica pra uma fase futura e vai
- * partir daqui.
+ * Marca a PP como paga e cria o lançamento financeiro correspondente via RPC.
+ * A data pode ser retroativa — é comum lançar dias depois do pagamento sair.
  */
-export async function marcarPagaFinanceiro(
-  pp_id: string,
-  pagoEm: string,
-): Promise<Result> {
-  const gate = await checarGateFinanceiro(pp_id, "pedido_compra.paga");
+export async function marcarPagaFinanceiro(input: unknown): Promise<Result> {
+  const parsed = baixaSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, message: parsed.error.issues[0]?.message ?? "Entrada inválida." };
+  }
+  const gate = await checarGateFinanceiro(parsed.data.pp_id, "pedido_compra.paga");
   if (!gate.ok) return gate;
   const { session, supabase } = gate;
 
-  const dataParsed = prazoSchema.safeParse(pagoEm);
-  if (!dataParsed.success) {
-    return {
-      ok: false,
-      message: dataParsed.error.issues[0]?.message ?? "Data inválida.",
-    };
-  }
-
-  const { data: pp, error: ppErr } = await supabase
+  const { data: pp } = await supabase
     .from("pedidos_compra")
-    .select("id, status, job_id, codigo, valor")
-    .eq("id", pp_id)
+    .select("id, status, codigo, valor, job_id, empresa_id")
+    .eq("id", parsed.data.pp_id)
     .eq("tenant_id", session.activeTenant.id)
     .maybeSingle();
 
-  if (ppErr || !pp) return { ok: false, message: "PP não encontrada." };
+  if (!pp) return { ok: false, message: "PP não encontrada." };
   if (pp.status !== "em_avaliacao") {
     return {
       ok: false,
@@ -170,34 +167,123 @@ export async function marcarPagaFinanceiro(
     };
   }
 
-  const { error: updErr } = await supabase
-    .from("pedidos_compra")
-    .update({
-      status: "pago",
-      pago_em: dataParsed.data,
-      pago_por: session.profile.id,
-    })
-    .eq("id", pp_id)
-    .eq("tenant_id", session.activeTenant.id);
+  const { data: lancId, error } = await supabase.rpc("dar_baixa_pp", {
+    p_pp_id: parsed.data.pp_id,
+    p_pago_em: parsed.data.pago_em,
+    p_conta_bancaria_id: parsed.data.conta_bancaria_id,
+    p_plano_conta_tipo_id: parsed.data.plano_conta_tipo_id,
+    p_plano_conta_subtipo_id: parsed.data.plano_conta_subtipo_id,
+    p_criado_por: session.profile.id,
+  });
 
-  if (updErr) {
-    return { ok: false, message: `Falha ao marcar como paga: ${updErr.message}` };
+  if (error) {
+    return { ok: false, message: `Falha ao dar baixa: ${error.message}` };
   }
 
   await logAuditEvent({
     acao: "pedido_compra.paga",
     tenantId: session.activeTenant.id,
     entidadeTipo: "pedido_compra",
-    entidadeId: pp_id,
+    entidadeId: parsed.data.pp_id,
     metadata: {
       pp_codigo: pp.codigo,
       valor: Number(pp.valor),
-      pago_em: dataParsed.data,
+      pago_em: parsed.data.pago_em,
       job_id: pp.job_id,
+      conta_bancaria_id: parsed.data.conta_bancaria_id,
+      lancamento_id: lancId,
+    },
+  });
+
+  await logAuditEvent({
+    acao: "lancamento_financeiro.criado",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "lancamento_financeiro",
+    entidadeId: lancId as string,
+    metadata: {
+      origem: "pp_baixa",
+      pp_codigo: pp.codigo,
+      valor: Number(pp.valor),
+      natureza: "saida",
     },
   });
 
   revalidatePath("/financeiro/pedidos-compra");
+  revalidatePath("/financeiro/conciliacao");
+  revalidatePath(`/jobs/${pp.job_id}`);
+  return { ok: true };
+}
+
+const estornoSchema = z.object({
+  pp_id: z.string().uuid(),
+  motivo: z
+    .string()
+    .trim()
+    .min(10, "Motivo precisa ter pelo menos 10 caracteres.")
+    .max(500, "Motivo passa de 500 caracteres."),
+});
+
+/**
+ * Estorna a baixa de uma PP paga: reverte o status para "em_avaliacao"
+ * e cria um lançamento reverso na mesma conta bancária, preservando o histórico contábil.
+ */
+export async function estornarBaixaPP(input: unknown): Promise<Result> {
+  const parsed = estornoSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, message: parsed.error.issues[0]?.message ?? "Entrada inválida." };
+  }
+  const gate = await checarGateFinanceiro(parsed.data.pp_id, "pedido_compra.baixa_estornada");
+  if (!gate.ok) return gate;
+  const { session, supabase } = gate;
+
+  const { data: pp } = await supabase
+    .from("pedidos_compra")
+    .select("id, status, codigo, job_id")
+    .eq("id", parsed.data.pp_id)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle();
+
+  if (!pp) return { ok: false, message: "PP não encontrada." };
+  if (pp.status !== "pago") {
+    return { ok: false, message: "Só PP paga pode ter a baixa estornada." };
+  }
+
+  const { data: reversoId, error } = await supabase.rpc("estornar_baixa_pp", {
+    p_pp_id: parsed.data.pp_id,
+    p_motivo: parsed.data.motivo,
+    p_criado_por: session.profile.id,
+  });
+
+  if (error) {
+    return { ok: false, message: `Falha ao estornar: ${error.message}` };
+  }
+
+  await logAuditEvent({
+    acao: "pedido_compra.baixa_estornada",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "pedido_compra",
+    entidadeId: parsed.data.pp_id,
+    metadata: {
+      pp_codigo: pp.codigo,
+      motivo: parsed.data.motivo,
+      lancamento_reverso_id: reversoId,
+    },
+  });
+
+  await logAuditEvent({
+    acao: "lancamento_financeiro.estornado",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "lancamento_financeiro",
+    entidadeId: reversoId as string,
+    metadata: {
+      origem: "pp_estorno",
+      pp_codigo: pp.codigo,
+      motivo: parsed.data.motivo,
+    },
+  });
+
+  revalidatePath("/financeiro/pedidos-compra");
+  revalidatePath("/financeiro/conciliacao");
   revalidatePath(`/jobs/${pp.job_id}`);
   return { ok: true };
 }

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { PedidosCompraList, type PPRow } from "./pedidos-compra-list";
-import type { PPStatus } from "@/lib/types";
+import type { PPStatus, ContaBancaria, PlanoContaTipo, PlanoContaSubtipo } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -19,29 +19,51 @@ export default async function PedidosCompraFinanceiroPage() {
 
   const supabase = createClient();
 
-  const { data, error } = await supabase
-    .from("pedidos_compra")
-    .select(
-      `
-      id, codigo, status, valor, quantidade, servico, especificacoes,
-      prazo_pagamento, prazo_pagamento_financeiro, pdf_path, created_at,
-      cancelada_em, motivo_cancelamento,
-      rejeitada_em, motivo_rejeicao, pago_em,
-      fornecedor:fornecedores(id, nome, razao_social),
-      empresa:empresas(id, razao_social, nome_fantasia),
-      cancelada_por_profile:profiles!cancelada_por(nome),
-      emitida_por_profile:profiles!emitida_por(nome),
-      rejeitada_por_profile:profiles!rejeitada_por(nome),
-      pago_por_profile:profiles!pago_por(nome),
-      job:jobs(
-        id, codigo, nome,
-        projeto:projetos(codigo, nome, cliente:clientes(nome_fantasia))
-      ),
-      anexos:pedidos_compra_anexos(id, arquivo_nome_original, arquivo_tamanho_bytes)
-    `,
-    )
-    .eq("tenant_id", session.activeTenant.id)
-    .order("created_at", { ascending: false });
+  const [{ data, error }, contasRes, tiposRes, subtiposRes] = await Promise.all([
+    supabase
+      .from("pedidos_compra")
+      .select(
+        `
+        id, codigo, status, valor, quantidade, servico, especificacoes,
+        prazo_pagamento, prazo_pagamento_financeiro, pdf_path, created_at,
+        cancelada_em, motivo_cancelamento,
+        rejeitada_em, motivo_rejeicao, pago_em,
+        fornecedor:fornecedores(id, nome, razao_social),
+        empresa:empresas(id, razao_social, nome_fantasia),
+        cancelada_por_profile:profiles!cancelada_por(nome),
+        emitida_por_profile:profiles!emitida_por(nome),
+        rejeitada_por_profile:profiles!rejeitada_por(nome),
+        pago_por_profile:profiles!pago_por(nome),
+        job:jobs(
+          id, codigo, nome,
+          projeto:projetos(codigo, nome, cliente:clientes(nome_fantasia))
+        ),
+        anexos:pedidos_compra_anexos(id, arquivo_nome_original, arquivo_tamanho_bytes)
+      `,
+      )
+      .eq("tenant_id", session.activeTenant.id)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("contas_bancarias")
+      .select("*")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("ativo", true)
+      .returns<ContaBancaria[]>(),
+    supabase
+      .from("plano_contas_tipos")
+      .select("*")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("ativo", true)
+      .order("ordem")
+      .returns<PlanoContaTipo[]>(),
+    supabase
+      .from("plano_contas_subtipos")
+      .select("*")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("ativo", true)
+      .order("nome")
+      .returns<PlanoContaSubtipo[]>(),
+  ]);
 
   if (error) console.error("[financeiro.pp.list]", error.message);
 
@@ -138,7 +160,12 @@ export default async function PedidosCompraFinanceiroPage() {
         </p>
       </header>
 
-      <PedidosCompraList rows={rows} />
+      <PedidosCompraList
+        rows={rows}
+        contas={contasRes.data ?? []}
+        tipos={tiposRes.data ?? []}
+        subtipos={subtiposRes.data ?? []}
+      />
     </div>
   );
 }
