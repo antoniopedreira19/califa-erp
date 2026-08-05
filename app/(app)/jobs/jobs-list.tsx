@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronDown, ChevronRight, Search } from "lucide-react";
+import { ArrowRight, ChevronRight, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
   Select,
@@ -67,22 +67,15 @@ function formatMoney(n: number | null): string {
   return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
-type DisplayRow =
-  | {
-      kind: "projeto";
-      projeto_id: string;
-      projeto_codigo: string | null;
-      projeto_nome: string | null;
-      cliente_nome: string | null;
-      quantidadeJobs: number;
-      valorTotalGrupo: number;
-      expanded: boolean;
-    }
-  | {
-      kind: "job";
-      row: JobRow;
-      indentado: boolean;
-    };
+interface GrupoProjeto {
+  projetoId: string;
+  codigo: string | null;
+  nome: string | null;
+  cliente: string | null;
+  jobs: JobRow[];
+  total: number;
+  aberto: boolean;
+}
 
 export function JobsList({
   rows,
@@ -96,7 +89,9 @@ export function JobsList({
     new Set(),
   );
   const [busca, setBusca] = React.useState("");
-  const [expandedIds, setExpandedIds] = React.useState<Set<string>>(new Set());
+  // Grupos nascem abertos, como no design. Guardamos os FECHADOS pra não
+  // precisar semear o state com os ids dos projetos no mount.
+  const [fechadosIds, setFechadosIds] = React.useState<Set<string>>(new Set());
   const [empresaFiltro, setEmpresaFiltro] = React.useState<string>("todas");
 
   const gruposPorProjeto = React.useMemo(() => {
@@ -109,71 +104,51 @@ export function JobsList({
     return map;
   }, [rows]);
 
-  const displayRows = React.useMemo<DisplayRow[]>(() => {
+  const grupos = React.useMemo<GrupoProjeto[]>(() => {
     const q = busca.trim().toLowerCase();
-    const filterActive =
+    const filtroAtivo =
       statusAtivos.size > 0 || q !== "" || empresaFiltro !== "todas";
 
-    function matches(r: JobRow): boolean {
+    function combina(r: JobRow): boolean {
       if (statusAtivos.size > 0 && !statusAtivos.has(r.status)) return false;
       if (empresaFiltro !== "todas" && r.empresa_id !== empresaFiltro)
         return false;
       if (q === "") return true;
       return (
-        r.codigo.toLowerCase().includes(q) ||
-        r.nome.toLowerCase().includes(q)
+        r.codigo.toLowerCase().includes(q) || r.nome.toLowerCase().includes(q)
       );
     }
 
-    // Ordena projetos pelo menor codigo de job dentro do grupo
-    const projetosOrdenados = Array.from(gruposPorProjeto.entries())
-      .map(([projetoId, jobsDoGrupo]) => {
-        const ordenados = [...jobsDoGrupo].sort((a, b) =>
-          a.codigo.localeCompare(b.codigo),
-        );
-        return { projetoId, jobs: ordenados };
-      })
+    // Projetos ordenados pelo menor código de job do grupo.
+    const ordenados = Array.from(gruposPorProjeto.entries())
+      .map(([projetoId, jobsDoGrupo]) => ({
+        projetoId,
+        jobs: [...jobsDoGrupo].sort((a, b) => a.codigo.localeCompare(b.codigo)),
+      }))
       .sort((a, b) => a.jobs[0].codigo.localeCompare(b.jobs[0].codigo));
 
-    const out: DisplayRow[] = [];
+    const out: GrupoProjeto[] = [];
 
-    for (const { projetoId, jobs } of projetosOrdenados) {
-      const jobsFiltrados = jobs.filter(matches);
-      if (jobsFiltrados.length === 0) continue;
+    for (const { projetoId, jobs } of ordenados) {
+      const visiveis = jobs.filter(combina);
+      if (visiveis.length === 0) continue;
 
-      // Caso 1: projeto original tem 1 job -> linha direta, sem header
-      if (jobs.length === 1) {
-        out.push({ kind: "job", row: jobsFiltrados[0], indentado: false });
-        continue;
-      }
-
-      // Caso 2: projeto tem 2+ jobs -> header de projeto + jobs indentados
       const primeiro = jobs[0];
-      const expanded = filterActive ? true : expandedIds.has(projetoId);
-
       out.push({
-        kind: "projeto",
-        projeto_id: projetoId,
-        projeto_codigo: primeiro.projeto_codigo,
-        projeto_nome: primeiro.projeto_nome,
-        cliente_nome: primeiro.cliente_nome,
-        quantidadeJobs: jobsFiltrados.length,
-        valorTotalGrupo: jobsFiltrados.reduce(
-          (s, j) => s + (j.valor_total ?? 0),
-          0,
-        ),
-        expanded,
+        projetoId,
+        codigo: primeiro.projeto_codigo,
+        nome: primeiro.projeto_nome,
+        cliente: primeiro.cliente_nome,
+        jobs: visiveis,
+        total: visiveis.reduce((s, j) => s + (j.valor_total ?? 0), 0),
+        // Com filtro ativo o grupo abre sempre: fechado ele esconderia
+        // justamente o job que o filtro encontrou.
+        aberto: filtroAtivo ? true : !fechadosIds.has(projetoId),
       });
-
-      if (expanded) {
-        for (const j of jobsFiltrados) {
-          out.push({ kind: "job", row: j, indentado: true });
-        }
-      }
     }
 
     return out;
-  }, [gruposPorProjeto, statusAtivos, busca, empresaFiltro, expandedIds]);
+  }, [gruposPorProjeto, statusAtivos, busca, empresaFiltro, fechadosIds]);
 
   function toggleStatus(s: JobStatus) {
     setStatusAtivos((prev) => {
@@ -184,8 +159,8 @@ export function JobsList({
     });
   }
 
-  function toggleExpand(id: string) {
-    setExpandedIds((prev) => {
+  function toggleGrupo(id: string) {
+    setFechadosIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -195,7 +170,7 @@ export function JobsList({
 
   return (
     <div className="space-y-4">
-      {/* Chips de filtro + busca */}
+      {/* Chips de filtro + empresa + busca */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           {STATUS_FILTROS.map((s) => {
@@ -206,10 +181,10 @@ export function JobsList({
                 type="button"
                 onClick={() => toggleStatus(s)}
                 className={cn(
-                  "rounded-full border px-3 py-1 text-xs font-semibold transition-colors",
+                  "rounded-full border px-[13px] py-[5px] text-xs font-semibold transition-colors",
                   ativo
-                    ? "bg-california-red text-white border-california-red"
-                    : "bg-white text-muted-foreground border-border hover:border-california-red/40 hover:text-california-red",
+                    ? "border-california-red bg-california-red text-white"
+                    : "border-border bg-white text-muted-foreground hover:border-california-red/40 hover:text-california-red",
                 )}
               >
                 {jobStatusLabel(s)}
@@ -220,7 +195,7 @@ export function JobsList({
         <div className="flex items-center gap-2">
           {empresas.length > 0 && (
             <Select value={empresaFiltro} onValueChange={setEmpresaFiltro}>
-              <SelectTrigger className="w-[180px]">
+              <SelectTrigger className="h-9 w-[180px] px-2.5 text-[13px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent
@@ -237,24 +212,24 @@ export function JobsList({
               </SelectContent>
             </Select>
           )}
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+          <div className="relative flex items-center">
+            <Search className="absolute left-2.5 h-3.5 w-3.5 text-muted-foreground" />
             <input
               type="text"
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
-              placeholder="Buscar por nome ou codigo"
-              className="rounded-lg border border-border bg-white pl-8 pr-3 py-1.5 text-xs w-64 focus:outline-none focus:border-california-red/40"
+              placeholder="Buscar por nome ou código"
+              className="w-64 rounded-lg border border-border bg-white py-2 pl-[30px] pr-3 text-xs text-foreground outline-none focus:border-california-red/40"
             />
           </div>
         </div>
       </div>
 
       {/* Tabela */}
-      <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-soft">
-        <table className="w-full text-sm">
+      <div className="overflow-x-auto rounded-2xl border border-border bg-card shadow-soft">
+        <table className="w-full min-w-[1120px] border-collapse text-sm">
           <thead>
-            <tr className="border-b border-border bg-muted/30 text-left text-xs uppercase tracking-wider text-muted-foreground">
+            <tr className="border-b border-border bg-muted/60 text-left text-xs font-semibold uppercase tracking-[0.06em] text-muted-foreground">
               <th className="w-8 px-2 py-3" aria-label="Expandir" />
               <th className="px-4 py-3 font-semibold">Código</th>
               <th className="px-4 py-3 font-semibold">Nome</th>
@@ -263,164 +238,159 @@ export function JobsList({
               <th className="px-4 py-3 font-semibold">Cliente</th>
               <th className="px-4 py-3 font-semibold">Responsável</th>
               <th className="px-4 py-3 font-semibold">Início</th>
-              <th className="px-4 py-3 font-semibold text-right">Valor total</th>
+              <th className="px-4 py-3 text-right font-semibold">Valor total</th>
               <th className="px-4 py-3 font-semibold">Status</th>
             </tr>
           </thead>
           <tbody>
-            {displayRows.length === 0 && (
-              <tr>
-                <td
-                  colSpan={10}
-                  className="px-4 py-12 text-center text-sm text-muted-foreground"
-                >
-                  {rows.length === 0
-                    ? "Nenhum job criado ainda. Aprove uma versão de orçamento e crie um job."
-                    : "Nenhum job encontrado com esses filtros."}
-                </td>
-              </tr>
-            )}
-            {displayRows.map((dr) => {
-              if (dr.kind === "projeto") {
-                return (
-                  <tr
-                    key={`p-${dr.projeto_id}`}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => router.push(`/jobs/projeto/${dr.projeto_id}`)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        router.push(`/jobs/projeto/${dr.projeto_id}`);
-                      }
-                    }}
-                    className="border-b border-border bg-california-red/5 hover:bg-california-red/10 cursor-pointer transition-colors focus-visible:outline-none focus-visible:bg-california-red/10"
-                  >
-                    <td className="w-8 px-2 py-3 align-middle border-l-4 border-l-california-red">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleExpand(dr.projeto_id);
-                        }}
-                        aria-label={dr.expanded ? "Colapsar jobs do projeto" : "Expandir jobs do projeto"}
-                        aria-expanded={dr.expanded}
-                        className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-                      >
-                        {dr.expanded ? (
-                          <ChevronDown className="h-4 w-4" />
-                        ) : (
-                          <ChevronRight className="h-4 w-4" />
-                        )}
-                      </button>
-                    </td>
-                    <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
-                      {dr.projeto_codigo ?? "—"}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="font-semibold">{dr.projeto_nome ?? "Projeto"}</span>
-                      <span className="ml-2 text-[11px] text-muted-foreground">
-                        {dr.quantidadeJobs} jobs
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">—</td>
-                    <td className="px-4 py-3 text-muted-foreground">—</td>
-                    <td className="px-4 py-3 text-muted-foreground">
-                      {dr.cliente_nome ?? "—"}
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">—</td>
-                    <td className="px-4 py-3 text-muted-foreground">—</td>
-                    <td className="px-4 py-3 text-right tabular-nums font-semibold">
-                      {formatMoney(dr.valorTotalGrupo)}
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">—</td>
-                  </tr>
-                );
-              }
-
-              const r = dr.row;
-              const isChild = dr.indentado;
-              return (
+            {grupos.map((g) => (
+              <React.Fragment key={g.projetoId}>
                 <tr
-                  key={r.id}
                   role="button"
                   tabIndex={0}
-                  onClick={() => router.push(`/jobs/${r.id}?from=jobs`)}
+                  aria-expanded={g.aberto}
+                  onClick={() => toggleGrupo(g.projetoId)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") {
                       e.preventDefault();
-                      router.push(`/jobs/${r.id}?from=jobs`);
+                      toggleGrupo(g.projetoId);
                     }
                   }}
                   className={cn(
-                    "border-b border-border last:border-0 hover:bg-accent/40 transition-colors cursor-pointer focus-visible:outline-none focus-visible:bg-accent/40",
-                    isChild && "bg-california-red/[0.03] hover:bg-california-red/10",
+                    "cursor-pointer border-b border-border transition-colors hover:bg-[#f0eeee]/85 focus-visible:outline-none focus-visible:bg-[#f0eeee]/85",
+                    g.aberto ? "bg-muted/90" : "bg-muted/40",
                   )}
                 >
-                  <td
-                    className={cn(
-                      "w-8 px-2 py-3 align-middle",
-                      isChild && "border-l-4 border-l-california-red",
-                    )}
-                  />
-                  <td className="px-4 py-3 font-mono text-xs">
-                    <Link
-                      href={`/jobs/${r.id}?from=jobs`}
-                      prefetch={false}
-                      className="hover:text-california-red"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {r.codigo}
-                    </Link>
-                  </td>
-                  <td className={cn("px-4 py-3", isChild && "pl-8")}>
-                    <div className="flex flex-wrap items-center gap-2">
-                      {isChild && (
+                  <td colSpan={10} className="p-0">
+                    <div className="grid grid-cols-[32px_1fr_auto_auto_auto] items-center gap-4 py-[11px] pl-2 pr-4">
+                      <div className="flex items-center justify-center">
                         <span
-                          aria-hidden="true"
-                          className="text-muted-foreground/60"
+                          className={cn(
+                            "flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-transform duration-150",
+                            g.aberto && "rotate-90",
+                          )}
                         >
-                          └
+                          <ChevronRight className="h-4 w-4" />
                         </span>
-                      )}
-                      <span className="font-medium">{r.nome}</span>
+                      </div>
+                      <div className="flex min-w-0 flex-wrap items-center gap-2.5">
+                        <span className="font-mono text-xs font-semibold text-[#b3323c]">
+                          {g.codigo ?? "—"}
+                        </span>
+                        <span className="text-[13.5px] font-semibold">
+                          {g.nome ?? "Projeto"}
+                        </span>
+                        <span className="h-3 w-px bg-[#dcdcdc]" />
+                        <span className="text-xs text-muted-foreground">
+                          {g.cliente ?? "—"}
+                        </span>
+                      </div>
+                      <span className="whitespace-nowrap text-[11px] font-semibold uppercase tracking-[0.07em] text-muted-foreground">
+                        {g.jobs.length === 1 ? "1 job" : `${g.jobs.length} jobs`}
+                      </span>
+                      <span className="whitespace-nowrap text-[13px] font-bold tabular-nums">
+                        {formatMoney(g.total)}
+                      </span>
+                      <Link
+                        href={`/jobs/projeto/${g.projetoId}`}
+                        prefetch={false}
+                        onClick={(e) => e.stopPropagation()}
+                        className="inline-flex items-center gap-1.5 whitespace-nowrap text-[11px] font-semibold uppercase tracking-[0.06em] text-california-red hover:text-california-red/80"
+                      >
+                        Visão agregada
+                        <ArrowRight className="h-3 w-3" />
+                      </Link>
                     </div>
                   </td>
-                  <td className="px-4 py-3">
-                    {r.empresa_nome ? (
-                      <span className="inline-flex items-center rounded-full border border-border bg-muted/40 px-2 py-0.5 text-[11px] font-medium text-foreground">
-                        {r.empresa_nome}
-                      </span>
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground">
-                    <span className="font-mono text-xs">{r.projeto_codigo}</span>{" "}
-                    <span>{r.projeto_nome ?? ""}</span>
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground">
-                    {r.cliente_nome ?? "—"}
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground">
-                    {r.responsavel_nome ?? "—"}
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground">
-                    {formatDate(r.data_inicio_prevista)}
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums font-semibold">
-                    {formatMoney(r.valor_total)}
-                  </td>
-                  <td className="px-4 py-3">
-                    <Badge className={cn("border", statusBadgeClasses(r.status))}>
-                      {jobStatusLabel(r.status)}
-                    </Badge>
-                  </td>
                 </tr>
-              );
-            })}
+
+                {g.aberto &&
+                  g.jobs.map((j, i) => (
+                    <tr
+                      key={j.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => router.push(`/jobs/${j.id}?from=jobs`)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          router.push(`/jobs/${j.id}?from=jobs`);
+                        }
+                      }}
+                      className="cursor-pointer border-b border-b-[#f4f2f2] transition-colors hover:bg-muted/70 focus-visible:outline-none focus-visible:bg-muted/70"
+                    >
+                      {/* Calha da árvore: vertical desce até o meio da última
+                          linha, e o traço horizontal encosta no código. */}
+                      <td className="relative w-8 px-2 py-3">
+                        <span
+                          aria-hidden="true"
+                          className="absolute left-[23px] top-0 w-px bg-[#dad7d7]"
+                          style={{
+                            height: i === g.jobs.length - 1 ? "50%" : "100%",
+                          }}
+                        />
+                        <span
+                          aria-hidden="true"
+                          className="absolute left-6 top-1/2 h-px w-[9px] bg-[#dad7d7]"
+                        />
+                      </td>
+                      <td className="px-4 py-3 font-mono text-xs">
+                        <Link
+                          href={`/jobs/${j.id}?from=jobs`}
+                          prefetch={false}
+                          className="text-california-red hover:text-california-red/80"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {j.codigo}
+                        </Link>
+                      </td>
+                      <td className="px-4 py-3 font-medium">{j.nome}</td>
+                      <td className="px-4 py-3">
+                        {j.empresa_nome ? (
+                          <span className="inline-flex items-center rounded-full border border-border bg-muted/80 px-2.5 py-0.5 text-[11px] font-medium text-foreground">
+                            {j.empresa_nome}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground">
+                        <span className="font-mono text-xs">
+                          {j.projeto_codigo}
+                        </span>{" "}
+                        <span>{j.projeto_nome ?? ""}</span>
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground">
+                        {j.cliente_nome ?? "—"}
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground">
+                        {j.responsavel_nome ?? "—"}
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground">
+                        {formatDate(j.data_inicio_prevista)}
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3 text-right font-semibold tabular-nums">
+                        {formatMoney(j.valor_total)}
+                      </td>
+                      <td className="px-4 py-3">
+                        <Badge
+                          className={cn("border", statusBadgeClasses(j.status))}
+                        >
+                          {jobStatusLabel(j.status)}
+                        </Badge>
+                      </td>
+                    </tr>
+                  ))}
+              </React.Fragment>
+            ))}
           </tbody>
         </table>
+
+        {grupos.length === 0 && (
+          <p className="px-4 py-12 text-center text-sm text-muted-foreground">
+            Nenhum job encontrado com esses filtros.
+          </p>
+        )}
       </div>
     </div>
   );

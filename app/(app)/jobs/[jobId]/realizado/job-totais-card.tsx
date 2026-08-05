@@ -10,6 +10,7 @@ import {
   agregarRentabilidadePorProjeto,
   type JobParaAgregar,
 } from "@/lib/calculos/projeto-totais";
+import { PainelResultado } from "@/components/painel-resultado";
 import {
   tipoCustoLabel,
   type TipoCusto,
@@ -165,19 +166,9 @@ export function JobTotaisCard({
     realizado: l.realizado,
   }));
 
-  // Sem realizado lancado a conta nao existe: faturamento menos imposto viraria
-  // "lucro" inteiro. Travessao em vez de numero inflado.
+  // Sem realizado lancado o rodape mostra travessao em vez de zero — a conta
+  // do resultado em si mora no PainelResultado.
   const temRealizado = totalRealizado > 0;
-  const resultadoOperacional = temRealizado
-    ? faturamento - imposto - totalRealizado
-    : null;
-  const resultadoGeral =
-    resultadoOperacional !== null && faturamento > 0
-      ? (resultadoOperacional / faturamento) * 100
-      : null;
-
-  const { rentabilidade: rentRealizado, percentual: rentRealizadoPct } =
-    calcularRentabilidade(subtotalGeral, totalRealizado);
 
   return (
     <div className="rounded-2xl border border-border bg-card shadow-soft">
@@ -411,128 +402,16 @@ export function JobTotaisCard({
           </div>
         </div>
 
-        <div className="p-6">
-          <p className="mb-3.5 text-[13px] font-bold uppercase tracking-wider">
-            Resultado
-          </p>
-          <div className="flex flex-col gap-1.5">
-            <LinhaValor
-              rotulo="Faturamento previsto"
-              valor={formatCurrency(faturamento, moeda)}
-            />
-            <LinhaValor
-              rotulo="− Impostos"
-              valor={formatCurrency(imposto, moeda)}
-            />
-            <LinhaValor
-              rotulo="− Custo realizado"
-              valor={
-                temRealizado ? formatCurrency(totalRealizado, moeda) : "—"
-              }
-            />
-            <div className="mt-3 flex items-baseline justify-between gap-3 border-t border-border pt-3">
-              <span className="text-sm font-semibold">
-                Resultado operacional
-              </span>
-              <span
-                className={cn(
-                  "whitespace-nowrap font-mono text-[15px] font-bold",
-                  resultadoOperacional === null
-                    ? "text-muted-foreground"
-                    : resultadoOperacional >= 0
-                      ? "text-emerald-700"
-                      : "text-california-red",
-                )}
-              >
-                {resultadoOperacional === null
-                  ? "—"
-                  : formatCurrency(resultadoOperacional, moeda)}
-              </span>
-            </div>
-          </div>
-
-          <div className="mt-2.5 rounded-xl border border-border bg-muted/40 px-3.5 pb-3 pt-2.5">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Composto por
-            </p>
-            <div className="mt-1 flex items-baseline justify-between gap-3 py-1">
-              <span className="text-sm font-medium">Honorários</span>
-              <span className="whitespace-nowrap font-mono text-[13px] font-semibold">
-                {formatCurrency(honorarios, moeda)} ·{" "}
-                {formatarTaxa(percentualHonorarios)}
-              </span>
-            </div>
-            <div className="flex items-baseline justify-between gap-3 border-t border-border pt-1.5">
-              <span className="text-sm font-medium">
-                Rentabilidade{" "}
-                <span className="font-normal text-muted-foreground">
-                  (orçado × realizado)
-                </span>
-              </span>
-              <span className="whitespace-nowrap font-mono text-[13px] font-semibold">
-                {temRealizado ? (
-                  <>
-                    {formatCurrency(rentRealizado, moeda)}
-                    {rentRealizadoPct !== null &&
-                      ` · ${formatarPercentual(rentRealizadoPct)}`}
-                  </>
-                ) : (
-                  <span className="text-muted-foreground">—</span>
-                )}
-              </span>
-            </div>
-          </div>
-
-          <div
-            className={cn(
-              "mt-2.5 flex items-baseline justify-between gap-3 rounded-xl border p-4",
-              resultadoGeral === null
-                ? "border-border bg-muted/40"
-                : resultadoGeral >= 0
-                  ? "border-emerald-200 bg-emerald-50"
-                  : "border-california-red/30 bg-california-red/5",
-            )}
-          >
-            <div>
-              <p
-                className={cn(
-                  "text-sm font-semibold",
-                  resultadoGeral === null
-                    ? "text-muted-foreground"
-                    : resultadoGeral >= 0
-                      ? "text-emerald-900"
-                      : "text-california-red",
-                )}
-              >
-                Resultado geral
-              </p>
-              <p
-                className={cn(
-                  "mt-0.5 text-xs",
-                  resultadoGeral === null
-                    ? "text-muted-foreground"
-                    : resultadoGeral >= 0
-                      ? "text-emerald-700"
-                      : "text-california-red/80",
-                )}
-              >
-                Resultado operacional ÷ faturamento previsto
-              </p>
-            </div>
-            <span
-              className={cn(
-                "whitespace-nowrap font-mono text-[26px] font-bold leading-none",
-                resultadoGeral === null
-                  ? "text-muted-foreground"
-                  : resultadoGeral >= 0
-                    ? "text-emerald-700"
-                    : "text-california-red",
-              )}
-            >
-              {resultadoGeral === null ? "—" : formatarPercentual(resultadoGeral)}
-            </span>
-          </div>
-        </div>
+        <PainelResultado
+          faturamento={faturamento}
+          imposto={imposto}
+          orcado={subtotalGeral}
+          custoPlanejado={totalPlanejado}
+          custoRealizado={totalRealizado}
+          honorarios={honorarios}
+          taxaHonorarios={formatarTaxa(percentualHonorarios)}
+          moeda={moeda}
+        />
       </div>
 
       <div className="flex items-start gap-2 border-t border-border bg-muted/40 px-6 py-4 text-xs leading-relaxed text-muted-foreground">
@@ -544,7 +423,7 @@ export function JobTotaisCard({
           <strong className="text-foreground">Faturamento</strong> = custos +
           honorários + impostos ·{" "}
           <strong className="text-foreground">Resultado operacional</strong> =
-          faturamento − impostos − custo realizado ·{" "}
+          faturamento − impostos − custo (planejado ou realizado) ·{" "}
           <strong className="text-foreground">Resultado geral</strong> =
           resultado operacional ÷ faturamento.
         </p>
