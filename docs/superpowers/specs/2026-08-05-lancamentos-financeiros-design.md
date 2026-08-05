@@ -32,7 +32,7 @@ Nesta fase entrega:
 2. CRUD administrativo de contas bancárias e plano de contas.
 3. Refactor da baixa da PP pra criar lançamento na conta bancária correta.
 4. Estorno reverso da baixa (cria lançamento oposto + volta PP pra `em_avaliacao`).
-5. Tela `/financeiro/lancamentos` com filtro por conta bancária e saldo derivado.
+5. Tela `/financeiro/conciliacao` com filtro por conta bancária e saldo derivado.
 
 ## 3. Decisões arquiteturais
 
@@ -406,7 +406,7 @@ Regras do 5.2, via RPC `estornar_baixa_pp(...)` (também transacional).
 Arquivo novo: `app/(app)/cadastros/contas-bancarias/actions.ts`.
 
 - `criarContaBancaria`, `atualizarContaBancaria`, `inativarContaBancaria`, `reativarContaBancaria`.
-- Gate: apenas `administrador`. Financeiro **lê** (pra escolher no dropdown), mas não edita.
+- Gate: `administrador` **ou** `financeiro`. Ambos criam, editam e inativam.
 - Saldo inicial pode ser editado somente **enquanto não houver lançamento** naquela conta. Depois trava.
 - `saldo_inicial_data` mesma regra que `saldo_inicial`.
 - Inativar: só permite se não houver lançamento nos últimos 90 dias (política simples pra evitar sumir conta com movimento recente). Se tiver, mensagem de erro clara.
@@ -417,10 +417,10 @@ Arquivo novo: `app/(app)/cadastros/plano-de-contas/actions.ts`.
 
 - `criarTipo`, `atualizarTipo`, `inativarTipo`, `reativarTipo`.
 - `criarSubtipo`, `atualizarSubtipo`, `inativarSubtipo`, `reativarSubtipo`.
-- Gate: apenas `administrador`. Financeiro só lê.
+- Gate: `administrador` **ou** `financeiro`. Ambos criam, editam, inativam.
 - Inativar tipo: bloqueia se existir subtipo ativo (força inativar em cadeia manualmente) OU se existir lançamento nos últimos 90 dias com esse tipo.
 - Inativar subtipo: bloqueia se existir lançamento nos últimos 90 dias com esse subtipo.
-- Ao editar `codigo` do tipo: audit obrigatório porque quebra rastreio histórico. Ideal: bloquear edição de `codigo` após primeiro lançamento — trata como imutável.
+- `codigo` do tipo é **editável enquanto não houver lançamento com esse tipo**. Assim que aparecer o primeiro lançamento, o campo trava (só `nome` continua editável). Preserva rastreio histórico do DRE.
 
 ## 7. UI
 
@@ -433,9 +433,9 @@ Adicionar 2 entradas em `/cadastros` (hub existente):
 
 Adicionar 1 entrada nova em `/financeiro`:
 
-- **Lançamentos** (`Receipt` icon)
+- **Conciliação** (`Receipt` icon) — rota `/financeiro/conciliacao`.
 
-Todas com `roles: ['administrador','financeiro']` (a rota `/cadastros/*` pode aceitar `administrador` só, mas as duas específicas de finanças herdam `financeiro` também **em modo read-only** — TBD na implementação; conservador é só admin edita e ambos leem).
+Todas as 3 entradas com `roles: ['administrador','financeiro']`. Ambos os papéis criam, editam e inativam.
 
 ### 7.2. CRUD `/cadastros/contas-bancarias`
 
@@ -492,7 +492,7 @@ Novo componente: `<BaixaPPModal>` com:
 - Form:
   - Data do pagamento* (DatePicker, default hoje)
   - Conta bancária* (dropdown; filtrado por `empresa_id = pp.empresa_id`, só ativas, agrupado por banco)
-  - Tipo* (dropdown; só ativos, ordenado por `ordem`, natureza esperada = saída então destaca CO/CT/CF/DP/DM/DA/DC/DT/DJ/IMOB/PL/DL — mas não bloqueia; se o financeiro escolher REC ou RF, mostra warning "isso é normalmente receita, tem certeza?")
+  - Tipo* (dropdown; só ativos, ordenado por `ordem`; sem restrição — financeiro escolhe livre entre os 15 tipos)
   - Subtipo* (dropdown; filtrado por `tipo_id`; se tipo vazio, dropdown desabilitado)
 - Botão "Confirmar baixa" (verde) + "Cancelar"
 - Bloco de erro no topo se algo falhar
@@ -500,13 +500,13 @@ Novo componente: `<BaixaPPModal>` com:
 O drawer da PP também ganha, quando `status='pago'`:
 
 - Botão **"Cancelar baixa"** (borda vermelha) — abre `<CancelarBaixaModal>` com input de motivo (10-500 chars) e botão de confirmar.
-- Link "Ver lançamento na conta {conta.nome}" que abre `/financeiro/lancamentos?conta={conta_id}&highlight={lancamento_id}`. Query params `conta` e `highlight` são consumidos pela tela do 7.5.
+- Link "Ver lançamento na conta {conta.nome}" que abre `/financeiro/conciliacao?conta={conta_id}&highlight={lancamento_id}`. Query params `conta` e `highlight` são consumidos pela tela do 7.5.
 
-### 7.5. `/financeiro/lancamentos`
+### 7.5. `/financeiro/conciliacao`
 
 Nova rota. Layout:
 
-- Header padrão (`Receipt` icon + kicker "Financeiro" + título "Lançamentos").
+- Header padrão (`Receipt` icon + kicker "Financeiro" + título "Conciliação").
 - Barra de filtros:
   - **Conta bancária*** (dropdown, obrigatório — nada aparece sem conta selecionada)
   - Período (2 date pickers, default: mês corrente)
@@ -531,10 +531,9 @@ Quando a URL vem com `?highlight=<lancamento_id>`, a linha desse id ganha um pul
 Todas as 4 tabelas novas seguem o padrão do projeto:
 
 - `alter table ... enable row level security;`
-- Policy `SELECT`: `is_tenant_member(tenant_id)` (todo membro lê).
-- Policy `INSERT`, `UPDATE`: `is_tenant_admin(tenant_id)` para `contas_bancarias`, `plano_contas_tipos`, `plano_contas_subtipos` (só admin edita).
-- Policy `INSERT`, `UPDATE`: `is_tenant_member(tenant_id)` para `lancamentos_financeiros` (server action já filtra por role admin|financeiro; RLS é defense-in-depth).
-- **Sem policy `DELETE`** em nenhuma. Estorno é lançamento reverso, não delete.
+- Policy `SELECT`: `is_tenant_member(tenant_id)` (todo membro lê — GP também precisa consultar plano de contas quando estamos vendo relatórios futuros).
+- Policy `INSERT`, `UPDATE`: `is_tenant_member(tenant_id)` **em todas as 4 tabelas**. O gate de role (`admin | financeiro`) mora no server action, seguindo o mesmo padrão da Central Financeira (Task 005) e da fase 2 de PPs. Motivo pra não subir isso pro RLS: o projeto não tem helper `is_tenant_financeiro` e criar um só pra esta task adiciona superfície sem ganho — o gate de role no server action já é enforceable e auditado (denials viram `acao_negada`).
+- **Sem policy `DELETE`** em nenhuma. Estorno é lançamento reverso, não delete. Inativar é `UPDATE ativo=false`.
 - `GRANT SELECT, INSERT, UPDATE ON <tabela> TO authenticated` no fim de cada bloco.
 
 Policies usam `(select auth.uid())` conforme regra do projeto (evita re-avaliação por linha).
@@ -658,7 +657,7 @@ Arquivos que **serão criados**:
 - `supabase/migrations/20260805000004_baixa_pp_rpc.sql`
 - `app/(app)/cadastros/contas-bancarias/page.tsx` + `actions.ts` + `conta-editor-drawer.tsx` + `contas-bancarias-list.tsx`
 - `app/(app)/cadastros/plano-de-contas/page.tsx` + `actions.ts` + `tipo-editor-drawer.tsx` + `subtipo-editor-drawer.tsx` + `tipos-list.tsx` + `subtipos-list.tsx`
-- `app/(app)/financeiro/lancamentos/page.tsx` + `lancamentos-list.tsx` + `filtros-conta.tsx`
+- `app/(app)/financeiro/conciliacao/page.tsx` + `conciliacao-list.tsx` + `filtros-conta.tsx`
 - `app/(app)/financeiro/pedidos-compra/baixa-pp-modal.tsx`
 - `app/(app)/financeiro/pedidos-compra/cancelar-baixa-modal.tsx`
 - `lib/calculos/saldo-conta.ts` — helper de saldo derivado + saldo anterior por período.
@@ -674,17 +673,21 @@ Arquivos que **serão criados**:
 - **Cadastro inativado com lançamento no meio** — bloqueado (janela 90 dias).
 - **Perda de rastreio se `codigo` do tipo mudar** — bloquear edição de `codigo` após primeiro lançamento (trata como imutável). Ou aceitar edição com audit obrigatório. **Decisão pendente durante implementação** — vou de bloqueio duro.
 
-## 14. Perguntas em aberto pra revisão de Antonio
+## 14. Perguntas resolvidas na rodada 2
 
-Se qualquer resposta abaixo for diferente do que assumi, ajusto antes de escrever o plano.
+Ficam registradas as decisões finais pra referência histórica.
 
-1. **Título da tela de saldo** — coloquei `/financeiro/lancamentos`. Antonio prefere `/financeiro/extrato`? Ou outro nome?
-2. **`caixa` na tabela `contas_bancarias`** — deixei como tipo pra cobrir caixa em espécie. OK? Se California não tem caixa físico, tiro o valor do enum e simplifico.
-3. **Bloqueio de `codigo` do tipo após primeiro lançamento** — imutável. OK?
-4. **Financeiro é read-only nos cadastros `/cadastros/contas-bancarias` e `/cadastros/plano-de-contas`, admin edita** — OK?
-5. **Warning quando financeiro escolhe REC/RF ao dar baixa** ("normalmente receita") — vale a pena, ou é ruído? Eu iria de warning mas não bloqueio.
-6. **Distribuição de Lucro (DL)** — modelei como `natureza_padrao='saida'`. Se contabilmente na California isso não é despesa e sim distribuição de resultado, ajusto o `ordem` ou natureza.
+1. ✅ **Rota da tela de saldo** — `/financeiro/conciliacao` (Antonio pensa nela como a tela de conciliação bancária).
+2. ✅ **`caixa` no enum** — fica. Cobre caixa em espécie se aparecer.
+3. ✅ **`codigo` do tipo imutável após primeiro lançamento** — sim. Preserva rastreio histórico do DRE.
+4. ✅ **Financeiro edita cadastros** — `admin | financeiro` criam, editam e inativam contas bancárias e plano de contas. Gate no server action (não no RLS — ver seção 8).
+5. ✅ **Sem warning REC/RF na baixa** — financeiro escolhe livre. Sem babá.
+6. ✅ **DL como `natureza_padrao='saida'`** — provisório. Ajustável no CRUD depois se contabilidade decidir diferente.
+
+## 15. Pendências pra Antonio antes do plano
+
+1. **Subtipos dos outros 13 tipos** (REC, CO, CT, CF, DM, DC, DT, RF, DJ, EMP, IMOB, PL, DL) — Antonio me manda screenshot/lista pra incluir no seed junto com DP e DA. Se não vier, vão no CRUD depois.
 
 ---
 
-**Próximo passo:** Antonio revisa esta spec, aponta ajustes. Depois invoco `writing-plans` pra gerar o plano de implementação passo a passo.
+**Próximo passo:** Antonio revisa esta versão final da spec. Assumindo que a única pendência é o material do #15 (ou a confirmação de que fica sem seed), invoco `writing-plans` pra gerar o plano de implementação passo a passo.
