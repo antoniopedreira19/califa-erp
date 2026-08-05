@@ -1,8 +1,18 @@
-# Handoff — Jobs: as quatro abas do detalhe do job
+# Handoff — Jobs
 
-Registro da implementação do design **"Jobs - Fluxo"** no módulo de Jobs, mais
-as decisões de modelagem e de negócio tomadas junto com o time durante a
-execução.
+Registro da implementação dos designs do módulo de Jobs, mais as decisões de
+modelagem e de negócio tomadas junto com o time durante a execução.
+
+O documento tem **duas partes**, uma por design:
+
+| Parte | Design | Telas | Seções |
+|---|---|---|---|
+| **I** | `Jobs - Fluxo.dc.html` + `Chat Job.dc.html` | as quatro abas do detalhe do job | 1 a 11 |
+| **II** | `Jobs - Lista e Projeto.dc.html` | lista de jobs e visão agregada do projeto | 12 a 17 |
+
+---
+
+# Parte I — as quatro abas do detalhe do job
 
 **Datas:** 2026-08-03 (entrega 1) · 2026-08-04 (entregas 2–5)
 **Origem do design:** projeto Claude Design `69342d83-28d9-4bea-a8af-c99e233f5f13`,
@@ -449,3 +459,210 @@ que **não podem ser apagados pela UI**, por design:
 - **Uma mensagem** de Tiago Mendonça na Comunicação do JOB-0002.
 
 Se quiser ambiente limpo, precisa remover via SQL.
+
+---
+
+# Parte II — lista de jobs e visão agregada do projeto
+
+**Datas:** 2026-08-04 (entregas 6 e 7) · 2026-08-05 (entrega 8)
+**Origem do design:** mesmo projeto Claude Design `69342d83-28d9-4bea-a8af-c99e233f5f13`,
+arquivo `Jobs - Lista e Projeto.dc.html`, lido via MCP `claude_design`. O arquivo
+foi **atualizado pelo time no meio da execução** (seletor de ótica e média das
+taxas) e relido — a entrega 8 é esse segundo estado do design.
+**Branch:** `design/jobs-lista-e-projeto`
+
+---
+
+## 12. Status
+
+| Entrega | Estado |
+|---|---|
+| **6 — lista de jobs e visão agregada conforme o design** | ✅ `fe1b5fa` (2026-08-04) |
+| **7 — resumo de resultado no cabeçalho das duas telas** | ✅ `fe1b5fa` (2026-08-04) |
+| **8 — seletor Planejada/Realizada e média das taxas** | ✅ `fe1b5fa` (2026-08-05) |
+
+As três foram aprovadas uma a uma e entraram no mesmo commit: as entregas se
+sobrepõem nos mesmos arquivos (`projeto/page.tsx` e `projeto-totais-card.tsx`),
+e separar exigiria staging parcial.
+
+`tsc --noEmit`, `next lint` e `next build` limpos. Verificadas no browser contra
+o banco real, com o mock do design servido em paralelo pra comparação lado a
+lado — as seções abaixo dizem o que foi conferido em cada uma.
+
+**Nenhuma migration.** Esta parte é só leitura: nada de novo foi gravado no
+banco.
+
+---
+
+## 13. Decisões desta entrega
+
+Nenhuma delas está no design nem no código — vieram de perguntas ao time ou de
+conflito entre o mock e o que o sistema já fazia.
+
+| Tema | Decisão |
+|---|---|
+| **Fonte do orçado na visão agregada** | Vem de `jobs_itens_orcado` (a cópia do job), não de `versoes_orcamento_itens`. Sem isso, depois de uma errata a planilha consolidada do projeto divergiria da Planilha Interna do job — a versão aprovada fica congelada de propósito. |
+| **Rótulos de tipo de custo** | Seguem `tipoCustoLabel()` do app ("A · Fat. direto", "B · Bi-trib.", …), **não** os do mock ("A · Terceiros com nota", …). O mock usava texto de exemplo; mudar quebraria a consistência com o card de Totais do job e com a tela da versão. |
+| **O que saiu da visão agregada** | A tabela "Rentabilidade agregada" (consolidava por nome de grupo entre jobs) e a tabela "Jobs do projeto". O design as substitui pela árvore no cabeçalho, um card de planilha por job e o card de Totais do projeto. `agregarRentabilidadePorProjeto` segue em uso pelo card de Totais do job. |
+| **Agrupamento na lista** | Todo projeto vira grupo, inclusive os de um job só, e os grupos **nascem abertos**. Antes o grupo só existia com 2+ jobs. |
+| **Resultado planejado / realizado** | Exibidos em **percentual**, como o "Resultado geral" da tela da versão — não em R$. |
+| **Ótica default do painel de Resultado** | Abre em **"Realizada"**, como o design. |
+| **Honorários e impostos do projeto** | Percentual exibido é a **média simples** das taxas dos jobs (não ponderada pelo valor). Antes listava a taxa de cada job ("12% · 15% · 15%"). |
+| **Ortografia** | O placeholder da busca ficou "Buscar por nome ou código", com acento; o mock está sem. Regra do `CLAUDE.md` vence o mock. |
+
+---
+
+## 14. Entrega 6 — lista de jobs e visão agregada
+
+**Commit:** `fe1b5fa`
+
+### Arquivos
+
+| Arquivo | Mudança |
+|---|---|
+| [`jobs-list.tsx`](app/(app)/jobs/jobs-list.tsx) | reescrita conforme o design |
+| [`projeto/[projetoId]/page.tsx`](app/(app)/jobs/projeto/[projetoId]/page.tsx) | reescrita: árvore de jobs, barra "Planilha consolidada", cards por job, Totais do projeto |
+| [`planilha-job-card.tsx`](app/(app)/jobs/projeto/[projetoId]/planilha-job-card.tsx) | **novo** — card colapsável por job com a planilha Orçado × Planejado × Realizado |
+| [`projeto-totais-card.tsx`](app/(app)/jobs/projeto/[projetoId]/projeto-totais-card.tsx) | **novo** — Totais do projeto |
+| [`tipos.ts`](app/(app)/jobs/projeto/[projetoId]/tipos.ts) | **novo** — o formato que a página monta no servidor e entrega pronto aos cards; nenhum dos dois refaz conta |
+| `jobs-do-projeto-table.tsx` | **removido** |
+
+### Lista de jobs
+
+A linha de projeto passou a ocupar a largura toda (`colspan={10}`) com um grid
+de 5 colunas: chevron, código + nome + cliente, contagem, total e o link
+**"Visão agregada →"**. Clicar na linha só expande — quem navega é o link. Antes
+a linha inteira navegava, o que tornava impossível colapsar sem sair da tela.
+
+Os jobs filhos ganharam a calha de árvore (linha vertical que morre no meio da
+última linha + traço horizontal), no lugar do `└` com borda vermelha à esquerda.
+
+Grupos nascem abertos, como no design. O state guarda os **fechados**, não os
+abertos — assim não é preciso semear os ids dos projetos no mount.
+
+### Visão agregada
+
+Um bloco por job, cada um com a planilha completa de 15 colunas, agrupamentos
+colapsáveis e rodapé com "Total do job" e "Rentabilidade". Abaixo, o card de
+Totais com uma linha por job e os dois painéis de fechamento.
+
+A **coluna "Valor total" da lista** e a árvore de jobs usam `jobs.valor_total`,
+que **é** o faturamento previsto — gravado na abertura e ressincronizado pela
+errata. Foi o que permitiu não carregar os itens de todos os jobs só pra montar
+a lista.
+
+### Layout das tabelas
+
+As tabelas de 15 colunas aqui usam **largura automática**, sem `table-fixed` nem
+`colgroup` — diferente da Planilha Interna do job. O que fecha as proporções com
+o mock é `w-[210px]` na primeira coluna da planilha do job (e `w-[320px]` na
+coluna "Job" dos Totais) mais `min-w-[132px]` nas colunas Total.
+
+Com `table-fixed` e as porcentagens da Planilha Interna, os blocos numéricos
+ficavam ~30% mais estreitos que o design. Medido no browser:
+
+| | 1ª coluna | Tipo | Categoria | R$ Unit. | QT | D/M | Total |
+|---|---|---|---|---|---|---|---|
+| mock | 198 | 43 | 99 | 112 | 28 | 34 | **158** |
+| `table-fixed` | 246 | 55 | 116 | 103 | 41 | 41 | **116** |
+| entregue | 210 | 51 | 105 | 86 | 33 | 41 | **157** |
+
+> ⚠️ O efeito colateral é o mesmo do design: um nome de item muito longo alarga
+> a primeira coluna, porque `truncate` não constrange em layout automático.
+
+### Verificado
+
+Mock do design servido localmente e comparado lado a lado com a aplicação, nas
+duas telas, colapsado e expandido. Larguras de coluna medidas com
+`getBoundingClientRect` nos dois. Console limpo em carga nova.
+
+---
+
+## 15. Entrega 7 — resumo de resultado no cabeçalho
+
+**Commit:** `fe1b5fa` · pedido do time, não está no design.
+
+Faixa de cinco blocos no canto superior direito, no mesmo padrão do
+`ResumoRentabilidade` da tela da versão do orçamento.
+
+| Arquivo | Mudança |
+|---|---|
+| [`components/resumo-resultado.tsx`](components/resumo-resultado.tsx) | **novo** |
+| [`jobs/[jobId]/page.tsx`](app/(app)/jobs/[jobId]/page.tsx) | resumo no cabeçalho da página |
+| [`projeto/[projetoId]/page.tsx`](app/(app)/jobs/projeto/[projetoId]/page.tsx) | idem |
+
+Ordem dos blocos, definida pelo time: faturamento previsto, custo planejado,
+custo realizado, resultado planejado, resultado realizado. Os dois resultados
+saem em **percentual**, de `calcularResultadoOperacional` — a mesma função da
+tela da versão e do card de Totais, então o "resultado realizado" do cabeçalho
+é sempre igual ao "resultado geral" do rodapé. Sem custo lançado o bloco mostra
+travessão com "sem planejado" / "sem realizado".
+
+No job o resumo fica no **cabeçalho da página**, acima das abas, e por isso
+aparece nas quatro. Só é renderizado se o job tiver itens.
+
+### Alinhamento vertical
+
+O topo do card alinha com o topo das **maiúsculas** do título, não com o topo
+do bloco: `mt-[27px]` na página do job (h1 `text-3xl`) e `mt-[24px]` na visão
+agregada (h1 `text-2xl`). São 16px da linha do código mais ~7px de folga entre
+a caixa de linha do `h1` e o topo das maiúsculas da Inter.
+
+Medido no browser comparando o topo do card com a altura de maiúscula real da
+fonte (`TextMetrics.actualBoundingBoxAscent` sobre "H"): −0,17px no job e
+−0,04px no projeto. A referência é a **altura de maiúscula**, não o glifo mais
+alto do título — "O" tem overshoot e "t"/"l" passam da linha de maiúscula, então
+alinhar pelo título faria o resultado mudar conforme o nome.
+
+---
+
+## 16. Entrega 8 — seletor Planejada/Realizada e média das taxas
+
+**Commit:** `fe1b5fa` · segunda versão do design.
+
+| Arquivo | Mudança |
+|---|---|
+| [`components/painel-resultado.tsx`](components/painel-resultado.tsx) | **novo** — o painel "Resultado" dos dois cards de Totais, agora client component |
+| [`job-totais-card.tsx`](app/(app)/jobs/[jobId]/realizado/job-totais-card.tsx) | usa o painel; legenda atualizada |
+| [`projeto-totais-card.tsx`](app/(app)/jobs/projeto/[projetoId]/projeto-totais-card.tsx) | usa o painel; média das taxas; legenda atualizada |
+
+### O seletor
+
+Troca a ótica inteira de uma vez. Faturamento previsto e impostos não dependem
+dela.
+
+| | Planejada | Realizada |
+|---|---|---|
+| linha do custo | − Custo planejado | − Custo realizado |
+| resultado | Resultado operacional **planejado** | Resultado operacional **realizado** |
+| composto por | Rentabilidade (orçado × **planejado**) | Rentabilidade (orçado × **realizado**) |
+| caixa final | Resultado geral **planejado** | Resultado geral **realizado** |
+
+Conferido no JOB-0002: planejada R$ 22.016,00 / 16,0%; realizada
+R$ 108.616,00 / 78,7% — os mesmos percentuais que a faixa do cabeçalho mostra.
+Os estilos computados do pill batem com o mock (fundo `#f1f0ec`, `padding 3px`,
+`gap 2px`, botão `5px 14px`, ativo branco com sombra `0 1px 2px rgba(0,0,0,.08)`).
+
+### Média das taxas
+
+No "Fechamento do orçado" do **projeto**, honorários e impostos passam a exibir
+a média simples das taxas dos jobs, arredondada em 2 casas — no projeto de
+teste, `(13 + 12 + 14)/3` vira "Honorários (13%)". O card do job continua com a
+taxa da própria versão, inclusive o "· 12%" ao lado dos honorários em
+"Composto por".
+
+> ⚠️ **Os valores em R$ continuam sendo a soma job a job**, cada um calculado
+> com a sua própria taxa. O percentual exibido é referência, não a taxa que
+> gerou aqueles números: quem tentar reconferir `custos × 13%` vai achar
+> diferente, de propósito. A legenda do rodapé diz isso.
+
+---
+
+## 17. Pendências da Parte II
+
+| Item | Situação |
+|---|---|
+| **Média ponderada das taxas** | A média é simples. Um job pequeno com taxa fora da curva mexe no percentual exibido tanto quanto um job grande. |
+| **"Valor total" da lista** | Usa `jobs.valor_total`. Hoje ele acompanha o faturamento (abertura + errata o ressincronizam); se algum caminho futuro gravar custo sem atualizar o campo, lista e visão agregada divergem. |
+| **Nome de item longo** | Alarga a primeira coluna das tabelas da visão agregada, por causa do layout automático. Mesmo comportamento do design. |
+| **Moeda do projeto** | O card de Totais assume a moeda do primeiro job. Projeto com jobs em moedas diferentes somaria valores incomparáveis — não existe hoje, mas nada impede. |

@@ -7,7 +7,13 @@ import { listActiveMembers } from "@/lib/data/members";
 import type { Job, JobStatus, Regional } from "@/lib/types";
 import { jobStatusLabel, JOB_STATUS_TRANSICOES, areaDoPapel } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
+import { ResumoResultado } from "@/components/resumo-resultado";
 import { cn } from "@/lib/utils";
+import {
+  calcularTotaisVersao,
+  calcularTotaisPlanejados,
+  calcularTotaisRealizado,
+} from "@/lib/calculos/versao-totais";
 import { JobEditorDrawer } from "./job-editor-drawer";
 import { StatusActions } from "./status-actions";
 import { ReenviarAprovacaoButton } from "./reenviar-aprovacao-button";
@@ -324,6 +330,20 @@ export default async function JobDetailPage({
     0,
   );
 
+  // Resumo do cabeçalho: mesmas funções do card de Totais da Planilha
+  // Interna, pra header e rodapé nunca divergirem.
+  const totaisJob = calcularTotaisVersao(
+    itens,
+    Number(versaoAprovada.percentual_honorarios),
+    Number(versaoAprovada.percentual_imposto),
+  );
+  const { totalPlanejado: custoPlanejadoJob } = calcularTotaisPlanejados(itens);
+  const { totalRealizado: custoRealizadoJob } = calcularTotaisRealizado(
+    itens.map((it) => ({
+      total_realizado: Number(realizadosMap.get(it.id)?.total_realizado ?? 0),
+    })),
+  );
+
   const threadChat = montarThreadChat(
     {
       criadoEm: raw.created_at,
@@ -400,21 +420,42 @@ export default async function JobDetailPage({
           <ArrowLeft className="h-3 w-3" />
           {backLink.label}
         </Link>
-        <div className="mt-3">
-          <p className="font-mono text-xs font-semibold text-muted-foreground">{job.codigo}</p>
-          <div className="mt-1 flex flex-wrap items-center gap-3">
-            <h1 className="text-3xl font-bold tracking-tight">{job.nome}</h1>
-            <Badge className={cn("border", statusBadgeClasses(job.status))}>
-              {jobStatusLabel(job.status)}
-            </Badge>
-            {job.status !== "cancelado" && (
-              <JobEditorDrawer
-                job={job}
-                regionais={regionais}
-                responsaveis={responsaveis}
-              />
-            )}
+        {/* O resumo tem largura fixa e fica ancorado à direita: quem cede
+            espaço para nome longo é a coluna do título, que quebra dentro
+            de si mesma (min-w-0 permite o encolhimento). */}
+        <div className="mt-3 flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
+          <div className="min-w-0 flex-1">
+            <p className="font-mono text-xs font-semibold text-muted-foreground">{job.codigo}</p>
+            <div className="mt-1 flex flex-wrap items-center gap-3">
+              <h1 className="text-3xl font-bold tracking-tight">{job.nome}</h1>
+              <Badge className={cn("border", statusBadgeClasses(job.status))}>
+                {jobStatusLabel(job.status)}
+              </Badge>
+              {job.status !== "cancelado" && (
+                <JobEditorDrawer
+                  job={job}
+                  regionais={regionais}
+                  responsaveis={responsaveis}
+                />
+              )}
+            </div>
           </div>
+
+          {/* Alinha o topo do resumo com o topo das LETRAS do nome do job,
+              não com o topo do bloco: 16px da linha do código + 4px do mt-1
+              + 7px de folga entre a caixa de linha do h1 (text-3xl/36px) e
+              o topo das maiúsculas da Inter. Medido no navegador. */}
+          {itens.length > 0 && (
+            <div className="mt-[27px]">
+              <ResumoResultado
+                faturamento={totaisJob.faturamento}
+                imposto={totaisJob.imposto}
+                custoPlanejado={custoPlanejadoJob}
+                custoRealizado={custoRealizadoJob}
+                moeda={versaoAprovada.moeda}
+              />
+            </div>
+          )}
         </div>
       </div>
 
