@@ -890,3 +890,34 @@ export interface PlanoContaSubtipo {
   created_at: string;
   updated_at: string;
 }
+
+// ---------- Task 011: lançamentos financeiros ----------
+
+export type NaturezaLancamento = "entrada" | "saida";
+
+export type OrigemLancamento =
+  | "pp_baixa"
+  | "pp_baixa_estornada"
+  | "pp_estorno"
+  | "manual";
+
+export interface LancamentoFinanceiro {
+  id: string;
+  tenant_id: string;
+  empresa_id: string;
+  conta_bancaria_id: string;
+  data_movimento: string; // YYYY-MM-DD
+  valor: string; // numeric — Number(...)
+  natureza: NaturezaLancamento;
+  descricao: string;
+  plano_conta_tipo_id: string;
+  plano_conta_subtipo_id: string;
+  fornecedor_id: string | null;
+  cliente_id: string | null;
+  job_id: string | null;
+  pedido_compra_id: string | null;
+  estorno_de_lancamento_id: string | null;
+  origem: OrigemLancamento;
+  criado_por: string;
+  created_at: string;
+}
