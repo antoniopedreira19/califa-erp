@@ -562,6 +562,7 @@ Ações auditadas via `log_audit_event`:
 - CREATE TABLE `plano_contas_tipos`, `plano_contas_subtipos`.
 - Índices, RLS, GRANT, triggers `set_updated_at`.
 - **Seed inicial dos 15 tipos** (dentro de `do $$ ... $$`), sem subtipos — vide seção 10.
+- **Trigger `enforce_tipo_codigo_imutavel`** aplicado após a criação de `lancamentos_financeiros` (ordem importa: a função referencia essa tabela). Portanto o trigger real vai na migration `20260805000003_lancamentos_financeiros.sql`, no fim do arquivo — vide seção 15.
 
 ### 9.3. `20260805000003_lancamentos_financeiros.sql`
 
@@ -570,7 +571,8 @@ Ações auditadas via `log_audit_event`:
 - Constraints CHECK e FK composta.
 - Unique parcial `uniq_baixa_ativa_por_pp` (where `origem='pp_baixa'`).
 - Índices, RLS (INSERT/UPDATE = `is_tenant_member`), GRANT.
-- Sem coluna `updated_at` e sem trigger — imutabilidade é a regra (só o `UPDATE origem` do estorno é permitido, e ele fica rastreado em audit).
+- Sem coluna `updated_at` e sem trigger de update no próprio lançamento — imutabilidade é a regra (só o `UPDATE origem` do estorno é permitido, e ele fica rastreado em audit).
+- No fim do arquivo: função + trigger `enforce_tipo_codigo_imutavel` em `plano_contas_tipos` (definido nesta migration porque referencia `lancamentos_financeiros`).
 
 ### 9.4. `20260805000004_baixa_pp_rpc.sql`
 
@@ -674,10 +676,34 @@ Ficam registradas as decisões finais pra referência histórica.
 5. ✅ **Sem warning REC/RF na baixa** — financeiro escolhe livre. Sem babá.
 6. ✅ **DL como `natureza_padrao='saida'`** — provisório. Ajustável no CRUD depois se contabilidade decidir diferente.
 
-## 15. Pendências pra Antonio antes do plano
+## 15. Decisões da rodada 4
 
-1. **Confirmar imutabilidade do `codigo` do tipo** — opção (A) trava dura após 1º uso vs (B) editável sempre com audit.
+1. ✅ **Imutabilidade do `codigo` do tipo** — opção **(A)** confirmada. Trava dura após o 1º uso. Enquanto não houver lançamento com aquele tipo, `codigo` é editável livremente. Assim que o primeiro lançamento é gravado, `codigo` fica bloqueado permanentemente. `nome` continua editável. Para trocar código depois disso: criar tipo novo, inativar o antigo.
+
+**Implementação da trava (A):**
+
+- Server action `atualizarTipoPlanoContas` faz `SELECT count(*) FROM lancamentos_financeiros WHERE plano_conta_tipo_id = ?`. Se > 0 e o input contiver `codigo` diferente do atual, retorna erro claro: "Este tipo já tem lançamento. Só o nome pode ser alterado. Para trocar o código, cadastre um tipo novo e inative este."
+- UI desabilita o campo `codigo` no drawer de edição quando `tipo.total_lancamentos > 0` (carregado no server component).
+- Defense-in-depth via trigger BEFORE UPDATE no banco que aborta se `NEW.codigo IS DISTINCT FROM OLD.codigo` e existe lançamento. Migração inclui:
+
+```sql
+create or replace function public.enforce_tipo_codigo_imutavel()
+returns trigger language plpgsql as $$
+begin
+  if NEW.codigo is distinct from OLD.codigo
+     and exists (select 1 from public.lancamentos_financeiros
+                  where plano_conta_tipo_id = OLD.id) then
+    raise exception
+      'Código do tipo não pode ser alterado após o primeiro lançamento (tipo %).', OLD.codigo;
+  end if;
+  return NEW;
+end$$;
+
+create trigger trg_tipo_codigo_imutavel
+  before update on public.plano_contas_tipos
+  for each row execute function public.enforce_tipo_codigo_imutavel();
+```
 
 ---
 
-**Próximo passo:** Antonio decide o #15. Depois invoco `writing-plans` pra gerar o plano de implementação passo a passo.
+**Todas as decisões estão fechadas. Próximo passo:** invocar `writing-plans` pra gerar o plano de implementação passo a passo.
