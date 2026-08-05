@@ -31,8 +31,8 @@ async function carregarInfoConta(
 }
 
 function mapDbError(msg: string): string {
-  if (msg.includes("contas_bancarias_nome_empresa_uq")) {
-    return "Já existe uma conta bancária com esse nome para esta empresa.";
+  if (msg.includes("uniq_conta_id_empresa")) {
+    return "Já existe uma conta bancária com esse identificador para esta empresa.";
   }
   return "Não foi possível salvar a conta bancária.";
 }

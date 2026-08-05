@@ -19,14 +19,14 @@ function temPermissao(role: string): boolean {
 // ---------- helpers ----------
 
 function mapTipoDbError(msg: string): string {
-  if (msg.includes("plano_contas_tipos_codigo_tenant_uq")) {
+  if (msg.includes("uniq_tipo_codigo_por_tenant")) {
     return "Já existe um tipo com esse código neste tenant.";
   }
   return "Não foi possível salvar o tipo.";
 }
 
 function mapSubtipoDbError(msg: string): string {
-  if (msg.includes("plano_contas_subtipos_nome_tipo_uq")) {
+  if (msg.includes("uniq_subtipo_nome_por_tipo")) {
     return "Já existe um subtipo com esse nome para este tipo.";
   }
   return "Não foi possível salvar o subtipo.";
