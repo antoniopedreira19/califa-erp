@@ -75,7 +75,7 @@ export default async function ConciliacaoPage({
       .from("lancamentos_financeiros")
       .select(
         `id, data_movimento, descricao, natureza, valor, origem, created_at,
-         fornecedores(nome_fantasia, razao_social),
+         fornecedores(nome, razao_social),
          jobs(codigo),
          plano_contas_tipos!inner(codigo, nome),
          plano_contas_subtipos!inner(nome)`,
@@ -94,7 +94,7 @@ export default async function ConciliacaoPage({
       natureza: "entrada" | "saida";
       valor: string | number;
       origem: string;
-      fornecedores: { nome_fantasia: string | null; razao_social: string | null } | null;
+      fornecedores: { nome: string | null; razao_social: string | null } | null;
       jobs: { codigo: string } | null;
       plano_contas_tipos: { codigo: string; nome: string };
       plano_contas_subtipos: { nome: string };
@@ -107,7 +107,7 @@ export default async function ConciliacaoPage({
       natureza: r.natureza,
       valor: Number(r.valor),
       fornecedor_nome:
-        r.fornecedores?.nome_fantasia ?? r.fornecedores?.razao_social ?? null,
+        r.fornecedores?.razao_social ?? r.fornecedores?.nome ?? null,
       job_codigo: r.jobs?.codigo ?? null,
       tipo_codigo: r.plano_contas_tipos.codigo,
       tipo_nome: r.plano_contas_tipos.nome,
