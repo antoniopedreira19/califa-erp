@@ -167,7 +167,11 @@ export function BaixaPPModal({
                   <SelectValue placeholder="Selecione..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {tiposAtivos.map((t) => (
+                  {tiposAtivos.length === 0 ? (
+                    <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                      Nenhum tipo cadastrado.
+                    </div>
+                  ) : tiposAtivos.map((t) => (
                     <SelectItem key={t.id} value={t.id}>
                       {t.codigo} · {t.nome}
                     </SelectItem>
