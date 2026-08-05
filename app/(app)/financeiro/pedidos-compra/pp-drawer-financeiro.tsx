@@ -30,21 +30,26 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Badge } from "@/components/ui/badge";
 import { cn, formatCurrency } from "@/lib/utils";
 import { ppStatusLabel, type PPStatus } from "@/lib/types";
+import type { ContaBancaria, PlanoContaTipo, PlanoContaSubtipo } from "@/lib/types";
 import type { PPRow } from "./pedidos-compra-list";
 import {
   salvarPrazoFinanceiro,
-  marcarPagaFinanceiro,
   rejeitarPedidoCompraFinanceiro,
 } from "./actions";
 import {
   signedUrlPdf,
   signedUrlAnexo,
 } from "@/app/(app)/jobs/[jobId]/realizado/actions-pp";
+import { BaixaPPModal } from "./baixa-pp-modal";
+import { CancelarBaixaModal } from "./cancelar-baixa-modal";
 
 interface Props {
   pp: PPRow | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  contas: ContaBancaria[];
+  tipos: PlanoContaTipo[];
+  subtipos: PlanoContaSubtipo[];
 }
 
 function formatDate(iso: string | null): string {
@@ -81,16 +86,16 @@ function iconePorMime(nome: string): typeof FileText {
   return FileText;
 }
 
-export function PPDrawerFinanceiro({ pp, open, onOpenChange }: Props) {
+export function PPDrawerFinanceiro({ pp, open, onOpenChange, contas, tipos, subtipos }: Props) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
   const [erro, setErro] = React.useState<string | null>(null);
   const [toast, setToast] = React.useState<string | null>(null);
   const [prazoLocal, setPrazoLocal] = React.useState<string | null>(null);
   const [askRejeitar, setAskRejeitar] = React.useState(false);
-  const [askPagar, setAskPagar] = React.useState(false);
   const [motivo, setMotivo] = React.useState("");
-  const [pagoEm, setPagoEm] = React.useState<string | null>(null);
+  const [baixaOpen, setBaixaOpen] = React.useState(false);
+  const [cancelarBaixaOpen, setCancelarBaixaOpen] = React.useState(false);
 
   // Sincroniza prazo local com o valor da PP ao abrir/trocar
   React.useEffect(() => {
@@ -98,7 +103,6 @@ export function PPDrawerFinanceiro({ pp, open, onOpenChange }: Props) {
     setPrazoLocal(pp.prazo_pagamento_financeiro);
     setErro(null);
     setMotivo("");
-    setPagoEm(format(new Date(), "yyyy-MM-dd"));
   }, [pp]);
 
   React.useEffect(() => {
@@ -161,21 +165,6 @@ export function PPDrawerFinanceiro({ pp, open, onOpenChange }: Props) {
       setAskRejeitar(false);
       onOpenChange(false);
       setToast(`${pp.codigo} rejeitada. O GP foi liberado pra corrigir.`);
-      router.refresh();
-    });
-  }
-
-  function handleConfirmarPagar() {
-    if (!pp || !pagoEm) return;
-    startTransition(async () => {
-      const res = await marcarPagaFinanceiro(pp.id, pagoEm);
-      if (!res.ok) {
-        setErro(res.message);
-        return;
-      }
-      setAskPagar(false);
-      onOpenChange(false);
-      setToast(`Baixa registrada em ${pp.codigo}.`);
       router.refresh();
     });
   }
@@ -412,12 +401,26 @@ export function PPDrawerFinanceiro({ pp, open, onOpenChange }: Props) {
 
               <button
                 type="button"
-                onClick={() => setAskPagar(true)}
+                onClick={() => setBaixaOpen(true)}
                 disabled={pending}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
               >
                 <CreditCard className="h-3.5 w-3.5" />
                 Dar Baixa
+              </button>
+            </div>
+          )}
+
+          {pp.status === "pago" && (
+            <div className="flex items-center justify-end gap-2 border-t border-border px-6 py-4">
+              <button
+                type="button"
+                onClick={() => setCancelarBaixaOpen(true)}
+                disabled={pending}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-california-red/30 bg-white px-3 py-2 text-xs font-semibold text-california-red hover:bg-california-red hover:text-white disabled:opacity-50"
+              >
+                <Ban className="h-3.5 w-3.5" />
+                Cancelar baixa
               </button>
             </div>
           )}
@@ -463,41 +466,23 @@ export function PPDrawerFinanceiro({ pp, open, onOpenChange }: Props) {
         onConfirm={handleConfirmarRejeitar}
       />
 
-      {/* Confirm baixa */}
-      <ConfirmDialog
-        open={askPagar}
-        onOpenChange={setAskPagar}
-        title={`Dar baixa em ${pp.codigo}?`}
-        description={
-          <div className="space-y-2">
-            <p>
-              Registra o pagamento de{" "}
-              <strong className="text-foreground">
-                {formatCurrency(pp.valor, "BRL")}
-              </strong>{" "}
-              para {pp.fornecedor_nome}. A PP passa para{" "}
-              <strong className="text-foreground">Pago</strong>.
-            </p>
-            <div>
-              <label className="text-xs font-medium">
-                Data do pagamento *
-              </label>
-              <p className="mb-1 text-[11px] text-muted-foreground">
-                Quando o pagamento efetivamente saiu. Pode ser retroativa.
-              </p>
-              <DatePicker
-                name="pago_em"
-                defaultValue={pagoEm ?? undefined}
-                onDateChange={(date) => setPagoEm(isoDateFromDate(date))}
-              />
-            </div>
-          </div>
-        }
-        confirmLabel="Confirmar baixa"
-        cancelLabel="Voltar"
-        pending={pending}
-        onConfirm={handleConfirmarPagar}
-      />
+      {pp && (
+        <>
+          <BaixaPPModal
+            pp={pp}
+            contas={contas}
+            tipos={tipos}
+            subtipos={subtipos}
+            open={baixaOpen}
+            onOpenChange={setBaixaOpen}
+          />
+          <CancelarBaixaModal
+            pp={pp}
+            open={cancelarBaixaOpen}
+            onOpenChange={setCancelarBaixaOpen}
+          />
+        </>
+      )}
 
       {/* Toast */}
       {toast && (
