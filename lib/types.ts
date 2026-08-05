@@ -75,7 +75,7 @@ export type CadastroStatus = "ativo" | "inativo";
 
 // ---------- Task fornecedor-dados-completos: endereço, banco, PIX ----------
 
-export type TipoContaBancaria = "corrente" | "poupanca" | "pagamento";
+export type TipoContaBancariaFornecedor = "corrente" | "poupanca" | "pagamento";
 export type PixTipoChave = "cpf" | "cnpj" | "email" | "telefone" | "aleatoria";
 
 export type UF =
@@ -159,7 +159,7 @@ export interface Fornecedor {
   agencia_dv: string | null;
   conta: string | null;
   conta_dv: string | null;
-  tipo_conta: TipoContaBancaria | null;
+  tipo_conta: TipoContaBancariaFornecedor | null;
 
   // PIX
   pix_tipo: PixTipoChave | null;
@@ -830,3 +830,36 @@ export type PPAnexoMimetype = (typeof PP_ANEXO_MIMETYPES_ACEITOS)[number];
 
 export const PP_ANEXO_TAMANHO_MAX_BYTES = 8 * 1024 * 1024;
 export const PP_ANEXOS_TAMANHO_TOTAL_MAX_BYTES = 25 * 1024 * 1024;
+
+// ---------- Task 011: contas_bancarias (lançamentos_financeiros) ----------
+
+export type TipoContaBancaria =
+  | "corrente"
+  | "poupanca"
+  | "investimento"
+  | "caixa";
+
+export const tipoContaBancariaLabel = (t: TipoContaBancaria): string =>
+  ({
+    corrente: "Conta corrente",
+    poupanca: "Poupança",
+    investimento: "Investimento",
+    caixa: "Caixa",
+  })[t];
+
+export interface ContaBancaria {
+  id: string;
+  tenant_id: string;
+  empresa_id: string;
+  nome: string;
+  banco: string;
+  agencia: string | null;
+  numero_conta: string | null;
+  tipo: TipoContaBancaria;
+  saldo_inicial: string; // numeric vem como string do Supabase — parse com Number(...)
+  saldo_inicial_data: string; // YYYY-MM-DD
+  ativo: boolean;
+  ordem: number;
+  created_at: string;
+  updated_at: string;
+}
