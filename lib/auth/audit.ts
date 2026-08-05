@@ -69,6 +69,10 @@ export type AuditAction =
   | "pedido_compra.rejeitada"
   | "pedido_compra.reenviada"
   | "custo_c.utilizado"
+  | "conta_bancaria.criada"
+  | "conta_bancaria.atualizada"
+  | "conta_bancaria.inativada"
+  | "conta_bancaria.reativada"
   | "acao_negada";
 
 export interface AuditPayload {
