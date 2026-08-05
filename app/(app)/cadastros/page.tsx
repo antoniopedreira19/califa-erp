@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Users, Building2, Tag, Layers, MapPin, Building, Wallet, ArrowRight, FolderKanban, type LucideIcon } from "lucide-react";
+import { Users, Building2, Tag, Layers, MapPin, Building, Wallet, ListTree, ArrowRight, FolderKanban, type LucideIcon } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 
@@ -10,7 +10,7 @@ export default async function CadastrosPage() {
   const supabase = createClient();
 
   // Contagens de ativos em paralelo para cada cadastro do hub.
-  const [clientesRes, fornecedoresRes, categoriasRes, catDominioRes, regionaisRes, cidadesRes, contasBancariasRes] = await Promise.all([
+  const [clientesRes, fornecedoresRes, categoriasRes, catDominioRes, regionaisRes, cidadesRes, contasBancariasRes, tiposPlanoRes] = await Promise.all([
     supabase
       .from("clientes")
       .select("*", { count: "exact", head: true })
@@ -46,6 +46,11 @@ export default async function CadastrosPage() {
       .select("*", { count: "exact", head: true })
       .eq("tenant_id", session.activeTenant.id)
       .eq("ativo", true),
+    supabase
+      .from("plano_contas_tipos")
+      .select("*", { count: "exact", head: true })
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("ativo", true),
   ]);
 
   if (clientesRes.error) console.error("[cadastros.clientes]", clientesRes.error.message);
@@ -55,6 +60,7 @@ export default async function CadastrosPage() {
   if (regionaisRes.error) console.error("[cadastros.regionais]", regionaisRes.error.message);
   if (cidadesRes.error) console.error("[cadastros.cidades]", cidadesRes.error.message);
   if (contasBancariasRes.error) console.error("[cadastros.contas_bancarias]", contasBancariasRes.error.message);
+  if (tiposPlanoRes.error) console.error("[cadastros.plano_contas_tipos]", tiposPlanoRes.error.message);
 
   return (
     <div className="space-y-8">
@@ -123,6 +129,13 @@ export default async function CadastrosPage() {
           title="Contas bancárias"
           description="Contas onde os pagamentos entram e saem, com saldo inicial e empresa associada."
           count={contasBancariasRes.count ?? 0}
+        />
+        <CadastroCard
+          href="/cadastros/plano-de-contas"
+          icon={ListTree}
+          title="Plano de contas"
+          description="Tipos e subtipos usados para classificar cada lançamento financeiro. Base do DRE."
+          count={tiposPlanoRes.count ?? 0}
         />
       </div>
     </div>
