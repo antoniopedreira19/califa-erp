@@ -2,12 +2,13 @@
 
 Registro da implementação dos design handoffs aprovados para o módulo de Orçamentos.
 
-**Datas:** 2026-07-27 (entregas 1–3) · 2026-07-30 (entregas 4–8) · 2026-07-31 (entrega 9) · 2026-08-03 (entrega 10)
+**Datas:** 2026-07-27 (entregas 1–3) · 2026-07-30 (entregas 4–8) · 2026-07-31 (entrega 9) · 2026-08-03 (entrega 10) · 2026-08-06 (entrega 11)
 **Origem do design:**
 - Entregas 1–3: pacote `design_handoff_califa/` (`Versoes - Destaque v4.dc.html` opção 2a, `Orcamento - Edicao Inline.dc.html` opção 3b, `README.md`, `IMPLEMENTACAO.md`). A pasta fica **só na máquina local** — está no `.gitignore` por ser referência de design, não código.
 - Entregas 4–5, 8 e 9: projeto Claude Design `69342d83-28d9-4bea-a8af-c99e233f5f13` (`Orcamento - Versao -final-.dc.html`, `Novo projeto.dc.html` e `Abertura de Job.dc.html`), lido via MCP `claude_design`. A Entrega 9 é a revisão do mesmo `Abertura de Job.dc.html`, relido depois de atualizado.
 - Entregas 6–7: pedidos diretos do time, sem handoff de design.
 - Entrega 10: slide "Título do Orçamento" enviado pelo time (2 pedidos anotados sobre print da tela da versão).
+- Entrega 11: pedido direto do time sobre prints das quatro telas (lista de projetos, formulário de projeto, orçamentos do projeto, formulário de orçamento). Sem handoff de design — as decisões saíram de perguntas respondidas durante a sessão, registradas na seção 12.
 
 ---
 
@@ -25,10 +26,11 @@ Registro da implementação dos design handoffs aprovados para o módulo de Orç
 | **8 — Abertura de job a partir da versão aprovada** | ✅ `c0dac5e` (2026-07-30) |
 | **9 — Revisão do layout de abertura de job** | ✅ `ab66165` (2026-07-31) |
 | **10 — Título editável inline + resumo de rentabilidade** | ✅ `75cbb22` (2026-08-03) |
+| **11 — Revisão de campos de projeto e orçamento + produto padrão** | ✅ `6e6bd77` + `4a227d7` + `f664e1f` (2026-08-06) |
 
-`tsc --noEmit` e `next lint` limpos em todas. Entregas 4, 5, 8, 9 e 10 também
-com `next build` completo. As Entregas 8 e 10 são as únicas com verificação
-de ponta a ponta contra o banco real — ver seções 9 e 11.
+`tsc --noEmit` e `next lint` limpos em todas. Entregas 4, 5, 8, 9, 10 e 11
+também com `next build` completo. As Entregas 8, 10 e 11 são as únicas com
+verificação de ponta a ponta contra o banco real — ver seções 9, 11 e 12.
 
 ---
 
@@ -439,15 +441,166 @@ O grupo do título virou `flex-1 min-w-0` e o resumo ficou ancorado à direita. 
 
 ---
 
-## 12. Próximos passos
+## 12. Entrega 11 — revisão de campos de projeto e orçamento + produto padrão
+
+**2026-08-06** · commits `6e6bd77` (campos), `4a227d7` (produto na criação do cliente) e `f664e1f` (produto padrão protegido) · pedido direto do time sobre prints das telas · 6 migrations.
+
+Duas frentes na mesma sessão. A primeira reorganiza o que cada nível
+guarda: o **projeto** virou o guarda-chuva da iniciativa (produto, várias
+regionais, vários responsáveis) e o **orçamento** passou a carregar a
+praça e os responsáveis da peça (regional, cidade, GP, produtor). A
+segunda garante que todo cliente tenha um produto — sem isso a primeira
+frente trancaria a criação de projeto.
+
+### 12.1 Migrations
+
+| Arquivo | O que faz |
+|---|---|
+| `20260806000001_projeto_multi_regional_responsavel_produto.sql` | `projeto_regionais` e `projeto_responsaveis` (N:N, RLS, backfill) + `projetos.produto_id` |
+| `20260806000002_orcamento_regional_cidade_responsaveis.sql` | `orcamentos.regional_id/cidade_id/gp_responsavel_id/produtor_id` + `jobs.produtor_id` |
+| `20260806000003_categorias_dominio_servico_e_orcamento.sql` | remapeia e **apaga** as categorias que saíram |
+| `20260806000004_produto_padrao_por_cliente.sql` | produto homônimo para cliente sem nenhum produto |
+| `20260806000005_produto_padrao_protegido.sql` | `cliente_produtos.padrao` + backfill universal + trigger de proteção |
+
+**As colunas `projetos.regional_id` e `projetos.responsavel_id` continuam
+existindo e são gravadas com o primeiro item de cada lista.**
+`responsavel_id` é `NOT NULL` e tem leitores fora deste fluxo — derrubar
+a coluna era mudança maior do que a entrega pedia. A fonte-verdade da UI
+são as tabelas de vínculo; as colunas são compatibilidade, e os
+`comment on column` no banco dizem isso.
+
+`projetos.cidade_id` virou legado: saiu do formulário (Cidade desceu para
+o orçamento) mas a coluna e os dados gravados continuam.
+
+### 12.2 Lista de Projetos & Orçamentos
+
+**Arquivos:** [`page.tsx`](app/(app)/orcamentos/page.tsx) · [`projetos-list.tsx`](app/(app)/orcamentos/projetos-list.tsx)
+
+- Filtros passaram a ser **Clientes · Produto · Regional · Ano · Status**. Saíram Responsáveis e Empresas — e com eles as chamadas `listActiveMembers`/`listEmpresasAtivas` da página.
+- Colunas: saíram **Empresa** e **Responsável**, entraram **Produto** e **Regional**. "Categoria" virou **Serviço**.
+- **As opções de Produto, Regional e Ano saem dos próprios projetos carregados**, num `useMemo`, não de query nova. O dropdown só oferece o que de fato filtra alguma linha e a página não paga ida extra ao banco.
+- **Ano = ano de `data_inicio_prevista`** — o mesmo que numera o código do projeto.
+- Regionais do projeto vêm em **query própria** (`projeto_regionais` com embed de `regionais`), dentro do mesmo `Promise.all` da contagem de orçamentos. Embed na listagem devolveria a linha do projeto repetida por regional.
+- Na coluna Regional, a primeira aparece inteira e as demais viram `+N` com `title` completo — coluna com 3 regionais estourava a linha.
+
+### 12.3 Formulário de projeto
+
+**Arquivos:** [`projeto-form.tsx`](app/(app)/orcamentos/projeto-form.tsx) · [`actions.ts`](app/(app)/orcamentos/actions.ts) · [`multi-select.tsx`](components/ui/multi-select.tsx) (novo)
+
+- **Cidade saiu**, **Produto entrou** (obrigatório), **Regional e Responsável viraram múltiplos**, **Categoria virou Serviço**.
+- Serviço agora oferece **Ativação · Always On · Fee · Interno**.
+- O `MultiSelect` novo segue o visual do `Combobox` que já existia: chips removíveis dentro do gatilho, busca só quando passa de 8 opções. **A ordem de seleção importa** — o primeiro item alimenta as colunas de compatibilidade.
+- O formulário posta `responsavel_ids`/`regional_ids` como chave repetida e a action lê com `getAll`, que preserva a ordem.
+- **A lista de produtos chega inteira e é filtrada no cliente** conforme o cliente escolhido. `cliente_produtos` é cadastro pequeno; um round-trip a cada troca de cliente não se pagaria. Trocar de cliente zera o produto selecionado.
+- A action confere **no servidor** que o produto pertence ao cliente e que as regionais existem e estão ativas — a FK só garante que o id existe em `cliente_produtos`/`regionais`, não a que cliente pertence.
+- `sincronizarVinculos` apaga e reinsere os vínculos. O conjunto é pequeno; um diff não pagaria a complexidade.
+
+### 12.4 Orçamentos do projeto
+
+**Arquivos:** [`orcamentos-list.tsx`](app/(app)/orcamentos/[projetoId]/orcamentos-list.tsx) · [`orcamento-form.tsx`](app/(app)/orcamentos/[projetoId]/orcamento-form.tsx) · [`actions.ts`](app/(app)/orcamentos/[projetoId]/actions.ts)
+
+- Tabela ganhou **Início previsto**, antes de Fim previsto.
+- Formulário ganhou **Regional · Cidade · GP Responsável · Produtor Responsável**, os quatro obrigatórios (no Zod; nullable no banco por causa dos 9 orçamentos que já existiam).
+- **Regional oferece só as regionais do projeto. GP oferece só os responsáveis do projeto.** Produtor oferece todos os membros ativos — decisão do time: enquanto o papel de produção não estiver modelado, não dá para restringir.
+- `assertRegionalEGpDoProjeto` refaz essa checagem **no servidor**. O formulário já mostra só o permitido, mas quem posta o form pode mandar outra coisa, e a FK não cobre o vínculo com o projeto.
+- Categoria do orçamento agora oferece **Ativação · Extra · Influencer · Conteúdo**.
+
+### 12.5 Categorias: por que apagar e não inativar
+
+O time pediu **exclusão**, não soft-delete. As FKs são `on delete restrict`,
+então a migration remapeia antes de apagar, no de-para que o time definiu:
+
+| Escopo | Saiu | Virou |
+|---|---|---|
+| projeto | Evento (1 projeto) | Ativação |
+| orçamento | Always On (2 orçamentos) | Ativação |
+| orçamento | Evento (2 orçamentos) | Ativação |
+
+Campanha, Projeto proprietário e Mídia saíram sem uso. Se sobrar alguma
+referência não prevista, o `restrict` faz o DELETE falhar e a migration
+para — melhor do que apagar às cegas.
+
+⚠️ **"Always On" saiu do escopo orçamento e entrou no escopo projeto.**
+São linhas diferentes (a unicidade é por tenant + escopo + nome), não há
+movimentação de registro entre escopos.
+
+### 12.6 Abertura de job: os campos herdados
+
+**Arquivos:** [`enviar-job-modal.tsx`](app/(app)/orcamentos/[projetoId]/[orcId]/versoes/[versaoId]/enviar-job-modal.tsx) · [`abertura-actions.ts`](app/(app)/orcamentos/[projetoId]/[orcId]/versoes/[versaoId]/abertura-actions.ts) · [`fluxo-abertura.tsx`](app/(app)/orcamentos/[projetoId]/[orcId]/versoes/[versaoId]/fluxo-abertura.tsx)
+
+Produto, Cidade, Regional, GP e Produtor **deixaram de ser campos do modal**
+e viraram `<Travado>`. Restam editáveis: nome, as três datas e observações.
+
+⚠️ **O servidor relê esses cinco valores do projeto e do orçamento — não
+os aceita do formulário.** Eles saíram do `aberturaJobSchema` e do
+`FormData`. Campo travado no HTML não é garantia; a fonte é o banco.
+
+- `jobs.responsavel_id` passou a vir do **GP do orçamento**. Antes vinha de `projetos.responsavel_id`, que agora é só compatibilidade.
+- `jobs.produtor_id` nasceu nesta entrega.
+- Se algum dos cinco estiver faltando (orçamento anterior a esta entrega), o modal mostra aviso âmbar listando o que falta e trava o botão; a action devolve a mesma lista. **Não inventamos valor padrão** — abrir job com dado faltando é o tipo de furo que aparece meses depois no financeiro.
+- `dados.cidade`/`produtoId`/`regionalId` saíram de `DadosJob` e viraram `HerdadosJob`, que o modal só exibe. Com job já aberto valem os valores congelados nele; antes disso, o que está cadastrado hoje.
+- Efeito colateral: `cidade-combobox.tsx` e a action `buscarCidades` ficaram sem uso. **Não foram apagados** — quando a carga do IBGE entrar (próximos passos, item 1), o `Select` simples de Cidade do formulário de orçamento precisa virar esse combobox com busca no servidor.
+
+### 12.7 Produto padrão — a marca do cliente
+
+**Arquivos:** [`clientes/actions.ts`](app/(app)/clientes/actions.ts) · [`produtos-actions.ts`](app/(app)/clientes/[id]/produtos-actions.ts) · [`produtos-card.tsx`](app/(app)/clientes/[id]/produtos-card.tsx)
+
+Com Produto obrigatório no projeto, cliente sem produto virou beco sem
+saída — e só 1 dos 4 clientes tinha produto. A saída foi transformar isso
+em regra de negócio: **todo cliente tem um produto que representa a sua
+marca** — a matriz, quando não há outras marcas no guarda-chuva.
+
+- `cliente_produtos.padrao` (boolean) + índice parcial único por cliente. **A identificação é a coluna, não a convenção "nome igual ao do cliente"** — convenção não é garantia.
+- `criarCliente` grava o padrão junto, com código `PRD-01`. Se esse insert falhar, a action **avisa em vez de redirecionar em silêncio**: o cliente já está gravado e PostgREST não dá transação para desfazer. Mesmo padrão da mensagem "Job criado, mas a planilha interna não foi montada".
+- O backfill cobre **todos os clientes, inclusive os que já tinham outros produtos** — promove o homônimo quando existe, senão cria com o próximo `PRD-NN` livre.
+- **Imutável:** não pode ser apagado, inativado, despromovido, trocar de cliente nem mudar de código. A única alteração de nome permitida é a que acompanha o nome fantasia.
+
+⚠️ **A proteção mora num trigger (`trg_cliente_produtos_padrao`), não só
+na server action.** `CLAUDE.md` pede que regra crítica não dependa do
+frontend; aqui não depende nem da API. A action tem um gate próprio só
+para devolver a mensagem certa antes do round-trip e registrar a
+tentativa como `acao_negada` na auditoria.
+
+- A função é `SECURITY DEFINER` de propósito (lê `clientes` para comparar o nome fantasia; com `INVOKER`, uma RLS restritiva devolveria `NULL` e barraria um rename legítimo). Por isso o **`revoke execute`**: sem ele a função de trigger fica chamável em `/rest/v1/rpc/protege_produto_padrao` — o advisor de segurança do Supabase apontou exatamente isso na conferência desta sessão. O trigger continua disparando; quem o executa é o dono da tabela.
+- `atualizarCliente` renomeia o padrão **depois** de gravar o cliente. A ordem é o que faz o trigger aceitar: nesse momento os dois nomes batem.
+- **Isto reverteu uma decisão da mesma sessão.** Antes, o rename usava `.eq("nome", nome_antigo)` para não sobrescrever produto ajustado à mão. Com o padrão imutável, "ajustado à mão" deixou de existir: o filtro virou `.eq("padrao", true)` e o padrão espelha o cliente sempre. Produtos comuns seguem intactos.
+- Na tela do cliente o padrão encabeça a lista, ganha tarja **MARCA** com cadeado, não abre o editor e não tem botão de inativar.
+
+### 12.8 Verificação (2026-08-06)
+
+`tsc --noEmit`, `next lint` (só o warning pré-existente de `combobox.tsx`,
+que o `multi-select.tsx` novo herda por usar o mesmo `role="combobox"`) e
+`npm run build` limpos. No navegador, contra o banco real:
+
+- **Projeto criado de ponta a ponta** com 2 regionais (NE, SP) e 5 responsáveis: gravou nas duas tabelas de vínculo, com produto e serviço. Resolve o item 6 dos próximos passos anteriores.
+- **Orçamento criado nesse projeto:** Regional ofereceu **só NE e SP**, GP ofereceu **só os 5 responsáveis do projeto**. Gravou regional, cidade, GP e produtor.
+- **Serviço do projeto** ofereceu exatamente Ativação, Always On, Fee, Interno; **categoria do orçamento**, exatamente Ativação, Conteúdo, Extra, Influencer.
+- **Trigger do produto padrão:** rename, inativação, despromoção e delete testados em SQL direto — os quatro barrados, e ainda barrados **depois** do `revoke execute`.
+- **Rename do cliente** com dois produtos: o padrão acompanhou, o comum ficou intacto. Produto comum segue clicável e com botão de inativar; o padrão, não.
+- Console do navegador e log do servidor sem erros. Advisor de performance só acusa `unused_index` (INFO) nos índices novos — esperado num banco sem tráfego.
+- Todos os registros de teste foram apagados ao final: os 4 clientes reais estão com o produto padrão e nada mais.
+
+⚠️ Como toda sessão deste projeto, o `next dev` escreveu **direto em
+produção** (próximos passos, item 5).
+
+### 12.9 O que ficou aberto
+
+1. **`cliente_produtos` tem 1 produto real** (Pevetech). Os outros 3 vieram do backfill com o nome do cliente. Se o time quiser marcas de verdade no guarda-chuva, é cadastro manual na tela do cliente.
+2. **Projetos anteriores a esta entrega estão sem produto** e 4 deles sem regional. Aparecem com "—" na lista, e criar orçamento neles esbarra no Regional desabilitado até alguém editar o projeto. Backfill não foi feito por falta de critério de negócio.
+3. **Cidade do orçamento usa `Select` simples** com a lista toda. Correto para as 2 cidades de hoje; troque pelo `CidadeCombobox` quando a carga do IBGE entrar.
+
+---
+
+## 13. Próximos passos
 
 1. **Carga completa de cidades do IBGE** — hoje só Salvador e São Paulo. Formato acordado: `Salvador-BA` num campo só, sem coluna `uf`. É só uma migration de INSERT: o schema e a busca já estão prontos (Entrega 8). Fonte: `https://servicosdados.ibge.gov.br/api/v1/localidades/municipios`. Ao carregar, reconciliar as 2 linhas atuais, que estão sem o sufixo de UF, e os jobs que já gravaram `Salvador`/`São Paulo`.
 2. **Exibir as observações do job** — `jobs.observacoes` grava desde a Entrega 9 mas nenhuma tela lê. Entra junto com o refino da tela de abertura do financeiro, onde ela faz sentido: é contexto para quem abre. Enquanto isso, o dado é write-only.
 3. **Remover a server action `criarJob`**, órfã desde a Entrega 8. Avaliar junto os campos `posicao_hierarquia` e `job_pai_id` do `jobSchema`, que provavelmente ficam sem uso.
 4. **Rotacionar o PAT do Supabase.** O `.mcp.json` esteve versionado no commit `69c521d` e foi removido em `65da0b2`; remover do tracking não apaga do histórico. O repositório inteiro, incluindo o arquivo, também foi enviado ao projeto do Claude Design. O token segue legível nos dois lugares.
 5. **Ambiente de desenvolvimento separado no Supabase** — hoje `next dev` escreve em produção (ver seção 4). Ficou evidente na Entrega 8: o teste de ponta a ponta criou o JOB-0003 direto na base real. As migrations em `supabase/migrations/` recriam o schema inteiro.
-6. **Criação de projeto de ponta a ponta** — confirmar a gravação de `regional_id`, `cidade_id`, `data_fim_prevista` e `descricao` (Entrega 5) e do `responsavel_id` escolhido (Entrega 7).
-7. **Caminhos não exercitados do fluxo de abertura** — a verificação da Entrega 8 cobriu só o caminho feliz. Faltam: rejeição pelo financeiro, cancelamento de aprovação com job existente, e abertura para cliente sem produto cadastrado (a mensagem existe mas nunca rodou).
-8. **Fase 2 da edição inline** (fora de escopo agora): alça de arrastar/preencher, seleção de intervalo, copiar/colar de planilha, navegação por teclado entre células, `⌘Z` global.
+6. **Caminhos não exercitados do fluxo de abertura** — a verificação da Entrega 8 cobriu só o caminho feliz. Faltam: rejeição pelo financeiro, cancelamento de aprovação com job existente, e abertura para cliente sem produto cadastrado (a mensagem existe mas nunca rodou).
+7. **Fase 2 da edição inline** (fora de escopo agora): alça de arrastar/preencher, seleção de intervalo, copiar/colar de planilha, navegação por teclado entre células, `⌘Z` global.
 
-**Resolvido desde a última revisão:** o modo `readOnly` da Entrega 2 ganhou prova de execução (v1 do ORC-0003 aprovada, grade travada), e os `console.log` de timing temporários saíram no commit `3021cff`.
+**Resolvido desde a última revisão:** o modo `readOnly` da Entrega 2 ganhou prova de execução (v1 do ORC-0003 aprovada, grade travada); os `console.log` de timing temporários saíram no commit `3021cff`; e a criação de projeto de ponta a ponta (item 6 da lista anterior) foi exercitada na Entrega 11 — ver seção 12.8.
+
+**Aberto pela Entrega 11:** ver os três pontos da seção 12.9.
