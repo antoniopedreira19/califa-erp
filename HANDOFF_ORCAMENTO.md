@@ -443,7 +443,7 @@ O grupo do título virou `flex-1 min-w-0` e o resumo ficou ancorado à direita. 
 
 ## 12. Entrega 11 — revisão de campos de projeto e orçamento + produto padrão
 
-**2026-08-06** · commits `6e6bd77` (campos), `4a227d7` (produto na criação do cliente) e `f664e1f` (produto padrão protegido) · pedido direto do time sobre prints das telas · 6 migrations.
+**2026-08-06** · commits `6e6bd77` (campos), `4a227d7` (produto na criação do cliente) e `f664e1f` (produto padrão protegido) · pedido direto do time sobre prints das telas · 7 migrations.
 
 Duas frentes na mesma sessão. A primeira reorganiza o que cada nível
 guarda: o **projeto** virou o guarda-chuva da iniciativa (produto, várias
@@ -461,6 +461,7 @@ frente trancaria a criação de projeto.
 | `20260806000003_categorias_dominio_servico_e_orcamento.sql` | remapeia e **apaga** as categorias que saíram |
 | `20260806000004_produto_padrao_por_cliente.sql` | produto homônimo para cliente sem nenhum produto |
 | `20260806000005_produto_padrao_protegido.sql` | `cliente_produtos.padrao` + backfill universal + trigger de proteção |
+| `20260806000006_backfill_produto_nos_projetos.sql` | projetos antigos recebem o produto padrão do seu cliente |
 
 **As colunas `projetos.regional_id` e `projetos.responsavel_id` continuam
 existindo e são gravadas com o primeiro item de cada lista.**
@@ -586,7 +587,11 @@ produção** (próximos passos, item 5).
 ### 12.9 O que ficou aberto
 
 1. **`cliente_produtos` tem 1 produto real** (Pevetech). Os outros 3 vieram do backfill com o nome do cliente. Se o time quiser marcas de verdade no guarda-chuva, é cadastro manual na tela do cliente.
-2. **Projetos anteriores a esta entrega estão sem produto** e 4 deles sem regional. Aparecem com "—" na lista, e criar orçamento neles esbarra no Regional desabilitado até alguém editar o projeto. Backfill não foi feito por falta de critério de negócio.
+2. **Quatro projetos anteriores a esta entrega continuam sem regional** — PEVETE-0001/26 a 0004/26. Criar orçamento neles esbarra no Regional desabilitado até alguém editar o projeto.
+
+   O produto **foi** preenchido (migration `...000006`) porque é determinístico: cada cliente tem exatamente um produto padrão, então para um projeto sem produto informado só existe uma escolha possível.
+
+   ⚠️ **Regional foi deixada em branco de propósito, não por esquecimento.** Escolher "uma qualquer" seria inventar dado de negócio, e o valor errado não se denuncia depois: desce para o orçamento, o job e o financeiro sem sinal nenhum. O campo vazio bloqueia a criação de orçamento e obriga alguém a decidir — que aqui é o comportamento correto. Se um dia o volume tornar a edição manual inviável, o caminho é pedir o de-para ao time, não sortear.
 3. **Cidade do orçamento usa `Select` simples** com a lista toda. Correto para as 2 cidades de hoje; troque pelo `CidadeCombobox` quando a carga do IBGE entrar.
 
 ---
