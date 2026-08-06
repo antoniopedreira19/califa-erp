@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import type { Cliente, Profile, ProjetoStatus } from "@/lib/types";
+import type { Cliente, ProjetoStatus } from "@/lib/types";
 import { projetoStatusLabel } from "@/lib/types";
 
 export interface ProjetoRow {
@@ -26,8 +26,10 @@ export interface ProjetoRow {
   status: ProjetoStatus;
   cliente_id: string;
   cliente_nome: string | null;
-  responsavel_id: string;
-  responsavel_nome: string | null;
+  produto_id: string | null;
+  produto_nome: string | null;
+  /** Regionais do projeto, já ordenadas por nome. */
+  regionais: { id: string; nome: string }[];
   data_inicio_prevista: string;
   orcamentos_count: number;
   /** Orçamentos com status aprovado OU job_criado. */
@@ -35,15 +37,11 @@ export interface ProjetoRow {
   /** Orçamentos com status job_criado (subset de aprovados). */
   jobs_count: number;
   created_at: string;
-  empresa_id: string;
-  empresa_nome: string | null;
 }
 
 interface Props {
   projetos: ProjetoRow[];
   clientes: Pick<Cliente, "id" | "nome_fantasia">[];
-  responsaveis: Pick<Profile, "id" | "nome">[];
-  empresas: { id: string; razao_social: string; nome_fantasia: string | null }[];
 }
 
 function statusBadgeClasses(status: ProjetoStatus): string {
@@ -58,29 +56,69 @@ function formatDate(iso: string | null): string {
   return `${d}/${m}/${y}`;
 }
 
-export function ProjetosList({ projetos, clientes, responsaveis, empresas }: Props) {
+/** Ano do projeto = ano do início previsto, o mesmo que numera o código. */
+function anoDoProjeto(p: ProjetoRow): string {
+  return p.data_inicio_prevista.slice(0, 4);
+}
+
+export function ProjetosList({ projetos, clientes }: Props) {
   const router = useRouter();
   const [busca, setBusca] = React.useState("");
   const [clienteFiltro, setClienteFiltro] = React.useState<string>("todos");
-  const [respFiltro, setRespFiltro] = React.useState<string>("todos");
+  const [produtoFiltro, setProdutoFiltro] = React.useState<string>("todos");
+  const [regionalFiltro, setRegionalFiltro] = React.useState<string>("todas");
+  const [anoFiltro, setAnoFiltro] = React.useState<string>("todos");
   const [statusFiltro, setStatusFiltro] = React.useState<string>("ativos");
-  const [empresaFiltro, setEmpresaFiltro] = React.useState<string>("todas");
+
+  // As opções de Produto, Regional e Ano saem dos próprios projetos: o
+  // dropdown só oferece o que de fato filtra alguma linha, e não custa
+  // query extra.
+  const produtosOpcoes = React.useMemo(() => {
+    const mapa = new Map<string, string>();
+    for (const p of projetos) {
+      if (p.produto_id && p.produto_nome) mapa.set(p.produto_id, p.produto_nome);
+    }
+    return [...mapa.entries()]
+      .map(([id, nome]) => ({ id, nome }))
+      .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+  }, [projetos]);
+
+  const regionaisOpcoes = React.useMemo(() => {
+    const mapa = new Map<string, string>();
+    for (const p of projetos) {
+      for (const r of p.regionais) mapa.set(r.id, r.nome);
+    }
+    return [...mapa.entries()]
+      .map(([id, nome]) => ({ id, nome }))
+      .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+  }, [projetos]);
+
+  const anosOpcoes = React.useMemo(() => {
+    const anos = new Set(projetos.map(anoDoProjeto));
+    return [...anos].sort((a, b) => b.localeCompare(a));
+  }, [projetos]);
 
   const filtrados = React.useMemo(() => {
     const q = busca.trim().toLowerCase();
     return projetos.filter((p) => {
       if (clienteFiltro !== "todos" && p.cliente_id !== clienteFiltro) return false;
-      if (respFiltro !== "todos" && p.responsavel_id !== respFiltro) return false;
+      if (produtoFiltro !== "todos" && p.produto_id !== produtoFiltro) return false;
+      if (
+        regionalFiltro !== "todas" &&
+        !p.regionais.some((r) => r.id === regionalFiltro)
+      ) {
+        return false;
+      }
+      if (anoFiltro !== "todos" && anoDoProjeto(p) !== anoFiltro) return false;
       if (statusFiltro === "ativos" && p.status !== "ativo") return false;
       if (statusFiltro === "arquivados" && p.status !== "arquivado") return false;
-      if (empresaFiltro !== "todas" && p.empresa_id !== empresaFiltro) return false;
       if (q) {
         const hay = `${p.codigo} ${p.nome} ${p.campanha ?? ""} ${p.cliente_nome ?? ""}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     });
-  }, [projetos, busca, clienteFiltro, respFiltro, statusFiltro, empresaFiltro]);
+  }, [projetos, busca, clienteFiltro, produtoFiltro, regionalFiltro, anoFiltro, statusFiltro]);
 
   return (
     <div className="space-y-4">
@@ -105,14 +143,40 @@ export function ProjetosList({ projetos, clientes, responsaveis, empresas }: Pro
             ))}
           </SelectContent>
         </Select>
-        <Select value={respFiltro} onValueChange={setRespFiltro}>
+        <Select value={produtoFiltro} onValueChange={setProdutoFiltro}>
           <SelectTrigger className="w-[180px]">
             <SelectValue />
           </SelectTrigger>
+          <SelectContent
+            side="bottom"
+            avoidCollisions={false}
+            className="w-[--radix-select-trigger-width]"
+          >
+            <SelectItem value="todos">Todos os produtos</SelectItem>
+            {produtosOpcoes.map((p) => (
+              <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={regionalFiltro} onValueChange={setRegionalFiltro}>
+          <SelectTrigger className="w-[170px]">
+            <SelectValue />
+          </SelectTrigger>
           <SelectContent>
-            <SelectItem value="todos">Todos responsáveis</SelectItem>
-            {responsaveis.map((r) => (
+            <SelectItem value="todas">Todas as regionais</SelectItem>
+            {regionaisOpcoes.map((r) => (
               <SelectItem key={r.id} value={r.id}>{r.nome}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={anoFiltro} onValueChange={setAnoFiltro}>
+          <SelectTrigger className="w-[130px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todos">Todos os anos</SelectItem>
+            {anosOpcoes.map((a) => (
+              <SelectItem key={a} value={a}>{a}</SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -126,23 +190,6 @@ export function ProjetosList({ projetos, clientes, responsaveis, empresas }: Pro
             <SelectItem value="todos">Todos</SelectItem>
           </SelectContent>
         </Select>
-        <Select value={empresaFiltro} onValueChange={setEmpresaFiltro}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent
-            side="bottom"
-            avoidCollisions={false}
-            className="w-[--radix-select-trigger-width]"
-          >
-            <SelectItem value="todas">Todas as empresas</SelectItem>
-            {empresas.map((e) => (
-              <SelectItem key={e.id} value={e.id}>
-                {e.nome_fantasia ?? e.razao_social}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-soft">
@@ -152,9 +199,9 @@ export function ProjetosList({ projetos, clientes, responsaveis, empresas }: Pro
               <th className="px-4 py-3 font-semibold">Código</th>
               <th className="px-4 py-3 font-semibold">Nome</th>
               <th className="px-4 py-3 font-semibold">Cliente</th>
-              <th className="px-4 py-3 font-semibold">Empresa</th>
-              <th className="px-4 py-3 font-semibold">Responsável</th>
-              <th className="px-4 py-3 font-semibold">Categoria</th>
+              <th className="px-4 py-3 font-semibold">Produto</th>
+              <th className="px-4 py-3 font-semibold">Regional</th>
+              <th className="px-4 py-3 font-semibold">Serviço</th>
               <th className="px-4 py-3 font-semibold">Início</th>
               <th className="px-4 py-3 font-semibold text-center">Orçamentos</th>
               <th className="px-4 py-3 font-semibold">Status</th>
@@ -209,16 +256,26 @@ export function ProjetosList({ projetos, clientes, responsaveis, empresas }: Pro
                   </div>
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">{p.cliente_nome ?? "—"}</td>
+                <td className="px-4 py-3 text-muted-foreground">{p.produto_nome ?? "—"}</td>
                 <td className="px-4 py-3">
-                  {p.empresa_nome ? (
-                    <span className="inline-flex items-center rounded-full border border-border bg-muted/40 px-2 py-0.5 text-[11px] font-medium text-foreground">
-                      {p.empresa_nome}
-                    </span>
-                  ) : (
+                  {p.regionais.length === 0 ? (
                     <span className="text-muted-foreground">—</span>
+                  ) : (
+                    // Uma regional aparece inteira; a partir da segunda, o
+                    // contador evita que a coluna estoure a linha.
+                    <span className="inline-flex items-center gap-1">
+                      <span className="text-muted-foreground">{p.regionais[0].nome}</span>
+                      {p.regionais.length > 1 && (
+                        <span
+                          title={p.regionais.map((r) => r.nome).join(", ")}
+                          className="inline-flex items-center rounded-full border border-border bg-muted/40 px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground"
+                        >
+                          +{p.regionais.length - 1}
+                        </span>
+                      )}
+                    </span>
                   )}
                 </td>
-                <td className="px-4 py-3 text-muted-foreground">{p.responsavel_nome ?? "—"}</td>
                 <td className="px-4 py-3 text-muted-foreground">{p.categoria_nome ?? "—"}</td>
                 <td className="px-4 py-3 text-muted-foreground">{formatDate(p.data_inicio_prevista)}</td>
                 <td className="px-4 py-3 text-center tabular-nums">{p.orcamentos_count}</td>

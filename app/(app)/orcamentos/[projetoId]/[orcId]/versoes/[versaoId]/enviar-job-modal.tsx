@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
 import { AlertCircle, ArrowRight, Briefcase, Lock } from "lucide-react";
 import {
   Dialog,
@@ -15,40 +14,33 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { DatePicker } from "@/components/ui/date-picker";
 import { TruncateTooltip } from "@/components/ui/truncate-tooltip";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { cn, formatCurrency } from "@/lib/utils";
 import { OBSERVACOES_MAX } from "@/lib/validations/abertura-job";
-import { CidadeCombobox, type CidadeOption } from "./cidade-combobox";
-
-export interface ProdutoOption {
-  id: string;
-  nome: string;
-  codigo: string;
-}
 
 export interface DadosJob {
   nome: string;
-  produtoId: string;
-  cidade: CidadeOption | null;
-  regionalId: string;
   dataInicio: string;
   dataFim: string;
   dataFaturamento: string;
   observacoes: string;
 }
 
+/**
+ * Dados que a abertura só EXIBE: desde 06/08/2026 produto vem do projeto
+ * e cidade, regional, GP e produtor vêm do orçamento. O servidor relê
+ * tudo do banco na hora de gravar — o modal não pode alterá-los.
+ */
+export interface HerdadosJob {
+  produtoNome: string | null;
+  cidadeNome: string | null;
+  regionalNome: string | null;
+  gpNome: string | null;
+  produtorNome: string | null;
+}
+
 /** Campos que o Zod do servidor valida — as chaves batem com `fieldErrors`. */
 type CampoObrigatorio =
   | "nome"
-  | "produto_id"
-  | "cidade_id"
-  | "regional_id"
   | "data_inicio_prevista"
   | "data_fim_prevista"
   | "data_prevista_faturamento";
@@ -56,13 +48,22 @@ type CampoObrigatorio =
 export function faltamCampos(d: DadosJob): Record<CampoObrigatorio, boolean> {
   return {
     nome: d.nome.trim().length < 2,
-    produto_id: !d.produtoId,
-    cidade_id: !d.cidade,
-    regional_id: !d.regionalId,
     data_inicio_prevista: !d.dataInicio,
     data_fim_prevista: !d.dataFim,
     data_prevista_faturamento: !d.dataFaturamento,
   };
+}
+
+/** Falta algo herdado? Então o orçamento/projeto está incompleto e a
+ *  abertura não tem como gravar o job. */
+export function herdadosIncompletos(h: HerdadosJob): string[] {
+  const faltando: string[] = [];
+  if (!h.produtoNome) faltando.push("Produto (no projeto)");
+  if (!h.regionalNome) faltando.push("Regional (no orçamento)");
+  if (!h.cidadeNome) faltando.push("Cidade (no orçamento)");
+  if (!h.gpNome) faltando.push("GP responsável (no orçamento)");
+  if (!h.produtorNome) faltando.push("Produtor responsável (no orçamento)");
+  return faltando;
 }
 
 interface Props {
@@ -79,17 +80,13 @@ interface Props {
   orcamentoCodigo: string;
   projetoNome: string;
   projetoCodigo: string;
-  clienteId: string;
   clienteNome: string;
-  responsavelNome: string;
   codigoJob: string;
   versaoLabel: string;
   valorTotal: number;
   moeda: string;
 
-  produtos: ProdutoOption[];
-  regionais: { id: string; nome: string }[];
-  cidadesIniciais: CidadeOption[];
+  herdados: HerdadosJob;
 
   fieldErrors: Record<string, string[]>;
   erroGeral: string | null;
@@ -105,16 +102,12 @@ export function EnviarJobModal({
   orcamentoCodigo,
   projetoNome,
   projetoCodigo,
-  clienteId,
   clienteNome,
-  responsavelNome,
   codigoJob,
   versaoLabel,
   valorTotal,
   moeda,
-  produtos,
-  regionais,
-  cidadesIniciais,
+  herdados,
   fieldErrors,
   erroGeral,
 }: Props) {
@@ -137,13 +130,13 @@ export function EnviarJobModal({
     return null;
   }
 
+  const faltandoHerdados = herdadosIncompletos(herdados);
+
   function handleConfirmar() {
     setTentou(true);
-    if (!completo) return;
+    if (!completo || faltandoHerdados.length > 0) return;
     onConfirmar();
   }
-
-  const semProdutos = produtos.length === 0;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -201,93 +194,17 @@ export function EnviarJobModal({
             <Travado valor={clienteNome} />
           </Campo>
 
-          {/* Linha 3 — produto, cidade, regional. */}
-          <Campo
-            rotulo="Produto"
-            obrigatorio
-            erro={erroDe("produto_id")}
-            apoio={
-              semProdutos ? (
-                <>
-                  Nenhum produto cadastrado para este cliente.{" "}
-                  <Link
-                    href={`/clientes/${clienteId}`}
-                    prefetch={false}
-                    className="font-medium text-california-red hover:underline"
-                  >
-                    Cadastrar agora
-                  </Link>
-                </>
-              ) : (
-                "Opções do cadastro do cliente."
-              )
-            }
-          >
-            <Select
-              value={dados.produtoId}
-              onValueChange={(v) => onChange({ produtoId: v })}
-              disabled={somenteLeitura || semProdutos}
-            >
-              <SelectTrigger
-                className={cn(
-                  erroDe("produto_id") &&
-                    "border-california-red ring-2 ring-california-red/15",
-                )}
-              >
-                <SelectValue
-                  placeholder={
-                    semProdutos ? "Nenhum produto cadastrado" : "Selecione o produto"
-                  }
-                />
-              </SelectTrigger>
-              <SelectContent>
-                {produtos.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.nome}{" "}
-                    <span className="font-mono text-xs text-muted-foreground">
-                      {p.codigo}
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          {/* Linha 3 — herdados do projeto e do orçamento, todos travados. */}
+          <Campo rotulo="Produto" apoio="Cadastrado no projeto.">
+            <Travado valor={herdados.produtoNome ?? "— não informado"} />
           </Campo>
 
-          <Campo rotulo="Cidade" obrigatorio erro={erroDe("cidade_id")}>
-            {somenteLeitura ? (
-              <Travado valor={dados.cidade?.nome ?? "—"} />
-            ) : (
-              <CidadeCombobox
-                value={dados.cidade}
-                onChange={(c) => onChange({ cidade: c })}
-                iniciais={cidadesIniciais}
-                erro={Boolean(erroDe("cidade_id"))}
-              />
-            )}
+          <Campo rotulo="Cidade" apoio={`Informada no orçamento ${orcamentoCodigo}.`}>
+            <Travado valor={herdados.cidadeNome ?? "— não informada"} />
           </Campo>
 
-          <Campo rotulo="Regional" obrigatorio erro={erroDe("regional_id")}>
-            <Select
-              value={dados.regionalId}
-              onValueChange={(v) => onChange({ regionalId: v })}
-              disabled={somenteLeitura}
-            >
-              <SelectTrigger
-                className={cn(
-                  erroDe("regional_id") &&
-                    "border-california-red ring-2 ring-california-red/15",
-                )}
-              >
-                <SelectValue placeholder="Selecione a regional" />
-              </SelectTrigger>
-              <SelectContent>
-                {regionais.map((r) => (
-                  <SelectItem key={r.id} value={r.id}>
-                    {r.nome}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <Campo rotulo="Regional" apoio={`Informada no orçamento ${orcamentoCodigo}.`}>
+            <Travado valor={herdados.regionalNome ?? "— não informada"} />
           </Campo>
 
           {/* Linha 4 — as três datas. */}
@@ -341,11 +258,15 @@ export function EnviarJobModal({
             />
           </Campo>
 
-          {/* Linha 5 — responsável e o valor, que fecha as 2 colunas. */}
-          <Campo rotulo="Responsável">
-            <Travado valor={responsavelNome} />
+          {/* Linha 5 — os dois responsáveis do orçamento, também travados. */}
+          <Campo rotulo="GP Responsável">
+            <Travado valor={herdados.gpNome ?? "— não informado"} />
           </Campo>
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-muted/40 px-4 py-3 md:col-span-2">
+          <Campo rotulo="Produtor Responsável">
+            <Travado valor={herdados.produtorNome ?? "— não informado"} />
+          </Campo>
+          <div className="md:col-span-1" />
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-muted/40 px-4 py-3 md:col-span-3">
             <div>
               <p className="text-sm font-semibold">Valor total do Job</p>
               <p className="mt-0.5 text-xs text-muted-foreground">
@@ -378,6 +299,15 @@ export function EnviarJobModal({
               placeholder="Contexto para quem abre o job: condições comerciais, dependências, o que combinamos com o cliente..."
             />
           </Campo>
+
+          {!somenteLeitura && faltandoHerdados.length > 0 && (
+            <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 md:col-span-3">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>
+                Complete antes de abrir o job: {faltandoHerdados.join(", ")}.
+              </span>
+            </div>
+          )}
 
           {erroGeral && (
             <div className="flex items-start gap-2 rounded-xl border border-california-red/20 bg-california-red/5 px-4 py-3 text-sm text-california-red md:col-span-3">
@@ -412,7 +342,7 @@ export function EnviarJobModal({
                 onClick={handleConfirmar}
                 className={cn(
                   "inline-flex items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white transition-all",
-                  completo
+                  completo && faltandoHerdados.length === 0
                     ? "hover:bg-california-red-hover hover:shadow-brand"
                     : "opacity-50",
                 )}

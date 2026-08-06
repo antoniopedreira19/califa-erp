@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
-import type { CategoriaDominio } from "@/lib/types";
+import { listActiveMembers } from "@/lib/data/members";
+import type { CategoriaDominio, Cidade, Profile, Regional } from "@/lib/types";
 import { OrcamentoForm } from "../orcamento-form";
 
 export const dynamic = "force-dynamic";
@@ -16,25 +17,55 @@ export default async function NovoOrcamentoPage({
   const session = await requireSession();
   const supabase = createClient();
 
-  const [{ data: projeto }, categoriasRes] = await Promise.all([
-    supabase
-      .from("projetos")
-      .select("id, codigo, nome")
-      .eq("id", params.projetoId)
-      .eq("tenant_id", session.activeTenant.id)
-      .maybeSingle(),
-    supabase
-      .from("categorias_dominio")
-      .select("id, nome")
-      .eq("tenant_id", session.activeTenant.id)
-      .eq("escopo", "orcamento")
-      .eq("ativo", true)
-      .order("nome"),
-  ]);
+  const [{ data: projeto }, categoriasRes, regionaisRes, respRes, cidadesRes, produtores] =
+    await Promise.all([
+      supabase
+        .from("projetos")
+        .select("id, codigo, nome")
+        .eq("id", params.projetoId)
+        .eq("tenant_id", session.activeTenant.id)
+        .maybeSingle(),
+      supabase
+        .from("categorias_dominio")
+        .select("id, nome")
+        .eq("tenant_id", session.activeTenant.id)
+        .eq("escopo", "orcamento")
+        .eq("ativo", true)
+        .order("nome"),
+      // Regional e GP do orçamento saem do que foi cadastrado no projeto.
+      supabase
+        .from("projeto_regionais")
+        .select("regional:regionais(id, nome)")
+        .eq("projeto_id", params.projetoId)
+        .eq("tenant_id", session.activeTenant.id),
+      supabase
+        .from("projeto_responsaveis")
+        .select("profile:profiles(id, nome)")
+        .eq("projeto_id", params.projetoId)
+        .eq("tenant_id", session.activeTenant.id),
+      supabase
+        .from("cidades")
+        .select("id, nome")
+        .eq("tenant_id", session.activeTenant.id)
+        .eq("ativo", true)
+        .order("nome"),
+      listActiveMembers(session.activeTenant.id),
+    ]);
 
   if (!projeto) notFound();
 
   const categorias = (categoriasRes.data ?? []) as Pick<CategoriaDominio, "id" | "nome">[];
+  const cidades = (cidadesRes.data ?? []) as Pick<Cidade, "id" | "nome">[];
+
+  const regionaisDoProjeto = ((regionaisRes.data ?? []) as any[])
+    .filter((v) => v.regional)
+    .map((v) => ({ id: v.regional.id, nome: v.regional.nome }))
+    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")) as Pick<Regional, "id" | "nome">[];
+
+  const gpsDoProjeto = ((respRes.data ?? []) as any[])
+    .filter((v) => v.profile)
+    .map((v) => ({ id: v.profile.id, nome: v.profile.nome }))
+    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")) as Pick<Profile, "id" | "nome">[];
 
   return (
     <div className="space-y-6 max-w-3xl mx-auto">
@@ -54,7 +85,14 @@ export default async function NovoOrcamentoPage({
       </div>
 
       <div className="rounded-2xl border border-border bg-card p-6 shadow-soft">
-        <OrcamentoForm projetoId={params.projetoId} categorias={categorias} />
+        <OrcamentoForm
+          projetoId={params.projetoId}
+          categorias={categorias}
+          regionaisDoProjeto={regionaisDoProjeto}
+          cidades={cidades}
+          gpsDoProjeto={gpsDoProjeto}
+          produtores={produtores}
+        />
       </div>
     </div>
   );

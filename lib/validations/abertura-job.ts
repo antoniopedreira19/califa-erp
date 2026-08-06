@@ -6,10 +6,13 @@ export const OBSERVACOES_MAX = 500;
 /**
  * Modal "Enviar job para abertura" (handoff "Abertura de Job.dc.html").
  *
- * Difere do `jobSchema` em três pontos deliberados:
- * - `produto_id` é FK para `cliente_produtos`, não texto livre;
- * - `cidade_id` é FK para o cadastro `cidades`, não texto livre;
- * - não tem `posicao_hierarquia`: não há mais conceito de principal/sub-job.
+ * Só valida o que o modal ainda deixa editar. Desde 06/08/2026 produto,
+ * cidade, regional, GP responsável e produtor responsável são herdados —
+ * produto vem do projeto, o resto vem do orçamento — e aparecem travados
+ * na tela. O servidor relê esses valores do banco em vez de aceitá-los do
+ * formulário, então eles não têm campo aqui.
+ *
+ * Não tem `posicao_hierarquia`: não há mais conceito de principal/sub-job.
  *
  * `valor_total` também não está aqui: é recalculado no servidor a partir
  * dos itens da versão aprovada. Valor de faturamento não vem do cliente.
@@ -23,9 +26,6 @@ export const aberturaJobSchema = z
       .trim()
       .min(2, "Informe o nome do job (mín. 2 caracteres).")
       .max(200, "Máximo 200 caracteres."),
-    produto_id: z.string().uuid("Selecione um produto do cadastro do cliente."),
-    cidade_id: z.string().uuid("Selecione a cidade."),
-    regional_id: z.string().uuid("Selecione a regional."),
     data_inicio_prevista: z
       .string()
       .regex(/^\d{4}-\d{2}-\d{2}$/, "Data de início é obrigatória."),

@@ -181,10 +181,19 @@ export interface Projeto {
   campanha: string | null;
   categoria_id: string | null;
   cliente_id: string;
-  /** Escolhido no formulário. Não confundir com `created_by`, que registra
-   *  quem cadastrou o projeto. */
+  /** Produto do cadastro do cliente (`cliente_produtos`). Herdado pelo job
+   *  na abertura. Nullable no banco por causa dos projetos anteriores a
+   *  06/08/2026; obrigatório no formulário. */
+  produto_id: string | null;
+  /** Compatibilidade: primeiro responsável selecionado. A lista completa
+   *  vive em `projeto_responsaveis`. Não confundir com `created_by`, que
+   *  registra quem cadastrou o projeto. */
   responsavel_id: string;
+  /** Compatibilidade: primeira regional selecionada. A lista completa vive
+   *  em `projeto_regionais`. */
   regional_id: string | null;
+  /** Legado: Cidade saiu do formulário do projeto em 06/08/2026 e passou a
+   *  ser informada no orçamento. A coluna e os dados continuam. */
   cidade_id: string | null;
   status: ProjetoStatus;
   data_inicio_prevista: string;
@@ -225,6 +234,13 @@ export interface Orcamento {
   status: OrcamentoStatus;
   versao_aprovada_id: string | null;
   categoria_id: string | null;
+  /** Uma das regionais cadastradas no projeto. */
+  regional_id: string | null;
+  cidade_id: string | null;
+  /** Vira `jobs.responsavel_id` na abertura. */
+  gp_responsavel_id: string | null;
+  /** Vira `jobs.produtor_id` na abertura. */
+  produtor_id: string | null;
   data_inicio_prevista: string | null;
   data_fim_prevista: string | null;
   created_by: string | null;
@@ -508,7 +524,10 @@ export interface Job {
   cidade: string | null;
   data_inicio_prevista: string | null;
   data_fim_prevista: string | null;
+  /** GP responsável, herdado do orçamento na abertura. */
   responsavel_id: string;
+  /** Produtor responsável, herdado do orçamento na abertura. */
+  produtor_id: string | null;
   valor_total: number | null;
   status: JobStatus;
   motivo_rejeicao: string | null;

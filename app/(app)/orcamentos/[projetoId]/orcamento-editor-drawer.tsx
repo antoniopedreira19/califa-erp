@@ -8,13 +8,23 @@ import {
   DialogTitle,
   DrawerContent,
 } from "@/components/ui/dialog";
-import type { CategoriaDominio, Orcamento } from "@/lib/types";
+import type {
+  CategoriaDominio,
+  Cidade,
+  Orcamento,
+  Profile,
+  Regional,
+} from "@/lib/types";
 import { OrcamentoForm } from "./orcamento-form";
 
 interface Props {
   projetoId: string;
   orcamento: Orcamento;
   categorias: Pick<CategoriaDominio, "id" | "nome">[];
+  regionaisDoProjeto: Pick<Regional, "id" | "nome">[];
+  cidades: Pick<Cidade, "id" | "nome">[];
+  gpsDoProjeto: Pick<Profile, "id" | "nome">[];
+  produtores: Pick<Profile, "id" | "nome">[];
   disabled?: boolean;
   disabledReason?: string;
 }
@@ -23,6 +33,10 @@ export function OrcamentoEditorDrawer({
   projetoId,
   orcamento,
   categorias,
+  regionaisDoProjeto,
+  cidades,
+  gpsDoProjeto,
+  produtores,
   disabled,
   disabledReason,
 }: Props) {
@@ -64,6 +78,10 @@ export function OrcamentoEditorDrawer({
               projetoId={projetoId}
               orcamento={orcamento}
               categorias={categorias}
+              regionaisDoProjeto={regionaisDoProjeto}
+              cidades={cidades}
+              gpsDoProjeto={gpsDoProjeto}
+              produtores={produtores}
               onSuccess={() => setOpen(false)}
               onCancel={() => setOpen(false)}
             />

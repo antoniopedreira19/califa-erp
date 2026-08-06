@@ -3,11 +3,15 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, FileStack, Lock } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
+import { listActiveMembers } from "@/lib/data/members";
 import {
   orcamentoStatusLabel,
   type CategoriaDominio,
+  type Cidade,
   type Orcamento,
   type Job,
+  type Profile,
+  type Regional,
   type VersaoOrcamentoStatus,
 } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
@@ -52,10 +56,10 @@ export default async function OrcamentoDetailPage({
   const session = await requireSession();
   const supabase = createClient();
 
-  const [orcRes, projRes, versoesRes, categoriasOrcRes, jobsProjetoRes] = await Promise.all([
+  const [orcRes, projRes, versoesRes, categoriasOrcRes, jobsProjetoRes, regionaisProjRes, respProjRes, cidadesRes, produtores] = await Promise.all([
     supabase
       .from("orcamentos")
-      .select("id, tenant_id, projeto_id, codigo, nome, status, categoria_id, data_inicio_prevista, data_fim_prevista, versao_aprovada_id, created_by, created_at, updated_at, categoria:categorias_dominio(nome)")
+      .select("id, tenant_id, projeto_id, codigo, nome, status, categoria_id, regional_id, cidade_id, gp_responsavel_id, produtor_id, data_inicio_prevista, data_fim_prevista, versao_aprovada_id, created_by, created_at, updated_at, categoria:categorias_dominio(nome)")
       .eq("id", params.orcId)
       .eq("projeto_id", params.projetoId)
       .eq("tenant_id", session.activeTenant.id)
@@ -85,6 +89,24 @@ export default async function OrcamentoDetailPage({
       .eq("projeto_id", params.projetoId)
       .eq("tenant_id", session.activeTenant.id)
       .neq("status", "cancelado"),
+    // Opções de Regional e GP do orçamento: saem do cadastro do projeto.
+    supabase
+      .from("projeto_regionais")
+      .select("regional:regionais(id, nome)")
+      .eq("projeto_id", params.projetoId)
+      .eq("tenant_id", session.activeTenant.id),
+    supabase
+      .from("projeto_responsaveis")
+      .select("profile:profiles(id, nome)")
+      .eq("projeto_id", params.projetoId)
+      .eq("tenant_id", session.activeTenant.id),
+    supabase
+      .from("cidades")
+      .select("id, nome")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("ativo", true)
+      .order("nome"),
+    listActiveMembers(session.activeTenant.id),
   ]);
 
   if (orcRes.error) console.error("[orcamentos.detail]", orcRes.error.message);
@@ -100,6 +122,17 @@ export default async function OrcamentoDetailPage({
   const responsavelNome: string | null = projeto.responsavel?.nome ?? null;
   const empresaNome: string | null = projeto.empresa?.nome_fantasia ?? projeto.empresa?.razao_social ?? null;
   const categoriasOrcamento = (categoriasOrcRes.data ?? []) as Pick<CategoriaDominio, "id" | "nome">[];
+  const cidades = (cidadesRes.data ?? []) as Pick<Cidade, "id" | "nome">[];
+
+  const regionaisDoProjeto = ((regionaisProjRes.data ?? []) as any[])
+    .filter((v) => v.regional)
+    .map((v) => ({ id: v.regional.id, nome: v.regional.nome }))
+    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")) as Pick<Regional, "id" | "nome">[];
+
+  const gpsDoProjeto = ((respProjRes.data ?? []) as any[])
+    .filter((v) => v.profile)
+    .map((v) => ({ id: v.profile.id, nome: v.profile.nome }))
+    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")) as Pick<Profile, "id" | "nome">[];
 
   const jobDoOrcamento = (jobsProjetoRes.data ?? []).find(
     (j: any) => j.orcamento_id === orcamento.id,
@@ -174,6 +207,10 @@ export default async function OrcamentoDetailPage({
               projetoId={params.projetoId}
               orcamento={orcamento}
               categorias={categoriasOrcamento}
+              regionaisDoProjeto={regionaisDoProjeto}
+              cidades={cidades}
+              gpsDoProjeto={gpsDoProjeto}
+              produtores={produtores}
               disabled={protegido}
               disabledReason={
                 protegido

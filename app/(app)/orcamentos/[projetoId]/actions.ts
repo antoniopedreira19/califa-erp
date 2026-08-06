@@ -18,6 +18,10 @@ function extractInput(formData: FormData) {
     nome: formData.get("nome")?.toString() ?? "",
     status: (formData.get("status")?.toString() ?? "rascunho") as any,
     categoria_id: formData.get("categoria_id")?.toString() ?? "",
+    regional_id: formData.get("regional_id")?.toString() ?? "",
+    cidade_id: formData.get("cidade_id")?.toString() ?? "",
+    gp_responsavel_id: formData.get("gp_responsavel_id")?.toString() ?? "",
+    produtor_id: formData.get("produtor_id")?.toString() ?? "",
     data_inicio_prevista: formData.get("data_inicio_prevista")?.toString() ?? "",
     data_fim_prevista: formData.get("data_fim_prevista")?.toString() ?? "",
   };
@@ -29,6 +33,12 @@ function mapDbError(msg: string): string {
   }
   if (msg.includes("orcamentos_datas_ordem")) {
     return "Data fim precisa ser igual ou posterior à data início.";
+  }
+  if (msg.includes("orcamentos_regional_id_fkey")) {
+    return "Regional inválida.";
+  }
+  if (msg.includes("orcamentos_cidade_id_fkey")) {
+    return "Cidade inválida.";
   }
   return "Não foi possível salvar. Tente novamente.";
 }
@@ -46,6 +56,54 @@ async function assertProjetoDoTenant(
     .maybeSingle();
   if (error || !data) {
     return { ok: false, message: "Projeto não encontrado." };
+  }
+  return { ok: true };
+}
+
+/**
+ * Regional e GP do orçamento têm que sair do projeto — o formulário já
+ * mostra só essas opções, mas quem posta o form pode mandar outra coisa.
+ * A FK não cobre isso: ela só garante que a regional existe no cadastro.
+ */
+async function assertRegionalEGpDoProjeto(
+  supabase: ReturnType<typeof createClient>,
+  projetoId: string,
+  tenantId: string,
+  regionalId: string,
+  gpId: string,
+): Promise<{ ok: true } | { ok: false; message: string; fieldErrors?: Record<string, string[]> }> {
+  const [regRes, gpRes] = await Promise.all([
+    supabase
+      .from("projeto_regionais")
+      .select("regional_id")
+      .eq("projeto_id", projetoId)
+      .eq("regional_id", regionalId)
+      .eq("tenant_id", tenantId)
+      .maybeSingle(),
+    supabase
+      .from("projeto_responsaveis")
+      .select("profile_id")
+      .eq("projeto_id", projetoId)
+      .eq("profile_id", gpId)
+      .eq("tenant_id", tenantId)
+      .maybeSingle(),
+  ]);
+
+  if (!regRes.data) {
+    return {
+      ok: false,
+      message: "Regional inválida para este projeto.",
+      fieldErrors: { regional_id: ["Escolha uma das regionais do projeto."] },
+    };
+  }
+  if (!gpRes.data) {
+    return {
+      ok: false,
+      message: "GP responsável inválido para este projeto.",
+      fieldErrors: {
+        gp_responsavel_id: ["Escolha um dos responsáveis do projeto."],
+      },
+    };
   }
   return { ok: true };
 }
@@ -69,6 +127,15 @@ export async function criarOrcamento(
 
   const chk = await assertProjetoDoTenant(supabase, projetoId, session.activeTenant.id);
   if (!chk.ok) return chk;
+
+  const vinculo = await assertRegionalEGpDoProjeto(
+    supabase,
+    projetoId,
+    session.activeTenant.id,
+    parsed.data.regional_id,
+    parsed.data.gp_responsavel_id,
+  );
+  if (!vinculo.ok) return vinculo;
 
   let codigo: string;
   try {
@@ -144,6 +211,15 @@ export async function atualizarOrcamento(
         "Orçamento em estado protegido (aprovado ou com job criado). Alterações precisam ser feitas pela Task 004/005.",
     };
   }
+
+  const vinculo = await assertRegionalEGpDoProjeto(
+    supabase,
+    projetoId,
+    session.activeTenant.id,
+    parsed.data.regional_id,
+    parsed.data.gp_responsavel_id,
+  );
+  if (!vinculo.ok) return vinculo;
 
   const { codigo, ...rest } = parsed.data;
   const payload = codigo ? { ...rest, codigo } : rest;

@@ -17,12 +17,10 @@ import { aprovarVersao } from "../actions";
 import { enviarJobParaAbertura } from "./abertura-actions";
 import {
   EnviarJobModal,
-  faltamCampos,
   type DadosJob,
-  type ProdutoOption,
+  type HerdadosJob,
 } from "./enviar-job-modal";
 import { ConfirmarEnvioModal } from "./confirmar-envio-modal";
-import type { CidadeOption } from "./cidade-combobox";
 
 type Modal = "aprovar" | "form" | "envio" | null;
 
@@ -52,16 +50,14 @@ interface Props {
   faturamento: number;
   moeda: string;
 
-  clienteId: string;
   clienteNome: string;
-  responsavelNome: string;
   proximoCodigoJob: string;
   projetoNome: string;
   projetoCodigo: string;
 
-  produtos: ProdutoOption[];
-  regionais: { id: string; nome: string }[];
-  cidadesIniciais: CidadeOption[];
+  /** Produto, cidade, regional, GP e produtor: só exibidos. O servidor
+   *  relê tudo do projeto/orçamento na hora de gravar o job. */
+  herdados: HerdadosJob;
 
   /** Valores que pré-preenchem o modal, vindos do orçamento. */
   inicial: DadosJob;
@@ -79,15 +75,11 @@ export function FluxoAbertura({
   custoPlanejado,
   faturamento,
   moeda,
-  clienteId,
   clienteNome,
-  responsavelNome,
   proximoCodigoJob,
   projetoNome,
   projetoCodigo,
-  produtos,
-  regionais,
-  cidadesIniciais,
+  herdados,
   inicial,
   job,
 }: Props) {
@@ -146,11 +138,10 @@ export function FluxoAbertura({
     setErroGeral(null);
     setFieldErrors({});
 
+    // Produto, cidade, regional, GP e produtor não vão no payload: o
+    // servidor lê esses valores do projeto e do orçamento.
     const formData = new FormData();
     formData.set("nome", dados.nome);
-    formData.set("produto_id", dados.produtoId);
-    formData.set("cidade_id", dados.cidade?.id ?? "");
-    formData.set("regional_id", dados.regionalId);
     formData.set("data_inicio_prevista", dados.dataInicio);
     formData.set("data_fim_prevista", dados.dataFim);
     formData.set("data_prevista_faturamento", dados.dataFaturamento);
@@ -170,22 +161,21 @@ export function FluxoAbertura({
     });
   }
 
-  const regionalNome =
-    regionais.find((r) => r.id === dados.regionalId)?.nome ?? "—";
-  const produtoNome =
-    produtos.find((p) => p.id === dados.produtoId)?.nome ?? "— não informado";
-
   const resumoEnvio = [
     { rotulo: "Job", valor: dados.nome || "—" },
     { rotulo: "Código", valor: proximoCodigoJob, mono: true },
     { rotulo: "Projeto", valor: `${projetoNome} · ${projetoCodigo}` },
     { rotulo: "Cliente", valor: clienteNome },
-    { rotulo: "Produto", valor: produtoNome },
+    { rotulo: "Produto", valor: herdados.produtoNome ?? "— não informado" },
     {
       rotulo: "Cidade · Regional",
-      valor: `${dados.cidade?.nome ?? "—"} · ${regionalNome}`,
+      valor: `${herdados.cidadeNome ?? "—"} · ${herdados.regionalNome ?? "—"}`,
     },
-    { rotulo: "Responsável", valor: responsavelNome },
+    { rotulo: "GP Responsável", valor: herdados.gpNome ?? "— não informado" },
+    {
+      rotulo: "Produtor Responsável",
+      valor: herdados.produtorNome ?? "— não informado",
+    },
     {
       rotulo: "Início · fim",
       valor: `${formatarData(dados.dataInicio)} → ${formatarData(dados.dataFim)}`,
@@ -341,16 +331,12 @@ export function FluxoAbertura({
         orcamentoCodigo={orcamentoCodigo}
         projetoNome={projetoNome}
         projetoCodigo={projetoCodigo}
-        clienteId={clienteId}
         clienteNome={clienteNome}
-        responsavelNome={responsavelNome}
         codigoJob={job?.codigo ?? proximoCodigoJob}
         versaoLabel={versaoLabel}
         valorTotal={faturamento}
         moeda={moeda}
-        produtos={produtos}
-        regionais={regionais}
-        cidadesIniciais={cidadesIniciais}
+        herdados={herdados}
         fieldErrors={fieldErrors}
         erroGeral={erroGeral}
       />
