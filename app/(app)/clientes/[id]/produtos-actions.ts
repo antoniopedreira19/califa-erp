@@ -10,7 +10,15 @@ type ActionResult =
   | { ok: true; id: string }
   | { ok: false; message: string; fieldErrors?: Record<string, string[]> };
 
+/** Mensagem única do produto padrão — usada tanto no gate da action
+ *  quanto na tradução do erro do trigger, que é a última barreira. */
+const PRODUTO_PADRAO_BLOQUEADO =
+  "Este produto representa a marca do cliente e não pode ser alterado. Para renomeá-lo, edite o nome fantasia do cliente.";
+
 function mapProdutoDbError(msg: string): string {
+  if (msg.includes("produto_padrao_protegido")) {
+    return PRODUTO_PADRAO_BLOQUEADO;
+  }
   if (msg.includes("uniq_cliente_produto_nome")) {
     return "Este cliente já tem um produto com esse nome.";
   }
@@ -21,6 +29,40 @@ function mapProdutoDbError(msg: string): string {
     return "Nome do produto não pode ficar vazio.";
   }
   return "Não foi possível salvar o produto.";
+}
+
+/**
+ * O produto padrão é imutável. O banco já barra via trigger; este gate
+ * existe para devolver a mensagem certa antes de gastar o round-trip e
+ * para registrar a tentativa na auditoria.
+ */
+async function assertNaoEhPadrao(
+  supabase: ReturnType<typeof createClient>,
+  tenantId: string,
+  clienteId: string,
+  produtoId: string,
+  acaoTentada: string,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const { data } = await supabase
+    .from("cliente_produtos")
+    .select("padrao")
+    .eq("id", produtoId)
+    .eq("cliente_id", clienteId)
+    .eq("tenant_id", tenantId)
+    .maybeSingle<{ padrao: boolean }>();
+
+  if (!data) return { ok: false, message: "Produto não encontrado." };
+  if (!data.padrao) return { ok: true };
+
+  await logAuditEvent({
+    acao: "acao_negada",
+    tenantId,
+    entidadeTipo: "cliente_produto",
+    entidadeId: produtoId,
+    metadata: { acao_tentada: acaoTentada, motivo: "produto_padrao_protegido" },
+  });
+
+  return { ok: false, message: PRODUTO_PADRAO_BLOQUEADO };
 }
 
 /**
@@ -117,6 +159,16 @@ export async function editarProduto(
   }
 
   const supabase = createClient();
+
+  const gate = await assertNaoEhPadrao(
+    supabase,
+    session.activeTenant.id,
+    clienteId,
+    id,
+    "cliente_produto.editado",
+  );
+  if (!gate.ok) return gate;
+
   // Código não muda no editar: ele identifica o produto no histórico.
   const { error } = await supabase
     .from("cliente_produtos")
@@ -150,6 +202,16 @@ async function alternarAtivo(
   const session = await requireSession();
 
   const supabase = createClient();
+
+  const gate = await assertNaoEhPadrao(
+    supabase,
+    session.activeTenant.id,
+    clienteId,
+    id,
+    ativo ? "cliente_produto.reativado" : "cliente_produto.inativado",
+  );
+  if (!gate.ok) return gate;
+
   const { error } = await supabase
     .from("cliente_produtos")
     .update({ ativo })
@@ -161,9 +223,11 @@ async function alternarAtivo(
     console.error("[cliente_produtos.ativo]", error.message);
     return {
       ok: false,
-      message: ativo
-        ? "Não foi possível reativar."
-        : "Não foi possível inativar.",
+      message: error.message.includes("produto_padrao_protegido")
+        ? PRODUTO_PADRAO_BLOQUEADO
+        : ativo
+          ? "Não foi possível reativar."
+          : "Não foi possível inativar.",
     };
   }
 

@@ -25,11 +25,14 @@ export default async function EditarClientePage({
       .eq("id", params.id)
       .eq("tenant_id", session.activeTenant.id)
       .maybeSingle<Cliente>(),
+    // O produto padrão (a marca do cliente) encabeça a lista; os demais
+    // seguem por código.
     supabase
       .from("cliente_produtos")
       .select("*")
       .eq("cliente_id", params.id)
       .eq("tenant_id", session.activeTenant.id)
+      .order("padrao", { ascending: false })
       .order("codigo"),
   ]);
 

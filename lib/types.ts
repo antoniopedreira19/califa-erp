@@ -488,6 +488,12 @@ export interface ClienteProduto {
   nome: string;
   codigo: string;
   ativo: boolean;
+  /** Produto que representa a marca do cliente — a matriz, quando não há
+   *  outras marcas no guarda-chuva. Existe um por cliente, nasce junto
+   *  com ele e não pode ser apagado, inativado nem renomeado à mão: o
+   *  nome acompanha o nome fantasia. Trigger `trg_cliente_produtos_padrao`
+   *  garante isso no banco, não só na server action. */
+  padrao: boolean;
   created_by: string | null;
   created_at: string;
   updated_at: string;
