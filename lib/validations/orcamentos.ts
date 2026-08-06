@@ -32,6 +32,14 @@ export const orcamentoSchema = z
       .optional()
       .or(z.literal(""))
       .transform((v) => (v && v.length > 0 ? v : null)),
+    // Obrigatórios desde 06/08/2026. Nullable no banco por causa dos
+    // orçamentos gravados antes desta mudança — a exigência vive aqui.
+    // `regional_id` precisa ser uma das regionais do projeto; isso a
+    // server action confere, porque o Zod não conhece o projeto.
+    regional_id: z.string().uuid("Selecione a regional."),
+    cidade_id: z.string().uuid("Selecione a cidade."),
+    gp_responsavel_id: z.string().uuid("Selecione o GP responsável."),
+    produtor_id: z.string().uuid("Selecione o produtor responsável."),
     data_inicio_prevista: z
       .string()
       .optional()

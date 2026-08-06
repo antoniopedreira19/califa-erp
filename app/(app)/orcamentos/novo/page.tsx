@@ -4,8 +4,8 @@ import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { listActiveMembers } from "@/lib/data/members";
 import { listEmpresasAtivas, getEmpresaPrincipal } from "@/lib/data/empresas";
-import type { CategoriaDominio, Cidade, Cliente, Regional } from "@/lib/types";
-import { ProjetoForm } from "../projeto-form";
+import type { CategoriaDominio, Cliente, Regional } from "@/lib/types";
+import { ProjetoForm, type ProdutoOption } from "../projeto-form";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +13,7 @@ export default async function NovoProjetoPage() {
   const session = await requireSession();
   const supabase = createClient();
 
-  const [clientesRes, responsaveis, regionaisRes, cidadesRes, categoriasRes, empresas, principal] = await Promise.all([
+  const [clientesRes, responsaveis, regionaisRes, produtosRes, categoriasRes, empresas, principal] = await Promise.all([
     supabase
       .from("clientes")
       .select("id, nome_fantasia, codigo_curto")
@@ -27,12 +27,14 @@ export default async function NovoProjetoPage() {
       .eq("tenant_id", session.activeTenant.id)
       .eq("ativo", true)
       .order("nome"),
+    // Cadastro pequeno (por cliente): vem inteiro e o formulário filtra
+    // pelo cliente escolhido, sem ida extra ao servidor a cada troca.
     supabase
-      .from("cidades")
-      .select("id, nome")
+      .from("cliente_produtos")
+      .select("id, nome, codigo, cliente_id")
       .eq("tenant_id", session.activeTenant.id)
       .eq("ativo", true)
-      .order("nome"),
+      .order("codigo"),
     supabase
       .from("categorias_dominio")
       .select("id, nome")
@@ -49,7 +51,7 @@ export default async function NovoProjetoPage() {
     "id" | "nome_fantasia" | "codigo_curto"
   >[];
   const regionais = (regionaisRes.data ?? []) as Pick<Regional, "id" | "nome">[];
-  const cidades = (cidadesRes.data ?? []) as Pick<Cidade, "id" | "nome">[];
+  const produtos = (produtosRes.data ?? []) as ProdutoOption[];
   const categorias = (categoriasRes.data ?? []) as Pick<
     CategoriaDominio,
     "id" | "nome"
@@ -79,7 +81,7 @@ export default async function NovoProjetoPage() {
           clientes={clientes}
           responsaveis={responsaveis}
           regionais={regionais}
-          cidades={cidades}
+          produtos={produtos}
           categorias={categorias}
         />
       </div>

@@ -66,7 +66,6 @@ export default async function VersaoDetailPage({
     categoriasRes,
     jobRes,
     regionaisRes,
-    cidadesRes,
   ] = await Promise.all([
     supabase
       .from("versoes_orcamento")
@@ -78,7 +77,9 @@ export default async function VersaoDetailPage({
     supabase
       .from("orcamentos")
       .select(
-        "id, codigo, nome, status, projeto_id, data_inicio_prevista, data_fim_prevista",
+        "id, codigo, nome, status, projeto_id, data_inicio_prevista, data_fim_prevista, " +
+          "regional:regionais(nome), cidade:cidades(nome), " +
+          "gp:profiles!gp_responsavel_id(nome), produtor:profiles!produtor_id(nome)",
       )
       .eq("id", params.orcId)
       .eq("tenant_id", session.activeTenant.id)
@@ -126,15 +127,6 @@ export default async function VersaoDetailPage({
       .eq("tenant_id", session.activeTenant.id)
       .eq("ativo", true)
       .order("nome"),
-    // Primeiras cidades do cadastro. A busca completa roda no servidor,
-    // sob demanda — ver `buscarCidades` em abertura-actions.
-    supabase
-      .from("cidades")
-      .select("id, nome")
-      .eq("tenant_id", session.activeTenant.id)
-      .eq("ativo", true)
-      .order("nome")
-      .limit(30),
   ]);
 
   if (versaoRes.error) console.error("[versao.detail]", versaoRes.error.message);
@@ -178,7 +170,7 @@ export default async function VersaoDetailPage({
   const [projetoRes, jobsCountRes] = await Promise.all([
     supabase
       .from("projetos")
-      .select("id, codigo, nome, cliente_id, cliente:clientes(id, nome_fantasia), responsavel:profiles!responsavel_id(nome)")
+      .select("id, codigo, nome, cliente_id, cliente:clientes(id, nome_fantasia), produto:cliente_produtos(nome)")
       .eq("id", orcamento.projeto_id)
       .eq("tenant_id", session.activeTenant.id)
       .maybeSingle(),
@@ -191,23 +183,8 @@ export default async function VersaoDetailPage({
   const projetoRaw = projetoRes.data as any;
   const clienteId: string = projetoRaw?.cliente_id ?? "";
   const clienteNome: string = projetoRaw?.cliente?.nome_fantasia ?? "—";
-  const responsavelNome: string = projetoRaw?.responsavel?.nome ?? "—";
   const projetoNome: string = projetoRaw?.nome ?? "—";
   const projetoCodigo: string = projetoRaw?.codigo ?? "—";
-
-  const produtosRes = clienteId
-    ? await supabase
-        .from("cliente_produtos")
-        .select("id, nome, codigo")
-        .eq("cliente_id", clienteId)
-        .eq("tenant_id", session.activeTenant.id)
-        .eq("ativo", true)
-        .order("codigo")
-    : { data: [], error: null };
-
-  if (produtosRes.error) {
-    console.error("[versao.produtos]", produtosRes.error.message);
-  }
 
   const totais = calcularTotaisVersao(
     itens,
@@ -224,7 +201,6 @@ export default async function VersaoDetailPage({
     custoPlanejado,
   );
 
-  const cidadesIniciais = (cidadesRes.data ?? []) as { id: string; nome: string }[];
   const regionais = (regionaisRes.data ?? []) as { id: string; nome: string }[];
 
   // Preview do código: o definitivo é gerado no insert. Serve só pra tela
@@ -233,25 +209,25 @@ export default async function VersaoDetailPage({
     .toString()
     .padStart(4, "0")}`;
 
-  const cidadeDoJob = job?.cidade
-    ? cidadesIniciais.find((c) => c.nome === job.cidade) ?? {
-        id: "",
-        nome: job.cidade,
-      }
-    : null;
-
   const inicialModal = {
     nome: job?.nome ?? orcamento.nome,
-    produtoId:
-      (job?.produto
-        ? (produtosRes.data ?? []).find((p: any) => p.nome === job.produto)?.id
-        : undefined) ?? "",
-    cidade: cidadeDoJob,
-    regionalId: job?.regional_id ?? "",
     dataInicio: job?.data_inicio_prevista ?? orcamento.data_inicio_prevista ?? "",
     dataFim: job?.data_fim_prevista ?? orcamento.data_fim_prevista ?? "",
     dataFaturamento: job?.data_prevista_faturamento ?? "",
     observacoes: job?.observacoes ?? "",
+  };
+
+  // Herdados: com job já aberto valem os valores congelados nele; antes
+  // disso, o que está cadastrado hoje no projeto e no orçamento.
+  const orcamentoRaw = orcamento as any;
+  const herdados = {
+    produtoNome: job?.produto ?? projetoRaw?.produto?.nome ?? null,
+    cidadeNome: job?.cidade ?? orcamentoRaw.cidade?.nome ?? null,
+    regionalNome: job
+      ? regionais.find((r) => r.id === job.regional_id)?.nome ?? null
+      : orcamentoRaw.regional?.nome ?? null,
+    gpNome: orcamentoRaw.gp?.nome ?? null,
+    produtorNome: orcamentoRaw.produtor?.nome ?? null,
   };
 
   return (
@@ -423,15 +399,11 @@ export default async function VersaoDetailPage({
         custoPlanejado={custoPlanejado}
         faturamento={totais.faturamento}
         moeda={versao.moeda}
-        clienteId={clienteId}
         clienteNome={clienteNome}
-        responsavelNome={responsavelNome}
         proximoCodigoJob={proximoCodigoJob}
         projetoNome={projetoNome}
         projetoCodigo={projetoCodigo}
-        produtos={(produtosRes.data ?? []) as { id: string; nome: string; codigo: string }[]}
-        regionais={regionais}
-        cidadesIniciais={cidadesIniciais}
+        herdados={herdados}
         inicial={inicialModal}
         job={job}
       />

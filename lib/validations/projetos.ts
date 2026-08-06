@@ -16,9 +16,15 @@ export const DESCRICAO_MAX = 600;
  * o update só a inclui no payload quando o form realmente a envia, para
  * não zerar o valor já gravado.
  *
- * Regional, Cidade, Final previsto e Categoria são obrigatórios AQUI e
+ * Regional, Produto, Final previsto e Serviço são obrigatórios AQUI e
  * nullable no banco — há projetos anteriores ao handoff sem esses dados,
  * e um NOT NULL exigiria backfill.
+ *
+ * Desde 06/08/2026: Regional e Responsável são listas (tabelas
+ * `projeto_regionais` e `projeto_responsaveis`); o primeiro item de cada
+ * uma alimenta as colunas de compatibilidade em `projetos`. Cidade saiu
+ * do formulário — passou a ser informada no orçamento. Produto entrou,
+ * vindo do cadastro do cliente selecionado.
  */
 export const projetoSchema = z
   .object({
@@ -35,10 +41,14 @@ export const projetoSchema = z
       .transform((v) => (v && v.length > 0 ? v : null)),
     empresa_id: z.string().uuid("Selecione a empresa."),
     cliente_id: z.string().uuid("Selecione um cliente válido."),
-    responsavel_id: z.string().uuid("Selecione um responsável válido."),
-    regional_id: z.string().uuid("Selecione a regional."),
-    cidade_id: z.string().uuid("Selecione a cidade."),
-    categoria_id: z.string().uuid("Selecione uma categoria para continuar."),
+    produto_id: z.string().uuid("Selecione um produto do cadastro do cliente."),
+    responsavel_ids: z
+      .array(z.string().uuid("Responsável inválido."))
+      .min(1, "Selecione ao menos um responsável."),
+    regional_ids: z
+      .array(z.string().uuid("Regional inválida."))
+      .min(1, "Selecione ao menos uma regional."),
+    categoria_id: z.string().uuid("Selecione um serviço para continuar."),
     data_inicio_prevista: z
       .string()
       .regex(/^\d{4}-\d{2}-\d{2}$/, "Data de início é obrigatória."),

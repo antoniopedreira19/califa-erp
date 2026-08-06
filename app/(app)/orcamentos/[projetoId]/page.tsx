@@ -10,6 +10,7 @@ import type {
   Cidade,
   Cliente,
   Orcamento,
+  Profile,
   Projeto,
   Regional,
 } from "@/lib/types";
@@ -17,6 +18,7 @@ import { projetoStatusLabel } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { ProjetoEditorDrawer } from "../projeto-editor-drawer";
+import type { ProdutoOption } from "../projeto-form";
 import { OrcamentosList, type OrcamentoRow } from "./orcamentos-list";
 
 export const dynamic = "force-dynamic";
@@ -41,18 +43,18 @@ export default async function ProjetoDetailPage({
   const session = await requireSession();
   const supabase = createClient();
 
-  const [projRes, orcsRes, clientesRes, responsaveis, regionaisRes, cidadesRes, categoriasProjRes, categoriasOrcRes, empresas] = await Promise.all([
+  const [projRes, orcsRes, clientesRes, responsaveis, regionaisRes, cidadesRes, categoriasProjRes, categoriasOrcRes, empresas, produtosRes, vinculosRegRes, vinculosRespRes] = await Promise.all([
     supabase
       .from("projetos")
       .select(
-        "id, tenant_id, empresa_id, codigo, nome, campanha, status, cliente_id, responsavel_id, regional_id, cidade_id, categoria_id, data_inicio_prevista, data_fim_prevista, descricao, created_by, created_at, updated_at, cliente:clientes(id, nome_fantasia), responsavel:profiles!responsavel_id(id, nome), regional:regionais(id, nome), cidade:cidades(id, nome), categoria:categorias_dominio(id, nome), empresa:empresas(id, razao_social, nome_fantasia)",
+        "id, tenant_id, empresa_id, codigo, nome, campanha, status, cliente_id, produto_id, responsavel_id, regional_id, cidade_id, categoria_id, data_inicio_prevista, data_fim_prevista, descricao, created_by, created_at, updated_at, cliente:clientes(id, nome_fantasia), produto:cliente_produtos(id, nome), categoria:categorias_dominio(id, nome), empresa:empresas(id, razao_social, nome_fantasia)",
       )
       .eq("id", params.projetoId)
       .eq("tenant_id", session.activeTenant.id)
       .maybeSingle(),
     supabase
       .from("orcamentos")
-      .select("id, codigo, nome, status, data_fim_prevista, created_at, categoria:categorias_dominio(nome)")
+      .select("id, codigo, nome, status, data_inicio_prevista, data_fim_prevista, created_at, categoria:categorias_dominio(nome)")
       .eq("projeto_id", params.projetoId)
       .eq("tenant_id", session.activeTenant.id)
       .order("created_at", { ascending: false }),
@@ -90,6 +92,22 @@ export default async function ProjetoDetailPage({
       .eq("ativo", true)
       .order("nome"),
     listEmpresasAtivas(session.activeTenant.id),
+    supabase
+      .from("cliente_produtos")
+      .select("id, nome, codigo, cliente_id")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("ativo", true)
+      .order("codigo"),
+    supabase
+      .from("projeto_regionais")
+      .select("regional_id, regional:regionais(id, nome)")
+      .eq("projeto_id", params.projetoId)
+      .eq("tenant_id", session.activeTenant.id),
+    supabase
+      .from("projeto_responsaveis")
+      .select("profile_id, profile:profiles(id, nome)")
+      .eq("projeto_id", params.projetoId)
+      .eq("tenant_id", session.activeTenant.id),
   ]);
 
   if (projRes.error) console.error("[projeto.detail]", projRes.error.message);
@@ -105,6 +123,7 @@ export default async function ProjetoDetailPage({
     campanha: raw.campanha,
     status: raw.status,
     cliente_id: raw.cliente_id,
+    produto_id: raw.produto_id,
     responsavel_id: raw.responsavel_id,
     regional_id: raw.regional_id,
     cidade_id: raw.cidade_id,
@@ -117,16 +136,27 @@ export default async function ProjetoDetailPage({
     updated_at: raw.updated_at,
   };
   const clienteNome: string | null = raw.cliente?.nome_fantasia ?? null;
-  const responsavelNome: string | null = raw.responsavel?.nome ?? null;
-  const regionalNome: string | null = raw.regional?.nome ?? null;
-  const cidadeNome: string | null = raw.cidade?.nome ?? null;
+  const produtoNome: string | null = raw.produto?.nome ?? null;
   const categoriaNome: string | null = raw.categoria?.nome ?? null;
   const empresaNome: string | null = raw.empresa?.nome_fantasia ?? raw.empresa?.razao_social ?? null;
 
   const regionais = (regionaisRes.data ?? []) as Pick<Regional, "id" | "nome">[];
   const cidades = (cidadesRes.data ?? []) as Pick<Cidade, "id" | "nome">[];
+  const produtos = (produtosRes.data ?? []) as ProdutoOption[];
   const categoriasProjeto = (categoriasProjRes.data ?? []) as Pick<CategoriaDominio, "id" | "nome">[];
   const categoriasOrcamento = (categoriasOrcRes.data ?? []) as Pick<CategoriaDominio, "id" | "nome">[];
+
+  // Regionais e responsáveis do projeto: alimentam o cabeçalho, o editor
+  // e — importante — as opções de Regional e GP no formulário do orçamento.
+  const regionaisDoProjeto = ((vinculosRegRes.data ?? []) as any[])
+    .filter((v) => v.regional)
+    .map((v) => ({ id: v.regional.id as string, nome: v.regional.nome as string }))
+    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+
+  const responsaveisDoProjeto = ((vinculosRespRes.data ?? []) as any[])
+    .filter((v) => v.profile)
+    .map((v) => ({ id: v.profile.id as string, nome: v.profile.nome as string }))
+    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")) as Pick<Profile, "id" | "nome">[];
 
   const orcamentosBrutos = (orcsRes.data ?? []) as any[];
   const orcamentoIds = orcamentosBrutos.map((o) => o.id);
@@ -150,6 +180,7 @@ export default async function ProjetoDetailPage({
     nome: o.nome,
     categoria_nome: o.categoria?.nome ?? null,
     status: o.status as Orcamento["status"],
+    data_inicio_prevista: o.data_inicio_prevista,
     data_fim_prevista: o.data_fim_prevista,
     versoes_count: versoesCountMap.get(o.id) ?? 0,
     created_at: o.created_at,
@@ -186,8 +217,10 @@ export default async function ProjetoDetailPage({
               clientes={clientes}
               responsaveis={responsaveis}
               regionais={regionais}
-              cidades={cidades}
+              produtos={produtos}
               categorias={categoriasProjeto}
+              regionaisSelecionadas={regionaisDoProjeto.map((r) => r.id)}
+              responsaveisSelecionados={responsaveisDoProjeto.map((r) => r.id)}
             />
           </div>
 
@@ -196,31 +229,41 @@ export default async function ProjetoDetailPage({
               <span className="text-foreground/60">Cliente:</span>{" "}
               <span className="text-foreground font-medium">{clienteNome ?? "—"}</span>
             </span>
+            {produtoNome && (
+              <>
+                <span aria-hidden className="text-border">·</span>
+                <span>
+                  <span className="text-foreground/60">Produto:</span>{" "}
+                  <span className="text-foreground font-medium">{produtoNome}</span>
+                </span>
+              </>
+            )}
             <span aria-hidden className="text-border">·</span>
             <span>
-              <span className="text-foreground/60">Responsável:</span>{" "}
-              <span className="text-foreground font-medium">{responsavelNome ?? "—"}</span>
+              <span className="text-foreground/60">
+                {responsaveisDoProjeto.length > 1 ? "Responsáveis:" : "Responsável:"}
+              </span>{" "}
+              <span className="text-foreground font-medium">
+                {responsaveisDoProjeto.length > 0
+                  ? responsaveisDoProjeto.map((r) => r.nome).join(", ")
+                  : "—"}
+              </span>
             </span>
             <span aria-hidden className="text-border">·</span>
             <span>
               <span className="text-foreground/60">Empresa:</span>{" "}
               <span className="text-foreground font-medium">{empresaNome ?? "—"}</span>
             </span>
-            {regionalNome && (
+            {regionaisDoProjeto.length > 0 && (
               <>
                 <span aria-hidden className="text-border">·</span>
                 <span>
-                  <span className="text-foreground/60">Regional:</span>{" "}
-                  <span className="text-foreground font-medium">{regionalNome}</span>
-                </span>
-              </>
-            )}
-            {cidadeNome && (
-              <>
-                <span aria-hidden className="text-border">·</span>
-                <span>
-                  <span className="text-foreground/60">Cidade:</span>{" "}
-                  <span className="text-foreground font-medium">{cidadeNome}</span>
+                  <span className="text-foreground/60">
+                    {regionaisDoProjeto.length > 1 ? "Regionais:" : "Regional:"}
+                  </span>{" "}
+                  <span className="text-foreground font-medium">
+                    {regionaisDoProjeto.map((r) => r.nome).join(", ")}
+                  </span>
                 </span>
               </>
             )}
@@ -238,7 +281,7 @@ export default async function ProjetoDetailPage({
               <>
                 <span aria-hidden className="text-border">·</span>
                 <span>
-                  <span className="text-foreground/60">Categoria:</span>{" "}
+                  <span className="text-foreground/60">Serviço:</span>{" "}
                   <span className="text-foreground font-medium">{categoriaNome}</span>
                 </span>
               </>

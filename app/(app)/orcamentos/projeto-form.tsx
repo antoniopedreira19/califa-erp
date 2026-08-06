@@ -14,11 +14,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DatePicker } from "@/components/ui/date-picker";
+import { MultiSelect } from "@/components/ui/multi-select";
 import { Textarea } from "@/components/ui/textarea";
 import { DESCRICAO_MAX } from "@/lib/validations/projetos";
 import type {
   CategoriaDominio,
-  Cidade,
   Cliente,
   Profile,
   Projeto,
@@ -30,6 +30,15 @@ import {
   type ActionResult,
 } from "./actions";
 
+/** Produto do cadastro do cliente. Vem com `cliente_id` porque a lista
+ *  chega inteira e é filtrada no cliente conforme a seleção. */
+export interface ProdutoOption {
+  id: string;
+  nome: string;
+  codigo: string;
+  cliente_id: string;
+}
+
 interface Props {
   projeto?: Projeto;
   empresas: { id: string; razao_social: string; nome_fantasia: string | null; principal: boolean }[];
@@ -37,8 +46,11 @@ interface Props {
   clientes: Pick<Cliente, "id" | "nome_fantasia" | "codigo_curto">[];
   responsaveis: Pick<Profile, "id" | "nome">[];
   regionais: Pick<Regional, "id" | "nome">[];
-  cidades: Pick<Cidade, "id" | "nome">[];
+  produtos: ProdutoOption[];
   categorias: Pick<CategoriaDominio, "id" | "nome">[];
+  /** Ids já vinculados ao projeto, na ordem gravada. */
+  regionaisSelecionadas?: string[];
+  responsaveisSelecionados?: string[];
   onSuccess?: () => void;
   onCancel?: () => void;
 }
@@ -50,8 +62,10 @@ export function ProjetoForm({
   clientes,
   responsaveis,
   regionais,
-  cidades,
+  produtos,
   categorias,
+  regionaisSelecionadas,
+  responsaveisSelecionados,
   onSuccess,
   onCancel,
 }: Props) {
@@ -64,13 +78,26 @@ export function ProjetoForm({
     projeto?.empresa_id ?? empresaPrincipalId ?? "",
   );
   const [clienteId, setClienteId] = React.useState(projeto?.cliente_id ?? "");
-  const [responsavelId, setResponsavelId] = React.useState(
-    projeto?.responsavel_id ?? "",
+  const [produtoId, setProdutoId] = React.useState(projeto?.produto_id ?? "");
+  const [responsavelIds, setResponsavelIds] = React.useState<string[]>(
+    responsaveisSelecionados ?? (projeto ? [projeto.responsavel_id] : []),
   );
-  const [regionalId, setRegionalId] = React.useState(projeto?.regional_id ?? "");
-  const [cidadeId, setCidadeId] = React.useState(projeto?.cidade_id ?? "");
+  const [regionalIds, setRegionalIds] = React.useState<string[]>(
+    regionaisSelecionadas ?? (projeto?.regional_id ? [projeto.regional_id] : []),
+  );
   const [categoriaId, setCategoriaId] = React.useState(projeto?.categoria_id ?? "");
   const [descricao, setDescricao] = React.useState(projeto?.descricao ?? "");
+
+  // Produto é cadastrado por cliente: trocar de cliente invalida a escolha.
+  const produtosDoCliente = React.useMemo(
+    () => produtos.filter((p) => p.cliente_id === clienteId),
+    [produtos, clienteId],
+  );
+
+  function handleClienteChange(novoClienteId: string) {
+    setClienteId(novoClienteId);
+    if (novoClienteId !== clienteId) setProdutoId("");
+  }
 
   /** Realce do campo com erro, como no handoff: borda vermelha + halo.
    *  Os Selects NÃO usam `required`: o Radix monta um <select> nativo
@@ -89,10 +116,12 @@ export function ProjetoForm({
     const formData = new FormData(e.currentTarget);
     formData.set("empresa_id", empresaId);
     formData.set("cliente_id", clienteId);
-    formData.set("responsavel_id", responsavelId);
-    formData.set("regional_id", regionalId);
-    formData.set("cidade_id", cidadeId);
+    formData.set("produto_id", produtoId);
     formData.set("categoria_id", categoriaId);
+    // `append` numa chave repetida: o servidor lê com `getAll` e a ordem
+    // define quem vai para as colunas de compatibilidade do projeto.
+    for (const id of responsavelIds) formData.append("responsavel_ids", id);
+    for (const id of regionalIds) formData.append("regional_ids", id);
 
     startTransition(async () => {
       const res: ActionResult = isEdit
@@ -150,27 +179,22 @@ export function ProjetoForm({
         </Field>
 
         <Field
-          label="Responsável"
-          name="responsavel_id"
+          label="Responsáveis"
+          name="responsavel_ids"
           required
           errors={fieldErrors}
         >
-          <Select value={responsavelId} onValueChange={setResponsavelId}>
-            <SelectTrigger className={erroClasses("responsavel_id")}>
-              <SelectValue placeholder="Selecione um membro do tenant" />
-            </SelectTrigger>
-            <SelectContent>
-              {responsaveis.map((r) => (
-                <SelectItem key={r.id} value={r.id}>
-                  {r.nome}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <MultiSelect
+            items={responsaveis.map((r) => ({ value: r.id, label: r.nome }))}
+            value={responsavelIds}
+            onChange={setResponsavelIds}
+            placeholder="Selecione um ou mais membros"
+            className={erroClasses("responsavel_ids")}
+          />
         </Field>
 
         <Field label="Cliente" name="cliente_id" required errors={fieldErrors}>
-          <Select value={clienteId} onValueChange={setClienteId}>
+          <Select value={clienteId} onValueChange={handleClienteChange}>
             <SelectTrigger className={erroClasses("cliente_id")}>
               <SelectValue placeholder="Selecione um cliente ativo" />
             </SelectTrigger>
@@ -185,40 +209,63 @@ export function ProjetoForm({
           </Select>
         </Field>
 
-        <Field label="Regional" name="regional_id" required errors={fieldErrors}>
-          <Select value={regionalId} onValueChange={setRegionalId}>
-            <SelectTrigger className={erroClasses("regional_id")}>
-              <SelectValue placeholder="Selecione a regional" />
+        <Field label="Produto" name="produto_id" required errors={fieldErrors}>
+          <Select
+            value={produtoId}
+            onValueChange={setProdutoId}
+            disabled={!clienteId || produtosDoCliente.length === 0}
+          >
+            <SelectTrigger className={erroClasses("produto_id")}>
+              <SelectValue
+                placeholder={
+                  !clienteId
+                    ? "Selecione o cliente primeiro"
+                    : produtosDoCliente.length === 0
+                      ? "Nenhum produto cadastrado"
+                      : "Selecione o produto"
+                }
+              />
             </SelectTrigger>
             <SelectContent>
-              {regionais.map((r) => (
-                <SelectItem key={r.id} value={r.id}>
-                  {r.nome}
+              {produtosDoCliente.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.nome}{" "}
+                  <span className="font-mono text-xs text-muted-foreground">
+                    {p.codigo}
+                  </span>
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
+          {clienteId && produtosDoCliente.length === 0 && (
+            <p className="text-xs text-muted-foreground">
+              Este cliente ainda não tem produtos.{" "}
+              <Link
+                href={`/clientes/${clienteId}`}
+                prefetch={false}
+                className="font-medium text-california-red hover:underline"
+              >
+                Cadastrar agora
+              </Link>
+            </p>
+          )}
         </Field>
 
-        <Field label="Cidade" name="cidade_id" required errors={fieldErrors}>
-          <Select value={cidadeId} onValueChange={setCidadeId}>
-            <SelectTrigger className={erroClasses("cidade_id")}>
-              <SelectValue placeholder="Selecione a cidade" />
-            </SelectTrigger>
-            <SelectContent>
-              {cidades.map((c) => (
-                <SelectItem key={c.id} value={c.id}>
-                  {c.nome}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <Field label="Regionais" name="regional_ids" required errors={fieldErrors}>
+          <MultiSelect
+            items={regionais.map((r) => ({ value: r.id, label: r.nome }))}
+            value={regionalIds}
+            onChange={setRegionalIds}
+            placeholder="Selecione uma ou mais regionais"
+            vazio="Nenhuma regional ativa cadastrada."
+            className={erroClasses("regional_ids")}
+          />
         </Field>
 
-        <Field label="Categoria" name="categoria_id" required errors={fieldErrors}>
+        <Field label="Serviço" name="categoria_id" required errors={fieldErrors}>
           <Select value={categoriaId} onValueChange={setCategoriaId}>
             <SelectTrigger className={erroClasses("categoria_id")}>
-              <SelectValue placeholder="Selecione uma categoria" />
+              <SelectValue placeholder="Selecione um serviço" />
             </SelectTrigger>
             <SelectContent>
               {categorias.map((c) => (

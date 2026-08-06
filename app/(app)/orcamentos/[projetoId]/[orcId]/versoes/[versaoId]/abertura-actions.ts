@@ -53,9 +53,6 @@ export async function buscarCidades(
 function extractInput(formData: FormData) {
   return {
     nome: formData.get("nome")?.toString() ?? "",
-    produto_id: formData.get("produto_id")?.toString() ?? "",
-    cidade_id: formData.get("cidade_id")?.toString() ?? "",
-    regional_id: formData.get("regional_id")?.toString() ?? "",
     data_inicio_prevista: formData.get("data_inicio_prevista")?.toString() ?? "",
     data_fim_prevista: formData.get("data_fim_prevista")?.toString() ?? "",
     data_prevista_faturamento:
@@ -134,7 +131,9 @@ export async function enviarJobParaAbertura(
 
   const { data: orc } = await supabase
     .from("orcamentos")
-    .select("id, status, versao_aprovada_id, projeto_id")
+    .select(
+      "id, status, versao_aprovada_id, projeto_id, regional_id, cidade_id, gp_responsavel_id, produtor_id",
+    )
     .eq("id", versao.orcamento_id)
     .eq("tenant_id", session.activeTenant.id)
     .maybeSingle<{
@@ -142,6 +141,10 @@ export async function enviarJobParaAbertura(
       status: string;
       versao_aprovada_id: string | null;
       projeto_id: string;
+      regional_id: string | null;
+      cidade_id: string | null;
+      gp_responsavel_id: string | null;
+      produtor_id: string | null;
     }>();
 
   if (!orc) return { ok: false, message: "Orçamento não encontrado." };
@@ -165,29 +168,45 @@ export async function enviarJobParaAbertura(
     return { ok: false, message: "Este orçamento já tem um job ativo." };
   }
 
-  // 3. Produto e cidade precisam pertencer ao cliente/tenant certo — não
-  //    basta serem uuid válido. Cliente vem do projeto.
+  // 3. Produto vem do projeto; cidade, regional, GP e produtor vêm do
+  //    orçamento. O formulário só exibe esses valores — reler do banco é
+  //    o que garante que o job grave o que está cadastrado, e não o que
+  //    chegou no payload.
   const { data: projeto } = await supabase
     .from("projetos")
-    .select("id, cliente_id, responsavel_id")
+    .select("id, cliente_id, produto_id")
     .eq("id", orc.projeto_id)
     .eq("tenant_id", session.activeTenant.id)
-    .maybeSingle<{ id: string; cliente_id: string; responsavel_id: string }>();
+    .maybeSingle<{ id: string; cliente_id: string; produto_id: string | null }>();
 
   if (!projeto) return { ok: false, message: "Projeto não encontrado." };
+
+  const faltando: string[] = [];
+  if (!projeto.produto_id) faltando.push("Produto (no projeto)");
+  if (!orc.regional_id) faltando.push("Regional (no orçamento)");
+  if (!orc.cidade_id) faltando.push("Cidade (no orçamento)");
+  if (!orc.gp_responsavel_id) faltando.push("GP responsável (no orçamento)");
+  if (!orc.produtor_id) faltando.push("Produtor responsável (no orçamento)");
+
+  if (faltando.length > 0) {
+    return {
+      ok: false,
+      message: `Complete o cadastro antes de abrir o job: ${faltando.join(", ")}.`,
+    };
+  }
 
   const [produtoRes, cidadeRes] = await Promise.all([
     supabase
       .from("cliente_produtos")
       .select("id, nome")
-      .eq("id", parsed.data.produto_id)
+      .eq("id", projeto.produto_id!)
       .eq("cliente_id", projeto.cliente_id)
       .eq("tenant_id", session.activeTenant.id)
       .maybeSingle<{ id: string; nome: string }>(),
     supabase
       .from("cidades")
       .select("id, nome")
-      .eq("id", parsed.data.cidade_id)
+      .eq("id", orc.cidade_id!)
       .eq("tenant_id", session.activeTenant.id)
       .maybeSingle<{ id: string; nome: string }>(),
   ]);
@@ -195,15 +214,13 @@ export async function enviarJobParaAbertura(
   if (!produtoRes.data) {
     return {
       ok: false,
-      message: "Produto inválido para este cliente.",
-      fieldErrors: { produto_id: ["Selecione um produto do cadastro do cliente."] },
+      message: "O produto cadastrado no projeto não pertence mais a este cliente. Edite o projeto.",
     };
   }
   if (!cidadeRes.data) {
     return {
       ok: false,
-      message: "Cidade inválida.",
-      fieldErrors: { cidade_id: ["Selecione uma cidade do cadastro."] },
+      message: "A cidade cadastrada no orçamento não existe mais no cadastro. Edite o orçamento.",
     };
   }
 
@@ -260,7 +277,7 @@ export async function enviarJobParaAbertura(
       versao_orcamento_aprovada_id: versaoId,
       nome: parsed.data.nome,
       produto: produtoRes.data.nome,
-      regional_id: parsed.data.regional_id,
+      regional_id: orc.regional_id,
       cidade: cidadeRes.data.nome,
       data_inicio_prevista: parsed.data.data_inicio_prevista,
       data_fim_prevista: parsed.data.data_fim_prevista,
@@ -268,7 +285,10 @@ export async function enviarJobParaAbertura(
       // Gravado mas ainda não exibido: a leitura entra quando a tela de
       // abertura do financeiro for refinada (decisão do time, 31/07/2026).
       observacoes: parsed.data.observacoes,
-      responsavel_id: projeto.responsavel_id,
+      // Os dois responsáveis vêm do orçamento desde 06/08/2026 — antes o
+      // job herdava `projetos.responsavel_id`.
+      responsavel_id: orc.gp_responsavel_id,
+      produtor_id: orc.produtor_id,
       valor_total: Number(totais.faturamento.toFixed(2)),
       // Congelado aqui e nunca mais alterado: é a base de comparação do
       // card de Erratas ("faturamento na abertura" x "atual").

@@ -17,9 +17,11 @@ function extractInput(formData: FormData) {
     empresa_id: formData.get("empresa_id")?.toString() ?? "",
     nome: formData.get("nome")?.toString() ?? "",
     cliente_id: formData.get("cliente_id")?.toString() ?? "",
-    responsavel_id: formData.get("responsavel_id")?.toString() ?? "",
-    regional_id: formData.get("regional_id")?.toString() ?? "",
-    cidade_id: formData.get("cidade_id")?.toString() ?? "",
+    produto_id: formData.get("produto_id")?.toString() ?? "",
+    // `getAll` preserva a ordem de envio, e a ordem importa: o primeiro
+    // item alimenta as colunas de compatibilidade em `projetos`.
+    responsavel_ids: formData.getAll("responsavel_ids").map((v) => v.toString()),
+    regional_ids: formData.getAll("regional_ids").map((v) => v.toString()),
     categoria_id: formData.get("categoria_id")?.toString() ?? "",
     data_inicio_prevista: formData.get("data_inicio_prevista")?.toString() ?? "",
     data_fim_prevista: formData.get("data_fim_prevista")?.toString() ?? "",
@@ -45,16 +47,114 @@ function mapDbError(msg: string): string {
   if (msg.includes("projetos_responsavel_id_fkey")) {
     return "Responsável inválido.";
   }
+  if (msg.includes("projeto_regionais_regional_id_fkey")) {
+    return "Regional inválida.";
+  }
   if (msg.includes("projetos_regional_id_fkey")) {
     return "Regional inválida.";
   }
-  if (msg.includes("projetos_cidade_id_fkey")) {
-    return "Cidade inválida.";
+  if (msg.includes("projeto_responsaveis_profile_id_fkey")) {
+    return "Responsável inválido.";
+  }
+  if (msg.includes("projetos_produto_id_fkey")) {
+    return "Produto inválido.";
   }
   if (msg.includes("projetos_fim_apos_inicio")) {
     return "A data final não pode ser anterior à data de início.";
   }
   return "Não foi possível salvar. Tente novamente.";
+}
+
+/**
+ * O produto é cadastrado por cliente e o banco não consegue garantir que
+ * o escolhido pertence ao cliente do projeto — a FK só aponta para
+ * `cliente_produtos`. A checagem é aqui, como já acontece na abertura de
+ * job. Mesma ideia para as regionais: confirma que existem e estão ativas
+ * no tenant antes de gravar os vínculos.
+ */
+async function validarProdutoERegionais(
+  supabase: ReturnType<typeof createClient>,
+  tenantId: string,
+  clienteId: string,
+  produtoId: string,
+  regionalIds: string[],
+): Promise<{ ok: true } | { ok: false; message: string; fieldErrors?: Record<string, string[]> }> {
+  const [produtoRes, regionaisRes] = await Promise.all([
+    supabase
+      .from("cliente_produtos")
+      .select("id")
+      .eq("id", produtoId)
+      .eq("cliente_id", clienteId)
+      .eq("tenant_id", tenantId)
+      .eq("ativo", true)
+      .maybeSingle(),
+    supabase
+      .from("regionais")
+      .select("id")
+      .in("id", regionalIds)
+      .eq("tenant_id", tenantId)
+      .eq("ativo", true),
+  ]);
+
+  if (!produtoRes.data) {
+    return {
+      ok: false,
+      message: "Produto inválido para este cliente.",
+      fieldErrors: { produto_id: ["Selecione um produto do cadastro do cliente."] },
+    };
+  }
+  if ((regionaisRes.data ?? []).length !== regionalIds.length) {
+    return {
+      ok: false,
+      message: "Regional inválida.",
+      fieldErrors: { regional_ids: ["Selecione regionais ativas do cadastro."] },
+    };
+  }
+  return { ok: true };
+}
+
+/** Regrava os vínculos N:N do projeto. Apaga e reinsere: o conjunto é
+ *  pequeno e o diff não pagaria a complexidade. */
+async function sincronizarVinculos(
+  supabase: ReturnType<typeof createClient>,
+  tenantId: string,
+  projetoId: string,
+  regionalIds: string[],
+  responsavelIds: string[],
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const [delReg, delResp] = await Promise.all([
+    supabase.from("projeto_regionais").delete().eq("projeto_id", projetoId).eq("tenant_id", tenantId),
+    supabase.from("projeto_responsaveis").delete().eq("projeto_id", projetoId).eq("tenant_id", tenantId),
+  ]);
+
+  if (delReg.error || delResp.error) {
+    console.error("[projetos.vinculos.delete]", delReg.error?.message ?? delResp.error?.message);
+    return { ok: false, message: "Não foi possível gravar regionais e responsáveis." };
+  }
+
+  const [insReg, insResp] = await Promise.all([
+    supabase.from("projeto_regionais").insert(
+      regionalIds.map((regional_id) => ({
+        projeto_id: projetoId,
+        regional_id,
+        tenant_id: tenantId,
+      })),
+    ),
+    supabase.from("projeto_responsaveis").insert(
+      responsavelIds.map((profile_id) => ({
+        projeto_id: projetoId,
+        profile_id,
+        tenant_id: tenantId,
+      })),
+    ),
+  ]);
+
+  if (insReg.error || insResp.error) {
+    const msg = insReg.error?.message ?? insResp.error?.message ?? "";
+    console.error("[projetos.vinculos.insert]", msg);
+    return { ok: false, message: mapDbError(msg) };
+  }
+  return { ok: true };
 }
 
 export async function criarProjeto(formData: FormData): Promise<ActionResult> {
@@ -71,6 +171,17 @@ export async function criarProjeto(formData: FormData): Promise<ActionResult> {
 
   const supabase = createClient();
 
+  const { regional_ids, responsavel_ids, ...campos } = parsed.data;
+
+  const check = await validarProdutoERegionais(
+    supabase,
+    session.activeTenant.id,
+    campos.cliente_id,
+    campos.produto_id,
+    regional_ids,
+  );
+  if (!check.ok) return check;
+
   let codigo: string;
   try {
     codigo = await gerarCodigoProjeto(
@@ -86,11 +197,14 @@ export async function criarProjeto(formData: FormData): Promise<ActionResult> {
   const { data, error } = await supabase
     .from("projetos")
     .insert({
-      ...parsed.data,
+      ...campos,
+      // Colunas de compatibilidade: recebem o primeiro item de cada lista.
+      // A fonte-verdade são `projeto_regionais` e `projeto_responsaveis`.
+      responsavel_id: responsavel_ids[0],
+      regional_id: regional_ids[0],
       codigo,
       tenant_id: session.activeTenant.id,
-      // `responsavel_id` vem do formulário. `created_by` registra quem
-      // cadastrou — os dois podem ser pessoas diferentes.
+      // `created_by` registra quem cadastrou — pode não ser o responsável.
       created_by: session.profile.id,
     })
     .select("id")
@@ -100,6 +214,15 @@ export async function criarProjeto(formData: FormData): Promise<ActionResult> {
     console.error("[projetos.criar]", error.message);
     return { ok: false, message: mapDbError(error.message) };
   }
+
+  const vinculos = await sincronizarVinculos(
+    supabase,
+    session.activeTenant.id,
+    data.id,
+    regional_ids,
+    responsavel_ids,
+  );
+  if (!vinculos.ok) return vinculos;
 
   await logAuditEvent({
     acao: "projeto.criado",
@@ -130,12 +253,28 @@ export async function atualizarProjeto(
 
   const supabase = createClient();
 
+  const { regional_ids, responsavel_ids, ...campos } = parsed.data;
+
+  const check = await validarProdutoERegionais(
+    supabase,
+    session.activeTenant.id,
+    campos.cliente_id,
+    campos.produto_id,
+    regional_ids,
+  );
+  if (!check.ok) return check;
+
   // Campanha saiu do formulário mas a coluna e os dados continuam.
   // Não basta o campo ser opcional no Zod: o transform devolve `null`
   // para entrada ausente, então a chave entraria no UPDATE e zeraria o
   // valor gravado. Removemos explicitamente quando o form não a envia.
-  const { campanha: _campanha, ...semCampanha } = parsed.data;
-  const payload = formData.has("campanha") ? parsed.data : semCampanha;
+  const { campanha: _campanha, ...semCampanha } = campos;
+  const base = formData.has("campanha") ? campos : semCampanha;
+  const payload = {
+    ...base,
+    responsavel_id: responsavel_ids[0],
+    regional_id: regional_ids[0],
+  };
 
   // Confirma que o projeto pertence ao tenant do usuário (RLS já filtra,
   // mas explicitamos no where pra clareza).
@@ -149,6 +288,15 @@ export async function atualizarProjeto(
     console.error("[projetos.atualizar]", error.message);
     return { ok: false, message: mapDbError(error.message) };
   }
+
+  const vinculos = await sincronizarVinculos(
+    supabase,
+    session.activeTenant.id,
+    id,
+    regional_ids,
+    responsavel_ids,
+  );
+  if (!vinculos.ok) return vinculos;
 
   await logAuditEvent({
     acao: "projeto.atualizado",

@@ -12,13 +12,12 @@ import {
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import type {
   CategoriaDominio,
-  Cidade,
   Cliente,
   Profile,
   Projeto,
   Regional,
 } from "@/lib/types";
-import { ProjetoForm } from "./projeto-form";
+import { ProjetoForm, type ProdutoOption } from "./projeto-form";
 import { arquivarProjeto, reativarProjeto } from "./actions";
 
 interface Props {
@@ -27,8 +26,10 @@ interface Props {
   clientes: Pick<Cliente, "id" | "nome_fantasia" | "codigo_curto">[];
   responsaveis: Pick<Profile, "id" | "nome">[];
   regionais: Pick<Regional, "id" | "nome">[];
-  cidades: Pick<Cidade, "id" | "nome">[];
+  produtos: ProdutoOption[];
   categorias: Pick<CategoriaDominio, "id" | "nome">[];
+  regionaisSelecionadas: string[];
+  responsaveisSelecionados: string[];
 }
 
 export function ProjetoEditorDrawer({
@@ -37,8 +38,10 @@ export function ProjetoEditorDrawer({
   clientes,
   responsaveis,
   regionais,
-  cidades,
+  produtos,
   categorias,
+  regionaisSelecionadas,
+  responsaveisSelecionados,
 }: Props) {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
@@ -97,8 +100,10 @@ export function ProjetoEditorDrawer({
               clientes={clientes}
               responsaveis={responsaveis}
               regionais={regionais}
-              cidades={cidades}
+              produtos={produtos}
               categorias={categorias}
+              regionaisSelecionadas={regionaisSelecionadas}
+              responsaveisSelecionados={responsaveisSelecionados}
               onSuccess={() => setOpen(false)}
               onCancel={() => setOpen(false)}
             />

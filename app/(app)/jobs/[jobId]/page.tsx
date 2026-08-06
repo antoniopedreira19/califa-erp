@@ -85,7 +85,7 @@ export default async function JobDetailPage({
     supabase
       .from("jobs")
       .select(
-        "id, tenant_id, empresa_id, codigo, nome, produto, cidade, data_inicio_prevista, data_fim_prevista, responsavel_id, valor_total, faturamento_abertura, status, motivo_rejeicao, projeto_id, orcamento_id, versao_orcamento_aprovada_id, regional_id, created_at, updated_at, responsavel:profiles!responsavel_id(id, nome), regional:regionais(id, nome), orcamento:orcamentos(id, codigo, nome, projeto_id), versao:versoes_orcamento!versao_orcamento_aprovada_id(id, numero_versao, nome, moeda, percentual_honorarios, percentual_imposto), projeto:projetos(id, codigo, nome)",
+        "id, tenant_id, empresa_id, codigo, nome, produto, cidade, data_inicio_prevista, data_fim_prevista, responsavel_id, produtor_id, valor_total, faturamento_abertura, status, motivo_rejeicao, projeto_id, orcamento_id, versao_orcamento_aprovada_id, regional_id, created_at, updated_at, responsavel:profiles!responsavel_id(id, nome), regional:regionais(id, nome), orcamento:orcamentos(id, codigo, nome, projeto_id), versao:versoes_orcamento!versao_orcamento_aprovada_id(id, numero_versao, nome, moeda, percentual_honorarios, percentual_imposto), projeto:projetos(id, codigo, nome)",
       )
       .eq("id", params.jobId)
       .eq("tenant_id", session.activeTenant.id)
@@ -308,6 +308,7 @@ export default async function JobDetailPage({
     data_inicio_prevista: raw.data_inicio_prevista,
     data_fim_prevista: raw.data_fim_prevista,
     responsavel_id: raw.responsavel_id,
+    produtor_id: raw.produtor_id,
     valor_total: raw.valor_total !== null ? Number(raw.valor_total) : null,
     status: raw.status,
     motivo_rejeicao: raw.motivo_rejeicao ?? null,

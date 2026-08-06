@@ -2,8 +2,6 @@ import Link from "next/link";
 import { FolderKanban, Plus, FileText } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
-import { listActiveMembers } from "@/lib/data/members";
-import { listEmpresasAtivas } from "@/lib/data/empresas";
 import type { Cliente, Projeto } from "@/lib/types";
 import { EmptyState } from "@/components/empty-state";
 import { ProjetosList, type ProjetoRow } from "./projetos-list";
@@ -14,16 +12,15 @@ export default async function ProjetosPage() {
   const session = await requireSession();
   const supabase = createClient();
 
-  const [projRes, clientesRes, responsaveis, empresas] = await Promise.all([
+  const [projRes, clientesRes] = await Promise.all([
     supabase
       .from("projetos")
       .select(
-        "id, codigo, nome, campanha, status, cliente_id, responsavel_id, " +
-          "data_inicio_prevista, created_at, empresa_id, " +
+        "id, codigo, nome, campanha, status, cliente_id, produto_id, " +
+          "data_inicio_prevista, created_at, " +
           "cliente:clientes(id, nome_fantasia), " +
-          "responsavel:profiles!responsavel_id(id, nome), " +
-          "categoria:categorias_dominio(nome), " +
-          "empresa:empresas(id, razao_social, nome_fantasia)",
+          "produto:cliente_produtos(id, nome), " +
+          "categoria:categorias_dominio(nome)",
       )
       .eq("tenant_id", session.activeTenant.id)
       .order("created_at", { ascending: false }),
@@ -33,8 +30,6 @@ export default async function ProjetosPage() {
       .eq("tenant_id", session.activeTenant.id)
       .eq("status", "ativo")
       .order("nome_fantasia"),
-    listActiveMembers(session.activeTenant.id),
-    listEmpresasAtivas(session.activeTenant.id),
   ]);
 
   if (projRes.error) console.error("[projetos.page]", projRes.error.message);
@@ -51,13 +46,25 @@ export default async function ProjetosPage() {
   const orcamentosCountMap = new Map<string, number>();
   const aprovadosCountMap = new Map<string, number>();
   const jobsCountMap = new Map<string, number>();
+  // Regionais do projeto: N:N, então vêm numa query própria em vez de
+  // embed na listagem (o embed devolveria a linha do projeto repetida).
+  const regionaisMap = new Map<string, { id: string; nome: string }[]>();
+
   if (projetoIds.length > 0) {
-    const { data: orcs } = await supabase
-      .from("orcamentos")
-      .select("projeto_id, status")
-      .in("projeto_id", projetoIds)
-      .eq("tenant_id", session.activeTenant.id);
-    for (const o of ((orcs ?? []) as any[])) {
+    const [orcsRes, vinculosRes] = await Promise.all([
+      supabase
+        .from("orcamentos")
+        .select("projeto_id, status")
+        .in("projeto_id", projetoIds)
+        .eq("tenant_id", session.activeTenant.id),
+      supabase
+        .from("projeto_regionais")
+        .select("projeto_id, regional:regionais(id, nome)")
+        .in("projeto_id", projetoIds)
+        .eq("tenant_id", session.activeTenant.id),
+    ]);
+
+    for (const o of ((orcsRes.data ?? []) as any[])) {
       orcamentosCountMap.set(o.projeto_id, (orcamentosCountMap.get(o.projeto_id) ?? 0) + 1);
       if (o.status === "aprovado" || o.status === "job_criado") {
         aprovadosCountMap.set(o.projeto_id, (aprovadosCountMap.get(o.projeto_id) ?? 0) + 1);
@@ -65,6 +72,16 @@ export default async function ProjetosPage() {
       if (o.status === "job_criado") {
         jobsCountMap.set(o.projeto_id, (jobsCountMap.get(o.projeto_id) ?? 0) + 1);
       }
+    }
+
+    for (const v of ((vinculosRes.data ?? []) as any[])) {
+      if (!v.regional) continue;
+      const atuais = regionaisMap.get(v.projeto_id) ?? [];
+      atuais.push({ id: v.regional.id, nome: v.regional.nome });
+      regionaisMap.set(v.projeto_id, atuais);
+    }
+    for (const lista of regionaisMap.values()) {
+      lista.sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
     }
   }
 
@@ -77,15 +94,14 @@ export default async function ProjetosPage() {
     status: p.status as Projeto["status"],
     cliente_id: p.cliente_id,
     cliente_nome: p.cliente?.nome_fantasia ?? null,
-    responsavel_id: p.responsavel_id,
-    responsavel_nome: p.responsavel?.nome ?? null,
+    produto_id: p.produto_id,
+    produto_nome: p.produto?.nome ?? null,
+    regionais: regionaisMap.get(p.id) ?? [],
     data_inicio_prevista: p.data_inicio_prevista,
     orcamentos_count: orcamentosCountMap.get(p.id) ?? 0,
     aprovados_count: aprovadosCountMap.get(p.id) ?? 0,
     jobs_count: jobsCountMap.get(p.id) ?? 0,
     created_at: p.created_at,
-    empresa_id: p.empresa_id,
-    empresa_nome: p.empresa?.nome_fantasia ?? p.empresa?.razao_social ?? null,
   }));
 
   const clientes = (clientesRes.data ?? []) as Pick<Cliente, "id" | "nome_fantasia">[];
@@ -135,12 +151,7 @@ export default async function ProjetosPage() {
           }
         />
       ) : (
-        <ProjetosList
-          projetos={projetos}
-          clientes={clientes}
-          responsaveis={responsaveis}
-          empresas={empresas}
-        />
+        <ProjetosList projetos={projetos} clientes={clientes} />
       )}
     </div>
   );

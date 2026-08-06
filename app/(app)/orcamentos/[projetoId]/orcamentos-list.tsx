@@ -13,6 +13,7 @@ export interface OrcamentoRow {
   nome: string;
   categoria_nome: string | null;
   status: Orcamento["status"];
+  data_inicio_prevista: string | null;
   data_fim_prevista: string | null;
   versoes_count: number;
   created_at: string;
@@ -51,6 +52,7 @@ export function OrcamentosList({ projetoId, orcamentos }: Props) {
             <th className="px-4 py-3 font-semibold">Código</th>
             <th className="px-4 py-3 font-semibold">Nome</th>
             <th className="px-4 py-3 font-semibold">Categoria</th>
+            <th className="px-4 py-3 font-semibold">Início previsto</th>
             <th className="px-4 py-3 font-semibold">Fim previsto</th>
             <th className="px-4 py-3 font-semibold text-center">Versões</th>
             <th className="px-4 py-3 font-semibold">Status</th>
@@ -83,6 +85,7 @@ export function OrcamentosList({ projetoId, orcamentos }: Props) {
               </td>
               <td className="px-4 py-3 font-medium">{o.nome}</td>
               <td className="px-4 py-3 text-muted-foreground">{o.categoria_nome ?? "—"}</td>
+              <td className="px-4 py-3 text-muted-foreground">{formatDate(o.data_inicio_prevista)}</td>
               <td className="px-4 py-3 text-muted-foreground">{formatDate(o.data_fim_prevista)}</td>
               <td className="px-4 py-3 text-center tabular-nums">{o.versoes_count}</td>
               <td className="px-4 py-3">
@@ -94,7 +97,7 @@ export function OrcamentosList({ projetoId, orcamentos }: Props) {
           ))}
           {orcamentos.length === 0 && (
             <tr>
-              <td colSpan={6} className="px-4 py-10 text-center text-sm text-muted-foreground">
+              <td colSpan={7} className="px-4 py-10 text-center text-sm text-muted-foreground">
                 Nenhum orçamento neste projeto ainda.
               </td>
             </tr>
