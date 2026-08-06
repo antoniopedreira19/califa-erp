@@ -72,10 +72,11 @@ export async function criarCliente(formData: FormData): Promise<ActionResult> {
     metadata: { nome_fantasia: parsed.data.nome_fantasia },
   });
 
-  // Todo cliente nasce com um produto homônimo. Produto é obrigatório no
-  // projeto desde 06/08/2026, e um cliente sem produto trava a criação de
-  // projeto — o padrão evita esse beco. O GP renomeia ou acrescenta
-  // outros depois, na tela do cliente.
+  // Todo cliente nasce com o produto padrão: o que representa a marca do
+  // cliente — a matriz, quando não há outras marcas no guarda-chuva. Ele
+  // é imutável (ver trigger `trg_cliente_produtos_padrao`) e resolve de
+  // saída o beco de cliente sem produto, já que Produto é obrigatório no
+  // formulário de projeto desde 06/08/2026.
   //
   // Código fixo em PRD-01: cliente recém-criado tem zero produtos, então
   // não vale gastar a query de contagem que `gerarCodigoProduto` faz.
@@ -86,6 +87,7 @@ export async function criarCliente(formData: FormData): Promise<ActionResult> {
       cliente_id: data.id,
       nome: parsed.data.nome_fantasia,
       codigo: "PRD-01",
+      padrao: true,
       created_by: session.profile.id,
     })
     .select("id")
@@ -114,6 +116,7 @@ export async function criarCliente(formData: FormData): Promise<ActionResult> {
       cliente_id: data.id,
       nome: parsed.data.nome_fantasia,
       codigo: "PRD-01",
+      padrao: true,
       origem: "padrao_na_criacao_do_cliente",
     },
   });
@@ -165,10 +168,13 @@ export async function atualizarCliente(
     entidadeId: id,
   });
 
-  // Renomear o cliente renomeia junto o produto que ainda carrega o nome
-  // antigo — o `.eq("nome", ...)` é o que garante isso: produto já
-  // ajustado à mão não casa e fica intacto. O nome é único por cliente,
-  // então no máximo uma linha é afetada.
+  // O produto padrão é a marca do cliente, então o nome dele acompanha o
+  // nome fantasia — sempre, sem exceção de "foi editado à mão": ninguém
+  // consegue editá-lo (trigger `trg_cliente_produtos_padrao`). Só os
+  // produtos comuns ficam intactos.
+  //
+  // Ordem importa: `clientes` já foi gravado acima, então o trigger vê os
+  // dois nomes batendo e deixa passar.
   const nomeMudou =
     anterior != null && anterior.nome_fantasia !== parsed.data.nome_fantasia;
 
@@ -178,13 +184,17 @@ export async function atualizarCliente(
       .update({ nome: parsed.data.nome_fantasia })
       .eq("cliente_id", id)
       .eq("tenant_id", session.activeTenant.id)
-      .eq("nome", anterior!.nome_fantasia);
+      .eq("padrao", true);
 
-    // Falha aqui não desfaz a edição do cliente: o produto continua com
-    // o nome antigo, que é um estado válido e editável na tela dele.
-    // O caso esperado é colisão com outro produto de mesmo nome.
+    // Falha aqui não desfaz a edição do cliente. O caso esperado é
+    // colisão com um produto comum que já usa o nome novo.
     if (errRename) {
       console.error("[clientes.atualizar.rename_produto]", errRename.message);
+      return {
+        ok: false,
+        message:
+          "Cliente renomeado, mas o produto que representa a marca continuou com o nome antigo — provavelmente já existe outro produto com esse nome neste cliente.",
+      };
     }
   }
 
