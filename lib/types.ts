@@ -1017,6 +1017,40 @@ export const contaAvulsaStatusLabel = (s: ContaAvulsaStatus): string =>
     baixada: "Baixada",
   })[s];
 
+export type FrequenciaRecorrencia = "quinzenal" | "mensal" | "anual";
+
+export const frequenciaRecorrenciaLabel = (f: FrequenciaRecorrencia): string =>
+  ({
+    quinzenal: "Quinzenal",
+    mensal: "Mensal",
+    anual: "Anual",
+  })[f];
+
+export interface ContaAvulsaRecorrente {
+  id: string;
+  tenant_id: string;
+  empresa_id: string;
+  descricao: string;
+  valor: string; // numeric → string do supabase-js
+  fornecedor_id: string | null;
+  cliente_id: string | null;
+  job_id: string | null;
+  plano_conta_tipo_id: string;
+  plano_conta_subtipo_id: string;
+  frequencia: FrequenciaRecorrencia;
+  dia_do_mes: number | null;
+  dia_quinzena_1: number | null;
+  dia_quinzena_2: number | null;
+  dia_do_ano_dia: number | null;
+  dia_do_ano_mes: number | null;
+  proxima_data: string; // YYYY-MM-DD
+  data_fim: string | null; // YYYY-MM-DD
+  ativo: boolean;
+  criado_por: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface ContaAvulsa {
   id: string;
   tenant_id: string;
@@ -1034,6 +1068,7 @@ export interface ContaAvulsa {
   pago_em: string | null;
   pago_por: string | null;
   conta_bancaria_baixa_id: string | null;
+  recorrente_id: string | null;
   criado_por: string;
   created_at: string;
   updated_at: string;

@@ -215,6 +215,7 @@ export default async function AvulsaDetalhesPage({
     pago_em: c.pago_em,
     pago_por: c.pago_por,
     conta_bancaria_baixa_id: c.conta_bancaria_baixa_id,
+    recorrente_id: (c.recorrente_id as string | null) ?? null,
     criado_por: c.criado_por,
     created_at: c.created_at,
     updated_at: c.updated_at,
