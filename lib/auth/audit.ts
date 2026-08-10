@@ -93,6 +93,12 @@ export type AuditAction =
   | "conta_avulsa.excluida"
   | "conta_avulsa.baixada"
   | "conta_avulsa.baixa_estornada"
+  | "conta_recorrente.criada"
+  | "conta_recorrente.editada"
+  | "conta_recorrente.pausada"
+  | "conta_recorrente.reativada"
+  | "conta_recorrente.excluida"
+  | "conta_recorrente.ocorrencia_gerada"
   | "acao_negada";
 
 export interface AuditPayload {
