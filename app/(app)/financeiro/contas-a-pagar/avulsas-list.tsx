@@ -45,12 +45,6 @@ const STATUS_FILTROS: Array<{ key: "todas" | ContaAvulsaStatus; label: string }>
   { key: "todas", label: "Todas" },
 ];
 
-const NATUREZA_FILTROS: Array<{ key: "todas" | NaturezaLancamento; label: string }> = [
-  { key: "todas", label: "Todas" },
-  { key: "saida", label: "Saída" },
-  { key: "entrada", label: "Entrada" },
-];
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -102,13 +96,11 @@ export function ContasAvulsasList({
 }: Props) {
   const [busca, setBusca] = React.useState("");
   const [statusFiltro, setStatusFiltro] = React.useState<"todas" | ContaAvulsaStatus>("pendente");
-  const [naturezaFiltro, setNaturezaFiltro] = React.useState<"todas" | NaturezaLancamento>("todas");
 
   const filtered = React.useMemo(() => {
     const q = busca.trim().toLowerCase();
     return rows.filter((r) => {
       if (statusFiltro !== "todas" && r.status !== statusFiltro) return false;
-      if (naturezaFiltro !== "todas" && r.natureza !== naturezaFiltro) return false;
       if (!q) return true;
       return (
         r.descricao.toLowerCase().includes(q) ||
@@ -117,7 +109,7 @@ export function ContasAvulsasList({
         (r.job_codigo ?? "").toLowerCase().includes(q)
       );
     });
-  }, [rows, busca, statusFiltro, naturezaFiltro]);
+  }, [rows, busca, statusFiltro]);
 
   return (
     <div className="space-y-4">
@@ -135,25 +127,6 @@ export function ContasAvulsasList({
                 statusFiltro === f.key
                   ? "border-california-red bg-california-red text-white"
                   : "border-border bg-white text-muted-foreground hover:border-california-red/50",
-              )}
-            >
-              {f.label}
-            </button>
-          ))}
-
-          <span className="mx-2 h-6 w-px bg-border" aria-hidden="true" />
-
-          {/* Chips de natureza */}
-          {NATUREZA_FILTROS.map((f) => (
-            <button
-              key={f.key}
-              type="button"
-              onClick={() => setNaturezaFiltro(f.key)}
-              className={cn(
-                "rounded-full border px-3 py-1 text-xs font-semibold transition-colors",
-                naturezaFiltro === f.key
-                  ? "border-slate-700 bg-slate-700 text-white"
-                  : "border-border bg-white text-muted-foreground hover:border-slate-500/50",
               )}
             >
               {f.label}
