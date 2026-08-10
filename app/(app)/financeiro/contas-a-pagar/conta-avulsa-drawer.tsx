@@ -51,7 +51,7 @@ interface AnexoPendente {
 type EmpresaResumida = { id: string; nome: string };
 type FornecedorResumido = { id: string; nome: string };
 type ClienteResumido = { id: string; nome: string };
-type JobResumido = { id: string; codigo: string; nome: string };
+type JobResumido = { id: string; codigo: string; nome: string; cliente_id: string | null };
 
 // ---------------------------------------------------------------------------
 // Props discriminated union
@@ -199,14 +199,28 @@ export function ContaAvulsaDrawer(props: Props) {
   // Handlers fornecedor / cliente (mutuamente exclusivos)
   // ---------------------------------------------------------------------------
 
-  function handleFornecedorChange(v: string) {
-    setFornecedorId(v);
-    if (v !== "__none__") setClienteId("__none__");
+  // Cliente é auto-preenchido e travado quando um job é escolhido — o
+  // cliente vem do projeto do job. Se job = "Nenhum", cliente volta a ser
+  // editável livremente. Fornecedor é independente do job.
+  const jobSelecionado = React.useMemo(
+    () => (jobId !== "__none__" ? props.jobs.find((j) => j.id === jobId) ?? null : null),
+    [jobId, props.jobs],
+  );
+  const clienteTravadoPeloJob = !!jobSelecionado?.cliente_id;
+
+  React.useEffect(() => {
+    if (jobSelecionado?.cliente_id) {
+      setClienteId(jobSelecionado.cliente_id);
+    }
+  }, [jobSelecionado]);
+
+  function handleFornecedorChange(v: string | null) {
+    setFornecedorId(v ?? "__none__");
   }
 
-  function handleClienteChange(v: string) {
-    setClienteId(v);
-    if (v !== "__none__") setFornecedorId("__none__");
+  function handleClienteChange(v: string | null) {
+    if (clienteTravadoPeloJob) return;
+    setClienteId(v ?? "__none__");
   }
 
   // ---------------------------------------------------------------------------
@@ -494,53 +508,8 @@ export function ContaAvulsaDrawer(props: Props) {
               ))}
             </div>
 
-            {/* Fornecedor */}
-            <div className="space-y-2">
-              <Label htmlFor="fornecedor_id">Fornecedor</Label>
-              <Select value={fornecedorId} onValueChange={handleFornecedorChange}>
-                <SelectTrigger id="fornecedor_id">
-                  <SelectValue placeholder="Nenhum (opcional)" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">Nenhum</SelectItem>
-                  {props.fornecedores.map((f) => (
-                    <SelectItem key={f.id} value={f.id}>
-                      {f.nome}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {fieldErrors.fornecedor_id?.map((msg, i) => (
-                <p key={i} className="text-xs text-california-red">
-                  {msg}
-                </p>
-              ))}
-            </div>
-
-            {/* Cliente */}
-            <div className="space-y-2">
-              <Label htmlFor="cliente_id">Cliente</Label>
-              <Select value={clienteId} onValueChange={handleClienteChange}>
-                <SelectTrigger id="cliente_id">
-                  <SelectValue placeholder="Nenhum (opcional)" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">Nenhum</SelectItem>
-                  {props.clientes.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.nome}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {fieldErrors.cliente_id?.map((msg, i) => (
-                <p key={i} className="text-xs text-california-red">
-                  {msg}
-                </p>
-              ))}
-            </div>
-
-            {/* Job */}
+            {/* Job — vem antes de Cliente porque escolher job preenche
+                cliente automaticamente (herdado do projeto do job). */}
             <div className="space-y-2">
               <Label htmlFor="job_id">Job</Label>
               <Combobox
@@ -557,6 +526,58 @@ export function ContaAvulsaDrawer(props: Props) {
                 ]}
               />
               {fieldErrors.job_id?.map((msg, i) => (
+                <p key={i} className="text-xs text-california-red">
+                  {msg}
+                </p>
+              ))}
+            </div>
+
+            {/* Fornecedor — destinatário do pagamento */}
+            <div className="space-y-2">
+              <Label htmlFor="fornecedor_id">Fornecedor</Label>
+              <Combobox
+                id="fornecedor_id"
+                value={fornecedorId}
+                onChange={handleFornecedorChange}
+                placeholder="Nenhum (opcional)"
+                items={[
+                  { value: "__none__", label: "Nenhum" },
+                  ...props.fornecedores.map((f) => ({
+                    value: f.id,
+                    label: f.nome,
+                  })),
+                ]}
+              />
+              {fieldErrors.fornecedor_id?.map((msg, i) => (
+                <p key={i} className="text-xs text-california-red">
+                  {msg}
+                </p>
+              ))}
+            </div>
+
+            {/* Cliente — rastreabilidade de custo. Travado se job escolhido. */}
+            <div className="space-y-2">
+              <Label htmlFor="cliente_id">Cliente</Label>
+              <Combobox
+                id="cliente_id"
+                value={clienteId}
+                onChange={handleClienteChange}
+                placeholder="Nenhum (opcional)"
+                disabled={clienteTravadoPeloJob}
+                items={[
+                  { value: "__none__", label: "Nenhum" },
+                  ...props.clientes.map((c) => ({
+                    value: c.id,
+                    label: c.nome,
+                  })),
+                ]}
+              />
+              {clienteTravadoPeloJob && (
+                <p className="text-xs text-muted-foreground">
+                  Cliente herdado do projeto do job. Para alterar, mude ou remova o job.
+                </p>
+              )}
+              {fieldErrors.cliente_id?.map((msg, i) => (
                 <p key={i} className="text-xs text-california-red">
                   {msg}
                 </p>

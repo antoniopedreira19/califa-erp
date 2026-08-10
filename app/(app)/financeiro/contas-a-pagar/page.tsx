@@ -125,10 +125,11 @@ export default async function PedidosCompraFinanceiroPage() {
       .eq("tenant_id", session.activeTenant.id)
       .eq("status", "ativo")
       .order("nome_fantasia"),
-    // Jobs não cancelados — limitado a 500 (trocar por combobox se necessário)
+    // Jobs não cancelados — inclui cliente_id do projeto pra auto-preencher
+    // cliente no drawer quando job é escolhido.
     supabase
       .from("jobs")
-      .select("id, codigo, nome")
+      .select("id, codigo, nome, projeto:projetos!inner(cliente_id)")
       .eq("tenant_id", session.activeTenant.id)
       .neq("status", "cancelado")
       .order("created_at", { ascending: false })
@@ -258,11 +259,23 @@ export default async function PedidosCompraFinanceiroPage() {
     id: c.id,
     nome: c.razao_social ?? c.nome_fantasia ?? "",
   }));
-  const jobsList = (jobsRes.data ?? []).map((j: { id: string; codigo: string; nome: string }) => ({
-    id: j.id,
-    codigo: j.codigo,
-    nome: j.nome,
-  }));
+  const jobsList = (jobsRes.data ?? []).map(
+    (j: {
+      id: string;
+      codigo: string;
+      nome: string;
+      projeto: { cliente_id: string } | { cliente_id: string }[] | null;
+    }) => {
+      // PostgREST embed self-referencial pode vir como array — normaliza.
+      const proj = Array.isArray(j.projeto) ? j.projeto[0] : j.projeto;
+      return {
+        id: j.id,
+        codigo: j.codigo,
+        nome: j.nome,
+        cliente_id: proj?.cliente_id ?? null,
+      };
+    },
+  );
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto">

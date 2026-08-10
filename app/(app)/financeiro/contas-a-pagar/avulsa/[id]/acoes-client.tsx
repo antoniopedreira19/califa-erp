@@ -28,7 +28,7 @@ interface EditarProps {
   subtipos: PlanoContaSubtipo[];
   fornecedores: Array<{ id: string; nome: string }>;
   clientes: Array<{ id: string; nome: string }>;
-  jobs: Array<{ id: string; codigo: string; nome: string }>;
+  jobs: Array<{ id: string; codigo: string; nome: string; cliente_id: string | null }>;
 }
 
 export function EditarAvulsaButton({
