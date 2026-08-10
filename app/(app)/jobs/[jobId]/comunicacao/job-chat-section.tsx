@@ -11,6 +11,10 @@ import {
   FilePenLine,
   Tags,
   X,
+  FileText,
+  CheckCircle,
+  XCircle,
+  Ban,
 } from "lucide-react";
 import {
   Tooltip,
@@ -41,6 +45,10 @@ const ICONE_COMPONENTE = {
   "folder-open": FolderOpen,
   "file-pen-line": FilePenLine,
   tags: Tags,
+  "file-text": FileText,
+  "check-circle": CheckCircle,
+  "x-circle": XCircle,
+  ban: Ban,
 } as const;
 
 const ICONE_CORES = {

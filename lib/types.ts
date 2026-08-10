@@ -804,6 +804,7 @@ export interface JobErrataComItens extends JobErrata {
 // ---------- Comunicação do job ----------
 
 export type ChatArea = "producao" | "financeiro";
+export type ChatEscopo = "geral" | "pps";
 
 export function chatAreaLabel(a: ChatArea): string {
   return a === "financeiro" ? "Financeiro" : "Produção";
@@ -829,6 +830,7 @@ export interface JobMensagem {
   job_id: string;
   autor_id: string;
   area: ChatArea;
+  escopo: ChatEscopo;
   texto: string;
   created_at: string;
 }
@@ -850,7 +852,14 @@ export type ItemChat =
   | {
       tipo: "sistema";
       id: string;
-      icone: "folder-open" | "file-pen-line" | "tags";
+      icone:
+        | "folder-open"
+        | "file-pen-line"
+        | "tags"
+        | "file-text"
+        | "check-circle"
+        | "x-circle"
+        | "ban";
       cor: "azul" | "verde" | "bege" | "vermelho";
       titulo: string;
       quando: string;
