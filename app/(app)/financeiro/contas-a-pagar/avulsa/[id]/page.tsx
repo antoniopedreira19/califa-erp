@@ -124,7 +124,7 @@ export default async function AvulsaDetalhesPage({
       .order("nome_fantasia"),
     supabase
       .from("jobs")
-      .select("id, codigo, nome")
+      .select("id, codigo, nome, projeto:projetos!inner(cliente_id)")
       .eq("tenant_id", session.activeTenant.id)
       .neq("status", "cancelado")
       .order("created_at", { ascending: false })
@@ -180,7 +180,20 @@ export default async function AvulsaDetalhesPage({
       nome: (cl.razao_social ?? cl.nome_fantasia) as string,
     }),
   );
-  const jobs = (jobsRes.data ?? []) as Array<{ id: string; codigo: string; nome: string }>;
+  const jobs = ((jobsRes.data ?? []) as Array<{
+    id: string;
+    codigo: string;
+    nome: string;
+    projeto: { cliente_id: string } | { cliente_id: string }[] | null;
+  }>).map((j) => {
+    const proj = Array.isArray(j.projeto) ? j.projeto[0] : j.projeto;
+    return {
+      id: j.id,
+      codigo: j.codigo,
+      nome: j.nome,
+      cliente_id: proj?.cliente_id ?? null,
+    };
+  });
   const tipos = (tiposRes.data ?? []) as PlanoContaTipo[];
   const subtipos = (subtiposRes.data ?? []) as PlanoContaSubtipo[];
   const contasBancarias = (contasRes.data ?? []) as import("@/lib/types").ContaBancaria[];
