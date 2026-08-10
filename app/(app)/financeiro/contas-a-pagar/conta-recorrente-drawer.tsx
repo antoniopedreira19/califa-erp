@@ -271,6 +271,19 @@ export function ContaRecorrenteDrawer(props: Props) {
     setError(null);
     setFieldErrors({});
 
+    // Validação client-side: quinzenal dia_1 < dia_2
+    if (
+      frequencia === "quinzenal" &&
+      diaQuinzena1 !== null &&
+      diaQuinzena2 !== null &&
+      diaQuinzena1 >= diaQuinzena2
+    ) {
+      setFieldErrors({
+        dia_quinzena_2: ["Segundo dia deve ser maior que o primeiro."],
+      });
+      return;
+    }
+
     const input = {
       empresa_id: empresaId,
       descricao: descricao.trim(),
