@@ -8,7 +8,7 @@ import {
   criarContaAvulsaSchema,
   editarContaAvulsaSchema,
   baixaAvulsaSchema,
-  estornoAvulsaSchema,
+  estornoAvulsaComRecorrenciaSchema,
 } from "@/lib/validations/conta-avulsa";
 
 type Ok<T = { id: string }> = { ok: true } & Partial<T>;
@@ -290,14 +290,17 @@ export async function editarContaAvulsa(
   return { ok: true, id };
 }
 
-export async function excluirContaAvulsa(id: string): Promise<Result> {
+export async function excluirContaAvulsa(
+  id: string,
+  opts?: { parar_recorrencia?: boolean },
+): Promise<Result> {
   const gate = await checarGateFinanceiro(id, "conta_avulsa.excluida");
   if (!gate.ok) return gate;
   const { session, supabase } = gate;
 
   const { data: atual } = await supabase
     .from("contas_avulsas")
-    .select("id, status, descricao, valor, natureza")
+    .select("id, status, descricao, valor, natureza, recorrente_id")
     .eq("id", id)
     .eq("tenant_id", session.activeTenant.id)
     .maybeSingle();
@@ -344,6 +347,33 @@ export async function excluirContaAvulsa(id: string): Promise<Result> {
       natureza: atual.natureza,
     },
   });
+
+  // Pausa template recorrente se solicitado e a conta era gerada por um.
+  if (opts?.parar_recorrencia && atual.recorrente_id) {
+    const { error: pauseErr } = await supabase
+      .from("contas_avulsas_recorrentes")
+      .update({ ativo: false })
+      .eq("id", atual.recorrente_id)
+      .eq("tenant_id", session.activeTenant.id);
+
+    if (!pauseErr) {
+      await logAuditEvent({
+        acao: "conta_recorrente.pausada",
+        tenantId: session.activeTenant.id,
+        entidadeTipo: "conta_recorrente",
+        entidadeId: atual.recorrente_id,
+        metadata: {
+          origem: "excluir_ocorrencia_avulsa",
+          avulsa_id: id,
+        },
+      });
+      revalidatePath(
+        `/financeiro/contas-a-pagar/recorrente/${atual.recorrente_id}`,
+      );
+    } else {
+      console.error("[avulsa.excluir.pausar_recorrente]", pauseErr.message);
+    }
+  }
 
   revalidatePath("/financeiro/contas-a-pagar");
   return { ok: true, id };
@@ -419,7 +449,7 @@ export async function darBaixaAvulsa(input: unknown): Promise<Result> {
 }
 
 export async function estornarBaixaAvulsa(input: unknown): Promise<Result> {
-  const parsed = estornoAvulsaSchema.safeParse(input);
+  const parsed = estornoAvulsaComRecorrenciaSchema.safeParse(input);
   if (!parsed.success) {
     return {
       ok: false,
@@ -435,7 +465,7 @@ export async function estornarBaixaAvulsa(input: unknown): Promise<Result> {
 
   const { data: atual } = await supabase
     .from("contas_avulsas")
-    .select("id, status, descricao")
+    .select("id, status, descricao, recorrente_id")
     .eq("id", parsed.data.conta_avulsa_id)
     .eq("tenant_id", session.activeTenant.id)
     .maybeSingle();
@@ -480,6 +510,33 @@ export async function estornarBaixaAvulsa(input: unknown): Promise<Result> {
       motivo: parsed.data.motivo,
     },
   });
+
+  // Pausa template recorrente se solicitado e a conta era gerada por um.
+  if (parsed.data.parar_recorrencia && atual.recorrente_id) {
+    const { error: pauseErr } = await supabase
+      .from("contas_avulsas_recorrentes")
+      .update({ ativo: false })
+      .eq("id", atual.recorrente_id)
+      .eq("tenant_id", session.activeTenant.id);
+
+    if (!pauseErr) {
+      await logAuditEvent({
+        acao: "conta_recorrente.pausada",
+        tenantId: session.activeTenant.id,
+        entidadeTipo: "conta_recorrente",
+        entidadeId: atual.recorrente_id,
+        metadata: {
+          origem: "estornar_baixa_avulsa",
+          avulsa_id: parsed.data.conta_avulsa_id,
+        },
+      });
+      revalidatePath(
+        `/financeiro/contas-a-pagar/recorrente/${atual.recorrente_id}`,
+      );
+    } else {
+      console.error("[avulsa.estornar.pausar_recorrente]", pauseErr.message);
+    }
+  }
 
   revalidatePath("/financeiro/contas-a-pagar");
   revalidatePath("/financeiro/conciliacao");
