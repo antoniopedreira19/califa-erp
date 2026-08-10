@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, FileText, Plus } from "lucide-react";
+import { ArrowLeft, FileText, Layers } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { listActiveMembers } from "@/lib/data/members";
@@ -19,6 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { ProjetoEditorDrawer } from "../projeto-editor-drawer";
 import type { ProdutoOption } from "../projeto-form";
+import { NovoOrcamentoMenu } from "./novo-orcamento-menu";
 import { OrcamentosList, type OrcamentoRow } from "./orcamentos-list";
 
 export const dynamic = "force-dynamic";
@@ -312,14 +313,19 @@ export default async function ProjetoDetailPage({
               </p>
             </div>
           </div>
-          <Link
-            href={`/orcamentos/${projeto.id}/novo`}
-            prefetch={false}
-            className="inline-flex items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-california-red-hover transition-all"
-          >
-            <Plus className="h-4 w-4" />
-            Novo orçamento
-          </Link>
+          <div className="flex flex-none items-center gap-3">
+            {orcamentos.length > 0 && (
+              <Link
+                href={`/orcamentos/${projeto.id}/agregado`}
+                prefetch={false}
+                className="inline-flex items-center gap-2 rounded-lg border border-border bg-white px-4 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-accent"
+              >
+                <Layers className="h-4 w-4" />
+                Visão agregada
+              </Link>
+            )}
+            <NovoOrcamentoMenu projetoId={projeto.id} />
+          </div>
         </div>
         <div className="p-6">
           <OrcamentosList projetoId={projeto.id} orcamentos={orcamentos} />

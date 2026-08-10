@@ -5,8 +5,8 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { parseOficial, type ParseResultado } from "@/lib/importacao/parser-oficial";
+import { extrairArquivoXlsx } from "@/lib/importacao/arquivo";
 
-const MAX_BYTES = 5 * 1024 * 1024; // 5 MB — planilhas típicas <500 KB
 const BUCKET = "orcamento-importacoes";
 
 export type PreviewResult =
@@ -36,35 +36,7 @@ export type ConfirmResult =
   | { ok: true; versao_id: string; orcamento_id: string; importacao_id: string }
   | { ok: false; message: string };
 
-async function extractArquivo(
-  formData: FormData,
-): Promise<
-  | { ok: true; buffer: Buffer; nome: string; tamanho: number }
-  | { ok: false; message: string }
-> {
-  const arquivo = formData.get("arquivo");
-  if (!(arquivo instanceof File)) {
-    return { ok: false, message: "Nenhum arquivo enviado." };
-  }
-  if (arquivo.size === 0) {
-    return { ok: false, message: "Arquivo vazio." };
-  }
-  if (arquivo.size > MAX_BYTES) {
-    return {
-      ok: false,
-      message: `Arquivo maior que ${MAX_BYTES / 1024 / 1024} MB. Reduza antes de enviar.`,
-    };
-  }
-  const nome = arquivo.name.toLowerCase();
-  if (!nome.endsWith(".xlsx") && !nome.endsWith(".xlsm")) {
-    return {
-      ok: false,
-      message: "Apenas arquivos .xlsx são aceitos. Salve como Excel e reenvie.",
-    };
-  }
-  const buffer = Buffer.from(await arquivo.arrayBuffer());
-  return { ok: true, buffer, nome: arquivo.name, tamanho: arquivo.size };
-}
+const extractArquivo = extrairArquivoXlsx;
 
 async function verificarOrcamento(
   orcamentoId: string,
