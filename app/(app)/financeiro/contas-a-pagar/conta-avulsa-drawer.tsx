@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Paperclip, Plus, Trash2, X } from "lucide-react";
+import { AlertCircle, Paperclip, Plus, X } from "lucide-react";
 import {
   Dialog,
   DialogTrigger,
@@ -220,6 +220,11 @@ export function ContaAvulsaDrawer(props: Props) {
 
     setUploadError(null);
 
+    // Accumulator começa com o total já existente e é atualizado dentro do
+    // loop, evitando que os arquivos 2, 3... validem contra o estado inicial.
+    let totalAcumulado = anexos.reduce((acc, a) => acc + a.tamanho, 0);
+    const novos: AnexoPendente[] = [];
+
     for (const file of files) {
       if (file.size > ANEXO_TAMANHO_MAX_BYTES) {
         setUploadError(
@@ -227,8 +232,7 @@ export function ContaAvulsaDrawer(props: Props) {
         );
         continue;
       }
-      const totalAtual = anexos.reduce((acc, a) => acc + a.tamanho, 0);
-      if (totalAtual + file.size > ANEXOS_TAMANHO_TOTAL_MAX_BYTES) {
+      if (totalAcumulado + file.size > ANEXOS_TAMANHO_TOTAL_MAX_BYTES) {
         setUploadError("Total de anexos ultrapassa 25 MB. Remova algum antes de adicionar mais.");
         break;
       }
@@ -253,10 +257,12 @@ export function ContaAvulsaDrawer(props: Props) {
         continue;
       }
 
-      setAnexos((prev) => [
-        ...prev,
-        { path, nome: file.name, tamanho: file.size, mimetype: file.type },
-      ]);
+      totalAcumulado += file.size;
+      novos.push({ path, nome: file.name, tamanho: file.size, mimetype: file.type });
+    }
+
+    if (novos.length > 0) {
+      setAnexos((prev) => [...prev, ...novos]);
     }
 
     // Limpa o input pra permitir re-selecionar o mesmo arquivo
@@ -495,6 +501,7 @@ export function ContaAvulsaDrawer(props: Props) {
             <div className="space-y-2">
               <Label>Data prevista de pagamento</Label>
               <DatePicker
+                key={isEditar ? (conta?.id ?? "criar") : "criar"}
                 name="data_prevista_pagamento_hidden"
                 defaultValue={dataPrevista}
                 placeholder="Selecione a data (opcional)"
@@ -696,7 +703,6 @@ export function ContaAvulsaDrawer(props: Props) {
                 )}
 
                 <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-white px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
-                  <Trash2 className="h-4 w-4 hidden" />
                   <Paperclip className="h-4 w-4" />
                   Adicionar arquivo
                   <input
