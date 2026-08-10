@@ -2,35 +2,19 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import {
-  MessagesSquare,
-  ChevronRight,
-  Paperclip,
-  ArrowUp,
-  FolderOpen,
-  FilePenLine,
-  Tags,
-  X,
-  FileText,
-  CheckCircle,
-  XCircle,
-  Ban,
-} from "lucide-react";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { MessagesSquare, ChevronRight } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { useIrParaAbaInformacoes } from "../job-tabs";
-import {
-  chatAreaLabel,
-  type ChatArea,
-  type ChatTom,
-  type ItemChat,
-} from "@/lib/types";
+import type { ChatTom, ItemChat, ChatArea } from "@/lib/types";
 import { enviarMensagem, marcarChatLido } from "./actions";
+import {
+  ICONE_COMPONENTE,
+  ICONE_CORES,
+  PILL_CORES,
+} from "@/components/chat/icone-map";
+import { BalaoPessoa } from "@/components/chat/balao-pessoa";
+import { ChatInput } from "@/components/chat/chat-input";
 
 interface Props {
   jobId: string;
@@ -40,29 +24,6 @@ interface Props {
   /** Área de quem está logado — vem do papel, não é escolhida. */
   minhaArea: ChatArea;
 }
-
-const ICONE_COMPONENTE = {
-  "folder-open": FolderOpen,
-  "file-pen-line": FilePenLine,
-  tags: Tags,
-  "file-text": FileText,
-  "check-circle": CheckCircle,
-  "x-circle": XCircle,
-  ban: Ban,
-} as const;
-
-const ICONE_CORES = {
-  azul: "bg-blue-50 text-blue-700",
-  verde: "bg-emerald-50 text-emerald-700",
-  bege: "bg-[#f1f0ec] text-foreground",
-  vermelho: "bg-red-50 text-red-700",
-} as const;
-
-const PILL_CORES = {
-  positivo: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  negativo: "border-red-200 bg-red-50 text-red-700",
-  neutro: "border-border bg-muted text-foreground",
-} as const;
 
 function classeValor(tom: ChatTom): string {
   switch (tom) {
@@ -77,15 +38,6 @@ function classeValor(tom: ChatTom): string {
   }
 }
 
-function iniciais(nome: string): string {
-  return nome
-    .split(" ")
-    .map((p) => p[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
-}
-
 export function JobChatSection({
   jobId,
   jobCodigo,
@@ -95,17 +47,12 @@ export function JobChatSection({
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
-  const [texto, setTexto] = React.useState("");
   const [erro, setErro] = React.useState<string | null>(null);
   const [abertas, setAbertas] = React.useState<Record<string, boolean>>({});
-  // Some assim que o usuário abre a aba, mas sem sumir antes de ele ver.
   const [badge, setBadge] = React.useState(naoLidas);
   const fimRef = React.useRef<HTMLDivElement>(null);
   const marcouRef = React.useRef(false);
 
-  // Só a ERRATA mais recente nasce aberta, como no design. O card de
-  // abertura fica fechado: é contexto histórico, não novidade — e num job
-  // sem errata ele sozinho aberto ocupava a thread inteira.
   React.useEffect(() => {
     const ultimaErrata = [...itens]
       .reverse()
@@ -113,7 +60,6 @@ export function JobChatSection({
     setAbertas(ultimaErrata ? { [ultimaErrata.id]: true } : {});
   }, [itens]);
 
-  // Marcar como lido é efeito de abrir a aba — roda uma vez só.
   React.useEffect(() => {
     if (marcouRef.current || naoLidas === 0) return;
     marcouRef.current = true;
@@ -124,10 +70,6 @@ export function JobChatSection({
     fimRef.current?.scrollIntoView({ block: "end" });
   }, [itens.length]);
 
-  // Realtime: mensagem do outro time aparece sem recarregar. O payload é
-  // ignorado de propósito — a thread é montada no servidor (mistura
-  // mensagens com erratas e a abertura), então o refresh traz tudo já
-  // ordenado em vez de a gente remontar aqui e arriscar divergir.
   React.useEffect(() => {
     const supabase = createClient();
     const canal = supabase
@@ -140,10 +82,9 @@ export function JobChatSection({
           table: "jobs_mensagens",
           filter: `job_id=eq.${jobId}`,
         },
-        async () => {
-          // Com a aba aberta a mensagem já está sendo lida agora: marca
-          // antes do refresh, senão o servidor recalcula e o badge sobe
-          // na cara de quem acabou de ler.
+        async (payload: any) => {
+          // Só o chat geral: escopo 'pps' é outro canal semântico.
+          if (payload?.new?.escopo && payload.new.escopo !== "geral") return;
           await marcarChatLido(jobId);
           router.refresh();
         },
@@ -155,17 +96,14 @@ export function JobChatSection({
     };
   }, [jobId, router]);
 
-  function handleEnviar() {
-    const t = texto.trim();
-    if (!t) return;
+  function handleEnviar(texto: string) {
     setErro(null);
     startTransition(async () => {
-      const res = await enviarMensagem(jobId, t);
+      const res = await enviarMensagem(jobId, texto);
       if (!res.ok) {
         setErro(res.message);
         return;
       }
-      setTexto("");
       router.refresh();
     });
   }
@@ -207,66 +145,13 @@ export function JobChatSection({
         <div ref={fimRef} />
       </div>
 
-      <div className="flex flex-none flex-col gap-2.5 border-t border-border bg-white px-3.5 py-3">
-        {erro && (
-          <div className="flex items-center justify-between gap-2 rounded border border-california-red/40 bg-california-red/5 px-2.5 py-1.5 text-xs text-california-red">
-            <span>{erro}</span>
-            <button type="button" onClick={() => setErro(null)}>
-              <X className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        )}
-
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-[10.5px] text-muted-foreground">
-            Enviando como
-          </span>
-          {/* Etiqueta, não escolha: a área vem do papel de quem está logado. */}
-          <span className="inline-flex items-center rounded-full border border-foreground bg-foreground px-2.5 py-1 text-[10.5px] font-semibold text-white">
-            {chatAreaLabel(minhaArea)}
-          </span>
-        </div>
-
-        <div className="flex items-end gap-2">
-          <textarea
-            rows={2}
-            value={texto}
-            onChange={(e) => setTexto(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                e.preventDefault();
-                handleEnviar();
-              }
-            }}
-            maxLength={2000}
-            placeholder="Escreva para o outro time…"
-            className="flex-1 resize-none rounded-[10px] border border-border bg-white px-[11px] py-[9px] text-[12.5px] leading-[1.45] outline-none focus:border-california-red/40"
-          />
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span>
-                <button
-                  type="button"
-                  disabled
-                  className="inline-flex h-9 w-9 cursor-not-allowed items-center justify-center rounded-[10px] border border-border bg-white text-muted-foreground opacity-50"
-                >
-                  <Paperclip className="h-[15px] w-[15px]" />
-                </button>
-              </span>
-            </TooltipTrigger>
-            <TooltipContent>Em breve — anexos no chat</TooltipContent>
-          </Tooltip>
-          <button
-            type="button"
-            onClick={handleEnviar}
-            disabled={pending || texto.trim().length === 0}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-[10px] bg-california-red text-white transition-opacity hover:opacity-90 disabled:opacity-40"
-            title="Enviar (Cmd+Enter)"
-          >
-            <ArrowUp className="h-4 w-4" />
-          </button>
-        </div>
-      </div>
+      <ChatInput
+        minhaArea={minhaArea}
+        pending={pending}
+        erro={erro}
+        onLimparErro={() => setErro(null)}
+        onEnviar={handleEnviar}
+      />
     </div>
   );
 }
@@ -355,52 +240,3 @@ function CardSistema({
   );
 }
 
-function BalaoPessoa({
-  item,
-}: {
-  item: Extract<ItemChat, { tipo: "pessoa" }>;
-}) {
-  // Produção à direita, Financeiro à esquerda — fixo por área, como no
-  // design, pra thread ficar igual pros dois times.
-  const direita = item.area === "producao";
-  return (
-    <div
-      className={cn(
-        "flex flex-none items-start gap-[9px]",
-        direita && "flex-row-reverse",
-      )}
-    >
-      <div
-        className={cn(
-          "inline-flex h-7 w-7 flex-none items-center justify-center rounded-full text-[10.5px] font-bold text-white",
-          direita ? "bg-california-red" : "bg-[#1e4fa3]",
-        )}
-      >
-        {iniciais(item.autor)}
-      </div>
-      <div className="min-w-0 max-w-[80%]">
-        <div
-          className={cn(
-            "mb-1 flex items-baseline gap-[7px]",
-            direita && "flex-row-reverse",
-          )}
-        >
-          <span className="text-[11.5px] font-semibold">{item.autor}</span>
-          <span className="text-[10.5px] text-muted-foreground">
-            {chatAreaLabel(item.area)} · {item.quando}
-          </span>
-        </div>
-        <div
-          className={cn(
-            "rounded-xl border px-3 py-2.5 text-[12.5px] leading-[1.5]",
-            direita
-              ? "border-[#f3ced1] bg-[#fef5f5]"
-              : "border-border bg-white",
-          )}
-        >
-          {item.texto}
-        </div>
-      </div>
-    </div>
-  );
-}
