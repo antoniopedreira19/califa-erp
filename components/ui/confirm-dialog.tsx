@@ -23,6 +23,13 @@ export interface ConfirmDialogProps {
   cancelLabel?: string;
   variant?: Variant;
   pending?: boolean;
+  /** Desabilita só o botão de confirmar — o cancelar continua ativo.
+   *  Para ação que ainda não pode ser executada, mas cujo fluxo já é
+   *  mostrado ao usuário. Use junto com `confirmDisabledReason`. */
+  confirmDisabled?: boolean;
+  /** Nota exibida acima dos botões explicando por que confirmar está
+   *  travado. Sem ela o botão morto parece defeito. */
+  confirmDisabledReason?: React.ReactNode;
   onConfirm: () => void | Promise<void>;
 }
 
@@ -50,6 +57,8 @@ export function ConfirmDialog({
   cancelLabel = "Cancelar",
   variant = "default",
   pending = false,
+  confirmDisabled = false,
+  confirmDisabledReason,
   onConfirm,
 }: ConfirmDialogProps) {
   return (
@@ -73,6 +82,12 @@ export function ConfirmDialog({
           </div>
         </DialogHeader>
 
+        {confirmDisabled && confirmDisabledReason && (
+          <div className="rounded-lg border border-dashed border-border bg-muted/40 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
+            {confirmDisabledReason}
+          </div>
+        )}
+
         <DialogFooter className="mt-2 gap-2 sm:gap-2">
           <button
             type="button"
@@ -85,7 +100,7 @@ export function ConfirmDialog({
           <button
             type="button"
             onClick={() => onConfirm()}
-            disabled={pending}
+            disabled={pending || confirmDisabled}
             className={cn(
               "inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all disabled:opacity-60 disabled:cursor-not-allowed",
               variant === "destructive"

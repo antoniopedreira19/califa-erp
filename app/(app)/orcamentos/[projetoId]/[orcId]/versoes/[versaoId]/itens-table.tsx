@@ -20,9 +20,11 @@ import {
   type TipoCusto,
   type VersaoOrcamentoItem,
   type Categoria,
+  type ItemBv,
 } from "@/lib/types";
 import { adicionarItem, atualizarCampoItem, removerItem } from "../actions";
 import { ColunasFixas, LARGURA_MINIMA } from "./grade-colunas";
+import { BvDialog, type FornecedorOpcao } from "@/app/(app)/_bv/bv-dialog";
 
 interface Props {
   grupoId: string;
@@ -34,6 +36,11 @@ interface Props {
   /** Grupo recolhido esconde as linhas, o "Novo item" e a trilha de ações.
    *  O subtotal continua visível — é o dado que justifica recolher. */
   aberto?: boolean;
+  /** BV por id do item. Só existe em item tipo A ou D. */
+  bvsPorItem: Record<string, ItemBv>;
+  fornecedores: FornecedorOpcao[];
+  /** "v5" — aparece no subtítulo do formulário de BV. */
+  versaoLabel: string;
 }
 
 /** Campos que a grade edita — espelha o allowlist do server action. */
@@ -53,6 +60,8 @@ type Overrides = Record<string, Partial<Record<Campo, ValorCampo>>>;
 type CelulaAtiva = { rowId: string; campo: Campo } | null;
 
 const TIPOS: TipoCusto[] = ["A", "B", "C", "D"];
+/** Tipos em que o cliente paga o fornecedor direto — os únicos com BV. */
+const TIPOS_COM_BV: string[] = ["A", "D"];
 /** Radix Select não aceita value="" — sentinela para "sem categoria". */
 const SEM_CATEGORIA = "__nenhuma__";
 const DRAFT_ID = "__draft__";
@@ -147,6 +156,9 @@ export function ItensTable({
   readOnly,
   categorias,
   aberto = true,
+  bvsPorItem,
+  fornecedores,
+  versaoLabel,
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
@@ -156,6 +168,9 @@ export function ItensTable({
   const [erro, setErro] = React.useState<string | null>(null);
   const [removendo, setRemovendo] =
     React.useState<VersaoOrcamentoItem | null>(null);
+  const [bvAberto, setBvAberto] = React.useState<VersaoOrcamentoItem | null>(
+    null,
+  );
 
   const wrapperRef = React.useRef<HTMLDivElement>(null);
   const tbodyRef = React.useRef<HTMLTableSectionElement>(null);
@@ -374,7 +389,20 @@ export function ItensTable({
     rentabilidadeDe(subtotalOrcado, subtotalPlanejado);
 
   const editavel = !readOnly;
-  const temTrilha = aberto && editavel && (itens.length > 0 || draft !== null);
+
+  /** O BV existe em A e D — os tipos em que o cliente paga o fornecedor
+   *  direto e sobra comissão a negociar. B e C passam pela California e
+   *  usam Pedido de Produção. Usa o valor otimista: mudar o tipo na
+   *  célula acende/apaga o botão na hora. */
+  const temBv = (item: VersaoOrcamentoItem) =>
+    TIPOS_COM_BV.includes(String(valorAtual(item, "tipo_custo")));
+
+  // Em versão congelada a trilha não some: ela ainda mostra os BVs já
+  // lançados, em modo consulta. Sem nenhum BV, não há o que mostrar.
+  const temBvVisivel = itens.some((it) => bvsPorItem[it.id]);
+  const temTrilha =
+    aberto &&
+    (editavel ? itens.length > 0 || draft !== null : temBvVisivel);
 
   return (
     <>
@@ -794,30 +822,59 @@ export function ItensTable({
           </div>
         )}
 
-        {/* Trilha de ações — fora do frame da tabela, ao lado das linhas. */}
+        {/* Trilha de ações — fora do frame da tabela, ao lado das linhas.
+            O +BV fica à ESQUERDA da ação que a tela já tinha (a lixeira),
+            na mesma posição que ele ocupa na planilha do job. */}
         {temTrilha && (
           <div
             className="absolute left-full ml-2 flex flex-col"
             style={{ top: railTop }}
           >
-            {itens.map((item) => (
-              <div
-                key={item.id}
-                className={cn("flex items-center", ALTURA_LINHA)}
-              >
-                <button
-                  type="button"
-                  onClick={() => setRemovendo(item)}
-                  disabled={pending}
-                  title={`Remover ${item.item}`}
-                  className="rounded-md p-1.5 text-muted-foreground hover:text-california-red hover:bg-accent transition-colors disabled:opacity-50"
+            {itens.map((item) => {
+              const bv = bvsPorItem[item.id] ?? null;
+              // Sem BV numa versão congelada não há nada a consultar —
+              // a vaga fica vazia para não desalinhar as linhas de baixo.
+              const mostraBv = temBv(item) && (editavel || bv !== null);
+
+              return (
+                <div
+                  key={item.id}
+                  className={cn("flex items-center gap-1", ALTURA_LINHA)}
                 >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            ))}
+                  {mostraBv ? (
+                    <BotaoBv
+                      temBv={bv !== null}
+                      itemNome={item.item}
+                      // BV que já saiu para o financeiro abre em consulta
+                      // mesmo com a versão aberta.
+                      somenteLeitura={
+                        !editavel || (bv !== null && bv.situacao !== "a_negociar")
+                      }
+                      onClick={() => setBvAberto(item)}
+                    />
+                  ) : (
+                    <span className="w-[26px] flex-none" aria-hidden />
+                  )}
+
+                  {editavel && (
+                    <button
+                      type="button"
+                      onClick={() => setRemovendo(item)}
+                      disabled={pending}
+                      title={`Remover ${item.item}`}
+                      className="rounded-md p-1.5 text-muted-foreground hover:text-california-red hover:bg-accent transition-colors disabled:opacity-50"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              );
+            })}
             {draft && (
-              <div className={cn("flex items-center", ALTURA_LINHA)}>
+              <div className={cn("flex items-center gap-1", ALTURA_LINHA)}>
+                {/* A linha nova ainda não existe no banco: sem id, não há
+                    a que prender um BV. O botão entra depois de salva. */}
+                <span className="w-[26px] flex-none" aria-hidden />
                 <button
                   type="button"
                   onClick={() => {
@@ -834,6 +891,24 @@ export function ItensTable({
           </div>
         )}
       </div>
+
+      {bvAberto && (
+        <BvDialog
+          open
+          onOpenChange={(o) => !o && setBvAberto(null)}
+          item={bvAberto}
+          grupoNome={grupoNome}
+          versaoLabel={versaoLabel}
+          categoriaNome={
+            categorias.find((c) => c.id === bvAberto.categoria_id)?.nome ?? null
+          }
+          moeda={moeda}
+          bv={bvsPorItem[bvAberto.id] ?? null}
+          fornecedores={fornecedores}
+          origem="orcamento"
+          readOnly={readOnly}
+        />
+      )}
 
       <ConfirmDialog
         open={removendo !== null}
@@ -854,6 +929,57 @@ export function ItensTable({
         onConfirm={handleRemoveConfirm}
       />
     </>
+  );
+}
+
+/** Quadrado do BV na calha da linha.
+ *
+ *  Vazado com "+BV" = item tipo A sem BV, clique lança um novo.
+ *  Preenchido com "BV" = já existe, perde o "+" e reabre o formulário
+ *  com os valores. A troca de estado é a única sinalização de BV na
+ *  planilha — nenhuma coluna nova entra na grade. */
+function BotaoBv({
+  temBv,
+  itemNome,
+  somenteLeitura,
+  onClick,
+}: {
+  temBv: boolean;
+  itemNome: string;
+  somenteLeitura?: boolean;
+  onClick: () => void;
+}) {
+  const title = temBv
+    ? somenteLeitura
+      ? `Ver BV de ${itemNome}`
+      : `Editar BV de ${itemNome}`
+    : `Lançar BV em ${itemNome}`;
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      aria-label={title}
+      className={cn(
+        "box-border inline-flex h-[26px] w-[26px] flex-none items-center justify-center rounded-[9px] border transition-colors",
+        temBv
+          ? "border-foreground bg-[#F1F0EC] text-foreground hover:border-california-red hover:text-california-red"
+          : "border-[#DEDCD7] bg-white text-[#8a8880] hover:border-california-red/50 hover:text-california-red",
+      )}
+    >
+      <span className="text-[10.5px] font-normal leading-none">
+        {temBv ? (
+          "BV"
+        ) : (
+          <>
+            {/* O "+" tem altura óptica menor que as letras; o nudge
+                alinha a linha de base dos três caracteres. */}
+            <span className="inline-block translate-y-[0.04em]">+</span>BV
+          </>
+        )}
+      </span>
+    </button>
   );
 }
 

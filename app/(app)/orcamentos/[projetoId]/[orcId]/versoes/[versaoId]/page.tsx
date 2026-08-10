@@ -9,6 +9,7 @@ import {
   type VersaoOrcamentoGrupo,
   type VersaoOrcamentoItem,
   type Categoria,
+  type ItemBv,
 } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -66,6 +67,8 @@ export default async function VersaoDetailPage({
     categoriasRes,
     jobRes,
     regionaisRes,
+    fornecedoresRes,
+    bvsRes,
   ] = await Promise.all([
     supabase
       .from("versoes_orcamento")
@@ -127,12 +130,37 @@ export default async function VersaoDetailPage({
       .eq("tenant_id", session.activeTenant.id)
       .eq("ativo", true)
       .order("nome"),
+    // Alimenta só o select do formulário de BV: id + nome, nada do
+    // cadastro completo do fornecedor.
+    supabase
+      .from("fornecedores")
+      .select("id, nome")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("status", "ativo")
+      .order("nome")
+      .returns<{ id: string; nome: string }[]>(),
+    // BVs ATIVOS da versão. Cancelado fica no banco como histórico, mas
+    // some da planilha: o quadrado volta a "+BV" e o item pode receber um
+    // lançamento novo. O `!inner` serve de filtro (só traz a coluna usada
+    // no where), não de embed de dados — mantém isto num round-trip só,
+    // em paralelo com a busca dos itens.
+    supabase
+      .from("itens_bv")
+      .select(
+        "id, tenant_id, item_versao_id, fornecedor_id, valor, prazo_repasse, " +
+          "situacao, created_by, created_at, updated_at, " +
+          "item:versoes_orcamento_itens!inner(versao_orcamento_id)",
+      )
+      .eq("item.versao_orcamento_id", params.versaoId)
+      .eq("tenant_id", session.activeTenant.id)
+      .neq("situacao", "cancelado"),
   ]);
 
   if (versaoRes.error) console.error("[versao.detail]", versaoRes.error.message);
   if (gruposRes.error) console.error("[versao.grupos]", gruposRes.error.message);
   if (itensRes.error) console.error("[versao.itens]", itensRes.error.message);
   if (categoriasRes.error) console.error("[versao.categorias]", categoriasRes.error.message);
+  if (bvsRes.error) console.error("[versao.bvs]", bvsRes.error.message);
 
   const job = jobRes.data ?? null;
   const temJobAtivo = job !== null;
@@ -163,7 +191,21 @@ export default async function VersaoDetailPage({
     if (list) list.push(it);
   }
 
+  const fornecedores = (fornecedoresRes.data ?? []) as {
+    id: string;
+    nome: string;
+  }[];
+
+  // Indexado por item: a calha consulta uma chave por linha. Objeto, e
+  // não Map, porque só objeto atravessa a fronteira server → client.
+  const bvsPorItem: Record<string, ItemBv> = {};
+  for (const raw of (bvsRes.data ?? []) as any[]) {
+    const { item: _joinFiltro, ...bv } = raw;
+    bvsPorItem[bv.item_versao_id] = { ...bv, valor: Number(bv.valor ?? 0) };
+  }
+
   const readOnly = versao.status === "aprovada" || versao.status === "cancelada";
+  const temBv = Object.keys(bvsPorItem).length > 0;
 
   // Segunda onda: depende de orcamento.projeto_id, por isso não entra no
   // Promise.all acima. Só o fluxo de abertura consome esses dados.
@@ -355,8 +397,15 @@ export default async function VersaoDetailPage({
       {/* Grupos + Totais dividem a mesma calha: é o que faz as colunas
           Total / Rentab. / % do card de Totais caírem exatamente sob as
           mesmas colunas dos cards de grupo. O pr reserva a trilha de ações
-          (Remover), que fica fora do frame de cada card. */}
-      <div className={cn("space-y-6", !readOnly && "pr-12")}>
+          que fica fora do frame de cada card: 64px comportam o quadrado do
+          BV (26px) + a lixeira (26px) + o respiro. Em versão congelada a
+          trilha só existe se houver BV a consultar, e aí basta o quadrado. */}
+      <div
+        className={cn(
+          "space-y-6",
+          !readOnly ? "pr-16" : temBv && "pr-10",
+        )}
+      >
         {grupos.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-border bg-muted/20 p-12 text-center">
             <FolderTree className="h-10 w-10 text-muted-foreground/50 mx-auto mb-4" />
@@ -376,6 +425,9 @@ export default async function VersaoDetailPage({
             moeda={versao.moeda}
             readOnly={readOnly}
             categorias={categorias}
+            bvsPorItem={bvsPorItem}
+            fornecedores={fornecedores}
+            versaoLabel={`v${versao.numero_versao}`}
           />
         )}
 

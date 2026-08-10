@@ -6,6 +6,7 @@ import type {
   PedidoCompra,
   Fornecedor,
   Empresa,
+  ItemBv,
 } from "@/lib/types";
 import { JobItemRealizadoTable } from "./job-item-realizado-table";
 
@@ -22,6 +23,10 @@ interface Props {
   empresas: Array<Pick<Empresa, "id" | "razao_social" | "nome_fantasia" | "ativo" | "principal">>;
   jobEmpresaId: string;
   jobResponsavelId: string;
+  /** BV por id do item da versão. Só existe em item tipo A ou D. */
+  bvsPorItem: Record<string, ItemBv>;
+  /** "v5" — aparece no subtítulo do formulário de BV. */
+  versaoLabel: string;
 }
 
 export function JobGrupoCard({
@@ -37,6 +42,8 @@ export function JobGrupoCard({
   empresas,
   jobEmpresaId,
   jobResponsavelId,
+  bvsPorItem,
+  versaoLabel,
 }: Props) {
   return (
     <div className="rounded-2xl border border-border bg-card shadow-soft">
@@ -62,6 +69,9 @@ export function JobGrupoCard({
         empresas={empresas}
         jobEmpresaId={jobEmpresaId}
         jobResponsavelId={jobResponsavelId}
+        bvsPorItem={bvsPorItem}
+        versaoLabel={versaoLabel}
+        grupoNome={grupo.nome}
       />
     </div>
   );
