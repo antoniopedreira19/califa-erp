@@ -14,7 +14,12 @@ interface Props {
   pending: boolean;
   erro: string | null;
   onLimparErro: () => void;
-  onEnviar: (texto: string) => void;
+  /**
+   * Retorna `true` se o envio deu certo — o textarea só é limpo nesse
+   * caso, pra não perder o que o usuário escreveu quando a mensagem
+   * falha (rede, RLS, validação).
+   */
+  onEnviar: (texto: string) => Promise<boolean>;
   placeholder?: string;
 }
 
@@ -33,11 +38,11 @@ export function ChatInput({
 }: Props) {
   const [texto, setTexto] = React.useState("");
 
-  function handleEnviar() {
+  async function handleEnviar() {
     const t = texto.trim();
     if (!t) return;
-    onEnviar(t);
-    setTexto("");
+    const ok = await onEnviar(t);
+    if (ok) setTexto("");
   }
 
   return (

@@ -44,7 +44,7 @@ export function JobPPsChatSection({
   onLidoInicial,
 }: Props) {
   const router = useRouter();
-  const [pending, startTransition] = React.useTransition();
+  const [pending, setPending] = React.useState(false);
   const [erro, setErro] = React.useState<string | null>(null);
   const [abertas, setAbertas] = React.useState<Record<string, boolean>>({});
   const fimRef = React.useRef<HTMLDivElement>(null);
@@ -91,16 +91,20 @@ export function JobPPsChatSection({
     };
   }, [jobId, router]);
 
-  function handleEnviar(texto: string) {
+  async function handleEnviar(texto: string): Promise<boolean> {
     setErro(null);
-    startTransition(async () => {
+    setPending(true);
+    try {
       const res = await enviarMensagemPP(jobId, texto);
       if (!res.ok) {
         setErro(res.message);
-        return;
+        return false;
       }
       router.refresh();
-    });
+      return true;
+    } finally {
+      setPending(false);
+    }
   }
 
   return (

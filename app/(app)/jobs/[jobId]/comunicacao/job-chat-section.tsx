@@ -46,7 +46,7 @@ export function JobChatSection({
   minhaArea,
 }: Props) {
   const router = useRouter();
-  const [pending, startTransition] = React.useTransition();
+  const [pending, setPending] = React.useState(false);
   const [erro, setErro] = React.useState<string | null>(null);
   const [abertas, setAbertas] = React.useState<Record<string, boolean>>({});
   const [badge, setBadge] = React.useState(naoLidas);
@@ -96,16 +96,20 @@ export function JobChatSection({
     };
   }, [jobId, router]);
 
-  function handleEnviar(texto: string) {
+  async function handleEnviar(texto: string): Promise<boolean> {
     setErro(null);
-    startTransition(async () => {
+    setPending(true);
+    try {
       const res = await enviarMensagem(jobId, texto);
       if (!res.ok) {
         setErro(res.message);
-        return;
+        return false;
       }
       router.refresh();
-    });
+      return true;
+    } finally {
+      setPending(false);
+    }
   }
 
   return (
