@@ -64,11 +64,21 @@ export function ConciliacaoList({
               </td>
               <td
                 className={`px-3 py-2 ${
-                  l.origem === "pp_baixa_estornada"
+                  l.origem === "pp_baixa_estornada" || l.origem === "avulsa_baixa_estornada"
                     ? "text-muted-foreground line-through"
                     : ""
                 }`}
               >
+                {l.origem.startsWith("pp_") && (
+                  <span className="mr-2 inline-flex items-center rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-blue-700">
+                    PP
+                  </span>
+                )}
+                {l.origem.startsWith("avulsa_") && (
+                  <span className="mr-2 inline-flex items-center rounded border border-slate-300 bg-slate-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-slate-700">
+                    Avulsa
+                  </span>
+                )}
                 {l.descricao}
               </td>
               <td className="px-3 py-2 text-xs">
