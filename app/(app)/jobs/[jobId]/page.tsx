@@ -25,6 +25,8 @@ import { ErratasCard } from "./erratas-card";
 import { JobChatSection } from "./comunicacao/job-chat-section";
 
 import { montarThreadChat } from "@/lib/data/job-chat";
+import { montarThreadChatPPs } from "@/lib/data/job-chat-pps";
+import { JobPPsChatFab } from "./pps/job-pps-chat-fab";
 import type {
   VersaoOrcamentoGrupo,
   ItemPlanilhaJob,
@@ -119,6 +121,8 @@ export default async function JobDetailPage({
     mensagensRes,
     leituraRes,
     bvsRes,
+    mensagensPPsRes,
+    leituraPPsRes,
   ] = await Promise.all([
     supabase
       .from("versoes_orcamento_grupos")
@@ -183,12 +187,14 @@ export default async function JobDetailPage({
       .select("*, autor:profiles!autor_id(nome)")
       .eq("job_id", params.jobId)
       .eq("tenant_id", session.activeTenant.id)
+      .eq("escopo", "geral")
       .order("created_at", { ascending: true }),
     supabase
       .from("jobs_chat_leituras")
       .select("lida_ate")
       .eq("job_id", params.jobId)
       .eq("profile_id", session.profile.id)
+      .eq("escopo", "geral")
       .maybeSingle(),
     // BVs ATIVOS da versão aprovada. O BV é chaveado pelo item da VERSÃO,
     // que é a mesma chave que `jobs_itens_orcado.item_versao_id` usa —
@@ -204,6 +210,22 @@ export default async function JobDetailPage({
       .eq("item.versao_orcamento_id", versaoAprovadaId)
       .eq("tenant_id", session.activeTenant.id)
       .neq("situacao", "cancelado"),
+    // Mensagens do chat de PPs (escopo='pps'), separadas do chat geral.
+    supabase
+      .from("jobs_mensagens")
+      .select("*, autor:profiles!autor_id(nome)")
+      .eq("job_id", params.jobId)
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("escopo", "pps")
+      .order("created_at", { ascending: true }),
+    // Leitura do usuário no chat de PPs.
+    supabase
+      .from("jobs_chat_leituras")
+      .select("lida_ate")
+      .eq("job_id", params.jobId)
+      .eq("profile_id", session.profile.id)
+      .eq("escopo", "pps")
+      .maybeSingle(),
   ]);
 
   const grupos = (gruposRes.data ?? []) as VersaoOrcamentoGrupo[];
@@ -405,6 +427,34 @@ export default async function JobDetailPage({
     erratas.filter(
       (e) => e.created_by !== session.profile.id && (!lidaAte || e.created_at > lidaAte),
     ).length;
+
+  // ---- Chat de PPs: thread e contador de não lidas ----
+  if (mensagensPPsRes.error)
+    console.error("[job.mensagens_pps]", mensagensPPsRes.error.message);
+
+  const mensagensPPs = (mensagensPPsRes.data ?? []).map((m: any) => ({
+    ...m,
+    autor_nome: m.autor?.nome ?? null,
+  }));
+
+  const fornecedoresPorId: Record<string, string> = Object.fromEntries(
+    fornecedores.map((f) => [f.id, f.razao_social ?? f.nome]),
+  );
+
+  const threadChatPPs = montarThreadChatPPs(
+    ppsDoJob,
+    mensagensPPs,
+    versaoAprovada.moeda,
+    fornecedoresPorId,
+  );
+
+  const lidaAtePPs =
+    (leituraPPsRes.data as { lida_ate: string } | null)?.lida_ate ?? null;
+  const naoLidasPPs = mensagensPPs.filter(
+    (m: any) =>
+      m.autor_id !== session.profile.id &&
+      (!lidaAtePPs || m.created_at > lidaAtePPs),
+  ).length;
 
   const podeAprovarRejeitar =
     session.activeRole === "administrador" ||
@@ -652,12 +702,19 @@ export default async function JobDetailPage({
         pps={
           <JobPPsSection
             pps={ppsDoJob}
-            fornecedoresPorId={Object.fromEntries(
-              fornecedores.map((f) => [f.id, f.razao_social ?? f.nome]),
-            )}
+            fornecedoresPorId={fornecedoresPorId}
             fornecedores={fornecedores}
             empresas={empresas}
             editable={podeEditarRealizado}
+          />
+        }
+        ppsChat={
+          <JobPPsChatFab
+            jobId={job.id}
+            jobCodigo={job.codigo}
+            itens={threadChatPPs}
+            minhaArea={areaDoPapel(session.activeRole)}
+            naoLidasIniciais={naoLidasPPs}
           />
         }
         chatCount={naoLidas}
