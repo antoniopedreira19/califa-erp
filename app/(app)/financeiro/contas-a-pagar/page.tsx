@@ -4,6 +4,7 @@ import Link from "next/link";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { PedidosCompraList, type PPRow } from "./pedidos-compra-list";
+import { ContasPagarTabs } from "./contas-pagar-tabs";
 import type { PPStatus, ContaBancaria, PlanoContaTipo, PlanoContaSubtipo } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +20,7 @@ export default async function PedidosCompraFinanceiroPage() {
 
   const supabase = createClient();
 
-  const [{ data, error }, contasRes, tiposRes, subtiposRes] = await Promise.all([
+  const [{ data, error }, contasRes, tiposRes, subtiposRes, ppsPendentesCountRes, avulsasPendentesCountRes] = await Promise.all([
     supabase
       .from("pedidos_compra")
       .select(
@@ -63,6 +64,16 @@ export default async function PedidosCompraFinanceiroPage() {
       .eq("ativo", true)
       .order("nome")
       .returns<PlanoContaSubtipo[]>(),
+    supabase
+      .from("pedidos_compra")
+      .select("id", { count: "exact", head: true })
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("status", "em_avaliacao"),
+    supabase
+      .from("contas_avulsas")
+      .select("id", { count: "exact", head: true })
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("status", "pendente"),
   ]);
 
   if (error) console.error("[financeiro.pp.list]", error.message);
@@ -156,15 +167,28 @@ export default async function PedidosCompraFinanceiroPage() {
           <h1 className="text-3xl font-bold tracking-tight">Contas a Pagar</h1>
         </div>
         <p className="text-sm text-muted-foreground max-w-2xl">
-          Avalie os Pedidos de Produção emitidos pelos GPs: ajuste o prazo de pagamento, dê baixa ou rejeite com motivo justificado.
+          Avalie os Pedidos de Compra emitidos pelos GPs e os lançamentos avulsos (aluguel, folha, impostos): ajuste o prazo, dê baixa ou rejeite com motivo justificado.
         </p>
       </header>
 
-      <PedidosCompraList
-        rows={rows}
-        contas={contasRes.data ?? []}
-        tipos={tiposRes.data ?? []}
-        subtipos={subtiposRes.data ?? []}
+      <ContasPagarTabs
+        pps={
+          <PedidosCompraList
+            rows={rows}
+            contas={contasRes.data ?? []}
+            tipos={tiposRes.data ?? []}
+            subtipos={subtiposRes.data ?? []}
+          />
+        }
+        ppsPendentesCount={ppsPendentesCountRes.count ?? 0}
+        avulsas={
+          <div className="rounded-xl border border-dashed border-border py-16 text-center">
+            <p className="text-sm text-muted-foreground">
+              Aba disponível em breve.
+            </p>
+          </div>
+        }
+        avulsasPendentesCount={avulsasPendentesCountRes.count ?? 0}
       />
     </div>
   );
