@@ -492,8 +492,9 @@ export async function estornarBaixaAvulsa(input: unknown): Promise<Result> {
 export async function signedUrlAnexoAvulsa(
   anexoId: string,
 ): Promise<{ ok: true; url: string } | Err> {
-  const session = await requireSession();
-  const supabase = createClient();
+  const gate = await checarGateFinanceiro(null, "conta_avulsa_anexo.signed_url");
+  if (!gate.ok) return gate;
+  const { session, supabase } = gate;
 
   const { data: anexo } = await supabase
     .from("contas_avulsas_anexos")
