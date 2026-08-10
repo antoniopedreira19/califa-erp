@@ -996,3 +996,58 @@ export interface LancamentoFinanceiro {
   criado_por: string;
   created_at: string;
 }
+
+// ---------- Task 012: contas_avulsas ----------
+
+export type ContaAvulsaStatus = "pendente" | "baixada";
+
+export const contaAvulsaStatusLabel = (s: ContaAvulsaStatus): string =>
+  ({
+    pendente: "Pendente",
+    baixada: "Baixada",
+  })[s];
+
+export interface ContaAvulsa {
+  id: string;
+  tenant_id: string;
+  empresa_id: string;
+  descricao: string;
+  valor: string; // numeric → string do supabase-js
+  natureza: NaturezaLancamento;
+  data_prevista_pagamento: string | null; // YYYY-MM-DD
+  status: ContaAvulsaStatus;
+  fornecedor_id: string | null;
+  cliente_id: string | null;
+  job_id: string | null;
+  plano_conta_tipo_id: string;
+  plano_conta_subtipo_id: string;
+  pago_em: string | null;
+  pago_por: string | null;
+  conta_bancaria_baixa_id: string | null;
+  criado_por: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ContaAvulsaAnexo {
+  id: string;
+  tenant_id: string;
+  conta_avulsa_id: string;
+  arquivo_path: string;
+  arquivo_nome_original: string;
+  arquivo_tamanho_bytes: number;
+  arquivo_mimetype: string;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface ContaAvulsaHistorico {
+  id: string;
+  tenant_id: string;
+  conta_avulsa_id: string;
+  campo_alterado: string;
+  valor_anterior: string | null;
+  valor_novo: string | null;
+  alterado_por: string;
+  alterado_em: string;
+}

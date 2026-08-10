@@ -88,6 +88,11 @@ export type AuditAction =
   | "lancamento_financeiro.criado"
   | "lancamento_financeiro.estornado"
   | "pedido_compra.baixa_estornada"
+  | "conta_avulsa.criada"
+  | "conta_avulsa.editada"
+  | "conta_avulsa.excluida"
+  | "conta_avulsa.baixada"
+  | "conta_avulsa.baixa_estornada"
   | "acao_negada";
 
 export interface AuditPayload {
