@@ -4,6 +4,13 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Trash2, CreditCard, Ban, Edit } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { ContaAvulsaDrawer } from "../../conta-avulsa-drawer";
 import { BaixarAvulsaModal } from "./baixar-avulsa-modal";
 import { CancelarBaixaAvulsaModal } from "./cancelar-baixa-avulsa-modal";
@@ -77,16 +84,20 @@ export function EditarAvulsaButton({
 interface ExcluirProps {
   contaId: string;
   descricao: string;
+  recorrenteId: string | null;
 }
 
-export function ExcluirAvulsaButton({ contaId, descricao }: ExcluirProps) {
+export function ExcluirAvulsaButton({ contaId, descricao, recorrenteId }: ExcluirProps) {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
   const [pending, startTransition] = React.useTransition();
+  const [pararRecorrencia, setPararRecorrencia] = React.useState<"nao" | "sim">("nao");
 
   function handleConfirm() {
     startTransition(async () => {
-      const res = await excluirContaAvulsa(contaId);
+      const res = await excluirContaAvulsa(contaId, {
+        parar_recorrencia: recorrenteId != null && pararRecorrencia === "sim",
+      });
       if (!res.ok) {
         alert(res.message);
         return;
@@ -96,16 +107,96 @@ export function ExcluirAvulsaButton({ contaId, descricao }: ExcluirProps) {
     });
   }
 
+  const botaoExcluir = (
+    <button
+      type="button"
+      onClick={() => {
+        setPararRecorrencia("nao");
+        setOpen(true);
+      }}
+      className="inline-flex items-center gap-1.5 rounded-lg border border-california-red/30 bg-white px-3 py-2 text-xs font-semibold text-california-red hover:bg-california-red hover:text-white"
+    >
+      <Trash2 className="h-3.5 w-3.5" />
+      Excluir
+    </button>
+  );
+
+  // Dialog especial para contas recorrentes
+  if (recorrenteId) {
+    return (
+      <>
+        {botaoExcluir}
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogContent className="sm:max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Excluir esta ocorrência?</DialogTitle>
+              <DialogDescription>
+                Esta conta faz parte de uma recorrência. Escolha como proceder:
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-3">
+              <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border p-3 hover:bg-muted/50">
+                <input
+                  type="radio"
+                  name="excluir_parar_recorrencia"
+                  value="nao"
+                  checked={pararRecorrencia === "nao"}
+                  onChange={() => setPararRecorrencia("nao")}
+                  className="mt-0.5"
+                />
+                <div>
+                  <p className="text-sm font-semibold">Só esta ocorrência</p>
+                  <p className="text-xs text-muted-foreground">
+                    O template continua ativo e vai gerar a próxima na data prevista.
+                  </p>
+                </div>
+              </label>
+              <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border p-3 hover:bg-muted/50">
+                <input
+                  type="radio"
+                  name="excluir_parar_recorrencia"
+                  value="sim"
+                  checked={pararRecorrencia === "sim"}
+                  onChange={() => setPararRecorrencia("sim")}
+                  className="mt-0.5"
+                />
+                <div>
+                  <p className="text-sm font-semibold">Parar toda a recorrência</p>
+                  <p className="text-xs text-muted-foreground">
+                    Este template é desativado. Nenhuma nova ocorrência será gerada até você reativar manualmente.
+                  </p>
+                </div>
+              </label>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 border-t border-border pt-4">
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirm}
+                disabled={pending}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-california-red px-3 py-2 text-sm font-semibold text-white hover:bg-california-red/90 disabled:opacity-50"
+              >
+                {pending ? "Confirmando..." : "Confirmar exclusão"}
+              </button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </>
+    );
+  }
+
+  // Fluxo original (não recorrente): ConfirmDialog simples
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-1.5 rounded-lg border border-california-red/30 bg-white px-3 py-2 text-xs font-semibold text-california-red hover:bg-california-red hover:text-white"
-      >
-        <Trash2 className="h-3.5 w-3.5" />
-        Excluir
-      </button>
+      {botaoExcluir}
       <ConfirmDialog
         open={open}
         onOpenChange={setOpen}
@@ -170,11 +261,13 @@ export function BaixarAvulsaModalClient({
 interface CancelarBaixaProps {
   contaId: string;
   descricao: string;
+  recorrenteId: string | null;
 }
 
 export function CancelarBaixaAvulsaModalClient({
   contaId,
   descricao,
+  recorrenteId,
 }: CancelarBaixaProps) {
   const [open, setOpen] = React.useState(false);
 
@@ -191,6 +284,7 @@ export function CancelarBaixaAvulsaModalClient({
       <CancelarBaixaAvulsaModal
         contaId={contaId}
         descricao={descricao}
+        recorrenteId={recorrenteId}
         open={open}
         onOpenChange={setOpen}
       />

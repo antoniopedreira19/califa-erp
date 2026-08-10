@@ -14,6 +14,7 @@ import { estornarBaixaAvulsa } from "../../actions-avulsas";
 interface Props {
   contaId: string;
   descricao: string;
+  recorrenteId: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -21,6 +22,7 @@ interface Props {
 export function CancelarBaixaAvulsaModal({
   contaId,
   descricao,
+  recorrenteId,
   open,
   onOpenChange,
 }: Props) {
@@ -28,11 +30,13 @@ export function CancelarBaixaAvulsaModal({
   const [pending, startTransition] = React.useTransition();
   const [erro, setErro] = React.useState<string | null>(null);
   const [motivo, setMotivo] = React.useState("");
+  const [pararRecorrencia, setPararRecorrencia] = React.useState<"nao" | "sim">("nao");
 
   React.useEffect(() => {
     if (!open) return;
     setErro(null);
     setMotivo("");
+    setPararRecorrencia("nao");
   }, [open, contaId]);
 
   function handleSubmit() {
@@ -45,6 +49,7 @@ export function CancelarBaixaAvulsaModal({
       const res = await estornarBaixaAvulsa({
         conta_avulsa_id: contaId,
         motivo: motivo.trim(),
+        parar_recorrencia: recorrenteId != null && pararRecorrencia === "sim",
       });
       if (!res.ok) {
         setErro(res.message);
@@ -72,6 +77,46 @@ export function CancelarBaixaAvulsaModal({
           Um lançamento reverso é gerado na conta bancária, mantendo o histórico contábil.
           O motivo fica no log de auditoria.
         </p>
+
+        {recorrenteId && (
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-muted-foreground">
+              Esta conta faz parte de uma recorrência. Escolha como proceder:
+            </p>
+            <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border p-3 hover:bg-muted/50">
+              <input
+                type="radio"
+                name="cancelar_baixa_parar_recorrencia"
+                value="nao"
+                checked={pararRecorrencia === "nao"}
+                onChange={() => setPararRecorrencia("nao")}
+                className="mt-0.5"
+              />
+              <div>
+                <p className="text-sm font-semibold">Só esta ocorrência</p>
+                <p className="text-xs text-muted-foreground">
+                  O template continua ativo e vai gerar a próxima na data prevista.
+                </p>
+              </div>
+            </label>
+            <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border p-3 hover:bg-muted/50">
+              <input
+                type="radio"
+                name="cancelar_baixa_parar_recorrencia"
+                value="sim"
+                checked={pararRecorrencia === "sim"}
+                onChange={() => setPararRecorrencia("sim")}
+                className="mt-0.5"
+              />
+              <div>
+                <p className="text-sm font-semibold">Parar toda a recorrência</p>
+                <p className="text-xs text-muted-foreground">
+                  Este template é desativado. Nenhuma nova ocorrência será gerada até você reativar manualmente.
+                </p>
+              </div>
+            </label>
+          </div>
+        )}
 
         {erro && (
           <div className="flex items-start gap-2 rounded border border-california-red/40 bg-california-red/5 p-3 text-sm text-california-red">
