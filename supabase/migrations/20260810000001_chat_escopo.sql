@@ -38,5 +38,5 @@ do $$ begin
   alter table public.jobs_chat_leituras
     add constraint jobs_chat_leituras_pkey
     primary key (job_id, profile_id, escopo);
-exception when duplicate_table then null;
+exception when duplicate_object then null;
 end $$;
