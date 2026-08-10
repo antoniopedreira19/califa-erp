@@ -75,3 +75,9 @@ export const estornoAvulsaSchema = z.object({
     .min(10, "Motivo precisa ter pelo menos 10 caracteres.")
     .max(500, "Motivo passa de 500 caracteres."),
 });
+
+/** Estendido com parar_recorrencia — usado quando o usuário quer estornar e
+ *  também pausar o template recorrente que gerou esta conta. */
+export const estornoAvulsaComRecorrenciaSchema = estornoAvulsaSchema.extend({
+  parar_recorrencia: z.boolean().optional(),
+});
