@@ -9,6 +9,10 @@ interface Props {
   pps: React.ReactNode;
   /** Quantidade de PPs ativas — vira o badge da aba. */
   ppsCount: number;
+  /** Renderizado apenas quando a aba PPs está ativa. Usado pelo FAB
+   * do chat de PPs — sem isso o botão apareceria em todas as abas
+   * (as outras não desmontam, ficam com `hidden`). */
+  ppsChat: React.ReactNode;
   chat: React.ReactNode;
   /** Mensagens e erratas ainda não lidas por quem está logado. */
   chatCount: number;
@@ -33,6 +37,7 @@ export function JobTabs({
   planilha,
   pps,
   ppsCount,
+  ppsChat,
   chat,
   chatCount,
 }: Props) {
@@ -106,6 +111,10 @@ export function JobTabs({
             montar, e montar escondido zeraria o badge sem ninguém ler. */}
         {tab === "chat" && chat}
       </div>
+
+      {/* FAB do chat de PPs — só renderiza enquanto a aba PPs está ativa,
+          do contrário o botão flutuante apareceria em todas as abas. */}
+      {tab === "pps" && ppsChat}
     </div>
     </JobTabsContext.Provider>
   );
