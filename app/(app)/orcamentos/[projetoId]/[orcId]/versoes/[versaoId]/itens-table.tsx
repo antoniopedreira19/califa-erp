@@ -22,9 +22,37 @@ import {
   type Categoria,
   type ItemBv,
 } from "@/lib/types";
-import { adicionarItem, atualizarCampoItem, removerItem } from "../actions";
+import {
+  adicionarItem,
+  atualizarCampoItem,
+  removerItem,
+  type ActionResult,
+} from "../actions";
 import { ColunasFixas, LARGURA_MINIMA } from "./grade-colunas";
-import { BvDialog, type FornecedorOpcao } from "@/app/(app)/_bv/bv-dialog";
+import {
+  BvDialog,
+  type AdaptadorBv,
+  type FornecedorOpcao,
+} from "@/app/(app)/_bv/bv-dialog";
+
+/** Onde a grade grava.
+ *
+ *  Por padrão, nas Server Actions da versão. O editor de orçamento do
+ *  projeto passa um adaptador que mexe no rascunho em memória — lá nada
+ *  existe no banco até o "Salvar orçamentos", mas a planilha é a mesma e
+ *  não pode ser reescrita só por causa do destino da escrita. */
+export interface AdaptadorItens {
+  atualizarCampo: (
+    itemId: string,
+    campo: string,
+    valor: string | null,
+  ) => Promise<ActionResult>;
+  adicionar: (grupoId: string, formData: FormData) => Promise<ActionResult>;
+  remover: (itemId: string) => Promise<ActionResult>;
+  /** Recarrega a origem dos dados depois de cada escrita. No rascunho é
+   *  no-op: o estado do React já é a fonte. */
+  aposEscrita: () => void;
+}
 
 interface Props {
   grupoId: string;
@@ -41,6 +69,10 @@ interface Props {
   fornecedores: FornecedorOpcao[];
   /** "v5" — aparece no subtítulo do formulário de BV. */
   versaoLabel: string;
+  /** Ausente ⇒ grava direto nas Server Actions da versão. */
+  adaptador?: AdaptadorItens;
+  /** Repassado ao formulário de BV; mesma regra do adaptador acima. */
+  adaptadorBv?: AdaptadorBv;
 }
 
 /** Campos que a grade edita — espelha o allowlist do server action. */
@@ -159,9 +191,23 @@ export function ItensTable({
   bvsPorItem,
   fornecedores,
   versaoLabel,
+  adaptador,
+  adaptadorBv,
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
+
+  /** Destino padrão das escritas: o banco, via Server Actions. */
+  const acoes = React.useMemo<AdaptadorItens>(
+    () =>
+      adaptador ?? {
+        atualizarCampo: atualizarCampoItem,
+        adicionar: adicionarItem,
+        remover: removerItem,
+        aposEscrita: () => router.refresh(),
+      },
+    [adaptador, router],
+  );
   const [ativa, setAtiva] = React.useState<CelulaAtiva>(null);
   const [overrides, setOverrides] = React.useState<Overrides>({});
   const [draft, setDraft] = React.useState<Draft | null>(null);
@@ -262,7 +308,7 @@ export function ItensTable({
 
     startTransition(async () => {
       try {
-        const res = await atualizarCampoItem(
+        const res = await acoes.atualizarCampo(
           itemId,
           campo,
           valor === null ? null : String(valor),
@@ -272,7 +318,7 @@ export function ItensTable({
           setErro(res.message);
           return;
         }
-        router.refresh();
+        acoes.aposEscrita();
       } catch (e) {
         // Falha de rede: sem reverter, a célula mostraria para sempre um
         // valor que não está no banco. Repassa o erro para o Next tratar
@@ -333,14 +379,14 @@ export function ItensTable({
 
     startTransition(async () => {
       try {
-        const res = await adicionarItem(grupoId, formData);
+        const res = await acoes.adicionar(grupoId, formData);
         if (!res.ok) {
           setErro(res.message);
           return;
         }
         setDraft(null);
         setAtiva(null);
-        router.refresh();
+        acoes.aposEscrita();
       } finally {
         // Sem o finally, uma falha de rede deixaria a trava presa e o
         // "Novo item" morto até recarregar a página.
@@ -373,10 +419,10 @@ export function ItensTable({
     if (!removendo) return;
     const alvo = removendo;
     startTransition(async () => {
-      const res = await removerItem(alvo.id);
+      const res = await acoes.remover(alvo.id);
       if (!res.ok) setErro(res.message);
       setRemovendo(null);
-      router.refresh();
+      acoes.aposEscrita();
     });
   }
 
@@ -907,6 +953,7 @@ export function ItensTable({
           fornecedores={fornecedores}
           origem="orcamento"
           readOnly={readOnly}
+          adaptador={adaptadorBv}
         />
       )}
 
