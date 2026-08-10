@@ -991,6 +991,7 @@ export interface LancamentoFinanceiro {
   cliente_id: string | null;
   job_id: string | null;
   pedido_compra_id: string | null;
+  conta_avulsa_id: string | null;
   estorno_de_lancamento_id: string | null;
   origem: OrigemLancamento;
   criado_por: string;
