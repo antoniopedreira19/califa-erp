@@ -24,11 +24,25 @@ import {
   type Profile,
   type Regional,
 } from "@/lib/types";
+import { orcamentoSchema } from "@/lib/validations/orcamentos";
 import {
   atualizarOrcamento,
   criarOrcamento,
   type ActionResult,
 } from "./actions";
+
+/** Os campos do orçamento sem nada de banco — o que o editor de orçamento
+ *  do projeto guarda no rascunho até o "Salvar orçamentos". */
+export interface DadosOrcamento {
+  nome: string;
+  categoria_id: string | null;
+  regional_id: string;
+  cidade_id: string;
+  gp_responsavel_id: string;
+  produtor_id: string;
+  data_inicio_prevista: string | null;
+  data_fim_prevista: string | null;
+}
 
 interface Props {
   projetoId: string;
@@ -45,6 +59,12 @@ interface Props {
   produtores: Pick<Profile, "id" | "nome">[];
   onSuccess?: () => void;
   onCancel?: () => void;
+  /** Presente ⇒ o formulário não grava nada: valida com o mesmo schema e
+   *  devolve os campos para quem chamou. É assim que o editor de orçamento
+   *  do projeto usa este formulário sem tocar no banco. */
+  onRascunho?: (dados: DadosOrcamento) => void;
+  /** Rótulo do botão de envio. O padrão serve à tela de sempre. */
+  rotuloSubmit?: string;
 }
 
 export function OrcamentoForm({
@@ -57,6 +77,8 @@ export function OrcamentoForm({
   produtores,
   onSuccess,
   onCancel,
+  onRascunho,
+  rotuloSubmit,
 }: Props) {
   const router = useRouter();
   const isEdit = Boolean(orcamento);
@@ -96,6 +118,32 @@ export function OrcamentoForm({
     formData.set("cidade_id", cidadeId);
     formData.set("gp_responsavel_id", gpId);
     formData.set("produtor_id", produtorId);
+
+    // Modo rascunho: a mesma validação, sem ida ao servidor. O que sai
+    // daqui entra na lista do editor e só vira registro no salvamento.
+    if (onRascunho) {
+      const parsed = orcamentoSchema.safeParse({
+        codigo: "",
+        nome: formData.get("nome")?.toString() ?? "",
+        status: "rascunho",
+        categoria_id: formData.get("categoria_id")?.toString() ?? "",
+        regional_id: regionalId,
+        cidade_id: cidadeId,
+        gp_responsavel_id: gpId,
+        produtor_id: produtorId,
+        data_inicio_prevista:
+          formData.get("data_inicio_prevista")?.toString() ?? "",
+        data_fim_prevista: formData.get("data_fim_prevista")?.toString() ?? "",
+      });
+      if (!parsed.success) {
+        setError("Verifique os campos destacados.");
+        setFieldErrors(parsed.error.flatten().fieldErrors);
+        return;
+      }
+      const { codigo: _semCodigo, status: _semStatus, ...dados } = parsed.data;
+      onRascunho(dados);
+      return;
+    }
 
     startTransition(async () => {
       const res: ActionResult = isEdit
@@ -323,7 +371,7 @@ export function OrcamentoForm({
           ) : (
             <>
               <Save className="h-4 w-4" />
-              {isEdit ? "Salvar alterações" : "Criar orçamento"}
+              {rotuloSubmit ?? (isEdit ? "Salvar alterações" : "Criar orçamento")}
             </>
           )}
         </button>
