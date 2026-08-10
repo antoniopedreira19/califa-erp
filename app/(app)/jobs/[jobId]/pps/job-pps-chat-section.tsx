@@ -2,12 +2,11 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { MessagesSquare, ChevronRight } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
-import { useIrParaAbaInformacoes } from "../job-tabs";
-import type { ChatTom, ItemChat, ChatArea } from "@/lib/types";
-import { enviarMensagem, marcarChatLido } from "./actions";
+import type { ChatArea, ChatTom, ItemChat } from "@/lib/types";
+import { enviarMensagemPP, marcarChatPPsLido } from "./actions-chat";
 import {
   ICONE_COMPONENTE,
   ICONE_CORES,
@@ -18,11 +17,11 @@ import { ChatInput } from "@/components/chat/chat-input";
 
 interface Props {
   jobId: string;
-  jobCodigo: string;
   itens: ItemChat[];
-  naoLidas: number;
-  /** Área de quem está logado — vem do papel, não é escolhida. */
   minhaArea: ChatArea;
+  /** Chamado uma vez, quando a section marca a thread como lida pela
+   * primeira vez após aberta. O FAB usa isso pra zerar o badge local. */
+  onLidoInicial: () => void;
 }
 
 function classeValor(tom: ChatTom): string {
@@ -38,42 +37,39 @@ function classeValor(tom: ChatTom): string {
   }
 }
 
-export function JobChatSection({
+export function JobPPsChatSection({
   jobId,
-  jobCodigo,
   itens,
-  naoLidas,
   minhaArea,
+  onLidoInicial,
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
   const [erro, setErro] = React.useState<string | null>(null);
   const [abertas, setAbertas] = React.useState<Record<string, boolean>>({});
-  const [badge, setBadge] = React.useState(naoLidas);
   const fimRef = React.useRef<HTMLDivElement>(null);
   const marcouRef = React.useRef(false);
 
-  React.useEffect(() => {
-    const ultimaErrata = [...itens]
-      .reverse()
-      .find((i) => i.tipo === "sistema" && i.id !== "abertura");
-    setAbertas(ultimaErrata ? { [ultimaErrata.id]: true } : {});
-  }, [itens]);
+  // Cards ficam fechados por default. Se o usuário quiser ver detalhes,
+  // clica. Diferente do chat de Comunicação (que abre a última errata) —
+  // aqui podem existir muitos cards de PP e abrir todos ocupa a thread.
 
   React.useEffect(() => {
-    if (marcouRef.current || naoLidas === 0) return;
+    if (marcouRef.current) return;
     marcouRef.current = true;
-    marcarChatLido(jobId).then(() => setBadge(0));
-  }, [jobId, naoLidas]);
+    marcarChatPPsLido(jobId).then(() => onLidoInicial());
+  }, [jobId, onLidoInicial]);
 
   React.useEffect(() => {
     fimRef.current?.scrollIntoView({ block: "end" });
   }, [itens.length]);
 
+  // Realtime pra thread aberta: chega mensagem nova de PP, refaz a
+  // thread e marca como lida (o usuário está com o drawer aberto).
   React.useEffect(() => {
     const supabase = createClient();
     const canal = supabase
-      .channel(`chat-job-${jobId}`)
+      .channel(`chat-pps-${jobId}`)
       .on(
         "postgres_changes",
         {
@@ -83,9 +79,8 @@ export function JobChatSection({
           filter: `job_id=eq.${jobId}`,
         },
         async (payload: any) => {
-          // Só o chat geral: escopo 'pps' é outro canal semântico.
-          if (payload?.new?.escopo && payload.new.escopo !== "geral") return;
-          await marcarChatLido(jobId);
+          if (payload?.new?.escopo !== "pps") return;
+          await marcarChatPPsLido(jobId);
           router.refresh();
         },
       )
@@ -99,7 +94,7 @@ export function JobChatSection({
   function handleEnviar(texto: string) {
     setErro(null);
     startTransition(async () => {
-      const res = await enviarMensagem(jobId, texto);
+      const res = await enviarMensagemPP(jobId, texto);
       if (!res.ok) {
         setErro(res.message);
         return;
@@ -109,25 +104,16 @@ export function JobChatSection({
   }
 
   return (
-    <div className="flex h-[620px] flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-soft">
-      <div className="flex flex-none items-center gap-2.5 border-b border-border bg-white px-[18px] py-4">
-        <MessagesSquare className="h-[17px] w-[17px] text-california-red" />
-        <div className="min-w-0">
-          <h2 className="text-xs font-semibold uppercase tracking-[0.08em]">
-            Comunicação
-          </h2>
-          <p className="mt-0.5 text-[11.5px] text-muted-foreground">
-            Produção ↔ Financeiro · {jobCodigo}
-          </p>
-        </div>
-        {badge > 0 && (
-          <span className="ml-auto inline-flex items-center whitespace-nowrap rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-[10.5px] font-semibold text-red-700">
-            {badge} {badge === 1 ? "não lida" : "não lidas"}
-          </span>
-        )}
-      </div>
-
+    <div className="flex h-full min-h-0 flex-col">
       <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto bg-[#FAFAFA] p-[18px]">
+        {itens.length === 0 && (
+          <div className="flex flex-1 items-center justify-center">
+            <p className="max-w-[240px] text-center text-xs text-muted-foreground">
+              Nenhuma PP nem mensagem por aqui ainda. Assim que uma PP for
+              emitida ou alguém escrever, aparece na thread.
+            </p>
+          </div>
+        )}
         {itens.map((item) =>
           item.tipo === "sistema" ? (
             <CardSistema
@@ -151,6 +137,7 @@ export function JobChatSection({
         erro={erro}
         onLimparErro={() => setErro(null)}
         onEnviar={handleEnviar}
+        placeholder="Escreva sobre uma PP…"
       />
     </div>
   );
@@ -166,7 +153,6 @@ function CardSistema({
   onAlternar: () => void;
 }) {
   const Icone = ICONE_COMPONENTE[item.icone];
-  const irParaInformacoes = useIrParaAbaInformacoes();
   return (
     <div className="flex-none overflow-hidden rounded-xl border border-[#e4e2dd] bg-white">
       <button
@@ -225,18 +211,8 @@ function CardSistema({
               </span>
             </div>
           ))}
-          {irParaInformacoes && (
-            <button
-              type="button"
-              onClick={irParaInformacoes}
-              className="self-start text-[11.5px] text-california-red hover:underline"
-            >
-              Abrir na aba Informações →
-            </button>
-          )}
         </div>
       )}
     </div>
   );
 }
-
