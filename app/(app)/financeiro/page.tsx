@@ -55,10 +55,10 @@ export default async function CentralFinanceiraPage() {
           count={aguardandoCount ?? 0}
         />
         <FinanceiroCard
-          href="/financeiro/pedidos-compra"
+          href="/financeiro/contas-a-pagar"
           icon={FileText}
           title="Contas a Pagar"
-          description="Avalie os Pedidos de Produção: ajuste o prazo, dê baixa ou rejeite com motivo."
+          description="Pedidos de Compra e lançamentos avulsos aguardando baixa."
           count={ppsCount ?? 0}
         />
         <FinanceiroCard

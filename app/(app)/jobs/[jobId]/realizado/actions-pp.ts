@@ -1000,7 +1000,7 @@ export async function reenviarPedidoCompra(
   });
 
   revalidatePath(`/jobs/${job.id}`);
-  revalidatePath("/financeiro/pedidos-compra");
+  revalidatePath("/financeiro/contas-a-pagar");
   return { ok: true };
 }
 

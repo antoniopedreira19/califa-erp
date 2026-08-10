@@ -124,7 +124,7 @@ export async function salvarPrazoFinanceiro(
     },
   });
 
-  revalidatePath("/financeiro/pedidos-compra");
+  revalidatePath("/financeiro/contas-a-pagar");
   return { ok: true };
 }
 
@@ -208,7 +208,7 @@ export async function marcarPagaFinanceiro(input: unknown): Promise<Result> {
     },
   });
 
-  revalidatePath("/financeiro/pedidos-compra");
+  revalidatePath("/financeiro/contas-a-pagar");
   revalidatePath("/financeiro/conciliacao");
   revalidatePath(`/jobs/${pp.job_id}`);
   return { ok: true };
@@ -282,7 +282,7 @@ export async function estornarBaixaPP(input: unknown): Promise<Result> {
     },
   });
 
-  revalidatePath("/financeiro/pedidos-compra");
+  revalidatePath("/financeiro/contas-a-pagar");
   revalidatePath("/financeiro/conciliacao");
   revalidatePath(`/jobs/${pp.job_id}`);
   return { ok: true };
@@ -353,7 +353,7 @@ export async function rejeitarPedidoCompraFinanceiro(
     },
   });
 
-  revalidatePath("/financeiro/pedidos-compra");
+  revalidatePath("/financeiro/contas-a-pagar");
   revalidatePath(`/jobs/${pp.job_id}`);
   return { ok: true };
 }
