@@ -22,6 +22,12 @@ interface Props {
    * tem a sua.
    */
   taxaHonorarios?: string;
+  /**
+   * Esconde o seletor e trava a ótica em planejada. É o caso do orçamento:
+   * ali o realizado ainda não existe, e um seletor que abre em "Realizada"
+   * mostraria uma coluna de travessões como se fosse resultado.
+   */
+  somentePlanejada?: boolean;
   moeda: string;
 }
 
@@ -64,10 +70,13 @@ export function PainelResultado({
   custoRealizado,
   honorarios,
   taxaHonorarios,
+  somentePlanejada,
   moeda,
 }: Props) {
-  const [visao, setVisao] = React.useState<Visao>("realizada");
-  const planejada = visao === "planejada";
+  const [visao, setVisao] = React.useState<Visao>(
+    somentePlanejada ? "planejada" : "realizada",
+  );
+  const planejada = somentePlanejada || visao === "planejada";
 
   const custo = planejada ? custoPlanejado : custoRealizado;
   const temCusto = custo > 0;
@@ -82,7 +91,9 @@ export function PainelResultado({
     custo,
   );
 
-  const sufixo = planejada ? "planejado" : "realizado";
+  // Sem o seletor não há duas óticas para distinguir — o rótulo fica igual
+  // ao da tela da versão do orçamento, sem sufixo.
+  const sufixo = somentePlanejada ? "" : planejada ? "planejado" : "realizado";
 
   return (
     <div className="p-6">
@@ -90,20 +101,22 @@ export function PainelResultado({
         <p className="text-[13px] font-bold uppercase tracking-wider">
           Resultado
         </p>
-        <div className="inline-flex gap-0.5 rounded-full bg-[#f1f0ec] p-[3px]">
-          <BotaoVisao
-            ativo={planejada}
-            onClick={() => setVisao("planejada")}
-          >
-            Planejada
-          </BotaoVisao>
-          <BotaoVisao
-            ativo={!planejada}
-            onClick={() => setVisao("realizada")}
-          >
-            Realizada
-          </BotaoVisao>
-        </div>
+        {!somentePlanejada && (
+          <div className="inline-flex gap-0.5 rounded-full bg-[#f1f0ec] p-[3px]">
+            <BotaoVisao
+              ativo={planejada}
+              onClick={() => setVisao("planejada")}
+            >
+              Planejada
+            </BotaoVisao>
+            <BotaoVisao
+              ativo={!planejada}
+              onClick={() => setVisao("realizada")}
+            >
+              Realizada
+            </BotaoVisao>
+          </div>
+        )}
       </div>
 
       <div className="flex flex-col gap-1.5">
@@ -118,7 +131,7 @@ export function PainelResultado({
         />
         <div className="mt-3 flex items-baseline justify-between gap-3 border-t border-border pt-3">
           <span className="text-sm font-semibold">
-            Resultado operacional {sufixo}
+            {`Resultado operacional ${sufixo}`.trim()}
           </span>
           <span
             className={cn(
@@ -190,7 +203,7 @@ export function PainelResultado({
                   : "text-california-red",
             )}
           >
-            Resultado geral {sufixo}
+            {`Resultado geral ${sufixo}`.trim()}
           </p>
           <p
             className={cn(

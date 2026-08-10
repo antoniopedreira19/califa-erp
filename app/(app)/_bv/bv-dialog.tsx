@@ -21,11 +21,30 @@ import {
   type ItemBv,
   type TipoCusto,
 } from "@/lib/types";
-import { cancelarBv, confirmarBv, salvarBv, type OrigemBv } from "./actions";
+import {
+  cancelarBv,
+  confirmarBv,
+  salvarBv,
+  type ActionResult,
+  type OrigemBv,
+} from "./actions";
 
 export interface FornecedorOpcao {
   id: string;
   nome: string;
+}
+
+/** Onde o BV é gravado.
+ *
+ *  Por padrão nas Server Actions, contra o item já existente no banco. O
+ *  editor de orçamento do projeto passa um adaptador que guarda o BV no
+ *  rascunho: lá o item ainda não tem id, e a linha em `itens_bv` só nasce
+ *  no "Salvar orçamentos", depois que os itens existem. */
+export interface AdaptadorBv {
+  salvar: (itemId: string, formData: FormData) => Promise<ActionResult>;
+  cancelar: (itemId: string) => Promise<ActionResult>;
+  /** No-op no rascunho: o estado do React já é a fonte. */
+  aposEscrita: () => void;
 }
 
 /** O que o formulário precisa do item. `VersaoOrcamentoItem` (orçamento)
@@ -71,6 +90,8 @@ interface Props {
   /** Contexto congelado (versão aprovada no orçamento, job encerrado):
    *  o BV é consultado, nunca gravado. */
   readOnly?: boolean;
+  /** Ausente ⇒ grava direto nas Server Actions. */
+  adaptador?: AdaptadorBv;
 }
 
 /** Aceita "1.234,56" e "1234.56". Vírgula presente ⇒ ponto é milhar.
@@ -114,9 +135,20 @@ export function BvDialog({
   origem,
   realizado,
   readOnly,
+  adaptador,
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
+
+  const acoes = React.useMemo<AdaptadorBv>(
+    () =>
+      adaptador ?? {
+        salvar: (itemId, formData) => salvarBv(itemId, formData, origem),
+        cancelar: (itemId) => cancelarBv(itemId, origem),
+        aposEscrita: () => router.refresh(),
+      },
+    [adaptador, origem, router],
+  );
   const [erro, setErro] = React.useState<string | null>(null);
   const [askRemover, setAskRemover] = React.useState(false);
   const [askConfirmar, setAskConfirmar] = React.useState(false);
@@ -183,13 +215,13 @@ export function BvDialog({
 
     setErro(null);
     startTransition(async () => {
-      const res = await salvarBv(item.id, formData, origem);
+      const res = await acoes.salvar(item.id, formData);
       if (!res.ok) {
         setErro(res.message);
         return;
       }
       onOpenChange(false);
-      router.refresh();
+      acoes.aposEscrita();
     });
   }
 
@@ -217,7 +249,7 @@ export function BvDialog({
         setAskConfirmar(false);
         return;
       }
-      const salvo = await salvarBv(item.id, formData, origem);
+      const salvo = await acoes.salvar(item.id, formData);
       if (!salvo.ok) {
         setAskConfirmar(false);
         setErro(salvo.message);
@@ -236,14 +268,14 @@ export function BvDialog({
 
   function handleRemover() {
     startTransition(async () => {
-      const res = await cancelarBv(item.id, origem);
+      const res = await acoes.cancelar(item.id);
       setAskRemover(false);
       if (!res.ok) {
         setErro(res.message);
         return;
       }
       onOpenChange(false);
-      router.refresh();
+      acoes.aposEscrita();
     });
   }
 

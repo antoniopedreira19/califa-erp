@@ -1,0 +1,138 @@
+import { notFound } from "next/navigation";
+import { requireSession } from "@/lib/auth/session";
+import { createClient } from "@/lib/supabase/server";
+import { listActiveMembers } from "@/lib/data/members";
+import type {
+  CategoriaDominio,
+  Cidade,
+  Categoria,
+  Profile,
+  Regional,
+} from "@/lib/types";
+import { EditorMultiJobs } from "./editor-multi-jobs";
+
+export const dynamic = "force-dynamic";
+
+/**
+ * Orçamento do projeto: monta vários orçamentos de job de uma vez.
+ *
+ * Tudo o que a tela precisa vem daqui em um único passe — o editor é um
+ * rascunho no cliente e não faz nenhuma leitura própria depois de montado.
+ */
+export default async function OrcamentoDoProjetoPage({
+  params,
+}: {
+  params: { projetoId: string };
+}) {
+  const session = await requireSession();
+  const supabase = createClient();
+  const tenantId = session.activeTenant.id;
+
+  const [
+    projRes,
+    categoriasOrcRes,
+    cidadesRes,
+    categoriasItemRes,
+    fornecedoresRes,
+    produtores,
+    vinculosRegRes,
+    vinculosRespRes,
+    orcCountRes,
+  ] = await Promise.all([
+    supabase
+      .from("projetos")
+      .select("id, codigo, nome, status")
+      .eq("id", params.projetoId)
+      .eq("tenant_id", tenantId)
+      .maybeSingle<{
+        id: string;
+        codigo: string;
+        nome: string;
+        status: string;
+      }>(),
+    supabase
+      .from("categorias_dominio")
+      .select("id, nome")
+      .eq("tenant_id", tenantId)
+      .eq("escopo", "orcamento")
+      .eq("ativo", true)
+      .order("nome"),
+    supabase
+      .from("cidades")
+      .select("id, nome")
+      .eq("tenant_id", tenantId)
+      .eq("ativo", true)
+      .order("nome"),
+    // Catálogo global do tenant — alimenta a coluna Categoria da planilha.
+    supabase
+      .from("categorias")
+      .select("*")
+      .eq("tenant_id", tenantId)
+      .order("nome")
+      .returns<Categoria[]>(),
+    // Só id + nome: é tudo que o formulário de BV usa.
+    supabase
+      .from("fornecedores")
+      .select("id, nome")
+      .eq("tenant_id", tenantId)
+      .eq("status", "ativo")
+      .order("nome")
+      .returns<{ id: string; nome: string }[]>(),
+    listActiveMembers(tenantId),
+    supabase
+      .from("projeto_regionais")
+      .select("regional_id, regional:regionais(id, nome)")
+      .eq("projeto_id", params.projetoId)
+      .eq("tenant_id", tenantId),
+    supabase
+      .from("projeto_responsaveis")
+      .select("profile_id, profile:profiles(id, nome)")
+      .eq("projeto_id", params.projetoId)
+      .eq("tenant_id", tenantId),
+    // Só a contagem: é a base do código previsto nos cards. Agregação
+    // separada em vez de embed — a lista de orçamentos não é usada aqui.
+    supabase
+      .from("orcamentos")
+      .select("id", { count: "exact", head: true })
+      .eq("projeto_id", params.projetoId)
+      .eq("tenant_id", tenantId),
+  ]);
+
+  const projeto = projRes.data;
+  if (!projeto) notFound();
+
+  // Regional e GP do orçamento saem do projeto — a peça não sai da praça
+  // que a iniciativa cobre. Mesma regra do formulário de sempre.
+  const regionaisDoProjeto = ((vinculosRegRes.data ?? []) as any[])
+    .filter((v) => v.regional)
+    .map((v) => ({ id: v.regional.id as string, nome: v.regional.nome as string }))
+    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")) as Pick<
+    Regional,
+    "id" | "nome"
+  >[];
+
+  const gpsDoProjeto = ((vinculosRespRes.data ?? []) as any[])
+    .filter((v) => v.profile)
+    .map((v) => ({ id: v.profile.id as string, nome: v.profile.nome as string }))
+    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")) as Pick<
+    Profile,
+    "id" | "nome"
+  >[];
+
+  return (
+    <EditorMultiJobs
+      projeto={projeto}
+      orcamentosExistentes={orcCountRes.count ?? 0}
+      categorias={(categoriasOrcRes.data ?? []) as Pick<
+        CategoriaDominio,
+        "id" | "nome"
+      >[]}
+      regionaisDoProjeto={regionaisDoProjeto}
+      cidades={(cidadesRes.data ?? []) as Pick<Cidade, "id" | "nome">[]}
+      gpsDoProjeto={gpsDoProjeto}
+      produtores={produtores}
+      categoriasItem={categoriasItemRes.data ?? []}
+      fornecedores={fornecedoresRes.data ?? []}
+    />
+  );
+}

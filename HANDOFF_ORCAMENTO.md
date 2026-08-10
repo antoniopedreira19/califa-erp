@@ -945,7 +945,218 @@ inclusive `jobs.valor_total`.
 
 ---
 
-## 15. Próximos passos
+## 15. Entrega 14 — orçamento do projeto e visão agregada editável
+
+Fecha o design `Orcamento do Projeto - Multi Jobs.dc.html` e o estende com
+a visão agregada, pedida em cima dele. São duas telas novas que dividem o
+mesmo motor: montar vários orçamentos de job num lugar só e gravar todos
+de uma vez.
+
+### 15.1 O seletor de "+ Novo orçamento"
+
+Na lista de orçamentos do projeto o botão virou menu com duas portas:
+
+- **Criar orçamento de um job** — o fluxo de sempre, intacto.
+- **Criar orçamento do projeto** — abre `/orcamentos/[projetoId]/multi`.
+
+O menu é feito à mão em `novo-orcamento-menu.tsx`, sem Radix: o botão
+precisa continuar sendo a âncora vermelha do cabeçalho, e um
+`DropdownMenu` traria trigger próprio para desfazer peça por peça.
+
+### 15.2 Rascunho no cliente, gravação em lote
+
+**Decisão central da entrega.** No editor do orçamento do projeto nada
+toca o banco enquanto o usuário não clicar em "Salvar orçamentos": criar
+o orçamento, importar a planilha, digitar item, lançar BV — tudo vive no
+estado do React.
+
+A consequência que justifica o desenho: **abandonar a tela não deixa
+meio-orçamento gravado no projeto**. O preço é uma action de parse que só
+lê o XLSX sem persistir (`_rascunho/actions.ts`), e o arquivo original
+fica com o cliente até o salvamento, quando sobe para o bucket junto com
+o registro em `orcamento_importacoes`.
+
+### 15.3 A planilha é a mesma, muda só o destino da escrita
+
+`ItensTable` e `BvDialog` ganharam um **adaptador de persistência
+opcional**. Sem ele, gravam nas Server Actions de sempre; com ele, mexem
+no rascunho em memória.
+
+```ts
+export interface AdaptadorItens {
+  atualizarCampo: (itemId, campo, valor) => Promise<ActionResult>;
+  adicionar: (grupoId, formData) => Promise<ActionResult>;
+  remover: (itemId) => Promise<ActionResult>;
+  aposEscrita: () => void; // router.refresh() no servidor, no-op no rascunho
+}
+```
+
+Por que isso e não uma grade nova: são ~1400 linhas de planilha com
+edição inline, trilha de ações, BV e regra de tipo de custo. Duplicar
+significaria duas grades divergindo a cada ajuste. A validação continua
+sendo a mesma porque os schemas Zod (`itens.ts`, `bv.ts`, `grupos.ts`)
+são importáveis dos dois lados.
+
+`OrcamentoForm` ganhou o mesmo tratamento: `onRascunho` valida com o
+`orcamentoSchema` de sempre e devolve os campos em vez de gravar.
+
+### 15.4 Parâmetros: um conjunto no editor, um por orçamento na agregada
+
+No editor do orçamento do projeto moeda, honorários e imposto são um
+conjunto só, no cabeçalho, aplicado a todas as v1 criadas. **Exceção:**
+planilha importada traz o % de honorários negociado nela, e ele vence o
+do cabeçalho *naquele* orçamento.
+
+Na visão agregada cada orçamento tem os seus, editáveis pelo botão de
+porcentagem do card — ali cada versão já nasceu com as suas.
+
+### 15.5 Card de Totais consolidado
+
+`_totais/totais-projeto-card.tsx`, no mesmo molde da visão agregada do
+módulo de Jobs: uma linha por orçamento, fechamento por tipo de custo e
+painel de resultado. Sem o bloco REALIZADO — na fase de orçamento ele não
+existe.
+
+Por isso `PainelResultado` ganhou `somentePlanejada`, que esconde o
+seletor Planejada/Realizada e tira o sufixo dos rótulos ("Resultado
+geral", não "Resultado geral planejado"). Sem essa flag o painel abriria
+em "Realizada" e mostraria uma coluna de travessões como se fosse
+resultado.
+
+**Taxas divergentes:** os valores em R$ são a soma orçamento a orçamento;
+o percentual exibido é a média das taxas em uso, com nota explicando
+quando elas divergem. Mesma convenção do card de Jobs.
+
+### 15.6 Visão agregada: qual versão vale
+
+`/orcamentos/[projetoId]/agregado`, alcançável pelo botão "Visão
+agregada" no cabeçalho da lista.
+
+Para cada orçamento vale a **versão aprovada**; sem ela, a mais recente
+não cancelada. A regra evita o caso de aprovar a v2, abrir uma v3 de
+rascunho e o total do projeto mudar sem ninguém ter decidido isso.
+
+Entram todos os orçamentos do projeto, inclusive os sem nenhuma versão
+(aparecem zerados, com o motivo). Cancelados e recusados ficam de fora.
+
+### 15.7 O que pode ser editado — e o que o domínio proíbe
+
+A visão agregada é **editável**, e é a continuação natural do orçamento do
+projeto: os orçamentos podem ter nascido ali ou um a um, e todos são
+ajustados no mesmo lugar, com o impacto visível no consolidado.
+
+Duas travas não são negociáveis na tela:
+
+| Situação | Comportamento |
+|---|---|
+| Versão aprovada | Somente leitura, com o motivo à vista |
+| Orçamento `job_criado` (job aberto pelo financeiro) | Somente leitura |
+| Demais (`rascunho`, `em_revisao`, `enviado_cliente`) | Editável |
+
+**Esta tela nunca cria versão nova de um orçamento existente.** As edições
+caem na versão aberta. Versão nova continua sendo ato da tela do
+orçamento — decisão do time, para a agregada não virar uma fábrica de
+versões a cada ajuste de digitação.
+
+Criar orçamento *novo* é permitido: entra como rascunho e vira registro no
+mesmo "Salvar alterações".
+
+O servidor reconfere as duas travas. Esconder botão não é trava.
+
+### 15.8 "Salvar alterações" reconcilia por id
+
+O cliente manda o **estado desejado inteiro**, não um diff. O servidor
+carrega o que está gravado e resolve:
+
+- grupo/item **com id** → UPDATE, e só quando algum campo mudou;
+- **sem id** → INSERT;
+- presente no banco e **ausente do payload** → DELETE.
+
+Itens são apagados **antes** dos grupos: a FK entre os dois é
+`on delete restrict`. O BV entra no mesmo diff — cria, atualiza ou
+cancela (nunca apaga: cancelar é o mesmo caminho do botão "Remover BV").
+
+Deixar a conta no servidor evita que o cliente rastreie remoções, e é lá
+que tenant e travas são conferidos de qualquer forma.
+
+Os orçamentos novos reaproveitam `salvarOrcamentosDoProjeto`, uma chamada
+por orçamento — cada um tem parâmetros próprios, e a action já cuida de
+código sequencial, importação e rollback.
+
+### 15.9 O mapa de ids que evita linha duplicada
+
+Achado no teste. Depois de um salvamento bem-sucedido as linhas criadas
+continuavam com id local no estado do cliente; um segundo "Salvar
+alterações" antes de a página recarregar as inseriria de novo — e
+recarregar pode falhar (o `router.refresh()` de dev chegou a devolver
+503 durante a verificação).
+
+A action passou a devolver `ids: Record<localId, idReal>` e o editor
+troca os ids na hora, sem depender do recarregamento.
+
+Junto veio outro ajuste: o retrato usado para responder "houve mudança?"
+saiu de uma `ref` (que não redesenha) para estado, e o campo `aberto` foi
+excluído da comparação — expandir um card não é alteração de conteúdo.
+
+### 15.10 Organização
+
+| Pasta | Papel |
+|---|---|
+| `orcamentos/_rascunho/` | tipos, helpers, card de orçamento, card de grupo, modais de importação e parâmetros, action de parse |
+| `orcamentos/_totais/` | card de Totais consolidado, usado pelas duas telas |
+| `[projetoId]/multi/` | editor do orçamento do projeto + action de gravação em lote |
+| `[projetoId]/agregado/` | visão agregada editável + action de "Salvar alterações" |
+
+Mesma convenção do `_bv/`: pasta com prefixo `_` não vira rota.
+
+**Nenhuma migration.** Toda a entrega roda sobre o schema existente.
+
+### 15.11 Verificação (2026-08-10)
+
+Exercitado no projeto TESTE-0001/26, contra a base real:
+
+1. **Editor do orçamento do projeto** — job montado à mão, item digitado
+   inline, BV de R$ 1.500 lançado, salvo como `TESTE-0001/26-03`.
+   Conferido no banco: orçamento + v1 + grupo + item + `itens_bv` em
+   `a_negociar`.
+2. **Importação** — planilha gerada no formato oficial (2 grupos, 4
+   itens) importada num segundo job, salva como `TESTE-0001/26-04`.
+   Versão nomeada "Importada de…", **honorários 12% lidos da planilha
+   sobrescrevendo os 0% do cabeçalho só nesse orçamento**, arquivo no
+   bucket e registro em `orcamento_importacoes` com as contagens do
+   reparse no servidor.
+3. **Visão agregada** — edição de valor, inserção e remoção de item, cada
+   uma confirmada no banco. Em todas, o orçamento permaneceu em **v1**:
+   nenhuma versão nova criada.
+4. **Duplo salvamento sem recarregar** — segunda gravação atualizou a
+   linha criada na primeira em vez de inseri-la de novo.
+5. **Travas** — no projeto PEVETE-0001/26, os três orçamentos com job
+   aberto aparecem em consulta, com faixa explicando o motivo e sem
+   nenhum controle de edição.
+6. **Guardas de saída** — o aviso do navegador bloqueou a navegação com
+   rascunho montado; o "Cancelar" pediu confirmação antes de descartar.
+7. **Sem regressão** na visão agregada de Jobs: o seletor
+   Planejada/Realizada continua lá, abrindo em "Realizada".
+
+Lint, typecheck e build limpos.
+
+### 15.12 O que ficou aberto
+
+1. **Sem transação cobrindo o lote.** Se um orçamento novo falhar no meio
+   do "Salvar alterações", as edições que já entraram permanecem — a
+   mensagem diz isso explicitamente. Fechar exigiria uma função no
+   Postgres, fora do que foi pedido.
+2. **Dados de teste na base.** No TESTE-0001/26: o `-01` teve o item
+   **GP** alterado de R$ 10.000 para R$ 12.500 e ganhou **Estagiario** a
+   R$ 700; os `-03` e `-04` foram criados nos testes. Reverter é decisão
+   do time.
+3. **Ordem dos itens é global na versão.** A reconciliação renumera
+   `ordem` a cada salvamento seguindo a ordem da tela. Não há
+   reordenação manual (arrastar) em nenhuma das duas telas.
+
+---
+
+## 16. Próximos passos
 
 1. **Carga completa de cidades do IBGE** — hoje só Salvador e São Paulo. Formato acordado: `Salvador-BA` num campo só, sem coluna `uf`. É só uma migration de INSERT: o schema e a busca já estão prontos (Entrega 8). Fonte: `https://servicosdados.ibge.gov.br/api/v1/localidades/municipios`. Ao carregar, reconciliar as 2 linhas atuais, que estão sem o sufixo de UF, e os jobs que já gravaram `Salvador`/`São Paulo`.
 2. **Exibir as observações do job** — `jobs.observacoes` grava desde a Entrega 9 mas nenhuma tela lê. Entra junto com o refino da tela de abertura do financeiro, onde ela faz sentido: é contexto para quem abre. Enquanto isso, o dado é write-only.
@@ -967,3 +1178,7 @@ durante a entrega, foi resolvida nela mesma (seção 14.8).
 aberto — botão na planilha do job, destaque de BV sem fornecedor e o
 fluxo de confirmação (com o envio ainda desabilitado, à espera do módulo
 de faturamento).
+
+**Aberto pela Entrega 14:** ver os três pontos da seção 15.12. O item 2
+(dados de teste no TESTE-0001/26) é o único que pede ação imediata do
+time; os outros dois são limitações conhecidas e documentadas.
