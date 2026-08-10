@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Search, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type {
@@ -101,6 +102,7 @@ export function RecorrentesList({
   clientes,
   jobs,
 }: Props) {
+  const router = useRouter();
   const [busca, setBusca] = React.useState("");
   const [ativoFiltro, setAtivoFiltro] = React.useState<AtivoFiltro>("ativas");
 
@@ -201,9 +203,7 @@ export function RecorrentesList({
               {filtered.map((r) => (
                 <tr
                   key={r.id}
-                  onClick={() => {
-                    window.location.href = `/financeiro/contas-a-pagar/recorrente/${r.id}`;
-                  }}
+                  onClick={() => router.push(`/financeiro/contas-a-pagar/recorrente/${r.id}`)}
                   className="border-b border-border last:border-0 hover:bg-muted/30 cursor-pointer"
                 >
                   <td className="px-3 py-2 font-medium">
