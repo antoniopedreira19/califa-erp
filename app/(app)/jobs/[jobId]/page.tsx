@@ -33,6 +33,7 @@ import type {
   PedidoCompra,
   PedidoCompraNaLista,
   Categoria,
+  ItemBv,
 } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -117,6 +118,7 @@ export default async function JobDetailPage({
     erratasRes,
     mensagensRes,
     leituraRes,
+    bvsRes,
   ] = await Promise.all([
     supabase
       .from("versoes_orcamento_grupos")
@@ -188,10 +190,34 @@ export default async function JobDetailPage({
       .eq("job_id", params.jobId)
       .eq("profile_id", session.profile.id)
       .maybeSingle(),
+    // BVs ATIVOS da versão aprovada. O BV é chaveado pelo item da VERSÃO,
+    // que é a mesma chave que `jobs_itens_orcado.item_versao_id` usa —
+    // por isso este é literalmente o mesmo registro que a tela de
+    // Orçamentos abre. O `!inner` serve de filtro, não de embed.
+    supabase
+      .from("itens_bv")
+      .select(
+        "id, tenant_id, item_versao_id, fornecedor_id, valor, prazo_repasse, " +
+          "situacao, created_by, created_at, updated_at, " +
+          "item:versoes_orcamento_itens!inner(versao_orcamento_id)",
+      )
+      .eq("item.versao_orcamento_id", versaoAprovadaId)
+      .eq("tenant_id", session.activeTenant.id)
+      .neq("situacao", "cancelado"),
   ]);
 
   const grupos = (gruposRes.data ?? []) as VersaoOrcamentoGrupo[];
   if (itensRes.error) console.error("[job.orcado]", itensRes.error.message);
+  if (bvsRes.error) console.error("[job.bvs]", bvsRes.error.message);
+
+  // Indexado por item da versão: a calha consulta uma chave por linha.
+  // Objeto, e não Map, porque só objeto atravessa a fronteira server →
+  // client.
+  const bvsPorItem: Record<string, ItemBv> = {};
+  for (const raw of (bvsRes.data ?? []) as any[]) {
+    const { item: _joinFiltro, ...bv } = raw;
+    bvsPorItem[bv.item_versao_id] = { ...bv, valor: Number(bv.valor ?? 0) };
+  }
   // `id` segue sendo o id do item na versão: é a chave que o realizado e a
   // PP usam. `orcado_id` é o que a errata altera.
   const itens: ItemPlanilhaJob[] = (itensRes.data ?? []).map((it: any) => ({
@@ -619,6 +645,7 @@ export default async function JobDetailPage({
             ppsPorItemId={ppsPorItemId}
             fornecedores={fornecedores}
             empresas={empresas}
+            bvsPorItem={bvsPorItem}
           />
         }
         ppsCount={ppsDoJob.filter((p) => p.status !== "cancelada").length}

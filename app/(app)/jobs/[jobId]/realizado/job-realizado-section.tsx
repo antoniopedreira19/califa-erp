@@ -10,6 +10,7 @@ import type {
   PedidoCompra,
   Fornecedor,
   Empresa,
+  ItemBv,
 } from "@/lib/types";
 import { JobGrupoCard } from "./job-grupo-card";
 import { JobTotaisCard } from "./job-totais-card";
@@ -35,6 +36,8 @@ interface Props {
   ppsPorItemId: Map<string, PedidoCompra>;
   fornecedores: Array<Pick<Fornecedor, "id" | "nome" | "razao_social" | "status">>;
   empresas: Array<Pick<Empresa, "id" | "razao_social" | "nome_fantasia" | "ativo" | "principal">>;
+  /** BV por id do item da versão. Só existe em item tipo A ou D. */
+  bvsPorItem: Record<string, ItemBv>;
 }
 
 export function JobRealizadoSection({
@@ -48,6 +51,7 @@ export function JobRealizadoSection({
   ppsPorItemId,
   fornecedores,
   empresas,
+  bvsPorItem,
 }: Props) {
   // Status onde nem mostramos a planilha
   if (
@@ -142,6 +146,8 @@ export function JobRealizadoSection({
                 empresas={empresas}
                 jobEmpresaId={job.empresa_id ?? ""}
                 jobResponsavelId={job.responsavel_id ?? ""}
+                bvsPorItem={bvsPorItem}
+                versaoLabel={`v${versao.numero_versao}`}
               />
             ))}
           </div>

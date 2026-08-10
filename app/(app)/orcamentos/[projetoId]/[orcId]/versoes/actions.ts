@@ -792,6 +792,72 @@ export async function atualizarItem(
  * `campo` chega do cliente, então passa pela allowlist antes de virar
  * UPDATE. Os totais são colunas GENERATED: o banco recalcula sozinho.
  */
+/** Tipos em que o cliente paga o fornecedor direto — os únicos com BV. */
+const TIPOS_COM_BV = ["A", "D"];
+
+/**
+ * Chamado quando um item deixa de ser tipo A ou D. O BV só faz sentido
+ * nesses dois (é neles que o cliente paga o fornecedor direto e sobra
+ * comissão), então a troca de tipo tem que decidir o destino do BV que
+ * estava lá.
+ *
+ * - `a_negociar` → cancela junto, mesmo mecanismo do botão "Remover BV".
+ * - `confirmado` / `recebido` → BLOQUEIA a troca de tipo. O BV já foi ao
+ *   financeiro; cancelá-lo por um efeito colateral de outra célula seria
+ *   apagar dinheiro sem que ninguém pedisse.
+ *
+ * Retorna a mensagem de bloqueio, ou null quando a troca pode seguir.
+ */
+async function resolverBvAoSairDoTipoComBv(
+  itemId: string,
+  tenantId: string,
+  itemNome: string,
+): Promise<string | null> {
+  const supabase = createClient();
+
+  const { data: bv } = await supabase
+    .from("itens_bv")
+    .select("id, valor, situacao")
+    .eq("item_versao_id", itemId)
+    .eq("tenant_id", tenantId)
+    .neq("situacao", "cancelado")
+    .maybeSingle<{ id: string; valor: number; situacao: string }>();
+
+  if (!bv) return null;
+
+  if (bv.situacao !== "a_negociar") {
+    return bv.situacao === "recebido"
+      ? "Este item tem BV já recebido. Não é possível mudar o tipo de custo."
+      : "Este item tem BV já confirmado e enviado ao financeiro. Não é possível mudar o tipo de custo.";
+  }
+
+  const { error } = await supabase
+    .from("itens_bv")
+    .update({ situacao: "cancelado" })
+    .eq("id", bv.id)
+    .eq("tenant_id", tenantId);
+
+  if (error) {
+    console.error("[itens.tipoCusto.cancelaBv]", error.message);
+    return "Não foi possível cancelar o BV deste item. Tipo de custo não alterado.";
+  }
+
+  await logAuditEvent({
+    acao: "item_bv.cancelado",
+    tenantId,
+    entidadeTipo: "item_bv",
+    entidadeId: bv.id,
+    metadata: {
+      item_versao_id: itemId,
+      item: itemNome,
+      valor: bv.valor,
+      motivo: "tipo_custo_perdeu_bv",
+    },
+  });
+
+  return null;
+}
+
 export async function atualizarCampoItem(
   itemId: string,
   campo: string,
@@ -818,10 +884,13 @@ export async function atualizarCampoItem(
   // chega aqui, então não dá para encadear consultas como no atualizarItem.
   const { data: item, error: loadError } = await supabase
     .from("versoes_orcamento_itens")
-    .select("versao_orcamento_id, versao:versoes_orcamento!inner(orcamento_id, status)")
+    .select(
+      "item, versao_orcamento_id, versao:versoes_orcamento!inner(orcamento_id, status)",
+    )
     .eq("id", itemId)
     .eq("tenant_id", session.activeTenant.id)
     .maybeSingle<{
+      item: string;
       versao_orcamento_id: string;
       versao: { orcamento_id: string; status: string };
     }>();
@@ -833,6 +902,19 @@ export async function atualizarCampoItem(
   if (!item?.versao) return { ok: false, message: "Item não encontrado." };
   if (item.versao.status === "aprovada") {
     return { ok: false, message: "Versão aprovada não permite alterar itens." };
+  }
+
+  // BV só existe em item tipo A ou D. Sair desses tipos tem que resolver
+  // o BV que estava lá, senão ele fica órfão no banco e invisível na
+  // tela. A consulta extra só roda nesse caso: o caminho quente (cada
+  // Enter numa célula numérica) continua com um round-trip só.
+  if (campo === "tipo_custo" && !TIPOS_COM_BV.includes(String(parsed.data))) {
+    const bloqueio = await resolverBvAoSairDoTipoComBv(
+      itemId,
+      session.activeTenant.id,
+      item.item,
+    );
+    if (bloqueio) return { ok: false, message: bloqueio };
   }
 
   const { error } = await supabase

@@ -401,6 +401,56 @@ export function tipoCustoLabel(t: TipoCusto): string {
   }
 }
 
+// ---------- BV por item (bonificação do fornecedor) ----------
+
+/** Situação da negociação do BV com o fornecedor.
+ *  `cancelado` zera o valor para efeito de conta — o registro fica no
+ *  item como histórico do que foi negociado e caiu. */
+export type BvSituacao =
+  | "a_negociar"
+  | "confirmado"
+  | "recebido"
+  | "cancelado";
+
+export const BV_SITUACOES: BvSituacao[] = [
+  "a_negociar",
+  "confirmado",
+  "recebido",
+  "cancelado",
+];
+
+export function bvSituacaoLabel(s: BvSituacao): string {
+  switch (s) {
+    case "a_negociar":
+      return "A negociar";
+    case "confirmado":
+      return "Confirmado";
+    case "recebido":
+      return "Recebido";
+    case "cancelado":
+      return "Cancelado";
+  }
+}
+
+/** BV de um item de custo tipo A: a parcela que o fornecedor devolve à
+ *  California. Registro único por item (`uniq_bv_item`), compartilhado
+ *  entre a tela de Orçamentos e a de Jobs — as duas apontam para o mesmo
+ *  item da versão. */
+export interface ItemBv {
+  id: string;
+  tenant_id: string;
+  item_versao_id: string;
+  /** Opcional no orçamento: dá pra lançar o valor antes de fechar com
+   *  quem. Fica em falta destacada no acompanhamento do job. */
+  fornecedor_id: string | null;
+  valor: number;
+  prazo_repasse: string | null;
+  situacao: BvSituacao;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 // ---------- Task 004 fase F: importação de planilha ----------
 
 export interface OrcamentoImportacao {

@@ -2,13 +2,14 @@
 
 Registro da implementação dos design handoffs aprovados para o módulo de Orçamentos.
 
-**Datas:** 2026-07-27 (entregas 1–3) · 2026-07-30 (entregas 4–8) · 2026-07-31 (entrega 9) · 2026-08-03 (entrega 10) · 2026-08-06 (entrega 11)
+**Datas:** 2026-07-27 (entregas 1–3) · 2026-07-30 (entregas 4–8) · 2026-07-31 (entrega 9) · 2026-08-03 (entrega 10) · 2026-08-06 (entrega 11) · 2026-08-07 (entregas 12 e 13)
 **Origem do design:**
 - Entregas 1–3: pacote `design_handoff_califa/` (`Versoes - Destaque v4.dc.html` opção 2a, `Orcamento - Edicao Inline.dc.html` opção 3b, `README.md`, `IMPLEMENTACAO.md`). A pasta fica **só na máquina local** — está no `.gitignore` por ser referência de design, não código.
 - Entregas 4–5, 8 e 9: projeto Claude Design `69342d83-28d9-4bea-a8af-c99e233f5f13` (`Orcamento - Versao -final-.dc.html`, `Novo projeto.dc.html` e `Abertura de Job.dc.html`), lido via MCP `claude_design`. A Entrega 9 é a revisão do mesmo `Abertura de Job.dc.html`, relido depois de atualizado.
 - Entregas 6–7: pedidos diretos do time, sem handoff de design.
 - Entrega 10: slide "Título do Orçamento" enviado pelo time (2 pedidos anotados sobre print da tela da versão).
 - Entrega 11: pedido direto do time sobre prints das quatro telas (lista de projetos, formulário de projeto, orçamentos do projeto, formulário de orçamento). Sem handoff de design — as decisões saíram de perguntas respondidas durante a sessão, registradas na seção 12.
+- Entregas 12 e 13: projeto Claude Design `69342d83` (`Orcamento - BV - Opcoes.dc.html`), lido via MCP `claude_design`. O design cobre três telas: a Entrega 12 fez a de Orçamentos e a 13 fechou a do job. A Entrega 13 traz quatro mudanças do time sobre o design (Confirmar com popup, fornecedor obrigatório, Realizado no lugar da rentabilidade, e BV↔PP alternando por tipo). Modelagem, ciclo de vida da situação e regras de trava saíram de perguntas respondidas durante as sessões, registradas nas seções 13 e 14.
 
 ---
 
@@ -27,10 +28,13 @@ Registro da implementação dos design handoffs aprovados para o módulo de Orç
 | **9 — Revisão do layout de abertura de job** | ✅ `ab66165` (2026-07-31) |
 | **10 — Título editável inline + resumo de rentabilidade** | ✅ `75cbb22` (2026-08-03) |
 | **11 — Revisão de campos de projeto e orçamento + produto padrão** | ✅ `6e6bd77` + `4a227d7` + `f664e1f` (2026-08-06) |
+| **12 — BV por item · parte 1: tela de Orçamentos** | ✅ (2026-08-07) |
+| **13 — BV na planilha do job + BV↔PP por tipo** | ✅ (2026-08-07) |
 
-`tsc --noEmit` e `next lint` limpos em todas. Entregas 4, 5, 8, 9, 10 e 11
-também com `next build` completo. As Entregas 8, 10 e 11 são as únicas com
-verificação de ponta a ponta contra o banco real — ver seções 9, 11 e 12.
+`tsc --noEmit` e `next lint` limpos em todas. Entregas 4, 5, 8 a 13
+também com `next build` completo. As Entregas 8 e 10 a 13 são as únicas
+com verificação de ponta a ponta contra o banco real — ver seções 9, 11,
+12, 13 e 14.
 
 ---
 
@@ -596,7 +600,352 @@ produção** (próximos passos, item 5).
 
 ---
 
-## 13. Próximos passos
+## 13. Entrega 12 — BV por item na tela de Orçamentos
+
+Origem: design `Orcamento - BV - Opcoes.dc.html` (projeto Claude Design
+`69342d83`). O design cobre **três** telas; esta entrega é a **parte 1**,
+só a de Orçamentos. A parte 2 (acompanhamento do job) é a próxima.
+
+### 13.1 O que é o BV
+
+Valor negociado com o **fornecedor** para que ele devolva parte do custo
+à California, como comissão. Só existe em item de **custo tipo A** — o
+tipo em que o cliente paga o fornecedor diretamente, e por isso sobra
+comissão a negociar. Em B, C e D o botão não aparece.
+
+⚠️ **Hoje o BV não abate custo e não entra em rentabilidade.** O
+abatimento só passa a valer quando o valor tiver sido faturado no módulo
+de faturamento e estiver no contas a receber aguardando recebimento —
+nenhum dos dois existe. Nada em `lib/calculos/versao-totais.ts` foi
+tocado nesta entrega, de propósito.
+
+O design trazia um agregado "BV lançado R$ 3.000,00" na barra de resumo
+da versão. **Foi removido a pedido do time:** por ora não há visão
+agregada, o BV é lido item a item.
+
+### 13.2 Por que tabela própria e não colunas no item
+
+`jobs_itens_orcado` é **cópia** do item da versão, criada na abertura do
+job e alterável por errata. Com `bv_valor`/`bv_situacao` como colunas, o
+BV do orçamento e o do job seriam registros distintos e divergiriam a
+cada errata — o oposto do que o design pede ("o mesmo formulário nas duas
+telas, já no item certo").
+
+`itens_bv` tem FK única para `versoes_orcamento_itens`. Como
+`jobs_itens_orcado.item_versao_id` aponta para a mesma linha, a parte 2
+vai ler e gravar **o mesmo registro**, sem sincronização. O BV também tem
+ciclo de vida próprio e vai receber vínculo de faturamento depois, o que
+não caberia numa coluna solta.
+
+### 13.3 Migration `20260807000001_itens_bv.sql`
+
+- Enum `bv_situacao`: `a_negociar` · `confirmado` · `recebido` · `cancelado`.
+- Tabela `itens_bv`: `item_versao_id` (FK, **unique** — um BV por item),
+  `fornecedor_id` (nullable), `valor`, `prazo_repasse`, `situacao`,
+  `created_by`, timestamps.
+- Trigger `bv_exige_item_tipo_a` (SECURITY DEFINER, `revoke execute`):
+  barra BV em item não-A e BV apontando para item de outro tenant. A
+  regra é financeira — não podia viver só na Server Action.
+- RLS nas 4 operações via `is_tenant_member`, GRANT para `authenticated`,
+  índices em tenant/fornecedor/situação, trigger de `updated_at`.
+
+### 13.4 A situação é derivada, nunca escolhida
+
+Decisão do time, e é o ponto mais importante desta entrega. O campo
+existe no formulário mas **não é editável por ninguém**:
+
+| Situação | Quem escreve |
+| --- | --- |
+| `a_negociar` | nasce assim, na tela de Orçamentos |
+| `confirmado` | envio ao financeiro, no acompanhamento do job (parte 2) |
+| `recebido` | baixa no contas a receber (módulo futuro) |
+| `cancelado` | remoção do BV, ou troca do tipo de custo para fora de A |
+
+`situacao` **não entra** em `lib/validations/bv.ts`: o formulário não
+manda o campo e a Server Action é quem decide. Ela só escreve
+`a_negociar`, e apenas em dois momentos — BV novo, ou BV voltando de
+`cancelado`.
+
+### 13.5 "Remover BV" é cancelamento, não exclusão
+
+`cancelarBv` faz `update situacao = 'cancelado'`; a linha permanece. A
+página carrega só os BVs ativos (`.neq("situacao", "cancelado")`), então
+o cancelado **some da planilha** e o quadrado volta a `+BV`.
+
+Lançar de novo no mesmo item **reaproveita a linha** (decisão do time) e
+devolve a situação para `a_negociar`. Os valores antigos são
+sobrescritos; quem guarda o que havia antes é a auditoria —
+`item_bv.cancelado` grava o valor, e o relançamento marca
+`substituiu_cancelado: true`.
+
+> Para a parte 2 o time sinalizou que BVs confirmados provavelmente
+> **precisarão ser registrados** em vez de sobrescritos. Se isso se
+> confirmar, o caminho é trocar `uniq_bv_item` por um índice parcial
+> ("um BV ativo por item", ignorando cancelados) — a modelagem atual não
+> impede essa evolução.
+
+### 13.6 Confirmado e recebido travam o BV
+
+A partir de `confirmado` o BV saiu das mãos do orçamento. **Nem editar
+nem cancelar**, mesmo em versão aberta: o formulário abre em consulta
+(campos desabilitados, sem Salvar e sem Remover, botão vira "Fechar") e
+tanto `salvarBv` quanto `cancelarBv` rejeitam no servidor.
+
+### 13.7 Troca de tipo de custo resolve o BV
+
+Sair de A deixaria o BV órfão — invisível na tela, vivo no banco. Por
+isso `atualizarCampoItem` passou a tratar o caso:
+
+- BV em `a_negociar` → **cancela junto**, com auditoria
+  (`motivo: "tipo_custo_deixou_de_ser_a"`).
+- BV `confirmado`/`recebido` → **bloqueia a troca de tipo**, com mensagem
+  explícita. Cancelar dinheiro que já foi ao financeiro como efeito
+  colateral de outra célula seria perda silenciosa.
+
+A consulta extra só roda quando `campo === "tipo_custo"` e o valor novo
+não é `A`. O caminho quente da edição inline (cada Enter numa célula
+numérica) continua com um round-trip só — ver `docs/PERFORMANCE.md`.
+
+### 13.8 Interface
+
+**Calha da linha** (`itens-table.tsx`): o quadrado de 26px fica à
+**esquerda** da lixeira, na mesma posição que ocupará na planilha do job.
+Vazado com `+BV` quando não há BV; preenchido com `BV` (sem o `+`) quando
+há. Nenhuma coluna nova entrou na grade.
+
+A trilha passou a existir **também em versão congelada**, coisa que antes
+não acontecia: aprovada ou cancelada, ela aparece só se houver BV a
+consultar, e só com o quadrado (sem lixeira). A calha reservada na página
+foi de `pr-12` para `pr-16` (quadrado + lixeira); em versão congelada com
+BV, `pr-10`. O alinhamento entre os cards de grupo e o card de Totais
+continua batendo porque os dois compartilham o mesmo `pr`.
+
+**Formulário** (`bv-dialog.tsx`): dialog de duas colunas. À esquerda,
+Orçado, Planejado e a rentabilidade do item, em leitura — editar número
+de planilha continua sendo na planilha. À direita, **Fornecedor** (acima
+do valor, opcional aqui), **Valor do BV** com o percentual sobre o total
+orçado calculado ao vivo, **Prazo de repasse** e a situação em leitura.
+
+### 13.9 Verificação (2026-08-07)
+
+`tsc --noEmit`, `next lint` (só os warnings pré-existentes de
+`combobox.tsx` e `multi-select.tsx`) e `npm run build` limpos. No
+navegador, contra o banco real:
+
+- **Tipo B** mostra só a lixeira; **tipo A sem BV**, o `+BV` vazado.
+- **Salvar sem fornecedor** grava — e revelou um bug real: o `.uuid()` do
+  Zod roda **antes** do `.transform()`, então a string vazia era
+  reprovada com "Fornecedor inválido". Corrigido com `preprocess`.
+- **Percentual ao vivo:** 750,50 sobre 5.000 → 15,0%.
+- **Ciclo completo:** lançar → quadrado preenchido → reabrir com valores
+  → editar (UPDATE, sem duplicar) → remover → linha vira `cancelado` →
+  quadrado volta a `+BV` → formulário reabre em branco → lançar de novo
+  reaproveita a mesma linha e volta a `a_negociar`.
+- **Auditoria:** `lancado 500` → `cancelado 500` → `lancado 900` com
+  `substituiu_cancelado: true`.
+- **Versão aprovada:** sem BV, nenhuma trilha; com BV, só o quadrado
+  preenchido, "Ver BV", campos travados, sem Salvar/Remover.
+- **BV confirmado em versão rascunho:** abre travado, com o aviso "Já foi
+  enviado ao financeiro".
+- **Troca de tipo:** A → B com BV `a_negociar` cancelou o BV e registrou
+  o motivo na auditoria. A → C com BV `confirmado` foi **bloqueada**, com
+  mensagem, e o tipo reverteu para A na tela.
+- **Banco:** trigger rejeita insert em item não-A; `uniq_bv_item` rejeita
+  o segundo BV. Advisors de segurança não acusam nada em `itens_bv` nem
+  na função nova; performance só acusa `unused_index` (INFO), esperado em
+  tabela sem tráfego.
+- Console sem erros. Registros de teste apagados ao final.
+
+⚠️ Como toda sessão deste projeto, o `next dev` escreveu **direto em
+produção** (próximos passos, item 5).
+
+### 13.10 O que ficou aberto
+
+1. **A parte 2 (acompanhamento do job) não existe ainda.** Enquanto ela
+   não entra, nenhum BV chega a `confirmado` pelo caminho normal — os
+   testes desse estado foram feitos com `update` em SQL.
+2. **`recebido` não tem produtor.** Depende do contas a receber. Até lá o
+   estado só é alcançável por SQL.
+3. **Permissão por papel não foi implementada** — decisão do time: "por
+   enquanto todos". Orçamento e Jobs são preenchidos pelo produto e pelo
+   GP, que precisam ver. Quando entrarem papéis sem acesso, o filtro vale
+   para o botão da calha **e** para as duas Server Actions.
+4. **`BV_SITUACOES` em `lib/types.ts` está sem uso** desde que o select
+   saiu do formulário. Foi mantido porque a parte 2 deve precisar dele
+   para exibir os quatro estados.
+
+---
+
+## 14. Entrega 13 — BV na planilha do job (parte 2) + BV↔PP por tipo
+
+Fecha o design `Orcamento - BV - Opcoes.dc.html`, com quatro mudanças
+pedidas pelo time em cima dele.
+
+### 14.1 Tipo A **ou D**, nas duas telas
+
+Migration `20260807000002_bv_tipo_a_ou_d.sql`. O critério do BV nunca foi
+a letra, é *"o cliente paga o fornecedor diretamente"* — verdade em A e em
+D. B (bi-tributação) e C passam pela California e seguem sem BV.
+
+Vale nas duas telas porque **o BV é um registro só**: um BV criado num
+item D pelo job seria rejeitado pelo trigger antigo. A função trocou de
+nome junto com a regra (`bv_exige_item_tipo_a` → `bv_exige_item_com_bv`),
+porque o nome passaria a mentir.
+
+### 14.2 BV e PP não coexistem na calha
+
+Mudança de design pedida pelo time: a coluna **Tipo** decide qual botão a
+linha mostra.
+
+| Tipo | Calha |
+| --- | --- |
+| A, D | quadrado de BV |
+| B, C | Ver PP / Gerar PP |
+
+Levantamento antes de mudar: as 6 PPs existentes estão **todas em itens
+tipo B**. Nenhuma PP ficou inacessível.
+
+### 14.3 Módulo compartilhado `app/(app)/_bv/`
+
+O formulário e as actions passaram a ser usados por duas rotas, então
+saíram de dentro de `orcamentos/` para uma pasta privada (`_` = fora do
+roteamento do App Router):
+
+- `_bv/actions.ts` — `salvarBv`, `confirmarBv`, `cancelarBv`.
+- `_bv/bv-dialog.tsx` — o formulário, com variante por `origem`.
+
+Toda escrita revalida **as duas rotas** (versão e job): é o mesmo BV nas
+duas telas, e trocar de tela não pode mostrar valor velho de cache.
+
+**A guarda de "versão congelada" virou dependente da origem.** Era um
+`if` simples e não podia continuar sendo: a planilha do job trabalha
+sobre a versão **aprovada**, que é justamente o estado que o orçamento
+bloqueia.
+
+| Origem | Regra |
+| --- | --- |
+| `orcamento` | versão não pode estar aprovada nem cancelada |
+| `job` | versão aprovada é o caso normal; só `cancelada` barra |
+
+### 14.4 Salvar e Confirmar
+
+Na planilha do job o rodapé tem **dois** botões, não um:
+
+- **Salvar** — grava mantendo `a_negociar`. Sem popup, sem exigir
+  fornecedor. É o que permite ajustar o BV depois da aprovação sem bater
+  o martelo (decisão do time; o pedido original era só "Confirmar").
+- **Confirmar** — exige fornecedor, abre o popup de "tem certeza" e
+  enviaria ao financeiro.
+
+Confirmar grava antes de confirmar: sem isso, o financeiro receberia um
+valor diferente do que está na tela.
+
+⚠️ **O botão do popup nasce desabilitado**, a pedido do time: não existe
+módulo de faturamento para onde enviar. O popup explica o motivo — botão
+morto sem explicação lê como defeito. `confirmarBv` está implementado e
+foi testado (ver 14.7); é só liberar o `confirmDisabled` quando o módulo
+existir.
+
+`ConfirmDialog` ganhou `confirmDisabled` + `confirmDisabledReason` para
+isso — desabilita só o confirmar, mantendo o cancelar vivo.
+
+### 14.5 Fornecedor obrigatório e o destaque de quem não tem
+
+No orçamento o fornecedor segue opcional; **no job é obrigatório para
+confirmar** — quem vai devolver a comissão precisa ter nome antes de
+virar cobrança. A trava vale na tela e em `confirmarBv`.
+
+O BV lançado sem fornecedor ganha **destaque âmbar** na calha do job
+(quadrado âmbar + pontinho), com tooltip dizendo o que falta. É o
+"destaque quando chegar na tela de acompanhamento" combinado na Entrega
+12.
+
+### 14.6 Realizado no lugar da rentabilidade
+
+Na variante job o terceiro bloco do formulário é o **Realizado**, não a
+caixa de rentabilidade do item — é o número que importa em execução, e a
+rentabilidade continua no rodapé do grupo. No orçamento nada muda: lá não
+existe realizado.
+
+### 14.7 Verificação (2026-08-07)
+
+`tsc --noEmit`, `next lint` (só os warnings pré-existentes) e
+`npm run build` limpos. No navegador, contra o banco real, no JOB-0002:
+
+- **Troca BV↔PP:** "Gerador" e "Luz" (A) mostram BV; os itens B mostram
+  PP. Nenhuma linha com os dois.
+- **Formulário no job:** bloco Realizado presente, caixa de rentabilidade
+  ausente, rodapé com Cancelar / Salvar / Confirmar, fornecedor marcado
+  com `*`.
+- **Confirmar sem fornecedor:** bloqueado com mensagem, popup não abre.
+- **Confirmar com fornecedor:** popup abre com valor e nome do fornecedor
+  no texto, e o botão "Confirmar envio" vem **desabilitado**, com o
+  motivo escrito.
+- **Salvar pelo job:** gravou `a_negociar`, auditoria com `origem: "job"`.
+- **Destaque âmbar:** BV salvo sem fornecedor ficou âmbar, com o tooltip
+  "sem fornecedor — defina antes de confirmar".
+- **Tipo D:** item marcado como D (versão + cópia do job) mostrou BV, e o
+  trigger aceitou o UPDATE. Restaurado para A depois.
+- **`confirmarBv`:** verificado habilitando o botão do popup
+  temporariamente — gravou `confirmado`, registrou `item_bv.confirmado` e
+  travou o BV (campos desabilitados, só "Fechar"). O botão foi devolvido
+  ao estado desabilitado em seguida.
+- Console sem erros em aba limpa. Registros de teste apagados ao final.
+
+⚠️ Como toda sessão deste projeto, o `next dev` escreveu **direto em
+produção** (próximos passos, item 5).
+
+### 14.8 Divergência de tipo entre a versão e a cópia do job
+
+Achado durante esta entrega e **resolvido nela** (as regras vieram do
+time depois de reproduzido o problema).
+
+**O problema.** A planilha do job lê `jobs_itens_orcado.tipo_custo` (a
+cópia), mas o trigger validava `versoes_orcamento_itens.tipo_custo` (a
+versão). A errata altera **só a cópia** — de propósito, para a versão
+seguir sendo o que o cliente aprovou ([actions-errata.ts:288](app/(app)/jobs/[jobId]/realizado/actions-errata.ts:288)).
+Reproduzido no JOB-0002: item levado de B para A passou a mostrar `+BV`
+e o banco recusou com *"BV só pode ser lançado em item de custo tipo A ou
+D"* — mensagem que contradizia a tela.
+
+⚠️ Vale registrar porque a intuição engana: **a versão estar travada é o
+que garante a divergência, não o que a impede.** A cópia anda com a
+errata; a versão fica parada.
+
+**As três regras que resolveram** (decisão do time):
+
+1. **Depois da errata, quem manda é a cópia** — migration
+   `20260807000003`. O trigger aceita quando a versão **ou** a cópia
+   forem A/D; `carregarContexto` aplica a mesma regra. Se a planilha do
+   job diz A, o BV grava.
+2. **Errata não troca tipo de item com PP ativa ou BV confirmado/recebido**
+   — bloqueio **por item** (os outros da errata seguem) e **só na troca
+   de tipo** (corrigir valor unitário com PP ativa continua permitido,
+   como sempre foi). A mensagem nomeia o item e o que cancelar.
+3. **Errata que tira o item de A/D cancela o BV `a_negociar`** junto,
+   com auditoria (`motivo: "errata_mudou_tipo_de_custo"`). **A→D não
+   cancela**: em D o cliente também paga o fornecedor direto e o BV
+   segue válido.
+
+Verificado com erratas reais no JOB-0002: o cancelamento automático
+(A→B), a gravação do BV com versão B + cópia A, e o bloqueio por BV
+confirmado — que recusou **antes** de gravar qualquer coisa (nenhuma
+errata criada, tipo intacto). Dados de teste revertidos ao final,
+inclusive `jobs.valor_total`.
+
+### 14.9 O que ficou aberto
+
+1. **`recebido` continua sem produtor** — depende do contas a receber.
+2. **Permissão por papel** segue não implementada (decisão do time: "por
+   enquanto todos").
+3. **A trava por PP ativa vale só na troca de tipo.** Um item com PP
+   emitida ainda aceita correção de valor unitário por errata — é o
+   comportamento que já existia, e o time optou por não mexer nele
+   agora.
+
+---
+
+## 15. Próximos passos
 
 1. **Carga completa de cidades do IBGE** — hoje só Salvador e São Paulo. Formato acordado: `Salvador-BA` num campo só, sem coluna `uf`. É só uma migration de INSERT: o schema e a busca já estão prontos (Entrega 8). Fonte: `https://servicosdados.ibge.gov.br/api/v1/localidades/municipios`. Ao carregar, reconciliar as 2 linhas atuais, que estão sem o sufixo de UF, e os jobs que já gravaram `Salvador`/`São Paulo`.
 2. **Exibir as observações do job** — `jobs.observacoes` grava desde a Entrega 9 mas nenhuma tela lê. Entra junto com o refino da tela de abertura do financeiro, onde ela faz sentido: é contexto para quem abre. Enquanto isso, o dado é write-only.
@@ -609,3 +958,12 @@ produção** (próximos passos, item 5).
 **Resolvido desde a última revisão:** o modo `readOnly` da Entrega 2 ganhou prova de execução (v1 do ORC-0003 aprovada, grade travada); os `console.log` de timing temporários saíram no commit `3021cff`; e a criação de projeto de ponta a ponta (item 6 da lista anterior) foi exercitada na Entrega 11 — ver seção 12.8.
 
 **Aberto pela Entrega 11:** ver os três pontos da seção 12.9.
+
+**Aberto pela Entrega 13:** ver os três pontos da seção 14.9 — todos
+menores. A divergência de tipo entre a versão e a cópia do job, achada
+durante a entrega, foi resolvida nela mesma (seção 14.8).
+
+**Resolvido pela Entrega 13:** a parte 2 do BV que a Entrega 12 deixou em
+aberto — botão na planilha do job, destaque de BV sem fornecedor e o
+fluxo de confirmação (com o envio ainda desabilitado, à espera do módulo
+de faturamento).

@@ -7,9 +7,15 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { TruncateTooltip } from "@/components/ui/truncate-tooltip";
 import { cn } from "@/lib/utils";
-import type { VersaoOrcamentoGrupo, VersaoOrcamentoItem, Categoria } from "@/lib/types";
+import type {
+  VersaoOrcamentoGrupo,
+  VersaoOrcamentoItem,
+  Categoria,
+  ItemBv,
+} from "@/lib/types";
 import { removerGrupo, renomearGrupo } from "../actions";
 import { ItensTable } from "./itens-table";
+import type { FornecedorOpcao } from "@/app/(app)/_bv/bv-dialog";
 
 interface Props {
   grupo: VersaoOrcamentoGrupo;
@@ -19,6 +25,9 @@ interface Props {
   categorias: Categoria[];
   aberto: boolean;
   onAlternar: () => void;
+  bvsPorItem: Record<string, ItemBv>;
+  fornecedores: FornecedorOpcao[];
+  versaoLabel: string;
 }
 
 export function GrupoCard({
@@ -29,6 +38,9 @@ export function GrupoCard({
   categorias,
   aberto,
   onAlternar,
+  bvsPorItem,
+  fornecedores,
+  versaoLabel,
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
@@ -186,6 +198,9 @@ export function GrupoCard({
         readOnly={readOnly}
         categorias={categorias}
         aberto={aberto}
+        bvsPorItem={bvsPorItem}
+        fornecedores={fornecedores}
+        versaoLabel={versaoLabel}
       />
 
       <ConfirmDialog

@@ -7,10 +7,18 @@ import { Badge } from "@/components/ui/badge";
 import { TruncateTooltip } from "@/components/ui/truncate-tooltip";
 import { cn, formatCurrency } from "@/lib/utils";
 import { calcularRentabilidade } from "@/lib/calculos/versao-totais";
-import type { ItemPlanilhaJob, JobItemRealizado, PedidoCompra, Fornecedor, Empresa } from "@/lib/types";
+import type {
+  ItemPlanilhaJob,
+  JobItemRealizado,
+  PedidoCompra,
+  Fornecedor,
+  Empresa,
+  ItemBv,
+} from "@/lib/types";
 import { upsertItemRealizado, type CampoRealizado } from "../actions-realizado";
 import { PPActionsCell } from "./pp-actions-cell";
 import { GerarPPDrawer } from "./gerar-pp-drawer";
+import { BvDialog } from "@/app/(app)/_bv/bv-dialog";
 
 interface Props {
   jobId: string;
@@ -26,6 +34,82 @@ interface Props {
   empresas: Array<Pick<Empresa, "id" | "razao_social" | "nome_fantasia" | "ativo" | "principal">>;
   jobEmpresaId: string;
   jobResponsavelId: string;
+  /** BV por id do item da versão. Só existe em item tipo A ou D. */
+  bvsPorItem: Record<string, ItemBv>;
+  /** "v5" — aparece no subtítulo do formulário de BV. */
+  versaoLabel: string;
+  grupoNome: string;
+}
+
+/** BV e Pedido de Produção não coexistem na calha: em A e D o cliente
+ *  paga o fornecedor diretamente (há comissão a negociar, não há PP a
+ *  emitir); em B e C o custo passa pela California e o que existe é a
+ *  PP. A coluna Tipo é quem decide qual botão a linha mostra. */
+const TIPOS_COM_BV: string[] = ["A", "D"];
+
+/** Quadrado do BV na calha do job. Mesma linguagem da tela de
+ *  Orçamentos — vazado com "+BV" quando não há, preenchido com "BV"
+ *  quando há — mais o alerta âmbar de BV sem fornecedor, que é o que
+ *  trava a confirmação para o financeiro. */
+function BvActionCell({
+  bv,
+  itemNome,
+  somenteLeitura,
+  onAbrir,
+}: {
+  bv: ItemBv | null;
+  itemNome: string;
+  somenteLeitura?: boolean;
+  onAbrir: () => void;
+}) {
+  const travado = somenteLeitura || (bv !== null && bv.situacao !== "a_negociar");
+  const semFornecedor = bv !== null && !bv.fornecedor_id && !travado;
+  const title = !bv
+    ? `Lançar BV em ${itemNome}`
+    : travado
+      ? `Ver BV de ${itemNome}`
+      : semFornecedor
+        ? `BV de ${itemNome} sem fornecedor — defina antes de confirmar`
+        : `Editar BV de ${itemNome}`;
+
+  return (
+    <div className={cn("flex items-center", ALTURA_LINHA)}>
+      <button
+        type="button"
+        onClick={onAbrir}
+        title={title}
+        aria-label={title}
+        className={cn(
+          "box-border inline-flex h-[26px] w-[26px] flex-none items-center justify-center rounded-[9px] border transition-colors",
+          !bv &&
+            "border-[#DEDCD7] bg-white text-[#8a8880] hover:border-california-red/50 hover:text-california-red",
+          bv &&
+            !semFornecedor &&
+            "border-foreground bg-[#F1F0EC] text-foreground hover:border-california-red hover:text-california-red",
+          semFornecedor &&
+            "border-amber-500 bg-amber-50 text-amber-700 hover:border-amber-600",
+        )}
+      >
+        <span className="text-[10.5px] font-normal leading-none">
+          {bv ? (
+            "BV"
+          ) : (
+            <>
+              {/* O "+" tem altura óptica menor que as letras; o nudge
+                  alinha a linha de base dos três caracteres. */}
+              <span className="inline-block translate-y-[0.04em]">+</span>BV
+            </>
+          )}
+        </span>
+      </button>
+      {semFornecedor && (
+        <span
+          aria-hidden
+          className="ml-1 h-1.5 w-1.5 flex-none rounded-full bg-amber-500"
+        />
+      )}
+    </div>
+  );
 }
 
 type CelulaAtiva = { itemId: string; campo: CampoRealizado } | null;
@@ -133,6 +217,9 @@ export function JobItemRealizadoTable({
   empresas,
   jobEmpresaId,
   jobResponsavelId: _jobResponsavelId,
+  bvsPorItem,
+  versaoLabel,
+  grupoNome,
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
@@ -146,6 +233,7 @@ export function JobItemRealizadoTable({
   const [railTop, setRailTop] = React.useState(0);
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [itemIdAtual, setItemIdAtual] = React.useState<string | null>(null);
+  const [bvAberto, setBvAberto] = React.useState<ItemPlanilhaJob | null>(null);
   const [toast, setToast] = React.useState<string | null>(null);
   // Estado otimista: quando finalizar PP OK, adiciona {itemRealizadoId: codigo}
   // pra trilha lateral mostrar os ícones Ver/Cancelar IMEDIATAMENTE, sem
@@ -516,12 +604,36 @@ export function JobItemRealizadoTable({
       {/* Fora do frame do card, como no design. A calha que recebe estes
           botões é reservada por JobRealizadoSection (pr-[114px]) — sem ela
           a trilha era cortada na borda direita da página. */}
-      {editable && (
+      {/* Job encerrado não some com a trilha: os BVs já lançados seguem
+          consultáveis, como na tela de Orçamentos. Só o que é ação
+          (gerar PP, lançar BV novo) é que desaparece. */}
+      {(editable || itens.some((i) => bvsPorItem[i.id])) && (
         <div
           className="absolute left-full ml-2.5 flex w-[104px] flex-col"
           style={{ top: railTop }}
         >
           {itens.map((item) => {
+            // Tipo A/D: a linha negocia BV e nunca emite PP.
+            if (TIPOS_COM_BV.includes(item.tipo_custo)) {
+              const bv = bvsPorItem[item.id] ?? null;
+              // Sem BV num job congelado não há o que consultar — a vaga
+              // fica vazia para não desalinhar as linhas de baixo.
+              if (!editable && !bv) {
+                return <div key={item.id} className={ALTURA_LINHA} />;
+              }
+              return (
+                <BvActionCell
+                  key={item.id}
+                  bv={bv}
+                  itemNome={item.item}
+                  somenteLeitura={!editable}
+                  onAbrir={() => setBvAberto(item)}
+                />
+              );
+            }
+
+            if (!editable) return <div key={item.id} className={ALTURA_LINHA} />;
+
             const realizado = realizadosMap.get(item.id);
             const total = realizado ? Number(realizado.total_realizado ?? 0) : 0;
             const realizadoId = realizado?.id ?? "";
@@ -586,6 +698,41 @@ export function JobItemRealizadoTable({
           />
         );
       })()}
+
+      {/* Mesmo formulário da tela de Orçamentos, na variante do job: o
+          terceiro bloco é o Realizado e o rodapé ganha o Confirmar. */}
+      {bvAberto &&
+        (() => {
+          const realizado = realizadosMap.get(bvAberto.id);
+          return (
+            <BvDialog
+              open
+              onOpenChange={(o) => !o && setBvAberto(null)}
+              item={bvAberto}
+              grupoNome={grupoNome}
+              versaoLabel={versaoLabel}
+              categoriaNome={
+                bvAberto.categoria_id
+                  ? categoriasMap.get(bvAberto.categoria_id) ?? null
+                  : null
+              }
+              moeda={moeda}
+              bv={bvsPorItem[bvAberto.id] ?? null}
+              fornecedores={fornecedores.map((f) => ({
+                id: f.id,
+                nome: f.razao_social ?? f.nome,
+              }))}
+              origem="job"
+              realizado={{
+                valorUnitario: Number(realizado?.valor_unitario_realizado ?? 0),
+                quantidade: Number(realizado?.quantidade_realizada ?? 0),
+                diasMeses: Number(realizado?.dias_meses_realizado ?? 0),
+                total: Number(realizado?.total_realizado ?? 0),
+              }}
+              readOnly={!editable}
+            />
+          );
+        })()}
 
       {toast && (
         <div

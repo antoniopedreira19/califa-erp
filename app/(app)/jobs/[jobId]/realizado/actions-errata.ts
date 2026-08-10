@@ -17,6 +17,89 @@ type Result = Ok | Err;
 
 const TIPOS = ["A", "B", "C", "D"] as const;
 
+/** Tipos em que o cliente paga o fornecedor direto — os únicos com BV. */
+const TIPOS_COM_BV: string[] = ["A", "D"];
+
+interface AlvoTroca {
+  copiaId: string;
+  itemVersaoId: string;
+  itemNome: string;
+}
+
+/**
+ * Barra a troca de tipo de custo em item que já tem documento emitido.
+ *
+ * Por item, não pela errata inteira (decisão do time): quem está
+ * corrigindo dez linhas não perde o trabalho por causa de uma. E só na
+ * troca de TIPO — mudar valor unitário com PP ativa segue permitido,
+ * como sempre foi.
+ *
+ * Retorna a mensagem de bloqueio, ou null quando a errata pode seguir.
+ */
+async function barrarTrocaDeTipo(
+  jobId: string,
+  tenantId: string,
+  alvos: AlvoTroca[],
+): Promise<string | null> {
+  const supabase = createClient();
+  const idsVersao = alvos.map((a) => a.itemVersaoId).filter(Boolean);
+  if (idsVersao.length === 0) return null;
+
+  const nomePorVersaoId = new Map(
+    alvos.map((a) => [a.itemVersaoId, a.itemNome]),
+  );
+
+  // Realizado é a ponte entre o item e a PP.
+  const { data: realizados } = await supabase
+    .from("jobs_itens_realizado")
+    .select("id, item_id")
+    .eq("job_id", jobId)
+    .eq("tenant_id", tenantId)
+    .in("item_id", idsVersao);
+
+  const versaoPorRealizado = new Map(
+    (realizados ?? []).map((r: any) => [r.id as string, r.item_id as string]),
+  );
+
+  const [ppsRes, bvsRes] = await Promise.all([
+    versaoPorRealizado.size > 0
+      ? supabase
+          .from("pedidos_compra")
+          .select("item_realizado_id, codigo")
+          .eq("job_id", jobId)
+          .eq("tenant_id", tenantId)
+          .neq("status", "cancelada")
+          .in("item_realizado_id", Array.from(versaoPorRealizado.keys()))
+      : Promise.resolve({ data: [] as any[], error: null }),
+    supabase
+      .from("itens_bv")
+      .select("item_versao_id, situacao")
+      .eq("tenant_id", tenantId)
+      .in("item_versao_id", idsVersao),
+  ]);
+
+  const pp = (ppsRes.data ?? [])[0] as
+    | { item_realizado_id: string; codigo: string }
+    | undefined;
+  if (pp) {
+    const itemVersaoId = versaoPorRealizado.get(pp.item_realizado_id) ?? "";
+    const nome = nomePorVersaoId.get(itemVersaoId) ?? "o item";
+    return `"${nome}" tem o Pedido de Produção ${pp.codigo} ativo. Cancele a PP antes de mudar o tipo de custo deste item.`;
+  }
+
+  const bvTravado = (bvsRes.data ?? []).find(
+    (b: any) => b.situacao === "confirmado" || b.situacao === "recebido",
+  ) as { item_versao_id: string; situacao: string } | undefined;
+  if (bvTravado) {
+    const nome = nomePorVersaoId.get(bvTravado.item_versao_id) ?? "o item";
+    return bvTravado.situacao === "recebido"
+      ? `"${nome}" tem BV já recebido. Não é possível mudar o tipo de custo deste item.`
+      : `"${nome}" tem BV já confirmado e enviado ao financeiro. Cancele o BV antes de mudar o tipo de custo deste item.`;
+  }
+
+  return null;
+}
+
 const alteracaoSchema = z.object({
   job_item_orcado_id: z.string().uuid(),
   valor_unitario: z.number().nonnegative(),
@@ -124,7 +207,7 @@ export async function registrarErrata(
   const { data: itensAtuais, error: itensErr } = await supabase
     .from("jobs_itens_orcado")
     .select(
-      "id, item, grupo_id, tipo_custo, valor_unitario_orcado, quantidade_orcada, dias_meses_orcado, total_orcado",
+      "id, item_versao_id, item, grupo_id, tipo_custo, valor_unitario_orcado, quantidade_orcada, dias_meses_orcado, total_orcado",
     )
     .eq("job_id", jobId)
     .eq("tenant_id", session.activeTenant.id);
@@ -134,6 +217,10 @@ export async function registrarErrata(
   }
 
   const porId = new Map(itensAtuais.map((i: any) => [i.id, i]));
+  // BV e realizado são chaveados pelo item da VERSÃO, não pela cópia.
+  const idVersaoPorCopia = new Map<string, string>(
+    itensAtuais.map((i: any) => [i.id as string, i.item_versao_id as string]),
+  );
 
   // Nome do grupo entra congelado no histórico.
   const { data: grupos } = await supabase
@@ -206,6 +293,26 @@ export async function registrarErrata(
 
   if (mudancas.length === 0) {
     return { ok: false, message: "Nenhum valor ou tipo de custo foi alterado." };
+  }
+
+  // ---- Trava de troca de tipo: PP ativa ou BV já confirmado ----
+  // Só a troca de TIPO é barrada — corrigir o valor unitário de um item
+  // com PP ativa continua permitido, como sempre foi. É a troca de tipo
+  // que faz BV e PP trocarem de lugar na calha, e ela não pode passar por
+  // cima de um documento que já saiu (a PP) nem de dinheiro que já foi ao
+  // financeiro (o BV confirmado).
+  const trocasDeTipo = mudancas.filter((m) => m.tipo_de !== m.tipo_para);
+  if (trocasDeTipo.length > 0) {
+    const bloqueio = await barrarTrocaDeTipo(
+      jobId,
+      session.activeTenant.id,
+      trocasDeTipo.map((m) => ({
+        copiaId: m.id,
+        itemVersaoId: idVersaoPorCopia.get(m.id) ?? "",
+        itemNome: m.item_nome,
+      })),
+    );
+    if (bloqueio) return { ok: false, message: bloqueio };
   }
 
   // ---- Totais antes e depois, pela mesma função do card de Totais ----
@@ -301,6 +408,48 @@ export async function registrarErrata(
         ok: false,
         message: `Errata registrada, mas o item "${m.item_nome}" não foi atualizado. Avise o suporte.`,
       };
+    }
+  }
+
+  // ---- BV que perdeu a razão de existir ----
+  // Item que sai de A/D deixa de ter comissão a negociar. O BV em
+  // "a negociar" é cancelado junto — os travados já foram barrados lá em
+  // cima. Ir de A para D não cancela: em D o cliente também paga o
+  // fornecedor direto e o BV continua válido.
+  const perderamBv = mudancas.filter(
+    (m) =>
+      TIPOS_COM_BV.includes(m.tipo_de) && !TIPOS_COM_BV.includes(m.tipo_para),
+  );
+
+  for (const m of perderamBv) {
+    const itemVersaoId = idVersaoPorCopia.get(m.id);
+    if (!itemVersaoId) continue;
+
+    const { data: bvCancelado } = await supabase
+      .from("itens_bv")
+      .update({ situacao: "cancelado" })
+      .eq("item_versao_id", itemVersaoId)
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("situacao", "a_negociar")
+      .select("id, valor")
+      .maybeSingle<{ id: string; valor: number }>();
+
+    if (bvCancelado) {
+      await logAuditEvent({
+        acao: "item_bv.cancelado",
+        tenantId: session.activeTenant.id,
+        entidadeTipo: "item_bv",
+        entidadeId: bvCancelado.id,
+        metadata: {
+          item_versao_id: itemVersaoId,
+          item: m.item_nome,
+          valor: bvCancelado.valor,
+          motivo: "errata_mudou_tipo_de_custo",
+          errata_id: errata.id,
+          tipo_de: m.tipo_de,
+          tipo_para: m.tipo_para,
+        },
+      });
     }
   }
 

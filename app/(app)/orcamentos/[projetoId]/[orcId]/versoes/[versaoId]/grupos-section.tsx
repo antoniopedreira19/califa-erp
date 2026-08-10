@@ -6,8 +6,10 @@ import type {
   VersaoOrcamentoGrupo,
   VersaoOrcamentoItem,
   Categoria,
+  ItemBv,
 } from "@/lib/types";
 import { GrupoCard } from "./grupo-card";
+import type { FornecedorOpcao } from "@/app/(app)/_bv/bv-dialog";
 
 /** Map não atravessa a fronteira server → client. A página manda os pares
  *  já montados. */
@@ -21,9 +23,22 @@ interface Props {
   moeda: string;
   readOnly?: boolean;
   categorias: Categoria[];
+  /** BV por id do item — indexado, e não Map, porque Map não atravessa a
+   *  fronteira server → client. */
+  bvsPorItem: Record<string, ItemBv>;
+  fornecedores: FornecedorOpcao[];
+  versaoLabel: string;
 }
 
-export function GruposSection({ secoes, moeda, readOnly, categorias }: Props) {
+export function GruposSection({
+  secoes,
+  moeda,
+  readOnly,
+  categorias,
+  bvsPorItem,
+  fornecedores,
+  versaoLabel,
+}: Props) {
   // Guarda quem está FECHADO: grupo novo nasce aberto sem precisar de
   // sincronização quando a lista muda. Sem persistência — recarregar a
   // página volta tudo a aberto, como no handoff.
@@ -76,6 +91,9 @@ export function GruposSection({ secoes, moeda, readOnly, categorias }: Props) {
             categorias={categorias}
             aberto={!fechados.has(s.grupo.id)}
             onAlternar={() => alternarGrupo(s.grupo.id)}
+            bvsPorItem={bvsPorItem}
+            fornecedores={fornecedores}
+            versaoLabel={versaoLabel}
           />
         ))}
       </div>
