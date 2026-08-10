@@ -5,6 +5,7 @@ import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { PedidosCompraList, type PPRow } from "./pedidos-compra-list";
 import { ContasPagarTabs } from "./contas-pagar-tabs";
+import { ContasAvulsasList, type AvulsaRow } from "./avulsas-list";
 import type { PPStatus, ContaBancaria, PlanoContaTipo, PlanoContaSubtipo } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -20,7 +21,19 @@ export default async function PedidosCompraFinanceiroPage() {
 
   const supabase = createClient();
 
-  const [{ data, error }, contasRes, tiposRes, subtiposRes, ppsPendentesCountRes, avulsasPendentesCountRes] = await Promise.all([
+  const [
+    { data, error },
+    contasRes,
+    tiposRes,
+    subtiposRes,
+    ppsPendentesCountRes,
+    avulsasPendentesCountRes,
+    avulsasRes,
+    empresasRes,
+    fornecedoresRes,
+    clientesRes,
+    jobsRes,
+  ] = await Promise.all([
     supabase
       .from("pedidos_compra")
       .select(
@@ -74,9 +87,56 @@ export default async function PedidosCompraFinanceiroPage() {
       .select("id", { count: "exact", head: true })
       .eq("tenant_id", session.activeTenant.id)
       .eq("status", "pendente"),
+    // Contas avulsas (todos os status) — para a lista da aba
+    supabase
+      .from("contas_avulsas")
+      .select(`
+        id, descricao, valor, natureza, data_prevista_pagamento, status,
+        pago_em, created_at,
+        fornecedor:fornecedores(nome, razao_social),
+        cliente:clientes(nome_fantasia, razao_social),
+        job:jobs(codigo),
+        empresa:empresas(razao_social, nome_fantasia),
+        tipo:plano_contas_tipos!inner(codigo),
+        subtipo:plano_contas_subtipos!inner(nome),
+        anexos:contas_avulsas_anexos(id)
+      `)
+      .eq("tenant_id", session.activeTenant.id)
+      .order("data_prevista_pagamento", { ascending: true })
+      .order("created_at", { ascending: false }),
+    // Empresas ativas (dropdown do drawer)
+    supabase
+      .from("empresas")
+      .select("id, razao_social, nome_fantasia")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("ativo", true)
+      .order("razao_social"),
+    // Fornecedores ativos (dropdown)
+    supabase
+      .from("fornecedores")
+      .select("id, nome, razao_social")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("status", "ativo")
+      .order("nome"),
+    // Clientes ativos (dropdown)
+    supabase
+      .from("clientes")
+      .select("id, nome_fantasia, razao_social")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("status", "ativo")
+      .order("nome_fantasia"),
+    // Jobs não cancelados — limitado a 500 (trocar por combobox se necessário)
+    supabase
+      .from("jobs")
+      .select("id, codigo, nome")
+      .eq("tenant_id", session.activeTenant.id)
+      .neq("status", "cancelado")
+      .order("created_at", { ascending: false })
+      .limit(500),
   ]);
 
   if (error) console.error("[financeiro.pp.list]", error.message);
+  if (avulsasRes.error) console.error("[financeiro.avulsas.list]", avulsasRes.error.message);
 
   const rows: PPRow[] = ((data ?? []) as unknown as Array<{
     id: string;
@@ -150,6 +210,60 @@ export default async function PedidosCompraFinanceiroPage() {
     anexos: r.anexos ?? [],
   }));
 
+  // Mapeamento das contas avulsas para AvulsaRow
+  const avulsasRows: AvulsaRow[] = ((avulsasRes.data ?? []) as unknown as Array<{
+    id: string;
+    descricao: string;
+    valor: string | number;
+    natureza: "entrada" | "saida";
+    data_prevista_pagamento: string | null;
+    status: "pendente" | "baixada";
+    pago_em: string | null;
+    created_at: string;
+    fornecedor: { nome: string | null; razao_social: string | null } | null;
+    cliente: { nome_fantasia: string | null; razao_social: string | null } | null;
+    job: { codigo: string } | null;
+    empresa: { razao_social: string | null; nome_fantasia: string | null } | null;
+    tipo: { codigo: string } | null;
+    subtipo: { nome: string } | null;
+    anexos: Array<{ id: string }> | null;
+  }>).map((r) => ({
+    id: r.id,
+    descricao: r.descricao,
+    valor: Number(r.valor),
+    natureza: r.natureza,
+    data_prevista_pagamento: r.data_prevista_pagamento,
+    status: r.status,
+    fornecedor_nome: r.fornecedor?.razao_social ?? r.fornecedor?.nome ?? null,
+    cliente_nome: r.cliente?.razao_social ?? r.cliente?.nome_fantasia ?? null,
+    job_codigo: r.job?.codigo ?? null,
+    empresa_nome: r.empresa?.razao_social ?? r.empresa?.nome_fantasia ?? "",
+    tipo_codigo: r.tipo?.codigo ?? "",
+    subtipo_nome: r.subtipo?.nome ?? "",
+    anexos_count: r.anexos?.length ?? 0,
+    pago_em: r.pago_em,
+    created_at: r.created_at,
+  }));
+
+  // Listas para os dropdowns do drawer de conta avulsa
+  const empresasList = (empresasRes.data ?? []).map((e: { id: string; razao_social: string | null; nome_fantasia: string | null }) => ({
+    id: e.id,
+    nome: e.razao_social ?? e.nome_fantasia ?? "",
+  }));
+  const fornecedoresList = (fornecedoresRes.data ?? []).map((f: { id: string; nome: string; razao_social: string | null }) => ({
+    id: f.id,
+    nome: f.razao_social ?? f.nome,
+  }));
+  const clientesList = (clientesRes.data ?? []).map((c: { id: string; nome_fantasia: string | null; razao_social: string | null }) => ({
+    id: c.id,
+    nome: c.razao_social ?? c.nome_fantasia ?? "",
+  }));
+  const jobsList = (jobsRes.data ?? []).map((j: { id: string; codigo: string; nome: string }) => ({
+    id: j.id,
+    codigo: j.codigo,
+    nome: j.nome,
+  }));
+
   return (
     <div className="space-y-8 max-w-7xl mx-auto">
       <header className="space-y-2">
@@ -182,11 +296,16 @@ export default async function PedidosCompraFinanceiroPage() {
         }
         ppsPendentesCount={ppsPendentesCountRes.count ?? 0}
         avulsas={
-          <div className="rounded-xl border border-dashed border-border py-16 text-center">
-            <p className="text-sm text-muted-foreground">
-              Aba disponível em breve.
-            </p>
-          </div>
+          <ContasAvulsasList
+            rows={avulsasRows}
+            tenantId={session.activeTenant.id}
+            empresas={empresasList}
+            tipos={tiposRes.data ?? []}
+            subtipos={subtiposRes.data ?? []}
+            fornecedores={fornecedoresList}
+            clientes={clientesList}
+            jobs={jobsList}
+          />
         }
         avulsasPendentesCount={avulsasPendentesCountRes.count ?? 0}
       />
