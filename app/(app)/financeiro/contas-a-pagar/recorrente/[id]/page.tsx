@@ -250,7 +250,7 @@ export default async function RecorrenteDetalhesPage({
       {/* Breadcrumb + Header */}
       <header className="space-y-2">
         <nav className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Link href="/financeiro" className="hover:text-california-red">
+          <Link href="/financeiro" prefetch={false} className="hover:text-california-red">
             Financeiro
           </Link>
           <ChevronRight className="h-3 w-3" />
