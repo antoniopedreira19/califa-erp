@@ -20,6 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Combobox } from "@/components/ui/combobox";
 import { DatePicker } from "@/components/ui/date-picker";
 import { createClient } from "@/lib/supabase/client";
 import { criarContaAvulsa, editarContaAvulsa } from "./actions-avulsas";
@@ -573,19 +574,19 @@ export function ContaAvulsaDrawer(props: Props) {
             {/* Job */}
             <div className="space-y-2">
               <Label htmlFor="job_id">Job</Label>
-              <Select value={jobId} onValueChange={setJobId}>
-                <SelectTrigger id="job_id">
-                  <SelectValue placeholder="Nenhum (opcional)" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">Nenhum</SelectItem>
-                  {props.jobs.map((j) => (
-                    <SelectItem key={j.id} value={j.id}>
-                      {j.codigo} — {j.nome}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Combobox
+                id="job_id"
+                value={jobId}
+                onChange={(v) => setJobId(v ?? "__none__")}
+                placeholder="Nenhum (opcional)"
+                items={[
+                  { value: "__none__", label: "Nenhum" },
+                  ...props.jobs.map((j) => ({
+                    value: j.id,
+                    label: `${j.codigo} — ${j.nome}`,
+                  })),
+                ]}
+              />
               {fieldErrors.job_id?.map((msg, i) => (
                 <p key={i} className="text-xs text-california-red">
                   {msg}
@@ -660,7 +661,7 @@ export function ContaAvulsaDrawer(props: Props) {
             {/* Anexos — só em modo criar */}
             {props.mode === "criar" && (
               <div className="space-y-3">
-                <Label>Anexos</Label>
+                <Label className="block">Anexos</Label>
 
                 {anexos.length > 0 && (
                   <ul className="space-y-1.5">
@@ -702,21 +703,23 @@ export function ContaAvulsaDrawer(props: Props) {
                   </div>
                 )}
 
-                <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-white px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
-                  <Paperclip className="h-4 w-4" />
-                  Adicionar arquivo
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    multiple
-                    className="sr-only"
-                    onChange={handleFileChange}
-                    disabled={!!uploadingFile || pending}
-                  />
-                </label>
-                <p className="text-xs text-muted-foreground">
-                  Máx. 8 MB por arquivo · 25 MB total
-                </p>
+                <div>
+                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-white px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
+                    <Paperclip className="h-4 w-4" />
+                    Adicionar arquivo
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      multiple
+                      className="sr-only"
+                      onChange={handleFileChange}
+                      disabled={!!uploadingFile || pending}
+                    />
+                  </label>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Máx. 8 MB por arquivo · 25 MB total
+                  </p>
+                </div>
               </div>
             )}
 
