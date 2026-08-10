@@ -149,6 +149,7 @@ export default async function AvulsaDetalhesPage({
     pago_em: string | null;
     pago_por: string | null;
     conta_bancaria_baixa_id: string | null;
+    recorrente_id: string | null;
     criado_por: string;
     created_at: string;
     updated_at: string;
@@ -287,6 +288,7 @@ export default async function AvulsaDetalhesPage({
                 <ExcluirAvulsaButton
                   contaId={c.id}
                   descricao={c.descricao}
+                  recorrenteId={c.recorrente_id ?? null}
                 />
               </>
             )}
@@ -294,6 +296,7 @@ export default async function AvulsaDetalhesPage({
               <CancelarBaixaAvulsaModalClient
                 contaId={c.id}
                 descricao={c.descricao}
+                recorrenteId={c.recorrente_id ?? null}
               />
             )}
           </div>
