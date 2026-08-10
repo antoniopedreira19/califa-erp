@@ -116,9 +116,9 @@ export function ContaAvulsaDrawer(props: Props) {
   const [empresaId, setEmpresaId] = React.useState<string>(
     conta?.empresa_id ?? "",
   );
-  const [natureza, setNatureza] = React.useState<"entrada" | "saida">(
-    conta?.natureza ?? "saida",
-  );
+  // Contas a pagar são sempre saída. Se um dia entrar recebimento avulso,
+  // vira outra aba/módulo — não este drawer.
+  const natureza: "saida" = "saida";
   const [descricao, setDescricao] = React.useState<string>(
     conta?.descricao ?? "",
   );
@@ -157,7 +157,6 @@ export function ContaAvulsaDrawer(props: Props) {
   React.useEffect(() => {
     if (open && isEditar && conta) {
       setEmpresaId(conta.empresa_id);
-      setNatureza(conta.natureza);
       setDescricao(conta.descricao);
       setValor(String(Number(conta.valor)));
       setDataPrevista(conta.data_prevista_pagamento ?? "");
@@ -169,7 +168,6 @@ export function ContaAvulsaDrawer(props: Props) {
     }
     if (open && !isEditar) {
       setEmpresaId("");
-      setNatureza("saida");
       setDescricao("");
       setValor("");
       setDataPrevista("");
@@ -381,7 +379,7 @@ export function ContaAvulsaDrawer(props: Props) {
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>
             {props.mode === "criar"
-              ? "Registre uma conta avulsa de entrada ou saída sem vínculo com pedido de produção."
+              ? "Registre uma conta a pagar sem vínculo com pedido de produção."
               : "Edite os dados da conta avulsa. Empresa não pode ser alterada. Anexos não são modificados neste formulário."}
           </DialogDescription>
         </DialogHeader>
@@ -419,35 +417,6 @@ export function ContaAvulsaDrawer(props: Props) {
                 </SelectContent>
               </Select>
               {fieldErrors.empresa_id?.map((msg, i) => (
-                <p key={i} className="text-xs text-california-red">
-                  {msg}
-                </p>
-              ))}
-            </div>
-
-            {/* Natureza */}
-            <div className="space-y-2">
-              <Label>Natureza *</Label>
-              <div className="flex gap-3">
-                {(["saida", "entrada"] as const).map((n) => (
-                  <button
-                    key={n}
-                    type="button"
-                    onClick={() => setNatureza(n)}
-                    className={[
-                      "flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors",
-                      natureza === n
-                        ? n === "saida"
-                          ? "border-california-red bg-california-red/10 text-california-red"
-                          : "border-emerald-600 bg-emerald-50 text-emerald-700"
-                        : "border-border bg-white text-muted-foreground hover:bg-muted",
-                    ].join(" ")}
-                  >
-                    {n === "saida" ? "Saída" : "Entrada"}
-                  </button>
-                ))}
-              </div>
-              {fieldErrors.natureza?.map((msg, i) => (
                 <p key={i} className="text-xs text-california-red">
                   {msg}
                 </p>
