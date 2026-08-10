@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { PedidosCompraList, type PPRow } from "./pedidos-compra-list";
 import { ContasPagarTabs } from "./contas-pagar-tabs";
 import { ContasAvulsasList, type AvulsaRow } from "./avulsas-list";
+import { RecorrentesList, type RecorrenteRow } from "./recorrentes-list";
 import type { PPStatus, ContaBancaria, PlanoContaTipo, PlanoContaSubtipo } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -33,6 +34,8 @@ export default async function PedidosCompraFinanceiroPage() {
     fornecedoresRes,
     clientesRes,
     jobsRes,
+    recorrentesRes,
+    recorrentesAtivasCountRes,
   ] = await Promise.all([
     supabase
       .from("pedidos_compra")
@@ -134,10 +137,32 @@ export default async function PedidosCompraFinanceiroPage() {
       .neq("status", "cancelado")
       .order("created_at", { ascending: false })
       .limit(500),
+    // Recorrências (todos os status)
+    supabase
+      .from("contas_avulsas_recorrentes")
+      .select(`
+        id, descricao, valor, frequencia,
+        dia_do_mes, dia_quinzena_1, dia_quinzena_2, dia_do_ano_dia, dia_do_ano_mes,
+        proxima_data, data_fim, ativo,
+        fornecedor:fornecedores(nome, razao_social),
+        empresa:empresas(razao_social, nome_fantasia),
+        tipo:plano_contas_tipos!inner(codigo),
+        subtipo:plano_contas_subtipos!inner(nome)
+      `)
+      .eq("tenant_id", session.activeTenant.id)
+      .order("ativo", { ascending: false })
+      .order("proxima_data", { ascending: true }),
+    // Contagem de recorrências ativas
+    supabase
+      .from("contas_avulsas_recorrentes")
+      .select("id", { count: "exact", head: true })
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("ativo", true),
   ]);
 
   if (error) console.error("[financeiro.pp.list]", error.message);
   if (avulsasRes.error) console.error("[financeiro.avulsas.list]", avulsasRes.error.message);
+  if (recorrentesRes.error) console.error("[financeiro.recorrentes.list]", recorrentesRes.error.message);
 
   const rows: PPRow[] = ((data ?? []) as unknown as Array<{
     id: string;
@@ -246,6 +271,43 @@ export default async function PedidosCompraFinanceiroPage() {
     created_at: r.created_at,
   }));
 
+  // Mapeamento das recorrências para RecorrenteRow
+  const recorrentesRows: RecorrenteRow[] = ((recorrentesRes.data ?? []) as unknown as Array<{
+    id: string;
+    descricao: string;
+    valor: string | number;
+    frequencia: "mensal" | "quinzenal" | "anual";
+    dia_do_mes: number | null;
+    dia_quinzena_1: number | null;
+    dia_quinzena_2: number | null;
+    dia_do_ano_dia: number | null;
+    dia_do_ano_mes: number | null;
+    proxima_data: string;
+    data_fim: string | null;
+    ativo: boolean;
+    fornecedor: { nome: string | null; razao_social: string | null } | null;
+    empresa: { razao_social: string | null; nome_fantasia: string | null } | null;
+    tipo: { codigo: string } | null;
+    subtipo: { nome: string } | null;
+  }>).map((r) => ({
+    id: r.id,
+    descricao: r.descricao,
+    valor: Number(r.valor),
+    frequencia: r.frequencia,
+    dia_do_mes: r.dia_do_mes,
+    dia_quinzena_1: r.dia_quinzena_1,
+    dia_quinzena_2: r.dia_quinzena_2,
+    dia_do_ano_dia: r.dia_do_ano_dia,
+    dia_do_ano_mes: r.dia_do_ano_mes,
+    proxima_data: r.proxima_data,
+    data_fim: r.data_fim,
+    ativo: r.ativo,
+    fornecedor_nome: r.fornecedor?.razao_social ?? r.fornecedor?.nome ?? null,
+    empresa_nome: r.empresa?.razao_social ?? r.empresa?.nome_fantasia ?? "",
+    tipo_codigo: r.tipo?.codigo ?? "",
+    subtipo_nome: r.subtipo?.nome ?? "",
+  }));
+
   // Listas para os dropdowns do drawer de conta avulsa
   const empresasList = (empresasRes.data ?? []).map((e: { id: string; razao_social: string | null; nome_fantasia: string | null }) => ({
     id: e.id,
@@ -321,6 +383,19 @@ export default async function PedidosCompraFinanceiroPage() {
           />
         }
         avulsasPendentesCount={avulsasPendentesCountRes.count ?? 0}
+        recorrentes={
+          <RecorrentesList
+            rows={recorrentesRows}
+            tenantId={session.activeTenant.id}
+            empresas={empresasList}
+            tipos={tiposRes.data ?? []}
+            subtipos={subtiposRes.data ?? []}
+            fornecedores={fornecedoresList}
+            clientes={clientesList}
+            jobs={jobsList}
+          />
+        }
+        recorrentesAtivasCount={recorrentesAtivasCountRes.count ?? 0}
       />
     </div>
   );

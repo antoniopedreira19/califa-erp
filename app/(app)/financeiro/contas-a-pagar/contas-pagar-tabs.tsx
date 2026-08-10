@@ -8,19 +8,25 @@ interface Props {
   pps: React.ReactNode;
   /** Contagem de PPs em avaliação — vira badge. */
   ppsPendentesCount: number;
-  /** Conteúdo da aba de avulsas (placeholder até Task 8). */
+  /** Conteúdo da aba de avulsas. */
   avulsas: React.ReactNode;
   /** Contagem de avulsas pendentes — vira badge. */
   avulsasPendentesCount: number;
+  /** Conteúdo da aba de recorrências. */
+  recorrentes: React.ReactNode;
+  /** Contagem de recorrências ativas — vira badge. */
+  recorrentesAtivasCount: number;
 }
 
-type TabKey = "pps" | "avulsas";
+type TabKey = "pps" | "avulsas" | "recorrentes";
 
 export function ContasPagarTabs({
   pps,
   ppsPendentesCount,
   avulsas,
   avulsasPendentesCount,
+  recorrentes,
+  recorrentesAtivasCount,
 }: Props) {
   const [tab, setTab] = React.useState<TabKey>("pps");
 
@@ -47,6 +53,14 @@ export function ContasPagarTabs({
             </span>
           )}
         </TabButton>
+        <TabButton active={tab === "recorrentes"} onClick={() => setTab("recorrentes")}>
+          Recorrências
+          {recorrentesAtivasCount > 0 && (
+            <span className="ml-1.5 inline-flex h-[17px] min-w-[17px] items-center justify-center rounded-full bg-california-red px-1 text-[10px] font-bold text-white">
+              {recorrentesAtivasCount}
+            </span>
+          )}
+        </TabButton>
       </div>
 
       <div
@@ -62,6 +76,13 @@ export function ContasPagarTabs({
         className={cn(tab === "avulsas" ? "" : "hidden")}
       >
         {avulsas}
+      </div>
+      <div
+        role="tabpanel"
+        aria-hidden={tab !== "recorrentes"}
+        className={cn(tab === "recorrentes" ? "" : "hidden")}
+      >
+        {recorrentes}
       </div>
     </div>
   );
