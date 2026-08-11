@@ -1101,3 +1101,29 @@ export interface ContaAvulsaHistorico {
   alterado_por: string;
   alterado_em: string;
 }
+
+// ---------- Task 014: rateio regional de contas avulsas ----------
+
+export interface ContaAvulsaRateio {
+  id: string;
+  tenant_id: string;
+  conta_avulsa_id: string;
+  regional_id: string;
+  percentual: string;  // numeric → string do supabase-js
+  created_at: string;
+}
+
+export interface ContaAvulsaRecorrenteRateio {
+  id: string;
+  tenant_id: string;
+  recorrente_id: string;
+  regional_id: string;
+  percentual: string;
+  created_at: string;
+}
+
+/** Linha de rateio no cliente (com percentual como número — o form). */
+export interface RateioLinhaInput {
+  regional_id: string;
+  percentual: number;
+}
