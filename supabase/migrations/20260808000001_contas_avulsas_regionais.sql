@@ -157,3 +157,5 @@ create constraint trigger trg_rec_rateio_soma
   after insert or update or delete on public.contas_avulsas_recorrentes_regionais
   deferrable initially deferred
   for each row execute function public.enforce_rateio_soma_100_recorrente();
+
+-- GRANTs por tabela acima (padrão do projeto: grant select/insert/update/delete segue cada bloco de CREATE TABLE + RLS, sem GRANT geral no fim do arquivo).
