@@ -348,8 +348,20 @@ export async function editarContaRecorrente(
     const { error: insErr } = await supabase
       .from("contas_avulsas_recorrentes_regionais")
       .insert(novasRows);
-    if (insErr)
+    if (insErr) {
+      // Compensação: restaura rateio anterior para não deixar a recorrência sem rateio.
+      if ((rateioAtual ?? []).length > 0) {
+        await supabase.from("contas_avulsas_recorrentes_regionais").insert(
+          (rateioAtual ?? []).map((r) => ({
+            tenant_id: session.activeTenant.id,
+            recorrente_id: id,
+            regional_id: r.regional_id,
+            percentual: r.percentual,
+          })),
+        );
+      }
       return { ok: false, message: `Falha ao salvar rateio: ${insErr.message}` };
+    }
 
     await logAuditEvent({
       acao: "conta_recorrente.rateio_alterado",
