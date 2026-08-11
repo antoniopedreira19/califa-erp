@@ -1122,8 +1122,6 @@ export interface ContaAvulsaRecorrenteRateio {
   created_at: string;
 }
 
-/** Linha de rateio no cliente (com percentual como número — o form). */
-export interface RateioLinhaInput {
-  regional_id: string;
-  percentual: number;
-}
+/** Linha de rateio no cliente (com percentual como número — o form).
+ *  Fonte-verdade: schema Zod em lib/validations/conta-avulsa.ts. */
+export type { RateioLinhaInput } from "@/lib/validations/conta-avulsa";
