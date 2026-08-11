@@ -47,16 +47,10 @@ export function JobGrupoCard({
 }: Props) {
   return (
     <div className="rounded-2xl border border-border bg-card shadow-soft">
-      <div className="flex h-[49px] items-center justify-between gap-3 rounded-t-2xl border-b border-border bg-muted/40 px-6">
-        <TruncateTooltip
-          as="h3"
-          text={grupo.nome}
-          className="text-base font-semibold text-foreground"
-        />
-        <span className="text-xs text-muted-foreground">
-          {itens.length} {itens.length === 1 ? "item" : "itens"}
-        </span>
-      </div>
+      {/* A tabela abre o card: o nome do agrupamento vive na faixa dela,
+          ao lado de ORÇADO / PLANEJADO / REALIZADO, e o contador foi para
+          a calha à direita. A barra de título de antes só segurava esses
+          dois e custava uma linha inteira de altura. */}
       <JobItemRealizadoTable
         jobId={jobId}
         itens={itens}
@@ -72,6 +66,18 @@ export function JobGrupoCard({
         bvsPorItem={bvsPorItem}
         versaoLabel={versaoLabel}
         grupoNome={grupo.nome}
+        cabecalhoGrupo={
+          <TruncateTooltip
+            as="h3"
+            text={grupo.nome}
+            className="text-base font-semibold text-foreground"
+          />
+        }
+        acoesGrupo={
+          <span className="whitespace-nowrap text-xs text-muted-foreground">
+            {itens.length} {itens.length === 1 ? "item" : "itens"}
+          </span>
+        }
       />
     </div>
   );

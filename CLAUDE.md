@@ -52,6 +52,17 @@ No MVP, o gerente de projetos conversa com o cliente fora do sistema. O sistema 
 
 Regressões de performance já custaram 2 iterações completas ao projeto — a última travou navegação a 33s. `docs/PERFORMANCE.md` documenta os case studies e os anti-padrões proibidos.
 
+## Planilhas: cor e grade (regra transversal)
+
+**Antes de tocar em qualquer planilha de orçamento ou job, leia as seções "Cores das planilhas", "Grades compartilhadas" e "Faixa do agrupamento" de `docs/09-identidade-visual-ui.md`.**
+
+**Regras não negociáveis:**
+- Cor de bloco vem de `app/(app)/_planilha/blocos.ts` — ORÇADO azul, PLANEJADO verde, REALIZADO laranja, RENTABILIDADE grafite. **Nunca escrever hex de bloco direto no JSX.**
+- Planilha e card de Totais da mesma tela usam o MESMO `colgroup`, com `table-fixed`. Layout automático em planilha ou Totais é proibido: as duas tabelas nunca alinham.
+- Valor de rentabilidade é sempre grafite, positivo ou negativo. Verde agora é do PLANEJADO.
+
+As mesmas cores estavam repetidas em 8 arquivos e já haviam divergido entre si; a visão agregada de jobs ficou 1 semana com as colunas dos Totais desalinhadas das da planilha por usar largura automática. `docs/09-identidade-visual-ui.md` tem os case studies.
+
 ## Ortografia em português (regra transversal)
 
 **Toda string que aparece pro usuário DEVE ter ortografia em pt-BR correta — com acentos, cedilha e til.** Sem exceção.

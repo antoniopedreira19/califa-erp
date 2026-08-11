@@ -60,56 +60,64 @@ export function GrupoRascunhoCard({
       ),
   );
 
-  return (
-    <div className="rounded-2xl border border-border bg-card shadow-soft">
-      <div className="flex items-center gap-3 rounded-t-2xl border-b border-border bg-muted/40 px-6 py-3">
+  /** Identidade do grupo — mora na faixa do thead, ao lado de ORÇADO /
+   *  PLANEJADO / RENTABILIDADE. Aqui o nome é editado direto, sem passo
+   *  de confirmação: nesta tela o usuário monta vários orçamentos em
+   *  sequência e cada clique a mais é atrito. */
+  const cabecalho = (
+    <div className="flex min-w-0 items-center gap-2.5">
+      <button
+        type="button"
+        onClick={() => setAberto((v) => !v)}
+        title={aberto ? "Ocultar itens do grupo" : "Mostrar itens do grupo"}
+        aria-expanded={aberto}
+        className="inline-flex h-6 w-6 flex-none items-center justify-center rounded-md border border-border bg-white text-muted-foreground hover:text-california-red hover:border-california-red/40 transition-colors"
+      >
+        <ChevronDown
+          className={cn(
+            "h-3.5 w-3.5 transition-transform duration-150",
+            !aberto && "-rotate-90",
+          )}
+        />
+      </button>
+
+      {readOnly ? (
+        <span className="truncate px-1.5 py-1 text-base font-semibold text-foreground">
+          {grupo.nome}
+        </span>
+      ) : (
+        <input
+          value={grupo.nome}
+          onChange={(e) => onRenomear(e.target.value)}
+          placeholder="Nome do grupo"
+          aria-label="Nome do grupo"
+          className="w-full min-w-0 rounded-md bg-transparent px-1.5 py-1 text-base font-semibold text-foreground outline-none transition-colors hover:bg-muted/60 focus:bg-white focus:ring-2 focus:ring-california-red/15"
+        />
+      )}
+    </div>
+  );
+
+  /** Contador e remover: calha à direita da tabela, na altura da faixa. */
+  const acoes = (
+    <div className="flex items-center gap-1.5 whitespace-nowrap">
+      <span className="text-xs text-muted-foreground">
+        {grupo.itens.length} {grupo.itens.length === 1 ? "item" : "itens"}
+      </span>
+      {!readOnly && (
         <button
           type="button"
-          onClick={() => setAberto((v) => !v)}
-          title={aberto ? "Ocultar itens do grupo" : "Mostrar itens do grupo"}
-          aria-expanded={aberto}
-          className="inline-flex h-6 w-6 flex-none items-center justify-center rounded-md border border-border bg-white text-muted-foreground hover:text-california-red hover:border-california-red/40 transition-colors"
+          onClick={() => setAskRemover(true)}
+          title="Remover grupo"
+          className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-california-red"
         >
-          <ChevronDown
-            className={cn(
-              "h-3.5 w-3.5 transition-transform duration-150",
-              !aberto && "-rotate-90",
-            )}
-          />
+          <Trash2 className="h-4 w-4" />
         </button>
+      )}
+    </div>
+  );
 
-        {readOnly ? (
-          <span className="px-1.5 py-1 text-base font-semibold text-foreground">
-            {grupo.nome}
-          </span>
-        ) : (
-          <input
-            value={grupo.nome}
-            onChange={(e) => onRenomear(e.target.value)}
-            placeholder="Nome do grupo"
-            aria-label="Nome do grupo"
-            className="w-[280px] max-w-full rounded-md bg-transparent px-1.5 py-1 text-base font-semibold text-foreground outline-none transition-colors hover:bg-white focus:bg-white focus:ring-2 focus:ring-california-red/15"
-          />
-        )}
-
-        <span className="text-xs text-muted-foreground">
-          {grupo.itens.length} {grupo.itens.length === 1 ? "item" : "itens"}
-        </span>
-
-        <div className="flex-1" />
-
-        {!readOnly && (
-          <button
-            type="button"
-            onClick={() => setAskRemover(true)}
-            title="Remover grupo"
-            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-california-red"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
-        )}
-      </div>
-
+  return (
+    <div className="rounded-2xl border border-border bg-card shadow-soft">
       <ItensTable
         grupoId={grupo.id}
         grupoNome={grupo.nome}
@@ -123,6 +131,8 @@ export function GrupoRascunhoCard({
         versaoLabel="v1"
         adaptador={adaptador}
         adaptadorBv={adaptadorBv}
+        cabecalhoGrupo={cabecalho}
+        acoesGrupo={acoes}
       />
 
       <ConfirmDialog

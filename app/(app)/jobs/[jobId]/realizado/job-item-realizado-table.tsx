@@ -23,6 +23,15 @@ import {
   BvActionButton,
   LARGURA_CALHA_BV,
 } from "@/app/(app)/_bv/bv-action-button";
+import {
+  ORCADO,
+  PLANEJADO,
+  REALIZADO,
+  FAIXA_ROTULO,
+  FAIXA_GRUPO,
+  RENTAB_VALOR,
+} from "@/app/(app)/_planilha/blocos";
+import { ColunasJob, LARGURA_MINIMA_JOB } from "@/app/(app)/_planilha/grade-job";
 
 interface Props {
   jobId: string;
@@ -43,6 +52,12 @@ interface Props {
   /** "v5" — aparece no subtítulo do formulário de BV. */
   versaoLabel: string;
   grupoNome: string;
+  /** Identidade do grupo — mora na PRIMEIRA linha do thead, na mesma
+   *  faixa de ORÇADO / PLANEJADO / REALIZADO. O card não tem mais barra
+   *  de título só para isso. */
+  cabecalhoGrupo?: React.ReactNode;
+  /** Contador de itens do grupo, na calha à direita da faixa. */
+  acoesGrupo?: React.ReactNode;
 }
 
 /** BV e Pedido de Produção não coexistem na calha: em A e D o cliente
@@ -83,12 +98,8 @@ type CelulaAtiva = { itemId: string; campo: CampoRealizado } | null;
 type Overrides = Record<string, Partial<Record<CampoRealizado, number>>>;
 
 const ALTURA_LINHA = "h-[34px]";
-const LARGURA_MINIMA = "min-w-[1160px]";
 
 const GRADE_NEUTRA = "border-r border-r-[#f1f1f1]";
-const GRADE_ORCADO = "border-r border-r-[#eceae5]";
-const GRADE_PLANEJADO = "border-r border-r-[#e6eff9]";
-const GRADE_REALIZADO = "border-r border-r-[#fde8b8]";
 
 const CAMPO_CLASSES =
   "h-7 w-full rounded-lg border border-california-red bg-white px-2 text-xs text-foreground outline-none ring-2 ring-california-red/15";
@@ -111,32 +122,6 @@ function formatarPercentual(p: number): string {
   return `${p.toFixed(1).replace(".", ",")}%`;
 }
 
-function ColunasFixas() {
-  return (
-    <colgroup>
-      {/* Item com largura propria: se ficar sem, ele absorve toda folga
-          que eu tirar das outras e a tabela volta a estourar pelas bordas. */}
-      <col className="w-[18%]" />
-      <col className="w-[4%]" />
-      <col className="w-[8.5%]" />
-      {/* Orcado */}
-      <col className="w-[7.5%]" />
-      <col className="w-[3%]" />
-      <col className="w-[3%]" />
-      <col className="w-[8.5%]" />
-      {/* Planejado */}
-      <col className="w-[7.5%]" />
-      <col className="w-[3%]" />
-      <col className="w-[3%]" />
-      <col className="w-[8.5%]" />
-      {/* Realizado */}
-      <col className="w-[7.5%]" />
-      <col className="w-[3%]" />
-      <col className="w-[3%]" />
-      <col className="w-[8.5%]" />
-    </colgroup>
-  );
-}
 
 /** Célula "R$ x,xx / y,y%" usada nas linhas de Rentabilidade do rodapé. */
 function CelulaRentabilidade({
@@ -187,6 +172,8 @@ export function JobItemRealizadoTable({
   bvsPorItem,
   versaoLabel,
   grupoNome,
+  cabecalhoGrupo,
+  acoesGrupo,
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
@@ -197,7 +184,9 @@ export function JobItemRealizadoTable({
   // Rail lateral PP
   const wrapperRef = React.useRef<HTMLDivElement>(null);
   const tbodyRef = React.useRef<HTMLTableSectionElement>(null);
+  const faixaRef = React.useRef<HTMLTableRowElement>(null);
   const [railTop, setRailTop] = React.useState(0);
+  const [faixaAltura, setFaixaAltura] = React.useState(0);
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [itemIdAtual, setItemIdAtual] = React.useState<string | null>(null);
   const [bvAberto, setBvAberto] = React.useState<ItemPlanilhaJob | null>(null);
@@ -221,10 +210,14 @@ export function JobItemRealizadoTable({
     const wrapper = wrapperRef.current;
     const tbody = tbodyRef.current;
     if (!wrapper || !tbody) return;
-    const medir = () =>
-      setRailTop(
-        tbody.getBoundingClientRect().top - wrapper.getBoundingClientRect().top,
-      );
+    const medir = () => {
+      const topoWrapper = wrapper.getBoundingClientRect().top;
+      setRailTop(tbody.getBoundingClientRect().top - topoWrapper);
+      // A calha do grupo se alinha pela faixa medida, não por altura
+      // chutada — o thead muda de altura conforme a fonte carrega.
+      const faixa = faixaRef.current;
+      if (faixa) setFaixaAltura(faixa.getBoundingClientRect().height);
+    };
     medir();
     const observer = new ResizeObserver(medir);
     observer.observe(wrapper);
@@ -366,30 +359,34 @@ export function JobItemRealizadoTable({
       )}
 
       <div ref={wrapperRef} className="relative">
-      <div className="overflow-x-auto rounded-b-2xl">
+      {/* Com o nome do grupo na faixa, a tabela abre e fecha o card. */}
+      <div
+        className={cn(
+          "overflow-x-auto rounded-b-2xl",
+          cabecalhoGrupo && !erro && "rounded-t-2xl",
+        )}
+      >
         <table
-          className={cn("w-full table-fixed text-sm border-collapse", LARGURA_MINIMA)}
+          className={cn(
+            "w-full table-fixed text-sm border-collapse",
+            LARGURA_MINIMA_JOB,
+          )}
         >
-          <ColunasFixas />
+          <ColunasJob />
           <thead className="text-[10px] uppercase tracking-wider text-muted-foreground">
-            <tr>
-              <th colSpan={3} className="bg-muted/40 border-b border-border" />
-              <th
-                colSpan={4}
-                className="text-center px-3 py-2 text-[11px] font-extrabold tracking-[0.1em] normal-case text-foreground bg-[#f1f0ec] border-b-[3px] border-b-[#282828] border-l-2 border-l-[#d7d7d7]"
-              >
+            {/* Linha 1 — o nome do agrupamento divide a faixa com os
+                blocos, em vez de ocupar uma barra só dele acima. */}
+            <tr ref={faixaRef}>
+              <th colSpan={3} className={FAIXA_GRUPO}>
+                {cabecalhoGrupo}
+              </th>
+              <th colSpan={4} className={cn(FAIXA_ROTULO, ORCADO.faixa)}>
                 ORÇADO
               </th>
-              <th
-                colSpan={4}
-                className="text-center px-3 py-2 text-[11px] font-extrabold tracking-[0.1em] normal-case text-[#1e4fa3] bg-[#e8f0fd] border-b-[3px] border-b-[#2f6fdb] border-l-2 border-l-[#b9d1f4]"
-              >
+              <th colSpan={4} className={cn(FAIXA_ROTULO, PLANEJADO.faixa)}>
                 PLANEJADO
               </th>
-              <th
-                colSpan={4}
-                className="text-center px-3 py-2 text-[11px] font-extrabold tracking-[0.1em] normal-case text-[#92400e] bg-[#fef3c7] border-b-[3px] border-b-[#d97706] border-l-2 border-l-[#f0c874]"
-              >
+              <th colSpan={4} className={cn(FAIXA_ROTULO, REALIZADO.faixa)}>
                 REALIZADO
               </th>
             </tr>
@@ -398,20 +395,20 @@ export function JobItemRealizadoTable({
               <th className="text-left font-semibold px-3 py-2 border-r border-r-border">Tipo</th>
               <th className="text-left font-semibold px-3 py-2 border-r border-r-border">Categoria</th>
               {/* Orcado */}
-              <th className="text-right font-semibold px-3 py-2 border-l-2 border-l-[#e4e2dd] border-r border-r-border">R$ Unit.</th>
-              <th className="text-right font-semibold px-3 py-2 border-r border-r-border">QT</th>
-              <th className="text-right font-semibold px-3 py-2 border-r border-r-border">D/M</th>
-              <th className="text-right font-semibold px-3 py-2">Total</th>
+              <th className={cn("text-right font-semibold px-3 py-2", ORCADO.cabecalhoAbre)}>R$ Unit.</th>
+              <th className={cn("text-right font-semibold px-3 py-2", ORCADO.cabecalhoMeio)}>QT</th>
+              <th className={cn("text-right font-semibold px-3 py-2", ORCADO.cabecalhoMeio)}>D/M</th>
+              <th className={cn("text-right font-semibold px-3 py-2", ORCADO.cabecalhoFim)}>Total</th>
               {/* Planejado */}
-              <th className="text-right font-semibold px-3 py-2 bg-blue-50/60 text-[#5a76a8] border-l-2 border-l-[#cfe0f7] border-r border-r-[#dfeafb]">R$ Unit.</th>
-              <th className="text-right font-semibold px-3 py-2 bg-blue-50/60 text-[#5a76a8] border-r border-r-[#dfeafb]">QT</th>
-              <th className="text-right font-semibold px-3 py-2 bg-blue-50/60 text-[#5a76a8] border-r border-r-[#dfeafb]">D/M</th>
-              <th className="text-right font-semibold px-3 py-2 bg-blue-50/60 text-[#5a76a8]">Total</th>
+              <th className={cn("text-right font-semibold px-3 py-2", PLANEJADO.cabecalhoAbre)}>R$ Unit.</th>
+              <th className={cn("text-right font-semibold px-3 py-2", PLANEJADO.cabecalhoMeio)}>QT</th>
+              <th className={cn("text-right font-semibold px-3 py-2", PLANEJADO.cabecalhoMeio)}>D/M</th>
+              <th className={cn("text-right font-semibold px-3 py-2", PLANEJADO.cabecalhoFim)}>Total</th>
               {/* Realizado */}
-              <th className="text-right font-semibold px-3 py-2 bg-[#fef3c7]/70 text-[#92400e] border-l-2 border-l-[#f0c874] border-r border-r-[#fde8b8]">R$ Unit.</th>
-              <th className="text-right font-semibold px-3 py-2 bg-[#fef3c7]/70 text-[#92400e] border-r border-r-[#fde8b8]">QT</th>
-              <th className="text-right font-semibold px-3 py-2 bg-[#fef3c7]/70 text-[#92400e] border-r border-r-[#fde8b8]">D/M</th>
-              <th className="text-right font-semibold px-3 py-2 bg-[#fef3c7]/70 text-[#92400e]">Total</th>
+              <th className={cn("text-right font-semibold px-3 py-2", REALIZADO.cabecalhoAbre)}>R$ Unit.</th>
+              <th className={cn("text-right font-semibold px-3 py-2", REALIZADO.cabecalhoMeio)}>QT</th>
+              <th className={cn("text-right font-semibold px-3 py-2", REALIZADO.cabecalhoMeio)}>D/M</th>
+              <th className={cn("text-right font-semibold px-3 py-2", REALIZADO.cabecalhoFim)}>Total</th>
             </tr>
           </thead>
 
@@ -449,35 +446,35 @@ export function JobItemRealizadoTable({
                     )}
                   </td>
                   {/* Orcado (RO) */}
-                  <td className={cn("px-3 text-right text-xs font-mono align-middle bg-black/[0.015] border-l-2 border-l-[#e4e2dd]", GRADE_ORCADO)}>
+                  <td className={cn("px-3 text-right text-xs font-mono align-middle", ORCADO.celulaAbre)}>
                     {formatCurrency(Number(item.valor_unitario_orcado ?? 0), moeda)}
                   </td>
-                  <td className={cn("px-3 text-right text-xs align-middle bg-black/[0.015]", GRADE_ORCADO)}>
+                  <td className={cn("px-3 text-right text-xs align-middle", ORCADO.celulaMeio)}>
                     {Number(item.quantidade_orcada ?? 0)}
                   </td>
-                  <td className={cn("px-3 text-right text-xs align-middle bg-black/[0.015]", GRADE_ORCADO)}>
+                  <td className={cn("px-3 text-right text-xs align-middle", ORCADO.celulaMeio)}>
                     {Number(item.dias_meses_orcado ?? 0)}
                   </td>
-                  <td className="px-3 text-right text-xs font-mono font-semibold align-middle bg-black/[0.015] whitespace-nowrap">
+                  <td className={cn("px-3 text-right text-xs font-mono font-semibold align-middle whitespace-nowrap", ORCADO.celulaTotal)}>
                     {formatCurrency(Number(item.total_orcado ?? 0), moeda)}
                   </td>
                   {/* Planejado (RO) */}
-                  <td className={cn("px-3 text-right text-xs font-mono align-middle bg-blue-50/40 border-l-2 border-l-[#cfe0f7]", GRADE_PLANEJADO)}>
+                  <td className={cn("px-3 text-right text-xs font-mono align-middle", PLANEJADO.celulaAbre)}>
                     {Number(item.valor_unitario_planejado ?? 0) > 0
                       ? formatCurrency(Number(item.valor_unitario_planejado), moeda)
                       : "—"}
                   </td>
-                  <td className={cn("px-3 text-right text-xs align-middle bg-blue-50/40", GRADE_PLANEJADO)}>
+                  <td className={cn("px-3 text-right text-xs align-middle", PLANEJADO.celulaMeio)}>
                     {Number(item.quantidade_planejada ?? 0) > 0
                       ? Number(item.quantidade_planejada)
                       : "—"}
                   </td>
-                  <td className={cn("px-3 text-right text-xs align-middle bg-blue-50/40", GRADE_PLANEJADO)}>
+                  <td className={cn("px-3 text-right text-xs align-middle", PLANEJADO.celulaMeio)}>
                     {Number(item.dias_meses_planejado ?? 0) > 0
                       ? Number(item.dias_meses_planejado)
                       : "—"}
                   </td>
-                  <td className="px-3 text-right text-xs font-mono font-semibold align-middle bg-blue-50/40 whitespace-nowrap">
+                  <td className={cn("px-3 text-right text-xs font-mono font-semibold align-middle whitespace-nowrap", PLANEJADO.celulaTotal)}>
                     {Number(item.total_planejado ?? 0) > 0
                       ? formatCurrency(Number(item.total_planejado), moeda)
                       : "—"}
@@ -492,7 +489,7 @@ export function JobItemRealizadoTable({
                     onAtivar={() => setAtiva({ itemId: item.id, campo: "valor_unitario_realizado" })}
                     onConfirmar={(raw) => confirmarNumero(item.id, "valor_unitario_realizado", raw)}
                     onCancelar={() => setAtiva(null)}
-                    tdClassName={cn("bg-[#fef3c7]/40 border-l-2 border-l-[#f0c874] font-mono", GRADE_REALIZADO)}
+                    tdClassName={cn("font-mono", REALIZADO.celulaAbre)}
                   />
                   <CelulaRealNum
                     valor={valorRealizado(item.id, "quantidade_realizada")}
@@ -501,7 +498,7 @@ export function JobItemRealizadoTable({
                     onAtivar={() => setAtiva({ itemId: item.id, campo: "quantidade_realizada" })}
                     onConfirmar={(raw) => confirmarNumero(item.id, "quantidade_realizada", raw)}
                     onCancelar={() => setAtiva(null)}
-                    tdClassName={cn("bg-[#fef3c7]/40", GRADE_REALIZADO)}
+                    tdClassName={REALIZADO.celulaMeio}
                   />
                   <CelulaRealNum
                     valor={valorRealizado(item.id, "dias_meses_realizado")}
@@ -510,9 +507,9 @@ export function JobItemRealizadoTable({
                     onAtivar={() => setAtiva({ itemId: item.id, campo: "dias_meses_realizado" })}
                     onConfirmar={(raw) => confirmarNumero(item.id, "dias_meses_realizado", raw)}
                     onCancelar={() => setAtiva(null)}
-                    tdClassName={cn("bg-[#fef3c7]/40", GRADE_REALIZADO)}
+                    tdClassName={REALIZADO.celulaMeio}
                   />
-                  <td className="px-3 text-right text-xs font-mono font-semibold align-middle bg-[#fef3c7]/40 whitespace-nowrap">
+                  <td className={cn("px-3 text-right text-xs font-mono font-semibold align-middle whitespace-nowrap", REALIZADO.celulaTotal)}>
                     {totalReal > 0 ? formatCurrency(totalReal, moeda) : "—"}
                   </td>
                 </tr>
@@ -525,16 +522,16 @@ export function JobItemRealizadoTable({
               <td colSpan={3} className="px-3 py-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                 Subtotal do grupo
               </td>
-              <td colSpan={3} className="bg-[#f1f0ec] border-l-2 border-l-[#d7d7d7] border-t-2 border-t-[#282828]" />
-              <td className="px-3 py-3 text-right whitespace-nowrap font-mono text-[13px] font-bold text-foreground bg-[#f1f0ec] border-t-2 border-t-[#282828]">
+              <td colSpan={3} className={ORCADO.subtotalVazio} />
+              <td className={cn("px-3 py-3 text-right whitespace-nowrap font-mono text-[13px] font-bold", ORCADO.subtotalValor)}>
                 {formatCurrency(subtotais.orcado, moeda)}
               </td>
-              <td colSpan={3} className="bg-[#e8f0fd] border-l-2 border-l-[#b9d1f4] border-t-2 border-t-[#2f6fdb]" />
-              <td className="px-3 py-3 text-right whitespace-nowrap font-mono text-[13px] font-bold text-[#1e4fa3] bg-[#e8f0fd] border-t-2 border-t-[#2f6fdb]">
+              <td colSpan={3} className={PLANEJADO.subtotalVazio} />
+              <td className={cn("px-3 py-3 text-right whitespace-nowrap font-mono text-[13px] font-bold", PLANEJADO.subtotalValor)}>
                 {formatCurrency(subtotais.planejado, moeda)}
               </td>
-              <td colSpan={3} className="bg-[#fef3c7] border-l-2 border-l-[#f0c874] border-t-2 border-t-[#d97706]" />
-              <td className="px-3 py-3 text-right whitespace-nowrap font-mono text-[13px] font-bold text-[#92400e] bg-[#fef3c7] border-t-2 border-t-[#d97706]">
+              <td colSpan={3} className={REALIZADO.subtotalVazio} />
+              <td className={cn("px-3 py-3 text-right whitespace-nowrap font-mono text-[13px] font-bold", REALIZADO.subtotalValor)}>
                 {subtotais.realizado > 0 ? formatCurrency(subtotais.realizado, moeda) : "—"}
               </td>
             </tr>
@@ -542,31 +539,42 @@ export function JobItemRealizadoTable({
               <td colSpan={3} className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground border-t border-t-border">
                 Rentabilidade
               </td>
-              <td colSpan={4} className="bg-[#f1f0ec] border-l-2 border-l-[#d7d7d7] border-t border-t-[#e4e2dd]" />
-              <td colSpan={3} className="bg-[#e8f0fd] border-l-2 border-l-[#b9d1f4] border-t border-t-[#cfe0f7]" />
-              <td className="px-3 py-2 text-right whitespace-nowrap bg-[#e8f0fd] border-t border-t-[#cfe0f7]">
+              <td colSpan={4} className={cn("border-t border-t-[#dfeafb]", ORCADO.celulaVazia)} />
+              <td colSpan={3} className={cn("border-t border-t-[#dcf5e8]", PLANEJADO.celulaVazia)} />
+              <td className={cn("px-3 py-2 text-right whitespace-nowrap border-t border-t-[#dcf5e8]", PLANEJADO.celulaTotal)}>
                 <CelulaRentabilidade
                   orcado={subtotais.orcado}
                   custo={subtotais.planejado}
                   moeda={moeda}
-                  corValor="text-[#1e4fa3]"
-                  corPercentual="text-[#5a76a8]"
+                  corValor={RENTAB_VALOR}
+                  corPercentual={RENTAB_VALOR}
                 />
               </td>
-              <td colSpan={3} className="bg-[#fef3c7] border-l-2 border-l-[#f0c874] border-t border-t-[#f0c874]" />
-              <td className="px-3 py-2 text-right whitespace-nowrap bg-[#fef3c7] border-t border-t-[#f0c874]">
+              <td colSpan={3} className={cn("border-t border-t-[#fbd8b8]", REALIZADO.celulaVazia)} />
+              <td className={cn("px-3 py-2 text-right whitespace-nowrap border-t border-t-[#fbd8b8]", REALIZADO.celulaTotal)}>
                 <CelulaRentabilidade
                   orcado={subtotais.orcado}
                   custo={subtotais.realizado}
                   moeda={moeda}
-                  corValor="text-[#92400e]"
-                  corPercentual="text-[#a3703a]"
+                  corValor={RENTAB_VALOR}
+                  corPercentual={RENTAB_VALOR}
                 />
               </td>
             </tr>
           </tfoot>
         </table>
       </div>
+
+      {/* Contador do grupo — calha à direita, na altura exata da faixa.
+          É para lá que ele foi quando a barra de título do card saiu. */}
+      {acoesGrupo && (
+        <div
+          className="absolute left-full top-0 ml-2.5 flex items-center"
+          style={{ height: faixaAltura || undefined }}
+        >
+          {acoesGrupo}
+        </div>
+      )}
 
       {/* Fora do frame do card, como no design. A calha que recebe estes
           botões é reservada por JobRealizadoSection — sem ela a trilha era

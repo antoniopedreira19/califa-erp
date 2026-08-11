@@ -11,7 +11,17 @@ import {
   type VersaoOrcamentoGrupo,
   type VersaoOrcamentoItem,
 } from "@/lib/types";
-import { ColunasFixas, LARGURA_MINIMA } from "./grade-colunas";
+import {
+  ColunasFixas,
+  LARGURA_MINIMA,
+} from "@/app/(app)/_planilha/grade-orcamento";
+import {
+  ORCADO,
+  PLANEJADO,
+  RENTABILIDADE,
+  FAIXA_ROTULO,
+  RENTAB_VALOR,
+} from "@/app/(app)/_planilha/blocos";
 
 interface Props {
   grupos: VersaoOrcamentoGrupo[];
@@ -23,13 +33,9 @@ interface Props {
 
 const TIPOS: TipoCusto[] = ["A", "B", "C", "D"];
 
-// Mesmas bandas de cor da grade de itens — a vista de Totais precisa
-// "rimar" com a tela de edição. As duas primeiras vestem as células
-// vazias que ocupam as colunas de detalhe (unitário, QT, D/M).
-const CELULA_ORCADO = "border-l-2 border-l-[#e4e2dd] bg-black/[0.015]";
-const CELULA_PLANEJADO = "border-l-2 border-l-[#cfe0f7] bg-[#f7fbff]";
-const CELULA_RENTAB =
-  "border-l-2 border-l-[#e4e2dd] border-r border-r-[#d9efe3]";
+// As bandas de cor vêm do mesmo módulo da grade de itens — a vista de
+// Totais precisa "rimar" com a tela de edição, e uma cor só muda em um
+// lugar.
 
 export function TotaisCard({
   grupos,
@@ -96,22 +102,13 @@ export function TotaisCard({
             {/* Linha 1 — faixas de bloco */}
             <tr>
               <th colSpan={3} className="bg-muted/40 border-b border-border" />
-              <th
-                colSpan={4}
-                className="text-center px-3 py-2 text-[11px] font-extrabold tracking-[0.1em] text-foreground bg-[#f1f0ec] border-b-[3px] border-b-[#282828] border-l-2 border-l-[#d7d7d7]"
-              >
+              <th colSpan={4} className={cn(FAIXA_ROTULO, ORCADO.faixa)}>
                 ORÇADO
               </th>
-              <th
-                colSpan={4}
-                className="text-center px-3 py-2 text-[11px] font-extrabold tracking-[0.1em] text-[#1e4fa3] bg-[#e8f0fd] border-b-[3px] border-b-[#2f6fdb] border-l-2 border-l-[#b9d1f4]"
-              >
+              <th colSpan={4} className={cn(FAIXA_ROTULO, PLANEJADO.faixa)}>
                 PLANEJADO
               </th>
-              <th
-                colSpan={2}
-                className="text-center px-3 py-2 text-[11px] font-extrabold tracking-[0.08em] text-emerald-700 bg-emerald-50 border-b-[3px] border-b-emerald-600 border-l-2 border-l-[#d7d7d7]"
-              >
+              <th colSpan={2} className={cn(FAIXA_ROTULO, RENTABILIDADE.faixa)}>
                 RENTABILIDADE
               </th>
             </tr>
@@ -121,19 +118,30 @@ export function TotaisCard({
               <th colSpan={3} className="text-left px-3 py-2">
                 Agrupamento
               </th>
-              <th colSpan={3} className="border-l-2 border-l-[#e4e2dd]" />
-              <th className="text-right px-3 py-2">Total</th>
-              <th
-                colSpan={3}
-                className="bg-[#f2f7fe] border-l-2 border-l-[#cfe0f7]"
-              />
-              <th className="text-right px-3 py-2 text-[#5a76a8] bg-[#f2f7fe]">
+              <th colSpan={3} className={ORCADO.cabecalhoAbre} />
+              <th className={cn("text-right px-3 py-2", ORCADO.cabecalhoFim)}>
                 Total
               </th>
-              <th className="text-right px-3 py-2 bg-emerald-50/50 text-emerald-800/70 border-l border-l-border border-r border-r-[#d9efe3]">
+              <th colSpan={3} className={PLANEJADO.cabecalhoAbre} />
+              <th
+                className={cn("text-right px-3 py-2", PLANEJADO.cabecalhoFim)}
+              >
+                Total
+              </th>
+              <th
+                className={cn(
+                  "text-right px-3 py-2",
+                  RENTABILIDADE.cabecalhoAbre,
+                )}
+              >
                 Rentab.
               </th>
-              <th className="text-right px-3 py-2 bg-emerald-50/50 text-emerald-800/70">
+              <th
+                className={cn(
+                  "text-right px-3 py-2",
+                  RENTABILIDADE.cabecalhoFim,
+                )}
+              >
                 %
               </th>
             </tr>
@@ -155,19 +163,29 @@ export function TotaisCard({
                   <td colSpan={3} className="px-3 py-[11px] text-foreground">
                     {l.nome}
                   </td>
-                  <td colSpan={3} className={CELULA_ORCADO} />
-                  <td className="px-3 py-[11px] text-right whitespace-nowrap font-mono text-[13px] text-foreground bg-black/[0.015]">
+                  <td colSpan={3} className={ORCADO.celulaVazia} />
+                  <td
+                    className={cn(
+                      "px-3 py-[11px] text-right whitespace-nowrap font-mono text-[13px]",
+                      ORCADO.celulaTotal,
+                    )}
+                  >
                     {formatCurrency(l.orcado, moeda)}
                   </td>
-                  <td colSpan={3} className={CELULA_PLANEJADO} />
-                  <td className="px-3 py-[11px] text-right whitespace-nowrap font-mono text-[13px] text-foreground bg-[#f7fbff]">
+                  <td colSpan={3} className={PLANEJADO.celulaVazia} />
+                  <td
+                    className={cn(
+                      "px-3 py-[11px] text-right whitespace-nowrap font-mono text-[13px]",
+                      PLANEJADO.celulaTotal,
+                    )}
+                  >
                     {formatCurrency(l.planejado, moeda)}
                   </td>
                   <td
                     className={cn(
                       "px-3 py-[11px] text-right whitespace-nowrap font-mono text-[13px]",
-                      CELULA_RENTAB,
-                      corRentabilidade(l.rentabilidade),
+                      RENTABILIDADE.celulaAbre,
+                      RENTAB_VALOR,
                     )}
                   >
                     {formatCurrency(l.rentabilidade, moeda)}
@@ -175,7 +193,7 @@ export function TotaisCard({
                   <td
                     className={cn(
                       "px-3 py-[11px] text-right whitespace-nowrap font-mono text-[13px]",
-                      corRentabilidade(l.rentabilidade),
+                      RENTABILIDADE.celulaTotal,
                     )}
                   >
                     {l.percentual === null ? (
@@ -197,32 +215,37 @@ export function TotaisCard({
               >
                 Total dos custos
               </td>
+              <td colSpan={3} className={ORCADO.subtotalVazio} />
               <td
-                colSpan={3}
-                className="bg-[#f1f0ec] border-l-2 border-l-[#d7d7d7] border-t-2 border-t-[#282828]"
-              />
-              <td className="px-3 py-[13px] text-right whitespace-nowrap font-mono text-sm font-bold text-foreground bg-[#f1f0ec] border-t-2 border-t-[#282828]">
+                className={cn(
+                  "px-3 py-[13px] text-right whitespace-nowrap font-mono text-sm font-bold",
+                  ORCADO.subtotalValor,
+                )}
+              >
                 {formatCurrency(subtotalGeral, moeda)}
               </td>
+              <td colSpan={3} className={PLANEJADO.subtotalVazio} />
               <td
-                colSpan={3}
-                className="bg-[#e8f0fd] border-l-2 border-l-[#b9d1f4] border-t-2 border-t-[#2f6fdb]"
-              />
-              <td className="px-3 py-[13px] text-right whitespace-nowrap font-mono text-sm font-bold text-[#1e4fa3] bg-[#e8f0fd] border-t-2 border-t-[#2f6fdb]">
+                className={cn(
+                  "px-3 py-[13px] text-right whitespace-nowrap font-mono text-sm font-bold",
+                  PLANEJADO.subtotalValor,
+                )}
+              >
                 {formatCurrency(totalPlanejado, moeda)}
               </td>
               <td
                 className={cn(
-                  "px-3 py-[13px] text-right whitespace-nowrap font-mono text-sm font-bold bg-emerald-50 border-l-2 border-l-[#d7d7d7] border-t-2 border-t-emerald-600 border-r border-r-[#d9efe3]",
-                  corRentabilidade(rentabilidade),
+                  "px-3 py-[13px] text-right whitespace-nowrap font-mono text-sm font-bold border-r border-r-[#e2e0da]",
+                  RENTABILIDADE.bordaAbre,
+                  RENTABILIDADE.subtotalValor,
                 )}
               >
                 {formatCurrency(rentabilidade, moeda)}
               </td>
               <td
                 className={cn(
-                  "px-3 py-[13px] text-right whitespace-nowrap font-mono text-sm font-bold bg-emerald-50 border-t-2 border-t-emerald-600",
-                  corRentabilidade(rentabilidade),
+                  "px-3 py-[13px] text-right whitespace-nowrap font-mono text-sm font-bold",
+                  RENTABILIDADE.subtotalValor,
                 )}
               >
                 {percentualRentabilidade === null ? (

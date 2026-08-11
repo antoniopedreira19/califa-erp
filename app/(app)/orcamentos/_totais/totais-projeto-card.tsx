@@ -5,6 +5,17 @@ import { cn, formatCurrency } from "@/lib/utils";
 import { calcularRentabilidade } from "@/lib/calculos/versao-totais";
 import { PainelResultado } from "@/components/painel-resultado";
 import { tipoCustoLabel, type TipoCusto } from "@/lib/types";
+import {
+  ColunasFixas,
+  LARGURA_MINIMA,
+} from "@/app/(app)/_planilha/grade-orcamento";
+import {
+  ORCADO,
+  PLANEJADO,
+  RENTABILIDADE,
+  FAIXA_ROTULO,
+  RENTAB_VALOR,
+} from "@/app/(app)/_planilha/blocos";
 
 const TIPOS: TipoCusto[] = ["A", "B", "C", "D"];
 
@@ -74,6 +85,11 @@ export function TotaisProjetoCard({ linhas, moeda, descricao }: Props) {
     new Set(linhas.map((l) => l.percentualHonorarios)).size > 1 ||
     new Set(linhas.map((l) => l.percentualImposto)).size > 1;
 
+  const {
+    rentabilidade: rentabilidadeProjeto,
+    percentual: percentualProjeto,
+  } = calcularRentabilidade(totalOrcado, totalPlanejado);
+
   return (
     <div className="rounded-2xl border border-border bg-card shadow-soft">
       <div className="flex items-start gap-3 border-b border-border p-6">
@@ -90,56 +106,58 @@ export function TotaisProjetoCard({ linhas, moeda, descricao }: Props) {
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[900px] table-fixed border-collapse text-sm">
-          {/* Sem larguras fixas a coluna de rótulo engole a tabela: as
-              células vazias dos blocos não têm conteúdo para disputar
-              espaço, e os dois blocos ficariam espremidos à direita. */}
-          <colgroup>
-            <col className="w-[14%]" />
-            <col className="w-[10%]" />
-            <col className="w-[10%]" />
-            <col className="w-[4%]" />
-            <col className="w-[4%]" />
-            <col className="w-[5%]" />
-            <col className="w-[20%]" />
-            <col className="w-[4%]" />
-            <col className="w-[4%]" />
-            <col className="w-[5%]" />
-            <col className="w-[20%]" />
-          </colgroup>
+        {/* Mesma grade de 13 colunas dos cards de orçamento acima: Total
+            orçado, Total planejado, Rentab. e % caem exatamente sob as
+            colunas de lá. Sem isso o leitor perde a coluna ao descer. */}
+        <table
+          className={cn(
+            "w-full table-fixed border-collapse text-sm",
+            LARGURA_MINIMA,
+          )}
+        >
+          <ColunasFixas />
           <thead>
             <tr>
               <th colSpan={3} className="border-b border-border bg-muted/40" />
-              <th
-                colSpan={4}
-                className="border-b-[3px] border-l-2 border-b-[#282828] border-l-[#d7d7d7] bg-[#f1f0ec] px-3 py-2 text-center text-[11px] font-extrabold tracking-[0.1em] text-foreground"
-              >
+              <th colSpan={4} className={cn(FAIXA_ROTULO, ORCADO.faixa)}>
                 ORÇADO
               </th>
-              <th
-                colSpan={4}
-                className="border-b-[3px] border-l-2 border-b-[#2f6fdb] border-l-[#b9d1f4] bg-[#e8f0fd] px-3 py-2 text-center text-[11px] font-extrabold tracking-[0.1em] text-[#1e4fa3]"
-              >
+              <th colSpan={4} className={cn(FAIXA_ROTULO, PLANEJADO.faixa)}>
                 PLANEJADO
               </th>
+              <th colSpan={2} className={cn(FAIXA_ROTULO, RENTABILIDADE.faixa)}>
+                RENTABILIDADE
+              </th>
             </tr>
-            <tr className="bg-muted/40">
-              <th
-                colSpan={3}
-                className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"
-              >
+            <tr className="bg-muted/40 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              <th colSpan={3} className="px-3 py-2 text-left">
                 Orçamento
               </th>
-              <th colSpan={3} className="border-l-2 border-l-[#e4e2dd]" />
-              <th className="min-w-[132px] px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              <th colSpan={3} className={ORCADO.cabecalhoAbre} />
+              <th className={cn("px-3 py-2 text-right", ORCADO.cabecalhoFim)}>
+                Total
+              </th>
+              <th colSpan={3} className={PLANEJADO.cabecalhoAbre} />
+              <th
+                className={cn("px-3 py-2 text-right", PLANEJADO.cabecalhoFim)}
+              >
                 Total
               </th>
               <th
-                colSpan={3}
-                className="border-l-2 border-l-[#cfe0f7] bg-blue-50/60"
-              />
-              <th className="min-w-[132px] bg-blue-50/60 px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-wider text-[#5a76a8]">
-                Total
+                className={cn(
+                  "px-3 py-2 text-right",
+                  RENTABILIDADE.cabecalhoAbre,
+                )}
+              >
+                Rentab.
+              </th>
+              <th
+                className={cn(
+                  "px-3 py-2 text-right",
+                  RENTABILIDADE.cabecalhoFim,
+                )}
+              >
+                %
               </th>
             </tr>
           </thead>
@@ -147,46 +165,80 @@ export function TotaisProjetoCard({ linhas, moeda, descricao }: Props) {
             {linhas.length === 0 ? (
               <tr className="border-b border-border">
                 <td
-                  colSpan={11}
+                  colSpan={13}
                   className="px-3 py-6 text-center text-sm text-muted-foreground"
                 >
                   Nenhum orçamento de job ainda.
                 </td>
               </tr>
             ) : (
-              linhas.map((l) => (
-                <tr key={l.id} className="border-b border-border">
-                  <td colSpan={3} className="p-3">
-                    <div className="flex flex-wrap items-center gap-2.5">
-                      <span className="font-mono text-xs font-bold text-california-red">
-                        {l.codigo}
-                      </span>
-                      <span className="text-[13.5px]">{l.nome}</span>
-                      {l.detalhe && (
-                        <span className="text-[11px] text-muted-foreground">
-                          {l.detalhe}
+              linhas.map((l) => {
+                const { rentabilidade, percentual } = calcularRentabilidade(
+                  l.orcado,
+                  l.planejado,
+                );
+                const semPlanejado = l.planejado <= 0;
+                return (
+                  <tr key={l.id} className="border-b border-border">
+                    <td colSpan={3} className="p-3">
+                      <div className="flex flex-wrap items-center gap-2.5">
+                        <span className="font-mono text-xs font-bold text-california-red">
+                          {l.codigo}
                         </span>
+                        <span className="text-[13.5px]">{l.nome}</span>
+                        {l.detalhe && (
+                          <span className="text-[11px] text-muted-foreground">
+                            {l.detalhe}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td colSpan={3} className={ORCADO.celulaVazia} />
+                    <td
+                      className={cn(
+                        "whitespace-nowrap p-3 text-right font-mono text-[13px]",
+                        ORCADO.celulaTotal,
                       )}
-                    </div>
-                  </td>
-                  <td
-                    colSpan={3}
-                    className="border-l-2 border-l-[#e4e2dd] bg-black/[0.015]"
-                  />
-                  <td className="whitespace-nowrap bg-black/[0.015] p-3 text-right font-mono text-[13px]">
-                    {formatCurrency(l.orcado, moeda)}
-                  </td>
-                  <td
-                    colSpan={3}
-                    className="border-l-2 border-l-[#cfe0f7] bg-blue-50/40"
-                  />
-                  <td className="whitespace-nowrap bg-blue-50/40 p-3 text-right font-mono text-[13px]">
-                    {l.planejado > 0
-                      ? formatCurrency(l.planejado, moeda)
-                      : "—"}
-                  </td>
-                </tr>
-              ))
+                    >
+                      {formatCurrency(l.orcado, moeda)}
+                    </td>
+                    <td colSpan={3} className={PLANEJADO.celulaVazia} />
+                    <td
+                      className={cn(
+                        "whitespace-nowrap p-3 text-right font-mono text-[13px]",
+                        PLANEJADO.celulaTotal,
+                      )}
+                    >
+                      {semPlanejado ? "—" : formatCurrency(l.planejado, moeda)}
+                    </td>
+                    <td
+                      className={cn(
+                        "whitespace-nowrap p-3 text-right font-mono text-[13px]",
+                        RENTABILIDADE.celulaAbre,
+                        RENTAB_VALOR,
+                      )}
+                    >
+                      {semPlanejado ? (
+                        <span className="text-muted-foreground">—</span>
+                      ) : (
+                        formatCurrency(rentabilidade, moeda)
+                      )}
+                    </td>
+                    <td
+                      className={cn(
+                        "whitespace-nowrap p-3 text-right font-mono text-[13px]",
+                        RENTABILIDADE.celulaTotal,
+                      )}
+                    >
+                      {semPlanejado || percentual === null ? (
+                        <span className="text-muted-foreground">—</span>
+                      ) : (
+                        formatarPercentual(percentual)
+                      )}
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
           <tfoot>
@@ -197,42 +249,50 @@ export function TotaisProjetoCard({ linhas, moeda, descricao }: Props) {
               >
                 Total dos custos · projeto
               </td>
+              <td colSpan={3} className={ORCADO.subtotalVazio} />
               <td
-                colSpan={3}
-                className="border-l-2 border-t-2 border-l-[#d7d7d7] border-t-[#282828] bg-[#f1f0ec]"
-              />
-              <td className="whitespace-nowrap border-t-2 border-t-[#282828] bg-[#f1f0ec] p-3 text-right font-mono text-[13px] font-bold">
+                className={cn(
+                  "whitespace-nowrap p-3 text-right font-mono text-[13px] font-bold",
+                  ORCADO.subtotalValor,
+                )}
+              >
                 {formatCurrency(totalOrcado, moeda)}
               </td>
+              <td colSpan={3} className={PLANEJADO.subtotalVazio} />
               <td
-                colSpan={3}
-                className="border-l-2 border-t-2 border-l-[#b9d1f4] border-t-[#2f6fdb] bg-[#e8f0fd]"
-              />
-              <td className="whitespace-nowrap border-t-2 border-t-[#2f6fdb] bg-[#e8f0fd] p-3 text-right font-mono text-[13px] font-bold text-[#1e4fa3]">
+                className={cn(
+                  "whitespace-nowrap p-3 text-right font-mono text-[13px] font-bold",
+                  PLANEJADO.subtotalValor,
+                )}
+              >
                 {totalPlanejado > 0 ? formatCurrency(totalPlanejado, moeda) : "—"}
               </td>
-            </tr>
-            <tr>
+              {/* A rentabilidade do projeto agora fecha a própria coluna,
+                  no lugar da linha extra que existia embaixo. */}
               <td
-                colSpan={3}
-                className="border-t border-t-border px-3 py-2.5 text-[10px] font-bold uppercase tracking-[0.07em] text-muted-foreground"
+                className={cn(
+                  "whitespace-nowrap p-3 text-right font-mono text-[13px] font-bold border-r border-r-[#e2e0da]",
+                  RENTABILIDADE.bordaAbre,
+                  RENTABILIDADE.subtotalValor,
+                )}
               >
-                Rentabilidade
+                {totalPlanejado > 0 ? (
+                  formatCurrency(rentabilidadeProjeto, moeda)
+                ) : (
+                  <span className="text-muted-foreground">—</span>
+                )}
               </td>
               <td
-                colSpan={4}
-                className="border-l-2 border-t border-l-[#d7d7d7] border-t-[#e4e2dd] bg-[#f1f0ec]"
-              />
-              <td
-                colSpan={3}
-                className="border-l-2 border-t border-l-[#b9d1f4] border-t-[#cfe0f7] bg-[#e8f0fd]"
-              />
-              <td className="whitespace-nowrap border-t border-t-[#cfe0f7] bg-[#e8f0fd] px-3 py-2.5 text-right">
-                <CelulaRentabilidade
-                  orcado={totalOrcado}
-                  custo={totalPlanejado}
-                  moeda={moeda}
-                />
+                className={cn(
+                  "whitespace-nowrap p-3 text-right font-mono text-[13px] font-bold",
+                  RENTABILIDADE.subtotalValor,
+                )}
+              >
+                {totalPlanejado > 0 && percentualProjeto !== null ? (
+                  formatarPercentual(percentualProjeto)
+                ) : (
+                  <span className="text-muted-foreground">—</span>
+                )}
               </td>
             </tr>
           </tfoot>
@@ -336,35 +396,6 @@ function formatarTaxa(p: number): string {
 function media(valores: number[]): number {
   if (valores.length === 0) return 0;
   return valores.reduce((s, v) => s + v, 0) / valores.length;
-}
-
-function CelulaRentabilidade({
-  orcado,
-  custo,
-  moeda,
-}: {
-  orcado: number;
-  custo: number;
-  moeda: string;
-}) {
-  const { rentabilidade, percentual } = calcularRentabilidade(orcado, custo);
-
-  if (custo <= 0) {
-    return <span className="font-mono text-sm text-muted-foreground">—</span>;
-  }
-
-  return (
-    <div className="flex flex-col items-end gap-0.5">
-      <span className="font-mono text-[12.5px] font-bold text-[#1e4fa3]">
-        {formatCurrency(rentabilidade, moeda)}
-      </span>
-      {percentual !== null && (
-        <span className="font-mono text-[10.5px] text-[#5a76a8]">
-          {formatarPercentual(percentual)}
-        </span>
-      )}
-    </div>
-  );
 }
 
 function LinhaValor({
