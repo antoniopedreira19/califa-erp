@@ -2,6 +2,26 @@ import { z } from "zod";
 
 const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
 
+export const rateioSchema = z
+  .array(
+    z.object({
+      regional_id: z.string().uuid("Selecione a regional."),
+      percentual: z
+        .number({ invalid_type_error: "Informe o percentual." })
+        .min(0.01, "Percentual mínimo 0,01.")
+        .max(100, "Percentual máximo 100."),
+    }),
+  )
+  .min(1, "Adicione pelo menos uma regional.")
+  .refine(
+    (a) => Math.abs(a.reduce((s, r) => s + r.percentual, 0) - 100) < 0.01,
+    { message: "A soma dos percentuais deve ser 100,00.", path: ["_sum"] },
+  )
+  .refine(
+    (a) => new Set(a.map((r) => r.regional_id)).size === a.length,
+    { message: "Cada regional só pode aparecer uma vez.", path: ["_dup"] },
+  );
+
 export const criarContaAvulsaSchema = z.object({
   empresa_id: z.string().uuid("Selecione a empresa."),
   descricao: z.string().trim().min(3, "Descrição muito curta.").max(500),
@@ -46,6 +66,7 @@ export const criarContaAvulsaSchema = z.object({
       }),
     )
     .default([]),
+  rateio: rateioSchema,
 });
 
 /**
@@ -58,6 +79,7 @@ export const editarContaAvulsaSchema = criarContaAvulsaSchema.omit({
   anexos: true,
 });
 
+export type RateioLinhaInput = z.infer<typeof rateioSchema>[number];
 export type CriarContaAvulsaInput = z.infer<typeof criarContaAvulsaSchema>;
 export type EditarContaAvulsaInput = z.infer<typeof editarContaAvulsaSchema>;
 

@@ -131,6 +131,46 @@ export async function criarContaAvulsa(input: unknown): Promise<Result> {
     }
   }
 
+  // Rateio regional
+  // Se tem job, força rateio único 100% na regional do job.
+  let rateioFinal = d.rateio;
+  if (d.job_id) {
+    const { data: jobRow } = await supabase
+      .from("jobs")
+      .select("regional_id")
+      .eq("id", d.job_id)
+      .eq("tenant_id", session.activeTenant.id)
+      .maybeSingle();
+    if (!jobRow?.regional_id) {
+      // Compensa: apaga a conta criada.
+      await supabase.from("contas_avulsas").delete().eq("id", conta.id);
+      return {
+        ok: false,
+        message: "Job selecionado não tem regional associada.",
+      };
+    }
+    rateioFinal = [{ regional_id: jobRow.regional_id, percentual: 100 }];
+  }
+
+  const rateioRows = rateioFinal.map((r) => ({
+    tenant_id: session.activeTenant.id,
+    conta_avulsa_id: conta.id,
+    regional_id: r.regional_id,
+    percentual: r.percentual,
+  }));
+  const { error: rateioErr } = await supabase
+    .from("contas_avulsas_regionais")
+    .insert(rateioRows);
+
+  if (rateioErr) {
+    // Compensação: apaga a conta que foi criada (cascade cuida do resto).
+    await supabase.from("contas_avulsas").delete().eq("id", conta.id);
+    return {
+      ok: false,
+      message: `Falha ao salvar rateio: ${rateioErr.message}`,
+    };
+  }
+
   await logAuditEvent({
     acao: "conta_avulsa.criada",
     tenantId: session.activeTenant.id,
@@ -241,49 +281,141 @@ export async function editarContaAvulsa(
     }
   }
 
-  if (camposAlterados.length === 0) {
+  // Carrega rateio atual pra comparar (independente de outros campos terem mudado)
+  const { data: rateioAtual } = await supabase
+    .from("contas_avulsas_regionais")
+    .select("regional_id, percentual")
+    .eq("conta_avulsa_id", id)
+    .eq("tenant_id", session.activeTenant.id);
+
+  // Se tem job, força rateio único 100% na regional do job.
+  let rateioNovo = d.rateio;
+  if (d.job_id) {
+    const { data: jobRow } = await supabase
+      .from("jobs")
+      .select("regional_id")
+      .eq("id", d.job_id)
+      .eq("tenant_id", session.activeTenant.id)
+      .maybeSingle();
+    if (!jobRow?.regional_id) {
+      return {
+        ok: false,
+        message: "Job selecionado não tem regional associada.",
+      };
+    }
+    rateioNovo = [{ regional_id: jobRow.regional_id, percentual: 100 }];
+  }
+
+  // Normaliza pra comparar
+  function normalizar(
+    rows: Array<{ regional_id: string; percentual: number | string }>,
+  ) {
+    return rows
+      .map((r) => `${r.regional_id}:${Number(r.percentual).toFixed(2)}`)
+      .sort()
+      .join("|");
+  }
+  const antesStr = normalizar(rateioAtual ?? []);
+  const depoisStr = normalizar(rateioNovo);
+  const rateioMudou = antesStr !== depoisStr;
+
+  if (camposAlterados.length === 0 && !rateioMudou) {
     // Nada mudou, retorna OK sem tocar em nada.
     return { ok: true, id };
   }
 
-  // UPDATE
-  const { error: updErr } = await supabase
-    .from("contas_avulsas")
-    .update({
-      descricao: d.descricao,
-      valor: d.valor,
-      natureza: d.natureza,
-      data_prevista_pagamento: d.data_prevista_pagamento,
-      fornecedor_id: d.fornecedor_id,
-      cliente_id: d.cliente_id,
-      job_id: d.job_id,
-      plano_conta_tipo_id: d.plano_conta_tipo_id,
-      plano_conta_subtipo_id: d.plano_conta_subtipo_id,
-    })
-    .eq("id", id)
-    .eq("tenant_id", session.activeTenant.id);
+  // UPDATE dos campos da conta (apenas se algum campo mudou)
+  if (camposAlterados.length > 0) {
+    const { error: updErr } = await supabase
+      .from("contas_avulsas")
+      .update({
+        descricao: d.descricao,
+        valor: d.valor,
+        natureza: d.natureza,
+        data_prevista_pagamento: d.data_prevista_pagamento,
+        fornecedor_id: d.fornecedor_id,
+        cliente_id: d.cliente_id,
+        job_id: d.job_id,
+        plano_conta_tipo_id: d.plano_conta_tipo_id,
+        plano_conta_subtipo_id: d.plano_conta_subtipo_id,
+      })
+      .eq("id", id)
+      .eq("tenant_id", session.activeTenant.id);
 
-  if (updErr) {
-    return { ok: false, message: `Falha ao atualizar: ${updErr.message}` };
+    if (updErr) {
+      return { ok: false, message: `Falha ao atualizar: ${updErr.message}` };
+    }
+
+    // INSERT histórico dos campos escalares
+    // Não é transacional entre chamadas do supabase-js — em caso de falha do
+    // histórico, o UPDATE persiste. Aceitável: histórico é audit, não afeta lógica.
+    if (historicoRows.length > 0) {
+      const { error: histErr } = await supabase
+        .from("contas_avulsas_historico")
+        .insert(historicoRows);
+      if (histErr) console.error("[avulsa.editar.historico]", histErr.message);
+    }
+
+    await logAuditEvent({
+      acao: "conta_avulsa.editada",
+      tenantId: session.activeTenant.id,
+      entidadeTipo: "conta_avulsa",
+      entidadeId: id,
+      metadata: { campos_alterados: camposAlterados },
+    });
   }
 
-  // INSERT histórico
-  // Não é transacional entre chamadas do supabase-js — em caso de falha do
-  // histórico, o UPDATE persiste. Aceitável: histórico é audit, não afeta lógica.
-  if (historicoRows.length > 0) {
-    const { error: histErr } = await supabase
-      .from("contas_avulsas_historico")
-      .insert(historicoRows);
-    if (histErr) console.error("[avulsa.editar.historico]", histErr.message);
-  }
+  // Rateio regional: delete-all + insert-all se mudou
+  if (rateioMudou) {
+    const { error: delErr } = await supabase
+      .from("contas_avulsas_regionais")
+      .delete()
+      .eq("conta_avulsa_id", id)
+      .eq("tenant_id", session.activeTenant.id);
+    if (delErr) {
+      return {
+        ok: false,
+        message: `Falha ao apagar rateio antigo: ${delErr.message}`,
+      };
+    }
 
-  await logAuditEvent({
-    acao: "conta_avulsa.editada",
-    tenantId: session.activeTenant.id,
-    entidadeTipo: "conta_avulsa",
-    entidadeId: id,
-    metadata: { campos_alterados: camposAlterados },
-  });
+    const novasRows = rateioNovo.map((r) => ({
+      tenant_id: session.activeTenant.id,
+      conta_avulsa_id: id,
+      regional_id: r.regional_id,
+      percentual: r.percentual,
+    }));
+    const { error: insErr } = await supabase
+      .from("contas_avulsas_regionais")
+      .insert(novasRows);
+    if (insErr) {
+      return {
+        ok: false,
+        message: `Falha ao salvar rateio: ${insErr.message}`,
+      };
+    }
+
+    // Histórico: 1 row consolidada pro rateio
+    await supabase.from("contas_avulsas_historico").insert({
+      tenant_id: session.activeTenant.id,
+      conta_avulsa_id: id,
+      campo_alterado: "rateio",
+      valor_anterior: JSON.stringify(rateioAtual ?? []),
+      valor_novo: JSON.stringify(rateioNovo),
+      alterado_por: session.profile.id,
+    });
+
+    await logAuditEvent({
+      acao: "conta_avulsa.rateio_alterado",
+      tenantId: session.activeTenant.id,
+      entidadeTipo: "conta_avulsa",
+      entidadeId: id,
+      metadata: {
+        linhas_anteriores: (rateioAtual ?? []).length,
+        linhas_novas: rateioNovo.length,
+      },
+    });
+  }
 
   revalidatePath("/financeiro/contas-a-pagar");
   revalidatePath(`/financeiro/contas-a-pagar/avulsa/${id}`);
