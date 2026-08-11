@@ -134,6 +134,8 @@ export async function salvarAlteracoesDoProjeto(
       JSON.stringify({
         moeda: parametros.moeda,
         taxa_cambio: parametros.taxa_cambio,
+        // Vai no payload por compatibilidade da tipagem; a action de criação
+        // ignora e lê os honorários do cadastro do cliente do projeto.
         percentual_honorarios: parametros.percentual_honorarios,
         percentual_imposto: parametros.percentual_imposto,
         jobs: [novo],
@@ -242,6 +244,9 @@ async function aplicarEdicao(
   }
 
   // ---------- Parâmetros da versão ----------
+  // `percentual_honorarios` NÃO entra aqui de propósito: em versão que já
+  // existe ele só muda pelo "Editar" da tela da versão, e só com role
+  // `administrador` (decisão de 11/08/2026). Esta tela preserva o gravado.
   const { error: paramErr } = await supabase
     .from("versoes_orcamento")
     .update({
@@ -250,9 +255,6 @@ async function aplicarEdicao(
         Number(alvo.parametros.taxa_cambio) > 0
           ? Number(alvo.parametros.taxa_cambio)
           : 1,
-      percentual_honorarios: faixaPercentual(
-        alvo.parametros.percentual_honorarios,
-      ),
       percentual_imposto: faixaPercentual(alvo.parametros.percentual_imposto),
     })
     .eq("id", versao.id)

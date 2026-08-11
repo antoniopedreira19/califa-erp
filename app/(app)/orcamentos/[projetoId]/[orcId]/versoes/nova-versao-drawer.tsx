@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { AlertCircle, Plus, Save } from "lucide-react";
+import { AlertCircle, Lock, Plus, Save } from "lucide-react";
 import {
   Dialog,
   DialogHeader,
@@ -16,12 +16,22 @@ import { criarVersao, type ActionResult } from "./actions";
 
 interface Props {
   orcamentoId: string;
+  /** Honorários do cadastro do cliente. Só exibição: o campo é travado e a
+   *  server action relê o percentual do cadastro na hora de gravar. */
+  honorariosCliente: number;
+  clienteNome: string | null;
   /** Bloqueia o botão em orçamentos que não aceitam mais versão. */
   disabled?: boolean;
   disabledReason?: string;
 }
 
-export function NovaVersaoDrawer({ orcamentoId, disabled, disabledReason }: Props) {
+export function NovaVersaoDrawer({
+  orcamentoId,
+  honorariosCliente,
+  clienteNome,
+  disabled,
+  disabledReason,
+}: Props) {
   const [open, setOpen] = React.useState(false);
   const [pending, startTransition] = React.useTransition();
   const [error, setError] = React.useState<string | null>(null);
@@ -105,14 +115,16 @@ export function NovaVersaoDrawer({ orcamentoId, disabled, disabledReason }: Prop
                 label="Honorários (%)"
                 name="percentual_honorarios"
                 errors={fieldErrors}
+                travado
+                hint={`Cadastro de ${clienteNome ?? "cliente"}`}
               >
+                {/* Sem `name`: nada é enviado, a action lê o cadastro. */}
                 <Input
-                  name="percentual_honorarios"
                   type="number"
-                  step="0.01"
-                  min="0"
-                  max="100"
-                  className="no-spinner"
+                  value={honorariosCliente}
+                  readOnly
+                  disabled
+                  className="no-spinner bg-muted/50 text-muted-foreground"
                 />
               </Field>
               <Field
@@ -175,18 +187,29 @@ function Field({
   label,
   name,
   errors,
+  travado,
+  hint,
   children,
 }: {
   label: string;
   name: string;
   errors: Record<string, string[]>;
+  /** Mostra o cadeado no rótulo — campo que a tela não deixa editar. */
+  travado?: boolean;
+  hint?: string;
   children: React.ReactNode;
 }) {
   const fieldErrors = errors[name];
   return (
     <div className="space-y-2">
-      <Label htmlFor={name}>{label}</Label>
+      <Label htmlFor={name} className="flex items-center gap-1.5">
+        {label}
+        {travado && <Lock className="h-3 w-3 text-muted-foreground" />}
+      </Label>
       {children}
+      {hint && (
+        <p className="text-[11px] leading-snug text-muted-foreground">{hint}</p>
+      )}
       {fieldErrors?.map((msg, i) => (
         <p key={i} className="text-xs text-california-red">
           {msg}

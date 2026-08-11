@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Save } from "lucide-react";
+import { Lock, Save } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -17,6 +17,8 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   parametros: ParametrosVersao;
   onSalvar: (parametros: ParametrosVersao) => void;
+  /** Nome do cliente do projeto, para o rótulo do campo travado. */
+  clienteNome?: string;
 }
 
 /** Aceita "19,53" e "19.53". */
@@ -32,22 +34,24 @@ function paraEdicao(valor: number): string {
 }
 
 /**
- * Moeda, câmbio e percentuais valem para TODAS as versões v1 criadas neste
+ * Moeda, câmbio e impostos valem para TODAS as versões v1 criadas neste
  * salvamento — no orçamento do projeto os jobs são faturados sob as mesmas
- * condições comerciais. A exceção é o job importado: o % de honorários
- * negociado dentro da planilha vence o daqui, só naquele orçamento.
+ * condições comerciais.
+ *
+ * Honorários é a exceção: desde 11/08/2026 vem do cadastro do cliente e
+ * não é digitável aqui. Nem planilha importada muda isso — o percentual do
+ * cliente vence, e quem importou é avisado quando a planilha divergia.
+ * Alterar só pelo "Editar" da tela da versão, e só como administrador.
  */
 export function ParametrosModal({
   open,
   onOpenChange,
   parametros,
   onSalvar,
+  clienteNome,
 }: Props) {
   const [moeda, setMoeda] = React.useState(parametros.moeda);
   const [taxa, setTaxa] = React.useState(paraEdicao(parametros.taxa_cambio));
-  const [honorarios, setHonorarios] = React.useState(
-    paraEdicao(parametros.percentual_honorarios),
-  );
   const [imposto, setImposto] = React.useState(
     paraEdicao(parametros.percentual_imposto),
   );
@@ -57,7 +61,6 @@ export function ParametrosModal({
     if (!open) return;
     setMoeda(parametros.moeda);
     setTaxa(paraEdicao(parametros.taxa_cambio));
-    setHonorarios(paraEdicao(parametros.percentual_honorarios));
     setImposto(paraEdicao(parametros.percentual_imposto));
     setErro(null);
   }, [open, parametros]);
@@ -65,22 +68,14 @@ export function ParametrosModal({
   function salvar(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const taxaNum = parseNumero(taxa);
-    const honorariosNum = parseNumero(honorarios);
     const impostoNum = parseNumero(imposto);
 
     if (taxaNum === null || taxaNum <= 0) {
       setErro("Taxa de câmbio precisa ser maior que zero.");
       return;
     }
-    if (
-      honorariosNum === null ||
-      honorariosNum < 0 ||
-      honorariosNum > 100 ||
-      impostoNum === null ||
-      impostoNum < 0 ||
-      impostoNum > 100
-    ) {
-      setErro("Percentuais precisam estar entre 0 e 100.");
+    if (impostoNum === null || impostoNum < 0 || impostoNum > 100) {
+      setErro("Impostos precisam estar entre 0 e 100.");
       return;
     }
     if (moeda.trim().length !== 3) {
@@ -91,7 +86,8 @@ export function ParametrosModal({
     onSalvar({
       moeda: moeda.trim().toUpperCase(),
       taxa_cambio: taxaNum,
-      percentual_honorarios: honorariosNum,
+      // Honorários não é editável aqui: segue o que veio do cadastro.
+      percentual_honorarios: parametros.percentual_honorarios,
       percentual_imposto: impostoNum,
     });
     onOpenChange(false);
@@ -106,8 +102,8 @@ export function ParametrosModal({
               Parâmetros das versões
             </DialogTitle>
             <DialogDescription className="mt-1.5 text-[13px]">
-              Valem para todos os orçamentos deste rascunho. Planilha
-              importada com honorários próprios mantém o percentual dela.
+              Valem para todos os orçamentos deste rascunho. Honorários vem
+              do cadastro do cliente e não é editável aqui.
             </DialogDescription>
           </div>
 
@@ -136,12 +132,23 @@ export function ParametrosModal({
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="percentual_honorarios">Honorários (%)</Label>
+              <Label
+                htmlFor="percentual_honorarios"
+                className="flex items-center gap-1.5"
+              >
+                Honorários (%)
+                <Lock className="h-3 w-3 text-muted-foreground" />
+              </Label>
               <Input
                 id="percentual_honorarios"
-                value={honorarios}
-                onChange={(e) => setHonorarios(e.target.value)}
+                value={paraEdicao(parametros.percentual_honorarios)}
+                readOnly
+                disabled
+                className="bg-muted/50 text-muted-foreground"
               />
+              <p className="text-[11px] leading-snug text-muted-foreground">
+                Cadastro de {clienteNome ?? "cliente"}
+              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="percentual_imposto">Impostos (%)</Label>

@@ -43,6 +43,7 @@ import { TotaisProjetoCard } from "../../_totais/totais-projeto-card";
 import {
   ITEM_VAZIO,
   contarItens,
+  divergenciaHonorarios,
   novoId,
   totaisDoJob,
 } from "../../_rascunho/rascunho";
@@ -64,6 +65,9 @@ interface Props {
     cliente: string | null;
     responsavel: string | null;
   };
+  /** Honorários do cadastro do cliente. Vale para os orçamentos criados
+   *  aqui; os que já existem mantêm o percentual gravado na versão. */
+  honorariosCliente: number;
   /** Quantos orçamentos o projeto já tem — base do código previsto dos novos. */
   orcamentosExistentes: number;
   /** Estado inicial, montado no servidor a partir da versão vigente. */
@@ -105,6 +109,7 @@ type Modal =
  */
 export function EditorAgregado({
   projeto,
+  honorariosCliente,
   orcamentosExistentes,
   inicial,
   categorias,
@@ -226,7 +231,11 @@ export function EditorAgregado({
         grupos: [],
         arquivoNome: null,
         percentualHonorariosDetectado: null,
-        parametros: { ...PARAMETROS_PADRAO },
+        // Orçamento novo nasce com os honorários do cadastro do cliente.
+        parametros: {
+          ...PARAMETROS_PADRAO,
+          percentual_honorarios: honorariosCliente,
+        },
       },
     ]);
     setModal(null);
@@ -432,6 +441,25 @@ export function EditorAgregado({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orcamentos, orcamentosExistentes, projeto.codigo]);
 
+  /** Planilhas importadas cujo % de honorários não é o do orçamento. O
+   *  percentual gravado vence — aqui só se avisa quem importou. */
+  const divergencias = React.useMemo(
+    () =>
+      orcamentos
+        .map((orc) => ({
+          nome: orc.nome,
+          aplicado: orc.parametros.percentual_honorarios,
+          daPlanilha: divergenciaHonorarios(orc, orc.parametros),
+        }))
+        .filter(
+          (
+            d,
+          ): d is { nome: string; aplicado: number; daPlanilha: number } =>
+            d.daPlanilha !== null,
+        ),
+    [orcamentos],
+  );
+
   const resumo = linhasTotais.reduce(
     (acc, l) => ({
       faturamento: acc.faturamento + l.faturamento,
@@ -629,6 +657,23 @@ export function EditorAgregado({
         </div>
       </div>
 
+      {divergencias.length > 0 && (
+        <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span className="flex-1">
+            Honorários da planilha ignorados —{" "}
+            {divergencias
+              .map(
+                (d) =>
+                  `${d.nome}: planilha com ${formatarPercentual(d.daPlanilha)}, orçamento segue com ${formatarPercentual(d.aplicado)}`,
+              )
+              .join(" · ")}
+            . O percentual vem do cadastro do cliente; alterar só pelo
+            &quot;Editar&quot; da tela da versão.
+          </span>
+        </div>
+      )}
+
       {erro && (
         <div className="flex items-start gap-2 rounded-xl border border-california-red/20 bg-california-red/5 px-4 py-3 text-sm text-california-red">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
@@ -796,6 +841,7 @@ export function EditorAgregado({
           onSalvar={(p: ParametrosVersao) =>
             mutarOrcamento(orcParametros.id, (o) => ({ ...o, parametros: p }))
           }
+          clienteNome={projeto.cliente ?? "cliente"}
         />
       )}
 
@@ -848,4 +894,9 @@ function periodo(inicio: string | null, fim: string | null): string | null {
   };
   if (inicio && fim) return `${br(inicio)} — ${br(fim)}`;
   return br((inicio ?? fim) as string);
+}
+
+/** Mesma formatação do editor do orçamento do projeto. */
+function formatarPercentual(valor: number): string {
+  return `${valor.toFixed(2).replace(".", ",").replace(/,00$/, "")}%`;
 }

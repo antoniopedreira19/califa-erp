@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { listActiveMembers } from "@/lib/data/members";
+import { HONORARIOS_PADRAO_FALLBACK } from "@/lib/validations/clientes";
 import type {
   Categoria,
   CategoriaDominio,
@@ -69,7 +70,7 @@ export default async function OrcamentosAgregadoPage({
     supabase
       .from("projetos")
       .select(
-        "id, codigo, nome, cliente:clientes(nome_fantasia), responsavel:profiles!responsavel_id(nome)",
+        "id, codigo, nome, cliente:clientes(nome_fantasia, percentual_honorarios_padrao), responsavel:profiles!responsavel_id(nome)",
       )
       .eq("id", params.projetoId)
       .eq("tenant_id", tenantId)
@@ -335,6 +336,10 @@ export default async function OrcamentosAgregadoPage({
         cliente: projeto.cliente?.nome_fantasia ?? null,
         responsavel: projeto.responsavel?.nome ?? null,
       }}
+      honorariosCliente={Number(
+        projeto.cliente?.percentual_honorarios_padrao ??
+          HONORARIOS_PADRAO_FALLBACK,
+      )}
       orcamentosExistentes={orcamentos.length}
       inicial={inicial}
       categorias={(categoriasOrcRes.data ?? []) as Pick<

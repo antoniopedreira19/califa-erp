@@ -5,13 +5,27 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
-import { clienteSchema } from "@/lib/validations/clientes";
+import {
+  clienteSchema,
+  HONORARIOS_PADRAO_FALLBACK,
+} from "@/lib/validations/clientes";
 
 export type ActionResult =
   | { ok: true; id?: string }
   | { ok: false; message: string; fieldErrors?: Record<string, string[]> };
 
-function extractInput(formData: FormData) {
+/**
+ * `honorariosVazioVale12`: na edição de um cadastro antigo, campo vazio cai
+ * no padrão da agência em vez de barrar o salvamento. Na criação o campo é
+ * obrigatório — quem cadastra o cliente decide o percentual dele.
+ */
+function extractInput(
+  formData: FormData,
+  { honorariosVazioVale12 = false }: { honorariosVazioVale12?: boolean } = {},
+) {
+  const honorarios =
+    formData.get("percentual_honorarios_padrao")?.toString().trim() ?? "";
+
   return {
     nome_fantasia: formData.get("nome_fantasia")?.toString() ?? "",
     codigo_curto: formData.get("codigo_curto")?.toString() ?? "",
@@ -20,6 +34,10 @@ function extractInput(formData: FormData) {
     email: formData.get("email")?.toString() ?? "",
     telefone: formData.get("telefone")?.toString() ?? "",
     observacoes: formData.get("observacoes")?.toString() ?? "",
+    percentual_honorarios_padrao:
+      honorarios === "" && honorariosVazioVale12
+        ? String(HONORARIOS_PADRAO_FALLBACK)
+        : honorarios,
   };
 }
 
@@ -129,7 +147,9 @@ export async function atualizarCliente(
   formData: FormData,
 ): Promise<ActionResult> {
   const session = await requireSession();
-  const parsed = clienteSchema.safeParse(extractInput(formData));
+  const parsed = clienteSchema.safeParse(
+    extractInput(formData, { honorariosVazioVale12: true }),
+  );
 
   if (!parsed.success) {
     return {
@@ -145,10 +165,13 @@ export async function atualizarCliente(
   // homônimo criado por padrão — ver abaixo.
   const { data: anterior } = await supabase
     .from("clientes")
-    .select("nome_fantasia")
+    .select("nome_fantasia, percentual_honorarios_padrao")
     .eq("id", id)
     .eq("tenant_id", session.activeTenant.id)
-    .maybeSingle<{ nome_fantasia: string }>();
+    .maybeSingle<{
+      nome_fantasia: string;
+      percentual_honorarios_padrao: number;
+    }>();
 
   const { error } = await supabase
     .from("clientes")
@@ -161,11 +184,24 @@ export async function atualizarCliente(
     return { ok: false, message: mapDbError(error.message) };
   }
 
+  // Honorários é condição comercial: mudança entra na auditoria com de/para.
+  const honorariosMudou =
+    anterior != null &&
+    Number(anterior.percentual_honorarios_padrao) !==
+      parsed.data.percentual_honorarios_padrao;
+
   await logAuditEvent({
     acao: "cliente.editado",
     tenantId: session.activeTenant.id,
     entidadeTipo: "cliente",
     entidadeId: id,
+    metadata: honorariosMudou
+      ? {
+          campo: "percentual_honorarios_padrao",
+          de: Number(anterior!.percentual_honorarios_padrao),
+          para: parsed.data.percentual_honorarios_padrao,
+        }
+      : undefined,
   });
 
   // O produto padrão é a marca do cliente, então o nome dele acompanha o

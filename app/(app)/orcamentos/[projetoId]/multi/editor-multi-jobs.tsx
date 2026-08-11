@@ -8,6 +8,7 @@ import {
   ArrowLeft,
   FilePlus,
   Layers,
+  Lock,
   Pencil,
   Plus,
   Save,
@@ -50,6 +51,7 @@ import { salvarOrcamentosDoProjeto } from "./actions";
 import {
   ITEM_VAZIO,
   contarItens,
+  divergenciaHonorarios,
   itensDoJob,
   novoId,
   totaisDoJob,
@@ -65,6 +67,10 @@ import {
 
 interface Props {
   projeto: { id: string; codigo: string; nome: string; status: string };
+  /** Honorários do cadastro do cliente. Único percentual válido aqui — o
+   *  campo nasce preenchido e travado, e o servidor regrava por cima. */
+  honorariosCliente: number;
+  clienteNome: string;
   /** Quantos orçamentos o projeto já tem — base do código previsto. */
   orcamentosExistentes: number;
   categorias: Pick<CategoriaDominio, "id" | "nome">[];
@@ -99,6 +105,8 @@ type Modal =
  */
 export function EditorMultiJobs({
   projeto,
+  honorariosCliente,
+  clienteNome,
   orcamentosExistentes,
   categorias,
   regionaisDoProjeto,
@@ -109,8 +117,10 @@ export function EditorMultiJobs({
   fornecedores,
 }: Props) {
   const router = useRouter();
-  const [parametros, setParametros] =
-    React.useState<ParametrosVersao>(PARAMETROS_PADRAO);
+  const [parametros, setParametros] = React.useState<ParametrosVersao>({
+    ...PARAMETROS_PADRAO,
+    percentual_honorarios: honorariosCliente,
+  });
   const [jobs, setJobs] = React.useState<JobRascunho[]>([]);
   const [modal, setModal] = React.useState<Modal>(null);
   const [erro, setErro] = React.useState<string | null>(null);
@@ -460,6 +470,22 @@ export function EditorMultiJobs({
     return { planejado, faturamento, resultadoGeral };
   }, [jobs, parametros]);
 
+  /** Planilhas cujo % de honorários não é o do cadastro do cliente. Não
+   *  bloqueia nada — o cadastro vence — mas quem importou precisa saber. */
+  const divergencias = React.useMemo(
+    () =>
+      jobs
+        .map((job) => ({
+          nome: job.nome,
+          daPlanilha: divergenciaHonorarios(job, parametros),
+        }))
+        .filter(
+          (d): d is { nome: string; daPlanilha: number } =>
+            d.daPlanilha !== null,
+        ),
+    [jobs, parametros],
+  );
+
   /** Cada job do rascunho vira uma linha do consolidado, no mesmo formato
    *  que a visão agregada usa para os orçamentos já gravados. */
   const linhasTotais = React.useMemo(
@@ -605,11 +631,15 @@ export function EditorMultiJobs({
                 </strong>
               </span>
               <span aria-hidden className="text-border">·</span>
-              <span>
+              <span className="inline-flex items-center gap-1.5">
                 Honorários:{" "}
                 <strong className="font-semibold text-foreground">
                   {formatarPercentual(parametros.percentual_honorarios)}
                 </strong>
+                <Lock
+                  className="h-3 w-3"
+                  aria-label={`Vem do cadastro de ${clienteNome}`}
+                />
               </span>
               <span aria-hidden className="text-border">·</span>
               <span>
@@ -663,6 +693,23 @@ export function EditorMultiJobs({
           </button>
         </div>
       </div>
+
+      {divergencias.length > 0 && (
+        <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span className="flex-1">
+            Honorários da planilha ignorados: os orçamentos vão usar{" "}
+            <strong>
+              {formatarPercentual(parametros.percentual_honorarios)}
+            </strong>{" "}
+            do cadastro de {clienteNome}, não o percentual da planilha (
+            {divergencias
+              .map((d) => `${d.nome}: ${formatarPercentual(d.daPlanilha)}`)
+              .join(" · ")}
+            ).
+          </span>
+        </div>
+      )}
 
       {erro && (
         <div className="flex items-start gap-2 rounded-xl border border-california-red/20 bg-california-red/5 px-4 py-3 text-sm text-california-red">
@@ -832,6 +879,7 @@ export function EditorMultiJobs({
         onOpenChange={(o) => !o && setModal(null)}
         parametros={parametros}
         onSalvar={setParametros}
+        clienteNome={clienteNome}
       />
 
       <ConfirmDialog

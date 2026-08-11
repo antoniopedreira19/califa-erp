@@ -16,6 +16,7 @@ import {
 } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { HONORARIOS_PADRAO_FALLBACK } from "@/lib/validations/clientes";
 import { OrcamentoEditorDrawer } from "../orcamento-editor-drawer";
 import { NovaVersaoDrawer } from "./versoes/nova-versao-drawer";
 import { VersoesList, type VersaoRow } from "./versoes/versoes-list";
@@ -66,7 +67,7 @@ export default async function OrcamentoDetailPage({
       .maybeSingle(),
     supabase
       .from("projetos")
-      .select("id, codigo, nome, campanha, cliente:clientes(id, nome_fantasia), responsavel:profiles!responsavel_id(id, nome), empresa:empresas(nome_fantasia, razao_social)")
+      .select("id, codigo, nome, campanha, cliente:clientes(id, nome_fantasia, percentual_honorarios_padrao), responsavel:profiles!responsavel_id(id, nome), empresa:empresas(nome_fantasia, razao_social)")
       .eq("id", params.projetoId)
       .eq("tenant_id", session.activeTenant.id)
       .maybeSingle(),
@@ -119,6 +120,10 @@ export default async function OrcamentoDetailPage({
   const orcamento = orcamentoRaw as Orcamento;
   const orcamentoCategoriaNome: string | null = orcamentoRaw.categoria?.nome ?? null;
   const clienteNome: string | null = projeto.cliente?.nome_fantasia ?? null;
+  // Honorários de toda versão nova sai daqui — o drawer só exibe, travado.
+  const honorariosCliente = Number(
+    projeto.cliente?.percentual_honorarios_padrao ?? HONORARIOS_PADRAO_FALLBACK,
+  );
   const responsavelNome: string | null = projeto.responsavel?.nome ?? null;
   const empresaNome: string | null = projeto.empresa?.nome_fantasia ?? projeto.empresa?.razao_social ?? null;
   const categoriasOrcamento = (categoriasOrcRes.data ?? []) as Pick<CategoriaDominio, "id" | "nome">[];
@@ -312,6 +317,8 @@ export default async function OrcamentoDetailPage({
             />
             <NovaVersaoDrawer
               orcamentoId={orcamento.id}
+              honorariosCliente={honorariosCliente}
+              clienteNome={clienteNome}
               disabled={!podeCriarVersao}
               disabledReason={
                 podeCriarVersao
