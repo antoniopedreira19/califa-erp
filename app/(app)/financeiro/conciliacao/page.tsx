@@ -113,7 +113,7 @@ export default async function ConciliacaoPage({
     };
 
     const raw = ((data ?? []) as unknown as RawRow[]).map((r) => {
-      const rateio = (r.conta_avulsa?.rateio ?? []).map((rr: any) => ({
+      const rateio = (r.conta_avulsa?.rateio ?? []).map((rr: { percentual: number; regional: { nome: string } | null }) => ({
         percentual: Number(rr.percentual),
         regional_nome: rr.regional?.nome ?? "—",
       }));
