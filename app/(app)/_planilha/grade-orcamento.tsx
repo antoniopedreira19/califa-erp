@@ -1,12 +1,14 @@
-/** Grade compartilhada entre a tabela de itens e o card de Totais.
+/** Grade das planilhas de ORÇAMENTO — 13 colunas.
  *
- *  As duas tabelas precisam das MESMAS larguras: o card de Totais repete
- *  as colunas Total (orçado), Total (planejado), Rentab. e % na mesma
- *  posição horizontal dos cards de grupo acima dele. Sem isso o leitor
- *  perde a coluna ao descer a página.
+ *  Compartilhada entre a tabela de itens, o card de Totais da versão e o
+ *  card de Totais da visão agregada do projeto. As três precisam das
+ *  MESMAS larguras: os Totais repetem as colunas Total (orçado), Total
+ *  (planejado), Rentab. e % na mesma posição horizontal dos cards de
+ *  grupo acima deles. Sem isso o leitor perde a coluna ao descer a
+ *  página.
  *
- *  Sem "use client" de propósito — a tabela de itens é client, o card de
- *  Totais é server, e ambos importam daqui.
+ *  Sem "use client" de propósito — a tabela de itens é client, os cards
+ *  de Totais são server, e todos importam daqui.
  */
 
 /** Larguras fixas do grid. Sem elas cada card mede as colunas pelo próprio

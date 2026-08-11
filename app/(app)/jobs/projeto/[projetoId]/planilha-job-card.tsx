@@ -7,15 +7,19 @@ import { cn, formatCurrency } from "@/lib/utils";
 import { calcularRentabilidade } from "@/lib/calculos/versao-totais";
 import { jobStatusLabel, type JobStatus } from "@/lib/types";
 import type { JobPlanilhaProjeto } from "./tipos";
+import {
+  ColunasJobsProjeto,
+  LARGURA_MINIMA_JOBS_PROJETO,
+} from "@/app/(app)/_planilha/grade-jobs-projeto";
+import {
+  ORCADO,
+  PLANEJADO,
+  REALIZADO,
+  FAIXA_ROTULO,
+  RENTAB_VALOR,
+} from "@/app/(app)/_planilha/blocos";
 
 const GRADE_NEUTRA = "border-r border-r-[#f1f1f1]";
-const GRADE_ORCADO = "border-r border-r-[#eceae5]";
-const GRADE_PLANEJADO = "border-r border-r-[#e6eff9]";
-const GRADE_REALIZADO = "border-r border-r-[#fde8b8]";
-
-const FUNDO_ORCADO = "bg-black/[0.015]";
-const FUNDO_PLANEJADO = "bg-blue-50/40";
-const FUNDO_REALIZADO = "bg-[#fef3c7]/40";
 
 function statusBadgeClasses(status: JobStatus): string {
   switch (status) {
@@ -148,28 +152,60 @@ export function PlanilhaJobCard({ job }: { job: JobPlanilhaProjeto }) {
           </p>
         </div>
 
+        {/* Mesmas cores dos blocos da planilha logo abaixo — o resumo do
+            job e a grade dele leem como a mesma coisa. */}
         <div className="ml-auto flex items-stretch">
-          <div className="border-l-2 border-l-[#d7d7d7] px-4 text-right">
-            <p className="text-[9.5px] font-bold uppercase tracking-[0.09em] text-muted-foreground">
+          <div className={cn("px-4 text-right", ORCADO.bordaAbre)}>
+            <p
+              className={cn(
+                "text-[9.5px] font-bold uppercase tracking-[0.09em]",
+                ORCADO.textoSuave,
+              )}
+            >
               Orçado
             </p>
-            <p className="mt-[3px] whitespace-nowrap font-mono text-[13px] font-bold">
+            <p
+              className={cn(
+                "mt-[3px] whitespace-nowrap font-mono text-[13px] font-bold",
+                ORCADO.texto,
+              )}
+            >
               {formatCurrency(job.orcado, moeda)}
             </p>
           </div>
-          <div className="border-l-2 border-l-[#b9d1f4] px-4 text-right">
-            <p className="text-[9.5px] font-bold uppercase tracking-[0.09em] text-[#5a76a8]">
+          <div className={cn("px-4 text-right", PLANEJADO.bordaAbre)}>
+            <p
+              className={cn(
+                "text-[9.5px] font-bold uppercase tracking-[0.09em]",
+                PLANEJADO.textoSuave,
+              )}
+            >
               Planejado
             </p>
-            <p className="mt-[3px] whitespace-nowrap font-mono text-[13px] font-bold text-[#1e4fa3]">
+            <p
+              className={cn(
+                "mt-[3px] whitespace-nowrap font-mono text-[13px] font-bold",
+                PLANEJADO.texto,
+              )}
+            >
               {moedaOuTraco(job.planejado, moeda)}
             </p>
           </div>
-          <div className="border-l-2 border-l-[#f0c874] px-4 text-right">
-            <p className="text-[9.5px] font-bold uppercase tracking-[0.09em] text-[#a3703a]">
+          <div className={cn("px-4 text-right", REALIZADO.bordaAbre)}>
+            <p
+              className={cn(
+                "text-[9.5px] font-bold uppercase tracking-[0.09em]",
+                REALIZADO.textoSuave,
+              )}
+            >
               Realizado
             </p>
-            <p className="mt-[3px] whitespace-nowrap font-mono text-[13px] font-bold text-[#92400e]">
+            <p
+              className={cn(
+                "mt-[3px] whitespace-nowrap font-mono text-[13px] font-bold",
+                REALIZADO.texto,
+              )}
+            >
               {moedaOuTraco(job.realizado, moeda)}
             </p>
           </div>
@@ -188,33 +224,30 @@ export function PlanilhaJobCard({ job }: { job: JobPlanilhaProjeto }) {
 
       {aberto && (
         <div className="overflow-x-auto">
-          {/* Largura automática, como no design: o bloco de agrupamento tem
-              210px de referência e os três blocos numéricos dividem o resto. */}
-          <table className="w-full min-w-[1320px] border-collapse text-sm">
+          {/* Grade compartilhada com o card de Totais desta tela: as
+              colunas Total de lá caem exatamente sob as daqui. */}
+          <table
+            className={cn(
+              "w-full table-fixed border-collapse text-sm",
+              LARGURA_MINIMA_JOBS_PROJETO,
+            )}
+          >
+            <ColunasJobsProjeto />
             <thead>
               <tr>
                 <th colSpan={3} className="border-b border-border bg-muted/40" />
-                <th
-                  colSpan={4}
-                  className="border-b-[3px] border-l-2 border-b-[#282828] border-l-[#d7d7d7] bg-[#f1f0ec] px-3 py-2 text-center text-[11px] font-extrabold tracking-[0.1em] text-foreground"
-                >
+                <th colSpan={4} className={cn(FAIXA_ROTULO, ORCADO.faixa)}>
                   ORÇADO
                 </th>
-                <th
-                  colSpan={4}
-                  className="border-b-[3px] border-l-2 border-b-[#2f6fdb] border-l-[#b9d1f4] bg-[#e8f0fd] px-3 py-2 text-center text-[11px] font-extrabold tracking-[0.1em] text-[#1e4fa3]"
-                >
+                <th colSpan={4} className={cn(FAIXA_ROTULO, PLANEJADO.faixa)}>
                   PLANEJADO
                 </th>
-                <th
-                  colSpan={4}
-                  className="border-b-[3px] border-l-2 border-b-[#d97706] border-l-[#f0c874] bg-[#fef3c7] px-3 py-2 text-center text-[11px] font-extrabold tracking-[0.1em] text-[#92400e]"
-                >
+                <th colSpan={4} className={cn(FAIXA_ROTULO, REALIZADO.faixa)}>
                   REALIZADO
                 </th>
               </tr>
               <tr className="bg-muted/40 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                <th className="w-[210px] border-r border-r-border px-3 py-2 text-left">
+                <th className="border-r border-r-border px-3 py-2 text-left">
                   Agrupamento · item
                 </th>
                 <th className="border-r border-r-border px-2 py-2 text-left">
@@ -223,38 +256,80 @@ export function PlanilhaJobCard({ job }: { job: JobPlanilhaProjeto }) {
                 <th className="border-r border-r-border px-3 py-2 text-left">
                   Categoria
                 </th>
-                <th className="border-l-2 border-r border-l-[#e4e2dd] border-r-border px-3 py-2 text-right">
+                <th
+                  className={cn("px-3 py-2 text-right", ORCADO.cabecalhoAbre)}
+                >
                   R$ Unit.
                 </th>
-                <th className="border-r border-r-border px-1.5 py-2 text-right">
+                <th
+                  className={cn("px-1.5 py-2 text-right", ORCADO.cabecalhoMeio)}
+                >
                   QT
                 </th>
-                <th className="border-r border-r-border px-1.5 py-2 text-right">
+                <th
+                  className={cn("px-1.5 py-2 text-right", ORCADO.cabecalhoMeio)}
+                >
                   D/M
                 </th>
-                <th className="min-w-[132px] px-3 py-2 text-right">Total</th>
-                <th className="border-l-2 border-r border-l-[#cfe0f7] border-r-[#dfeafb] bg-blue-50/60 px-3 py-2 text-right text-[#5a76a8]">
-                  R$ Unit.
-                </th>
-                <th className="border-r border-r-[#dfeafb] bg-blue-50/60 px-1.5 py-2 text-right text-[#5a76a8]">
-                  QT
-                </th>
-                <th className="border-r border-r-[#dfeafb] bg-blue-50/60 px-1.5 py-2 text-right text-[#5a76a8]">
-                  D/M
-                </th>
-                <th className="min-w-[132px] bg-blue-50/60 px-3 py-2 text-right text-[#5a76a8]">
+                <th className={cn("px-3 py-2 text-right", ORCADO.cabecalhoFim)}>
                   Total
                 </th>
-                <th className="border-l-2 border-r border-l-[#f0c874] border-r-[#fde8b8] bg-[#fef3c7]/70 px-3 py-2 text-right text-[#92400e]">
+                <th
+                  className={cn(
+                    "px-3 py-2 text-right",
+                    PLANEJADO.cabecalhoAbre,
+                  )}
+                >
                   R$ Unit.
                 </th>
-                <th className="border-r border-r-[#fde8b8] bg-[#fef3c7]/70 px-1.5 py-2 text-right text-[#92400e]">
+                <th
+                  className={cn(
+                    "px-1.5 py-2 text-right",
+                    PLANEJADO.cabecalhoMeio,
+                  )}
+                >
                   QT
                 </th>
-                <th className="border-r border-r-[#fde8b8] bg-[#fef3c7]/70 px-1.5 py-2 text-right text-[#92400e]">
+                <th
+                  className={cn(
+                    "px-1.5 py-2 text-right",
+                    PLANEJADO.cabecalhoMeio,
+                  )}
+                >
                   D/M
                 </th>
-                <th className="min-w-[132px] bg-[#fef3c7]/70 px-3 py-2 text-right text-[#92400e]">
+                <th
+                  className={cn("px-3 py-2 text-right", PLANEJADO.cabecalhoFim)}
+                >
+                  Total
+                </th>
+                <th
+                  className={cn(
+                    "px-3 py-2 text-right",
+                    REALIZADO.cabecalhoAbre,
+                  )}
+                >
+                  R$ Unit.
+                </th>
+                <th
+                  className={cn(
+                    "px-1.5 py-2 text-right",
+                    REALIZADO.cabecalhoMeio,
+                  )}
+                >
+                  QT
+                </th>
+                <th
+                  className={cn(
+                    "px-1.5 py-2 text-right",
+                    REALIZADO.cabecalhoMeio,
+                  )}
+                >
+                  D/M
+                </th>
+                <th
+                  className={cn("px-3 py-2 text-right", REALIZADO.cabecalhoFim)}
+                >
                   Total
                 </th>
               </tr>
@@ -313,14 +388,13 @@ export function PlanilhaJobCard({ job }: { job: JobPlanilhaProjeto }) {
                       <td
                         colSpan={3}
                         className={cn(
-                          "border-l-2 border-l-[#e4e2dd]",
-                          FUNDO_ORCADO,
+                          ORCADO.celulaVazia,
                         )}
                       />
                       <td
                         className={cn(
                           "whitespace-nowrap px-3 py-2.5 text-right font-mono text-[12.5px] font-semibold",
-                          FUNDO_ORCADO,
+                          ORCADO.celulaTotal,
                         )}
                       >
                         {formatCurrency(g.orcado, moeda)}
@@ -328,14 +402,13 @@ export function PlanilhaJobCard({ job }: { job: JobPlanilhaProjeto }) {
                       <td
                         colSpan={3}
                         className={cn(
-                          "border-l-2 border-l-[#cfe0f7]",
-                          FUNDO_PLANEJADO,
+                          PLANEJADO.celulaVazia,
                         )}
                       />
                       <td
                         className={cn(
-                          "whitespace-nowrap px-3 py-2.5 text-right font-mono text-[12.5px] font-semibold text-[#1e4fa3]",
-                          FUNDO_PLANEJADO,
+                          "whitespace-nowrap px-3 py-2.5 text-right font-mono text-[12.5px] font-semibold",
+                          PLANEJADO.celulaTotal,
                         )}
                       >
                         {moedaOuTraco(g.planejado, moeda)}
@@ -343,14 +416,13 @@ export function PlanilhaJobCard({ job }: { job: JobPlanilhaProjeto }) {
                       <td
                         colSpan={3}
                         className={cn(
-                          "border-l-2 border-l-[#f0c874]",
-                          FUNDO_REALIZADO,
+                          REALIZADO.celulaVazia,
                         )}
                       />
                       <td
                         className={cn(
-                          "whitespace-nowrap px-3 py-2.5 text-right font-mono text-[12.5px] font-semibold text-[#92400e]",
-                          FUNDO_REALIZADO,
+                          "whitespace-nowrap px-3 py-2.5 text-right font-mono text-[12.5px] font-semibold",
+                          REALIZADO.celulaTotal,
                         )}
                       >
                         {moedaOuTraco(g.realizado, moeda)}
@@ -387,9 +459,8 @@ export function PlanilhaJobCard({ job }: { job: JobPlanilhaProjeto }) {
                           {/* Orçado */}
                           <td
                             className={cn(
-                              "whitespace-nowrap border-l-2 border-l-[#e4e2dd] px-3 py-2.5 text-right font-mono text-xs",
-                              FUNDO_ORCADO,
-                              GRADE_ORCADO,
+                              "whitespace-nowrap px-3 py-2.5 text-right font-mono text-xs",
+                              ORCADO.celulaAbre,
                             )}
                           >
                             {formatCurrency(it.orcUnit, moeda)}
@@ -397,8 +468,7 @@ export function PlanilhaJobCard({ job }: { job: JobPlanilhaProjeto }) {
                           <td
                             className={cn(
                               "px-1.5 py-2.5 text-right text-xs",
-                              FUNDO_ORCADO,
-                              GRADE_ORCADO,
+                              ORCADO.celulaMeio,
                             )}
                           >
                             {it.orcQt}
@@ -406,8 +476,7 @@ export function PlanilhaJobCard({ job }: { job: JobPlanilhaProjeto }) {
                           <td
                             className={cn(
                               "px-1.5 py-2.5 text-right text-xs",
-                              FUNDO_ORCADO,
-                              GRADE_ORCADO,
+                              ORCADO.celulaMeio,
                             )}
                           >
                             {it.orcDm}
@@ -415,7 +484,7 @@ export function PlanilhaJobCard({ job }: { job: JobPlanilhaProjeto }) {
                           <td
                             className={cn(
                               "whitespace-nowrap px-3 py-2.5 text-right font-mono text-xs font-semibold",
-                              FUNDO_ORCADO,
+                              ORCADO.celulaTotal,
                             )}
                           >
                             {formatCurrency(it.orcTotal, moeda)}
@@ -423,9 +492,8 @@ export function PlanilhaJobCard({ job }: { job: JobPlanilhaProjeto }) {
                           {/* Planejado */}
                           <td
                             className={cn(
-                              "whitespace-nowrap border-l-2 border-l-[#cfe0f7] px-3 py-2.5 text-right font-mono text-xs",
-                              FUNDO_PLANEJADO,
-                              GRADE_PLANEJADO,
+                              "whitespace-nowrap px-3 py-2.5 text-right font-mono text-xs",
+                              PLANEJADO.celulaAbre,
                             )}
                           >
                             {moedaOuTraco(it.planUnit, moeda)}
@@ -433,8 +501,7 @@ export function PlanilhaJobCard({ job }: { job: JobPlanilhaProjeto }) {
                           <td
                             className={cn(
                               "px-1.5 py-2.5 text-right text-xs",
-                              FUNDO_PLANEJADO,
-                              GRADE_PLANEJADO,
+                              PLANEJADO.celulaMeio,
                             )}
                           >
                             {numeroOuTraco(it.planQt)}
@@ -442,8 +509,7 @@ export function PlanilhaJobCard({ job }: { job: JobPlanilhaProjeto }) {
                           <td
                             className={cn(
                               "px-1.5 py-2.5 text-right text-xs",
-                              FUNDO_PLANEJADO,
-                              GRADE_PLANEJADO,
+                              PLANEJADO.celulaMeio,
                             )}
                           >
                             {numeroOuTraco(it.planDm)}
@@ -451,7 +517,7 @@ export function PlanilhaJobCard({ job }: { job: JobPlanilhaProjeto }) {
                           <td
                             className={cn(
                               "whitespace-nowrap px-3 py-2.5 text-right font-mono text-xs font-semibold",
-                              FUNDO_PLANEJADO,
+                              PLANEJADO.celulaTotal,
                             )}
                           >
                             {moedaOuTraco(it.planTotal, moeda)}
@@ -459,9 +525,8 @@ export function PlanilhaJobCard({ job }: { job: JobPlanilhaProjeto }) {
                           {/* Realizado */}
                           <td
                             className={cn(
-                              "whitespace-nowrap border-l-2 border-l-[#f0c874] px-3 py-2.5 text-right font-mono text-xs",
-                              FUNDO_REALIZADO,
-                              GRADE_REALIZADO,
+                              "whitespace-nowrap px-3 py-2.5 text-right font-mono text-xs",
+                              REALIZADO.celulaAbre,
                             )}
                           >
                             {moedaOuTraco(it.realUnit, moeda)}
@@ -469,8 +534,7 @@ export function PlanilhaJobCard({ job }: { job: JobPlanilhaProjeto }) {
                           <td
                             className={cn(
                               "px-1.5 py-2.5 text-right text-xs",
-                              FUNDO_REALIZADO,
-                              GRADE_REALIZADO,
+                              REALIZADO.celulaMeio,
                             )}
                           >
                             {numeroOuTraco(it.realQt)}
@@ -478,8 +542,7 @@ export function PlanilhaJobCard({ job }: { job: JobPlanilhaProjeto }) {
                           <td
                             className={cn(
                               "px-1.5 py-2.5 text-right text-xs",
-                              FUNDO_REALIZADO,
-                              GRADE_REALIZADO,
+                              REALIZADO.celulaMeio,
                             )}
                           >
                             {numeroOuTraco(it.realDm)}
@@ -487,7 +550,7 @@ export function PlanilhaJobCard({ job }: { job: JobPlanilhaProjeto }) {
                           <td
                             className={cn(
                               "whitespace-nowrap px-3 py-2.5 text-right font-mono text-xs font-semibold",
-                              FUNDO_REALIZADO,
+                              REALIZADO.celulaTotal,
                             )}
                           >
                             {moedaOuTraco(it.realTotal, moeda)}
@@ -507,25 +570,31 @@ export function PlanilhaJobCard({ job }: { job: JobPlanilhaProjeto }) {
                 >
                   Total do job
                 </td>
+                <td colSpan={3} className={ORCADO.subtotalVazio} />
                 <td
-                  colSpan={3}
-                  className="border-l-2 border-t-2 border-l-[#d7d7d7] border-t-[#282828] bg-[#f1f0ec]"
-                />
-                <td className="whitespace-nowrap border-t-2 border-t-[#282828] bg-[#f1f0ec] px-3 py-3 text-right font-mono text-[13px] font-bold">
+                  className={cn(
+                    "whitespace-nowrap px-3 py-3 text-right font-mono text-[13px] font-bold",
+                    ORCADO.subtotalValor,
+                  )}
+                >
                   {formatCurrency(job.orcado, moeda)}
                 </td>
+                <td colSpan={3} className={PLANEJADO.subtotalVazio} />
                 <td
-                  colSpan={3}
-                  className="border-l-2 border-t-2 border-l-[#b9d1f4] border-t-[#2f6fdb] bg-[#e8f0fd]"
-                />
-                <td className="whitespace-nowrap border-t-2 border-t-[#2f6fdb] bg-[#e8f0fd] px-3 py-3 text-right font-mono text-[13px] font-bold text-[#1e4fa3]">
+                  className={cn(
+                    "whitespace-nowrap px-3 py-3 text-right font-mono text-[13px] font-bold",
+                    PLANEJADO.subtotalValor,
+                  )}
+                >
                   {moedaOuTraco(job.planejado, moeda)}
                 </td>
+                <td colSpan={3} className={REALIZADO.subtotalVazio} />
                 <td
-                  colSpan={3}
-                  className="border-l-2 border-t-2 border-l-[#f0c874] border-t-[#d97706] bg-[#fef3c7]"
-                />
-                <td className="whitespace-nowrap border-t-2 border-t-[#d97706] bg-[#fef3c7] px-3 py-3 text-right font-mono text-[13px] font-bold text-[#92400e]">
+                  className={cn(
+                    "whitespace-nowrap px-3 py-3 text-right font-mono text-[13px] font-bold",
+                    REALIZADO.subtotalValor,
+                  )}
+                >
                   {moedaOuTraco(job.realizado, moeda)}
                 </td>
               </tr>
@@ -538,32 +607,48 @@ export function PlanilhaJobCard({ job }: { job: JobPlanilhaProjeto }) {
                 </td>
                 <td
                   colSpan={4}
-                  className="border-l-2 border-t border-l-[#d7d7d7] border-t-[#e4e2dd] bg-[#f1f0ec]"
+                  className={cn("border-t border-t-[#dfeafb]", ORCADO.celulaVazia)}
                 />
                 <td
                   colSpan={3}
-                  className="border-l-2 border-t border-l-[#b9d1f4] border-t-[#cfe0f7] bg-[#e8f0fd]"
+                  className={cn(
+                    "border-t border-t-[#dcf5e8]",
+                    PLANEJADO.celulaVazia,
+                  )}
                 />
-                <td className="whitespace-nowrap border-t border-t-[#cfe0f7] bg-[#e8f0fd] px-3 py-2.5 text-right">
+                <td
+                  className={cn(
+                    "whitespace-nowrap px-3 py-2.5 text-right border-t border-t-[#dcf5e8]",
+                    PLANEJADO.celulaTotal,
+                  )}
+                >
                   <CelulaRentabilidade
                     orcado={job.orcado}
                     custo={job.planejado}
                     moeda={moeda}
-                    corValor="text-[#1e4fa3]"
-                    corPercentual="text-[#5a76a8]"
+                    corValor={RENTAB_VALOR}
+                    corPercentual={RENTAB_VALOR}
                   />
                 </td>
                 <td
                   colSpan={3}
-                  className="border-l-2 border-t border-l-[#f0c874] border-t-[#f0c874] bg-[#fef3c7]"
+                  className={cn(
+                    "border-t border-t-[#fbd8b8]",
+                    REALIZADO.celulaVazia,
+                  )}
                 />
-                <td className="whitespace-nowrap border-t border-t-[#f0c874] bg-[#fef3c7] px-3 py-2.5 text-right">
+                <td
+                  className={cn(
+                    "whitespace-nowrap px-3 py-2.5 text-right border-t border-t-[#fbd8b8]",
+                    REALIZADO.celulaTotal,
+                  )}
+                >
                   <CelulaRentabilidade
                     orcado={job.orcado}
                     custo={job.realizado}
                     moeda={moeda}
-                    corValor="text-[#92400e]"
-                    corPercentual="text-[#a3703a]"
+                    corValor={RENTAB_VALOR}
+                    corPercentual={RENTAB_VALOR}
                   />
                 </td>
               </tr>

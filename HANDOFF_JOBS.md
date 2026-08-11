@@ -3,13 +3,17 @@
 Registro da implementação dos designs do módulo de Jobs, mais as decisões de
 modelagem e de negócio tomadas junto com o time durante a execução.
 
-O documento tem **três partes**, uma por design:
+O documento tem **quatro partes**, uma por design:
 
 | Parte | Design | Telas | Seções |
 |---|---|---|---|
 | **I** | `Jobs - Fluxo.dc.html` + `Chat Job.dc.html` | as quatro abas do detalhe do job | 1 a 11 |
 | **II** | `Jobs - Lista e Projeto.dc.html` | lista de jobs e visão agregada do projeto | 12 a 17 |
 | **III** | `Orcamento - BV - Opcoes.dc.html` | BV na Planilha Interna + travas na errata | 18 a 23 |
+| **IV** | `Comparativo Cores - Orcamento e Job.dc.html` | cor dos blocos e faixa do agrupamento, nas 2 telas de planilha | 24 e 25 |
+
+> A Parte IV é transversal aos módulos de Orçamento e Job. A regra vive em
+> `docs/09-identidade-visual-ui.md`; aqui fica só o que é do Job.
 
 ---
 
@@ -857,3 +861,61 @@ produção**.
 | **Permissão por papel** | Não implementada — decisão do time ("por enquanto todos"). Quando entrar, vale para o botão da calha **e** para as três Server Actions |
 | **PP ativa + correção de valor** | Segue permitido por errata. Só a troca de tipo é barrada |
 | **BV cancelado é sobrescrito** | Relançar no mesmo item reaproveita a linha. Se a parte de confirmação exigir histórico de BVs cancelados, trocar `uniq_bv_item` por índice parcial ("um BV ativo por item") |
+
+---
+
+# Parte IV — cores dos blocos e faixa do agrupamento
+
+**Data:** 2026-08-11
+**Origem do design:** projeto Claude Design `69342d83-28d9-4bea-a8af-c99e233f5f13`,
+arquivo `Comparativo Cores - Orcamento e Job.dc.html`, lido via MCP `claude_design`.
+O design cobre orçamento e job de uma vez; a parte de Orçamentos é a Entrega 15
+do `HANDOFF_ORCAMENTO.md`.
+**Branch:** `design/bv-botoes-adicionar-abrir`
+
+⚠️ **A regra em si não mora aqui.** O sistema de cor por bloco, as grades
+compartilhadas e a faixa do agrupamento são transversais aos dois módulos —
+estão em `docs/09-identidade-visual-ui.md`, seções "Cores das planilhas",
+"Grades compartilhadas" e "Faixa do agrupamento". Duplicar a spec nos dois
+handoffs faria as cópias divergirem, que é o defeito que esta entrega corrigiu
+no código. Aqui fica só o que é do módulo de Jobs.
+
+---
+
+## 24. O que mudou nas telas de job
+
+1. **Paleta trocada.** ORÇADO era bege/grafite e virou azul; PLANEJADO era azul
+   e virou verde; REALIZADO era âmbar (`#fef3c7`/`#92400e`) e virou laranja
+   (`#FFEDD5`/`#C2410C`). Vale na Planilha Interna, no card de Totais do job, na
+   planilha consolidada do projeto e no card de Totais do projeto. As pílulas
+   Orçado/Planejado/Realizado do cabeçalho de cada job na agregada seguem as
+   mesmas cores — o resumo e a grade abaixo dele leem como a mesma coisa.
+2. **A barra de título do `JobGrupoCard` saiu.** O nome do agrupamento subiu
+   para a faixa do `<thead>` e o contador de itens foi para a calha à direita,
+   onde já moram as pílulas de BV e PP. A calha do grupo se alinha pela altura
+   **medida** da faixa (`faixaRef` + `ResizeObserver`).
+3. **Rentabilidade em grafite.** As duas linhas de Rentabilidade do rodapé
+   (orçado × planejado e orçado × realizado) continuam onde estavam, sob as
+   colunas Total de PLANEJADO e REALIZADO — o job **não** ganhou bloco
+   RENTABILIDADE. Decisão do time: *"essa modificação é de design, e não deverá
+   afetar as informações presentes no modelo atual"*. Só a cor do número mudou.
+4. **Grades extraídas.** `job-item-realizado-table.tsx` e `job-totais-card.tsx`
+   tinham colgroups de 15 colunas duplicados e idênticos — viraram
+   `app/(app)/_planilha/grade-job.tsx`. A visão agregada ganhou
+   `grade-jobs-projeto.tsx`, que **não existia**: era o que faltava para os
+   Totais alinharem (ver o case study no doc — reverte a decisão de layout
+   automático da §14).
+
+---
+
+## 25. Verificação
+
+`tsc --noEmit --incremental false` e `next lint` limpos. Alinhamento conferido
+medindo `getBoundingClientRect()` no navegador, não a olho:
+
+| Tela | Fronteiras das colunas | Resultado |
+|---|---|---|
+| Planilha Interna (3 grupos + Totais) | 153/575/879/1183/1487 nas 4 tabelas | exato |
+| Agregada do projeto (planilha + Totais) | 111/579/935/1290/1645 nas 2 tabelas | exato |
+
+Nenhuma migration. Nada em `lib/calculos/` foi tocado.

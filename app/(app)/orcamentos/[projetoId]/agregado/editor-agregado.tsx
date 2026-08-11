@@ -689,6 +689,13 @@ export function EditorAgregado({
         </div>
       )}
 
+      {/* Orçamentos e Totais dividem a mesma calha: é o que faz as colunas
+          Total / Rentab. / % do card de Totais caírem exatamente sob as
+          mesmas colunas das planilhas dos grupos. O pr reserva a trilha de
+          ações que fica fora do frame de cada card de grupo: 154px
+          comportam o respiro (8px) + a pílula do BV (116px) + a lixeira
+          (26px) + o gap. Mesmo arranjo da tela da versão individual. */}
+      <div className="flex flex-col gap-6 pr-[154px]">
       <div className="flex flex-col gap-4">
         {orcamentos.map((orc) => {
           if (!orc.origemBanco) contadorNovos += 1;
@@ -744,11 +751,12 @@ export function EditorAgregado({
         })}
       </div>
 
-      <TotaisProjetoCard
-        moeda={moedaProjeto}
-        descricao="Orçado × Planejado por orçamento · a versão vigente de cada um, com as alterações ainda não salvas já refletidas."
-        linhas={linhasTotais}
-      />
+        <TotaisProjetoCard
+          moeda={moedaProjeto}
+          descricao="Orçado × Planejado por orçamento · a versão vigente de cada um, com as alterações ainda não salvas já refletidas."
+          linhas={linhasTotais}
+        />
+      </div>
 
       <div className="sticky bottom-0 z-30 -mx-5 border-t border-border bg-white/95 backdrop-blur md:-mx-8">
         <div className="flex items-center gap-4 px-5 py-3.5 md:px-8">

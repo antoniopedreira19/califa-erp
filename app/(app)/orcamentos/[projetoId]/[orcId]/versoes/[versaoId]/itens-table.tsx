@@ -28,7 +28,18 @@ import {
   removerItem,
   type ActionResult,
 } from "../actions";
-import { ColunasFixas, LARGURA_MINIMA } from "./grade-colunas";
+import {
+  ColunasFixas,
+  LARGURA_MINIMA,
+} from "@/app/(app)/_planilha/grade-orcamento";
+import {
+  ORCADO,
+  PLANEJADO,
+  RENTABILIDADE,
+  FAIXA_ROTULO,
+  FAIXA_GRUPO,
+  RENTAB_VALOR,
+} from "@/app/(app)/_planilha/blocos";
 import {
   BvDialog,
   type AdaptadorBv,
@@ -77,6 +88,17 @@ interface Props {
   adaptador?: AdaptadorItens;
   /** Repassado ao formulário de BV; mesma regra do adaptador acima. */
   adaptadorBv?: AdaptadorBv;
+  /** Identidade do grupo — recolher e nome. Mora na PRIMEIRA linha do
+   *  thead, na mesma faixa de ORÇADO / PLANEJADO / RENTABILIDADE: o card
+   *  não tem mais barra de título só para isso. */
+  cabecalhoGrupo?: React.ReactNode;
+  /** Ações do grupo (contador, remover). Vão para a calha à direita da
+   *  tabela, na altura da faixa — onde o design põe o "6 itens". */
+  acoesGrupo?: React.ReactNode;
+  /** A faixa da tabela é o topo do card e precisa arredondar. Falso
+   *  enquanto o card mostra um aviso próprio à frente dela. Sem valor,
+   *  vale a presença do `cabecalhoGrupo`. */
+  abreCard?: boolean;
 }
 
 /** Campos que a grade edita — espelha o allowlist do server action. */
@@ -110,9 +132,6 @@ const ALTURA_LINHA = "h-7";
 
 // Grade: linhas verticais discretas, uma cor por bloco.
 const GRADE_NEUTRA = "border-r border-r-[#f1f1f1]";
-const GRADE_ORCADO = "border-r border-r-[#eceae5]";
-const GRADE_PLANEJADO = "border-r border-r-[#e6eff9]";
-const GRADE_RENTAB = "border-r border-r-[#d9efe3]";
 
 /** 2px menor que a linha (28px), como no handoff — o campo respira dentro
  *  da célula em vez de encostar nas bordas. */
@@ -197,6 +216,9 @@ export function ItensTable({
   versaoLabel,
   adaptador,
   adaptadorBv,
+  cabecalhoGrupo,
+  acoesGrupo,
+  abreCard,
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
@@ -224,21 +246,27 @@ export function ItensTable({
 
   const wrapperRef = React.useRef<HTMLDivElement>(null);
   const tbodyRef = React.useRef<HTMLTableSectionElement>(null);
+  const faixaRef = React.useRef<HTMLTableRowElement>(null);
   const persistindoRef = React.useRef(false);
   const [railTop, setRailTop] = React.useState(0);
+  const [faixaAltura, setFaixaAltura] = React.useState(0);
 
   const temDraft = draft !== null;
 
   // A trilha de ações vive fora do card, então precisa saber onde o
   // tbody começa. Altura de linha é fixa; só o offset do topo varia.
+  // A faixa do grupo é o primeiro <tr> do thead — a calha das ações do
+  // grupo se alinha por ela, não por altura chutada.
   React.useLayoutEffect(() => {
     const wrapper = wrapperRef.current;
     const tbody = tbodyRef.current;
     if (!wrapper || !tbody) return;
-    const medir = () =>
-      setRailTop(
-        tbody.getBoundingClientRect().top - wrapper.getBoundingClientRect().top,
-      );
+    const medir = () => {
+      const topoWrapper = wrapper.getBoundingClientRect().top;
+      setRailTop(tbody.getBoundingClientRect().top - topoWrapper);
+      const faixa = faixaRef.current;
+      if (faixa) setFaixaAltura(faixa.getBoundingClientRect().height);
+    };
     medir();
     const observer = new ResizeObserver(medir);
     observer.observe(wrapper);
@@ -440,6 +468,10 @@ export function ItensTable({
 
   const editavel = !readOnly;
 
+  // Quem arredonda o topo é o primeiro elemento visível do card: o aviso,
+  // quando existe, senão a própria faixa da tabela.
+  const arredondaTopo = (abreCard ?? cabecalhoGrupo != null) && !erro;
+
   /** O BV existe em A e D — os tipos em que o cliente paga o fornecedor
    *  direto e sobra comissão a negociar. B e C passam pela California e
    *  usam Pedido de Produção. Usa o valor otimista: mudar o tipo na
@@ -457,7 +489,12 @@ export function ItensTable({
   return (
     <>
       {erro && (
-        <div className="flex items-center justify-between gap-3 border-b border-california-red/20 bg-california-red/5 px-6 py-2 text-xs text-california-red">
+        <div
+          className={cn(
+            "flex items-center justify-between gap-3 border-b border-california-red/20 bg-california-red/5 px-6 py-2 text-xs text-california-red",
+            (abreCard ?? cabecalhoGrupo != null) && "rounded-t-2xl",
+          )}
+        >
           <span>{erro}</span>
           <button
             type="button"
@@ -472,10 +509,13 @@ export function ItensTable({
 
       <div ref={wrapperRef} className="relative">
         {/* Sem a barra de dica embaixo (readOnly ou grupo recolhido), é a
-            própria tabela que fecha o card — precisa arredondar. */}
+            própria tabela que fecha o card — precisa arredondar. Com o
+            nome do grupo na faixa ela também ABRE o card, e o mesmo vale
+            para o topo (a menos que o aviso de erro esteja na frente). */}
         <div
           className={cn(
             "overflow-x-auto",
+            arredondaTopo && "rounded-t-2xl",
             (readOnly || !aberto) && "rounded-b-2xl",
           )}
         >
@@ -484,24 +524,22 @@ export function ItensTable({
           >
             <ColunasFixas />
             <thead className="text-[10px] uppercase tracking-wider text-muted-foreground">
-              {/* Linha 1 — faixas de bloco */}
-              <tr>
-                <th colSpan={3} className="bg-muted/40 border-b border-border" />
-                <th
-                  colSpan={4}
-                  className="text-center px-3 py-2 text-[11px] font-extrabold tracking-[0.1em] normal-case text-foreground bg-[#f1f0ec] border-b-[3px] border-b-[#282828] border-l-2 border-l-[#d7d7d7]"
-                >
+              {/* Linha 1 — o nome do agrupamento divide a faixa com os
+                  blocos, em vez de ocupar uma barra só dele acima da
+                  tabela. */}
+              <tr ref={faixaRef}>
+                <th colSpan={3} className={FAIXA_GRUPO}>
+                  {cabecalhoGrupo}
+                </th>
+                <th colSpan={4} className={cn(FAIXA_ROTULO, ORCADO.faixa)}>
                   ORÇADO
                 </th>
-                <th
-                  colSpan={4}
-                  className="text-center px-3 py-2 text-[11px] font-extrabold tracking-[0.1em] normal-case text-[#1e4fa3] bg-[#e8f0fd] border-b-[3px] border-b-[#2f6fdb] border-l-2 border-l-[#b9d1f4]"
-                >
+                <th colSpan={4} className={cn(FAIXA_ROTULO, PLANEJADO.faixa)}>
                   PLANEJADO
                 </th>
                 <th
                   colSpan={2}
-                  className="text-center px-3 py-2 text-[11px] font-extrabold tracking-[0.08em] normal-case text-emerald-700 bg-emerald-50 border-b-[3px] border-b-emerald-600 border-l-2 border-l-[#d7d7d7]"
+                  className={cn(FAIXA_ROTULO, RENTABILIDADE.faixa)}
                 >
                   RENTABILIDADE
                 </th>
@@ -517,34 +555,86 @@ export function ItensTable({
                 </th>
                 <th className="text-left font-semibold px-3 py-2">Categoria</th>
                 {/* bloco ORÇADO */}
-                <th className="text-right font-semibold px-3 py-2 border-l-2 border-l-[#e4e2dd] border-r border-r-border">
+                <th
+                  className={cn(
+                    "text-right font-semibold px-3 py-2",
+                    ORCADO.cabecalhoAbre,
+                  )}
+                >
                   R$ Unit.
                 </th>
-                <th className="text-right font-semibold px-3 py-2 border-r border-r-border">
+                <th
+                  className={cn(
+                    "text-right font-semibold px-3 py-2",
+                    ORCADO.cabecalhoMeio,
+                  )}
+                >
                   QT
                 </th>
-                <th className="text-right font-semibold px-3 py-2 border-r border-r-border">
+                <th
+                  className={cn(
+                    "text-right font-semibold px-3 py-2",
+                    ORCADO.cabecalhoMeio,
+                  )}
+                >
                   D/M
                 </th>
-                <th className="text-right font-semibold px-3 py-2">Total</th>
+                <th
+                  className={cn(
+                    "text-right font-semibold px-3 py-2",
+                    ORCADO.cabecalhoFim,
+                  )}
+                >
+                  Total
+                </th>
                 {/* bloco PLANEJADO */}
-                <th className="text-right font-semibold px-3 py-2 bg-blue-50/60 text-[#5a76a8] border-l-2 border-l-[#cfe0f7] border-r border-r-[#dfeafb]">
+                <th
+                  className={cn(
+                    "text-right font-semibold px-3 py-2",
+                    PLANEJADO.cabecalhoAbre,
+                  )}
+                >
                   R$ Unit.
                 </th>
-                <th className="text-right font-semibold px-3 py-2 bg-blue-50/60 text-[#5a76a8] border-r border-r-[#dfeafb]">
+                <th
+                  className={cn(
+                    "text-right font-semibold px-3 py-2",
+                    PLANEJADO.cabecalhoMeio,
+                  )}
+                >
                   QT
                 </th>
-                <th className="text-right font-semibold px-3 py-2 bg-blue-50/60 text-[#5a76a8] border-r border-r-[#dfeafb]">
+                <th
+                  className={cn(
+                    "text-right font-semibold px-3 py-2",
+                    PLANEJADO.cabecalhoMeio,
+                  )}
+                >
                   D/M
                 </th>
-                <th className="text-right font-semibold px-3 py-2 bg-blue-50/60 text-[#5a76a8]">
+                <th
+                  className={cn(
+                    "text-right font-semibold px-3 py-2",
+                    PLANEJADO.cabecalhoFim,
+                  )}
+                >
                   Total
                 </th>
                 {/* bloco RENTABILIDADE */}
-                <th className="text-right font-semibold px-3 py-2 bg-emerald-50/50 text-emerald-800/70 border-l border-l-border border-r border-r-[#d9efe3]">
+                <th
+                  className={cn(
+                    "text-right font-semibold px-3 py-2",
+                    RENTABILIDADE.cabecalhoAbre,
+                  )}
+                >
                   R$
                 </th>
-                <th className="text-right font-semibold px-3 py-2 bg-emerald-50/50 text-emerald-800/70">
+                <th
+                  className={cn(
+                    "text-right font-semibold px-3 py-2",
+                    RENTABILIDADE.cabecalhoFim,
+                  )}
+                >
                   %
                 </th>
               </tr>
@@ -661,10 +751,7 @@ export function ItensTable({
                         confirmarNumero(item, "valor_unitario_orcado", raw)
                       }
                       onCancelar={() => setAtiva(null)}
-                      tdClassName={cn(
-                        "font-mono bg-black/[0.015] border-l-2 border-l-[#e4e2dd]",
-                        GRADE_ORCADO,
-                      )}
+                      tdClassName={cn("font-mono", ORCADO.celulaAbre)}
                     />
                     <CelulaNumero
                       valor={num(valorAtual(item, "quantidade_orcada"))}
@@ -677,7 +764,7 @@ export function ItensTable({
                         confirmarNumero(item, "quantidade_orcada", raw)
                       }
                       onCancelar={() => setAtiva(null)}
-                      tdClassName={cn("bg-black/[0.015]", GRADE_ORCADO)}
+                      tdClassName={ORCADO.celulaMeio}
                     />
                     <CelulaNumero
                       valor={num(valorAtual(item, "dias_meses_orcado"))}
@@ -690,9 +777,14 @@ export function ItensTable({
                         confirmarNumero(item, "dias_meses_orcado", raw)
                       }
                       onCancelar={() => setAtiva(null)}
-                      tdClassName={cn("bg-black/[0.015]", GRADE_ORCADO)}
+                      tdClassName={ORCADO.celulaMeio}
                     />
-                    <td className="px-3 text-right font-mono text-xs font-semibold bg-black/[0.015] whitespace-nowrap">
+                    <td
+                      className={cn(
+                        "px-3 text-right font-mono text-xs font-semibold whitespace-nowrap",
+                        ORCADO.celulaTotal,
+                      )}
+                    >
                       {formatCurrency(totais.orcado, moeda)}
                     </td>
 
@@ -715,10 +807,7 @@ export function ItensTable({
                         confirmarNumero(item, "valor_unitario_planejado", raw)
                       }
                       onCancelar={() => setAtiva(null)}
-                      tdClassName={cn(
-                        "font-mono bg-blue-50/40 border-l-2 border-l-[#cfe0f7]",
-                        GRADE_PLANEJADO,
-                      )}
+                      tdClassName={cn("font-mono", PLANEJADO.celulaAbre)}
                     />
                     <CelulaNumero
                       valor={num(valorAtual(item, "quantidade_planejada"))}
@@ -734,7 +823,7 @@ export function ItensTable({
                         confirmarNumero(item, "quantidade_planejada", raw)
                       }
                       onCancelar={() => setAtiva(null)}
-                      tdClassName={cn("bg-blue-50/40", GRADE_PLANEJADO)}
+                      tdClassName={PLANEJADO.celulaMeio}
                     />
                     <CelulaNumero
                       valor={num(valorAtual(item, "dias_meses_planejado"))}
@@ -750,9 +839,14 @@ export function ItensTable({
                         confirmarNumero(item, "dias_meses_planejado", raw)
                       }
                       onCancelar={() => setAtiva(null)}
-                      tdClassName={cn("bg-blue-50/40", GRADE_PLANEJADO)}
+                      tdClassName={PLANEJADO.celulaMeio}
                     />
-                    <td className="px-3 text-right font-mono text-xs font-semibold bg-blue-50/40 whitespace-nowrap">
+                    <td
+                      className={cn(
+                        "px-3 text-right font-mono text-xs font-semibold whitespace-nowrap",
+                        PLANEJADO.celulaTotal,
+                      )}
+                    >
                       {formatCurrency(totais.planejado, moeda)}
                     </td>
 
@@ -794,33 +888,37 @@ export function ItensTable({
                 >
                   Subtotal do grupo
                 </td>
+                <td colSpan={3} className={ORCADO.subtotalVazio} />
                 <td
-                  colSpan={3}
-                  className="bg-[#f1f0ec] border-l-2 border-l-[#d7d7d7] border-t-2 border-t-[#282828]"
-                />
-                <td className="px-3 py-1.5 text-right whitespace-nowrap font-mono text-[13px] font-bold text-foreground bg-[#f1f0ec] border-t-2 border-t-[#282828]">
+                  className={cn(
+                    "px-3 py-1.5 text-right whitespace-nowrap font-mono text-[13px] font-bold",
+                    ORCADO.subtotalValor,
+                  )}
+                >
                   {formatCurrency(subtotalOrcado, moeda)}
                 </td>
+                <td colSpan={3} className={PLANEJADO.subtotalVazio} />
                 <td
-                  colSpan={3}
-                  className="bg-[#e8f0fd] border-l-2 border-l-[#b9d1f4] border-t-2 border-t-[#2f6fdb]"
-                />
-                <td className="px-3 py-1.5 text-right whitespace-nowrap font-mono text-[13px] font-bold text-[#1e4fa3] bg-[#e8f0fd] border-t-2 border-t-[#2f6fdb]">
+                  className={cn(
+                    "px-3 py-1.5 text-right whitespace-nowrap font-mono text-[13px] font-bold",
+                    PLANEJADO.subtotalValor,
+                  )}
+                >
                   {formatCurrency(subtotalPlanejado, moeda)}
                 </td>
                 <td
                   className={cn(
-                    "px-3 py-1.5 text-right whitespace-nowrap font-mono text-xs font-semibold bg-emerald-50 border-l-2 border-l-[#d7d7d7] border-t-2 border-t-emerald-600",
-                    GRADE_RENTAB,
-                    resultado >= 0 ? "text-emerald-700" : "text-california-red",
+                    "px-3 py-1.5 text-right whitespace-nowrap font-mono text-xs font-semibold border-r border-r-[#e2e0da]",
+                    RENTABILIDADE.bordaAbre,
+                    RENTABILIDADE.subtotalValor,
                   )}
                 >
                   {formatCurrency(resultado, moeda)}
                 </td>
                 <td
                   className={cn(
-                    "px-3 py-1.5 text-right whitespace-nowrap font-mono text-xs font-semibold bg-emerald-50 border-t-2 border-t-emerald-600",
-                    resultado >= 0 ? "text-emerald-700" : "text-california-red",
+                    "px-3 py-1.5 text-right whitespace-nowrap font-mono text-xs font-semibold",
+                    RENTABILIDADE.subtotalValor,
                   )}
                 >
                   {percentualSubtotal === null ? (
@@ -869,6 +967,18 @@ export function ItensTable({
               <kbd className="font-mono">Enter</kbd> confirma ·{" "}
               <kbd className="font-mono">Esc</kbd> desfaz
             </span>
+          </div>
+        )}
+
+        {/* Ações do grupo — contador e remover, na calha à direita, na
+            altura exata da faixa. É para lá que elas foram quando a barra
+            de título do card saiu. */}
+        {acoesGrupo && (
+          <div
+            className="absolute left-full top-0 ml-2 flex items-center"
+            style={{ height: faixaAltura || undefined }}
+          >
+            {acoesGrupo}
           </div>
         )}
 
@@ -1285,10 +1395,7 @@ function LinhaDraft({
         onAtivar={() => onAtivar("valor_unitario_orcado")}
         onConfirmar={(raw) => onConfirmarNumero("valor_unitario_orcado", raw)}
         onCancelar={onFechar}
-        tdClassName={cn(
-          "font-mono bg-black/[0.015] border-l-2 border-l-[#e4e2dd]",
-          GRADE_ORCADO,
-        )}
+        tdClassName={cn("font-mono", ORCADO.celulaAbre)}
       />
       <CelulaNumero
         valor={draft.quantidade_orcada}
@@ -1297,7 +1404,7 @@ function LinhaDraft({
         onAtivar={() => onAtivar("quantidade_orcada")}
         onConfirmar={(raw) => onConfirmarNumero("quantidade_orcada", raw)}
         onCancelar={onFechar}
-        tdClassName={cn("bg-black/[0.015]", GRADE_ORCADO)}
+        tdClassName={ORCADO.celulaMeio}
       />
       <CelulaNumero
         valor={draft.dias_meses_orcado}
@@ -1306,9 +1413,14 @@ function LinhaDraft({
         onAtivar={() => onAtivar("dias_meses_orcado")}
         onConfirmar={(raw) => onConfirmarNumero("dias_meses_orcado", raw)}
         onCancelar={onFechar}
-        tdClassName={cn("bg-black/[0.015]", GRADE_ORCADO)}
+        tdClassName={ORCADO.celulaMeio}
       />
-      <td className="px-3 text-right font-mono text-xs font-semibold bg-black/[0.015] whitespace-nowrap">
+      <td
+        className={cn(
+          "px-3 text-right font-mono text-xs font-semibold whitespace-nowrap",
+          ORCADO.celulaTotal,
+        )}
+      >
         {formatCurrency(totalOrcado, moeda)}
       </td>
 
@@ -1323,10 +1435,7 @@ function LinhaDraft({
         onAtivar={() => onAtivar("valor_unitario_planejado")}
         onConfirmar={(raw) => onConfirmarNumero("valor_unitario_planejado", raw)}
         onCancelar={onFechar}
-        tdClassName={cn(
-          "font-mono bg-blue-50/40 border-l-2 border-l-[#cfe0f7]",
-          GRADE_PLANEJADO,
-        )}
+        tdClassName={cn("font-mono", PLANEJADO.celulaAbre)}
       />
       <CelulaNumero
         valor={draft.quantidade_planejada}
@@ -1335,7 +1444,7 @@ function LinhaDraft({
         onAtivar={() => onAtivar("quantidade_planejada")}
         onConfirmar={(raw) => onConfirmarNumero("quantidade_planejada", raw)}
         onCancelar={onFechar}
-        tdClassName={cn("bg-blue-50/40", GRADE_PLANEJADO)}
+        tdClassName={PLANEJADO.celulaMeio}
       />
       <CelulaNumero
         valor={draft.dias_meses_planejado}
@@ -1344,9 +1453,14 @@ function LinhaDraft({
         onAtivar={() => onAtivar("dias_meses_planejado")}
         onConfirmar={(raw) => onConfirmarNumero("dias_meses_planejado", raw)}
         onCancelar={onFechar}
-        tdClassName={cn("bg-blue-50/40", GRADE_PLANEJADO)}
+        tdClassName={PLANEJADO.celulaMeio}
       />
-      <td className="px-3 text-right font-mono text-xs font-semibold bg-blue-50/40 whitespace-nowrap">
+      <td
+        className={cn(
+          "px-3 text-right font-mono text-xs font-semibold whitespace-nowrap",
+          PLANEJADO.celulaTotal,
+        )}
+      >
         {formatCurrency(totalPlanejado, moeda)}
       </td>
 
@@ -1375,27 +1489,33 @@ function CelulasRentabilidade({
     planejado,
   );
   const semPlanejado = planejado <= 0;
-  const cor = rentabilidade >= 0 ? "text-emerald-700" : "text-california-red";
 
   return (
     <>
       <td
         className={cn(
-          "px-3 text-right font-mono text-xs whitespace-nowrap border-l-2 border-l-[#e4e2dd]",
-          GRADE_RENTAB,
+          "px-3 text-right font-mono text-xs whitespace-nowrap",
+          RENTABILIDADE.celulaAbre,
         )}
       >
         {semPlanejado ? (
           <span className="text-muted-foreground">—</span>
         ) : (
-          <span className={cor}>{formatCurrency(rentabilidade, moeda)}</span>
+          <span className={RENTAB_VALOR}>
+            {formatCurrency(rentabilidade, moeda)}
+          </span>
         )}
       </td>
-      <td className="px-3 text-right font-mono text-xs whitespace-nowrap">
+      <td
+        className={cn(
+          "px-3 text-right font-mono text-xs whitespace-nowrap",
+          RENTABILIDADE.celulaTotal,
+        )}
+      >
         {percentualRentabilidade === null ? (
           <span className="text-muted-foreground">—</span>
         ) : (
-          <span className={cor}>
+          <span className={RENTAB_VALOR}>
             {formatarPercentual(percentualRentabilidade)}
           </span>
         )}

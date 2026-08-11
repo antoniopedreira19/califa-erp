@@ -17,6 +17,12 @@ import type { Categoria } from "@/lib/types";
 import type { AdaptadorItens } from "../[projetoId]/[orcId]/versoes/[versaoId]/itens-table";
 import type { AdaptadorBv, FornecedorOpcao } from "@/app/(app)/_bv/bv-dialog";
 import { GrupoRascunhoCard } from "./grupo-rascunho-card";
+import {
+  ORCADO,
+  PLANEJADO,
+  RENTABILIDADE,
+  type Bloco,
+} from "@/app/(app)/_planilha/blocos";
 import type { JobRascunho, ParametrosVersao } from "./tipos";
 import { contarItens, totaisDoJob } from "./rascunho";
 
@@ -128,16 +134,20 @@ export function JobRascunhoCard({
         </div>
 
         <div className="flex flex-none items-stretch">
-          <ColunaTotal rotulo="Orçado" valor={formatCurrency(totais.orcado, parametros.moeda)} />
+          <ColunaTotal
+            rotulo="Orçado"
+            valor={formatCurrency(totais.orcado, parametros.moeda)}
+            bloco={ORCADO}
+          />
           <ColunaTotal
             rotulo="Planejado"
             valor={formatCurrency(totais.planejado, parametros.moeda)}
-            tom="azul"
+            bloco={PLANEJADO}
           />
           <ColunaTotal
             rotulo="Rentabilidade"
             valor={formatCurrency(totais.rentabilidade, parametros.moeda)}
-            tom="verde"
+            bloco={RENTABILIDADE}
           />
         </div>
 
@@ -166,13 +176,14 @@ export function JobRascunhoCard({
       </div>
 
       {job.aberto && (
-        // O pr reserva a faixa em que a trilha de ações da planilha se
-        // apoia, à direita de cada card de grupo: 154px comportam o respiro
-        // (8px) + a pílula do BV (116px) + a lixeira (26px) + o gap. Eram
-        // 48px enquanto o BV era um quadradinho de 26px.
-        <div className="flex flex-col gap-4 rounded-b-2xl border-t border-border bg-muted/20 p-5 pr-[154px]">
+        // Sem padding lateral: os cards de grupo ocupam toda a largura
+        // interna do card do orçamento, que é o que faz as colunas deles
+        // caírem sob as do card de Totais — ele vive um nível acima, na
+        // página. Quem tem recuo é o resto do painel (`mx-5`). A calha da
+        // trilha de ações é reservada pelo editor, para os dois de uma vez.
+        <div className="flex flex-col gap-4 rounded-b-2xl border-t border-border bg-muted/20 py-5">
           {semPlanilha ? (
-            <div className="flex flex-col items-center gap-3.5 rounded-2xl border border-dashed border-border bg-card px-8 py-7 text-center">
+            <div className="mx-5 flex flex-col items-center gap-3.5 rounded-2xl border border-dashed border-border bg-card px-8 py-7 text-center">
               <p className="max-w-md text-sm leading-relaxed text-muted-foreground">
                 {readOnly
                   ? "Este orçamento não tem planilha e não pode mais ser editado por aqui."
@@ -205,12 +216,12 @@ export function JobRascunhoCard({
           ) : (
             <>
               {bloqueio && (
-                <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs leading-relaxed text-amber-800">
+                <div className="mx-5 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs leading-relaxed text-amber-800">
                   <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                   <span>{bloqueio}</span>
                 </div>
               )}
-              <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="mx-5 flex flex-wrap items-center justify-between gap-3">
                 <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
                   <FolderTree className="h-4 w-4 text-california-red" />
                   {job.grupos.length}{" "}
@@ -246,17 +257,32 @@ export function JobRascunhoCard({
               ))}
 
               {job.grupos.length > 0 && (
-                <div className="flex items-center border-t border-border pt-3.5">
+                <div className="mx-5 flex items-center border-t border-border pt-3.5">
                   <span className="mr-auto text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                     Total do orçamento · {codigo}
                   </span>
-                  <span className="px-5 font-mono text-sm font-bold">
+                  <span
+                    className={cn(
+                      "px-5 font-mono text-sm font-bold",
+                      ORCADO.texto,
+                    )}
+                  >
                     {formatCurrency(totais.orcado, parametros.moeda)}
                   </span>
-                  <span className="border-l border-border px-5 font-mono text-sm font-bold text-[#1e4fa3]">
+                  <span
+                    className={cn(
+                      "border-l border-border px-5 font-mono text-sm font-bold",
+                      PLANEJADO.texto,
+                    )}
+                  >
                     {formatCurrency(totais.planejado, parametros.moeda)}
                   </span>
-                  <span className="border-l border-border pl-5 font-mono text-sm font-bold text-emerald-700">
+                  <span
+                    className={cn(
+                      "border-l border-border pl-5 font-mono text-sm font-bold",
+                      RENTABILIDADE.texto,
+                    )}
+                  >
                     {formatCurrency(totais.rentabilidade, parametros.moeda)}
                   </span>
                 </div>
@@ -289,23 +315,23 @@ export function JobRascunhoCard({
   );
 }
 
+/** Mesma cor do bloco correspondente na planilha logo abaixo — o resumo
+ *  do orçamento e a grade dele leem como a mesma coisa. */
 function ColunaTotal({
   rotulo,
   valor,
-  tom,
+  bloco,
 }: {
   rotulo: string;
   valor: string;
-  tom?: "azul" | "verde";
+  bloco: Bloco;
 }) {
   return (
-    <div className="border-l border-border px-5 text-right">
+    <div className={cn("px-5 text-right", bloco.bordaAbre)}>
       <p
         className={cn(
           "text-[9.5px] font-bold uppercase tracking-wider",
-          tom === "azul" && "text-[#5a76a8]",
-          tom === "verde" && "text-emerald-800/80",
-          !tom && "text-muted-foreground",
+          bloco.textoSuave,
         )}
       >
         {rotulo}
@@ -313,8 +339,7 @@ function ColunaTotal({
       <p
         className={cn(
           "mt-1 whitespace-nowrap font-mono text-sm font-bold",
-          tom === "azul" && "text-[#1e4fa3]",
-          tom === "verde" && "text-emerald-700",
+          bloco.texto,
         )}
       >
         {valor}

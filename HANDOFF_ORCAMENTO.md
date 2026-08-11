@@ -2,13 +2,14 @@
 
 Registro da implementação dos design handoffs aprovados para o módulo de Orçamentos.
 
-**Datas:** 2026-07-27 (entregas 1–3) · 2026-07-30 (entregas 4–8) · 2026-07-31 (entrega 9) · 2026-08-03 (entrega 10) · 2026-08-06 (entrega 11) · 2026-08-07 (entregas 12 e 13)
+**Datas:** 2026-07-27 (entregas 1–3) · 2026-07-30 (entregas 4–8) · 2026-07-31 (entrega 9) · 2026-08-03 (entrega 10) · 2026-08-06 (entrega 11) · 2026-08-07 (entregas 12 e 13) · 2026-08-11 (entrega 15)
 **Origem do design:**
 - Entregas 1–3: pacote `design_handoff_califa/` (`Versoes - Destaque v4.dc.html` opção 2a, `Orcamento - Edicao Inline.dc.html` opção 3b, `README.md`, `IMPLEMENTACAO.md`). A pasta fica **só na máquina local** — está no `.gitignore` por ser referência de design, não código.
 - Entregas 4–5, 8 e 9: projeto Claude Design `69342d83-28d9-4bea-a8af-c99e233f5f13` (`Orcamento - Versao -final-.dc.html`, `Novo projeto.dc.html` e `Abertura de Job.dc.html`), lido via MCP `claude_design`. A Entrega 9 é a revisão do mesmo `Abertura de Job.dc.html`, relido depois de atualizado.
 - Entregas 6–7: pedidos diretos do time, sem handoff de design.
 - Entrega 10: slide "Título do Orçamento" enviado pelo time (2 pedidos anotados sobre print da tela da versão).
 - Entrega 11: pedido direto do time sobre prints das quatro telas (lista de projetos, formulário de projeto, orçamentos do projeto, formulário de orçamento). Sem handoff de design — as decisões saíram de perguntas respondidas durante a sessão, registradas na seção 12.
+- Entrega 15: projeto Claude Design `69342d83` (`Comparativo Cores - Orcamento e Job.dc.html`). Cobre orçamento e job; a parte de Jobs está na Parte IV do `HANDOFF_JOBS.md`. A regra transversal ficou em `docs/09-identidade-visual-ui.md`.
 - Entregas 12 e 13: projeto Claude Design `69342d83` (`Orcamento - BV - Opcoes.dc.html`), lido via MCP `claude_design`. O design cobre três telas: a Entrega 12 fez a de Orçamentos e a 13 fechou a do job. A Entrega 13 traz quatro mudanças do time sobre o design (Confirmar com popup, fornecedor obrigatório, Realizado no lugar da rentabilidade, e BV↔PP alternando por tipo). Modelagem, ciclo de vida da situação e regras de trava saíram de perguntas respondidas durante as sessões, registradas nas seções 13 e 14.
 
 ---
@@ -30,11 +31,14 @@ Registro da implementação dos design handoffs aprovados para o módulo de Orç
 | **11 — Revisão de campos de projeto e orçamento + produto padrão** | ✅ `6e6bd77` + `4a227d7` + `f664e1f` (2026-08-06) |
 | **12 — BV por item · parte 1: tela de Orçamentos** | ✅ (2026-08-07) |
 | **13 — BV na planilha do job + BV↔PP por tipo** | ✅ (2026-08-07) |
+| **14 — Orçamento do projeto e visão agregada editável** | ✅ `2950666` (2026-08-10) |
+| **15 — Cores dos blocos e faixa do agrupamento** | ✅ (2026-08-11) |
 
 `tsc --noEmit` e `next lint` limpos em todas. Entregas 4, 5, 8 a 13
 também com `next build` completo. As Entregas 8 e 10 a 13 são as únicas
 com verificação de ponta a ponta contra o banco real — ver seções 9, 11,
-12, 13 e 14.
+12, 13 e 14. A Entrega 15 foi verificada no navegador, medindo as
+fronteiras das colunas — ver seção 16.3.
 
 ---
 
@@ -1156,7 +1160,65 @@ Lint, typecheck e build limpos.
 
 ---
 
-## 16. Próximos passos
+## 16. Entrega 15 — cores dos blocos e faixa do agrupamento
+
+**Data:** 2026-08-11 · **Branch:** `design/bv-botoes-adicionar-abrir`
+**Origem do design:** projeto Claude Design `69342d83-28d9-4bea-a8af-c99e233f5f13`,
+arquivo `Comparativo Cores - Orcamento e Job.dc.html`, lido via MCP `claude_design`.
+O design cobre orçamento e job de uma vez; a parte de Jobs está na Parte IV do
+`HANDOFF_JOBS.md`.
+
+⚠️ **A regra em si não mora aqui.** O sistema de cor por bloco, as grades
+compartilhadas e a faixa do agrupamento são transversais aos dois módulos —
+estão em `docs/09-identidade-visual-ui.md`, seções "Cores das planilhas",
+"Grades compartilhadas" e "Faixa do agrupamento". Duplicar a spec nos dois
+handoffs faria as cópias divergirem, que é o defeito que esta entrega corrigiu
+no código. Aqui fica só o que é do módulo de Orçamentos.
+
+### 16.1 O que mudou nas telas de orçamento
+
+1. **Paleta trocada.** ORÇADO era bege/grafite e virou azul; PLANEJADO era azul
+   e virou verde; RENTABILIDADE era verde e virou grafite. Vale na versão
+   individual, nos cards de grupo do rascunho/agregada e nos dois cards de
+   Totais.
+2. **A barra de título do card de grupo saiu.** O nome subiu para a faixa do
+   `<thead>`; contador e lixeira foram para a calha. Vale em `GrupoCard`
+   (versão) e `GrupoRascunhoCard` (agregada). O input de renomear inline da
+   agregada continua funcionando dentro da faixa.
+3. **Totais da agregada ganhou o bloco RENTABILIDADE**, que os cards de grupo
+   acima já tinham e ele não. Cada linha de orçamento agora mostra a própria
+   rentabilidade em R$ e %, e o rodapé fecha a coluna — a linha "Rentabilidade"
+   solta que existia embaixo virou redundante e saiu (mesmo número, melhor
+   posicionado, via `calcularRentabilidade`).
+4. **Alinhamento.** `grade-colunas.tsx` saiu de dentro de `versoes/[versaoId]/`
+   e virou `app/(app)/_planilha/grade-orcamento.tsx`, agora compartilhado pelas
+   **três** tabelas (itens, Totais da versão, Totais da agregada). Na agregada
+   também foi preciso mexer no aninhamento — ver "Grades compartilhadas" no doc.
+
+### 16.2 Decisões do time nesta entrega
+
+Três perguntas feitas antes de codar:
+
+- **Controles do grupo:** vão todos para a faixa + calha, não sobra barra fina.
+- **Escopo:** *"Essa modificação é de design, e não deverá afetar as informações
+  presentes no modelo atual."* Nenhum bloco novo, nenhuma coluna a mais — a
+  exceção é a rentabilidade que faltava no Totais da agregada, pedida
+  explicitamente no mesmo enunciado.
+- **Cor da rentabilidade:** *"Sempre grafite"* — inclusive negativa.
+
+### 16.3 Verificação
+
+`tsc --noEmit --incremental false` e `next lint` limpos. Alinhamento conferido
+medindo `getBoundingClientRect()` no navegador, não a olho:
+
+| Tela | Fronteiras das colunas | Resultado |
+|---|---|---|
+| Versão individual | idênticas nas 2 tabelas | exato |
+| Agregada de orçamento | 111/511/898/1284/1491 vs 112/512/897/1283/1490 | 1px (borda a mais do card do orçamento) |
+
+---
+
+## 17. Próximos passos
 
 1. **Carga completa de cidades do IBGE** — hoje só Salvador e São Paulo. Formato acordado: `Salvador-BA` num campo só, sem coluna `uf`. É só uma migration de INSERT: o schema e a busca já estão prontos (Entrega 8). Fonte: `https://servicosdados.ibge.gov.br/api/v1/localidades/municipios`. Ao carregar, reconciliar as 2 linhas atuais, que estão sem o sufixo de UF, e os jobs que já gravaram `Salvador`/`São Paulo`.
 2. **Exibir as observações do job** — `jobs.observacoes` grava desde a Entrega 9 mas nenhuma tela lê. Entra junto com o refino da tela de abertura do financeiro, onde ela faz sentido: é contexto para quem abre. Enquanto isso, o dado é write-only.
