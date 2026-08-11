@@ -84,15 +84,17 @@ export function JobRealizadoSection({
 
   return (
     // Quando dá pra gerar PP, reserva a calha da direita: a trilha de
-    // "Ver PP" / "Gerar PP" é posicionada fora do card, e sem esse espaço
-    // ela era cortada na borda da página.
+    // "Adicionar BV" / "Abrir BV" / "Gerar PP" / "Ver PP" é posicionada
+    // fora do card, e sem esse espaço ela era cortada na borda da página.
     //
-    // 104px e não 114: a trilha tem 104px de botão + 10px de respiro, e
-    // esses 10px podem invadir o padding do layout (32px) sem encostar na
-    // borda. Devolver os 10px ao card é o que faz a tabela caber inteira —
-    // as bordas de 2px entre os blocos somam ~5px que as porcentagens das
-    // colunas não preveem.
-    <div className={cn("space-y-4", editable && "pr-[104px]")}>
+    // 116px e não 126: a trilha tem 116px de botão ("Adicionar BV" é o
+    // rótulo mais longo) + 10px de respiro, e esses 10px podem invadir o
+    // padding do layout (32px) sem encostar na borda. Devolver os 10px ao
+    // card é o que faz a tabela caber inteira — as bordas de 2px entre os
+    // blocos somam ~5px que as porcentagens das colunas não preveem.
+    // Os 12px a mais que a calha antiga foram devolvidos à página (o
+    // max-w de JobDetalhe cresceu junto): a planilha não encolheu.
+    <div className={cn("space-y-4", editable && "pr-[116px]")}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <ClipboardList className="h-4 w-4 text-california-red" />

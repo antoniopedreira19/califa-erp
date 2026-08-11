@@ -166,9 +166,11 @@ export function JobRascunhoCard({
       </div>
 
       {job.aberto && (
-        // pr-12 reserva a faixa em que a trilha de ações da planilha se
-        // apoia, à direita de cada card de grupo.
-        <div className="flex flex-col gap-4 rounded-b-2xl border-t border-border bg-muted/20 p-5 pr-12">
+        // O pr reserva a faixa em que a trilha de ações da planilha se
+        // apoia, à direita de cada card de grupo: 154px comportam o respiro
+        // (8px) + a pílula do BV (116px) + a lixeira (26px) + o gap. Eram
+        // 48px enquanto o BV era um quadradinho de 26px.
+        <div className="flex flex-col gap-4 rounded-b-2xl border-t border-border bg-muted/20 p-5 pr-[154px]">
           {semPlanilha ? (
             <div className="flex flex-col items-center gap-3.5 rounded-2xl border border-dashed border-border bg-card px-8 py-7 text-center">
               <p className="max-w-md text-sm leading-relaxed text-muted-foreground">

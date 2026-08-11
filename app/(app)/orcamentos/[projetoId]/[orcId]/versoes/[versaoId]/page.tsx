@@ -272,8 +272,12 @@ export default async function VersaoDetailPage({
     produtorNome: orcamentoRaw.produtor?.nome ?? null,
   };
 
+  // 1370 e não max-w-7xl (1280): quando o "+BV" quadrado virou a pílula
+  // "Adicionar BV" a calha da direita passou de 64px para 154px, e os 90px
+  // a mais vieram da folga que sobrava nas laterais da tela — não da
+  // planilha. A grade continua com a mesma largura útil de antes.
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
+    <div className="space-y-6 max-w-[1370px] mx-auto">
       <div>
         <Link
           href={`/orcamentos/${params.projetoId}/${orcamento.id}`}
@@ -397,13 +401,14 @@ export default async function VersaoDetailPage({
       {/* Grupos + Totais dividem a mesma calha: é o que faz as colunas
           Total / Rentab. / % do card de Totais caírem exatamente sob as
           mesmas colunas dos cards de grupo. O pr reserva a trilha de ações
-          que fica fora do frame de cada card: 64px comportam o quadrado do
-          BV (26px) + a lixeira (26px) + o respiro. Em versão congelada a
-          trilha só existe se houver BV a consultar, e aí basta o quadrado. */}
+          que fica fora do frame de cada card: 154px comportam o respiro
+          (8px) + a pílula do BV (116px) + a lixeira (26px) + o gap. Em
+          versão congelada a trilha só existe se houver BV a consultar, e aí
+          bastam o respiro e a pílula. */}
       <div
         className={cn(
           "space-y-6",
-          !readOnly ? "pr-16" : temBv && "pr-10",
+          !readOnly ? "pr-[154px]" : temBv && "pr-[124px]",
         )}
       >
         {grupos.length === 0 ? (

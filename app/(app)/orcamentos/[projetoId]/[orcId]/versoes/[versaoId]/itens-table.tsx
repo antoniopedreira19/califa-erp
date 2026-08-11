@@ -34,6 +34,10 @@ import {
   type AdaptadorBv,
   type FornecedorOpcao,
 } from "@/app/(app)/_bv/bv-dialog";
+import {
+  BvActionButton,
+  LARGURA_CALHA_BV,
+} from "@/app/(app)/_bv/bv-action-button";
 
 /** Onde a grade grava.
  *
@@ -869,8 +873,10 @@ export function ItensTable({
         )}
 
         {/* Trilha de ações — fora do frame da tabela, ao lado das linhas.
-            O +BV fica à ESQUERDA da ação que a tela já tinha (a lixeira),
-            na mesma posição que ele ocupa na planilha do job. */}
+            O BV fica à ESQUERDA da ação que a tela já tinha (a lixeira),
+            na mesma posição que ele ocupa na planilha do job. A pílula tem
+            largura fixa para que as lixeiras de todas as linhas — inclusive
+            as de tipo B e C, que não têm BV — fiquem no mesmo eixo. */}
         {temTrilha && (
           <div
             className="absolute left-full ml-2 flex flex-col"
@@ -887,20 +893,22 @@ export function ItensTable({
                   key={item.id}
                   className={cn("flex items-center gap-1", ALTURA_LINHA)}
                 >
-                  {mostraBv ? (
-                    <BotaoBv
-                      temBv={bv !== null}
-                      itemNome={item.item}
-                      // BV que já saiu para o financeiro abre em consulta
-                      // mesmo com a versão aberta.
-                      somenteLeitura={
-                        !editavel || (bv !== null && bv.situacao !== "a_negociar")
-                      }
-                      onClick={() => setBvAberto(item)}
-                    />
-                  ) : (
-                    <span className="w-[26px] flex-none" aria-hidden />
-                  )}
+                  <span
+                    className={cn("flex flex-none items-center", LARGURA_CALHA_BV)}
+                  >
+                    {mostraBv && (
+                      <BvActionButton
+                        temBv={bv !== null}
+                        itemNome={item.item}
+                        // BV que já saiu para o financeiro abre em consulta
+                        // mesmo com a versão aberta.
+                        somenteLeitura={
+                          !editavel || (bv !== null && bv.situacao !== "a_negociar")
+                        }
+                        onClick={() => setBvAberto(item)}
+                      />
+                    )}
+                  </span>
 
                   {editavel && (
                     <button
@@ -920,7 +928,10 @@ export function ItensTable({
               <div className={cn("flex items-center gap-1", ALTURA_LINHA)}>
                 {/* A linha nova ainda não existe no banco: sem id, não há
                     a que prender um BV. O botão entra depois de salva. */}
-                <span className="w-[26px] flex-none" aria-hidden />
+                <span
+                  className={cn("flex-none", LARGURA_CALHA_BV)}
+                  aria-hidden
+                />
                 <button
                   type="button"
                   onClick={() => {
@@ -976,57 +987,6 @@ export function ItensTable({
         onConfirm={handleRemoveConfirm}
       />
     </>
-  );
-}
-
-/** Quadrado do BV na calha da linha.
- *
- *  Vazado com "+BV" = item tipo A sem BV, clique lança um novo.
- *  Preenchido com "BV" = já existe, perde o "+" e reabre o formulário
- *  com os valores. A troca de estado é a única sinalização de BV na
- *  planilha — nenhuma coluna nova entra na grade. */
-function BotaoBv({
-  temBv,
-  itemNome,
-  somenteLeitura,
-  onClick,
-}: {
-  temBv: boolean;
-  itemNome: string;
-  somenteLeitura?: boolean;
-  onClick: () => void;
-}) {
-  const title = temBv
-    ? somenteLeitura
-      ? `Ver BV de ${itemNome}`
-      : `Editar BV de ${itemNome}`
-    : `Lançar BV em ${itemNome}`;
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={title}
-      aria-label={title}
-      className={cn(
-        "box-border inline-flex h-[26px] w-[26px] flex-none items-center justify-center rounded-[9px] border transition-colors",
-        temBv
-          ? "border-foreground bg-[#F1F0EC] text-foreground hover:border-california-red hover:text-california-red"
-          : "border-[#DEDCD7] bg-white text-[#8a8880] hover:border-california-red/50 hover:text-california-red",
-      )}
-    >
-      <span className="text-[10.5px] font-normal leading-none">
-        {temBv ? (
-          "BV"
-        ) : (
-          <>
-            {/* O "+" tem altura óptica menor que as letras; o nudge
-                alinha a linha de base dos três caracteres. */}
-            <span className="inline-block translate-y-[0.04em]">+</span>BV
-          </>
-        )}
-      </span>
-    </button>
   );
 }
 
