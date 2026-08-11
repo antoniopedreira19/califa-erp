@@ -748,7 +748,13 @@ export function EditorMultiJobs({
           </button>
         </div>
       ) : (
-        <div className="space-y-4">
+        // Orçamentos e Totais dividem a mesma calha: é o que faz as colunas
+        // Total / Rentab. / % do card de Totais caírem exatamente sob as
+        // mesmas colunas das planilhas dos grupos. O pr reserva a trilha de
+        // ações que fica fora do frame de cada card de grupo: 154px
+        // comportam o respiro (8px) + a pílula do BV (116px) + a lixeira
+        // (26px) + o gap. Mesmo arranjo do editor agregado.
+        <div className="space-y-4 pr-[154px]">
           {jobs.map((job, i) => (
             <JobRascunhoCard
               key={job.id}
