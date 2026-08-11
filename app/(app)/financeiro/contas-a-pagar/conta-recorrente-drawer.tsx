@@ -23,11 +23,13 @@ import {
 import { Combobox } from "@/components/ui/combobox";
 import { DatePicker } from "@/components/ui/date-picker";
 import { criarContaRecorrente, editarContaRecorrente } from "./actions-recorrentes";
+import { RateioRegionalEditor } from "./rateio-regional-editor";
 import type {
   ContaAvulsaRecorrente,
   FrequenciaRecorrencia,
   PlanoContaTipo,
   PlanoContaSubtipo,
+  RateioLinhaInput,
 } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -37,7 +39,8 @@ import type {
 type EmpresaResumida = { id: string; nome: string };
 type FornecedorResumido = { id: string; nome: string };
 type ClienteResumido = { id: string; nome: string };
-type JobResumido = { id: string; codigo: string; nome: string; cliente_id: string | null };
+type JobResumido = { id: string; codigo: string; nome: string; cliente_id: string | null; regional_id: string | null };
+type RegionalResumida = { id: string; nome: string; ativo: boolean };
 
 // ---------------------------------------------------------------------------
 // Utilitário de data
@@ -64,6 +67,7 @@ type Props =
       fornecedores: FornecedorResumido[];
       clientes: ClienteResumido[];
       jobs: JobResumido[];
+      regionais: RegionalResumida[];
       trigger?: React.ReactNode;
     }
   | {
@@ -76,6 +80,8 @@ type Props =
       fornecedores: FornecedorResumido[];
       clientes: ClienteResumido[];
       jobs: JobResumido[];
+      regionais: RegionalResumida[];
+      rateioInicial?: RateioLinhaInput[];
       open: boolean;
       onOpenChange: (b: boolean) => void;
       trigger?: React.ReactNode;
@@ -135,6 +141,12 @@ export function ContaRecorrenteDrawer(props: Props) {
     recorrente?.plano_conta_subtipo_id ?? "",
   );
 
+  // Rateio de regional
+  const rateioInicialEditar = isEditar
+    ? ((props as Extract<Props, { mode: "editar" }>).rateioInicial ?? [])
+    : [];
+  const [rateio, setRateio] = React.useState<RateioLinhaInput[]>(rateioInicialEditar);
+
   // Campos de recorrência
   const [frequencia, setFrequencia] = React.useState<FrequenciaRecorrencia>(
     recorrente?.frequencia ?? "mensal",
@@ -179,6 +191,9 @@ export function ContaRecorrenteDrawer(props: Props) {
       setDiaDoAnoDia(recorrente.dia_do_ano_dia ?? null);
       setDiaDoAnoMes(recorrente.dia_do_ano_mes ?? null);
       setDataFim(recorrente.data_fim ?? null);
+      setRateio(
+        (props as Extract<Props, { mode: "editar" }>).rateioInicial ?? [],
+      );
     }
     if (open && !isEditar) {
       setEmpresaId("");
@@ -196,7 +211,9 @@ export function ContaRecorrenteDrawer(props: Props) {
       setDiaDoAnoDia(null);
       setDiaDoAnoMes(null);
       setDataFim(null);
+      setRateio([]);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, isEditar, recorrente]);
 
   // Subtipo filtrado pelo tipo selecionado
@@ -240,6 +257,11 @@ export function ContaRecorrenteDrawer(props: Props) {
       setClienteId(jobSelecionado.cliente_id);
     }
   }, [jobSelecionado]);
+
+  // Rateio derivado: soma e validade
+  const somaRateio = rateio.reduce((s, l) => s + l.percentual, 0);
+  const rateioValido =
+    rateio.length > 0 && Math.abs(somaRateio - 100) < 0.01;
 
   function handleFornecedorChange(v: string | null) {
     setFornecedorId(v ?? "__none__");
@@ -300,6 +322,7 @@ export function ContaRecorrenteDrawer(props: Props) {
       dia_do_ano_dia: frequencia === "anual" ? diaDoAnoDia : null,
       dia_do_ano_mes: frequencia === "anual" ? diaDoAnoMes : null,
       data_fim: dataFim || null,
+      rateio,
     };
 
     startTransition(async () => {
@@ -543,6 +566,15 @@ export function ContaRecorrenteDrawer(props: Props) {
                 </p>
               ))}
             </div>
+
+            {/* Rateio de regional */}
+            <RateioRegionalEditor
+              linhas={rateio}
+              onChange={setRateio}
+              regionais={props.regionais}
+              jobRegionalId={jobSelecionado?.regional_id ?? null}
+              disabled={pending}
+            />
 
             {/* Tipo do plano de contas */}
             <div className="space-y-2">
@@ -817,7 +849,7 @@ export function ContaRecorrenteDrawer(props: Props) {
             </button>
             <button
               type="submit"
-              disabled={pending}
+              disabled={pending || !rateioValido}
               className={submitClass}
             >
               {submitLabel}

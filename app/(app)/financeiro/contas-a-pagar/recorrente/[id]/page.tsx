@@ -9,6 +9,7 @@ import type {
   ContaAvulsaStatus,
   PlanoContaTipo,
   PlanoContaSubtipo,
+  RateioLinhaInput,
 } from "@/lib/types";
 import {
   EditarRecorrenteButton,
@@ -88,6 +89,8 @@ export default async function RecorrenteDetalhesPage({
     fornecedoresRes,
     clientesRes,
     jobsRes,
+    rateioRes,
+    regionaisRes,
   ] = await Promise.all([
     supabase
       .from("contas_avulsas")
@@ -125,11 +128,23 @@ export default async function RecorrenteDetalhesPage({
       .order("nome_fantasia"),
     supabase
       .from("jobs")
-      .select("id, codigo, nome, projeto:projetos!inner(cliente_id)")
+      .select("id, codigo, nome, regional_id, projeto:projetos!inner(cliente_id)")
       .eq("tenant_id", session.activeTenant.id)
       .neq("status", "cancelado")
       .order("created_at", { ascending: false })
       .limit(500),
+    // Rateio de regional desta recorrência
+    supabase
+      .from("contas_avulsas_recorrentes_regionais")
+      .select("regional_id, percentual")
+      .eq("recorrente_id", params.id)
+      .eq("tenant_id", session.activeTenant.id),
+    // Regionais ativas (para o editor de rateio no drawer)
+    supabase
+      .from("regionais")
+      .select("id, nome, ativo")
+      .eq("tenant_id", session.activeTenant.id)
+      .order("nome"),
   ]);
 
   // Mapeamentos auxiliares
@@ -155,6 +170,7 @@ export default async function RecorrenteDetalhesPage({
     id: string;
     codigo: string;
     nome: string;
+    regional_id: string | null;
     projeto: { cliente_id: string } | { cliente_id: string }[] | null;
   }>).map((j) => {
     const proj = Array.isArray(j.projeto) ? j.projeto[0] : j.projeto;
@@ -163,10 +179,28 @@ export default async function RecorrenteDetalhesPage({
       codigo: j.codigo,
       nome: j.nome,
       cliente_id: proj?.cliente_id ?? null,
+      regional_id: j.regional_id ?? null,
     };
   });
   const tipos = (tiposRes.data ?? []) as PlanoContaTipo[];
   const subtipos = (subtiposRes.data ?? []) as PlanoContaSubtipo[];
+
+  // Rateio regional desta recorrência
+  const rateioInicial: RateioLinhaInput[] = (
+    (rateioRes.data ?? []) as Array<{ regional_id: string; percentual: string | number }>
+  ).map((r) => ({
+    regional_id: r.regional_id,
+    percentual: Number(r.percentual),
+  }));
+
+  // Regionais (para o editor de rateio no drawer)
+  const regionaisList = (regionaisRes.data ?? []).map(
+    (r: { id: string; nome: string; ativo: boolean }) => ({
+      id: r.id,
+      nome: r.nome,
+      ativo: r.ativo,
+    }),
+  );
 
   // Ocorrências geradas
   const ocorrencias = (ocorrenciasRes.data ?? []).map(
@@ -301,6 +335,8 @@ export default async function RecorrenteDetalhesPage({
                   fornecedores={fornecedores}
                   clientes={clientes}
                   jobs={jobs}
+                  regionais={regionaisList}
+                  rateioInicial={rateioInicial}
                 />
                 <PausarRecorrenteButton
                   recorrenteId={r.id}

@@ -411,6 +411,7 @@ export default async function PedidosCompraFinanceiroPage() {
             fornecedores={fornecedoresList}
             clientes={clientesList}
             jobs={jobsList}
+            regionais={regionaisList}
           />
         }
         recorrentesAtivasCount={recorrentesAtivasCountRes.count ?? 0}
