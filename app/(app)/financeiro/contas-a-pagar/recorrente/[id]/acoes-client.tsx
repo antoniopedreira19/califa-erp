@@ -14,6 +14,7 @@ import type {
   ContaAvulsaRecorrente,
   PlanoContaTipo,
   PlanoContaSubtipo,
+  RateioLinhaInput,
 } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -28,6 +29,7 @@ type JobResumido = {
   codigo: string;
   nome: string;
   cliente_id: string | null;
+  regional_id: string | null;
 };
 
 // ---------------------------------------------------------------------------
@@ -44,6 +46,8 @@ interface EditarProps {
   fornecedores: FornecedorResumido[];
   clientes: ClienteResumido[];
   jobs: JobResumido[];
+  regionais: Array<{ id: string; nome: string; ativo: boolean }>;
+  rateioInicial?: RateioLinhaInput[];
 }
 
 export function EditarRecorrenteButton({
@@ -55,6 +59,8 @@ export function EditarRecorrenteButton({
   fornecedores,
   clientes,
   jobs,
+  regionais,
+  rateioInicial,
 }: EditarProps) {
   const [open, setOpen] = React.useState(false);
 
@@ -78,6 +84,8 @@ export function EditarRecorrenteButton({
         fornecedores={fornecedores}
         clientes={clientes}
         jobs={jobs}
+        regionais={regionais}
+        rateioInicial={rateioInicial}
         open={open}
         onOpenChange={setOpen}
       />
