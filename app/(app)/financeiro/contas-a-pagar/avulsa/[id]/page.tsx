@@ -77,6 +77,8 @@ export default async function AvulsaDetalhesPage({
     fornecedoresRes,
     clientesRes,
     jobsRes,
+    regionaisRes,
+    rateioRes,
   ] = await Promise.all([
     supabase
       .from("contas_avulsas_anexos")
@@ -124,11 +126,23 @@ export default async function AvulsaDetalhesPage({
       .order("nome_fantasia"),
     supabase
       .from("jobs")
-      .select("id, codigo, nome, projeto:projetos!inner(cliente_id)")
+      .select("id, codigo, nome, regional_id, projeto:projetos!inner(cliente_id)")
       .eq("tenant_id", session.activeTenant.id)
       .neq("status", "cancelado")
       .order("created_at", { ascending: false })
       .limit(500),
+    // Regionais (para o editor de rateio no drawer)
+    supabase
+      .from("regionais")
+      .select("id, nome, ativo")
+      .eq("tenant_id", session.activeTenant.id)
+      .order("nome"),
+    // Rateio atual da conta (para inicializar o editor no modo editar)
+    supabase
+      .from("contas_avulsas_regionais")
+      .select("regional_id, percentual")
+      .eq("conta_avulsa_id", params.id)
+      .eq("tenant_id", session.activeTenant.id),
   ]);
 
   // conta vem do Supabase com embeds — usar cast amplo para acessar joins
@@ -185,6 +199,7 @@ export default async function AvulsaDetalhesPage({
     id: string;
     codigo: string;
     nome: string;
+    regional_id: string | null;
     projeto: { cliente_id: string } | { cliente_id: string }[] | null;
   }>).map((j) => {
     const proj = Array.isArray(j.projeto) ? j.projeto[0] : j.projeto;
@@ -193,11 +208,25 @@ export default async function AvulsaDetalhesPage({
       codigo: j.codigo,
       nome: j.nome,
       cliente_id: proj?.cliente_id ?? null,
+      regional_id: j.regional_id ?? null,
     };
   });
   const tipos = (tiposRes.data ?? []) as PlanoContaTipo[];
   const subtipos = (subtiposRes.data ?? []) as PlanoContaSubtipo[];
   const contasBancarias = (contasRes.data ?? []) as import("@/lib/types").ContaBancaria[];
+  const regionais = (regionaisRes.data ?? []).map(
+    (r: { id: string; nome: string; ativo: boolean }) => ({
+      id: r.id,
+      nome: r.nome,
+      ativo: r.ativo,
+    }),
+  );
+  const rateioInicial = (rateioRes.data ?? []).map(
+    (r: { regional_id: string; percentual: number | string }) => ({
+      regional_id: r.regional_id,
+      percentual: Number(r.percentual),
+    }),
+  );
 
   const contaParaDrawer: ContaAvulsa = {
     id: c.id,
@@ -278,6 +307,8 @@ export default async function AvulsaDetalhesPage({
                   fornecedores={fornecedores}
                   clientes={clientes}
                   jobs={jobs}
+                  regionais={regionais}
+                  rateioInicial={rateioInicial}
                 />
                 <BaixarAvulsaModalClient
                   contaId={c.id}

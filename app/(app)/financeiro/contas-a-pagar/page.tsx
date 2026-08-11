@@ -36,6 +36,7 @@ export default async function PedidosCompraFinanceiroPage() {
     jobsRes,
     recorrentesRes,
     recorrentesAtivasCountRes,
+    regionaisRes,
   ] = await Promise.all([
     supabase
       .from("pedidos_compra")
@@ -128,11 +129,11 @@ export default async function PedidosCompraFinanceiroPage() {
       .eq("tenant_id", session.activeTenant.id)
       .eq("status", "ativo")
       .order("nome_fantasia"),
-    // Jobs não cancelados — inclui cliente_id do projeto pra auto-preencher
-    // cliente no drawer quando job é escolhido.
+    // Jobs não cancelados — inclui cliente_id do projeto e regional_id do job
+    // para auto-preencher cliente/rateio no drawer quando job é escolhido.
     supabase
       .from("jobs")
-      .select("id, codigo, nome, projeto:projetos!inner(cliente_id)")
+      .select("id, codigo, nome, regional_id, projeto:projetos!inner(cliente_id)")
       .eq("tenant_id", session.activeTenant.id)
       .neq("status", "cancelado")
       .order("created_at", { ascending: false })
@@ -158,6 +159,12 @@ export default async function PedidosCompraFinanceiroPage() {
       .select("id", { count: "exact", head: true })
       .eq("tenant_id", session.activeTenant.id)
       .eq("ativo", true),
+    // Regionais (para o editor de rateio no drawer da avulsa)
+    supabase
+      .from("regionais")
+      .select("id, nome, ativo")
+      .eq("tenant_id", session.activeTenant.id)
+      .order("nome"),
   ]);
 
   if (error) console.error("[financeiro.pp.list]", error.message);
@@ -326,6 +333,7 @@ export default async function PedidosCompraFinanceiroPage() {
       id: string;
       codigo: string;
       nome: string;
+      regional_id: string | null;
       projeto: { cliente_id: string } | { cliente_id: string }[] | null;
     }) => {
       // PostgREST embed self-referencial pode vir como array — normaliza.
@@ -335,8 +343,17 @@ export default async function PedidosCompraFinanceiroPage() {
         codigo: j.codigo,
         nome: j.nome,
         cliente_id: proj?.cliente_id ?? null,
+        regional_id: j.regional_id ?? null,
       };
     },
+  );
+
+  const regionaisList = (regionaisRes.data ?? []).map(
+    (r: { id: string; nome: string; ativo: boolean }) => ({
+      id: r.id,
+      nome: r.nome,
+      ativo: r.ativo,
+    }),
   );
 
   return (
@@ -380,6 +397,7 @@ export default async function PedidosCompraFinanceiroPage() {
             fornecedores={fornecedoresList}
             clientes={clientesList}
             jobs={jobsList}
+            regionais={regionaisList}
           />
         }
         avulsasPendentesCount={avulsasPendentesCountRes.count ?? 0}

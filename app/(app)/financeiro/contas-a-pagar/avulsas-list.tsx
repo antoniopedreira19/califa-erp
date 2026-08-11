@@ -77,7 +77,8 @@ interface Props {
   subtipos: PlanoContaSubtipo[];
   fornecedores: Array<{ id: string; nome: string }>;
   clientes: Array<{ id: string; nome: string }>;
-  jobs: Array<{ id: string; codigo: string; nome: string; cliente_id: string | null }>;
+  jobs: Array<{ id: string; codigo: string; nome: string; cliente_id: string | null; regional_id: string | null }>;
+  regionais: Array<{ id: string; nome: string; ativo: boolean }>;
 }
 
 // ---------------------------------------------------------------------------
@@ -93,6 +94,7 @@ export function ContasAvulsasList({
   fornecedores,
   clientes,
   jobs,
+  regionais,
 }: Props) {
   const [busca, setBusca] = React.useState("");
   const [statusFiltro, setStatusFiltro] = React.useState<"todas" | ContaAvulsaStatus>("pendente");
@@ -155,6 +157,7 @@ export function ContasAvulsasList({
           fornecedores={fornecedores}
           clientes={clientes}
           jobs={jobs}
+          regionais={regionais}
           trigger={
             <button
               type="button"
