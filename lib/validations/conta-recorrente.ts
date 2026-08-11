@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { rateioSchema } from "./conta-avulsa";
 
 const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -43,6 +44,7 @@ export const criarContaRecorrenteSchema = z
       .regex(dateRegex, "Data em YYYY-MM-DD.")
       .nullable()
       .or(z.literal("").transform(() => null)),
+    rateio: rateioSchema,
   })
   .superRefine((data, ctx) => {
     if (data.frequencia === "mensal" && data.dia_do_mes == null) {

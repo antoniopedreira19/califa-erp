@@ -148,6 +148,46 @@ export async function criarContaRecorrente(input: unknown): Promise<Result> {
     };
   }
 
+  // Rateio regional
+  let rateioFinal = d.rateio;
+  if (d.job_id) {
+    const { data: jobRow } = await supabase
+      .from("jobs")
+      .select("regional_id")
+      .eq("id", d.job_id)
+      .eq("tenant_id", session.activeTenant.id)
+      .maybeSingle();
+    if (!jobRow?.regional_id) {
+      await supabase
+        .from("contas_avulsas_recorrentes")
+        .delete()
+        .eq("id", rec.id);
+      return {
+        ok: false,
+        message: "Job selecionado não tem regional associada.",
+      };
+    }
+    rateioFinal = [{ regional_id: jobRow.regional_id, percentual: 100 }];
+  }
+
+  const rateioRows = rateioFinal.map((r) => ({
+    tenant_id: session.activeTenant.id,
+    recorrente_id: rec.id,
+    regional_id: r.regional_id,
+    percentual: r.percentual,
+  }));
+  const { error: rateioErr } = await supabase
+    .from("contas_avulsas_recorrentes_regionais")
+    .insert(rateioRows);
+
+  if (rateioErr) {
+    await supabase
+      .from("contas_avulsas_recorrentes")
+      .delete()
+      .eq("id", rec.id);
+    return { ok: false, message: `Falha ao salvar rateio: ${rateioErr.message}` };
+  }
+
   await logAuditEvent({
     acao: "conta_recorrente.criada",
     tenantId: session.activeTenant.id,
@@ -254,6 +294,74 @@ export async function editarContaRecorrente(
     .eq("tenant_id", session.activeTenant.id);
 
   if (error) return { ok: false, message: `Falha ao atualizar: ${error.message}` };
+
+  // Rateio regional: carrega atual, compara, substitui se mudou
+  const { data: rateioAtual } = await supabase
+    .from("contas_avulsas_recorrentes_regionais")
+    .select("regional_id, percentual")
+    .eq("recorrente_id", id)
+    .eq("tenant_id", session.activeTenant.id);
+
+  let rateioNovo = d.rateio;
+  if (d.job_id) {
+    const { data: jobRow } = await supabase
+      .from("jobs")
+      .select("regional_id")
+      .eq("id", d.job_id)
+      .eq("tenant_id", session.activeTenant.id)
+      .maybeSingle();
+    if (!jobRow?.regional_id) {
+      return {
+        ok: false,
+        message: "Job selecionado não tem regional associada.",
+      };
+    }
+    rateioNovo = [{ regional_id: jobRow.regional_id, percentual: 100 }];
+  }
+
+  function normalizar(
+    rows: Array<{ regional_id: string; percentual: number | string }>,
+  ) {
+    return rows
+      .map((r) => `${r.regional_id}:${Number(r.percentual).toFixed(2)}`)
+      .sort()
+      .join("|");
+  }
+  const antesStr = normalizar(rateioAtual ?? []);
+  const depoisStr = normalizar(rateioNovo);
+
+  if (antesStr !== depoisStr) {
+    const { error: delErr } = await supabase
+      .from("contas_avulsas_recorrentes_regionais")
+      .delete()
+      .eq("recorrente_id", id)
+      .eq("tenant_id", session.activeTenant.id);
+    if (delErr)
+      return { ok: false, message: `Falha ao apagar rateio: ${delErr.message}` };
+
+    const novasRows = rateioNovo.map((r) => ({
+      tenant_id: session.activeTenant.id,
+      recorrente_id: id,
+      regional_id: r.regional_id,
+      percentual: r.percentual,
+    }));
+    const { error: insErr } = await supabase
+      .from("contas_avulsas_recorrentes_regionais")
+      .insert(novasRows);
+    if (insErr)
+      return { ok: false, message: `Falha ao salvar rateio: ${insErr.message}` };
+
+    await logAuditEvent({
+      acao: "conta_recorrente.rateio_alterado",
+      tenantId: session.activeTenant.id,
+      entidadeTipo: "conta_recorrente",
+      entidadeId: id,
+      metadata: {
+        linhas_anteriores: (rateioAtual ?? []).length,
+        linhas_novas: rateioNovo.length,
+      },
+    });
+  }
 
   await logAuditEvent({
     acao: "conta_recorrente.editada",
