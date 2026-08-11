@@ -389,6 +389,17 @@ export async function editarContaAvulsa(
       .from("contas_avulsas_regionais")
       .insert(novasRows);
     if (insErr) {
+      // Compensação: restaura rateio anterior para não deixar a conta sem rateio.
+      if ((rateioAtual ?? []).length > 0) {
+        await supabase.from("contas_avulsas_regionais").insert(
+          (rateioAtual ?? []).map((r) => ({
+            tenant_id: session.activeTenant.id,
+            conta_avulsa_id: id,
+            regional_id: r.regional_id,
+            percentual: r.percentual,
+          })),
+        );
+      }
       return {
         ok: false,
         message: `Falha ao salvar rateio: ${insErr.message}`,
