@@ -15,6 +15,7 @@ export type LancamentoLinha = {
   credito: number;
   debito: number;
   saldo: number;
+  rateio: Array<{ percentual: number; regional_nome: string }>;
 };
 
 /**
@@ -66,7 +67,9 @@ export async function calcularSaldoAnterior(
  * Recebe raw rows já ordenadas por data_movimento ASC, created_at ASC.
  */
 export function derivarSaldo(
-  rows: Omit<LancamentoLinha, "credito" | "debito" | "saldo">[],
+  rows: (Omit<LancamentoLinha, "credito" | "debito" | "saldo"> & {
+    rateio?: Array<{ percentual: number; regional_nome: string }>;
+  })[],
   saldoAnterior: number,
 ): LancamentoLinha[] {
   let saldo = saldoAnterior;
@@ -74,6 +77,6 @@ export function derivarSaldo(
     const credito = r.natureza === "entrada" ? r.valor : 0;
     const debito = r.natureza === "saida" ? r.valor : 0;
     saldo = saldo + credito - debito;
-    return { ...r, credito, debito, saldo };
+    return { ...r, credito, debito, saldo, rateio: r.rateio ?? [] };
   });
 }
