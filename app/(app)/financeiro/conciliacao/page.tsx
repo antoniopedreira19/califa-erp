@@ -78,7 +78,13 @@ export default async function ConciliacaoPage({
          fornecedores(nome, razao_social),
          jobs(codigo),
          plano_contas_tipos!inner(codigo, nome),
-         plano_contas_subtipos!inner(nome)`,
+         plano_contas_subtipos!inner(nome),
+         conta_avulsa:contas_avulsas!conta_avulsa_id(
+           rateio:contas_avulsas_regionais(
+             percentual,
+             regional:regionais(nome)
+           )
+         )`,
       )
       .eq("tenant_id", session.activeTenant.id)
       .eq("conta_bancaria_id", contaId)
@@ -98,22 +104,35 @@ export default async function ConciliacaoPage({
       jobs: { codigo: string } | null;
       plano_contas_tipos: { codigo: string; nome: string };
       plano_contas_subtipos: { nome: string };
+      conta_avulsa: {
+        rateio: Array<{
+          percentual: number;
+          regional: { nome: string } | null;
+        }>;
+      } | null;
     };
 
-    const raw = ((data ?? []) as unknown as RawRow[]).map((r) => ({
-      id: r.id,
-      data_movimento: r.data_movimento,
-      descricao: r.descricao,
-      natureza: r.natureza,
-      valor: Number(r.valor),
-      fornecedor_nome:
-        r.fornecedores?.razao_social ?? r.fornecedores?.nome ?? null,
-      job_codigo: r.jobs?.codigo ?? null,
-      tipo_codigo: r.plano_contas_tipos.codigo,
-      tipo_nome: r.plano_contas_tipos.nome,
-      subtipo_nome: r.plano_contas_subtipos.nome,
-      origem: r.origem,
-    }));
+    const raw = ((data ?? []) as unknown as RawRow[]).map((r) => {
+      const rateio = (r.conta_avulsa?.rateio ?? []).map((rr: any) => ({
+        percentual: Number(rr.percentual),
+        regional_nome: rr.regional?.nome ?? "—",
+      }));
+      return {
+        id: r.id,
+        data_movimento: r.data_movimento,
+        descricao: r.descricao,
+        natureza: r.natureza,
+        valor: Number(r.valor),
+        fornecedor_nome:
+          r.fornecedores?.razao_social ?? r.fornecedores?.nome ?? null,
+        job_codigo: r.jobs?.codigo ?? null,
+        tipo_codigo: r.plano_contas_tipos.codigo,
+        tipo_nome: r.plano_contas_tipos.nome,
+        subtipo_nome: r.plano_contas_subtipos.nome,
+        origem: r.origem,
+        rateio,
+      };
+    });
 
     linhas = derivarSaldo(raw, saldoAnterior);
     creditos = linhas.reduce((acc, l) => acc + l.credito, 0);

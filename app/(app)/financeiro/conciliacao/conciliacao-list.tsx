@@ -79,6 +79,16 @@ export function ConciliacaoList({
                     Avulsa
                   </span>
                 )}
+                {l.rateio && l.rateio.length > 1 && (
+                  <span
+                    className="ml-2 inline-flex items-center rounded border border-slate-300 bg-slate-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-slate-700"
+                    title={l.rateio
+                      .map((r) => `${r.regional_nome}: ${r.percentual.toFixed(2)}%`)
+                      .join("\n")}
+                  >
+                    Rateado
+                  </span>
+                )}
                 {l.descricao}
               </td>
               <td className="px-3 py-2 text-xs">
