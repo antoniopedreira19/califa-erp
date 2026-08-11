@@ -22,6 +22,7 @@ import {
   BaixarAnexoButton,
 } from "./acoes-client";
 import { HistoricoMudancas } from "./historico-mudancas";
+import { RateioCard } from "../../rateio-card";
 
 export const dynamic = "force-dynamic";
 
@@ -228,6 +229,20 @@ export default async function AvulsaDetalhesPage({
     }),
   );
 
+  // Mapeamento de regionais por ID (para o card de rateio)
+  const regionaisPorId = new Map(
+    (regionaisRes.data ?? []).map((r: { id: string; nome: string; ativo: boolean }) => [
+      r.id,
+      { nome: r.nome, ativo: r.ativo },
+    ]),
+  );
+
+  // Rateio para o card (apenas para renderização)
+  const rateio = (rateioRes.data ?? []).map((r) => ({
+    regional_id: r.regional_id,
+    percentual: Number(r.percentual),
+  }));
+
   const contaParaDrawer: ContaAvulsa = {
     id: c.id,
     tenant_id: c.tenant_id,
@@ -377,6 +392,13 @@ export default async function AvulsaDetalhesPage({
           </span>
         </div>
       </div>
+
+      {/* Card Rateio de regional */}
+      <RateioCard
+        rateio={rateio}
+        valorTotal={Number(c.valor)}
+        regionaisPorId={regionaisPorId}
+      />
 
       {/* Card Baixa — só se baixada */}
       {c.status === "baixada" && (

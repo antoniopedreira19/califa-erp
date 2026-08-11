@@ -18,6 +18,7 @@ import {
   ExcluirRecorrenteButton,
 } from "./acoes-client";
 import { HistoricoOcorrencias } from "./historico-ocorrencias";
+import { RateioCard } from "../../rateio-card";
 
 export const dynamic = "force-dynamic";
 
@@ -201,6 +202,20 @@ export default async function RecorrenteDetalhesPage({
       ativo: r.ativo,
     }),
   );
+
+  // Mapeamento de regionais por ID (para o card de rateio)
+  const regionaisPorId = new Map(
+    (regionaisRes.data ?? []).map((reg: { id: string; nome: string; ativo: boolean }) => [
+      reg.id,
+      { nome: reg.nome, ativo: reg.ativo },
+    ]),
+  );
+
+  // Rateio para o card (apenas para renderização)
+  const rateio = (rateioRes.data ?? []).map((r) => ({
+    regional_id: r.regional_id,
+    percentual: Number(r.percentual),
+  }));
 
   // Ocorrências geradas
   const ocorrencias = (ocorrenciasRes.data ?? []).map(
@@ -417,6 +432,13 @@ export default async function RecorrenteDetalhesPage({
           <span className="font-mono">{formatDate(r.data_fim)}</span>
         </div>
       </div>
+
+      {/* Card Rateio de regional */}
+      <RateioCard
+        rateio={rateio}
+        valorTotal={Number(r.valor)}
+        regionaisPorId={regionaisPorId}
+      />
 
       {/* Card Histórico de ocorrências */}
       <HistoricoOcorrencias ocorrencias={ocorrencias} />
