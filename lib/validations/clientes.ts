@@ -56,6 +56,25 @@ export const clienteSchema = z.object({
     .max(2000, "Máximo 2000 caracteres.")
     .optional()
     .transform((v) => (v && v.length > 0 ? v : null)),
+  /**
+   * Honorários padrão do cliente. Obrigatório: é ele que abastece toda
+   * versão de orçamento do cliente, então não pode nascer indefinido.
+   * Aceita "12" e "12,5" — o formulário é pt-BR.
+   */
+  percentual_honorarios_padrao: z
+    .string()
+    .trim()
+    .min(1, "Informe o percentual de honorários.")
+    .transform((v) => Number(v.replace(",", ".")))
+    .refine((n) => Number.isFinite(n), "Percentual inválido.")
+    .refine(
+      (n) => n >= 0 && n <= 100,
+      "Percentual de honorários precisa estar entre 0 e 100.",
+    ),
 });
 
 export type ClienteInput = z.infer<typeof clienteSchema>;
+
+/** Padrão comercial da agência — usado quando o campo chega vazio na
+ *  edição de um cadastro antigo. Espelha o default da coluna no banco. */
+export const HONORARIOS_PADRAO_FALLBACK = 12;

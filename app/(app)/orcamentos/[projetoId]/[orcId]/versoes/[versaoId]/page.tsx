@@ -312,6 +312,10 @@ export default async function VersaoDetailPage({
             </Badge>
             <VersaoEditorDrawer
               versao={versao}
+              // Honorários nasce do cadastro do cliente; divergir dele nesta
+              // versão é ato de administrador (decisão de 11/08/2026).
+              podeEditarHonorarios={session.activeRole === "administrador"}
+              clienteNome={clienteNome}
               disabled={versao.status === "aprovada"}
               disabledReason={
                 versao.status === "aprovada"

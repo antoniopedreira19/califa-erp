@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Pencil, Save } from "lucide-react";
+import { AlertCircle, Lock, Pencil, Save } from "lucide-react";
 import {
   Dialog,
   DialogHeader,
@@ -30,11 +30,23 @@ import { atualizarVersao, type ActionResult } from "../actions";
 
 interface Props {
   versao: VersaoOrcamento;
+  /** Só `administrador` altera os honorários da versão — o padrão vem do
+   *  cadastro do cliente. Para os demais o campo fica travado, e a server
+   *  action recusa mesmo que alguém contorne a tela. */
+  podeEditarHonorarios: boolean;
+  /** Cliente do projeto, para explicar de onde vem o percentual. */
+  clienteNome?: string | null;
   disabled?: boolean;
   disabledReason?: string;
 }
 
-export function VersaoEditorDrawer({ versao, disabled, disabledReason }: Props) {
+export function VersaoEditorDrawer({
+  versao,
+  podeEditarHonorarios,
+  clienteNome,
+  disabled,
+  disabledReason,
+}: Props) {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
   const [pending, startTransition] = React.useTransition();
@@ -123,16 +135,33 @@ export function VersaoEditorDrawer({ versao, disabled, disabledReason }: Props) 
                 label="Honorários (%)"
                 name="percentual_honorarios"
                 errors={fieldErrors}
+                travado={!podeEditarHonorarios}
+                hint={
+                  podeEditarHonorarios
+                    ? `Padrão de ${clienteNome ?? "cliente"}: alterar aqui vale só para esta versão.`
+                    : `Vem do cadastro de ${clienteNome ?? "cliente"}. Só administrador altera.`
+                }
               >
-                <Input
-                  name="percentual_honorarios"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  max="100"
-                  placeholder={`atual: ${formatNumberHint(versao.percentual_honorarios)}%`}
-                  className="no-spinner"
-                />
+                {podeEditarHonorarios ? (
+                  <Input
+                    name="percentual_honorarios"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="100"
+                    placeholder={`atual: ${formatNumberHint(versao.percentual_honorarios)}%`}
+                    className="no-spinner"
+                  />
+                ) : (
+                  /* Sem `name`: o campo não é enviado. */
+                  <Input
+                    type="number"
+                    value={versao.percentual_honorarios}
+                    readOnly
+                    disabled
+                    className="no-spinner bg-muted/50 text-muted-foreground"
+                  />
+                )}
               </Field>
               <Field
                 label="Impostos (%)"
@@ -213,18 +242,29 @@ function Field({
   label,
   name,
   errors,
+  travado,
+  hint,
   children,
 }: {
   label: string;
   name: string;
   errors: Record<string, string[]>;
+  /** Cadeado no rótulo: campo que este usuário não pode alterar. */
+  travado?: boolean;
+  hint?: string;
   children: React.ReactNode;
 }) {
   const fieldErrors = errors[name];
   return (
     <div className="space-y-2">
-      <Label htmlFor={name}>{label}</Label>
+      <Label htmlFor={name} className="flex items-center gap-1.5">
+        {label}
+        {travado && <Lock className="h-3 w-3 text-muted-foreground" />}
+      </Label>
       {children}
+      {hint && (
+        <p className="text-[11px] leading-snug text-muted-foreground">{hint}</p>
+      )}
       {fieldErrors?.map((msg, i) => (
         <p key={i} className="text-xs text-california-red">
           {msg}

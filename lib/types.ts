@@ -123,6 +123,11 @@ export interface Cliente {
   telefone: string | null;
   observacoes: string | null;
   status: CadastroStatus;
+  /** Percentual de honorários padrão do cliente. É com ele que toda versão
+   *  de orçamento do cliente nasce; o campo fica travado nas telas de
+   *  criação e só `administrador` altera, pelo "Editar" da versão. Mudar
+   *  aqui não mexe em versões já criadas. */
+  percentual_honorarios_padrao: number;
   created_by: string | null;
   created_at: string;
   updated_at: string;

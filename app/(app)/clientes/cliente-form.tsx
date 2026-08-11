@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { MaskedInput } from "@/components/ui/masked-input";
 import { onlyDigits } from "@/lib/utils";
+import { HONORARIOS_PADRAO_FALLBACK } from "@/lib/validations/clientes";
 import type { Cliente } from "@/lib/types";
 import {
   atualizarCliente,
@@ -99,6 +100,27 @@ export function ClienteForm({ cliente }: Props) {
             defaultValue={cliente?.telefone ?? ""}
           />
         </Field>
+
+        <Field
+          label="Honorários (%)"
+          name="percentual_honorarios_padrao"
+          required
+          errors={fieldErrors}
+          hint="Percentual padrão deste cliente. Todo orçamento novo nasce com ele já preenchido e travado. Alterar aqui não muda orçamentos que já existem."
+        >
+          <Input
+            name="percentual_honorarios_padrao"
+            type="number"
+            step="0.01"
+            min="0"
+            max="100"
+            required
+            defaultValue={
+              cliente?.percentual_honorarios_padrao ?? HONORARIOS_PADRAO_FALLBACK
+            }
+            className="no-spinner"
+          />
+        </Field>
       </div>
 
       <Field label="Observações" name="observacoes" errors={fieldErrors}>
@@ -151,12 +173,14 @@ function Field({
   name,
   required,
   errors,
+  hint,
   children,
 }: {
   label: string;
   name: string;
   required?: boolean;
   errors: Record<string, string[]>;
+  hint?: string;
   children: React.ReactNode;
 }) {
   const fieldErrors = errors[name];
@@ -167,6 +191,7 @@ function Field({
         {required && <span className="text-california-red ml-1">*</span>}
       </Label>
       {children}
+      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
       {fieldErrors?.map((msg, i) => (
         <p key={i} className="text-xs text-california-red">
           {msg}

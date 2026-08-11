@@ -311,12 +311,30 @@ function PreviewPanel({
         )}
       </div>
 
-      {preview.percentual_honorarios !== null && (
-        <div className="rounded-xl border border-border bg-muted/20 px-4 py-3 text-xs text-muted-foreground">
-          Detectamos <b className="text-foreground">
-            {preview.percentual_honorarios.toString().replace(".", ",")}%
+      {preview.percentual_honorarios !== null &&
+      preview.percentual_honorarios !== preview.percentual_honorarios_cliente ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+          A planilha traz{" "}
+          <b>{preview.percentual_honorarios.toString().replace(".", ",")}%</b>{" "}
+          de honorários, mas a versão vai nascer com{" "}
+          <b>
+            {preview.percentual_honorarios_cliente
+              .toString()
+              .replace(".", ",")}
+            %
           </b>{" "}
-          de honorários no resumo — vamos aplicar na versão criada.
+          — o percentual do cadastro de {preview.cliente_nome}. Para usar
+          outro, um administrador altera pelo &quot;Editar&quot; da versão
+          depois de criada.
+        </div>
+      ) : (
+        <div className="rounded-xl border border-border bg-muted/20 px-4 py-3 text-xs text-muted-foreground">
+          Honorários da versão:{" "}
+          <b className="text-foreground">
+            {preview.percentual_honorarios_cliente.toString().replace(".", ",")}
+            %
+          </b>{" "}
+          — do cadastro de {preview.cliente_nome}.
         </div>
       )}
 

@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
+import { honorariosDoOrcamento } from "@/lib/data/clientes";
 import { versaoSchema } from "@/lib/validations/versoes";
 import {
   itemSchema,
@@ -147,12 +148,28 @@ export async function criarVersao(
   }
 
   const projetoId = orc.projeto_id;
+
+  // Honorários da versão nova vem do cadastro do cliente, nunca do form: o
+  // drawer mostra o campo travado e não envia nada (11/08/2026).
+  const honorariosCliente = await honorariosDoOrcamento(
+    orcamentoId,
+    session.activeTenant.id,
+  );
+  if (!honorariosCliente) {
+    return {
+      ok: false,
+      message:
+        "Não foi possível ler os honorários do cliente. Confira o cadastro do cliente do projeto.",
+    };
+  }
+
   const numero = await proximoNumeroVersao(orcamentoId, session.activeTenant.id);
 
   const { data, error } = await supabase
     .from("versoes_orcamento")
     .insert({
       ...parsed.data,
+      percentual_honorarios: honorariosCliente.percentual,
       tenant_id: session.activeTenant.id,
       orcamento_id: orcamentoId,
       numero_versao: numero,
@@ -189,10 +206,14 @@ export async function atualizarVersao(
 
   const { data: atual } = await supabase
     .from("versoes_orcamento")
-    .select("orcamento_id, status")
+    .select("orcamento_id, status, percentual_honorarios")
     .eq("id", versaoId)
     .eq("tenant_id", session.activeTenant.id)
-    .maybeSingle<{ orcamento_id: string; status: string }>();
+    .maybeSingle<{
+      orcamento_id: string;
+      status: string;
+      percentual_honorarios: number;
+    }>();
 
   if (!atual) return { ok: false, message: "Versão não encontrada." };
   if (atual.status === "aprovada") {
@@ -201,6 +222,24 @@ export async function atualizarVersao(
       message: "Versão aprovada não pode ser alterada manualmente.",
     };
   }
+
+  // Honorários é o único campo desta tela com trava de papel: o padrão vem
+  // do cadastro do cliente e só administrador pode divergir dele aqui.
+  // Não é gate de tela — quem não pode nem tem o campo habilitado, e sem
+  // esta checagem um POST direto passaria por cima disso.
+  const honorariosNovo = updates.percentual_honorarios;
+  const honorariosMudou =
+    typeof honorariosNovo === "number" &&
+    Number(atual.percentual_honorarios) !== honorariosNovo;
+
+  if (honorariosMudou && session.activeRole !== "administrador") {
+    return {
+      ok: false,
+      message:
+        "Só administrador altera os honorários da versão. O padrão vem do cadastro do cliente.",
+    };
+  }
+  if (!honorariosMudou) delete updates.percentual_honorarios;
 
   const { error } = await supabase
     .from("versoes_orcamento")
@@ -218,6 +257,13 @@ export async function atualizarVersao(
     tenantId: session.activeTenant.id,
     entidadeTipo: "versao_orcamento",
     entidadeId: versaoId,
+    metadata: honorariosMudou
+      ? {
+          campo: "percentual_honorarios",
+          de: Number(atual.percentual_honorarios),
+          para: honorariosNovo,
+        }
+      : undefined,
   });
 
   const { data: orcAtual } = await supabase

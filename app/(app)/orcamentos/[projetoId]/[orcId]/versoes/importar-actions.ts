@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
+import { honorariosDoOrcamento } from "@/lib/data/clientes";
 import { parseOficial, type ParseResultado } from "@/lib/importacao/parser-oficial";
 import { extrairArquivoXlsx } from "@/lib/importacao/arquivo";
 
@@ -22,7 +23,12 @@ export type PreviewResult =
           total_planejado: number;
         }[];
         warnings: ParseResultado["warnings"];
+        /** % que a planilha traz. Não é o que vai ser aplicado — serve para
+         *  avisar quem importou quando difere do cadastro do cliente. */
         percentual_honorarios: number | null;
+        /** % que a versão vai receber de fato: o do cadastro do cliente. */
+        percentual_honorarios_cliente: number;
+        cliente_nome: string;
         linhas_lidas: number;
         linhas_importadas: number;
         linhas_ignoradas: number;
@@ -74,7 +80,20 @@ export async function previewImportacao(
 
   const check = await verificarOrcamento(orcamentoId, session.activeTenant.id);
   if (!check.ok) return { ok: false, message: check.message };
-  // projeto_id available as check.projeto_id if needed for future use
+
+  // O percentual que a versão vai receber. Lido aqui para o preview poder
+  // avisar antes de confirmar quando a planilha discorda do cadastro.
+  const honorariosCliente = await honorariosDoOrcamento(
+    orcamentoId,
+    session.activeTenant.id,
+  );
+  if (!honorariosCliente) {
+    return {
+      ok: false,
+      message:
+        "Não foi possível ler os honorários do cliente. Confira o cadastro do cliente do projeto.",
+    };
+  }
 
   const arq = await extractArquivo(formData);
   if (!arq.ok) return { ok: false, message: arq.message };
@@ -122,6 +141,8 @@ export async function previewImportacao(
     })),
     warnings: parsed.warnings,
     percentual_honorarios: parsed.percentual_honorarios,
+    percentual_honorarios_cliente: honorariosCliente.percentual,
+    cliente_nome: honorariosCliente.clienteNome,
     linhas_lidas: parsed.linhas_lidas,
     linhas_importadas: parsed.linhas_importadas,
     linhas_ignoradas: parsed.linhas_ignoradas,
@@ -146,6 +167,18 @@ export async function confirmarImportacao(
   const check = await verificarOrcamento(orcamentoId, session.activeTenant.id);
   if (!check.ok) return { ok: false, message: check.message };
   const projetoId = check.projeto_id;
+
+  const honorariosCliente = await honorariosDoOrcamento(
+    orcamentoId,
+    session.activeTenant.id,
+  );
+  if (!honorariosCliente) {
+    return {
+      ok: false,
+      message:
+        "Não foi possível ler os honorários do cliente. Confira o cadastro do cliente do projeto.",
+    };
+  }
 
   const arq = await extractArquivo(formData);
   if (!arq.ok) return { ok: false, message: arq.message };
@@ -184,7 +217,9 @@ export async function confirmarImportacao(
 
   const numero = (ultimaVersao?.numero_versao ?? 0) + 1;
 
-  // 2) Criar a versão em rascunho. Usa o % de honorários detectado, se houver.
+  // 2) Criar a versão em rascunho. O % de honorários vem do cadastro do
+  //    cliente e vence o que estiver escrito na planilha — o preview já
+  //    avisou quem importou quando os dois divergiam (11/08/2026).
   const { data: novaVersao, error: versaoErr } = await service
     .from("versoes_orcamento")
     .insert({
@@ -195,7 +230,7 @@ export async function confirmarImportacao(
       status: "rascunho",
       moeda: "BRL",
       taxa_cambio: 1,
-      percentual_honorarios: parsed.percentual_honorarios ?? 0,
+      percentual_honorarios: honorariosCliente.percentual,
       percentual_imposto: 0,
       created_by: session.profile.id,
     })
@@ -334,6 +369,14 @@ export async function confirmarImportacao(
       arquivo_nome: arq.nome,
       linhas_importadas: parsed.linhas_importadas,
       warnings_count: parsed.warnings.length,
+      ...(parsed.percentual_honorarios !== null &&
+      parsed.percentual_honorarios !== honorariosCliente.percentual
+        ? {
+            honorarios_planilha_ignorado: parsed.percentual_honorarios,
+            honorarios_aplicado: honorariosCliente.percentual,
+            honorarios_origem: "cadastro_do_cliente",
+          }
+        : {}),
     },
   });
 

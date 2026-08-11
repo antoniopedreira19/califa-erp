@@ -65,7 +65,8 @@ export interface JobRascunho extends DadosOrcamentoRascunho {
   /** Nome do arquivo importado, para o rótulo do card. O arquivo em si
    *  fica fora do rascunho serializável (ver `arquivosPorJob` no editor). */
   arquivoNome: string | null;
-  /** % de honorários lido da planilha. Vence o do cabeçalho neste job. */
+  /** % de honorários lido da planilha. NÃO é aplicado — o cadastro do
+   *  cliente vence. Fica aqui só para avisar quem importou (11/08/2026). */
   percentualHonorariosDetectado: number | null;
 }
 

@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { listActiveMembers } from "@/lib/data/members";
+import { HONORARIOS_PADRAO_FALLBACK } from "@/lib/validations/clientes";
 import type {
   CategoriaDominio,
   Cidade,
@@ -39,9 +40,14 @@ export default async function OrcamentoDoProjetoPage({
     vinculosRespRes,
     orcCountRes,
   ] = await Promise.all([
+    // O cliente entra no embed por causa dos honorários: o percentual do
+    // cadastro é o único que vale na criação, e o editor precisa dele já
+    // no primeiro render para mostrar o campo travado com o valor certo.
     supabase
       .from("projetos")
-      .select("id, codigo, nome, status")
+      .select(
+        "id, codigo, nome, status, cliente:clientes(id, nome_fantasia, percentual_honorarios_padrao)",
+      )
       .eq("id", params.projetoId)
       .eq("tenant_id", tenantId)
       .maybeSingle<{
@@ -49,6 +55,11 @@ export default async function OrcamentoDoProjetoPage({
         codigo: string;
         nome: string;
         status: string;
+        cliente: {
+          id: string;
+          nome_fantasia: string;
+          percentual_honorarios_padrao: number | string;
+        } | null;
       }>(),
     supabase
       .from("categorias_dominio")
@@ -122,6 +133,11 @@ export default async function OrcamentoDoProjetoPage({
   return (
     <EditorMultiJobs
       projeto={projeto}
+      honorariosCliente={Number(
+        projeto.cliente?.percentual_honorarios_padrao ??
+          HONORARIOS_PADRAO_FALLBACK,
+      )}
+      clienteNome={projeto.cliente?.nome_fantasia ?? "cliente"}
       orcamentosExistentes={orcCountRes.count ?? 0}
       categorias={(categoriasOrcRes.data ?? []) as Pick<
         CategoriaDominio,

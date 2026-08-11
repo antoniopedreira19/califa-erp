@@ -115,13 +115,26 @@ export interface TotaisJob {
   percentualHonorarios: number;
 }
 
-/** Honorários da planilha importada valem mais que o padrão do cabeçalho:
- *  foi o percentual efetivamente negociado naquele orçamento. */
+/** Honorários vem do cadastro do cliente e vence qualquer outra fonte —
+ *  inclusive o percentual escrito dentro da planilha importada (decisão de
+ *  11/08/2026). O valor lido da planilha continua no rascunho só para
+ *  avisar quem importou que ele foi ignorado: ver `divergenciaHonorarios`. */
 export function honorariosDoJob(
-  job: JobRascunho,
+  _job: JobRascunho,
   parametros: ParametrosVersao,
 ): number {
-  return job.percentualHonorariosDetectado ?? parametros.percentual_honorarios;
+  return parametros.percentual_honorarios;
+}
+
+/** Percentual que a planilha trazia quando ele difere do cadastro do
+ *  cliente. `null` = sem planilha, ou planilha alinhada com o cadastro. */
+export function divergenciaHonorarios(
+  job: JobRascunho,
+  parametros: ParametrosVersao,
+): number | null {
+  const daPlanilha = job.percentualHonorariosDetectado;
+  if (daPlanilha === null) return null;
+  return daPlanilha === parametros.percentual_honorarios ? null : daPlanilha;
 }
 
 export function totaisDoJob(

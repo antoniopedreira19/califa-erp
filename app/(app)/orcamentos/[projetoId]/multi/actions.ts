@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
+import { honorariosDoProjeto } from "@/lib/data/clientes";
 import { extrairArquivoXlsx } from "@/lib/importacao/arquivo";
 import {
   parseOficial,
@@ -235,7 +236,17 @@ export async function salvarOrcamentosDoProjeto(
     Number.isFinite(payload.taxa_cambio) && payload.taxa_cambio > 0
       ? payload.taxa_cambio
       : 1;
-  const honorariosPadrao = faixaPercentual(payload.percentual_honorarios);
+  // Honorários NUNCA vem do payload: é o cadastro do cliente que manda, e
+  // a tela mostra o campo travado justamente porque a decisão é aqui.
+  const honorariosCliente = await honorariosDoProjeto(projetoId, tenantId);
+  if (!honorariosCliente) {
+    return {
+      ok: false,
+      message:
+        "Não foi possível ler os honorários do cliente do projeto. Confira o cadastro do cliente.",
+    };
+  }
+  const honorarios = faixaPercentual(honorariosCliente.percentual);
   const imposto = faixaPercentual(payload.percentual_imposto);
 
   let sequencial = orcCountRes.count ?? 0;
@@ -271,6 +282,12 @@ export async function salvarOrcamentosDoProjeto(
       }
     }
 
+    // Detectado no reparse do servidor, não no que veio da tela. A tela já
+    // avisou quem importou; aqui o número entra na auditoria, que é o que
+    // sobra depois para explicar por que a versão saiu com outro %.
+    const honorariosDaPlanilha =
+      importacao?.parsed.percentual_honorarios ?? null;
+
     sequencial += 1;
     const codigo = `${projRes.data.codigo}-${String(sequencial).padStart(2, "0")}`;
 
@@ -302,10 +319,10 @@ export async function salvarOrcamentosDoProjeto(
         status: "rascunho",
         moeda,
         taxa_cambio: taxaCambio,
-        // Planilha importada traz o % negociado nela; ele vale mais que o
-        // padrão do cabeçalho, que é só o ponto de partida do editor.
-        percentual_honorarios:
-          importacao?.parsed.percentual_honorarios ?? honorariosPadrao,
+        // Cadastro do cliente vence tudo, inclusive o % escrito dentro da
+        // planilha importada. Divergência não bloqueia o salvamento: o
+        // editor avisa antes, e `avisos` repete depois de gravar.
+        percentual_honorarios: honorarios,
         percentual_imposto: imposto,
         created_by: session.profile.id,
       })
@@ -459,6 +476,14 @@ export async function salvarOrcamentosDoProjeto(
         numero_versao: 1,
         origem: "orcamento_do_projeto",
         ...(importacao ? { arquivo_nome: importacao.nome } : {}),
+        ...(honorariosDaPlanilha !== null &&
+        honorariosDaPlanilha !== honorarios
+          ? {
+              honorarios_planilha_ignorado: honorariosDaPlanilha,
+              honorarios_aplicado: honorarios,
+              honorarios_origem: "cadastro_do_cliente",
+            }
+          : {}),
       },
     });
   }
