@@ -213,6 +213,7 @@ export function ContaRecorrenteDrawer(props: Props) {
       setDataFim(null);
       setRateio([]);
     }
+  // props é lido dentro mas o drawer sempre fecha/reabre para editar — não precisa reagir a mudança de props sem re-abrir
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, isEditar, recorrente]);
 
@@ -262,6 +263,10 @@ export function ContaRecorrenteDrawer(props: Props) {
   const somaRateio = rateio.reduce((s, l) => s + l.percentual, 0);
   const rateioValido =
     rateio.length > 0 && Math.abs(somaRateio - 100) < 0.01;
+  // Bloqueia salvar se qualquer linha referencia regional inativa (spec 5.9)
+  const rateioTemInativa = rateio.some(
+    (r) => props.regionais.find((rr) => rr.id === r.regional_id)?.ativo === false,
+  );
 
   function handleFornecedorChange(v: string | null) {
     setFornecedorId(v ?? "__none__");
@@ -839,21 +844,28 @@ export function ContaRecorrenteDrawer(props: Props) {
           </div>
 
           {/* Footer */}
-          <div className="flex items-center justify-end gap-3 border-t border-border p-4">
-            <button
-              type="button"
-              onClick={() => handleOpenChange(false)}
-              className="rounded-lg px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-muted transition-colors"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={pending || !rateioValido}
-              className={submitClass}
-            >
-              {submitLabel}
-            </button>
+          <div className="border-t border-border p-4 space-y-2">
+            {rateioTemInativa && (
+              <p className="text-xs text-amber-700 text-right">
+                Substitua a regional inativa antes de salvar.
+              </p>
+            )}
+            <div className="flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => handleOpenChange(false)}
+                className="rounded-lg px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-muted transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={pending || !rateioValido || rateioTemInativa}
+                className={submitClass}
+              >
+                {submitLabel}
+              </button>
+            </div>
           </div>
         </form>
       </DrawerContent>
