@@ -20,6 +20,7 @@ import type {
   ContaBancaria,
   PlanoContaTipo,
   PlanoContaSubtipo,
+  RateioLinhaInput,
 } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -35,7 +36,9 @@ interface EditarProps {
   subtipos: PlanoContaSubtipo[];
   fornecedores: Array<{ id: string; nome: string }>;
   clientes: Array<{ id: string; nome: string }>;
-  jobs: Array<{ id: string; codigo: string; nome: string; cliente_id: string | null }>;
+  jobs: Array<{ id: string; codigo: string; nome: string; cliente_id: string | null; regional_id: string | null }>;
+  regionais: Array<{ id: string; nome: string; ativo: boolean }>;
+  rateioInicial?: RateioLinhaInput[];
 }
 
 export function EditarAvulsaButton({
@@ -47,6 +50,8 @@ export function EditarAvulsaButton({
   fornecedores,
   clientes,
   jobs,
+  regionais,
+  rateioInicial,
 }: EditarProps) {
   const [open, setOpen] = React.useState(false);
 
@@ -70,6 +75,8 @@ export function EditarAvulsaButton({
         fornecedores={fornecedores}
         clientes={clientes}
         jobs={jobs}
+        regionais={regionais}
+        rateioInicial={rateioInicial}
         open={open}
         onOpenChange={setOpen}
       />

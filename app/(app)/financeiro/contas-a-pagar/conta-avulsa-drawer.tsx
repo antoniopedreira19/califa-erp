@@ -28,7 +28,9 @@ import type {
   ContaAvulsa,
   PlanoContaTipo,
   PlanoContaSubtipo,
+  RateioLinhaInput,
 } from "@/lib/types";
+import { RateioRegionalEditor } from "./rateio-regional-editor";
 
 // ---------------------------------------------------------------------------
 // Constantes de validação de upload
@@ -51,7 +53,8 @@ interface AnexoPendente {
 type EmpresaResumida = { id: string; nome: string };
 type FornecedorResumido = { id: string; nome: string };
 type ClienteResumido = { id: string; nome: string };
-type JobResumido = { id: string; codigo: string; nome: string; cliente_id: string | null };
+type JobResumido = { id: string; codigo: string; nome: string; cliente_id: string | null; regional_id: string | null };
+type RegionalResumida = { id: string; nome: string; ativo: boolean };
 
 // ---------------------------------------------------------------------------
 // Props discriminated union
@@ -67,6 +70,7 @@ type Props =
       fornecedores: FornecedorResumido[];
       clientes: ClienteResumido[];
       jobs: JobResumido[];
+      regionais: RegionalResumida[];
       trigger?: React.ReactNode;
     }
   | {
@@ -79,6 +83,8 @@ type Props =
       fornecedores: FornecedorResumido[];
       clientes: ClienteResumido[];
       jobs: JobResumido[];
+      regionais: RegionalResumida[];
+      rateioInicial?: RateioLinhaInput[];
       open: boolean;
       onOpenChange: (b: boolean) => void;
       trigger?: React.ReactNode;
@@ -144,6 +150,12 @@ export function ContaAvulsaDrawer(props: Props) {
     conta?.plano_conta_subtipo_id ?? "",
   );
 
+  // Rateio de regional
+  const rateioInicialEditar = isEditar
+    ? ((props as Extract<Props, { mode: "editar" }>).rateioInicial ?? [])
+    : [];
+  const [rateio, setRateio] = React.useState<RateioLinhaInput[]>(rateioInicialEditar);
+
   // Anexos (só em modo criar)
   const [anexos, setAnexos] = React.useState<AnexoPendente[]>([]);
   const [uploadError, setUploadError] = React.useState<string | null>(null);
@@ -165,6 +177,9 @@ export function ContaAvulsaDrawer(props: Props) {
       setJobId(conta.job_id ?? "__none__");
       setTipoId(conta.plano_conta_tipo_id);
       setSubtipoId(conta.plano_conta_subtipo_id);
+      setRateio(
+        (props as Extract<Props, { mode: "editar" }>).rateioInicial ?? [],
+      );
     }
     if (open && !isEditar) {
       setEmpresaId("");
@@ -176,9 +191,11 @@ export function ContaAvulsaDrawer(props: Props) {
       setJobId("__none__");
       setTipoId("");
       setSubtipoId("");
+      setRateio([]);
       setAnexos([]);
       setUploadError(null);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, isEditar, conta]);
 
   // Subtipo filtrado pelo tipo selecionado
@@ -323,6 +340,7 @@ export function ContaAvulsaDrawer(props: Props) {
       job_id: jobId === "__none__" ? null : jobId,
       plano_conta_tipo_id: tipoId,
       plano_conta_subtipo_id: subtipoId,
+      rateio,
       ...(props.mode === "criar" ? { anexos } : {}),
     };
 
@@ -368,6 +386,11 @@ export function ContaAvulsaDrawer(props: Props) {
       : "rounded-lg bg-california-red px-4 py-2 text-sm font-medium text-white hover:bg-california-red/90 disabled:opacity-50 transition-colors";
 
   const tiposAtivos = props.tipos.filter((t) => t.ativo);
+
+  // Rateio válido: pelo menos 1 linha e soma = 100 (ou job selecionado, que trava em 100%)
+  const somaRateio = rateio.reduce((s, l) => s + l.percentual, 0);
+  const rateioValido =
+    rateio.length > 0 && Math.abs(somaRateio - 100) < 0.01;
 
   // ---------------------------------------------------------------------------
   // Render
@@ -584,6 +607,15 @@ export function ContaAvulsaDrawer(props: Props) {
               ))}
             </div>
 
+            {/* Rateio de regional */}
+            <RateioRegionalEditor
+              linhas={rateio}
+              onChange={setRateio}
+              regionais={props.regionais}
+              jobRegionalId={jobSelecionado?.regional_id ?? null}
+              disabled={pending}
+            />
+
             {/* Tipo do plano de contas */}
             <div className="space-y-2">
               <Label htmlFor="plano_conta_tipo_id">Tipo *</Label>
@@ -733,7 +765,7 @@ export function ContaAvulsaDrawer(props: Props) {
             </button>
             <button
               type="submit"
-              disabled={pending || !!uploadingFile}
+              disabled={pending || !!uploadingFile || !rateioValido}
               className={submitClass}
             >
               {submitLabel}
