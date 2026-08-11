@@ -19,6 +19,10 @@ import { upsertItemRealizado, type CampoRealizado } from "../actions-realizado";
 import { PPActionsCell } from "./pp-actions-cell";
 import { GerarPPDrawer } from "./gerar-pp-drawer";
 import { BvDialog } from "@/app/(app)/_bv/bv-dialog";
+import {
+  BvActionButton,
+  LARGURA_CALHA_BV,
+} from "@/app/(app)/_bv/bv-action-button";
 
 interface Props {
   jobId: string;
@@ -47,10 +51,9 @@ interface Props {
  *  PP. A coluna Tipo é quem decide qual botão a linha mostra. */
 const TIPOS_COM_BV: string[] = ["A", "D"];
 
-/** Quadrado do BV na calha do job. Mesma linguagem da tela de
- *  Orçamentos — vazado com "+BV" quando não há, preenchido com "BV"
- *  quando há — mais o alerta âmbar de BV sem fornecedor, que é o que
- *  trava a confirmação para o financeiro. */
+/** Pílula do BV na calha do job. Mesma linguagem da tela de Orçamentos e
+ *  a mesma pílula de Gerar PP / Ver PP, na mesma altura e encostada na
+ *  mesma borda — BV e PP nunca dividem a linha, então o slot é único. */
 function BvActionCell({
   bv,
   itemNome,
@@ -63,51 +66,15 @@ function BvActionCell({
   onAbrir: () => void;
 }) {
   const travado = somenteLeitura || (bv !== null && bv.situacao !== "a_negociar");
-  const semFornecedor = bv !== null && !bv.fornecedor_id && !travado;
-  const title = !bv
-    ? `Lançar BV em ${itemNome}`
-    : travado
-      ? `Ver BV de ${itemNome}`
-      : semFornecedor
-        ? `BV de ${itemNome} sem fornecedor — defina antes de confirmar`
-        : `Editar BV de ${itemNome}`;
 
   return (
     <div className={cn("flex items-center", ALTURA_LINHA)}>
-      <button
-        type="button"
+      <BvActionButton
+        temBv={bv !== null}
+        itemNome={itemNome}
+        somenteLeitura={travado}
         onClick={onAbrir}
-        title={title}
-        aria-label={title}
-        className={cn(
-          "box-border inline-flex h-[26px] w-[26px] flex-none items-center justify-center rounded-[9px] border transition-colors",
-          !bv &&
-            "border-[#DEDCD7] bg-white text-[#8a8880] hover:border-california-red/50 hover:text-california-red",
-          bv &&
-            !semFornecedor &&
-            "border-foreground bg-[#F1F0EC] text-foreground hover:border-california-red hover:text-california-red",
-          semFornecedor &&
-            "border-amber-500 bg-amber-50 text-amber-700 hover:border-amber-600",
-        )}
-      >
-        <span className="text-[10.5px] font-normal leading-none">
-          {bv ? (
-            "BV"
-          ) : (
-            <>
-              {/* O "+" tem altura óptica menor que as letras; o nudge
-                  alinha a linha de base dos três caracteres. */}
-              <span className="inline-block translate-y-[0.04em]">+</span>BV
-            </>
-          )}
-        </span>
-      </button>
-      {semFornecedor && (
-        <span
-          aria-hidden
-          className="ml-1 h-1.5 w-1.5 flex-none rounded-full bg-amber-500"
-        />
-      )}
+      />
     </div>
   );
 }
@@ -602,14 +569,17 @@ export function JobItemRealizadoTable({
       </div>
 
       {/* Fora do frame do card, como no design. A calha que recebe estes
-          botões é reservada por JobRealizadoSection (pr-[114px]) — sem ela
-          a trilha era cortada na borda direita da página. */}
+          botões é reservada por JobRealizadoSection — sem ela a trilha era
+          cortada na borda direita da página. */}
       {/* Job encerrado não some com a trilha: os BVs já lançados seguem
           consultáveis, como na tela de Orçamentos. Só o que é ação
           (gerar PP, lançar BV novo) é que desaparece. */}
       {(editable || itens.some((i) => bvsPorItem[i.id])) && (
         <div
-          className="absolute left-full ml-2.5 flex w-[104px] flex-col"
+          className={cn(
+            "absolute left-full ml-2.5 flex flex-col",
+            LARGURA_CALHA_BV,
+          )}
           style={{ top: railTop }}
         >
           {itens.map((item) => {
