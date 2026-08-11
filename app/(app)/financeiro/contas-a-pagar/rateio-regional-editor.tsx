@@ -11,6 +11,7 @@ interface RegionalOption {
   ativo: boolean;
 }
 
+// onChange deve ser estável — passe um setter do useState ou um useCallback no caller.
 interface Props {
   linhas: RateioLinhaInput[];
   onChange: (linhas: RateioLinhaInput[]) => void;
