@@ -29,23 +29,28 @@ import {
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Badge } from "@/components/ui/badge";
 import { cn, formatCurrency } from "@/lib/utils";
-import { ppStatusLabel, type PPStatus } from "@/lib/types";
+import { ppStatusLabel, type PPStatus, type ContaBancaria, type PlanoContaTipo, type PlanoContaSubtipo } from "@/lib/types";
 import type { PPRow } from "./pedidos-compra-list";
 import {
   salvarPrazoFinanceiro,
   rejeitarPedidoCompraFinanceiro,
   aprovarPP,
+  marcarPagaFinanceiro,
 } from "./actions";
 import {
   signedUrlPdf,
   signedUrlAnexo,
 } from "@/app/(app)/jobs/[jobId]/realizado/actions-pp";
 import { CancelarBaixaModal } from "./cancelar-baixa-modal";
+import { BaixaPPDialog } from "@/components/financeiro/baixa-pp-dialog";
 
 interface Props {
   pp: PPRow | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  contas: ContaBancaria[];
+  tipos: PlanoContaTipo[];
+  subtipos: PlanoContaSubtipo[];
 }
 
 function formatDate(iso: string | null): string {
@@ -84,7 +89,7 @@ function iconePorMime(nome: string): typeof FileText {
   return FileText;
 }
 
-export function PPDrawerFinanceiro({ pp, open, onOpenChange }: Props) {
+export function PPDrawerFinanceiro({ pp, open, onOpenChange, contas, tipos, subtipos }: Props) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
   const [erro, setErro] = React.useState<string | null>(null);
@@ -93,6 +98,7 @@ export function PPDrawerFinanceiro({ pp, open, onOpenChange }: Props) {
   const [askRejeitar, setAskRejeitar] = React.useState(false);
   const [motivo, setMotivo] = React.useState("");
   const [cancelarBaixaOpen, setCancelarBaixaOpen] = React.useState(false);
+  const [darBaixaOpen, setDarBaixaOpen] = React.useState(false);
 
   // Sincroniza prazo local com o valor da PP ao abrir/trocar
   React.useEffect(() => {
@@ -420,6 +426,20 @@ export function PPDrawerFinanceiro({ pp, open, onOpenChange }: Props) {
             </div>
           )}
 
+          {pp.status === "aprovada" && (
+            <div className="flex items-center justify-end gap-2 border-t border-border px-6 py-4">
+              <button
+                type="button"
+                onClick={() => setDarBaixaOpen(true)}
+                disabled={pending}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+              >
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                Dar baixa
+              </button>
+            </div>
+          )}
+
           {pp.status === "pago" && (
             <div className="flex items-center justify-end gap-2 border-t border-border px-6 py-4">
               <button
@@ -480,6 +500,41 @@ export function PPDrawerFinanceiro({ pp, open, onOpenChange }: Props) {
           pp={pp}
           open={cancelarBaixaOpen}
           onOpenChange={setCancelarBaixaOpen}
+        />
+      )}
+
+      {pp && pp.status === "aprovada" && (
+        <BaixaPPDialog
+          open={darBaixaOpen}
+          onOpenChange={setDarBaixaOpen}
+          ppCodigo={pp.codigo}
+          descricao={pp.servico}
+          valor={pp.valor}
+          empresaId={pp.empresa_id}
+          dataPrevista={pp.prazo_pagamento_financeiro ?? pp.prazo_pagamento}
+          contas={contas}
+          tipos={tipos}
+          subtipos={subtipos}
+          pending={pending}
+          onConfirm={(payload) => {
+            startTransition(async () => {
+              const res = await marcarPagaFinanceiro({
+                pp_id: pp.id,
+                pago_em: payload.pago_em,
+                conta_bancaria_id: payload.conta_bancaria_id,
+                plano_conta_tipo_id: payload.plano_conta_tipo_id,
+                plano_conta_subtipo_id: payload.plano_conta_subtipo_id,
+              });
+              if (!res.ok) {
+                setErro(res.message);
+              } else {
+                setToast(`${pp.codigo} baixada.`);
+                router.refresh();
+                setDarBaixaOpen(false);
+                setTimeout(() => onOpenChange(false), 1200);
+              }
+            });
+          }}
         />
       )}
 

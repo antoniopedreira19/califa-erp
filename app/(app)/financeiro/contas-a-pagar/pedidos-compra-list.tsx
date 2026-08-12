@@ -4,7 +4,7 @@ import * as React from "react";
 import { Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import type { PPStatus } from "@/lib/types";
+import type { PPStatus, ContaBancaria, PlanoContaTipo, PlanoContaSubtipo } from "@/lib/types";
 import { ppStatusLabel } from "@/lib/types";
 import { PPDrawerFinanceiro } from "./pp-drawer-financeiro";
 
@@ -71,29 +71,83 @@ function formatMoney(n: number): string {
   return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
+type FiltroStatus = PPStatus | "todas";
+
+const STATUS_FILTROS: Array<{ key: FiltroStatus; label: string }> = [
+  { key: "em_avaliacao", label: "Em avaliação" },
+  { key: "aprovada", label: "Aprovadas" },
+  { key: "pago", label: "Pagas" },
+  { key: "rejeitada", label: "Rejeitadas" },
+  { key: "cancelada", label: "Canceladas" },
+  { key: "todas", label: "Todas" },
+];
+
 interface PedidosCompraListProps {
   rows: PPRow[];
+  contas: ContaBancaria[];
+  tipos: PlanoContaTipo[];
+  subtipos: PlanoContaSubtipo[];
 }
 
-export function PedidosCompraList({ rows }: PedidosCompraListProps) {
+export function PedidosCompraList({ rows, contas, tipos, subtipos }: PedidosCompraListProps) {
+  const [filtro, setFiltro] = React.useState<FiltroStatus>("em_avaliacao");
   const [busca, setBusca] = React.useState("");
   const [ppSelecionada, setPpSelecionada] = React.useState<PPRow | null>(null);
 
+  const contagens = React.useMemo(() => {
+    const c: Record<FiltroStatus, number> = {
+      todas: rows.length,
+      em_avaliacao: 0,
+      aprovada: 0,
+      pago: 0,
+      rejeitada: 0,
+      cancelada: 0,
+    };
+    for (const r of rows) c[r.status]++;
+    return c;
+  }, [rows]);
+
   const filtrados = React.useMemo(() => {
     const q = busca.trim().toLowerCase();
-    if (q === "") return rows;
-    return rows.filter(
-      (r) =>
+    return rows.filter((r) => {
+      if (filtro !== "todas" && r.status !== filtro) return false;
+      if (q === "") return true;
+      return (
         r.codigo.toLowerCase().includes(q) ||
         r.fornecedor_nome.toLowerCase().includes(q) ||
         r.job_codigo.toLowerCase().includes(q) ||
-        r.job_nome.toLowerCase().includes(q),
-    );
-  }, [rows, busca]);
+        r.job_nome.toLowerCase().includes(q)
+      );
+    });
+  }, [rows, filtro, busca]);
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-end gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap gap-1">
+          {STATUS_FILTROS.map((f) => {
+            const ativo = filtro === f.key;
+            const count = contagens[f.key];
+            return (
+              <button
+                key={f.key}
+                type="button"
+                onClick={() => setFiltro(f.key)}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                  ativo
+                    ? "border-california-red bg-california-red/10 text-california-red"
+                    : "border-border bg-white text-muted-foreground hover:bg-muted/50",
+                )}
+              >
+                {f.label}
+                <span className={cn("tabular-nums", ativo ? "text-california-red" : "text-muted-foreground/70")}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
           <input
@@ -175,6 +229,9 @@ export function PedidosCompraList({ rows }: PedidosCompraListProps) {
         onOpenChange={(open) => {
           if (!open) setPpSelecionada(null);
         }}
+        contas={contas}
+        tipos={tipos}
+        subtipos={subtipos}
       />
     </div>
   );

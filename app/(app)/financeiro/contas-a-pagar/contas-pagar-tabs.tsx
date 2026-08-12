@@ -10,8 +10,8 @@ interface Props {
   ppsPendentesCount: number;
   /** Conteúdo da aba de avulsas. */
   avulsas: React.ReactNode;
-  /** Contagem de avulsas pendentes — vira badge. */
-  avulsasPendentesCount?: number;
+  /** Contagem de avulsas aprovadas aguardando pagamento — vira badge. */
+  avulsasAprovadasCount?: number;
   /** Conteúdo da aba de recorrências. */
   recorrentes: React.ReactNode;
   /** Contagem de recorrências ativas — vira badge. */
@@ -24,7 +24,7 @@ export function ContasPagarTabs({
   pps,
   ppsPendentesCount,
   avulsas,
-  avulsasPendentesCount,
+  avulsasAprovadasCount,
   recorrentes,
   recorrentesAtivasCount,
 }: Props) {
@@ -47,9 +47,9 @@ export function ContasPagarTabs({
         </TabButton>
         <TabButton active={tab === "avulsas"} onClick={() => setTab("avulsas")}>
           Lançamentos Avulsos
-          {(avulsasPendentesCount ?? 0) > 0 && (
+          {(avulsasAprovadasCount ?? 0) > 0 && (
             <span className="ml-1.5 inline-flex h-[17px] min-w-[17px] items-center justify-center rounded-full bg-california-red px-1 text-[10px] font-bold text-white">
-              {avulsasPendentesCount}
+              {avulsasAprovadasCount}
             </span>
           )}
         </TabButton>

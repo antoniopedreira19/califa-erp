@@ -7,7 +7,7 @@ import { PedidosCompraList, type PPRow } from "./pedidos-compra-list";
 import { ContasPagarTabs } from "./contas-pagar-tabs";
 import { ContasAvulsasList, type AvulsaRow } from "./avulsas-list";
 import { RecorrentesList, type RecorrenteRow } from "./recorrentes-list";
-import type { PPStatus, PlanoContaTipo, PlanoContaSubtipo } from "@/lib/types";
+import type { PPStatus, PlanoContaTipo, PlanoContaSubtipo, ContaBancaria } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -24,9 +24,11 @@ export default async function PedidosCompraFinanceiroPage() {
 
   const [
     { data, error },
+    contasRes,
     tiposRes,
     subtiposRes,
     ppsPendentesCountRes,
+    avulsasAprovadasCountRes,
     avulsasRes,
     empresasRes,
     fornecedoresRes,
@@ -58,8 +60,13 @@ export default async function PedidosCompraFinanceiroPage() {
       `,
       )
       .eq("tenant_id", session.activeTenant.id)
-      .eq("status", "em_avaliacao")
       .order("created_at", { ascending: false }),
+    supabase
+      .from("contas_bancarias")
+      .select("*")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("ativo", true)
+      .returns<ContaBancaria[]>(),
     supabase
       .from("plano_contas_tipos")
       .select("*")
@@ -79,12 +86,17 @@ export default async function PedidosCompraFinanceiroPage() {
       .select("id", { count: "exact", head: true })
       .eq("tenant_id", session.activeTenant.id)
       .eq("status", "em_avaliacao"),
+    supabase
+      .from("contas_avulsas")
+      .select("id", { count: "exact", head: true })
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("status", "aprovada"),
     // Contas avulsas (todos os status) — para a lista da aba
     supabase
       .from("contas_avulsas")
       .select(`
         id, descricao, valor, natureza, data_prevista_pagamento, status,
-        pago_em, created_at,
+        pago_em, created_at, empresa_id,
         fornecedor:fornecedores(nome, razao_social),
         cliente:clientes(nome_fantasia, razao_social),
         job:jobs(codigo),
@@ -241,6 +253,7 @@ export default async function PedidosCompraFinanceiroPage() {
     status: "aprovada" | "baixada";
     pago_em: string | null;
     created_at: string;
+    empresa_id: string;
     fornecedor: { nome: string | null; razao_social: string | null } | null;
     cliente: { nome_fantasia: string | null; razao_social: string | null } | null;
     job: { codigo: string } | null;
@@ -258,6 +271,7 @@ export default async function PedidosCompraFinanceiroPage() {
     fornecedor_nome: r.fornecedor?.razao_social ?? r.fornecedor?.nome ?? null,
     cliente_nome: r.cliente?.razao_social ?? r.cliente?.nome_fantasia ?? null,
     job_codigo: r.job?.codigo ?? null,
+    empresa_id: r.empresa_id,
     empresa_nome: r.empresa?.razao_social ?? r.empresa?.nome_fantasia ?? "",
     tipo_codigo: r.tipo?.codigo ?? "",
     subtipo_nome: r.subtipo?.nome ?? "",
@@ -352,18 +366,17 @@ export default async function PedidosCompraFinanceiroPage() {
             Financeiro
           </Link>
           <ChevronRight className="h-3 w-3" />
-          <span className="text-california-red">Caixa de entrada</span>
+          <span className="text-california-red">Contas a Pagar</span>
         </nav>
         <div className="flex items-center gap-3">
           <div className="rounded-lg bg-california-red/10 p-2">
             <FileText className="h-5 w-5 text-california-red" />
           </div>
-          <h1 className="text-3xl font-bold tracking-tight">Caixa de entrada</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Contas a Pagar</h1>
         </div>
         <p className="text-sm text-muted-foreground max-w-2xl">
-          Avalie os Pedidos de Compra emitidos pelos GPs. Aprove para liberar
-          pagamento na tela &ldquo;A pagar&rdquo;, ou rejeite com motivo justificado.
-          Lançamentos avulsos também são revisados aqui.
+          Pedidos de Compra, lançamentos avulsos e recorrências que envolvem
+          dinheiro a sair. Aprove, rejeite ou dê baixa conforme o estado da linha.
         </p>
       </header>
 
@@ -371,6 +384,9 @@ export default async function PedidosCompraFinanceiroPage() {
         pps={
           <PedidosCompraList
             rows={rows}
+            contas={contasRes.data ?? []}
+            tipos={tiposRes.data ?? []}
+            subtipos={subtiposRes.data ?? []}
           />
         }
         ppsPendentesCount={ppsPendentesCountRes.count ?? 0}
@@ -385,8 +401,10 @@ export default async function PedidosCompraFinanceiroPage() {
             clientes={clientesList}
             jobs={jobsList}
             regionais={regionaisList}
+            contas={contasRes.data ?? []}
           />
         }
+        avulsasAprovadasCount={avulsasAprovadasCountRes.count ?? 0}
         recorrentes={
           <RecorrentesList
             rows={recorrentesRows}
