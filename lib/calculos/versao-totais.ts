@@ -66,6 +66,51 @@ const _todosOsTiposListados: TipoForaDaLista extends never
 void _todosOsTiposListados;
 
 /**
+ * Agrupamento de EXIBIÇÃO do fechamento por tipo de custo.
+ *
+ * A conta continua por tipo — A · Direto e A · Repasse têm alavancas
+ * diferentes em `REGRAS_TIPO_CUSTO` (um fatura pela California, o outro
+ * não), e o mesmo vale para F · Externo e F · Interno. O que muda aqui é só
+ * a leitura do fechamento: quem olha o painel quer o custo A e o custo F
+ * fechados, não a quebra interna deles.
+ *
+ * Fonte única das linhas do "Fechamento do orçado · por tipo de custo" nas
+ * quatro telas que mostram esse bloco (versão do orçamento, projeto do
+ * orçamento, projeto de jobs e realizado do job).
+ */
+export const LINHAS_FECHAMENTO_POR_TIPO = [
+  { chave: "A", label: "Custo A", tipos: ["A", "AR"] },
+  { chave: "B", label: "B · Bi-trib.", tipos: ["B"] },
+  { chave: "C", label: "C · Sem honor.", tipos: ["C"] },
+  { chave: "D", label: "D · Interno", tipos: ["D"] },
+  { chave: "F", label: "Custo F", tipos: ["F", "FI"] },
+] as const satisfies ReadonlyArray<{
+  chave: string;
+  label: string;
+  tipos: readonly TipoCusto[];
+}>;
+
+// Mesma guarda de exaustividade de `TIPOS_CUSTO`: tipo novo que ninguém
+// encaixar numa linha some do fechamento sem avisar. Aqui isso vira erro de
+// compilação.
+type TipoForaDoFechamento = Exclude<
+  TipoCusto,
+  (typeof LINHAS_FECHAMENTO_POR_TIPO)[number]["tipos"][number]
+>;
+const _todosOsTiposNoFechamento: TipoForaDoFechamento extends never
+  ? true
+  : ["Falta tipo em LINHAS_FECHAMENTO_POR_TIPO"] = true;
+void _todosOsTiposNoFechamento;
+
+/** Soma os subtotais dos tipos que compõem uma linha do fechamento. */
+export function somarLinhaFechamento(
+  subtotaisPorTipo: Record<TipoCusto, number>,
+  tipos: readonly TipoCusto[],
+): number {
+  return tipos.reduce((s, t) => s + (subtotaisPorTipo[t] ?? 0), 0);
+}
+
+/**
  * Tipos em que o cliente paga o fornecedor diretamente — os únicos que
  * admitem BV. Espelha o trigger `bv_exige_item_com_bv` no Postgres; mudar
  * aqui sem mudar lá deixa a tela oferecendo um BV que o banco recusa.

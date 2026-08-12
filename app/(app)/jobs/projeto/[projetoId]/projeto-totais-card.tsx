@@ -3,11 +3,13 @@ import { Calculator } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import {
   calcularRentabilidade,
+  LINHAS_FECHAMENTO_POR_TIPO,
+  somarLinhaFechamento,
   TIPOS_CUSTO,
 } from "@/lib/calculos/versao-totais";
 import { PainelResultado } from "@/components/painel-resultado";
 import { LegendaFechamento } from "@/components/legenda-fechamento";
-import { tipoCustoLabel, type TipoCusto } from "@/lib/types";
+import { type TipoCusto } from "@/lib/types";
 import type { JobPlanilhaProjeto } from "./tipos";
 import {
   ColunasJobsProjeto,
@@ -351,11 +353,14 @@ export function ProjetoTotaisCard({
             Fechamento do orçado · por tipo de custo
           </p>
           <div className="flex flex-col gap-1.5">
-            {TIPOS_CUSTO.map((t) => (
+            {LINHAS_FECHAMENTO_POR_TIPO.map((linha) => (
               <LinhaValor
-                key={t}
-                rotulo={tipoCustoLabel(t)}
-                valor={formatCurrency(subtotaisPorTipo[t], moeda)}
+                key={linha.chave}
+                rotulo={linha.label}
+                valor={formatCurrency(
+                  somarLinhaFechamento(subtotaisPorTipo, linha.tipos),
+                  moeda,
+                )}
               />
             ))}
             <div className="mt-3 border-t border-border pt-3">

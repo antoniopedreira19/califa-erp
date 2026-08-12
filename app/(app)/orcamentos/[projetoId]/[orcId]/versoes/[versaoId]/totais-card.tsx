@@ -5,10 +5,10 @@ import {
   calcularTotaisVersao,
   calcularTotaisPlanejados,
   calcularResultadoOperacional,
-  TIPOS_CUSTO,
+  LINHAS_FECHAMENTO_POR_TIPO,
+  somarLinhaFechamento,
 } from "@/lib/calculos/versao-totais";
 import {
-  tipoCustoLabel,
   type VersaoOrcamentoGrupo,
   type VersaoOrcamentoItem,
 } from "@/lib/types";
@@ -270,11 +270,11 @@ export function TotaisCard({
             Fechamento do orçado · por tipo de custo
           </p>
           <div className="space-y-1.5">
-            {TIPOS_CUSTO.map((t) => (
+            {LINHAS_FECHAMENTO_POR_TIPO.map((linha) => (
               <Linha
-                key={t}
-                label={tipoCustoLabel(t)}
-                value={subtotaisPorTipo[t]}
+                key={linha.chave}
+                label={linha.label}
+                value={somarLinhaFechamento(subtotaisPorTipo, linha.tipos)}
                 moeda={moeda}
               />
             ))}

@@ -3,7 +3,10 @@
 ## Status
 
 Vigente. Revisada em 11/08/2026, quando A e F ganharam subdivisões e o
-fechamento passou a produzir **dois** números em vez de um.
+fechamento passou a produzir **dois** números em vez de um. Revisada em
+12/08/2026: as subdivisões continuam valendo na conta, mas o painel de
+fechamento passou a exibi-las somadas (ver "Como o fechamento aparece na
+tela").
 
 ## Os dois números do fechamento
 
@@ -67,6 +70,37 @@ abas batem em honorários, imposto e valor do job, célula a célula.
 - **F · Externo** — hoje espelha o A · Direto. Subdivisão criada junto com
   o F · Interno; a diferença de negócio entre F e A ainda será definida.
 - **F · Interno** — como o F · Externo, mas sem honorários da agência.
+
+## Como o fechamento aparece na tela
+
+A matriz acima é a **conta**. A leitura é mais curta: desde 12/08/2026 o painel
+"Fechamento do orçado · por tipo de custo" mostra **cinco linhas**, com as
+subdivisões somadas.
+
+| Linha | Soma |
+|---|---|
+| Custo A | `A` + `AR` |
+| B · Bi-trib. | `B` |
+| C · Sem honor. | `C` |
+| D · Interno | `D` |
+| Custo F | `F` + `FI` |
+
+O motivo é de leitura: quem confere o fechamento quer o custo A e o custo F
+fechados. A quebra interna importa para a conta — `AR` fatura pela California e
+`A` não, `F · Externo` tem honorário e `F · Interno` não — e não para o total.
+**Nenhum número mudou**: faturamento previsto, valor do job, honorários e
+imposto continuam saindo de `REGRAS_TIPO_CUSTO`, tipo a tipo.
+
+A fonte é `LINHAS_FECHAMENTO_POR_TIPO`, em `lib/calculos/versao-totais.ts`,
+usada pelas quatro telas de Totais (versão do orçamento, projeto do orçamento,
+projeto de jobs e realizado do job). Tem a mesma guarda de exaustividade do
+`TIPOS_CUSTO`: tipo que entre em `TipoCusto` e não caia em nenhuma linha **para
+de compilar**, em vez de sumir do painel em silêncio.
+
+Duas coisas seguem com os tipos separados, de propósito: a **legenda do
+rodapé**, que é onde se explica por que o total dá o que dá ("honorários sobre
+A · Direto + A · Repasse + B + D + F · Externo"), e o **XLSX exportado**, que
+mantém `SUB-TOTAL` por tipo cru porque é o formato da planilha oficial.
 
 ## BV × Pedido de Produção
 

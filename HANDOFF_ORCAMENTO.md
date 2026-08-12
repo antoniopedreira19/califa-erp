@@ -1275,7 +1275,8 @@ não seja listado em `TIPOS_CUSTO` **para de compilar**.
 
 1. **Card de Totais da versão e da agregada** ganharam a linha "Valor do Job"
    logo abaixo de "Faturamento previsto" — vermelho California em cima, preto
-   embaixo. O fechamento por tipo de custo passou a listar os sete.
+   embaixo. O fechamento por tipo de custo passou a listar os sete — **hoje são
+   cinco linhas**, ver a nota de 12/08/2026 no fim da seção.
 2. **Cabeçalhos** (`ResumoRentabilidade`, no editor da agregada e do multi)
    mostram **só o Valor do Job** — o bloco que dizia "Faturamento previsto"
    passou a dizer "Valor do Job", sem ganhar bloco novo.
@@ -1298,6 +1299,15 @@ por conta própria para cabeçalhos, barra fixa, KPIs do multi e lista de jobs �
 não foi pedido, e na lista o número a mais **empurrou o botão "Visão agregada"
 para a linha seguinte**. Revertido nos commits `408444b`, `5654c87` e `5a2e24f`.
 A regra que ficou: **fora dos cards de Totais, um número só — o Valor do Job.**
+
+⚠️ **Fechamento em cinco linhas (2026-08-12).** A pedido do time, o painel
+"Fechamento do orçado · por tipo de custo" soma as subdivisões: `A` + `AR`
+viram **Custo A**, `F` + `FI` viram **Custo F**. Sete linhas viraram cinco, nas
+quatro telas de Totais. **Só a leitura mudou** — a conta continua tipo a tipo
+em `REGRAS_TIPO_CUSTO`, e nenhum total se moveu. A fonte das linhas é
+`LINHAS_FECHAMENTO_POR_TIPO` (`lib/calculos/versao-totais.ts`), com guarda de
+exaustividade. A legenda do rodapé e o XLSX exportado seguem com os tipos
+separados. Regra completa em `docs/decisions/003-tipos-de-custo.md`.
 As exceções, todas conversadas com o time, estão em 17.4 item 3 (os dois modais
 do envio) e no card de Erratas (`HANDOFF_JOBS.md`, seção 28).
 
