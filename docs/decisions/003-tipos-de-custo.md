@@ -79,17 +79,22 @@ subdivisões somadas.
 
 | Linha | Soma |
 |---|---|
-| Custo A | `A` + `AR` |
-| B · Bi-trib. | `B` |
-| C · Sem honor. | `C` |
-| D · Interno | `D` |
-| Custo F | `F` + `FI` |
+| Sub-total A | `A` + `AR` |
+| Sub-total B | `B` |
+| Sub-total C | `C` |
+| Sub-total D | `D` |
+| Sub-total F | `F` + `FI` |
 
 O motivo é de leitura: quem confere o fechamento quer o custo A e o custo F
 fechados. A quebra interna importa para a conta — `AR` fatura pela California e
 `A` não, `F · Externo` tem honorário e `F · Interno` não — e não para o total.
 **Nenhum número mudou**: faturamento previsto, valor do job, honorários e
 imposto continuam saindo de `REGRAS_TIPO_CUSTO`, tipo a tipo.
+
+Os rótulos são **só a letra** (13/08/2026), no formato `SUB-TOTAL A` que a
+planilha oficial já usava — quem lê o painel e quem lê o XLSX exportado veem o
+mesmo nome. Os descritores ("Bi-trib.", "Sem honor.", "Interno") saíram do
+painel: o significado de cada letra está na legenda do rodapé e nesta decisão.
 
 A fonte é `LINHAS_FECHAMENTO_POR_TIPO`, em `lib/calculos/versao-totais.ts`,
 usada pelas quatro telas de Totais (versão do orçamento, projeto do orçamento,

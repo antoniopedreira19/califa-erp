@@ -1301,10 +1301,13 @@ para a linha seguinte**. Revertido nos commits `408444b`, `5654c87` e `5a2e24f`.
 A regra que ficou: **fora dos cards de Totais, um número só — o Valor do Job.**
 
 ⚠️ **Fechamento em cinco linhas (2026-08-12).** A pedido do time, o painel
-"Fechamento do orçado · por tipo de custo" soma as subdivisões: `A` + `AR`
-viram **Custo A**, `F` + `FI` viram **Custo F**. Sete linhas viraram cinco, nas
-quatro telas de Totais. **Só a leitura mudou** — a conta continua tipo a tipo
-em `REGRAS_TIPO_CUSTO`, e nenhum total se moveu. A fonte das linhas é
+"Fechamento do orçado · por tipo de custo" soma as subdivisões: `A` + `AR` e
+`F` + `FI` viram uma linha cada. Sete linhas viraram cinco, nas quatro telas de
+Totais. Em 13/08/2026 os rótulos viraram **`Sub-total A` … `Sub-total F`**, o
+mesmo nome que o XLSX exportado já usava; os descritores ("Bi-trib.", "Sem
+honor.", "Interno") saíram do painel e seguem na legenda do rodapé. **Só a
+leitura mudou** — a conta continua tipo a tipo em `REGRAS_TIPO_CUSTO`, e nenhum
+total se moveu. A fonte das linhas é
 `LINHAS_FECHAMENTO_POR_TIPO` (`lib/calculos/versao-totais.ts`), com guarda de
 exaustividade. A legenda do rodapé e o XLSX exportado seguem com os tipos
 separados. Regra completa em `docs/decisions/003-tipos-de-custo.md`.

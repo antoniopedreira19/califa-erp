@@ -978,11 +978,13 @@ conversadas com o time, são o card de Erratas (seção 28) e os dois modais do
 envio de job (`HANDOFF_ORCAMENTO.md`, 17.4 item 3).
 
 ⚠️ **Fechamento em cinco linhas (2026-08-12).** A pedido do time, o painel
-"Fechamento do orçado · por tipo de custo" soma as subdivisões: `A` + `AR`
-viram **Custo A**, `F` + `FI` viram **Custo F**. Vale para o card do job e o da
-agregada do projeto (e para as duas telas do módulo de Orçamentos). **Só a
-leitura mudou** — a conta continua tipo a tipo em `REGRAS_TIPO_CUSTO`, e nenhum
-total se moveu. A fonte das linhas é `LINHAS_FECHAMENTO_POR_TIPO`
+"Fechamento do orçado · por tipo de custo" soma as subdivisões: `A` + `AR` e
+`F` + `FI` viram uma linha cada. Vale para o card do job e o da agregada do
+projeto (e para as duas telas do módulo de Orçamentos). Em 13/08/2026 os
+rótulos viraram **`Sub-total A` … `Sub-total F`**, o mesmo nome que o XLSX
+exportado já usava; os descritores ("Bi-trib.", "Sem honor.", "Interno") saíram
+do painel e seguem na legenda do rodapé. **Só a leitura mudou** — a conta
+continua tipo a tipo em `REGRAS_TIPO_CUSTO`, e nenhum total se moveu. A fonte das linhas é `LINHAS_FECHAMENTO_POR_TIPO`
 (`lib/calculos/versao-totais.ts`), com guarda de exaustividade. A legenda do
 rodapé e o XLSX exportado seguem com os tipos separados. Regra completa em
 `docs/decisions/003-tipos-de-custo.md`.

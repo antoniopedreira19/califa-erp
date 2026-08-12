@@ -79,11 +79,11 @@ void _todosOsTiposListados;
  * orçamento, projeto de jobs e realizado do job).
  */
 export const LINHAS_FECHAMENTO_POR_TIPO = [
-  { chave: "A", label: "Custo A", tipos: ["A", "AR"] },
-  { chave: "B", label: "B · Bi-trib.", tipos: ["B"] },
-  { chave: "C", label: "C · Sem honor.", tipos: ["C"] },
-  { chave: "D", label: "D · Interno", tipos: ["D"] },
-  { chave: "F", label: "Custo F", tipos: ["F", "FI"] },
+  { chave: "A", label: "Sub-total A", tipos: ["A", "AR"] },
+  { chave: "B", label: "Sub-total B", tipos: ["B"] },
+  { chave: "C", label: "Sub-total C", tipos: ["C"] },
+  { chave: "D", label: "Sub-total D", tipos: ["D"] },
+  { chave: "F", label: "Sub-total F", tipos: ["F", "FI"] },
 ] as const satisfies ReadonlyArray<{
   chave: string;
   label: string;
