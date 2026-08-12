@@ -7,7 +7,7 @@ import { PedidosCompraList, type PPRow } from "./pedidos-compra-list";
 import { ContasPagarTabs } from "./contas-pagar-tabs";
 import { ContasAvulsasList, type AvulsaRow } from "./avulsas-list";
 import { RecorrentesList, type RecorrenteRow } from "./recorrentes-list";
-import type { PPStatus, ContaBancaria, PlanoContaTipo, PlanoContaSubtipo } from "@/lib/types";
+import type { PPStatus, PlanoContaTipo, PlanoContaSubtipo } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -24,11 +24,9 @@ export default async function PedidosCompraFinanceiroPage() {
 
   const [
     { data, error },
-    contasRes,
     tiposRes,
     subtiposRes,
     ppsPendentesCountRes,
-    avulsasPendentesCountRes,
     avulsasRes,
     empresasRes,
     fornecedoresRes,
@@ -60,13 +58,8 @@ export default async function PedidosCompraFinanceiroPage() {
       `,
       )
       .eq("tenant_id", session.activeTenant.id)
+      .eq("status", "em_avaliacao")
       .order("created_at", { ascending: false }),
-    supabase
-      .from("contas_bancarias")
-      .select("*")
-      .eq("tenant_id", session.activeTenant.id)
-      .eq("ativo", true)
-      .returns<ContaBancaria[]>(),
     supabase
       .from("plano_contas_tipos")
       .select("*")
@@ -86,11 +79,6 @@ export default async function PedidosCompraFinanceiroPage() {
       .select("id", { count: "exact", head: true })
       .eq("tenant_id", session.activeTenant.id)
       .eq("status", "em_avaliacao"),
-    supabase
-      .from("contas_avulsas")
-      .select("id", { count: "exact", head: true })
-      .eq("tenant_id", session.activeTenant.id)
-      .eq("status", "pendente"),
     // Contas avulsas (todos os status) — para a lista da aba
     supabase
       .from("contas_avulsas")
@@ -364,16 +352,18 @@ export default async function PedidosCompraFinanceiroPage() {
             Financeiro
           </Link>
           <ChevronRight className="h-3 w-3" />
-          <span className="text-california-red">Contas a Pagar</span>
+          <span className="text-california-red">Caixa de entrada</span>
         </nav>
         <div className="flex items-center gap-3">
           <div className="rounded-lg bg-california-red/10 p-2">
             <FileText className="h-5 w-5 text-california-red" />
           </div>
-          <h1 className="text-3xl font-bold tracking-tight">Contas a Pagar</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Caixa de entrada</h1>
         </div>
         <p className="text-sm text-muted-foreground max-w-2xl">
-          Avalie os Pedidos de Compra emitidos pelos GPs e os lançamentos avulsos (aluguel, folha, impostos): ajuste o prazo, dê baixa ou rejeite com motivo justificado.
+          Avalie os Pedidos de Compra emitidos pelos GPs. Aprove para liberar
+          pagamento na tela &ldquo;A pagar&rdquo;, ou rejeite com motivo justificado.
+          Lançamentos avulsos também são revisados aqui.
         </p>
       </header>
 
@@ -381,9 +371,6 @@ export default async function PedidosCompraFinanceiroPage() {
         pps={
           <PedidosCompraList
             rows={rows}
-            contas={contasRes.data ?? []}
-            tipos={tiposRes.data ?? []}
-            subtipos={subtiposRes.data ?? []}
           />
         }
         ppsPendentesCount={ppsPendentesCountRes.count ?? 0}
@@ -400,7 +387,6 @@ export default async function PedidosCompraFinanceiroPage() {
             regionais={regionaisList}
           />
         }
-        avulsasPendentesCount={avulsasPendentesCountRes.count ?? 0}
         recorrentes={
           <RecorrentesList
             rows={recorrentesRows}

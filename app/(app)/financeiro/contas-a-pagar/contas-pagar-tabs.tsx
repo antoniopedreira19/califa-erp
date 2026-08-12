@@ -11,7 +11,7 @@ interface Props {
   /** Conteúdo da aba de avulsas. */
   avulsas: React.ReactNode;
   /** Contagem de avulsas pendentes — vira badge. */
-  avulsasPendentesCount: number;
+  avulsasPendentesCount?: number;
   /** Conteúdo da aba de recorrências. */
   recorrentes: React.ReactNode;
   /** Contagem de recorrências ativas — vira badge. */
@@ -47,7 +47,7 @@ export function ContasPagarTabs({
         </TabButton>
         <TabButton active={tab === "avulsas"} onClick={() => setTab("avulsas")}>
           Lançamentos Avulsos
-          {avulsasPendentesCount > 0 && (
+          {(avulsasPendentesCount ?? 0) > 0 && (
             <span className="ml-1.5 inline-flex h-[17px] min-w-[17px] items-center justify-center rounded-full bg-california-red px-1 text-[10px] font-bold text-white">
               {avulsasPendentesCount}
             </span>

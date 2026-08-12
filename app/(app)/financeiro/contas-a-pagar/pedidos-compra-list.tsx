@@ -4,7 +4,7 @@ import * as React from "react";
 import { Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import type { PPStatus, ContaBancaria, PlanoContaTipo, PlanoContaSubtipo } from "@/lib/types";
+import type { PPStatus } from "@/lib/types";
 import { ppStatusLabel } from "@/lib/types";
 import { PPDrawerFinanceiro } from "./pp-drawer-financeiro";
 
@@ -81,12 +81,9 @@ function formatMoney(n: number): string {
 
 interface PedidosCompraListProps {
   rows: PPRow[];
-  contas: ContaBancaria[];
-  tipos: PlanoContaTipo[];
-  subtipos: PlanoContaSubtipo[];
 }
 
-export function PedidosCompraList({ rows, contas, tipos, subtipos }: PedidosCompraListProps) {
+export function PedidosCompraList({ rows }: PedidosCompraListProps) {
   const [filtro, setFiltro] = React.useState<"todas" | PPStatus>("em_avaliacao");
   const [busca, setBusca] = React.useState("");
   const [ppSelecionada, setPpSelecionada] = React.useState<PPRow | null>(null);
@@ -209,9 +206,6 @@ export function PedidosCompraList({ rows, contas, tipos, subtipos }: PedidosComp
         onOpenChange={(open) => {
           if (!open) setPpSelecionada(null);
         }}
-        contas={contas}
-        tipos={tipos}
-        subtipos={subtipos}
       />
     </div>
   );
