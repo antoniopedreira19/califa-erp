@@ -41,7 +41,7 @@ No MVP, o gerente de projetos conversa com o cliente fora do sistema. O sistema 
 
 ## Banco: o fluxo do MCP (regra transversal, leia primeiro)
 
-**Antes de qualquer trabalho neste projeto, leia `docs/FLUXO-BANCO.md`.** O Supabase **não é do time**: pertence a outro desenvolvedor, que cedeu a chave do MCP. Nada é criado pelo painel; toda estrutura nasce de migration versionada e aplicada pelo MCP.
+**Antes de qualquer trabalho neste projeto, leia `docs/FLUXO-BANCO.md`.** O banco é compartilhado por mais de uma frente de desenvolvimento. Nada é criado pelo painel do Supabase: toda estrutura nasce de migration versionada no repositório e aplicada pelo MCP.
 
 **O ciclo, sem pular etapa:**
 1. **Ler o banco pelo MCP antes de codar** — colunas, enums, constraints e o dado real, para não inventar estrutura que já existe.
@@ -50,7 +50,7 @@ No MVP, o gerente de projetos conversa com o cliente fora do sistema. O sistema 
 4. **Conferir pelo MCP que aplicou** — colunas, RLS, policies, GRANT para `authenticated` (e nada para `anon`), índices, e o dado quando houve backfill.
 5. **Commitar a migration junto do código que depende dela**, no mesmo commit.
 
-**Autorização (combinada em 12/08/2026):** mudança **aditiva** — coluna, tabela, índice, policy, backfill que preenche vazio, valor novo em enum — aplica direto. Mudança **destrutiva** — remover coluna/tabela/linha, alterar tipo de campo populado, renomear coluna em uso, backfill que sobrescreve — **para e pergunta antes**. Na dúvida, pergunta.
+**Mudança destrutiva não se aplica sozinha.** Remover coluna, tabela ou linha, alterar tipo de campo já populado, renomear coluna em uso, backfill que sobrescreve valor existente: tudo isso exige confirmação explícita de quem conduz a sessão, porque o banco tem dado de outras frentes. Mudança aditiva (coluna, tabela, índice, policy, backfill que preenche vazio, valor novo em enum) segue o fluxo normal. Na dúvida sobre em qual lado a mudança cai, pergunte.
 
 **O TypeScript não lê o banco.** Não há tipos gerados: `lib/types.ts` é escrito à mão. Migration que mexe em coluna usada pelo frontend termina atualizando o tipo correspondente, no mesmo commit — senão o campo fica invisível para o verificador e para o autocompletar.
 

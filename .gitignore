@@ -59,5 +59,9 @@ design_handoff_califa/
 # Claude Code local (permissões e dev server da máquina; regenera sozinho)
 .claude/
 
+# Instruções pessoais de cada dev (contexto e combinados que só valem para quem escreveu).
+# O que vale para o time inteiro fica no CLAUDE.md, que é versionado.
+CLAUDE.local.md
+
 # Workspace do processo Subagent-Driven Development (briefs, ledger, reports; regenera sozinho)
 .superpowers/
