@@ -50,10 +50,12 @@ export default async function AbrirJobNoFinanceiroPage({
   const agora = new Date();
   const hojeIso = agora.toISOString().slice(0, 10);
 
-  // Custo previsto = custo planejado da planilha interna. A Server Action
+  // Custo previsto = planejado dos itens de calha PP — só o que a
+  // California de fato desembolsa (docs/decisions/004). A Server Action
   // relê esse mesmo número do banco antes de gravar — o que vai daqui é
-  // só o que a tela precisa mostrar.
-  const custoPrevisto = Math.round(job.planilha_planejado * 100) / 100;
+  // só o que a tela precisa mostrar. Zero é legítimo: job 100% A/D abre
+  // sem curva.
+  const custoPrevisto = Math.round(job.planilha_desembolso * 100) / 100;
 
   const baseCompetencia = job.data_inicio_prevista ?? hojeIso;
   const anoSugerido = Number(baseCompetencia.slice(0, 4));

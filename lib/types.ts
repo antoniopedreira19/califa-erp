@@ -622,8 +622,11 @@ export interface Job {
   competencia_trimestre: number | null;
   competencia_ano: number | null;
   /**
-   * Cópia do custo planejado da planilha interna no instante da abertura.
-   * Errata posterior NÃO reescreve — a previsão de caixa não é retroativa.
+   * Cópia, no instante da abertura, do planejado dos itens de calha PP
+   * (AR, B, C, F, FI) — só o que a California desembolsa. Itens A e D
+   * são pagos direto pelo cliente e ficam fora (docs/decisions/004).
+   * Zero é legítimo: job 100% A/D abre sem curva. Errata posterior NÃO
+   * reescreve — a previsão de caixa não é retroativa.
    */
   custo_previsto_total: number | null;
   data_abertura_financeiro: string | null;

@@ -1,4 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
+import { tipoGeraDesembolso } from "@/lib/calculos/versao-totais";
+import type { TipoCusto } from "@/lib/types";
 
 /**
  * Um job na fila de abertura, com tudo que a conferência do financeiro
@@ -11,6 +13,9 @@ export interface JobNaFila {
   codigo: string;
   nome: string;
   valor_total: number | null;
+  /** O que a California emite nota — difere do valor total pelos custos
+   *  que o cliente paga direto ao fornecedor (A, D, F). */
+  faturamento_previsto: number | null;
   data_inicio_prevista: string | null;
   data_fim_prevista: string | null;
   data_prevista_faturamento: string | null;
@@ -30,8 +35,12 @@ export interface JobNaFila {
   planilha_grupos: number;
   planilha_itens: number;
   planilha_orcado: number;
-  /** Vira o custo previsto do job na abertura. */
+  /** Planejado de TODOS os tipos — controle interno da planilha. */
   planilha_planejado: number;
+  /** Planejado só dos tipos de calha PP (AR, B, C, F, FI) — o que a
+   *  California de fato desembolsa. Vira o custo previsto na abertura
+   *  (docs/decisions/004). */
+  planilha_desembolso: number;
 }
 
 export interface TotaisPlanilhaJob {
@@ -39,10 +48,11 @@ export interface TotaisPlanilhaJob {
   itens: number;
   orcado: number;
   planejado: number;
+  desembolso: number;
 }
 
 const SELECT_JOB_FILA =
-  "id, codigo, nome, valor_total, data_inicio_prevista, data_fim_prevista, " +
+  "id, codigo, nome, valor_total, faturamento_previsto, data_inicio_prevista, data_fim_prevista, " +
   "data_prevista_faturamento, observacoes, created_at, produto, cidade, projeto_id, " +
   "projeto:projetos(codigo, nome, cliente:clientes(nome_fantasia)), " +
   "regional:regionais(nome), " +
@@ -63,7 +73,7 @@ export async function totaisDasPlanilhas(
   const supabase = createClient();
   const { data, error } = await supabase
     .from("jobs_itens_orcado")
-    .select("job_id, grupo_id, total_orcado, total_planejado")
+    .select("job_id, grupo_id, tipo_custo, total_orcado, total_planejado")
     .in("job_id", jobIds);
 
   if (error) {
@@ -76,6 +86,7 @@ export async function totaisDasPlanilhas(
   for (const linha of (data ?? []) as {
     job_id: string;
     grupo_id: string | null;
+    tipo_custo: TipoCusto;
     total_orcado: number | string | null;
     total_planejado: number | string | null;
   }[]) {
@@ -84,10 +95,14 @@ export async function totaisDasPlanilhas(
       itens: 0,
       orcado: 0,
       planejado: 0,
+      desembolso: 0,
     };
     atual.itens += 1;
     atual.orcado += Number(linha.total_orcado ?? 0);
     atual.planejado += Number(linha.total_planejado ?? 0);
+    if (tipoGeraDesembolso(linha.tipo_custo)) {
+      atual.desembolso += Number(linha.total_planejado ?? 0);
+    }
     mapa.set(linha.job_id, atual);
 
     if (linha.grupo_id) {
@@ -111,6 +126,10 @@ function montarJobNaFila(j: any, totais?: TotaisPlanilhaJob): JobNaFila {
     codigo: j.codigo,
     nome: j.nome,
     valor_total: j.valor_total !== null ? Number(j.valor_total) : null,
+    faturamento_previsto:
+      j.faturamento_previsto !== null && j.faturamento_previsto !== undefined
+        ? Number(j.faturamento_previsto)
+        : null,
     data_inicio_prevista: j.data_inicio_prevista,
     data_fim_prevista: j.data_fim_prevista,
     data_prevista_faturamento: j.data_prevista_faturamento,
@@ -130,6 +149,7 @@ function montarJobNaFila(j: any, totais?: TotaisPlanilhaJob): JobNaFila {
     planilha_itens: totais?.itens ?? 0,
     planilha_orcado: totais?.orcado ?? 0,
     planilha_planejado: totais?.planejado ?? 0,
+    planilha_desembolso: totais?.desembolso ?? 0,
   };
 }
 

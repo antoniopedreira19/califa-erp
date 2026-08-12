@@ -293,6 +293,9 @@ export async function enviarJobParaAbertura(
       responsavel_id: orc.gp_responsavel_id,
       produtor_id: orc.produtor_id,
       valor_total: Number(totais.valorJob.toFixed(2)),
+      // A coluna VIVA do faturamento previsto — sem ela o job nasceria
+      // nulo e a listagem do financeiro leria "—" até a primeira errata.
+      faturamento_previsto: Number(totais.faturamentoPrevisto.toFixed(2)),
       // Congelado aqui e nunca mais alterado: é a base de comparação do
       // card de Erratas ("faturamento na abertura" x "atual").
       valor_job_abertura: Number(totais.valorJob.toFixed(2)),
