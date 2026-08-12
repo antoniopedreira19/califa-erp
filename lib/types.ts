@@ -1093,11 +1093,10 @@ export interface LancamentoFinanceiro {
 
 // ---------- Task 012: contas_avulsas ----------
 
-export type ContaAvulsaStatus = "pendente" | "aprovada" | "baixada";
+export type ContaAvulsaStatus = "aprovada" | "baixada";
 
 export const contaAvulsaStatusLabel = (s: ContaAvulsaStatus): string =>
   ({
-    pendente: "Pendente",
     aprovada: "Aprovada",
     baixada: "Baixada",
   })[s];
