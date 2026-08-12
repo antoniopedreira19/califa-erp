@@ -357,3 +357,111 @@ export async function rejeitarPedidoCompraFinanceiro(
   revalidatePath(`/jobs/${pp.job_id}`);
   return { ok: true };
 }
+
+/**
+ * Aprova a PP: muda em_avaliacao -> aprovada. A partir daí, a PP entra
+ * na fila "A pagar" e pode ser efetivamente baixada.
+ */
+export async function aprovarPP(pp_id: string): Promise<Result> {
+  const gate = await checarGateFinanceiro(pp_id, "pedido_compra.aprovada");
+  if (!gate.ok) return gate;
+  const { session, supabase } = gate;
+
+  const { data: pp } = await supabase
+    .from("pedidos_compra")
+    .select("id, status, codigo, valor, job_id, prazo_pagamento_financeiro")
+    .eq("id", pp_id)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle();
+
+  if (!pp) return { ok: false, message: "PP não encontrada." };
+  if (pp.status !== "em_avaliacao") {
+    return {
+      ok: false,
+      message:
+        pp.status === "aprovada"
+          ? "PP já está aprovada."
+          : "Só PP em avaliação pode ser aprovada.",
+    };
+  }
+
+  const { error } = await supabase.rpc("aprovar_pp", { p_pp_id: pp_id });
+  if (error) {
+    return { ok: false, message: `Falha ao aprovar: ${error.message}` };
+  }
+
+  await logAuditEvent({
+    acao: "pedido_compra.aprovada",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "pedido_compra",
+    entidadeId: pp_id,
+    metadata: {
+      pp_codigo: pp.codigo,
+      valor: Number(pp.valor),
+      job_id: pp.job_id,
+      prazo_pagamento_financeiro: pp.prazo_pagamento_financeiro,
+    },
+  });
+
+  revalidatePath("/financeiro/contas-a-pagar");
+  revalidatePath("/financeiro/a-pagar");
+  revalidatePath("/financeiro");
+  revalidatePath(`/jobs/${pp.job_id}`);
+  return { ok: true };
+}
+
+const desaprovarSchema = z.object({
+  pp_id: z.string().uuid(),
+  motivo: motivoSchema,
+});
+
+/**
+ * Desaprova a PP: devolve pra em_avaliacao. Usado quando a aprovação foi
+ * feita por engano ou apareceu informação nova que exige reavaliação.
+ */
+export async function desaprovarPP(input: unknown): Promise<Result> {
+  const parsed = desaprovarSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, message: parsed.error.issues[0]?.message ?? "Entrada inválida." };
+  }
+  const gate = await checarGateFinanceiro(parsed.data.pp_id, "pedido_compra.desaprovada");
+  if (!gate.ok) return gate;
+  const { session, supabase } = gate;
+
+  const { data: pp } = await supabase
+    .from("pedidos_compra")
+    .select("id, status, codigo, job_id")
+    .eq("id", parsed.data.pp_id)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle();
+
+  if (!pp) return { ok: false, message: "PP não encontrada." };
+  if (pp.status !== "aprovada") {
+    return { ok: false, message: "Só PP aprovada pode ser desaprovada." };
+  }
+
+  const { error } = await supabase.rpc("desaprovar_pp", {
+    p_pp_id: parsed.data.pp_id,
+    p_motivo: parsed.data.motivo,
+  });
+  if (error) {
+    return { ok: false, message: `Falha ao desaprovar: ${error.message}` };
+  }
+
+  await logAuditEvent({
+    acao: "pedido_compra.desaprovada",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "pedido_compra",
+    entidadeId: parsed.data.pp_id,
+    metadata: {
+      pp_codigo: pp.codigo,
+      job_id: pp.job_id,
+      motivo: parsed.data.motivo,
+    },
+  });
+
+  revalidatePath("/financeiro/contas-a-pagar");
+  revalidatePath("/financeiro/a-pagar");
+  revalidatePath("/financeiro");
+  return { ok: true };
+}
