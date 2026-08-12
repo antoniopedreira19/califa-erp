@@ -14,7 +14,7 @@ export default async function JobsPage() {
     supabase
       .from("jobs")
       .select(
-        "id, codigo, nome, status, valor_total, faturamento_previsto, data_inicio_prevista, empresa_id, projeto_id, " +
+        "id, codigo, nome, status, valor_total, data_inicio_prevista, empresa_id, projeto_id, " +
           "projeto:projetos(codigo, nome, cliente:clientes(nome_fantasia)), " +
           "responsavel:profiles!responsavel_id(nome), " +
           "empresa:empresas(id, razao_social, nome_fantasia)",
@@ -32,8 +32,6 @@ export default async function JobsPage() {
     nome: r.nome,
     status: r.status,
     valor_total: r.valor_total !== null ? Number(r.valor_total) : null,
-    faturamento_previsto:
-      r.faturamento_previsto !== null ? Number(r.faturamento_previsto) : null,
     data_inicio_prevista: r.data_inicio_prevista,
     projeto_id: r.projeto_id,
     projeto_codigo: r.projeto?.codigo ?? null,

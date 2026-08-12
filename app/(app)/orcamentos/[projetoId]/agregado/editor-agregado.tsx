@@ -635,7 +635,6 @@ export function EditorAgregado({
           </div>
 
           <ResumoRentabilidade
-            faturamentoPrevisto={resumo.faturamentoPrevisto}
             valorJob={resumo.valorJob}
             custoPlanejado={resumo.planejado}
             resultadoGeral={resultadoGeral}
