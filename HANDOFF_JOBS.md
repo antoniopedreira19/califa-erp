@@ -958,14 +958,23 @@ chama de `FATURAMENTO`. Quem é novo é o faturamento previsto, menor.
    custos pagos direto ao fornecedor, que a agência nem desembolsa. **Os
    percentuais na tela não mudaram**: a base continua sendo o mesmo número de
    antes, agora com o nome certo.
-3. **`ResumoResultado`** (cabeçalho do job e da agregada) mostra os dois lado a
-   lado, para não contradizer o card abaixo.
-4. **Lista de jobs** ganhou a coluna "Faturamento previsto" à esquerda de "Valor
-   total", em cinza; a linha do projeto soma as duas. O número vem de
-   `jobs.faturamento_previsto`, coluna nova — recalcular por linha numa lista é
-   o anti-padrão que `docs/PERFORMANCE.md` proíbe.
+3. **`ResumoResultado`** (cabeçalho do job e da agregada) mostra **só o Valor do
+   Job** — o bloco que dizia "Faturamento previsto" passou a dizer "Valor do
+   Job", sem ganhar bloco novo.
+4. **Lista de jobs: nenhuma coluna nova.** Segue com "Valor total" sozinha. A
+   coluna `jobs.faturamento_previsto` existe no banco (gravada na abertura e
+   pelas erratas), mas a lista **não a lê** — ver o aviso de escopo abaixo.
 5. **A legenda das fórmulas virou `components/legenda-fechamento.tsx`**, único
    para as quatro telas de Totais. Estava copiada em quatro arquivos.
+
+⚠️ **Correção de escopo (2026-08-12).** O pedido do time foi a linha "Valor do
+Job" **nos Totais**. A primeira versão desta entrega estendeu o par de números
+por conta própria para o cabeçalho do job, o da agregada e a lista de jobs — na
+lista, o número a mais na linha do projeto **empurrou o botão "Visão agregada"
+para a linha seguinte**. Revertido no commit `408444b`. A regra que ficou:
+**fora dos cards de Totais, um número só — o Valor do Job.** As exceções, todas
+conversadas com o time, são o card de Erratas (seção 28) e os dois modais do
+envio de job (`HANDOFF_ORCAMENTO.md`, 17.4 item 3).
 
 ---
 
@@ -1025,9 +1034,9 @@ No navegador, com dados reais:
 | Tela | Resultado |
 |---|---|
 | Card de Totais do JOB-0004 | bate com a planilha Corona: honorários 44.287,80 · imposto 100.320,37 · 513.673,17 |
-| Cabeçalho do job | os dois números lado a lado |
-| Agregada do projeto (A=80.000) | Fat. previsto 89.057,22 × Valor do Job 169.057,22 — diferença de exatos R$ 80.000 |
-| Lista de jobs | as duas colunas, com a soma por projeto |
+| Cabeçalho do job | um bloco só, "Valor do Job" |
+| Agregada do projeto (A=80.000) | no card de Totais: fat. previsto 89.057,22 × Valor do Job 169.057,22 — diferença de exatos R$ 80.000, o subtotal A |
+| Lista de jobs | uma coluna só ("Valor total"); linha do projeto em 47px, sem quebrar o botão "Visão agregada" |
 | Card de Erratas do JOB-0002 | `EFEITO NO FAT. PREVISTO —` · `EFEITO NO VALOR DO JOB +R$ 1.392,00` (o travessão é a errata antiga, correto) |
 
 ### Migrations
