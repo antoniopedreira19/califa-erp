@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, FileText, Files, Plus } from "lucide-react";
+import { ChevronDown, ChevronRight, FileText, Files, Plus } from "lucide-react";
 
 interface Props {
   projetoId: string;
@@ -64,18 +64,19 @@ export function NovoOrcamentoMenu({ projetoId }: Props) {
       {aberto && (
         <div
           role="menu"
-          className="absolute right-0 top-[calc(100%+0.625rem)] z-20 w-[300px] rounded-2xl border border-border bg-card p-1.5 text-left shadow-brand"
+          className="absolute right-0 top-[calc(100%+0.625rem)] z-20 w-[292px] rounded-2xl border border-border bg-card p-1.5 text-left shadow-elevated"
         >
           <OpcaoMenu
             icone={<FileText className="h-4 w-4 text-muted-foreground" />}
             rotulo="Criar orçamento de um job"
-            descricao="Um orçamento por vez, com sua própria planilha."
             onClick={() => navegar(`/orcamentos/${projetoId}/novo`)}
           />
+          {/* Divisória entre as duas portas de entrada — recuada até o texto,
+              para não cortar a coluna dos ícones. */}
+          <div className="mx-3 h-px bg-border" role="separator" />
           <OpcaoMenu
             icone={<Files className="h-4 w-4 text-muted-foreground" />}
             rotulo="Criar orçamento do projeto"
-            descricao="Monte vários jobs juntos e salve todos de uma vez."
             onClick={() => navegar(`/orcamentos/${projetoId}/multi`)}
           />
         </div>
@@ -87,12 +88,10 @@ export function NovoOrcamentoMenu({ projetoId }: Props) {
 function OpcaoMenu({
   icone,
   rotulo,
-  descricao,
   onClick,
 }: {
   icone: React.ReactNode;
   rotulo: string;
-  descricao: string;
   onClick: () => void;
 }) {
   return (
@@ -100,19 +99,15 @@ function OpcaoMenu({
       type="button"
       role="menuitem"
       onClick={onClick}
-      className="flex w-full items-start gap-3 rounded-xl p-3 text-left transition-colors hover:bg-accent"
+      className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-accent"
     >
-      <span className="mt-0.5 flex h-9 w-9 flex-none items-center justify-center rounded-lg bg-muted">
+      <span className="flex h-8 w-8 flex-none items-center justify-center rounded-lg bg-muted">
         {icone}
       </span>
-      <span className="min-w-0 flex-1">
-        <span className="block text-sm font-semibold text-foreground">
-          {rotulo}
-        </span>
-        <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">
-          {descricao}
-        </span>
+      <span className="min-w-0 flex-1 text-sm font-semibold text-foreground">
+        {rotulo}
       </span>
+      <ChevronRight className="h-4 w-4 flex-none text-muted-foreground" />
     </button>
   );
 }

@@ -967,6 +967,15 @@ O menu é feito à mão em `novo-orcamento-menu.tsx`, sem Radix: o botão
 precisa continuar sendo a âncora vermelha do cabeçalho, e um
 `DropdownMenu` traria trigger próprio para desfazer peça por peça.
 
+⚠️ **Enxugado para o design (2026-08-13).** O pop-up usava `shadow-brand`, e o
+halo vermelho do token (`rgba(231,75,86,0.35)`) aparecia atrás do card. Passou
+para `shadow-elevated`, a sombra neutra — **o token não mudou**, e segue valendo
+para os botões e drawers que o usam. Junto: cada opção virou uma linha só
+(rótulo + `ChevronRight`), as duas descrições saíram, e entrou uma divisória
+entre elas, recuada até o texto para não cortar a coluna dos ícones. O que cada
+porta faz continua registrado aqui e no comentário do componente — a tela deixou
+de explicar.
+
 ### 15.2 Rascunho no cliente, gravação em lote
 
 **Decisão central da entrega.** No editor do orçamento do projeto nada
