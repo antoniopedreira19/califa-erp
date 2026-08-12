@@ -11,8 +11,13 @@ export type ActionResult =
   | { ok: true; id: string }
   | { ok: false; message: string; fieldErrors?: Record<string, string[]> };
 
+// `valor_total` e `faturamento_previsto` NÃO entram aqui de propósito: os
+// dois são derivados dos itens orçados do job (ver `calcularTotaisVersao`)
+// e só são reescritos pela abertura e pelas erratas. Já existiu um campo
+// editável no drawer que gravava valor_total à mão — o JOB-0001 ficou com
+// R$ 1.000.000 sobre R$ 5.617 de itens, e o card de Totais e a listagem
+// passaram a contar histórias diferentes.
 function extractInput(formData: FormData) {
-  const valorRaw = formData.get("valor_total")?.toString();
   return {
     nome: formData.get("nome")?.toString() ?? "",
     produto: formData.get("produto")?.toString() ?? "",
@@ -21,7 +26,6 @@ function extractInput(formData: FormData) {
     data_inicio_prevista: formData.get("data_inicio_prevista")?.toString() ?? "",
     data_fim_prevista: formData.get("data_fim_prevista")?.toString() ?? "",
     responsavel_id: formData.get("responsavel_id")?.toString() ?? "",
-    valor_total: valorRaw && valorRaw.length > 0 ? Number(valorRaw) : null,
   };
 }
 
@@ -60,7 +64,6 @@ export async function atualizarJob(
       data_inicio_prevista: parsed.data.data_inicio_prevista,
       data_fim_prevista: parsed.data.data_fim_prevista,
       responsavel_id: parsed.data.responsavel_id,
-      valor_total: parsed.data.valor_total,
     })
     .eq("id", id)
     .eq("tenant_id", session.activeTenant.id);
@@ -137,57 +140,17 @@ export async function atualizarStatusJob(
   return { ok: true, id };
 }
 
-export async function aprovarAberturaJob(jobId: string): Promise<ActionResult> {
-  const session = await requireSession();
-  if (session.activeRole !== "administrador" && session.activeRole !== "financeiro") {
-    await logAuditEvent({
-      acao: "acao_negada",
-      tenantId: session.activeTenant.id,
-      entidadeTipo: "job",
-      entidadeId: jobId,
-      metadata: { action: "job.aprovarAbertura", role: session.activeRole },
-    });
-    return { ok: false, message: "Só administrador ou financeiro pode aprovar aberturas de job." };
-  }
-
-  const supabase = createClient();
-  const { data: job } = await supabase
-    .from("jobs")
-    .select("id, status, projeto_id, orcamento_id")
-    .eq("id", jobId)
-    .eq("tenant_id", session.activeTenant.id)
-    .maybeSingle<{ id: string; status: JobStatus; projeto_id: string; orcamento_id: string }>();
-
-  if (!job) return { ok: false, message: "Job não encontrado." };
-  if (job.status !== "aguardando_abertura") {
-    return { ok: false, message: `Job está em status ${job.status} — não é aprovável.` };
-  }
-
-  const { error } = await supabase
-    .from("jobs")
-    .update({ status: "aberto", motivo_rejeicao: null })
-    .eq("id", jobId)
-    .eq("tenant_id", session.activeTenant.id);
-
-  if (error) {
-    console.error("[jobs.aprovarAbertura]", error.message);
-    return { ok: false, message: mapJobDbError(error.message) };
-  }
-
-  await logAuditEvent({
-    acao: "job.abertura_aprovada",
-    tenantId: session.activeTenant.id,
-    entidadeTipo: "job",
-    entidadeId: jobId,
-  });
-
-  revalidatePath(`/jobs/${jobId}`);
-  revalidatePath("/jobs");
-  revalidatePath("/financeiro");
-  revalidatePath("/financeiro/jobs-aguardando-abertura");
-  revalidatePath(`/orcamentos/${job.projeto_id}/${job.orcamento_id}`);
-  return { ok: true, id: jobId };
-}
+/**
+ * Aprovar a abertura NÃO mora mais aqui.
+ *
+ * Abrir um job passou a exigir registro financeiro — categoria,
+ * competência, custo previsto e curva de desembolso —, coletado no
+ * formulário da Central Financeira. A action que grava tudo isso e só
+ * então muda o status é `abrirJobNoFinanceiro`, em
+ * app/(app)/financeiro/abertura-de-job/actions.ts. A antiga
+ * `aprovarAberturaJob`, que só trocava o status, foi removida: mantida,
+ * seria um caminho paralelo capaz de abrir job sem nenhum desses campos.
+ */
 
 export async function rejeitarAberturaJob(
   jobId: string,
@@ -254,7 +217,7 @@ export async function rejeitarAberturaJob(
   revalidatePath(`/jobs/${jobId}`);
   revalidatePath("/jobs");
   revalidatePath("/financeiro");
-  revalidatePath("/financeiro/jobs-aguardando-abertura");
+  revalidatePath("/financeiro/abertura-de-job");
   revalidatePath(`/orcamentos/${job.projeto_id}/${job.orcamento_id}`);
   return { ok: true, id: jobId };
 }
@@ -299,7 +262,7 @@ export async function reenviarJobParaAprovacao(jobId: string): Promise<ActionRes
   revalidatePath(`/jobs/${jobId}`);
   revalidatePath("/jobs");
   revalidatePath("/financeiro");
-  revalidatePath("/financeiro/jobs-aguardando-abertura");
+  revalidatePath("/financeiro/abertura-de-job");
   revalidatePath(`/orcamentos/${job.projeto_id}/${job.orcamento_id}`);
   return { ok: true, id: jobId };
 }

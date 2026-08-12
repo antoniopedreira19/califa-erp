@@ -8,8 +8,15 @@ import {
 } from "@/lib/calculos/versao-totais";
 
 interface Props {
-  /** Custos + honorários + impostos. */
-  faturamento: number;
+  /**
+   * Valor do job: o compromisso total do cliente (o que passa pela agência
+   * mais o que ele paga direto ao fornecedor) + honorários + impostos.
+   *
+   * É esta a base do resultado, e não o faturamento previsto: o custo
+   * descontado abaixo é o do job inteiro, então a receita comparada precisa
+   * ser a do job inteiro também.
+   */
+  valorJob: number;
   imposto: number;
   /** Total dos custos orçados — base da rentabilidade. */
   orcado: number;
@@ -63,7 +70,7 @@ function LinhaValor({
  * rodando, e é o padrão do design.
  */
 export function PainelResultado({
-  faturamento,
+  valorJob,
   imposto,
   orcado,
   custoPlanejado,
@@ -82,7 +89,7 @@ export function PainelResultado({
   const temCusto = custo > 0;
 
   const { resultadoOperacional, resultadoGeral } = calcularResultadoOperacional(
-    faturamento,
+    valorJob,
     imposto,
     custo,
   );
@@ -121,8 +128,8 @@ export function PainelResultado({
 
       <div className="flex flex-col gap-1.5">
         <LinhaValor
-          rotulo="Faturamento previsto"
-          valor={formatCurrency(faturamento, moeda)}
+          rotulo="Valor do Job"
+          valor={formatCurrency(valorJob, moeda)}
         />
         <LinhaValor rotulo="− Impostos" valor={formatCurrency(imposto, moeda)} />
         <LinhaValor
@@ -215,7 +222,7 @@ export function PainelResultado({
                   : "text-california-red/80",
             )}
           >
-            Resultado operacional ÷ faturamento previsto
+            Resultado operacional ÷ valor do job
           </p>
         </div>
         <span

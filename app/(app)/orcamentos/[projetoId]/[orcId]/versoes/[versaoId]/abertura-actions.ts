@@ -224,7 +224,10 @@ export async function enviarJobParaAbertura(
     };
   }
 
-  // 4. Valor total = faturamento previsto, recalculado dos itens.
+  // 4. Valor total = VALOR DO JOB, recalculado dos itens. É o compromisso
+  //    total do cliente — inclui o que ele paga direto ao fornecedor. O
+  //    faturamento previsto (só o que a California emite nota) aparece na
+  //    tela, mas não é o que dimensiona o job no financeiro.
   const { data: itensBrutos, error: itensErr } = await supabase
     .from("versoes_orcamento_itens")
     .select("tipo_custo, total_orcado")
@@ -289,10 +292,13 @@ export async function enviarJobParaAbertura(
       // job herdava `projetos.responsavel_id`.
       responsavel_id: orc.gp_responsavel_id,
       produtor_id: orc.produtor_id,
-      valor_total: Number(totais.faturamento.toFixed(2)),
+      valor_total: Number(totais.valorJob.toFixed(2)),
       // Congelado aqui e nunca mais alterado: é a base de comparação do
       // card de Erratas ("faturamento na abertura" x "atual").
-      faturamento_abertura: Number(totais.faturamento.toFixed(2)),
+      valor_job_abertura: Number(totais.valorJob.toFixed(2)),
+      faturamento_previsto_abertura: Number(
+        totais.faturamentoPrevisto.toFixed(2),
+      ),
       // status default do banco = 'aguardando_abertura' — não sobrescreva
       created_by: session.profile.id,
     })
@@ -377,7 +383,8 @@ export async function enviarJobParaAbertura(
       codigo,
       orcamento_id: orc.id,
       versao_id: versaoId,
-      valor_total: Number(totais.faturamento.toFixed(2)),
+      valor_total: Number(totais.valorJob.toFixed(2)),
+      faturamento_previsto: Number(totais.faturamentoPrevisto.toFixed(2)),
       data_prevista_faturamento: parsed.data.data_prevista_faturamento,
     },
   });
@@ -386,7 +393,7 @@ export async function enviarJobParaAbertura(
   revalidatePath(`/orcamentos/${orc.projeto_id}/${orc.id}`);
   revalidatePath(`/orcamentos/${orc.projeto_id}`);
   revalidatePath("/jobs");
-  revalidatePath("/financeiro/jobs-aguardando-abertura");
+  revalidatePath("/financeiro/abertura-de-job");
 
   return { ok: true, jobId: novo.id, codigo };
 }

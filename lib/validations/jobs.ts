@@ -34,7 +34,9 @@ export const jobSchema = z
       .optional()
       .transform((v) => (v && v.length > 0 ? v : null)),
     responsavel_id: z.string().uuid("Selecione um responsável válido."),
-    valor_total: z.coerce.number().nonnegative().nullable().optional(),
+    // `valor_total` saiu daqui em 11/08/2026: ele e o `faturamento_previsto`
+    // são derivados dos itens orçados, e um campo editável no formulário
+    // permitia gravar um valor que não fecha com a planilha do job.
   })
   .superRefine((data, ctx) => {
     if (

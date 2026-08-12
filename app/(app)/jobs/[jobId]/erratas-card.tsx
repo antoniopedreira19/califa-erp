@@ -7,8 +7,13 @@ import { tipoCustoLabel, type JobErrataComItens, type JobErrataItem } from "@/li
 
 interface Props {
   erratas: JobErrataComItens[];
-  faturamentoAbertura: number | null;
-  faturamentoAtual: number;
+  /** Valor do job congelado na abertura. */
+  valorJobAbertura: number | null;
+  /** Faturamento previsto congelado na abertura. `null` nos jobs que já
+   *  tinham errata quando a coluna nasceu — ali a tela mostra travessão. */
+  faturamentoPrevistoAbertura: number | null;
+  valorJobAtual: number;
+  faturamentoPrevistoAtual: number;
   moeda: string;
 }
 
@@ -41,8 +46,10 @@ function tagDaMudanca(i: JobErrataItem): { rotulo: string; classe: string } {
 
 export function ErratasCard({
   erratas,
-  faturamentoAbertura,
-  faturamentoAtual,
+  valorJobAbertura,
+  faturamentoPrevistoAbertura,
+  valorJobAtual,
+  faturamentoPrevistoAtual,
   moeda,
 }: Props) {
   // Primeira aberta, como no design.
@@ -52,8 +59,12 @@ export function ErratasCard({
     if (erratas.length > 0) setAbertas({ [erratas[0].id]: true });
   }, [erratas]);
 
-  const base = faturamentoAbertura ?? faturamentoAtual;
-  const delta = faturamentoAtual - base;
+  const baseJob = valorJobAbertura ?? valorJobAtual;
+  const deltaJob = valorJobAtual - baseJob;
+  const deltaFat =
+    faturamentoPrevistoAbertura === null
+      ? null
+      : faturamentoPrevistoAtual - faturamentoPrevistoAbertura;
   const vazio = erratas.length === 0;
 
   return (
@@ -75,39 +86,54 @@ export function ErratasCard({
             <>
               <div className="text-right">
                 <p className="text-[9.5px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  Faturamento na abertura
+                  Na abertura
                 </p>
-                <p className="mt-0.5 font-mono text-[13px] text-muted-foreground">
-                  {formatCurrency(base, moeda)}
+                <p className="mt-0.5 font-mono text-[11.5px] text-muted-foreground">
+                  {faturamentoPrevistoAbertura === null
+                    ? "—"
+                    : formatCurrency(faturamentoPrevistoAbertura, moeda)}
+                </p>
+                <p className="font-mono text-[13px] text-muted-foreground">
+                  {formatCurrency(baseJob, moeda)}
                 </p>
               </div>
               <ArrowRight className="h-3.5 w-3.5 text-[#c9c9c9]" />
             </>
           )}
+          {/* Faturamento previsto em cima, em cinza; valor do job embaixo,
+              em preto — mesma hierarquia do card de Totais. */}
           <div className="text-right">
             <p className="text-[9.5px] font-semibold uppercase tracking-wider text-muted-foreground">
-              {vazio ? "Faturamento" : "Faturamento atual"}
+              {vazio ? "Fechamento" : "Atual"}
             </p>
-            <p className="mt-0.5 font-mono text-[13px] font-bold">
-              {formatCurrency(faturamentoAtual, moeda)}
+            <p className="mt-0.5 font-mono text-[11.5px] text-muted-foreground">
+              {formatCurrency(faturamentoPrevistoAtual, moeda)}
+            </p>
+            <p className="font-mono text-[13px] font-bold">
+              {formatCurrency(valorJobAtual, moeda)}
             </p>
           </div>
           {!vazio && (
-            <span
-              className={cn(
-                "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 font-mono text-xs font-bold",
-                delta >= 0
-                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                  : "border-red-200 bg-red-50 text-red-700",
-              )}
-            >
-              {delta >= 0 ? (
-                <TrendingUp className="h-3 w-3" />
-              ) : (
-                <TrendingDown className="h-3 w-3" />
-              )}
-              {comSinal(delta, moeda)}
-            </span>
+            <div className="flex flex-col items-end gap-1">
+              <span className="whitespace-nowrap font-mono text-[10.5px] text-muted-foreground">
+                fat. {deltaFat === null ? "—" : comSinal(deltaFat, moeda)}
+              </span>
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 font-mono text-xs font-bold",
+                  deltaJob >= 0
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                    : "border-red-200 bg-red-50 text-red-700",
+                )}
+              >
+                {deltaJob >= 0 ? (
+                  <TrendingUp className="h-3 w-3" />
+                ) : (
+                  <TrendingDown className="h-3 w-3" />
+                )}
+                {comSinal(deltaJob, moeda)}
+              </span>
+            </div>
           )}
         </div>
       </div>
@@ -122,7 +148,12 @@ export function ErratasCard({
 
       {erratas.map((e) => {
         const aberta = !!abertas[e.id];
-        const deltaErrata = e.faturamento_depois - e.faturamento_antes;
+        const deltaErrata = e.valor_job_depois - e.valor_job_antes;
+        const deltaErrataFat =
+          e.faturamento_previsto_antes === null ||
+          e.faturamento_previsto_depois === null
+            ? null
+            : e.faturamento_previsto_depois - e.faturamento_previsto_antes;
         const deltaCusto = e.custo_orcado_depois - e.custo_orcado_antes;
 
         return (
@@ -150,15 +181,23 @@ export function ErratasCard({
               <span className="whitespace-nowrap text-[11.5px] text-muted-foreground">
                 Orçado {comSinal(deltaCusto, moeda)}
               </span>
-              <span
-                className={cn(
-                  "inline-flex items-center whitespace-nowrap rounded-full border px-2.5 py-1 font-mono text-[11.5px] font-bold",
-                  deltaErrata >= 0
-                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                    : "border-red-200 bg-red-50 text-red-700",
-                )}
-              >
-                {comSinal(deltaErrata, moeda)}
+              <span className="flex flex-col items-end gap-0.5">
+                <span className="whitespace-nowrap font-mono text-[10.5px] text-muted-foreground">
+                  fat.{" "}
+                  {deltaErrataFat === null
+                    ? "—"
+                    : comSinal(deltaErrataFat, moeda)}
+                </span>
+                <span
+                  className={cn(
+                    "inline-flex items-center whitespace-nowrap rounded-full border px-2.5 py-1 font-mono text-[11.5px] font-bold",
+                    deltaErrata >= 0
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                      : "border-red-200 bg-red-50 text-red-700",
+                  )}
+                >
+                  {comSinal(deltaErrata, moeda)}
+                </span>
               </span>
               <ChevronRight
                 className={cn(
@@ -171,7 +210,7 @@ export function ErratasCard({
             {aberta && (
               <div className="border-t border-border bg-muted/30 px-6 pb-4 pt-1.5">
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[720px] border-collapse">
+                  <table className="w-full min-w-[860px] border-collapse">
                     <thead>
                       <tr className="text-[9.5px] font-semibold uppercase tracking-wider text-muted-foreground">
                         <th className="w-[104px] py-2.5 pr-2 text-left">
@@ -184,8 +223,11 @@ export function ErratasCard({
                         <th className="w-[200px] px-2 py-2.5 text-right">
                           Valor orçado
                         </th>
-                        <th className="w-[140px] py-2.5 pl-2 text-right">
-                          Efeito no faturamento
+                        <th className="w-[130px] px-2 py-2.5 text-right">
+                          Efeito no fat. previsto
+                        </th>
+                        <th className="w-[130px] py-2.5 pl-2 text-right">
+                          Efeito no valor do job
                         </th>
                       </tr>
                     </thead>
@@ -247,16 +289,35 @@ export function ErratasCard({
                                 </span>
                               </div>
                             </td>
+                            <td className="px-2 py-2.5 text-right align-top">
+                              <span
+                                className={cn(
+                                  "whitespace-nowrap font-mono text-xs",
+                                  i.efeito_faturamento_previsto === null
+                                    ? "text-muted-foreground"
+                                    : i.efeito_faturamento_previsto >= 0
+                                      ? "text-emerald-700"
+                                      : "text-red-700",
+                                )}
+                              >
+                                {i.efeito_faturamento_previsto === null
+                                  ? "—"
+                                  : comSinal(
+                                      i.efeito_faturamento_previsto,
+                                      moeda,
+                                    )}
+                              </span>
+                            </td>
                             <td className="py-2.5 pl-2 text-right align-top">
                               <span
                                 className={cn(
                                   "whitespace-nowrap font-mono text-xs font-semibold",
-                                  i.efeito_faturamento >= 0
+                                  i.efeito_valor_job >= 0
                                     ? "text-emerald-700"
                                     : "text-red-700",
                                 )}
                               >
-                                {comSinal(i.efeito_faturamento, moeda)}
+                                {comSinal(i.efeito_valor_job, moeda)}
                               </span>
                             </td>
                           </tr>
@@ -273,6 +334,11 @@ export function ErratasCard({
                         </td>
                         <td className="whitespace-nowrap px-2 pt-3 text-right font-mono text-xs text-muted-foreground">
                           Orçado {comSinal(deltaCusto, moeda)}
+                        </td>
+                        <td className="whitespace-nowrap px-2 pt-3 text-right font-mono text-xs text-muted-foreground">
+                          {deltaErrataFat === null
+                            ? "—"
+                            : comSinal(deltaErrataFat, moeda)}
                         </td>
                         <td className="pl-2 pt-3 text-right">
                           <span

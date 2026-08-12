@@ -2,9 +2,16 @@ import { cn, formatCurrency } from "@/lib/utils";
 import { calcularResultadoOperacional } from "@/lib/calculos/versao-totais";
 
 interface Props {
-  /** Custos + honorários + impostos — o que o cliente paga. */
-  faturamento: number;
-  /** Imposto embutido no faturamento. Sai da conta do resultado. */
+  /**
+   * Valor do job: o compromisso total do cliente — o que passa pela agência
+   * mais o que ele paga direto ao fornecedor, com honorários e impostos.
+   * É a base do resultado, como no card de Totais.
+   */
+  valorJob: number;
+  /** O que a California emite nota. Anda ao lado do valor do job para o
+   *  cabeçalho não contradizer o card de Totais logo abaixo. */
+  faturamentoPrevisto: number;
+  /** Imposto embutido na receita. Sai da conta do resultado. */
   imposto: number;
   /** Soma do planejado dos itens: o desembolso esperado da agência. */
   custoPlanejado: number;
@@ -18,24 +25,25 @@ interface Props {
  * agregada do projeto — a mesma ideia do `ResumoRentabilidade` da versão do
  * orçamento, com as duas óticas (planejado e realizado) lado a lado.
  *
- * Resultado = (faturamento − impostos − custo) ÷ faturamento, a mesma conta
+ * Resultado = (valor do job − impostos − custo) ÷ valor do job, a mesma conta
  * do "Resultado geral" do card de Totais. Sem custo lançado a conta não
  * existe: travessão, nunca um percentual inflado pelo faturamento inteiro.
  */
 export function ResumoResultado({
-  faturamento,
+  valorJob,
+  faturamentoPrevisto,
   imposto,
   custoPlanejado,
   custoRealizado,
   moeda,
 }: Props) {
   const { resultadoGeral: resultadoPlanejado } = calcularResultadoOperacional(
-    faturamento,
+    valorJob,
     imposto,
     custoPlanejado,
   );
   const { resultadoGeral: resultadoRealizado } = calcularResultadoOperacional(
-    faturamento,
+    valorJob,
     imposto,
     custoRealizado,
   );
@@ -44,7 +52,13 @@ export function ResumoResultado({
     <div className="flex divide-x divide-border rounded-xl border border-border bg-card shadow-soft">
       <Bloco label="Faturamento previsto">
         <span className="font-mono text-base font-bold text-foreground">
-          {formatCurrency(faturamento, moeda)}
+          {formatCurrency(faturamentoPrevisto, moeda)}
+        </span>
+      </Bloco>
+
+      <Bloco label="Valor do Job">
+        <span className="font-mono text-base font-bold text-foreground">
+          {formatCurrency(valorJob, moeda)}
         </span>
       </Bloco>
 

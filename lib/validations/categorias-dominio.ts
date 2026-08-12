@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const categoriaDominioSchema = z.object({
-  escopo: z.enum(["projeto", "orcamento"]),
+  escopo: z.enum(["projeto", "orcamento", "job"]),
   nome: z
     .string()
     .trim()

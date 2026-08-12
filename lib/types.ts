@@ -293,7 +293,13 @@ export type VersaoOrcamentoStatus =
   | "substituida"
   | "cancelada";
 
-export type TipoCusto = "A" | "B" | "C" | "D";
+/** Espelha o enum `public.tipo_custo` no Postgres, na mesma ordem.
+ *  `A` = A · Direto e `F` = F · Externo — as letras "cruas" ficaram com o
+ *  comportamento que já era o delas antes da subdivisão, então os dados
+ *  gravados não precisaram de backfill.
+ *  As alavancas de cálculo de cada tipo estão em `REGRAS_TIPO_CUSTO`
+ *  (lib/calculos/versao-totais.ts). */
+export type TipoCusto = "A" | "AR" | "B" | "C" | "D" | "F" | "FI";
 
 export interface VersaoOrcamento {
   id: string;
@@ -396,13 +402,19 @@ export function versaoStatusLabel(s: VersaoOrcamentoStatus): string {
 export function tipoCustoLabel(t: TipoCusto): string {
   switch (t) {
     case "A":
-      return "A · Fat. direto";
+      return "A · Direto";
+    case "AR":
+      return "A · Repasse";
     case "B":
       return "B · Bi-trib.";
     case "C":
       return "C · Sem honor.";
     case "D":
       return "D · Interno";
+    case "F":
+      return "F · Externo";
+    case "FI":
+      return "F · Interno";
   }
 }
 
@@ -489,7 +501,7 @@ export interface ImportacaoWarning {
 
 // ---------- Categorias de domínio (projeto + orçamento) ----------
 
-export type CategoriaDominioEscopo = "projeto" | "orcamento";
+export type CategoriaDominioEscopo = "projeto" | "orcamento" | "job";
 
 export interface CategoriaDominio {
   id: string;
@@ -503,7 +515,14 @@ export interface CategoriaDominio {
 }
 
 export function categoriaDominioEscopoLabel(e: CategoriaDominioEscopo): string {
-  return e === "projeto" ? "Projeto" : "Orçamento";
+  switch (e) {
+    case "projeto":
+      return "Projeto";
+    case "orcamento":
+      return "Orçamento";
+    case "job":
+      return "Job";
+  }
 }
 
 // ---------- Regionais ----------
@@ -592,9 +611,60 @@ export interface Job {
   valor_total: number | null;
   status: JobStatus;
   motivo_rejeicao: string | null;
+  /**
+   * Nome do job NO FINANCEIRO. Quando nulo, vale `nome` (o da produção).
+   * São dois nomes de propósito: o financeiro renomeia para o uso dele
+   * sem renomear o job do GP. Use `nomeDoJobNoFinanceiro()`.
+   */
+  nome_financeiro: string | null;
+  /** Categoria contábil (categorias_dominio, escopo 'job'). */
+  categoria_id: string | null;
+  competencia_trimestre: number | null;
+  competencia_ano: number | null;
+  /**
+   * Cópia do custo planejado da planilha interna no instante da abertura.
+   * Errata posterior NÃO reescreve — a previsão de caixa não é retroativa.
+   */
+  custo_previsto_total: number | null;
+  data_abertura_financeiro: string | null;
+  aberto_por: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
+}
+
+/** Uma data da curva de desembolso do job. */
+export interface JobPrevisaoCusto {
+  id: string;
+  tenant_id: string;
+  job_id: string;
+  ordem: number;
+  data_prevista: string;
+  valor: number;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * O nome que o financeiro vê. Cai para o nome da produção enquanto o job
+ * não tiver sido aberto (ou se quem abriu não renomeou).
+ */
+export function nomeDoJobNoFinanceiro(job: {
+  nome: string;
+  nome_financeiro?: string | null;
+}): string {
+  const financeiro = job.nome_financeiro?.trim();
+  return financeiro && financeiro.length > 0 ? financeiro : job.nome;
+}
+
+/** "3T/2026" — vazio enquanto a competência não tiver sido registrada. */
+export function competenciaLabel(
+  trimestre: number | null,
+  ano: number | null,
+): string {
+  if (!trimestre || !ano) return "—";
+  return `${trimestre}T/${ano}`;
 }
 
 /**
@@ -778,8 +848,12 @@ export interface JobErrata {
   justificativa: string | null;
   custo_orcado_antes: number;
   custo_orcado_depois: number;
-  faturamento_antes: number;
-  faturamento_depois: number;
+  valor_job_antes: number;
+  valor_job_depois: number;
+  /** `null` nas erratas anteriores a 11/08/2026: o faturamento previsto
+   *  daquele momento não é reconstituível. */
+  faturamento_previsto_antes: number | null;
+  faturamento_previsto_depois: number | null;
   created_by: string | null;
   created_at: string;
 }
@@ -797,7 +871,10 @@ export interface JobErrataItem {
   valor_unitario_para: number;
   total_de: number;
   total_para: number;
-  efeito_faturamento: number;
+  /** Efeito deste item no valor do job. */
+  efeito_valor_job: number;
+  /** Efeito no faturamento previsto. `null` nas erratas antigas. */
+  efeito_faturamento_previsto: number | null;
 }
 
 /** Errata com os itens e o autor, como o card do histórico precisa. */

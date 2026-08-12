@@ -73,7 +73,7 @@ export default async function JobDetailPage({
   searchParams,
 }: {
   params: { jobId: string };
-  searchParams?: { from?: string };
+  searchParams?: { from?: string; aba?: string };
 }) {
   const session = await requireSession();
   const supabase = createClient();
@@ -84,11 +84,20 @@ export default async function JobDetailPage({
       ? `?from=${fromParam}`
       : "";
 
+  // Quem chega de fora pode apontar para uma aba específica — a
+  // conferência do financeiro manda direto para a Planilha Interna.
+  const abaInicial =
+    searchParams?.aba === "planilha" ||
+    searchParams?.aba === "pps" ||
+    searchParams?.aba === "chat"
+      ? searchParams.aba
+      : "info";
+
   const [jobRes, regionaisRes, responsaveis] = await Promise.all([
     supabase
       .from("jobs")
       .select(
-        "id, tenant_id, empresa_id, codigo, nome, produto, cidade, data_inicio_prevista, data_fim_prevista, responsavel_id, produtor_id, valor_total, faturamento_abertura, status, motivo_rejeicao, projeto_id, orcamento_id, versao_orcamento_aprovada_id, regional_id, created_at, updated_at, responsavel:profiles!responsavel_id(id, nome), regional:regionais(id, nome), orcamento:orcamentos(id, codigo, nome, projeto_id), versao:versoes_orcamento!versao_orcamento_aprovada_id(id, numero_versao, nome, moeda, percentual_honorarios, percentual_imposto), projeto:projetos(id, codigo, nome)",
+        "id, tenant_id, empresa_id, codigo, nome, produto, cidade, data_inicio_prevista, data_fim_prevista, responsavel_id, produtor_id, valor_total, faturamento_previsto, valor_job_abertura, faturamento_previsto_abertura, status, motivo_rejeicao, projeto_id, orcamento_id, versao_orcamento_aprovada_id, regional_id, created_at, updated_at, responsavel:profiles!responsavel_id(id, nome), regional:regionais(id, nome), orcamento:orcamentos(id, codigo, nome, projeto_id), versao:versoes_orcamento!versao_orcamento_aprovada_id(id, numero_versao, nome, moeda, percentual_honorarios, percentual_imposto), projeto:projetos(id, codigo, nome)",
       )
       .eq("id", params.jobId)
       .eq("tenant_id", session.activeTenant.id)
@@ -315,8 +324,18 @@ export default async function JobDetailPage({
     ...e,
     custo_orcado_antes: Number(e.custo_orcado_antes ?? 0),
     custo_orcado_depois: Number(e.custo_orcado_depois ?? 0),
-    faturamento_antes: Number(e.faturamento_antes ?? 0),
-    faturamento_depois: Number(e.faturamento_depois ?? 0),
+    valor_job_antes: Number(e.valor_job_antes ?? 0),
+    valor_job_depois: Number(e.valor_job_depois ?? 0),
+    faturamento_previsto_antes:
+      e.faturamento_previsto_antes !== null &&
+      e.faturamento_previsto_antes !== undefined
+        ? Number(e.faturamento_previsto_antes)
+        : null,
+    faturamento_previsto_depois:
+      e.faturamento_previsto_depois !== null &&
+      e.faturamento_previsto_depois !== undefined
+        ? Number(e.faturamento_previsto_depois)
+        : null,
     autor_nome: e.autor?.nome ?? null,
     itens: (e.itens ?? []).map((i: any) => ({
       ...i,
@@ -324,7 +343,12 @@ export default async function JobDetailPage({
       valor_unitario_para: Number(i.valor_unitario_para ?? 0),
       total_de: Number(i.total_de ?? 0),
       total_para: Number(i.total_para ?? 0),
-      efeito_faturamento: Number(i.efeito_faturamento ?? 0),
+      efeito_valor_job: Number(i.efeito_valor_job ?? 0),
+      efeito_faturamento_previsto:
+        i.efeito_faturamento_previsto !== null &&
+        i.efeito_faturamento_previsto !== undefined
+          ? Number(i.efeito_faturamento_previsto)
+          : null,
     })),
   }));
 
@@ -360,6 +384,21 @@ export default async function JobDetailPage({
     valor_total: raw.valor_total !== null ? Number(raw.valor_total) : null,
     status: raw.status,
     motivo_rejeicao: raw.motivo_rejeicao ?? null,
+    // Registro financeiro da abertura. Esta página não exibe nenhum
+    // deles ainda (a visão financeira do job é entrega própria), mas o
+    // tipo `Job` os declara — o select acima não os traz, então caem
+    // em null em vez de undefined.
+    nome_financeiro: raw.nome_financeiro ?? null,
+    categoria_id: raw.categoria_id ?? null,
+    competencia_trimestre: raw.competencia_trimestre ?? null,
+    competencia_ano: raw.competencia_ano ?? null,
+    custo_previsto_total:
+      raw.custo_previsto_total !== undefined &&
+      raw.custo_previsto_total !== null
+        ? Number(raw.custo_previsto_total)
+        : null,
+    data_abertura_financeiro: raw.data_abertura_financeiro ?? null,
+    aberto_por: raw.aberto_por ?? null,
     created_by: null,
     created_at: raw.created_at,
     updated_at: raw.updated_at,
@@ -399,9 +438,9 @@ export default async function JobDetailPage({
       orcamentoCodigo: raw.orcamento?.codigo ?? null,
       versaoNumero: raw.versao?.numero_versao ?? null,
       versaoNome: raw.versao?.nome ?? null,
-      faturamentoAbertura:
-        raw.faturamento_abertura !== null && raw.faturamento_abertura !== undefined
-          ? Number(raw.faturamento_abertura)
+      valorJobAbertura:
+        raw.valor_job_abertura !== null && raw.valor_job_abertura !== undefined
+          ? Number(raw.valor_job_abertura)
           : null,
       totalOrcado: totalOrcadoJob,
       qtdItens: itens.length,
@@ -470,7 +509,7 @@ export default async function JobDetailPage({
       ? { href: "/jobs", label: "Voltar para jobs" }
       : fromParam === "financeiro"
         ? {
-            href: "/financeiro/jobs-aguardando-abertura",
+            href: "/financeiro/abertura-de-job",
             label: "Voltar para aprovações",
           }
         : {
@@ -529,7 +568,8 @@ export default async function JobDetailPage({
           {itens.length > 0 && (
             <div className="mt-[27px]">
               <ResumoResultado
-                faturamento={totaisJob.faturamento}
+                valorJob={totaisJob.valorJob}
+                faturamentoPrevisto={totaisJob.faturamentoPrevisto}
                 imposto={totaisJob.imposto}
                 custoPlanejado={custoPlanejadoJob}
                 custoRealizado={custoRealizadoJob}
@@ -553,6 +593,7 @@ export default async function JobDetailPage({
       )}
 
       <JobTabs
+        abaInicial={abaInicial}
         info={
           <div className="grid gap-4 md:grid-cols-2">
         <div className="rounded-2xl border border-border bg-card p-6 shadow-soft">
@@ -634,13 +675,23 @@ export default async function JobDetailPage({
 
         <ErratasCard
           erratas={erratas}
-          faturamentoAbertura={
-            raw.faturamento_abertura !== null &&
-            raw.faturamento_abertura !== undefined
-              ? Number(raw.faturamento_abertura)
+          valorJobAbertura={
+            raw.valor_job_abertura !== null &&
+            raw.valor_job_abertura !== undefined
+              ? Number(raw.valor_job_abertura)
               : null
           }
-          faturamentoAtual={job.valor_total ?? 0}
+          faturamentoPrevistoAbertura={
+            raw.faturamento_previsto_abertura !== null &&
+            raw.faturamento_previsto_abertura !== undefined
+              ? Number(raw.faturamento_previsto_abertura)
+              : null
+          }
+          // Recalculados dos itens, não lidos de `jobs.valor_total`: a
+          // coluna é um espelho denormalizado e o card não pode divergir da
+          // planilha logo acima.
+          valorJobAtual={totaisJob.valorJob}
+          faturamentoPrevistoAtual={totaisJob.faturamentoPrevisto}
           moeda={versaoAprovada.moeda}
         />
 

@@ -62,6 +62,7 @@ export type AuditAction =
   | "job.hierarquia_alterada"
   | "job.status_alterado"
   | "job.abertura_aprovada"
+  | "job.aberto_no_financeiro"
   | "job.abertura_rejeitada"
   | "job.reenviado_para_aprovacao"
   | "job.realizado_atualizado"

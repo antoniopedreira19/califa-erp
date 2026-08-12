@@ -1,13 +1,14 @@
-import { Calculator, Info } from "lucide-react";
+import { Calculator } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
+import { LegendaFechamento } from "@/components/legenda-fechamento";
 import {
   calcularTotaisVersao,
   calcularTotaisPlanejados,
   calcularResultadoOperacional,
+  TIPOS_CUSTO,
 } from "@/lib/calculos/versao-totais";
 import {
   tipoCustoLabel,
-  type TipoCusto,
   type VersaoOrcamentoGrupo,
   type VersaoOrcamentoItem,
 } from "@/lib/types";
@@ -31,8 +32,6 @@ interface Props {
   moeda: string;
 }
 
-const TIPOS: TipoCusto[] = ["A", "B", "C", "D"];
-
 // As bandas de cor vêm do mesmo módulo da grade de itens — a vista de
 // Totais precisa "rimar" com a tela de edição, e uma cor só muda em um
 // lugar.
@@ -49,7 +48,8 @@ export function TotaisCard({
     subtotalGeral,
     honorarios,
     imposto,
-    faturamento,
+    faturamentoPrevisto,
+    valorJob,
   } = calcularTotaisVersao(itens, percentualHonorarios, percentualImposto);
 
   const {
@@ -65,8 +65,11 @@ export function TotaisCard({
   // Resultado operacional = o que sobra depois de pagar imposto e o custo
   // que a agência realmente espera desembolsar (planejado). Sem planejado
   // lançado a conta não existe — mostra travessão em vez de número inflado.
+  // A base é o VALOR DO JOB, não o faturamento previsto: o custo planejado
+  // inclui os itens pagos direto ao fornecedor, então a receita comparada
+  // precisa incluí-los também.
   const { resultadoOperacional, resultadoGeral } = calcularResultadoOperacional(
-    faturamento,
+    valorJob,
     imposto,
     totalPlanejado,
   );
@@ -267,7 +270,7 @@ export function TotaisCard({
             Fechamento do orçado · por tipo de custo
           </p>
           <div className="space-y-1.5">
-            {TIPOS.map((t) => (
+            {TIPOS_CUSTO.map((t) => (
               <Linha
                 key={t}
                 label={tipoCustoLabel(t)}
@@ -291,10 +294,19 @@ export function TotaisCard({
               value={imposto}
               moeda={moeda}
             />
+            {/* Os dois fechamentos: o que a California emite nota e o que o
+                cliente se compromete a gastar no total. Diferem pelos
+                principais pagos direto ao fornecedor (A · Direto, D e F). */}
             <div className="mt-3 pt-3.5 border-t border-border flex items-baseline justify-between gap-3">
               <span className="text-sm font-semibold">Faturamento previsto</span>
               <span className="whitespace-nowrap font-mono text-lg font-bold text-california-red">
-                {formatCurrency(faturamento, moeda)}
+                {formatCurrency(faturamentoPrevisto, moeda)}
+              </span>
+            </div>
+            <div className="flex items-baseline justify-between gap-3 pt-1">
+              <span className="text-sm font-semibold">Valor do Job</span>
+              <span className="whitespace-nowrap font-mono text-lg font-bold text-foreground">
+                {formatCurrency(valorJob, moeda)}
               </span>
             </div>
           </div>
@@ -306,11 +318,7 @@ export function TotaisCard({
             Resultado
           </p>
           <div className="space-y-1.5">
-            <Linha
-              label="Faturamento previsto"
-              value={faturamento}
-              moeda={moeda}
-            />
+            <Linha label="Valor do Job" value={valorJob} moeda={moeda} />
             <Linha label="− Impostos" value={imposto} moeda={moeda} />
             <Linha
               label="− Custo planejado"
@@ -411,7 +419,7 @@ export function TotaisCard({
                 >
                   {resultadoGeral === null
                     ? "Preencha o planejado dos itens para ver o resultado."
-                    : "Resultado operacional ÷ faturamento previsto"}
+                    : "Resultado operacional ÷ valor do job"}
                 </p>
               </div>
               <span
@@ -433,19 +441,8 @@ export function TotaisCard({
         </div>
       </div>
 
-      <div className="border-t border-border bg-muted/30 px-6 py-4 flex items-start gap-2 text-xs text-muted-foreground leading-relaxed rounded-b-2xl">
-        <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-        <p>
-          <strong className="text-foreground">Honorários</strong> sobre A + B +
-          D · <strong className="text-foreground">Impostos</strong> sobre B + C
-          + honorários em <em>gross-up</em> ·{" "}
-          <strong className="text-foreground">Faturamento</strong> = custos +
-          honorários + impostos ·{" "}
-          <strong className="text-foreground">Resultado operacional</strong> =
-          faturamento − impostos − custo planejado ·{" "}
-          <strong className="text-foreground">Resultado geral</strong> =
-          resultado operacional ÷ faturamento.
-        </p>
+      <div className="overflow-hidden rounded-b-2xl">
+        <LegendaFechamento />
       </div>
     </div>
   );

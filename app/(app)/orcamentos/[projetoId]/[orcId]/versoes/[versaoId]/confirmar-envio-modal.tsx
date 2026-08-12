@@ -27,6 +27,7 @@ export function ConfirmarEnvioModal({
   orcamentoCodigo,
   linhas,
   valorTotal,
+  faturamentoPrevisto,
   moeda,
   observacoes,
   erro,
@@ -38,7 +39,10 @@ export function ConfirmarEnvioModal({
   pending: boolean;
   orcamentoCodigo: string;
   linhas: { rotulo: string; valor: string; mono?: boolean }[];
+  /** Valor do Job — o que vai para `jobs.valor_total`. */
   valorTotal: number;
+  /** O que a California emite nota nesta versão. */
+  faturamentoPrevisto: number;
   moeda: string;
   /** Só leitura: este pop-up é conferência. Alterar exige voltar ao formulário. */
   observacoes: string;
@@ -84,8 +88,16 @@ export function ConfirmarEnvioModal({
             </div>
           ))}
           <div className="flex items-baseline justify-between gap-3 border-t border-border pt-2.5">
-            <span className="text-[13px] font-semibold">Valor total</span>
+            <span className="text-[13px] font-semibold">
+              Faturamento previsto
+            </span>
             <span className="font-mono text-[15px] font-bold text-california-red">
+              {formatCurrency(faturamentoPrevisto, moeda)}
+            </span>
+          </div>
+          <div className="flex items-baseline justify-between gap-3">
+            <span className="text-[13px] font-semibold">Valor total</span>
+            <span className="font-mono text-[15px] font-bold text-foreground">
               {formatCurrency(valorTotal, moeda)}
             </span>
           </div>

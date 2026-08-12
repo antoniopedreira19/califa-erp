@@ -2,7 +2,10 @@ import { NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
-import { calcularTotaisVersao } from "@/lib/calculos/versao-totais";
+import {
+  calcularTotaisVersao,
+  TIPOS_CUSTO,
+} from "@/lib/calculos/versao-totais";
 import type {
   TipoCusto,
   VersaoOrcamento,
@@ -24,7 +27,7 @@ const BORDER: Partial<ExcelJS.Borders> = {
   right: { style: "thin", color: { argb: "FFCCCCCC" } },
 };
 
-const TIPOS: TipoCusto[] = ["A", "B", "C", "D"];
+const TIPOS = TIPOS_CUSTO;
 
 export async function GET(
   _req: Request,
@@ -219,7 +222,12 @@ export async function GET(
   // -------- Bloco de totais no final --------
   const honorPct = Number(versao.percentual_honorarios ?? 0);
   const impPct = Number(versao.percentual_imposto ?? 0);
-  const { subtotaisPorTipo, subtotalGeral, honorarios, imposto, faturamento } =
+  // A planilha enviada ao cliente segue mostrando só o VALOR DO JOB, no
+  // rótulo FATURAMENTO que ela sempre teve: é o total que o cliente se
+  // compromete a gastar. A quebra entre o que a California emite nota e o
+  // que ele paga direto ao fornecedor é leitura interna (decisão do Tiago
+  // em 11/08/2026) e não entra neste arquivo.
+  const { subtotaisPorTipo, subtotalGeral, honorarios, imposto, valorJob } =
     calcularTotaisVersao(itens, honorPct, impPct);
 
   // 1 linha vazia
@@ -243,7 +251,7 @@ export async function GET(
       label: `HONORÁRIOS ${honorPct.toString().replace(".", ",")}%`,
       value: honorarios,
     },
-    { label: "FATURAMENTO", value: faturamento, bold: true, faturamento: true },
+    { label: "FATURAMENTO", value: valorJob, bold: true, faturamento: true },
   ];
 
   for (const r of summaryRows) {

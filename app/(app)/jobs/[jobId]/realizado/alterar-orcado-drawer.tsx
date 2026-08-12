@@ -19,7 +19,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn, formatCurrency } from "@/lib/utils";
-import { calcularTotaisVersao } from "@/lib/calculos/versao-totais";
+import {
+  calcularTotaisVersao,
+  TIPOS_CUSTO,
+} from "@/lib/calculos/versao-totais";
 import {
   tipoCustoLabel,
   type TipoCusto,
@@ -40,7 +43,7 @@ interface Props {
   onSuccess?: () => void;
 }
 
-const TIPOS: TipoCusto[] = ["A", "B", "C", "D"];
+const TIPOS = TIPOS_CUSTO;
 
 type Rascunho = { unitario: string; tipo: TipoCusto };
 
@@ -166,9 +169,11 @@ export function AlterarOrcadoDrawer({
     return {
       custoAntes: antes.subtotalGeral,
       custoDepois: depois.subtotalGeral,
-      fatAntes: antes.faturamento,
-      fatDepois: depois.faturamento,
-      deltaFat: depois.faturamento - antes.faturamento,
+      // Valor do Job: é o número gravado em `jobs.valor_total` e o que a
+      // errata registra, então é ele que a prévia precisa mostrar.
+      fatAntes: antes.valorJob,
+      fatDepois: depois.valorJob,
+      deltaFat: depois.valorJob - antes.valorJob,
     };
   }, [itens, mudancas, percentualHonorarios, percentualImposto]);
 
@@ -378,7 +383,7 @@ export function AlterarOrcadoDrawer({
                     {mudancas.length}{" "}
                     {mudancas.length === 1 ? "item alterado" : "itens alterados"}
                   </strong>{" "}
-                  · faturamento{" "}
+                  · valor do job{" "}
                   <span
                     className={cn(
                       "font-mono font-semibold",
@@ -433,7 +438,7 @@ export function AlterarOrcadoDrawer({
                   {mudancas.length === 1 ? "item" : "itens"} deste job. Isso:
                 </p>
                 <ul className="mt-1.5 list-disc space-y-0.5 pl-4">
-                  <li>muda o faturamento previsto e a rentabilidade do job;</li>
+                  <li>muda o valor do job e a rentabilidade dele;</li>
                   <li>
                     fica registrado como errata, com seu nome e a data — o
                     histórico não pode ser apagado;
@@ -455,7 +460,7 @@ export function AlterarOrcadoDrawer({
                 </p>
               </div>
               <div>
-                <p className="text-muted-foreground">Faturamento previsto</p>
+                <p className="text-muted-foreground">Valor do Job</p>
                 <p className="mt-0.5 font-mono">
                   {formatCurrency(impacto.fatAntes, moeda)} →{" "}
                   <strong

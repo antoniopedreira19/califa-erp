@@ -106,7 +106,10 @@ export interface TotaisJob {
   orcado: number;
   planejado: number;
   rentabilidade: number;
-  faturamento: number;
+  /** O que a California emite nota. */
+  faturamentoPrevisto: number;
+  /** Compromisso total do cliente. */
+  valorJob: number;
   imposto: number;
   honorarios: number;
   subtotaisPorTipo: Record<TipoCusto, number>;
@@ -145,8 +148,13 @@ export function totaisDoJob(
   const orcado = itens.reduce((s, it) => s + totalOrcadoDe(it), 0);
   const planejado = itens.reduce((s, it) => s + totalPlanejadoDe(it), 0);
   const percentualHonorarios = honorariosDoJob(job, parametros);
-  const { faturamento, imposto, honorarios, subtotaisPorTipo } =
-    calcularTotaisVersao(
+  const {
+    faturamentoPrevisto,
+    valorJob,
+    imposto,
+    honorarios,
+    subtotaisPorTipo,
+  } = calcularTotaisVersao(
       itens.map((it) => ({
         tipo_custo: it.tipo_custo,
         total_orcado: totalOrcadoDe(it),
@@ -158,7 +166,8 @@ export function totaisDoJob(
     orcado,
     planejado,
     rentabilidade: orcado - planejado,
-    faturamento,
+    faturamentoPrevisto,
+    valorJob,
     imposto,
     honorarios,
     subtotaisPorTipo,

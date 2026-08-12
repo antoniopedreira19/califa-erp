@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { TIPOS_CUSTO } from "@/lib/calculos/versao-totais";
 
 /**
  * Schema de item da versão. `grupo_id` vem do contexto (contexto do
@@ -13,7 +14,7 @@ export const itemSchema = z.object({
     .trim()
     .min(1, "Descreva o item.")
     .max(500, "Máximo 500 caracteres."),
-  tipo_custo: z.enum(["A", "B", "C", "D"]).default("A"),
+  tipo_custo: z.enum(TIPOS_CUSTO).default("A"),
   valor_unitario_orcado: z.coerce
     .number({ invalid_type_error: "Valor inválido." })
     .nonnegative("Não pode ser negativo.")

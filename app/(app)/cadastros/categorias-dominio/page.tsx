@@ -34,19 +34,20 @@ export default async function CategoriasDominioPage() {
             Cadastros
           </Link>
           <ChevronRight className="h-3 w-3" />
-          <span>Categorias (Projeto/Orçamento)</span>
+          <span>Categorias (Projeto/Orçamento/Job)</span>
         </nav>
         <div className="flex items-center gap-3">
           <div className="rounded-lg bg-california-red/10 p-2">
             <Layers className="h-5 w-5 text-california-red" />
           </div>
           <h1 className="text-3xl font-bold tracking-tight">
-            Categorias (Projeto/Orçamento)
+            Categorias (Projeto/Orçamento/Job)
           </h1>
         </div>
         <p className="text-sm text-muted-foreground">
-          Vocabulário para classificar projetos (Fee, Evento, Campanha...) e
-          orçamentos (Always On, Mídia, Influencer...) por tipo de iniciativa.
+          Vocabulário para classificar projetos (Fee, Evento, Campanha...),
+          orçamentos (Always On, Mídia, Influencer...) e jobs no financeiro
+          (Evento, Trade, Fee mensal...) por tipo de iniciativa.
         </p>
       </header>
 

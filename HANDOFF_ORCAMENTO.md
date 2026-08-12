@@ -1218,7 +1218,137 @@ medindo `getBoundingClientRect()` no navegador, não a olho:
 
 ---
 
-## 17. Próximos passos
+## 17. Entrega 16 — Faturamento previsto × Valor do Job, e as subdivisões de custo
+
+**Data:** 2026-08-11 · **Origem:** planilhas oficiais do time, não um design.
+`OrçadoPlanejadoRealizado (1).xlsx` (Corona) e
+`[INT] SJ PEPSI CG - NE - 2026.xlsx` (a que valeu como referência final).
+
+⚠️ **A regra em si não mora aqui.** A matriz dos sete tipos de custo e as duas
+fórmulas de fechamento estão em `docs/decisions/003-tipos-de-custo.md`, e a
+fonte no código é `REGRAS_TIPO_CUSTO` em `lib/calculos/versao-totais.ts`. Aqui
+fica só o que é do módulo de Orçamentos. A parte de Jobs está na Parte V do
+`HANDOFF_JOBS.md`.
+
+### 17.1 O problema: um número fazia o papel de dois
+
+O card de Totais mostrava só "Faturamento previsto", e ele somava **todo** o
+custo. Isso confundia duas coisas que o time trata separado:
+
+- o que a California **emite nota**;
+- o que o cliente **se compromete a gastar**, incluindo o que ele paga direto
+  ao fornecedor.
+
+Nos tipos de pagamento direto (A · Direto, D, F) o principal nunca passa pela
+agência — só o honorário. Somá-lo ao faturamento inflava a receita da
+California pelo valor do fornecedor.
+
+### 17.2 As duas linhas
+
+```
+faturamento previsto = Σ(AR, B, C)     + honorários + imposto
+valor do job         = Σ(tudo menos D) + honorários + imposto
+```
+
+Os dois compartilham honorários e imposto; mudam só em quais principais
+entram. **O Valor do Job é o número que a planilha oficial chama de
+`FATURAMENTO`** — o que o sistema calculava antes.
+
+`Resultado operacional` e `Resultado geral` passaram a usar o **Valor do Job**
+como base. O custo descontado é o do job inteiro, então a receita comparada
+precisa ser a do job inteiro; com o faturamento previsto ali, o resultado caía
+pelo valor dos custos que a agência nem desembolsa.
+
+### 17.3 Sete tipos onde havia quatro
+
+`A` virou A · Direto e ganhou o irmão `AR` (A · Repasse, com o principal
+passando pela California). Entraram `F` (F · Externo, hoje espelho do A ·
+Direto) e `FI` (F · Interno, sem honorários). As letras "cruas" ficaram com o
+comportamento que já era delas — **nenhum backfill foi preciso**.
+
+A regra virou **dado, não `if`**: `REGRAS_TIPO_CUSTO` é uma matriz de quatro
+booleanos por tipo (`fatura`, `valorJob`, `honorarios`, `imposto`). Tipo novo é
+uma linha a mais. Há guarda de exaustividade: tipo que entre em `TipoCusto` e
+não seja listado em `TIPOS_CUSTO` **para de compilar**.
+
+### 17.4 O que mudou nas telas de orçamento
+
+1. **Card de Totais da versão e da agregada** ganharam a linha "Valor do Job"
+   logo abaixo de "Faturamento previsto" — vermelho California em cima, preto
+   embaixo. O fechamento por tipo de custo passou a listar os sete.
+2. **Cabeçalhos** (`ResumoRentabilidade`, no editor da agregada e do multi)
+   mostram os dois números lado a lado, para não contradizer o card abaixo.
+3. **Fluxo de abertura**: a barra fixa, o pop-up de aprovação e os dois modais
+   (`EnviarJobModal`, `ConfirmarEnvioModal`) mostram os dois. `jobs.valor_total`
+   recebe o **Valor do Job**; `jobs.faturamento_previsto` é novo.
+4. **A legenda das fórmulas virou componente único**,
+   `components/legenda-fechamento.tsx`. Estava copiada em quatro arquivos — o
+   mesmo defeito que a Entrega 15 corrigiu nas cores.
+5. **`TIPOS_COM_BV` centralizou** em `versao-totais.ts` como o predicado
+   `aceitaBV()`. Estava duplicado em nove arquivos. A regra continua `('A','D')`
+   e espelha o trigger `bv_exige_item_com_bv` — A · Repasse e os F não têm BV.
+
+### 17.5 O Excel exportado ao cliente não mudou
+
+Continua mostrando **só o Valor do Job**, no rótulo `FATURAMENTO` que sempre
+teve. Decisão do time: a quebra entre o que a California fatura e o que o
+cliente paga direto é leitura interna.
+
+### 17.6 Decisões do time nesta entrega
+
+Quatro rodadas de pergunta antes de codar — a primeira planilha e o enunciado
+inicial se contradiziam:
+
+- **"apenas não podemos faturar o custo A"** foi o enunciado inicial. A
+  planilha Corona, porém, somava A e D na mesma célula (`SUB-TOTAL A e D`) e
+  os dois davam faturamento **idêntico** — verificado replicando a fórmula e
+  batendo com a célula `G64`. A referência não separava o que o enunciado
+  separava.
+- A segunda planilha separou os subtotais e tirava o **D** do `TOTAL`, não o A.
+  Decisão final do time: **A, D e F ficam fora**, e o AR entra.
+- **Base do resultado:** Valor do Job, "para o resultado não despencar".
+- **Modal e listagens:** mostram os dois.
+
+### 17.7 Verificação
+
+`tsc --noEmit` e `next lint` limpos; `npm run build` compila. O cálculo do
+código foi conferido **contra a planilha oficial, não contra uma réplica**:
+
+| Aba de `[INT] SJ PEPSI CG - NE - 2026` | Honorários | Imposto | Valor do Job × célula `FATURAMENTO` |
+|---|---|---|---|
+| SJ PEPSI 26 | 57.877,20 | 59.749,42 | 599.936,62 ✅ |
+| SJ PEPSI 26 (MS) | 57.877,20 | 59.749,42 | 599.936,62 ✅ |
+| SJ PEPSI 26 (Tudo custo B) | 57.877,20 | 105.619,56 | 645.806,76 ✅ |
+| SJ PEPSI 26 (MS c margem) | 60.064,80 | 64.704,76 | 625.309,56 ✅ |
+| PAINEL EXTRA | 8.400,00 | 2.038,67 | 80.438,67 ✅ |
+
+Nas quatro telas, no navegador, com dados reais: versão do orçamento (A=4.000)
+deu `14.514,73 / 18.514,73`; agregada de orçamentos, diferença de exatos
+R$ 84.000 — o subtotal A.
+
+⚠️ **Armadilha de leitura de Excel:** `getCell` do ExcelJS devolve o valor da
+célula mestre para todas as células de uma mesclagem, o que infla somas
+recalculadas linha a linha. Duas abas "divergiram" por isso antes de o erro ser
+achado. Ao conferir planilha, ler os **subtotais que ela mesma calculou**.
+
+### 17.8 Migrations desta entrega
+
+| Migration | O que faz |
+|---|---|
+| `20260811000004_tipos_custo_subdivisoes.sql` | `AR`, `F`, `FI` no enum `tipo_custo`. Isolada: valor novo de enum não pode ser usado na mesma transação em que é criado |
+| `20260811000005_jobs_faturamento_previsto.sql` | `jobs.faturamento_previsto` + backfill pela mesma fórmula |
+
+### 17.9 O que ficou aberto
+
+1. **F ainda não tem regra própria** — F · Externo é clone de A · Direto. Quando
+   o time definir o que o diferencia, é uma linha na matriz.
+2. **Subdivisões do custo A no nível do item** (a aba `CUSTO A` da planilha, com
+   `FORNECEDOR`, `MÚTUO`, `IMPOSTO NF`, `VALOR CALIFORNIA`) é modelo de dados
+   novo e ficou para uma entrega própria.
+
+---
+
+## 18. Próximos passos
 
 1. **Carga completa de cidades do IBGE** — hoje só Salvador e São Paulo. Formato acordado: `Salvador-BA` num campo só, sem coluna `uf`. É só uma migration de INSERT: o schema e a busca já estão prontos (Entrega 8). Fonte: `https://servicosdados.ibge.gov.br/api/v1/localidades/municipios`. Ao carregar, reconciliar as 2 linhas atuais, que estão sem o sufixo de UF, e os jobs que já gravaram `Salvador`/`São Paulo`.
 2. **Exibir as observações do job** — `jobs.observacoes` grava desde a Entrega 9 mas nenhuma tela lê. Entra junto com o refino da tela de abertura do financeiro, onde ela faz sentido: é contexto para quem abre. Enquanto isso, o dado é write-only.
