@@ -1,25 +1,28 @@
 # Fluxo de banco — Supabase via MCP
 
 > **Leia este arquivo antes de começar qualquer trabalho neste projeto.**
-> Ele descreve como o banco é alterado, quem pode alterar o quê, e o que
-> nunca pode ser feito sem perguntar.
+> Ele descreve como o banco é alterado, o que exige confirmação, e como
+> conferir que banco e repositório continuam contando a mesma história.
 
 ---
 
 ## O contexto que muda tudo
 
-**O Supabase não é do time que desenvolve aqui.** Ele pertence a outro
-desenvolvedor, que cedeu a chave do MCP para que as alterações do
-desenvolvimento sejam registradas e configuradas a partir daqui.
-
-Isso tem duas consequências práticas:
+**Há um único banco, e mais de uma frente de desenvolvimento mexendo
+nele.** Isso tem duas consequências práticas:
 
 1. **Não existe painel.** Nada é criado "na mão" pela interface do
    Supabase. Toda estrutura nasce de uma migration versionada no
-   repositório e aplicada pelo MCP.
-2. **Estamos na casa dos outros.** O banco é compartilhado, tem dado de
-   outras pessoas e não é ambiente descartável. Erro aqui não se resolve
-   apagando e recriando.
+   repositório e aplicada pelo MCP. É o que mantém o repositório sendo a
+   história completa do banco.
+2. **Não é ambiente descartável.** O banco tem dado de outras frentes e
+   de gente que vai usar o sistema. Erro aqui não se resolve apagando e
+   recriando.
+
+> Se a sessão tiver um combinado próprio sobre até onde ir sem perguntar
+> (por exemplo, quem é dono do projeto Supabase, ou uma janela de
+> manutenção a respeitar), ele vive no `CLAUDE.local.md` de cada um —
+> arquivo pessoal, fora do controle de versão.
 
 ---
 
@@ -90,13 +93,15 @@ em texto versionado.
 
 ---
 
-## Autorização: o que aplicar direto e o que perguntar antes
+## Aditivo x destrutivo: onde está a linha
 
-**Combinado com o time em 12/08/2026 — vale até alguém dizer o contrário.**
+A régua abaixo vale para todo mundo. **Até onde cada frente vai sem parar
+para perguntar é combinado de cada sessão** e mora no `CLAUDE.local.md` de
+cada um.
 
-### Aplicar direto, sem perguntar
+### Aditivo — não destrói nada
 
-Mudança **aditiva**, que não destrói nada:
+Mudança que só acrescenta:
 
 - coluna nova (nulável ou com default);
 - tabela nova;
@@ -104,9 +109,9 @@ Mudança **aditiva**, que não destrói nada:
 - backfill que **preenche** o que estava vazio;
 - valor novo em enum.
 
-### Parar e perguntar antes
+### Destrutivo — exige confirmação explícita, sempre
 
-Mudança **destrutiva**, ou que reescreve o que já existe:
+Mudança que remove ou reescreve o que já existe:
 
 - remover coluna, tabela, índice ou policy;
 - apagar linhas;
@@ -116,7 +121,7 @@ Mudança **destrutiva**, ou que reescreve o que já existe:
 - qualquer coisa em tabela que não seja do módulo em que se está mexendo.
 
 Na dúvida sobre em qual lado a mudança cai, **pergunte**. O custo de
-perguntar é um minuto; o de errar é o dado de outra pessoa.
+perguntar é um minuto; o de errar é o dado de outra frente.
 
 ---
 
