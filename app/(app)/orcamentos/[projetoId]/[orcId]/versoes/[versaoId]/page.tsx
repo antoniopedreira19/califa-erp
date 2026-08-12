@@ -69,6 +69,7 @@ export default async function VersaoDetailPage({
     regionaisRes,
     fornecedoresRes,
     bvsRes,
+    cidadesRes,
   ] = await Promise.all([
     supabase
       .from("versoes_orcamento")
@@ -81,6 +82,7 @@ export default async function VersaoDetailPage({
       .from("orcamentos")
       .select(
         "id, codigo, nome, status, projeto_id, data_inicio_prevista, data_fim_prevista, " +
+          "regional_id, cidade_id, " +
           "regional:regionais(nome), cidade:cidades(nome), " +
           "gp:profiles!gp_responsavel_id(nome), produtor:profiles!produtor_id(nome)",
       )
@@ -92,6 +94,8 @@ export default async function VersaoDetailPage({
         nome: string;
         status: string;
         projeto_id: string;
+        regional_id: string | null;
+        cidade_id: string | null;
         data_inicio_prevista: string | null;
         data_fim_prevista: string | null;
       }>(),
@@ -154,6 +158,18 @@ export default async function VersaoDetailPage({
       .eq("item.versao_orcamento_id", params.versaoId)
       .eq("tenant_id", session.activeTenant.id)
       .neq("situacao", "cancelado"),
+    // Só as primeiras cidades, para o combobox do modal de abertura não
+    // abrir vazio. O cadastro comporta o Brasil inteiro: o resto é
+    // buscado no servidor a cada digitação (`buscarCidades`, mesmo
+    // limite de 30).
+    supabase
+      .from("cidades")
+      .select("id, nome")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("ativo", true)
+      .order("nome")
+      .limit(30)
+      .returns<{ id: string; nome: string }[]>(),
   ]);
 
   if (versaoRes.error) console.error("[versao.detail]", versaoRes.error.message);
@@ -209,7 +225,7 @@ export default async function VersaoDetailPage({
 
   // Segunda onda: depende de orcamento.projeto_id, por isso não entra no
   // Promise.all acima. Só o fluxo de abertura consome esses dados.
-  const [projetoRes, jobsCountRes] = await Promise.all([
+  const [projetoRes, jobsCountRes, projetoRegionaisRes] = await Promise.all([
     supabase
       .from("projetos")
       .select("id, codigo, nome, cliente_id, cliente:clientes(id, nome_fantasia), produto:cliente_produtos(nome)")
@@ -219,6 +235,13 @@ export default async function VersaoDetailPage({
     supabase
       .from("jobs")
       .select("id", { count: "exact", head: true })
+      .eq("tenant_id", session.activeTenant.id),
+    // Opções de regional do modal de abertura: as do projeto, mesma
+    // regra do formulário do orçamento.
+    supabase
+      .from("projeto_regionais")
+      .select("regional:regionais(id, nome)")
+      .eq("projeto_id", orcamento.projeto_id)
       .eq("tenant_id", session.activeTenant.id),
   ]);
 
@@ -251,8 +274,28 @@ export default async function VersaoDetailPage({
     .toString()
     .padStart(4, "0")}`;
 
+  // Regionais do projeto, em ordem alfabética — alimentam o select do
+  // modal de abertura.
+  const regionaisDoProjeto = ((projetoRegionaisRes.data ?? []) as any[])
+    .map((pr) => pr.regional)
+    .filter(Boolean)
+    .map((r: any) => ({ id: r.id as string, nome: r.nome as string }))
+    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+
+  const cidadesIniciais = (cidadesRes.data ?? []) as {
+    id: string;
+    nome: string;
+  }[];
+
+  const orcamentoRaw = orcamento as any;
+
   const inicialModal = {
     nome: job?.nome ?? orcamento.nome,
+    // Cidade e regional são editáveis no modal: entram pré-preenchidas
+    // com o que está hoje no orçamento.
+    cidadeId: orcamento.cidade_id ?? "",
+    cidadeNome: orcamentoRaw.cidade?.nome ?? "",
+    regionalId: orcamento.regional_id ?? "",
     dataInicio: job?.data_inicio_prevista ?? orcamento.data_inicio_prevista ?? "",
     dataFim: job?.data_fim_prevista ?? orcamento.data_fim_prevista ?? "",
     dataFaturamento: job?.data_prevista_faturamento ?? "",
@@ -260,8 +303,9 @@ export default async function VersaoDetailPage({
   };
 
   // Herdados: com job já aberto valem os valores congelados nele; antes
-  // disso, o que está cadastrado hoje no projeto e no orçamento.
-  const orcamentoRaw = orcamento as any;
+  // disso, o que está cadastrado hoje no projeto e no orçamento. Cidade
+  // e regional só são lidas daqui no modo somente leitura — enquanto o
+  // job não existe, quem manda é o formulário (`inicialModal`).
   const herdados = {
     produtoNome: job?.produto ?? projetoRaw?.produto?.nome ?? null,
     cidadeNome: job?.cidade ?? orcamentoRaw.cidade?.nome ?? null,
@@ -466,6 +510,8 @@ export default async function VersaoDetailPage({
         projetoNome={projetoNome}
         projetoCodigo={projetoCodigo}
         herdados={herdados}
+        regionaisDoProjeto={regionaisDoProjeto}
+        cidadesIniciais={cidadesIniciais}
         inicial={inicialModal}
         job={job}
       />
