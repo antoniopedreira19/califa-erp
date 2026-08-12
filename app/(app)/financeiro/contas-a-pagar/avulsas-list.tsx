@@ -2,16 +2,20 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Search, Plus } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Search, Plus, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type {
   ContaAvulsaStatus,
+  ContaBancaria,
   PlanoContaTipo,
   PlanoContaSubtipo,
   NaturezaLancamento,
 } from "@/lib/types";
 import { contaAvulsaStatusLabel } from "@/lib/types";
 import { ContaAvulsaDrawer } from "./conta-avulsa-drawer";
+import { BaixaAvulsaDialog } from "@/components/financeiro/baixa-avulsa-dialog";
+import { darBaixaAvulsaInline } from "./actions";
 
 // ---------------------------------------------------------------------------
 // Tipos exportados
@@ -27,6 +31,7 @@ export interface AvulsaRow {
   fornecedor_nome: string | null;
   cliente_nome: string | null;
   job_codigo: string | null;
+  empresa_id: string;
   empresa_nome: string;
   tipo_codigo: string;
   subtipo_nome: string;
@@ -79,6 +84,7 @@ interface Props {
   clientes: Array<{ id: string; nome: string }>;
   jobs: Array<{ id: string; codigo: string; nome: string; cliente_id: string | null; regional_id: string | null }>;
   regionais: Array<{ id: string; nome: string; ativo: boolean }>;
+  contas: ContaBancaria[];
 }
 
 // ---------------------------------------------------------------------------
@@ -95,9 +101,14 @@ export function ContasAvulsasList({
   clientes,
   jobs,
   regionais,
+  contas,
 }: Props) {
+  const router = useRouter();
   const [busca, setBusca] = React.useState("");
   const [statusFiltro, setStatusFiltro] = React.useState<"todas" | ContaAvulsaStatus>("aprovada");
+  const [baixando, setBaixando] = React.useState<AvulsaRow | null>(null);
+  const [pending, startTransition] = React.useTransition();
+  const [erroBaixa, setErroBaixa] = React.useState<string | null>(null);
 
   const filtered = React.useMemo(() => {
     const q = busca.trim().toLowerCase();
@@ -193,6 +204,7 @@ export function ContasAvulsasList({
                 <th className="px-3 py-2 text-right">Valor</th>
                 <th className="px-3 py-2 text-left">Status</th>
                 <th className="px-3 py-2 text-center">Anexos</th>
+                <th className="px-3 py-2 text-right">Ação</th>
               </tr>
             </thead>
             <tbody>
@@ -247,10 +259,72 @@ export function ContasAvulsasList({
                   <td className="px-3 py-2 text-center text-xs">
                     {r.anexos_count > 0 ? r.anexos_count : "—"}
                   </td>
+                  <td className="px-3 py-2 text-right">
+                    {r.status === "aprovada" && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setErroBaixa(null);
+                          setBaixando(r);
+                        }}
+                        className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-2 py-1 text-[11px] font-semibold text-white hover:bg-emerald-700"
+                      >
+                        <CheckCircle2 className="h-3 w-3" />
+                        Dar baixa
+                      </button>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {baixando && (
+        <BaixaAvulsaDialog
+          open={true}
+          onOpenChange={(open) => { if (!open) setBaixando(null); }}
+          descricao={baixando.descricao}
+          valor={baixando.valor}
+          empresaId={baixando.empresa_id}
+          dataPrevista={baixando.data_prevista_pagamento}
+          contas={contas}
+          tipoLabel="Avulsa"
+          pending={pending}
+          onConfirm={(payload) => {
+            const alvo = baixando;
+            if (!alvo) return;
+            startTransition(async () => {
+              const res = await darBaixaAvulsaInline({
+                avulsa_id: alvo.id,
+                pago_em: payload.pago_em,
+                conta_bancaria_id: payload.conta_bancaria_id,
+              });
+              if (!res.ok) {
+                setErroBaixa(res.message);
+              } else {
+                setBaixando(null);
+                router.refresh();
+              }
+            });
+          }}
+        />
+      )}
+
+      {erroBaixa && (
+        <div
+          role="alert"
+          className="fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-lg border border-california-red/40 bg-california-red/5 px-4 py-3 shadow-elevated"
+        >
+          <span className="text-sm font-medium text-california-red">{erroBaixa}</span>
+          <button
+            type="button"
+            onClick={() => setErroBaixa(null)}
+            className="text-california-red hover:opacity-70"
+          >
+            ×
+          </button>
         </div>
       )}
     </div>
