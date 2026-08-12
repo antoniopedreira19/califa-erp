@@ -1,0 +1,41 @@
+-- =====================================================================
+-- Subdivisões dos tipos de custo: A vira A·Direto + A·Repasse, e entra
+-- o custo F (Externo + Interno).
+--
+-- Contexto: a planilha oficial passou a separar o que a California
+-- realmente emite nota do que o cliente paga direto ao fornecedor. Isso
+-- criou duas linhas no card de Totais — "Faturamento previsto" (só o que
+-- a agência fatura) e "Valor do Job" (o compromisso total do cliente) —
+-- e os tipos de custo são as alavancas dessa conta.
+--
+-- Matriz acordada com o Tiago em 11/08/2026 (a fonte no código é
+-- REGRAS_TIPO_CUSTO em lib/calculos/versao-totais.ts):
+--
+--   tipo | principal fatura? | principal no job? | honorários | imposto
+--   -----+-------------------+-------------------+------------+--------
+--   A    | não               | sim               | sim        | não
+--   AR   | SIM               | sim               | sim        | não
+--   B    | sim               | sim               | sim        | sim
+--   C    | sim               | sim               | não        | sim
+--   D    | não               | NÃO               | sim        | não
+--   F    | não               | sim               | sim        | não
+--   FI   | não               | sim               | NÃO        | não
+--
+-- 'A' continua significando A·Direto: é o comportamento que as 22 linhas
+-- já gravadas tinham, então não há backfill. 'AR', 'F' e 'FI' nascem sem
+-- uso.
+--
+-- BV: o trigger `bv_exige_item_com_bv` segue com ('A','D') e NÃO muda.
+-- O critério dele é "o cliente paga o fornecedor diretamente", que
+-- continua valendo só para A·Direto e D — no A·Repasse o dinheiro passa
+-- pela California, e F/FI ficam de fora por decisão do Tiago. Os tipos
+-- novos caem automaticamente no "não" da condição existente.
+--
+-- Migration isolada: valor novo de enum não pode ser USADO na mesma
+-- transação em que é criado. Cada ADD VALUE abaixo se ancora só em
+-- valor pré-existente ('A' e 'D') — por isso o FI entra antes do F.
+-- =====================================================================
+
+alter type public.tipo_custo add value if not exists 'AR' after 'A';
+alter type public.tipo_custo add value if not exists 'FI' after 'D';
+alter type public.tipo_custo add value if not exists 'F' after 'D';

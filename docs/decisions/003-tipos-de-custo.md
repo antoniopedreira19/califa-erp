@@ -2,33 +2,91 @@
 
 ## Status
 
-Aprovada como regra inicial, pendente de validação fina dos cálculos.
+Vigente. Revisada em 11/08/2026, quando A e F ganharam subdivisões e o
+fechamento passou a produzir **dois** números em vez de um.
 
-## Tipos
+## Os dois números do fechamento
 
-### A
+Até 11/08/2026 o card de Totais mostrava só "Faturamento previsto", e ele
+somava **todo** o custo. Isso confundia duas coisas diferentes:
 
-Faturamento direto para cliente. Impostos sobre honorários. Usado em influenciadores, normalmente com 13% de honorários.
+- **Faturamento previsto** — o que a California emite nota. Não inclui o
+  principal dos custos que o cliente paga direto ao fornecedor.
+- **Valor do Job** — o compromisso total do cliente, somando o que passa
+  pela agência e o que ele paga direto. É o número que a planilha oficial
+  chama de `FATURAMENTO`, e é ele que vai para `jobs.valor_total`.
 
-### B
+Os dois compartilham honorários e imposto; mudam só em quais principais
+entram. O **resultado operacional e o resultado geral usam o Valor do
+Job** como base: o custo descontado é o do job inteiro, então a receita
+comparada precisa ser a do job inteiro também.
 
-Bi tributação. Faturamento via California. Imposto sobre custo da operação mais honorários.
+## Matriz de tipos
 
-### C
+A fonte no código é `REGRAS_TIPO_CUSTO`, em
+`lib/calculos/versao-totais.ts`. Tabela e código não podem divergir.
 
-Sem honorários. Imposto sobre custo. Uso somente com permissão do Bruno.
+| Tipo | Rótulo | Principal no faturamento previsto | Principal no valor do job | Base de honorários | Base de imposto | Calha |
+|---|---|---|---|---|---|---|
+| `A` | A · Direto | não | sim | sim | não | BV |
+| `AR` | A · Repasse | **sim** | sim | sim | não | PP |
+| `B` | B · Bi-trib. | sim | sim | sim | **sim** | PP |
+| `C` | C · Sem honor. | sim | sim | **não** | **sim** | PP |
+| `D` | D · Interno | não | **não** | sim | não | BV |
+| `F` | F · Externo | não | sim | sim | não | PP |
+| `FI` | F · Interno | não | sim | **não** | não | PP |
 
-### D
+Fórmulas:
 
-Faturamento direto para cliente, com visão interna para agência/GP. Imposto sobre honorários.
+```
+honorários = Σ(tipos com honorários) × %honor
+imposto    = (Σ(tipos com imposto) + honorários) × t / (1 − t)     [gross-up]
+
+faturamento previsto = Σ(AR, B, C)        + honorários + imposto
+valor do job         = Σ(tudo menos D)    + honorários + imposto
+```
+
+Validado contra a planilha oficial `[INT] SJ PEPSI CG - NE - 2026`: as 5
+abas batem em honorários, imposto e valor do job, célula a célula.
+
+## Descrição de cada tipo
+
+- **A · Direto** — faturamento direto para o cliente. O fornecedor recebe
+  do cliente; a agência fatura só o honorário. Imposto sobre honorários.
+  Usado em influenciadores, normalmente com 13% de honorários.
+- **A · Repasse** — mesmo caso, mas o principal passa pela California, que
+  o repassa ao fornecedor. Por isso entra no faturamento previsto. Não tem
+  BV: sem pagamento direto, não há comissão a negociar com o fornecedor.
+- **B · Bi-tributação** — faturamento via California. Imposto sobre o custo
+  da operação mais honorários.
+- **C · Sem honorários** — imposto sobre o custo, sem honorário da agência.
+  Uso somente com permissão do Bruno.
+- **D · Interno** — faturamento direto para o cliente, com visão interna
+  para agência/GP. Fica fora até do valor do job: só os honorários dele
+  chegam ao fechamento.
+- **F · Externo** — hoje espelha o A · Direto. Subdivisão criada junto com
+  o F · Interno; a diferença de negócio entre F e A ainda será definida.
+- **F · Interno** — como o F · Externo, mas sem honorários da agência.
+
+## BV × Pedido de Produção
+
+O critério não é a letra, é **"o cliente paga o fornecedor diretamente"**.
+Só `A · Direto` e `D` admitem BV. O resto mostra Pedido de Produção na
+calha. A regra vive em dois lugares que precisam andar juntos:
+
+- `TIPOS_COM_BV` / `aceitaBV()` em `lib/calculos/versao-totais.ts`;
+- o trigger `bv_exige_item_com_bv` no Postgres.
+
+Mudar um sem o outro deixa a tela oferecendo um BV que o banco recusa.
+
+## O que fica de fora
+
+A planilha exportada para o cliente continua mostrando **só o Valor do
+Job**, no rótulo `FATURAMENTO` que sempre teve. A quebra entre o que a
+California fatura e o que o cliente paga direto é leitura interna.
 
 ## Consequência no sistema
 
-Tipo de custo não é apenas etiqueta. Ele afeta:
-
-- faturamento previsto;
-- honorários;
-- base de imposto;
-- visão do cliente;
-- visão interna;
-- necessidade de aprovação especial.
+Tipo de custo não é etiqueta. Ele afeta faturamento previsto, valor do
+job, honorários, base de imposto, visão do cliente, visão interna,
+disponibilidade de BV e necessidade de aprovação especial.

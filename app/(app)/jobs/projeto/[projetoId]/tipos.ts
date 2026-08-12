@@ -49,6 +49,8 @@ export interface JobPlanilhaProjeto {
   subtotaisPorTipo: Record<TipoCusto, number>;
   honorarios: number;
   imposto: number;
-  /** Custos + honorários + imposto. É o "valor" do job na árvore. */
-  faturamento: number;
+  /** O que a California emite nota neste job. */
+  faturamentoPrevisto: number;
+  /** Compromisso total do cliente. É o "valor" do job na árvore. */
+  valorJob: number;
 }

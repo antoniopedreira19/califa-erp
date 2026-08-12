@@ -18,6 +18,7 @@ import type {
   VersaoOrcamentoGrupo,
   VersaoOrcamentoItem,
 } from "@/lib/types";
+import { aceitaBV } from "@/lib/calculos/versao-totais";
 
 export type ActionResult =
   | { ok: true; id?: string }
@@ -839,7 +840,6 @@ export async function atualizarItem(
  * UPDATE. Os totais são colunas GENERATED: o banco recalcula sozinho.
  */
 /** Tipos em que o cliente paga o fornecedor direto — os únicos com BV. */
-const TIPOS_COM_BV = ["A", "D"];
 
 /**
  * Chamado quando um item deixa de ser tipo A ou D. O BV só faz sentido
@@ -954,7 +954,7 @@ export async function atualizarCampoItem(
   // o BV que estava lá, senão ele fica órfão no banco e invisível na
   // tela. A consulta extra só roda nesse caso: o caminho quente (cada
   // Enter numa célula numérica) continua com um round-trip só.
-  if (campo === "tipo_custo" && !TIPOS_COM_BV.includes(String(parsed.data))) {
+  if (campo === "tipo_custo" && !aceitaBV(String(parsed.data))) {
     const bloqueio = await resolverBvAoSairDoTipoComBv(
       itemId,
       session.activeTenant.id,

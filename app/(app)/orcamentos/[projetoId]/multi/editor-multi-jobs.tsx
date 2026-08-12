@@ -64,6 +64,7 @@ import {
   type OrcamentoProjetoPayload,
   type ParametrosVersao,
 } from "../../_rascunho/tipos";
+import { aceitaBV } from "@/lib/calculos/versao-totais";
 
 interface Props {
   projeto: { id: string; codigo: string; nome: string; status: string };
@@ -83,7 +84,6 @@ interface Props {
 }
 
 /** Tipos em que o cliente paga o fornecedor direto — os únicos com BV. */
-const TIPOS_COM_BV: string[] = ["A", "D"];
 
 type Modal =
   | { tipo: "form" }
@@ -347,7 +347,7 @@ export function EditorMultiJobs({
           // não há o caso, travado no banco, de BV já no financeiro.
           if (
             campo === "tipo_custo" &&
-            !TIPOS_COM_BV.includes(String(parsed.data))
+            !aceitaBV(String(parsed.data))
           ) {
             atualizado.bv = null;
           }
@@ -422,7 +422,7 @@ export function EditorMultiJobs({
       salvar: async (itemId, formData) => {
         const alvo = acharItem(itemId);
         if (!alvo) return { ok: false, message: "Item não encontrado." };
-        if (!TIPOS_COM_BV.includes(alvo.tipo_custo)) {
+        if (!aceitaBV(alvo.tipo_custo)) {
           return {
             ok: false,
             message: "BV só pode ser lançado em item de custo tipo A ou D.",
@@ -454,20 +454,22 @@ export function EditorMultiJobs({
   // ---------- totais do cabeçalho ----------
   const resumo = React.useMemo(() => {
     let planejado = 0;
-    let faturamento = 0;
+    let faturamentoPrevisto = 0;
+    let valorJob = 0;
     let imposto = 0;
     for (const job of jobs) {
       const t = totaisDoJob(job, parametros);
       planejado += t.planejado;
-      faturamento += t.faturamento;
+      faturamentoPrevisto += t.faturamentoPrevisto;
+      valorJob += t.valorJob;
       imposto += t.imposto;
     }
     const { resultadoGeral } = calcularResultadoOperacional(
-      faturamento,
+      valorJob,
       imposto,
       planejado,
     );
-    return { planejado, faturamento, resultadoGeral };
+    return { planejado, faturamentoPrevisto, valorJob, resultadoGeral };
   }, [jobs, parametros]);
 
   /** Planilhas cujo % de honorários não é o do cadastro do cliente. Não
@@ -500,7 +502,8 @@ export function EditorMultiJobs({
           planejado: t.planejado,
           honorarios: t.honorarios,
           imposto: t.imposto,
-          faturamento: t.faturamento,
+          faturamentoPrevisto: t.faturamentoPrevisto,
+          valorJob: t.valorJob,
           subtotaisPorTipo: t.subtotaisPorTipo,
           percentualHonorarios: t.percentualHonorarios,
           percentualImposto: parametros.percentual_imposto,
@@ -654,7 +657,15 @@ export function EditorMultiJobs({
           <div className="flex flex-none rounded-2xl border border-border bg-card shadow-soft">
             <Kpi
               rotulo="Faturamento previsto"
-              valor={formatCurrency(resumo.faturamento, parametros.moeda)}
+              valor={formatCurrency(
+                resumo.faturamentoPrevisto,
+                parametros.moeda,
+              )}
+            />
+            <Kpi
+              rotulo="Valor do Job"
+              valor={formatCurrency(resumo.valorJob, parametros.moeda)}
+              borda
             />
             <Kpi
               rotulo="Custo planejado"

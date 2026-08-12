@@ -1,8 +1,9 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, XCircle, AlertCircle } from "lucide-react";
+import { XCircle, AlertCircle, Landmark } from "lucide-react";
 import {
   Dialog,
   DialogHeader,
@@ -10,37 +11,28 @@ import {
   DialogDescription,
   DrawerContent,
 } from "@/components/ui/dialog";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Label } from "@/components/ui/label";
-import {
-  aprovarAberturaJob,
-  rejeitarAberturaJob,
-} from "@/app/(app)/jobs/actions";
+import { rejeitarAberturaJob } from "@/app/(app)/jobs/actions";
 
 interface Props {
   jobId: string;
 }
 
+/**
+ * Aprovação financeira vista de dentro do job.
+ *
+ * Aprovar NÃO acontece aqui: abrir o job exige categoria, competência e
+ * previsão de custos, que só o formulário do financeiro coleta. Um botão
+ * de aprovar direto nesta página abriria o job sem nada disso — por isso
+ * ele virou um link para lá. Rejeitar continua sendo possível daqui,
+ * porque não depende de registro nenhum.
+ */
 export function AprovarRejeitarButtons({ jobId }: Props) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
-  const [confirmAprovar, setConfirmAprovar] = React.useState(false);
   const [rejeitarOpen, setRejeitarOpen] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = React.useState<Record<string, string[]>>({});
-
-  function handleAprovar() {
-    setError(null);
-    startTransition(async () => {
-      const res = await aprovarAberturaJob(jobId);
-      if (!res.ok) {
-        setError(res.message);
-        return;
-      }
-      setConfirmAprovar(false);
-      router.refresh();
-    });
-  }
 
   function handleRejeitar(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -62,14 +54,14 @@ export function AprovarRejeitarButtons({ jobId }: Props) {
   return (
     <>
       <div className="flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          onClick={() => setConfirmAprovar(true)}
+        <Link
+          href={`/financeiro/abertura-de-job/${jobId}`}
+          prefetch={false}
           className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 transition-colors"
         >
-          <CheckCircle2 className="h-4 w-4" />
-          Aprovar abertura
-        </button>
+          <Landmark className="h-4 w-4" />
+          Abrir no financeiro
+        </Link>
         <button
           type="button"
           onClick={() => setRejeitarOpen(true)}
@@ -79,17 +71,11 @@ export function AprovarRejeitarButtons({ jobId }: Props) {
           Rejeitar
         </button>
       </div>
+      <p className="mt-2 text-xs text-muted-foreground">
+        A abertura pede categoria, competência e previsão de custos — preenchidas
+        na Central Financeira.
+      </p>
       {error && <p className="mt-2 text-xs text-california-red">{error}</p>}
-
-      <ConfirmDialog
-        open={confirmAprovar}
-        onOpenChange={(o) => !o && setConfirmAprovar(false)}
-        title="Aprovar abertura deste job?"
-        description="O status muda pra 'Aberto'. A partir daí o job entra em operação normal."
-        confirmLabel="Aprovar"
-        onConfirm={handleAprovar}
-        pending={pending}
-      />
 
       <Dialog open={rejeitarOpen} onOpenChange={setRejeitarOpen}>
         <DrawerContent>

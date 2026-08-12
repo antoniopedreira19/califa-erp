@@ -1,5 +1,6 @@
 import ExcelJS from "exceljs";
 import type { ImportacaoWarning, TipoCusto } from "@/lib/types";
+import { TIPOS_CUSTO } from "@/lib/calculos/versao-totais";
 
 /**
  * Parser da planilha padrão da Agência California ("aba Oficial").
@@ -45,7 +46,7 @@ const KEYWORDS_RESUMO = [
 
 const KEYWORDS_HEADER = ["planilha", "item", "r$", "qt", "d/m", "tt"];
 
-const TIPOS_VALIDOS: readonly TipoCusto[] = ["A", "B", "C", "D"] as const;
+const TIPOS_VALIDOS: readonly TipoCusto[] = TIPOS_CUSTO;
 
 export interface ParseItem {
   ordem: number;

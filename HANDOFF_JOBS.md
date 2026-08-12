@@ -3,7 +3,7 @@
 Registro da implementação dos designs do módulo de Jobs, mais as decisões de
 modelagem e de negócio tomadas junto com o time durante a execução.
 
-O documento tem **quatro partes**, uma por design:
+O documento tem **cinco partes**:
 
 | Parte | Design | Telas | Seções |
 |---|---|---|---|
@@ -11,6 +11,7 @@ O documento tem **quatro partes**, uma por design:
 | **II** | `Jobs - Lista e Projeto.dc.html` | lista de jobs e visão agregada do projeto | 12 a 17 |
 | **III** | `Orcamento - BV - Opcoes.dc.html` | BV na Planilha Interna + travas na errata | 18 a 23 |
 | **IV** | `Comparativo Cores - Orcamento e Job.dc.html` | cor dos blocos e faixa do agrupamento, nas 2 telas de planilha | 24 e 25 |
+| **V** | planilhas oficiais do time (sem design) | Faturamento previsto × Valor do Job, nas telas de Totais, lista e erratas | 26 a 29 |
 
 > A Parte IV é transversal aos módulos de Orçamento e Job. A regra vive em
 > `docs/09-identidade-visual-ui.md`; aqui fica só o que é do Job.
@@ -919,3 +920,120 @@ medindo `getBoundingClientRect()` no navegador, não a olho:
 | Agregada do projeto (planilha + Totais) | 111/579/935/1290/1645 nas 2 tabelas | exato |
 
 Nenhuma migration. Nada em `lib/calculos/` foi tocado.
+
+---
+
+# Parte V — Faturamento previsto × Valor do Job
+
+**Data:** 2026-08-11 · **Origem:** planilhas oficiais do time, não um design.
+`[INT] SJ PEPSI CG - NE - 2026.xlsx` valeu como referência final.
+
+> Transversal aos módulos de Orçamento e Job. A regra vive em
+> `docs/decisions/003-tipos-de-custo.md`, e a fonte no código é
+> `REGRAS_TIPO_CUSTO` em `lib/calculos/versao-totais.ts`. O contexto completo
+> da decisão está na seção 17 do `HANDOFF_ORCAMENTO.md`; aqui fica só o que é
+> do Job.
+
+---
+
+## 26. O que mudou nas telas de job
+
+O fechamento passou a produzir **dois** números onde havia um:
+
+```
+faturamento previsto = Σ(AR, B, C)     + honorários + imposto   (o que a California emite nota)
+valor do job         = Σ(tudo menos D) + honorários + imposto   (compromisso total do cliente)
+```
+
+O **Valor do Job é o número que o sistema já calculava** — a planilha oficial
+chama de `FATURAMENTO`. Quem é novo é o faturamento previsto, menor.
+
+1. **Card de Totais do job e da agregada do projeto** ganharam a linha "Valor
+   do Job" abaixo de "Faturamento previsto". O fechamento por tipo de custo
+   passou a listar sete tipos (`A`, `AR`, `B`, `C`, `D`, `F`, `FI`).
+2. **`PainelResultado` mudou de base.** A prop `faturamento` virou `valorJob`,
+   e `Resultado operacional`/`Resultado geral` calculam sobre ele. O custo
+   descontado é o do job inteiro, então a receita comparada precisa ser a do job
+   inteiro — com o faturamento previsto ali, o resultado caía pelo valor dos
+   custos pagos direto ao fornecedor, que a agência nem desembolsa. **Os
+   percentuais na tela não mudaram**: a base continua sendo o mesmo número de
+   antes, agora com o nome certo.
+3. **`ResumoResultado`** (cabeçalho do job e da agregada) mostra os dois lado a
+   lado, para não contradizer o card abaixo.
+4. **Lista de jobs** ganhou a coluna "Faturamento previsto" à esquerda de "Valor
+   total", em cinza; a linha do projeto soma as duas. O número vem de
+   `jobs.faturamento_previsto`, coluna nova — recalcular por linha numa lista é
+   o anti-padrão que `docs/PERFORMANCE.md` proíbe.
+5. **A legenda das fórmulas virou `components/legenda-fechamento.tsx`**, único
+   para as quatro telas de Totais. Estava copiada em quatro arquivos.
+
+---
+
+## 27. `jobs.valor_total` não é mais editável à mão
+
+O drawer "Editar" do job tinha um campo `Valor Total (R$)` que **gravava direto
+na coluna**, por cima do valor calculado dos itens. Não era hipótese: o
+**JOB-0001 ficou com R$ 1.000.000,00 gravados contra R$ 5.617,00 de itens**, e
+a lista e o card de Totais passaram a contar histórias diferentes.
+
+Fechado em três pontas: o campo saiu do drawer, `valor_total` saiu do
+`jobSchema` (`lib/validations/jobs.ts`) e a gravação saiu de
+`atualizarJob`. As duas colunas agora só são escritas pela abertura do job e
+pelas erratas. O card de Erratas passou a **recalcular dos itens** em vez de ler
+`jobs.valor_total`, para nunca divergir da planilha logo acima.
+
+⚠️ **O dado do JOB-0001 não foi corrigido** — é dinheiro gravado e ficou para
+decisão do time.
+
+---
+
+## 28. Erratas registram os dois efeitos
+
+Uma errata muda valor orçado e/ou tipo de custo, e as duas coisas podem mexer
+nos dois números de forma **independente**: trocar `A · Direto` por `A · Repasse`
+move o faturamento previsto e deixa o Valor do Job intacto. Guardar um número só
+apagava metade do efeito no histórico.
+
+As colunas antigas sempre guardaram o Valor do Job, então foram **renomeadas**,
+não duplicadas:
+
+| Antes | Depois | Novo |
+|---|---|---|
+| `jobs_erratas.faturamento_antes/depois` | `valor_job_antes/depois` | `faturamento_previsto_antes/depois` |
+| `jobs_erratas_itens.efeito_faturamento` | `efeito_valor_job` | `efeito_faturamento_previsto` |
+| `jobs.faturamento_abertura` | `valor_job_abertura` | `faturamento_previsto_abertura` |
+
+Na tela, cada errata mostra os dois efeitos — no cabeçalho, na linha e por item.
+
+**As colunas novas nascem `NULL` nas erratas anteriores a 11/08/2026**: o estado
+histórico daquele momento não é reconstituível, e a tela mostra travessão em vez
+de número inventado. Mesma regra para `faturamento_previsto_abertura`, que só
+foi preenchido nos jobs **sem** errata — onde o valor de hoje é, por construção,
+o da abertura.
+
+---
+
+## 29. Verificação (2026-08-11)
+
+`tsc --noEmit` e `next lint` limpos; `npm run build` compila. O cálculo do
+código foi conferido **contra a planilha oficial**, não contra uma réplica: as 5
+abas batem em honorários, imposto e Valor do Job (tabela na seção 17.7 do
+`HANDOFF_ORCAMENTO.md`).
+
+No navegador, com dados reais:
+
+| Tela | Resultado |
+|---|---|
+| Card de Totais do JOB-0004 | bate com a planilha Corona: honorários 44.287,80 · imposto 100.320,37 · 513.673,17 |
+| Cabeçalho do job | os dois números lado a lado |
+| Agregada do projeto (A=80.000) | Fat. previsto 89.057,22 × Valor do Job 169.057,22 — diferença de exatos R$ 80.000 |
+| Lista de jobs | as duas colunas, com a soma por projeto |
+| Card de Erratas do JOB-0002 | `EFEITO NO FAT. PREVISTO —` · `EFEITO NO VALOR DO JOB +R$ 1.392,00` (o travessão é a errata antiga, correto) |
+
+### Migrations
+
+| Migration | O que faz |
+|---|---|
+| `20260811000004_tipos_custo_subdivisoes.sql` | `AR`, `F`, `FI` no enum `tipo_custo` |
+| `20260811000005_jobs_faturamento_previsto.sql` | `jobs.faturamento_previsto` + backfill |
+| `20260811000006_erratas_dois_numeros.sql` | renomes das erratas + colunas de faturamento previsto |

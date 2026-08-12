@@ -1,8 +1,12 @@
 import Link from "next/link";
-import { Calculator, Info } from "lucide-react";
+import { Calculator } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
-import { calcularRentabilidade } from "@/lib/calculos/versao-totais";
+import {
+  calcularRentabilidade,
+  TIPOS_CUSTO,
+} from "@/lib/calculos/versao-totais";
 import { PainelResultado } from "@/components/painel-resultado";
+import { LegendaFechamento } from "@/components/legenda-fechamento";
 import { tipoCustoLabel, type TipoCusto } from "@/lib/types";
 import type { JobPlanilhaProjeto } from "./tipos";
 import {
@@ -16,8 +20,6 @@ import {
   FAIXA_ROTULO,
   RENTAB_VALOR,
 } from "@/app/(app)/_planilha/blocos";
-
-const TIPOS: TipoCusto[] = ["A", "B", "C", "D"];
 
 function formatarPercentual(p: number): string {
   return `${p.toFixed(1).replace(".", ",")}%`;
@@ -115,14 +117,21 @@ export function ProjetoTotaisCard({
   const totalRealizado = jobs.reduce((s, j) => s + j.realizado, 0);
   const honorarios = jobs.reduce((s, j) => s + j.honorarios, 0);
   const imposto = jobs.reduce((s, j) => s + j.imposto, 0);
-  const faturamento = jobs.reduce((s, j) => s + j.faturamento, 0);
+  const faturamentoPrevisto = jobs.reduce(
+    (s, j) => s + j.faturamentoPrevisto,
+    0,
+  );
+  const valorJob = jobs.reduce((s, j) => s + j.valorJob, 0);
 
-  const subtotaisPorTipo = TIPOS.reduce<Record<TipoCusto, number>>(
+  const subtotaisPorTipo = TIPOS_CUSTO.reduce<Record<TipoCusto, number>>(
     (acc, t) => {
       acc[t] = jobs.reduce((s, j) => s + j.subtotaisPorTipo[t], 0);
       return acc;
     },
-    { A: 0, B: 0, C: 0, D: 0 },
+    Object.fromEntries(TIPOS_CUSTO.map((t) => [t, 0])) as Record<
+      TipoCusto,
+      number
+    >,
   );
 
   const temRealizado = totalRealizado > 0;
@@ -342,7 +351,7 @@ export function ProjetoTotaisCard({
             Fechamento do orçado · por tipo de custo
           </p>
           <div className="flex flex-col gap-1.5">
-            {TIPOS.map((t) => (
+            {TIPOS_CUSTO.map((t) => (
               <LinhaValor
                 key={t}
                 rotulo={tipoCustoLabel(t)}
@@ -372,10 +381,19 @@ export function ProjetoTotaisCard({
               }
               valor={formatCurrency(imposto, moeda)}
             />
+            {/* Os dois fechamentos: o que a California emite nota e o que o
+                cliente se compromete a gastar no total. Diferem pelos
+                principais pagos direto ao fornecedor (A · Direto, D e F). */}
             <div className="mt-3 flex items-baseline justify-between gap-3 border-t border-border pt-3.5">
               <span className="text-sm font-semibold">Faturamento previsto</span>
               <span className="whitespace-nowrap font-mono text-lg font-bold text-california-red">
-                {formatCurrency(faturamento, moeda)}
+                {formatCurrency(faturamentoPrevisto, moeda)}
+              </span>
+            </div>
+            <div className="flex items-baseline justify-between gap-3 pt-1">
+              <span className="text-sm font-semibold">Valor do Job</span>
+              <span className="whitespace-nowrap font-mono text-lg font-bold text-foreground">
+                {formatCurrency(valorJob, moeda)}
               </span>
             </div>
             <p className="mt-2.5 text-[11.5px] text-muted-foreground">
@@ -386,7 +404,7 @@ export function ProjetoTotaisCard({
         </div>
 
         <PainelResultado
-          faturamento={faturamento}
+          valorJob={valorJob}
           imposto={imposto}
           orcado={totalOrcado}
           custoPlanejado={totalPlanejado}
@@ -396,23 +414,7 @@ export function ProjetoTotaisCard({
         />
       </div>
 
-      <div className="flex items-start gap-2 border-t border-border bg-muted/40 px-6 py-4 text-xs leading-relaxed text-muted-foreground">
-        <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-        <p>
-          <strong className="text-foreground">Honorários</strong> sobre A + B + D
-          · <strong className="text-foreground">Impostos</strong> sobre B + C +
-          honorários em <em>gross-up</em> ·{" "}
-          <strong className="text-foreground">Faturamento</strong> = custos +
-          honorários + impostos ·{" "}
-          <strong className="text-foreground">Resultado operacional</strong> =
-          faturamento − impostos − custo (planejado ou realizado) ·{" "}
-          <strong className="text-foreground">Resultado geral</strong> =
-          resultado operacional ÷ faturamento · Os percentuais de{" "}
-          <strong className="text-foreground">honorários</strong> e{" "}
-          <strong className="text-foreground">impostos</strong> no fechamento
-          são a média das taxas dos jobs deste projeto.
-        </p>
-      </div>
+      <LegendaFechamento custo="custo (planejado ou realizado)" />
     </div>
   );
 }

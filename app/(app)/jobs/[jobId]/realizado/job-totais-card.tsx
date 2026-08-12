@@ -1,19 +1,20 @@
-import { Calculator, Info } from "lucide-react";
+import { Calculator } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import {
   calcularTotaisVersao,
   calcularTotaisPlanejados,
   calcularTotaisRealizado,
   calcularRentabilidade,
+  TIPOS_CUSTO,
 } from "@/lib/calculos/versao-totais";
 import {
   agregarRentabilidadePorProjeto,
   type JobParaAgregar,
 } from "@/lib/calculos/projeto-totais";
 import { PainelResultado } from "@/components/painel-resultado";
+import { LegendaFechamento } from "@/components/legenda-fechamento";
 import {
   tipoCustoLabel,
-  type TipoCusto,
   type VersaoOrcamentoGrupo,
   type ItemPlanilhaJob,
   type JobItemRealizado,
@@ -35,8 +36,6 @@ interface Props {
   percentualImposto: number;
   moeda: string;
 }
-
-const TIPOS: TipoCusto[] = ["A", "B", "C", "D"];
 
 function formatarPercentual(p: number): string {
   return `${p.toFixed(1).replace(".", ",")}%`;
@@ -121,8 +120,14 @@ export function JobTotaisCard({
   percentualImposto,
   moeda,
 }: Props) {
-  const { subtotaisPorTipo, subtotalGeral, honorarios, imposto, faturamento } =
-    calcularTotaisVersao(itens, percentualHonorarios, percentualImposto);
+  const {
+    subtotaisPorTipo,
+    subtotalGeral,
+    honorarios,
+    imposto,
+    faturamentoPrevisto,
+    valorJob,
+  } = calcularTotaisVersao(itens, percentualHonorarios, percentualImposto);
 
   const { totalPlanejado } = calcularTotaisPlanejados(itens);
 
@@ -340,7 +345,7 @@ export function JobTotaisCard({
             Fechamento do orçado · por tipo de custo
           </p>
           <div className="flex flex-col gap-1.5">
-            {TIPOS.map((t) => (
+            {TIPOS_CUSTO.map((t) => (
               <LinhaValor
                 key={t}
                 rotulo={tipoCustoLabel(t)}
@@ -362,19 +367,28 @@ export function JobTotaisCard({
               rotulo={`Impostos (${formatarTaxa(percentualImposto)})`}
               valor={formatCurrency(imposto, moeda)}
             />
+            {/* Os dois fechamentos: o que a California emite nota e o que o
+                cliente se compromete a gastar no total. Diferem pelos
+                principais pagos direto ao fornecedor (A · Direto, D e F). */}
             <div className="mt-3 flex items-baseline justify-between gap-3 border-t border-border pt-3.5">
               <span className="text-sm font-semibold">
                 Faturamento previsto
               </span>
               <span className="whitespace-nowrap font-mono text-lg font-bold text-california-red">
-                {formatCurrency(faturamento, moeda)}
+                {formatCurrency(faturamentoPrevisto, moeda)}
+              </span>
+            </div>
+            <div className="flex items-baseline justify-between gap-3 pt-1">
+              <span className="text-sm font-semibold">Valor do Job</span>
+              <span className="whitespace-nowrap font-mono text-lg font-bold text-foreground">
+                {formatCurrency(valorJob, moeda)}
               </span>
             </div>
           </div>
         </div>
 
         <PainelResultado
-          faturamento={faturamento}
+          valorJob={valorJob}
           imposto={imposto}
           orcado={subtotalGeral}
           custoPlanejado={totalPlanejado}
@@ -385,20 +399,7 @@ export function JobTotaisCard({
         />
       </div>
 
-      <div className="flex items-start gap-2 border-t border-border bg-muted/40 px-6 py-4 text-xs leading-relaxed text-muted-foreground">
-        <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-        <p>
-          <strong className="text-foreground">Honorários</strong> sobre A + B + D
-          · <strong className="text-foreground">Impostos</strong> sobre B + C +
-          honorários em <em>gross-up</em> ·{" "}
-          <strong className="text-foreground">Faturamento</strong> = custos +
-          honorários + impostos ·{" "}
-          <strong className="text-foreground">Resultado operacional</strong> =
-          faturamento − impostos − custo (planejado ou realizado) ·{" "}
-          <strong className="text-foreground">Resultado geral</strong> =
-          resultado operacional ÷ faturamento.
-        </p>
-      </div>
+      <LegendaFechamento custo="custo (planejado ou realizado)" />
     </div>
   );
 }

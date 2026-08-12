@@ -1,11 +1,13 @@
 import { cn, formatCurrency } from "@/lib/utils";
 
 interface Props {
-  /** Custos + honorários + impostos — o que o cliente paga. */
-  faturamento: number;
+  /** O que a California emite nota. */
+  faturamentoPrevisto: number;
+  /** Compromisso total do cliente — base do resultado. */
+  valorJob: number;
   /** Soma do planejado dos itens: o desembolso esperado da agência. */
   custoPlanejado: number;
-  /** Resultado operacional ÷ faturamento. `null` = planejado não lançado. */
+  /** Resultado operacional ÷ valor do job. `null` = planejado não lançado. */
   resultadoGeral: number | null;
   moeda: string;
 }
@@ -16,7 +18,8 @@ interface Props {
  * de Totais. Os números vêm dos mesmos cálculos daquele card.
  */
 export function ResumoRentabilidade({
-  faturamento,
+  faturamentoPrevisto,
+  valorJob,
   custoPlanejado,
   resultadoGeral,
   moeda,
@@ -27,7 +30,13 @@ export function ResumoRentabilidade({
     <div className="flex divide-x divide-border rounded-xl border border-border bg-card shadow-soft">
       <Bloco label="Faturamento previsto">
         <span className="font-mono text-base font-bold text-foreground">
-          {formatCurrency(faturamento, moeda)}
+          {formatCurrency(faturamentoPrevisto, moeda)}
+        </span>
+      </Bloco>
+
+      <Bloco label="Valor do Job">
+        <span className="font-mono text-base font-bold text-foreground">
+          {formatCurrency(valorJob, moeda)}
         </span>
       </Bloco>
 

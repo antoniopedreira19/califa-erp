@@ -56,6 +56,7 @@ import {
   type ParametrosVersao,
 } from "../../_rascunho/tipos";
 import { salvarAlteracoesDoProjeto } from "./actions";
+import { aceitaBV } from "@/lib/calculos/versao-totais";
 
 interface Props {
   projeto: {
@@ -82,7 +83,6 @@ interface Props {
 }
 
 /** Tipos em que o cliente paga o fornecedor direto — os únicos com BV. */
-const TIPOS_COM_BV: string[] = ["A", "D"];
 
 type Modal =
   | { tipo: "form" }
@@ -309,7 +309,7 @@ export function EditorAgregado({
           const atualizado = { ...item, [campo]: parsed.data } as ItemRascunho;
           if (
             campo === "tipo_custo" &&
-            !TIPOS_COM_BV.includes(String(parsed.data))
+            !aceitaBV(String(parsed.data))
           ) {
             atualizado.bv = null;
           }
@@ -384,7 +384,7 @@ export function EditorAgregado({
       salvar: async (itemId, formData) => {
         const alvo = acharItem(itemId);
         if (!alvo) return { ok: false, message: "Item não encontrado." };
-        if (!TIPOS_COM_BV.includes(alvo.tipo_custo)) {
+        if (!aceitaBV(alvo.tipo_custo)) {
           return {
             ok: false,
             message: "BV só pode ser lançado em item de custo tipo A ou D.",
@@ -432,7 +432,8 @@ export function EditorAgregado({
         planejado: t.planejado,
         honorarios: t.honorarios,
         imposto: t.imposto,
-        faturamento: t.faturamento,
+        faturamentoPrevisto: t.faturamentoPrevisto,
+        valorJob: t.valorJob,
         subtotaisPorTipo: t.subtotaisPorTipo,
         percentualHonorarios: t.percentualHonorarios,
         percentualImposto: orc.parametros.percentual_imposto,
@@ -462,14 +463,15 @@ export function EditorAgregado({
 
   const resumo = linhasTotais.reduce(
     (acc, l) => ({
-      faturamento: acc.faturamento + l.faturamento,
+      faturamentoPrevisto: acc.faturamentoPrevisto + l.faturamentoPrevisto,
+      valorJob: acc.valorJob + l.valorJob,
       imposto: acc.imposto + l.imposto,
       planejado: acc.planejado + l.planejado,
     }),
-    { faturamento: 0, imposto: 0, planejado: 0 },
+    { faturamentoPrevisto: 0, valorJob: 0, imposto: 0, planejado: 0 },
   );
   const { resultadoGeral } = calcularResultadoOperacional(
-    resumo.faturamento,
+    resumo.valorJob,
     resumo.imposto,
     resumo.planejado,
   );
@@ -633,7 +635,8 @@ export function EditorAgregado({
           </div>
 
           <ResumoRentabilidade
-            faturamento={resumo.faturamento}
+            faturamentoPrevisto={resumo.faturamentoPrevisto}
+            valorJob={resumo.valorJob}
             custoPlanejado={resumo.planejado}
             resultadoGeral={resultadoGeral}
             moeda={moedaProjeto}

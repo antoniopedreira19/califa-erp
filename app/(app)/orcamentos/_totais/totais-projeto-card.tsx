@@ -1,9 +1,13 @@
 "use client";
 
-import { Calculator, Info } from "lucide-react";
+import { Calculator } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
-import { calcularRentabilidade } from "@/lib/calculos/versao-totais";
+import {
+  calcularRentabilidade,
+  TIPOS_CUSTO,
+} from "@/lib/calculos/versao-totais";
 import { PainelResultado } from "@/components/painel-resultado";
+import { LegendaFechamento } from "@/components/legenda-fechamento";
 import { tipoCustoLabel, type TipoCusto } from "@/lib/types";
 import {
   ColunasFixas,
@@ -16,8 +20,6 @@ import {
   FAIXA_ROTULO,
   RENTAB_VALOR,
 } from "@/app/(app)/_planilha/blocos";
-
-const TIPOS: TipoCusto[] = ["A", "B", "C", "D"];
 
 /**
  * Uma linha do consolidado: o fechamento de UM orçamento de job, já
@@ -37,7 +39,10 @@ export interface LinhaTotaisProjeto {
   planejado: number;
   honorarios: number;
   imposto: number;
-  faturamento: number;
+  /** O que a California emite nota neste orçamento. */
+  faturamentoPrevisto: number;
+  /** Compromisso total do cliente neste orçamento. */
+  valorJob: number;
   subtotaisPorTipo: Record<TipoCusto, number>;
   percentualHonorarios: number;
   percentualImposto: number;
@@ -63,14 +68,21 @@ export function TotaisProjetoCard({ linhas, moeda, descricao }: Props) {
   const totalPlanejado = linhas.reduce((s, l) => s + l.planejado, 0);
   const honorarios = linhas.reduce((s, l) => s + l.honorarios, 0);
   const imposto = linhas.reduce((s, l) => s + l.imposto, 0);
-  const faturamento = linhas.reduce((s, l) => s + l.faturamento, 0);
+  const faturamentoPrevisto = linhas.reduce(
+    (s, l) => s + l.faturamentoPrevisto,
+    0,
+  );
+  const valorJob = linhas.reduce((s, l) => s + l.valorJob, 0);
 
-  const subtotaisPorTipo = TIPOS.reduce<Record<TipoCusto, number>>(
+  const subtotaisPorTipo = TIPOS_CUSTO.reduce<Record<TipoCusto, number>>(
     (acc, t) => {
       acc[t] = linhas.reduce((s, l) => s + l.subtotaisPorTipo[t], 0);
       return acc;
     },
-    { A: 0, B: 0, C: 0, D: 0 },
+    Object.fromEntries(TIPOS_CUSTO.map((t) => [t, 0])) as Record<
+      TipoCusto,
+      number
+    >,
   );
 
   // Cada orçamento tem as suas taxas — a planilha importada traz o % que
@@ -305,7 +317,7 @@ export function TotaisProjetoCard({ linhas, moeda, descricao }: Props) {
             Fechamento do orçado · por tipo de custo
           </p>
           <div className="flex flex-col gap-1.5">
-            {TIPOS.map((t) => (
+            {TIPOS_CUSTO.map((t) => (
               <LinhaValor
                 key={t}
                 rotulo={tipoCustoLabel(t)}
@@ -335,10 +347,19 @@ export function TotaisProjetoCard({ linhas, moeda, descricao }: Props) {
               }
               valor={formatCurrency(imposto, moeda)}
             />
+            {/* Os dois fechamentos: o que a California emite nota e o que o
+                cliente se compromete a gastar no total. Diferem pelos
+                principais pagos direto ao fornecedor (A · Direto, D e F). */}
             <div className="mt-3 flex items-baseline justify-between gap-3 border-t border-border pt-3.5">
               <span className="text-sm font-semibold">Faturamento previsto</span>
               <span className="whitespace-nowrap font-mono text-lg font-bold text-california-red">
-                {formatCurrency(faturamento, moeda)}
+                {formatCurrency(faturamentoPrevisto, moeda)}
+              </span>
+            </div>
+            <div className="flex items-baseline justify-between gap-3 pt-1">
+              <span className="text-sm font-semibold">Valor do Job</span>
+              <span className="whitespace-nowrap font-mono text-lg font-bold text-foreground">
+                {formatCurrency(valorJob, moeda)}
               </span>
             </div>
             {taxasDivergem && (
@@ -352,7 +373,7 @@ export function TotaisProjetoCard({ linhas, moeda, descricao }: Props) {
         </div>
 
         <PainelResultado
-          faturamento={faturamento}
+          valorJob={valorJob}
           imposto={imposto}
           orcado={totalOrcado}
           custoPlanejado={totalPlanejado}
@@ -364,19 +385,8 @@ export function TotaisProjetoCard({ linhas, moeda, descricao }: Props) {
         />
       </div>
 
-      <div className="flex items-start gap-2 rounded-b-2xl border-t border-border bg-muted/40 px-6 py-4 text-xs leading-relaxed text-muted-foreground">
-        <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-        <p>
-          <strong className="text-foreground">Honorários</strong> sobre A + B + D
-          · <strong className="text-foreground">Impostos</strong> sobre B + C +
-          honorários em <em>gross-up</em> ·{" "}
-          <strong className="text-foreground">Faturamento</strong> = custos +
-          honorários + impostos ·{" "}
-          <strong className="text-foreground">Resultado operacional</strong> =
-          faturamento − impostos − custo planejado ·{" "}
-          <strong className="text-foreground">Resultado geral</strong> =
-          resultado operacional ÷ faturamento.
-        </p>
+      <div className="overflow-hidden rounded-b-2xl">
+        <LegendaFechamento />
       </div>
     </div>
   );

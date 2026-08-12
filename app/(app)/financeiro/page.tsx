@@ -48,10 +48,10 @@ export default async function CentralFinanceiraPage() {
 
       <div className="grid gap-4 md:grid-cols-2">
         <FinanceiroCard
-          href="/financeiro/jobs-aguardando-abertura"
+          href="/financeiro/abertura-de-job"
           icon={Clock}
-          title="Jobs Aguardando Abertura"
-          description="Aprove ou rejeite a abertura dos jobs recém-criados pelos GPs."
+          title="Abertura de Job"
+          description="Confira os jobs enviados pela produção e complete o registro financeiro para abri-los."
           count={aguardandoCount ?? 0}
         />
         <FinanceiroCard

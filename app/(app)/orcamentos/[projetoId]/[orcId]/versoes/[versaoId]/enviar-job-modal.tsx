@@ -83,7 +83,10 @@ interface Props {
   clienteNome: string;
   codigoJob: string;
   versaoLabel: string;
+  /** Valor do Job — o que vai para `jobs.valor_total`. */
   valorTotal: number;
+  /** O que a California emite nota nesta versão. */
+  faturamentoPrevisto: number;
   moeda: string;
 
   herdados: HerdadosJob;
@@ -106,6 +109,7 @@ export function EnviarJobModal({
   codigoJob,
   versaoLabel,
   valorTotal,
+  faturamentoPrevisto,
   moeda,
   herdados,
   fieldErrors,
@@ -266,16 +270,22 @@ export function EnviarJobModal({
             <Travado valor={herdados.produtorNome ?? "— não informado"} />
           </Campo>
           <div className="md:col-span-1" />
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-muted/40 px-4 py-3 md:col-span-3">
-            <div>
-              <p className="text-sm font-semibold">Valor total do Job</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                Faturamento previsto da versão {versaoLabel}
-              </p>
+          <div className="rounded-xl border border-border bg-muted/40 px-4 py-3 md:col-span-3">
+            <p className="text-xs text-muted-foreground">
+              Fechamento da versão {versaoLabel}
+            </p>
+            <div className="mt-2 flex flex-wrap items-baseline justify-between gap-3">
+              <p className="text-sm font-semibold">Faturamento previsto</p>
+              <span className="whitespace-nowrap font-mono text-lg font-bold text-california-red">
+                {formatCurrency(faturamentoPrevisto, moeda)}
+              </span>
             </div>
-            <span className="whitespace-nowrap font-mono text-2xl font-bold text-california-red">
-              {formatCurrency(valorTotal, moeda)}
-            </span>
+            <div className="mt-1.5 flex flex-wrap items-baseline justify-between gap-3 border-t border-border pt-2">
+              <p className="text-sm font-semibold">Valor total do Job</p>
+              <span className="whitespace-nowrap font-mono text-2xl font-bold text-foreground">
+                {formatCurrency(valorTotal, moeda)}
+              </span>
+            </div>
           </div>
 
           {/* Linha 6 — observações, linha inteira. */}

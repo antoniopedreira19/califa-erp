@@ -21,6 +21,7 @@ export interface JobRow {
   nome: string;
   status: JobStatus;
   valor_total: number | null;
+  faturamento_previsto: number | null;
   data_inicio_prevista: string | null;
   projeto_id: string;
   projeto_codigo: string | null;
@@ -74,6 +75,7 @@ interface GrupoProjeto {
   cliente: string | null;
   jobs: JobRow[];
   total: number;
+  totalFaturamento: number;
   aberto: boolean;
 }
 
@@ -141,6 +143,10 @@ export function JobsList({
         cliente: primeiro.cliente_nome,
         jobs: visiveis,
         total: visiveis.reduce((s, j) => s + (j.valor_total ?? 0), 0),
+        totalFaturamento: visiveis.reduce(
+          (s, j) => s + (j.faturamento_previsto ?? 0),
+          0,
+        ),
         // Com filtro ativo o grupo abre sempre: fechado ele esconderia
         // justamente o job que o filtro encontrou.
         aberto: filtroAtivo ? true : !fechadosIds.has(projetoId),
@@ -238,6 +244,9 @@ export function JobsList({
               <th className="px-4 py-3 font-semibold">Cliente</th>
               <th className="px-4 py-3 font-semibold">Responsável</th>
               <th className="px-4 py-3 font-semibold">Início</th>
+              <th className="px-4 py-3 text-right font-semibold">
+                Faturamento previsto
+              </th>
               <th className="px-4 py-3 text-right font-semibold">Valor total</th>
               <th className="px-4 py-3 font-semibold">Status</th>
             </tr>
@@ -261,7 +270,7 @@ export function JobsList({
                     g.aberto ? "bg-muted/90" : "bg-muted/40",
                   )}
                 >
-                  <td colSpan={10} className="p-0">
+                  <td colSpan={11} className="p-0">
                     <div className="grid grid-cols-[32px_1fr_auto_auto_auto] items-center gap-4 py-[11px] pl-2 pr-4">
                       <div className="flex items-center justify-center">
                         <span
@@ -287,6 +296,11 @@ export function JobsList({
                       </div>
                       <span className="whitespace-nowrap text-[11px] font-semibold uppercase tracking-[0.07em] text-muted-foreground">
                         {g.jobs.length === 1 ? "1 job" : `${g.jobs.length} jobs`}
+                      </span>
+                      {/* Faturamento previsto do projeto em cinza, valor do
+                          job em preto — mesma hierarquia do card de Totais. */}
+                      <span className="whitespace-nowrap text-[13px] tabular-nums text-muted-foreground">
+                        {formatMoney(g.totalFaturamento)}
                       </span>
                       <span className="whitespace-nowrap text-[13px] font-bold tabular-nums">
                         {formatMoney(g.total)}
@@ -368,6 +382,9 @@ export function JobsList({
                       </td>
                       <td className="px-4 py-3 text-muted-foreground">
                         {formatDate(j.data_inicio_prevista)}
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-muted-foreground">
+                        {formatMoney(j.faturamento_previsto)}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-right font-semibold tabular-nums">
                         {formatMoney(j.valor_total)}

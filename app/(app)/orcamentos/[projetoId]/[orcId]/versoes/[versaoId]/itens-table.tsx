@@ -49,6 +49,7 @@ import {
   BvActionButton,
   LARGURA_CALHA_BV,
 } from "@/app/(app)/_bv/bv-action-button";
+import { aceitaBV, TIPOS_CUSTO } from "@/lib/calculos/versao-totais";
 
 /** Onde a grade grava.
  *
@@ -117,9 +118,7 @@ type ValorCampo = string | number | null;
 type Overrides = Record<string, Partial<Record<Campo, ValorCampo>>>;
 type CelulaAtiva = { rowId: string; campo: Campo } | null;
 
-const TIPOS: TipoCusto[] = ["A", "B", "C", "D"];
 /** Tipos em que o cliente paga o fornecedor direto — os únicos com BV. */
-const TIPOS_COM_BV: string[] = ["A", "D"];
 /** Radix Select não aceita value="" — sentinela para "sem categoria". */
 const SEM_CATEGORIA = "__nenhuma__";
 const DRAFT_ID = "__draft__";
@@ -477,7 +476,7 @@ export function ItensTable({
    *  usam Pedido de Produção. Usa o valor otimista: mudar o tipo na
    *  célula acende/apaga o botão na hora. */
   const temBv = (item: VersaoOrcamentoItem) =>
-    TIPOS_COM_BV.includes(String(valorAtual(item, "tipo_custo")));
+    aceitaBV(String(valorAtual(item, "tipo_custo")));
 
   // Em versão congelada a trilha não some: ela ainda mostra os BVs já
   // lançados, em modo consulta. Sem nenhum BV, não há o que mostrar.
@@ -686,7 +685,7 @@ export function ItensTable({
                       editando={ativaAqui("tipo_custo")}
                       editavel={editavel}
                       valor={String(valorAtual(item, "tipo_custo"))}
-                      opcoes={TIPOS.map((t) => ({
+                      opcoes={TIPOS_CUSTO.map((t) => ({
                         value: t,
                         label: tipoCustoLabel(t),
                       }))}
@@ -1349,7 +1348,7 @@ function LinhaDraft({
         editando={ativaAqui("tipo_custo")}
         editavel
         valor={draft.tipo_custo}
-        opcoes={TIPOS.map((t) => ({ value: t, label: tipoCustoLabel(t) }))}
+        opcoes={TIPOS_CUSTO.map((t) => ({ value: t, label: tipoCustoLabel(t) }))}
         onAtivar={() => onAtivar("tipo_custo")}
         onConfirmar={(v) => onConfirmarTexto("tipo_custo", v)}
         onFechar={onFechar}

@@ -215,8 +215,14 @@ export default async function ProjetoAgregadoPage({
 
     // Mesma função da tela da versão e do card de Totais do job: o
     // fechamento do projeto é a soma dos fechamentos, não uma conta nova.
-    const { subtotaisPorTipo, subtotalGeral, honorarios, imposto, faturamento } =
-      calcularTotaisVersao(
+    const {
+      subtotaisPorTipo,
+      subtotalGeral,
+      honorarios,
+      imposto,
+      faturamentoPrevisto,
+      valorJob,
+    } = calcularTotaisVersao(
         itensDoJob.map((it) => ({
           tipo_custo: it.tipo_custo as TipoCusto,
           total_orcado: num(it.total_orcado),
@@ -241,7 +247,8 @@ export default async function ProjetoAgregadoPage({
       subtotaisPorTipo,
       honorarios,
       imposto,
-      faturamento,
+      faturamentoPrevisto,
+      valorJob,
     };
   });
 
@@ -251,12 +258,19 @@ export default async function ProjetoAgregadoPage({
   // Totais logo abaixo — não existe taxa única do projeto.
   const resumoProjeto = planilhas.reduce(
     (acc, j) => ({
-      faturamento: acc.faturamento + j.faturamento,
+      valorJob: acc.valorJob + j.valorJob,
+      faturamentoPrevisto: acc.faturamentoPrevisto + j.faturamentoPrevisto,
       imposto: acc.imposto + j.imposto,
       planejado: acc.planejado + j.planejado,
       realizado: acc.realizado + j.realizado,
     }),
-    { faturamento: 0, imposto: 0, planejado: 0, realizado: 0 },
+    {
+      valorJob: 0,
+      faturamentoPrevisto: 0,
+      imposto: 0,
+      planejado: 0,
+      realizado: 0,
+    },
   );
 
   const statusMix = jobs.reduce<Record<string, number>>((acc, j) => {
@@ -301,7 +315,8 @@ export default async function ProjetoAgregadoPage({
               Inter. Medido no navegador. */}
           <div className="mt-[24px]">
             <ResumoResultado
-              faturamento={resumoProjeto.faturamento}
+              valorJob={resumoProjeto.valorJob}
+              faturamentoPrevisto={resumoProjeto.faturamentoPrevisto}
               imposto={resumoProjeto.imposto}
               custoPlanejado={resumoProjeto.planejado}
               custoRealizado={resumoProjeto.realizado}
@@ -338,7 +353,7 @@ export default async function ProjetoAgregadoPage({
                 </span>
                 <span className="h-[11px] w-px bg-[#dcdcdc]" />
                 <span className="text-xs tabular-nums text-muted-foreground">
-                  {formatCurrency(j.faturamento, j.moeda)}
+                  {formatCurrency(j.valorJob, j.moeda)}
                 </span>
                 <span
                   className={cn(

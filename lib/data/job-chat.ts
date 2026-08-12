@@ -61,7 +61,7 @@ export interface DadosAberturaChat {
   orcamentoCodigo: string | null;
   versaoNumero: number | null;
   versaoNome: string | null;
-  faturamentoAbertura: number | null;
+  valorJobAbertura: number | null;
   totalOrcado: number;
   qtdItens: number;
   qtdGrupos: number;
@@ -80,10 +80,10 @@ export function montarThreadChat(
 
   // ---- Card de abertura ----
   const linhasAbertura: ChatLinha[] = [];
-  if (abertura.faturamentoAbertura !== null) {
+  if (abertura.valorJobAbertura !== null) {
     linhasAbertura.push({
       texto: "Valor de faturamento na abertura",
-      valor: moeda(abertura.faturamentoAbertura, moedaCode),
+      valor: moeda(abertura.valorJobAbertura, moedaCode),
       tom: "neutro",
     });
   }
@@ -126,8 +126,8 @@ export function montarThreadChat(
     quando: dataHora(abertura.criadoEm),
     resumo: origem,
     valor:
-      abertura.faturamentoAbertura !== null
-        ? moeda(abertura.faturamentoAbertura, moedaCode)
+      abertura.valorJobAbertura !== null
+        ? moeda(abertura.valorJobAbertura, moedaCode)
         : null,
     valorTom: "neutro",
     linhas: linhasAbertura,
@@ -136,7 +136,7 @@ export function montarThreadChat(
 
   // ---- Um card por errata ----
   for (const e of erratas) {
-    const delta = e.faturamento_depois - e.faturamento_antes;
+    const delta = e.valor_job_depois - e.valor_job_antes;
     // Errata que só reclassifica ganha ícone e cor próprios: o valor
     // orçado não mexeu, mas o faturamento sim, e isso confunde quem lê.
     const soTipo =
@@ -154,14 +154,14 @@ export function montarThreadChat(
         : `Valor · ${i.item_nome} ${moeda(i.total_de, moedaCode)} → ${moeda(i.total_para, moedaCode)}`;
       return {
         texto,
-        valor: comSinal(i.efeito_faturamento, moedaCode),
-        tom: i.efeito_faturamento >= 0 ? "positivo" : "negativo",
+        valor: comSinal(i.efeito_valor_job, moedaCode),
+        tom: i.efeito_valor_job >= 0 ? "positivo" : "negativo",
       };
     });
 
     linhas.push({
-      texto: "Novo valor de faturamento",
-      valor: moeda(e.faturamento_depois, moedaCode),
+      texto: "Novo valor do job",
+      valor: moeda(e.valor_job_depois, moedaCode),
       tom: "neutro",
     });
 

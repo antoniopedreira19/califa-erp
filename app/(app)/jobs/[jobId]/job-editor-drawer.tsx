@@ -121,18 +121,6 @@ export function JobEditorDrawer({ job, regionais, responsaveis }: Props) {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="valor_total">Valor Total (R$)</Label>
-                <Input
-                  id="valor_total"
-                  name="valor_total"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  className="no-spinner"
-                  defaultValue={job.valor_total !== null ? job.valor_total.toFixed(2) : ""}
-                />
-              </div>
             </div>
             {error && (
               <div className="flex items-start gap-2 rounded-xl border border-california-red/20 bg-california-red/5 px-4 py-3 text-sm text-california-red">

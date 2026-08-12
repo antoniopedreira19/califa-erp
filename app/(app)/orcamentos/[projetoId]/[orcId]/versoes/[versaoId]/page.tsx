@@ -238,7 +238,7 @@ export default async function VersaoDetailPage({
     0,
   );
   const { resultadoGeral } = calcularResultadoOperacional(
-    totais.faturamento,
+    totais.valorJob,
     totais.imposto,
     custoPlanejado,
   );
@@ -339,7 +339,8 @@ export default async function VersaoDetailPage({
           </div>
 
           <ResumoRentabilidade
-            faturamento={totais.faturamento}
+            faturamentoPrevisto={totais.faturamentoPrevisto}
+            valorJob={totais.valorJob}
             custoPlanejado={custoPlanejado}
             resultadoGeral={resultadoGeral}
             moeda={versao.moeda}
@@ -458,7 +459,8 @@ export default async function VersaoDetailPage({
         qtdGrupos={grupos.length}
         qtdItens={itens.length}
         custoPlanejado={custoPlanejado}
-        faturamento={totais.faturamento}
+        faturamentoPrevisto={totais.faturamentoPrevisto}
+        valorJob={totais.valorJob}
         moeda={versao.moeda}
         clienteNome={clienteNome}
         proximoCodigoJob={proximoCodigoJob}

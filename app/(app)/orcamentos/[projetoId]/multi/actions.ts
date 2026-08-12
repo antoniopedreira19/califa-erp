@@ -15,10 +15,10 @@ import { grupoSchema } from "@/lib/validations/grupos";
 import { itemSchema } from "@/lib/validations/itens";
 import { bvSchema } from "@/lib/validations/bv";
 import type { GrupoPayload, OrcamentoProjetoPayload } from "../../_rascunho/tipos";
+import { aceitaBV } from "@/lib/calculos/versao-totais";
 
 const BUCKET = "orcamento-importacoes";
 /** Tipos em que o cliente paga o fornecedor direto — os únicos com BV. */
-const TIPOS_COM_BV = ["A", "D"];
 
 // ============================================================
 // Salvamento em lote
@@ -202,7 +202,7 @@ export async function salvarOrcamentosDoProjeto(
           };
         }
         if (item.bv) {
-          if (!TIPOS_COM_BV.includes(itemOk.data.tipo_custo)) {
+          if (!aceitaBV(itemOk.data.tipo_custo)) {
             return {
               ok: false,
               message: `${rotulo} · ${item.item}: BV só existe em item de custo tipo A ou D.`,

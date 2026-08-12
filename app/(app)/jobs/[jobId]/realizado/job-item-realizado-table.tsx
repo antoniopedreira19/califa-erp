@@ -32,6 +32,7 @@ import {
   RENTAB_VALOR,
 } from "@/app/(app)/_planilha/blocos";
 import { ColunasJob, LARGURA_MINIMA_JOB } from "@/app/(app)/_planilha/grade-job";
+import { aceitaBV } from "@/lib/calculos/versao-totais";
 
 interface Props {
   jobId: string;
@@ -64,7 +65,6 @@ interface Props {
  *  paga o fornecedor diretamente (há comissão a negociar, não há PP a
  *  emitir); em B e C o custo passa pela California e o que existe é a
  *  PP. A coluna Tipo é quem decide qual botão a linha mostra. */
-const TIPOS_COM_BV: string[] = ["A", "D"];
 
 /** Pílula do BV na calha do job. Mesma linguagem da tela de Orçamentos e
  *  a mesma pílula de Gerar PP / Ver PP, na mesma altura e encostada na
@@ -592,7 +592,7 @@ export function JobItemRealizadoTable({
         >
           {itens.map((item) => {
             // Tipo A/D: a linha negocia BV e nunca emite PP.
-            if (TIPOS_COM_BV.includes(item.tipo_custo)) {
+            if (aceitaBV(item.tipo_custo)) {
               const bv = bvsPorItem[item.id] ?? null;
               // Sem BV num job congelado não há o que consultar — a vaga
               // fica vazia para não desalinhar as linhas de baixo.

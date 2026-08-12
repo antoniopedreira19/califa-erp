@@ -16,6 +16,10 @@ interface Props {
   chat: React.ReactNode;
   /** Mensagens e erratas ainda não lidas por quem está logado. */
   chatCount: number;
+  /** Aba em que a página abre. Usada por quem chega de fora apontando
+   *  para uma seção específica (ex.: "ver planilha interna", vindo da
+   *  conferência do financeiro). Sem isso o link cairia em Informações. */
+  abaInicial?: TabKey;
 }
 
 type TabKey = "info" | "planilha" | "pps" | "chat";
@@ -40,8 +44,9 @@ export function JobTabs({
   ppsChat,
   chat,
   chatCount,
+  abaInicial = "info",
 }: Props) {
-  const [tab, setTab] = React.useState<TabKey>("info");
+  const [tab, setTab] = React.useState<TabKey>(abaInicial);
 
   return (
     <JobTabsContext.Provider value={setTab}>

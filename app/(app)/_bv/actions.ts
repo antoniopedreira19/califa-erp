@@ -6,6 +6,7 @@ import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { bvSchema } from "@/lib/validations/bv";
 import type { BvSituacao, ItemBv } from "@/lib/types";
+import { aceitaBV } from "@/lib/calculos/versao-totais";
 
 export type ActionResult =
   | { ok: true; id?: string }
@@ -26,7 +27,6 @@ export type OrigemBv = "orcamento" | "job";
 /** Tipos de custo em que o cliente paga o fornecedor diretamente — os
  *  únicos em que existe comissão a negociar. B e C passam pela
  *  California e usam Pedido de Produção no lugar do BV. */
-const TIPOS_COM_BV = ["A", "D"];
 
 interface ContextoItem {
   versao_orcamento_id: string;
@@ -107,7 +107,7 @@ async function carregarContexto(
   // mudado o tipo lá, e a versão aprovada não acompanha de propósito.
   // Mesma regra do trigger `bv_exige_item_com_bv`.
   const tipoEfetivo = copiaRes.data?.tipo_custo ?? data.tipo_custo;
-  if (!TIPOS_COM_BV.includes(tipoEfetivo)) {
+  if (!aceitaBV(tipoEfetivo)) {
     return { error: "BV só pode ser lançado em item de custo tipo A ou D." };
   }
 

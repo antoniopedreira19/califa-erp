@@ -13,9 +13,9 @@ import type {
   ParametrosVersao,
 } from "../../_rascunho/tipos";
 import { salvarOrcamentosDoProjeto } from "../multi/actions";
+import { aceitaBV } from "@/lib/calculos/versao-totais";
 
 /** Tipos em que o cliente paga o fornecedor direto — os únicos com BV. */
-const TIPOS_COM_BV = ["A", "D"];
 
 /** Status do orçamento em que a planilha não se altera mais por aqui. */
 const ORCAMENTO_CONGELADO = ["aprovado", "job_criado", "cancelado", "recusado"];
@@ -178,7 +178,7 @@ function validarFormato(alvo: OrcamentoEdicaoPayload): string | null {
         return `${grupo.nome}: ${itemOk.error.errors[0]?.message ?? "item inválido."}`;
       }
       if (item.bv) {
-        if (!TIPOS_COM_BV.includes(itemOk.data.tipo_custo)) {
+        if (!aceitaBV(itemOk.data.tipo_custo)) {
           return `${item.item}: BV só existe em item de custo tipo A ou D.`;
         }
         const bvOk = bvSchema.safeParse(item.bv);

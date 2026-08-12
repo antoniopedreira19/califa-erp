@@ -1,37 +1,124 @@
 import type { TipoCusto, VersaoOrcamentoItem } from "@/lib/types";
 
-const TIPOS: TipoCusto[] = ["A", "B", "C", "D"];
+/**
+ * Regra de cada tipo de custo, como matriz de alavancas.
+ *
+ * As quatro colunas são as únicas perguntas que o fechamento faz sobre um
+ * item. Manter isso como DADO, e não como `if` espalhado, é o que permitiu
+ * subdividir A e F sem reescrever a conta: tipo novo é uma linha a mais.
+ *
+ * Validado contra a planilha oficial "[INT] SJ PEPSI CG - NE - 2026" em
+ * 11/08/2026 — as 5 abas batem em honorários, imposto e valor do job.
+ */
+export interface RegraTipoCusto {
+  /** O principal entra no **faturamento previsto** — o que a California
+   *  emite nota. Falso quando o cliente paga o fornecedor diretamente. */
+  fatura: boolean;
+  /** O principal entra no **valor do job** — o compromisso total do
+   *  cliente, somando o que passa pela agência e o que vai direto. */
+  valorJob: boolean;
+  /** Entra na base de honorários (aplicada sobre o principal). */
+  honorarios: boolean;
+  /** Entra na base de imposto (junto com os honorários, em gross-up). */
+  imposto: boolean;
+}
+
+export const REGRAS_TIPO_CUSTO: Record<TipoCusto, RegraTipoCusto> = {
+  // A · Direto — cliente paga o fornecedor direto; agência fatura só o honorário.
+  A: { fatura: false, valorJob: true, honorarios: true, imposto: false },
+  // A · Repasse — mesmo A, mas o principal passa pela California.
+  AR: { fatura: true, valorJob: true, honorarios: true, imposto: false },
+  // B · Bi-tributação — faturamento via California, imposto sobre o custo.
+  B: { fatura: true, valorJob: true, honorarios: true, imposto: true },
+  // C · Sem honorários — contrato específico; imposto sim, honorário não.
+  C: { fatura: true, valorJob: true, honorarios: false, imposto: true },
+  // D · Interno — direto ao fornecedor e fora até do valor do job.
+  D: { fatura: false, valorJob: false, honorarios: true, imposto: false },
+  // F · Externo — hoje espelha o A · Direto.
+  F: { fatura: false, valorJob: true, honorarios: true, imposto: false },
+  // F · Interno — como o F · Externo, mas sem honorários da agência.
+  FI: { fatura: false, valorJob: true, honorarios: false, imposto: false },
+};
+
+/**
+ * Ordem de exibição dos tipos, igual à do enum no Postgres.
+ *
+ * Tupla literal (e não `Object.keys`) porque `z.enum` exige tupla — assim os
+ * schemas de validação e as telas leem da mesma lista.
+ */
+export const TIPOS_CUSTO = [
+  "A",
+  "AR",
+  "B",
+  "C",
+  "D",
+  "F",
+  "FI",
+] as const satisfies readonly TipoCusto[];
+
+// Guarda de exaustividade: se um tipo novo entrar em `TipoCusto` e alguém
+// esquecer de listá-lo acima, isto para de compilar em vez de sumir das
+// telas silenciosamente.
+type TipoForaDaLista = Exclude<TipoCusto, (typeof TIPOS_CUSTO)[number]>;
+const _todosOsTiposListados: TipoForaDaLista extends never
+  ? true
+  : ["Falta tipo em TIPOS_CUSTO"] = true;
+void _todosOsTiposListados;
+
+/**
+ * Tipos em que o cliente paga o fornecedor diretamente — os únicos que
+ * admitem BV. Espelha o trigger `bv_exige_item_com_bv` no Postgres; mudar
+ * aqui sem mudar lá deixa a tela oferecendo um BV que o banco recusa.
+ *
+ * A · Repasse fica de fora de propósito: nele o dinheiro passa pela
+ * California, então não há comissão direta a negociar. F também não tem BV.
+ */
+export const TIPOS_COM_BV: readonly TipoCusto[] = ["A", "D"];
+
+/** `true` quando o tipo aceita BV. Recebe `string` porque o tipo costuma
+ *  chegar do banco ou de um `<select>` sem narrowing. */
+export function aceitaBV(tipo: string): boolean {
+  return (TIPOS_COM_BV as readonly string[]).includes(tipo);
+}
 
 export interface VersaoTotais {
-  /** Soma dos totais por tipo (chave: A/B/C/D). */
+  /** Soma dos totais por tipo. */
   subtotaisPorTipo: Record<TipoCusto, number>;
-  /** Soma geral de todos os itens (A+B+C+D). */
+  /** Soma geral de todos os itens — o custo, independente de quem fatura. */
   subtotalGeral: number;
-  /** Base sobre a qual incidem honorários (A + B + D). Tipo C fica fora. */
+  /** Base sobre a qual incidem honorários. */
   baseHonorarios: number;
-  /** Base sobre a qual incide o imposto (B + C + Honorários). */
+  /** Base sobre a qual incide o imposto (inclui os honorários). */
   baseImposto: number;
   /** Honorários calculados: baseHonorarios × %honor. */
   honorarios: number;
-  /** Imposto calculado em regime gross-up:
-   *  baseImposto × taxa / (1 − taxa), com taxa = %imp/100. */
+  /** Imposto em regime gross-up: base × taxa / (1 − taxa). */
   imposto: number;
-  /** Faturamento previsto: subtotalGeral + honorários + imposto. */
-  faturamento: number;
+  /**
+   * **Faturamento previsto** — o que a California emite nota.
+   * Só o principal dos tipos com `fatura: true`, mais honorários e imposto.
+   */
+  faturamentoPrevisto: number;
+  /**
+   * **Valor do job** — o compromisso total do cliente, somando o que passa
+   * pela agência e o que ele paga direto ao fornecedor. É o número que a
+   * planilha oficial chama de FATURAMENTO.
+   */
+  valorJob: number;
 }
 
 /**
- * Regra de cálculo da versão do orçamento (valida com o time comercial;
- * revisões futuras podem alterar).
+ * Fechamento da versão do orçamento (e da cópia orçada do job, que tem a
+ * mesma forma).
  *
- * - Honorários incidem sobre (A + B + D). Tipo C fica de fora
- *   (contrato específico do Bruno: sem honorários da agência).
- * - Imposto usa a base (B + C + Honorários), no regime gross-up: a
- *   agência precisa faturar bruto o suficiente para que, depois do
- *   imposto ser descontado, sobre exatamente a base líquida. Fórmula:
- *      imposto = base × taxa / (1 − taxa)
- *   Se %imp = 19,53, então taxa = 0,1953 e o multiplicador é ≈ 0,2427.
- * - Faturamento é a soma dos custos + honorários + imposto.
+ * - **Honorários** incidem sobre os tipos com `honorarios: true`.
+ * - **Imposto** usa (tipos com `imposto: true`) + honorários, em gross-up:
+ *   a agência precisa faturar bruto o bastante para que, depois do imposto
+ *   descontado, sobre exatamente a base líquida —
+ *      imposto = base × taxa / (1 − taxa).
+ *   Com %imp = 19,53 a taxa é 0,1953 e o multiplicador ≈ 0,2427.
+ * - **Faturamento previsto** e **valor do job** compartilham honorários e
+ *   imposto; mudam só em quais principais entram.
  */
 export function calcularTotaisVersao(
   // Aceita tanto o item da versão quanto a cópia orçada do job — as duas
@@ -40,23 +127,34 @@ export function calcularTotaisVersao(
   percentualHonorarios: number,
   percentualImposto: number,
 ): VersaoTotais {
-  const subtotaisPorTipo: Record<TipoCusto, number> = { A: 0, B: 0, C: 0, D: 0 };
+  const subtotaisPorTipo = Object.fromEntries(
+    TIPOS_CUSTO.map((t) => [t, 0]),
+  ) as Record<TipoCusto, number>;
+
   for (const it of itens) {
-    subtotaisPorTipo[it.tipo_custo] =
-      (subtotaisPorTipo[it.tipo_custo] ?? 0) + Number(it.total_orcado ?? 0);
+    // Tipo desconhecido (dado antigo ou enum novo ainda não mapeado) não
+    // pode virar `undefined + n = NaN` e contaminar a tela inteira.
+    if (subtotaisPorTipo[it.tipo_custo] === undefined) continue;
+    subtotaisPorTipo[it.tipo_custo] += Number(it.total_orcado ?? 0);
   }
 
-  const subtotalGeral = TIPOS.reduce((s, t) => s + subtotaisPorTipo[t], 0);
+  const somarOnde = (lever: keyof RegraTipoCusto) =>
+    TIPOS_CUSTO.reduce(
+      (s, t) => (REGRAS_TIPO_CUSTO[t][lever] ? s + subtotaisPorTipo[t] : s),
+      0,
+    );
 
-  const baseHonorarios =
-    subtotaisPorTipo.A + subtotaisPorTipo.B + subtotaisPorTipo.D;
+  const subtotalGeral = TIPOS_CUSTO.reduce(
+    (s, t) => s + subtotaisPorTipo[t],
+    0,
+  );
+
+  const baseHonorarios = somarOnde("honorarios");
   const honorarios = baseHonorarios * (percentualHonorarios / 100);
 
-  const baseImposto = subtotaisPorTipo.B + subtotaisPorTipo.C + honorarios;
+  const baseImposto = somarOnde("imposto") + honorarios;
   const taxa = Math.max(0, Math.min(0.9999, percentualImposto / 100));
   const imposto = taxa > 0 ? (baseImposto * taxa) / (1 - taxa) : 0;
-
-  const faturamento = subtotalGeral + honorarios + imposto;
 
   return {
     subtotaisPorTipo,
@@ -65,52 +163,45 @@ export function calcularTotaisVersao(
     baseImposto,
     honorarios,
     imposto,
-    faturamento,
+    faturamentoPrevisto: somarOnde("fatura") + honorarios + imposto,
+    valorJob: somarOnde("valorJob") + honorarios + imposto,
   };
 }
 
 /**
- * Efeito de UM item no faturamento, quando seu total e/ou tipo de custo
- * mudam por errata.
+ * Efeito de UM item quando seu total e/ou tipo de custo mudam por errata.
  *
- * Honorários e imposto incidem sobre SOMAS, e as duas fórmulas são
- * lineares nelas — então o efeito de cada item é exato e a soma dos
- * efeitos individuais fecha com o delta total da errata. É isso que
- * permite mostrar "efeito no faturamento" linha a linha.
+ * Honorários e imposto incidem sobre SOMAS, e as duas fórmulas são lineares
+ * nelas — então o efeito de cada item é exato e a soma dos efeitos
+ * individuais fecha com o delta total da errata. É isso que permite mostrar
+ * "efeito" linha a linha.
  *
- *   Δcusto      = total_para − total_de
- *   Δbase_honor = parcela A+B+D depois − antes
- *   Δhonorários = Δbase_honor × h
- *   Δbase_imp   = parcela B+C depois − antes + Δhonorários
- *   Δimposto    = Δbase_imp × t / (1 − t)
- *   Δfaturamento = Δcusto + Δhonorários + Δimposto
+ * Devolve os dois números porque a mudança de tipo pode mexer num sem mexer
+ * no outro: trocar A · Direto por A · Repasse move o faturamento previsto e
+ * deixa o valor do job intacto.
  */
-export function calcularEfeitoNoFaturamento(
+export function calcularEfeitoDaMudanca(
   de: { total: number; tipoCusto: TipoCusto },
   para: { total: number; tipoCusto: TipoCusto },
   percentualHonorarios: number,
   percentualImposto: number,
-): number {
-  const entraEmHonorarios = (t: TipoCusto) => t === "A" || t === "B" || t === "D";
-  const entraEmImposto = (t: TipoCusto) => t === "B" || t === "C";
-
+): { faturamentoPrevisto: number; valorJob: number } {
   const h = percentualHonorarios / 100;
   const taxa = Math.max(0, Math.min(0.9999, percentualImposto / 100));
 
-  const deltaCusto = para.total - de.total;
+  const delta = (lever: keyof RegraTipoCusto) =>
+    (REGRAS_TIPO_CUSTO[para.tipoCusto]?.[lever] ? para.total : 0) -
+    (REGRAS_TIPO_CUSTO[de.tipoCusto]?.[lever] ? de.total : 0);
 
-  const deltaBaseHonorarios =
-    (entraEmHonorarios(para.tipoCusto) ? para.total : 0) -
-    (entraEmHonorarios(de.tipoCusto) ? de.total : 0);
-  const deltaHonorarios = deltaBaseHonorarios * h;
-
-  const deltaBaseImposto =
-    (entraEmImposto(para.tipoCusto) ? para.total : 0) -
-    (entraEmImposto(de.tipoCusto) ? de.total : 0) +
-    deltaHonorarios;
+  const deltaHonorarios = delta("honorarios") * h;
+  const deltaBaseImposto = delta("imposto") + deltaHonorarios;
   const deltaImposto = taxa > 0 ? (deltaBaseImposto * taxa) / (1 - taxa) : 0;
+  const comum = deltaHonorarios + deltaImposto;
 
-  return deltaCusto + deltaHonorarios + deltaImposto;
+  return {
+    faturamentoPrevisto: delta("fatura") + comum,
+    valorJob: delta("valorJob") + comum,
+  };
 }
 
 /**
@@ -138,8 +229,6 @@ export function calcularRentabilidade(
  *
  * Retorna `percentualRentabilidade: null` quando não há planejado (não
  * planejado = mostrar travessão em vez de "100%").
- *
- * Fórmula completa (com honor+imposto) fica pra iteração futura.
  */
 export function calcularTotaisPlanejados(
   itens: Array<Pick<VersaoOrcamentoItem, "total_orcado" | "total_planejado">>,
@@ -166,25 +255,31 @@ export function calcularTotaisPlanejados(
 /**
  * Resultado da versão sob a ótica do desembolso esperado pela agência.
  *
- * - Resultado operacional = faturamento − impostos − custo planejado.
- * - Resultado geral = resultado operacional ÷ faturamento (em %).
+ * - Resultado operacional = valor do job − impostos − custo planejado.
+ * - Resultado geral = resultado operacional ÷ valor do job (em %).
+ *
+ * A base é o **valor do job**, não o faturamento previsto: o custo que
+ * entra na conta é o do job inteiro, então a receita também precisa ser a
+ * do job inteiro. Usar o faturamento previsto aqui faria o resultado cair
+ * pelo valor dos custos pagos direto ao fornecedor, que a agência nem
+ * desembolsa (decisão do Tiago em 11/08/2026).
  *
  * Sem planejado lançado a conta não existe: retorna `null` nos dois campos
- * em vez de um número inflado (faturamento inteiro virando "lucro").
+ * em vez de um número inflado (receita inteira virando "lucro").
  *
  * Fonte única do card de Totais e do resumo do cabeçalho da versão.
  */
 export function calcularResultadoOperacional(
-  faturamento: number,
+  valorJob: number,
   imposto: number,
   custoPlanejado: number,
 ): { resultadoOperacional: number | null; resultadoGeral: number | null } {
   if (custoPlanejado <= 0) {
     return { resultadoOperacional: null, resultadoGeral: null };
   }
-  const resultadoOperacional = faturamento - imposto - custoPlanejado;
+  const resultadoOperacional = valorJob - imposto - custoPlanejado;
   const resultadoGeral =
-    faturamento > 0 ? (resultadoOperacional / faturamento) * 100 : null;
+    valorJob > 0 ? (resultadoOperacional / valorJob) * 100 : null;
   return { resultadoOperacional, resultadoGeral };
 }
 

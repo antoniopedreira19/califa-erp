@@ -7,7 +7,9 @@ import { createClient } from "@/lib/supabase/server";
 import { logAuditEvent } from "@/lib/auth/audit";
 import {
   calcularTotaisVersao,
-  calcularEfeitoNoFaturamento,
+  calcularEfeitoDaMudanca,
+  TIPOS_CUSTO,
+  aceitaBV,
 } from "@/lib/calculos/versao-totais";
 import type { TipoCusto } from "@/lib/types";
 
@@ -15,10 +17,9 @@ type Ok = { ok: true; errataId: string };
 type Err = { ok: false; message: string };
 type Result = Ok | Err;
 
-const TIPOS = ["A", "B", "C", "D"] as const;
+const TIPOS = TIPOS_CUSTO;
 
 /** Tipos em que o cliente paga o fornecedor direto — os únicos com BV. */
-const TIPOS_COM_BV: string[] = ["A", "D"];
 
 interface AlvoTroca {
   copiaId: string;
@@ -243,7 +244,7 @@ export async function registrarErrata(
     unitario_para: number;
     total_de: number;
     total_para: number;
-    efeito: number;
+    efeito: { faturamentoPrevisto: number; valorJob: number };
   };
 
   const mudancas: Mudanca[] = [];
@@ -282,7 +283,9 @@ export async function registrarErrata(
       unitario_para: unitarioPara,
       total_de: totalDe,
       total_para: totalPara,
-      efeito: calcularEfeitoNoFaturamento(
+      // Os DOIS efeitos: mudar o tipo pode mexer num sem mexer no outro
+      // (A · Direto -> A · Repasse move só o faturamento previsto).
+      efeito: calcularEfeitoDaMudanca(
         { total: totalDe, tipoCusto: tipoDe },
         { total: totalPara, tipoCusto: tipoPara },
         pctHonorarios,
@@ -347,12 +350,14 @@ export async function registrarErrata(
       titulo,
       justificativa: justificativa?.trim() || null,
       // Duas casas em tudo que é dinheiro: `jobs.valor_total` e
-      // `faturamento_abertura` também são gravados assim, e sem isso o
+      // `valor_job_abertura` também são gravados assim, e sem isso o
       // card de Erratas mostra o mesmo delta com 1 centavo de diferença.
       custo_orcado_antes: dinheiro(antes.subtotalGeral),
       custo_orcado_depois: dinheiro(depois.subtotalGeral),
-      faturamento_antes: dinheiro(antes.faturamento),
-      faturamento_depois: dinheiro(depois.faturamento),
+      valor_job_antes: dinheiro(antes.valorJob),
+      valor_job_depois: dinheiro(depois.valorJob),
+      faturamento_previsto_antes: dinheiro(antes.faturamentoPrevisto),
+      faturamento_previsto_depois: dinheiro(depois.faturamentoPrevisto),
       created_by: session.profile.id,
     })
     .select("id")
@@ -378,7 +383,8 @@ export async function registrarErrata(
         valor_unitario_para: m.unitario_para,
         total_de: dinheiro(m.total_de),
         total_para: dinheiro(m.total_para),
-        efeito_faturamento: dinheiro(m.efeito),
+        efeito_valor_job: dinheiro(m.efeito.valorJob),
+        efeito_faturamento_previsto: dinheiro(m.efeito.faturamentoPrevisto),
       })),
     );
 
@@ -418,7 +424,7 @@ export async function registrarErrata(
   // fornecedor direto e o BV continua válido.
   const perderamBv = mudancas.filter(
     (m) =>
-      TIPOS_COM_BV.includes(m.tipo_de) && !TIPOS_COM_BV.includes(m.tipo_para),
+      aceitaBV(m.tipo_de) && !aceitaBV(m.tipo_para),
   );
 
   for (const m of perderamBv) {
@@ -453,10 +459,15 @@ export async function registrarErrata(
     }
   }
 
-  // Faturamento previsto do job acompanha o orçado.
+  // `jobs.valor_total` é o Valor do Job; os dois números acompanham o
+  // orçado e precisam andar juntos, senão a listagem mostra um par que não
+  // fecha com a planilha do job.
   await supabase
     .from("jobs")
-    .update({ valor_total: Number(depois.faturamento.toFixed(2)) })
+    .update({
+      valor_total: Number(depois.valorJob.toFixed(2)),
+      faturamento_previsto: Number(depois.faturamentoPrevisto.toFixed(2)),
+    })
     .eq("id", jobId)
     .eq("tenant_id", session.activeTenant.id);
 
@@ -469,8 +480,10 @@ export async function registrarErrata(
       errata_id: errata.id,
       titulo,
       itens_alterados: mudancas.length,
-      faturamento_antes: antes.faturamento,
-      faturamento_depois: depois.faturamento,
+      valor_job_antes: antes.valorJob,
+      valor_job_depois: depois.valorJob,
+      faturamento_previsto_antes: antes.faturamentoPrevisto,
+      faturamento_previsto_depois: depois.faturamentoPrevisto,
     },
   });
 

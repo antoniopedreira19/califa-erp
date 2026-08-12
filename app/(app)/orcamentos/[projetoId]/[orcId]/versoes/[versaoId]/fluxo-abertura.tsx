@@ -47,7 +47,10 @@ interface Props {
   qtdGrupos: number;
   qtdItens: number;
   custoPlanejado: number;
-  faturamento: number;
+  /** O que a California emite nota. */
+  faturamentoPrevisto: number;
+  /** Compromisso total do cliente — é o que vai para `jobs.valor_total`. */
+  valorJob: number;
   moeda: string;
 
   clienteNome: string;
@@ -73,7 +76,8 @@ export function FluxoAbertura({
   qtdGrupos,
   qtdItens,
   custoPlanejado,
-  faturamento,
+  faturamentoPrevisto,
+  valorJob,
   moeda,
   clienteNome,
   proximoCodigoJob,
@@ -207,7 +211,11 @@ export function FluxoAbertura({
               <span className="text-xs text-muted-foreground">
                 Faturamento previsto{" "}
                 <span className="font-mono font-semibold text-foreground">
-                  {formatCurrency(faturamento, moeda)}
+                  {formatCurrency(faturamentoPrevisto, moeda)}
+                </span>{" "}
+                · Valor do Job{" "}
+                <span className="font-mono font-semibold text-foreground">
+                  {formatCurrency(valorJob, moeda)}
                 </span>{" "}
                 · alterações salvas automaticamente
               </span>
@@ -303,7 +311,15 @@ export function FluxoAbertura({
                   Faturamento previsto
                 </span>
                 <span className="font-mono text-[13px] font-semibold text-foreground">
-                  {formatCurrency(faturamento, moeda)}
+                  {formatCurrency(faturamentoPrevisto, moeda)}
+                </span>
+              </span>
+              <span className="flex items-baseline justify-between gap-3">
+                <span className="text-[13px] text-muted-foreground">
+                  Valor do Job
+                </span>
+                <span className="font-mono text-[13px] font-semibold text-foreground">
+                  {formatCurrency(valorJob, moeda)}
                 </span>
               </span>
             </span>
@@ -334,7 +350,8 @@ export function FluxoAbertura({
         clienteNome={clienteNome}
         codigoJob={job?.codigo ?? proximoCodigoJob}
         versaoLabel={versaoLabel}
-        valorTotal={faturamento}
+        valorTotal={valorJob}
+        faturamentoPrevisto={faturamentoPrevisto}
         moeda={moeda}
         herdados={herdados}
         fieldErrors={fieldErrors}
@@ -350,7 +367,8 @@ export function FluxoAbertura({
         pending={pending}
         orcamentoCodigo={orcamentoCodigo}
         linhas={resumoEnvio}
-        valorTotal={faturamento}
+        valorTotal={valorJob}
+        faturamentoPrevisto={faturamentoPrevisto}
         moeda={moeda}
         observacoes={dados.observacoes}
         erro={erroGeral}
