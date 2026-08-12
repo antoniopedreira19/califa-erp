@@ -53,6 +53,8 @@ export async function buscarCidades(
 function extractInput(formData: FormData) {
   return {
     nome: formData.get("nome")?.toString() ?? "",
+    cidade_id: formData.get("cidade_id")?.toString() ?? "",
+    regional_id: formData.get("regional_id")?.toString() ?? "",
     data_inicio_prevista: formData.get("data_inicio_prevista")?.toString() ?? "",
     data_fim_prevista: formData.get("data_fim_prevista")?.toString() ?? "",
     data_prevista_faturamento:
@@ -89,7 +91,8 @@ function mapDbError(msg: string): string {
  *   decidida aqui nem em outro lugar;
  * - `valor_total` é recalculado a partir dos itens da versão, nunca vem
  *   do formulário;
- * - nome e datas informados no modal são gravados TAMBÉM no orçamento.
+ * - nome, datas, cidade e regional informados no modal são gravados
+ *   TAMBÉM no orçamento.
  */
 export async function enviarJobParaAbertura(
   versaoId: string,
@@ -132,7 +135,7 @@ export async function enviarJobParaAbertura(
   const { data: orc } = await supabase
     .from("orcamentos")
     .select(
-      "id, status, versao_aprovada_id, projeto_id, regional_id, cidade_id, gp_responsavel_id, produtor_id",
+      "id, status, versao_aprovada_id, projeto_id, gp_responsavel_id, produtor_id",
     )
     .eq("id", versao.orcamento_id)
     .eq("tenant_id", session.activeTenant.id)
@@ -141,8 +144,6 @@ export async function enviarJobParaAbertura(
       status: string;
       versao_aprovada_id: string | null;
       projeto_id: string;
-      regional_id: string | null;
-      cidade_id: string | null;
       gp_responsavel_id: string | null;
       produtor_id: string | null;
     }>();
@@ -168,10 +169,11 @@ export async function enviarJobParaAbertura(
     return { ok: false, message: "Este orçamento já tem um job ativo." };
   }
 
-  // 3. Produto vem do projeto; cidade, regional, GP e produtor vêm do
-  //    orçamento. O formulário só exibe esses valores — reler do banco é
-  //    o que garante que o job grave o que está cadastrado, e não o que
-  //    chegou no payload.
+  // 3. Produto vem do projeto; GP e produtor vêm do orçamento. O
+  //    formulário só exibe esses três — reler do banco é o que garante
+  //    que o job grave o que está cadastrado, e não o que chegou no
+  //    payload. Cidade e regional, ao contrário, o modal deixa trocar:
+  //    vêm do formulário e são conferidas logo abaixo.
   const { data: projeto } = await supabase
     .from("projetos")
     .select("id, cliente_id, produto_id")
@@ -183,8 +185,6 @@ export async function enviarJobParaAbertura(
 
   const faltando: string[] = [];
   if (!projeto.produto_id) faltando.push("Produto (no projeto)");
-  if (!orc.regional_id) faltando.push("Regional (no orçamento)");
-  if (!orc.cidade_id) faltando.push("Cidade (no orçamento)");
   if (!orc.gp_responsavel_id) faltando.push("GP responsável (no orçamento)");
   if (!orc.produtor_id) faltando.push("Produtor responsável (no orçamento)");
 
@@ -195,7 +195,10 @@ export async function enviarJobParaAbertura(
     };
   }
 
-  const [produtoRes, cidadeRes] = await Promise.all([
+  // A regional escolhida precisa estar entre as do projeto — a mesma
+  // regra do formulário do orçamento. A lista do modal já filtra, mas
+  // quem manda o payload não é obrigado a respeitá-la.
+  const [produtoRes, cidadeRes, regionalDoProjetoRes] = await Promise.all([
     supabase
       .from("cliente_produtos")
       .select("id, nome")
@@ -206,9 +209,16 @@ export async function enviarJobParaAbertura(
     supabase
       .from("cidades")
       .select("id, nome")
-      .eq("id", orc.cidade_id!)
+      .eq("id", parsed.data.cidade_id)
       .eq("tenant_id", session.activeTenant.id)
       .maybeSingle<{ id: string; nome: string }>(),
+    supabase
+      .from("projeto_regionais")
+      .select("regional_id")
+      .eq("projeto_id", orc.projeto_id)
+      .eq("regional_id", parsed.data.regional_id)
+      .eq("tenant_id", session.activeTenant.id)
+      .maybeSingle<{ regional_id: string }>(),
   ]);
 
   if (!produtoRes.data) {
@@ -220,7 +230,15 @@ export async function enviarJobParaAbertura(
   if (!cidadeRes.data) {
     return {
       ok: false,
-      message: "A cidade cadastrada no orçamento não existe mais no cadastro. Edite o orçamento.",
+      message: "A cidade escolhida não existe mais no cadastro. Selecione outra.",
+      fieldErrors: { cidade_id: ["Cidade não encontrada no cadastro."] },
+    };
+  }
+  if (!regionalDoProjetoRes.data) {
+    return {
+      ok: false,
+      message: "A regional escolhida não está cadastrada neste projeto. Selecione outra.",
+      fieldErrors: { regional_id: ["Regional não cadastrada no projeto."] },
     };
   }
 
@@ -252,11 +270,14 @@ export async function enviarJobParaAbertura(
     return { ok: false, message: (e as Error).message };
   }
 
-  // 5. Nome e datas voltam para o orçamento, como avisa o modal.
+  // 5. Nome, datas, cidade e regional voltam para o orçamento, como
+  //    avisa o modal — orçamento e job nunca divergem nesses campos.
   const { error: errOrcDados } = await supabase
     .from("orcamentos")
     .update({
       nome: parsed.data.nome,
+      cidade_id: parsed.data.cidade_id,
+      regional_id: parsed.data.regional_id,
       data_inicio_prevista: parsed.data.data_inicio_prevista,
       data_fim_prevista: parsed.data.data_fim_prevista,
     })
@@ -280,7 +301,7 @@ export async function enviarJobParaAbertura(
       versao_orcamento_aprovada_id: versaoId,
       nome: parsed.data.nome,
       produto: produtoRes.data.nome,
-      regional_id: orc.regional_id,
+      regional_id: parsed.data.regional_id,
       cidade: cidadeRes.data.nome,
       data_inicio_prevista: parsed.data.data_inicio_prevista,
       data_fim_prevista: parsed.data.data_fim_prevista,
@@ -386,6 +407,9 @@ export async function enviarJobParaAbertura(
       codigo,
       orcamento_id: orc.id,
       versao_id: versaoId,
+      // Editáveis no modal desde 12/08/2026 — registrar o que foi escolhido.
+      cidade_id: parsed.data.cidade_id,
+      regional_id: parsed.data.regional_id,
       valor_total: Number(totais.valorJob.toFixed(2)),
       faturamento_previsto: Number(totais.faturamentoPrevisto.toFixed(2)),
       data_prevista_faturamento: parsed.data.data_prevista_faturamento,

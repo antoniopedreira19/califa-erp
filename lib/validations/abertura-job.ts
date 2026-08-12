@@ -6,18 +6,25 @@ export const OBSERVACOES_MAX = 500;
 /**
  * Modal "Enviar job para abertura" (handoff "Abertura de Job.dc.html").
  *
- * Só valida o que o modal ainda deixa editar. Desde 06/08/2026 produto,
- * cidade, regional, GP responsável e produtor responsável são herdados —
- * produto vem do projeto, o resto vem do orçamento — e aparecem travados
- * na tela. O servidor relê esses valores do banco em vez de aceitá-los do
- * formulário, então eles não têm campo aqui.
+ * Só valida o que o modal deixa editar. Produto, GP responsável e produtor
+ * responsável continuam herdados — produto vem do projeto, os dois
+ * responsáveis vêm do orçamento — e aparecem travados na tela; o servidor
+ * relê esses valores do banco em vez de aceitá-los do formulário, então
+ * eles não têm campo aqui.
+ *
+ * Cidade e regional voltaram a ser editáveis em 12/08/2026: chegam
+ * pré-preenchidas com o que está no orçamento e, se o usuário trocar, o
+ * valor novo é gravado no job E no orçamento — como já acontece com nome
+ * e datas. A regional escolhida ainda precisa estar cadastrada no projeto;
+ * isso o servidor confere, porque a lista do formulário não é garantia.
  *
  * Não tem `posicao_hierarquia`: não há mais conceito de principal/sub-job.
  *
  * `valor_total` também não está aqui: é recalculado no servidor a partir
  * dos itens da versão aprovada. Valor de faturamento não vem do cliente.
  *
- * Nome e datas são gravados TAMBÉM no orçamento — ver `enviarJobParaAbertura`.
+ * Nome, datas, cidade e regional são gravados TAMBÉM no orçamento — ver
+ * `enviarJobParaAbertura`.
  */
 export const aberturaJobSchema = z
   .object({
@@ -26,6 +33,8 @@ export const aberturaJobSchema = z
       .trim()
       .min(2, "Informe o nome do job (mín. 2 caracteres).")
       .max(200, "Máximo 200 caracteres."),
+    cidade_id: z.string().uuid("Selecione a cidade."),
+    regional_id: z.string().uuid("Selecione a regional."),
     data_inicio_prevista: z
       .string()
       .regex(/^\d{4}-\d{2}-\d{2}$/, "Data de início é obrigatória."),

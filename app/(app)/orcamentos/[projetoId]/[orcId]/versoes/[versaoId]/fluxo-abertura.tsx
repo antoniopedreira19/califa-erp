@@ -58,9 +58,13 @@ interface Props {
   projetoNome: string;
   projetoCodigo: string;
 
-  /** Produto, cidade, regional, GP e produtor: só exibidos. O servidor
-   *  relê tudo do projeto/orçamento na hora de gravar o job. */
+  /** Produto, GP e produtor: só exibidos. O servidor relê os três do
+   *  projeto/orçamento na hora de gravar o job. */
   herdados: HerdadosJob;
+
+  /** Opções de cidade e regional do modal — ver <EnviarJobModal>. */
+  regionaisDoProjeto: { id: string; nome: string }[];
+  cidadesIniciais: { id: string; nome: string }[];
 
   /** Valores que pré-preenchem o modal, vindos do orçamento. */
   inicial: DadosJob;
@@ -84,6 +88,8 @@ export function FluxoAbertura({
   projetoNome,
   projetoCodigo,
   herdados,
+  regionaisDoProjeto,
+  cidadesIniciais,
   inicial,
   job,
 }: Props) {
@@ -142,10 +148,13 @@ export function FluxoAbertura({
     setErroGeral(null);
     setFieldErrors({});
 
-    // Produto, cidade, regional, GP e produtor não vão no payload: o
-    // servidor lê esses valores do projeto e do orçamento.
+    // Produto, GP e produtor não vão no payload: o servidor lê os três
+    // do projeto e do orçamento. Cidade e regional vão, porque o modal
+    // deixa trocá-los — e o servidor confere os dois antes de gravar.
     const formData = new FormData();
     formData.set("nome", dados.nome);
+    formData.set("cidade_id", dados.cidadeId);
+    formData.set("regional_id", dados.regionalId);
     formData.set("data_inicio_prevista", dados.dataInicio);
     formData.set("data_fim_prevista", dados.dataFim);
     formData.set("data_prevista_faturamento", dados.dataFaturamento);
@@ -172,8 +181,12 @@ export function FluxoAbertura({
     { rotulo: "Cliente", valor: clienteNome },
     { rotulo: "Produto", valor: herdados.produtoNome ?? "— não informado" },
     {
+      // O que o usuário escolheu no formulário — não o que estava no
+      // orçamento antes de ele abrir o modal.
       rotulo: "Cidade · Regional",
-      valor: `${herdados.cidadeNome ?? "—"} · ${herdados.regionalNome ?? "—"}`,
+      valor: `${dados.cidadeNome || "—"} · ${
+        regionaisDoProjeto.find((r) => r.id === dados.regionalId)?.nome ?? "—"
+      }`,
     },
     { rotulo: "GP Responsável", valor: herdados.gpNome ?? "— não informado" },
     {
@@ -342,6 +355,8 @@ export function FluxoAbertura({
         faturamentoPrevisto={faturamentoPrevisto}
         moeda={moeda}
         herdados={herdados}
+        regionaisDoProjeto={regionaisDoProjeto}
+        cidadesIniciais={cidadesIniciais}
         fieldErrors={fieldErrors}
         erroGeral={erroGeral}
       />
