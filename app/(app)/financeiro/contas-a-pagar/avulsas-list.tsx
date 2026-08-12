@@ -40,7 +40,7 @@ export interface AvulsaRow {
 // ---------------------------------------------------------------------------
 
 const STATUS_FILTROS: Array<{ key: "todas" | ContaAvulsaStatus; label: string }> = [
-  { key: "pendente", label: "Pendentes" },
+  { key: "aprovada", label: "Aprovadas" },
   { key: "baixada", label: "Baixadas" },
   { key: "todas", label: "Todas" },
 ];
@@ -50,7 +50,7 @@ const STATUS_FILTROS: Array<{ key: "todas" | ContaAvulsaStatus; label: string }>
 // ---------------------------------------------------------------------------
 
 function statusBadgeClass(status: ContaAvulsaStatus): string {
-  return status === "pendente"
+  return status === "aprovada"
     ? "bg-[#fffbeb] text-[#92400e] border-[#fde68a]"
     : "bg-emerald-50 text-emerald-700 border-emerald-200";
 }
@@ -97,7 +97,7 @@ export function ContasAvulsasList({
   regionais,
 }: Props) {
   const [busca, setBusca] = React.useState("");
-  const [statusFiltro, setStatusFiltro] = React.useState<"todas" | ContaAvulsaStatus>("pendente");
+  const [statusFiltro, setStatusFiltro] = React.useState<"todas" | ContaAvulsaStatus>("aprovada");
 
   const filtered = React.useMemo(() => {
     const q = busca.trim().toLowerCase();

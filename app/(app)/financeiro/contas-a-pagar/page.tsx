@@ -238,7 +238,7 @@ export default async function PedidosCompraFinanceiroPage() {
     valor: string | number;
     natureza: "entrada" | "saida";
     data_prevista_pagamento: string | null;
-    status: "pendente" | "baixada";
+    status: "aprovada" | "baixada";
     pago_em: string | null;
     created_at: string;
     fornecedor: { nome: string | null; razao_social: string | null } | null;
