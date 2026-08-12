@@ -5,8 +5,18 @@
 -- Ver spec: docs/superpowers/specs/2026-08-12-aprovacao-financeira-fluxo-caixa-design.md
 -- =====================================================================
 
--- 0. Guarda (rodada antes via execute_sql separado — count = 0)
--- select count(*) from public.contas_avulsas where status::text = 'pendente';
+-- 0. Guarda: aborta se ainda houver registros com pendente
+do $$
+declare v_count integer;
+begin
+  select count(*) into v_count
+    from public.contas_avulsas
+   where status::text = 'pendente';
+  if v_count > 0 then
+    raise exception
+      'Ainda existem % contas avulsas com status=pendente. Migre antes de rodar esta migration.', v_count;
+  end if;
+end $$;
 
 -- 1. Drop views dependentes da coluna status
 drop view if exists public.vw_fluxo_caixa;
