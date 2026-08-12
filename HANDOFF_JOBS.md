@@ -950,7 +950,8 @@ chama de `FATURAMENTO`. Quem é novo é o faturamento previsto, menor.
 
 1. **Card de Totais do job e da agregada do projeto** ganharam a linha "Valor
    do Job" abaixo de "Faturamento previsto". O fechamento por tipo de custo
-   passou a listar sete tipos (`A`, `AR`, `B`, `C`, `D`, `F`, `FI`).
+   passou a listar sete tipos (`A`, `AR`, `B`, `C`, `D`, `F`, `FI`) — **hoje são
+   cinco linhas**, ver a nota de 12/08/2026 no fim da seção.
 2. **`PainelResultado` mudou de base.** A prop `faturamento` virou `valorJob`,
    e `Resultado operacional`/`Resultado geral` calculam sobre ele. O custo
    descontado é o do job inteiro, então a receita comparada precisa ser a do job
@@ -975,6 +976,16 @@ para a linha seguinte**. Revertido no commit `408444b`. A regra que ficou:
 **fora dos cards de Totais, um número só — o Valor do Job.** As exceções, todas
 conversadas com o time, são o card de Erratas (seção 28) e os dois modais do
 envio de job (`HANDOFF_ORCAMENTO.md`, 17.4 item 3).
+
+⚠️ **Fechamento em cinco linhas (2026-08-12).** A pedido do time, o painel
+"Fechamento do orçado · por tipo de custo" soma as subdivisões: `A` + `AR`
+viram **Custo A**, `F` + `FI` viram **Custo F**. Vale para o card do job e o da
+agregada do projeto (e para as duas telas do módulo de Orçamentos). **Só a
+leitura mudou** — a conta continua tipo a tipo em `REGRAS_TIPO_CUSTO`, e nenhum
+total se moveu. A fonte das linhas é `LINHAS_FECHAMENTO_POR_TIPO`
+(`lib/calculos/versao-totais.ts`), com guarda de exaustividade. A legenda do
+rodapé e o XLSX exportado seguem com os tipos separados. Regra completa em
+`docs/decisions/003-tipos-de-custo.md`.
 
 ---
 
