@@ -5,7 +5,8 @@ de negócio tomadas junto com o time durante a execução.
 
 | Parte | Design | Telas | Seções |
 |---|---|---|---|
-| **I** | `Abertura de Job.dc.html` | fila de abertura, conferência, formulário de registro financeiro | 1 a 9 |
+| **I** | `Abertura de Job.dc.html` | fila de abertura, conferência, formulário de registro financeiro | 1 a 10 |
+| **I·rev** | revisão de 12/08 (sem design novo) | previsão de desembolso na calha PP, janelas 08/20, os dois números do fechamento | 11 a 14 |
 
 > Contas a pagar, conciliação e lançamentos financeiros já existiam antes deste
 > documento e não estão registrados aqui.
@@ -183,6 +184,8 @@ apagar `.next` e reiniciar. Ver a mesma armadilha na Entrega 16 do
    `job_status`, cujo fluxo de encerramento está bloqueado em `lib/types.ts`.
 4. ~~**`jobs.observacoes`** grava e nenhuma tela lê~~ — desatualizado: o modal
    de conferência lê desde 11/08 ("Observações da produção").
+5. **Integração da curva com o Fluxo de caixa** — ver seção 14: a tela da
+   task015 ainda não lê `jobs_previsao_custo`.
 
 ---
 
@@ -193,3 +196,114 @@ apagar `.next` e reiniciar. Ver a mesma armadilha na Entrega 16 do
 | `20260811000002_abertura_job_financeiro.sql` | 7 colunas em `jobs`, tabela `jobs_previsao_custo` com RLS + 4 policies + GRANT + índices, escopo `job` em `categorias_dominio` |
 | `20260811000003_categorias_dominio_job_seed.sql` | 5 categorias de job iniciais, idempotente |
 | `20260812000001_previsao_desembolso_calha_pp.sql` | recalcula `custo_previsto_total` dos jobs abertos com a regra da calha PP, apaga curvas de desembolso zero e faz backfill de `faturamento_previsto` nulo |
+
+---
+
+# Revisão de 12/08 — previsão de desembolso, janelas de pagamento e os dois números
+
+**Data:** 2026-08-12
+**Regra de negócio:** `docs/decisions/004-previsao-de-desembolso.md`
+**Origem:** revisão da entrega com o financeiro. Sem design novo — as mudanças
+são de regra, não de layout.
+
+---
+
+## 11. Custo previsto passou a ser só o que a California desembolsa
+
+A primeira versão somava o planejado de **todos** os itens no custo previsto.
+Errado: itens de calha BV (tipos A e D) são pagos pelo cliente direto ao
+fornecedor — esse dinheiro nunca sai do caixa da California e estaria inflando
+o fluxo de caixa com desembolsos que não existem.
+
+**A regra agora:** custo previsto = planejado dos itens de **calha PP**
+(`AR`, `B`, `C`, `F`, `FI`). O planejado dos tipos A e D **continua existindo
+como controle interno da planilha, mas nunca gera previsão de custo** — isso,
+por decisão do financeiro, não muda nem em fase futura.
+
+Onde a regra mora:
+
+| Peça | Papel |
+|---|---|
+| `REGRAS_TIPO_CUSTO.calha` (`lib/calculos/versao-totais.ts`) | campo novo `"PP" \| "BV"`, na mesma matriz das demais regras por tipo — espelha a coluna Calha de `docs/decisions/003` e o trigger `bv_tipo_com_bv` do banco |
+| `tipoGeraDesembolso()` / `TIPOS_CALHA_PP` | helpers derivados; tipo novo com `calha: "PP"` entra sozinho |
+| `dados.ts` → `planilha_desembolso` | agregado separado do `planilha_planejado` (que segue sendo o total, controle interno) |
+| Server Action | relê os itens do banco e refaz a soma com o filtro — não confia no formulário |
+
+**Job 100% A/D abre com custo zero, sem curva e com aviso** ("Nenhum desembolso
+previsto pela California") — é estado legítimo, não erro. A action valida a
+simetria: custo zero exige curva vazia; custo positivo exige curva que some o
+total. A auditoria ganhou `sem_desembolso` no metadata.
+
+Junto com isso, a linha **"Margem prevista" saiu do formulário**: com o custo
+virando só desembolso, ela diria "100% de margem" num job 100% A. Rentabilidade
+tem casa própria (Resultado planejado, na página do job).
+
+---
+
+## 12. Janelas de pagamento e os dois números do fechamento
+
+**Janelas.** A California paga em duas janelas por mês — **dia 08 e dia 20**,
+empurrados para o dia útil seguinte quando caem em fim de semana. As datas da
+curva agora só podem ser janelas: a sugestão automática já nasce nelas, o
+calendário desabilita os demais dias (`DatePicker` ganhou o prop opcional
+`dateDisabled`, aditivo), e a Server Action revalida — regra crítica não
+depende do frontend. A matemática vive em `curva.ts`
+(`proximaJanelaDePagamento`, `ehJanelaDePagamento`, `janelaSeguinte`).
+
+> ⚠️ Feriado ainda não é tratado — não existe calendário de feriados no
+> sistema. Quando existir, o ajuste entra em `ajustarParaDiaUtil`, num lugar só.
+
+**Os dois números.** A conferência, o card "Dados da produção" do formulário e
+o modal de confirmação passaram a mostrar **Faturamento previsto** (vermelho) e
+**Valor total**, na mesma ordem e hierarquia do modal do envio de job — era a
+única tela do fluxo que ainda mostrava um número só. O subtítulo do card "Valor
+total do job", que dizia "Faturamento previsto do orçamento" (verdade até os
+dois números se separarem), virou "Compromisso total do cliente, somando o que
+ele paga direto ao fornecedor".
+
+**`jobs.faturamento_previsto` corrigido nas duas pontas:** o INSERT do envio
+(`abertura-actions.ts`) agora grava a coluna viva — antes só a `_abertura` era
+gravada e todo job nascia nulo; a migration `20260812000001` recalculou os
+nulos com a mesma fórmula determinística do backfill original.
+
+**Abatimento por PP** (para a entrega do fluxo de caixa — as regras já estão
+fechadas em `docs/decisions/004`): a PP é o título; quando um item ganha PP, o
+planejado inteiro daquele item sai da previsão; o consumo é da data mais
+próxima para as seguintes; saldo que passa da data rola para a próxima janela;
+encerramento do job encerra o resíduo. Implementação recomendada e registrada:
+**resíduo calculado na leitura**, nunca reescrevendo a curva da abertura.
+
+---
+
+## 13. Verificação (2026-08-12)
+
+`tsc --noEmit` e `next lint` limpos. Matemática das janelas validada com casos
+reais: 08/08/2026 (sábado) → 10/08; 20/09/2026 (domingo) → 21/09; 21/08 → 08/09.
+
+Fluxo de **desembolso zero** exercitado no navegador até a gravação real,
+abrindo o JOB-0009 (100% tipo A):
+
+| Checagem | Resultado |
+|---|---|
+| Card "Custo previsto total" | R$ 0,00 · "Nenhum item de calha PP" |
+| Bloco da curva | substituído pelo aviso âmbar; sem "Adicionar data" |
+| Rodapé | "Tudo pronto. Este job não tem desembolso previsto pela California — abre sem curva." |
+| Conferência | Faturamento previsto R$ 149,12 (vermelho) + Valor total R$ 1.149,12 |
+| Gravação | `aberto`, Evento, 3T/2026, custo 0,00, **zero** linhas de curva |
+| Auditoria | `job.aberto_no_financeiro` com `sem_desembolso: true` |
+| Migration | JOB-0008 recalculado para custo 0,00 e curva apagada; `faturamento_previsto` do JOB-0009 backfilled (149,12) |
+
+---
+
+## 14. Integração pendente com o Fluxo de caixa (task015)
+
+A task015 (paralela a esta revisão) criou a tela **Fluxo de caixa** sobre a
+view `vw_fluxo_caixa` — que lê PPs, contas avulsas e lançamentos, mas **não lê
+`jobs_previsao_custo`**. Ou seja: o "previsto" daquela tela hoje é título
+emitido, não previsão de abertura.
+
+A integração que falta é exatamente o que `docs/decisions/004` especifica: o
+resíduo da curva (curva − planejado dos itens que já têm PP, consumido na ordem
+das datas, rolado por janela) entra como camada de previsão por cima dos
+títulos. Sem isso, o fluxo de caixa enxerga o desembolso só depois da PP
+existir — some o horizonte entre a abertura do job e a emissão das PPs.
