@@ -609,6 +609,20 @@ export interface Job {
   /** Produtor responsável, herdado do orçamento na abertura. */
   produtor_id: string | null;
   valor_total: number | null;
+  /**
+   * O que a California emite nota: Σ(AR, B, C) + honorários + imposto.
+   * Difere de `valor_total` pelos principais que o cliente paga direto ao
+   * fornecedor (A, D, F). Gravado no envio do job e atualizado por errata.
+   */
+  faturamento_previsto: number | null;
+  /** Valor do job congelado na abertura — base do card de Erratas. */
+  valor_job_abertura: number | null;
+  /** Faturamento previsto congelado na abertura — base do card de Erratas. */
+  faturamento_previsto_abertura: number | null;
+  /** Data prevista para o faturamento, informada no envio do job. */
+  data_prevista_faturamento: string | null;
+  /** Contexto livre da produção, lido no modal de conferência do financeiro. */
+  observacoes: string | null;
   status: JobStatus;
   motivo_rejeicao: string | null;
   /**

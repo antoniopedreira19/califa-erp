@@ -97,7 +97,7 @@ export default async function JobDetailPage({
     supabase
       .from("jobs")
       .select(
-        "id, tenant_id, empresa_id, codigo, nome, produto, cidade, data_inicio_prevista, data_fim_prevista, responsavel_id, produtor_id, valor_total, faturamento_previsto, valor_job_abertura, faturamento_previsto_abertura, status, motivo_rejeicao, projeto_id, orcamento_id, versao_orcamento_aprovada_id, regional_id, created_at, updated_at, responsavel:profiles!responsavel_id(id, nome), regional:regionais(id, nome), orcamento:orcamentos(id, codigo, nome, projeto_id), versao:versoes_orcamento!versao_orcamento_aprovada_id(id, numero_versao, nome, moeda, percentual_honorarios, percentual_imposto), projeto:projetos(id, codigo, nome)",
+        "id, tenant_id, empresa_id, codigo, nome, produto, cidade, data_inicio_prevista, data_fim_prevista, data_prevista_faturamento, observacoes, responsavel_id, produtor_id, valor_total, faturamento_previsto, valor_job_abertura, faturamento_previsto_abertura, status, motivo_rejeicao, projeto_id, orcamento_id, versao_orcamento_aprovada_id, regional_id, created_at, updated_at, responsavel:profiles!responsavel_id(id, nome), regional:regionais(id, nome), orcamento:orcamentos(id, codigo, nome, projeto_id), versao:versoes_orcamento!versao_orcamento_aprovada_id(id, numero_versao, nome, moeda, percentual_honorarios, percentual_imposto), projeto:projetos(id, codigo, nome)",
       )
       .eq("id", params.jobId)
       .eq("tenant_id", session.activeTenant.id)
@@ -382,6 +382,22 @@ export default async function JobDetailPage({
     responsavel_id: raw.responsavel_id,
     produtor_id: raw.produtor_id,
     valor_total: raw.valor_total !== null ? Number(raw.valor_total) : null,
+    faturamento_previsto:
+      raw.faturamento_previsto !== undefined &&
+      raw.faturamento_previsto !== null
+        ? Number(raw.faturamento_previsto)
+        : null,
+    valor_job_abertura:
+      raw.valor_job_abertura !== undefined && raw.valor_job_abertura !== null
+        ? Number(raw.valor_job_abertura)
+        : null,
+    faturamento_previsto_abertura:
+      raw.faturamento_previsto_abertura !== undefined &&
+      raw.faturamento_previsto_abertura !== null
+        ? Number(raw.faturamento_previsto_abertura)
+        : null,
+    data_prevista_faturamento: raw.data_prevista_faturamento ?? null,
+    observacoes: raw.observacoes ?? null,
     status: raw.status,
     motivo_rejeicao: raw.motivo_rejeicao ?? null,
     // Registro financeiro da abertura. Esta página não exibe nenhum
