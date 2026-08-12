@@ -213,11 +213,11 @@ export async function editarContaAvulsa(
     .maybeSingle();
 
   if (!atual) return { ok: false, message: "Conta avulsa não encontrada." };
-  if (atual.status !== "pendente") {
+  if (atual.status !== "aprovada") {
     return {
       ok: false,
       message:
-        "Só conta pendente pode ser editada. Para alterar uma baixada, cancele a baixa antes.",
+        "Só conta aprovada pode ser editada. Para alterar uma baixada, cancele a baixa antes.",
     };
   }
 
@@ -449,7 +449,7 @@ export async function excluirContaAvulsa(
     .maybeSingle();
 
   if (!atual) return { ok: false, message: "Conta avulsa não encontrada." };
-  if (atual.status !== "pendente") {
+  if (atual.status !== "aprovada") {
     return {
       ok: false,
       message:
@@ -545,7 +545,8 @@ export async function darBaixaAvulsa(input: unknown): Promise<Result> {
     .maybeSingle();
 
   if (!atual) return { ok: false, message: "Conta avulsa não encontrada." };
-  if (atual.status !== "aprovada" && atual.status !== "pendente") {
+  // Aceita "pendente" até Task 12 remover o enum — nenhum registro deve ter esse status após Task 2
+  if (atual.status !== "aprovada" && atual.status !== "pendente") { // until Task 12
     return { ok: false, message: "Só avulsa aprovada pode ser baixada." };
   }
 

@@ -299,7 +299,7 @@ export default async function AvulsaDetalhesPage({
               <h1 className="text-2xl font-bold">{c.descricao}</h1>
               <span
                 className={
-                  c.status === "pendente"
+                  c.status === "aprovada"
                     ? "inline-flex items-center rounded-full border border-[#fde68a] bg-[#fffbeb] px-2 py-0.5 text-[10px] font-semibold uppercase text-[#92400e]"
                     : "inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold uppercase text-emerald-700"
                 }
@@ -311,7 +311,7 @@ export default async function AvulsaDetalhesPage({
 
           {/* Botões de ação dependem do status */}
           <div className="flex items-center gap-2">
-            {c.status === "pendente" && (
+            {c.status === "aprovada" && (
               <>
                 <EditarAvulsaButton
                   conta={contaParaDrawer}

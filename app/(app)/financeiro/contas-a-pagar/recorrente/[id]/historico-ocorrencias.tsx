@@ -24,7 +24,7 @@ function formatMoney(n: number): string {
 }
 
 function statusBadge(status: ContaAvulsaStatus): string {
-  return status === "pendente"
+  return status === "aprovada"
     ? "bg-[#fffbeb] text-[#92400e] border-[#fde68a]"
     : "bg-emerald-50 text-emerald-700 border-emerald-200";
 }
