@@ -1277,16 +1277,29 @@ não seja listado em `TIPOS_CUSTO` **para de compilar**.
    logo abaixo de "Faturamento previsto" — vermelho California em cima, preto
    embaixo. O fechamento por tipo de custo passou a listar os sete.
 2. **Cabeçalhos** (`ResumoRentabilidade`, no editor da agregada e do multi)
-   mostram os dois números lado a lado, para não contradizer o card abaixo.
-3. **Fluxo de abertura**: a barra fixa, o pop-up de aprovação e os dois modais
-   (`EnviarJobModal`, `ConfirmarEnvioModal`) mostram os dois. `jobs.valor_total`
-   recebe o **Valor do Job**; `jobs.faturamento_previsto` é novo.
+   mostram **só o Valor do Job** — o bloco que dizia "Faturamento previsto"
+   passou a dizer "Valor do Job", sem ganhar bloco novo.
+3. **Fluxo de abertura**: a barra fixa do rodapé e o pop-up de aprovação
+   mostram **só o Valor do Job**. Os dois modais do envio (`EnviarJobModal`,
+   `ConfirmarEnvioModal`) mostram **os dois**, no quadro "Fechamento da versão"
+   — é a última conferência antes de criar o job, e o time decidiu manter.
+   `jobs.valor_total` recebe o **Valor do Job**; `jobs.faturamento_previsto`
+   é novo.
 4. **A legenda das fórmulas virou componente único**,
    `components/legenda-fechamento.tsx`. Estava copiada em quatro arquivos — o
    mesmo defeito que a Entrega 15 corrigiu nas cores.
 5. **`TIPOS_COM_BV` centralizou** em `versao-totais.ts` como o predicado
    `aceitaBV()`. Estava duplicado em nove arquivos. A regra continua `('A','D')`
    e espelha o trigger `bv_exige_item_com_bv` — A · Repasse e os F não têm BV.
+
+⚠️ **Correção de escopo (2026-08-12).** O pedido do time foi a linha "Valor do
+Job" **nos Totais**. A primeira versão desta entrega estendeu o par de números
+por conta própria para cabeçalhos, barra fixa, KPIs do multi e lista de jobs —
+não foi pedido, e na lista o número a mais **empurrou o botão "Visão agregada"
+para a linha seguinte**. Revertido nos commits `408444b`, `5654c87` e `5a2e24f`.
+A regra que ficou: **fora dos cards de Totais, um número só — o Valor do Job.**
+As exceções, todas conversadas com o time, estão em 17.4 item 3 (os dois modais
+do envio) e no card de Erratas (`HANDOFF_JOBS.md`, seção 28).
 
 ### 17.5 O Excel exportado ao cliente não mudou
 
