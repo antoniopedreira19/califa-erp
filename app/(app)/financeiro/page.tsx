@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Landmark, Clock, ArrowRight, FileText, Receipt, type LucideIcon } from "lucide-react";
+import { Landmark, Clock, ArrowRight, FileText, Receipt, Wallet, TrendingUp, type LucideIcon } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 
@@ -14,7 +14,7 @@ export default async function CentralFinanceiraPage() {
 
   const supabase = createClient();
 
-  const [aguardandoRes, ppsRes] = await Promise.all([
+  const [aguardandoRes, ppsRes, aPagarRes] = await Promise.all([
     supabase
       .from("jobs")
       .select("id", { count: "exact", head: true })
@@ -25,6 +25,10 @@ export default async function CentralFinanceiraPage() {
       .select("id", { count: "exact", head: true })
       .eq("tenant_id", session.activeTenant.id)
       .eq("status", "em_avaliacao"),
+    supabase
+      .from("vw_a_pagar")
+      .select("origem_id", { count: "exact", head: true })
+      .eq("tenant_id", session.activeTenant.id),
   ]);
   const aguardandoCount = aguardandoRes.count;
   const ppsCount = ppsRes.count;
@@ -57,9 +61,22 @@ export default async function CentralFinanceiraPage() {
         <FinanceiroCard
           href="/financeiro/contas-a-pagar"
           icon={FileText}
-          title="Contas a Pagar"
-          description="Pedidos de Compra e lançamentos avulsos aguardando baixa."
+          title="Caixa de entrada"
+          description="Pedidos de Compra aguardando avaliação — aprovar ou rejeitar."
           count={ppsCount ?? 0}
+        />
+        <FinanceiroCard
+          href="/financeiro/a-pagar"
+          icon={Wallet}
+          title="A pagar"
+          description="Aprovados aguardando pagamento — dar baixa quando o dinheiro sair."
+          count={aPagarRes.count ?? 0}
+        />
+        <FinanceiroCard
+          href="/financeiro/fluxo-caixa"
+          icon={TrendingUp}
+          title="Fluxo de caixa"
+          description="Previsto + realizado por dia, semana ou mês, com saldo projetado."
         />
         <FinanceiroCard
           href="/financeiro/conciliacao"
