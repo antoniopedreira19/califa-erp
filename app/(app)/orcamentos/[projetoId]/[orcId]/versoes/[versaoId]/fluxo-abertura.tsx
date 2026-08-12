@@ -304,14 +304,6 @@ export function FluxoAbertura({
               </span>
               <span className="flex items-baseline justify-between gap-3">
                 <span className="text-[13px] text-muted-foreground">
-                  Faturamento previsto
-                </span>
-                <span className="font-mono text-[13px] font-semibold text-foreground">
-                  {formatCurrency(faturamentoPrevisto, moeda)}
-                </span>
-              </span>
-              <span className="flex items-baseline justify-between gap-3">
-                <span className="text-[13px] text-muted-foreground">
                   Valor do Job
                 </span>
                 <span className="font-mono text-[13px] font-semibold text-foreground">
