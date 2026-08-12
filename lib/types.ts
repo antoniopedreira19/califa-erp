@@ -766,12 +766,14 @@ export interface PedidoCompra {
  * volta pra `em_avaliacao`. Por isso o unique parcial por item continua
  * valendo pra ela — quem libera o item é só o cancelamento.
  */
-export type PPStatus = "em_avaliacao" | "pago" | "rejeitada" | "cancelada";
+export type PPStatus = "em_avaliacao" | "aprovada" | "pago" | "rejeitada" | "cancelada";
 
 export function ppStatusLabel(s: PPStatus): string {
   switch (s) {
     case "em_avaliacao":
       return "Em avaliação";
+    case "aprovada":
+      return "Aprovada";
     case "pago":
       return "Pago";
     case "rejeitada":

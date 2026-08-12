@@ -71,6 +71,8 @@ function statusBadgeClasses(status: PPStatus): string {
   switch (status) {
     case "em_avaliacao":
       return "bg-[#fffbeb] text-[#92400e] border-[#fde68a]";
+    case "aprovada":
+      return "bg-blue-50 text-blue-700 border-blue-200";
     case "pago":
       return "bg-emerald-50 text-emerald-700 border-emerald-200";
     case "rejeitada":
