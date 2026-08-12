@@ -68,6 +68,78 @@ export function redistribuirIgualmente(
   return linhas.map((l, i) => ({ ...l, valor: valores[i] ?? 0 }));
 }
 
+// ---------- Janelas de pagamento ----------
+//
+// A California paga em duas janelas por mês: dia 08 e dia 20. Caindo em
+// sábado ou domingo, vale o dia útil seguinte. As datas da curva SÓ podem
+// ser janelas — previsão em data que não é dia de pagamento é fictícia e
+// o fluxo de caixa teria que rolá-la depois (docs/decisions/004).
+//
+// Feriado ainda NÃO é tratado: não existe calendário de feriados no
+// sistema. Quando existir, o ajuste entra aqui, num lugar só.
+
+/** Sábado/domingo (em UTC) empurram para a segunda-feira seguinte. */
+function ajustarParaDiaUtil(ms: number): number {
+  const diaSemana = new Date(ms).getUTCDay();
+  if (diaSemana === 6) return ms + 2 * DIA_MS; // sábado -> segunda
+  if (diaSemana === 0) return ms + DIA_MS; // domingo -> segunda
+  return ms;
+}
+
+/** A janela (dia 08 ou 20 ajustado) de um mês, em ms UTC. */
+function janelaDoMes(ano: number, mesZeroBased: number, dia: 8 | 20): number {
+  return ajustarParaDiaUtil(Date.UTC(ano, mesZeroBased, dia));
+}
+
+/** Primeira janela de pagamento cuja data é >= a data dada. */
+export function proximaJanelaDePagamento(aPartirDeIso: string): string {
+  const base = isoParaUtc(aPartirDeIso);
+  const baseMs = base ?? Date.UTC(1970, 0, 1);
+  const d = new Date(baseMs);
+  const ano = d.getUTCFullYear();
+  const mes = d.getUTCMonth();
+  // As duas janelas deste mês e a primeira do seguinte cobrem qualquer
+  // ponto de partida — inclusive um dia 21+ ou um dia 08 que caiu em
+  // fim de semana e escorregou.
+  const candidatas = [
+    janelaDoMes(ano, mes, 8),
+    janelaDoMes(ano, mes, 20),
+    janelaDoMes(ano, mes + 1, 8),
+    janelaDoMes(ano, mes + 1, 20),
+  ];
+  const alvo = candidatas.find((ms) => ms >= baseMs) ?? candidatas[3];
+  return utcParaIso(alvo);
+}
+
+/** A janela seguinte à data dada (estritamente depois dela). */
+export function janelaSeguinte(depoisDeIso: string): string {
+  const ms = isoParaUtc(depoisDeIso);
+  if (ms === null) return proximaJanelaDePagamento(depoisDeIso);
+  return proximaJanelaDePagamento(utcParaIso(ms + DIA_MS));
+}
+
+/** A data é uma janela de pagamento válida (08/20, ajustada)? */
+export function ehJanelaDePagamento(iso: string): boolean {
+  if (!iso || iso.length < 10) return false;
+  return proximaJanelaDePagamento(iso) === iso.slice(0, 10);
+}
+
+/** Todas as janelas dentro de [inicioIso, fimIso], em ordem. */
+function janelasNoPeriodo(inicioIso: string, fimIso: string): string[] {
+  const fimMs = isoParaUtc(fimIso);
+  if (fimMs === null) return [];
+  const janelas: string[] = [];
+  let cursor = proximaJanelaDePagamento(inicioIso);
+  // 60 janelas = ~2,5 anos de job; backstop contra loop infinito.
+  while (janelas.length < 60) {
+    const ms = isoParaUtc(cursor);
+    if (ms === null || ms > fimMs) break;
+    janelas.push(cursor);
+    cursor = janelaSeguinte(cursor);
+  }
+  return janelas;
+}
+
 /**
  * Quantas datas sugerir para um custo. Job pequeno sai num pagamento só;
  * job grande espalha. É só um ponto de partida — quem abre edita.
@@ -79,9 +151,10 @@ function quantasParcelas(total: number): number {
 }
 
 /**
- * Curva sugerida: parcelas iguais, espaçadas entre o início e o fim do
- * job. Sem período no job, cai para intervalos de 30 dias a partir de
- * hoje — melhor que não sugerir nada e deixar o campo vazio.
+ * Curva sugerida: parcelas iguais, nas janelas de pagamento (08/20) do
+ * período do job — espaçadas dentro da lista de janelas disponíveis.
+ * Período sem janela nenhuma (job curto entre dois dias de pagamento)
+ * cai na primeira janela depois do início. Custo zero não tem curva.
  */
 export function sugerirCurva(
   total: number,
@@ -89,32 +162,43 @@ export function sugerirCurva(
   fim: string | null | undefined,
   hojeIso: string,
 ): CurvaLinha[] {
-  const n = quantasParcelas(total);
+  if (total <= 0) return [];
+
+  const inicioIso = inicio ?? hojeIso;
+  const disponiveis = fim ? janelasNoPeriodo(inicioIso, fim) : [];
+  // Sem janela no período: a primeira janela viável depois do início.
+  if (disponiveis.length === 0) {
+    disponiveis.push(proximaJanelaDePagamento(inicioIso));
+  }
+
+  const n = Math.min(quantasParcelas(total), disponiveis.length);
   const valores = dividirEmParcelas(total, n);
 
-  const inicioMs = isoParaUtc(inicio) ?? isoParaUtc(hojeIso) ?? Date.now();
-  const fimMs = isoParaUtc(fim) ?? inicioMs + n * 30 * DIA_MS;
-  const span = Math.max(fimMs - inicioMs, 0);
+  // Espalha os índices pela lista de janelas: 1 parcela pega a primeira,
+  // 2 pegam primeira e última, 3 pegam primeira, meio e última.
+  const indices =
+    n === 1
+      ? [0]
+      : valores.map((_, i) =>
+          Math.round((i * (disponiveis.length - 1)) / (n - 1)),
+        );
 
   return valores.map((valor, i) => ({
     id: `curva-${i + 1}`,
-    // i+1 sobre n+1 distribui as datas DENTRO do período, sem colar a
-    // primeira no início nem a última no fim do job.
-    data: utcParaIso(inicioMs + Math.round((span * (i + 1)) / (n + 1))),
+    data: disponiveis[indices[i]],
     valor,
   }));
 }
 
-/** Próxima data sugerida ao clicar em "Adicionar data": 15 dias depois. */
+/** Ao clicar em "Adicionar data": a janela seguinte à última da curva. */
 export function proximaDataSugerida(
   linhas: CurvaLinha[],
   inicio: string | null | undefined,
   hojeIso: string,
 ): string {
   const ultima = linhas[linhas.length - 1];
-  const baseMs =
-    isoParaUtc(ultima?.data) ?? isoParaUtc(inicio) ?? isoParaUtc(hojeIso)!;
-  return utcParaIso(baseMs + 15 * DIA_MS);
+  if (ultima?.data) return janelaSeguinte(ultima.data);
+  return proximaJanelaDePagamento(inicio ?? hojeIso);
 }
 
 /** Trimestre (1-4) de uma data ISO. Base da sugestão de competência. */

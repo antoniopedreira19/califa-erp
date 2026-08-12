@@ -17,6 +17,12 @@ const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
  */
 export const TOLERANCIA_CURVA = 0.02;
 
+/**
+ * Pode ser vazia: job sem custo de calha PP (100% pago direto pelo
+ * cliente) abre sem desembolso previsto. Quando o custo previsto é maior
+ * que zero, a action exige que a curva exista e some o total — essa
+ * amarração cruzada é dela, não do schema.
+ */
 export const curvaDesembolsoSchema = z
   .array(
     z.object({
@@ -26,7 +32,6 @@ export const curvaDesembolsoSchema = z
         .positive("Cada data da curva precisa de um valor maior que zero."),
     }),
   )
-  .min(1, "A curva precisa de pelo menos uma data.")
   .max(60, "Máximo de 60 datas na curva.");
 
 export const aberturaFinanceiraSchema = z.object({

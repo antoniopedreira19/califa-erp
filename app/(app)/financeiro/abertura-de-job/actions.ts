@@ -9,8 +9,9 @@ import {
   TOLERANCIA_CURVA,
   type AberturaFinanceiraInput,
 } from "@/lib/validations/abertura-financeiro";
-import type { JobStatus } from "@/lib/types";
-import { emCentavos, somaCurva } from "./curva";
+import type { JobStatus, TipoCusto } from "@/lib/types";
+import { tipoGeraDesembolso } from "@/lib/calculos/versao-totais";
+import { ehJanelaDePagamento, emCentavos, somaCurva } from "./curva";
 
 export type ActionResult =
   | { ok: true; id: string }
@@ -22,8 +23,12 @@ export type ActionResult =
  * então muda o status para `aberto`.
  *
  * O custo previsto NÃO vem do formulário. É relido de
- * `jobs_itens_orcado` aqui dentro: é dinheiro, e o navegador não é fonte
- * confiável para ele. A curva enviada é conferida contra esse valor.
+ * `jobs_itens_orcado` aqui dentro — é dinheiro, e o navegador não é
+ * fonte confiável para ele — e soma SÓ os itens de calha PP (AR, B, C,
+ * F, FI): são os únicos em que a California paga o fornecedor. Itens A
+ * e D são pagos direto pelo cliente e nunca viram previsão de
+ * desembolso (docs/decisions/004). Job 100% A/D abre com custo zero e
+ * curva vazia — é legítimo, não é erro.
  */
 export async function abrirJobNoFinanceiro(
   jobId: string,
@@ -102,7 +107,7 @@ export async function abrirJobNoFinanceiro(
   // ---------- Custo previsto: relido do banco, não do formulário ----------
   const { data: itens, error: itensErro } = await supabase
     .from("jobs_itens_orcado")
-    .select("total_planejado")
+    .select("tipo_custo, total_planejado")
     .eq("job_id", jobId)
     .eq("tenant_id", session.activeTenant.id);
 
@@ -113,26 +118,54 @@ export async function abrirJobNoFinanceiro(
 
   const custoPrevisto = emCentavos(
     (itens ?? []).reduce(
-      (s, i: { total_planejado: number | string | null }) =>
-        s + Number(i.total_planejado ?? 0),
+      (
+        s,
+        i: { tipo_custo: TipoCusto; total_planejado: number | string | null },
+      ) =>
+        tipoGeraDesembolso(i.tipo_custo)
+          ? s + Number(i.total_planejado ?? 0)
+          : s,
       0,
     ),
   );
 
-  if (custoPrevisto <= 0) {
+  const semDesembolso = custoPrevisto <= 0;
+
+  if (semDesembolso && parsed.data.curva.length > 0) {
     return {
       ok: false,
       message:
-        "A planilha interna deste job está sem custo planejado. Ajuste o orçamento antes de abrir.",
+        "Este job não tem desembolso previsto pela California — a curva precisa ficar vazia.",
     };
   }
 
-  const soma = somaCurva(parsed.data.curva);
-  if (Math.abs(soma - custoPrevisto) >= TOLERANCIA_CURVA) {
-    return {
-      ok: false,
-      message: `A curva de desembolso soma ${soma.toFixed(2)} e o custo previsto é ${custoPrevisto.toFixed(2)}. Ajuste as datas antes de abrir.`,
-    };
+  if (!semDesembolso) {
+    if (parsed.data.curva.length === 0) {
+      return {
+        ok: false,
+        message: "A curva de desembolso precisa de pelo menos uma data.",
+      };
+    }
+
+    const soma = somaCurva(parsed.data.curva);
+    if (Math.abs(soma - custoPrevisto) >= TOLERANCIA_CURVA) {
+      return {
+        ok: false,
+        message: `A curva de desembolso soma ${soma.toFixed(2)} e o custo previsto é ${custoPrevisto.toFixed(2)}. Ajuste as datas antes de abrir.`,
+      };
+    }
+
+    // Pagamento só acontece nas janelas (dia 08 e 20, ajustadas para o
+    // dia útil seguinte). Regra crítica não depende só do formulário.
+    const foraDeJanela = parsed.data.curva.find(
+      (l) => !ehJanelaDePagamento(l.data_prevista),
+    );
+    if (foraDeJanela) {
+      return {
+        ok: false,
+        message: `A data ${foraDeJanela.data_prevista} não é uma janela de pagamento (dias 08 e 20, ou o dia útil seguinte).`,
+      };
+    }
   }
 
   const agora = new Date().toISOString();
@@ -174,16 +207,18 @@ export async function abrirJobNoFinanceiro(
     console.error("[abertura-job.curva-delete]", deleteErro.message);
   }
 
-  const { error: curvaErro } = await supabase.from("jobs_previsao_custo").insert(
-    parsed.data.curva.map((linha, i) => ({
-      tenant_id: session.activeTenant.id,
-      job_id: jobId,
-      ordem: i + 1,
-      data_prevista: linha.data_prevista,
-      valor: linha.valor,
-      created_by: session.profile.id,
-    })),
-  );
+  const { error: curvaErro } = semDesembolso
+    ? { error: null }
+    : await supabase.from("jobs_previsao_custo").insert(
+        parsed.data.curva.map((linha, i) => ({
+          tenant_id: session.activeTenant.id,
+          job_id: jobId,
+          ordem: i + 1,
+          data_prevista: linha.data_prevista,
+          valor: linha.valor,
+          created_by: session.profile.id,
+        })),
+      );
 
   if (curvaErro) {
     // O job já está aberto e o registro contábil gravado. Voltar o status
@@ -215,6 +250,7 @@ export async function abrirJobNoFinanceiro(
       competencia: `${parsed.data.competencia_trimestre}T/${parsed.data.competencia_ano}`,
       custo_previsto_total: custoPrevisto,
       datas_na_curva: parsed.data.curva.length,
+      sem_desembolso: semDesembolso,
     },
   });
 

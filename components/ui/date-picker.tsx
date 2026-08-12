@@ -29,6 +29,10 @@ export interface DatePickerProps {
   className?: string;
   /** Callback opcional recebendo a data selecionada (Date ou null). */
   onDateChange?: (date: Date | null) => void;
+  /** Predicado opcional: dias em que retorna `true` ficam desabilitados
+   *  no calendário. Uso: telas que só aceitam certas datas (ex.: janelas
+   *  de pagamento do financeiro). */
+  dateDisabled?: (date: Date) => boolean;
 }
 
 function parseIsoDate(iso: string | undefined): Date | null {
@@ -49,6 +53,7 @@ export function DatePicker({
   disabled,
   className,
   onDateChange,
+  dateDisabled,
 }: DatePickerProps) {
   const [date, setDate] = React.useState<Date | null>(() => parseIsoDate(defaultValue));
   const [open, setOpen] = React.useState(false);
@@ -118,6 +123,7 @@ export function DatePicker({
             mode="single"
             selected={date ?? undefined}
             onSelect={handleSelect}
+            disabled={dateDisabled}
             initialFocus
             fixedWeeks
           />

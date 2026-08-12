@@ -21,23 +21,31 @@ export interface RegraTipoCusto {
   honorarios: boolean;
   /** Entra na base de imposto (junto com os honorários, em gross-up). */
   imposto: boolean;
+  /** Calha do item: "PP" quando a California paga o fornecedor (o custo
+   *  vira Pedido de Produção e sai do caixa dela); "BV" quando o cliente
+   *  paga o fornecedor direto (o que existe é comissão a negociar).
+   *  É a mesma regra do trigger `bv_tipo_com_bv` no banco (A ou D) e da
+   *  coluna Calha em docs/decisions/003. Quem monta previsão de
+   *  desembolso filtra por "PP" — item de calha BV nunca gera previsão
+   *  (docs/decisions/004). */
+  calha: "PP" | "BV";
 }
 
 export const REGRAS_TIPO_CUSTO: Record<TipoCusto, RegraTipoCusto> = {
   // A · Direto — cliente paga o fornecedor direto; agência fatura só o honorário.
-  A: { fatura: false, valorJob: true, honorarios: true, imposto: false },
+  A: { fatura: false, valorJob: true, honorarios: true, imposto: false, calha: "BV" },
   // A · Repasse — mesmo A, mas o principal passa pela California.
-  AR: { fatura: true, valorJob: true, honorarios: true, imposto: false },
+  AR: { fatura: true, valorJob: true, honorarios: true, imposto: false, calha: "PP" },
   // B · Bi-tributação — faturamento via California, imposto sobre o custo.
-  B: { fatura: true, valorJob: true, honorarios: true, imposto: true },
+  B: { fatura: true, valorJob: true, honorarios: true, imposto: true, calha: "PP" },
   // C · Sem honorários — contrato específico; imposto sim, honorário não.
-  C: { fatura: true, valorJob: true, honorarios: false, imposto: true },
+  C: { fatura: true, valorJob: true, honorarios: false, imposto: true, calha: "PP" },
   // D · Interno — direto ao fornecedor e fora até do valor do job.
-  D: { fatura: false, valorJob: false, honorarios: true, imposto: false },
+  D: { fatura: false, valorJob: false, honorarios: true, imposto: false, calha: "BV" },
   // F · Externo — hoje espelha o A · Direto.
-  F: { fatura: false, valorJob: true, honorarios: true, imposto: false },
+  F: { fatura: false, valorJob: true, honorarios: true, imposto: false, calha: "PP" },
   // F · Interno — como o F · Externo, mas sem honorários da agência.
-  FI: { fatura: false, valorJob: true, honorarios: false, imposto: false },
+  FI: { fatura: false, valorJob: true, honorarios: false, imposto: false, calha: "PP" },
 };
 
 /**
@@ -55,6 +63,21 @@ export const TIPOS_CUSTO = [
   "F",
   "FI",
 ] as const satisfies readonly TipoCusto[];
+
+/**
+ * Tipos cuja calha é PP — os únicos em que a California paga o fornecedor
+ * e, portanto, os únicos que entram em previsão de desembolso
+ * (docs/decisions/004). Derivado de `REGRAS_TIPO_CUSTO`: tipo novo com
+ * `calha: "PP"` entra aqui sozinho.
+ */
+export const TIPOS_CALHA_PP: readonly TipoCusto[] = TIPOS_CUSTO.filter(
+  (t) => REGRAS_TIPO_CUSTO[t].calha === "PP",
+);
+
+/** O planejado deste item sai do caixa da California? */
+export function tipoGeraDesembolso(tipo: TipoCusto): boolean {
+  return REGRAS_TIPO_CUSTO[tipo].calha === "PP";
+}
 
 // Guarda de exaustividade: se um tipo novo entrar em `TipoCusto` e alguém
 // esquecer de listá-lo acima, isto para de compilar em vez de sumir das

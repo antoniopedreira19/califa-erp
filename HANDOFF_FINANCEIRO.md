@@ -54,12 +54,33 @@ Sete colunas novas em `jobs`, criadas por
 | `nome_financeiro` | o financeiro renomeia o job **para o uso dele**, sem renomear o job da produção |
 | `categoria_id` | classificação contábil (`categorias_dominio`, escopo `job`) |
 | `competencia_trimestre` / `competencia_ano` | competência contábil, sugerida pelo início do job |
-| `custo_previsto_total` | **cópia** do custo planejado da planilha no instante da abertura |
+| `custo_previsto_total` | **cópia** do planejado dos itens de calha PP no instante da abertura (ver nota de 12/08 abaixo) |
 | `data_abertura_financeiro` / `aberto_por` | carimbo de quem abriu e quando; não editável pela UI |
 
 Mais a tabela `jobs_previsao_custo`: a **curva de desembolso** — em que datas o
 custo previsto deve sair do caixa. Nasce com RLS, 4 policies, `GRANT` explícito
 para `authenticated` e três índices.
+
+⚠️ **Correção de regra (2026-08-12, decidida com o financeiro —
+`docs/decisions/004-previsao-de-desembolso.md`).** A primeira versão somava o
+planejado de **todos** os itens no custo previsto. Errado: itens de calha BV
+(tipos A e D) são pagos pelo cliente direto ao fornecedor e nunca saem do caixa
+da California. O que mudou:
+
+1. **Custo previsto = planejado da calha PP** (AR, B, C, F, FI), lido de
+   `REGRAS_TIPO_CUSTO.calha`. Job 100% A/D abre com custo **zero e sem curva**,
+   com aviso na tela — estado legítimo, não erro.
+2. **As datas da curva só podem ser janelas de pagamento** (dias 08 e 20,
+   empurradas para o dia útil seguinte em fim de semana; feriado é pendência
+   conhecida). O calendário trava, e a action revalida.
+3. **A conferência e o formulário mostram os dois números** do fechamento
+   (Faturamento previsto e Valor do Job), igual ao modal do envio — e a linha
+   "Margem prevista" saiu: com o custo virando só desembolso, ela viraria "100%
+   de margem" em job 100% A.
+4. **`jobs.faturamento_previsto` passou a ser gravado no INSERT do envio**
+   (`abertura-actions.ts`) — antes só a coluna `_abertura` era gravada e o job
+   nascia nulo. Migration `20260812000001` recalculou os nulos e os custos já
+   gravados (JOB-0008 foi a zero e perdeu a curva, corretamente).
 
 ---
 
@@ -160,8 +181,8 @@ apagar `.next` e reiniciar. Ver a mesma armadilha na Entrega 16 do
    retornaria zero jobs sempre — quem usa concluiria que o dado sumiu, não que a
    feature não existe. "Aguardando encerramento" ainda exigiria mexer no
    `job_status`, cujo fluxo de encerramento está bloqueado em `lib/types.ts`.
-4. **`jobs.observacoes`** grava desde a Entrega 9 do módulo de Jobs e nenhuma
-   tela lê. Esta é a tela onde faria sentido: é contexto para quem abre.
+4. ~~**`jobs.observacoes`** grava e nenhuma tela lê~~ — desatualizado: o modal
+   de conferência lê desde 11/08 ("Observações da produção").
 
 ---
 
@@ -171,3 +192,4 @@ apagar `.next` e reiniciar. Ver a mesma armadilha na Entrega 16 do
 |---|---|
 | `20260811000002_abertura_job_financeiro.sql` | 7 colunas em `jobs`, tabela `jobs_previsao_custo` com RLS + 4 policies + GRANT + índices, escopo `job` em `categorias_dominio` |
 | `20260811000003_categorias_dominio_job_seed.sql` | 5 categorias de job iniciais, idempotente |
+| `20260812000001_previsao_desembolso_calha_pp.sql` | recalcula `custo_previsto_total` dos jobs abertos com a regra da calha PP, apaga curvas de desembolso zero e faz backfill de `faturamento_previsto` nulo |

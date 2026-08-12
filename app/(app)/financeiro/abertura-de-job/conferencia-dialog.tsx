@@ -113,9 +113,20 @@ export function ConferenciaDialog({ job, onOpenChange, onReprovar }: Props) {
               </span>
             </div>
           ))}
+          {/* Os dois números do fechamento, como no modal do envio do job:
+              o que a California emite nota e o compromisso total do
+              cliente. */}
           <div className="flex items-baseline justify-between gap-3 border-t border-border pt-2.5">
+            <span className="text-[13px] font-semibold">
+              Faturamento previsto
+            </span>
+            <span className="font-mono text-[14px] font-bold text-california-red">
+              {formatCurrency(job.faturamento_previsto)}
+            </span>
+          </div>
+          <div className="flex items-baseline justify-between gap-3">
             <span className="text-[13px] font-semibold">Valor total</span>
-            <span className="font-mono text-base font-bold text-california-red">
+            <span className="font-mono text-base font-bold">
               {formatCurrency(job.valor_total)}
             </span>
           </div>

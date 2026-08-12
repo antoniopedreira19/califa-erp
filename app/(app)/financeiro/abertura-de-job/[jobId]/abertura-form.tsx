@@ -43,6 +43,7 @@ import { formatDataBr, formatPeriodo } from "../formatos";
 import {
   curvaFecha,
   dividirEmParcelas,
+  ehJanelaDePagamento,
   emCentavos,
   foraDaCompetencia,
   proximaDataSugerida,
@@ -141,34 +142,26 @@ export function AberturaForm({
   const diferenca = emCentavos(soma - custoPrevisto);
 
   const nomeOk = nome.trim().length >= 2;
-  const temCusto = custoPrevisto > 0;
+  // Custo zero é legítimo: job 100% pago direto pelo cliente ao
+  // fornecedor (tipos A/D) abre sem curva de desembolso.
+  const semDesembolso = custoPrevisto <= 0;
   const todasDatasPreenchidas = curva.every((l) => l.data.length === 10);
   const todosValoresPositivos = linhasNumericas.every((l) => l.valor > 0);
-  const podeAbrir =
-    nomeOk &&
-    categoriaId !== "" &&
-    temCusto &&
-    curva.length > 0 &&
-    todasDatasPreenchidas &&
-    todosValoresPositivos &&
-    fecha;
+  const curvaOk =
+    semDesembolso ||
+    (curva.length > 0 && todasDatasPreenchidas && todosValoresPositivos && fecha);
+  const podeAbrir = nomeOk && categoriaId !== "" && curvaOk;
 
-  const margem = (job.valor_total ?? 0) - custoPrevisto;
-  const margemPct =
-    job.valor_total && job.valor_total > 0
-      ? (margem / job.valor_total) * 100
-      : 0;
-  const margemLabel = `${formatCurrency(margem)} · ${formatPercentual(margemPct)}`;
   const categoriaNome =
     categorias.find((c) => c.id === categoriaId)?.nome ?? "— não informada";
   const competenciaLabel = `${trimestre}T/${ano}`;
 
-  const textoValidacao = !temCusto
-    ? "Sem custo planejado na planilha interna — verifique o orçamento do job."
-    : !nomeOk
-      ? "Informe o nome do job."
-      : categoriaId === ""
-        ? "Selecione a categoria do job."
+  const textoValidacao = !nomeOk
+    ? "Informe o nome do job."
+    : categoriaId === ""
+      ? "Selecione a categoria do job."
+      : semDesembolso
+        ? "Tudo pronto. Este job não tem desembolso previsto pela California — abre sem curva."
         : !todasDatasPreenchidas
           ? "Preencha a data de todas as linhas da curva."
           : !todosValoresPositivos
@@ -456,7 +449,8 @@ export function AberturaForm({
                     {formatCurrency(job.valor_total)}
                   </p>
                   <p className="mt-1 text-[11px] text-muted-foreground">
-                    Faturamento previsto do orçamento
+                    Compromisso total do cliente, somando o que ele paga direto
+                    ao fornecedor
                   </p>
                 </div>
                 <div className="rounded-xl border border-california-red/25 bg-california-red/5 px-4 py-3">
@@ -473,14 +467,31 @@ export function AberturaForm({
                     </span>
                   </div>
                   <p className="mt-1 text-[11px] text-muted-foreground">
-                    {temCusto
-                      ? `Custo planejado da planilha interna · ${margemLabel} de margem`
-                      : "A planilha interna deste job está sem custo planejado."}
+                    {semDesembolso
+                      ? "Nenhum item de calha PP — a California não desembolsa neste job."
+                      : "Planejado dos itens que a California paga (tipos que geram PP)"}
                   </p>
                 </div>
               </div>
 
-              {/* Curva de desembolso */}
+              {/* Curva de desembolso. Sem item de calha PP não há o que
+                  distribuir — o aviso substitui a tabela inteira. */}
+              {semDesembolso ? (
+                <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3.5">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
+                  <div>
+                    <p className="text-[13px] font-semibold text-amber-800">
+                      Nenhum desembolso previsto pela California
+                    </p>
+                    <p className="mt-1 text-xs leading-relaxed text-amber-800/80">
+                      Os custos deste job são pagos diretamente pelo cliente ao
+                      fornecedor (itens de calha BV). O planejado da planilha
+                      segue como controle interno, mas não gera previsão de
+                      custos — o job abre sem curva de desembolso.
+                    </p>
+                  </div>
+                </div>
+              ) : (
               <div className="overflow-hidden rounded-xl border border-border">
                 <div className="flex flex-wrap items-center gap-2.5 border-b border-border bg-muted/60 px-4 py-2.5">
                   <CalendarDays className="h-3.5 w-3.5 text-muted-foreground" />
@@ -488,15 +499,14 @@ export function AberturaForm({
                     Curva de desembolso
                   </p>
                   <span className="text-[11.5px] text-muted-foreground">
-                    Distribuída entre{" "}
+                    Janelas de pagamento (dias 08 e 20) entre{" "}
                     {formatDataBr(job.data_inicio_prevista)} e{" "}
                     {formatDataBr(job.data_fim_prevista)}
                   </span>
                   <button
                     type="button"
                     onClick={distribuirIgualmente}
-                    disabled={!temCusto}
-                    className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-1.5 text-[11.5px] font-semibold text-muted-foreground transition-colors hover:border-[#d7d7d7] hover:text-foreground disabled:opacity-50"
+                    className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-1.5 text-[11.5px] font-semibold text-muted-foreground transition-colors hover:border-[#d7d7d7] hover:text-foreground"
                   >
                     <Split className="h-3 w-3" />
                     Distribuir igualmente
@@ -542,6 +552,13 @@ export function AberturaForm({
                                 name={`curva-data-${linha.id}`}
                                 defaultValue={linha.data}
                                 className="h-9 text-[13px]"
+                                // Pagamento só nas janelas: qualquer outro
+                                // dia fica apagado no calendário.
+                                dateDisabled={(d) =>
+                                  !ehJanelaDePagamento(
+                                    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`,
+                                  )
+                                }
                                 onDateChange={(d) =>
                                   atualizarLinha(linha.id, {
                                     data: d
@@ -652,14 +669,16 @@ export function AberturaForm({
                   </div>
                 </div>
               </div>
+              )}
 
               <div className="flex items-start gap-2.5 rounded-xl border border-border bg-muted/50 px-3.5 py-3">
                 <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                 <p className="text-xs leading-relaxed text-muted-foreground">
                   A previsão não trava o realizado: ela alimenta o fluxo de
-                  caixa do financeiro e o comparativo com o planejado da
-                  planilha. Datas fora da competência escolhida ficam
-                  sinalizadas.
+                  caixa do financeiro e vai sendo abatida conforme as PPs do
+                  job forem emitidas. As datas seguem as janelas de pagamento
+                  (dias 08 e 20, ou o dia útil seguinte); datas fora da
+                  competência escolhida ficam sinalizadas.
                 </p>
               </div>
             </div>
@@ -691,9 +710,19 @@ export function AberturaForm({
                 </span>
               </div>
             ))}
+            {/* Os dois números do fechamento, como no modal do envio:
+                faturamento previsto em vermelho, valor total fechando. */}
             <div className="mt-0.5 flex items-baseline justify-between gap-3 border-t border-border pt-2.5">
+              <span className="text-[12.5px] font-semibold">
+                Faturamento previsto
+              </span>
+              <span className="font-mono text-[13px] font-bold text-california-red">
+                {formatCurrency(job.faturamento_previsto)}
+              </span>
+            </div>
+            <div className="flex items-baseline justify-between gap-3">
               <span className="text-[12.5px] font-semibold">Valor total</span>
-              <span className="font-mono text-[15px] font-bold text-california-red">
+              <span className="font-mono text-[15px] font-bold">
                 {formatCurrency(job.valor_total)}
               </span>
             </div>
@@ -740,20 +769,11 @@ export function AberturaForm({
                 Datas previstas
               </span>
               <span className="text-[12.5px] font-semibold">
-                {curva.length === 1 ? "1 data" : `${curva.length} datas`}
-              </span>
-            </div>
-            <div className="flex items-baseline justify-between gap-3 border-t border-border pt-2.5">
-              <span className="text-[12.5px] text-muted-foreground">
-                Margem prevista
-              </span>
-              <span
-                className={cn(
-                  "font-mono text-[13px] font-bold",
-                  margem >= 0 ? "text-emerald-700" : "text-california-red",
-                )}
-              >
-                {margemLabel}
+                {semDesembolso
+                  ? "Sem desembolso"
+                  : curva.length === 1
+                    ? "1 data"
+                    : `${curva.length} datas`}
               </span>
             </div>
           </div>
@@ -824,15 +844,27 @@ export function AberturaForm({
             />
             <ResumoLinha
               rotulo="Curva"
-              valor={`${curva.length}× · ${formatDataBr(curva[0]?.data)}${
-                curva.length > 1
-                  ? ` → ${formatDataBr(curva[curva.length - 1]?.data)}`
-                  : ""
-              }`}
+              valor={
+                semDesembolso
+                  ? "Sem desembolso previsto"
+                  : `${curva.length}× · ${formatDataBr(curva[0]?.data)}${
+                      curva.length > 1
+                        ? ` → ${formatDataBr(curva[curva.length - 1]?.data)}`
+                        : ""
+                    }`
+              }
             />
             <div className="flex items-baseline justify-between gap-3 border-t border-border pt-2.5">
+              <span className="text-[13px] font-semibold">
+                Faturamento previsto
+              </span>
+              <span className="font-mono text-[13px] font-bold text-california-red">
+                {formatCurrency(job.faturamento_previsto)}
+              </span>
+            </div>
+            <div className="flex items-baseline justify-between gap-3">
               <span className="text-[13px] font-semibold">Valor total</span>
-              <span className="font-mono text-[15px] font-bold text-california-red">
+              <span className="font-mono text-[15px] font-bold">
                 {formatCurrency(job.valor_total)}
               </span>
             </div>
