@@ -8,9 +8,6 @@ interface Props {
    * É a base do resultado, como no card de Totais.
    */
   valorJob: number;
-  /** O que a California emite nota. Anda ao lado do valor do job para o
-   *  cabeçalho não contradizer o card de Totais logo abaixo. */
-  faturamentoPrevisto: number;
   /** Imposto embutido na receita. Sai da conta do resultado. */
   imposto: number;
   /** Soma do planejado dos itens: o desembolso esperado da agência. */
@@ -31,7 +28,6 @@ interface Props {
  */
 export function ResumoResultado({
   valorJob,
-  faturamentoPrevisto,
   imposto,
   custoPlanejado,
   custoRealizado,
@@ -50,12 +46,6 @@ export function ResumoResultado({
 
   return (
     <div className="flex divide-x divide-border rounded-xl border border-border bg-card shadow-soft">
-      <Bloco label="Faturamento previsto">
-        <span className="font-mono text-base font-bold text-foreground">
-          {formatCurrency(faturamentoPrevisto, moeda)}
-        </span>
-      </Bloco>
-
       <Bloco label="Valor do Job">
         <span className="font-mono text-base font-bold text-foreground">
           {formatCurrency(valorJob, moeda)}

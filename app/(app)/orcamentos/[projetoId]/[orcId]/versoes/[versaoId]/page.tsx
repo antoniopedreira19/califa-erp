@@ -339,7 +339,6 @@ export default async function VersaoDetailPage({
           </div>
 
           <ResumoRentabilidade
-            faturamentoPrevisto={totais.faturamentoPrevisto}
             valorJob={totais.valorJob}
             custoPlanejado={custoPlanejado}
             resultadoGeral={resultadoGeral}

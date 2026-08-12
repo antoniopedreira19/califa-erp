@@ -569,7 +569,6 @@ export default async function JobDetailPage({
             <div className="mt-[27px]">
               <ResumoResultado
                 valorJob={totaisJob.valorJob}
-                faturamentoPrevisto={totaisJob.faturamentoPrevisto}
                 imposto={totaisJob.imposto}
                 custoPlanejado={custoPlanejadoJob}
                 custoRealizado={custoRealizadoJob}
