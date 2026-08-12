@@ -454,13 +454,11 @@ export function EditorMultiJobs({
   // ---------- totais do cabeçalho ----------
   const resumo = React.useMemo(() => {
     let planejado = 0;
-    let faturamentoPrevisto = 0;
     let valorJob = 0;
     let imposto = 0;
     for (const job of jobs) {
       const t = totaisDoJob(job, parametros);
       planejado += t.planejado;
-      faturamentoPrevisto += t.faturamentoPrevisto;
       valorJob += t.valorJob;
       imposto += t.imposto;
     }
@@ -469,7 +467,7 @@ export function EditorMultiJobs({
       imposto,
       planejado,
     );
-    return { planejado, faturamentoPrevisto, valorJob, resultadoGeral };
+    return { planejado, valorJob, resultadoGeral };
   }, [jobs, parametros]);
 
   /** Planilhas cujo % de honorários não é o do cadastro do cliente. Não
@@ -656,16 +654,8 @@ export function EditorMultiJobs({
 
           <div className="flex flex-none rounded-2xl border border-border bg-card shadow-soft">
             <Kpi
-              rotulo="Faturamento previsto"
-              valor={formatCurrency(
-                resumo.faturamentoPrevisto,
-                parametros.moeda,
-              )}
-            />
-            <Kpi
               rotulo="Valor do Job"
               valor={formatCurrency(resumo.valorJob, parametros.moeda)}
-              borda
             />
             <Kpi
               rotulo="Custo planejado"

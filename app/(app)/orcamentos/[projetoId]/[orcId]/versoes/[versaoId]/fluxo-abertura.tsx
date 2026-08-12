@@ -209,11 +209,7 @@ export function FluxoAbertura({
                 {qtdItens === 1 ? "item" : "itens"}
               </span>
               <span className="text-xs text-muted-foreground">
-                Faturamento previsto{" "}
-                <span className="font-mono font-semibold text-foreground">
-                  {formatCurrency(faturamentoPrevisto, moeda)}
-                </span>{" "}
-                · Valor do Job{" "}
+                Valor do Job{" "}
                 <span className="font-mono font-semibold text-foreground">
                   {formatCurrency(valorJob, moeda)}
                 </span>{" "}
