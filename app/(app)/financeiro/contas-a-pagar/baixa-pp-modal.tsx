@@ -21,7 +21,7 @@ import {
 import { formatCurrency } from "@/lib/utils";
 import type { ContaBancaria, PlanoContaTipo, PlanoContaSubtipo } from "@/lib/types";
 import type { PPRow } from "./pedidos-compra-list";
-import { marcarPagaFinanceiro } from "./actions";
+import { marcarPagaFinanceiro } from "@/app/(app)/financeiro/a-pagar/actions";
 
 interface Props {
   pp: PPRow;
