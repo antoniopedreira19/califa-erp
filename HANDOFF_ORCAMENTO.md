@@ -2,7 +2,7 @@
 
 Registro da implementação dos design handoffs aprovados para o módulo de Orçamentos.
 
-**Datas:** 2026-07-27 (entregas 1–3) · 2026-07-30 (entregas 4–8) · 2026-07-31 (entrega 9) · 2026-08-03 (entrega 10) · 2026-08-06 (entrega 11) · 2026-08-07 (entregas 12 e 13) · 2026-08-11 (entrega 15)
+**Datas:** 2026-07-27 (entregas 1–3) · 2026-07-30 (entregas 4–8) · 2026-07-31 (entrega 9) · 2026-08-03 (entrega 10) · 2026-08-06 (entrega 11) · 2026-08-07 (entregas 12 e 13) · 2026-08-11 (entrega 15) · 2026-08-12 (entrega 17)
 **Origem do design:**
 - Entregas 1–3: pacote `design_handoff_califa/` (`Versoes - Destaque v4.dc.html` opção 2a, `Orcamento - Edicao Inline.dc.html` opção 3b, `README.md`, `IMPLEMENTACAO.md`). A pasta fica **só na máquina local** — está no `.gitignore` por ser referência de design, não código.
 - Entregas 4–5, 8 e 9: projeto Claude Design `69342d83-28d9-4bea-a8af-c99e233f5f13` (`Orcamento - Versao -final-.dc.html`, `Novo projeto.dc.html` e `Abertura de Job.dc.html`), lido via MCP `claude_design`. A Entrega 9 é a revisão do mesmo `Abertura de Job.dc.html`, relido depois de atualizado.
@@ -33,6 +33,7 @@ Registro da implementação dos design handoffs aprovados para o módulo de Orç
 | **13 — BV na planilha do job + BV↔PP por tipo** | ✅ (2026-08-07) |
 | **14 — Orçamento do projeto e visão agregada editável** | ✅ `2950666` (2026-08-10) |
 | **15 — Cores dos blocos e faixa do agrupamento** | ✅ (2026-08-11) |
+| **17 — Cidade e Regional editáveis na abertura + modal inteiro visível** | ✅ `40881a7` (2026-08-12) |
 
 `tsc --noEmit` e `next lint` limpos em todas. Entregas 4, 5, 8 a 13
 também com `next build` completo. As Entregas 8 e 10 a 13 são as únicas
@@ -549,6 +550,13 @@ os aceita do formulário.** Eles saíram do `aberturaJobSchema` e do
 - Se algum dos cinco estiver faltando (orçamento anterior a esta entrega), o modal mostra aviso âmbar listando o que falta e trava o botão; a action devolve a mesma lista. **Não inventamos valor padrão** — abrir job com dado faltando é o tipo de furo que aparece meses depois no financeiro.
 - `dados.cidade`/`produtoId`/`regionalId` saíram de `DadosJob` e viraram `HerdadosJob`, que o modal só exibe. Com job já aberto valem os valores congelados nele; antes disso, o que está cadastrado hoje.
 - Efeito colateral: `cidade-combobox.tsx` e a action `buscarCidades` ficaram sem uso. **Não foram apagados** — quando a carga do IBGE entrar (próximos passos, item 1), o `Select` simples de Cidade do formulário de orçamento precisa virar esse combobox com busca no servidor.
+
+⚠️ **12/08/2026 — desta lista de cinco, dois voltaram a ser editáveis.**
+Cidade e Regional saíram de `HerdadosJob` e viraram campos do formulário
+de novo; `cidade-combobox.tsx` e `buscarCidades` deixaram de ser órfãos.
+Herdados travados hoje são **três**: produto, GP e produtor. Ver a
+Entrega 17 (seção 18) e
+[`docs/decisions/005-cidade-e-regional-na-abertura.md`](docs/decisions/005-cidade-e-regional-na-abertura.md).
 
 ### 12.7 Produto padrão — a marca do cliente
 
@@ -1383,7 +1391,108 @@ achado. Ao conferir planilha, ler os **subtotais que ela mesma calculou**.
 
 ---
 
-## 18. Próximos passos
+## 18. Entrega 17 — Cidade e Regional editáveis na abertura, e o modal inteiro na tela
+
+**Data:** 2026-08-12 · **Origem:** pedido direto do time sobre print do
+modal "Enviar job para abertura". Sem handoff de design.
+
+Dois pedidos, um modal: os campos Cidade e Regional deviam continuar
+pré-preenchidos mas voltar a aceitar edição, e o formulário devia caber
+inteiro ao abrir.
+
+⚠️ **A regra não mora aqui.** Está em
+[`docs/decisions/005-cidade-e-regional-na-abertura.md`](docs/decisions/005-cidade-e-regional-na-abertura.md).
+Esta seção registra o que mudou no código e como foi medido.
+
+### 18.1 O que reverteu da Entrega 11
+
+A seção 12.6 tinha travado **cinco** campos e tirado os cinco do
+`aberturaJobSchema` e do `FormData`. Agora são **três**: produto (do
+projeto), GP e produtor (do orçamento) — esses o servidor continua
+relendo do banco e o modal continua só exibindo em `<Travado>`.
+
+Cidade e Regional voltaram a ser campos de formulário: saíram de
+`HerdadosJob` (que os mantém só para o modo somente leitura, onde valem
+os valores congelados no job) e entraram em `DadosJob` como `cidadeId`,
+`cidadeNome` e `regionalId`.
+
+### 18.2 Três decisões que o time respondeu antes de codar
+
+| Pergunta | Resposta |
+|---|---|
+| Editar cidade/regional afeta o orçamento? | **Grava também no orçamento**, junto com nome e datas. Orçamento e job nunca divergem. |
+| Quais regionais aparecem? | **Só as do projeto** (`projeto_regionais`), igual ao formulário de orçamento. |
+| Como escolher a cidade? | **Combobox com busca no servidor** — o `cidade-combobox.tsx` que estava órfão. |
+
+### 18.3 O que o servidor confere
+
+Campo editável no HTML não é garantia — quem posta o form não é obrigado
+a respeitar a lista que a tela mostrou. `enviarJobParaAbertura` valida
+`cidade_id`/`regional_id` como uuid no Zod e, em paralelo com a busca do
+produto, confere que a cidade existe no tenant e que a regional está em
+`projeto_regionais` do projeto do orçamento. As duas falhas devolvem
+`fieldErrors` no campo certo, e nada é gravado.
+
+É a mesma checagem que `assertRegionalEGpDoProjeto` faz no formulário de
+orçamento (seção 12.4) — só que aqui feita direto na action, porque o
+payload é outro.
+
+O aviso âmbar de "complete o cadastro antes de abrir o job" perdeu Cidade
+e Regional: não faz sentido travar o botão por algo que o usuário resolve
+na própria tela. Produto, GP e produtor continuam lá.
+
+### 18.4 A altura: o `62vh` era o vilão, mas não sozinho
+
+O diálogo já era `max-h-[92vh]`, mas o miolo tinha `max-h-[62vh]` **fixo**
+— ele cortava o formulário mesmo com tela sobrando. A correção estrutural
+foi transformar o diálogo em `flex flex-col` (`max-h-[97vh]`) com o miolo
+em `grid min-h-0 flex-1 overflow-y-auto`, e `shrink-0` no cabeçalho e no
+rodapé. Assim o formulário ocupa toda a altura disponível e, onde não
+couber, só o miolo rola.
+
+⚠️ **Só isso não resolveu.** Medido num viewport de 970 px (≈ o do print
+do time), o conteúdo pedia 815 px e o miolo oferecia 722. Faltavam ~93 px
+que nenhum `vh` a mais entregaria sem colar o diálogo nas bordas. Foram
+recuperados apertando medidas, sem tirar campo nem texto:
+
+| Onde | De | Para |
+|---|---|---|
+| `gap-y` do miolo | `4` | `3` |
+| padding do miolo | `p-6` | `px-6 py-4` |
+| padding do cabeçalho | `p-6` | `px-6 py-5` |
+| padding do rodapé | `py-4` | `py-3` |
+| `space-y` do `<Campo>` | `2` | `1.5` |
+| card de fechamento | `py-3` / `mt-2` | `py-2.5` / `mt-1.5` |
+| Observações | `rows=3`, `min-h-[84px]` | `rows=2`, `min-h-[68px]` (segue `resize-y`) |
+
+### 18.5 Verificação
+
+Feita no navegador contra a versão aprovada do **PEVETE-0001/26-04**
+(projeto com 2 regionais, sem job ativo), medindo o DOM em vez de
+confiar em screenshot:
+
+- campos abrem preenchidos com o orçamento (Salvador / SP) e editáveis;
+- o select lista exatamente as 2 regionais do projeto (NE, SP), e trocar
+  reflete no estado do `<FluxoAbertura>`;
+- o combobox de cidade abre com as cidades do servidor e a troca sobe
+  para o pai;
+- "Confirmar dados" marca só as três datas vazias — Cidade e Regional
+  contam como preenchidas;
+- **rolagem 0 px** num viewport de 970 px, inclusive com as três
+  mensagens de erro na tela, que é o estado mais alto do formulário. Em
+  820 px o miolo rola 146 px e o rodapé continua visível;
+- modo somente leitura (JOB-0009): Cidade e Regional voltam a `<Travado>`
+  com o que ficou congelado no job.
+
+`tsc --noEmit` e `next lint` limpos.
+
+⚠️ **O caminho de gravação não foi executado.** Confirmar o envio criaria
+um job de verdade — o `next dev` desta máquina escreve em produção (seção
+4, e item 5 dos próximos passos). O `UPDATE` no orçamento e o `INSERT` do
+job com os valores do formulário estão implementados e conferidos por
+leitura, não por execução.
+
+## 19. Próximos passos
 
 1. **Carga completa de cidades do IBGE** — hoje só Salvador e São Paulo. Formato acordado: `Salvador-BA` num campo só, sem coluna `uf`. É só uma migration de INSERT: o schema e a busca já estão prontos (Entrega 8). Fonte: `https://servicosdados.ibge.gov.br/api/v1/localidades/municipios`. Ao carregar, reconciliar as 2 linhas atuais, que estão sem o sufixo de UF, e os jobs que já gravaram `Salvador`/`São Paulo`.
 2. **Exibir as observações do job** — `jobs.observacoes` grava desde a Entrega 9 mas nenhuma tela lê. Entra junto com o refino da tela de abertura do financeiro, onde ela faz sentido: é contexto para quem abre. Enquanto isso, o dado é write-only.
