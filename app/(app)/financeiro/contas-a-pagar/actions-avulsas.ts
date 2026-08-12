@@ -545,8 +545,7 @@ export async function darBaixaAvulsa(input: unknown): Promise<Result> {
     .maybeSingle();
 
   if (!atual) return { ok: false, message: "Conta avulsa não encontrada." };
-  // Aceita "pendente" até Task 12 remover o enum — nenhum registro deve ter esse status após Task 2
-  if (atual.status !== "aprovada" && atual.status !== "pendente") { // until Task 12
+  if (atual.status !== "aprovada") {
     return { ok: false, message: "Só avulsa aprovada pode ser baixada." };
   }
 

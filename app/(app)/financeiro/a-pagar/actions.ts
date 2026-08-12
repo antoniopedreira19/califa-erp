@@ -43,8 +43,7 @@ const baixaPPSchema = z.object({
 });
 
 /**
- * Baixa uma PP aprovada via RPC. PP em em_avaliacao também aceita por ora
- * (Task 11 endurece pra exigir status 'aprovada' na RPC).
+ * Baixa uma PP aprovada via RPC. Exige status='aprovada' (Task 11).
  */
 export async function marcarPagaFinanceiro(input: unknown): Promise<Result> {
   const parsed = baixaPPSchema.safeParse(input);
@@ -63,7 +62,7 @@ export async function marcarPagaFinanceiro(input: unknown): Promise<Result> {
     .maybeSingle();
 
   if (!pp) return { ok: false, message: "PP não encontrada." };
-  if (pp.status !== "aprovada" && pp.status !== "em_avaliacao") {
+  if (pp.status !== "aprovada") {
     return {
       ok: false,
       message: pp.status === "pago" ? "PP já está paga." : "Só PP aprovada pode ser baixada.",
@@ -127,8 +126,7 @@ export async function darBaixaAvulsa(input: unknown): Promise<Result> {
     .maybeSingle();
 
   if (!av) return { ok: false, message: "Conta avulsa não encontrada." };
-  // Aceita "pendente" até Task 12 remover o enum — nenhum registro deve ter esse status após Task 2
-  if (av.status !== "aprovada" && av.status !== "pendente") { // until Task 12
+  if (av.status !== "aprovada") {
     return {
       ok: false,
       message: av.status === "baixada" ? "Já está baixada." : "Só avulsa aprovada pode ser baixada.",
