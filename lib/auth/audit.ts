@@ -73,6 +73,8 @@ export type AuditAction =
   | "pedido_compra.paga"
   | "pedido_compra.rejeitada"
   | "pedido_compra.reenviada"
+  | "pedido_compra.aprovada"
+  | "pedido_compra.desaprovada"
   | "custo_c.utilizado"
   | "conta_bancaria.criada"
   | "conta_bancaria.atualizada"
