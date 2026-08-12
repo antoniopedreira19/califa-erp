@@ -406,9 +406,9 @@ export function PPDrawerFinanceiro({ pp, open, onOpenChange }: Props) {
                     if (!res.ok) {
                       setErro(res.message);
                     } else {
-                      onOpenChange(false);
                       setToast(`${pp.codigo} aprovada — vai para "A pagar".`);
                       router.refresh();
+                      setTimeout(() => onOpenChange(false), 1200);
                     }
                   });
                 }}

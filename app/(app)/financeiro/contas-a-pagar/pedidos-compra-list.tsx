@@ -46,14 +46,6 @@ export interface PPRow {
   }>;
 }
 
-const STATUS_FILTROS: Array<{ key: "todas" | PPStatus; label: string }> = [
-  { key: "em_avaliacao", label: "Em avaliação" },
-  { key: "pago", label: "Pago" },
-  { key: "rejeitada", label: "Rejeitado" },
-  { key: "cancelada", label: "Cancelada" },
-  { key: "todas", label: "Todas" },
-];
-
 function statusBadgeClasses(status: PPStatus): string {
   switch (status) {
     case "em_avaliacao":
@@ -84,47 +76,24 @@ interface PedidosCompraListProps {
 }
 
 export function PedidosCompraList({ rows }: PedidosCompraListProps) {
-  const [filtro, setFiltro] = React.useState<"todas" | PPStatus>("em_avaliacao");
   const [busca, setBusca] = React.useState("");
   const [ppSelecionada, setPpSelecionada] = React.useState<PPRow | null>(null);
 
   const filtrados = React.useMemo(() => {
     const q = busca.trim().toLowerCase();
-    return rows.filter((r) => {
-      if (filtro !== "todas" && r.status !== filtro) return false;
-      if (q === "") return true;
-      return (
+    if (q === "") return rows;
+    return rows.filter(
+      (r) =>
         r.codigo.toLowerCase().includes(q) ||
         r.fornecedor_nome.toLowerCase().includes(q) ||
         r.job_codigo.toLowerCase().includes(q) ||
-        r.job_nome.toLowerCase().includes(q)
-      );
-    });
-  }, [rows, filtro, busca]);
+        r.job_nome.toLowerCase().includes(q),
+    );
+  }, [rows, busca]);
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          {STATUS_FILTROS.map((s) => {
-            const ativo = filtro === s.key;
-            return (
-              <button
-                key={s.key}
-                type="button"
-                onClick={() => setFiltro(s.key)}
-                className={cn(
-                  "rounded-full border px-3 py-1 text-xs font-semibold transition-colors",
-                  ativo
-                    ? "bg-california-red text-white border-california-red"
-                    : "bg-white text-muted-foreground border-border hover:border-california-red/40 hover:text-california-red",
-                )}
-              >
-                {s.label}
-              </button>
-            );
-          })}
-        </div>
+      <div className="flex flex-wrap items-center justify-end gap-3">
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
           <input
