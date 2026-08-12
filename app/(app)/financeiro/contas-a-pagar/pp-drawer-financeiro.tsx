@@ -10,7 +10,7 @@ import {
   Download,
   Eye,
   Ban,
-  CreditCard,
+  CheckCircle2,
   ExternalLink,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
@@ -30,26 +30,22 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Badge } from "@/components/ui/badge";
 import { cn, formatCurrency } from "@/lib/utils";
 import { ppStatusLabel, type PPStatus } from "@/lib/types";
-import type { ContaBancaria, PlanoContaTipo, PlanoContaSubtipo } from "@/lib/types";
 import type { PPRow } from "./pedidos-compra-list";
 import {
   salvarPrazoFinanceiro,
   rejeitarPedidoCompraFinanceiro,
+  aprovarPP,
 } from "./actions";
 import {
   signedUrlPdf,
   signedUrlAnexo,
 } from "@/app/(app)/jobs/[jobId]/realizado/actions-pp";
-import { BaixaPPModal } from "./baixa-pp-modal";
 import { CancelarBaixaModal } from "./cancelar-baixa-modal";
 
 interface Props {
   pp: PPRow | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  contas: ContaBancaria[];
-  tipos: PlanoContaTipo[];
-  subtipos: PlanoContaSubtipo[];
 }
 
 function formatDate(iso: string | null): string {
@@ -88,7 +84,7 @@ function iconePorMime(nome: string): typeof FileText {
   return FileText;
 }
 
-export function PPDrawerFinanceiro({ pp, open, onOpenChange, contas, tipos, subtipos }: Props) {
+export function PPDrawerFinanceiro({ pp, open, onOpenChange }: Props) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
   const [erro, setErro] = React.useState<string | null>(null);
@@ -96,7 +92,6 @@ export function PPDrawerFinanceiro({ pp, open, onOpenChange, contas, tipos, subt
   const [prazoLocal, setPrazoLocal] = React.useState<string | null>(null);
   const [askRejeitar, setAskRejeitar] = React.useState(false);
   const [motivo, setMotivo] = React.useState("");
-  const [baixaOpen, setBaixaOpen] = React.useState(false);
   const [cancelarBaixaOpen, setCancelarBaixaOpen] = React.useState(false);
 
   // Sincroniza prazo local com o valor da PP ao abrir/trocar
@@ -105,7 +100,6 @@ export function PPDrawerFinanceiro({ pp, open, onOpenChange, contas, tipos, subt
     setPrazoLocal(pp.prazo_pagamento_financeiro);
     setErro(null);
     setMotivo("");
-    setBaixaOpen(false);
     setCancelarBaixaOpen(false);
   }, [pp]);
 
@@ -405,12 +399,23 @@ export function PPDrawerFinanceiro({ pp, open, onOpenChange, contas, tipos, subt
 
               <button
                 type="button"
-                onClick={() => setBaixaOpen(true)}
-                disabled={pending}
+                disabled={pp.status !== "em_avaliacao" || pending}
+                onClick={() => {
+                  startTransition(async () => {
+                    const res = await aprovarPP(pp.id);
+                    if (!res.ok) {
+                      setErro(res.message);
+                    } else {
+                      onOpenChange(false);
+                      setToast(`${pp.codigo} aprovada — vai para "A pagar".`);
+                      router.refresh();
+                    }
+                  });
+                }}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
               >
-                <CreditCard className="h-3.5 w-3.5" />
-                Dar Baixa
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                Aprovar
               </button>
             </div>
           )}
@@ -471,21 +476,11 @@ export function PPDrawerFinanceiro({ pp, open, onOpenChange, contas, tipos, subt
       />
 
       {pp && (
-        <>
-          <BaixaPPModal
-            pp={pp}
-            contas={contas}
-            tipos={tipos}
-            subtipos={subtipos}
-            open={baixaOpen}
-            onOpenChange={setBaixaOpen}
-          />
-          <CancelarBaixaModal
-            pp={pp}
-            open={cancelarBaixaOpen}
-            onOpenChange={setCancelarBaixaOpen}
-          />
-        </>
+        <CancelarBaixaModal
+          pp={pp}
+          open={cancelarBaixaOpen}
+          onOpenChange={setCancelarBaixaOpen}
+        />
       )}
 
       {/* Toast */}
