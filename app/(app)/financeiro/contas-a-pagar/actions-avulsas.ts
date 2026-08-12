@@ -545,8 +545,8 @@ export async function darBaixaAvulsa(input: unknown): Promise<Result> {
     .maybeSingle();
 
   if (!atual) return { ok: false, message: "Conta avulsa não encontrada." };
-  if (atual.status !== "pendente") {
-    return { ok: false, message: "Conta avulsa não está pendente." };
+  if (atual.status !== "aprovada" && atual.status !== "pendente") {
+    return { ok: false, message: "Só avulsa aprovada pode ser baixada." };
   }
 
   const { data: lancId, error } = await supabase.rpc("dar_baixa_avulsa", {

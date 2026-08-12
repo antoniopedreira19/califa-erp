@@ -97,6 +97,7 @@ export async function marcarPagaFinanceiro(input: unknown): Promise<Result> {
   });
 
   revalidatePath("/financeiro/a-pagar");
+  revalidatePath("/financeiro/contas-a-pagar");
   revalidatePath("/financeiro/fluxo-caixa");
   revalidatePath("/financeiro/conciliacao");
   revalidatePath(`/jobs/${pp.job_id}`);
