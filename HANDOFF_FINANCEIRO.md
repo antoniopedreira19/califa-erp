@@ -7,6 +7,7 @@ de negócio tomadas junto com o time durante a execução.
 |---|---|---|---|
 | **I** | `Abertura de Job.dc.html` | fila de abertura, conferência, formulário de registro financeiro | 1 a 10 |
 | **I·rev** | revisão de 12/08 (sem design novo) | previsão de desembolso na calha PP, janelas 08/20, os dois números do fechamento | 11 a 14 |
+| **II** | `Abertura de Job - Financeiro.dc.html`, aba "Jobs abertos" | lista de jobs abertos, job na visão do financeiro | 15 a 18 |
 
 > Contas a pagar, conciliação e lançamentos financeiros já existiam antes deste
 > documento e não estão registrados aqui.
@@ -307,3 +308,107 @@ resíduo da curva (curva − planejado dos itens que já têm PP, consumido na o
 das datas, rolado por janela) entra como camada de previsão por cima dos
 títulos. Sem isso, o fluxo de caixa enxerga o desembolso só depois da PP
 existir — some o horizonte entre a abertura do job e a emissão das PPs.
+
+---
+
+# Parte II — Jobs abertos
+
+**Data:** 2026-08-12
+**Origem do design:** `Abertura de Job - Financeiro.dc.html`, aba "Jobs abertos"
+e tela "Job aberto — visão do financeiro".
+
+---
+
+## 15. As duas telas
+
+| Rota | O que faz |
+|---|---|
+| `/financeiro/abertura-de-job` | ganhou a **segunda aba**: lista dos jobs já abertos, agrupada por projeto |
+| `/financeiro/jobs/[jobId]` | o job na visão do financeiro — somente leitura, focada em dinheiro |
+
+A aba é estado de tela, não rota: as duas listas descem prontas do server
+component, carregadas em `Promise.all`. Trocar de aba não refaz query, e as duas
+contagens do cabeçalho ficam sempre verdadeiras. A aba inicial é "Jobs abertos"
+quando a fila está vazia — que é o estado normal do dia a dia.
+
+**Rota própria para o job, e não a página de Jobs**, porque as duas respondem a
+perguntas diferentes: lá é a operação, aqui é o compromisso financeiro. Planilha
+interna, erratas e comunicação continuam morando em `/jobs/[jobId]`, e daqui se
+navega para lá — duplicar essas três seria criar duas telas caras para manter em
+sincronia.
+
+**Nenhuma migration.** Esta entrega é só leitura do que já existe.
+
+---
+
+## 16. O que saiu do design, e por quê
+
+Três coisas do design **não** entraram, todas por falta de dado real por trás —
+decisões tomadas com o time antes de codar:
+
+1. **Chips e coluna de faturamento** (`Faturado` / `Aguardando faturamento`) e a
+   linha de totais por faturamento. Não existe nada no banco que diga se um job
+   foi faturado. Chip de filtro ligado em campo inexistente devolve zero linhas
+   sempre, e quem usa conclui que o dado sumiu — não que a feature não existe.
+   Entra junto de contas a receber. No lugar, o resumo mostra a contagem e o
+   **valor total** dos jobs visíveis, que recalcula com os filtros.
+2. **Badge "Aguardando encerramento".** `job_status` não tem esse estado e o
+   fluxo de encerramento está registrado como bloqueado em `lib/types.ts`.
+3. **Coluna "Situação" nas previsões de pagamento.** No design, a parcela vira
+   "Pago" quando a data já passou — mas data que passa não paga nada. Pela
+   decisão 004, a previsão é abatida quando a PP do item é emitida. Enquanto
+   esse abatimento não existir de verdade, o card mostra o que sabe (data, valor
+   e % do total) em vez de inventar um estado. Ver seção 18.
+
+Duas colunas **entraram** no lugar das que saíram, porque agora há dado:
+**Categoria** e **Competência**. O filtro "Ano" usa o **ano da competência**, o
+eixo contábil, não o do calendário do job.
+
+O KPI de topo segue a regra de 12/08 — **um número só, o Valor do Job** — e não
+o "Faturamento previsto" que o design mostrava, anterior a essa regra.
+
+---
+
+## 17. Detalhes que valem registro
+
+- **Nome duplo na lista.** A linha mostra o nome do financeiro e, quando difere,
+  o da produção abaixo em cinza. A busca casa com os **dois**: quem procura pode
+  lembrar do nome antigo, não do que o financeiro deu.
+- **Grupos nascem abertos**, e o state guarda os *fechados* — evita semear o
+  state com os ids dos projetos no mount. Com filtro ativo o grupo abre sempre:
+  fechado, ele esconderia justamente o job que o filtro encontrou. Mesmo padrão
+  de `/jobs`.
+- **`aberto_por` não entra como embed.** A FK aponta para `auth.users`, não para
+  `profiles`, então o PostgREST não enxerga relação por ali e devolve *"Could not
+  find a relationship between 'jobs' and 'profiles'"*. O nome vem de uma consulta
+  à parte por id (`profiles.id == auth.users.id`), em paralelo com a do
+  realizado.
+- **PPs rejeitadas e canceladas** aparecem na tabela, mas ficam **fora** do total
+  e dos rodapés: não são compromisso nem desembolso. O rodapé separa o que já
+  saiu do caixa (`pago`) do que está comprometido e ainda não pago
+  (`em_avaliacao` + `aprovada`).
+
+---
+
+## 18. Verificação (2026-08-12)
+
+`tsc --noEmit` e `next lint` limpos; `npm run build` compilou com as duas rotas
+no bundle. No navegador, com dados reais:
+
+| Checagem | Resultado |
+|---|---|
+| Lista | 10 jobs em 5 projetos, total R$ 2.649.570,15 |
+| Filtro GP = Debora Brito | 2 jobs, total recalculado para R$ 537.749,98 |
+| Job com curva e PP (JOB-0010) | previsão de 20/08 · R$ 11.760,00 (100%); PP-00007 rejeitada, fora do total ativo; margem R$ 12.316,81 · 51,2% |
+| Job sem desembolso (JOB-0008) | card de previsões explica a calha BV; card de PPs mostra o vazio |
+| Competência e abertura | preenchidas nas 10 linhas, efeito do backfill dos jobs legados |
+
+---
+
+## 19. O que ficou aberto
+
+1. **Faturamento** — chips, coluna e totais, junto de contas a receber.
+2. **Encerramento** — badge e chip, quando o fluxo existir.
+3. **Abatimento da previsão por PP** — a coluna "Situação" do card de previsões
+   e a integração com `vw_fluxo_caixa` (seção 14). As regras já estão fechadas em
+   `docs/decisions/004-previsao-de-desembolso.md`.

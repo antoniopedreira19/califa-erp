@@ -3,8 +3,10 @@ import { redirect } from "next/navigation";
 import { Landmark } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { listarFilaDeAbertura } from "./dados";
+import { listarJobsAbertos } from "./dados-abertos";
 import { formatEnviadoEm } from "./formatos";
-import { FilaAbertura, type FilaLinha } from "./fila-list";
+import { type FilaLinha } from "./fila-list";
+import { AberturaTabs } from "./abertura-tabs";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +19,12 @@ export default async function AberturaDeJobPage() {
     redirect("/home?reason=sem_permissao_financeira");
   }
 
-  const fila = await listarFilaDeAbertura(session.activeTenant.id);
+  // Duas queries independentes — em paralelo, nunca em série
+  // (`docs/PERFORMANCE.md`).
+  const [fila, abertos] = await Promise.all([
+    listarFilaDeAbertura(session.activeTenant.id),
+    listarJobsAbertos(session.activeTenant.id),
+  ]);
 
   // "há 2 horas" é calculado aqui, no servidor, e desce como texto pronto:
   // calcular no client component causaria divergência de hidratação.
@@ -48,26 +55,7 @@ export default async function AberturaDeJobPage() {
         </p>
       </header>
 
-      {/* Barra de abas com uma aba só: "Jobs abertos" entra aqui na
-          próxima entrega, junto com a marcação de faturamento. */}
-      <div
-        role="tablist"
-        aria-label="Seções da abertura de job"
-        className="flex items-center gap-1 border-b border-border"
-      >
-        <span
-          role="tab"
-          aria-selected="true"
-          className="mr-5 inline-flex items-center gap-2 border-b-2 border-california-red px-1 py-3 text-sm font-semibold"
-        >
-          Jobs aguardando abertura
-          <span className="inline-flex items-center rounded-full bg-california-red/10 px-2.5 py-0.5 font-mono text-[11px] font-bold text-[#b3323c]">
-            {linhas.length}
-          </span>
-        </span>
-      </div>
-
-      <FilaAbertura linhas={linhas} />
+      <AberturaTabs fila={linhas} abertos={abertos} />
     </div>
   );
 }
