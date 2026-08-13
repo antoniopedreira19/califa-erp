@@ -62,7 +62,7 @@ begin
     update public.itens_bv
        set situacao = 'confirmado'
      where id = v_fat.origem_id
-       and situacao in ('recebido', 'confirmado'); -- confirmado é no-op mas explícito
+       and situacao = 'recebido';
   end if;
 
   -- Se origem='job': nada a fazer aqui — a fila derivada recalcula sozinha

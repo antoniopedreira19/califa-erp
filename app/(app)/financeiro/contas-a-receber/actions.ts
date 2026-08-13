@@ -102,7 +102,7 @@ export async function emitirFaturamento(
     return { ok: false, message: parsed.error.issues[0]?.message ?? "Entrada inválida." };
   }
   const gate = await checarGateFinanceiro(
-    parsed.data.origem_id ?? "avulso",
+    parsed.data.origem_id ?? "",
     "faturamento",
     "faturamento.emitido",
   );
