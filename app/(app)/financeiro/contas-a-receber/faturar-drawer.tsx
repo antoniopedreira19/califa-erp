@@ -3,10 +3,12 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { format, addDays } from "date-fns";
-import { FileText, Trash2, Plus, AlertTriangle, X } from "lucide-react";
+import { FileText, Trash2, Plus, AlertTriangle, X, Paperclip, CheckCircle2 } from "lucide-react";
 import { Dialog, DrawerContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { formatCurrency } from "@/lib/utils";
 import type { ContaBancaria, PlanoContaTipo, PlanoContaSubtipo } from "@/lib/types";
 import { emitirFaturamento, uploadNfPdf } from "./actions";
@@ -223,11 +225,11 @@ export function FaturarDrawer({
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="text-xs font-medium">Empresa emissora *</label>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="empresa">Empresa emissora *</Label>
               <Select value={empresaId} onValueChange={setEmpresaId} disabled={!isAvulso && origemTipo === "job"}>
-                <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                <SelectTrigger id="empresa"><SelectValue placeholder="Selecione..." /></SelectTrigger>
                 <SelectContent>
                   {empresas.map((e) => (
                     <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>
@@ -235,11 +237,11 @@ export function FaturarDrawer({
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1">
-              <label className="text-xs font-medium">{tipoContraparte} *</label>
+            <div className="space-y-2">
+              <Label htmlFor="contraparte">{tipoContraparte} *</Label>
               {origemTipo === "bv" ? (
                 <Select value={fornecedorId} onValueChange={setFornecedorId} disabled={!podeEditarContraparte}>
-                  <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                  <SelectTrigger id="contraparte"><SelectValue placeholder="Selecione..." /></SelectTrigger>
                   <SelectContent>
                     {fornecedores.map((f) => (
                       <SelectItem key={f.id} value={f.id}>{f.nome}</SelectItem>
@@ -248,7 +250,7 @@ export function FaturarDrawer({
                 </Select>
               ) : (
                 <Select value={clienteId} onValueChange={setClienteId} disabled={!podeEditarContraparte}>
-                  <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                  <SelectTrigger id="contraparte"><SelectValue placeholder="Selecione..." /></SelectTrigger>
                   <SelectContent>
                     {clientes.map((c) => (
                       <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>
@@ -259,53 +261,82 @@ export function FaturarDrawer({
             </div>
           </div>
 
-          <div className="space-y-1">
-            <label className="text-xs font-medium">Descrição *</label>
-            <input
+          <div className="space-y-2">
+            <Label htmlFor="descricao">Descrição *</Label>
+            <Input
+              id="descricao"
               type="text"
               value={descricao}
               onChange={(e) => setDescricao(e.target.value)}
               maxLength={200}
-              className="w-full rounded-lg border border-border bg-white px-3 py-2 text-sm"
+              placeholder="Ex: Serviço prestado ao cliente X em setembro"
             />
           </div>
 
-          <div className="rounded-lg border border-dashed border-border p-3">
-            <label className="text-xs font-medium">Anexo NF (PDF) *</label>
-            <input
-              type="file"
-              accept="application/pdf"
-              onChange={handleFile}
-              disabled={uploading}
-              className="mt-1 block w-full text-xs"
-            />
-            {uploading && <p className="mt-1 text-xs text-muted-foreground">Enviando...</p>}
+          {/* Anexo NF */}
+          <div className="space-y-2">
+            <Label>Anexo NF (PDF) *</Label>
+
             {anexoNome && (
-              <p className="mt-1 text-xs text-emerald-700">{anexoNome} enviado.</p>
+              <div className="flex items-center justify-between rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm">
+                <span className="flex items-center gap-2 truncate">
+                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+                  <span className="truncate">{anexoNome}</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAnexoPath(null);
+                    setAnexoNome(null);
+                  }}
+                  className="ml-2 shrink-0 rounded p-1 text-muted-foreground hover:text-california-red hover:bg-accent transition-colors"
+                  aria-label="Remover anexo"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )}
+
+            {!anexoNome && (
+              <div>
+                <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-white px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
+                  <Paperclip className="h-4 w-4" />
+                  {uploading ? "Enviando..." : "Anexar PDF"}
+                  <input
+                    type="file"
+                    accept="application/pdf"
+                    className="sr-only"
+                    onChange={handleFile}
+                    disabled={uploading}
+                  />
+                </label>
+                <p className="mt-1 text-xs text-muted-foreground">Apenas PDF · máx. 10 MB</p>
+              </div>
             )}
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
-            <div className="space-y-1">
-              <label className="text-xs font-medium">Nº NF *</label>
-              <input
+          <div className="grid grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="numero-nf">Nº NF *</Label>
+              <Input
+                id="numero-nf"
                 type="text"
                 value={numeroNf}
                 onChange={(e) => setNumeroNf(e.target.value)}
-                className="w-full rounded-lg border border-border bg-white px-3 py-2 text-sm"
+                placeholder="Ex: 12345"
               />
             </div>
-            <div className="space-y-1">
-              <label className="text-xs font-medium">Série *</label>
-              <input
+            <div className="space-y-2">
+              <Label htmlFor="serie">Série *</Label>
+              <Input
+                id="serie"
                 type="text"
                 value={serie}
                 onChange={(e) => setSerie(e.target.value)}
-                className="w-full rounded-lg border border-border bg-white px-3 py-2 text-sm"
               />
             </div>
-            <div className="space-y-1">
-              <label className="text-xs font-medium">Emissão *</label>
+            <div className="space-y-2">
+              <Label>Emissão *</Label>
               <DatePicker
                 name="data_emissao"
                 defaultValue={dataEmissao}
@@ -314,21 +345,24 @@ export function FaturarDrawer({
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
-            <div className="space-y-1">
-              <label className="text-xs font-medium">Valor total *</label>
-              <input
+          <div className="grid grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="valor-total">Valor total (R$) *</Label>
+              <Input
+                id="valor-total"
                 type="number"
                 step="0.01"
+                min="0.01"
                 value={valorTotal}
                 onChange={(e) => setValorTotal(e.target.value)}
-                className="w-full rounded-lg border border-border bg-white px-3 py-2 text-sm font-mono"
+                placeholder="0,00"
+                className="font-mono [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               />
             </div>
-            <div className="space-y-1">
-              <label className="text-xs font-medium">Tipo *</label>
+            <div className="space-y-2">
+              <Label htmlFor="tipo">Tipo *</Label>
               <Select value={tipoId} onValueChange={setTipoId}>
-                <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                <SelectTrigger id="tipo"><SelectValue placeholder="Selecione..." /></SelectTrigger>
                 <SelectContent>
                   {tiposAtivos.map((t) => (
                     <SelectItem key={t.id} value={t.id}>{t.codigo} · {t.nome}</SelectItem>
@@ -336,10 +370,10 @@ export function FaturarDrawer({
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1">
-              <label className="text-xs font-medium">Subtipo *</label>
+            <div className="space-y-2">
+              <Label htmlFor="subtipo">Subtipo *</Label>
               <Select value={subtipoId} onValueChange={setSubtipoId} disabled={!tipoId}>
-                <SelectTrigger><SelectValue placeholder={tipoId ? "Selecione..." : "Escolha o tipo"} /></SelectTrigger>
+                <SelectTrigger id="subtipo"><SelectValue placeholder={tipoId ? "Selecione..." : "Escolha o tipo"} /></SelectTrigger>
                 <SelectContent>
                   {subtiposDoTipo.map((s) => (
                     <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>
@@ -349,51 +383,67 @@ export function FaturarDrawer({
             </div>
           </div>
 
-          <div className="space-y-2 rounded-lg border border-border p-3">
+          {/* Parcelas */}
+          <div className="space-y-3 rounded-xl border border-border bg-muted/20 p-4">
             <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Parcelas</label>
+              <Label className="uppercase tracking-wider text-xs">Parcelas</Label>
               <div className="flex gap-1">
-                <button type="button" onClick={() => aplicarParcelamentoPadrao(2)} className="rounded border border-border px-2 py-1 text-[10px]">2×</button>
-                <button type="button" onClick={() => aplicarParcelamentoPadrao(3)} className="rounded border border-border px-2 py-1 text-[10px]">3×</button>
-                <button type="button" onClick={() => aplicarParcelamentoPadrao(6)} className="rounded border border-border px-2 py-1 text-[10px]">6×</button>
+                {[2, 3, 6].map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => aplicarParcelamentoPadrao(n)}
+                    className="rounded-md border border-border bg-white px-2 py-1 text-[11px] font-medium text-muted-foreground hover:border-california-red/40 hover:text-foreground transition-colors"
+                  >
+                    {n}×
+                  </button>
+                ))}
               </div>
             </div>
-            {parcelas.map((p, i) => (
-              <div key={i} className="grid grid-cols-[40px_1fr_1fr_40px] items-center gap-2">
-                <span className="text-xs text-muted-foreground">{p.numero}</span>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={p.valor}
-                  onChange={(e) => updateParcela(i, "valor", e.target.value)}
-                  placeholder="Valor"
-                  className="rounded border border-border px-2 py-1 text-sm font-mono"
-                />
-                <DatePicker
-                  name={`venc-${i}`}
-                  defaultValue={p.data_vencimento}
-                  onDateChange={(d) => updateParcela(i, "data_vencimento", d ? format(d, "yyyy-MM-dd") : "")}
-                />
-                <button
-                  type="button"
-                  onClick={() => removerParcela(i)}
-                  disabled={parcelas.length === 1}
-                  className="text-muted-foreground hover:text-california-red disabled:opacity-30"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            ))}
-            <button
-              type="button"
-              onClick={addParcela}
-              className="inline-flex items-center gap-1 rounded border border-dashed border-border px-2 py-1 text-xs"
-            >
-              <Plus className="h-3 w-3" /> Nova parcela
-            </button>
-            <p className={`text-xs ${somaOk ? "text-emerald-700" : "text-california-red"}`}>
-              Soma: {formatCurrency(somaParcelas, "BRL")} / Total: {formatCurrency(valorTotalNum, "BRL")}
-            </p>
+
+            <div className="space-y-2">
+              {parcelas.map((p, i) => (
+                <div key={i} className="grid grid-cols-[32px_1fr_1fr_36px] items-center gap-2">
+                  <span className="text-xs font-medium text-muted-foreground text-center">{p.numero}</span>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    value={p.valor}
+                    onChange={(e) => updateParcela(i, "valor", e.target.value)}
+                    placeholder="0,00"
+                    className="font-mono h-10 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  />
+                  <DatePicker
+                    name={`venc-${i}`}
+                    defaultValue={p.data_vencimento}
+                    onDateChange={(d) => updateParcela(i, "data_vencimento", d ? format(d, "yyyy-MM-dd") : "")}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removerParcela(i)}
+                    disabled={parcelas.length === 1}
+                    className="flex items-center justify-center rounded-md p-1.5 text-muted-foreground hover:text-california-red hover:bg-accent transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
+                    aria-label="Remover parcela"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex items-center justify-between border-t border-border/60 pt-3">
+              <button
+                type="button"
+                onClick={addParcela}
+                className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-border bg-white px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:border-california-red/40 hover:text-foreground transition-colors"
+              >
+                <Plus className="h-3 w-3" /> Nova parcela
+              </button>
+              <p className={`text-xs font-medium ${somaOk ? "text-emerald-700" : "text-california-red"}`}>
+                Soma {formatCurrency(somaParcelas, "BRL")} / Total {formatCurrency(valorTotalNum, "BRL")}
+              </p>
+            </div>
           </div>
         </div>
 
