@@ -183,6 +183,8 @@ Admin cadastrado: `antonio@pevetech.com.br` (role `administrador` no tenant `age
 ### Task 005 — Aprovação de versão (Fase E) + Jobs + Central Financeira
 - **Aprovação de versão** (`aprovarVersao(versaoId)`):
   - Valida versão em `rascunho|em_revisao|enviada_cliente`, orçamento não em `job_criado|aprovado|cancelado`, ≥1 item.
+  - ⚠️ **13/08/2026 — o gate de aprovação apertou.** Além de ≥1 item, agora exige **alíquota de imposto entre as fixas** (19,53 / 24,269914) e **≥1 item com `total_orcado > 0`**. Item existir não basta: linha criada e não preenchida dá total zero e abria job com orçado zerado. As três checagens moram em `bloqueioAprovacaoVersao` (`lib/validations/versoes.ts`), usada pela server action E pelo botão — mensagem única, o botão desabilita com o motivo à vista. **Criar e editar versão continuam aceitando imposto em branco**; a exigência é só na aprovação. Ver `docs/decisions/006-aliquota-fixa-e-gate-de-aprovacao.md`.
+  - ⚠️ **13/08/2026 — imposto virou seletor.** O campo livre saiu das três telas (parâmetros do rascunho, nova versão, editar versão). Opções em `lib/impostos.ts` (`ALIQUOTAS_IMPOSTO`) — não escrever percentual solto no JSX. `versoes_orcamento.percentual_imposto` foi para `numeric(10,6)` (migration `20260813000002`) porque `numeric(6,3)` arredondava 24,269914 para 24,270.
   - Update versão pra `aprovada` (trigger `cascata_versao_aprovada` no banco cascata as outras versões pra `substituida`).
   - Update orçamento pra `aprovado` com `versao_aprovada_id`, `aprovado_em`, `aprovado_por`.
   - Audit `versao_orcamento.aprovada`.

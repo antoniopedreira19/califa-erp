@@ -169,7 +169,6 @@ export default async function OrcamentoDetailPage({
     return {
       id: v.id,
       numero_versao: v.numero_versao,
-      nome: v.nome,
       status: v.status as VersaoOrcamentoStatus,
       percentual_honorarios: Number(v.percentual_honorarios ?? 0),
       percentual_imposto: Number(v.percentual_imposto ?? 0),
@@ -343,6 +342,7 @@ export default async function OrcamentoDetailPage({
           <VersoesList
             projetoId={params.projetoId}
             orcamentoId={orcamento.id}
+            nomeJob={orcamento.nome}
             versoes={versoes}
             podeAprovarVersao={
               orcamento.status !== "aprovado" &&

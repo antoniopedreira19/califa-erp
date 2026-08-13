@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { AlertCircle, ClipboardList } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { nomeVersao } from "@/lib/nome-versao";
 import type {
   Job,
   VersaoOrcamento,
@@ -27,7 +28,9 @@ interface Props {
     | "empresa_id"
     | "responsavel_id"
   >;
-  versao: Pick<VersaoOrcamento, "id" | "numero_versao" | "nome" | "moeda" | "percentual_honorarios" | "percentual_imposto">;
+  versao: Pick<VersaoOrcamento, "id" | "numero_versao" | "moeda" | "percentual_honorarios" | "percentual_imposto">;
+  /** "Nome do Job" do orçamento — base do nome da versão. */
+  nomeJob: string;
   grupos: VersaoOrcamentoGrupo[];
   itens: ItemPlanilhaJob[];
   realizadosMap: Map<string, JobItemRealizado>;
@@ -43,6 +46,7 @@ interface Props {
 export function JobRealizadoSection({
   job,
   versao,
+  nomeJob,
   grupos,
   itens,
   realizadosMap,
@@ -99,8 +103,7 @@ export function JobRealizadoSection({
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <ClipboardList className="h-4 w-4 text-california-red" />
           <span>
-            Planilha do job · v{versao.numero_versao}
-            {versao.nome ? ` · ${versao.nome}` : ""}
+            Planilha do job · {nomeVersao(nomeJob, versao.numero_versao)}
           </span>
         </div>
         <div className="flex items-center gap-3">

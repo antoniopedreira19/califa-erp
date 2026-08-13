@@ -15,12 +15,12 @@ import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { cn, formatCurrency } from "@/lib/utils";
 import { versaoStatusLabel, type VersaoOrcamentoStatus } from "@/lib/types";
+import { nomeVersao } from "@/lib/nome-versao";
 import { aprovarVersao, cancelarVersao, duplicarVersao } from "./actions";
 
 export interface VersaoRow {
   id: string;
   numero_versao: number;
-  nome: string | null;
   status: VersaoOrcamentoStatus;
   percentual_honorarios: number;
   percentual_imposto: number;
@@ -64,11 +64,14 @@ function statusBadgeClasses(status: VersaoOrcamentoStatus): string {
 export function VersoesList({
   projetoId,
   orcamentoId,
+  nomeJob,
   versoes,
   podeAprovarVersao,
 }: {
   projetoId: string;
   orcamentoId: string;
+  /** "Nome do Job" do orçamento — base do nome de toda versão dele. */
+  nomeJob: string;
   versoes: VersaoRow[];
   /** false quando orçamento está aprovado/job_criado/cancelado — botão aprovar some. */
   podeAprovarVersao: boolean;
@@ -169,7 +172,7 @@ export function VersoesList({
                         isMaisRecente ? "font-semibold" : "font-medium",
                       )}
                     >
-                      {v.nome ?? `Versão ${v.numero_versao}`}
+                      {nomeVersao(nomeJob, v.numero_versao)}
                     </Link>
                     {isMaisRecente && <Badge>Mais recente</Badge>}
                     <Badge className={cn("border", statusBadgeClasses(v.status))}>
