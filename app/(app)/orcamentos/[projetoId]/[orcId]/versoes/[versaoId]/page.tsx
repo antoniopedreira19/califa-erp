@@ -23,6 +23,7 @@ import { NovoGrupoDrawer } from "./novo-grupo-drawer";
 import { ResumoRentabilidade } from "./resumo-rentabilidade";
 import { TotaisCard } from "./totais-card";
 import { VersaoEditorDrawer } from "./versao-editor-drawer";
+import { ImportarPlanilhaDrawer } from "../importar-drawer";
 import { AprovacaoActions } from "./aprovacao-actions";
 import {
   BannersEstado,
@@ -375,6 +376,29 @@ export default async function VersaoDetailPage({
               <Download className="h-3.5 w-3.5" />
               Exportar
             </a>
+            {/* Ao lado do Exportar, como o time pediu: quem percebeu que
+                importou a planilha errada troca por aqui mesmo, sem sair
+                da versão. Em versão congelada some — lá não há o que
+                substituir. */}
+            {!readOnly && (
+              <ImportarPlanilhaDrawer
+                projetoId={params.projetoId}
+                orcamentoId={params.orcId}
+                modo="sobrescrever"
+                versaoId={versao.id}
+                conteudoAtual={{
+                  grupos: grupos.length,
+                  itens: itens.length,
+                  bvs: Object.keys(bvsPorItem).length,
+                }}
+                disabled={temJobAtivo}
+                disabledReason={
+                  temJobAtivo
+                    ? "Esta versão já gerou um job e não pode ser sobrescrita."
+                    : undefined
+                }
+              />
+            )}
           </div>
 
           <ResumoRentabilidade
