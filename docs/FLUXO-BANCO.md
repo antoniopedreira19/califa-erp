@@ -19,11 +19,6 @@ nele.** Isso tem duas consequências práticas:
    de gente que vai usar o sistema. Erro aqui não se resolve apagando e
    recriando.
 
-> Se a sessão tiver um combinado próprio sobre até onde ir sem perguntar
-> (por exemplo, quem é dono do projeto Supabase, ou uma janela de
-> manutenção a respeitar), ele vive no `CLAUDE.local.md` de cada um —
-> arquivo pessoal, fora do controle de versão.
-
 ---
 
 ## O ciclo obrigatório, em cinco passos
@@ -95,9 +90,9 @@ em texto versionado.
 
 ## Aditivo x destrutivo: onde está a linha
 
-A régua abaixo vale para todo mundo. **Até onde cada frente vai sem parar
-para perguntar é combinado de cada sessão** e mora no `CLAUDE.local.md` de
-cada um.
+O que é aditivo segue o fluxo normal dos cinco passos. O que é destrutivo
+**exige confirmação explícita antes de ser aplicado** — sem exceção, e
+independente de quem esteja conduzindo a sessão.
 
 ### Aditivo — não destrói nada
 
