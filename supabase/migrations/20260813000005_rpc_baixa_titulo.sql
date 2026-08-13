@@ -36,8 +36,8 @@ begin
 
   -- 2. Carrega faturamento pai (pra descrição, tipo/subtipo, contraparte)
   select * into v_fat from public.faturamentos where id = v_titulo.faturamento_id;
-  if v_fat.status = 'cancelado' then
-    raise exception 'Faturamento pai está cancelado.';
+  if v_fat.status <> 'emitido' then
+    raise exception 'Faturamento não está emitido (status atual: %).', v_fat.status;
   end if;
 
   -- 3. Carrega conta + valida empresa/data
