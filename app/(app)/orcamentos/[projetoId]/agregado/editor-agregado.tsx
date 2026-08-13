@@ -387,7 +387,8 @@ export function EditorAgregado({
         if (!aceitaBV(alvo.tipo_custo)) {
           return {
             ok: false,
-            message: "BV só pode ser lançado em item de custo tipo A ou D.",
+            message:
+              "BV só pode ser lançado em item de custo tipo A, A · Repasse ou D.",
           };
         }
         const parsed = bvSchema.safeParse({

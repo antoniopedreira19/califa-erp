@@ -1518,3 +1518,49 @@ de faturamento).
 **Aberto pela Entrega 14:** ver os três pontos da seção 15.12. O item 2
 (dados de teste no TESTE-0001/26) é o único que pede ação imediata do
 time; os outros dois são limitações conhecidas e documentadas.
+
+---
+
+## 16. `A · Repasse` passou a aceitar BV (2026-08-13)
+
+> ⚠️ **Reverte a regra da Entrega 12/13.** Naquelas entregas o BV existia
+> só em `A` e `D`, e a decisão 003 dizia explicitamente que o
+> `A · Repasse` não tinha BV. Passou a ter, confirmado com o time em
+> 13/08/2026.
+
+### Efeito nesta tela
+
+Um só: **a linha de tipo `AR` agora mostra a pílula de BV**, exatamente
+como `A` e `D` — "Adicionar BV" / "Abrir BV", mesmo formulário, mesmo
+ciclo de vida de situação, mesma trava de edição depois de enviado ao
+financeiro.
+
+**A pílula não se divide aqui.** A calha dividida (BV │ PP) do design
+`Job - A com Repasse - BV e PP.dc.html` é da planilha do **job**: a PP
+nasce do realizado (`pedidos_compra` referencia `job_itens_realizado`) e
+no orçamento nada disso existe ainda. Decisão do time, 13/08/2026.
+
+Nada mais mudou na tela: nem colgroup, nem larguras, nem a reserva de
+`pr-[154px]`, nem o card de Totais, nem qualquer número do fechamento.
+
+### Consequências automáticas que valem conferir
+
+Tudo o que já lia `aceitaBV()` passou a incluir `AR` sozinho, e isso é o
+comportamento desejado:
+
+- mudar o tipo de um item de `A` para `AR` **não cancela mais** o BV
+  lançado (antes cancelava, porque `AR` saía da lista);
+- os editores multi-jobs e agregado aceitam BV em `AR`;
+- as mensagens de erro passaram de "tipo A ou D" para "tipo A,
+  A · Repasse ou D".
+
+### Onde está a regra
+
+`TIPOS_COM_BV` em `lib/calculos/versao-totais.ts` e o trigger
+`bv_exige_item_com_bv` no Postgres (`20260813000001_bv_aceita_a_repasse.sql`).
+Os dois precisam andar juntos — mudar um sem o outro deixa a tela
+oferecendo um BV que o banco recusa.
+
+O resto da história — por que `AR` tem as duas coisas, e por que "tem BV"
+e "sai do caixa da California" viraram duas perguntas separadas — está na
+decisão 003 e na seção 30 do `HANDOFF_JOBS.md`.

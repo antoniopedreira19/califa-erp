@@ -16,13 +16,11 @@ import type {
   ItemBv,
 } from "@/lib/types";
 import { upsertItemRealizado, type CampoRealizado } from "../actions-realizado";
-import { PPActionsCell } from "./pp-actions-cell";
+import { CalhaLinha } from "./calha-linha";
 import { GerarPPDrawer } from "./gerar-pp-drawer";
 import { BvDialog } from "@/app/(app)/_bv/bv-dialog";
-import {
-  BvActionButton,
-  LARGURA_CALHA_BV,
-} from "@/app/(app)/_bv/bv-action-button";
+import { acaoBv } from "@/app/(app)/_bv/bv-action-button";
+import { LARGURA_CALHA } from "@/app/(app)/_planilha/calha-acoes";
 import {
   ORCADO,
   PLANEJADO,
@@ -32,7 +30,7 @@ import {
   RENTAB_VALOR,
 } from "@/app/(app)/_planilha/blocos";
 import { ColunasJob, LARGURA_MINIMA_JOB } from "@/app/(app)/_planilha/grade-job";
-import { aceitaBV } from "@/lib/calculos/versao-totais";
+import { aceitaBV, tipoGeraDesembolso } from "@/lib/calculos/versao-totais";
 
 interface Props {
   jobId: string;
@@ -48,7 +46,7 @@ interface Props {
   empresas: Array<Pick<Empresa, "id" | "razao_social" | "nome_fantasia" | "ativo" | "principal">>;
   jobEmpresaId: string;
   jobResponsavelId: string;
-  /** BV por id do item da versão. Só existe em item tipo A ou D. */
+  /** BV por id do item da versão. Só existe em item tipo A, AR ou D. */
   bvsPorItem: Record<string, ItemBv>;
   /** "v5" — aparece no subtítulo do formulário de BV. */
   versaoLabel: string;
@@ -61,38 +59,17 @@ interface Props {
   acoesGrupo?: React.ReactNode;
 }
 
-/** BV e Pedido de Produção não coexistem na calha: em A e D o cliente
- *  paga o fornecedor diretamente (há comissão a negociar, não há PP a
- *  emitir); em B e C o custo passa pela California e o que existe é a
- *  PP. A coluna Tipo é quem decide qual botão a linha mostra. */
-
-/** Pílula do BV na calha do job. Mesma linguagem da tela de Orçamentos e
- *  a mesma pílula de Gerar PP / Ver PP, na mesma altura e encostada na
- *  mesma borda — BV e PP nunca dividem a linha, então o slot é único. */
-function BvActionCell({
-  bv,
-  itemNome,
-  somenteLeitura,
-  onAbrir,
-}: {
-  bv: ItemBv | null;
-  itemNome: string;
-  somenteLeitura?: boolean;
-  onAbrir: () => void;
-}) {
-  const travado = somenteLeitura || (bv !== null && bv.situacao !== "a_negociar");
-
-  return (
-    <div className={cn("flex items-center", ALTURA_LINHA)}>
-      <BvActionButton
-        temBv={bv !== null}
-        itemNome={itemNome}
-        somenteLeitura={travado}
-        onClick={onAbrir}
-      />
-    </div>
-  );
-}
+/** Quem decide o conteúdo da calha é a coluna Tipo:
+ *
+ *   - `A` e `D` — o cliente paga o fornecedor direto. Só BV.
+ *   - `B`, `C`, `F`, `FI` — o custo sai do caixa da California. Só PP.
+ *   - `AR` (A · Repasse) — as duas coisas na mesma linha: o principal
+ *     passa pela California e vira PP, e ainda há comissão a negociar com
+ *     o fornecedor, que é o BV. Desde 13/08/2026 é o único tipo assim, e
+ *     é ele que a pílula dividida atende.
+ *
+ *  A pílula dividida cabe na MESMA calha de sempre (116px), então a
+ *  reserva da página não muda e a tabela não perde um pixel. */
 
 type CelulaAtiva = { itemId: string; campo: CampoRealizado } | null;
 type Overrides = Record<string, Partial<Record<CampoRealizado, number>>>;
@@ -586,46 +563,56 @@ export function JobItemRealizadoTable({
         <div
           className={cn(
             "absolute left-full ml-2.5 flex flex-col",
-            LARGURA_CALHA_BV,
+            LARGURA_CALHA,
           )}
           style={{ top: railTop }}
         >
           {itens.map((item) => {
-            // Tipo A/D: a linha negocia BV e nunca emite PP.
-            if (aceitaBV(item.tipo_custo)) {
-              const bv = bvsPorItem[item.id] ?? null;
-              // Sem BV num job congelado não há o que consultar — a vaga
-              // fica vazia para não desalinhar as linhas de baixo.
-              if (!editable && !bv) {
-                return <div key={item.id} className={ALTURA_LINHA} />;
-              }
-              return (
-                <BvActionCell
-                  key={item.id}
-                  bv={bv}
-                  itemNome={item.item}
-                  somenteLeitura={!editable}
-                  onAbrir={() => setBvAberto(item)}
-                />
-              );
-            }
+            // ---- BV: tipos A, AR e D ----
+            const bv = bvsPorItem[item.id] ?? null;
+            // Sem BV num job congelado não há o que consultar — a vaga
+            // fica vazia para não desalinhar as linhas de baixo.
+            const mostraBv =
+              aceitaBV(item.tipo_custo) && (editable || bv !== null);
+            const travado =
+              !editable || (bv !== null && bv.situacao !== "a_negociar");
 
-            if (!editable) return <div key={item.id} className={ALTURA_LINHA} />;
-
+            // ---- PP: tipos de calha PP (AR, B, C, F, FI) ----
+            // Job congelado não gera nem consulta PP na planilha: a aba de
+            // Pedidos de Produção é quem guarda o histórico.
             const realizado = realizadosMap.get(item.id);
-            const total = realizado ? Number(realizado.total_realizado ?? 0) : 0;
             const realizadoId = realizado?.id ?? "";
             const pp = ppsPorItemId.get(realizadoId) ?? null;
-            const otimista = ppsOtimistas.get(realizadoId) ?? null;
+
             return (
-              <PPActionsCell
+              <CalhaLinha
                 key={item.id}
-                itemRealizadoId={realizadoId}
-                totalRealizado={total}
-                pp={pp}
-                ppOtimista={pp ? null : otimista}
-                editable={editable}
-                onGerar={abrirDrawer}
+                altura={ALTURA_LINHA}
+                bv={
+                  mostraBv
+                    ? acaoBv({
+                        temBv: bv !== null,
+                        itemNome: item.item,
+                        somenteLeitura: travado,
+                        onClick: () => setBvAberto(item),
+                      })
+                    : null
+                }
+                pp={
+                  editable && tipoGeraDesembolso(item.tipo_custo)
+                    ? {
+                        itemRealizadoId: realizadoId,
+                        totalRealizado: realizado
+                          ? Number(realizado.total_realizado ?? 0)
+                          : 0,
+                        pedido: pp,
+                        otimista: pp
+                          ? null
+                          : ppsOtimistas.get(realizadoId) ?? null,
+                        onGerar: abrirDrawer,
+                      }
+                    : null
+                }
               />
             );
           })}

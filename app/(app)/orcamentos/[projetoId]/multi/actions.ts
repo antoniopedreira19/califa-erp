@@ -205,7 +205,7 @@ export async function salvarOrcamentosDoProjeto(
           if (!aceitaBV(itemOk.data.tipo_custo)) {
             return {
               ok: false,
-              message: `${rotulo} · ${item.item}: BV só existe em item de custo tipo A ou D.`,
+              message: `${rotulo} · ${item.item}: BV só existe em item de custo tipo A, A · Repasse ou D.`,
             };
           }
           const bvOk = bvSchema.safeParse(item.bv);

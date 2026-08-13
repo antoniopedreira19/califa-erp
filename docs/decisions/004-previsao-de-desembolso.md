@@ -22,7 +22,15 @@ segunda parte não muda nem em fase futura (decisão do financeiro,
 
 A fonte no código é o campo `calha` de `REGRAS_TIPO_CUSTO`
 (`lib/calculos/versao-totais.ts`), o mesmo lugar das demais regras por
-tipo. O banco valida o lado BV no trigger `bv_tipo_com_bv` (A ou D).
+tipo.
+
+> ⚠️ 13/08/2026 — `AR` passou a aceitar BV também (decisão 003). Isso
+> **não mexe nesta decisão**: `calha` continua "PP" no `AR`, então ele
+> segue entrando na previsão de desembolso exatamente como antes. "Tem
+> BV" e "sai do caixa da California" viraram duas perguntas separadas, e
+> só a segunda é que esta decisão lê. Quem responde pela primeira é
+> `TIPOS_COM_BV`, validado no banco pelo trigger `bv_exige_item_com_bv`
+> (hoje `A`, `AR`, `D`).
 
 Consequência aceita: job 100% A/D abre com custo previsto **zero** e sem
 curva. A tela avisa que não há desembolso previsto — é um estado

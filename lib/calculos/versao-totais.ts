@@ -21,13 +21,15 @@ export interface RegraTipoCusto {
   honorarios: boolean;
   /** Entra na base de imposto (junto com os honorários, em gross-up). */
   imposto: boolean;
-  /** Calha do item: "PP" quando a California paga o fornecedor (o custo
-   *  vira Pedido de Produção e sai do caixa dela); "BV" quando o cliente
-   *  paga o fornecedor direto (o que existe é comissão a negociar).
-   *  É a mesma regra do trigger `bv_tipo_com_bv` no banco (A ou D) e da
-   *  coluna Calha em docs/decisions/003. Quem monta previsão de
-   *  desembolso filtra por "PP" — item de calha BV nunca gera previsão
-   *  (docs/decisions/004). */
+  /** De quem sai o dinheiro do principal: "PP" quando a California paga o
+   *  fornecedor (o custo vira Pedido de Produção e sai do caixa dela);
+   *  "BV" quando o cliente paga o fornecedor direto. Quem monta previsão
+   *  de desembolso filtra por "PP" — item de calha BV nunca gera previsão
+   *  (docs/decisions/004).
+   *
+   *  NÃO é o mesmo que "tem BV": desde 13/08/2026 o A · Repasse paga o
+   *  fornecedor pela California (calha "PP") **e** negocia comissão com
+   *  ele (BV). Quem responde por BV é `TIPOS_COM_BV`, mais abaixo. */
   calha: "PP" | "BV";
 }
 
@@ -134,14 +136,23 @@ export function somarLinhaFechamento(
 }
 
 /**
- * Tipos em que o cliente paga o fornecedor diretamente — os únicos que
- * admitem BV. Espelha o trigger `bv_exige_item_com_bv` no Postgres; mudar
- * aqui sem mudar lá deixa a tela oferecendo um BV que o banco recusa.
+ * Tipos em que existe comissão a negociar com o fornecedor — os únicos
+ * que admitem BV. Espelha o trigger `bv_exige_item_com_bv` no Postgres;
+ * mudar aqui sem mudar lá deixa a tela oferecendo um BV que o banco
+ * recusa.
  *
- * A · Repasse fica de fora de propósito: nele o dinheiro passa pela
- * California, então não há comissão direta a negociar. F também não tem BV.
+ * `A` e `D`: o cliente paga o fornecedor direto, e o que sobra para a
+ * California é a comissão.
+ *
+ * `AR` entrou em 13/08/2026 (decisão do time). Ele é o único tipo com as
+ * DUAS coisas na mesma linha: o principal passa pela California e é
+ * repassado ao fornecedor — segue gerando Pedido de Produção, porque
+ * `calha` continua "PP" — e ainda assim há comissão a negociar com esse
+ * fornecedor. Antes disso o AR era o "só PP" da tabela.
+ *
+ * F e FI seguem sem BV.
  */
-export const TIPOS_COM_BV: readonly TipoCusto[] = ["A", "D"];
+export const TIPOS_COM_BV: readonly TipoCusto[] = ["A", "AR", "D"];
 
 /** `true` quando o tipo aceita BV. Recebe `string` porque o tipo costuma
  *  chegar do banco ou de um `<select>` sem narrowing. */

@@ -108,7 +108,9 @@ async function carregarContexto(
   // Mesma regra do trigger `bv_exige_item_com_bv`.
   const tipoEfetivo = copiaRes.data?.tipo_custo ?? data.tipo_custo;
   if (!aceitaBV(tipoEfetivo)) {
-    return { error: "BV só pode ser lançado em item de custo tipo A ou D." };
+    return {
+      error: "BV só pode ser lançado em item de custo tipo A, A · Repasse ou D.",
+    };
   }
 
   return {
@@ -233,7 +235,8 @@ export async function salvarBv(
     if (error.message.includes("tipo A")) {
       return {
         ok: false,
-        message: "BV só pode ser lançado em item de custo tipo A ou D.",
+        message:
+          "BV só pode ser lançado em item de custo tipo A, A · Repasse ou D.",
       };
     }
     return { ok: false, message: "Não foi possível salvar o BV." };

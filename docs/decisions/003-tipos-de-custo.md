@@ -8,6 +8,14 @@ fechamento passou a produzir **dois** números em vez de um. Revisada em
 fechamento passou a exibi-las somadas (ver "Como o fechamento aparece na
 tela").
 
+> ⚠️ **13/08/2026 — `A · Repasse` passou a aceitar BV.** Até aqui esta
+> decisão dizia, com estas palavras, que o AR não tinha BV. Passou a ter:
+> o principal continua saindo do caixa da California (segue gerando PP e
+> previsão de desembolso), e **além disso** há comissão a negociar com o
+> fornecedor. AR virou o único tipo com as duas coisas na mesma linha da
+> planilha. **Nenhum número mudou** — nem faturamento previsto, nem valor
+> do job, nem honorários, nem imposto, nem previsão de desembolso.
+
 ## Os dois números do fechamento
 
 Até 11/08/2026 o card de Totais mostrava só "Faturamento previsto", e ele
@@ -29,15 +37,25 @@ comparada precisa ser a do job inteiro também.
 A fonte no código é `REGRAS_TIPO_CUSTO`, em
 `lib/calculos/versao-totais.ts`. Tabela e código não podem divergir.
 
-| Tipo | Rótulo | Principal no faturamento previsto | Principal no valor do job | Base de honorários | Base de imposto | Calha |
-|---|---|---|---|---|---|---|
-| `A` | A · Direto | não | sim | sim | não | BV |
-| `AR` | A · Repasse | **sim** | sim | sim | não | PP |
-| `B` | B · Bi-trib. | sim | sim | sim | **sim** | PP |
-| `C` | C · Sem honor. | sim | sim | **não** | **sim** | PP |
-| `D` | D · Interno | não | **não** | sim | não | BV |
-| `F` | F · Externo | não | sim | sim | não | PP |
-| `FI` | F · Interno | não | sim | **não** | não | PP |
+| Tipo | Rótulo | Principal no faturamento previsto | Principal no valor do job | Base de honorários | Base de imposto | Desembolso | Calha na tela |
+|---|---|---|---|---|---|---|---|
+| `A` | A · Direto | não | sim | sim | não | BV | BV |
+| `AR` | A · Repasse | **sim** | sim | sim | não | PP | **BV + PP** |
+| `B` | B · Bi-trib. | sim | sim | sim | **sim** | PP | PP |
+| `C` | C · Sem honor. | sim | sim | **não** | **sim** | PP | PP |
+| `D` | D · Interno | não | **não** | sim | não | BV | BV |
+| `F` | F · Externo | não | sim | sim | não | PP | PP |
+| `FI` | F · Interno | não | sim | **não** | não | PP | PP |
+
+As duas últimas colunas **não** são a mesma pergunta, e confundi-las foi o
+que tornou esta revisão necessária:
+
+- **Desembolso** é o campo `calha` de `REGRAS_TIPO_CUSTO` — de quem sai o
+  dinheiro do principal. "PP" quando sai do caixa da California, e é só
+  isso que a previsão de desembolso lê (decisão 004).
+- **Calha na tela** é o que a linha da planilha oferece de ação, e sai de
+  `TIPOS_COM_BV` (BV) somado a `calha === "PP"` (PP). Em `AR` os dois são
+  verdadeiros ao mesmo tempo.
 
 Fórmulas:
 
@@ -58,8 +76,10 @@ abas batem em honorários, imposto e valor do job, célula a célula.
   do cliente; a agência fatura só o honorário. Imposto sobre honorários.
   Usado em influenciadores, normalmente com 13% de honorários.
 - **A · Repasse** — mesmo caso, mas o principal passa pela California, que
-  o repassa ao fornecedor. Por isso entra no faturamento previsto. Não tem
-  BV: sem pagamento direto, não há comissão a negociar com o fornecedor.
+  o repassa ao fornecedor. Por isso entra no faturamento previsto. Desde
+  13/08/2026 tem **BV e PP**: o repasse ao fornecedor é o que gera o
+  Pedido de Produção, e a comissão negociada com esse mesmo fornecedor é o
+  BV. É o único tipo com as duas ações na mesma linha.
 - **B · Bi-tributação** — faturamento via California. Imposto sobre o custo
   da operação mais honorários.
 - **C · Sem honorários** — imposto sobre o custo, sem honorário da agência.
@@ -109,14 +129,49 @@ mantém `SUB-TOTAL` por tipo cru porque é o formato da planilha oficial.
 
 ## BV × Pedido de Produção
 
-O critério não é a letra, é **"o cliente paga o fornecedor diretamente"**.
-Só `A · Direto` e `D` admitem BV. O resto mostra Pedido de Produção na
-calha. A regra vive em dois lugares que precisam andar juntos:
+São **duas perguntas independentes**, não um interruptor de duas posições:
+
+- **Tem BV?** = "há comissão a negociar com o fornecedor". Vale para
+  `A`, `AR` e `D`.
+- **Tem PP?** = "o custo sai do caixa da California". Vale para `AR`,
+  `B`, `C`, `F` e `FI` — é o campo `calha`.
+
+`AR` responde sim às duas, e é por isso que a linha dele mostra as duas
+ações. Nenhum outro tipo faz isso hoje.
+
+Até 13/08/2026 as duas perguntas eram tratadas como uma só ("o cliente
+paga o fornecedor direto ⇒ BV, senão ⇒ PP"), o que dava certo porque
+nenhum tipo caía nos dois lados. O `AR` quebrou a coincidência.
+
+A regra do BV vive em dois lugares que precisam andar juntos:
 
 - `TIPOS_COM_BV` / `aceitaBV()` em `lib/calculos/versao-totais.ts`;
-- o trigger `bv_exige_item_com_bv` no Postgres.
+- o trigger `bv_exige_item_com_bv` no Postgres
+  (`20260813000001_bv_aceita_a_repasse.sql`).
 
 Mudar um sem o outro deixa a tela oferecendo um BV que o banco recusa.
+
+### Como isso aparece na planilha
+
+A calha das ações vive **fora** do frame da tabela, numa faixa de 116px
+que a página reserva com `pr-`. A tabela nunca cede espaço para ela.
+
+Na linha de `AR` a pílula **se divide em duas metades** dentro da mesma
+moldura e da mesma largura — BV à esquerda, PP à direita, separadas por um
+fio de 1px. O rótulo encurta para a sigla e o texto completo vai para o
+tooltip. A pílula dividida mede ~100px, menos que os 111px de "Adicionar
+BV", então nada precisou crescer. As linhas de ação única não mudaram.
+
+Fonte: `app/(app)/_planilha/calha-acoes.tsx`, do handoff de design
+"Job - A com Repasse - BV e PP".
+
+**No orçamento a pílula nunca se divide**, mesmo em `AR`: a PP nasce do
+realizado do job (`pedidos_compra` referencia `job_itens_realizado`), e no
+orçamento nada disso existe ainda. Lá o `AR` mostra só o BV.
+
+**No job a PP só entra depois do realizado lançado** — é dele que sai o
+valor da PP. Na prática a linha de `AR` começa com a pílula inteira do BV
+e se divide quando o realizado é preenchido.
 
 ## O que fica de fora
 
