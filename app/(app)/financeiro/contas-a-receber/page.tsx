@@ -5,7 +5,8 @@ import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { ContasReceberTabs } from "./tabs";
 import { FaturamentoList, type FaturamentoPendenteRow } from "./faturamento-list";
-import type { ContaBancaria, PlanoContaTipo, PlanoContaSubtipo } from "@/lib/types";
+import { TitulosList, type TituloRow } from "./titulos-list";
+import type { ContaBancaria, PlanoContaTipo, PlanoContaSubtipo, TituloReceberStatus } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,7 @@ export default async function ContasReceberPage() {
     empresasRes,
     clientesRes,
     fornecedoresRes,
+    titulosRes,
   ] = await Promise.all([
     supabase
       .from("vw_faturamento_pendente")
@@ -69,11 +71,68 @@ export default async function ContasReceberPage() {
       .eq("tenant_id", session.activeTenant.id)
       .eq("status", "ativo")
       .order("nome"),
+    supabase
+      .from("titulos_receber")
+      .select(`
+        id, numero_parcela, valor, data_vencimento, status,
+        pago_em, empresa_id, faturamento_id,
+        faturamento:faturamentos!inner(
+          id, numero_nf, serie, data_emissao, descricao, status,
+          origem_tipo, origem_id,
+          cliente:clientes(id, nome_fantasia, razao_social),
+          fornecedor:fornecedores(id, nome, razao_social)
+        )
+      `)
+      .eq("tenant_id", session.activeTenant.id)
+      .order("data_vencimento", { ascending: true }),
   ]);
 
   if (pendentesRes.error) {
     console.error("[cr.pendentes]", pendentesRes.error.message);
   }
+  if (titulosRes.error) {
+    console.error("[cr.titulos]", titulosRes.error.message);
+  }
+
+  const titulosRows: TituloRow[] = ((titulosRes.data ?? []) as unknown as Array<{
+    id: string;
+    numero_parcela: number;
+    valor: string | number;
+    data_vencimento: string;
+    status: TituloReceberStatus;
+    pago_em: string | null;
+    empresa_id: string;
+    faturamento_id: string;
+    faturamento: {
+      id: string;
+      numero_nf: string;
+      serie: string;
+      descricao: string;
+      status: "emitido" | "cancelado";
+      origem_tipo: "job" | "bv" | "avulso";
+      cliente: { nome_fantasia: string | null; razao_social: string | null } | null;
+      fornecedor: { nome: string | null; razao_social: string | null } | null;
+    };
+  }>).map((r) => ({
+    id: r.id,
+    numero_parcela: r.numero_parcela,
+    valor: Number(r.valor),
+    data_vencimento: r.data_vencimento,
+    status: r.status,
+    pago_em: r.pago_em,
+    empresa_id: r.empresa_id,
+    faturamento_id: r.faturamento_id,
+    fat_numero_nf: r.faturamento.numero_nf,
+    fat_serie: r.faturamento.serie,
+    fat_descricao: r.faturamento.descricao,
+    fat_status: r.faturamento.status,
+    contraparte_nome:
+      r.faturamento.fornecedor?.razao_social ??
+      r.faturamento.fornecedor?.nome ??
+      r.faturamento.cliente?.razao_social ??
+      r.faturamento.cliente?.nome_fantasia ??
+      "—",
+  }));
 
   const pendentes: FaturamentoPendenteRow[] = (pendentesRes.data ?? []).map((r) => ({
     origem_tipo: r.origem_tipo as FaturamentoPendenteRow["origem_tipo"],
@@ -143,8 +202,8 @@ export default async function ContasReceberPage() {
           />
         }
         faturamentoCount={pendentes.length}
-        titulos={<div className="p-12 text-center text-muted-foreground text-sm">Em construção (Task 11).</div>}
-        titulosCount={0}
+        titulos={<TitulosList rows={titulosRows} contas={contasRes.data ?? []} />}
+        titulosCount={titulosRows.filter((t) => t.status === "em_aberto").length}
       />
     </div>
   );
