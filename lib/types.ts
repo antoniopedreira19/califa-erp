@@ -1108,6 +1108,69 @@ export interface LancamentoFinanceiro {
   created_at: string;
 }
 
+// ---------- Task 008: contas a receber (faturamento) ----------
+
+export type FaturamentoOrigemTipo = "job" | "bv" | "avulso";
+export type FaturamentoStatus = "emitido" | "cancelado";
+export type TituloReceberStatus = "em_aberto" | "pago" | "cancelado";
+
+export function faturamentoStatusLabel(s: FaturamentoStatus): string {
+  return s === "emitido" ? "Emitido" : "Cancelado";
+}
+
+export function tituloReceberStatusLabel(s: TituloReceberStatus): string {
+  switch (s) {
+    case "em_aberto":
+      return "Em aberto";
+    case "pago":
+      return "Pago";
+    case "cancelado":
+      return "Cancelado";
+  }
+}
+
+export interface Faturamento {
+  id: string;
+  tenant_id: string;
+  empresa_id: string;
+  origem_tipo: FaturamentoOrigemTipo;
+  origem_id: string | null;
+  cliente_id: string | null;
+  fornecedor_id: string | null;
+  numero_nf: string;
+  serie: string;
+  data_emissao: string;
+  valor_total: number;
+  descricao: string;
+  anexo_nf_path: string;
+  plano_conta_tipo_id: string;
+  plano_conta_subtipo_id: string;
+  status: FaturamentoStatus;
+  cancelado_em: string | null;
+  cancelado_por: string | null;
+  motivo_cancelamento: string | null;
+  emitido_em: string;
+  emitido_por: string;
+}
+
+export interface TituloReceber {
+  id: string;
+  tenant_id: string;
+  empresa_id: string;
+  faturamento_id: string;
+  numero_parcela: number;
+  valor: number;
+  data_vencimento: string;
+  status: TituloReceberStatus;
+  pago_em: string | null;
+  pago_por: string | null;
+  conta_bancaria_recebimento_id: string | null;
+  lancamento_id: string | null;
+  cancelado_em: string | null;
+  cancelado_por: string | null;
+  created_at: string;
+}
+
 // ---------- Task 012: contas_avulsas ----------
 
 export type ContaAvulsaStatus = "aprovada" | "baixada";
