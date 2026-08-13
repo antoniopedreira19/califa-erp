@@ -1,31 +1,34 @@
 "use client";
 
-import * as React from "react";
 import { Plus, Table2 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import {
+  CalhaAcoes,
+  LARGURA_CALHA,
+  PILULA_CALHA,
+  type AcaoCalha,
+} from "@/app/(app)/_planilha/calha-acoes";
 
 /** Largura da calha que recebe o botão.
  *
- *  "Adicionar BV" é o rótulo mais longo da trilha — mais que "Gerar PP" e
- *  "Ver PP" —, então é ele quem define a calha. Quem reserva o espaço na
- *  página (o `pr-` da seção) tem que usar este mesmo número, senão a
- *  trilha é cortada na borda direita. */
-export const LARGURA_CALHA_BV = "w-[116px]";
+ *  Mora em `_planilha/calha-acoes` desde 13/08/2026: a calha deixou de
+ *  ser "a calha do BV" quando o A · Repasse passou a dividi-la com a PP.
+ *  O nome antigo continua exportado porque é ele que as telas importam e
+ *  é ele que os comentários de `pr-` na página citam. */
+export const LARGURA_CALHA_BV = LARGURA_CALHA;
 
-/** Pílula do BV na calha da linha.
+/** Classes da pílula de ação única. Idem: a forma é a mesma para BV e
+ *  para PP, então vive num lugar só. */
+export const PILULA_BV = PILULA_CALHA;
+
+/** Descreve a ação de BV de uma linha, para a calha montar a pílula.
  *
- *  Desde que A e D só geram BV e B e C só geram PP, cada linha tem uma
- *  única ação — nunca as duas. Isso dispensou o antigo quadradinho de
- *  "+BV": o BV virou botão de texto na mesma calha, na mesma altura e com
- *  a mesma pílula de Gerar PP / Ver PP. Só o verbo e a cor mudam — criar é
- *  vermelho California, consultar é neutro.
+ *  Separado do componente porque a planilha do job precisa da DESCRIÇÃO
+ *  para juntá-la à da PP na mesma moldura — em A · Repasse a linha tem as
+ *  duas ações. Quem tem só o BV usa o `BvActionButton` logo abaixo.
  *
  *  "Abrir BV" usa o ícone de planilha (o BV é um documento interno) e
  *  "Ver PP" segue com o olho: ações parecidas, objetos diferentes. */
-export const PILULA_BV =
-  "inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border px-2.5 py-1 text-[11px] font-semibold transition-colors disabled:opacity-50";
-
-export function BvActionButton({
+export function acaoBv({
   temBv,
   itemNome,
   somenteLeitura,
@@ -37,37 +40,31 @@ export function BvActionButton({
    *  O rótulo não muda — "Abrir BV" já cobre ver e editar. */
   somenteLeitura?: boolean;
   onClick: () => void;
-}) {
-  const title = temBv
-    ? somenteLeitura
-      ? `Ver BV de ${itemNome}`
-      : `Editar BV de ${itemNome}`
-    : `Lançar BV em ${itemNome}`;
+}): AcaoCalha {
+  return {
+    chave: "bv",
+    rotulo: temBv ? "Abrir BV" : "Adicionar BV",
+    sigla: "BV",
+    titulo: temBv
+      ? somenteLeitura
+        ? `Ver BV de ${itemNome}`
+        : `Editar BV de ${itemNome}`
+      : `Lançar BV em ${itemNome}`,
+    icone: temBv ? Table2 : Plus,
+    criar: !temBv,
+    onClick,
+  };
+}
 
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={title}
-      aria-label={title}
-      className={cn(
-        PILULA_BV,
-        temBv
-          ? "border-border bg-white text-foreground hover:border-[#d7d7d7] hover:bg-muted"
-          : "border-border bg-white text-california-red hover:border-california-red/30 hover:bg-california-red/[0.06]",
-      )}
-    >
-      {temBv ? (
-        <>
-          <Table2 className="h-3.5 w-3.5 text-muted-foreground" />
-          Abrir BV
-        </>
-      ) : (
-        <>
-          <Plus className="h-3.5 w-3.5" />
-          Adicionar BV
-        </>
-      )}
-    </button>
-  );
+/** Pílula do BV na calha da linha, quando o BV é a única ação dela.
+ *
+ *  Em A · Direto e D o cliente paga o fornecedor diretamente: não há PP a
+ *  emitir, e a linha tem só esta pílula, com o rótulo por extenso. */
+export function BvActionButton(props: {
+  temBv: boolean;
+  itemNome: string;
+  somenteLeitura?: boolean;
+  onClick: () => void;
+}) {
+  return <CalhaAcoes acoes={[acaoBv(props)]} />;
 }

@@ -179,7 +179,7 @@ function validarFormato(alvo: OrcamentoEdicaoPayload): string | null {
       }
       if (item.bv) {
         if (!aceitaBV(itemOk.data.tipo_custo)) {
-          return `${item.item}: BV só existe em item de custo tipo A ou D.`;
+          return `${item.item}: BV só existe em item de custo tipo A, A · Repasse ou D.`;
         }
         const bvOk = bvSchema.safeParse(item.bv);
         if (!bvOk.success) {

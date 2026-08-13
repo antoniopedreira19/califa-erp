@@ -842,7 +842,7 @@ export async function atualizarItem(
 /** Tipos em que o cliente paga o fornecedor direto — os únicos com BV. */
 
 /**
- * Chamado quando um item deixa de ser tipo A ou D. O BV só faz sentido
+ * Chamado quando um item deixa de ser tipo A, AR ou D. O BV só faz sentido
  * nesses dois (é neles que o cliente paga o fornecedor direto e sobra
  * comissão), então a troca de tipo tem que decidir o destino do BV que
  * estava lá.
@@ -950,7 +950,7 @@ export async function atualizarCampoItem(
     return { ok: false, message: "Versão aprovada não permite alterar itens." };
   }
 
-  // BV só existe em item tipo A ou D. Sair desses tipos tem que resolver
+  // BV só existe em item tipo A, AR ou D. Sair desses tipos tem que resolver
   // o BV que estava lá, senão ele fica órfão no banco e invisível na
   // tela. A consulta extra só roda nesse caso: o caminho quente (cada
   // Enter numa célula numérica) continua com um round-trip só.

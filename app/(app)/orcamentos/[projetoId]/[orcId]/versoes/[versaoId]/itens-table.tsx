@@ -80,7 +80,7 @@ interface Props {
   /** Grupo recolhido esconde as linhas, o "Novo item" e a trilha de ações.
    *  O subtotal continua visível — é o dado que justifica recolher. */
   aberto?: boolean;
-  /** BV por id do item. Só existe em item tipo A ou D. */
+  /** BV por id do item. Só existe em item tipo A, AR ou D. */
   bvsPorItem: Record<string, ItemBv>;
   fornecedores: FornecedorOpcao[];
   /** "v5" — aparece no subtítulo do formulário de BV. */
@@ -118,7 +118,6 @@ type ValorCampo = string | number | null;
 type Overrides = Record<string, Partial<Record<Campo, ValorCampo>>>;
 type CelulaAtiva = { rowId: string; campo: Campo } | null;
 
-/** Tipos em que o cliente paga o fornecedor direto — os únicos com BV. */
 /** Radix Select não aceita value="" — sentinela para "sem categoria". */
 const SEM_CATEGORIA = "__nenhuma__";
 const DRAFT_ID = "__draft__";
@@ -471,10 +470,15 @@ export function ItensTable({
   // quando existe, senão a própria faixa da tabela.
   const arredondaTopo = (abreCard ?? cabecalhoGrupo != null) && !erro;
 
-  /** O BV existe em A e D — os tipos em que o cliente paga o fornecedor
-   *  direto e sobra comissão a negociar. B e C passam pela California e
-   *  usam Pedido de Produção. Usa o valor otimista: mudar o tipo na
-   *  célula acende/apaga o botão na hora. */
+  /** O BV existe em A, AR e D — os tipos em que há comissão a negociar
+   *  com o fornecedor. O AR entrou em 13/08/2026: nele o principal passa
+   *  pela California e ainda assim há comissão. Usa o valor otimista:
+   *  mudar o tipo na célula acende/apaga o botão na hora.
+   *
+   *  Aqui a pílula nunca se divide, mesmo em AR: a PP nasce do realizado
+   *  do job (`pedidos_compra` referencia `job_itens_realizado`), e no
+   *  orçamento nada disso existe ainda. A calha dividida é da planilha do
+   *  job. */
   const temBv = (item: VersaoOrcamentoItem) =>
     aceitaBV(String(valorAtual(item, "tipo_custo")));
 

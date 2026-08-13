@@ -342,7 +342,7 @@ export function EditorMultiJobs({
         }
         mutarItem(itemId, (item) => {
           const atualizado = { ...item, [campo]: parsed.data } as ItemRascunho;
-          // BV só existe em item tipo A ou D. Sair desses tipos cancela o
+          // BV só existe em item tipo A, AR ou D. Sair desses tipos cancela o
           // que estava lá — no rascunho todo BV está "a negociar", então
           // não há o caso, travado no banco, de BV já no financeiro.
           if (
@@ -425,7 +425,8 @@ export function EditorMultiJobs({
         if (!aceitaBV(alvo.tipo_custo)) {
           return {
             ok: false,
-            message: "BV só pode ser lançado em item de custo tipo A ou D.",
+            message:
+              "BV só pode ser lançado em item de custo tipo A, A · Repasse ou D.",
           };
         }
         const parsed = bvSchema.safeParse({

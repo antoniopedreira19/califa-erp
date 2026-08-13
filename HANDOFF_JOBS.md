@@ -1059,3 +1059,83 @@ No navegador, com dados reais:
 | `20260811000004_tipos_custo_subdivisoes.sql` | `AR`, `F`, `FI` no enum `tipo_custo` |
 | `20260811000005_jobs_faturamento_previsto.sql` | `jobs.faturamento_previsto` + backfill |
 | `20260811000006_erratas_dois_numeros.sql` | renomes das erratas + colunas de faturamento previsto |
+
+---
+
+## 30. `A · Repasse` na calha — BV **e** PP na mesma linha (2026-08-13)
+
+Origem: design `Job - A com Repasse - BV e PP.dc.html` (projeto Claude
+Design `69342d83`), lido via MCP `claude_design`.
+
+> ⚠️ **Isto reverte uma regra escrita.** A decisão 003 dizia, com estas
+> palavras, que o `A · Repasse` **não** tinha BV — "sem pagamento direto,
+> não há comissão a negociar com o fornecedor". Passou a ter. Confirmado
+> com o time em 13/08/2026 antes de qualquer linha de código.
+
+### O que mudou
+
+`AR` virou o único tipo com **duas** ações na linha da planilha: o
+principal passa pela California e é repassado ao fornecedor (segue
+gerando **PP**), e há comissão a negociar com esse mesmo fornecedor
+(**BV**). Os outros tipos continuam com uma ação só.
+
+### O que **não** mudou — confirmado com o time
+
+**Nenhum número.** `REGRAS_TIPO_CUSTO.AR.calha` continua `"PP"`, então
+faturamento previsto, valor do job, honorários, imposto e **previsão de
+desembolso** ficaram idênticos. O BV segue sem abater custo e sem entrar
+em rentabilidade, como desde `20260807000001_itens_bv.sql`. Incluir o BV
+na conta é decisão futura do time, não desta entrega.
+
+### A pílula dividida
+
+A calha vive **fora** do frame da tabela, em 116px que a página reserva
+com `pr-`. A regra do handoff: a tabela nunca cede espaço. Nas linhas de
+`AR` a pílula **se divide em duas metades** dentro da mesma moldura —
+BV à esquerda, PP à direita, fio de 1px entre elas —, o rótulo encurta
+para a sigla e o texto completo vai para o tooltip.
+
+Medido no navegador: pílula dividida **100,5px** contra **111px** de
+"Adicionar BV". Ou seja, ela é mais estreita que a pílula mais larga que
+já existia — nenhuma reserva precisou crescer e a tabela não perdeu um
+pixel.
+
+| Estado da linha `AR` | Calha |
+|---|---|
+| sem realizado lançado | `+ Adicionar BV` (pílula inteira) |
+| com realizado, sem documentos | `+ BV │ 📄 PP` |
+| BV lançado, PP emitida | `▦ BV │ 👁 PP` (neutro) |
+
+**A PP só entra depois do realizado**, como em qualquer outro tipo — é
+dele que sai o valor da PP. Por isso a linha começa inteira e se divide.
+
+### Arquivos
+
+| Arquivo | Papel |
+|---|---|
+| [`_planilha/calha-acoes.tsx`](app/(app)/_planilha/calha-acoes.tsx) | **Novo.** Fonte única da pílula da calha: forma inteira, forma dividida e `LARGURA_CALHA` |
+| [`realizado/calha-linha.tsx`](app/(app)/jobs/[jobId]/realizado/calha-linha.tsx) | **Novo.** Junta as ações de uma linha e guarda o estado do "Ver PP" |
+| `realizado/pp-actions-cell.tsx` | **Removido.** Só sabia de PP; virou o `calha-linha` |
+| [`_bv/bv-action-button.tsx`](app/(app)/_bv/bv-action-button.tsx) | Passou a exportar `acaoBv()` (descrição) além do botão; visual delegado à calha |
+| [`versao-totais.ts`](lib/calculos/versao-totais.ts) | `TIPOS_COM_BV` ganhou `AR`; `calha` documentado como "de quem sai o dinheiro", não "que botão aparece" |
+
+### Migration
+
+| Migration | O que faz |
+|---|---|
+| `20260813000001_bv_aceita_a_repasse.sql` | `bv_exige_item_com_bv` passa a aceitar `('A','AR','D')` — aditiva, só afrouxa |
+
+Conferido pelo MCP depois de aplicar: função com os três tipos, trigger
+ativo, `authenticated` **sem** execute na função, e os 4 BVs existentes
+intactos.
+
+### Verificado
+
+`tsc --noEmit` limpo, `next lint` sem avisos novos (só os dois de
+`combobox`/`multi-select`, que já existiam), `npm run build` compila.
+
+A pílula foi conferida no navegador numa rota de preview temporária, já
+removida: **não há item `AR` no banco hoje** (`select count(*) … tipo_custo
+= 'AR'` → 0) e criar um só para ver a tela significaria escrever dado de
+negócio numa base compartilhada. Falta, portanto, o teste de ponta a ponta
+com item `AR` real — lançar BV e gerar PP na mesma linha.

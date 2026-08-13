@@ -36,7 +36,7 @@ interface Props {
   ppsPorItemId: Map<string, PedidoCompra>;
   fornecedores: Array<Pick<Fornecedor, "id" | "nome" | "razao_social" | "status">>;
   empresas: Array<Pick<Empresa, "id" | "razao_social" | "nome_fantasia" | "ativo" | "principal">>;
-  /** BV por id do item da versão. Só existe em item tipo A ou D. */
+  /** BV por id do item da versão. Só existe em item tipo A, AR ou D. */
   bvsPorItem: Record<string, ItemBv>;
 }
 

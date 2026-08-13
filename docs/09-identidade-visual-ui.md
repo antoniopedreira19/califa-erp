@@ -122,6 +122,16 @@ São três grades, uma por formato de tela:
 
 O nome do agrupamento mora na **primeira linha do `<thead>`**, na célula de `colSpan={3}` à esquerda de ORÇADO / PLANEJADO / …, e não numa barra de título própria acima da tabela — era uma linha inteira de altura só para um nome. Contador de itens e ações do grupo (renomear, remover) vão para a calha à direita, alinhados pela **altura medida** da faixa (`faixaRef` + `ResizeObserver`), nunca por altura fixa: o thead muda de altura conforme a fonte carrega.
 
+## Calha de ações (fora da tabela)
+
+As ações de linha das planilhas — BV, Pedido de Produção, remover — vivem numa calha **fora** do frame da tabela, posicionada em `absolute left-full` e alinhada pelo topo do `<tbody>` medido (`railTop` + `ResizeObserver`), com a mesma altura de linha da grade.
+
+**A tabela nunca cede espaço para a calha.** Quem abre espaço é a página, com um `pr-` do tamanho exato da calha — `pr-[116px]` no job, `pr-[154px]` no orçamento (calha + lixeira + respiro). Toda a largura da tabela continua sendo dado.
+
+A consequência prática: **ação nova numa linha não pode alargar a calha**. Se não couber, a saída é reorganizar dentro da largura que já existe, não empurrar a tabela. Foi o que aconteceu em 13/08/2026, quando o `A · Repasse` passou a ter BV **e** PP na mesma linha: em vez de coluna nova ou calha mais larga, a pílula **se divide em duas metades** dentro da mesma moldura, separadas por um fio de 1px, com o rótulo encurtado para a sigla e o texto completo no tooltip. A dividida mede ~100px contra os 111px de "Adicionar BV" — mais estreita que a pílula mais larga que já existia.
+
+Fonte única da pílula (as duas formas, e a largura da calha): `app/(app)/_planilha/calha-acoes.tsx`. **Nunca escrever a pílula direto no JSX de uma tela** — é o mesmo erro que as cores de bloco cometeram em 8 arquivos.
+
 ## Header padrão da página
 
 Toda página do app (`app/(app)/**`) começa com um `<header>` que tem sempre 3 elementos: **kicker** (ou breadcrumb) → **ícone + título** → **descrição**. O ícone fica num quadrado arredondado com fundo `bg-california-red/10` — dá reconhecimento visual imediato à seção, matching a sidebar.
