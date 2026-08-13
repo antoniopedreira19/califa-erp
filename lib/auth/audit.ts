@@ -104,6 +104,10 @@ export type AuditAction =
   | "conta_recorrente.ocorrencia_gerada"
   | "conta_avulsa.rateio_alterado"
   | "conta_recorrente.rateio_alterado"
+  | "faturamento.emitido"
+  | "faturamento.cancelado"
+  | "titulo.baixado"
+  | "titulo.baixa_estornada"
   | "acao_negada";
 
 export interface AuditPayload {
