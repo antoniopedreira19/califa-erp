@@ -1139,3 +1139,96 @@ removida: **não há item `AR` no banco hoje** (`select count(*) … tipo_custo
 = 'AR'` → 0) e criar um só para ver a tela significaria escrever dado de
 negócio numa base compartilhada. Falta, portanto, o teste de ponta a ponta
 com item `AR` real — lançar BV e gerar PP na mesma linha.
+
+---
+
+## 31. Navegação por teclado nas planilhas (2026-08-13)
+
+Pedido do time: "clicar em Tab com uma célula selecionada salva o ajuste e
+abre a célula à direita". Setas direcionais entraram no mesmo pedido.
+
+Vale para as **duas** grades editáveis do sistema, que são só duas:
+`itens-table.tsx` (versão do orçamento, rascunho multi-jobs e rascunho
+agregado — as três usam o mesmo componente) e
+`job-item-realizado-table.tsx` (planilha interna do job).
+
+### O que passou a valer
+
+| Tecla | Efeito |
+|---|---|
+| `Tab` / `Shift+Tab` | confirma e anda na horizontal; na última coluna desce para a **primeira** coluna da linha seguinte |
+| `Enter` / `Shift+Enter` | confirma e desce / sobe na mesma coluna |
+| `↑` `↓` | idem Enter |
+| `←` `→` | andam **só na borda** do texto — ver abaixo |
+| `Esc` | desfaz, como antes |
+
+No orçamento a sequência tem 9 colunas (Item, Tipo, Categoria e os 3+3 de
+Orçado/Planejado) e o Tab cai na linha "Novo item" quando ela existe. No
+job são 3 — só o bloco Realizado é editável.
+
+Decisões do time (13/08/2026), perguntadas antes de codar: fim de linha
+desce para a linha seguinte; as colunas de escolha entram na sequência
+com o dropdown abrindo sozinho; e o Enter, que antes só fechava a edição,
+passou a descer.
+
+### As três coisas que não eram óbvias
+
+**1. `←` e `→` disputam com o cursor do texto.** A regra: elas só saem da
+célula com o cursor na primeira/última posição e sem seleção. No meio do
+texto continuam sendo do cursor — senão não haveria como corrigir uma
+descrição sem redigitar. `↑` e `↓` sempre navegam, porque o campo tem uma
+linha só e não há cursor vertical a perder. Efeito colateral aceito: como
+o campo entra com o valor todo selecionado, a primeira `→` só desfaz a
+seleção; a segunda é que anda.
+
+**2. O `<select>` não devolve o foco de forma confiável nesta grade.** A
+primeira tentativa foi manter a célula ativa depois de escolher, com o
+foco no gatilho, esperando o Tab. Não para de pé: nos editores de
+rascunho toda escrita reconstrói a árvore de componentes, então qualquer
+estado local da célula (inclusive a abertura do dropdown) se perde no
+rebuild — a lista reabria sozinha e a célula ficava **presa**, sem como
+sair pelo teclado. Duas versões foram testadas no navegador e as duas
+falharam do mesmo jeito.
+
+A saída foi eliminar a dependência: **escolher avança para a próxima
+célula**, e o `<select>` some da tela. Não há foco a devolver nem popover
+a manter. Para não arrastar quem usa mouse, a célula ativa registra
+`porTeclado` — chegou por Tab/seta, escolher avança; chegou por clique,
+escolher encerra a edição, como sempre foi. Esse sinalizador mora no pai
+justamente porque estado de célula não sobrevive ao rebuild.
+
+**3. Um bug antigo apareceu junto.** O `finalizado` das células nunca era
+resetado: depois do primeiro Enter ele ficava `true` para sempre, e a
+partir dali sair da célula pelo clique **não gravava**. Passava
+despercebido porque o Enter fechava a edição e a célula raramente era
+reaberta; com a navegação por teclado ela é reaberta o tempo todo. Um
+`useEffect` de reset resolveu, nas duas grades.
+
+### Verificado no navegador
+
+No editor agregado do TESTE-0001/26, que é **rascunho** — o adaptador
+grava em estado do React e nada vai ao banco até o "Salvar alterações",
+então dá para exercitar a grade inteira sem escrever em base
+compartilhada. E na planilha do JOB-0010, onde navegar sem alterar valor
+não dispara escrita (`n === valorRealizado` só move a célula).
+
+| Caso | Resultado |
+|---|---|
+| Tab horizontal | col 3 → 4 → 5 → **7**, pulando a coluna Total sozinho |
+| Tab no fim da linha | linha 0 col 9 → linha 1 col 0 |
+| Shift+Tab | linha 1 col 0 → linha 0 col 9 |
+| Enter / ↑ / ↓ | descem e sobem na mesma coluna |
+| `←` no meio do texto | fica na célula, move o cursor |
+| `←` na posição 0 | sai da célula |
+| Tab com dropdown aberto | atravessa a coluna **sem** alterar o valor |
+| Escolher no dropdown, tendo chegado por Tab | grava e avança (Tipo → Categoria, coluna 2) |
+| Escolher no dropdown, tendo chegado por clique | grava e encerra, sem avançar |
+| Planilha do job | Tab 11 → 12 → 13 → linha seguinte; ↑ e Enter idem |
+
+`tsc --noEmit` limpo, `next lint` sem avisos novos, `npm run build`
+compila.
+
+⚠️ **Não exercitado:** o Tab que sai da última linha para a linha "Novo
+item" e dispara o salvamento dela. O código religa o foco ao id que a
+`adicionar` devolve (as três origens devolvem), mas o caminho não foi
+percorrido no navegador — testá-lo criaria item de verdade.
