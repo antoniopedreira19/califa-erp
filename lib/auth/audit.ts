@@ -25,6 +25,11 @@ export type AuditAction =
   | "versao_orcamento.criada"
   | "versao_orcamento.editada"
   | "versao_orcamento.importada"
+  // Importação que SUBSTITUI o conteúdo de uma versão existente, apagando
+  // grupos, itens e os BVs deles. Separada de `importada` de propósito: a
+  // outra só cria, esta destrói antes de criar, e a auditoria precisa
+  // distinguir as duas ao reconstituir o que aconteceu com uma versão.
+  | "versao_orcamento.sobrescrita_por_importacao"
   | "versao_orcamento.aprovada"
   | "versao_orcamento.aprovacao_cancelada"
   | "item_bv.lancado"

@@ -91,8 +91,50 @@ para o log do servidor.
 Refazer o formulário criaria um orçamento duplicado, então esse é o
 degrau seguro: nunca voltar para o formulário depois do orçamento gravado.
 
-## O que fica de fora
+## Adendo — importar substituindo a versão (13/08/2026)
 
-O botão "Importar planilha" da tela do orçamento continua criando uma
-versão nova (v+1) — ele não passou a sobrescrever. Ver a nota da
-importação no `HANDOFF_ORCAMENTO.md`.
+A tela da versão ganhou um **"Importar planilha"** ao lado do "Exportar".
+Ele **substitui** o conteúdo da versão aberta, em vez de criar uma versão
+nova. O caso que atende, nas palavras do time: *"importei a planilha
+errada, quero importar a certa no mesmo lugar"*.
+
+O botão da tela do **orçamento continua como estava**, criando uma v+1 —
+decisão do time. Os dois dividem o mesmo componente e o mesmo preview; o
+que muda é o destino e, no que sobrescreve, um passo a mais.
+
+### O que apaga
+
+Grupos, itens e — em cascata — os **BVs** lançados nesses itens. O BV
+pertence ao item e não sobrevive à troca da planilha. A confirmação
+mostra os três números antes de qualquer escrita, e o botão só grava no
+segundo clique.
+
+### O que preserva
+
+Alíquota, honorários, moeda, câmbio e status. É a diferença de fundo para
+`confirmarImportacao`, que redefine tudo isso ao criar a versão: quem já
+escolheu a alíquota não perde a escolha ao reimportar.
+
+### Ordem e travas
+
+**Itens antes de grupos**: `versoes_orcamento_itens.grupo_id` é
+`RESTRICT`, então apagar grupo com item dentro falha.
+
+Duas travas, porque apagar item **cascateia para
+`jobs_itens_realizado`** e é **barrado por `jobs_itens_orcado`**
+(`NO ACTION`):
+
+1. versão `aprovada` ou `cancelada` recusa a importação;
+2. versão que já tem cópia em `jobs_itens_orcado` recusa, com mensagem
+   pedindo para criar versão nova.
+
+O status sozinho já impediria — job exige versão aprovada — mas a regra é
+financeira e não pode depender de uma camada só.
+
+**Planilha sem itens não apaga nada**: o usuário pediu para TROCAR, não
+para destruir em troca de nada.
+
+A ação é `sobrescreverVersaoComPlanilha` em `versoes/importar-actions.ts`,
+e registra auditoria própria (`versao_orcamento.sobrescrita_por_importacao`),
+separada de `versao_orcamento.importada` — uma só cria, a outra destrói
+antes de criar, e a auditoria precisa distinguir as duas.

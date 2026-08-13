@@ -1633,3 +1633,32 @@ projeto TESTE-0002/26 (Paraquedas), com autorização do time:
 ⚠️ **Dado de teste deixado no banco**: o orçamento `TESTE-0002/26-02` e a
 v1 dele. Criados com autorização para exercitar o fluxo; remover quando
 não forem mais úteis.
+
+### 17.1 Importar planilha na tela da versão (2026-08-13)
+
+> ⚠️ **Ação destrutiva nova.** O "Importar planilha" da tela da VERSÃO
+> apaga grupos, itens e os BVs deles. O da tela do ORÇAMENTO não mudou —
+> continua criando v+1. Regra completa no adendo da
+> [decisão 007](docs/decisions/007-nome-da-versao-e-v1-automatica.md).
+
+Botão ao lado do "Exportar", escondido em versão congelada e desabilitado
+quando a versão já gerou job. Reusa `ImportarPlanilhaDrawer` com
+`modo="sobrescrever"`: mesmo upload, mesmo preview, mais um passo de
+confirmação que mostra em número o que será apagado.
+
+**Testado de ponta a ponta** com uma planilha real (`orcamento-teste.xlsx`,
+baixada do bucket de importações) na v1 do TESTE-0002/26-02:
+
+| Passo | Resultado |
+|---|---|
+| 1ª importação (versão vazia) | aviso diz "Esta versão está vazia — nada será apagado"; grava 2 grupos / 4 itens |
+| Cenário montado | alíquota posta em 19,53% e 1 BV lançado no item tipo A |
+| 2ª importação | aviso conta **− 2 grupos, − 4 itens, − 1 BV** |
+| Depois de confirmar | 2 grupos / 4 itens (**substituiu**, não somou) |
+| BV | **0 restantes** — foi em cascata, como decidido |
+| Alíquota | **19,53% preservada** |
+| Registro | 2 linhas em `orcamento_importacoes`, 2 eventos `versao_orcamento.sobrescrita_por_importacao` |
+
+⚠️ **Não exercitado**: a trava de versão com job aberto. O caminho existe
+nas duas camadas (botão desabilitado + recusa na action), mas exercitá-lo
+exigiria abrir um job sobre uma versão de teste e depois cancelá-lo.
