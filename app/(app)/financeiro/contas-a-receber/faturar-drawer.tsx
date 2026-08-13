@@ -9,6 +9,7 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MoneyInput } from "@/components/ui/money-input";
 import { formatCurrency } from "@/lib/utils";
 import type { ContaBancaria, PlanoContaTipo, PlanoContaSubtipo } from "@/lib/types";
 import { emitirFaturamento, uploadNfPdf } from "./actions";
@@ -29,7 +30,7 @@ interface Props {
   fornecedores: Array<{ id: string; nome: string }>;
 }
 
-type Parcela = { numero: number; valor: string; data_vencimento: string };
+type Parcela = { numero: number; valor: number; data_vencimento: string };
 
 export function FaturarDrawer({
   state,
@@ -66,13 +67,13 @@ export function FaturarDrawer({
   const [numeroNf, setNumeroNf] = React.useState("");
   const [serie, setSerie] = React.useState("1");
   const [dataEmissao, setDataEmissao] = React.useState(format(new Date(), "yyyy-MM-dd"));
-  const [valorTotal, setValorTotal] = React.useState(saldoSugerido > 0 ? saldoSugerido.toFixed(2) : "");
+  const [valorTotal, setValorTotal] = React.useState<number>(saldoSugerido > 0 ? saldoSugerido : 0);
   const [tipoId, setTipoId] = React.useState("");
   const [subtipoId, setSubtipoId] = React.useState("");
   const [parcelas, setParcelas] = React.useState<Parcela[]>([
     {
       numero: 1,
-      valor: saldoSugerido > 0 ? saldoSugerido.toFixed(2) : "",
+      valor: saldoSugerido > 0 ? saldoSugerido : 0,
       data_vencimento: format(addDays(new Date(), 30), "yyyy-MM-dd"),
     },
   ]);
@@ -87,10 +88,9 @@ export function FaturarDrawer({
   );
   const tiposAtivos = React.useMemo(() => tipos.filter((t) => t.ativo), [tipos]);
 
-  const valorTotalNum = Number(valorTotal) || 0;
-  const somaParcelas = parcelas.reduce((s, p) => s + (Number(p.valor) || 0), 0);
-  const somaOk = Math.abs(somaParcelas - valorTotalNum) < 0.01;
-  const divergePrevisto = row ? Math.abs(valorTotalNum - saldoSugerido) > 0.01 : false;
+  const somaParcelas = parcelas.reduce((s, p) => s + p.valor, 0);
+  const somaOk = Math.abs(somaParcelas - valorTotal) < 0.01;
+  const divergePrevisto = row ? Math.abs(valorTotal - saldoSugerido) > 0.01 : false;
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -113,19 +113,17 @@ export function FaturarDrawer({
   }
 
   function aplicarParcelamentoPadrao(n: number) {
-    if (!valorTotalNum) return;
-    const valorPorParcela = valorTotalNum / n;
+    if (!valorTotal) return;
+    // Divide em centavos pra evitar erro de float
+    const totalCents = Math.round(valorTotal * 100);
+    const centsPorParcela = Math.floor(totalCents / n);
+    const sobra = totalCents - centsPorParcela * n;
     const novas: Parcela[] = Array.from({ length: n }, (_, i) => ({
       numero: i + 1,
-      valor: valorPorParcela.toFixed(2),
+      // Última parcela absorve a sobra dos centavos
+      valor: (i === n - 1 ? centsPorParcela + sobra : centsPorParcela) / 100,
       data_vencimento: format(addDays(new Date(), 30 * (i + 1)), "yyyy-MM-dd"),
     }));
-    // Ajusta última parcela pra bater o total exato
-    const somaEfetiva = novas.reduce((s, p) => s + Number(p.valor), 0);
-    const diff = valorTotalNum - somaEfetiva;
-    if (Math.abs(diff) > 0.001) {
-      novas[novas.length - 1].valor = (Number(novas[novas.length - 1].valor) + diff).toFixed(2);
-    }
     setParcelas(novas);
   }
 
@@ -134,7 +132,7 @@ export function FaturarDrawer({
       ...p,
       {
         numero: p.length + 1,
-        valor: "",
+        valor: 0,
         data_vencimento: format(addDays(new Date(), 30 * (p.length + 1)), "yyyy-MM-dd"),
       },
     ]);
@@ -144,8 +142,12 @@ export function FaturarDrawer({
     setParcelas((p) => p.filter((_, idx) => idx !== i).map((pp, idx) => ({ ...pp, numero: idx + 1 })));
   }
 
-  function updateParcela(i: number, campo: keyof Parcela, valor: string) {
-    setParcelas((p) => p.map((pp, idx) => (idx === i ? { ...pp, [campo]: valor } : pp)));
+  function updateParcelaValor(i: number, valor: number) {
+    setParcelas((p) => p.map((pp, idx) => (idx === i ? { ...pp, valor } : pp)));
+  }
+
+  function updateParcelaData(i: number, data_vencimento: string) {
+    setParcelas((p) => p.map((pp, idx) => (idx === i ? { ...pp, data_vencimento } : pp)));
   }
 
   function handleConfirm() {
@@ -155,7 +157,7 @@ export function FaturarDrawer({
       return;
     }
     if (!somaOk) {
-      setErro(`Soma das parcelas (${formatCurrency(somaParcelas, "BRL")}) não bate com valor total (${formatCurrency(valorTotalNum, "BRL")}).`);
+      setErro(`Soma das parcelas (${formatCurrency(somaParcelas, "BRL")}) não bate com valor total (${formatCurrency(valorTotal, "BRL")}).`);
       return;
     }
 
@@ -169,14 +171,14 @@ export function FaturarDrawer({
         numero_nf: numeroNf,
         serie,
         data_emissao: dataEmissao,
-        valor_total: valorTotalNum,
+        valor_total: valorTotal,
         descricao,
         anexo_nf_path: anexoPath,
         plano_conta_tipo_id: tipoId,
         plano_conta_subtipo_id: subtipoId,
         parcelas: parcelas.map((p) => ({
           numero: p.numero,
-          valor: Number(p.valor),
+          valor: p.valor,
           data_vencimento: p.data_vencimento,
         })),
       };
@@ -220,7 +222,7 @@ export function FaturarDrawer({
             <div className="flex items-start gap-2 rounded border border-yellow-400 bg-yellow-50 p-3 text-sm text-yellow-800">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
               <span>
-                Valor total (R$ {valorTotal}) diverge do saldo previsto (R$ {saldoSugerido.toFixed(2)}). Confirme se está correto.
+                Valor total ({formatCurrency(valorTotal, "BRL")}) diverge do saldo previsto ({formatCurrency(saldoSugerido, "BRL")}). Confirme se está correto.
               </span>
             </div>
           )}
@@ -347,16 +349,11 @@ export function FaturarDrawer({
 
           <div className="grid grid-cols-3 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="valor-total">Valor total (R$) *</Label>
-              <Input
+              <Label htmlFor="valor-total">Valor total *</Label>
+              <MoneyInput
                 id="valor-total"
-                type="number"
-                step="0.01"
-                min="0.01"
                 value={valorTotal}
-                onChange={(e) => setValorTotal(e.target.value)}
-                placeholder="0,00"
-                className="font-mono [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                onValueChange={setValorTotal}
               />
             </div>
             <div className="space-y-2">
@@ -405,19 +402,14 @@ export function FaturarDrawer({
               {parcelas.map((p, i) => (
                 <div key={i} className="grid grid-cols-[32px_1fr_1fr_36px] items-center gap-2">
                   <span className="text-xs font-medium text-muted-foreground text-center">{p.numero}</span>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    min="0.01"
+                  <MoneyInput
                     value={p.valor}
-                    onChange={(e) => updateParcela(i, "valor", e.target.value)}
-                    placeholder="0,00"
-                    className="font-mono h-10 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    onValueChange={(v) => updateParcelaValor(i, v)}
                   />
                   <DatePicker
                     name={`venc-${i}`}
                     defaultValue={p.data_vencimento}
-                    onDateChange={(d) => updateParcela(i, "data_vencimento", d ? format(d, "yyyy-MM-dd") : "")}
+                    onDateChange={(d) => updateParcelaData(i, d ? format(d, "yyyy-MM-dd") : "")}
                   />
                   <button
                     type="button"
@@ -441,7 +433,7 @@ export function FaturarDrawer({
                 <Plus className="h-3 w-3" /> Nova parcela
               </button>
               <p className={`text-xs font-medium ${somaOk ? "text-emerald-700" : "text-california-red"}`}>
-                Soma {formatCurrency(somaParcelas, "BRL")} / Total {formatCurrency(valorTotalNum, "BRL")}
+                Soma {formatCurrency(somaParcelas, "BRL")} / Total {formatCurrency(valorTotal, "BRL")}
               </p>
             </div>
           </div>
