@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Briefcase, Info, Circle } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
+import { nomeVersao } from "@/lib/nome-versao";
 import { createClient } from "@/lib/supabase/server";
 import { listActiveMembers } from "@/lib/data/members";
 import type { Job, JobStatus, Regional } from "@/lib/types";
@@ -672,7 +673,12 @@ export default async function JobDetailPage({
                 prefetch={false}
                 className="text-california-red hover:underline"
               >
-                v{raw.versao?.numero_versao} {raw.versao?.nome ? `· ${raw.versao.nome}` : ""}
+                {raw.versao
+                  ? nomeVersao(
+                      raw.orcamento?.nome ?? job.nome,
+                      raw.versao.numero_versao,
+                    )
+                  : "—"}
               </Link>
             </dd>
             <dt className="text-muted-foreground">Valor de faturamento</dt>
@@ -749,10 +755,10 @@ export default async function JobDetailPage({
               empresa_id: job.empresa_id,
               responsavel_id: job.responsavel_id,
             }}
+            nomeJob={raw.orcamento?.nome ?? job.nome}
             versao={{
               id: versaoAprovada.id,
               numero_versao: versaoAprovada.numero_versao,
-              nome: versaoAprovada.nome,
               moeda: versaoAprovada.moeda,
               percentual_honorarios: Number(versaoAprovada.percentual_honorarios),
               percentual_imposto: Number(versaoAprovada.percentual_imposto),

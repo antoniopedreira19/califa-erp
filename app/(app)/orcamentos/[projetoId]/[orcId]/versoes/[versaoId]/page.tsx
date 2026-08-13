@@ -13,6 +13,7 @@ import {
 } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { nomeVersao } from "@/lib/nome-versao";
 import {
   calcularTotaisVersao,
   calcularResultadoOperacional,
@@ -22,7 +23,6 @@ import { NovoGrupoDrawer } from "./novo-grupo-drawer";
 import { ResumoRentabilidade } from "./resumo-rentabilidade";
 import { TotaisCard } from "./totais-card";
 import { VersaoEditorDrawer } from "./versao-editor-drawer";
-import { VersaoTituloInline } from "./versao-titulo-inline";
 import { AprovacaoActions } from "./aprovacao-actions";
 import {
   BannersEstado,
@@ -340,17 +340,12 @@ export default async function VersaoDetailPage({
             <p className="font-mono text-xs font-semibold text-muted-foreground">
               v{versao.numero_versao}
             </p>
-            <VersaoTituloInline
-              versaoId={versao.id}
-              nome={versao.nome}
-              numeroVersao={versao.numero_versao}
-              disabled={versao.status === "aprovada"}
-              disabledReason={
-                versao.status === "aprovada"
-                  ? "Versão aprovada não pode ser editada."
-                  : undefined
-              }
-            />
+            {/* Texto puro desde 13/08/2026: o nome da versão é o do job
+                mais o número, calculado, e não se edita mais aqui. O
+                título inline saiu junto com a coluna `nome`. */}
+            <h1 className="min-w-0 break-words text-2xl font-bold tracking-tight text-foreground">
+              {nomeVersao(orcamento.nome, versao.numero_versao)}
+            </h1>
             <Badge className={cn("border", statusBadgeClasses(versao.status))}>
               {versaoStatusLabel(versao.status)}
             </Badge>
@@ -501,6 +496,8 @@ export default async function VersaoDetailPage({
         jobHref={job ? `/jobs/${job.id}` : null}
         qtdGrupos={grupos.length}
         qtdItens={itens.length}
+        qtdItensComValor={itens.filter((i) => i.total_orcado > 0).length}
+        percentualImposto={Number(versao.percentual_imposto)}
         custoPlanejado={custoPlanejado}
         faturamentoPrevisto={totais.faturamentoPrevisto}
         valorJob={totais.valorJob}

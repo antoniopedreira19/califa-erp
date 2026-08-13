@@ -21,6 +21,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  ALIQUOTAS_IMPOSTO,
+  aliquotaParaValor,
+  formatarAliquota,
+  valorInicialAliquota,
+} from "@/lib/impostos";
+import {
   VERSAO_STATUS_EDITAVEIS,
   versaoStatusLabel,
   type VersaoOrcamento,
@@ -57,6 +63,11 @@ export function VersaoEditorDrawer({
   const [status, setStatus] = React.useState<VersaoOrcamentoStatus>(
     VERSAO_STATUS_EDITAVEIS.includes(versao.status) ? versao.status : "rascunho",
   );
+  // Versão legada (0, 19,54, 20) abre vazia: a lista não tem esse valor e
+  // salvar exige escolher uma das alíquotas atuais.
+  const [imposto, setImposto] = React.useState(() =>
+    valorInicialAliquota(Number(versao.percentual_imposto)),
+  );
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -65,6 +76,9 @@ export function VersaoEditorDrawer({
 
     const formData = new FormData(e.currentTarget);
     formData.set("status", status);
+    // Em branco preserva a alíquota atual, igual aos demais campos do drawer.
+    // Escolher só vira obrigatório na aprovação.
+    if (imposto !== "") formData.set("percentual_imposto", imposto);
 
     startTransition(async () => {
       const res: ActionResult = await atualizarVersao(versao.id, formData);
@@ -104,14 +118,6 @@ export function VersaoEditorDrawer({
           className="flex-1 flex flex-col overflow-hidden"
         >
           <div className="flex-1 overflow-y-auto p-6 space-y-5">
-            <Field label="Nome da versão" name="nome" errors={fieldErrors}>
-              <Input
-                name="nome"
-                defaultValue={versao.nome ?? ""}
-                placeholder="Ex.: Proposta inicial, Revisão após reunião"
-              />
-            </Field>
-
             <div className="grid gap-4 md:grid-cols-2">
               <Field label="Moeda" name="moeda" errors={fieldErrors}>
                 <Input
@@ -168,15 +174,18 @@ export function VersaoEditorDrawer({
                 name="percentual_imposto"
                 errors={fieldErrors}
               >
-                <Input
-                  name="percentual_imposto"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  max="100"
-                  placeholder={`atual: ${formatNumberHint(versao.percentual_imposto)}%`}
-                  className="no-spinner"
-                />
+                <Select value={imposto} onValueChange={setImposto}>
+                  <SelectTrigger id="percentual_imposto">
+                    <SelectValue placeholder="Selecione a alíquota" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ALIQUOTAS_IMPOSTO.map((a) => (
+                      <SelectItem key={a} value={aliquotaParaValor(a)}>
+                        {formatarAliquota(a)}%
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </Field>
             </div>
 
