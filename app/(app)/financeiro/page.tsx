@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Landmark, Clock, ArrowRight, FileText, Receipt, TrendingUp, type LucideIcon } from "lucide-react";
+import { Landmark, Clock, ArrowRight, FileText, Receipt, TrendingUp, Wallet, BookOpen, type LucideIcon } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 
@@ -14,7 +14,7 @@ export default async function CentralFinanceiraPage() {
 
   const supabase = createClient();
 
-  const [aguardandoRes, ppsRes] = await Promise.all([
+  const [aguardandoRes, ppsRes, aFaturarRes, inadimplentesRes] = await Promise.all([
     supabase
       .from("jobs")
       .select("id", { count: "exact", head: true })
@@ -25,9 +25,21 @@ export default async function CentralFinanceiraPage() {
       .select("id", { count: "exact", head: true })
       .eq("tenant_id", session.activeTenant.id)
       .eq("status", "em_avaliacao"),
+    supabase
+      .from("vw_faturamento_pendente")
+      .select("origem_id", { count: "exact", head: true })
+      .eq("tenant_id", session.activeTenant.id),
+    supabase
+      .from("titulos_receber")
+      .select("id", { count: "exact", head: true })
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("status", "em_aberto")
+      .lt("data_vencimento", new Date().toISOString().slice(0, 10)),
   ]);
   const aguardandoCount = aguardandoRes.count;
   const ppsCount = ppsRes.count;
+  const aFaturarCount = aFaturarRes.count ?? 0;
+  const inadimplentesCount = inadimplentesRes.count ?? 0;
 
   return (
     <div className="space-y-8">
@@ -56,7 +68,7 @@ export default async function CentralFinanceiraPage() {
         />
         <FinanceiroCard
           href="/financeiro/contas-a-pagar"
-          icon={FileText}
+          icon={Wallet}
           title="Contas a Pagar"
           description="Aprovar Pedidos de Compra, gerir avulsas e recorrências, dar baixa em aprovados."
           count={ppsCount ?? 0}
@@ -68,8 +80,15 @@ export default async function CentralFinanceiraPage() {
           description="Previsto + realizado por dia, semana ou mês, com saldo projetado."
         />
         <FinanceiroCard
-          href="/financeiro/conciliacao"
+          href="/financeiro/contas-a-receber"
           icon={Receipt}
+          title="Contas a Receber"
+          description="Emitir NF a partir de jobs e BVs, acompanhar títulos até o recebimento."
+          count={aFaturarCount + inadimplentesCount}
+        />
+        <FinanceiroCard
+          href="/financeiro/conciliacao"
+          icon={BookOpen}
           title="Conciliação Bancária"
           description="Extrato por conta bancária. Base pra bater com o extrato do banco e pra o DRE."
         />
