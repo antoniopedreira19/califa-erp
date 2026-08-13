@@ -33,6 +33,12 @@ import {
   LARGURA_MINIMA,
 } from "@/app/(app)/_planilha/grade-orcamento";
 import {
+  celulaVizinha,
+  direcaoDaTecla,
+  direcaoNoCampo,
+  type Direcao,
+} from "@/app/(app)/_planilha/navegacao";
+import {
   ORCADO,
   PLANEJADO,
   RENTABILIDADE,
@@ -114,9 +120,39 @@ type Campo =
   | "quantidade_planejada"
   | "dias_meses_planejado";
 
+/** Ordem em que o Tab percorre a linha — a mesma da tela, da esquerda
+ *  para a direita. Total e Rentabilidade não entram porque são calculadas:
+ *  o Tab passa por cima delas sem precisar saber que existem. */
+const CAMPOS_NAVEGAVEIS: readonly Campo[] = [
+  "item",
+  "tipo_custo",
+  "categoria_id",
+  "valor_unitario_orcado",
+  "quantidade_orcada",
+  "dias_meses_orcado",
+  "valor_unitario_planejado",
+  "quantidade_planejada",
+  "dias_meses_planejado",
+];
+
 type ValorCampo = string | number | null;
 type Overrides = Record<string, Partial<Record<Campo, ValorCampo>>>;
-type CelulaAtiva = { rowId: string; campo: Campo } | null;
+/** Célula em edição.
+ *
+ *  `porTeclado` diz COMO se chegou nela, e existe por causa das colunas
+ *  de escolha. Escolher um valor no `<select>` precisa continuar a
+ *  navegação de quem veio de Tab — mas não pode arrastar quem veio de
+ *  clique para a próxima célula, abrindo um dropdown que ninguém pediu.
+ *
+ *  Ele mora AQUI, e não dentro da célula, porque nos editores de rascunho
+ *  toda escrita reconstrói a árvore de componentes: estado local de
+ *  célula não sobrevive ao rebuild, e essa foi a origem de a lista ficar
+ *  presa aberta depois de escolher. Aqui em cima, sobrevive. */
+type CelulaAtiva = {
+  rowId: string;
+  campo: Campo;
+  porTeclado?: boolean;
+} | null;
 
 /** Radix Select não aceita value="" — sentinela para "sem categoria". */
 const SEM_CATEGORIA = "__nenhuma__";
@@ -221,7 +257,7 @@ export function ItensTable({
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
 
-  /** Destino padrão das escritas: o banco, via Server Actions. */
+  /** Direcao padrão das escritas: o banco, via Server Actions. */
   const acoes = React.useMemo<AdaptadorItens>(
     () =>
       adaptador ?? {
@@ -319,10 +355,40 @@ export function ItensTable({
     };
   }
 
-  function gravar(itemId: string, campo: Campo, valor: ValorCampo) {
+  /** Ordem das linhas para a navegação. A linha nova entra no fim: o Tab
+   *  que sai do último item cai nela em vez de morrer, que é o que faz
+   *  dar para preencher um grupo inteiro sem tocar no mouse. */
+  const linhasNavegaveis = React.useMemo(
+    () => [...itens.map((it) => it.id), ...(draft ? [DRAFT_ID] : [])],
+    [itens, draft],
+  );
+
+  /** Para onde o teclado leva a partir daqui. `null` encerra a edição. */
+  const celulaDirecao = React.useCallback(
+    (rowId: string, campo: Campo, destino?: Direcao): CelulaAtiva => {
+      if (!destino) return null; // blur / clique fora: só confirma e sai
+      const alvo = celulaVizinha(
+        linhasNavegaveis,
+        CAMPOS_NAVEGAVEIS,
+        { linhaId: rowId, campo },
+        destino,
+      );
+      return alvo
+        ? { rowId: alvo.linhaId, campo: alvo.campo, porTeclado: true }
+        : null;
+    },
+    [linhasNavegaveis],
+  );
+
+  function gravar(
+    itemId: string,
+    campo: Campo,
+    valor: ValorCampo,
+    proxima: CelulaAtiva,
+  ) {
     const anterior = overrides[itemId];
     setErro(null);
-    setAtiva(null);
+    setAtiva(proxima);
     setOverrides((prev) => ({
       ...prev,
       [itemId]: { ...prev[itemId], [campo]: valor },
@@ -359,37 +425,59 @@ export function ItensTable({
     });
   }
 
-  /** Confirma uma célula de item já existente. */
+  /** Confirma uma célula de item já existente e move o foco. */
   function confirmarCampo(
     item: VersaoOrcamentoItem,
     campo: Campo,
     valor: ValorCampo,
+    destino?: Direcao,
   ) {
+    const proxima = celulaDirecao(item.id, campo, destino);
+    // Valor igual não vira escrita — mas a navegação acontece do mesmo
+    // jeito, senão passar por uma célula sem alterar nada mataria o Tab.
     if (mesmoValor(valorAtual(item, campo), valor)) {
-      setAtiva(null);
+      setAtiva(proxima);
       return;
     }
-    gravar(item.id, campo, valor);
+    gravar(item.id, campo, valor, proxima);
   }
 
   function confirmarNumero(
     item: VersaoOrcamentoItem,
     campo: Campo,
     raw: string,
+    destino?: Direcao,
   ) {
     const n = parseNumero(raw);
     if (n === null) {
+      // Entrada inválida interrompe a navegação de propósito: seguir em
+      // frente esconderia o aviso atrás da próxima célula.
       setAtiva(null);
       setErro("Valor inválido — a célula foi mantida como estava.");
       return;
     }
-    confirmarCampo(item, campo, n);
+    confirmarCampo(item, campo, n, destino);
   }
+
+  /** Fecha a célula SE ela ainda for a ativa.
+   *
+   *  O `<select>` avisa que fechou também quando é desmontado pela
+   *  navegação — sem esta guarda, o aviso de fechamento chegaria depois
+   *  do `setAtiva` da próxima célula e cancelaria o Tab. */
+  const fecharCelula = React.useCallback((rowId: string, campo: Campo) => {
+    // Updater, e não leitura direta: o Radix avisa que fechou no mesmo
+    // tick em que a escolha já mandou a edição para a próxima célula, e
+    // sem olhar o estado MAIS RECENTE este aviso atrasado fecharia a
+    // célula errada — matando o Tab que acabou de acontecer.
+    setAtiva((atual) =>
+      atual && atual.rowId === rowId && atual.campo === campo ? null : atual,
+    );
+  }, []);
 
   /** Salva a linha nova assim que ela tem descrição.
    *  O ref é trava de reentrância: sem ela, qualquer re-execução do
    *  handler insere o item de novo. */
-  function persistirDraft(d: Draft) {
+  function persistirDraft(d: Draft, proxima: CelulaAtiva) {
     if (persistindoRef.current) return;
     persistindoRef.current = true;
 
@@ -415,7 +503,17 @@ export function ItensTable({
           return;
         }
         setDraft(null);
-        setAtiva(null);
+        // A linha nova troca de identidade ao ser salva: o `__draft__`
+        // deixa de existir e nasce um item com id do banco. Sem religar o
+        // destino a esse id, o Tab que disparou o salvamento cairia numa
+        // linha que não está mais na tela e a edição morreria no meio da
+        // digitação. As três origens de escrita (banco, multi-jobs e
+        // agregado) devolvem o id justamente para isto.
+        setAtiva(
+          proxima && proxima.rowId === DRAFT_ID && res.id
+            ? { rowId: res.id, campo: proxima.campo }
+            : proxima,
+        );
         acoes.aposEscrita();
       } finally {
         // Sem o finally, uma falha de rede deixaria a trava presa e o
@@ -425,24 +523,29 @@ export function ItensTable({
     });
   }
 
-  function confirmarDraft(campo: Campo, valor: ValorCampo) {
+  function confirmarDraft(campo: Campo, valor: ValorCampo, destino?: Direcao) {
     if (!draft) return;
     const atualizado = { ...draft, [campo]: valor } as Draft;
-    setAtiva(null);
+    const proxima = celulaDirecao(DRAFT_ID, campo, destino);
     setErro(null);
     setDraft(atualizado);
-    // Sem descrição o banco recusa: a linha fica local até ter texto.
-    if (atualizado.item.trim().length > 0) persistirDraft(atualizado);
+    // Sem descrição o banco recusa: a linha fica local até ter texto, e a
+    // navegação segue dentro do próprio rascunho.
+    if (atualizado.item.trim().length > 0) {
+      persistirDraft(atualizado, proxima);
+      return;
+    }
+    setAtiva(proxima);
   }
 
-  function confirmarDraftNumero(campo: Campo, raw: string) {
+  function confirmarDraftNumero(campo: Campo, raw: string, destino?: Direcao) {
     const n = parseNumero(raw);
     if (n === null) {
       setAtiva(null);
       setErro("Valor inválido — a célula foi mantida como estava.");
       return;
     }
-    confirmarDraft(campo, n);
+    confirmarDraft(campo, n, destino);
   }
 
   function handleRemoveConfirm() {
@@ -680,7 +783,7 @@ export function ItensTable({
                       onAtivar={() =>
                         setAtiva({ rowId: item.id, campo: "item" })
                       }
-                      onConfirmar={(v) => confirmarCampo(item, "item", v.trim())}
+                      onConfirmar={(v, d) => confirmarCampo(item, "item", v.trim(), d)}
                       onCancelar={() => setAtiva(null)}
                       tdClassName={cn("text-foreground", GRADE_NEUTRA)}
                     />
@@ -696,8 +799,18 @@ export function ItensTable({
                       onAtivar={() =>
                         setAtiva({ rowId: item.id, campo: "tipo_custo" })
                       }
-                      onConfirmar={(v) => confirmarCampo(item, "tipo_custo", v)}
-                      onFechar={() => setAtiva(null)}
+                      onConfirmar={(v) =>
+                        confirmarCampo(
+                          item,
+                          "tipo_custo",
+                          v,
+                          ativa?.porTeclado ? "proxima" : undefined,
+                        )
+                      }
+                      onNavegar={(d) =>
+                        setAtiva(celulaDirecao(item.id, "tipo_custo", d))
+                      }
+                      onFechar={() => fecharCelula(item.id, "tipo_custo")}
                       tdClassName={cn(GRADE_NEUTRA, "px-2")}
                     >
                       <Badge variant="outline" className="px-1.5">
@@ -727,9 +840,13 @@ export function ItensTable({
                           item,
                           "categoria_id",
                           v === SEM_CATEGORIA ? null : v,
+                          ativa?.porTeclado ? "proxima" : undefined,
                         )
                       }
-                      onFechar={() => setAtiva(null)}
+                      onNavegar={(d) =>
+                        setAtiva(celulaDirecao(item.id, "categoria_id", d))
+                      }
+                      onFechar={() => fecharCelula(item.id, "categoria_id")}
                     >
                       {categoria ? (
                         <Badge variant="neutral">{categoria.nome}</Badge>
@@ -750,8 +867,8 @@ export function ItensTable({
                           campo: "valor_unitario_orcado",
                         })
                       }
-                      onConfirmar={(raw) =>
-                        confirmarNumero(item, "valor_unitario_orcado", raw)
+                      onConfirmar={(raw, d) =>
+                        confirmarNumero(item, "valor_unitario_orcado", raw, d)
                       }
                       onCancelar={() => setAtiva(null)}
                       tdClassName={cn("font-mono", ORCADO.celulaAbre)}
@@ -763,8 +880,8 @@ export function ItensTable({
                       onAtivar={() =>
                         setAtiva({ rowId: item.id, campo: "quantidade_orcada" })
                       }
-                      onConfirmar={(raw) =>
-                        confirmarNumero(item, "quantidade_orcada", raw)
+                      onConfirmar={(raw, d) =>
+                        confirmarNumero(item, "quantidade_orcada", raw, d)
                       }
                       onCancelar={() => setAtiva(null)}
                       tdClassName={ORCADO.celulaMeio}
@@ -776,8 +893,8 @@ export function ItensTable({
                       onAtivar={() =>
                         setAtiva({ rowId: item.id, campo: "dias_meses_orcado" })
                       }
-                      onConfirmar={(raw) =>
-                        confirmarNumero(item, "dias_meses_orcado", raw)
+                      onConfirmar={(raw, d) =>
+                        confirmarNumero(item, "dias_meses_orcado", raw, d)
                       }
                       onCancelar={() => setAtiva(null)}
                       tdClassName={ORCADO.celulaMeio}
@@ -806,8 +923,8 @@ export function ItensTable({
                           campo: "valor_unitario_planejado",
                         })
                       }
-                      onConfirmar={(raw) =>
-                        confirmarNumero(item, "valor_unitario_planejado", raw)
+                      onConfirmar={(raw, d) =>
+                        confirmarNumero(item, "valor_unitario_planejado", raw, d)
                       }
                       onCancelar={() => setAtiva(null)}
                       tdClassName={cn("font-mono", PLANEJADO.celulaAbre)}
@@ -822,8 +939,8 @@ export function ItensTable({
                           campo: "quantidade_planejada",
                         })
                       }
-                      onConfirmar={(raw) =>
-                        confirmarNumero(item, "quantidade_planejada", raw)
+                      onConfirmar={(raw, d) =>
+                        confirmarNumero(item, "quantidade_planejada", raw, d)
                       }
                       onCancelar={() => setAtiva(null)}
                       tdClassName={PLANEJADO.celulaMeio}
@@ -838,8 +955,8 @@ export function ItensTable({
                           campo: "dias_meses_planejado",
                         })
                       }
-                      onConfirmar={(raw) =>
-                        confirmarNumero(item, "dias_meses_planejado", raw)
+                      onConfirmar={(raw, d) =>
+                        confirmarNumero(item, "dias_meses_planejado", raw, d)
                       }
                       onCancelar={() => setAtiva(null)}
                       tdClassName={PLANEJADO.celulaMeio}
@@ -871,10 +988,14 @@ export function ItensTable({
                   ativa={ativa}
                   onAtivar={(campo) => setAtiva({ rowId: DRAFT_ID, campo })}
                   onFechar={() => setAtiva(null)}
-                  onConfirmarTexto={(campo, v) => confirmarDraft(campo, v)}
-                  onConfirmarNumero={(campo, raw) =>
-                    confirmarDraftNumero(campo, raw)
+                  onConfirmarTexto={(campo, v, d) => confirmarDraft(campo, v, d)}
+                  onConfirmarNumero={(campo, raw, d) =>
+                    confirmarDraftNumero(campo, raw, d)
                   }
+                  onNavegar={(campo, d) =>
+                    setAtiva(celulaDirecao(DRAFT_ID, campo, d))
+                  }
+                  onFecharCelula={(campo) => fecharCelula(DRAFT_ID, campo)}
                 />
               )}
 
@@ -967,7 +1088,9 @@ export function ItensTable({
           <div className="flex items-center justify-between gap-4 border-t border-border bg-muted/40 px-6 py-3 rounded-b-2xl">
             <span className="text-[11px] text-muted-foreground">
               Clique em qualquer célula para editar ·{" "}
-              <kbd className="font-mono">Enter</kbd> confirma ·{" "}
+              <kbd className="font-mono">Tab</kbd> e as{" "}
+              <kbd className="font-mono">setas</kbd> andam ·{" "}
+              <kbd className="font-mono">Enter</kbd> desce ·{" "}
               <kbd className="font-mono">Esc</kbd> desfaz
             </span>
           </div>
@@ -1122,11 +1245,19 @@ function CelulaTexto({
   editando: boolean;
   editavel: boolean;
   onAtivar: () => void;
-  onConfirmar: (valor: string) => void;
+  onConfirmar: (valor: string, destino?: Direcao) => void;
   onCancelar: () => void;
   tdClassName?: string;
 }) {
   const finalizado = React.useRef(false);
+
+  // Sem este reset o ref ficava `true` para sempre depois do primeiro
+  // Enter, e a partir daí sair da célula pelo clique não gravava mais
+  // nada. Passava despercebido porque o Enter fechava a edição; com a
+  // navegação por teclado a mesma célula é reaberta o tempo todo.
+  React.useEffect(() => {
+    if (editando) finalizado.current = false;
+  }, [editando]);
 
   if (editando) {
     return (
@@ -1136,10 +1267,15 @@ function CelulaTexto({
           defaultValue={valor}
           onFocus={(e) => e.currentTarget.select()}
           onKeyDown={(e) => {
-            if (e.key === "Enter") {
+            const destino = direcaoNoCampo(e, e.currentTarget);
+            if (destino) {
+              // preventDefault é o que impede o navegador de levar o foco
+              // para o próximo elemento por conta própria: quem decide
+              // para onde ir é a grade, não a ordem do DOM.
               e.preventDefault();
               finalizado.current = true;
-              onConfirmar(e.currentTarget.value);
+              onConfirmar(e.currentTarget.value, destino);
+              return;
             }
             if (e.key === "Escape") {
               e.preventDefault();
@@ -1183,11 +1319,15 @@ function CelulaNumero({
   editando: boolean;
   editavel: boolean;
   onAtivar: () => void;
-  onConfirmar: (raw: string) => void;
+  onConfirmar: (raw: string, destino?: Direcao) => void;
   onCancelar: () => void;
   tdClassName?: string;
 }) {
   const finalizado = React.useRef(false);
+
+  React.useEffect(() => {
+    if (editando) finalizado.current = false;
+  }, [editando]);
 
   if (editando) {
     return (
@@ -1198,10 +1338,12 @@ function CelulaNumero({
           defaultValue={paraEdicao(valor)}
           onFocus={(e) => e.currentTarget.select()}
           onKeyDown={(e) => {
-            if (e.key === "Enter") {
+            const destino = direcaoNoCampo(e, e.currentTarget);
+            if (destino) {
               e.preventDefault();
               finalizado.current = true;
-              onConfirmar(e.currentTarget.value);
+              onConfirmar(e.currentTarget.value, destino);
+              return;
             }
             if (e.key === "Escape") {
               e.preventDefault();
@@ -1233,6 +1375,12 @@ function CelulaNumero({
   );
 }
 
+/** Célula de escolha (Tipo, Categoria).
+ *
+ *  As setas aqui são do dropdown — é com elas que se percorrem as opções
+ *  —, então esta célula navega só por Tab e Enter. Escolher um valor
+ *  fecha a lista mas NÃO sai da célula: o gatilho continua com o foco e
+ *  é o Tab seguinte que anda, como o time pediu em 13/08/2026. */
 function CelulaSelect({
   valor,
   opcoes,
@@ -1241,6 +1389,7 @@ function CelulaSelect({
   editavel,
   onAtivar,
   onConfirmar,
+  onNavegar,
   onFechar,
   tdClassName,
   children,
@@ -1252,17 +1401,31 @@ function CelulaSelect({
   editando: boolean;
   editavel: boolean;
   onAtivar: () => void;
-  onConfirmar: (valor: string) => void;
+  onConfirmar: (valor: string, destino?: Direcao) => void;
+  onNavegar: (destino: Direcao) => void;
   onFechar: () => void;
   tdClassName?: string;
   children: React.ReactNode;
 }) {
+
+  /** Só o Tab é nosso: ele atravessa a coluna sem escolher nada. O Enter
+   *  pertence ao Radix, que o usa para confirmar a opção destacada —
+   *  interceptá-lo aqui deixaria o dropdown sem como escolher pelo
+   *  teclado. As setas também são dele, para percorrer as opções. */
+  function navegarNaLista(e: React.KeyboardEvent) {
+    if (e.key !== "Tab") return;
+    e.preventDefault();
+    onNavegar(e.shiftKey ? "anterior" : "proxima");
+  }
+
   if (editando) {
     return (
       <td className={cn(TD_BASE, tdClassName, "px-1.5")}>
         <Select
           value={valor}
           defaultOpen
+          // Escolher grava E decide para onde ir — quem sabe disso é o
+          // pai, que conhece o `porTeclado` da célula. Aqui só repassa.
           onValueChange={onConfirmar}
           onOpenChange={(aberto) => {
             if (!aberto) onFechar();
@@ -1273,7 +1436,9 @@ function CelulaSelect({
           >
             <SelectValue />
           </SelectTrigger>
-          <SelectContent>
+          {/* Tab com a lista aberta atravessa sem escolher — é o jeito de
+              passar por uma coluna que já está certa. */}
+          <SelectContent onKeyDown={navegarNaLista}>
             {opcoes.map((o) => (
               <SelectItem key={o.value} value={o.value}>
                 {o.label}
@@ -1310,6 +1475,8 @@ function LinhaDraft({
   onFechar,
   onConfirmarTexto,
   onConfirmarNumero,
+  onNavegar,
+  onFecharCelula,
 }: {
   draft: Draft;
   moeda: string;
@@ -1317,8 +1484,13 @@ function LinhaDraft({
   ativa: CelulaAtiva;
   onAtivar: (campo: Campo) => void;
   onFechar: () => void;
-  onConfirmarTexto: (campo: Campo, valor: ValorCampo) => void;
-  onConfirmarNumero: (campo: Campo, raw: string) => void;
+  onConfirmarTexto: (campo: Campo, valor: ValorCampo, destino?: Direcao) => void;
+  onConfirmarNumero: (campo: Campo, raw: string, destino?: Direcao) => void;
+  /** Tab/Enter num `<select>` da linha nova: navega sem gravar valor. */
+  onNavegar: (campo: Campo, destino: Direcao) => void;
+  /** Fecha só se a célula ainda for a ativa — mesma guarda das linhas de
+   *  item, para o aviso de fechamento do Radix não cancelar o Tab. */
+  onFecharCelula: (campo: Campo) => void;
 }) {
   const ativaAqui = (campo: Campo) =>
     ativa?.rowId === DRAFT_ID && ativa.campo === campo;
@@ -1344,7 +1516,7 @@ function LinhaDraft({
         editando={ativaAqui("item")}
         editavel
         onAtivar={() => onAtivar("item")}
-        onConfirmar={(v) => onConfirmarTexto("item", v.trim())}
+        onConfirmar={(v, d) => onConfirmarTexto("item", v.trim(), d)}
         onCancelar={onFechar}
         tdClassName={cn("text-foreground", GRADE_NEUTRA)}
       />
@@ -1354,8 +1526,15 @@ function LinhaDraft({
         valor={draft.tipo_custo}
         opcoes={TIPOS_CUSTO.map((t) => ({ value: t, label: tipoCustoLabel(t) }))}
         onAtivar={() => onAtivar("tipo_custo")}
-        onConfirmar={(v) => onConfirmarTexto("tipo_custo", v)}
-        onFechar={onFechar}
+        onConfirmar={(v) =>
+          onConfirmarTexto(
+            "tipo_custo",
+            v,
+            ativa?.porTeclado ? "proxima" : undefined,
+          )
+        }
+        onNavegar={(d) => onNavegar("tipo_custo", d)}
+        onFechar={() => onFecharCelula("tipo_custo")}
         tdClassName={cn(GRADE_NEUTRA, "px-2")}
       >
         <Badge variant="outline" className="px-1.5">
@@ -1378,9 +1557,14 @@ function LinhaDraft({
         vazio="Nenhuma categoria cadastrada em /categorias"
         onAtivar={() => onAtivar("categoria_id")}
         onConfirmar={(v) =>
-          onConfirmarTexto("categoria_id", v === SEM_CATEGORIA ? null : v)
+          onConfirmarTexto(
+            "categoria_id",
+            v === SEM_CATEGORIA ? null : v,
+            ativa?.porTeclado ? "proxima" : undefined,
+          )
         }
-        onFechar={onFechar}
+        onNavegar={(d) => onNavegar("categoria_id", d)}
+        onFechar={() => onFecharCelula("categoria_id")}
       >
         {categoria ? (
           <Badge variant="neutral">{categoria.nome}</Badge>
@@ -1396,7 +1580,7 @@ function LinhaDraft({
         editando={ativaAqui("valor_unitario_orcado")}
         editavel
         onAtivar={() => onAtivar("valor_unitario_orcado")}
-        onConfirmar={(raw) => onConfirmarNumero("valor_unitario_orcado", raw)}
+        onConfirmar={(raw, d) => onConfirmarNumero("valor_unitario_orcado", raw, d)}
         onCancelar={onFechar}
         tdClassName={cn("font-mono", ORCADO.celulaAbre)}
       />
@@ -1405,7 +1589,7 @@ function LinhaDraft({
         editando={ativaAqui("quantidade_orcada")}
         editavel
         onAtivar={() => onAtivar("quantidade_orcada")}
-        onConfirmar={(raw) => onConfirmarNumero("quantidade_orcada", raw)}
+        onConfirmar={(raw, d) => onConfirmarNumero("quantidade_orcada", raw, d)}
         onCancelar={onFechar}
         tdClassName={ORCADO.celulaMeio}
       />
@@ -1414,7 +1598,7 @@ function LinhaDraft({
         editando={ativaAqui("dias_meses_orcado")}
         editavel
         onAtivar={() => onAtivar("dias_meses_orcado")}
-        onConfirmar={(raw) => onConfirmarNumero("dias_meses_orcado", raw)}
+        onConfirmar={(raw, d) => onConfirmarNumero("dias_meses_orcado", raw, d)}
         onCancelar={onFechar}
         tdClassName={ORCADO.celulaMeio}
       />
@@ -1436,7 +1620,7 @@ function LinhaDraft({
         editando={ativaAqui("valor_unitario_planejado")}
         editavel
         onAtivar={() => onAtivar("valor_unitario_planejado")}
-        onConfirmar={(raw) => onConfirmarNumero("valor_unitario_planejado", raw)}
+        onConfirmar={(raw, d) => onConfirmarNumero("valor_unitario_planejado", raw, d)}
         onCancelar={onFechar}
         tdClassName={cn("font-mono", PLANEJADO.celulaAbre)}
       />
@@ -1445,7 +1629,7 @@ function LinhaDraft({
         editando={ativaAqui("quantidade_planejada")}
         editavel
         onAtivar={() => onAtivar("quantidade_planejada")}
-        onConfirmar={(raw) => onConfirmarNumero("quantidade_planejada", raw)}
+        onConfirmar={(raw, d) => onConfirmarNumero("quantidade_planejada", raw, d)}
         onCancelar={onFechar}
         tdClassName={PLANEJADO.celulaMeio}
       />
@@ -1454,7 +1638,7 @@ function LinhaDraft({
         editando={ativaAqui("dias_meses_planejado")}
         editavel
         onAtivar={() => onAtivar("dias_meses_planejado")}
-        onConfirmar={(raw) => onConfirmarNumero("dias_meses_planejado", raw)}
+        onConfirmar={(raw, d) => onConfirmarNumero("dias_meses_planejado", raw, d)}
         onCancelar={onFechar}
         tdClassName={PLANEJADO.celulaMeio}
       />
