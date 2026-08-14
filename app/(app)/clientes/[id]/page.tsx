@@ -3,10 +3,11 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
-import type { Cliente, ClienteProduto } from "@/lib/types";
+import type { Cliente, ClienteProduto, ClientePortal } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { ClienteForm } from "../cliente-form";
 import { ProdutosCard } from "./produtos-card";
+import { PortaisCard } from "./portais-card";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +19,7 @@ export default async function EditarClientePage({
   const session = await requireSession();
   const supabase = createClient();
 
-  const [clienteRes, produtosRes] = await Promise.all([
+  const [clienteRes, produtosRes, portaisRes] = await Promise.all([
     supabase
       .from("clientes")
       .select("*")
@@ -34,14 +35,25 @@ export default async function EditarClientePage({
       .eq("tenant_id", session.activeTenant.id)
       .order("padrao", { ascending: false })
       .order("codigo"),
+    // Portais de fornecedor: os ativos primeiro, porque são os que o
+    // envio do job oferece.
+    supabase
+      .from("cliente_portais")
+      .select("*")
+      .eq("cliente_id", params.id)
+      .eq("tenant_id", session.activeTenant.id)
+      .order("ativo", { ascending: false })
+      .order("nome"),
   ]);
 
   const cliente = clienteRes.data;
   if (clienteRes.error) console.error("[clientes.detail]", clienteRes.error.message);
   if (produtosRes.error) console.error("[cliente_produtos.list]", produtosRes.error.message);
+  if (portaisRes.error) console.error("[cliente_portais.list]", portaisRes.error.message);
   if (!cliente) notFound();
 
   const produtos = (produtosRes.data ?? []) as ClienteProduto[];
+  const portais = (portaisRes.data ?? []) as ClientePortal[];
 
   return (
     <div className="space-y-6 max-w-3xl mx-auto">
@@ -70,6 +82,8 @@ export default async function EditarClientePage({
       </div>
 
       <ProdutosCard clienteId={cliente.id} produtos={produtos} />
+
+      <PortaisCard clienteId={cliente.id} portais={portais} />
     </div>
   );
 }
