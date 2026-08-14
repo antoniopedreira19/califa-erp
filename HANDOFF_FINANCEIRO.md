@@ -499,16 +499,226 @@ pelo MCP: 2 tabelas, 7 policies, `authenticated` com acesso, `anon` sem nenhum.
 
 ## 24. O que falta desta frente
 
-1. **Cadastro de portais no cliente.** A tabela existe e o formulário já lê
-   dela, mas não há tela para cadastrar — o campo mostra o aviso de "nenhum
-   portal cadastrado". É a peça que falta para a Parte III ficar completa.
-2. **A gravação não foi exercitada de ponta a ponta.** Enviar o JOB-0010 é
-   escrita em dado de produção; ficou para quando o time autorizar.
-3. **Etapa 2 — encerramento:** resumo de fechamento (faturamento previsto ×
-   faturamento, desmembrado em orçado, honorários e encargos, custo realizado e
-   margem em valor **e** percentual), **trava por PP ou BV em aberto** e job
-   **somente leitura** depois de encerrado. Hoje JOB-0001 (2 PPs), JOB-0004
-   (88 PPs) e JOB-0010 (1 BV) seriam bloqueados pela trava.
-4. **Jobs Abertos ganha a coluna de faturamento**, igual ao design — agora há
-   insumo: não enviado / enviado / faturado. Fica para quando o fluxo inteiro
-   estiver desenhado, conforme combinado.
+> ⚠️ **Atualizado em 13/08/2026.** Os quatro itens desta lista foram
+> entregues — ver seções 25 a 27. O que sobrou está na seção 28.
+
+1. **Cadastro de portais no cliente.** ✅ Entregue — `PortaisCard` em
+   `/clientes/[id]`, com inativação em vez de exclusão.
+2. **A gravação não foi exercitada de ponta a ponta.** ✅ Exercitada no
+   JOB-0010 (seção 25).
+3. **Etapa 2 — encerramento.** ✅ Entregue (seção 26).
+4. **Jobs Abertos ganha a coluna de faturamento.** ✅ Entregue (seção 27).
+
+---
+
+## 25. Parte IV — o envio para faturamento, exercitado
+
+O JOB-0010 foi enviado de ponta a ponta: `valor_faturado` R$ 21.076,81,
+`numero_po` PO-2026-0042, vencimento 25/08/2026, CNAE preenchido, portal
+"Coupa" do cliente gravado junto com a URL do momento do envio. A auditoria
+registrou `job.enviado_para_faturamento`; o botão de envio sumiu da tela e o
+de encerramento apareceu no lugar.
+
+O `portal_url` é **cópia**, não referência: o cadastro do cliente pode mudar
+de endereço depois, e o registro do envio não pode mudar junto.
+
+---
+
+## 26. Parte IV — encerramento
+
+Regras completas em `docs/decisions/008-encerramento-do-job.md`. O resumo:
+
+- **Só encerra job já enviado para faturamento.**
+- **Trava por documento em aberto:** PP em `em_avaliacao`/`aprovada` ou BV em
+  `a_negociar`/`confirmado` bloqueiam, e a tela diz **quais** — pelo código da
+  PP e pelo item do BV.
+- **Resumo de fechamento** antes de gravar: faturamento previsto na abertura ×
+  Faturamento (o previsto de agora), desmembrado em custos orçados, honorários
+  e encargos/impostos, mais custo realizado e **margem em valor e percentual**.
+- **Job encerrado é congelado** — `jobEstaCongelado()` barra edição, PP, BV,
+  realizado e errata, no servidor e na interface.
+
+Dois achados no caminho:
+
+1. **`atualizarJob` não tinha gate de status nenhum.** Job cancelado era
+   editável. Ganhou a trava.
+2. **O card de Status sumiria do job encerrado**, levando junto o registro do
+   faturamento — a condição de render dependia só de haver transição ou envio
+   pendente. Corrigido: com envio registrado o card fica, e uma frase explica o
+   que "encerrado" significa.
+
+**Onde a divergência aparece:** se uma errata mexer no job entre o envio e o
+encerramento, o resumo mostra o valor enviado ao lado do faturamento atual e
+manda confirmar com o financeiro. O sistema não escolhe qual foi para a nota.
+
+### Verificação (2026-08-13)
+
+`tsc --noEmit` e `next lint` limpos. Conferido no navegador, JOB-0010:
+
+| Checagem | Resultado |
+|---|---|
+| Trava | "Este job ainda não pode ser encerrado. 1 BV ainda não recebido: Sinalização." — botão desabilitado |
+| Faturamento previsto na abertura | R$ 19.684,81 (bate com `faturamento_previsto_abertura`) |
+| Faturamento | R$ 21.076,81 (bate com `faturamento_previsto` e com o valor enviado — sem divergência) |
+| Desmembramento | custos R$ 17.820,00 · honorários 12% R$ 2.138,40 · encargos 19,54% R$ 4.118,41 → Valor do Job R$ 24.076,81 |
+| Margem | R$ 9.958,40 e 41,4% — igual ao "Resultado realizado" do cabeçalho |
+| `levantarImpedimentos` (servidor) | rota temporária de leitura devolveu, para os 11 jobs, exatamente o que o SQL direto devolve |
+
+> ⚠️ **Atualizado em 14/08/2026.** O encerramento foi executado de ponta a
+> ponta no JOB-0009 — ver seção 29.
+
+---
+
+## 27. Jobs Abertos alinhado ao design
+
+A lista passou a ter as colunas do design: **Código · Nome · Empresa ·
+Projeto · Cliente · GP responsável · Abertura · Valor total · Faturamento**.
+Saíram Categoria e Competência — não estão no design; os dois campos
+continuam existindo no job e aparecem no detalhe do financeiro.
+
+O projeto aparece **duas vezes** de propósito: na faixa do agrupamento e na
+coluna. Com o grupo colapsado por um filtro, a linha vira resultado de busca
+solto e "de que projeto é isso?" some.
+
+**Chips:** ver seção 29 — o "Aguardando encerramento" do design saiu em
+14/08/2026, e a esteira ganhou dois estados de dinheiro.
+
+A tabela `faturamentos` é da outra frente (contas a receber) e está vazia
+hoje — por isso "Faturado R$ 0,00". A ligação é polimórfica
+(`origem_tipo`/`origem_id`), então não há embed possível: são queries rasas
+em `Promise.all`, cruzadas em memória, como manda `docs/PERFORMANCE.md`.
+
+---
+
+## 28. Correção do valor do JOB-0001
+
+`jobs.valor_total` do JOB-0001 estava em **R$ 1.000.000,00** sobre um único
+item orçado de R$ 4.000,00 — resquício do campo de valor editável à mão que
+o drawer teve antes de o fluxo estar estruturado (o campo já não existe; ver
+comentário no topo de `app/(app)/jobs/actions.ts`).
+
+O número correto sai de `calcularTotaisVersao`: 4.000 de custo + 520 de
+honorários (13%) + 1.097,00 de imposto 19,53% "por dentro" = **R$ 5.617,00**
+— exatamente o que `faturamento_previsto` e `valor_job_abertura` já
+traziam. Só a coluna `valor_total` divergia.
+
+Corrigido pela migration `20260814000001_corrige_valor_total_job_0001.sql`,
+com guarda no `WHERE` que a torna idempotente e impede que toque em qualquer
+outro job. **Autorizado pelo Tiago em 14/08/2026.**
+
+**Conferência do universo inteiro antes de mexer:** a fórmula foi replicada
+em SQL e rodada contra os 11 jobs. Os outros 10 batem ao centavo com o
+gravado — o JOB-0001 era o único divergente. É o que dá confiança de que a
+correção acerta o número, e não que a fórmula estivesse errada.
+
+---
+
+## 29. A esteira ganhou Liquidado e Inadimplente
+
+Regras completas em `docs/decisions/009-esteira-do-faturamento.md`.
+
+O chip "Aguardando encerramento" do design **saiu**: se sobrepunha a
+"Faturado" e os dois devolviam o mesmo conjunto (decisão do Tiago,
+14/08/2026). No lugar entraram os dois estados de dinheiro:
+
+| Estado | Condição |
+|---|---|
+| Aguardando envio | sem `jobs_envio_faturamento` |
+| Enviado | envio registrado, sem nota |
+| Faturado | nota emitida, nada vencido |
+| **Inadimplente** | nota emitida e parcela vencida em aberto |
+| **Liquidado** | todas as parcelas recebidas |
+
+Chips: **Todos · Aguardando faturamento · Faturado · Liquidado ·
+Inadimplente**. "Aguardando faturamento" cobre os dois estados antes da
+nota. Liquidado e Inadimplente entram no resumo **só quando existem** —
+enquanto o módulo de recebimento não roda, a linha fica igual à do design.
+
+O nome é **"Liquidado"**, e não "Recebido": o sistema já usa `recebido` para
+BV e `pago` para PP, e um terceiro "recebido" no nível do job criaria
+ambiguidade na tela onde os três aparecem.
+
+A regra mora em `lib/calculos/esteira-faturamento.ts` como **função pura**,
+de propósito: `faturamentos` e `titulos_receber` são da frente de contas a
+receber, e conferir pela interface exigiria emitir nota no módulo do outro.
+
+---
+
+## 30. Bug corrigido: envio sem PO não funcionava
+
+O campo "Número da PO" é opcional, mas o envio com ele **vazio** falhava,
+mostrando ao usuário a mensagem crua do Zod em inglês: *"Expected string,
+received null"*.
+
+Causa: o drawer manda `null` quando o campo fica em branco, e o schema era
+`z.string().optional()` — que aceita `undefined`, não `null`. Corrigido com
+`.nullable()` em `numero_po`. Aproveitando, `portal_id` ganhou mensagem em
+português no `.uuid()`, que era o outro caminho capaz de vazar inglês.
+
+**Por que passou despercebido até agora:** os dois envios anteriores
+(JOB-0010 e JOB-0001) tinham PO preenchida. O caso opcional só apareceu no
+primeiro envio sem PO — exatamente o que o campo opcional existe para
+permitir.
+
+---
+
+## 31. Verificação (2026-08-14)
+
+`tsc --noEmit` limpo, `next lint` sem novidades (só os 2 warnings
+pré-existentes de `combobox`/`multi-select`), `npm run build` compilou.
+
+### Fluxo completo, JOB-0001
+
+| Checagem | Resultado |
+|---|---|
+| Valor corrigido | R$ 5.617,00 no cabeçalho, no metadata e no valor de faturamento |
+| Envio para faturamento | gravado: R$ 5.617,00, PO-2026-0001, venc. 14/08/2026, CNAE, sem portal (cliente não tem) |
+| Trava do encerramento | "Este job ainda não pode ser encerrado. 1 PP sem baixa: PP-00001." — botão desabilitado |
+| Resumo | custos R$ 4.000,00 · honorários 13% R$ 520,00 · encargos 19,53% R$ 1.097,00 → Valor do Job R$ 5.617,00 |
+| Margem | R$ 2.520,00 e 44,9% — igual ao "Resultado realizado" do cabeçalho |
+
+**O JOB-0001 não foi encerrado.** Para isso seria preciso dar baixa na
+PP-00001, e a baixa chama `dar_baixa_pp`, que gera lançamento financeiro e
+movimenta saldo de conta bancária — módulo de contas a pagar da outra
+frente. Não entrei nele. O caminho feliz foi exercitado no JOB-0009, abaixo.
+
+### Caminho feliz, JOB-0009
+
+| Checagem | Resultado |
+|---|---|
+| Envio **sem PO** | gravou `numero_po: null` — o bug da seção 30, corrigido e conferido |
+| Resumo sem trava | botão "Encerrar job" ativo |
+| Números | custos R$ 1.000,00 · honorários 12% R$ 120,00 · encargos 19,53% R$ 29,12 → Valor do Job R$ 1.149,12 |
+| Margem sem custo realizado | "—" nos dois campos, com a frase explicando que a conta apareceria como se a receita inteira fosse lucro |
+| Encerramento | status `encerrado`, auditoria `job.encerrado` com `{faturamento: 149.12}` |
+| Congelamento | botão "Editar" sumiu; planilha sem "Alterar orçado", sem calha de BV e sem "Gerar PP"; card de Status manteve o registro do faturamento e ganhou "Job encerrado — é histórico. Não aceita edição, PP nem BV." |
+| Saiu da lista | Jobs Abertos foi de 10 para 9 |
+
+### A esteira
+
+10 casos rodados contra a função de produção (`classificarFaturamento`),
+**10/10 corretos**: os cinco estados, parcela vencendo hoje, parcela paga
+com atraso, e a mistura de paga + vencida.
+
+### Jobs Abertos
+
+| Checagem | Resultado |
+|---|---|
+| Resumo | 9 jobs abertos · Faturado R$ 0,00 · Aguardando faturamento R$ 1.209.838,03 · Valor total R$ 1.654.038,03 |
+| Somas conferidas | R$ 1.209.838,03 = R$ 1.209.987,15 − R$ 149,12 (JOB-0009 encerrado). Valor total = R$ 2.649.570,15 − R$ 1.149,12 − R$ 994.383,00 (correção do JOB-0001) |
+| Coluna | JOB-0001 e JOB-0010 com selo âmbar "ENVIADO"; os demais "AGUARDANDO ENVIO" |
+| Chips | "Liquidado" e "Inadimplente" devolvem 0 jobs e R$ 0,00 — correto, `faturamentos` está vazia |
+
+---
+
+## 32. O que falta desta frente
+
+1. **Liquidado e Inadimplente nunca foram vistos com dado real.** A regra
+   está conferida em 10 casos, mas depende de `faturamentos` e
+   `titulos_receber` receberem movimento pela frente de contas a receber.
+2. **JOB-0001 segue aberto**, com a PP-00001 em avaliação. Encerrá-lo exige
+   baixa no módulo de contas a pagar — decisão sua.
+3. **Abatimento da previsão de desembolso pela PP** e integração com
+   `vw_fluxo_caixa` (seção 14).
+4. **Feriados na janela de pagamento.** Hoje o ajuste só empurra sábado e
+   domingo (seção 12).
