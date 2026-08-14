@@ -412,3 +412,103 @@ no bundle. No navegador, com dados reais:
 3. **Abatimento da previsão por PP** — a coluna "Situação" do card de previsões
    e a integração com `vw_fluxo_caixa` (seção 14). As regras já estão fechadas em
    `docs/decisions/004-previsao-de-desembolso.md`.
+
+---
+
+# Parte III — Envio do job para faturamento
+
+**Data:** 2026-08-13
+**Escopo combinado com o time:** etapa 1 de 2. O **encerramento** (resumo de
+fechamento, trava por PP/BV em aberto e job somente-leitura) ficou para a etapa
+seguinte, por ser a que mais toca o módulo de Jobs.
+
+---
+
+## 20. O passo que faltava
+
+Antes desta entrega não havia nada entre "job aberto" e "financeiro emite a
+NF": a `vw_faturamento_pendente` listava **todo job aberto** com faturamento
+previsto, e o financeiro descobria sozinho o que estava pronto. Faltavam
+justamente as informações que só a produção tem — número da PO, CNAE a usar,
+portal do cliente e o vencimento acordado.
+
+Agora a produção **libera** o job, e é essa liberação que põe o job na fila.
+
+| Tabela | Papel |
+|---|---|
+| `cliente_portais` | portais de fornecedor do cliente. **Vários por cliente** — decisão do time: certos clientes têm mais de um |
+| `jobs_envio_faturamento` | a liberação: valor, PO, vencimento, CNAE, portal escolhido, quem enviou e quando. Um por job |
+
+⚠️ **`vw_faturamento_pendente` mudou** (migration `20260813000018`): o ramo
+`job` agora exige o envio, e passa a usar o **valor liberado** e o **vencimento
+acordado** no lugar do previsto corrente e da data da abertura. O ramo `bv`
+ficou intacto. Feita com `create or replace` e lista de colunas idêntica — a UI
+da task016 não precisou mudar. **Consequência aceita pelo time: job aberto que
+ainda não foi enviado some da aba Faturamento até alguém enviá-lo.**
+
+---
+
+## 21. Decisões
+
+- **O valor vai travado.** Vem de `jobs.faturamento_previsto` (já com erratas) e
+  é **relido no servidor** — valor de nota fiscal não vem do formulário. O
+  campo é read-only, com selo "Do faturamento previsto".
+- **Cópia, não referência.** `valor_faturado` é congelado no envio: errata
+  posterior mudaria o valor que a produção declarou ter liberado.
+- **CNAE é texto livre nesta fase**, por decisão do time — não existe cadastro
+  de CNAE no projeto e criar um agora seria antecipar estrutura sem uso
+  definido. Quando virar lista, o campo vira FK.
+- **O portal guarda snapshot da URL** além da FK: se o cadastro mudar depois, o
+  registro do envio continua dizendo para onde a nota devia ir. O servidor
+  confere que o portal escolhido é **do cliente daquele job** — a lista do
+  formulário não é garantia.
+- **Envio é único por job** (unique em `job_id`) e **não tem DELETE**: é evento,
+  não rascunho. NF parcial continua possível do lado do financeiro, onde
+  `faturamentos` controla o saldo.
+- **O encerramento só aparece depois do envio** — antes disso não há o que
+  encerrar.
+
+---
+
+## 22. Abertura saiu da página do job
+
+O bloco "Aprovação financeira" foi **removido** de `/jobs/[jobId]`: abrir e
+rejeitar viraram ações exclusivas da Central Financeira, onde o modal de
+conferência já tem as duas. Uma responsabilidade, um lugar. No lugar do bloco,
+job aguardando abertura mostra só para onde ir.
+
+Sobre "nenhuma PP enquanto o job não for aberto": **já estava valendo** nas duas
+camadas — `checarGatesRealizado` (server) e `podeEditarRealizado` (UI) exigem
+`aberto` ou `em_producao`. Verificado no navegador: JOB-0011, aguardando
+abertura, não mostra "Gerar PP".
+
+---
+
+## 23. Verificação (2026-08-13)
+
+`tsc --noEmit` e `next lint` limpos; `npm run build` compilou. Banco conferido
+pelo MCP: 2 tabelas, 7 policies, `authenticated` com acesso, `anon` sem nenhum.
+
+| Checagem | Resultado |
+|---|---|
+| JOB-0011 (aguardando) | sem "Abrir no financeiro", sem "Rejeitar", sem "Gerar PP"; aviso aponta para a Central Financeira |
+| JOB-0010 (aberto) | "Enviar job para faturamento" aparece; encerramento escondido |
+| Formulário | valor travado em R$ 21.076,81 (o previsto **após a errata**, não o valor do job); vencimento pré-preenchido com 25/08/2026 da abertura; "Enviar" bloqueado sem CNAE; aviso de portal não cadastrado |
+
+---
+
+## 24. O que falta desta frente
+
+1. **Cadastro de portais no cliente.** A tabela existe e o formulário já lê
+   dela, mas não há tela para cadastrar — o campo mostra o aviso de "nenhum
+   portal cadastrado". É a peça que falta para a Parte III ficar completa.
+2. **A gravação não foi exercitada de ponta a ponta.** Enviar o JOB-0010 é
+   escrita em dado de produção; ficou para quando o time autorizar.
+3. **Etapa 2 — encerramento:** resumo de fechamento (faturamento previsto ×
+   faturamento, desmembrado em orçado, honorários e encargos, custo realizado e
+   margem em valor **e** percentual), **trava por PP ou BV em aberto** e job
+   **somente leitura** depois de encerrado. Hoje JOB-0001 (2 PPs), JOB-0004
+   (88 PPs) e JOB-0010 (1 BV) seriam bloqueados pela trava.
+4. **Jobs Abertos ganha a coluna de faturamento**, igual ao design — agora há
+   insumo: não enviado / enviado / faturado. Fica para quando o fluxo inteiro
+   estiver desenhado, conforme combinado.
