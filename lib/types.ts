@@ -650,6 +650,44 @@ export interface Job {
   updated_at: string;
 }
 
+/** Um portal de fornecedor do cliente, onde a NF é lançada. */
+export interface ClientePortal {
+  id: string;
+  tenant_id: string;
+  cliente_id: string;
+  nome: string;
+  url: string;
+  ativo: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * A liberação do job pela produção para o financeiro faturar.
+ *
+ * Um por job. Enquanto não existe, o job não aparece na fila de
+ * faturamento — a `vw_faturamento_pendente` exige este registro.
+ */
+export interface JobEnvioFaturamento {
+  id: string;
+  tenant_id: string;
+  job_id: string;
+  /** Cópia do `faturamento_previsto` no instante do envio. */
+  valor_faturado: number;
+  numero_po: string | null;
+  /** Vencimento acordado com o cliente. */
+  data_faturamento: string;
+  cnae: string;
+  portal_id: string | null;
+  /** Snapshot da URL: o cadastro do portal pode mudar depois. */
+  portal_url: string | null;
+  enviado_em: string;
+  enviado_por: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 /** Uma data da curva de desembolso do job. */
 export interface JobPrevisaoCusto {
   id: string;
