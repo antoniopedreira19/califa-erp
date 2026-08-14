@@ -691,8 +691,33 @@ frente. Não entrei nele. O caminho feliz foi exercitado no JOB-0009, abaixo.
 | Números | custos R$ 1.000,00 · honorários 12% R$ 120,00 · encargos 19,53% R$ 29,12 → Valor do Job R$ 1.149,12 |
 | Margem sem custo realizado | "—" nos dois campos, com a frase explicando que a conta apareceria como se a receita inteira fosse lucro |
 | Encerramento | status `encerrado`, auditoria `job.encerrado` com `{faturamento: 149.12}` |
-| Congelamento | botão "Editar" sumiu; planilha sem "Alterar orçado", sem calha de BV e sem "Gerar PP"; card de Status manteve o registro do faturamento e ganhou "Job encerrado — é histórico. Não aceita edição, PP nem BV." |
+| Congelamento (interface) | botão "Editar" sumiu; planilha sem "Alterar orçado", sem calha de BV e sem "Gerar PP"; card de Status manteve o registro do faturamento e ganhou "Job encerrado — é histórico. Não aceita edição, PP nem BV." |
 | Saiu da lista | Jobs Abertos foi de 10 para 9 |
+
+### Congelamento no SERVIDOR, exercitado
+
+A interface esconder o botão não prova nada — a regra tem que estar na
+action. As três foram chamadas direto contra o JOB-0009 já encerrado, por
+uma rota temporária, e **as três recusaram**:
+
+| Action | Resposta |
+|---|---|
+| `atualizarJob` | "Job encerrado — não pode mais ser editado." |
+| `cancelarBv` | "Job encerrado — o BV não pode mais ser alterado." |
+| `encerrarJob` (de novo) | "Só job aberto pode ser encerrado. Este está em encerrado." |
+
+O teste foi montado para **não gravar em nenhum cenário**, inclusive se a
+trava tivesse falhado: `atualizarJob` recebeu os mesmos valores que já
+estavam no banco, e `cancelarBv` rodou num item sem BV (a action pararia no
+"BV não encontrado" antes de criar qualquer coisa).
+
+Confirmado depois: `updated_at` do JOB-0009 continua no instante do
+encerramento (04:55:07), sem rastro da tentativa das 06:47 — e a auditoria
+registrou `acao_negada` com `{acao_tentada: "job.atualizado", motivo:
+"status_bloqueia_edicao", status_atual: "encerrado"}`.
+
+`cancelarBv` é a prova das três ações de BV: `salvarBv`, `confirmarBv` e
+`cancelarBv` passam todas pelo mesmo `carregarContexto`, onde a trava mora.
 
 ### A esteira
 

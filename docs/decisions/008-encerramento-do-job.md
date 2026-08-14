@@ -73,6 +73,10 @@ troca de status solta, é a action `encerrarJob`, que refaz a trava antes
 de gravar. Não existe caminho de volta pela interface — reabrir um job
 encerrado é operação de banco, deliberadamente.
 
+As três travas foram exercitadas contra um job já encerrado, chamando as
+actions direto — não só conferindo que a interface esconde o botão. Ver
+`HANDOFF_FINANCEIRO.md`, seção 31.
+
 ## Consequências
 
 - A ordem do fluxo passa a ser rígida: abrir → produzir → enviar para
