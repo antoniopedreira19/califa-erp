@@ -165,7 +165,7 @@ export function OrcamentoForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <div className="grid gap-4 md:grid-cols-2">
-        <Field label="Nome do orçamento" name="nome" required errors={fieldErrors}>
+        <Field label="Nome do Job" name="nome" required errors={fieldErrors}>
           <Input
             name="nome"
             defaultValue={orcamento?.nome ?? ""}

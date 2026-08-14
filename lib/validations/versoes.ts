@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { VERSAO_STATUS_EDITAVEIS } from "@/lib/types";
+import { isAliquotaConhecida } from "@/lib/impostos";
 
 /**
  * Schema do header da versão. `numero_versao` NÃO entra aqui — é
@@ -7,12 +8,9 @@ import { VERSAO_STATUS_EDITAVEIS } from "@/lib/types";
  * imutável na edição.
  */
 export const versaoSchema = z.object({
-  nome: z
-    .string()
-    .trim()
-    .max(200, "Máximo 200 caracteres.")
-    .optional()
-    .transform((v) => (v && v.length > 0 ? v : null)),
+  // `nome` saiu em 13/08/2026: o nome da versão é o do job mais o número
+  // da versão, calculado na leitura (`lib/nome-versao.ts`). A coluna
+  // continua no banco com o conteúdo antigo, sem ninguém ler nem gravar.
   moeda: z
     .string()
     .trim()
@@ -49,3 +47,33 @@ export const versaoSchema = z.object({
 });
 
 export type VersaoInput = z.infer<typeof versaoSchema>;
+
+/**
+ * O que impede aprovar a versão, em texto para o usuário — ou `null` quando
+ * está liberada.
+ *
+ * Mora aqui porque roda nos dois lados: a server action `aprovarVersao` é quem
+ * de fato barra, e o botão "Aprovar versão" usa a mesma função para desabilitar
+ * com o motivo no title. Mensagem única evita o botão dizer uma coisa e o
+ * servidor recusar por outra.
+ *
+ * Aprovar trava os valores da versão e é o que alimenta o job, então os três
+ * pontos abaixo não podem passar batido.
+ */
+export function bloqueioAprovacaoVersao(input: {
+  percentualImposto: number;
+  qtdItens: number;
+  /** Itens com total_orcado > 0 — linha começada e não preenchida dá 0. */
+  qtdItensComValor: number;
+}): string | null {
+  if (!isAliquotaConhecida(input.percentualImposto)) {
+    return 'Escolha a alíquota de impostos da versão antes de aprovar. Use o botão "Editar" da versão.';
+  }
+  if (input.qtdItens === 0) {
+    return "Adicione ao menos 1 item antes de aprovar a versão.";
+  }
+  if (input.qtdItensComValor === 0) {
+    return "Nenhum item da planilha tem valor. Preencha ao menos um item antes de aprovar a versão.";
+  }
+  return null;
+}

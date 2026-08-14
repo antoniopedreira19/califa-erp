@@ -12,6 +12,18 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  ALIQUOTAS_IMPOSTO,
+  aliquotaParaValor,
+  formatarAliquota,
+} from "@/lib/impostos";
 import { criarVersao, type ActionResult } from "./actions";
 
 interface Props {
@@ -38,12 +50,18 @@ export function NovaVersaoDrawer({
   const [fieldErrors, setFieldErrors] = React.useState<
     Record<string, string[]>
   >({});
+  const [imposto, setImposto] = React.useState("");
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
     setFieldErrors({});
+
     const formData = new FormData(e.currentTarget);
+    // O Select é controlado e não tem `name`: o valor entra aqui. Deixar em
+    // branco é permitido — a alíquota só é exigida para aprovar a versão, não
+    // para criá-la; sem escolha a action grava o default 0.
+    if (imposto !== "") formData.set("percentual_imposto", imposto);
 
     startTransition(async () => {
       const res: ActionResult = await criarVersao(orcamentoId, formData);
@@ -81,14 +99,6 @@ export function NovaVersaoDrawer({
           className="flex-1 flex flex-col overflow-hidden"
         >
           <div className="flex-1 overflow-y-auto p-6 space-y-5">
-            <Field label="Nome da versão (opcional)" name="nome" errors={fieldErrors}>
-              <Input
-                name="nome"
-                placeholder="Ex.: Proposta inicial, Revisão após reunião"
-                autoFocus
-              />
-            </Field>
-
             <div className="grid gap-4 md:grid-cols-2">
               <Field label="Moeda" name="moeda" errors={fieldErrors}>
                 <Input
@@ -132,14 +142,18 @@ export function NovaVersaoDrawer({
                 name="percentual_imposto"
                 errors={fieldErrors}
               >
-                <Input
-                  name="percentual_imposto"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  max="100"
-                  className="no-spinner"
-                />
+                <Select value={imposto} onValueChange={setImposto}>
+                  <SelectTrigger id="percentual_imposto">
+                    <SelectValue placeholder="Selecione a alíquota" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ALIQUOTAS_IMPOSTO.map((a) => (
+                      <SelectItem key={a} value={aliquotaParaValor(a)}>
+                        {formatarAliquota(a)}%
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </Field>
             </div>
 

@@ -10,6 +10,19 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  ALIQUOTAS_IMPOSTO,
+  aliquotaParaValor,
+  formatarAliquota,
+  valorInicialAliquota,
+} from "@/lib/impostos";
 import type { ParametrosVersao } from "./tipos";
 
 interface Props {
@@ -53,7 +66,7 @@ export function ParametrosModal({
   const [moeda, setMoeda] = React.useState(parametros.moeda);
   const [taxa, setTaxa] = React.useState(paraEdicao(parametros.taxa_cambio));
   const [imposto, setImposto] = React.useState(
-    paraEdicao(parametros.percentual_imposto),
+    valorInicialAliquota(parametros.percentual_imposto),
   );
   const [erro, setErro] = React.useState<string | null>(null);
 
@@ -61,23 +74,22 @@ export function ParametrosModal({
     if (!open) return;
     setMoeda(parametros.moeda);
     setTaxa(paraEdicao(parametros.taxa_cambio));
-    setImposto(paraEdicao(parametros.percentual_imposto));
+    setImposto(valorInicialAliquota(parametros.percentual_imposto));
     setErro(null);
   }, [open, parametros]);
 
   function salvar(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const taxaNum = parseNumero(taxa);
-    const impostoNum = parseNumero(imposto);
 
     if (taxaNum === null || taxaNum <= 0) {
       setErro("Taxa de câmbio precisa ser maior que zero.");
       return;
     }
-    if (impostoNum === null || impostoNum < 0 || impostoNum > 100) {
-      setErro("Impostos precisam estar entre 0 e 100.");
-      return;
-    }
+    // Alíquota em branco é permitida aqui: só a aprovação da versão exige uma
+    // das opções. Sem escolha, preserva o que o rascunho já tinha.
+    const impostoNum =
+      imposto === "" ? parametros.percentual_imposto : Number(imposto);
     if (moeda.trim().length !== 3) {
       setErro("Informe a moeda em três letras (BRL, USD, EUR).");
       return;
@@ -152,11 +164,18 @@ export function ParametrosModal({
             </div>
             <div className="space-y-2">
               <Label htmlFor="percentual_imposto">Impostos (%)</Label>
-              <Input
-                id="percentual_imposto"
-                value={imposto}
-                onChange={(e) => setImposto(e.target.value)}
-              />
+              <Select value={imposto} onValueChange={setImposto}>
+                <SelectTrigger id="percentual_imposto">
+                  <SelectValue placeholder="Selecione a alíquota" />
+                </SelectTrigger>
+                <SelectContent>
+                  {ALIQUOTAS_IMPOSTO.map((a) => (
+                    <SelectItem key={a} value={aliquotaParaValor(a)}>
+                      {formatarAliquota(a)}%
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 

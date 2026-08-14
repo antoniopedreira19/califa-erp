@@ -5,7 +5,12 @@ import { createClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { jobSchema, rejeicaoAberturaSchema } from "@/lib/validations/jobs";
-import { JOB_STATUS_TRANSICOES, type JobStatus } from "@/lib/types";
+import {
+  JOB_STATUS_TRANSICOES,
+  jobEstaCongelado,
+  jobStatusLabel,
+  type JobStatus,
+} from "@/lib/types";
 
 export type ActionResult =
   | { ok: true; id: string }
@@ -52,6 +57,35 @@ export async function atualizarJob(
   }
 
   const supabase = createClient();
+
+  // Job encerrado ou cancelado é histórico: nada mais nele é editado.
+  // A trava é aqui e não só no botão porque a action é o que grava.
+  const { data: atual } = await supabase
+    .from("jobs")
+    .select("status")
+    .eq("id", id)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle<{ status: JobStatus }>();
+
+  if (!atual) return { ok: false, message: "Job não encontrado." };
+
+  if (jobEstaCongelado(atual.status)) {
+    await logAuditEvent({
+      acao: "acao_negada",
+      tenantId: session.activeTenant.id,
+      entidadeTipo: "job",
+      entidadeId: id,
+      metadata: {
+        acao_tentada: "job.atualizado",
+        motivo: "status_bloqueia_edicao",
+        status_atual: atual.status,
+      },
+    });
+    return {
+      ok: false,
+      message: `Job ${jobStatusLabel(atual.status).toLowerCase()} — não pode mais ser editado.`,
+    };
+  }
 
   // Apenas campos operacionais são atualizáveis aqui — hierarquia e status têm actions próprias
   const { error } = await supabase

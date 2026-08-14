@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
+import { nomeVersao } from "@/lib/nome-versao";
 import {
   calcularTotaisVersao,
   TIPOS_CUSTO,
@@ -118,7 +119,7 @@ export async function GET(
   ws.getRow(1).values = [
     `${orcamento.codigo} · ${orcamento.nome}`,
     `Cliente: ${clienteNome}`,
-    `Versão v${versao.numero_versao}${versao.nome ? ` · ${versao.nome}` : ""}`,
+    nomeVersao(orcamento.nome, versao.numero_versao),
     "",
     "",
     "",

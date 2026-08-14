@@ -5,7 +5,8 @@ import { createClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { bvSchema } from "@/lib/validations/bv";
-import type { BvSituacao, ItemBv } from "@/lib/types";
+import type { BvSituacao, ItemBv, JobStatus } from "@/lib/types";
+import { jobEstaCongelado } from "@/lib/types";
 import { aceitaBV } from "@/lib/calculos/versao-totais";
 
 export type ActionResult =
@@ -102,6 +103,15 @@ async function carregarContexto(
         job: { status: string };
       }>(),
   ]);
+
+  // Job encerrado é histórico: nem lançar, nem confirmar, nem cancelar
+  // BV. As três ações passam por aqui, então a trava mora num lugar só.
+  // (`cancelado` não chega neste ponto — o filtro acima já o descarta.)
+  if (copiaRes.data && jobEstaCongelado(copiaRes.data.job.status as JobStatus)) {
+    return {
+      error: "Job encerrado — o BV não pode mais ser alterado.",
+    };
+  }
 
   // Depois da abertura do job quem manda é a cópia: a errata pode ter
   // mudado o tipo lá, e a versão aprovada não acompanha de propósito.
