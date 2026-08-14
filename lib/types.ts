@@ -739,13 +739,32 @@ export const JOB_STATUS_TRANSICOES: Record<JobStatus, JobStatus[]> = {
 };
 
 /**
- * `encerrado` NÃO entra em JOB_STATUS_TRANSICOES de propósito: o fluxo de
- * encerramento ainda não existe, e a tela renderiza esse botão desabilitado
- * à parte. Deixá-lo na tabela geraria um botão ativo que encerraria o job
- * sem nenhum processo por trás.
+ * `encerrado` continua FORA de `JOB_STATUS_TRANSICOES` de propósito, mesmo
+ * agora que o fluxo existe (13/08/2026): encerrar não é troca de status
+ * solta. Exige o job já enviado para faturamento, nenhuma PP e nenhum BV
+ * em aberto, e passa pelo resumo de fechamento. Quem faz é a action
+ * `encerrarJob`, não `atualizarStatusJob`.
  */
 export const ENCERRAMENTO_INDISPONIVEL =
-  "Em breve — o fluxo de encerramento ainda não existe";
+  "Encerre pelo resumo de fechamento, no bloco de Status";
+
+/** PP que ainda não saiu do caixa — impede o encerramento do job. */
+export const PP_STATUS_EM_ABERTO: PPStatus[] = ["em_avaliacao", "aprovada"];
+
+/** BV que ainda não foi recebido — impede o encerramento do job. */
+export const BV_SITUACAO_EM_ABERTO: BvSituacao[] = [
+  "a_negociar",
+  "confirmado",
+];
+
+/**
+ * Job encerrado é histórico: não aceita edição, PP nova, BV novo nem
+ * lançamento de realizado. A regra mora aqui para as telas e as actions
+ * lerem do mesmo lugar.
+ */
+export function jobEstaCongelado(status: JobStatus): boolean {
+  return status === "encerrado" || status === "cancelado";
+}
 
 export function jobStatusLabel(s: JobStatus): string {
   switch (s) {
