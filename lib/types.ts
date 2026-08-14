@@ -1059,7 +1059,6 @@ export interface PlanoContaTipo {
   codigo: string;
   nome: string;
   natureza_padrao: NaturezaPadraoTipo;
-  ordem: number;
   ativo: boolean;
   created_at: string;
   updated_at: string;
@@ -1069,8 +1068,8 @@ export interface PlanoContaSubtipo {
   id: string;
   tenant_id: string;
   tipo_id: string;
+  codigo: string;
   nome: string;
-  ordem: number;
   ativo: boolean;
   created_at: string;
   updated_at: string;

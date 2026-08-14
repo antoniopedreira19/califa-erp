@@ -24,7 +24,11 @@ import { criarTipo, atualizarTipo } from "./actions";
 import type { PlanoContaTipo } from "@/lib/types";
 
 type Props =
-  | { mode: "criar"; trigger?: React.ReactNode }
+  | {
+      mode: "criar";
+      proximoCodigo: string;
+      trigger?: React.ReactNode;
+    }
   | {
       mode: "editar";
       tipo: PlanoContaTipo;
@@ -33,6 +37,10 @@ type Props =
       open?: boolean;
       onOpenChange?: (open: boolean) => void;
     };
+
+function apenasDigitos(v: string, max: number) {
+  return v.replace(/[^0-9]/g, "").slice(0, max);
+}
 
 export function TipoDrawer(props: Props) {
   const router = useRouter();
@@ -46,8 +54,11 @@ export function TipoDrawer(props: Props) {
   const isEditar = props.mode === "editar";
   const tipo = isEditar ? props.tipo : undefined;
   const codigoBloqueado = isEditar ? props.codigoBloqueado : false;
+  const codigoInicial = isEditar
+    ? (tipo?.codigo ?? "")
+    : props.proximoCodigo;
 
-  // Estado controlado para o Select de natureza_padrao
+  const [codigo, setCodigo] = React.useState<string>(codigoInicial);
   const [natureza, setNatureza] = React.useState<string>(
     tipo?.natureza_padrao ?? "",
   );
@@ -56,15 +67,19 @@ export function TipoDrawer(props: Props) {
   const open = isControlled ? (props as any).open : internalOpen;
   const setOpen = isControlled ? (props as any).onOpenChange : setInternalOpen;
 
-  // Sincronizar natureza ao abrir
+  // Sincronizar valores ao abrir
   React.useEffect(() => {
-    if (open && isEditar && tipo) {
-      setNatureza(tipo.natureza_padrao);
+    if (open) {
+      if (isEditar && tipo) {
+        setCodigo(tipo.codigo);
+        setNatureza(tipo.natureza_padrao);
+      } else if (!isEditar) {
+        setCodigo(props.mode === "criar" ? props.proximoCodigo : "");
+        setNatureza("");
+      }
     }
-    if (open && !isEditar) {
-      setNatureza("");
-    }
-  }, [open, isEditar, tipo]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   function handleOpenChange(next: boolean) {
     if (!next) {
@@ -79,8 +94,8 @@ export function TipoDrawer(props: Props) {
     setError(null);
     setFieldErrors({});
     const formData = new FormData(e.currentTarget);
-    // Injetar valor do select controlado
     formData.set("natureza_padrao", natureza);
+    formData.set("codigo", codigo);
 
     startTransition(async () => {
       const res =
@@ -99,14 +114,9 @@ export function TipoDrawer(props: Props) {
   }
 
   const title = props.mode === "criar" ? "Novo tipo" : "Editar tipo";
-  const submitLabel =
-    props.mode === "criar"
-      ? pending
-        ? "Criando..."
-        : "Salvar"
-      : pending
-        ? "Salvando..."
-        : "Salvar";
+  const submitLabel = pending
+    ? "Salvando..."
+    : "Salvar";
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -127,8 +137,8 @@ export function TipoDrawer(props: Props) {
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>
             {props.mode === "criar"
-              ? "Tipos definem a natureza do lançamento no DRE."
-              : "Edite o tipo. O código só pode ser alterado se não houver lançamentos."}
+              ? "Tipos são o nível macro do plano de contas. Código: 2 dígitos (ex.: 01, 15)."
+              : "Edite o tipo. O código só pode ser alterado se não houver lançamento."}
           </DialogDescription>
         </DialogHeader>
         <form
@@ -152,15 +162,19 @@ export function TipoDrawer(props: Props) {
                 name="codigo"
                 autoFocus={!codigoBloqueado}
                 required
-                maxLength={6}
+                inputMode="numeric"
+                maxLength={2}
                 disabled={codigoBloqueado}
-                defaultValue={tipo?.codigo ?? ""}
-                placeholder="Ex.: REC, DP, CO"
-                className="uppercase font-mono"
-                onChange={(e) => {
-                  e.currentTarget.value = e.currentTarget.value.toUpperCase();
-                }}
+                value={codigo}
+                onChange={(e) => setCodigo(apenasDigitos(e.currentTarget.value, 2))}
+                placeholder="01"
+                className="font-mono w-24"
               />
+              {!codigoBloqueado && props.mode === "criar" && (
+                <p className="text-xs text-muted-foreground">
+                  Sugerido: <span className="font-mono">{props.proximoCodigo}</span>. Você pode alterar.
+                </p>
+              )}
               {fieldErrors.codigo?.map((msg, i) => (
                 <p key={i} className="text-xs text-california-red">
                   {msg}
@@ -178,7 +192,7 @@ export function TipoDrawer(props: Props) {
                 required
                 maxLength={120}
                 defaultValue={tipo?.nome ?? ""}
-                placeholder="Ex.: Receitas, Despesas com Pessoal"
+                placeholder="Ex.: Receita, Despesa com Pessoal"
               />
               {fieldErrors.nome?.map((msg, i) => (
                 <p key={i} className="text-xs text-california-red">
@@ -201,26 +215,6 @@ export function TipoDrawer(props: Props) {
                 </SelectContent>
               </Select>
               {fieldErrors.natureza_padrao?.map((msg, i) => (
-                <p key={i} className="text-xs text-california-red">
-                  {msg}
-                </p>
-              ))}
-            </div>
-
-            {/* Ordem */}
-            <div className="space-y-2">
-              <Label htmlFor="ordem">Ordem</Label>
-              <Input
-                id="ordem"
-                name="ordem"
-                type="number"
-                min={0}
-                step={1}
-                defaultValue={tipo?.ordem ?? 0}
-                placeholder="0"
-                className="[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-              />
-              {fieldErrors.ordem?.map((msg, i) => (
                 <p key={i} className="text-xs text-california-red">
                   {msg}
                 </p>
