@@ -12,12 +12,18 @@ import {
 import { atualizarStatusJob } from "@/app/(app)/jobs/actions";
 import type { JobStatus } from "@/lib/types";
 import { jobStatusLabel, ENCERRAMENTO_INDISPONIVEL } from "@/lib/types";
+import { EncerrarDialog, type ResumoEncerramento } from "./encerrar-dialog";
 
 interface Props {
   jobId: string;
   transicoes: JobStatus[];
-  /** Mostra o botão de encerramento (desabilitado) junto das transições. */
+  /** Mostra o botão de encerramento junto das transições. */
   mostrarEncerramento?: boolean;
+  /**
+   * Números do fechamento. Sem eles o botão aparece desabilitado com a
+   * explicação — é o caso de quem chega ao job por fora do financeiro.
+   */
+  resumoEncerramento?: ResumoEncerramento | null;
 }
 
 const STATUS_META: Record<string, { icon: React.ElementType; classes: string; verb: string }> = {
@@ -30,10 +36,12 @@ export function StatusActions({
   jobId,
   transicoes,
   mostrarEncerramento,
+  resumoEncerramento,
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
   const [confirmando, setConfirmando] = React.useState<JobStatus | null>(null);
+  const [encerrando, setEncerrando] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
   function handleTransicao(status: JobStatus) {
@@ -52,26 +60,36 @@ export function StatusActions({
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-3">
-        {/* Primário no design, mas sem fluxo por trás ainda: fica
-            desabilitado e explica o porquê, em vez de encerrar o job sem
-            nenhum processo. */}
-        {mostrarEncerramento && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span>
-                <button
-                  type="button"
-                  disabled
-                  className="inline-flex cursor-not-allowed items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-sm font-medium text-white opacity-50"
-                >
-                  <Send className="h-4 w-4" />
-                  Enviar job para encerramento
-                </button>
-              </span>
-            </TooltipTrigger>
-            <TooltipContent>{ENCERRAMENTO_INDISPONIVEL}</TooltipContent>
-          </Tooltip>
-        )}
+        {/* Só existe depois do envio para faturamento. Abre o resumo de
+            fechamento: encerrar é o fim da linha do job, não um clique
+            direto. */}
+        {mostrarEncerramento &&
+          (resumoEncerramento ? (
+            <button
+              type="button"
+              onClick={() => setEncerrando(true)}
+              className="inline-flex items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-california-red-hover"
+            >
+              <Send className="h-4 w-4" />
+              Enviar job para encerramento
+            </button>
+          ) : (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span>
+                  <button
+                    type="button"
+                    disabled
+                    className="inline-flex cursor-not-allowed items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-sm font-medium text-white opacity-50"
+                  >
+                    <Send className="h-4 w-4" />
+                    Enviar job para encerramento
+                  </button>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>{ENCERRAMENTO_INDISPONIVEL}</TooltipContent>
+            </Tooltip>
+          ))}
         {transicoes.map((s) => {
           const meta = STATUS_META[s];
           if (!meta) return null;
@@ -92,6 +110,15 @@ export function StatusActions({
         })}
       </div>
       {error && <p className="text-xs text-california-red">{error}</p>}
+
+      {resumoEncerramento && (
+        <EncerrarDialog
+          jobId={jobId}
+          resumo={resumoEncerramento}
+          open={encerrando}
+          onOpenChange={setEncerrando}
+        />
+      )}
 
       {confirmando && (
         <ConfirmDialog

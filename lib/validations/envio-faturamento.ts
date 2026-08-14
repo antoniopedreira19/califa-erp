@@ -14,10 +14,15 @@ const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
  * (decisão do time, 13/08/2026).
  */
 export const envioFaturamentoSchema = z.object({
+  // `nullable` além de `optional`: o formulário manda `null` quando o
+  // campo fica vazio, não `undefined`. Sem isto o Zod recusava o envio
+  // sem PO — que é justamente o caso que o campo opcional existe para
+  // permitir — com a mensagem crua "Expected string, received null".
   numero_po: z
     .string()
     .trim()
     .max(60, "Máximo 60 caracteres.")
+    .nullable()
     .optional()
     .transform((v) => (v && v.length > 0 ? v : null)),
   data_faturamento: z
@@ -28,9 +33,11 @@ export const envioFaturamentoSchema = z.object({
     .trim()
     .min(1, "Informe o CNAE a ser utilizado.")
     .max(120, "Máximo 120 caracteres."),
+  // Mensagem em português mesmo num caminho improvável: o que vaza do
+  // Zod sem mensagem custom vaza em inglês, na cara do usuário.
   portal_id: z
     .string()
-    .uuid()
+    .uuid("Selecione um portal da lista.")
     .nullable()
     .optional()
     .transform((v) => (v && v.length > 0 ? v : null)),

@@ -6,7 +6,14 @@ import { nomeVersao } from "@/lib/nome-versao";
 import { createClient } from "@/lib/supabase/server";
 import { listActiveMembers } from "@/lib/data/members";
 import type { Job, JobStatus, Regional } from "@/lib/types";
-import { jobStatusLabel, JOB_STATUS_TRANSICOES, areaDoPapel } from "@/lib/types";
+import {
+  jobStatusLabel,
+  JOB_STATUS_TRANSICOES,
+  areaDoPapel,
+  jobEstaCongelado,
+  PP_STATUS_EM_ABERTO,
+  BV_SITUACAO_EM_ABERTO,
+} from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { ResumoResultado } from "@/components/resumo-resultado";
 import { cn } from "@/lib/utils";
@@ -17,6 +24,7 @@ import {
 } from "@/lib/calculos/versao-totais";
 import { JobEditorDrawer } from "./job-editor-drawer";
 import { StatusActions } from "./status-actions";
+import type { ResumoEncerramento } from "./encerrar-dialog";
 import { ReenviarAprovacaoButton } from "./reenviar-aprovacao-button";
 import { EnviarFaturamentoDrawer } from "./enviar-faturamento-drawer";
 import { JobRealizadoSection } from "./realizado/job-realizado-section";
@@ -548,6 +556,42 @@ export default async function JobDetailPage({
     envioFaturamento === null &&
     totaisJob.faturamentoPrevisto > 0;
 
+  // Resumo de fechamento. Só existe depois do envio para faturamento —
+  // antes disso não há o que encerrar. Os impedimentos saem dos dados que
+  // a página já carregou (nenhuma query nova); o servidor refaz a conta
+  // na hora de gravar, porque esta tela pode estar velha.
+  const ppsEmAberto = ppsDoJob
+    .filter((pp) => PP_STATUS_EM_ABERTO.includes(pp.status))
+    .map((pp) => ({ codigo: pp.codigo, status: pp.status }));
+  const nomeDoItem = new Map(itens.map((it) => [it.id, it.item]));
+  const bvsEmAberto = Object.values(bvsPorItem)
+    .filter((bv) => BV_SITUACAO_EM_ABERTO.includes(bv.situacao))
+    .map((bv) => ({
+      item: nomeDoItem.get(bv.item_versao_id) ?? "Item da planilha",
+      situacao: bv.situacao,
+    }));
+
+  const resumoEncerramento: ResumoEncerramento | null =
+    job.status === "aberto" && envioFaturamento
+      ? {
+          faturamentoAbertura: job.faturamento_previsto_abertura,
+          // "Faturamento" do fechamento é o faturamento previsto de agora,
+          // recalculado dos itens — não o número congelado na abertura.
+          faturamentoFechamento: totaisJob.faturamentoPrevisto,
+          valorEnviado: Number(envioFaturamento.valor_faturado),
+          orcado: totaisJob.subtotalGeral,
+          honorarios: totaisJob.honorarios,
+          imposto: totaisJob.imposto,
+          percentualHonorarios: Number(versaoAprovada.percentual_honorarios),
+          percentualImposto: Number(versaoAprovada.percentual_imposto),
+          valorJob: totaisJob.valorJob,
+          custoRealizado: custoRealizadoJob,
+          moeda: versaoAprovada.moeda,
+          ppsEmAberto,
+          bvsEmAberto,
+        }
+      : null;
+
   const podeEditarRealizado =
     (session.activeRole === "administrador" ||
       job.responsavel_id === session.profile.id) &&
@@ -600,7 +644,8 @@ export default async function JobDetailPage({
               <Badge className={cn("border", statusBadgeClasses(job.status))}>
                 {jobStatusLabel(job.status)}
               </Badge>
-              {job.status !== "cancelado" && (
+              {/* Encerrado e cancelado são histórico: sem edição. */}
+              {!jobEstaCongelado(job.status) && (
                 <JobEditorDrawer
                   job={job}
                   regionais={regionais}
@@ -748,7 +793,10 @@ export default async function JobDetailPage({
           moeda={versaoAprovada.moeda}
         />
 
-        {(transicoes.length > 0 || podeEnviarFaturamento) && (
+        {/* `envioFaturamento` entra na condição porque job encerrado não
+            tem transição nem envio pendente — e o registro do faturamento
+            é justamente o que precisa continuar visível depois disso. */}
+        {(transicoes.length > 0 || podeEnviarFaturamento || envioFaturamento) && (
           <div className="rounded-2xl border border-border bg-card p-6 shadow-soft md:col-span-2">
             <div className="flex items-center gap-2 mb-4">
               <Circle className="h-4 w-4 text-california-red" />
@@ -811,6 +859,16 @@ export default async function JobDetailPage({
               </p>
             )}
 
+            {/* Sem transições e sem envio pendente o card ficaria só com a
+                linha do faturamento e uma borda solta embaixo. Esta é a
+                frase que fecha o card — e diz o que "encerrado" significa. */}
+            {jobEstaCongelado(job.status) && (
+              <p className="text-sm text-muted-foreground">
+                Job {jobStatusLabel(job.status).toLowerCase()} — é histórico.
+                Não aceita edição, PP nem BV.
+              </p>
+            )}
+
             {transicoes.length > 0 && (
               <StatusActions
                 jobId={job.id}
@@ -820,6 +878,7 @@ export default async function JobDetailPage({
                 mostrarEncerramento={
                   job.status === "aberto" && envioFaturamento !== null
                 }
+                resumoEncerramento={resumoEncerramento}
               />
             )}
           </div>
