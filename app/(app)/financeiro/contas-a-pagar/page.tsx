@@ -72,14 +72,14 @@ export default async function PedidosCompraFinanceiroPage() {
       .select("*")
       .eq("tenant_id", session.activeTenant.id)
       .eq("ativo", true)
-      .order("ordem")
+      .order("codigo")
       .returns<PlanoContaTipo[]>(),
     supabase
       .from("plano_contas_subtipos")
       .select("*")
       .eq("tenant_id", session.activeTenant.id)
       .eq("ativo", true)
-      .order("nome")
+      .order("codigo")
       .returns<PlanoContaSubtipo[]>(),
     supabase
       .from("pedidos_compra")

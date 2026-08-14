@@ -44,14 +44,14 @@ export default async function ContasReceberPage() {
       .select("*")
       .eq("tenant_id", session.activeTenant.id)
       .eq("ativo", true)
-      .order("ordem")
+      .order("codigo")
       .returns<PlanoContaTipo[]>(),
     supabase
       .from("plano_contas_subtipos")
       .select("*")
       .eq("tenant_id", session.activeTenant.id)
       .eq("ativo", true)
-      .order("nome")
+      .order("codigo")
       .returns<PlanoContaSubtipo[]>(),
     supabase
       .from("empresas")

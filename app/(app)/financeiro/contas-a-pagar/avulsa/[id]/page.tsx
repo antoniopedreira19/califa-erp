@@ -106,13 +106,13 @@ export default async function AvulsaDetalhesPage({
       .select("*")
       .eq("tenant_id", session.activeTenant.id)
       .eq("ativo", true)
-      .order("ordem"),
+      .order("codigo"),
     supabase
       .from("plano_contas_subtipos")
       .select("*")
       .eq("tenant_id", session.activeTenant.id)
       .eq("ativo", true)
-      .order("nome"),
+      .order("codigo"),
     supabase
       .from("fornecedores")
       .select("id, nome, razao_social")
