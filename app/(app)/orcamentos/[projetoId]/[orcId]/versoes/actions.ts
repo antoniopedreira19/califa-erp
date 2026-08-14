@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { honorariosDoOrcamento } from "@/lib/data/clientes";
-import { versaoSchema } from "@/lib/validations/versoes";
+import { bloqueioAprovacaoVersao, versaoSchema } from "@/lib/validations/versoes";
 import {
   itemSchema,
   camposItemEditaveis,
@@ -34,8 +34,9 @@ function extractVersaoInput(formData: FormData) {
     const raw = formData.get(k)?.toString() ?? "";
     return raw.trim().length > 0 ? raw : fallback;
   };
+  // `nome` não entra: desde 13/08/2026 o nome da versão é calculado
+  // (nome do job + V{n}) e não existe caminho para gravá-lo.
   return {
-    nome: formData.get("nome")?.toString() ?? "",
     moeda: get("moeda", "BRL"),
     taxa_cambio: get("taxa_cambio", "1"),
     percentual_honorarios: get("percentual_honorarios", "0"),
@@ -49,9 +50,9 @@ function extractVersaoInput(formData: FormData) {
 function extractVersaoPartial(formData: FormData): Record<string, unknown> {
   const partial: Record<string, unknown> = {};
 
-  // nome: sempre presente no form; vazio significa "sem nome" (null).
-  const nome = formData.get("nome")?.toString() ?? "";
-  partial.nome = nome.trim().length > 0 ? nome.trim() : null;
+  // `nome` não entra: o nome da versão é calculado, não gravado. Um
+  // formulário que mande o campo é ignorado de propósito — a regra tem
+  // que valer no servidor, não só no sumiço do input.
 
   const moeda = formData.get("moeda")?.toString().trim();
   if (moeda && moeda.length > 0) {
@@ -1035,10 +1036,16 @@ export async function aprovarVersao(versaoId: string): Promise<ActionResult> {
   // 1. Fetch versão + orçamento (com projeto_id pra revalidatePath)
   const { data: versao, error: errVer } = await supabase
     .from("versoes_orcamento")
-    .select("id, status, orcamento_id, tenant_id")
+    .select("id, status, orcamento_id, tenant_id, percentual_imposto")
     .eq("id", versaoId)
     .eq("tenant_id", session.activeTenant.id)
-    .maybeSingle<{ id: string; status: string; orcamento_id: string; tenant_id: string }>();
+    .maybeSingle<{
+      id: string;
+      status: string;
+      orcamento_id: string;
+      tenant_id: string;
+      percentual_imposto: number;
+    }>();
 
   if (errVer || !versao) {
     return { ok: false, message: "Versão não encontrada." };
@@ -1050,6 +1057,7 @@ export async function aprovarVersao(versaoId: string): Promise<ActionResult> {
       message: `Versão em status ${versao.status} não pode ser aprovada.`,
     };
   }
+
 
   // 2. Fetch orçamento pra validar status + projeto_id
   const { data: orc } = await supabase
@@ -1070,18 +1078,34 @@ export async function aprovarVersao(versaoId: string): Promise<ActionResult> {
     };
   }
 
-  // 3. Verificar que versão tem ≥1 grupo com ≥1 item
-  const { count: itensCount } = await supabase
-    .from("versoes_orcamento_itens")
-    .select("id", { count: "exact", head: true })
-    .eq("versao_orcamento_id", versaoId)
-    .eq("tenant_id", session.activeTenant.id);
+  // 3. Verificar que a versão tem item E que ao menos um deles tem valor.
+  //    Linha criada e não preenchida tem total_orcado 0 (coluna gerada:
+  //    unitário × quantidade × dias). Aprovar assim travaria a versão e
+  //    abriria job com orçado zerado.
+  const [{ count: itensCount }, { count: comValorCount }] = await Promise.all([
+    supabase
+      .from("versoes_orcamento_itens")
+      .select("id", { count: "exact", head: true })
+      .eq("versao_orcamento_id", versaoId)
+      .eq("tenant_id", session.activeTenant.id),
+    supabase
+      .from("versoes_orcamento_itens")
+      .select("id", { count: "exact", head: true })
+      .eq("versao_orcamento_id", versaoId)
+      .eq("tenant_id", session.activeTenant.id)
+      .gt("total_orcado", 0),
+  ]);
 
-  if ((itensCount ?? 0) === 0) {
-    return {
-      ok: false,
-      message: "Adicione ao menos 1 item antes de aprovar a versão.",
-    };
+  // Alíquota escolhida + item com valor. Mesma função do botão "Aprovar
+  // versão", para a tela e o servidor nunca discordarem do motivo.
+  const bloqueio = bloqueioAprovacaoVersao({
+    percentualImposto: Number(versao.percentual_imposto),
+    qtdItens: itensCount ?? 0,
+    qtdItensComValor: comValorCount ?? 0,
+  });
+
+  if (bloqueio) {
+    return { ok: false, message: bloqueio };
   }
 
   const agora = new Date().toISOString();

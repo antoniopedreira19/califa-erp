@@ -388,3 +388,256 @@ export async function confirmarImportacao(
     importacao_id: importacaoId,
   };
 }
+
+/**
+ * Substitui o conteúdo de uma versão EXISTENTE pelo de uma planilha.
+ *
+ * Irmã de `confirmarImportacao`, com uma diferença de intenção: aquela
+ * cria uma versão nova (v+1) e é a porta da tela do orçamento; esta
+ * sobrescreve a versão aberta e é a porta da tela da versão. O caso que
+ * ela atende, nas palavras do time: "importei a planilha errada, quero
+ * importar a certa no mesmo lugar".
+ *
+ * O que ela APAGA da versão: grupos, itens e — em cascata — os BVs
+ * lançados nesses itens. Decisão do time (13/08/2026): o BV pertence ao
+ * item e não sobrevive à troca da planilha. Quem chama mostra a contagem
+ * na confirmação antes de chegar aqui.
+ *
+ * O que ela PRESERVA: alíquota, honorários, moeda, câmbio e status da
+ * versão. Quem já escolheu a alíquota não perde a escolha ao reimportar.
+ * É a diferença mais visível para `confirmarImportacao`, que redefine
+ * tudo isso ao criar a versão.
+ */
+export async function sobrescreverVersaoComPlanilha(
+  versaoId: string,
+  formData: FormData,
+): Promise<ConfirmResult> {
+  const session = await requireSession();
+  const tenantId = session.activeTenant.id;
+  const supabase = createClient();
+
+  const { data: versao } = await supabase
+    .from("versoes_orcamento")
+    .select("id, status, orcamento_id")
+    .eq("id", versaoId)
+    .eq("tenant_id", tenantId)
+    .maybeSingle<{ id: string; status: string; orcamento_id: string }>();
+
+  if (!versao) return { ok: false, message: "Versão não encontrada." };
+
+  // Congelada não se sobrescreve: aprovada é o que o cliente aceitou e o
+  // que alimenta o job; cancelada é histórico.
+  if (versao.status === "aprovada" || versao.status === "cancelada") {
+    return {
+      ok: false,
+      message: `Versão ${versao.status} não aceita importação.`,
+    };
+  }
+
+  const orcamentoId = versao.orcamento_id;
+  const check = await verificarOrcamento(orcamentoId, tenantId);
+  if (!check.ok) return { ok: false, message: check.message };
+  const projetoId = check.projeto_id;
+
+  // Guarda dura: apagar item cascateia para `jobs_itens_realizado` e é
+  // BARRADO por `jobs_itens_orcado` (NO ACTION). Um job aberto sobre esta
+  // versão transformaria a importação em erro de FK no meio do caminho —
+  // ou, pior, em realizado apagado. O status já impediria (job exige
+  // versão aprovada), mas a regra é financeira e não pode depender de uma
+  // camada só.
+  const { count: copiasDeJob } = await supabase
+    .from("jobs_itens_orcado")
+    .select("id", { count: "exact", head: true })
+    .eq("versao_orcamento_id", versaoId)
+    .eq("tenant_id", tenantId);
+
+  if ((copiasDeJob ?? 0) > 0) {
+    return {
+      ok: false,
+      message:
+        "Esta versão já gerou um job e não pode ser sobrescrita. Crie uma versão nova para importar outra planilha.",
+    };
+  }
+
+  const arq = await extractArquivo(formData);
+  if (!arq.ok) return { ok: false, message: arq.message };
+
+  let parsed: ParseResultado;
+  try {
+    parsed = await parseOficial(arq.buffer);
+  } catch (err) {
+    console.error("[importacao.sobrescrever.parse]", err);
+    return { ok: false, message: "Falha ao processar o arquivo." };
+  }
+
+  // Planilha vazia não apaga nada: seria destruir o que existe em troca
+  // de nada, e o usuário não pediu isso — ele pediu para TROCAR.
+  if (parsed.grupos.length === 0) {
+    return {
+      ok: false,
+      message:
+        "Nenhum item encontrado na planilha. Nada foi apagado — revise o arquivo e tente de novo.",
+    };
+  }
+
+  const service = createServiceClient();
+
+  // ---- 1) Apagar o conteúdo atual ----
+  // Itens ANTES dos grupos: `versoes_orcamento_itens.grupo_id` é RESTRICT,
+  // então apagar grupo com item dentro falha. Os BVs saem junto com os
+  // itens, por cascade.
+  const { error: delItensErr } = await service
+    .from("versoes_orcamento_itens")
+    .delete()
+    .eq("versao_orcamento_id", versaoId)
+    .eq("tenant_id", tenantId);
+
+  if (delItensErr) {
+    console.error("[importacao.sobrescrever.itens.delete]", delItensErr.message);
+    return {
+      ok: false,
+      message: "Não foi possível limpar os itens da versão. Nada foi alterado.",
+    };
+  }
+
+  const { error: delGruposErr } = await service
+    .from("versoes_orcamento_grupos")
+    .delete()
+    .eq("versao_orcamento_id", versaoId)
+    .eq("tenant_id", tenantId);
+
+  if (delGruposErr) {
+    console.error("[importacao.sobrescrever.grupos.delete]", delGruposErr.message);
+    return {
+      ok: false,
+      message:
+        "Os itens foram removidos, mas os grupos não. Recarregue a tela e tente de novo.",
+    };
+  }
+
+  // ---- 2) Gravar o conteúdo novo ----
+  const { data: gruposCriados, error: gruposErr } = await service
+    .from("versoes_orcamento_grupos")
+    .insert(
+      parsed.grupos.map((g) => ({
+        tenant_id: tenantId,
+        versao_orcamento_id: versaoId,
+        nome: g.nome,
+        ordem: g.ordem,
+      })),
+    )
+    .select("id, nome, ordem");
+
+  if (gruposErr || !gruposCriados) {
+    console.error("[importacao.sobrescrever.grupos]", gruposErr?.message);
+    return {
+      ok: false,
+      message:
+        "A versão foi esvaziada, mas os grupos da planilha não entraram. Importe novamente.",
+    };
+  }
+
+  const grupoIdPorNome = new Map<string, string>();
+  for (const g of gruposCriados as { id: string; nome: string; ordem: number }[]) {
+    grupoIdPorNome.set(`${g.nome}#${g.ordem}`, g.id);
+  }
+
+  const itensParaInserir: any[] = [];
+  let ordemGlobal = 0;
+  for (const grupo of parsed.grupos) {
+    const grupoId = grupoIdPorNome.get(`${grupo.nome}#${grupo.ordem}`);
+    if (!grupoId) continue;
+    for (const it of grupo.itens) {
+      ordemGlobal++;
+      itensParaInserir.push({
+        tenant_id: tenantId,
+        versao_orcamento_id: versaoId,
+        grupo_id: grupoId,
+        categoria_id: null,
+        ordem: ordemGlobal,
+        planilha_origem: `linha ${it.linha_xlsx}`,
+        item: it.item,
+        tipo_custo: it.tipo_custo,
+        valor_unitario_orcado: it.valor_unitario_orcado,
+        quantidade_orcada: it.quantidade_orcada,
+        dias_meses_orcado: it.dias_meses_orcado,
+        valor_unitario_planejado: it.valor_unitario_planejado,
+        quantidade_planejada: it.quantidade_planejada,
+        dias_meses_planejado: it.dias_meses_planejado,
+      });
+    }
+  }
+
+  const { error: itensErr } = await service
+    .from("versoes_orcamento_itens")
+    .insert(itensParaInserir);
+
+  if (itensErr) {
+    console.error("[importacao.sobrescrever.itens]", itensErr.message);
+    return {
+      ok: false,
+      message:
+        "Os grupos entraram, mas os itens não. Importe novamente para completar.",
+    };
+  }
+
+  // ---- 3) Guardar o arquivo e registrar ----
+  const importacaoId = crypto.randomUUID();
+  const arquivoNomeSlug = arq.nome.replace(/[^\w.\-]/g, "_");
+  const arquivoPath = `${tenantId}/${orcamentoId}/${importacaoId}-${arquivoNomeSlug}`;
+
+  const { error: uploadErr } = await service.storage
+    .from(BUCKET)
+    .upload(arquivoPath, arq.buffer, {
+      contentType:
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      upsert: false,
+    });
+
+  if (uploadErr) {
+    console.error("[importacao.sobrescrever.upload]", uploadErr.message);
+    // Não bloqueia: a planilha já está na versão.
+  }
+
+  const { error: impErr } = await service.from("orcamento_importacoes").insert({
+    id: importacaoId,
+    tenant_id: tenantId,
+    orcamento_id: orcamentoId,
+    versao_orcamento_id: versaoId,
+    arquivo_path: uploadErr ? "" : arquivoPath,
+    arquivo_nome_original: arq.nome,
+    arquivo_tamanho_bytes: arq.tamanho,
+    aba_origem: parsed.aba,
+    linhas_lidas: parsed.linhas_lidas,
+    linhas_importadas: parsed.linhas_importadas,
+    linhas_ignoradas: parsed.linhas_ignoradas,
+    warnings: parsed.warnings as any,
+    created_by: session.profile.id,
+  });
+
+  if (impErr) console.error("[importacao.sobrescrever.registro]", impErr.message);
+
+  await logAuditEvent({
+    acao: "versao_orcamento.sobrescrita_por_importacao",
+    tenantId,
+    entidadeTipo: "versao_orcamento",
+    entidadeId: versaoId,
+    metadata: {
+      orcamento_id: orcamentoId,
+      importacao_id: importacaoId,
+      arquivo_nome: arq.nome,
+      linhas_importadas: parsed.linhas_importadas,
+      warnings_count: parsed.warnings.length,
+    },
+  });
+
+  revalidatePath(`/orcamentos/${projetoId}/${orcamentoId}`);
+  revalidatePath(`/orcamentos/${projetoId}/${orcamentoId}/versoes/${versaoId}`);
+
+  return {
+    ok: true,
+    versao_id: versaoId,
+    orcamento_id: orcamentoId,
+    importacao_id: importacaoId,
+  };
+}

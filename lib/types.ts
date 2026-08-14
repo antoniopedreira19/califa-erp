@@ -650,6 +650,44 @@ export interface Job {
   updated_at: string;
 }
 
+/** Um portal de fornecedor do cliente, onde a NF é lançada. */
+export interface ClientePortal {
+  id: string;
+  tenant_id: string;
+  cliente_id: string;
+  nome: string;
+  url: string;
+  ativo: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * A liberação do job pela produção para o financeiro faturar.
+ *
+ * Um por job. Enquanto não existe, o job não aparece na fila de
+ * faturamento — a `vw_faturamento_pendente` exige este registro.
+ */
+export interface JobEnvioFaturamento {
+  id: string;
+  tenant_id: string;
+  job_id: string;
+  /** Cópia do `faturamento_previsto` no instante do envio. */
+  valor_faturado: number;
+  numero_po: string | null;
+  /** Vencimento acordado com o cliente. */
+  data_faturamento: string;
+  cnae: string;
+  portal_id: string | null;
+  /** Snapshot da URL: o cadastro do portal pode mudar depois. */
+  portal_url: string | null;
+  enviado_em: string;
+  enviado_por: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 /** Uma data da curva de desembolso do job. */
 export interface JobPrevisaoCusto {
   id: string;
@@ -701,13 +739,32 @@ export const JOB_STATUS_TRANSICOES: Record<JobStatus, JobStatus[]> = {
 };
 
 /**
- * `encerrado` NÃO entra em JOB_STATUS_TRANSICOES de propósito: o fluxo de
- * encerramento ainda não existe, e a tela renderiza esse botão desabilitado
- * à parte. Deixá-lo na tabela geraria um botão ativo que encerraria o job
- * sem nenhum processo por trás.
+ * `encerrado` continua FORA de `JOB_STATUS_TRANSICOES` de propósito, mesmo
+ * agora que o fluxo existe (13/08/2026): encerrar não é troca de status
+ * solta. Exige o job já enviado para faturamento, nenhuma PP e nenhum BV
+ * em aberto, e passa pelo resumo de fechamento. Quem faz é a action
+ * `encerrarJob`, não `atualizarStatusJob`.
  */
 export const ENCERRAMENTO_INDISPONIVEL =
-  "Em breve — o fluxo de encerramento ainda não existe";
+  "Encerre pelo resumo de fechamento, no bloco de Status";
+
+/** PP que ainda não saiu do caixa — impede o encerramento do job. */
+export const PP_STATUS_EM_ABERTO: PPStatus[] = ["em_avaliacao", "aprovada"];
+
+/** BV que ainda não foi recebido — impede o encerramento do job. */
+export const BV_SITUACAO_EM_ABERTO: BvSituacao[] = [
+  "a_negociar",
+  "confirmado",
+];
+
+/**
+ * Job encerrado é histórico: não aceita edição, PP nova, BV novo nem
+ * lançamento de realizado. A regra mora aqui para as telas e as actions
+ * lerem do mesmo lugar.
+ */
+export function jobEstaCongelado(status: JobStatus): boolean {
+  return status === "encerrado" || status === "cancelado";
+}
 
 export function jobStatusLabel(s: JobStatus): string {
   switch (s) {

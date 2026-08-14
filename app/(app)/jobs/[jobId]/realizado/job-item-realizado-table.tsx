@@ -30,6 +30,11 @@ import {
   RENTAB_VALOR,
 } from "@/app/(app)/_planilha/blocos";
 import { ColunasJob, LARGURA_MINIMA_JOB } from "@/app/(app)/_planilha/grade-job";
+import {
+  celulaVizinha,
+  direcaoNoCampo,
+  type Direcao,
+} from "@/app/(app)/_planilha/navegacao";
 import { aceitaBV, tipoGeraDesembolso } from "@/lib/calculos/versao-totais";
 
 interface Props {
@@ -70,6 +75,15 @@ interface Props {
  *
  *  A pílula dividida cabe na MESMA calha de sempre (116px), então a
  *  reserva da página não muda e a tabela não perde um pixel. */
+
+/** Ordem do Tab na linha. Só o bloco Realizado é editável no job — o
+ *  Orçado e o Planejado vêm da versão aprovada e da errata, e a
+ *  Rentabilidade é calculada. */
+const CAMPOS_NAVEGAVEIS: readonly CampoRealizado[] = [
+  "valor_unitario_realizado",
+  "quantidade_realizada",
+  "dias_meses_realizado",
+];
 
 type CelulaAtiva = { itemId: string; campo: CampoRealizado } | null;
 type Overrides = Record<string, Partial<Record<CampoRealizado, number>>>;
@@ -253,8 +267,34 @@ export function JobItemRealizadoTable({
     return r ? Number(r.total_realizado ?? 0) : 0;
   }
 
-  function confirmarNumero(itemId: string, campo: CampoRealizado, raw: string) {
+  /** Para onde o teclado leva. `null` encerra a edição. */
+  const celulaDestino = React.useCallback(
+    (
+      itemId: string,
+      campo: CampoRealizado,
+      destino?: Direcao,
+    ): CelulaAtiva => {
+      if (!destino) return null;
+      const alvo = celulaVizinha(
+        itens.map((it) => it.id),
+        CAMPOS_NAVEGAVEIS,
+        { linhaId: itemId, campo },
+        destino,
+      );
+      return alvo ? { itemId: alvo.linhaId, campo: alvo.campo } : null;
+    },
+    [itens],
+  );
+
+  function confirmarNumero(
+    itemId: string,
+    campo: CampoRealizado,
+    raw: string,
+    destino?: Direcao,
+  ) {
     const n = parseNumero(raw);
+    // Entrada recusada interrompe a navegação de propósito: seguir em
+    // frente esconderia o aviso atrás da próxima célula.
     if (n === null) {
       setAtiva(null);
       setErro("Valor inválido — a célula foi mantida como estava.");
@@ -265,17 +305,25 @@ export function JobItemRealizadoTable({
       setErro("Valor não pode ser negativo.");
       return;
     }
+    const proxima = celulaDestino(itemId, campo, destino);
+    // Valor igual não vira escrita, mas a navegação segue: passar por uma
+    // célula sem alterar nada não pode matar o Tab.
     if (n === valorRealizado(itemId, campo)) {
-      setAtiva(null);
+      setAtiva(proxima);
       return;
     }
-    gravar(itemId, campo, n);
+    gravar(itemId, campo, n, proxima);
   }
 
-  function gravar(itemId: string, campo: CampoRealizado, valor: number) {
+  function gravar(
+    itemId: string,
+    campo: CampoRealizado,
+    valor: number,
+    proxima: CelulaAtiva,
+  ) {
     const anterior = overrides[itemId];
     setErro(null);
-    setAtiva(null);
+    setAtiva(proxima);
     setOverrides((prev) => ({
       ...prev,
       [itemId]: { ...prev[itemId], [campo]: valor },
@@ -464,7 +512,7 @@ export function JobItemRealizadoTable({
                     editando={ativaAqui("valor_unitario_realizado")}
                     editavel={editable}
                     onAtivar={() => setAtiva({ itemId: item.id, campo: "valor_unitario_realizado" })}
-                    onConfirmar={(raw) => confirmarNumero(item.id, "valor_unitario_realizado", raw)}
+                    onConfirmar={(raw, d) => confirmarNumero(item.id, "valor_unitario_realizado", raw, d)}
                     onCancelar={() => setAtiva(null)}
                     tdClassName={cn("font-mono", REALIZADO.celulaAbre)}
                   />
@@ -473,7 +521,7 @@ export function JobItemRealizadoTable({
                     editando={ativaAqui("quantidade_realizada")}
                     editavel={editable}
                     onAtivar={() => setAtiva({ itemId: item.id, campo: "quantidade_realizada" })}
-                    onConfirmar={(raw) => confirmarNumero(item.id, "quantidade_realizada", raw)}
+                    onConfirmar={(raw, d) => confirmarNumero(item.id, "quantidade_realizada", raw, d)}
                     onCancelar={() => setAtiva(null)}
                     tdClassName={REALIZADO.celulaMeio}
                   />
@@ -482,7 +530,7 @@ export function JobItemRealizadoTable({
                     editando={ativaAqui("dias_meses_realizado")}
                     editavel={editable}
                     onAtivar={() => setAtiva({ itemId: item.id, campo: "dias_meses_realizado" })}
-                    onConfirmar={(raw) => confirmarNumero(item.id, "dias_meses_realizado", raw)}
+                    onConfirmar={(raw, d) => confirmarNumero(item.id, "dias_meses_realizado", raw, d)}
                     onCancelar={() => setAtiva(null)}
                     tdClassName={REALIZADO.celulaMeio}
                   />
@@ -624,7 +672,9 @@ export function JobItemRealizadoTable({
         <div className="flex items-center justify-between gap-4 border-t border-border bg-muted/40 px-6 py-3 rounded-b-2xl">
           <span className="text-[11px] text-muted-foreground">
             Clique em qualquer célula do bloco Realizado para editar ·{" "}
-            <kbd className="font-mono">Enter</kbd> confirma ·{" "}
+            <kbd className="font-mono">Tab</kbd> e as{" "}
+            <kbd className="font-mono">setas</kbd> andam ·{" "}
+            <kbd className="font-mono">Enter</kbd> desce ·{" "}
             <kbd className="font-mono">Esc</kbd> desfaz
           </span>
         </div>
@@ -735,7 +785,7 @@ function CelulaRealNum({
   editando: boolean;
   editavel: boolean;
   onAtivar: () => void;
-  onConfirmar: (raw: string) => void;
+  onConfirmar: (raw: string, destino?: Direcao) => void;
   onCancelar: () => void;
   tdClassName?: string;
 }) {
@@ -754,10 +804,14 @@ function CelulaRealNum({
           defaultValue={paraEdicao(valor)}
           onFocus={(e) => e.currentTarget.select()}
           onKeyDown={(e) => {
-            if (e.key === "Enter") {
+            const destino = direcaoNoCampo(e, e.currentTarget);
+            if (destino) {
+              // preventDefault: quem decide o próximo foco é a grade, não
+              // a ordem do DOM.
               e.preventDefault();
               finalizado.current = true;
-              onConfirmar(e.currentTarget.value);
+              onConfirmar(e.currentTarget.value, destino);
+              return;
             }
             if (e.key === "Escape") {
               e.preventDefault();

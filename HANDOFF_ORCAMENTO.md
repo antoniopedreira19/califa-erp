@@ -1564,3 +1564,101 @@ oferecendo um BV que o banco recusa.
 O resto da história — por que `AR` tem as duas coisas, e por que "tem BV"
 e "sai do caixa da California" viraram duas perguntas separadas — está na
 decisão 003 e na seção 30 do `HANDOFF_JOBS.md`.
+
+---
+
+## 17. Nome da versão calculado e V1 automática (2026-08-13)
+
+> ⚠️ **Duas coisas que a tela fazia deixaram de existir**: o nome da
+> versão não é mais digitável, e criar orçamento não leva mais para a
+> lista de versões vazia. A regra está na
+> [decisão 007](docs/decisions/007-nome-da-versao-e-v1-automatica.md).
+
+### Nome da versão
+
+Passou a ser `{orcamentos.nome} - V{numero_versao}` — "Bebedouros SP -
+V2" —, calculado na leitura por `nomeVersao()` em `lib/nome-versao.ts`.
+
+Saíram da tela: o **título inline editável** da versão (o arquivo
+`versao-titulo-inline.tsx` foi removido) e o campo **"Nome da versão"**
+dos drawers de edição e de nova versão. Saiu também do servidor: `nome`
+não está mais no `versaoSchema` nem nos extratores de
+`versoes/actions.ts`, então um form que mande o campo é ignorado.
+
+A coluna `versoes_orcamento.nome` **continua no banco** com o conteúdo
+antigo. As 20 versões que tinham nome próprio — 11 delas aprovadas —
+passaram a exibir o nome calculado, por decisão do time: regra única, sem
+exceção para versão aprovada.
+
+Telas atualizadas: lista de versões, título da versão, "Versão aprovada"
+na tela do job, cabeçalho da planilha do realizado e o XLSX exportado. O
+rótulo curto `v1`/`v2` **não** mudou — é referência de número, não nome.
+
+### V1 automática
+
+`criarOrcamento` passou a criar a v1 em rascunho e redirecionar para a
+planilha dela, em vez de `/orcamentos/[projetoId]/[orcId]`. A v1 nasce
+com honorários do cadastro do cliente, BRL, câmbio 1 e **sem alíquota**
+(decisão 006 — quem cobra é a aprovação).
+
+Falhando a leitura dos honorários, a v1 não é criada e o destino volta a
+ser a tela do orçamento, com log no servidor: versão com base de
+honorários errada produz fechamento errado em silêncio, e voltar para o
+formulário criaria orçamento duplicado.
+
+A função vive em `orcamentos/[projetoId]/actions.ts` e **não** reusa
+`criarVersao`: aquela é a porta do formulário, com validação de status e
+`redirect` próprio, e chamá-la de dentro significaria capturar o redirect
+dela para descartar.
+
+### Verificado no fluxo real
+
+Criado o orçamento **TESTE-0002/26-02 · "TESTE Claude - fluxo V1"** no
+projeto TESTE-0002/26 (Paraquedas), com autorização do time:
+
+| Verificação | Resultado |
+|---|---|
+| Destino após criar | `/orcamentos/…/…/versoes/4206ebfa…` — a planilha da v1 |
+| Título da versão | `TESTE Claude - fluxo V1 - V1` |
+| Versões criadas | exatamente 1, `numero_versao = 1`, status `rascunho` |
+| Alíquota | `0.000000` — não escolhida |
+| Honorários | `12.000`, vindos do cadastro do cliente |
+| Coluna `nome` | `null` — nada foi gravado |
+| Barra de aprovação | "Aprovar versão" **desabilitado**, com "Escolha a alíquota de impostos da versão antes de aprovar" |
+| Lista de versões do Bebedouros | `Bebedouros SP - V2` e `Bebedouros SP - V1` (a v2 se chamava "V Teste") |
+| Export XLSX | HTTP 200, content-type de xlsx |
+
+`tsc --noEmit`, `next lint` e `npm run build` limpos.
+
+⚠️ **Dado de teste deixado no banco**: o orçamento `TESTE-0002/26-02` e a
+v1 dele. Criados com autorização para exercitar o fluxo; remover quando
+não forem mais úteis.
+
+### 17.1 Importar planilha na tela da versão (2026-08-13)
+
+> ⚠️ **Ação destrutiva nova.** O "Importar planilha" da tela da VERSÃO
+> apaga grupos, itens e os BVs deles. O da tela do ORÇAMENTO não mudou —
+> continua criando v+1. Regra completa no adendo da
+> [decisão 007](docs/decisions/007-nome-da-versao-e-v1-automatica.md).
+
+Botão ao lado do "Exportar", escondido em versão congelada e desabilitado
+quando a versão já gerou job. Reusa `ImportarPlanilhaDrawer` com
+`modo="sobrescrever"`: mesmo upload, mesmo preview, mais um passo de
+confirmação que mostra em número o que será apagado.
+
+**Testado de ponta a ponta** com uma planilha real (`orcamento-teste.xlsx`,
+baixada do bucket de importações) na v1 do TESTE-0002/26-02:
+
+| Passo | Resultado |
+|---|---|
+| 1ª importação (versão vazia) | aviso diz "Esta versão está vazia — nada será apagado"; grava 2 grupos / 4 itens |
+| Cenário montado | alíquota posta em 19,53% e 1 BV lançado no item tipo A |
+| 2ª importação | aviso conta **− 2 grupos, − 4 itens, − 1 BV** |
+| Depois de confirmar | 2 grupos / 4 itens (**substituiu**, não somou) |
+| BV | **0 restantes** — foi em cascata, como decidido |
+| Alíquota | **19,53% preservada** |
+| Registro | 2 linhas em `orcamento_importacoes`, 2 eventos `versao_orcamento.sobrescrita_por_importacao` |
+
+⚠️ **Não exercitado**: a trava de versão com job aberto. O caminho existe
+nas duas camadas (botão desabilitado + recusa na action), mas exercitá-lo
+exigiria abrir um job sobre uma versão de teste e depois cancelá-lo.

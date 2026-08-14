@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  AlertCircle,
   ArrowRight,
   ArrowUpRight,
   Briefcase,
@@ -13,6 +14,7 @@ import {
 } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { formatCurrency } from "@/lib/utils";
+import { bloqueioAprovacaoVersao } from "@/lib/validations/versoes";
 import { aprovarVersao } from "../actions";
 import { enviarJobParaAbertura } from "./abertura-actions";
 import {
@@ -46,6 +48,10 @@ interface Props {
 
   qtdGrupos: number;
   qtdItens: number;
+  /** Itens com total orçado > 0 — linha começada e vazia não conta. */
+  qtdItensComValor: number;
+  /** Alíquota gravada na versão, para checar se saiu do seletor. */
+  percentualImposto: number;
   custoPlanejado: number;
   /** O que a California emite nota. */
   faturamentoPrevisto: number;
@@ -79,6 +85,8 @@ export function FluxoAbertura({
   jobHref,
   qtdGrupos,
   qtdItens,
+  qtdItensComValor,
+  percentualImposto,
   custoPlanejado,
   faturamentoPrevisto,
   valorJob,
@@ -105,6 +113,13 @@ export function FluxoAbertura({
   const podeAprovar = ["rascunho", "em_revisao", "enviada_cliente"].includes(
     versaoStatus,
   );
+  // Mesma função que a server action usa: o title do botão explica exatamente
+  // o motivo pelo qual o servidor recusaria.
+  const bloqueio = bloqueioAprovacaoVersao({
+    percentualImposto,
+    qtdItens,
+    qtdItensComValor,
+  });
   const aprovada = versaoStatus === "aprovada";
   const etapa: "rascunho" | "aprovada" | "enviada" = job
     ? "enviada"
@@ -221,13 +236,20 @@ export function FluxoAbertura({
                 {qtdGrupos} {qtdGrupos === 1 ? "grupo" : "grupos"} · {qtdItens}{" "}
                 {qtdItens === 1 ? "item" : "itens"}
               </span>
-              <span className="text-xs text-muted-foreground">
-                Valor do Job{" "}
-                <span className="font-mono font-semibold text-foreground">
-                  {formatCurrency(valorJob, moeda)}
-                </span>{" "}
-                · alterações salvas automaticamente
-              </span>
+              {bloqueio ? (
+                <span className="flex items-start gap-1.5 text-xs font-medium text-california-red">
+                  <AlertCircle className="mt-px h-3.5 w-3.5 shrink-0" />
+                  {bloqueio}
+                </span>
+              ) : (
+                <span className="text-xs text-muted-foreground">
+                  Valor do Job{" "}
+                  <span className="font-mono font-semibold text-foreground">
+                    {formatCurrency(valorJob, moeda)}
+                  </span>{" "}
+                  · alterações salvas automaticamente
+                </span>
+              )}
             </>
           )}
           {etapa === "aprovada" && (
@@ -266,7 +288,9 @@ export function FluxoAbertura({
             <button
               type="button"
               onClick={() => setModal("aprovar")}
-              className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-[13px] font-semibold text-white shadow-sm hover:bg-emerald-700 hover:shadow-lg transition-all"
+              disabled={bloqueio !== null}
+              title={bloqueio ?? undefined}
+              className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-[13px] font-semibold text-white shadow-sm hover:bg-emerald-700 hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-sm disabled:hover:bg-emerald-600"
             >
               <CheckCircle2 className="h-4 w-4" />
               Aprovar versão

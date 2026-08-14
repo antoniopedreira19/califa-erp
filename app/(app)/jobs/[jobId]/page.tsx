@@ -2,10 +2,18 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Briefcase, Info, Circle } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
+import { nomeVersao } from "@/lib/nome-versao";
 import { createClient } from "@/lib/supabase/server";
 import { listActiveMembers } from "@/lib/data/members";
 import type { Job, JobStatus, Regional } from "@/lib/types";
-import { jobStatusLabel, JOB_STATUS_TRANSICOES, areaDoPapel } from "@/lib/types";
+import {
+  jobStatusLabel,
+  JOB_STATUS_TRANSICOES,
+  areaDoPapel,
+  jobEstaCongelado,
+  PP_STATUS_EM_ABERTO,
+  BV_SITUACAO_EM_ABERTO,
+} from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { ResumoResultado } from "@/components/resumo-resultado";
 import { cn } from "@/lib/utils";
@@ -16,8 +24,9 @@ import {
 } from "@/lib/calculos/versao-totais";
 import { JobEditorDrawer } from "./job-editor-drawer";
 import { StatusActions } from "./status-actions";
+import type { ResumoEncerramento } from "./encerrar-dialog";
 import { ReenviarAprovacaoButton } from "./reenviar-aprovacao-button";
-import { AprovarRejeitarButtons } from "./aprovar-rejeitar-buttons";
+import { EnviarFaturamentoDrawer } from "./enviar-faturamento-drawer";
 import { JobRealizadoSection } from "./realizado/job-realizado-section";
 import { JobPPsSection } from "./pps/job-pps-section";
 import { JobTabs } from "./job-tabs";
@@ -97,7 +106,7 @@ export default async function JobDetailPage({
     supabase
       .from("jobs")
       .select(
-        "id, tenant_id, empresa_id, codigo, nome, produto, cidade, data_inicio_prevista, data_fim_prevista, data_prevista_faturamento, observacoes, responsavel_id, produtor_id, valor_total, faturamento_previsto, valor_job_abertura, faturamento_previsto_abertura, status, motivo_rejeicao, projeto_id, orcamento_id, versao_orcamento_aprovada_id, regional_id, created_at, updated_at, responsavel:profiles!responsavel_id(id, nome), regional:regionais(id, nome), orcamento:orcamentos(id, codigo, nome, projeto_id), versao:versoes_orcamento!versao_orcamento_aprovada_id(id, numero_versao, nome, moeda, percentual_honorarios, percentual_imposto), projeto:projetos(id, codigo, nome)",
+        "id, tenant_id, empresa_id, codigo, nome, produto, cidade, data_inicio_prevista, data_fim_prevista, data_prevista_faturamento, observacoes, responsavel_id, produtor_id, valor_total, faturamento_previsto, valor_job_abertura, faturamento_previsto_abertura, status, motivo_rejeicao, projeto_id, orcamento_id, versao_orcamento_aprovada_id, regional_id, created_at, updated_at, responsavel:profiles!responsavel_id(id, nome), regional:regionais(id, nome), orcamento:orcamentos(id, codigo, nome, projeto_id), versao:versoes_orcamento!versao_orcamento_aprovada_id(id, numero_versao, nome, moeda, percentual_honorarios, percentual_imposto), projeto:projetos(id, codigo, nome, cliente_id)",
       )
       .eq("id", params.jobId)
       .eq("tenant_id", session.activeTenant.id)
@@ -132,6 +141,8 @@ export default async function JobDetailPage({
     bvsRes,
     mensagensPPsRes,
     leituraPPsRes,
+    envioFaturamentoRes,
+    portaisRes,
   ] = await Promise.all([
     supabase
       .from("versoes_orcamento_grupos")
@@ -235,11 +246,37 @@ export default async function JobDetailPage({
       .eq("profile_id", session.profile.id)
       .eq("escopo", "pps")
       .maybeSingle(),
+    // Envio para faturamento: existe no máximo um por job. É ele que
+    // decide entre mostrar "Enviar para faturamento" e liberar o
+    // encerramento.
+    supabase
+      .from("jobs_envio_faturamento")
+      .select("id, valor_faturado, data_faturamento, numero_po, cnae, portal_url, enviado_em")
+      .eq("job_id", params.jobId)
+      .eq("tenant_id", session.activeTenant.id)
+      .maybeSingle(),
+    // Portais do cliente, para o formulário de envio.
+    supabase
+      .from("cliente_portais")
+      .select("id, nome, url, cliente:clientes!inner(id)")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("ativo", true)
+      .order("nome"),
   ]);
 
   const grupos = (gruposRes.data ?? []) as VersaoOrcamentoGrupo[];
   if (itensRes.error) console.error("[job.orcado]", itensRes.error.message);
   if (bvsRes.error) console.error("[job.bvs]", bvsRes.error.message);
+  if (envioFaturamentoRes.error) {
+    console.error("[job.envio-faturamento]", envioFaturamentoRes.error.message);
+  }
+
+  const envioFaturamento = (envioFaturamentoRes.data as any) ?? null;
+  // Só os portais do cliente DESTE job — a consulta traz os do tenant e o
+  // filtro por cliente é feito aqui, com o id que já veio no `raw`.
+  const portaisDoCliente = ((portaisRes.data ?? []) as any[])
+    .filter((p) => p.cliente?.id === raw.projeto?.cliente_id)
+    .map((p) => ({ id: p.id, nome: p.nome, url: p.url }));
 
   // Indexado por item da versão: a calha consulta uma chave por linha.
   // Objeto, e não Map, porque só objeto atravessa a fronteira server →
@@ -511,9 +548,49 @@ export default async function JobDetailPage({
       (!lidaAtePPs || m.created_at > lidaAtePPs),
   ).length;
 
-  const podeAprovarRejeitar =
-    session.activeRole === "administrador" ||
-    session.activeRole === "financeiro";
+  // Envio para faturamento: quem produz é quem libera, porque PO, CNAE e
+  // portal são informação da produção. Financeiro e admin também podem,
+  // para não travar o fluxo quando o GP estiver fora.
+  const podeEnviarFaturamento =
+    job.status === "aberto" &&
+    envioFaturamento === null &&
+    totaisJob.faturamentoPrevisto > 0;
+
+  // Resumo de fechamento. Só existe depois do envio para faturamento —
+  // antes disso não há o que encerrar. Os impedimentos saem dos dados que
+  // a página já carregou (nenhuma query nova); o servidor refaz a conta
+  // na hora de gravar, porque esta tela pode estar velha.
+  const ppsEmAberto = ppsDoJob
+    .filter((pp) => PP_STATUS_EM_ABERTO.includes(pp.status))
+    .map((pp) => ({ codigo: pp.codigo, status: pp.status }));
+  const nomeDoItem = new Map(itens.map((it) => [it.id, it.item]));
+  const bvsEmAberto = Object.values(bvsPorItem)
+    .filter((bv) => BV_SITUACAO_EM_ABERTO.includes(bv.situacao))
+    .map((bv) => ({
+      item: nomeDoItem.get(bv.item_versao_id) ?? "Item da planilha",
+      situacao: bv.situacao,
+    }));
+
+  const resumoEncerramento: ResumoEncerramento | null =
+    job.status === "aberto" && envioFaturamento
+      ? {
+          faturamentoAbertura: job.faturamento_previsto_abertura,
+          // "Faturamento" do fechamento é o faturamento previsto de agora,
+          // recalculado dos itens — não o número congelado na abertura.
+          faturamentoFechamento: totaisJob.faturamentoPrevisto,
+          valorEnviado: Number(envioFaturamento.valor_faturado),
+          orcado: totaisJob.subtotalGeral,
+          honorarios: totaisJob.honorarios,
+          imposto: totaisJob.imposto,
+          percentualHonorarios: Number(versaoAprovada.percentual_honorarios),
+          percentualImposto: Number(versaoAprovada.percentual_imposto),
+          valorJob: totaisJob.valorJob,
+          custoRealizado: custoRealizadoJob,
+          moeda: versaoAprovada.moeda,
+          ppsEmAberto,
+          bvsEmAberto,
+        }
+      : null;
 
   const podeEditarRealizado =
     (session.activeRole === "administrador" ||
@@ -567,7 +644,8 @@ export default async function JobDetailPage({
               <Badge className={cn("border", statusBadgeClasses(job.status))}>
                 {jobStatusLabel(job.status)}
               </Badge>
-              {job.status !== "cancelado" && (
+              {/* Encerrado e cancelado são histórico: sem edição. */}
+              {!jobEstaCongelado(job.status) && (
                 <JobEditorDrawer
                   job={job}
                   regionais={regionais}
@@ -672,7 +750,12 @@ export default async function JobDetailPage({
                 prefetch={false}
                 className="text-california-red hover:underline"
               >
-                v{raw.versao?.numero_versao} {raw.versao?.nome ? `· ${raw.versao.nome}` : ""}
+                {raw.versao
+                  ? nomeVersao(
+                      raw.orcamento?.nome ?? job.nome,
+                      raw.versao.numero_versao,
+                    )
+                  : "—"}
               </Link>
             </dd>
             <dt className="text-muted-foreground">Valor de faturamento</dt>
@@ -710,28 +793,92 @@ export default async function JobDetailPage({
           moeda={versaoAprovada.moeda}
         />
 
-        {(transicoes.length > 0 ||
-          (job.status === "aguardando_abertura" && podeAprovarRejeitar)) && (
+        {/* `envioFaturamento` entra na condição porque job encerrado não
+            tem transição nem envio pendente — e o registro do faturamento
+            é justamente o que precisa continuar visível depois disso. */}
+        {(transicoes.length > 0 || podeEnviarFaturamento || envioFaturamento) && (
           <div className="rounded-2xl border border-border bg-card p-6 shadow-soft md:col-span-2">
             <div className="flex items-center gap-2 mb-4">
               <Circle className="h-4 w-4 text-california-red" />
               <h2 className="text-sm font-semibold uppercase tracking-wider">Status</h2>
             </div>
-            {job.status === "aguardando_abertura" && podeAprovarRejeitar && (
+
+            {/* Abrir e rejeitar saíram desta página em 13/08/2026: abertura
+                é ação exclusiva da Central Financeira, onde o modal de
+                conferência já tem as duas. Job aguardando abertura mostra
+                só para onde ir. */}
+            {job.status === "aguardando_abertura" && (
+              <p className="mb-4 pb-4 border-b border-border text-sm text-muted-foreground">
+                Aguardando abertura pelo financeiro. A conferência e a
+                abertura acontecem na Central Financeira, em{" "}
+                <Link
+                  href="/financeiro/abertura-de-job"
+                  className="font-medium text-california-red hover:underline"
+                >
+                  Abertura de Job
+                </Link>
+                .
+              </p>
+            )}
+
+            {podeEnviarFaturamento && (
               <div className="mb-4 pb-4 border-b border-border">
                 <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
-                  Aprovação financeira
+                  Faturamento
                 </p>
-                <AprovarRejeitarButtons jobId={job.id} />
+                <EnviarFaturamentoDrawer
+                  jobId={job.id}
+                  jobCodigo={job.codigo}
+                  valorFaturado={totaisJob.faturamentoPrevisto}
+                  dataPrevistaFaturamento={job.data_prevista_faturamento}
+                  portais={portaisDoCliente}
+                  moeda={versaoAprovada.moeda}
+                />
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Libera o job para o financeiro emitir a nota. O
+                  encerramento fica disponível depois disso.
+                </p>
               </div>
             )}
+
+            {envioFaturamento && (
+              <p className="mb-4 pb-4 border-b border-border text-sm text-muted-foreground">
+                Enviado para faturamento em{" "}
+                <strong className="font-mono text-foreground">
+                  {formatDate(envioFaturamento.enviado_em.slice(0, 10))}
+                </strong>{" "}
+                no valor de{" "}
+                <strong className="text-foreground">
+                  {formatMoney(Number(envioFaturamento.valor_faturado))}
+                </strong>
+                , com vencimento em{" "}
+                <strong className="font-mono text-foreground">
+                  {formatDate(envioFaturamento.data_faturamento)}
+                </strong>
+                .
+              </p>
+            )}
+
+            {/* Sem transições e sem envio pendente o card ficaria só com a
+                linha do faturamento e uma borda solta embaixo. Esta é a
+                frase que fecha o card — e diz o que "encerrado" significa. */}
+            {jobEstaCongelado(job.status) && (
+              <p className="text-sm text-muted-foreground">
+                Job {jobStatusLabel(job.status).toLowerCase()} — é histórico.
+                Não aceita edição, PP nem BV.
+              </p>
+            )}
+
             {transicoes.length > 0 && (
               <StatusActions
                 jobId={job.id}
                 transicoes={transicoes}
+                // O encerramento só entra em cena depois do envio para
+                // faturamento — antes disso não há o que encerrar.
                 mostrarEncerramento={
-                  job.status === "aberto" || job.status === "em_producao"
+                  job.status === "aberto" && envioFaturamento !== null
                 }
+                resumoEncerramento={resumoEncerramento}
               />
             )}
           </div>
@@ -749,10 +896,10 @@ export default async function JobDetailPage({
               empresa_id: job.empresa_id,
               responsavel_id: job.responsavel_id,
             }}
+            nomeJob={raw.orcamento?.nome ?? job.nome}
             versao={{
               id: versaoAprovada.id,
               numero_versao: versaoAprovada.numero_versao,
-              nome: versaoAprovada.nome,
               moeda: versaoAprovada.moeda,
               percentual_honorarios: Number(versaoAprovada.percentual_honorarios),
               percentual_imposto: Number(versaoAprovada.percentual_imposto),

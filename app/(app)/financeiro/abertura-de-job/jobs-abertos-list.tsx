@@ -5,10 +5,72 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight, ChevronRight, Search } from "lucide-react";
 import { formatCurrency, cn } from "@/lib/utils";
-import { competenciaLabel } from "@/lib/types";
-import type { JobAberto } from "./dados-abertos";
+import type { JobAberto, SituacaoFaturamento } from "./dados-abertos";
 
 const TODOS = "Todos";
+
+/**
+ * Chips da esteira do faturamento. Cada job cai em exatamente um — a
+ * decisão de 14/08/2026 foi trocar "Aguardando encerramento", que se
+ * sobrepunha a "Faturado", pelos dois estados de dinheiro: recebido
+ * (`Liquidado`) e vencido sem receber (`Inadimplente`).
+ */
+type Chip =
+  | "todos"
+  | "aguardando_faturamento"
+  | "faturado"
+  | "liquidado"
+  | "inadimplente";
+
+const CHIPS: { key: Chip; rotulo: string }[] = [
+  { key: "todos", rotulo: "Todos" },
+  { key: "aguardando_faturamento", rotulo: "Aguardando faturamento" },
+  { key: "faturado", rotulo: "Faturado" },
+  { key: "liquidado", rotulo: "Liquidado" },
+  { key: "inadimplente", rotulo: "Inadimplente" },
+];
+
+/** Ainda não virou nota — os dois estados anteriores ao faturamento. */
+function aguardandoFaturamento(j: JobAberto): boolean {
+  return (
+    j.situacao_faturamento === "aguardando_envio" ||
+    j.situacao_faturamento === "enviado"
+  );
+}
+
+function noChip(j: JobAberto, chip: Chip): boolean {
+  if (chip === "todos") return true;
+  if (chip === "aguardando_faturamento") return aguardandoFaturamento(j);
+  return j.situacao_faturamento === chip;
+}
+
+const SITUACAO_META: Record<
+  SituacaoFaturamento,
+  { rotulo: string; classes: string }
+> = {
+  liquidado: {
+    rotulo: "Liquidado",
+    classes: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  },
+  // Inadimplente é o único estado que exige ação hoje — usa o vermelho da
+  // casa, o mesmo dos alertas do resto do sistema.
+  inadimplente: {
+    rotulo: "Inadimplente",
+    classes: "border-california-red/25 bg-california-red/5 text-california-red",
+  },
+  faturado: {
+    rotulo: "Faturado",
+    classes: "border-blue-200 bg-blue-50 text-blue-700",
+  },
+  enviado: {
+    rotulo: "Enviado",
+    classes: "border-amber-200 bg-amber-50 text-amber-700",
+  },
+  aguardando_envio: {
+    rotulo: "Aguardando envio",
+    classes: "border-border bg-muted/80 text-muted-foreground",
+  },
+};
 
 interface GrupoProjeto {
   projetoId: string;
@@ -40,6 +102,7 @@ function opcoesDe(linhas: JobAberto[], campo: (j: JobAberto) => string | null) {
 export function JobsAbertosList({ linhas }: { linhas: JobAberto[] }) {
   const router = useRouter();
   const [busca, setBusca] = React.useState("");
+  const [chip, setChip] = React.useState<Chip>("todos");
   const [regional, setRegional] = React.useState(TODOS);
   const [gp, setGp] = React.useState(TODOS);
   const [produto, setProduto] = React.useState(TODOS);
@@ -88,12 +151,14 @@ export function JobsAbertosList({ linhas }: { linhas: JobAberto[] }) {
     const q = busca.trim().toLowerCase();
     const filtroAtivo =
       q !== "" ||
+      chip !== "todos" ||
       regional !== TODOS ||
       gp !== TODOS ||
       produto !== TODOS ||
       ano !== TODOS;
 
     function combina(j: JobAberto): boolean {
+      if (!noChip(j, chip)) return false;
       if (regional !== TODOS && j.regional_nome !== regional) return false;
       if (gp !== TODOS && j.responsavel_nome !== gp) return false;
       if (produto !== TODOS && j.produto !== produto) return false;
@@ -134,10 +199,24 @@ export function JobsAbertosList({ linhas }: { linhas: JobAberto[] }) {
     return out.sort((a, b) =>
       (a.codigo ?? "").localeCompare(b.codigo ?? "", "pt-BR"),
     );
-  }, [linhas, busca, regional, gp, produto, ano, fechados]);
+  }, [linhas, busca, chip, regional, gp, produto, ano, fechados]);
 
   const visiveis = grupos.flatMap((g) => g.jobs);
   const totalVisivel = visiveis.reduce((s, j) => s + (j.valor_total ?? 0), 0);
+  // Os dois números do design particionam o visível: ou a nota saiu, ou
+  // ainda não. Somam o valor de faturamento, não o valor do job.
+  const soma = (fn: (j: JobAberto) => boolean) =>
+    visiveis.filter(fn).reduce((s, j) => s + (j.valor_faturamento ?? 0), 0);
+
+  const totalAguardando = soma(aguardandoFaturamento);
+  const totalFaturado = soma((j) => !aguardandoFaturamento(j));
+  // Liquidado e inadimplente são recortes DENTRO do faturado. Só aparecem
+  // quando existem — enquanto o módulo de recebimento não roda, a linha
+  // fica igual à do design.
+  const totalLiquidado = soma((j) => j.situacao_faturamento === "liquidado");
+  const totalInadimplente = soma(
+    (j) => j.situacao_faturamento === "inadimplente",
+  );
 
   function toggleGrupo(id: string) {
     setFechados((prev) => {
@@ -150,6 +229,27 @@ export function JobsAbertosList({ linhas }: { linhas: JobAberto[] }) {
 
   return (
     <div className="space-y-4">
+      {/* Chips da esteira do faturamento, antes dos filtros — é por eles
+          que o financeiro entra na tela. */}
+      <div className="flex flex-wrap items-center gap-2">
+        {CHIPS.map((c) => (
+          <button
+            key={c.key}
+            type="button"
+            onClick={() => setChip(c.key)}
+            aria-pressed={chip === c.key}
+            className={cn(
+              "h-[34px] rounded-full border px-3.5 text-[12.5px] font-semibold transition-colors",
+              chip === c.key
+                ? "border-california-red bg-california-red text-white"
+                : "border-border bg-white text-muted-foreground hover:border-[#d7d7d7] hover:text-foreground",
+            )}
+          >
+            {c.rotulo}
+          </button>
+        ))}
+      </div>
+
       {/* Filtros + busca */}
       <div className="flex flex-wrap items-center gap-2">
         {filtros.map((f) => {
@@ -219,14 +319,48 @@ export function JobsAbertosList({ linhas }: { linhas: JobAberto[] }) {
         </div>
       </div>
 
-      {/* Resumo. Sem os totais de faturamento do design: não há dado que
-          diga se um job foi faturado — entra com contas a receber. */}
       <div className="flex flex-wrap items-center gap-3.5 text-[12.5px] text-muted-foreground">
         <span>
           {visiveis.length === 1
             ? "1 job aberto"
             : `${visiveis.length} jobs abertos`}
         </span>
+        <span className="h-3 w-px bg-[#dcdcdc]" />
+        <span>
+          Faturado{" "}
+          <strong className="tabular-nums text-foreground">
+            {formatCurrency(totalFaturado)}
+          </strong>
+        </span>
+        <span className="h-3 w-px bg-[#dcdcdc]" />
+        <span>
+          Aguardando faturamento{" "}
+          <strong className="tabular-nums text-foreground">
+            {formatCurrency(totalAguardando)}
+          </strong>
+        </span>
+        {totalLiquidado > 0 && (
+          <>
+            <span className="h-3 w-px bg-[#dcdcdc]" />
+            <span>
+              Liquidado{" "}
+              <strong className="tabular-nums text-emerald-700">
+                {formatCurrency(totalLiquidado)}
+              </strong>
+            </span>
+          </>
+        )}
+        {totalInadimplente > 0 && (
+          <>
+            <span className="h-3 w-px bg-[#dcdcdc]" />
+            <span>
+              Inadimplente{" "}
+              <strong className="tabular-nums text-california-red">
+                {formatCurrency(totalInadimplente)}
+              </strong>
+            </span>
+          </>
+        )}
         <span className="h-3 w-px bg-[#dcdcdc]" />
         <span>
           Valor total{" "}
@@ -244,12 +378,12 @@ export function JobsAbertosList({ linhas }: { linhas: JobAberto[] }) {
               <th className="px-4 py-3 font-semibold">Código</th>
               <th className="px-4 py-3 font-semibold">Nome</th>
               <th className="px-4 py-3 font-semibold">Empresa</th>
+              <th className="px-4 py-3 font-semibold">Projeto</th>
               <th className="px-4 py-3 font-semibold">Cliente</th>
               <th className="px-4 py-3 font-semibold">GP responsável</th>
-              <th className="px-4 py-3 font-semibold">Categoria</th>
-              <th className="px-4 py-3 font-semibold">Competência</th>
               <th className="px-4 py-3 font-semibold">Abertura</th>
               <th className="px-4 py-3 text-right font-semibold">Valor total</th>
+              <th className="px-4 py-3 text-right font-semibold">Faturamento</th>
             </tr>
           </thead>
           <tbody>
@@ -271,7 +405,7 @@ export function JobsAbertosList({ linhas }: { linhas: JobAberto[] }) {
                     g.aberto ? "bg-muted/90" : "bg-muted/40",
                   )}
                 >
-                  <td colSpan={10} className="p-0">
+                  <td colSpan={11} className="p-0">
                     <div className="grid grid-cols-[32px_1fr_auto_auto_auto] items-center gap-4 py-[11px] pl-2 pr-4">
                       <div className="flex items-center justify-center">
                         <span
@@ -366,26 +500,59 @@ export function JobsAbertosList({ linhas }: { linhas: JobAberto[] }) {
                           <span className="text-muted-foreground">—</span>
                         )}
                       </td>
+                      {/* Repete o projeto da faixa de propósito: com o
+                          grupo colapsado a linha vira resultado de busca
+                          solto, e "de que projeto é isso?" some. */}
+                      <td className="px-4 py-3 text-muted-foreground">
+                        <div className="flex flex-col gap-0.5">
+                          <span className="font-mono text-[11px] font-semibold text-[#b3323c]">
+                            {j.projeto_codigo ?? "—"}
+                          </span>
+                          <span className="text-[12px]">
+                            {j.projeto_nome ?? "—"}
+                          </span>
+                        </div>
+                      </td>
                       <td className="px-4 py-3 text-muted-foreground">
                         {j.cliente_nome ?? "—"}
                       </td>
                       <td className="px-4 py-3 text-muted-foreground">
                         {j.responsavel_nome ?? "—"}
                       </td>
-                      <td className="px-4 py-3 text-muted-foreground">
-                        {j.categoria_nome ?? "—"}
-                      </td>
-                      <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
-                        {competenciaLabel(
-                          j.competencia_trimestre,
-                          j.competencia_ano,
-                        )}
-                      </td>
                       <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
                         {formatDataBr(j.data_abertura_financeiro)}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-right font-semibold tabular-nums">
                         {formatCurrency(j.valor_total)}
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3 text-right">
+                        <div className="flex flex-col items-end gap-1">
+                          <span className="font-semibold tabular-nums">
+                            {formatCurrency(j.valor_faturamento)}
+                          </span>
+                          <span
+                            className={cn(
+                              "inline-flex items-center rounded-full border px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-[0.04em]",
+                              SITUACAO_META[j.situacao_faturamento].classes,
+                            )}
+                          >
+                            {SITUACAO_META[j.situacao_faturamento].rotulo}
+                          </span>
+                          {/* Segunda linha: o dado que qualifica o selo — o
+                              número da nota, ou desde quando está vencido. */}
+                          {j.situacao_faturamento === "inadimplente" &&
+                          j.vencimento_em_aberto ? (
+                            <span className="text-[10.5px] text-california-red">
+                              venceu em {formatDataBr(j.vencimento_em_aberto)}
+                            </span>
+                          ) : (
+                            j.numero_nf && (
+                              <span className="font-mono text-[10.5px] text-muted-foreground">
+                                NF {j.numero_nf}
+                              </span>
+                            )
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}

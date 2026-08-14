@@ -7,6 +7,7 @@ import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { orcamentoSchema } from "@/lib/validations/orcamentos";
 import { gerarCodigoOrcamento } from "@/lib/codigos/orcamentos";
+import { honorariosDoOrcamento } from "@/lib/data/clientes";
 
 export type ActionResult =
   | { ok: true; id?: string }
@@ -172,7 +173,81 @@ export async function criarOrcamento(
   });
 
   revalidatePath(`/orcamentos/${projetoId}`);
-  redirect(`/orcamentos/${projetoId}/${data.id}`);
+
+  // A V1 nasce junto com o orçamento e o usuário cai direto na planilha
+  // (decisão do time, 13/08/2026). Antes, criar um orçamento levava para
+  // uma lista de versões vazia e exigia um segundo passo — "Nova versão"
+  // — que nunca teve escolha real: a primeira versão de um orçamento novo
+  // é sempre a v1 em rascunho.
+  //
+  // Sem alíquota de propósito: escolher imposto é decisão de fechamento,
+  // não de abertura, e quem cobra é a aprovação (docs/decisions/006).
+  const versaoId = await criarVersaoInicial(data.id, session.activeTenant.id, session.profile.id);
+
+  if (!versaoId) {
+    // O orçamento existe e é válido sem versão — é o estado que a tela de
+    // versões já sabe mostrar. Cair nela é o degrau seguro: refazer o
+    // formulário criaria um orçamento duplicado.
+    redirect(`/orcamentos/${projetoId}/${data.id}`);
+  }
+
+  redirect(`/orcamentos/${projetoId}/${data.id}/versoes/${versaoId}`);
+}
+
+/** Cria a v1 em rascunho de um orçamento recém-criado.
+ *
+ *  Devolve o id, ou `null` quando não deu — e aí quem chama decide o
+ *  destino. Não usa `criarVersao`: aquela é a porta do formulário, com
+ *  validação de status e redirect próprio, e chamá-la de dentro daqui
+ *  significaria capturar o redirect dela para descartar. */
+async function criarVersaoInicial(
+  orcamentoId: string,
+  tenantId: string,
+  profileId: string,
+): Promise<string | null> {
+  const supabase = createClient();
+
+  // Honorários vêm do cadastro do cliente, como em toda criação de versão.
+  // Sem eles a conta de fechamento sai errada e em silêncio, então é
+  // preferível abrir sem versão a abrir com uma versão de base errada.
+  const honorarios = await honorariosDoOrcamento(orcamentoId, tenantId);
+  if (!honorarios) {
+    console.error("[orcamentos.criar.v1] honorários do cliente não lidos", {
+      orcamentoId,
+    });
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from("versoes_orcamento")
+    .insert({
+      tenant_id: tenantId,
+      orcamento_id: orcamentoId,
+      numero_versao: 1,
+      status: "rascunho",
+      moeda: "BRL",
+      taxa_cambio: 1,
+      percentual_honorarios: honorarios.percentual,
+      percentual_imposto: 0,
+      created_by: profileId,
+    })
+    .select("id")
+    .single<{ id: string }>();
+
+  if (error || !data) {
+    console.error("[orcamentos.criar.v1]", error?.message);
+    return null;
+  }
+
+  await logAuditEvent({
+    acao: "versao_orcamento.criada",
+    tenantId,
+    entidadeTipo: "versao_orcamento",
+    entidadeId: data.id,
+    metadata: { orcamento_id: orcamentoId, numero_versao: 1, origem: "criacao_orcamento" },
+  });
+
+  return data.id;
 }
 
 export async function atualizarOrcamento(

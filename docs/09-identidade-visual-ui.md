@@ -122,6 +122,20 @@ São três grades, uma por formato de tela:
 
 O nome do agrupamento mora na **primeira linha do `<thead>`**, na célula de `colSpan={3}` à esquerda de ORÇADO / PLANEJADO / …, e não numa barra de título própria acima da tabela — era uma linha inteira de altura só para um nome. Contador de itens e ações do grupo (renomear, remover) vão para a calha à direita, alinhados pela **altura medida** da faixa (`faixaRef` + `ResizeObserver`), nunca por altura fixa: o thead muda de altura conforme a fonte carrega.
 
+## Navegação por teclado nas planilhas
+
+As duas grades editáveis (versão do orçamento e realizado do job) se comportam como planilha: **Tab anda na horizontal, Enter desce, as setas andam nas duas direções, Esc desfaz.** Tab na última coluna editável desce para a **primeira coluna da linha seguinte**, e no orçamento cai na linha "Novo item" quando ela existe — dá para preencher um grupo inteiro sem tocar no mouse.
+
+A sequência é declarada em `CAMPOS_NAVEGAVEIS` em cada grade, e a regra de "qual é a próxima" é compartilhada em `app/(app)/_planilha/navegacao.ts`. **Coluna calculada não entra na lista** — Total e Rentabilidade não são navegáveis, e o Tab passa por cima delas sem precisar saber que existem.
+
+Três regras que não são óbvias e já custaram retrabalho:
+
+1. **← e → só saem da célula na borda do texto** (cursor na primeira ou na última posição, sem seleção). No meio do texto elas continuam movendo o cursor, senão seria impossível corrigir uma descrição sem redigitá-la. ↑ e ↓ sempre navegam: o campo tem uma linha só.
+2. **Coluna de escolha (`<select>`) navega só por Tab** — as setas são do dropdown, que precisa delas para percorrer as opções. Escolher um valor **avança** para a próxima célula quando se chegou ali pelo teclado, e **encerra** a edição quando se chegou pelo clique. É o que o `porTeclado` da célula ativa registra.
+3. **Estado de célula mora no pai, nunca dentro da célula.** Nos editores de rascunho (multi-jobs e agregado) toda escrita reconstrói a árvore de componentes: `useState` dentro da célula não sobrevive ao rebuild. Uma tentativa de guardar ali a abertura do dropdown deixou a lista presa aberta depois de escolher.
+
+Valor recusado (texto não numérico, número negativo) **interrompe a navegação** de propósito: seguir em frente esconderia o aviso atrás da próxima célula.
+
 ## Calha de ações (fora da tabela)
 
 As ações de linha das planilhas — BV, Pedido de Produção, remover — vivem numa calha **fora** do frame da tabela, posicionada em `absolute left-full` e alinhada pelo topo do `<tbody>` medido (`railTop` + `ResizeObserver`), com a mesma altura de linha da grade.
