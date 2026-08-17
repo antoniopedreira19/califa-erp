@@ -3,10 +3,32 @@ import { z } from "zod";
 const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
+ * Uma parcela do faturamento: em quantas notas o job será faturado.
+ *
+ * Decisão do Tiago (17/08/2026, Tela 3.3): quem informa o parcelamento é
+ * a PRODUÇÃO, no envio — não a previsão de recebimento da abertura, que
+ * responde outra pergunta (quando o dinheiro entra, não em quantas notas
+ * o job sai). Cada parcela vira uma linha da aba Faturamento.
+ */
+export const parcelaFaturamentoSchema = z.object({
+  ordem: z.number().int().min(1),
+  valor: z.number().positive("Parcela precisa ter valor maior que zero."),
+  data_vencimento: z
+    .string()
+    .regex(dateRegex, "Informe o vencimento de cada parcela."),
+});
+
+export type ParcelaFaturamentoInput = z.infer<typeof parcelaFaturamentoSchema>;
+
+/**
  * Envio do job para faturamento — o que a produção libera ao financeiro.
  *
  * `valor_faturado` NÃO está aqui: vem travado do `faturamento_previsto`
  * do job e é relido no servidor. Valor de nota não vem do formulário.
+ *
+ * As `parcelas` também são conferidas contra esse número relido — a soma
+ * tem que fechar. O navegador diz em quantas partes; quanto no total,
+ * quem diz é o banco.
  *
  * `portal_id` é opcional porque nem todo cliente tem portal, e `numero_po`
  * porque nem todo cliente emite PO. O CNAE é obrigatório e, nesta fase, é
@@ -41,6 +63,9 @@ export const envioFaturamentoSchema = z.object({
     .nullable()
     .optional()
     .transform((v) => (v && v.length > 0 ? v : null)),
+  parcelas: z
+    .array(parcelaFaturamentoSchema)
+    .min(1, "Informe ao menos uma parcela de faturamento."),
 });
 
 export type EnvioFaturamentoInput = z.infer<typeof envioFaturamentoSchema>;

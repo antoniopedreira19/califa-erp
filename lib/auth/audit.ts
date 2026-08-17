@@ -122,6 +122,7 @@ export type AuditAction =
   | "faturamento.cancelado"
   | "titulo.baixado"
   | "titulo.baixa_estornada"
+  | "titulo.previsao_repactuada"
   | "acao_negada";
 
 export interface AuditPayload {

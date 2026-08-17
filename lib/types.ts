@@ -722,6 +722,27 @@ export interface JobEnvioFaturamento {
   updated_at: string;
 }
 
+/**
+ * Uma parcela do faturamento do job — em quantas notas ele será faturado.
+ *
+ * Informada pela produção no envio (decisão do Tiago, 17/08/2026). Cada
+ * parcela é uma linha da aba Faturamento; a NF emitida a consome, total
+ * ou parcialmente. Não confundir com `JobPrevisaoRecebimento`, que diz
+ * quando o dinheiro entra, não em quantas notas o job sai.
+ */
+export interface JobEnvioFaturamentoParcela {
+  id: string;
+  tenant_id: string;
+  envio_id: string;
+  job_id: string;
+  ordem: number;
+  valor: number;
+  /** Vencimento acordado com o cliente para esta parcela. */
+  data_vencimento: string;
+  created_at: string;
+  updated_at: string;
+}
+
 /** Uma data da curva de desembolso do job. */
 export interface JobPrevisaoCusto {
   id: string;
@@ -1327,23 +1348,52 @@ export interface Faturamento {
   tenant_id: string;
   empresa_id: string;
   origem_tipo: FaturamentoOrigemTipo;
+  /**
+   * Origem única da nota, quando existe. NULO em NF agrupada (vários
+   * jobs) e em avulso — nesses casos a verdade está em
+   * `faturamento_itens`.
+   */
   origem_id: string | null;
   cliente_id: string | null;
   fornecedor_id: string | null;
   numero_nf: string;
+  /** Fora das telas desde a Tela 3.3; continua gravada, default "1". */
   serie: string;
   data_emissao: string;
   valor_total: number;
   descricao: string;
   anexo_nf_path: string;
-  plano_conta_tipo_id: string;
-  plano_conta_subtipo_id: string;
+  /**
+   * Preenchido só no faturamento avulso (campo "Centro de custo" do
+   * formulário). Em job/BV é nulo: a classificação que vale para o DRE é
+   * a escolhida na baixa do título.
+   */
+  plano_conta_tipo_id: string | null;
+  plano_conta_subtipo_id: string | null;
   status: FaturamentoStatus;
   cancelado_em: string | null;
   cancelado_por: string | null;
   motivo_cancelamento: string | null;
   emitido_em: string;
   emitido_por: string;
+}
+
+/**
+ * O que uma NF cobre, e por quanto — uma linha por job ou BV.
+ *
+ * É o que sustenta ao mesmo tempo a NF agrupada (vários jobs numa nota) e
+ * o faturamento parcial (valor menor que o saldo da parcela).
+ */
+export interface FaturamentoItem {
+  id: string;
+  tenant_id: string;
+  faturamento_id: string;
+  origem_tipo: FaturamentoOrigemTipo;
+  origem_id: string | null;
+  /** Parcela do envio consumida. Só existe em item de job. */
+  envio_parcela_id: string | null;
+  valor: number;
+  created_at: string;
 }
 
 export interface TituloReceber {
@@ -1353,7 +1403,12 @@ export interface TituloReceber {
   faturamento_id: string;
   numero_parcela: number;
   valor: number;
+  /** O que a nota diz. Imutável depois de emitida — trigger no banco. */
   data_vencimento: string;
+  /** Quando o financeiro espera receber. Repactuável pelo lápis. */
+  data_previsao_recebimento: string | null;
+  /** Primeira previsão registrada. Congelada por trigger. */
+  data_previsao_recebimento_primeira: string | null;
   status: TituloReceberStatus;
   pago_em: string | null;
   pago_por: string | null;

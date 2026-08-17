@@ -1490,3 +1490,47 @@ etapa final do plano. ⚠️ **Não exercitado:** a emissão real de uma PP
 parcelada (gerar 3 PDFs e abrir cada um) — depende de criar PP de
 verdade, com anexo, num job aberto. É o primeiro caso a rodar na etapa
 final.
+
+---
+
+## 35. Enviar para faturamento agora diz em quantas notas (2026-08-17)
+
+> ⚠️ **Ajuste na seção 25 do `HANDOFF_FINANCEIRO.md` e no envio descrito
+> antes deste documento.** O drawer "Enviar job para faturamento"
+> carregava um valor e uma data. Agora carrega também **o parcelamento**.
+
+Decisão do Tiago (registrada em
+`docs/decisions/017-faturamento-agrupado-parcial-e-avulso.md` §3): quem
+informa em quantas notas fiscais o job será faturado é a **produção**, no
+envio — não o financeiro, e não a previsão de recebimento da abertura.
+
+O drawer ganhou o bloco **"Em quantas notas este job será faturado"**,
+com atalhos `1× 2× 3× 6×`, uma linha por parcela (valor + vencimento),
+"Nova parcela" e o contador `Soma X / Y`. A 1ª parcela vence na data de
+faturamento do formulário — mexer nela arrasta a primeira e deixa as
+outras como estão, porque o espaçamento entre elas é acordo com o
+cliente.
+
+**O valor continua vindo travado** de `jobs.faturamento_previsto` e
+relido no servidor. O que a action confere a mais é a **soma das
+parcelas** contra esse número relido: o navegador diz como repartir, o
+banco diz quanto. Se a gravação das parcelas falhar, o envio é desfeito —
+envio sem parcela não apareceria na fila do financeiro, e o job ficaria
+no limbo de "enviado, mas invisível".
+
+Cada parcela vira uma **linha da aba Faturamento** em Contas a Receber,
+com o seu próprio vencimento, faturada por sua própria NF (seção 35 do
+`HANDOFF_FINANCEIRO.md`).
+
+| Arquivo | O que mudou |
+|---|---|
+| `lib/validations/envio-faturamento.ts` | `parcelaFaturamentoSchema` e o campo `parcelas` |
+| `jobs/[jobId]/actions-faturamento.ts` | confere a soma, grava as parcelas, desfaz o envio se falhar |
+| `jobs/[jobId]/enviar-faturamento-drawer.tsx` | o bloco de parcelamento |
+| `supabase/migrations/20260817000005_...sql` | tabela `jobs_envio_faturamento_parcelas` |
+
+### Verificação
+
+`tsc --noEmit`, `next lint` (só os 2 avisos pré-existentes) e
+`npm run build` limpos. **Sem verificação no navegador** — consolidada na
+etapa final do plano.

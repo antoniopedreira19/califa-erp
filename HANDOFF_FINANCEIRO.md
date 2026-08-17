@@ -10,6 +10,7 @@ de negócio tomadas junto com o time durante a execução.
 | **II** | `Abertura de Job - Financeiro.dc.html`, aba "Jobs abertos" | lista de jobs abertos, job na visão do financeiro | 15 a 18 |
 | **V** | `Abertura de Job - Telas Atuais.dc.html`, itens 02a e 03 | previsão de recebimento no formulário de abertura, planilha interna em leitura | 33 |
 | **VI** | `Contas a Pagar - Titulos a Pagar.dc.html` | aba unificada de títulos a pagar, baixa por parcela, aprovação com data de pagamento | 34 |
+| **VII** | `Contas a Receber - Faturamento Agrupado.dc.html` | NF cobrindo vários jobs, faturamento parcial e avulso, previsão de recebimento do título | 35 |
 
 > Contas a pagar, conciliação e lançamentos financeiros já existiam antes deste
 > documento e não estão registrados aqui.
@@ -960,3 +961,124 @@ continuam existindo.
   3.4).
 - **Contato de cobrança** (`jobs_contatos`) segue invisível para o
   financeiro — a lacuna da decisão 012 continua aberta.
+
+---
+
+## 35. Contas a Receber: faturamento agrupado, parcial e avulso (2026-08-17)
+
+Protótipo `Contas a Receber - Faturamento Agrupado.dc.html`, mais o
+arquivo `Contas a Receber - Faturamento - notas de implementacao.md` do
+mesmo projeto. Regras novas em
+`docs/decisions/017-faturamento-agrupado-parcial-e-avulso.md`.
+
+> ⚠️ **Isto muda o formulário de emissão descrito antes deste
+> documento.** Uma NF deixa de ser "uma nota, um job": passa a cobrir
+> vários jobs do mesmo cliente, e pode cobrir só parte do saldo de cada
+> um. **Tipo e Subtipo saíram do formulário de emissão** e passaram a ser
+> pedidos na baixa do título. **Série saiu das telas** (continua no banco,
+> com default `1`). E o título a receber ganhou uma **previsão de
+> recebimento** editável, ao lado do vencimento.
+
+### A nota virou cabeçalho + linhas
+
+| Camada | Tabela | Responde |
+|---|---|---|
+| Cabeçalho | `faturamentos` | o que é esta nota |
+| **Linhas** | **`faturamento_itens`** (nova) | **o que ela cobre, e por quanto de cada** |
+| Recebimento | `titulos_receber` | como o dinheiro entra |
+
+`faturamentos.origem_id` fica **vazio na nota agrupada** — quem quiser
+saber o que a nota cobre lê `faturamento_itens`. Gravar "o primeiro job"
+faria qualquer leitura futura atribuir a nota inteira a ele.
+
+### A aba Faturamento agora tem uma linha por PARCELA
+
+Tabela nova `jobs_envio_faturamento_parcelas`: ao enviar o job para
+faturamento, **a produção informa em quantas notas ele será faturado**,
+com valor e vencimento de cada parcela. Cada parcela é uma linha da aba,
+faturada por sua própria NF.
+
+Não confundir com `jobs_previsao_recebimento` (seção 33): aquela diz
+*quando o dinheiro entra*, esta diz *em quantas notas o job sai*.
+
+Colunas: Origem · Job/descrição · Cliente · Valor (da parcela) · Já
+faturado · Saldo a faturar (com "total do job") · Parcela `N/T` ·
+Vencimento · Ação. Chips de filtro **por cliente com contagem**, busca, e
+faixa "A faturar".
+
+**Notas já emitidas permanecem na aba**, em verde, com chip `FATURADO` e
+botão `NF <número>` que reabre o mesmo formulário em **somente leitura**
+(campos bloqueados, sem seletor total/parcial, sem lixeiras nem atalhos,
+rodapé "Fechar", e **Visualizar NF** abrindo o PDF no próprio painel).
+
+### Agrupado, parcial e avulso
+
+- **Agrupado:** botão "Faturamento Agrupado" liga o modo de seleção
+  (checkbox por linha + selecionar todos). Com mais de um cliente na
+  seleção **o formulário não abre** — o erro sai na própria barra,
+  nomeando os clientes. **BV nunca entra**: a contraparte dele é o
+  fornecedor, e o checkbox fica desabilitado.
+- **Parcial:** seletor `Valor integral` × `Faturamento parcial` no topo
+  de "Jobs nesta NF". No parcial cada job ganha campo editável, botão
+  `50% do valor`, selo "Parcial" e a linha "R$ X volta para a aba
+  Faturamento", com resumo azul do que retorna. Valor acima do saldo
+  bloqueia no cliente, na action **e** na RPC.
+- **Avulso:** mesmo drawer, com cliente, valor total, job de referência
+  (só rastreio — não consome saldo) e centro de custo obrigatório. Não
+  altera saldo de nenhum job.
+
+**Não existe NF programada.** O modelo "1 NF por parcela" foi avaliado no
+protótipo e descartado; quem não quer faturar tudo agora usa o parcial.
+
+### Aba Títulos a Receber
+
+Colunas: ✎ Vencimento · Previsão de recebimento · Nota fiscal · Cliente ·
+Jobs cobertos · Data de recebimento · Valor · Parcela · Status · Ação.
+NF de vários jobs exibe o selo **"Agrupada · N jobs"** e a lista.
+
+Três datas, e **duas são imutáveis**: o vencimento da NF e a 1ª previsão
+registrada, as duas congeladas por trigger. O lápis muda só a previsão,
+que aparece em **âmbar** quando difere do vencimento — e é ela que
+`vw_fluxo_caixa` passou a ler.
+
+A baixa pede **data do recebimento**, **conta bancária que recebeu** e
+**centro de custo do recebimento** (o par Tipo + Subtipo). Título
+recebido sempre tem data — invariante garantida no diálogo, no schema e
+dentro da RPC.
+
+**Estorno e cancelamento de NF não têm porta nesta tela**, seguindo o
+protótipo e a mesma decisão da 016 §9. As actions continuam no
+repositório.
+
+### Migration `20260817000005_contas_a_receber_agrupado.sql`
+
+Aplicada e conferida pelo MCP. Duas tabelas novas
+(`jobs_envio_faturamento_parcelas` e `faturamento_itens`, ambas com RLS,
+policies só para `authenticated` via `is_tenant_member`, índices e ACL
+sem `anon`), 2 colunas em `titulos_receber`, 1 trigger,
+`dar_baixa_titulo_com_plano` nova (`security definer`, `search_path`
+fixo, **sem `EXECUTE` para `PUBLIC`**), `emitir_faturamento` e
+`cancelar_faturamento` redefinidas, e as views `vw_faturamento_pendente`
+(uma linha por parcela) e `vw_fluxo_caixa` (título pela previsão).
+
+Backfill aditivo: os 3 envios existentes ganharam 1 parcela `1/1` com o
+valor e a data que já tinham.
+
+**Único item do lado destrutivo, autorizado pelo Tiago:** o CHECK
+`chk_faturamento_origem` foi substituído por uma versão que aceita
+`origem_id` nulo em job/BV. `faturamentos` tinha 0 linhas.
+
+Lógica exercitada no banco com rollback: NF parcial de R$ 4.000 sobre uma
+parcela de R$ 7.025,60 deixou saldo de R$ 3.025,60; cancelar a NF
+devolveu os R$ 7.025,60; e um `update` forçando vencimento e 1ª previsão
+para 1999 manteve as duas intactas.
+
+### Fora do escopo, de propósito
+
+- **Fluxo de Caixa** (Tela 3.4) não foi tocado.
+- **Contato de cobrança** (`jobs_contatos`) segue invisível para o
+  financeiro, por decisão do Tiago nesta sessão — a lacuna da decisão 012
+  continua aberta.
+- **O abatimento da previsão de recebimento da abertura** pelo título
+  emitido continua sem regra escrita (pendência da seção 33 / decisão
+  015). É a Tela 3.4 que vai precisar dela.
