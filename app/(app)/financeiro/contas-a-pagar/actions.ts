@@ -1,5 +1,24 @@
 "use server";
 
+/**
+ * Ações do financeiro sobre o Pedido de Produção.
+ *
+ * ⚠️ Nota da Tela 3.2 (17/08/2026): quatro exports deste arquivo ficaram
+ * SEM CHAMADOR na UI, e é de propósito:
+ *
+ * • `aprovarPP` e `salvarPrazoFinanceiro` — a aprovação passou a exigir a
+ *   data de pagamento no mesmo ato (`aprovarPPComData`, em
+ *   `actions-titulos.ts`), o que dispensou o par "salvar prazo" +
+ *   "aprovar".
+ * • `marcarPagaFinanceiro` e `darBaixaAvulsaInline` — a baixa deixou de
+ *   ser da PP inteira e da avulsa isolada; agora é do TÍTULO (parcela ou
+ *   avulsa), em `darBaixaTitulo`.
+ * • `estornarBaixaPP` — o estorno saiu da UI por decisão do Tiago. Ver a
+ *   nota em `cancelar-baixa-modal.tsx`.
+ *
+ * `rejeitarPedidoCompraFinanceiro` e `desaprovarPP` seguem em uso.
+ */
+
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth/session";

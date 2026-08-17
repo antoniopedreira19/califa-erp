@@ -85,6 +85,10 @@ export type AuditAction =
   | "pedido_compra.reenviada"
   | "pedido_compra.aprovada"
   | "pedido_compra.desaprovada"
+  // Tela 3.2 — a baixa passou a ser da PARCELA, e a data de pagamento do
+  // título virou repactuável.
+  | "pedido_compra.parcela_paga"
+  | "titulo_pagar.data_repactuada"
   | "custo_c.utilizado"
   | "conta_bancaria.criada"
   | "conta_bancaria.atualizada"

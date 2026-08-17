@@ -9,6 +9,7 @@ de negócio tomadas junto com o time durante a execução.
 | **I·rev** | revisão de 12/08 (sem design novo) | previsão de desembolso na calha PP, janelas 08/20, os dois números do fechamento | 11 a 14 |
 | **II** | `Abertura de Job - Financeiro.dc.html`, aba "Jobs abertos" | lista de jobs abertos, job na visão do financeiro | 15 a 18 |
 | **V** | `Abertura de Job - Telas Atuais.dc.html`, itens 02a e 03 | previsão de recebimento no formulário de abertura, planilha interna em leitura | 33 |
+| **VI** | `Contas a Pagar - Titulos a Pagar.dc.html` | aba unificada de títulos a pagar, baixa por parcela, aprovação com data de pagamento | 34 |
 
 > Contas a pagar, conciliação e lançamentos financeiros já existiam antes deste
 > documento e não estão registrados aqui.
@@ -838,3 +839,124 @@ esta rota é passo do fluxo de abertura, não uma segunda casa da planilha.
 `[jobId]/abertura-form.tsx`, `[jobId]/page.tsx`,
 `[jobId]/planilha/page.tsx` (novo), `dados.ts`, `curva.ts`, `actions.ts`,
 `lib/validations/abertura-financeiro.ts`, `lib/types.ts`.
+
+## 34. Contas a Pagar: a aba "Títulos a Pagar" (2026-08-17)
+
+Protótipo `Contas a Pagar - Titulos a Pagar.dc.html` (25 estados,
+interativo). Regras novas em
+`docs/decisions/016-titulos-a-pagar-e-baixa-por-parcela.md`.
+
+> ⚠️ **Isto refaz a máquina de pagamento descrita antes deste
+> documento.** Até aqui o financeiro aprovava a PP, salvava um "prazo
+> financeiro" à parte e baixava a **PP inteira** num lançamento só. Agora
+> a aprovação define a **data de pagamento** no mesmo ato, e quem se
+> baixa é a **parcela**. Também fecha o adiamento explícito da decisão
+> 014 §7.
+
+### As três abas
+
+`Pedidos de Produção (PPs)` · `Títulos a Pagar` · `Recorrências`. A aba
+**"Lançamentos Avulsos" foi absorvida**: a avulsa virou um título de
+origem `AVULSO` na lista unificada, e a criação passou a ser o botão
+"+ Lançamento Avulso" de lá. As rotas de detalhe da avulsa continuam
+funcionando. A tela abre em Títulos a Pagar — é o que o financeiro faz
+todo dia.
+
+### A lista unificada não tem tabela
+
+Nasce de consulta sobre o que já existe, sem tabela-espelho:
+
+| Chip de origem | Fonte |
+|---|---|
+| `PP-NNNNN` | `pedidos_compra_parcelas` de PP `aprovada` ou `pago` |
+| `AVULSO` | `contas_avulsas` com `recorrente_id` nulo |
+| `RECORRÊNCIA` | `contas_avulsas` com `recorrente_id` preenchido |
+
+A recorrência não exigiu nada novo: `gerar_ocorrencias_recorrentes` já
+materializava cada ocorrência como uma `contas_avulsas`.
+
+Colunas: Data de pagamento (editável, **vermelha quando difere do
+vencimento original**) · Venc. original · Título · Fornecedor · Job ·
+Origem · Valor · Parcela `N/T` · Status · Dar baixa. Chips A pagar /
+Pagos / Todas, segunda linha de ORIGEM, e faixa de resumo com Em aberto ·
+Vencendo em 7 dias · Pagos hoje. Em "Todas", o que ainda precisa sair vem
+antes do que já foi pago.
+
+### Duas datas onde havia uma
+
+- **Vencimento original** — o prazo negociado pela produção, impresso no
+  PDF. Congelado na emissão.
+- **Data de pagamento** — quando o financeiro paga. Nasce na aprovação e
+  é repactuável pelo lápis.
+
+O pop-up do lápis exibe **sempre** as duas, mais a **1ª data de
+pagamento** já definida — que um trigger no banco congela, para a
+promessa não depender da tela.
+
+### PP parcelada: a data desloca todas pelo mesmo delta
+
+Decisão do Tiago. Aprovar em 08/09 uma PP que vencia 01/09 · 01/10 ·
+01/11 gera pagamentos em 08/09 · 08/10 · 08/11. Exercitado no banco antes
+de liberar, com rollback.
+
+### O formulário de aprovação da PP
+
+| Antes | Agora |
+|---|---|
+| Bloco "Ações do financeiro" com "Prazo pagamento financeiro" + botão "Salvar prazo" | Campo único **"Data de pagamento" \*** — obrigatório, escolhido antes de aprovar |
+| Prazo original numa linha da grade de dados | **Vencimento original em card âmbar destacado**, com o texto "Prazo negociado pela produção com o fornecedor" |
+| Botão "Ver PDF" (ícone de olho, abre aba nova) | **"Visualizar documentos"** — PP e anexo(s) lado a lado, em overlay, com as ações de aprovar/rejeitar no rodapé |
+| "Dar baixa" e "Cancelar baixa" no rodapé | Saíram. A baixa é da parcela e mora na aba Títulos |
+
+PP fora da avaliação exibe o aviso "Esta PP já saiu da avaliação".
+Na lista da aba, a coluna "Prazo Financeiro" virou **"Parcela"** (`1/3`).
+
+### O modal de baixa
+
+Um só, para as três origens. Data do pagamento · Conta que realizará o
+pagamento (**sem conta padrão** — escolhida na mão toda vez) · **Centro
+de custo do pagamento**, obrigatório.
+
+**"Centro de custo" é o plano de contas (Tipo + Subtipo)** — decisão do
+Tiago. Não existe centro de custo no banco, e a legenda do próprio
+protótipo ("define onde o custo entra no DRE") descreve o que o plano de
+contas já fazia. Vem sugerido pela origem quando ela tem plano, e a
+escolha vai para o lançamento sem reescrever a classificação da avulsa.
+
+### Lançamento avulso com dois botões
+
+**Criar** lança a previsão em Títulos a Pagar. **Criar e dar baixa** cria
+e abre o modal de baixa em seguida — o pagamento já aconteceu e vai
+direto para a conciliação.
+
+### O estorno saiu da UI
+
+Decisão do Tiago: seguir o protótipo, que não tem estorno em lugar
+nenhum. `estornarBaixaPP` e `cancelar-baixa-modal.tsx` continuam no
+repositório, sem porta na tela — e o arquivo carrega a nota dizendo isso.
+**Consequência assumida:** reverter baixa errada hoje exige intervenção
+fora da tela.
+
+### Migration
+
+`20260817000004_titulos_a_pagar.sql` — aditiva: 5 colunas
+(`data_pagamento` e `data_pagamento_primeira` em
+`pedidos_compra_parcelas` e `contas_avulsas`, `pedido_compra_parcela_id`
+em `lancamentos_financeiros`), 1 FK, 3 índices, 1 trigger, 3 funções
+novas (`aprovar_pp_com_data`, `dar_baixa_pp_parcela`,
+`dar_baixa_avulsa_com_plano`, todas `security definer` com `search_path`
+fixo e **sem `EXECUTE` para `PUBLIC`**), `gerar_ocorrencias_recorrentes`
+redefinida, e as views `vw_a_pagar` / `vw_fluxo_caixa` passando a
+listar **uma linha por parcela em aberto** — sem isso o Fluxo de Caixa
+nasceria concentrando num dia o que sai em três.
+
+Nada removido: `prazo_pagamento_financeiro` virou espelho da 1ª parcela
+(com comentário no banco), e `dar_baixa_pp` / `estornar_baixa_pp`
+continuam existindo.
+
+### Fora do escopo, de propósito
+
+- **Contas a Receber e Fluxo de Caixa** não foram tocados (Telas 3.3 e
+  3.4).
+- **Contato de cobrança** (`jobs_contatos`) segue invisível para o
+  financeiro — a lacuna da decisão 012 continua aberta.

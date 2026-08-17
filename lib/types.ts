@@ -1130,17 +1130,36 @@ export type ItemChat =
  * parcela, nem no legado (a migration `20260817000002` backfillou todas).
  * É isso que deixa as listas e o PDF tratarem os dois casos igual.
  *
- * `pago_em` / `pago_por` são da baixa por parcela, que entra na Tela 3.2
- * ("Títulos a Pagar"). Até lá quem baixa é a PP inteira.
+ * `pago_em` / `pago_por` são da baixa por parcela, que a Tela 3.2
+ * ("Títulos a Pagar") passou a fazer: quem se baixa é a parcela, e a PP
+ * só vira `pago` quando a última é quitada.
  */
 export interface PedidoCompraParcela {
   id: string;
   tenant_id: string;
   pedido_compra_id: string;
   numero: number;
+  /**
+   * Vencimento ORIGINAL — o prazo que a produção negociou com o
+   * fornecedor, impresso no PDF. Nunca muda depois da emissão.
+   */
   data_vencimento: string;
   valor: number;
   pdf_path: string | null;
+  /**
+   * Quando o financeiro vai pagar ESTA parcela. Nasce na aprovação da PP
+   * (`aprovar_pp_com_data`, que desloca todas pelo mesmo delta) e é
+   * repactuável pelo lápis da aba Títulos a Pagar. Diferente de
+   * `data_vencimento` = título repactuado, exibido em vermelho.
+   * Nulo enquanto a PP está em avaliação.
+   */
+  data_pagamento: string | null;
+  /**
+   * A primeira data de pagamento já definida. Congelada por trigger no
+   * banco — repactuar não a altera. É metade do histórico que o pop-up
+   * de edição exibe (a outra metade é `data_vencimento`).
+   */
+  data_pagamento_primeira: string | null;
   pago_em: string | null;
   pago_por: string | null;
   created_at: string;
@@ -1269,6 +1288,12 @@ export interface LancamentoFinanceiro {
   cliente_id: string | null;
   job_id: string | null;
   pedido_compra_id: string | null;
+  /**
+   * Parcela de PP que este lançamento quitou (Tela 3.2). Nulo quando o
+   * lançamento não veio de baixa de parcela — avulsa, título a receber,
+   * manual, e as baixas de PP inteira anteriores a 17/08/2026.
+   */
+  pedido_compra_parcela_id: string | null;
   conta_avulsa_id: string | null;
   estorno_de_lancamento_id: string | null;
   origem: OrigemLancamento;
@@ -1390,7 +1415,16 @@ export interface ContaAvulsa {
   descricao: string;
   valor: string; // numeric → string do supabase-js
   natureza: NaturezaLancamento;
+  /**
+   * Vencimento ORIGINAL — a data informada na criação (ou a data da
+   * ocorrência, quando gerada por recorrência). A partir da Tela 3.2 é a
+   * coluna "Venc. original" da aba Títulos a Pagar.
+   */
   data_prevista_pagamento: string | null; // YYYY-MM-DD
+  /** Data de pagamento vigente, repactuável. Nasce igual à original. */
+  data_pagamento: string | null; // YYYY-MM-DD
+  /** Primeira data de pagamento definida. Congelada por trigger. */
+  data_pagamento_primeira: string | null; // YYYY-MM-DD
   status: ContaAvulsaStatus;
   fornecedor_id: string | null;
   cliente_id: string | null;
@@ -1405,6 +1439,26 @@ export interface ContaAvulsa {
   created_at: string;
   updated_at: string;
 }
+
+// ---------- Tela 3.2: título a pagar (visão unificada) ----------
+
+/**
+ * De onde o título veio. Não é coluna de banco: a aba "Títulos a Pagar"
+ * não tem tabela própria (decisão do plano: sem tabela-espelho). Ela
+ * nasce da união de duas fontes, e a origem se deduz assim:
+ *
+ *   pp          → parcela de `pedidos_compra_parcelas` de PP aprovada
+ *   avulso      → `contas_avulsas` com `recorrente_id` nulo
+ *   recorrencia → `contas_avulsas` com `recorrente_id` preenchido
+ *                 (a ocorrência que `gerar_ocorrencias_recorrentes` cria)
+ */
+export type OrigemTitulo = "pp" | "avulso" | "recorrencia";
+
+export const origemTituloLabel = (o: OrigemTitulo, ppCodigo?: string | null): string =>
+  o === "pp" ? (ppCodigo ?? "PP") : o === "avulso" ? "AVULSO" : "RECORRÊNCIA";
+
+/** `a_pagar` enquanto não há baixa; `pago` depois dela. */
+export type TituloPagarStatus = "a_pagar" | "pago";
 
 export interface ContaAvulsaAnexo {
   id: string;
