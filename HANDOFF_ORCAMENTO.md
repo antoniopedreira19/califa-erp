@@ -35,6 +35,7 @@ Registro da implementação dos design handoffs aprovados para o módulo de Orç
 | **15 — Cores dos blocos e faixa do agrupamento** | ✅ (2026-08-11) |
 | **17 — Cidade e Regional editáveis na abertura + modal inteiro visível** | ✅ `40881a7` (2026-08-12) |
 | **18 — Funil comercial nas listas, Valor do Job e GPs Responsáveis** | ✅ `d078f8a` + `63c258f` + `9018e3a` (2026-08-17) |
+| **19 — Editor multi-jobs: novo no topo, orçado zerado bloqueia, categoria obrigatória** | ✅ (2026-08-17) |
 
 `tsc --noEmit` e `next lint` limpos em todas. Entregas 4, 5, 8 a 13
 também com `next build` completo. As Entregas 8 e 10 a 13 são as únicas
@@ -1709,3 +1710,40 @@ o caso a caso do TESTE-0002: são a base dos testes das próximas entregas
 do plano local e só devem ser removidos quando o plano terminar. O
 registro vivo (ids, estágio de cada um, o que cada um reserva) fica na
 seção "Registro de testes" do plano local.
+
+## 21. Entrega 19 — Editor multi-jobs: novo no topo, orçado zerado bloqueia, categoria obrigatória (2026-08-17)
+
+**Origem:** plano local de alterações de telas (Grupo B, Tela 1.4), com
+as decisões do Tiago de 16/08. Regra do orçado zerado na
+[decisão 011](docs/decisions/011-orcado-obrigatorio-para-salvar-e-aprovar.md).
+
+Três alterações independentes:
+
+1. **Orçamento novo aparece no TOPO da lista** (`multi/editor-multi-jobs.tsx`).
+   O array `jobs` continua em ordem de criação — é ela que gera os
+   códigos (`-01` é sempre o mais antigo) e o payload do salvamento; só a
+   renderização inverte, via `jobsExibicao` (par `{ job, indice }` com o
+   índice original para `codigoPrevisto`). O card de Totais segue a mesma
+   ordem invertida, com o código original por linha. `indiceImportando` e
+   o texto do dialog (`codigoPrevisto(jobs.length)`) não mudaram porque
+   já usavam o índice/tamanho do array original.
+2. **"Salvar orçamentos" bloqueia com R$ unitário ORÇADO zerado** —
+   decisão 011. Cliente: `itensComOrcadoZerado` varre jobs → grupos →
+   itens e o erro nomeia `orçamento · grupo · item`. Servidor: mesma
+   checagem no loop de validação de `salvarOrcamentosDoProjeto`
+   (`multi/actions.ts`), no padrão `${rotulo} · ${grupo.nome}: ...`.
+   **Planejado zerado salva normalmente.** Escopo: só o editor multi e
+   sua action — o agregado ficou de fora de propósito (ver decisão).
+3. **Categoria do orçamento de job passou a obrigatória** — vale para
+   `/orcamentos/[projetoId]/novo` e para o dialog do editor multi (mesmo
+   `orcamento-form.tsx`). `orcamentoSchema.categoria_id` virou
+   `z.string().uuid("Selecione a categoria.")` (banco continua nullable
+   pelo legado, como os obrigatórios de 06/08); o Select perdeu a opção
+   "Sem categoria" e ganhou placeholder "Selecione a categoria" +
+   asterisco; `DadosOrcamento.categoria_id` passou de `string | null`
+   para `string`. **Consequência assumida:** orçamento antigo sem
+   categoria passa a exigir a escolha ao ser editado no drawer.
+
+**Verificação no navegador** (dev server, sessão real, projeto
+TESTE-0003/26): ver seção "Registro de testes" do plano local. `next
+lint` e `npm run build` limpos.

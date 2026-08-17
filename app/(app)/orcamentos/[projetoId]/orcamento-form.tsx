@@ -35,7 +35,7 @@ import {
  *  do projeto guarda no rascunho até o "Salvar orçamentos". */
 export interface DadosOrcamento {
   nome: string;
-  categoria_id: string | null;
+  categoria_id: string;
   regional_id: string;
   cidade_id: string;
   gp_responsavel_id: string;
@@ -90,9 +90,10 @@ export function OrcamentoForm({
       ? orcamento.status
       : "rascunho",
   );
-  const SEM_CATEGORIA = "__none__";
+  // Categoria é obrigatória desde 17/08/2026: sem opção "Sem categoria",
+  // estado inicial vazio mostra o placeholder e o Zod cobra a escolha.
   const [categoriaId, setCategoriaId] = React.useState(
-    orcamento?.categoria_id ?? SEM_CATEGORIA,
+    orcamento?.categoria_id ?? "",
   );
   const [regionalId, setRegionalId] = React.useState(orcamento?.regional_id ?? "");
   const [cidadeId, setCidadeId] = React.useState(orcamento?.cidade_id ?? "");
@@ -113,7 +114,7 @@ export function OrcamentoForm({
     setFieldErrors({});
     const formData = new FormData(e.currentTarget);
     if (isEdit) formData.set("status", status);
-    formData.set("categoria_id", categoriaId === SEM_CATEGORIA ? "" : categoriaId);
+    formData.set("categoria_id", categoriaId);
     formData.set("regional_id", regionalId);
     formData.set("cidade_id", cidadeId);
     formData.set("gp_responsavel_id", gpId);
@@ -185,13 +186,12 @@ export function OrcamentoForm({
           </Field>
         )}
 
-        <Field label="Categoria" name="categoria_id" errors={fieldErrors}>
+        <Field label="Categoria" name="categoria_id" required errors={fieldErrors}>
           <Select value={categoriaId} onValueChange={setCategoriaId}>
             <SelectTrigger className={erroClasses("categoria_id")}>
-              <SelectValue placeholder="Sem categoria" />
+              <SelectValue placeholder="Selecione a categoria" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value={SEM_CATEGORIA}>Sem categoria</SelectItem>
               {categorias.map((c) => (
                 <SelectItem key={c.id} value={c.id}>
                   {c.nome}
