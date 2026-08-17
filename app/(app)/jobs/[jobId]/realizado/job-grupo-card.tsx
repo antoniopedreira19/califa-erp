@@ -16,7 +16,10 @@ interface Props {
   realizadosMap: Map<string, JobItemRealizado>;
   categoriasMap: Map<string, string>;
   moeda: string;
+  /** Lançar/editar o bloco REALIZADO. Vale já na pré-abertura. */
   editable: boolean;
+  /** Trilha lateral de BV e Pedido de Produção — só com o job aberto. */
+  podeAcoes: boolean;
   jobId: string;
   ppsPorItemId: Map<string, PedidoCompra>;
   fornecedores: Array<Pick<Fornecedor, "id" | "nome" | "razao_social" | "status">>;
@@ -36,6 +39,7 @@ export function JobGrupoCard({
   categoriasMap,
   moeda,
   editable,
+  podeAcoes,
   jobId,
   ppsPorItemId,
   fornecedores,
@@ -58,6 +62,7 @@ export function JobGrupoCard({
         categoriasMap={categoriasMap}
         moeda={moeda}
         editable={editable}
+        podeAcoes={podeAcoes}
         ppsPorItemId={ppsPorItemId}
         fornecedores={fornecedores}
         empresas={empresas}

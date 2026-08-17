@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { logAuditEvent } from "@/lib/auth/audit";
-import type { JobItemRealizado } from "@/lib/types";
+import type { JobItemRealizado, JobStatus } from "@/lib/types";
+import { jobAceitaRealizado } from "@/lib/types";
 
 export type CampoRealizado =
   | "valor_unitario_realizado"
@@ -34,7 +35,7 @@ function parseNumero(raw: string): number | null {
  * Cria ou atualiza uma linha de realizado (job, item).
  * Gates:
  * - Job existe no tenant.
- * - Job em status "aberto" ou "em_producao".
+ * - Job em status que aceita realizado (`jobAceitaRealizado`).
  * - User e admin OU responsavel do job.
  * - Item pertence a versao aprovada do job (defense-in-depth).
  * - Valor >= 0.
@@ -65,8 +66,9 @@ export async function upsertItemRealizado(
     return { ok: false, message: "Job não encontrado." };
   }
 
-  // 2. Gate de status
-  if (job.status !== "aberto" && job.status !== "em_producao") {
+  // 2. Gate de status — inclui a pré-abertura desde 17/08/2026. Só
+  // errata, BV e PP continuam esperando o financeiro abrir o job.
+  if (!jobAceitaRealizado(job.status as JobStatus)) {
     await logAuditEvent({
       acao: "acao_negada",
       tenantId: session.activeTenant.id,
@@ -81,7 +83,7 @@ export async function upsertItemRealizado(
     return {
       ok: false,
       message:
-        "Realizado só pode ser lançado com o job em 'Aberto' ou 'Em produção'.",
+        "Job encerrado ou cancelado — o realizado não pode mais ser lançado.",
     };
   }
 

@@ -800,6 +800,32 @@ export function jobEstaCongelado(status: JobStatus): boolean {
   return status === "encerrado" || status === "cancelado";
 }
 
+/**
+ * Onde o REALIZADO pode ser lançado. Desde 17/08/2026 inclui os dois
+ * status de pré-abertura: a produção começa a gastar antes de o
+ * financeiro abrir o job, e esconder a planilha até lá obrigava a
+ * anotar valores fora do sistema. O que a abertura libera é o que tem
+ * consequência financeira — ver `jobAceitaAcoesPlanilha`.
+ */
+export function jobAceitaRealizado(status: JobStatus): boolean {
+  return (
+    status === "aberto" ||
+    status === "em_producao" ||
+    status === "aguardando_abertura" ||
+    status === "rejeitado_financeiro"
+  );
+}
+
+/**
+ * Errata, BV e Pedido de Produção: só com o job já aberto pelo
+ * financeiro. São as ações que mexem no orçado ou geram documento de
+ * pagamento — antes da abertura o job ainda pode ser devolvido, e nada
+ * disso pode ter saído.
+ */
+export function jobAceitaAcoesPlanilha(status: JobStatus): boolean {
+  return status === "aberto" || status === "em_producao";
+}
+
 export function jobStatusLabel(s: JobStatus): string {
   switch (s) {
     case "aguardando_abertura":

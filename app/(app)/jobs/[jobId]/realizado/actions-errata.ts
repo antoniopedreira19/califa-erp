@@ -11,7 +11,8 @@ import {
   TIPOS_CUSTO,
   aceitaBV,
 } from "@/lib/calculos/versao-totais";
-import type { TipoCusto } from "@/lib/types";
+import type { TipoCusto, JobStatus } from "@/lib/types";
+import { jobAceitaAcoesPlanilha } from "@/lib/types";
 
 type Ok = { ok: true; errataId: string };
 type Err = { ok: false; message: string };
@@ -167,7 +168,10 @@ export async function registrarErrata(
 
   if (jobErr || !job) return { ok: false, message: "Job não encontrado." };
 
-  if (job.status !== "aberto" && job.status !== "em_producao") {
+  // Errata continua exigindo o job ABERTO, mesmo agora que a planilha
+  // aparece na pré-abertura (17/08/2026): mexer no orçado antes de o
+  // financeiro conferir o job é justamente o que a abertura protege.
+  if (!jobAceitaAcoesPlanilha(job.status as JobStatus)) {
     await logAuditEvent({
       acao: "acao_negada",
       tenantId: session.activeTenant.id,
