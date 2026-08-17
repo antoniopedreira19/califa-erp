@@ -31,7 +31,7 @@ export function ContasReceberTabs({
           )}
         </TabButton>
         <TabButton active={tab === "titulos"} onClick={() => setTab("titulos")}>
-          A Receber
+          Títulos a Receber
           {titulosCount > 0 && (
             <span className="ml-1.5 inline-flex h-[17px] min-w-[17px] items-center justify-center rounded-full bg-california-red px-1 text-[10px] font-bold text-white">
               {titulosCount}
