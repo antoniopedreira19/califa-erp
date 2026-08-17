@@ -170,10 +170,13 @@ export default async function JobDetailPage({
     // Sem filtro de status: a trilha da Planilha Interna usa só as ativas,
     // mas a aba de Pedidos de Produção lista as canceladas também. Uma
     // query só em vez de duas.
+    // O embed de parcelas é leve de propósito: uma PP tem 1 a 3 parcelas
+    // na prática, e a aba de PPs precisa de TODAS elas (uma linha por
+    // vencimento). Query separada aqui só somaria round-trip.
     supabase
       .from("pedidos_compra")
       .select(
-        "*, emitido:profiles!emitida_por(nome), anexos:pedidos_compra_anexos(id, arquivo_nome_original, arquivo_tamanho_bytes)",
+        "*, emitido:profiles!emitida_por(nome), anexos:pedidos_compra_anexos(id, arquivo_nome_original, arquivo_tamanho_bytes), parcelas:pedidos_compra_parcelas(id, tenant_id, pedido_compra_id, numero, data_vencimento, valor, pdf_path, pago_em, pago_por, created_at, updated_at, created_by)",
       )
       .eq("job_id", raw.id)
       .eq("tenant_id", session.activeTenant.id)
@@ -336,6 +339,9 @@ export default async function JobDetailPage({
     valor: Number(pp.valor),
     emitida_por_nome: pp.emitido?.nome ?? null,
     grupo_nome: grupoPorItemRealizadoId.get(pp.item_realizado_id) ?? null,
+    parcelas: (pp.parcelas ?? [])
+      .map((p: any) => ({ ...p, valor: Number(p.valor ?? 0) }))
+      .sort((a: any, b: any) => a.numero - b.numero),
     anexos: (pp.anexos ?? []).map((a: any) => ({
       id: a.id,
       arquivo_nome_original: a.arquivo_nome_original,
@@ -343,11 +349,15 @@ export default async function JobDetailPage({
     })),
   }));
 
-  // A trilha da planilha só enxerga PP ativa: cancelada libera o item pra
-  // gerar de novo, então tem que voltar a mostrar "Gerar PP".
-  const ppsPorItemId = new Map<string, PedidoCompra>();
+  // Um item pode ter VÁRIAS PPs desde 17/08/2026 (PPs parciais), então o
+  // mapa guarda lista. A cancelada fica de fora: ela devolveu saldo ao
+  // item e não conta nem no chip nem na conta do painel.
+  const ppsPorItemId = new Map<string, PedidoCompra[]>();
   for (const pp of ppsDoJob) {
-    if (pp.status !== "cancelada") ppsPorItemId.set(pp.item_realizado_id, pp);
+    if (pp.status === "cancelada") continue;
+    const atuais = ppsPorItemId.get(pp.item_realizado_id) ?? [];
+    atuais.push(pp);
+    ppsPorItemId.set(pp.item_realizado_id, atuais);
   }
 
   const fornecedores = (fornecedoresRes.data ?? []) as any[];

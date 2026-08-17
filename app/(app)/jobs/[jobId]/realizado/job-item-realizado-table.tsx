@@ -18,6 +18,8 @@ import type {
 import { upsertItemRealizado, type CampoRealizado } from "../actions-realizado";
 import { CalhaLinha } from "./calha-linha";
 import { GerarPPDrawer } from "./gerar-pp-drawer";
+import { PainelPPsItem } from "./painel-pps-item";
+import { saldoDoItem, somaDasPPs } from "@/lib/calculos/pps-item";
 import { BvDialog } from "@/app/(app)/_bv/bv-dialog";
 import { acaoBv } from "@/app/(app)/_bv/bv-action-button";
 import { LARGURA_CALHA } from "@/app/(app)/_planilha/calha-acoes";
@@ -50,8 +52,8 @@ interface Props {
    *  Antes da abertura a planilha é visível e o realizado é editável,
    *  mas nada que vire documento pode ser criado. */
   podeAcoes: boolean;
-  // PP rail
-  ppsPorItemId: Map<string, PedidoCompra>;
+  // PP rail — várias PPs por item desde 17/08/2026 (PPs parciais).
+  ppsPorItemId: Map<string, PedidoCompra[]>;
   fornecedores: Array<Pick<Fornecedor, "id" | "nome" | "razao_social" | "status">>;
   empresas: Array<Pick<Empresa, "id" | "razao_social" | "nome_fantasia" | "ativo" | "principal">>;
   jobEmpresaId: string;
@@ -99,6 +101,15 @@ const GRADE_NEUTRA = "border-r border-r-[#f1f1f1]";
 
 const CAMPO_CLASSES =
   "h-7 w-full rounded-lg border border-california-red bg-white px-2 text-xs text-foreground outline-none ring-2 ring-california-red/15";
+
+/** Razão social quando existe — é o nome que o PDF da PP usa. */
+function nomeDoFornecedor(
+  fornecedores: Array<Pick<Fornecedor, "id" | "nome" | "razao_social">>,
+  id: string,
+): string {
+  const f = fornecedores.find((x) => x.id === id);
+  return f?.razao_social ?? f?.nome ?? "Fornecedor";
+}
 
 function parseNumero(raw: string): number | null {
   const s = raw.trim();
@@ -184,6 +195,7 @@ export function JobItemRealizadoTable({
   const faixaRef = React.useRef<HTMLTableRowElement>(null);
   const [railTop, setRailTop] = React.useState(0);
   const [faixaAltura, setFaixaAltura] = React.useState(0);
+  const [painelOpen, setPainelOpen] = React.useState(false);
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [itemIdAtual, setItemIdAtual] = React.useState<string | null>(null);
   const [bvAberto, setBvAberto] = React.useState<ItemPlanilhaJob | null>(null);
@@ -221,9 +233,10 @@ export function JobItemRealizadoTable({
     return () => observer.disconnect();
   }, [itens.length, editable, podeAcoes]);
 
-  function abrirDrawer(itemRealizadoId: string) {
+  /** O chip da calha abre o painel; o formulário só se chega por ele. */
+  function abrirPainel(itemRealizadoId: string) {
     setItemIdAtual(itemRealizadoId);
-    setDrawerOpen(true);
+    setPainelOpen(true);
   }
 
   // Descarta overrides quando o servidor devolve o mesmo valor.
@@ -636,7 +649,7 @@ export function JobItemRealizadoTable({
             // Pedidos de Produção é quem guarda o histórico.
             const realizado = realizadosMap.get(item.id);
             const realizadoId = realizado?.id ?? "";
-            const pp = ppsPorItemId.get(realizadoId) ?? null;
+            const ppsDoItem = ppsPorItemId.get(realizadoId) ?? [];
 
             return (
               <CalhaLinha
@@ -659,11 +672,12 @@ export function JobItemRealizadoTable({
                         totalRealizado: realizado
                           ? Number(realizado.total_realizado ?? 0)
                           : 0,
-                        pedido: pp,
-                        otimista: pp
-                          ? null
-                          : ppsOtimistas.get(realizadoId) ?? null,
-                        onGerar: abrirDrawer,
+                        pedidos: ppsDoItem,
+                        otimista:
+                          ppsDoItem.length > 0
+                            ? null
+                            : ppsOtimistas.get(realizadoId) ?? null,
+                        onAbrirPainel: abrirPainel,
                       }
                     : null
                 }
@@ -691,32 +705,78 @@ export function JobItemRealizadoTable({
           (i) => (realizadosMap.get(i.id)?.id ?? "") === itemIdAtual,
         );
         const realizadoAtual = itemAtual ? realizadosMap.get(itemAtual.id) : null;
+        const totalRealizado = realizadoAtual
+          ? Number(realizadoAtual.total_realizado ?? 0)
+          : 0;
+        const quantidadeRealizada = realizadoAtual
+          ? Number(realizadoAtual.quantidade_realizada ?? 0)
+          : 0;
+        const ppsDoItem = itemIdAtual
+          ? (ppsPorItemId.get(itemIdAtual) ?? [])
+          : [];
+        const emPPs = somaDasPPs(ppsDoItem);
+        const saldo = saldoDoItem(totalRealizado, ppsDoItem);
+
         return (
-          <GerarPPDrawer
-            open={drawerOpen}
-            onOpenChange={setDrawerOpen}
-            itemRealizadoId={itemIdAtual}
-            jobId={jobId}
-            fornecedores={fornecedores}
-            empresas={empresas}
-            defaultEmpresaId={jobEmpresaId}
-            itemDescricao={itemAtual?.item ?? ""}
-            valorRealizado={realizadoAtual ? Number(realizadoAtual.total_realizado ?? 0) : 0}
-            quantidadeRealizada={realizadoAtual ? Number(realizadoAtual.quantidade_realizada ?? 0) : 0}
-            onSuccess={(codigo) => {
-              setToast(`Pedido de Produção ${codigo} gerado com sucesso!`);
-              // Estado otimista: já mostra os ícones Ver/Cancelar antes do
-              // router.refresh() completar. Sem flicker quando a PP real
-              // chega via prop (ppsPorItemId do server).
-              if (itemIdAtual) {
-                setPpsOtimistas((prev) => {
-                  const next = new Map(prev);
-                  next.set(itemIdAtual, { codigo });
-                  return next;
-                });
+          <>
+            <PainelPPsItem
+              open={painelOpen}
+              onOpenChange={setPainelOpen}
+              itemNome={itemAtual?.item ?? ""}
+              grupoNome={grupoNome}
+              moeda={moeda}
+              totalRealizado={totalRealizado}
+              quantidadeRealizada={quantidadeRealizada}
+              pps={ppsDoItem.map((pp) => ({
+                id: pp.id,
+                codigo: pp.codigo,
+                status: pp.status,
+                fornecedorNome: nomeDoFornecedor(fornecedores, pp.fornecedor_id),
+                quantidade: Number(pp.quantidade ?? 0),
+                valor: Number(pp.valor ?? 0),
+              }))}
+              emPPs={emPPs}
+              saldo={saldo}
+              onNovaPP={
+                podeAcoes
+                  ? () => {
+                      // O painel some enquanto o formulário está aberto:
+                      // dois drawers empilhados na direita brigariam pelo
+                      // mesmo espaço.
+                      setPainelOpen(false);
+                      setDrawerOpen(true);
+                    }
+                  : null
               }
-            }}
-          />
+            />
+
+            <GerarPPDrawer
+              open={drawerOpen}
+              onOpenChange={setDrawerOpen}
+              itemRealizadoId={itemIdAtual}
+              jobId={jobId}
+              fornecedores={fornecedores}
+              empresas={empresas}
+              defaultEmpresaId={jobEmpresaId}
+              itemDescricao={itemAtual?.item ?? ""}
+              valorRealizado={totalRealizado}
+              quantidadeRealizada={quantidadeRealizada}
+              saldoDisponivel={saldo}
+              onSuccess={(codigo) => {
+                setToast(`Pedido de Produção ${codigo} gerado com sucesso!`);
+                // Estado otimista: o chip da calha já conta a PP nova antes
+                // do router.refresh() completar. Some sozinho quando a PP
+                // real chega via prop (ppsPorItemId do server).
+                if (itemIdAtual) {
+                  setPpsOtimistas((prev) => {
+                    const next = new Map(prev);
+                    next.set(itemIdAtual, { codigo });
+                    return next;
+                  });
+                }
+              }}
+            />
+          </>
         );
       })()}
 

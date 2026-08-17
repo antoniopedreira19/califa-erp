@@ -6,6 +6,14 @@ import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { gerarCodigoPP } from "@/lib/codigos/pedidos-compra";
+import {
+  valorDaPP,
+  saldoDoItem,
+  passaDoSaldo,
+  parcelasFecham,
+  dividirEmParcelas,
+  proximoVencimento,
+} from "@/lib/calculos/pps-item";
 // NÃO importar renderPedidoCompraPDF estaticamente. O módulo pedido-compra.ts
 // puxa pdfmake, que tem side-effects de inicialização que falham em runtime
 // serverless Vercel. Se importarmos aqui, TODAS as actions do arquivo caem
@@ -24,20 +32,46 @@ import {
 const BUCKET = "pedidos-compra";
 const PDF_TTL_SEGUNDOS = 3600;
 
+/** R$ nas mensagens de erro — o usuário lê valor, não número solto. */
+function brl(v: number): string {
+  return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
 type Ok<T = object> = { ok: true } & T;
 type Err = { ok: false; message: string };
 type Result<T = object> = Ok<T> | Err;
 
+const dataSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Data deve estar em YYYY-MM-DD");
+
+/** Teto de parcelas: 36 é 3 anos de mensais — acima disso é erro de
+ *  digitação, não parcelamento. Vale contra payload sem fim. */
+const MAX_PARCELAS = 36;
+
 const dadosSchema = z.object({
   fornecedor_id: z.string().uuid(),
   empresa_id: z.string().uuid(),
-  prazo_pagamento: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/, "Data deve estar em YYYY-MM-DD"),
+  // Vencimento da 1ª parcela. A parcela 1 SEMPRE repete esta data — o
+  // campo continua existindo em `pedidos_compra` porque é o que o
+  // financeiro e as views leem hoje.
+  prazo_pagamento: dataSchema,
   servico: z.string().trim().min(1).max(500),
+  // Quantidade do item que ESTA PP leva. Desde 17/08/2026 é ela que
+  // define o valor da PP (quantidade × R$/un do realizado), então deixou
+  // de ser texto solto do documento.
   quantidade: z.number().positive(),
   especificacoes: z.string().max(2000).nullable().optional(),
+  // Uma linha por parcela, sempre — PP sem parcelamento manda 1.
+  parcelas: z
+    .array(z.object({ data_vencimento: dataSchema, valor: z.number().positive() }))
+    .min(1, "Informe ao menos uma parcela.")
+    .max(MAX_PARCELAS, `No máximo ${MAX_PARCELAS} parcelas.`),
 });
+
+/** O reenvio corrige a PP mas não redefine o parcelamento: mesmo número
+ *  de parcelas, valores redivididos. Por isso não recebe `parcelas`. */
+const dadosReenvioSchema = dadosSchema.omit({ parcelas: true });
 
 const anexoUploadedSchema = z.object({
   anexo_id: z.string().uuid(),
@@ -156,6 +190,35 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
 }
 
 /**
+ * Quanto do realizado do item ainda pode virar PP.
+ *
+ * `excetoPPId` serve ao reenvio: a PP que está sendo corrigida não pode
+ * competir consigo mesma pelo saldo. Só o cancelamento devolve saldo —
+ * PP rejeitada continua ocupando, porque vai ser corrigida e reenviada.
+ */
+async function saldoDisponivelDoItem(
+  supabase: ReturnType<typeof createClient>,
+  tenantId: string,
+  itemRealizadoId: string,
+  totalRealizado: number,
+  excetoPPId?: string,
+): Promise<number> {
+  const query = supabase
+    .from("pedidos_compra")
+    .select("valor, status")
+    .eq("item_realizado_id", itemRealizadoId)
+    .eq("tenant_id", tenantId)
+    .neq("status", "cancelada");
+
+  const { data } = excetoPPId ? await query.neq("id", excetoPPId) : await query;
+
+  return saldoDoItem(
+    totalRealizado,
+    (data ?? []).map((pp) => ({ valor: Number(pp.valor), status: pp.status })),
+  );
+}
+
+/**
  * Fase 1 do fluxo: reserva um pp_id UUID e retorna o path prefix para
  * client fazer upload direto dos anexos pro bucket. NAO persiste no DB.
  */
@@ -187,19 +250,21 @@ async function reservarPedidoCompraImpl(
     return { ok: false, message: "Item ainda não tem realizado lançado." };
   }
 
-  // Rejeita se ja existe PP
-  const { data: ppExistente } = await supabase
-    .from("pedidos_compra")
-    .select("id")
-    .eq("item_realizado_id", itemRealizadoId)
-    .eq("tenant_id", session.activeTenant.id)
-    .maybeSingle();
-
-  if (ppExistente) {
+  // PP já existente não bloqueia mais: o item aceita quantas PPs forem
+  // necessárias, de quantos fornecedores forem (17/08/2026). O que
+  // bloqueia é o item já estar inteiro em PPs — sem saldo não há o que
+  // pedir, e o usuário merece saber disso ANTES de preencher o formulário.
+  const saldo = await saldoDisponivelDoItem(
+    supabase,
+    session.activeTenant.id,
+    itemRealizadoId,
+    Number(item.total_realizado ?? 0),
+  );
+  if (saldo <= 0) {
     return {
       ok: false,
       message:
-        "Já existe PP para este item. Cancele a atual antes de gerar outra.",
+        "O realizado deste item já está inteiro em PPs. Cancele uma PP ou aumente o realizado para pedir mais.",
     };
   }
 
@@ -249,6 +314,43 @@ async function finalizarPedidoCompraImpl(
     };
   }
   const d = dadosParsed.data;
+
+  // ---- Valor da PP e saldo do item ----
+  // O valor deixou de ser o realizado inteiro: é a fatia que ESTA PP
+  // leva, quantidade × R$/un do realizado. A soma das PPs não canceladas
+  // do item não pode passar do realizado — a mesma conta que o painel
+  // "Destrinchar realizado" mostra, e que o trigger do banco reforça.
+  const valor = valorDaPP(
+    d.quantidade,
+    Number(item.total_realizado ?? 0),
+    Number(item.quantidade_realizada ?? 0),
+  );
+  if (valor <= 0) {
+    return {
+      ok: false,
+      message: "Quantidade inválida: o valor da PP ficaria zerado.",
+    };
+  }
+
+  const saldo = await saldoDisponivelDoItem(
+    supabase,
+    session.activeTenant.id,
+    itemRealizadoId,
+    Number(item.total_realizado ?? 0),
+  );
+  if (passaDoSaldo(valor, saldo)) {
+    return {
+      ok: false,
+      message: `A PP de ${brl(valor)} passa do saldo do item. Máximo aceito: ${brl(saldo)}.`,
+    };
+  }
+
+  if (!parcelasFecham(d.parcelas.map((p) => p.valor), valor)) {
+    return {
+      ok: false,
+      message: `A soma das parcelas precisa fechar com o valor da PP (${brl(valor)}).`,
+    };
+  }
 
   // Valida anexos array
   if (anexos.length < 1) {
@@ -338,8 +440,10 @@ async function finalizarPedidoCompraImpl(
     servico: d.servico,
     quantidade: d.quantidade,
     especificacoes: d.especificacoes ?? null,
-    valor: Number(item.total_realizado),
-    prazo_pagamento: d.prazo_pagamento,
+    valor,
+    // Continua sendo o vencimento da 1ª parcela: é o que as views do
+    // financeiro leem hoje, e o que a Tela 3.2 vai reorganizar.
+    prazo_pagamento: d.parcelas[0].data_vencimento,
     pdf_path: "",
     emitida_por: session.profile.id,
   });
@@ -371,6 +475,37 @@ async function finalizarPedidoCompraImpl(
       .from(BUCKET)
       .remove(anexosParsed.data.map((a) => a.path));
     return { ok: false, message: `Falha ao salvar PP: ${insertErr.message}` };
+  }
+
+  // INSERT parcelas bulk (uma só ida ao banco, regra de PERFORMANCE.md).
+  // PP sem parcelamento grava 1 parcela 1/1: nenhuma PP fica sem parcela,
+  // e por isso as listas e o PDF tratam os dois casos do mesmo jeito.
+  const { error: parcelasErr } = await supabase
+    .from("pedidos_compra_parcelas")
+    .insert(
+      d.parcelas.map((p, i) => ({
+        tenant_id: session.activeTenant.id,
+        pedido_compra_id: pp_id,
+        numero: i + 1,
+        data_vencimento: p.data_vencimento,
+        valor: p.valor,
+        created_by: session.profile.id,
+      })),
+    );
+  if (parcelasErr) {
+    // Rollback: PP sem parcela seria PP invisível para o financeiro.
+    await supabase
+      .from("pedidos_compra")
+      .delete()
+      .eq("id", pp_id)
+      .eq("tenant_id", session.activeTenant.id);
+    await supabase.storage
+      .from(BUCKET)
+      .remove(anexosParsed.data.map((a) => a.path));
+    return {
+      ok: false,
+      message: `Falha ao salvar as parcelas: ${parcelasErr.message}`,
+    };
   }
 
   // INSERT anexos bulk
@@ -447,8 +582,8 @@ async function finalizarPedidoCompraImpl(
         servico: d.servico,
         quantidade: d.quantidade,
         especificacoes: d.especificacoes ?? null,
-        valor: Number(item.total_realizado),
-        prazo_pagamento: d.prazo_pagamento,
+        valor,
+        prazo_pagamento: d.parcelas[0].data_vencimento,
         created_at: new Date().toISOString(),
       },
       empresa: empRes.data as never,
@@ -531,7 +666,10 @@ async function finalizarPedidoCompraImpl(
     entidadeId: pp_id,
     metadata: {
       pp_codigo: codigo,
-      valor: Number(item.total_realizado),
+      valor,
+      quantidade: d.quantidade,
+      parcelas: d.parcelas.length,
+      saldo_do_item_antes: saldo,
       fornecedor_id: d.fornecedor_id,
       item_realizado_id: itemRealizadoId,
       job_id: job.id,
@@ -722,12 +860,19 @@ export async function prefixoAnexosPedidoCompra(
  * conferir, então não pode contradizer a PP. O código da PP não muda,
  * logo o path também não.
  *
- * `valor` não vem do formulário — continua espelhando o total_realizado
- * do item, igual na emissão.
+ * `valor` não vem do formulário: é calculado da quantidade, igual na
+ * emissão (quantidade × R$/un do realizado).
+ *
+ * O PARCELAMENTO não se refaz aqui — a quantidade de parcelas e os
+ * vencimentos foram combinados com o fornecedor na emissão. O que a
+ * correção pode mudar é o valor total, e nesse caso as parcelas são
+ * redivididas pela mesma regra do formulário (parte igual, sobra na
+ * última), mantendo número e datas. Quem quiser outro parcelamento
+ * cancela a PP e emite outra.
  */
 export async function reenviarPedidoCompra(
   pp_id: string,
-  dados: z.input<typeof dadosSchema>,
+  dados: z.input<typeof dadosReenvioSchema>,
   anexosNovos: z.input<typeof anexoUploadedSchema>[],
   anexosRemovidosIds: string[],
 ): Promise<Result> {
@@ -757,7 +902,7 @@ export async function reenviarPedidoCompra(
   if (!gate.ok) return gate;
   const { item, job } = gate;
 
-  const dadosParsed = dadosSchema.safeParse(dados);
+  const dadosParsed = dadosReenvioSchema.safeParse(dados);
   if (!dadosParsed.success) {
     return {
       ok: false,
@@ -872,7 +1017,34 @@ export async function reenviarPedidoCompra(
 
   const projeto = projetoRes.data as ProjetoEnriquecido;
   const orcamento = orcRes.data as { codigo: string } | null;
-  const valor = Number(item.total_realizado ?? 0);
+  // Valor recalculado da quantidade corrigida, e conferido contra o saldo
+  // SEM contar esta PP — ela já ocupa o saldo desde a emissão, e não pode
+  // competir consigo mesma.
+  const valor = valorDaPP(
+    d.quantidade,
+    Number(item.total_realizado ?? 0),
+    Number(item.quantidade_realizada ?? 0),
+  );
+  if (valor <= 0) {
+    return {
+      ok: false,
+      message: "Quantidade inválida: o valor da PP ficaria zerado.",
+    };
+  }
+
+  const saldoSemEsta = await saldoDisponivelDoItem(
+    supabase,
+    session.activeTenant.id,
+    ppRow.item_realizado_id,
+    Number(item.total_realizado ?? 0),
+    pp_id,
+  );
+  if (passaDoSaldo(valor, saldoSemEsta)) {
+    return {
+      ok: false,
+      message: `A PP de ${brl(valor)} passa do saldo do item. Máximo aceito: ${brl(saldoSemEsta)}.`,
+    };
+  }
 
   // ---- PDF novo, sobrescrevendo o antigo ----
   let pdfBuffer: Buffer;
@@ -941,6 +1113,43 @@ export async function reenviarPedidoCompra(
 
   if (updErr) {
     return { ok: false, message: `Falha ao reenviar PP: ${updErr.message}` };
+  }
+
+  // ---- Parcelas seguem a correção ----
+  // Número de parcelas não muda no reenvio (foi combinado com o
+  // fornecedor). O valor total pode ter mudado, então redivide pela mesma
+  // regra do formulário. As datas só se refazem se a 1ª mudou — assim
+  // vencimento que o GP ajustou à mão não é apagado sem motivo.
+  const { data: parcelasAtuais } = await supabase
+    .from("pedidos_compra_parcelas")
+    .select("id, numero, data_vencimento")
+    .eq("pedido_compra_id", pp_id)
+    .eq("tenant_id", session.activeTenant.id)
+    .order("numero", { ascending: true });
+
+  if (parcelasAtuais && parcelasAtuais.length > 0) {
+    const valores = dividirEmParcelas(valor, parcelasAtuais.length);
+    const primeiraMudou =
+      parcelasAtuais[0].data_vencimento.slice(0, 10) !== d.prazo_pagamento;
+
+    let vencimento = d.prazo_pagamento;
+    for (const [i, parcela] of parcelasAtuais.entries()) {
+      const data = primeiraMudou
+        ? vencimento
+        : parcela.data_vencimento.slice(0, 10);
+      const { error: updParcelaErr } = await supabase
+        .from("pedidos_compra_parcelas")
+        .update({ valor: valores[i], data_vencimento: data })
+        .eq("id", parcela.id)
+        .eq("tenant_id", session.activeTenant.id);
+      if (updParcelaErr) {
+        return {
+          ok: false,
+          message: `PP reenviada, mas as parcelas não foram atualizadas: ${updParcelaErr.message}`,
+        };
+      }
+      vencimento = proximoVencimento(vencimento);
+    }
   }
 
   if (anexosParsed.data.length > 0) {

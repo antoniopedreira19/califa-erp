@@ -21,7 +21,7 @@ interface Props {
   /** Trilha lateral de BV e Pedido de Produção — só com o job aberto. */
   podeAcoes: boolean;
   jobId: string;
-  ppsPorItemId: Map<string, PedidoCompra>;
+  ppsPorItemId: Map<string, PedidoCompra[]>;
   fornecedores: Array<Pick<Fornecedor, "id" | "nome" | "razao_social" | "status">>;
   empresas: Array<Pick<Empresa, "id" | "razao_social" | "nome_fantasia" | "ativo" | "principal">>;
   jobEmpresaId: string;

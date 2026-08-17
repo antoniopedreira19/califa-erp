@@ -303,7 +303,15 @@ export function PPDrawerFinanceiro({ pp, open, onOpenChange, contas, tipos, subt
                   {formatCurrency(pp.valor, "BRL")}
                 </span>
                 <span className="text-muted-foreground">Prazo Original</span>
-                <span>{formatDate(pp.prazo_pagamento)}</span>
+                <span>
+                  {formatDate(pp.prazo_pagamento)}
+                  {pp.parcelas.length > 1 && (
+                    <span className="text-muted-foreground">
+                      {" "}
+                      · 1ª de {pp.parcelas.length}
+                    </span>
+                  )}
+                </span>
                 <span className="text-muted-foreground">Emitida em</span>
                 <span>
                   {formatDate(pp.created_at)}
@@ -317,6 +325,35 @@ export function PPDrawerFinanceiro({ pp, open, onOpenChange, contas, tipos, subt
                 )}
               </div>
             </div>
+
+            {/* Parcelas — leitura. A baixa continua sendo da PP inteira
+                até a Tela 3.2 ("Títulos a Pagar"), mas o financeiro
+                precisa ver em quantas vezes vai pagar ANTES de aprovar. */}
+            {pp.parcelas.length > 1 && (
+              <div>
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Parcelas ({pp.parcelas.length})
+                </h3>
+                <ul className="divide-y divide-border rounded-lg border border-border">
+                  {pp.parcelas.map((p) => (
+                    <li
+                      key={p.numero}
+                      className="flex items-center justify-between gap-3 px-3 py-2 text-xs"
+                    >
+                      <span className="font-mono text-muted-foreground">
+                        {p.numero}/{pp.parcelas.length}
+                      </span>
+                      <span className="text-muted-foreground">
+                        vence em {formatDate(p.data_vencimento)}
+                      </span>
+                      <span className="ml-auto font-mono font-semibold">
+                        {formatCurrency(p.valor, "BRL")}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
             {/* Anexos */}
             {pp.anexos.length > 0 && (
