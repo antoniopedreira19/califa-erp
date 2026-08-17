@@ -37,6 +37,27 @@ function brl(v: number): string {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
+/**
+ * Caminho do PDF de UMA parcela, no mesmo prefixo da PP.
+ *
+ * PP de parcela única mantém o nome histórico (`pp-PP-00008.pdf`): é o
+ * caminho que as PPs já emitidas usam, e mudá-lo quebraria o link delas
+ * sem ganhar nada. Parcelada ganha o sufixo, que é o que distingue os
+ * documentos na hora de baixar.
+ */
+function caminhoPdfParcela(
+  tenantId: string,
+  jobId: string,
+  ppId: string,
+  codigo: string,
+  numero: number,
+  total: number,
+): string {
+  const nome =
+    total > 1 ? `pp-${codigo}-parcela-${numero}de${total}.pdf` : `pp-${codigo}.pdf`;
+  return `${tenantId}/${jobId}/${ppId}/${nome}`;
+}
+
 type Ok<T = object> = { ok: true } & T;
 type Err = { ok: false; message: string };
 type Result<T = object> = Ok<T> | Err;
@@ -480,7 +501,7 @@ async function finalizarPedidoCompraImpl(
   // INSERT parcelas bulk (uma só ida ao banco, regra de PERFORMANCE.md).
   // PP sem parcelamento grava 1 parcela 1/1: nenhuma PP fica sem parcela,
   // e por isso as listas e o PDF tratam os dois casos do mesmo jeito.
-  const { error: parcelasErr } = await supabase
+  const { data: parcelasCriadas, error: parcelasErr } = await supabase
     .from("pedidos_compra_parcelas")
     .insert(
       d.parcelas.map((p, i) => ({
@@ -491,7 +512,8 @@ async function finalizarPedidoCompraImpl(
         valor: p.valor,
         created_by: session.profile.id,
       })),
-    );
+    )
+    .select("id, numero, data_vencimento, valor");
   if (parcelasErr) {
     // Rollback: PP sem parcela seria PP invisível para o financeiro.
     await supabase
@@ -570,33 +592,60 @@ async function finalizarPedidoCompraImpl(
   const responsavelNome = projeto?.responsavel?.nome ?? "";
   const clienteNome = projeto?.cliente?.nome_fantasia ?? "";
 
-  // Renderiza PDF
-  let pdfBuffer: Buffer;
+  // ---- Um documento POR PARCELA (Tela 2.3) ----
+  // O fornecedor recebe um PDF por vencimento, e é ele que o financeiro
+  // confere na hora de pagar. Tudo idêntico entre eles, menos o Prazo de
+  // Pagto, a linha "Parcela: N/T" e o valor em destaque.
+  const parcelas = (parcelasCriadas ?? []).slice().sort((a, b) => a.numero - b.numero);
+  const documentos: Array<{ parcelaId: string; path: string; buffer: Buffer }> = [];
+
   try {
     // Import dinâmico: só carrega pdfmake QUANDO vai gerar PDF, isolando
     // seus side-effects de inicialização do resto do módulo.
     const { renderPedidoCompraPDF } = await import("@/lib/pdf/pedido-compra");
-    pdfBuffer = await renderPedidoCompraPDF({
-      pp: {
-        codigo,
-        servico: d.servico,
-        quantidade: d.quantidade,
-        especificacoes: d.especificacoes ?? null,
-        valor,
-        prazo_pagamento: d.parcelas[0].data_vencimento,
-        created_at: new Date().toISOString(),
-      },
-      empresa: empRes.data as never,
-      fornecedor: fornRes.data as never,
-      job: { nome: job.nome, produto: job.produto ?? "" },
-      projeto: {
-        codigo: projeto?.codigo ?? "",
-        campanha: projeto?.campanha ?? null,
-      },
-      orcamento: { codigo: orcamento?.codigo ?? "" },
-      cliente: { nome_fantasia: clienteNome },
-      responsavelNome,
-    });
+    const emitidoEm = new Date().toISOString();
+
+    for (const parcela of parcelas) {
+      const buffer = await renderPedidoCompraPDF({
+        pp: {
+          codigo,
+          servico: d.servico,
+          quantidade: d.quantidade,
+          especificacoes: d.especificacoes ?? null,
+          valor,
+          prazo_pagamento: parcela.data_vencimento,
+          created_at: emitidoEm,
+        },
+        empresa: empRes.data as never,
+        fornecedor: fornRes.data as never,
+        job: { nome: job.nome, produto: job.produto ?? "" },
+        projeto: {
+          codigo: projeto?.codigo ?? "",
+          campanha: projeto?.campanha ?? null,
+        },
+        orcamento: { codigo: orcamento?.codigo ?? "" },
+        cliente: { nome_fantasia: clienteNome },
+        responsavelNome,
+        parcela: {
+          numero: parcela.numero,
+          total: parcelas.length,
+          data_vencimento: parcela.data_vencimento,
+          valor: Number(parcela.valor),
+        },
+      });
+      documentos.push({
+        parcelaId: parcela.id,
+        path: caminhoPdfParcela(
+          session.activeTenant.id,
+          job.id,
+          pp_id,
+          codigo,
+          parcela.numero,
+          parcelas.length,
+        ),
+        buffer,
+      });
+    }
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     await supabase
@@ -610,27 +659,50 @@ async function finalizarPedidoCompraImpl(
     return { ok: false, message: `Falha ao gerar PDF: ${msg}` };
   }
 
-  const pdfPath = `${session.activeTenant.id}/${job.id}/${pp_id}/pp-${codigo}.pdf`;
-  const { error: uploadErr } = await supabase.storage
-    .from(BUCKET)
-    .upload(pdfPath, pdfBuffer, {
-      contentType: "application/pdf",
-      upsert: false,
-    });
-
-  if (uploadErr) {
-    await supabase
-      .from("pedidos_compra")
-      .delete()
-      .eq("id", pp_id)
-      .eq("tenant_id", session.activeTenant.id);
-    await supabase.storage
+  for (const doc of documentos) {
+    const { error: uploadErr } = await supabase.storage
       .from(BUCKET)
-      .remove(anexosParsed.data.map((a) => a.path));
-    return {
-      ok: false,
-      message: `Falha ao subir PDF: ${uploadErr.message}`,
-    };
+      .upload(doc.path, doc.buffer, {
+        contentType: "application/pdf",
+        upsert: false,
+      });
+
+    if (uploadErr) {
+      // Rollback inteiro: PP com metade dos documentos é pior que PP
+      // nenhuma — o fornecedor receberia parcela sem papel.
+      await supabase
+        .from("pedidos_compra")
+        .delete()
+        .eq("id", pp_id)
+        .eq("tenant_id", session.activeTenant.id);
+      await supabase.storage
+        .from(BUCKET)
+        .remove([
+          ...documentos.map((x) => x.path),
+          ...anexosParsed.data.map((a) => a.path),
+        ]);
+      return {
+        ok: false,
+        message: `Falha ao subir PDF: ${uploadErr.message}`,
+      };
+    }
+  }
+
+  // Cada parcela guarda o caminho do SEU documento; `pedidos_compra.pdf_path`
+  // segue apontando para o da primeira, que é o que as telas do financeiro
+  // abrem hoje quando falam "a PP".
+  const pdfPath = documentos[0]?.path ?? "";
+  for (const doc of documentos) {
+    const { error: errPath } = await supabase
+      .from("pedidos_compra_parcelas")
+      .update({ pdf_path: doc.path })
+      .eq("id", doc.parcelaId)
+      .eq("tenant_id", session.activeTenant.id);
+    if (errPath) {
+      // Documento existe no bucket; só o ponteiro falhou. Não desfaz a
+      // PP por isso — avisa, que é o padrão das falhas parciais daqui.
+      console.error("[pp.parcela.pdf_path]", errPath.message);
+    }
   }
 
   // Update pdf_path + fornecedor no realizado
@@ -646,7 +718,10 @@ async function finalizarPedidoCompraImpl(
   if (updPP.error || updReal.error) {
     await supabase.storage
       .from(BUCKET)
-      .remove([pdfPath, ...anexosParsed.data.map((a) => a.path)]);
+      .remove([
+        ...documentos.map((x) => x.path),
+        ...anexosParsed.data.map((a) => a.path),
+      ]);
     await supabase
       .from("pedidos_compra")
       .delete()
@@ -1046,50 +1121,104 @@ export async function reenviarPedidoCompra(
     };
   }
 
-  // ---- PDF novo, sobrescrevendo o antigo ----
-  let pdfBuffer: Buffer;
+  // ---- Parcelas: valores redivididos, datas conforme a 1ª ----
+  // Precisa vir ANTES do PDF: cada documento carrega o vencimento e o
+  // valor da SUA parcela, então os números têm que estar decididos.
+  const { data: parcelasAtuais } = await supabase
+    .from("pedidos_compra_parcelas")
+    .select("id, numero, data_vencimento")
+    .eq("pedido_compra_id", pp_id)
+    .eq("tenant_id", session.activeTenant.id)
+    .order("numero", { ascending: true });
+
+  const parcelas = parcelasAtuais ?? [];
+  const valores = dividirEmParcelas(valor, Math.max(parcelas.length, 1));
+  const primeiraMudou =
+    parcelas.length > 0 &&
+    parcelas[0].data_vencimento.slice(0, 10) !== d.prazo_pagamento;
+
+  const parcelasNovas = parcelas.map((parcela, i) => {
+    let data = parcela.data_vencimento.slice(0, 10);
+    if (primeiraMudou) {
+      data = d.prazo_pagamento;
+      for (let k = 0; k < i; k++) data = proximoVencimento(data);
+    }
+    return {
+      id: parcela.id,
+      numero: parcela.numero,
+      data_vencimento: data,
+      valor: valores[i],
+    };
+  });
+
+  // ---- PDFs novos, sobrescrevendo os antigos ----
+  // Um por parcela, como na emissão. Aqui o snapshot É regerado de
+  // propósito: a PP foi corrigida, e o papel que o fornecedor recebe não
+  // pode contradizer o que o financeiro vai aprovar.
+  const documentos: Array<{ parcelaId: string; path: string; buffer: Buffer }> = [];
   try {
     const { renderPedidoCompraPDF } = await import("@/lib/pdf/pedido-compra");
-    pdfBuffer = await renderPedidoCompraPDF({
-      pp: {
-        codigo: ppRow.codigo,
-        servico: d.servico,
-        quantidade: d.quantidade,
-        especificacoes: d.especificacoes ?? null,
-        valor,
-        prazo_pagamento: d.prazo_pagamento,
-        created_at: new Date().toISOString(),
-      },
-      empresa: empRes.data as never,
-      fornecedor: fornRes.data as never,
-      job: { nome: job.nome, produto: job.produto ?? "" },
-      projeto: {
-        codigo: projeto?.codigo ?? "",
-        campanha: projeto?.campanha ?? null,
-      },
-      orcamento: { codigo: orcamento?.codigo ?? "" },
-      cliente: { nome_fantasia: projeto?.cliente?.nome_fantasia ?? "" },
-      responsavelNome: projeto?.responsavel?.nome ?? "",
-    });
+    const emitidoEm = new Date().toISOString();
+
+    for (const parcela of parcelasNovas) {
+      const buffer = await renderPedidoCompraPDF({
+        pp: {
+          codigo: ppRow.codigo,
+          servico: d.servico,
+          quantidade: d.quantidade,
+          especificacoes: d.especificacoes ?? null,
+          valor,
+          prazo_pagamento: parcela.data_vencimento,
+          created_at: emitidoEm,
+        },
+        empresa: empRes.data as never,
+        fornecedor: fornRes.data as never,
+        job: { nome: job.nome, produto: job.produto ?? "" },
+        projeto: {
+          codigo: projeto?.codigo ?? "",
+          campanha: projeto?.campanha ?? null,
+        },
+        orcamento: { codigo: orcamento?.codigo ?? "" },
+        cliente: { nome_fantasia: projeto?.cliente?.nome_fantasia ?? "" },
+        responsavelNome: projeto?.responsavel?.nome ?? "",
+        parcela: {
+          numero: parcela.numero,
+          total: parcelasNovas.length,
+          data_vencimento: parcela.data_vencimento,
+          valor: parcela.valor,
+        },
+      });
+      documentos.push({
+        parcelaId: parcela.id,
+        path: caminhoPdfParcela(
+          session.activeTenant.id,
+          job.id,
+          pp_id,
+          ppRow.codigo,
+          parcela.numero,
+          parcelasNovas.length,
+        ),
+        buffer,
+      });
+    }
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     return { ok: false, message: `Falha ao gerar PDF: ${msg}` };
   }
 
-  const pdfPath =
-    ppRow.pdf_path ||
-    `${session.activeTenant.id}/${job.id}/${pp_id}/pp-${ppRow.codigo}.pdf`;
-
-  const { error: uploadErr } = await supabase.storage
-    .from(BUCKET)
-    .upload(pdfPath, pdfBuffer, {
-      contentType: "application/pdf",
-      upsert: true,
-    });
-
-  if (uploadErr) {
-    return { ok: false, message: `Falha ao subir PDF: ${uploadErr.message}` };
+  for (const doc of documentos) {
+    const { error: uploadErr } = await supabase.storage
+      .from(BUCKET)
+      .upload(doc.path, doc.buffer, {
+        contentType: "application/pdf",
+        upsert: true,
+      });
+    if (uploadErr) {
+      return { ok: false, message: `Falha ao subir PDF: ${uploadErr.message}` };
+    }
   }
+
+  const pdfPath = documentos[0]?.path ?? ppRow.pdf_path;
 
   // ---- Persiste: PP volta pra avaliação, rejeição some do registro ----
   const { error: updErr } = await supabase
@@ -1115,40 +1244,21 @@ export async function reenviarPedidoCompra(
     return { ok: false, message: `Falha ao reenviar PP: ${updErr.message}` };
   }
 
-  // ---- Parcelas seguem a correção ----
-  // Número de parcelas não muda no reenvio (foi combinado com o
-  // fornecedor). O valor total pode ter mudado, então redivide pela mesma
-  // regra do formulário. As datas só se refazem se a 1ª mudou — assim
-  // vencimento que o GP ajustou à mão não é apagado sem motivo.
-  const { data: parcelasAtuais } = await supabase
-    .from("pedidos_compra_parcelas")
-    .select("id, numero, data_vencimento")
-    .eq("pedido_compra_id", pp_id)
-    .eq("tenant_id", session.activeTenant.id)
-    .order("numero", { ascending: true });
-
-  if (parcelasAtuais && parcelasAtuais.length > 0) {
-    const valores = dividirEmParcelas(valor, parcelasAtuais.length);
-    const primeiraMudou =
-      parcelasAtuais[0].data_vencimento.slice(0, 10) !== d.prazo_pagamento;
-
-    let vencimento = d.prazo_pagamento;
-    for (const [i, parcela] of parcelasAtuais.entries()) {
-      const data = primeiraMudou
-        ? vencimento
-        : parcela.data_vencimento.slice(0, 10);
-      const { error: updParcelaErr } = await supabase
-        .from("pedidos_compra_parcelas")
-        .update({ valor: valores[i], data_vencimento: data })
-        .eq("id", parcela.id)
-        .eq("tenant_id", session.activeTenant.id);
-      if (updParcelaErr) {
-        return {
-          ok: false,
-          message: `PP reenviada, mas as parcelas não foram atualizadas: ${updParcelaErr.message}`,
-        };
-      }
-      vencimento = proximoVencimento(vencimento);
+  for (const [i, parcela] of parcelasNovas.entries()) {
+    const { error: updParcelaErr } = await supabase
+      .from("pedidos_compra_parcelas")
+      .update({
+        valor: parcela.valor,
+        data_vencimento: parcela.data_vencimento,
+        pdf_path: documentos[i]?.path ?? null,
+      })
+      .eq("id", parcela.id)
+      .eq("tenant_id", session.activeTenant.id);
+    if (updParcelaErr) {
+      return {
+        ok: false,
+        message: `PP reenviada, mas as parcelas não foram atualizadas: ${updParcelaErr.message}`,
+      };
     }
   }
 
@@ -1240,6 +1350,43 @@ export async function signedUrlPdf(
   const { data, error } = await supabase.storage
     .from(BUCKET)
     .createSignedUrl(pp.pdf_path, PDF_TTL_SEGUNDOS);
+
+  if (error || !data)
+    return { ok: false, message: error?.message ?? "Falha URL" };
+  return { ok: true, url: data.signedUrl };
+}
+
+/**
+ * URL assinada do documento de UMA parcela (Tela 2.3).
+ *
+ * Cada linha de parcela baixa o SEU papel — o que tem o vencimento e o
+ * valor dela. PP legada cai no `pdf_path` que a migration backfillou, que
+ * é o documento único de sempre; e se a parcela ainda não tiver caminho
+ * (falha no ponteiro durante a emissão), cai no da PP, que existe.
+ */
+export async function signedUrlPdfParcela(
+  parcela_id: string,
+): Promise<Result<{ url: string }>> {
+  const session = await requireSession();
+  const supabase = createClient();
+
+  const { data: parcela } = await supabase
+    .from("pedidos_compra_parcelas")
+    .select("pdf_path, pedido:pedidos_compra(pdf_path)")
+    .eq("id", parcela_id)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle<{ pdf_path: string | null; pedido: { pdf_path: string } | null }>();
+
+  if (!parcela) return { ok: false, message: "Parcela não encontrada." };
+
+  const caminho = parcela.pdf_path || parcela.pedido?.pdf_path;
+  if (!caminho) {
+    return { ok: false, message: "PDF ainda não disponível para esta parcela." };
+  }
+
+  const { data, error } = await supabase.storage
+    .from(BUCKET)
+    .createSignedUrl(caminho, PDF_TTL_SEGUNDOS);
 
   if (error || !data)
     return { ok: false, message: error?.message ?? "Falha URL" };
