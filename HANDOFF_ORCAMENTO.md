@@ -36,6 +36,7 @@ Registro da implementação dos design handoffs aprovados para o módulo de Orç
 | **17 — Cidade e Regional editáveis na abertura + modal inteiro visível** | ✅ `40881a7` (2026-08-12) |
 | **18 — Funil comercial nas listas, Valor do Job e GPs Responsáveis** | ✅ `d078f8a` + `63c258f` + `9018e3a` (2026-08-17) |
 | **19 — Editor multi-jobs: novo no topo, orçado zerado bloqueia, categoria obrigatória** | ✅ (2026-08-17) |
+| **20 — Tela da versão: grupo automático na v1, Status fora do drawer, aprovação exige orçado** | ✅ (2026-08-17) |
 
 `tsc --noEmit` e `next lint` limpos em todas. Entregas 4, 5, 8 a 13
 também com `next build` completo. As Entregas 8 e 10 a 13 são as únicas
@@ -1747,3 +1748,51 @@ Três alterações independentes:
 **Verificação no navegador** (dev server, sessão real, projeto
 TESTE-0003/26): ver seção "Registro de testes" do plano local. `next
 lint` e `npm run build` limpos.
+
+## 22. Entrega 20 — Tela da versão: grupo automático na v1, Status fora do drawer, aprovação exige orçado (2026-08-17)
+
+**Origem:** plano local de alterações de telas (Grupo B, Tela 1.5).
+Regra do orçado na
+[decisão 011](docs/decisions/011-orcado-obrigatorio-para-salvar-e-aprovar.md);
+o grupo automático é adendo datado na
+[decisão 007](docs/decisions/007-nome-da-versao-e-v1-automatica.md).
+
+Três alterações:
+
+1. **A v1 criada junto do orçamento já nasce com o grupo "Novo grupo"**
+   (`criarVersaoInicial` em `[projetoId]/actions.ts`): insert em
+   `versoes_orcamento_grupos` com ordem 1, mesmo nome default do "Criar
+   planilha" do multi. A tela da versão abre com a linha "Novo item"
+   pronta. Falha no insert loga e segue (usuário cria o grupo na mão);
+   item vazio não é criado. "Nova versão" e "Duplicar versão" intactos.
+2. **O drawer "Editar dados da versão" perdeu o campo Status** — o status
+   da versão passou a ser 100% do sistema (aprovada → aprovação;
+   substituída → cascata; cancelada → `cancelarVersao`). No servidor,
+   `extractVersaoPartial` **ignora** `status` vindo do FormData (mesmo
+   padrão do `nome`), então bypass do form não altera nada. `criarVersao`
+   continua nascendo "rascunho". `VERSAO_STATUS_EDITAVEIS` segue exportado
+   em `lib/types.ts` (o `versaoSchema` de `criarVersao` ainda o usa), mas
+   nenhuma tela oferece mais o campo.
+3. **Aprovar versão bloqueia com R$ unitário orçado zerado** — decisão
+   011. `bloqueioAprovacaoVersao` ganhou `qtdItensOrcadoZerado` (mensagem
+   única para botão e servidor); `aprovarVersao` conta os zerados numa
+   terceira query do mesmo `Promise.all` (`.eq("valor_unitario_orcado",
+   0)`); a page passa a contagem ao `FluxoAbertura`, que desabilita o
+   botão com o motivo no `title`. **Planejado zerado não bloqueia.** As
+   checagens anteriores (alíquota, ≥1 item, ≥1 item com valor)
+   permanecem.
+
+**Nota (falso alarme investigado em 16/08):** os honorários do cliente
+SÃO gravados corretamente na v1; o que bloqueava aprovação era a alíquota
+nascendo em 0% — comportamento correto por decisão 006, mantido como
+está. Nenhuma mudança em `lib/impostos.ts` ou na exigência da alíquota.
+
+**Verificação no navegador** (dev server, sessão real, projeto
+TESTE-0003/26): alterações 1 e 2 conferidas de ponta a ponta; da
+alteração 3, a cadeia de bloqueios foi vista ativa, mas a mensagem
+específica do orçado zerado (caso misto: item com valor + item zerado)
+ficou para a **etapa final de testes** — decisão do Tiago de 17/08:
+a partir do Grupo B, a conferência completa no navegador é consolidada
+numa rodada única ao fim do plano de alterações. Detalhes na seção
+"Registro de testes" do plano local. `next lint` e `npm run build`
+limpos.

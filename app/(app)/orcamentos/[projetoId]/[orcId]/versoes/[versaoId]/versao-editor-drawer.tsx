@@ -26,12 +26,7 @@ import {
   formatarAliquota,
   valorInicialAliquota,
 } from "@/lib/impostos";
-import {
-  VERSAO_STATUS_EDITAVEIS,
-  versaoStatusLabel,
-  type VersaoOrcamento,
-  type VersaoOrcamentoStatus,
-} from "@/lib/types";
+import { type VersaoOrcamento } from "@/lib/types";
 import { atualizarVersao, type ActionResult } from "../actions";
 
 interface Props {
@@ -60,9 +55,6 @@ export function VersaoEditorDrawer({
   const [fieldErrors, setFieldErrors] = React.useState<Record<string, string[]>>(
     {},
   );
-  const [status, setStatus] = React.useState<VersaoOrcamentoStatus>(
-    VERSAO_STATUS_EDITAVEIS.includes(versao.status) ? versao.status : "rascunho",
-  );
   // Versão legada (0, 19,54, 20) abre vazia: a lista não tem esse valor e
   // salvar exige escolher uma das alíquotas atuais.
   const [imposto, setImposto] = React.useState(() =>
@@ -75,7 +67,9 @@ export function VersaoEditorDrawer({
     setFieldErrors({});
 
     const formData = new FormData(e.currentTarget);
-    formData.set("status", status);
+    // Status não é enviado: desde 17/08/2026 ele é 100% do sistema
+    // (aprovação, cascata de substituídas, cancelamento) e a action
+    // ignora o campo mesmo que um form o mande.
     // Em branco preserva a alíquota atual, igual aos demais campos do drawer.
     // Escolher só vira obrigatório na aprovação.
     if (imposto !== "") formData.set("percentual_imposto", imposto);
@@ -188,24 +182,6 @@ export function VersaoEditorDrawer({
                 </Select>
               </Field>
             </div>
-
-            <Field label="Status" name="status" errors={fieldErrors}>
-              <Select
-                value={status}
-                onValueChange={(v) => setStatus(v as VersaoOrcamentoStatus)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {VERSAO_STATUS_EDITAVEIS.map((s) => (
-                    <SelectItem key={s} value={s}>
-                      {versaoStatusLabel(s)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
 
             {error && (
               <div className="flex items-start gap-2 rounded-xl border border-california-red/20 bg-california-red/5 px-4 py-3 text-sm text-california-red">

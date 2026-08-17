@@ -521,6 +521,9 @@ export default async function VersaoDetailPage({
         qtdGrupos={grupos.length}
         qtdItens={itens.length}
         qtdItensComValor={itens.filter((i) => i.total_orcado > 0).length}
+        qtdItensOrcadoZerado={
+          itens.filter((i) => Number(i.valor_unitario_orcado) === 0).length
+        }
         percentualImposto={Number(versao.percentual_imposto)}
         custoPlanejado={custoPlanejado}
         faturamentoPrevisto={totais.faturamentoPrevisto}

@@ -50,6 +50,9 @@ interface Props {
   qtdItens: number;
   /** Itens com total orçado > 0 — linha começada e vazia não conta. */
   qtdItensComValor: number;
+  /** Itens com R$ unitário orçado = 0 — qualquer um bloqueia a aprovação
+   *  (docs/decisions/011); planejado zerado não bloqueia. */
+  qtdItensOrcadoZerado: number;
   /** Alíquota gravada na versão, para checar se saiu do seletor. */
   percentualImposto: number;
   custoPlanejado: number;
@@ -86,6 +89,7 @@ export function FluxoAbertura({
   qtdGrupos,
   qtdItens,
   qtdItensComValor,
+  qtdItensOrcadoZerado,
   percentualImposto,
   custoPlanejado,
   faturamentoPrevisto,
@@ -119,6 +123,7 @@ export function FluxoAbertura({
     percentualImposto,
     qtdItens,
     qtdItensComValor,
+    qtdItensOrcadoZerado,
   });
   const aprovada = versaoStatus === "aprovada";
   const etapa: "rascunho" | "aprovada" | "enviada" = job

@@ -69,7 +69,14 @@ Criar um orçamento agora:
 1. grava o orçamento;
 2. cria a **v1 em rascunho** — honorários do cadastro do cliente, BRL,
    câmbio 1, **sem alíquota**;
-3. redireciona para a planilha dessa v1.
+3. ⚠️ *(17/08/2026)* cria o **primeiro grupo** da v1 ("Novo grupo",
+   ordem 1 — o mesmo default do "Criar planilha" do editor multi), para a
+   tela abrir com a linha "Novo item" pronta em vez de exigir o clique em
+   "Novo grupo" antes de digitar. Item vazio NÃO é criado: item
+   persistido tem validação de conteúdo. Falha no insert do grupo não
+   desfaz nada — loga e segue, no mesmo degrau seguro do item abaixo. Só
+   a v1 da criação: "Nova versão" e "Duplicar versão" não mudam;
+4. redireciona para a planilha dessa v1.
 
 Antes, criar um orçamento levava para uma lista de versões vazia e exigia
 um segundo passo — "Nova versão" — que nunca teve escolha real: a
