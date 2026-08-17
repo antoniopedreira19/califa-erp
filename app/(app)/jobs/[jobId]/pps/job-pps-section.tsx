@@ -12,7 +12,11 @@ import {
   type PedidoCompraParcela,
   type PPStatus,
 } from "@/lib/types";
-import { cancelarPedidoCompra, signedUrlPdf } from "../realizado/actions-pp";
+import {
+  cancelarPedidoCompra,
+  signedUrlPdfParcela,
+  signedUrlPdf,
+} from "../realizado/actions-pp";
 import { PPStatusChip } from "./pp-status-chip";
 import { EditarPPDrawer } from "./editar-pp-drawer";
 
@@ -177,9 +181,12 @@ export function JobPPsSection({
     total: ativas.reduce((s, p) => s + Number(p.valor ?? 0), 0),
   };
 
-  function handleVer(pp: PedidoCompraNaLista) {
+  /** Cada linha baixa o documento da SUA parcela (Tela 2.3). */
+  function handleVer(pp: PedidoCompraNaLista, parcelaId: string | null) {
     startTransition(async () => {
-      const res = await signedUrlPdf(pp.id);
+      const res = parcelaId
+        ? await signedUrlPdfParcela(parcelaId)
+        : await signedUrlPdf(pp.id);
       if (!res.ok) {
         setErro(res.message);
         return;
@@ -366,12 +373,11 @@ export function JobPPsSection({
                       <PPStatusChip status={pp.status} />
                     </td>
                     <td className="px-3.5">
-                      {/* Editar e Ver PDF são da PP inteira, então só a
-                          primeira parcela os mostra — repetir em cada
-                          linha sugeriria ação por parcela, que só existe
-                          a partir da Tela 3.2. */}
-                      <div className={cn("flex items-center justify-end gap-1.5", indice > 0 && "invisible")}>
-                        {editable && pp.status === "rejeitada" && (
+                      {/* Ver PDF é de CADA parcela (Tela 2.3): cada uma
+                          tem seu documento. Editar é da PP inteira, então
+                          só a primeira linha o mostra. */}
+                      <div className="flex items-center justify-end gap-1.5">
+                        {editable && pp.status === "rejeitada" && indice === 0 && (
                           <button
                             type="button"
                             onClick={() => setPpEditando(pp)}
@@ -385,14 +391,17 @@ export function JobPPsSection({
                           <TooltipTrigger asChild>
                             <button
                               type="button"
-                              onClick={() => handleVer(pp)}
+                              onClick={() => handleVer(pp, parcela?.id ?? null)}
                               disabled={pending}
                               className="inline-flex items-center justify-center rounded-lg border border-border bg-white p-1.5 text-muted-foreground hover:bg-muted disabled:opacity-50"
                             >
                               <Eye className="h-3.5 w-3.5" />
                             </button>
                           </TooltipTrigger>
-                          <TooltipContent>Ver PDF · {pp.codigo}</TooltipContent>
+                          <TooltipContent>
+                            Ver PDF · {pp.codigo}
+                            {total > 1 ? ` · parcela ${indice + 1}/${total}` : ""}
+                          </TooltipContent>
                         </Tooltip>
                       </div>
                     </td>

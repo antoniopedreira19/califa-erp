@@ -1404,3 +1404,64 @@ fixo e `security invoker`. Os ERROR/WARN da lista são pré-existentes
 `npm run build` limpos. Trigger exercitado no banco. **Sem verificação no
 navegador** — consolidada na etapa final do plano, por decisão do Tiago
 em 17/08/2026.
+
+---
+
+## 34. PDF da PP: um documento por parcela (2026-08-17)
+
+Depende da entrega 33. Sem migration própria: a coluna
+`pedidos_compra_parcelas.pdf_path` já nasceu na migration `20260817000002`.
+
+### O que mudou
+
+**Um PDF por parcela, arquivado na emissão.** O gerador roda uma vez por
+parcela e cada documento vai para o bucket com nome próprio
+(`pp-PP-00008-parcela-2de3.pdf`); o caminho fica na linha da parcela. PP
+de parcela única mantém o nome histórico (`pp-PP-00008.pdf`) — mudar
+quebraria o link das PPs já emitidas sem ganhar nada.
+
+**O que muda entre os documentos da mesma PP:** só três coisas.
+
+| Campo | Comportamento |
+|---|---|
+| Prazo de Pagto | vencimento DAQUELA parcela |
+| Parcela: N/T | linha nova, logo abaixo do prazo, **sempre presente** (inclusive `1/1`) |
+| Valor | o valor da parcela em destaque; em PP parcelada, "Valor total do pedido" logo abaixo, em peso normal |
+
+Todo o resto (código, emissão, fornecedor, serviço, especificações,
+dados bancários) é idêntico.
+
+**`renderPedidoCompraPDF` ganhou o parâmetro `parcela`** — obrigatório.
+Não há assinatura antiga sobrevivendo: PP sem parcelamento manda `1/1`, e
+o documento sai com o mesmo desenho. Padrão uniforme é o que evita o
+fornecedor achar que "sem parcela" significa outra coisa.
+
+**Cada linha baixa o seu papel.** A aba de PPs do job mostra o botão de
+PDF em TODA linha de parcela (Editar e Cancelar seguem só na primeira,
+porque são da PP inteira), chamando a action nova
+`signedUrlPdfParcela`. Ela cai no `pdf_path` da PP quando a parcela não
+tem caminho — o que cobre as 8 PPs legadas, cuja parcela 1/1 aponta para
+o documento único de sempre, sem regerar nada.
+
+**Reenvio de PP rejeitada regera os N documentos**, sobrescrevendo. Não
+é quebra do snapshot: o reenvio já regerava o PDF desde a entrega 2,
+porque o papel que vai ao fornecedor não pode contradizer o que o
+financeiro vai aprovar. Falha de upload no meio da EMISSÃO desfaz a PP
+inteira — PP com metade dos documentos seria pior que PP nenhuma.
+
+### Arquivos
+
+| Arquivo | Mudança |
+|---|---|
+| `lib/pdf/pedido-compra.ts` | parâmetro `parcela`; linha "Parcela: N/T"; bloco de valor com destaque na parcela e total como secundário |
+| `realizado/actions-pp.ts` | emissão e reenvio em laço por parcela; `caminhoPdfParcela`; `signedUrlPdfParcela` |
+| `pps/job-pps-section.tsx` | botão de PDF por linha de parcela |
+
+### Verificação
+
+`tsc --noEmit`, `next lint` (só os 2 avisos pré-existentes) e
+`npm run build` limpos. **Sem verificação no navegador** — consolidada na
+etapa final do plano. ⚠️ **Não exercitado:** a emissão real de uma PP
+parcelada (gerar 3 PDFs e abrir cada um) — depende de criar PP de
+verdade, com anexo, num job aberto. É o primeiro caso a rodar na etapa
+final.
