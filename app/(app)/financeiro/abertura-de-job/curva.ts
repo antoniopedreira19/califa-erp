@@ -1,9 +1,13 @@
 /**
- * Curva de desembolso: em que datas o custo previsto do job sai do caixa.
+ * As duas previsões da abertura do job:
+ *
+ *   * curva de desembolso — em que datas o custo previsto SAI do caixa;
+ *   * previsão de recebimento — em que datas o faturamento previsto
+ *     ENTRA no caixa (seção no fim do arquivo).
  *
  * Funções puras, compartilhadas entre o formulário (client) e a Server
- * Action (server). A ação NÃO confia na conta do navegador — refaz a
- * soma daqui com o custo previsto lido do banco.
+ * Action (server). A ação NÃO confia na conta do navegador — refaz as
+ * somas daqui com os totais lidos do banco.
  *
  * Datas circulam sempre como `yyyy-mm-dd` e a aritmética usa UTC, para
  * o dia não escorregar conforme o fuso de quem executa.
@@ -199,6 +203,46 @@ export function proximaDataSugerida(
   const ultima = linhas[linhas.length - 1];
   if (ultima?.data) return janelaSeguinte(ultima.data);
   return proximaJanelaDePagamento(inicio ?? hojeIso);
+}
+
+// ---------- Previsão de recebimento ----------
+//
+// Entrada de dinheiro NÃO segue as janelas de pagamento (dias 08 e 20):
+// aquelas são o calendário com que a California paga fornecedor. Quem
+// manda aqui é o cliente — a primeira parcela nasce da data prevista de
+// faturamento que a produção informou no envio do job, e as seguintes
+// caem 30 dias depois da anterior, como no protótipo. Tudo editável.
+
+/**
+ * Previsão sugerida: uma única parcela com o faturamento previsto
+ * inteiro, na data prevista de faturamento. Faturamento previsto zero
+ * (job 100% pago direto pelo cliente ao fornecedor) não tem previsão.
+ */
+export function sugerirRecebimento(
+  total: number,
+  dataFaturamento: string | null | undefined,
+  hojeIso: string,
+): CurvaLinha[] {
+  if (total <= 0) return [];
+  return [
+    {
+      id: "recebimento-1",
+      data: (dataFaturamento ?? hojeIso).slice(0, 10),
+      valor: emCentavos(total),
+    },
+  ];
+}
+
+/** Ao clicar em "Adicionar parcela": 30 dias depois da última. */
+export function proximaDataRecebimento(
+  linhas: CurvaLinha[],
+  dataFaturamento: string | null | undefined,
+  hojeIso: string,
+): string {
+  const ultima = linhas[linhas.length - 1];
+  const base = isoParaUtc(ultima?.data ?? dataFaturamento ?? hojeIso);
+  if (base === null) return hojeIso;
+  return utcParaIso(base + 30 * DIA_MS);
 }
 
 /** Trimestre (1-4) de uma data ISO. Base da sugestão de competência. */

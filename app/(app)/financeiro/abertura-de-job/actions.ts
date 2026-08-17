@@ -19,16 +19,22 @@ export type ActionResult =
 
 /**
  * Abre o job no financeiro: grava o registro contábil (nome financeiro,
- * categoria, competência, custo previsto e curva de desembolso) e só
- * então muda o status para `aberto`.
+ * categoria, competência, custo previsto, curva de desembolso e previsão
+ * de recebimento) e só então muda o status para `aberto`.
  *
- * O custo previsto NÃO vem do formulário. É relido de
- * `jobs_itens_orcado` aqui dentro — é dinheiro, e o navegador não é
- * fonte confiável para ele — e soma SÓ os itens de calha PP (AR, B, C,
- * F, FI): são os únicos em que a California paga o fornecedor. Itens A
- * e D são pagos direto pelo cliente e nunca viram previsão de
- * desembolso (docs/decisions/004). Job 100% A/D abre com custo zero e
- * curva vazia — é legítimo, não é erro.
+ * Nenhum dos dois totais vem do formulário — são dinheiro, e o navegador
+ * não é fonte confiável para dinheiro:
+ *
+ *   * o CUSTO previsto é relido de `jobs_itens_orcado` aqui dentro, e
+ *     soma SÓ os itens de calha PP (AR, B, C, F, FI): são os únicos em
+ *     que a California paga o fornecedor. Itens A e D são pagos direto
+ *     pelo cliente e nunca viram previsão de desembolso
+ *     (docs/decisions/004). Job 100% A/D abre com custo zero e curva
+ *     vazia — é legítimo, não é erro;
+ *   * o FATURAMENTO previsto é relido de `jobs.faturamento_previsto`, e
+ *     é contra ele que as parcelas de recebimento fecham. Não é o
+ *     `valor_total`, que inclui o que o cliente paga direto ao
+ *     fornecedor e nunca passa pelo caixa da California.
  */
 export async function abrirJobNoFinanceiro(
   jobId: string,
@@ -66,7 +72,7 @@ export async function abrirJobNoFinanceiro(
 
   const { data: job } = await supabase
     .from("jobs")
-    .select("id, status, projeto_id, orcamento_id")
+    .select("id, status, projeto_id, orcamento_id, faturamento_previsto")
     .eq("id", jobId)
     .eq("tenant_id", session.activeTenant.id)
     .maybeSingle<{
@@ -74,6 +80,7 @@ export async function abrirJobNoFinanceiro(
       status: JobStatus;
       projeto_id: string;
       orcamento_id: string;
+      faturamento_previsto: number | string | null;
     }>();
 
   if (!job) return { ok: false, message: "Job não encontrado." };
@@ -168,6 +175,39 @@ export async function abrirJobNoFinanceiro(
     }
   }
 
+  // ---------- Faturamento previsto: relido do banco, como o custo ----------
+  // As parcelas de recebimento NÃO seguem as janelas de pagamento: elas
+  // são entrada de dinheiro, e quem manda na data é o cliente.
+  const faturamentoPrevisto = emCentavos(
+    Number(job.faturamento_previsto ?? 0),
+  );
+  const semRecebimento = faturamentoPrevisto <= 0;
+
+  if (semRecebimento && parsed.data.recebimento.length > 0) {
+    return {
+      ok: false,
+      message:
+        "Este job não tem faturamento previsto pela California — a previsão de recebimento precisa ficar vazia.",
+    };
+  }
+
+  if (!semRecebimento) {
+    if (parsed.data.recebimento.length === 0) {
+      return {
+        ok: false,
+        message: "A previsão de recebimento precisa de pelo menos uma parcela.",
+      };
+    }
+
+    const somaReceb = somaCurva(parsed.data.recebimento);
+    if (Math.abs(somaReceb - faturamentoPrevisto) >= TOLERANCIA_CURVA) {
+      return {
+        ok: false,
+        message: `As parcelas de recebimento somam ${somaReceb.toFixed(2)} e o faturamento previsto é ${faturamentoPrevisto.toFixed(2)}. Ajuste os valores antes de abrir.`,
+      };
+    }
+  }
+
   const agora = new Date().toISOString();
 
   const { error: updateErro } = await supabase
@@ -194,48 +234,90 @@ export async function abrirJobNoFinanceiro(
     return { ok: false, message: "Não foi possível abrir o job." };
   }
 
-  // A curva é regravada inteira: apaga o que houver e insere de novo.
-  // Na abertura não há nada para apagar, mas a edição futura da curva
-  // usa o mesmo caminho.
-  const { error: deleteErro } = await supabase
-    .from("jobs_previsao_custo")
-    .delete()
-    .eq("job_id", jobId)
-    .eq("tenant_id", session.activeTenant.id);
+  // As duas previsões são regravadas inteiras: apaga o que houver e
+  // insere de novo. Na abertura não há nada para apagar, mas a edição
+  // futura usa o mesmo caminho.
+  const [deleteCurva, deleteReceb] = await Promise.all([
+    supabase
+      .from("jobs_previsao_custo")
+      .delete()
+      .eq("job_id", jobId)
+      .eq("tenant_id", session.activeTenant.id),
+    supabase
+      .from("jobs_previsao_recebimento")
+      .delete()
+      .eq("job_id", jobId)
+      .eq("tenant_id", session.activeTenant.id),
+  ]);
 
-  if (deleteErro) {
-    console.error("[abertura-job.curva-delete]", deleteErro.message);
+  if (deleteCurva.error) {
+    console.error("[abertura-job.curva-delete]", deleteCurva.error.message);
+  }
+  if (deleteReceb.error) {
+    console.error(
+      "[abertura-job.recebimento-delete]",
+      deleteReceb.error.message,
+    );
   }
 
-  const { error: curvaErro } = semDesembolso
-    ? { error: null }
-    : await supabase.from("jobs_previsao_custo").insert(
-        parsed.data.curva.map((linha, i) => ({
-          tenant_id: session.activeTenant.id,
-          job_id: jobId,
-          ordem: i + 1,
-          data_prevista: linha.data_prevista,
-          valor: linha.valor,
-          created_by: session.profile.id,
-        })),
-      );
+  const linhaPrevisao = (
+    linha: { data_prevista: string; valor: number },
+    i: number,
+  ) => ({
+    tenant_id: session.activeTenant.id,
+    job_id: jobId,
+    ordem: i + 1,
+    data_prevista: linha.data_prevista,
+    valor: linha.valor,
+    created_by: session.profile.id,
+  });
 
-  if (curvaErro) {
+  const [curvaRes, recebRes] = await Promise.all([
+    semDesembolso
+      ? Promise.resolve({ error: null })
+      : supabase
+          .from("jobs_previsao_custo")
+          .insert(parsed.data.curva.map(linhaPrevisao)),
+    semRecebimento
+      ? Promise.resolve({ error: null })
+      : supabase
+          .from("jobs_previsao_recebimento")
+          .insert(parsed.data.recebimento.map(linhaPrevisao)),
+  ]);
+
+  const curvaErro = curvaRes.error;
+  const recebErro = recebRes.error;
+
+  if (curvaErro || recebErro) {
     // O job já está aberto e o registro contábil gravado. Voltar o status
     // aqui seria pior: o financeiro veria o job sumir da fila e reaparecer.
-    // Melhor abrir com a curva vazia e deixar o alerta explícito.
-    console.error("[abertura-job.curva-insert]", curvaErro.message);
+    // Melhor abrir sem a previsão e deixar o alerta explícito.
+    if (curvaErro) {
+      console.error("[abertura-job.curva-insert]", curvaErro.message);
+    }
+    if (recebErro) {
+      console.error("[abertura-job.recebimento-insert]", recebErro.message);
+    }
     await logAuditEvent({
       acao: "job.aberto_no_financeiro",
       tenantId: session.activeTenant.id,
       entidadeTipo: "job",
       entidadeId: jobId,
-      metadata: { curva_falhou: true, erro: curvaErro.message },
+      metadata: {
+        curva_falhou: Boolean(curvaErro),
+        recebimento_falhou: Boolean(recebErro),
+        erro: (curvaErro ?? recebErro)?.message,
+      },
     });
+    const oQueFalhou =
+      curvaErro && recebErro
+        ? "a curva de desembolso e a previsão de recebimento não foram gravadas"
+        : curvaErro
+          ? "a curva de desembolso não foi gravada"
+          : "a previsão de recebimento não foi gravada";
     return {
       ok: false,
-      message:
-        "O job foi aberto, mas a curva de desembolso não foi gravada. Registre as datas na página do job.",
+      message: `O job foi aberto, mas ${oQueFalhou}. Registre as datas na página do job.`,
     };
   }
 
@@ -251,6 +333,9 @@ export async function abrirJobNoFinanceiro(
       custo_previsto_total: custoPrevisto,
       datas_na_curva: parsed.data.curva.length,
       sem_desembolso: semDesembolso,
+      faturamento_previsto: faturamentoPrevisto,
+      parcelas_de_recebimento: parsed.data.recebimento.length,
+      sem_recebimento: semRecebimento,
     },
   });
 
