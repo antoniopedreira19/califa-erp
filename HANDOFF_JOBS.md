@@ -3,7 +3,8 @@
 Registro da implementação dos designs do módulo de Jobs, mais as decisões de
 modelagem e de negócio tomadas junto com o time durante a execução.
 
-O documento tem **cinco partes**:
+O documento tem **cinco partes**, mais as entregas avulsas que vieram
+depois delas:
 
 | Parte | Design | Telas | Seções |
 |---|---|---|---|
@@ -15,6 +16,30 @@ O documento tem **cinco partes**:
 
 > A Parte IV é transversal aos módulos de Orçamento e Job. A regra vive em
 > `docs/09-identidade-visual-ui.md`; aqui fica só o que é do Job.
+
+### Entregas avulsas (seções 30+)
+
+Cada uma nasceu de um pedido pontual, não de um design fechado — por isso
+não formam parte própria. Estão em ordem cronológica no fim do arquivo.
+
+| Seção | Entrega | Data | Commit | Migration |
+|---|---|---|---|---|
+| 30 | `A · Repasse` na calha: BV **e** PP na mesma linha | 2026-08-13 | — | — |
+| 31 | Navegação por teclado nas planilhas | 2026-08-13 | — | — |
+| 32 | Planilha Interna visível antes da abertura | 2026-08-17 | `a21b910` | — |
+| 33 | PPs parciais por item + parcelas de pagamento | 2026-08-17 | `f2d3ccf` | `20260817000002` |
+| 34 | PDF da PP: um documento por parcela | 2026-08-17 | `93b58ea` | — |
+
+As seções **32 a 34** são o Grupo D do plano de alterações de telas
+(Telas 2.1, 2.2 e 2.3), executado numa sessão em 17/08/2026. As regras de
+negócio que elas fixaram viraram `docs/decisions/013-realizado-antes-da-abertura.md`
+e `docs/decisions/014-pps-parciais-e-parcelas.md`.
+
+> ⚠️ **As três estão sem verificação no navegador.** Lint, `tsc` e build
+> limpos; o trigger de saldo foi exercitado direto no banco. A conferência
+> logada ficou para uma etapa final, depois de todas as telas do plano —
+> decisão do Tiago em 17/08/2026. O caso mais importante a rodar lá é a
+> emissão real de uma PP parcelada.
 
 ---
 
