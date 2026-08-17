@@ -65,6 +65,9 @@ export function bloqueioAprovacaoVersao(input: {
   qtdItens: number;
   /** Itens com total_orcado > 0 — linha começada e não preenchida dá 0. */
   qtdItensComValor: number;
+  /** Itens com valor_unitario_orcado = 0 — aprovar exige orçado em todos;
+   *  o planejado pode ficar zerado (docs/decisions/011). */
+  qtdItensOrcadoZerado: number;
 }): string | null {
   if (!isAliquotaConhecida(input.percentualImposto)) {
     return 'Escolha a alíquota de impostos da versão antes de aprovar. Use o botão "Editar" da versão.';
@@ -74,6 +77,9 @@ export function bloqueioAprovacaoVersao(input: {
   }
   if (input.qtdItensComValor === 0) {
     return "Nenhum item da planilha tem valor. Preencha ao menos um item antes de aprovar a versão.";
+  }
+  if (input.qtdItensOrcadoZerado > 0) {
+    return `${input.qtdItensOrcadoZerado} ${input.qtdItensOrcadoZerado === 1 ? "item" : "itens"} com R$ unitário orçado zerado. Preencha o orçado de todos os itens antes de aprovar a versão.`;
   }
   return null;
 }
