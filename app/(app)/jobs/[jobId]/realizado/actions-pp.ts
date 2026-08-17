@@ -16,7 +16,9 @@ import {
   PP_ANEXO_TAMANHO_MAX_BYTES,
   PP_ANEXOS_TAMANHO_TOTAL_MAX_BYTES,
   podeCancelarPP,
+  jobAceitaAcoesPlanilha,
   type PPStatus,
+  type JobStatus,
 } from "@/lib/types";
 
 const BUCKET = "pedidos-compra";
@@ -107,7 +109,10 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
     return { ok: false, message: "Job não encontrado." };
   }
 
-  if (job.status !== "aberto" && job.status !== "em_producao") {
+  // PP continua exigindo o job ABERTO, mesmo agora que a planilha
+  // aparece na pré-abertura (17/08/2026): o pedido é compromisso de
+  // pagamento, e antes da abertura o job ainda pode ser devolvido.
+  if (!jobAceitaAcoesPlanilha(job.status as JobStatus)) {
     await logAuditEvent({
       acao: "acao_negada",
       tenantId: session.activeTenant.id,
@@ -615,7 +620,7 @@ export async function cancelarPedidoCompra(pp_id: string): Promise<Result> {
   }
 
   const job = (pp as unknown as { jobs: { status: string; responsavel_id: string | null } }).jobs;
-  if (job.status !== "aberto" && job.status !== "em_producao") {
+  if (!jobAceitaAcoesPlanilha(job.status as JobStatus)) {
     return { ok: false, message: "Job não está em estado editável." };
   }
 

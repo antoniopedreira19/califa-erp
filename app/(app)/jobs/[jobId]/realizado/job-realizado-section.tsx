@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AlertCircle, ClipboardList } from "lucide-react";
+import { Clock, ClipboardList } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { nomeVersao } from "@/lib/nome-versao";
 import type {
@@ -35,7 +35,10 @@ interface Props {
   itens: ItemPlanilhaJob[];
   realizadosMap: Map<string, JobItemRealizado>;
   categoriasMap: Map<string, string>;
+  /** Lançar/editar o bloco REALIZADO. Vale já na pré-abertura. */
   editable: boolean;
+  /** Errata, BV e Pedido de Produção — só com o job aberto. */
+  podeAcoes: boolean;
   ppsPorItemId: Map<string, PedidoCompra>;
   fornecedores: Array<Pick<Fornecedor, "id" | "nome" | "razao_social" | "status">>;
   empresas: Array<Pick<Empresa, "id" | "razao_social" | "nome_fantasia" | "ativo" | "principal">>;
@@ -52,32 +55,19 @@ export function JobRealizadoSection({
   realizadosMap,
   categoriasMap,
   editable,
+  podeAcoes,
   ppsPorItemId,
   fornecedores,
   empresas,
   bvsPorItem,
 }: Props) {
-  // Status onde nem mostramos a planilha
-  if (
+  // Antes da abertura a planilha aparece inteira e o realizado já pode
+  // ser lançado — o que fica de fora são as ações que geram documento.
+  // O aviso substitui o antigo bloco "Realizado indisponível", que
+  // escondia a planilha toda.
+  const preAbertura =
     job.status === "aguardando_abertura" ||
-    job.status === "rejeitado_financeiro"
-  ) {
-    return (
-      <div className="rounded-2xl border border-border bg-muted/20 p-6 shadow-soft">
-        <div className="flex items-start gap-3">
-          <AlertCircle className="h-5 w-5 text-muted-foreground mt-0.5" />
-          <div>
-            <h2 className="text-sm font-semibold text-foreground">
-              Realizado indisponível
-            </h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Aguarde a aprovação do financeiro para lançar valores realizados.
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
+    job.status === "rejeitado_financeiro";
 
   const itensPorGrupo = new Map<string, ItemPlanilhaJob[]>();
   for (const g of grupos) itensPorGrupo.set(g.id, []);
@@ -85,6 +75,12 @@ export function JobRealizadoSection({
     const list = itensPorGrupo.get(it.grupo_id);
     if (list) list.push(it);
   }
+
+  // A trilha lateral aparece quando há ação (BV/PP) OU quando há BV
+  // lançado para consultar num job sem ação — é a mesma condição que a
+  // tabela usa para desenhá-la, e a reserva tem que acompanhar as duas.
+  const temBvLancado = itens.some((it) => bvsPorItem[it.id]);
+  const temCalha = podeAcoes || temBvLancado;
 
   return (
     // Quando dá pra gerar PP, reserva a calha da direita: a trilha de
@@ -98,7 +94,18 @@ export function JobRealizadoSection({
     // blocos somam ~5px que as porcentagens das colunas não preveem.
     // Os 12px a mais que a calha antiga foram devolvidos à página (o
     // max-w de JobDetalhe cresceu junto): a planilha não encolheu.
-    <div className={cn("space-y-4", editable && "pr-[116px]")}>
+    <div className={cn("space-y-4", temCalha && "pr-[116px]")}>
+      {preAbertura && (
+        <div className="flex items-start gap-2 rounded-xl border border-border bg-muted/30 px-4 py-2.5 text-xs text-muted-foreground">
+          <Clock className="mt-0.5 h-3.5 w-3.5 flex-none" />
+          <span>
+            {job.status === "aguardando_abertura"
+              ? "Job aguardando abertura pelo financeiro — o realizado já pode ser lançado; erratas, BVs e pedidos de produção ficam disponíveis após a abertura."
+              : "Job devolvido pelo financeiro — o realizado já pode ser lançado; erratas, BVs e pedidos de produção ficam disponíveis após a abertura."}
+          </span>
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <ClipboardList className="h-4 w-4 text-california-red" />
@@ -107,7 +114,7 @@ export function JobRealizadoSection({
           </span>
         </div>
         <div className="flex items-center gap-3">
-          {editable && (
+          {podeAcoes && (
             <AlterarOrcadoButton
               jobId={job.id}
               itens={itens}
@@ -145,6 +152,7 @@ export function JobRealizadoSection({
                 categoriasMap={categoriasMap}
                 moeda={versao.moeda}
                 editable={editable}
+                podeAcoes={podeAcoes}
                 jobId={job.id}
                 ppsPorItemId={ppsPorItemId}
                 fornecedores={fornecedores}

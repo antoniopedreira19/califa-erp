@@ -44,7 +44,12 @@ interface Props {
   /** id da categoria -> nome. Itens sem categoria caem no travessão. */
   categoriasMap: Map<string, string>;
   moeda: string;
+  /** Células do bloco REALIZADO. Vale já na pré-abertura. */
   editable: boolean;
+  /** Trilha lateral de BV e Pedido de Produção — só com o job aberto.
+   *  Antes da abertura a planilha é visível e o realizado é editável,
+   *  mas nada que vire documento pode ser criado. */
+  podeAcoes: boolean;
   // PP rail
   ppsPorItemId: Map<string, PedidoCompra>;
   fornecedores: Array<Pick<Fornecedor, "id" | "nome" | "razao_social" | "status">>;
@@ -155,6 +160,7 @@ export function JobItemRealizadoTable({
   categoriasMap,
   moeda,
   editable,
+  podeAcoes,
   ppsPorItemId,
   fornecedores,
   empresas,
@@ -213,7 +219,7 @@ export function JobItemRealizadoTable({
     const observer = new ResizeObserver(medir);
     observer.observe(wrapper);
     return () => observer.disconnect();
-  }, [itens.length, editable]);
+  }, [itens.length, editable, podeAcoes]);
 
   function abrirDrawer(itemRealizadoId: string) {
     setItemIdAtual(itemRealizadoId);
@@ -607,7 +613,7 @@ export function JobItemRealizadoTable({
       {/* Job encerrado não some com a trilha: os BVs já lançados seguem
           consultáveis, como na tela de Orçamentos. Só o que é ação
           (gerar PP, lançar BV novo) é que desaparece. */}
-      {(editable || itens.some((i) => bvsPorItem[i.id])) && (
+      {(podeAcoes || itens.some((i) => bvsPorItem[i.id])) && (
         <div
           className={cn(
             "absolute left-full ml-2.5 flex flex-col",
@@ -621,9 +627,9 @@ export function JobItemRealizadoTable({
             // Sem BV num job congelado não há o que consultar — a vaga
             // fica vazia para não desalinhar as linhas de baixo.
             const mostraBv =
-              aceitaBV(item.tipo_custo) && (editable || bv !== null);
+              aceitaBV(item.tipo_custo) && (podeAcoes || bv !== null);
             const travado =
-              !editable || (bv !== null && bv.situacao !== "a_negociar");
+              !podeAcoes || (bv !== null && bv.situacao !== "a_negociar");
 
             // ---- PP: tipos de calha PP (AR, B, C, F, FI) ----
             // Job congelado não gera nem consulta PP na planilha: a aba de
@@ -647,7 +653,7 @@ export function JobItemRealizadoTable({
                     : null
                 }
                 pp={
-                  editable && tipoGeraDesembolso(item.tipo_custo)
+                  podeAcoes && tipoGeraDesembolso(item.tipo_custo)
                     ? {
                         itemRealizadoId: realizadoId,
                         totalRealizado: realizado

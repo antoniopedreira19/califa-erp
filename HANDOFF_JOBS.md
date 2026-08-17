@@ -1232,3 +1232,80 @@ compila.
 item" e dispara o salvamento dela. O código religa o foco ao id que a
 `adicionar` devolve (as três origens devolvem), mas o caminho não foi
 percorrido no navegador — testá-lo criaria item de verdade.
+
+---
+
+## 32. Planilha Interna visível antes da abertura (2026-08-17)
+
+Regra do Tiago, registrada em `docs/decisions/013-realizado-antes-da-abertura.md`.
+
+> ⚠️ **Isto muda o comportamento descrito na entrega 1.** Até aqui, job
+> em `aguardando_abertura` ou `rejeitado_financeiro` mostrava na aba
+> Planilha Interna apenas o bloco "Realizado indisponível" — a planilha
+> inteira sumia. Esse bloco **não existe mais**.
+
+### O que mudou
+
+Nos dois status de pré-abertura a planilha aparece completa e o
+**realizado já pode ser lançado** por administrador ou responsável do
+job. Continuam presos ao job aberto pelo financeiro: **errata**
+("Alterar orçado"), **BV** e **Pedido de Produção** — as ações que mexem
+no orçado conferido ou viram compromisso de pagamento num job que ainda
+pode ser devolvido.
+
+No lugar do bloco removido, um aviso discreto acima da planilha diz o que
+ainda não está disponível e por quê.
+
+### O flag único virou dois
+
+`podeEditarRealizado` controlava planilha, realizado, errata, BV e PP ao
+mesmo tempo. Agora são dois, com o **mesmo** perfil de permissão
+(administrador ou responsável) e status diferentes:
+
+| Flag | Status aceitos | Controla |
+|---|---|---|
+| `podeEditarRealizado` | `aberto`, `em_producao`, `aguardando_abertura`, `rejeitado_financeiro` | células do bloco REALIZADO e a barra de atalhos de teclado |
+| `podeAcoesPlanilha` | `aberto`, `em_producao` | "Alterar orçado", trilha lateral de BV/PP e a aba de PPs |
+
+As duas listas de status moram em `jobAceitaRealizado` e
+`jobAceitaAcoesPlanilha` (`lib/types.ts`), ao lado do `jobEstaCongelado`.
+São elas que as server actions leem — a tela e o servidor não têm mais
+como discordar sobre o que cada status permite.
+
+### Arquivos
+
+| Arquivo | Mudança |
+|---|---|
+| `lib/types.ts` | as duas funções novas |
+| `jobs/[jobId]/page.tsx` | flag único → `podeEditarRealizado` + `podeAcoesPlanilha`; a aba de PPs passa a receber o restrito |
+| `realizado/job-realizado-section.tsx` | early-return removido; prop `podeAcoes`; aviso de pré-abertura; "Alterar orçado" sob `podeAcoes` |
+| `realizado/job-grupo-card.tsx` | repassa `podeAcoes` |
+| `realizado/job-item-realizado-table.tsx` | células seguem `editable`; trilha de BV/PP passa a seguir `podeAcoes` |
+| `jobs/[jobId]/actions-realizado.ts` | gate passa a aceitar a pré-abertura |
+| `realizado/actions-errata.ts`, `realizado/actions-pp.ts` | mesmo bloqueio de antes, agora lendo a função compartilhada |
+| `app/(app)/_bv/actions.ts` | **gate novo** |
+
+### O gate do BV não existia
+
+Errata e PP já recusavam a pré-abertura no servidor. O BV, não: a trava
+dele em `carregarContexto` só cobria job **encerrado**, e a interface
+escondia o botão — o que bastava enquanto a planilha inteira ficava
+escondida. Com a planilha visível, uma chamada direta à action
+(`origem: "job"`) passaria. A trava entrou no mesmo lugar da de
+encerrado, então vale para lançar, confirmar e cancelar de uma vez.
+
+### A reserva da calha acompanha a trilha
+
+O `pr-[116px]` da seção seguia o flag único e a tabela desenhava a trilha
+por outra condição (`editable || tem BV lançado`). Com os dois flags, as
+duas passam a ler a **mesma** condição — `podeAcoes || tem BV lançado`.
+Efeito colateral bem-vindo: job **encerrado** com BV lançado desenhava a
+trilha sem reserva nenhuma e ela encostava na borda direita da página;
+agora reserva.
+
+### Verificação
+
+`tsc --noEmit`, `next lint` (só os 2 avisos pré-existentes de
+`components/ui`) e `npm run build` limpos. **Sem verificação no
+navegador** — consolidada na etapa final do plano de alterações de telas,
+por decisão do Tiago em 17/08/2026.

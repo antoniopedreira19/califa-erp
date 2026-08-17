@@ -11,6 +11,8 @@ import {
   JOB_STATUS_TRANSICOES,
   areaDoPapel,
   jobEstaCongelado,
+  jobAceitaRealizado,
+  jobAceitaAcoesPlanilha,
   PP_STATUS_EM_ABERTO,
   BV_SITUACAO_EM_ABERTO,
 } from "@/lib/types";
@@ -592,10 +594,16 @@ export default async function JobDetailPage({
         }
       : null;
 
-  const podeEditarRealizado =
-    (session.activeRole === "administrador" ||
-      job.responsavel_id === session.profile.id) &&
-    (job.status === "aberto" || job.status === "em_producao");
+  // Mesmo perfil de permissão nos dois flags — o que muda é o status.
+  // O realizado passou a valer antes da abertura (17/08/2026); errata,
+  // BV e PP continuam presos ao job já aberto pelo financeiro. As duas
+  // regras moram em `lib/types.ts`, que é de onde as server actions leem.
+  const quemPodeMexer =
+    session.activeRole === "administrador" ||
+    job.responsavel_id === session.profile.id;
+
+  const podeEditarRealizado = quemPodeMexer && jobAceitaRealizado(job.status);
+  const podeAcoesPlanilha = quemPodeMexer && jobAceitaAcoesPlanilha(job.status);
 
   const backLink =
     fromParam === "jobs"
@@ -909,6 +917,7 @@ export default async function JobDetailPage({
             realizadosMap={realizadosMap}
             categoriasMap={categoriasMap}
             editable={podeEditarRealizado}
+            podeAcoes={podeAcoesPlanilha}
             ppsPorItemId={ppsPorItemId}
             fornecedores={fornecedores}
             empresas={empresas}
@@ -922,7 +931,7 @@ export default async function JobDetailPage({
             fornecedoresPorId={fornecedoresPorId}
             fornecedores={fornecedores}
             empresas={empresas}
-            editable={podeEditarRealizado}
+            editable={podeAcoesPlanilha}
           />
         }
         ppsChat={
