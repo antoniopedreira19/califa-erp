@@ -1309,3 +1309,98 @@ agora reserva.
 `components/ui`) e `npm run build` limpos. **Sem verificação no
 navegador** — consolidada na etapa final do plano de alterações de telas,
 por decisão do Tiago em 17/08/2026.
+
+---
+
+## 33. PPs parciais por item e parcelas de pagamento (2026-08-17)
+
+Design: `Job - PPs Parciais - Opcoes.dc.html` (projeto Claude Design
+`69342d83`), **opção 2a — Ficha numérica · sem gráfico**, lido via MCP.
+Regras em `docs/decisions/014-pps-parciais-e-parcelas.md`.
+
+> ⚠️ **Isto reverte duas regras escritas.** A entrega 1 dizia que o item
+> tinha **uma** PP, e o índice `uniq_pp_ativa_por_item_realizado`
+> materializava isso no banco. E a seção 30 descrevia a metade "Ver PP"
+> da calha abrindo o PDF direto. As duas caíram: um item pode ter várias
+> PPs, e a metade virou o chip `PPs · N`, que abre o painel.
+
+### O que mudou
+
+**1. Um item, várias PPs.** Sem limite de quantas e **sem limite por
+fornecedor** (decisão explícita do Tiago — a primeira redação do plano
+previa uma por fornecedor). O que trava é o saldo: a soma das PPs não
+canceladas nunca passa do Realizado do item. PP **rejeitada continua
+ocupando o saldo**; só o cancelamento devolve.
+
+**2. Painel "Destrinchar realizado".** O chip `PPs · N` (ou "Gerar PP",
+quando não há nenhuma) abre um painel lateral de 430px com a ficha
+numérica do design: Realizado do item, Em PPs emitidas e Saldo, a lista
+das PPs do item com "Ver PP" em cada uma, e o botão "Nova PP para este
+item" com a nota do máximo aceito. É de lá que o formulário se abre — a
+calha não abre mais PDF nem formulário direto.
+
+**3. O valor da PP virou fatia.** Era `total_realizado` do item inteiro;
+agora é `quantidade × (total_realizado ÷ quantidade_realizada)`. Dividir
+o total pela quantidade embute o D/M sozinho. Sem campo de valor no
+formulário: quem dimensiona é a quantidade, como nos números do design
+(800 un / R$ 9.400,00 → R$ 11,75/un).
+
+**4. Descrição e Quantidade abrem vazias**, para não induzir a pedir o
+item inteiro a um fornecedor só.
+
+**5. Parcelas.** "Prazo de pagamento" e "Parcelas" dividem a linha; com
+2+ aparecem as linhas com vencimento (+1 mês, editável) e valor (divisão
+igual com sobra na última, editável). A soma tem que fechar com o valor
+da PP — no cliente e na action. Na aba de PPs do job, **uma linha por
+parcela** (`PP-00008 · 2/3`); Editar/Ver PDF/Cancelar só na linha da 1ª,
+porque são da PP inteira.
+
+**6. Financeiro (leitura).** Chip `3x` na lista de PPs e bloco de
+parcelas no drawer. A **baixa continua por PP** até a Tela 3.2, por
+decisão de escopo do Tiago: ela reestrutura Contas a Pagar em "Títulos a
+Pagar" e refaria a mesma máquina (`dar_baixa_pp`, estorno, `vw_a_pagar`,
+`vw_fluxo_caixa`).
+
+### Migration `20260817000002_pedidos_compra_parcelas.sql`
+
+Aplicada e conferida pelo MCP. Três partes:
+
+| Parte | O quê |
+|---|---|
+| Aditivo | tabela `pedidos_compra_parcelas` (12 colunas, RLS + 3 policies, `authenticated=arwDxtm` sem DELETE, 5 índices, trigger de `updated_at`) |
+| Aditivo | backfill: as 8 PPs existentes viraram 1 parcela 1/1, herdando prazo, valor, `pdf_path` e a baixa |
+| **Destrutivo** | `drop index uniq_pp_ativa_por_item_realizado` — **autorizado pelo Tiago nesta sessão** |
+
+No lugar do índice entrou o trigger **`pp_valida_saldo_do_item`**, que é
+a regra de verdade: recusa insert/update cuja soma passe do realizado do
+item, com mensagem em português. Vale para chamada direta à action e para
+dois cliques simultâneos, que o índice não cobria e o código sozinho não
+cobre. Testado no banco (update de +R$ 1.000 numa PP recusado, e nada
+gravado). Conferido antes de aplicar: nenhuma das 8 PPs viola a regra.
+
+**Advisors:** nenhum achado novo — a função nasceu com `search_path`
+fixo e `security invoker`. Os ERROR/WARN da lista são pré-existentes
+(views SECURITY DEFINER, RPCs executáveis por `authenticated`,
+`search_path` de funções antigas, leaked password protection).
+
+### Arquivos
+
+| Arquivo | Mudança |
+|---|---|
+| `lib/calculos/pps-item.ts` | **novo** — as contas (valor, saldo, divisão em parcelas, próximo vencimento), usadas pela tela E pela action |
+| `lib/types.ts` | `PedidoCompraParcela`; `PedidoCompraNaLista.parcelas` |
+| `realizado/painel-pps-item.tsx` | **novo** — o painel 2a |
+| `realizado/calha-linha.tsx` | "Ver PP"/"Gerar PP" → chip `PPs · N` que abre o painel; o estado do PDF saiu daqui |
+| `realizado/job-item-realizado-table.tsx` | `Map<string, PedidoCompra[]>`; painel + formulário encadeados |
+| `realizado/gerar-pp-drawer.tsx` | campos vazios, valor derivado da quantidade, grid de parcelas, máximo aceito |
+| `realizado/actions-pp.ts` | valor da fatia, gate de saldo, insert das parcelas, reenvio coerente |
+| `jobs/[jobId]/page.tsx` | embed das parcelas; mapa de PPs por item vira lista |
+| `pps/job-pps-section.tsx` | uma linha por parcela |
+| `financeiro/contas-a-pagar/*` | parcelas na query, chip `3x` na lista, bloco no drawer |
+
+### Verificação
+
+`tsc --noEmit`, `next lint` (só os 2 avisos pré-existentes) e
+`npm run build` limpos. Trigger exercitado no banco. **Sem verificação no
+navegador** — consolidada na etapa final do plano, por decisão do Tiago
+em 17/08/2026.

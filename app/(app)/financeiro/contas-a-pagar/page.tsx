@@ -56,7 +56,8 @@ export default async function PedidosCompraFinanceiroPage() {
           id, codigo, nome,
           projeto:projetos(codigo, nome, cliente:clientes(nome_fantasia))
         ),
-        anexos:pedidos_compra_anexos(id, arquivo_nome_original, arquivo_tamanho_bytes)
+        anexos:pedidos_compra_anexos(id, arquivo_nome_original, arquivo_tamanho_bytes),
+        parcelas:pedidos_compra_parcelas(numero, data_vencimento, valor, pago_em)
       `,
       )
       .eq("tenant_id", session.activeTenant.id)
@@ -209,6 +210,12 @@ export default async function PedidosCompraFinanceiroPage() {
       arquivo_nome_original: string;
       arquivo_tamanho_bytes: number;
     }>;
+    parcelas: Array<{
+      numero: number;
+      data_vencimento: string;
+      valor: string | number;
+      pago_em: string | null;
+    }> | null;
   }>).map((r) => ({
     id: r.id,
     codigo: r.codigo,
@@ -241,6 +248,16 @@ export default async function PedidosCompraFinanceiroPage() {
     cancelada_por_nome: r.cancelada_por_profile?.nome ?? null,
     emitida_por_nome: r.emitida_por_profile?.nome ?? null,
     anexos: r.anexos ?? [],
+    // Ordenadas aqui: o embed do PostgREST não garante ordem, e a lista
+    // e o drawer mostram "1/3, 2/3, 3/3" na sequência.
+    parcelas: (r.parcelas ?? [])
+      .map((p) => ({
+        numero: p.numero,
+        data_vencimento: p.data_vencimento,
+        valor: Number(p.valor),
+        pago_em: p.pago_em,
+      }))
+      .sort((a, b) => a.numero - b.numero),
   }));
 
   // Mapeamento das contas avulsas para AvulsaRow

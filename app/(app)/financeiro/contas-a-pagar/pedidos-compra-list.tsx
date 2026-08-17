@@ -44,6 +44,17 @@ export interface PPRow {
     arquivo_nome_original: string;
     arquivo_tamanho_bytes: number;
   }>;
+  /**
+   * Parcelas da PP, sempre ao menos uma (1/1). A baixa continua sendo da
+   * PP inteira até a Tela 3.2 — aqui elas são leitura: o financeiro
+   * precisa ver em quantas vezes vai pagar antes de aprovar.
+   */
+  parcelas: Array<{
+    numero: number;
+    data_vencimento: string;
+    valor: number;
+    pago_em: string | null;
+  }>;
 }
 
 function statusBadgeClasses(status: PPStatus): string {
@@ -198,7 +209,17 @@ export function PedidosCompraList({ rows, contas, tipos, subtipos }: PedidosComp
                 }}
                 className="border-b border-border last:border-0 hover:bg-accent/40 transition-colors cursor-pointer focus-visible:outline-none focus-visible:bg-accent/40"
               >
-                <td className="px-4 py-3 font-mono text-xs">{r.codigo}</td>
+                <td className="whitespace-nowrap px-4 py-3 font-mono text-xs">
+                  {r.codigo}
+                  {r.parcelas.length > 1 && (
+                    <span
+                      title={`Pagamento em ${r.parcelas.length} parcelas`}
+                      className="ml-1.5 rounded-full border border-border bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground"
+                    >
+                      {r.parcelas.length}x
+                    </span>
+                  )}
+                </td>
                 <td className="px-4 py-3">{r.fornecedor_nome}</td>
                 <td className="px-4 py-3 text-muted-foreground">
                   <span className="font-mono text-xs">{r.job_codigo}</span>{" "}

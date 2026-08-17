@@ -897,8 +897,11 @@ export interface PedidoCompra {
  * ainda não olhou) e termina em `pago`, `rejeitada` ou `cancelada`.
  *
  * `rejeitada` não é terminal de verdade: o GP corrige e reenvia, e a PP
- * volta pra `em_avaliacao`. Por isso o unique parcial por item continua
- * valendo pra ela — quem libera o item é só o cancelamento.
+ * volta pra `em_avaliacao`. Por isso ela continua ocupando o SALDO do
+ * item — quem devolve saldo é só o cancelamento. (Até 17/08/2026 quem
+ * dizia isso era o índice `uniq_pp_ativa_por_item_realizado`, que
+ * permitia uma PP ativa por item; ele saiu quando as PPs parciais
+ * entraram, e a regra passou para o trigger `pp_valida_saldo_do_item`.)
  */
 export type PPStatus = "em_avaliacao" | "aprovada" | "pago" | "rejeitada" | "cancelada";
 
@@ -1098,10 +1101,38 @@ export type ItemChat =
       em: string;
     };
 
+/**
+ * Uma parcela do Pedido de Produção — um vencimento próprio, com valor
+ * próprio e (desde a Tela 2.3) documento próprio.
+ *
+ * PP sem parcelamento tem exatamente UMA parcela, 1/1: não existe PP sem
+ * parcela, nem no legado (a migration `20260817000002` backfillou todas).
+ * É isso que deixa as listas e o PDF tratarem os dois casos igual.
+ *
+ * `pago_em` / `pago_por` são da baixa por parcela, que entra na Tela 3.2
+ * ("Títulos a Pagar"). Até lá quem baixa é a PP inteira.
+ */
+export interface PedidoCompraParcela {
+  id: string;
+  tenant_id: string;
+  pedido_compra_id: string;
+  numero: number;
+  data_vencimento: string;
+  valor: number;
+  pdf_path: string | null;
+  pago_em: string | null;
+  pago_por: string | null;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+}
+
 /** PP com os campos que as telas de lista mostram junto. */
 export interface PedidoCompraNaLista extends PedidoCompra {
   emitida_por_nome: string | null;
   grupo_nome: string | null;
+  /** Sempre ao menos uma, ordenada por `numero`. */
+  parcelas: PedidoCompraParcela[];
   anexos: Array<{
     id: string;
     arquivo_nome_original: string;
