@@ -11,6 +11,7 @@ de negócio tomadas junto com o time durante a execução.
 | **V** | `Abertura de Job - Telas Atuais.dc.html`, itens 02a e 03 | previsão de recebimento no formulário de abertura, planilha interna em leitura | 33 |
 | **VI** | `Contas a Pagar - Titulos a Pagar.dc.html` | aba unificada de títulos a pagar, baixa por parcela, aprovação com data de pagamento | 34 |
 | **VII** | `Contas a Receber - Faturamento Agrupado.dc.html` | NF cobrindo vários jobs, faturamento parcial e avulso, previsão de recebimento do título | 35 |
+| **VIII** | `Fluxo de Caixa.dc.html` | matriz período × natureza com drill-down; as previsões da abertura entram no caixa | 36 |
 
 > Contas a pagar, conciliação e lançamentos financeiros já existiam antes deste
 > documento e não estão registrados aqui.
@@ -311,6 +312,12 @@ resíduo da curva (curva − planejado dos itens que já têm PP, consumido na o
 das datas, rolado por janela) entra como camada de previsão por cima dos
 títulos. Sem isso, o fluxo de caixa enxerga o desembolso só depois da PP
 existir — some o horizonte entre a abertura do job e a emissão das PPs.
+
+> ⚠️ **17/08/2026 — resolvido. Esta seção descreve um estado que não existe
+> mais.** A migration `20260817000006_vw_fluxo_caixa_previsoes.sql` colocou o
+> resíduo da curva na `vw_fluxo_caixa`, exatamente como a decisão 004 manda, e
+> fez o mesmo do lado da entrada — que na época desta seção nem tinha regra
+> escrita. Ver **seção 36** e `docs/decisions/018`.
 
 ---
 
@@ -1082,3 +1089,119 @@ para 1999 manteve as duas intactas.
 - **O abatimento da previsão de recebimento da abertura** pelo título
   emitido continua sem regra escrita (pendência da seção 33 / decisão
   015). É a Tela 3.4 que vai precisar dela.
+
+---
+
+# Parte VIII — Fluxo de Caixa
+
+**Data:** 2026-08-17
+**Origem do design:** `Fluxo de Caixa.dc.html`, projeto Claude Design
+`69342d83`. (O arquivo `Fluxo de Caixa - Tela Atual.dc.html`, no mesmo
+projeto, é só o "antes".)
+
+---
+
+## 36. A tela virou matriz, e as previsões entraram no caixa
+
+A tela anterior era uma lista de períodos com três colunas — previsto,
+realizado, saldo acumulado. Ela respondia "quanto entra e quanto sai", mas
+não respondia as duas perguntas que o financeiro faz de verdade: **de onde
+vem esse previsto** e **quando o caixa aperta**.
+
+A tela nova é uma **matriz período × natureza**: 3 colunas de passado mais
+o horizonte, cada uma rotulada `REALIZADO`, `EM CURSO` (a fronteira do
+hoje, destacada) ou `PREVISTO`. As linhas-mestre são Entradas, Saídas,
+Líquido do período e Saldo projetado.
+
+### As três camadas, que são o ponto da tela
+
+Cada natureza se abre em três componentes, iguais em todas as colunas:
+
+| Componente | O que é | De onde vem |
+|---|---|---|
+| Já movimentado nas contas | caixa efetivo, já baixado | `lancamentos_financeiros` |
+| Títulos em aberto | documento emitido, ainda não pago | parcela de PP, conta avulsa aprovada, título a receber |
+| Só previsão (abertura do job) | curva do job, ainda sem documento | `jobs_previsao_custo`, `jobs_previsao_recebimento`, parcelas do envio |
+
+**Essa separação é a entrega.** Antes, "previsto" misturava título e
+previsão — e previsão da abertura nem chegava à tela. Agora dá para ver
+que R$ 300 mil de saída em outubro são R$ 100 mil de PP já emitida e
+R$ 200 mil de curva que ainda pode mudar. São dois graus de certeza
+diferentes, e decidir pagamento com eles somados é decidir no escuro.
+
+Cada componente expande até o item, com descrição, data, regional e conta
+bancária (ou "sem conta alocada").
+
+### A regra mora no banco
+
+A `vw_fluxo_caixa` ganhou a coluna `classe` (`movimento` / `titulo` /
+`previsao`) e as linhas de previsão. **A tela não recalcula nada** — só
+agrupa e soma. Consequência: o DRE e qualquer leitor futuro da view
+recebem o abatimento e as rolagens prontos.
+
+O que a view passou a fazer, e que ninguém fazia antes:
+
+- **Saída:** resíduo da curva = curva da abertura − planejado dos itens que
+  já têm PP, consumido da data mais próxima para a mais distante com piso
+  em zero, e o que venceu sem virar PP rola para a próxima janela de
+  pagamento. É a decisão 004, enfim implementada.
+- **Entrada:** job **sem** envio para faturamento projeta pela previsão da
+  abertura; job **com** envio projeta pelas parcelas do envio, menos o que
+  já virou título. Previsão vencida sem NF é lida em hoje + 1. Era a
+  lacuna que as decisões 015 e 017 registraram — agora é a **decisão 018**.
+- **Regional:** rateio entra proporcional, o que fez a view emitir uma
+  linha por regional nas origens rateadas.
+
+### Conferência no banco (17/08/2026)
+
+Resíduo da curva, batido job a job contra `curva − planejado dos itens com
+PP`: JOB-0001 2.500 − 1.000 = **1.500**; JOB-0004 250.900 − 4.500 =
+**246.400**; JOB-0010 11.760 − 0 = **11.760**; JOB-0013 65.000 − 40.000 =
+**25.000** (a 1ª das 2 parcelas da curva zerou inteira, e só a 2ª aparece).
+
+Rolagem: as previsões vencidas caíram todas em **20/08** (a próxima janela
+de pagamento a partir de 17/08); a parcela de envio vencida do JOB-0001
+caiu em **18/08** (hoje + 1); a do JOB-0010, com vencimento futuro em
+25/08, ficou onde estava.
+
+As **duas cópias da regra de janela** — `curva.ts` no TypeScript e
+`fc_proxima_janela_pagamento` no SQL — foram comparadas em 6 datas,
+incluindo os casos de fim de semana (08/11/2026 é domingo → 09/11;
+20/12/2026 é domingo → 21/12). Concordam em todas.
+
+### Saldo bancário: lido, não reconstruído
+
+O protótipo reconstrói o saldo de abertura da janela a partir do saldo de
+hoje. Aqui ele vem do razão, pela função nova `fc_saldos_por_conta(date)`:
+saldo inicial cadastrado da conta + lançamentos até a data. O servidor
+pede o saldo na véspera da âncora (4 meses atrás) e o cliente caminha daí
+para frente — um número exato, e uma consulta só.
+
+### Migrations
+
+`20260817000006_vw_fluxo_caixa_previsoes.sql` — a `vw_fluxo_caixa`
+redefinida com `create or replace` (as 13 colunas antigas no mesmo nome,
+tipo e posição; `classe` e `regional_id` no fim), mais
+`fc_ajusta_dia_util`, `fc_proxima_janela_pagamento` e
+`fc_saldos_por_conta`. **Nenhuma linha de dado tocada.**
+
+`20260817000007_fc_janelas_grant_public.sql` — correção. A 000006 revogou
+`execute` de `public` nas três funções seguindo o padrão das RPCs do
+projeto, e isso quebrou a leitura da view: o teste de `execute` é feito
+contra quem consulta, não contra o dono da view, então qualquer papel que
+leia `vw_fluxo_caixa` precisa executar a função de janela. As duas funções
+de data voltaram ao `public` — são aritmética pura, sem acesso a tabela.
+`fc_saldos_por_conta`, que lê dado, continua restrita a `authenticated`.
+
+### Fora do escopo, de propósito
+
+- **Filtro "Divisão" do protótipo removido** — o conceito não existe no
+  banco. Decisão do Tiago (decisão 018 §5).
+- **`security_invoker` nas views** — as três views do schema ignoram a RLS
+  das tabelas de baixo. Ligar fecha numa linha e foi conferido que não
+  quebraria nada; o Tiago colocou acessos na fase de cadastro de usuários,
+  depois de todas as telas definidas.
+- **Verificação no navegador** — não feita nesta sessão, por combinação:
+  segue consolidada na etapa final de testes.
+- **Contato de cobrança** (`jobs_contatos`) segue invisível para o
+  financeiro; a lacuna da decisão 012 continua aberta.
