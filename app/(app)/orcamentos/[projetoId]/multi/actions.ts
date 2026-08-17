@@ -201,6 +201,14 @@ export async function salvarOrcamentosDoProjeto(
             }`,
           };
         }
+        // Orçado zerado não salva — regra crítica, então vale aqui e não
+        // só no aviso da tela. O planejado pode ficar em 0 (16/08/2026).
+        if (!(itemOk.data.valor_unitario_orcado > 0)) {
+          return {
+            ok: false,
+            message: `${rotulo} · ${grupo.nome}: "${itemOk.data.item}" com R$ unitário orçado zerado. Preencha o orçado de todos os itens antes de salvar.`,
+          };
+        }
         if (item.bv) {
           if (!aceitaBV(itemOk.data.tipo_custo)) {
             return {

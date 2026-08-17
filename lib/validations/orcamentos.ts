@@ -26,12 +26,8 @@ export const orcamentoSchema = z
       .refine((v) => ORCAMENTO_STATUS_EDITAVEIS.includes(v), {
         message: "Status inválido para edição manual.",
       }),
-    categoria_id: z
-      .string()
-      .uuid()
-      .optional()
-      .or(z.literal(""))
-      .transform((v) => (v && v.length > 0 ? v : null)),
+    // Obrigatória desde 17/08/2026, no mesmo padrão dos campos abaixo.
+    categoria_id: z.string().uuid("Selecione a categoria."),
     // Obrigatórios desde 06/08/2026. Nullable no banco por causa dos
     // orçamentos gravados antes desta mudança — a exigência vive aqui.
     // `regional_id` precisa ser uma das regionais do projeto; isso a
