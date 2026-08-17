@@ -5,16 +5,26 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { orcamentoStatusLabel, type Orcamento } from "@/lib/types";
+import { formatBRL } from "@/lib/format";
+import {
+  estagioFunilBadgeClasses,
+  estagioFunilLabel,
+  type EstagioFunil,
+} from "@/lib/calculos/funil";
 
 export interface OrcamentoRow {
   id: string;
   codigo: string;
   nome: string;
   categoria_nome: string | null;
-  status: Orcamento["status"];
+  /** Estágio do funil comercial (lib/calculos/funil.ts) — a mesma
+   *  semântica que a lista de projetos usa pra contar. */
+  estagio: EstagioFunil;
   data_inicio_prevista: string | null;
   data_fim_prevista: string | null;
+  /** Valor do job da versão aprovada (ou da mais recente, em negociação).
+   *  `null` quando o orçamento ainda não tem versão. */
+  valor_job: number | null;
   versoes_count: number;
   created_at: string;
 }
@@ -22,18 +32,6 @@ export interface OrcamentoRow {
 interface Props {
   projetoId: string;
   orcamentos: OrcamentoRow[];
-}
-
-function statusBadgeClasses(status: Orcamento["status"]): string {
-  switch (status) {
-    case "rascunho": return "bg-muted text-muted-foreground border-border";
-    case "em_revisao": return "bg-amber-50 text-amber-700 border-amber-200";
-    case "enviado_cliente": return "bg-blue-50 text-blue-700 border-blue-200";
-    case "aprovado": return "bg-emerald-50 text-emerald-700 border-emerald-200";
-    case "job_criado": return "bg-california-red/10 text-california-red border-california-red/20";
-    case "recusado": return "bg-rose-50 text-rose-700 border-rose-200";
-    case "cancelado": return "bg-slate-100 text-slate-500 border-slate-200";
-  }
 }
 
 function formatDate(iso: string | null): string {
@@ -54,6 +52,7 @@ export function OrcamentosList({ projetoId, orcamentos }: Props) {
             <th className="px-4 py-3 font-semibold">Categoria</th>
             <th className="px-4 py-3 font-semibold">Início previsto</th>
             <th className="px-4 py-3 font-semibold">Fim previsto</th>
+            <th className="px-4 py-3 font-semibold text-right">Valor do Job</th>
             <th className="px-4 py-3 font-semibold text-center">Versões</th>
             <th className="px-4 py-3 font-semibold">Status</th>
           </tr>
@@ -87,17 +86,24 @@ export function OrcamentosList({ projetoId, orcamentos }: Props) {
               <td className="px-4 py-3 text-muted-foreground">{o.categoria_nome ?? "—"}</td>
               <td className="px-4 py-3 text-muted-foreground">{formatDate(o.data_inicio_prevista)}</td>
               <td className="px-4 py-3 text-muted-foreground">{formatDate(o.data_fim_prevista)}</td>
+              <td className="px-4 py-3 text-right tabular-nums">
+                {o.valor_job === null ? (
+                  <span className="text-muted-foreground">—</span>
+                ) : (
+                  formatBRL(o.valor_job)
+                )}
+              </td>
               <td className="px-4 py-3 text-center tabular-nums">{o.versoes_count}</td>
               <td className="px-4 py-3">
-                <Badge className={cn("border", statusBadgeClasses(o.status))}>
-                  {orcamentoStatusLabel(o.status)}
+                <Badge className={cn("border", estagioFunilBadgeClasses(o.estagio))}>
+                  {estagioFunilLabel(o.estagio)}
                 </Badge>
               </td>
             </tr>
           ))}
           {orcamentos.length === 0 && (
             <tr>
-              <td colSpan={7} className="px-4 py-10 text-center text-sm text-muted-foreground">
+              <td colSpan={8} className="px-4 py-10 text-center text-sm text-muted-foreground">
                 Nenhum orçamento neste projeto ainda.
               </td>
             </tr>
