@@ -1,5 +1,20 @@
 "use client";
 
+/**
+ * ⚠️ SEM PORTA NA UI desde a Tela 3.2 (17/08/2026).
+ *
+ * Decisão do Tiago: seguir o protótipo à risca, que não tem estorno em
+ * lugar nenhum — título pago exibe apenas "Conciliação". Este componente
+ * e a action `estornarBaixaPP` continuam no repositório, funcionando, mas
+ * nenhuma tela os monta. Reverter uma baixa errada hoje exige intervenção
+ * fora da tela.
+ *
+ * Se o estorno voltar, note que ele foi escrito para a baixa da PP
+ * INTEIRA (`estornar_baixa_pp`), e a baixa passou a ser por PARCELA
+ * (`dar_baixa_pp_parcela`) — vai precisar de uma RPC equivalente por
+ * parcela antes de ser religado.
+ */
+
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, AlertCircle } from "lucide-react";

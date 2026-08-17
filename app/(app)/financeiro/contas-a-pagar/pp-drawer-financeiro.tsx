@@ -1,5 +1,24 @@
 "use client";
 
+/**
+ * Formulário de avaliação da PP (aba "Pedidos de Produção").
+ *
+ * Reescrito na Tela 3.2. O que mudou e por quê:
+ *
+ * • O bloco "Ações do financeiro" (que só guardava o `prazo_pagamento_
+ *   financeiro` num botão "Salvar prazo" à parte) virou um campo único e
+ *   OBRIGATÓRIO: **Data de pagamento**, escolhida ANTES de aprovar. É ela
+ *   que vira o vencimento dos títulos — e, numa PP parcelada, desloca
+ *   TODAS as parcelas pelo mesmo delta.
+ * • O **vencimento original** — o prazo que a produção negociou — ganhou
+ *   destaque próprio: é a referência contra a qual o financeiro decide.
+ * • "Ver PP" virou **"Visualizar documentos"**: PP e anexos lado a lado.
+ * • Baixa e estorno saíram daqui. Baixa é da PARCELA e mora na aba
+ *   "Títulos a Pagar"; o estorno foi retirado da UI por decisão do Tiago
+ *   (17/08/2026), seguindo o protótipo. O código de estorno segue no
+ *   repositório — ver `cancelar-baixa-modal.tsx` e `estornarBaixaPP`.
+ */
+
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -7,11 +26,14 @@ import {
   X,
   FileText,
   Image as ImageIcon,
-  Download,
+  CalendarClock,
+  Columns2,
   Eye,
   Ban,
   CheckCircle2,
   ExternalLink,
+  Lock,
+  AlertCircle,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import {
@@ -21,36 +43,19 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { DatePicker } from "@/components/ui/date-picker";
-import {
-  Tooltip,
-  TooltipTrigger,
-  TooltipContent,
-} from "@/components/ui/tooltip";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Badge } from "@/components/ui/badge";
 import { cn, formatCurrency } from "@/lib/utils";
-import { ppStatusLabel, type PPStatus, type ContaBancaria, type PlanoContaTipo, type PlanoContaSubtipo } from "@/lib/types";
+import { ppStatusLabel, type PPStatus } from "@/lib/types";
 import type { PPRow } from "./pedidos-compra-list";
-import {
-  salvarPrazoFinanceiro,
-  rejeitarPedidoCompraFinanceiro,
-  aprovarPP,
-  marcarPagaFinanceiro,
-} from "./actions";
-import {
-  signedUrlPdf,
-  signedUrlAnexo,
-} from "@/app/(app)/jobs/[jobId]/realizado/actions-pp";
-import { CancelarBaixaModal } from "./cancelar-baixa-modal";
-import { BaixaPPDialog } from "@/components/financeiro/baixa-pp-dialog";
+import { rejeitarPedidoCompraFinanceiro } from "./actions";
+import { aprovarPPComData } from "./actions-titulos";
+import { DocumentosPPOverlay } from "./documentos-pp-overlay";
 
 interface Props {
   pp: PPRow | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  contas: ContaBancaria[];
-  tipos: PlanoContaTipo[];
-  subtipos: PlanoContaSubtipo[];
 }
 
 function formatDate(iso: string | null): string {
@@ -62,10 +67,6 @@ function formatDate(iso: string | null): string {
 function formatDateTime(iso: string | null): string {
   if (!iso) return "—";
   return format(parseISO(iso), "dd/MM/yyyy HH:mm");
-}
-
-function isoDateFromDate(date: Date | null): string | null {
-  return date ? format(date, "yyyy-MM-dd") : null;
 }
 
 function statusBadgeClasses(status: PPStatus): string {
@@ -89,72 +90,61 @@ function iconePorMime(nome: string): typeof FileText {
   return FileText;
 }
 
-export function PPDrawerFinanceiro({ pp, open, onOpenChange, contas, tipos, subtipos }: Props) {
+export function PPDrawerFinanceiro({ pp, open, onOpenChange }: Props) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
   const [erro, setErro] = React.useState<string | null>(null);
   const [toast, setToast] = React.useState<string | null>(null);
-  const [prazoLocal, setPrazoLocal] = React.useState<string | null>(null);
+  const [dataPagamento, setDataPagamento] = React.useState<string>("");
   const [askRejeitar, setAskRejeitar] = React.useState(false);
   const [motivo, setMotivo] = React.useState("");
-  const [cancelarBaixaOpen, setCancelarBaixaOpen] = React.useState(false);
-  const [darBaixaOpen, setDarBaixaOpen] = React.useState(false);
+  const [docsAbertos, setDocsAbertos] = React.useState(false);
 
-  // Sincroniza prazo local com o valor da PP ao abrir/trocar
   React.useEffect(() => {
     if (!pp) return;
-    setPrazoLocal(pp.prazo_pagamento_financeiro);
+    setDataPagamento("");
     setErro(null);
     setMotivo("");
-    setCancelarBaixaOpen(false);
+    setDocsAbertos(false);
   }, [pp]);
 
   React.useEffect(() => {
     if (!toast) return;
-    const t = setTimeout(() => setToast(null), 3000);
+    const t = setTimeout(() => setToast(null), 3500);
     return () => clearTimeout(t);
   }, [toast]);
 
   if (!pp) return null;
 
-  // Só PP em avaliação aceita ação do financeiro. Paga, rejeitada ou
-  // cancelada viram leitura — o próximo passo é do GP ou de outra fase.
-  const podeEditar = pp.status === "em_avaliacao";
-  const prazoMudou = prazoLocal !== pp.prazo_pagamento_financeiro;
+  // Só PP em avaliação aceita ação do financeiro. Aprovada, paga,
+  // rejeitada ou cancelada viram leitura.
+  const emAvaliacao = pp.status === "em_avaliacao";
+  const hoje = format(new Date(), "dd/MM/yyyy");
+  // O vencimento original que ancora o deslocamento é o da 1ª parcela —
+  // o mesmo `prazo_pagamento` impresso no PDF.
+  const vencOriginal = pp.parcelas[0]?.data_vencimento ?? pp.prazo_pagamento;
 
-  function handleVerPDF() {
+  function handleAprovar() {
     if (!pp) return;
+    if (!dataPagamento) {
+      setErro("Escolha a data de pagamento antes de aprovar.");
+      return;
+    }
     startTransition(async () => {
-      const res = await signedUrlPdf(pp.id);
+      const res = await aprovarPPComData({
+        pp_id: pp.id,
+        data_pagamento: dataPagamento,
+      });
       if (!res.ok) {
         setErro(res.message);
         return;
       }
-      window.open(res.url, "_blank", "noopener,noreferrer");
-    });
-  }
-
-  function handleBaixarAnexo(anexoId: string) {
-    startTransition(async () => {
-      const res = await signedUrlAnexo(anexoId);
-      if (!res.ok) {
-        setErro(res.message);
-        return;
-      }
-      window.open(res.url, "_blank", "noopener,noreferrer");
-    });
-  }
-
-  function handleSalvarPrazo() {
-    if (!pp) return;
-    startTransition(async () => {
-      const res = await salvarPrazoFinanceiro(pp.id, prazoLocal);
-      if (!res.ok) {
-        setErro(res.message);
-        return;
-      }
-      setToast("Prazo financeiro salvo!");
+      setDocsAbertos(false);
+      setToast(
+        `${pp.codigo} aprovada · ${pp.parcelas.length > 1 ? `${pp.parcelas.length} títulos criados` : "título criado"} para ${formatDate(dataPagamento)}.`,
+      );
       router.refresh();
+      setTimeout(() => onOpenChange(false), 1200);
     });
   }
 
@@ -167,42 +157,64 @@ export function PPDrawerFinanceiro({ pp, open, onOpenChange, contas, tipos, subt
         return;
       }
       setAskRejeitar(false);
+      setDocsAbertos(false);
       onOpenChange(false);
       setToast(`${pp.codigo} rejeitada. O GP foi liberado pra corrigir.`);
       router.refresh();
     });
   }
 
+  const acoesAvaliacao = (
+    <>
+      <button
+        type="button"
+        onClick={() => setAskRejeitar(true)}
+        disabled={pending}
+        className="inline-flex items-center gap-1.5 rounded-lg border border-california-red/40 bg-white px-3.5 py-2 text-sm font-semibold text-california-red transition-colors hover:bg-california-red/5 disabled:opacity-50"
+      >
+        <Ban className="h-3.5 w-3.5" />
+        Rejeitar
+      </button>
+      <button
+        type="button"
+        onClick={handleAprovar}
+        disabled={pending}
+        className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
+      >
+        <CheckCircle2 className="h-3.5 w-3.5" />
+        {pending ? "Aprovando..." : "Aprovar"}
+      </button>
+    </>
+  );
+
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DrawerContent className="sm:max-w-2xl">
-          <DialogHeader className="px-6 pt-6 pb-4 border-b border-border">
-            <DialogTitle className="flex items-center gap-3">
+          <DialogHeader className="border-b border-border px-6 pb-4 pt-6">
+            <DialogTitle className="flex flex-wrap items-center gap-3">
               <span className="font-mono text-lg">{pp.codigo}</span>
               <Badge className={cn("border", statusBadgeClasses(pp.status))}>
                 {ppStatusLabel(pp.status)}
               </Badge>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    onClick={handleVerPDF}
-                    disabled={pending}
-                    className="ml-auto rounded-md p-1.5 text-muted-foreground hover:text-california-red hover:bg-accent transition-colors disabled:opacity-50"
-                  >
-                    <Eye className="h-4 w-4" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent>Ver PDF</TooltipContent>
-              </Tooltip>
+              <button
+                type="button"
+                onClick={() => setDocsAbertos(true)}
+                className="ml-auto inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-border bg-white px-3 py-2 text-xs font-semibold transition-colors hover:border-california-red hover:text-california-red"
+              >
+                <Columns2 className="h-3.5 w-3.5" />
+                Visualizar documentos
+              </button>
             </DialogTitle>
           </DialogHeader>
 
-          <div className="flex-1 overflow-y-auto space-y-4 p-6">
+          <div className="flex-1 space-y-4 overflow-y-auto p-6">
             {erro && (
-              <div className="flex items-start justify-between gap-2 rounded border border-california-red/40 bg-california-red/5 p-3 text-sm text-california-red">
-                <span>{erro}</span>
+              <div className="flex items-start justify-between gap-2 rounded-lg border border-california-red/40 bg-california-red/5 p-3 text-sm text-california-red">
+                <span className="flex items-start gap-2">
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                  {erro}
+                </span>
                 <button type="button" onClick={() => setErro(null)}>
                   <X className="h-4 w-4" />
                 </button>
@@ -211,14 +223,11 @@ export function PPDrawerFinanceiro({ pp, open, onOpenChange, contas, tipos, subt
 
             {pp.status === "cancelada" && (
               <div className="rounded-lg border border-california-red/30 bg-california-red/5 p-3">
-                <p className="text-xs font-semibold uppercase tracking-wider text-california-red mb-1">
+                <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-california-red">
                   Cancelada
                 </p>
                 <p className="text-sm">
-                  Por{" "}
-                  <span className="font-medium">
-                    {pp.cancelada_por_nome ?? "—"}
-                  </span>{" "}
+                  Por <span className="font-medium">{pp.cancelada_por_nome ?? "—"}</span>{" "}
                   em {formatDateTime(pp.cancelada_em)}
                 </p>
                 <p className="mt-2 text-sm">
@@ -234,10 +243,7 @@ export function PPDrawerFinanceiro({ pp, open, onOpenChange, contas, tipos, subt
                   Rejeitada
                 </p>
                 <p className="text-sm">
-                  Por{" "}
-                  <span className="font-medium">
-                    {pp.rejeitada_por_nome ?? "—"}
-                  </span>{" "}
+                  Por <span className="font-medium">{pp.rejeitada_por_nome ?? "—"}</span>{" "}
                   em {formatDateTime(pp.rejeitada_em)}
                 </p>
                 <p className="mt-2 text-sm">
@@ -256,11 +262,10 @@ export function PPDrawerFinanceiro({ pp, open, onOpenChange, contas, tipos, subt
                   Paga
                 </p>
                 <p className="text-sm">
-                  Em {formatDate(pp.pago_em)}
+                  Última parcela baixada em {formatDate(pp.pago_em)}
                   {pp.pago_por_nome ? (
                     <>
-                      , registrado por{" "}
-                      <span className="font-medium">{pp.pago_por_nome}</span>
+                      , por <span className="font-medium">{pp.pago_por_nome}</span>
                     </>
                   ) : null}
                 </p>
@@ -268,7 +273,7 @@ export function PPDrawerFinanceiro({ pp, open, onOpenChange, contas, tipos, subt
             )}
 
             {/* Dados */}
-            <div className="rounded-lg border border-border bg-muted/20 p-4 space-y-2 text-sm">
+            <div className="space-y-2 rounded-lg border border-border bg-muted/20 p-4 text-sm">
               <div className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1">
                 <span className="text-muted-foreground">Fornecedor</span>
                 <span className="font-medium">{pp.fornecedor_nome}</span>
@@ -287,7 +292,7 @@ export function PPDrawerFinanceiro({ pp, open, onOpenChange, contas, tipos, subt
                     href={`/jobs/${pp.job_id}`}
                     prefetch={false}
                     onClick={(e) => e.stopPropagation()}
-                    className="text-california-red hover:underline inline-flex items-center gap-1"
+                    className="inline-flex items-center gap-1 text-california-red hover:underline"
                   >
                     <span className="font-mono text-xs">{pp.job_codigo}</span>{" "}
                     {pp.job_nome}
@@ -298,19 +303,11 @@ export function PPDrawerFinanceiro({ pp, open, onOpenChange, contas, tipos, subt
                 <span>{pp.servico}</span>
                 <span className="text-muted-foreground">Quantidade</span>
                 <span>{pp.quantidade}</span>
+                <span className="text-muted-foreground">Parcela</span>
+                <span className="font-mono text-xs">1/{Math.max(pp.parcelas.length, 1)}</span>
                 <span className="text-muted-foreground">Valor</span>
                 <span className="font-mono font-semibold">
                   {formatCurrency(pp.valor, "BRL")}
-                </span>
-                <span className="text-muted-foreground">Prazo Original</span>
-                <span>
-                  {formatDate(pp.prazo_pagamento)}
-                  {pp.parcelas.length > 1 && (
-                    <span className="text-muted-foreground">
-                      {" "}
-                      · 1ª de {pp.parcelas.length}
-                    </span>
-                  )}
                 </span>
                 <span className="text-muted-foreground">Emitida em</span>
                 <span>
@@ -326,9 +323,27 @@ export function PPDrawerFinanceiro({ pp, open, onOpenChange, contas, tipos, subt
               </div>
             </div>
 
-            {/* Parcelas — leitura. A baixa continua sendo da PP inteira
-                até a Tela 3.2 ("Títulos a Pagar"), mas o financeiro
-                precisa ver em quantas vezes vai pagar ANTES de aprovar. */}
+            {/* Vencimento original em evidência — é contra ele que a data
+                de pagamento se decide, e é ele que fica registrado. */}
+            <div className="flex items-center gap-3.5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3.5">
+              <div className="flex h-10 w-10 flex-none items-center justify-center rounded-lg bg-amber-900/10 text-amber-800">
+                <CalendarClock className="h-5 w-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-amber-800">
+                  Vencimento original
+                </p>
+                <p className="mt-0.5 font-mono text-xl font-bold">
+                  {formatDate(vencOriginal)}
+                </p>
+                <p className="mt-0.5 text-[11px] text-amber-900/70">
+                  Prazo negociado pela produção com o fornecedor.
+                </p>
+              </div>
+            </div>
+
+            {/* Parcelas — leitura. Depois de aprovada, cada uma vira uma
+                linha própria na aba "Títulos a Pagar". */}
             {pp.parcelas.length > 1 && (
               <div>
                 <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -345,6 +360,9 @@ export function PPDrawerFinanceiro({ pp, open, onOpenChange, contas, tipos, subt
                       </span>
                       <span className="text-muted-foreground">
                         vence em {formatDate(p.data_vencimento)}
+                        {p.data_pagamento && p.data_pagamento !== p.data_vencimento && (
+                          <> · paga em {formatDate(p.data_pagamento)}</>
+                        )}
                       </span>
                       <span className="ml-auto font-mono font-semibold">
                         {formatCurrency(p.valor, "BRL")}
@@ -358,7 +376,7 @@ export function PPDrawerFinanceiro({ pp, open, onOpenChange, contas, tipos, subt
             {/* Anexos */}
             {pp.anexos.length > 0 && (
               <div>
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Anexos ({pp.anexos.length})
                 </h3>
                 <ul className="space-y-1">
@@ -370,19 +388,16 @@ export function PPDrawerFinanceiro({ pp, open, onOpenChange, contas, tipos, subt
                         className="flex items-center gap-2 rounded border border-border bg-white p-2 text-xs"
                       >
                         <Icon className="h-4 w-4 text-muted-foreground" />
-                        <span className="flex-1 truncate">
-                          {a.arquivo_nome_original}
-                        </span>
+                        <span className="flex-1 truncate">{a.arquivo_nome_original}</span>
                         <span className="text-muted-foreground">
                           {(a.arquivo_tamanho_bytes / 1024).toFixed(0)} KB
                         </span>
                         <button
                           type="button"
-                          onClick={() => handleBaixarAnexo(a.id)}
-                          disabled={pending}
-                          className="text-california-red hover:opacity-70 disabled:opacity-50"
+                          onClick={() => setDocsAbertos(true)}
+                          className="text-california-red hover:opacity-70"
                         >
-                          <Download className="h-3.5 w-3.5" />
+                          <Eye className="h-3.5 w-3.5" />
                         </button>
                       </li>
                     );
@@ -391,107 +406,80 @@ export function PPDrawerFinanceiro({ pp, open, onOpenChange, contas, tipos, subt
               </div>
             )}
 
-            {/* Ações financeiras (só enquanto está em avaliação) */}
-            {podeEditar && (
-              <div className="space-y-3 rounded-lg border border-border p-4">
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Ações do financeiro
-                </h3>
-                <div>
-                  <label className="text-xs font-medium">
-                    Prazo pagamento financeiro
-                  </label>
-                  <p className="text-[11px] text-muted-foreground mb-1">
-                    Data em que o financeiro vai efetuar o pagamento (interno; não vai pro PDF).
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1">
-                      <DatePicker
-                        name="prazo_financeiro"
-                        defaultValue={prazoLocal ?? undefined}
-                        onDateChange={(date) => setPrazoLocal(isoDateFromDate(date))}
-                      />
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleSalvarPrazo}
-                      disabled={pending || !prazoMudou}
-                      className="rounded-lg bg-california-red px-3 py-1.5 text-xs font-semibold text-white hover:bg-california-red-hover disabled:opacity-50"
-                    >
-                      Salvar prazo
-                    </button>
-                  </div>
-                </div>
+            {/* Data de pagamento — o campo que substituiu "Ações do
+                financeiro". Obrigatório antes de aprovar. */}
+            {emAvaliacao && (
+              <div className="space-y-2 rounded-xl border border-border p-4">
+                <p className="text-sm font-bold">
+                  Data de pagamento <span className="text-california-red">*</span>
+                </p>
+                <p className="text-xs text-muted-foreground text-pretty">
+                  Escolha antes de aprovar. Esta data vira o vencimento do título em
+                  Títulos a Pagar; o vencimento original fica registrado.
+                  {pp.parcelas.length > 1 && (
+                    <>
+                      {" "}
+                      Como esta PP tem {pp.parcelas.length} parcelas, as demais são
+                      deslocadas pelo mesmo número de dias.
+                    </>
+                  )}
+                </p>
+                <DatePicker
+                  name="data_pagamento"
+                  defaultValue={dataPagamento || undefined}
+                  onDateChange={(d) => {
+                    setDataPagamento(d ? format(d, "yyyy-MM-dd") : "");
+                    setErro(null);
+                  }}
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Hoje é{" "}
+                  <strong className="font-semibold text-california-red">{hoje}</strong> —
+                  destacado no calendário.
+                </p>
+              </div>
+            )}
+
+            {!emAvaliacao && (
+              <div className="flex items-center gap-2.5 rounded-xl border border-dashed border-border px-4 py-3.5 text-xs text-muted-foreground">
+                <Lock className="h-3.5 w-3.5 flex-none" />
+                <span>
+                  Esta PP já saiu da avaliação. Aprovação e rejeição ficam disponíveis
+                  apenas para PPs em avaliação.
+                </span>
               </div>
             )}
           </div>
 
-          {/* Avaliação: aprovar pagando, ou devolver pro GP corrigir.
-              Cancelar não mora aqui — é exclusivo da aba de PPs do job. */}
-          {podeEditar && (
+          {emAvaliacao && (
             <div className="flex items-center justify-between gap-2 border-t border-border px-6 py-4">
-              <button
-                type="button"
-                onClick={() => setAskRejeitar(true)}
-                disabled={pending}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-california-red/30 bg-white px-3 py-2 text-xs font-semibold text-california-red transition-colors hover:bg-california-red hover:text-white disabled:opacity-50"
-              >
-                <Ban className="h-3.5 w-3.5" />
-                Rejeitar
-              </button>
-
-              <button
-                type="button"
-                disabled={pp.status !== "em_avaliacao" || pending}
-                onClick={() => {
-                  startTransition(async () => {
-                    const res = await aprovarPP(pp.id);
-                    if (!res.ok) {
-                      setErro(res.message);
-                    } else {
-                      setToast(`${pp.codigo} aprovada — vai para "A pagar".`);
-                      router.refresh();
-                      setTimeout(() => onOpenChange(false), 1200);
-                    }
-                  });
-                }}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
-              >
-                <CheckCircle2 className="h-3.5 w-3.5" />
-                Aprovar
-              </button>
-            </div>
-          )}
-
-          {pp.status === "aprovada" && (
-            <div className="flex items-center justify-end gap-2 border-t border-border px-6 py-4">
-              <button
-                type="button"
-                onClick={() => setDarBaixaOpen(true)}
-                disabled={pending}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
-              >
-                <CheckCircle2 className="h-3.5 w-3.5" />
-                Dar baixa
-              </button>
-            </div>
-          )}
-
-          {pp.status === "pago" && (
-            <div className="flex items-center justify-end gap-2 border-t border-border px-6 py-4">
-              <button
-                type="button"
-                onClick={() => setCancelarBaixaOpen(true)}
-                disabled={pending}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-california-red/30 bg-white px-3 py-2 text-xs font-semibold text-california-red hover:bg-california-red hover:text-white disabled:opacity-50"
-              >
-                <Ban className="h-3.5 w-3.5" />
-                Cancelar baixa
-              </button>
+              {acoesAvaliacao}
             </div>
           )}
         </DrawerContent>
       </Dialog>
+
+      <DocumentosPPOverlay
+        open={docsAbertos}
+        onClose={() => setDocsAbertos(false)}
+        ppId={pp.id}
+        ppCodigo={pp.codigo}
+        anexos={pp.anexos}
+        rodape={
+          emAvaliacao ? (
+            <div className="flex flex-wrap items-center justify-end gap-2.5">
+              <span className="mr-auto text-xs text-white/70">
+                Data de pagamento:{" "}
+                <strong className="font-semibold text-white">
+                  {dataPagamento ? formatDate(dataPagamento) : "não escolhida"}
+                </strong>{" "}
+                · vencimento original {formatDate(vencOriginal)}
+              </span>
+              {acoesAvaliacao}
+            </div>
+          ) : undefined
+        }
+      />
 
       {/* Confirm rejeitar */}
       <ConfirmDialog
@@ -504,8 +492,8 @@ export function PPDrawerFinanceiro({ pp, open, onOpenChange, contas, tipos, subt
         description={
           <div className="space-y-2">
             <p>
-              A PP volta pro gerente do job, que vê o motivo, corrige e reenvia
-              para avaliação. O item continua reservado — não vira uma PP nova.
+              A PP volta pro gerente do job, que vê o motivo, corrige e reenvia para
+              avaliação. O item continua reservado — não vira uma PP nova.
             </p>
             <div>
               <label className="text-xs font-medium">
@@ -532,54 +520,11 @@ export function PPDrawerFinanceiro({ pp, open, onOpenChange, contas, tipos, subt
         onConfirm={handleConfirmarRejeitar}
       />
 
-      {pp && (
-        <CancelarBaixaModal
-          pp={pp}
-          open={cancelarBaixaOpen}
-          onOpenChange={setCancelarBaixaOpen}
-        />
-      )}
-
-      {pp && pp.status === "aprovada" && (
-        <BaixaPPDialog
-          open={darBaixaOpen}
-          onOpenChange={setDarBaixaOpen}
-          ppCodigo={pp.codigo}
-          descricao={pp.servico}
-          valor={pp.valor}
-          empresaId={pp.empresa_id}
-          dataPrevista={pp.prazo_pagamento_financeiro ?? pp.prazo_pagamento}
-          contas={contas}
-          tipos={tipos}
-          subtipos={subtipos}
-          pending={pending}
-          onConfirm={(payload) => {
-            startTransition(async () => {
-              const res = await marcarPagaFinanceiro({
-                pp_id: pp.id,
-                pago_em: payload.pago_em,
-                conta_bancaria_id: payload.conta_bancaria_id,
-                plano_conta_tipo_id: payload.plano_conta_tipo_id,
-                plano_conta_subtipo_id: payload.plano_conta_subtipo_id,
-              });
-              if (!res.ok) {
-                setErro(res.message);
-              } else {
-                setToast(`${pp.codigo} baixada.`);
-                router.refresh();
-                setDarBaixaOpen(false);
-                setTimeout(() => onOpenChange(false), 1200);
-              }
-            });
-          }}
-        />
-      )}
-
       {/* Toast */}
       {toast && (
         <div
           role="status"
-          className="fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 shadow-elevated animate-in fade-in slide-in-from-bottom-2"
+          className="fixed bottom-6 right-6 z-[80] flex items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 shadow-elevated animate-in fade-in slide-in-from-bottom-2"
         >
           <span className="text-sm font-medium text-emerald-800">{toast}</span>
           <button
