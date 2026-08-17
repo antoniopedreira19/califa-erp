@@ -226,7 +226,7 @@ export default async function VersaoDetailPage({
 
   // Segunda onda: depende de orcamento.projeto_id, por isso não entra no
   // Promise.all acima. Só o fluxo de abertura consome esses dados.
-  const [projetoRes, jobsCountRes, projetoRegionaisRes] = await Promise.all([
+  const [projetoRes, jobsCountRes, projetoRegionaisRes, contatosRes] = await Promise.all([
     supabase
       .from("projetos")
       .select("id, codigo, nome, cliente_id, cliente:clientes(id, nome_fantasia), produto:cliente_produtos(nome)")
@@ -244,6 +244,18 @@ export default async function VersaoDetailPage({
       .select("regional:regionais(id, nome)")
       .eq("projeto_id", orcamento.projeto_id)
       .eq("tenant_id", session.activeTenant.id),
+    // Contatos de cobrança do job já enviado — quem os lê é o modo
+    // somente leitura do modal ("Ver dados do job"). Cabe nesta onda
+    // porque `job.id` já é conhecido; sem job, nem query existe.
+    job
+      ? supabase
+          .from("jobs_contatos")
+          .select("nome, numero, email")
+          .eq("job_id", job.id)
+          .eq("tenant_id", session.activeTenant.id)
+          .eq("tipo", "cobranca")
+          .order("ordem", { ascending: true })
+      : Promise.resolve({ data: [], error: null }),
   ]);
 
   const projetoRaw = projetoRes.data as any;
@@ -290,6 +302,16 @@ export default async function VersaoDetailPage({
 
   const orcamentoRaw = orcamento as any;
 
+  if (contatosRes.error) {
+    console.error("[versao.contatos_job]", (contatosRes.error as any).message);
+  }
+
+  const contatosDoJob = ((contatosRes.data ?? []) as any[]).map((c) => ({
+    nome: (c.nome as string | null) ?? "",
+    numero: (c.numero as string | null) ?? "",
+    email: (c.email as string | null) ?? "",
+  }));
+
   const inicialModal = {
     nome: job?.nome ?? orcamento.nome,
     // Cidade e regional são editáveis no modal: entram pré-preenchidas
@@ -301,6 +323,16 @@ export default async function VersaoDetailPage({
     dataFim: job?.data_fim_prevista ?? orcamento.data_fim_prevista ?? "",
     dataFaturamento: job?.data_prevista_faturamento ?? "",
     observacoes: job?.observacoes ?? "",
+    // Job já enviado mostra o que foi gravado (lista vazia nos jobs
+    // anteriores a 17/08/2026, que não tinham contato). Antes do envio, o
+    // formulário abre com uma linha pronta para digitar — a lixeira fica
+    // desabilitada enquanto ela for a única.
+    contatos:
+      contatosDoJob.length > 0
+        ? contatosDoJob
+        : job
+          ? []
+          : [{ nome: "", numero: "", email: "" }],
   };
 
   // Herdados: com job já aberto valem os valores congelados nele; antes

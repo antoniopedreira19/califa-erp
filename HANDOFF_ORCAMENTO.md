@@ -37,6 +37,7 @@ Registro da implementação dos design handoffs aprovados para o módulo de Orç
 | **18 — Funil comercial nas listas, Valor do Job e GPs Responsáveis** | ✅ `d078f8a` + `63c258f` + `9018e3a` (2026-08-17) |
 | **19 — Editor multi-jobs: novo no topo, orçado zerado bloqueia, categoria obrigatória** | ✅ (2026-08-17) |
 | **20 — Tela da versão: grupo automático na v1, Status fora do drawer, aprovação exige orçado** | ✅ (2026-08-17) |
+| **21 — Contato de cobrança na abertura do job + "Descritivo do Job"** | ✅ (2026-08-17) |
 
 `tsc --noEmit` e `next lint` limpos em todas. Entregas 4, 5, 8 a 13
 também com `next build` completo. As Entregas 8 e 10 a 13 são as únicas
@@ -1796,3 +1797,69 @@ a partir do Grupo B, a conferência completa no navegador é consolidada
 numa rodada única ao fim do plano de alterações. Detalhes na seção
 "Registro de testes" do plano local. `next lint` e `npm run build`
 limpos.
+
+## 23. Entrega 21 — Contato de cobrança na abertura do job e "Descritivo do Job" (2026-08-17)
+
+**Origem:** plano local de alterações de telas (Grupo C, Tela 1.6), com as
+decisões do Tiago de 17/08. Regra na
+[decisão 012](docs/decisions/012-contato-de-cobranca-do-job.md).
+**Primeira migration do plano:** `20260817000001_jobs_contatos.sql`.
+
+Três alterações nos dois modais do envio de job
+(`enviar-job-modal.tsx` e `confirmar-envio-modal.tsx`):
+
+1. **"Observações" virou "Descritivo"** no formulário e na conferência, e
+   **"Descritivo do Job"** nas duas telas do financeiro que leem o mesmo
+   dado — `abertura-de-job/conferencia-dialog.tsx` (diálogo de conferência
+   da fila) e `financeiro/jobs/[jobId]/page.tsx` (detalhe do job). O
+   rótulo unificado nas duas pontas foi decisão do Tiago nesta sessão: era
+   o mesmo campo com dois nomes. **A coluna segue `jobs.observacoes`**, e
+   com ela o campo do form, o schema Zod e `OBSERVACOES_MAX` — mudou o
+   rótulo, não o dado. O comentário defasado na action (que dizia que o
+   financeiro ainda não lia o campo) foi corrigido.
+2. **Seção "Contato de cobrança"** entre a linha GP/Produtor e o card de
+   Fechamento da versão: grid de 3 colunas (Nome · Número · E-mail) +
+   lixeira por linha, botão "+ Adicionar contato" abaixo. Nome e e-mail
+   obrigatórios, número opcional, ao menos uma linha para enviar. Usa o
+   `Campo` e o `Input` já existentes do modal, com o asterisco vermelho
+   padrão — nenhum componente ou badge novo. A lixeira desabilita quando
+   sobra uma só linha. No modo somente leitura ("Ver dados do job") os
+   contatos gravados aparecem travados; job anterior a esta entrega mostra
+   "— nenhum contato registrado".
+3. **Contatos na conferência**, entre "Valor total" e o Descritivo: nome
+   na linha, e-mail (e número, quando houver, separado por " · ") logo
+   abaixo em fonte menor e `text-muted-foreground`. Sem chip e sem
+   tooltip.
+
+**Banco (mudança aditiva, ciclo do `docs/FLUXO-BANCO.md` completo):** tabela
+nova `jobs_contatos` — `tenant_id`, `job_id` (`on delete cascade`), `tipo`
+(CHECK `'cobranca' | 'pagamento'`; a aplicação grava só `'cobranca'`),
+`nome`, `numero` (nullable), `email`, `ordem`, timestamps com trigger
+`set_updated_at`, `created_by`. RLS ligada com as três policies via
+`public.is_tenant_member(tenant_id)`, GRANT `select, insert, update` para
+`authenticated` e **nada para `anon`**; índices `(job_id, ordem)` e
+`(tenant_id)`. Sem GRANT de `delete` de propósito — ver decisão 012.
+`JobContato` e `JobContatoTipo` escritos à mão em `lib/types.ts`, no mesmo
+commit.
+
+**Onde a obrigatoriedade mora:** `faltamCampos` no modal (destaca a linha
+torta e desabilita "Confirmar dados") e `contatos_cobranca` em
+`aberturaJobSchema` — regra crítica não vive só no front. Os contatos
+viajam como JSON num campo do FormData; `parseContatos` na action faz o
+parse e payload ilegível cai na mensagem "Informe ao menos um contato de
+cobrança.". O insert é em bulk, depois da cópia da planilha e antes do
+`status = 'job_criado'` do orçamento; falha segue o padrão das falhas
+parciais ("Job criado, mas os contatos não foram gravados. Avise o
+suporte."). O audit de `job.enviado_para_abertura` ganhou
+`qtd_contatos_cobranca` — a quantidade, sem nome nem e-mail: dado pessoal
+do cliente não precisa ser duplicado no log.
+
+**Leitura sem custo novo:** os contatos do job já enviado entram na
+**segunda onda** de queries da página da versão (a que já dependia de
+`orcamento.projeto_id`), e só quando existe job — nenhum round-trip a mais
+no caminho comum.
+
+**Verificação:** `tsc --noEmit` e `next lint` limpos; migration aplicada e
+conferida pelo MCP (colunas, FKs, CHECKs, RLS, policies, GRANT, índices,
+trigger, advisors). A conferência no navegador segue consolidada na etapa
+final de testes do plano.

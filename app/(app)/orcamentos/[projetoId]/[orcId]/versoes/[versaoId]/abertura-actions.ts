@@ -50,6 +50,22 @@ export async function buscarCidades(
   return (data ?? []) as { id: string; nome: string }[];
 }
 
+/**
+ * Os contatos de cobrança chegam como JSON num campo único do FormData —
+ * é o único campo composto do formulário. Payload ilegível vira array
+ * vazio de propósito: o schema devolve "Informe ao menos um contato de
+ * cobrança.", que é a mensagem certa para quem está na tela.
+ */
+function parseContatos(raw: string): unknown {
+  if (!raw) return [];
+  try {
+    const valor = JSON.parse(raw);
+    return Array.isArray(valor) ? valor : [];
+  } catch {
+    return [];
+  }
+}
+
 function extractInput(formData: FormData) {
   return {
     nome: formData.get("nome")?.toString() ?? "",
@@ -60,6 +76,9 @@ function extractInput(formData: FormData) {
     data_prevista_faturamento:
       formData.get("data_prevista_faturamento")?.toString() ?? "",
     observacoes: formData.get("observacoes")?.toString() ?? "",
+    contatos_cobranca: parseContatos(
+      formData.get("contatos_cobranca")?.toString() ?? "",
+    ),
   };
 }
 
@@ -306,8 +325,9 @@ export async function enviarJobParaAbertura(
       data_inicio_prevista: parsed.data.data_inicio_prevista,
       data_fim_prevista: parsed.data.data_fim_prevista,
       data_prevista_faturamento: parsed.data.data_prevista_faturamento,
-      // Gravado mas ainda não exibido: a leitura entra quando a tela de
-      // abertura do financeiro for refinada (decisão do time, 31/07/2026).
+      // Na tela chama "Descritivo do Job" desde 17/08/2026; a coluna
+      // segue `observacoes`. O financeiro lê no diálogo de conferência da
+      // fila de abertura e no detalhe do job.
       observacoes: parsed.data.observacoes,
       // Os dois responsáveis vêm do orçamento desde 06/08/2026 — antes o
       // job herdava `projetos.responsavel_id`.
@@ -382,6 +402,32 @@ export async function enviarJobParaAbertura(
     }
   }
 
+  // 6c. Contatos de cobrança — quem o financeiro procura para cobrar. O
+  //     schema garante ao menos um, então o insert nunca vem vazio; em
+  //     bulk, não um por vez (docs/PERFORMANCE.md, anti-padrão I).
+  const { error: errContatos } = await supabase.from("jobs_contatos").insert(
+    parsed.data.contatos_cobranca.map((c, i) => ({
+      tenant_id: session.activeTenant.id,
+      job_id: novo.id,
+      tipo: "cobranca",
+      nome: c.nome,
+      numero: c.numero,
+      email: c.email,
+      // Posição no formulário: o primeiro é o contato principal na prática.
+      ordem: i + 1,
+      created_by: session.profile.id,
+    })),
+  );
+
+  if (errContatos) {
+    console.error("[abertura.contatos_insert]", errContatos.message);
+    return {
+      ok: false,
+      message:
+        "Job criado, mas os contatos não foram gravados. Avise o suporte.",
+    };
+  }
+
   // 7. Orçamento passa a 'job_criado'.
   const { error: errOrcStatus } = await supabase
     .from("orcamentos")
@@ -413,6 +459,10 @@ export async function enviarJobParaAbertura(
       valor_total: Number(totais.valorJob.toFixed(2)),
       faturamento_previsto: Number(totais.faturamentoPrevisto.toFixed(2)),
       data_prevista_faturamento: parsed.data.data_prevista_faturamento,
+      // Quantos contatos de cobrança foram gravados (obrigatório ≥ 1
+      // desde 17/08/2026). Sem e-mail nem nome no audit: dado pessoal do
+      // cliente não precisa ser duplicado no log.
+      qtd_contatos_cobranca: parsed.data.contatos_cobranca.length,
     },
   });
 

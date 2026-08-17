@@ -621,7 +621,11 @@ export interface Job {
   faturamento_previsto_abertura: number | null;
   /** Data prevista para o faturamento, informada no envio do job. */
   data_prevista_faturamento: string | null;
-  /** Contexto livre da produção, lido no modal de conferência do financeiro. */
+  /**
+   * Contexto livre da produção, lido no modal de conferência do financeiro.
+   * Aparece na tela como **Descritivo do Job** desde 17/08/2026 — a coluna
+   * e o campo continuam `observacoes` (só o rótulo mudou).
+   */
   observacoes: string | null;
   status: JobStatus;
   motivo_rejeicao: string | null;
@@ -648,6 +652,36 @@ export interface Job {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+}
+
+/**
+ * Tipo de contato do job. Hoje a aplicação só grava 'cobranca' — quem
+ * recebe a cobrança no cliente. O CHECK do banco já aceita 'pagamento'
+ * para não exigir migration se o contato de pagamento voltar à mesa
+ * (a ideia foi descartada em 17/08/2026 — docs/decisions/012).
+ */
+export type JobContatoTipo = "cobranca" | "pagamento";
+
+/**
+ * Contato informado no modal "Enviar job para abertura", uma linha por
+ * pessoa. É contato DO JOB, não do cadastro do cliente: muda de job para
+ * job (praça, evento, área que aprovou a verba), por isso é digitado na
+ * abertura em vez de herdado de `clientes`.
+ */
+export interface JobContato {
+  id: string;
+  tenant_id: string;
+  job_id: string;
+  tipo: JobContatoTipo;
+  nome: string;
+  /** Telefone — o único campo opcional da linha. */
+  numero: string | null;
+  email: string;
+  /** Posição no formulário: o primeiro é o contato principal na prática. */
+  ordem: number;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
 }
 
 /** Um portal de fornecedor do cliente, onde a NF é lançada. */

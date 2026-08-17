@@ -179,6 +179,20 @@ export function FluxoAbertura({
     formData.set("data_fim_prevista", dados.dataFim);
     formData.set("data_prevista_faturamento", dados.dataFaturamento);
     formData.set("observacoes", dados.observacoes);
+    // Único campo composto do formulário: vai como JSON e a action
+    // parseia antes de validar. Linha totalmente em branco é descartada
+    // aqui — só o que tem conteúdo chega ao servidor.
+    formData.set(
+      "contatos_cobranca",
+      JSON.stringify(
+        dados.contatos.filter(
+          (c) =>
+            c.nome.trim().length > 0 ||
+            c.email.trim().length > 0 ||
+            c.numero.trim().length > 0,
+        ),
+      ),
+    );
 
     startTransition(async () => {
       const res = await enviarJobParaAbertura(versaoId, formData);
@@ -402,6 +416,7 @@ export function FluxoAbertura({
         valorTotal={valorJob}
         faturamentoPrevisto={faturamentoPrevisto}
         moeda={moeda}
+        contatos={dados.contatos}
         observacoes={dados.observacoes}
         erro={erroGeral}
       />

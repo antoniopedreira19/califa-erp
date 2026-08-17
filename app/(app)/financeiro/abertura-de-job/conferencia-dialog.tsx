@@ -152,9 +152,12 @@ export function ConferenciaDialog({ job, onOpenChange, onReprovar }: Props) {
         </Link>
 
         <div className="space-y-1.5">
-          <p className="text-[12.5px] font-semibold">Observações da produção</p>
+          {/* Mesmo dado que a produção digita no modal de envio: coluna
+              `jobs.observacoes`, rotulada "Descritivo do Job" nas duas
+              pontas desde 17/08/2026. */}
+          <p className="text-[12.5px] font-semibold">Descritivo do Job</p>
           <div className="rounded-lg border border-border bg-muted px-3.5 py-3 text-[12.5px] leading-relaxed text-muted-foreground">
-            {job.observacoes?.trim() || "Sem observações da produção."}
+            {job.observacoes?.trim() || "Sem descritivo do job."}
           </div>
         </div>
 

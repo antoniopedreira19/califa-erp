@@ -292,8 +292,10 @@ export default async function JobNoFinanceiroPage({
 
       {job.observacoes && (
         <section className="rounded-2xl border border-border bg-card p-6 shadow-soft">
+          {/* `jobs.observacoes` — o texto que a produção escreve no envio
+              do job. Rótulo unificado em 17/08/2026. */}
           <h2 className="mb-2 text-xs font-semibold uppercase tracking-[0.08em]">
-            Observações da produção
+            Descritivo do Job
           </h2>
           <p className="text-[13px] leading-relaxed text-muted-foreground">
             {job.observacoes}
