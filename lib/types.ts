@@ -736,6 +736,27 @@ export interface JobPrevisaoCusto {
 }
 
 /**
+ * Uma parcela da previsão de recebimento do job — o outro lado da curva
+ * de desembolso, gravado na mesma abertura. A soma das parcelas fecha com
+ * `jobs.faturamento_previsto`.
+ *
+ * Previsão não é título: quando a NF sai, nasce um `titulos_receber` que
+ * ABATE esta previsão na leitura do fluxo de caixa. Nada aqui é apagado
+ * pelo faturamento.
+ */
+export interface JobPrevisaoRecebimento {
+  id: string;
+  tenant_id: string;
+  job_id: string;
+  ordem: number;
+  data_prevista: string;
+  valor: number;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
  * O nome que o financeiro vê. Cai para o nome da produção enquanto o job
  * não tiver sido aberto (ou se quem abriu não renomeou).
  */

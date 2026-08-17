@@ -8,6 +8,7 @@ de negócio tomadas junto com o time durante a execução.
 | **I** | `Abertura de Job.dc.html` | fila de abertura, conferência, formulário de registro financeiro | 1 a 10 |
 | **I·rev** | revisão de 12/08 (sem design novo) | previsão de desembolso na calha PP, janelas 08/20, os dois números do fechamento | 11 a 14 |
 | **II** | `Abertura de Job - Financeiro.dc.html`, aba "Jobs abertos" | lista de jobs abertos, job na visão do financeiro | 15 a 18 |
+| **V** | `Abertura de Job - Telas Atuais.dc.html`, itens 02a e 03 | previsão de recebimento no formulário de abertura, planilha interna em leitura | 33 |
 
 > Contas a pagar, conciliação e lançamentos financeiros já existiam antes deste
 > documento e não estão registrados aqui.
@@ -747,3 +748,93 @@ com atraso, e a mistura de paga + vencida.
    `vw_fluxo_caixa` (seção 14).
 4. **Feriados na janela de pagamento.** Hoje o ajuste só empurra sábado e
    domingo (seção 12).
+
+---
+
+## 33. Previsão de recebimento e planilha em leitura na abertura (2026-08-17)
+
+Itens **02 (versão 02a)** e **03** do catálogo
+`Abertura de Job - Telas Atuais.dc.html`. Regra nova em
+`docs/decisions/015-previsao-de-recebimento-na-abertura.md`.
+
+> ⚠️ **Isto muda o formulário descrito nas seções 3 a 6.** Até aqui a
+> abertura registrava **uma** previsão (a curva de desembolso). Agora são
+> **duas**, em cards separados: "Previsão de recebimento" em cima,
+> "Previsão de custos" embaixo. O selo de status do cabeçalho
+> ("Conferido") **foi removido** — decisão do Tiago: é desnecessário.
+
+### O card novo — Previsão de recebimento
+
+Dois números no topo, os mesmos dois do fechamento do envio: **Valor
+total do job** (compromisso do cliente) e **Faturamento previsto** (o que
+a California recebe, com o selo "Do orçamento"). Abaixo, a tabela de
+parcelas — mesma anatomia da curva de desembolso: `#`, data prevista,
+valor, % do total, lixeira; "Distribuir igualmente" no cabeçalho,
+"Adicionar parcela" no rodapé, e o chip verde/âmbar dizendo se a soma
+fecha.
+
+| | Curva de desembolso | Parcelas de recebimento |
+|---|---|---|
+| Fecha contra | `custo_previsto_total` (planejado da calha PP) | `jobs.faturamento_previsto` |
+| Primeira data | janela de pagamento dentro do período do job | data prevista de faturamento do envio |
+| Datas seguintes | próxima janela (08/20, ajustada) | +30 dias da anterior |
+| Restrição de data | **só** janelas de pagamento | nenhuma — quem manda é o cliente |
+| Total zero | abre sem curva (job 100% A/D) | abre sem previsão (nada a faturar) |
+
+O total **não vem do formulário**: a action relê `faturamento_previsto`
+do banco antes de conferir a soma, como já fazia com o custo previsto.
+
+### Migration
+
+`20260817000003_jobs_previsao_recebimento.sql` — aditiva, espelho exato
+de `jobs_previsao_custo`: 9 colunas, `tenant_id`, RLS ligada, 4 policies
+só para `authenticated` via `is_tenant_member`, 3 índices + PK + unique
+`(job_id, ordem)`, trigger de `updated_at` e GRANT explícito. Tipo
+`JobPrevisaoRecebimento` em `lib/types.ts`, no mesmo commit.
+
+### O resto do quadro 02a
+
+| Onde | O que mudou |
+|---|---|
+| Cabeçalho | selo de status removido; subtítulo passou a citar as duas previsões |
+| Lateral | card novo **"Descritivo do Job"** — o texto que a produção escreveu no envio (`jobs.observacoes`), mais "Enviado por" (o `created_by` do job) e "Orçamento de origem" |
+| Lateral | "Ver planilha interna" virou o bloco do protótipo: ícone, título e o resumo real da planilha (`N agrupamentos · N itens · orçado R$ X`) |
+| Resumo do registro | ganhou **Faturamento previsto**, **Recebimentos** e **Margem prevista** (faturamento − custo, verde quando positiva) |
+| Confirmação | linha "Recebimento" com `N× · primeira → última`, ao lado da linha da curva |
+
+### Item 03 — planilha interna em leitura
+
+Rota nova `/financeiro/abertura-de-job/[jobId]/planilha`, aberta pelo
+bloco "Visualizar planilha interna" da lateral. É **a mesma planilha** da
+aba Planilha Interna do job — `JobGrupoCard` e `JobTotaisCard`, os
+mesmos componentes, sem cópia — com `editable` e `podeAcoes` em `false`:
+sem edição de realizado, sem "Alterar orçado", sem trilha de BV/PP.
+Cabeçalho com "Voltar para a abertura" e o selo "Somente leitura".
+
+Job que já saiu da fila cai por redirect na planilha da página do job:
+esta rota é passo do fluxo de abertura, não uma segunda casa da planilha.
+
+### Fora do escopo, de propósito
+
+- **Itens 01 e 04 a 07 do catálogo não foram tocados** — inclusive o
+  diálogo de conferência da fila, que continua existindo (é por isso que
+  o protótipo mostra "Em conferência" no cabeçalho e nós não mostramos
+  selo nenhum).
+- **02b** (card único "Previsões" com tabela unificada) foi avaliado e
+  descartado pelo Tiago.
+- **Contato de cobrança** (`jobs_contatos`, criado na entrega de
+  17/08 do `HANDOFF_ORCAMENTO.md`) **continua invisível para o
+  financeiro** — não entrou aqui. A decisão 012 aponta para esta tela e
+  está errada; o destino segue em aberto.
+- **Duas divergências conscientes do protótipo**, porque copiá-lo diria
+  algo falso sobre o nosso dado: o subtítulo de "Valor total do job" no
+  card de custos (o protótipo escreve "Faturamento previsto do
+  orçamento", mas aqui os dois números são diferentes) e o rótulo
+  "Descritivo do Job" no lugar de "Observações da produção" (nome que o
+  campo passou a ter nas duas pontas em 17/08).
+
+### Arquivos
+
+`[jobId]/abertura-form.tsx`, `[jobId]/page.tsx`,
+`[jobId]/planilha/page.tsx` (novo), `dados.ts`, `curva.ts`, `actions.ts`,
+`lib/validations/abertura-financeiro.ts`, `lib/types.ts`.

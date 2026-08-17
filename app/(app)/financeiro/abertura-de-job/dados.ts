@@ -156,17 +156,27 @@ function montarJobNaFila(j: any, totais?: TotaisPlanilhaJob): JobNaFila {
 /**
  * Um job específico para a tela de abertura. Devolve também o status
  * cru, porque a página precisa desviar quem chegou num job que já foi
- * aberto ou reprovado por outra pessoa.
+ * aberto ou reprovado por outra pessoa, e o nome de quem enviou o job
+ * para abertura — o `created_by` do job, que é quem clicou em "Enviar
+ * job para abertura" na tela da versão.
+ *
+ * O nome sai em query própria, e não em embed: `jobs.created_by` aponta
+ * para `auth.users`, não para `profiles`, então o PostgREST não faz o
+ * join sozinho. `profiles.id` É o id do usuário de auth.
  */
 export async function carregarJobParaAbertura(
   tenantId: string,
   jobId: string,
-): Promise<{ job: JobNaFila; status: string } | null> {
+): Promise<{
+  job: JobNaFila;
+  status: string;
+  enviadoPorNome: string | null;
+} | null> {
   const supabase = createClient();
 
   const { data, error } = await supabase
     .from("jobs")
-    .select(`${SELECT_JOB_FILA}, status`)
+    .select(`${SELECT_JOB_FILA}, status, created_by`)
     .eq("id", jobId)
     .eq("tenant_id", tenantId)
     .maybeSingle();
@@ -177,10 +187,27 @@ export async function carregarJobParaAbertura(
   }
   if (!data) return null;
 
-  const totais = await totaisDasPlanilhas([jobId]);
+  const criadoPor = (data as any).created_by as string | null;
+
+  const [totais, autorRes] = await Promise.all([
+    totaisDasPlanilhas([jobId]),
+    criadoPor
+      ? supabase
+          .from("profiles")
+          .select("nome")
+          .eq("id", criadoPor)
+          .maybeSingle<{ nome: string | null }>()
+      : Promise.resolve({ data: null, error: null }),
+  ]);
+
+  if (autorRes.error) {
+    console.error("[abertura-job.enviado-por]", autorRes.error.message);
+  }
+
   return {
     job: montarJobNaFila(data, totais.get(jobId)),
     status: (data as any).status,
+    enviadoPorNome: autorRes.data?.nome ?? null,
   };
 }
 

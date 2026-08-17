@@ -11,9 +11,9 @@ import { z } from "zod";
 const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
- * Tolerância ao comparar a soma da curva com o custo previsto. Existe por
- * causa do centavo de arredondamento ao dividir um total por 3 — não é
- * folga de negócio.
+ * Tolerância ao comparar a soma de uma previsão (curva de desembolso ou
+ * parcelas de recebimento) com o total dela. Existe por causa do centavo
+ * de arredondamento ao dividir um total por 3 — não é folga de negócio.
  */
 export const TOLERANCIA_CURVA = 0.02;
 
@@ -33,6 +33,25 @@ export const curvaDesembolsoSchema = z
     }),
   )
   .max(60, "Máximo de 60 datas na curva.");
+
+/**
+ * Parcelas de recebimento: em que datas o faturamento previsto entra no
+ * caixa. Pode ser vazia pelo mesmo motivo da curva — job cujo
+ * faturamento previsto é zero (tudo pago direto pelo cliente ao
+ * fornecedor) abre sem previsão de entrada. Quando o faturamento previsto
+ * é maior que zero, a action exige que as parcelas existam e fechem com
+ * ele.
+ */
+export const previsaoRecebimentoSchema = z
+  .array(
+    z.object({
+      data_prevista: z.string().regex(dateRegex, "Informe a data prevista."),
+      valor: z
+        .number({ invalid_type_error: "Informe o valor da parcela." })
+        .positive("Cada parcela de recebimento precisa de um valor maior que zero."),
+    }),
+  )
+  .max(60, "Máximo de 60 parcelas de recebimento.");
 
 export const aberturaFinanceiraSchema = z.object({
   /**
@@ -57,9 +76,13 @@ export const aberturaFinanceiraSchema = z.object({
     .min(2000, "Ano inválido.")
     .max(2100, "Ano inválido."),
   curva: curvaDesembolsoSchema,
+  recebimento: previsaoRecebimentoSchema,
 });
 
 export type CurvaDesembolsoLinhaInput = z.infer<
   typeof curvaDesembolsoSchema
+>[number];
+export type PrevisaoRecebimentoLinhaInput = z.infer<
+  typeof previsaoRecebimentoSchema
 >[number];
 export type AberturaFinanceiraInput = z.infer<typeof aberturaFinanceiraSchema>;
