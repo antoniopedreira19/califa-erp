@@ -5,14 +5,18 @@ import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { listActiveMembers } from "@/lib/data/members";
 import { listEmpresasAtivas } from "@/lib/data/empresas";
+import { escolherJobDoFunil, estagioFunil } from "@/lib/calculos/funil";
+import { calcularTotaisVersao } from "@/lib/calculos/versao-totais";
 import type {
   CategoriaDominio,
   Cidade,
   Cliente,
+  JobStatus,
   Orcamento,
   Profile,
   Projeto,
   Regional,
+  TipoCusto,
 } from "@/lib/types";
 import { projetoStatusLabel } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
@@ -55,7 +59,7 @@ export default async function ProjetoDetailPage({
       .maybeSingle(),
     supabase
       .from("orcamentos")
-      .select("id, codigo, nome, status, data_inicio_prevista, data_fim_prevista, created_at, categoria:categorias_dominio(nome)")
+      .select("id, codigo, nome, status, versao_aprovada_id, data_inicio_prevista, data_fim_prevista, created_at, categoria:categorias_dominio(nome)")
       .eq("projeto_id", params.projetoId)
       .eq("tenant_id", session.activeTenant.id)
       .order("created_at", { ascending: false }),
@@ -162,16 +166,96 @@ export default async function ProjetoDetailPage({
   const orcamentosBrutos = (orcsRes.data ?? []) as any[];
   const orcamentoIds = orcamentosBrutos.map((o) => o.id);
 
-  // Contagem agregada de versões por orçamento
+  // Versões (contagem + escolha da versão-alvo do valor) e jobs (estágio
+  // do funil) por orçamento — queries paralelas e leves, sem embed.
   const versoesCountMap = new Map<string, number>();
+  type VersaoLeve = {
+    id: string;
+    orcamento_id: string;
+    numero_versao: number;
+    percentual_honorarios: number;
+    percentual_imposto: number;
+    created_at: string;
+  };
+  const versoesPorOrcamento = new Map<string, VersaoLeve[]>();
+  const jobsPorOrcamento = new Map<string, { status: JobStatus; created_at: string }[]>();
+  // Valor do job por orçamento: versão APROVADA quando existir; senão a
+  // mais recente (número em negociação). Sem versão → null (travessão).
+  const valorJobMap = new Map<string, number>();
+
   if (orcamentoIds.length > 0) {
-    const { data: versoes } = await supabase
-      .from("versoes_orcamento")
-      .select("orcamento_id")
-      .in("orcamento_id", orcamentoIds)
-      .eq("tenant_id", session.activeTenant.id);
-    for (const v of ((versoes ?? []) as any[])) {
+    const [versoesRes, jobsRes] = await Promise.all([
+      supabase
+        .from("versoes_orcamento")
+        .select("id, orcamento_id, numero_versao, percentual_honorarios, percentual_imposto, created_at")
+        .in("orcamento_id", orcamentoIds)
+        .eq("tenant_id", session.activeTenant.id),
+      supabase
+        .from("jobs")
+        .select("orcamento_id, status, created_at")
+        .in("orcamento_id", orcamentoIds)
+        .eq("tenant_id", session.activeTenant.id),
+    ]);
+    if (versoesRes.error) console.error("[projeto.versoes]", versoesRes.error.message);
+    if (jobsRes.error) console.error("[projeto.jobs]", jobsRes.error.message);
+
+    for (const v of ((versoesRes.data ?? []) as VersaoLeve[])) {
       versoesCountMap.set(v.orcamento_id, (versoesCountMap.get(v.orcamento_id) ?? 0) + 1);
+      const atuais = versoesPorOrcamento.get(v.orcamento_id) ?? [];
+      atuais.push(v);
+      versoesPorOrcamento.set(v.orcamento_id, atuais);
+    }
+    for (const j of ((jobsRes.data ?? []) as any[])) {
+      const atuais = jobsPorOrcamento.get(j.orcamento_id) ?? [];
+      atuais.push({ status: j.status as JobStatus, created_at: j.created_at });
+      jobsPorOrcamento.set(j.orcamento_id, atuais);
+    }
+
+    // Versão-alvo de cada orçamento (aprovada > mais recente)…
+    const versaoAlvoPorOrcamento = new Map<string, VersaoLeve>();
+    for (const o of orcamentosBrutos) {
+      const versoes = versoesPorOrcamento.get(o.id) ?? [];
+      if (versoes.length === 0) continue;
+      const aprovada = o.versao_aprovada_id
+        ? versoes.find((v) => v.id === o.versao_aprovada_id)
+        : undefined;
+      const alvo =
+        aprovada ??
+        [...versoes].sort(
+          (a, b) =>
+            b.numero_versao - a.numero_versao ||
+            b.created_at.localeCompare(a.created_at),
+        )[0];
+      versaoAlvoPorOrcamento.set(o.id, alvo);
+    }
+
+    // …e os itens SÓ dessas versões, no mínimo necessário pro cálculo.
+    const versaoAlvoIds = [...versaoAlvoPorOrcamento.values()].map((v) => v.id);
+    if (versaoAlvoIds.length > 0) {
+      const { data: itens, error: itensErr } = await supabase
+        .from("versoes_orcamento_itens")
+        .select("versao_orcamento_id, tipo_custo, total_orcado")
+        .in("versao_orcamento_id", versaoAlvoIds)
+        .eq("tenant_id", session.activeTenant.id);
+      if (itensErr) console.error("[projeto.itens]", itensErr.message);
+
+      const itensPorVersao = new Map<string, { tipo_custo: TipoCusto; total_orcado: number }[]>();
+      for (const it of ((itens ?? []) as any[])) {
+        const atuais = itensPorVersao.get(it.versao_orcamento_id) ?? [];
+        atuais.push({ tipo_custo: it.tipo_custo, total_orcado: Number(it.total_orcado ?? 0) });
+        itensPorVersao.set(it.versao_orcamento_id, atuais);
+      }
+
+      for (const [orcId, versao] of versaoAlvoPorOrcamento) {
+        // A MESMA definição de "Valor do job" do fechamento da versão
+        // (calcularTotaisVersao): principal com valorJob + honorários + imposto.
+        const totais = calcularTotaisVersao(
+          itensPorVersao.get(versao.id) ?? [],
+          Number(versao.percentual_honorarios ?? 0),
+          Number(versao.percentual_imposto ?? 0),
+        );
+        valorJobMap.set(orcId, totais.valorJob);
+      }
     }
   }
 
@@ -180,9 +264,13 @@ export default async function ProjetoDetailPage({
     codigo: o.codigo,
     nome: o.nome,
     categoria_nome: o.categoria?.nome ?? null,
-    status: o.status as Orcamento["status"],
+    estagio: estagioFunil(
+      o.status as Orcamento["status"],
+      escolherJobDoFunil(jobsPorOrcamento.get(o.id) ?? []),
+    ),
     data_inicio_prevista: o.data_inicio_prevista,
     data_fim_prevista: o.data_fim_prevista,
+    valor_job: valorJobMap.get(o.id) ?? null,
     versoes_count: versoesCountMap.get(o.id) ?? 0,
     created_at: o.created_at,
   }));
