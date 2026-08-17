@@ -2,7 +2,7 @@
 
 Registro da implementação dos design handoffs aprovados para o módulo de Orçamentos.
 
-**Datas:** 2026-07-27 (entregas 1–3) · 2026-07-30 (entregas 4–8) · 2026-07-31 (entrega 9) · 2026-08-03 (entrega 10) · 2026-08-06 (entrega 11) · 2026-08-07 (entregas 12 e 13) · 2026-08-11 (entrega 15) · 2026-08-12 (entrega 17)
+**Datas:** 2026-07-27 (entregas 1–3) · 2026-07-30 (entregas 4–8) · 2026-07-31 (entrega 9) · 2026-08-03 (entrega 10) · 2026-08-06 (entrega 11) · 2026-08-07 (entregas 12 e 13) · 2026-08-11 (entrega 15) · 2026-08-12 (entrega 17) · 2026-08-17 (entrega 18)
 **Origem do design:**
 - Entregas 1–3: pacote `design_handoff_califa/` (`Versoes - Destaque v4.dc.html` opção 2a, `Orcamento - Edicao Inline.dc.html` opção 3b, `README.md`, `IMPLEMENTACAO.md`). A pasta fica **só na máquina local** — está no `.gitignore` por ser referência de design, não código.
 - Entregas 4–5, 8 e 9: projeto Claude Design `69342d83-28d9-4bea-a8af-c99e233f5f13` (`Orcamento - Versao -final-.dc.html`, `Novo projeto.dc.html` e `Abertura de Job.dc.html`), lido via MCP `claude_design`. A Entrega 9 é a revisão do mesmo `Abertura de Job.dc.html`, relido depois de atualizado.
@@ -34,6 +34,7 @@ Registro da implementação dos design handoffs aprovados para o módulo de Orç
 | **14 — Orçamento do projeto e visão agregada editável** | ✅ `2950666` (2026-08-10) |
 | **15 — Cores dos blocos e faixa do agrupamento** | ✅ (2026-08-11) |
 | **17 — Cidade e Regional editáveis na abertura + modal inteiro visível** | ✅ `40881a7` (2026-08-12) |
+| **18 — Funil comercial nas listas, Valor do Job e GPs Responsáveis** | ✅ `d078f8a` + `63c258f` + `9018e3a` (2026-08-17) |
 
 `tsc --noEmit` e `next lint` limpos em todas. Entregas 4, 5, 8 a 13
 também com `next build` completo. As Entregas 8 e 10 a 13 são as únicas
@@ -1662,3 +1663,49 @@ baixada do bucket de importações) na v1 do TESTE-0002/26-02:
 ⚠️ **Não exercitado**: a trava de versão com job aberto. O caminho existe
 nas duas camadas (botão desabilitado + recusa na action), mas exercitá-lo
 exigiria abrir um job sobre uma versão de teste e depois cancelá-lo.
+
+## 20. Entrega 18 — Funil comercial nas listas, Valor do Job e GPs Responsáveis (2026-08-17)
+
+**Origem:** plano local de alterações de telas (Grupo A), com as decisões
+do Tiago de 16-17/08. O plano fica em `planos-locais/` (gitignorado, como
+as referências de design). Regra de negócio na
+[decisão 010](docs/decisions/010-funil-comercial-do-orcamento.md).
+**Commits:** `d078f8a` (lista de projetos) · `63c258f` (formulário de
+projeto) · `9018e3a` (detalhe do projeto).
+
+Três telas, um módulo novo:
+
+1. **`lib/calculos/funil.ts` (novo)** — fonte única do funil comercial:
+   `estagioFunil`, `estagioFunilLabel`, `estagioFunilBadgeClasses`,
+   `escolherJobDoFunil`. Semântica completa na decisão 010.
+2. **Lista de projetos** (`page.tsx` + `projetos-list.tsx`): célula Nome
+   perde os selos "N aprovado(s)"/"N job(s)"; três colunas novas depois
+   de Orçamentos — **Aprovados · Enviados · Abertos** — mutuamente
+   exclusivas, zero renderizado como travessão discreto. A query de
+   `jobs` (`orcamento_id, status, created_at` por `projeto_id`) entrou no
+   `Promise.all` existente; sem embed.
+3. **Formulário de projeto** (`projeto-form.tsx`): rótulo "Responsáveis"
+   → **"GPs Responsáveis"**, placeholder → "Selecione um ou mais GPs".
+   Só strings — identificadores (`responsavel_ids` etc.) e a lista de
+   membros oferecida ficaram como estavam (decisão explícita).
+4. **Detalhe do projeto** (`[projetoId]/page.tsx` + `orcamentos-list.tsx`):
+   coluna **"Valor do Job"** entre Fim previsto e Versões (versão
+   aprovada > mais recente > travessão; `calcularTotaisVersao().valorJob`,
+   a mesma conta do fechamento) e coluna Status trocada pelo **badge de
+   estágio do funil**. Itens buscados só das versões-alvo, em 3 colunas
+   (`versao_orcamento_id, tipo_custo, total_orcado`).
+
+**Verificação no navegador** (dev server, sessão real): contagens do
+funil cruzadas com SQL em NOV-0002/26 e TESTE-0001/26 — job `encerrado`
+contando em Abertos, rascunho/recusado fora do funil; "Valor do Job" da
+lista batendo com o fechamento da versão (R$ 11.200,00 nos dois lugares
+em TESTE-0001/26-03); formulário de projeto usado de ponta a ponta.
+`next lint` e `npm run build` limpos nos três commits.
+
+⚠️ **Dado de teste deixado no banco** (autorização permanente do Tiago,
+17/08): projeto **TESTE-0003/26 · "Teste Alterações"** com os orçamentos
+`-01` (rascunho), `-02` e `-03` (aprovados, alíquota 19,53%). Substituem
+o caso a caso do TESTE-0002: são a base dos testes das próximas entregas
+do plano local e só devem ser removidos quando o plano terminar. O
+registro vivo (ids, estágio de cada um, o que cada um reserva) fica na
+seção "Registro de testes" do plano local.
