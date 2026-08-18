@@ -80,8 +80,13 @@ export function JobRealizadoSection({
   // A trilha lateral aparece quando há ação (BV/PP) OU quando há BV
   // lançado para consultar num job sem ação — é a mesma condição que a
   // tabela usa para desenhá-la, e a reserva tem que acompanhar as duas.
+  //
+  // A exceção do BV para consulta foi escrita para o job ENCERRADO, que
+  // é histórico. Na pré-abertura ela não vale: ali o BV ainda é ação
+  // futura, o job pode ser devolvido, e a trilha tem que sumir por
+  // inteiro — como o critério da Tela 2.1 pede (18/08/2026).
   const temBvLancado = itens.some((it) => bvsPorItem[it.id]);
-  const temCalha = podeAcoes || temBvLancado;
+  const temCalha = podeAcoes || (temBvLancado && !preAbertura);
 
   return (
     // Quando dá pra gerar PP, reserva a calha da direita: a trilha de
@@ -154,6 +159,7 @@ export function JobRealizadoSection({
                 moeda={versao.moeda}
                 editable={editable}
                 podeAcoes={podeAcoes}
+                preAbertura={preAbertura}
                 jobId={job.id}
                 ppsPorItemId={ppsPorItemId}
                 fornecedores={fornecedores}

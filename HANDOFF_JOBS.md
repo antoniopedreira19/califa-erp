@@ -1534,3 +1534,60 @@ com o seu próprio vencimento, faturada por sua própria NF (seção 35 do
 `tsc --noEmit`, `next lint` (só os 2 avisos pré-existentes) e
 `npm run build` limpos. **Sem verificação no navegador** — consolidada na
 etapa final do plano.
+
+## 36. Verificação no navegador: a trilha de BV antes da abertura (2026-08-18)
+
+**⚠️ Corrige a entrega 32.** A verificação final do plano de telas achou
+uma sobra: num job **pré-abertura** (`aguardando_abertura` ou
+`rejeitado_financeiro`) que já tinha um BV lançado lá atrás, a pílula
+**"Abrir BV" continuava na calha** — e o popup abria **editável**, com
+Fornecedor, Valor, Prazo e os botões Salvar · Confirmar · Remover BV
+todos ativos. O critério da entrega 32 pede a trilha de BV ausente antes
+da abertura.
+
+**Por que aconteceu.** A calha aparece quando
+`podeAcoes || itens.some(i => bvsPorItem[i.id])`. A exceção foi escrita
+para o job **ENCERRADO** — "os BVs já lançados seguem consultáveis", que
+é histórico e faz sentido — e a pré-abertura entrou depois no mesmo
+`podeAcoes = false`, herdando uma regra que não era dela. Pior: o
+`BvDialog` recebia `readOnly={!editable}`, e `editable` é o flag do
+**REALIZADO**, que na pré-abertura é `true`. A calha até passava
+`somenteLeitura: true`, mas isso só muda o *tooltip*.
+
+**Nunca houve risco de dado**: a action recusava (gate de
+`carregarContexto`, entrega 32), e o BV ficava intacto. Era beco sem
+saída de UI — o usuário preenchia e tomava erro.
+
+**O conserto.** Um `preAbertura` explícito, calculado em
+`job-realizado-section.tsx` e descido até
+`job-item-realizado-table.tsx`, separa os dois casos que `podeAcoes`
+juntava:
+
+- **encerrado** — `podeAcoes` falso, `preAbertura` falso: a pílula fica,
+  para consulta, como sempre foi;
+- **pré-abertura** — `podeAcoes` falso, `preAbertura` verdadeiro: a
+  trilha some por inteiro, e a reserva de 116px (`pr-[116px]`) some
+  junto, devolvendo a largura à planilha.
+
+E o `BvDialog` passou a receber **`readOnly={!podeAcoes}`** em vez de
+`!editable` — que é o certo nos três casos: aberto edita, encerrado
+consulta, pré-abertura nem abre.
+
+De quebra, a mensagem do gate em `_bv/actions.ts` passou a distinguir os
+dois status: job devolvido lê "Job devolvido pelo financeiro — o BV fica
+disponível depois da abertura", em vez de dizer "aguardando abertura"
+para um job que foi devolvido.
+
+**Conferido depois da correção:** JOB-0011 (`rejeitado_financeiro`) sem
+nenhuma pílula na calha e com o realizado ainda editável; JOB-0010
+(`aberto`) com "Abrir BV", "Gerar PP" e "Alterar orçado" no lugar, e o
+popup do BV abrindo editável.
+
+### A regra de PP por fornecedor, para quem for ler o plano antigo
+
+O critério 3 da Tela 2.2 do plano local diz que "segunda PP do mesmo
+fornecedor no mesmo item é recusada". **Esse critério está velho** — a
+decisão do Tiago na própria entrega 33 (`docs/decisions/014`) removeu o
+limite: não há teto de PPs por item nem por fornecedor, o que trava é o
+saldo do realizado. A verificação confirmou o comportamento novo criando
+a PP-00010 no mesmo item e mesmo fornecedor da PP-00009.

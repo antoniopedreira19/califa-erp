@@ -244,19 +244,41 @@ export default async function ContasReceberPage() {
 
   // Quantas parcelas de recebimento cada nota tem, e qual a 1ª a vencer —
   // as duas colunas que a linha verde mostra.
-  const parcelasPorNota = new Map<string, { qtd: number; primeiroVenc: string | null }>();
+  // Guardamos as parcelas em si, e não só a contagem: o formulário em
+  // modo leitura precisa listar valor e vencimento de cada uma
+  // (18/08/2026 — antes ele inventava uma parcela com o total da nota).
+  const parcelasPorNota = new Map<
+    string,
+    {
+      qtd: number;
+      primeiroVenc: string | null;
+      parcelas: Array<{ numero: number; valor: number; data_vencimento: string }>;
+    }
+  >();
   for (const t of (titulosRes.data ?? []) as unknown as Array<{
     faturamento_id: string;
+    numero_parcela: number;
+    valor: string | number;
     data_vencimento: string;
     status: TituloReceberStatus;
   }>) {
     if (t.status === "cancelado") continue;
-    const atual = parcelasPorNota.get(t.faturamento_id) ?? { qtd: 0, primeiroVenc: null };
+    const atual =
+      parcelasPorNota.get(t.faturamento_id) ??
+      { qtd: 0, primeiroVenc: null, parcelas: [] };
     atual.qtd += 1;
     if (!atual.primeiroVenc || t.data_vencimento < atual.primeiroVenc) {
       atual.primeiroVenc = t.data_vencimento;
     }
+    atual.parcelas.push({
+      numero: t.numero_parcela,
+      valor: Number(t.valor),
+      data_vencimento: t.data_vencimento,
+    });
     parcelasPorNota.set(t.faturamento_id, atual);
+  }
+  for (const p of parcelasPorNota.values()) {
+    p.parcelas.sort((a, b) => a.numero - b.numero);
   }
 
   const faturados: FaturadoRow[] = faturadosBrutos.map((f) => {
@@ -277,6 +299,7 @@ export default async function ContasReceberPage() {
       cliente_id: f.cliente_id,
       qtd_parcelas: parc?.qtd ?? 1,
       primeiro_vencimento: parc?.primeiroVenc ?? null,
+      parcelas: parc?.parcelas ?? [],
       itens: f.itens.map((i) => {
         const job = i.origem_id ? jobPorId.get(i.origem_id) : undefined;
         return {

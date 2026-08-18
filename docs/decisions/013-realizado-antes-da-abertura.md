@@ -78,3 +78,20 @@ onde as três ações de BV passam.
 - **Job encerrado e cancelado seguem congelados** para tudo, inclusive
   realizado (`jobEstaCongelado`).
 - Nenhuma migration: a regra é de status e permissão, não de estrutura.
+
+---
+
+## ⚠️ Nota de 2026-08-18 — a trilha de BV não estava sumindo
+
+Esta decisão separa o que a pré-abertura libera (o **realizado**) do que
+ela não libera (errata, BV e PP). A verificação no navegador achou uma
+sobra: num job pré-abertura com um BV lançado antes, a pílula "Abrir BV"
+continuava na calha e o popup abria editável — porque a exceção que
+mantém BVs consultáveis foi escrita para o job **encerrado**, e a
+pré-abertura herdou a mesma condição (`podeAcoes` falso nos dois casos).
+
+Sem risco de dado: a action já recusava. Corrigido com um `preAbertura`
+explícito, que distingue os dois casos, e com o `BvDialog` passando a
+usar `readOnly={!podeAcoes}` em vez de `!editable` — o `editable` é o
+flag do realizado, que na pré-abertura é verdadeiro. Ver entrega 36 do
+`HANDOFF_JOBS.md`.

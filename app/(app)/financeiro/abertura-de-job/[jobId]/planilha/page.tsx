@@ -189,6 +189,10 @@ export default async function PlanilhaDaAberturaPage({
                 // Leitura pura: nem lançar realizado, nem errata/BV/PP.
                 editable={false}
                 podeAcoes={false}
+                // Esta rota só existe enquanto o job aguarda abertura (já
+                // aberto, ela redireciona para /jobs/[jobId]) — e nela a
+                // trilha lateral não aparece de jeito nenhum.
+                preAbertura
                 jobId={(raw as any).id}
                 // Job aguardando abertura não tem PP nem BV — as duas ações
                 // só existem depois de aberto. Mapas vazios não escondem
