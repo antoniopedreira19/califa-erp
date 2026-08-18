@@ -37,10 +37,18 @@ import {
   type BaixaTituloAlvo,
 } from "@/components/financeiro/baixa-titulo-dialog";
 import {
+  BaixaRegistradaDialog,
+  type BaixaRegistradaAlvo,
+} from "@/components/financeiro/baixa-registrada-dialog";
+import {
   EditarDataPagamentoDialog,
   type EditarDataAlvo,
 } from "./editar-data-pagamento-dialog";
-import { darBaixaTitulo, repactuarDataPagamento } from "./actions-titulos";
+import {
+  darBaixaTitulo,
+  estornarBaixaTitulo,
+  repactuarDataPagamento,
+} from "./actions-titulos";
 
 // ---------------------------------------------------------------------------
 // Tipo da linha
@@ -172,6 +180,9 @@ export function TitulosPagarList({
   const [busca, setBusca] = React.useState("");
 
   const [baixando, setBaixando] = React.useState<TituloRow | null>(null);
+  /** Título JÁ PAGO aberto para conferência — e para estornar, se for o
+   *  caso. Clicar na linha paga é o que o abre (18/08/2026). */
+  const [conferindo, setConferindo] = React.useState<TituloRow | null>(null);
   const [editando, setEditando] = React.useState<TituloRow | null>(null);
   const [erroAcao, setErroAcao] = React.useState<string | null>(null);
   const [toast, setToast] = React.useState<string | null>(null);
@@ -276,6 +287,25 @@ export function TitulosPagarList({
         empresaId: baixando.empresa_id,
         planoContaTipoId: baixando.plano_conta_tipo_id,
         planoContaSubtipoId: baixando.plano_conta_subtipo_id,
+      }
+    : null;
+
+  const alvoConferencia: BaixaRegistradaAlvo | null = conferindo
+    ? {
+        titulo: conferindo.descricao,
+        origem:
+          conferindo.origem === "pp"
+            ? `Pedido de produção ${conferindo.origem_label}`
+            : conferindo.origem === "recorrencia"
+              ? `Recorrência · ${conferindo.descricao}`
+              : "Lançamento avulso",
+        parcela: `${conferindo.parcela_numero}/${conferindo.parcela_total}`,
+        valor: conferindo.valor,
+        pagoEm: conferindo.pago_em,
+        contaNome: conferindo.conta_nome,
+        centroNome: conferindo.centro_nome,
+        dataPagamento: conferindo.data_pagamento,
+        vencOriginal: conferindo.venc_original,
       }
     : null;
 
@@ -420,7 +450,19 @@ export function TitulosPagarList({
               return (
                 <tr
                   key={`${r.origem}-${r.id}`}
-                  className="border-b border-border transition-colors last:border-0 hover:bg-accent/40"
+                  // Título pago abre a baixa registrada ao clique, como o
+                  // Tiago pediu em 18/08/2026. Em aberto a linha não é
+                  // clicável: as ações dele são os botões próprios (lápis
+                  // e "Dar baixa"), e um clique solto não pode disparar
+                  // pagamento.
+                  onClick={pago ? () => {
+                    setErroAcao(null);
+                    setConferindo(r);
+                  } : undefined}
+                  className={cn(
+                    "border-b border-border transition-colors last:border-0 hover:bg-accent/40",
+                    pago && "cursor-pointer",
+                  )}
                 >
                   <td className="px-3.5 py-3">
                     <div className="flex items-center gap-2">
@@ -504,10 +546,18 @@ export function TitulosPagarList({
                   </td>
                   <td className="px-4 py-3 text-right">
                     {pago ? (
-                      <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                      <button
+                        type="button"
+                        title="Ver a baixa registrada — e estornar, se preciso"
+                        onClick={() => {
+                          setErroAcao(null);
+                          setConferindo(r);
+                        }}
+                        className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border border-border px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:border-california-red hover:text-california-red"
+                      >
                         <Check className="h-3 w-3" />
                         Conciliação
-                      </span>
+                      </button>
                     ) : (
                       <button
                         type="button"
@@ -566,6 +616,40 @@ export function TitulosPagarList({
             setErroAcao(null);
             setToast(
               `Baixa registrada · ${formatMoney(alvo.valor)} enviado para a conciliação.`,
+            );
+            router.refresh();
+          });
+        }}
+      />
+
+      <BaixaRegistradaDialog
+        open={conferindo !== null}
+        onOpenChange={(o) => {
+          if (!o) {
+            setConferindo(null);
+            setErroAcao(null);
+          }
+        }}
+        alvo={alvoConferencia}
+        pending={pending}
+        erro={erroAcao}
+        onEstornar={(motivo) => {
+          const alvo = conferindo;
+          if (!alvo) return;
+          startTransition(async () => {
+            const res = await estornarBaixaTitulo({
+              origem: alvo.origem,
+              id: alvo.id,
+              motivo,
+            });
+            if (!res.ok) {
+              setErroAcao(res.message);
+              return;
+            }
+            setConferindo(null);
+            setErroAcao(null);
+            setToast(
+              `Baixa estornada · ${formatMoney(alvo.valor)} devolvido para "A pagar".`,
             );
             router.refresh();
           });

@@ -1398,3 +1398,52 @@ de regional recorta só os **fluxos**.
 
 Nada mudou no código; ficou registrado em `docs/decisions/018` para não
 ser "consertado" por engano depois.
+
+## 40. O estorno voltou para a tela, no título já pago (2026-08-18)
+
+Fecha o que a entrega 39 deixou pela metade: a semântica do estorno já
+estava certa (por parcela), mas ele continuava sem porta na interface. O
+Tiago pediu a porta de volta — "adicione a opção de fazer um estorno ao
+clicar em um título sobre o qual já foi dado baixa, com um botão no
+formulário aberto com o clique". **Revoga a parte da decisão 016 que
+tirava o estorno da UI**; ver a segunda nota de 18/08 lá.
+
+### O que abre no clique
+
+`components/financeiro/baixa-registrada-dialog.tsx` — espelho em leitura
+do `BaixaTituloDialog`. Em cima, os dados do título (origem, parcela,
+venc. original, data de pagamento, valor). Embaixo, um bloco verde
+**"Enviado para a conciliação"** com o que a baixa gravou: **pago em ·
+conta · centro de custo**. É a conferência que antes só existia como
+texto miúdo embaixo da descrição na tabela.
+
+Abrem o diálogo: a **linha inteira** do título pago e o chip
+**"Conciliação"**, que virou botão. Título em aberto **não** é clicável
+na linha — as ações dele são o lápis da data e o "Dar baixa", e um
+clique solto não pode disparar pagamento.
+
+### O estorno em dois tempos
+
+Dentro do formulário, primeiro aparece só o botão **"Estornar baixa"**.
+Clicando nele é que surgem o campo de motivo (mínimo 10 caracteres) e o
+**"Confirmar estorno"**, com um "Voltar" para desistir. É a ação mais
+destrutiva da aba — desfaz dinheiro que já foi para a conciliação —,
+então não fica a um clique de quem só queria conferir a baixa.
+
+### A action
+
+`estornarBaixaTitulo({origem, id, motivo})`, irmã de `darBaixaTitulo` e
+com a mesma assinatura: origem `pp` cai em `estornarBaixaParcela`,
+`avulso` e `recorrencia` em `estornarBaixaAvulsa`. A aba unificada não
+precisa saber que por baixo existem duas tabelas — é a mesma escolha que
+a baixa já fazia.
+
+Sem migration: as duas RPCs já existiam (a de parcela nasceu na entrega
+39). `cancelar-baixa-modal.tsx`, que estava parado esperando exatamente
+isto, foi **removido** — o diálogo novo faz o que ele fazia e mais.
+
+**Exercitado pela tela:** parcela 3/3 da PP-00009 → clique → "Estornar
+baixa" → motivo curto manteve o confirmar desabilitado → motivo completo
+liberou → estornada. Contadores acompanharam (Pagos 3→2, A pagar 1→2, Em
+aberto R$ 6.000,00), a PP voltou a `aprovada` e o extrato ganhou o par
+`pp_baixa_estornada` + `pp_estorno`.
