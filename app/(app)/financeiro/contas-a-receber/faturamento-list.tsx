@@ -35,6 +35,10 @@ import {
 import { cn } from "@/lib/utils";
 import type { PlanoContaTipo, PlanoContaSubtipo } from "@/lib/types";
 import { FaturarDrawer, type DrawerState } from "./faturar-drawer";
+import {
+  ContatosCobrancaInline,
+  type ContatoCobranca,
+} from "@/components/financeiro/contatos-cobranca";
 
 // ---------------------------------------------------------------------------
 // Tipos das linhas
@@ -61,6 +65,9 @@ export interface FaturamentoPendenteRow {
   parcela_numero: number;
   parcela_total: number;
   data_prevista: string | null;
+  /** Quem cobrar quando esta parcela virar nota (docs/decisions/012).
+   *  Vazio em BV, que não tem job, e nos jobs anteriores a 17/08/2026. */
+  contatos: ContatoCobranca[];
 }
 
 export interface FaturadoRow {
@@ -494,8 +501,15 @@ export function FaturamentoList({
                       )}
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-xs text-muted-foreground">
-                    {p.contraparte_nome}
+                  <td className="px-4 py-3 text-xs">
+                    <div className="flex flex-col gap-1">
+                      <span className="text-muted-foreground">
+                        {p.contraparte_nome}
+                      </span>
+                      {/* Quem cobrar, ao lado de quem é cobrado — é aqui
+                          que a nota nasce (docs/decisions/012). */}
+                      <ContatosCobrancaInline contatos={p.contatos} />
+                    </div>
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-muted-foreground">
                     {formatMoney(p.valor_previsto)}

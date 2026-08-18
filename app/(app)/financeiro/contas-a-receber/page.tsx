@@ -10,6 +10,10 @@ import {
   type FaturadoRow,
 } from "./faturamento-list";
 import { TitulosList, type TituloRow } from "./titulos-list";
+import {
+  contatosDeCobrancaPorJob,
+  type ContatoCobranca,
+} from "@/lib/data/contatos-cobranca";
 import type {
   ContaBancaria,
   PlanoContaTipo,
@@ -172,6 +176,14 @@ export default async function ContasReceberPage() {
   const nomeFornecedor = new Map(fornecedoresList.map((f) => [f.id, f.nome]));
   const jobPorId = new Map(jobsList.map((j) => [j.id, j]));
 
+  // Quem cobrar, por job (docs/decisions/012). Uma query só para a tela
+  // inteira — depende de `jobsList`, por isso não cabe na onda paralela
+  // de cima. Job anterior a 17/08/2026 não aparece no mapa.
+  const contatosPorJob = await contatosDeCobrancaPorJob(
+    jobsList.map((j) => j.id),
+    session.activeTenant.id,
+  );
+
   // --- Aba Faturamento: pendentes -----------------------------------------
 
   const pendentes: FaturamentoPendenteRow[] = (pendentesRes.data ?? []).map((r) => {
@@ -196,6 +208,11 @@ export default async function ContasReceberPage() {
       parcela_numero: Number(r.parcela_numero ?? 1),
       parcela_total: Number(r.parcela_total ?? 1),
       data_prevista: (r.data_prevista as string | null) ?? null,
+      // BV não tem job, logo não tem contato de cobrança do job.
+      contatos:
+        r.origem_tipo === "job"
+          ? (contatosPorJob.get(r.origem_id as string) ?? [])
+          : [],
     };
   });
 
@@ -353,6 +370,13 @@ export default async function ContasReceberPage() {
               }
               return `${job.codigo} ${job.nome}`;
             }),
+      // NF agrupada cobre vários jobs (decisão 017): junta os contatos de
+      // todos eles, sem repetir o mesmo e-mail duas vezes.
+      contatos: dedupContatos(
+        itens.flatMap((i) =>
+          i.origem_id ? (contatosPorJob.get(i.origem_id) ?? []) : [],
+        ),
+      ),
       conta_nome: baixa?.conta ?? null,
       centro_nome: baixa?.centro ?? null,
     };
@@ -419,4 +443,22 @@ export default async function ContasReceberPage() {
       />
     </div>
   );
+}
+
+/**
+ * Uma NF agrupada pode cobrir vários jobs do mesmo cliente, e o mesmo
+ * contato costuma responder por todos. Repetir o nome três vezes na
+ * linha do título não informa nada — a chave é o e-mail, que é o que o
+ * financeiro usa para cobrar; contato sem e-mail cai no nome.
+ */
+function dedupContatos(lista: ContatoCobranca[]): ContatoCobranca[] {
+  const vistos = new Set<string>();
+  const saida: ContatoCobranca[] = [];
+  for (const c of lista) {
+    const chave = (c.email || c.nome || "").trim().toLowerCase();
+    if (!chave || vistos.has(chave)) continue;
+    vistos.add(chave);
+    saida.push(c);
+  }
+  return saida;
 }

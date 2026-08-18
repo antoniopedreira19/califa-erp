@@ -1,6 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
 import { tipoGeraDesembolso } from "@/lib/calculos/versao-totais";
 import type { TipoCusto } from "@/lib/types";
+import {
+  contatosDeCobrancaPorJob,
+  type ContatoCobranca,
+} from "@/lib/data/contatos-cobranca";
 
 /**
  * Um job na fila de abertura, com tudo que a conferência do financeiro
@@ -41,6 +45,10 @@ export interface JobNaFila {
    *  California de fato desembolsa. Vira o custo previsto na abertura
    *  (docs/decisions/004). */
   planilha_desembolso: number;
+  /** Quem o financeiro procura para receber. A produção informa no envio
+   *  (docs/decisions/012); job anterior a 17/08/2026 vem com lista
+   *  vazia, que é estado legítimo. */
+  contatos: ContatoCobranca[];
 }
 
 export interface TotaisPlanilhaJob {
@@ -120,7 +128,11 @@ export async function totaisDasPlanilhas(
   return mapa;
 }
 
-function montarJobNaFila(j: any, totais?: TotaisPlanilhaJob): JobNaFila {
+function montarJobNaFila(
+  j: any,
+  totais?: TotaisPlanilhaJob,
+  contatos?: ContatoCobranca[],
+): JobNaFila {
   return {
     id: j.id,
     codigo: j.codigo,
@@ -150,6 +162,7 @@ function montarJobNaFila(j: any, totais?: TotaisPlanilhaJob): JobNaFila {
     planilha_orcado: totais?.orcado ?? 0,
     planilha_planejado: totais?.planejado ?? 0,
     planilha_desembolso: totais?.desembolso ?? 0,
+    contatos: contatos ?? [],
   };
 }
 
@@ -189,8 +202,9 @@ export async function carregarJobParaAbertura(
 
   const criadoPor = (data as any).created_by as string | null;
 
-  const [totais, autorRes] = await Promise.all([
+  const [totais, contatos, autorRes] = await Promise.all([
     totaisDasPlanilhas([jobId]),
+    contatosDeCobrancaPorJob([jobId], tenantId),
     criadoPor
       ? supabase
           .from("profiles")
@@ -205,7 +219,7 @@ export async function carregarJobParaAbertura(
   }
 
   return {
-    job: montarJobNaFila(data, totais.get(jobId)),
+    job: montarJobNaFila(data, totais.get(jobId), contatos.get(jobId)),
     status: (data as any).status,
     enviadoPorNome: autorRes.data?.nome ?? null,
   };
@@ -230,7 +244,13 @@ export async function listarFilaDeAbertura(
   }
 
   const linhas = (data ?? []) as any[];
-  const totais = await totaisDasPlanilhas(linhas.map((j) => j.id));
+  const ids = linhas.map((j) => j.id as string);
+  const [totais, contatos] = await Promise.all([
+    totaisDasPlanilhas(ids),
+    contatosDeCobrancaPorJob(ids, tenantId),
+  ]);
 
-  return linhas.map((j) => montarJobNaFila(j, totais.get(j.id)));
+  return linhas.map((j) =>
+    montarJobNaFila(j, totais.get(j.id), contatos.get(j.id)),
+  );
 }

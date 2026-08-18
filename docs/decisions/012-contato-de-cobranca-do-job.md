@@ -70,3 +70,22 @@ continua `jobs.observacoes`**, assim como o campo do form, o schema Zod e
 - **Leitura dos contatos pelo financeiro.** A tabela nasce nesta entrega
   com a gravação; exibir os contatos nas telas do financeiro entra quando
   a tela de abertura for refinada (Tela 3.1 do plano).
+
+  > ⚠️ **17/08/2026 — esta linha estava errada, e foi resolvida.** A Tela
+  > 3.1 cobriu só os itens 02a e 03 do protótipo e passou sem tocar nos
+  > contatos, como o plano mandava — o dado ficou sendo só de escrita, e a
+  > justificativa desta própria decisão ("o financeiro precisa saber a
+  > quem cobrar") não se cumpria.
+  >
+  > A leitura entrou em **quatro** telas do financeiro, por decisão do
+  > Tiago: a conferência da fila de abertura
+  > (`abertura-de-job/conferencia-dialog.tsx`), o job aberto
+  > (`financeiro/jobs/[jobId]`), e as duas abas de Contas a Receber —
+  > **Faturamento** e **Títulos a Receber**. As duas apresentações moram
+  > em `components/financeiro/contatos-cobranca.tsx`, e a query em
+  > `lib/data/contatos-cobranca.ts`.
+  >
+  > As duas últimas **revertem** o que a
+  > [017](017-faturamento-agrupado-parcial-e-avulso.md) registrou horas
+  > antes ("contato de cobrança não entra nesta tela"). Decisão do mesmo
+  > dia, tomada depois de ver a lacuna inteira.

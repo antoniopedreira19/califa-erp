@@ -18,6 +18,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { formatCurrency } from "@/lib/utils";
+import { ContatosCobrancaCaixa } from "@/components/financeiro/contatos-cobranca";
 import type { JobNaFila } from "./dados";
 import { formatDataBr, formatPeriodo } from "./formatos";
 
@@ -160,6 +161,12 @@ export function ConferenciaDialog({ job, onOpenChange, onReprovar }: Props) {
             {job.observacoes?.trim() || "Sem descritivo do job."}
           </div>
         </div>
+
+        {/* Mesma natureza do Descritivo — o que a produção informou no
+            envio — e por isso a mesma caixa. Aqui é o único momento em
+            que dá para devolver o job por contato faltando ou e-mail
+            torto, ANTES de assumi-lo (docs/decisions/012). */}
+        <ContatosCobrancaCaixa contatos={job.contatos} />
 
         <div className="flex items-center justify-end gap-2.5">
           <button
