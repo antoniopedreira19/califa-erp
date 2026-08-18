@@ -159,6 +159,16 @@ export function FaturarDrawer({
 
   const [parcelas, setParcelas] = React.useState<Parcela[]>(() => {
     if (nota) {
+      // As parcelas REAIS da nota, na ordem em que foram geradas. A
+      // versão anterior montava uma parcela sintética com o total, e uma
+      // NF emitida em 2× reabria dizendo 1× (corrigido em 18/08/2026).
+      // O fallback só existe para nota antiga sem título vinculado.
+      if (nota.parcelas.length > 0) {
+        return nota.parcelas.map((p) => ({
+          valor: p.valor,
+          data_vencimento: p.data_vencimento,
+        }));
+      }
       return [
         {
           valor: nota.valor_total,

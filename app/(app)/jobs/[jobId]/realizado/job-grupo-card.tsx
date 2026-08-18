@@ -20,6 +20,9 @@ interface Props {
   editable: boolean;
   /** Trilha lateral de BV e Pedido de Produção — só com o job aberto. */
   podeAcoes: boolean;
+  /** Job ainda não aberto pelo financeiro: a trilha some por inteiro,
+   *  inclusive o BV já lançado. */
+  preAbertura: boolean;
   jobId: string;
   ppsPorItemId: Map<string, PedidoCompra[]>;
   fornecedores: Array<Pick<Fornecedor, "id" | "nome" | "razao_social" | "status">>;
@@ -40,6 +43,7 @@ export function JobGrupoCard({
   moeda,
   editable,
   podeAcoes,
+  preAbertura,
   jobId,
   ppsPorItemId,
   fornecedores,
@@ -63,6 +67,7 @@ export function JobGrupoCard({
         moeda={moeda}
         editable={editable}
         podeAcoes={podeAcoes}
+        preAbertura={preAbertura}
         ppsPorItemId={ppsPorItemId}
         fornecedores={fornecedores}
         empresas={empresas}

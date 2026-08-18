@@ -5,14 +5,17 @@
  *
  * Decisão do Tiago: seguir o protótipo à risca, que não tem estorno em
  * lugar nenhum — título pago exibe apenas "Conciliação". Este componente
- * e a action `estornarBaixaPP` continuam no repositório, funcionando, mas
- * nenhuma tela os monta. Reverter uma baixa errada hoje exige intervenção
- * fora da tela.
+ * e a action `estornarBaixaParcela` continuam no repositório,
+ * funcionando, mas nenhuma tela os monta. Reverter uma baixa errada hoje
+ * exige intervenção fora da tela.
  *
- * Se o estorno voltar, note que ele foi escrito para a baixa da PP
- * INTEIRA (`estornar_baixa_pp`), e a baixa passou a ser por PARCELA
- * (`dar_baixa_pp_parcela`) — vai precisar de uma RPC equivalente por
- * parcela antes de ser religado.
+ * ✅ 18/08/2026 — o aviso que estava aqui foi resolvido. Ele dizia que o
+ * estorno tinha sido escrito para a PP INTEIRA enquanto a baixa virara
+ * por PARCELA, e que faltava uma RPC equivalente antes de religar. O
+ * Tiago fechou a regra ("cada baixa ou estorno deverá ser feito por
+ * parcela; a aprovação é por PP"), nasceu a
+ * `estornar_baixa_pp_parcela` e este modal já aponta para ela. Religar
+ * agora é só montá-lo em algum lugar — a semântica está certa.
  */
 
 import * as React from "react";
@@ -24,16 +27,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import type { PPRow } from "./pedidos-compra-list";
-import { estornarBaixaPP } from "./actions";
+import { estornarBaixaParcela } from "./actions-titulos";
 
 interface Props {
-  pp: PPRow;
+  /** A PARCELA cuja baixa se quer reverter — a unidade do estorno desde
+   *  18/08/2026. `rotulo` é como ela aparece na tela: "PP-00009 · 2/3". */
+  parcela: { id: string; rotulo: string };
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-export function CancelarBaixaModal({ pp, open, onOpenChange }: Props) {
+export function CancelarBaixaModal({ parcela, open, onOpenChange }: Props) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
   const [erro, setErro] = React.useState<string | null>(null);
@@ -43,12 +47,15 @@ export function CancelarBaixaModal({ pp, open, onOpenChange }: Props) {
     if (!open) return;
     setErro(null);
     setMotivo("");
-  }, [open, pp]);
+  }, [open, parcela]);
 
   function handleSubmit() {
     setErro(null);
     startTransition(async () => {
-      const res = await estornarBaixaPP({ pp_id: pp.id, motivo });
+      const res = await estornarBaixaParcela({
+        parcela_id: parcela.id,
+        motivo,
+      });
       if (!res.ok) {
         setErro(res.message);
         return;
@@ -64,13 +71,15 @@ export function CancelarBaixaModal({ pp, open, onOpenChange }: Props) {
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 text-california-red" />
-            Cancelar baixa de {pp.codigo}
+            Cancelar baixa de {parcela.rotulo}
           </DialogTitle>
         </DialogHeader>
 
         <p className="text-sm text-muted-foreground">
-          A PP volta para{" "}
-          <span className="font-medium text-foreground">Em avaliação</span>. Um
+          A parcela volta para{" "}
+          <span className="font-medium text-foreground">A pagar</span> e a PP,
+          se estava paga, volta para{" "}
+          <span className="font-medium text-foreground">Aprovada</span>. Um
           lançamento reverso é gerado na mesma conta bancária, mantendo o
           histórico contábil. O motivo fica no log de auditoria.
         </p>

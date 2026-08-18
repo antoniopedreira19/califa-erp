@@ -179,3 +179,19 @@ exige intervenção fora da tela.
   emitido** continua sem regra escrita — é a pendência que a
   [015](015-previsao-de-recebimento-na-abertura.md) registrou e que a
   Tela 3.4 (Fluxo de Caixa) vai precisar resolver.
+
+---
+
+## ⚠️ Nota de 2026-08-18 — a NF reaberta mentia o parcelamento
+
+A §4 desta decisão diz que as parcelas do formulário são **parcelas de
+recebimento da NF emitida**, cada uma virando um título vinculado à mesma
+nota. A emissão sempre fez isso certo. O que estava errado era a
+**releitura**: reabrindo a nota pelo botão `NF <número>`, o formulário em
+modo somente-leitura montava **uma parcela sintética** com o valor total,
+em vez de carregar os títulos gravados. NF emitida em 2× reabria dizendo
+1×.
+
+Corrigido em 18/08/2026 (sem migration): `FaturadoRow` passou a carregar
+as parcelas reais — valor e vencimento, em ordem — e o drawer as usa no
+modo leitura. Ver entrega 38 do `HANDOFF_FINANCEIRO.md`.

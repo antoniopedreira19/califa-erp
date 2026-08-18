@@ -124,7 +124,9 @@ async function carregarContexto(
   ) {
     return {
       error:
-        "Job aguardando abertura pelo financeiro — o BV fica disponível depois da abertura.",
+        copiaRes.data.job.status === "rejeitado_financeiro"
+          ? "Job devolvido pelo financeiro — o BV fica disponível depois da abertura."
+          : "Job aguardando abertura pelo financeiro — o BV fica disponível depois da abertura.",
     };
   }
 

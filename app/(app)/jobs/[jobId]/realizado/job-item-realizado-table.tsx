@@ -52,6 +52,10 @@ interface Props {
    *  Antes da abertura a planilha é visível e o realizado é editável,
    *  mas nada que vire documento pode ser criado. */
   podeAcoes: boolean;
+  /** Job ainda não aberto pelo financeiro (`aguardando_abertura` ou
+   *  `rejeitado_financeiro`). Distingue-se do job ENCERRADO, que também
+   *  tem `podeAcoes` falso mas conserva os BVs lançados para consulta. */
+  preAbertura: boolean;
   // PP rail — várias PPs por item desde 17/08/2026 (PPs parciais).
   ppsPorItemId: Map<string, PedidoCompra[]>;
   fornecedores: Array<Pick<Fornecedor, "id" | "nome" | "razao_social" | "status">>;
@@ -172,6 +176,7 @@ export function JobItemRealizadoTable({
   moeda,
   editable,
   podeAcoes,
+  preAbertura,
   ppsPorItemId,
   fornecedores,
   empresas,
@@ -231,7 +236,7 @@ export function JobItemRealizadoTable({
     const observer = new ResizeObserver(medir);
     observer.observe(wrapper);
     return () => observer.disconnect();
-  }, [itens.length, editable, podeAcoes]);
+  }, [itens.length, editable, podeAcoes, preAbertura]);
 
   /** O chip da calha abre o painel; o formulário só se chega por ele. */
   function abrirPainel(itemRealizadoId: string) {
@@ -626,7 +631,7 @@ export function JobItemRealizadoTable({
       {/* Job encerrado não some com a trilha: os BVs já lançados seguem
           consultáveis, como na tela de Orçamentos. Só o que é ação
           (gerar PP, lançar BV novo) é que desaparece. */}
-      {(podeAcoes || itens.some((i) => bvsPorItem[i.id])) && (
+      {(podeAcoes || (!preAbertura && itens.some((i) => bvsPorItem[i.id]))) && (
         <div
           className={cn(
             "absolute left-full ml-2.5 flex flex-col",
@@ -640,7 +645,8 @@ export function JobItemRealizadoTable({
             // Sem BV num job congelado não há o que consultar — a vaga
             // fica vazia para não desalinhar as linhas de baixo.
             const mostraBv =
-              aceitaBV(item.tipo_custo) && (podeAcoes || bv !== null);
+              aceitaBV(item.tipo_custo) &&
+              (podeAcoes || (!preAbertura && bv !== null));
             const travado =
               !podeAcoes || (bv !== null && bv.situacao !== "a_negociar");
 
@@ -810,7 +816,7 @@ export function JobItemRealizadoTable({
                 diasMeses: Number(realizado?.dias_meses_realizado ?? 0),
                 total: Number(realizado?.total_realizado ?? 0),
               }}
-              readOnly={!editable}
+              readOnly={!podeAcoes}
             />
           );
         })()}

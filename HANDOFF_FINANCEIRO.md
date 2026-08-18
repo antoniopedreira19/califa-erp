@@ -1263,3 +1263,138 @@ A query é uma só por tela, por lote de job ids, coberta pelo índice
 
 Nada mudou no banco. `jobs_contatos` já existia com RLS, policies e
 índice; esta entrega é só leitura.
+
+## 38. Verificação no navegador: três correções no financeiro (2026-08-18)
+
+A etapa final de verificação do plano de telas percorreu a esteira
+inteira com dado real — JOB-0015 aberto, PP-00009 de R$ 12.000,00 em 3
+parcelas, NF 900123 agrupando duas parcelas com faturamento parcial. Ela
+achou três coisas que as entregas 34 e 35 deixaram passar, e que este
+item corrige. Migration
+`20260818000001_baixa_por_parcela_e_data_aprovacao.sql`.
+
+### ⚠️ A baixa por parcela estava bloqueada da SEGUNDA em diante
+
+**Corrige a entrega 34.** A `20260805000003_lancamentos_financeiros.sql`
+criou `uniq_baixa_ativa_por_pp`, único em
+`lancamentos_financeiros(pedido_compra_id) where origem = 'pp_baixa'`,
+numa época em que uma PP tinha uma baixa. A entrega 34 passou a inserir
+**um lançamento por parcela** e não substituiu o índice: a 1ª parcela
+baixava, e da 2ª em diante o Postgres recusava — com a mensagem crua
+`duplicate key value violates unique constraint` chegando à tela. Na
+prática, **PP parcelada nunca chegava a `pago`**.
+
+O índice virou `uniq_baixa_ativa_por_parcela`, em
+`(pedido_compra_parcela_id)`. A unicidade continua existindo, só que na
+granularidade certa; o estorno segue funcionando porque troca a origem
+para `pp_baixa_estornada` e sai do índice parcial. O índice antigo foi
+recriado como caso de borda (`uniq_baixa_ativa_por_pp_sem_parcela`), para
+lançamento de baixa sem parcela vinculada — que o fluxo atual não produz.
+
+Conferido depois da correção: as parcelas 2/3 e 3/3 da PP-00009 baixaram
+pela tela, a PP passou a `pago` na última, e ficaram 3 linhas em
+`lancamentos_financeiros`.
+
+⚠️ **Fora do escopo, e conhecido:** `estornar_baixa_pp` (estorno da PP
+inteira) ainda pega `limit 1` dos lançamentos e devolve a PP a
+`aprovada` sem limpar `pago_em` das parcelas. Desde a decisão 016 ela não
+tem porta na interface; consertá-la exige decidir a semântica do estorno
+com parcelas.
+
+### ⚠️ Aprovar PP sem data de pagamento passava no servidor
+
+**Corrige a entrega 34.** A decisão 016 fez da "Data de pagamento" o que
+a aprovação decide. O caminho da tela sempre esteve certo
+(`aprovarPPComData` → `aprovar_pp_com_data`, que exige a data e desloca
+as parcelas). O furo era a action **legada** `aprovarPP`, que ficou sem
+chamador na UI mas continua exposta pela rede: chamada direta, aprovava
+com `prazo_pagamento_financeiro` nulo, e os títulos nasciam com data de
+pagamento vazia e sem 1ª data registrada — quebrando a repactuação.
+
+A trava entrou nos dois lugares: na RPC `aprovar_pp` (último portão) e na
+action, para a mensagem chegar em português.
+
+### A NF reaberta mostrava uma parcela em vez das que existem
+
+**Corrige a entrega 35.** Em `faturar-drawer.tsx`, o modo leitura montava
+**uma parcela sintética** com o total da nota. Uma NF emitida em 2×
+reabria dizendo 1×, com o valor cheio — os títulos no banco estavam
+certos, e a própria lista marcava a linha como `2x`, mas o formulário de
+conferência contava outra história.
+
+O `page.tsx` já carregava os títulos para contar as parcelas; agora leva
+junto valor e vencimento de cada uma, em `FaturadoRow.parcelas`, e o
+drawer usa essas. O fallback sintético sobrou só para nota antiga sem
+título vinculado.
+
+### Mensagem de erro da baixa
+
+Violação de constraint deixou de vazar para o usuário: `mensagemDeBaixa`
+em `actions-titulos.ts` traduz as que conhecemos, deixa passar o texto
+das RPCs (que já é português) e cai numa frase genérica no resto,
+mandando o original para o log do servidor.
+
+### Cadastro: subtipos provisórios do plano de contas
+
+A verificação esbarrou num impedimento que **não é de código**: a baixa
+exige centro de custo com Tipo **e** Subtipo, e só 2 dos 15 tipos tinham
+subtipo cadastrado. Na prática, toda baixa era obrigada a sair como
+"05 · Despesa com Pessoal / Salário", inclusive a de um pedido de
+produção.
+
+Por decisão do Tiago (18/08/2026), os 13 tipos restantes ganharam **um
+subtipo provisório `999 · Geral (provisório)`**, criado pela action
+`criarSubtipo` — com validação e auditoria, não por SQL direto. O código
+999 é proposital: deixa a faixa 001–099 livre para o plano de contas real
+e marca na tela o que ainda é provisório. **Trocar por subtipos de
+verdade é trabalho pendente do cadastro.**
+
+## 39. As duas decisões do dia: estorno por parcela e saldo sem regional (2026-08-18)
+
+Fecham as duas perguntas que a verificação deixou em aberto. Migration
+`20260818000002_estorno_por_parcela.sql`.
+
+### Estorno virou por parcela — e a versão antiga foi desarmada
+
+A decisão 016 mudou a baixa para a parcela e **deixou o estorno para
+trás**. O Tiago fechou a simetria: aprovar é por PP (e gera um título por
+parcela), dar baixa e estornar são por parcela.
+
+`estornar_baixa_pp_parcela` gera o lançamento reverso, devolve a parcela
+para em aberto e traz a PP de `pago` de volta a `aprovada` — espelho
+exato da baixa, que só promove a `pago` quando a última parcela cai. A
+action é `estornarBaixaParcela`, em `actions-titulos.ts`, ao lado da
+baixa que ela reverte; a antiga `estornarBaixaPP` **saiu** de
+`actions.ts`.
+
+A RPC velha `estornar_baixa_pp` não foi derrubada: ela agora levanta
+exceção apontando para a substituta. Derrubar calaria um chamador; assim
+ele é avisado. Também perdeu o `execute` para `public`, que arrastava
+desde as 13 funções antigas.
+
+**Por que ela era um perigo:** pegava `limit 1` dos lançamentos da PP,
+criava um reverso e devolvia a PP a `aprovada` **sem limpar `pago_em` das
+parcelas**. Numa PP de 3 parcelas pagas, o resultado seria uma PP
+"aprovada" com as 3 parcelas ainda marcadas como pagas e um só lançamento
+revertido.
+
+**O estorno continua sem porta na UI**, como a decisão 016 mandou — o
+protótipo não tem estorno em lugar nenhum. `cancelar-baixa-modal.tsx`
+segue parado, mas agora aponta para a action certa e recebe uma
+**parcela** em vez de uma PP: religá-lo é montá-lo em algum lugar.
+
+**Ciclo exercitado ao vivo:** PP-00009 com as 3 parcelas pagas → estorno
+da 3/3 (parcela em aberto, PP de volta a `aprovada`, original virou
+`pp_baixa_estornada`, nasceu um `pp_estorno` de entrada) → nova baixa da
+3/3 (PP de volta a `pago`). Parcelas 1 e 2 intactas o tempo todo.
+
+### Fluxo de caixa: o saldo é da conta, nunca da regional
+
+A verificação mostrou que, com filtro de regional, os indicadores partem
+do saldo bancário inteiro. **Decisão do Tiago: está certo assim** — conta
+bancária não tem regional, então o ponto de partida é escolhido pelo
+filtro de CONTA ("Todas agregadas" ou uma conta específica), e o filtro
+de regional recorta só os **fluxos**.
+
+Nada mudou no código; ficou registrado em `docs/decisions/018` para não
+ser "consertado" por engano depois.

@@ -150,3 +150,29 @@ prontos.
 - **Contato de cobrança** (`jobs_contatos`) segue invisível para o
   financeiro. A lacuna da [012](012-contato-de-cobranca-do-job.md)
   continua aberta.
+
+---
+
+## Decisão de 2026-08-18 — o saldo não tem regional, e está certo assim
+
+A verificação no navegador levantou o ponto para o Tiago olhar: com um
+filtro de **regional** ativo, os três indicadores de saldo partem do
+saldo bancário **inteiro** (que não tem regional) e acumulam só os fluxos
+da regional filtrada. Com REGIONAL = NE, "Saldo hoje" continuava
+R$ 106.959 e a projeção saía de lá.
+
+**Decisão do Tiago:** fica como está.
+
+> "As contas bancárias em si não têm regionais, então o saldo em questão
+> pode continuar e deverá ser escolhido como total, ou pela conta
+> bancária selecionada."
+
+Ou seja: **o ponto de partida do saldo é escolhido pelo filtro de CONTA
+BANCÁRIA, não pelo de regional.** "Todas agregadas" parte do saldo de
+todas as contas ativas; uma conta específica parte do saldo dela. O
+filtro de regional recorta os **fluxos**, nunca o saldo — porque saldo de
+regional não existe no mundo real, o dinheiro está na conta da empresa.
+
+Nada a mudar no código: é o que a tela já fazia, e o subtítulo do
+indicador já diz de onde o saldo vem em cada caso ("Todas as contas
+ativas agregadas" ou o nome da conta escolhida).

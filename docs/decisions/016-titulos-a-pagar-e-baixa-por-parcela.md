@@ -140,3 +140,66 @@ inteira.
   título de origem `AVULSO`, e a criação passou a ser o botão
   "+ Lançamento Avulso" da aba unificada. As rotas de detalhe
   (`/financeiro/contas-a-pagar/avulsa/[id]`) continuam funcionando.
+
+---
+
+## ⚠️ Nota de 2026-08-18 — a §1 só passou a valer de fato agora
+
+A verificação no navegador mostrou que a regra desta decisão — "a
+unidade de pagamento é a parcela, e a PP só vira `pago` quando a última é
+quitada" — **não estava em vigor**. Um índice único herdado da
+`20260805000003_lancamentos_financeiros.sql`,
+`uniq_baixa_ativa_por_pp`, admitia **um lançamento de baixa por PP**, de
+quando uma PP tinha uma baixa só. A migration desta decisão passou a
+inserir um lançamento por parcela sem substituí-lo: a 1ª parcela baixava
+e a 2ª morria numa violação de constraint.
+
+Corrigido pela `20260818000001_baixa_por_parcela_e_data_aprovacao.sql`,
+que troca a unicidade para `(pedido_compra_parcela_id)`. A decisão não
+muda — o que muda é que ela finalmente acontece.
+
+Na mesma migration, a exigência da **data de pagamento na aprovação**
+(§3) desceu para a RPC `aprovar_pp`. A action legada `aprovarPP`, sem
+chamador na UI mas ainda exposta pela rede, aprovava sem data e gerava
+títulos sem data de pagamento nem 1ª data registrada — o que quebrava a
+repactuação que esta mesma decisão criou.
+
+---
+
+## Decisão de 2026-08-18 — a granularidade, dita por inteiro
+
+A verificação perguntou o que "estornar" deveria significar numa PP
+parcelada. O Tiago fechou a regra dos três verbos de uma vez:
+
+> "As PPs sempre chegarão 'por parcela' no contas a pagar e cada baixa ou
+> estorno deverá ser feito por parcela. Porém, quanto à aprovação, essa
+> deverá ser feita por PP, e criar os títulos referentes a cada parcela em
+> títulos a pagar."
+
+| Verbo | Granularidade | Onde vive |
+|---|---|---|
+| **Aprovar** | **PP inteira** — e gera um título por parcela | `aprovar_pp_com_data` / `aprovarPPComData` |
+| **Dar baixa** | **parcela** | `dar_baixa_pp_parcela` / `darBaixaTitulo` |
+| **Estornar** | **parcela** | `estornar_baixa_pp_parcela` / `estornarBaixaParcela` |
+
+Aprovação e baixa já eram assim. O estorno não: era o
+`estornar_baixa_pp`, herdado de quando uma PP tinha uma baixa só, que
+pegava `limit 1` dos lançamentos e devolvia a PP a `aprovada` **sem
+limpar `pago_em` das parcelas** — numa PP de 3 parcelas pagas, deixaria
+uma PP "aprovada" com as 3 parcelas ainda pagas.
+
+A `20260818000002_estorno_por_parcela.sql` cria a versão por parcela —
+que gera o lançamento reverso, devolve a parcela para em aberto e traz a
+PP de `pago` para `aprovada`, simétrica à baixa — e **desarma** a antiga,
+que passa a levantar exceção apontando para a substituta.
+
+**O estorno continua SEM PORTA NA UI**, como esta mesma decisão
+determinou: o protótipo não tem estorno em lugar nenhum. O que mudou é
+que, no dia em que ele voltar, a semântica está certa —
+`cancelar-baixa-modal.tsx` já aponta para a action nova.
+
+**Exercitado ao vivo em 18/08/2026:** PP-00009 (3×R$ 4.000,00) com as três
+parcelas pagas, estorno da 3/3 → parcela voltou a em aberto, PP voltou a
+`aprovada`, o lançamento original virou `pp_baixa_estornada` e nasceu um
+`pp_estorno` de entrada; nova baixa da 3/3 → PP de volta a `pago`. As
+parcelas 1 e 2 nunca foram tocadas.

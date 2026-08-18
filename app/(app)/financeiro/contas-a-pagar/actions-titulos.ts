@@ -33,6 +33,33 @@ const dataSchema = z
 const origemSchema = z.enum(["pp", "avulso", "recorrencia"]);
 
 /**
+ * A mensagem do Postgres não é para o usuário.
+ *
+ * As RPCs de baixa falam português quando são elas que barram, mas uma
+ * violação de constraint sobe crua — foi o que apareceu na verificação
+ * de 18/08/2026, com o índice de baixa por parcela chegando à tela como
+ * `duplicate key value violates unique constraint`. Erro que não
+ * reconhecemos vira uma frase genérica, e o original fica no log do
+ * servidor para quem for investigar.
+ */
+function mensagemDeBaixa(msg: string): string {
+  if (msg.includes("uniq_baixa_ativa_por_parcela")) {
+    return "Esta parcela já tem uma baixa registrada.";
+  }
+  if (msg.includes("uniq_baixa_ativa_por_pp_sem_parcela")) {
+    return "Este pedido de produção já tem uma baixa registrada.";
+  }
+  if (msg.includes("uniq_baixa_ativa_por_avulsa")) {
+    return "Este lançamento já tem uma baixa registrada.";
+  }
+  // As RPCs levantam exceção com texto já pronto para a tela; o
+  // prefixo do Postgres é o que precisa sair.
+  const limpa = msg.replace(/^.*?(?:ERROR|erro):\s*/i, "").trim();
+  if (limpa && !/[_"]/.test(limpa)) return limpa;
+  return "Não foi possível dar baixa. Tente novamente.";
+}
+
+/**
  * Gate: apenas admin ou financeiro, com `acao_negada` no audit.
  * Mesmo formato do `checarGateFinanceiro` de `actions.ts` e
  * `actions-avulsas.ts` — repetido de propósito para cada arquivo
@@ -240,7 +267,10 @@ export async function darBaixaTitulo(input: unknown): Promise<Result> {
       p_plano_conta_subtipo_id: d.plano_conta_subtipo_id,
       p_criado_por: session.profile.id,
     });
-    if (error) return { ok: false, message: `Falha ao dar baixa: ${error.message}` };
+    if (error) {
+      console.error("[titulos.baixa.pp]", error.message);
+      return { ok: false, message: mensagemDeBaixa(error.message) };
+    }
 
     await logAuditEvent({
       acao: "pedido_compra.parcela_paga",
@@ -285,7 +315,10 @@ export async function darBaixaTitulo(input: unknown): Promise<Result> {
     p_plano_conta_tipo_id: d.plano_conta_tipo_id,
     p_plano_conta_subtipo_id: d.plano_conta_subtipo_id,
   });
-  if (error) return { ok: false, message: `Falha ao dar baixa: ${error.message}` };
+  if (error) {
+    console.error("[titulos.baixa.avulsa]", error.message);
+    return { ok: false, message: mensagemDeBaixa(error.message) };
+  }
 
   await logAuditEvent({
     acao: "conta_avulsa.baixada",
@@ -421,5 +454,116 @@ export async function repactuarDataPagamento(input: unknown): Promise<Result> {
   });
 
   revalidarFinanceiro();
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------
+// Estornar a baixa de uma parcela
+// ---------------------------------------------------------------------
+
+const estornoSchema = z.object({
+  /** Id da PARCELA — o estorno tem a mesma granularidade da baixa. */
+  parcela_id: z.string().uuid(),
+  motivo: z
+    .string()
+    .trim()
+    .min(10, "Motivo precisa ter pelo menos 10 caracteres.")
+    .max(500, "Motivo passa de 500 caracteres."),
+});
+
+/**
+ * Estorna a baixa de UMA parcela de PP.
+ *
+ * Decisão do Tiago (18/08/2026): "as PPs sempre chegarão por parcela no
+ * contas a pagar e cada baixa ou estorno deverá ser feito por parcela;
+ * quanto à aprovação, essa deverá ser feita por PP". Esta action é a
+ * metade que faltava — a antiga `estornarBaixaPP` revertia a PP inteira
+ * e foi removida.
+ *
+ * ⚠️ Continua SEM PORTA NA UI, como a decisão 016 determinou: o
+ * protótipo não tem estorno em lugar nenhum. O que muda é que, no dia em
+ * que ele voltar, a semântica está certa. Ver `cancelar-baixa-modal.tsx`.
+ */
+export async function estornarBaixaParcela(input: unknown): Promise<Result> {
+  const parsed = estornoSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      message: parsed.error.issues[0]?.message ?? "Entrada inválida.",
+    };
+  }
+  const d = parsed.data;
+
+  const gate = await checarGateFinanceiro(
+    "pedido_compra",
+    d.parcela_id,
+    "pedido_compra.parcela_baixa_estornada",
+  );
+  if (!gate.ok) return gate;
+  const { session, supabase } = gate;
+
+  const { data: parcela } = await supabase
+    .from("pedidos_compra_parcelas")
+    .select(
+      "id, numero, valor, pago_em, pedido:pedidos_compra!inner(id, codigo, job_id)",
+    )
+    .eq("id", d.parcela_id)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle<{
+      id: string;
+      numero: number;
+      valor: string | number;
+      pago_em: string | null;
+      pedido: { id: string; codigo: string; job_id: string } | null;
+    }>();
+
+  if (!parcela) return { ok: false, message: "Parcela não encontrada." };
+  if (!parcela.pago_em) {
+    return { ok: false, message: "Esta parcela não está paga." };
+  }
+
+  const { data: reversoId, error } = await supabase.rpc(
+    "estornar_baixa_pp_parcela",
+    {
+      p_parcela_id: d.parcela_id,
+      p_motivo: d.motivo,
+      p_criado_por: session.profile.id,
+    },
+  );
+
+  if (error) {
+    console.error("[titulos.estorno.parcela]", error.message);
+    return { ok: false, message: mensagemDeBaixa(error.message) };
+  }
+
+  await logAuditEvent({
+    acao: "pedido_compra.parcela_baixa_estornada",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "pedido_compra",
+    entidadeId: parcela.pedido?.id ?? null,
+    metadata: {
+      pp_codigo: parcela.pedido?.codigo,
+      parcela_id: parcela.id,
+      parcela_numero: parcela.numero,
+      valor: Number(parcela.valor),
+      motivo: d.motivo,
+      lancamento_reverso_id: reversoId,
+    },
+  });
+
+  await logAuditEvent({
+    acao: "lancamento_financeiro.estornado",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "lancamento_financeiro",
+    entidadeId: (reversoId as string) ?? null,
+    metadata: {
+      origem: "pp_estorno",
+      pp_codigo: parcela.pedido?.codigo,
+      parcela_numero: parcela.numero,
+      motivo: d.motivo,
+    },
+  });
+
+  revalidarFinanceiro(parcela.pedido?.job_id);
   return { ok: true };
 }

@@ -83,6 +83,11 @@ export interface FaturadoRow {
   cliente_id: string | null;
   qtd_parcelas: number;
   primeiro_vencimento: string | null;
+  /** As parcelas de recebimento que a nota realmente gerou, em ordem.
+   *  O formulário em modo leitura mostra ESTAS — antes ele montava uma
+   *  parcela sintética com o total da NF, e uma nota 2× aparecia como
+   *  1× (corrigido em 18/08/2026). */
+  parcelas: Array<{ numero: number; valor: number; data_vencimento: string }>;
   itens: Array<{
     origem_tipo: "job" | "bv" | "avulso";
     codigo: string;
