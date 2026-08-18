@@ -461,14 +461,24 @@ export async function repactuarDataPagamento(input: unknown): Promise<Result> {
 // Estornar a baixa de uma parcela
 // ---------------------------------------------------------------------
 
+const motivoEstornoSchema = z
+  .string()
+  .trim()
+  .min(10, "Motivo precisa ter pelo menos 10 caracteres.")
+  .max(500, "Motivo passa de 500 caracteres.");
+
 const estornoSchema = z.object({
   /** Id da PARCELA — o estorno tem a mesma granularidade da baixa. */
   parcela_id: z.string().uuid(),
-  motivo: z
-    .string()
-    .trim()
-    .min(10, "Motivo precisa ter pelo menos 10 caracteres.")
-    .max(500, "Motivo passa de 500 caracteres."),
+  motivo: motivoEstornoSchema,
+});
+
+const estornoTituloSchema = z.object({
+  origem: origemSchema,
+  /** Id da parcela (origem `pp`) ou da conta avulsa (demais origens) —
+   *  o mesmo par que `darBaixaTitulo` recebe. */
+  id: z.string().uuid(),
+  motivo: motivoEstornoSchema,
 });
 
 /**
@@ -566,4 +576,35 @@ export async function estornarBaixaParcela(input: unknown): Promise<Result> {
 
   revalidarFinanceiro(parcela.pedido?.job_id);
   return { ok: true };
+}
+
+/**
+ * Estorna a baixa de um TÍTULO, seja qual for a origem.
+ *
+ * É a irmã de `darBaixaTitulo`, com a mesma assinatura `{origem, id}`:
+ * a aba unificada não deve saber que por baixo existem duas tabelas.
+ * Origem `pp` cai no estorno por parcela; `avulso` e `recorrencia` caem
+ * no estorno da `contas_avulsas`, que sempre foi por lançamento.
+ *
+ * Religado na UI em 18/08/2026, a pedido do Tiago: título pago abre o
+ * mesmo formulário da baixa, agora em leitura, com o botão de estornar
+ * dentro dele. A decisão 016 tinha tirado o estorno da tela seguindo o
+ * protótipo; esta decisão a substitui.
+ */
+export async function estornarBaixaTitulo(input: unknown): Promise<Result> {
+  const parsed = estornoTituloSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      message: parsed.error.issues[0]?.message ?? "Entrada inválida.",
+    };
+  }
+  const d = parsed.data;
+
+  if (d.origem === "pp") {
+    return estornarBaixaParcela({ parcela_id: d.id, motivo: d.motivo });
+  }
+
+  const { estornarBaixaAvulsa } = await import("./actions-avulsas");
+  return estornarBaixaAvulsa({ conta_avulsa_id: d.id, motivo: d.motivo });
 }

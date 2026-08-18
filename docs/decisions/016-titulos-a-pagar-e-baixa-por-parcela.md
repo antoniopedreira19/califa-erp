@@ -203,3 +203,46 @@ parcelas pagas, estorno da 3/3 → parcela voltou a em aberto, PP voltou a
 `aprovada`, o lançamento original virou `pp_baixa_estornada` e nasceu um
 `pp_estorno` de entrada; nova baixa da 3/3 → PP de volta a `pago`. As
 parcelas 1 e 2 nunca foram tocadas.
+
+---
+
+## Decisão de 2026-08-18 (2) — o estorno VOLTA para a tela
+
+A §"o estorno sai da UI" desta decisão **fica revogada**. Ela seguia o
+protótipo à risca, que não tem estorno em lugar nenhum, e a consequência
+registrada na época era que "reverter uma baixa errada exige intervenção
+fora da tela". Com o estorno já corrigido para a granularidade de parcela
+(nota anterior), o Tiago pediu de volta:
+
+> "Pode adicionar a opção de fazer um estorno ao clicar em um título
+> sobre o qual já foi dado baixa (com um botão no formulário aberto com o
+> clique)."
+
+**Como ficou.** Título `PAGO` passa a ser clicável — a linha inteira e o
+chip "Conciliação", que virou botão. Abre o **`BaixaRegistradaDialog`**,
+espelho em leitura do modal de baixa: título, origem, parcela, venc.
+original, data de pagamento e valor, mais um bloco verde "Enviado para a
+conciliação" com **pago em · conta · centro de custo** — o que a baixa
+efetivamente registrou.
+
+O estorno vive dentro desse formulário, em **dois tempos**: primeiro o
+botão "Estornar baixa" sozinho; só depois o campo de motivo (mínimo 10
+caracteres) e o "Confirmar estorno". É a ação mais destrutiva da aba —
+desfaz dinheiro que já foi para a conciliação —, então não fica a um
+clique de quem só queria conferir.
+
+**Título em aberto continua não sendo clicável na linha**: as ações dele
+são os botões próprios (o lápis da data e o "Dar baixa"), e um clique
+solto não pode disparar pagamento.
+
+A action é `estornarBaixaTitulo({origem, id, motivo})`, irmã de
+`darBaixaTitulo` e com a mesma assinatura: origem `pp` cai no estorno por
+parcela, `avulso` e `recorrencia` no da `contas_avulsas`. A aba não
+precisa saber que por baixo existem duas tabelas.
+
+**Exercitado pela tela em 18/08/2026:** parcela 3/3 da PP-00009, paga,
+aberta pelo clique → "Estornar baixa" → motivo de 5 caracteres manteve o
+confirmar desabilitado, motivo completo liberou → estornada. A linha
+saiu de "Pagos" (3 → 2), voltou para "A pagar" (1 → 2), "Em aberto"
+subiu para R$ 6.000,00, a PP voltou a `aprovada` e nasceu o par
+`pp_baixa_estornada` + `pp_estorno` no extrato.
