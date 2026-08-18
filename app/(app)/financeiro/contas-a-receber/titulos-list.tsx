@@ -21,6 +21,10 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Banknote, Check, CheckCheck, Layers, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  ContatosCobrancaInline,
+  type ContatoCobranca,
+} from "@/components/financeiro/contatos-cobranca";
 import type {
   ContaBancaria,
   PlanoContaTipo,
@@ -54,6 +58,9 @@ export interface TituloRow {
   fat_descricao: string;
   contraparte_nome: string;
   jobs_cobertos: string[];
+  /** Contatos de cobrança dos jobs que a nota cobre, sem repetição
+   *  (docs/decisions/012). Vazio nos jobs anteriores a 17/08/2026. */
+  contatos: ContatoCobranca[];
   conta_nome: string | null;
   centro_nome: string | null;
 }
@@ -217,6 +224,10 @@ export function TitulosList({ rows, contas, tipos, subtipos }: Props) {
                       <span className="font-mono text-[11.5px] text-muted-foreground text-pretty">
                         {r.jobs_cobertos.join("  ·  ")}
                       </span>
+                      {/* A quem cobrar este título. Numa NF agrupada são os
+                          contatos de todos os jobs da nota, sem repetir
+                          (docs/decisions/012). */}
+                      <ContatosCobrancaInline contatos={r.contatos} />
                     </div>
                   </td>
                   <td className="px-3.5 py-3">

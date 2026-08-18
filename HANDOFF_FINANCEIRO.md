@@ -1205,3 +1205,61 @@ de data voltaram ao `public` — são aritmética pura, sem acesso a tabela.
   segue consolidada na etapa final de testes.
 - **Contato de cobrança** (`jobs_contatos`) segue invisível para o
   financeiro; a lacuna da decisão 012 continua aberta.
+
+---
+
+## 37. O contato de cobrança ficou visível para o financeiro (P1)
+
+**Data:** 2026-08-17
+
+A Tela 1.6 criou `jobs_contatos` e passou a **exigir** ao menos um
+contato de cobrança para enviar o job para abertura. Mas a leitura só
+existia num lugar: o modal "Ver dados do job", na tela da versão — lado
+do **orçamento**. Nenhuma tela do financeiro exibia o dado.
+
+Ou seja: o campo era obrigatório, estava gravado e íntegro, e **quem
+precisava cobrar não conseguia ver a quem cobrar**. A justificativa da
+decisão 012 não se cumpria.
+
+### Onde entrou
+
+| Tela | Forma | Por quê ali |
+|---|---|---|
+| `abertura-de-job/conferencia-dialog.tsx` | caixa, no padrão do Descritivo | é o único momento de devolver o job por contato faltando ou e-mail torto, **antes** de assumi-lo |
+| `financeiro/jobs/[jobId]` | seção própria | a referência do dia a dia, com o job já aberto |
+| Contas a Receber · aba **Faturamento** | linha compacta sob a contraparte | quem cobrar ao lado de quem é cobrado, no momento em que a nota nasce |
+| Contas a Receber · aba **Títulos a Receber** | linha compacta sob os jobs cobertos | é onde a cobrança de fato acontece |
+
+As duas últimas **revertem** a decisão que o Tiago tinha tomado horas
+antes, na sessão da Tela 3.3 (decisão 017: "contato de cobrança não entra
+nesta tela"). Nota ⚠️ datada nas duas decisões, 012 e 017.
+
+### Dois arquivos novos, e o motivo de existirem
+
+`lib/data/contatos-cobranca.ts` e
+`components/financeiro/contatos-cobranca.tsx`. São quatro telas lendo o
+mesmo dado e desenhando o mesmo bloco — a alternativa era o mesmo
+`select` e o mesmo JSX copiados quatro vezes, que é **exatamente** como as
+cores das planilhas divergiram entre si
+(`docs/09-identidade-visual-ui.md`). O componente tem duas
+apresentações, `Caixa` e `Inline`, porque são dois contextos: diálogo e
+tabela densa.
+
+A query é uma só por tela, por lote de job ids, coberta pelo índice
+`idx_jobs_contatos_job` — nada de N+1 por linha de tabela.
+
+### Detalhes que valem registro
+
+- **NF agrupada junta os contatos dos vários jobs**, deduplicados por
+  e-mail (nome como reserva, quando não há e-mail). O mesmo contato
+  respondendo por três jobs aparece uma vez.
+- **BV não tem contato**, porque não tem job — a contraparte é o
+  fornecedor.
+- **Job anterior a 17/08/2026 não tem contato** e nunca terá: a exigência
+  nasceu com a Tela 1.6 e não houve backfill. A tela diz "sem contato de
+  cobrança" em vez de esconder a seção — ausência é informação.
+
+### Sem migration
+
+Nada mudou no banco. `jobs_contatos` já existia com RLS, policies e
+índice; esta entrega é só leitura.

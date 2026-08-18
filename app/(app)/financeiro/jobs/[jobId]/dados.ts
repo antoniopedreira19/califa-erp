@@ -1,4 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
+import {
+  contatosDeCobrancaDoJob,
+  type ContatoCobranca,
+} from "@/lib/data/contatos-cobranca";
 import { nomeDoJobNoFinanceiro, type PPStatus } from "@/lib/types";
 
 /** Uma data da curva de desembolso, como foi gravada na abertura. */
@@ -82,6 +86,9 @@ export interface DadosDoJobFinanceiro {
   job: JobNoFinanceiro;
   previsoes: PrevisaoDoJob[];
   pps: PpDoJob[];
+  /** Quem cobrar. Vazio nos jobs anteriores a 17/08/2026
+   *  (docs/decisions/012). */
+  contatos: ContatoCobranca[];
 }
 
 /**
@@ -136,7 +143,7 @@ export async function carregarJobNoFinanceiro(
   // Realizado vive em outra tabela; e quem abriu vem de `profiles` por id,
   // já que a FK de `aberto_por` aponta para `auth.users`. As duas não
   // dependem uma da outra — vão juntas.
-  const [realizadosRes, abertoPorRes] = await Promise.all([
+  const [realizadosRes, abertoPorRes, contatos] = await Promise.all([
     supabase
       .from("jobs_itens_realizado")
       .select("total_realizado")
@@ -149,6 +156,7 @@ export async function carregarJobNoFinanceiro(
           .eq("id", raw.aberto_por)
           .maybeSingle()
       : Promise.resolve({ data: null }),
+    contatosDeCobrancaDoJob(jobId, tenantId),
   ]);
 
   const realizadoTotal = (realizadosRes.data ?? []).reduce(
@@ -224,5 +232,6 @@ export async function carregarJobNoFinanceiro(
       valor: Number(p.valor ?? 0),
       status: p.status as PPStatus,
     })),
+    contatos,
   };
 }

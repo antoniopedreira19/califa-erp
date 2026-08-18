@@ -164,6 +164,13 @@ exige intervenção fora da tela.
   Decisão do Tiago nesta sessão. A pendência P1 do plano de alterações
   segue aberta, com os dois destinos já recomendados
   (`conferencia-dialog.tsx` e `financeiro/jobs/[jobId]`).
+
+  > ⚠️ **17/08/2026, mais tarde no mesmo dia — REVERTIDO pelo Tiago.** Ao
+  > fechar a pendência P1 ele pediu o contato de cobrança **também nas
+  > duas abas desta tela**: uma linha por contato sob a contraparte, na
+  > aba Faturamento, e sob os jobs cobertos, na aba Títulos a Receber.
+  > Numa NF agrupada os contatos dos vários jobs aparecem juntos, sem
+  > repetir o mesmo e-mail. Ver [012](012-contato-de-cobranca-do-job.md).
 - **Filtros de status na aba Títulos a Receber.** O protótipo não os tem;
   a lista mostra tudo, ordenada por vencimento.
 - **`dar_baixa_titulo` (sem plano) e `estornar_baixa_titulo`** continuam
