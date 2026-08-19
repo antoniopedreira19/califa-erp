@@ -1866,9 +1866,9 @@ final de testes do plano.
 
 ---
 
-## 24. Entrega 22 — Categoria do job no pop-up de envio (2026-08-18)
+## 24. Entrega 22 — Categoria do job nos modais de envio (2026-08-19)
 
-**Origem:** pedido do Tiago de 18/08. Regra na
+**Origem:** pedido do Tiago de 19/08. Regra na
 [decisão 019](docs/decisions/019-categoria-do-job.md).
 
 Os **dois** modais do envio ganharam a **Categoria**, sempre entre o

@@ -144,7 +144,6 @@ export function CategoriaDominioDrawer(props: Props) {
                 <SelectContent>
                   <SelectItem value="projeto">Projeto</SelectItem>
                   <SelectItem value="orcamento">Orçamento</SelectItem>
-                  <SelectItem value="job">Job</SelectItem>
                 </SelectContent>
               </Select>
               {fieldErrors.escopo?.map((msg, i) => (
