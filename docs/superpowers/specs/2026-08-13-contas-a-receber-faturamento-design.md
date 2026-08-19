@@ -272,6 +272,44 @@ Tabela com colunas:
 
 Header da aba tem botão `+ Novo Faturamento avulso` (abre `faturar-avulso-drawer`).
 
+> ⚠️ **19/08/2026 — largura da tela e posição da barra de agrupamento.**
+> A página saiu de `max-w-7xl` (1280px) para **`max-w-[1560px]`**, a mesma
+> largura do Fluxo de Caixa. Motivo: a tabela de Títulos a Receber precisa
+> de 1426px e vinha sendo cortada desde sempre, e a de Faturamento
+> (1371px) perdia a coluna **Ação** assim que o contato de cobrança
+> (decisão 012) passou a ocupar a célula do cliente.
+>
+> **1560 é teto declarado, não largura efetiva.** O próprio layout
+> (`app/(app)/layout.tsx`: `max-w-[1600px]` + `px-8`) já limita o conteúdo
+> a **1536px**, então 1560 e 1600 renderizam idênticos — a folga lateral
+> vem do padding do layout, não da diferença de 40px. O valor fica em 1560
+> por igualdade com o Fluxo de Caixa.
+>
+> Medido no navegador em 19/08/2026: em viewport de 1600px e acima, as
+> duas tabelas cabem inteiras (`scrollWidth == clientWidth`). Em 1440px
+> elas **continuam rolando dentro da própria caixa** — 1298px disponíveis
+> contra 1371/1426 necessários. Isso não é regressão (antes eram 1280
+> disponíveis), mas o corte só desaparece de fato a partir de ~1570px de
+> viewport. A página em si nunca rola na horizontal em nenhuma largura.
+>
+> A **barra do Faturamento Agrupado** (contador, total, chip de cliente,
+> *Limpar* e *Faturar selecionados*) saiu de cima da tabela e virou
+> **rodapé fixo `sticky bottom-0`**, no mesmo padrão da barra de ações do
+> job (`app/(app)/jobs/[jobId]/barra-acoes-job.tsx`). Antes ela rolava
+> para fora da vista: com a lista longa, marcava-se as linhas de baixo sem
+> enxergar o total nem o botão. Continua aparecendo **só no modo
+> agrupamento**. Duas consequências de implementação: o bloco de erro
+> (cliente misto, BV na seleção) passou para **acima** da linha de ações,
+> porque numa barra de rodapé quem encosta na borda de baixo tem de ser o
+> botão; e o fundo virou branco opaco com a tinta vermelha numa camada
+> interna, porque `bg-california-red/[0.04]` é transparente demais e a
+> tabela aparecia por baixo da barra ao rolar.
+>
+> A barra precisa continuar sendo o **último elemento com altura** de
+> `faturamento-list.tsx` — o drawer e o toast que vêm depois são
+> posicionados por cima e não ocupam espaço no fluxo. Mover qualquer
+> conteúdo para depois dela quebra o `sticky`.
+
 ### Drawer "Faturar"
 
 Campos:
