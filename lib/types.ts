@@ -501,7 +501,13 @@ export interface ImportacaoWarning {
 
 // ---------- Categorias de domínio (projeto + orçamento) ----------
 
-export type CategoriaDominioEscopo = "projeto" | "orcamento" | "job";
+/**
+ * O escopo 'job' existiu até 19/08/2026 como vocabulário só do
+ * financeiro. A decisão 019 fez a categoria do job ser a do orçamento, e
+ * a migration `20260819000001` apagou as linhas — ver o handoff do
+ * financeiro.
+ */
+export type CategoriaDominioEscopo = "projeto" | "orcamento";
 
 export interface CategoriaDominio {
   id: string;
@@ -520,8 +526,6 @@ export function categoriaDominioEscopoLabel(e: CategoriaDominioEscopo): string {
       return "Projeto";
     case "orcamento":
       return "Orçamento";
-    case "job":
-      return "Job";
   }
 }
 
@@ -638,8 +642,9 @@ export interface Job {
   /**
    * Categoria do job (categorias_dominio, escopo 'orcamento'). Herdada do
    * orçamento de origem na abertura, onde o financeiro pode trocá-la sem
-   * alterar o orçamento. Jobs abertos antes de 18/08/2026 apontam para o
-   * escopo 'job', que era um vocabulário só do financeiro.
+   * alterar o orçamento. Nulo é estado legítimo: os 4 jobs mais antigos
+   * vieram de orçamentos anteriores à obrigatoriedade da categoria e
+   * ficaram sem uma na migração de 19/08/2026.
    */
   categoria_id: string | null;
   competencia_trimestre: number | null;

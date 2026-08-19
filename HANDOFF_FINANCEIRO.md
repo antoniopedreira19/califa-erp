@@ -1450,9 +1450,9 @@ aberto R$ 6.000,00), a PP voltou a `aprovada` e o extrato ganhou o par
 
 ---
 
-## 41. A categoria do job passou a vir do orçamento (2026-08-18)
+## 41. A categoria do job passou a vir do orçamento (2026-08-19)
 
-**Origem:** pedido do Tiago de 18/08 — *"O campo atual não existe e não
+**Origem:** pedido do Tiago de 19/08 — *"O campo atual não existe e não
 faz sentido."* Regra na
 [decisão 019](docs/decisions/019-categoria-do-job.md).
 
@@ -1492,14 +1492,11 @@ A troca grava em `jobs.categoria_id` e para por aí — mesmo padrão do
 vez de pré-selecionar um id que o servidor recusaria: o rodapé volta a
 pedir "Selecione a categoria do job", e o botão fica travado.
 
-### Sem migration, e sem tocar no que já está aberto
+### A troca de vocabulário em si não pediu migration
 
 `jobs.categoria_id` é FK solta para `categorias_dominio`, sem CHECK de
-escopo — quem valida é a action. **Os 12 jobs abertos antes de hoje
-continuam apontando para o escopo `job`** e exibindo o nome gravado; as 5
-linhas seguem no banco e no cadastro. Apagá-las é destrutivo e ficou
-fora — mas, a partir daqui, o escopo `job` é um vocabulário **órfão**:
-não alimenta mais nenhuma tela. Decidir o destino dele é assunto aberto.
+escopo — quem valida é a action. O que exigiu migration foi o passo
+seguinte, na nota abaixo.
 
 **Leitura sem custo novo:** `categoria_id` e o nome entram no embed de
 `orcamento` que `SELECT_JOB_FILA` já fazia para pegar o código — nenhuma
@@ -1512,3 +1509,29 @@ navegador com o JOB-0014 (orçamento NOV-0002/26-02, categoria
 dropdown listando exatamente Ativação, Conteúdo, Extra e Influencer.
 Nada gravado — o job segue em `aguardando_abertura`.
 
+---
+
+⚠️ **O escopo `job` foi apagado, no mesmo dia (2026-08-19).** O parágrafo
+acima dizia que as 5 categorias ficariam no banco e que o destino delas
+era assunto aberto — não é mais. O Tiago decidiu apagar, e a migration
+`20260819000001_encerra_escopo_job_das_categorias.sql` fez em três passos:
+
+1. **Os 12 jobs saíram de lá primeiro** — a FK é `ON DELETE RESTRICT`, o
+   DELETE não passaria com eles apontando. Cada um herdou a categoria do
+   orçamento dele: JOB-0005 a 0010, 0013 e 0015 (8) viraram **Ativação**;
+   JOB-0001 a 0004 (4) ficaram **sem categoria**, porque ORC-0001/0002/0003
+   e PEVETE-0002/26-01 são anteriores à obrigatoriedade de 17/08 e nunca
+   tiveram uma. Nulo é estado legítimo aqui — perda aceita pelo Tiago, em
+   vez de inventar valor.
+2. **Uma trava** aborta a migration se sobrar algum job preso, com a
+   contagem no erro, em vez de estourar FK no meio do DELETE.
+3. **As 5 linhas foram apagadas.**
+
+No código, `'job'` saiu do tipo `CategoriaDominioEscopo`, do Zod
+(`lib/validations/categorias-dominio.ts`), do seletor do drawer e do
+filtro da lista. **Cadastros › Categorias virou "(Projeto/Orçamento)"**, e
+a descrição da tela agora diz que o job herda a categoria do orçamento.
+
+**Conferido pelo MCP depois de aplicar:** `categorias_dominio` só tem
+`projeto` (4) e `orcamento` (4); os 8 jobs migrados aparecem com
+**Ativação · escopo orcamento** e os 4 antigos sem categoria.
