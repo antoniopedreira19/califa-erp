@@ -1591,3 +1591,178 @@ decisão do Tiago na própria entrega 33 (`docs/decisions/014`) removeu o
 limite: não há teto de PPs por item nem por fornecedor, o que trava é o
 saldo do realizado. A verificação confirmou o comportamento novo criando
 a PP-00010 no mesmo item e mesmo fornecedor da PP-00009.
+
+---
+
+## 37. Aba Informações do Job: cabeçalho, ficha e barra de ações (2026-08-19)
+
+Design: `Job - Informacoes - Cabecalho Opcoes.dc.html` (turno 6), com o
+resumo do turno 1b de `Job - Resumo de Indicadores - Opcoes.dc.html` e a
+barra de `Job - Informacoes - Barra de Acoes.dc.html`.
+
+A aba tinha dois cards lado a lado — **Metadata** e **Origem** —, o card de
+**Erratas** e um card de **Status** com os botões do fluxo. Virou: resumo de
+duas linhas no topo, descritivo em faixa larga, ficha Job × Projeto,
+três cards laterais, Erratas (inalterado) e uma barra fixa no rodapé.
+
+### O resumo do topo virou duas linhas
+
+`components/resumo-resultado.tsx`. A régua tinha cinco blocos irmãos —
+Valor do Job, Custo planejado, Custo realizado, Resultado planejado,
+Resultado realizado — e planejado e realizado só se pareavam na cabeça de
+quem lia. Agora o Valor do Job fica isolado à esquerda, porque é o único
+número sem par, e cada linha da direita é um cenário fechado: o custo e a
+rentabilidade que ele produz.
+
+⚠️ **O componente é compartilhado** com a visão agregada do projeto
+(`/jobs/projeto/[projetoId]`). Decisão do Tiago em 19/08: **muda nas duas
+telas**, não numa variante só do job. A conta (`calcularResultadoOperacional`)
+não mudou; o travessão com "sem planejado"/"sem realizado" também não.
+
+### O descritivo saiu do pé da ficha
+
+`jobs.observacoes` — rotulado "Descritivo do Job" desde 17/08/2026 — passou
+a ser a **primeira coisa depois das abas**, numa faixa da largura da tela e
+em 16px. Era o texto mais lido da abertura e não aparecia nesta tela; só no
+financeiro. O corpo trava em `104ch`.
+
+### "Metadata" e "Origem" viraram ficha Job × Projeto
+
+O card "Metadata" misturava campo do job com campo do projeto — e rotulava
+**"Cliente"** um valor que era o **nome do projeto**. A ficha agora tem duas
+colunas da mesma tabela:
+
+| Coluna **Job** | Coluna **Projeto** |
+|---|---|
+| Nome do job | Nome do projeto |
+| Categoria do job (`categorias_dominio`, escopo `orcamento`) | Cliente — `clientes.nome_fantasia`, o de verdade |
+| Produto | Tipo do projeto |
+| Regional · Cidade | Período do projeto |
+| Competência | *Jobs do projeto* (lista, com badge de status) |
+| Período | |
+| Abertura (data · quem abriu) | |
+| Prev. faturamento | |
+
+**"Tipo do projeto" é a categoria do projeto** — `projetos.categoria_id`,
+`categorias_dominio` escopo `projeto` (Always On, Ativação, Fee, Interno).
+Decisão do Tiago em 19/08. Não confundir com a categoria do **job**, que sai
+do mesmo catálogo mas do escopo `orcamento` — os dois vocabulários têm
+"Ativação" e é fácil trocar um pelo outro lendo a tela.
+
+Cinco campos **nunca tinham aparecido no módulo de Jobs**, embora já
+existissem no banco e na Central Financeira: categoria do job, competência,
+data e autor da abertura, produtor responsável e os contatos de cobrança.
+Nenhuma migration foi necessária — o `select` da página é que não os trazia.
+
+⚠️ **Competência aparece em dois formatos.** Aqui é `competenciaLabelLongo`
+("3º tri · 2026"), como o design pede; a Central Financeira segue com
+`competenciaLabel` ("3T/2026"), onde o campo divide linha com outros seis.
+As duas funções moram juntas em `lib/types.ts` de propósito.
+
+### Cards laterais: Responsáveis, Origem e Contatos
+
+- **Responsáveis** — GP responsável e Produtor (`jobs.produtor_id`, que a
+  tela nunca mostrou).
+- **Origem** — Código do job, Projeto e **"Orçamento aprovado"**. Decisão do
+  Tiago: seguir o design ao pé da letra. Isso **funde orçamento e versão num
+  link só** e **remove "Valor de faturamento"** da aba (ele continua no card
+  de Erratas e no resumo do topo). O link aponta para a **versão**, não para
+  o orçamento — o rótulo diz "aprovado", e o que foi aprovado é a versão; a
+  tela da versão tem o caminho de volta.
+- **Contatos de cobrança** — `jobs_contatos` via `contatosDeCobrancaDoJob`,
+  o mesmo carregador das quatro telas do financeiro. O design fechava com
+  "Ver todos os 4 contatos"; **não existe tela de contatos do job**, e são 1
+  a 4 por job na prática, então o card lista todos. O primeiro leva a pílula
+  "Principal", que é a ordem do formulário de abertura.
+
+### O card "Status" virou barra fixa no rodapé
+
+`app/(app)/jobs/[jobId]/barra-acoes-job.tsx`, no mesmo padrão da barra de
+aprovação do orçamento (`fluxo-abertura.tsx` · `sticky bottom-0`). As frases
+que moravam no card viraram o texto à esquerda — a barra **sempre** diz em
+que ponto do fluxo o job está, inclusive quando não há botão nenhum.
+
+| Estado | Texto | Botão |
+|---|---|---|
+| `aguardando_abertura` | aguardando o financeiro, com link para a Central | Cancelar job |
+| `rejeitado_financeiro` | devolvido, corrija e reenvie | Cancelar job |
+| `aberto` sem envio | faturamento previsto | Enviar job para faturamento |
+| `aberto` com envio | registro do envio | Enviar job para encerramento |
+| `encerrado` · `cancelado` | é histórico + registro do faturamento | — |
+
+**Cancelar job só existe antes da abertura** — regra nova, em
+`docs/decisions/020-cancelar-job-so-antes-da-abertura.md`. A server action
+continua aceitando o cancelamento; o que mudou é a superfície que o oferece.
+
+O rótulo do encerramento continua **"Enviar job para encerramento"** e
+vermelho California, não o "Encerrar job" verde que o desenho da barra
+mostra — decisão do Tiago, para não renomear uma ação que passa por resumo
+de fechamento. O `ENCERRAMENTO_INDISPONIVEL` foi ajustado: dizia "no bloco
+de Status", que deixou de existir.
+
+⚠️ **A barra fica FORA das abas**, como no protótipo — as ações são do job,
+não da aba de Informações. Na aba **PPs** o FAB do chat (`fixed bottom-6
+right-6`, `z-40`) encosta na barra (`z-20`). Levantado antes de implementar e
+**aceito pelo Tiago em 19/08**; medido depois, com a página rolada e a barra
+grudada: a sobreposição é de **5px × 20px**, só o canto superior direito do
+botão. O rótulo e a maior parte da área de clique ficam livres. Com a página
+sem rolagem não há sobreposição nenhuma — a barra fica acima do FAB.
+
+### O card de Erratas não mudou
+
+O turno 6 desenha o card simplificado, sem o bloco de valores do cabeçalho.
+É esboço: o recorte do turno era cabeçalho e ficha. Decisão do Tiago:
+manter o `ErratasCard` como está.
+
+### Arquivos
+
+| Arquivo | O quê |
+|---|---|
+| `components/resumo-resultado.tsx` | régua de 5 blocos → 2 linhas (afeta o job **e** a visão do projeto) |
+| `app/(app)/jobs/[jobId]/ficha-job.tsx` | **novo** — descritivo, ficha Job × Projeto e os 3 cards laterais |
+| `app/(app)/jobs/[jobId]/barra-acoes-job.tsx` | **novo** — barra fixa, textos por estado |
+| `app/(app)/jobs/[jobId]/page.tsx` | `select` com os campos que faltavam, 2 queries novas, render da aba |
+| `app/(app)/jobs/[jobId]/status-actions.tsx` | layout de linha para caber na barra; "Cancelar job" virou secundário |
+| `app/(app)/jobs/[jobId]/enviar-faturamento-drawer.tsx` | botão na altura da barra (h-9) |
+| `lib/types.ts` | `competenciaLabelLongo`; texto do `ENCERRAMENTO_INDISPONIVEL` |
+
+As duas queries novas são os **jobs irmãos do projeto** (coberta por
+`idx_jobs_projeto`) e o **nome de quem abriu** — esta não pode ser embed
+porque `jobs.aberto_por` aponta para `auth.users` e o nome mora em
+`profiles`. As duas entraram no `Promise.all` que já existia; os contatos de
+cobrança entraram no primeiro. Nenhuma query em série foi adicionada.
+
+### Verificação
+
+`tsc --noEmit`, `next lint` e `next build` limpos. O build rodou numa cópia
+do repo fora da pasta, porque o `next dev` estava de pé — build com o dev
+server ligado corrompe o `.next` e derruba o CSS do preview.
+
+Os embeds novos do `select` (`profiles!produtor_id`,
+`categorias_dominio!categoria_id` e o aninhado `projetos → clientes` /
+`projetos → categorias_dominio`) foram exercitados contra a API: voltaram
+**401 de GRANT**, não 400 de relacionamento — ou seja, o PostgREST resolveu
+a árvore inteira antes de esbarrar no RLS. De quebra confirma que `anon` não
+tem SELECT em `jobs`.
+
+**Conferência logada no navegador, 19/08/2026** — os cinco estados do job,
+sem nenhum erro de console em nenhum deles:
+
+| Job | Estado | O que confirmou |
+|---|---|---|
+| JOB-0015 | `aberto`, já enviado, 2 contatos, descritivo preenchido | ficha completa; barra com o registro do envio e "Enviar job para encerramento" |
+| JOB-0013 | `aberto`, sem envio, sem contato, sem descritivo | "Sem descritivo do job.", "Nenhum contato de cobrança informado na abertura."; barra com "Enviar job para faturamento" e **sem** Cancelar |
+| JOB-0014 | `aguardando_abertura`, sem categoria nem competência | travessões nos três campos da abertura, "— sem realizado" no resumo; barra com **Cancelar job** e o link para a Central |
+| JOB-0011 | `rejeitado_financeiro` | banner de rejeição e "Reenviar pra aprovação" preservados; barra com Cancelar |
+| JOB-0009 | `encerrado` | sem botão Editar; barra sem botão nenhum, só o texto e o registro do faturamento |
+
+A regra nova está de pé: **Cancelar job aparece em JOB-0014 e JOB-0011 e não
+aparece em JOB-0013 nem em JOB-0015**, os dois abertos.
+
+Também conferidos: os quatro links da ficha (projeto no cabeçalho da coluna,
+job irmão com o `?from=` preservado, e os dois do card de Origem, sendo o de
+"Orçamento aprovado" apontando para a versão); a **visão agregada do
+projeto** com o resumo novo de duas linhas (`PEVETE-0001/26`); a barra
+presente nas abas Planilha Interna e PPs; e `scrollWidth == clientWidth` em
+todas — **zero rolagem horizontal**, inclusive na Planilha Interna, onde a
+tabela mede 1334px.

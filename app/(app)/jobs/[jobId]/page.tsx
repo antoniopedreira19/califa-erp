@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Briefcase, Info, Circle } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { nomeVersao } from "@/lib/nome-versao";
 import { createClient } from "@/lib/supabase/server";
 import { listActiveMembers } from "@/lib/data/members";
+import { contatosDeCobrancaDoJob } from "@/lib/data/contatos-cobranca";
 import type { Job, JobStatus, Regional } from "@/lib/types";
 import {
   jobStatusLabel,
@@ -25,10 +26,10 @@ import {
   calcularTotaisRealizado,
 } from "@/lib/calculos/versao-totais";
 import { JobEditorDrawer } from "./job-editor-drawer";
-import { StatusActions } from "./status-actions";
 import type { ResumoEncerramento } from "./encerrar-dialog";
 import { ReenviarAprovacaoButton } from "./reenviar-aprovacao-button";
-import { EnviarFaturamentoDrawer } from "./enviar-faturamento-drawer";
+import { BarraAcoesJob } from "./barra-acoes-job";
+import { FichaJob } from "./ficha-job";
 import { JobRealizadoSection } from "./realizado/job-realizado-section";
 import { JobPPsSection } from "./pps/job-pps-section";
 import { JobTabs } from "./job-tabs";
@@ -68,17 +69,6 @@ function statusBadgeClasses(status: JobStatus): string {
   }
 }
 
-function formatDate(iso: string | null): string {
-  if (!iso) return "—";
-  const [y, m, d] = iso.slice(0, 10).split("-");
-  return `${d}/${m}/${y}`;
-}
-
-function formatMoney(n: number | null): string {
-  if (n === null || n === undefined) return "—";
-  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
-
 export default async function JobDetailPage({
   params,
   searchParams,
@@ -104,11 +94,12 @@ export default async function JobDetailPage({
       ? searchParams.aba
       : "info";
 
-  const [jobRes, regionaisRes, responsaveis] = await Promise.all([
+  const [jobRes, regionaisRes, responsaveis, contatosCobranca] =
+    await Promise.all([
     supabase
       .from("jobs")
       .select(
-        "id, tenant_id, empresa_id, codigo, nome, produto, cidade, data_inicio_prevista, data_fim_prevista, data_prevista_faturamento, observacoes, responsavel_id, produtor_id, valor_total, faturamento_previsto, valor_job_abertura, faturamento_previsto_abertura, status, motivo_rejeicao, projeto_id, orcamento_id, versao_orcamento_aprovada_id, regional_id, created_at, updated_at, responsavel:profiles!responsavel_id(id, nome), regional:regionais(id, nome), orcamento:orcamentos(id, codigo, nome, projeto_id), versao:versoes_orcamento!versao_orcamento_aprovada_id(id, numero_versao, nome, moeda, percentual_honorarios, percentual_imposto), projeto:projetos(id, codigo, nome, cliente_id)",
+        "id, tenant_id, empresa_id, codigo, nome, produto, cidade, data_inicio_prevista, data_fim_prevista, data_prevista_faturamento, observacoes, responsavel_id, produtor_id, valor_total, faturamento_previsto, valor_job_abertura, faturamento_previsto_abertura, status, motivo_rejeicao, projeto_id, orcamento_id, versao_orcamento_aprovada_id, regional_id, categoria_id, competencia_trimestre, competencia_ano, data_abertura_financeiro, aberto_por, created_at, updated_at, responsavel:profiles!responsavel_id(id, nome), produtor:profiles!produtor_id(id, nome), regional:regionais(id, nome), categoria:categorias_dominio!categoria_id(id, nome), orcamento:orcamentos(id, codigo, nome, projeto_id), versao:versoes_orcamento!versao_orcamento_aprovada_id(id, numero_versao, nome, moeda, percentual_honorarios, percentual_imposto), projeto:projetos(id, codigo, nome, cliente_id, data_inicio_prevista, data_fim_prevista, cliente:clientes(id, nome_fantasia), categoria:categorias_dominio(id, nome))",
       )
       .eq("id", params.jobId)
       .eq("tenant_id", session.activeTenant.id)
@@ -120,6 +111,9 @@ export default async function JobDetailPage({
       .eq("ativo", true)
       .order("nome"),
     listActiveMembers(session.activeTenant.id),
+    // Contatos que a produção informou no envio para abertura. Uma query
+    // só, coberta pelo índice `idx_jobs_contatos_job`.
+    contatosDeCobrancaDoJob(params.jobId, session.activeTenant.id),
   ]);
 
   if (jobRes.error) console.error("[job.detail]", jobRes.error.message);
@@ -145,6 +139,8 @@ export default async function JobDetailPage({
     leituraPPsRes,
     envioFaturamentoRes,
     portaisRes,
+    jobsIrmaosRes,
+    abertoPorRes,
   ] = await Promise.all([
     supabase
       .from("versoes_orcamento_grupos")
@@ -267,6 +263,24 @@ export default async function JobDetailPage({
       .eq("tenant_id", session.activeTenant.id)
       .eq("ativo", true)
       .order("nome"),
+    // Irmãos do job na ficha: o projeto é o guarda-chuva, e quem abre um
+    // job quer ver de relance o que mais corre debaixo dele. Coberta pelo
+    // índice `idx_jobs_projeto`; quatro colunas, sem embed.
+    supabase
+      .from("jobs")
+      .select("id, codigo, nome, status")
+      .eq("projeto_id", raw.projeto_id)
+      .eq("tenant_id", session.activeTenant.id)
+      .order("codigo", { ascending: true }),
+    // `aberto_por` NÃO entra como embed: a FK aponta para `auth.users`, e
+    // o nome mora em `profiles`. Query própria, e só quando há alguém.
+    raw.aberto_por
+      ? supabase
+          .from("profiles")
+          .select("nome")
+          .eq("id", raw.aberto_por)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
   ]);
 
   const grupos = (gruposRes.data ?? []) as VersaoOrcamentoGrupo[];
@@ -568,6 +582,23 @@ export default async function JobDetailPage({
     envioFaturamento === null &&
     totaisJob.faturamentoPrevisto > 0;
 
+  if (jobsIrmaosRes.error)
+    console.error("[job.irmaos]", jobsIrmaosRes.error.message);
+
+  const jobsDoProjeto = ((jobsIrmaosRes.data ?? []) as any[]).map((j) => ({
+    id: j.id as string,
+    codigo: j.codigo as string,
+    nome: j.nome as string,
+    status: j.status as JobStatus,
+  }));
+
+  const abertoPorNome =
+    (abertoPorRes.data as { nome: string } | null)?.nome ?? null;
+
+  const versaoLabel = raw.versao
+    ? nomeVersao(raw.orcamento?.nome ?? job.nome, raw.versao.numero_versao)
+    : "—";
+
   // Resumo de fechamento. Só existe depois do envio para faturamento —
   // antes disso não há o que encerrar. Os impedimentos saem dos dados que
   // a página já carregou (nenhuma query nova); o servidor refaz a conta
@@ -706,201 +737,77 @@ export default async function JobDetailPage({
       <JobTabs
         abaInicial={abaInicial}
         info={
-          <div className="grid gap-4 md:grid-cols-2">
-        <div className="rounded-2xl border border-border bg-card p-6 shadow-soft">
-          <div className="flex items-center gap-2 mb-4">
-            <Info className="h-4 w-4 text-california-red" />
-            <h2 className="text-sm font-semibold uppercase tracking-wider">Metadata</h2>
-          </div>
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
-            <dt className="text-muted-foreground">Cliente</dt>
-            <dd className="font-medium">{raw.projeto?.nome ?? "—"}</dd>
-            <dt className="text-muted-foreground">Produto</dt>
-            <dd>{job.produto ?? "—"}</dd>
-            <dt className="text-muted-foreground">Regional</dt>
-            <dd>{raw.regional?.nome ?? "—"}</dd>
-            <dt className="text-muted-foreground">Cidade</dt>
-            <dd>{job.cidade ?? "—"}</dd>
-            <dt className="text-muted-foreground">Data início</dt>
-            <dd>{formatDate(job.data_inicio_prevista)}</dd>
-            <dt className="text-muted-foreground">Data fim</dt>
-            <dd>{formatDate(job.data_fim_prevista)}</dd>
-            <dt className="text-muted-foreground">Responsável</dt>
-            <dd>{raw.responsavel?.nome ?? "—"}</dd>
-            <dt className="text-muted-foreground">Valor total</dt>
-            <dd className="font-semibold">{formatMoney(job.valor_total)}</dd>
-          </dl>
-        </div>
+          <div className="space-y-4">
+            <FichaJob
+              descritivo={job.observacoes}
+              job={{
+                codigo: job.codigo,
+                nome: job.nome,
+                categoriaNome: raw.categoria?.nome ?? null,
+                produto: job.produto,
+                regionalNome: raw.regional?.nome ?? null,
+                cidade: job.cidade,
+                competenciaTrimestre: job.competencia_trimestre,
+                competenciaAno: job.competencia_ano,
+                dataInicio: job.data_inicio_prevista,
+                dataFim: job.data_fim_prevista,
+                dataAbertura: job.data_abertura_financeiro,
+                abertoPorNome,
+                dataPrevistaFaturamento: job.data_prevista_faturamento,
+              }}
+              projeto={{
+                id: raw.projeto_id,
+                codigo: raw.projeto?.codigo ?? "—",
+                nome: raw.projeto?.nome ?? "—",
+                // Cliente de verdade, do cadastro — antes desta tela o card
+                // rotulava "Cliente" e mostrava o nome do PROJETO.
+                clienteNome: raw.projeto?.cliente?.nome_fantasia ?? null,
+                // Categoria do projeto (`categorias_dominio`, escopo
+                // 'projeto'). Não confundir com a categoria do job, que sai
+                // do mesmo catálogo mas do escopo 'orcamento'.
+                tipoNome: raw.projeto?.categoria?.nome ?? null,
+                dataInicio: raw.projeto?.data_inicio_prevista ?? null,
+                dataFim: raw.projeto?.data_fim_prevista ?? null,
+              }}
+              jobsDoProjeto={jobsDoProjeto}
+              jobAtualId={job.id}
+              jobLinkSuffix={jobLinkSuffix}
+              gpNome={raw.responsavel?.nome ?? null}
+              produtorNome={raw.produtor?.nome ?? null}
+              origem={{
+                projetoHref: `/orcamentos/${raw.projeto_id}`,
+                // Aponta para a VERSÃO, não para o orçamento: o rótulo é
+                // "Orçamento aprovado", e o que foi aprovado é a versão. A
+                // tela da versão tem o caminho de volta ao orçamento.
+                orcamentoHref: `/orcamentos/${raw.projeto_id}/${raw.orcamento_id}/versoes/${raw.versao_orcamento_aprovada_id}`,
+                orcamentoCodigo: raw.orcamento?.codigo ?? null,
+                versaoLabel,
+              }}
+              contatos={contatosCobranca}
+              statusBadgeClasses={statusBadgeClasses}
+            />
 
-        {/* Ao lado do Metadata, como no design — não em largura total. */}
-        <div className="rounded-2xl border border-border bg-card p-6 shadow-soft">
-          <div className="flex items-center gap-2 mb-4">
-            <Briefcase className="h-4 w-4 text-california-red" />
-            <h2 className="text-sm font-semibold uppercase tracking-wider">Origem</h2>
-          </div>
-          {/* Label estreito e valor amplo: os valores aqui são links longos
-              ("PEVETE-0002/26 · Novo Teste rqada"), diferente do Metadata. */}
-          <dl className="grid grid-cols-[150px_1fr] gap-x-4 gap-y-3 text-sm">
-            <dt className="text-muted-foreground">Projeto</dt>
-            <dd>
-              <Link
-                href={`/orcamentos/${raw.projeto_id}`}
-                prefetch={false}
-                className="text-california-red hover:underline"
-              >
-                <span className="font-mono">{raw.projeto?.codigo}</span> · {raw.projeto?.nome}
-              </Link>
-            </dd>
-            <dt className="text-muted-foreground">Orçamento</dt>
-            <dd>
-              <Link
-                href={`/orcamentos/${raw.projeto_id}/${raw.orcamento_id}`}
-                prefetch={false}
-                className="text-california-red hover:underline"
-              >
-                <span className="font-mono">{raw.orcamento?.codigo}</span> · {raw.orcamento?.nome}
-              </Link>
-            </dd>
-            <dt className="text-muted-foreground">Versão aprovada</dt>
-            <dd>
-              <Link
-                href={`/orcamentos/${raw.projeto_id}/${raw.orcamento_id}/versoes/${raw.versao_orcamento_aprovada_id}`}
-                prefetch={false}
-                className="text-california-red hover:underline"
-              >
-                {raw.versao
-                  ? nomeVersao(
-                      raw.orcamento?.nome ?? job.nome,
-                      raw.versao.numero_versao,
-                    )
-                  : "—"}
-              </Link>
-            </dd>
-            <dt className="text-muted-foreground">Valor de faturamento</dt>
-            <dd className="font-mono font-semibold">
-              {formatMoney(job.valor_total)}
-              {erratas.length > 0 && (
-                <span className="ml-1.5 font-sans text-xs font-normal text-muted-foreground">
-                  (após {erratas.length}{" "}
-                  {erratas.length === 1 ? "errata" : "erratas"})
-                </span>
-              )}
-            </dd>
-          </dl>
-        </div>
-
-        <ErratasCard
-          erratas={erratas}
-          valorJobAbertura={
-            raw.valor_job_abertura !== null &&
-            raw.valor_job_abertura !== undefined
-              ? Number(raw.valor_job_abertura)
-              : null
-          }
-          faturamentoPrevistoAbertura={
-            raw.faturamento_previsto_abertura !== null &&
-            raw.faturamento_previsto_abertura !== undefined
-              ? Number(raw.faturamento_previsto_abertura)
-              : null
-          }
-          // Recalculados dos itens, não lidos de `jobs.valor_total`: a
-          // coluna é um espelho denormalizado e o card não pode divergir da
-          // planilha logo acima.
-          valorJobAtual={totaisJob.valorJob}
-          faturamentoPrevistoAtual={totaisJob.faturamentoPrevisto}
-          moeda={versaoAprovada.moeda}
-        />
-
-        {/* `envioFaturamento` entra na condição porque job encerrado não
-            tem transição nem envio pendente — e o registro do faturamento
-            é justamente o que precisa continuar visível depois disso. */}
-        {(transicoes.length > 0 || podeEnviarFaturamento || envioFaturamento) && (
-          <div className="rounded-2xl border border-border bg-card p-6 shadow-soft md:col-span-2">
-            <div className="flex items-center gap-2 mb-4">
-              <Circle className="h-4 w-4 text-california-red" />
-              <h2 className="text-sm font-semibold uppercase tracking-wider">Status</h2>
-            </div>
-
-            {/* Abrir e rejeitar saíram desta página em 13/08/2026: abertura
-                é ação exclusiva da Central Financeira, onde o modal de
-                conferência já tem as duas. Job aguardando abertura mostra
-                só para onde ir. */}
-            {job.status === "aguardando_abertura" && (
-              <p className="mb-4 pb-4 border-b border-border text-sm text-muted-foreground">
-                Aguardando abertura pelo financeiro. A conferência e a
-                abertura acontecem na Central Financeira, em{" "}
-                <Link
-                  href="/financeiro/abertura-de-job"
-                  className="font-medium text-california-red hover:underline"
-                >
-                  Abertura de Job
-                </Link>
-                .
-              </p>
-            )}
-
-            {podeEnviarFaturamento && (
-              <div className="mb-4 pb-4 border-b border-border">
-                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
-                  Faturamento
-                </p>
-                <EnviarFaturamentoDrawer
-                  jobId={job.id}
-                  jobCodigo={job.codigo}
-                  valorFaturado={totaisJob.faturamentoPrevisto}
-                  dataPrevistaFaturamento={job.data_prevista_faturamento}
-                  portais={portaisDoCliente}
-                  moeda={versaoAprovada.moeda}
-                />
-                <p className="mt-2 text-xs text-muted-foreground">
-                  Libera o job para o financeiro emitir a nota. O
-                  encerramento fica disponível depois disso.
-                </p>
-              </div>
-            )}
-
-            {envioFaturamento && (
-              <p className="mb-4 pb-4 border-b border-border text-sm text-muted-foreground">
-                Enviado para faturamento em{" "}
-                <strong className="font-mono text-foreground">
-                  {formatDate(envioFaturamento.enviado_em.slice(0, 10))}
-                </strong>{" "}
-                no valor de{" "}
-                <strong className="text-foreground">
-                  {formatMoney(Number(envioFaturamento.valor_faturado))}
-                </strong>
-                , com vencimento em{" "}
-                <strong className="font-mono text-foreground">
-                  {formatDate(envioFaturamento.data_faturamento)}
-                </strong>
-                .
-              </p>
-            )}
-
-            {/* Sem transições e sem envio pendente o card ficaria só com a
-                linha do faturamento e uma borda solta embaixo. Esta é a
-                frase que fecha o card — e diz o que "encerrado" significa. */}
-            {jobEstaCongelado(job.status) && (
-              <p className="text-sm text-muted-foreground">
-                Job {jobStatusLabel(job.status).toLowerCase()} — é histórico.
-                Não aceita edição, PP nem BV.
-              </p>
-            )}
-
-            {transicoes.length > 0 && (
-              <StatusActions
-                jobId={job.id}
-                transicoes={transicoes}
-                // O encerramento só entra em cena depois do envio para
-                // faturamento — antes disso não há o que encerrar.
-                mostrarEncerramento={
-                  job.status === "aberto" && envioFaturamento !== null
-                }
-                resumoEncerramento={resumoEncerramento}
-              />
-            )}
-          </div>
-        )}
+            <ErratasCard
+              erratas={erratas}
+              valorJobAbertura={
+                raw.valor_job_abertura !== null &&
+                raw.valor_job_abertura !== undefined
+                  ? Number(raw.valor_job_abertura)
+                  : null
+              }
+              faturamentoPrevistoAbertura={
+                raw.faturamento_previsto_abertura !== null &&
+                raw.faturamento_previsto_abertura !== undefined
+                  ? Number(raw.faturamento_previsto_abertura)
+                  : null
+              }
+              // Recalculados dos itens, não lidos de `jobs.valor_total`: a
+              // coluna é um espelho denormalizado e o card não pode divergir
+              // da planilha logo acima.
+              valorJobAtual={totaisJob.valorJob}
+              faturamentoPrevistoAtual={totaisJob.faturamentoPrevisto}
+              moeda={versaoAprovada.moeda}
+            />
           </div>
         }
         planilha={
@@ -963,6 +870,23 @@ export default async function JobDetailPage({
             minhaArea={areaDoPapel(session.activeRole)}
           />
         }
+      />
+
+      {/* Fora das abas de propósito: as ações são do job, não da aba de
+          Informações. Substitui o card "Status", que vivia no corpo da aba
+          — ver <BarraAcoesJob>. */}
+      <BarraAcoesJob
+        jobId={job.id}
+        jobCodigo={job.codigo}
+        status={job.status}
+        transicoes={transicoes}
+        envioFaturamento={envioFaturamento}
+        podeEnviarFaturamento={podeEnviarFaturamento}
+        faturamentoPrevisto={totaisJob.faturamentoPrevisto}
+        dataPrevistaFaturamento={job.data_prevista_faturamento}
+        portais={portaisDoCliente}
+        moeda={versaoAprovada.moeda}
+        resumoEncerramento={resumoEncerramento}
       />
     </div>
   );

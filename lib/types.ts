@@ -809,6 +809,21 @@ export function competenciaLabel(
 }
 
 /**
+ * "3º tri · 2026" — a forma por extenso, usada na ficha do job no módulo de
+ * Jobs (handoff "Job · Informações — Cabeçalho", 19/08/2026). A Central
+ * Financeira segue com `competenciaLabel`, que é compacta porque lá o campo
+ * divide linha com outros seis. Mora aqui junto da irmã para as duas nunca
+ * divergirem por descuido.
+ */
+export function competenciaLabelLongo(
+  trimestre: number | null,
+  ano: number | null,
+): string {
+  if (!trimestre || !ano) return "—";
+  return `${trimestre}º tri · ${ano}`;
+}
+
+/**
  * Transições "livres" (sem role gate). Ações que exigem gate financeiro
  * (aprovar/rejeitar abertura) OU input adicional (motivo) têm server actions
  * próprias e NÃO estão nesta tabela.
@@ -832,7 +847,7 @@ export const JOB_STATUS_TRANSICOES: Record<JobStatus, JobStatus[]> = {
  * `encerrarJob`, não `atualizarStatusJob`.
  */
 export const ENCERRAMENTO_INDISPONIVEL =
-  "Encerre pelo resumo de fechamento, no bloco de Status";
+  "Encerre pelo resumo de fechamento, na barra de ações do rodapé";
 
 /** PP que ainda não saiu do caixa — impede o encerramento do job. */
 export const PP_STATUS_EM_ABERTO: PPStatus[] = ["em_avaliacao", "aprovada"];

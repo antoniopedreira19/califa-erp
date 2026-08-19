@@ -167,10 +167,12 @@ export function EnviarFaturamentoDrawer({
 
   return (
     <>
+      {/* Altura e raio da barra fixa do rodapé, que é onde este botão
+          passou a morar em 19/08/2026. */}
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-california-red-hover"
+        className="inline-flex h-9 items-center gap-2 whitespace-nowrap rounded-[10px] bg-california-red px-4 text-[13px] font-semibold text-white transition-colors hover:bg-california-red-hover"
       >
         <Send className="h-4 w-4" />
         Enviar job para faturamento
