@@ -155,6 +155,9 @@ export default async function AvulsaDetalhesPage({
     valor: string;
     natureza: NaturezaLancamento;
     data_prevista_pagamento: string | null;
+    // Tela 3.2 — datas de pagamento (o `select("*")` acima já as traz).
+    data_pagamento: string | null;
+    data_pagamento_primeira: string | null;
     status: ContaAvulsaStatus;
     fornecedor_id: string | null;
     cliente_id: string | null;
@@ -251,6 +254,8 @@ export default async function AvulsaDetalhesPage({
     valor: c.valor,
     natureza: c.natureza,
     data_prevista_pagamento: c.data_prevista_pagamento,
+    data_pagamento: c.data_pagamento,
+    data_pagamento_primeira: c.data_pagamento_primeira,
     status: c.status,
     fornecedor_id: c.fornecedor_id,
     cliente_id: c.cliente_id,

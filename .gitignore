@@ -65,3 +65,6 @@ CLAUDE.local.md
 
 # Workspace do processo Subagent-Driven Development (briefs, ledger, reports; regenera sozinho)
 .superpowers/
+
+# Planos de alteração montados fora do fluxo de tasks (uso local, enviados ao Claude Code sob demanda)
+planos-locais/

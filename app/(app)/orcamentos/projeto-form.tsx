@@ -179,7 +179,7 @@ export function ProjetoForm({
         </Field>
 
         <Field
-          label="Responsáveis"
+          label="GPs Responsáveis"
           name="responsavel_ids"
           required
           errors={fieldErrors}
@@ -188,7 +188,7 @@ export function ProjetoForm({
             items={responsaveis.map((r) => ({ value: r.id, label: r.nome }))}
             value={responsavelIds}
             onChange={setResponsavelIds}
-            placeholder="Selecione um ou mais membros"
+            placeholder="Selecione um ou mais GPs"
             className={erroClasses("responsavel_ids")}
           />
         </Field>

@@ -83,8 +83,9 @@ export default async function VersaoDetailPage({
       .from("orcamentos")
       .select(
         "id, codigo, nome, status, projeto_id, data_inicio_prevista, data_fim_prevista, " +
-          "regional_id, cidade_id, " +
+          "regional_id, cidade_id, categoria_id, " +
           "regional:regionais(nome), cidade:cidades(nome), " +
+          "categoria:categorias_dominio(nome), " +
           "gp:profiles!gp_responsavel_id(nome), produtor:profiles!produtor_id(nome)",
       )
       .eq("id", params.orcId)
@@ -97,6 +98,7 @@ export default async function VersaoDetailPage({
         projeto_id: string;
         regional_id: string | null;
         cidade_id: string | null;
+        categoria_id: string | null;
         data_inicio_prevista: string | null;
         data_fim_prevista: string | null;
       }>(),
@@ -226,7 +228,7 @@ export default async function VersaoDetailPage({
 
   // Segunda onda: depende de orcamento.projeto_id, por isso não entra no
   // Promise.all acima. Só o fluxo de abertura consome esses dados.
-  const [projetoRes, jobsCountRes, projetoRegionaisRes] = await Promise.all([
+  const [projetoRes, jobsCountRes, projetoRegionaisRes, contatosRes] = await Promise.all([
     supabase
       .from("projetos")
       .select("id, codigo, nome, cliente_id, cliente:clientes(id, nome_fantasia), produto:cliente_produtos(nome)")
@@ -244,6 +246,18 @@ export default async function VersaoDetailPage({
       .select("regional:regionais(id, nome)")
       .eq("projeto_id", orcamento.projeto_id)
       .eq("tenant_id", session.activeTenant.id),
+    // Contatos de cobrança do job já enviado — quem os lê é o modo
+    // somente leitura do modal ("Ver dados do job"). Cabe nesta onda
+    // porque `job.id` já é conhecido; sem job, nem query existe.
+    job
+      ? supabase
+          .from("jobs_contatos")
+          .select("nome, numero, email")
+          .eq("job_id", job.id)
+          .eq("tenant_id", session.activeTenant.id)
+          .eq("tipo", "cobranca")
+          .order("ordem", { ascending: true })
+      : Promise.resolve({ data: [], error: null }),
   ]);
 
   const projetoRaw = projetoRes.data as any;
@@ -290,6 +304,16 @@ export default async function VersaoDetailPage({
 
   const orcamentoRaw = orcamento as any;
 
+  if (contatosRes.error) {
+    console.error("[versao.contatos_job]", (contatosRes.error as any).message);
+  }
+
+  const contatosDoJob = ((contatosRes.data ?? []) as any[]).map((c) => ({
+    nome: (c.nome as string | null) ?? "",
+    numero: (c.numero as string | null) ?? "",
+    email: (c.email as string | null) ?? "",
+  }));
+
   const inicialModal = {
     nome: job?.nome ?? orcamento.nome,
     // Cidade e regional são editáveis no modal: entram pré-preenchidas
@@ -301,6 +325,16 @@ export default async function VersaoDetailPage({
     dataFim: job?.data_fim_prevista ?? orcamento.data_fim_prevista ?? "",
     dataFaturamento: job?.data_prevista_faturamento ?? "",
     observacoes: job?.observacoes ?? "",
+    // Job já enviado mostra o que foi gravado (lista vazia nos jobs
+    // anteriores a 17/08/2026, que não tinham contato). Antes do envio, o
+    // formulário abre com uma linha pronta para digitar — a lixeira fica
+    // desabilitada enquanto ela for a única.
+    contatos:
+      contatosDoJob.length > 0
+        ? contatosDoJob
+        : job
+          ? []
+          : [{ nome: "", numero: "", email: "" }],
   };
 
   // Herdados: com job já aberto valem os valores congelados nele; antes
@@ -315,6 +349,10 @@ export default async function VersaoDetailPage({
       : orcamentoRaw.regional?.nome ?? null,
     gpNome: orcamentoRaw.gp?.nome ?? null,
     produtorNome: orcamentoRaw.produtor?.nome ?? null,
+    // Categoria do job = a do orçamento, sempre. `jobs.categoria_id` só
+    // existe depois que o financeiro abre o job, e mesmo então quem manda
+    // aqui é o orçamento: esta tela é a visão da produção.
+    categoriaNome: orcamentoRaw.categoria?.nome ?? null,
   };
 
   // 1370 e não max-w-7xl (1280): quando o "+BV" quadrado virou a pílula
@@ -521,6 +559,9 @@ export default async function VersaoDetailPage({
         qtdGrupos={grupos.length}
         qtdItens={itens.length}
         qtdItensComValor={itens.filter((i) => i.total_orcado > 0).length}
+        qtdItensOrcadoZerado={
+          itens.filter((i) => Number(i.valor_unitario_orcado) === 0).length
+        }
         percentualImposto={Number(versao.percentual_imposto)}
         custoPlanejado={custoPlanejado}
         faturamentoPrevisto={totais.faturamentoPrevisto}

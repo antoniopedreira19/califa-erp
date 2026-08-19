@@ -50,6 +50,9 @@ interface Props {
   qtdItens: number;
   /** Itens com total orçado > 0 — linha começada e vazia não conta. */
   qtdItensComValor: number;
+  /** Itens com R$ unitário orçado = 0 — qualquer um bloqueia a aprovação
+   *  (docs/decisions/011); planejado zerado não bloqueia. */
+  qtdItensOrcadoZerado: number;
   /** Alíquota gravada na versão, para checar se saiu do seletor. */
   percentualImposto: number;
   custoPlanejado: number;
@@ -86,6 +89,7 @@ export function FluxoAbertura({
   qtdGrupos,
   qtdItens,
   qtdItensComValor,
+  qtdItensOrcadoZerado,
   percentualImposto,
   custoPlanejado,
   faturamentoPrevisto,
@@ -119,6 +123,7 @@ export function FluxoAbertura({
     percentualImposto,
     qtdItens,
     qtdItensComValor,
+    qtdItensOrcadoZerado,
   });
   const aprovada = versaoStatus === "aprovada";
   const etapa: "rascunho" | "aprovada" | "enviada" = job
@@ -174,6 +179,20 @@ export function FluxoAbertura({
     formData.set("data_fim_prevista", dados.dataFim);
     formData.set("data_prevista_faturamento", dados.dataFaturamento);
     formData.set("observacoes", dados.observacoes);
+    // Único campo composto do formulário: vai como JSON e a action
+    // parseia antes de validar. Linha totalmente em branco é descartada
+    // aqui — só o que tem conteúdo chega ao servidor.
+    formData.set(
+      "contatos_cobranca",
+      JSON.stringify(
+        dados.contatos.filter(
+          (c) =>
+            c.nome.trim().length > 0 ||
+            c.email.trim().length > 0 ||
+            c.numero.trim().length > 0,
+        ),
+      ),
+    );
 
     startTransition(async () => {
       const res = await enviarJobParaAbertura(versaoId, formData);
@@ -195,6 +214,12 @@ export function FluxoAbertura({
     { rotulo: "Projeto", valor: `${projetoNome} · ${projetoCodigo}` },
     { rotulo: "Cliente", valor: clienteNome },
     { rotulo: "Produto", valor: herdados.produtoNome ?? "— não informado" },
+    {
+      // Herdada do orçamento — é a categoria com que o job chega ao
+      // financeiro na abertura.
+      rotulo: "Categoria",
+      valor: herdados.categoriaNome ?? "— não informada",
+    },
     {
       // O que o usuário escolheu no formulário — não o que estava no
       // orçamento antes de ele abrir o modal.
@@ -397,6 +422,7 @@ export function FluxoAbertura({
         valorTotal={valorJob}
         faturamentoPrevisto={faturamentoPrevisto}
         moeda={moeda}
+        contatos={dados.contatos}
         observacoes={dados.observacoes}
         erro={erroGeral}
       />

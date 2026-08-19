@@ -2,7 +2,8 @@ import Link from "next/link";
 import { FolderKanban, Plus, FileText } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
-import type { Cliente, Projeto } from "@/lib/types";
+import { escolherJobDoFunil, estagioFunil } from "@/lib/calculos/funil";
+import type { Cliente, JobStatus, OrcamentoStatus, Projeto } from "@/lib/types";
 import { EmptyState } from "@/components/empty-state";
 import { ProjetosList, type ProjetoRow } from "./projetos-list";
 
@@ -39,22 +40,28 @@ export default async function ProjetosPage() {
   const projetoIds = projetosBrutos.map((p) => p.id);
 
   // Contagens agregadas de orçamentos por projeto (SEM embed pesado).
-  // Uma query só, split em 3 métricas por status:
-  //   total = todos os orçamentos
-  //   aprovados = status ∈ (aprovado, job_criado)   ← "já foi aceito pelo cliente"
-  //   jobs = status = job_criado                     ← "operação abriu"
+  // total = todos os orçamentos, qualquer status; as 3 colunas do funil
+  // (Aprovados / Enviados / Abertos) são mutuamente exclusivas e vêm de
+  // `estagioFunil` — a mesma função que rotula as linhas no detalhe do
+  // projeto (lib/calculos/funil.ts).
   const orcamentosCountMap = new Map<string, number>();
   const aprovadosCountMap = new Map<string, number>();
-  const jobsCountMap = new Map<string, number>();
+  const enviadosCountMap = new Map<string, number>();
+  const abertosCountMap = new Map<string, number>();
   // Regionais do projeto: N:N, então vêm numa query própria em vez de
   // embed na listagem (o embed devolveria a linha do projeto repetida).
   const regionaisMap = new Map<string, { id: string; nome: string }[]>();
 
   if (projetoIds.length > 0) {
-    const [orcsRes, vinculosRes] = await Promise.all([
+    const [orcsRes, jobsRes, vinculosRes] = await Promise.all([
       supabase
         .from("orcamentos")
-        .select("projeto_id, status")
+        .select("id, projeto_id, status")
+        .in("projeto_id", projetoIds)
+        .eq("tenant_id", session.activeTenant.id),
+      supabase
+        .from("jobs")
+        .select("orcamento_id, status, created_at")
         .in("projeto_id", projetoIds)
         .eq("tenant_id", session.activeTenant.id),
       supabase
@@ -63,15 +70,29 @@ export default async function ProjetosPage() {
         .in("projeto_id", projetoIds)
         .eq("tenant_id", session.activeTenant.id),
     ]);
+    if (jobsRes.error) console.error("[projetos.jobs]", jobsRes.error.message);
+
+    // Jobs por orçamento — quase sempre 1; com mais de um, o funil olha o
+    // não-cancelado mais recente (escolherJobDoFunil).
+    const jobsPorOrcamento = new Map<string, { status: JobStatus; created_at: string }[]>();
+    for (const j of ((jobsRes.data ?? []) as any[])) {
+      const atuais = jobsPorOrcamento.get(j.orcamento_id) ?? [];
+      atuais.push({ status: j.status as JobStatus, created_at: j.created_at });
+      jobsPorOrcamento.set(j.orcamento_id, atuais);
+    }
 
     for (const o of ((orcsRes.data ?? []) as any[])) {
       orcamentosCountMap.set(o.projeto_id, (orcamentosCountMap.get(o.projeto_id) ?? 0) + 1);
-      if (o.status === "aprovado" || o.status === "job_criado") {
+      const jobStatus = escolherJobDoFunil(jobsPorOrcamento.get(o.id) ?? []);
+      const estagio = estagioFunil(o.status as OrcamentoStatus, jobStatus);
+      if (estagio === "aprovado") {
         aprovadosCountMap.set(o.projeto_id, (aprovadosCountMap.get(o.projeto_id) ?? 0) + 1);
+      } else if (estagio === "enviado") {
+        enviadosCountMap.set(o.projeto_id, (enviadosCountMap.get(o.projeto_id) ?? 0) + 1);
+      } else if (estagio === "aberto") {
+        abertosCountMap.set(o.projeto_id, (abertosCountMap.get(o.projeto_id) ?? 0) + 1);
       }
-      if (o.status === "job_criado") {
-        jobsCountMap.set(o.projeto_id, (jobsCountMap.get(o.projeto_id) ?? 0) + 1);
-      }
+      // "orcamento" e "cancelado" ficam fora do funil: contam só no total.
     }
 
     for (const v of ((vinculosRes.data ?? []) as any[])) {
@@ -100,7 +121,8 @@ export default async function ProjetosPage() {
     data_inicio_prevista: p.data_inicio_prevista,
     orcamentos_count: orcamentosCountMap.get(p.id) ?? 0,
     aprovados_count: aprovadosCountMap.get(p.id) ?? 0,
-    jobs_count: jobsCountMap.get(p.id) ?? 0,
+    enviados_count: enviadosCountMap.get(p.id) ?? 0,
+    abertos_count: abertosCountMap.get(p.id) ?? 0,
     created_at: p.created_at,
   }));
 

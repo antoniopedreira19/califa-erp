@@ -6,7 +6,7 @@ import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { bvSchema } from "@/lib/validations/bv";
 import type { BvSituacao, ItemBv, JobStatus } from "@/lib/types";
-import { jobEstaCongelado } from "@/lib/types";
+import { jobEstaCongelado, jobAceitaAcoesPlanilha } from "@/lib/types";
 import { aceitaBV } from "@/lib/calculos/versao-totais";
 
 export type ActionResult =
@@ -110,6 +110,23 @@ async function carregarContexto(
   if (copiaRes.data && jobEstaCongelado(copiaRes.data.job.status as JobStatus)) {
     return {
       error: "Job encerrado — o BV não pode mais ser alterado.",
+    };
+  }
+
+  // Pré-abertura: o job existe (a cópia nasce no envio para abertura),
+  // mas o financeiro ainda não o abriu. A planilha do job passou a ser
+  // visível nesse estado em 17/08/2026 e o realizado é editável nele —
+  // o BV não: é compromisso de comissão, e o job ainda pode voltar.
+  // Sem esta trava a UI escondia o botão, mas a action aceitava.
+  if (
+    copiaRes.data &&
+    !jobAceitaAcoesPlanilha(copiaRes.data.job.status as JobStatus)
+  ) {
+    return {
+      error:
+        copiaRes.data.job.status === "rejeitado_financeiro"
+          ? "Job devolvido pelo financeiro — o BV fica disponível depois da abertura."
+          : "Job aguardando abertura pelo financeiro — o BV fica disponível depois da abertura.",
     };
   }
 

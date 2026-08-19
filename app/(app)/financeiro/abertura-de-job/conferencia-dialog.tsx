@@ -18,6 +18,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { formatCurrency } from "@/lib/utils";
+import { ContatosCobrancaCaixa } from "@/components/financeiro/contatos-cobranca";
 import type { JobNaFila } from "./dados";
 import { formatDataBr, formatPeriodo } from "./formatos";
 
@@ -46,6 +47,9 @@ export function ConferenciaDialog({ job, onOpenChange, onReprovar }: Props) {
     },
     { rotulo: "Cliente", valor: job.cliente_nome ?? "—" },
     { rotulo: "Produto", valor: job.produto ?? "—" },
+    // Vem do orçamento: é a categoria que a produção deu ao job e a que a
+    // tela de abertura pré-seleciona.
+    { rotulo: "Categoria", valor: job.categoria_nome ?? "— não informada" },
     {
       rotulo: "Cidade · Regional",
       valor:
@@ -152,11 +156,20 @@ export function ConferenciaDialog({ job, onOpenChange, onReprovar }: Props) {
         </Link>
 
         <div className="space-y-1.5">
-          <p className="text-[12.5px] font-semibold">Observações da produção</p>
+          {/* Mesmo dado que a produção digita no modal de envio: coluna
+              `jobs.observacoes`, rotulada "Descritivo do Job" nas duas
+              pontas desde 17/08/2026. */}
+          <p className="text-[12.5px] font-semibold">Descritivo do Job</p>
           <div className="rounded-lg border border-border bg-muted px-3.5 py-3 text-[12.5px] leading-relaxed text-muted-foreground">
-            {job.observacoes?.trim() || "Sem observações da produção."}
+            {job.observacoes?.trim() || "Sem descritivo do job."}
           </div>
         </div>
+
+        {/* Mesma natureza do Descritivo — o que a produção informou no
+            envio — e por isso a mesma caixa. Aqui é o único momento em
+            que dá para devolver o job por contato faltando ou e-mail
+            torto, ANTES de assumi-lo (docs/decisions/012). */}
+        <ContatosCobrancaCaixa contatos={job.contatos} />
 
         <div className="flex items-center justify-end gap-2.5">
           <button
@@ -173,7 +186,7 @@ export function ConferenciaDialog({ job, onOpenChange, onReprovar }: Props) {
             className="inline-flex items-center gap-1.5 rounded-lg bg-california-red px-[18px] py-2.5 text-[13.5px] font-bold text-white transition-colors hover:bg-california-red-hover"
           >
             <Check className="h-4 w-4" />
-            Aprovar e preencher abertura
+            Preencher Abertura
           </button>
         </div>
       </DialogContent>

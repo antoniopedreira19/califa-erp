@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { cn, formatCurrency } from "@/lib/utils";
 import { OBSERVACOES_MAX } from "@/lib/validations/abertura-job";
+import type { ContatoCobranca } from "./enviar-job-modal";
 
 /**
  * Confirmação do envio do job. Não usa o `ConfirmDialog` genérico: o
@@ -29,6 +30,7 @@ export function ConfirmarEnvioModal({
   valorTotal,
   faturamentoPrevisto,
   moeda,
+  contatos,
   observacoes,
   erro,
 }: {
@@ -44,6 +46,9 @@ export function ConfirmarEnvioModal({
   /** O que a California emite nota nesta versão. */
   faturamentoPrevisto: number;
   moeda: string;
+  /** Contatos de cobrança digitados no formulário — dado digitado tem de
+   *  ser conferível antes de gravar. */
+  contatos: ContatoCobranca[];
   /** Só leitura: este pop-up é conferência. Alterar exige voltar ao formulário. */
   observacoes: string;
   erro: string | null;
@@ -103,11 +108,33 @@ export function ConfirmarEnvioModal({
           </div>
         </div>
 
-        {/* Observações aparecem aqui só para conferência. Mesma caixa do
+        {/* Contato de cobrança: nome na linha, e-mail (e número, quando
+            houver) abaixo em fonte menor. Sem chip e sem tooltip — o que
+            foi digitado tem de estar visível na conferência. */}
+        <div className="flex flex-col gap-2 border-t border-border pt-3">
+          <span className="text-[12.5px] font-semibold">Contato de cobrança</span>
+          {contatos.length === 0 ? (
+            <span className="text-[13px] text-muted-foreground">—</span>
+          ) : (
+            contatos.map((c, i) => (
+              <div key={i} className="flex flex-col">
+                <span className="text-[13px] font-semibold text-foreground">
+                  {c.nome.trim() || "—"}
+                </span>
+                <span className="text-[11.5px] text-muted-foreground">
+                  {[c.email.trim(), c.numero.trim()].filter(Boolean).join(" · ") ||
+                    "—"}
+                </span>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Descritivo aparece aqui só para conferência. Mesma caixa do
             handoff, mas travada: este pop-up não edita nada. */}
         <div className="flex flex-col gap-1.5">
           <div className="flex items-baseline justify-between gap-2.5">
-            <span className="text-[12.5px] font-semibold">Observações</span>
+            <span className="text-[12.5px] font-semibold">Descritivo</span>
             <span className="font-mono text-[11px] text-muted-foreground">
               {observacoes.length}/{OBSERVACOES_MAX}
             </span>

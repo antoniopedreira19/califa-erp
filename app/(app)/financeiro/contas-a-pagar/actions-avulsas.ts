@@ -95,7 +95,12 @@ export async function criarContaAvulsa(input: unknown): Promise<Result> {
       descricao: d.descricao,
       valor: d.valor,
       natureza: d.natureza,
+      // Tela 3.2: a avulsa nasce com as três datas iguais. A prevista é o
+      // "venc. original" da aba Títulos a Pagar; a de pagamento é a que o
+      // lápis repactua; a primeira fica congelada por trigger no banco.
       data_prevista_pagamento: d.data_prevista_pagamento,
+      data_pagamento: d.data_prevista_pagamento,
+      data_pagamento_primeira: d.data_prevista_pagamento,
       fornecedor_id: d.fornecedor_id,
       cliente_id: d.cliente_id,
       job_id: d.job_id,
@@ -333,6 +338,14 @@ export async function editarContaAvulsa(
         valor: d.valor,
         natureza: d.natureza,
         data_prevista_pagamento: d.data_prevista_pagamento,
+        // A data de pagamento só acompanha a correção da prevista enquanto
+        // ninguém a repactuou (Tela 3.2). Se já divergiu, a escolha do
+        // financeiro no lápis vale mais que a correção feita aqui — e a
+        // primeira data é congelada por trigger de qualquer jeito.
+        ...(atual.data_pagamento == null ||
+        atual.data_pagamento === atual.data_prevista_pagamento
+          ? { data_pagamento: d.data_prevista_pagamento }
+          : {}),
         fornecedor_id: d.fornecedor_id,
         cliente_id: d.cliente_id,
         job_id: d.job_id,

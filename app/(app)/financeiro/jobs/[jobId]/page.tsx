@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { carregarJobNoFinanceiro } from "./dados";
 import { PrevisoesCard } from "./previsoes-card";
 import { PpsCard } from "./pps-card";
+import { ContatosCobrancaCaixa } from "@/components/financeiro/contatos-cobranca";
 
 export const dynamic = "force-dynamic";
 
@@ -68,7 +69,7 @@ export default async function JobNoFinanceiroPage({
   );
   if (!dados) notFound();
 
-  const { job, previsoes, pps } = dados;
+  const { job, previsoes, pps, contatos } = dados;
 
   // Job que ainda não passou pela abertura não tem o que mostrar aqui —
   // o lugar dele é a fila.
@@ -292,14 +293,27 @@ export default async function JobNoFinanceiroPage({
 
       {job.observacoes && (
         <section className="rounded-2xl border border-border bg-card p-6 shadow-soft">
+          {/* `jobs.observacoes` — o texto que a produção escreve no envio
+              do job. Rótulo unificado em 17/08/2026. */}
           <h2 className="mb-2 text-xs font-semibold uppercase tracking-[0.08em]">
-            Observações da produção
+            Descritivo do Job
           </h2>
           <p className="text-[13px] leading-relaxed text-muted-foreground">
             {job.observacoes}
           </p>
         </section>
       )}
+
+      {/* A referência do dia a dia: aqui é onde a cobrança acontece, com o
+          job já aberto. Diferente do Descritivo, esta seção aparece MESMO
+          vazia — "sem contato" é informação que o financeiro precisa ver
+          (docs/decisions/012). */}
+      <section className="rounded-2xl border border-border bg-card p-6 shadow-soft">
+        <h2 className="mb-2 text-xs font-semibold uppercase tracking-[0.08em]">
+          Contato de cobrança
+        </h2>
+        <ContatosCobrancaCaixa contatos={contatos} titulo={null} />
+      </section>
     </div>
   );
 }

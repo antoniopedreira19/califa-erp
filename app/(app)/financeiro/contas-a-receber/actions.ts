@@ -67,6 +67,21 @@ export async function uploadNfPdf(formData: FormData): Promise<Result<{ path: st
   return { ok: true, path };
 }
 
+/** URL assinada para ver o PDF da NF dentro do drawer (modo leitura). */
+export async function urlAnexoNf(path: string): Promise<Result<{ url: string }>> {
+  const gate = await checarGateFinanceiro(path, "faturamento", "faturamento.anexo_lido");
+  if (!gate.ok) return gate;
+
+  const { data, error } = await gate.supabase.storage
+    .from("faturamentos-nf")
+    .createSignedUrl(path, 60 * 10);
+
+  if (error || !data) {
+    return { ok: false, message: "Não foi possível abrir o PDF da nota." };
+  }
+  return { ok: true, url: data.signedUrl };
+}
+
 // ---------------------------------------------------------------------------
 // Emitir Faturamento
 // ---------------------------------------------------------------------------
@@ -77,21 +92,36 @@ const parcelaSchema = z.object({
   data_vencimento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 });
 
+/**
+ * Um item da nota: o job (ou BV) coberto, e por quanto.
+ *
+ * `envio_parcela_id` é o que amarra o item à parcela do envio — é ele que
+ * faz o saldo baixar na linha certa da aba Faturamento.
+ */
+const itemSchema = z.object({
+  origem_tipo: z.enum(["job", "bv", "avulso"]),
+  origem_id: z.string().uuid().nullable(),
+  envio_parcela_id: z.string().uuid().nullable(),
+  valor: z.number().positive(),
+});
+
 const emitirSchema = z.object({
   empresa_id: z.string().uuid("Selecione a empresa emissora."),
   origem_tipo: z.enum(["job", "bv", "avulso"]),
   origem_id: z.string().uuid().nullable(),
   cliente_id: z.string().uuid().nullable(),
   fornecedor_id: z.string().uuid().nullable(),
-  numero_nf: z.string().trim().min(1, "Número da NF obrigatório."),
-  serie: z.string().trim().min(1, "Série obrigatória."),
+  numero_nf: z.string().trim().min(1, "Informe o número da NF."),
   data_emissao: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data de emissão inválida."),
-  valor_total: z.number().positive("Valor total precisa ser positivo."),
-  descricao: z.string().trim().min(3, "Descrição obrigatória."),
-  anexo_nf_path: z.string().min(1, "Anexe o PDF da NF."),
-  plano_conta_tipo_id: z.string().uuid("Selecione o tipo."),
-  plano_conta_subtipo_id: z.string().uuid("Selecione o subtipo."),
-  parcelas: z.array(parcelaSchema).min(1, "Ao menos uma parcela."),
+  valor_total: z.number().positive("O valor total da NF precisa ser maior que zero."),
+  descricao: z.string().trim().min(3, "Escreva a descrição que vai na nota fiscal."),
+  anexo_nf_path: z.string().min(1, "Anexe o PDF da nota fiscal antes de emitir."),
+  // Só o avulso informa (é o campo "Centro de custo" do formulário). Em
+  // job/BV a classificação que vale é a da baixa do título.
+  plano_conta_tipo_id: z.string().uuid().nullable(),
+  plano_conta_subtipo_id: z.string().uuid().nullable(),
+  itens: z.array(itemSchema).min(1, "A nota precisa cobrir ao menos um item."),
+  parcelas: z.array(parcelaSchema).min(1, "A nota precisa de ao menos uma parcela."),
 });
 
 export async function emitirFaturamento(
@@ -109,38 +139,68 @@ export async function emitirFaturamento(
   if (!gate.ok) return gate;
   const { session, supabase } = gate;
 
-  // Valida coerência contraparte × origem (defensivo — RPC também valida)
-  if (
-    parsed.data.origem_tipo === "bv" &&
-    (!parsed.data.fornecedor_id || parsed.data.cliente_id)
-  ) {
+  const d = parsed.data;
+
+  // Coerência contraparte × origem (defensivo — a RPC e o CHECK também
+  // validam, e é aqui que a mensagem sai legível).
+  if (d.origem_tipo === "bv" && (!d.fornecedor_id || d.cliente_id)) {
     return { ok: false, message: "BV precisa de fornecedor (e não cliente)." };
   }
   if (
-    (parsed.data.origem_tipo === "job" || parsed.data.origem_tipo === "avulso") &&
-    (!parsed.data.cliente_id || parsed.data.fornecedor_id)
+    (d.origem_tipo === "job" || d.origem_tipo === "avulso") &&
+    (!d.cliente_id || d.fornecedor_id)
   ) {
     return { ok: false, message: "Job e avulso precisam de cliente (e não fornecedor)." };
+  }
+  if (d.origem_tipo === "avulso" && (!d.plano_conta_tipo_id || !d.plano_conta_subtipo_id)) {
+    return { ok: false, message: "No faturamento avulso, informe o centro de custo." };
+  }
+
+  // BV nunca entra em NF agrupada: a contraparte dele é o fornecedor.
+  const bvs = d.itens.filter((i) => i.origem_tipo === "bv");
+  if (bvs.length > 0 && d.itens.length > 1) {
+    return {
+      ok: false,
+      message:
+        "BV tem o fornecedor como contraparte e precisa ser faturado individualmente.",
+    };
+  }
+
+  const somaItens = d.itens.reduce((s, i) => s + i.valor, 0);
+  if (Math.abs(somaItens - d.valor_total) > 0.01) {
+    return {
+      ok: false,
+      message: `A soma dos jobs desta NF (${brl(somaItens)}) não fecha com o total (${brl(d.valor_total)}).`,
+    };
+  }
+  const somaParcelas = d.parcelas.reduce((s, p) => s + p.valor, 0);
+  if (Math.abs(somaParcelas - d.valor_total) > 0.01) {
+    return {
+      ok: false,
+      message: `A soma das parcelas (${brl(somaParcelas)}) não fecha com o total da NF (${brl(d.valor_total)}).`,
+    };
   }
 
   const { data: fatId, error } = await supabase.rpc("emitir_faturamento", {
     payload: {
       tenant_id: session.activeTenant.id,
-      empresa_id: parsed.data.empresa_id,
-      origem_tipo: parsed.data.origem_tipo,
-      origem_id: parsed.data.origem_id,
-      cliente_id: parsed.data.cliente_id,
-      fornecedor_id: parsed.data.fornecedor_id,
-      numero_nf: parsed.data.numero_nf,
-      serie: parsed.data.serie,
-      data_emissao: parsed.data.data_emissao,
-      valor_total: parsed.data.valor_total,
-      descricao: parsed.data.descricao,
-      anexo_nf_path: parsed.data.anexo_nf_path,
-      plano_conta_tipo_id: parsed.data.plano_conta_tipo_id,
-      plano_conta_subtipo_id: parsed.data.plano_conta_subtipo_id,
+      empresa_id: d.empresa_id,
+      origem_tipo: d.origem_tipo,
+      // NF agrupada não tem origem única — a verdade vai nos itens.
+      origem_id: d.itens.length > 1 ? null : d.origem_id,
+      cliente_id: d.cliente_id,
+      fornecedor_id: d.fornecedor_id,
+      numero_nf: d.numero_nf,
+      serie: "1",
+      data_emissao: d.data_emissao,
+      valor_total: d.valor_total,
+      descricao: d.descricao,
+      anexo_nf_path: d.anexo_nf_path,
+      plano_conta_tipo_id: d.plano_conta_tipo_id,
+      plano_conta_subtipo_id: d.plano_conta_subtipo_id,
       emitido_por: session.profile.id,
-      parcelas: parsed.data.parcelas,
+      itens: d.itens,
+      parcelas: d.parcelas,
     },
   });
 
@@ -152,12 +212,12 @@ export async function emitirFaturamento(
     entidadeTipo: "faturamento",
     entidadeId: fatId as string,
     metadata: {
-      origem_tipo: parsed.data.origem_tipo,
-      origem_id: parsed.data.origem_id,
-      numero_nf: parsed.data.numero_nf,
-      serie: parsed.data.serie,
-      valor_total: parsed.data.valor_total,
-      qtd_parcelas: parsed.data.parcelas.length,
+      origem_tipo: d.origem_tipo,
+      numero_nf: d.numero_nf,
+      valor_total: d.valor_total,
+      qtd_itens: d.itens.length,
+      qtd_parcelas: d.parcelas.length,
+      agrupada: d.itens.length > 1,
     },
   });
 
@@ -168,13 +228,22 @@ export async function emitirFaturamento(
 }
 
 // ---------------------------------------------------------------------------
-// Dar baixa em título
+// Baixa do recebimento
 // ---------------------------------------------------------------------------
 
+/**
+ * Os três obrigatórios do protótipo. `pago_em` é o mais importante:
+ * título recebido SEMPRE tem data de recebimento — invariante garantida
+ * aqui, no schema, e de novo dentro da RPC.
+ */
 const baixaSchema = z.object({
   titulo_id: z.string().uuid(),
-  pago_em: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida."),
-  conta_bancaria_id: z.string().uuid("Selecione a conta bancária."),
+  pago_em: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Informe a data do recebimento."),
+  conta_bancaria_id: z.string().uuid("Selecione a conta bancária que recebeu."),
+  plano_conta_tipo_id: z.string().uuid("Selecione o centro de custo do recebimento."),
+  plano_conta_subtipo_id: z
+    .string()
+    .uuid("Selecione o centro de custo do recebimento."),
 });
 
 export async function darBaixaTitulo(input: unknown): Promise<Result> {
@@ -190,10 +259,12 @@ export async function darBaixaTitulo(input: unknown): Promise<Result> {
   if (!gate.ok) return gate;
   const { session, supabase } = gate;
 
-  const { data: lancId, error } = await supabase.rpc("dar_baixa_titulo", {
+  const { data: lancId, error } = await supabase.rpc("dar_baixa_titulo_com_plano", {
     p_titulo_id: parsed.data.titulo_id,
     p_pago_em: parsed.data.pago_em,
     p_conta_bancaria_id: parsed.data.conta_bancaria_id,
+    p_tipo_id: parsed.data.plano_conta_tipo_id,
+    p_subtipo_id: parsed.data.plano_conta_subtipo_id,
     p_criado_por: session.profile.id,
   });
 
@@ -207,6 +278,8 @@ export async function darBaixaTitulo(input: unknown): Promise<Result> {
     metadata: {
       pago_em: parsed.data.pago_em,
       conta_bancaria_id: parsed.data.conta_bancaria_id,
+      plano_conta_tipo_id: parsed.data.plano_conta_tipo_id,
+      plano_conta_subtipo_id: parsed.data.plano_conta_subtipo_id,
       lancamento_id: lancId,
     },
   });
@@ -219,8 +292,84 @@ export async function darBaixaTitulo(input: unknown): Promise<Result> {
 }
 
 // ---------------------------------------------------------------------------
-// Estornar baixa
+// Repactuar a previsão de recebimento
 // ---------------------------------------------------------------------------
+
+const previsaoSchema = z.object({
+  titulo_id: z.string().uuid(),
+  data_previsao_recebimento: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Informe a nova previsão de recebimento."),
+});
+
+/**
+ * O lápis da coluna Vencimento.
+ *
+ * Só a PREVISÃO muda. O vencimento da NF e a 1ª previsão registrada não
+ * dependem desta action para ficarem intactos: o trigger
+ * `congela_previsao_recebimento_primeira` reverte qualquer tentativa,
+ * venha ela daqui ou de fora.
+ */
+export async function repactuarPrevisaoRecebimento(input: unknown): Promise<Result> {
+  const parsed = previsaoSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, message: parsed.error.issues[0]?.message ?? "Entrada inválida." };
+  }
+  const gate = await checarGateFinanceiro(
+    parsed.data.titulo_id,
+    "titulo_receber",
+    "titulo.previsao_repactuada",
+  );
+  if (!gate.ok) return gate;
+  const { session, supabase } = gate;
+
+  const { data: titulo } = await supabase
+    .from("titulos_receber")
+    .select("id, status, data_previsao_recebimento")
+    .eq("id", parsed.data.titulo_id)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle<{ id: string; status: string; data_previsao_recebimento: string | null }>();
+
+  if (!titulo) return { ok: false, message: "Título não encontrado." };
+  if (titulo.status !== "em_aberto") {
+    return {
+      ok: false,
+      message: "Só título em aberto tem previsão de recebimento a repactuar.",
+    };
+  }
+
+  const { error } = await supabase
+    .from("titulos_receber")
+    .update({ data_previsao_recebimento: parsed.data.data_previsao_recebimento })
+    .eq("id", parsed.data.titulo_id)
+    .eq("tenant_id", session.activeTenant.id);
+
+  if (error) return { ok: false, message: `Falha ao salvar a previsão: ${error.message}` };
+
+  await logAuditEvent({
+    acao: "titulo.previsao_repactuada",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "titulo_receber",
+    entidadeId: parsed.data.titulo_id,
+    metadata: {
+      de: titulo.data_previsao_recebimento,
+      para: parsed.data.data_previsao_recebimento,
+    },
+  });
+
+  revalidatePath("/financeiro/contas-a-receber");
+  revalidatePath("/financeiro/fluxo-caixa");
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// Estorno e cancelamento — sem porta na UI desde a Tela 3.3
+// ---------------------------------------------------------------------------
+//
+// O protótipo não tem estorno nem cancelamento de NF em lugar nenhum:
+// título recebido exibe apenas "Conciliação". Mesma decisão que a 016 §9
+// tomou no contas a pagar. As duas actions continuam aqui, funcionando,
+// para o dia em que a tela voltar a precisar delas.
 
 const estornoSchema = z.object({
   titulo_id: z.string().uuid(),
@@ -266,10 +415,6 @@ export async function estornarBaixaTitulo(input: unknown): Promise<Result> {
   return { ok: true };
 }
 
-// ---------------------------------------------------------------------------
-// Cancelar Faturamento
-// ---------------------------------------------------------------------------
-
 const cancelarSchema = z.object({
   faturamento_id: z.string().uuid(),
   motivo: z.string().trim().min(10, "Motivo precisa ter ao menos 10 caracteres."),
@@ -308,4 +453,8 @@ export async function cancelarFaturamento(input: unknown): Promise<Result> {
   revalidatePath("/financeiro/fluxo-caixa");
   revalidatePath("/financeiro");
   return { ok: true };
+}
+
+function brl(n: number): string {
+  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }

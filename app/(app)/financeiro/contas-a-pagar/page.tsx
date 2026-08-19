@@ -5,7 +5,7 @@ import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { PedidosCompraList, type PPRow } from "./pedidos-compra-list";
 import { ContasPagarTabs } from "./contas-pagar-tabs";
-import { ContasAvulsasList, type AvulsaRow } from "./avulsas-list";
+import { TitulosPagarList, type TituloRow } from "./titulos-pagar-list";
 import { RecorrentesList, type RecorrenteRow } from "./recorrentes-list";
 import type { PPStatus, PlanoContaTipo, PlanoContaSubtipo, ContaBancaria } from "@/lib/types";
 
@@ -28,8 +28,8 @@ export default async function PedidosCompraFinanceiroPage() {
     tiposRes,
     subtiposRes,
     ppsPendentesCountRes,
-    avulsasAprovadasCountRes,
     avulsasRes,
+    baixasRes,
     empresasRes,
     fornecedoresRes,
     clientesRes,
@@ -56,7 +56,11 @@ export default async function PedidosCompraFinanceiroPage() {
           id, codigo, nome,
           projeto:projetos(codigo, nome, cliente:clientes(nome_fantasia))
         ),
-        anexos:pedidos_compra_anexos(id, arquivo_nome_original, arquivo_tamanho_bytes)
+        anexos:pedidos_compra_anexos(id, arquivo_nome_original, arquivo_tamanho_bytes),
+        parcelas:pedidos_compra_parcelas(
+          id, numero, data_vencimento, data_pagamento, data_pagamento_primeira,
+          valor, pago_em
+        )
       `,
       )
       .eq("tenant_id", session.activeTenant.id)
@@ -86,28 +90,34 @@ export default async function PedidosCompraFinanceiroPage() {
       .select("id", { count: "exact", head: true })
       .eq("tenant_id", session.activeTenant.id)
       .eq("status", "em_avaliacao"),
-    supabase
-      .from("contas_avulsas")
-      .select("id", { count: "exact", head: true })
-      .eq("tenant_id", session.activeTenant.id)
-      .eq("status", "aprovada"),
-    // Contas avulsas (todos os status) — para a lista da aba
+    // Contas avulsas (todos os status) — viram títulos de origem AVULSO ou
+    // RECORRÊNCIA na aba unificada, conforme `recorrente_id`.
     supabase
       .from("contas_avulsas")
       .select(`
-        id, descricao, valor, natureza, data_prevista_pagamento, status,
-        pago_em, created_at, empresa_id,
+        id, descricao, valor, natureza, data_prevista_pagamento,
+        data_pagamento, data_pagamento_primeira, status,
+        pago_em, created_at, empresa_id, recorrente_id,
+        plano_conta_tipo_id, plano_conta_subtipo_id,
         fornecedor:fornecedores(nome, razao_social),
-        cliente:clientes(nome_fantasia, razao_social),
-        job:jobs(codigo),
-        empresa:empresas(razao_social, nome_fantasia),
-        tipo:plano_contas_tipos!inner(codigo),
-        subtipo:plano_contas_subtipos!inner(nome),
-        anexos:contas_avulsas_anexos(id)
+        job:jobs(codigo)
       `)
       .eq("tenant_id", session.activeTenant.id)
       .order("data_prevista_pagamento", { ascending: true })
       .order("created_at", { ascending: false }),
+    // Baixas já realizadas — só o que a linha paga exibe no subtítulo
+    // ("Pago em X · conta · centro de custo"). Sem embed pesado: três
+    // nomes e nada mais.
+    supabase
+      .from("lancamentos_financeiros")
+      .select(`
+        pedido_compra_parcela_id, conta_avulsa_id, data_movimento,
+        conta:contas_bancarias(nome, banco),
+        tipo:plano_contas_tipos(codigo),
+        subtipo:plano_contas_subtipos(nome)
+      `)
+      .eq("tenant_id", session.activeTenant.id)
+      .in("origem", ["pp_baixa", "avulsa_baixa"]),
     // Empresas ativas (dropdown do drawer)
     supabase
       .from("empresas")
@@ -169,6 +179,7 @@ export default async function PedidosCompraFinanceiroPage() {
 
   if (error) console.error("[financeiro.pp.list]", error.message);
   if (avulsasRes.error) console.error("[financeiro.avulsas.list]", avulsasRes.error.message);
+  if (baixasRes.error) console.error("[financeiro.baixas.list]", baixasRes.error.message);
   if (recorrentesRes.error) console.error("[financeiro.recorrentes.list]", recorrentesRes.error.message);
 
   const rows: PPRow[] = ((data ?? []) as unknown as Array<{
@@ -209,6 +220,15 @@ export default async function PedidosCompraFinanceiroPage() {
       arquivo_nome_original: string;
       arquivo_tamanho_bytes: number;
     }>;
+    parcelas: Array<{
+      id: string;
+      numero: number;
+      data_vencimento: string;
+      data_pagamento: string | null;
+      data_pagamento_primeira: string | null;
+      valor: string | number;
+      pago_em: string | null;
+    }> | null;
   }>).map((r) => ({
     id: r.id,
     codigo: r.codigo,
@@ -241,44 +261,135 @@ export default async function PedidosCompraFinanceiroPage() {
     cancelada_por_nome: r.cancelada_por_profile?.nome ?? null,
     emitida_por_nome: r.emitida_por_profile?.nome ?? null,
     anexos: r.anexos ?? [],
+    // Ordenadas aqui: o embed do PostgREST não garante ordem, e a lista
+    // e o drawer mostram "1/3, 2/3, 3/3" na sequência.
+    parcelas: (r.parcelas ?? [])
+      .map((p) => ({
+        id: p.id,
+        numero: p.numero,
+        data_vencimento: p.data_vencimento,
+        data_pagamento: p.data_pagamento,
+        data_pagamento_primeira: p.data_pagamento_primeira,
+        valor: Number(p.valor),
+        pago_em: p.pago_em,
+      }))
+      .sort((a, b) => a.numero - b.numero),
   }));
 
-  // Mapeamento das contas avulsas para AvulsaRow
-  const avulsasRows: AvulsaRow[] = ((avulsasRes.data ?? []) as unknown as Array<{
+  // -------------------------------------------------------------------
+  // Títulos a pagar — a visão unificada
+  // -------------------------------------------------------------------
+  //
+  // Não há tabela de títulos (decisão do plano: nada de tabela-espelho).
+  // A lista nasce da união de duas fontes já existentes, agregadas aqui
+  // no servidor:
+  //   • parcelas de PP aprovada ou paga → origem `pp`
+  //   • `contas_avulsas` → `avulso` ou `recorrencia`, conforme
+  //     `recorrente_id` (a recorrência materializa ocorrências ali)
+
+  type BaixaInfo = { pago_em: string; conta: string; centro: string };
+
+  const baixaPorParcela = new Map<string, BaixaInfo>();
+  const baixaPorAvulsa = new Map<string, BaixaInfo>();
+
+  for (const l of (baixasRes.data ?? []) as unknown as Array<{
+    pedido_compra_parcela_id: string | null;
+    conta_avulsa_id: string | null;
+    data_movimento: string;
+    conta: { nome: string | null; banco: string | null } | null;
+    tipo: { codigo: string } | null;
+    subtipo: { nome: string } | null;
+  }>) {
+    const info: BaixaInfo = {
+      pago_em: l.data_movimento,
+      conta: l.conta?.nome
+        ? `${l.conta.nome}${l.conta.banco ? ` · ${l.conta.banco}` : ""}`
+        : "—",
+      centro:
+        l.tipo?.codigo && l.subtipo?.nome
+          ? `${l.tipo.codigo} · ${l.subtipo.nome}`
+          : "—",
+    };
+    if (l.pedido_compra_parcela_id) baixaPorParcela.set(l.pedido_compra_parcela_id, info);
+    if (l.conta_avulsa_id) baixaPorAvulsa.set(l.conta_avulsa_id, info);
+  }
+
+  const titulos: TituloRow[] = [];
+
+  for (const pp of rows) {
+    // PP em avaliação ainda não é dinheiro a sair — vive só na aba de PPs.
+    // Rejeitada e cancelada, idem.
+    if (pp.status !== "aprovada" && pp.status !== "pago") continue;
+    const total = pp.parcelas.length;
+    for (const par of pp.parcelas) {
+      const baixa = baixaPorParcela.get(par.id);
+      titulos.push({
+        id: par.id,
+        origem: "pp",
+        origem_label: pp.codigo,
+        descricao: pp.servico,
+        fornecedor_nome: pp.fornecedor_nome || "—",
+        job_codigo: pp.job_codigo || "—",
+        data_pagamento: par.data_pagamento,
+        venc_original: par.data_vencimento,
+        data_pagamento_primeira: par.data_pagamento_primeira,
+        valor: par.valor,
+        parcela_numero: par.numero,
+        parcela_total: total,
+        status: par.pago_em ? "pago" : "a_pagar",
+        empresa_id: pp.empresa_id,
+        // A PP não carrega plano de contas — o financeiro escolhe na baixa.
+        plano_conta_tipo_id: null,
+        plano_conta_subtipo_id: null,
+        pago_em: par.pago_em,
+        conta_nome: baixa?.conta ?? null,
+        centro_nome: baixa?.centro ?? null,
+      });
+    }
+  }
+
+  for (const a of (avulsasRes.data ?? []) as unknown as Array<{
     id: string;
     descricao: string;
     valor: string | number;
-    natureza: "entrada" | "saida";
     data_prevista_pagamento: string | null;
+    data_pagamento: string | null;
+    data_pagamento_primeira: string | null;
     status: "aprovada" | "baixada";
     pago_em: string | null;
-    created_at: string;
     empresa_id: string;
+    recorrente_id: string | null;
+    plano_conta_tipo_id: string;
+    plano_conta_subtipo_id: string;
     fornecedor: { nome: string | null; razao_social: string | null } | null;
-    cliente: { nome_fantasia: string | null; razao_social: string | null } | null;
     job: { codigo: string } | null;
-    empresa: { razao_social: string | null; nome_fantasia: string | null } | null;
-    tipo: { codigo: string } | null;
-    subtipo: { nome: string } | null;
-    anexos: Array<{ id: string }> | null;
-  }>).map((r) => ({
-    id: r.id,
-    descricao: r.descricao,
-    valor: Number(r.valor),
-    natureza: r.natureza,
-    data_prevista_pagamento: r.data_prevista_pagamento,
-    status: r.status,
-    fornecedor_nome: r.fornecedor?.razao_social ?? r.fornecedor?.nome ?? null,
-    cliente_nome: r.cliente?.razao_social ?? r.cliente?.nome_fantasia ?? null,
-    job_codigo: r.job?.codigo ?? null,
-    empresa_id: r.empresa_id,
-    empresa_nome: r.empresa?.razao_social ?? r.empresa?.nome_fantasia ?? "",
-    tipo_codigo: r.tipo?.codigo ?? "",
-    subtipo_nome: r.subtipo?.nome ?? "",
-    anexos_count: r.anexos?.length ?? 0,
-    pago_em: r.pago_em,
-    created_at: r.created_at,
-  }));
+  }>) {
+    const baixa = baixaPorAvulsa.get(a.id);
+    titulos.push({
+      id: a.id,
+      origem: a.recorrente_id ? "recorrencia" : "avulso",
+      origem_label: a.recorrente_id ? "RECORRÊNCIA" : "AVULSO",
+      descricao: a.descricao,
+      fornecedor_nome: a.fornecedor?.razao_social ?? a.fornecedor?.nome ?? "—",
+      job_codigo: a.job?.codigo ?? "—",
+      data_pagamento: a.data_pagamento ?? a.data_prevista_pagamento,
+      venc_original: a.data_prevista_pagamento,
+      data_pagamento_primeira: a.data_pagamento_primeira,
+      valor: Number(a.valor),
+      parcela_numero: 1,
+      parcela_total: 1,
+      status: a.status === "baixada" ? "pago" : "a_pagar",
+      empresa_id: a.empresa_id,
+      // Sugestão do centro de custo: o plano escolhido na criação.
+      plano_conta_tipo_id: a.plano_conta_tipo_id,
+      plano_conta_subtipo_id: a.plano_conta_subtipo_id,
+      pago_em: a.pago_em,
+      conta_nome: baixa?.conta ?? null,
+      centro_nome: baixa?.centro ?? null,
+    });
+  }
+
+  const titulosAPagarCount = titulos.filter((t) => t.status === "a_pagar").length;
 
   // Mapeamento das recorrências para RecorrenteRow
   const recorrentesRows: RecorrenteRow[] = ((recorrentesRes.data ?? []) as unknown as Array<{
@@ -374,37 +485,31 @@ export default async function PedidosCompraFinanceiroPage() {
           </div>
           <h1 className="text-3xl font-bold tracking-tight">Contas a Pagar</h1>
         </div>
-        <p className="text-sm text-muted-foreground max-w-2xl">
-          Pedidos de Compra, lançamentos avulsos e recorrências que envolvem
-          dinheiro a sair. Aprove, rejeite ou dê baixa conforme o estado da linha.
+        <p className="text-sm text-muted-foreground max-w-2xl text-pretty">
+          Pedidos de Produção, títulos a pagar e recorrências que envolvem
+          dinheiro a sair. Aprove e rejeite os PPs; dê baixa nos títulos para
+          enviá-los à conciliação.
         </p>
       </header>
 
       <ContasPagarTabs
-        pps={
-          <PedidosCompraList
-            rows={rows}
+        pps={<PedidosCompraList rows={rows} />}
+        ppsPendentesCount={ppsPendentesCountRes.count ?? 0}
+        titulos={
+          <TitulosPagarList
+            rows={titulos}
+            tenantId={session.activeTenant.id}
             contas={contasRes.data ?? []}
             tipos={tiposRes.data ?? []}
             subtipos={subtiposRes.data ?? []}
-          />
-        }
-        ppsPendentesCount={ppsPendentesCountRes.count ?? 0}
-        avulsas={
-          <ContasAvulsasList
-            rows={avulsasRows}
-            tenantId={session.activeTenant.id}
             empresas={empresasList}
-            tipos={tiposRes.data ?? []}
-            subtipos={subtiposRes.data ?? []}
             fornecedores={fornecedoresList}
             clientes={clientesList}
             jobs={jobsList}
             regionais={regionaisList}
-            contas={contasRes.data ?? []}
           />
         }
-        avulsasAprovadasCount={avulsasAprovadasCountRes.count ?? 0}
+        titulosAPagarCount={titulosAPagarCount}
         recorrentes={
           <RecorrentesList
             rows={recorrentesRows}

@@ -239,6 +239,24 @@ async function criarVersaoInicial(
     return null;
   }
 
+  // A v1 já nasce com um grupo: a tela da versão abre com a linha "Novo
+  // item" pronta, sem obrigar o clique em "Novo grupo" antes de digitar.
+  // Mesmo nome default do "Criar planilha" do editor multi. Falha aqui
+  // não desfaz o orçamento nem a versão — o usuário cria o grupo na mão,
+  // mesmo degrau seguro do versaoId null acima. Item vazio NÃO é criado:
+  // item persistido tem validação de conteúdo.
+  const { error: grupoErr } = await supabase
+    .from("versoes_orcamento_grupos")
+    .insert({
+      tenant_id: tenantId,
+      versao_orcamento_id: data.id,
+      nome: "Novo grupo",
+      ordem: 1,
+    });
+  if (grupoErr) {
+    console.error("[orcamentos.criar.v1.grupo]", grupoErr.message);
+  }
+
   await logAuditEvent({
     acao: "versao_orcamento.criada",
     tenantId,

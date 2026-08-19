@@ -1,5 +1,27 @@
 "use server";
 
+/**
+ * Ações do financeiro sobre o Pedido de Produção.
+ *
+ * ⚠️ Nota da Tela 3.2 (17/08/2026): quatro exports deste arquivo ficaram
+ * SEM CHAMADOR na UI, e é de propósito:
+ *
+ * • `aprovarPP` e `salvarPrazoFinanceiro` — a aprovação passou a exigir a
+ *   data de pagamento no mesmo ato (`aprovarPPComData`, em
+ *   `actions-titulos.ts`), o que dispensou o par "salvar prazo" +
+ *   "aprovar".
+ * • `marcarPagaFinanceiro` e `darBaixaAvulsaInline` — a baixa deixou de
+ *   ser da PP inteira e da avulsa isolada; agora é do TÍTULO (parcela ou
+ *   avulsa), em `darBaixaTitulo`.
+ *
+ * ⚠️ Atualização de 18/08/2026: `estornarBaixaPP` SAIU deste arquivo.
+ * O estorno passou a ser por PARCELA (decisão do Tiago), e mora em
+ * `estornarBaixaParcela`, em `actions-titulos.ts`, ao lado da baixa que
+ * ele reverte.
+ *
+ * `rejeitarPedidoCompraFinanceiro` e `desaprovarPP` seguem em uso.
+ */
+
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth/session";
@@ -259,79 +281,20 @@ export async function darBaixaAvulsaInline(input: unknown): Promise<Result> {
   return { ok: true };
 }
 
-const estornoSchema = z.object({
-  pp_id: z.string().uuid(),
-  motivo: z
-    .string()
-    .trim()
-    .min(10, "Motivo precisa ter pelo menos 10 caracteres.")
-    .max(500, "Motivo passa de 500 caracteres."),
-});
-
 /**
- * Estorna a baixa de uma PP paga: reverte o status para "em_avaliacao"
- * e cria um lançamento reverso na mesma conta bancária, preservando o histórico contábil.
+ * ⚠️ `estornarBaixaPP` foi REMOVIDA em 18/08/2026.
+ *
+ * Ela estornava a PP INTEIRA, num tempo em que uma PP tinha uma baixa
+ * só. Desde a decisão 016 a baixa é por PARCELA, e o Tiago fechou a
+ * simetria: "cada baixa ou estorno deverá ser feito por parcela; a
+ * aprovação é por PP". Manter a versão antiga exposta era um risco real
+ * — ela devolvia a PP a `aprovada` sem limpar `pago_em` das parcelas.
+ *
+ * A substituta é `estornarBaixaParcela`, em `actions-titulos.ts`, ao
+ * lado da baixa que ela reverte. A RPC `estornar_baixa_pp` continua no
+ * banco, desarmada, levantando exceção com o caminho novo
+ * (`20260818000002_estorno_por_parcela.sql`).
  */
-export async function estornarBaixaPP(input: unknown): Promise<Result> {
-  const parsed = estornoSchema.safeParse(input);
-  if (!parsed.success) {
-    return { ok: false, message: parsed.error.issues[0]?.message ?? "Entrada inválida." };
-  }
-  const gate = await checarGateFinanceiro(parsed.data.pp_id, "pedido_compra.baixa_estornada");
-  if (!gate.ok) return gate;
-  const { session, supabase } = gate;
-
-  const { data: pp } = await supabase
-    .from("pedidos_compra")
-    .select("id, status, codigo, job_id")
-    .eq("id", parsed.data.pp_id)
-    .eq("tenant_id", session.activeTenant.id)
-    .maybeSingle();
-
-  if (!pp) return { ok: false, message: "PP não encontrada." };
-  if (pp.status !== "pago") {
-    return { ok: false, message: "Só PP paga pode ter a baixa estornada." };
-  }
-
-  const { data: reversoId, error } = await supabase.rpc("estornar_baixa_pp", {
-    p_pp_id: parsed.data.pp_id,
-    p_motivo: parsed.data.motivo,
-    p_criado_por: session.profile.id,
-  });
-
-  if (error) {
-    return { ok: false, message: `Falha ao estornar: ${error.message}` };
-  }
-
-  await logAuditEvent({
-    acao: "pedido_compra.baixa_estornada",
-    tenantId: session.activeTenant.id,
-    entidadeTipo: "pedido_compra",
-    entidadeId: parsed.data.pp_id,
-    metadata: {
-      pp_codigo: pp.codigo,
-      motivo: parsed.data.motivo,
-      lancamento_reverso_id: reversoId,
-    },
-  });
-
-  await logAuditEvent({
-    acao: "lancamento_financeiro.estornado",
-    tenantId: session.activeTenant.id,
-    entidadeTipo: "lancamento_financeiro",
-    entidadeId: reversoId as string,
-    metadata: {
-      origem: "pp_estorno",
-      pp_codigo: pp.codigo,
-      motivo: parsed.data.motivo,
-    },
-  });
-
-  revalidatePath("/financeiro/contas-a-pagar");
-  revalidatePath("/financeiro/conciliacao");
-  revalidatePath(`/jobs/${pp.job_id}`);
-  return { ok: true };
-}
 
 /**
  * Rejeita a PP com motivo obrigatório. Não é cancelamento: a PP continua
@@ -427,6 +390,19 @@ export async function aprovarPP(pp_id: string): Promise<Result> {
         pp.status === "aprovada"
           ? "PP já está aprovada."
           : "Só PP em avaliação pode ser aprovada.",
+    };
+  }
+
+  // A data de pagamento é o que a aprovação decide (decisão 016): ela
+  // vira o vencimento do título em Títulos a Pagar e desloca as demais
+  // parcelas pelo mesmo número de dias. Sem ela o título nasceria sem
+  // data e sem 1ª data registrada, quebrando a repactuação. A trava
+  // existe também na RPC — esta aqui é para a mensagem chegar em
+  // português (18/08/2026).
+  if (!pp.prazo_pagamento_financeiro) {
+    return {
+      ok: false,
+      message: "Escolha a data de pagamento antes de aprovar a PP.",
     };
   }
 

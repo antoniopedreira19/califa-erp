@@ -29,7 +29,8 @@ interface Props {
 const STATUS_META: Record<string, { icon: React.ElementType; classes: string; verb: string }> = {
   aberto: { icon: PlayCircle, classes: "bg-blue-600 text-white hover:bg-blue-700", verb: "reabrir" },
   em_producao: { icon: PlayCircle, classes: "bg-amber-600 text-white hover:bg-amber-700", verb: "iniciar produção" },
-  cancelado: { icon: XCircle, classes: "bg-california-red text-white hover:bg-california-red-hover", verb: "cancelar" },
+  // Secundário na barra: borda e fundo branco, ficando vermelho no hover.
+  cancelado: { icon: XCircle, classes: "border border-border bg-white text-foreground hover:border-california-red/40 hover:text-california-red", verb: "cancelar" },
 };
 
 export function StatusActions({
@@ -58,8 +59,16 @@ export function StatusActions({
   }
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-3">
+    // Linha, não coluna: desde 19/08/2026 estes botões moram na barra fixa
+    // do rodapé, que é horizontal. O erro entra à esquerda dos botões em
+    // vez de embaixo — embaixo esticaria a barra e empurraria o conteúdo.
+    <>
+      <div className="flex flex-wrap items-center gap-2.5">
+        {error && (
+          <span className="text-xs font-medium text-california-red">
+            {error}
+          </span>
+        )}
         {/* Só existe depois do envio para faturamento. Abre o resumo de
             fechamento: encerrar é o fim da linha do job, não um clique
             direto. */}
@@ -68,7 +77,7 @@ export function StatusActions({
             <button
               type="button"
               onClick={() => setEncerrando(true)}
-              className="inline-flex items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-california-red-hover"
+              className="inline-flex h-9 items-center gap-2 whitespace-nowrap rounded-[10px] bg-california-red px-4 text-[13px] font-semibold text-white transition-colors hover:bg-california-red-hover"
             >
               <Send className="h-4 w-4" />
               Enviar job para encerramento
@@ -80,7 +89,7 @@ export function StatusActions({
                   <button
                     type="button"
                     disabled
-                    className="inline-flex cursor-not-allowed items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-sm font-medium text-white opacity-50"
+                    className="inline-flex h-9 cursor-not-allowed items-center gap-2 whitespace-nowrap rounded-[10px] bg-california-red px-4 text-[13px] font-semibold text-white opacity-50"
                   >
                     <Send className="h-4 w-4" />
                     Enviar job para encerramento
@@ -99,7 +108,7 @@ export function StatusActions({
               key={s}
               type="button"
               onClick={() => setConfirmando(s)}
-              className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${meta.classes}`}
+              className={`inline-flex h-9 items-center gap-2 whitespace-nowrap rounded-[10px] px-4 text-[13px] font-semibold transition-colors ${meta.classes}`}
             >
               <Icon className="h-4 w-4" />
               {/* Rótulo é a ação ("Cancelar job"), não o status de destino
@@ -109,7 +118,6 @@ export function StatusActions({
           );
         })}
       </div>
-      {error && <p className="text-xs text-california-red">{error}</p>}
 
       {resumoEncerramento && (
         <EncerrarDialog
@@ -131,6 +139,6 @@ export function StatusActions({
           pending={pending}
         />
       )}
-    </div>
+    </>
   );
 }

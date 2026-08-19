@@ -501,7 +501,13 @@ export interface ImportacaoWarning {
 
 // ---------- Categorias de domínio (projeto + orçamento) ----------
 
-export type CategoriaDominioEscopo = "projeto" | "orcamento" | "job";
+/**
+ * O escopo 'job' existiu até 19/08/2026 como vocabulário só do
+ * financeiro. A decisão 019 fez a categoria do job ser a do orçamento, e
+ * a migration `20260819000001` apagou as linhas — ver o handoff do
+ * financeiro.
+ */
+export type CategoriaDominioEscopo = "projeto" | "orcamento";
 
 export interface CategoriaDominio {
   id: string;
@@ -520,8 +526,6 @@ export function categoriaDominioEscopoLabel(e: CategoriaDominioEscopo): string {
       return "Projeto";
     case "orcamento":
       return "Orçamento";
-    case "job":
-      return "Job";
   }
 }
 
@@ -621,7 +625,11 @@ export interface Job {
   faturamento_previsto_abertura: number | null;
   /** Data prevista para o faturamento, informada no envio do job. */
   data_prevista_faturamento: string | null;
-  /** Contexto livre da produção, lido no modal de conferência do financeiro. */
+  /**
+   * Contexto livre da produção, lido no modal de conferência do financeiro.
+   * Aparece na tela como **Descritivo do Job** desde 17/08/2026 — a coluna
+   * e o campo continuam `observacoes` (só o rótulo mudou).
+   */
   observacoes: string | null;
   status: JobStatus;
   motivo_rejeicao: string | null;
@@ -631,7 +639,13 @@ export interface Job {
    * sem renomear o job do GP. Use `nomeDoJobNoFinanceiro()`.
    */
   nome_financeiro: string | null;
-  /** Categoria contábil (categorias_dominio, escopo 'job'). */
+  /**
+   * Categoria do job (categorias_dominio, escopo 'orcamento'). Herdada do
+   * orçamento de origem na abertura, onde o financeiro pode trocá-la sem
+   * alterar o orçamento. Nulo é estado legítimo: os 4 jobs mais antigos
+   * vieram de orçamentos anteriores à obrigatoriedade da categoria e
+   * ficaram sem uma na migração de 19/08/2026.
+   */
   categoria_id: string | null;
   competencia_trimestre: number | null;
   competencia_ano: number | null;
@@ -648,6 +662,36 @@ export interface Job {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+}
+
+/**
+ * Tipo de contato do job. Hoje a aplicação só grava 'cobranca' — quem
+ * recebe a cobrança no cliente. O CHECK do banco já aceita 'pagamento'
+ * para não exigir migration se o contato de pagamento voltar à mesa
+ * (a ideia foi descartada em 17/08/2026 — docs/decisions/012).
+ */
+export type JobContatoTipo = "cobranca" | "pagamento";
+
+/**
+ * Contato informado no modal "Enviar job para abertura", uma linha por
+ * pessoa. É contato DO JOB, não do cadastro do cliente: muda de job para
+ * job (praça, evento, área que aprovou a verba), por isso é digitado na
+ * abertura em vez de herdado de `clientes`.
+ */
+export interface JobContato {
+  id: string;
+  tenant_id: string;
+  job_id: string;
+  tipo: JobContatoTipo;
+  nome: string;
+  /** Telefone — o único campo opcional da linha. */
+  numero: string | null;
+  email: string;
+  /** Posição no formulário: o primeiro é o contato principal na prática. */
+  ordem: number;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
 }
 
 /** Um portal de fornecedor do cliente, onde a NF é lançada. */
@@ -688,8 +732,50 @@ export interface JobEnvioFaturamento {
   updated_at: string;
 }
 
+/**
+ * Uma parcela do faturamento do job — em quantas notas ele será faturado.
+ *
+ * Informada pela produção no envio (decisão do Tiago, 17/08/2026). Cada
+ * parcela é uma linha da aba Faturamento; a NF emitida a consome, total
+ * ou parcialmente. Não confundir com `JobPrevisaoRecebimento`, que diz
+ * quando o dinheiro entra, não em quantas notas o job sai.
+ */
+export interface JobEnvioFaturamentoParcela {
+  id: string;
+  tenant_id: string;
+  envio_id: string;
+  job_id: string;
+  ordem: number;
+  valor: number;
+  /** Vencimento acordado com o cliente para esta parcela. */
+  data_vencimento: string;
+  created_at: string;
+  updated_at: string;
+}
+
 /** Uma data da curva de desembolso do job. */
 export interface JobPrevisaoCusto {
+  id: string;
+  tenant_id: string;
+  job_id: string;
+  ordem: number;
+  data_prevista: string;
+  valor: number;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Uma parcela da previsão de recebimento do job — o outro lado da curva
+ * de desembolso, gravado na mesma abertura. A soma das parcelas fecha com
+ * `jobs.faturamento_previsto`.
+ *
+ * Previsão não é título: quando a NF sai, nasce um `titulos_receber` que
+ * ABATE esta previsão na leitura do fluxo de caixa. Nada aqui é apagado
+ * pelo faturamento.
+ */
+export interface JobPrevisaoRecebimento {
   id: string;
   tenant_id: string;
   job_id: string;
@@ -723,6 +809,21 @@ export function competenciaLabel(
 }
 
 /**
+ * "3º tri · 2026" — a forma por extenso, usada na ficha do job no módulo de
+ * Jobs (handoff "Job · Informações — Cabeçalho", 19/08/2026). A Central
+ * Financeira segue com `competenciaLabel`, que é compacta porque lá o campo
+ * divide linha com outros seis. Mora aqui junto da irmã para as duas nunca
+ * divergirem por descuido.
+ */
+export function competenciaLabelLongo(
+  trimestre: number | null,
+  ano: number | null,
+): string {
+  if (!trimestre || !ano) return "—";
+  return `${trimestre}º tri · ${ano}`;
+}
+
+/**
  * Transições "livres" (sem role gate). Ações que exigem gate financeiro
  * (aprovar/rejeitar abertura) OU input adicional (motivo) têm server actions
  * próprias e NÃO estão nesta tabela.
@@ -746,7 +847,7 @@ export const JOB_STATUS_TRANSICOES: Record<JobStatus, JobStatus[]> = {
  * `encerrarJob`, não `atualizarStatusJob`.
  */
 export const ENCERRAMENTO_INDISPONIVEL =
-  "Encerre pelo resumo de fechamento, no bloco de Status";
+  "Encerre pelo resumo de fechamento, na barra de ações do rodapé";
 
 /** PP que ainda não saiu do caixa — impede o encerramento do job. */
 export const PP_STATUS_EM_ABERTO: PPStatus[] = ["em_avaliacao", "aprovada"];
@@ -764,6 +865,32 @@ export const BV_SITUACAO_EM_ABERTO: BvSituacao[] = [
  */
 export function jobEstaCongelado(status: JobStatus): boolean {
   return status === "encerrado" || status === "cancelado";
+}
+
+/**
+ * Onde o REALIZADO pode ser lançado. Desde 17/08/2026 inclui os dois
+ * status de pré-abertura: a produção começa a gastar antes de o
+ * financeiro abrir o job, e esconder a planilha até lá obrigava a
+ * anotar valores fora do sistema. O que a abertura libera é o que tem
+ * consequência financeira — ver `jobAceitaAcoesPlanilha`.
+ */
+export function jobAceitaRealizado(status: JobStatus): boolean {
+  return (
+    status === "aberto" ||
+    status === "em_producao" ||
+    status === "aguardando_abertura" ||
+    status === "rejeitado_financeiro"
+  );
+}
+
+/**
+ * Errata, BV e Pedido de Produção: só com o job já aberto pelo
+ * financeiro. São as ações que mexem no orçado ou geram documento de
+ * pagamento — antes da abertura o job ainda pode ser devolvido, e nada
+ * disso pode ter saído.
+ */
+export function jobAceitaAcoesPlanilha(status: JobStatus): boolean {
+  return status === "aberto" || status === "em_producao";
 }
 
 export function jobStatusLabel(s: JobStatus): string {
@@ -837,8 +964,11 @@ export interface PedidoCompra {
  * ainda não olhou) e termina em `pago`, `rejeitada` ou `cancelada`.
  *
  * `rejeitada` não é terminal de verdade: o GP corrige e reenvia, e a PP
- * volta pra `em_avaliacao`. Por isso o unique parcial por item continua
- * valendo pra ela — quem libera o item é só o cancelamento.
+ * volta pra `em_avaliacao`. Por isso ela continua ocupando o SALDO do
+ * item — quem devolve saldo é só o cancelamento. (Até 17/08/2026 quem
+ * dizia isso era o índice `uniq_pp_ativa_por_item_realizado`, que
+ * permitia uma PP ativa por item; ele saiu quando as PPs parciais
+ * entraram, e a regra passou para o trigger `pp_valida_saldo_do_item`.)
  */
 export type PPStatus = "em_avaliacao" | "aprovada" | "pago" | "rejeitada" | "cancelada";
 
@@ -1038,10 +1168,57 @@ export type ItemChat =
       em: string;
     };
 
+/**
+ * Uma parcela do Pedido de Produção — um vencimento próprio, com valor
+ * próprio e (desde a Tela 2.3) documento próprio.
+ *
+ * PP sem parcelamento tem exatamente UMA parcela, 1/1: não existe PP sem
+ * parcela, nem no legado (a migration `20260817000002` backfillou todas).
+ * É isso que deixa as listas e o PDF tratarem os dois casos igual.
+ *
+ * `pago_em` / `pago_por` são da baixa por parcela, que a Tela 3.2
+ * ("Títulos a Pagar") passou a fazer: quem se baixa é a parcela, e a PP
+ * só vira `pago` quando a última é quitada.
+ */
+export interface PedidoCompraParcela {
+  id: string;
+  tenant_id: string;
+  pedido_compra_id: string;
+  numero: number;
+  /**
+   * Vencimento ORIGINAL — o prazo que a produção negociou com o
+   * fornecedor, impresso no PDF. Nunca muda depois da emissão.
+   */
+  data_vencimento: string;
+  valor: number;
+  pdf_path: string | null;
+  /**
+   * Quando o financeiro vai pagar ESTA parcela. Nasce na aprovação da PP
+   * (`aprovar_pp_com_data`, que desloca todas pelo mesmo delta) e é
+   * repactuável pelo lápis da aba Títulos a Pagar. Diferente de
+   * `data_vencimento` = título repactuado, exibido em vermelho.
+   * Nulo enquanto a PP está em avaliação.
+   */
+  data_pagamento: string | null;
+  /**
+   * A primeira data de pagamento já definida. Congelada por trigger no
+   * banco — repactuar não a altera. É metade do histórico que o pop-up
+   * de edição exibe (a outra metade é `data_vencimento`).
+   */
+  data_pagamento_primeira: string | null;
+  pago_em: string | null;
+  pago_por: string | null;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+}
+
 /** PP com os campos que as telas de lista mostram junto. */
 export interface PedidoCompraNaLista extends PedidoCompra {
   emitida_por_nome: string | null;
   grupo_nome: string | null;
+  /** Sempre ao menos uma, ordenada por `numero`. */
+  parcelas: PedidoCompraParcela[];
   anexos: Array<{
     id: string;
     arquivo_nome_original: string;
@@ -1157,6 +1334,12 @@ export interface LancamentoFinanceiro {
   cliente_id: string | null;
   job_id: string | null;
   pedido_compra_id: string | null;
+  /**
+   * Parcela de PP que este lançamento quitou (Tela 3.2). Nulo quando o
+   * lançamento não veio de baixa de parcela — avulsa, título a receber,
+   * manual, e as baixas de PP inteira anteriores a 17/08/2026.
+   */
+  pedido_compra_parcela_id: string | null;
   conta_avulsa_id: string | null;
   estorno_de_lancamento_id: string | null;
   origem: OrigemLancamento;
@@ -1190,23 +1373,52 @@ export interface Faturamento {
   tenant_id: string;
   empresa_id: string;
   origem_tipo: FaturamentoOrigemTipo;
+  /**
+   * Origem única da nota, quando existe. NULO em NF agrupada (vários
+   * jobs) e em avulso — nesses casos a verdade está em
+   * `faturamento_itens`.
+   */
   origem_id: string | null;
   cliente_id: string | null;
   fornecedor_id: string | null;
   numero_nf: string;
+  /** Fora das telas desde a Tela 3.3; continua gravada, default "1". */
   serie: string;
   data_emissao: string;
   valor_total: number;
   descricao: string;
   anexo_nf_path: string;
-  plano_conta_tipo_id: string;
-  plano_conta_subtipo_id: string;
+  /**
+   * Preenchido só no faturamento avulso (campo "Centro de custo" do
+   * formulário). Em job/BV é nulo: a classificação que vale para o DRE é
+   * a escolhida na baixa do título.
+   */
+  plano_conta_tipo_id: string | null;
+  plano_conta_subtipo_id: string | null;
   status: FaturamentoStatus;
   cancelado_em: string | null;
   cancelado_por: string | null;
   motivo_cancelamento: string | null;
   emitido_em: string;
   emitido_por: string;
+}
+
+/**
+ * O que uma NF cobre, e por quanto — uma linha por job ou BV.
+ *
+ * É o que sustenta ao mesmo tempo a NF agrupada (vários jobs numa nota) e
+ * o faturamento parcial (valor menor que o saldo da parcela).
+ */
+export interface FaturamentoItem {
+  id: string;
+  tenant_id: string;
+  faturamento_id: string;
+  origem_tipo: FaturamentoOrigemTipo;
+  origem_id: string | null;
+  /** Parcela do envio consumida. Só existe em item de job. */
+  envio_parcela_id: string | null;
+  valor: number;
+  created_at: string;
 }
 
 export interface TituloReceber {
@@ -1216,7 +1428,12 @@ export interface TituloReceber {
   faturamento_id: string;
   numero_parcela: number;
   valor: number;
+  /** O que a nota diz. Imutável depois de emitida — trigger no banco. */
   data_vencimento: string;
+  /** Quando o financeiro espera receber. Repactuável pelo lápis. */
+  data_previsao_recebimento: string | null;
+  /** Primeira previsão registrada. Congelada por trigger. */
+  data_previsao_recebimento_primeira: string | null;
   status: TituloReceberStatus;
   pago_em: string | null;
   pago_por: string | null;
@@ -1278,7 +1495,16 @@ export interface ContaAvulsa {
   descricao: string;
   valor: string; // numeric → string do supabase-js
   natureza: NaturezaLancamento;
+  /**
+   * Vencimento ORIGINAL — a data informada na criação (ou a data da
+   * ocorrência, quando gerada por recorrência). A partir da Tela 3.2 é a
+   * coluna "Venc. original" da aba Títulos a Pagar.
+   */
   data_prevista_pagamento: string | null; // YYYY-MM-DD
+  /** Data de pagamento vigente, repactuável. Nasce igual à original. */
+  data_pagamento: string | null; // YYYY-MM-DD
+  /** Primeira data de pagamento definida. Congelada por trigger. */
+  data_pagamento_primeira: string | null; // YYYY-MM-DD
   status: ContaAvulsaStatus;
   fornecedor_id: string | null;
   cliente_id: string | null;
@@ -1293,6 +1519,26 @@ export interface ContaAvulsa {
   created_at: string;
   updated_at: string;
 }
+
+// ---------- Tela 3.2: título a pagar (visão unificada) ----------
+
+/**
+ * De onde o título veio. Não é coluna de banco: a aba "Títulos a Pagar"
+ * não tem tabela própria (decisão do plano: sem tabela-espelho). Ela
+ * nasce da união de duas fontes, e a origem se deduz assim:
+ *
+ *   pp          → parcela de `pedidos_compra_parcelas` de PP aprovada
+ *   avulso      → `contas_avulsas` com `recorrente_id` nulo
+ *   recorrencia → `contas_avulsas` com `recorrente_id` preenchido
+ *                 (a ocorrência que `gerar_ocorrencias_recorrentes` cria)
+ */
+export type OrigemTitulo = "pp" | "avulso" | "recorrencia";
+
+export const origemTituloLabel = (o: OrigemTitulo, ppCodigo?: string | null): string =>
+  o === "pp" ? (ppCodigo ?? "PP") : o === "avulso" ? "AVULSO" : "RECORRÊNCIA";
+
+/** `a_pagar` enquanto não há baixa; `pago` depois dela. */
+export type TituloPagarStatus = "a_pagar" | "pago";
 
 export interface ContaAvulsaAnexo {
   id: string;

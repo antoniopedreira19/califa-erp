@@ -487,15 +487,26 @@ export function EditorMultiJobs({
     [jobs, parametros],
   );
 
+  /** Ordem de exibição: o orçamento mais novo em cima. O array `jobs`
+   *  continua em ordem de criação — é ela que gera os códigos e o payload
+   *  do salvamento — então só a leitura inverte, carregando o índice
+   *  original para o código previsto (decisão do Tiago, 16/08). */
+  const jobsExibicao = React.useMemo(
+    () => jobs.map((job, indice) => ({ job, indice })).reverse(),
+    [jobs],
+  );
+
   /** Cada job do rascunho vira uma linha do consolidado, no mesmo formato
-   *  que a visão agregada usa para os orçamentos já gravados. */
+   *  que a visão agregada usa para os orçamentos já gravados. Segue a
+   *  mesma ordem de exibição da lista (invertida), com o código original
+   *  de cada orçamento. */
   const linhasTotais = React.useMemo(
     () =>
-      jobs.map((job, i) => {
+      jobsExibicao.map(({ job, indice }) => {
         const t = totaisDoJob(job, parametros);
         return {
           id: job.id,
-          codigo: codigoPrevisto(i),
+          codigo: codigoPrevisto(indice),
           nome: job.nome,
           orcado: t.orcado,
           planejado: t.planejado,
@@ -509,7 +520,7 @@ export function EditorMultiJobs({
         };
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [jobs, parametros, orcamentosExistentes, projeto.codigo],
+    [jobsExibicao, parametros, orcamentosExistentes, projeto.codigo],
   );
 
   const totalItens = jobs.reduce((s, j) => s + contarItens(j.grupos), 0);
@@ -526,6 +537,15 @@ export function EditorMultiJobs({
     if (jobsSemItens.length > 0) {
       setErro(
         `Sem itens em: ${jobsSemItens.map((j) => j.nome).join(", ")}. Importe uma planilha ou adicione itens antes de salvar.`,
+      );
+      return;
+    }
+    // Orçado é o compromisso do orçamento: nenhum item pode ficar em 0.
+    // O planejado pode — ele se preenche depois (regra corrigida em 16/08).
+    const orcadosZerados = itensComOrcadoZerado(jobs);
+    if (orcadosZerados.length > 0) {
+      setErro(
+        `R$ unitário orçado zerado em: ${orcadosZerados.join("; ")}. Preencha o orçado de todos os itens antes de salvar.`,
       );
       return;
     }
@@ -757,11 +777,11 @@ export function EditorMultiJobs({
         // comportam o respiro (8px) + a pílula do BV (116px) + a lixeira
         // (26px) + o gap. Mesmo arranjo do editor agregado.
         <div className="space-y-4 pr-[154px]">
-          {jobs.map((job, i) => (
+          {jobsExibicao.map(({ job, indice }) => (
             <JobRascunhoCard
               key={job.id}
               job={job}
-              codigo={codigoPrevisto(i)}
+              codigo={codigoPrevisto(indice)}
               parametros={parametros}
               descricao={descricaoDoJob(job)}
               categorias={categoriasItem}
@@ -943,6 +963,26 @@ function Kpi({
       </p>
     </div>
   );
+}
+
+/** Itens com R$ unit. orçado zerado (ou não numérico), rotulados por
+ *  orçamento · grupo · item. A mesma regra vale na action de salvamento —
+ *  aqui é só o aviso antes da ida ao servidor. */
+function itensComOrcadoZerado(jobs: JobRascunho[]): string[] {
+  const rotulos: string[] = [];
+  for (const job of jobs) {
+    for (const grupo of job.grupos) {
+      grupo.itens.forEach((item, i) => {
+        const valor = Number(item.valor_unitario_orcado);
+        if (!(valor > 0)) {
+          rotulos.push(
+            `${job.nome} · ${grupo.nome} · ${item.item.trim() || `Item ${i + 1}`}`,
+          );
+        }
+      });
+    }
+  }
+  return rotulos;
 }
 
 function formatarPercentual(valor: number): string {

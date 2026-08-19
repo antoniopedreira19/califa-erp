@@ -2,7 +2,7 @@
 
 Registro da implementação dos design handoffs aprovados para o módulo de Orçamentos.
 
-**Datas:** 2026-07-27 (entregas 1–3) · 2026-07-30 (entregas 4–8) · 2026-07-31 (entrega 9) · 2026-08-03 (entrega 10) · 2026-08-06 (entrega 11) · 2026-08-07 (entregas 12 e 13) · 2026-08-11 (entrega 15) · 2026-08-12 (entrega 17)
+**Datas:** 2026-07-27 (entregas 1–3) · 2026-07-30 (entregas 4–8) · 2026-07-31 (entrega 9) · 2026-08-03 (entrega 10) · 2026-08-06 (entrega 11) · 2026-08-07 (entregas 12 e 13) · 2026-08-11 (entrega 15) · 2026-08-12 (entrega 17) · 2026-08-17 (entrega 18)
 **Origem do design:**
 - Entregas 1–3: pacote `design_handoff_califa/` (`Versoes - Destaque v4.dc.html` opção 2a, `Orcamento - Edicao Inline.dc.html` opção 3b, `README.md`, `IMPLEMENTACAO.md`). A pasta fica **só na máquina local** — está no `.gitignore` por ser referência de design, não código.
 - Entregas 4–5, 8 e 9: projeto Claude Design `69342d83-28d9-4bea-a8af-c99e233f5f13` (`Orcamento - Versao -final-.dc.html`, `Novo projeto.dc.html` e `Abertura de Job.dc.html`), lido via MCP `claude_design`. A Entrega 9 é a revisão do mesmo `Abertura de Job.dc.html`, relido depois de atualizado.
@@ -34,6 +34,10 @@ Registro da implementação dos design handoffs aprovados para o módulo de Orç
 | **14 — Orçamento do projeto e visão agregada editável** | ✅ `2950666` (2026-08-10) |
 | **15 — Cores dos blocos e faixa do agrupamento** | ✅ (2026-08-11) |
 | **17 — Cidade e Regional editáveis na abertura + modal inteiro visível** | ✅ `40881a7` (2026-08-12) |
+| **18 — Funil comercial nas listas, Valor do Job e GPs Responsáveis** | ✅ `d078f8a` + `63c258f` + `9018e3a` (2026-08-17) |
+| **19 — Editor multi-jobs: novo no topo, orçado zerado bloqueia, categoria obrigatória** | ✅ (2026-08-17) |
+| **20 — Tela da versão: grupo automático na v1, Status fora do drawer, aprovação exige orçado** | ✅ (2026-08-17) |
+| **21 — Contato de cobrança na abertura do job + "Descritivo do Job"** | ✅ (2026-08-17) |
 
 `tsc --noEmit` e `next lint` limpos em todas. Entregas 4, 5, 8 a 13
 também com `next build` completo. As Entregas 8 e 10 a 13 são as únicas
@@ -1662,3 +1666,249 @@ baixada do bucket de importações) na v1 do TESTE-0002/26-02:
 ⚠️ **Não exercitado**: a trava de versão com job aberto. O caminho existe
 nas duas camadas (botão desabilitado + recusa na action), mas exercitá-lo
 exigiria abrir um job sobre uma versão de teste e depois cancelá-lo.
+
+## 20. Entrega 18 — Funil comercial nas listas, Valor do Job e GPs Responsáveis (2026-08-17)
+
+**Origem:** plano local de alterações de telas (Grupo A), com as decisões
+do Tiago de 16-17/08. O plano fica em `planos-locais/` (gitignorado, como
+as referências de design). Regra de negócio na
+[decisão 010](docs/decisions/010-funil-comercial-do-orcamento.md).
+**Commits:** `d078f8a` (lista de projetos) · `63c258f` (formulário de
+projeto) · `9018e3a` (detalhe do projeto).
+
+Três telas, um módulo novo:
+
+1. **`lib/calculos/funil.ts` (novo)** — fonte única do funil comercial:
+   `estagioFunil`, `estagioFunilLabel`, `estagioFunilBadgeClasses`,
+   `escolherJobDoFunil`. Semântica completa na decisão 010.
+2. **Lista de projetos** (`page.tsx` + `projetos-list.tsx`): célula Nome
+   perde os selos "N aprovado(s)"/"N job(s)"; três colunas novas depois
+   de Orçamentos — **Aprovados · Enviados · Abertos** — mutuamente
+   exclusivas, zero renderizado como travessão discreto. A query de
+   `jobs` (`orcamento_id, status, created_at` por `projeto_id`) entrou no
+   `Promise.all` existente; sem embed.
+3. **Formulário de projeto** (`projeto-form.tsx`): rótulo "Responsáveis"
+   → **"GPs Responsáveis"**, placeholder → "Selecione um ou mais GPs".
+   Só strings — identificadores (`responsavel_ids` etc.) e a lista de
+   membros oferecida ficaram como estavam (decisão explícita).
+4. **Detalhe do projeto** (`[projetoId]/page.tsx` + `orcamentos-list.tsx`):
+   coluna **"Valor do Job"** entre Fim previsto e Versões (versão
+   aprovada > mais recente > travessão; `calcularTotaisVersao().valorJob`,
+   a mesma conta do fechamento) e coluna Status trocada pelo **badge de
+   estágio do funil**. Itens buscados só das versões-alvo, em 3 colunas
+   (`versao_orcamento_id, tipo_custo, total_orcado`).
+
+**Verificação no navegador** (dev server, sessão real): contagens do
+funil cruzadas com SQL em NOV-0002/26 e TESTE-0001/26 — job `encerrado`
+contando em Abertos, rascunho/recusado fora do funil; "Valor do Job" da
+lista batendo com o fechamento da versão (R$ 11.200,00 nos dois lugares
+em TESTE-0001/26-03); formulário de projeto usado de ponta a ponta.
+`next lint` e `npm run build` limpos nos três commits.
+
+⚠️ **Dado de teste deixado no banco** (autorização permanente do Tiago,
+17/08): projeto **TESTE-0003/26 · "Teste Alterações"** com os orçamentos
+`-01` (rascunho), `-02` e `-03` (aprovados, alíquota 19,53%). Substituem
+o caso a caso do TESTE-0002: são a base dos testes das próximas entregas
+do plano local e só devem ser removidos quando o plano terminar. O
+registro vivo (ids, estágio de cada um, o que cada um reserva) fica na
+seção "Registro de testes" do plano local.
+
+## 21. Entrega 19 — Editor multi-jobs: novo no topo, orçado zerado bloqueia, categoria obrigatória (2026-08-17)
+
+**Origem:** plano local de alterações de telas (Grupo B, Tela 1.4), com
+as decisões do Tiago de 16/08. Regra do orçado zerado na
+[decisão 011](docs/decisions/011-orcado-obrigatorio-para-salvar-e-aprovar.md).
+
+Três alterações independentes:
+
+1. **Orçamento novo aparece no TOPO da lista** (`multi/editor-multi-jobs.tsx`).
+   O array `jobs` continua em ordem de criação — é ela que gera os
+   códigos (`-01` é sempre o mais antigo) e o payload do salvamento; só a
+   renderização inverte, via `jobsExibicao` (par `{ job, indice }` com o
+   índice original para `codigoPrevisto`). O card de Totais segue a mesma
+   ordem invertida, com o código original por linha. `indiceImportando` e
+   o texto do dialog (`codigoPrevisto(jobs.length)`) não mudaram porque
+   já usavam o índice/tamanho do array original.
+2. **"Salvar orçamentos" bloqueia com R$ unitário ORÇADO zerado** —
+   decisão 011. Cliente: `itensComOrcadoZerado` varre jobs → grupos →
+   itens e o erro nomeia `orçamento · grupo · item`. Servidor: mesma
+   checagem no loop de validação de `salvarOrcamentosDoProjeto`
+   (`multi/actions.ts`), no padrão `${rotulo} · ${grupo.nome}: ...`.
+   **Planejado zerado salva normalmente.** Escopo: só o editor multi e
+   sua action — o agregado ficou de fora de propósito (ver decisão).
+3. **Categoria do orçamento de job passou a obrigatória** — vale para
+   `/orcamentos/[projetoId]/novo` e para o dialog do editor multi (mesmo
+   `orcamento-form.tsx`). `orcamentoSchema.categoria_id` virou
+   `z.string().uuid("Selecione a categoria.")` (banco continua nullable
+   pelo legado, como os obrigatórios de 06/08); o Select perdeu a opção
+   "Sem categoria" e ganhou placeholder "Selecione a categoria" +
+   asterisco; `DadosOrcamento.categoria_id` passou de `string | null`
+   para `string`. **Consequência assumida:** orçamento antigo sem
+   categoria passa a exigir a escolha ao ser editado no drawer.
+
+**Verificação no navegador** (dev server, sessão real, projeto
+TESTE-0003/26): ver seção "Registro de testes" do plano local. `next
+lint` e `npm run build` limpos.
+
+## 22. Entrega 20 — Tela da versão: grupo automático na v1, Status fora do drawer, aprovação exige orçado (2026-08-17)
+
+**Origem:** plano local de alterações de telas (Grupo B, Tela 1.5).
+Regra do orçado na
+[decisão 011](docs/decisions/011-orcado-obrigatorio-para-salvar-e-aprovar.md);
+o grupo automático é adendo datado na
+[decisão 007](docs/decisions/007-nome-da-versao-e-v1-automatica.md).
+
+Três alterações:
+
+1. **A v1 criada junto do orçamento já nasce com o grupo "Novo grupo"**
+   (`criarVersaoInicial` em `[projetoId]/actions.ts`): insert em
+   `versoes_orcamento_grupos` com ordem 1, mesmo nome default do "Criar
+   planilha" do multi. A tela da versão abre com a linha "Novo item"
+   pronta. Falha no insert loga e segue (usuário cria o grupo na mão);
+   item vazio não é criado. "Nova versão" e "Duplicar versão" intactos.
+2. **O drawer "Editar dados da versão" perdeu o campo Status** — o status
+   da versão passou a ser 100% do sistema (aprovada → aprovação;
+   substituída → cascata; cancelada → `cancelarVersao`). No servidor,
+   `extractVersaoPartial` **ignora** `status` vindo do FormData (mesmo
+   padrão do `nome`), então bypass do form não altera nada. `criarVersao`
+   continua nascendo "rascunho". `VERSAO_STATUS_EDITAVEIS` segue exportado
+   em `lib/types.ts` (o `versaoSchema` de `criarVersao` ainda o usa), mas
+   nenhuma tela oferece mais o campo.
+3. **Aprovar versão bloqueia com R$ unitário orçado zerado** — decisão
+   011. `bloqueioAprovacaoVersao` ganhou `qtdItensOrcadoZerado` (mensagem
+   única para botão e servidor); `aprovarVersao` conta os zerados numa
+   terceira query do mesmo `Promise.all` (`.eq("valor_unitario_orcado",
+   0)`); a page passa a contagem ao `FluxoAbertura`, que desabilita o
+   botão com o motivo no `title`. **Planejado zerado não bloqueia.** As
+   checagens anteriores (alíquota, ≥1 item, ≥1 item com valor)
+   permanecem.
+
+**Nota (falso alarme investigado em 16/08):** os honorários do cliente
+SÃO gravados corretamente na v1; o que bloqueava aprovação era a alíquota
+nascendo em 0% — comportamento correto por decisão 006, mantido como
+está. Nenhuma mudança em `lib/impostos.ts` ou na exigência da alíquota.
+
+**Verificação no navegador** (dev server, sessão real, projeto
+TESTE-0003/26): alterações 1 e 2 conferidas de ponta a ponta; da
+alteração 3, a cadeia de bloqueios foi vista ativa, mas a mensagem
+específica do orçado zerado (caso misto: item com valor + item zerado)
+ficou para a **etapa final de testes** — decisão do Tiago de 17/08:
+a partir do Grupo B, a conferência completa no navegador é consolidada
+numa rodada única ao fim do plano de alterações. Detalhes na seção
+"Registro de testes" do plano local. `next lint` e `npm run build`
+limpos.
+
+## 23. Entrega 21 — Contato de cobrança na abertura do job e "Descritivo do Job" (2026-08-17)
+
+**Origem:** plano local de alterações de telas (Grupo C, Tela 1.6), com as
+decisões do Tiago de 17/08. Regra na
+[decisão 012](docs/decisions/012-contato-de-cobranca-do-job.md).
+**Primeira migration do plano:** `20260817000001_jobs_contatos.sql`.
+
+Três alterações nos dois modais do envio de job
+(`enviar-job-modal.tsx` e `confirmar-envio-modal.tsx`):
+
+1. **"Observações" virou "Descritivo"** no formulário e na conferência, e
+   **"Descritivo do Job"** nas duas telas do financeiro que leem o mesmo
+   dado — `abertura-de-job/conferencia-dialog.tsx` (diálogo de conferência
+   da fila) e `financeiro/jobs/[jobId]/page.tsx` (detalhe do job). O
+   rótulo unificado nas duas pontas foi decisão do Tiago nesta sessão: era
+   o mesmo campo com dois nomes. **A coluna segue `jobs.observacoes`**, e
+   com ela o campo do form, o schema Zod e `OBSERVACOES_MAX` — mudou o
+   rótulo, não o dado. O comentário defasado na action (que dizia que o
+   financeiro ainda não lia o campo) foi corrigido.
+2. **Seção "Contato de cobrança"** entre a linha GP/Produtor e o card de
+   Fechamento da versão: grid de 3 colunas (Nome · Número · E-mail) +
+   lixeira por linha, botão "+ Adicionar contato" abaixo. Nome e e-mail
+   obrigatórios, número opcional, ao menos uma linha para enviar. Usa o
+   `Campo` e o `Input` já existentes do modal, com o asterisco vermelho
+   padrão — nenhum componente ou badge novo. A lixeira desabilita quando
+   sobra uma só linha. No modo somente leitura ("Ver dados do job") os
+   contatos gravados aparecem travados; job anterior a esta entrega mostra
+   "— nenhum contato registrado".
+3. **Contatos na conferência**, entre "Valor total" e o Descritivo: nome
+   na linha, e-mail (e número, quando houver, separado por " · ") logo
+   abaixo em fonte menor e `text-muted-foreground`. Sem chip e sem
+   tooltip.
+
+**Banco (mudança aditiva, ciclo do `docs/FLUXO-BANCO.md` completo):** tabela
+nova `jobs_contatos` — `tenant_id`, `job_id` (`on delete cascade`), `tipo`
+(CHECK `'cobranca' | 'pagamento'`; a aplicação grava só `'cobranca'`),
+`nome`, `numero` (nullable), `email`, `ordem`, timestamps com trigger
+`set_updated_at`, `created_by`. RLS ligada com as três policies via
+`public.is_tenant_member(tenant_id)`, GRANT `select, insert, update` para
+`authenticated` e **nada para `anon`**; índices `(job_id, ordem)` e
+`(tenant_id)`. Sem GRANT de `delete` de propósito — ver decisão 012.
+`JobContato` e `JobContatoTipo` escritos à mão em `lib/types.ts`, no mesmo
+commit.
+
+**Onde a obrigatoriedade mora:** `faltamCampos` no modal (destaca a linha
+torta e desabilita "Confirmar dados") e `contatos_cobranca` em
+`aberturaJobSchema` — regra crítica não vive só no front. Os contatos
+viajam como JSON num campo do FormData; `parseContatos` na action faz o
+parse e payload ilegível cai na mensagem "Informe ao menos um contato de
+cobrança.". O insert é em bulk, depois da cópia da planilha e antes do
+`status = 'job_criado'` do orçamento; falha segue o padrão das falhas
+parciais ("Job criado, mas os contatos não foram gravados. Avise o
+suporte."). O audit de `job.enviado_para_abertura` ganhou
+`qtd_contatos_cobranca` — a quantidade, sem nome nem e-mail: dado pessoal
+do cliente não precisa ser duplicado no log.
+
+**Leitura sem custo novo:** os contatos do job já enviado entram na
+**segunda onda** de queries da página da versão (a que já dependia de
+`orcamento.projeto_id`), e só quando existe job — nenhum round-trip a mais
+no caminho comum.
+
+**Verificação:** `tsc --noEmit` e `next lint` limpos; migration aplicada e
+conferida pelo MCP (colunas, FKs, CHECKs, RLS, policies, GRANT, índices,
+trigger, advisors). A conferência no navegador segue consolidada na etapa
+final de testes do plano.
+
+---
+
+## 24. Entrega 22 — Categoria do job nos modais de envio (2026-08-19)
+
+**Origem:** pedido do Tiago de 19/08. Regra na
+[decisão 019](docs/decisions/019-categoria-do-job.md).
+
+Os **dois** modais do envio ganharam a **Categoria**, sempre entre o
+Produto e o par Cidade/Regional. O valor é a categoria do orçamento de
+origem — `categorias_dominio`, escopo `orcamento` —, a mesma que o
+financeiro recebe pré-selecionada na abertura.
+
+1. **`confirmar-envio-modal.tsx`** ("Tem certeza que quer enviar esse job
+   para a abertura?") — linha nova no card de resumo, entre "Produto" e
+   "Cidade · Regional".
+2. **`enviar-job-modal.tsx`** ("Enviar job para abertura") — campo
+   travado, com o apoio "Cadastrada no orçamento.", irmão do Produto.
+
+**A grade do formulário mudou de forma por causa disso.** Produto, Cidade
+e Regional dividiam uma linha de 3 colunas; a Categoria tinha de entrar
+**entre** o Produto e as outras duas (decisão do Tiago), e Cidade e
+Regional não podem se separar — as regionais oferecidas dependem da
+cidade. Então Produto e Categoria passaram a ocupar **uma linha cada**,
+com dois espaçadores `hidden md:block` fechando cada linha, e Cidade +
+Regional descem juntas para a linha seguinte. No mobile a grade já era de
+uma coluna e os espaçadores somem.
+
+O dado entra por `HerdadosJob.categoriaNome`, ao lado de produto, GP e
+produtor: campo herdado, exibido, não editável nestes modais. Quem o
+preenche é a página da versão, que passou a embedar
+`categoria:categorias_dominio(nome)` na query do orçamento que **já
+existia** — sem round-trip novo.
+
+**Herdado, e sempre do orçamento.** Mesmo com job já enviado (modo "Ver
+dados do job"), a linha mostra a categoria do orçamento, não a de
+`jobs.categoria_id`: esta tela é a visão da produção, e a do job só passa
+a existir depois que o financeiro abre — podendo inclusive ser outra, se
+ele trocar.
+
+**Não entrou em `herdadosIncompletos()`:** orçamento antigo sem categoria
+não bloqueia o envio, só mostra "— não informada". Categoria é
+obrigatória no orçamento desde 17/08, então o caso é residual.
+
+**Verificação:** `tsc --noEmit` e `next lint` limpos. Exercitado no
+navegador em TESTE-0003/26-06 · Teste B3 (categoria **Extra**, diferente
+das demais do projeto de propósito, para provar que o valor é lido do
+orçamento): a linha saiu "Categoria · Extra". Parado antes de "Sim,
+enviar job" — conferido pelo MCP que o orçamento segue com 0 jobs.

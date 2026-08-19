@@ -8,6 +8,10 @@ de negócio tomadas junto com o time durante a execução.
 | **I** | `Abertura de Job.dc.html` | fila de abertura, conferência, formulário de registro financeiro | 1 a 10 |
 | **I·rev** | revisão de 12/08 (sem design novo) | previsão de desembolso na calha PP, janelas 08/20, os dois números do fechamento | 11 a 14 |
 | **II** | `Abertura de Job - Financeiro.dc.html`, aba "Jobs abertos" | lista de jobs abertos, job na visão do financeiro | 15 a 18 |
+| **V** | `Abertura de Job - Telas Atuais.dc.html`, itens 02a e 03 | previsão de recebimento no formulário de abertura, planilha interna em leitura | 33 |
+| **VI** | `Contas a Pagar - Titulos a Pagar.dc.html` | aba unificada de títulos a pagar, baixa por parcela, aprovação com data de pagamento | 34 |
+| **VII** | `Contas a Receber - Faturamento Agrupado.dc.html` | NF cobrindo vários jobs, faturamento parcial e avulso, previsão de recebimento do título | 35 |
+| **VIII** | `Fluxo de Caixa.dc.html` | matriz período × natureza com drill-down; as previsões da abertura entram no caixa | 36 |
 
 > Contas a pagar, conciliação e lançamentos financeiros já existiam antes deste
 > documento e não estão registrados aqui.
@@ -308,6 +312,12 @@ resíduo da curva (curva − planejado dos itens que já têm PP, consumido na o
 das datas, rolado por janela) entra como camada de previsão por cima dos
 títulos. Sem isso, o fluxo de caixa enxerga o desembolso só depois da PP
 existir — some o horizonte entre a abertura do job e a emissão das PPs.
+
+> ⚠️ **17/08/2026 — resolvido. Esta seção descreve um estado que não existe
+> mais.** A migration `20260817000006_vw_fluxo_caixa_previsoes.sql` colocou o
+> resíduo da curva na `vw_fluxo_caixa`, exatamente como a decisão 004 manda, e
+> fez o mesmo do lado da entrada — que na época desta seção nem tinha regra
+> escrita. Ver **seção 36** e `docs/decisions/018`.
 
 ---
 
@@ -747,3 +757,781 @@ com atraso, e a mistura de paga + vencida.
    `vw_fluxo_caixa` (seção 14).
 4. **Feriados na janela de pagamento.** Hoje o ajuste só empurra sábado e
    domingo (seção 12).
+
+---
+
+## 33. Previsão de recebimento e planilha em leitura na abertura (2026-08-17)
+
+Itens **02 (versão 02a)** e **03** do catálogo
+`Abertura de Job - Telas Atuais.dc.html`. Regra nova em
+`docs/decisions/015-previsao-de-recebimento-na-abertura.md`.
+
+> ⚠️ **Isto muda o formulário descrito nas seções 3 a 6.** Até aqui a
+> abertura registrava **uma** previsão (a curva de desembolso). Agora são
+> **duas**, em cards separados: "Previsão de recebimento" em cima,
+> "Previsão de custos" embaixo. O selo de status do cabeçalho
+> ("Conferido") **foi removido** — decisão do Tiago: é desnecessário.
+
+### O card novo — Previsão de recebimento
+
+Dois números no topo, os mesmos dois do fechamento do envio: **Valor
+total do job** (compromisso do cliente) e **Faturamento previsto** (o que
+a California recebe, com o selo "Do orçamento"). Abaixo, a tabela de
+parcelas — mesma anatomia da curva de desembolso: `#`, data prevista,
+valor, % do total, lixeira; "Distribuir igualmente" no cabeçalho,
+"Adicionar parcela" no rodapé, e o chip verde/âmbar dizendo se a soma
+fecha.
+
+| | Curva de desembolso | Parcelas de recebimento |
+|---|---|---|
+| Fecha contra | `custo_previsto_total` (planejado da calha PP) | `jobs.faturamento_previsto` |
+| Primeira data | janela de pagamento dentro do período do job | data prevista de faturamento do envio |
+| Datas seguintes | próxima janela (08/20, ajustada) | +30 dias da anterior |
+| Restrição de data | **só** janelas de pagamento | nenhuma — quem manda é o cliente |
+| Total zero | abre sem curva (job 100% A/D) | abre sem previsão (nada a faturar) |
+
+O total **não vem do formulário**: a action relê `faturamento_previsto`
+do banco antes de conferir a soma, como já fazia com o custo previsto.
+
+### Migration
+
+`20260817000003_jobs_previsao_recebimento.sql` — aditiva, espelho exato
+de `jobs_previsao_custo`: 9 colunas, `tenant_id`, RLS ligada, 4 policies
+só para `authenticated` via `is_tenant_member`, 3 índices + PK + unique
+`(job_id, ordem)`, trigger de `updated_at` e GRANT explícito. Tipo
+`JobPrevisaoRecebimento` em `lib/types.ts`, no mesmo commit.
+
+### O resto do quadro 02a
+
+| Onde | O que mudou |
+|---|---|
+| Cabeçalho | selo de status removido; subtítulo passou a citar as duas previsões |
+| Lateral | card novo **"Descritivo do Job"** — o texto que a produção escreveu no envio (`jobs.observacoes`), mais "Enviado por" (o `created_by` do job) e "Orçamento de origem" |
+| Lateral | "Ver planilha interna" virou o bloco do protótipo: ícone, título e o resumo real da planilha (`N agrupamentos · N itens · orçado R$ X`) |
+| Resumo do registro | ganhou **Faturamento previsto**, **Recebimentos** e **Margem prevista** (faturamento − custo, verde quando positiva) |
+| Confirmação | linha "Recebimento" com `N× · primeira → última`, ao lado da linha da curva |
+
+### Item 03 — planilha interna em leitura
+
+Rota nova `/financeiro/abertura-de-job/[jobId]/planilha`, aberta pelo
+bloco "Visualizar planilha interna" da lateral. É **a mesma planilha** da
+aba Planilha Interna do job — `JobGrupoCard` e `JobTotaisCard`, os
+mesmos componentes, sem cópia — com `editable` e `podeAcoes` em `false`:
+sem edição de realizado, sem "Alterar orçado", sem trilha de BV/PP.
+Cabeçalho com "Voltar para a abertura" e o selo "Somente leitura".
+
+Job que já saiu da fila cai por redirect na planilha da página do job:
+esta rota é passo do fluxo de abertura, não uma segunda casa da planilha.
+
+### Fora do escopo, de propósito
+
+- **Itens 01 e 04 a 07 do catálogo não foram tocados** — inclusive o
+  diálogo de conferência da fila, que continua existindo (é por isso que
+  o protótipo mostra "Em conferência" no cabeçalho e nós não mostramos
+  selo nenhum).
+- **02b** (card único "Previsões" com tabela unificada) foi avaliado e
+  descartado pelo Tiago.
+- **Contato de cobrança** (`jobs_contatos`, criado na entrega de
+  17/08 do `HANDOFF_ORCAMENTO.md`) **continua invisível para o
+  financeiro** — não entrou aqui. A decisão 012 aponta para esta tela e
+  está errada; o destino segue em aberto.
+- **Duas divergências conscientes do protótipo**, porque copiá-lo diria
+  algo falso sobre o nosso dado: o subtítulo de "Valor total do job" no
+  card de custos (o protótipo escreve "Faturamento previsto do
+  orçamento", mas aqui os dois números são diferentes) e o rótulo
+  "Descritivo do Job" no lugar de "Observações da produção" (nome que o
+  campo passou a ter nas duas pontas em 17/08).
+
+### Arquivos
+
+`[jobId]/abertura-form.tsx`, `[jobId]/page.tsx`,
+`[jobId]/planilha/page.tsx` (novo), `dados.ts`, `curva.ts`, `actions.ts`,
+`lib/validations/abertura-financeiro.ts`, `lib/types.ts`.
+
+## 34. Contas a Pagar: a aba "Títulos a Pagar" (2026-08-17)
+
+Protótipo `Contas a Pagar - Titulos a Pagar.dc.html` (25 estados,
+interativo). Regras novas em
+`docs/decisions/016-titulos-a-pagar-e-baixa-por-parcela.md`.
+
+> ⚠️ **Isto refaz a máquina de pagamento descrita antes deste
+> documento.** Até aqui o financeiro aprovava a PP, salvava um "prazo
+> financeiro" à parte e baixava a **PP inteira** num lançamento só. Agora
+> a aprovação define a **data de pagamento** no mesmo ato, e quem se
+> baixa é a **parcela**. Também fecha o adiamento explícito da decisão
+> 014 §7.
+
+### As três abas
+
+`Pedidos de Produção (PPs)` · `Títulos a Pagar` · `Recorrências`. A aba
+**"Lançamentos Avulsos" foi absorvida**: a avulsa virou um título de
+origem `AVULSO` na lista unificada, e a criação passou a ser o botão
+"+ Lançamento Avulso" de lá. As rotas de detalhe da avulsa continuam
+funcionando. A tela abre em Títulos a Pagar — é o que o financeiro faz
+todo dia.
+
+### A lista unificada não tem tabela
+
+Nasce de consulta sobre o que já existe, sem tabela-espelho:
+
+| Chip de origem | Fonte |
+|---|---|
+| `PP-NNNNN` | `pedidos_compra_parcelas` de PP `aprovada` ou `pago` |
+| `AVULSO` | `contas_avulsas` com `recorrente_id` nulo |
+| `RECORRÊNCIA` | `contas_avulsas` com `recorrente_id` preenchido |
+
+A recorrência não exigiu nada novo: `gerar_ocorrencias_recorrentes` já
+materializava cada ocorrência como uma `contas_avulsas`.
+
+Colunas: Data de pagamento (editável, **vermelha quando difere do
+vencimento original**) · Venc. original · Título · Fornecedor · Job ·
+Origem · Valor · Parcela `N/T` · Status · Dar baixa. Chips A pagar /
+Pagos / Todas, segunda linha de ORIGEM, e faixa de resumo com Em aberto ·
+Vencendo em 7 dias · Pagos hoje. Em "Todas", o que ainda precisa sair vem
+antes do que já foi pago.
+
+### Duas datas onde havia uma
+
+- **Vencimento original** — o prazo negociado pela produção, impresso no
+  PDF. Congelado na emissão.
+- **Data de pagamento** — quando o financeiro paga. Nasce na aprovação e
+  é repactuável pelo lápis.
+
+O pop-up do lápis exibe **sempre** as duas, mais a **1ª data de
+pagamento** já definida — que um trigger no banco congela, para a
+promessa não depender da tela.
+
+### PP parcelada: a data desloca todas pelo mesmo delta
+
+Decisão do Tiago. Aprovar em 08/09 uma PP que vencia 01/09 · 01/10 ·
+01/11 gera pagamentos em 08/09 · 08/10 · 08/11. Exercitado no banco antes
+de liberar, com rollback.
+
+### O formulário de aprovação da PP
+
+| Antes | Agora |
+|---|---|
+| Bloco "Ações do financeiro" com "Prazo pagamento financeiro" + botão "Salvar prazo" | Campo único **"Data de pagamento" \*** — obrigatório, escolhido antes de aprovar |
+| Prazo original numa linha da grade de dados | **Vencimento original em card âmbar destacado**, com o texto "Prazo negociado pela produção com o fornecedor" |
+| Botão "Ver PDF" (ícone de olho, abre aba nova) | **"Visualizar documentos"** — PP e anexo(s) lado a lado, em overlay, com as ações de aprovar/rejeitar no rodapé |
+| "Dar baixa" e "Cancelar baixa" no rodapé | Saíram. A baixa é da parcela e mora na aba Títulos |
+
+PP fora da avaliação exibe o aviso "Esta PP já saiu da avaliação".
+Na lista da aba, a coluna "Prazo Financeiro" virou **"Parcela"** (`1/3`).
+
+### O modal de baixa
+
+Um só, para as três origens. Data do pagamento · Conta que realizará o
+pagamento (**sem conta padrão** — escolhida na mão toda vez) · **Centro
+de custo do pagamento**, obrigatório.
+
+**"Centro de custo" é o plano de contas (Tipo + Subtipo)** — decisão do
+Tiago. Não existe centro de custo no banco, e a legenda do próprio
+protótipo ("define onde o custo entra no DRE") descreve o que o plano de
+contas já fazia. Vem sugerido pela origem quando ela tem plano, e a
+escolha vai para o lançamento sem reescrever a classificação da avulsa.
+
+### Lançamento avulso com dois botões
+
+**Criar** lança a previsão em Títulos a Pagar. **Criar e dar baixa** cria
+e abre o modal de baixa em seguida — o pagamento já aconteceu e vai
+direto para a conciliação.
+
+### O estorno saiu da UI
+
+Decisão do Tiago: seguir o protótipo, que não tem estorno em lugar
+nenhum. `estornarBaixaPP` e `cancelar-baixa-modal.tsx` continuam no
+repositório, sem porta na tela — e o arquivo carrega a nota dizendo isso.
+**Consequência assumida:** reverter baixa errada hoje exige intervenção
+fora da tela.
+
+### Migration
+
+`20260817000004_titulos_a_pagar.sql` — aditiva: 5 colunas
+(`data_pagamento` e `data_pagamento_primeira` em
+`pedidos_compra_parcelas` e `contas_avulsas`, `pedido_compra_parcela_id`
+em `lancamentos_financeiros`), 1 FK, 3 índices, 1 trigger, 3 funções
+novas (`aprovar_pp_com_data`, `dar_baixa_pp_parcela`,
+`dar_baixa_avulsa_com_plano`, todas `security definer` com `search_path`
+fixo e **sem `EXECUTE` para `PUBLIC`**), `gerar_ocorrencias_recorrentes`
+redefinida, e as views `vw_a_pagar` / `vw_fluxo_caixa` passando a
+listar **uma linha por parcela em aberto** — sem isso o Fluxo de Caixa
+nasceria concentrando num dia o que sai em três.
+
+Nada removido: `prazo_pagamento_financeiro` virou espelho da 1ª parcela
+(com comentário no banco), e `dar_baixa_pp` / `estornar_baixa_pp`
+continuam existindo.
+
+### Fora do escopo, de propósito
+
+- **Contas a Receber e Fluxo de Caixa** não foram tocados (Telas 3.3 e
+  3.4).
+- **Contato de cobrança** (`jobs_contatos`) segue invisível para o
+  financeiro — a lacuna da decisão 012 continua aberta.
+
+---
+
+## 35. Contas a Receber: faturamento agrupado, parcial e avulso (2026-08-17)
+
+Protótipo `Contas a Receber - Faturamento Agrupado.dc.html`, mais o
+arquivo `Contas a Receber - Faturamento - notas de implementacao.md` do
+mesmo projeto. Regras novas em
+`docs/decisions/017-faturamento-agrupado-parcial-e-avulso.md`.
+
+> ⚠️ **Isto muda o formulário de emissão descrito antes deste
+> documento.** Uma NF deixa de ser "uma nota, um job": passa a cobrir
+> vários jobs do mesmo cliente, e pode cobrir só parte do saldo de cada
+> um. **Tipo e Subtipo saíram do formulário de emissão** e passaram a ser
+> pedidos na baixa do título. **Série saiu das telas** (continua no banco,
+> com default `1`). E o título a receber ganhou uma **previsão de
+> recebimento** editável, ao lado do vencimento.
+
+### A nota virou cabeçalho + linhas
+
+| Camada | Tabela | Responde |
+|---|---|---|
+| Cabeçalho | `faturamentos` | o que é esta nota |
+| **Linhas** | **`faturamento_itens`** (nova) | **o que ela cobre, e por quanto de cada** |
+| Recebimento | `titulos_receber` | como o dinheiro entra |
+
+`faturamentos.origem_id` fica **vazio na nota agrupada** — quem quiser
+saber o que a nota cobre lê `faturamento_itens`. Gravar "o primeiro job"
+faria qualquer leitura futura atribuir a nota inteira a ele.
+
+### A aba Faturamento agora tem uma linha por PARCELA
+
+Tabela nova `jobs_envio_faturamento_parcelas`: ao enviar o job para
+faturamento, **a produção informa em quantas notas ele será faturado**,
+com valor e vencimento de cada parcela. Cada parcela é uma linha da aba,
+faturada por sua própria NF.
+
+Não confundir com `jobs_previsao_recebimento` (seção 33): aquela diz
+*quando o dinheiro entra*, esta diz *em quantas notas o job sai*.
+
+Colunas: Origem · Job/descrição · Cliente · Valor (da parcela) · Já
+faturado · Saldo a faturar (com "total do job") · Parcela `N/T` ·
+Vencimento · Ação. Chips de filtro **por cliente com contagem**, busca, e
+faixa "A faturar".
+
+**Notas já emitidas permanecem na aba**, em verde, com chip `FATURADO` e
+botão `NF <número>` que reabre o mesmo formulário em **somente leitura**
+(campos bloqueados, sem seletor total/parcial, sem lixeiras nem atalhos,
+rodapé "Fechar", e **Visualizar NF** abrindo o PDF no próprio painel).
+
+### Agrupado, parcial e avulso
+
+- **Agrupado:** botão "Faturamento Agrupado" liga o modo de seleção
+  (checkbox por linha + selecionar todos). Com mais de um cliente na
+  seleção **o formulário não abre** — o erro sai na própria barra,
+  nomeando os clientes. **BV nunca entra**: a contraparte dele é o
+  fornecedor, e o checkbox fica desabilitado.
+- **Parcial:** seletor `Valor integral` × `Faturamento parcial` no topo
+  de "Jobs nesta NF". No parcial cada job ganha campo editável, botão
+  `50% do valor`, selo "Parcial" e a linha "R$ X volta para a aba
+  Faturamento", com resumo azul do que retorna. Valor acima do saldo
+  bloqueia no cliente, na action **e** na RPC.
+- **Avulso:** mesmo drawer, com cliente, valor total, job de referência
+  (só rastreio — não consome saldo) e centro de custo obrigatório. Não
+  altera saldo de nenhum job.
+
+**Não existe NF programada.** O modelo "1 NF por parcela" foi avaliado no
+protótipo e descartado; quem não quer faturar tudo agora usa o parcial.
+
+### Aba Títulos a Receber
+
+Colunas: ✎ Vencimento · Previsão de recebimento · Nota fiscal · Cliente ·
+Jobs cobertos · Data de recebimento · Valor · Parcela · Status · Ação.
+NF de vários jobs exibe o selo **"Agrupada · N jobs"** e a lista.
+
+Três datas, e **duas são imutáveis**: o vencimento da NF e a 1ª previsão
+registrada, as duas congeladas por trigger. O lápis muda só a previsão,
+que aparece em **âmbar** quando difere do vencimento — e é ela que
+`vw_fluxo_caixa` passou a ler.
+
+A baixa pede **data do recebimento**, **conta bancária que recebeu** e
+**centro de custo do recebimento** (o par Tipo + Subtipo). Título
+recebido sempre tem data — invariante garantida no diálogo, no schema e
+dentro da RPC.
+
+**Estorno e cancelamento de NF não têm porta nesta tela**, seguindo o
+protótipo e a mesma decisão da 016 §9. As actions continuam no
+repositório.
+
+### Migration `20260817000005_contas_a_receber_agrupado.sql`
+
+Aplicada e conferida pelo MCP. Duas tabelas novas
+(`jobs_envio_faturamento_parcelas` e `faturamento_itens`, ambas com RLS,
+policies só para `authenticated` via `is_tenant_member`, índices e ACL
+sem `anon`), 2 colunas em `titulos_receber`, 1 trigger,
+`dar_baixa_titulo_com_plano` nova (`security definer`, `search_path`
+fixo, **sem `EXECUTE` para `PUBLIC`**), `emitir_faturamento` e
+`cancelar_faturamento` redefinidas, e as views `vw_faturamento_pendente`
+(uma linha por parcela) e `vw_fluxo_caixa` (título pela previsão).
+
+Backfill aditivo: os 3 envios existentes ganharam 1 parcela `1/1` com o
+valor e a data que já tinham.
+
+**Único item do lado destrutivo, autorizado pelo Tiago:** o CHECK
+`chk_faturamento_origem` foi substituído por uma versão que aceita
+`origem_id` nulo em job/BV. `faturamentos` tinha 0 linhas.
+
+Lógica exercitada no banco com rollback: NF parcial de R$ 4.000 sobre uma
+parcela de R$ 7.025,60 deixou saldo de R$ 3.025,60; cancelar a NF
+devolveu os R$ 7.025,60; e um `update` forçando vencimento e 1ª previsão
+para 1999 manteve as duas intactas.
+
+### Fora do escopo, de propósito
+
+- **Fluxo de Caixa** (Tela 3.4) não foi tocado.
+- **Contato de cobrança** (`jobs_contatos`) segue invisível para o
+  financeiro, por decisão do Tiago nesta sessão — a lacuna da decisão 012
+  continua aberta.
+- **O abatimento da previsão de recebimento da abertura** pelo título
+  emitido continua sem regra escrita (pendência da seção 33 / decisão
+  015). É a Tela 3.4 que vai precisar dela.
+
+---
+
+# Parte VIII — Fluxo de Caixa
+
+**Data:** 2026-08-17
+**Origem do design:** `Fluxo de Caixa.dc.html`, projeto Claude Design
+`69342d83`. (O arquivo `Fluxo de Caixa - Tela Atual.dc.html`, no mesmo
+projeto, é só o "antes".)
+
+---
+
+## 36. A tela virou matriz, e as previsões entraram no caixa
+
+A tela anterior era uma lista de períodos com três colunas — previsto,
+realizado, saldo acumulado. Ela respondia "quanto entra e quanto sai", mas
+não respondia as duas perguntas que o financeiro faz de verdade: **de onde
+vem esse previsto** e **quando o caixa aperta**.
+
+A tela nova é uma **matriz período × natureza**: 3 colunas de passado mais
+o horizonte, cada uma rotulada `REALIZADO`, `EM CURSO` (a fronteira do
+hoje, destacada) ou `PREVISTO`. As linhas-mestre são Entradas, Saídas,
+Líquido do período e Saldo projetado.
+
+### As três camadas, que são o ponto da tela
+
+Cada natureza se abre em três componentes, iguais em todas as colunas:
+
+| Componente | O que é | De onde vem |
+|---|---|---|
+| Já movimentado nas contas | caixa efetivo, já baixado | `lancamentos_financeiros` |
+| Títulos em aberto | documento emitido, ainda não pago | parcela de PP, conta avulsa aprovada, título a receber |
+| Só previsão (abertura do job) | curva do job, ainda sem documento | `jobs_previsao_custo`, `jobs_previsao_recebimento`, parcelas do envio |
+
+**Essa separação é a entrega.** Antes, "previsto" misturava título e
+previsão — e previsão da abertura nem chegava à tela. Agora dá para ver
+que R$ 300 mil de saída em outubro são R$ 100 mil de PP já emitida e
+R$ 200 mil de curva que ainda pode mudar. São dois graus de certeza
+diferentes, e decidir pagamento com eles somados é decidir no escuro.
+
+Cada componente expande até o item, com descrição, data, regional e conta
+bancária (ou "sem conta alocada").
+
+### A regra mora no banco
+
+A `vw_fluxo_caixa` ganhou a coluna `classe` (`movimento` / `titulo` /
+`previsao`) e as linhas de previsão. **A tela não recalcula nada** — só
+agrupa e soma. Consequência: o DRE e qualquer leitor futuro da view
+recebem o abatimento e as rolagens prontos.
+
+O que a view passou a fazer, e que ninguém fazia antes:
+
+- **Saída:** resíduo da curva = curva da abertura − planejado dos itens que
+  já têm PP, consumido da data mais próxima para a mais distante com piso
+  em zero, e o que venceu sem virar PP rola para a próxima janela de
+  pagamento. É a decisão 004, enfim implementada.
+- **Entrada:** job **sem** envio para faturamento projeta pela previsão da
+  abertura; job **com** envio projeta pelas parcelas do envio, menos o que
+  já virou título. Previsão vencida sem NF é lida em hoje + 1. Era a
+  lacuna que as decisões 015 e 017 registraram — agora é a **decisão 018**.
+- **Regional:** rateio entra proporcional, o que fez a view emitir uma
+  linha por regional nas origens rateadas.
+
+### Conferência no banco (17/08/2026)
+
+Resíduo da curva, batido job a job contra `curva − planejado dos itens com
+PP`: JOB-0001 2.500 − 1.000 = **1.500**; JOB-0004 250.900 − 4.500 =
+**246.400**; JOB-0010 11.760 − 0 = **11.760**; JOB-0013 65.000 − 40.000 =
+**25.000** (a 1ª das 2 parcelas da curva zerou inteira, e só a 2ª aparece).
+
+Rolagem: as previsões vencidas caíram todas em **20/08** (a próxima janela
+de pagamento a partir de 17/08); a parcela de envio vencida do JOB-0001
+caiu em **18/08** (hoje + 1); a do JOB-0010, com vencimento futuro em
+25/08, ficou onde estava.
+
+As **duas cópias da regra de janela** — `curva.ts` no TypeScript e
+`fc_proxima_janela_pagamento` no SQL — foram comparadas em 6 datas,
+incluindo os casos de fim de semana (08/11/2026 é domingo → 09/11;
+20/12/2026 é domingo → 21/12). Concordam em todas.
+
+### Saldo bancário: lido, não reconstruído
+
+O protótipo reconstrói o saldo de abertura da janela a partir do saldo de
+hoje. Aqui ele vem do razão, pela função nova `fc_saldos_por_conta(date)`:
+saldo inicial cadastrado da conta + lançamentos até a data. O servidor
+pede o saldo na véspera da âncora (4 meses atrás) e o cliente caminha daí
+para frente — um número exato, e uma consulta só.
+
+### Migrations
+
+`20260817000006_vw_fluxo_caixa_previsoes.sql` — a `vw_fluxo_caixa`
+redefinida com `create or replace` (as 13 colunas antigas no mesmo nome,
+tipo e posição; `classe` e `regional_id` no fim), mais
+`fc_ajusta_dia_util`, `fc_proxima_janela_pagamento` e
+`fc_saldos_por_conta`. **Nenhuma linha de dado tocada.**
+
+`20260817000007_fc_janelas_grant_public.sql` — correção. A 000006 revogou
+`execute` de `public` nas três funções seguindo o padrão das RPCs do
+projeto, e isso quebrou a leitura da view: o teste de `execute` é feito
+contra quem consulta, não contra o dono da view, então qualquer papel que
+leia `vw_fluxo_caixa` precisa executar a função de janela. As duas funções
+de data voltaram ao `public` — são aritmética pura, sem acesso a tabela.
+`fc_saldos_por_conta`, que lê dado, continua restrita a `authenticated`.
+
+### Fora do escopo, de propósito
+
+- **Filtro "Divisão" do protótipo removido** — o conceito não existe no
+  banco. Decisão do Tiago (decisão 018 §5).
+- **`security_invoker` nas views** — as três views do schema ignoram a RLS
+  das tabelas de baixo. Ligar fecha numa linha e foi conferido que não
+  quebraria nada; o Tiago colocou acessos na fase de cadastro de usuários,
+  depois de todas as telas definidas.
+- **Verificação no navegador** — não feita nesta sessão, por combinação:
+  segue consolidada na etapa final de testes.
+- **Contato de cobrança** (`jobs_contatos`) segue invisível para o
+  financeiro; a lacuna da decisão 012 continua aberta.
+
+---
+
+## 37. O contato de cobrança ficou visível para o financeiro (P1)
+
+**Data:** 2026-08-17
+
+A Tela 1.6 criou `jobs_contatos` e passou a **exigir** ao menos um
+contato de cobrança para enviar o job para abertura. Mas a leitura só
+existia num lugar: o modal "Ver dados do job", na tela da versão — lado
+do **orçamento**. Nenhuma tela do financeiro exibia o dado.
+
+Ou seja: o campo era obrigatório, estava gravado e íntegro, e **quem
+precisava cobrar não conseguia ver a quem cobrar**. A justificativa da
+decisão 012 não se cumpria.
+
+### Onde entrou
+
+| Tela | Forma | Por quê ali |
+|---|---|---|
+| `abertura-de-job/conferencia-dialog.tsx` | caixa, no padrão do Descritivo | é o único momento de devolver o job por contato faltando ou e-mail torto, **antes** de assumi-lo |
+| `financeiro/jobs/[jobId]` | seção própria | a referência do dia a dia, com o job já aberto |
+| Contas a Receber · aba **Faturamento** | linha compacta sob a contraparte | quem cobrar ao lado de quem é cobrado, no momento em que a nota nasce |
+| Contas a Receber · aba **Títulos a Receber** | linha compacta sob os jobs cobertos | é onde a cobrança de fato acontece |
+
+As duas últimas **revertem** a decisão que o Tiago tinha tomado horas
+antes, na sessão da Tela 3.3 (decisão 017: "contato de cobrança não entra
+nesta tela"). Nota ⚠️ datada nas duas decisões, 012 e 017.
+
+### Dois arquivos novos, e o motivo de existirem
+
+`lib/data/contatos-cobranca.ts` e
+`components/financeiro/contatos-cobranca.tsx`. São quatro telas lendo o
+mesmo dado e desenhando o mesmo bloco — a alternativa era o mesmo
+`select` e o mesmo JSX copiados quatro vezes, que é **exatamente** como as
+cores das planilhas divergiram entre si
+(`docs/09-identidade-visual-ui.md`). O componente tem duas
+apresentações, `Caixa` e `Inline`, porque são dois contextos: diálogo e
+tabela densa.
+
+A query é uma só por tela, por lote de job ids, coberta pelo índice
+`idx_jobs_contatos_job` — nada de N+1 por linha de tabela.
+
+### Detalhes que valem registro
+
+- **NF agrupada junta os contatos dos vários jobs**, deduplicados por
+  e-mail (nome como reserva, quando não há e-mail). O mesmo contato
+  respondendo por três jobs aparece uma vez.
+- **BV não tem contato**, porque não tem job — a contraparte é o
+  fornecedor.
+- **Job anterior a 17/08/2026 não tem contato** e nunca terá: a exigência
+  nasceu com a Tela 1.6 e não houve backfill. A tela diz "sem contato de
+  cobrança" em vez de esconder a seção — ausência é informação.
+
+### Sem migration
+
+Nada mudou no banco. `jobs_contatos` já existia com RLS, policies e
+índice; esta entrega é só leitura.
+
+## 38. Verificação no navegador: três correções no financeiro (2026-08-18)
+
+A etapa final de verificação do plano de telas percorreu a esteira
+inteira com dado real — JOB-0015 aberto, PP-00009 de R$ 12.000,00 em 3
+parcelas, NF 900123 agrupando duas parcelas com faturamento parcial. Ela
+achou três coisas que as entregas 34 e 35 deixaram passar, e que este
+item corrige. Migration
+`20260818000001_baixa_por_parcela_e_data_aprovacao.sql`.
+
+### ⚠️ A baixa por parcela estava bloqueada da SEGUNDA em diante
+
+**Corrige a entrega 34.** A `20260805000003_lancamentos_financeiros.sql`
+criou `uniq_baixa_ativa_por_pp`, único em
+`lancamentos_financeiros(pedido_compra_id) where origem = 'pp_baixa'`,
+numa época em que uma PP tinha uma baixa. A entrega 34 passou a inserir
+**um lançamento por parcela** e não substituiu o índice: a 1ª parcela
+baixava, e da 2ª em diante o Postgres recusava — com a mensagem crua
+`duplicate key value violates unique constraint` chegando à tela. Na
+prática, **PP parcelada nunca chegava a `pago`**.
+
+O índice virou `uniq_baixa_ativa_por_parcela`, em
+`(pedido_compra_parcela_id)`. A unicidade continua existindo, só que na
+granularidade certa; o estorno segue funcionando porque troca a origem
+para `pp_baixa_estornada` e sai do índice parcial. O índice antigo foi
+recriado como caso de borda (`uniq_baixa_ativa_por_pp_sem_parcela`), para
+lançamento de baixa sem parcela vinculada — que o fluxo atual não produz.
+
+Conferido depois da correção: as parcelas 2/3 e 3/3 da PP-00009 baixaram
+pela tela, a PP passou a `pago` na última, e ficaram 3 linhas em
+`lancamentos_financeiros`.
+
+⚠️ **Fora do escopo, e conhecido:** `estornar_baixa_pp` (estorno da PP
+inteira) ainda pega `limit 1` dos lançamentos e devolve a PP a
+`aprovada` sem limpar `pago_em` das parcelas. Desde a decisão 016 ela não
+tem porta na interface; consertá-la exige decidir a semântica do estorno
+com parcelas.
+
+### ⚠️ Aprovar PP sem data de pagamento passava no servidor
+
+**Corrige a entrega 34.** A decisão 016 fez da "Data de pagamento" o que
+a aprovação decide. O caminho da tela sempre esteve certo
+(`aprovarPPComData` → `aprovar_pp_com_data`, que exige a data e desloca
+as parcelas). O furo era a action **legada** `aprovarPP`, que ficou sem
+chamador na UI mas continua exposta pela rede: chamada direta, aprovava
+com `prazo_pagamento_financeiro` nulo, e os títulos nasciam com data de
+pagamento vazia e sem 1ª data registrada — quebrando a repactuação.
+
+A trava entrou nos dois lugares: na RPC `aprovar_pp` (último portão) e na
+action, para a mensagem chegar em português.
+
+### A NF reaberta mostrava uma parcela em vez das que existem
+
+**Corrige a entrega 35.** Em `faturar-drawer.tsx`, o modo leitura montava
+**uma parcela sintética** com o total da nota. Uma NF emitida em 2×
+reabria dizendo 1×, com o valor cheio — os títulos no banco estavam
+certos, e a própria lista marcava a linha como `2x`, mas o formulário de
+conferência contava outra história.
+
+O `page.tsx` já carregava os títulos para contar as parcelas; agora leva
+junto valor e vencimento de cada uma, em `FaturadoRow.parcelas`, e o
+drawer usa essas. O fallback sintético sobrou só para nota antiga sem
+título vinculado.
+
+### Mensagem de erro da baixa
+
+Violação de constraint deixou de vazar para o usuário: `mensagemDeBaixa`
+em `actions-titulos.ts` traduz as que conhecemos, deixa passar o texto
+das RPCs (que já é português) e cai numa frase genérica no resto,
+mandando o original para o log do servidor.
+
+### Cadastro: subtipos provisórios do plano de contas
+
+A verificação esbarrou num impedimento que **não é de código**: a baixa
+exige centro de custo com Tipo **e** Subtipo, e só 2 dos 15 tipos tinham
+subtipo cadastrado. Na prática, toda baixa era obrigada a sair como
+"05 · Despesa com Pessoal / Salário", inclusive a de um pedido de
+produção.
+
+Por decisão do Tiago (18/08/2026), os 13 tipos restantes ganharam **um
+subtipo provisório `999 · Geral (provisório)`**, criado pela action
+`criarSubtipo` — com validação e auditoria, não por SQL direto. O código
+999 é proposital: deixa a faixa 001–099 livre para o plano de contas real
+e marca na tela o que ainda é provisório. **Trocar por subtipos de
+verdade é trabalho pendente do cadastro.**
+
+## 39. As duas decisões do dia: estorno por parcela e saldo sem regional (2026-08-18)
+
+Fecham as duas perguntas que a verificação deixou em aberto. Migration
+`20260818000002_estorno_por_parcela.sql`.
+
+### Estorno virou por parcela — e a versão antiga foi desarmada
+
+A decisão 016 mudou a baixa para a parcela e **deixou o estorno para
+trás**. O Tiago fechou a simetria: aprovar é por PP (e gera um título por
+parcela), dar baixa e estornar são por parcela.
+
+`estornar_baixa_pp_parcela` gera o lançamento reverso, devolve a parcela
+para em aberto e traz a PP de `pago` de volta a `aprovada` — espelho
+exato da baixa, que só promove a `pago` quando a última parcela cai. A
+action é `estornarBaixaParcela`, em `actions-titulos.ts`, ao lado da
+baixa que ela reverte; a antiga `estornarBaixaPP` **saiu** de
+`actions.ts`.
+
+A RPC velha `estornar_baixa_pp` não foi derrubada: ela agora levanta
+exceção apontando para a substituta. Derrubar calaria um chamador; assim
+ele é avisado. Também perdeu o `execute` para `public`, que arrastava
+desde as 13 funções antigas.
+
+**Por que ela era um perigo:** pegava `limit 1` dos lançamentos da PP,
+criava um reverso e devolvia a PP a `aprovada` **sem limpar `pago_em` das
+parcelas**. Numa PP de 3 parcelas pagas, o resultado seria uma PP
+"aprovada" com as 3 parcelas ainda marcadas como pagas e um só lançamento
+revertido.
+
+**O estorno continua sem porta na UI**, como a decisão 016 mandou — o
+protótipo não tem estorno em lugar nenhum. `cancelar-baixa-modal.tsx`
+segue parado, mas agora aponta para a action certa e recebe uma
+**parcela** em vez de uma PP: religá-lo é montá-lo em algum lugar.
+
+**Ciclo exercitado ao vivo:** PP-00009 com as 3 parcelas pagas → estorno
+da 3/3 (parcela em aberto, PP de volta a `aprovada`, original virou
+`pp_baixa_estornada`, nasceu um `pp_estorno` de entrada) → nova baixa da
+3/3 (PP de volta a `pago`). Parcelas 1 e 2 intactas o tempo todo.
+
+### Fluxo de caixa: o saldo é da conta, nunca da regional
+
+A verificação mostrou que, com filtro de regional, os indicadores partem
+do saldo bancário inteiro. **Decisão do Tiago: está certo assim** — conta
+bancária não tem regional, então o ponto de partida é escolhido pelo
+filtro de CONTA ("Todas agregadas" ou uma conta específica), e o filtro
+de regional recorta só os **fluxos**.
+
+Nada mudou no código; ficou registrado em `docs/decisions/018` para não
+ser "consertado" por engano depois.
+
+## 40. O estorno voltou para a tela, no título já pago (2026-08-18)
+
+Fecha o que a entrega 39 deixou pela metade: a semântica do estorno já
+estava certa (por parcela), mas ele continuava sem porta na interface. O
+Tiago pediu a porta de volta — "adicione a opção de fazer um estorno ao
+clicar em um título sobre o qual já foi dado baixa, com um botão no
+formulário aberto com o clique". **Revoga a parte da decisão 016 que
+tirava o estorno da UI**; ver a segunda nota de 18/08 lá.
+
+### O que abre no clique
+
+`components/financeiro/baixa-registrada-dialog.tsx` — espelho em leitura
+do `BaixaTituloDialog`. Em cima, os dados do título (origem, parcela,
+venc. original, data de pagamento, valor). Embaixo, um bloco verde
+**"Enviado para a conciliação"** com o que a baixa gravou: **pago em ·
+conta · centro de custo**. É a conferência que antes só existia como
+texto miúdo embaixo da descrição na tabela.
+
+Abrem o diálogo: a **linha inteira** do título pago e o chip
+**"Conciliação"**, que virou botão. Título em aberto **não** é clicável
+na linha — as ações dele são o lápis da data e o "Dar baixa", e um
+clique solto não pode disparar pagamento.
+
+### O estorno em dois tempos
+
+Dentro do formulário, primeiro aparece só o botão **"Estornar baixa"**.
+Clicando nele é que surgem o campo de motivo (mínimo 10 caracteres) e o
+**"Confirmar estorno"**, com um "Voltar" para desistir. É a ação mais
+destrutiva da aba — desfaz dinheiro que já foi para a conciliação —,
+então não fica a um clique de quem só queria conferir a baixa.
+
+### A action
+
+`estornarBaixaTitulo({origem, id, motivo})`, irmã de `darBaixaTitulo` e
+com a mesma assinatura: origem `pp` cai em `estornarBaixaParcela`,
+`avulso` e `recorrencia` em `estornarBaixaAvulsa`. A aba unificada não
+precisa saber que por baixo existem duas tabelas — é a mesma escolha que
+a baixa já fazia.
+
+Sem migration: as duas RPCs já existiam (a de parcela nasceu na entrega
+39). `cancelar-baixa-modal.tsx`, que estava parado esperando exatamente
+isto, foi **removido** — o diálogo novo faz o que ele fazia e mais.
+
+**Exercitado pela tela:** parcela 3/3 da PP-00009 → clique → "Estornar
+baixa" → motivo curto manteve o confirmar desabilitado → motivo completo
+liberou → estornada. Contadores acompanharam (Pagos 3→2, A pagar 1→2, Em
+aberto R$ 6.000,00), a PP voltou a `aprovada` e o extrato ganhou o par
+`pp_baixa_estornada` + `pp_estorno`.
+
+---
+
+## 41. A categoria do job passou a vir do orçamento (2026-08-19)
+
+**Origem:** pedido do Tiago de 19/08 — *"O campo atual não existe e não
+faz sentido."* Regra na
+[decisão 019](docs/decisions/019-categoria-do-job.md).
+
+O select **"Categoria do job"** da abertura oferecia um vocabulário
+próprio do financeiro (`categorias_dominio`, escopo `job`: Ativação de
+marca, Conteúdo · Digital, Evento, Fee mensal, Trade · PDV) que não
+existia em nenhuma outra tela e que quem abria o job preenchia do zero.
+Agora ele mostra **a categoria que a produção deu ao job no orçamento** —
+escopo `orcamento`: Ativação, Conteúdo, Extra, Influencer.
+
+### O que mudou nas telas da abertura
+
+1. **Formulário de abertura** — o campo chega **pré-selecionado** com a
+   categoria do orçamento e lista o mesmo vocabulário. Abaixo dele, a
+   legenda "Vem do orçamento `NOV-0002/26-02`. Pode ser trocada aqui sem
+   alterar o orçamento" — mesmo espírito da legenda do "Nome do job".
+   Continua obrigatório para abrir.
+2. **Pop-up "Conferir o job antes de abrir"** — linha **Categoria** entre
+   "Produto" e "Cidade · Regional", com o mesmo valor.
+3. **Painel "Dados da produção"** (coluna direita do formulário) — mesma
+   linha, mesma posição, mas com o valor **do orçamento**, fixo. Ele não
+   acompanha o select: se o financeiro trocar a categoria, o painel segue
+   mostrando a que a produção mandou e o **"Resumo do registro"**, no pé
+   da página, mostra a escolhida. É a mesma divisão que o nome do job já
+   fazia entre as duas caixas.
+4. **Botão do pop-up de conferência** — "Aprovar e preencher abertura"
+   virou **"Preencher Abertura"**. Ele nunca aprovou nada: só navega para
+   o formulário, e a aprovação é o "Abrir job no financeiro" lá no fim.
+
+### Trocar aqui não mexe no orçamento
+
+A troca grava em `jobs.categoria_id` e para por aí — mesmo padrão do
+`nome_financeiro`. A Server Action passou a exigir escopo `orcamento`
+(era `job`), além de tenant e `ativo`, que já conferia.
+
+**Categoria inativada** entre o envio e a abertura deixa o campo vazio em
+vez de pré-selecionar um id que o servidor recusaria: o rodapé volta a
+pedir "Selecione a categoria do job", e o botão fica travado.
+
+### A troca de vocabulário em si não pediu migration
+
+`jobs.categoria_id` é FK solta para `categorias_dominio`, sem CHECK de
+escopo — quem valida é a action. O que exigiu migration foi o passo
+seguinte, na nota abaixo.
+
+**Leitura sem custo novo:** `categoria_id` e o nome entram no embed de
+`orcamento` que `SELECT_JOB_FILA` já fazia para pegar o código — nenhuma
+query a mais na fila nem na tela de abertura.
+
+**Verificação:** `tsc --noEmit` e `next lint` limpos. Exercitado no
+navegador com o JOB-0014 (orçamento NOV-0002/26-02, categoria
+**Ativação**): a conferência mostrou "Categoria · Ativação" e o botão
+"Preencher Abertura"; o formulário abriu com "Ativação" selecionada e o
+dropdown listando exatamente Ativação, Conteúdo, Extra e Influencer.
+Nada gravado — o job segue em `aguardando_abertura`.
+
+---
+
+⚠️ **O escopo `job` foi apagado, no mesmo dia (2026-08-19).** O parágrafo
+acima dizia que as 5 categorias ficariam no banco e que o destino delas
+era assunto aberto — não é mais. O Tiago decidiu apagar, e a migration
+`20260819000001_encerra_escopo_job_das_categorias.sql` fez em três passos:
+
+1. **Os 12 jobs saíram de lá primeiro** — a FK é `ON DELETE RESTRICT`, o
+   DELETE não passaria com eles apontando. Cada um herdou a categoria do
+   orçamento dele: JOB-0005 a 0010, 0013 e 0015 (8) viraram **Ativação**;
+   JOB-0001 a 0004 (4) ficaram **sem categoria**, porque ORC-0001/0002/0003
+   e PEVETE-0002/26-01 são anteriores à obrigatoriedade de 17/08 e nunca
+   tiveram uma. Nulo é estado legítimo aqui — perda aceita pelo Tiago, em
+   vez de inventar valor.
+2. **Uma trava** aborta a migration se sobrar algum job preso, com a
+   contagem no erro, em vez de estourar FK no meio do DELETE.
+3. **As 5 linhas foram apagadas.**
+
+No código, `'job'` saiu do tipo `CategoriaDominioEscopo`, do Zod
+(`lib/validations/categorias-dominio.ts`), do seletor do drawer e do
+filtro da lista. **Cadastros › Categorias virou "(Projeto/Orçamento)"**, e
+a descrição da tela agora diz que o job herda a categoria do orçamento.
+
+**Conferido pelo MCP depois de aplicar:** `categorias_dominio` só tem
+`projeto` (4) e `orcamento` (4); os 8 jobs migrados aparecem com
+**Ativação · escopo orcamento** e os 4 antigos sem categoria.

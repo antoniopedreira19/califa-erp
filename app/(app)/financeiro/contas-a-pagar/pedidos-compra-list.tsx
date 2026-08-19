@@ -4,7 +4,7 @@ import * as React from "react";
 import { Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import type { PPStatus, ContaBancaria, PlanoContaTipo, PlanoContaSubtipo } from "@/lib/types";
+import type { PPStatus } from "@/lib/types";
 import { ppStatusLabel } from "@/lib/types";
 import { PPDrawerFinanceiro } from "./pp-drawer-financeiro";
 
@@ -43,6 +43,22 @@ export interface PPRow {
     id: string;
     arquivo_nome_original: string;
     arquivo_tamanho_bytes: number;
+  }>;
+  /**
+   * Parcelas da PP, sempre ao menos uma (1/1). Aqui são leitura — o
+   * financeiro precisa ver em quantas vezes vai pagar ANTES de aprovar.
+   * A baixa de cada uma acontece na aba "Títulos a Pagar" (Tela 3.2).
+   */
+  parcelas: Array<{
+    id: string;
+    numero: number;
+    /** Prazo negociado pela produção. Não muda depois da emissão. */
+    data_vencimento: string;
+    /** Definida na aprovação; nula enquanto a PP está em avaliação. */
+    data_pagamento: string | null;
+    data_pagamento_primeira: string | null;
+    valor: number;
+    pago_em: string | null;
   }>;
 }
 
@@ -84,12 +100,9 @@ const STATUS_FILTROS: Array<{ key: FiltroStatus; label: string }> = [
 
 interface PedidosCompraListProps {
   rows: PPRow[];
-  contas: ContaBancaria[];
-  tipos: PlanoContaTipo[];
-  subtipos: PlanoContaSubtipo[];
 }
 
-export function PedidosCompraList({ rows, contas, tipos, subtipos }: PedidosCompraListProps) {
+export function PedidosCompraList({ rows }: PedidosCompraListProps) {
   const [filtro, setFiltro] = React.useState<FiltroStatus>("em_avaliacao");
   const [busca, setBusca] = React.useState("");
   const [ppSelecionada, setPpSelecionada] = React.useState<PPRow | null>(null);
@@ -169,8 +182,8 @@ export function PedidosCompraList({ rows, contas, tipos, subtipos }: PedidosComp
               <th className="px-4 py-3 font-semibold">Job</th>
               <th className="px-4 py-3 font-semibold">Emissão</th>
               <th className="px-4 py-3 font-semibold text-right">Valor</th>
-              <th className="px-4 py-3 font-semibold">Prazo Original</th>
-              <th className="px-4 py-3 font-semibold">Prazo Financeiro</th>
+              <th className="px-4 py-3 font-semibold">Prazo original</th>
+              <th className="px-4 py-3 font-semibold">Parcela</th>
               <th className="px-4 py-3 font-semibold">Status</th>
             </tr>
           </thead>
@@ -198,7 +211,9 @@ export function PedidosCompraList({ rows, contas, tipos, subtipos }: PedidosComp
                 }}
                 className="border-b border-border last:border-0 hover:bg-accent/40 transition-colors cursor-pointer focus-visible:outline-none focus-visible:bg-accent/40"
               >
-                <td className="px-4 py-3 font-mono text-xs">{r.codigo}</td>
+                <td className="whitespace-nowrap px-4 py-3 font-mono text-xs font-bold text-california-red">
+                  {r.codigo}
+                </td>
                 <td className="px-4 py-3">{r.fornecedor_nome}</td>
                 <td className="px-4 py-3 text-muted-foreground">
                   <span className="font-mono text-xs">{r.job_codigo}</span>{" "}
@@ -209,8 +224,13 @@ export function PedidosCompraList({ rows, contas, tipos, subtipos }: PedidosComp
                   {formatMoney(r.valor)}
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">{formatDate(r.prazo_pagamento)}</td>
-                <td className="px-4 py-3 text-muted-foreground">
-                  {r.prazo_pagamento_financeiro ? formatDate(r.prazo_pagamento_financeiro) : "—"}
+                {/* Parcela: a PP parcelada aparece como "1/3" — quantas vezes
+                    o financeiro vai pagar. Cada parcela vira uma linha
+                    própria na aba "Títulos a Pagar". */}
+                <td className="px-4 py-3">
+                  <span className="rounded-md border border-border bg-muted px-2 py-0.5 font-mono text-xs font-semibold">
+                    1/{Math.max(r.parcelas.length, 1)}
+                  </span>
                 </td>
                 <td className="px-4 py-3">
                   <Badge className={cn("border", statusBadgeClasses(r.status))}>
@@ -229,9 +249,6 @@ export function PedidosCompraList({ rows, contas, tipos, subtipos }: PedidosComp
         onOpenChange={(open) => {
           if (!open) setPpSelecionada(null);
         }}
-        contas={contas}
-        tipos={tipos}
-        subtipos={subtipos}
       />
     </div>
   );

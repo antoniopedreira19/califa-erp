@@ -18,7 +18,7 @@ import { inativarCategoriaDominio, reativarCategoriaDominio } from "./actions";
 import { useRouter } from "next/navigation";
 
 type StatusFiltro = "ativas" | "inativas" | "todas";
-type EscopoFiltro = "projeto" | "orcamento" | "job" | "todos";
+type EscopoFiltro = "projeto" | "orcamento" | "todos";
 
 export function CategoriasDominioList({
   categorias,
@@ -93,7 +93,6 @@ export function CategoriasDominioList({
               <SelectItem value="todos">Todos os escopos</SelectItem>
               <SelectItem value="projeto">Projeto</SelectItem>
               <SelectItem value="orcamento">Orçamento</SelectItem>
-              <SelectItem value="job">Job</SelectItem>
             </SelectContent>
           </Select>
           <Select
