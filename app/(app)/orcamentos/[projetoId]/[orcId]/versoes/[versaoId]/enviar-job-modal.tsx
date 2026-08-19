@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { AlertCircle, ArrowRight, Briefcase, Lock } from "lucide-react";
+import { AlertCircle, ArrowRight, Briefcase, Lock, Plus, Trash2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -25,6 +25,18 @@ import { cn, formatCurrency } from "@/lib/utils";
 import { OBSERVACOES_MAX } from "@/lib/validations/abertura-job";
 import { CidadeCombobox, type CidadeOption } from "./cidade-combobox";
 
+/** Uma linha da seção "Contato de cobrança". Strings sempre — o estado do
+ *  formulário nunca carrega `null`; quem converte "" em null é o Zod. */
+export interface ContatoCobranca {
+  nome: string;
+  numero: string;
+  email: string;
+}
+
+export function contatoVazio(): ContatoCobranca {
+  return { nome: "", numero: "", email: "" };
+}
+
 export interface DadosJob {
   nome: string;
   /** Pré-preenchidos com o orçamento; se mudarem, o orçamento acompanha. */
@@ -35,6 +47,9 @@ export interface DadosJob {
   dataFim: string;
   dataFaturamento: string;
   observacoes: string;
+  /** Quem recebe a cobrança no cliente. Ao menos um é obrigatório para
+   *  enviar; vira linha em `jobs_contatos` (docs/decisions/012). */
+  contatos: ContatoCobranca[];
 }
 
 /**
@@ -51,6 +66,9 @@ export interface HerdadosJob {
   regionalNome: string | null;
   gpNome: string | null;
   produtorNome: string | null;
+  /** Categoria do job, herdada do orçamento (categorias_dominio, escopo
+   *  'orcamento'). É a mesma que o financeiro vê na abertura. */
+  categoriaNome: string | null;
 }
 
 /** Campos que o Zod do servidor valida — as chaves batem com `fieldErrors`. */
@@ -60,7 +78,20 @@ type CampoObrigatorio =
   | "regional_id"
   | "data_inicio_prevista"
   | "data_fim_prevista"
-  | "data_prevista_faturamento";
+  | "data_prevista_faturamento"
+  | "contatos_cobranca";
+
+/** Versão curta da regra do servidor: só evita que o usuário descubra o
+ *  e-mail torto no envio. O Zod da action é quem tem a palavra final. */
+const EMAIL_PLAUSIVEL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export function nomeContatoInvalido(c: ContatoCobranca): boolean {
+  return c.nome.trim().length < 2;
+}
+
+export function emailContatoInvalido(c: ContatoCobranca): boolean {
+  return !EMAIL_PLAUSIVEL.test(c.email.trim());
+}
 
 export function faltamCampos(d: DadosJob): Record<CampoObrigatorio, boolean> {
   return {
@@ -70,6 +101,11 @@ export function faltamCampos(d: DadosJob): Record<CampoObrigatorio, boolean> {
     data_inicio_prevista: !d.dataInicio,
     data_fim_prevista: !d.dataFim,
     data_prevista_faturamento: !d.dataFaturamento,
+    // Espelha o schema do servidor: ao menos uma linha, e TODA linha com
+    // nome e e-mail. Número em branco não conta como pendência.
+    contatos_cobranca:
+      d.contatos.length === 0 ||
+      d.contatos.some((c) => nomeContatoInvalido(c) || emailContatoInvalido(c)),
   };
 }
 
@@ -161,6 +197,30 @@ export function EnviarJobModal({
 
   const faltandoHerdados = herdadosIncompletos(herdados);
 
+  /** Contatos não usam o "Campo obrigatório." genérico: a pendência pode
+   *  ser "não tem nenhum" ou "tem, mas incompleto" — e são conversas
+   *  diferentes com o usuário. */
+  const erroContatos = (() => {
+    const doServidor = fieldErrors.contatos_cobranca?.[0];
+    if (doServidor) return doServidor;
+    if (!tentou) return null;
+    if (dados.contatos.length === 0) {
+      return "Informe ao menos um contato de cobrança.";
+    }
+    if (faltando.contatos_cobranca) {
+      return "Preencha nome e e-mail de todos os contatos de cobrança.";
+    }
+    return null;
+  })();
+
+  function alterarContato(i: number, patch: Partial<ContatoCobranca>) {
+    onChange({
+      contatos: dados.contatos.map((c, idx) =>
+        idx === i ? { ...c, ...patch } : c,
+      ),
+    });
+  }
+
   function handleConfirmar() {
     setTentou(true);
     if (!completo || faltandoHerdados.length > 0) return;
@@ -232,13 +292,25 @@ export function EnviarJobModal({
             <Travado valor={clienteNome} />
           </Campo>
 
-          {/* Linha 3 — produto continua travado (vem do projeto); cidade e
-              regional chegam pré-preenchidas com o orçamento e podem ser
-              trocadas aqui. Com o job já enviado, os três só exibem. */}
+          {/* Linhas 3 e 4 — Produto e Categoria, um por linha, os dois
+              travados: vêm do projeto e do orçamento. Cada um leva dois
+              espaçadores para fechar a linha, porque a Categoria precisa
+              ficar entre o Produto e o par Cidade/Regional — que não pode
+              se separar, já que as regionais dependem da cidade. No
+              mobile a grade vira uma coluna e os espaçadores somem. */}
           <Campo rotulo="Produto" apoio="Cadastrado no projeto.">
             <Travado valor={herdados.produtoNome ?? "— não informado"} />
           </Campo>
+          <div className="hidden md:col-span-2 md:block" aria-hidden />
 
+          <Campo rotulo="Categoria" apoio="Cadastrada no orçamento.">
+            <Travado valor={herdados.categoriaNome ?? "— não informada"} />
+          </Campo>
+          <div className="hidden md:col-span-2 md:block" aria-hidden />
+
+          {/* Linha 5 — cidade e regional chegam pré-preenchidas com o
+              orçamento e podem ser trocadas aqui. Com o job já enviado,
+              as duas só exibem. */}
           <Campo
             rotulo="Cidade"
             obrigatorio
@@ -310,7 +382,12 @@ export function EnviarJobModal({
             )}
           </Campo>
 
-          {/* Linha 4 — as três datas. */}
+          {/* Cidade e Regional ocupam duas das três colunas; sem este
+              espaçador a "Data de início" subiria para o buraco que
+              sobra e as três datas ficariam partidas em duas linhas. */}
+          <div className="hidden md:block" aria-hidden />
+
+          {/* Linha 6 — as três datas. */}
           <Campo
             rotulo="Data de início"
             obrigatorio
@@ -369,6 +446,100 @@ export function EnviarJobModal({
             <Travado valor={herdados.produtorNome ?? "— não informado"} />
           </Campo>
           <div className="md:col-span-1" />
+
+          {/* Linha 5b — contato de cobrança. Uma linha por pessoa: é o que
+              o financeiro usa para cobrar, e muda de job para job. */}
+          <Campo
+            rotulo="Contato de cobrança"
+            obrigatorio={!somenteLeitura}
+            className="md:col-span-3"
+            erro={erroContatos}
+            apoio="Quem recebe a cobrança no cliente. Número é opcional."
+          >
+            {somenteLeitura && dados.contatos.length === 0 ? (
+              <Travado valor="— nenhum contato registrado" />
+            ) : (
+              <div className="space-y-2">
+                {dados.contatos.map((c, i) => (
+                  <div
+                    // Índice como chave: as linhas não têm id antes de
+                    // gravar, e remover sempre refaz o array inteiro.
+                    key={i}
+                    className="grid items-center gap-2 md:grid-cols-[1fr_1fr_1fr_36px]"
+                  >
+                    <Input
+                      value={c.nome}
+                      disabled={somenteLeitura}
+                      onChange={(e) => alterarContato(i, { nome: e.target.value })}
+                      maxLength={120}
+                      placeholder="Nome"
+                      aria-label={`Nome do contato ${i + 1}`}
+                      className={cn(
+                        tentou &&
+                          nomeContatoInvalido(c) &&
+                          "border-california-red ring-2 ring-california-red/15",
+                      )}
+                    />
+                    <Input
+                      value={c.numero}
+                      disabled={somenteLeitura}
+                      onChange={(e) =>
+                        alterarContato(i, { numero: e.target.value })
+                      }
+                      maxLength={40}
+                      placeholder="Número · opcional"
+                      aria-label={`Número do contato ${i + 1}`}
+                    />
+                    <Input
+                      type="email"
+                      value={c.email}
+                      disabled={somenteLeitura}
+                      onChange={(e) => alterarContato(i, { email: e.target.value })}
+                      maxLength={200}
+                      placeholder="E-mail"
+                      aria-label={`E-mail do contato ${i + 1}`}
+                      className={cn(
+                        tentou &&
+                          emailContatoInvalido(c) &&
+                          "border-california-red ring-2 ring-california-red/15",
+                      )}
+                    />
+                    {!somenteLeitura && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onChange({
+                            contatos: dados.contatos.filter(
+                              (_, idx) => idx !== i,
+                            ),
+                          })
+                        }
+                        disabled={dados.contatos.length === 1}
+                        aria-label={`Remover contato ${i + 1}`}
+                        className="flex items-center justify-center rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-california-red transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+
+                {!somenteLeitura && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onChange({ contatos: [...dados.contatos, contatoVazio()] })
+                    }
+                    className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-border bg-white px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:border-california-red/40 hover:text-foreground transition-colors"
+                  >
+                    <Plus className="h-3 w-3" />
+                    Adicionar contato
+                  </button>
+                )}
+              </div>
+            )}
+          </Campo>
+
           <div className="rounded-xl border border-border bg-muted/40 px-4 py-2.5 md:col-span-3">
             <p className="text-xs text-muted-foreground">
               Fechamento da versão {versaoLabel}
@@ -387,9 +558,10 @@ export function EnviarJobModal({
             </div>
           </div>
 
-          {/* Linha 6 — observações, linha inteira. */}
+          {/* Linha 6 — descritivo, linha inteira. Rótulo renomeado em
+              17/08/2026; o campo e a coluna seguem `observacoes`. */}
           <Campo
-            rotulo="Observações"
+            rotulo="Descritivo"
             opcional
             className="md:col-span-3"
             apoio={

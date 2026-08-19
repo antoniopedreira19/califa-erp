@@ -105,8 +105,8 @@ export default async function CadastrosPage() {
         <CadastroCard
           href="/cadastros/categorias-dominio"
           icon={Layers}
-          title="Categorias (Projeto/Orçamento/Job)"
-          description="Tipo de iniciativa para classificar projetos (Fee, Evento...), orçamentos (Always On, Mídia...) e jobs no financeiro."
+          title="Categorias (Projeto/Orçamento)"
+          description="Tipo de iniciativa para classificar projetos (Fee, Evento...) e orçamentos (Always On, Mídia...). O job herda a categoria do orçamento."
           count={catDominioRes.count ?? 0}
         />
         <CadastroCard

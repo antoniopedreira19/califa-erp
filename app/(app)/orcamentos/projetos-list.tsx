@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, Briefcase, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -31,11 +31,16 @@ export interface ProjetoRow {
   /** Regionais do projeto, já ordenadas por nome. */
   regionais: { id: string; nome: string }[];
   data_inicio_prevista: string;
+  /** Total de orçamentos do projeto, qualquer status (cancelados e
+   *  recusados incluídos). As 3 contagens abaixo são o funil comercial —
+   *  mutuamente exclusivas, semântica em `lib/calculos/funil.ts`. */
   orcamentos_count: number;
-  /** Orçamentos com status aprovado OU job_criado. */
+  /** Estágio "aprovado": aprovado sem job, ou job rejeitado pelo financeiro. */
   aprovados_count: number;
-  /** Orçamentos com status job_criado (subset de aprovados). */
-  jobs_count: number;
+  /** Estágio "enviado": job aguardando abertura pelo financeiro. */
+  enviados_count: number;
+  /** Estágio "aberto": job aberto/em produção/encerrado. */
+  abertos_count: number;
   created_at: string;
 }
 
@@ -59,6 +64,16 @@ function formatDate(iso: string | null): string {
 /** Ano do projeto = ano do início previsto, o mesmo que numera o código. */
 function anoDoProjeto(p: ProjetoRow): string {
   return p.data_inicio_prevista.slice(0, 4);
+}
+
+/** Célula do funil: zero vira travessão discreto pra tabela não virar uma
+ *  parede de zeros — o olho acha na hora onde há movimento. */
+function CelulaFunil({ valor }: { valor: number }) {
+  return (
+    <td className="px-4 py-3 text-center tabular-nums">
+      {valor === 0 ? <span className="text-muted-foreground">—</span> : valor}
+    </td>
+  );
 }
 
 export function ProjetosList({ projetos, clientes }: Props) {
@@ -204,6 +219,9 @@ export function ProjetosList({ projetos, clientes }: Props) {
               <th className="px-4 py-3 font-semibold">Serviço</th>
               <th className="px-4 py-3 font-semibold">Início</th>
               <th className="px-4 py-3 font-semibold text-center">Orçamentos</th>
+              <th className="px-4 py-3 font-semibold text-center">Aprovados</th>
+              <th className="px-4 py-3 font-semibold text-center">Enviados</th>
+              <th className="px-4 py-3 font-semibold text-center">Abertos</th>
               <th className="px-4 py-3 font-semibold">Status</th>
             </tr>
           </thead>
@@ -233,27 +251,7 @@ export function ProjetosList({ projetos, clientes }: Props) {
                   </Link>
                 </td>
                 <td className="px-4 py-3">
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="font-medium">{p.nome}</span>
-                    {p.aprovados_count > 0 && (
-                      <span
-                        title={`${p.aprovados_count} de ${p.orcamentos_count} orçamento(s) aprovado(s)`}
-                        className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700"
-                      >
-                        <CheckCircle2 className="h-3 w-3" />
-                        {p.aprovados_count} aprovado{p.aprovados_count > 1 ? "s" : ""}
-                      </span>
-                    )}
-                    {p.jobs_count > 0 && (
-                      <span
-                        title={`${p.jobs_count} job(s) criado(s) a partir deste projeto`}
-                        className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700"
-                      >
-                        <Briefcase className="h-3 w-3" />
-                        {p.jobs_count} job{p.jobs_count > 1 ? "s" : ""}
-                      </span>
-                    )}
-                  </div>
+                  <span className="font-medium">{p.nome}</span>
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">{p.cliente_nome ?? "—"}</td>
                 <td className="px-4 py-3 text-muted-foreground">{p.produto_nome ?? "—"}</td>
@@ -279,6 +277,9 @@ export function ProjetosList({ projetos, clientes }: Props) {
                 <td className="px-4 py-3 text-muted-foreground">{p.categoria_nome ?? "—"}</td>
                 <td className="px-4 py-3 text-muted-foreground">{formatDate(p.data_inicio_prevista)}</td>
                 <td className="px-4 py-3 text-center tabular-nums">{p.orcamentos_count}</td>
+                <CelulaFunil valor={p.aprovados_count} />
+                <CelulaFunil valor={p.enviados_count} />
+                <CelulaFunil valor={p.abertos_count} />
                 <td className="px-4 py-3">
                   <Badge className={cn("border", statusBadgeClasses(p.status))}>
                     {projetoStatusLabel(p.status)}
@@ -288,7 +289,7 @@ export function ProjetosList({ projetos, clientes }: Props) {
             ))}
             {filtrados.length === 0 && (
               <tr>
-                <td colSpan={9} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                <td colSpan={12} className="px-4 py-10 text-center text-sm text-muted-foreground">
                   Nenhum projeto encontrado com esses filtros.
                 </td>
               </tr>

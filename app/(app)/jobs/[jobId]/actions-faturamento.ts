@@ -14,6 +14,10 @@ export type ActionResult =
   | { ok: true; id: string }
   | { ok: false; message: string; fieldErrors?: Record<string, string[]> };
 
+function formatarBRL(n: number): string {
+  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
 /**
  * A produção libera o job para o financeiro faturar.
  *
@@ -25,6 +29,12 @@ export type ActionResult =
  * aqui dentro. É valor de nota fiscal; o navegador não é fonte confiável
  * para ele. O que o formulário mostra é uma leitura travada do mesmo
  * número.
+ *
+ * Desde a Tela 3.3 o envio também diz EM QUANTAS NOTAS o job será
+ * faturado (`jobs_envio_faturamento_parcelas`). Cada parcela vira uma
+ * linha da aba Faturamento, com o seu próprio vencimento. A soma é
+ * conferida contra o valor relido: quem diz o total é o banco, o
+ * formulário só diz como reparti-lo.
  */
 export async function enviarJobParaFaturamento(
   jobId: string,
@@ -76,6 +86,19 @@ export async function enviarJobParaFaturamento(
       ok: false,
       message:
         "Este job está sem faturamento previsto — não há valor a faturar.",
+    };
+  }
+
+  // A soma das parcelas fecha contra o valor RELIDO, não contra o que o
+  // navegador mandou. Tolerância de 1 centavo pelo arredondamento da
+  // divisão em partes iguais.
+  const somaParcelas = parsed.data.parcelas.reduce((s, p) => s + p.valor, 0);
+  if (Math.abs(somaParcelas - valor) > 0.01) {
+    return {
+      ok: false,
+      message:
+        `A soma das parcelas (${formatarBRL(somaParcelas)}) não fecha com o ` +
+        `valor a faturar (${formatarBRL(valor)}).`,
     };
   }
 
@@ -142,6 +165,31 @@ export async function enviarJobParaFaturamento(
     };
   }
 
+  const { error: erroParcelas } = await supabase
+    .from("jobs_envio_faturamento_parcelas")
+    .insert(
+      parsed.data.parcelas.map((p) => ({
+        tenant_id: session.activeTenant.id,
+        envio_id: novo.id,
+        job_id: jobId,
+        ordem: p.ordem,
+        valor: p.valor,
+        data_vencimento: p.data_vencimento,
+      })),
+    );
+
+  // Envio sem parcela não aparece na fila do financeiro — a view lê as
+  // parcelas, não o envio. Desfazemos o envio para o job não ficar num
+  // limbo de "enviado, mas invisível".
+  if (erroParcelas) {
+    console.error("[job.enviarFaturamento.parcelas]", erroParcelas.message);
+    await supabase.from("jobs_envio_faturamento").delete().eq("id", novo.id);
+    return {
+      ok: false,
+      message: "Não foi possível gravar as parcelas de faturamento.",
+    };
+  }
+
   await logAuditEvent({
     acao: "job.enviado_para_faturamento",
     tenantId: session.activeTenant.id,
@@ -153,6 +201,7 @@ export async function enviarJobParaFaturamento(
       cnae: parsed.data.cnae,
       tem_po: parsed.data.numero_po !== null,
       tem_portal: parsed.data.portal_id !== null,
+      qtd_parcelas: parsed.data.parcelas.length,
     },
   });
 

@@ -157,6 +157,25 @@ interface Dados {
   orcamento: Pick<Orcamento, "codigo">;
   cliente: Pick<Cliente, "nome_fantasia">;
   responsavelNome: string;
+  /**
+   * A parcela que ESTE documento representa.
+   *
+   * Desde 17/08/2026 a emissão arquiva um PDF por parcela: o fornecedor
+   * recebe um documento por vencimento, e é ele que o financeiro confere
+   * na hora de pagar. Os campos são idênticos entre os documentos da
+   * mesma PP — mudam só o Prazo de Pagto, a linha "Parcela: N/T" e o
+   * valor em destaque.
+   *
+   * Obrigatório, inclusive em PP sem parcelamento: ela manda 1/1, e o
+   * documento sai com o mesmo desenho. Padrão uniforme é o que evita o
+   * fornecedor achar que "sem parcela" significa outra coisa.
+   */
+  parcela: {
+    numero: number;
+    total: number;
+    data_vencimento: string;
+    valor: number;
+  };
 }
 
 export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
@@ -169,6 +188,7 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
     orcamento,
     cliente,
     responsavelNome,
+    parcela,
   } = dados;
 
   const enderecoEmpresa = [
@@ -301,7 +321,13 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
         ],
         [
           { text: "", fontSize: 8 },
-          lv("Prazo de Pagto", fmtDate(pp.prazo_pagamento)),
+          // Vencimento DESTA parcela, não o da PP: é a data que o
+          // fornecedor tem que ler neste documento.
+          lv("Prazo de Pagto", fmtDate(parcela.data_vencimento)),
+        ],
+        [
+          { text: "", fontSize: 8 },
+          lv("Parcela", `${parcela.numero}/${parcela.total}`),
         ],
       ],
     },
@@ -444,17 +470,40 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
   };
 
   // ===== 7. VALOR destacado =====
+  // O que está em destaque é o valor DA PARCELA — é o que vai ser pago
+  // contra este documento. O total do pedido continua visível, em peso
+  // normal, para o fornecedor situar a parcela dentro do pedido. Em PP de
+  // parcela única os dois números são o mesmo, e aí só o destaque aparece.
+  const valorParcelaTexto =
+    parcela.total > 1
+      ? `Valor da parcela (${parcela.numero}/${parcela.total}):  `
+      : "Valor:  ";
+
   const valorBlock: Content = {
     table: {
       widths: ["*"],
       body: [
         [
           {
-            text: [
-              { text: "Valor:  ", bold: true, fontSize: 11 },
-              { text: fmtBRL(pp.valor), bold: true, fontSize: 13 },
+            stack: [
+              {
+                text: [
+                  { text: valorParcelaTexto, bold: true, fontSize: 11 },
+                  { text: fmtBRL(parcela.valor), bold: true, fontSize: 13 },
+                ],
+                alignment: "right",
+              },
+              ...(parcela.total > 1
+                ? [
+                    {
+                      text: `Valor total do pedido: ${fmtBRL(pp.valor)}`,
+                      fontSize: 9,
+                      alignment: "right" as const,
+                      margin: [0, 2, 0, 0] as [number, number, number, number],
+                    },
+                  ]
+                : []),
             ],
-            alignment: "right",
             fillColor: "#e5e5e5",
             margin: [8, 5, 8, 5],
           },

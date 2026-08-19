@@ -79,8 +79,10 @@ function extractVersaoPartial(formData: FormData): Record<string, unknown> {
       partial.percentual_imposto = n;
   }
 
-  const status = formData.get("status")?.toString();
-  if (status) partial.status = status;
+  // `status` não entra: desde 17/08/2026 o status da versão é 100% do
+  // sistema (aprovação, cascata de substituídas, `cancelarVersao`). Um
+  // formulário que mande o campo é ignorado de propósito — a regra tem
+  // que valer no servidor, não só no sumiço do input.
 
   return partial;
 }
@@ -1082,19 +1084,28 @@ export async function aprovarVersao(versaoId: string): Promise<ActionResult> {
   //    Linha criada e não preenchida tem total_orcado 0 (coluna gerada:
   //    unitário × quantidade × dias). Aprovar assim travaria a versão e
   //    abriria job com orçado zerado.
-  const [{ count: itensCount }, { count: comValorCount }] = await Promise.all([
-    supabase
-      .from("versoes_orcamento_itens")
-      .select("id", { count: "exact", head: true })
-      .eq("versao_orcamento_id", versaoId)
-      .eq("tenant_id", session.activeTenant.id),
-    supabase
-      .from("versoes_orcamento_itens")
-      .select("id", { count: "exact", head: true })
-      .eq("versao_orcamento_id", versaoId)
-      .eq("tenant_id", session.activeTenant.id)
-      .gt("total_orcado", 0),
-  ]);
+  const [{ count: itensCount }, { count: comValorCount }, { count: orcadoZeradoCount }] =
+    await Promise.all([
+      supabase
+        .from("versoes_orcamento_itens")
+        .select("id", { count: "exact", head: true })
+        .eq("versao_orcamento_id", versaoId)
+        .eq("tenant_id", session.activeTenant.id),
+      supabase
+        .from("versoes_orcamento_itens")
+        .select("id", { count: "exact", head: true })
+        .eq("versao_orcamento_id", versaoId)
+        .eq("tenant_id", session.activeTenant.id)
+        .gt("total_orcado", 0),
+      // Orçado zerado em qualquer item bloqueia (docs/decisions/011);
+      // planejado zerado não entra na conta.
+      supabase
+        .from("versoes_orcamento_itens")
+        .select("id", { count: "exact", head: true })
+        .eq("versao_orcamento_id", versaoId)
+        .eq("tenant_id", session.activeTenant.id)
+        .eq("valor_unitario_orcado", 0),
+    ]);
 
   // Alíquota escolhida + item com valor. Mesma função do botão "Aprovar
   // versão", para a tela e o servidor nunca discordarem do motivo.
@@ -1102,6 +1113,7 @@ export async function aprovarVersao(versaoId: string): Promise<ActionResult> {
     percentualImposto: Number(versao.percentual_imposto),
     qtdItens: itensCount ?? 0,
     qtdItensComValor: comValorCount ?? 0,
+    qtdItensOrcadoZerado: orcadoZeradoCount ?? 0,
   });
 
   if (bloqueio) {

@@ -10,11 +10,14 @@
  *
  *  Quem decide o QUE aparece é a tabela (ela é quem conhece o tipo de
  *  custo). Este componente decide COMO: junta as ações da linha e entrega
- *  para a calha desenhar uma pílula inteira ou uma dividida. Também é
- *  dele o estado do "Ver PP", que abre o PDF por URL assinada.
+ *  para a calha desenhar uma pílula inteira ou uma dividida.
+ *
+ *  O "Ver PP" que abria o PDF direto daqui saiu em 17/08/2026: com PPs
+ *  parciais um item tem VÁRIAS PPs, e a calha não tem como escolher qual
+ *  PDF abrir. A metade virou o chip "PPs · N", que abre o painel
+ *  "Destrinchar realizado" — é lá que cada PP tem o seu "Ver PP".
  */
 
-import * as React from "react";
 import { FilePlus, Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { PedidoCompra } from "@/lib/types";
@@ -22,17 +25,17 @@ import {
   CalhaAcoes,
   type AcaoCalha,
 } from "@/app/(app)/_planilha/calha-acoes";
-import { signedUrlPdf } from "./actions-pp";
 
 export interface DadosPpLinha {
   itemRealizadoId: string;
   totalRealizado: number;
-  pedido: PedidoCompra | null;
+  /** Todas as PPs ativas do item — desde 17/08/2026 podem ser várias. */
+  pedidos: PedidoCompra[];
   /** Placeholder otimista antes do refresh do server chegar. Só tem
-   *  `codigo` — a metade fica disabled porque ainda não temos o id para
-   *  chamar a action. Some quando a PP real chega via prop. */
+   *  `codigo`. Some quando a PP real chega via prop. */
   otimista: { codigo: string } | null;
-  onGerar: (itemRealizadoId: string) => void;
+  /** Abre o painel "Destrinchar realizado" do item. */
+  onAbrirPainel: (itemRealizadoId: string) => void;
 }
 
 export function CalhaLinha({
@@ -50,83 +53,50 @@ export function CalhaLinha({
    *  congelada. */
   pp: DadosPpLinha | null;
 }) {
-  const [pending, startTransition] = React.useTransition();
-  const [erro, setErro] = React.useState<string | null>(null);
-
-  const pedido = pp?.pedido ?? null;
-
-  function verPdf() {
-    if (!pedido) return;
-    startTransition(async () => {
-      const res = await signedUrlPdf(pedido!.id);
-      if (!res.ok) {
-        setErro(res.message);
-        return;
-      }
-      window.open(res.url, "_blank", "noopener,noreferrer");
-    });
-  }
-
   const acoes: AcaoCalha[] = [];
   if (bv) acoes.push(bv);
 
-  const acaoPp = descreverPp(pp, pedido, pending, verPdf);
+  const acaoPp = descreverPp(pp);
   if (acaoPp) acoes.push(acaoPp);
 
   return (
     <div className={cn("relative flex items-center", altura)}>
       <CalhaAcoes acoes={acoes} />
-      {erro && (
-        <div
-          className="absolute right-0 top-full z-10 mt-1 whitespace-nowrap rounded border border-california-red/40 bg-white px-2 py-1 text-[10px] text-california-red shadow"
-          onClick={() => setErro(null)}
-        >
-          {erro}
-        </div>
-      )}
     </div>
   );
 }
 
-/** Regra de quando a PP aparece — a mesma de sempre, só extraída.
+/** Regra de quando a PP aparece — e o que a metade faz.
  *
  *  Sem realizado lançado não há o que pedir: a PP nasce do valor
  *  realizado da linha, então a metade só entra depois que ele existe. Em
  *  A · Repasse isso significa que a linha começa com a pílula inteira do
- *  BV e SE DIVIDE quando o realizado é lançado. */
-function descreverPp(
-  pp: DadosPpLinha | null,
-  pedido: PedidoCompra | null,
-  pending: boolean,
-  onVer: () => void,
-): AcaoCalha | null {
+ *  BV e SE DIVIDE quando o realizado é lançado.
+ *
+ *  Desde 17/08/2026 os dois caminhos levam ao MESMO lugar: o painel
+ *  "Destrinchar realizado". Um item pode ter várias PPs, então "Ver PP"
+ *  não sabia mais qual PDF abrir — quem escolhe é o painel, que lista
+ *  todas. O que muda é só o rótulo: sem PP é criação ("Gerar PP", em
+ *  vermelho); com PP é consulta ("PPs · N", neutro), como o design pede. */
+function descreverPp(pp: DadosPpLinha | null): AcaoCalha | null {
   if (!pp) return null;
   if (pp.totalRealizado <= 0) return null;
 
-  // Com PP: só visualizar. Cancelar mora na aba de Pedidos de Produção.
-  if (pedido) {
-    return {
-      chave: "pp",
-      rotulo: "Ver PP",
-      sigla: "PP",
-      titulo: `Ver PDF · ${pedido.codigo}`,
-      icone: Eye,
-      criar: false,
-      disabled: pending,
-      onClick: onVer,
-    };
-  }
+  const quantas = pp.pedidos.length + (pp.otimista ? 1 : 0);
+  const abrir = () => pp.onAbrirPainel(pp.itemRealizadoId);
 
-  // PP recém-gerada, aguardando o refresh do server trazer o id real.
-  if (pp.otimista) {
+  if (quantas > 0) {
     return {
       chave: "pp",
-      rotulo: "Ver PP",
-      sigla: "PP",
-      titulo: `Ver PDF · ${pp.otimista.codigo} (atualizando...)`,
+      rotulo: `PPs · ${quantas}`,
+      sigla: `PP·${quantas}`,
+      titulo:
+        quantas === 1
+          ? "1 Pedido de Produção neste item"
+          : `${quantas} Pedidos de Produção neste item`,
       icone: Eye,
       criar: false,
-      disabled: true,
+      onClick: abrir,
     };
   }
 
@@ -137,6 +107,6 @@ function descreverPp(
     titulo: "Gerar PP",
     icone: FilePlus,
     criar: true,
-    onClick: () => pp.onGerar(pp.itemRealizadoId),
+    onClick: abrir,
   };
 }

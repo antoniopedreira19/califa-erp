@@ -1,6 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
 import { tipoGeraDesembolso } from "@/lib/calculos/versao-totais";
 import type { TipoCusto } from "@/lib/types";
+import {
+  contatosDeCobrancaPorJob,
+  type ContatoCobranca,
+} from "@/lib/data/contatos-cobranca";
 
 /**
  * Um job na fila de abertura, com tudo que a conferência do financeiro
@@ -31,6 +35,13 @@ export interface JobNaFila {
   responsavel_nome: string | null;
   produtor_nome: string | null;
   orcamento_codigo: string | null;
+  /**
+   * Categoria do job, herdada do orçamento de origem (categorias_dominio,
+   * escopo 'orcamento'). Na fila, `jobs.categoria_id` ainda é null — quem
+   * grava é a abertura, e é este valor que ela chega pré-selecionando.
+   */
+  categoria_id: string | null;
+  categoria_nome: string | null;
   /** Agregados da planilha interna do job. */
   planilha_grupos: number;
   planilha_itens: number;
@@ -41,6 +52,10 @@ export interface JobNaFila {
    *  California de fato desembolsa. Vira o custo previsto na abertura
    *  (docs/decisions/004). */
   planilha_desembolso: number;
+  /** Quem o financeiro procura para receber. A produção informa no envio
+   *  (docs/decisions/012); job anterior a 17/08/2026 vem com lista
+   *  vazia, que é estado legítimo. */
+  contatos: ContatoCobranca[];
 }
 
 export interface TotaisPlanilhaJob {
@@ -58,7 +73,7 @@ const SELECT_JOB_FILA =
   "regional:regionais(nome), " +
   "responsavel:profiles!responsavel_id(nome), " +
   "produtor:profiles!produtor_id(nome), " +
-  "orcamento:orcamentos(codigo)";
+  "orcamento:orcamentos(codigo, categoria_id, categoria:categorias_dominio(nome))";
 
 /**
  * Soma o orçado e o planejado da planilha interna de vários jobs numa
@@ -120,7 +135,11 @@ export async function totaisDasPlanilhas(
   return mapa;
 }
 
-function montarJobNaFila(j: any, totais?: TotaisPlanilhaJob): JobNaFila {
+function montarJobNaFila(
+  j: any,
+  totais?: TotaisPlanilhaJob,
+  contatos?: ContatoCobranca[],
+): JobNaFila {
   return {
     id: j.id,
     codigo: j.codigo,
@@ -145,28 +164,41 @@ function montarJobNaFila(j: any, totais?: TotaisPlanilhaJob): JobNaFila {
     responsavel_nome: j.responsavel?.nome ?? null,
     produtor_nome: j.produtor?.nome ?? null,
     orcamento_codigo: j.orcamento?.codigo ?? null,
+    categoria_id: j.orcamento?.categoria_id ?? null,
+    categoria_nome: j.orcamento?.categoria?.nome ?? null,
     planilha_grupos: totais?.grupos ?? 0,
     planilha_itens: totais?.itens ?? 0,
     planilha_orcado: totais?.orcado ?? 0,
     planilha_planejado: totais?.planejado ?? 0,
     planilha_desembolso: totais?.desembolso ?? 0,
+    contatos: contatos ?? [],
   };
 }
 
 /**
  * Um job específico para a tela de abertura. Devolve também o status
  * cru, porque a página precisa desviar quem chegou num job que já foi
- * aberto ou reprovado por outra pessoa.
+ * aberto ou reprovado por outra pessoa, e o nome de quem enviou o job
+ * para abertura — o `created_by` do job, que é quem clicou em "Enviar
+ * job para abertura" na tela da versão.
+ *
+ * O nome sai em query própria, e não em embed: `jobs.created_by` aponta
+ * para `auth.users`, não para `profiles`, então o PostgREST não faz o
+ * join sozinho. `profiles.id` É o id do usuário de auth.
  */
 export async function carregarJobParaAbertura(
   tenantId: string,
   jobId: string,
-): Promise<{ job: JobNaFila; status: string } | null> {
+): Promise<{
+  job: JobNaFila;
+  status: string;
+  enviadoPorNome: string | null;
+} | null> {
   const supabase = createClient();
 
   const { data, error } = await supabase
     .from("jobs")
-    .select(`${SELECT_JOB_FILA}, status`)
+    .select(`${SELECT_JOB_FILA}, status, created_by`)
     .eq("id", jobId)
     .eq("tenant_id", tenantId)
     .maybeSingle();
@@ -177,10 +209,28 @@ export async function carregarJobParaAbertura(
   }
   if (!data) return null;
 
-  const totais = await totaisDasPlanilhas([jobId]);
+  const criadoPor = (data as any).created_by as string | null;
+
+  const [totais, contatos, autorRes] = await Promise.all([
+    totaisDasPlanilhas([jobId]),
+    contatosDeCobrancaPorJob([jobId], tenantId),
+    criadoPor
+      ? supabase
+          .from("profiles")
+          .select("nome")
+          .eq("id", criadoPor)
+          .maybeSingle<{ nome: string | null }>()
+      : Promise.resolve({ data: null, error: null }),
+  ]);
+
+  if (autorRes.error) {
+    console.error("[abertura-job.enviado-por]", autorRes.error.message);
+  }
+
   return {
-    job: montarJobNaFila(data, totais.get(jobId)),
+    job: montarJobNaFila(data, totais.get(jobId), contatos.get(jobId)),
     status: (data as any).status,
+    enviadoPorNome: autorRes.data?.nome ?? null,
   };
 }
 
@@ -203,7 +253,13 @@ export async function listarFilaDeAbertura(
   }
 
   const linhas = (data ?? []) as any[];
-  const totais = await totaisDasPlanilhas(linhas.map((j) => j.id));
+  const ids = linhas.map((j) => j.id as string);
+  const [totais, contatos] = await Promise.all([
+    totaisDasPlanilhas(ids),
+    contatosDeCobrancaPorJob(ids, tenantId),
+  ]);
 
-  return linhas.map((j) => montarJobNaFila(j, totais.get(j.id)));
+  return linhas.map((j) =>
+    montarJobNaFila(j, totais.get(j.id), contatos.get(j.id)),
+  );
 }

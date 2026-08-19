@@ -3,7 +3,7 @@ import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { carregarJobParaAbertura } from "../dados";
 import { formatDataHoraBr } from "../formatos";
-import { sugerirCurva, trimestreDe } from "../curva";
+import { sugerirCurva, sugerirRecebimento, trimestreDe } from "../curva";
 import { AberturaForm } from "./abertura-form";
 
 export const dynamic = "force-dynamic";
@@ -25,11 +25,14 @@ export default async function AbrirJobNoFinanceiroPage({
 
   const [carregado, categoriasRes] = await Promise.all([
     carregarJobParaAbertura(session.activeTenant.id, params.jobId),
+    // Escopo 'orcamento': a categoria do job é a que a produção escolheu
+    // no orçamento — o financeiro confere e pode trocar, mas dentro do
+    // mesmo vocabulário. Não existe lista de categoria só do financeiro.
     supabase
       .from("categorias_dominio")
       .select("id, nome")
       .eq("tenant_id", session.activeTenant.id)
-      .eq("escopo", "job")
+      .eq("escopo", "orcamento")
       .eq("ativo", true)
       .order("nome"),
   ]);
@@ -46,7 +49,7 @@ export default async function AbrirJobNoFinanceiroPage({
     console.error("[abertura-job.categorias]", categoriasRes.error.message);
   }
 
-  const { job } = carregado;
+  const { job, enviadoPorNome } = carregado;
   const agora = new Date();
   const hojeIso = agora.toISOString().slice(0, 10);
 
@@ -56,6 +59,13 @@ export default async function AbrirJobNoFinanceiroPage({
   // só o que a tela precisa mostrar. Zero é legítimo: job 100% A/D abre
   // sem curva.
   const custoPrevisto = Math.round(job.planilha_desembolso * 100) / 100;
+
+  // Faturamento previsto = o que a California prevê receber do cliente.
+  // É contra ele que as parcelas de recebimento fecham — e não contra o
+  // valor total, que inclui o que o cliente paga direto ao fornecedor.
+  // A Server Action também relê este número do banco antes de gravar.
+  const faturamentoPrevisto =
+    Math.round(Number(job.faturamento_previsto ?? 0) * 100) / 100;
 
   const baseCompetencia = job.data_inicio_prevista ?? hojeIso;
   const anoSugerido = Number(baseCompetencia.slice(0, 4));
@@ -69,10 +79,17 @@ export default async function AbrirJobNoFinanceiroPage({
       job={job}
       categorias={categoriasRes.data ?? []}
       custoPrevisto={custoPrevisto}
+      faturamentoPrevisto={faturamentoPrevisto}
+      enviadoPorNome={enviadoPorNome}
       curvaInicial={sugerirCurva(
         custoPrevisto,
         job.data_inicio_prevista,
         job.data_fim_prevista,
+        hojeIso,
+      )}
+      recebimentoInicial={sugerirRecebimento(
+        faturamentoPrevisto,
+        job.data_prevista_faturamento,
         hojeIso,
       )}
       trimestreSugerido={trimestreDe(baseCompetencia)}

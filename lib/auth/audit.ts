@@ -85,6 +85,14 @@ export type AuditAction =
   | "pedido_compra.reenviada"
   | "pedido_compra.aprovada"
   | "pedido_compra.desaprovada"
+  // Tela 3.2 — a baixa passou a ser da PARCELA, e a data de pagamento do
+  // título virou repactuável.
+  | "pedido_compra.parcela_paga"
+  // 18/08/2026: o estorno acompanhou a baixa e também virou por parcela.
+  // `pedido_compra.baixa_estornada` (mais abaixo) é o registro histórico
+  // do estorno da PP inteira, que existiu até aqui.
+  | "pedido_compra.parcela_baixa_estornada"
+  | "titulo_pagar.data_repactuada"
   | "custo_c.utilizado"
   | "conta_bancaria.criada"
   | "conta_bancaria.atualizada"
@@ -118,6 +126,7 @@ export type AuditAction =
   | "faturamento.cancelado"
   | "titulo.baixado"
   | "titulo.baixa_estornada"
+  | "titulo.previsao_repactuada"
   | "acao_negada";
 
 export interface AuditPayload {

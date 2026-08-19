@@ -23,6 +23,13 @@ import {
   type PPAnexoMimetype,
 } from "@/lib/types";
 import {
+  valorDaPP,
+  dividirEmParcelas,
+  parcelasFecham,
+  passaDoSaldo,
+  proximoVencimento,
+} from "@/lib/calculos/pps-item";
+import {
   reservarPedidoCompra,
   finalizarPedidoCompra,
 } from "./actions-pp";
@@ -38,7 +45,16 @@ interface Props {
   itemDescricao: string;
   valorRealizado: number;
   quantidadeRealizada: number;
+  /** Quanto do realizado ainda não está em PP. É o teto desta PP. */
+  saldoDisponivel: number;
   onSuccess?: (codigo: string) => void;
+}
+
+/** Uma linha do parcelamento no formulário. */
+interface ParcelaLocal {
+  data_vencimento: string;
+  /** Texto cru: o usuário pode estar no meio da digitação. */
+  valor: string;
 }
 
 interface AnexoLocal {
@@ -70,6 +86,17 @@ function dateToIso(date: Date | null): string {
   return date ? format(date, "yyyy-MM-dd") : "";
 }
 
+/** Aceita "1.234,56" e "1234.56", como o resto das grades do sistema. */
+function parseNumeroLocal(bruto: string): number {
+  const s = bruto.trim();
+  if (s === "") return 0;
+  const normalizado = s.includes(",")
+    ? s.replace(/\./g, "").replace(",", ".")
+    : s;
+  const n = Number(normalizado);
+  return Number.isFinite(n) ? n : 0;
+}
+
 export function GerarPPDrawer({
   open,
   onOpenChange,
@@ -81,6 +108,7 @@ export function GerarPPDrawer({
   itemDescricao,
   valorRealizado,
   quantidadeRealizada,
+  saldoDisponivel,
   onSuccess,
 }: Props) {
   const router = useRouter();
@@ -94,9 +122,15 @@ export function GerarPPDrawer({
   const [fornecedorId, setFornecedorId] = React.useState<string>("");
   const [empresaId, setEmpresaId] = React.useState<string>(defaultEmpresaId);
   const [prazoPagamento, setPrazoPagamento] = React.useState<string>(defaultPrazoPagamento());
-  const [servico, setServico] = React.useState<string>(itemDescricao);
-  const [quantidade, setQuantidade] = React.useState<string>(String(quantidadeRealizada || 1));
+  // Descrição e quantidade abrem VAZIAS desde 17/08/2026: com PPs
+  // parciais, herdar o nome e a quantidade do item induzia a pedir o item
+  // inteiro para um fornecedor só, que é o oposto do que a tela faz.
+  const [servico, setServico] = React.useState<string>("");
+  const [quantidade, setQuantidade] = React.useState<string>("");
   const [especificacoes, setEspecificacoes] = React.useState<string>("");
+  // Parcelas: sempre ao menos uma, e a primeira acompanha o "Prazo de
+  // pagamento" — ela É o prazo, não uma linha extra.
+  const [parcelas, setParcelas] = React.useState<ParcelaLocal[]>([]);
 
   const [anexos, setAnexos] = React.useState<AnexoLocal[]>([]);
   const abortedRef = React.useRef(false);
@@ -118,9 +152,10 @@ export function GerarPPDrawer({
     setFornecedorId("");
     setEmpresaId(defaultEmpresaId);
     setPrazoPagamento(defaultPrazoPagamento());
-    setServico(itemDescricao);
-    setQuantidade(String(quantidadeRealizada || 1));
+    setServico("");
+    setQuantidade("");
     setEspecificacoes("");
+    setParcelas([]);
     setAnexos([]);
     setDrawerKey((k) => k + 1);
 
@@ -246,6 +281,68 @@ export function GerarPPDrawer({
     }
   }
 
+  // ---- Valor da PP: quantidade × R$/un do realizado ----
+  // Não existe campo de valor. A PP é uma fatia do realizado do item, e
+  // é a quantidade que diz o tamanho da fatia (design "PPs Parciais").
+  const qtdNum = parseNumeroLocal(quantidade);
+  const valorPP =
+    qtdNum > 0 ? valorDaPP(qtdNum, valorRealizado, quantidadeRealizada) : 0;
+
+  /** Refaz as parcelas mantendo as datas que já existem. */
+  const montarParcelas = React.useCallback(
+    (n: number, primeiraData: string, valor: number, atuais: ParcelaLocal[]) => {
+      const valores = dividirEmParcelas(valor, n);
+      const datas: string[] = [];
+      let corrente = primeiraData;
+      for (let i = 0; i < n; i++) {
+        // A 1ª é sempre o "Prazo de pagamento". Da 2ª em diante mantém o
+        // que o usuário já tinha ajustado; só as novas nascem de +1 mês.
+        datas.push(i === 0 ? primeiraData : (atuais[i]?.data_vencimento ?? corrente));
+        corrente = proximoVencimento(datas[i]);
+      }
+      return datas.map((data, i) => ({
+        data_vencimento: data,
+        valor: valores[i].toFixed(2).replace(".", ","),
+      }));
+    },
+    [],
+  );
+
+  function mudarNumeroDeParcelas(bruto: string) {
+    const n = Math.max(1, Math.min(36, Math.floor(Number(bruto) || 1)));
+    setParcelas(n === 1 ? [] : montarParcelas(n, prazoPagamento, valorPP, parcelas));
+  }
+
+  function mudarPrazo(iso: string) {
+    setPrazoPagamento(iso);
+    if (parcelas.length > 0) {
+      // Mover a 1ª data reconstrói a escada: as seguintes acompanham.
+      setParcelas(montarParcelas(parcelas.length, iso, valorPP, []));
+    }
+  }
+
+  function mudarQuantidade(bruto: string) {
+    setQuantidade(bruto);
+    if (parcelas.length > 0) {
+      const novo = parseNumeroLocal(bruto);
+      const valor =
+        novo > 0 ? valorDaPP(novo, valorRealizado, quantidadeRealizada) : 0;
+      // Valor da PP mudou: redivide, preservando as datas combinadas.
+      setParcelas(montarParcelas(parcelas.length, prazoPagamento, valor, parcelas));
+    }
+  }
+
+  /** O que vai para a action: PP sem parcelamento manda 1 parcela. */
+  function parcelasParaEnvio(): Array<{ data_vencimento: string; valor: number }> {
+    if (parcelas.length === 0) {
+      return [{ data_vencimento: prazoPagamento, valor: valorPP }];
+    }
+    return parcelas.map((p) => ({
+      data_vencimento: p.data_vencimento,
+      valor: parseNumeroLocal(p.valor),
+    }));
+  }
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setErro(null);
@@ -266,9 +363,29 @@ export function GerarPPDrawer({
       setErro("Serviço é obrigatório.");
       return;
     }
-    const qtdNum = Number(quantidade.replace(",", "."));
-    if (!Number.isFinite(qtdNum) || qtdNum <= 0) {
+    if (qtdNum <= 0) {
       setErro("Quantidade deve ser um número positivo.");
+      return;
+    }
+    if (valorPP <= 0) {
+      setErro("O valor desta PP ficaria zerado. Confira a quantidade.");
+      return;
+    }
+    if (passaDoSaldo(valorPP, saldoDisponivel)) {
+      setErro(
+        `Esta PP (${formatCurrency(valorPP, "BRL")}) passa do saldo do item. Máximo aceito: ${formatCurrency(saldoDisponivel, "BRL")}.`,
+      );
+      return;
+    }
+    const parcelasEnvio = parcelasParaEnvio();
+    if (parcelasEnvio.some((p) => !p.data_vencimento)) {
+      setErro("Toda parcela precisa de uma data de vencimento.");
+      return;
+    }
+    if (!parcelasFecham(parcelasEnvio.map((p) => p.valor), valorPP)) {
+      setErro(
+        `A soma das parcelas precisa fechar com o valor da PP (${formatCurrency(valorPP, "BRL")}).`,
+      );
       return;
     }
     const anexosOk = anexos.filter((a) => a.status === "ok");
@@ -297,6 +414,7 @@ export function GerarPPDrawer({
             servico: servico.trim(),
             quantidade: qtdNum,
             especificacoes: especificacoes.trim() || null,
+            parcelas: parcelasEnvio,
           },
           anexosOk.map((a) => ({
             anexo_id: a.anexo_id,
@@ -361,8 +479,39 @@ export function GerarPPDrawer({
             <div className="rounded-lg border border-border bg-muted/30 p-3">
               <p className="text-xs text-muted-foreground">Item</p>
               <p className="font-medium">{itemDescricao}</p>
-              <p className="mt-2 text-xs text-muted-foreground">Valor realizado</p>
-              <p className="font-mono font-semibold">{formatCurrency(valorRealizado, "BRL")}</p>
+              <div className="mt-2 grid grid-cols-3 gap-3">
+                <div>
+                  <p className="text-xs text-muted-foreground">Realizado do item</p>
+                  <p className="font-mono font-semibold">
+                    {formatCurrency(valorRealizado, "BRL")}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Máximo aceito</p>
+                  <p className="font-mono font-semibold">
+                    {formatCurrency(saldoDisponivel, "BRL")}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Valor desta PP</p>
+                  <p
+                    className={cn(
+                      "font-mono font-semibold",
+                      passaDoSaldo(valorPP, saldoDisponivel) &&
+                        "text-california-red",
+                    )}
+                  >
+                    {valorPP > 0 ? formatCurrency(valorPP, "BRL") : "—"}
+                  </p>
+                </div>
+              </div>
+              <p className="mt-2 text-[11px] text-muted-foreground">
+                O valor sai da quantidade:{" "}
+                {quantidadeRealizada > 0
+                  ? `${formatCurrency(valorRealizado / quantidadeRealizada, "BRL")} por unidade do realizado`
+                  : "informe o realizado do item antes"}
+                .
+              </p>
             </div>
 
             {/* Fornecedor & Empresa */}
@@ -404,15 +553,93 @@ export function GerarPPDrawer({
                 </Select>
               </div>
 
-              <div>
-                <label className="text-xs font-medium">Prazo de pagamento *</label>
-                <DatePicker
-                  key={`prazo-${drawerKey}`}
-                  name="prazo_pagamento"
-                  defaultValue={prazoPagamento}
-                  onDateChange={(date) => setPrazoPagamento(dateToIso(date))}
-                />
+              {/* Prazo e Parcelas dividem a linha: o prazo é o vencimento
+                  da 1ª parcela, e o número ao lado diz em quantas vezes
+                  o fornecedor recebe. */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium">Prazo de pagamento *</label>
+                  <DatePicker
+                    key={`prazo-${drawerKey}`}
+                    name="prazo_pagamento"
+                    defaultValue={prazoPagamento}
+                    onDateChange={(date) => mudarPrazo(dateToIso(date))}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium">Parcelas</label>
+                  <Input
+                    value={String(Math.max(parcelas.length, 1))}
+                    onChange={(e) => mudarNumeroDeParcelas(e.target.value)}
+                    className="no-spinner"
+                    inputMode="numeric"
+                  />
+                </div>
               </div>
+
+              {parcelas.length > 1 && (
+                <div className="space-y-2 rounded-lg border border-border bg-muted/20 p-3">
+                  <p className="text-[11px] text-muted-foreground">
+                    Vencimentos sugeridos de mês em mês e valores divididos
+                    igualmente — os dois são editáveis. A soma tem que fechar
+                    com o valor da PP.
+                  </p>
+                  {parcelas.map((p, i) => (
+                    <div key={i} className="grid grid-cols-[28px_1fr_1fr] items-center gap-2">
+                      <span className="font-mono text-[11px] text-muted-foreground">
+                        {i + 1}/{parcelas.length}
+                      </span>
+                      <DatePicker
+                        key={`parcela-${drawerKey}-${i}`}
+                        name={`parcela_${i}_vencimento`}
+                        defaultValue={p.data_vencimento}
+                        // A 1ª acompanha o Prazo de pagamento acima: mudar
+                        // nos dois lugares deixaria os dois campos brigando.
+                        disabled={i === 0}
+                        onDateChange={(date) =>
+                          setParcelas((prev) =>
+                            prev.map((q, j) =>
+                              j === i
+                                ? { ...q, data_vencimento: dateToIso(date) }
+                                : q,
+                            ),
+                          )
+                        }
+                      />
+                      <Input
+                        value={p.valor}
+                        onChange={(e) =>
+                          setParcelas((prev) =>
+                            prev.map((q, j) =>
+                              j === i ? { ...q, valor: e.target.value } : q,
+                            ),
+                          )
+                        }
+                        className="no-spinner text-right font-mono"
+                        inputMode="decimal"
+                      />
+                    </div>
+                  ))}
+                  <div className="flex items-center justify-between border-t border-border pt-2 text-[11px]">
+                    <span className="text-muted-foreground">Soma das parcelas</span>
+                    <span
+                      className={cn(
+                        "font-mono font-semibold",
+                        !parcelasFecham(
+                          parcelas.map((p) => parseNumeroLocal(p.valor)),
+                          valorPP,
+                        ) && "text-california-red",
+                      )}
+                    >
+                      {formatCurrency(
+                        parcelas.reduce((s, p) => s + parseNumeroLocal(p.valor), 0),
+                        "BRL",
+                      )}{" "}
+                      / {formatCurrency(valorPP, "BRL")}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Servico */}
@@ -431,12 +658,17 @@ export function GerarPPDrawer({
               </div>
 
               <div>
-                <label className="text-xs font-medium">Quantidade</label>
+                <label className="text-xs font-medium">Quantidade *</label>
                 <Input
                   value={quantidade}
-                  onChange={(e) => setQuantidade(e.target.value)}
+                  onChange={(e) => mudarQuantidade(e.target.value)}
                   className="no-spinner"
                   inputMode="decimal"
+                  placeholder={
+                    quantidadeRealizada > 0
+                      ? `Até ${quantidadeRealizada} do realizado`
+                      : ""
+                  }
                 />
               </div>
 

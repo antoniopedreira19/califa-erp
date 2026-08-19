@@ -2,7 +2,14 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Paperclip, Plus, X } from "lucide-react";
+import {
+  AlertCircle,
+  CalendarPlus,
+  CreditCard,
+  Paperclip,
+  Plus,
+  X,
+} from "lucide-react";
 import {
   Dialog,
   DialogTrigger,
@@ -72,6 +79,12 @@ type Props =
       jobs: JobResumido[];
       regionais: RegionalResumida[];
       trigger?: React.ReactNode;
+      /**
+       * Habilita o botão "Criar e dar baixa" da Tela 3.2: cria o
+       * lançamento e devolve o id para quem chamou abrir o modal de baixa
+       * em seguida. Sem esta prop, o drawer segue só com "Criar".
+       */
+      onCriadaParaBaixa?: (contaAvulsaId: string) => void;
     }
   | {
       mode: "editar";
@@ -325,6 +338,14 @@ export function ContaAvulsaDrawer(props: Props) {
   // Submit
   // ---------------------------------------------------------------------------
 
+  /**
+   * Qual dos dois botões de criação disparou o submit (Tela 3.2).
+   * `criar` lança a previsão em Títulos a Pagar; `criar_e_baixar` cria e
+   * devolve o id para o pai abrir o modal de baixa — o pagamento já
+   * aconteceu e vai direto para a conciliação.
+   */
+  const acaoSubmitRef = React.useRef<"criar" | "criar_e_baixar">("criar");
+
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
@@ -362,6 +383,14 @@ export function ContaAvulsaDrawer(props: Props) {
         return;
       }
       handleOpenChange(false);
+      if (
+        props.mode === "criar" &&
+        acaoSubmitRef.current === "criar_e_baixar" &&
+        res.id
+      ) {
+        props.onCriadaParaBaixa?.(res.id);
+      }
+      acaoSubmitRef.current = "criar";
       router.refresh();
     });
   }
@@ -387,6 +416,10 @@ export function ContaAvulsaDrawer(props: Props) {
       : "rounded-lg bg-california-red px-4 py-2 text-sm font-medium text-white hover:bg-california-red/90 disabled:opacity-50 transition-colors";
 
   const tiposAtivos = props.tipos.filter((t) => t.ativo);
+
+  /** Dois botões de criação só existem quando o pai sabe abrir a baixa. */
+  const ofereceBaixaDireta =
+    props.mode === "criar" && typeof props.onCriadaParaBaixa === "function";
 
   // Rateio válido: pelo menos 1 linha e soma = 100 (ou job selecionado, que trava em 100%)
   const somaRateio = rateio.reduce((s, l) => s + l.percentual, 0);
@@ -766,6 +799,16 @@ export function ContaAvulsaDrawer(props: Props) {
                 Substitua a regional inativa antes de salvar.
               </p>
             )}
+            {ofereceBaixaDireta && (
+              <p className="text-[11px] text-muted-foreground text-pretty">
+                <strong className="font-semibold text-foreground">Criar</strong>{" "}
+                lança a previsão em Títulos a Pagar.{" "}
+                <strong className="font-semibold text-foreground">
+                  Criar e dar baixa
+                </strong>{" "}
+                registra o pagamento agora e envia para a conciliação.
+              </p>
+            )}
             <div className="flex items-center justify-end gap-3">
               <button
                 type="button"
@@ -776,11 +819,34 @@ export function ContaAvulsaDrawer(props: Props) {
               </button>
               <button
                 type="submit"
+                onClick={() => {
+                  acaoSubmitRef.current = "criar";
+                }}
                 disabled={pending || !!uploadingFile || !rateioValido || rateioTemInativa}
-                className={submitClass}
+                className={
+                  ofereceBaixaDireta
+                    ? "inline-flex items-center gap-2 rounded-lg border border-border bg-white px-4 py-2 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50 transition-colors"
+                    : submitClass
+                }
               >
+                {ofereceBaixaDireta && <CalendarPlus className="h-4 w-4" />}
                 {submitLabel}
               </button>
+              {ofereceBaixaDireta && (
+                <button
+                  type="submit"
+                  onClick={() => {
+                    acaoSubmitRef.current = "criar_e_baixar";
+                  }}
+                  disabled={
+                    pending || !!uploadingFile || !rateioValido || rateioTemInativa
+                  }
+                  className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+                >
+                  <CreditCard className="h-4 w-4" />
+                  {pending ? "Criando..." : "Criar e dar baixa"}
+                </button>
+              )}
             </div>
           </div>
         </form>

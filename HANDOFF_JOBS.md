@@ -3,7 +3,8 @@
 Registro da implementação dos designs do módulo de Jobs, mais as decisões de
 modelagem e de negócio tomadas junto com o time durante a execução.
 
-O documento tem **cinco partes**:
+O documento tem **cinco partes**, mais as entregas avulsas que vieram
+depois delas:
 
 | Parte | Design | Telas | Seções |
 |---|---|---|---|
@@ -15,6 +16,30 @@ O documento tem **cinco partes**:
 
 > A Parte IV é transversal aos módulos de Orçamento e Job. A regra vive em
 > `docs/09-identidade-visual-ui.md`; aqui fica só o que é do Job.
+
+### Entregas avulsas (seções 30+)
+
+Cada uma nasceu de um pedido pontual, não de um design fechado — por isso
+não formam parte própria. Estão em ordem cronológica no fim do arquivo.
+
+| Seção | Entrega | Data | Commit | Migration |
+|---|---|---|---|---|
+| 30 | `A · Repasse` na calha: BV **e** PP na mesma linha | 2026-08-13 | — | — |
+| 31 | Navegação por teclado nas planilhas | 2026-08-13 | — | — |
+| 32 | Planilha Interna visível antes da abertura | 2026-08-17 | `a21b910` | — |
+| 33 | PPs parciais por item + parcelas de pagamento | 2026-08-17 | `f2d3ccf` | `20260817000002` |
+| 34 | PDF da PP: um documento por parcela | 2026-08-17 | `93b58ea` | — |
+
+As seções **32 a 34** são o Grupo D do plano de alterações de telas
+(Telas 2.1, 2.2 e 2.3), executado numa sessão em 17/08/2026. As regras de
+negócio que elas fixaram viraram `docs/decisions/013-realizado-antes-da-abertura.md`
+e `docs/decisions/014-pps-parciais-e-parcelas.md`.
+
+> ⚠️ **As três estão sem verificação no navegador.** Lint, `tsc` e build
+> limpos; o trigger de saldo foi exercitado direto no banco. A conferência
+> logada ficou para uma etapa final, depois de todas as telas do plano —
+> decisão do Tiago em 17/08/2026. O caso mais importante a rodar lá é a
+> emissão real de uma PP parcelada.
 
 ---
 
@@ -1232,3 +1257,512 @@ compila.
 item" e dispara o salvamento dela. O código religa o foco ao id que a
 `adicionar` devolve (as três origens devolvem), mas o caminho não foi
 percorrido no navegador — testá-lo criaria item de verdade.
+
+---
+
+## 32. Planilha Interna visível antes da abertura (2026-08-17)
+
+Regra do Tiago, registrada em `docs/decisions/013-realizado-antes-da-abertura.md`.
+
+> ⚠️ **Isto muda o comportamento descrito na entrega 1.** Até aqui, job
+> em `aguardando_abertura` ou `rejeitado_financeiro` mostrava na aba
+> Planilha Interna apenas o bloco "Realizado indisponível" — a planilha
+> inteira sumia. Esse bloco **não existe mais**.
+
+### O que mudou
+
+Nos dois status de pré-abertura a planilha aparece completa e o
+**realizado já pode ser lançado** por administrador ou responsável do
+job. Continuam presos ao job aberto pelo financeiro: **errata**
+("Alterar orçado"), **BV** e **Pedido de Produção** — as ações que mexem
+no orçado conferido ou viram compromisso de pagamento num job que ainda
+pode ser devolvido.
+
+No lugar do bloco removido, um aviso discreto acima da planilha diz o que
+ainda não está disponível e por quê.
+
+### O flag único virou dois
+
+`podeEditarRealizado` controlava planilha, realizado, errata, BV e PP ao
+mesmo tempo. Agora são dois, com o **mesmo** perfil de permissão
+(administrador ou responsável) e status diferentes:
+
+| Flag | Status aceitos | Controla |
+|---|---|---|
+| `podeEditarRealizado` | `aberto`, `em_producao`, `aguardando_abertura`, `rejeitado_financeiro` | células do bloco REALIZADO e a barra de atalhos de teclado |
+| `podeAcoesPlanilha` | `aberto`, `em_producao` | "Alterar orçado", trilha lateral de BV/PP e a aba de PPs |
+
+As duas listas de status moram em `jobAceitaRealizado` e
+`jobAceitaAcoesPlanilha` (`lib/types.ts`), ao lado do `jobEstaCongelado`.
+São elas que as server actions leem — a tela e o servidor não têm mais
+como discordar sobre o que cada status permite.
+
+### Arquivos
+
+| Arquivo | Mudança |
+|---|---|
+| `lib/types.ts` | as duas funções novas |
+| `jobs/[jobId]/page.tsx` | flag único → `podeEditarRealizado` + `podeAcoesPlanilha`; a aba de PPs passa a receber o restrito |
+| `realizado/job-realizado-section.tsx` | early-return removido; prop `podeAcoes`; aviso de pré-abertura; "Alterar orçado" sob `podeAcoes` |
+| `realizado/job-grupo-card.tsx` | repassa `podeAcoes` |
+| `realizado/job-item-realizado-table.tsx` | células seguem `editable`; trilha de BV/PP passa a seguir `podeAcoes` |
+| `jobs/[jobId]/actions-realizado.ts` | gate passa a aceitar a pré-abertura |
+| `realizado/actions-errata.ts`, `realizado/actions-pp.ts` | mesmo bloqueio de antes, agora lendo a função compartilhada |
+| `app/(app)/_bv/actions.ts` | **gate novo** |
+
+### O gate do BV não existia
+
+Errata e PP já recusavam a pré-abertura no servidor. O BV, não: a trava
+dele em `carregarContexto` só cobria job **encerrado**, e a interface
+escondia o botão — o que bastava enquanto a planilha inteira ficava
+escondida. Com a planilha visível, uma chamada direta à action
+(`origem: "job"`) passaria. A trava entrou no mesmo lugar da de
+encerrado, então vale para lançar, confirmar e cancelar de uma vez.
+
+### A reserva da calha acompanha a trilha
+
+O `pr-[116px]` da seção seguia o flag único e a tabela desenhava a trilha
+por outra condição (`editable || tem BV lançado`). Com os dois flags, as
+duas passam a ler a **mesma** condição — `podeAcoes || tem BV lançado`.
+Efeito colateral bem-vindo: job **encerrado** com BV lançado desenhava a
+trilha sem reserva nenhuma e ela encostava na borda direita da página;
+agora reserva.
+
+### Verificação
+
+`tsc --noEmit`, `next lint` (só os 2 avisos pré-existentes de
+`components/ui`) e `npm run build` limpos. **Sem verificação no
+navegador** — consolidada na etapa final do plano de alterações de telas,
+por decisão do Tiago em 17/08/2026.
+
+---
+
+## 33. PPs parciais por item e parcelas de pagamento (2026-08-17)
+
+Design: `Job - PPs Parciais - Opcoes.dc.html` (projeto Claude Design
+`69342d83`), **opção 2a — Ficha numérica · sem gráfico**, lido via MCP.
+Regras em `docs/decisions/014-pps-parciais-e-parcelas.md`.
+
+> ⚠️ **Isto reverte duas regras escritas.** A entrega 1 dizia que o item
+> tinha **uma** PP, e o índice `uniq_pp_ativa_por_item_realizado`
+> materializava isso no banco. E a seção 30 descrevia a metade "Ver PP"
+> da calha abrindo o PDF direto. As duas caíram: um item pode ter várias
+> PPs, e a metade virou o chip `PPs · N`, que abre o painel.
+
+### O que mudou
+
+**1. Um item, várias PPs.** Sem limite de quantas e **sem limite por
+fornecedor** (decisão explícita do Tiago — a primeira redação do plano
+previa uma por fornecedor). O que trava é o saldo: a soma das PPs não
+canceladas nunca passa do Realizado do item. PP **rejeitada continua
+ocupando o saldo**; só o cancelamento devolve.
+
+**2. Painel "Destrinchar realizado".** O chip `PPs · N` (ou "Gerar PP",
+quando não há nenhuma) abre um painel lateral de 430px com a ficha
+numérica do design: Realizado do item, Em PPs emitidas e Saldo, a lista
+das PPs do item com "Ver PP" em cada uma, e o botão "Nova PP para este
+item" com a nota do máximo aceito. É de lá que o formulário se abre — a
+calha não abre mais PDF nem formulário direto.
+
+**3. O valor da PP virou fatia.** Era `total_realizado` do item inteiro;
+agora é `quantidade × (total_realizado ÷ quantidade_realizada)`. Dividir
+o total pela quantidade embute o D/M sozinho. Sem campo de valor no
+formulário: quem dimensiona é a quantidade, como nos números do design
+(800 un / R$ 9.400,00 → R$ 11,75/un).
+
+**4. Descrição e Quantidade abrem vazias**, para não induzir a pedir o
+item inteiro a um fornecedor só.
+
+**5. Parcelas.** "Prazo de pagamento" e "Parcelas" dividem a linha; com
+2+ aparecem as linhas com vencimento (+1 mês, editável) e valor (divisão
+igual com sobra na última, editável). A soma tem que fechar com o valor
+da PP — no cliente e na action. Na aba de PPs do job, **uma linha por
+parcela** (`PP-00008 · 2/3`); Editar/Ver PDF/Cancelar só na linha da 1ª,
+porque são da PP inteira.
+
+**6. Financeiro (leitura).** Chip `3x` na lista de PPs e bloco de
+parcelas no drawer. A **baixa continua por PP** até a Tela 3.2, por
+decisão de escopo do Tiago: ela reestrutura Contas a Pagar em "Títulos a
+Pagar" e refaria a mesma máquina (`dar_baixa_pp`, estorno, `vw_a_pagar`,
+`vw_fluxo_caixa`).
+
+### Migration `20260817000002_pedidos_compra_parcelas.sql`
+
+Aplicada e conferida pelo MCP. Três partes:
+
+| Parte | O quê |
+|---|---|
+| Aditivo | tabela `pedidos_compra_parcelas` (12 colunas, RLS + 3 policies, `authenticated=arwDxtm` sem DELETE, 5 índices, trigger de `updated_at`) |
+| Aditivo | backfill: as 8 PPs existentes viraram 1 parcela 1/1, herdando prazo, valor, `pdf_path` e a baixa |
+| **Destrutivo** | `drop index uniq_pp_ativa_por_item_realizado` — **autorizado pelo Tiago nesta sessão** |
+
+No lugar do índice entrou o trigger **`pp_valida_saldo_do_item`**, que é
+a regra de verdade: recusa insert/update cuja soma passe do realizado do
+item, com mensagem em português. Vale para chamada direta à action e para
+dois cliques simultâneos, que o índice não cobria e o código sozinho não
+cobre. Testado no banco (update de +R$ 1.000 numa PP recusado, e nada
+gravado). Conferido antes de aplicar: nenhuma das 8 PPs viola a regra.
+
+**Advisors:** nenhum achado novo — a função nasceu com `search_path`
+fixo e `security invoker`. Os ERROR/WARN da lista são pré-existentes
+(views SECURITY DEFINER, RPCs executáveis por `authenticated`,
+`search_path` de funções antigas, leaked password protection).
+
+### Arquivos
+
+| Arquivo | Mudança |
+|---|---|
+| `lib/calculos/pps-item.ts` | **novo** — as contas (valor, saldo, divisão em parcelas, próximo vencimento), usadas pela tela E pela action |
+| `lib/types.ts` | `PedidoCompraParcela`; `PedidoCompraNaLista.parcelas` |
+| `realizado/painel-pps-item.tsx` | **novo** — o painel 2a |
+| `realizado/calha-linha.tsx` | "Ver PP"/"Gerar PP" → chip `PPs · N` que abre o painel; o estado do PDF saiu daqui |
+| `realizado/job-item-realizado-table.tsx` | `Map<string, PedidoCompra[]>`; painel + formulário encadeados |
+| `realizado/gerar-pp-drawer.tsx` | campos vazios, valor derivado da quantidade, grid de parcelas, máximo aceito |
+| `realizado/actions-pp.ts` | valor da fatia, gate de saldo, insert das parcelas, reenvio coerente |
+| `jobs/[jobId]/page.tsx` | embed das parcelas; mapa de PPs por item vira lista |
+| `pps/job-pps-section.tsx` | uma linha por parcela |
+| `financeiro/contas-a-pagar/*` | parcelas na query, chip `3x` na lista, bloco no drawer |
+
+### Verificação
+
+`tsc --noEmit`, `next lint` (só os 2 avisos pré-existentes) e
+`npm run build` limpos. Trigger exercitado no banco. **Sem verificação no
+navegador** — consolidada na etapa final do plano, por decisão do Tiago
+em 17/08/2026.
+
+---
+
+## 34. PDF da PP: um documento por parcela (2026-08-17)
+
+Depende da entrega 33. Sem migration própria: a coluna
+`pedidos_compra_parcelas.pdf_path` já nasceu na migration `20260817000002`.
+
+### O que mudou
+
+**Um PDF por parcela, arquivado na emissão.** O gerador roda uma vez por
+parcela e cada documento vai para o bucket com nome próprio
+(`pp-PP-00008-parcela-2de3.pdf`); o caminho fica na linha da parcela. PP
+de parcela única mantém o nome histórico (`pp-PP-00008.pdf`) — mudar
+quebraria o link das PPs já emitidas sem ganhar nada.
+
+**O que muda entre os documentos da mesma PP:** só três coisas.
+
+| Campo | Comportamento |
+|---|---|
+| Prazo de Pagto | vencimento DAQUELA parcela |
+| Parcela: N/T | linha nova, logo abaixo do prazo, **sempre presente** (inclusive `1/1`) |
+| Valor | o valor da parcela em destaque; em PP parcelada, "Valor total do pedido" logo abaixo, em peso normal |
+
+Todo o resto (código, emissão, fornecedor, serviço, especificações,
+dados bancários) é idêntico.
+
+**`renderPedidoCompraPDF` ganhou o parâmetro `parcela`** — obrigatório.
+Não há assinatura antiga sobrevivendo: PP sem parcelamento manda `1/1`, e
+o documento sai com o mesmo desenho. Padrão uniforme é o que evita o
+fornecedor achar que "sem parcela" significa outra coisa.
+
+**Cada linha baixa o seu papel.** A aba de PPs do job mostra o botão de
+PDF em TODA linha de parcela (Editar e Cancelar seguem só na primeira,
+porque são da PP inteira), chamando a action nova
+`signedUrlPdfParcela`. Ela cai no `pdf_path` da PP quando a parcela não
+tem caminho — o que cobre as 8 PPs legadas, cuja parcela 1/1 aponta para
+o documento único de sempre, sem regerar nada.
+
+**Reenvio de PP rejeitada regera os N documentos**, sobrescrevendo. Não
+é quebra do snapshot: o reenvio já regerava o PDF desde a entrega 2,
+porque o papel que vai ao fornecedor não pode contradizer o que o
+financeiro vai aprovar. Falha de upload no meio da EMISSÃO desfaz a PP
+inteira — PP com metade dos documentos seria pior que PP nenhuma.
+
+### Arquivos
+
+| Arquivo | Mudança |
+|---|---|
+| `lib/pdf/pedido-compra.ts` | parâmetro `parcela`; linha "Parcela: N/T"; bloco de valor com destaque na parcela e total como secundário |
+| `realizado/actions-pp.ts` | emissão e reenvio em laço por parcela; `caminhoPdfParcela`; `signedUrlPdfParcela` |
+| `pps/job-pps-section.tsx` | botão de PDF por linha de parcela |
+
+### Verificação
+
+`tsc --noEmit`, `next lint` (só os 2 avisos pré-existentes) e
+`npm run build` limpos. **Sem verificação no navegador** — consolidada na
+etapa final do plano. ⚠️ **Não exercitado:** a emissão real de uma PP
+parcelada (gerar 3 PDFs e abrir cada um) — depende de criar PP de
+verdade, com anexo, num job aberto. É o primeiro caso a rodar na etapa
+final.
+
+---
+
+## 35. Enviar para faturamento agora diz em quantas notas (2026-08-17)
+
+> ⚠️ **Ajuste na seção 25 do `HANDOFF_FINANCEIRO.md` e no envio descrito
+> antes deste documento.** O drawer "Enviar job para faturamento"
+> carregava um valor e uma data. Agora carrega também **o parcelamento**.
+
+Decisão do Tiago (registrada em
+`docs/decisions/017-faturamento-agrupado-parcial-e-avulso.md` §3): quem
+informa em quantas notas fiscais o job será faturado é a **produção**, no
+envio — não o financeiro, e não a previsão de recebimento da abertura.
+
+O drawer ganhou o bloco **"Em quantas notas este job será faturado"**,
+com atalhos `1× 2× 3× 6×`, uma linha por parcela (valor + vencimento),
+"Nova parcela" e o contador `Soma X / Y`. A 1ª parcela vence na data de
+faturamento do formulário — mexer nela arrasta a primeira e deixa as
+outras como estão, porque o espaçamento entre elas é acordo com o
+cliente.
+
+**O valor continua vindo travado** de `jobs.faturamento_previsto` e
+relido no servidor. O que a action confere a mais é a **soma das
+parcelas** contra esse número relido: o navegador diz como repartir, o
+banco diz quanto. Se a gravação das parcelas falhar, o envio é desfeito —
+envio sem parcela não apareceria na fila do financeiro, e o job ficaria
+no limbo de "enviado, mas invisível".
+
+Cada parcela vira uma **linha da aba Faturamento** em Contas a Receber,
+com o seu próprio vencimento, faturada por sua própria NF (seção 35 do
+`HANDOFF_FINANCEIRO.md`).
+
+| Arquivo | O que mudou |
+|---|---|
+| `lib/validations/envio-faturamento.ts` | `parcelaFaturamentoSchema` e o campo `parcelas` |
+| `jobs/[jobId]/actions-faturamento.ts` | confere a soma, grava as parcelas, desfaz o envio se falhar |
+| `jobs/[jobId]/enviar-faturamento-drawer.tsx` | o bloco de parcelamento |
+| `supabase/migrations/20260817000005_...sql` | tabela `jobs_envio_faturamento_parcelas` |
+
+### Verificação
+
+`tsc --noEmit`, `next lint` (só os 2 avisos pré-existentes) e
+`npm run build` limpos. **Sem verificação no navegador** — consolidada na
+etapa final do plano.
+
+## 36. Verificação no navegador: a trilha de BV antes da abertura (2026-08-18)
+
+**⚠️ Corrige a entrega 32.** A verificação final do plano de telas achou
+uma sobra: num job **pré-abertura** (`aguardando_abertura` ou
+`rejeitado_financeiro`) que já tinha um BV lançado lá atrás, a pílula
+**"Abrir BV" continuava na calha** — e o popup abria **editável**, com
+Fornecedor, Valor, Prazo e os botões Salvar · Confirmar · Remover BV
+todos ativos. O critério da entrega 32 pede a trilha de BV ausente antes
+da abertura.
+
+**Por que aconteceu.** A calha aparece quando
+`podeAcoes || itens.some(i => bvsPorItem[i.id])`. A exceção foi escrita
+para o job **ENCERRADO** — "os BVs já lançados seguem consultáveis", que
+é histórico e faz sentido — e a pré-abertura entrou depois no mesmo
+`podeAcoes = false`, herdando uma regra que não era dela. Pior: o
+`BvDialog` recebia `readOnly={!editable}`, e `editable` é o flag do
+**REALIZADO**, que na pré-abertura é `true`. A calha até passava
+`somenteLeitura: true`, mas isso só muda o *tooltip*.
+
+**Nunca houve risco de dado**: a action recusava (gate de
+`carregarContexto`, entrega 32), e o BV ficava intacto. Era beco sem
+saída de UI — o usuário preenchia e tomava erro.
+
+**O conserto.** Um `preAbertura` explícito, calculado em
+`job-realizado-section.tsx` e descido até
+`job-item-realizado-table.tsx`, separa os dois casos que `podeAcoes`
+juntava:
+
+- **encerrado** — `podeAcoes` falso, `preAbertura` falso: a pílula fica,
+  para consulta, como sempre foi;
+- **pré-abertura** — `podeAcoes` falso, `preAbertura` verdadeiro: a
+  trilha some por inteiro, e a reserva de 116px (`pr-[116px]`) some
+  junto, devolvendo a largura à planilha.
+
+E o `BvDialog` passou a receber **`readOnly={!podeAcoes}`** em vez de
+`!editable` — que é o certo nos três casos: aberto edita, encerrado
+consulta, pré-abertura nem abre.
+
+De quebra, a mensagem do gate em `_bv/actions.ts` passou a distinguir os
+dois status: job devolvido lê "Job devolvido pelo financeiro — o BV fica
+disponível depois da abertura", em vez de dizer "aguardando abertura"
+para um job que foi devolvido.
+
+**Conferido depois da correção:** JOB-0011 (`rejeitado_financeiro`) sem
+nenhuma pílula na calha e com o realizado ainda editável; JOB-0010
+(`aberto`) com "Abrir BV", "Gerar PP" e "Alterar orçado" no lugar, e o
+popup do BV abrindo editável.
+
+### A regra de PP por fornecedor, para quem for ler o plano antigo
+
+O critério 3 da Tela 2.2 do plano local diz que "segunda PP do mesmo
+fornecedor no mesmo item é recusada". **Esse critério está velho** — a
+decisão do Tiago na própria entrega 33 (`docs/decisions/014`) removeu o
+limite: não há teto de PPs por item nem por fornecedor, o que trava é o
+saldo do realizado. A verificação confirmou o comportamento novo criando
+a PP-00010 no mesmo item e mesmo fornecedor da PP-00009.
+
+---
+
+## 37. Aba Informações do Job: cabeçalho, ficha e barra de ações (2026-08-19)
+
+Design: `Job - Informacoes - Cabecalho Opcoes.dc.html` (turno 6), com o
+resumo do turno 1b de `Job - Resumo de Indicadores - Opcoes.dc.html` e a
+barra de `Job - Informacoes - Barra de Acoes.dc.html`.
+
+A aba tinha dois cards lado a lado — **Metadata** e **Origem** —, o card de
+**Erratas** e um card de **Status** com os botões do fluxo. Virou: resumo de
+duas linhas no topo, descritivo em faixa larga, ficha Job × Projeto,
+três cards laterais, Erratas (inalterado) e uma barra fixa no rodapé.
+
+### O resumo do topo virou duas linhas
+
+`components/resumo-resultado.tsx`. A régua tinha cinco blocos irmãos —
+Valor do Job, Custo planejado, Custo realizado, Resultado planejado,
+Resultado realizado — e planejado e realizado só se pareavam na cabeça de
+quem lia. Agora o Valor do Job fica isolado à esquerda, porque é o único
+número sem par, e cada linha da direita é um cenário fechado: o custo e a
+rentabilidade que ele produz.
+
+⚠️ **O componente é compartilhado** com a visão agregada do projeto
+(`/jobs/projeto/[projetoId]`). Decisão do Tiago em 19/08: **muda nas duas
+telas**, não numa variante só do job. A conta (`calcularResultadoOperacional`)
+não mudou; o travessão com "sem planejado"/"sem realizado" também não.
+
+### O descritivo saiu do pé da ficha
+
+`jobs.observacoes` — rotulado "Descritivo do Job" desde 17/08/2026 — passou
+a ser a **primeira coisa depois das abas**, numa faixa da largura da tela e
+em 16px. Era o texto mais lido da abertura e não aparecia nesta tela; só no
+financeiro. O corpo trava em `104ch`.
+
+### "Metadata" e "Origem" viraram ficha Job × Projeto
+
+O card "Metadata" misturava campo do job com campo do projeto — e rotulava
+**"Cliente"** um valor que era o **nome do projeto**. A ficha agora tem duas
+colunas da mesma tabela:
+
+| Coluna **Job** | Coluna **Projeto** |
+|---|---|
+| Nome do job | Nome do projeto |
+| Categoria do job (`categorias_dominio`, escopo `orcamento`) | Cliente — `clientes.nome_fantasia`, o de verdade |
+| Produto | Tipo do projeto |
+| Regional · Cidade | Período do projeto |
+| Competência | *Jobs do projeto* (lista, com badge de status) |
+| Período | |
+| Abertura (data · quem abriu) | |
+| Prev. faturamento | |
+
+**"Tipo do projeto" é a categoria do projeto** — `projetos.categoria_id`,
+`categorias_dominio` escopo `projeto` (Always On, Ativação, Fee, Interno).
+Decisão do Tiago em 19/08. Não confundir com a categoria do **job**, que sai
+do mesmo catálogo mas do escopo `orcamento` — os dois vocabulários têm
+"Ativação" e é fácil trocar um pelo outro lendo a tela.
+
+Cinco campos **nunca tinham aparecido no módulo de Jobs**, embora já
+existissem no banco e na Central Financeira: categoria do job, competência,
+data e autor da abertura, produtor responsável e os contatos de cobrança.
+Nenhuma migration foi necessária — o `select` da página é que não os trazia.
+
+⚠️ **Competência aparece em dois formatos.** Aqui é `competenciaLabelLongo`
+("3º tri · 2026"), como o design pede; a Central Financeira segue com
+`competenciaLabel` ("3T/2026"), onde o campo divide linha com outros seis.
+As duas funções moram juntas em `lib/types.ts` de propósito.
+
+### Cards laterais: Responsáveis, Origem e Contatos
+
+- **Responsáveis** — GP responsável e Produtor (`jobs.produtor_id`, que a
+  tela nunca mostrou).
+- **Origem** — Código do job, Projeto e **"Orçamento aprovado"**. Decisão do
+  Tiago: seguir o design ao pé da letra. Isso **funde orçamento e versão num
+  link só** e **remove "Valor de faturamento"** da aba (ele continua no card
+  de Erratas e no resumo do topo). O link aponta para a **versão**, não para
+  o orçamento — o rótulo diz "aprovado", e o que foi aprovado é a versão; a
+  tela da versão tem o caminho de volta.
+- **Contatos de cobrança** — `jobs_contatos` via `contatosDeCobrancaDoJob`,
+  o mesmo carregador das quatro telas do financeiro. O design fechava com
+  "Ver todos os 4 contatos"; **não existe tela de contatos do job**, e são 1
+  a 4 por job na prática, então o card lista todos. O primeiro leva a pílula
+  "Principal", que é a ordem do formulário de abertura.
+
+### O card "Status" virou barra fixa no rodapé
+
+`app/(app)/jobs/[jobId]/barra-acoes-job.tsx`, no mesmo padrão da barra de
+aprovação do orçamento (`fluxo-abertura.tsx` · `sticky bottom-0`). As frases
+que moravam no card viraram o texto à esquerda — a barra **sempre** diz em
+que ponto do fluxo o job está, inclusive quando não há botão nenhum.
+
+| Estado | Texto | Botão |
+|---|---|---|
+| `aguardando_abertura` | aguardando o financeiro, com link para a Central | Cancelar job |
+| `rejeitado_financeiro` | devolvido, corrija e reenvie | Cancelar job |
+| `aberto` sem envio | faturamento previsto | Enviar job para faturamento |
+| `aberto` com envio | registro do envio | Enviar job para encerramento |
+| `encerrado` · `cancelado` | é histórico + registro do faturamento | — |
+
+**Cancelar job só existe antes da abertura** — regra nova, em
+`docs/decisions/020-cancelar-job-so-antes-da-abertura.md`. A server action
+continua aceitando o cancelamento; o que mudou é a superfície que o oferece.
+
+O rótulo do encerramento continua **"Enviar job para encerramento"** e
+vermelho California, não o "Encerrar job" verde que o desenho da barra
+mostra — decisão do Tiago, para não renomear uma ação que passa por resumo
+de fechamento. O `ENCERRAMENTO_INDISPONIVEL` foi ajustado: dizia "no bloco
+de Status", que deixou de existir.
+
+⚠️ **A barra fica FORA das abas**, como no protótipo — as ações são do job,
+não da aba de Informações. Na aba **PPs** o FAB do chat (`fixed bottom-6
+right-6`, `z-40`) encosta na barra (`z-20`). Levantado antes de implementar e
+**aceito pelo Tiago em 19/08**; medido depois, com a página rolada e a barra
+grudada: a sobreposição é de **5px × 20px**, só o canto superior direito do
+botão. O rótulo e a maior parte da área de clique ficam livres. Com a página
+sem rolagem não há sobreposição nenhuma — a barra fica acima do FAB.
+
+### O card de Erratas não mudou
+
+O turno 6 desenha o card simplificado, sem o bloco de valores do cabeçalho.
+É esboço: o recorte do turno era cabeçalho e ficha. Decisão do Tiago:
+manter o `ErratasCard` como está.
+
+### Arquivos
+
+| Arquivo | O quê |
+|---|---|
+| `components/resumo-resultado.tsx` | régua de 5 blocos → 2 linhas (afeta o job **e** a visão do projeto) |
+| `app/(app)/jobs/[jobId]/ficha-job.tsx` | **novo** — descritivo, ficha Job × Projeto e os 3 cards laterais |
+| `app/(app)/jobs/[jobId]/barra-acoes-job.tsx` | **novo** — barra fixa, textos por estado |
+| `app/(app)/jobs/[jobId]/page.tsx` | `select` com os campos que faltavam, 2 queries novas, render da aba |
+| `app/(app)/jobs/[jobId]/status-actions.tsx` | layout de linha para caber na barra; "Cancelar job" virou secundário |
+| `app/(app)/jobs/[jobId]/enviar-faturamento-drawer.tsx` | botão na altura da barra (h-9) |
+| `lib/types.ts` | `competenciaLabelLongo`; texto do `ENCERRAMENTO_INDISPONIVEL` |
+
+As duas queries novas são os **jobs irmãos do projeto** (coberta por
+`idx_jobs_projeto`) e o **nome de quem abriu** — esta não pode ser embed
+porque `jobs.aberto_por` aponta para `auth.users` e o nome mora em
+`profiles`. As duas entraram no `Promise.all` que já existia; os contatos de
+cobrança entraram no primeiro. Nenhuma query em série foi adicionada.
+
+### Verificação
+
+`tsc --noEmit`, `next lint` e `next build` limpos. O build rodou numa cópia
+do repo fora da pasta, porque o `next dev` estava de pé — build com o dev
+server ligado corrompe o `.next` e derruba o CSS do preview.
+
+Os embeds novos do `select` (`profiles!produtor_id`,
+`categorias_dominio!categoria_id` e o aninhado `projetos → clientes` /
+`projetos → categorias_dominio`) foram exercitados contra a API: voltaram
+**401 de GRANT**, não 400 de relacionamento — ou seja, o PostgREST resolveu
+a árvore inteira antes de esbarrar no RLS. De quebra confirma que `anon` não
+tem SELECT em `jobs`.
+
+**Conferência logada no navegador, 19/08/2026** — os cinco estados do job,
+sem nenhum erro de console em nenhum deles:
+
+| Job | Estado | O que confirmou |
+|---|---|---|
+| JOB-0015 | `aberto`, já enviado, 2 contatos, descritivo preenchido | ficha completa; barra com o registro do envio e "Enviar job para encerramento" |
+| JOB-0013 | `aberto`, sem envio, sem contato, sem descritivo | "Sem descritivo do job.", "Nenhum contato de cobrança informado na abertura."; barra com "Enviar job para faturamento" e **sem** Cancelar |
+| JOB-0014 | `aguardando_abertura`, sem categoria nem competência | travessões nos três campos da abertura, "— sem realizado" no resumo; barra com **Cancelar job** e o link para a Central |
+| JOB-0011 | `rejeitado_financeiro` | banner de rejeição e "Reenviar pra aprovação" preservados; barra com Cancelar |
+| JOB-0009 | `encerrado` | sem botão Editar; barra sem botão nenhum, só o texto e o registro do faturamento |
+
+A regra nova está de pé: **Cancelar job aparece em JOB-0014 e JOB-0011 e não
+aparece em JOB-0013 nem em JOB-0015**, os dois abertos.
+
+Também conferidos: os quatro links da ficha (projeto no cabeçalho da coluna,
+job irmão com o `?from=` preservado, e os dois do card de Origem, sendo o de
+"Orçamento aprovado" apontando para a versão); a **visão agregada do
+projeto** com o resumo novo de duas linhas (`PEVETE-0001/26`); a barra
+presente nas abas Planilha Interna e PPs; e `scrollWidth == clientWidth` em
+todas — **zero rolagem horizontal**, inclusive na Planilha Interna, onde a
+tabela mede 1334px.

@@ -9,9 +9,14 @@ import { cn, formatCurrency } from "@/lib/utils";
 import {
   podeCancelarPP,
   type PedidoCompraNaLista,
+  type PedidoCompraParcela,
   type PPStatus,
 } from "@/lib/types";
-import { cancelarPedidoCompra, signedUrlPdf } from "../realizado/actions-pp";
+import {
+  cancelarPedidoCompra,
+  signedUrlPdfParcela,
+  signedUrlPdf,
+} from "../realizado/actions-pp";
 import { PPStatusChip } from "./pp-status-chip";
 import { EditarPPDrawer } from "./editar-pp-drawer";
 
@@ -25,6 +30,15 @@ interface Props {
 }
 
 type Filtro = "todas" | PPStatus;
+
+/** Uma linha da tabela = uma PARCELA de uma PP. `parcela: null` só
+ *  acontece se o embed vier vazio — nenhuma PP fica sem parcela. */
+interface LinhaPP {
+  pp: PedidoCompraNaLista;
+  parcela: PedidoCompraParcela | null;
+  indice: number;
+  total: number;
+}
 
 const CHIPS: Array<{ key: Filtro; label: string }> = [
   { key: "todas", label: "Todas" },
@@ -106,6 +120,32 @@ export function JobPPsSection({
     });
   }, [pps, filtro, busca, fornecedoresPorId]);
 
+  /**
+   * Uma linha por PARCELA (decisão do Tiago, 17/08/2026): cada parcela é
+   * um vencimento próprio, e é assim que o financeiro vai tratá-la. PP
+   * sem parcelamento tem uma parcela 1/1 e continua ocupando uma linha
+   * só — visualmente nada mudou para ela.
+   *
+   * PP legada sem parcela não existe (a migration backfillou todas), mas
+   * o fallback evita sumir com a linha caso o embed venha vazio.
+   */
+  const linhasVisiveis = React.useMemo<LinhaPP[]>(
+    () =>
+      visiveis.flatMap((pp): LinhaPP[] => {
+        const parcelas = pp.parcelas ?? [];
+        if (parcelas.length === 0) {
+          return [{ pp, parcela: null, indice: 0, total: 1 }];
+        }
+        return parcelas.map((parcela, i) => ({
+          pp,
+          parcela,
+          indice: i,
+          total: parcelas.length,
+        }));
+      }),
+    [visiveis],
+  );
+
   React.useLayoutEffect(() => {
     const tbody = tbodyRef.current;
     if (!tbody) return;
@@ -129,7 +169,7 @@ export function JobPPsSection({
     const tabela = tbody.closest("table");
     if (tabela) observer.observe(tabela);
     return () => observer.disconnect();
-  }, [visiveis]);
+  }, [linhasVisiveis]);
 
   // Cards de resumo ignoram canceladas: PP cancelada não é PP gerada, é
   // uma que deixou de existir pro job.
@@ -141,9 +181,12 @@ export function JobPPsSection({
     total: ativas.reduce((s, p) => s + Number(p.valor ?? 0), 0),
   };
 
-  function handleVer(pp: PedidoCompraNaLista) {
+  /** Cada linha baixa o documento da SUA parcela (Tela 2.3). */
+  function handleVer(pp: PedidoCompraNaLista, parcelaId: string | null) {
     startTransition(async () => {
-      const res = await signedUrlPdf(pp.id);
+      const res = parcelaId
+        ? await signedUrlPdfParcela(parcelaId)
+        : await signedUrlPdf(pp.id);
       if (!res.ok) {
         setErro(res.message);
         return;
@@ -259,7 +302,7 @@ export function JobPPsSection({
                   <th className="px-3.5 py-2.5 text-left">Código</th>
                   <th className="px-3.5 py-2.5 text-left">Serviço · item do job</th>
                   <th className="px-3.5 py-2.5 text-left">Fornecedor</th>
-                  <th className="px-3.5 py-2.5 text-left">Prazo de pagamento</th>
+                  <th className="px-3.5 py-2.5 text-left">Vencimento</th>
                   <th className="px-3.5 py-2.5 text-left">Prazo</th>
                   <th className="px-3.5 py-2.5 text-right">Valor</th>
                   <th className="px-3.5 py-2.5 text-left">Status</th>
@@ -267,7 +310,7 @@ export function JobPPsSection({
                 </tr>
               </thead>
               <tbody ref={tbodyRef}>
-                {visiveis.length === 0 && (
+                {linhasVisiveis.length === 0 && (
                   <tr>
                     <td
                       colSpan={8}
@@ -277,15 +320,28 @@ export function JobPPsSection({
                     </td>
                   </tr>
                 )}
-                {visiveis.map((pp) => (
+                {linhasVisiveis.map(({ pp, parcela, indice, total }) => {
+                  const vencimento = parcela?.data_vencimento ?? pp.prazo_pagamento;
+                  const valorLinha = parcela
+                    ? Number(parcela.valor)
+                    : Number(pp.valor);
+                  return (
                   <tr
-                    key={pp.id}
+                    key={parcela?.id ?? pp.id}
                     className={cn(
                       "h-[57px] border-b border-border/60 last:border-0",
                       pp.status === "cancelada" && "opacity-60",
                     )}
                   >
-                    <td className="px-3.5 font-mono text-[11.5px]">{pp.codigo}</td>
+                    <td className="whitespace-nowrap px-3.5 font-mono text-[11.5px]">
+                      {pp.codigo}
+                      {total > 1 && (
+                        <span className="text-muted-foreground">
+                          {" "}
+                          · {indice + 1}/{total}
+                        </span>
+                      )}
+                    </td>
                     <td className="px-3.5">
                       <div className="flex flex-col gap-0.5">
                         <span className="text-[13px] font-semibold">
@@ -295,6 +351,9 @@ export function JobPPsSection({
                           {pp.grupo_nome ? `${pp.grupo_nome} · ` : ""}
                           emitida em {formatarData(pp.created_at)}
                           {pp.emitida_por_nome ? ` por ${pp.emitida_por_nome}` : ""}
+                          {total > 1
+                            ? ` · ${formatCurrency(Number(pp.valor), "BRL")} em ${total}x`
+                            : ""}
                         </span>
                       </div>
                     </td>
@@ -302,20 +361,23 @@ export function JobPPsSection({
                       {fornecedoresPorId[pp.fornecedor_id] ?? "—"}
                     </td>
                     <td className="whitespace-nowrap px-3.5 font-mono text-xs">
-                      {formatarData(pp.prazo_pagamento)}
+                      {formatarData(vencimento)}
                     </td>
                     <td className="whitespace-nowrap px-3.5 text-muted-foreground">
-                      {prazoEmDias(pp.created_at, pp.prazo_pagamento)}
+                      {prazoEmDias(pp.created_at, vencimento)}
                     </td>
                     <td className="whitespace-nowrap px-3.5 text-right font-mono text-[12.5px] font-semibold">
-                      {formatCurrency(Number(pp.valor), "BRL")}
+                      {formatCurrency(valorLinha, "BRL")}
                     </td>
                     <td className="px-3.5">
                       <PPStatusChip status={pp.status} />
                     </td>
                     <td className="px-3.5">
+                      {/* Ver PDF é de CADA parcela (Tela 2.3): cada uma
+                          tem seu documento. Editar é da PP inteira, então
+                          só a primeira linha o mostra. */}
                       <div className="flex items-center justify-end gap-1.5">
-                        {editable && pp.status === "rejeitada" && (
+                        {editable && pp.status === "rejeitada" && indice === 0 && (
                           <button
                             type="button"
                             onClick={() => setPpEditando(pp)}
@@ -329,19 +391,23 @@ export function JobPPsSection({
                           <TooltipTrigger asChild>
                             <button
                               type="button"
-                              onClick={() => handleVer(pp)}
+                              onClick={() => handleVer(pp, parcela?.id ?? null)}
                               disabled={pending}
                               className="inline-flex items-center justify-center rounded-lg border border-border bg-white p-1.5 text-muted-foreground hover:bg-muted disabled:opacity-50"
                             >
                               <Eye className="h-3.5 w-3.5" />
                             </button>
                           </TooltipTrigger>
-                          <TooltipContent>Ver PDF · {pp.codigo}</TooltipContent>
+                          <TooltipContent>
+                            Ver PDF · {pp.codigo}
+                            {total > 1 ? ` · parcela ${indice + 1}/${total}` : ""}
+                          </TooltipContent>
                         </Tooltip>
                       </div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -354,12 +420,13 @@ export function JobPPsSection({
             className="absolute left-full ml-2.5"
             style={{ width: LARGURA_TRILHA, top: offsetThead }}
           >
-            {visiveis.map((pp, i) => {
+            {linhasVisiveis.map(({ pp, parcela, indice }, i) => {
               const pos = linhas[i];
-              if (!pos || !podeCancelarPP(pp.status)) return null;
+              // Cancelar é da PP inteira: só na linha da 1ª parcela.
+              if (!pos || indice > 0 || !podeCancelarPP(pp.status)) return null;
               return (
                 <div
-                  key={pp.id}
+                  key={parcela?.id ?? pp.id}
                   className="absolute inset-x-0 flex items-center"
                   style={{ top: pos.top, height: pos.height }}
                 >
