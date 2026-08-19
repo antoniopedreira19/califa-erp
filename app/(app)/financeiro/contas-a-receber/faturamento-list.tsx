@@ -336,74 +336,6 @@ export function FaturamentoList({
         </div>
       </div>
 
-      {/* Barra de seleção */}
-      {modoSelecao && (
-        <div className="overflow-hidden rounded-xl border border-california-red/35 bg-california-red/[0.04]">
-          <div className="flex flex-wrap items-center gap-3.5 px-4 py-3">
-            <span className="flex items-center gap-2 whitespace-nowrap text-xs font-semibold">
-              <Layers className="h-3.5 w-3.5 text-california-red" />
-              Faturamento Agrupado
-            </span>
-            <div className="h-4 w-px bg-california-red/25" />
-            <span className="whitespace-nowrap text-xs text-muted-foreground">
-              {selecionados.length} selecionado(s)
-            </span>
-            <span className="whitespace-nowrap font-mono text-sm font-bold tabular-nums">
-              {formatMoney(totalSelecionado)}
-            </span>
-            {clientesSelecionados.length > 0 && (
-              <span
-                className={cn(
-                  "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-[11px] font-semibold",
-                  misto
-                    ? "border-red-200 bg-red-50 text-california-red"
-                    : "border-border bg-white text-muted-foreground",
-                )}
-              >
-                <Building2 className="h-3 w-3" />
-                {misto
-                  ? `${clientesSelecionados.length} clientes diferentes`
-                  : clientesSelecionados[0]}
-              </span>
-            )}
-            <div className="ml-auto flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setSel({});
-                  limparErro();
-                }}
-                className="rounded-lg border border-border bg-white px-3 py-2 text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground"
-              >
-                Limpar
-              </button>
-              <button
-                type="button"
-                onClick={faturarSelecionados}
-                className={cn(
-                  "inline-flex items-center gap-2 whitespace-nowrap rounded-lg px-3.5 py-2 text-xs font-semibold text-white transition-colors",
-                  selecionados.length === 0
-                    ? "bg-california-red/45"
-                    : "bg-california-red hover:bg-california-red-hover",
-                )}
-              >
-                <FileText className="h-3.5 w-3.5" />
-                Faturar selecionados
-              </button>
-            </div>
-          </div>
-          {erroTitulo && (
-            <div className="flex items-start gap-2.5 border-t border-california-red/30 bg-california-red/[0.09] px-4 py-3 text-xs text-california-red">
-              <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-              <div className="flex flex-col gap-0.5">
-                <span className="font-bold">{erroTitulo}</span>
-                <span className="text-california-red/85">{erroDetalhe}</span>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
       {/* Faixa de resumo */}
       <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card px-4 py-3">
         <Hourglass className="h-3.5 w-3.5 text-california-red" />
@@ -626,6 +558,88 @@ export function FaturamentoList({
           são faturados individualmente porque a contraparte é o fornecedor.
         </span>
       </p>
+
+      {/* Barra do Faturamento Agrupado — fixa no rodapé, no mesmo padrão da
+          barra de ações do job (`jobs/[jobId]/barra-acoes-job.tsx`). Vivia
+          acima da tabela, onde saía de vista assim que a lista rolava: o
+          usuário marcava as linhas de baixo sem enxergar o total nem o
+          botão. Aqui ela acompanha a rolagem.
+
+          Precisa ser o último elemento COM ALTURA da lista para o
+          `sticky bottom-0` grudar — o drawer e o toast que vêm depois são
+          posicionados por cima e não ocupam espaço no fluxo.
+
+          O fundo branco opaco é obrigatório: o tom vermelho de 4% que a
+          barra tinha é transparente demais e a tabela apareceria por baixo
+          dela ao rolar. A tinta vermelha vem numa camada interna. */}
+      {modoSelecao && (
+        <div className="sticky bottom-0 z-20 -mx-1 overflow-hidden rounded-t-2xl border border-b-0 border-california-red/35 bg-white/95 shadow-[0_-4px_16px_-8px_rgba(0,0,0,0.12)] backdrop-blur">
+          {/* O erro fica ACIMA da linha de ações: numa barra de rodapé quem
+              encosta na borda de baixo tem de ser o botão. */}
+          {erroTitulo && (
+            <div className="flex items-start gap-2.5 border-b border-california-red/30 bg-california-red/[0.09] px-5 py-3 text-xs text-california-red">
+              <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <div className="flex flex-col gap-0.5">
+                <span className="font-bold">{erroTitulo}</span>
+                <span className="text-california-red/85">{erroDetalhe}</span>
+              </div>
+            </div>
+          )}
+          <div className="flex flex-wrap items-center gap-3.5 bg-california-red/[0.04] px-5 py-2.5">
+            <span className="flex items-center gap-2 whitespace-nowrap text-xs font-semibold">
+              <Layers className="h-3.5 w-3.5 text-california-red" />
+              Faturamento Agrupado
+            </span>
+            <div className="h-4 w-px bg-california-red/25" />
+            <span className="whitespace-nowrap text-xs text-muted-foreground">
+              {selecionados.length} selecionado(s)
+            </span>
+            <span className="whitespace-nowrap font-mono text-sm font-bold tabular-nums">
+              {formatMoney(totalSelecionado)}
+            </span>
+            {clientesSelecionados.length > 0 && (
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-[11px] font-semibold",
+                  misto
+                    ? "border-red-200 bg-red-50 text-california-red"
+                    : "border-border bg-white text-muted-foreground",
+                )}
+              >
+                <Building2 className="h-3 w-3" />
+                {misto
+                  ? `${clientesSelecionados.length} clientes diferentes`
+                  : clientesSelecionados[0]}
+              </span>
+            )}
+            <div className="ml-auto flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setSel({});
+                  limparErro();
+                }}
+                className="rounded-lg border border-border bg-white px-3 py-2 text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground"
+              >
+                Limpar
+              </button>
+              <button
+                type="button"
+                onClick={faturarSelecionados}
+                className={cn(
+                  "inline-flex items-center gap-2 whitespace-nowrap rounded-lg px-3.5 py-2 text-xs font-semibold text-white transition-colors",
+                  selecionados.length === 0
+                    ? "bg-california-red/45"
+                    : "bg-california-red hover:bg-california-red-hover",
+                )}
+              >
+                <FileText className="h-3.5 w-3.5" />
+                Faturar selecionados
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {drawer && (
         <FaturarDrawer
