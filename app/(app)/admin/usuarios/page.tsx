@@ -1,18 +1,22 @@
 import Link from "next/link";
-import { ArrowLeft, ShieldCheck, UserPlus, Users } from "lucide-react";
+import { ArrowLeft, MailWarning, ShieldCheck, UserPlus, Users } from "lucide-react";
 import { requireAdmin } from "@/lib/auth/session";
 import { createServiceClient } from "@/lib/supabase/server";
 import { roleLabel, type AppRole } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { ConvidarUsuarioDrawer } from "./convidar-drawer";
+import { ReenviarConviteButton } from "./reenviar-convite-button";
 
 export const dynamic = "force-dynamic";
+
+type AcessoStatus = "ativo" | "pendente" | "inativo";
 
 interface MemberRow {
   user_id: string;
   role: AppRole;
   status: "ativo" | "inativo";
   created_at: string;
+  acesso: AcessoStatus;
   profile: {
     id: string;
     nome: string;
@@ -48,13 +52,44 @@ export default async function AdminUsuariosPage() {
 
   const byId = new Map((profiles ?? []).map((p) => [p.id, p]));
 
-  const rows: MemberRow[] = (members ?? []).map((m) => ({
-    user_id: m.user_id,
-    role: m.role as AppRole,
-    status: m.status as "ativo" | "inativo",
-    created_at: m.created_at as string,
-    profile: byId.get(m.user_id) ?? null,
-  }));
+  // Detecta convites pendentes: usuário existe em auth.users mas ainda não
+  // confirmou o e-mail (email_confirmed_at IS NULL). O admin API pagina em
+  // até 1000 por página — para o time da Agência isso cabe folgado numa só.
+  const emailConfirmadoById = new Map<string, boolean>();
+  const { data: authListing, error: authErr } = await service.auth.admin.listUsers({
+    page: 1,
+    perPage: 200,
+  });
+  if (authErr) {
+    console.error("[admin.usuarios.list.auth-users]", authErr.message);
+  } else {
+    for (const u of authListing?.users ?? []) {
+      emailConfirmadoById.set(u.id, Boolean(u.email_confirmed_at));
+    }
+  }
+
+  const rows: MemberRow[] = (members ?? []).map((m) => {
+    const profile = byId.get(m.user_id) ?? null;
+    const perfilAtivo = profile?.ativo ?? true;
+    const vinculoAtivo = m.status === "ativo";
+    // Se listUsers falhou, assume confirmado para não travar UI com botão
+    // fantasma; o admin pode tentar reenviar mesmo assim se necessário.
+    const emailConfirmado = emailConfirmadoById.get(m.user_id) ?? true;
+
+    let acesso: AcessoStatus;
+    if (!perfilAtivo || !vinculoAtivo) acesso = "inativo";
+    else if (!emailConfirmado) acesso = "pendente";
+    else acesso = "ativo";
+
+    return {
+      user_id: m.user_id,
+      role: m.role as AppRole,
+      status: m.status as "ativo" | "inativo",
+      created_at: m.created_at as string,
+      acesso,
+      profile,
+    };
+  });
 
   return (
     <div className="space-y-8">
@@ -99,15 +134,13 @@ export default async function AdminUsuariosPage() {
                 <th className="text-left font-semibold px-6 py-3">E-mail</th>
                 <th className="text-left font-semibold px-6 py-3">Papel</th>
                 <th className="text-left font-semibold px-6 py-3">Status</th>
+                <th className="text-right font-semibold px-6 py-3">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {rows.map((row) => {
                 const nome = row.profile?.nome ?? "—";
                 const email = row.profile?.email ?? "—";
-                const perfilAtivo = row.profile?.ativo ?? true;
-                const vinculoAtivo = row.status === "ativo";
-                const acessoOk = perfilAtivo && vinculoAtivo;
                 return (
                   <tr
                     key={row.user_id}
@@ -133,14 +166,28 @@ export default async function AdminUsuariosPage() {
                       </span>
                     </td>
                     <td className="px-6 py-3.5">
-                      {acessoOk ? (
+                      {row.acesso === "ativo" && (
                         <Badge className="bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/10 border-emerald-500/20">
                           Ativo
                         </Badge>
-                      ) : (
+                      )}
+                      {row.acesso === "pendente" && (
+                        <Badge className="bg-amber-500/10 text-amber-700 hover:bg-amber-500/10 border-amber-500/20 inline-flex items-center gap-1">
+                          <MailWarning className="h-3 w-3" />
+                          Convite pendente
+                        </Badge>
+                      )}
+                      {row.acesso === "inativo" && (
                         <Badge className="bg-muted text-muted-foreground hover:bg-muted border-border">
                           Inativo
                         </Badge>
+                      )}
+                    </td>
+                    <td className="px-6 py-3.5 text-right">
+                      {row.acesso === "pendente" ? (
+                        <ReenviarConviteButton userId={row.user_id} />
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
                       )}
                     </td>
                   </tr>

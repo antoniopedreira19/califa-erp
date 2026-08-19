@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
-import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { conviteSchema } from "@/lib/validations/convite";
@@ -270,4 +270,112 @@ export async function convidarUsuario(
 
   revalidatePath("/admin/usuarios");
   return { ok: true, id: newUserId, message: "Convite enviado com sucesso." };
+}
+
+/**
+ * Reenvia o convite de acesso para um usuário que ainda não confirmou o e-mail.
+ *
+ * Fluxo:
+ * 1. Valida sessão + admin.
+ * 2. Confirma que o `userId` é membro do tenant ativo (impede admin reenviar
+ *    convite para usuário de outro tenant, mesmo sabendo o id).
+ * 3. Puxa o auth.user pelo service client e confere que `email_confirmed_at`
+ *    ainda é null — se já confirmou, não faz sentido reenviar convite.
+ * 4. Chama `inviteUserByEmail` de novo: o GoTrue regenera o token e envia
+ *    e-mail novo com o mesmo redirectTo do convite original.
+ * 5. Loga auditoria `usuario.reenvio_convite`.
+ */
+export async function reenviarConvite(userId: string): Promise<ActionResult> {
+  const session = await requireAdmin();
+  const tenantId = session.activeTenant.id;
+
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    console.error(
+      "[admin.usuarios.reenviar] SUPABASE_SERVICE_ROLE_KEY ausente no ambiente.",
+    );
+    return {
+      ok: false,
+      message:
+        "Configuração do servidor incompleta (falta service_role key). Fale com o dev.",
+    };
+  }
+
+  if (typeof userId !== "string" || userId.length === 0) {
+    return { ok: false, message: "ID do usuário inválido." };
+  }
+
+  const service = createServiceClient();
+
+  const { data: member, error: memberErr } = await service
+    .from("tenant_members")
+    .select("id, user_id, status")
+    .eq("tenant_id", tenantId)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (memberErr) {
+    console.error(
+      "[admin.usuarios.reenviar.select-member]",
+      memberErr.message,
+    );
+    return { ok: false, message: "Não foi possível verificar o vínculo." };
+  }
+
+  if (!member) {
+    return { ok: false, message: "Usuário não pertence a este tenant." };
+  }
+
+  const { data: userInfo, error: getUserErr } =
+    await service.auth.admin.getUserById(userId);
+
+  if (getUserErr || !userInfo?.user) {
+    console.error(
+      "[admin.usuarios.reenviar.get-user]",
+      getUserErr?.message ?? "sem user",
+    );
+    return { ok: false, message: "Não foi possível encontrar o usuário." };
+  }
+
+  const authUser = userInfo.user;
+  if (authUser.email_confirmed_at) {
+    return {
+      ok: false,
+      message:
+        "Este usuário já ativou a conta — não é preciso reenviar convite.",
+    };
+  }
+  if (!authUser.email) {
+    return { ok: false, message: "Usuário sem e-mail cadastrado." };
+  }
+
+  const origin = resolveOrigin();
+  const redirectTo = `${origin}/api/auth/callback?next=/definir-senha`;
+
+  const { error: inviteErr } = await service.auth.admin.inviteUserByEmail(
+    authUser.email,
+    { redirectTo },
+  );
+
+  if (inviteErr) {
+    console.error("[admin.usuarios.reenviar.invite]", inviteErr.message);
+    const msg = inviteErr.message.toLowerCase();
+    if (msg.includes("rate") || msg.includes("too many")) {
+      return {
+        ok: false,
+        message: "Aguarde alguns segundos antes de reenviar de novo.",
+      };
+    }
+    return { ok: false, message: "Não foi possível reenviar o convite." };
+  }
+
+  await logAuditEvent({
+    acao: "usuario.reenvio_convite",
+    tenantId,
+    entidadeTipo: "tenant_member",
+    entidadeId: userId,
+    metadata: { email: authUser.email, redirectTo },
+  });
+
+  revalidatePath("/admin/usuarios");
+  return { ok: true, message: "Convite reenviado." };
 }
