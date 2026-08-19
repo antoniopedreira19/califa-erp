@@ -1863,3 +1863,52 @@ no caminho comum.
 conferida pelo MCP (colunas, FKs, CHECKs, RLS, policies, GRANT, índices,
 trigger, advisors). A conferência no navegador segue consolidada na etapa
 final de testes do plano.
+
+---
+
+## 24. Entrega 22 — Categoria do job no pop-up de envio (2026-08-18)
+
+**Origem:** pedido do Tiago de 18/08. Regra na
+[decisão 019](docs/decisions/019-categoria-do-job.md).
+
+Os **dois** modais do envio ganharam a **Categoria**, sempre entre o
+Produto e o par Cidade/Regional. O valor é a categoria do orçamento de
+origem — `categorias_dominio`, escopo `orcamento` —, a mesma que o
+financeiro recebe pré-selecionada na abertura.
+
+1. **`confirmar-envio-modal.tsx`** ("Tem certeza que quer enviar esse job
+   para a abertura?") — linha nova no card de resumo, entre "Produto" e
+   "Cidade · Regional".
+2. **`enviar-job-modal.tsx`** ("Enviar job para abertura") — campo
+   travado, com o apoio "Cadastrada no orçamento.", irmão do Produto.
+
+**A grade do formulário mudou de forma por causa disso.** Produto, Cidade
+e Regional dividiam uma linha de 3 colunas; a Categoria tinha de entrar
+**entre** o Produto e as outras duas (decisão do Tiago), e Cidade e
+Regional não podem se separar — as regionais oferecidas dependem da
+cidade. Então Produto e Categoria passaram a ocupar **uma linha cada**,
+com dois espaçadores `hidden md:block` fechando cada linha, e Cidade +
+Regional descem juntas para a linha seguinte. No mobile a grade já era de
+uma coluna e os espaçadores somem.
+
+O dado entra por `HerdadosJob.categoriaNome`, ao lado de produto, GP e
+produtor: campo herdado, exibido, não editável nestes modais. Quem o
+preenche é a página da versão, que passou a embedar
+`categoria:categorias_dominio(nome)` na query do orçamento que **já
+existia** — sem round-trip novo.
+
+**Herdado, e sempre do orçamento.** Mesmo com job já enviado (modo "Ver
+dados do job"), a linha mostra a categoria do orçamento, não a de
+`jobs.categoria_id`: esta tela é a visão da produção, e a do job só passa
+a existir depois que o financeiro abre — podendo inclusive ser outra, se
+ele trocar.
+
+**Não entrou em `herdadosIncompletos()`:** orçamento antigo sem categoria
+não bloqueia o envio, só mostra "— não informada". Categoria é
+obrigatória no orçamento desde 17/08, então o caso é residual.
+
+**Verificação:** `tsc --noEmit` e `next lint` limpos. Exercitado no
+navegador em TESTE-0003/26-06 · Teste B3 (categoria **Extra**, diferente
+das demais do projeto de propósito, para provar que o valor é lido do
+orçamento): a linha saiu "Categoria · Extra". Parado antes de "Sim,
+enviar job" — conferido pelo MCP que o orçamento segue com 0 jobs.

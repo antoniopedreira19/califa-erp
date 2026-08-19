@@ -215,6 +215,12 @@ export function FluxoAbertura({
     { rotulo: "Cliente", valor: clienteNome },
     { rotulo: "Produto", valor: herdados.produtoNome ?? "— não informado" },
     {
+      // Herdada do orçamento — é a categoria com que o job chega ao
+      // financeiro na abertura.
+      rotulo: "Categoria",
+      valor: herdados.categoriaNome ?? "— não informada",
+    },
+    {
       // O que o usuário escolheu no formulário — não o que estava no
       // orçamento antes de ele abrir o modal.
       rotulo: "Cidade · Regional",

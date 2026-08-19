@@ -138,7 +138,15 @@ export function AberturaForm({
   const router = useRouter();
 
   const [nome, setNome] = React.useState(job.nome);
-  const [categoriaId, setCategoriaId] = React.useState("");
+  // Chega com a categoria que a produção deu ao job no orçamento — o
+  // financeiro confere e pode trocar. Só pré-seleciona o que está na
+  // lista: categoria inativada desde o envio deixa o campo vazio, e aí o
+  // rodapé pede para escolher, em vez de o servidor recusar no envio.
+  const [categoriaId, setCategoriaId] = React.useState(() =>
+    job.categoria_id && categorias.some((c) => c.id === job.categoria_id)
+      ? job.categoria_id
+      : "",
+  );
   const [trimestre, setTrimestre] = React.useState(trimestreSugerido);
   const [ano, setAno] = React.useState(anoSugerido);
   const [curva, setCurva] = React.useState<LinhaPrevisaoForm[]>(() =>
@@ -343,6 +351,10 @@ export function AberturaForm({
     },
     { rotulo: "Cliente", valor: job.cliente_nome ?? "—" },
     { rotulo: "Produto", valor: job.produto ?? "—" },
+    // A que veio do orçamento — fixa. O que o financeiro escolher no
+    // campo ao lado aparece no "Resumo do registro", não aqui: este
+    // painel é o que a produção mandou.
+    { rotulo: "Categoria", valor: job.categoria_nome ?? "— não informada" },
     {
       rotulo: "Cidade · Regional",
       valor: [job.cidade, job.regional_nome].filter(Boolean).join(" · ") || "—",
@@ -455,10 +467,15 @@ export function AberturaForm({
                     ))}
                   </SelectContent>
                 </Select>
+                <span className="text-[11px] text-muted-foreground">
+                  Vem do orçamento{" "}
+                  <span className="font-mono">{job.orcamento_codigo ?? "—"}</span>
+                  . Pode ser trocada aqui sem alterar o orçamento.
+                </span>
                 {categorias.length === 0 && (
                   <span className="text-[11px] text-california-red">
-                    Nenhuma categoria de job cadastrada. Cadastre em Cadastros ›
-                    Categorias.
+                    Nenhuma categoria de orçamento cadastrada. Cadastre em
+                    Cadastros › Categorias.
                   </span>
                 )}
               </div>

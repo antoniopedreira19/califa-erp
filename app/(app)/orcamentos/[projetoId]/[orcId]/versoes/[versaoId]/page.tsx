@@ -83,8 +83,9 @@ export default async function VersaoDetailPage({
       .from("orcamentos")
       .select(
         "id, codigo, nome, status, projeto_id, data_inicio_prevista, data_fim_prevista, " +
-          "regional_id, cidade_id, " +
+          "regional_id, cidade_id, categoria_id, " +
           "regional:regionais(nome), cidade:cidades(nome), " +
+          "categoria:categorias_dominio(nome), " +
           "gp:profiles!gp_responsavel_id(nome), produtor:profiles!produtor_id(nome)",
       )
       .eq("id", params.orcId)
@@ -97,6 +98,7 @@ export default async function VersaoDetailPage({
         projeto_id: string;
         regional_id: string | null;
         cidade_id: string | null;
+        categoria_id: string | null;
         data_inicio_prevista: string | null;
         data_fim_prevista: string | null;
       }>(),
@@ -347,6 +349,10 @@ export default async function VersaoDetailPage({
       : orcamentoRaw.regional?.nome ?? null,
     gpNome: orcamentoRaw.gp?.nome ?? null,
     produtorNome: orcamentoRaw.produtor?.nome ?? null,
+    // Categoria do job = a do orçamento, sempre. `jobs.categoria_id` só
+    // existe depois que o financeiro abre o job, e mesmo então quem manda
+    // aqui é o orçamento: esta tela é a visão da produção.
+    categoriaNome: orcamentoRaw.categoria?.nome ?? null,
   };
 
   // 1370 e não max-w-7xl (1280): quando o "+BV" quadrado virou a pílula

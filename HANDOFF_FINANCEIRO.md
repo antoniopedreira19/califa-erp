@@ -1447,3 +1447,68 @@ baixa" → motivo curto manteve o confirmar desabilitado → motivo completo
 liberou → estornada. Contadores acompanharam (Pagos 3→2, A pagar 1→2, Em
 aberto R$ 6.000,00), a PP voltou a `aprovada` e o extrato ganhou o par
 `pp_baixa_estornada` + `pp_estorno`.
+
+---
+
+## 41. A categoria do job passou a vir do orçamento (2026-08-18)
+
+**Origem:** pedido do Tiago de 18/08 — *"O campo atual não existe e não
+faz sentido."* Regra na
+[decisão 019](docs/decisions/019-categoria-do-job.md).
+
+O select **"Categoria do job"** da abertura oferecia um vocabulário
+próprio do financeiro (`categorias_dominio`, escopo `job`: Ativação de
+marca, Conteúdo · Digital, Evento, Fee mensal, Trade · PDV) que não
+existia em nenhuma outra tela e que quem abria o job preenchia do zero.
+Agora ele mostra **a categoria que a produção deu ao job no orçamento** —
+escopo `orcamento`: Ativação, Conteúdo, Extra, Influencer.
+
+### O que mudou nas telas da abertura
+
+1. **Formulário de abertura** — o campo chega **pré-selecionado** com a
+   categoria do orçamento e lista o mesmo vocabulário. Abaixo dele, a
+   legenda "Vem do orçamento `NOV-0002/26-02`. Pode ser trocada aqui sem
+   alterar o orçamento" — mesmo espírito da legenda do "Nome do job".
+   Continua obrigatório para abrir.
+2. **Pop-up "Conferir o job antes de abrir"** — linha **Categoria** entre
+   "Produto" e "Cidade · Regional", com o mesmo valor.
+3. **Painel "Dados da produção"** (coluna direita do formulário) — mesma
+   linha, mesma posição, mas com o valor **do orçamento**, fixo. Ele não
+   acompanha o select: se o financeiro trocar a categoria, o painel segue
+   mostrando a que a produção mandou e o **"Resumo do registro"**, no pé
+   da página, mostra a escolhida. É a mesma divisão que o nome do job já
+   fazia entre as duas caixas.
+4. **Botão do pop-up de conferência** — "Aprovar e preencher abertura"
+   virou **"Preencher Abertura"**. Ele nunca aprovou nada: só navega para
+   o formulário, e a aprovação é o "Abrir job no financeiro" lá no fim.
+
+### Trocar aqui não mexe no orçamento
+
+A troca grava em `jobs.categoria_id` e para por aí — mesmo padrão do
+`nome_financeiro`. A Server Action passou a exigir escopo `orcamento`
+(era `job`), além de tenant e `ativo`, que já conferia.
+
+**Categoria inativada** entre o envio e a abertura deixa o campo vazio em
+vez de pré-selecionar um id que o servidor recusaria: o rodapé volta a
+pedir "Selecione a categoria do job", e o botão fica travado.
+
+### Sem migration, e sem tocar no que já está aberto
+
+`jobs.categoria_id` é FK solta para `categorias_dominio`, sem CHECK de
+escopo — quem valida é a action. **Os 12 jobs abertos antes de hoje
+continuam apontando para o escopo `job`** e exibindo o nome gravado; as 5
+linhas seguem no banco e no cadastro. Apagá-las é destrutivo e ficou
+fora — mas, a partir daqui, o escopo `job` é um vocabulário **órfão**:
+não alimenta mais nenhuma tela. Decidir o destino dele é assunto aberto.
+
+**Leitura sem custo novo:** `categoria_id` e o nome entram no embed de
+`orcamento` que `SELECT_JOB_FILA` já fazia para pegar o código — nenhuma
+query a mais na fila nem na tela de abertura.
+
+**Verificação:** `tsc --noEmit` e `next lint` limpos. Exercitado no
+navegador com o JOB-0014 (orçamento NOV-0002/26-02, categoria
+**Ativação**): a conferência mostrou "Categoria · Ativação" e o botão
+"Preencher Abertura"; o formulário abriu com "Ativação" selecionada e o
+dropdown listando exatamente Ativação, Conteúdo, Extra e Influencer.
+Nada gravado — o job segue em `aguardando_abertura`.
+

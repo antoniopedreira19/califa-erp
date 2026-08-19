@@ -92,8 +92,9 @@ export async function abrirJobNoFinanceiro(
     };
   }
 
-  // A categoria precisa ser do escopo 'job' e do mesmo tenant. Sem esta
-  // conferência, um id de categoria de projeto passaria pela FK.
+  // A categoria do job é a do orçamento (escopo 'orcamento'), e do mesmo
+  // tenant. Sem esta conferência, um id de categoria de projeto passaria
+  // pela FK.
   const { data: categoria } = await supabase
     .from("categorias_dominio")
     .select("id, escopo, ativo")
@@ -101,7 +102,7 @@ export async function abrirJobNoFinanceiro(
     .eq("tenant_id", session.activeTenant.id)
     .maybeSingle<{ id: string; escopo: string; ativo: boolean }>();
 
-  if (!categoria || categoria.escopo !== "job") {
+  if (!categoria || categoria.escopo !== "orcamento") {
     return { ok: false, message: "Categoria de job inválida." };
   }
   if (!categoria.ativo) {
