@@ -635,7 +635,12 @@ export interface Job {
    * sem renomear o job do GP. Use `nomeDoJobNoFinanceiro()`.
    */
   nome_financeiro: string | null;
-  /** Categoria contábil (categorias_dominio, escopo 'job'). */
+  /**
+   * Categoria do job (categorias_dominio, escopo 'orcamento'). Herdada do
+   * orçamento de origem na abertura, onde o financeiro pode trocá-la sem
+   * alterar o orçamento. Jobs abertos antes de 18/08/2026 apontam para o
+   * escopo 'job', que era um vocabulário só do financeiro.
+   */
   categoria_id: string | null;
   competencia_trimestre: number | null;
   competencia_ano: number | null;

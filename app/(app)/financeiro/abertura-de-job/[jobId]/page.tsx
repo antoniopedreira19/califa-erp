@@ -25,11 +25,14 @@ export default async function AbrirJobNoFinanceiroPage({
 
   const [carregado, categoriasRes] = await Promise.all([
     carregarJobParaAbertura(session.activeTenant.id, params.jobId),
+    // Escopo 'orcamento': a categoria do job é a que a produção escolheu
+    // no orçamento — o financeiro confere e pode trocar, mas dentro do
+    // mesmo vocabulário. Não existe lista de categoria só do financeiro.
     supabase
       .from("categorias_dominio")
       .select("id, nome")
       .eq("tenant_id", session.activeTenant.id)
-      .eq("escopo", "job")
+      .eq("escopo", "orcamento")
       .eq("ativo", true)
       .order("nome"),
   ]);

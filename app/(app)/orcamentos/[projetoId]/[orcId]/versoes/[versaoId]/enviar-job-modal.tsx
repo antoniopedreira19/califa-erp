@@ -66,6 +66,9 @@ export interface HerdadosJob {
   regionalNome: string | null;
   gpNome: string | null;
   produtorNome: string | null;
+  /** Categoria do job, herdada do orçamento (categorias_dominio, escopo
+   *  'orcamento'). É a mesma que o financeiro vê na abertura. */
+  categoriaNome: string | null;
 }
 
 /** Campos que o Zod do servidor valida — as chaves batem com `fieldErrors`. */
@@ -289,13 +292,25 @@ export function EnviarJobModal({
             <Travado valor={clienteNome} />
           </Campo>
 
-          {/* Linha 3 — produto continua travado (vem do projeto); cidade e
-              regional chegam pré-preenchidas com o orçamento e podem ser
-              trocadas aqui. Com o job já enviado, os três só exibem. */}
+          {/* Linhas 3 e 4 — Produto e Categoria, um por linha, os dois
+              travados: vêm do projeto e do orçamento. Cada um leva dois
+              espaçadores para fechar a linha, porque a Categoria precisa
+              ficar entre o Produto e o par Cidade/Regional — que não pode
+              se separar, já que as regionais dependem da cidade. No
+              mobile a grade vira uma coluna e os espaçadores somem. */}
           <Campo rotulo="Produto" apoio="Cadastrado no projeto.">
             <Travado valor={herdados.produtoNome ?? "— não informado"} />
           </Campo>
+          <div className="hidden md:col-span-2 md:block" aria-hidden />
 
+          <Campo rotulo="Categoria" apoio="Cadastrada no orçamento.">
+            <Travado valor={herdados.categoriaNome ?? "— não informada"} />
+          </Campo>
+          <div className="hidden md:col-span-2 md:block" aria-hidden />
+
+          {/* Linha 5 — cidade e regional chegam pré-preenchidas com o
+              orçamento e podem ser trocadas aqui. Com o job já enviado,
+              as duas só exibem. */}
           <Campo
             rotulo="Cidade"
             obrigatorio
@@ -367,7 +382,12 @@ export function EnviarJobModal({
             )}
           </Campo>
 
-          {/* Linha 4 — as três datas. */}
+          {/* Cidade e Regional ocupam duas das três colunas; sem este
+              espaçador a "Data de início" subiria para o buraco que
+              sobra e as três datas ficariam partidas em duas linhas. */}
+          <div className="hidden md:block" aria-hidden />
+
+          {/* Linha 6 — as três datas. */}
           <Campo
             rotulo="Data de início"
             obrigatorio

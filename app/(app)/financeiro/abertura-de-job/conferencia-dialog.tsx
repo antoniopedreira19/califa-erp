@@ -47,6 +47,9 @@ export function ConferenciaDialog({ job, onOpenChange, onReprovar }: Props) {
     },
     { rotulo: "Cliente", valor: job.cliente_nome ?? "—" },
     { rotulo: "Produto", valor: job.produto ?? "—" },
+    // Vem do orçamento: é a categoria que a produção deu ao job e a que a
+    // tela de abertura pré-seleciona.
+    { rotulo: "Categoria", valor: job.categoria_nome ?? "— não informada" },
     {
       rotulo: "Cidade · Regional",
       valor:
@@ -183,7 +186,7 @@ export function ConferenciaDialog({ job, onOpenChange, onReprovar }: Props) {
             className="inline-flex items-center gap-1.5 rounded-lg bg-california-red px-[18px] py-2.5 text-[13.5px] font-bold text-white transition-colors hover:bg-california-red-hover"
           >
             <Check className="h-4 w-4" />
-            Aprovar e preencher abertura
+            Preencher Abertura
           </button>
         </div>
       </DialogContent>

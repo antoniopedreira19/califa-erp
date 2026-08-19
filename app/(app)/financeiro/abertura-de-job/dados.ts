@@ -35,6 +35,13 @@ export interface JobNaFila {
   responsavel_nome: string | null;
   produtor_nome: string | null;
   orcamento_codigo: string | null;
+  /**
+   * Categoria do job, herdada do orçamento de origem (categorias_dominio,
+   * escopo 'orcamento'). Na fila, `jobs.categoria_id` ainda é null — quem
+   * grava é a abertura, e é este valor que ela chega pré-selecionando.
+   */
+  categoria_id: string | null;
+  categoria_nome: string | null;
   /** Agregados da planilha interna do job. */
   planilha_grupos: number;
   planilha_itens: number;
@@ -66,7 +73,7 @@ const SELECT_JOB_FILA =
   "regional:regionais(nome), " +
   "responsavel:profiles!responsavel_id(nome), " +
   "produtor:profiles!produtor_id(nome), " +
-  "orcamento:orcamentos(codigo)";
+  "orcamento:orcamentos(codigo, categoria_id, categoria:categorias_dominio(nome))";
 
 /**
  * Soma o orçado e o planejado da planilha interna de vários jobs numa
@@ -157,6 +164,8 @@ function montarJobNaFila(
     responsavel_nome: j.responsavel?.nome ?? null,
     produtor_nome: j.produtor?.nome ?? null,
     orcamento_codigo: j.orcamento?.codigo ?? null,
+    categoria_id: j.orcamento?.categoria_id ?? null,
+    categoria_nome: j.orcamento?.categoria?.nome ?? null,
     planilha_grupos: totais?.grupos ?? 0,
     planilha_itens: totais?.itens ?? 0,
     planilha_orcado: totais?.orcado ?? 0,
