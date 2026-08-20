@@ -346,7 +346,9 @@ export function TitulosPagarList({
             ? `Pedido de produção ${baixando.origem_label}`
             : baixando.origem === "recorrencia"
               ? `Recorrência · ${baixando.descricao}`
-              : "Lançamento avulso",
+              : baixando.origem === "desembolso"
+                ? `Desembolso ${baixando.origem_label}`
+                : "Lançamento avulso",
         parcela: `${baixando.parcela_numero}/${baixando.parcela_total}`,
         vencimento: baixando.data_pagamento,
         valor: baixando.valor,
@@ -364,7 +366,9 @@ export function TitulosPagarList({
             ? `Pedido de produção ${conferindo.origem_label}`
             : conferindo.origem === "recorrencia"
               ? `Recorrência · ${conferindo.descricao}`
-              : "Lançamento avulso",
+              : conferindo.origem === "desembolso"
+                ? `Desembolso ${conferindo.origem_label}`
+                : "Lançamento avulso",
         parcela: `${conferindo.parcela_numero}/${conferindo.parcela_total}`,
         valor: conferindo.valor,
         pagoEm: conferindo.pago_em,
@@ -381,7 +385,9 @@ export function TitulosPagarList({
         origem:
           editando.origem === "pp"
             ? `${editando.origem_label} · ${editando.parcela_numero}/${editando.parcela_total}`
-            : editando.origem_label,
+            : editando.origem === "desembolso"
+              ? `Desembolso ${editando.origem_label}`
+              : editando.origem_label,
         vencOriginal: editando.venc_original,
         primeiraData: editando.data_pagamento_primeira,
         dataAtual: editando.data_pagamento,
