@@ -116,6 +116,7 @@ export async function darBaixaLoteCartao(input: unknown): Promise<Result> {
     return { ok: false, message: mensagemDeBaixaLote(error.message) };
   }
 
+  // Evento agregado — uma única entrada para a fatura toda.
   await logAuditEvent({
     acao: "contas_pagar.baixa_lote_cartao",
     tenantId: session.activeTenant.id,
@@ -130,6 +131,80 @@ export async function darBaixaLoteCartao(input: unknown): Promise<Result> {
       lancamentos: ids,
     },
   });
+
+  // Eventos individuais — 1 por título, conforme spec §3.7.
+  const ppIds = d.titulos.filter((t) => t.origem === "pp").map((t) => t.id);
+  const avulsaIds = d.titulos
+    .filter((t) => t.origem === "avulso" || t.origem === "recorrencia")
+    .map((t) => t.id);
+
+  // Batch SELECT para obter pedido_compra_id das parcelas de PP.
+  const parcelasMap = new Map<string, { pedido_compra_id: string; numero: number; valor: number }>();
+  if (ppIds.length > 0) {
+    const { data: parcelasData } = await supabase
+      .from("pedidos_compra_parcelas")
+      .select("id, pedido_compra_id, numero, valor")
+      .in("id", ppIds);
+    for (const p of parcelasData ?? []) {
+      parcelasMap.set(p.id, {
+        pedido_compra_id: p.pedido_compra_id,
+        numero: p.numero,
+        valor: Number(p.valor),
+      });
+    }
+  }
+
+  // Batch SELECT para obter dados das contas avulsas.
+  const avulsasMap = new Map<string, { descricao: string; valor: number }>();
+  if (avulsaIds.length > 0) {
+    const { data: avulsasData } = await supabase
+      .from("contas_avulsas")
+      .select("id, descricao, valor")
+      .in("id", avulsaIds);
+    for (const a of avulsasData ?? []) {
+      avulsasMap.set(a.id, { descricao: a.descricao, valor: Number(a.valor) });
+    }
+  }
+
+  // O array `ids` retornado pela RPC vem na mesma ordem de `d.titulos` — zipear.
+  const lancamentosIds = (ids as string[]) ?? [];
+  await Promise.all(
+    d.titulos.map(async (titulo, idx) => {
+      const lancamento_id = lancamentosIds[idx] ?? null;
+      if (titulo.origem === "pp") {
+        const parcela = parcelasMap.get(titulo.id);
+        await logAuditEvent({
+          acao: "pedido_compra.parcela_paga",
+          tenantId: session.activeTenant.id,
+          entidadeTipo: "pedido_compra",
+          entidadeId: parcela?.pedido_compra_id ?? null,
+          metadata: {
+            parcela_id: titulo.id,
+            parcela_numero: parcela?.numero ?? null,
+            lancamento_id,
+            pago_em: d.pago_em,
+            valor: parcela?.valor ?? null,
+            via: "baixa_lote_cartao",
+          },
+        });
+      } else {
+        const avulsa = avulsasMap.get(titulo.id);
+        await logAuditEvent({
+          acao: "conta_avulsa.baixada",
+          tenantId: session.activeTenant.id,
+          entidadeTipo: "conta_avulsa",
+          entidadeId: titulo.id,
+          metadata: {
+            descricao: avulsa?.descricao ?? null,
+            lancamento_id,
+            pago_em: d.pago_em,
+            valor: avulsa?.valor ?? null,
+            via: "baixa_lote_cartao",
+          },
+        });
+      }
+    }),
+  );
 
   revalidatePath("/financeiro/contas-a-pagar");
   revalidatePath("/financeiro/fluxo-caixa");

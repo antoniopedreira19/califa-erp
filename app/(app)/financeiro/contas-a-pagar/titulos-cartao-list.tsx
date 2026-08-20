@@ -116,7 +116,6 @@ interface Props {
   contas: ContaBancaria[];
   tipos: PlanoContaTipo[];
   subtipos: PlanoContaSubtipo[];
-  tenantId: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -196,13 +195,7 @@ function GrupoCartaoHeader({
 // Componente principal
 // ---------------------------------------------------------------------------
 
-export function TitulosCartaoList({
-  rows,
-  cartoes,
-  contas,
-  tipos,
-  subtipos,
-}: Props) {
+export function TitulosCartaoList({ rows, cartoes, contas, tipos, subtipos }: Props) {
   const router = useRouter();
 
   // Filtros
