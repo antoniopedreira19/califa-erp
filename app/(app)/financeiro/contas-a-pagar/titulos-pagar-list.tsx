@@ -434,10 +434,10 @@ export function TitulosPagarList({
         <table className="w-full table-fixed text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/30 text-center text-[11px] uppercase tracking-wider text-muted-foreground">
-              <th className="w-[12%] px-2 py-3 font-semibold">Data de pagamento</th>
-              <th className="w-[8%] px-2 py-3 font-semibold">Venc. original</th>
-              <th className="w-[20%] px-3 py-3 font-semibold">Título</th>
-              <th className="w-[14%] px-3 py-3 font-semibold">Fornecedor</th>
+              <th className="w-[10%] px-2 py-3 font-semibold">Data Pgto.</th>
+              <th className="w-[8%] px-2 py-3 font-semibold">Venc. Orig.</th>
+              <th className="w-[21%] px-3 py-3 font-semibold">Título</th>
+              <th className="w-[15%] px-3 py-3 font-semibold">Fornecedor</th>
               <th className="w-[8%] px-2 py-3 font-semibold">Job</th>
               <th className="w-[9%] px-2 py-3 font-semibold">Origem</th>
               <th className="w-[9%] px-3 py-3 font-semibold">Valor</th>
@@ -490,9 +490,9 @@ export function TitulosPagarList({
                             setErroAcao(null);
                             setEditando(r);
                           }}
-                          className="inline-flex h-[26px] w-[26px] flex-none items-center justify-center rounded-md border border-border bg-white text-muted-foreground transition-colors hover:border-california-red hover:text-california-red"
+                          className="inline-flex h-5 w-5 flex-none items-center justify-center rounded border border-border bg-white text-muted-foreground transition-colors hover:border-california-red hover:text-california-red"
                         >
-                          <Pencil className="h-3 w-3" />
+                          <Pencil className="h-2.5 w-2.5" />
                         </button>
                       )}
                       <span
