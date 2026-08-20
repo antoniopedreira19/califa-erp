@@ -14,7 +14,6 @@ import {
   dividirEmParcelas,
   proximoVencimento,
 } from "@/lib/calculos/pps-item";
-import { parcelasParaFatura, formatarISO } from "@/lib/cartoes/proxima-fatura";
 // NÃO importar renderPedidoCompraPDF estaticamente. O módulo pedido-compra.ts
 // puxa pdfmake, que tem side-effects de inicialização que falham em runtime
 // serverless Vercel. Se importarmos aqui, TODAS as actions do arquivo caem
@@ -490,35 +489,10 @@ async function finalizarPedidoCompraImpl(
     return { ok: false, message: msg };
   }
 
-  // Quando a forma é cartão, sobrescreve as datas das parcelas com as
-  // faturas calculadas a partir do dia_vencimento_fatura do cartão.
-  // O formulário já enviou datas calculadas localmente; aqui reconfirmamos
-  // no server (regra não pode ser só frontend).
-  let parcelasFinais = d.parcelas;
-  if (d.forma_pagamento === "cartao_credito" && d.cartao_credito_id) {
-    const { data: cartaoRow } = await supabase
-      .from("cartoes_credito")
-      .select("dia_vencimento_fatura")
-      .eq("id", d.cartao_credito_id)
-      .eq("tenant_id", session.activeTenant.id)
-      .maybeSingle();
-
-    if (cartaoRow?.dia_vencimento_fatura) {
-      const datas = parcelasParaFatura(
-        cartaoRow.dia_vencimento_fatura,
-        new Date(),
-        d.parcelas.length,
-      );
-      // Mantém os valores enviados pelo form; recalcula APENAS as datas.
-      // Isso garante que edições manuais de data feitas pelo usuário não
-      // fiquem totalmente ignoradas quando o server revalida — mas as
-      // datas do server prevalecem para garantir coerência.
-      parcelasFinais = d.parcelas.map((p, i) => ({
-        ...p,
-        data_vencimento: formatarISO(datas[i] ?? datas[datas.length - 1]),
-      }));
-    }
-  }
+  // Usa as datas validadas pelo Zod; não sobrescreve o que o user editou.
+  // O validador superRefine garante que cada parcela tem data_vencimento >= hoje
+  // quando a forma é cartão de crédito.
+  const parcelasFinais = d.parcelas;
 
   // INSERT pedidos_compra (pdf_path = '' placeholder)
   const { error: insertErr } = await supabase.from("pedidos_compra").insert({
