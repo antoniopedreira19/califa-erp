@@ -1319,6 +1319,15 @@ export type OrigemLancamento =
   | "pp_baixa"
   | "pp_baixa_estornada"
   | "pp_estorno"
+  | "avulsa_baixa"
+  | "avulsa_baixa_estornada"
+  | "avulsa_estorno"
+  | "titulo_baixa"
+  | "titulo_baixa_estornada"
+  | "titulo_estorno"
+  | "desembolso_baixa"
+  | "desembolso_baixa_estornada"
+  | "desembolso_estorno"
   | "manual";
 
 export interface LancamentoFinanceiro {
@@ -1343,6 +1352,16 @@ export interface LancamentoFinanceiro {
    */
   pedido_compra_parcela_id: string | null;
   conta_avulsa_id: string | null;
+  /**
+   * Desembolso que este lançamento quitou (via desembolso_baixa) ou estornou.
+   * Nulo em outras origens.
+   */
+  desembolso_id: string | null;
+  /**
+   * Parcela do desembolso que este lançamento quitou. Nulo em lançamento
+   * que não veio de baixa de parcela de desembolso.
+   */
+  desembolso_parcela_id: string | null;
   estorno_de_lancamento_id: string | null;
   origem: OrigemLancamento;
   criado_por: string;
@@ -1587,10 +1606,10 @@ export interface ContaAvulsa {
  *   recorrencia → `contas_avulsas` com `recorrente_id` preenchido
  *                 (a ocorrência que `gerar_ocorrencias_recorrentes` cria)
  */
-export type OrigemTitulo = "pp" | "avulso" | "recorrencia";
+export type OrigemTitulo = "pp" | "avulso" | "recorrencia" | "desembolso";
 
 export const origemTituloLabel = (o: OrigemTitulo, ppCodigo?: string | null): string =>
-  o === "pp" ? (ppCodigo ?? "PP") : o === "avulso" ? "AVULSO" : "RECORRÊNCIA";
+  o === "pp" ? (ppCodigo ?? "PP") : o === "avulso" ? "AVULSO" : o === "recorrencia" ? "RECORRÊNCIA" : "DESEMBOLSO";
 
 /** `a_pagar` enquanto não há baixa; `pago` depois dela. */
 export type TituloPagarStatus = "a_pagar" | "pago";
