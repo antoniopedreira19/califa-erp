@@ -265,3 +265,27 @@ export async function cancelarDesembolso(input: unknown): Promise<Result> {
   revalidarDesembolsos();
   return { ok: true };
 }
+
+export async function signedUrlAnexoDesembolso(
+  anexoId: string,
+): Promise<{ ok: true; url: string } | { ok: false; message: string }> {
+  const session = await requireSession();
+  const supabase = createClient();
+
+  const { data: anexo } = await supabase
+    .from("desembolsos_anexos")
+    .select("arquivo_path, tenant_id")
+    .eq("id", anexoId)
+    .maybeSingle();
+
+  if (!anexo || anexo.tenant_id !== session.activeTenant.id) {
+    return { ok: false, message: "Anexo não encontrado." };
+  }
+
+  const { data, error } = await supabase.storage
+    .from("desembolsos")
+    .createSignedUrl(anexo.arquivo_path, 60);
+
+  if (error || !data) return { ok: false, message: "Falha ao gerar URL de download." };
+  return { ok: true, url: data.signedUrl };
+}

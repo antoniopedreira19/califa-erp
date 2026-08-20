@@ -17,6 +17,7 @@ import {
   Menu,
   X,
   Lock,
+  Wallet,
 } from "lucide-react";
 
 type NavLink = {
@@ -46,6 +47,12 @@ const links: NavLink[] = [
     label: "Financeiro",
     icon: Landmark,
     roles: ["administrador", "financeiro"],
+  },
+  {
+    href: "/financeiro/desembolsos",
+    label: "Desembolsos",
+    icon: Wallet,
+    activePathPrefixes: ["/financeiro/desembolsos"],
   },
   {
     href: "/admin",
