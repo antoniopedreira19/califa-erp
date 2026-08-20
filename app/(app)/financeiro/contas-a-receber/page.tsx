@@ -413,8 +413,22 @@ export default async function ContasReceberPage() {
   }, 0);
   const proximoNf = maiorNf > 0 ? String(maiorNf + 1) : "";
 
+  // Mais largo que o padrao do app (max-w-7xl = 1280px), na mesma largura
+  // do Fluxo de Caixa: a tabela de Titulos a Receber precisa de 1426px e
+  // era cortada em 1280 desde que nasceu, e a de Faturamento (1371px)
+  // perdeu a coluna de acao quando o contato de cobranca passou a ocupar a
+  // celula do cliente (decisao 012).
+  //
+  // O numero 1560 e teto declarado, nao largura efetiva: o proprio layout
+  // (`app/(app)/layout.tsx`, max-w-[1600px] + px-8) ja limita o conteudo a
+  // 1536px, entao 1560 e 1600 renderizam identicos e a folga lateral vem
+  // do padding do layout. Fica 1560 por igualdade com o Fluxo de Caixa.
+  //
+  // As duas tabelas cabem inteiras a partir de ~1570px de viewport. Abaixo
+  // disso elas rolam DENTRO da propria caixa (`overflow-x-auto`) — a
+  // pagina nunca rola na horizontal.
   return (
-    <div className="mx-auto max-w-7xl space-y-8">
+    <div className="mx-auto max-w-[1560px] space-y-8">
       <header className="space-y-2">
         <nav className="flex items-center gap-2 text-xs text-muted-foreground">
           <Link href="/financeiro" className="transition-colors hover:text-california-red">
