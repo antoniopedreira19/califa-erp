@@ -13,8 +13,10 @@ import type {
   NaturezaLancamento,
   PlanoContaTipo,
   PlanoContaSubtipo,
+  BandeiraCartao,
 } from "@/lib/types";
 import { contaAvulsaStatusLabel } from "@/lib/types";
+import type { CartaoOption } from "@/components/financeiro/forma-pagamento-field";
 import {
   EditarAvulsaButton,
   ExcluirAvulsaButton,
@@ -81,6 +83,7 @@ export default async function AvulsaDetalhesPage({
     jobsRes,
     regionaisRes,
     rateioRes,
+    cartoesRes,
   ] = await Promise.all([
     supabase
       .from("contas_avulsas_anexos")
@@ -145,6 +148,13 @@ export default async function AvulsaDetalhesPage({
       .select("regional_id, percentual")
       .eq("conta_avulsa_id", params.id)
       .eq("tenant_id", session.activeTenant.id),
+    // Cartões de crédito ativos (para o drawer de edição)
+    supabase
+      .from("cartoes_credito")
+      .select("id, nome, banco, bandeira, ultimos_4_digitos, dia_vencimento_fatura")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("ativo", true)
+      .order("nome"),
   ]);
 
   // conta vem do Supabase com embeds — usar cast amplo para acessar joins
@@ -249,6 +259,17 @@ export default async function AvulsaDetalhesPage({
     percentual: Number(r.percentual),
   }));
 
+  const cartoes = (cartoesRes.data ?? []).map(
+    (cartao: { id: string; nome: string; banco: string; bandeira: string; ultimos_4_digitos: string; dia_vencimento_fatura: number }) => ({
+      id: cartao.id,
+      nome: cartao.nome,
+      banco: cartao.banco,
+      bandeira: cartao.bandeira as BandeiraCartao,
+      ultimos_4_digitos: cartao.ultimos_4_digitos,
+      dia_vencimento_fatura: cartao.dia_vencimento_fatura,
+    }),
+  ) as CartaoOption[];
+
   const contaParaDrawer: ContaAvulsa = {
     id: c.id,
     tenant_id: c.tenant_id,
@@ -334,6 +355,7 @@ export default async function AvulsaDetalhesPage({
                   jobs={jobs}
                   regionais={regionais}
                   rateioInicial={rateioInicial}
+                  cartoes={cartoes}
                 />
                 <BaixarAvulsaModalClient
                   contaId={c.id}

@@ -22,6 +22,7 @@ import type {
   PlanoContaSubtipo,
   RateioLinhaInput,
 } from "@/lib/types";
+import type { CartaoOption } from "@/components/financeiro/forma-pagamento-field";
 
 // ---------------------------------------------------------------------------
 // EditarAvulsaButton
@@ -39,6 +40,7 @@ interface EditarProps {
   jobs: Array<{ id: string; codigo: string; nome: string; cliente_id: string | null; regional_id: string | null }>;
   regionais: Array<{ id: string; nome: string; ativo: boolean }>;
   rateioInicial?: RateioLinhaInput[];
+  cartoes?: CartaoOption[];
 }
 
 export function EditarAvulsaButton({
@@ -52,6 +54,7 @@ export function EditarAvulsaButton({
   jobs,
   regionais,
   rateioInicial,
+  cartoes,
 }: EditarProps) {
   const [open, setOpen] = React.useState(false);
 
@@ -77,6 +80,7 @@ export function EditarAvulsaButton({
         jobs={jobs}
         regionais={regionais}
         rateioInicial={rateioInicial}
+        cartoes={cartoes}
         open={open}
         onOpenChange={setOpen}
       />
