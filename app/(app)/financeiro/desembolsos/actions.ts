@@ -19,12 +19,23 @@ function revalidarDesembolsos() {
   revalidatePath("/financeiro/fluxo-caixa");
 }
 
-async function checarGateFinanceiro(): Promise<
+async function checarGateFinanceiro(
+  entidadeTipo: string,
+  entidadeId: string | null,
+  acaoTentada: string,
+): Promise<
   | { ok: true; session: Awaited<ReturnType<typeof requireSession>>; supabase: ReturnType<typeof createClient> }
   | { ok: false; message: string }
 > {
   const session = await requireSession();
   if (session.activeRole !== "administrador" && session.activeRole !== "financeiro") {
+    await logAuditEvent({
+      acao: "acao_negada",
+      tenantId: session.activeTenant.id,
+      entidadeTipo,
+      entidadeId,
+      metadata: { acao_tentada: acaoTentada, motivo: "sem_permissao_financeira" },
+    });
     return { ok: false, message: "Apenas admin ou financeiro pode executar esta ação." };
   }
   return { ok: true, session, supabase: createClient() };
@@ -123,7 +134,7 @@ export async function aprovarDesembolsoComData(input: unknown): Promise<Result> 
   const parsed = aprovarDesembolsoSchema.safeParse(input);
   if (!parsed.success) return { ok: false, message: parsed.error.issues[0]?.message ?? "Entrada inválida." };
 
-  const gate = await checarGateFinanceiro();
+  const gate = await checarGateFinanceiro("desembolso", parsed.data.desembolso_id, "desembolso.aprovada");
   if (!gate.ok) return gate;
 
   const { data: desembolso } = await gate.supabase
@@ -163,7 +174,7 @@ export async function rejeitarDesembolso(input: unknown): Promise<Result> {
   const parsed = rejeitarDesembolsoSchema.safeParse(input);
   if (!parsed.success) return { ok: false, message: parsed.error.issues[0]?.message ?? "Entrada inválida." };
 
-  const gate = await checarGateFinanceiro();
+  const gate = await checarGateFinanceiro("desembolso", parsed.data.desembolso_id, "desembolso.rejeitada");
   if (!gate.ok) return gate;
 
   const { data: desembolso } = await gate.supabase
@@ -205,7 +216,7 @@ export async function cancelarDesembolso(input: unknown): Promise<Result> {
   const parsed = cancelarDesembolsoSchema.safeParse(input);
   if (!parsed.success) return { ok: false, message: parsed.error.issues[0]?.message ?? "Entrada inválida." };
 
-  const gate = await checarGateFinanceiro();
+  const gate = await checarGateFinanceiro("desembolso", parsed.data.desembolso_id, "desembolso.cancelada");
   if (!gate.ok) return gate;
 
   const { data: desembolso } = await gate.supabase
