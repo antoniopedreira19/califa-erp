@@ -168,6 +168,8 @@ export default async function AvulsaDetalhesPage({
     pago_por: string | null;
     conta_bancaria_baixa_id: string | null;
     recorrente_id: string | null;
+    forma_pagamento: any;
+    cartao_credito_id: string | null;
     criado_por: string;
     created_at: string;
     updated_at: string;
@@ -266,6 +268,8 @@ export default async function AvulsaDetalhesPage({
     pago_por: c.pago_por,
     conta_bancaria_baixa_id: c.conta_bancaria_baixa_id,
     recorrente_id: (c.recorrente_id as string | null) ?? null,
+    forma_pagamento: (c.forma_pagamento as any) ?? null,
+    cartao_credito_id: (c.cartao_credito_id as string | null) ?? null,
     criado_por: c.criado_por,
     created_at: c.created_at,
     updated_at: c.updated_at,
