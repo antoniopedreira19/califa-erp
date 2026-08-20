@@ -28,11 +28,13 @@ import { cn } from "@/lib/utils";
 import { DatePicker } from "@/components/ui/date-picker";
 import type {
   ContaBancaria,
+  FormaPagamento,
   OrigemTitulo,
   PlanoContaTipo,
   PlanoContaSubtipo,
   TituloPagarStatus,
 } from "@/lib/types";
+import type { CartaoOption } from "@/components/financeiro/forma-pagamento-field";
 import { ContaAvulsaDrawer } from "./conta-avulsa-drawer";
 import {
   BaixaTituloDialog,
@@ -80,6 +82,14 @@ export interface TituloRow {
   pago_em: string | null;
   conta_nome: string | null;
   centro_nome: string | null;
+  /**
+   * Forma de pagamento da conta avulsa ou recorrência.
+   * Parcelas de PP ficam null (PP não tem forma_pagamento ainda).
+   * Task 10 consome esses campos para separar cartões da aba comum.
+   */
+  forma_pagamento: FormaPagamento | null;
+  /** Cartão de crédito associado. Null para PP ou formas sem cartão. */
+  cartao_credito_id: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -160,6 +170,8 @@ interface Props {
     regional_id: string | null;
   }>;
   regionais: Array<{ id: string; nome: string; ativo: boolean }>;
+  /** Cartões de crédito ativos — repassados ao drawer de conta avulsa. */
+  cartoes?: CartaoOption[];
 }
 
 export function TitulosPagarList({
@@ -174,6 +186,7 @@ export function TitulosPagarList({
   clientes,
   jobs,
   regionais,
+  cartoes = [],
 }: Props) {
   // Cada aba enxerga só o próprio conjunto — evita cascata de condicionais
   // no resto do componente.
@@ -411,6 +424,7 @@ export function TitulosPagarList({
             clientes={clientes}
             jobs={jobs}
             regionais={regionais}
+            cartoes={cartoes}
             onCriadaParaBaixa={(id) => {
               setFiltroOrigem("todas");
               setBusca("");

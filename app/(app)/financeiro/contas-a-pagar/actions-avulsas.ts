@@ -106,6 +106,8 @@ export async function criarContaAvulsa(input: unknown): Promise<Result> {
       job_id: d.job_id,
       plano_conta_tipo_id: d.plano_conta_tipo_id,
       plano_conta_subtipo_id: d.plano_conta_subtipo_id,
+      forma_pagamento: d.forma_pagamento,
+      cartao_credito_id: d.cartao_credito_id,
       criado_por: session.profile.id,
     })
     .select("id")
@@ -186,6 +188,8 @@ export async function criarContaAvulsa(input: unknown): Promise<Result> {
       valor: Number(d.valor),
       natureza: d.natureza,
       empresa_id: d.empresa_id,
+      forma_pagamento: d.forma_pagamento,
+      cartao_credito_id: d.cartao_credito_id,
       anexos_count: d.anexos.length,
     },
   });
@@ -254,6 +258,8 @@ export async function editarContaAvulsa(
     "job_id",
     "plano_conta_tipo_id",
     "plano_conta_subtipo_id",
+    "forma_pagamento",
+    "cartao_credito_id",
   ] as const;
 
   const historicoRows: Array<{
@@ -351,6 +357,8 @@ export async function editarContaAvulsa(
         job_id: d.job_id,
         plano_conta_tipo_id: d.plano_conta_tipo_id,
         plano_conta_subtipo_id: d.plano_conta_subtipo_id,
+        forma_pagamento: d.forma_pagamento,
+        cartao_credito_id: d.cartao_credito_id,
       })
       .eq("id", id)
       .eq("tenant_id", session.activeTenant.id);
