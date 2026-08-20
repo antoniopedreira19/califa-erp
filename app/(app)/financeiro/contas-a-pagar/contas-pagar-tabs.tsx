@@ -4,14 +4,16 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 
 /**
- * Cinco abas desde 20/08/2026.
+ * Seis abas desde 20/08/2026.
  *
  * - PPs: pedidos de produção (aprovação/rejeição).
+ * - Pedidos de Desembolsos: desembolsos diretos (aprovação/rejeição/cancelamento).
  * - Recorrências: gestão de contas avulsas recorrentes.
  * - Títulos a Pagar: avulsos + PPs (exceto cartões pendentes).
  * - Títulos a Pagar (Cartão): somente cartão de crédito + baixa em lote.
  * - Títulos Pagos: histórico do que já saiu (arquivo/conciliação).
  *
+ * PPs e Desembolsos agrupam workflows de aprovação no início.
  * "Títulos a Pagar (Cartão)" fica entre "Títulos a Pagar" e "Títulos Pagos".
  * A antiga "Lançamentos Avulsos" foi ABSORVIDA por "Títulos a Pagar": a
  * avulsa virou um título de origem AVULSO na lista unificada.
@@ -21,6 +23,10 @@ interface Props {
   pps: React.ReactNode;
   /** Contagem de PPs em avaliação — vira badge. */
   ppsPendentesCount: number;
+  /** Conteúdo da aba de desembolsos (já pronto, vindo da page.tsx). */
+  desembolsos: React.ReactNode;
+  /** Contagem de desembolsos em avaliação — vira badge. */
+  desembolsosPendentesCount: number;
   /** Conteúdo da aba unificada de títulos a pagar (sem cartões pendentes). */
   titulos: React.ReactNode;
   /** Quantos títulos estão a pagar (excluindo cartões) — vira badge. */
@@ -37,11 +43,13 @@ interface Props {
   titulosCartaoCount: number;
 }
 
-type TabKey = "pps" | "titulos" | "cartao" | "recorrentes" | "pagos";
+type TabKey = "pps" | "desembolsos" | "titulos" | "cartao" | "recorrentes" | "pagos";
 
 export function ContasPagarTabs({
   pps,
   ppsPendentesCount,
+  desembolsos,
+  desembolsosPendentesCount,
   titulos,
   titulosAPagarCount,
   recorrentes,
@@ -63,6 +71,13 @@ export function ContasPagarTabs({
       >
         <TabButton active={tab === "pps"} onClick={() => setTab("pps")} count={ppsPendentesCount}>
           Pedidos de Produção (PPs)
+        </TabButton>
+        <TabButton
+          active={tab === "desembolsos"}
+          onClick={() => setTab("desembolsos")}
+          count={desembolsosPendentesCount}
+        >
+          Pedidos de Desembolsos
         </TabButton>
         <TabButton
           active={tab === "recorrentes"}
@@ -96,6 +111,13 @@ export function ContasPagarTabs({
         className={cn(tab === "pps" ? "" : "hidden")}
       >
         {pps}
+      </div>
+      <div
+        role="tabpanel"
+        aria-hidden={tab !== "desembolsos"}
+        className={cn(tab === "desembolsos" ? "" : "hidden")}
+      >
+        {desembolsos}
       </div>
       <div
         role="tabpanel"
