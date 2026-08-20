@@ -28,8 +28,6 @@ interface Props {
   recorrentesAtivasCount: number;
   /** Conteúdo da aba de títulos já pagos. */
   titulosPagos: React.ReactNode;
-  /** Quantos títulos já foram pagos — vira badge. */
-  titulosPagosCount: number;
 }
 
 type TabKey = "pps" | "titulos" | "recorrentes" | "pagos";
@@ -42,7 +40,6 @@ export function ContasPagarTabs({
   recorrentes,
   recorrentesAtivasCount,
   titulosPagos,
-  titulosPagosCount,
 }: Props) {
   // Abre em "Títulos a Pagar": é a aba central de saída de dinheiro, e o
   // que o financeiro faz todo dia é dar baixa, não avaliar PP.
@@ -72,11 +69,7 @@ export function ContasPagarTabs({
         >
           Títulos a Pagar
         </TabButton>
-        <TabButton
-          active={tab === "pagos"}
-          onClick={() => setTab("pagos")}
-          count={titulosPagosCount}
-        >
+        <TabButton active={tab === "pagos"} onClick={() => setTab("pagos")}>
           Títulos Pagos
         </TabButton>
       </div>
@@ -121,7 +114,7 @@ function TabButton({
 }: {
   active: boolean;
   onClick: () => void;
-  count: number;
+  count?: number;
   children: React.ReactNode;
 }) {
   return (
@@ -138,7 +131,7 @@ function TabButton({
       )}
     >
       {children}
-      {count > 0 && (
+      {count !== undefined && count > 0 && (
         <span
           className={cn(
             "inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1.5 text-[10px] font-bold",

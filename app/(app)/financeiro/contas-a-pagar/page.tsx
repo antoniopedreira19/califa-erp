@@ -390,7 +390,6 @@ export default async function PedidosCompraFinanceiroPage() {
   }
 
   const titulosAPagarCount = titulos.filter((t) => t.status === "a_pagar").length;
-  const titulosPagosCount = titulos.filter((t) => t.status === "pago").length;
 
   // Mapeamento das recorrências para RecorrenteRow
   const recorrentesRows: RecorrenteRow[] = ((recorrentesRes.data ?? []) as unknown as Array<{
@@ -541,7 +540,6 @@ export default async function PedidosCompraFinanceiroPage() {
             regionais={regionaisList}
           />
         }
-        titulosPagosCount={titulosPagosCount}
       />
     </div>
   );

@@ -14,9 +14,9 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import {
   CalendarClock,
-  Check,
   CheckCheck,
   CreditCard,
+  Eye,
   Info,
   Pencil,
   Plus,
@@ -187,6 +187,10 @@ export function TitulosPagarList({
 
   const [filtroOrigem, setFiltroOrigem] = React.useState<"todas" | OrigemTitulo>("todas");
   const [busca, setBusca] = React.useState("");
+  // Filtro de período — só usado no modo `pagos`. Filtra por `pago_em`
+  // (ISO local). Datas vazias = sem limite naquele lado.
+  const [dataDe, setDataDe] = React.useState<string>("");
+  const [dataAte, setDataAte] = React.useState<string>("");
 
   const [baixando, setBaixando] = React.useState<TituloRow | null>(null);
   /** Título JÁ PAGO aberto para conferência — e para estornar, se for o
@@ -219,8 +223,9 @@ export function TitulosPagarList({
     return () => clearTimeout(t);
   }, [toast]);
 
-  // O chip de origem conta respeitando a busca ativa: o número é
-  // literalmente "quantas linhas apareceriam se eu clicasse aqui".
+  // O chip de origem conta respeitando a busca e o período ativos: o
+  // número é literalmente "quantas linhas apareceriam se eu clicasse
+  // aqui".
   const casaBusca = React.useCallback(
     (r: TituloRow, q: string) =>
       !q ||
@@ -231,22 +236,38 @@ export function TitulosPagarList({
     [],
   );
 
+  // Filtro de período só se aplica no modo `pagos`, por `pago_em`. No modo
+  // `a_pagar` os dois inputs de data ficam ocultos, então retorna true.
+  const casaPeriodo = React.useCallback(
+    (r: TituloRow) => {
+      if (modo !== "pagos") return true;
+      if (!dataDe && !dataAte) return true;
+      const p = r.pago_em ?? "";
+      if (!p) return false;
+      if (dataDe && p < dataDe) return false;
+      if (dataAte && p > dataAte) return false;
+      return true;
+    },
+    [modo, dataDe, dataAte],
+  );
+
   const contagemOrigem = React.useMemo(() => {
     const q = busca.trim().toLowerCase();
-    const base = rows.filter((r) => casaBusca(r, q));
+    const base = rows.filter((r) => casaBusca(r, q) && casaPeriodo(r));
     return {
       todas: base.length,
       pp: base.filter((r) => r.origem === "pp").length,
       avulso: base.filter((r) => r.origem === "avulso").length,
       recorrencia: base.filter((r) => r.origem === "recorrencia").length,
     };
-  }, [rows, busca, casaBusca]);
+  }, [rows, busca, casaBusca, casaPeriodo]);
 
   const filtrados = React.useMemo(() => {
     const q = busca.trim().toLowerCase();
     return rows
       .filter((r) => {
         if (filtroOrigem !== "todas" && r.origem !== filtroOrigem) return false;
+        if (!casaPeriodo(r)) return false;
         return casaBusca(r, q);
       })
       .sort((a, b) => {
@@ -261,7 +282,7 @@ export function TitulosPagarList({
           b.data_pagamento ?? "9999-12-31",
         );
       });
-  }, [rows, filtroOrigem, busca, casaBusca, modo]);
+  }, [rows, filtroOrigem, busca, casaBusca, casaPeriodo, modo]);
 
   // Faixa de resumo — sempre sobre a base inteira do modo, não sobre o
   // filtro: é panorama do caixa, não recorte da busca. O corte de "mês"
@@ -284,6 +305,9 @@ export function TitulosPagarList({
       };
     }
     const mesAtual = hoje.slice(0, 7);
+    // "Total pago" reflete o filtro de período (é o número que interessa
+    // quando o usuário está recortando um intervalo). "Hoje" e "Este mês"
+    // são atalhos absolutos e ignoram o período.
     return {
       emAberto: 0,
       semana: 0,
@@ -291,9 +315,9 @@ export function TitulosPagarList({
       pagosMes: rows
         .filter((r) => (r.pago_em ?? "").slice(0, 7) === mesAtual)
         .reduce((s, r) => s + r.valor, 0),
-      totalPago: rows.reduce((s, r) => s + r.valor, 0),
+      totalPago: rows.filter((r) => casaPeriodo(r)).reduce((s, r) => s + r.valor, 0),
     };
-  }, [rows, modo]);
+  }, [rows, modo, casaPeriodo]);
 
   const alvoBaixa: BaixaTituloAlvo | null = baixando
     ? {
@@ -347,8 +371,44 @@ export function TitulosPagarList({
 
   return (
     <div className="space-y-4">
-      {/* Busca + (só no modo a_pagar) botão de lançamento avulso */}
+      {/* Busca + filtro de período (só no modo pagos) + (só no modo a_pagar)
+          botão de lançamento avulso */}
       <div className="flex flex-wrap items-center justify-end gap-2.5">
+        {modo === "pagos" && (
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <CalendarClock className="h-3.5 w-3.5" />
+            <span className="font-semibold uppercase tracking-wider text-[11px]">Pago em</span>
+            <input
+              type="date"
+              value={dataDe}
+              onChange={(e) => setDataDe(e.target.value)}
+              max={dataAte || undefined}
+              aria-label="Data inicial"
+              className="rounded-lg border border-border bg-white px-2 py-1.5 text-xs focus:border-california-red/40 focus:outline-none"
+            />
+            <span>até</span>
+            <input
+              type="date"
+              value={dataAte}
+              onChange={(e) => setDataAte(e.target.value)}
+              min={dataDe || undefined}
+              aria-label="Data final"
+              className="rounded-lg border border-border bg-white px-2 py-1.5 text-xs focus:border-california-red/40 focus:outline-none"
+            />
+            {(dataDe || dataAte) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setDataDe("");
+                  setDataAte("");
+                }}
+                className="ml-0.5 rounded-md border border-border bg-white px-2 py-1.5 text-[11px] font-medium text-muted-foreground hover:border-california-red hover:text-california-red"
+              >
+                Limpar
+              </button>
+            )}
+          </div>
+        )}
         <div className="relative">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <input
@@ -585,15 +645,15 @@ export function TitulosPagarList({
                       <button
                         type="button"
                         title="Ver a baixa registrada — e estornar, se preciso"
+                        aria-label="Ver baixa registrada"
                         onClick={(e) => {
                           e.stopPropagation();
                           setErroAcao(null);
                           setConferindo(r);
                         }}
-                        className="inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-border px-2 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:border-california-red hover:text-california-red"
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:border-california-red hover:text-california-red"
                       >
-                        <Check className="h-3 w-3" />
-                        Conciliação
+                        <Eye className="h-3.5 w-3.5" />
                       </button>
                     ) : (
                       <button
