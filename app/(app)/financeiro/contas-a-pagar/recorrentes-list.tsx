@@ -169,7 +169,7 @@ export function RecorrentesList({
           trigger={
             <button
               type="button"
-              className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+              className="inline-flex items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-california-red-hover"
             >
               <Plus className="h-4 w-4" />
               Nova recorrência

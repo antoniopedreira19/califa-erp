@@ -371,54 +371,71 @@ export function TitulosPagarList({
 
   return (
     <div className="space-y-4">
-      {/* Busca + filtro de período (só no modo pagos) + (só no modo a_pagar)
-          botão de lançamento avulso */}
-      <div className="flex flex-wrap items-center justify-end gap-2.5">
-        {modo === "pagos" && (
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <CalendarClock className="h-3.5 w-3.5" />
-            <span className="font-semibold uppercase tracking-wider text-[11px]">Pago em</span>
-            <input
-              type="date"
-              value={dataDe}
-              onChange={(e) => setDataDe(e.target.value)}
-              max={dataAte || undefined}
-              aria-label="Data inicial"
-              className="rounded-lg border border-border bg-white px-2 py-1.5 text-xs focus:border-california-red/40 focus:outline-none"
+      {/* Filtros + busca + botão — tudo numa linha, padrão da aba
+          Recorrências. No modo `pagos`, o filtro de período dobra pra
+          próxima linha via flex-wrap se não couber. */}
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-1 flex-wrap items-center gap-2">
+          {CHIP_ORIGEM.map((c) => (
+            <Chip
+              key={c.key}
+              ativo={filtroOrigem === c.key}
+              onClick={() => setFiltroOrigem(c.key)}
+              label={c.label}
+              count={contagemOrigem[c.key]}
             />
-            <span>até</span>
+          ))}
+
+          {modo === "pagos" && (
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <CalendarClock className="h-3.5 w-3.5" />
+              <span className="text-[11px] font-semibold uppercase tracking-wider">
+                Pago em
+              </span>
+              <input
+                type="date"
+                value={dataDe}
+                onChange={(e) => setDataDe(e.target.value)}
+                max={dataAte || undefined}
+                aria-label="Data inicial"
+                className="rounded-lg border border-border bg-white px-2 py-1.5 text-xs focus:border-california-red focus:outline-none"
+              />
+              <span>até</span>
+              <input
+                type="date"
+                value={dataAte}
+                onChange={(e) => setDataAte(e.target.value)}
+                min={dataDe || undefined}
+                aria-label="Data final"
+                className="rounded-lg border border-border bg-white px-2 py-1.5 text-xs focus:border-california-red focus:outline-none"
+              />
+              {(dataDe || dataAte) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDataDe("");
+                    setDataAte("");
+                  }}
+                  className="ml-0.5 rounded-md border border-border bg-white px-2 py-1.5 text-[11px] font-medium text-muted-foreground hover:border-california-red hover:text-california-red"
+                >
+                  Limpar
+                </button>
+              )}
+            </div>
+          )}
+
+          <div className="relative ml-auto min-w-[240px] max-w-md flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <input
-              type="date"
-              value={dataAte}
-              onChange={(e) => setDataAte(e.target.value)}
-              min={dataDe || undefined}
-              aria-label="Data final"
-              className="rounded-lg border border-border bg-white px-2 py-1.5 text-xs focus:border-california-red/40 focus:outline-none"
+              type="text"
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              placeholder="Buscar por título, fornecedor ou job..."
+              className="w-full rounded-lg border border-border bg-white py-2 pl-9 pr-3 text-sm focus:border-california-red focus:outline-none"
             />
-            {(dataDe || dataAte) && (
-              <button
-                type="button"
-                onClick={() => {
-                  setDataDe("");
-                  setDataAte("");
-                }}
-                className="ml-0.5 rounded-md border border-border bg-white px-2 py-1.5 text-[11px] font-medium text-muted-foreground hover:border-california-red hover:text-california-red"
-              >
-                Limpar
-              </button>
-            )}
           </div>
-        )}
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-          <input
-            type="text"
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-            placeholder="Buscar por título, fornecedor ou job"
-            className="w-72 rounded-lg border border-border bg-white py-1.5 pl-8 pr-3 text-xs focus:border-california-red/40 focus:outline-none"
-          />
         </div>
+
         {modo === "a_pagar" && (
           <ContaAvulsaDrawer
             mode="criar"
@@ -438,30 +455,14 @@ export function TitulosPagarList({
             trigger={
               <button
                 type="button"
-                className="inline-flex items-center gap-2 whitespace-nowrap rounded-lg bg-california-red px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-california-red-hover"
+                className="inline-flex items-center gap-2 whitespace-nowrap rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-california-red-hover"
               >
-                <Plus className="h-3.5 w-3.5" />
+                <Plus className="h-4 w-4" />
                 Lançamento Avulso
               </button>
             }
           />
         )}
-      </div>
-
-      {/* Chips de origem */}
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="whitespace-nowrap text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-          Origem
-        </span>
-        {CHIP_ORIGEM.map((c) => (
-          <Chip
-            key={c.key}
-            ativo={filtroOrigem === c.key}
-            onClick={() => setFiltroOrigem(c.key)}
-            label={c.label}
-            count={contagemOrigem[c.key]}
-          />
-        ))}
       </div>
 
       {/* Faixa de resumo — panorama do caixa por modo */}
@@ -827,17 +828,17 @@ function Chip({
       type="button"
       onClick={onClick}
       className={cn(
-        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-3 py-1 text-xs font-semibold transition-colors",
         ativo
-          ? "border-california-red bg-california-red/10 text-california-red"
-          : "border-border bg-white text-muted-foreground hover:bg-muted/50",
+          ? "border-california-red bg-california-red text-white"
+          : "border-border bg-white text-muted-foreground hover:border-california-red/50",
       )}
     >
       {label}
       <span
         className={cn(
-          "font-semibold tabular-nums",
-          ativo ? "text-california-red" : "text-muted-foreground/70",
+          "tabular-nums",
+          ativo ? "text-white/85" : "text-muted-foreground/70",
         )}
       >
         {count}
