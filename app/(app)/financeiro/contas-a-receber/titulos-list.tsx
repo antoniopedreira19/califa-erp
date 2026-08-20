@@ -284,7 +284,7 @@ export function TitulosList({ rows, contas, tipos, subtipos }: Props) {
                         className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-md bg-emerald-700 px-2.5 py-1.5 text-[11.5px] font-semibold text-white transition-colors hover:bg-emerald-800"
                       >
                         <Banknote className="h-3.5 w-3.5" />
-                        Dar baixa
+                        Baixar
                       </button>
                     )}
                   </td>
