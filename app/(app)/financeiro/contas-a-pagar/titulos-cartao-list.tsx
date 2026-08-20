@@ -97,6 +97,8 @@ function origemChipClass(origem: OrigemTitulo): string {
       return "border-violet-200 bg-violet-50 text-violet-700";
     case "recorrencia":
       return "border-blue-200 bg-blue-50 text-blue-700";
+    case "desembolso":
+      return "border-amber-200 bg-amber-50 text-amber-700";
   }
 }
 
