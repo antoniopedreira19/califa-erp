@@ -41,6 +41,7 @@ export default async function PedidosCompraFinanceiroPage() {
     regionaisRes,
     cartoesRes,
     desembolsosRes,
+    desembolsosTitulosRes,
   ] = await Promise.all([
     supabase
       .from("pedidos_compra")
@@ -117,13 +118,13 @@ export default async function PedidosCompraFinanceiroPage() {
     supabase
       .from("lancamentos_financeiros")
       .select(`
-        pedido_compra_parcela_id, conta_avulsa_id, data_movimento,
+        pedido_compra_parcela_id, conta_avulsa_id, desembolso_parcela_id, data_movimento,
         conta:contas_bancarias(nome, banco),
         tipo:plano_contas_tipos(codigo),
         subtipo:plano_contas_subtipos(nome)
       `)
       .eq("tenant_id", session.activeTenant.id)
-      .in("origem", ["pp_baixa", "avulsa_baixa"]),
+      .in("origem", ["pp_baixa", "avulsa_baixa", "desembolso_baixa"]),
     // Empresas ativas (dropdown do drawer)
     supabase
       .from("empresas")
@@ -202,6 +203,23 @@ export default async function PedidosCompraFinanceiroPage() {
       `)
       .eq("tenant_id", session.activeTenant.id)
       .order("created_at", { ascending: false }),
+    // Desembolsos para Títulos a Pagar — apenas aprovada|pago, com parcelas
+    // embed. Query separada da de aprovação (Task 9) para não misturar filtros.
+    supabase
+      .from("desembolsos")
+      .select(`
+        id, codigo, descricao, status, forma_pagamento, cartao_credito_id,
+        empresa_id,
+        fornecedor:fornecedores(nome, razao_social),
+        job:jobs(codigo),
+        parcelas:desembolsos_parcelas(
+          id, numero, data_vencimento, data_pagamento, data_pagamento_primeira,
+          valor, pago_em
+        )
+      `)
+      .eq("tenant_id", session.activeTenant.id)
+      .in("status", ["aprovada", "pago"])
+      .order("created_at", { ascending: false }),
   ]);
 
   if (error) console.error("[financeiro.pp.list]", error.message);
@@ -210,6 +228,7 @@ export default async function PedidosCompraFinanceiroPage() {
   if (recorrentesRes.error) console.error("[financeiro.recorrentes.list]", recorrentesRes.error.message);
   if (cartoesRes.error) console.error("[financeiro.cartoes.list]", cartoesRes.error.message);
   if (desembolsosRes.error) console.error("[financeiro.desembolsos.list]", desembolsosRes.error.message);
+  if (desembolsosTitulosRes.error) console.error("[financeiro.desembolsos_titulos.list]", desembolsosTitulosRes.error.message);
 
   const rows: PPRow[] = ((data ?? []) as unknown as Array<{
     id: string;
@@ -324,10 +343,12 @@ export default async function PedidosCompraFinanceiroPage() {
 
   const baixaPorParcela = new Map<string, BaixaInfo>();
   const baixaPorAvulsa = new Map<string, BaixaInfo>();
+  const baixaPorDesembolsoParcela = new Map<string, BaixaInfo>();
 
   for (const l of (baixasRes.data ?? []) as unknown as Array<{
     pedido_compra_parcela_id: string | null;
     conta_avulsa_id: string | null;
+    desembolso_parcela_id: string | null;
     data_movimento: string;
     conta: { nome: string | null; banco: string | null } | null;
     tipo: { codigo: string } | null;
@@ -345,6 +366,7 @@ export default async function PedidosCompraFinanceiroPage() {
     };
     if (l.pedido_compra_parcela_id) baixaPorParcela.set(l.pedido_compra_parcela_id, info);
     if (l.conta_avulsa_id) baixaPorAvulsa.set(l.conta_avulsa_id, info);
+    if (l.desembolso_parcela_id) baixaPorDesembolsoParcela.set(l.desembolso_parcela_id, info);
   }
 
   const titulos: TituloRow[] = [];
@@ -427,6 +449,56 @@ export default async function PedidosCompraFinanceiroPage() {
       forma_pagamento: a.forma_pagamento,
       cartao_credito_id: a.cartao_credito_id,
     });
+  }
+
+  // 4º loop — parcelas de desembolso aprovado/pago viram títulos de origem `desembolso`.
+  for (const des of (desembolsosTitulosRes.data ?? []) as unknown as Array<{
+    id: string;
+    codigo: string;
+    descricao: string;
+    status: "aprovada" | "pago";
+    forma_pagamento: FormaPagamento | null;
+    cartao_credito_id: string | null;
+    empresa_id: string;
+    fornecedor: { nome: string | null; razao_social: string | null } | null;
+    job: { codigo: string } | null;
+    parcelas: Array<{
+      id: string;
+      numero: number;
+      data_vencimento: string;
+      data_pagamento: string | null;
+      data_pagamento_primeira: string | null;
+      valor: string | number;
+      pago_em: string | null;
+    }>;
+  }>) {
+    const total = des.parcelas.length;
+    for (const par of des.parcelas) {
+      const baixa = baixaPorDesembolsoParcela.get(par.id);
+      titulos.push({
+        id: par.id,
+        origem: "desembolso",
+        origem_label: des.codigo,
+        descricao: des.descricao,
+        fornecedor_nome: des.fornecedor?.razao_social ?? des.fornecedor?.nome ?? "—",
+        job_codigo: des.job?.codigo ?? "—",
+        data_pagamento: par.data_pagamento,
+        venc_original: par.data_vencimento,
+        data_pagamento_primeira: par.data_pagamento_primeira,
+        valor: Number(par.valor),
+        parcela_numero: par.numero,
+        parcela_total: total,
+        status: par.pago_em ? "pago" : "a_pagar",
+        empresa_id: des.empresa_id,
+        plano_conta_tipo_id: null, // desembolso escolhe na baixa
+        plano_conta_subtipo_id: null,
+        pago_em: par.pago_em,
+        conta_nome: baixa?.conta ?? null,
+        centro_nome: baixa?.centro ?? null,
+        forma_pagamento: des.forma_pagamento,
+        cartao_credito_id: des.cartao_credito_id,
+      });
+    }
   }
 
   // Títulos de cartão de crédito pendentes — alimentam a 5ª aba.

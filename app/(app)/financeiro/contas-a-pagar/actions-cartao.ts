@@ -17,7 +17,7 @@ import { logAuditEvent } from "@/lib/auth/audit";
 type Result = { ok: true; lancamentos: string[] } | { ok: false; message: string };
 
 const tituloSchema = z.object({
-  origem: z.enum(["pp", "avulso", "recorrencia"]),
+  origem: z.enum(["pp", "avulso", "recorrencia", "desembolso"]),
   id: z.string().uuid("ID de título inválido."),
 });
 
@@ -43,6 +43,9 @@ function mensagemDeBaixaLote(msg: string): string {
   }
   if (msg.includes("uniq_baixa_ativa_por_pp_sem_parcela")) {
     return "Um dos pedidos de produção já tem baixa registrada.";
+  }
+  if (msg.includes("uniq_baixa_ativa_por_desembolso_parcela")) {
+    return "Uma das parcelas de desembolso já tem baixa registrada.";
   }
   const limpa = msg.replace(/^.*?(?:ERROR|erro):\s*/i, "").trim();
   if (limpa && !/[_"]/.test(limpa)) return limpa;
@@ -166,6 +169,17 @@ export async function darBaixaLoteCartao(input: unknown): Promise<Result> {
     }
   }
 
+  // Batch SELECT para obter dados das parcelas de desembolso.
+  const desembolsosIds = d.titulos.filter((t) => t.origem === "desembolso").map((t) => t.id);
+  const desembolsosData: Array<{ id: string; desembolso_id: string; numero: number; valor: string }> = [];
+  if (desembolsosIds.length > 0) {
+    const { data } = await supabase
+      .from("desembolsos_parcelas")
+      .select("id, desembolso_id, numero, valor")
+      .in("id", desembolsosIds);
+    desembolsosData.push(...((data ?? []) as typeof desembolsosData));
+  }
+
   // O array `ids` retornado pela RPC vem na mesma ordem de `d.titulos` — zipear.
   const lancamentosIds = (ids as string[]) ?? [];
   await Promise.all(
@@ -184,6 +198,22 @@ export async function darBaixaLoteCartao(input: unknown): Promise<Result> {
             lancamento_id,
             pago_em: d.pago_em,
             valor: parcela?.valor ?? null,
+            via: "baixa_lote_cartao",
+          },
+        });
+      } else if (titulo.origem === "desembolso") {
+        const parcela = desembolsosData.find((p) => p.id === titulo.id);
+        await logAuditEvent({
+          acao: "desembolso.parcela_paga",
+          tenantId: session.activeTenant.id,
+          entidadeTipo: "desembolso",
+          entidadeId: parcela?.desembolso_id ?? null,
+          metadata: {
+            parcela_id: titulo.id,
+            parcela_numero: parcela?.numero ?? null,
+            valor: Number(parcela?.valor ?? 0),
+            pago_em: d.pago_em,
+            lancamento_id,
             via: "baixa_lote_cartao",
           },
         });
