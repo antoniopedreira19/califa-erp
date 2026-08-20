@@ -1641,3 +1641,65 @@ export interface ContaAvulsaRecorrenteRateio {
 /** Linha de rateio no cliente (com percentual como número — o form).
  *  Fonte-verdade: schema Zod em lib/validations/conta-avulsa.ts. */
 export type { RateioLinhaInput } from "@/lib/validations/conta-avulsa";
+
+// ---------- Desembolsos (20/08/2026) ----------
+
+export type DesembolsoStatus =
+  | "em_avaliacao"
+  | "aprovada"
+  | "pago"
+  | "rejeitada"
+  | "cancelada";
+
+export const desembolsoStatusLabel = (s: DesembolsoStatus): string =>
+  ({
+    em_avaliacao: "Em avaliação",
+    aprovada: "Aprovada",
+    pago: "Pago",
+    rejeitada: "Rejeitada",
+    cancelada: "Cancelada",
+  })[s];
+
+export interface Desembolso {
+  id: string;
+  tenant_id: string;
+  codigo: string;
+  empresa_id: string;
+  descricao: string;
+  valor: string; // numeric → string
+  forma_pagamento: FormaPagamento | null;
+  cartao_credito_id: string | null;
+  status: DesembolsoStatus;
+  fornecedor_id: string | null;
+  cliente_id: string | null;
+  job_id: string | null;
+  data_prevista_pagamento: string | null;
+  motivo_rejeicao: string | null;
+  motivo_cancelamento: string | null;
+  criado_por: string;
+  aprovada_por: string | null;
+  aprovada_em: string | null;
+  rejeitada_por: string | null;
+  rejeitada_em: string | null;
+  cancelada_por: string | null;
+  cancelada_em: string | null;
+  pago_em: string | null;
+  pago_por: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DesembolsoParcela {
+  id: string;
+  tenant_id: string;
+  desembolso_id: string;
+  numero: number;
+  data_vencimento: string;
+  data_pagamento: string | null;
+  data_pagamento_primeira: string | null;
+  valor: string;
+  pago_em: string | null;
+  pago_por: string | null;
+  created_at: string;
+  updated_at: string;
+}
