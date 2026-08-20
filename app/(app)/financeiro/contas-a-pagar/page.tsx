@@ -8,7 +8,8 @@ import { ContasPagarTabs } from "./contas-pagar-tabs";
 import { TitulosPagarList, type TituloRow } from "./titulos-pagar-list";
 import { TitulosCartaoList } from "./titulos-cartao-list";
 import { RecorrentesList, type RecorrenteRow } from "./recorrentes-list";
-import type { PPStatus, PlanoContaTipo, PlanoContaSubtipo, ContaBancaria, FormaPagamento, BandeiraCartao } from "@/lib/types";
+import { DesembolsosContasPagarList, type DesembolsoRow } from "./desembolsos-list";
+import type { PPStatus, PlanoContaTipo, PlanoContaSubtipo, ContaBancaria, FormaPagamento, BandeiraCartao, DesembolsoStatus } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +40,7 @@ export default async function PedidosCompraFinanceiroPage() {
     recorrentesAtivasCountRes,
     regionaisRes,
     cartoesRes,
+    desembolsosRes,
   ] = await Promise.all([
     supabase
       .from("pedidos_compra")
@@ -186,6 +188,20 @@ export default async function PedidosCompraFinanceiroPage() {
       .eq("tenant_id", session.activeTenant.id)
       .eq("ativo", true)
       .order("nome"),
+    // Desembolsos — todos os status para a aba de aprovação (Task 9).
+    // Task 10 adiciona SELECT diferente com parcelas embed (apenas aprovada/pago).
+    supabase
+      .from("desembolsos")
+      .select(`
+        id, codigo, descricao, valor, status, forma_pagamento, cartao_credito_id,
+        data_prevista_pagamento, motivo_rejeicao, motivo_cancelamento,
+        aprovada_em, rejeitada_em, cancelada_em, pago_em, created_at,
+        empresa:empresas(id, razao_social, nome_fantasia),
+        fornecedor:fornecedores(id, nome, razao_social),
+        criador:profiles!desembolsos_criado_por_fkey(nome)
+      `)
+      .eq("tenant_id", session.activeTenant.id)
+      .order("created_at", { ascending: false }),
   ]);
 
   if (error) console.error("[financeiro.pp.list]", error.message);
@@ -193,6 +209,7 @@ export default async function PedidosCompraFinanceiroPage() {
   if (baixasRes.error) console.error("[financeiro.baixas.list]", baixasRes.error.message);
   if (recorrentesRes.error) console.error("[financeiro.recorrentes.list]", recorrentesRes.error.message);
   if (cartoesRes.error) console.error("[financeiro.cartoes.list]", cartoesRes.error.message);
+  if (desembolsosRes.error) console.error("[financeiro.desembolsos.list]", desembolsosRes.error.message);
 
   const rows: PPRow[] = ((data ?? []) as unknown as Array<{
     id: string;
@@ -502,6 +519,56 @@ export default async function PedidosCompraFinanceiroPage() {
     }),
   );
 
+  // -------------------------------------------------------------------
+  // Desembolsos — mapeamento para DesembolsoRow
+  // -------------------------------------------------------------------
+
+  const desembolsosRows: DesembolsoRow[] = (
+    (desembolsosRes.data ?? []) as unknown as Array<{
+      id: string;
+      codigo: string;
+      descricao: string;
+      valor: string | number;
+      status: DesembolsoStatus;
+      forma_pagamento: FormaPagamento | null;
+      cartao_credito_id: string | null;
+      data_prevista_pagamento: string | null;
+      motivo_rejeicao: string | null;
+      motivo_cancelamento: string | null;
+      aprovada_em: string | null;
+      rejeitada_em: string | null;
+      cancelada_em: string | null;
+      pago_em: string | null;
+      created_at: string;
+      empresa: { id: string; razao_social: string | null; nome_fantasia: string | null } | null;
+      fornecedor: { id: string; nome: string; razao_social: string | null } | null;
+      criador: { nome: string } | null;
+    }>
+  ).map((d) => ({
+    id: d.id,
+    codigo: d.codigo,
+    descricao: d.descricao,
+    valor: Number(d.valor),
+    status: d.status,
+    forma_pagamento: d.forma_pagamento,
+    cartao_credito_id: d.cartao_credito_id,
+    data_prevista_pagamento: d.data_prevista_pagamento,
+    motivo_rejeicao: d.motivo_rejeicao,
+    motivo_cancelamento: d.motivo_cancelamento,
+    aprovada_em: d.aprovada_em,
+    rejeitada_em: d.rejeitada_em,
+    cancelada_em: d.cancelada_em,
+    pago_em: d.pago_em,
+    created_at: d.created_at,
+    empresa_nome: d.empresa?.razao_social ?? d.empresa?.nome_fantasia ?? "—",
+    fornecedor_nome: d.fornecedor?.razao_social ?? d.fornecedor?.nome ?? "—",
+    criador_nome: d.criador?.nome ?? "—",
+  }));
+
+  const desembolsosPendentesCount = desembolsosRows.filter(
+    (d) => d.status === "em_avaliacao",
+  ).length;
+
   const cartoesList = (cartoesRes.data ?? []).map(
     (c: {
       id: string;
@@ -548,6 +615,8 @@ export default async function PedidosCompraFinanceiroPage() {
       <ContasPagarTabs
         pps={<PedidosCompraList rows={rows} />}
         ppsPendentesCount={ppsPendentesCountRes.count ?? 0}
+        desembolsos={<DesembolsosContasPagarList rows={desembolsosRows} />}
+        desembolsosPendentesCount={desembolsosPendentesCount}
         titulos={
           // Aba comum exclui cartões pendentes (eles têm aba própria).
           // `t.status !== "a_pagar"` preserva cartões pagos para o modo "pagos"
