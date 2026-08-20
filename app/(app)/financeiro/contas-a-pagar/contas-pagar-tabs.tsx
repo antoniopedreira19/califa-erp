@@ -4,17 +4,21 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 
 /**
- * Três abas desde a Tela 3.2. A antiga "Lançamentos Avulsos" foi
+ * Quatro abas desde 20/08/2026. A antiga "Lançamentos Avulsos" foi
  * ABSORVIDA por "Títulos a Pagar": a avulsa virou um título de origem
  * AVULSO na lista unificada, e a criação passou a ser o botão
  * "+ Lançamento Avulso" de lá.
+ *
+ * "Títulos a Pagar" só mostra o que ainda tem que sair; "Títulos Pagos"
+ * é a arquivo/histórico do que já saiu — as duas abas usam o mesmo
+ * componente `TitulosPagarList`, em modos diferentes.
  */
 interface Props {
   /** Conteúdo da aba de PPs (já pronto, vindo da page.tsx). */
   pps: React.ReactNode;
   /** Contagem de PPs em avaliação — vira badge. */
   ppsPendentesCount: number;
-  /** Conteúdo da aba unificada de títulos. */
+  /** Conteúdo da aba unificada de títulos a pagar. */
   titulos: React.ReactNode;
   /** Quantos títulos estão a pagar — vira badge. */
   titulosAPagarCount: number;
@@ -22,9 +26,13 @@ interface Props {
   recorrentes: React.ReactNode;
   /** Contagem de recorrências ativas — vira badge. */
   recorrentesAtivasCount: number;
+  /** Conteúdo da aba de títulos já pagos. */
+  titulosPagos: React.ReactNode;
+  /** Quantos títulos já foram pagos — vira badge. */
+  titulosPagosCount: number;
 }
 
-type TabKey = "pps" | "titulos" | "recorrentes";
+type TabKey = "pps" | "titulos" | "recorrentes" | "pagos";
 
 export function ContasPagarTabs({
   pps,
@@ -33,6 +41,8 @@ export function ContasPagarTabs({
   titulosAPagarCount,
   recorrentes,
   recorrentesAtivasCount,
+  titulosPagos,
+  titulosPagosCount,
 }: Props) {
   // Abre em "Títulos a Pagar": é a aba central de saída de dinheiro, e o
   // que o financeiro faz todo dia é dar baixa, não avaliar PP.
@@ -62,6 +72,13 @@ export function ContasPagarTabs({
         >
           Títulos a Pagar
         </TabButton>
+        <TabButton
+          active={tab === "pagos"}
+          onClick={() => setTab("pagos")}
+          count={titulosPagosCount}
+        >
+          Títulos Pagos
+        </TabButton>
       </div>
 
       <div
@@ -84,6 +101,13 @@ export function ContasPagarTabs({
         className={cn(tab === "recorrentes" ? "" : "hidden")}
       >
         {recorrentes}
+      </div>
+      <div
+        role="tabpanel"
+        aria-hidden={tab !== "pagos"}
+        className={cn(tab === "pagos" ? "" : "hidden")}
+      >
+        {titulosPagos}
       </div>
     </div>
   );

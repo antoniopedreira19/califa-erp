@@ -390,6 +390,7 @@ export default async function PedidosCompraFinanceiroPage() {
   }
 
   const titulosAPagarCount = titulos.filter((t) => t.status === "a_pagar").length;
+  const titulosPagosCount = titulos.filter((t) => t.status === "pago").length;
 
   // Mapeamento das recorrências para RecorrenteRow
   const recorrentesRows: RecorrenteRow[] = ((recorrentesRes.data ?? []) as unknown as Array<{
@@ -498,6 +499,7 @@ export default async function PedidosCompraFinanceiroPage() {
         titulos={
           <TitulosPagarList
             rows={titulos}
+            modo="a_pagar"
             tenantId={session.activeTenant.id}
             contas={contasRes.data ?? []}
             tipos={tiposRes.data ?? []}
@@ -524,6 +526,22 @@ export default async function PedidosCompraFinanceiroPage() {
           />
         }
         recorrentesAtivasCount={recorrentesAtivasCountRes.count ?? 0}
+        titulosPagos={
+          <TitulosPagarList
+            rows={titulos}
+            modo="pagos"
+            tenantId={session.activeTenant.id}
+            contas={contasRes.data ?? []}
+            tipos={tiposRes.data ?? []}
+            subtipos={subtiposRes.data ?? []}
+            empresas={empresasList}
+            fornecedores={fornecedoresList}
+            clientes={clientesList}
+            jobs={jobsList}
+            regionais={regionaisList}
+          />
+        }
+        titulosPagosCount={titulosPagosCount}
       />
     </div>
   );
