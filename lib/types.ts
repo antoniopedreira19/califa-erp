@@ -955,6 +955,8 @@ export interface PedidoCompra {
   rejeitada_por: string | null;
   rejeitada_em: string | null;
   motivo_rejeicao: string | null;
+  forma_pagamento: FormaPagamento | null;
+  cartao_credito_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -1531,6 +1533,8 @@ export interface ContaAvulsaRecorrente {
   dia_do_ano_mes: number | null;
   proxima_data: string; // YYYY-MM-DD
   data_fim: string | null; // YYYY-MM-DD
+  forma_pagamento: FormaPagamento | null;
+  cartao_credito_id: string | null;
   ativo: boolean;
   criado_por: string;
   created_at: string;
@@ -1564,6 +1568,8 @@ export interface ContaAvulsa {
   pago_por: string | null;
   conta_bancaria_baixa_id: string | null;
   recorrente_id: string | null;
+  forma_pagamento: FormaPagamento | null;
+  cartao_credito_id: string | null;
   criado_por: string;
   created_at: string;
   updated_at: string;
