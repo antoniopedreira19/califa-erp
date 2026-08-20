@@ -84,7 +84,7 @@ export async function darBaixaLoteCartao(input: unknown): Promise<Result> {
     });
     return {
       ok: false,
-      message: "Apenas admin ou financeiro pode dar baixa.",
+      message: "Apenas admin ou financeiro pode executar esta ação.",
     };
   }
 
