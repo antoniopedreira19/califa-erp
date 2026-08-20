@@ -4,23 +4,26 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 
 /**
- * Quatro abas desde 20/08/2026. A antiga "Lançamentos Avulsos" foi
- * ABSORVIDA por "Títulos a Pagar": a avulsa virou um título de origem
- * AVULSO na lista unificada, e a criação passou a ser o botão
- * "+ Lançamento Avulso" de lá.
+ * Cinco abas desde 20/08/2026.
  *
- * "Títulos a Pagar" só mostra o que ainda tem que sair; "Títulos Pagos"
- * é a arquivo/histórico do que já saiu — as duas abas usam o mesmo
- * componente `TitulosPagarList`, em modos diferentes.
+ * - PPs: pedidos de produção (aprovação/rejeição).
+ * - Recorrências: gestão de contas avulsas recorrentes.
+ * - Títulos a Pagar: avulsos + PPs (exceto cartões pendentes).
+ * - Títulos a Pagar (Cartão): somente cartão de crédito + baixa em lote.
+ * - Títulos Pagos: histórico do que já saiu (arquivo/conciliação).
+ *
+ * "Títulos a Pagar (Cartão)" fica entre "Títulos a Pagar" e "Títulos Pagos".
+ * A antiga "Lançamentos Avulsos" foi ABSORVIDA por "Títulos a Pagar": a
+ * avulsa virou um título de origem AVULSO na lista unificada.
  */
 interface Props {
   /** Conteúdo da aba de PPs (já pronto, vindo da page.tsx). */
   pps: React.ReactNode;
   /** Contagem de PPs em avaliação — vira badge. */
   ppsPendentesCount: number;
-  /** Conteúdo da aba unificada de títulos a pagar. */
+  /** Conteúdo da aba unificada de títulos a pagar (sem cartões pendentes). */
   titulos: React.ReactNode;
-  /** Quantos títulos estão a pagar — vira badge. */
+  /** Quantos títulos estão a pagar (excluindo cartões) — vira badge. */
   titulosAPagarCount: number;
   /** Conteúdo da aba de recorrências. */
   recorrentes: React.ReactNode;
@@ -28,9 +31,13 @@ interface Props {
   recorrentesAtivasCount: number;
   /** Conteúdo da aba de títulos já pagos. */
   titulosPagos: React.ReactNode;
+  /** Conteúdo da aba de títulos a pagar no cartão de crédito. */
+  titulosCartao: React.ReactNode;
+  /** Quantos títulos de cartão estão pendentes — vira badge. */
+  titulosCartaoCount: number;
 }
 
-type TabKey = "pps" | "titulos" | "recorrentes" | "pagos";
+type TabKey = "pps" | "titulos" | "cartao" | "recorrentes" | "pagos";
 
 export function ContasPagarTabs({
   pps,
@@ -40,6 +47,8 @@ export function ContasPagarTabs({
   recorrentes,
   recorrentesAtivasCount,
   titulosPagos,
+  titulosCartao,
+  titulosCartaoCount,
 }: Props) {
   // Abre em "Títulos a Pagar": é a aba central de saída de dinheiro, e o
   // que o financeiro faz todo dia é dar baixa, não avaliar PP.
@@ -69,6 +78,13 @@ export function ContasPagarTabs({
         >
           Títulos a Pagar
         </TabButton>
+        <TabButton
+          active={tab === "cartao"}
+          onClick={() => setTab("cartao")}
+          count={titulosCartaoCount}
+        >
+          Títulos a Pagar (Cartão)
+        </TabButton>
         <TabButton active={tab === "pagos"} onClick={() => setTab("pagos")}>
           Títulos Pagos
         </TabButton>
@@ -94,6 +110,13 @@ export function ContasPagarTabs({
         className={cn(tab === "recorrentes" ? "" : "hidden")}
       >
         {recorrentes}
+      </div>
+      <div
+        role="tabpanel"
+        aria-hidden={tab !== "cartao"}
+        className={cn(tab === "cartao" ? "" : "hidden")}
+      >
+        {titulosCartao}
       </div>
       <div
         role="tabpanel"
