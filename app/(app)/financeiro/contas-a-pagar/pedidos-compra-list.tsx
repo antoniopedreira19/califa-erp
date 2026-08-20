@@ -4,7 +4,7 @@ import * as React from "react";
 import { Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import type { PPStatus } from "@/lib/types";
+import type { PPStatus, FormaPagamento } from "@/lib/types";
 import { ppStatusLabel } from "@/lib/types";
 import { PPDrawerFinanceiro } from "./pp-drawer-financeiro";
 
@@ -39,6 +39,8 @@ export interface PPRow {
   pdf_path: string;
   cancelada_por_nome: string | null;
   emitida_por_nome: string | null;
+  forma_pagamento: FormaPagamento | null;
+  cartao_credito_id: string | null;
   anexos: Array<{
     id: string;
     arquivo_nome_original: string;

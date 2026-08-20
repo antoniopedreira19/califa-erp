@@ -48,6 +48,7 @@ export default async function PedidosCompraFinanceiroPage() {
         prazo_pagamento, prazo_pagamento_financeiro, pdf_path, created_at,
         cancelada_em, motivo_cancelamento,
         rejeitada_em, motivo_rejeicao, pago_em,
+        forma_pagamento, cartao_credito_id,
         fornecedor:fornecedores(id, nome, razao_social),
         empresa:empresas(id, razao_social, nome_fantasia),
         cancelada_por_profile:profiles!cancelada_por(nome),
@@ -210,6 +211,8 @@ export default async function PedidosCompraFinanceiroPage() {
     rejeitada_em: string | null;
     motivo_rejeicao: string | null;
     pago_em: string | null;
+    forma_pagamento: FormaPagamento | null;
+    cartao_credito_id: string | null;
     fornecedor: { id: string; nome: string; razao_social: string | null } | null;
     empresa: { id: string; razao_social: string; nome_fantasia: string | null } | null;
     cancelada_por_profile: { nome: string } | null;
@@ -271,6 +274,8 @@ export default async function PedidosCompraFinanceiroPage() {
     cliente_nome: r.job?.projeto?.cliente?.nome_fantasia ?? null,
     cancelada_por_nome: r.cancelada_por_profile?.nome ?? null,
     emitida_por_nome: r.emitida_por_profile?.nome ?? null,
+    forma_pagamento: r.forma_pagamento,
+    cartao_credito_id: r.cartao_credito_id,
     anexos: r.anexos ?? [],
     // Ordenadas aqui: o embed do PostgREST não garante ordem, e a lista
     // e o drawer mostram "1/3, 2/3, 3/3" na sequência.
@@ -355,12 +360,9 @@ export default async function PedidosCompraFinanceiroPage() {
         pago_em: par.pago_em,
         conta_nome: baixa?.conta ?? null,
         centro_nome: baixa?.centro ?? null,
-        // Parcelas de PP herdam forma_pagamento/cartao_credito_id da PP-pai
-        // quando a PP tiver esses campos. Por ora, PPs não têm forma_pagamento
-        // na query — ficam null aqui. Task 10 consumirá esses campos para
-        // separar cartões da aba comum.
-        forma_pagamento: null,
-        cartao_credito_id: null,
+        // Parcelas herdam forma_pagamento/cartao_credito_id da PP-pai.
+        forma_pagamento: pp.forma_pagamento,
+        cartao_credito_id: pp.cartao_credito_id,
       });
     }
   }
@@ -591,7 +593,6 @@ export default async function PedidosCompraFinanceiroPage() {
             contas={contasRes.data ?? []}
             tipos={tiposRes.data ?? []}
             subtipos={subtiposRes.data ?? []}
-            tenantId={session.activeTenant.id}
           />
         }
         titulosCartaoCount={titulosCartaoCount}
