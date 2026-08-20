@@ -7,7 +7,7 @@ import { PedidosCompraList, type PPRow } from "./pedidos-compra-list";
 import { ContasPagarTabs } from "./contas-pagar-tabs";
 import { TitulosPagarList, type TituloRow } from "./titulos-pagar-list";
 import { RecorrentesList, type RecorrenteRow } from "./recorrentes-list";
-import type { PPStatus, PlanoContaTipo, PlanoContaSubtipo, ContaBancaria } from "@/lib/types";
+import type { PPStatus, PlanoContaTipo, PlanoContaSubtipo, ContaBancaria, FormaPagamento, BandeiraCartao } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +37,7 @@ export default async function PedidosCompraFinanceiroPage() {
     recorrentesRes,
     recorrentesAtivasCountRes,
     regionaisRes,
+    cartoesRes,
   ] = await Promise.all([
     supabase
       .from("pedidos_compra")
@@ -99,6 +100,7 @@ export default async function PedidosCompraFinanceiroPage() {
         data_pagamento, data_pagamento_primeira, status,
         pago_em, created_at, empresa_id, recorrente_id,
         plano_conta_tipo_id, plano_conta_subtipo_id,
+        forma_pagamento, cartao_credito_id,
         fornecedor:fornecedores(nome, razao_social),
         job:jobs(codigo)
       `)
@@ -175,12 +177,20 @@ export default async function PedidosCompraFinanceiroPage() {
       .select("id, nome, ativo")
       .eq("tenant_id", session.activeTenant.id)
       .order("nome"),
+    // Cartões de crédito ativos (para o drawer de conta avulsa e Task 10)
+    supabase
+      .from("cartoes_credito")
+      .select("id, nome, banco, bandeira, ultimos_4_digitos, dia_vencimento_fatura")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("ativo", true)
+      .order("nome"),
   ]);
 
   if (error) console.error("[financeiro.pp.list]", error.message);
   if (avulsasRes.error) console.error("[financeiro.avulsas.list]", avulsasRes.error.message);
   if (baixasRes.error) console.error("[financeiro.baixas.list]", baixasRes.error.message);
   if (recorrentesRes.error) console.error("[financeiro.recorrentes.list]", recorrentesRes.error.message);
+  if (cartoesRes.error) console.error("[financeiro.cartoes.list]", cartoesRes.error.message);
 
   const rows: PPRow[] = ((data ?? []) as unknown as Array<{
     id: string;
@@ -344,6 +354,12 @@ export default async function PedidosCompraFinanceiroPage() {
         pago_em: par.pago_em,
         conta_nome: baixa?.conta ?? null,
         centro_nome: baixa?.centro ?? null,
+        // Parcelas de PP herdam forma_pagamento/cartao_credito_id da PP-pai
+        // quando a PP tiver esses campos. Por ora, PPs não têm forma_pagamento
+        // na query — ficam null aqui. Task 10 consumirá esses campos para
+        // separar cartões da aba comum.
+        forma_pagamento: null,
+        cartao_credito_id: null,
       });
     }
   }
@@ -361,6 +377,8 @@ export default async function PedidosCompraFinanceiroPage() {
     recorrente_id: string | null;
     plano_conta_tipo_id: string;
     plano_conta_subtipo_id: string;
+    forma_pagamento: FormaPagamento | null;
+    cartao_credito_id: string | null;
     fornecedor: { nome: string | null; razao_social: string | null } | null;
     job: { codigo: string } | null;
   }>) {
@@ -386,6 +404,8 @@ export default async function PedidosCompraFinanceiroPage() {
       pago_em: a.pago_em,
       conta_nome: baixa?.conta ?? null,
       centro_nome: baixa?.centro ?? null,
+      forma_pagamento: a.forma_pagamento,
+      cartao_credito_id: a.cartao_credito_id,
     });
   }
 
@@ -469,6 +489,26 @@ export default async function PedidosCompraFinanceiroPage() {
     }),
   );
 
+  const cartoesList = (cartoesRes.data ?? []).map(
+    (c: {
+      id: string;
+      nome: string;
+      banco: string;
+      bandeira: string;
+      ultimos_4_digitos: string;
+      dia_vencimento_fatura: number;
+    }) => ({
+      id: c.id,
+      nome: c.nome,
+      banco: c.banco,
+      // O PostgREST retorna o enum como string — a coluna é do tipo
+      // `bandeira_cartao` que corresponde a `BandeiraCartao` no TS.
+      bandeira: c.bandeira as BandeiraCartao,
+      ultimos_4_digitos: c.ultimos_4_digitos,
+      dia_vencimento_fatura: c.dia_vencimento_fatura,
+    }),
+  );
+
   return (
     <div className="space-y-8 max-w-7xl mx-auto">
       <header className="space-y-2">
@@ -508,6 +548,7 @@ export default async function PedidosCompraFinanceiroPage() {
             clientes={clientesList}
             jobs={jobsList}
             regionais={regionaisList}
+            cartoes={cartoesList}
           />
         }
         titulosAPagarCount={titulosAPagarCount}
@@ -538,6 +579,7 @@ export default async function PedidosCompraFinanceiroPage() {
             clientes={clientesList}
             jobs={jobsList}
             regionais={regionaisList}
+            cartoes={cartoesList}
           />
         }
       />

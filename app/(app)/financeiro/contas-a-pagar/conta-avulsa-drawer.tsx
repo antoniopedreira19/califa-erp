@@ -33,11 +33,16 @@ import { createClient } from "@/lib/supabase/client";
 import { criarContaAvulsa, editarContaAvulsa } from "./actions-avulsas";
 import type {
   ContaAvulsa,
+  FormaPagamento,
   PlanoContaTipo,
   PlanoContaSubtipo,
   RateioLinhaInput,
 } from "@/lib/types";
 import { RateioRegionalEditor } from "./rateio-regional-editor";
+import {
+  FormaPagamentoField,
+  type CartaoOption,
+} from "@/components/financeiro/forma-pagamento-field";
 
 // ---------------------------------------------------------------------------
 // Constantes de validação de upload
@@ -78,6 +83,8 @@ type Props =
       clientes: ClienteResumido[];
       jobs: JobResumido[];
       regionais: RegionalResumida[];
+      /** Cartões de crédito ativos. Se omitido, combobox de cartão não aparece. */
+      cartoes?: CartaoOption[];
       trigger?: React.ReactNode;
       /**
        * Habilita o botão "Criar e dar baixa" da Tela 3.2: cria o
@@ -97,6 +104,8 @@ type Props =
       clientes: ClienteResumido[];
       jobs: JobResumido[];
       regionais: RegionalResumida[];
+      /** Cartões de crédito ativos. Se omitido, combobox de cartão não aparece. */
+      cartoes?: CartaoOption[];
       rateioInicial?: RateioLinhaInput[];
       open: boolean;
       onOpenChange: (b: boolean) => void;
@@ -162,6 +171,12 @@ export function ContaAvulsaDrawer(props: Props) {
   const [subtipoId, setSubtipoId] = React.useState<string>(
     conta?.plano_conta_subtipo_id ?? "",
   );
+  const [formaPagamento, setFormaPagamento] = React.useState<FormaPagamento | null>(
+    conta?.forma_pagamento ?? null,
+  );
+  const [cartaoCreditoId, setCartaoCreditoId] = React.useState<string | null>(
+    conta?.cartao_credito_id ?? null,
+  );
 
   // Rateio de regional
   const rateioInicialEditar = isEditar
@@ -190,6 +205,8 @@ export function ContaAvulsaDrawer(props: Props) {
       setJobId(conta.job_id ?? "__none__");
       setTipoId(conta.plano_conta_tipo_id);
       setSubtipoId(conta.plano_conta_subtipo_id);
+      setFormaPagamento(conta.forma_pagamento ?? null);
+      setCartaoCreditoId(conta.cartao_credito_id ?? null);
       setRateio(
         (props as Extract<Props, { mode: "editar" }>).rateioInicial ?? [],
       );
@@ -204,6 +221,8 @@ export function ContaAvulsaDrawer(props: Props) {
       setJobId("__none__");
       setTipoId("");
       setSubtipoId("");
+      setFormaPagamento(null);
+      setCartaoCreditoId(null);
       setRateio([]);
       setAnexos([]);
       setUploadError(null);
@@ -362,6 +381,8 @@ export function ContaAvulsaDrawer(props: Props) {
       job_id: jobId === "__none__" ? null : jobId,
       plano_conta_tipo_id: tipoId,
       plano_conta_subtipo_id: subtipoId,
+      forma_pagamento: formaPagamento,
+      cartao_credito_id: cartaoCreditoId,
       rateio,
       ...(props.mode === "criar" ? { anexos } : {}),
     };
@@ -497,6 +518,30 @@ export function ContaAvulsaDrawer(props: Props) {
                 </p>
               ))}
             </div>
+
+            {/* Forma de pagamento */}
+            <FormaPagamentoField
+              cartoes={props.cartoes ?? []}
+              value={{
+                forma_pagamento: formaPagamento,
+                cartao_credito_id: cartaoCreditoId,
+              }}
+              onChange={(v, opts) => {
+                setFormaPagamento(v.forma_pagamento);
+                setCartaoCreditoId(v.cartao_credito_id);
+                if (
+                  v.forma_pagamento === "cartao_credito" &&
+                  opts?.dataPagamentoSugerida
+                ) {
+                  setDataPrevista(opts.dataPagamentoSugerida);
+                }
+              }}
+              disabled={pending}
+              error={
+                fieldErrors.forma_pagamento?.[0] ??
+                fieldErrors.cartao_credito_id?.[0]
+              }
+            />
 
             {/* Descrição */}
             <div className="space-y-2">
