@@ -204,6 +204,7 @@ export default async function PlanilhaDaAberturaPage({
                 jobResponsavelId={(raw as any).responsavel_id ?? ""}
                 bvsPorItem={{}}
                 versaoLabel={`v${versao?.numero_versao ?? 1}`}
+                cartoes={[]}
               />
             ))}
           </div>

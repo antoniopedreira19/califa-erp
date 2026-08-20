@@ -18,6 +18,7 @@ import type {
 import { upsertItemRealizado, type CampoRealizado } from "../actions-realizado";
 import { CalhaLinha } from "./calha-linha";
 import { GerarPPDrawer } from "./gerar-pp-drawer";
+import type { CartaoOption } from "@/components/financeiro/forma-pagamento-field";
 import { PainelPPsItem } from "./painel-pps-item";
 import { saldoDoItem, somaDasPPs } from "@/lib/calculos/pps-item";
 import { BvDialog } from "@/app/(app)/_bv/bv-dialog";
@@ -67,6 +68,8 @@ interface Props {
   /** "v5" — aparece no subtítulo do formulário de BV. */
   versaoLabel: string;
   grupoNome: string;
+  /** Cartões de crédito ativos do tenant — buscados pelo server component pai. */
+  cartoes: CartaoOption[];
   /** Identidade do grupo — mora na PRIMEIRA linha do thead, na mesma
    *  faixa de ORÇADO / PLANEJADO / REALIZADO. O card não tem mais barra
    *  de título só para isso. */
@@ -185,6 +188,7 @@ export function JobItemRealizadoTable({
   bvsPorItem,
   versaoLabel,
   grupoNome,
+  cartoes,
   cabecalhoGrupo,
   acoesGrupo,
 }: Props) {
@@ -768,6 +772,7 @@ export function JobItemRealizadoTable({
               valorRealizado={totalRealizado}
               quantidadeRealizada={quantidadeRealizada}
               saldoDisponivel={saldo}
+              cartoes={cartoes}
               onSuccess={(codigo) => {
                 setToast(`Pedido de Produção ${codigo} gerado com sucesso!`);
                 // Estado otimista: o chip da calha já conta a PP nova antes

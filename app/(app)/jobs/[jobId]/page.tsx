@@ -141,6 +141,7 @@ export default async function JobDetailPage({
     portaisRes,
     jobsIrmaosRes,
     abertoPorRes,
+    cartoesRes,
   ] = await Promise.all([
     supabase
       .from("versoes_orcamento_grupos")
@@ -281,6 +282,14 @@ export default async function JobDetailPage({
           .eq("id", raw.aberto_por)
           .maybeSingle()
       : Promise.resolve({ data: null, error: null }),
+    // Cartões ativos: passados ao form de emissão de PP para o
+    // FormaPagamentoField. Uma query por page load — sem overhead extra.
+    supabase
+      .from("cartoes_credito")
+      .select("id, nome, banco, bandeira, ultimos_4_digitos, dia_vencimento_fatura")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("ativo", true)
+      .order("nome"),
   ]);
 
   const grupos = (gruposRes.data ?? []) as VersaoOrcamentoGrupo[];
@@ -595,6 +604,12 @@ export default async function JobDetailPage({
   const abertoPorNome =
     (abertoPorRes.data as { nome: string } | null)?.nome ?? null;
 
+  if (cartoesRes.error)
+    console.error("[job.cartoes]", cartoesRes.error.message);
+  // Cast via `any`: a bandeira vem como string do Supabase e CartaoOption
+  // a declara como BandeiraCartao — o banco tem constraint de enum e o cast é seguro.
+  const cartoes = (cartoesRes.data ?? []) as any[];
+
   const versaoLabel = raw.versao
     ? nomeVersao(raw.orcamento?.nome ?? job.nome, raw.versao.numero_versao)
     : "—";
@@ -839,6 +854,7 @@ export default async function JobDetailPage({
             fornecedores={fornecedores}
             empresas={empresas}
             bvsPorItem={bvsPorItem}
+            cartoes={cartoes}
           />
         }
         ppsCount={ppsDoJob.filter((p) => p.status !== "cancelada").length}

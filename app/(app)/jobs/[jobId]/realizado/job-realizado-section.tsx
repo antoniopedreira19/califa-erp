@@ -13,6 +13,7 @@ import type {
   Empresa,
   ItemBv,
 } from "@/lib/types";
+import type { CartaoOption } from "@/components/financeiro/forma-pagamento-field";
 import { JobGrupoCard } from "./job-grupo-card";
 import { JobTotaisCard } from "./job-totais-card";
 import { AlterarOrcadoButton } from "./alterar-orcado-button";
@@ -45,6 +46,8 @@ interface Props {
   empresas: Array<Pick<Empresa, "id" | "razao_social" | "nome_fantasia" | "ativo" | "principal">>;
   /** BV por id do item da versão. Só existe em item tipo A, AR ou D. */
   bvsPorItem: Record<string, ItemBv>;
+  /** Cartões de crédito ativos do tenant — buscados pelo server component pai. */
+  cartoes: CartaoOption[];
 }
 
 export function JobRealizadoSection({
@@ -61,6 +64,7 @@ export function JobRealizadoSection({
   fornecedores,
   empresas,
   bvsPorItem,
+  cartoes,
 }: Props) {
   // Antes da abertura a planilha aparece inteira e o realizado já pode
   // ser lançado — o que fica de fora são as ações que geram documento.
@@ -168,6 +172,7 @@ export function JobRealizadoSection({
                 jobResponsavelId={job.responsavel_id ?? ""}
                 bvsPorItem={bvsPorItem}
                 versaoLabel={`v${versao.numero_versao}`}
+                cartoes={cartoes}
               />
             ))}
           </div>
