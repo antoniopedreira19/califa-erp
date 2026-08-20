@@ -14,6 +14,7 @@ import {
   dividirEmParcelas,
   proximoVencimento,
 } from "@/lib/calculos/pps-item";
+import { parcelasParaFatura, formatarISO } from "@/lib/cartoes/proxima-fatura";
 // NÃO importar renderPedidoCompraPDF estaticamente. O módulo pedido-compra.ts
 // puxa pdfmake, que tem side-effects de inicialização que falham em runtime
 // serverless Vercel. Se importarmos aqui, TODAS as actions do arquivo caem
@@ -70,7 +71,9 @@ const dataSchema = z
  *  digitação, não parcelamento. Vale contra payload sem fim. */
 const MAX_PARCELAS = 36;
 
-const dadosSchema = z.object({
+const formaPagamentoEnumZ = z.enum(["pix", "transferencia", "boleto", "cartao_credito"]);
+
+const dadosBaseSchema = z.object({
   fornecedor_id: z.string().uuid(),
   empresa_id: z.string().uuid(),
   // Vencimento da 1ª parcela. A parcela 1 SEMPRE repete esta data — o
@@ -88,11 +91,49 @@ const dadosSchema = z.object({
     .array(z.object({ data_vencimento: dataSchema, valor: z.number().positive() }))
     .min(1, "Informe ao menos uma parcela.")
     .max(MAX_PARCELAS, `No máximo ${MAX_PARCELAS} parcelas.`),
+  // Forma de pagamento — obrigatória, sem default.
+  forma_pagamento: formaPagamentoEnumZ,
+  // UUID do cartão selecionado; obrigatório quando forma = cartao_credito.
+  cartao_credito_id: z.string().uuid().nullable().optional(),
 });
 
-/** O reenvio corrige a PP mas não redefine o parcelamento: mesmo número
- *  de parcelas, valores redivididos. Por isso não recebe `parcelas`. */
-const dadosReenvioSchema = dadosSchema.omit({ parcelas: true });
+/** O reenvio corrige a PP mas não redefine o parcelamento nem a forma de
+ *  pagamento: quem quiser mudar a forma cancela e emite nova PP. */
+const dadosReenvioSchema = dadosBaseSchema.omit({
+  parcelas: true,
+  forma_pagamento: true,
+  cartao_credito_id: true,
+});
+
+const dadosSchema = dadosBaseSchema.superRefine((val, ctx) => {
+  if (val.forma_pagamento === "cartao_credito") {
+    if (!val.cartao_credito_id) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["cartao_credito_id"],
+        message: "Selecione o cartão de crédito.",
+      });
+    }
+    const hoje = new Date().toISOString().slice(0, 10);
+    for (let i = 0; i < val.parcelas.length; i++) {
+      if (val.parcelas[i].data_vencimento < hoje) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["parcelas", i, "data_vencimento"],
+          message: "Data da parcela não pode ser anterior a hoje.",
+        });
+      }
+    }
+  } else {
+    if (val.cartao_credito_id) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["cartao_credito_id"],
+        message: "Cartão só é aceito quando a forma de pagamento é Cartão de Crédito.",
+      });
+    }
+  }
+});
 
 const anexoUploadedSchema = z.object({
   anexo_id: z.string().uuid(),
@@ -449,6 +490,36 @@ async function finalizarPedidoCompraImpl(
     return { ok: false, message: msg };
   }
 
+  // Quando a forma é cartão, sobrescreve as datas das parcelas com as
+  // faturas calculadas a partir do dia_vencimento_fatura do cartão.
+  // O formulário já enviou datas calculadas localmente; aqui reconfirmamos
+  // no server (regra não pode ser só frontend).
+  let parcelasFinais = d.parcelas;
+  if (d.forma_pagamento === "cartao_credito" && d.cartao_credito_id) {
+    const { data: cartaoRow } = await supabase
+      .from("cartoes_credito")
+      .select("dia_vencimento_fatura")
+      .eq("id", d.cartao_credito_id)
+      .eq("tenant_id", session.activeTenant.id)
+      .maybeSingle();
+
+    if (cartaoRow?.dia_vencimento_fatura) {
+      const datas = parcelasParaFatura(
+        cartaoRow.dia_vencimento_fatura,
+        new Date(),
+        d.parcelas.length,
+      );
+      // Mantém os valores enviados pelo form; recalcula APENAS as datas.
+      // Isso garante que edições manuais de data feitas pelo usuário não
+      // fiquem totalmente ignoradas quando o server revalida — mas as
+      // datas do server prevalecem para garantir coerência.
+      parcelasFinais = d.parcelas.map((p, i) => ({
+        ...p,
+        data_vencimento: formatarISO(datas[i] ?? datas[datas.length - 1]),
+      }));
+    }
+  }
+
   // INSERT pedidos_compra (pdf_path = '' placeholder)
   const { error: insertErr } = await supabase.from("pedidos_compra").insert({
     id: pp_id,
@@ -464,9 +535,11 @@ async function finalizarPedidoCompraImpl(
     valor,
     // Continua sendo o vencimento da 1ª parcela: é o que as views do
     // financeiro leem hoje, e o que a Tela 3.2 vai reorganizar.
-    prazo_pagamento: d.parcelas[0].data_vencimento,
+    prazo_pagamento: parcelasFinais[0].data_vencimento,
     pdf_path: "",
     emitida_por: session.profile.id,
+    forma_pagamento: d.forma_pagamento,
+    cartao_credito_id: d.cartao_credito_id ?? null,
   });
 
   if (insertErr) {
@@ -501,10 +574,12 @@ async function finalizarPedidoCompraImpl(
   // INSERT parcelas bulk (uma só ida ao banco, regra de PERFORMANCE.md).
   // PP sem parcelamento grava 1 parcela 1/1: nenhuma PP fica sem parcela,
   // e por isso as listas e o PDF tratam os dois casos do mesmo jeito.
+  // Usa `parcelasFinais`, que já tem as datas recalculadas pelo cartão
+  // quando a forma é cartao_credito.
   const { data: parcelasCriadas, error: parcelasErr } = await supabase
     .from("pedidos_compra_parcelas")
     .insert(
-      d.parcelas.map((p, i) => ({
+      parcelasFinais.map((p, i) => ({
         tenant_id: session.activeTenant.id,
         pedido_compra_id: pp_id,
         numero: i + 1,
@@ -743,11 +818,13 @@ async function finalizarPedidoCompraImpl(
       pp_codigo: codigo,
       valor,
       quantidade: d.quantidade,
-      parcelas: d.parcelas.length,
+      parcelas: parcelasFinais.length,
       saldo_do_item_antes: saldo,
       fornecedor_id: d.fornecedor_id,
       item_realizado_id: itemRealizadoId,
       job_id: job.id,
+      forma_pagamento: d.forma_pagamento,
+      cartao_credito_id: d.cartao_credito_id ?? null,
     },
   });
 
