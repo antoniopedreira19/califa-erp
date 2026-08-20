@@ -7,6 +7,7 @@ import { formatCurrency } from "@/lib/utils";
 import type {
   ContaAvulsaRecorrente,
   ContaAvulsaStatus,
+  BandeiraCartao,
   FormaPagamento,
   PlanoContaTipo,
   PlanoContaSubtipo,
@@ -93,6 +94,7 @@ export default async function RecorrenteDetalhesPage({
     jobsRes,
     rateioRes,
     regionaisRes,
+    cartoesRes,
   ] = await Promise.all([
     supabase
       .from("contas_avulsas")
@@ -146,6 +148,13 @@ export default async function RecorrenteDetalhesPage({
       .from("regionais")
       .select("id, nome, ativo")
       .eq("tenant_id", session.activeTenant.id)
+      .order("nome"),
+    // Cartões de crédito ativos (para o drawer de edição)
+    supabase
+      .from("cartoes_credito")
+      .select("id, nome, banco, bandeira, ultimos_4_digitos, dia_vencimento_fatura")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("ativo", true)
       .order("nome"),
   ]);
 
@@ -201,6 +210,25 @@ export default async function RecorrenteDetalhesPage({
       id: r.id,
       nome: r.nome,
       ativo: r.ativo,
+    }),
+  );
+
+  // Cartões de crédito (para o drawer de edição)
+  const cartoesList = (cartoesRes.data ?? []).map(
+    (c: {
+      id: string;
+      nome: string;
+      banco: string;
+      bandeira: string;
+      ultimos_4_digitos: string;
+      dia_vencimento_fatura: number;
+    }) => ({
+      id: c.id,
+      nome: c.nome,
+      banco: c.banco,
+      bandeira: c.bandeira as BandeiraCartao,
+      ultimos_4_digitos: c.ultimos_4_digitos,
+      dia_vencimento_fatura: c.dia_vencimento_fatura,
     }),
   );
 
@@ -356,6 +384,7 @@ export default async function RecorrenteDetalhesPage({
                   clientes={clientes}
                   jobs={jobs}
                   regionais={regionaisList}
+                  cartoes={cartoesList}
                   rateioInicial={rateioInicial}
                 />
                 <PausarRecorrenteButton

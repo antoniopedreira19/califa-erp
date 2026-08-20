@@ -11,6 +11,7 @@ import type {
   PlanoContaSubtipo,
 } from "@/lib/types";
 import { ContaRecorrenteDrawer } from "./conta-recorrente-drawer";
+import type { CartaoOption } from "@/components/financeiro/forma-pagamento-field";
 
 // ---------------------------------------------------------------------------
 // Tipos exportados
@@ -87,6 +88,7 @@ interface Props {
   clientes: Array<{ id: string; nome: string }>;
   jobs: Array<{ id: string; codigo: string; nome: string; cliente_id: string | null; regional_id: string | null }>;
   regionais: Array<{ id: string; nome: string; ativo: boolean }>;
+  cartoes: CartaoOption[];
 }
 
 // ---------------------------------------------------------------------------
@@ -103,6 +105,7 @@ export function RecorrentesList({
   clientes,
   jobs,
   regionais,
+  cartoes,
 }: Props) {
   const router = useRouter();
   const [busca, setBusca] = React.useState("");
@@ -166,6 +169,7 @@ export function RecorrentesList({
           clientes={clientes}
           jobs={jobs}
           regionais={regionais}
+          cartoes={cartoes}
           trigger={
             <button
               type="button"

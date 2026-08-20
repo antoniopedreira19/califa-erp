@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Plus } from "lucide-react";
+import { AlertCircle, Info, Plus } from "lucide-react";
 import {
   Dialog,
   DialogTrigger,
@@ -24,12 +24,17 @@ import { Combobox } from "@/components/ui/combobox";
 import { DatePicker } from "@/components/ui/date-picker";
 import { criarContaRecorrente, editarContaRecorrente } from "./actions-recorrentes";
 import { RateioRegionalEditor } from "./rateio-regional-editor";
+import {
+  FormaPagamentoField,
+  type CartaoOption,
+} from "@/components/financeiro/forma-pagamento-field";
 import type {
   ContaAvulsaRecorrente,
   FrequenciaRecorrencia,
   PlanoContaTipo,
   PlanoContaSubtipo,
   RateioLinhaInput,
+  FormaPagamento,
 } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -68,6 +73,7 @@ type Props =
       clientes: ClienteResumido[];
       jobs: JobResumido[];
       regionais: RegionalResumida[];
+      cartoes: CartaoOption[];
       trigger?: React.ReactNode;
     }
   | {
@@ -81,6 +87,7 @@ type Props =
       clientes: ClienteResumido[];
       jobs: JobResumido[];
       regionais: RegionalResumida[];
+      cartoes: CartaoOption[];
       rateioInicial?: RateioLinhaInput[];
       open: boolean;
       onOpenChange: (b: boolean) => void;
@@ -170,6 +177,14 @@ export function ContaRecorrenteDrawer(props: Props) {
     recorrente?.data_fim ?? null,
   );
 
+  // Forma de pagamento
+  const [formaPagamento, setFormaPagamento] = React.useState<FormaPagamento | null>(
+    recorrente?.forma_pagamento ?? null,
+  );
+  const [cartaoCreditoId, setCartaoCreditoId] = React.useState<string | null>(
+    recorrente?.cartao_credito_id ?? null,
+  );
+
   // ---------------------------------------------------------------------------
   // Resetar estado ao abrir/fechar
   // ---------------------------------------------------------------------------
@@ -191,6 +206,8 @@ export function ContaRecorrenteDrawer(props: Props) {
       setDiaDoAnoDia(recorrente.dia_do_ano_dia ?? null);
       setDiaDoAnoMes(recorrente.dia_do_ano_mes ?? null);
       setDataFim(recorrente.data_fim ?? null);
+      setFormaPagamento(recorrente.forma_pagamento ?? null);
+      setCartaoCreditoId(recorrente.cartao_credito_id ?? null);
       setRateio(
         (props as Extract<Props, { mode: "editar" }>).rateioInicial ?? [],
       );
@@ -211,6 +228,8 @@ export function ContaRecorrenteDrawer(props: Props) {
       setDiaDoAnoDia(null);
       setDiaDoAnoMes(null);
       setDataFim(null);
+      setFormaPagamento(null);
+      setCartaoCreditoId(null);
       setRateio([]);
     }
   // props é lido dentro mas o drawer sempre fecha/reabre para editar — não precisa reagir a mudança de props sem re-abrir
@@ -327,6 +346,8 @@ export function ContaRecorrenteDrawer(props: Props) {
       dia_do_ano_dia: frequencia === "anual" ? diaDoAnoDia : null,
       dia_do_ano_mes: frequencia === "anual" ? diaDoAnoMes : null,
       data_fim: dataFim || null,
+      forma_pagamento: formaPagamento,
+      cartao_credito_id: cartaoCreditoId,
       rateio,
     };
 
@@ -644,6 +665,39 @@ export function ContaRecorrenteDrawer(props: Props) {
                 </p>
               ))}
             </div>
+
+            {/* ---------------------------------------------------------------- */}
+            {/* Forma de pagamento                                                */}
+            {/* ---------------------------------------------------------------- */}
+
+            <FormaPagamentoField
+              cartoes={props.cartoes}
+              value={{
+                forma_pagamento: formaPagamento,
+                cartao_credito_id: cartaoCreditoId,
+              }}
+              onChange={(v) => {
+                setFormaPagamento(v.forma_pagamento);
+                setCartaoCreditoId(v.cartao_credito_id);
+              }}
+              disabled={pending}
+              obrigatorio={false}
+              error={
+                fieldErrors.forma_pagamento?.[0] ??
+                fieldErrors.cartao_credito_id?.[0]
+              }
+            />
+
+            {/* Aviso informativo quando cartão selecionado (não bloqueante) */}
+            {formaPagamento === "cartao_credito" && (
+              <div className="flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5 text-xs text-blue-700">
+                <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span>
+                  Cada ocorrência será agendada para a próxima fatura do cartão
+                  na data da geração pelo cron.
+                </span>
+              </div>
+            )}
 
             {/* ---------------------------------------------------------------- */}
             {/* Recorrência                                                       */}
