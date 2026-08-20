@@ -49,18 +49,18 @@ export function ContasPagarTabs({
           Pedidos de Produção (PPs)
         </TabButton>
         <TabButton
-          active={tab === "titulos"}
-          onClick={() => setTab("titulos")}
-          count={titulosAPagarCount}
-        >
-          Títulos a Pagar
-        </TabButton>
-        <TabButton
           active={tab === "recorrentes"}
           onClick={() => setTab("recorrentes")}
           count={recorrentesAtivasCount}
         >
           Recorrências
+        </TabButton>
+        <TabButton
+          active={tab === "titulos"}
+          onClick={() => setTab("titulos")}
+          count={titulosAPagarCount}
+        >
+          Títulos a Pagar
         </TabButton>
       </div>
 
