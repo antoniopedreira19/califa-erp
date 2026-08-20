@@ -132,6 +132,12 @@ export type AuditAction =
   | "titulo.baixado"
   | "titulo.baixa_estornada"
   | "titulo.previsao_repactuada"
+  | "desembolso.criado"
+  | "desembolso.aprovada"
+  | "desembolso.rejeitada"
+  | "desembolso.cancelada"
+  | "desembolso.parcela_paga"
+  | "desembolso.parcela_baixa_estornada"
   | "acao_negada";
 
 export interface AuditPayload {
