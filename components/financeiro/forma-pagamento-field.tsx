@@ -1,6 +1,5 @@
 "use client";
 
-import { useMemo } from "react";
 import Link from "next/link";
 import {
   Select,
@@ -56,7 +55,6 @@ const FORMAS: FormaPagamento[] = [
   "boleto",
   "cartao_credito",
 ];
-const NENHUM = "__nenhum__";
 
 export function FormaPagamentoField({
   cartoes,
@@ -66,16 +64,14 @@ export function FormaPagamentoField({
   obrigatorio = true,
   error,
 }: Props) {
-  const cartoesAtivos = useMemo(() => cartoes, [cartoes]);
-
   function handleFormaChange(nova: FormaPagamento) {
     if (nova !== "cartao_credito") {
       onChange({ forma_pagamento: nova, cartao_credito_id: null });
       return;
     }
     // Ao virar cartão: se só há 1 cartão, seleciona automaticamente.
-    if (cartoesAtivos.length === 1) {
-      const unico = cartoesAtivos[0];
+    if (cartoes.length === 1) {
+      const unico = cartoes[0];
       const dia = unico.dia_vencimento_fatura;
       const data = formatarISO(proximaFatura(dia, new Date()));
       onChange(
@@ -88,11 +84,7 @@ export function FormaPagamentoField({
   }
 
   function handleCartaoChange(cartaoId: string) {
-    if (cartaoId === NENHUM) {
-      onChange({ forma_pagamento: "cartao_credito", cartao_credito_id: null });
-      return;
-    }
-    const c = cartoesAtivos.find((c) => c.id === cartaoId);
+    const c = cartoes.find((c) => c.id === cartaoId);
     if (!c) return;
     const data = formatarISO(proximaFatura(c.dia_vencimento_fatura, new Date()));
     onChange(
@@ -102,7 +94,7 @@ export function FormaPagamentoField({
   }
 
   const mostraCartao = value.forma_pagamento === "cartao_credito";
-  const semCartoes = mostraCartao && cartoesAtivos.length === 0;
+  const semCartoes = mostraCartao && cartoes.length === 0;
 
   return (
     <div className="space-y-2">
@@ -127,7 +119,7 @@ export function FormaPagamentoField({
 
         {mostraCartao && !semCartoes && (
           <Select
-            value={value.cartao_credito_id ?? NENHUM}
+            value={value.cartao_credito_id ?? undefined}
             onValueChange={handleCartaoChange}
             disabled={disabled}
           >
@@ -135,7 +127,7 @@ export function FormaPagamentoField({
               <SelectValue placeholder="Selecione o cartão" />
             </SelectTrigger>
             <SelectContent>
-              {cartoesAtivos.map((c) => (
+              {cartoes.map((c) => (
                 <SelectItem key={c.id} value={c.id}>
                   {c.nome} · {bandeiraCartaoLabel(c.bandeira)} · ••••
                   {c.ultimos_4_digitos}
