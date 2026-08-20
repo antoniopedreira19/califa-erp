@@ -126,6 +126,7 @@ export type AuditAction =
   | "cartao_credito.atualizado"
   | "cartao_credito.inativado"
   | "cartao_credito.reativado"
+  | "contas_pagar.baixa_lote_cartao"
   | "faturamento.emitido"
   | "faturamento.cancelado"
   | "titulo.baixado"
