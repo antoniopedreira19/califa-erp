@@ -12,6 +12,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
+import { format } from "date-fns";
 import {
   CalendarClock,
   CheckCheck,
@@ -24,6 +25,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { DatePicker } from "@/components/ui/date-picker";
 import type {
   ContaBancaria,
   OrigemTitulo,
@@ -386,44 +388,6 @@ export function TitulosPagarList({
             />
           ))}
 
-          {modo === "pagos" && (
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <CalendarClock className="h-3.5 w-3.5" />
-              <span className="text-[11px] font-semibold uppercase tracking-wider">
-                Pago em
-              </span>
-              <input
-                type="date"
-                value={dataDe}
-                onChange={(e) => setDataDe(e.target.value)}
-                max={dataAte || undefined}
-                aria-label="Data inicial"
-                className="rounded-lg border border-border bg-white px-2 py-1.5 text-xs focus:border-california-red focus:outline-none"
-              />
-              <span>até</span>
-              <input
-                type="date"
-                value={dataAte}
-                onChange={(e) => setDataAte(e.target.value)}
-                min={dataDe || undefined}
-                aria-label="Data final"
-                className="rounded-lg border border-border bg-white px-2 py-1.5 text-xs focus:border-california-red focus:outline-none"
-              />
-              {(dataDe || dataAte) && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDataDe("");
-                    setDataAte("");
-                  }}
-                  className="ml-0.5 rounded-md border border-border bg-white px-2 py-1.5 text-[11px] font-medium text-muted-foreground hover:border-california-red hover:text-california-red"
-                >
-                  Limpar
-                </button>
-              )}
-            </div>
-          )}
-
           <div className="relative ml-auto min-w-[240px] max-w-md flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <input
@@ -500,6 +464,32 @@ export function TitulosPagarList({
               label="Total pago (filtro)"
               valor={resumo.totalPago}
             />
+            {/* Filtro de período — ancorado à direita do card. Cada
+                DatePicker traz seu próprio X pra limpar. */}
+            <div className="ml-auto flex items-center gap-2">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Pago em
+              </span>
+              <div className="w-[160px]">
+                <DatePicker
+                  name="pago_em_de"
+                  defaultValue={dataDe}
+                  placeholder="De"
+                  onDateChange={(d) => setDataDe(d ? format(d, "yyyy-MM-dd") : "")}
+                  className="h-9 px-3 text-xs"
+                />
+              </div>
+              <span className="text-xs text-muted-foreground">até</span>
+              <div className="w-[160px]">
+                <DatePicker
+                  name="pago_em_ate"
+                  defaultValue={dataAte}
+                  placeholder="Até"
+                  onDateChange={(d) => setDataAte(d ? format(d, "yyyy-MM-dd") : "")}
+                  className="h-9 px-3 text-xs"
+                />
+              </div>
+            </div>
           </>
         )}
       </div>
