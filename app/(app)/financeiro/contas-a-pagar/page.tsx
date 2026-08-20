@@ -563,6 +563,7 @@ export default async function PedidosCompraFinanceiroPage() {
             clientes={clientesList}
             jobs={jobsList}
             regionais={regionaisList}
+            cartoes={cartoesList}
           />
         }
         recorrentesAtivasCount={recorrentesAtivasCountRes.count ?? 0}
