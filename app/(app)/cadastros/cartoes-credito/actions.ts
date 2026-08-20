@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { logAuditEvent } from "@/lib/auth/audit";
@@ -8,6 +9,8 @@ import {
   criarCartaoSchema,
   atualizarCartaoSchema,
 } from "@/lib/validations/cartao-credito";
+
+const idSchema = z.object({ id: z.string().uuid() });
 
 type Result = { ok: true } | { ok: false; message: string };
 
@@ -116,18 +119,21 @@ export async function atualizarCartao(input: unknown): Promise<Result> {
   });
 
   revalidatePath("/cadastros/cartoes-credito");
+  revalidatePath("/cadastros");
   revalidatePath("/financeiro/contas-a-pagar");
   return { ok: true };
 }
 
-export async function inativarCartao(input: { id: string }): Promise<Result> {
+export async function inativarCartao(input: unknown): Promise<Result> {
+  const parsed = idSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, message: "ID inválido." };
   const gate = await checarGate();
   if (!gate.ok) return gate;
 
   const { error } = await gate.supabase
     .from("cartoes_credito")
     .update({ ativo: false })
-    .eq("id", input.id)
+    .eq("id", parsed.data.id)
     .eq("tenant_id", gate.session.activeTenant.id);
   if (error) return { ok: false, message: `Falha ao inativar: ${error.message}` };
 
@@ -135,7 +141,7 @@ export async function inativarCartao(input: { id: string }): Promise<Result> {
     acao: "cartao_credito.inativado",
     tenantId: gate.session.activeTenant.id,
     entidadeTipo: "cartao_credito",
-    entidadeId: input.id,
+    entidadeId: parsed.data.id,
     metadata: {},
   });
 
@@ -144,14 +150,16 @@ export async function inativarCartao(input: { id: string }): Promise<Result> {
   return { ok: true };
 }
 
-export async function reativarCartao(input: { id: string }): Promise<Result> {
+export async function reativarCartao(input: unknown): Promise<Result> {
+  const parsed = idSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, message: "ID inválido." };
   const gate = await checarGate();
   if (!gate.ok) return gate;
 
   const { error } = await gate.supabase
     .from("cartoes_credito")
     .update({ ativo: true })
-    .eq("id", input.id)
+    .eq("id", parsed.data.id)
     .eq("tenant_id", gate.session.activeTenant.id);
   if (error) return { ok: false, message: `Falha ao reativar: ${error.message}` };
 
@@ -159,7 +167,7 @@ export async function reativarCartao(input: { id: string }): Promise<Result> {
     acao: "cartao_credito.reativado",
     tenantId: gate.session.activeTenant.id,
     entidadeTipo: "cartao_credito",
-    entidadeId: input.id,
+    entidadeId: parsed.data.id,
     metadata: {},
   });
 

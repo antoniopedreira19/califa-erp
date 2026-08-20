@@ -17,12 +17,12 @@ import { bandeiraCartaoLabel } from "@/lib/types";
 import { CartaoDrawer } from "./cartao-drawer";
 import { inativarCartao, reativarCartao } from "./actions";
 
-type StatusFiltro = "ativas" | "inativas" | "todas";
+type StatusFiltro = "ativos" | "inativos" | "todos";
 
 export function CartoesList({ rows }: { rows: CartaoCredito[] }) {
   const router = useRouter();
   const [busca, setBusca] = React.useState("");
-  const [status, setStatus] = React.useState<StatusFiltro>("ativas");
+  const [status, setStatus] = React.useState<StatusFiltro>("ativos");
   const [pending, startTransition] = React.useTransition();
   const [editando, setEditando] = React.useState<CartaoCredito | null>(null);
   const [confirmando, setConfirmando] = React.useState<{
@@ -33,8 +33,8 @@ export function CartoesList({ rows }: { rows: CartaoCredito[] }) {
   const filtered = React.useMemo(() => {
     const q = busca.trim().toLowerCase();
     return rows.filter((c) => {
-      if (status === "ativas" && !c.ativo) return false;
-      if (status === "inativas" && c.ativo) return false;
+      if (status === "ativos" && !c.ativo) return false;
+      if (status === "inativos" && c.ativo) return false;
       if (!q) return true;
       return (
         c.nome.toLowerCase().includes(q) ||
@@ -82,9 +82,9 @@ export function CartoesList({ rows }: { rows: CartaoCredito[] }) {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="ativas">Ativos</SelectItem>
-              <SelectItem value="inativas">Inativos</SelectItem>
-              <SelectItem value="todas">Todos</SelectItem>
+              <SelectItem value="ativos">Ativos</SelectItem>
+              <SelectItem value="inativos">Inativos</SelectItem>
+              <SelectItem value="todos">Todos</SelectItem>
             </SelectContent>
           </Select>
         </div>
