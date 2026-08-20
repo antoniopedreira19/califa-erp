@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { PedidosCompraList, type PPRow } from "./pedidos-compra-list";
 import { ContasPagarTabs } from "./contas-pagar-tabs";
 import { TitulosPagarList, type TituloRow } from "./titulos-pagar-list";
+import { TitulosCartaoList } from "./titulos-cartao-list";
 import { RecorrentesList, type RecorrenteRow } from "./recorrentes-list";
 import type { PPStatus, PlanoContaTipo, PlanoContaSubtipo, ContaBancaria, FormaPagamento, BandeiraCartao } from "@/lib/types";
 
@@ -409,7 +410,17 @@ export default async function PedidosCompraFinanceiroPage() {
     });
   }
 
-  const titulosAPagarCount = titulos.filter((t) => t.status === "a_pagar").length;
+  // Títulos de cartão de crédito pendentes — alimentam a 5ª aba.
+  const titulosCartao = titulos.filter(
+    (t) => t.forma_pagamento === "cartao_credito" && t.status === "a_pagar",
+  );
+  const titulosCartaoCount = titulosCartao.length;
+
+  // Aba comum "Títulos a Pagar" exclui cartões pendentes (eles têm aba própria).
+  // Cartões PAGOS permanecem em "Títulos Pagos" (status "pago" não é filtrado aqui).
+  const titulosAPagarCount = titulos.filter(
+    (t) => t.status === "a_pagar" && t.forma_pagamento !== "cartao_credito",
+  ).length;
 
   // Mapeamento das recorrências para RecorrenteRow
   const recorrentesRows: RecorrenteRow[] = ((recorrentesRes.data ?? []) as unknown as Array<{
@@ -536,8 +547,14 @@ export default async function PedidosCompraFinanceiroPage() {
         pps={<PedidosCompraList rows={rows} />}
         ppsPendentesCount={ppsPendentesCountRes.count ?? 0}
         titulos={
+          // Aba comum exclui cartões pendentes (eles têm aba própria).
+          // `t.status !== "a_pagar"` preserva cartões pagos para o modo "pagos"
+          // do mesmo componente — mas aqui só modo "a_pagar" recebe os rows
+          // filtrados; a aba de pagos usa rows sem filtro (veja titulosPagos abaixo).
           <TitulosPagarList
-            rows={titulos}
+            rows={titulos.filter(
+              (t) => t.status !== "a_pagar" || t.forma_pagamento !== "cartao_credito",
+            )}
             modo="a_pagar"
             tenantId={session.activeTenant.id}
             contas={contasRes.data ?? []}
@@ -567,7 +584,19 @@ export default async function PedidosCompraFinanceiroPage() {
           />
         }
         recorrentesAtivasCount={recorrentesAtivasCountRes.count ?? 0}
+        titulosCartao={
+          <TitulosCartaoList
+            rows={titulosCartao}
+            cartoes={cartoesList}
+            contas={contasRes.data ?? []}
+            tipos={tiposRes.data ?? []}
+            subtipos={subtiposRes.data ?? []}
+            tenantId={session.activeTenant.id}
+          />
+        }
+        titulosCartaoCount={titulosCartaoCount}
         titulosPagos={
+          // "Títulos Pagos" recebe todos os rows (cartões pagos aparecem aqui).
           <TitulosPagarList
             rows={titulos}
             modo="pagos"
