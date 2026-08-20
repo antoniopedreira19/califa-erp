@@ -1444,6 +1444,55 @@ export interface TituloReceber {
   created_at: string;
 }
 
+// ---------- Forma de pagamento e cartões (20/08/2026) ----------
+
+export type FormaPagamento =
+  | "pix"
+  | "transferencia"
+  | "boleto"
+  | "cartao_credito";
+
+export const formaPagamentoLabel = (f: FormaPagamento): string =>
+  ({
+    pix: "PIX",
+    transferencia: "Transferência",
+    boleto: "Boleto",
+    cartao_credito: "Cartão de Crédito",
+  })[f];
+
+export type BandeiraCartao =
+  | "visa"
+  | "master"
+  | "elo"
+  | "amex"
+  | "hipercard"
+  | "outra";
+
+export const bandeiraCartaoLabel = (b: BandeiraCartao): string =>
+  ({
+    visa: "Visa",
+    master: "Mastercard",
+    elo: "Elo",
+    amex: "American Express",
+    hipercard: "Hipercard",
+    outra: "Outra",
+  })[b];
+
+export interface CartaoCredito {
+  id: string;
+  tenant_id: string;
+  nome: string;
+  banco: string;
+  bandeira: BandeiraCartao;
+  ultimos_4_digitos: string;
+  dono: string;
+  dia_vencimento_fatura: number;
+  ativo: boolean;
+  created_at: string;
+  created_by: string | null;
+  updated_at: string;
+}
+
 // ---------- Task 012: contas_avulsas ----------
 
 export type ContaAvulsaStatus = "aprovada" | "baixada";
