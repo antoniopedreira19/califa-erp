@@ -210,24 +210,43 @@ export function TitulosPagarList({
     return () => clearTimeout(t);
   }, [toast]);
 
-  const contagemStatus = React.useMemo(
-    () => ({
-      a_pagar: rows.filter((r) => r.status === "a_pagar").length,
-      pago: rows.filter((r) => r.status === "pago").length,
-      todos: rows.length,
-    }),
-    [rows],
+  // Cada grupo de chips conta respeitando os OUTROS filtros ativos (e a
+  // busca). O número em cada chip é literalmente "quantas linhas apareceriam
+  // se eu clicasse aqui" — assim os chips não divergem da tabela.
+  const casaBusca = React.useCallback(
+    (r: TituloRow, q: string) =>
+      !q ||
+      r.descricao.toLowerCase().includes(q) ||
+      r.fornecedor_nome.toLowerCase().includes(q) ||
+      r.job_codigo.toLowerCase().includes(q) ||
+      r.origem_label.toLowerCase().includes(q),
+    [],
   );
 
-  const contagemOrigem = React.useMemo(
-    () => ({
-      todas: rows.length,
-      pp: rows.filter((r) => r.origem === "pp").length,
-      avulso: rows.filter((r) => r.origem === "avulso").length,
-      recorrencia: rows.filter((r) => r.origem === "recorrencia").length,
-    }),
-    [rows],
-  );
+  const contagemStatus = React.useMemo(() => {
+    const q = busca.trim().toLowerCase();
+    const base = rows.filter(
+      (r) => (filtroOrigem === "todas" || r.origem === filtroOrigem) && casaBusca(r, q),
+    );
+    return {
+      a_pagar: base.filter((r) => r.status === "a_pagar").length,
+      pago: base.filter((r) => r.status === "pago").length,
+      todos: base.length,
+    };
+  }, [rows, filtroOrigem, busca, casaBusca]);
+
+  const contagemOrigem = React.useMemo(() => {
+    const q = busca.trim().toLowerCase();
+    const base = rows.filter(
+      (r) => (filtroStatus === "todos" || r.status === filtroStatus) && casaBusca(r, q),
+    );
+    return {
+      todas: base.length,
+      pp: base.filter((r) => r.origem === "pp").length,
+      avulso: base.filter((r) => r.origem === "avulso").length,
+      recorrencia: base.filter((r) => r.origem === "recorrencia").length,
+    };
+  }, [rows, filtroStatus, busca, casaBusca]);
 
   const filtrados = React.useMemo(() => {
     const q = busca.trim().toLowerCase();
@@ -235,13 +254,7 @@ export function TitulosPagarList({
       .filter((r) => {
         if (filtroStatus !== "todos" && r.status !== filtroStatus) return false;
         if (filtroOrigem !== "todas" && r.origem !== filtroOrigem) return false;
-        if (!q) return true;
-        return (
-          r.descricao.toLowerCase().includes(q) ||
-          r.fornecedor_nome.toLowerCase().includes(q) ||
-          r.job_codigo.toLowerCase().includes(q) ||
-          r.origem_label.toLowerCase().includes(q)
-        );
+        return casaBusca(r, q);
       })
       .sort((a, b) => {
         // Pago desce: em "Todos", o que ainda precisa sair vem primeiro.
@@ -251,7 +264,7 @@ export function TitulosPagarList({
           b.data_pagamento ?? "9999-12-31",
         );
       });
-  }, [rows, filtroStatus, filtroOrigem, busca]);
+  }, [rows, filtroStatus, filtroOrigem, busca, casaBusca]);
 
   // Faixa de resumo — sempre sobre a base inteira, não sobre o filtro:
   // é panorama do caixa, não recorte da busca.
@@ -414,21 +427,23 @@ export function TitulosPagarList({
         />
       </div>
 
-      {/* Tabela */}
-      <div className="overflow-x-auto rounded-2xl border border-border bg-card shadow-soft">
-        <table className="w-full min-w-[1160px] text-sm">
+      {/* Tabela — table-fixed para caber no max-w-7xl sem scroll horizontal.
+          Larguras em % para escalar com o container; Título e Fornecedor
+          absorvem sobra e truncam quando precisa. */}
+      <div className="rounded-2xl border border-border bg-card shadow-soft">
+        <table className="w-full table-fixed text-sm">
           <thead>
-            <tr className="border-b border-border bg-muted/30 text-left text-[11px] uppercase tracking-wider text-muted-foreground">
-              <th className="w-[150px] px-3.5 py-3 font-semibold">Data de pagamento</th>
-              <th className="w-[104px] px-3.5 py-3 font-semibold">Venc. original</th>
-              <th className="min-w-[280px] px-4 py-3 font-semibold">Título</th>
-              <th className="min-w-[180px] px-4 py-3 font-semibold">Fornecedor</th>
-              <th className="px-4 py-3 font-semibold">Job</th>
-              <th className="px-4 py-3 font-semibold">Origem</th>
-              <th className="px-4 py-3 text-right font-semibold">Valor</th>
-              <th className="w-[72px] px-3 py-3 font-semibold">Parcela</th>
-              <th className="w-[96px] px-3.5 py-3 font-semibold">Status</th>
-              <th className="w-[130px] px-4 py-3 text-right font-semibold">Ação</th>
+            <tr className="border-b border-border bg-muted/30 text-center text-[11px] uppercase tracking-wider text-muted-foreground">
+              <th className="w-[12%] px-2 py-3 font-semibold">Data de pagamento</th>
+              <th className="w-[8%] px-2 py-3 font-semibold">Venc. original</th>
+              <th className="w-[20%] px-3 py-3 font-semibold">Título</th>
+              <th className="w-[14%] px-3 py-3 font-semibold">Fornecedor</th>
+              <th className="w-[8%] px-2 py-3 font-semibold">Job</th>
+              <th className="w-[9%] px-2 py-3 font-semibold">Origem</th>
+              <th className="w-[9%] px-3 py-3 font-semibold">Valor</th>
+              <th className="w-[6%] px-2 py-3 font-semibold">Parcela</th>
+              <th className="w-[7%] px-2 py-3 font-semibold">Status</th>
+              <th className="w-[7%] px-2 py-3 font-semibold">Ação</th>
             </tr>
           </thead>
           <tbody>
@@ -464,13 +479,14 @@ export function TitulosPagarList({
                     pago && "cursor-pointer",
                   )}
                 >
-                  <td className="px-3.5 py-3">
-                    <div className="flex items-center gap-2">
+                  <td className="px-2 py-3">
+                    <div className="flex items-center justify-center gap-1.5">
                       {!pago && (
                         <button
                           type="button"
                           title="Editar data de pagamento"
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.stopPropagation();
                             setErroAcao(null);
                             setEditando(r);
                           }}
@@ -489,7 +505,7 @@ export function TitulosPagarList({
                       </span>
                     </div>
                   </td>
-                  <td className="px-3.5 py-3">
+                  <td className="px-2 py-3 text-center">
                     <span
                       className={cn(
                         "whitespace-nowrap font-mono text-xs",
@@ -499,9 +515,9 @@ export function TitulosPagarList({
                       {formatDate(r.venc_original)}
                     </span>
                   </td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-col gap-0.5">
-                      <span className="font-semibold">{r.descricao}</span>
+                  <td className="px-3 py-3">
+                    <div className="flex min-w-0 flex-col gap-0.5">
+                      <span className="break-words font-semibold">{r.descricao}</span>
                       {pago && (
                         <span className="text-[11px] text-muted-foreground">
                           Pago em {formatDate(r.pago_em)} · {r.conta_nome ?? "—"} ·{" "}
@@ -510,32 +526,34 @@ export function TitulosPagarList({
                       )}
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-xs text-muted-foreground">
-                    {r.fornecedor_nome}
+                  <td className="px-3 py-3 text-xs text-muted-foreground">
+                    <span className="block truncate" title={r.fornecedor_nome}>
+                      {r.fornecedor_nome}
+                    </span>
                   </td>
-                  <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-muted-foreground">
+                  <td className="whitespace-nowrap px-2 py-3 text-center font-mono text-xs text-muted-foreground">
                     {r.job_codigo}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-2 py-3 text-center">
                     <span
                       className={cn(
-                        "inline-flex items-center whitespace-nowrap rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide",
+                        "inline-flex items-center whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide",
                         origemChipClass(r.origem),
                       )}
                     >
                       {r.origem_label}
                     </span>
                   </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-right font-semibold tabular-nums">
+                  <td className="whitespace-nowrap px-3 py-3 text-right font-semibold tabular-nums">
                     {formatMoney(r.valor)}
                   </td>
-                  <td className="px-3 py-3 font-mono text-xs text-muted-foreground">
+                  <td className="px-2 py-3 text-center font-mono text-xs text-muted-foreground">
                     {r.parcela_numero}/{r.parcela_total}
                   </td>
-                  <td className="px-3.5 py-3">
+                  <td className="px-2 py-3 text-center">
                     <span
                       className={cn(
-                        "inline-flex items-center whitespace-nowrap rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide",
+                        "inline-flex items-center whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide",
                         pago
                           ? "border-emerald-200 bg-emerald-50 text-emerald-700"
                           : "border-[#fde68a] bg-[#fffbeb] text-[#92400e]",
@@ -544,16 +562,17 @@ export function TitulosPagarList({
                       {pago ? "Pago" : "A pagar"}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-right">
+                  <td className="px-2 py-3 text-center">
                     {pago ? (
                       <button
                         type="button"
                         title="Ver a baixa registrada — e estornar, se preciso"
-                        onClick={() => {
+                        onClick={(e) => {
+                          e.stopPropagation();
                           setErroAcao(null);
                           setConferindo(r);
                         }}
-                        className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border border-border px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:border-california-red hover:text-california-red"
+                        className="inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-border px-2 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:border-california-red hover:text-california-red"
                       >
                         <Check className="h-3 w-3" />
                         Conciliação
@@ -561,11 +580,12 @@ export function TitulosPagarList({
                     ) : (
                       <button
                         type="button"
-                        onClick={() => {
+                        onClick={(e) => {
+                          e.stopPropagation();
                           setErroAcao(null);
                           setBaixando(r);
                         }}
-                        className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-md bg-emerald-600 px-2.5 py-1.5 text-[11px] font-semibold text-white transition-colors hover:bg-emerald-700"
+                        className="inline-flex items-center gap-1 whitespace-nowrap rounded-md bg-emerald-600 px-2 py-1.5 text-[11px] font-semibold text-white transition-colors hover:bg-emerald-700"
                       >
                         <CreditCard className="h-3 w-3" />
                         Dar baixa
