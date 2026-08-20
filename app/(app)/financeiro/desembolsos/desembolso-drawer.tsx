@@ -97,7 +97,7 @@ function dividirEmParcelas(total: number, n: number): number[] {
 
 function proximoVencimento(iso: string): string {
   const [y, m, d] = iso.split("-").map(Number);
-  const mesAlvo = m; // ja 1-indexed; +1 mês
+  const mesAlvo = m + 1; // ja 1-indexed; +1 mês
   const anoAlvo = mesAlvo > 12 ? y + 1 : y;
   const mesReal = mesAlvo > 12 ? 1 : mesAlvo;
   const ultimoDia = new Date(anoAlvo, mesReal, 0).getDate();
