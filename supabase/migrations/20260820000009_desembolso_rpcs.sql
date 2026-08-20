@@ -290,6 +290,7 @@ create or replace function dar_baixa_lote_cartao(
 ) returns uuid[]
 language plpgsql
 security invoker
+set search_path = public
 as $$
 declare
   v_titulo jsonb;
