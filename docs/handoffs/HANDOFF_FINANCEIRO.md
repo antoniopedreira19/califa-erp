@@ -1641,15 +1641,22 @@ como o protótipo desenhava — em PEVETE-0001/26 a diferença era de
 R$ 88.000. Por isso a tabela tem 7 colunas e não 6: "Faturável" entrou
 para a subtração fechar aos olhos de quem lê.
 
-**Entram no agregado:** `aguardando_abertura`, `aberto`, `em_producao` e
-`encerrado`. Ficam de fora `rejeitado_financeiro` e `cancelado`.
+**Aparecem no agregado:** `aguardando_abertura`, `aberto`, `em_producao`
+e `encerrado`. Fora: `rejeitado_financeiro` e `cancelado`.
 
-⚠️ **Job que ainda não foi aberto mostra travessão em Custo previsto E em
-Margem** — sem curva não há margem, e custo zero faria a linha afirmar
-100%. Cada total do rodapé soma o que a própria coluna mostra, então o
-total de margem pode ficar menor que `faturável − custo`; uma nota abaixo
-da tabela explica. Em NOV-0002/26 o total de margem é R$ 39.064,87 (só
-JOB-0013), e não os R$ 150.410,71 da subtração dos outros totais.
+⚠️ **Mas só SOMA quem já passou pela abertura.** Job em
+`aguardando_abertura` aparece marcado com "Aguarda abertura · não soma" e
+fica fora de todos os totais e cards. O motivo é do banco: job não aberto
+tem **zero linhas em `vw_fluxo_caixa`**, zero previsão de recebimento e
+zero curva — as três nascem na abertura. Em NOV-0002/26 os totais mostram
+só o JOB-0013 (R$ 104.064,87 · R$ 104.064,87 · R$ 65.000 · R$ 39.064,87)
+e o card conta 1 job, não 2.
+
+⚠️ **A aba "Visualizar Jobs" passou a listar encerrados** (21/08/2026),
+além de abertos e do legado `em_producao`. A linha ganha um badge com o
+status quando ele não é "aberto" — sem isso não dá para distinguir um
+encerrado de um em andamento. O resumo virou "N jobs no financeiro", e
+`listarJobsAbertos` virou `listarJobsDoFinanceiro`, que é o que ela faz.
 
 **Exceção combinada:** "Orçamento aprovado" continua saindo para
 Orçamentos — é o único destino sem equivalente aqui —, mas agora com

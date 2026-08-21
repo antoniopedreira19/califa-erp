@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight, ChevronRight, Search } from "lucide-react";
 import { formatCurrency, cn } from "@/lib/utils";
+import { jobStatusLabel } from "@/lib/types";
 import type { JobAberto, SituacaoFaturamento } from "./dados-abertos";
 import { SITUACAO_META } from "./situacao-faturamento";
 
@@ -309,9 +310,11 @@ export function JobsAbertosList({ linhas }: { linhas: JobAberto[] }) {
 
       <div className="flex flex-wrap items-center gap-3.5 text-[12.5px] text-muted-foreground">
         <span>
+          {/* "jobs", e não "jobs abertos": desde 21/08/2026 a aba lista
+              também os encerrados. */}
           {visiveis.length === 1
-            ? "1 job aberto"
-            : `${visiveis.length} jobs abertos`}
+            ? "1 job no financeiro"
+            : `${visiveis.length} jobs no financeiro`}
         </span>
         <span className="h-3 w-px bg-[#dcdcdc]" />
         <span>
@@ -477,7 +480,19 @@ export function JobsAbertosList({ linhas }: { linhas: JobAberto[] }) {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex flex-col gap-0.5">
-                          <span className="font-medium">{j.nome}</span>
+                          <span className="flex flex-wrap items-center gap-2">
+                            <span className="font-medium">{j.nome}</span>
+                            {/* Só quando o status NÃO é `aberto`: com a
+                                aba listando encerrados, sem esta marca não
+                                dá para distinguir um do outro. Um badge em
+                                toda linha seria ruído — a maioria é
+                                aberta. */}
+                            {j.status !== "aberto" && (
+                              <span className="inline-flex items-center rounded-full border border-[#ddd6fe] bg-[#f5f3ff] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.05em] text-[#6d28d9]">
+                                {jobStatusLabel(j.status)}
+                              </span>
+                            )}
+                          </span>
                           {j.nome_producao !== j.nome && (
                             <span className="text-[11px] text-muted-foreground">
                               produção: {j.nome_producao}

@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { nomeDoJobNoFinanceiro } from "@/lib/types";
 import type { SituacaoFaturamento } from "@/lib/calculos/esteira-faturamento";
+import type { JobStatus } from "@/lib/types";
 import {
   faturamentoPorJob,
   FATURAMENTO_VAZIO,
@@ -27,6 +28,14 @@ export interface JobAberto {
   nome: string;
   /** Nome da produção, mostrado quando difere — some a dúvida de "que job é esse". */
   nome_producao: string;
+  /**
+   * Status do job. A aba mostra `aberto`, `em_producao` e `encerrado` —
+   * tudo que já passou pela abertura no financeiro (decisão do Tiago,
+   * 21/08/2026: "deverá listar jobs encerrados também"). A linha marca o
+   * status quando ele não é `aberto`, senão não dá para distinguir um
+   * job encerrado de um em andamento.
+   */
+  status: JobStatus;
   valor_total: number | null;
   data_abertura_financeiro: string | null;
   competencia_trimestre: number | null;
@@ -66,7 +75,7 @@ export interface JobAberto {
 }
 
 const SELECT_JOB_ABERTO =
-  "id, codigo, nome, nome_financeiro, valor_total, faturamento_previsto, " +
+  "id, codigo, nome, nome_financeiro, status, valor_total, faturamento_previsto, " +
   "data_abertura_financeiro, " +
   "competencia_trimestre, competencia_ano, projeto_id, produto, " +
   "projeto_financeiro_id, " +
@@ -78,7 +87,23 @@ const SELECT_JOB_ABERTO =
   "projeto:projetos(codigo, nome, cliente:clientes(nome_fantasia))";
 
 /**
- * Todos os jobs já abertos no financeiro, ordenados por código.
+ * Status que a aba "Visualizar Jobs" lista: tudo que já passou pela
+ * abertura no financeiro.
+ *
+ * `aguardando_abertura` fica de fora porque tem aba própria ao lado, e
+ * `rejeitado_financeiro`/`cancelado` porque não existem no financeiro.
+ * `em_producao` é legado (nenhum job novo cai nele), mas quem estiver lá
+ * passou pela abertura.
+ */
+export const STATUS_NA_LISTA = [
+  "aberto",
+  "em_producao",
+  "encerrado",
+] as const;
+
+/**
+ * Os jobs do financeiro — os que já passaram pela abertura —, ordenados
+ * por código.
  *
  * Duas leituras em paralelo: os jobs e a esteira de faturamento do
  * tenant (`lib/data/faturamento-por-job`, que por dentro faz três
@@ -87,7 +112,7 @@ const SELECT_JOB_ABERTO =
  * `hoje` entra por parâmetro para a inadimplência ser testável sem
  * depender do relógio da máquina.
  */
-export async function listarJobsAbertos(
+export async function listarJobsDoFinanceiro(
   tenantId: string,
   hoje: string = new Date().toISOString().slice(0, 10),
 ): Promise<JobAberto[]> {
@@ -102,7 +127,7 @@ export async function listarJobsAbertos(
       .from("jobs")
       .select(SELECT_JOB_ABERTO)
       .eq("tenant_id", tenantId)
-      .eq("status", "aberto")
+      .in("status", STATUS_NA_LISTA as unknown as string[])
       .order("codigo", { ascending: true }),
     faturamentoPorJob(tenantId, hoje),
   ]);
@@ -110,7 +135,7 @@ export async function listarJobsAbertos(
   const { data, error } = jobsRes;
 
   if (error) {
-    console.error("[jobs-abertos.listar]", error.message);
+    console.error("[jobs-do-financeiro.listar]", error.message);
     return [];
   }
 
@@ -122,6 +147,7 @@ export async function listarJobsAbertos(
       codigo: j.codigo,
       nome: nomeDoJobNoFinanceiro(j),
       nome_producao: j.nome,
+      status: j.status as JobStatus,
       valor_total: j.valor_total !== null ? Number(j.valor_total) : null,
       data_abertura_financeiro: j.data_abertura_financeiro,
       competencia_trimestre: j.competencia_trimestre,
