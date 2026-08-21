@@ -24,15 +24,30 @@ import type { JobPlanilhaProjeto } from "./tipos";
 export function PlanilhasDoProjeto({
   planilhas,
   moeda,
-  jobHref,
+  jobHrefBase,
 }: {
   planilhas: JobPlanilhaProjeto[];
   moeda: string;
-  /** Para onde "Abrir job" leva. O financeiro passa a rota dele: aquele
-   *  módulo não encaminha para telas de outros. */
-  jobHref?: (id: string) => string;
+  /** Prefixo da rota de "Abrir job" — o id é concatenado aqui dentro. O
+   *  financeiro passa `/financeiro/jobs`: aquele módulo não encaminha
+   *  para telas de outros. Ausente ⇒ a rota de Jobs, com `?from=jobs`.
+   *
+   *  ⚠️ É uma STRING, e não a função `(id) => string` que os dois cards
+   *  recebem. Este componente é client, e função não atravessa a
+   *  fronteira server → client: passar a função rendia
+   *  "Functions cannot be passed directly to Client Components" e a
+   *  página inteira em branco. `tsc`, `lint` e `build` passam mesmo
+   *  assim — só abrir a rota pega. A função é montada aqui, do lado
+   *  client, onde ela é inofensiva. */
+  jobHrefBase?: string;
 }) {
   const [visao, setVisao] = React.useState<VisaoBv>(VISAO_BV_PADRAO);
+
+  const rotaDoJob = React.useMemo(
+    () =>
+      jobHrefBase ? (id: string) => `${jobHrefBase}/${id}` : undefined,
+    [jobHrefBase],
+  );
 
   return (
     <>
@@ -58,7 +73,7 @@ export function PlanilhasDoProjeto({
           key={j.id}
           job={j}
           visao={visao}
-          jobHref={jobHref?.(j.id)}
+          jobHref={rotaDoJob?.(j.id)}
         />
       ))}
 
@@ -66,7 +81,7 @@ export function PlanilhasDoProjeto({
         jobs={planilhas}
         moeda={moeda}
         visao={visao}
-        jobHref={jobHref}
+        jobHref={rotaDoJob}
       />
     </>
   );
