@@ -196,7 +196,35 @@ confirmados. O mesmo ajuste entrou nos resumos de cabeçalho
 (`ResumoRentabilidade`, `ResumoResultado`), senão eles e o card de Totais
 mostrariam resultados diferentes para a mesma tela.
 
-## 8. O formulário do BV (design 4a)
+## 8. Confirmar o BV envia mesmo para o faturamento
+
+A esteira existe desde 13/08/2026 e está ligada ponta a ponta — não era
+uma promessa. Confirmar não emite a nota; ele coloca o BV **na fila de
+quem emite**:
+
+| Passo | O que acontece |
+|---|---|
+| **Confirmar** na planilha | `itens_bv.situacao = 'confirmado'` |
+| Imediatamente | o BV entra em `vw_faturamento_pendente` e aparece na aba Faturamento de `/financeiro/contas-a-receber` (e na Central), com chip de origem **BV** e o fornecedor como contraparte |
+| O financeiro emite | nasce o `faturamentos` (origem `bv`) e os `titulos_receber` |
+| Baixa do último título | `dar_baixa_titulo` move o BV para **`recebido`**, fechando o ciclo |
+
+Isso valida a regra do realizado: quando o Tiago diz "só será preenchido
+quando o BV for confirmado **e enviado para faturamento**", os dois são o
+mesmo evento — confirmar É o envio.
+
+### ⚠️ A fila fatura o BRUTO; a planilha desconta o LÍQUIDO
+
+`vw_faturamento_pendente` propõe `bv.valor` — os R$ 15,00 cheios. A
+planilha desconta R$ 12,07. **Os dois estão certos e medem coisas
+diferentes:** a nota contra o fornecedor é pelo valor cheio da comissão,
+e o imposto sai de dentro dela; o que sobra para a agência, e portanto o
+que abate o custo do item, é o líquido.
+
+É o único lugar do produto onde os dois números convivem. Quem for mexer
+na fila de faturamento precisa saber que a diferença é intencional.
+
+## 9. O formulário do BV (design 4a)
 
 - **Situação sai do corpo** e vira pílula com ponto de cor no canto
   direito do cabeçalho. Ela é estado, não campo: ninguém a escolhe.
@@ -235,9 +263,6 @@ mostrariam resultados diferentes para a mesma tela.
   para todos.
 - **O XLSX exportado** continua em Bruto e sem BV: a quebra é leitura
   interna, como a decisão 003 já dizia.
-- **Confirmar o BV não emite nota.** Ele muda a situação para
-  `confirmado` e trava o registro; a ligação com `faturamentos` /
-  contas a receber (o caminho até `recebido`) é entrega separada.
 - **Baixar o orçado abaixo da soma das PPs** continua possível, como o
   realizado permitia antes. Travar a errata por causa disso não foi
   decidido.

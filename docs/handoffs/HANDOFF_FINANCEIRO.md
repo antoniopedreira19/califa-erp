@@ -1706,3 +1706,17 @@ produção, mesma chave, e o resumo do cabeçalho com realizado R$ 7.000,00
 (ela zera os itens `A`).
 
 Zero erros de console e zero rolagem horizontal.
+
+### O BV confirmado cai na fila de faturamento (nada novo, mas agora alcançável)
+
+A esteira do BV já existia inteira — `vw_faturamento_pendente` inclui
+`itens_bv` com `situacao = 'confirmado'`, e `dar_baixa_titulo` fecha o
+ciclo em `recebido`. O que faltava era **chegar até ela**: o botão
+Confirmar da planilha nascia desabilitado. Com ele liberado, o caminho
+Confirmar → fila de Faturamento → nota → título → baixa → `recebido`
+passa a rodar de ponta a ponta.
+
+⚠️ A fila propõe `bv.valor`, o **bruto**; a planilha desconta o
+**líquido**. É intencional: a nota contra o fornecedor é pela comissão
+cheia e o imposto sai de dentro dela; o que abate o custo do item é o que
+sobra. Decisão 022, §8.
