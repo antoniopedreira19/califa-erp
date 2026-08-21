@@ -1535,3 +1535,123 @@ a descrição da tela agora diz que o job herda a categoria do orçamento.
 **Conferido pelo MCP depois de aplicar:** `categorias_dominio` só tem
 `projeto` (4) e `orcamento` (4); os 8 jobs migrados aparecem com
 **Ativação · escopo orcamento** e os 4 antigos sem categoria.
+
+---
+
+## 42. Abertura de Job: projeto do financeiro, contas do job e as cinco abas (2026-08-20)
+
+Design: `Abertura de Job - Financeiro.dc.html`.
+Regra completa em [`docs/decisions/021`](docs/decisions/021-projeto-do-financeiro-e-edicao-da-abertura.md).
+Migration: `20260820000011_projetos_financeiro_e_contas_do_job.sql`.
+
+Duas telas mudaram: o **formulário de abertura** e o que abre ao **clicar
+num job** na aba de jobs abertos.
+
+### O que entrou no formulário de abertura
+
+| Campo | O que é |
+|---|---|
+| **Projeto** * | Editável, com "+" para criar projeto ali mesmo. Arrumação do financeiro, invisível para a produção |
+| **Recebimento em** | Conta bancária de entrada do job, com saldo de hoje na opção |
+| **Pagamento em** | Conta bancária de saída do job |
+
+Mais o badge **Em conferência** no cabeçalho, a linha **Projeto** no
+Resumo do registro e no modal de confirmação, e o subtítulo citando
+projeto.
+
+### ⚠️ A aba "Jobs abertos" virou "Visualizar Jobs"
+
+E passou a **agrupar pelo projeto do financeiro**, não pelo da produção.
+A coluna Projeto da linha acompanha (com fallback no da produção, para
+job aberto antes da migration).
+
+**A "Visão agregada" da faixa some** quando o grupo do financeiro junta
+jobs de projetos de produção diferentes — aquela tela é da produção
+(`/jobs/projeto/[id]`) e não existe um projeto único para onde apontar.
+
+### ⚠️ A tela do job aberto virou casca de cinco abas
+
+`/financeiro/jobs/[jobId]` deixou de ser resumo em cards:
+
+**Abertura do Job · Informações do Job · Planilha Interna · Fluxo de
+Caixa do Job · Comunicação.**
+
+Três dessas abas são os **mesmos componentes** de `/jobs/[jobId]`. Para
+isso o carregamento daquela página saiu dela e virou
+`app/(app)/jobs/[jobId]/carregar-detalhe.ts`, chamado pelas duas telas. A
+Planilha Interna entra sempre em leitura no financeiro (`editable=false`,
+`podeAcoes=false`).
+
+**A aba Abertura do Job é o próprio formulário**, em modo leitura, com o
+botão **Editar registro**. `AberturaForm` passou a ter três modos:
+`abertura` (fila), `leitura` e `edicao`.
+
+### ⚠️ Cards que saíram desta tela
+
+`PrevisoesCard`, `PpsCard` e o card "Contato de cobrança" não são mais
+renderizados por `/financeiro/jobs/[jobId]` — o conteúdo deles agora vive
+nas abas (previsões no formulário de abertura, PPs no Fluxo de Caixa e na
+trilha da Planilha, contatos na ficha de Informações).
+`app/(app)/financeiro/jobs/[jobId]/dados.ts`, `previsoes-card.tsx` e
+`pps-card.tsx` ficaram **sem uso** e continuam no repositório à espera da
+decisão do Tiago sobre removê-los.
+
+### Editar registro: congela o consumido, libera o saldo
+
+O consumo anda em ordem de data e a parcela que fica no meio **parte em
+duas** — a fatia consumida trava (cadeado) e o resto segue editável. Vale
+para a curva (consome PP) e para o recebimento (consome nota). Regra
+única em `lib/calculos/previsao-congelada.ts`, usada pela tela e pela
+Server Action.
+
+Toda alteração vai para `audit_events`
+(`job.registro_abertura_editado`), com de/para de cada campo e das duas
+previsões. **Sem bloco de histórico na tela**, por decisão do Tiago.
+
+### Conferência no banco (20/08/2026)
+
+`projetos_financeiro`: 12 linhas espelhadas, RLS ligada, 3 policies,
+`authenticated` com select/insert/update e `anon` sem nada. Os 16 jobs
+com `projeto_financeiro_id` preenchido.
+
+### Conferido no navegador
+
+As cinco abas renderizam sem erro de console; `/jobs/[jobId]` segue
+íntegra depois da extração do carregamento. A repartição do congelado foi
+conferida contra JOB-0015 (12.000 🔒 + 6.000 🔒 + 6.000 livre) e JOB-0013
+(37.500 🔒 + 2.500 + 25.000).
+
+### ⚠️ Depois: o financeiro deixou de encaminhar para outros módulos (2026-08-20)
+
+Regra do Tiago no mesmo dia: **o módulo financeiro não deve encaminhar a
+telas de outros módulos**. Entrou a tela
+**`/financeiro/projetos/[projetoId]`** — a visão agregada do projeto
+dentro do próprio financeiro — e quatro links passaram a apontar para
+dentro:
+
+| Onde | Ia para | Vai para |
+|---|---|---|
+| Faixa de grupo, "Visão agregada" | `/jobs/projeto/[id]` | `/financeiro/projetos/[id]` |
+| Ficha do job, card Projeto | `/orcamentos/[projetoId]` | `/financeiro/projetos/[id]` |
+| Ficha do job, "Jobs do projeto" | `/jobs/[id]` | `/financeiro/jobs/[id]` |
+| Conferência da fila, planilha interna | `/jobs/[id]?aba=planilha` | `/financeiro/abertura-de-job/[id]/planilha` |
+
+**A margem do agregado é `faturável − custo`**, não `valor total − custo`
+como o protótipo desenhava — em PEVETE-0001/26 a diferença era de
+R$ 88.000. Por isso a tabela tem 7 colunas e não 6: "Faturável" entrou
+para a subtração fechar aos olhos de quem lê.
+
+**Entram no agregado:** `aguardando_abertura`, `aberto`, `em_producao` e
+`encerrado`. Ficam de fora `rejeitado_financeiro` e `cancelado`.
+
+**Exceção combinada:** "Orçamento aprovado" continua saindo para
+Orçamentos — é o único destino sem equivalente aqui —, mas agora com
+confirmação ("Sair para o módulo de Orçamentos?"), via
+`components/financeiro/link-saida-de-modulo.tsx`.
+
+**Pendência:** `contas-a-pagar/pp-drawer-financeiro.tsx` ainda aponta para
+`/jobs/[id]`. Não mexido nesta rodada — o arquivo tem commits do Antonio.
+
+A classificação da esteira de faturamento saiu de `dados-abertos.ts` e
+virou `lib/data/faturamento-por-job.ts`, usada pela lista e pelo agregado
+do projeto: duas cópias divergiriam na primeira nota cancelada.

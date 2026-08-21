@@ -64,6 +64,21 @@ export const aberturaFinanceiraSchema = z.object({
     .trim()
     .min(2, "Informe o nome do job (mín. 2 caracteres).")
     .max(200, "Máximo 200 caracteres."),
+  /**
+   * Projeto do job NA VISÃO DO FINANCEIRO (`projetos_financeiro`). Não
+   * mexe em `jobs.projeto_id`, que é o da produção e continua vindo do
+   * orçamento — mesmo contrato de `nome_financeiro` vs `nome`.
+   * Obrigatório: o protótipo marca o campo com asterisco.
+   */
+  projeto_financeiro_id: z.string().uuid("Selecione o projeto do job."),
+  /**
+   * Contas bancárias do job: uma para a entrada, uma para a saída.
+   * Opcionais de propósito — o protótipo não marca nenhuma das duas com
+   * asterisco, e job sem faturamento previsto (cliente paga direto ao
+   * fornecedor) não tem por que ter conta de recebimento.
+   */
+  conta_recebimento_id: z.string().uuid().nullable(),
+  conta_pagamento_id: z.string().uuid().nullable(),
   categoria_id: z.string().uuid("Selecione a categoria do job."),
   competencia_trimestre: z
     .number()
@@ -86,3 +101,38 @@ export type PrevisaoRecebimentoLinhaInput = z.infer<
   typeof previsaoRecebimentoSchema
 >[number];
 export type AberturaFinanceiraInput = z.infer<typeof aberturaFinanceiraSchema>;
+
+/**
+ * Criação de projeto do financeiro direto do formulário de abertura
+ * ("Criar projeto para este job", do protótipo).
+ *
+ * Só o nome vem da tela: o código é gerado pelo sistema
+ * (`lib/codigos/projetos-financeiro.ts`) e o cliente vem do orçamento de
+ * origem do job — nenhum dos dois é escolha de quem preenche.
+ */
+export const criarProjetoFinanceiroSchema = z.object({
+  nome: z
+    .string()
+    .trim()
+    .min(2, "Informe o nome do projeto (mín. 2 caracteres).")
+    .max(200, "Máximo 200 caracteres."),
+});
+
+export type CriarProjetoFinanceiroInput = z.infer<
+  typeof criarProjetoFinanceiroSchema
+>;
+
+/**
+ * Edição do registro da abertura de um job JÁ ABERTO ("Editar registro",
+ * do protótipo). Mesmos campos da abertura: o formulário é o mesmo, só
+ * muda o que a action aceita reescrever.
+ *
+ * O que NUNCA muda na edição, e por isso não está aqui:
+ * `data_abertura_financeiro` e `aberto_por` — a abertura aconteceu uma
+ * vez, e reescrever quem abriu apagaria a única prova de quem conferiu.
+ */
+export const edicaoRegistroAberturaSchema = aberturaFinanceiraSchema;
+
+export type EdicaoRegistroAberturaInput = z.infer<
+  typeof edicaoRegistroAberturaSchema
+>;

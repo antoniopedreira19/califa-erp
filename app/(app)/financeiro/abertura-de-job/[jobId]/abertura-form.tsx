@@ -12,18 +12,23 @@ import {
   CalendarDays,
   Check,
   CheckCircle2,
+  ChevronDown,
+  ClipboardCheck,
   Clock,
   CornerUpLeft,
   FileText,
+  Folder,
   Info,
   Landmark,
   Lock,
+  Pencil,
   Plus,
   Split,
   Table2,
   Trash2,
   TrendingDown,
   TrendingUp,
+  X,
 } from "lucide-react";
 import {
   Dialog,
@@ -40,6 +45,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DatePicker } from "@/components/ui/date-picker";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { formatCurrency, cn } from "@/lib/utils";
 import type { JobNaFila } from "../dados";
 import { formatDataBr, formatPeriodo } from "../formatos";
@@ -54,8 +64,15 @@ import {
   somaCurva,
   type CurvaLinha,
 } from "../curva";
-import { abrirJobNoFinanceiro } from "../actions";
+import {
+  abrirJobNoFinanceiro,
+  criarProjetoFinanceiro,
+  editarRegistroDaAbertura,
+} from "../actions";
 import { ReprovarDialog } from "../reprovar-dialog";
+import type { ProjetoFinanceiroOpcao } from "@/lib/data/projetos-financeiro";
+import type { ContaBancariaOpcao } from "@/lib/data/contas-bancarias";
+import { repartirPrevisao } from "@/lib/calculos/previsao-congelada";
 
 interface CategoriaOption {
   id: string;
@@ -71,11 +88,33 @@ interface LinhaPrevisaoForm {
   id: string;
   data: string;
   valorTexto: string;
+  /**
+   * Parcela já consumida por PP emitida (curva) ou nota emitida
+   * (recebimento). Data e valor travados: o dinheiro já saiu ou já foi
+   * faturado. Só existe na edição de job aberto — na abertura, nada foi
+   * consumido ainda.
+   */
+  congelada?: boolean;
 }
+
+/**
+ * A mesma tela serve três momentos, como no protótipo:
+ *
+ *   * `abertura` — job na fila, tudo editável, termina em "Abrir job no
+ *     financeiro" ou "Reprovar job";
+ *   * `leitura`  — job já aberto, aba "Abertura do Job": o registro como
+ *     foi confirmado, com o botão "Editar registro";
+ *   * `edicao`   — o mesmo job aberto, destravado para salvar alterações.
+ */
+export type ModoAbertura = "abertura" | "leitura" | "edicao";
 
 interface Props {
   job: JobNaFila;
   categorias: CategoriaOption[];
+  /** Projetos do financeiro do mesmo cliente, para o combo. */
+  projetos: ProjetoFinanceiroOpcao[];
+  /** Contas ativas do tenant, com saldo de hoje. */
+  contas: ContaBancariaOpcao[];
   custoPrevisto: number;
   /** Base das parcelas de recebimento — o que a California prevê receber. */
   faturamentoPrevisto: number;
@@ -88,6 +127,17 @@ interface Props {
   anos: number[];
   hojeIso: string;
   agoraLabel: string;
+  /** Default `abertura` — a fila continua chamando sem passar nada. */
+  modo?: ModoAbertura;
+  /**
+   * Quanto de cada previsão já foi consumido por PP emitida / nota
+   * emitida. Só chega no job aberto; congela as parcelas mais próximas
+   * (`lib/calculos/previsao-congelada.ts`).
+   */
+  consumo?: { custo: number; recebimento: number };
+  /** Quando e por quem o job foi aberto — o rodapé do modo leitura. */
+  abertoEmLabel?: string | null;
+  abertoPorNome?: string | null;
 }
 
 function parseMoeda(texto: string): number {
@@ -113,17 +163,47 @@ function formatPercentual(n: number): string {
   })}%`;
 }
 
-function paraForm(linhas: CurvaLinha[]): LinhaPrevisaoForm[] {
-  return linhas.map((l) => ({
-    id: l.id,
-    data: l.data,
+/**
+ * Transforma a previsão guardada nas linhas da tela, repartindo o que já
+ * foi consumido.
+ *
+ * A regra do que congela é a MESMA do servidor
+ * (`lib/calculos/previsao-congelada.ts`): o consumo anda em ordem de
+ * data, da parcela mais próxima para a mais distante, e a parcela que
+ * ele alcança pela metade parte em duas — a fatia congelada e o resto.
+ * Sem `consumido` (que é o caso da abertura) nada congela e o resultado
+ * é o mapeamento direto.
+ */
+function paraForm(
+  linhas: CurvaLinha[],
+  consumido = 0,
+): LinhaPrevisaoForm[] {
+  if (consumido <= 0) {
+    return linhas.map((l) => ({
+      id: l.id,
+      data: l.data,
+      valorTexto: formatMoedaTexto(l.valor),
+    }));
+  }
+
+  return repartirPrevisao(
+    linhas.map((l) => ({ data_prevista: l.data, valor: l.valor })),
+    consumido,
+  ).map((l, i) => ({
+    // A repartição pode partir uma linha em duas, então o id da previsão
+    // guardada não serve mais como chave — a posição serve.
+    id: `linha-${i}-${l.data_prevista}-${l.congelada ? "c" : "l"}`,
+    data: l.data_prevista,
     valorTexto: formatMoedaTexto(l.valor),
+    congelada: l.congelada,
   }));
 }
 
 export function AberturaForm({
   job,
   categorias,
+  projetos,
+  contas,
   custoPrevisto,
   faturamentoPrevisto,
   enviadoPorNome,
@@ -134,9 +214,23 @@ export function AberturaForm({
   anos,
   hojeIso,
   agoraLabel,
+  modo = "abertura",
+  consumo,
+  abertoEmLabel,
+  abertoPorNome,
 }: Props) {
   const router = useRouter();
 
+  // Modo leitura só destrava quando alguém clica em "Editar registro".
+  const [editando, setEditando] = React.useState(false);
+  const travado = modo === "leitura" && !editando;
+  const ehEdicao = modo === "edicao" || (modo === "leitura" && editando);
+
+  const consumoCusto = consumo?.custo ?? 0;
+  const consumoReceb = consumo?.recebimento ?? 0;
+
+  // Na abertura o nome vem do job da produção; num job já aberto vem do
+  // nome que o financeiro gravou (`dados-abertos` já resolve o fallback).
   const [nome, setNome] = React.useState(job.nome);
   // Chega com a categoria que a produção deu ao job no orçamento — o
   // financeiro confere e pode trocar. Só pré-seleciona o que está na
@@ -147,13 +241,39 @@ export function AberturaForm({
       ? job.categoria_id
       : "",
   );
+  // Projeto NA VISÃO DO FINANCEIRO. Não é `job.projeto_id` — aquele é o
+  // da produção, vem do orçamento e não muda aqui.
+  const [projetoId, setProjetoId] = React.useState(
+    () => job.projeto_financeiro_id ?? "",
+  );
+  const [projetoAberto, setProjetoAberto] = React.useState(false);
+  const [criandoProjeto, setCriandoProjeto] = React.useState(false);
+  const [nomeNovoProjeto, setNomeNovoProjeto] = React.useState("");
+  const [criandoPending, setCriandoPending] = React.useState(false);
+  /**
+   * O combo desce do server component, então o projeto que acabou de ser
+   * criado só aparece nele depois do `router.refresh()`. Guardar a linha
+   * aqui evita a janela em que o campo mostra "Selecione o projeto"
+   * logo depois de criar um.
+   */
+  const [projetoNovo, setProjetoNovo] =
+    React.useState<ProjetoFinanceiroOpcao | null>(null);
+  const [contaRecebId, setContaRecebId] = React.useState<string | null>(
+    () => job.conta_recebimento_id,
+  );
+  const [contaPagId, setContaPagId] = React.useState<string | null>(
+    () => job.conta_pagamento_id,
+  );
+  const [dropConta, setDropConta] = React.useState<
+    "recebimento" | "pagamento" | null
+  >(null);
   const [trimestre, setTrimestre] = React.useState(trimestreSugerido);
   const [ano, setAno] = React.useState(anoSugerido);
   const [curva, setCurva] = React.useState<LinhaPrevisaoForm[]>(() =>
-    paraForm(curvaInicial),
+    paraForm(curvaInicial, consumo?.custo ?? 0),
   );
   const [recebimento, setRecebimento] = React.useState<LinhaPrevisaoForm[]>(
-    () => paraForm(recebimentoInicial),
+    () => paraForm(recebimentoInicial, consumo?.recebimento ?? 0),
   );
   const [confirmarAberto, setConfirmarAberto] = React.useState(false);
   const [reprovarAberto, setReprovarAberto] = React.useState(false);
@@ -197,11 +317,54 @@ export function AberturaForm({
     (recebimento.length > 0 && recebDatasOk && recebValoresOk && recebBate);
 
   const nomeOk = nome.trim().length >= 2;
-  const podeAbrir = nomeOk && categoriaId !== "" && curvaOk && recebOk;
+  const projetoOk = projetoId !== "";
+  const podeAbrir =
+    nomeOk && projetoOk && categoriaId !== "" && curvaOk && recebOk;
 
   const categoriaNome =
     categorias.find((c) => c.id === categoriaId)?.nome ?? "— não informada";
   const competenciaLabel = `${trimestre}T/${ano}`;
+
+  // ---------- Projeto do financeiro ----------
+  const projetosVisiveis = React.useMemo(
+    () =>
+      projetoNovo && !projetos.some((p) => p.id === projetoNovo.id)
+        ? [...projetos, projetoNovo].sort((a, b) =>
+            a.codigo.localeCompare(b.codigo),
+          )
+        : projetos,
+    [projetos, projetoNovo],
+  );
+  const projetoSel = projetosVisiveis.find((p) => p.id === projetoId) ?? null;
+  const projetoLabel = projetoSel?.nome ?? "Selecione o projeto";
+  const projetoCodigo = projetoSel?.codigo ?? "";
+  const projetoResumo = projetoSel
+    ? `${projetoSel.nome} · ${projetoSel.codigo}`
+    : "— não informado";
+  // O projeto da produção fica como referência, e é explicitamente outra
+  // coisa: mexer aqui não move o job em Orçamentos.
+  const projetoDica = `Arrumação do financeiro. Na produção, o job segue em ${job.projeto_codigo ?? "—"}.`;
+
+  // ---------- Contas bancárias ----------
+  const contaReceb = contas.find((c) => c.id === contaRecebId) ?? null;
+  const contaPag = contas.find((c) => c.id === contaPagId) ?? null;
+
+  // ---------- Parte livre das previsões ----------
+  // Distribuir e conferir só valem sobre o saldo: o que PP/nota já
+  // consumiu está congelado e não entra na conta.
+  const congeladoCurva = emCentavos(
+    curva
+      .filter((l) => l.congelada)
+      .reduce((s, l) => s + parseMoeda(l.valorTexto), 0),
+  );
+  const congeladoReceb = emCentavos(
+    recebimento
+      .filter((l) => l.congelada)
+      .reduce((s, l) => s + parseMoeda(l.valorTexto), 0),
+  );
+  const livreCusto = emCentavos(custoPrevisto - congeladoCurva);
+  const livreReceb = emCentavos(faturamentoPrevisto - congeladoReceb);
+  const temCongelado = congeladoCurva > 0 || congeladoReceb > 0;
 
   // Margem prevista: o que a California recebe menos o que ela
   // desembolsa. Não entra o que o cliente paga direto ao fornecedor —
@@ -212,7 +375,9 @@ export function AberturaForm({
 
   const textoValidacao = !nomeOk
     ? "Informe o nome do job."
-    : categoriaId === ""
+    : !projetoOk
+      ? "Selecione o projeto do job."
+      : categoriaId === ""
       ? "Selecione a categoria do job."
       : !semRecebimento && !recebDatasOk
         ? "Preencha a data de todas as parcelas de recebimento."
@@ -245,24 +410,32 @@ export function AberturaForm({
     );
   }
 
-  function distribuirCurva() {
-    const valores = dividirEmParcelas(custoPrevisto, curva.length);
-    setCurva((atual) =>
-      atual.map((l, i) => ({
-        ...l,
-        valorTexto: formatMoedaTexto(valores[i] ?? 0),
-      })),
+  /**
+   * Distribuir divide só o SALDO entre as linhas livres. As congeladas
+   * ficam onde estão: o dinheiro delas já saiu (PP emitida) ou já foi
+   * faturado (nota emitida). Sem nada congelado — que é o caso da
+   * abertura — o saldo é o total e o comportamento é o de sempre.
+   */
+  function distribuirEntreLivres(
+    linhas: LinhaPrevisaoForm[],
+    totalLivre: number,
+  ): LinhaPrevisaoForm[] {
+    const livres = linhas.filter((l) => !l.congelada);
+    const valores = dividirEmParcelas(Math.max(0, totalLivre), livres.length);
+    let i = 0;
+    return linhas.map((l) =>
+      l.congelada
+        ? l
+        : { ...l, valorTexto: formatMoedaTexto(valores[i++] ?? 0) },
     );
   }
 
+  function distribuirCurva() {
+    setCurva((atual) => distribuirEntreLivres(atual, livreCusto));
+  }
+
   function distribuirRecebimento() {
-    const valores = dividirEmParcelas(faturamentoPrevisto, recebimento.length);
-    setRecebimento((atual) =>
-      atual.map((l, i) => ({
-        ...l,
-        valorTexto: formatMoedaTexto(valores[i] ?? 0),
-      })),
-    );
+    setRecebimento((atual) => distribuirEntreLivres(atual, livreReceb));
   }
 
   function adicionarData() {
@@ -296,37 +469,92 @@ export function AberturaForm({
     ]);
   }
 
+  /**
+   * Linha congelada nunca sai, e a última linha livre também não: a
+   * previsão precisa de pelo menos um lugar para o saldo pousar. Quando
+   * TUDO está congelado (consumo cobriu a previsão inteira) não há linha
+   * livre nenhuma, e aí não há o que remover mesmo.
+   */
+  function podeRemover(linhas: LinhaPrevisaoForm[], id: string): boolean {
+    const alvo = linhas.find((l) => l.id === id);
+    if (!alvo || alvo.congelada) return false;
+    return linhas.filter((l) => !l.congelada).length > 1;
+  }
+
   function removerDaCurva(id: string) {
-    if (curva.length <= 1) return;
+    if (!podeRemover(curva, id)) return;
     setCurva((atual) => atual.filter((l) => l.id !== id));
   }
 
   function removerDoRecebimento(id: string) {
-    if (recebimento.length <= 1) return;
+    if (!podeRemover(recebimento, id)) return;
     setRecebimento((atual) => atual.filter((l) => l.id !== id));
+  }
+
+  /**
+   * Cria o projeto do financeiro e já vincula no formulário ("Criar
+   * projeto para este job"). O código e o cliente são do servidor — aqui
+   * só vai o nome.
+   */
+  function confirmarNovoProjeto() {
+    const nomeLimpo = nomeNovoProjeto.trim();
+    if (nomeLimpo.length < 2 || criandoPending) return;
+
+    setErro(null);
+    setCriandoPending(true);
+    void criarProjetoFinanceiro(job.id, { nome: nomeLimpo }).then((res) => {
+      setCriandoPending(false);
+      if (!res.ok) {
+        setErro(res.message);
+        return;
+      }
+      // O combo desce do server component, então a linha nova só aparece
+      // nele depois do refresh. Selecionar por id já deixa o formulário
+      // válido antes disso.
+      setProjetoNovo({
+        id: res.id,
+        codigo: res.codigo,
+        nome: res.nome,
+        cliente_id: job.cliente_id ?? "",
+        cliente_nome: job.cliente_nome,
+      });
+      setProjetoId(res.id);
+      setCriandoProjeto(false);
+      setProjetoAberto(false);
+      setNomeNovoProjeto("");
+      router.refresh();
+    });
+  }
+
+  /** O que as duas actions recebem — os campos são os mesmos. */
+  function montarPayload() {
+    return {
+      nome_financeiro: nome.trim(),
+      projeto_financeiro_id: projetoId,
+      conta_recebimento_id: contaRecebId,
+      conta_pagamento_id: contaPagId,
+      categoria_id: categoriaId,
+      competencia_trimestre: trimestre,
+      competencia_ano: ano,
+      curva: semDesembolso
+        ? []
+        : linhasCurva.map((l) => ({
+            data_prevista: l.data,
+            valor: l.valor,
+          })),
+      recebimento: semRecebimento
+        ? []
+        : linhasReceb.map((l) => ({
+            data_prevista: l.data,
+            valor: l.valor,
+          })),
+    };
   }
 
   function confirmarAbertura() {
     setErro(null);
     startTransition(async () => {
-      const res = await abrirJobNoFinanceiro(job.id, {
-        nome_financeiro: nome.trim(),
-        categoria_id: categoriaId,
-        competencia_trimestre: trimestre,
-        competencia_ano: ano,
-        curva: semDesembolso
-          ? []
-          : linhasCurva.map((l) => ({
-              data_prevista: l.data,
-              valor: l.valor,
-            })),
-        recebimento: semRecebimento
-          ? []
-          : linhasReceb.map((l) => ({
-              data_prevista: l.data,
-              valor: l.valor,
-            })),
-      });
+      const res = await abrirJobNoFinanceiro(job.id, montarPayload());
 
       if (!res.ok) {
         setErro(res.message);
@@ -338,6 +566,48 @@ export function AberturaForm({
       router.push(`/jobs/${job.id}?from=financeiro`);
       router.refresh();
     });
+  }
+
+  /**
+   * Salvar a edição de um job já aberto. Sem modal de confirmação: o job
+   * já existe, nada nasce daqui, e o aviso do que a edição reescreve já
+   * está na faixa vermelha no topo do formulário.
+   */
+  function salvarEdicao() {
+    setErro(null);
+    startTransition(async () => {
+      const res = await editarRegistroDaAbertura(job.id, montarPayload());
+
+      if (!res.ok) {
+        setErro(res.message);
+        return;
+      }
+
+      setEditando(false);
+      router.refresh();
+    });
+  }
+
+  /** Desfaz a edição voltando tudo ao que veio do servidor. */
+  function cancelarEdicao() {
+    setErro(null);
+    setNome(job.nome);
+    setProjetoId(job.projeto_financeiro_id ?? "");
+    setContaRecebId(job.conta_recebimento_id);
+    setContaPagId(job.conta_pagamento_id);
+    setCategoriaId(
+      job.categoria_id && categorias.some((c) => c.id === job.categoria_id)
+        ? job.categoria_id
+        : "",
+    );
+    setTrimestre(trimestreSugerido);
+    setAno(anoSugerido);
+    setCurva(paraForm(curvaInicial, consumoCusto));
+    setRecebimento(paraForm(recebimentoInicial, consumoReceb));
+    setCriandoProjeto(false);
+    setProjetoAberto(false);
+    setDropConta(null);
+    setEditando(false);
   }
 
   const dadosProducao: { rotulo: string; valor: string; mono?: boolean }[] = [
@@ -381,31 +651,86 @@ export function AberturaForm({
   return (
     <div className="flex flex-col gap-5 pb-6">
       {/* ---------- Cabeçalho ---------- */}
-      <div>
-        <Link
-          href="/financeiro/abertura-de-job"
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <ArrowLeft className="h-3 w-3" />
-          Voltar para a fila de abertura
-        </Link>
-        <div className="mt-3 flex flex-wrap items-center gap-3">
-          <div className="rounded-lg bg-california-red/10 p-2">
-            <Landmark className="h-5 w-5 text-california-red" />
-          </div>
-          <h1 className="text-[26px] font-bold tracking-tight">
-            Abrir job no financeiro
-          </h1>
-          <span className="rounded-md border border-border bg-muted px-2.5 py-1 font-mono text-[12.5px] font-bold">
-            {job.codigo}
+      {/* Job já aberto, registro travado: a faixa conta quando e por quem
+          a abertura foi confirmada, e é dela que sai o "Editar registro". */}
+      {travado && (
+        <div className="flex flex-wrap items-center gap-2.5 rounded-2xl border border-border bg-card px-[18px] py-3 shadow-soft">
+          <Lock className="h-3.5 w-3.5 text-muted-foreground" />
+          <span className="text-[12.5px] font-semibold">
+            Formulário de abertura · somente leitura
+          </span>
+          <span className="text-[12.5px] text-muted-foreground">
+            o registro como foi confirmado
+          </span>
+          <span className="ml-auto text-[12.5px] text-muted-foreground">
+            Aberto em{" "}
+            <span className="font-mono text-foreground">
+              {abertoEmLabel ?? "—"}
+            </span>
+            {abertoPorNome ? ` por ${abertoPorNome}` : ""}
+          </span>
+          <button
+            type="button"
+            onClick={() => setEditando(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-3.5 py-[7px] text-[12.5px] font-semibold transition-colors hover:border-california-red hover:text-california-red"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+            Editar registro
+          </button>
+        </div>
+      )}
+
+      {/* Editando um job já aberto: o aviso do que está em jogo. O que
+          esta edição NÃO toca (data e usuário da abertura) está dito de
+          propósito — é a dúvida que aparece na hora de salvar. */}
+      {modo !== "abertura" && ehEdicao && (
+        <div className="flex flex-wrap items-center gap-2.5 rounded-2xl border border-california-red/30 bg-california-red/[0.04] px-[18px] py-3">
+          <Pencil className="h-3.5 w-3.5 text-california-red" />
+          <span className="text-[12.5px] font-semibold">
+            Editando o registro da abertura
+          </span>
+          <span className="text-[12.5px] text-muted-foreground">
+            as alterações valem só depois de salvar — a data e o usuário da
+            abertura não mudam
           </span>
         </div>
-        <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-          Confira os dados da produção ao lado — e a planilha interna do job —
-          e complete o registro financeiro: nome, categoria, competência e as
-          previsões de recebimento e de custos.
-        </p>
-      </div>
+      )}
+
+      {/* O cabeçalho grande é só da fila. Dentro da aba do job aberto a
+          página já tem o próprio (código, nome e situação), e repetir
+          "Abrir job no financeiro" num job que já está aberto seria
+          simplesmente falso. */}
+      {modo === "abertura" && (
+        <div>
+          <Link
+            href="/financeiro/abertura-de-job"
+            className="inline-flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <ArrowLeft className="h-3 w-3" />
+            Voltar para a fila de abertura
+          </Link>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <div className="rounded-lg bg-california-red/10 p-2">
+              <Landmark className="h-5 w-5 text-california-red" />
+            </div>
+            <h1 className="text-[26px] font-bold tracking-tight">
+              Abrir job no financeiro
+            </h1>
+            <span className="rounded-md border border-border bg-muted px-2.5 py-1 font-mono text-[12.5px] font-bold">
+              {job.codigo}
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-white px-2.5 py-[3px] text-[10.5px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">
+              <ClipboardCheck className="h-3 w-3" />
+              Em conferência
+            </span>
+          </div>
+          <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
+            Confira os dados da produção ao lado — e a planilha interna do job
+            — e complete o registro financeiro: nome, projeto, categoria,
+            competência e as previsões de recebimento e de custos.
+          </p>
+        </div>
+      )}
 
       {erro && (
         <div className="flex items-start gap-2 rounded-xl border border-california-red/20 bg-california-red/5 px-4 py-3 text-sm text-california-red">
@@ -427,7 +752,7 @@ export function AberturaForm({
             </header>
 
             <div className="grid gap-4 p-5 md:grid-cols-2">
-              <div className="flex flex-col gap-1.5 md:col-span-2">
+              <div className="flex flex-col gap-1.5">
                 <label
                   htmlFor="nome-financeiro"
                   className="text-[12.5px] font-semibold"
@@ -438,12 +763,165 @@ export function AberturaForm({
                   id="nome-financeiro"
                   value={nome}
                   onChange={(e) => setNome(e.target.value)}
+                  readOnly={travado}
                   maxLength={200}
-                  className="h-[42px] rounded-lg border border-border bg-white px-3.5 text-[13.5px] font-medium outline-none focus:border-california-red/40"
+                  className={cn(
+                    "h-[42px] rounded-lg border border-border bg-white px-3.5 text-[13.5px] font-medium outline-none focus:border-california-red/40",
+                    travado && "bg-muted/60 text-muted-foreground",
+                  )}
                 />
                 <span className="text-[11px] text-muted-foreground">
-                  Editável. Este nome vale no financeiro — a produção continua
-                  vendo o nome que ela cadastrou.
+                  {travado ? "Este nome" : "Editável. Este nome"} vale no
+                  financeiro — a produção continua vendo o nome que ela
+                  cadastrou.
+                </span>
+              </div>
+
+              {/* Projeto na visão do financeiro. Trocar aqui NÃO move o job
+                  em Orçamentos: `jobs.projeto_id` continua sendo o da
+                  produção (migration 20260820000011). */}
+              <div className="flex flex-col gap-1.5">
+                <span className="text-[12.5px] font-semibold">
+                  Projeto <span className="text-california-red">*</span>
+                </span>
+                <div className="flex items-center gap-2">
+                  <Popover
+                    open={projetoAberto}
+                    onOpenChange={(o) => !travado && setProjetoAberto(o)}
+                  >
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        disabled={travado}
+                        className={cn(
+                          "flex h-[42px] min-w-0 flex-1 items-center gap-2.5 rounded-lg border border-border bg-white px-3 text-left outline-none transition-colors",
+                          !travado && "hover:border-[#d7d7d7]",
+                          travado && "bg-muted/60",
+                        )}
+                      >
+                        <Folder className="h-[15px] w-[15px] shrink-0 text-[#8a8a8a]" />
+                        <span className="flex min-w-0 flex-1 items-baseline gap-2">
+                          <span
+                            className={cn(
+                              "truncate text-[13.5px] font-semibold",
+                              !projetoSel && "text-muted-foreground",
+                            )}
+                          >
+                            {projetoLabel}
+                          </span>
+                          <span className="shrink-0 font-mono text-[11.5px] text-muted-foreground">
+                            {projetoCodigo}
+                          </span>
+                        </span>
+                        {!travado && (
+                          <ChevronDown className="h-[15px] w-[15px] shrink-0 text-[#8a8a8a]" />
+                        )}
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[320px] p-1.5" align="start">
+                      <p className="px-2.5 pb-2 pt-1.5 text-[10px] font-bold uppercase tracking-[0.09em] text-[#8a8a8a]">
+                        Projetos abertos
+                      </p>
+                      {projetosVisiveis.length === 0 ? (
+                        <p className="px-2.5 pb-2 text-[12px] text-muted-foreground">
+                          Nenhum projeto do financeiro para este cliente. Crie
+                          um no botão ao lado.
+                        </p>
+                      ) : (
+                        projetosVisiveis.map((pr) => (
+                          <button
+                            key={pr.id}
+                            type="button"
+                            onClick={() => {
+                              setProjetoId(pr.id);
+                              setProjetoAberto(false);
+                            }}
+                            className={cn(
+                              "block w-full rounded-lg px-2.5 py-2 text-left text-[13px] transition-colors hover:bg-muted",
+                              pr.id === projetoId &&
+                                "bg-california-red/[0.06] text-california-red",
+                            )}
+                          >
+                            <span className="flex items-baseline justify-between gap-3">
+                              <span className="truncate font-semibold">
+                                {pr.nome}
+                              </span>
+                              <span className="shrink-0 font-mono text-[11px] text-[#8a8a8a]">
+                                {pr.codigo}
+                              </span>
+                            </span>
+                            <span className="mt-0.5 block text-[11px] text-muted-foreground">
+                              {pr.cliente_nome ?? "—"}
+                            </span>
+                          </button>
+                        ))
+                      )}
+                    </PopoverContent>
+                  </Popover>
+
+                  {!travado && (
+                    <Popover
+                      open={criandoProjeto}
+                      onOpenChange={setCriandoProjeto}
+                    >
+                      <PopoverTrigger asChild>
+                        <button
+                          type="button"
+                          title="Criar projeto para este job"
+                          aria-label="Criar projeto para este job"
+                          className="inline-flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-lg border border-border bg-white text-muted-foreground transition-colors hover:border-california-red hover:text-california-red"
+                        >
+                          <Plus className="h-[17px] w-[17px]" />
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent
+                        className="w-[420px] border-california-red/30 p-4"
+                        align="end"
+                      >
+                        <p className="text-[12.5px] font-semibold">
+                          Criar projeto para este job
+                        </p>
+                        <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                          <input
+                            value={nomeNovoProjeto}
+                            onChange={(e) => setNomeNovoProjeto(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                confirmarNovoProjeto();
+                              }
+                            }}
+                            placeholder="Nome do novo projeto"
+                            maxLength={200}
+                            className="h-9 min-w-[180px] flex-1 rounded-lg border border-border bg-white px-3 text-[13px] font-medium outline-none focus:border-california-red/40"
+                          />
+                          <button
+                            type="button"
+                            onClick={confirmarNovoProjeto}
+                            disabled={
+                              nomeNovoProjeto.trim().length < 2 || criandoPending
+                            }
+                            className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-california-red px-3 text-[12.5px] font-bold text-white transition-colors hover:bg-california-red-hover disabled:cursor-not-allowed disabled:opacity-45"
+                          >
+                            <Check className="h-3.5 w-3.5" />
+                            {criandoPending ? "Criando..." : "Criar e vincular"}
+                          </button>
+                        </div>
+                        <p className="mt-2.5 text-[11px] leading-relaxed text-muted-foreground">
+                          O código é gerado pelo sistema e o cliente vem do
+                          orçamento de origem. O projeto vale só no financeiro —
+                          a produção continua vendo o job em{" "}
+                          <span className="font-mono">
+                            {job.projeto_codigo ?? "—"}
+                          </span>
+                          .
+                        </p>
+                      </PopoverContent>
+                    </Popover>
+                  )}
+                </div>
+                <span className="text-[11px] text-muted-foreground">
+                  {projetoDica}
                 </span>
               </div>
 
@@ -455,7 +933,11 @@ export function AberturaForm({
                   Categoria do job{" "}
                   <span className="text-california-red">*</span>
                 </label>
-                <Select value={categoriaId} onValueChange={setCategoriaId}>
+                <Select
+                  value={categoriaId}
+                  onValueChange={setCategoriaId}
+                  disabled={travado}
+                >
                   <SelectTrigger id="categoria-job" className="h-[42px]">
                     <SelectValue placeholder="Selecione a categoria" />
                   </SelectTrigger>
@@ -491,6 +973,7 @@ export function AberturaForm({
                         key={t}
                         type="button"
                         onClick={() => setTrimestre(t)}
+                        disabled={travado}
                         aria-pressed={trimestre === t}
                         className={cn(
                           "rounded-md px-3 py-1.5 text-xs font-semibold transition-colors",
@@ -509,6 +992,7 @@ export function AberturaForm({
                         key={a}
                         type="button"
                         onClick={() => setAno(a)}
+                        disabled={travado}
                         aria-pressed={ano === a}
                         className={cn(
                           "rounded-md px-3 py-1.5 text-xs font-semibold transition-colors",
@@ -533,15 +1017,22 @@ export function AberturaForm({
                 <Clock className="h-4 w-4 shrink-0 text-muted-foreground" />
                 <div className="min-w-0">
                   <p className="text-[12.5px] font-semibold">
-                    Data de abertura · registrada automaticamente
+                    {modo === "abertura"
+                      ? "Data de abertura · registrada automaticamente"
+                      : "Data de abertura · registrada"}
                   </p>
                   <p className="text-[11.5px] text-muted-foreground">
-                    Gravada no momento da confirmação, junto do usuário
-                    responsável — não é editável.
+                    {modo === "abertura"
+                      ? "Gravada no momento da confirmação, junto do usuário responsável — não é editável."
+                      : `Gravada na confirmação${abertoPorNome ? `, por ${abertoPorNome}` : ""}. Editar o registro não muda esta data.`}
                   </p>
                 </div>
+                {/* No job já aberto o que vale é a data GRAVADA. Mostrar o
+                    relógio de agora aqui faria a tela afirmar que o job
+                    foi aberto neste instante, toda vez que alguém abrisse
+                    a aba. */}
                 <span className="ml-auto whitespace-nowrap font-mono text-[12.5px] font-semibold">
-                  {agoraLabel}
+                  {modo === "abertura" ? agoraLabel : (abertoEmLabel ?? "—")}
                 </span>
               </div>
             </div>
@@ -557,6 +1048,18 @@ export function AberturaForm({
               <span className="text-xs text-muted-foreground">
                 Faturamento previsto do orçamento + parcelas
               </span>
+              <ContaSeletor
+                rotulo="Recebimento em"
+                contas={contas}
+                selecionada={contaReceb}
+                travado={travado}
+                aberto={dropConta === "recebimento"}
+                onAbrir={(o) => setDropConta(o ? "recebimento" : null)}
+                onEscolher={(id) => {
+                  setContaRecebId(id);
+                  setDropConta(null);
+                }}
+              />
             </header>
 
             <div className="flex flex-col gap-[18px] p-5">
@@ -619,14 +1122,18 @@ export function AberturaForm({
                       Faturamento previsto para{" "}
                       {formatDataBr(job.data_prevista_faturamento)}
                     </span>
-                    <button
-                      type="button"
-                      onClick={distribuirRecebimento}
-                      className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-1.5 text-[11.5px] font-semibold text-muted-foreground transition-colors hover:border-[#d7d7d7] hover:text-foreground"
-                    >
-                      <Split className="h-3 w-3" />
-                      Distribuir igualmente
-                    </button>
+                    {!travado && (
+                      <button
+                        type="button"
+                        onClick={distribuirRecebimento}
+                        className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-1.5 text-[11.5px] font-semibold text-muted-foreground transition-colors hover:border-[#d7d7d7] hover:text-foreground"
+                      >
+                        <Split className="h-3 w-3" />
+                        {congeladoReceb > 0
+                          ? "Distribuir o saldo"
+                          : "Distribuir igualmente"}
+                      </button>
+                    )}
                   </div>
 
                   <table className="w-full border-collapse text-[13.5px]">
@@ -663,48 +1170,66 @@ export function AberturaForm({
                             </td>
                             <td className="px-4 py-2.5">
                               <div className="w-[190px]">
-                                {/* Recebimento não segue as janelas de
-                                    pagamento: quem manda na data de entrada
-                                    é o cliente, não o calendário com que a
-                                    California paga fornecedor. */}
-                                <DatePicker
-                                  name={`recebimento-data-${linha.id}`}
-                                  defaultValue={linha.data}
-                                  className="h-9 text-[13px]"
-                                  onDateChange={(d) =>
-                                    atualizarRecebimento(linha.id, {
-                                      data: d
-                                        ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
-                                        : "",
-                                    })
-                                  }
-                                />
+                                {linha.congelada || travado ? (
+                                  <LinhaTravada
+                                    texto={formatDataBr(linha.data)}
+                                    congelada={Boolean(linha.congelada)}
+                                    titulo={
+                                      linha.congelada
+                                        ? "Já faturado — esta parcela não pode mudar"
+                                        : undefined
+                                    }
+                                  />
+                                ) : (
+                                  /* Recebimento não segue as janelas de
+                                     pagamento: quem manda na data de entrada
+                                     é o cliente, não o calendário com que a
+                                     California paga fornecedor. */
+                                  <DatePicker
+                                    name={`recebimento-data-${linha.id}`}
+                                    defaultValue={linha.data}
+                                    className="h-9 text-[13px]"
+                                    onDateChange={(d) =>
+                                      atualizarRecebimento(linha.id, {
+                                        data: d
+                                          ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+                                          : "",
+                                      })
+                                    }
+                                  />
+                                )}
                               </div>
                             </td>
                             <td className="px-4 py-2.5">
-                              <div className="ml-auto flex h-9 w-[180px] items-center gap-1.5 rounded-lg border border-border px-3">
-                                <span className="text-xs font-semibold text-muted-foreground">
-                                  R$
-                                </span>
-                                <input
-                                  aria-label={`Valor da parcela ${i + 1}`}
-                                  value={linha.valorTexto}
-                                  onChange={(e) =>
-                                    atualizarRecebimento(linha.id, {
-                                      valorTexto: e.target.value,
-                                    })
-                                  }
-                                  onBlur={() =>
-                                    atualizarRecebimento(linha.id, {
-                                      valorTexto: formatMoedaTexto(
-                                        parseMoeda(linha.valorTexto),
-                                      ),
-                                    })
-                                  }
-                                  inputMode="decimal"
-                                  className="w-full min-w-0 border-0 bg-transparent text-right font-mono text-[13px] font-semibold outline-none"
-                                />
-                              </div>
+                              {linha.congelada || travado ? (
+                                <p className="text-right font-mono text-[13px] font-semibold">
+                                  {formatCurrency(valor)}
+                                </p>
+                              ) : (
+                                <div className="ml-auto flex h-9 w-[180px] items-center gap-1.5 rounded-lg border border-border px-3">
+                                  <span className="text-xs font-semibold text-muted-foreground">
+                                    R$
+                                  </span>
+                                  <input
+                                    aria-label={`Valor da parcela ${i + 1}`}
+                                    value={linha.valorTexto}
+                                    onChange={(e) =>
+                                      atualizarRecebimento(linha.id, {
+                                        valorTexto: e.target.value,
+                                      })
+                                    }
+                                    onBlur={() =>
+                                      atualizarRecebimento(linha.id, {
+                                        valorTexto: formatMoedaTexto(
+                                          parseMoeda(linha.valorTexto),
+                                        ),
+                                      })
+                                    }
+                                    inputMode="decimal"
+                                    className="w-full min-w-0 border-0 bg-transparent text-right font-mono text-[13px] font-semibold outline-none"
+                                  />
+                                </div>
+                              )}
                             </td>
                             <td className="px-4 py-2.5 text-right font-mono text-[12.5px] text-muted-foreground">
                               {faturamentoPrevisto > 0
@@ -712,20 +1237,24 @@ export function AberturaForm({
                                 : "—"}
                             </td>
                             <td className="px-4 py-2.5">
+                              {travado ? null : (
                               <button
                                 type="button"
                                 onClick={() => removerDoRecebimento(linha.id)}
-                                disabled={recebimento.length <= 1}
+                                disabled={!podeRemover(recebimento, linha.id)}
                                 aria-label={`Remover a parcela ${i + 1}`}
                                 title={
-                                  recebimento.length <= 1
-                                    ? "A previsão precisa de pelo menos uma parcela"
-                                    : "Remover parcela"
+                                  linha.congelada
+                                    ? "Parcela já faturada — não pode ser removida"
+                                    : !podeRemover(recebimento, linha.id)
+                                      ? "A previsão precisa de pelo menos uma parcela"
+                                      : "Remover parcela"
                                 }
                                 className="inline-flex h-[30px] w-[30px] items-center justify-center rounded-lg border border-border bg-white text-california-red transition-colors hover:bg-california-red/5 disabled:cursor-not-allowed disabled:text-[#d7d7d7] disabled:hover:bg-white"
                               >
                                 <Trash2 className="h-3.5 w-3.5" />
                               </button>
+                              )}
                             </td>
                           </tr>
                         );
@@ -734,14 +1263,16 @@ export function AberturaForm({
                   </table>
 
                   <div className="flex flex-wrap items-center gap-3 border-t border-border bg-muted/40 px-4 py-3">
-                    <button
-                      type="button"
-                      onClick={adicionarParcelaRecebimento}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-[#d7d7d7] bg-white px-3 py-2 text-xs font-semibold text-muted-foreground transition-colors hover:border-california-red hover:text-california-red"
-                    >
-                      <Plus className="h-3 w-3" />
-                      Adicionar parcela
-                    </button>
+                    {!travado && (
+                      <button
+                        type="button"
+                        onClick={adicionarParcelaRecebimento}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-[#d7d7d7] bg-white px-3 py-2 text-xs font-semibold text-muted-foreground transition-colors hover:border-california-red hover:text-california-red"
+                      >
+                        <Plus className="h-3 w-3" />
+                        Adicionar parcela
+                      </button>
+                    )}
                     <div className="ml-auto flex flex-wrap items-center gap-4">
                       <span className="text-[12.5px] text-muted-foreground">
                         Soma das parcelas{" "}
@@ -800,6 +1331,18 @@ export function AberturaForm({
               <span className="text-xs text-muted-foreground">
                 Custo planejado da planilha + curva de desembolso
               </span>
+              <ContaSeletor
+                rotulo="Pagamento em"
+                contas={contas}
+                selecionada={contaPag}
+                travado={travado}
+                aberto={dropConta === "pagamento"}
+                onAbrir={(o) => setDropConta(o ? "pagamento" : null)}
+                onEscolher={(id) => {
+                  setContaPagId(id);
+                  setDropConta(null);
+                }}
+              />
             </header>
 
             <div className="flex flex-col gap-[18px] p-5">
@@ -866,14 +1409,18 @@ export function AberturaForm({
                     {formatDataBr(job.data_inicio_prevista)} e{" "}
                     {formatDataBr(job.data_fim_prevista)}
                   </span>
-                  <button
-                    type="button"
-                    onClick={distribuirCurva}
-                    className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-1.5 text-[11.5px] font-semibold text-muted-foreground transition-colors hover:border-[#d7d7d7] hover:text-foreground"
-                  >
-                    <Split className="h-3 w-3" />
-                    Distribuir igualmente
-                  </button>
+                  {!travado && (
+                    <button
+                      type="button"
+                      onClick={distribuirCurva}
+                      className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-1.5 text-[11.5px] font-semibold text-muted-foreground transition-colors hover:border-[#d7d7d7] hover:text-foreground"
+                    >
+                      <Split className="h-3 w-3" />
+                      {congeladoCurva > 0
+                        ? "Distribuir o saldo"
+                        : "Distribuir igualmente"}
+                    </button>
+                  )}
                 </div>
 
                 <table className="w-full border-collapse text-[13.5px]">
@@ -911,26 +1458,38 @@ export function AberturaForm({
                           </td>
                           <td className="px-4 py-2.5">
                             <div className="w-[190px]">
-                              <DatePicker
-                                name={`curva-data-${linha.id}`}
-                                defaultValue={linha.data}
-                                className="h-9 text-[13px]"
-                                // Pagamento só nas janelas: qualquer outro
-                                // dia fica apagado no calendário.
-                                dateDisabled={(d) =>
-                                  !ehJanelaDePagamento(
-                                    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`,
-                                  )
-                                }
-                                onDateChange={(d) =>
-                                  atualizarCurva(linha.id, {
-                                    data: d
-                                      ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
-                                      : "",
-                                  })
-                                }
-                              />
-                              {fora && (
+                              {linha.congelada || travado ? (
+                                <LinhaTravada
+                                  texto={formatDataBr(linha.data)}
+                                  congelada={Boolean(linha.congelada)}
+                                  titulo={
+                                    linha.congelada
+                                      ? "Já consumida por PP emitida — esta data não pode mudar"
+                                      : undefined
+                                  }
+                                />
+                              ) : (
+                                <DatePicker
+                                  name={`curva-data-${linha.id}`}
+                                  defaultValue={linha.data}
+                                  className="h-9 text-[13px]"
+                                  // Pagamento só nas janelas: qualquer outro
+                                  // dia fica apagado no calendário.
+                                  dateDisabled={(d) =>
+                                    !ehJanelaDePagamento(
+                                      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`,
+                                    )
+                                  }
+                                  onDateChange={(d) =>
+                                    atualizarCurva(linha.id, {
+                                      data: d
+                                        ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+                                        : "",
+                                    })
+                                  }
+                                />
+                              )}
+                              {fora && !linha.congelada && (
                                 <span className="mt-1 inline-flex items-center gap-1 text-[10.5px] font-medium text-amber-700">
                                   <AlertTriangle className="h-2.5 w-2.5" />
                                   Fora da competência {competenciaLabel}
@@ -939,48 +1498,58 @@ export function AberturaForm({
                             </div>
                           </td>
                           <td className="px-4 py-2.5">
-                            <div className="ml-auto flex h-9 w-[180px] items-center gap-1.5 rounded-lg border border-border px-3">
-                              <span className="text-xs font-semibold text-muted-foreground">
-                                R$
-                              </span>
-                              <input
-                                aria-label={`Valor da data ${i + 1}`}
-                                value={linha.valorTexto}
-                                onChange={(e) =>
-                                  atualizarCurva(linha.id, {
-                                    valorTexto: e.target.value,
-                                  })
-                                }
-                                onBlur={() =>
-                                  atualizarCurva(linha.id, {
-                                    valorTexto: formatMoedaTexto(
-                                      parseMoeda(linha.valorTexto),
-                                    ),
-                                  })
-                                }
-                                inputMode="decimal"
-                                className="w-full min-w-0 border-0 bg-transparent text-right font-mono text-[13px] font-semibold outline-none"
-                              />
-                            </div>
+                            {linha.congelada || travado ? (
+                              <p className="text-right font-mono text-[13px] font-semibold">
+                                {formatCurrency(valor)}
+                              </p>
+                            ) : (
+                              <div className="ml-auto flex h-9 w-[180px] items-center gap-1.5 rounded-lg border border-border px-3">
+                                <span className="text-xs font-semibold text-muted-foreground">
+                                  R$
+                                </span>
+                                <input
+                                  aria-label={`Valor da data ${i + 1}`}
+                                  value={linha.valorTexto}
+                                  onChange={(e) =>
+                                    atualizarCurva(linha.id, {
+                                      valorTexto: e.target.value,
+                                    })
+                                  }
+                                  onBlur={() =>
+                                    atualizarCurva(linha.id, {
+                                      valorTexto: formatMoedaTexto(
+                                        parseMoeda(linha.valorTexto),
+                                      ),
+                                    })
+                                  }
+                                  inputMode="decimal"
+                                  className="w-full min-w-0 border-0 bg-transparent text-right font-mono text-[13px] font-semibold outline-none"
+                                />
+                              </div>
+                            )}
                           </td>
                           <td className="px-4 py-2.5 text-right font-mono text-[12.5px] text-muted-foreground">
                             {custoPrevisto > 0 ? formatPercentual(pct) : "—"}
                           </td>
                           <td className="px-4 py-2.5">
+                            {travado ? null : (
                             <button
                               type="button"
                               onClick={() => removerDaCurva(linha.id)}
-                              disabled={curva.length <= 1}
+                              disabled={!podeRemover(curva, linha.id)}
                               aria-label={`Remover a data ${i + 1}`}
                               title={
-                                curva.length <= 1
-                                  ? "A curva precisa de pelo menos uma data"
-                                  : "Remover data"
+                                linha.congelada
+                                  ? "Data já consumida por PP emitida — não pode ser removida"
+                                  : !podeRemover(curva, linha.id)
+                                    ? "A curva precisa de pelo menos uma data"
+                                    : "Remover data"
                               }
                               className="inline-flex h-[30px] w-[30px] items-center justify-center rounded-lg border border-border bg-white text-california-red transition-colors hover:bg-california-red/5 disabled:cursor-not-allowed disabled:text-[#d7d7d7] disabled:hover:bg-white"
                             >
                               <Trash2 className="h-3.5 w-3.5" />
                             </button>
+                            )}
                           </td>
                         </tr>
                       );
@@ -989,14 +1558,16 @@ export function AberturaForm({
                 </table>
 
                 <div className="flex flex-wrap items-center gap-3 border-t border-border bg-muted/40 px-4 py-3">
-                  <button
-                    type="button"
-                    onClick={adicionarData}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-[#d7d7d7] bg-white px-3 py-2 text-xs font-semibold text-muted-foreground transition-colors hover:border-california-red hover:text-california-red"
-                  >
-                    <Plus className="h-3 w-3" />
-                    Adicionar data
-                  </button>
+                  {!travado && (
+                    <button
+                      type="button"
+                      onClick={adicionarData}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-[#d7d7d7] bg-white px-3 py-2 text-xs font-semibold text-muted-foreground transition-colors hover:border-california-red hover:text-california-red"
+                    >
+                      <Plus className="h-3 w-3" />
+                      Adicionar data
+                    </button>
+                  )}
                   <div className="ml-auto flex flex-wrap items-center gap-4">
                     <span className="text-[12.5px] text-muted-foreground">
                       Soma das datas{" "}
@@ -1143,6 +1714,14 @@ export function AberturaForm({
             </p>
             <div className="flex items-baseline justify-between gap-3">
               <span className="text-[12.5px] text-muted-foreground">
+                Projeto
+              </span>
+              <span className="text-right text-[12.5px] font-semibold">
+                {projetoResumo}
+              </span>
+            </div>
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="text-[12.5px] text-muted-foreground">
                 Categoria
               </span>
               <span className="text-right text-[12.5px] font-semibold">
@@ -1218,40 +1797,68 @@ export function AberturaForm({
       </div>
 
       {/* ---------- Barra fixa de ação ---------- */}
-      <div className="sticky bottom-0 z-10 -mx-5 -mb-6 flex flex-wrap items-center justify-between gap-4 border-t border-border bg-white/95 px-5 py-3.5 backdrop-blur md:-mx-8 md:-mb-8 md:px-8">
-        <span
-          className={cn(
-            "inline-flex items-center gap-2 text-[12.5px] font-medium",
-            podeAbrir ? "text-emerald-700" : "text-amber-700",
-          )}
-        >
-          {podeAbrir ? (
-            <CheckCircle2 className="h-3.5 w-3.5" />
-          ) : (
-            <AlertCircle className="h-3.5 w-3.5" />
-          )}
-          {textoValidacao}
-        </span>
-        <div className="flex items-center gap-2.5">
-          <button
-            type="button"
-            onClick={() => setReprovarAberto(true)}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-4 py-2.5 text-[13.5px] font-semibold text-california-red transition-colors hover:border-california-red hover:bg-california-red/5"
+      {/* Registro travado não tem barra: não há nada para confirmar, e
+          "Editar registro" mora na faixa do topo. */}
+      {!travado && (
+        <div className="sticky bottom-0 z-10 -mx-5 -mb-6 flex flex-wrap items-center justify-between gap-4 border-t border-border bg-white/95 px-5 py-3.5 backdrop-blur md:-mx-8 md:-mb-8 md:px-8">
+          <span
+            className={cn(
+              "inline-flex items-center gap-2 text-[12.5px] font-medium",
+              podeAbrir ? "text-emerald-700" : "text-amber-700",
+            )}
           >
-            <CornerUpLeft className="h-4 w-4" />
-            Reprovar job
-          </button>
-          <button
-            type="button"
-            onClick={() => setConfirmarAberto(true)}
-            disabled={!podeAbrir || pending}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-5 py-2.5 text-[13.5px] font-bold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-45"
-          >
-            <Check className="h-4 w-4" />
-            Abrir job no financeiro
-          </button>
+            {podeAbrir ? (
+              <CheckCircle2 className="h-3.5 w-3.5" />
+            ) : (
+              <AlertCircle className="h-3.5 w-3.5" />
+            )}
+            {textoValidacao}
+          </span>
+          <div className="flex items-center gap-2.5">
+            {ehEdicao ? (
+              <>
+                <button
+                  type="button"
+                  onClick={cancelarEdicao}
+                  disabled={pending}
+                  className="rounded-lg border border-border bg-white px-4 py-2.5 text-[13.5px] font-semibold transition-colors hover:bg-muted disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={salvarEdicao}
+                  disabled={!podeAbrir || pending}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-california-red px-5 py-2.5 text-[13.5px] font-bold text-white transition-colors hover:bg-california-red-hover disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                  <Check className="h-4 w-4" />
+                  {pending ? "Salvando..." : "Salvar alterações"}
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setReprovarAberto(true)}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-4 py-2.5 text-[13.5px] font-semibold text-california-red transition-colors hover:border-california-red hover:bg-california-red/5"
+                >
+                  <CornerUpLeft className="h-4 w-4" />
+                  Reprovar job
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmarAberto(true)}
+                  disabled={!podeAbrir || pending}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-5 py-2.5 text-[13.5px] font-bold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                  <Check className="h-4 w-4" />
+                  Abrir job no financeiro
+                </button>
+              </>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* ---------- Confirmação ---------- */}
       <Dialog open={confirmarAberto} onOpenChange={setConfirmarAberto}>
@@ -1271,6 +1878,7 @@ export function AberturaForm({
 
           <div className="flex flex-col gap-2.5 rounded-xl border border-border px-4 py-4">
             <ResumoLinha rotulo="Nome do job" valor={nome.trim()} />
+            <ResumoLinha rotulo="Projeto" valor={projetoResumo} />
             <ResumoLinha rotulo="Categoria" valor={categoriaNome} />
             <ResumoLinha rotulo="Competência" valor={competenciaLabel} mono />
             <ResumoLinha rotulo="Data de abertura" valor={agoraLabel} mono />
@@ -1375,5 +1983,143 @@ function ResumoLinha({
         {valor}
       </span>
     </div>
+  );
+}
+
+/**
+ * Escolhe a conta bancária da seção — uma para a entrada, uma para a
+ * saída, como no protótipo (o seletor mora no cabeçalho da seção, e não
+ * na linha da tabela: a conta é do job inteiro).
+ *
+ * Mostra o saldo de hoje em cada opção porque a pergunta que o financeiro
+ * faz aqui é "de qual conta isso sai", e saldo é metade dessa resposta.
+ * O número vem de `fc_saldos_por_conta`, a mesma função do Fluxo de
+ * Caixa — nunca de uma conta feita à parte, que divergiria.
+ */
+function ContaSeletor({
+  rotulo,
+  contas,
+  selecionada,
+  travado,
+  aberto,
+  onAbrir,
+  onEscolher,
+}: {
+  rotulo: string;
+  contas: ContaBancariaOpcao[];
+  selecionada: ContaBancariaOpcao | null;
+  travado: boolean;
+  aberto: boolean;
+  onAbrir: (aberto: boolean) => void;
+  onEscolher: (id: string | null) => void;
+}) {
+  // Sem conta cadastrada não há o que escolher, e um botão que não abre
+  // nada é pior do que botão nenhum.
+  if (contas.length === 0) return null;
+
+  return (
+    <div className="ml-auto">
+      <Popover open={aberto} onOpenChange={(o) => !travado && onAbrir(o)}>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            disabled={travado}
+            className={cn(
+              "inline-flex h-[38px] items-center gap-2.5 rounded-[9px] border bg-white px-3 text-left transition-colors",
+              aberto ? "border-california-red" : "border-border",
+              !travado && "hover:border-[#d7d7d7]",
+              travado && "bg-muted/60",
+            )}
+          >
+            <Landmark className="h-[15px] w-[15px] shrink-0 text-muted-foreground" />
+            <span className="flex flex-col items-start leading-[1.2]">
+              <span className="text-[9px] font-bold uppercase tracking-[0.08em] text-[#8a8a8a]">
+                {rotulo}
+              </span>
+              <span
+                className={cn(
+                  "whitespace-nowrap text-[12.5px] font-semibold",
+                  !selecionada && "text-muted-foreground",
+                )}
+              >
+                {selecionada?.rotulo ?? "Não definida"}
+              </span>
+            </span>
+            {!travado && (
+              <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[#8a8a8a]" />
+            )}
+          </button>
+        </PopoverTrigger>
+        <PopoverContent className="w-[318px] p-1.5" align="end">
+          {contas.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              onClick={() => onEscolher(c.id)}
+              className={cn(
+                "block w-full rounded-lg px-2.5 py-2 text-left text-[13px] transition-colors hover:bg-muted",
+                c.id === selecionada?.id &&
+                  "bg-california-red/[0.06] text-california-red",
+              )}
+            >
+              <span className="flex items-baseline justify-between gap-3">
+                <span className="truncate font-semibold">{c.rotulo}</span>
+                <span className="shrink-0 font-mono text-[11px] text-[#8a8a8a]">
+                  {formatCurrency(c.saldo)}
+                </span>
+              </span>
+              <span className="mt-0.5 block text-[11px] text-muted-foreground">
+                {c.detalhe}
+              </span>
+            </button>
+          ))}
+          {/* A conta é opcional (o protótipo não marca com asterisco), e
+              job sem faturamento previsto não tem por que ter conta de
+              recebimento — então limpar precisa ser possível. */}
+          {selecionada && (
+            <button
+              type="button"
+              onClick={() => onEscolher(null)}
+              className="mt-1 flex w-full items-center gap-1.5 rounded-lg border-t border-border px-2.5 py-2 text-left text-[12px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              <X className="h-3 w-3" />
+              Não definir conta
+            </button>
+          )}
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+}
+
+/**
+ * A data de uma linha que não aceita edição.
+ *
+ * Duas razões diferentes caem aqui, e a tela distingue as duas: a linha
+ * está CONGELADA (PP ou nota já consumiu aquele dinheiro — cadeado) ou o
+ * formulário inteiro está em leitura (job aberto, ninguém clicou em
+ * "Editar registro" — sem cadeado, porque nada ali é definitivo, só está
+ * travado no momento).
+ */
+function LinhaTravada({
+  texto,
+  congelada,
+  titulo,
+}: {
+  texto: string;
+  congelada: boolean;
+  titulo?: string;
+}) {
+  return (
+    <span
+      title={titulo}
+      className={cn(
+        "inline-flex h-9 items-center gap-1.5 font-mono text-[13px] font-medium",
+        congelada ? "text-foreground" : "text-muted-foreground",
+      )}
+    >
+      {congelada && <Lock className="h-3 w-3 shrink-0 text-muted-foreground" />}
+      {texto}
+    </span>
   );
 }

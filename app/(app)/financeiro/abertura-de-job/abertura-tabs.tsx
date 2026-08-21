@@ -32,7 +32,11 @@ export function AberturaTabs({
 
   const abas: { key: Aba; rotulo: string; contagem: number }[] = [
     { key: "aguardando", rotulo: "Jobs aguardando abertura", contagem: fila.length },
-    { key: "abertos", rotulo: "Jobs abertos", contagem: abertos.length },
+    // "Visualizar Jobs", e não "Jobs abertos": esta aba é a porta de
+    // entrada do job já aberto no financeiro — dela se chega ao registro
+    // da abertura, à planilha, ao fluxo de caixa e à comunicação
+    // (decisão do Tiago, 20/08/2026).
+    { key: "abertos", rotulo: "Visualizar Jobs", contagem: abertos.length },
   ];
 
   return (

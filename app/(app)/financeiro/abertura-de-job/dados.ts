@@ -30,7 +30,22 @@ export interface JobNaFila {
   projeto_id: string;
   projeto_codigo: string | null;
   projeto_nome: string | null;
+  /** Cliente do projeto de produção. Filtra o combo de projeto do
+   *  financeiro e vira o `cliente_id` do projeto criado ali. */
+  cliente_id: string | null;
   cliente_nome: string | null;
+  /**
+   * Projeto na visão do financeiro (`projetos_financeiro`). Independente
+   * de `projeto_id`, que é o da produção — o financeiro reagrupa sem que
+   * a produção enxergue (migration 20260820000011).
+   */
+  projeto_financeiro_id: string | null;
+  projeto_financeiro_codigo: string | null;
+  projeto_financeiro_nome: string | null;
+  /** Conta em que o faturamento deste job entra. Uma para o job todo. */
+  conta_recebimento_id: string | null;
+  /** Conta de onde os custos deste job saem. Uma para o job todo. */
+  conta_pagamento_id: string | null;
   regional_nome: string | null;
   responsavel_nome: string | null;
   produtor_nome: string | null;
@@ -69,7 +84,9 @@ export interface TotaisPlanilhaJob {
 const SELECT_JOB_FILA =
   "id, codigo, nome, valor_total, faturamento_previsto, data_inicio_prevista, data_fim_prevista, " +
   "data_prevista_faturamento, observacoes, created_at, produto, cidade, projeto_id, " +
-  "projeto:projetos(codigo, nome, cliente:clientes(nome_fantasia)), " +
+  "projeto_financeiro_id, conta_recebimento_id, conta_pagamento_id, " +
+  "projeto:projetos(codigo, nome, cliente_id, cliente:clientes(nome_fantasia)), " +
+  "projeto_financeiro:projetos_financeiro(codigo, nome), " +
   "regional:regionais(nome), " +
   "responsavel:profiles!responsavel_id(nome), " +
   "produtor:profiles!produtor_id(nome), " +
@@ -159,7 +176,13 @@ function montarJobNaFila(
     projeto_id: j.projeto_id,
     projeto_codigo: j.projeto?.codigo ?? null,
     projeto_nome: j.projeto?.nome ?? null,
+    cliente_id: j.projeto?.cliente_id ?? null,
     cliente_nome: j.projeto?.cliente?.nome_fantasia ?? null,
+    projeto_financeiro_id: j.projeto_financeiro_id ?? null,
+    projeto_financeiro_codigo: j.projeto_financeiro?.codigo ?? null,
+    projeto_financeiro_nome: j.projeto_financeiro?.nome ?? null,
+    conta_recebimento_id: j.conta_recebimento_id ?? null,
+    conta_pagamento_id: j.conta_pagamento_id ?? null,
     regional_nome: j.regional?.nome ?? null,
     responsavel_nome: j.responsavel?.nome ?? null,
     produtor_nome: j.produtor?.nome ?? null,

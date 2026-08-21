@@ -2,6 +2,8 @@ import { notFound, redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { carregarJobParaAbertura } from "../dados";
+import { listarProjetosFinanceiro } from "@/lib/data/projetos-financeiro";
+import { listarContasBancarias } from "@/lib/data/contas-bancarias";
 import { formatDataHoraBr } from "../formatos";
 import { sugerirCurva, sugerirRecebimento, trimestreDe } from "../curva";
 import { AberturaForm } from "./abertura-form";
@@ -23,7 +25,7 @@ export default async function AbrirJobNoFinanceiroPage({
 
   const supabase = createClient();
 
-  const [carregado, categoriasRes] = await Promise.all([
+  const [carregado, categoriasRes, contas] = await Promise.all([
     carregarJobParaAbertura(session.activeTenant.id, params.jobId),
     // Escopo 'orcamento': a categoria do job é a que a produção escolheu
     // no orçamento — o financeiro confere e pode trocar, mas dentro do
@@ -35,6 +37,7 @@ export default async function AbrirJobNoFinanceiroPage({
       .eq("escopo", "orcamento")
       .eq("ativo", true)
       .order("nome"),
+    listarContasBancarias(session.activeTenant.id),
   ]);
 
   if (!carregado) notFound();
@@ -50,6 +53,15 @@ export default async function AbrirJobNoFinanceiroPage({
   }
 
   const { job, enviadoPorNome } = carregado;
+
+  // Depende do cliente que veio do job — por isso fora do Promise.all
+  // acima. O combo lista só projetos do mesmo cliente: agrupar clientes
+  // diferentes sob um projeto faria o total somar dinheiro de dois.
+  const projetos = await listarProjetosFinanceiro(
+    session.activeTenant.id,
+    job.cliente_id,
+  );
+
   const agora = new Date();
   const hojeIso = agora.toISOString().slice(0, 10);
 
@@ -78,6 +90,8 @@ export default async function AbrirJobNoFinanceiroPage({
     <AberturaForm
       job={job}
       categorias={categoriasRes.data ?? []}
+      projetos={projetos}
+      contas={contas}
       custoPrevisto={custoPrevisto}
       faturamentoPrevisto={faturamentoPrevisto}
       enviadoPorNome={enviadoPorNome}
