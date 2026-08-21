@@ -1636,39 +1636,25 @@ dentro:
 | Ficha do job, "Jobs do projeto" | `/jobs/[id]` | `/financeiro/jobs/[id]` |
 | Conferência da fila, planilha interna | `/jobs/[id]?aba=planilha` | `/financeiro/abertura-de-job/[id]/planilha` |
 
-**A margem do agregado é `faturável − custo`**, não `valor total − custo`
-como o protótipo desenhava — em PEVETE-0001/26 a diferença era de
-R$ 88.000. Por isso a tabela tem 7 colunas e não 6: "Faturável" entrou
-para a subtração fechar aos olhos de quem lê.
+**A visão agregada é a MESMA tela da produção**, no recorte do
+financeiro: árvore dos jobs, cards, um bloco de planilha por job e Totais
+consolidado. Os jobs vêm de `projeto_financeiro_id` e levam o
+`nome_financeiro`. A montagem saiu da página da produção e virou
+`app/(app)/jobs/projeto/[projetoId]/carregar-planilhas.ts`, usada pelas
+duas.
 
-**Aparecem no agregado:** `aguardando_abertura`, `aberto`, `em_producao`
-e `encerrado`. Fora: `rejeitado_financeiro` e `cancelado`.
+⚠️ **Ela tem duas abas** (21/08/2026): *Planilha Interna agregada* e
+*Fluxo de Caixa do Projeto*. O fluxo soma todos os jobs, cada sub-linha
+abre por job, e uma barra filtra por job ou por conta bancária —
+recalculando no cliente, sem ida ao servidor. Por isso o cálculo da
+matriz virou função pura (`lib/calculos/fluxo-caixa-matriz.ts`) e o
+componente (`components/financeiro/fluxo-caixa-jobs.tsx`) serve a aba do
+job e a do projeto. **Prazos no agregado são a média** dos jobs que têm a
+data.
 
-⚠️ **Mas só SOMA quem já passou pela abertura.** Job em
-`aguardando_abertura` aparece marcado com "Aguarda abertura · não soma" e
-fica fora de todos os totais e cards. O motivo é do banco: job não aberto
-tem **zero linhas em `vw_fluxo_caixa`**, zero previsão de recebimento e
-zero curva — as três nascem na abertura. Em NOV-0002/26 os totais mostram
-só o JOB-0013 (R$ 104.064,87 · R$ 104.064,87 · R$ 65.000 · R$ 39.064,87)
-e o card conta 1 job, não 2.
-
-⚠️ **A aba da Abertura de Job virou endereçável por URL** (`?aba=abertos`
-ou `?aba=aguardando`). Sem isso, voltar da visão agregada ou do detalhe
-de um job caía na fila — a página escolhia a aba sozinha (fila primeiro
-quando ela não está vazia) e ignorava de onde a pessoa tinha saído.
-
-Os dois "Voltar para Visualizar Jobs" apontam para `?aba=abertos`, e os
-da fila (formulário de abertura e reprovação) para `?aba=aguardando`.
-Trocar de aba na tela atualiza a URL por `history.replaceState`, e não
-pelo router: a página é `force-dynamic`, e um `router.replace` refaria
-todas as queries só para trocar de aba. Assim o link fica copiável e o
-voltar do navegador reabre a aba certa.
-
-⚠️ **A aba "Visualizar Jobs" passou a listar encerrados** (21/08/2026),
-além de abertos e do legado `em_producao`. A linha ganha um badge com o
-status quando ele não é "aberto" — sem isso não dá para distinguir um
-encerrado de um em andamento. O resumo virou "N jobs no financeiro", e
-`listarJobsAbertos` virou `listarJobsDoFinanceiro`, que é o que ela faz.
+⚠️ **Entram só os jobs da aba "Visualizar Jobs"** (`aberto`,
+`em_producao`, `encerrado`). Job aguardando abertura não aparece na
+agregada — tem aba própria.
 
 **Exceção combinada:** "Orçamento aprovado" continua saindo para
 Orçamentos — é o único destino sem equivalente aqui —, mas agora com

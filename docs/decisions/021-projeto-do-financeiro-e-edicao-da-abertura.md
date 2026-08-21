@@ -167,59 +167,45 @@ tela da PRODUÇÃO. Além de sair do módulo, ela não serviria: lá o
 agrupamento é por `jobs.projeto_id`, e o grupo do financeiro pode juntar
 jobs que na produção estão em projetos diferentes.
 
-Entrou `/financeiro/projetos/[projetoId]`: cabeçalho com código e nome,
-quatro cards (Cliente, Jobs no financeiro, Valor total, Faturados N de M)
-e a tabela "Jobs do projeto".
+Entrou `/financeiro/projetos/[projetoId]`, que é **a mesma tela da visão
+agregada da produção** (`/jobs/projeto/[id]`) no recorte do financeiro:
+árvore dos jobs, cards, um bloco de planilha por job e o card de Totais
+consolidado. O que muda é só o recorte — os jobs vêm de
+`projeto_financeiro_id` e cada bloco leva o `nome_financeiro`.
 
-### Quais jobs entram, e quais somam — não é a mesma pergunta
+A montagem da planilha saiu da página da produção e virou
+`app/(app)/jobs/projeto/[projetoId]/carregar-planilhas.ts`, usada pelas
+duas telas. Duas cópias dela divergiriam na primeira errata.
 
-Entram na LISTA: `aguardando_abertura`, `aberto`, `em_producao` e
-`encerrado`. Ficam de fora `rejeitado_financeiro` e `cancelado` — job que
-o financeiro devolveu ou que morreu não pertence ao projeto.
+### Duas abas (21/08/2026)
 
-`em_producao` é status legado (nenhum job novo cai nele), mas quem
-estiver lá passou pela abertura: tirá-lo faria o job sumir do agregado no
-meio da vida.
+| Aba | O que é |
+|---|---|
+| **Planilha Interna agregada** | Um bloco de planilha por job + Totais do projeto, exatamente como a visão agregada da produção |
+| **Fluxo de Caixa do Projeto** | A aba de Fluxo de Caixa do job, somando todos os jobs do projeto |
 
-**Só SOMA nos totais quem já passou pela abertura.** Job em
-`aguardando_abertura` aparece na lista, marcado com "Aguarda abertura ·
-não soma" e apagado, e fica fora de todos os totais e dos cards.
+No fluxo agregado, **cada sub-linha abre mostrando quanto cada job pôs
+naquele mês**, e as de título seguem abrindo nos documentos — agora com o
+código do job em cada um, senão não dá para saber de onde veio.
 
-O motivo é do banco, não estético (Tiago, 21/08/2026): job não aberto tem
-**zero linhas em `vw_fluxo_caixa`**, zero parcelas em
-`jobs_previsao_recebimento` e zero linhas em `jobs_previsao_custo` — as
-três nascem na abertura. Somar o faturável dele aqui faria o total do
-projeto afirmar um dinheiro que o financeiro ainda não conhece, e
-divergir do Fluxo de Caixa.
+Uma **barra de filtros** isola um job ou uma conta bancária. Filtrar
+remonta a matriz no CLIENTE: as linhas já desceram todas, então não há
+ida ao servidor. Por isso o cálculo da matriz virou função pura em
+`lib/calculos/fluxo-caixa-matriz.ts`, e o componente
+`components/financeiro/fluxo-caixa-jobs.tsx` serve as duas telas — na aba
+do job ele esconde os filtros e a abertura por job, que com um job só
+repetiriam a própria linha.
 
-Conferido em 21/08/2026, NOV-0002/26: JOB-0013 (aberto) e JOB-0014
-(aguardando). Os totais mostram só o JOB-0013 — R$ 104.064,87 de valor e
-de faturável, R$ 65.000 de custo, R$ 39.064,87 de margem — e o card "Jobs
-no financeiro" conta 1, não 2. Uma nota abaixo da tabela diz que há 1 job
-aguardando e por que ele não entra.
+**Prazos**: por job não somam, então o agregado mostra a **média** dos
+jobs que têm a data, com "média de N jobs" embaixo. Job sem a data que
+fecha o prazo fica de fora da média em vez de entrar como zero.
 
-### A margem é sobre o faturável
+### Quais jobs entram
 
-`faturamento previsto − custo previsto`, e **não** `valor total − custo`,
-que era o que o protótipo desenhava. O valor total inclui o que o cliente
-paga direto ao fornecedor (tipos A/D) e esse dinheiro nunca passa pelo
-caixa da California (decisão 004). Em PEVETE-0001/26, com três jobs, as
-duas contas davam **R$ 129.014,39** (protótipo) contra **R$ 41.014,39**
-(esta regra) — R$ 88.000 de diferença.
-
-É a mesma conta da "Margem prevista" do formulário de abertura, e é o que
-o próprio subtítulo do protótipo diz: *"valor faturável × custo previsto
-no financeiro"*.
-
-Por causa disso a tabela tem **sete colunas**, e não as seis do
-protótipo: "Faturável" entrou entre "Valor total" e "Custo previsto",
-senão a subtração não fecharia aos olhos de quem lê. "Valor total" fica
-como referência, a pedido do Tiago.
-
-Job que ainda não passou pela abertura mostra **travessão** em Custo
-previsto e em Margem — sem curva de desembolso não há nem custo nem
-margem, e tratar o custo como zero faria a linha afirmar 100% de margem.
-Ele também não soma em nada, pelo motivo da seção acima.
+Os mesmos da aba "Visualizar Jobs" (`STATUS_NA_LISTA`): `aberto`,
+`em_producao` e `encerrado`. Job aguardando abertura **não aparece** — a
+visão agregada unifica o que está naquela aba, e quem aguarda tem a aba
+própria ao lado (decisão do Tiago, 21/08/2026).
 
 ### O que mais deixou de sair do módulo
 

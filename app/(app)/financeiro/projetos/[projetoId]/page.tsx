@@ -1,36 +1,70 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft, Calculator, FolderKanban } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  ClipboardList,
+  FolderKanban,
+  Lock,
+} from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
-import { competenciaLabel } from "@/lib/types";
+import { createClient } from "@/lib/supabase/server";
+import {
+  jobStatusLabel,
+  nomeDoJobNoFinanceiro,
+  type JobStatus,
+} from "@/lib/types";
 import { cn, formatCurrency } from "@/lib/utils";
-import { carregarProjetoFinanceiro } from "@/lib/data/projetos-financeiro";
-import { SITUACAO_META } from "../../abertura-de-job/situacao-faturamento";
+import { ResumoResultado } from "@/components/resumo-resultado";
+import { FluxoCaixaJobs } from "@/components/financeiro/fluxo-caixa-jobs";
+import { listarContasBancarias } from "@/lib/data/contas-bancarias";
+import { carregarPlanilhasDosJobs } from "@/app/(app)/jobs/projeto/[projetoId]/carregar-planilhas";
+import { PlanilhaJobCard } from "@/app/(app)/jobs/projeto/[projetoId]/planilha-job-card";
+import { ProjetoTotaisCard } from "@/app/(app)/jobs/projeto/[projetoId]/projeto-totais-card";
+import { STATUS_NA_LISTA } from "../../abertura-de-job/dados-abertos";
+import {
+  carregarLinhasDeFluxo,
+  carregarPrazosDosJobs,
+} from "../../jobs/[jobId]/fluxo-do-job";
+import { ProjetoTabs } from "./projeto-tabs";
 
 export const dynamic = "force-dynamic";
+
+function statusBadgeClasses(status: JobStatus): string {
+  switch (status) {
+    case "aberto":
+      return "border-blue-200 bg-blue-50 text-blue-700";
+    case "em_producao":
+      return "border-amber-200 bg-amber-50 text-amber-700";
+    case "encerrado":
+      return "border-emerald-200 bg-emerald-50 text-emerald-700";
+    default:
+      return "border-slate-200 bg-slate-100 text-slate-500";
+  }
+}
 
 /**
  * A visão agregada do projeto NO FINANCEIRO.
  *
- * Rota própria do módulo, e não a tela de projeto da produção
- * (`/jobs/projeto/[id]`): o financeiro não encaminha para telas de outros
- * módulos (decisão do Tiago, 20/08/2026). E não daria para reusar aquela
- * mesmo querendo — lá o agrupamento é por `jobs.projeto_id`, e aqui é
- * pelo projeto do financeiro, que pode juntar jobs que na produção estão
- * em projetos diferentes.
+ * É a mesma tela da visão agregada da produção (`/jobs/projeto/[id]`) —
+ * árvore dos jobs, cards, um bloco de planilha por job e o card de Totais
+ * consolidado —, no recorte do financeiro: os jobs vêm do projeto DO
+ * FINANCEIRO (`projeto_financeiro_id`) e cada bloco leva o
+ * `nome_financeiro`. A planilha é montada pelo MESMO
+ * `carregarPlanilhasDosJobs` das duas telas; duas cópias divergiriam na
+ * primeira errata.
  *
- * ---------------------------------------------------------------------
- * A margem
- * ---------------------------------------------------------------------
+ * Rota própria, e não a da produção, porque o financeiro não encaminha
+ * para telas de outros módulos (decisão do Tiago, 20/08/2026) e porque o
+ * agrupamento aqui é outro: o mesmo projeto do financeiro pode juntar
+ * jobs que na produção estão em projetos diferentes.
  *
- * `faturamento previsto − custo previsto`, e NÃO `valor total − custo`,
- * que é o que o protótipo desenhava. O valor total inclui o que o cliente
- * paga direto ao fornecedor (tipos A/D) e esse dinheiro nunca passa pelo
- * caixa da California (decisão 004) — somá-lo na margem inflaria o
- * resultado do projeto. Em PEVETE-0001/26 a diferença entre as duas
- * contas era de R$ 88.000 em três jobs. É a mesma conta da "Margem
- * prevista" do formulário de abertura, e é o que o próprio subtítulo do
- * protótipo diz: "valor faturável × custo previsto".
+ * Duas abas (21/08/2026): a planilha agregada e o fluxo de caixa somado
+ * dos jobs do projeto.
+ *
+ * Entram só os jobs da aba "Visualizar Jobs" (`STATUS_NA_LISTA`): a visão
+ * agregada unifica o que está lá, e job aguardando abertura tem aba
+ * própria.
  */
 export default async function ProjetoNoFinanceiroPage({
   params,
@@ -45,29 +79,74 @@ export default async function ProjetoNoFinanceiroPage({
     redirect("/home?reason=sem_permissao_financeira");
   }
 
-  const projeto = await carregarProjetoFinanceiro(
-    session.activeTenant.id,
-    params.projetoId,
-  );
+  const supabase = createClient();
+  const tenantId = session.activeTenant.id;
+  const hoje = new Date().toISOString().slice(0, 10);
+
+  const [projetoRes, jobsRes] = await Promise.all([
+    supabase
+      .from("projetos_financeiro")
+      .select("id, codigo, nome, cliente:clientes(nome_fantasia)")
+      .eq("id", params.projetoId)
+      .eq("tenant_id", tenantId)
+      .maybeSingle(),
+    supabase
+      .from("jobs")
+      .select("id, codigo, nome, nome_financeiro, status")
+      .eq("tenant_id", tenantId)
+      .eq("projeto_financeiro_id", params.projetoId)
+      .in("status", STATUS_NA_LISTA as unknown as string[])
+      .order("codigo", { ascending: true }),
+  ]);
+
+  if (projetoRes.error) {
+    console.error("[projeto-financeiro]", projetoRes.error.message);
+  }
+  const projeto = projetoRes.data as any;
   if (!projeto) notFound();
 
-  const cards = [
-    { rotulo: "Cliente", valor: projeto.cliente_nome ?? "—", mono: false },
-    {
-      rotulo: "Jobs no financeiro",
-      valor: String(projeto.jobsNoFinanceiro),
-      mono: true,
-    },
-    { rotulo: "Valor total", valor: formatCurrency(projeto.totalValor), mono: true },
-    {
-      rotulo: "Faturados",
-      valor: `${projeto.faturados} de ${projeto.jobsNoFinanceiro}`,
-      mono: true,
-    },
-  ];
+  if (jobsRes.error) {
+    console.error("[projeto-financeiro.jobs]", jobsRes.error.message);
+  }
+
+  const jobsDoProjeto = ((jobsRes.data ?? []) as any[]).map((j) => ({
+    id: j.id as string,
+    codigo: j.codigo as string,
+    nome: nomeDoJobNoFinanceiro(j),
+    status: j.status as JobStatus,
+  }));
+  const jobIds = jobsDoProjeto.map((j) => j.id);
+
+  // Independentes entre si — em paralelo, nunca em série
+  // (`docs/PERFORMANCE.md`).
+  const [planilhas, linhasDeFluxo, prazos, contas] = await Promise.all([
+    carregarPlanilhasDosJobs(tenantId, jobIds, { usarNomeFinanceiro: true }),
+    carregarLinhasDeFluxo(tenantId, jobIds),
+    carregarPrazosDosJobs(tenantId, jobIds),
+    listarContasBancarias(tenantId),
+  ]);
+
+  const moedaProjeto = planilhas[0]?.moeda ?? "BRL";
+
+  // Soma dos fechamentos de cada job, igual ao card de Totais da aba —
+  // não existe taxa única do projeto.
+  const resumo = planilhas.reduce(
+    (acc, j) => ({
+      valorJob: acc.valorJob + j.valorJob,
+      imposto: acc.imposto + j.imposto,
+      planejado: acc.planejado + j.planejado,
+      realizado: acc.realizado + j.realizado,
+    }),
+    { valorJob: 0, imposto: 0, planejado: 0, realizado: 0 },
+  );
+
+  const statusMix = jobsDoProjeto.reduce<Record<string, number>>((acc, j) => {
+    acc[j.status] = (acc[j.status] ?? 0) + 1;
+    return acc;
+  }, {});
 
   return (
-    <div className="space-y-5">
+    <div className="mx-auto flex max-w-[1452px] flex-col gap-6 min-[1600px]:mr-6">
       <div>
         <Link
           href="/financeiro/abertura-de-job?aba=abertos"
@@ -76,212 +155,171 @@ export default async function ProjetoNoFinanceiroPage({
           <ArrowLeft className="h-3 w-3" />
           Voltar para Visualizar Jobs
         </Link>
-        <div className="mt-3 flex flex-wrap items-center gap-3">
-          <div className="rounded-lg bg-california-red/10 p-2">
-            <FolderKanban className="h-5 w-5 text-california-red" />
+
+        <div className="mt-3 flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            <div className="rounded-lg bg-california-red/10 p-2">
+              <FolderKanban className="h-5 w-5 text-california-red" />
+            </div>
+            <div className="min-w-0">
+              <p className="font-mono text-xs font-semibold text-muted-foreground">
+                {projeto.codigo}
+              </p>
+              <h1 className="text-2xl font-bold tracking-tight">
+                {projeto.nome}
+              </h1>
+            </div>
           </div>
-          <div>
-            <p className="font-mono text-xs font-semibold text-muted-foreground">
-              {projeto.codigo}
-            </p>
-            <h1 className="text-2xl font-bold tracking-tight">
-              {projeto.nome}
-            </h1>
-          </div>
+
+          {planilhas.length > 0 && (
+            <div className="mt-[24px]">
+              <ResumoResultado
+                valorJob={resumo.valorJob}
+                imposto={resumo.imposto}
+                custoPlanejado={resumo.planejado}
+                custoRealizado={resumo.realizado}
+                moeda={moedaProjeto}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Árvore dos jobs, como na visão agregada da produção — mas os
+            links ficam dentro do financeiro. */}
+        <div className="ml-[19px] mt-2.5 flex flex-col">
+          {jobsDoProjeto.map((j, i) => {
+            const planilha = planilhas.find((p) => p.id === j.id);
+            return (
+              <Link
+                key={j.id}
+                href={`/financeiro/jobs/${j.id}`}
+                prefetch={false}
+                className="group relative grid grid-cols-[28px_auto_1fr] items-center gap-2.5 py-[5px]"
+              >
+                <span
+                  aria-hidden="true"
+                  className="absolute left-0 top-0 w-px bg-[#dad7d7]"
+                  style={{
+                    height: i === jobsDoProjeto.length - 1 ? "50%" : "100%",
+                  }}
+                />
+                <span
+                  aria-hidden="true"
+                  className="absolute left-0 top-1/2 h-px w-[18px] bg-[#dad7d7]"
+                />
+                <span />
+                <span className="inline-flex items-center gap-2.5 whitespace-nowrap">
+                  <span className="font-mono text-[11.5px] font-semibold text-[#b3323c]">
+                    {j.codigo}
+                  </span>
+                  <span className="text-[13px] font-medium text-foreground">
+                    {j.nome}
+                  </span>
+                  <span className="h-[11px] w-px bg-[#dcdcdc]" />
+                  <span className="text-xs tabular-nums text-muted-foreground">
+                    {formatCurrency(planilha?.valorJob ?? 0, moedaProjeto)}
+                  </span>
+                  <span
+                    className={cn(
+                      "inline-flex items-center rounded-full border px-2 py-px text-[9.5px] font-semibold uppercase tracking-[0.06em]",
+                      statusBadgeClasses(j.status),
+                    )}
+                  >
+                    {jobStatusLabel(j.status)}
+                  </span>
+                  <ArrowRight className="h-3 w-3 text-[#c9c9c9] transition-colors group-hover:text-california-red" />
+                </span>
+              </Link>
+            );
+          })}
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {cards.map((c) => (
-          <div
-            key={c.rotulo}
-            className="rounded-2xl border border-border bg-card px-[18px] py-4 shadow-soft"
-          >
-            <p className="text-[10px] font-bold uppercase tracking-[0.09em] text-muted-foreground">
-              {c.rotulo}
-            </p>
-            <p
-              className={cn(
-                "mt-1.5 truncate text-lg font-bold",
-                c.mono && "font-mono",
-              )}
-            >
-              {c.valor}
-            </p>
-          </div>
-        ))}
+      <div className="grid gap-4 md:grid-cols-4">
+        <CardResumo
+          rotulo="Cliente"
+          valor={projeto.cliente?.nome_fantasia ?? "—"}
+        />
+        <CardResumo
+          rotulo="Jobs no financeiro"
+          valor={String(jobsDoProjeto.length)}
+        />
+        <CardResumo
+          rotulo="Valor do projeto"
+          valor={formatCurrency(resumo.valorJob, moedaProjeto)}
+        />
+        <div className="rounded-2xl border border-border bg-card p-4 shadow-soft">
+          <p className="text-[10px] uppercase tracking-[0.09em] text-muted-foreground">
+            Distribuição
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {Object.entries(statusMix)
+              .map(
+                ([s, n]) =>
+                  `${n} ${jobStatusLabel(s as JobStatus).toLowerCase()}`,
+              )
+              .join(" · ") || "—"}
+          </p>
+        </div>
       </div>
 
-      <section className="overflow-hidden rounded-2xl border border-border bg-card shadow-soft">
-        <header className="flex flex-wrap items-center gap-2.5 border-b border-border bg-muted/50 px-5 py-3.5">
-          <Calculator className="h-4 w-4 text-california-red" />
-          <h2 className="text-[15px] font-semibold">Jobs do projeto</h2>
-          <span className="text-xs text-muted-foreground">
-            Valor faturável × custo previsto no financeiro
-          </span>
-        </header>
+      {jobsDoProjeto.length === 0 ? (
+        <div className="rounded-2xl border border-border bg-card px-5 py-10 text-center text-sm text-muted-foreground shadow-soft">
+          Nenhum job aberto no financeiro neste projeto.
+        </div>
+      ) : (
+        <ProjetoTabs
+          planilha={
+            <>
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <ClipboardList className="h-4 w-4 text-california-red" />
+                  <span>
+                    Planilha consolidada · um bloco por job · Orçado ×
+                    Planejado × Realizado
+                  </span>
+                </div>
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-[11px] py-1 text-[11px] font-semibold text-muted-foreground">
+                  <Lock className="h-[11px] w-[11px]" />
+                  Somente leitura
+                </span>
+              </div>
 
-        {projeto.jobs.length === 0 ? (
-          <p className="px-5 py-10 text-center text-sm text-muted-foreground">
-            Nenhum job neste projeto do financeiro.
-          </p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px] border-collapse text-[13.5px]">
-              <thead>
-                <tr className="border-b border-border text-left text-[10px] font-semibold uppercase tracking-[0.07em] text-muted-foreground">
-                  <th className="px-5 py-3 font-semibold">Job</th>
-                  <th className="px-4 py-3 font-semibold">Competência</th>
-                  <th className="px-4 py-3 font-semibold">Faturamento</th>
-                  <th className="px-4 py-3 text-right font-semibold">
-                    Valor total
-                  </th>
-                  {/* Coluna a mais do que o protótipo, de propósito: a
-                      margem passou a sair do faturável, e sem ele na tela
-                      a subtração não fecha aos olhos de quem lê. */}
-                  <th className="px-4 py-3 text-right font-semibold">
-                    Faturável
-                  </th>
-                  <th className="px-4 py-3 text-right font-semibold">
-                    Custo previsto
-                  </th>
-                  <th className="px-5 py-3 text-right font-semibold">Margem</th>
-                </tr>
-              </thead>
-              <tbody>
-                {projeto.jobs.map((j) => {
-                  const meta = SITUACAO_META[j.situacao_faturamento];
-                  // Sem curva de desembolso não há margem: o job ainda
-                  // não passou pela abertura. Tratar o custo como zero
-                  // faria a linha afirmar margem de 100%.
-                  const margem =
-                    j.custo_previsto === null
-                      ? null
-                      : j.faturamento_previsto - j.custo_previsto;
+              {planilhas.map((j) => (
+                <PlanilhaJobCard key={j.id} job={j} />
+              ))}
 
-                  return (
-                    <tr
-                      key={j.id}
-                      className={cn(
-                        "border-b border-b-[#f4f2f2] transition-colors last:border-0 hover:bg-muted/60",
-                        // Job que ainda aguarda abertura aparece, mas não
-                        // soma: fica apagado para a leitura de relance não
-                        // confundir os números dele com os do total.
-                        !j.aberto_no_financeiro && "bg-muted/30 text-muted-foreground",
-                      )}
-                    >
-                      <td className="px-5 py-3">
-                        <Link
-                          href={`/financeiro/jobs/${j.id}`}
-                          prefetch={false}
-                          className="flex flex-col gap-0.5"
-                        >
-                          <span className="font-mono text-[11px] font-semibold text-[#b3323c]">
-                            {j.codigo}
-                          </span>
-                          <span className="font-medium">{j.nome}</span>
-                        </Link>
-                        {!j.aberto_no_financeiro && (
-                          <span className="mt-1 inline-flex w-fit items-center whitespace-nowrap rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.05em] text-amber-700">
-                            Aguarda abertura · não soma
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 font-mono text-[12.5px] text-muted-foreground">
-                        {competenciaLabel(
-                          j.competencia_trimestre,
-                          j.competencia_ano,
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={cn(
-                            "inline-flex items-center whitespace-nowrap rounded-full border px-2.5 py-0.5 text-[11px] font-semibold",
-                            meta.classes,
-                          )}
-                        >
-                          {meta.rotulo}
-                        </span>
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-right font-mono tabular-nums">
-                        {formatCurrency(j.valor_total)}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-right font-mono tabular-nums">
-                        {formatCurrency(j.faturamento_previsto)}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-right font-mono tabular-nums text-[#1e4fa3]">
-                        {/* Job que ainda não passou pela abertura não tem
-                            curva — travessão, e não R$ 0,00, que leria
-                            como "não vai custar nada". */}
-                        {j.custo_previsto === null
-                          ? "—"
-                          : formatCurrency(j.custo_previsto)}
-                      </td>
-                      <td
-                        className={cn(
-                          "whitespace-nowrap px-5 py-3 text-right font-mono font-semibold tabular-nums",
-                          margem === null
-                            ? "text-muted-foreground"
-                            : margem >= 0
-                              ? "text-emerald-700"
-                              : "text-[#b3323c]",
-                        )}
-                      >
-                        {margem === null ? "—" : formatCurrency(margem)}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-              <tfoot>
-                <tr>
-                  <td
-                    colSpan={3}
-                    className="border-t-2 border-foreground px-5 py-3.5 text-[13px] font-bold"
-                  >
-                    Total do projeto
-                  </td>
-                  <td className="whitespace-nowrap border-t-2 border-foreground px-4 py-3.5 text-right font-mono text-sm font-bold tabular-nums">
-                    {formatCurrency(projeto.totalValor)}
-                  </td>
-                  <td className="whitespace-nowrap border-t-2 border-foreground px-4 py-3.5 text-right font-mono text-sm font-bold tabular-nums">
-                    {formatCurrency(projeto.totalFaturamento)}
-                  </td>
-                  <td className="whitespace-nowrap border-t-2 border-foreground px-4 py-3.5 text-right font-mono text-sm font-bold tabular-nums text-[#1e4fa3]">
-                    {formatCurrency(projeto.totalCusto)}
-                  </td>
-                  <td
-                    className={cn(
-                      "whitespace-nowrap border-t-2 border-foreground px-5 py-3.5 text-right font-mono text-sm font-bold tabular-nums",
-                      projeto.totalMargem >= 0
-                        ? "text-emerald-700"
-                        : "text-[#b3323c]",
-                    )}
-                  >
-                    {formatCurrency(projeto.totalMargem)}
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        )}
+              <ProjetoTotaisCard jobs={planilhas} moeda={moedaProjeto} />
+            </>
+          }
+          fluxo={
+            <FluxoCaixaJobs
+              linhas={linhasDeFluxo}
+              jobs={jobsDoProjeto.map((j) => ({
+                id: j.id,
+                codigo: j.codigo,
+                nome: j.nome,
+              }))}
+              contas={contas.map((c) => ({ id: c.id, rotulo: c.rotulo }))}
+              prazos={prazos}
+              hoje={hoje}
+              moeda={moedaProjeto}
+              descricao="Os fluxos de todos os jobs deste projeto, somados: o realizado (movimentos das contas) mais o previsto (títulos em aberto e as previsões da abertura). Filtre por job ou por conta para isolar uma parte."
+            />
+          }
+        />
+      )}
+    </div>
+  );
+}
 
-        {/* Job que aguarda abertura não tem linha no fluxo de caixa: nem
-            previsão de recebimento, nem curva — as duas nascem na
-            abertura. Por isso ele aparece aqui mas fica fora de todos os
-            totais, e a nota diz isso em vez de deixar a diferença entre a
-            lista e a soma sem explicação. */}
-        {projeto.aguardandoAbertura > 0 && (
-          <p className="border-t border-border px-5 py-3 text-[11.5px] text-muted-foreground">
-            {projeto.aguardandoAbertura === 1
-              ? "1 job ainda aguarda abertura no financeiro"
-              : `${projeto.aguardandoAbertura} jobs ainda aguardam abertura no financeiro`}
-            {" "}— aparece na lista, mas fica fora dos totais: sem abertura não
-            há previsão de recebimento nem curva de desembolso, e nada dele
-            entra no fluxo de caixa.
-          </p>
-        )}
-      </section>
+function CardResumo({ rotulo, valor }: { rotulo: string; valor: string }) {
+  return (
+    <div className="rounded-2xl border border-border bg-card p-4 shadow-soft">
+      <p className="text-[10px] uppercase tracking-[0.09em] text-muted-foreground">
+        {rotulo}
+      </p>
+      <p className="mt-1 truncate text-sm font-semibold">{valor}</p>
     </div>
   );
 }
