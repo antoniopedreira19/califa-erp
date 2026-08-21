@@ -29,6 +29,10 @@ import type {
 import type { CartaoOption } from "@/components/financeiro/forma-pagamento-field";
 import { VISAO_BV_PADRAO, type VisaoBv } from "@/lib/calculos/bv-planilha";
 import { ChaveBrutoLiquido } from "@/app/(app)/_planilha/chave-bruto-liquido";
+import {
+  BotaoRecolherTodos,
+  useGruposRecolhiveis,
+} from "@/app/(app)/_planilha/recolher-grupos";
 import { JobGrupoCard } from "./job-grupo-card";
 import { JobTotaisCard } from "./job-totais-card";
 import { AlterarOrcadoButton } from "./alterar-orcado-button";
@@ -81,6 +85,11 @@ export function JobRealizadoSection({
   // Uma chave para a página inteira. Abre em Bruto: é a tela de sempre,
   // e quem não lida com BV nunca precisa saber que a outra existe.
   const [visao, setVisao] = React.useState<VisaoBv>(VISAO_BV_PADRAO);
+
+  // Recolher agrupamento, igual à planilha do orçamento: o subtotal e a
+  // rentabilidade continuam à vista, que é o que justifica recolher.
+  const gruposIds = React.useMemo(() => grupos.map((g) => g.id), [grupos]);
+  const recolher = useGruposRecolhiveis(gruposIds);
 
   // Antes da abertura a planilha aparece inteira — o que fica de fora são
   // as ações que geram documento. O aviso substitui o antigo bloco
@@ -139,6 +148,12 @@ export function JobRealizadoSection({
           </span>
         </div>
         <div className="flex items-center gap-3">
+          {grupos.length > 0 && (
+            <BotaoRecolherTodos
+              algumAberto={recolher.algumAberto}
+              onAlternarTodos={recolher.alternarTodos}
+            />
+          )}
           <ChaveBrutoLiquido visao={visao} onChange={setVisao} />
           {podeAcoes && (
             <AlterarOrcadoButton
@@ -179,6 +194,8 @@ export function JobRealizadoSection({
                 moeda={versao.moeda}
                 percentualImposto={versao.percentual_imposto}
                 visao={visao}
+                aberto={recolher.estaAberto(g.id)}
+                onAlternar={() => recolher.alternar(g.id)}
                 podeAcoes={podeAcoes}
                 preAbertura={preAbertura}
                 jobId={job.id}

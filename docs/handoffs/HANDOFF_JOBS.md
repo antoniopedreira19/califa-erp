@@ -1881,3 +1881,45 @@ O espelho de `A`/`D` foi exercitado ao vivo na versão em rascunho
 TESTE-0003/26 · Teste B2: as três células do PLANEJADO não abrem, e mudar
 o orçado de R$ 200,00 para R$ 250,00 arrastou o planejado junto, no banco
 e na tela. Revertido para R$ 200,00.
+
+
+---
+
+## ⚠️ 21/08/2026 — a Planilha Interna passou a recolher agrupamento
+
+Pedido do Tiago: o "Recolher todos" e o chevron por grupo, que só o
+orçamento tinha, valem para **todas** as planilhas do sistema.
+
+Na Planilha Interna (que serve `/jobs/[jobId]` e
+`/financeiro/jobs/[jobId]`) e na conferência da abertura não havia nada
+disso — nem botão, nem chevron. Agora têm os dois, no mesmo desenho do
+orçamento.
+
+Recolhido, o grupo mantém **subtotal e rentabilidade** à vista e esconde
+as linhas de item, **a calha de BV/PP** e o rodapé de ajuda. A calha some
+junto de propósito: ela é posicionada em `absolute` contra as linhas, e
+sobreviver a elas deixaria as pílulas flutuando sobre o subtotal.
+
+Na **visão agregada** os grupos já recolhiam, mas não havia o botão. Ele
+entrou **dentro de cada card de job**, e não no topo da página: lá cada
+bloco de job é uma planilha (grupos e subtotais próprios), e os cards
+nascem fechados — um botão no topo mexeria em grupos invisíveis.
+
+A máquina de estado virou fonte única em
+`app/(app)/_planilha/recolher-grupos.tsx`, e o `GruposSection` do
+orçamento passou a consumi-la em vez de manter a cópia dele. Ver a seção
+"Recolher agrupamento" de `docs/09-identidade-visual-ui.md`.
+
+**Verificação:** `tsc --noEmit`, `next lint` e `npm run build` limpos.
+Conferido logado em 21/08/2026:
+
+| Tela | Confirmado |
+|---|---|
+| Planilha Interna (JOB-0010) | "Recolher todos" → linhas e calha somem, SUBTOTAL e RENTABILIDADE ficam, contador vira "2 itens ocultos", botão vira "Expandir todos" |
+| Chevron individual | abre só aquele grupo; com estado misto o botão do topo volta a "Recolher todos" |
+| Conferência da abertura (JOB-0012) | mesmo comportamento, com "Somente leitura" preservado |
+| Visão agregada | botão aparece ao abrir o card do job; "Expandir todos" abriu os dois grupos e virou "Recolher todos" |
+| `/financeiro/jobs/[jobId]` | botão e chevrons presentes |
+| Orçamento (sem regressão no refactor) | 7 linhas → 2, rótulo alterna, subtotal fica |
+
+Zero erros de console em aba limpa e zero rolagem horizontal.
