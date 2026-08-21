@@ -6,6 +6,7 @@ import { ArrowRight, ChevronRight } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import { calcularRentabilidade } from "@/lib/calculos/versao-totais";
 import {
+  rotuloColunaTotal,
   valorNaVisao,
   type ValoresDoBloco,
   type VisaoBv,
@@ -374,7 +375,7 @@ export function PlanilhaJobCard({
                 <th
                   className={cn("px-3 py-2 text-right", PLANEJADO.cabecalhoFim)}
                 >
-                  Total
+                  {rotuloColunaTotal(visao)}
                 </th>
                 <th
                   className={cn(
@@ -403,7 +404,7 @@ export function PlanilhaJobCard({
                 <th
                   className={cn("px-3 py-2 text-right", REALIZADO.cabecalhoFim)}
                 >
-                  Total
+                  {rotuloColunaTotal(visao)}
                 </th>
               </tr>
             </thead>

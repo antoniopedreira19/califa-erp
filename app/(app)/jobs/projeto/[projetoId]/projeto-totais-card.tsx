@@ -9,6 +9,7 @@ import {
 } from "@/lib/calculos/versao-totais";
 import {
   somarBlocosDosItens,
+  rotuloColunaTotal,
   valorNaVisao,
   type VisaoBv,
 } from "@/lib/calculos/bv-planilha";
@@ -222,13 +223,13 @@ export function ProjetoTotaisCard({
               <th
                 className={cn("px-3 py-2 text-right", PLANEJADO.cabecalhoFim)}
               >
-                Total
+                {rotuloColunaTotal(visao)}
               </th>
               <th colSpan={3} className={REALIZADO.cabecalhoAbre} />
               <th
                 className={cn("px-3 py-2 text-right", REALIZADO.cabecalhoFim)}
               >
-                Total
+                {rotuloColunaTotal(visao)}
               </th>
             </tr>
           </thead>

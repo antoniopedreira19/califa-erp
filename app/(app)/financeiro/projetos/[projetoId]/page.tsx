@@ -290,7 +290,7 @@ export default async function ProjetoNoFinanceiroPage({
               <PlanilhasDoProjeto
                 planilhas={planilhas}
                 moeda={moedaProjeto}
-                jobHref={(id) => `/financeiro/jobs/${id}`}
+                jobHrefBase="/financeiro/jobs"
               />
             </>
           }

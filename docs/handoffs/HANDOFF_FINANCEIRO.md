@@ -1741,3 +1741,37 @@ a chave Bruto ⇄ Líquido na mesma barra.
 
 **Verificação:** conferido logado no JOB-0012 (fila de abertura) e no
 JOB-0010 pelo financeiro. Ver o detalhamento no `HANDOFF_JOBS.md`.
+
+
+---
+
+## ⚠️ 21/08/2026 — `/financeiro/projetos/[projetoId]` estava em branco
+
+Achado na conferência final, e é o tipo de defeito que **só abrir a rota
+pega**: `tsc`, `next lint` e `npm run build` passavam todos.
+
+A página passava `jobHref={(id) => \`/financeiro/jobs/${id}\`}` — uma
+**função** — para `PlanilhasDoProjeto`, que virou client component nesta
+sessão (ele hospeda o estado da chave Bruto ⇄ Líquido). Função não
+atravessa a fronteira server → client: o React derrubava a árvore com
+*"Functions cannot be passed directly to Client Components"* e a rota
+renderizava vazia.
+
+Funcionava antes porque `ProjetoTotaisCard` era server e a função nunca
+cruzava nada. E `/jobs/projeto/[projetoId]` não quebrou porque não passa
+`jobHref` — usa o default.
+
+**Correção:** a prop virou `jobHrefBase`, uma **string**
+(`"/financeiro/jobs"`), e a função é montada dentro do componente client,
+onde é inofensiva. A regra da decisão de 20/08 — o financeiro não
+encaminha para telas de outros — segue de pé: conferido que os links de
+"Abrir job" apontam para `/financeiro/jobs/[id]`.
+
+Varri os outros quatro componentes client criados/convertidos nesta
+sessão (`PlanilhaVersao`, `PlanilhaConferencia`, `PlanilhasDoProjeto`,
+`JobRealizadoSection`) atrás de props de função vindas de server
+components: este era o único caso.
+
+Na mesma conferência: os rótulos de coluna da visão agregada não
+acompanhavam a chave — os valores trocavam, mas o cabeçalho continuava
+"Total" em vez de "Total líquido". Corrigido nos dois cards.
