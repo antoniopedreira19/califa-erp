@@ -703,7 +703,7 @@ export function AberturaForm({
       {modo === "abertura" && (
         <div>
           <Link
-            href="/financeiro/abertura-de-job"
+            href="/financeiro/abertura-de-job?aba=aguardando"
             className="inline-flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
           >
             <ArrowLeft className="h-3 w-3" />
@@ -1955,7 +1955,7 @@ export function AberturaForm({
         jobCodigo={job.codigo}
         gpNome={job.responsavel_nome}
         produtorNome={job.produtor_nome}
-        redirecionarPara="/financeiro/abertura-de-job"
+        redirecionarPara="/financeiro/abertura-de-job?aba=aguardando"
       />
     </div>
   );

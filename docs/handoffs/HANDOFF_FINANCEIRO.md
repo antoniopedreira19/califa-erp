@@ -1652,6 +1652,18 @@ zero curva — as três nascem na abertura. Em NOV-0002/26 os totais mostram
 só o JOB-0013 (R$ 104.064,87 · R$ 104.064,87 · R$ 65.000 · R$ 39.064,87)
 e o card conta 1 job, não 2.
 
+⚠️ **A aba da Abertura de Job virou endereçável por URL** (`?aba=abertos`
+ou `?aba=aguardando`). Sem isso, voltar da visão agregada ou do detalhe
+de um job caía na fila — a página escolhia a aba sozinha (fila primeiro
+quando ela não está vazia) e ignorava de onde a pessoa tinha saído.
+
+Os dois "Voltar para Visualizar Jobs" apontam para `?aba=abertos`, e os
+da fila (formulário de abertura e reprovação) para `?aba=aguardando`.
+Trocar de aba na tela atualiza a URL por `history.replaceState`, e não
+pelo router: a página é `force-dynamic`, e um `router.replace` refaria
+todas as queries só para trocar de aba. Assim o link fica copiável e o
+voltar do navegador reabre a aba certa.
+
 ⚠️ **A aba "Visualizar Jobs" passou a listar encerrados** (21/08/2026),
 além de abertos e do legado `em_producao`. A linha ganha um badge com o
 status quando ele não é "aberto" — sem isso não dá para distinguir um

@@ -6,7 +6,7 @@ import { FilaAbertura, type FilaLinha } from "./fila-list";
 import { JobsAbertosList } from "./jobs-abertos-list";
 import type { JobAberto } from "./dados-abertos";
 
-type Aba = "aguardando" | "abertos";
+export type Aba = "aguardando" | "abertos";
 
 /**
  * As duas abas da Abertura de Job, como no design: a fila do que ainda
@@ -20,15 +20,40 @@ type Aba = "aguardando" | "abertos";
 export function AberturaTabs({
   fila,
   abertos,
+  abaInicial,
 }: {
   fila: FilaLinha[];
   abertos: JobAberto[];
+  /**
+   * Aba pedida pela URL (`?aba=`). Quem volta da visão agregada ou do
+   * detalhe de um job cai de novo em "Visualizar Jobs" — sem isso a
+   * página escolhia sozinha e mandava para a fila, que não é de onde a
+   * pessoa saiu.
+   */
+  abaInicial?: Aba;
 }) {
   const [aba, setAba] = React.useState<Aba>(
-    // Fila vazia é o estado normal do dia a dia: abrir direto em "Jobs
-    // abertos" poupa um clique e evita receber um empty state na cara.
-    fila.length > 0 ? "aguardando" : "abertos",
+    abaInicial ??
+      // Sem `?aba=` na URL, a fila vazia é o estado normal do dia a dia:
+      // abrir direto em "Visualizar Jobs" poupa um clique e evita receber
+      // um empty state na cara.
+      (fila.length > 0 ? "aguardando" : "abertos"),
   );
+
+  /**
+   * Mantém a URL contando em que aba a pessoa está, sem passar pelo
+   * router: a página é `force-dynamic`, e um `router.replace` refaria
+   * todas as queries só para trocar de aba. Assim o link continua
+   * copiável e o voltar do navegador reabre a aba certa.
+   */
+  function irPara(nova: Aba) {
+    setAba(nova);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.set("aba", nova);
+      window.history.replaceState(null, "", url.toString());
+    }
+  }
 
   const abas: { key: Aba; rotulo: string; contagem: number }[] = [
     { key: "aguardando", rotulo: "Jobs aguardando abertura", contagem: fila.length },
@@ -54,7 +79,7 @@ export function AberturaTabs({
               type="button"
               role="tab"
               aria-selected={ativo}
-              onClick={() => setAba(a.key)}
+              onClick={() => irPara(a.key)}
               className={cn(
                 "mr-5 inline-flex items-center gap-2 border-b-2 px-1 py-3 text-sm font-semibold transition-colors",
                 ativo
