@@ -286,10 +286,18 @@ export default async function ProjetoNoFinanceiroPage({
               </div>
 
               {planilhas.map((j) => (
-                <PlanilhaJobCard key={j.id} job={j} />
+                <PlanilhaJobCard
+                  key={j.id}
+                  job={j}
+                  jobHref={`/financeiro/jobs/${j.id}`}
+                />
               ))}
 
-              <ProjetoTotaisCard jobs={planilhas} moeda={moedaProjeto} />
+              <ProjetoTotaisCard
+                jobs={planilhas}
+                moeda={moedaProjeto}
+                jobHref={(id) => `/financeiro/jobs/${id}`}
+              />
             </>
           }
           fluxo={

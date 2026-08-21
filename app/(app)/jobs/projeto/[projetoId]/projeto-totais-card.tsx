@@ -110,9 +110,16 @@ function CelulaRentabilidade({
 export function ProjetoTotaisCard({
   jobs,
   moeda,
+  jobHref,
 }: {
   jobs: JobPlanilhaProjeto[];
   moeda: string;
+  /**
+   * Para onde o código do job leva. Default é a página de Jobs. O
+   * financeiro passa `/financeiro/jobs/[id]`: aquele módulo não
+   * encaminha para telas de outros (decisão do Tiago, 20/08/2026).
+   */
+  jobHref?: (jobId: string) => string;
 }) {
   const totalOrcado = jobs.reduce((s, j) => s + j.orcado, 0);
   const totalPlanejado = jobs.reduce((s, j) => s + j.planejado, 0);
@@ -214,7 +221,7 @@ export function ProjetoTotaisCard({
                 <td colSpan={3} className="p-3">
                   <div className="flex flex-wrap items-center gap-2.5">
                     <Link
-                      href={`/jobs/${j.id}?from=jobs`}
+                      href={jobHref ? jobHref(j.id) : `/jobs/${j.id}?from=jobs`}
                       prefetch={false}
                       className="font-mono text-xs font-bold text-california-red hover:text-california-red/80"
                     >

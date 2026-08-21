@@ -85,7 +85,18 @@ function numeroOuTraco(n: number): string {
   return n > 0 ? String(n) : "—";
 }
 
-export function PlanilhaJobCard({ job }: { job: JobPlanilhaProjeto }) {
+export function PlanilhaJobCard({
+  job,
+  jobHref,
+}: {
+  job: JobPlanilhaProjeto;
+  /**
+   * Para onde "Abrir job" leva. Default é a página de Jobs. O financeiro
+   * passa `/financeiro/jobs/[id]`: aquele módulo não encaminha para telas
+   * de outros (decisão do Tiago, 20/08/2026).
+   */
+  jobHref?: string;
+}) {
   const [aberto, setAberto] = React.useState(false);
   const [gruposAbertos, setGruposAbertos] = React.useState<Set<string>>(
     new Set(),
@@ -212,7 +223,7 @@ export function PlanilhaJobCard({ job }: { job: JobPlanilhaProjeto }) {
         </div>
 
         <Link
-          href={`/jobs/${job.id}?from=jobs`}
+          href={jobHref ?? `/jobs/${job.id}?from=jobs`}
           prefetch={false}
           onClick={(e) => e.stopPropagation()}
           className="ml-2 inline-flex items-center gap-1.5 whitespace-nowrap text-[11px] font-semibold uppercase tracking-[0.06em] text-california-red hover:text-california-red/80"
