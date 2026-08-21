@@ -55,13 +55,13 @@ export default async function ProjetoNoFinanceiroPage({
     { rotulo: "Cliente", valor: projeto.cliente_nome ?? "—", mono: false },
     {
       rotulo: "Jobs no financeiro",
-      valor: String(projeto.jobs.length),
+      valor: String(projeto.jobsNoFinanceiro),
       mono: true,
     },
     { rotulo: "Valor total", valor: formatCurrency(projeto.totalValor), mono: true },
     {
       rotulo: "Faturados",
-      valor: `${projeto.faturados} de ${projeto.jobs.length}`,
+      valor: `${projeto.faturados} de ${projeto.jobsNoFinanceiro}`,
       mono: true,
     },
   ];
@@ -162,7 +162,13 @@ export default async function ProjetoNoFinanceiroPage({
                   return (
                     <tr
                       key={j.id}
-                      className="border-b border-b-[#f4f2f2] transition-colors last:border-0 hover:bg-muted/60"
+                      className={cn(
+                        "border-b border-b-[#f4f2f2] transition-colors last:border-0 hover:bg-muted/60",
+                        // Job que ainda aguarda abertura aparece, mas não
+                        // soma: fica apagado para a leitura de relance não
+                        // confundir os números dele com os do total.
+                        !j.aberto_no_financeiro && "bg-muted/30 text-muted-foreground",
+                      )}
                     >
                       <td className="px-5 py-3">
                         <Link
@@ -175,6 +181,11 @@ export default async function ProjetoNoFinanceiroPage({
                           </span>
                           <span className="font-medium">{j.nome}</span>
                         </Link>
+                        {!j.aberto_no_financeiro && (
+                          <span className="mt-1 inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.05em] text-amber-700">
+                            Aguarda abertura · não soma
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3 font-mono text-[12.5px] text-muted-foreground">
                         {competenciaLabel(
@@ -255,17 +266,19 @@ export default async function ProjetoNoFinanceiroPage({
           </div>
         )}
 
-        {/* Cada total é a soma do que a PRÓPRIA coluna mostra — e a
-            coluna Margem não mostra nada em job sem curva. Daí o total de
-            margem poder ser menor que faturável menos custo; a nota
-            abaixo diz por quê, em vez de deixar a diferença sem
-            explicação. */}
-        {projeto.semCustoPrevisto > 0 && (
+        {/* Job que aguarda abertura não tem linha no fluxo de caixa: nem
+            previsão de recebimento, nem curva — as duas nascem na
+            abertura. Por isso ele aparece aqui mas fica fora de todos os
+            totais, e a nota diz isso em vez de deixar a diferença entre a
+            lista e a soma sem explicação. */}
+        {projeto.aguardandoAbertura > 0 && (
           <p className="border-t border-border px-5 py-3 text-[11.5px] text-muted-foreground">
-            {projeto.semCustoPrevisto === 1
-              ? "1 job ainda não foi aberto no financeiro e não tem custo previsto"
-              : `${projeto.semCustoPrevisto} jobs ainda não foram abertos no financeiro e não têm custo previsto`}
-            {" "}— o valor e o faturável deles entram no total, a margem não.
+            {projeto.aguardandoAbertura === 1
+              ? "1 job ainda aguarda abertura no financeiro"
+              : `${projeto.aguardandoAbertura} jobs ainda aguardam abertura no financeiro`}
+            {" "}— aparece na lista, mas fica fora dos totais: sem abertura não
+            há previsão de recebimento nem curva de desembolso, e nada dele
+            entra no fluxo de caixa.
           </p>
         )}
       </section>

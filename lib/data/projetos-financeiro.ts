@@ -100,7 +100,17 @@ export interface JobDoProjetoFinanceiro {
   /** Curva da abertura. Nulo em job que ainda não foi aberto. */
   custo_previsto: number | null;
   situacao_faturamento: SituacaoFaturamento;
-  /** Já passou pela abertura? Decide se as colunas de registro têm valor. */
+  /**
+   * Já passou pela abertura no financeiro?
+   *
+   * Decide se o job SOMA nos totais. Job que ainda aguarda abertura
+   * aparece na lista — é trabalho aprovado que vem por aí —, mas não
+   * entra em conta nenhuma: ele tem ZERO linhas em `vw_fluxo_caixa`, sem
+   * previsão de recebimento e sem curva de desembolso, porque as duas
+   * nascem na abertura. Somar o faturável dele aqui faria o total do
+   * projeto afirmar um dinheiro que o financeiro ainda não conhece
+   * (decisão do Tiago, 21/08/2026).
+   */
   aberto_no_financeiro: boolean;
 }
 
@@ -121,22 +131,18 @@ export interface ProjetoFinanceiroAgregado {
    * abertura — decisão do Tiago em 20/08/2026, contra o que o protótipo
    * desenhava.
    *
-   * Soma SÓ os jobs que já têm curva de desembolso. Job que ainda não
-   * foi aberto não tem custo, e entrar com custo zero o faria contribuir
-   * com o faturável inteiro como se fosse margem. Por isso este total
-   * pode ser menor que `totalFaturamento - totalCusto`; o rodapé da tela
-   * diz quantos jobs ficaram de fora.
+   * Como os demais totais, soma só os jobs já abertos no financeiro.
    */
   totalMargem: number;
   /** Quantos já têm nota emitida, de quantos entram no agregado. */
   faturados: number;
   /**
-   * Jobs que ainda não passaram pela abertura, e por isso não têm curva
-   * de custo. Entram no total de valor e de faturável, mas a margem
-   * deles é desconhecida — o rodapé avisa, em vez de deixar a soma
-   * parecer uma margem fechada.
+   * Jobs que ainda aguardam abertura. Aparecem na lista e ficam fora de
+   * todos os totais; o rodapé da tela diz quantos são.
    */
-  semCustoPrevisto: number;
+  aguardandoAbertura: number;
+  /** Quantos jobs entram nas contas — o denominador dos cards. */
+  jobsNoFinanceiro: number;
 }
 
 /**
@@ -208,8 +214,13 @@ export async function carregarProjetoFinanceiro(
     }),
   );
 
+  // TODOS os totais somam apenas os jobs já abertos no financeiro. Quem
+  // aguarda abertura aparece na lista, mas não entra em conta — não tem
+  // linha no fluxo de caixa, e o total precisa bater com o que o
+  // financeiro de fato registrou.
+  const noFinanceiro = jobs.filter((j) => j.aberto_no_financeiro);
   const soma = (fn: (j: JobDoProjetoFinanceiro) => number) =>
-    jobs.reduce((s, j) => s + fn(j), 0);
+    noFinanceiro.reduce((s, j) => s + fn(j), 0);
 
   const totalFaturamento = soma((j) => j.faturamento_previsto);
   const totalCusto = soma((j) => j.custo_previsto ?? 0);
@@ -223,11 +234,10 @@ export async function carregarProjetoFinanceiro(
     totalValor: soma((j) => j.valor_total),
     totalFaturamento,
     totalCusto,
-    totalMargem: jobs
-      .filter((j) => j.custo_previsto !== null)
-      .reduce((sm, j) => sm + j.faturamento_previsto - (j.custo_previsto ?? 0), 0),
-    semCustoPrevisto: jobs.filter((j) => j.custo_previsto === null).length,
-    faturados: jobs.filter(
+    totalMargem: totalFaturamento - totalCusto,
+    aguardandoAbertura: jobs.length - noFinanceiro.length,
+    jobsNoFinanceiro: noFinanceiro.length,
+    faturados: noFinanceiro.filter(
       (j) =>
         j.situacao_faturamento === "faturado" ||
         j.situacao_faturamento === "liquidado" ||

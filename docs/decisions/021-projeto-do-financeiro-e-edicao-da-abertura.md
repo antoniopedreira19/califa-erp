@@ -171,15 +171,32 @@ Entrou `/financeiro/projetos/[projetoId]`: cabeçalho com código e nome,
 quatro cards (Cliente, Jobs no financeiro, Valor total, Faturados N de M)
 e a tabela "Jobs do projeto".
 
-### Quais jobs entram
+### Quais jobs entram, e quais somam — não é a mesma pergunta
 
-`aguardando_abertura`, `aberto`, `em_producao` e `encerrado`. Ficam de
-fora `rejeitado_financeiro` e `cancelado` — job que o financeiro devolveu
-ou que morreu não soma no total do projeto.
+Entram na LISTA: `aguardando_abertura`, `aberto`, `em_producao` e
+`encerrado`. Ficam de fora `rejeitado_financeiro` e `cancelado` — job que
+o financeiro devolveu ou que morreu não pertence ao projeto.
 
 `em_producao` é status legado (nenhum job novo cai nele), mas quem
 estiver lá passou pela abertura: tirá-lo faria o job sumir do agregado no
 meio da vida.
+
+**Só SOMA nos totais quem já passou pela abertura.** Job em
+`aguardando_abertura` aparece na lista, marcado com "Aguarda abertura ·
+não soma" e apagado, e fica fora de todos os totais e dos cards.
+
+O motivo é do banco, não estético (Tiago, 21/08/2026): job não aberto tem
+**zero linhas em `vw_fluxo_caixa`**, zero parcelas em
+`jobs_previsao_recebimento` e zero linhas em `jobs_previsao_custo` — as
+três nascem na abertura. Somar o faturável dele aqui faria o total do
+projeto afirmar um dinheiro que o financeiro ainda não conhece, e
+divergir do Fluxo de Caixa.
+
+Conferido em 21/08/2026, NOV-0002/26: JOB-0013 (aberto) e JOB-0014
+(aguardando). Os totais mostram só o JOB-0013 — R$ 104.064,87 de valor e
+de faturável, R$ 65.000 de custo, R$ 39.064,87 de margem — e o card "Jobs
+no financeiro" conta 1, não 2. Uma nota abaixo da tabela diz que há 1 job
+aguardando e por que ele não entra.
 
 ### A margem é sobre o faturável
 
@@ -200,19 +217,9 @@ senão a subtração não fecharia aos olhos de quem lê. "Valor total" fica
 como referência, a pedido do Tiago.
 
 Job que ainda não passou pela abertura mostra **travessão** em Custo
-previsto, e não R$ 0,00 — zero leria como "não vai custar nada". Pelo
-mesmo motivo a **Margem dele também é travessão**: sem curva de
-desembolso não há margem, e tratar o custo como zero faria a linha
-afirmar 100% de margem.
-
-Cada total do rodapé é a soma do que a **própria coluna** mostra. Como a
-coluna Margem não mostra nada nesses jobs, o total de margem pode ficar
-menor que `faturável − custo` — e uma nota abaixo da tabela diz quantos
-jobs ficaram de fora e por quê. Visto na verificação de 20/08/2026:
-NOV-0002/26 tem JOB-0013 (aberto, margem R$ 39.064,87) e JOB-0014 (ainda
-aguardando abertura, margem travessão), e o total de margem é
-R$ 39.064,87 — não os R$ 150.410,71 que a subtração dos outros totais
-daria.
+previsto e em Margem — sem curva de desembolso não há nem custo nem
+margem, e tratar o custo como zero faria a linha afirmar 100% de margem.
+Ele também não soma em nada, pelo motivo da seção acima.
 
 ### O que mais deixou de sair do módulo
 

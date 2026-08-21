@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { Landmark } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { listarFilaDeAbertura } from "./dados";
-import { listarJobsAbertos } from "./dados-abertos";
+import { listarJobsDoFinanceiro } from "./dados-abertos";
 import { formatEnviadoEm } from "./formatos";
 import { type FilaLinha } from "./fila-list";
 import { AberturaTabs } from "./abertura-tabs";
@@ -23,7 +23,7 @@ export default async function AberturaDeJobPage() {
   // (`docs/PERFORMANCE.md`).
   const [fila, abertos] = await Promise.all([
     listarFilaDeAbertura(session.activeTenant.id),
-    listarJobsAbertos(session.activeTenant.id),
+    listarJobsDoFinanceiro(session.activeTenant.id),
   ]);
 
   // "há 2 horas" é calculado aqui, no servidor, e desce como texto pronto:
