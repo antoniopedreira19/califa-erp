@@ -6,11 +6,15 @@ import { listarFilaDeAbertura } from "./dados";
 import { listarJobsDoFinanceiro } from "./dados-abertos";
 import { formatEnviadoEm } from "./formatos";
 import { type FilaLinha } from "./fila-list";
-import { AberturaTabs } from "./abertura-tabs";
+import { AberturaTabs, type Aba } from "./abertura-tabs";
 
 export const dynamic = "force-dynamic";
 
-export default async function AberturaDeJobPage() {
+export default async function AberturaDeJobPage({
+  searchParams,
+}: {
+  searchParams?: { aba?: string };
+}) {
   const session = await requireSession();
   if (
     session.activeRole !== "administrador" &&
@@ -55,7 +59,15 @@ export default async function AberturaDeJobPage() {
         </p>
       </header>
 
-      <AberturaTabs fila={linhas} abertos={abertos} />
+      <AberturaTabs
+        fila={linhas}
+        abertos={abertos}
+        abaInicial={
+          searchParams?.aba === "abertos" || searchParams?.aba === "aguardando"
+            ? (searchParams.aba as Aba)
+            : undefined
+        }
+      />
     </div>
   );
 }
