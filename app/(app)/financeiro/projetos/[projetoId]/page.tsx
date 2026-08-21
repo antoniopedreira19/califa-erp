@@ -182,7 +182,7 @@ export default async function ProjetoNoFinanceiroPage({
                           <span className="font-medium">{j.nome}</span>
                         </Link>
                         {!j.aberto_no_financeiro && (
-                          <span className="mt-1 inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.05em] text-amber-700">
+                          <span className="mt-1 inline-flex w-fit items-center whitespace-nowrap rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.05em] text-amber-700">
                             Aguarda abertura · não soma
                           </span>
                         )}
