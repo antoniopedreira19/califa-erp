@@ -120,10 +120,23 @@ export interface ProjetoFinanceiroAgregado {
    * (decisão 004). É a mesma conta da "Margem prevista" do formulário de
    * abertura — decisão do Tiago em 20/08/2026, contra o que o protótipo
    * desenhava.
+   *
+   * Soma SÓ os jobs que já têm curva de desembolso. Job que ainda não
+   * foi aberto não tem custo, e entrar com custo zero o faria contribuir
+   * com o faturável inteiro como se fosse margem. Por isso este total
+   * pode ser menor que `totalFaturamento - totalCusto`; o rodapé da tela
+   * diz quantos jobs ficaram de fora.
    */
   totalMargem: number;
   /** Quantos já têm nota emitida, de quantos entram no agregado. */
   faturados: number;
+  /**
+   * Jobs que ainda não passaram pela abertura, e por isso não têm curva
+   * de custo. Entram no total de valor e de faturável, mas a margem
+   * deles é desconhecida — o rodapé avisa, em vez de deixar a soma
+   * parecer uma margem fechada.
+   */
+  semCustoPrevisto: number;
 }
 
 /**
@@ -210,7 +223,10 @@ export async function carregarProjetoFinanceiro(
     totalValor: soma((j) => j.valor_total),
     totalFaturamento,
     totalCusto,
-    totalMargem: totalFaturamento - totalCusto,
+    totalMargem: jobs
+      .filter((j) => j.custo_previsto !== null)
+      .reduce((sm, j) => sm + j.faturamento_previsto - (j.custo_previsto ?? 0), 0),
+    semCustoPrevisto: jobs.filter((j) => j.custo_previsto === null).length,
     faturados: jobs.filter(
       (j) =>
         j.situacao_faturamento === "faturado" ||

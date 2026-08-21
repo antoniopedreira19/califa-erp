@@ -200,7 +200,19 @@ senão a subtração não fecharia aos olhos de quem lê. "Valor total" fica
 como referência, a pedido do Tiago.
 
 Job que ainda não passou pela abertura mostra **travessão** em Custo
-previsto, e não R$ 0,00 — zero leria como "não vai custar nada".
+previsto, e não R$ 0,00 — zero leria como "não vai custar nada". Pelo
+mesmo motivo a **Margem dele também é travessão**: sem curva de
+desembolso não há margem, e tratar o custo como zero faria a linha
+afirmar 100% de margem.
+
+Cada total do rodapé é a soma do que a **própria coluna** mostra. Como a
+coluna Margem não mostra nada nesses jobs, o total de margem pode ficar
+menor que `faturável − custo` — e uma nota abaixo da tabela diz quantos
+jobs ficaram de fora e por quê. Visto na verificação de 20/08/2026:
+NOV-0002/26 tem JOB-0013 (aberto, margem R$ 39.064,87) e JOB-0014 (ainda
+aguardando abertura, margem travessão), e o total de margem é
+R$ 39.064,87 — não os R$ 150.410,71 que a subtração dos outros totais
+daria.
 
 ### O que mais deixou de sair do módulo
 
