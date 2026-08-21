@@ -169,9 +169,21 @@ Fonte: `app/(app)/_planilha/calha-acoes.tsx`, do handoff de design
 realizado do job (`pedidos_compra` referencia `job_itens_realizado`), e no
 orçamento nada disso existe ainda. Lá o `AR` mostra só o BV.
 
-**No job a PP só entra depois do realizado lançado** — é dele que sai o
-valor da PP. Na prática a linha de `AR` começa com a pílula inteira do BV
-e se divide quando o realizado é preenchido.
+> ⚠️ **21/08/2026 — a linha de `AR` já nasce dividida no job.** Até aqui
+> este parágrafo dizia que "a PP só entra depois do realizado lançado" e
+> que a linha "começa com a pílula inteira do BV e se divide quando o
+> realizado é preenchido". Isso deixou de valer: o realizado passou a SER
+> a soma das PPs, então esperar por ele deixaria a metade PP invisível
+> para sempre — a primeira PP nunca poderia nascer. O que libera a metade
+> agora é o **orçado** do item. Ver `022-bv-liquido-e-realizado-por-pp.md`.
+
+> ⚠️ **21/08/2026 — o BV passou a MEXER em número.** Esta decisão dizia,
+> na revisão de 13/08, que "nenhum número mudou" com o `AR` ganhando BV.
+> Continua verdade para **faturamento previsto, valor do job, honorários e
+> imposto do fechamento** — todos saem de `REGRAS_TIPO_CUSTO` e seguem
+> intactos. Mas o BV agora desconta do **planejado** e do **realizado**,
+> pelo valor líquido, e o painel Resultado ganhou a linha "+ BVs".
+> Em `A` e `D` o planejado deixou de ser digitado e espelha o orçado.
 
 ## O que fica de fora
 

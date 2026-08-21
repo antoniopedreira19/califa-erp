@@ -14,6 +14,9 @@ interface Props {
   custoPlanejado: number;
   /** Soma do realizado lançado. */
   custoRealizado: number;
+  /** BV líquido a devolver ao resultado, por ótica. Ver `PainelResultado`. */
+  bvPlanejado?: number;
+  bvRealizado?: number;
   moeda: string;
 }
 
@@ -37,17 +40,23 @@ export function ResumoResultado({
   imposto,
   custoPlanejado,
   custoRealizado,
+  bvPlanejado = 0,
+  bvRealizado = 0,
   moeda,
 }: Props) {
+  // O BV volta para a agência: ele REDUZ o custo na conta do resultado —
+  // a mesma operação que o painel Resultado escreve como linha "+ BVs".
+  // Sem isto o resumo do cabeçalho e o card de Totais mostrariam
+  // percentuais diferentes para o mesmo projeto (docs/decisions/022).
   const { resultadoGeral: resultadoPlanejado } = calcularResultadoOperacional(
     valorJob,
     imposto,
-    custoPlanejado,
+    custoPlanejado - bvPlanejado,
   );
   const { resultadoGeral: resultadoRealizado } = calcularResultadoOperacional(
     valorJob,
     imposto,
-    custoRealizado,
+    custoRealizado - bvRealizado,
   );
 
   return (

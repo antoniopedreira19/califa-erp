@@ -9,6 +9,7 @@ import type {
   ItemBv,
 } from "@/lib/types";
 import type { CartaoOption } from "@/components/financeiro/forma-pagamento-field";
+import type { VisaoBv } from "@/lib/calculos/bv-planilha";
 import { JobItemRealizadoTable } from "./job-item-realizado-table";
 
 interface Props {
@@ -17,8 +18,10 @@ interface Props {
   realizadosMap: Map<string, JobItemRealizado>;
   categoriasMap: Map<string, string>;
   moeda: string;
-  /** Lançar/editar o bloco REALIZADO. Vale já na pré-abertura. */
-  editable: boolean;
+  /** Alíquota do job, que vira o BV líquido descontado na vista Líquido. */
+  percentualImposto: number;
+  /** Bruto ou Líquido (− BV) — decidida uma vez por página. */
+  visao: VisaoBv;
   /** Trilha lateral de BV e Pedido de Produção — só com o job aberto. */
   podeAcoes: boolean;
   /** Job ainda não aberto pelo financeiro: a trilha some por inteiro,
@@ -44,7 +47,8 @@ export function JobGrupoCard({
   realizadosMap,
   categoriasMap,
   moeda,
-  editable,
+  percentualImposto,
+  visao,
   podeAcoes,
   preAbertura,
   jobId,
@@ -69,7 +73,8 @@ export function JobGrupoCard({
         realizadosMap={realizadosMap}
         categoriasMap={categoriasMap}
         moeda={moeda}
-        editable={editable}
+        percentualImposto={percentualImposto}
+        visao={visao}
         podeAcoes={podeAcoes}
         preAbertura={preAbertura}
         ppsPorItemId={ppsPorItemId}

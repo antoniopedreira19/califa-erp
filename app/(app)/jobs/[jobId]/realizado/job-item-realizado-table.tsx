@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
 import { X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { TruncateTooltip } from "@/components/ui/truncate-tooltip";
@@ -15,7 +14,6 @@ import type {
   Empresa,
   ItemBv,
 } from "@/lib/types";
-import { upsertItemRealizado, type CampoRealizado } from "../actions-realizado";
 import { CalhaLinha } from "./calha-linha";
 import { GerarPPDrawer } from "./gerar-pp-drawer";
 import type { CartaoOption } from "@/components/financeiro/forma-pagamento-field";
@@ -24,6 +22,7 @@ import { saldoDoItem, somaDasPPs } from "@/lib/calculos/pps-item";
 import { BvDialog } from "@/app/(app)/_bv/bv-dialog";
 import { acaoBv } from "@/app/(app)/_bv/bv-action-button";
 import { LARGURA_CALHA } from "@/app/(app)/_planilha/calha-acoes";
+import { SubLinhaBv } from "@/app/(app)/_planilha/chave-bruto-liquido";
 import {
   ORCADO,
   PLANEJADO,
@@ -33,12 +32,18 @@ import {
   RENTAB_VALOR,
 } from "@/app/(app)/_planilha/blocos";
 import { ColunasJob, LARGURA_MINIMA_JOB } from "@/app/(app)/_planilha/grade-job";
-import {
-  celulaVizinha,
-  direcaoNoCampo,
-  type Direcao,
-} from "@/app/(app)/_planilha/navegacao";
 import { aceitaBV, tipoGeraDesembolso } from "@/lib/calculos/versao-totais";
+import {
+  BLOCO_ZERO,
+  blocosDoItem,
+  realizadoVemDasPPs,
+  rotuloColunaTotal,
+  rotuloSubtotal,
+  somarBlocosDosItens,
+  valorNaVisao,
+  type ValoresDoBloco,
+  type VisaoBv,
+} from "@/lib/calculos/bv-planilha";
 
 interface Props {
   jobId: string;
@@ -47,8 +52,13 @@ interface Props {
   /** id da categoria -> nome. Itens sem categoria caem no travessão. */
   categoriasMap: Map<string, string>;
   moeda: string;
-  /** Células do bloco REALIZADO. Vale já na pré-abertura. */
-  editable: boolean;
+  /** Alíquota do job — vira o BV líquido, que é o que a vista Líquido
+   *  desconta. */
+  percentualImposto: number;
+  /** Bruto (padrão) ou Líquido (− BV). Decidida uma vez por página, em
+   *  `JobRealizadoSection`: dois grupos em modos diferentes deixariam o
+   *  card de Totais sem bater com nenhum deles. */
+  visao: VisaoBv;
   /** Trilha lateral de BV e Pedido de Produção — só com o job aberto.
    *  Antes da abertura a planilha é visível e o realizado é editável,
    *  mas nada que vire documento pode ser criado. */
@@ -90,24 +100,20 @@ interface Props {
  *  A pílula dividida cabe na MESMA calha de sempre (116px), então a
  *  reserva da página não muda e a tabela não perde um pixel. */
 
-/** Ordem do Tab na linha. Só o bloco Realizado é editável no job — o
- *  Orçado e o Planejado vêm da versão aprovada e da errata, e a
- *  Rentabilidade é calculada. */
-const CAMPOS_NAVEGAVEIS: readonly CampoRealizado[] = [
-  "valor_unitario_realizado",
-  "quantidade_realizada",
-  "dias_meses_realizado",
-];
-
-type CelulaAtiva = { itemId: string; campo: CampoRealizado } | null;
-type Overrides = Record<string, Partial<Record<CampoRealizado, number>>>;
-
+/** ⚠️ Nenhuma célula desta planilha é editável desde 21/08/2026.
+ *
+ *  O Orçado e o Planejado sempre vieram da versão aprovada e da errata. O
+ *  REALIZADO era o único bloco digitável — e deixou de ser: ele nasce
+ *  zerado e é montado pelas PPs emitidas no item (trigger
+ *  `trg_pp_recalcula_realizado`). Em `A` e `D`, que não geram PP, o
+ *  realizado é o próprio orçado.
+ *
+ *  Por isso saíram daqui a navegação por Tab, os overrides otimistas e a
+ *  chamada a `upsertItemRealizado`: não há mais o que gravar a partir
+ *  desta tabela. Mexer no realizado agora é emitir ou cancelar PP. */
 const ALTURA_LINHA = "h-[34px]";
 
 const GRADE_NEUTRA = "border-r border-r-[#f1f1f1]";
-
-const CAMPO_CLASSES =
-  "h-7 w-full rounded-lg border border-california-red bg-white px-2 text-xs text-foreground outline-none ring-2 ring-california-red/15";
 
 /** Razão social quando existe — é o nome que o PDF da PP usa. */
 function nomeDoFornecedor(
@@ -116,20 +122,6 @@ function nomeDoFornecedor(
 ): string {
   const f = fornecedores.find((x) => x.id === id);
   return f?.razao_social ?? f?.nome ?? "Fornecedor";
-}
-
-function parseNumero(raw: string): number | null {
-  const s = raw.trim();
-  if (s === "") return null;
-  const normalizado = s.includes(",")
-    ? s.replace(/\./g, "").replace(",", ".")
-    : s;
-  const n = Number(normalizado);
-  return Number.isFinite(n) ? n : null;
-}
-
-function paraEdicao(valor: number): string {
-  return String(valor).replace(".", ",");
 }
 
 function formatarPercentual(p: number): string {
@@ -177,7 +169,8 @@ export function JobItemRealizadoTable({
   realizadosMap,
   categoriasMap,
   moeda,
-  editable,
+  percentualImposto,
+  visao,
   podeAcoes,
   preAbertura,
   ppsPorItemId,
@@ -192,12 +185,6 @@ export function JobItemRealizadoTable({
   cabecalhoGrupo,
   acoesGrupo,
 }: Props) {
-  const router = useRouter();
-  const [pending, startTransition] = React.useTransition();
-  const [ativa, setAtiva] = React.useState<CelulaAtiva>(null);
-  const [overrides, setOverrides] = React.useState<Overrides>({});
-  const [erro, setErro] = React.useState<string | null>(null);
-
   // Rail lateral PP
   const wrapperRef = React.useRef<HTMLDivElement>(null);
   const tbodyRef = React.useRef<HTMLTableSectionElement>(null);
@@ -240,7 +227,7 @@ export function JobItemRealizadoTable({
     const observer = new ResizeObserver(medir);
     observer.observe(wrapper);
     return () => observer.disconnect();
-  }, [itens.length, editable, podeAcoes, preAbertura]);
+  }, [itens.length, visao, podeAcoes, preAbertura]);
 
   /** O chip da calha abre o painel; o formulário só se chega por ele. */
   function abrirPainel(itemRealizadoId: string) {
@@ -248,175 +235,73 @@ export function JobItemRealizadoTable({
     setPainelOpen(true);
   }
 
-  // Descarta overrides quando o servidor devolve o mesmo valor.
-  React.useEffect(() => {
-    setOverrides((prev) => {
-      if (Object.keys(prev).length === 0) return prev;
-      const next: Overrides = {};
-      for (const item of itens) {
-        const campos = prev[item.id];
-        if (!campos) continue;
-        const realizado = realizadosMap.get(item.id);
-        const restante: Partial<Record<CampoRealizado, number>> = {};
-        for (const [campo, valor] of Object.entries(campos)) {
-          const doServidor = realizado
-            ? Number(realizado[campo as CampoRealizado] ?? 0)
-            : 0;
-          if (doServidor !== valor) {
-            restante[campo as CampoRealizado] = valor as number;
-          }
-        }
-        if (Object.keys(restante).length > 0) next[item.id] = restante;
-      }
-      return next;
-    });
-  }, [itens, realizadosMap]);
-
-  function valorRealizado(itemId: string, campo: CampoRealizado): number {
-    const override = overrides[itemId]?.[campo];
-    if (override !== undefined) return override;
-    const r = realizadosMap.get(itemId);
-    if (r) return Number(r[campo] ?? 0);
-    // Sem lançamento ainda: espelha o default do banco (QT e D/M nascem 1),
-    // pra célula já mostrar o valor que vai valer quando o unitário for
-    // preenchido, em vez de um travessão que sugere "vazio".
-    return campo === "valor_unitario_realizado" ? 0 : 1;
-  }
-
-  function totalRealizadoDe(itemId: string): number {
-    const override = overrides[itemId];
-    if (override) {
-      const v = valorRealizado(itemId, "valor_unitario_realizado");
-      const q = valorRealizado(itemId, "quantidade_realizada");
-      const d = valorRealizado(itemId, "dias_meses_realizado");
-      return v * q * d;
-    }
-    const r = realizadosMap.get(itemId);
-    return r ? Number(r.total_realizado ?? 0) : 0;
-  }
-
-  /** Para onde o teclado leva. `null` encerra a edição. */
-  const celulaDestino = React.useCallback(
-    (
-      itemId: string,
-      campo: CampoRealizado,
-      destino?: Direcao,
-    ): CelulaAtiva => {
-      if (!destino) return null;
-      const alvo = celulaVizinha(
-        itens.map((it) => it.id),
-        CAMPOS_NAVEGAVEIS,
-        { linhaId: itemId, campo },
-        destino,
+  /**
+   * Os três blocos de UMA linha, já com a dedução de BV separada.
+   *
+   * - **Orçado** nunca recebe BV: é idêntico nas duas vistas.
+   * - **Planejado** deduz o BV CONGELADO no envio para abertura
+   *   (`bv_liquido_planejado`). Editar o BV depois, aqui na planilha, não
+   *   mexe nele — o compromisso do planejado já foi fechado. O valor novo
+   *   só reaparece no realizado, e só na confirmação.
+   * - **Realizado** deduz o BV vigente, e só a partir de `confirmado`.
+   *   Enquanto ele está `a_negociar` a linha diz "BV não emitido" em vez
+   *   de deduzir zero — que pareceria "não tem BV".
+   */
+  const blocosPorItem = React.useMemo(() => {
+    const mapa = new Map<string, ReturnType<typeof blocosDoItem>>();
+    for (const it of itens) {
+      mapa.set(
+        it.id,
+        blocosDoItem(
+          it,
+          bvsPorItem[it.id] ?? null,
+          Number(realizadosMap.get(it.id)?.total_realizado ?? 0),
+          percentualImposto,
+          !preAbertura,
+        ),
       );
-      return alvo ? { itemId: alvo.linhaId, campo: alvo.campo } : null;
-    },
-    [itens],
+    }
+    return mapa;
+  }, [itens, bvsPorItem, realizadosMap, percentualImposto, preAbertura]);
+
+  const BLOCO_VAZIO = {
+    orcado: 0,
+    planejado: BLOCO_ZERO,
+    realizado: BLOCO_ZERO,
+  };
+
+  const subtotais = React.useMemo(
+    () =>
+      somarBlocosDosItens(
+        itens.map((it) => blocosPorItem.get(it.id) ?? BLOCO_VAZIO),
+      ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [itens, blocosPorItem],
   );
 
-  function confirmarNumero(
-    itemId: string,
-    campo: CampoRealizado,
-    raw: string,
-    destino?: Direcao,
-  ) {
-    const n = parseNumero(raw);
-    // Entrada recusada interrompe a navegação de propósito: seguir em
-    // frente esconderia o aviso atrás da próxima célula.
-    if (n === null) {
-      setAtiva(null);
-      setErro("Valor inválido — a célula foi mantida como estava.");
-      return;
-    }
-    if (n < 0) {
-      setAtiva(null);
-      setErro("Valor não pode ser negativo.");
-      return;
-    }
-    const proxima = celulaDestino(itemId, campo, destino);
-    // Valor igual não vira escrita, mas a navegação segue: passar por uma
-    // célula sem alterar nada não pode matar o Tab.
-    if (n === valorRealizado(itemId, campo)) {
-      setAtiva(proxima);
-      return;
-    }
-    gravar(itemId, campo, n, proxima);
+  /** Quanto do item ainda pode virar PP.
+   *
+   *  Sai do ORÇADO desde 21/08/2026, não mais do realizado: com o
+   *  realizado virando a própria soma das PPs, ele se limitaria sozinho.
+   *  Mesma conta do trigger `pp_valida_saldo_do_item`. */
+  function saldoParaPPs(itemId: string, itemRealizadoId: string): number {
+    const orcado = blocosPorItem.get(itemId)?.orcado ?? 0;
+    return saldoDoItem(orcado, ppsPorItemId.get(itemRealizadoId) ?? []);
   }
 
-  function gravar(
-    itemId: string,
-    campo: CampoRealizado,
-    valor: number,
-    proxima: CelulaAtiva,
-  ) {
-    const anterior = overrides[itemId];
-    setErro(null);
-    setAtiva(proxima);
-    setOverrides((prev) => ({
-      ...prev,
-      [itemId]: { ...prev[itemId], [campo]: valor },
-    }));
-
-    const reverter = () =>
-      setOverrides((prev) => {
-        const next = { ...prev };
-        if (anterior) next[itemId] = anterior;
-        else delete next[itemId];
-        return next;
-      });
-
-    startTransition(async () => {
-      try {
-        const res = await upsertItemRealizado(jobId, itemId, campo, String(valor));
-        if (!res.ok) {
-          reverter();
-          setErro(res.message);
-          return;
-        }
-        router.refresh();
-      } catch (e) {
-        reverter();
-        throw e;
-      }
-    });
-  }
-
-  const subtotais = React.useMemo(() => {
-    let orcado = 0;
-    let planejado = 0;
-    let realizado = 0;
-    for (const it of itens) {
-      orcado += Number(it.total_orcado ?? 0);
-      planejado += Number(it.total_planejado ?? 0);
-      realizado += totalRealizadoDe(it.id);
-    }
-    return { orcado, planejado, realizado };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [itens, overrides, realizadosMap]);
-
-  void pending;
+  const fmt = (v: number) => formatCurrency(v, moeda);
 
   return (
     <>
-      {erro && (
-        <div className="flex items-center justify-between gap-3 border-b border-california-red/20 bg-california-red/5 px-6 py-2 text-xs text-california-red">
-          <span>{erro}</span>
-          <button
-            type="button"
-            onClick={() => setErro(null)}
-            className="rounded-md p-1 hover:bg-california-red/10"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
-        </div>
-      )}
-
+      {/* A faixa de erro que ficava aqui era do lançamento inline do
+          realizado, que deixou de existir em 21/08/2026. Erro de PP e de
+          BV vive no drawer que o produziu, junto do campo que o causou. */}
       <div ref={wrapperRef} className="relative">
       {/* Com o nome do grupo na faixa, a tabela abre e fecha o card. */}
       <div
         className={cn(
           "overflow-x-auto rounded-b-2xl",
-          cabecalhoGrupo && !erro && "rounded-t-2xl",
+          cabecalhoGrupo && "rounded-t-2xl",
         )}
       >
         <table
@@ -456,12 +341,12 @@ export function JobItemRealizadoTable({
               <th className={cn("text-right font-semibold px-3 py-2", PLANEJADO.cabecalhoAbre)}>R$ Unit.</th>
               <th className={cn("text-right font-semibold px-3 py-2", PLANEJADO.cabecalhoMeio)}>QT</th>
               <th className={cn("text-right font-semibold px-3 py-2", PLANEJADO.cabecalhoMeio)}>D/M</th>
-              <th className={cn("text-right font-semibold px-3 py-2", PLANEJADO.cabecalhoFim)}>Total</th>
+              <th className={cn("text-right font-semibold px-3 py-2", PLANEJADO.cabecalhoFim)}>{rotuloColunaTotal(visao)}</th>
               {/* Realizado */}
               <th className={cn("text-right font-semibold px-3 py-2", REALIZADO.cabecalhoAbre)}>R$ Unit.</th>
               <th className={cn("text-right font-semibold px-3 py-2", REALIZADO.cabecalhoMeio)}>QT</th>
               <th className={cn("text-right font-semibold px-3 py-2", REALIZADO.cabecalhoMeio)}>D/M</th>
-              <th className={cn("text-right font-semibold px-3 py-2", REALIZADO.cabecalhoFim)}>Total</th>
+              <th className={cn("text-right font-semibold px-3 py-2", REALIZADO.cabecalhoFim)}>{rotuloColunaTotal(visao)}</th>
             </tr>
           </thead>
 
@@ -474,12 +359,16 @@ export function JobItemRealizadoTable({
               </tr>
             )}
             {itens.map((item) => {
-              const totalReal = totalRealizadoDe(item.id);
+              const blocos = blocosPorItem.get(item.id) ?? BLOCO_VAZIO;
+              const realizadoDoItem = realizadosMap.get(item.id);
+              // A quebra do realizado espelha o orçado só em `A`/`D` COM o
+              // job aberto. Na pré-abertura ela vem da linha de realizado,
+              // que está zerada — e zero vira travessão, igual ao Total.
+              const quebraDasPPs =
+                realizadoVemDasPPs(item.tipo_custo) || preAbertura;
               const categoria = item.categoria_id
                 ? categoriasMap.get(item.categoria_id)
                 : null;
-              const ativaAqui = (campo: CampoRealizado) =>
-                ativa?.itemId === item.id && ativa.campo === campo;
 
               return (
                 <tr key={item.id} className={cn(ALTURA_LINHA, "border-b border-border")}>
@@ -527,44 +416,52 @@ export function JobItemRealizadoTable({
                       ? Number(item.dias_meses_planejado)
                       : "—"}
                   </td>
-                  <td className={cn("px-3 text-right text-xs font-mono font-semibold align-middle whitespace-nowrap", PLANEJADO.celulaTotal)}>
-                    {Number(item.total_planejado ?? 0) > 0
-                      ? formatCurrency(Number(item.total_planejado), moeda)
-                      : "—"}
-                  </td>
-                  {/* Realizado (editavel) */}
-                  <CelulaRealNum
-                    valor={valorRealizado(item.id, "valor_unitario_realizado")}
+                  <CelulaTotalComBv
+                    bloco={blocos.planejado}
+                    visao={visao}
+                    moeda={moeda}
+                    className={PLANEJADO.celulaTotal}
+                    cor={PLANEJADO.texto}
+                    corRotulo={PLANEJADO.textoSuave}
+                  />
+                  {/* Realizado — leitura. Em item que gera PP, a quebra
+                      descreve as PPs emitidas (quantidade somada e o
+                      unitário que ela implica); em A e D, que não geram
+                      PP, ela espelha o orçado. */}
+                  <CelulaLeitura
+                    valor={
+                      quebraDasPPs
+                        ? Number(realizadoDoItem?.valor_unitario_realizado ?? 0)
+                        : Number(item.valor_unitario_orcado ?? 0)
+                    }
                     formato="moeda"
                     moeda={moeda}
-                    editando={ativaAqui("valor_unitario_realizado")}
-                    editavel={editable}
-                    onAtivar={() => setAtiva({ itemId: item.id, campo: "valor_unitario_realizado" })}
-                    onConfirmar={(raw, d) => confirmarNumero(item.id, "valor_unitario_realizado", raw, d)}
-                    onCancelar={() => setAtiva(null)}
-                    tdClassName={cn("font-mono", REALIZADO.celulaAbre)}
+                    className={cn("font-mono", REALIZADO.celulaAbre)}
                   />
-                  <CelulaRealNum
-                    valor={valorRealizado(item.id, "quantidade_realizada")}
-                    editando={ativaAqui("quantidade_realizada")}
-                    editavel={editable}
-                    onAtivar={() => setAtiva({ itemId: item.id, campo: "quantidade_realizada" })}
-                    onConfirmar={(raw, d) => confirmarNumero(item.id, "quantidade_realizada", raw, d)}
-                    onCancelar={() => setAtiva(null)}
-                    tdClassName={REALIZADO.celulaMeio}
+                  <CelulaLeitura
+                    valor={
+                      quebraDasPPs
+                        ? Number(realizadoDoItem?.quantidade_realizada ?? 0)
+                        : Number(item.quantidade_orcada ?? 0)
+                    }
+                    className={REALIZADO.celulaMeio}
                   />
-                  <CelulaRealNum
-                    valor={valorRealizado(item.id, "dias_meses_realizado")}
-                    editando={ativaAqui("dias_meses_realizado")}
-                    editavel={editable}
-                    onAtivar={() => setAtiva({ itemId: item.id, campo: "dias_meses_realizado" })}
-                    onConfirmar={(raw, d) => confirmarNumero(item.id, "dias_meses_realizado", raw, d)}
-                    onCancelar={() => setAtiva(null)}
-                    tdClassName={REALIZADO.celulaMeio}
+                  <CelulaLeitura
+                    valor={
+                      quebraDasPPs
+                        ? Number(realizadoDoItem?.dias_meses_realizado ?? 0)
+                        : Number(item.dias_meses_orcado ?? 0)
+                    }
+                    className={REALIZADO.celulaMeio}
                   />
-                  <td className={cn("px-3 text-right text-xs font-mono font-semibold align-middle whitespace-nowrap", REALIZADO.celulaTotal)}>
-                    {totalReal > 0 ? formatCurrency(totalReal, moeda) : "—"}
-                  </td>
+                  <CelulaTotalComBv
+                    bloco={blocos.realizado}
+                    visao={visao}
+                    moeda={moeda}
+                    className={REALIZADO.celulaTotal}
+                    cor={REALIZADO.texto}
+                    corRotulo={REALIZADO.textoSuave}
+                  />
                 </tr>
               );
             })}
@@ -573,19 +470,48 @@ export function JobItemRealizadoTable({
           <tfoot>
             <tr>
               <td colSpan={3} className="px-3 py-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Subtotal do grupo
+                {rotuloSubtotal(visao)}
               </td>
               <td colSpan={3} className={ORCADO.subtotalVazio} />
               <td className={cn("px-3 py-3 text-right whitespace-nowrap font-mono text-[13px] font-bold", ORCADO.subtotalValor)}>
                 {formatCurrency(subtotais.orcado, moeda)}
               </td>
+              {/* O subtotal repete a sub-linha das células, somando o BV
+                  de todos os itens do grupo — foi o que substituiu as
+                  pílulas de "BV do grupo" do design 3b. */}
               <td colSpan={3} className={PLANEJADO.subtotalVazio} />
-              <td className={cn("px-3 py-3 text-right whitespace-nowrap font-mono text-[13px] font-bold", PLANEJADO.subtotalValor)}>
-                {formatCurrency(subtotais.planejado, moeda)}
+              <td className={cn("px-3 py-3 text-right whitespace-nowrap", PLANEJADO.subtotalValor)}>
+                <div className="flex flex-col items-end">
+                  <span className="font-mono text-[13px] font-bold">
+                    {formatCurrency(valorNaVisao(subtotais.planejado, visao), moeda)}
+                  </span>
+                  {visao === "liquido" && (
+                    <SubLinhaBv
+                      deducao={subtotais.planejado.deducaoBv}
+                      formatar={fmt}
+                      cor={PLANEJADO.texto}
+                      corRotulo={PLANEJADO.textoSuave}
+                    />
+                  )}
+                </div>
               </td>
               <td colSpan={3} className={REALIZADO.subtotalVazio} />
-              <td className={cn("px-3 py-3 text-right whitespace-nowrap font-mono text-[13px] font-bold", REALIZADO.subtotalValor)}>
-                {subtotais.realizado > 0 ? formatCurrency(subtotais.realizado, moeda) : "—"}
+              <td className={cn("px-3 py-3 text-right whitespace-nowrap", REALIZADO.subtotalValor)}>
+                <div className="flex flex-col items-end">
+                  <span className="font-mono text-[13px] font-bold">
+                    {subtotais.realizado.bruto > 0
+                      ? formatCurrency(valorNaVisao(subtotais.realizado, visao), moeda)
+                      : "—"}
+                  </span>
+                  {visao === "liquido" && (
+                    <SubLinhaBv
+                      deducao={subtotais.realizado.deducaoBv}
+                      formatar={fmt}
+                      cor={REALIZADO.texto}
+                      corRotulo={REALIZADO.textoSuave}
+                    />
+                  )}
+                </div>
               </td>
             </tr>
             <tr>
@@ -597,7 +523,7 @@ export function JobItemRealizadoTable({
               <td className={cn("px-3 py-2 text-right whitespace-nowrap border-t border-t-[#dcf5e8]", PLANEJADO.celulaTotal)}>
                 <CelulaRentabilidade
                   orcado={subtotais.orcado}
-                  custo={subtotais.planejado}
+                  custo={valorNaVisao(subtotais.planejado, visao)}
                   moeda={moeda}
                   corValor={RENTAB_VALOR}
                   corPercentual={RENTAB_VALOR}
@@ -607,7 +533,7 @@ export function JobItemRealizadoTable({
               <td className={cn("px-3 py-2 text-right whitespace-nowrap border-t border-t-[#fbd8b8]", REALIZADO.celulaTotal)}>
                 <CelulaRentabilidade
                   orcado={subtotais.orcado}
-                  custo={subtotais.realizado}
+                  custo={valorNaVisao(subtotais.realizado, visao)}
                   moeda={moeda}
                   corValor={RENTAB_VALOR}
                   corPercentual={RENTAB_VALOR}
@@ -679,9 +605,11 @@ export function JobItemRealizadoTable({
                   podeAcoes && tipoGeraDesembolso(item.tipo_custo)
                     ? {
                         itemRealizadoId: realizadoId,
-                        totalRealizado: realizado
-                          ? Number(realizado.total_realizado ?? 0)
-                          : 0,
+                        // Era o realizado. Com o realizado nascendo das
+                        // PPs, esperar por ele deixava a metade PP
+                        // invisível para sempre — nunca haveria a
+                        // primeira PP. Quem libera agora é o orçado.
+                        baseDisponivel: Number(item.total_orcado ?? 0),
                         pedidos: ppsDoItem,
                         otimista:
                           ppsDoItem.length > 0
@@ -698,14 +626,12 @@ export function JobItemRealizadoTable({
       )}
       </div>
 
-      {editable && (
-        <div className="flex items-center justify-between gap-4 border-t border-border bg-muted/40 px-6 py-3 rounded-b-2xl">
+      {podeAcoes && (
+        <div className="flex items-center justify-between gap-4 rounded-b-2xl border-t border-border bg-muted/40 px-6 py-3">
           <span className="text-[11px] text-muted-foreground">
-            Clique em qualquer célula do bloco Realizado para editar ·{" "}
-            <kbd className="font-mono">Tab</kbd> e as{" "}
-            <kbd className="font-mono">setas</kbd> andam ·{" "}
-            <kbd className="font-mono">Enter</kbd> desce ·{" "}
-            <kbd className="font-mono">Esc</kbd> desfaz
+            O Realizado não é digitado: ele é a soma dos Pedidos de Produção
+            emitidos no item. Em custo <strong>A</strong> e <strong>D</strong>,
+            que não geram PP, ele espelha o Orçado.
           </span>
         </div>
       )}
@@ -714,18 +640,21 @@ export function JobItemRealizadoTable({
         const itemAtual = itens.find(
           (i) => (realizadosMap.get(i.id)?.id ?? "") === itemIdAtual,
         );
-        const realizadoAtual = itemAtual ? realizadosMap.get(itemAtual.id) : null;
-        const totalRealizado = realizadoAtual
-          ? Number(realizadoAtual.total_realizado ?? 0)
-          : 0;
-        const quantidadeRealizada = realizadoAtual
-          ? Number(realizadoAtual.quantidade_realizada ?? 0)
+        // A base do painel e do formulário é o ORÇADO do item: é dele que
+        // sai o saldo, e é sobre a quantidade orçada que a fatia da PP é
+        // medida. O realizado não serve mais de base — ele É a soma das
+        // PPs, e se limitaria sozinho.
+        const orcadoAtual = itemAtual ? Number(itemAtual.total_orcado ?? 0) : 0;
+        const quantidadeOrcada = itemAtual
+          ? Number(itemAtual.quantidade_orcada ?? 0)
           : 0;
         const ppsDoItem = itemIdAtual
           ? (ppsPorItemId.get(itemIdAtual) ?? [])
           : [];
         const emPPs = somaDasPPs(ppsDoItem);
-        const saldo = saldoDoItem(totalRealizado, ppsDoItem);
+        const saldo = itemAtual
+          ? saldoParaPPs(itemAtual.id, itemIdAtual ?? "")
+          : 0;
 
         return (
           <>
@@ -735,8 +664,8 @@ export function JobItemRealizadoTable({
               itemNome={itemAtual?.item ?? ""}
               grupoNome={grupoNome}
               moeda={moeda}
-              totalRealizado={totalRealizado}
-              quantidadeRealizada={quantidadeRealizada}
+              totalOrcado={orcadoAtual}
+              quantidadeOrcada={quantidadeOrcada}
               pps={ppsDoItem.map((pp) => ({
                 id: pp.id,
                 codigo: pp.codigo,
@@ -769,8 +698,8 @@ export function JobItemRealizadoTable({
               empresas={empresas}
               defaultEmpresaId={jobEmpresaId}
               itemDescricao={itemAtual?.item ?? ""}
-              valorRealizado={totalRealizado}
-              quantidadeRealizada={quantidadeRealizada}
+              valorOrcado={orcadoAtual}
+              quantidadeOrcada={quantidadeOrcada}
               saldoDisponivel={saldo}
               cartoes={cartoes}
               onSuccess={(codigo) => {
@@ -796,6 +725,7 @@ export function JobItemRealizadoTable({
       {bvAberto &&
         (() => {
           const realizado = realizadosMap.get(bvAberto.id);
+          const daPP = realizadoVemDasPPs(bvAberto.tipo_custo) || preAbertura;
           return (
             <BvDialog
               open
@@ -814,12 +744,19 @@ export function JobItemRealizadoTable({
                 id: f.id,
                 nome: f.razao_social ?? f.nome,
               }))}
+              percentualImposto={percentualImposto}
               origem="job"
               realizado={{
-                valorUnitario: Number(realizado?.valor_unitario_realizado ?? 0),
-                quantidade: Number(realizado?.quantidade_realizada ?? 0),
-                diasMeses: Number(realizado?.dias_meses_realizado ?? 0),
-                total: Number(realizado?.total_realizado ?? 0),
+                valorUnitario: daPP
+                  ? Number(realizado?.valor_unitario_realizado ?? 0)
+                  : Number(bvAberto.valor_unitario_orcado ?? 0),
+                quantidade: daPP
+                  ? Number(realizado?.quantidade_realizada ?? 0)
+                  : Number(bvAberto.quantidade_orcada ?? 0),
+                diasMeses: daPP
+                  ? Number(realizado?.dias_meses_realizado ?? 0)
+                  : Number(bvAberto.dias_meses_orcado ?? 0),
+                total: blocosPorItem.get(bvAberto.id)?.realizado.bruto ?? 0,
               }}
               readOnly={!podeAcoes}
             />
@@ -845,83 +782,83 @@ export function JobItemRealizadoTable({
   );
 }
 
-function CelulaRealNum({
+/** Célula de leitura do bloco Realizado.
+ *
+ *  Substituiu a `CelulaRealNum`, que era um input disfarçado de célula.
+ *  Zero vira travessão: "R$ 0,00" numa linha sem PP diria "custou zero",
+ *  quando o que houve foi "ainda não se pediu nada". */
+function CelulaLeitura({
   valor,
   formato,
   moeda,
-  editando,
-  editavel,
-  onAtivar,
-  onConfirmar,
-  onCancelar,
-  tdClassName,
+  className,
 }: {
   valor: number;
   formato?: "moeda";
   moeda?: string;
-  editando: boolean;
-  editavel: boolean;
-  onAtivar: () => void;
-  onConfirmar: (raw: string, destino?: Direcao) => void;
-  onCancelar: () => void;
-  tdClassName?: string;
+  className?: string;
 }) {
-  const finalizado = React.useRef(false);
-
-  React.useEffect(() => {
-    if (editando) finalizado.current = false;
-  }, [editando]);
-
-  if (editando) {
-    return (
-      <td className={cn("text-xs align-middle px-1.5", tdClassName)}>
-        <input
-          autoFocus
-          inputMode="decimal"
-          defaultValue={paraEdicao(valor)}
-          onFocus={(e) => e.currentTarget.select()}
-          onKeyDown={(e) => {
-            const destino = direcaoNoCampo(e, e.currentTarget);
-            if (destino) {
-              // preventDefault: quem decide o próximo foco é a grade, não
-              // a ordem do DOM.
-              e.preventDefault();
-              finalizado.current = true;
-              onConfirmar(e.currentTarget.value, destino);
-              return;
-            }
-            if (e.key === "Escape") {
-              e.preventDefault();
-              finalizado.current = true;
-              onCancelar();
-            }
-          }}
-          onBlur={(e) => {
-            if (!finalizado.current) onConfirmar(e.currentTarget.value);
-          }}
-          className={cn(CAMPO_CLASSES, "text-right font-mono")}
-        />
-      </td>
-    );
-  }
-
-  const mostrarTraco = valor <= 0;
-
+  const vazio = valor <= 0;
   return (
     <td
       className={cn(
-        "text-xs align-middle px-3 text-right whitespace-nowrap",
-        tdClassName,
-        editavel && "cursor-pointer",
-        mostrarTraco && "text-muted-foreground",
+        "whitespace-nowrap px-3 text-right align-middle text-xs",
+        className,
+        vazio && "text-muted-foreground",
       )}
-      onClick={editavel ? onAtivar : undefined}
     >
-      {mostrarTraco
-        ? "—"
-        : formato === "moeda"
-          ? formatCurrency(valor, moeda)
-          : valor}
+      {vazio ? "—" : formato === "moeda" ? formatCurrency(valor, moeda) : valor}
+    </td>
+  );
+}
+
+/** Célula de Total dos blocos que recebem BV.
+ *
+ *  Na vista Bruto é o Total de sempre. Na Líquido mostra o valor já
+ *  descontado E a sub-linha que diz de quanto foi o desconto — é ela que
+ *  torna a dedução auditável sem abrir o formulário do BV. */
+function CelulaTotalComBv({
+  bloco,
+  visao,
+  moeda,
+  className,
+  cor,
+  corRotulo,
+}: {
+  bloco: ValoresDoBloco;
+  visao: VisaoBv;
+  moeda: string;
+  className?: string;
+  cor: string;
+  corRotulo: string;
+}) {
+  const valor = valorNaVisao(bloco, visao);
+  return (
+    <td
+      className={cn(
+        "whitespace-nowrap px-3 text-right align-middle",
+        className,
+      )}
+    >
+      <div className="flex flex-col items-end">
+        <span
+          className={cn(
+            "font-mono text-xs font-semibold leading-[1.2]",
+            bloco.bruto <= 0 && "text-muted-foreground",
+          )}
+        >
+          {bloco.bruto > 0 ? formatCurrency(valor, moeda) : "—"}
+        </span>
+        {visao === "liquido" && bloco.bruto > 0 && (
+          <SubLinhaBv
+            deducao={bloco.deducaoBv}
+            pendente={bloco.bvPendente}
+            formatar={(v) => formatCurrency(v, moeda)}
+            cor={cor}
+            corRotulo={corRotulo}
+          />
+        )}
+      </div>
     </td>
   );
 }

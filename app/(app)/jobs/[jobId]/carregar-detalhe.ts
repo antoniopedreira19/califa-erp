@@ -6,9 +6,8 @@ import { montarThreadChat } from "@/lib/data/job-chat";
 import { montarThreadChatPPs } from "@/lib/data/job-chat-pps";
 import {
   calcularTotaisVersao,
-  calcularTotaisPlanejados,
-  calcularTotaisRealizado,
 } from "@/lib/calculos/versao-totais";
+import { blocosDoItem, somarBlocosDosItens } from "@/lib/calculos/bv-planilha";
 import {
   JOB_STATUS_TRANSICOES,
   jobAceitaRealizado,
@@ -296,6 +295,12 @@ export async function carregarDetalheDoJob(
     quantidade_planejada: Number(it.quantidade_planejada ?? 0),
     dias_meses_planejado: Number(it.dias_meses_planejado ?? 0),
     total_planejado: Number(it.total_planejado ?? 0),
+    // `null` preservado de propósito: significa "ainda não congelado", e
+    // é o que manda a conta calcular a dedução a partir do BV vigente.
+    bv_liquido_planejado:
+      it.bv_liquido_planejado === null || it.bv_liquido_planejado === undefined
+        ? null
+        : Number(it.bv_liquido_planejado),
   }));
   const realizados = (realizadosRes.data ?? []).map((r: any) => ({
     ...r,
@@ -478,12 +483,31 @@ export async function carregarDetalheDoJob(
     Number(versaoAprovada.percentual_honorarios),
     Number(versaoAprovada.percentual_imposto),
   );
-  const { totalPlanejado: custoPlanejadoJob } = calcularTotaisPlanejados(itens);
-  const { totalRealizado: custoRealizadoJob } = calcularTotaisRealizado(
-    itens.map((it) => ({
-      total_realizado: Number(realizadosMap.get(it.id)?.total_realizado ?? 0),
-    })),
+  // Passa pelos blocos com BV, e não pela soma crua das colunas: em `A` e
+  // `D` o realizado é o ORÇADO (eles não geram PP e ficam em zero na
+  // tabela), e o resumo do cabeçalho precisa bater com o card de Totais
+  // da Planilha Interna (docs/decisions/022).
+  // "Já aberto" e não "aceita ações": job ENCERRADO continua mostrando o
+  // realizado — ele é histórico. O que zera o bloco é a pré-abertura.
+  const jobJaAberto =
+    raw.status !== "aguardando_abertura" &&
+    raw.status !== "rejeitado_financeiro";
+
+  const blocosDoJob = somarBlocosDosItens(
+    itens.map((it) =>
+      blocosDoItem(
+        it,
+        bvsPorItem[it.id] ?? null,
+        Number(realizadosMap.get(it.id)?.total_realizado ?? 0),
+        Number(versaoAprovada.percentual_imposto),
+        jobJaAberto,
+      ),
+    ),
   );
+  const custoPlanejadoJob = blocosDoJob.planejado.bruto;
+  const custoRealizadoJob = blocosDoJob.realizado.bruto;
+  const bvPlanejadoJob = blocosDoJob.planejado.deducaoBv;
+  const bvRealizadoJob = blocosDoJob.realizado.deducaoBv;
 
   const threadChat = montarThreadChat(
     {
@@ -658,6 +682,8 @@ export async function carregarDetalheDoJob(
     totaisJob,
     custoPlanejadoJob,
     custoRealizadoJob,
+    bvPlanejadoJob,
+    bvRealizadoJob,
     resumoEncerramento,
     podeEditarRealizado,
     podeAcoesPlanilha,

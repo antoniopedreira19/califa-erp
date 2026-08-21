@@ -15,8 +15,7 @@ import { ResumoResultado } from "@/components/resumo-resultado";
 import { cn, formatCurrency } from "@/lib/utils";
 import { jobStatusLabel, type JobStatus } from "@/lib/types";
 import { carregarPlanilhasDosJobs } from "./carregar-planilhas";
-import { PlanilhaJobCard } from "./planilha-job-card";
-import { ProjetoTotaisCard } from "./projeto-totais-card";
+import { PlanilhasDoProjeto } from "./planilhas-do-projeto";
 
 export const dynamic = "force-dynamic";
 
@@ -98,8 +97,13 @@ export default async function ProjetoAgregadoPage({
       valorJob: acc.valorJob + j.valorJob,
       faturamentoPrevisto: acc.faturamentoPrevisto + j.faturamentoPrevisto,
       imposto: acc.imposto + j.imposto,
-      planejado: acc.planejado + j.planejado,
-      realizado: acc.realizado + j.realizado,
+      // Bruto, e a dedução de BV somada à parte: é assim que o painel
+      // Resultado escreve a conta (custo bruto + BVs), e é o que faz o
+      // resumo do cabeçalho bater com o card de Totais logo abaixo.
+      planejado: acc.planejado + j.planejado.bruto,
+      realizado: acc.realizado + j.realizado.bruto,
+      bvPlanejado: acc.bvPlanejado + j.planejado.deducaoBv,
+      bvRealizado: acc.bvRealizado + j.realizado.deducaoBv,
     }),
     {
       valorJob: 0,
@@ -107,6 +111,8 @@ export default async function ProjetoAgregadoPage({
       imposto: 0,
       planejado: 0,
       realizado: 0,
+      bvPlanejado: 0,
+      bvRealizado: 0,
     },
   );
 
@@ -156,6 +162,8 @@ export default async function ProjetoAgregadoPage({
               imposto={resumoProjeto.imposto}
               custoPlanejado={resumoProjeto.planejado}
               custoRealizado={resumoProjeto.realizado}
+              bvPlanejado={resumoProjeto.bvPlanejado}
+              bvRealizado={resumoProjeto.bvRealizado}
               moeda={moedaProjeto}
             />
           </div>
@@ -237,25 +245,8 @@ export default async function ProjetoAgregadoPage({
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <ClipboardList className="h-4 w-4 text-california-red" />
-          <span>
-            Planilha consolidada · um bloco por job · Orçado × Planejado ×
-            Realizado
-          </span>
-        </div>
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-[11px] py-1 text-[11px] font-semibold text-muted-foreground">
-          <Lock className="h-[11px] w-[11px]" />
-          Somente leitura
-        </span>
-      </div>
-
-      {planilhas.map((j) => (
-        <PlanilhaJobCard key={j.id} job={j} />
-      ))}
-
-      <ProjetoTotaisCard jobs={planilhas} moeda={moedaProjeto} />
+      {/* Blocos de job e Totais sob a MESMA chave Bruto ⇄ Líquido. */}
+      <PlanilhasDoProjeto planilhas={planilhas} moeda={moedaProjeto} />
     </div>
   );
 }

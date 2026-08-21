@@ -16,6 +16,7 @@ import { cn, formatCurrency } from "@/lib/utils";
 import type { Categoria } from "@/lib/types";
 import type { AdaptadorItens } from "../[projetoId]/[orcId]/versoes/[versaoId]/itens-table";
 import type { AdaptadorBv, FornecedorOpcao } from "@/app/(app)/_bv/bv-dialog";
+import type { VisaoBv } from "@/lib/calculos/bv-planilha";
 import { GrupoRascunhoCard } from "./grupo-rascunho-card";
 import {
   ORCADO,
@@ -33,6 +34,9 @@ interface Props {
    *  gerado no servidor, no salvamento. */
   codigo: string;
   parametros: ParametrosVersao;
+  /** Bruto ou Líquido (− BV). O estado mora no editor: a chave vale para
+   *  a página inteira, e aqui há vários orçamentos na mesma tela. */
+  visao: VisaoBv;
   /** Linha de contexto do card: categoria · regional · cidade · GP · datas. */
   descricao: string;
   categorias: Categoria[];
@@ -66,6 +70,7 @@ export function JobRascunhoCard({
   job,
   codigo,
   parametros,
+  visao,
   descricao,
   categorias,
   fornecedores,
@@ -246,6 +251,8 @@ export function JobRascunhoCard({
                   key={grupo.id}
                   grupo={grupo}
                   moeda={parametros.moeda}
+                  percentualImposto={parametros.percentual_imposto}
+                  visao={visao}
                   categorias={categorias}
                   fornecedores={fornecedores}
                   adaptador={adaptador}

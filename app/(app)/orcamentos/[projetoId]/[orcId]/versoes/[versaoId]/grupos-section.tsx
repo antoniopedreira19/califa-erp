@@ -10,6 +10,8 @@ import type {
 } from "@/lib/types";
 import { GrupoCard } from "./grupo-card";
 import type { FornecedorOpcao } from "@/app/(app)/_bv/bv-dialog";
+import type { VisaoBv } from "@/lib/calculos/bv-planilha";
+import { ChaveBrutoLiquido } from "@/app/(app)/_planilha/chave-bruto-liquido";
 
 /** Map não atravessa a fronteira server → client. A página manda os pares
  *  já montados. */
@@ -21,6 +23,12 @@ export interface SecaoGrupo {
 interface Props {
   secoes: SecaoGrupo[];
   moeda: string;
+  /** Alíquota da versão — vira o BV líquido da vista Líquido. */
+  percentualImposto: number;
+  /** Bruto ou Líquido (− BV). O estado mora em `PlanilhaVersao`, acima
+   *  daqui, porque o card de Totais precisa da MESMA vista. */
+  visao: VisaoBv;
+  onMudarVisao: (v: VisaoBv) => void;
   readOnly?: boolean;
   categorias: Categoria[];
   /** BV por id do item — indexado, e não Map, porque Map não atravessa a
@@ -33,6 +41,9 @@ interface Props {
 export function GruposSection({
   secoes,
   moeda,
+  percentualImposto,
+  visao,
+  onMudarVisao,
   readOnly,
   categorias,
   bvsPorItem,
@@ -65,7 +76,7 @@ export function GruposSection({
 
   return (
     <div>
-      <div className="mb-3">
+      <div className="mb-3 flex items-center justify-between gap-3">
         <button
           type="button"
           onClick={alternarTodos}
@@ -78,6 +89,7 @@ export function GruposSection({
           )}
           {algumAberto ? "Recolher todos" : "Expandir todos"}
         </button>
+        <ChaveBrutoLiquido visao={visao} onChange={onMudarVisao} />
       </div>
 
       <div className="space-y-6">
@@ -87,6 +99,8 @@ export function GruposSection({
             grupo={s.grupo}
             itens={s.itens}
             moeda={moeda}
+            percentualImposto={percentualImposto}
+            visao={visao}
             readOnly={readOnly}
             categorias={categorias}
             aberto={!fechados.has(s.grupo.id)}

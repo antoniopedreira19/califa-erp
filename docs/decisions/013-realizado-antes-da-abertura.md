@@ -95,3 +95,24 @@ explícito, que distingue os dois casos, e com o `BvDialog` passando a
 usar `readOnly={!podeAcoes}` em vez de `!editable` — o `editable` é o
 flag do realizado, que na pré-abertura é verdadeiro. Ver entrega 36 do
 `HANDOFF_JOBS.md`.
+
+
+---
+
+## ⚠️ Nota de 2026-08-21 — o realizado deixou de ser lançado
+
+Esta decisão liberou **lançar realizado** na pré-abertura, e a linha que
+ela traça ("registrar o que aconteceu" × "gerar documento") continua
+valendo para errata, BV e PP. O que mudou é o outro lado: **não existe
+mais lançamento de realizado.**
+
+O realizado passou a ser derivado — soma das PPs do item, ou o próprio
+orçado em `A` e `D` — e `upsertItemRealizado` foi removida. Na prática a
+linha "Lançar/editar realizado ✅" da tabela acima virou letra morta: na
+pré-abertura não há PP a emitir, então o realizado fica em zero até a
+abertura (nos tipos que geram PP) ou já mostra o orçado (em `A` e `D`).
+
+`jobAceitaRealizado` continua existindo e continua sendo o gate de quem
+pode ver o quê; ela só não guarda mais nenhuma escrita.
+
+Ver `022-bv-liquido-e-realizado-por-pp.md`.

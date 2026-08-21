@@ -1912,3 +1912,90 @@ navegador em TESTE-0003/26-06 · Teste B3 (categoria **Extra**, diferente
 das demais do projeto de propósito, para provar que o valor é lido do
 orçamento): a linha saiu "Categoria · Extra". Parado antes de "Sim,
 enviar job" — conferido pelo MCP que o orçamento segue com 0 jobs.
+
+
+---
+
+## ⚠️ 21/08/2026 — o BV desconta do planejado, e `A`/`D` perderam o planejado próprio
+
+Handoff de design: `Job - A com Repasse - BV e PP.dc.html`, telas **4a** e
+**3b**. Regra completa em `docs/decisions/022-bv-liquido-e-realizado-por-pp.md`.
+
+### `A` e `D` não digitam mais o planejado
+
+Nesses dois tipos o cliente paga o fornecedor diretamente, então a agência
+não tem custo próprio a planejar: o custo É o orçado. As três células do
+PLANEJADO deixaram de abrir e passaram a espelhar as do ORÇADO — e o Tab
+**pula** por cima delas, senão a navegação morreria numa célula que não
+abre.
+
+`AR` ficou de fora de propósito: lá o principal passa pela California e há
+custo a planejar de verdade.
+
+Quem garante o espelho é o trigger `planejado_espelha_orcado`, no
+Postgres, e **não** a Server Action: são seis caminhos de escrita
+chegando em `versoes_orcamento_itens` (célula, linha nova, drawer, os dois
+pontos da importação, "Salvar orçamentos" do multi e o agregado).
+`atualizarCampoItem` ficou só com a recusa, que é o que devolve uma
+mensagem em português em vez de um erro de banco.
+
+### A chave Bruto ⇄ Líquido
+
+Uma por página, na barra ao lado de "Recolher todos". Em Líquido o Total
+do PLANEJADO mostra o custo sem o BV, com a dedução em sub-linha na célula
+e no subtotal do grupo. O ORÇADO não muda.
+
+`GruposSection` e `TotaisCard` passaram a sair de um componente client só
+(`PlanilhaVersao`): eles eram irmãos renderizados direto pela página, e o
+estado da chave não tinha onde morar. Os editores de rascunho (multi e
+agregado) ganharam a mesma chave, uma por página.
+
+### O BV congela na aprovação
+
+`aprovarVersao` grava `bv_liquido_planejado` em cada item. Depois da
+aprovação o BV continua editável — mas na planilha do JOB —, e o
+planejado **não** pode acompanhar: ele é o compromisso que o financeiro
+confere e abre. O valor novo só reaparece no realizado, e só quando
+confirmado.
+
+Falhar ao congelar não aborta a aprovação: sem o snapshot a conta cai no
+cálculo ao vivo, que dá o mesmo número enquanto ninguém mexer no BV.
+Derrubar uma aprovação por isso seria pior que o defeito.
+
+### O formulário do BV
+
+Situação saiu do corpo e virou pílula no canto direito do cabeçalho. O
+corpo termina em **Impostos** (alíquota da versão, leitura) e **BV
+líquido** — o número que a planilha desconta. O botão **Confirmar** foi
+liberado: ele nascia desabilitado por "o módulo de faturamento ainda não
+existe", que envelheceu (a esteira entrou em 14/08).
+
+Os mini-blocos passaram a ler `_planilha/blocos.ts`. Eles tinham paleta
+própria, com o **PLANEJADO em azul** — herança de antes de 11/08, quando o
+azul era dele. O formulário contava outra história que a planilha atrás.
+
+### Verificação
+
+`tsc --noEmit`, `next lint` e `npm run build` limpos.
+
+**Conferência logada no navegador, 21/08/2026** — versão em rascunho
+TESTE-0003/26 · Teste B2, com um item `A`:
+
+- as três células do PLANEJADO **não abrem** para edição (`cursor-pointer`
+  ausente), enquanto as do ORÇADO abrem normalmente;
+- mudar o orçado de R$ 200,00 para R$ 250,00 arrastou o planejado junto —
+  na tela e no banco. Revertido para R$ 200,00;
+- a chave alterna os rótulos: o ORÇADO segue "Total" e o PLANEJADO vira
+  "Total líquido", com o subtotal em "Subtotal do grupo · líquido (− BV)";
+- o **editor agregado** do mesmo projeto mostra a chave na barra de cima.
+  O editor **multi** nasce sem orçamento nenhum, e aí não há planilha para
+  alternar — a chave só aparece com ao menos um card.
+
+O formulário do BV foi conferido pela planilha do JOB-0010, no item
+"Sinalização" (BV de R$ 15,00, alíquota 19,54%): pílula **A negociar** no
+canto direito do cabeçalho, **Impostos 19,54% · − R$ 2,93**, **BV líquido
+R$ 12,07**, e o **Confirmar habilitado**. Os três mini-blocos leem
+`blocos.ts` — PLANEJADO em verde `#3f8a70`, o azul que estava lá era do
+ORÇADO. Fechado sem salvar.
+
+Zero erros de console e zero rolagem horizontal em todas as telas.

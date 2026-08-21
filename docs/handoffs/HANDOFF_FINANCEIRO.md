@@ -1667,3 +1667,42 @@ confirmação ("Sair para o módulo de Orçamentos?"), via
 A classificação da esteira de faturamento saiu de `dados-abertos.ts` e
 virou `lib/data/faturamento-por-job.ts`, usada pela lista e pelo agregado
 do projeto: duas cópias divergiriam na primeira nota cancelada.
+
+
+---
+
+## ⚠️ 21/08/2026 — a conferência da abertura passou a enxergar o BV
+
+Regra completa em `docs/decisions/022-bv-liquido-e-realizado-por-pp.md`.
+
+`/financeiro/abertura-de-job/[jobId]/planilha` carregava `bvsPorItem={{}}`,
+com o comentário "job aguardando abertura não tem PP nem BV". **A metade
+sobre o BV estava errada**: o BV nasce no ORÇAMENTO, antes da aprovação,
+então um job na fila já pode ter BV lançado. Na prática o financeiro
+conferia um custo planejado com a comissão ainda embutida — e é
+exatamente nesta tela que o planejado congela.
+
+Agora a tela carrega os BVs da versão e ganhou a chave **Bruto ⇄
+Líquido**, num componente client (`PlanilhaConferencia`) porque a chave
+vale para os grupos e para o card de Totais juntos.
+
+`/financeiro/jobs/[jobId]` e `/financeiro/projetos/[projetoId]` herdaram a
+chave junto: as duas reaproveitam os componentes da produção
+(`JobRealizadoSection` e `PlanilhasDoProjeto`).
+
+**Verificação:** `tsc --noEmit`, `next lint` e `npm run build` limpos.
+
+**Conferência logada no navegador, 21/08/2026** — JOB-0012, na fila de
+abertura: a chave aparece, "Somente leitura" continua no lugar, e o bloco
+REALIZADO inteiro fica em travessão (total e quebra). Esse último ponto
+foi um defeito achado NA conferência: o item `A` mostrava o orçado no
+realizado antes de o job abrir, contra a regra "desde a abertura".
+Corrigido com o flag `jobAberto`; job encerrado segue mostrando o
+realizado, porque ali ele é histórico.
+
+`/financeiro/jobs/[jobId]` conferido no JOB-0010: mesma planilha da
+produção, mesma chave, e o resumo do cabeçalho com realizado R$ 7.000,00
+— que é o número certo só porque `dados.ts` parou de somar a coluna crua
+(ela zera os itens `A`).
+
+Zero erros de console e zero rolagem horizontal.

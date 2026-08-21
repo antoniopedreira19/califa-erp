@@ -107,7 +107,15 @@ export default async function JobNoFinanceiroPage({
 
   if (!detalhe || !carregadoParaAbertura) notFound();
 
-  const { job, versaoAprovada, totaisJob, custoPlanejadoJob, custoRealizadoJob } =
+  const {
+    job,
+    versaoAprovada,
+    totaisJob,
+    custoPlanejadoJob,
+    custoRealizadoJob,
+    bvPlanejadoJob,
+    bvRealizadoJob,
+  } =
     detalhe;
 
   // Job que ainda não passou pela abertura não tem registro para mostrar —
@@ -236,6 +244,8 @@ export default async function JobNoFinanceiroPage({
                 imposto={totaisJob.imposto}
                 custoPlanejado={custoPlanejadoJob}
                 custoRealizado={custoRealizadoJob}
+                bvPlanejado={bvPlanejadoJob}
+                bvRealizado={bvRealizadoJob}
                 moeda={versaoAprovada.moeda}
               />
             </div>
@@ -368,7 +378,6 @@ export default async function JobNoFinanceiroPage({
             itens={detalhe.itens}
             realizadosMap={detalhe.realizadosMap}
             categoriasMap={detalhe.categoriasMap}
-            editable={false}
             podeAcoes={false}
             ppsPorItemId={detalhe.ppsPorItemId}
             fornecedores={detalhe.fornecedores}

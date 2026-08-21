@@ -5,12 +5,12 @@ import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import type {
   Categoria,
+  ItemBv,
   ItemPlanilhaJob,
   JobItemRealizado,
   VersaoOrcamentoGrupo,
 } from "@/lib/types";
-import { JobGrupoCard } from "@/app/(app)/jobs/[jobId]/realizado/job-grupo-card";
-import { JobTotaisCard } from "@/app/(app)/jobs/[jobId]/realizado/job-totais-card";
+import { PlanilhaConferencia } from "./planilha-conferencia";
 
 export const dynamic = "force-dynamic";
 
@@ -20,8 +20,10 @@ export const dynamic = "force-dynamic";
  * para o formulário sem perder o caminho.
  *
  * É a mesma planilha da aba Planilha Interna do job (mesmos componentes,
- * mesmos agrupamentos, tipos, colunas e totais), com edição e ações
- * desligadas: `editable` e `podeAcoes` em `false`.
+ * mesmos agrupamentos, tipos, colunas e totais), com as ações desligadas
+ * (`podeAcoes` em `false`) — e, desde 21/08/2026, com a chave Bruto ⇄
+ * Líquido, porque é AQUI que o planejado congela: o financeiro precisa
+ * ver o custo sem a comissão antes de assinar embaixo.
  */
 export default async function PlanilhaDaAberturaPage({
   params,
@@ -60,7 +62,8 @@ export default async function PlanilhaDaAberturaPage({
   const versao = (raw as any).versao;
   const versaoAprovadaId = (raw as any).versao_orcamento_aprovada_id as string;
 
-  const [gruposRes, itensRes, realizadosRes, categoriasRes] = await Promise.all([
+  const [gruposRes, itensRes, realizadosRes, categoriasRes, bvsRes] =
+    await Promise.all([
     supabase
       .from("versoes_orcamento_grupos")
       .select("*")
@@ -89,6 +92,19 @@ export default async function PlanilhaDaAberturaPage({
       .select("id, nome")
       .eq("tenant_id", session.activeTenant.id)
       .returns<Pick<Categoria, "id" | "nome">[]>(),
+    // O BV nasce no ORÇAMENTO, antes da aprovação — então um job na fila
+    // de abertura já pode ter BV lançado. Esta tela o ignorava, e com
+    // isso mostrava ao financeiro um planejado com a comissão embutida.
+    supabase
+      .from("itens_bv")
+      .select(
+        "id, tenant_id, item_versao_id, fornecedor_id, valor, prazo_repasse, " +
+          "situacao, created_by, created_at, updated_at, " +
+          "item:versoes_orcamento_itens!inner(versao_orcamento_id)",
+      )
+      .eq("item.versao_orcamento_id", versaoAprovadaId)
+      .eq("tenant_id", session.activeTenant.id)
+      .neq("situacao", "cancelado"),
   ]);
 
   for (const [rotulo, res] of [
@@ -96,6 +112,7 @@ export default async function PlanilhaDaAberturaPage({
     ["itens", itensRes],
     ["realizado", realizadosRes],
     ["categorias", categoriasRes],
+    ["bvs", bvsRes],
   ] as const) {
     if (res.error) {
       console.error(`[abertura-job.planilha.${rotulo}]`, res.error.message);
@@ -120,6 +137,12 @@ export default async function PlanilhaDaAberturaPage({
     quantidade_planejada: Number(it.quantidade_planejada ?? 0),
     dias_meses_planejado: Number(it.dias_meses_planejado ?? 0),
     total_planejado: Number(it.total_planejado ?? 0),
+    // `null` preservado de propósito: significa "ainda não congelado", e
+    // é o que manda a conta calcular a dedução a partir do BV vigente.
+    bv_liquido_planejado:
+      it.bv_liquido_planejado === null || it.bv_liquido_planejado === undefined
+        ? null
+        : Number(it.bv_liquido_planejado),
   }));
 
   const realizadosMap = new Map<string, JobItemRealizado>();
@@ -135,6 +158,14 @@ export default async function PlanilhaDaAberturaPage({
 
   const categoriasMap = new Map<string, string>();
   for (const c of categoriasRes.data ?? []) categoriasMap.set(c.id, c.nome);
+
+  // Objeto, e não Map: só objeto atravessa a fronteira server → client
+  // sem cerimônia, e é o formato que a planilha do job já espera.
+  const bvsPorItem: Record<string, ItemBv> = {};
+  for (const linha of (bvsRes.data ?? []) as any[]) {
+    const { item: _joinFiltro, ...bv } = linha;
+    bvsPorItem[bv.item_versao_id] = { ...bv, valor: Number(bv.valor ?? 0) };
+  }
 
   const itensPorGrupo = new Map<string, ItemPlanilhaJob[]>();
   for (const g of grupos) itensPorGrupo.set(g.id, []);
@@ -169,55 +200,21 @@ export default async function PlanilhaDaAberturaPage({
         </span>
       </div>
 
-      {grupos.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-border bg-muted/20 p-12 text-center">
-          <p className="text-sm text-muted-foreground">
-            A versão aprovada não tem grupos.
-          </p>
-        </div>
-      ) : (
-        <>
-          <div className="space-y-4">
-            {grupos.map((g) => (
-              <JobGrupoCard
-                key={g.id}
-                grupo={g}
-                itens={itensPorGrupo.get(g.id) ?? []}
-                realizadosMap={realizadosMap}
-                categoriasMap={categoriasMap}
-                moeda={versao?.moeda ?? "BRL"}
-                // Leitura pura: nem lançar realizado, nem errata/BV/PP.
-                editable={false}
-                podeAcoes={false}
-                // Esta rota só existe enquanto o job aguarda abertura (já
-                // aberto, ela redireciona para /jobs/[jobId]) — e nela a
-                // trilha lateral não aparece de jeito nenhum.
-                preAbertura
-                jobId={(raw as any).id}
-                // Job aguardando abertura não tem PP nem BV — as duas ações
-                // só existem depois de aberto. Mapas vazios não escondem
-                // nada, e evitam duas queries que sempre voltariam vazias.
-                ppsPorItemId={new Map()}
-                fornecedores={[]}
-                empresas={[]}
-                jobEmpresaId={(raw as any).empresa_id ?? ""}
-                jobResponsavelId={(raw as any).responsavel_id ?? ""}
-                bvsPorItem={{}}
-                versaoLabel={`v${versao?.numero_versao ?? 1}`}
-                cartoes={[]}
-              />
-            ))}
-          </div>
-          <JobTotaisCard
-            grupos={grupos}
-            itens={itens}
-            realizadosMap={realizadosMap}
-            percentualHonorarios={Number(versao?.percentual_honorarios ?? 0)}
-            percentualImposto={Number(versao?.percentual_imposto ?? 0)}
-            moeda={versao?.moeda ?? "BRL"}
-          />
-        </>
-      )}
+      <PlanilhaConferencia
+        jobId={(raw as any).id}
+        jobEmpresaId={(raw as any).empresa_id ?? ""}
+        jobResponsavelId={(raw as any).responsavel_id ?? ""}
+        grupos={grupos}
+        itens={itens}
+        itensPorGrupo={itensPorGrupo}
+        realizadosMap={realizadosMap}
+        categoriasMap={categoriasMap}
+        bvsPorItem={bvsPorItem}
+        versaoLabel={`v${versao?.numero_versao ?? 1}`}
+        moeda={versao?.moeda ?? "BRL"}
+        percentualHonorarios={Number(versao?.percentual_honorarios ?? 0)}
+        percentualImposto={Number(versao?.percentual_imposto ?? 0)}
+      />
     </div>
   );
 }

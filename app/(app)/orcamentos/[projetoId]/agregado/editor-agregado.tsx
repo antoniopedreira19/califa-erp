@@ -57,6 +57,8 @@ import {
 } from "../../_rascunho/tipos";
 import { salvarAlteracoesDoProjeto } from "./actions";
 import { aceitaBV } from "@/lib/calculos/versao-totais";
+import { VISAO_BV_PADRAO, type VisaoBv } from "@/lib/calculos/bv-planilha";
+import { ChaveBrutoLiquido } from "@/app/(app)/_planilha/chave-bruto-liquido";
 
 interface Props {
   projeto: {
@@ -121,6 +123,9 @@ export function EditorAgregado({
   fornecedores,
 }: Props) {
   const router = useRouter();
+  // Uma chave para a página inteira, como na tela da versão: vários
+  // orçamentos na mesma tela em modos diferentes não teriam leitura.
+  const [visao, setVisao] = React.useState<VisaoBv>(VISAO_BV_PADRAO);
   const [orcamentos, setOrcamentos] =
     React.useState<OrcamentoRascunho[]>(inicial);
   const [modal, setModal] = React.useState<Modal>(null);
@@ -700,6 +705,9 @@ export function EditorAgregado({
           (26px) + o gap. Mesmo arranjo da tela da versão individual. */}
       <div className="flex flex-col gap-6 pr-[154px]">
       <div className="flex flex-col gap-4">
+        <div className="flex justify-end">
+          <ChaveBrutoLiquido visao={visao} onChange={setVisao} />
+        </div>
         {orcamentos.map((orc) => {
           if (!orc.origemBanco) contadorNovos += 1;
           const codigo = codigoDe(orc, contadorNovos);
@@ -710,6 +718,7 @@ export function EditorAgregado({
               job={orc}
               codigo={codigo}
               parametros={orc.parametros}
+              visao={visao}
               descricao={descricao(orc)}
               categorias={categoriasItem}
               fornecedores={fornecedores}

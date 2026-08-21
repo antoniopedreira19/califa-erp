@@ -3,6 +3,7 @@
 // Totais refazem conta, só formatam.
 
 import type { JobStatus, TipoCusto } from "@/lib/types";
+import type { ValoresDoBloco } from "@/lib/calculos/bv-planilha";
 
 export interface ItemPlanilhaProjeto {
   id: string;
@@ -16,11 +17,15 @@ export interface ItemPlanilhaProjeto {
   planUnit: number;
   planQt: number;
   planDm: number;
-  planTotal: number;
   realUnit: number;
   realQt: number;
   realDm: number;
-  realTotal: number;
+  /** Total do PLANEJADO com a dedução de BV separada — a vista Bruto usa
+   *  `bruto`, a Líquido usa `liquido`, e a sub-linha mostra `deducaoBv`. */
+  planejado: ValoresDoBloco;
+  /** Idem para o REALIZADO. Em item `A` e `D` o bruto é o ORÇADO: eles
+   *  não geram PP, então não há soma de PPs de onde tirá-lo. */
+  realizado: ValoresDoBloco;
 }
 
 export interface GrupoPlanilhaProjeto {
@@ -28,8 +33,8 @@ export interface GrupoPlanilhaProjeto {
   nome: string;
   itens: ItemPlanilhaProjeto[];
   orcado: number;
-  planejado: number;
-  realizado: number;
+  planejado: ValoresDoBloco;
+  realizado: ValoresDoBloco;
 }
 
 export interface JobPlanilhaProjeto {
@@ -44,8 +49,8 @@ export interface JobPlanilhaProjeto {
   grupos: GrupoPlanilhaProjeto[];
   /** Soma dos totais orçados dos itens (= "Total dos custos" do job). */
   orcado: number;
-  planejado: number;
-  realizado: number;
+  planejado: ValoresDoBloco;
+  realizado: ValoresDoBloco;
   subtotaisPorTipo: Record<TipoCusto, number>;
   honorarios: number;
   imposto: number;

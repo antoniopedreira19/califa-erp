@@ -7,10 +7,13 @@
  *  descartadas pelo Tiago).
  *
  *  A leitura que o design pede é contábil e silenciosa: três números em
- *  fonte monoespaçada — Realizado do item, o que já está Em PPs emitidas
+ *  fonte monoespaçada — Orçado do item, o que já está Em PPs emitidas
  *  e o Saldo — sem barra de progresso e sem cor de alerta. O saldo aqui
  *  é LIMITE para novas PPs, não meta a completar; por isso ele não
  *  "pede" para ser gasto, e quem avisa o teto é a nota embaixo do botão.
+ *
+ *  ⚠️ A base virou o ORÇADO em 21/08/2026: o realizado passou a SER a
+ *  soma das PPs, e não pode ser o próprio teto. Ver decisão 022.
  *
  *  O bloco numérico tem altura fixa de propósito: item com 1 PP e item
  *  com 6 abrem exatamente igual.
@@ -39,9 +42,13 @@ interface Props {
   itemNome: string;
   grupoNome: string;
   moeda: string;
-  /** Realizado do item — a base de tudo que o painel mostra. */
-  totalRealizado: number;
-  quantidadeRealizada: number;
+  /** ORÇADO do item — a base de tudo que o painel mostra.
+   *
+   *  Era o realizado até 21/08/2026. Trocou porque o realizado passou a
+   *  SER a soma das PPs: usá-lo como teto faria o item se limitar pelo
+   *  que ele mesmo já consumiu, e a primeira PP nunca caberia. */
+  totalOrcado: number;
+  quantidadeOrcada: number;
   /** PPs do item, canceladas inclusive (elas aparecem, mas não somam). */
   pps: PPDoItem[];
   emPPs: number;
@@ -56,8 +63,8 @@ export function PainelPPsItem({
   itemNome,
   grupoNome,
   moeda,
-  totalRealizado,
-  quantidadeRealizada,
+  totalOrcado,
+  quantidadeOrcada,
   pps,
   emPPs,
   saldo,
@@ -70,7 +77,7 @@ export function PainelPPsItem({
   const fornecedoresDistintos = new Set(ativas.map((pp) => pp.fornecedorNome))
     .size;
   const unidadesEmPPs = ativas.reduce((s, pp) => s + pp.quantidade, 0);
-  const unidadesSaldo = Math.max(quantidadeRealizada - unidadesEmPPs, 0);
+  const unidadesSaldo = Math.max(quantidadeOrcada - unidadesEmPPs, 0);
   const semSaldo = saldo <= 0;
 
   function verPdf(ppId: string) {
@@ -120,10 +127,10 @@ export function PainelPPsItem({
           <div className="overflow-hidden rounded-[14px] border border-border bg-card">
             <div className="grid grid-cols-2">
               <FichaNumero
-                rotulo="Realizado do item"
-                valor={formatCurrency(totalRealizado, moeda)}
-                detalhe={`${formatarQuantidade(quantidadeRealizada)} un · ${formatCurrency(
-                  quantidadeRealizada > 0 ? totalRealizado / quantidadeRealizada : 0,
+                rotulo="Orçado do item"
+                valor={formatCurrency(totalOrcado, moeda)}
+                detalhe={`${formatarQuantidade(quantidadeOrcada)} un · ${formatCurrency(
+                  quantidadeOrcada > 0 ? totalOrcado / quantidadeOrcada : 0,
                   moeda,
                 )}/un`}
                 className="border-b border-r border-border"
@@ -223,7 +230,7 @@ export function PainelPPsItem({
             </button>
             <span className="text-[11px] leading-relaxed text-muted-foreground">
               Máximo aceito: {formatCurrency(Math.max(saldo, 0), moeda)} · acima
-              disso é preciso alterar o realizado.
+              disso é preciso uma errata no orçado do item.
             </span>
           </div>
         )}

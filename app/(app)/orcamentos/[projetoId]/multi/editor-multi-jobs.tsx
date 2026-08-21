@@ -65,6 +65,8 @@ import {
   type ParametrosVersao,
 } from "../../_rascunho/tipos";
 import { aceitaBV } from "@/lib/calculos/versao-totais";
+import { VISAO_BV_PADRAO, type VisaoBv } from "@/lib/calculos/bv-planilha";
+import { ChaveBrutoLiquido } from "@/app/(app)/_planilha/chave-bruto-liquido";
 
 interface Props {
   projeto: { id: string; codigo: string; nome: string; status: string };
@@ -117,6 +119,9 @@ export function EditorMultiJobs({
   fornecedores,
 }: Props) {
   const router = useRouter();
+  // Uma chave para a página inteira, como na tela da versão: vários
+  // orçamentos na mesma tela em modos diferentes não teriam leitura.
+  const [visao, setVisao] = React.useState<VisaoBv>(VISAO_BV_PADRAO);
   const [parametros, setParametros] = React.useState<ParametrosVersao>({
     ...PARAMETROS_PADRAO,
     percentual_honorarios: honorariosCliente,
@@ -777,9 +782,13 @@ export function EditorMultiJobs({
         // comportam o respiro (8px) + a pílula do BV (116px) + a lixeira
         // (26px) + o gap. Mesmo arranjo do editor agregado.
         <div className="space-y-4 pr-[154px]">
+          <div className="flex justify-end">
+            <ChaveBrutoLiquido visao={visao} onChange={setVisao} />
+          </div>
           {jobsExibicao.map(({ job, indice }) => (
             <JobRascunhoCard
               key={job.id}
+              visao={visao}
               job={job}
               codigo={codigoPrevisto(indice)}
               parametros={parametros}

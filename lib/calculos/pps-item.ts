@@ -3,9 +3,15 @@
  *
  * Desde 17/08/2026 um item pode ter MAIS DE UMA PP — sem limite de
  * quantas, e sem limite por fornecedor. O que trava é o saldo: a soma das
- * PPs não canceladas nunca passa do Realizado do item. É a regra do
- * design "Job - PPs Parciais - Opcoes" (opção 2a) e ela mora no banco
- * também, no trigger `pp_valida_saldo_do_item`.
+ * PPs não canceladas nunca passa do ORÇADO do item. É a regra do design
+ * "Job - PPs Parciais - Opcoes" (opção 2a) e ela mora no banco também, no
+ * trigger `pp_valida_saldo_do_item`.
+ *
+ * ⚠️ A base era o REALIZADO até 21/08/2026. Trocou porque o realizado
+ * passou a ser a própria soma das PPs (trigger
+ * `trg_pp_recalcula_realizado`): comparar a soma consigo mesma nunca
+ * barraria nada, e a primeira PP de um item nunca caberia. Ver
+ * `docs/decisions/022-bv-liquido-e-realizado-por-pp.md`.
  *
  * Este arquivo é a fonte única das contas — a tela usa para mostrar o
  * saldo e o "máximo aceito", e a server action usa para recusar. Duas
@@ -19,29 +25,29 @@ function arredondar(v: number): number {
 }
 
 /**
- * R$ por unidade do REALIZADO — é o preço que a PP parcial usa.
+ * R$ por unidade da BASE do item — é o preço que a PP parcial usa.
  *
- * Sai de `total / quantidade`, e não de `valor_unitario_realizado`, de
- * propósito: o total do item é unitário × QT × D/M, então um item com
- * D/M = 2 custa o dobro por unidade entregue. Dividir o total pela
- * quantidade embute o D/M sozinho e vale para os dois casos.
+ * Sai de `total / quantidade`, e não do unitário gravado, de propósito: o
+ * total do item é unitário × QT × D/M, então um item com D/M = 2 custa o
+ * dobro por unidade entregue. Dividir o total pela quantidade embute o
+ * D/M sozinho e vale para os dois casos.
  */
 export function unitarioEfetivo(
-  totalRealizado: number,
-  quantidadeRealizada: number,
+  totalDaBase: number,
+  quantidadeDaBase: number,
 ): number {
-  if (quantidadeRealizada <= 0) return 0;
-  return totalRealizado / quantidadeRealizada;
+  if (quantidadeDaBase <= 0) return 0;
+  return totalDaBase / quantidadeDaBase;
 }
 
 /** Valor de uma PP que leva `quantidade` unidades do item. */
 export function valorDaPP(
   quantidade: number,
-  totalRealizado: number,
-  quantidadeRealizada: number,
+  totalDaBase: number,
+  quantidadeDaBase: number,
 ): number {
   return arredondar(
-    quantidade * unitarioEfetivo(totalRealizado, quantidadeRealizada),
+    quantidade * unitarioEfetivo(totalDaBase, quantidadeDaBase),
   );
 }
 
@@ -59,10 +65,10 @@ export interface PPParaSaldo {
  * o saldo, outra PP poderia consumi-lo e o reenvio ficaria impossível.
  */
 export function saldoDoItem(
-  totalRealizado: number,
+  totalOrcado: number,
   pps: PPParaSaldo[],
 ): number {
-  return arredondar(totalRealizado - somaDasPPs(pps));
+  return arredondar(totalOrcado - somaDasPPs(pps));
 }
 
 /** O que já está comprometido em PPs — o "Em PPs emitidas" do painel. */

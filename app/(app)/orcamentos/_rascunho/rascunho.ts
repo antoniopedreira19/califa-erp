@@ -73,6 +73,9 @@ export function comoItemDaVersao(
     quantidade_planejada: item.quantidade_planejada,
     dias_meses_planejado: item.dias_meses_planejado,
     total_planejado: totalPlanejadoDe(item),
+    // Rascunho não tem BV congelado: nada foi aprovado ainda, então a
+    // dedução é sempre calculada a partir do BV que está na tela.
+    bv_liquido_planejado: null,
     fornecedor_id: null,
     observacoes: null,
     created_at: "",

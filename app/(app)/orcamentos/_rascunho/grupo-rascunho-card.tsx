@@ -10,12 +10,18 @@ import {
   type AdaptadorItens,
 } from "../[projetoId]/[orcId]/versoes/[versaoId]/itens-table";
 import type { AdaptadorBv, FornecedorOpcao } from "@/app/(app)/_bv/bv-dialog";
+import type { VisaoBv } from "@/lib/calculos/bv-planilha";
 import type { GrupoRascunho } from "./tipos";
 import { comoBvDaVersao, comoItemDaVersao } from "./rascunho";
 
 interface Props {
   grupo: GrupoRascunho;
   moeda: string;
+  /** Alíquota do orçamento — vira o BV líquido da vista Líquido. */
+  percentualImposto: number;
+  /** Bruto ou Líquido (− BV). O estado mora no editor, que é o dono da
+   *  página inteira. */
+  visao: VisaoBv;
   categorias: Categoria[];
   fornecedores: FornecedorOpcao[];
   adaptador: AdaptadorItens;
@@ -37,6 +43,8 @@ interface Props {
 export function GrupoRascunhoCard({
   grupo,
   moeda,
+  percentualImposto,
+  visao,
   categorias,
   fornecedores,
   adaptador,
@@ -123,6 +131,8 @@ export function GrupoRascunhoCard({
         grupoNome={grupo.nome}
         itens={itens}
         moeda={moeda}
+        percentualImposto={percentualImposto}
+        visao={visao}
         readOnly={readOnly}
         categorias={categorias}
         aberto={aberto}

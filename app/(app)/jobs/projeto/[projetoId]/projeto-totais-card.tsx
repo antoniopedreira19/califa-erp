@@ -7,6 +7,11 @@ import {
   somarLinhaFechamento,
   TIPOS_CUSTO,
 } from "@/lib/calculos/versao-totais";
+import {
+  somarBlocosDosItens,
+  valorNaVisao,
+  type VisaoBv,
+} from "@/lib/calculos/bv-planilha";
 import { PainelResultado } from "@/components/painel-resultado";
 import { LegendaFechamento } from "@/components/legenda-fechamento";
 import { type TipoCusto } from "@/lib/types";
@@ -111,6 +116,7 @@ export function ProjetoTotaisCard({
   jobs,
   moeda,
   jobHref,
+  visao,
 }: {
   jobs: JobPlanilhaProjeto[];
   moeda: string;
@@ -120,10 +126,21 @@ export function ProjetoTotaisCard({
    * encaminha para telas de outros (decisão do Tiago, 20/08/2026).
    */
   jobHref?: (jobId: string) => string;
+  /** Bruto ou Líquido (− BV). A mesma dos blocos de job acima. */
+  visao: VisaoBv;
 }) {
   const totalOrcado = jobs.reduce((s, j) => s + j.orcado, 0);
-  const totalPlanejado = jobs.reduce((s, j) => s + j.planejado, 0);
-  const totalRealizado = jobs.reduce((s, j) => s + j.realizado, 0);
+  // Blocos, e não números: a linha "+ BVs" do Resultado precisa da
+  // dedução separada do bruto.
+  const somaDosJobs = somarBlocosDosItens(
+    jobs.map((j) => ({
+      orcado: j.orcado,
+      planejado: j.planejado,
+      realizado: j.realizado,
+    })),
+  );
+  const totalPlanejado = valorNaVisao(somaDosJobs.planejado, visao);
+  const totalRealizado = valorNaVisao(somaDosJobs.realizado, visao);
   const honorarios = jobs.reduce((s, j) => s + j.honorarios, 0);
   const imposto = jobs.reduce((s, j) => s + j.imposto, 0);
   const faturamentoPrevisto = jobs.reduce(
@@ -246,7 +263,9 @@ export function ProjetoTotaisCard({
                     PLANEJADO.celulaTotal,
                   )}
                 >
-                  {j.planejado > 0 ? formatCurrency(j.planejado, moeda) : "—"}
+                  {j.planejado.bruto > 0
+                    ? formatCurrency(valorNaVisao(j.planejado, visao), moeda)
+                    : "—"}
                 </td>
                 <td colSpan={3} className={REALIZADO.celulaVazia} />
                 <td
@@ -255,7 +274,9 @@ export function ProjetoTotaisCard({
                     REALIZADO.celulaTotal,
                   )}
                 >
-                  {j.realizado > 0 ? formatCurrency(j.realizado, moeda) : "—"}
+                  {j.realizado.bruto > 0
+                    ? formatCurrency(valorNaVisao(j.realizado, visao), moeda)
+                    : "—"}
                 </td>
               </tr>
             ))}

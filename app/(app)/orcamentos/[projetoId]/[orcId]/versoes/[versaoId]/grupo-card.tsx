@@ -14,6 +14,7 @@ import type {
   ItemBv,
 } from "@/lib/types";
 import { removerGrupo, renomearGrupo } from "../actions";
+import type { VisaoBv } from "@/lib/calculos/bv-planilha";
 import { ItensTable } from "./itens-table";
 import type { FornecedorOpcao } from "@/app/(app)/_bv/bv-dialog";
 
@@ -21,6 +22,10 @@ interface Props {
   grupo: VersaoOrcamentoGrupo;
   itens: VersaoOrcamentoItem[];
   moeda: string;
+  /** Alíquota da versão — vira o BV líquido da vista Líquido. */
+  percentualImposto: number;
+  /** Bruto ou Líquido (− BV) — decidida uma vez por página. */
+  visao: VisaoBv;
   readOnly?: boolean;
   categorias: Categoria[];
   aberto: boolean;
@@ -34,6 +39,8 @@ export function GrupoCard({
   grupo,
   itens,
   moeda,
+  percentualImposto,
+  visao,
   readOnly,
   categorias,
   aberto,
@@ -189,6 +196,8 @@ export function GrupoCard({
         grupoNome={grupo.nome}
         itens={itens}
         moeda={moeda}
+        percentualImposto={percentualImposto}
+        visao={visao}
         readOnly={readOnly}
         categorias={categorias}
         aberto={aberto}

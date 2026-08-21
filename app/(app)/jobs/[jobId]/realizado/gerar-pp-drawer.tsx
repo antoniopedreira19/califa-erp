@@ -53,9 +53,11 @@ interface Props {
   empresas: Array<{ id: string; razao_social: string; principal: boolean }>;
   defaultEmpresaId: string;
   itemDescricao: string;
-  valorRealizado: number;
-  quantidadeRealizada: number;
-  /** Quanto do realizado ainda não está em PP. É o teto desta PP. */
+  /** ORÇADO do item — a base da fatia. Era o realizado até 21/08/2026;
+   *  agora o realizado é justamente o que estas PPs vão construir. */
+  valorOrcado: number;
+  quantidadeOrcada: number;
+  /** Quanto do orçado ainda não está em PP. É o teto desta PP. */
   saldoDisponivel: number;
   /** Cartões de crédito ativos do tenant — buscados pelo server component pai. */
   cartoes: CartaoOption[];
@@ -118,8 +120,8 @@ export function GerarPPDrawer({
   empresas,
   defaultEmpresaId,
   itemDescricao,
-  valorRealizado,
-  quantidadeRealizada,
+  valorOrcado,
+  quantidadeOrcada,
   saldoDisponivel,
   cartoes,
   onSuccess,
@@ -188,7 +190,7 @@ export function GerarPPDrawer({
       setPpId(res.pp_id);
       setUploadPrefix(res.upload_prefix);
     })();
-  }, [open, itemRealizadoId, defaultEmpresaId, itemDescricao, quantidadeRealizada]);
+  }, [open, itemRealizadoId, defaultEmpresaId, itemDescricao, quantidadeOrcada]);
 
   // DESABILITADO — o cleanup automatico estava disparando entre upload e
   // finalizar (quando ppId mudava por qualquer re-render), apagando os
@@ -300,12 +302,12 @@ export function GerarPPDrawer({
     }
   }
 
-  // ---- Valor da PP: quantidade × R$/un do realizado ----
-  // Não existe campo de valor. A PP é uma fatia do realizado do item, e
+  // ---- Valor da PP: quantidade × R$/un do orçado ----
+  // Não existe campo de valor. A PP é uma fatia do orçado do item, e
   // é a quantidade que diz o tamanho da fatia (design "PPs Parciais").
   const qtdNum = parseNumeroLocal(quantidade);
   const valorPP =
-    qtdNum > 0 ? valorDaPP(qtdNum, valorRealizado, quantidadeRealizada) : 0;
+    qtdNum > 0 ? valorDaPP(qtdNum, valorOrcado, quantidadeOrcada) : 0;
 
   /** Refaz as parcelas mantendo as datas que já existem. */
   const montarParcelas = React.useCallback(
@@ -401,7 +403,7 @@ export function GerarPPDrawer({
     if (parcelas.length > 0) {
       const novo = parseNumeroLocal(bruto);
       const valor =
-        novo > 0 ? valorDaPP(novo, valorRealizado, quantidadeRealizada) : 0;
+        novo > 0 ? valorDaPP(novo, valorOrcado, quantidadeOrcada) : 0;
       // Valor da PP mudou: redivide os valores, preservando as datas
       // (cartão ou mês a mês conforme configuração atual).
       const valores = dividirEmParcelas(valor, parcelas.length);
@@ -573,9 +575,9 @@ export function GerarPPDrawer({
               <p className="font-medium">{itemDescricao}</p>
               <div className="mt-2 grid grid-cols-3 gap-3">
                 <div>
-                  <p className="text-xs text-muted-foreground">Realizado do item</p>
+                  <p className="text-xs text-muted-foreground">Orçado do item</p>
                   <p className="font-mono font-semibold">
-                    {formatCurrency(valorRealizado, "BRL")}
+                    {formatCurrency(valorOrcado, "BRL")}
                   </p>
                 </div>
                 <div>
@@ -599,9 +601,9 @@ export function GerarPPDrawer({
               </div>
               <p className="mt-2 text-[11px] text-muted-foreground">
                 O valor sai da quantidade:{" "}
-                {quantidadeRealizada > 0
-                  ? `${formatCurrency(valorRealizado / quantidadeRealizada, "BRL")} por unidade do realizado`
-                  : "informe o realizado do item antes"}
+                {quantidadeOrcada > 0
+                  ? `${formatCurrency(valorOrcado / quantidadeOrcada, "BRL")} por unidade do orçado`
+                  : "o item não tem quantidade orçada"}
                 .
               </p>
             </div>
@@ -771,8 +773,8 @@ export function GerarPPDrawer({
                   className="no-spinner"
                   inputMode="decimal"
                   placeholder={
-                    quantidadeRealizada > 0
-                      ? `Até ${quantidadeRealizada} do realizado`
+                    quantidadeOrcada > 0
+                      ? `Até ${quantidadeOrcada} do orçado`
                       : ""
                   }
                 />

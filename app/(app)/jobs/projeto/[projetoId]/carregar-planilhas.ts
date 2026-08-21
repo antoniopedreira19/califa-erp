@@ -1,5 +1,11 @@
 import { createClient } from "@/lib/supabase/server";
 import { calcularTotaisVersao } from "@/lib/calculos/versao-totais";
+import {
+  blocosDoItem,
+  realizadoVemDasPPs,
+  somarBlocosDosItens,
+  type BvParaConta,
+} from "@/lib/calculos/bv-planilha";
 import { nomeDoJobNoFinanceiro, type JobStatus, type TipoCusto } from "@/lib/types";
 import type {
   GrupoPlanilhaProjeto,
@@ -55,7 +61,8 @@ export async function carregarPlanilhasDosJobs(
   // Orçado vem da CÓPIA de cada job (`jobs_itens_orcado`), não da versão:
   // a errata altera a cópia, e a visão agregada precisa bater com a
   // Planilha Interna do job — a versão aprovada segue congelada.
-  const [gruposRes, itensRes, realizadosRes, categoriasRes] = await Promise.all([
+  const [gruposRes, itensRes, realizadosRes, categoriasRes, bvsRes] =
+    await Promise.all([
     supabase
       .from("versoes_orcamento_grupos")
       .select("id, nome, versao_orcamento_id, ordem")
@@ -67,7 +74,8 @@ export async function carregarPlanilhasDosJobs(
       .select(
         "id, job_id, item_versao_id, grupo_id, ordem, item, tipo_custo, categoria_id, " +
           "valor_unitario_orcado, quantidade_orcada, dias_meses_orcado, total_orcado, " +
-          "valor_unitario_planejado, quantidade_planejada, dias_meses_planejado, total_planejado",
+          "valor_unitario_planejado, quantidade_planejada, dias_meses_planejado, total_planejado, " +
+          "bv_liquido_planejado",
       )
       .eq("tenant_id", tenantId)
       .in("job_id", jobIds)
@@ -80,6 +88,17 @@ export async function carregarPlanilhasDosJobs(
       .eq("tenant_id", tenantId)
       .in("job_id", jobIds),
     supabase.from("categorias").select("id, nome").eq("tenant_id", tenantId),
+    // O BV entra na conta desde 21/08/2026: a vista Líquido desconta o
+    // líquido dele do planejado e do realizado. Chaveado pelo item da
+    // VERSÃO, que é a chave de `itens_bv`.
+    supabase
+      .from("itens_bv")
+      .select(
+        "item_versao_id, valor, situacao, item:versoes_orcamento_itens!inner(versao_orcamento_id)",
+      )
+      .eq("tenant_id", tenantId)
+      .in("item.versao_orcamento_id", versaoIds)
+      .neq("situacao", "cancelado"),
   ]);
 
   if (gruposRes.error) {
@@ -88,6 +107,16 @@ export async function carregarPlanilhasDosJobs(
   if (itensRes.error) {
     console.error("[planilhas-do-projeto.orcado]", itensRes.error.message);
   }
+  if (bvsRes.error) {
+    console.error("[planilhas-do-projeto.bvs]", bvsRes.error.message);
+  }
+
+  const bvPorItemVersao = new Map<string, BvParaConta>(
+    (bvsRes.data ?? []).map((b: any) => [
+      b.item_versao_id as string,
+      { valor: b.valor, situacao: b.situacao },
+    ]),
+  );
 
   const categoriasMap = new Map<string, string>();
   for (const c of (categoriasRes.data ?? []) as any[]) {
@@ -126,6 +155,13 @@ export async function carregarPlanilhasDosJobs(
 
   return jobs.map((j) => {
     const itensDoJob = itensPorJob.get(j.id) ?? [];
+    // Lida ANTES dos grupos: é ela que transforma o valor do BV em
+    // líquido, e cada job tem a sua (a do orçamento aprovado dele).
+    const aliquotaDoJob = num(j.versao?.percentual_imposto);
+    // Job na fila de abertura não tem realizado nenhum — nem o do orçado
+    // nas linhas `A` e `D`. Mesma regra da Planilha Interna.
+    const jobAberto =
+      j.status !== "aguardando_abertura" && j.status !== "rejeitado_financeiro";
     const gruposDaVersao =
       gruposPorVersao.get(j.versao_orcamento_aprovada_id) ?? [];
 
@@ -134,10 +170,28 @@ export async function carregarPlanilhasDosJobs(
         .filter((it) => it.grupo_id === g.id)
         .map((it) => {
           const real = realizadosPorChave.get(`${j.id}/${it.item_versao_id}`);
+          const tipo = it.tipo_custo as TipoCusto;
+          // Mesma função da Planilha Interna do job: a visão agregada não
+          // pode ter uma segunda implementação da conta, ou ela e a tela
+          // do job começam a divergir. Em `A` e `D` o realizado é o
+          // ORÇADO — eles não geram PP.
+          const blocos = blocosDoItem(
+            {
+              tipo_custo: tipo,
+              total_orcado: it.total_orcado,
+              total_planejado: it.total_planejado,
+              bv_liquido_planejado: it.bv_liquido_planejado,
+            },
+            bvPorItemVersao.get(it.item_versao_id) ?? null,
+            real?.total ?? 0,
+            aliquotaDoJob,
+            jobAberto,
+          );
+          const daPP = realizadoVemDasPPs(tipo) || !jobAberto;
           return {
             id: it.id,
             nome: it.item,
-            tipo: it.tipo_custo as TipoCusto,
+            tipo,
             categoria: it.categoria_id
               ? (categoriasMap.get(it.categoria_id) ?? null)
               : null,
@@ -148,21 +202,31 @@ export async function carregarPlanilhasDosJobs(
             planUnit: num(it.valor_unitario_planejado),
             planQt: num(it.quantidade_planejada),
             planDm: num(it.dias_meses_planejado),
-            planTotal: num(it.total_planejado),
-            realUnit: real?.unit ?? 0,
-            realQt: real?.qt ?? 0,
-            realDm: real?.dm ?? 0,
-            realTotal: real?.total ?? 0,
+            // A quebra do realizado descreve as PPs; em `A` e `D`, que não
+            // têm PP, ela espelha o orçado, como na planilha do job.
+            realUnit: daPP ? (real?.unit ?? 0) : num(it.valor_unitario_orcado),
+            realQt: daPP ? (real?.qt ?? 0) : num(it.quantidade_orcada),
+            realDm: daPP ? (real?.dm ?? 0) : num(it.dias_meses_orcado),
+            planejado: blocos.planejado,
+            realizado: blocos.realizado,
           };
         });
+
+      const somaDoGrupo = somarBlocosDosItens(
+        itens.map((i) => ({
+          orcado: i.orcTotal,
+          planejado: i.planejado,
+          realizado: i.realizado,
+        })),
+      );
 
       return {
         id: g.id,
         nome: g.nome,
         itens,
-        orcado: itens.reduce((s, i) => s + i.orcTotal, 0),
-        planejado: itens.reduce((s, i) => s + i.planTotal, 0),
-        realizado: itens.reduce((s, i) => s + i.realTotal, 0),
+        orcado: somaDoGrupo.orcado,
+        planejado: somaDoGrupo.planejado,
+        realizado: somaDoGrupo.realizado,
       };
     });
 
@@ -200,8 +264,16 @@ export async function carregarPlanilhasDosJobs(
       percentualImposto,
       grupos,
       orcado: subtotalGeral,
-      planejado: grupos.reduce((s, g) => s + g.planejado, 0),
-      realizado: grupos.reduce((s, g) => s + g.realizado, 0),
+      ...(() => {
+        const soma = somarBlocosDosItens(
+          grupos.map((g) => ({
+            orcado: g.orcado,
+            planejado: g.planejado,
+            realizado: g.realizado,
+          })),
+        );
+        return { planejado: soma.planejado, realizado: soma.realizado };
+      })(),
       subtotaisPorTipo,
       honorarios,
       imposto,

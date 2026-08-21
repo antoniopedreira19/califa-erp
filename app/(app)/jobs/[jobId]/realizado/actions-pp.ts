@@ -156,9 +156,13 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
         id: string;
         tenant_id: string;
         job_id: string;
-        total_realizado: number | null;
-        quantidade_realizada: number | null;
         item_id: string;
+        /** ORÇADO do item na cópia do job (`jobs_itens_orcado`) — a base
+         *  da fatia da PP e o teto do saldo desde 21/08/2026. Vem da
+         *  cópia, e não da versão aprovada, porque é a cópia que a errata
+         *  altera. */
+        total_orcado: number;
+        quantidade_orcada: number;
       };
       job: {
         id: string;
@@ -178,18 +182,43 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
   const session = await requireSession();
   const supabase = createClient();
 
-  const { data: item, error: itemErr } = await supabase
+  const { data: ancora, error: itemErr } = await supabase
     .from("jobs_itens_realizado")
-    .select(
-      "id, tenant_id, job_id, total_realizado, quantidade_realizada, item_id",
-    )
+    .select("id, tenant_id, job_id, item_id")
     .eq("id", itemRealizadoId)
     .eq("tenant_id", session.activeTenant.id)
     .maybeSingle();
 
-  if (itemErr || !item) {
+  if (itemErr || !ancora) {
     return { ok: false, message: "Item realizado não encontrado." };
   }
+
+  // A base da PP é o ORÇADO do item, e ele mora na cópia do job. Sem esta
+  // linha não há como saber quanto o item comporta — e o trigger
+  // `pp_valida_saldo_do_item` recusaria de todo jeito.
+  const { data: orcado, error: orcadoErr } = await supabase
+    .from("jobs_itens_orcado")
+    .select("total_orcado, quantidade_orcada")
+    .eq("job_id", ancora.job_id)
+    .eq("item_versao_id", ancora.item_id)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle();
+
+  if (orcadoErr || !orcado) {
+    return {
+      ok: false,
+      message: "Item não encontrado na planilha do job.",
+    };
+  }
+
+  const item = {
+    id: ancora.id,
+    tenant_id: ancora.tenant_id,
+    job_id: ancora.job_id,
+    item_id: ancora.item_id,
+    total_orcado: Number(orcado.total_orcado ?? 0),
+    quantidade_orcada: Number(orcado.quantidade_orcada ?? 0),
+  };
 
   const { data: job, error: jobErr } = await supabase
     .from("jobs")
@@ -251,7 +280,11 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
 }
 
 /**
- * Quanto do realizado do item ainda pode virar PP.
+ * Quanto do ORÇADO do item ainda pode virar PP.
+ *
+ * Era o realizado até 21/08/2026. Trocou porque o realizado passou a SER
+ * a soma das PPs: comparar a soma com ela mesma nunca barraria nada, e a
+ * primeira PP de um item nunca caberia.
  *
  * `excetoPPId` serve ao reenvio: a PP que está sendo corrigida não pode
  * competir consigo mesma pelo saldo. Só o cancelamento devolve saldo —
@@ -261,7 +294,7 @@ async function saldoDisponivelDoItem(
   supabase: ReturnType<typeof createClient>,
   tenantId: string,
   itemRealizadoId: string,
-  totalRealizado: number,
+  totalOrcado: number,
   excetoPPId?: string,
 ): Promise<number> {
   const query = supabase
@@ -274,7 +307,7 @@ async function saldoDisponivelDoItem(
   const { data } = excetoPPId ? await query.neq("id", excetoPPId) : await query;
 
   return saldoDoItem(
-    totalRealizado,
+    totalOrcado,
     (data ?? []).map((pp) => ({ valor: Number(pp.valor), status: pp.status })),
   );
 }
@@ -307,8 +340,8 @@ async function reservarPedidoCompraImpl(
 
   const { item, job, session, supabase } = gate;
 
-  if (Number(item.total_realizado ?? 0) <= 0) {
-    return { ok: false, message: "Item ainda não tem realizado lançado." };
+  if (item.total_orcado <= 0) {
+    return { ok: false, message: "Item sem valor orçado — não há o que pedir." };
   }
 
   // PP já existente não bloqueia mais: o item aceita quantas PPs forem
@@ -319,13 +352,13 @@ async function reservarPedidoCompraImpl(
     supabase,
     session.activeTenant.id,
     itemRealizadoId,
-    Number(item.total_realizado ?? 0),
+    item.total_orcado,
   );
   if (saldo <= 0) {
     return {
       ok: false,
       message:
-        "O realizado deste item já está inteiro em PPs. Cancele uma PP ou aumente o realizado para pedir mais.",
+        "O orçado deste item já está inteiro em PPs. Cancele uma PP ou faça uma errata no orçado para pedir mais.",
     };
   }
 
@@ -377,14 +410,14 @@ async function finalizarPedidoCompraImpl(
   const d = dadosParsed.data;
 
   // ---- Valor da PP e saldo do item ----
-  // O valor deixou de ser o realizado inteiro: é a fatia que ESTA PP
-  // leva, quantidade × R$/un do realizado. A soma das PPs não canceladas
-  // do item não pode passar do realizado — a mesma conta que o painel
-  // "Destrinchar realizado" mostra, e que o trigger do banco reforça.
+  // O valor é a fatia que ESTA PP leva: quantidade × R$/un do ORÇADO. A
+  // soma das PPs não canceladas do item não pode passar do orçado — a
+  // mesma conta que o painel "Destrinchar realizado" mostra, e que o
+  // trigger `pp_valida_saldo_do_item` reforça no banco.
   const valor = valorDaPP(
     d.quantidade,
-    Number(item.total_realizado ?? 0),
-    Number(item.quantidade_realizada ?? 0),
+    item.total_orcado,
+    item.quantidade_orcada,
   );
   if (valor <= 0) {
     return {
@@ -397,7 +430,7 @@ async function finalizarPedidoCompraImpl(
     supabase,
     session.activeTenant.id,
     itemRealizadoId,
-    Number(item.total_realizado ?? 0),
+    item.total_orcado,
   );
   if (passaDoSaldo(valor, saldo)) {
     return {
@@ -1148,8 +1181,8 @@ export async function reenviarPedidoCompra(
   // competir consigo mesma.
   const valor = valorDaPP(
     d.quantidade,
-    Number(item.total_realizado ?? 0),
-    Number(item.quantidade_realizada ?? 0),
+    item.total_orcado,
+    item.quantidade_orcada,
   );
   if (valor <= 0) {
     return {
@@ -1162,7 +1195,7 @@ export async function reenviarPedidoCompra(
     supabase,
     session.activeTenant.id,
     ppRow.item_realizado_id,
-    Number(item.total_realizado ?? 0),
+    item.total_orcado,
     pp_id,
   );
   if (passaDoSaldo(valor, saldoSemEsta)) {

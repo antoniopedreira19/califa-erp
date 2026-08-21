@@ -129,6 +129,8 @@ export default async function JobDetailPage({
     totaisJob,
     custoPlanejadoJob,
     custoRealizadoJob,
+    bvPlanejadoJob,
+    bvRealizadoJob,
     resumoEncerramento,
     podeEditarRealizado,
     podeAcoesPlanilha,
@@ -204,6 +206,8 @@ export default async function JobDetailPage({
                 imposto={totaisJob.imposto}
                 custoPlanejado={custoPlanejadoJob}
                 custoRealizado={custoRealizadoJob}
+                bvPlanejado={bvPlanejadoJob}
+                bvRealizado={bvRealizadoJob}
                 moeda={versaoAprovada.moeda}
               />
             </div>
@@ -322,7 +326,6 @@ export default async function JobDetailPage({
             itens={itens}
             realizadosMap={realizadosMap}
             categoriasMap={categoriasMap}
-            editable={podeEditarRealizado}
             podeAcoes={podeAcoesPlanilha}
             ppsPorItemId={ppsPorItemId}
             fornecedores={fornecedores}

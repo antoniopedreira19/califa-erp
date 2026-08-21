@@ -2,8 +2,6 @@ import { Calculator } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import {
   calcularTotaisVersao,
-  calcularTotaisPlanejados,
-  calcularTotaisRealizado,
   calcularRentabilidade,
   LINHAS_FECHAMENTO_POR_TIPO,
   somarLinhaFechamento,
@@ -17,8 +15,17 @@ import { LegendaFechamento } from "@/components/legenda-fechamento";
 import {
   type VersaoOrcamentoGrupo,
   type ItemPlanilhaJob,
+  type ItemBv,
   type JobItemRealizado,
 } from "@/lib/types";
+import {
+  blocosDoItem,
+  rotuloColunaTotal,
+  somarBlocosDosItens,
+  valorNaVisao,
+  type VisaoBv,
+} from "@/lib/calculos/bv-planilha";
+import { SubLinhaBv } from "@/app/(app)/_planilha/chave-bruto-liquido";
 import { ColunasJob, LARGURA_MINIMA_JOB } from "@/app/(app)/_planilha/grade-job";
 import {
   ORCADO,
@@ -32,6 +39,15 @@ interface Props {
   grupos: VersaoOrcamentoGrupo[];
   itens: ItemPlanilhaJob[];
   realizadosMap: Map<string, JobItemRealizado>;
+  /** BV por id do item da versão — a dedução da vista Líquido e a linha
+   *  "+ BVs" do painel Resultado saem daqui. */
+  bvsPorItem: Record<string, ItemBv>;
+  /** Bruto ou Líquido (− BV). Vem de `JobRealizadoSection`: o Totais tem
+   *  que estar sempre no mesmo modo que os grupos acima dele. */
+  visao: VisaoBv;
+  /** Job já aberto pelo financeiro. Falso zera o REALIZADO — inclusive o
+   *  dos tipos `A` e `D`, que fora isso espelhariam o orçado. */
+  jobAberto: boolean;
   percentualHonorarios: number;
   percentualImposto: number;
   moeda: string;
@@ -116,6 +132,9 @@ export function JobTotaisCard({
   grupos,
   itens,
   realizadosMap,
+  bvsPorItem,
+  visao,
+  jobAberto,
   percentualHonorarios,
   percentualImposto,
   moeda,
@@ -129,14 +148,25 @@ export function JobTotaisCard({
     valorJob,
   } = calcularTotaisVersao(itens, percentualHonorarios, percentualImposto);
 
-  const { totalPlanejado } = calcularTotaisPlanejados(itens);
+  // Planejado e realizado passam pelos blocos com BV: o número que o card
+  // mostra tem que ser o MESMO que os grupos acima somaram, e a única
+  // forma de garantir isso é a conta ser a mesma função.
+  const blocosPorItem = new Map(
+    itens.map((it) => [
+      it.id,
+      blocosDoItem(
+        it,
+        bvsPorItem[it.id] ?? null,
+        Number(realizadosMap.get(it.id)?.total_realizado ?? 0),
+        percentualImposto,
+        jobAberto,
+      ),
+    ]),
+  );
+  const totais = somarBlocosDosItens([...blocosPorItem.values()]);
 
-  // Enriquece itens com total_realizado do map (0 se sem lancamento)
-  const itensComRealizado = itens.map((it) => {
-    const r = realizadosMap.get(it.id);
-    return { total_realizado: r ? Number(r.total_realizado ?? 0) : 0 };
-  });
-  const { totalRealizado } = calcularTotaisRealizado(itensComRealizado);
+  const totalPlanejado = valorNaVisao(totais.planejado, visao);
+  const totalRealizado = valorNaVisao(totais.realizado, visao);
 
   // Agrupamentos por grupo — reusa a mesma funcao usada na pagina de projeto,
   // garantindo que visao individual e visao agregada calculam da mesma forma.
@@ -146,16 +176,28 @@ export function JobTotaisCard({
       nome: g.nome,
       created_at: g.created_at,
     })),
-    itens: itens.map((i) => ({
-      id: i.id,
-      grupo_id: i.grupo_id,
-      total_orcado: i.total_orcado,
-      total_planejado: i.total_planejado,
-    })),
-    realizadosPorItemId: realizadosMap as unknown as Map<
-      string,
-      { total_realizado: number | string | null }
-    >,
+    // Os totais entregues ao agregador já vêm na VISTA ativa: o
+    // agrupamento do card não pode contar um BV que a linha da planilha
+    // acabou de descontar.
+    itens: itens.map((i) => {
+      const b = blocosPorItem.get(i.id);
+      return {
+        id: i.id,
+        grupo_id: i.grupo_id,
+        total_orcado: b?.orcado ?? 0,
+        total_planejado: b ? valorNaVisao(b.planejado, visao) : 0,
+      };
+    }),
+    realizadosPorItemId: new Map(
+      itens.map((i) => [
+        i.id,
+        {
+          total_realizado: blocosPorItem.get(i.id)
+            ? valorNaVisao(blocosPorItem.get(i.id)!.realizado, visao)
+            : 0,
+        },
+      ]),
+    ),
   };
   const { linhas: linhasAgregadas } = agregarRentabilidadePorProjeto(
     [jobParaAgregar],
@@ -234,7 +276,7 @@ export function JobTotaisCard({
                   PLANEJADO.cabecalhoFim,
                 )}
               >
-                Total
+                {rotuloColunaTotal(visao)}
               </th>
               <th colSpan={3} className={REALIZADO.cabecalhoAbre} />
               <th
@@ -243,7 +285,7 @@ export function JobTotaisCard({
                   REALIZADO.cabecalhoFim,
                 )}
               >
-                Total
+                {rotuloColunaTotal(visao)}
               </th>
             </tr>
           </thead>
@@ -296,14 +338,38 @@ export function JobTotaisCard({
                 {formatCurrency(subtotalGeral, moeda)}
               </td>
               <td colSpan={3} className={PLANEJADO.subtotalVazio} />
-              <td className={cn("px-3 py-3 text-right whitespace-nowrap font-mono text-[13px] font-bold", PLANEJADO.subtotalValor)}>
-                {totalPlanejado > 0
-                  ? formatCurrency(totalPlanejado, moeda)
-                  : "—"}
+              <td className={cn("px-3 py-3 text-right whitespace-nowrap", PLANEJADO.subtotalValor)}>
+                <div className="flex flex-col items-end">
+                  <span className="font-mono text-[13px] font-bold">
+                    {totais.planejado.bruto > 0
+                      ? formatCurrency(totalPlanejado, moeda)
+                      : "—"}
+                  </span>
+                  {visao === "liquido" && (
+                    <SubLinhaBv
+                      deducao={totais.planejado.deducaoBv}
+                      formatar={(v) => formatCurrency(v, moeda)}
+                      cor={PLANEJADO.texto}
+                      corRotulo={PLANEJADO.textoSuave}
+                    />
+                  )}
+                </div>
               </td>
               <td colSpan={3} className={REALIZADO.subtotalVazio} />
-              <td className={cn("px-3 py-3 text-right whitespace-nowrap font-mono text-[13px] font-bold", REALIZADO.subtotalValor)}>
-                {temRealizado ? formatCurrency(totalRealizado, moeda) : "—"}
+              <td className={cn("px-3 py-3 text-right whitespace-nowrap", REALIZADO.subtotalValor)}>
+                <div className="flex flex-col items-end">
+                  <span className="font-mono text-[13px] font-bold">
+                    {temRealizado ? formatCurrency(totalRealizado, moeda) : "—"}
+                  </span>
+                  {visao === "liquido" && (
+                    <SubLinhaBv
+                      deducao={totais.realizado.deducaoBv}
+                      formatar={(v) => formatCurrency(v, moeda)}
+                      cor={REALIZADO.texto}
+                      corRotulo={REALIZADO.textoSuave}
+                    />
+                  )}
+                </div>
               </td>
             </tr>
             <tr>
@@ -390,12 +456,17 @@ export function JobTotaisCard({
           </div>
         </div>
 
+        {/* O Resultado usa o custo BRUTO e mostra o BV como linha própria
+            — por isso ele dá o mesmo número nas duas vistas. Ver o
+            comentário de `bvPlanejado` em PainelResultado. */}
         <PainelResultado
           valorJob={valorJob}
           imposto={imposto}
           orcado={subtotalGeral}
-          custoPlanejado={totalPlanejado}
-          custoRealizado={totalRealizado}
+          custoPlanejado={totais.planejado.bruto}
+          custoRealizado={totais.realizado.bruto}
+          bvPlanejado={totais.planejado.deducaoBv}
+          bvRealizado={totais.realizado.deducaoBv}
           honorarios={honorarios}
           taxaHonorarios={formatarTaxa(percentualHonorarios)}
           moeda={moeda}

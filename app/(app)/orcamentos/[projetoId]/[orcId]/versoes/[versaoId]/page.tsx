@@ -18,10 +18,10 @@ import {
   calcularTotaisVersao,
   calcularResultadoOperacional,
 } from "@/lib/calculos/versao-totais";
-import { GruposSection } from "./grupos-section";
+import { bvContaNoPlanejado, bvLiquido } from "@/lib/calculos/bv-planilha";
+import { PlanilhaVersao } from "./planilha-versao";
 import { NovoGrupoDrawer } from "./novo-grupo-drawer";
 import { ResumoRentabilidade } from "./resumo-rentabilidade";
-import { TotaisCard } from "./totais-card";
 import { VersaoEditorDrawer } from "./versao-editor-drawer";
 import { ImportarPlanilhaDrawer } from "../importar-drawer";
 import { AprovacaoActions } from "./aprovacao-actions";
@@ -275,10 +275,25 @@ export default async function VersaoDetailPage({
     (s, it) => s + Number(it.total_planejado ?? 0),
     0,
   );
+
+  // O BV volta para a agência, então ele REDUZ o custo na conta do
+  // resultado — a mesma operação que o card de Totais escreve como linha
+  // "+ BVs". Sem isto o resumo do cabeçalho e o card mostrariam
+  // resultados diferentes para a mesma versão (docs/decisions/022).
+  //
+  // O bloco "Custo planejado" do resumo segue mostrando o BRUTO, como o
+  // card: quem quer ver o líquido usa a chave da planilha.
+  const bvLiquidoDaVersao = Object.values(bvsPorItem).reduce(
+    (s, bv) =>
+      bvContaNoPlanejado(bv.situacao)
+        ? s + bvLiquido(Number(bv.valor ?? 0), Number(versao.percentual_imposto))
+        : s,
+    0,
+  );
   const { resultadoGeral } = calcularResultadoOperacional(
     totais.valorJob,
     totais.imposto,
-    custoPlanejado,
+    custoPlanejado - bvLiquidoDaVersao,
   );
 
   const regionais = (regionaisRes.data ?? []) as { id: string; nome: string }[];
@@ -516,37 +531,23 @@ export default async function VersaoDetailPage({
           !readOnly ? "pr-[154px]" : temBv && "pr-[124px]",
         )}
       >
-        {grupos.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-border bg-muted/20 p-12 text-center">
-            <FolderTree className="h-10 w-10 text-muted-foreground/50 mx-auto mb-4" />
-            <p className="text-sm text-muted-foreground">
-              Nenhum grupo ainda. Crie o primeiro grupo para começar a adicionar itens.
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Exemplos: Equipe, Ativação, Staff, Logística...
-            </p>
-          </div>
-        ) : (
-          <GruposSection
-            secoes={grupos.map((g) => ({
-              grupo: g,
-              itens: itensPorGrupo.get(g.id) ?? [],
-            }))}
-            moeda={versao.moeda}
-            readOnly={readOnly}
-            categorias={categorias}
-            bvsPorItem={bvsPorItem}
-            fornecedores={fornecedores}
-            versaoLabel={`v${versao.numero_versao}`}
-          />
-        )}
-
-        <TotaisCard
+        {/* Grupos e Totais sob a MESMA chave Bruto ⇄ Líquido — por isso os
+            dois passaram a sair de um componente client só. */}
+        <PlanilhaVersao
           grupos={grupos}
           itens={itens}
+          secoes={grupos.map((g) => ({
+            grupo: g,
+            itens: itensPorGrupo.get(g.id) ?? [],
+          }))}
+          moeda={versao.moeda}
+          readOnly={readOnly}
+          categorias={categorias}
+          bvsPorItem={bvsPorItem}
+          fornecedores={fornecedores}
+          versaoLabel={`v${versao.numero_versao}`}
           percentualHonorarios={Number(versao.percentual_honorarios)}
           percentualImposto={Number(versao.percentual_imposto)}
-          moeda={versao.moeda}
         />
       </div>
 

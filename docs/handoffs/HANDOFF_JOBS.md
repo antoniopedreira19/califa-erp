@@ -1766,3 +1766,118 @@ projeto** com o resumo novo de duas linhas (`PEVETE-0001/26`); a barra
 presente nas abas Planilha Interna e PPs; e `scrollWidth == clientWidth` em
 todas — **zero rolagem horizontal**, inclusive na Planilha Interna, onde a
 tabela mede 1334px.
+
+
+---
+
+## ⚠️ 21/08/2026 — o BV entrou na conta, e o realizado saiu do teclado
+
+Handoff de design: `Job - A com Repasse - BV e PP.dc.html`, telas **4a** e
+**3b**. Regra completa em `docs/decisions/022-bv-liquido-e-realizado-por-pp.md`
+— aqui fica só o que mudou nesta tela.
+
+### A Planilha Interna não tem mais célula editável
+
+O bloco REALIZADO era o único digitável. Ele passou a ser **derivado**:
+
+| Tipo | Realizado |
+|---|---|
+| `A`, `D` | o **orçado**, desde a abertura (não geram PP) |
+| `AR`, `B`, `C`, `F`, `FI` | **soma das PPs** não canceladas |
+
+Saíram junto: a navegação por Tab do bloco, os overrides otimistas e a
+Server Action `upsertItemRealizado` — **removida**, não escondida, porque
+Server Action é endpoint e um realizado digitado por fora romperia a
+igualdade com as PPs em silêncio. O rodapé de ajuda ("clique em qualquer
+célula...") virou a explicação de onde o número vem.
+
+`jobs_itens_realizado` continua existindo como **âncora** da PP
+(`item_realizado_id`), agora criada no envio para abertura, zerada, e
+mantida pelo trigger `trg_pp_recalcula_realizado`.
+
+### O saldo da PP vem do orçado
+
+Não dá mais para o realizado ser o teto: ele é a própria soma das PPs. O
+painel "Destrinchar realizado" trocou a primeira ficha de "Realizado do
+item" para **"Orçado do item"**, e o formulário de PP passou a medir a
+fatia sobre a quantidade orçada. Ver a nota de 21/08 na decisão 014.
+
+Efeito na calha: a metade **PP** da linha `AR` **nasce visível**. Antes
+ela só aparecia com realizado lançado — o que nunca mais aconteceria.
+
+### A chave Bruto ⇄ Líquido
+
+Uma por página, no topo da seção, ao lado de "Alterar orçado". Em Líquido
+o Total de PLANEJADO e REALIZADO mostra o custo **sem o BV**, com a
+dedução em sub-linha (na célula e no subtotal do grupo, ali somando os
+BVs de todos os itens). O ORÇADO é idêntico nos dois modos.
+
+`JobRealizadoSection` virou **client component** por causa dela: a chave
+vale para os grupos e para o card de Totais juntos, e o estado precisa
+morar no ancestral comum. A mesma seção serve `/jobs/[jobId]` e
+`/financeiro/jobs/[jobId]` — mexer nela muda as duas, que é o que se quer.
+
+### O painel Resultado ganhou "+ BVs"
+
+`Valor do Job − Impostos − Custo bruto + BVs`. É a mesma conta que
+`− Custo líquido`, escrita do outro lado do sinal — então **o Resultado dá
+o mesmo número nas duas vistas**. A chave não mexe nele.
+
+### Visão agregada do projeto
+
+`/jobs/projeto/[projetoId]` e `/financeiro/projetos/[projetoId]` passaram
+a montar os totais por `blocosDoItem`, a mesma função da planilha do job.
+Sem isso a visão agregada teria zerado o realizado de **todo item `A`**,
+que na tabela fica em zero de propósito. As duas telas dividem o
+componente `PlanilhasDoProjeto`.
+
+### O REALIZADO fica zerado na pré-abertura
+
+Achado na conferência: a regra é "realizado = orçado **desde a abertura**",
+e o `A` estava mostrando o orçado já na fila do financeiro. Corrigido com
+o flag `jobAberto` em `realizadoBrutoDoItem` / `blocosDoItem`: em
+`aguardando_abertura` e `rejeitado_financeiro` o bloco inteiro zera —
+total E quebra (R$ Unit. / QT / D/M).
+
+Job **encerrado** continua mostrando o realizado: ele é histórico. Por
+isso o flag é "já foi aberto", e não `jobAceitaAcoesPlanilha`.
+
+### Verificação
+
+`tsc --noEmit`, `next lint` e `npm run build` limpos. Os três gatilhos
+novos exercitados no banco com dado real, dentro de uma transação
+abortada (nada gravado):
+
+| Gatilho | Resultado |
+|---|---|
+| `planejado_espelha_orcado` | tentativa de gravar planejado 1×1×1 num item `A` virou R$ 77.000,00, igual ao orçado |
+| `trg_pp_recalcula_realizado` | âncora zerada + PP de R$ 100,00 (qtd 2) → realizado 100,00 / qtd 2,000 |
+| `pp_valida_saldo_do_item` | PP acima do teto recusada: "passaria do orçado. Orçado: 4500,00, já em PPs: 100,00" |
+
+**Conferência logada no navegador, 21/08/2026** — JOB-0010 (aberto, com
+"Sinalização" tipo `A` + BV de R$ 15,00 a 19,54%, e itens `B` com PP):
+
+| O que | Confirmado |
+|---|---|
+| Realizado de `A` | R$ 3.000,00 = o orçado |
+| Realizado de `B` com PP | R$ 4.000,00 = Σ PPs (era 3.000 digitado) |
+| Realizado de `B` sem PP | travessão |
+| Chave em Líquido | planejado da Sinalização R$ 2.987,93 com sub-linha `BV −R$ 12,07` |
+| Realizado com BV `a_negociar` | R$ 3.000,00 + **"BV não emitido"** |
+| Subtotal e Totais em Líquido | R$ 5.747,93 e R$ 14.747,93, com a sub-linha somando o grupo |
+| Rótulos | ORÇADO segue "Total"; PLANEJADO e REALIZADO viram "Total líquido" |
+| Painel Resultado | `− Custo planejado 14.760,00 + BVs 12,07 = 5.210,47`, **idêntico nas duas vistas** |
+| BV confirmado (simulado no banco e revertido) | realizado virou R$ 2.987,93 com `BV −R$ 12,07`; Resultado ganhou `+ BVs (confirmados, líquidos)`; rentab. do cabeçalho 53,8% → 53,9% |
+| Painel "Destrinchar realizado" | "Orçado do item" R$ 7.000,00 · em PPs R$ 4.000,00 · **saldo R$ 3.000,00** |
+| Formulário de PP | "Orçado do item" e "R$ 7.000,00 por unidade do orçado" |
+| Calha | `PPs · 1` e `Gerar PP` visíveis sem realizado lançado |
+| Visão agregada do projeto | realizado R$ 7.000,00 (batendo com a planilha) e R$ 14.747,93 em Líquido |
+| `/financeiro/jobs/[jobId]` | mesma planilha, mesma chave, realizado R$ 7.000,00 no resumo |
+| Conferência da abertura (JOB-0012) | REALIZADO inteiro em travessão; chave presente; "Somente leitura" preservado |
+| Rolagem horizontal | `scrollWidth == clientWidth` em todas |
+| Console | zero erros em aba limpa |
+
+O espelho de `A`/`D` foi exercitado ao vivo na versão em rascunho
+TESTE-0003/26 · Teste B2: as três células do PLANEJADO não abrem, e mudar
+o orçado de R$ 200,00 para R$ 250,00 arrastou o planejado junto, no banco
+e na tela. Revertido para R$ 200,00.
