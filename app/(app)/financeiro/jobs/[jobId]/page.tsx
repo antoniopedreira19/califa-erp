@@ -26,27 +26,11 @@ import { consumoDasPrevisoes, previsoesGravadas } from "../../abertura-de-job/co
 import { trimestreDe } from "../../abertura-de-job/curva";
 import { formatDataHoraBr } from "../../abertura-de-job/formatos";
 import { SITUACAO_META } from "../../abertura-de-job/situacao-faturamento";
-import { carregarFluxoDoJob } from "./fluxo-do-job";
-import { FluxoCaixaDoJob, type PrazoDoJob } from "./fluxo-caixa-job";
+import { carregarLinhasDeFluxo, carregarPrazosDosJobs } from "./fluxo-do-job";
+import { FluxoCaixaJobs } from "@/components/financeiro/fluxo-caixa-jobs";
 import { JobFinanceiroTabs } from "./job-financeiro-tabs";
 
 export const dynamic = "force-dynamic";
-
-/** Dias corridos entre duas datas ISO. Null quando falta alguma ponta. */
-function diasEntre(de: string | null, ate: string | null): number | null {
-  if (!de || !ate) return null;
-  const d1 = new Date(`${de.slice(0, 10)}T00:00:00Z`).getTime();
-  const d2 = new Date(`${ate.slice(0, 10)}T00:00:00Z`).getTime();
-  if (Number.isNaN(d1) || Number.isNaN(d2)) return null;
-  return Math.round((d2 - d1) / 86_400_000);
-}
-
-function formatDataBr(iso: string | null): string {
-  if (!iso) return "—";
-  const [ano, mes, dia] = iso.slice(0, 10).split("-");
-  if (!ano || !mes || !dia) return "—";
-  return `${dia}/${mes}/${ano}`;
-}
 
 /**
  * O job aberto na visão do financeiro — as cinco abas do protótipo
@@ -85,7 +69,8 @@ export default async function JobNoFinanceiroPage({
     detalhe,
     carregadoParaAbertura,
     contas,
-    fluxo,
+    linhasDeFluxo,
+    prazosDoJob,
     previsoes,
     consumo,
     notaRes,
@@ -94,7 +79,8 @@ export default async function JobNoFinanceiroPage({
     carregarDetalheDoJob(session, params.jobId),
     carregarJobParaAbertura(tenantId, params.jobId),
     listarContasBancarias(tenantId),
-    carregarFluxoDoJob(tenantId, params.jobId),
+    carregarLinhasDeFluxo(tenantId, [params.jobId]),
+    carregarPrazosDosJobs(tenantId, [params.jobId]),
     previsoesGravadas(supabase, tenantId, params.jobId),
     consumoDasPrevisoes(supabase, tenantId, params.jobId),
     // Nota emitida do job: decide o badge de faturamento e datou o prazo
@@ -185,43 +171,6 @@ export default async function JobNoFinanceiroPage({
     hoje,
   );
   const situacaoMeta = SITUACAO_META[situacao];
-
-  // ---- Prazos do job ----
-  // Todos saem de data real. Sem a ponta que fecha o prazo, o card mostra
-  // travessão — número inventado aqui viraria indicador de gestão.
-  const dataAbertura = job.data_abertura_financeiro?.slice(0, 10) ?? null;
-  const dataFaturamento =
-    nota?.data_emissao?.slice(0, 10) ?? job.data_prevista_faturamento;
-  const ultimoRecebimento =
-    titulos
-      .map((t) => t.vencimento)
-      .sort()
-      .at(-1) ??
-    previsoes.recebimento
-      .map((p) => p.data)
-      .sort()
-      .at(-1) ??
-    null;
-
-  const prazos: PrazoDoJob[] = [
-    {
-      rotulo: "Prazo de faturamento",
-      dias: diasEntre(dataAbertura, dataFaturamento),
-      detalhe: `abertura ${formatDataBr(dataAbertura)} → faturamento ${formatDataBr(dataFaturamento)}`,
-    },
-    {
-      rotulo: "Prazo de recebimento (do faturamento)",
-      dias: diasEntre(dataFaturamento, ultimoRecebimento),
-      detalhe: nota
-        ? "nota emitida → último vencimento"
-        : "faturamento previsto → último recebimento previsto",
-    },
-    {
-      rotulo: "Prazo de recebimento do job",
-      dias: diasEntre(dataAbertura, ultimoRecebimento),
-      detalhe: "abertura → último recebimento",
-    },
-  ];
 
   // ---- Formulário de abertura em leitura ----
   const custoPrevisto = Math.round((job.custo_previsto_total ?? 0) * 100) / 100;
@@ -429,10 +378,16 @@ export default async function JobNoFinanceiroPage({
           />
         }
         fluxo={
-          <FluxoCaixaDoJob
-            fluxo={fluxo}
-            prazos={prazos}
+          <FluxoCaixaJobs
+            linhas={linhasDeFluxo}
+            jobs={[
+              { id: job.id, codigo: job.codigo, nome: jobNaFila.nome },
+            ]}
+            contas={contas.map((c) => ({ id: c.id, rotulo: c.rotulo }))}
+            prazos={prazosDoJob}
+            hoje={hoje}
             moeda={versaoAprovada.moeda}
+            descricao="Só o que passa por este job: o realizado (movimentos das contas) mais o previsto (títulos em aberto e as previsões da abertura)."
           />
         }
         chat={
