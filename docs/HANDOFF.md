@@ -117,8 +117,8 @@ Admin cadastrado: `antonio@pevetech.com.br` (role `administrador` no tenant `age
   - Tabela `versoes_orcamento_categorias` (escopo por versão, mesmo padrão de grupos). Botão "Nova categoria" no header ao lado de "Novo grupo".
   - Item ganha `categoria_id` (opcional) + 4 campos planejados (`valor_unitario_planejado`, `quantidade_planejada`, `dias_meses_planejado`, `total_planejado` GENERATED).
   - Drawer de item tem dropdown de categoria e bloco Planejado (fundo azul).
-  - Tabela de itens tem 13 colunas (orçado + planejado + categoria + bloco Rentabilidade em R$ e %) — detalhes em [`HANDOFF_ORCAMENTO.md`](../HANDOFF_ORCAMENTO.md), Entrega 3.
-  - Card de totais reescrito neste ciclo — detalhes em [`HANDOFF_ORCAMENTO.md`](../HANDOFF_ORCAMENTO.md), Entrega 3.
+  - Tabela de itens tem 13 colunas (orçado + planejado + categoria + bloco Rentabilidade em R$ e %) — detalhes em [`HANDOFF_ORCAMENTO.md`](handoffs/HANDOFF_ORCAMENTO.md), Entrega 3.
+  - Card de totais reescrito neste ciclo — detalhes em [`HANDOFF_ORCAMENTO.md`](handoffs/HANDOFF_ORCAMENTO.md), Entrega 3.
   - Parser lê col B (categoria) e cols I-K (planejado); confirmarImportacao cria categorias em bulk.
   - Duplicar versão copia categorias (com map old→new) e campos planejados.
   - Helper `calcularTotaisPlanejados` em `lib/calculos/versao-totais.ts`.

@@ -30,7 +30,7 @@ const dataSchema = z
   .regex(/^\d{4}-\d{2}-\d{2}$/, "Data deve estar em YYYY-MM-DD.");
 
 /** Origem do título — ver `OrigemTitulo` em `lib/types.ts`. */
-const origemSchema = z.enum(["pp", "avulso", "recorrencia"]);
+const origemSchema = z.enum(["pp", "avulso", "recorrencia", "desembolso"]);
 
 /**
  * A mensagem do Postgres não é para o usuário.
@@ -51,6 +51,9 @@ function mensagemDeBaixa(msg: string): string {
   }
   if (msg.includes("uniq_baixa_ativa_por_avulsa")) {
     return "Este lançamento já tem uma baixa registrada.";
+  }
+  if (msg.includes("uniq_baixa_ativa_por_desembolso_parcela")) {
+    return "Esta parcela de desembolso já tem uma baixa registrada.";
   }
   // As RPCs levantam exceção com texto já pronto para a tela; o
   // prefixo do Postgres é o que precisa sair.
@@ -290,6 +293,61 @@ export async function darBaixaTitulo(input: unknown): Promise<Result> {
     });
 
     revalidarFinanceiro(parcela.pedido.job_id);
+    return { ok: true };
+  }
+
+  if (d.origem === "desembolso") {
+    const { data: parcela } = await supabase
+      .from("desembolsos_parcelas")
+      .select(
+        "id, numero, valor, pago_em, desembolso:desembolsos!inner(id, codigo, status)",
+      )
+      .eq("id", d.id)
+      .eq("tenant_id", session.activeTenant.id)
+      .maybeSingle<{
+        id: string;
+        numero: number;
+        valor: string | number;
+        pago_em: string | null;
+        desembolso: { id: string; codigo: string; status: string } | null;
+      }>();
+
+    if (!parcela) return { ok: false, message: "Parcela não encontrada." };
+    if (parcela.pago_em) return { ok: false, message: "Esta parcela já está paga." };
+    if (parcela.desembolso?.status !== "aprovada") {
+      return { ok: false, message: "O desembolso precisa estar aprovado antes da baixa." };
+    }
+
+    const { data: lancId, error } = await supabase.rpc("dar_baixa_desembolso_parcela", {
+      p_parcela_id: d.id,
+      p_pago_em: d.pago_em,
+      p_conta_bancaria_id: d.conta_bancaria_id,
+      p_plano_conta_tipo_id: d.plano_conta_tipo_id,
+      p_plano_conta_subtipo_id: d.plano_conta_subtipo_id,
+      p_criado_por: session.profile.id,
+    });
+    if (error) {
+      console.error("[titulos.baixa.desembolso]", error.message);
+      return { ok: false, message: mensagemDeBaixa(error.message) };
+    }
+
+    await logAuditEvent({
+      acao: "desembolso.parcela_paga",
+      tenantId: session.activeTenant.id,
+      entidadeTipo: "desembolso",
+      entidadeId: parcela.desembolso!.id,
+      metadata: {
+        codigo: parcela.desembolso!.codigo,
+        parcela_id: parcela.id,
+        parcela_numero: parcela.numero,
+        valor: Number(parcela.valor),
+        pago_em: d.pago_em,
+        conta_bancaria_id: d.conta_bancaria_id,
+        lancamento_id: lancId,
+      },
+    });
+
+    revalidarFinanceiro();
     return { ok: true };
   }
 
@@ -605,6 +663,94 @@ export async function estornarBaixaTitulo(input: unknown): Promise<Result> {
     return estornarBaixaParcela({ parcela_id: d.id, motivo: d.motivo });
   }
 
+  if (d.origem === "desembolso") {
+    return estornarBaixaDesembolsoParcela(d.id, d.motivo);
+  }
+
   const { estornarBaixaAvulsa } = await import("./actions-avulsas");
   return estornarBaixaAvulsa({ conta_avulsa_id: d.id, motivo: d.motivo });
+}
+
+/**
+ * Estorna a baixa de UMA parcela de desembolso.
+ *
+ * Mesmo padrão de `estornarBaixaParcela` mas chamando a RPC
+ * `estornar_baixa_desembolso_parcela`.
+ */
+async function estornarBaixaDesembolsoParcela(
+  parcelaId: string,
+  motivo: string,
+): Promise<Result> {
+  const gate = await checarGateFinanceiro(
+    "desembolso",
+    parcelaId,
+    "desembolso.parcela_baixa_estornada",
+  );
+  if (!gate.ok) return gate;
+  const { session, supabase } = gate;
+
+  const { data: parcela } = await supabase
+    .from("desembolsos_parcelas")
+    .select(
+      "id, numero, valor, pago_em, desembolso:desembolsos!inner(id, codigo)",
+    )
+    .eq("id", parcelaId)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle<{
+      id: string;
+      numero: number;
+      valor: string | number;
+      pago_em: string | null;
+      desembolso: { id: string; codigo: string } | null;
+    }>();
+
+  if (!parcela) return { ok: false, message: "Parcela não encontrada." };
+  if (!parcela.pago_em) {
+    return { ok: false, message: "Esta parcela não está paga." };
+  }
+
+  const { data: reversoId, error } = await supabase.rpc(
+    "estornar_baixa_desembolso_parcela",
+    {
+      p_parcela_id: parcelaId,
+      p_motivo: motivo,
+      p_criado_por: session.profile.id,
+    },
+  );
+
+  if (error) {
+    console.error("[titulos.estorno.desembolso]", error.message);
+    return { ok: false, message: mensagemDeBaixa(error.message) };
+  }
+
+  await logAuditEvent({
+    acao: "desembolso.parcela_baixa_estornada",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "desembolso",
+    entidadeId: parcela.desembolso?.id ?? null,
+    metadata: {
+      codigo: parcela.desembolso?.codigo,
+      parcela_id: parcela.id,
+      parcela_numero: parcela.numero,
+      valor: Number(parcela.valor),
+      motivo,
+      lancamento_reverso_id: reversoId,
+    },
+  });
+
+  await logAuditEvent({
+    acao: "lancamento_financeiro.estornado",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "lancamento_financeiro",
+    entidadeId: (reversoId as string) ?? null,
+    metadata: {
+      origem: "desembolso_estorno",
+      codigo: parcela.desembolso?.codigo,
+      parcela_numero: parcela.numero,
+      motivo,
+    },
+  });
+
+  revalidarFinanceiro();
+  return { ok: true };
 }

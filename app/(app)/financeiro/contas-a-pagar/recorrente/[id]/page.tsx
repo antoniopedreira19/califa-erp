@@ -7,6 +7,8 @@ import { formatCurrency } from "@/lib/utils";
 import type {
   ContaAvulsaRecorrente,
   ContaAvulsaStatus,
+  BandeiraCartao,
+  FormaPagamento,
   PlanoContaTipo,
   PlanoContaSubtipo,
   RateioLinhaInput,
@@ -92,6 +94,7 @@ export default async function RecorrenteDetalhesPage({
     jobsRes,
     rateioRes,
     regionaisRes,
+    cartoesRes,
   ] = await Promise.all([
     supabase
       .from("contas_avulsas")
@@ -145,6 +148,13 @@ export default async function RecorrenteDetalhesPage({
       .from("regionais")
       .select("id, nome, ativo")
       .eq("tenant_id", session.activeTenant.id)
+      .order("nome"),
+    // Cartões de crédito ativos (para o drawer de edição)
+    supabase
+      .from("cartoes_credito")
+      .select("id, nome, banco, bandeira, ultimos_4_digitos, dia_vencimento_fatura")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("ativo", true)
       .order("nome"),
   ]);
 
@@ -203,6 +213,25 @@ export default async function RecorrenteDetalhesPage({
     }),
   );
 
+  // Cartões de crédito (para o drawer de edição)
+  const cartoesList = (cartoesRes.data ?? []).map(
+    (c: {
+      id: string;
+      nome: string;
+      banco: string;
+      bandeira: string;
+      ultimos_4_digitos: string;
+      dia_vencimento_fatura: number;
+    }) => ({
+      id: c.id,
+      nome: c.nome,
+      banco: c.banco,
+      bandeira: c.bandeira as BandeiraCartao,
+      ultimos_4_digitos: c.ultimos_4_digitos,
+      dia_vencimento_fatura: c.dia_vencimento_fatura,
+    }),
+  );
+
   // Mapeamento de regionais por ID (para o card de rateio)
   const regionaisPorId = new Map(
     (regionaisRes.data ?? []).map((reg: { id: string; nome: string; ativo: boolean }) => [
@@ -254,6 +283,8 @@ export default async function RecorrenteDetalhesPage({
     dia_do_ano_mes: number | null;
     proxima_data: string;
     data_fim: string | null;
+    forma_pagamento: FormaPagamento | null;
+    cartao_credito_id: string | null;
     ativo: boolean;
     criado_por: string;
     created_at: string;
@@ -286,6 +317,8 @@ export default async function RecorrenteDetalhesPage({
     dia_do_ano_mes: r.dia_do_ano_mes,
     proxima_data: r.proxima_data,
     data_fim: r.data_fim,
+    forma_pagamento: r.forma_pagamento as FormaPagamento | null,
+    cartao_credito_id: (r.cartao_credito_id as string | null) ?? null,
     ativo: r.ativo,
     criado_por: r.criado_por,
     created_at: r.created_at,
@@ -351,6 +384,7 @@ export default async function RecorrenteDetalhesPage({
                   clientes={clientes}
                   jobs={jobs}
                   regionais={regionaisList}
+                  cartoes={cartoesList}
                   rateioInicial={rateioInicial}
                 />
                 <PausarRecorrenteButton

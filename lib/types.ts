@@ -955,6 +955,8 @@ export interface PedidoCompra {
   rejeitada_por: string | null;
   rejeitada_em: string | null;
   motivo_rejeicao: string | null;
+  forma_pagamento: FormaPagamento | null;
+  cartao_credito_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -1317,6 +1319,15 @@ export type OrigemLancamento =
   | "pp_baixa"
   | "pp_baixa_estornada"
   | "pp_estorno"
+  | "avulsa_baixa"
+  | "avulsa_baixa_estornada"
+  | "avulsa_estorno"
+  | "titulo_baixa"
+  | "titulo_baixa_estornada"
+  | "titulo_estorno"
+  | "desembolso_baixa"
+  | "desembolso_baixa_estornada"
+  | "desembolso_estorno"
   | "manual";
 
 export interface LancamentoFinanceiro {
@@ -1341,6 +1352,16 @@ export interface LancamentoFinanceiro {
    */
   pedido_compra_parcela_id: string | null;
   conta_avulsa_id: string | null;
+  /**
+   * Desembolso que este lançamento quitou (via desembolso_baixa) ou estornou.
+   * Nulo em outras origens.
+   */
+  desembolso_id: string | null;
+  /**
+   * Parcela do desembolso que este lançamento quitou. Nulo em lançamento
+   * que não veio de baixa de parcela de desembolso.
+   */
+  desembolso_parcela_id: string | null;
   estorno_de_lancamento_id: string | null;
   origem: OrigemLancamento;
   criado_por: string;
@@ -1444,6 +1465,55 @@ export interface TituloReceber {
   created_at: string;
 }
 
+// ---------- Forma de pagamento e cartões (20/08/2026) ----------
+
+export type FormaPagamento =
+  | "pix"
+  | "transferencia"
+  | "boleto"
+  | "cartao_credito";
+
+export const formaPagamentoLabel = (f: FormaPagamento): string =>
+  ({
+    pix: "PIX",
+    transferencia: "Transferência",
+    boleto: "Boleto",
+    cartao_credito: "Cartão de Crédito",
+  })[f];
+
+export type BandeiraCartao =
+  | "visa"
+  | "master"
+  | "elo"
+  | "amex"
+  | "hipercard"
+  | "outra";
+
+export const bandeiraCartaoLabel = (b: BandeiraCartao): string =>
+  ({
+    visa: "Visa",
+    master: "Mastercard",
+    elo: "Elo",
+    amex: "American Express",
+    hipercard: "Hipercard",
+    outra: "Outra",
+  })[b];
+
+export interface CartaoCredito {
+  id: string;
+  tenant_id: string;
+  nome: string;
+  banco: string;
+  bandeira: BandeiraCartao;
+  ultimos_4_digitos: string;
+  dono: string;
+  dia_vencimento_fatura: number;
+  ativo: boolean;
+  created_at: string;
+  created_by: string | null;
+  updated_at: string;
+}
+
 // ---------- Task 012: contas_avulsas ----------
 
 export type ContaAvulsaStatus = "aprovada" | "baixada";
@@ -1482,6 +1552,8 @@ export interface ContaAvulsaRecorrente {
   dia_do_ano_mes: number | null;
   proxima_data: string; // YYYY-MM-DD
   data_fim: string | null; // YYYY-MM-DD
+  forma_pagamento: FormaPagamento | null;
+  cartao_credito_id: string | null;
   ativo: boolean;
   criado_por: string;
   created_at: string;
@@ -1515,6 +1587,8 @@ export interface ContaAvulsa {
   pago_por: string | null;
   conta_bancaria_baixa_id: string | null;
   recorrente_id: string | null;
+  forma_pagamento: FormaPagamento | null;
+  cartao_credito_id: string | null;
   criado_por: string;
   created_at: string;
   updated_at: string;
@@ -1532,10 +1606,10 @@ export interface ContaAvulsa {
  *   recorrencia → `contas_avulsas` com `recorrente_id` preenchido
  *                 (a ocorrência que `gerar_ocorrencias_recorrentes` cria)
  */
-export type OrigemTitulo = "pp" | "avulso" | "recorrencia";
+export type OrigemTitulo = "pp" | "avulso" | "recorrencia" | "desembolso";
 
 export const origemTituloLabel = (o: OrigemTitulo, ppCodigo?: string | null): string =>
-  o === "pp" ? (ppCodigo ?? "PP") : o === "avulso" ? "AVULSO" : "RECORRÊNCIA";
+  o === "pp" ? (ppCodigo ?? "PP") : o === "avulso" ? "AVULSO" : o === "recorrencia" ? "RECORRÊNCIA" : "DESEMBOLSO";
 
 /** `a_pagar` enquanto não há baixa; `pago` depois dela. */
 export type TituloPagarStatus = "a_pagar" | "pago";
@@ -1586,3 +1660,65 @@ export interface ContaAvulsaRecorrenteRateio {
 /** Linha de rateio no cliente (com percentual como número — o form).
  *  Fonte-verdade: schema Zod em lib/validations/conta-avulsa.ts. */
 export type { RateioLinhaInput } from "@/lib/validations/conta-avulsa";
+
+// ---------- Desembolsos (20/08/2026) ----------
+
+export type DesembolsoStatus =
+  | "em_avaliacao"
+  | "aprovada"
+  | "pago"
+  | "rejeitada"
+  | "cancelada";
+
+export const desembolsoStatusLabel = (s: DesembolsoStatus): string =>
+  ({
+    em_avaliacao: "Em avaliação",
+    aprovada: "Aprovada",
+    pago: "Pago",
+    rejeitada: "Rejeitada",
+    cancelada: "Cancelada",
+  })[s];
+
+export interface Desembolso {
+  id: string;
+  tenant_id: string;
+  codigo: string;
+  empresa_id: string;
+  descricao: string;
+  valor: string; // numeric → string
+  forma_pagamento: FormaPagamento | null;
+  cartao_credito_id: string | null;
+  status: DesembolsoStatus;
+  fornecedor_id: string | null;
+  cliente_id: string | null;
+  job_id: string | null;
+  data_prevista_pagamento: string | null;
+  motivo_rejeicao: string | null;
+  motivo_cancelamento: string | null;
+  criado_por: string;
+  aprovada_por: string | null;
+  aprovada_em: string | null;
+  rejeitada_por: string | null;
+  rejeitada_em: string | null;
+  cancelada_por: string | null;
+  cancelada_em: string | null;
+  pago_em: string | null;
+  pago_por: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DesembolsoParcela {
+  id: string;
+  tenant_id: string;
+  desembolso_id: string;
+  numero: number;
+  data_vencimento: string;
+  data_pagamento: string | null;
+  data_pagamento_primeira: string | null;
+  valor: string;
+  pago_em: string | null;
+  pago_por: string | null;
+  created_at: string;
+  updated_at: string;
+}

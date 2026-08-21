@@ -8,6 +8,7 @@ import type {
   Empresa,
   ItemBv,
 } from "@/lib/types";
+import type { CartaoOption } from "@/components/financeiro/forma-pagamento-field";
 import { JobItemRealizadoTable } from "./job-item-realizado-table";
 
 interface Props {
@@ -33,6 +34,8 @@ interface Props {
   bvsPorItem: Record<string, ItemBv>;
   /** "v5" — aparece no subtítulo do formulário de BV. */
   versaoLabel: string;
+  /** Cartões de crédito ativos do tenant — buscados pelo server component pai. */
+  cartoes: CartaoOption[];
 }
 
 export function JobGrupoCard({
@@ -52,6 +55,7 @@ export function JobGrupoCard({
   jobResponsavelId,
   bvsPorItem,
   versaoLabel,
+  cartoes,
 }: Props) {
   return (
     <div className="rounded-2xl border border-border bg-card shadow-soft">
@@ -75,6 +79,7 @@ export function JobGrupoCard({
         jobResponsavelId={jobResponsavelId}
         bvsPorItem={bvsPorItem}
         versaoLabel={versaoLabel}
+        cartoes={cartoes}
         grupoNome={grupo.nome}
         cabecalhoGrupo={
           <TruncateTooltip
