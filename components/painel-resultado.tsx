@@ -20,8 +20,27 @@ interface Props {
   imposto: number;
   /** Total dos custos orçados — base da rentabilidade. */
   orcado: number;
+  /** Custo BRUTO — com o BV ainda embutido. O BV entra logo abaixo, como
+   *  linha própria. */
   custoPlanejado: number;
   custoRealizado: number;
+  /**
+   * BV líquido a somar de volta, por ótica.
+   *
+   * A conta é `Valor do Job − Impostos − Custo bruto + BVs`, e ela é
+   * ALGEBRICAMENTE a mesma coisa que `− Custo líquido`: o BV que a
+   * planilha desconta do custo é o mesmo que aqui volta como receita. A
+   * diferença é só de leitura — aqui a comissão aparece, em vez de
+   * desaparecer dentro de um custo menor.
+   *
+   * Consequência de propósito: o Resultado dá o MESMO número nas duas
+   * vistas da chave Bruto ⇄ Líquido. Ele não segue a chave.
+   *
+   * Na ótica planejada somam todos os BVs ativos (é projeção); na
+   * realizada, só os confirmados. Quem filtra é quem monta os blocos.
+   */
+  bvPlanejado?: number;
+  bvRealizado?: number;
   honorarios: number;
   /**
    * Taxa exibida ao lado dos honorários em "Composto por". Fica de fora
@@ -75,6 +94,8 @@ export function PainelResultado({
   orcado,
   custoPlanejado,
   custoRealizado,
+  bvPlanejado = 0,
+  bvRealizado = 0,
   honorarios,
   taxaHonorarios,
   somentePlanejada,
@@ -86,16 +107,19 @@ export function PainelResultado({
   const planejada = somentePlanejada || visao === "planejada";
 
   const custo = planejada ? custoPlanejado : custoRealizado;
+  const bv = planejada ? bvPlanejado : bvRealizado;
   const temCusto = custo > 0;
 
+  // O BV entra como REDUÇÃO do custo na conta, e como linha somando na
+  // leitura. É a mesma operação escrita dos dois lados do sinal.
   const { resultadoOperacional, resultadoGeral } = calcularResultadoOperacional(
     valorJob,
     imposto,
-    custo,
+    custo - bv,
   );
   const { rentabilidade, percentual: rentabilidadePct } = calcularRentabilidade(
     orcado,
-    custo,
+    custo - bv,
   );
 
   // Sem o seletor não há duas óticas para distinguir — o rótulo fica igual
@@ -136,6 +160,19 @@ export function PainelResultado({
           rotulo={planejada ? "− Custo planejado" : "− Custo realizado"}
           valor={temCusto ? formatCurrency(custo, moeda) : "—"}
         />
+        {bv > 0 && (
+          <LinhaValor
+            rotulo={
+              <>
+                + BVs{" "}
+                <span className="text-xs">
+                  ({planejada ? "planejados" : "confirmados"}, líquidos)
+                </span>
+              </>
+            }
+            valor={formatCurrency(bv, moeda)}
+          />
+        )}
         <div className="mt-3 flex items-baseline justify-between gap-3 border-t border-border pt-3">
           <span className="text-sm font-semibold">
             {`Resultado operacional ${sufixo}`.trim()}

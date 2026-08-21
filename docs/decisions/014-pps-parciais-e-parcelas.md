@@ -107,3 +107,29 @@ existem, esperando a 3.2.
   preciso alterar o realizado"); travar a edição dele não foi decidido.
 - **Nenhum limite de PPs por fornecedor**, por decisão explícita do
   Tiago — a primeira redação do plano previa uma por fornecedor.
+
+
+---
+
+## ⚠️ Nota de 2026-08-21 — a base do saldo virou o ORÇADO
+
+Os itens 1, 2 e 3 desta decisão continuam de pé: várias PPs por item, só
+o cancelamento devolve saldo, e o valor da PP é uma fatia medida em
+**quantidade**. O que trocou foi a **base** da fatia e do teto.
+
+| | Até 20/08 | Desde 21/08 |
+|---|---|---|
+| Teto do item | realizado | **orçado** (`jobs_itens_orcado.total_orcado`) |
+| Unitário da fatia | total_realizado ÷ quantidade_realizada | **total_orcado ÷ quantidade_orcada** |
+
+O motivo é circularidade: o realizado passou a SER a soma das PPs, então
+"soma das PPs ≤ realizado" compararia o número consigo mesmo e nunca
+barraria nada — e a primeira PP de um item nunca caberia.
+
+Os números do exemplo do item 3 continuam ilustrando a conta; só troque
+"realizado" por "orçado" ao lê-los.
+
+O parágrafo final ("Baixar o realizado do item para menos que a soma das
+PPs continua possível") passou a valer para o **orçado**, via errata.
+
+Ver `022-bv-liquido-e-realizado-por-pp.md`.

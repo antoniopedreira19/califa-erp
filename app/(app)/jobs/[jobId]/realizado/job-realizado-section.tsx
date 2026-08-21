@@ -1,3 +1,16 @@
+"use client";
+
+/** ⚠️ Client component desde 21/08/2026, por causa de UMA coisa: a chave
+ *  Bruto ⇄ Líquido. Ela vale para a planilha inteira — todos os grupos e
+ *  o card de Totais —, então o estado tem que morar no ancestral comum
+ *  dos três. Uma chave por grupo, como o design 3b desenha, deixaria o
+ *  Totais sem bater com nenhum dos grupos.
+ *
+ *  Esta seção é a MESMA nas duas telas de job: a do GP (`/jobs/[jobId]`)
+ *  e a do financeiro (`/financeiro/jobs/[jobId]`). Mexer aqui muda as
+ *  duas, que é o que se quer — elas mostram a mesma planilha. */
+
+import * as React from "react";
 import Link from "next/link";
 import { Clock, ClipboardList } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -14,6 +27,8 @@ import type {
   ItemBv,
 } from "@/lib/types";
 import type { CartaoOption } from "@/components/financeiro/forma-pagamento-field";
+import { VISAO_BV_PADRAO, type VisaoBv } from "@/lib/calculos/bv-planilha";
+import { ChaveBrutoLiquido } from "@/app/(app)/_planilha/chave-bruto-liquido";
 import { JobGrupoCard } from "./job-grupo-card";
 import { JobTotaisCard } from "./job-totais-card";
 import { AlterarOrcadoButton } from "./alterar-orcado-button";
@@ -36,8 +51,6 @@ interface Props {
   itens: ItemPlanilhaJob[];
   realizadosMap: Map<string, JobItemRealizado>;
   categoriasMap: Map<string, string>;
-  /** Lançar/editar o bloco REALIZADO. Vale já na pré-abertura. */
-  editable: boolean;
   /** Errata, BV e Pedido de Produção — só com o job aberto. */
   podeAcoes: boolean;
   /** Todas as PPs ativas de cada item realizado (PPs parciais). */
@@ -58,7 +71,6 @@ export function JobRealizadoSection({
   itens,
   realizadosMap,
   categoriasMap,
-  editable,
   podeAcoes,
   ppsPorItemId,
   fornecedores,
@@ -66,10 +78,13 @@ export function JobRealizadoSection({
   bvsPorItem,
   cartoes,
 }: Props) {
-  // Antes da abertura a planilha aparece inteira e o realizado já pode
-  // ser lançado — o que fica de fora são as ações que geram documento.
-  // O aviso substitui o antigo bloco "Realizado indisponível", que
-  // escondia a planilha toda.
+  // Uma chave para a página inteira. Abre em Bruto: é a tela de sempre,
+  // e quem não lida com BV nunca precisa saber que a outra existe.
+  const [visao, setVisao] = React.useState<VisaoBv>(VISAO_BV_PADRAO);
+
+  // Antes da abertura a planilha aparece inteira — o que fica de fora são
+  // as ações que geram documento. O aviso substitui o antigo bloco
+  // "Realizado indisponível", que escondia a planilha toda.
   const preAbertura =
     job.status === "aguardando_abertura" ||
     job.status === "rejeitado_financeiro";
@@ -110,8 +125,8 @@ export function JobRealizadoSection({
           <Clock className="mt-0.5 h-3.5 w-3.5 flex-none" />
           <span>
             {job.status === "aguardando_abertura"
-              ? "Job aguardando abertura pelo financeiro — o realizado já pode ser lançado; erratas, BVs e pedidos de produção ficam disponíveis após a abertura."
-              : "Job devolvido pelo financeiro — o realizado já pode ser lançado; erratas, BVs e pedidos de produção ficam disponíveis após a abertura."}
+              ? "Job aguardando abertura pelo financeiro — erratas, BVs e pedidos de produção ficam disponíveis após a abertura, e é da PP que o realizado nasce."
+              : "Job devolvido pelo financeiro — erratas, BVs e pedidos de produção ficam disponíveis após a abertura, e é da PP que o realizado nasce."}
           </span>
         </div>
       )}
@@ -124,6 +139,7 @@ export function JobRealizadoSection({
           </span>
         </div>
         <div className="flex items-center gap-3">
+          <ChaveBrutoLiquido visao={visao} onChange={setVisao} />
           {podeAcoes && (
             <AlterarOrcadoButton
               jobId={job.id}
@@ -161,7 +177,8 @@ export function JobRealizadoSection({
                 realizadosMap={realizadosMap}
                 categoriasMap={categoriasMap}
                 moeda={versao.moeda}
-                editable={editable}
+                percentualImposto={versao.percentual_imposto}
+                visao={visao}
                 podeAcoes={podeAcoes}
                 preAbertura={preAbertura}
                 jobId={job.id}
@@ -180,6 +197,9 @@ export function JobRealizadoSection({
             grupos={grupos}
             itens={itens}
             realizadosMap={realizadosMap}
+            bvsPorItem={bvsPorItem}
+            visao={visao}
+            jobAberto={!preAbertura}
             percentualHonorarios={versao.percentual_honorarios}
             percentualImposto={versao.percentual_imposto}
             moeda={versao.moeda}

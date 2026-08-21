@@ -359,6 +359,12 @@ export interface VersaoOrcamentoItem {
   quantidade_planejada: number;
   dias_meses_planejado: number;
   total_planejado: number;
+  /** BV líquido congelado na aprovação da versão — quanto o PLANEJADO
+   *  deduz na vista Líquido. `null` enquanto a versão está aberta: aí a
+   *  dedução é calculada na hora, a partir do BV vigente. Depois da
+   *  aprovação o BV ainda muda (na planilha do job), e o planejado NÃO
+   *  pode acompanhar — por isso o congelamento. */
+  bv_liquido_planejado: number | null;
   /** Legado do modelo antes de haver tabela de fornecedores por item.
    *  Mantido nullable no banco; não é mais usado nas telas. */
   fornecedor_id: string | null;
@@ -910,6 +916,23 @@ export function jobStatusLabel(s: JobStatus): string {
   }
 }
 
+/**
+ * Realizado de um item do job.
+ *
+ * ⚠️ Desde 21/08/2026 NADA aqui é digitado. A linha nasce zerada no envio
+ * para abertura (ela é a âncora que a PP referencia) e os quatro números
+ * são reescritos pelo trigger `trg_pp_recalcula_realizado` a cada PP
+ * emitida, editada ou cancelada:
+ *
+ * - `total_realizado` — soma das PPs não canceladas;
+ * - `quantidade_realizada` — soma das quantidades dessas PPs;
+ * - `valor_unitario_realizado` — total ÷ quantidade;
+ * - `dias_meses_realizado` — 1 quando há PP, 0 quando não há.
+ *
+ * Item `A` e `D` nunca geram PP, então a linha deles fica em zero e a
+ * aplicação lê o ORÇADO no lugar (`realizadoBrutoDoItem`). Não tente ler
+ * o realizado de um item direto desta tabela sem passar por lá.
+ */
 export interface JobItemRealizado {
   id: string;
   tenant_id: string;
@@ -1046,6 +1069,10 @@ export interface ItemPlanilhaJob {
   quantidade_planejada: number;
   dias_meses_planejado: number;
   total_planejado: number;
+  /** Cópia de `versoes_orcamento_itens.bv_liquido_planejado` feita no
+   *  envio para abertura. Editar o BV na planilha do job não mexe aqui:
+   *  o valor novo só se materializa no REALIZADO, e só na confirmação. */
+  bv_liquido_planejado: number | null;
 }
 
 export interface JobErrata {

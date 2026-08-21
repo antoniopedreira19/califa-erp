@@ -14,11 +14,13 @@ import {
 } from "@/lib/validations/itens";
 import { grupoSchema } from "@/lib/validations/grupos";
 import type {
+  TipoCusto,
   VersaoOrcamento,
   VersaoOrcamentoGrupo,
   VersaoOrcamentoItem,
 } from "@/lib/types";
 import { aceitaBV } from "@/lib/calculos/versao-totais";
+import { bvLiquido, planejadoEspelhaOrcado } from "@/lib/calculos/bv-planilha";
 
 export type ActionResult =
   | { ok: true; id?: string }
@@ -907,6 +909,13 @@ async function resolverBvAoSairDoTipoComBv(
   return null;
 }
 
+/** As três colunas do bloco PLANEJADO — as que `A` e `D` não digitam. */
+const CAMPOS_PLANEJADO_DO_ITEM: readonly string[] = [
+  "valor_unitario_planejado",
+  "quantidade_planejada",
+  "dias_meses_planejado",
+];
+
 export async function atualizarCampoItem(
   itemId: string,
   campo: string,
@@ -934,12 +943,14 @@ export async function atualizarCampoItem(
   const { data: item, error: loadError } = await supabase
     .from("versoes_orcamento_itens")
     .select(
-      "item, versao_orcamento_id, versao:versoes_orcamento!inner(orcamento_id, status)",
+      "item, tipo_custo, versao_orcamento_id, " +
+        "versao:versoes_orcamento!inner(orcamento_id, status)",
     )
     .eq("id", itemId)
     .eq("tenant_id", session.activeTenant.id)
     .maybeSingle<{
       item: string;
+      tipo_custo: TipoCusto;
       versao_orcamento_id: string;
       versao: { orcamento_id: string; status: string };
     }>();
@@ -966,6 +977,28 @@ export async function atualizarCampoItem(
     if (bloqueio) return { ok: false, message: bloqueio };
   }
 
+  // `A` e `D`: o planejado ESPELHA o orçado e não é digitado. A tela já
+  // trava as células, mas Server Action é endpoint — sem esta guarda a
+  // escrita seguiria alcançável pelo console do navegador, e o item
+  // ficaria com um planejado que a planilha não mostra.
+  const tipoDepois = (
+    campo === "tipo_custo" ? String(parsed.data) : item.tipo_custo
+  ) as TipoCusto;
+  const espelha = planejadoEspelhaOrcado(tipoDepois);
+
+  if (espelha && CAMPOS_PLANEJADO_DO_ITEM.includes(campo)) {
+    return {
+      ok: false,
+      message:
+        "Em custo A e D o planejado acompanha o orçado — não é digitado.",
+    };
+  }
+
+  // Quem GRAVA o espelho é o trigger `trg_planejado_espelha_orcado`, no
+  // Postgres — são seis caminhos de escrita diferentes chegando nesta
+  // tabela, e replicar a conta em cada um é como ela se perde. Aqui fica
+  // só a recusa, que é o que devolve uma mensagem em português ao usuário
+  // em vez de um erro de banco.
   const { error } = await supabase
     .from("versoes_orcamento_itens")
     .update({ [campo]: parsed.data })
@@ -1121,6 +1154,40 @@ export async function aprovarVersao(versaoId: string): Promise<ActionResult> {
   }
 
   const agora = new Date().toISOString();
+
+  // 3b. CONGELA o BV de cada item no planejado.
+  //
+  // Depois da aprovação o BV continua editável — mas na planilha do JOB,
+  // e lá ele já não pode mexer no planejado: o planejado é o compromisso
+  // que o financeiro confere e abre. Sem este congelamento, editar o BV
+  // no job reescreveria retroativamente o custo planejado da versão
+  // aprovada. O valor novo se materializa no REALIZADO, e só quando
+  // confirmado (docs/decisions/022).
+  //
+  // Falhar aqui NÃO aborta a aprovação: sem o congelamento a conta cai no
+  // cálculo ao vivo, que dá o mesmo número enquanto ninguém mexer no BV.
+  // Derrubar uma aprovação por causa disso seria pior que o defeito.
+  const { data: bvsDaVersao, error: errBvs } = await supabase
+    .from("itens_bv")
+    .select("valor, item_versao_id, item:versoes_orcamento_itens!inner(versao_orcamento_id)")
+    .eq("item.versao_orcamento_id", versaoId)
+    .eq("tenant_id", session.activeTenant.id)
+    .neq("situacao", "cancelado");
+
+  if (errBvs) {
+    console.error("[versao.aprovar.bv_congelar]", errBvs.message);
+  } else {
+    const taxa = Number(versao.percentual_imposto);
+    await Promise.all(
+      (bvsDaVersao ?? []).map((b: any) =>
+        supabase
+          .from("versoes_orcamento_itens")
+          .update({ bv_liquido_planejado: bvLiquido(Number(b.valor ?? 0), taxa) })
+          .eq("id", b.item_versao_id)
+          .eq("tenant_id", session.activeTenant.id),
+      ),
+    );
+  }
 
   // 4. Update versão (dispara trigger cascata pras outras versões)
   const { error: errUpdVer } = await supabase

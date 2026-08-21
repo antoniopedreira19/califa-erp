@@ -4,6 +4,7 @@ import {
   type ContatoCobranca,
 } from "@/lib/data/contatos-cobranca";
 import { nomeDoJobNoFinanceiro, type PPStatus } from "@/lib/types";
+import { realizadoBrutoDoItem } from "@/lib/calculos/bv-planilha";
 
 /** Uma data da curva de desembolso, como foi gravada na abertura. */
 export interface PrevisaoDoJob {
@@ -144,9 +145,16 @@ export async function carregarJobNoFinanceiro(
   // já que a FK de `aberto_por` aponta para `auth.users`. As duas não
   // dependem uma da outra — vão juntas.
   const [realizadosRes, abertoPorRes, contatos] = await Promise.all([
+    // Não basta somar `total_realizado`: desde 21/08/2026 ele é a soma das
+    // PPs, e item `A`/`D` (que não gera PP) fica em zero — o realizado
+    // deles é o ORÇADO, substituído na leitura. Somar a coluna crua
+    // zeraria toda linha de custo A do job (docs/decisions/022).
     supabase
-      .from("jobs_itens_realizado")
-      .select("total_realizado")
+      .from("jobs_itens_orcado")
+      .select(
+        "item_versao_id, tipo_custo, total_orcado, " +
+          "realizado:jobs_itens_realizado!inner(total_realizado)",
+      )
       .eq("job_id", jobId)
       .eq("tenant_id", tenantId),
     raw.aberto_por
@@ -160,8 +168,23 @@ export async function carregarJobNoFinanceiro(
   ]);
 
   const realizadoTotal = (realizadosRes.data ?? []).reduce(
-    (s, i: { total_realizado: number | string | null }) =>
-      s + Number(i.total_realizado ?? 0),
+    (s: number, i: any) =>
+      s +
+      realizadoBrutoDoItem(
+        i.tipo_custo,
+        Number(i.total_orcado ?? 0),
+        // O embed é `!inner` e 1:1, mas o PostgREST devolve objeto ou
+        // array conforme a inferência da FK — normalizar aqui evita um
+        // NaN silencioso somando o job inteiro.
+        Number(
+          (Array.isArray(i.realizado) ? i.realizado[0] : i.realizado)
+            ?.total_realizado ?? 0,
+        ),
+        // Job na fila de abertura não tem realizado — nem o do orçado nas
+        // linhas `A` e `D`. Encerrado continua tendo: é histórico.
+        raw.status !== "aguardando_abertura" &&
+          raw.status !== "rejeitado_financeiro",
+      ),
     0,
   );
 

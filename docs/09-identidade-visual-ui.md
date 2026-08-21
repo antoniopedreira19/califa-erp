@@ -100,6 +100,38 @@ A rentabilidade fica em neutro de propósito: ela não é um bloco de entrada, �
 
 **Proibido:** escrever hex de bloco direto no JSX. Antes de 2026-08-11 as mesmas cores estavam repetidas em 8 arquivos e **já haviam divergido** entre si — a tela da versão e a agregada usavam tons diferentes para o mesmo bloco.
 
+> ⚠️ **21/08/2026 — o nono arquivo apareceu.** O formulário do BV
+> (`app/(app)/_bv/bv-dialog.tsx`) tinha uma paleta própria, com os três
+> mini-blocos em hex solto — e com o **PLANEJADO em azul**, herança de
+> antes de 11/08, quando o azul era dele. Um usuário via o planejado verde
+> na planilha e azul no formulário aberto por cima dela. Passou a ler
+> `blocos.ts` como todo o resto. É o caso de teste da regra acima: divergir
+> não exige má-fé, só um arquivo que ninguém revisitou.
+
+## A chave Bruto ⇄ Líquido (− BV)
+
+Desde 21/08/2026 as planilhas têm **duas leituras** dos mesmos números: em
+**Bruto** (padrão) o custo aparece cheio; em **Líquido** o BV do item é
+descontado do PLANEJADO e do REALIZADO. Regra de negócio em
+`docs/decisions/022-bv-liquido-e-realizado-por-pp.md`; aqui ficam as
+regras visuais.
+
+- **Uma chave por PÁGINA**, nunca por grupo ou por card. Dois grupos em
+  modos diferentes na mesma tela dariam um Totais que não bate com
+  nenhum deles. Componente: `app/(app)/_planilha/chave-bruto-liquido.tsx`.
+- **Mesma pastilha** do seletor Planejada/Realizada do painel Resultado —
+  duas chaves com formas diferentes na mesma tela seriam duas gramáticas
+  para a mesma ideia.
+- **O ORÇADO nunca muda** entre os modos: ele não recebe BV.
+- Na vista Líquido, o Total ganha uma **sub-linha** `BV −1.050,00`, na
+  cor do bloco a que pertence (verde no PLANEJADO, laranja no REALIZADO).
+  Ela aparece na célula do item **e no subtotal do grupo**, ali somando os
+  BVs de todos os itens. É ela que torna a dedução auditável sem abrir o
+  formulário — e é o motivo de o design 3b ter descartado tooltip: tooltip
+  não sobrevive a tablet, impressão nem export.
+- O **painel Resultado não segue a chave**: lá o BV virou linha própria
+  ("+ BVs"), então o número é o mesmo nos dois modos.
+
 ## Grades compartilhadas (planilha × Totais)
 
 **Regra:** a planilha e o card de Totais da mesma tela usam o MESMO `colgroup`, com `table-fixed`. As colunas Total / Rentab. / % do rodapé têm que cair exatamente sob as mesmas colunas dos cards de grupo acima — senão o leitor perde a coluna ao descer a página.

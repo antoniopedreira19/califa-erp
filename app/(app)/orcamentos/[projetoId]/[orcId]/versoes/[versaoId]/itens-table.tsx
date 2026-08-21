@@ -56,6 +56,16 @@ import {
   LARGURA_CALHA_BV,
 } from "@/app/(app)/_bv/bv-action-button";
 import { aceitaBV, TIPOS_CUSTO } from "@/lib/calculos/versao-totais";
+import {
+  blocosDoItem,
+  planejadoEspelhaOrcado,
+  rotuloColunaTotal,
+  rotuloSubtotal,
+  somarBlocosDosItens,
+  valorNaVisao,
+  type VisaoBv,
+} from "@/lib/calculos/bv-planilha";
+import { SubLinhaBv } from "@/app/(app)/_planilha/chave-bruto-liquido";
 
 /** Onde a grade grava.
  *
@@ -81,6 +91,10 @@ interface Props {
   grupoNome: string;
   itens: VersaoOrcamentoItem[];
   moeda: string;
+  /** Alíquota da versão — vira o BV líquido descontado na vista Líquido. */
+  percentualImposto: number;
+  /** Bruto (padrão) ou Líquido (− BV). Decidida uma vez por página. */
+  visao: VisaoBv;
   readOnly?: boolean;
   categorias: Categoria[];
   /** Grupo recolhido esconde as linhas, o "Novo item" e a trilha de ações.
@@ -130,6 +144,13 @@ const CAMPOS_NAVEGAVEIS: readonly Campo[] = [
   "valor_unitario_orcado",
   "quantidade_orcada",
   "dias_meses_orcado",
+  "valor_unitario_planejado",
+  "quantidade_planejada",
+  "dias_meses_planejado",
+];
+
+/** As três colunas do bloco PLANEJADO — as que `A` e `D` travam. */
+const CAMPOS_PLANEJADO: readonly Campo[] = [
   "valor_unitario_planejado",
   "quantidade_planejada",
   "dias_meses_planejado",
@@ -242,6 +263,8 @@ export function ItensTable({
   grupoNome,
   itens,
   moeda,
+  percentualImposto,
+  visao,
   readOnly,
   categorias,
   aberto = true,
@@ -337,22 +360,46 @@ export function ItensTable({
   function totaisDoItem(item: VersaoOrcamentoItem) {
     // Sem edição pendente usa o valor GENERATED do banco; com edição,
     // recalcula na hora (valor × qtd × dias/meses).
-    if (!overrides[item.id]) {
-      return {
-        orcado: Number(item.total_orcado),
-        planejado: Number(item.total_planejado),
-      };
-    }
-    return {
-      orcado:
-        num(valorAtual(item, "valor_unitario_orcado")) *
+    const orcado = overrides[item.id]
+      ? num(valorAtual(item, "valor_unitario_orcado")) *
         num(valorAtual(item, "quantidade_orcada")) *
-        num(valorAtual(item, "dias_meses_orcado")),
-      planejado:
-        num(valorAtual(item, "valor_unitario_planejado")) *
+        num(valorAtual(item, "dias_meses_orcado"))
+      : Number(item.total_orcado);
+
+    // Em `A` e `D` o planejado É o orçado — inclusive enquanto o usuário
+    // ainda está digitando o orçado, para o espelho não piscar atrasado.
+    if (planejadoEspelhaOrcado(
+      String(valorAtual(item, "tipo_custo")) as VersaoOrcamentoItem["tipo_custo"],
+    )) {
+      return { orcado, planejado: orcado };
+    }
+
+    const planejado = overrides[item.id]
+      ? num(valorAtual(item, "valor_unitario_planejado")) *
         num(valorAtual(item, "quantidade_planejada")) *
-        num(valorAtual(item, "dias_meses_planejado")),
-    };
+        num(valorAtual(item, "dias_meses_planejado"))
+      : Number(item.total_planejado);
+
+    return { orcado, planejado };
+  }
+
+  /** Os blocos da linha, com a dedução de BV separada. No orçamento não
+   *  há realizado — só o par orçado × planejado importa aqui. */
+  function blocosDe(item: VersaoOrcamentoItem) {
+    const totais = totaisDoItem(item);
+    return blocosDoItem(
+      {
+        tipo_custo: String(
+          valorAtual(item, "tipo_custo"),
+        ) as VersaoOrcamentoItem["tipo_custo"],
+        total_orcado: totais.orcado,
+        total_planejado: totais.planejado,
+        bv_liquido_planejado: item.bv_liquido_planejado,
+      },
+      bvsPorItem[item.id] ?? null,
+      0,
+      percentualImposto,
+    );
   }
 
   /** Ordem das linhas para a navegação. A linha nova entra no fim: o Tab
@@ -363,21 +410,58 @@ export function ItensTable({
     [itens, draft],
   );
 
+  /** As três colunas de PLANEJADO travadas nesta linha.
+   *
+   *  Em `A` e `D` o planejado espelha o orçado e não se digita — o Tab
+   *  precisa PULAR essas células, senão a navegação morre numa célula
+   *  que não abre para edição. A linha nova (draft) nasce sem tipo
+   *  definido, então nunca trava. */
+  const planejadoTravadoEm = React.useCallback(
+    (rowId: string): boolean => {
+      const item = itens.find((it) => it.id === rowId);
+      if (!item) return false;
+      return planejadoEspelhaOrcado(
+        String(valorAtual(item, "tipo_custo")) as VersaoOrcamentoItem["tipo_custo"],
+      );
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [itens, overrides],
+  );
+
   /** Para onde o teclado leva a partir daqui. `null` encerra a edição. */
   const celulaDirecao = React.useCallback(
     (rowId: string, campo: Campo, destino?: Direcao): CelulaAtiva => {
       if (!destino) return null; // blur / clique fora: só confirma e sai
-      const alvo = celulaVizinha(
+
+      let alvo = celulaVizinha(
         linhasNavegaveis,
         CAMPOS_NAVEGAVEIS,
         { linhaId: rowId, campo },
         destino,
       );
+
+      // Anda até sair de célula travada. O teto é o tamanho da grade:
+      // uma planilha inteira de itens `A` não pode virar laço infinito —
+      // aí não há para onde ir e a edição encerra.
+      const teto = linhasNavegaveis.length * CAMPOS_NAVEGAVEIS.length;
+      for (let i = 0; alvo && i < teto; i++) {
+        const travada =
+          CAMPOS_PLANEJADO.includes(alvo.campo) &&
+          planejadoTravadoEm(alvo.linhaId);
+        if (!travada) break;
+        alvo = celulaVizinha(
+          linhasNavegaveis,
+          CAMPOS_NAVEGAVEIS,
+          alvo,
+          destino,
+        );
+      }
+
       return alvo
         ? { rowId: alvo.linhaId, campo: alvo.campo, porTeclado: true }
         : null;
     },
-    [linhasNavegaveis],
+    [linhasNavegaveis, planejadoTravadoEm],
   );
 
   function gravar(
@@ -559,11 +643,9 @@ export function ItensTable({
     });
   }
 
-  const subtotalOrcado = itens.reduce((s, it) => s + totaisDoItem(it).orcado, 0);
-  const subtotalPlanejado = itens.reduce(
-    (s, it) => s + totaisDoItem(it).planejado,
-    0,
-  );
+  const subtotais = somarBlocosDosItens(itens.map(blocosDe));
+  const subtotalOrcado = subtotais.orcado;
+  const subtotalPlanejado = valorNaVisao(subtotais.planejado, visao);
   const { rentabilidade: resultado, percentualRentabilidade: percentualSubtotal } =
     rentabilidadeDe(subtotalOrcado, subtotalPlanejado);
 
@@ -724,7 +806,7 @@ export function ItensTable({
                     PLANEJADO.cabecalhoFim,
                   )}
                 >
-                  Total
+                  {rotuloColunaTotal(visao)}
                 </th>
                 {/* bloco RENTABILIDADE */}
                 <th
@@ -760,6 +842,13 @@ export function ItensTable({
 
               {aberto && itens.map((item) => {
                 const totais = totaisDoItem(item);
+                const blocos = blocosDe(item);
+                const planejadoNaVisao = valorNaVisao(blocos.planejado, visao);
+                const planejadoTravado = planejadoEspelhaOrcado(
+                  String(
+                    valorAtual(item, "tipo_custo"),
+                  ) as VersaoOrcamentoItem["tipo_custo"],
+                );
                 const categoriaId = valorAtual(item, "categoria_id") as
                   | string
                   | null;
@@ -910,13 +999,20 @@ export function ItensTable({
 
                     {/* Planejado espelha o Orçado: zero é "R$ 0,00 · 0 · 0",
                         não travessão. Simetria entre os dois blocos, e a
-                        linha nova não muda de cara ao ser salva. */}
+                        linha nova não muda de cara ao ser salva.
+                        Em `A` e `D` o espelho é literal e as células não
+                        abrem: lá o cliente paga o fornecedor direto, e o
+                        custo da agência É o orçado menos o BV. */}
                     <CelulaNumero
-                      valor={num(valorAtual(item, "valor_unitario_planejado"))}
+                      valor={
+                        planejadoTravado
+                          ? num(valorAtual(item, "valor_unitario_orcado"))
+                          : num(valorAtual(item, "valor_unitario_planejado"))
+                      }
                       formato="moeda"
                       moeda={moeda}
                       editando={ativaAqui("valor_unitario_planejado")}
-                      editavel={editavel}
+                      editavel={editavel && !planejadoTravado}
                       onAtivar={() =>
                         setAtiva({
                           rowId: item.id,
@@ -930,9 +1026,13 @@ export function ItensTable({
                       tdClassName={cn("font-mono", PLANEJADO.celulaAbre)}
                     />
                     <CelulaNumero
-                      valor={num(valorAtual(item, "quantidade_planejada"))}
+                      valor={
+                        planejadoTravado
+                          ? num(valorAtual(item, "quantidade_orcada"))
+                          : num(valorAtual(item, "quantidade_planejada"))
+                      }
                       editando={ativaAqui("quantidade_planejada")}
-                      editavel={editavel}
+                      editavel={editavel && !planejadoTravado}
                       onAtivar={() =>
                         setAtiva({
                           rowId: item.id,
@@ -946,9 +1046,13 @@ export function ItensTable({
                       tdClassName={PLANEJADO.celulaMeio}
                     />
                     <CelulaNumero
-                      valor={num(valorAtual(item, "dias_meses_planejado"))}
+                      valor={
+                        planejadoTravado
+                          ? num(valorAtual(item, "dias_meses_orcado"))
+                          : num(valorAtual(item, "dias_meses_planejado"))
+                      }
                       editando={ativaAqui("dias_meses_planejado")}
-                      editavel={editavel}
+                      editavel={editavel && !planejadoTravado}
                       onAtivar={() =>
                         setAtiva({
                           rowId: item.id,
@@ -963,16 +1067,28 @@ export function ItensTable({
                     />
                     <td
                       className={cn(
-                        "px-3 text-right font-mono text-xs font-semibold whitespace-nowrap",
+                        "px-3 text-right whitespace-nowrap",
                         PLANEJADO.celulaTotal,
                       )}
                     >
-                      {formatCurrency(totais.planejado, moeda)}
+                      <div className="flex flex-col items-end">
+                        <span className="font-mono text-xs font-semibold leading-[1.2]">
+                          {formatCurrency(planejadoNaVisao, moeda)}
+                        </span>
+                        {visao === "liquido" && (
+                          <SubLinhaBv
+                            deducao={blocos.planejado.deducaoBv}
+                            formatar={(v) => formatCurrency(v, moeda)}
+                            cor={PLANEJADO.texto}
+                            corRotulo={PLANEJADO.textoSuave}
+                          />
+                        )}
+                      </div>
                     </td>
 
                     <CelulasRentabilidade
                       orcado={totais.orcado}
-                      planejado={totais.planejado}
+                      planejado={planejadoNaVisao}
                       moeda={moeda}
                     />
                   </tr>
@@ -1010,7 +1126,7 @@ export function ItensTable({
                   colSpan={3}
                   className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"
                 >
-                  Subtotal do grupo
+                  {rotuloSubtotal(visao)}
                 </td>
                 <td colSpan={3} className={ORCADO.subtotalVazio} />
                 <td
@@ -1024,11 +1140,26 @@ export function ItensTable({
                 <td colSpan={3} className={PLANEJADO.subtotalVazio} />
                 <td
                   className={cn(
-                    "px-3 py-1.5 text-right whitespace-nowrap font-mono text-[13px] font-bold",
+                    "px-3 py-1.5 text-right whitespace-nowrap",
                     PLANEJADO.subtotalValor,
                   )}
                 >
-                  {formatCurrency(subtotalPlanejado, moeda)}
+                  <div className="flex flex-col items-end">
+                    <span className="font-mono text-[13px] font-bold">
+                      {formatCurrency(subtotalPlanejado, moeda)}
+                    </span>
+                    {/* A soma dos BVs de todos os itens do grupo — foi o
+                        que substituiu as pílulas "BV do grupo" do design
+                        3b, por decisão do Tiago em 21/08/2026. */}
+                    {visao === "liquido" && (
+                      <SubLinhaBv
+                        deducao={subtotais.planejado.deducaoBv}
+                        formatar={(v) => formatCurrency(v, moeda)}
+                        cor={PLANEJADO.texto}
+                        corRotulo={PLANEJADO.textoSuave}
+                      />
+                    )}
+                  </div>
                 </td>
                 <td
                   className={cn(
@@ -1198,6 +1329,7 @@ export function ItensTable({
           moeda={moeda}
           bv={bvsPorItem[bvAberto.id] ?? null}
           fornecedores={fornecedores}
+          percentualImposto={percentualImposto}
           origem="orcamento"
           readOnly={readOnly}
           adaptador={adaptadorBv}

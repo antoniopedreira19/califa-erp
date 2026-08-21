@@ -15,6 +15,13 @@ import {
 } from "@/components/ui/dialog";
 import { cn, formatCurrency } from "@/lib/utils";
 import { calcularTotaisPlanejados } from "@/lib/calculos/versao-totais";
+import { bvLiquido, impostoDoBv } from "@/lib/calculos/bv-planilha";
+import {
+  ORCADO,
+  PLANEJADO,
+  REALIZADO,
+  type Bloco,
+} from "@/app/(app)/_planilha/blocos";
 import {
   bvSituacaoLabel,
   type BvSituacao,
@@ -83,6 +90,11 @@ interface Props {
   moeda: string;
   bv: ItemBv | null;
   fornecedores: FornecedorOpcao[];
+  /** Alíquota do job (`versoes_orcamento.percentual_imposto`), aplicada
+   *  sobre o valor do BV para chegar ao líquido — que é o único número
+   *  que a planilha subtrai. Multiplicação direta, não o gross-up do
+   *  fechamento da versão. */
+  percentualImposto: number;
   /** Muda o rodapé e o terceiro bloco de valores. */
   origem: OrigemBv;
   /** Job: substitui a caixa de rentabilidade. Ignorado no orçamento. */
@@ -122,6 +134,65 @@ function formatarPercentual(percentual: number): string {
   return `${percentual.toFixed(1).replace(".", ",")}%`;
 }
 
+/** Alíquota em duas casas — 19,53% e 24,27%. Uma casa só (o formato do
+ *  percentual do BV) não distinguiria 19,53 de 19,54, que é justamente o
+ *  par que a decisão 006 existe para separar. */
+function formatarAliquota(percentual: number): string {
+  return `${Number(percentual ?? 0).toFixed(2).replace(".", ",")}%`;
+}
+
+/** O subtítulo mudava de verdade com o A · Repasse: nele o principal NÃO
+ *  vai direto ao fornecedor, passa pela California. Dizer "cliente paga o
+ *  fornecedor diretamente" numa linha AR seria informação errada. */
+function descricaoDaCalha(tipo: TipoCusto): string {
+  return tipo === "AR"
+    ? "a California repassa o principal ao fornecedor"
+    : "cliente paga o fornecedor diretamente";
+}
+
+/** Cor da pílula por situação: âmbar enquanto se negocia, grafite quando
+ *  fechado, verde quando o dinheiro entrou. A mesma família das pílulas
+ *  de tipo da planilha — pastilha com ponto, não etiqueta de formulário. */
+const TOM_SITUACAO: Record<
+  BvSituacao,
+  { moldura: string; ponto: string }
+> = {
+  a_negociar: {
+    moldura: "border-amber-200 bg-amber-50 text-amber-800",
+    ponto: "bg-amber-500",
+  },
+  confirmado: {
+    moldura: "border-border bg-muted text-foreground",
+    ponto: "bg-foreground",
+  },
+  recebido: {
+    moldura: "border-emerald-200 bg-emerald-50 text-emerald-800",
+    ponto: "bg-emerald-600",
+  },
+  cancelado: {
+    moldura: "border-border bg-muted text-muted-foreground",
+    ponto: "bg-muted-foreground",
+  },
+};
+
+/** Situação como ESTADO no cabeçalho, e não campo no corpo: ninguém a
+ *  escolhe — ela anda sozinha com os eventos das outras telas. */
+function PilulaSituacao({ situacao }: { situacao: BvSituacao }) {
+  const tom = TOM_SITUACAO[situacao];
+  return (
+    <span
+      title="A situação anda sozinha: nasce em A negociar, vira Confirmado no envio ao financeiro e Recebido na baixa do contas a receber."
+      className={cn(
+        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border py-1 pl-2 pr-3 text-xs font-semibold",
+        tom.moldura,
+      )}
+    >
+      <span className={cn("h-1.5 w-1.5 flex-none rounded-full", tom.ponto)} />
+      {bvSituacaoLabel(situacao)}
+    </span>
+  );
+}
+
 export function BvDialog({
   open,
   onOpenChange,
@@ -132,6 +203,7 @@ export function BvDialog({
   moeda,
   bv,
   fornecedores,
+  percentualImposto,
   origem,
   realizado,
   readOnly,
@@ -186,6 +258,12 @@ export function BvDialog({
   const valorBv = parseNumero(valorRaw) ?? 0;
   // Percentual sobre o orçado: é sobre esse total que o BV é negociado.
   const percentualBv = totalOrcado > 0 ? (valorBv / totalOrcado) * 100 : null;
+
+  // O que a California de fato recebe — e o único número que a planilha
+  // subtrai do item. Acompanha a digitação: o usuário vê o líquido mudar
+  // enquanto negocia, que é o ponto de mostrá-lo aqui.
+  const impostoBv = impostoDoBv(valorBv, percentualImposto);
+  const liquidoBv = bvLiquido(valorBv, percentualImposto);
 
   const prazoRef = React.useRef<HTMLFormElement>(null);
 
@@ -287,8 +365,11 @@ export function BvDialog({
         <DialogContent className="max-w-3xl gap-0 overflow-hidden p-0">
           <form ref={prazoRef} onSubmit={handleSubmit}>
             {/* Cabeçalho — identifica a linha da planilha de onde o
-                formulário foi aberto. */}
-            <div className="flex items-start gap-4 px-6 pb-4 pt-5">
+                formulário foi aberto, e mostra em que ponto do ciclo o BV
+                está. A Situação vive AQUI, e não no corpo: ela é estado,
+                não campo — ninguém a escolhe. Encostada à direita, no
+                espaço que já estava vazio ao lado do fechar. */}
+            <div className="flex items-start gap-4 px-6 pb-4 pt-5 pr-16">
               <div className="flex min-w-0 flex-1 flex-col gap-1.5">
                 <div className="flex flex-wrap items-center gap-2">
                   <DialogTitle className="text-lg font-bold tracking-tight">
@@ -302,9 +383,15 @@ export function BvDialog({
                   )}
                 </div>
                 <DialogDescription className="text-xs">
-                  Grupo {grupoNome} · versão {versaoLabel} · cliente paga o
-                  fornecedor diretamente
+                  Grupo {grupoNome} · versão {versaoLabel} ·{" "}
+                  {descricaoDaCalha(item.tipo_custo)}
                 </DialogDescription>
+              </div>
+              <div className="flex flex-none items-center gap-2.5 pt-0.5">
+                <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
+                  Situação
+                </span>
+                <PilulaSituacao situacao={situacaoAtual} />
               </div>
             </div>
 
@@ -341,7 +428,7 @@ export function BvDialog({
                   diasMeses={Number(item.dias_meses_planejado)}
                   total={totalPlanejado}
                   moeda={moeda}
-                  tom="azul"
+                  tom="planejado"
                 />
 
                 {/* No job o terceiro bloco é o Realizado — é o número que
@@ -356,7 +443,7 @@ export function BvDialog({
                     diasMeses={realizado?.diasMeses ?? 0}
                     total={realizado?.total ?? 0}
                     moeda={moeda}
-                    tom="ambar"
+                    tom="realizado"
                   />
                 ) : (
                   <div className="flex items-center justify-between gap-3 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3">
@@ -481,32 +568,46 @@ export function BvDialog({
                   />
                 </div>
 
-                {/* Situação é derivada, nunca escolhida: quem a move são
-                    os eventos de outras telas. Por isso ela é exibida, e
-                    não editável — nem para quem pode editar o resto. */}
+                {/* O corpo termina na conta: quanto do BV vira imposto e
+                    quanto de fato volta para a California. O líquido é o
+                    ÚNICO número que a planilha subtrai do item — por isso
+                    ele fecha o formulário, em vez de ficar implícito. */}
                 <div className="flex flex-col gap-1.5">
                   <span className="text-[13px] font-semibold text-foreground">
-                    Situação
+                    Impostos
                   </span>
-                  <div className="flex h-11 items-center rounded-xl border border-dashed border-border bg-white/60 px-3.5">
-                    <Badge variant="neutral">
-                      {bvSituacaoLabel(situacaoAtual)}
-                    </Badge>
+                  <div className="flex items-center justify-between gap-2.5 rounded-xl border border-border bg-muted/50 px-3.5 py-2.5">
+                    <span className="font-mono text-sm font-semibold text-foreground">
+                      {formatarAliquota(percentualImposto)}
+                    </span>
+                    <span className="whitespace-nowrap font-mono text-sm text-muted-foreground">
+                      − {formatCurrency(impostoBv, moeda)}
+                    </span>
                   </div>
-                  {travadoPorSituacao ? (
-                    <span className="text-[11.5px] leading-relaxed text-muted-foreground">
-                      {situacaoAtual === "recebido"
-                        ? "Já teve baixa no contas a receber."
-                        : "Já foi enviado ao financeiro."}{" "}
-                      A partir daqui nada mais é alterado neste BV.
+                  <span className="text-[11.5px] leading-relaxed text-muted-foreground">
+                    Alíquota configurada no job, aplicada sobre o valor do BV.
+                  </span>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[13px] font-semibold text-foreground">
+                    BV líquido
+                  </span>
+                  <div className="flex items-center justify-between gap-2.5 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3">
+                    <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-emerald-800/80">
+                      Valor do BV − impostos
                     </span>
-                  ) : (
-                    <span className="text-[11.5px] leading-relaxed text-muted-foreground">
-                      Anda sozinha: nasce em <strong>A negociar</strong>, vira{" "}
-                      <strong>Confirmado</strong> no envio ao financeiro e{" "}
-                      <strong>Recebido</strong> na baixa do contas a receber.
+                    <span className="whitespace-nowrap font-mono text-base font-bold text-emerald-700">
+                      {formatCurrency(liquidoBv, moeda)}
                     </span>
-                  )}
+                  </div>
+                  <span className="text-[11.5px] leading-relaxed text-muted-foreground">
+                    {travadoPorSituacao
+                      ? situacaoAtual === "recebido"
+                        ? "Já teve baixa no contas a receber — nada mais muda neste BV."
+                        : "Já foi enviado ao financeiro — nada mais muda neste BV."
+                      : "É este o valor que a planilha desconta do item na vista Líquido."}
+                  </span>
                 </div>
               </div>
             </div>
@@ -589,7 +690,11 @@ export function BvDialog({
 
       {/* O envio ao financeiro é irreversível: confirmado, o BV trava nas
           duas telas. Por isso a confirmação explica o que acontece antes
-          de acontecer. */}
+          de acontecer.
+          O botão ficou DESABILITADO até 21/08/2026, com o aviso "o módulo
+          de faturamento ainda não existe" — que envelheceu: a esteira
+          entrou em 14/08 (decisão 009). E sem confirmar não há como o BV
+          chegar ao REALIZADO, que é exatamente a regra nova. */}
       <ConfirmDialog
         open={askConfirmar}
         onOpenChange={setAskConfirmar}
@@ -605,54 +710,43 @@ export function BvDialog({
             <strong className="text-foreground">
               {fornecedores.find((f) => f.id === fornecedorId)?.nome ?? "—"}
             </strong>
-            . Depois de confirmado, o BV passa a <strong>Confirmado</strong> e
-            não pode mais ser editado nem removido — nem aqui, nem no
-            orçamento.
+            , no líquido de{" "}
+            <strong className="text-foreground">
+              {formatCurrency(liquidoBv, moeda)}
+            </strong>{" "}
+            depois dos impostos. Depois de confirmado, o BV passa a{" "}
+            <strong>Confirmado</strong>, é descontado do Realizado do item na
+            vista Líquido, e não pode mais ser editado nem removido — nem
+            aqui, nem no orçamento.
           </>
         }
         confirmLabel="Confirmar envio"
         cancelLabel="Voltar"
         pending={pending}
-        confirmDisabled
-        confirmDisabledReason={
-          <>
-            O envio está desativado por enquanto: o módulo de faturamento
-            ainda não existe, então não há para onde mandar o BV. O fluxo
-            fica pronto e o botão é liberado quando o módulo entrar. Até lá,
-            use <strong>Salvar</strong> para registrar a negociação.
-          </>
-        }
         onConfirm={handleConfirmar}
       />
     </>
   );
 }
 
-type Tom = "neutro" | "azul" | "ambar";
+/** Mini-blocos do formulário nas cores do produto.
+ *
+ *  Elas saem de `_planilha/blocos.ts`, e não de hex escrito aqui: a regra
+ *  do CLAUDE.md é que a cor de um bloco tem uma fonte só. Até 21/08/2026
+ *  este arquivo tinha a sua própria paleta, com o PLANEJADO em AZUL —
+ *  herança de antes de 11/08, quando o azul era dele. Hoje azul é do
+ *  ORÇADO e o planejado é verde, e o formulário estava contando outra
+ *  história que a planilha logo atrás dele.
+ *
+ *  A borda fica neutra nos três: `Bloco` não tem uma borda de moldura
+ *  externa, e inventar uma aqui recriaria exatamente o problema. */
+const TONS = {
+  orcado: ORCADO,
+  planejado: PLANEJADO,
+  realizado: REALIZADO,
+} satisfies Record<string, Bloco>;
 
-const TONS: Record<Tom, { titulo: string; borda: string; head: string; linha: string; total: string }> = {
-  neutro: {
-    titulo: "text-muted-foreground",
-    borda: "border-border",
-    head: "border-b border-border bg-muted/40 text-muted-foreground",
-    linha: "",
-    total: "",
-  },
-  azul: {
-    titulo: "text-[#5a76a8]",
-    borda: "border-[#dfeafb]",
-    head: "border-b border-[#dfeafb] bg-blue-50/60 text-[#5a76a8]",
-    linha: "bg-blue-50/20",
-    total: "text-[#1e4fa3]",
-  },
-  ambar: {
-    titulo: "text-[#b45309]",
-    borda: "border-[#f7e6c2]",
-    head: "border-b border-[#f7e6c2] bg-[#FFFBEB] text-[#b45309]",
-    linha: "bg-[#FFFDF5]",
-    total: "text-[#b45309]",
-  },
-};
+type Tom = keyof typeof TONS;
 
 /** Mini-planilha de leitura: repete um bloco da linha para o usuário ver
  *  sobre o que está negociando o BV. */
@@ -663,7 +757,7 @@ function BlocoValores({
   diasMeses,
   total,
   moeda,
-  tom = "neutro",
+  tom = "orcado",
 }: {
   titulo: string;
   valorUnitario: number;
@@ -679,18 +773,18 @@ function BlocoValores({
       <span
         className={cn(
           "text-[10px] font-bold uppercase tracking-[0.1em]",
-          c.titulo,
+          c.textoSuave,
         )}
       >
         {titulo}
       </span>
-      <div className={cn("overflow-hidden rounded-xl border", c.borda)}>
+      <div className="overflow-hidden rounded-xl border border-border">
         <table className="w-full table-fixed border-collapse text-xs">
           <thead>
             <tr
               className={cn(
-                "text-[9.5px] font-semibold uppercase tracking-wider",
-                c.head,
+                "border-b border-border text-[9.5px] font-semibold uppercase tracking-wider",
+                c.cabecalhoFim,
               )}
             >
               <th className="w-[30%] px-3 py-1.5 text-left">R$ Unit.</th>
@@ -700,18 +794,18 @@ function BlocoValores({
             </tr>
           </thead>
           <tbody>
-            <tr className={cn("h-9 font-mono", c.linha)}>
-              <td className="whitespace-nowrap px-3">
+            {/* `celulaTotal` traz fundo E cor do bloco. As três primeiras
+                células devolvem a cor ao texto normal: só o Total é que
+                fala na cor do bloco, como na planilha. */}
+            <tr className={cn("h-9 font-mono", c.celulaTotal)}>
+              <td className="whitespace-nowrap px-3 text-foreground">
                 {formatCurrency(valorUnitario, moeda)}
               </td>
-              <td className="px-1.5 text-center">{quantidade}</td>
-              <td className="px-1.5 text-center">{diasMeses}</td>
-              <td
-                className={cn(
-                  "whitespace-nowrap px-3 text-right font-bold",
-                  c.total,
-                )}
-              >
+              <td className="px-1.5 text-center text-foreground">
+                {quantidade}
+              </td>
+              <td className="px-1.5 text-center text-foreground">{diasMeses}</td>
+              <td className="whitespace-nowrap px-3 text-right font-bold">
                 {formatCurrency(total, moeda)}
               </td>
             </tr>

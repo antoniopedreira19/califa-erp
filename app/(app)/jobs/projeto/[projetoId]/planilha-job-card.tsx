@@ -5,6 +5,12 @@ import Link from "next/link";
 import { ArrowRight, ChevronRight } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import { calcularRentabilidade } from "@/lib/calculos/versao-totais";
+import {
+  valorNaVisao,
+  type ValoresDoBloco,
+  type VisaoBv,
+} from "@/lib/calculos/bv-planilha";
+import { SubLinhaBv } from "@/app/(app)/_planilha/chave-bruto-liquido";
 import { jobStatusLabel, type JobStatus } from "@/lib/types";
 import type { JobPlanilhaProjeto } from "./tipos";
 import {
@@ -85,11 +91,54 @@ function numeroOuTraco(n: number): string {
   return n > 0 ? String(n) : "—";
 }
 
+/** Total de um bloco que recebe BV, com a sub-linha da dedução na vista
+ *  Líquido — a mesma leitura da Planilha Interna do job. */
+function TotalComBv({
+  bloco,
+  visao,
+  moeda,
+  className,
+  cor,
+  corRotulo,
+  tamanho = "text-xs",
+}: {
+  bloco: ValoresDoBloco;
+  visao: VisaoBv;
+  moeda: string;
+  className?: string;
+  cor: string;
+  corRotulo: string;
+  tamanho?: string;
+}) {
+  return (
+    <td className={cn("whitespace-nowrap px-3 py-2.5 text-right", className)}>
+      <div className="flex flex-col items-end">
+        <span className={cn("font-mono font-semibold", tamanho)}>
+          {moedaOuTraco(valorNaVisao(bloco, visao), moeda)}
+        </span>
+        {visao === "liquido" && bloco.bruto > 0 && (
+          <SubLinhaBv
+            deducao={bloco.deducaoBv}
+            pendente={bloco.bvPendente}
+            formatar={(v) => formatCurrency(v, moeda)}
+            cor={cor}
+            corRotulo={corRotulo}
+          />
+        )}
+      </div>
+    </td>
+  );
+}
+
 export function PlanilhaJobCard({
   job,
   jobHref,
+  visao,
 }: {
   job: JobPlanilhaProjeto;
+  /** Bruto ou Líquido (− BV). Vem da página: a chave vale para todos os
+   *  jobs do projeto e para o card de Totais, juntos. */
+  visao: VisaoBv;
   /**
    * Para onde "Abrir job" leva. Default é a página de Jobs. O financeiro
    * passa `/financeiro/jobs/[id]`: aquele módulo não encaminha para telas
@@ -199,7 +248,7 @@ export function PlanilhaJobCard({
                 PLANEJADO.texto,
               )}
             >
-              {moedaOuTraco(job.planejado, moeda)}
+              {moedaOuTraco(valorNaVisao(job.planejado, visao), moeda)}
             </p>
           </div>
           <div className={cn("px-4 text-right", REALIZADO.bordaAbre)}>
@@ -217,7 +266,7 @@ export function PlanilhaJobCard({
                 REALIZADO.texto,
               )}
             >
-              {moedaOuTraco(job.realizado, moeda)}
+              {moedaOuTraco(valorNaVisao(job.realizado, visao), moeda)}
             </p>
           </div>
         </div>
@@ -416,28 +465,30 @@ export function PlanilhaJobCard({
                           PLANEJADO.celulaVazia,
                         )}
                       />
-                      <td
-                        className={cn(
-                          "whitespace-nowrap px-3 py-2.5 text-right font-mono text-[12.5px] font-semibold",
-                          PLANEJADO.celulaTotal,
-                        )}
-                      >
-                        {moedaOuTraco(g.planejado, moeda)}
-                      </td>
+                      <TotalComBv
+                        bloco={g.planejado}
+                        visao={visao}
+                        moeda={moeda}
+                        className={PLANEJADO.celulaTotal}
+                        cor={PLANEJADO.texto}
+                        corRotulo={PLANEJADO.textoSuave}
+                        tamanho="text-[12.5px]"
+                      />
                       <td
                         colSpan={3}
                         className={cn(
                           REALIZADO.celulaVazia,
                         )}
                       />
-                      <td
-                        className={cn(
-                          "whitespace-nowrap px-3 py-2.5 text-right font-mono text-[12.5px] font-semibold",
-                          REALIZADO.celulaTotal,
-                        )}
-                      >
-                        {moedaOuTraco(g.realizado, moeda)}
-                      </td>
+                      <TotalComBv
+                        bloco={g.realizado}
+                        visao={visao}
+                        moeda={moeda}
+                        className={REALIZADO.celulaTotal}
+                        cor={REALIZADO.texto}
+                        corRotulo={REALIZADO.textoSuave}
+                        tamanho="text-[12.5px]"
+                      />
                     </tr>
 
                     {gAberto &&
@@ -525,14 +576,14 @@ export function PlanilhaJobCard({
                           >
                             {numeroOuTraco(it.planDm)}
                           </td>
-                          <td
-                            className={cn(
-                              "whitespace-nowrap px-3 py-2.5 text-right font-mono text-xs font-semibold",
-                              PLANEJADO.celulaTotal,
-                            )}
-                          >
-                            {moedaOuTraco(it.planTotal, moeda)}
-                          </td>
+                          <TotalComBv
+                            bloco={it.planejado}
+                            visao={visao}
+                            moeda={moeda}
+                            className={PLANEJADO.celulaTotal}
+                            cor={PLANEJADO.texto}
+                            corRotulo={PLANEJADO.textoSuave}
+                          />
                           {/* Realizado */}
                           <td
                             className={cn(
@@ -558,14 +609,14 @@ export function PlanilhaJobCard({
                           >
                             {numeroOuTraco(it.realDm)}
                           </td>
-                          <td
-                            className={cn(
-                              "whitespace-nowrap px-3 py-2.5 text-right font-mono text-xs font-semibold",
-                              REALIZADO.celulaTotal,
-                            )}
-                          >
-                            {moedaOuTraco(it.realTotal, moeda)}
-                          </td>
+                          <TotalComBv
+                            bloco={it.realizado}
+                            visao={visao}
+                            moeda={moeda}
+                            className={REALIZADO.celulaTotal}
+                            cor={REALIZADO.texto}
+                            corRotulo={REALIZADO.textoSuave}
+                          />
                         </tr>
                       ))}
                   </React.Fragment>
@@ -597,7 +648,7 @@ export function PlanilhaJobCard({
                     PLANEJADO.subtotalValor,
                   )}
                 >
-                  {moedaOuTraco(job.planejado, moeda)}
+                  {moedaOuTraco(valorNaVisao(job.planejado, visao), moeda)}
                 </td>
                 <td colSpan={3} className={REALIZADO.subtotalVazio} />
                 <td
@@ -606,7 +657,7 @@ export function PlanilhaJobCard({
                     REALIZADO.subtotalValor,
                   )}
                 >
-                  {moedaOuTraco(job.realizado, moeda)}
+                  {moedaOuTraco(valorNaVisao(job.realizado, visao), moeda)}
                 </td>
               </tr>
               <tr>
@@ -635,7 +686,7 @@ export function PlanilhaJobCard({
                 >
                   <CelulaRentabilidade
                     orcado={job.orcado}
-                    custo={job.planejado}
+                    custo={valorNaVisao(job.planejado, visao)}
                     moeda={moeda}
                     corValor={RENTAB_VALOR}
                     corPercentual={RENTAB_VALOR}
@@ -656,7 +707,7 @@ export function PlanilhaJobCard({
                 >
                   <CelulaRentabilidade
                     orcado={job.orcado}
-                    custo={job.realizado}
+                    custo={valorNaVisao(job.realizado, visao)}
                     moeda={moeda}
                     corValor={RENTAB_VALOR}
                     corPercentual={RENTAB_VALOR}

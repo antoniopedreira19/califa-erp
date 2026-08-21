@@ -28,7 +28,11 @@ import {
 
 export interface DadosPpLinha {
   itemRealizadoId: string;
-  totalRealizado: number;
+  /** Quanto o item permite em PPs — o ORÇADO dele. Era o realizado até
+   *  21/08/2026; com o realizado passando a ser a própria soma das PPs,
+   *  esperar por ele deixaria a metade PP invisível para sempre, porque
+   *  a primeira PP nunca poderia nascer. */
+  baseDisponivel: number;
   /** Todas as PPs ativas do item — desde 17/08/2026 podem ser várias. */
   pedidos: PedidoCompra[];
   /** Placeholder otimista antes do refresh do server chegar. Só tem
@@ -68,10 +72,11 @@ export function CalhaLinha({
 
 /** Regra de quando a PP aparece — e o que a metade faz.
  *
- *  Sem realizado lançado não há o que pedir: a PP nasce do valor
- *  realizado da linha, então a metade só entra depois que ele existe. Em
- *  A · Repasse isso significa que a linha começa com a pílula inteira do
- *  BV e SE DIVIDE quando o realizado é lançado.
+ *  Item sem orçado não tem o que pedir, e é só isso que esconde a metade
+ *  hoje. Até 21/08/2026 quem mandava aqui era o realizado lançado à mão;
+ *  em A · Repasse isso fazia a linha começar com a pílula inteira do BV e
+ *  só se dividir depois. Agora ela já nasce dividida — a PP é justamente
+ *  o que vai construir o realizado.
  *
  *  Desde 17/08/2026 os dois caminhos levam ao MESMO lugar: o painel
  *  "Destrinchar realizado". Um item pode ter várias PPs, então "Ver PP"
@@ -80,7 +85,7 @@ export function CalhaLinha({
  *  vermelho); com PP é consulta ("PPs · N", neutro), como o design pede. */
 function descreverPp(pp: DadosPpLinha | null): AcaoCalha | null {
   if (!pp) return null;
-  if (pp.totalRealizado <= 0) return null;
+  if (pp.baseDisponivel <= 0) return null;
 
   const quantas = pp.pedidos.length + (pp.otimista ? 1 : 0);
   const abrir = () => pp.onAbrirPainel(pp.itemRealizadoId);

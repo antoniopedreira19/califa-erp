@@ -3,15 +3,24 @@ import { cn, formatCurrency } from "@/lib/utils";
 import { LegendaFechamento } from "@/components/legenda-fechamento";
 import {
   calcularTotaisVersao,
-  calcularTotaisPlanejados,
+  calcularRentabilidade,
   calcularResultadoOperacional,
   LINHAS_FECHAMENTO_POR_TIPO,
   somarLinhaFechamento,
 } from "@/lib/calculos/versao-totais";
 import {
+  type ItemBv,
   type VersaoOrcamentoGrupo,
   type VersaoOrcamentoItem,
 } from "@/lib/types";
+import {
+  blocosDoItem,
+  rotuloColunaTotal,
+  somarBlocosDosItens,
+  valorNaVisao,
+  type VisaoBv,
+} from "@/lib/calculos/bv-planilha";
+import { SubLinhaBv } from "@/app/(app)/_planilha/chave-bruto-liquido";
 import {
   ColunasFixas,
   LARGURA_MINIMA,
@@ -27,6 +36,11 @@ import {
 interface Props {
   grupos: VersaoOrcamentoGrupo[];
   itens: VersaoOrcamentoItem[];
+  /** BV por id do item — a dedução da vista Líquido e a linha "+ BVs" do
+   *  Resultado saem daqui. */
+  bvsPorItem: Record<string, ItemBv>;
+  /** Bruto ou Líquido (− BV). Tem que ser a MESMA dos grupos acima. */
+  visao: VisaoBv;
   percentualHonorarios: number;
   percentualImposto: number;
   moeda: string;
@@ -39,6 +53,8 @@ interface Props {
 export function TotaisCard({
   grupos,
   itens,
+  bvsPorItem,
+  visao,
   percentualHonorarios,
   percentualImposto,
   moeda,
@@ -52,13 +68,22 @@ export function TotaisCard({
     valorJob,
   } = calcularTotaisVersao(itens, percentualHonorarios, percentualImposto);
 
-  const {
-    totalPlanejado,
-    rentabilidade,
-    percentualRentabilidade,
-  } = calcularTotaisPlanejados(itens);
+  // O planejado passa pelos blocos com BV: em `A` e `D` ele espelha o
+  // orçado, e na vista Líquido a comissão sai fora. O número aqui tem que
+  // ser o MESMO que os grupos somaram — por isso é a mesma função.
+  const blocosPorItem = new Map(
+    itens.map((it) => [
+      it.id,
+      blocosDoItem(it, bvsPorItem[it.id] ?? null, 0, percentualImposto),
+    ]),
+  );
+  const totais = somarBlocosDosItens([...blocosPorItem.values()]);
 
-  const linhas = agruparPorGrupo(grupos, itens);
+  const totalPlanejado = valorNaVisao(totais.planejado, visao);
+  const { rentabilidade, percentual: percentualRentabilidade } =
+    calcularRentabilidade(totais.orcado, totalPlanejado);
+
+  const linhas = agruparPorGrupo(grupos, itens, blocosPorItem, visao);
 
   const temPlanejado = totalPlanejado > 0;
 
@@ -68,10 +93,14 @@ export function TotaisCard({
   // A base é o VALOR DO JOB, não o faturamento previsto: o custo planejado
   // inclui os itens pagos direto ao fornecedor, então a receita comparada
   // precisa incluí-los também.
+  // O BV entra como REDUÇÃO do custo na conta, e como linha somando na
+  // leitura — as duas escritas da mesma operação. Consequência de
+  // propósito: o Resultado dá o mesmo número nas duas vistas da chave.
+  const bvNoResultado = totais.planejado.deducaoBv;
   const { resultadoOperacional, resultadoGeral } = calcularResultadoOperacional(
     valorJob,
     imposto,
-    totalPlanejado,
+    totais.planejado.bruto - bvNoResultado,
   );
 
   return (
@@ -129,7 +158,7 @@ export function TotaisCard({
               <th
                 className={cn("text-right px-3 py-2", PLANEJADO.cabecalhoFim)}
               >
-                Total
+                {rotuloColunaTotal(visao)}
               </th>
               <th
                 className={cn(
@@ -230,11 +259,23 @@ export function TotaisCard({
               <td colSpan={3} className={PLANEJADO.subtotalVazio} />
               <td
                 className={cn(
-                  "px-3 py-[13px] text-right whitespace-nowrap font-mono text-sm font-bold",
+                  "px-3 py-[13px] text-right whitespace-nowrap",
                   PLANEJADO.subtotalValor,
                 )}
               >
-                {formatCurrency(totalPlanejado, moeda)}
+                <div className="flex flex-col items-end">
+                  <span className="font-mono text-sm font-bold">
+                    {formatCurrency(totalPlanejado, moeda)}
+                  </span>
+                  {visao === "liquido" && (
+                    <SubLinhaBv
+                      deducao={totais.planejado.deducaoBv}
+                      formatar={(v) => formatCurrency(v, moeda)}
+                      cor={PLANEJADO.texto}
+                      corRotulo={PLANEJADO.textoSuave}
+                    />
+                  )}
+                </div>
               </td>
               <td
                 className={cn(
@@ -322,9 +363,16 @@ export function TotaisCard({
             <Linha label="− Impostos" value={imposto} moeda={moeda} />
             <Linha
               label="− Custo planejado"
-              value={totalPlanejado}
+              value={totais.planejado.bruto}
               moeda={moeda}
             />
+            {bvNoResultado > 0 && (
+              <Linha
+                label="+ BVs (planejados, líquidos)"
+                value={bvNoResultado}
+                moeda={moeda}
+              />
+            )}
             <div className="mt-3 pt-3 border-t border-border flex items-baseline justify-between gap-3">
               <span className="text-sm font-semibold">
                 Resultado operacional
@@ -461,6 +509,8 @@ interface LinhaAgrupamento {
 function agruparPorGrupo(
   grupos: VersaoOrcamentoGrupo[],
   itens: VersaoOrcamentoItem[],
+  blocosPorItem: Map<string, ReturnType<typeof blocosDoItem>>,
+  visao: VisaoBv,
 ): LinhaAgrupamento[] {
   const porGrupo = new Map<string, VersaoOrcamentoItem[]>();
   for (const it of itens) {
@@ -470,15 +520,22 @@ function agruparPorGrupo(
   }
 
   return grupos.map((g) => {
-    const { totalOrcado, totalPlanejado, rentabilidade, percentualRentabilidade } =
-      calcularTotaisPlanejados(porGrupo.get(g.id) ?? []);
+    const doGrupo = (porGrupo.get(g.id) ?? [])
+      .map((it) => blocosPorItem.get(it.id))
+      .filter((b): b is NonNullable<typeof b> => b != null);
+    const soma = somarBlocosDosItens(doGrupo);
+    const planejado = valorNaVisao(soma.planejado, visao);
+    const { rentabilidade, percentual } = calcularRentabilidade(
+      soma.orcado,
+      planejado,
+    );
     return {
       id: g.id,
       nome: g.nome,
-      orcado: totalOrcado,
-      planejado: totalPlanejado,
+      orcado: soma.orcado,
+      planejado,
       rentabilidade,
-      percentual: percentualRentabilidade,
+      percentual,
     };
   });
 }

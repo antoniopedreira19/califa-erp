@@ -360,7 +360,7 @@ export async function enviarJobParaAbertura(
   const { data: itensDaVersao, error: errItensCopia } = await supabase
     .from("versoes_orcamento_itens")
     .select(
-      "id, grupo_id, ordem, item, tipo_custo, categoria_id, valor_unitario_orcado, quantidade_orcada, dias_meses_orcado, valor_unitario_planejado, quantidade_planejada, dias_meses_planejado",
+      "id, grupo_id, ordem, item, tipo_custo, categoria_id, valor_unitario_orcado, quantidade_orcada, dias_meses_orcado, valor_unitario_planejado, quantidade_planejada, dias_meses_planejado, bv_liquido_planejado",
     )
     .eq("versao_orcamento_id", versaoId)
     .eq("tenant_id", session.activeTenant.id);
@@ -390,6 +390,10 @@ export async function enviarJobParaAbertura(
         valor_unitario_planejado: i.valor_unitario_planejado,
         quantidade_planejada: i.quantidade_planejada,
         dias_meses_planejado: i.dias_meses_planejado,
+        // O BV que o planejado deduz vem CONGELADO da aprovação. Editar o
+        // BV depois, na planilha do job, não mexe aqui — o compromisso do
+        // planejado fecha neste ponto (docs/decisions/022).
+        bv_liquido_planejado: i.bv_liquido_planejado,
       })),
     );
 
@@ -400,6 +404,42 @@ export async function enviarJobParaAbertura(
         message: "Job criado, mas a planilha interna não foi montada. Avise o suporte.",
       };
     }
+
+    // 6c. Âncora do realizado, uma linha por item, zerada.
+    //
+    // A PP referencia `jobs_itens_realizado.id`. Até 21/08/2026 a linha
+    // nascia no primeiro lançamento manual do realizado; sem lançamento
+    // manual ela precisa existir desde já, senão a calha não teria em que
+    // pendurar o "Gerar PP" e o item ficaria sem como pedir nada.
+    //
+    // Zerada de propósito: o realizado começa em zero e sobe a cada PP.
+    // Item `A` e `D` também ganha a linha — ela não é usada (eles leem o
+    // orçado), mas uma exceção aqui só criaria um caso a mais para quem
+    // for ler isto depois.
+    const { error: errAncora } = await supabase
+      .from("jobs_itens_realizado")
+      .upsert(
+        (itensDaVersao ?? []).map((i: any) => ({
+          tenant_id: session.activeTenant.id,
+          job_id: novo.id,
+          item_id: i.id,
+          valor_unitario_realizado: 0,
+          quantidade_realizada: 0,
+          dias_meses_realizado: 0,
+          created_by: session.profile.id,
+        })),
+        { onConflict: "job_id,item_id", ignoreDuplicates: true },
+      );
+
+    if (errAncora) {
+      console.error("[abertura.ancora_realizado]", errAncora.message);
+      return {
+        ok: false,
+        message:
+          "Job criado, mas a planilha interna não foi montada. Avise o suporte.",
+      };
+    }
+
   }
 
   // 6c. Contatos de cobrança — quem o financeiro procura para cobrar. O

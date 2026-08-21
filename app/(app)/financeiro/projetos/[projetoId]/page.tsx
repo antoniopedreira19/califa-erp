@@ -19,8 +19,7 @@ import { ResumoResultado } from "@/components/resumo-resultado";
 import { FluxoCaixaJobs } from "@/components/financeiro/fluxo-caixa-jobs";
 import { listarContasBancarias } from "@/lib/data/contas-bancarias";
 import { carregarPlanilhasDosJobs } from "@/app/(app)/jobs/projeto/[projetoId]/carregar-planilhas";
-import { PlanilhaJobCard } from "@/app/(app)/jobs/projeto/[projetoId]/planilha-job-card";
-import { ProjetoTotaisCard } from "@/app/(app)/jobs/projeto/[projetoId]/projeto-totais-card";
+import { PlanilhasDoProjeto } from "@/app/(app)/jobs/projeto/[projetoId]/planilhas-do-projeto";
 import { STATUS_NA_LISTA } from "../../abertura-de-job/dados-abertos";
 import {
   carregarLinhasDeFluxo,
@@ -134,10 +133,22 @@ export default async function ProjetoNoFinanceiroPage({
     (acc, j) => ({
       valorJob: acc.valorJob + j.valorJob,
       imposto: acc.imposto + j.imposto,
-      planejado: acc.planejado + j.planejado,
-      realizado: acc.realizado + j.realizado,
+      // Bruto, com a dedução de BV somada à parte — a mesma forma do
+      // painel Resultado (custo bruto + BVs), para o resumo bater com o
+      // card de Totais da aba (docs/decisions/022).
+      planejado: acc.planejado + j.planejado.bruto,
+      realizado: acc.realizado + j.realizado.bruto,
+      bvPlanejado: acc.bvPlanejado + j.planejado.deducaoBv,
+      bvRealizado: acc.bvRealizado + j.realizado.deducaoBv,
     }),
-    { valorJob: 0, imposto: 0, planejado: 0, realizado: 0 },
+    {
+      valorJob: 0,
+      imposto: 0,
+      planejado: 0,
+      realizado: 0,
+      bvPlanejado: 0,
+      bvRealizado: 0,
+    },
   );
 
   const statusMix = jobsDoProjeto.reduce<Record<string, number>>((acc, j) => {
@@ -178,6 +189,8 @@ export default async function ProjetoNoFinanceiroPage({
                 imposto={resumo.imposto}
                 custoPlanejado={resumo.planejado}
                 custoRealizado={resumo.realizado}
+                bvPlanejado={resumo.bvPlanejado}
+                bvRealizado={resumo.bvRealizado}
                 moeda={moedaProjeto}
               />
             </div>
@@ -271,30 +284,11 @@ export default async function ProjetoNoFinanceiroPage({
         <ProjetoTabs
           planilha={
             <>
-              <div className="flex flex-wrap items-center justify-between gap-4">
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <ClipboardList className="h-4 w-4 text-california-red" />
-                  <span>
-                    Planilha consolidada · um bloco por job · Orçado ×
-                    Planejado × Realizado
-                  </span>
-                </div>
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-[11px] py-1 text-[11px] font-semibold text-muted-foreground">
-                  <Lock className="h-[11px] w-[11px]" />
-                  Somente leitura
-                </span>
-              </div>
-
-              {planilhas.map((j) => (
-                <PlanilhaJobCard
-                  key={j.id}
-                  job={j}
-                  jobHref={`/financeiro/jobs/${j.id}`}
-                />
-              ))}
-
-              <ProjetoTotaisCard
-                jobs={planilhas}
+              {/* Blocos de job e Totais sob a MESMA chave Bruto ⇄
+                  Líquido — o mesmo componente da tela de projeto da
+                  produção, com o recorte de rota do financeiro. */}
+              <PlanilhasDoProjeto
+                planilhas={planilhas}
                 moeda={moedaProjeto}
                 jobHref={(id) => `/financeiro/jobs/${id}`}
               />
