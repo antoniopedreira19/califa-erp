@@ -2023,3 +2023,25 @@ correção, como as cores dos blocos já divergiram uma vez.
 **Verificação:** conferido logado que a tela da versão não regrediu — 7
 linhas de item → 2 ao recolher, rótulo alternando, "ocultos" no contador
 e subtotal preservado.
+
+
+---
+
+## ⚠️ 21/08/2026 — os editores de rascunho ganharam o "Recolher todos"
+
+Ficaram de fora da primeira passada e a conferência pegou: os editores
+multi e agregado tinham o **chevron** por grupo, mas não o botão. O
+`GrupoRascunhoCard` guardava o `aberto` em estado LOCAL, então nenhum
+botão pai conseguia comandá-lo.
+
+O estado subiu para o `JobRascunhoCard`, que é quem conhece todos os
+grupos daquele orçamento — e é lá que o botão mora, ao lado de "Novo
+grupo". Cada card de orçamento é uma planilha própria (grupos e subtotal
+seus), a mesma escolha feita na visão agregada.
+
+**Verificação:** conferido logado no editor multi de TESTE-0003/26,
+criando um card de rascunho "Teste Multi" com uma planilha: a chave Bruto
+⇄ Líquido aparece assim que existe um card, o "Recolher todos" aparece
+assim que existe um grupo, e recolher esconde as linhas mantendo o
+subtotal. Descartado com "Cancelar" — conferido pelo MCP que nenhum
+orçamento foi gravado.
