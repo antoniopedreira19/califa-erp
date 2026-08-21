@@ -1541,7 +1541,7 @@ a descrição da tela agora diz que o job herda a categoria do orçamento.
 ## 42. Abertura de Job: projeto do financeiro, contas do job e as cinco abas (2026-08-20)
 
 Design: `Abertura de Job - Financeiro.dc.html`.
-Regra completa em [`docs/decisions/021`](docs/decisions/021-projeto-do-financeiro-e-edicao-da-abertura.md).
+Regra completa em [`docs/decisions/021`](../decisions/021-projeto-do-financeiro-e-edicao-da-abertura.md).
 Migration: `20260820000011_projetos_financeiro_e_contas_do_job.sql`.
 
 Duas telas mudaram: o **formulário de abertura** e o que abre ao **clicar
@@ -1643,6 +1643,13 @@ para a subtração fechar aos olhos de quem lê.
 
 **Entram no agregado:** `aguardando_abertura`, `aberto`, `em_producao` e
 `encerrado`. Ficam de fora `rejeitado_financeiro` e `cancelado`.
+
+⚠️ **Job que ainda não foi aberto mostra travessão em Custo previsto E em
+Margem** — sem curva não há margem, e custo zero faria a linha afirmar
+100%. Cada total do rodapé soma o que a própria coluna mostra, então o
+total de margem pode ficar menor que `faturável − custo`; uma nota abaixo
+da tabela explica. Em NOV-0002/26 o total de margem é R$ 39.064,87 (só
+JOB-0013), e não os R$ 150.410,71 da subtração dos outros totais.
 
 **Exceção combinada:** "Orçamento aprovado" continua saindo para
 Orçamentos — é o único destino sem equivalente aqui —, mas agora com

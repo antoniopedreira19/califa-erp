@@ -151,8 +151,13 @@ export default async function ProjetoNoFinanceiroPage({
               <tbody>
                 {projeto.jobs.map((j) => {
                   const meta = SITUACAO_META[j.situacao_faturamento];
+                  // Sem curva de desembolso não há margem: o job ainda
+                  // não passou pela abertura. Tratar o custo como zero
+                  // faria a linha afirmar margem de 100%.
                   const margem =
-                    j.faturamento_previsto - (j.custo_previsto ?? 0);
+                    j.custo_previsto === null
+                      ? null
+                      : j.faturamento_previsto - j.custo_previsto;
 
                   return (
                     <tr
@@ -197,17 +202,21 @@ export default async function ProjetoNoFinanceiroPage({
                         {/* Job que ainda não passou pela abertura não tem
                             curva — travessão, e não R$ 0,00, que leria
                             como "não vai custar nada". */}
-                        {j.aberto_no_financeiro && j.custo_previsto !== null
-                          ? formatCurrency(j.custo_previsto)
-                          : "—"}
+                        {j.custo_previsto === null
+                          ? "—"
+                          : formatCurrency(j.custo_previsto)}
                       </td>
                       <td
                         className={cn(
                           "whitespace-nowrap px-5 py-3 text-right font-mono font-semibold tabular-nums",
-                          margem >= 0 ? "text-emerald-700" : "text-[#b3323c]",
+                          margem === null
+                            ? "text-muted-foreground"
+                            : margem >= 0
+                              ? "text-emerald-700"
+                              : "text-[#b3323c]",
                         )}
                       >
-                        {formatCurrency(margem)}
+                        {margem === null ? "—" : formatCurrency(margem)}
                       </td>
                     </tr>
                   );
@@ -244,6 +253,20 @@ export default async function ProjetoNoFinanceiroPage({
               </tfoot>
             </table>
           </div>
+        )}
+
+        {/* Cada total é a soma do que a PRÓPRIA coluna mostra — e a
+            coluna Margem não mostra nada em job sem curva. Daí o total de
+            margem poder ser menor que faturável menos custo; a nota
+            abaixo diz por quê, em vez de deixar a diferença sem
+            explicação. */}
+        {projeto.semCustoPrevisto > 0 && (
+          <p className="border-t border-border px-5 py-3 text-[11.5px] text-muted-foreground">
+            {projeto.semCustoPrevisto === 1
+              ? "1 job ainda não foi aberto no financeiro e não tem custo previsto"
+              : `${projeto.semCustoPrevisto} jobs ainda não foram abertos no financeiro e não têm custo previsto`}
+            {" "}— o valor e o faturável deles entram no total, a margem não.
+          </p>
         )}
       </section>
     </div>
