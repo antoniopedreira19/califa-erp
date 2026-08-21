@@ -59,6 +59,10 @@ interface Props {
    *  `JobRealizadoSection`: dois grupos em modos diferentes deixariam o
    *  card de Totais sem bater com nenhum deles. */
   visao: VisaoBv;
+  /** Grupo recolhido esconde as LINHAS e a calha de ações. O subtotal e a
+   *  rentabilidade continuam visíveis — são o dado que justifica recolher,
+   *  mesma regra da planilha do orçamento. */
+  aberto?: boolean;
   /** Trilha lateral de BV e Pedido de Produção — só com o job aberto.
    *  Antes da abertura a planilha é visível e o realizado é editável,
    *  mas nada que vire documento pode ser criado. */
@@ -171,6 +175,7 @@ export function JobItemRealizadoTable({
   moeda,
   percentualImposto,
   visao,
+  aberto = true,
   podeAcoes,
   preAbertura,
   ppsPorItemId,
@@ -227,7 +232,7 @@ export function JobItemRealizadoTable({
     const observer = new ResizeObserver(medir);
     observer.observe(wrapper);
     return () => observer.disconnect();
-  }, [itens.length, visao, podeAcoes, preAbertura]);
+  }, [itens.length, visao, aberto, podeAcoes, preAbertura]);
 
   /** O chip da calha abre o painel; o formulário só se chega por ele. */
   function abrirPainel(itemRealizadoId: string) {
@@ -351,14 +356,14 @@ export function JobItemRealizadoTable({
           </thead>
 
           <tbody ref={tbodyRef}>
-            {itens.length === 0 && (
+            {aberto && itens.length === 0 && (
               <tr>
                 <td colSpan={15} className="py-8 text-center text-sm text-muted-foreground">
                   Sem itens neste grupo.
                 </td>
               </tr>
             )}
-            {itens.map((item) => {
+            {aberto && itens.map((item) => {
               const blocos = blocosPorItem.get(item.id) ?? BLOCO_VAZIO;
               const realizadoDoItem = realizadosMap.get(item.id);
               // A quebra do realizado espelha o orçado só em `A`/`D` COM o
@@ -561,7 +566,8 @@ export function JobItemRealizadoTable({
       {/* Job encerrado não some com a trilha: os BVs já lançados seguem
           consultáveis, como na tela de Orçamentos. Só o que é ação
           (gerar PP, lançar BV novo) é que desaparece. */}
-      {(podeAcoes || (!preAbertura && itens.some((i) => bvsPorItem[i.id]))) && (
+      {aberto &&
+        (podeAcoes || (!preAbertura && itens.some((i) => bvsPorItem[i.id]))) && (
         <div
           className={cn(
             "absolute left-full ml-2.5 flex flex-col",
@@ -626,7 +632,7 @@ export function JobItemRealizadoTable({
       )}
       </div>
 
-      {podeAcoes && (
+      {aberto && podeAcoes && (
         <div className="flex items-center justify-between gap-4 rounded-b-2xl border-t border-border bg-muted/40 px-6 py-3">
           <span className="text-[11px] text-muted-foreground">
             O Realizado não é digitado: ele é a soma dos Pedidos de Produção

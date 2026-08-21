@@ -251,3 +251,35 @@ Usar shadcn/ui como base e adaptar ao padrão visual do RH:
 - Task 003 aplica o padrão em orçamentos e listagens.
 - Task 004 aplica o padrão no editor/importador/exportador de versões.
 - Task 005 aplica o padrão na criação do job.
+
+
+## Recolher agrupamento (todas as planilhas)
+
+Toda planilha com agrupamentos recolhe, e recolhe **do mesmo jeito** —
+gesto aprendido uma vez, válido em qualquer tela:
+
+- **chevron** de 24px no cabeçalho do grupo, girando −90° quando fechado;
+- **"Recolher todos" / "Expandir todos"** no topo da planilha, com o
+  rótulo seguindo o estado (basta um grupo aberto para o botão oferecer
+  fechar tudo);
+- o contador da calha vira **"N itens ocultos"**.
+
+**O que fica visível ao recolher:** o **subtotal do grupo** e a
+**rentabilidade**. São o dado que justifica recolher — esconder tudo
+transformaria o gesto em "sumir com o grupo". O que some são as linhas de
+item, a calha de ações e o rodapé de ajuda.
+
+**Fonte única:** `app/(app)/_planilha/recolher-grupos.tsx` —
+`useGruposRecolhiveis` (a máquina de estado) e `BotaoRecolherTodos`. Ela
+guarda quem está **fechado**, não quem está aberto: grupo novo nasce
+aberto sem precisar de sincronização quando a lista muda. Sem
+persistência — recarregar volta ao padrão.
+
+O padrão é `"aberto"` em toda planilha, com **uma exceção**: os grupos
+dentro dos blocos de job da visão agregada nascem `"fechado"`, porque lá
+a página é uma lista de N jobs e abrir tudo enterraria o consolidado.
+
+**Proibido:** recriar o `Set` de fechados na tela. Até 21/08/2026 só o
+orçamento tinha o recurso; ao levá-lo para as outras três planilhas, a
+alternativa era quatro cópias da mesma máquina de estado — que divergem
+na primeira correção, exatamente como as cores dos blocos divergiram.

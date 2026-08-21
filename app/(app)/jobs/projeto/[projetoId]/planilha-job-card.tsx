@@ -11,6 +11,10 @@ import {
   type VisaoBv,
 } from "@/lib/calculos/bv-planilha";
 import { SubLinhaBv } from "@/app/(app)/_planilha/chave-bruto-liquido";
+import {
+  BotaoRecolherTodos,
+  useGruposRecolhiveis,
+} from "@/app/(app)/_planilha/recolher-grupos";
 import { jobStatusLabel, type JobStatus } from "@/lib/types";
 import type { JobPlanilhaProjeto } from "./tipos";
 import {
@@ -147,21 +151,21 @@ export function PlanilhaJobCard({
   jobHref?: string;
 }) {
   const [aberto, setAberto] = React.useState(false);
-  const [gruposAbertos, setGruposAbertos] = React.useState<Set<string>>(
-    new Set(),
-  );
 
   const moeda = job.moeda;
   const totalItens = job.grupos.reduce((s, g) => s + g.itens.length, 0);
 
-  function toggleGrupo(id: string) {
-    setGruposAbertos((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
+  // Cada bloco de job É uma planilha aqui: grupos e subtotais próprios.
+  // Por isso o "Recolher todos" mora DENTRO do card, agindo nos grupos
+  // dele — um botão no topo da página mexeria em grupos escondidos, já
+  // que os cards nascem fechados. Padrão "fechado" pelo mesmo motivo:
+  // abrir todos os grupos de todos os jobs enterraria o consolidado.
+  const gruposIds = React.useMemo(
+    () => job.grupos.map((g) => g.id),
+    [job.grupos],
+  );
+  const recolher = useGruposRecolhiveis(gruposIds, "fechado");
+
 
   return (
     <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-soft">
@@ -281,6 +285,15 @@ export function PlanilhaJobCard({
           <ArrowRight className="h-3 w-3" />
         </Link>
       </div>
+
+      {aberto && job.grupos.length > 0 && (
+        <div className="flex justify-end border-b border-border bg-muted/20 px-5 py-2.5">
+          <BotaoRecolherTodos
+            algumAberto={recolher.algumAberto}
+            onAlternarTodos={recolher.alternarTodos}
+          />
+        </div>
+      )}
 
       {aberto && (
         <div className="overflow-x-auto">
@@ -407,18 +420,18 @@ export function PlanilhaJobCard({
                 </tr>
               )}
               {job.grupos.map((g) => {
-                const gAberto = gruposAbertos.has(g.id);
+                const gAberto = recolher.estaAberto(g.id);
                 return (
                   <React.Fragment key={g.id}>
                     <tr
                       role="button"
                       tabIndex={0}
                       aria-expanded={gAberto}
-                      onClick={() => toggleGrupo(g.id)}
+                      onClick={() => recolher.alternar(g.id)}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === " ") {
                           e.preventDefault();
-                          toggleGrupo(g.id);
+                          recolher.alternar(g.id);
                         }
                       }}
                       className={cn(

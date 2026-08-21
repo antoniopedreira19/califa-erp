@@ -1,3 +1,5 @@
+import { ChevronDown } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { TruncateTooltip } from "@/components/ui/truncate-tooltip";
 import type {
   VersaoOrcamentoGrupo,
@@ -22,6 +24,9 @@ interface Props {
   percentualImposto: number;
   /** Bruto ou Líquido (− BV) — decidida uma vez por página. */
   visao: VisaoBv;
+  /** Grupo recolhido esconde as linhas; subtotal e rentabilidade ficam. */
+  aberto: boolean;
+  onAlternar: () => void;
   /** Trilha lateral de BV e Pedido de Produção — só com o job aberto. */
   podeAcoes: boolean;
   /** Job ainda não aberto pelo financeiro: a trilha some por inteiro,
@@ -49,6 +54,8 @@ export function JobGrupoCard({
   moeda,
   percentualImposto,
   visao,
+  aberto,
+  onAlternar,
   podeAcoes,
   preAbertura,
   jobId,
@@ -75,6 +82,7 @@ export function JobGrupoCard({
         moeda={moeda}
         percentualImposto={percentualImposto}
         visao={visao}
+        aberto={aberto}
         podeAcoes={podeAcoes}
         preAbertura={preAbertura}
         ppsPorItemId={ppsPorItemId}
@@ -87,15 +95,36 @@ export function JobGrupoCard({
         cartoes={cartoes}
         grupoNome={grupo.nome}
         cabecalhoGrupo={
-          <TruncateTooltip
-            as="h3"
-            text={grupo.nome}
-            className="text-base font-semibold text-foreground"
-          />
+          // Mesma pastilha do cabeçalho de grupo do orçamento: o leitor
+          // aprende o gesto uma vez e ele vale nas duas planilhas.
+          <div className="flex min-w-0 items-center gap-2.5">
+            <button
+              type="button"
+              onClick={onAlternar}
+              title={
+                aberto ? "Ocultar itens do grupo" : "Mostrar itens do grupo"
+              }
+              aria-expanded={aberto}
+              className="inline-flex h-6 w-6 flex-none items-center justify-center rounded-md border border-border bg-white text-muted-foreground transition-colors hover:border-california-red/40 hover:text-california-red"
+            >
+              <ChevronDown
+                className={cn(
+                  "h-3.5 w-3.5 transition-transform duration-150",
+                  !aberto && "-rotate-90",
+                )}
+              />
+            </button>
+            <TruncateTooltip
+              as="h3"
+              text={grupo.nome}
+              className="text-base font-semibold text-foreground"
+            />
+          </div>
         }
         acoesGrupo={
           <span className="whitespace-nowrap text-xs text-muted-foreground">
             {itens.length} {itens.length === 1 ? "item" : "itens"}
+            {!aberto && itens.length > 0 && " ocultos"}
           </span>
         }
       />

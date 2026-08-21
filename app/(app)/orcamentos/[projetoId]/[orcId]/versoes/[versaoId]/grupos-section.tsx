@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { ChevronsDownUp, ChevronsUpDown } from "lucide-react";
 import type {
   VersaoOrcamentoGrupo,
   VersaoOrcamentoItem,
@@ -12,6 +11,10 @@ import { GrupoCard } from "./grupo-card";
 import type { FornecedorOpcao } from "@/app/(app)/_bv/bv-dialog";
 import type { VisaoBv } from "@/lib/calculos/bv-planilha";
 import { ChaveBrutoLiquido } from "@/app/(app)/_planilha/chave-bruto-liquido";
+import {
+  BotaoRecolherTodos,
+  useGruposRecolhiveis,
+} from "@/app/(app)/_planilha/recolher-grupos";
 
 /** Map não atravessa a fronteira server → client. A página manda os pares
  *  já montados. */
@@ -50,45 +53,19 @@ export function GruposSection({
   fornecedores,
   versaoLabel,
 }: Props) {
-  // Guarda quem está FECHADO: grupo novo nasce aberto sem precisar de
-  // sincronização quando a lista muda. Sem persistência — recarregar a
-  // página volta tudo a aberto, como no handoff.
-  const [fechados, setFechados] = React.useState<Set<string>>(new Set());
-
-  function alternarGrupo(id: string) {
-    setFechados((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
-
-  // Estado misto resolve para "recolher": basta um grupo aberto para o
-  // botão oferecer fechar tudo.
-  const algumAberto = secoes.some((s) => !fechados.has(s.grupo.id));
-
-  function alternarTodos() {
-    setFechados(
-      algumAberto ? new Set(secoes.map((s) => s.grupo.id)) : new Set(),
-    );
-  }
+  // A máquina de estado mora em `_planilha/recolher-grupos`: a planilha do
+  // job, a da conferência do financeiro e os blocos da visão agregada
+  // usam a MESMA, e quatro cópias divergiriam na primeira correção.
+  const ids = React.useMemo(() => secoes.map((s) => s.grupo.id), [secoes]);
+  const recolher = useGruposRecolhiveis(ids);
 
   return (
     <div>
       <div className="mb-3 flex items-center justify-between gap-3">
-        <button
-          type="button"
-          onClick={alternarTodos}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-2 text-xs font-semibold text-muted-foreground hover:text-california-red hover:border-california-red/40 transition-colors"
-        >
-          {algumAberto ? (
-            <ChevronsDownUp className="h-3.5 w-3.5" />
-          ) : (
-            <ChevronsUpDown className="h-3.5 w-3.5" />
-          )}
-          {algumAberto ? "Recolher todos" : "Expandir todos"}
-        </button>
+        <BotaoRecolherTodos
+          algumAberto={recolher.algumAberto}
+          onAlternarTodos={recolher.alternarTodos}
+        />
         <ChaveBrutoLiquido visao={visao} onChange={onMudarVisao} />
       </div>
 
@@ -103,8 +80,8 @@ export function GruposSection({
             visao={visao}
             readOnly={readOnly}
             categorias={categorias}
-            aberto={!fechados.has(s.grupo.id)}
-            onAlternar={() => alternarGrupo(s.grupo.id)}
+            aberto={recolher.estaAberto(s.grupo.id)}
+            onAlternar={() => recolher.alternar(s.grupo.id)}
             bvsPorItem={bvsPorItem}
             fornecedores={fornecedores}
             versaoLabel={versaoLabel}

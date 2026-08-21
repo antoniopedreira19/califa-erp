@@ -22,6 +22,10 @@ import type {
 } from "@/lib/types";
 import { VISAO_BV_PADRAO, type VisaoBv } from "@/lib/calculos/bv-planilha";
 import { ChaveBrutoLiquido } from "@/app/(app)/_planilha/chave-bruto-liquido";
+import {
+  BotaoRecolherTodos,
+  useGruposRecolhiveis,
+} from "@/app/(app)/_planilha/recolher-grupos";
 import { JobGrupoCard } from "@/app/(app)/jobs/[jobId]/realizado/job-grupo-card";
 import { JobTotaisCard } from "@/app/(app)/jobs/[jobId]/realizado/job-totais-card";
 
@@ -57,6 +61,8 @@ export function PlanilhaConferencia({
   percentualImposto,
 }: Props) {
   const [visao, setVisao] = React.useState<VisaoBv>(VISAO_BV_PADRAO);
+  const gruposIds = React.useMemo(() => grupos.map((g) => g.id), [grupos]);
+  const recolher = useGruposRecolhiveis(gruposIds);
 
   if (grupos.length === 0) {
     return (
@@ -70,7 +76,11 @@ export function PlanilhaConferencia({
 
   return (
     <>
-      <div className="flex justify-end">
+      <div className="flex items-center justify-end gap-3">
+        <BotaoRecolherTodos
+          algumAberto={recolher.algumAberto}
+          onAlternarTodos={recolher.alternarTodos}
+        />
         <ChaveBrutoLiquido visao={visao} onChange={setVisao} />
       </div>
 
@@ -85,6 +95,8 @@ export function PlanilhaConferencia({
             moeda={moeda}
             percentualImposto={percentualImposto}
             visao={visao}
+            aberto={recolher.estaAberto(g.id)}
+            onAlternar={() => recolher.alternar(g.id)}
             // Leitura pura: nem errata, nem BV, nem PP.
             podeAcoes={false}
             // Esta rota só existe enquanto o job aguarda abertura (já

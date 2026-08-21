@@ -1720,3 +1720,24 @@ passa a rodar de ponta a ponta.
 **líquido**. É intencional: a nota contra o fornecedor é pela comissão
 cheia e o imposto sai de dentro dela; o que abate o custo do item é o que
 sobra. Decisão 022, §8.
+
+
+---
+
+## ⚠️ 21/08/2026 — recolher agrupamento nas planilhas do financeiro
+
+`/financeiro/abertura-de-job/[jobId]/planilha` (conferência),
+`/financeiro/jobs/[jobId]` (Planilha Interna) e
+`/financeiro/projetos/[projetoId]` (consolidada) ganharam o **"Recolher
+todos"** e o **chevron por grupo**, no mesmo desenho do orçamento.
+
+As duas primeiras herdaram de graça — reaproveitam `JobRealizadoSection`
+e `JobGrupoCard` da produção. Na consolidada o botão entrou **dentro de
+cada card de job**, agindo nos grupos daquele job.
+
+Recolhido, o grupo mantém subtotal e rentabilidade à vista. Detalhe da
+conferência: o "Somente leitura" continua no lugar, e o botão convive com
+a chave Bruto ⇄ Líquido na mesma barra.
+
+**Verificação:** conferido logado no JOB-0012 (fila de abertura) e no
+JOB-0010 pelo financeiro. Ver o detalhamento no `HANDOFF_JOBS.md`.

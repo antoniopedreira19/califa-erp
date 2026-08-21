@@ -2002,3 +2002,24 @@ R$ 12,07**, e o **Confirmar habilitado**. Os três mini-blocos leem
 ORÇADO. Fechado sem salvar.
 
 Zero erros de console e zero rolagem horizontal em todas as telas.
+
+
+---
+
+## ⚠️ 21/08/2026 — o recolher de grupo virou componente compartilhado
+
+O `GruposSection` mantinha a própria máquina de estado do recolher (um
+`Set` de fechados, o `alternarTodos` e o botão). Quando o recurso foi
+levado para a planilha do job, a conferência do financeiro e a visão
+agregada, ela virou fonte única em
+`app/(app)/_planilha/recolher-grupos.tsx` (`useGruposRecolhiveis` +
+`BotaoRecolherTodos`), e o orçamento passou a consumi-la.
+
+**Nada mudou no comportamento desta tela** — mesmo botão, mesmo rótulo
+alternando, mesmo chevron, mesmo subtotal visível ao recolher. O que
+mudou é onde a lógica mora: quatro cópias divergiriam na primeira
+correção, como as cores dos blocos já divergiram uma vez.
+
+**Verificação:** conferido logado que a tela da versão não regrediu — 7
+linhas de item → 2 ao recolher, rótulo alternando, "ocultos" no contador
+e subtotal preservado.
