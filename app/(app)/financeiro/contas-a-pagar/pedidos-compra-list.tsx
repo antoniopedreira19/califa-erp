@@ -4,7 +4,7 @@ import * as React from "react";
 import { Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import type { PPStatus } from "@/lib/types";
+import type { PPStatus, FormaPagamento } from "@/lib/types";
 import { ppStatusLabel } from "@/lib/types";
 import { PPDrawerFinanceiro } from "./pp-drawer-financeiro";
 
@@ -39,6 +39,8 @@ export interface PPRow {
   pdf_path: string;
   cancelada_por_nome: string | null;
   emitida_por_nome: string | null;
+  forma_pagamento: FormaPagamento | null;
+  cartao_credito_id: string | null;
   anexos: Array<{
     id: string;
     arquivo_nome_original: string;
@@ -136,8 +138,10 @@ export function PedidosCompraList({ rows }: PedidosCompraListProps) {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-1">
+      {/* Cabeçalho no padrão de Recorrências: chips + busca numa linha só.
+          Sem botão de criação — PP nasce em Compras, não aqui. */}
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-1 flex-wrap items-center gap-2">
           {STATUS_FILTROS.map((f) => {
             const ativo = filtro === f.key;
             const count = contagens[f.key];
@@ -147,29 +151,34 @@ export function PedidosCompraList({ rows }: PedidosCompraListProps) {
                 type="button"
                 onClick={() => setFiltro(f.key)}
                 className={cn(
-                  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                  "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-3 py-1 text-xs font-semibold transition-colors",
                   ativo
-                    ? "border-california-red bg-california-red/10 text-california-red"
-                    : "border-border bg-white text-muted-foreground hover:bg-muted/50",
+                    ? "border-california-red bg-california-red text-white"
+                    : "border-border bg-white text-muted-foreground hover:border-california-red/50",
                 )}
               >
                 {f.label}
-                <span className={cn("tabular-nums", ativo ? "text-california-red" : "text-muted-foreground/70")}>
+                <span
+                  className={cn(
+                    "tabular-nums",
+                    ativo ? "text-white/85" : "text-muted-foreground/70",
+                  )}
+                >
                   {count}
                 </span>
               </button>
             );
           })}
-        </div>
-        <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-          <input
-            type="text"
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-            placeholder="Buscar por código, fornecedor ou job"
-            className="rounded-lg border border-border bg-white pl-8 pr-3 py-1.5 text-xs w-72 focus:outline-none focus:border-california-red/40"
-          />
+          <div className="relative ml-auto min-w-[240px] max-w-md flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <input
+              type="text"
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              placeholder="Buscar por código, fornecedor ou job..."
+              className="w-full rounded-lg border border-border bg-white py-2 pl-9 pr-3 text-sm focus:border-california-red focus:outline-none"
+            />
+          </div>
         </div>
       </div>
 

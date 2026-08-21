@@ -16,6 +16,7 @@ import type {
   PlanoContaSubtipo,
   RateioLinhaInput,
 } from "@/lib/types";
+import type { CartaoOption } from "@/components/financeiro/forma-pagamento-field";
 
 // ---------------------------------------------------------------------------
 // Tipos auxiliares compartilhados
@@ -47,6 +48,7 @@ interface EditarProps {
   clientes: ClienteResumido[];
   jobs: JobResumido[];
   regionais: Array<{ id: string; nome: string; ativo: boolean }>;
+  cartoes: CartaoOption[];
   rateioInicial?: RateioLinhaInput[];
 }
 
@@ -60,6 +62,7 @@ export function EditarRecorrenteButton({
   clientes,
   jobs,
   regionais,
+  cartoes,
   rateioInicial,
 }: EditarProps) {
   const [open, setOpen] = React.useState(false);
@@ -85,6 +88,7 @@ export function EditarRecorrenteButton({
         clientes={clientes}
         jobs={jobs}
         regionais={regionais}
+        cartoes={cartoes}
         rateioInicial={rateioInicial}
         open={open}
         onOpenChange={setOpen}

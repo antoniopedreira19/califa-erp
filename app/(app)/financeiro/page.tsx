@@ -74,17 +74,17 @@ export default async function CentralFinanceiraPage() {
           count={ppsCount ?? 0}
         />
         <FinanceiroCard
-          href="/financeiro/fluxo-caixa"
-          icon={TrendingUp}
-          title="Fluxo de caixa"
-          description="Previsto + realizado por dia, semana ou mês, com saldo projetado."
-        />
-        <FinanceiroCard
           href="/financeiro/contas-a-receber"
           icon={Receipt}
           title="Contas a Receber"
           description="Emitir NF a partir de jobs e BVs, acompanhar títulos até o recebimento."
           count={aFaturarCount + inadimplentesCount}
+        />
+        <FinanceiroCard
+          href="/financeiro/fluxo-caixa"
+          icon={TrendingUp}
+          title="Fluxo de caixa"
+          description="Previsto + realizado por dia, semana ou mês, com saldo projetado."
         />
         <FinanceiroCard
           href="/financeiro/conciliacao"

@@ -136,6 +136,8 @@ export async function criarContaRecorrente(input: unknown): Promise<Result> {
       dia_do_ano_mes: d.dia_do_ano_mes,
       proxima_data: proximaData,
       data_fim: d.data_fim,
+      forma_pagamento: d.forma_pagamento ?? null,
+      cartao_credito_id: d.cartao_credito_id ?? null,
       criado_por: session.profile.id,
     })
     .select("id")
@@ -199,6 +201,8 @@ export async function criarContaRecorrente(input: unknown): Promise<Result> {
       frequencia: d.frequencia,
       proxima_data: proximaData,
       data_fim: d.data_fim,
+      forma_pagamento: d.forma_pagamento ?? null,
+      cartao_credito_id: d.cartao_credito_id ?? null,
     },
   });
 
@@ -284,6 +288,8 @@ export async function editarContaRecorrente(
     dia_do_ano_dia: d.dia_do_ano_dia,
     dia_do_ano_mes: d.dia_do_ano_mes,
     data_fim: d.data_fim,
+    forma_pagamento: d.forma_pagamento ?? null,
+    cartao_credito_id: d.cartao_credito_id ?? null,
   };
   if (novaProxData !== null) patch.proxima_data = novaProxData;
 

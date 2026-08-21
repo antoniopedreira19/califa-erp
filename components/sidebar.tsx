@@ -17,6 +17,7 @@ import {
   Menu,
   X,
   Lock,
+  Wallet,
 } from "lucide-react";
 
 type NavLink = {
@@ -46,6 +47,12 @@ const links: NavLink[] = [
     label: "Financeiro",
     icon: Landmark,
     roles: ["administrador", "financeiro"],
+  },
+  {
+    href: "/financeiro/desembolsos",
+    label: "Desembolsos",
+    icon: Wallet,
+    activePathPrefixes: ["/financeiro/desembolsos"],
   },
   {
     href: "/admin",
@@ -171,12 +178,22 @@ export function Sidebar({
           </p>
           {visibleLinks.map((link) => {
             const Icon = link.icon;
+            // Um link "pai" só acende por prefixo se nenhum filho mais especifico
+            // do sidebar tambem estiver ativo — evita "Financeiro" e "Desembolsos"
+            // acesos ao mesmo tempo em /financeiro/desembolsos.
+            const hasMoreSpecific = visibleLinks.some(
+              (other) =>
+                other.href !== link.href &&
+                other.href.startsWith(link.href + "/") &&
+                (pathname === other.href || pathname.startsWith(other.href + "/")),
+            );
             const isActive =
-              pathname === link.href ||
-              pathname.startsWith(link.href + "/") ||
-              (link.activePathPrefixes?.some(
-                (p) => pathname === p || pathname.startsWith(p + "/"),
-              ) ?? false);
+              !hasMoreSpecific &&
+              (pathname === link.href ||
+                pathname.startsWith(link.href + "/") ||
+                (link.activePathPrefixes?.some(
+                  (p) => pathname === p || pathname.startsWith(p + "/"),
+                ) ?? false));
             const tooltipTitle = !expanded
               ? link.label + (link.disabled ? " (em breve)" : "")
               : link.disabled

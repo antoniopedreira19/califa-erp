@@ -21,6 +21,7 @@ import {
   PP_ANEXO_TAMANHO_MAX_BYTES,
   PP_ANEXOS_TAMANHO_TOTAL_MAX_BYTES,
   type PPAnexoMimetype,
+  type FormaPagamento,
 } from "@/lib/types";
 import {
   valorDaPP,
@@ -29,6 +30,15 @@ import {
   passaDoSaldo,
   proximoVencimento,
 } from "@/lib/calculos/pps-item";
+import {
+  parcelasParaFatura,
+  formatarISO,
+} from "@/lib/cartoes/proxima-fatura";
+import {
+  FormaPagamentoField,
+  type CartaoOption,
+  type FormaPagamentoValue,
+} from "@/components/financeiro/forma-pagamento-field";
 import {
   reservarPedidoCompra,
   finalizarPedidoCompra,
@@ -47,6 +57,8 @@ interface Props {
   quantidadeRealizada: number;
   /** Quanto do realizado ainda não está em PP. É o teto desta PP. */
   saldoDisponivel: number;
+  /** Cartões de crédito ativos do tenant — buscados pelo server component pai. */
+  cartoes: CartaoOption[];
   onSuccess?: (codigo: string) => void;
 }
 
@@ -109,6 +121,7 @@ export function GerarPPDrawer({
   valorRealizado,
   quantidadeRealizada,
   saldoDisponivel,
+  cartoes,
   onSuccess,
 }: Props) {
   const router = useRouter();
@@ -131,6 +144,11 @@ export function GerarPPDrawer({
   // Parcelas: sempre ao menos uma, e a primeira acompanha o "Prazo de
   // pagamento" — ela É o prazo, não uma linha extra.
   const [parcelas, setParcelas] = React.useState<ParcelaLocal[]>([]);
+  // Forma de pagamento — inclui cartão de crédito quando aplicável.
+  const [formaPagamento, setFormaPagamento] = React.useState<FormaPagamentoValue>({
+    forma_pagamento: null,
+    cartao_credito_id: null,
+  });
 
   const [anexos, setAnexos] = React.useState<AnexoLocal[]>([]);
   const abortedRef = React.useRef(false);
@@ -157,6 +175,7 @@ export function GerarPPDrawer({
     setEspecificacoes("");
     setParcelas([]);
     setAnexos([]);
+    setFormaPagamento({ forma_pagamento: null, cartao_credito_id: null });
     setDrawerKey((k) => k + 1);
 
     // Reserva pp_id + upload_prefix
@@ -308,9 +327,65 @@ export function GerarPPDrawer({
     [],
   );
 
+  /** Datas das parcelas para um cartão com dia_vencimento_fatura e N parcelas. */
+  function datasParaCartao(cartao: CartaoOption, n: number, valor: number): ParcelaLocal[] {
+    const datas = parcelasParaFatura(cartao.dia_vencimento_fatura, new Date(), n);
+    const valores = dividirEmParcelas(valor, n);
+    return datas.map((d, i) => ({
+      data_vencimento: formatarISO(d),
+      valor: valores[i].toFixed(2).replace(".", ","),
+    }));
+  }
+
+  /**
+   * Handler do FormaPagamentoField. Quando forma = cartão + cartão selecionado
+   * com parcelas > 1, auto-preenche as datas de parcelas pelo dia_vencimento_fatura.
+   * Para parcela única (ou sem parcelas), atualiza o prazo_pagamento.
+   */
+  function handleFormaPagamentoChange(
+    v: FormaPagamentoValue,
+    opts?: { dataPagamentoSugerida?: string },
+  ) {
+    setFormaPagamento(v);
+
+    if (v.forma_pagamento !== "cartao_credito" || !v.cartao_credito_id) return;
+
+    const cartao = cartoes.find((c) => c.id === v.cartao_credito_id);
+    if (!cartao) return;
+
+    const n = Math.max(parcelas.length, 1);
+
+    if (n > 1) {
+      // Parcelas já abertas: recalcula só as datas, mantém os valores.
+      const datas = parcelasParaFatura(cartao.dia_vencimento_fatura, new Date(), n);
+      setParcelas((prev) =>
+        prev.map((p, i) => ({
+          ...p,
+          data_vencimento: formatarISO(datas[i] ?? datas[datas.length - 1]),
+        })),
+      );
+    } else if (opts?.dataPagamentoSugerida) {
+      // Parcela única: atualiza prazo de pagamento.
+      setPrazoPagamento(opts.dataPagamentoSugerida);
+      setDrawerKey((k) => k + 1); // força remontagem do DatePicker do prazo
+    }
+  }
+
   function mudarNumeroDeParcelas(bruto: string) {
     const n = Math.max(1, Math.min(36, Math.floor(Number(bruto) || 1)));
-    setParcelas(n === 1 ? [] : montarParcelas(n, prazoPagamento, valorPP, parcelas));
+    if (n === 1) {
+      setParcelas([]);
+      return;
+    }
+    // Se cartão selecionado, usa datas da fatura; senão usa escada de meses.
+    if (formaPagamento.forma_pagamento === "cartao_credito" && formaPagamento.cartao_credito_id) {
+      const cartao = cartoes.find((c) => c.id === formaPagamento.cartao_credito_id);
+      if (cartao) {
+        setParcelas(datasParaCartao(cartao, n, valorPP));
+        return;
+      }
+    }
+    setParcelas(montarParcelas(n, prazoPagamento, valorPP, parcelas));
   }
 
   function mudarPrazo(iso: string) {
@@ -327,8 +402,15 @@ export function GerarPPDrawer({
       const novo = parseNumeroLocal(bruto);
       const valor =
         novo > 0 ? valorDaPP(novo, valorRealizado, quantidadeRealizada) : 0;
-      // Valor da PP mudou: redivide, preservando as datas combinadas.
-      setParcelas(montarParcelas(parcelas.length, prazoPagamento, valor, parcelas));
+      // Valor da PP mudou: redivide os valores, preservando as datas
+      // (cartão ou mês a mês conforme configuração atual).
+      const valores = dividirEmParcelas(valor, parcelas.length);
+      setParcelas((prev) =>
+        prev.map((p, i) => ({
+          ...p,
+          valor: valores[i].toFixed(2).replace(".", ","),
+        })),
+      );
     }
   }
 
@@ -377,6 +459,14 @@ export function GerarPPDrawer({
       );
       return;
     }
+    if (!formaPagamento.forma_pagamento) {
+      setErro("Selecione a forma de pagamento.");
+      return;
+    }
+    if (formaPagamento.forma_pagamento === "cartao_credito" && !formaPagamento.cartao_credito_id) {
+      setErro("Selecione o cartão de crédito.");
+      return;
+    }
     const parcelasEnvio = parcelasParaEnvio();
     if (parcelasEnvio.some((p) => !p.data_vencimento)) {
       setErro("Toda parcela precisa de uma data de vencimento.");
@@ -415,6 +505,8 @@ export function GerarPPDrawer({
             quantidade: qtdNum,
             especificacoes: especificacoes.trim() || null,
             parcelas: parcelasEnvio,
+            forma_pagamento: formaPagamento.forma_pagamento as FormaPagamento,
+            cartao_credito_id: formaPagamento.cartao_credito_id ?? null,
           },
           anexosOk.map((a) => ({
             anexo_id: a.anexo_id,
@@ -512,6 +604,20 @@ export function GerarPPDrawer({
                   : "informe o realizado do item antes"}
                 .
               </p>
+            </div>
+
+            {/* Forma de pagamento */}
+            <div className="space-y-3">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Pagamento
+              </h3>
+              <FormaPagamentoField
+                cartoes={cartoes}
+                value={formaPagamento}
+                onChange={handleFormaPagamentoChange}
+                disabled={pending}
+                obrigatorio
+              />
             </div>
 
             {/* Fornecedor & Empresa */}

@@ -133,11 +133,22 @@ export type AuditAction =
   | "conta_recorrente.ocorrencia_gerada"
   | "conta_avulsa.rateio_alterado"
   | "conta_recorrente.rateio_alterado"
+  | "cartao_credito.criado"
+  | "cartao_credito.atualizado"
+  | "cartao_credito.inativado"
+  | "cartao_credito.reativado"
+  | "contas_pagar.baixa_lote_cartao"
   | "faturamento.emitido"
   | "faturamento.cancelado"
   | "titulo.baixado"
   | "titulo.baixa_estornada"
   | "titulo.previsao_repactuada"
+  | "desembolso.criado"
+  | "desembolso.aprovada"
+  | "desembolso.rejeitada"
+  | "desembolso.cancelada"
+  | "desembolso.parcela_paga"
+  | "desembolso.parcela_baixa_estornada"
   | "acao_negada";
 
 export interface AuditPayload {
