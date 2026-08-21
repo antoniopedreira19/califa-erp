@@ -1968,7 +1968,10 @@ Situação saiu do corpo e virou pílula no canto direito do cabeçalho. O
 corpo termina em **Impostos** (alíquota da versão, leitura) e **BV
 líquido** — o número que a planilha desconta. O botão **Confirmar** foi
 liberado: ele nascia desabilitado por "o módulo de faturamento ainda não
-existe", que envelheceu (a esteira entrou em 14/08).
+existe", e não é verdade há tempo. Confirmar coloca o BV em
+`vw_faturamento_pendente`, e ele aparece na aba Faturamento do contas a
+receber com chip de origem **BV**; a baixa do último título o move para
+`recebido`. Confirmar É o envio para faturamento — ver decisão 022, §8.
 
 Os mini-blocos passaram a ler `_planilha/blocos.ts`. Eles tinham paleta
 própria, com o **PLANEJADO em azul** — herança de antes de 11/08, quando o
