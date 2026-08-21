@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
+import { LinkSaidaDeModulo } from "@/components/financeiro/link-saida-de-modulo";
 import { cn } from "@/lib/utils";
 import { competenciaLabelLongo, jobStatusLabel } from "@/lib/types";
 import type { JobStatus } from "@/lib/types";
@@ -70,6 +71,19 @@ interface Props {
   jobAtualId: string;
   /** `?from=...` preservado nos links para os jobs irmãos. */
   jobLinkSuffix: string;
+  /**
+   * Rota base dos jobs irmãos. Default `/jobs/` — a página de Jobs. O
+   * financeiro passa `/financeiro/jobs/`: aquele módulo não encaminha
+   * para telas de outros (decisão do Tiago, 20/08/2026).
+   */
+  jobHrefBase?: string;
+  /**
+   * Quando a ficha é renderizada FORA do módulo de Jobs, o link do
+   * orçamento aprovado passa por uma confirmação de saída de módulo. É a
+   * exceção combinada com o Tiago (20/08/2026): o orçamento só existe em
+   * Orçamentos, então o caminho fica, mas avisado.
+   */
+  confirmarSaidaParaOrcamento?: boolean;
   gpNome: string | null;
   produtorNome: string | null;
   origem: OrigemDaFicha;
@@ -94,6 +108,8 @@ export function FichaJob({
   jobsDoProjeto,
   jobAtualId,
   jobLinkSuffix,
+  jobHrefBase = "/jobs/",
+  confirmarSaidaParaOrcamento = false,
   gpNome,
   produtorNome,
   origem,
@@ -228,7 +244,7 @@ export function FichaJob({
                 ) : (
                   <Link
                     key={irmao.id}
-                    href={`/jobs/${irmao.id}${jobLinkSuffix}`}
+                    href={`${jobHrefBase}${irmao.id}${jobLinkSuffix}`}
                     prefetch={false}
                     className={cn(classes, "transition-colors hover:bg-muted/40")}
                   >
@@ -273,6 +289,31 @@ export function FichaJob({
               </Link>
             </CampoLateral>
             <CampoLateral rotulo="Orçamento aprovado">
+              {confirmarSaidaParaOrcamento ? (
+                <LinkSaidaDeModulo
+                  href={origem.orcamentoHref}
+                  modulo="Orçamentos"
+                  descricao={
+                    <>
+                      A versão aprovada{" "}
+                      <span className="font-mono">
+                        {origem.orcamentoCodigo ?? "—"}
+                      </span>{" "}
+                      · {origem.versaoLabel} mora no módulo de Orçamentos —
+                      não existe cópia dela no financeiro. Você sai desta
+                      tela para abri-la.
+                    </>
+                  }
+                  className="text-california-red hover:underline"
+                >
+                  <span>
+                    <span className="font-mono text-[13px]">
+                      {origem.orcamentoCodigo ?? "—"}
+                    </span>{" "}
+                    · {origem.versaoLabel}
+                  </span>
+                </LinkSaidaDeModulo>
+              ) : (
               <Link
                 href={origem.orcamentoHref}
                 prefetch={false}
@@ -283,6 +324,7 @@ export function FichaJob({
                 </span>{" "}
                 · {origem.versaoLabel}
               </Link>
+              )}
             </CampoLateral>
           </div>
 

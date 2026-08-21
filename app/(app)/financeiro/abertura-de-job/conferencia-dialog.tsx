@@ -136,8 +136,12 @@ export function ConferenciaDialog({ job, onOpenChange, onReprovar }: Props) {
           </div>
         </div>
 
+        {/* Planilha DENTRO do financeiro: a rota
+            `/financeiro/abertura-de-job/[jobId]/planilha` mostra a mesma
+            planilha em leitura, sem tirar quem confere do módulo
+            (decisão do Tiago, 20/08/2026). */}
         <Link
-          href={`/jobs/${job.id}?from=financeiro&aba=planilha`}
+          href={`/financeiro/abertura-de-job/${job.id}/planilha`}
           prefetch={false}
           className="flex items-center gap-2.5 rounded-xl border border-border bg-muted/50 px-4 py-3 text-left transition-colors hover:border-california-red/50 hover:bg-california-red/5"
         >

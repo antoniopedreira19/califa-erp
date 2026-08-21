@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ArrowRight, ChevronRight, Search } from "lucide-react";
 import { formatCurrency, cn } from "@/lib/utils";
 import type { JobAberto, SituacaoFaturamento } from "./dados-abertos";
+import { SITUACAO_META } from "./situacao-faturamento";
 
 const TODOS = "Todos";
 
@@ -44,35 +45,8 @@ function noChip(j: JobAberto, chip: Chip): boolean {
   return j.situacao_faturamento === chip;
 }
 
-const SITUACAO_META: Record<
-  SituacaoFaturamento,
-  { rotulo: string; classes: string }
-> = {
-  liquidado: {
-    rotulo: "Liquidado",
-    classes: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  },
-  // Inadimplente é o único estado que exige ação hoje — usa o vermelho da
-  // casa, o mesmo dos alertas do resto do sistema.
-  inadimplente: {
-    rotulo: "Inadimplente",
-    classes: "border-california-red/25 bg-california-red/5 text-california-red",
-  },
-  faturado: {
-    rotulo: "Faturado",
-    classes: "border-blue-200 bg-blue-50 text-blue-700",
-  },
-  enviado: {
-    rotulo: "Enviado",
-    classes: "border-amber-200 bg-amber-50 text-amber-700",
-  },
-  aguardando_envio: {
-    rotulo: "Aguardando envio",
-    classes: "border-border bg-muted/80 text-muted-foreground",
-  },
-};
-
 interface GrupoProjeto {
+  /** Id do projeto DO FINANCEIRO (ou do de produção, no fallback). */
   projetoId: string;
   codigo: string | null;
   nome: string | null;
@@ -80,6 +54,13 @@ interface GrupoProjeto {
   jobs: JobAberto[];
   total: number;
   aberto: boolean;
+  /**
+   * O grupo tem projeto do financeiro de verdade? Falso só no fallback,
+   * em job aberto antes da migration 20260820000011 que nunca foi
+   * reeditado — aí a chave do grupo é o projeto da PRODUÇÃO, e a visão
+   * agregada do financeiro não existe para ele.
+   */
+  temProjetoFinanceiro: boolean;
 }
 
 function formatDataBr(iso: string | null): string {
@@ -172,11 +153,17 @@ export function JobsAbertosList({ linhas }: { linhas: JobAberto[] }) {
         .includes(q);
     }
 
+    // Agrupa pelo projeto DO FINANCEIRO — é a arrumação desta aba, e ela
+    // é independente da produção (decisão do Tiago, 20/08/2026). Job
+    // aberto antes da migration 20260820000011 e nunca reeditado pode não
+    // ter projeto do financeiro; nesse caso cai no da produção, para não
+    // sumir da lista nem virar um grupo "sem projeto".
     const porProjeto = new Map<string, JobAberto[]>();
     for (const j of linhas) {
-      const arr = porProjeto.get(j.projeto_id) ?? [];
+      const chave = j.projeto_financeiro_id ?? j.projeto_id;
+      const arr = porProjeto.get(chave) ?? [];
       arr.push(j);
-      porProjeto.set(j.projeto_id, arr);
+      porProjeto.set(chave, arr);
     }
 
     const out: GrupoProjeto[] = [];
@@ -186,14 +173,15 @@ export function JobsAbertosList({ linhas }: { linhas: JobAberto[] }) {
       const primeiro = jobs[0];
       out.push({
         projetoId,
-        codigo: primeiro.projeto_codigo,
-        nome: primeiro.projeto_nome,
+        codigo: primeiro.projeto_financeiro_codigo ?? primeiro.projeto_codigo,
+        nome: primeiro.projeto_financeiro_nome ?? primeiro.projeto_nome,
         cliente: primeiro.cliente_nome,
         jobs: visiveis,
         total: visiveis.reduce((s, j) => s + (j.valor_total ?? 0), 0),
         // Com filtro ativo o grupo abre sempre: fechado esconderia
         // justamente o job que o filtro encontrou.
         aberto: filtroAtivo ? true : !fechados.has(projetoId),
+        temProjetoFinanceiro: primeiro.projeto_financeiro_id !== null,
       });
     }
     return out.sort((a, b) =>
@@ -435,15 +423,21 @@ export function JobsAbertosList({ linhas }: { linhas: JobAberto[] }) {
                       <span className="whitespace-nowrap text-[13px] font-bold tabular-nums">
                         {formatCurrency(g.total)}
                       </span>
-                      <Link
-                        href={`/jobs/projeto/${g.projetoId}`}
-                        prefetch={false}
-                        onClick={(e) => e.stopPropagation()}
-                        className="inline-flex items-center gap-1.5 whitespace-nowrap text-[11px] font-semibold uppercase tracking-[0.06em] text-california-red hover:text-california-red/80"
-                      >
-                        Visão agregada
-                        <ArrowRight className="h-3 w-3" />
-                      </Link>
+                      {/* Tela do PRÓPRIO financeiro: o módulo não
+                          encaminha para telas de outros módulos, e o
+                          agregado aqui é pelo projeto do financeiro
+                          (decisão do Tiago, 20/08/2026). */}
+                      {g.temProjetoFinanceiro && (
+                        <Link
+                          href={`/financeiro/projetos/${g.projetoId}`}
+                          prefetch={false}
+                          onClick={(e) => e.stopPropagation()}
+                          className="inline-flex items-center gap-1.5 whitespace-nowrap text-[11px] font-semibold uppercase tracking-[0.06em] text-california-red hover:text-california-red/80"
+                        >
+                          Visão agregada
+                          <ArrowRight className="h-3 w-3" />
+                        </Link>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -502,14 +496,18 @@ export function JobsAbertosList({ linhas }: { linhas: JobAberto[] }) {
                       </td>
                       {/* Repete o projeto da faixa de propósito: com o
                           grupo colapsado a linha vira resultado de busca
-                          solto, e "de que projeto é isso?" some. */}
+                          solto, e "de que projeto é isso?" some. É o
+                          projeto do FINANCEIRO — o mesmo por que a faixa
+                          agrupa. */}
                       <td className="px-4 py-3 text-muted-foreground">
                         <div className="flex flex-col gap-0.5">
                           <span className="font-mono text-[11px] font-semibold text-[#b3323c]">
-                            {j.projeto_codigo ?? "—"}
+                            {j.projeto_financeiro_codigo ??
+                              j.projeto_codigo ??
+                              "—"}
                           </span>
                           <span className="text-[12px]">
-                            {j.projeto_nome ?? "—"}
+                            {j.projeto_financeiro_nome ?? j.projeto_nome ?? "—"}
                           </span>
                         </div>
                       </td>

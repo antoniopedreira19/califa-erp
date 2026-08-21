@@ -68,6 +68,17 @@ export type AuditAction =
   | "job.status_alterado"
   | "job.abertura_aprovada"
   | "job.aberto_no_financeiro"
+  // Edição do registro da abertura de um job já aberto ("Editar
+  // registro"). Separada de `aberto_no_financeiro` de propósito: a
+  // abertura acontece uma vez, a edição quantas forem precisas, e o
+  // metadata desta traz o de/para de cada campo e das duas previsões.
+  // É o único lugar onde essa alteração fica registrada — decisão do
+  // Tiago (20/08/2026): auditoria sim, bloco de histórico na tela não.
+  | "job.registro_abertura_editado"
+  // Projeto criado pela própria tela de abertura, na tabela
+  // `projetos_financeiro`. Não é `projeto.criado`: aquele é o projeto da
+  // produção, que nasce do orçamento e a produção enxerga.
+  | "projeto_financeiro.criado"
   | "job.abertura_rejeitada"
   | "job.reenviado_para_aprovacao"
   | "job.realizado_atualizado"
