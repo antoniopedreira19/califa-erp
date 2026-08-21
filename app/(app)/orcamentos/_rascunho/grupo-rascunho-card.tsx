@@ -28,6 +28,11 @@ interface Props {
   adaptadorBv: AdaptadorBv;
   onRenomear: (nome: string) => void;
   onRemover: () => void;
+  /** Grupo recolhido esconde as linhas; o subtotal continua visível.
+   *  O estado mora no card do ORÇAMENTO, não aqui: é ele que conhece
+   *  todos os grupos e hospeda o "Recolher todos". */
+  aberto: boolean;
+  onAlternar: () => void;
   /** Versão congelada (aprovada, job aberto): a planilha vira consulta. */
   readOnly?: boolean;
 }
@@ -45,6 +50,8 @@ export function GrupoRascunhoCard({
   moeda,
   percentualImposto,
   visao,
+  aberto,
+  onAlternar,
   categorias,
   fornecedores,
   adaptador,
@@ -53,7 +60,6 @@ export function GrupoRascunhoCard({
   onRemover,
   readOnly,
 }: Props) {
-  const [aberto, setAberto] = React.useState(true);
   const [askRemover, setAskRemover] = React.useState(false);
 
   const itens = grupo.itens.map((it, i) =>
@@ -76,7 +82,7 @@ export function GrupoRascunhoCard({
     <div className="flex min-w-0 items-center gap-2.5">
       <button
         type="button"
-        onClick={() => setAberto((v) => !v)}
+        onClick={onAlternar}
         title={aberto ? "Ocultar itens do grupo" : "Mostrar itens do grupo"}
         aria-expanded={aberto}
         className="inline-flex h-6 w-6 flex-none items-center justify-center rounded-md border border-border bg-white text-muted-foreground hover:text-california-red hover:border-california-red/40 transition-colors"

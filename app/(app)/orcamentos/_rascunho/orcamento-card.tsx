@@ -17,6 +17,10 @@ import type { Categoria } from "@/lib/types";
 import type { AdaptadorItens } from "../[projetoId]/[orcId]/versoes/[versaoId]/itens-table";
 import type { AdaptadorBv, FornecedorOpcao } from "@/app/(app)/_bv/bv-dialog";
 import type { VisaoBv } from "@/lib/calculos/bv-planilha";
+import {
+  BotaoRecolherTodos,
+  useGruposRecolhiveis,
+} from "@/app/(app)/_planilha/recolher-grupos";
 import { GrupoRascunhoCard } from "./grupo-rascunho-card";
 import {
   ORCADO,
@@ -89,6 +93,15 @@ export function JobRascunhoCard({
 }: Props) {
   const [askRemover, setAskRemover] = React.useState(false);
   const totais = totaisDoJob(job, parametros);
+
+  // Cada card de orçamento é uma planilha própria, com seus grupos e seu
+  // subtotal — por isso o "Recolher todos" mora aqui dentro, agindo só
+  // nos grupos deste orçamento. Mesma escolha da visão agregada.
+  const gruposIds = React.useMemo(
+    () => job.grupos.map((g) => g.id),
+    [job.grupos],
+  );
+  const recolher = useGruposRecolhiveis(gruposIds);
   const nItens = contarItens(job.grupos);
   const readOnly = Boolean(bloqueio);
   // Orçamento congelado sem planilha não tem o que oferecer: não dá para
@@ -234,16 +247,24 @@ export function JobRascunhoCard({
                   {nItens === 1 ? "item" : "itens"}
                   {job.arquivoNome ? ` · ${job.arquivoNome}` : ""}
                 </span>
-                {!readOnly && (
-                  <button
-                    type="button"
-                    onClick={onNovoGrupo}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-california-red/30 bg-california-red/5 px-3 py-2 text-xs font-semibold text-california-red transition-colors hover:bg-california-red/10"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    Novo grupo
-                  </button>
-                )}
+                <div className="flex items-center gap-2.5">
+                  {job.grupos.length > 0 && (
+                    <BotaoRecolherTodos
+                      algumAberto={recolher.algumAberto}
+                      onAlternarTodos={recolher.alternarTodos}
+                    />
+                  )}
+                  {!readOnly && (
+                    <button
+                      type="button"
+                      onClick={onNovoGrupo}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-california-red/30 bg-california-red/5 px-3 py-2 text-xs font-semibold text-california-red transition-colors hover:bg-california-red/10"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Novo grupo
+                    </button>
+                  )}
+                </div>
               </div>
 
               {job.grupos.map((grupo) => (
@@ -253,6 +274,8 @@ export function JobRascunhoCard({
                   moeda={parametros.moeda}
                   percentualImposto={parametros.percentual_imposto}
                   visao={visao}
+                  aberto={recolher.estaAberto(grupo.id)}
+                  onAlternar={() => recolher.alternar(grupo.id)}
                   categorias={categorias}
                   fornecedores={fornecedores}
                   adaptador={adaptador}
