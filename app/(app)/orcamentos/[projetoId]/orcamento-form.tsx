@@ -147,11 +147,13 @@ export function OrcamentoForm({
     }
 
     startTransition(async () => {
-      const res: ActionResult = isEdit
+      // Criar redireciona no SERVIDOR e o cliente recebe `undefined`; só
+      // editar volta um resultado. Testar `res.ok` direto quebra a tela.
+      const res: ActionResult | void = isEdit
         ? await atualizarOrcamento(projetoId, orcamento!.id, formData)
         : await criarOrcamento(projetoId, formData);
 
-      if (!res.ok) {
+      if (res && !res.ok) {
         setError(res.message);
         if (res.fieldErrors) setFieldErrors(res.fieldErrors);
         return;

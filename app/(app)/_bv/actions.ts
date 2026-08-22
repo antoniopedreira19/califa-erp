@@ -150,9 +150,9 @@ async function carregarContexto(
 }
 
 function revalidarAmbas(ctx: ContextoItem) {
-  revalidatePath(
-    `/orcamentos/${ctx.projeto_id}/${ctx.orcamento_id}/versoes/${ctx.versao_orcamento_id}`,
-  );
+  // A planilha da versão passou a morar na tela do orçamento (as versões
+  // viraram abas em 21/08/2026): é esse o caminho a revalidar.
+  revalidatePath(`/orcamentos/${ctx.projeto_id}/${ctx.orcamento_id}`);
   if (ctx.job_id) revalidatePath(`/jobs/${ctx.job_id}`);
 }
 

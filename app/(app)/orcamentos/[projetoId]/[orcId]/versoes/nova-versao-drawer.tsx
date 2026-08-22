@@ -35,6 +35,12 @@ interface Props {
   /** Bloqueia o botão em orçamentos que não aceitam mais versão. */
   disabled?: boolean;
   disabledReason?: string;
+  /** Controle externo. O menu "+" das abas do orçamento abre este drawer
+   *  sem ter um gatilho próprio para clicar. */
+  aberto?: boolean;
+  onAbertoChange?: (aberto: boolean) => void;
+  /** Esconde o botão-gatilho: quem abre é quem controla. */
+  semGatilho?: boolean;
 }
 
 export function NovaVersaoDrawer({
@@ -43,8 +49,13 @@ export function NovaVersaoDrawer({
   clienteNome,
   disabled,
   disabledReason,
+  aberto,
+  onAbertoChange,
+  semGatilho,
 }: Props) {
-  const [open, setOpen] = React.useState(false);
+  const [openInterno, setOpenInterno] = React.useState(false);
+  const open = aberto ?? openInterno;
+  const setOpen = onAbertoChange ?? setOpenInterno;
   const [pending, startTransition] = React.useTransition();
   const [error, setError] = React.useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = React.useState<
@@ -64,28 +75,35 @@ export function NovaVersaoDrawer({
     if (imposto !== "") formData.set("percentual_imposto", imposto);
 
     startTransition(async () => {
-      const res: ActionResult = await criarVersao(orcamentoId, formData);
-      if (!res.ok) {
+      // Sucesso redireciona no SERVIDOR para a versão criada, e aí o cliente
+      // recebe `undefined` — testar `res.ok` direto quebra a tela.
+      const res: ActionResult | void = await criarVersao(orcamentoId, formData);
+      if (res && !res.ok) {
         setError(res.message);
         if (res.fieldErrors) setFieldErrors(res.fieldErrors);
+        return;
       }
-      // Server action redireciona para a versão criada em caso de sucesso.
+      // O redirect agora cai na MESMA rota, só trocando o `?v=` — o drawer
+      // não é mais desmontado pela navegação e precisa se fechar sozinho.
+      setOpen(false);
     });
   }
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <button
-          type="button"
-          disabled={disabled}
-          title={disabled ? disabledReason : undefined}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-california-red px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-california-red-hover transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <Plus className="h-3.5 w-3.5" />
-          Nova versão
-        </button>
-      </DialogTrigger>
+      {!semGatilho && (
+        <DialogTrigger asChild>
+          <button
+            type="button"
+            disabled={disabled}
+            title={disabled ? disabledReason : undefined}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-california-red px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-california-red-hover transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Nova versão
+          </button>
+        </DialogTrigger>
+      )}
       <DrawerContent>
         <DialogHeader className="border-b border-border p-6">
           <DialogTitle>Nova versão do orçamento</DialogTitle>

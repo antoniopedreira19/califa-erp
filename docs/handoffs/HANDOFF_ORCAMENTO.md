@@ -2045,3 +2045,124 @@ criando um card de rascunho "Teste Multi" com uma planilha: a chave Bruto
 assim que existe um grupo, e recolher esconde as linhas mantendo o
 subtotal. Descartado com "Cancelar" — conferido pelo MCP que nenhum
 orçamento foi gravado.
+
+
+---
+
+## ⚠️ 21/08/2026 — a tela da versão deixou de existir: as versões viraram abas do orçamento
+
+Handoff `Orcamento - Versoes em Abas.dc.html`. A regra completa está em
+[`docs/decisions/023-versoes-em-abas-na-tela-do-orcamento.md`](../decisions/023-versoes-em-abas-na-tela-do-orcamento.md)
+— aqui fica só o que muda para quem já conhecia as duas telas.
+
+**As entregas 1 a 22 acima descrevem a tela da versão como uma página
+própria, em `/orcamentos/[projetoId]/[orcId]/versoes/[versaoId]`. Ela não
+é mais.** Os componentes continuam todos no mesmo lugar no disco (a pasta
+`versoes/[versaoId]/` não se mexeu) e o comportamento deles é o mesmo — o
+que mudou é **quem os renderiza**: agora é
+`/orcamentos/[projetoId]/[orcId]`, com a versão em `?v=<versaoId>`. A rota
+antiga sobreviveu como `permanentRedirect`, então nenhum link gravado
+quebrou.
+
+**O card "Versões do orçamento" saiu** (`versoes-list.tsx` removido). No
+lugar dele, uma fita de abas com o `+` à esquerda:
+
+- `+` → **criar do zero** / **copiar uma versão existente** (submenu com
+  "N itens · R$ X · honor. Y%" de cada uma) / **importar planilha**.
+- Selo **MAIS RECENTE** na mais nova (sempre a primeira à esquerda) e
+  **APROVADA** na aprovada.
+
+**Deletar versão** — no lugar do `X` "cancelar" de cada linha da lista —
+virou botão no cabeçalho, à direita de Duplicar, e incide sobre a aba
+selecionada. Apaga de verdade: versão, grupos, itens e os BVs deles.
+Disponível para todos os papéis por enquanto; o gate por perfil fica para
+a etapa de permissões (decisão do Tiago).
+
+Trava em três casos: versão **aprovada** (o botão nem aparece — apagá-la
+desfaria a aprovação em silêncio, porque a FK é SET NULL), versão que
+**virou job**, e a **última** versão do orçamento (aí o botão fica visível
+e desabilitado, com o motivo no tooltip). As três valem no servidor.
+
+**A versão mais recente é sempre a aba mais à esquerda** e leva o selo
+MAIS RECENTE — sem exceção, agora que versão fora do jogo é apagada em vez
+de virar "cancelada".
+
+**Moeda, Câmbio, Honorários e Impostos saíram do `VersaoEditorDrawer`** e
+viraram uma linha com "Editar" à direita de Impostos, que abre os quatro
+campos no lugar. Mesmas regras de antes — a server action é a mesma. O
+drawer continua no repositório, sem consumidor nesta tela.
+
+**A planilha não foi tocada.** Cores de `_planilha/blocos.ts`, calha de
+BV, chave Bruto ⇄ Líquido, "Recolher todos": tudo igual. A planilha
+desenhada no handoff é ilustrativa e traz a paleta invertida — não vale
+contra a decisão 015.
+
+**Pega geral, achada na conferência:** Server Action que chama
+`redirect()` devolve `undefined` ao cliente. `criarVersao`,
+`duplicarVersao` e `criarOrcamento` agora declaram
+`Promise<ActionResult | void>` e os call sites testam `res && !res.ok`.
+Antes o tipo mentia; o defeito ficava escondido porque o redirect trocava
+de página. Com orçamento e versão na mesma rota, ele apareceu na hora.
+
+**Verificação (logado, 21/08/2026):**
+
+- `TESTE-0003/26-01` (Teste Alterações Job 1): troca de aba v1 ⇄ v2,
+  edição no lugar do Câmbio (1 → 5,42 → 1, revertido), `+` → copiar v1
+  criando a v3 (1 grupo, 1 item) e **delete da v3** pelo botão do
+  cabeçalho. Conferido pelo MCP que grupo e item foram junto, sem órfão, e
+  que a auditoria gravou `numero_versao: 3, itens_apagados: 1`. Sem `?v=`
+  a tela volta para a v2.
+- `ORC-0001` (PEVETE-0001/26, job criado): as 5 abas, `+` e "Editar"
+  travados pelo estado protegido, v5 aprovada com os banners e o
+  `FluxoAbertura` intactos, v4 substituída abrindo com 9 grupos e 44
+  itens.
+- Rota antiga `.../versoes/<id da v3>` redirecionando para `?v=` com a
+  aba certa; `?v=` inválido caindo na aprovada, sem 404.
+- Export da v5 devolvendo `orcamento-ORC-0001-v5.xlsx` (200,
+  `content-type` de xlsx).
+- Criação de orçamento pelo formulário caindo em `?v=<v1>` — criado o
+  `TESTE-0003/26-07 Teste Abas Versoes` como dado de teste, com v1..v5
+  vazias (v2 pelo "criar do zero", v3 idem, v4 e v5 por "Duplicar").
+- **Trava nova de `duplicarVersao`, provada pelo bypass no console:** em
+  `ORC-0001` (job criado) a action recusa com "Não é possível criar versão
+  em orçamento job_criado", e num orçamento editável ela redireciona
+  normalmente. Duplicar cria uma versão, então tem que obedecer à mesma
+  regra de `criarVersao` — antes só `criarVersao` a aplicava, e o botão
+  "Duplicar" da lista não tinha gate nenhum.
+- `/orcamentos`, `/orcamentos/[projetoId]`, `/agregado`, `/multi`,
+  `/jobs`, `/jobs/[jobId]` e `/financeiro` abertos sem erro; zero erro de
+  console em aba nova.
+- **Travas do delete, pelo bypass no console** (por fora do cliente):
+  versão única → "O orçamento precisa de ao menos uma versão"; v5 aprovada
+  do `ORC-0001` → "Versão aprovada não pode ser deletada"; id inexistente
+  → "Versão não encontrada". Na aba aprovada o botão não é renderizado; na
+  aba de versão única ele aparece desabilitado com o motivo.
+
+---
+
+## ⚠️ 21/08/2026 — o que o delete de versão exigiu do banco
+
+Três migrations saíram junto com o botão, e valem como aviso para quem for
+mexer em delete neste esquema:
+
+1. **`20260821000003_remover_versoes_canceladas.sql`** — DESTRUTIVA,
+   autorizada pelo Tiago. Apagou as 2 versões que estavam `cancelada`
+   (`PEVETE-0002/26-01` v1 de 29/07 e a v3 criada na conferência). O valor
+   `cancelada` continua no enum; nenhum caminho da UI o produz mais.
+2. **`20260821000004_delete_de_versao_orcamento.sql`** —
+   `versoes_orcamento` **não tinha GRANT nem policy de DELETE**. Só
+   SELECT/INSERT/UPDATE, porque até então nada apagava versão. O sintoma
+   foi `permission denied for table versoes_orcamento` — que é o GRANT
+   faltando; a policy ausente, sozinha, teria dado 0 linhas afetadas **em
+   silêncio**, que é bem pior de diagnosticar.
+3. **`20260821000005_rpc_deletar_versao_orcamento.sql`** — apagar em três
+   chamadas ao PostgREST são três transações. A terceira falhou (o GRANT
+   acima), e a versão ficou sem itens e sem grupos, sem aviso. Virou RPC:
+   uma chamada, uma transação. `SECURITY INVOKER` — o RLS de tenant
+   continua valendo, não é bypass.
+
+**A ordem item → grupo → versão é obrigatória.** `versoes_orcamento` tem
+CASCADE para os dois, mas `versoes_orcamento_itens.grupo_id` referencia o
+grupo com **RESTRICT**, checado na hora. Um `delete from
+versoes_orcamento` seco pode bater nesse RESTRICT e falhar inteiro,
+dependendo da ordem em que o Postgres processar as cascatas.
