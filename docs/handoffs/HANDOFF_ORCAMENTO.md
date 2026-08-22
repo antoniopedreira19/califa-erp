@@ -612,7 +612,7 @@ produção** (próximos passos, item 5).
    O produto **foi** preenchido (migration `...000006`) porque é determinístico: cada cliente tem exatamente um produto padrão, então para um projeto sem produto informado só existe uma escolha possível.
 
    ⚠️ **Regional foi deixada em branco de propósito, não por esquecimento.** Escolher "uma qualquer" seria inventar dado de negócio, e o valor errado não se denuncia depois: desce para o orçamento, o job e o financeiro sem sinal nenhum. O campo vazio bloqueia a criação de orçamento e obriga alguém a decidir — que aqui é o comportamento correto. Se um dia o volume tornar a edição manual inviável, o caminho é pedir o de-para ao time, não sortear.
-3. **Cidade do orçamento usa `Select` simples** com a lista toda. Correto para as 2 cidades de hoje; troque pelo `CidadeCombobox` quando a carga do IBGE entrar.
+3. ~~**Cidade do orçamento usa `Select` simples** com a lista toda. Correto para as 2 cidades de hoje; troque pelo `CidadeCombobox` quando a carga do IBGE entrar.~~ ✅ **Fechado em 21/08/2026** — ver a nota do fim deste documento.
 
 ---
 
@@ -2045,3 +2045,66 @@ criando um card de rascunho "Teste Multi" com uma planilha: a chave Bruto
 assim que existe um grupo, e recolher esconde as linhas mantendo o
 subtotal. Descartado com "Cancelar" — conferido pelo MCP que nenhum
 orçamento foi gravado.
+
+
+---
+
+## ⚠️ 21/08/2026 — cidade do orçamento virou combobox com busca no servidor
+
+Fecha o item 3 da seção 12.9. O formulário de orçamento
+(`orcamento-form.tsx`) usava um `Select` alimentado pela lista **inteira**
+de cidades ativas do tenant, e cinco páginas `force-dynamic` carregavam
+essa lista sem `limit` a cada visita. Com as 2 cidades de hoje não doía;
+com a carga do IBGE (~5.570 municípios) viraria peso morto em todo render.
+A decisão 005 já dizia a regra — "nunca carregar tudo no cliente" — e o
+`CidadeCombobox` já existia, usado só pelo modal de abertura de job.
+
+**O que mudou**
+
+- O `Select` de Cidade do formulário de orçamento virou `CidadeCombobox`:
+  a página manda só as 30 primeiras e a digitação busca o resto no
+  servidor (`ilike` + limite, com 250 ms de espera).
+- `buscarCidades` e o `cidade-combobox.tsx` saíram de
+  `versoes/[versaoId]/` e subiram para `app/(app)/orcamentos/`, que é o
+  ancestral comum dos dois consumidores. A query em si virou
+  `lib/data/cidades.ts` (`listarCidades`, `listarCidadesIniciais`,
+  `LIMITE_CIDADES`) — o limite passa a existir num lugar só.
+- As cinco páginas que traziam a lista inteira (`novo`, `multi`,
+  `agregado`, o detalhe do orçamento e a versão) agora chamam
+  `listarCidadesIniciais`.
+
+**Onde o nome da cidade passou a viajar junto**
+
+Sem a lista completa, ninguém consegue resolver `cidade_id → nome` no
+cliente. Três pontos precisaram do nome vindo do servidor:
+
+| Tela | De onde vem o nome |
+|---|---|
+| Editar orçamento (drawer) | embed `cidade:cidades(id, nome)` no próprio orçamento, via a prop `cidadeAtual` |
+| Cards do editor **agregado** | embed `cidade:cidades(nome)` na lista de orçamentos do projeto |
+| Cards recém-criados nos editores **multi** e **agregado** | o combobox devolve o par, e ele entra no rascunho como `cidade_nome` |
+
+`cidade_nome` mora em `JobRascunho`, **não** em `DadosOrcamentoRascunho`:
+é rótulo de tela, e o payload que sobe para a Server Action continua
+mandando só `cidade_id` — o servidor resolve o nome sozinho e revalida a
+cidade contra o tenant, como já fazia.
+
+**Dívida vizinha que saiu junto**
+
+`app/(app)/orcamentos/[projetoId]/page.tsx` fazia **duas** queries que
+nada na página consumia — `cidades` e `categorias_dominio` de escopo
+orçamento. São restos de quando o formulário de orçamento morava ali,
+antes de `2950666`. Removidas: eram dois round-trips por visita numa
+página `force-dynamic`.
+
+**O que NÃO mudou**
+
+- Nenhuma regra de negócio. Cidade continua obrigatória, continua
+  revalidada no servidor e continua gravada igual.
+- A tela de cadastro (`/cadastros/cidades`) segue listando tudo sem
+  paginação — é a tela que existe para ver a lista inteira. Se a carga do
+  IBGE entrar, ela é a próxima a precisar de paginação/busca.
+
+**Verificação:** `tsc --noEmit` e `next lint` limpos. Conferência logada
+no navegador **pendente** — entra na etapa final, junto com as demais
+telas.

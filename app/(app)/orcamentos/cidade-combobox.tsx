@@ -4,7 +4,7 @@ import * as React from "react";
 import { ChevronDown, Search } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { buscarCidades } from "./abertura-actions";
+import { buscarCidades } from "./cidades-actions";
 
 export interface CidadeOption {
   id: string;

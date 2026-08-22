@@ -58,6 +58,12 @@ export interface DadosOrcamentoRascunho {
 
 export interface JobRascunho extends DadosOrcamentoRascunho {
   id: string;
+  /** Nome da cidade, só para o rótulo do card. Fica fora de
+   *  `DadosOrcamentoRascunho` de propósito: o payload manda `cidade_id` e
+   *  o servidor resolve o nome sozinho. Vem junto porque a tela não tem
+   *  mais a lista completa de cidades para consultar por id — o combobox
+   *  busca no servidor e só ele conhece o par. */
+  cidade_nome: string;
   aberto: boolean;
   /** `null` = ainda sem planilha (mostra importar / criar). */
   origem: "importado" | "manual" | null;

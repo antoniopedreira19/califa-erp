@@ -18,13 +18,13 @@ import {
   ORCAMENTO_STATUS_EDITAVEIS,
   orcamentoStatusLabel,
   type CategoriaDominio,
-  type Cidade,
   type Orcamento,
   type OrcamentoStatus,
   type Profile,
   type Regional,
 } from "@/lib/types";
 import { orcamentoSchema } from "@/lib/validations/orcamentos";
+import { CidadeCombobox, type CidadeOption } from "../cidade-combobox";
 import {
   atualizarOrcamento,
   criarOrcamento,
@@ -38,6 +38,10 @@ export interface DadosOrcamento {
   categoria_id: string;
   regional_id: string;
   cidade_id: string;
+  /** Nome da cidade escolhida. Vai junto porque quem consome o rascunho
+   *  não tem mais a lista completa para resolver o id — o combobox busca
+   *  no servidor e só ele conhece o par. */
+  cidade_nome: string;
   gp_responsavel_id: string;
   produtor_id: string;
   data_inicio_prevista: string | null;
@@ -51,7 +55,12 @@ interface Props {
   /** Só as regionais cadastradas no projeto — a peça não sai da praça
    *  que a iniciativa cobre. */
   regionaisDoProjeto: Pick<Regional, "id" | "nome">[];
-  cidades: Pick<Cidade, "id" | "nome">[];
+  /** Primeiras cidades do cadastro, só para o combobox não abrir vazio —
+   *  o resto é buscado no servidor a cada digitação. */
+  cidadesIniciais: CidadeOption[];
+  /** Cidade já gravada no orçamento, com o nome resolvido no servidor.
+   *  Sem ela o combobox abriria sem rótulo em edição. */
+  cidadeAtual?: CidadeOption | null;
   /** GP responsável sai dos responsáveis do projeto. */
   gpsDoProjeto: Pick<Profile, "id" | "nome">[];
   /** Produtor sai de todos os membros ativos — o time de produção ainda
@@ -72,7 +81,8 @@ export function OrcamentoForm({
   orcamento,
   categorias,
   regionaisDoProjeto,
-  cidades,
+  cidadesIniciais,
+  cidadeAtual,
   gpsDoProjeto,
   produtores,
   onSuccess,
@@ -96,7 +106,9 @@ export function OrcamentoForm({
     orcamento?.categoria_id ?? "",
   );
   const [regionalId, setRegionalId] = React.useState(orcamento?.regional_id ?? "");
-  const [cidadeId, setCidadeId] = React.useState(orcamento?.cidade_id ?? "");
+  const [cidade, setCidade] = React.useState<CidadeOption | null>(
+    cidadeAtual ?? null,
+  );
   const [gpId, setGpId] = React.useState(orcamento?.gp_responsavel_id ?? "");
   const [produtorId, setProdutorId] = React.useState(orcamento?.produtor_id ?? "");
 
@@ -116,7 +128,7 @@ export function OrcamentoForm({
     if (isEdit) formData.set("status", status);
     formData.set("categoria_id", categoriaId);
     formData.set("regional_id", regionalId);
-    formData.set("cidade_id", cidadeId);
+    formData.set("cidade_id", cidade?.id ?? "");
     formData.set("gp_responsavel_id", gpId);
     formData.set("produtor_id", produtorId);
 
@@ -129,7 +141,7 @@ export function OrcamentoForm({
         status: "rascunho",
         categoria_id: formData.get("categoria_id")?.toString() ?? "",
         regional_id: regionalId,
-        cidade_id: cidadeId,
+        cidade_id: cidade?.id ?? "",
         gp_responsavel_id: gpId,
         produtor_id: produtorId,
         data_inicio_prevista:
@@ -142,7 +154,7 @@ export function OrcamentoForm({
         return;
       }
       const { codigo: _semCodigo, status: _semStatus, ...dados } = parsed.data;
-      onRascunho(dados);
+      onRascunho({ ...dados, cidade_nome: cidade?.nome ?? "" });
       return;
     }
 
@@ -233,18 +245,12 @@ export function OrcamentoForm({
         </Field>
 
         <Field label="Cidade" name="cidade_id" required errors={fieldErrors}>
-          <Select value={cidadeId} onValueChange={setCidadeId}>
-            <SelectTrigger className={erroClasses("cidade_id")}>
-              <SelectValue placeholder="Selecione a cidade" />
-            </SelectTrigger>
-            <SelectContent>
-              {cidades.map((c) => (
-                <SelectItem key={c.id} value={c.id}>
-                  {c.nome}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <CidadeCombobox
+            value={cidade}
+            onChange={setCidade}
+            iniciais={cidadesIniciais}
+            erro={Boolean(fieldErrors["cidade_id"]?.length)}
+          />
         </Field>
 
         <Field

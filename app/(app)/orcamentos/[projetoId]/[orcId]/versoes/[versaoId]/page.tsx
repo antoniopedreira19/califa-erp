@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, FolderTree, Download } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
+import { listarCidadesIniciais } from "@/lib/data/cidades";
 import {
   versaoStatusLabel,
   type VersaoOrcamento,
@@ -70,7 +71,7 @@ export default async function VersaoDetailPage({
     regionaisRes,
     fornecedoresRes,
     bvsRes,
-    cidadesRes,
+    cidadesIniciais,
   ] = await Promise.all([
     supabase
       .from("versoes_orcamento")
@@ -163,16 +164,8 @@ export default async function VersaoDetailPage({
       .neq("situacao", "cancelado"),
     // Só as primeiras cidades, para o combobox do modal de abertura não
     // abrir vazio. O cadastro comporta o Brasil inteiro: o resto é
-    // buscado no servidor a cada digitação (`buscarCidades`, mesmo
-    // limite de 30).
-    supabase
-      .from("cidades")
-      .select("id, nome")
-      .eq("tenant_id", session.activeTenant.id)
-      .eq("ativo", true)
-      .order("nome")
-      .limit(30)
-      .returns<{ id: string; nome: string }[]>(),
+    // buscado no servidor a cada digitação (`buscarCidades`, mesmo limite).
+    listarCidadesIniciais(session.activeTenant.id),
   ]);
 
   if (versaoRes.error) console.error("[versao.detail]", versaoRes.error.message);
@@ -311,11 +304,6 @@ export default async function VersaoDetailPage({
     .filter(Boolean)
     .map((r: any) => ({ id: r.id as string, nome: r.nome as string }))
     .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
-
-  const cidadesIniciais = (cidadesRes.data ?? []) as {
-    id: string;
-    nome: string;
-  }[];
 
   const orcamentoRaw = orcamento as any;
 

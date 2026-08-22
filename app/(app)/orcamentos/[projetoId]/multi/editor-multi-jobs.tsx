@@ -32,11 +32,11 @@ import { bvSchema } from "@/lib/validations/bv";
 import type {
   Categoria,
   CategoriaDominio,
-  Cidade,
   Profile,
   Regional,
   TipoCusto,
 } from "@/lib/types";
+import type { CidadeOption } from "../../cidade-combobox";
 import type { AdaptadorItens } from "../[orcId]/versoes/[versaoId]/itens-table";
 import type { AdaptadorBv, FornecedorOpcao } from "@/app/(app)/_bv/bv-dialog";
 import { OrcamentoForm, type DadosOrcamento } from "../orcamento-form";
@@ -78,7 +78,9 @@ interface Props {
   orcamentosExistentes: number;
   categorias: Pick<CategoriaDominio, "id" | "nome">[];
   regionaisDoProjeto: Pick<Regional, "id" | "nome">[];
-  cidades: Pick<Cidade, "id" | "nome">[];
+  /** Primeiras cidades do cadastro — o combobox do formulário busca o
+   *  resto no servidor. O rótulo do card sai de `job.cidade_nome`. */
+  cidadesIniciais: CidadeOption[];
   gpsDoProjeto: Pick<Profile, "id" | "nome">[];
   produtores: Pick<Profile, "id" | "nome">[];
   categoriasItem: Categoria[];
@@ -112,7 +114,7 @@ export function EditorMultiJobs({
   orcamentosExistentes,
   categorias,
   regionaisDoProjeto,
-  cidades,
+  cidadesIniciais,
   gpsDoProjeto,
   produtores,
   categoriasItem,
@@ -154,17 +156,16 @@ export function EditorMultiJobs({
     () => ({
       categoria: new Map(categorias.map((c) => [c.id, c.nome])),
       regional: new Map(regionaisDoProjeto.map((r) => [r.id, r.nome])),
-      cidade: new Map(cidades.map((c) => [c.id, c.nome])),
       gp: new Map(gpsDoProjeto.map((g) => [g.id, g.nome])),
     }),
-    [categorias, regionaisDoProjeto, cidades, gpsDoProjeto],
+    [categorias, regionaisDoProjeto, gpsDoProjeto],
   );
 
   function descricaoDoJob(job: JobRascunho): string {
     const partes = [
       job.categoria_id ? nomePor.categoria.get(job.categoria_id) : null,
       nomePor.regional.get(job.regional_id),
-      nomePor.cidade.get(job.cidade_id),
+      job.cidade_nome || null,
       nomePor.gp.get(job.gp_responsavel_id)
         ? `GP ${nomePor.gp.get(job.gp_responsavel_id)}`
         : null,
@@ -890,7 +891,7 @@ export function EditorMultiJobs({
             projetoId={projeto.id}
             categorias={categorias}
             regionaisDoProjeto={regionaisDoProjeto}
-            cidades={cidades}
+            cidadesIniciais={cidadesIniciais}
             gpsDoProjeto={gpsDoProjeto}
             produtores={produtores}
             onRascunho={criarJob}
