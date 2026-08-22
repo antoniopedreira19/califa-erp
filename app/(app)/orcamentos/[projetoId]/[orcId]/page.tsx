@@ -4,10 +4,10 @@ import { ArrowLeft, FileStack, Lock } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { listActiveMembers } from "@/lib/data/members";
+import { listarCidadesIniciais } from "@/lib/data/cidades";
 import {
   orcamentoStatusLabel,
   type CategoriaDominio,
-  type Cidade,
   type Orcamento,
   type Job,
   type Profile,
@@ -57,10 +57,10 @@ export default async function OrcamentoDetailPage({
   const session = await requireSession();
   const supabase = createClient();
 
-  const [orcRes, projRes, versoesRes, categoriasOrcRes, jobsProjetoRes, regionaisProjRes, respProjRes, cidadesRes, produtores] = await Promise.all([
+  const [orcRes, projRes, versoesRes, categoriasOrcRes, jobsProjetoRes, regionaisProjRes, respProjRes, cidadesIniciais, produtores] = await Promise.all([
     supabase
       .from("orcamentos")
-      .select("id, tenant_id, projeto_id, codigo, nome, status, categoria_id, regional_id, cidade_id, gp_responsavel_id, produtor_id, data_inicio_prevista, data_fim_prevista, versao_aprovada_id, created_by, created_at, updated_at, categoria:categorias_dominio(nome)")
+      .select("id, tenant_id, projeto_id, codigo, nome, status, categoria_id, regional_id, cidade_id, gp_responsavel_id, produtor_id, data_inicio_prevista, data_fim_prevista, versao_aprovada_id, created_by, created_at, updated_at, categoria:categorias_dominio(nome), cidade:cidades(id, nome)")
       .eq("id", params.orcId)
       .eq("projeto_id", params.projetoId)
       .eq("tenant_id", session.activeTenant.id)
@@ -101,12 +101,10 @@ export default async function OrcamentoDetailPage({
       .select("profile:profiles(id, nome)")
       .eq("projeto_id", params.projetoId)
       .eq("tenant_id", session.activeTenant.id),
-    supabase
-      .from("cidades")
-      .select("id, nome")
-      .eq("tenant_id", session.activeTenant.id)
-      .eq("ativo", true)
-      .order("nome"),
+    // Só as primeiras cidades, para o combobox do editor não abrir vazio.
+    // O cadastro comporta o Brasil inteiro: o resto é buscado no servidor
+    // a cada digitação (`buscarCidades`, mesmo limite).
+    listarCidadesIniciais(session.activeTenant.id),
     listActiveMembers(session.activeTenant.id),
   ]);
 
@@ -127,7 +125,9 @@ export default async function OrcamentoDetailPage({
   const responsavelNome: string | null = projeto.responsavel?.nome ?? null;
   const empresaNome: string | null = projeto.empresa?.nome_fantasia ?? projeto.empresa?.razao_social ?? null;
   const categoriasOrcamento = (categoriasOrcRes.data ?? []) as Pick<CategoriaDominio, "id" | "nome">[];
-  const cidades = (cidadesRes.data ?? []) as Pick<Cidade, "id" | "nome">[];
+  const cidadeAtual = orcamentoRaw.cidade
+    ? { id: orcamentoRaw.cidade.id as string, nome: orcamentoRaw.cidade.nome as string }
+    : null;
 
   const regionaisDoProjeto = ((regionaisProjRes.data ?? []) as any[])
     .filter((v) => v.regional)
@@ -212,7 +212,8 @@ export default async function OrcamentoDetailPage({
               orcamento={orcamento}
               categorias={categoriasOrcamento}
               regionaisDoProjeto={regionaisDoProjeto}
-              cidades={cidades}
+              cidadesIniciais={cidadesIniciais}
+              cidadeAtual={cidadeAtual}
               gpsDoProjeto={gpsDoProjeto}
               produtores={produtores}
               disabled={protegido}

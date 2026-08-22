@@ -2,11 +2,11 @@ import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { listActiveMembers } from "@/lib/data/members";
+import { listarCidadesIniciais } from "@/lib/data/cidades";
 import { HONORARIOS_PADRAO_FALLBACK } from "@/lib/validations/clientes";
 import type {
   Categoria,
   CategoriaDominio,
-  Cidade,
   Profile,
   Regional,
   TipoCusto,
@@ -60,7 +60,7 @@ export default async function OrcamentosAgregadoPage({
     projRes,
     orcsRes,
     categoriasOrcRes,
-    cidadesRes,
+    cidadesIniciais,
     categoriasItemRes,
     fornecedoresRes,
     produtores,
@@ -79,7 +79,8 @@ export default async function OrcamentosAgregadoPage({
       .from("orcamentos")
       .select(
         "id, codigo, nome, status, versao_aprovada_id, categoria_id, regional_id, " +
-          "cidade_id, gp_responsavel_id, produtor_id, data_inicio_prevista, data_fim_prevista",
+          "cidade_id, cidade:cidades(nome), gp_responsavel_id, produtor_id, " +
+          "data_inicio_prevista, data_fim_prevista",
       )
       .eq("projeto_id", params.projetoId)
       .eq("tenant_id", tenantId)
@@ -92,12 +93,10 @@ export default async function OrcamentosAgregadoPage({
       .eq("escopo", "orcamento")
       .eq("ativo", true)
       .order("nome"),
-    supabase
-      .from("cidades")
-      .select("id, nome")
-      .eq("tenant_id", tenantId)
-      .eq("ativo", true)
-      .order("nome"),
+    // Só as primeiras cidades: o combobox do formulário busca o resto no
+    // servidor a cada digitação. O nome da cidade de cada orçamento já
+    // gravado vem no embed acima.
+    listarCidadesIniciais(tenantId),
     supabase
       .from("categorias")
       .select("*")
@@ -136,6 +135,7 @@ export default async function OrcamentosAgregadoPage({
     categoria_id: string | null;
     regional_id: string;
     cidade_id: string;
+    cidade: { nome: string } | null;
     gp_responsavel_id: string;
     produtor_id: string;
     data_inicio_prevista: string | null;
@@ -273,6 +273,7 @@ export default async function OrcamentosAgregadoPage({
       categoria_id: orc.categoria_id,
       regional_id: orc.regional_id,
       cidade_id: orc.cidade_id,
+      cidade_nome: orc.cidade?.nome ?? "",
       gp_responsavel_id: orc.gp_responsavel_id,
       produtor_id: orc.produtor_id,
       data_inicio_prevista: orc.data_inicio_prevista,
@@ -347,7 +348,7 @@ export default async function OrcamentosAgregadoPage({
         "id" | "nome"
       >[]}
       regionaisDoProjeto={regionaisDoProjeto}
-      cidades={(cidadesRes.data ?? []) as Pick<Cidade, "id" | "nome">[]}
+      cidadesIniciais={cidadesIniciais}
       gpsDoProjeto={gpsDoProjeto}
       produtores={produtores}
       categoriasItem={categoriasItemRes.data ?? []}

@@ -24,11 +24,11 @@ import { bvSchema } from "@/lib/validations/bv";
 import type {
   Categoria,
   CategoriaDominio,
-  Cidade,
   Profile,
   Regional,
   TipoCusto,
 } from "@/lib/types";
+import type { CidadeOption } from "../../cidade-combobox";
 import type { AdaptadorItens } from "../[orcId]/versoes/[versaoId]/itens-table";
 import type { AdaptadorBv, FornecedorOpcao } from "@/app/(app)/_bv/bv-dialog";
 import { ResumoRentabilidade } from "../[orcId]/versoes/[versaoId]/resumo-rentabilidade";
@@ -77,7 +77,9 @@ interface Props {
   inicial: OrcamentoRascunho[];
   categorias: Pick<CategoriaDominio, "id" | "nome">[];
   regionaisDoProjeto: Pick<Regional, "id" | "nome">[];
-  cidades: Pick<Cidade, "id" | "nome">[];
+  /** Primeiras cidades do cadastro — o combobox do formulário busca o
+   *  resto no servidor. O rótulo do card sai de `orc.cidade_nome`. */
+  cidadesIniciais: CidadeOption[];
   gpsDoProjeto: Pick<Profile, "id" | "nome">[];
   produtores: Pick<Profile, "id" | "nome">[];
   categoriasItem: Categoria[];
@@ -116,7 +118,7 @@ export function EditorAgregado({
   inicial,
   categorias,
   regionaisDoProjeto,
-  cidades,
+  cidadesIniciais,
   gpsDoProjeto,
   produtores,
   categoriasItem,
@@ -160,17 +162,16 @@ export function EditorAgregado({
     () => ({
       categoria: new Map(categorias.map((c) => [c.id, c.nome])),
       regional: new Map(regionaisDoProjeto.map((r) => [r.id, r.nome])),
-      cidade: new Map(cidades.map((c) => [c.id, c.nome])),
       gp: new Map(gpsDoProjeto.map((g) => [g.id, g.nome])),
     }),
-    [categorias, regionaisDoProjeto, cidades, gpsDoProjeto],
+    [categorias, regionaisDoProjeto, gpsDoProjeto],
   );
 
   function descricao(orc: OrcamentoRascunho): string {
     return [
       orc.categoria_id ? nomePor.categoria.get(orc.categoria_id) : null,
       nomePor.regional.get(orc.regional_id),
-      nomePor.cidade.get(orc.cidade_id),
+      orc.cidade_nome || null,
       nomePor.gp.get(orc.gp_responsavel_id)
         ? `GP ${nomePor.gp.get(orc.gp_responsavel_id)}`
         : null,
@@ -832,7 +833,7 @@ export function EditorAgregado({
             projetoId={projeto.id}
             categorias={categorias}
             regionaisDoProjeto={regionaisDoProjeto}
-            cidades={cidades}
+            cidadesIniciais={cidadesIniciais}
             gpsDoProjeto={gpsDoProjeto}
             produtores={produtores}
             onRascunho={criarOrcamento}

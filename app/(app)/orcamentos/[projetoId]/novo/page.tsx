@@ -4,7 +4,8 @@ import { ArrowLeft } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { listActiveMembers } from "@/lib/data/members";
-import type { CategoriaDominio, Cidade, Profile, Regional } from "@/lib/types";
+import { listarCidadesIniciais } from "@/lib/data/cidades";
+import type { CategoriaDominio, Profile, Regional } from "@/lib/types";
 import { OrcamentoForm } from "../orcamento-form";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +18,7 @@ export default async function NovoOrcamentoPage({
   const session = await requireSession();
   const supabase = createClient();
 
-  const [{ data: projeto }, categoriasRes, regionaisRes, respRes, cidadesRes, produtores] =
+  const [{ data: projeto }, categoriasRes, regionaisRes, respRes, cidadesIniciais, produtores] =
     await Promise.all([
       supabase
         .from("projetos")
@@ -43,19 +44,15 @@ export default async function NovoOrcamentoPage({
         .select("profile:profiles(id, nome)")
         .eq("projeto_id", params.projetoId)
         .eq("tenant_id", session.activeTenant.id),
-      supabase
-        .from("cidades")
-        .select("id, nome")
-        .eq("tenant_id", session.activeTenant.id)
-        .eq("ativo", true)
-        .order("nome"),
+      // Só as primeiras cidades: o combobox busca o resto no servidor a
+      // cada digitação. O cadastro comporta o Brasil inteiro.
+      listarCidadesIniciais(session.activeTenant.id),
       listActiveMembers(session.activeTenant.id),
     ]);
 
   if (!projeto) notFound();
 
   const categorias = (categoriasRes.data ?? []) as Pick<CategoriaDominio, "id" | "nome">[];
-  const cidades = (cidadesRes.data ?? []) as Pick<Cidade, "id" | "nome">[];
 
   const regionaisDoProjeto = ((regionaisRes.data ?? []) as any[])
     .filter((v) => v.regional)
@@ -89,7 +86,7 @@ export default async function NovoOrcamentoPage({
           projetoId={params.projetoId}
           categorias={categorias}
           regionaisDoProjeto={regionaisDoProjeto}
-          cidades={cidades}
+          cidadesIniciais={cidadesIniciais}
           gpsDoProjeto={gpsDoProjeto}
           produtores={produtores}
         />
