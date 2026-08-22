@@ -52,6 +52,12 @@ interface Props {
   /** O que existe hoje na versão, para a confirmação dizer o tamanho do
    *  estrago em número, não em advérbio. */
   conteudoAtual?: { grupos: number; itens: number; bvs: number };
+  /** Controle externo. O menu "+" das abas do orçamento abre este drawer
+   *  sem ter um gatilho próprio para clicar. */
+  aberto?: boolean;
+  onAbertoChange?: (aberto: boolean) => void;
+  /** Esconde o botão-gatilho: quem abre é quem controla. */
+  semGatilho?: boolean;
 }
 
 type Preview = Extract<PreviewResult, { ok: true }>["preview"];
@@ -66,10 +72,15 @@ export function ImportarPlanilhaDrawer({
   modo = "nova-versao",
   versaoId,
   conteudoAtual,
+  aberto,
+  onAbertoChange,
+  semGatilho,
 }: Props) {
   const sobrescreve = modo === "sobrescrever";
   const router = useRouter();
-  const [open, setOpen] = React.useState(false);
+  const [openInterno, setOpenInterno] = React.useState(false);
+  const open = aberto ?? openInterno;
+  const setOpen = onAbertoChange ?? setOpenInterno;
   const [stage, setStage] = React.useState<Stage>("select");
   const [erro, setErro] = React.useState<string | null>(null);
   const [preview, setPreview] = React.useState<Preview | null>(null);
@@ -138,9 +149,7 @@ export function ImportarPlanilhaDrawer({
     // Sobrescrevendo já estamos na versão certa — só recarregar. Criando,
     // é preciso ir até a versão nova.
     if (!sobrescreve) {
-      router.push(
-        `/orcamentos/${projetoId}/${res.orcamento_id}/versoes/${res.versao_id}`,
-      );
+      router.push(`/orcamentos/${projetoId}/${res.orcamento_id}?v=${res.versao_id}`);
     }
     router.refresh();
   }
@@ -153,17 +162,19 @@ export function ImportarPlanilhaDrawer({
         if (!o) reset();
       }}
     >
-      <DialogTrigger asChild>
-        <button
-          type="button"
-          disabled={disabled}
-          title={disabled ? disabledReason : undefined}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-2 text-xs font-semibold text-foreground shadow-sm hover:border-california-red/40 hover:text-california-red transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <Upload className="h-3.5 w-3.5" />
-          Importar planilha
-        </button>
-      </DialogTrigger>
+      {!semGatilho && (
+        <DialogTrigger asChild>
+          <button
+            type="button"
+            disabled={disabled}
+            title={disabled ? disabledReason : undefined}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-2 text-xs font-semibold text-foreground shadow-sm hover:border-california-red/40 hover:text-california-red transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Upload className="h-3.5 w-3.5" />
+            Importar planilha
+          </button>
+        </DialogTrigger>
+      )}
       <DrawerContent className="sm:max-w-2xl">
         <DialogHeader className="border-b border-border p-6">
           <DialogTitle>

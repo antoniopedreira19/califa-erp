@@ -109,10 +109,17 @@ async function assertRegionalEGpDoProjeto(
   return { ok: true };
 }
 
+/**
+ * Cria o orçamento (com a v1 junto) e REDIRECIONA para ele.
+ *
+ * Retorno `ActionResult | void`: `redirect()` no servidor não devolve
+ * valor ao cliente — no caminho feliz o `await` resolve `undefined` e a
+ * navegação já aconteceu. Só o erro volta como objeto.
+ */
 export async function criarOrcamento(
   projetoId: string,
   formData: FormData,
-): Promise<ActionResult> {
+): Promise<ActionResult | void> {
   const session = await requireSession();
   const parsed = orcamentoSchema.safeParse(extractInput(formData));
 
@@ -191,7 +198,7 @@ export async function criarOrcamento(
     redirect(`/orcamentos/${projetoId}/${data.id}`);
   }
 
-  redirect(`/orcamentos/${projetoId}/${data.id}/versoes/${versaoId}`);
+  redirect(`/orcamentos/${projetoId}/${data.id}?v=${versaoId}`);
 }
 
 /** Cria a v1 em rascunho de um orçamento recém-criado.

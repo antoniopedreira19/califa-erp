@@ -632,7 +632,6 @@ export async function sobrescreverVersaoComPlanilha(
   });
 
   revalidatePath(`/orcamentos/${projetoId}/${orcamentoId}`);
-  revalidatePath(`/orcamentos/${projetoId}/${orcamentoId}/versoes/${versaoId}`);
 
   return {
     ok: true,

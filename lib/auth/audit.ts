@@ -32,6 +32,12 @@ export type AuditAction =
   | "versao_orcamento.sobrescrita_por_importacao"
   | "versao_orcamento.aprovada"
   | "versao_orcamento.aprovacao_cancelada"
+  // Apaga a linha de verdade — grupos, itens e BVs vão junto. Substituiu
+  // o "cancelar versão" em 21/08/2026: marcar a versão como cancelada e
+  // deixá-la navegável não resolvia nada que simplesmente não aprová-la já
+  // não resolvesse (decisão 023). Como o registro deixa de existir, o
+  // metadata guarda o que ele era.
+  | "versao_orcamento.deletada"
   | "item_bv.lancado"
   | "item_bv.editado"
   | "item_bv.confirmado"
