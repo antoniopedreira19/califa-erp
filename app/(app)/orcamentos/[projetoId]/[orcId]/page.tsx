@@ -4,12 +4,12 @@ import { ArrowLeft, FileStack, FolderTree, Lock } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { listActiveMembers } from "@/lib/data/members";
+import { listarCidadesIniciais, type CidadeOpcao } from "@/lib/data/cidades";
 import {
   orcamentoStatusLabel,
   versaoStatusLabel,
   type Categoria,
   type CategoriaDominio,
-  type Cidade,
   type ItemBv,
   type Orcamento,
   type Profile,
@@ -144,7 +144,7 @@ export default async function OrcamentoDetailPage({
     jobRes,
     regionaisProjRes,
     respProjRes,
-    cidadesRes,
+    cidadesIniciais,
     produtores,
     categoriasRes,
     fornecedoresRes,
@@ -155,7 +155,7 @@ export default async function OrcamentoDetailPage({
       .from("orcamentos")
       .select(
         "id, tenant_id, projeto_id, codigo, nome, status, categoria_id, regional_id, cidade_id, gp_responsavel_id, produtor_id, data_inicio_prevista, data_fim_prevista, versao_aprovada_id, created_by, created_at, updated_at, " +
-          "categoria:categorias_dominio(nome), regional:regionais(nome), cidade:cidades(nome), " +
+          "categoria:categorias_dominio(nome), regional:regionais(nome), cidade:cidades(id, nome), " +
           "gp:profiles!gp_responsavel_id(nome), produtor:profiles!produtor_id(nome)",
       )
       .eq("id", params.orcId)
@@ -204,16 +204,11 @@ export default async function OrcamentoDetailPage({
       .select("profile:profiles(id, nome)")
       .eq("projeto_id", params.projetoId)
       .eq("tenant_id", session.activeTenant.id),
-    // Serve os dois consumidores: o editor do orçamento usa a lista
-    // inteira e o combobox do modal de abertura usa as 30 primeiras. Uma
-    // query só — o cadastro comporta o Brasil inteiro, e o resto o modal
-    // busca no servidor a cada digitação (`buscarCidades`).
-    supabase
-      .from("cidades")
-      .select("id, nome")
-      .eq("tenant_id", session.activeTenant.id)
-      .eq("ativo", true)
-      .order("nome"),
+    // Só as primeiras cidades, e as mesmas para os dois consumidores desta
+    // tela: o editor do orçamento e o combobox do modal de abertura. O
+    // cadastro comporta o Brasil inteiro — o resto vem do servidor a cada
+    // digitação (`buscarCidades`, mesmo limite).
+    listarCidadesIniciais(session.activeTenant.id),
     listActiveMembers(session.activeTenant.id),
     supabase
       .from("categorias")
@@ -267,7 +262,12 @@ export default async function OrcamentoDetailPage({
     CategoriaDominio,
     "id" | "nome"
   >[];
-  const cidades = (cidadesRes.data ?? []) as Pick<Cidade, "id" | "nome">[];
+  // A cidade gravada no orçamento entra por fora da lista: com o combobox
+  // limitado a 30, ela pode não estar entre as primeiras, e o editor
+  // precisa exibi-la mesmo assim.
+  const cidadeAtual: CidadeOpcao | null = orcamentoRaw.cidade
+    ? { id: orcamentoRaw.cidade.id as string, nome: orcamentoRaw.cidade.nome as string }
+    : null;
   const categorias = (categoriasRes.data ?? []) as Categoria[];
   const fornecedores = (fornecedoresRes.data ?? []) as {
     id: string;
@@ -429,7 +429,8 @@ export default async function OrcamentoDetailPage({
               orcamento={orcamento}
               categorias={categoriasOrcamento}
               regionaisDoProjeto={regionaisDoProjeto}
-              cidades={cidades}
+              cidadesIniciais={cidadesIniciais}
+              cidadeAtual={cidadeAtual}
               gpsDoProjeto={gpsDoProjeto}
               produtores={produtores}
               disabled={protegido}
@@ -555,7 +556,7 @@ export default async function OrcamentoDetailPage({
           fornecedores={fornecedores}
           regionais={regionais}
           regionaisDoProjeto={regionaisDoProjeto}
-          cidades={cidades}
+          cidadesIniciais={cidadesIniciais}
           clienteNome={clienteNome ?? "—"}
           job={job}
           temJobAtivo={temJobAtivo}
@@ -598,7 +599,7 @@ function VersaoSelecionada({
   fornecedores,
   regionais,
   regionaisDoProjeto,
-  cidades,
+  cidadesIniciais,
   clienteNome,
   job,
   temJobAtivo,
@@ -620,7 +621,7 @@ function VersaoSelecionada({
   fornecedores: { id: string; nome: string }[];
   regionais: { id: string; nome: string }[];
   regionaisDoProjeto: Pick<Regional, "id" | "nome">[];
-  cidades: Pick<Cidade, "id" | "nome">[];
+  cidadesIniciais: CidadeOpcao[];
   clienteNome: string;
   job: JobExistente | null;
   temJobAtivo: boolean;
@@ -867,9 +868,9 @@ function VersaoSelecionada({
         projetoCodigo={projetoRaw?.codigo ?? "—"}
         herdados={herdados}
         regionaisDoProjeto={regionaisDoProjeto}
-        // O combobox abre com as primeiras; o resto vem do servidor a
-        // cada digitação.
-        cidadesIniciais={cidades.slice(0, 30)}
+        // Já vêm limitadas de `listarCidadesIniciais`; o resto do Brasil
+        // vem do servidor a cada digitação.
+        cidadesIniciais={cidadesIniciais}
         inicial={inicialModal}
         job={job}
       />

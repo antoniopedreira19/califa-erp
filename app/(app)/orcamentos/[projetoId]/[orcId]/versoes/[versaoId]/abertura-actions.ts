@@ -13,43 +13,6 @@ export type AberturaResult =
   | { ok: true; jobId: string; codigo: string }
   | { ok: false; message: string; fieldErrors?: Record<string, string[]> };
 
-/** Máximo de cidades devolvidas por busca. O cadastro comporta a lista
- *  completa do Brasil — nunca carregue tudo no cliente. */
-const LIMITE_CIDADES = 30;
-
-/**
- * Busca de cidades para o dropdown do modal, feita no servidor.
- * Sem termo, devolve as primeiras em ordem alfabética.
- */
-export async function buscarCidades(
-  termo: string,
-): Promise<{ id: string; nome: string }[]> {
-  const session = await requireSession();
-  const supabase = createClient();
-
-  let query = supabase
-    .from("cidades")
-    .select("id, nome")
-    .eq("tenant_id", session.activeTenant.id)
-    .eq("ativo", true)
-    .order("nome")
-    .limit(LIMITE_CIDADES);
-
-  const q = termo.trim();
-  if (q.length > 0) {
-    // Escapa os curingas do LIKE para que "%" digitado busque literal.
-    const escaped = q.replace(/[%_]/g, (m) => `\\${m}`);
-    query = query.ilike("nome", `%${escaped}%`);
-  }
-
-  const { data, error } = await query;
-  if (error) {
-    console.error("[cidades.buscar]", error.message);
-    return [];
-  }
-  return (data ?? []) as { id: string; nome: string }[];
-}
-
 /**
  * Os contatos de cobrança chegam como JSON num campo único do FormData —
  * é o único campo composto do formulário. Payload ilegível vira array

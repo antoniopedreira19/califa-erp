@@ -9,7 +9,6 @@ import { escolherJobDoFunil, estagioFunil } from "@/lib/calculos/funil";
 import { calcularTotaisVersao } from "@/lib/calculos/versao-totais";
 import type {
   CategoriaDominio,
-  Cidade,
   Cliente,
   JobStatus,
   Orcamento,
@@ -48,7 +47,7 @@ export default async function ProjetoDetailPage({
   const session = await requireSession();
   const supabase = createClient();
 
-  const [projRes, orcsRes, clientesRes, responsaveis, regionaisRes, cidadesRes, categoriasProjRes, categoriasOrcRes, empresas, produtosRes, vinculosRegRes, vinculosRespRes] = await Promise.all([
+  const [projRes, orcsRes, clientesRes, responsaveis, regionaisRes, categoriasProjRes, empresas, produtosRes, vinculosRegRes, vinculosRespRes] = await Promise.all([
     supabase
       .from("projetos")
       .select(
@@ -77,23 +76,10 @@ export default async function ProjetoDetailPage({
       .eq("ativo", true)
       .order("nome"),
     supabase
-      .from("cidades")
-      .select("id, nome")
-      .eq("tenant_id", session.activeTenant.id)
-      .eq("ativo", true)
-      .order("nome"),
-    supabase
       .from("categorias_dominio")
       .select("id, nome")
       .eq("tenant_id", session.activeTenant.id)
       .eq("escopo", "projeto")
-      .eq("ativo", true)
-      .order("nome"),
-    supabase
-      .from("categorias_dominio")
-      .select("id, nome")
-      .eq("tenant_id", session.activeTenant.id)
-      .eq("escopo", "orcamento")
       .eq("ativo", true)
       .order("nome"),
     listEmpresasAtivas(session.activeTenant.id),
@@ -146,10 +132,8 @@ export default async function ProjetoDetailPage({
   const empresaNome: string | null = raw.empresa?.nome_fantasia ?? raw.empresa?.razao_social ?? null;
 
   const regionais = (regionaisRes.data ?? []) as Pick<Regional, "id" | "nome">[];
-  const cidades = (cidadesRes.data ?? []) as Pick<Cidade, "id" | "nome">[];
   const produtos = (produtosRes.data ?? []) as ProdutoOption[];
   const categoriasProjeto = (categoriasProjRes.data ?? []) as Pick<CategoriaDominio, "id" | "nome">[];
-  const categoriasOrcamento = (categoriasOrcRes.data ?? []) as Pick<CategoriaDominio, "id" | "nome">[];
 
   // Regionais e responsáveis do projeto: alimentam o cabeçalho, o editor
   // e — importante — as opções de Regional e GP no formulário do orçamento.
