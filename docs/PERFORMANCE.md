@@ -228,6 +228,7 @@ Case studies documentam decisões erradas. Sempre atualizar aqui quando algo tra
 - ❌ `await getUser(); await from("...").select();` sequencial. Use RPC ou `Promise.all`.
 - ❌ `.select("...embed:tabela(*)")` só pra contar/somar. Faça query agregada.
 - ❌ `<Link>` em lista de 5+ itens sem `prefetch={false}`.
+- ❌ Carregar cadastro que **cresce** (cidades, fornecedores, categorias de item) inteiro num `<Select>`. Traga as primeiras N no servidor e busque o resto por digitação — ver `lib/data/cidades.ts` + `CidadeCombobox`. "São só 2 linhas hoje" é o argumento que deixa a query sem `limit` numa página `force-dynamic`.
 - ❌ `useEffect` que dispara fetch no mount de client component sem loading state.
 - ❌ `for (const x of items) { await supabase.from(...).insert(x); }`. Bulk sempre.
 - ❌ `console.log` de debug esquecido em produção.

@@ -10,11 +10,11 @@ import {
 } from "@/components/ui/dialog";
 import type {
   CategoriaDominio,
-  Cidade,
   Orcamento,
   Profile,
   Regional,
 } from "@/lib/types";
+import type { CidadeOption } from "../cidade-combobox";
 import { OrcamentoForm } from "./orcamento-form";
 
 interface Props {
@@ -22,7 +22,8 @@ interface Props {
   orcamento: Orcamento;
   categorias: Pick<CategoriaDominio, "id" | "nome">[];
   regionaisDoProjeto: Pick<Regional, "id" | "nome">[];
-  cidades: Pick<Cidade, "id" | "nome">[];
+  cidadesIniciais: CidadeOption[];
+  cidadeAtual: CidadeOption | null;
   gpsDoProjeto: Pick<Profile, "id" | "nome">[];
   produtores: Pick<Profile, "id" | "nome">[];
   disabled?: boolean;
@@ -34,7 +35,8 @@ export function OrcamentoEditorDrawer({
   orcamento,
   categorias,
   regionaisDoProjeto,
-  cidades,
+  cidadesIniciais,
+  cidadeAtual,
   gpsDoProjeto,
   produtores,
   disabled,
@@ -79,7 +81,8 @@ export function OrcamentoEditorDrawer({
               orcamento={orcamento}
               categorias={categorias}
               regionaisDoProjeto={regionaisDoProjeto}
-              cidades={cidades}
+              cidadesIniciais={cidadesIniciais}
+              cidadeAtual={cidadeAtual}
               gpsDoProjeto={gpsDoProjeto}
               produtores={produtores}
               onSuccess={() => setOpen(false)}

@@ -23,7 +23,10 @@ import {
 import { TruncateTooltip } from "@/components/ui/truncate-tooltip";
 import { cn, formatCurrency } from "@/lib/utils";
 import { OBSERVACOES_MAX } from "@/lib/validations/abertura-job";
-import { CidadeCombobox, type CidadeOption } from "./cidade-combobox";
+import {
+  CidadeCombobox,
+  type CidadeOption,
+} from "@/app/(app)/orcamentos/cidade-combobox";
 
 /** Uma linha da seção "Contato de cobrança". Strings sempre — o estado do
  *  formulário nunca carrega `null`; quem converte "" em null é o Zod. */

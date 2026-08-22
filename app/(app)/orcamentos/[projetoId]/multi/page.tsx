@@ -2,10 +2,10 @@ import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { listActiveMembers } from "@/lib/data/members";
+import { listarCidadesIniciais } from "@/lib/data/cidades";
 import { HONORARIOS_PADRAO_FALLBACK } from "@/lib/validations/clientes";
 import type {
   CategoriaDominio,
-  Cidade,
   Categoria,
   Profile,
   Regional,
@@ -32,7 +32,7 @@ export default async function OrcamentoDoProjetoPage({
   const [
     projRes,
     categoriasOrcRes,
-    cidadesRes,
+    cidadesIniciais,
     categoriasItemRes,
     fornecedoresRes,
     produtores,
@@ -68,12 +68,9 @@ export default async function OrcamentoDoProjetoPage({
       .eq("escopo", "orcamento")
       .eq("ativo", true)
       .order("nome"),
-    supabase
-      .from("cidades")
-      .select("id, nome")
-      .eq("tenant_id", tenantId)
-      .eq("ativo", true)
-      .order("nome"),
+    // Só as primeiras cidades: o combobox do formulário busca o resto no
+    // servidor a cada digitação. O cadastro comporta o Brasil inteiro.
+    listarCidadesIniciais(tenantId),
     // Catálogo global do tenant — alimenta a coluna Categoria da planilha.
     supabase
       .from("categorias")
@@ -144,7 +141,7 @@ export default async function OrcamentoDoProjetoPage({
         "id" | "nome"
       >[]}
       regionaisDoProjeto={regionaisDoProjeto}
-      cidades={(cidadesRes.data ?? []) as Pick<Cidade, "id" | "nome">[]}
+      cidadesIniciais={cidadesIniciais}
       gpsDoProjeto={gpsDoProjeto}
       produtores={produtores}
       categoriasItem={categoriasItemRes.data ?? []}
