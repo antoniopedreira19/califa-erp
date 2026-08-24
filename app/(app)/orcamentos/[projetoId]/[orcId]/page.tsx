@@ -33,7 +33,6 @@ import { MetaVersao } from "./meta-versao";
 import { ImportarPlanilhaDrawer } from "./versoes/importar-drawer";
 import { NovaVersaoDrawer } from "./versoes/nova-versao-drawer";
 import { PlanilhaVersao } from "./versoes/[versaoId]/planilha-versao";
-import { NovoGrupoDrawer } from "./versoes/[versaoId]/novo-grupo-drawer";
 import { ResumoRentabilidade } from "./versoes/[versaoId]/resumo-rentabilidade";
 import { AprovacaoActions } from "./versoes/[versaoId]/aprovacao-actions";
 import {
@@ -641,7 +640,7 @@ function VersaoSelecionada({
     total_planejado: Number(it.total_planejado ?? 0),
   }));
 
-  // Agrupa itens por grupo_id para passar para cada GrupoCard.
+  // Agrupa itens por grupo_id: a planilha recebe os pares já montados.
   const itensPorGrupo = new Map<string, VersaoOrcamentoItem[]>();
   for (const g of grupos) itensPorGrupo.set(g.id, []);
   for (const it of itens) {
@@ -776,7 +775,9 @@ function VersaoSelecionada({
         jobHref={job ? `/jobs/${job.id}` : null}
       />
 
-      {/* Barra de ação — Novo grupo */}
+      {/* Barra de ação — "Novo grupo" saiu daqui em 24/08/2026: ele agora
+          vive na linha tracejada do pé da planilha, que é onde o grupo
+          novo de fato nasce (handoff "Grupos Unificados"). */}
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <FolderTree className="h-4 w-4 text-california-red" />
@@ -810,7 +811,6 @@ function VersaoSelecionada({
                   : motivoBloqueio
               }
             />
-            <NovoGrupoDrawer versaoId={versao.id} />
           </div>
         )}
       </div>
@@ -842,6 +842,7 @@ function VersaoSelecionada({
           versaoLabel={`v${versao.numero_versao}`}
           percentualHonorarios={Number(versao.percentual_honorarios)}
           percentualImposto={Number(versao.percentual_imposto)}
+          versaoId={versao.id}
         />
       </div>
 

@@ -1775,3 +1775,28 @@ components: este era o único caso.
 Na mesma conferência: os rótulos de coluna da visão agregada não
 acompanhavam a chave — os valores trocavam, mas o cabeçalho continuava
 "Total" em vez de "Total líquido". Corrigido nos dois cards.
+
+---
+
+## ⚠️ 2026-08-24 — A planilha de conferência acompanhou a tabela única
+
+**Origem:** projeto Claude Design `69342d83`,
+`Planilha Interna - Grupos Unificados.dc.html`. Regra transversal em
+`docs/decisions/024-planilha-em-tabela-unica.md`.
+
+A conferência da abertura (`/financeiro/abertura-de-job/[jobId]/planilha`)
+e o job na visão do financeiro (`/financeiro/jobs/[jobId]`) mostram a
+MESMA planilha da produção — então mudaram junto, sem decisão própria:
+uma tabela só, agrupamento em linha, rentabilidade no vão de PLANEJADO e
+REALIZADO, e **TOTAL DA PLANILHA** fechando a tabela.
+
+Nada mudou no que estas telas permitem: a conferência segue leitura pura
+(sem errata, sem BV, sem PP) e o realizado segue zerado antes da abertura.
+O que era `JobGrupoCard` virou o próprio `JobItemRealizadoTable`, que
+agora recebe todos os agrupamentos de uma vez.
+
+O projeto do financeiro (`/financeiro/projetos/[projetoId]`) usa o mesmo
+`PlanilhasDoProjeto` da produção e acompanhou a correção da visão
+agregada — ver o handoff de Jobs.
+
+**Verificação:** conferido logado em 24/08/2026 na conferência do JOB-0012.

@@ -23,6 +23,7 @@ import type {
 import { VISAO_BV_PADRAO, type VisaoBv } from "@/lib/calculos/bv-planilha";
 import type { FornecedorOpcao } from "@/app/(app)/_bv/bv-dialog";
 import { GruposSection } from "./grupos-section";
+import { NovoGrupoDrawer } from "./novo-grupo-drawer";
 import { TotaisCard } from "./totais-card";
 
 interface Props {
@@ -38,6 +39,10 @@ interface Props {
   versaoLabel: string;
   percentualHonorarios: number;
   percentualImposto: number;
+  /** Necessário para o "Novo grupo", que desde 24/08/2026 mora DENTRO da
+   *  planilha — na linha tracejada do pé da tabela — em vez de na barra
+   *  de ações da página. */
+  versaoId: string;
 }
 
 export function PlanilhaVersao({
@@ -52,6 +57,7 @@ export function PlanilhaVersao({
   versaoLabel,
   percentualHonorarios,
   percentualImposto,
+  versaoId,
 }: Props) {
   const [visao, setVisao] = React.useState<VisaoBv>(VISAO_BV_PADRAO);
 
@@ -67,6 +73,14 @@ export function PlanilhaVersao({
           <p className="mt-1 text-xs text-muted-foreground">
             Exemplos: Equipe, Ativação, Staff, Logística...
           </p>
+          {!readOnly && (
+            <div className="mt-5 flex justify-center">
+              {/* Sem nenhum grupo não há linha tracejada onde encaixar o
+                  gatilho: aqui ele é a única ação da tela, e por isso vem
+                  na forma sólida. */}
+              <NovoGrupoDrawer versaoId={versaoId} />
+            </div>
+          )}
         </div>
       ) : (
         <GruposSection
@@ -80,6 +94,11 @@ export function PlanilhaVersao({
           bvsPorItem={bvsPorItem}
           fornecedores={fornecedores}
           versaoLabel={versaoLabel}
+          novoGrupo={
+            readOnly ? undefined : (
+              <NovoGrupoDrawer versaoId={versaoId} variante="tracejada" />
+            )
+          }
         />
       )}
 

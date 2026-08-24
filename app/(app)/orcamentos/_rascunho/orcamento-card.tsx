@@ -3,10 +3,10 @@
 import * as React from "react";
 import {
   ChevronRight,
+  FolderPlus,
   FolderTree,
   Lock,
   Percent,
-  Plus,
   Table2,
   Trash2,
   Upload,
@@ -14,22 +14,35 @@ import {
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { cn, formatCurrency } from "@/lib/utils";
 import type { Categoria } from "@/lib/types";
-import type { AdaptadorItens } from "../[projetoId]/[orcId]/versoes/[versaoId]/itens-table";
+import {
+  ItensTable,
+  type AdaptadorItens,
+  type GrupoDaPlanilha,
+} from "../[projetoId]/[orcId]/versoes/[versaoId]/itens-table";
 import type { AdaptadorBv, FornecedorOpcao } from "@/app/(app)/_bv/bv-dialog";
 import type { VisaoBv } from "@/lib/calculos/bv-planilha";
 import {
   BotaoRecolherTodos,
   useGruposRecolhiveis,
 } from "@/app/(app)/_planilha/recolher-grupos";
-import { GrupoRascunhoCard } from "./grupo-rascunho-card";
 import {
+  AcoesDoGrupoRascunho,
+  NomeDoGrupoRascunho,
+} from "./grupo-rascunho-linha";
+import {
+  BOTAO_NOVO_GRUPO,
   ORCADO,
   PLANEJADO,
   RENTABILIDADE,
   type Bloco,
 } from "@/app/(app)/_planilha/blocos";
 import type { JobRascunho, ParametrosVersao } from "./tipos";
-import { contarItens, totaisDoJob } from "./rascunho";
+import {
+  comoBvDaVersao,
+  comoItemDaVersao,
+  contarItens,
+  totaisDoJob,
+} from "./rascunho";
 
 interface Props {
   job: JobRascunho;
@@ -103,6 +116,38 @@ export function JobRascunhoCard({
   );
   const recolher = useGruposRecolhiveis(gruposIds);
   const nItens = contarItens(job.grupos);
+
+  // O rascunho tem tipos próprios; a planilha fala o tipo da VERSÃO. A
+  // tradução é a mesma de sempre — só deixou de ser feita por grupo,
+  // porque agora a tabela recebe a planilha inteira de uma vez.
+  const gruposDaPlanilha = React.useMemo<GrupoDaPlanilha[]>(
+    () =>
+      job.grupos.map((g) => ({
+        id: g.id,
+        nome: g.nome,
+        itens: g.itens.map((it, i) => comoItemDaVersao(it, g.id, i + 1)),
+      })),
+    [job.grupos],
+  );
+
+  /** O grupo do RASCUNHO por id — o nome e a lixeira precisam dele, e não
+   *  da tradução para o tipo da versão. */
+  const grupoPorId = React.useMemo(
+    () => new Map(job.grupos.map((g) => [g.id, g])),
+    [job.grupos],
+  );
+
+  const bvsPorItem = React.useMemo(() => {
+    const mapa: Record<string, NonNullable<ReturnType<typeof comoBvDaVersao>>> =
+      {};
+    for (const g of job.grupos) {
+      for (const it of g.itens) {
+        const bv = comoBvDaVersao(it);
+        if (bv) mapa[it.id] = bv;
+      }
+    }
+    return mapa;
+  }, [job.grupos]);
   const readOnly = Boolean(bloqueio);
   // Orçamento congelado sem planilha não tem o que oferecer: não dá para
   // importar nem criar, então mostra o motivo em vez dos dois botões.
@@ -254,67 +299,84 @@ export function JobRascunhoCard({
                       onAlternarTodos={recolher.alternarTodos}
                     />
                   )}
-                  {!readOnly && (
-                    <button
-                      type="button"
-                      onClick={onNovoGrupo}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-california-red/30 bg-california-red/5 px-3 py-2 text-xs font-semibold text-california-red transition-colors hover:bg-california-red/10"
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                      Novo grupo
-                    </button>
-                  )}
                 </div>
               </div>
 
-              {job.grupos.map((grupo) => (
-                <GrupoRascunhoCard
-                  key={grupo.id}
-                  grupo={grupo}
-                  moeda={parametros.moeda}
-                  percentualImposto={parametros.percentual_imposto}
-                  visao={visao}
-                  aberto={recolher.estaAberto(grupo.id)}
-                  onAlternar={() => recolher.alternar(grupo.id)}
-                  categorias={categorias}
-                  fornecedores={fornecedores}
-                  adaptador={adaptador}
-                  adaptadorBv={adaptadorBv}
-                  onRenomear={(nome) => onRenomearGrupo(grupo.id, nome)}
-                  onRemover={() => onRemoverGrupo(grupo.id)}
-                  readOnly={readOnly}
-                />
-              ))}
+              {job.grupos.length === 0 && !readOnly && (
+                // Planilha criada e ainda sem agrupamento: não há tabela,
+                // e portanto não há a linha tracejada onde o "Novo grupo"
+                // mora desde 24/08/2026. Sem este bloco o orçamento
+                // ficaria sem nenhuma porta de entrada.
+                <div className="mx-5 flex flex-col items-center gap-3 rounded-2xl border border-dashed border-border bg-card px-8 py-7 text-center">
+                  <p className="text-sm text-muted-foreground">
+                    Nenhum agrupamento ainda. Crie o primeiro para começar a
+                    adicionar itens.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={onNovoGrupo}
+                    className={BOTAO_NOVO_GRUPO}
+                  >
+                    <FolderPlus className="h-3.5 w-3.5" />
+                    Novo grupo
+                  </button>
+                </div>
+              )}
 
               {job.grupos.length > 0 && (
-                <div className="mx-5 flex items-center border-t border-border pt-3.5">
-                  <span className="mr-auto text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                    Total do orçamento · {codigo}
-                  </span>
-                  <span
-                    className={cn(
-                      "px-5 font-mono text-sm font-bold",
-                      ORCADO.texto,
+                // Um card para a planilha inteira — antes era um por
+                // grupo. Sem padding lateral e sem `overflow-hidden`: as
+                // colunas precisam cair sob as do card de Totais, e a
+                // calha de ações precisa escapar do frame.
+                <div className="rounded-2xl border border-border bg-card shadow-soft">
+                  <ItensTable
+                    grupos={gruposDaPlanilha}
+                    moeda={parametros.moeda}
+                    percentualImposto={parametros.percentual_imposto}
+                    visao={visao}
+                    readOnly={readOnly}
+                    categorias={categorias}
+                    estaAberto={recolher.estaAberto}
+                    onAlternarGrupo={recolher.alternar}
+                    nomeDoGrupo={(g) => (
+                      <NomeDoGrupoRascunho
+                        grupo={grupoPorId.get(g.id) ?? { ...g, itens: [] }}
+                        readOnly={readOnly}
+                        onRenomear={(nome) => onRenomearGrupo(g.id, nome)}
+                      />
                     )}
-                  >
-                    {formatCurrency(totais.orcado, parametros.moeda)}
-                  </span>
-                  <span
-                    className={cn(
-                      "border-l border-border px-5 font-mono text-sm font-bold",
-                      PLANEJADO.texto,
-                    )}
-                  >
-                    {formatCurrency(totais.planejado, parametros.moeda)}
-                  </span>
-                  <span
-                    className={cn(
-                      "border-l border-border pl-5 font-mono text-sm font-bold",
-                      RENTABILIDADE.texto,
-                    )}
-                  >
-                    {formatCurrency(totais.rentabilidade, parametros.moeda)}
-                  </span>
+                    acoesDoGrupo={
+                      readOnly
+                        ? undefined
+                        : (g) => (
+                            <AcoesDoGrupoRascunho
+                              grupo={grupoPorId.get(g.id) ?? { ...g, itens: [] }}
+                              onRemover={() => onRemoverGrupo(g.id)}
+                            />
+                          )
+                    }
+                    novoGrupo={
+                      readOnly ? undefined : (
+                        <button
+                          type="button"
+                          onClick={onNovoGrupo}
+                          className={BOTAO_NOVO_GRUPO}
+                        >
+                          <FolderPlus className="h-3.5 w-3.5" />
+                          Novo grupo
+                        </button>
+                      )
+                    }
+                    bvsPorItem={bvsPorItem}
+                    fornecedores={fornecedores}
+                    versaoLabel="v1"
+                    adaptador={adaptador}
+                    adaptadorBv={adaptadorBv}
+                    // O total do orçamento é o pé da tabela desde
+                    // 24/08/2026 — era a faixa solta que ficava embaixo
+                    // dos cards de grupo, com as colunas fora do eixo.
+                    rotuloTotal={`Total do orçamento · ${codigo}`}
+                  />
                 </div>
               )}
             </>

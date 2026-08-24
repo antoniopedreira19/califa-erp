@@ -1923,3 +1923,51 @@ Conferido logado em 21/08/2026:
 | Orçamento (sem regressão no refactor) | 7 linhas → 2, rótulo alterna, subtotal fica |
 
 Zero erros de console em aba limpa e zero rolagem horizontal.
+
+---
+
+## ⚠️ 2026-08-24 — A Planilha Interna virou uma tabela só (design "Grupos Unificados")
+
+**Origem:** projeto Claude Design `69342d83`, arquivo
+`Planilha Interna - Grupos Unificados.dc.html`, tela `1b Job`. Regra
+transversal em `docs/decisions/024-planilha-em-tabela-unica.md` e
+`docs/09-identidade-visual-ui.md` ("Linha do agrupamento").
+
+**O que mudou nesta tela.** Os cards de grupo acabaram: a Planilha
+Interna é **um card e uma tabela**, com um `<thead>` só. Cada agrupamento
+é uma linha de 40px, e a tabela fecha com **TOTAL DA PLANILHA** no
+`<tfoot>`. Vale igual em `/jobs/[jobId]` e em `/financeiro/jobs/[jobId]`,
+que sempre mostraram a mesma planilha.
+
+**A sublinha "Rentabilidade" acabou.** Ela abria uma linha inteira embaixo
+do subtotal, em cada grupo — duas por card, quatro numa tela de dois
+agrupamentos. Agora a rentabilidade ocupa o **vão vazio** de PLANEJADO e
+REALIZADO, à esquerda do total, na mesma linha do subtotal. No ORÇADO ela
+não existe: ele é a base da comparação. Mesma mudança no card de Totais,
+nas linhas de agrupamento e no rodapé.
+
+**A calha deixou de contar linhas e passou a medi-las.** Com linhas de
+alturas diferentes na mesma tabela (grupo 40px, item 34px, sub-linha do BV
+crescendo na vista Líquido), `railTop` + altura fixa acumulava erro a cada
+agrupamento. Cada `<tr>` agora se marca com `data-calha` e
+`_planilha/calha.tsx` lê a posição real. O BV e a PP continuam na mesma
+calha de 116px, e o `pr-[116px]` da página não mudou.
+
+**Visão agregada do projeto:** a mesma correção. As linhas de agrupamento
+de cada bloco de job ganharam a rentabilidade no vão e o fundo forte da
+linha de grupo; as duas linhas de rodapé ("Total do job" + "Rentabilidade")
+viraram uma. Idem no card de Totais do projeto, nas linhas por job.
+
+**Cores:** nada mudou. ORÇADO azul, PLANEJADO verde, REALIZADO laranja,
+rentabilidade em grafite (decisão 015). O handoff só repinta a tela de
+orçamento, e essa parte foi recusada — ver a decisão 024.
+
+**Arquivos:** `job-item-realizado-table.tsx` passou a receber `grupos`
+(todos) e `job-grupo-card.tsx` deixou de existir — ele só dava moldura a
+um agrupamento.
+
+**Verificação:** `tsc --noEmit`, `next lint` e `npm run build` limpos.
+Conferido logado em 24/08/2026: JOB-0006 (3 agrupamentos, calha de PP e BV
+alinhada linha a linha — medido no DOM, zero célula transbordando),
+conferência da abertura (JOB-0012) e visão agregada do projeto
+`89f4c6b7` com os três jobs abertos.
