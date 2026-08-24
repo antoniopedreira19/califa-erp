@@ -33,7 +33,10 @@ import {
   BotaoRecolherTodos,
   useGruposRecolhiveis,
 } from "@/app/(app)/_planilha/recolher-grupos";
-import { JobGrupoCard } from "./job-grupo-card";
+import {
+  JobItemRealizadoTable,
+  type GrupoDoJob,
+} from "./job-item-realizado-table";
 import { JobTotaisCard } from "./job-totais-card";
 import { AlterarOrcadoButton } from "./alterar-orcado-button";
 
@@ -98,12 +101,18 @@ export function JobRealizadoSection({
     job.status === "aguardando_abertura" ||
     job.status === "rejeitado_financeiro";
 
-  const itensPorGrupo = new Map<string, ItemPlanilhaJob[]>();
-  for (const g of grupos) itensPorGrupo.set(g.id, []);
-  for (const it of itens) {
-    const list = itensPorGrupo.get(it.grupo_id);
-    if (list) list.push(it);
-  }
+  // A planilha inteira numa tabela só desde 24/08/2026: os pares
+  // grupo → itens são montados aqui e vão de uma vez para a tabela.
+  const gruposDaPlanilha = React.useMemo<GrupoDoJob[]>(() => {
+    const porGrupo = new Map<string, ItemPlanilhaJob[]>();
+    for (const g of grupos) porGrupo.set(g.id, []);
+    for (const it of itens) porGrupo.get(it.grupo_id)?.push(it);
+    return grupos.map((g) => ({
+      id: g.id,
+      nome: g.nome,
+      itens: porGrupo.get(g.id) ?? [],
+    }));
+  }, [grupos, itens]);
 
   // A trilha lateral aparece quando há ação (BV/PP) OU quando há BV
   // lançado para consultar num job sem ação — é a mesma condição que a
@@ -183,32 +192,31 @@ export function JobRealizadoSection({
         </div>
       ) : (
         <>
-          <div className="space-y-4">
-            {grupos.map((g) => (
-              <JobGrupoCard
-                key={g.id}
-                grupo={g}
-                itens={itensPorGrupo.get(g.id) ?? []}
-                realizadosMap={realizadosMap}
-                categoriasMap={categoriasMap}
-                moeda={versao.moeda}
-                percentualImposto={versao.percentual_imposto}
-                visao={visao}
-                aberto={recolher.estaAberto(g.id)}
-                onAlternar={() => recolher.alternar(g.id)}
-                podeAcoes={podeAcoes}
-                preAbertura={preAbertura}
-                jobId={job.id}
-                ppsPorItemId={ppsPorItemId}
-                fornecedores={fornecedores}
-                empresas={empresas}
-                jobEmpresaId={job.empresa_id ?? ""}
-                jobResponsavelId={job.responsavel_id ?? ""}
-                bvsPorItem={bvsPorItem}
-                versaoLabel={`v${versao.numero_versao}`}
-                cartoes={cartoes}
-              />
-            ))}
+          {/* Um card para a planilha inteira — antes era um por grupo.
+              Sem `overflow-hidden`: a calha de ações precisa escapar do
+              frame, e são os filhos que arredondam os cantos. */}
+          <div className="rounded-2xl border border-border bg-card shadow-soft">
+            <JobItemRealizadoTable
+              jobId={job.id}
+              grupos={gruposDaPlanilha}
+              realizadosMap={realizadosMap}
+              categoriasMap={categoriasMap}
+              moeda={versao.moeda}
+              percentualImposto={versao.percentual_imposto}
+              visao={visao}
+              estaAberto={recolher.estaAberto}
+              onAlternarGrupo={recolher.alternar}
+              podeAcoes={podeAcoes}
+              preAbertura={preAbertura}
+              ppsPorItemId={ppsPorItemId}
+              fornecedores={fornecedores}
+              empresas={empresas}
+              jobEmpresaId={job.empresa_id ?? ""}
+              jobResponsavelId={job.responsavel_id ?? ""}
+              bvsPorItem={bvsPorItem}
+              versaoLabel={`v${versao.numero_versao}`}
+              cartoes={cartoes}
+            />
           </div>
           <JobTotaisCard
             grupos={grupos}

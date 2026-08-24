@@ -250,7 +250,7 @@ export function TotaisCard({
               <td colSpan={3} className={ORCADO.subtotalVazio} />
               <td
                 className={cn(
-                  "px-3 py-[13px] text-right whitespace-nowrap font-mono text-sm font-bold",
+                  "px-3 py-[13px] text-right whitespace-nowrap font-mono text-[13px] font-bold",
                   ORCADO.subtotalValor,
                 )}
               >
@@ -264,7 +264,7 @@ export function TotaisCard({
                 )}
               >
                 <div className="flex flex-col items-end">
-                  <span className="font-mono text-sm font-bold">
+                  <span className="font-mono text-[13px] font-bold">
                     {formatCurrency(totalPlanejado, moeda)}
                   </span>
                   {visao === "liquido" && (
@@ -279,7 +279,7 @@ export function TotaisCard({
               </td>
               <td
                 className={cn(
-                  "px-3 py-[13px] text-right whitespace-nowrap font-mono text-sm font-bold border-r border-r-[#e2e0da]",
+                  "px-3 py-[13px] text-right whitespace-nowrap font-mono text-[13px] font-bold border-r border-r-[#e2e0da]",
                   RENTABILIDADE.bordaAbre,
                   RENTABILIDADE.subtotalValor,
                 )}
@@ -288,7 +288,7 @@ export function TotaisCard({
               </td>
               <td
                 className={cn(
-                  "px-3 py-[13px] text-right whitespace-nowrap font-mono text-sm font-bold",
+                  "px-3 py-[13px] text-right whitespace-nowrap font-mono text-[13px] font-bold",
                   RENTABILIDADE.subtotalValor,
                 )}
               >

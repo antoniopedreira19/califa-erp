@@ -33,9 +33,13 @@ export function ColunasFixas() {
       <col className="w-[3.5%]" />
       <col className="w-[3.5%]" />
       <col className="w-[11%]" />
-      {/* Rentabilidade */}
-      <col className="w-[9.5%]" />
-      <col className="w-[5.5%]" />
+      {/* Rentabilidade — a coluna de R$ é a ÚNICA da planilha que carrega
+          sinal negativo, e por isso precisa de um dígito a mais que as
+          outras de moeda: "-R$ 117.500,00" a 13px pede ~122px, e os 9,5%
+          de antes davam 101px no piso de 1060px. O espaço saiu do "%",
+          que nunca passa de "-99,9%". */}
+      <col className="w-[11.5%]" />
+      <col className="w-[4.5%]" />
     </colgroup>
   );
 }

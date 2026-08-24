@@ -2225,3 +2225,70 @@ página `force-dynamic`.
 **Verificação:** `tsc --noEmit` e `next lint` limpos. Conferência logada
 no navegador **pendente** — entra na etapa final, junto com as demais
 telas.
+
+---
+
+## ⚠️ 2026-08-24 — A planilha virou uma tabela só (design "Grupos Unificados")
+
+**Origem:** projeto Claude Design `69342d83`, arquivo
+`Planilha Interna - Grupos Unificados.dc.html`, tela `2a Orçamento`.
+Regra transversal em `docs/decisions/024-planilha-em-tabela-unica.md` e
+`docs/09-identidade-visual-ui.md` ("Linha do agrupamento").
+
+**O que mudou nesta tela.** Os cards de grupo acabaram. A planilha da
+versão — e a de cada orçamento do rascunho, no `/agregado` e no `/multi` —
+é **um card e uma tabela**, com um `<thead>` só. Cada agrupamento é uma
+linha de 40px que carrega o próprio subtotal e a própria rentabilidade, os
+itens ficam indentados abaixo, e a tabela fecha com **TOTAL DO
+ORÇAMENTO** no `<tfoot>`. No rascunho esse rótulo leva o código
+(`Total do orçamento · TESTE-0003/26-04`) e substitui a faixa solta que
+ficava embaixo dos cards, cujas colunas nunca caíram no eixo das da
+planilha.
+
+**"Novo grupo" saiu da barra de ações** e virou a linha tracejada no pé do
+corpo da tabela. Mesmo drawer, mesma Server Action — só a forma do
+gatilho mudou (`variante="tracejada"` no `NovoGrupoDrawer`). Sem nenhum
+grupo ainda ele volta a ser o botão sólido, dentro do estado vazio.
+
+**Renomear e remover grupo:** o lápis foi para dentro da linha, ao lado do
+nome; a lixeira para a calha, na altura da linha do grupo. O contador de
+itens saiu da calha e entrou na linha. Decisão do Tiago, 24/08/2026.
+
+**O Tab atravessa os agrupamentos.** Antes cada grupo era uma tabela e a
+navegação morria no fim dele; agora a planilha é uma sequência só, e grupo
+recolhido é pulado. Decisão do Tiago, 24/08/2026.
+
+**O que o handoff pedia e não foi feito** (as duas decisões do Tiago,
+antes de codar): repintar os blocos do orçamento (ORÇADO grafite,
+PLANEJADO azul, RENTABILIDADE verde) — recusado, a paleta da decisão 015
+vale em toda tela; e dar ao card de Totais um `colgroup` próprio —
+recusado, o colgroup compartilhado é o que mantém as colunas no eixo.
+
+**A coluna Rentab. R$ foi de 9,5% para 11,5%** em
+`_planilha/grade-orcamento.tsx`. Ela é a única da planilha que carrega
+sinal negativo, e `-R$ 117.500,00` a 13px pede ~122px — no piso de 1060px
+os 9,5% davam 101px, e em `table-fixed` o excedente transborda por cima da
+coluna vizinha. **Já era assim antes desta entrega**: o card de Totais, a
+14px, transbordava ainda mais; o total novo no pé da tabela só tornou o
+defeito visível em mais um lugar. O espaço saiu do `%` (5,5% → 4,5%), que
+nunca passa de `-99,9%`, e o rodapé do card de Totais desceu de 14px para
+13px, igualando o da planilha. Como a grade é compartilhada, a correção
+vale para versão, rascunho e os dois cards de Totais de uma vez.
+
+**Estado vazio novo no rascunho:** orçamento com planilha criada e ainda
+sem nenhum agrupamento não tem tabela — e, portanto, não tem a linha
+tracejada onde o "Novo grupo" passou a morar. Sem um bloco próprio ele
+ficaria sem porta de entrada, já que o botão saiu da barra. Ganhou um
+convite tracejado com o mesmo gatilho.
+
+**Arquivos:** `itens-table.tsx` passou a receber `grupos` (todos), e
+`grupo-card.tsx` virou `grupo-linha.tsx`, exportando só `NomeDoGrupo` e
+`AcoesDoGrupo`. No rascunho, `grupo-rascunho-card.tsx` virou
+`grupo-rascunho-linha.tsx` pela mesma razão.
+
+**Verificação:** `tsc --noEmit`, `next lint` e `npm run build` limpos.
+Conferido logado em 24/08/2026: versão com 3 agrupamentos (uma tabela, um
+cabeçalho, colunas do Totais no mesmo eixo — medido no DOM), versão sem
+grupo (estado vazio com o gatilho sólido), rascunho do `/agregado` (tfoot
+com o código do orçamento), e o Tab cruzando de um grupo para o outro,
+inclusive pulando um grupo recolhido no meio.

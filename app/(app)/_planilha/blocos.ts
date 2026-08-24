@@ -31,6 +31,12 @@ export interface Bloco {
   subtotalVazio: string;
   /** Linha de subtotal/total: célula do valor. */
   subtotalValor: string;
+  /** Linha do GRUPO dentro da tabela única: célula vazia. Mesmo fundo
+   *  forte do subtotal, mas com fios de 1px em cima e embaixo — ela
+   *  separa dois trechos de itens, não fecha a tabela. */
+  grupoVazio: string;
+  /** Linha do GRUPO: célula do valor (subtotal do agrupamento). */
+  grupoValor: string;
   /** Cor do bloco para rótulos e valores fora da tabela. */
   texto: string;
   /** Variação suave, para rótulos pequenos. */
@@ -55,6 +61,9 @@ export const ORCADO: Bloco = {
   subtotalVazio:
     "bg-[#e8f0fd] border-l-2 border-l-[#b9d1f4] border-t-2 border-t-[#2f6fdb]",
   subtotalValor: "bg-[#e8f0fd] border-t-2 border-t-[#2f6fdb] text-[#1e4fa3]",
+  grupoVazio:
+    "bg-[#e8f0fd] border-l-2 border-l-[#b9d1f4] border-y border-y-[#cfe0f7]",
+  grupoValor: "bg-[#e8f0fd] border-y border-y-[#cfe0f7] text-[#1e4fa3]",
   texto: "text-[#1e4fa3]",
   textoSuave: "text-[#5a76a8]",
   bordaAbre: "border-l-2 border-l-[#b9d1f4]",
@@ -76,6 +85,9 @@ export const PLANEJADO: Bloco = {
   subtotalVazio:
     "bg-[#ecfdf5] border-l-2 border-l-[#a7f3d0] border-t-2 border-t-[#059669]",
   subtotalValor: "bg-[#ecfdf5] border-t-2 border-t-[#059669] text-[#047857]",
+  grupoVazio:
+    "bg-[#ecfdf5] border-l-2 border-l-[#a7f3d0] border-y border-y-[#bdecd6]",
+  grupoValor: "bg-[#ecfdf5] border-y border-y-[#bdecd6] text-[#047857]",
   texto: "text-[#047857]",
   textoSuave: "text-[#3f8a70]",
   bordaAbre: "border-l-2 border-l-[#a7f3d0]",
@@ -97,6 +109,9 @@ export const REALIZADO: Bloco = {
   subtotalVazio:
     "bg-[#ffedd5] border-l-2 border-l-[#f9c296] border-t-2 border-t-[#ea580c]",
   subtotalValor: "bg-[#ffedd5] border-t-2 border-t-[#ea580c] text-[#c2410c]",
+  grupoVazio:
+    "bg-[#ffedd5] border-l-2 border-l-[#f9c296] border-y border-y-[#f9c296]",
+  grupoValor: "bg-[#ffedd5] border-y border-y-[#f9c296] text-[#c2410c]",
   texto: "text-[#c2410c]",
   textoSuave: "text-[#9a5a33]",
   bordaAbre: "border-l-2 border-l-[#f9c296]",
@@ -118,6 +133,9 @@ export const RENTABILIDADE: Bloco = {
   subtotalVazio:
     "bg-[#eceae5] border-l-2 border-l-[#c9c6bf] border-t-2 border-t-[#282828]",
   subtotalValor: "bg-[#eceae5] border-t-2 border-t-[#282828] text-[#282828]",
+  grupoVazio:
+    "bg-[#eceae5] border-l-2 border-l-[#c9c6bf] border-y border-y-[#dcd9d2]",
+  grupoValor: "bg-[#eceae5] border-y border-y-[#dcd9d2] text-[#282828]",
   texto: "text-[#282828]",
   textoSuave: "text-[#5f5d57]",
   bordaAbre: "border-l-2 border-l-[#c9c6bf]",
@@ -136,3 +154,30 @@ export const FAIXA_GRUPO =
  *  no número; a cor não precisa repetir e ainda brigaria com o verde do
  *  PLANEJADO. Decisão do time, 11/08/2026. */
 export const RENTAB_VALOR = "text-[#282828]";
+
+/** Célula do NOME do agrupamento na tabela única — a que abre a linha de
+ *  grupo, à esquerda dos blocos. Neutra de propósito: o grupo não
+ *  pertence a ORÇADO nem a PLANEJADO, ele atravessa os dois. Os fios de
+ *  1px em cima e embaixo são os mesmos do `grupoVazio` dos blocos, para
+ *  a linha inteira fechar no mesmo nível. */
+export const LINHA_GRUPO_NOME =
+  "text-left px-3 bg-[#f3f2ee] border-t border-t-[#e3e1db] border-b border-b-border normal-case";
+
+/** Célula do rótulo do TOTAL da planilha — a última linha da tabela, no
+ *  `tfoot`. Fundo igual ao da linha de grupo, mas com o fio grosso de
+ *  topo: é ele que diz "aqui a planilha fecha". */
+export const LINHA_TOTAL_ROTULO =
+  "text-left px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-foreground bg-[#f3f2ee] border-t-2 border-t-foreground";
+
+/** Linha tracejada do "Novo grupo", no pé do corpo da tabela — depois do
+ *  último grupo e antes do total. Ela mostra ONDE o grupo vai nascer, e
+ *  fecha a simetria com o "＋ Novo item" que encerra cada agrupamento. */
+export const LINHA_NOVO_GRUPO =
+  "px-3 py-2 border-t border-t-[#e3e1db] bg-[#fcfcfb]";
+
+/** O gatilho que mora nessa linha. Tracejado e leve de propósito: ali
+ *  dentro um botão sólido seria o elemento mais pesado da planilha e
+ *  competiria com os números. As duas origens de "Novo grupo" — o drawer
+ *  da versão e o botão local do rascunho — usam esta mesma forma. */
+export const BOTAO_NOVO_GRUPO =
+  "inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-dashed border-california-red bg-california-red/5 px-3 py-1.5 text-xs font-semibold text-california-red transition-colors hover:bg-california-red/10 disabled:cursor-not-allowed disabled:opacity-50";

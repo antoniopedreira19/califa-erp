@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Plus, Save } from "lucide-react";
+import { AlertCircle, FolderPlus, Plus, Save } from "lucide-react";
 import {
   Dialog,
   DialogHeader,
@@ -14,14 +14,33 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { criarGrupo, type ActionResult } from "../actions";
+import { BOTAO_NOVO_GRUPO } from "@/app/(app)/_planilha/blocos";
 
 interface Props {
   versaoId: string;
   disabled?: boolean;
   disabledReason?: string;
+  /** Forma do gatilho.
+   *
+   *  `"tracejada"` é a do handoff "Grupos Unificados": o botão mora numa
+   *  linha tracejada DENTRO da tabela, depois do último grupo, mostrando
+   *  onde o grupo novo vai nascer. Ali ele não pode ser sólido — seria o
+   *  elemento mais pesado da planilha, competindo com os números.
+   *
+   *  `"solida"` continua para o estado vazio, em que ele é a única ação
+   *  da tela e precisa ser o botão primário. */
+  variante?: "solida" | "tracejada";
 }
 
-export function NovoGrupoDrawer({ versaoId, disabled, disabledReason }: Props) {
+const GATILHO_SOLIDO =
+  "inline-flex items-center gap-1.5 rounded-lg bg-california-red px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-california-red-hover transition-all disabled:opacity-50 disabled:cursor-not-allowed";
+
+export function NovoGrupoDrawer({
+  versaoId,
+  disabled,
+  disabledReason,
+  variante = "solida",
+}: Props) {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
   const [pending, startTransition] = React.useTransition();
@@ -53,9 +72,15 @@ export function NovoGrupoDrawer({ versaoId, disabled, disabledReason }: Props) {
           type="button"
           disabled={disabled}
           title={disabled ? disabledReason : undefined}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-california-red px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-california-red-hover transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          className={
+            variante === "tracejada" ? BOTAO_NOVO_GRUPO : GATILHO_SOLIDO
+          }
         >
-          <Plus className="h-3.5 w-3.5" />
+          {variante === "tracejada" ? (
+            <FolderPlus className="h-3.5 w-3.5" />
+          ) : (
+            <Plus className="h-3.5 w-3.5" />
+          )}
           Novo grupo
         </button>
       </DialogTrigger>

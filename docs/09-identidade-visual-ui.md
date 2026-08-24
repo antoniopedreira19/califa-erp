@@ -144,19 +144,41 @@ São três grades, uma por formato de tela:
 | Job — planilha interna | 15 | `app/(app)/_planilha/grade-job.tsx` |
 | Job — visão agregada do projeto | 15 | `app/(app)/_planilha/grade-jobs-projeto.tsx` |
 
+**A coluna Rentab. R$ do orçamento tem 11,5%**, e não a mesma largura das outras colunas de moeda: ela é a única da planilha que carrega sinal negativo, e `-R$ 117.500,00` a 13px pede ~122px. O espaço saiu do `%` ao lado, que nunca passa de `-99,9%` (24/08/2026). Em `table-fixed` o número que não cabe **transborda por cima da coluna vizinha** — não encolhe, não quebra.
+
 **Proibido:** layout automático (tabela sem `table-fixed`/`colgroup`) em planilha ou Totais. Com larguras automáticas cada tabela se dimensiona pelo próprio conteúdo — duas tabelas com conteúdos diferentes nunca alinham, e o alinhamento não tem como se sustentar.
 
 **Cuidado com aninhamento:** não basta a grade ser igual, os contêineres precisam ter a mesma largura. Na agregada de orçamento os cards de grupo vivem dentro do card do orçamento; foi preciso zerar o padding lateral desse painel (`py-5` + `mx-5` no resto) e subir a calha `pr-[154px]` para um wrapper que envolve orçamentos **e** Totais. É o mesmo arranjo que a tela da versão individual já usava.
 
+**Case study** (2026-08-24): o handoff "Planilha Interna - Grupos Unificados" dava ao card de Totais um `colgroup` PRÓPRIO — 7 colunas no orçamento, 8 no job — em que as colunas Total não caíam sob as da planilha acima. Recusado: mantida a grade compartilhada. A consequência é que, no Totais, a rentabilidade também mora no vão do bloco em vez de ganhar colunas próprias — mesma leitura da planilha, e o eixo vertical se sustenta.
+
 **Case study** (2026-08-11): a visão agregada de jobs tinha sido deliberadamente posta em layout automático (04/08) para casar proporções com um mock. Era justamente o que deixava as colunas dos Totais desalinhadas das da planilha. Trocada por `table-fixed` + colgroup compartilhado; medido no navegador, os blocos numéricos ficaram com ~356px cada em viewport de 1660px — não encolheram. No mesmo dia, a agregada de orçamento ganhou o bloco RENTABILIDADE, que existia nos cards de grupo mas faltava no Totais.
 
-## Faixa do agrupamento
+## Linha do agrupamento (tabela única)
 
-O nome do agrupamento mora na **primeira linha do `<thead>`**, na célula de `colSpan={3}` à esquerda de ORÇADO / PLANEJADO / …, e não numa barra de título própria acima da tabela — era uma linha inteira de altura só para um nome. Contador de itens e ações do grupo (renomear, remover) vão para a calha à direita, alinhados pela **altura medida** da faixa (`faixaRef` + `ResizeObserver`), nunca por altura fixa: o thead muda de altura conforme a fonte carrega.
+**Regra (24/08/2026, decisão 024):** a planilha inteira é **uma tabela só** — um card, um `<thead>`, uma calha de números. Não existe mais card por agrupamento.
+
+O agrupamento é **uma linha de 40px** do `<tbody>`:
+
+| Onde | O quê |
+|---|---|
+| `colSpan={3}` à esquerda (`LINHA_GRUPO_NOME`) | chevron · nome · lápis de renomear · contador de itens |
+| vão de cada bloco (`grupoVazio`) | vazio no ORÇADO; **rentabilidade** no PLANEJADO e no REALIZADO |
+| coluna Total de cada bloco (`grupoValor`) | o subtotal do agrupamento |
+
+A tabela fecha com o **total da planilha** no `<tfoot>` (`LINHA_TOTAL_ROTULO` + `subtotalVazio`/`subtotalValor`), e o corpo termina numa **linha tracejada de "Novo grupo"** — depois do último grupo, antes do total, que é onde o grupo novo vai nascer.
+
+**A rentabilidade não abre sublinha.** Ela mora no vão vazio do próprio bloco, à esquerda do total, por `app/(app)/_planilha/rentabilidade-inline.tsx`. Empilhada (rótulo em cima, número embaixo): em linha ela mede ~155px num vão de ~157px e transborda por cima do total ao lado, porque `table-fixed` não deixa a célula crescer. No ORÇADO ela não existe — ele é a base da comparação.
+
+**Fonte única das classes:** `app/(app)/_planilha/blocos.ts` (`LINHA_GRUPO_NOME`, `LINHA_TOTAL_ROTULO`, `LINHA_NOVO_GRUPO`, `BOTAO_NOVO_GRUPO`, e `grupoVazio`/`grupoValor` em cada bloco). Mesma regra das cores: **nunca escrever direto no JSX**.
+
+**Ações do grupo:** lápis de renomear **na linha**, ao lado do nome; lixeira **na calha**, na altura da linha do grupo, com uma vaga vazia da largura do BV antes dela para cair no mesmo eixo das lixeiras de item.
 
 ## Navegação por teclado nas planilhas
 
-As duas grades editáveis (versão do orçamento e realizado do job) se comportam como planilha: **Tab anda na horizontal, Enter desce, as setas andam nas duas direções, Esc desfaz.** Tab na última coluna editável desce para a **primeira coluna da linha seguinte**, e no orçamento cai na linha "Novo item" quando ela existe — dá para preencher um grupo inteiro sem tocar no mouse.
+A grade editável do orçamento se comporta como planilha: **Tab anda na horizontal, Enter desce, as setas andam nas duas direções, Esc desfaz.** Tab na última coluna editável desce para a **primeira coluna da linha seguinte**, e cai na linha "Novo item" quando ela existe — dá para preencher um grupo inteiro sem tocar no mouse.
+
+**A sequência atravessa os agrupamentos** (24/08/2026, decisão 024): com a planilha numa tabela só, o Tab que sai do último item de um grupo cai no primeiro do grupo seguinte. **Grupo recolhido é pulado** — ele não tem linha na tela, então fica fora da lista de linhas navegáveis. Antes disso cada grupo era uma tabela própria e a navegação morria no fim dele.
 
 A sequência é declarada em `CAMPOS_NAVEGAVEIS` em cada grade, e a regra de "qual é a próxima" é compartilhada em `app/(app)/_planilha/navegacao.ts`. **Coluna calculada não entra na lista** — Total e Rentabilidade não são navegáveis, e o Tab passa por cima delas sem precisar saber que existem.
 
@@ -170,7 +192,9 @@ Valor recusado (texto não numérico, número negativo) **interrompe a navegaç�
 
 ## Calha de ações (fora da tabela)
 
-As ações de linha das planilhas — BV, Pedido de Produção, remover — vivem numa calha **fora** do frame da tabela, posicionada em `absolute left-full` e alinhada pelo topo do `<tbody>` medido (`railTop` + `ResizeObserver`), com a mesma altura de linha da grade.
+As ações de linha das planilhas — BV, Pedido de Produção, remover — vivem numa calha **fora** do frame da tabela, posicionada em `absolute left-full`.
+
+**Cada pílula é presa à posição MEDIDA da linha que acompanha** (24/08/2026): a `<tr>` se marca com `data-calha="<chave>"` e `app/(app)/_planilha/calha.tsx` lê `getBoundingClientRect` dela. Antes bastava saber onde o `<tbody>` começava e empilhar caixas de altura fixa (`railTop`), porque toda linha media o mesmo. Com a tabela única não medem: linha de grupo tem 40px, de item 28, de "Novo item" 30, e o PLANEJADO na vista Líquido cresce mais um degrau por causa da sub-linha do BV. **Altura chutada acumula erro** — no terceiro agrupamento a lixeira já aponta para a linha errada.
 
 **A tabela nunca cede espaço para a calha.** Quem abre espaço é a página, com um `pr-` do tamanho exato da calha — `pr-[116px]` no job, `pr-[154px]` no orçamento (calha + lixeira + respiro). Toda a largura da tabela continua sendo dado.
 
@@ -264,10 +288,10 @@ gesto aprendido uma vez, válido em qualquer tela:
   fechar tudo);
 - o contador da calha vira **"N itens ocultos"**.
 
-**O que fica visível ao recolher:** o **subtotal do grupo** e a
-**rentabilidade**. São o dado que justifica recolher — esconder tudo
-transformaria o gesto em "sumir com o grupo". O que some são as linhas de
-item, a calha de ações e o rodapé de ajuda.
+**O que fica visível ao recolher:** a **linha do agrupamento** inteira —
+nome, subtotal e rentabilidade. São o dado que justifica recolher —
+esconder tudo transformaria o gesto em "sumir com o grupo". O que some são
+as linhas de item, o "Novo item" e as ações de item na calha.
 
 **Fonte única:** `app/(app)/_planilha/recolher-grupos.tsx` —
 `useGruposRecolhiveis` (a máquina de estado) e `BotaoRecolherTodos`. Ela

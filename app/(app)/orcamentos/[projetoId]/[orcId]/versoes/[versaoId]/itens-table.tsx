@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2, X } from "lucide-react";
+import { ChevronDown, Plus, Trash2, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { TruncateTooltip } from "@/components/ui/truncate-tooltip";
@@ -44,8 +44,16 @@ import {
   RENTABILIDADE,
   FAIXA_ROTULO,
   FAIXA_GRUPO,
+  LINHA_GRUPO_NOME,
+  LINHA_NOVO_GRUPO,
+  LINHA_TOTAL_ROTULO,
   RENTAB_VALOR,
 } from "@/app/(app)/_planilha/blocos";
+import {
+  Calha,
+  LinhaDaCalha,
+  usePosicoesDaCalha,
+} from "@/app/(app)/_planilha/calha";
 import {
   BvDialog,
   type AdaptadorBv,
@@ -60,7 +68,6 @@ import {
   blocosDoItem,
   planejadoEspelhaOrcado,
   rotuloColunaTotal,
-  rotuloSubtotal,
   somarBlocosDosItens,
   valorNaVisao,
   type VisaoBv,
@@ -86,10 +93,22 @@ export interface AdaptadorItens {
   aposEscrita: () => void;
 }
 
-interface Props {
-  grupoId: string;
-  grupoNome: string;
+/** Um agrupamento da planilha, com os itens já separados. */
+export interface GrupoDaPlanilha {
+  id: string;
+  nome: string;
   itens: VersaoOrcamentoItem[];
+}
+
+interface Props {
+  /** TODOS os agrupamentos da planilha, na ordem em que aparecem.
+   *
+   *  Até 24/08/2026 este componente desenhava UM grupo, e a tela
+   *  empilhava um card por grupo. O handoff "Planilha Interna - Grupos
+   *  Unificados" juntou tudo numa tabela só: um cabeçalho de colunas,
+   *  uma calha de números, e cada grupo virando uma linha que carrega o
+   *  próprio subtotal. */
+  grupos: GrupoDaPlanilha[];
   moeda: string;
   /** Alíquota da versão — vira o BV líquido descontado na vista Líquido. */
   percentualImposto: number;
@@ -97,9 +116,6 @@ interface Props {
   visao: VisaoBv;
   readOnly?: boolean;
   categorias: Categoria[];
-  /** Grupo recolhido esconde as linhas, o "Novo item" e a trilha de ações.
-   *  O subtotal continua visível — é o dado que justifica recolher. */
-  aberto?: boolean;
   /** BV por id do item. Só existe em item tipo A, AR ou D. */
   bvsPorItem: Record<string, ItemBv>;
   fornecedores: FornecedorOpcao[];
@@ -109,17 +125,26 @@ interface Props {
   adaptador?: AdaptadorItens;
   /** Repassado ao formulário de BV; mesma regra do adaptador acima. */
   adaptadorBv?: AdaptadorBv;
-  /** Identidade do grupo — recolher e nome. Mora na PRIMEIRA linha do
-   *  thead, na mesma faixa de ORÇADO / PLANEJADO / RENTABILIDADE: o card
-   *  não tem mais barra de título só para isso. */
-  cabecalhoGrupo?: React.ReactNode;
-  /** Ações do grupo (contador, remover). Vão para a calha à direita da
-   *  tabela, na altura da faixa — onde o design põe o "6 itens". */
-  acoesGrupo?: React.ReactNode;
-  /** A faixa da tabela é o topo do card e precisa arredondar. Falso
-   *  enquanto o card mostra um aviso próprio à frente dela. Sem valor,
-   *  vale a presença do `cabecalhoGrupo`. */
-  abreCard?: boolean;
+  /** Grupo recolhido esconde as linhas, o "Novo item" e as ações de item.
+   *  A linha do grupo — com o subtotal e a rentabilidade — continua à
+   *  vista: é ela que justifica recolher. */
+  estaAberto: (grupoId: string) => boolean;
+  onAlternarGrupo: (grupoId: string) => void;
+  /** O NOME do grupo dentro da linha dele. Só o nome: o chevron e o
+   *  contador de itens são iguais em toda tela e saem daqui de dentro.
+   *  Quem passa isto é a tela, porque renomear muda de mecanismo entre
+   *  elas — Server Action na versão, estado local no rascunho. */
+  nomeDoGrupo?: (grupo: GrupoDaPlanilha) => React.ReactNode;
+  /** Ações do grupo (remover) — vão para a calha à direita, na altura da
+   *  linha do grupo, no mesmo eixo das lixeiras de item. */
+  acoesDoGrupo?: (grupo: GrupoDaPlanilha) => React.ReactNode;
+  /** Gatilho de "Novo grupo", na linha tracejada que fecha o corpo da
+   *  tabela. Ausente ⇒ a linha não existe (versão congelada). */
+  novoGrupo?: React.ReactNode;
+  /** BASE do rótulo do pé da tabela. Default: "Total do orçamento". A
+   *  vista Líquido acrescenta o sufixo sozinha, para o rótulo não ter que
+   *  ser reescrito em cada tela. */
+  rotuloTotal?: string;
 }
 
 /** Campos que a grade edita — espelha o allowlist do server action. */
@@ -157,43 +182,45 @@ const CAMPOS_PLANEJADO: readonly Campo[] = [
 ];
 
 type ValorCampo = string | number | null;
-type Overrides = Record<string, Partial<Record<Campo, ValorCampo>>>;
+
 /** Célula em edição.
  *
- *  `porTeclado` diz COMO se chegou nela, e existe por causa das colunas
- *  de escolha. Escolher um valor no `<select>` precisa continuar a
- *  navegação de quem veio de Tab — mas não pode arrastar quem veio de
- *  clique para a próxima célula, abrindo um dropdown que ninguém pediu.
- *
- *  Ele mora AQUI, e não dentro da célula, porque nos editores de rascunho
- *  toda escrita reconstrói a árvore de componentes: estado local de
- *  célula não sobrevive ao rebuild, e essa foi a origem de a lista ficar
- *  presa aberta depois de escolher. Aqui em cima, sobrevive. */
+ *  `porTeclado` distingue a célula que o Tab abriu da que o clique
+ *  abriu: só na primeira o `<select>` continua a navegação sozinho
+ *  depois da escolha. */
 type CelulaAtiva = {
   rowId: string;
   campo: Campo;
   porTeclado?: boolean;
 } | null;
 
+type Overrides = Record<string, Partial<Record<Campo, ValorCampo>>>;
+
 /** Radix Select não aceita value="" — sentinela para "sem categoria". */
 const SEM_CATEGORIA = "__nenhuma__";
 const DRAFT_ID = "__draft__";
-/** Altura fixa da linha: mantém a trilha de ações fora do card alinhada.
- *  28px é o meio-termo entre os 36px antigos e os 25px do handoff: é o
- *  menor valor que ainda comporta o botão da trilha (14px de ícone + 6px
- *  de padding = 26px) e mantém o alvo de clique acima do mínimo de 24px
- *  da WCAG 2.5.8. */
+
+/** Altura fixa da linha de item. A calha à direita não depende mais
+ *  disto — ela mede cada linha —, mas a grade continua respirando melhor
+ *  com a altura travada do que deixando o conteúdo decidir. */
 const ALTURA_LINHA = "h-7";
 
-// Grade: linhas verticais discretas, uma cor por bloco.
+/** Fio vertical entre as colunas neutras (Item, Tipo, Categoria). */
 const GRADE_NEUTRA = "border-r border-r-[#f1f1f1]";
+
+/** Recuo dos itens sob a linha do grupo. É ele que faz a hierarquia
+ *  aparecer sem precisar de card por agrupamento. */
+const RECUO_ITEM = "pl-[30px]";
 
 /** 2px menor que a linha (28px), como no handoff — o campo respira dentro
  *  da célula em vez de encostar nas bordas. */
 const CAMPO_CLASSES =
-  "h-[26px] w-full rounded-lg border border-california-red bg-white px-2 text-xs text-foreground outline-none ring-2 ring-california-red/15";
+  "h-[26px] w-full rounded-md border border-california-red/40 bg-white px-2 text-xs outline-none focus:border-california-red";
 
 interface Draft {
+  /** A que grupo a linha nova pertence. Com uma tabela só para a planilha
+   *  inteira, o rascunho precisa dizer onde nasceu. */
+  grupoId: string;
   item: string;
   tipo_custo: TipoCusto;
   categoria_id: string | null;
@@ -206,37 +233,42 @@ interface Draft {
 }
 
 /** Planejado nasce igual ao orçado (0 · 1 · 1): a linha nova é uma folha
- *  em branco simétrica, não um lado preenchido e outro zerado. */
-const DRAFT_VAZIO: Draft = {
-  item: "",
-  tipo_custo: "A",
-  categoria_id: null,
-  valor_unitario_orcado: 0,
-  quantidade_orcada: 1,
-  dias_meses_orcado: 1,
-  valor_unitario_planejado: 0,
-  quantidade_planejada: 1,
-  dias_meses_planejado: 1,
-};
+ *  em branco nos dois blocos, e não um planejado zerado ao lado de um
+ *  orçado preenchido. */
+function draftVazio(grupoId: string): Draft {
+  return {
+    grupoId,
+    item: "",
+    tipo_custo: "B",
+    categoria_id: null,
+    valor_unitario_orcado: 0,
+    quantidade_orcada: 1,
+    dias_meses_orcado: 1,
+    valor_unitario_planejado: 0,
+    quantidade_planejada: 1,
+    dias_meses_planejado: 1,
+  };
+}
 
 /** Aceita "1.234,56" e "1234.56". Vírgula presente ⇒ ponto é milhar. */
 function parseNumero(raw: string): number | null {
-  const s = raw.trim();
-  if (s === "") return null;
-  const normalizado = s.includes(",")
-    ? s.replace(/\./g, "").replace(",", ".")
-    : s;
+  const limpo = raw.trim();
+  if (limpo === "") return 0;
+  const normalizado = limpo.includes(",")
+    ? limpo.replace(/\./g, "").replace(",", ".")
+    : limpo;
   const n = Number(normalizado);
   return Number.isFinite(n) ? n : null;
 }
 
 /** Número cru para digitação: vírgula decimal, sem separador de milhar. */
 function paraEdicao(valor: number): string {
+  if (!Number.isFinite(valor)) return "";
   return String(valor).replace(".", ",");
 }
 
 /** Rentabilidade de uma linha (ou do subtotal) pela fórmula oficial da
- *  versão — a mesma que alimenta o card de Totais. */
+ *  versão — mesma função do card de Totais. */
 function rentabilidadeDe(orcado: number, planejado: number) {
   return calcularTotaisPlanejados([
     { total_orcado: orcado, total_planejado: planejado },
@@ -259,23 +291,23 @@ function mesmoValor(a: ValorCampo, b: ValorCampo): boolean {
 }
 
 export function ItensTable({
-  grupoId,
-  grupoNome,
-  itens,
+  grupos,
   moeda,
   percentualImposto,
   visao,
   readOnly,
   categorias,
-  aberto = true,
   bvsPorItem,
   fornecedores,
   versaoLabel,
   adaptador,
   adaptadorBv,
-  cabecalhoGrupo,
-  acoesGrupo,
-  abreCard,
+  estaAberto,
+  onAlternarGrupo,
+  nomeDoGrupo,
+  acoesDoGrupo,
+  novoGrupo,
+  rotuloTotal,
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
@@ -302,40 +334,42 @@ export function ItensTable({
   );
 
   const wrapperRef = React.useRef<HTMLDivElement>(null);
-  const tbodyRef = React.useRef<HTMLTableSectionElement>(null);
-  const faixaRef = React.useRef<HTMLTableRowElement>(null);
   const persistindoRef = React.useRef(false);
-  const [railTop, setRailTop] = React.useState(0);
-  const [faixaAltura, setFaixaAltura] = React.useState(0);
 
-  const temDraft = draft !== null;
+  const editavel = !readOnly;
 
-  // A trilha de ações vive fora do card, então precisa saber onde o
-  // tbody começa. Altura de linha é fixa; só o offset do topo varia.
-  // A faixa do grupo é o primeiro <tr> do thead — a calha das ações do
-  // grupo se alinha por ela, não por altura chutada.
-  React.useLayoutEffect(() => {
-    const wrapper = wrapperRef.current;
-    const tbody = tbodyRef.current;
-    if (!wrapper || !tbody) return;
-    const medir = () => {
-      const topoWrapper = wrapper.getBoundingClientRect().top;
-      setRailTop(tbody.getBoundingClientRect().top - topoWrapper);
-      const faixa = faixaRef.current;
-      if (faixa) setFaixaAltura(faixa.getBoundingClientRect().height);
-    };
-    medir();
-    const observer = new ResizeObserver(medir);
-    observer.observe(wrapper);
-    return () => observer.disconnect();
-  }, [itens.length, readOnly, temDraft, aberto]);
+  /** Todos os itens da planilha, achatados — a navegação e a busca por
+   *  id atravessam os grupos e não podem depender de qual card era. */
+  const itensPorId = React.useMemo(() => {
+    const mapa = new Map<string, VersaoOrcamentoItem>();
+    for (const g of grupos) for (const it of g.itens) mapa.set(it.id, it);
+    return mapa;
+  }, [grupos]);
+
+  const todosOsItens = React.useMemo(
+    () => grupos.flatMap((g) => g.itens),
+    [grupos],
+  );
+
+  // A calha vive fora do frame da tabela e agora acompanha linhas de
+  // alturas diferentes (grupo, item, "Novo item"). Medir é a única forma
+  // de acertar — ver o cabeçalho de `_planilha/calha`.
+  const posicoesCalha = usePosicoesDaCalha(wrapperRef, [
+    grupos,
+    draft,
+    readOnly,
+    visao,
+    // Recolher/expandir muda o que existe no DOM e, com isso, todos os
+    // offsets abaixo do grupo que se moveu.
+    grupos.map((g) => (estaAberto(g.id) ? "1" : "0")).join(""),
+  ]);
 
   // Descarta o valor otimista quando o servidor já devolveu o mesmo valor.
   React.useEffect(() => {
     setOverrides((prev) => {
       if (Object.keys(prev).length === 0) return prev;
       const next: Overrides = {};
-      for (const item of itens) {
+      for (const item of todosOsItens) {
         const campos = prev[item.id];
         if (!campos) continue;
         const restante: Partial<Record<Campo, ValorCampo>> = {};
@@ -349,7 +383,7 @@ export function ItensTable({
       }
       return next;
     });
-  }, [itens]);
+  }, [todosOsItens]);
 
   function valorAtual(item: VersaoOrcamentoItem, campo: Campo): ValorCampo {
     const campos = overrides[item.id];
@@ -402,13 +436,23 @@ export function ItensTable({
     );
   }
 
-  /** Ordem das linhas para a navegação. A linha nova entra no fim: o Tab
-   *  que sai do último item cai nela em vez de morrer, que é o que faz
-   *  dar para preencher um grupo inteiro sem tocar no mouse. */
-  const linhasNavegaveis = React.useMemo(
-    () => [...itens.map((it) => it.id), ...(draft ? [DRAFT_ID] : [])],
-    [itens, draft],
-  );
+  /** Ordem das linhas para a navegação — a planilha INTEIRA, e não mais
+   *  um grupo de cada vez (decisão do Tiago, 24/08/2026). O Tab que sai
+   *  do último item de um grupo cai no primeiro do grupo seguinte, que é
+   *  o comportamento de planilha de verdade. Grupo recolhido não tem
+   *  linha na tela: fica fora da lista e o Tab pula por cima dele.
+   *
+   *  A linha nova entra logo depois do último item DO GRUPO DELA, que é
+   *  onde ela aparece. */
+  const linhasNavegaveis = React.useMemo(() => {
+    const ids: string[] = [];
+    for (const g of grupos) {
+      if (!estaAberto(g.id)) continue;
+      for (const it of g.itens) ids.push(it.id);
+      if (draft?.grupoId === g.id) ids.push(DRAFT_ID);
+    }
+    return ids;
+  }, [grupos, draft, estaAberto]);
 
   /** As três colunas de PLANEJADO travadas nesta linha.
    *
@@ -418,14 +462,18 @@ export function ItensTable({
    *  definido, então nunca trava. */
   const planejadoTravadoEm = React.useCallback(
     (rowId: string): boolean => {
-      const item = itens.find((it) => it.id === rowId);
+      const item = itensPorId.get(rowId);
       if (!item) return false;
+      const campos = overrides[rowId];
+      const tipo =
+        campos && "tipo_custo" in campos
+          ? campos.tipo_custo
+          : item.tipo_custo;
       return planejadoEspelhaOrcado(
-        String(valorAtual(item, "tipo_custo")) as VersaoOrcamentoItem["tipo_custo"],
+        String(tipo) as VersaoOrcamentoItem["tipo_custo"],
       );
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [itens, overrides],
+    [itensPorId, overrides],
   );
 
   /** Para onde o teclado leva a partir daqui. `null` encerra a edição. */
@@ -581,7 +629,7 @@ export function ItensTable({
 
     startTransition(async () => {
       try {
-        const res = await acoes.adicionar(grupoId, formData);
+        const res = await acoes.adicionar(d.grupoId, formData);
         if (!res.ok) {
           setErro(res.message);
           return;
@@ -643,17 +691,11 @@ export function ItensTable({
     });
   }
 
-  const subtotais = somarBlocosDosItens(itens.map(blocosDe));
-  const subtotalOrcado = subtotais.orcado;
-  const subtotalPlanejado = valorNaVisao(subtotais.planejado, visao);
-  const { rentabilidade: resultado, percentualRentabilidade: percentualSubtotal } =
-    rentabilidadeDe(subtotalOrcado, subtotalPlanejado);
-
-  const editavel = !readOnly;
-
-  // Quem arredonda o topo é o primeiro elemento visível do card: o aviso,
-  // quando existe, senão a própria faixa da tabela.
-  const arredondaTopo = (abreCard ?? cabecalhoGrupo != null) && !erro;
+  /** Abre a linha nova NO grupo pedido, com o cursor na descrição. */
+  function abrirDraft(grupoId: string) {
+    setDraft(draftVazio(grupoId));
+    setAtiva({ rowId: DRAFT_ID, campo: "item" });
+  }
 
   /** O BV existe em A, AR e D — os tipos em que há comissão a negociar
    *  com o fornecedor. O AR entrou em 13/08/2026: nele o principal passa
@@ -667,22 +709,46 @@ export function ItensTable({
   const temBv = (item: VersaoOrcamentoItem) =>
     aceitaBV(String(valorAtual(item, "tipo_custo")));
 
-  // Em versão congelada a trilha não some: ela ainda mostra os BVs já
-  // lançados, em modo consulta. Sem nenhum BV, não há o que mostrar.
-  const temBvVisivel = itens.some((it) => bvsPorItem[it.id]);
-  const temTrilha =
-    aberto &&
-    (editavel ? itens.length > 0 || draft !== null : temBvVisivel);
+  /** Subtotais de cada grupo e o fechamento da planilha inteira — a
+   *  mesma conta, aplicada a recortes diferentes da mesma lista. */
+  const subtotaisPorGrupo = React.useMemo(() => {
+    const mapa = new Map<string, ReturnType<typeof somarBlocosDosItens>>();
+    for (const g of grupos) {
+      mapa.set(g.id, somarBlocosDosItens(g.itens.map(blocosDe)));
+    }
+    return mapa;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [grupos, overrides, bvsPorItem, percentualImposto]);
+
+  const totaisDaPlanilha = React.useMemo(
+    () => somarBlocosDosItens(todosOsItens.map(blocosDe)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [todosOsItens, overrides, bvsPorItem, percentualImposto],
+  );
+
+  const totalOrcado = totaisDaPlanilha.orcado;
+  const totalPlanejado = valorNaVisao(totaisDaPlanilha.planejado, visao);
+  const {
+    rentabilidade: resultadoTotal,
+    percentualRentabilidade: percentualTotal,
+  } = rentabilidadeDe(totalOrcado, totalPlanejado);
+
+  const rotuloDoTotal = `${rotuloTotal ?? "Total do orçamento"}${
+    visao === "liquido" ? " · líquido (− BV)" : ""
+  }`;
+
+  // Em versão congelada a calha não some: ela ainda mostra os BVs já
+  // lançados, em modo consulta. Sem nada a mostrar, não há calha.
+  const temBvVisivel = todosOsItens.some((it) => bvsPorItem[it.id]);
+  const temCalha = editavel || temBvVisivel;
+
+  /** A barra de dica só faz sentido com células à vista. */
+  const temDica = editavel && grupos.some((g) => estaAberto(g.id));
 
   return (
     <>
       {erro && (
-        <div
-          className={cn(
-            "flex items-center justify-between gap-3 border-b border-california-red/20 bg-california-red/5 px-6 py-2 text-xs text-california-red",
-            (abreCard ?? cabecalhoGrupo != null) && "rounded-t-2xl",
-          )}
-        >
+        <div className="flex items-center justify-between gap-3 rounded-t-2xl border-b border-california-red/20 bg-california-red/5 px-6 py-2 text-xs text-california-red">
           <span>{erro}</span>
           <button
             type="button"
@@ -696,15 +762,13 @@ export function ItensTable({
       )}
 
       <div ref={wrapperRef} className="relative">
-        {/* Sem a barra de dica embaixo (readOnly ou grupo recolhido), é a
-            própria tabela que fecha o card — precisa arredondar. Com o
-            nome do grupo na faixa ela também ABRE o card, e o mesmo vale
-            para o topo (a menos que o aviso de erro esteja na frente). */}
+        {/* Sem a barra de dica embaixo (readOnly ou tudo recolhido), é a
+            própria tabela que fecha o card — precisa arredondar. */}
         <div
           className={cn(
             "overflow-x-auto",
-            arredondaTopo && "rounded-t-2xl",
-            (readOnly || !aberto) && "rounded-b-2xl",
+            !erro && "rounded-t-2xl",
+            !temDica && "rounded-b-2xl",
           )}
         >
           <table
@@ -712,13 +776,11 @@ export function ItensTable({
           >
             <ColunasFixas />
             <thead className="text-[10px] uppercase tracking-wider text-muted-foreground">
-              {/* Linha 1 — o nome do agrupamento divide a faixa com os
-                  blocos, em vez de ocupar uma barra só dele acima da
-                  tabela. */}
-              <tr ref={faixaRef}>
-                <th colSpan={3} className={FAIXA_GRUPO}>
-                  {cabecalhoGrupo}
-                </th>
+              {/* Linha 1 — a faixa dos blocos. Ela é UMA para a planilha
+                  inteira: era esta repetição, um cabeçalho por grupo, que
+                  o handoff "Grupos Unificados" veio eliminar. */}
+              <tr>
+                <th colSpan={3} className={FAIXA_GRUPO} />
                 <th colSpan={4} className={cn(FAIXA_ROTULO, ORCADO.faixa)}>
                   ORÇADO
                 </th>
@@ -736,7 +798,7 @@ export function ItensTable({
               {/* Linha 2 — sub-cabeçalho de colunas */}
               <tr className="bg-muted/40">
                 <th className="text-left font-semibold px-3 py-2 border-r border-r-border">
-                  Item
+                  Grupo · Item
                 </th>
                 <th className="text-left font-semibold px-3 py-2 border-r border-r-border">
                   Tipo
@@ -828,332 +890,524 @@ export function ItensTable({
               </tr>
             </thead>
 
-            <tbody ref={tbodyRef}>
-              {aberto && itens.length === 0 && !draft && (
-                <tr>
-                  <td
-                    colSpan={13}
-                    className="py-8 text-center text-sm text-muted-foreground"
-                  >
-                    Sem itens neste grupo ainda.
-                  </td>
-                </tr>
-              )}
-
-              {aberto && itens.map((item) => {
-                const totais = totaisDoItem(item);
-                const blocos = blocosDe(item);
-                const planejadoNaVisao = valorNaVisao(blocos.planejado, visao);
-                const planejadoTravado = planejadoEspelhaOrcado(
-                  String(
-                    valorAtual(item, "tipo_custo"),
-                  ) as VersaoOrcamentoItem["tipo_custo"],
-                );
-                const categoriaId = valorAtual(item, "categoria_id") as
-                  | string
-                  | null;
-                const categoria = categorias.find((c) => c.id === categoriaId);
-                const ativaAqui = (campo: Campo) =>
-                  ativa?.rowId === item.id && ativa.campo === campo;
+            <tbody>
+              {grupos.map((grupo) => {
+                const aberto = estaAberto(grupo.id);
+                const sub =
+                  subtotaisPorGrupo.get(grupo.id) ??
+                  somarBlocosDosItens([]);
+                const subOrcado = sub.orcado;
+                const subPlanejado = valorNaVisao(sub.planejado, visao);
+                const {
+                  rentabilidade: subResultado,
+                  percentualRentabilidade: subPercentual,
+                } = rentabilidadeDe(subOrcado, subPlanejado);
 
                 return (
-                  <tr
-                    key={item.id}
-                    className={cn(
-                      ALTURA_LINHA,
-                      "border-b border-border transition-colors",
-                      editavel && "hover:bg-accent/40",
-                    )}
-                  >
-                    <CelulaTexto
-                      valor={String(valorAtual(item, "item") ?? "")}
-                      editando={ativaAqui("item")}
-                      editavel={editavel}
-                      onAtivar={() =>
-                        setAtiva({ rowId: item.id, campo: "item" })
-                      }
-                      onConfirmar={(v, d) => confirmarCampo(item, "item", v.trim(), d)}
-                      onCancelar={() => setAtiva(null)}
-                      tdClassName={cn("text-foreground", GRADE_NEUTRA)}
-                    />
-
-                    <CelulaSelect
-                      editando={ativaAqui("tipo_custo")}
-                      editavel={editavel}
-                      valor={String(valorAtual(item, "tipo_custo"))}
-                      opcoes={TIPOS_CUSTO.map((t) => ({
-                        value: t,
-                        label: tipoCustoLabel(t),
-                      }))}
-                      onAtivar={() =>
-                        setAtiva({ rowId: item.id, campo: "tipo_custo" })
-                      }
-                      onConfirmar={(v) =>
-                        confirmarCampo(
-                          item,
-                          "tipo_custo",
-                          v,
-                          ativa?.porTeclado ? "proxima" : undefined,
-                        )
-                      }
-                      onNavegar={(d) =>
-                        setAtiva(celulaDirecao(item.id, "tipo_custo", d))
-                      }
-                      onFechar={() => fecharCelula(item.id, "tipo_custo")}
-                      tdClassName={cn(GRADE_NEUTRA, "px-2")}
-                    >
-                      <Badge variant="outline" className="px-1.5">
-                        {String(valorAtual(item, "tipo_custo"))}
-                      </Badge>
-                    </CelulaSelect>
-
-                    <CelulaSelect
-                      editando={ativaAqui("categoria_id")}
-                      editavel={editavel}
-                      valor={categoriaId ?? SEM_CATEGORIA}
-                      opcoes={[
-                        { value: SEM_CATEGORIA, label: "Nenhuma" },
-                        ...categorias
-                          .filter((c) => c.ativo || c.id === item.categoria_id)
-                          .map((c) => ({
-                            value: c.id,
-                            label: c.ativo ? c.nome : `${c.nome} (inativa)`,
-                          })),
-                      ]}
-                      vazio="Nenhuma categoria cadastrada em /categorias"
-                      onAtivar={() =>
-                        setAtiva({ rowId: item.id, campo: "categoria_id" })
-                      }
-                      onConfirmar={(v) =>
-                        confirmarCampo(
-                          item,
-                          "categoria_id",
-                          v === SEM_CATEGORIA ? null : v,
-                          ativa?.porTeclado ? "proxima" : undefined,
-                        )
-                      }
-                      onNavegar={(d) =>
-                        setAtiva(celulaDirecao(item.id, "categoria_id", d))
-                      }
-                      onFechar={() => fecharCelula(item.id, "categoria_id")}
-                    >
-                      {categoria ? (
-                        <Badge variant="neutral">{categoria.nome}</Badge>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </CelulaSelect>
-
-                    <CelulaNumero
-                      valor={num(valorAtual(item, "valor_unitario_orcado"))}
-                      formato="moeda"
-                      moeda={moeda}
-                      editando={ativaAqui("valor_unitario_orcado")}
-                      editavel={editavel}
-                      onAtivar={() =>
-                        setAtiva({
-                          rowId: item.id,
-                          campo: "valor_unitario_orcado",
-                        })
-                      }
-                      onConfirmar={(raw, d) =>
-                        confirmarNumero(item, "valor_unitario_orcado", raw, d)
-                      }
-                      onCancelar={() => setAtiva(null)}
-                      tdClassName={cn("font-mono", ORCADO.celulaAbre)}
-                    />
-                    <CelulaNumero
-                      valor={num(valorAtual(item, "quantidade_orcada"))}
-                      editando={ativaAqui("quantidade_orcada")}
-                      editavel={editavel}
-                      onAtivar={() =>
-                        setAtiva({ rowId: item.id, campo: "quantidade_orcada" })
-                      }
-                      onConfirmar={(raw, d) =>
-                        confirmarNumero(item, "quantidade_orcada", raw, d)
-                      }
-                      onCancelar={() => setAtiva(null)}
-                      tdClassName={ORCADO.celulaMeio}
-                    />
-                    <CelulaNumero
-                      valor={num(valorAtual(item, "dias_meses_orcado"))}
-                      editando={ativaAqui("dias_meses_orcado")}
-                      editavel={editavel}
-                      onAtivar={() =>
-                        setAtiva({ rowId: item.id, campo: "dias_meses_orcado" })
-                      }
-                      onConfirmar={(raw, d) =>
-                        confirmarNumero(item, "dias_meses_orcado", raw, d)
-                      }
-                      onCancelar={() => setAtiva(null)}
-                      tdClassName={ORCADO.celulaMeio}
-                    />
-                    <td
-                      className={cn(
-                        "px-3 text-right font-mono text-xs font-semibold whitespace-nowrap",
-                        ORCADO.celulaTotal,
-                      )}
-                    >
-                      {formatCurrency(totais.orcado, moeda)}
-                    </td>
-
-                    {/* Planejado espelha o Orçado: zero é "R$ 0,00 · 0 · 0",
-                        não travessão. Simetria entre os dois blocos, e a
-                        linha nova não muda de cara ao ser salva.
-                        Em `A` e `D` o espelho é literal e as células não
-                        abrem: lá o cliente paga o fornecedor direto, e o
-                        custo da agência É o orçado menos o BV. */}
-                    <CelulaNumero
-                      valor={
-                        planejadoTravado
-                          ? num(valorAtual(item, "valor_unitario_orcado"))
-                          : num(valorAtual(item, "valor_unitario_planejado"))
-                      }
-                      formato="moeda"
-                      moeda={moeda}
-                      editando={ativaAqui("valor_unitario_planejado")}
-                      editavel={editavel && !planejadoTravado}
-                      onAtivar={() =>
-                        setAtiva({
-                          rowId: item.id,
-                          campo: "valor_unitario_planejado",
-                        })
-                      }
-                      onConfirmar={(raw, d) =>
-                        confirmarNumero(item, "valor_unitario_planejado", raw, d)
-                      }
-                      onCancelar={() => setAtiva(null)}
-                      tdClassName={cn("font-mono", PLANEJADO.celulaAbre)}
-                    />
-                    <CelulaNumero
-                      valor={
-                        planejadoTravado
-                          ? num(valorAtual(item, "quantidade_orcada"))
-                          : num(valorAtual(item, "quantidade_planejada"))
-                      }
-                      editando={ativaAqui("quantidade_planejada")}
-                      editavel={editavel && !planejadoTravado}
-                      onAtivar={() =>
-                        setAtiva({
-                          rowId: item.id,
-                          campo: "quantidade_planejada",
-                        })
-                      }
-                      onConfirmar={(raw, d) =>
-                        confirmarNumero(item, "quantidade_planejada", raw, d)
-                      }
-                      onCancelar={() => setAtiva(null)}
-                      tdClassName={PLANEJADO.celulaMeio}
-                    />
-                    <CelulaNumero
-                      valor={
-                        planejadoTravado
-                          ? num(valorAtual(item, "dias_meses_orcado"))
-                          : num(valorAtual(item, "dias_meses_planejado"))
-                      }
-                      editando={ativaAqui("dias_meses_planejado")}
-                      editavel={editavel && !planejadoTravado}
-                      onAtivar={() =>
-                        setAtiva({
-                          rowId: item.id,
-                          campo: "dias_meses_planejado",
-                        })
-                      }
-                      onConfirmar={(raw, d) =>
-                        confirmarNumero(item, "dias_meses_planejado", raw, d)
-                      }
-                      onCancelar={() => setAtiva(null)}
-                      tdClassName={PLANEJADO.celulaMeio}
-                    />
-                    <td
-                      className={cn(
-                        "px-3 text-right whitespace-nowrap",
-                        PLANEJADO.celulaTotal,
-                      )}
-                    >
-                      <div className="flex flex-col items-end">
-                        <span className="font-mono text-xs font-semibold leading-[1.2]">
-                          {formatCurrency(planejadoNaVisao, moeda)}
-                        </span>
-                        {visao === "liquido" && (
-                          <SubLinhaBv
-                            deducao={blocos.planejado.deducaoBv}
-                            formatar={(v) => formatCurrency(v, moeda)}
-                            cor={PLANEJADO.texto}
-                            corRotulo={PLANEJADO.textoSuave}
-                          />
+                  <React.Fragment key={grupo.id}>
+                    {/* A LINHA DO GRUPO: nome à esquerda e o subtotal já
+                        alinhado às colunas Total de cada bloco. Era o
+                        `tfoot` de um card inteiro; agora é uma linha. */}
+                    <tr data-calha={`g:${grupo.id}`} className="h-10">
+                      <td colSpan={3} className={LINHA_GRUPO_NOME}>
+                        <div className="flex min-w-0 items-center gap-2.5">
+                          <button
+                            type="button"
+                            onClick={() => onAlternarGrupo(grupo.id)}
+                            title={
+                              aberto
+                                ? "Ocultar itens do grupo"
+                                : "Mostrar itens do grupo"
+                            }
+                            aria-expanded={aberto}
+                            className="inline-flex h-5 w-5 flex-none items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-white hover:text-california-red"
+                          >
+                            <ChevronDown
+                              className={cn(
+                                "h-3.5 w-3.5 transition-transform duration-150",
+                                !aberto && "-rotate-90",
+                              )}
+                            />
+                          </button>
+                          {nomeDoGrupo ? (
+                            nomeDoGrupo(grupo)
+                          ) : (
+                            <TruncateTooltip
+                              text={grupo.nome}
+                              className="text-[13.5px] font-bold tracking-[-0.01em] text-foreground"
+                            />
+                          )}
+                          <span className="flex-none whitespace-nowrap text-[11px] text-muted-foreground">
+                            {grupo.itens.length}{" "}
+                            {grupo.itens.length === 1 ? "item" : "itens"}
+                            {!aberto && grupo.itens.length > 0 && " ocultos"}
+                          </span>
+                        </div>
+                      </td>
+                      <td colSpan={3} className={ORCADO.grupoVazio} />
+                      <td
+                        className={cn(
+                          "px-3 text-right whitespace-nowrap font-mono text-[13px] font-bold",
+                          ORCADO.grupoValor,
                         )}
-                      </div>
-                    </td>
+                      >
+                        {formatCurrency(subOrcado, moeda)}
+                      </td>
+                      <td colSpan={3} className={PLANEJADO.grupoVazio} />
+                      <td
+                        className={cn(
+                          "px-3 text-right whitespace-nowrap",
+                          PLANEJADO.grupoValor,
+                        )}
+                      >
+                        <div className="flex flex-col items-end">
+                          <span className="font-mono text-[13px] font-bold leading-[1.2]">
+                            {formatCurrency(subPlanejado, moeda)}
+                          </span>
+                          {/* A soma dos BVs de todos os itens do grupo. */}
+                          {visao === "liquido" && (
+                            <SubLinhaBv
+                              deducao={sub.planejado.deducaoBv}
+                              formatar={(v) => formatCurrency(v, moeda)}
+                              cor={PLANEJADO.texto}
+                              corRotulo={PLANEJADO.textoSuave}
+                            />
+                          )}
+                        </div>
+                      </td>
+                      <td
+                        className={cn(
+                          "px-3 text-right whitespace-nowrap font-mono text-xs font-semibold",
+                          RENTABILIDADE.bordaAbre,
+                          RENTABILIDADE.grupoValor,
+                        )}
+                      >
+                        {formatCurrency(subResultado, moeda)}
+                      </td>
+                      <td
+                        className={cn(
+                          "px-3 text-right whitespace-nowrap font-mono text-xs font-semibold",
+                          RENTABILIDADE.grupoValor,
+                        )}
+                      >
+                        {subPercentual === null ? (
+                          <span className="text-muted-foreground">—</span>
+                        ) : (
+                          formatarPercentual(subPercentual)
+                        )}
+                      </td>
+                    </tr>
 
-                    <CelulasRentabilidade
-                      orcado={totais.orcado}
-                      planejado={planejadoNaVisao}
-                      moeda={moeda}
-                    />
-                  </tr>
+                    {aberto &&
+                      grupo.itens.length === 0 &&
+                      draft?.grupoId !== grupo.id && (
+                        <tr className="border-b border-border">
+                          <td
+                            colSpan={13}
+                            className="py-5 pl-[30px] pr-3 text-xs text-muted-foreground"
+                          >
+                            Sem itens neste grupo ainda.
+                          </td>
+                        </tr>
+                      )}
+
+                    {aberto &&
+                      grupo.itens.map((item) => {
+                        const totais = totaisDoItem(item);
+                        const blocos = blocosDe(item);
+                        const planejadoNaVisao = valorNaVisao(
+                          blocos.planejado,
+                          visao,
+                        );
+                        const planejadoTravado = planejadoEspelhaOrcado(
+                          String(
+                            valorAtual(item, "tipo_custo"),
+                          ) as VersaoOrcamentoItem["tipo_custo"],
+                        );
+                        const categoriaId = valorAtual(item, "categoria_id") as
+                          | string
+                          | null;
+                        const categoria = categorias.find(
+                          (c) => c.id === categoriaId,
+                        );
+                        const ativaAqui = (campo: Campo) =>
+                          ativa?.rowId === item.id && ativa.campo === campo;
+
+                        return (
+                          <tr
+                            key={item.id}
+                            data-calha={`i:${item.id}`}
+                            className={cn(
+                              ALTURA_LINHA,
+                              "border-b border-border transition-colors",
+                              editavel && "hover:bg-accent/40",
+                            )}
+                          >
+                            <CelulaTexto
+                              valor={String(valorAtual(item, "item") ?? "")}
+                              editando={ativaAqui("item")}
+                              editavel={editavel}
+                              onAtivar={() =>
+                                setAtiva({ rowId: item.id, campo: "item" })
+                              }
+                              onConfirmar={(v, d) =>
+                                confirmarCampo(item, "item", v.trim(), d)
+                              }
+                              onCancelar={() => setAtiva(null)}
+                              tdClassName={cn(
+                                "text-foreground",
+                                RECUO_ITEM,
+                                GRADE_NEUTRA,
+                              )}
+                            />
+
+                            <CelulaSelect
+                              editando={ativaAqui("tipo_custo")}
+                              editavel={editavel}
+                              valor={String(valorAtual(item, "tipo_custo"))}
+                              opcoes={TIPOS_CUSTO.map((t) => ({
+                                value: t,
+                                label: tipoCustoLabel(t),
+                              }))}
+                              onAtivar={() =>
+                                setAtiva({ rowId: item.id, campo: "tipo_custo" })
+                              }
+                              onConfirmar={(v) =>
+                                confirmarCampo(
+                                  item,
+                                  "tipo_custo",
+                                  v,
+                                  ativa?.porTeclado ? "proxima" : undefined,
+                                )
+                              }
+                              onNavegar={(d) =>
+                                setAtiva(celulaDirecao(item.id, "tipo_custo", d))
+                              }
+                              onFechar={() => fecharCelula(item.id, "tipo_custo")}
+                              tdClassName={cn(GRADE_NEUTRA, "px-2")}
+                            >
+                              <Badge variant="outline" className="px-1.5">
+                                {String(valorAtual(item, "tipo_custo"))}
+                              </Badge>
+                            </CelulaSelect>
+
+                            <CelulaSelect
+                              editando={ativaAqui("categoria_id")}
+                              editavel={editavel}
+                              valor={categoriaId ?? SEM_CATEGORIA}
+                              opcoes={[
+                                { value: SEM_CATEGORIA, label: "Nenhuma" },
+                                ...categorias
+                                  .filter(
+                                    (c) => c.ativo || c.id === item.categoria_id,
+                                  )
+                                  .map((c) => ({
+                                    value: c.id,
+                                    label: c.ativo
+                                      ? c.nome
+                                      : `${c.nome} (inativa)`,
+                                  })),
+                              ]}
+                              vazio="Nenhuma categoria cadastrada em /categorias"
+                              onAtivar={() =>
+                                setAtiva({
+                                  rowId: item.id,
+                                  campo: "categoria_id",
+                                })
+                              }
+                              onConfirmar={(v) =>
+                                confirmarCampo(
+                                  item,
+                                  "categoria_id",
+                                  v === SEM_CATEGORIA ? null : v,
+                                  ativa?.porTeclado ? "proxima" : undefined,
+                                )
+                              }
+                              onNavegar={(d) =>
+                                setAtiva(
+                                  celulaDirecao(item.id, "categoria_id", d),
+                                )
+                              }
+                              onFechar={() =>
+                                fecharCelula(item.id, "categoria_id")
+                              }
+                            >
+                              {categoria ? (
+                                <Badge variant="neutral">{categoria.nome}</Badge>
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
+                            </CelulaSelect>
+
+                            <CelulaNumero
+                              valor={num(
+                                valorAtual(item, "valor_unitario_orcado"),
+                              )}
+                              formato="moeda"
+                              moeda={moeda}
+                              editando={ativaAqui("valor_unitario_orcado")}
+                              editavel={editavel}
+                              onAtivar={() =>
+                                setAtiva({
+                                  rowId: item.id,
+                                  campo: "valor_unitario_orcado",
+                                })
+                              }
+                              onConfirmar={(raw, d) =>
+                                confirmarNumero(
+                                  item,
+                                  "valor_unitario_orcado",
+                                  raw,
+                                  d,
+                                )
+                              }
+                              onCancelar={() => setAtiva(null)}
+                              tdClassName={cn("font-mono", ORCADO.celulaAbre)}
+                            />
+                            <CelulaNumero
+                              valor={num(valorAtual(item, "quantidade_orcada"))}
+                              editando={ativaAqui("quantidade_orcada")}
+                              editavel={editavel}
+                              onAtivar={() =>
+                                setAtiva({
+                                  rowId: item.id,
+                                  campo: "quantidade_orcada",
+                                })
+                              }
+                              onConfirmar={(raw, d) =>
+                                confirmarNumero(item, "quantidade_orcada", raw, d)
+                              }
+                              onCancelar={() => setAtiva(null)}
+                              tdClassName={ORCADO.celulaMeio}
+                            />
+                            <CelulaNumero
+                              valor={num(valorAtual(item, "dias_meses_orcado"))}
+                              editando={ativaAqui("dias_meses_orcado")}
+                              editavel={editavel}
+                              onAtivar={() =>
+                                setAtiva({
+                                  rowId: item.id,
+                                  campo: "dias_meses_orcado",
+                                })
+                              }
+                              onConfirmar={(raw, d) =>
+                                confirmarNumero(item, "dias_meses_orcado", raw, d)
+                              }
+                              onCancelar={() => setAtiva(null)}
+                              tdClassName={ORCADO.celulaMeio}
+                            />
+                            <td
+                              className={cn(
+                                "px-3 text-right font-mono text-xs font-semibold whitespace-nowrap",
+                                ORCADO.celulaTotal,
+                              )}
+                            >
+                              {formatCurrency(totais.orcado, moeda)}
+                            </td>
+
+                            {/* Planejado espelha o Orçado: zero é
+                                "R$ 0,00 · 0 · 0", não travessão. Em `A` e
+                                `D` o espelho é literal e as células não
+                                abrem: lá o cliente paga o fornecedor
+                                direto, e o custo da agência É o orçado
+                                menos o BV. */}
+                            <CelulaNumero
+                              valor={
+                                planejadoTravado
+                                  ? num(valorAtual(item, "valor_unitario_orcado"))
+                                  : num(
+                                      valorAtual(item, "valor_unitario_planejado"),
+                                    )
+                              }
+                              formato="moeda"
+                              moeda={moeda}
+                              editando={ativaAqui("valor_unitario_planejado")}
+                              editavel={editavel && !planejadoTravado}
+                              onAtivar={() =>
+                                setAtiva({
+                                  rowId: item.id,
+                                  campo: "valor_unitario_planejado",
+                                })
+                              }
+                              onConfirmar={(raw, d) =>
+                                confirmarNumero(
+                                  item,
+                                  "valor_unitario_planejado",
+                                  raw,
+                                  d,
+                                )
+                              }
+                              onCancelar={() => setAtiva(null)}
+                              tdClassName={cn("font-mono", PLANEJADO.celulaAbre)}
+                            />
+                            <CelulaNumero
+                              valor={
+                                planejadoTravado
+                                  ? num(valorAtual(item, "quantidade_orcada"))
+                                  : num(valorAtual(item, "quantidade_planejada"))
+                              }
+                              editando={ativaAqui("quantidade_planejada")}
+                              editavel={editavel && !planejadoTravado}
+                              onAtivar={() =>
+                                setAtiva({
+                                  rowId: item.id,
+                                  campo: "quantidade_planejada",
+                                })
+                              }
+                              onConfirmar={(raw, d) =>
+                                confirmarNumero(
+                                  item,
+                                  "quantidade_planejada",
+                                  raw,
+                                  d,
+                                )
+                              }
+                              onCancelar={() => setAtiva(null)}
+                              tdClassName={PLANEJADO.celulaMeio}
+                            />
+                            <CelulaNumero
+                              valor={
+                                planejadoTravado
+                                  ? num(valorAtual(item, "dias_meses_orcado"))
+                                  : num(valorAtual(item, "dias_meses_planejado"))
+                              }
+                              editando={ativaAqui("dias_meses_planejado")}
+                              editavel={editavel && !planejadoTravado}
+                              onAtivar={() =>
+                                setAtiva({
+                                  rowId: item.id,
+                                  campo: "dias_meses_planejado",
+                                })
+                              }
+                              onConfirmar={(raw, d) =>
+                                confirmarNumero(
+                                  item,
+                                  "dias_meses_planejado",
+                                  raw,
+                                  d,
+                                )
+                              }
+                              onCancelar={() => setAtiva(null)}
+                              tdClassName={PLANEJADO.celulaMeio}
+                            />
+                            <td
+                              className={cn(
+                                "px-3 text-right whitespace-nowrap",
+                                PLANEJADO.celulaTotal,
+                              )}
+                            >
+                              <div className="flex flex-col items-end">
+                                <span className="font-mono text-xs font-semibold leading-[1.2]">
+                                  {formatCurrency(planejadoNaVisao, moeda)}
+                                </span>
+                                {visao === "liquido" && (
+                                  <SubLinhaBv
+                                    deducao={blocos.planejado.deducaoBv}
+                                    formatar={(v) => formatCurrency(v, moeda)}
+                                    cor={PLANEJADO.texto}
+                                    corRotulo={PLANEJADO.textoSuave}
+                                  />
+                                )}
+                              </div>
+                            </td>
+
+                            <CelulasRentabilidade
+                              orcado={totais.orcado}
+                              planejado={planejadoNaVisao}
+                              moeda={moeda}
+                            />
+                          </tr>
+                        );
+                      })}
+
+                    {/* Linha nova — preenchida na própria grade, sem drawer. */}
+                    {aberto && draft?.grupoId === grupo.id && (
+                      <LinhaDraft
+                        draft={draft}
+                        moeda={moeda}
+                        categorias={categorias}
+                        ativa={ativa}
+                        onAtivar={(campo) => setAtiva({ rowId: DRAFT_ID, campo })}
+                        onFechar={() => setAtiva(null)}
+                        onConfirmarTexto={(campo, v, d) =>
+                          confirmarDraft(campo, v, d)
+                        }
+                        onConfirmarNumero={(campo, raw, d) =>
+                          confirmarDraftNumero(campo, raw, d)
+                        }
+                        onNavegar={(campo, d) =>
+                          setAtiva(celulaDirecao(DRAFT_ID, campo, d))
+                        }
+                        onFecharCelula={(campo) => fecharCelula(DRAFT_ID, campo)}
+                      />
+                    )}
+
+                    {/* "Novo item" fecha o agrupamento, e não a tabela —
+                        é o que dá ao grupo um fim visível sem precisar do
+                        card que ele tinha antes. */}
+                    {aberto && editavel && (
+                      <tr className="h-[30px] border-b border-border">
+                        <td colSpan={13} className="pl-[30px] pr-3">
+                          <button
+                            type="button"
+                            onClick={() => abrirDraft(grupo.id)}
+                            disabled={draft !== null || pending}
+                            className="inline-flex items-center gap-1.5 whitespace-nowrap text-[11.5px] font-semibold text-california-red transition-colors hover:text-california-red-hover disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            <Plus className="h-3 w-3" />
+                            Novo item em {grupo.nome}
+                          </button>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
                 );
               })}
 
-              {/* Linha nova — preenchida na própria grade, sem drawer. */}
-              {aberto && draft && (
-                <LinhaDraft
-                  draft={draft}
-                  moeda={moeda}
-                  categorias={categorias}
-                  ativa={ativa}
-                  onAtivar={(campo) => setAtiva({ rowId: DRAFT_ID, campo })}
-                  onFechar={() => setAtiva(null)}
-                  onConfirmarTexto={(campo, v, d) => confirmarDraft(campo, v, d)}
-                  onConfirmarNumero={(campo, raw, d) =>
-                    confirmarDraftNumero(campo, raw, d)
-                  }
-                  onNavegar={(campo, d) =>
-                    setAtiva(celulaDirecao(DRAFT_ID, campo, d))
-                  }
-                  onFecharCelula={(campo) => fecharCelula(DRAFT_ID, campo)}
-                />
+              {/* "Novo grupo" — depois do último grupo e antes do total,
+                  que é onde o grupo novo vai nascer. */}
+              {novoGrupo && (
+                <tr>
+                  <td colSpan={13} className={LINHA_NOVO_GRUPO}>
+                    <div className="flex items-center gap-2.5">
+                      {novoGrupo}
+                      <span className="text-[11px] text-muted-foreground">
+                        o grupo novo entra aqui, no fim da ordem
+                      </span>
+                    </div>
+                  </td>
+                </tr>
               )}
-
             </tbody>
 
             <tfoot>
               <tr>
-                {/* py-1.5: o subtotal fecha a planilha, não precisa do
-                    corpo de antes — fica só um degrau acima da linha de
-                    item (28px) em vez de quase o dobro. */}
-                <td
-                  colSpan={3}
-                  className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"
-                >
-                  {rotuloSubtotal(visao)}
+                <td colSpan={3} className={LINHA_TOTAL_ROTULO}>
+                  {rotuloDoTotal}
                 </td>
                 <td colSpan={3} className={ORCADO.subtotalVazio} />
                 <td
                   className={cn(
-                    "px-3 py-1.5 text-right whitespace-nowrap font-mono text-[13px] font-bold",
+                    "px-3 py-2 text-right whitespace-nowrap font-mono text-[13px] font-bold",
                     ORCADO.subtotalValor,
                   )}
                 >
-                  {formatCurrency(subtotalOrcado, moeda)}
+                  {formatCurrency(totalOrcado, moeda)}
                 </td>
                 <td colSpan={3} className={PLANEJADO.subtotalVazio} />
                 <td
                   className={cn(
-                    "px-3 py-1.5 text-right whitespace-nowrap",
+                    "px-3 py-2 text-right whitespace-nowrap",
                     PLANEJADO.subtotalValor,
                   )}
                 >
                   <div className="flex flex-col items-end">
                     <span className="font-mono text-[13px] font-bold">
-                      {formatCurrency(subtotalPlanejado, moeda)}
+                      {formatCurrency(totalPlanejado, moeda)}
                     </span>
-                    {/* A soma dos BVs de todos os itens do grupo — foi o
-                        que substituiu as pílulas "BV do grupo" do design
-                        3b, por decisão do Tiago em 21/08/2026. */}
                     {visao === "liquido" && (
                       <SubLinhaBv
-                        deducao={subtotais.planejado.deducaoBv}
+                        deducao={totaisDaPlanilha.planejado.deducaoBv}
                         formatar={(v) => formatCurrency(v, moeda)}
                         cor={PLANEJADO.texto}
                         corRotulo={PLANEJADO.textoSuave}
@@ -1163,60 +1417,32 @@ export function ItensTable({
                 </td>
                 <td
                   className={cn(
-                    "px-3 py-1.5 text-right whitespace-nowrap font-mono text-xs font-semibold border-r border-r-[#e2e0da]",
+                    "px-3 py-2 text-right whitespace-nowrap font-mono text-[13px] font-bold",
                     RENTABILIDADE.bordaAbre,
                     RENTABILIDADE.subtotalValor,
                   )}
                 >
-                  {formatCurrency(resultado, moeda)}
+                  {formatCurrency(resultadoTotal, moeda)}
                 </td>
                 <td
                   className={cn(
-                    "px-3 py-1.5 text-right whitespace-nowrap font-mono text-xs font-semibold",
+                    "px-3 py-2 text-right whitespace-nowrap font-mono text-[13px] font-bold",
                     RENTABILIDADE.subtotalValor,
                   )}
                 >
-                  {percentualSubtotal === null ? (
+                  {percentualTotal === null ? (
                     <span className="text-muted-foreground">—</span>
                   ) : (
-                    formatarPercentual(percentualSubtotal)
+                    formatarPercentual(percentualTotal)
                   )}
                 </td>
               </tr>
-
-              {/* "Novo item" vem DEPOIS do subtotal (decisão do time,
-                  27/07/2026) — o handoff original pedia acima dele. */}
-              {aberto && editavel && (
-                <tr>
-                  {/* border-t fecha a base da grade: o subtotal é a última
-                      linha da planilha, e o "Novo item" fica fora dela. */}
-                  <td
-                    colSpan={13}
-                    className="border-t border-border px-3 py-2"
-                  >
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setDraft(DRAFT_VAZIO);
-                        setAtiva({ rowId: DRAFT_ID, campo: "item" });
-                      }}
-                      disabled={draft !== null || pending}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-california-red/30 bg-california-red/5 px-3 py-1.5 text-xs font-semibold text-california-red hover:bg-california-red hover:text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                      Novo item
-                    </button>
-                  </td>
-                </tr>
-              )}
             </tfoot>
           </table>
         </div>
 
-        {/* A dica só faz sentido com células à vista — com o grupo recolhido
-            ela apontaria para uma grade que não está lá. */}
-        {aberto && editavel && (
-          <div className="flex items-center justify-between gap-4 border-t border-border bg-muted/40 px-6 py-3 rounded-b-2xl">
+        {temDica && (
+          <div className="flex items-center justify-between gap-4 rounded-b-2xl border-t border-border bg-muted/40 px-6 py-3">
             <span className="text-[11px] text-muted-foreground">
               Clique em qualquer célula para editar ·{" "}
               <kbd className="font-mono">Tab</kbd> e as{" "}
@@ -1227,72 +1453,84 @@ export function ItensTable({
           </div>
         )}
 
-        {/* Ações do grupo — contador e remover, na calha à direita, na
-            altura exata da faixa. É para lá que elas foram quando a barra
-            de título do card saiu. */}
-        {acoesGrupo && (
-          <div
-            className="absolute left-full top-0 ml-2 flex items-center"
-            style={{ height: faixaAltura || undefined }}
-          >
-            {acoesGrupo}
-          </div>
-        )}
-
-        {/* Trilha de ações — fora do frame da tabela, ao lado das linhas.
-            O BV fica à ESQUERDA da ação que a tela já tinha (a lixeira),
-            na mesma posição que ele ocupa na planilha do job. A pílula tem
-            largura fixa para que as lixeiras de todas as linhas — inclusive
-            as de tipo B e C, que não têm BV — fiquem no mesmo eixo. */}
-        {temTrilha && (
-          <div
-            className="absolute left-full ml-2 flex flex-col"
-            style={{ top: railTop }}
-          >
-            {itens.map((item) => {
-              const bv = bvsPorItem[item.id] ?? null;
-              // Sem BV numa versão congelada não há nada a consultar —
-              // a vaga fica vazia para não desalinhar as linhas de baixo.
-              const mostraBv = temBv(item) && (editavel || bv !== null);
+        {/* A calha — fora do frame da tabela, ao lado das linhas. Cada
+            pílula é presa à posição MEDIDA da linha que ela acompanha:
+            numa tabela só, as linhas têm alturas diferentes e altura
+            chutada acumularia erro a cada grupo. */}
+        {temCalha && (
+          <Calha>
+            {grupos.map((grupo) => {
+              const aberto = estaAberto(grupo.id);
+              const acoesGrupo = acoesDoGrupo?.(grupo);
 
               return (
-                <div
-                  key={item.id}
-                  className={cn("flex items-center gap-1", ALTURA_LINHA)}
-                >
-                  <span
-                    className={cn("flex flex-none items-center", LARGURA_CALHA_BV)}
-                  >
-                    {mostraBv && (
-                      <BvActionButton
-                        temBv={bv !== null}
-                        itemNome={item.item}
-                        // BV que já saiu para o financeiro abre em consulta
-                        // mesmo com a versão aberta.
-                        somenteLeitura={
-                          !editavel || (bv !== null && bv.situacao !== "a_negociar")
-                        }
-                        onClick={() => setBvAberto(item)}
+                <React.Fragment key={grupo.id}>
+                  {acoesGrupo && (
+                    <LinhaDaCalha posicao={posicoesCalha[`g:${grupo.id}`]}>
+                      {/* A vaga do BV fica vazia para a lixeira do grupo
+                          cair no mesmo eixo das lixeiras de item. */}
+                      <span
+                        className={cn("flex-none", LARGURA_CALHA_BV)}
+                        aria-hidden
                       />
-                    )}
-                  </span>
-
-                  {editavel && (
-                    <button
-                      type="button"
-                      onClick={() => setRemovendo(item)}
-                      disabled={pending}
-                      title={`Remover ${item.item}`}
-                      className="rounded-md p-1.5 text-muted-foreground hover:text-california-red hover:bg-accent transition-colors disabled:opacity-50"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
+                      {acoesGrupo}
+                    </LinhaDaCalha>
                   )}
-                </div>
+
+                  {aberto &&
+                    grupo.itens.map((item) => {
+                      const bv = bvsPorItem[item.id] ?? null;
+                      // Sem BV numa versão congelada não há nada a
+                      // consultar — a vaga fica vazia para não desalinhar.
+                      const mostraBv = temBv(item) && (editavel || bv !== null);
+                      if (!mostraBv && !editavel) return null;
+
+                      return (
+                        <LinhaDaCalha
+                          key={item.id}
+                          posicao={posicoesCalha[`i:${item.id}`]}
+                        >
+                          <span
+                            className={cn(
+                              "flex flex-none items-center",
+                              LARGURA_CALHA_BV,
+                            )}
+                          >
+                            {mostraBv && (
+                              <BvActionButton
+                                temBv={bv !== null}
+                                itemNome={item.item}
+                                // BV que já saiu para o financeiro abre em
+                                // consulta mesmo com a versão aberta.
+                                somenteLeitura={
+                                  !editavel ||
+                                  (bv !== null && bv.situacao !== "a_negociar")
+                                }
+                                onClick={() => setBvAberto(item)}
+                              />
+                            )}
+                          </span>
+
+                          {editavel && (
+                            <button
+                              type="button"
+                              onClick={() => setRemovendo(item)}
+                              disabled={pending}
+                              title={`Remover ${item.item}`}
+                              className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-california-red disabled:opacity-50"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                        </LinhaDaCalha>
+                      );
+                    })}
+                </React.Fragment>
               );
             })}
+
             {draft && (
-              <div className={cn("flex items-center gap-1", ALTURA_LINHA)}>
+              <LinhaDaCalha posicao={posicoesCalha[DRAFT_ID]}>
                 {/* A linha nova ainda não existe no banco: sem id, não há
                     a que prender um BV. O botão entra depois de salva. */}
                 <span
@@ -1306,13 +1544,13 @@ export function ItensTable({
                     setAtiva(null);
                   }}
                   title="Descartar linha nova"
-                  className="rounded-md p-1.5 text-muted-foreground hover:text-california-red hover:bg-accent transition-colors"
+                  className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-california-red"
                 >
                   <X className="h-3.5 w-3.5" />
                 </button>
-              </div>
+              </LinhaDaCalha>
             )}
-          </div>
+          </Calha>
         )}
       </div>
 
@@ -1321,7 +1559,10 @@ export function ItensTable({
           open
           onOpenChange={(o) => !o && setBvAberto(null)}
           item={bvAberto}
-          grupoNome={grupoNome}
+          grupoNome={
+            grupos.find((g) => g.itens.some((i) => i.id === bvAberto.id))
+              ?.nome ?? ""
+          }
           versaoLabel={versaoLabel}
           categoriaNome={
             categorias.find((c) => c.id === bvAberto.categoria_id)?.nome ?? null
@@ -1344,8 +1585,11 @@ export function ItensTable({
           <>
             <strong className="text-foreground">{removendo?.item}</strong> será
             removido do grupo{" "}
-            <strong className="text-foreground">{grupoNome}</strong>. Você pode
-            adicionar novamente depois se precisar.
+            <strong className="text-foreground">
+              {grupos.find((g) => g.itens.some((i) => i.id === removendo?.id))
+                ?.nome ?? ""}
+            </strong>
+            . Você pode adicionar novamente depois se precisar.
           </>
         }
         confirmLabel="Remover"
@@ -1393,7 +1637,7 @@ function CelulaTexto({
 
   if (editando) {
     return (
-      <td className={cn(TD_BASE, tdClassName, "px-1.5")}>
+      <td className={cn(TD_BASE, "px-1.5", tdClassName)}>
         <input
           autoFocus
           defaultValue={valor}
@@ -1426,7 +1670,7 @@ function CelulaTexto({
 
   return (
     <td
-      className={cn(TD_BASE, tdClassName, "px-3", editavel && "cursor-pointer")}
+      className={cn(TD_BASE, "px-3", tdClassName, editavel && "cursor-pointer")}
       onClick={editavel ? onAtivar : undefined}
     >
       <TruncateTooltip text={valor} />
@@ -1638,6 +1882,7 @@ function LinhaDraft({
 
   return (
     <tr
+      data-calha={DRAFT_ID}
       className={cn(
         ALTURA_LINHA,
         "border-b border-border bg-california-red/[0.03]",
@@ -1650,7 +1895,7 @@ function LinhaDraft({
         onAtivar={() => onAtivar("item")}
         onConfirmar={(v, d) => onConfirmarTexto("item", v.trim(), d)}
         onCancelar={onFechar}
-        tdClassName={cn("text-foreground", GRADE_NEUTRA)}
+        tdClassName={cn("text-foreground", RECUO_ITEM, GRADE_NEUTRA)}
       />
       <CelulaSelect
         editando={ativaAqui("tipo_custo")}
