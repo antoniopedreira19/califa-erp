@@ -1389,6 +1389,13 @@ export interface LancamentoFinanceiro {
    * que não veio de baixa de parcela de desembolso.
    */
   desembolso_parcela_id: string | null;
+  /**
+   * Forma de pagamento efetivamente usada na baixa. Nulo em lançamentos
+   * anteriores a 25/08/2026 e em origem 'manual' sem forma definida.
+   */
+  forma_pagamento: FormaPagamento | null;
+  /** Cartão usado quando forma = cartao_credito. */
+  cartao_credito_id: string | null;
   estorno_de_lancamento_id: string | null;
   origem: OrigemLancamento;
   criado_por: string;
