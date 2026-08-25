@@ -250,6 +250,18 @@ function draftVazio(grupoId: string): Draft {
   };
 }
 
+/** A linha nova ainda em branco — nenhum campo saiu do estado de
+ *  nascimento. É por este teste que ela some sozinha no Esc e em
+ *  qualquer clique fora dela: enquanto ninguém digitou nada, a linha não
+ *  é um item, é só o cursor esperando. Digitou qualquer coisa (inclusive
+ *  um valor sem descrição), ela fica na tela até o usuário decidir. */
+function draftIntocado(d: Draft): boolean {
+  const zero = draftVazio(d.grupoId);
+  return (Object.keys(zero) as Array<keyof Draft>).every(
+    (campo) => d[campo] === zero[campo],
+  );
+}
+
 /** Aceita "1.234,56" e "1234.56". Vírgula presente ⇒ ponto é milhar. */
 function parseNumero(raw: string): number | null {
   const limpo = raw.trim();
@@ -364,6 +376,56 @@ export function ItensTable({
     grupos.map((g) => (estaAberto(g.id) ? "1" : "0")).join(""),
   ]);
 
+  // O handler de clique-fora lê o rascunho por ref, e não pela closure:
+  // ver o porquê logo abaixo.
+  const draftRef = React.useRef(draft);
+  draftRef.current = draft;
+  const descarteAgendado = React.useRef<ReturnType<typeof setTimeout>>();
+
+  // Enquanto a linha nova estiver em branco, qualquer clique fora dela a
+  // descarta: ela ainda não é um item, é só o cursor esperando alguém
+  // digitar. `pointerdown` e não `click` porque o clique numa outra
+  // célula já teria aberto a edição de lá antes de o descarte acontecer.
+  // Ficam de fora a própria linha e o menu do Radix, que abre em portal
+  // fora da tabela — escolher um Tipo não pode matar a linha.
+  //
+  // O descarte espera um tique porque o campo em edição só entrega o que
+  // foi digitado no `blur`, e o navegador dispara o `blur` DEPOIS deste
+  // handler. Matar a linha aqui apagaria a descrição recém-digitada
+  // antes de ela ser gravada.
+  //
+  // Daí a inscrição ser de mount, com `[]`: o `blur` chama `setDraft` com
+  // um objeto NOVO, e um efeito que dependesse de `draft` se
+  // reinscreveria no meio do caminho — a limpeza cancelaria o descarte
+  // que acabou de ser agendado, e a linha em branco ficaria na tela.
+  // Defeito real, visto no navegador em 25/08/2026: com clique
+  // sintético (sem troca de foco) passava, com clique de verdade não.
+  React.useEffect(() => {
+    const aoApontar = (e: PointerEvent) => {
+      const atual = draftRef.current;
+      if (!atual || !draftIntocado(atual)) return;
+
+      const alvo = e.target instanceof Element ? e.target : null;
+      if (
+        alvo?.closest(`[data-calha="${DRAFT_ID}"]`) ||
+        alvo?.closest("[data-radix-popper-content-wrapper]")
+      ) {
+        return;
+      }
+
+      descarteAgendado.current = setTimeout(() => {
+        setDraft((d) => (d && draftIntocado(d) ? null : d));
+        setAtiva((ativa) => (ativa?.rowId === DRAFT_ID ? null : ativa));
+      }, 0);
+    };
+
+    document.addEventListener("pointerdown", aoApontar);
+    return () => {
+      document.removeEventListener("pointerdown", aoApontar);
+      clearTimeout(descarteAgendado.current);
+    };
+  }, []);
+
   // Descarta o valor otimista quando o servidor já devolveu o mesmo valor.
   React.useEffect(() => {
     setOverrides((prev) => {
@@ -454,6 +516,19 @@ export function ItensTable({
     return ids;
   }, [grupos, draft, estaAberto]);
 
+  /** Último item visível de cada grupo → id do grupo dele. É por aqui
+   *  que o Enter/↓ da última linha sabe que o destino não é o primeiro
+   *  item do grupo de baixo, e sim o "Novo item" DESTE grupo. */
+  const grupoDoUltimoItem = React.useMemo(() => {
+    const mapa = new Map<string, string>();
+    for (const g of grupos) {
+      if (!estaAberto(g.id)) continue;
+      const ultimo = g.itens[g.itens.length - 1];
+      if (ultimo) mapa.set(ultimo.id, g.id);
+    }
+    return mapa;
+  }, [grupos, estaAberto]);
+
   /** As três colunas de PLANEJADO travadas nesta linha.
    *
    *  Em `A` e `D` o planejado espelha o orçado e não se digita — o Tab
@@ -480,6 +555,24 @@ export function ItensTable({
   const celulaDirecao = React.useCallback(
     (rowId: string, campo: Campo, destino?: Direcao): CelulaAtiva => {
       if (!destino) return null; // blur / clique fora: só confirma e sai
+
+      // Enter/↓ na última linha do grupo abre o "Novo item" DELE em vez
+      // de cair no grupo seguinte (pedido do Tiago, 25/08/2026): é assim
+      // que se acrescenta item sem tirar a mão do teclado. O cursor vai
+      // para a descrição, que é o campo sem o qual a linha não grava.
+      // Rascunho já aberto em OUTRO grupo e ainda em branco é
+      // descartado no caminho — em branco ele não vale nada.
+      if (destino === "abaixo" && editavel) {
+        const grupoId = grupoDoUltimoItem.get(rowId);
+        if (
+          grupoId &&
+          (!draft ||
+            (draft.grupoId !== grupoId && draftIntocado(draft)))
+        ) {
+          setDraft(draftVazio(grupoId));
+          return { rowId: DRAFT_ID, campo: "item", porTeclado: true };
+        }
+      }
 
       let alvo = celulaVizinha(
         linhasNavegaveis,
@@ -509,7 +602,7 @@ export function ItensTable({
         ? { rowId: alvo.linhaId, campo: alvo.campo, porTeclado: true }
         : null;
     },
-    [linhasNavegaveis, planejadoTravadoEm],
+    [linhasNavegaveis, planejadoTravadoEm, grupoDoUltimoItem, draft, editavel],
   );
 
   function gravar(
@@ -697,6 +790,11 @@ export function ItensTable({
     setAtiva({ rowId: DRAFT_ID, campo: "item" });
   }
 
+  /** Esc numa célula da linha nova: em branco, ela some junto. */
+  const descartarDraftIntocado = React.useCallback(() => {
+    setDraft((atual) => (atual && draftIntocado(atual) ? null : atual));
+  }, []);
+
   /** O BV existe em A, AR e D — os tipos em que há comissão a negociar
    *  com o fornecedor. O AR entrou em 13/08/2026: nele o principal passa
    *  pela California e ainda assim há comissão. Usa o valor otimista:
@@ -747,28 +845,36 @@ export function ItensTable({
 
   return (
     <>
-      {erro && (
-        <div className="flex items-center justify-between gap-3 rounded-t-2xl border-b border-california-red/20 bg-california-red/5 px-6 py-2 text-xs text-california-red">
-          <span>{erro}</span>
-          <button
-            type="button"
-            onClick={() => setErro(null)}
-            className="rounded-md p-1 hover:bg-california-red/10"
-            title="Fechar aviso"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
-        </div>
-      )}
+      {/* O card da planilha inteira. Ele mora AQUI, e não no chamador,
+          porque desde 25/08/2026 a dica de teclado fica FORA dele — e um
+          componente não consegue devolver nada fora do próprio card se
+          quem desenha o card é quem o chama. Sem `overflow-hidden`: a
+          calha de ações precisa escapar do frame, e são os filhos que
+          arredondam os cantos. */}
+      <div
+        ref={wrapperRef}
+        className="relative rounded-2xl border border-border bg-card shadow-soft"
+      >
+        {erro && (
+          <div className="flex items-center justify-between gap-3 rounded-t-2xl border-b border-california-red/20 bg-california-red/5 px-6 py-2 text-xs text-california-red">
+            <span>{erro}</span>
+            <button
+              type="button"
+              onClick={() => setErro(null)}
+              className="rounded-md p-1 hover:bg-california-red/10"
+              title="Fechar aviso"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
 
-      <div ref={wrapperRef} className="relative">
-        {/* Sem a barra de dica embaixo (readOnly ou tudo recolhido), é a
-            própria tabela que fecha o card — precisa arredondar. */}
+        {/* A tabela fecha o card sozinha: abaixo dela não há mais nada
+            dentro do frame. */}
         <div
           className={cn(
-            "overflow-x-auto",
+            "overflow-x-auto rounded-b-2xl",
             !erro && "rounded-t-2xl",
-            !temDica && "rounded-b-2xl",
           )}
         >
           <table
@@ -1328,7 +1434,10 @@ export function ItensTable({
                         categorias={categorias}
                         ativa={ativa}
                         onAtivar={(campo) => setAtiva({ rowId: DRAFT_ID, campo })}
-                        onFechar={() => setAtiva(null)}
+                        onFechar={() => {
+                          setAtiva(null);
+                          descartarDraftIntocado();
+                        }}
                         onConfirmarTexto={(campo, v, d) =>
                           confirmarDraft(campo, v, d)
                         }
@@ -1351,7 +1460,13 @@ export function ItensTable({
                           <button
                             type="button"
                             onClick={() => abrirDraft(grupo.id)}
-                            disabled={draft !== null || pending}
+                            // Rascunho em branco não trava nada: o clique
+                            // aqui o descarta (pointerdown, acima) e abre
+                            // a linha nova neste grupo.
+                            disabled={
+                              (draft !== null && !draftIntocado(draft)) ||
+                              pending
+                            }
                             className="inline-flex items-center gap-1.5 whitespace-nowrap text-[11.5px] font-semibold text-california-red transition-colors hover:text-california-red-hover disabled:cursor-not-allowed disabled:opacity-50"
                           >
                             <Plus className="h-3 w-3" />
@@ -1440,18 +1555,6 @@ export function ItensTable({
             </tfoot>
           </table>
         </div>
-
-        {temDica && (
-          <div className="flex items-center justify-between gap-4 rounded-b-2xl border-t border-border bg-muted/40 px-6 py-3">
-            <span className="text-[11px] text-muted-foreground">
-              Clique em qualquer célula para editar ·{" "}
-              <kbd className="font-mono">Tab</kbd> e as{" "}
-              <kbd className="font-mono">setas</kbd> andam ·{" "}
-              <kbd className="font-mono">Enter</kbd> desce ·{" "}
-              <kbd className="font-mono">Esc</kbd> desfaz
-            </span>
-          </div>
-        )}
 
         {/* A calha — fora do frame da tabela, ao lado das linhas. Cada
             pílula é presa à posição MEDIDA da linha que ela acompanha:
@@ -1553,6 +1656,19 @@ export function ItensTable({
           </Calha>
         )}
       </div>
+
+      {/* A dica de teclado vive FORA do card (pedido do Tiago,
+          25/08/2026): colada no rodapé, dentro do frame, ela lia como se
+          fosse mais uma linha da planilha. */}
+      {temDica && (
+        <p className="mt-2 px-1 text-[11px] text-muted-foreground">
+          Clique em qualquer célula para editar ·{" "}
+          <kbd className="font-mono">Tab</kbd> e as{" "}
+          <kbd className="font-mono">setas</kbd> andam ·{" "}
+          <kbd className="font-mono">Enter</kbd> desce ·{" "}
+          <kbd className="font-mono">Esc</kbd> desfaz
+        </p>
+      )}
 
       {bvAberto && (
         <BvDialog

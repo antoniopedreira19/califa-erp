@@ -133,11 +133,9 @@ export function PlanilhaConferencia({
       </div>
 
       <JobTotaisCard
-        grupos={grupos}
         itens={itens}
         realizadosMap={realizadosMap}
         bvsPorItem={bvsPorItem}
-        visao={visao}
         // A rota só existe enquanto o job aguarda abertura: o REALIZADO
         // inteiro fica zerado, inclusive nas linhas `A` e `D`.
         jobAberto={false}

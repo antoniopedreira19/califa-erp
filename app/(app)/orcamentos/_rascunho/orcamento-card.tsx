@@ -324,11 +324,12 @@ export function JobRascunhoCard({
               )}
 
               {job.grupos.length > 0 && (
-                // Um card para a planilha inteira — antes era um por
-                // grupo. Sem padding lateral e sem `overflow-hidden`: as
-                // colunas precisam cair sob as do card de Totais, e a
-                // calha de ações precisa escapar do frame.
-                <div className="rounded-2xl border border-border bg-card shadow-soft">
+                // Sem padding lateral: as colunas precisam cair sob as do
+                // card de Totais. Quem desenha o card da planilha é a
+                // própria `ItensTable` — a dica de teclado sai embaixo
+                // dele, fora do frame —, e esta div existe só para as
+                // duas coisas ocuparem UMA vaga do `gap-4` da coluna.
+                <div>
                   <ItensTable
                     grupos={gruposDaPlanilha}
                     moeda={parametros.moeda}

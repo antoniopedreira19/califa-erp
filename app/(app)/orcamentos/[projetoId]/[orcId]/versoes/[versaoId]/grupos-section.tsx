@@ -85,31 +85,27 @@ export function GruposSection({
         <ChaveBrutoLiquido visao={visao} onChange={onMudarVisao} />
       </div>
 
-      {/* Um card para a planilha inteira — antes era um por grupo.
-          Sem `overflow-hidden`: a calha de ações precisa escapar do frame,
-          e são os filhos que arredondam os cantos. */}
-      <div className="rounded-2xl border border-border bg-card shadow-soft">
-        <ItensTable
-          grupos={grupos}
-          moeda={moeda}
-          percentualImposto={percentualImposto}
-          visao={visao}
-          readOnly={readOnly}
-          categorias={categorias}
-          estaAberto={recolher.estaAberto}
-          onAlternarGrupo={recolher.alternar}
-          nomeDoGrupo={(grupo) => (
-            <NomeDoGrupo grupo={grupo} readOnly={readOnly} />
-          )}
-          acoesDoGrupo={
-            readOnly ? undefined : (grupo) => <AcoesDoGrupo grupo={grupo} />
-          }
-          novoGrupo={novoGrupo}
-          bvsPorItem={bvsPorItem}
-          fornecedores={fornecedores}
-          versaoLabel={versaoLabel}
-        />
-      </div>
+      {/* O card da planilha é desenhado pela própria `ItensTable` — a
+          dica de teclado que vem embaixo dele precisa ficar fora do
+          frame. */}
+      <ItensTable
+        grupos={grupos}
+        moeda={moeda}
+        percentualImposto={percentualImposto}
+        visao={visao}
+        readOnly={readOnly}
+        categorias={categorias}
+        estaAberto={recolher.estaAberto}
+        onAlternarGrupo={recolher.alternar}
+        nomeDoGrupo={(grupo) => <NomeDoGrupo grupo={grupo} readOnly={readOnly} />}
+        acoesDoGrupo={
+          readOnly ? undefined : (grupo) => <AcoesDoGrupo grupo={grupo} />
+        }
+        novoGrupo={novoGrupo}
+        bvsPorItem={bvsPorItem}
+        fornecedores={fornecedores}
+        versaoLabel={versaoLabel}
+      />
     </div>
   );
 }

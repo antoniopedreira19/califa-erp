@@ -219,11 +219,9 @@ export function JobRealizadoSection({
             />
           </div>
           <JobTotaisCard
-            grupos={grupos}
             itens={itens}
             realizadosMap={realizadosMap}
             bvsPorItem={bvsPorItem}
-            visao={visao}
             jobAberto={!preAbertura}
             percentualHonorarios={versao.percentual_honorarios}
             percentualImposto={versao.percentual_imposto}

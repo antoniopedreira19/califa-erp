@@ -2,60 +2,30 @@ import { Calculator } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import {
   calcularTotaisVersao,
-  calcularRentabilidade,
   LINHAS_FECHAMENTO_POR_TIPO,
   somarLinhaFechamento,
 } from "@/lib/calculos/versao-totais";
-import {
-  agregarRentabilidadePorProjeto,
-  type JobParaAgregar,
-} from "@/lib/calculos/projeto-totais";
 import { PainelResultado } from "@/components/painel-resultado";
 import { LegendaFechamento } from "@/components/legenda-fechamento";
 import {
-  type VersaoOrcamentoGrupo,
   type ItemPlanilhaJob,
   type ItemBv,
   type JobItemRealizado,
 } from "@/lib/types";
-import {
-  blocosDoItem,
-  rotuloColunaTotal,
-  somarBlocosDosItens,
-  valorNaVisao,
-  type VisaoBv,
-} from "@/lib/calculos/bv-planilha";
-import { SubLinhaBv } from "@/app/(app)/_planilha/chave-bruto-liquido";
-import { ColunasJob, LARGURA_MINIMA_JOB } from "@/app/(app)/_planilha/grade-job";
-import { RentabilidadeNoVao } from "@/app/(app)/_planilha/rentabilidade-inline";
-import {
-  ORCADO,
-  PLANEJADO,
-  REALIZADO,
-  FAIXA_ROTULO,
-  RENTAB_VALOR,
-} from "@/app/(app)/_planilha/blocos";
+import { blocosDoItem, somarBlocosDosItens } from "@/lib/calculos/bv-planilha";
 
 interface Props {
-  grupos: VersaoOrcamentoGrupo[];
   itens: ItemPlanilhaJob[];
   realizadosMap: Map<string, JobItemRealizado>;
   /** BV por id do item da versão — a dedução da vista Líquido e a linha
    *  "+ BVs" do painel Resultado saem daqui. */
   bvsPorItem: Record<string, ItemBv>;
-  /** Bruto ou Líquido (− BV). Vem de `JobRealizadoSection`: o Totais tem
-   *  que estar sempre no mesmo modo que os grupos acima dele. */
-  visao: VisaoBv;
   /** Job já aberto pelo financeiro. Falso zera o REALIZADO — inclusive o
    *  dos tipos `A` e `D`, que fora isso espelhariam o orçado. */
   jobAberto: boolean;
   percentualHonorarios: number;
   percentualImposto: number;
   moeda: string;
-}
-
-function formatarPercentual(p: number): string {
-  return `${p.toFixed(1).replace(".", ",")}%`;
 }
 
 /** Taxa configurada na versão: 12 -> "12%", 19.53 -> "19,53%". */
@@ -97,11 +67,9 @@ function LinhaValor({
 
 
 export function JobTotaisCard({
-  grupos,
   itens,
   realizadosMap,
   bvsPorItem,
-  visao,
   jobAberto,
   percentualHonorarios,
   percentualImposto,
@@ -133,56 +101,6 @@ export function JobTotaisCard({
   );
   const totais = somarBlocosDosItens([...blocosPorItem.values()]);
 
-  const totalPlanejado = valorNaVisao(totais.planejado, visao);
-  const totalRealizado = valorNaVisao(totais.realizado, visao);
-
-  // Agrupamentos por grupo — reusa a mesma funcao usada na pagina de projeto,
-  // garantindo que visao individual e visao agregada calculam da mesma forma.
-  const jobParaAgregar: JobParaAgregar = {
-    grupos: grupos.map((g) => ({
-      id: g.id,
-      nome: g.nome,
-      created_at: g.created_at,
-    })),
-    // Os totais entregues ao agregador já vêm na VISTA ativa: o
-    // agrupamento do card não pode contar um BV que a linha da planilha
-    // acabou de descontar.
-    itens: itens.map((i) => {
-      const b = blocosPorItem.get(i.id);
-      return {
-        id: i.id,
-        grupo_id: i.grupo_id,
-        total_orcado: b?.orcado ?? 0,
-        total_planejado: b ? valorNaVisao(b.planejado, visao) : 0,
-      };
-    }),
-    realizadosPorItemId: new Map(
-      itens.map((i) => [
-        i.id,
-        {
-          total_realizado: blocosPorItem.get(i.id)
-            ? valorNaVisao(blocosPorItem.get(i.id)!.realizado, visao)
-            : 0,
-        },
-      ]),
-    ),
-  };
-  const { linhas: linhasAgregadas } = agregarRentabilidadePorProjeto(
-    [jobParaAgregar],
-    "primeiroEncontro",
-  );
-  const linhas = linhasAgregadas.map((l) => ({
-    id: l.chaveNormalizada,
-    nome: l.nomeExibicao,
-    orcado: l.orcado,
-    planejado: l.planejado,
-    realizado: l.realizado,
-  }));
-
-  // Sem realizado lancado o rodape mostra travessao em vez de zero — a conta
-  // do resultado em si mora no PainelResultado.
-  const temRealizado = totalRealizado > 0;
-
   return (
     <div className="rounded-2xl border border-border bg-card shadow-soft">
       <div className="flex items-center gap-3 border-b border-border p-6">
@@ -198,193 +116,7 @@ export function JobTotaisCard({
         </div>
       </div>
 
-      <div className="overflow-x-auto">
-        {/* Mesma grade dos cards de agrupamento acima: as colunas Total
-            de Orçado, Planejado e Realizado caem exatamente sob as de lá. */}
-        <table
-          className={cn(
-            "w-full table-fixed border-collapse text-sm",
-            LARGURA_MINIMA_JOB,
-          )}
-        >
-          <ColunasJob />
-          <thead>
-            <tr>
-              <th colSpan={3} className="bg-muted/40 border-b border-border" />
-              <th colSpan={4} className={cn(FAIXA_ROTULO, ORCADO.faixa)}>
-                ORÇADO
-              </th>
-              <th colSpan={4} className={cn(FAIXA_ROTULO, PLANEJADO.faixa)}>
-                PLANEJADO
-              </th>
-              <th colSpan={4} className={cn(FAIXA_ROTULO, REALIZADO.faixa)}>
-                REALIZADO
-              </th>
-            </tr>
-            <tr className="bg-muted/40">
-              <th
-                colSpan={3}
-                className="text-left px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"
-              >
-                Agrupamento
-              </th>
-              <th colSpan={3} className={ORCADO.cabecalhoAbre} />
-              <th
-                className={cn(
-                  "text-right px-3 py-2 text-[10px] font-semibold uppercase tracking-wider",
-                  ORCADO.cabecalhoFim,
-                )}
-              >
-                Total
-              </th>
-              <th colSpan={3} className={PLANEJADO.cabecalhoAbre} />
-              <th
-                className={cn(
-                  "text-right px-3 py-2 text-[10px] font-semibold uppercase tracking-wider",
-                  PLANEJADO.cabecalhoFim,
-                )}
-              >
-                {rotuloColunaTotal(visao)}
-              </th>
-              <th colSpan={3} className={REALIZADO.cabecalhoAbre} />
-              <th
-                className={cn(
-                  "text-right px-3 py-2 text-[10px] font-semibold uppercase tracking-wider",
-                  REALIZADO.cabecalhoFim,
-                )}
-              >
-                {rotuloColunaTotal(visao)}
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {linhas.map((l) => (
-              <tr key={l.id} className="border-b border-border">
-                <td colSpan={3} className="px-3 py-3 text-sm">
-                  {l.nome}
-                </td>
-                <td colSpan={3} className={ORCADO.celulaVazia} />
-                <td
-                  className={cn(
-                    "px-3 py-3 text-right whitespace-nowrap font-mono text-[13px]",
-                    ORCADO.celulaTotal,
-                  )}
-                >
-                  {formatCurrency(l.orcado, moeda)}
-                </td>
-                <td
-                  colSpan={3}
-                  className={cn("overflow-hidden px-3 py-3 text-right", PLANEJADO.celulaVazia)}
-                >
-                  <RentabilidadeNoVao
-                    orcado={l.orcado}
-                    custo={l.planejado}
-                    moeda={moeda}
-                    corRotulo={PLANEJADO.textoSuave}
-                  />
-                </td>
-                <td
-                  className={cn(
-                    "px-3 py-3 text-right whitespace-nowrap font-mono text-[13px]",
-                    PLANEJADO.celulaTotal,
-                  )}
-                >
-                  {l.planejado > 0 ? formatCurrency(l.planejado, moeda) : "—"}
-                </td>
-                <td
-                  colSpan={3}
-                  className={cn("overflow-hidden px-3 py-3 text-right", REALIZADO.celulaVazia)}
-                >
-                  <RentabilidadeNoVao
-                    orcado={l.orcado}
-                    custo={l.realizado}
-                    moeda={moeda}
-                    corRotulo={REALIZADO.textoSuave}
-                  />
-                </td>
-                <td
-                  className={cn(
-                    "px-3 py-3 text-right whitespace-nowrap font-mono text-[13px]",
-                    REALIZADO.celulaTotal,
-                  )}
-                >
-                  {l.realizado > 0 ? formatCurrency(l.realizado, moeda) : "—"}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-          <tfoot>
-            <tr>
-              <td
-                colSpan={3}
-                className="px-3 py-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground border-t border-t-border"
-              >
-                Total dos custos
-              </td>
-              <td colSpan={3} className={ORCADO.subtotalVazio} />
-              <td className={cn("px-3 py-3 text-right whitespace-nowrap font-mono text-[13px] font-bold", ORCADO.subtotalValor)}>
-                {formatCurrency(subtotalGeral, moeda)}
-              </td>
-              <td
-                colSpan={3}
-                className={cn("overflow-hidden px-3 py-3 text-right", PLANEJADO.subtotalVazio)}
-              >
-                <RentabilidadeNoVao
-                  orcado={subtotalGeral}
-                  custo={totalPlanejado}
-                  moeda={moeda}
-                  corRotulo={PLANEJADO.textoSuave}
-                />
-              </td>
-              <td className={cn("px-3 py-3 text-right whitespace-nowrap", PLANEJADO.subtotalValor)}>
-                <div className="flex flex-col items-end">
-                  <span className="font-mono text-[13px] font-bold">
-                    {totais.planejado.bruto > 0
-                      ? formatCurrency(totalPlanejado, moeda)
-                      : "—"}
-                  </span>
-                  {visao === "liquido" && (
-                    <SubLinhaBv
-                      deducao={totais.planejado.deducaoBv}
-                      formatar={(v) => formatCurrency(v, moeda)}
-                      cor={PLANEJADO.texto}
-                      corRotulo={PLANEJADO.textoSuave}
-                    />
-                  )}
-                </div>
-              </td>
-              <td
-                colSpan={3}
-                className={cn("overflow-hidden px-3 py-3 text-right", REALIZADO.subtotalVazio)}
-              >
-                <RentabilidadeNoVao
-                  orcado={subtotalGeral}
-                  custo={totalRealizado}
-                  moeda={moeda}
-                  corRotulo={REALIZADO.textoSuave}
-                />
-              </td>
-              <td className={cn("px-3 py-3 text-right whitespace-nowrap", REALIZADO.subtotalValor)}>
-                <div className="flex flex-col items-end">
-                  <span className="font-mono text-[13px] font-bold">
-                    {temRealizado ? formatCurrency(totalRealizado, moeda) : "—"}
-                  </span>
-                  {visao === "liquido" && (
-                    <SubLinhaBv
-                      deducao={totais.realizado.deducaoBv}
-                      formatar={(v) => formatCurrency(v, moeda)}
-                      cor={REALIZADO.texto}
-                      corRotulo={REALIZADO.textoSuave}
-                    />
-                  )}
-                </div>
-              </td>
-            </tr>
-          </tfoot>
-        </table>
-      </div>
-
-      <div className="grid grid-cols-1 border-t border-border md:grid-cols-2">
+      <div className="grid grid-cols-1 md:grid-cols-2">
         <div className="border-b border-border p-6 md:border-b-0 md:border-r">
           <p className="mb-3.5 text-[13px] font-bold uppercase tracking-wider">
             Fechamento do orçado · por tipo de custo
