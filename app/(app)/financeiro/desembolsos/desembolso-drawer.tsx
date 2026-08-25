@@ -25,16 +25,7 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { createClient } from "@/lib/supabase/client";
 import { criarDesembolso } from "./actions";
 import type { RateioLinhaInput } from "@/lib/types";
-import {
-  FormaPagamentoField,
-  type CartaoOption,
-  type FormaPagamentoValue,
-} from "@/components/financeiro/forma-pagamento-field";
 import { RateioRegionalEditor } from "@/app/(app)/financeiro/contas-a-pagar/rateio-regional-editor";
-import {
-  parcelasParaFatura,
-  formatarISO,
-} from "@/lib/cartoes/proxima-fatura";
 
 // ---------------------------------------------------------------------------
 // Constantes
@@ -64,7 +55,6 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   tenantId: string;
-  cartoes: CartaoOption[];
   empresas: Array<{ id: string; nome: string }>;
   fornecedores: Array<{ id: string; nome: string }>;
   clientes: Array<{ id: string; nome: string }>;
@@ -127,7 +117,6 @@ export function DesembolsoDrawer({
   open,
   onOpenChange,
   tenantId,
-  cartoes,
   empresas,
   fornecedores,
   clientes,
@@ -145,10 +134,6 @@ export function DesembolsoDrawer({
   // Campos do formulário
   const [empresaId, setEmpresaId] = React.useState("");
   const [descricao, setDescricao] = React.useState("");
-  const [formaPagamento, setFormaPagamento] = React.useState<FormaPagamentoValue>({
-    forma_pagamento: null,
-    cartao_credito_id: null,
-  });
   const [fornecedorId, setFornecedorId] = React.useState<string>("__none__");
   const [clienteId, setClienteId] = React.useState<string>("__none__");
   const [jobId, setJobId] = React.useState<string>("__none__");
@@ -169,7 +154,6 @@ export function DesembolsoDrawer({
     setSuccessMsg(null);
     setEmpresaId("");
     setDescricao("");
-    setFormaPagamento({ forma_pagamento: null, cartao_credito_id: null });
     setFornecedorId("__none__");
     setClienteId("__none__");
     setJobId("__none__");
@@ -186,10 +170,6 @@ export function DesembolsoDrawer({
   // ---------------------------------------------------------------------------
   // Derivados
   // ---------------------------------------------------------------------------
-
-  const isCartao =
-    formaPagamento.forma_pagamento === "cartao_credito" &&
-    !!formaPagamento.cartao_credito_id;
 
   const valorNum = parseNumero(valor);
   const numParcelasNum = Math.max(1, Math.min(36, Math.floor(Number(numParcelas) || 1)));
@@ -230,38 +210,12 @@ export function DesembolsoDrawer({
     }));
   }
 
-  function montarParcelasCartao(
-    cartao: CartaoOption,
-    n: number,
-    total: number,
-  ): ParcelaLocal[] {
-    const datas = parcelasParaFatura(cartao.dia_vencimento_fatura, new Date(), n);
-    const valores = dividirEmParcelas(total, n);
-    return datas.map((d, i) => ({
-      numero: i + 1,
-      data_vencimento: formatarISO(d),
-      valor: valores[i].toFixed(2),
-    }));
-  }
-
   function handleNumParcelasChange(bruto: string) {
     setNumParcelas(bruto);
     const n = Math.max(1, Math.min(36, Math.floor(Number(bruto) || 1)));
     if (n <= 1) {
       setParcelas([]);
       return;
-    }
-    if (
-      formaPagamento.forma_pagamento === "cartao_credito" &&
-      formaPagamento.cartao_credito_id
-    ) {
-      const cartao = cartoes.find(
-        (c) => c.id === formaPagamento.cartao_credito_id,
-      );
-      if (cartao) {
-        setParcelas(montarParcelasCartao(cartao, n, valorNum));
-        return;
-      }
     }
     setParcelas(montarParcelasEscada(n, dataPrevista, valorNum, parcelas));
   }
@@ -271,31 +225,6 @@ export function DesembolsoDrawer({
     setDataPrevista(iso);
     if (parcelas.length > 1) {
       setParcelas(montarParcelasEscada(parcelas.length, iso, valorNum, []));
-    }
-  }
-
-  // ---------------------------------------------------------------------------
-  // Handler FormaPagamentoField
-  // ---------------------------------------------------------------------------
-
-  function handleFormaPagamentoChange(
-    v: FormaPagamentoValue,
-    opts?: { dataPagamentoSugerida?: string },
-  ) {
-    setFormaPagamento(v);
-
-    if (v.forma_pagamento !== "cartao_credito" || !v.cartao_credito_id) return;
-
-    const cartao = cartoes.find((c) => c.id === v.cartao_credito_id);
-    if (!cartao) return;
-
-    const n = numParcelasNum;
-    if (n > 1) {
-      // Recalcula datas das parcelas com a fatura do cartão
-      setParcelas(montarParcelasCartao(cartao, n, valorNum));
-    } else if (opts?.dataPagamentoSugerida) {
-      setDataPrevista(opts.dataPagamentoSugerida);
-      setDrawerKey((k) => k + 1);
     }
   }
 
@@ -394,10 +323,6 @@ export function DesembolsoDrawer({
       setError("Selecione a empresa.");
       return;
     }
-    if (!formaPagamento.forma_pagamento) {
-      setError("Selecione a forma de pagamento.");
-      return;
-    }
     if (!rateioValido) {
       setError("O rateio de regional deve somar exatamente 100%.");
       return;
@@ -415,12 +340,10 @@ export function DesembolsoDrawer({
       empresa_id: empresaId,
       descricao: descricao.trim(),
       valor,
-      forma_pagamento: formaPagamento.forma_pagamento,
-      cartao_credito_id: formaPagamento.cartao_credito_id,
       fornecedor_id: fornecedorId === "__none__" ? null : fornecedorId,
       cliente_id: clienteId === "__none__" ? null : clienteId,
       job_id: jobId === "__none__" ? null : jobId,
-      data_prevista_pagamento: isCartao ? null : dataPrevista || null,
+      data_prevista_pagamento: dataPrevista || null,
       rateio,
       parcelas: parcelasParaEnvio(),
       anexos,
@@ -496,16 +419,7 @@ export function DesembolsoDrawer({
               </p>
             </div>
 
-            {/* ── 3. Forma de pagamento ────────────────────────────── */}
-            <FormaPagamentoField
-              cartoes={cartoes}
-              value={formaPagamento}
-              onChange={handleFormaPagamentoChange}
-              disabled={pending}
-              obrigatorio
-            />
-
-            {/* ── 4. Fornecedor / Cliente / Job ────────────────────── */}
+            {/* ── 3. Fornecedor / Cliente / Job ────────────────────── */}
             <div className="space-y-4">
               <div className="space-y-2">
                 <Label>Fornecedor</Label>
@@ -581,9 +495,7 @@ export function DesembolsoDrawer({
               {parcelas.length > 1 && (
                 <div className="rounded-lg border border-border bg-muted/20 p-3 space-y-2">
                   <p className="text-[11px] text-muted-foreground">
-                    {isCartao
-                      ? "Datas auto-preenchidas pela fatura do cartão. Valores divididos igualmente — ambos editáveis."
-                      : "Vencimentos sugeridos de mês em mês e valores divididos igualmente — ambos editáveis."}
+                    Vencimentos sugeridos de mês em mês e valores divididos igualmente — ambos editáveis.
                   </p>
                   {parcelas.map((p, i) => (
                     <div
@@ -597,7 +509,7 @@ export function DesembolsoDrawer({
                         key={`parcela-${drawerKey}-${i}`}
                         name={`parcela_${i}_vencimento`}
                         defaultValue={p.data_vencimento}
-                        disabled={i === 0 && !isCartao}
+                        disabled={i === 0}
                         onDateChange={(date) =>
                           setParcelas((prev) =>
                             prev.map((q, j) =>
@@ -659,19 +571,13 @@ export function DesembolsoDrawer({
             {/* ── 8. Data prevista ─────────────────────────────────── */}
             <div className="space-y-2">
               <Label>Data prevista de pagamento</Label>
-              {isCartao ? (
-                <p className="text-sm text-muted-foreground rounded-lg border border-border bg-muted/30 px-3 py-2">
-                  Auto: definida pela fatura do cartão (não editável para cartão).
-                </p>
-              ) : (
-                <DatePicker
-                  key={`data-prevista-${drawerKey}`}
-                  name="data_prevista_pagamento"
-                  defaultValue={dataPrevista}
-                  placeholder="Selecione a data (opcional)"
-                  onDateChange={handleDataPrevistaChange}
-                />
-              )}
+              <DatePicker
+                key={`data-prevista-${drawerKey}`}
+                name="data_prevista_pagamento"
+                defaultValue={dataPrevista}
+                placeholder="Selecione a data (opcional)"
+                onDateChange={handleDataPrevistaChange}
+              />
             </div>
 
             {/* ── 9. Anexos ────────────────────────────────────────── */}
