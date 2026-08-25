@@ -70,8 +70,6 @@ const dataSchema = z
  *  digitação, não parcelamento. Vale contra payload sem fim. */
 const MAX_PARCELAS = 36;
 
-const formaPagamentoEnumZ = z.enum(["pix", "transferencia", "boleto", "cartao_credito"]);
-
 const dadosBaseSchema = z.object({
   fornecedor_id: z.string().uuid(),
   empresa_id: z.string().uuid(),
@@ -90,49 +88,15 @@ const dadosBaseSchema = z.object({
     .array(z.object({ data_vencimento: dataSchema, valor: z.number().positive() }))
     .min(1, "Informe ao menos uma parcela.")
     .max(MAX_PARCELAS, `No máximo ${MAX_PARCELAS} parcelas.`),
-  // Forma de pagamento — obrigatória, sem default.
-  forma_pagamento: formaPagamentoEnumZ,
-  // UUID do cartão selecionado; obrigatório quando forma = cartao_credito.
-  cartao_credito_id: z.string().uuid().nullable().optional(),
 });
 
-/** O reenvio corrige a PP mas não redefine o parcelamento nem a forma de
- *  pagamento: quem quiser mudar a forma cancela e emite nova PP. */
+/** O reenvio corrige a PP mas não redefine o parcelamento:
+ *  quem quiser mudar os vencimentos cancela e emite nova PP. */
 const dadosReenvioSchema = dadosBaseSchema.omit({
   parcelas: true,
-  forma_pagamento: true,
-  cartao_credito_id: true,
 });
 
-const dadosSchema = dadosBaseSchema.superRefine((val, ctx) => {
-  if (val.forma_pagamento === "cartao_credito") {
-    if (!val.cartao_credito_id) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["cartao_credito_id"],
-        message: "Selecione o cartão de crédito.",
-      });
-    }
-    const hoje = new Date().toISOString().slice(0, 10);
-    for (let i = 0; i < val.parcelas.length; i++) {
-      if (val.parcelas[i].data_vencimento < hoje) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ["parcelas", i, "data_vencimento"],
-          message: "Data da parcela não pode ser anterior a hoje.",
-        });
-      }
-    }
-  } else {
-    if (val.cartao_credito_id) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["cartao_credito_id"],
-        message: "Cartão só é aceito quando a forma de pagamento é Cartão de Crédito.",
-      });
-    }
-  }
-});
+const dadosSchema = dadosBaseSchema;
 
 const anexoUploadedSchema = z.object({
   anexo_id: z.string().uuid(),
@@ -523,8 +487,6 @@ async function finalizarPedidoCompraImpl(
   }
 
   // Usa as datas validadas pelo Zod; não sobrescreve o que o user editou.
-  // O validador superRefine garante que cada parcela tem data_vencimento >= hoje
-  // quando a forma é cartão de crédito.
   const parcelasFinais = d.parcelas;
 
   // INSERT pedidos_compra (pdf_path = '' placeholder)
@@ -545,8 +507,6 @@ async function finalizarPedidoCompraImpl(
     prazo_pagamento: parcelasFinais[0].data_vencimento,
     pdf_path: "",
     emitida_por: session.profile.id,
-    forma_pagamento: d.forma_pagamento,
-    cartao_credito_id: d.cartao_credito_id ?? null,
   });
 
   if (insertErr) {
@@ -581,8 +541,6 @@ async function finalizarPedidoCompraImpl(
   // INSERT parcelas bulk (uma só ida ao banco, regra de PERFORMANCE.md).
   // PP sem parcelamento grava 1 parcela 1/1: nenhuma PP fica sem parcela,
   // e por isso as listas e o PDF tratam os dois casos do mesmo jeito.
-  // Usa `parcelasFinais`, que já tem as datas recalculadas pelo cartão
-  // quando a forma é cartao_credito.
   const { data: parcelasCriadas, error: parcelasErr } = await supabase
     .from("pedidos_compra_parcelas")
     .insert(
@@ -830,8 +788,6 @@ async function finalizarPedidoCompraImpl(
       fornecedor_id: d.fornecedor_id,
       item_realizado_id: itemRealizadoId,
       job_id: job.id,
-      forma_pagamento: d.forma_pagamento,
-      cartao_credito_id: d.cartao_credito_id ?? null,
     },
   });
 

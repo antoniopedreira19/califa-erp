@@ -128,7 +128,6 @@ export function PlanilhaConferencia({
           jobResponsavelId={jobResponsavelId}
           bvsPorItem={bvsPorItem}
           versaoLabel={versaoLabel}
-          cartoes={[]}
         />
       </div>
 
