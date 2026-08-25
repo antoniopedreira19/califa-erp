@@ -51,7 +51,6 @@ export default async function PedidosCompraFinanceiroPage() {
         prazo_pagamento, prazo_pagamento_financeiro, pdf_path, created_at,
         cancelada_em, motivo_cancelamento,
         rejeitada_em, motivo_rejeicao, pago_em,
-        forma_pagamento, cartao_credito_id,
         fornecedor:fornecedores(id, nome, razao_social),
         empresa:empresas(id, razao_social, nome_fantasia),
         cancelada_por_profile:profiles!cancelada_por(nome),
@@ -195,7 +194,7 @@ export default async function PedidosCompraFinanceiroPage() {
     supabase
       .from("desembolsos")
       .select(`
-        id, codigo, descricao, valor, status, forma_pagamento, cartao_credito_id,
+        id, codigo, descricao, valor, status,
         data_prevista_pagamento, motivo_rejeicao, motivo_cancelamento,
         aprovada_em, rejeitada_em, cancelada_em, pago_em, created_at,
         empresa:empresas(id, razao_social, nome_fantasia),
@@ -209,7 +208,7 @@ export default async function PedidosCompraFinanceiroPage() {
     supabase
       .from("desembolsos")
       .select(`
-        id, codigo, descricao, status, forma_pagamento, cartao_credito_id,
+        id, codigo, descricao, status,
         empresa_id,
         fornecedor:fornecedores(nome, razao_social),
         job:jobs(codigo),
@@ -248,8 +247,6 @@ export default async function PedidosCompraFinanceiroPage() {
     rejeitada_em: string | null;
     motivo_rejeicao: string | null;
     pago_em: string | null;
-    forma_pagamento: FormaPagamento | null;
-    cartao_credito_id: string | null;
     fornecedor: { id: string; nome: string; razao_social: string | null } | null;
     empresa: { id: string; razao_social: string; nome_fantasia: string | null } | null;
     cancelada_por_profile: { nome: string } | null;
@@ -311,8 +308,8 @@ export default async function PedidosCompraFinanceiroPage() {
     cliente_nome: r.job?.projeto?.cliente?.nome_fantasia ?? null,
     cancelada_por_nome: r.cancelada_por_profile?.nome ?? null,
     emitida_por_nome: r.emitida_por_profile?.nome ?? null,
-    forma_pagamento: r.forma_pagamento,
-    cartao_credito_id: r.cartao_credito_id,
+    forma_pagamento: null,
+    cartao_credito_id: null,
     anexos: r.anexos ?? [],
     // Ordenadas aqui: o embed do PostgREST não garante ordem, e a lista
     // e o drawer mostram "1/3, 2/3, 3/3" na sequência.
@@ -479,8 +476,6 @@ export default async function PedidosCompraFinanceiroPage() {
     codigo: string;
     descricao: string;
     status: "aprovada" | "pago";
-    forma_pagamento: FormaPagamento | null;
-    cartao_credito_id: string | null;
     empresa_id: string;
     fornecedor: { nome: string | null; razao_social: string | null } | null;
     job: { codigo: string } | null;
@@ -634,8 +629,6 @@ export default async function PedidosCompraFinanceiroPage() {
       descricao: string;
       valor: string | number;
       status: DesembolsoStatus;
-      forma_pagamento: FormaPagamento | null;
-      cartao_credito_id: string | null;
       data_prevista_pagamento: string | null;
       motivo_rejeicao: string | null;
       motivo_cancelamento: string | null;
@@ -654,8 +647,6 @@ export default async function PedidosCompraFinanceiroPage() {
     descricao: d.descricao,
     valor: Number(d.valor),
     status: d.status,
-    forma_pagamento: d.forma_pagamento,
-    cartao_credito_id: d.cartao_credito_id,
     data_prevista_pagamento: d.data_prevista_pagamento,
     motivo_rejeicao: d.motivo_rejeicao,
     motivo_cancelamento: d.motivo_cancelamento,
