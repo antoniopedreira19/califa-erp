@@ -501,17 +501,20 @@ export default async function PedidosCompraFinanceiroPage() {
     }
   }
 
-  // Títulos de cartão de crédito pendentes — alimentam a 5ª aba.
+  // Aba "Cartão" — TODOS os títulos de cartão (a pagar + pagos). O filtro
+  // de status é interno na lista, padrão "a pagar".
   const titulosCartao = titulos.filter(
-    (t) => t.forma_pagamento === "cartao_credito" && t.status === "a_pagar",
+    (t) => t.forma_pagamento === "cartao_credito",
   );
-  const titulosCartaoCount = titulosCartao.length;
+  // Badge da aba: só os "a pagar" (o padrão do filtro).
+  const titulosCartaoCount = titulosCartao.filter((t) => t.status === "a_pagar").length;
 
-  // Aba comum "Títulos a Pagar" exclui cartões pendentes (eles têm aba própria).
-  // Cartões PAGOS permanecem em "Títulos Pagos" (status "pago" não é filtrado aqui).
-  const titulosAPagarCount = titulos.filter(
-    (t) => t.status === "a_pagar" && t.forma_pagamento !== "cartao_credito",
-  ).length;
+  // Aba "Títulos a Pagar" — TODOS os não-cartão (a pagar + pagos). Filtro
+  // de status também é interno, padrão "a pagar".
+  const titulosNaoCartao = titulos.filter(
+    (t) => t.forma_pagamento !== "cartao_credito",
+  );
+  const titulosAPagarCount = titulosNaoCartao.filter((t) => t.status === "a_pagar").length;
 
   // Mapeamento das recorrências para RecorrenteRow
   const recorrentesRows: RecorrenteRow[] = ((recorrentesRes.data ?? []) as unknown as Array<{
@@ -690,15 +693,8 @@ export default async function PedidosCompraFinanceiroPage() {
         desembolsos={<DesembolsosContasPagarList rows={desembolsosRows} />}
         desembolsosPendentesCount={desembolsosPendentesCount}
         titulos={
-          // Aba comum exclui cartões pendentes (eles têm aba própria).
-          // `t.status !== "a_pagar"` preserva cartões pagos para o modo "pagos"
-          // do mesmo componente — mas aqui só modo "a_pagar" recebe os rows
-          // filtrados; a aba de pagos usa rows sem filtro (veja titulosPagos abaixo).
           <TitulosPagarList
-            rows={titulos.filter(
-              (t) => t.status !== "a_pagar" || t.forma_pagamento !== "cartao_credito",
-            )}
-            modo="a_pagar"
+            rows={titulosNaoCartao}
             tenantId={session.activeTenant.id}
             contas={contasRes.data ?? []}
             tipos={tiposRes.data ?? []}
@@ -737,23 +733,6 @@ export default async function PedidosCompraFinanceiroPage() {
           />
         }
         titulosCartaoCount={titulosCartaoCount}
-        titulosPagos={
-          // "Títulos Pagos" recebe todos os rows (cartões pagos aparecem aqui).
-          <TitulosPagarList
-            rows={titulos}
-            modo="pagos"
-            tenantId={session.activeTenant.id}
-            contas={contasRes.data ?? []}
-            tipos={tiposRes.data ?? []}
-            subtipos={subtiposRes.data ?? []}
-            empresas={empresasList}
-            fornecedores={fornecedoresList}
-            clientes={clientesList}
-            jobs={jobsList}
-            regionais={regionaisList}
-            cartoes={cartoesList}
-          />
-        }
       />
     </div>
   );
