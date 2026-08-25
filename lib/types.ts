@@ -978,8 +978,6 @@ export interface PedidoCompra {
   rejeitada_por: string | null;
   rejeitada_em: string | null;
   motivo_rejeicao: string | null;
-  forma_pagamento: FormaPagamento | null;
-  cartao_credito_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -1720,8 +1718,6 @@ export interface Desembolso {
   empresa_id: string;
   descricao: string;
   valor: string; // numeric → string
-  forma_pagamento: FormaPagamento | null;
-  cartao_credito_id: string | null;
   status: DesembolsoStatus;
   fornecedor_id: string | null;
   cliente_id: string | null;
