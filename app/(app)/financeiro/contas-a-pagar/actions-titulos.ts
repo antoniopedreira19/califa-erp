@@ -194,17 +194,41 @@ export async function aprovarPPComData(input: unknown): Promise<Result> {
 // Dar baixa num título
 // ---------------------------------------------------------------------
 
-const baixaSchema = z.object({
-  origem: origemSchema,
-  /** Id da parcela (origem `pp`) ou da conta avulsa (demais origens). */
-  id: z.string().uuid(),
-  pago_em: dataSchema,
-  conta_bancaria_id: z.string().uuid("Selecione a conta que realizará o pagamento."),
-  plano_conta_tipo_id: z.string().uuid("Selecione o centro de custo do pagamento."),
-  plano_conta_subtipo_id: z
-    .string()
-    .uuid("Selecione o centro de custo do pagamento."),
-});
+const baixaSchema = z
+  .object({
+    origem: origemSchema,
+    /** Id da parcela (origem `pp`) ou da conta avulsa (demais origens). */
+    id: z.string().uuid(),
+    pago_em: dataSchema,
+    conta_bancaria_id: z.string().uuid("Selecione a conta que realizará o pagamento."),
+    plano_conta_tipo_id: z.string().uuid("Selecione o centro de custo do pagamento."),
+    plano_conta_subtipo_id: z
+      .string()
+      .uuid("Selecione o centro de custo do pagamento."),
+    forma_pagamento: z.enum(["pix", "transferencia", "boleto", "cartao_credito"], {
+      required_error: "Selecione a forma de pagamento.",
+    }),
+    cartao_credito_id: z
+      .string()
+      .uuid()
+      .nullable()
+      .or(z.literal("").transform(() => null)),
+  })
+  .superRefine((data, ctx) => {
+    if (data.forma_pagamento === "cartao_credito" && !data.cartao_credito_id) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Selecione o cartão de crédito.",
+        path: ["cartao_credito_id"],
+      });
+    } else if (data.forma_pagamento !== "cartao_credito" && data.cartao_credito_id) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Cartão só pode ser informado quando a forma é cartão de crédito.",
+        path: ["cartao_credito_id"],
+      });
+    }
+  });
 
 /**
  * Baixa um título e o envia para a conciliação.
@@ -269,6 +293,8 @@ export async function darBaixaTitulo(input: unknown): Promise<Result> {
       p_plano_conta_tipo_id: d.plano_conta_tipo_id,
       p_plano_conta_subtipo_id: d.plano_conta_subtipo_id,
       p_criado_por: session.profile.id,
+      p_forma_pagamento: d.forma_pagamento,
+      p_cartao_credito_id: d.cartao_credito_id,
     });
     if (error) {
       console.error("[titulos.baixa.pp]", error.message);
@@ -289,6 +315,8 @@ export async function darBaixaTitulo(input: unknown): Promise<Result> {
         job_id: parcela.pedido.job_id,
         conta_bancaria_id: d.conta_bancaria_id,
         lancamento_id: lancId,
+        forma_pagamento: d.forma_pagamento,
+        cartao_credito_id: d.cartao_credito_id,
       },
     });
 
@@ -325,6 +353,8 @@ export async function darBaixaTitulo(input: unknown): Promise<Result> {
       p_plano_conta_tipo_id: d.plano_conta_tipo_id,
       p_plano_conta_subtipo_id: d.plano_conta_subtipo_id,
       p_criado_por: session.profile.id,
+      p_forma_pagamento: d.forma_pagamento,
+      p_cartao_credito_id: d.cartao_credito_id,
     });
     if (error) {
       console.error("[titulos.baixa.desembolso]", error.message);
@@ -344,6 +374,8 @@ export async function darBaixaTitulo(input: unknown): Promise<Result> {
         pago_em: d.pago_em,
         conta_bancaria_id: d.conta_bancaria_id,
         lancamento_id: lancId,
+        forma_pagamento: d.forma_pagamento,
+        cartao_credito_id: d.cartao_credito_id,
       },
     });
 
@@ -372,6 +404,8 @@ export async function darBaixaTitulo(input: unknown): Promise<Result> {
     p_conta_bancaria_id: d.conta_bancaria_id,
     p_plano_conta_tipo_id: d.plano_conta_tipo_id,
     p_plano_conta_subtipo_id: d.plano_conta_subtipo_id,
+    p_forma_pagamento: d.forma_pagamento,
+    p_cartao_credito_id: d.cartao_credito_id,
   });
   if (error) {
     console.error("[titulos.baixa.avulsa]", error.message);
@@ -390,6 +424,8 @@ export async function darBaixaTitulo(input: unknown): Promise<Result> {
       origem: avulsa.recorrente_id ? "recorrencia" : "avulso",
       conta_bancaria_id: d.conta_bancaria_id,
       lancamento_id: lancId,
+      forma_pagamento: d.forma_pagamento,
+      cartao_credito_id: d.cartao_credito_id,
     },
   });
 
