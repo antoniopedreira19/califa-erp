@@ -39,8 +39,8 @@ export interface PPRow {
   pdf_path: string;
   cancelada_por_nome: string | null;
   emitida_por_nome: string | null;
-  forma_pagamento: FormaPagamento | null;
-  cartao_credito_id: string | null;
+  forma_pagamento: FormaPagamento | null; // sempre null para PP (coluna dropada na Task 7; populada via baixa no TituloRow)
+  cartao_credito_id: string | null; // idem
   anexos: Array<{
     id: string;
     arquivo_nome_original: string;
