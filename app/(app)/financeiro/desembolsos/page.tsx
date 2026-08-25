@@ -13,12 +13,10 @@ export default async function DesembolsosPage() {
     session.activeRole === "administrador" || session.activeRole === "financeiro";
 
   // Base query — user comum vê só os seus
-  // forma_pagamento e cartao_credito_id ainda existem no banco (Task 7 remove);
-  // mantemos no SELECT para exibição de registros antigos na lista
   let query = supabase
     .from("desembolsos")
     .select(`
-      id, codigo, descricao, valor, status, forma_pagamento, cartao_credito_id,
+      id, codigo, descricao, valor, status,
       data_prevista_pagamento, criado_por, created_at,
       empresa:empresas(id, razao_social, nome_fantasia),
       fornecedor:fornecedores(id, nome, razao_social),
