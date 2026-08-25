@@ -6,6 +6,7 @@ import {
   faturamentoPorJob,
   FATURAMENTO_VAZIO,
 } from "@/lib/data/faturamento-por-job";
+import { caixaPorJob, CAIXA_VAZIO } from "@/lib/data/caixa-por-job";
 
 export type { SituacaoFaturamento };
 
@@ -41,7 +42,6 @@ export interface JobAberto {
   competencia_trimestre: number | null;
   competencia_ano: number | null;
   categoria_nome: string | null;
-  empresa_nome: string | null;
   projeto_id: string;
   projeto_codigo: string | null;
   projeto_nome: string | null;
@@ -72,16 +72,42 @@ export interface JobAberto {
   valor_recebido: number;
   /** Vencimento em aberto mais antigo. É o que datar a inadimplência. */
   vencimento_em_aberto: string | null;
+  /**
+   * Recebimentos e custos TOTAIS do job — as duas colunas que entraram
+   * em 24/08/2026 (design "Abertura de Job - Financeiro").
+   *
+   * O número é sempre a leitura mais atual: movimentado + título +
+   * previsão em aberto, somados de `vw_fluxo_caixa` sem contar em dobro
+   * (`lib/data/caixa-por-job`). O `_realizado` é o recorte do que já é
+   * dinheiro na conta — é dele que sai o "62% recebido" da segunda linha
+   * da célula.
+   *
+   * FALLBACK: job sem NENHUMA entrada no fluxo de caixa mostra o
+   * `faturamento_previsto` da abertura, e job sem nenhuma saída mostra o
+   * `custo_previsto_total` (decisão do Tiago, 24/08/2026). Sem isso a
+   * coluna Recebimentos nasceria zerada em 9 dos 13 jobs de hoje, que
+   * são anteriores à `jobs_previsao_recebimento` (17/08/2026) e nunca
+   * foram enviados para faturamento. `_do_previsto` marca esse caso para
+   * a célula dizer de onde veio o número.
+   */
+  recebimentos: number;
+  recebimentos_realizado: number;
+  recebimentos_do_previsto: boolean;
+  custos: number;
+  custos_realizado: number;
+  custos_do_previsto: boolean;
 }
 
 const SELECT_JOB_ABERTO =
   "id, codigo, nome, nome_financeiro, status, valor_total, faturamento_previsto, " +
+  // `custo_previsto_total` é o fallback da coluna Custos — job sem curva
+  // de desembolso mostra o que a abertura previu.
+  "custo_previsto_total, " +
   "data_abertura_financeiro, " +
   "competencia_trimestre, competencia_ano, projeto_id, produto, " +
   "projeto_financeiro_id, " +
   "projeto_financeiro:projetos_financeiro(codigo, nome), " +
   "categoria:categorias_dominio(nome), " +
-  "empresa:empresas(razao_social, nome_fantasia), " +
   "regional:regionais(nome), " +
   "responsavel:profiles!responsavel_id(nome), " +
   "projeto:projetos(codigo, nome, cliente:clientes(nome_fantasia))";
@@ -118,11 +144,12 @@ export async function listarJobsDoFinanceiro(
 ): Promise<JobAberto[]> {
   const supabase = createClient();
 
-  // Duas leituras independentes: os jobs e a esteira de faturamento do
-  // tenant inteiro. A esteira mora em `lib/data/faturamento-por-job` —
-  // a visão agregada do projeto usa a MESMA classificação, e duas cópias
-  // dela divergiriam na primeira nota cancelada.
-  const [jobsRes, esteira] = await Promise.all([
+  // Três leituras independentes: os jobs, a esteira de faturamento do
+  // tenant inteiro e os totais de caixa por job. A esteira mora em
+  // `lib/data/faturamento-por-job` — a visão agregada do projeto usa a
+  // MESMA classificação, e duas cópias dela divergiriam na primeira nota
+  // cancelada. Em paralelo, nunca em série (`docs/PERFORMANCE.md`).
+  const [jobsRes, esteira, caixa] = await Promise.all([
     supabase
       .from("jobs")
       .select(SELECT_JOB_ABERTO)
@@ -130,6 +157,7 @@ export async function listarJobsDoFinanceiro(
       .in("status", STATUS_NA_LISTA as unknown as string[])
       .order("codigo", { ascending: true }),
     faturamentoPorJob(tenantId, hoje),
+    caixaPorJob(tenantId),
   ]);
 
   const { data, error } = jobsRes;
@@ -141,6 +169,13 @@ export async function listarJobsDoFinanceiro(
 
   return ((data ?? []) as any[]).map((j) => {
     const fat = esteira.get(j.id) ?? FATURAMENTO_VAZIO;
+    const cx = caixa.get(j.id) ?? CAIXA_VAZIO;
+
+    // O fallback só entra quando o fluxo de caixa não tem NADA daquele
+    // lado — nem movimento, nem título, nem previsão. Com qualquer linha
+    // lá, quem manda é ela: é o número mais atual.
+    const semRecebimento = cx.recebimentos <= 0;
+    const semCusto = cx.custos <= 0;
 
     return {
       id: j.id,
@@ -153,7 +188,6 @@ export async function listarJobsDoFinanceiro(
       competencia_trimestre: j.competencia_trimestre,
       competencia_ano: j.competencia_ano,
       categoria_nome: j.categoria?.nome ?? null,
-      empresa_nome: j.empresa?.nome_fantasia ?? j.empresa?.razao_social ?? null,
       projeto_id: j.projeto_id,
       projeto_codigo: j.projeto?.codigo ?? null,
       projeto_nome: j.projeto?.nome ?? null,
@@ -175,6 +209,14 @@ export async function listarJobsDoFinanceiro(
       data_envio_faturamento: fat.data_envio,
       valor_recebido: fat.valor_recebido,
       vencimento_em_aberto: fat.vencimento_em_aberto,
+      recebimentos: semRecebimento
+        ? Number(j.faturamento_previsto ?? 0)
+        : cx.recebimentos,
+      recebimentos_realizado: cx.recebimentos_realizado,
+      recebimentos_do_previsto: semRecebimento,
+      custos: semCusto ? Number(j.custo_previsto_total ?? 0) : cx.custos,
+      custos_realizado: cx.custos_realizado,
+      custos_do_previsto: semCusto,
     };
   });
 }
