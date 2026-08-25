@@ -119,6 +119,7 @@ export default async function PedidosCompraFinanceiroPage() {
       .from("lancamentos_financeiros")
       .select(`
         pedido_compra_parcela_id, conta_avulsa_id, desembolso_parcela_id, data_movimento,
+        forma_pagamento, cartao_credito_id,
         conta:contas_bancarias(nome, banco),
         tipo:plano_contas_tipos(codigo),
         subtipo:plano_contas_subtipos(nome)
@@ -339,7 +340,13 @@ export default async function PedidosCompraFinanceiroPage() {
   //   • `contas_avulsas` → `avulso` ou `recorrencia`, conforme
   //     `recorrente_id` (a recorrência materializa ocorrências ali)
 
-  type BaixaInfo = { pago_em: string; conta: string; centro: string };
+  type BaixaInfo = {
+    pago_em: string;
+    conta: string;
+    centro: string;
+    forma_pagamento: FormaPagamento | null;
+    cartao_credito_id: string | null;
+  };
 
   const baixaPorParcela = new Map<string, BaixaInfo>();
   const baixaPorAvulsa = new Map<string, BaixaInfo>();
@@ -350,6 +357,8 @@ export default async function PedidosCompraFinanceiroPage() {
     conta_avulsa_id: string | null;
     desembolso_parcela_id: string | null;
     data_movimento: string;
+    forma_pagamento: FormaPagamento | null;
+    cartao_credito_id: string | null;
     conta: { nome: string | null; banco: string | null } | null;
     tipo: { codigo: string } | null;
     subtipo: { nome: string } | null;
@@ -363,6 +372,8 @@ export default async function PedidosCompraFinanceiroPage() {
         l.tipo?.codigo && l.subtipo?.nome
           ? `${l.tipo.codigo} · ${l.subtipo.nome}`
           : "—",
+      forma_pagamento: l.forma_pagamento,
+      cartao_credito_id: l.cartao_credito_id,
     };
     if (l.pedido_compra_parcela_id) baixaPorParcela.set(l.pedido_compra_parcela_id, info);
     if (l.conta_avulsa_id) baixaPorAvulsa.set(l.conta_avulsa_id, info);
@@ -399,9 +410,14 @@ export default async function PedidosCompraFinanceiroPage() {
         pago_em: par.pago_em,
         conta_nome: baixa?.conta ?? null,
         centro_nome: baixa?.centro ?? null,
-        // Parcelas herdam forma_pagamento/cartao_credito_id da PP-pai.
-        forma_pagamento: pp.forma_pagamento,
-        cartao_credito_id: pp.cartao_credito_id,
+        // Se paga, usa a forma registrada na baixa; senão, null (planejado
+        // não existe para PP — Task 7 vai remover a coluna da PP-pai).
+        forma_pagamento: par.pago_em
+          ? baixa?.forma_pagamento ?? null
+          : null,
+        cartao_credito_id: par.pago_em
+          ? baixa?.cartao_credito_id ?? null
+          : null,
       });
     }
   }
@@ -446,8 +462,14 @@ export default async function PedidosCompraFinanceiroPage() {
       pago_em: a.pago_em,
       conta_nome: baixa?.conta ?? null,
       centro_nome: baixa?.centro ?? null,
-      forma_pagamento: a.forma_pagamento,
-      cartao_credito_id: a.cartao_credito_id,
+      // Se paga, prefere a forma registrada na baixa (realizado); senão,
+      // usa a forma planejada da origem (avulsa/recorrência).
+      forma_pagamento: a.pago_em
+        ? baixa?.forma_pagamento ?? a.forma_pagamento
+        : a.forma_pagamento,
+      cartao_credito_id: a.pago_em
+        ? baixa?.cartao_credito_id ?? a.cartao_credito_id
+        : a.cartao_credito_id,
     });
   }
 
@@ -495,8 +517,15 @@ export default async function PedidosCompraFinanceiroPage() {
         pago_em: par.pago_em,
         conta_nome: baixa?.conta ?? null,
         centro_nome: baixa?.centro ?? null,
-        forma_pagamento: des.forma_pagamento,
-        cartao_credito_id: des.cartao_credito_id,
+        // Se paga, usa a forma registrada na baixa; senão, null (planejado
+        // não existe para desembolso-parcela — Task 7 vai remover a coluna
+        // do desembolso-pai).
+        forma_pagamento: par.pago_em
+          ? baixa?.forma_pagamento ?? null
+          : null,
+        cartao_credito_id: par.pago_em
+          ? baixa?.cartao_credito_id ?? null
+          : null,
       });
     }
   }
