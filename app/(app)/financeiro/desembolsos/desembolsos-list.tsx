@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { type DesembolsoStatus, desembolsoStatusLabel, type FormaPagamento, formaPagamentoLabel } from "@/lib/types";
+import { type DesembolsoStatus, desembolsoStatusLabel } from "@/lib/types";
 import { DesembolsoDrawer } from "./desembolso-drawer";
 
 // ---------------------------------------------------------------------------
@@ -18,8 +18,6 @@ export interface DesembolsoRow {
   descricao: string;
   valor: string;
   status: DesembolsoStatus;
-  forma_pagamento: FormaPagamento | null;
-  cartao_credito_id: string | null;
   data_prevista_pagamento: string | null;
   criado_por: string;
   created_at: string;
@@ -183,7 +181,6 @@ export function DesembolsosList({
                 <th className="px-3 py-2 text-left">Empresa</th>
                 <th className="px-3 py-2 text-left">Fornecedor</th>
                 <th className="px-3 py-2 text-right">Valor</th>
-                <th className="px-3 py-2 text-left">Forma</th>
                 <th className="px-3 py-2 text-left">Vencimento</th>
                 <th className="px-3 py-2 text-left">Status</th>
                 {isAdminOrFinanceiro && (
@@ -221,15 +218,6 @@ export function DesembolsosList({
                   </td>
                   <td className="px-3 py-2 text-right font-mono text-xs font-semibold">
                     {formatMoney(r.valor)}
-                  </td>
-                  <td className="px-3 py-2 text-xs">
-                    {r.forma_pagamento ? (
-                      <span className="inline-flex items-center rounded-full border border-border bg-muted/50 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-                        {formaPagamentoLabel(r.forma_pagamento)}
-                      </span>
-                    ) : (
-                      "—"
-                    )}
                   </td>
                   <td className="px-3 py-2 text-xs font-mono">
                     {formatDate(r.data_prevista_pagamento)}
