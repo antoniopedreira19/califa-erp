@@ -16,7 +16,6 @@ import type {
 } from "@/lib/types";
 import { CalhaLinha } from "./calha-linha";
 import { GerarPPDrawer } from "./gerar-pp-drawer";
-import type { CartaoOption } from "@/components/financeiro/forma-pagamento-field";
 import { PainelPPsItem } from "./painel-pps-item";
 import { saldoDoItem, somaDasPPs } from "@/lib/calculos/pps-item";
 import { BvDialog } from "@/app/(app)/_bv/bv-dialog";
@@ -102,8 +101,6 @@ interface Props {
   bvsPorItem: Record<string, ItemBv>;
   /** "v5" — aparece no subtítulo do formulário de BV. */
   versaoLabel: string;
-  /** Cartões de crédito ativos do tenant — buscados pelo server component pai. */
-  cartoes: CartaoOption[];
   /** BASE do rótulo do pé da tabela. A vista Líquido acrescenta o sufixo
    *  sozinha. Default: "Total da planilha". */
   rotuloTotal?: string;
@@ -170,7 +167,6 @@ export function JobItemRealizadoTable({
   jobResponsavelId: _jobResponsavelId,
   bvsPorItem,
   versaoLabel,
-  cartoes,
   rotuloTotal,
 }: Props) {
   // Rail lateral PP
@@ -858,7 +854,6 @@ export function JobItemRealizadoTable({
               valorOrcado={orcadoAtual}
               quantidadeOrcada={quantidadeOrcada}
               saldoDisponivel={saldo}
-              cartoes={cartoes}
               onSuccess={(codigo) => {
                 setToast(`Pedido de Produção ${codigo} gerado com sucesso!`);
                 // Estado otimista: o chip da calha já conta a PP nova antes
