@@ -722,6 +722,9 @@ export function TitulosPagarList({
         contas={contas}
         tipos={tipos}
         subtipos={subtipos}
+        cartoes={cartoes}
+        formaPlanejada={baixando?.forma_pagamento ?? null}
+        cartaoPlanejadoId={baixando?.cartao_credito_id ?? null}
         pending={pending}
         erro={erroAcao}
         onConfirm={(payload) => {

@@ -34,7 +34,12 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import { formatCurrency } from "@/lib/utils";
-import type { ContaBancaria, PlanoContaTipo, PlanoContaSubtipo } from "@/lib/types";
+import type { ContaBancaria, FormaPagamento, PlanoContaTipo, PlanoContaSubtipo } from "@/lib/types";
+import {
+  FormaPagamentoField,
+  type CartaoOption,
+  type FormaPagamentoValue,
+} from "@/components/financeiro/forma-pagamento-field";
 
 export interface BaixaTituloAlvo {
   titulo: string;
@@ -54,6 +59,9 @@ export function BaixaTituloDialog({
   contas,
   tipos,
   subtipos,
+  cartoes,
+  formaPlanejada,
+  cartaoPlanejadoId,
   pending,
   erro,
   onConfirm,
@@ -64,6 +72,12 @@ export function BaixaTituloDialog({
   contas: ContaBancaria[];
   tipos: PlanoContaTipo[];
   subtipos: PlanoContaSubtipo[];
+  /** Cartões de crédito disponíveis para o seletor de forma de pagamento. */
+  cartoes: CartaoOption[];
+  /** Forma de pagamento pré-definida (avulso/recorrência herdam da origem). */
+  formaPlanejada?: FormaPagamento | null;
+  /** Cartão pré-selecionado quando `formaPlanejada` é "cartao_credito". */
+  cartaoPlanejadoId?: string | null;
   pending: boolean;
   erro: string | null;
   onConfirm: (payload: {
@@ -71,6 +85,8 @@ export function BaixaTituloDialog({
     conta_bancaria_id: string;
     plano_conta_tipo_id: string;
     plano_conta_subtipo_id: string;
+    forma_pagamento: FormaPagamento;
+    cartao_credito_id: string | null;
   }) => void;
 }) {
   const [erroLocal, setErroLocal] = React.useState<string | null>(null);
@@ -78,9 +94,14 @@ export function BaixaTituloDialog({
   const [contaId, setContaId] = React.useState("");
   const [tipoId, setTipoId] = React.useState("");
   const [subtipoId, setSubtipoId] = React.useState("");
+  const [formaPagamento, setFormaPagamento] = React.useState<FormaPagamentoValue>({
+    forma_pagamento: null,
+    cartao_credito_id: null,
+  });
 
-  // Ao abrir: hoje como data, conta em branco (sem padrão, por decisão) e
-  // centro de custo sugerido pela origem quando existe.
+  // Ao abrir: hoje como data, conta em branco (sem padrão, por decisão),
+  // centro de custo sugerido pela origem quando existe,
+  // e forma de pagamento pré-preenchida quando a origem já definiu.
   React.useEffect(() => {
     if (!open || !alvo) return;
     setErroLocal(null);
@@ -88,7 +109,11 @@ export function BaixaTituloDialog({
     setContaId("");
     setTipoId(alvo.planoContaTipoId ?? "");
     setSubtipoId(alvo.planoContaSubtipoId ?? "");
-  }, [open, alvo]);
+    setFormaPagamento({
+      forma_pagamento: formaPlanejada ?? null,
+      cartao_credito_id: cartaoPlanejadoId ?? null,
+    });
+  }, [open, alvo, formaPlanejada, cartaoPlanejadoId]);
 
   const contasDaEmpresa = contas.filter(
     (c) => c.empresa_id === alvo?.empresaId && c.ativo,
@@ -106,6 +131,18 @@ export function BaixaTituloDialog({
     );
   }
 
+  function handleFormaPagamento(
+    v: FormaPagamentoValue,
+    opts?: { dataPagamentoSugerida?: string },
+  ) {
+    setFormaPagamento(v);
+    setErroLocal(null);
+    // Se o cartão sugere uma data de pagamento, usa ela.
+    if (opts?.dataPagamentoSugerida) {
+      setPagoEm(opts.dataPagamentoSugerida);
+    }
+  }
+
   function handleSubmit() {
     setErroLocal(null);
     if (!pagoEm || !contaId) {
@@ -118,11 +155,24 @@ export function BaixaTituloDialog({
       setErroLocal("Selecione o centro de custo do pagamento.");
       return;
     }
+    if (!formaPagamento.forma_pagamento) {
+      setErroLocal("Selecione a forma de pagamento.");
+      return;
+    }
+    if (
+      formaPagamento.forma_pagamento === "cartao_credito" &&
+      !formaPagamento.cartao_credito_id
+    ) {
+      setErroLocal("Selecione o cartão de crédito.");
+      return;
+    }
     onConfirm({
       pago_em: pagoEm,
       conta_bancaria_id: contaId,
       plano_conta_tipo_id: tipoId,
       plano_conta_subtipo_id: subtipoId,
+      forma_pagamento: formaPagamento.forma_pagamento,
+      cartao_credito_id: formaPagamento.cartao_credito_id,
     });
   }
 
@@ -209,6 +259,14 @@ export function BaixaTituloDialog({
               </SelectContent>
             </Select>
           </div>
+
+          <FormaPagamentoField
+            cartoes={cartoes}
+            value={formaPagamento}
+            onChange={handleFormaPagamento}
+            disabled={pending}
+            obrigatorio
+          />
 
           <div className="space-y-1">
             <label className="text-xs font-semibold">
