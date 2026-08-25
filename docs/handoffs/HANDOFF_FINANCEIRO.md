@@ -1800,3 +1800,93 @@ O projeto do financeiro (`/financeiro/projetos/[projetoId]`) usa o mesmo
 agregada — ver o handoff de Jobs.
 
 **Verificação:** conferido logado em 24/08/2026 na conferência do JOB-0012.
+
+---
+
+## ⚠️ 2026-08-24 — "Visualizar Jobs" ganhou Recebimentos, Custos e o seletor de organização
+
+**Origem:** projeto Claude Design `69342d83`,
+`Abertura de Job - Financeiro.dc.html`. Regra transversal em
+`docs/decisions/025-recebimentos-e-custos-na-lista-de-jobs.md`.
+
+**Isto altera a tabela descrita na seção 27** (`Jobs Abertos alinhado ao
+design`) e a coluna Faturamento da seção 29 continua exatamente como
+estava — as duas colunas novas ficam à direita dela, não a substituem.
+
+### As duas colunas novas
+
+**Recebimentos** (verde) e **Custos** (grafite-vermelho) mostram o número
+mais atual do job: movimentado + título + previsão em aberto, somados de
+`vw_fluxo_caixa` pela view nova `vw_fluxo_caixa_job_totais`. Cada célula
+traz uma segunda linha dizendo o que o número de cima não conta sozinho:
+
+| segunda linha | quando |
+| --- | --- |
+| `62% recebido` / `40% realizado` | há movimento na conta |
+| `nada recebido` / `sem realizado` | só previsão ou título, nada movimentado |
+| `previsto na abertura` | fallback — o job não tem nada daquele lado no caixa |
+| `sem previsão` | o total é zero |
+
+O fallback e o porquê dele estão na decisão 025, seção 4. Em resumo: sem
+ele, 9 dos 13 jobs de hoje nasceriam com Recebimentos R$ 0,00, porque são
+anteriores à `jobs_previsao_recebimento`.
+
+Os dois totais entraram na linha de resumo do topo (somando o que os
+filtros deixaram visível) e nas faixas de projeto, somando os jobs do
+grupo.
+
+### O seletor "Organizar por"
+
+Pastilha no canto direito da linha de resumo, mesma forma da chave
+Bruto/Líquido da planilha:
+
+- **Por projeto** (padrão) — a tela de sempre: faixa do projeto, jobs
+  embaixo, "Visão agregada" na faixa.
+- **Por job** — lista corrida, sem faixa, ordenada pela abertura mais
+  recente. O **código do projeto vira link** para a visão agregada
+  (`/financeiro/projetos/[id]`) — decisão do Tiago: sem a faixa, é por
+  ele que se chega lá. Job sem projeto do financeiro mostra o código da
+  produção como texto, porque essa tela não existe para ele.
+
+O padrão continua "Por projeto": é a arrumação que o financeiro já tinha.
+Os chips da esteira, os quatro filtros e a busca valem igual nas duas
+visões — a base é a mesma lista filtrada.
+
+### A coluna Empresa saiu
+
+Das duas visões. Decisão do Tiago (24/08/2026): "Empresa não precisa ser
+um campo visível em nenhum dos casos — sempre será a empresa
+selecionada". O seletor de empresa não existe ainda e não entra agora,
+então a coluna só ocupava largura. Saiu junto o embed
+`empresa:empresas(...)` da query, que não tinha outro consumidor.
+
+### Arquivos
+
+- `supabase/migrations/20260824000001_vw_fluxo_caixa_job_totais.sql` — view nova
+- `lib/data/caixa-por-job.ts` — leitura da view (novo)
+- `app/(app)/financeiro/abertura-de-job/dados-abertos.ts` — campos novos e o fallback
+- `app/(app)/financeiro/abertura-de-job/jobs-abertos-list.tsx` — as duas visões
+
+**Verificação (2026-08-24, logado):** `npx tsc --noEmit` e `npm run lint`
+limpos, `npm run build` passou. A view foi conferida pelo MCP — `SELECT`
+só para `authenticated`, nada para `anon`.
+
+Na tela, com os 13 jobs do tenant:
+
+- os números batem job a job com a `vw_fluxo_caixa`. JOB-0015 sai com
+  Recebimentos R$ 38.795,58 · `21% recebido` e Custos R$ 20.000,00 ·
+  `80% realizado`; JOB-0004 cai no fallback e mostra R$ 513.673,17 ·
+  `previsto na abertura`; JOB-0008 e JOB-0009, sem curva, mostram
+  R$ 0,00 · `sem previsão`;
+- os totais do topo fecham com a soma das faixas — Recebimentos
+  R$ 1.418.462,11 e Custos R$ 717.460,00;
+- as duas visões trocam pelo seletor, e os chips e filtros valem nas
+  duas: com "Faturado" (zero jobs hoje) a lista corrida cai no mesmo
+  empty state e os totais zeram;
+- na visão Por job, o código do projeto abre
+  `/financeiro/projetos/[id]` e o resto da linha abre
+  `/financeiro/jobs/[id]` — conferidos os dois.
+
+Console e log do servidor limpos. Uma correção saiu daqui: os códigos de
+job e de projeto quebravam em duas linhas nas colunas mais estreitas —
+`whitespace-nowrap` nos quatro pontos.
