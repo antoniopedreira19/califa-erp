@@ -7,7 +7,6 @@ import { Plus, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { type DesembolsoStatus, desembolsoStatusLabel, type FormaPagamento, formaPagamentoLabel } from "@/lib/types";
 import { DesembolsoDrawer } from "./desembolso-drawer";
-import type { CartaoOption } from "@/components/financeiro/forma-pagamento-field";
 
 // ---------------------------------------------------------------------------
 // Tipos
@@ -32,7 +31,6 @@ export interface DesembolsoRow {
 interface Props {
   rows: DesembolsoRow[];
   tenantId: string;
-  cartoes: CartaoOption[];
   empresas: Array<{ id: string; nome: string }>;
   fornecedores: Array<{ id: string; nome: string }>;
   clientes: Array<{ id: string; nome: string }>;
@@ -99,7 +97,6 @@ function nomeEmpresa(
 export function DesembolsosList({
   rows,
   tenantId,
-  cartoes,
   empresas,
   fornecedores,
   clientes,
@@ -264,7 +261,6 @@ export function DesembolsosList({
         open={drawerOpen}
         onOpenChange={setDrawerOpen}
         tenantId={tenantId}
-        cartoes={cartoes}
         empresas={empresas}
         fornecedores={fornecedores}
         clientes={clientes}
