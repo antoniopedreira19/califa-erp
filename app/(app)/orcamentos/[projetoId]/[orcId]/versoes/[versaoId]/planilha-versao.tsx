@@ -103,7 +103,6 @@ export function PlanilhaVersao({
       )}
 
       <TotaisCard
-        grupos={grupos}
         itens={itens}
         bvsPorItem={bvsPorItem}
         visao={visao}

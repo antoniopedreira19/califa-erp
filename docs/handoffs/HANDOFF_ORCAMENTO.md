@@ -2292,3 +2292,86 @@ cabeçalho, colunas do Totais no mesmo eixo — medido no DOM), versão sem
 grupo (estado vazio com o gatilho sólido), rascunho do `/agregado` (tfoot
 com o código do orçamento), e o Tab cruzando de um grupo para o outro,
 inclusive pulando um grupo recolhido no meio.
+
+---
+
+## ⚠️ 2026-08-25 — O Totais perdeu a tabela de agrupamentos, e a linha nova nasce pelo teclado
+
+Regra transversal em
+`docs/decisions/026-agrupamentos-saem-do-totais-e-linha-nova-por-teclado.md`.
+
+**A tabela de agrupamentos saiu do card de Totais.** Ela listava
+"Grupo 1 · Grupo 2 · … / TOTAL DOS CUSTOS" com ORÇADO, PLANEJADO e
+RENTABILIDADE lado a lado. Depois da decisão 024, o subtotal de cada
+agrupamento mora na própria linha do grupo, na mesma grade — "Recolher
+todos" mostra exatamente aquela leitura, no lugar onde a pessoa já está.
+Era o mesmo número em duas grades para manter em sincronia. **Fechamento
+do orçado por tipo de custo, Resultado, "Composto por" e Resultado geral
+não mudaram em nada.**
+
+**O `TotaisCard` deixou de receber `grupos`** e, com a tabela, saíram do
+arquivo `agruparPorGrupo`, o `colgroup` compartilhado (`ColunasFixas`) e
+os módulos de cor de bloco. Ele continua recebendo `visao`: a
+rentabilidade do "Composto por" é calculada na vista ativa da chave.
+
+**A dica de teclado saiu de dentro do card** ("Clique em qualquer célula
+para editar · Tab e as setas andam · Enter desce · Esc desfaz"). Era uma
+faixa cinza colada no rodapé, abaixo do TOTAL DO ORÇAMENTO, e lia como se
+fosse mais uma linha da planilha. Virou texto solto embaixo do card,
+mesma fonte e mesmo tamanho. Decisão do Tiago, 25/08/2026.
+
+⚠️ **Consequência estrutural: o card da planilha agora é desenhado pela
+própria `ItensTable`.** Um componente não devolve nada fora de um card
+que o chamador é que desenha. `grupos-section.tsx` e (no rascunho)
+`orcamento-card.tsx` pararam de envolver a tabela com
+`rounded-2xl border bg-card shadow-soft` — a `ItensTable` fundiu essas
+classes no `div` que já era o `relative` da calha. No rascunho a `div`
+que sobrou existe só para o card e a dica ocuparem UMA vaga do `gap-4`
+da coluna. Se alguém envolver a `ItensTable` num card de novo, a dica
+volta para dentro do frame.
+
+**Enter e ↓ na última linha de um agrupamento abrem o "＋ Novo item"
+dele**, em vez de cair no primeiro item do grupo seguinte — o cursor vai
+para a **descrição**, não para a coluna de origem, porque é o campo sem o
+qual a linha não grava. Decisão do Tiago, 25/08/2026: quebra de propósito
+o "Enter desce na mesma coluna", já que o gesto é acrescentar item. **O
+Tab não mudou** (continua atravessando os grupos, decisão 024).
+
+**A linha nova em branco some sozinha** — no Esc e em qualquer clique
+fora dela. "Em branco" é *nenhum campo mexido* (Tipo B, 0 · 1 · 1, sem
+categoria), decisão do Tiago: quem digitou um valor sem descrição
+continua vendo a linha, e sai pelo X da calha. A regra de gravação é a de
+sempre: **sem descrição nada vai para o banco.**
+
+⚠️ **Quatro armadilhas que o descarte precisou respeitar** — mexer aqui
+sem elas quebra em silêncio:
+- O `pointerdown` chega **antes** do `blur`, e o campo só entrega o que
+  foi digitado no `blur`. Descartar na hora apaga a descrição
+  recém-digitada. O teste roda num `setTimeout(…, 0)`.
+- **O listener é de mount (`[]`) e lê o rascunho por ref.** Foi defeito
+  de verdade, pego no navegador em 25/08/2026: com o efeito dependendo de
+  `draft`, o `setDraft` do `blur` devolve um objeto NOVO, o efeito se
+  reinscreve e a limpeza cancela o `setTimeout` recém-agendado — a linha
+  em branco fica na tela. **Teste sintético não pega**: `dispatchEvent`
+  sem troca de foco não dispara `blur`, então nada se reinscreve. Só
+  aparece com clique de gente.
+- O menu do Radix abre em **portal fora da tabela**: sem excluir
+  `[data-radix-popper-content-wrapper]`, escolher um Tipo mata a linha.
+- "＋ Novo item" de outro grupo não fica mais travado por rascunho em
+  branco (o clique descarta e reabre); rascunho já mexido continua
+  bloqueando.
+
+**Verificação:** `tsc --noEmit`, `next lint` e `npm run build` limpos.
+Conferido logado em 25/08/2026 no orçamento Teste B3 (TESTE-0003/26-06,
+projeto Teste Alterações), medindo no DOM a cada passo: Totais com zero
+`<table>` e sem "Agrupamento", números do fechamento e do Resultado
+idênticos aos de antes; dica como `<p>` irmã do card, 8px abaixo dele, e
+no rascunho do `/agregado` os mesmos 8px; "Recolher todos" entregando a
+leitura que a tabela removida dava; Enter na última linha do Grupo 1 e ↓
+na do Grupo 2 abrindo a linha nova no grupo certo com foco na descrição;
+Esc, clique real fora e linha com QT digitada sobrevivendo ao clique
+fora. Também: item novo digitado e salvo por clique em outra célula
+(gravou, "8 itens no total"), depois removido — a planilha voltou aos 7
+itens e a R$ 68.000,00. Conferidos ainda o Realizado do JOB `ceedcfb5` e
+a conferência da abertura do JOB-0012, os dois sem a tabela e sem erro no
+console.
