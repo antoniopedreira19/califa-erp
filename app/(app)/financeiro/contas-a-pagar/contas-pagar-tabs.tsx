@@ -4,19 +4,18 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 
 /**
- * Seis abas desde 20/08/2026.
+ * Cinco abas (25/08/2026, simplificação).
  *
  * - PPs: pedidos de produção (aprovação/rejeição).
  * - Pedidos de Desembolsos: desembolsos diretos (aprovação/rejeição/cancelamento).
  * - Recorrências: gestão de contas avulsas recorrentes.
- * - Títulos a Pagar: avulsos + PPs (exceto cartões pendentes).
- * - Títulos a Pagar (Cartão): somente cartão de crédito + baixa em lote.
- * - Títulos Pagos: histórico do que já saiu (arquivo/conciliação).
+ * - Títulos a Pagar: avulsos + PPs + desembolsos NÃO cartão (a pagar e pagos,
+ *   com filtro interno de status padrão "A pagar").
+ * - Cartão: mesma coisa para cartão de crédito, com baixa em lote da fatura.
  *
- * PPs e Desembolsos agrupam workflows de aprovação no início.
- * "Títulos a Pagar (Cartão)" fica entre "Títulos a Pagar" e "Títulos Pagos".
- * A antiga "Lançamentos Avulsos" foi ABSORVIDA por "Títulos a Pagar": a
- * avulsa virou um título de origem AVULSO na lista unificada.
+ * A antiga "Títulos Pagos" foi absorvida pelo filtro de status interno de
+ * "Títulos a Pagar" e "Cartão". A antiga "Lançamentos Avulsos" já havia
+ * sido absorvida por "Títulos a Pagar" como origem AVULSO.
  */
 interface Props {
   /** Conteúdo da aba de PPs (já pronto, vindo da page.tsx). */
@@ -27,23 +26,21 @@ interface Props {
   desembolsos: React.ReactNode;
   /** Contagem de desembolsos em avaliação — vira badge. */
   desembolsosPendentesCount: number;
-  /** Conteúdo da aba unificada de títulos a pagar (sem cartões pendentes). */
+  /** Conteúdo da aba unificada de títulos a pagar (não cartão, todos os status). */
   titulos: React.ReactNode;
-  /** Quantos títulos estão a pagar (excluindo cartões) — vira badge. */
+  /** Quantos títulos "a pagar" não-cartão existem — vira badge. */
   titulosAPagarCount: number;
   /** Conteúdo da aba de recorrências. */
   recorrentes: React.ReactNode;
   /** Contagem de recorrências ativas — vira badge. */
   recorrentesAtivasCount: number;
-  /** Conteúdo da aba de títulos já pagos. */
-  titulosPagos: React.ReactNode;
-  /** Conteúdo da aba de títulos a pagar no cartão de crédito. */
+  /** Conteúdo da aba de títulos no cartão (todos os status). */
   titulosCartao: React.ReactNode;
-  /** Quantos títulos de cartão estão pendentes — vira badge. */
+  /** Quantos títulos de cartão estão a pagar — vira badge. */
   titulosCartaoCount: number;
 }
 
-type TabKey = "pps" | "desembolsos" | "titulos" | "cartao" | "recorrentes" | "pagos";
+type TabKey = "pps" | "desembolsos" | "titulos" | "cartao" | "recorrentes";
 
 export function ContasPagarTabs({
   pps,
@@ -54,7 +51,6 @@ export function ContasPagarTabs({
   titulosAPagarCount,
   recorrentes,
   recorrentesAtivasCount,
-  titulosPagos,
   titulosCartao,
   titulosCartaoCount,
 }: Props) {
@@ -98,10 +94,7 @@ export function ContasPagarTabs({
           onClick={() => setTab("cartao")}
           count={titulosCartaoCount}
         >
-          Títulos a Pagar (Cartão)
-        </TabButton>
-        <TabButton active={tab === "pagos"} onClick={() => setTab("pagos")}>
-          Títulos Pagos
+          Cartão
         </TabButton>
       </div>
 
@@ -139,13 +132,6 @@ export function ContasPagarTabs({
         className={cn(tab === "cartao" ? "" : "hidden")}
       >
         {titulosCartao}
-      </div>
-      <div
-        role="tabpanel"
-        aria-hidden={tab !== "pagos"}
-        className={cn(tab === "pagos" ? "" : "hidden")}
-      >
-        {titulosPagos}
       </div>
     </div>
   );
