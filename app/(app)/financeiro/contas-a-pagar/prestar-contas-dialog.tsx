@@ -50,6 +50,10 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   pp: PPParaPrestacao | null;
+  /** UUID do tenant ativo — necessário para montar o prefix do Storage em
+   *  conformidade com a policy do bucket `pedidos-compra`, que valida
+   *  `split_part(name, '/', 1)::uuid` como tenant_id. */
+  tenantId: string;
   onSuccess?: (prestacao_id: string) => void;
 }
 
@@ -93,7 +97,7 @@ function parseNumeroLocal(bruto: string): number {
 // Componente
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function PrestarContasDialog({ open, onOpenChange, pp, onSuccess }: Props) {
+export function PrestarContasDialog({ open, onOpenChange, pp, tenantId, onSuccess }: Props) {
   const supabase = React.useMemo(() => createClient(), []);
   const [pending, startTransition] = React.useTransition();
   const submittingRef = React.useRef(false);
@@ -101,10 +105,9 @@ export function PrestarContasDialog({ open, onOpenChange, pp, onSuccess }: Props
   const [valorGastoStr, setValorGastoStr] = React.useState<string>("");
   const [anexos, setAnexos] = React.useState<AnexoLocal[]>([]);
   const [erro, setErro] = React.useState<string | null>(null);
-  // Prefixo do upload — montado a partir do tenant_id da sessão.
-  // Como o tenant_id não está disponível direto no client, usamos o UUID
-  // da PP como escopo suficiente: `verba-prestacoes/<pp_id>/`.
-  // O server action usa o tenant da sessão ao inserir nos anexos.
+  // Prefixo do upload — montado conforme a policy do bucket `pedidos-compra`,
+  // que exige `split_part(name, '/', 1)::uuid` como tenant_id.
+  // Formato: `<tenant_id>/verba-prestacoes/<pp_id>/`
   const [uploadPrefix, setUploadPrefix] = React.useState<string>("");
 
   // Reset ao abrir
@@ -113,8 +116,8 @@ export function PrestarContasDialog({ open, onOpenChange, pp, onSuccess }: Props
     setValorGastoStr("");
     setAnexos([]);
     setErro(null);
-    setUploadPrefix(`verba-prestacoes/${pp.id}/`);
-  }, [open, pp]);
+    setUploadPrefix(`${tenantId}/verba-prestacoes/${pp.id}/`);
+  }, [open, pp, tenantId]);
 
   // ── Upload ────────────────────────────────────────────────────────────────
 
