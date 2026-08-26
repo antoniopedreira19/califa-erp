@@ -382,6 +382,7 @@ export default async function JobNoFinanceiroPage({
             ppsPorItemId={detalhe.ppsPorItemId}
             fornecedores={detalhe.fornecedores}
             empresas={detalhe.empresas}
+            responsaveis={detalhe.responsaveis}
             bvsPorItem={detalhe.bvsPorItem}
           />
         }

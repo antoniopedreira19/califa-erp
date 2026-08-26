@@ -124,6 +124,7 @@ export function PlanilhaConferencia({
           ppsPorItemId={new Map()}
           fornecedores={[]}
           empresas={[]}
+          responsaveis={[]}
           jobEmpresaId={jobEmpresaId}
           jobResponsavelId={jobResponsavelId}
           bvsPorItem={bvsPorItem}
