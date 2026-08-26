@@ -37,6 +37,108 @@ export interface LinhaFluxo {
   /** Código do documento ("PP-00009 3/3", "NF 900123/2"). */
   codigo: string;
   descricao: string;
+  /** `vw_fluxo_caixa.origem_tipo` — pp, titulo, previsao_custo, … */
+  origemTipo: string;
+  /**
+   * `lancamentos_financeiros.origem`, só nas linhas de movimento.
+   *
+   * É o que distingue uma baixa de um estorno: as duas chegam como
+   * `origem_tipo = 'lancamento'`, e sem isso o estorno de PP — que entra
+   * como ENTRADA, porque o dinheiro volta para a conta — se lê como
+   * recebimento de cliente.
+   */
+  origemLancamento: string | null;
+}
+
+/**
+ * Um documento por trás de uma célula da matriz.
+ *
+ * A tela abre isso no hover e no clique de cada valor (decisão do Tiago,
+ * 26/08/2026): o número sozinho não diz de onde veio, e na linha de
+ * movimento convivem recebimento de cliente e estorno de PP, que somam
+ * juntos mas não significam a mesma coisa.
+ */
+export interface ItemComposicao {
+  chave: string;
+  jobId: string;
+  /** "Recebimento de título", "Estorno de PP", "Cronograma de desembolsos"… */
+  rotulo: string;
+  codigo: string;
+  descricao: string;
+  data: string;
+  valor: number;
+  /** Estorno recebe tratamento visual próprio na composição. */
+  estorno: boolean;
+  /**
+   * A natureza da linha. Só importa na composição do LÍQUIDO, onde
+   * entrada e saída convivem na mesma célula e uma subtrai a outra — nas
+   * demais células a linha inteira já é de uma natureza só.
+   */
+  natureza: NaturezaFluxo;
+}
+
+/**
+ * Chave de uma célula na composição.
+ *
+ * `liquido` é o escopo da linha "Líquido do período", que soma as duas
+ * naturezas do mês; nele `classe` é sempre `total`.
+ */
+export function chaveComposicao(
+  escopo: NaturezaFluxo | "liquido",
+  classe: ClasseFluxo | "total",
+  indiceMes: number,
+): string {
+  return `${escopo}-${classe}-${indiceMes}`;
+}
+
+const ROTULO_LANCAMENTO: Record<string, string> = {
+  pp_baixa: "Baixa de PP",
+  pp_baixa_estornada: "Baixa de PP (estornada)",
+  pp_estorno: "Estorno de PP",
+  titulo_baixa: "Recebimento de título",
+  titulo_baixa_estornada: "Recebimento (estornado)",
+  titulo_estorno: "Estorno de recebimento",
+  avulsa_baixa: "Conta avulsa paga",
+  avulsa_baixa_estornada: "Conta avulsa (estornada)",
+  avulsa_estorno: "Estorno de conta avulsa",
+  desembolso_baixa: "Desembolso pago",
+  desembolso_baixa_estornada: "Desembolso (estornado)",
+  desembolso_estorno: "Estorno de desembolso",
+  manual: "Lançamento manual",
+};
+
+const ROTULO_ORIGEM: Record<string, string> = {
+  pp: "PP a pagar",
+  avulsa: "Conta avulsa",
+  recorrente: "Conta recorrente",
+  desembolso: "Desembolso",
+  titulo: "Título a receber",
+  previsao_custo: "Cronograma de desembolsos",
+  previsao_recebimento: "Previsão de recebimento",
+  envio_parcela: "Faturamento previsto",
+};
+
+/** O que a linha é, em português, para a composição da célula. */
+export function rotuloDaLinha(l: LinhaFluxo): string {
+  if (l.origemTipo === "lancamento") {
+    return (
+      ROTULO_LANCAMENTO[l.origemLancamento ?? ""] ?? "Movimento na conta"
+    );
+  }
+  return ROTULO_ORIGEM[l.origemTipo] ?? l.origemTipo;
+}
+
+/**
+ * Estorno é qualquer ponta do par que o estorno cria: o lançamento
+ * original, que fica marcado `_estornada`, e o contra-lançamento.
+ *
+ * Os dois continuam somando na linha de movimento — o extrato da conta é
+ * esse, o dinheiro saiu e voltou (decisão do Tiago, 26/08/2026). Quem
+ * separa é a composição, não o total.
+ */
+export function ehEstorno(l: LinhaFluxo): boolean {
+  const o = l.origemLancamento ?? "";
+  return o.endsWith("_estorno") || o.endsWith("_estornada");
 }
 
 export interface DetalheFluxo {
@@ -74,6 +176,15 @@ export interface MatrizFluxo {
    * sub-linha, mês a mês. É o que a visão agregada abre ao clicar.
    */
   porJob: Record<string, ContribuicaoDeJob[]>;
+  /**
+   * `chaveComposicao(natureza, classe, mês)` → os documentos que formam
+   * aquela célula. Esparso: célula vazia não tem chave.
+   *
+   * Cada linha entra DUAS vezes — na chave da sua classe e na chave
+   * `total` da natureza —, porque a tela mostra as duas e o usuário pode
+   * abrir qualquer uma. São referências para o mesmo objeto, não cópias.
+   */
+  composicao: Record<string, ItemComposicao[]>;
 }
 
 /** "2026-08" → "08/2026", como o protótipo rotula a coluna. */
@@ -117,10 +228,11 @@ export function montarMatrizFluxo(
   const detalhesReceber: DetalheFluxo[] = [];
   const detalhesPagar: DetalheFluxo[] = [];
   const porJob: Record<string, ContribuicaoDeJob[]> = {};
+  const composicao: Record<string, ItemComposicao[]> = {};
 
-  for (const l of linhas) {
+  linhas.forEach((l, ordem) => {
     const i = indice.get(mesDe(l.dataEvento));
-    if (i === undefined) continue;
+    if (i === undefined) return;
 
     const alvo = l.natureza === "entrada" ? entradas : saidas;
     alvo[l.classe][i] += l.valor;
@@ -133,6 +245,30 @@ export function montarMatrizFluxo(
       lista.push(contrib);
     }
     contrib.valores[i] += l.valor;
+
+    const item: ItemComposicao = {
+      // `ordem` entra na chave porque o mesmo documento pode aparecer
+      // duas vezes na mesma célula — a parcela 3/3 da PP-00009 foi
+      // baixada e estornada duas vezes, no mesmo dia e no mesmo valor.
+      chave: `${l.jobId}-${l.codigo}-${l.dataEvento}-${ordem}`,
+      jobId: l.jobId,
+      rotulo: rotuloDaLinha(l),
+      codigo: l.codigo,
+      descricao: l.descricao,
+      data: l.dataEvento,
+      valor: l.valor,
+      estorno: ehEstorno(l),
+      natureza: l.natureza,
+    };
+    for (const k of [
+      chaveComposicao(l.natureza, l.classe, i),
+      chaveComposicao(l.natureza, "total", i),
+      // O líquido do período é entradas menos saídas: a composição dele
+      // é o mês inteiro, das duas naturezas, e o sinal é quem separa.
+      chaveComposicao("liquido", "total", i),
+    ]) {
+      (composicao[k] ?? (composicao[k] = [])).push(item);
+    }
 
     if (l.classe === "titulo") {
       const detalhe: DetalheFluxo = {
@@ -147,6 +283,17 @@ export function montarMatrizFluxo(
       if (l.natureza === "entrada") detalhesReceber.push(detalhe);
       else detalhesPagar.push(detalhe);
     }
+  });
+
+  // Dentro de cada célula: entradas antes de saídas, e o mais recente
+  // primeiro. A ordem por natureza só muda alguma coisa na célula do
+  // líquido, a única onde as duas convivem — nas demais a chave já é de
+  // uma natureza só e a comparação é inócua.
+  for (const itens of Object.values(composicao)) {
+    itens.sort((a, b) => {
+      if (a.natureza !== b.natureza) return a.natureza === "entrada" ? -1 : 1;
+      return a.data < b.data ? 1 : a.data > b.data ? -1 : 0;
+    });
   }
 
   const liquido = meses.map(
@@ -181,6 +328,7 @@ export function montarMatrizFluxo(
     saldoFim: saldo[saldo.length - 1] ?? 0,
     ultimoMesLabel: meses.length > 0 ? rotuloMes(meses[meses.length - 1]) : "—",
     porJob,
+    composicao,
   };
 }
 

@@ -1890,3 +1890,103 @@ Na tela, com os 13 jobs do tenant:
 Console e log do servidor limpos. Uma correção saiu daqui: os códigos de
 job e de projeto quebravam em duas linhas nas colunas mais estreitas —
 `whitespace-nowrap` nos quatro pontos.
+
+---
+
+## ⚠️ 2026-08-26 — O fluxo de caixa do job perdia dinheiro em dois pontos
+
+Investigação a partir de um sintoma do Tiago: a aba **Fluxo de Caixa do
+Job** do JOB-0013 estava com a coluna Entradas inteira vazia e mostrava
+R$ 25.000,00 de saída onde a abertura previa R$ 65.000,00. A tela e o
+`lib/calculos/fluxo-caixa-matriz.ts` estavam certos — os dois furos eram
+de leitura, na `vw_fluxo_caixa`.
+
+Regras novas em [decisão 027](../decisions/027-pp-aprovada-e-a-composicao-do-fluxo-do-job.md).
+Migrations `20260826000001`, `20260826000002` e `20260826000003`.
+
+**1. PP em avaliação abatia a curva sem virar título.** `itens_com_pp`
+aceitava tudo que não fosse cancelada/rejeitada; o branch da PP só
+emitia `aprovada`/`pago`. Entre criar e aprovar, o custo sumia. No
+JOB-0013 escondia R$ 40.000,00 (planejado do item da PP-00008, que está
+`em_avaliacao`). Agora os dois filtros são o mesmo: **PP aprovada é
+título**.
+
+**2. Recebimento pago sumia do job.** `dar_baixa_titulo`,
+`dar_baixa_titulo_com_plano` e `estornar_baixa_titulo` gravam o
+lançamento **sem `job_id`** — as únicas três de oito RPCs de baixa que
+não gravam. A linha "Já movimentado / Entradas" era estruturalmente
+zero. O conserto não é preencher a coluna (uma nota soma vários jobs):
+a view passa a ratear o lançamento por `titulo_receber_id` →
+`fat_composicao`, a mesma régua da classe `titulo`. **Nenhuma RPC foi
+tocada** — inclusive para não encostar nas que a outra frente reescreveu
+em 25/08 (`20260825000002`, `20260825000005`).
+
+**3. Composição do valor no hover/clique.** Toda célula da matriz abre a
+lista dos documentos que a formam — as três sub-linhas, o total de cada
+natureza, o **Líquido do período** e a contribuição por job da visão
+agregada. É o que nomeia o estorno de PP como estorno *daquela* PP: ele
+continua somando na linha de movimento (o número é o do extrato, por
+decisão do Tiago), mas deixa de se passar por recebimento de cliente.
+Coluna nova `vw_fluxo_caixa.origem_lancamento` carrega
+`lancamentos_financeiros.origem` para isso.
+
+No líquido — a única célula onde entrada e saída convivem — cada item sai
+com sinal (`+` verde, `−` vermelho) e a cor do valor vem do sinal, não da
+natureza. O **Saldo acumulado** ficou de fora: sendo soma corrida, a
+composição dele seria a matriz inteira repetida em cada coluna.
+
+**3b. "Curva de desembolso" agora é "Cronograma de desembolsos".** O mesmo
+conceito tinha três nomes na interface. O nome único fica um nível abaixo
+de "Previsão de custos", que já é o `<h2>` da seção que o contém no form
+de Abertura do Job. Trocado na sub-linha da aba, no form de abertura
+(bloco, subtítulo e 4 mensagens de erro) e na `descricao` do branch 6 da
+view — que virou `Cronograma de desembolsos · JOB-0013 1/2`, no formato
+do branch de recebimento. ⚠️ Como esse texto vem do banco, a tela geral
+`/financeiro/fluxo-caixa` também passa a exibir o nome novo.
+
+**4. Avulsa e desembolso saem do título do job.** Só PP abate a curva,
+então avulsa/desembolso aprovados apareceriam como dívida a mais. No
+recorte por job eles só entram depois da baixa; no Fluxo de Caixa geral
+continuam como estão. Hoje não muda número: nenhuma das duas está
+vinculada a job.
+
+**5. Backfill.** 8 dos 10 jobs abertos ganharam previsão de recebimento
+(parcela única = `faturamento_previsto` em `data_prevista_faturamento`).
+JOB-0001 e JOB-0002 ficaram sem — `data_prevista_faturamento` nula.
+
+⚠️ **Os números da nota de 2026-08-24 acima envelheceram.** O JOB-0015
+saía com Recebimentos R$ 38.795,58 · `21% recebido` e Custos
+R$ 20.000,00 · `80% realizado`; depois destes consertos sai com
+Recebimentos R$ 49.754,69 · `38% recebido` e Custos R$ 20.000,00 ·
+`80% realizado`. O JOB-0013 saiu de R$ 25.000,00 para R$ 65.000,00 de
+custo. Os totais do topo mudam na mesma proporção.
+
+**Verificação (2026-08-26):** `npm run typecheck` e `npm run lint`
+limpos. Banco conferido pelo MCP: soma dos lançamentos preservada ao
+centavo depois do rateio e depois do rename (entrada R$ 18.959,11 e saída
+R$ 16.000,00 em `lancamentos_financeiros` e na classe `movimento` da
+view), `SELECT` só para `authenticated` nas duas views, backfill sem
+sobrescrever nenhuma previsão existente.
+
+O componente foi exercitado numa rota temporária sem sessão (removida em
+seguida, junto da liberação no `isPublicRoute`) com os dados reais do
+JOB-0015 mais um mês de líquido negativo montado de propósito. Conferidos
+no navegador:
+
+- a tabela não quebra com o `PopoverAnchor` no `<td>`;
+- Entradas 08/2026 = R$ 18.959,11 abre em `NF 900123/1 · RECEBIMENTO DE
+  TÍTULO` + 2 × `PP-00009 3/3 · ESTORNO DE PP` (fundo âmbar);
+- Saídas 08/2026 = R$ 16.000,00 abre em 2 × `BAIXA DE PP` + 2 ×
+  `BAIXA DE PP (ESTORNADA)` da mesma parcela 3/3 — que é a explicação do
+  número dobrado que o Tiago decidiu manter;
+- Líquido 09/2026 = −R$ 59.081,77 abre em `+ R$ 5.918,23` de faturamento
+  previsto e `− R$ 40.000,00` / `− R$ 25.000,00` de
+  `CRONOGRAMA DE DESEMBOLSOS`, nessa ordem, e a célula fica vermelha;
+- hover abre com atraso, clique fixa, e dois popovers fixados convivem.
+
+Duas correções saíram daí: o código do documento estava sendo truncado
+por dividir a linha com o selo (foi para linha própria), e nas linhas de
+previsão o selo e a descrição repetiam a mesma frase (a descrição some
+quando é igual ao rótulo).
+
+**A verificação logada, na tela real, fica com o Tiago.**

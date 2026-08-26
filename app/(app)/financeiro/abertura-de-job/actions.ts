@@ -169,7 +169,7 @@ export async function abrirJobNoFinanceiro(
     if (parsed.data.curva.length === 0) {
       return {
         ok: false,
-        message: "A curva de desembolso precisa de pelo menos uma data.",
+        message: "O cronograma de desembolsos precisa de pelo menos uma data.",
       };
     }
 
@@ -177,7 +177,7 @@ export async function abrirJobNoFinanceiro(
     if (Math.abs(soma - custoPrevisto) >= TOLERANCIA_CURVA) {
       return {
         ok: false,
-        message: `A curva de desembolso soma ${soma.toFixed(2)} e o custo previsto é ${custoPrevisto.toFixed(2)}. Ajuste as datas antes de abrir.`,
+        message: `O cronograma de desembolsos soma ${soma.toFixed(2)} e o custo previsto é ${custoPrevisto.toFixed(2)}. Ajuste as datas antes de abrir.`,
       };
     }
 
@@ -335,9 +335,9 @@ export async function abrirJobNoFinanceiro(
     });
     const oQueFalhou =
       curvaErro && recebErro
-        ? "a curva de desembolso e a previsão de recebimento não foram gravadas"
+        ? "o cronograma de desembolsos e a previsão de recebimento não foram gravados"
         : curvaErro
-          ? "a curva de desembolso não foi gravada"
+          ? "o cronograma de desembolsos não foi gravado"
           : "a previsão de recebimento não foi gravada";
     return {
       ok: false,
@@ -757,7 +757,7 @@ export async function editarRegistroDaAbertura(
     if (parsed.data.curva.length === 0) {
       return {
         ok: false,
-        message: "A curva de desembolso precisa de pelo menos uma data.",
+        message: "O cronograma de desembolsos precisa de pelo menos uma data.",
       };
     }
 
@@ -765,7 +765,7 @@ export async function editarRegistroDaAbertura(
     if (Math.abs(soma - custoPrevisto) >= TOLERANCIA_CURVA) {
       return {
         ok: false,
-        message: `A curva de desembolso soma ${soma.toFixed(2)} e o custo previsto é ${custoPrevisto.toFixed(2)}. Ajuste as datas antes de salvar.`,
+        message: `O cronograma de desembolsos soma ${soma.toFixed(2)} e o custo previsto é ${custoPrevisto.toFixed(2)}. Ajuste as datas antes de salvar.`,
       };
     }
 
