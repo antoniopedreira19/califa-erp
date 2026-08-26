@@ -297,6 +297,8 @@ export async function carregarDetalheDoJob(
     total_planejado: Number(it.total_planejado ?? 0),
     // `null` preservado de propósito: significa "ainda não congelado", e
     // é o que manda a conta calcular a dedução a partir do BV vigente.
+    em_save: it.em_save === true,
+    save_consumido: Number(it.save_consumido ?? 0),
     bv_liquido_planejado:
       it.bv_liquido_planejado === null || it.bv_liquido_planejado === undefined
         ? null

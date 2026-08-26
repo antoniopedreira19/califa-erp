@@ -212,7 +212,7 @@ export async function registrarErrata(
   const { data: itensAtuais, error: itensErr } = await supabase
     .from("jobs_itens_orcado")
     .select(
-      "id, item_versao_id, item, grupo_id, tipo_custo, valor_unitario_orcado, quantidade_orcada, dias_meses_orcado, total_orcado",
+      "id, item_versao_id, item, grupo_id, tipo_custo, valor_unitario_orcado, quantidade_orcada, dias_meses_orcado, total_orcado, em_save, save_consumido",
     )
     .eq("job_id", jobId)
     .eq("tenant_id", session.activeTenant.id);

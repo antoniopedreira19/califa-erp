@@ -6,7 +6,10 @@ import { createClient } from "@/lib/supabase/server";
 import { listActiveMembers } from "@/lib/data/members";
 import { listEmpresasAtivas } from "@/lib/data/empresas";
 import { escolherJobDoFunil, estagioFunil } from "@/lib/calculos/funil";
-import { calcularTotaisVersao } from "@/lib/calculos/versao-totais";
+import {
+  calcularTotaisVersao,
+  type ItemParaTotais,
+} from "@/lib/calculos/versao-totais";
 import type {
   CategoriaDominio,
   Cliente,
@@ -218,15 +221,20 @@ export default async function ProjetoDetailPage({
     if (versaoAlvoIds.length > 0) {
       const { data: itens, error: itensErr } = await supabase
         .from("versoes_orcamento_itens")
-        .select("versao_orcamento_id, tipo_custo, total_orcado")
+        .select("versao_orcamento_id, tipo_custo, total_orcado, em_save, save_consumido")
         .in("versao_orcamento_id", versaoAlvoIds)
         .eq("tenant_id", session.activeTenant.id);
       if (itensErr) console.error("[projeto.itens]", itensErr.message);
 
-      const itensPorVersao = new Map<string, { tipo_custo: TipoCusto; total_orcado: number }[]>();
+      const itensPorVersao = new Map<string, ItemParaTotais[]>();
       for (const it of ((itens ?? []) as any[])) {
         const atuais = itensPorVersao.get(it.versao_orcamento_id) ?? [];
-        atuais.push({ tipo_custo: it.tipo_custo, total_orcado: Number(it.total_orcado ?? 0) });
+        atuais.push({
+          tipo_custo: it.tipo_custo,
+          total_orcado: Number(it.total_orcado ?? 0),
+          em_save: it.em_save === true,
+          save_consumido: Number(it.save_consumido ?? 0),
+        });
         itensPorVersao.set(it.versao_orcamento_id, atuais);
       }
 

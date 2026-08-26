@@ -68,6 +68,11 @@ export function comoItemDaVersao(
     quantidade_orcada: item.quantidade_orcada,
     dias_meses_orcado: item.dias_meses_orcado,
     total_orcado: totalOrcadoDe(item),
+    // O editor de rascunho é sandbox local e ainda não marca save: os dois
+    // campos entram neutros, que é o caso em que os três fechamentos de
+    // `calcularTotaisVersao` coincidem.
+    em_save: false,
+    save_consumido: 0,
     categoria_id: item.categoria_id,
     valor_unitario_planejado: item.valor_unitario_planejado,
     quantidade_planejada: item.quantidade_planejada,
