@@ -1268,6 +1268,22 @@ export interface PedidoCompraAnexo {
   created_at: string;
 }
 
+export interface PPVerbaDevolucao {
+  id: string;
+  tenant_id: string;
+  empresa_id: string;
+  prestacao_id: string;
+  pedido_compra_id: string;
+  valor: number;
+  data_pagamento: string;
+  data_pagamento_primeira: string;
+  pago_em: string | null;
+  pago_por: string | null;
+  lancamento_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface PPVerbaPrestacao {
   id: string;
   tenant_id: string;
@@ -1378,6 +1394,8 @@ export type OrigemLancamento =
   | "desembolso_baixa"
   | "desembolso_baixa_estornada"
   | "desembolso_estorno"
+  | "pp_devolucao_verba"
+  | "pp_devolucao_verba_estornada"
   | "manual";
 
 export interface LancamentoFinanceiro {
@@ -1412,6 +1430,11 @@ export interface LancamentoFinanceiro {
    * que não veio de baixa de parcela de desembolso.
    */
   desembolso_parcela_id: string | null;
+  /**
+   * Devolução de verba que este lançamento quitou (via pp_devolucao_verba)
+   * ou estornou. Nulo em outras origens.
+   */
+  pp_verba_devolucao_id: string | null;
   /**
    * Forma de pagamento efetivamente usada na baixa. Nulo em lançamentos
    * anteriores a 25/08/2026 e em origem 'manual' sem forma definida.
@@ -1663,10 +1686,14 @@ export interface ContaAvulsa {
  *   recorrencia → `contas_avulsas` com `recorrente_id` preenchido
  *                 (a ocorrência que `gerar_ocorrencias_recorrentes` cria)
  */
-export type OrigemTitulo = "pp" | "avulso" | "recorrencia" | "desembolso";
+export type OrigemTitulo = "pp" | "avulso" | "recorrencia" | "desembolso" | "pp_devolucao_verba";
 
 export const origemTituloLabel = (o: OrigemTitulo, ppCodigo?: string | null): string =>
-  o === "pp" ? (ppCodigo ?? "PP") : o === "avulso" ? "AVULSO" : o === "recorrencia" ? "RECORRÊNCIA" : "DESEMBOLSO";
+  o === "pp" ? (ppCodigo ?? "PP")
+    : o === "avulso" ? "AVULSO"
+    : o === "recorrencia" ? "RECORRÊNCIA"
+    : o === "desembolso" ? "DESEMBOLSO"
+    : "DEVOLUÇÃO VERBA";
 
 /** `a_pagar` enquanto não há baixa; `pago` depois dela. */
 export type TituloPagarStatus = "a_pagar" | "pago";
