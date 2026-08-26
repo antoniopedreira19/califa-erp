@@ -237,3 +237,92 @@ export async function saveDaVersao(
   }
   return saida;
 }
+
+/**
+ * Estado do save de cada linha de UM job, chaveado pelo id do item da
+ * VERSÃO — que é a chave que a Planilha Interna usa em toda a tela.
+ *
+ * Aqui as duas pontas são mais simples que no orçamento: o job existe, o
+ * saldo dele existe, e os consumos apontam direto para a cópia do job.
+ */
+export async function saveDoJob(
+  supabase: SupabaseClient,
+  tenantId: string,
+  jobId: string,
+  itens: {
+    id: string;
+    orcado_id: string;
+    em_save: boolean;
+    save_consumido: number;
+  }[],
+): Promise<Record<string, EstadoSaveDaLinha>> {
+  const orcadoIds = itens.map((i) => i.orcado_id).filter(Boolean);
+  if (orcadoIds.length === 0) return {};
+
+  const [origensRes, destinosRes] = await Promise.all([
+    // De onde vem o dinheiro que paga estas linhas.
+    supabase
+      .from("saves_consumos")
+      .select("job_item_orcado_id, valor, job_origem_id, jobs!inner(codigo)")
+      .eq("tenant_id", tenantId)
+      .in("job_item_orcado_id", orcadoIds),
+    // Quem consumiu o saldo DESTE job. O saldo é do job, então o destino
+    // vale para todas as linhas em save dele (decisão 023, nota de 26/08).
+    supabase
+      .from("saves_consumos")
+      .select("valor, job_item_orcado_id, item_versao_id")
+      .eq("tenant_id", tenantId)
+      .eq("job_origem_id", jobId),
+  ]);
+
+  const origensPorOrcado = new Map<string, PontaDeSave[]>();
+  for (const c of (origensRes.data ?? []) as any[]) {
+    const lista = origensPorOrcado.get(c.job_item_orcado_id) ?? [];
+    lista.push({
+      jobId: c.job_origem_id,
+      codigo: (c.jobs as any)?.codigo ?? "—",
+      valor: Number(c.valor ?? 0),
+    });
+    origensPorOrcado.set(c.job_item_orcado_id, lista);
+  }
+
+  // Resolve o job consumidor de cada consumo para nomear o destino.
+  const destinos: PontaDeSave[] = [];
+  const linhas = (destinosRes.data ?? []) as any[];
+  if (linhas.length > 0) {
+    const idsCopia = linhas.map((c) => c.job_item_orcado_id).filter(Boolean);
+    const { data: copias } = idsCopia.length
+      ? await supabase
+          .from("jobs_itens_orcado")
+          .select("id, job_id, jobs!inner(codigo)")
+          .in("id", idsCopia)
+      : { data: [] as any[] };
+
+    const porId = new Map(
+      ((copias ?? []) as any[]).map((r) => [
+        r.id,
+        { jobId: r.job_id as string, codigo: (r.jobs as any)?.codigo ?? "—" },
+      ]),
+    );
+    for (const c of linhas) {
+      const alvo = porId.get(c.job_item_orcado_id);
+      if (!alvo) continue;
+      const ja = destinos.find((d) => d.jobId === alvo.jobId);
+      if (ja) ja.valor += Number(c.valor ?? 0);
+      else destinos.push({ ...alvo, valor: Number(c.valor ?? 0) });
+    }
+  }
+
+  const saida: Record<string, EstadoSaveDaLinha> = {};
+  for (const it of itens) {
+    const origens = origensPorOrcado.get(it.orcado_id) ?? [];
+    if (!it.em_save && origens.length === 0) continue;
+    saida[it.id] = {
+      emSave: it.em_save,
+      saveConsumido: Number(it.save_consumido ?? 0),
+      origens,
+      destinos: it.em_save ? destinos : [],
+    };
+  }
+  return saida;
+}

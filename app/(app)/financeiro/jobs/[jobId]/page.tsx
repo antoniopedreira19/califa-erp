@@ -353,8 +353,16 @@ export default async function JobNoFinanceiroPage({
         }
         planilha={
           /* Sempre em leitura: quem edita realizado, BV e PP é a produção,
-             na página de Jobs. O financeiro confere. */
+             na página de Jobs. O financeiro confere.
+
+             O save entra por inteiro na visualização — coluna, estados e
+             rastro —, e `podeAcoes={false}` fecha a porta da edição, aqui
+             como no resto da planilha. `saldosDeSave` vem vazio porque,
+             sem edição, não há de onde escolher origem. */
           <JobRealizadoSection
+            savePorItem={detalhe.savePorItem}
+            saldosDeSave={[]}
+            clienteNome={detalhe.clienteNome}
             job={{
               id: job.id,
               status: job.status,

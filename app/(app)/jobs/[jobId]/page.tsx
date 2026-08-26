@@ -305,6 +305,9 @@ export default async function JobDetailPage({
         }
         planilha={
           <JobRealizadoSection
+            savePorItem={detalhe.savePorItem}
+            saldosDeSave={detalhe.saldosDeSave}
+            clienteNome={detalhe.clienteNome}
             job={{
               id: job.id,
               status: job.status,

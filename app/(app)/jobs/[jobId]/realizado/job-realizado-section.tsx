@@ -15,6 +15,12 @@ import Link from "next/link";
 import { Clock, ClipboardList } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { nomeVersao } from "@/lib/nome-versao";
+import { useRouter } from "next/navigation";
+import { MenuExibirColunas } from "@/app/(app)/_planilha/exibir-colunas";
+import { SAVE_VAZIO, type EstadoSaveDaLinha } from "@/app/(app)/_planilha/save-coluna";
+import { SaveDialog, type LinhaDoSave } from "@/app/(app)/_planilha/save-dialog";
+import type { SaldoDeSave } from "@/lib/data/saves";
+import { registrarErrataDeSave } from "./save-errata-actions";
 import type {
   Job,
   VersaoOrcamento,
@@ -63,6 +69,12 @@ interface Props {
   empresas: Array<Pick<Empresa, "id" | "razao_social" | "nome_fantasia" | "ativo" | "principal">>;
   /** BV por id do item da versão. Só existe em item tipo A, AR ou D. */
   bvsPorItem: Record<string, ItemBv>;
+  /** Estado do save por id do item da VERSÃO, como o BV. */
+  savePorItem: Record<string, EstadoSaveDaLinha>;
+  /** Saldos de save que o cliente deste job tem para gastar. */
+  saldosDeSave: SaldoDeSave[];
+  /** Nome do cliente — aparece no texto do formulário de save. */
+  clienteNome: string;
   /** Cartões de crédito ativos do tenant — buscados pelo server component pai. */
   cartoes: CartaoOption[];
 }
@@ -76,6 +88,9 @@ export function JobRealizadoSection({
   realizadosMap,
   categoriasMap,
   podeAcoes,
+  savePorItem,
+  saldosDeSave,
+  clienteNome,
   ppsPorItemId,
   fornecedores,
   empresas,
@@ -114,7 +129,35 @@ export function JobRealizadoSection({
   // futura, o job pode ser devolvido, e a trilha tem que sumir por
   // inteiro — como o critério da Tela 2.1 pede (18/08/2026).
   const temBvLancado = itens.some((it) => bvsPorItem[it.id]);
+  const router = useRouter();
   const temCalha = podeAcoes || (temBvLancado && !preAbertura);
+
+  // SAVE — a coluna abre sozinha em quem já usa, e some em quem nunca
+  // usou: a Planilha Interna de sempre continua a de sempre.
+  // Abre sozinha em quem já usa save ou tem saldo a gastar; quem nunca
+  // usou liga pelo menu "Exibir" — sem ele não haveria como criar o
+  // primeiro save de um job.
+  const [saveLigado, setSaveLigado] = React.useState(
+    Object.keys(savePorItem).length > 0 ||
+      saldosDeSave.some((s) => s.disponivel > 0),
+  );
+  const temSave = saveLigado;
+  const [linhaSave, setLinhaSave] = React.useState<ItemPlanilhaJob | null>(null);
+  // No job, mexer no save é ERRATA — e errata exige job aberto, a mesma
+  // porta de `AlterarOrcadoButton`. O financeiro chega aqui com
+  // `podeAcoes` falso e lê sem editar.
+  const podeMexerNoSave = podeAcoes;
+
+  const linhaDoDialog: LinhaDoSave | null = linhaSave
+    ? {
+        id: linhaSave.orcado_id,
+        nome: linhaSave.item,
+        grupoNome:
+          grupos.find((g) => g.id === linhaSave.grupo_id)?.nome ?? "—",
+        tipoCusto: linhaSave.tipo_custo,
+        totalOrcado: Number(linhaSave.total_orcado ?? 0),
+      }
+    : null;
 
   return (
     // Quando dá pra gerar PP, reserva a calha da direita: a trilha de
@@ -155,6 +198,19 @@ export function JobRealizadoSection({
             />
           )}
           <ChaveBrutoLiquido visao={visao} onChange={setVisao} />
+          <MenuExibirColunas
+            blocos={[
+              {
+                chave: "save",
+                rotulo: "Save",
+                visivel: saveLigado,
+                onAlternar: () => setSaveLigado((v) => !v),
+              },
+              { chave: "orcado", rotulo: "Orçado", visivel: true },
+              { chave: "planejado", rotulo: "Planejado", visivel: true },
+              { chave: "realizado", rotulo: "Realizado", visivel: true },
+            ]}
+          />
           {podeAcoes && (
             <AlterarOrcadoButton
               jobId={job.id}
@@ -187,6 +243,9 @@ export function JobRealizadoSection({
             {grupos.map((g) => (
               <JobGrupoCard
                 key={g.id}
+                saveVisivel={temSave}
+                savePorItem={savePorItem}
+                onAbrirSave={podeMexerNoSave ? setLinhaSave : undefined}
                 grupo={g}
                 itens={itensPorGrupo.get(g.id) ?? []}
                 realizadosMap={realizadosMap}
@@ -223,6 +282,46 @@ export function JobRealizadoSection({
           />
         </>
       )}
+
+      <SaveDialog
+        open={linhaSave !== null}
+        onOpenChange={(aberto) => !aberto && setLinhaSave(null)}
+        linha={linhaDoDialog}
+        estado={
+          linhaSave ? (savePorItem[linhaSave.id] ?? SAVE_VAZIO) : SAVE_VAZIO
+        }
+        saldos={saldosDeSave}
+        moeda={versao.moeda}
+        percentualHonorarios={versao.percentual_honorarios}
+        percentualImposto={versao.percentual_imposto}
+        clienteNome={clienteNome}
+        onMarcarSave={
+          linhaSave && podeMexerNoSave
+            ? async (marcar) => {
+                const r = await registrarErrataDeSave(
+                  job.id,
+                  linhaSave.orcado_id,
+                  { tipo: "marcar", emSave: marcar },
+                );
+                if (r.ok) router.refresh();
+                return r;
+              }
+            : undefined
+        }
+        onSalvarConsumo={
+          linhaSave && podeMexerNoSave
+            ? async (origens) => {
+                const r = await registrarErrataDeSave(
+                  job.id,
+                  linhaSave.orcado_id,
+                  { tipo: "consumo", origens },
+                );
+                if (r.ok) router.refresh();
+                return r;
+              }
+            : undefined
+        }
+      />
     </div>
   );
 }
