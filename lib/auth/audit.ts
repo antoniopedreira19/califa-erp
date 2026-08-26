@@ -32,6 +32,14 @@ export type AuditAction =
   | "versao_orcamento.sobrescrita_por_importacao"
   | "versao_orcamento.aprovada"
   | "versao_orcamento.aprovacao_cancelada"
+  // SAVE — o crédito entre jobs (docs/decisions/023-save-entre-jobs.md).
+  // Registrado porque marcar uma linha ou definir um consumo move
+  // faturamento previsto e valor do job, e move dinheiro entre jobs.
+  | "save.linha.marcada"
+  | "save.linha.desmarcada"
+  | "save.consumo.definido"
+  | "save.orcamento.ligado"
+  | "save.orcamento.desligado"
   | "item_bv.lancado"
   | "item_bv.editado"
   | "item_bv.confirmado"
