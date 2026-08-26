@@ -22,8 +22,17 @@ import type {
 } from "@/lib/types";
 import { VISAO_BV_PADRAO, type VisaoBv } from "@/lib/calculos/bv-planilha";
 import type { FornecedorOpcao } from "@/app/(app)/_bv/bv-dialog";
+import { useRouter } from "next/navigation";
+import { SAVE_VAZIO, type EstadoSaveDaLinha } from "@/app/(app)/_planilha/save-coluna";
+import { SaveDialog, type LinhaDoSave } from "@/app/(app)/_planilha/save-dialog";
+import type { SaldoDeSave } from "@/lib/data/saves";
 import { GruposSection } from "./grupos-section";
 import { TotaisCard } from "./totais-card";
+import {
+  definirSavePorPadrao,
+  marcarSaveDaLinha,
+  salvarConsumoDeSave,
+} from "./save-actions";
 
 interface Props {
   grupos: VersaoOrcamentoGrupo[];
@@ -38,6 +47,17 @@ interface Props {
   versaoLabel: string;
   percentualHonorarios: number;
   percentualImposto: number;
+  // ---- SAVE (docs/decisions/023-save-entre-jobs.md)
+  versaoId: string;
+  /** Aparece no texto do formulário: o crédito é do cliente. */
+  clienteNome: string;
+  savePorPadrao: boolean;
+  /** Estado do save por id do item. Só traz item que tem algo. */
+  savePorItem: Record<string, EstadoSaveDaLinha>;
+  /** Saldos de save que este cliente tem para gastar. */
+  saldosDeSave: SaldoDeSave[];
+  /** Nome do grupo por id — o formulário mostra de qual grupo é a linha. */
+  nomeDoGrupo: Record<string, string>;
 }
 
 export function PlanilhaVersao({
@@ -52,8 +72,38 @@ export function PlanilhaVersao({
   versaoLabel,
   percentualHonorarios,
   percentualImposto,
+  versaoId,
+  clienteNome,
+  savePorPadrao,
+  savePorItem,
+  saldosDeSave,
+  nomeDoGrupo,
 }: Props) {
+  const router = useRouter();
   const [visao, setVisao] = React.useState<VisaoBv>(VISAO_BV_PADRAO);
+
+  // A coluna abre sozinha em quem já usa save, e fica fechada em quem
+  // nunca usou: assim a planilha de sempre continua a de sempre.
+  const temSave =
+    savePorPadrao ||
+    Object.keys(savePorItem).length > 0 ||
+    saldosDeSave.some((s) => s.disponivel > 0);
+  const [saveVisivel, setSaveVisivel] = React.useState(temSave);
+  const [padrao, setPadrao] = React.useState(savePorPadrao);
+  const [linhaAberta, setLinhaAberta] =
+    React.useState<VersaoOrcamentoItem | null>(null);
+
+  const editavel = !readOnly;
+
+  const linhaDoDialog: LinhaDoSave | null = linhaAberta
+    ? {
+        id: linhaAberta.id,
+        nome: linhaAberta.item,
+        grupoNome: nomeDoGrupo[linhaAberta.grupo_id] ?? "—",
+        tipoCusto: linhaAberta.tipo_custo,
+        totalOrcado: Number(linhaAberta.total_orcado ?? 0),
+      }
+    : null;
 
   return (
     <>
@@ -80,6 +130,21 @@ export function PlanilhaVersao({
           bvsPorItem={bvsPorItem}
           fornecedores={fornecedores}
           versaoLabel={versaoLabel}
+          saveVisivel={saveVisivel}
+          savePorItem={savePorItem}
+          onAbrirSave={editavel ? setLinhaAberta : undefined}
+          onAlternarSave={() => setSaveVisivel((v) => !v)}
+          savePorPadrao={padrao}
+          onAlternarSavePadrao={
+            editavel
+              ? async (ligado) => {
+                  setPadrao(ligado);
+                  const r = await definirSavePorPadrao(versaoId, ligado);
+                  if (!r.ok) setPadrao(!ligado);
+                  router.refresh();
+                }
+              : undefined
+          }
         />
       )}
 
@@ -91,6 +156,38 @@ export function PlanilhaVersao({
         percentualHonorarios={percentualHonorarios}
         percentualImposto={percentualImposto}
         moeda={moeda}
+      />
+
+      <SaveDialog
+        open={linhaAberta !== null}
+        onOpenChange={(aberto) => !aberto && setLinhaAberta(null)}
+        linha={linhaDoDialog}
+        estado={
+          linhaAberta ? (savePorItem[linhaAberta.id] ?? SAVE_VAZIO) : SAVE_VAZIO
+        }
+        saldos={saldosDeSave}
+        moeda={moeda}
+        percentualHonorarios={percentualHonorarios}
+        percentualImposto={percentualImposto}
+        clienteNome={clienteNome}
+        onMarcarSave={
+          linhaAberta
+            ? async (marcar) => {
+                const r = await marcarSaveDaLinha(linhaAberta.id, marcar);
+                if (r.ok) router.refresh();
+                return r;
+              }
+            : undefined
+        }
+        onSalvarConsumo={
+          linhaAberta
+            ? async (origens) => {
+                const r = await salvarConsumoDeSave(linhaAberta.id, origens);
+                if (r.ok) router.refresh();
+                return r;
+              }
+            : undefined
+        }
       />
     </>
   );

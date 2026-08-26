@@ -1,6 +1,9 @@
 "use client";
 
 import * as React from "react";
+import { cn } from "@/lib/utils";
+import { MenuExibirColunas } from "@/app/(app)/_planilha/exibir-colunas";
+import type { EstadoSaveDaLinha } from "@/app/(app)/_planilha/save-coluna";
 import type {
   VersaoOrcamentoGrupo,
   VersaoOrcamentoItem,
@@ -39,6 +42,15 @@ interface Props {
   bvsPorItem: Record<string, ItemBv>;
   fornecedores: FornecedorOpcao[];
   versaoLabel: string;
+  /** Liga a coluna SAVE nas tabelas dos grupos. */
+  saveVisivel?: boolean;
+  savePorItem?: Record<string, EstadoSaveDaLinha>;
+  onAbrirSave?: (item: VersaoOrcamentoItem) => void;
+  /** Liga e desliga a coluna Save. Ausente ⇒ o menu some. */
+  onAlternarSave?: () => void;
+  /** Chave "Orçamento de save": todo item novo nasce marcado. */
+  savePorPadrao?: boolean;
+  onAlternarSavePadrao?: (ligado: boolean) => void;
 }
 
 export function GruposSection({
@@ -52,6 +64,12 @@ export function GruposSection({
   bvsPorItem,
   fornecedores,
   versaoLabel,
+  saveVisivel,
+  savePorItem,
+  onAbrirSave,
+  onAlternarSave,
+  savePorPadrao,
+  onAlternarSavePadrao,
 }: Props) {
   // A máquina de estado mora em `_planilha/recolher-grupos`: a planilha do
   // job, a da conferência do financeiro e os blocos da visão agregada
@@ -66,8 +84,40 @@ export function GruposSection({
           algumAberto={recolher.algumAberto}
           onAlternarTodos={recolher.alternarTodos}
         />
-        <ChaveBrutoLiquido visao={visao} onChange={onMudarVisao} />
+        <div className="flex items-center gap-3">
+          {onAlternarSavePadrao && (
+            <ChaveOrcamentoDeSave
+              ligado={savePorPadrao ?? false}
+              onChange={onAlternarSavePadrao}
+            />
+          )}
+          <ChaveBrutoLiquido visao={visao} onChange={onMudarVisao} />
+          {onAlternarSave && (
+            <MenuExibirColunas
+              blocos={[
+                {
+                  chave: "save",
+                  rotulo: "Save",
+                  visivel: saveVisivel ?? false,
+                  onAlternar: onAlternarSave,
+                },
+                { chave: "orcado", rotulo: "Orçado", visivel: true },
+                { chave: "planejado", rotulo: "Planejado", visivel: true },
+                { chave: "realizado", rotulo: "Realizado", visivel: false },
+              ]}
+            />
+          )}
+        </div>
       </div>
+
+      {savePorPadrao && (
+        <div className="mb-3 rounded-xl border border-[#d7d5cf] bg-muted/30 px-3.5 py-2.5 text-[11.5px] leading-relaxed text-muted-foreground">
+          <strong className="text-foreground">Orçamento de save ligado.</strong>{" "}
+          Todo item novo nasce em save — o cliente paga, o serviço vira
+          crédito. As linhas já existentes não mudam; desligar não desmarca
+          nada.
+        </div>
+      )}
 
       <div className="space-y-6">
         {secoes.map((s) => (
@@ -85,9 +135,54 @@ export function GruposSection({
             bvsPorItem={bvsPorItem}
             fornecedores={fornecedores}
             versaoLabel={versaoLabel}
+            saveVisivel={saveVisivel}
+            savePorItem={savePorItem}
+            onAbrirSave={onAbrirSave}
           />
         ))}
       </div>
     </div>
+  );
+}
+
+/** A chave do "Orçamento de save" — default de linha nova, não trava
+ *  (decisão 023 §10). Fica na barra da planilha, e não no cabeçalho da
+ *  página como no design: é ajuste de comportamento da planilha, e o
+ *  cabeçalho é server component. */
+function ChaveOrcamentoDeSave({
+  ligado,
+  onChange,
+}: {
+  ligado: boolean;
+  onChange: (ligado: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={ligado}
+      onClick={() => onChange(!ligado)}
+      className={cn(
+        "inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors",
+        ligado
+          ? "border-[#5f5d57] bg-[#5f5d57] text-white"
+          : "border-border bg-card text-muted-foreground hover:bg-muted",
+      )}
+    >
+      <span
+        className={cn(
+          "inline-flex h-3.5 w-6 flex-none items-center rounded-full p-0.5 transition-colors",
+          ligado ? "bg-white/30" : "bg-muted-foreground/25",
+        )}
+      >
+        <span
+          className={cn(
+            "h-2.5 w-2.5 rounded-full bg-current transition-transform",
+            ligado && "translate-x-2.5",
+          )}
+        />
+      </span>
+      Orçamento de save
+    </button>
   );
 }
