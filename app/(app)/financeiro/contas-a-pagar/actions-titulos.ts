@@ -249,9 +249,21 @@ export async function darBaixaTitulo(input: unknown): Promise<Result> {
   const d = parsed.data;
 
   const gate = await checarGateFinanceiro(
-    d.origem === "pp" ? "pedido_compra" : "conta_avulsa",
+    d.origem === "pp"
+      ? "pedido_compra"
+      : d.origem === "pp_devolucao_verba"
+        ? "pp_verba_devolucao"
+        : d.origem === "desembolso"
+          ? "desembolso"
+          : "conta_avulsa",
     d.id,
-    d.origem === "pp" ? "pedido_compra.parcela_paga" : "conta_avulsa.baixada",
+    d.origem === "pp"
+      ? "pedido_compra.parcela_paga"
+      : d.origem === "pp_devolucao_verba"
+        ? "pp_verba_devolucao.baixada"
+        : d.origem === "desembolso"
+          ? "desembolso.parcela_paga"
+          : "conta_avulsa.baixada",
   );
   if (!gate.ok) return gate;
   const { session, supabase } = gate;
