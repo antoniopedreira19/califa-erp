@@ -3,6 +3,7 @@ import type {
   JobMensagem,
   PedidoCompraNaLista,
 } from "@/lib/types";
+import { nomeContraparteBRPP } from "@/lib/types";
 
 /**
  * Monta a thread do chat de PPs de um job.
@@ -62,8 +63,12 @@ export function montarThreadChatPPs(
   // updated_at. Uma PP que ainda está "em_avaliacao" só gera o card de
   // emissão.
   for (const pp of pps) {
-    const fornecedorNome =
-      (pp.fornecedor_id ? fornecedoresPorId[pp.fornecedor_id] : null) ?? "Fornecedor";
+    const fornecedorLookup = pp.fornecedor_id ? fornecedoresPorId[pp.fornecedor_id] : null;
+    const fornecedorNome = nomeContraparteBRPP({
+      verba_producao: pp.verba_producao,
+      fornecedor: fornecedorLookup ? { nome: fornecedorLookup } : null,
+      responsavel: pp.responsavel,
+    }) || "Fornecedor";
     const valorFmt = moeda(Number(pp.valor ?? 0), moedaCode);
 
     // Card de emissão (sempre existe)

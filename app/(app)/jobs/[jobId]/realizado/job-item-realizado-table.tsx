@@ -10,10 +10,12 @@ import type {
   ItemPlanilhaJob,
   JobItemRealizado,
   PedidoCompra,
+  PedidoCompraNaLista,
   Fornecedor,
   Empresa,
   ItemBv,
 } from "@/lib/types";
+import { nomeContraparteBRPP } from "@/lib/types";
 import { CalhaLinha } from "./calha-linha";
 import { GerarPPDrawer } from "./gerar-pp-drawer";
 import { PainelPPsItem } from "./painel-pps-item";
@@ -92,7 +94,7 @@ interface Props {
    *  tem `podeAcoes` falso mas conserva os BVs lançados para consulta. */
   preAbertura: boolean;
   // PP rail — várias PPs por item desde 17/08/2026 (PPs parciais).
-  ppsPorItemId: Map<string, PedidoCompra[]>;
+  ppsPorItemId: Map<string, PedidoCompraNaLista[]>;
   fornecedores: Array<Pick<Fornecedor, "id" | "nome" | "razao_social" | "status">>;
   empresas: Array<Pick<Empresa, "id" | "razao_social" | "nome_fantasia" | "ativo" | "principal">>;
   /** Membros ativos do tenant — usados no combo de Responsável da Verba de Produção. */
@@ -826,7 +828,11 @@ export function JobItemRealizadoTable({
                 id: pp.id,
                 codigo: pp.codigo,
                 status: pp.status,
-                fornecedorNome: nomeDoFornecedor(fornecedores, pp.fornecedor_id ?? ""),
+                fornecedorNome: nomeContraparteBRPP({
+                  verba_producao: pp.verba_producao,
+                  fornecedor: pp.fornecedor_id ? { nome: nomeDoFornecedor(fornecedores, pp.fornecedor_id) } : null,
+                  responsavel: pp.responsavel,
+                }) || nomeDoFornecedor(fornecedores, pp.fornecedor_id ?? ""),
                 quantidade: Number(pp.quantidade ?? 0),
                 valor: Number(pp.valor ?? 0),
               }))}

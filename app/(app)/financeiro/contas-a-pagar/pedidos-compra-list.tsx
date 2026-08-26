@@ -5,7 +5,7 @@ import { Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { PPStatus, FormaPagamento, PPVerbaPrestacao, PPVerbaPrestacaoAnexo } from "@/lib/types";
-import { ppStatusLabel } from "@/lib/types";
+import { ppStatusLabel, nomeContraparteBRPP } from "@/lib/types";
 import { PPDrawerFinanceiro } from "./pp-drawer-financeiro";
 
 export interface PPRow {
@@ -43,6 +43,8 @@ export interface PPRow {
   cartao_credito_id: string | null; // idem
   /** Verdadeiro quando a PP é do tipo Verba de Produção. */
   verba_producao: boolean;
+  /** Nome do responsável pela verba — preenchido quando verba_producao = true. */
+  responsavel_nome: string | null;
   /**
    * Prestação de contas vinculada (só existe se a PP for verba + já foi
    * prestada). Null quando não foi prestada ainda.
@@ -232,9 +234,16 @@ export function PedidosCompraList({ rows, tenantId }: PedidosCompraListProps) {
                 className="border-b border-border last:border-0 hover:bg-accent/40 transition-colors cursor-pointer focus-visible:outline-none focus-visible:bg-accent/40"
               >
                 <td className="whitespace-nowrap px-4 py-3 font-mono text-xs font-bold text-california-red">
-                  {r.codigo}
+                  <span>{r.codigo}</span>
+                  {r.verba_producao && (
+                    <span className="ml-2 rounded-md bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
+                      Verba
+                    </span>
+                  )}
                 </td>
-                <td className="px-4 py-3">{r.fornecedor_nome}</td>
+                <td className="px-4 py-3">
+                  {nomeContraparteBRPP({ verba_producao: r.verba_producao, fornecedor: r.fornecedor_nome ? { nome: r.fornecedor_nome } : null, responsavel: r.responsavel_nome ? { nome: r.responsavel_nome } : null })}
+                </td>
                 <td className="px-4 py-3 text-muted-foreground">
                   <span className="font-mono text-xs">{r.job_codigo}</span>{" "}
                   <span>{r.job_nome}</span>

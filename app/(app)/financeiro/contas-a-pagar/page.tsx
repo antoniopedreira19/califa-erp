@@ -54,6 +54,7 @@ export default async function PedidosCompraFinanceiroPage() {
         cancelada_em, motivo_cancelamento,
         rejeitada_em, motivo_rejeicao, pago_em, verba_producao,
         fornecedor:fornecedores(id, nome, razao_social),
+        responsavel:profiles!responsavel_verba_id(id, nome),
         empresa:empresas(id, razao_social, nome_fantasia),
         cancelada_por_profile:profiles!cancelada_por(nome),
         emitida_por_profile:profiles!emitida_por(nome),
@@ -295,6 +296,7 @@ export default async function PedidosCompraFinanceiroPage() {
     pago_em: string | null;
     verba_producao: boolean;
     fornecedor: { id: string; nome: string; razao_social: string | null } | null;
+    responsavel: { id: string; nome: string } | null;
     empresa: { id: string; razao_social: string; nome_fantasia: string | null } | null;
     cancelada_por_profile: { nome: string } | null;
     emitida_por_profile: { nome: string } | null;
@@ -358,6 +360,7 @@ export default async function PedidosCompraFinanceiroPage() {
     forma_pagamento: null,
     cartao_credito_id: null,
     verba_producao: r.verba_producao ?? false,
+    responsavel_nome: r.responsavel?.nome ?? null,
     prestacao: prestacoesPorPP.get(r.id) ?? null,
     anexos: r.anexos ?? [],
     // Ordenadas aqui: o embed do PostgREST não garante ordem, e a lista
