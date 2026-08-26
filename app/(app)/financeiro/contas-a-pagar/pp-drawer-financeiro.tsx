@@ -51,11 +51,14 @@ import type { PPRow } from "./pedidos-compra-list";
 import { rejeitarPedidoCompraFinanceiro } from "./actions";
 import { aprovarPPComData } from "./actions-titulos";
 import { DocumentosPPOverlay } from "./documentos-pp-overlay";
+import { PrestarContasDialog } from "./prestar-contas-dialog";
+import { signedUrlAnexoPrestacao } from "./prestacao-verba-actions";
 
 interface Props {
   pp: PPRow | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  tenantId: string;
 }
 
 function formatDate(iso: string | null): string {
@@ -84,13 +87,17 @@ function statusBadgeClasses(status: PPStatus): string {
   }
 }
 
+function formatMoney(n: number): string {
+  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
 function iconePorMime(nome: string): typeof FileText {
   const lower = nome.toLowerCase();
   if (/\.(png|jpe?g|webp)$/.test(lower)) return ImageIcon;
   return FileText;
 }
 
-export function PPDrawerFinanceiro({ pp, open, onOpenChange }: Props) {
+export function PPDrawerFinanceiro({ pp, open, onOpenChange, tenantId }: Props) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
   const [erro, setErro] = React.useState<string | null>(null);
@@ -99,6 +106,7 @@ export function PPDrawerFinanceiro({ pp, open, onOpenChange }: Props) {
   const [askRejeitar, setAskRejeitar] = React.useState(false);
   const [motivo, setMotivo] = React.useState("");
   const [docsAbertos, setDocsAbertos] = React.useState(false);
+  const [prestarOpen, setPrestarOpen] = React.useState(false);
 
   React.useEffect(() => {
     if (!pp) return;
@@ -106,7 +114,14 @@ export function PPDrawerFinanceiro({ pp, open, onOpenChange }: Props) {
     setErro(null);
     setMotivo("");
     setDocsAbertos(false);
+    setPrestarOpen(false);
   }, [pp]);
+
+  async function abrirAnexo(anexo_id: string) {
+    const res = await signedUrlAnexoPrestacao(anexo_id);
+    if (res.ok) window.open(res.url, "_blank");
+    else alert(res.message);
+  }
 
   React.useEffect(() => {
     if (!toast) return;
@@ -406,6 +421,90 @@ export function PPDrawerFinanceiro({ pp, open, onOpenChange }: Props) {
               </div>
             )}
 
+            {/* Prestação de contas — visível apenas para PPs de Verba de
+                Produção. Exibe 3 estados: PP não paga (aviso), PP paga sem
+                prestação (botão), prestação já feita (card readonly). */}
+            {pp.verba_producao && (
+              <section className="rounded-md border border-border p-4">
+                <h3 className="text-sm font-semibold">Prestação de contas</h3>
+
+                {pp.status !== "pago" && (
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    A prestação de contas só pode ser feita depois que a PP for totalmente paga.
+                  </p>
+                )}
+
+                {pp.status === "pago" && !pp.prestacao && (
+                  <div className="mt-3">
+                    <button
+                      type="button"
+                      onClick={() => setPrestarOpen(true)}
+                      className="rounded-md bg-california-red px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-california-red-hover"
+                    >
+                      Prestar contas
+                    </button>
+                  </div>
+                )}
+
+                {pp.prestacao && (
+                  <div className="mt-3 space-y-3 text-sm">
+                    <p className="text-muted-foreground">
+                      Fechada em {formatDate(pp.prestacao.fechada_em)}
+                      {pp.prestacao.fechada_por_profile?.nome
+                        ? ` por ${pp.prestacao.fechada_por_profile.nome}`
+                        : ""}.
+                    </p>
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="rounded border border-border bg-muted/20 p-3 text-center">
+                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Valor da PP</p>
+                        <p className="mt-1 font-mono font-semibold">{formatMoney(pp.valor)}</p>
+                      </div>
+                      <div className="rounded border border-border bg-muted/20 p-3 text-center">
+                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Gasto declarado</p>
+                        <p className="mt-1 font-mono font-semibold">{formatMoney(pp.prestacao.valor_gasto)}</p>
+                      </div>
+                      <div className="rounded border border-border bg-muted/20 p-3 text-center">
+                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Devolvido</p>
+                        <p className="mt-1 font-mono font-semibold text-emerald-700">
+                          {formatMoney(pp.prestacao.valor_devolvido)}
+                        </p>
+                      </div>
+                    </div>
+                    {pp.prestacao.anexos.length > 0 && (
+                      <div>
+                        <p className="mb-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                          Notas fiscais anexadas
+                        </p>
+                        <ul className="space-y-1">
+                          {pp.prestacao.anexos.map((a) => {
+                            const Icon = iconePorMime(a.arquivo_nome_original);
+                            return (
+                              <li
+                                key={a.id}
+                                className="flex items-center gap-2 rounded border border-border bg-white p-2 text-xs"
+                              >
+                                <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                                <button
+                                  type="button"
+                                  onClick={() => abrirAnexo(a.id)}
+                                  className="flex-1 truncate text-left text-california-red underline hover:opacity-80"
+                                >
+                                  {a.arquivo_nome_original}
+                                </button>
+                                <span className="text-muted-foreground">
+                                  {(a.arquivo_tamanho_bytes / 1024).toFixed(0)} KB
+                                </span>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </section>
+            )}
+
             {/* Data de pagamento — o campo que substituiu "Ações do
                 financeiro". Obrigatório antes de aprovar. */}
             {emAvaliacao && (
@@ -480,6 +579,20 @@ export function PPDrawerFinanceiro({ pp, open, onOpenChange }: Props) {
           ) : undefined
         }
       />
+
+      {/* Dialog de prestação de contas (só verba de produção paga) */}
+      {pp.verba_producao && (
+        <PrestarContasDialog
+          open={prestarOpen}
+          onOpenChange={setPrestarOpen}
+          pp={{ id: pp.id, codigo: pp.codigo, valor: pp.valor, servico: pp.servico }}
+          tenantId={tenantId}
+          onSuccess={() => {
+            setPrestarOpen(false);
+            router.refresh();
+          }}
+        />
+      )}
 
       {/* Confirm rejeitar */}
       <ConfirmDialog

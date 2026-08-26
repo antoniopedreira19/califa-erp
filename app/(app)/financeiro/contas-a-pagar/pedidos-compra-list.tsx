@@ -4,7 +4,7 @@ import * as React from "react";
 import { Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import type { PPStatus, FormaPagamento } from "@/lib/types";
+import type { PPStatus, FormaPagamento, PPVerbaPrestacao, PPVerbaPrestacaoAnexo } from "@/lib/types";
 import { ppStatusLabel } from "@/lib/types";
 import { PPDrawerFinanceiro } from "./pp-drawer-financeiro";
 
@@ -41,6 +41,16 @@ export interface PPRow {
   emitida_por_nome: string | null;
   forma_pagamento: FormaPagamento | null; // sempre null para PP (coluna dropada na Task 7; populada via baixa no TituloRow)
   cartao_credito_id: string | null; // idem
+  /** Verdadeiro quando a PP é do tipo Verba de Produção. */
+  verba_producao: boolean;
+  /**
+   * Prestação de contas vinculada (só existe se a PP for verba + já foi
+   * prestada). Null quando não foi prestada ainda.
+   */
+  prestacao?: (PPVerbaPrestacao & {
+    fechada_por_profile: { nome: string } | null;
+    anexos: Array<Pick<PPVerbaPrestacaoAnexo, "id" | "arquivo_nome_original" | "arquivo_tamanho_bytes" | "arquivo_mimetype">>;
+  }) | null;
   anexos: Array<{
     id: string;
     arquivo_nome_original: string;
@@ -102,9 +112,10 @@ const STATUS_FILTROS: Array<{ key: FiltroStatus; label: string }> = [
 
 interface PedidosCompraListProps {
   rows: PPRow[];
+  tenantId: string;
 }
 
-export function PedidosCompraList({ rows }: PedidosCompraListProps) {
+export function PedidosCompraList({ rows, tenantId }: PedidosCompraListProps) {
   const [filtro, setFiltro] = React.useState<FiltroStatus>("em_avaliacao");
   const [busca, setBusca] = React.useState("");
   const [ppSelecionada, setPpSelecionada] = React.useState<PPRow | null>(null);
@@ -258,6 +269,7 @@ export function PedidosCompraList({ rows }: PedidosCompraListProps) {
         onOpenChange={(open) => {
           if (!open) setPpSelecionada(null);
         }}
+        tenantId={tenantId}
       />
     </div>
   );

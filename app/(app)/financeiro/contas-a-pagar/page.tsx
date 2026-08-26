@@ -42,6 +42,7 @@ export default async function PedidosCompraFinanceiroPage() {
     cartoesRes,
     desembolsosRes,
     desembolsosTitulosRes,
+    prestacoesRes,
   ] = await Promise.all([
     supabase
       .from("pedidos_compra")
@@ -50,7 +51,7 @@ export default async function PedidosCompraFinanceiroPage() {
         id, codigo, status, valor, quantidade, servico, especificacoes,
         prazo_pagamento, prazo_pagamento_financeiro, pdf_path, created_at,
         cancelada_em, motivo_cancelamento,
-        rejeitada_em, motivo_rejeicao, pago_em,
+        rejeitada_em, motivo_rejeicao, pago_em, verba_producao,
         fornecedor:fornecedores(id, nome, razao_social),
         empresa:empresas(id, razao_social, nome_fantasia),
         cancelada_por_profile:profiles!cancelada_por(nome),
@@ -220,6 +221,15 @@ export default async function PedidosCompraFinanceiroPage() {
       .eq("tenant_id", session.activeTenant.id)
       .in("status", ["aprovada", "pago"])
       .order("created_at", { ascending: false }),
+    // Prestações de contas de PPs de Verba de Produção (Task 6).
+    supabase
+      .from("pp_verba_prestacoes")
+      .select(`
+        id, pedido_compra_id, valor_gasto, valor_devolvido, fechada_em,
+        fechada_por_profile:profiles!fechada_por(nome),
+        anexos:pp_verba_prestacoes_anexos(id, arquivo_nome_original, arquivo_tamanho_bytes, arquivo_mimetype)
+      `)
+      .eq("tenant_id", session.activeTenant.id),
   ]);
 
   if (error) console.error("[financeiro.pp.list]", error.message);
@@ -229,6 +239,29 @@ export default async function PedidosCompraFinanceiroPage() {
   if (cartoesRes.error) console.error("[financeiro.cartoes.list]", cartoesRes.error.message);
   if (desembolsosRes.error) console.error("[financeiro.desembolsos.list]", desembolsosRes.error.message);
   if (desembolsosTitulosRes.error) console.error("[financeiro.desembolsos_titulos.list]", desembolsosTitulosRes.error.message);
+  if (prestacoesRes.error) console.error("[financeiro.prestacoes.list]", prestacoesRes.error.message);
+
+  // Mapa pedido_compra_id → prestação (com anexos e profile de quem fechou)
+  type PrestacaoComAnexos = {
+    id: string;
+    pedido_compra_id: string;
+    valor_gasto: number;
+    valor_devolvido: number;
+    fechada_em: string;
+    fechada_por: string;
+    tenant_id: string;
+    fechada_por_profile: { nome: string } | null;
+    anexos: Array<{
+      id: string;
+      arquivo_nome_original: string;
+      arquivo_tamanho_bytes: number;
+      arquivo_mimetype: string;
+    }>;
+  };
+  const prestacoesPorPP = new Map<string, PrestacaoComAnexos>();
+  for (const p of (prestacoesRes.data ?? []) as unknown as PrestacaoComAnexos[]) {
+    prestacoesPorPP.set(p.pedido_compra_id, p);
+  }
 
   const rows: PPRow[] = ((data ?? []) as unknown as Array<{
     id: string;
@@ -247,6 +280,7 @@ export default async function PedidosCompraFinanceiroPage() {
     rejeitada_em: string | null;
     motivo_rejeicao: string | null;
     pago_em: string | null;
+    verba_producao: boolean;
     fornecedor: { id: string; nome: string; razao_social: string | null } | null;
     empresa: { id: string; razao_social: string; nome_fantasia: string | null } | null;
     cancelada_por_profile: { nome: string } | null;
@@ -310,6 +344,8 @@ export default async function PedidosCompraFinanceiroPage() {
     emitida_por_nome: r.emitida_por_profile?.nome ?? null,
     forma_pagamento: null,
     cartao_credito_id: null,
+    verba_producao: r.verba_producao ?? false,
+    prestacao: prestacoesPorPP.get(r.id) ?? null,
     anexos: r.anexos ?? [],
     // Ordenadas aqui: o embed do PostgREST não garante ordem, e a lista
     // e o drawer mostram "1/3, 2/3, 3/3" na sequência.
@@ -708,7 +744,7 @@ export default async function PedidosCompraFinanceiroPage() {
       </header>
 
       <ContasPagarTabs
-        pps={<PedidosCompraList rows={rows} />}
+        pps={<PedidosCompraList rows={rows} tenantId={session.activeTenant.id} />}
         ppsPendentesCount={ppsPendentesCountRes.count ?? 0}
         desembolsos={<DesembolsosContasPagarList rows={desembolsosRows} />}
         desembolsosPendentesCount={desembolsosPendentesCount}
