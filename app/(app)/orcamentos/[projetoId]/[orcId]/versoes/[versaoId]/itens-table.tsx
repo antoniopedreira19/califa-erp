@@ -14,6 +14,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn, formatCurrency } from "@/lib/utils";
+import {
+  CabecalhoSaveColuna,
+  CabecalhoSaveFaixa,
+  CelulaSave,
+  SAVE_VAZIO,
+  classesDaLinhaComSave,
+  type EstadoSaveDaLinha,
+} from "@/app/(app)/_planilha/save-coluna";
 import { calcularTotaisPlanejados } from "@/lib/calculos/versao-totais";
 import {
   tipoCustoLabel,
@@ -31,6 +39,9 @@ import {
 import {
   ColunasFixas,
   LARGURA_MINIMA,
+  LARGURA_MINIMA_SAVE,
+  colunasDoRotulo,
+  totalDeColunas,
 } from "@/app/(app)/_planilha/grade-orcamento";
 import {
   celulaVizinha,
@@ -120,6 +131,15 @@ interface Props {
    *  enquanto o card mostra um aviso próprio à frente dela. Sem valor,
    *  vale a presença do `cabecalhoGrupo`. */
   abreCard?: boolean;
+  /** Liga a coluna SAVE. Desligada, a grade volta às 13 colunas de sempre
+   *  e nada nesta tabela muda — é o estado de quem nunca usou save. */
+  saveVisivel?: boolean;
+  /** Estado do save por id do item da versão. Item ausente = linha limpa. */
+  savePorItem?: Record<string, EstadoSaveDaLinha>;
+  /** Abre o formulário de save da linha. Ausente ⇒ a coluna mostra o
+   *  estado mas não deixa mexer: é como o financeiro e a versão aprovada
+   *  leem a planilha. */
+  onAbrirSave?: (item: VersaoOrcamentoItem) => void;
 }
 
 /** Campos que a grade edita — espelha o allowlist do server action. */
@@ -276,6 +296,9 @@ export function ItensTable({
   cabecalhoGrupo,
   acoesGrupo,
   abreCard,
+  saveVisivel = false,
+  savePorItem,
+  onAbrirSave,
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
@@ -708,14 +731,18 @@ export function ItensTable({
           )}
         >
           <table
-            className={cn("w-full table-fixed text-sm border-collapse", LARGURA_MINIMA)}
+            className={cn(
+              "w-full table-fixed text-sm border-collapse",
+              saveVisivel ? LARGURA_MINIMA_SAVE : LARGURA_MINIMA,
+            )}
           >
-            <ColunasFixas />
+            <ColunasFixas save={saveVisivel} />
             <thead className="text-[10px] uppercase tracking-wider text-muted-foreground">
               {/* Linha 1 — o nome do agrupamento divide a faixa com os
                   blocos, em vez de ocupar uma barra só dele acima da
                   tabela. */}
               <tr ref={faixaRef}>
+                {saveVisivel && <CabecalhoSaveFaixa />}
                 <th colSpan={3} className={FAIXA_GRUPO}>
                   {cabecalhoGrupo}
                 </th>
@@ -735,6 +762,7 @@ export function ItensTable({
 
               {/* Linha 2 — sub-cabeçalho de colunas */}
               <tr className="bg-muted/40">
+                {saveVisivel && <CabecalhoSaveColuna />}
                 <th className="text-left font-semibold px-3 py-2 border-r border-r-border">
                   Item
                 </th>
@@ -832,7 +860,7 @@ export function ItensTable({
               {aberto && itens.length === 0 && !draft && (
                 <tr>
                   <td
-                    colSpan={13}
+                    colSpan={totalDeColunas(saveVisivel)}
                     className="py-8 text-center text-sm text-muted-foreground"
                   >
                     Sem itens neste grupo ainda.
@@ -855,6 +883,7 @@ export function ItensTable({
                 const categoria = categorias.find((c) => c.id === categoriaId);
                 const ativaAqui = (campo: Campo) =>
                   ativa?.rowId === item.id && ativa.campo === campo;
+                const save = savePorItem?.[item.id] ?? SAVE_VAZIO;
 
                 return (
                   <tr
@@ -863,8 +892,20 @@ export function ItensTable({
                       ALTURA_LINHA,
                       "border-b border-border transition-colors",
                       editavel && "hover:bg-accent/40",
+                      saveVisivel && classesDaLinhaComSave(save),
                     )}
                   >
+                    {saveVisivel && (
+                      <CelulaSave
+                        estado={save}
+                        moeda={moeda}
+                        totalOrcado={totais.orcado}
+                        onAbrir={
+                          onAbrirSave ? () => onAbrirSave(item) : undefined
+                        }
+                        disabled={pending}
+                      />
+                    )}
                     <CelulaTexto
                       valor={String(valorAtual(item, "item") ?? "")}
                       editando={ativaAqui("item")}
@@ -1098,6 +1139,7 @@ export function ItensTable({
               {/* Linha nova — preenchida na própria grade, sem drawer. */}
               {aberto && draft && (
                 <LinhaDraft
+                  saveVisivel={saveVisivel}
                   draft={draft}
                   moeda={moeda}
                   categorias={categorias}
@@ -1123,7 +1165,7 @@ export function ItensTable({
                     corpo de antes — fica só um degrau acima da linha de
                     item (28px) em vez de quase o dobro. */}
                 <td
-                  colSpan={3}
+                  colSpan={colunasDoRotulo(saveVisivel)}
                   className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"
                 >
                   {rotuloSubtotal(visao)}
@@ -1191,7 +1233,7 @@ export function ItensTable({
                   {/* border-t fecha a base da grade: o subtotal é a última
                       linha da planilha, e o "Novo item" fica fora dela. */}
                   <td
-                    colSpan={13}
+                    colSpan={totalDeColunas(saveVisivel)}
                     className="border-t border-border px-3 py-2"
                   >
                     <button
@@ -1609,6 +1651,7 @@ function LinhaDraft({
   onConfirmarNumero,
   onNavegar,
   onFecharCelula,
+  saveVisivel,
 }: {
   draft: Draft;
   moeda: string;
@@ -1623,6 +1666,10 @@ function LinhaDraft({
   /** Fecha só se a célula ainda for a ativa — mesma guarda das linhas de
    *  item, para o aviso de fechamento do Radix não cancelar o Tab. */
   onFecharCelula: (campo: Campo) => void;
+  /** A grade tem a coluna de Save aberta: a linha nova precisa da célula
+   *  vaga, senão ela escorrega uma casa em relação às de cima. A linha
+   *  ainda não existe no banco, então não há save a definir nela. */
+  saveVisivel?: boolean;
 }) {
   const ativaAqui = (campo: Campo) =>
     ativa?.rowId === DRAFT_ID && ativa.campo === campo;
@@ -1643,6 +1690,9 @@ function LinhaDraft({
         "border-b border-border bg-california-red/[0.03]",
       )}
     >
+      {saveVisivel && (
+        <td className="border-r border-r-[#e8e7e3]" aria-hidden />
+      )}
       <CelulaTexto
         valor={draft.item}
         editando={ativaAqui("item")}

@@ -136,3 +136,54 @@ export const FAIXA_GRUPO =
  *  no número; a cor não precisa repetir e ainda brigaria com o verde do
  *  PLANEJADO. Decisão do time, 11/08/2026. */
 export const RENTAB_VALOR = "text-[#282828]";
+
+/** SAVE — a coluna e os estados de linha do crédito entre jobs.
+ *
+ *  Não é um quinto bloco: é uma **calha de estado**, e por isso empresta o
+ *  grafite da RENTABILIDADE em vez de estrear uma cor. Save não é um
+ *  momento da linha (como orçado, planejado e realizado); é uma marca
+ *  sobre ela, e o neutro diz isso sem competir com os três.
+ *
+ *  A distinção entre gerar e consumir fica na TEXTURA, não no matiz:
+ *
+ *  - **gera save** → hachura diagonal. O serviço não acontece aqui, e a
+ *    linha listrada diz "vendido, mas não executado neste projeto" sem
+ *    precisar de legenda.
+ *  - **consome save** → fundo grafite claro, cheio. A linha acontece
+ *    aqui; o que veio de fora é o dinheiro.
+ *
+ *  Do design `Orcamento - Versao com Save.dc.html` (projeto Claude Design
+ *  `69342d83`), 26/08/2026.
+ */
+export const SAVE = {
+  /** Faixa da coluna no cabeçalho, alinhada com as faixas dos blocos. */
+  faixa:
+    "text-[#5f5d57] bg-[#f3f2ef] border-b-[3px] border-b-[#5f5d57] border-r border-r-[#e2e0da]",
+  /** Célula da coluna Save numa linha qualquer. */
+  celula: "text-center border-r border-r-[#e8e7e3]",
+  /** Textura da linha que GERA save — aplicada na célula do Save e nas
+   *  células de texto da linha. */
+  hachura:
+    "bg-[repeating-linear-gradient(135deg,rgba(40,40,40,.055)_0_3px,transparent_3px_7px)]",
+  /** Fundo da linha que CONSOME save. */
+  linhaConsome: "bg-[#f7f6f3]",
+  /** Borda que abre a célula do Save numa linha consumidora. */
+  bordaConsome: "border-l-2 border-l-[#5f5d57]",
+  /** Botão "ainda não definido": tracejado no vermelho California, porque
+   *  é a única ação de criação da coluna. */
+  botaoVazio:
+    "inline-flex items-center justify-center w-[18px] h-[18px] rounded-[5px] border border-dashed border-california-red bg-california-red/[0.07] text-california-red",
+  /** Botão da linha que gera save e ainda não tem destino: grafite cheio. */
+  botaoGera:
+    "inline-flex items-center justify-center w-[18px] h-[18px] rounded-[5px] border border-[#5f5d57] bg-[#5f5d57] text-white",
+  /** Botão que mostra o código do job, nas duas direções. */
+  botaoCodigo:
+    "inline-flex items-center gap-px font-mono text-[9px] font-bold tracking-[-.04em] text-foreground",
+  /** Pastilha "+N" quando a linha consome de mais de uma origem. */
+  pastilhaMais:
+    "inline-flex items-center justify-center ml-0.5 min-w-[13px] h-3 px-0.5 rounded-[3px] bg-[#5f5d57] text-white font-mono text-[8px] font-bold",
+  /** Texto apagado da linha em save — ela não tem custo a mostrar. */
+  textoApagado: "text-[#5f5d57]",
+  /** Cor do ícone de direção. */
+  icone: "text-[#5f5d57]",
+} as const;
