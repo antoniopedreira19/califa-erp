@@ -109,7 +109,7 @@ function origemChipClass(origem: OrigemTitulo): string {
     case "desembolso":
       return "border-amber-200 bg-amber-50 text-amber-700";
     case "pp_devolucao_verba":
-      return "border-teal-200 bg-teal-50 text-teal-700";
+      return "border-emerald-200 bg-emerald-50 text-emerald-700";
   }
 }
 
