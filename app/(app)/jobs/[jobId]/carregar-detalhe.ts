@@ -7,6 +7,7 @@ import { montarThreadChatPPs } from "@/lib/data/job-chat-pps";
 import {
   calcularTotaisVersao,
 } from "@/lib/calculos/versao-totais";
+import { saldosDeSaveDoCliente, saveDoJob } from "@/lib/data/saves";
 import { blocosDoItem, somarBlocosDosItens } from "@/lib/calculos/bv-planilha";
 import {
   JOB_STATUS_TRANSICOES,
@@ -651,8 +652,27 @@ export async function carregarDetalheDoJob(
 
   const podeEditarRealizado = quemPodeMexer && jobAceitaRealizado(job.status);
   const podeAcoesPlanilha = quemPodeMexer && jobAceitaAcoesPlanilha(job.status);
+  // SAVE — o crédito entre jobs. As duas leituras vão juntas: uma em
+  // série apareceria no TTFB da tela mais pesada do job.
+  const clienteIdDoJob: string = raw.projeto?.cliente_id ?? "";
+  const [savePorItem, saldosDeSave] = await Promise.all([
+    saveDoJob(supabase, session.activeTenant.id, jobId, itens),
+    clienteIdDoJob
+      ? saldosDeSaveDoCliente(
+          supabase,
+          session.activeTenant.id,
+          clienteIdDoJob,
+          // Ninguém consome o próprio saldo.
+          jobId,
+        )
+      : Promise.resolve([]),
+  ]);
+
   return {
     raw,
+    savePorItem,
+    saldosDeSave,
+    clienteNome: raw.projeto?.cliente?.nome_fantasia ?? "—",
     job,
     grupos,
     itens,

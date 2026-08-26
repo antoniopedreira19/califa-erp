@@ -31,7 +31,21 @@ import {
   FAIXA_GRUPO,
   RENTAB_VALOR,
 } from "@/app/(app)/_planilha/blocos";
-import { ColunasJob, LARGURA_MINIMA_JOB } from "@/app/(app)/_planilha/grade-job";
+import {
+  ColunasJob,
+  LARGURA_MINIMA_JOB,
+  LARGURA_MINIMA_JOB_SAVE,
+  colunasDoRotuloJob,
+  totalDeColunasJob,
+} from "@/app/(app)/_planilha/grade-job";
+import {
+  CabecalhoSaveColuna,
+  CabecalhoSaveFaixa,
+  CelulaSave,
+  SAVE_VAZIO,
+  classesDaLinhaComSave,
+  type EstadoSaveDaLinha,
+} from "@/app/(app)/_planilha/save-coluna";
 import { aceitaBV, tipoGeraDesembolso } from "@/lib/calculos/versao-totais";
 import {
   BLOCO_ZERO,
@@ -46,6 +60,12 @@ import {
 } from "@/lib/calculos/bv-planilha";
 
 interface Props {
+  /** Liga a coluna SAVE. Mesma coluna da planilha do orçamento — no job
+   *  ela é só leitura até a Errata, que é quem pode mexer no orçado
+   *  depois da abertura (decisão 023, nota de 26/08/2026). */
+  saveVisivel?: boolean;
+  savePorItem?: Record<string, EstadoSaveDaLinha>;
+  onAbrirSave?: (item: ItemPlanilhaJob) => void;
   jobId: string;
   itens: ItemPlanilhaJob[];
   realizadosMap: Map<string, JobItemRealizado>;
@@ -168,6 +188,9 @@ function CelulaRentabilidade({
 }
 
 export function JobItemRealizadoTable({
+  saveVisivel = false,
+  savePorItem,
+  onAbrirSave,
   jobId,
   itens,
   realizadosMap,
@@ -312,14 +335,15 @@ export function JobItemRealizadoTable({
         <table
           className={cn(
             "w-full table-fixed text-sm border-collapse",
-            LARGURA_MINIMA_JOB,
+            saveVisivel ? LARGURA_MINIMA_JOB_SAVE : LARGURA_MINIMA_JOB,
           )}
         >
-          <ColunasJob />
+          <ColunasJob save={saveVisivel} />
           <thead className="text-[10px] uppercase tracking-wider text-muted-foreground">
             {/* Linha 1 — o nome do agrupamento divide a faixa com os
                 blocos, em vez de ocupar uma barra só dele acima. */}
             <tr ref={faixaRef}>
+              {saveVisivel && <CabecalhoSaveFaixa />}
               <th colSpan={3} className={FAIXA_GRUPO}>
                 {cabecalhoGrupo}
               </th>
@@ -334,6 +358,7 @@ export function JobItemRealizadoTable({
               </th>
             </tr>
             <tr className="bg-muted/40">
+              {saveVisivel && <CabecalhoSaveColuna />}
               <th className="text-left font-semibold px-3 py-2 border-r border-r-border">Item</th>
               <th className="text-left font-semibold px-3 py-2 border-r border-r-border">Tipo</th>
               <th className="text-left font-semibold px-3 py-2 border-r border-r-border">Categoria</th>
@@ -358,7 +383,7 @@ export function JobItemRealizadoTable({
           <tbody ref={tbodyRef}>
             {aberto && itens.length === 0 && (
               <tr>
-                <td colSpan={15} className="py-8 text-center text-sm text-muted-foreground">
+                <td colSpan={totalDeColunasJob(saveVisivel)} className="py-8 text-center text-sm text-muted-foreground">
                   Sem itens neste grupo.
                 </td>
               </tr>
@@ -376,7 +401,23 @@ export function JobItemRealizadoTable({
                 : null;
 
               return (
-                <tr key={item.id} className={cn(ALTURA_LINHA, "border-b border-border")}>
+                <tr
+                  key={item.id}
+                  className={cn(
+                    ALTURA_LINHA,
+                    "border-b border-border",
+                    saveVisivel &&
+                      classesDaLinhaComSave(savePorItem?.[item.id] ?? SAVE_VAZIO),
+                  )}
+                >
+                  {saveVisivel && (
+                    <CelulaSave
+                      estado={savePorItem?.[item.id] ?? SAVE_VAZIO}
+                      moeda={moeda}
+                      totalOrcado={Number(item.total_orcado ?? 0)}
+                      onAbrir={onAbrirSave ? () => onAbrirSave(item) : undefined}
+                    />
+                  )}
                   <td className={cn("px-3 text-xs align-middle", GRADE_NEUTRA)}>
                     <TruncateTooltip text={item.item} />
                   </td>
@@ -474,7 +515,7 @@ export function JobItemRealizadoTable({
 
           <tfoot>
             <tr>
-              <td colSpan={3} className="px-3 py-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              <td colSpan={colunasDoRotuloJob(saveVisivel)} className="px-3 py-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                 {rotuloSubtotal(visao)}
               </td>
               <td colSpan={3} className={ORCADO.subtotalVazio} />
@@ -520,7 +561,7 @@ export function JobItemRealizadoTable({
               </td>
             </tr>
             <tr>
-              <td colSpan={3} className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground border-t border-t-border">
+              <td colSpan={colunasDoRotuloJob(saveVisivel)} className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground border-t border-t-border">
                 Rentabilidade
               </td>
               <td colSpan={4} className={cn("border-t border-t-[#dfeafb]", ORCADO.celulaVazia)} />

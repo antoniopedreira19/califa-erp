@@ -1,6 +1,7 @@
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TruncateTooltip } from "@/components/ui/truncate-tooltip";
+import type { EstadoSaveDaLinha } from "@/app/(app)/_planilha/save-coluna";
 import type {
   VersaoOrcamentoGrupo,
   ItemPlanilhaJob,
@@ -15,6 +16,9 @@ import type { VisaoBv } from "@/lib/calculos/bv-planilha";
 import { JobItemRealizadoTable } from "./job-item-realizado-table";
 
 interface Props {
+  saveVisivel?: boolean;
+  savePorItem?: Record<string, EstadoSaveDaLinha>;
+  onAbrirSave?: (item: ItemPlanilhaJob) => void;
   grupo: VersaoOrcamentoGrupo;
   itens: ItemPlanilhaJob[];
   realizadosMap: Map<string, JobItemRealizado>;
@@ -47,6 +51,9 @@ interface Props {
 }
 
 export function JobGrupoCard({
+  saveVisivel,
+  savePorItem,
+  onAbrirSave,
   grupo,
   itens,
   realizadosMap,
@@ -75,6 +82,9 @@ export function JobGrupoCard({
           a calha à direita. A barra de título de antes só segurava esses
           dois e custava uma linha inteira de altura. */}
       <JobItemRealizadoTable
+        saveVisivel={saveVisivel}
+        savePorItem={savePorItem}
+        onAbrirSave={onAbrirSave}
         jobId={jobId}
         itens={itens}
         realizadosMap={realizadosMap}

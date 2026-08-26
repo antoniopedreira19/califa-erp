@@ -11,6 +11,7 @@
  * invariante "soma dos faturamentos = soma dos valores de job" é testável,
  * e é aqui que ela é testada.
  */
+import { blocosDoItem, somarBlocosDosItens } from "../lib/calculos/bv-planilha";
 import {
   calcularTotaisVersao,
   calcularEfeitoDaMudanca,
@@ -202,6 +203,51 @@ const efeitos = VEGA.reduce(
 );
 conferir("Σ efeitos = faturamento previsto", efeitos.fat, v.faturamentoPrevisto, 0.005);
 conferir("Σ efeitos = valor do job", efeitos.job, v.valorJob, 0.005);
+
+// ------------------------------------------------- rentabilidade
+console.log("\n=== 7. Rentabilidade: gera sai, consome entra ===");
+
+// Mesma assimetria do valor do job (decisão 023 §9): a linha que GERA
+// save é venda sem execução e não tem custo com que comparar; a que
+// CONSOME acontece aqui, tem custo, e entra na conta normalmente.
+const blocos = [
+  // normal: 10.000 orçado, 8.000 planejado
+  blocosDoItem(
+    { tipo_custo: "B", total_orcado: 10000, total_planejado: 8000 },
+    null,
+    0,
+    19.53,
+  ),
+  // GERA save: 30.000 orçado, planejado zerado pelo trigger
+  blocosDoItem(
+    { tipo_custo: "B", total_orcado: 30000, total_planejado: 0, em_save: true },
+    null,
+    0,
+    19.53,
+  ),
+  // CONSOME save: 20.000 orçado, 16.000 planejado — linha normal para a
+  // rentabilidade, porque o serviço acontece aqui.
+  blocosDoItem(
+    { tipo_custo: "B", total_orcado: 20000, total_planejado: 16000 },
+    null,
+    0,
+    19.53,
+  ),
+];
+const soma = somarBlocosDosItens(blocos);
+
+conferir("Coluna ORÇADO segue cheia", soma.orcado, 60000, 0);
+conferir("Base da rentabilidade sem o save", soma.orcadoRentabilidade, 30000, 0);
+conferir("Custo planejado", soma.planejado.bruto, 24000, 0);
+conferir(
+  "Rentabilidade = 30.000 − 24.000",
+  soma.orcadoRentabilidade - soma.planejado.bruto,
+  6000,
+  0,
+);
+console.log(
+  `  a linha que gera save sai (30.000 fora da base) e a que consome entra (20.000 dentro)`,
+);
 
 console.log(
   falhas === 0
