@@ -71,7 +71,6 @@ const dataSchema = z
 const MAX_PARCELAS = 36;
 
 const dadosBaseSchema = z.object({
-  fornecedor_id: z.string().uuid(),
   empresa_id: z.string().uuid(),
   // Vencimento da 1ª parcela. A parcela 1 SEMPRE repete esta data — o
   // campo continua existindo em `pedidos_compra` porque é o que o
@@ -88,13 +87,48 @@ const dadosBaseSchema = z.object({
     .array(z.object({ data_vencimento: dataSchema, valor: z.number().positive() }))
     .min(1, "Informe ao menos uma parcela.")
     .max(MAX_PARCELAS, `No máximo ${MAX_PARCELAS} parcelas.`),
+}).and(
+  // Union discriminada por verba_producao: OFF exige fornecedor; ON exige
+  // responsável. O CHECK do banco é o backstop — este schema valida antes.
+  z.discriminatedUnion("verba_producao", [
+    z.object({
+      verba_producao: z.literal(false),
+      fornecedor_id: z.string().uuid(),
+      responsavel_verba_id: z.null().optional(),
+    }),
+    z.object({
+      verba_producao: z.literal(true),
+      fornecedor_id: z.null().optional(),
+      responsavel_verba_id: z.string().uuid(),
+    }),
+  ])
+);
+
+/** Campos base SEM parcelas — base do reenvio (não redefine parcelamento). */
+const dadosCamposBase = z.object({
+  empresa_id: z.string().uuid(),
+  prazo_pagamento: dataSchema,
+  servico: z.string().trim().min(1).max(500),
+  quantidade: z.number().positive(),
+  especificacoes: z.string().max(2000).nullable().optional(),
 });
 
 /** O reenvio corrige a PP mas não redefine o parcelamento:
  *  quem quiser mudar os vencimentos cancela e emite nova PP. */
-const dadosReenvioSchema = dadosBaseSchema.omit({
-  parcelas: true,
-});
+const dadosReenvioSchema = dadosCamposBase.and(
+  z.discriminatedUnion("verba_producao", [
+    z.object({
+      verba_producao: z.literal(false),
+      fornecedor_id: z.string().uuid(),
+      responsavel_verba_id: z.null().optional(),
+    }),
+    z.object({
+      verba_producao: z.literal(true),
+      fornecedor_id: z.null().optional(),
+      responsavel_verba_id: z.string().uuid(),
+    }),
+  ])
+);
 
 const dadosSchema = dadosBaseSchema;
 
@@ -454,15 +488,18 @@ async function finalizarPedidoCompraImpl(
     }
   }
 
-  // Valida FKs (fornecedor + empresa pertencem ao tenant)
-  const [fornRes, empRes] = await Promise.all([
-    supabase
-      .from("fornecedores")
-      .select("*")
-      .eq("id", d.fornecedor_id)
-      .eq("tenant_id", session.activeTenant.id)
-      .eq("status", "ativo")
-      .maybeSingle(),
+  // Valida FKs (fornecedor OU responsável + empresa pertencem ao tenant).
+  // Verba de Produção não tem fornecedor — valida o responsável no lugar.
+  const [fornRes, empRes, responsavelRes] = await Promise.all([
+    d.verba_producao
+      ? Promise.resolve({ data: null })
+      : supabase
+          .from("fornecedores")
+          .select("*")
+          .eq("id", d.fornecedor_id as string)
+          .eq("tenant_id", session.activeTenant.id)
+          .eq("status", "ativo")
+          .maybeSingle(),
     supabase
       .from("empresas")
       .select("*")
@@ -470,10 +507,20 @@ async function finalizarPedidoCompraImpl(
       .eq("tenant_id", session.activeTenant.id)
       .eq("ativo", true)
       .maybeSingle(),
+    d.verba_producao
+      ? supabase
+          .from("profiles")
+          .select("id, nome")
+          .eq("id", d.responsavel_verba_id as string)
+          .eq("tenant_id", session.activeTenant.id)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
   ]);
 
-  if (!fornRes.data)
+  if (!d.verba_producao && !fornRes.data)
     return { ok: false, message: "Fornecedor inválido ou inativo." };
+  if (d.verba_producao && !responsavelRes.data)
+    return { ok: false, message: "Responsável inválido ou não encontrado." };
   if (!empRes.data)
     return { ok: false, message: "Empresa emissora inválida ou inativa." };
 
@@ -496,7 +543,10 @@ async function finalizarPedidoCompraImpl(
     codigo,
     item_realizado_id: itemRealizadoId,
     job_id: job.id,
-    fornecedor_id: d.fornecedor_id,
+    // Verba: fornecedor null, responsável preenchido. PP normal: o oposto.
+    verba_producao: d.verba_producao,
+    fornecedor_id: d.verba_producao ? null : (d.fornecedor_id ?? null),
+    responsavel_verba_id: d.verba_producao ? (d.responsavel_verba_id ?? null) : null,
     empresa_id: d.empresa_id,
     servico: d.servico,
     quantidade: d.quantidade,
@@ -636,67 +686,74 @@ async function finalizarPedidoCompraImpl(
   // O fornecedor recebe um PDF por vencimento, e é ele que o financeiro
   // confere na hora de pagar. Tudo idêntico entre eles, menos o Prazo de
   // Pagto, a linha "Parcela: N/T" e o valor em destaque.
+  //
+  // Verba de Produção não tem fornecedor — o PDF que o modelo atual
+  // renderiza é orientado ao fornecedor externo. Por ora, verba omite
+  // geração de PDF (os anexos são o documento); Task futura adaptará o
+  // modelo para verba interna.
   const parcelas = (parcelasCriadas ?? []).slice().sort((a, b) => a.numero - b.numero);
   const documentos: Array<{ parcelaId: string; path: string; buffer: Buffer }> = [];
 
-  try {
-    // Import dinâmico: só carrega pdfmake QUANDO vai gerar PDF, isolando
-    // seus side-effects de inicialização do resto do módulo.
-    const { renderPedidoCompraPDF } = await import("@/lib/pdf/pedido-compra");
-    const emitidoEm = new Date().toISOString();
+  if (!d.verba_producao) {
+    try {
+      // Import dinâmico: só carrega pdfmake QUANDO vai gerar PDF, isolando
+      // seus side-effects de inicialização do resto do módulo.
+      const { renderPedidoCompraPDF } = await import("@/lib/pdf/pedido-compra");
+      const emitidoEm = new Date().toISOString();
 
-    for (const parcela of parcelas) {
-      const buffer = await renderPedidoCompraPDF({
-        pp: {
-          codigo,
-          servico: d.servico,
-          quantidade: d.quantidade,
-          especificacoes: d.especificacoes ?? null,
-          valor,
-          prazo_pagamento: parcela.data_vencimento,
-          created_at: emitidoEm,
-        },
-        empresa: empRes.data as never,
-        fornecedor: fornRes.data as never,
-        job: { nome: job.nome, produto: job.produto ?? "" },
-        projeto: {
-          codigo: projeto?.codigo ?? "",
-          campanha: projeto?.campanha ?? null,
-        },
-        orcamento: { codigo: orcamento?.codigo ?? "" },
-        cliente: { nome_fantasia: clienteNome },
-        responsavelNome,
-        parcela: {
-          numero: parcela.numero,
-          total: parcelas.length,
-          data_vencimento: parcela.data_vencimento,
-          valor: Number(parcela.valor),
-        },
-      });
-      documentos.push({
-        parcelaId: parcela.id,
-        path: caminhoPdfParcela(
-          session.activeTenant.id,
-          job.id,
-          pp_id,
-          codigo,
-          parcela.numero,
-          parcelas.length,
-        ),
-        buffer,
-      });
+      for (const parcela of parcelas) {
+        const buffer = await renderPedidoCompraPDF({
+          pp: {
+            codigo,
+            servico: d.servico,
+            quantidade: d.quantidade,
+            especificacoes: d.especificacoes ?? null,
+            valor,
+            prazo_pagamento: parcela.data_vencimento,
+            created_at: emitidoEm,
+          },
+          empresa: empRes.data as never,
+          fornecedor: fornRes.data as never,
+          job: { nome: job.nome, produto: job.produto ?? "" },
+          projeto: {
+            codigo: projeto?.codigo ?? "",
+            campanha: projeto?.campanha ?? null,
+          },
+          orcamento: { codigo: orcamento?.codigo ?? "" },
+          cliente: { nome_fantasia: clienteNome },
+          responsavelNome,
+          parcela: {
+            numero: parcela.numero,
+            total: parcelas.length,
+            data_vencimento: parcela.data_vencimento,
+            valor: Number(parcela.valor),
+          },
+        });
+        documentos.push({
+          parcelaId: parcela.id,
+          path: caminhoPdfParcela(
+            session.activeTenant.id,
+            job.id,
+            pp_id,
+            codigo,
+            parcela.numero,
+            parcelas.length,
+          ),
+          buffer,
+        });
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      await supabase
+        .from("pedidos_compra")
+        .delete()
+        .eq("id", pp_id)
+        .eq("tenant_id", session.activeTenant.id);
+      await supabase.storage
+        .from(BUCKET)
+        .remove(anexosParsed.data.map((a) => a.path));
+      return { ok: false, message: `Falha ao gerar PDF: ${msg}` };
     }
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    await supabase
-      .from("pedidos_compra")
-      .delete()
-      .eq("id", pp_id)
-      .eq("tenant_id", session.activeTenant.id);
-    await supabase.storage
-      .from(BUCKET)
-      .remove(anexosParsed.data.map((a) => a.path));
-    return { ok: false, message: `Falha ao gerar PDF: ${msg}` };
   }
 
   for (const doc of documentos) {
@@ -745,14 +802,17 @@ async function finalizarPedidoCompraImpl(
     }
   }
 
-  // Update pdf_path + fornecedor no realizado
+  // Update pdf_path + fornecedor no realizado.
+  // Verba de Produção não tem fornecedor — não sobrescreve o campo.
   const [updPP, updReal] = await Promise.all([
     supabase.from("pedidos_compra").update({ pdf_path: pdfPath }).eq("id", pp_id),
-    supabase
-      .from("jobs_itens_realizado")
-      .update({ fornecedor_id: d.fornecedor_id })
-      .eq("id", itemRealizadoId)
-      .eq("tenant_id", session.activeTenant.id),
+    d.verba_producao
+      ? Promise.resolve({ error: null })
+      : supabase
+          .from("jobs_itens_realizado")
+          .update({ fornecedor_id: d.fornecedor_id ?? null })
+          .eq("id", itemRealizadoId)
+          .eq("tenant_id", session.activeTenant.id),
   ]);
 
   if (updPP.error || updReal.error) {
@@ -785,7 +845,9 @@ async function finalizarPedidoCompraImpl(
       quantidade: d.quantidade,
       parcelas: parcelasFinais.length,
       saldo_do_item_antes: saldo,
-      fornecedor_id: d.fornecedor_id,
+      verba_producao: d.verba_producao,
+      fornecedor_id: d.verba_producao ? null : (d.fornecedor_id ?? null),
+      responsavel_verba_id: d.verba_producao ? (d.responsavel_verba_id ?? null) : null,
       item_realizado_id: itemRealizadoId,
       job_id: job.id,
     },

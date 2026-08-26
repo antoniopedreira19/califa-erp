@@ -63,6 +63,8 @@ interface Props {
   ppsPorItemId: Map<string, PedidoCompra[]>;
   fornecedores: Array<Pick<Fornecedor, "id" | "nome" | "razao_social" | "status">>;
   empresas: Array<Pick<Empresa, "id" | "razao_social" | "nome_fantasia" | "ativo" | "principal">>;
+  /** Membros ativos do tenant — usados no combo de Responsável da Verba de Produção. */
+  responsaveis: Array<{ id: string; nome: string }>;
   /** BV por id do item da versão. Só existe em item tipo A, AR ou D. */
   bvsPorItem: Record<string, ItemBv>;
 }
@@ -79,6 +81,7 @@ export function JobRealizadoSection({
   ppsPorItemId,
   fornecedores,
   empresas,
+  responsaveis,
   bvsPorItem,
 }: Props) {
   // Uma chave para a página inteira. Abre em Bruto: é a tela de sempre,
@@ -207,6 +210,7 @@ export function JobRealizadoSection({
               ppsPorItemId={ppsPorItemId}
               fornecedores={fornecedores}
               empresas={empresas}
+              responsaveis={responsaveis}
               jobEmpresaId={job.empresa_id ?? ""}
               jobResponsavelId={job.responsavel_id ?? ""}
               bvsPorItem={bvsPorItem}

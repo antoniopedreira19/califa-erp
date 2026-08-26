@@ -329,6 +329,7 @@ export default async function JobDetailPage({
             ppsPorItemId={ppsPorItemId}
             fornecedores={fornecedores}
             empresas={empresas}
+            responsaveis={responsaveis}
             bvsPorItem={bvsPorItem}
           />
         }

@@ -41,6 +41,8 @@ interface Props {
   jobId: string;
   fornecedores: Array<{ id: string; nome: string; razao_social: string | null }>;
   empresas: Array<{ id: string; razao_social: string; principal: boolean }>;
+  /** Membros ativos do tenant — exibidos quando switch Verba de Produção está ON. */
+  responsaveis: Array<{ id: string; nome: string }>;
   defaultEmpresaId: string;
   itemDescricao: string;
   /** ORÇADO do item — a base da fatia. Era o realizado até 21/08/2026;
@@ -106,6 +108,7 @@ export function GerarPPDrawer({
   jobId,
   fornecedores,
   empresas,
+  responsaveis,
   defaultEmpresaId,
   itemDescricao,
   valorOrcado,
@@ -121,7 +124,11 @@ export function GerarPPDrawer({
   const [uploadPrefix, setUploadPrefix] = React.useState<string | null>(null);
   const [erro, setErro] = React.useState<string | null>(null);
 
+  // Switch Verba de Produção: OFF (default) → fornecedor obrigatório;
+  // ON → responsável interno obrigatório, fornecedor escondido.
+  const [verbaProducao, setVerbaProducao] = React.useState(false);
   const [fornecedorId, setFornecedorId] = React.useState<string>("");
+  const [responsavelId, setResponsavelId] = React.useState<string>("");
   const [empresaId, setEmpresaId] = React.useState<string>(defaultEmpresaId);
   const [prazoPagamento, setPrazoPagamento] = React.useState<string>(defaultPrazoPagamento());
   // Descrição e quantidade abrem VAZIAS desde 17/08/2026: com PPs
@@ -151,7 +158,9 @@ export function GerarPPDrawer({
     setErro(null);
     setPpId(null);
     setUploadPrefix(null);
+    setVerbaProducao(false);
     setFornecedorId("");
+    setResponsavelId("");
     setEmpresaId(defaultEmpresaId);
     setPrazoPagamento(defaultPrazoPagamento());
     setServico("");
@@ -360,7 +369,11 @@ export function GerarPPDrawer({
     e.preventDefault();
     setErro(null);
     if (!ppId || !itemRealizadoId) return;
-    if (!fornecedorId) {
+    if (verbaProducao && !responsavelId) {
+      setErro("Escolha um responsável.");
+      return;
+    }
+    if (!verbaProducao && !fornecedorId) {
       setErro("Escolha um fornecedor.");
       return;
     }
@@ -418,17 +431,30 @@ export function GerarPPDrawer({
 
     startTransition(async () => {
       try {
+        const dadosBase = {
+          empresa_id: empresaId,
+          prazo_pagamento: prazoPagamento,
+          servico: servico.trim(),
+          quantidade: qtdNum,
+          especificacoes: especificacoes.trim() || null,
+          parcelas: parcelasEnvio,
+        };
+        const dados = verbaProducao
+          ? {
+              ...dadosBase,
+              verba_producao: true as const,
+              responsavel_verba_id: responsavelId,
+              fornecedor_id: null,
+            }
+          : {
+              ...dadosBase,
+              verba_producao: false as const,
+              fornecedor_id: fornecedorId,
+              responsavel_verba_id: null,
+            };
         const res = await finalizarPedidoCompra(
           ppId,
-          {
-            fornecedor_id: fornecedorId,
-            empresa_id: empresaId,
-            prazo_pagamento: prazoPagamento,
-            servico: servico.trim(),
-            quantidade: qtdNum,
-            especificacoes: especificacoes.trim() || null,
-            parcelas: parcelasEnvio,
-          },
+          dados,
           anexosOk.map((a) => ({
             anexo_id: a.anexo_id,
             path: a.path,
@@ -533,21 +559,73 @@ export function GerarPPDrawer({
                 Fornecedor & Empresa
               </h3>
 
-              <div>
-                <label className="text-xs font-medium">Fornecedor *</label>
-                <Select value={fornecedorId} onValueChange={setFornecedorId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Escolha o fornecedor" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {fornecedores.map((f) => (
-                      <SelectItem key={f.id} value={f.id}>
-                        {f.razao_social ?? f.nome}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              {/* Switch Verba de Produção */}
+              <label className="flex cursor-pointer items-center gap-2.5">
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={verbaProducao}
+                  onClick={() => {
+                    setVerbaProducao((v) => {
+                      if (!v) setFornecedorId(""); // vai ligar: limpa fornecedor
+                      else setResponsavelId("");   // vai desligar: limpa responsável
+                      return !v;
+                    });
+                  }}
+                  className={cn(
+                    "relative inline-flex h-5 w-9 flex-none items-center rounded-full border-2 border-transparent transition-colors",
+                    verbaProducao ? "bg-california-red" : "bg-muted-foreground/30",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "inline-block h-4 w-4 rounded-full bg-white shadow transition-transform",
+                      verbaProducao ? "translate-x-4" : "translate-x-0",
+                    )}
+                  />
+                </button>
+                <span className="text-sm font-medium">Verba de Produção</span>
+                {verbaProducao && (
+                  <span className="ml-auto text-[11px] text-muted-foreground">
+                    Pago ao responsável interno
+                  </span>
+                )}
+              </label>
+
+              {/* Fornecedor (modo normal) ou Responsável (modo verba) */}
+              {verbaProducao ? (
+                <div>
+                  <label className="text-xs font-medium">Responsável *</label>
+                  <Select value={responsavelId} onValueChange={setResponsavelId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Escolha um responsável" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {responsaveis.map((r) => (
+                        <SelectItem key={r.id} value={r.id}>
+                          {r.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : (
+                <div>
+                  <label className="text-xs font-medium">Fornecedor *</label>
+                  <Select value={fornecedorId} onValueChange={setFornecedorId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Escolha o fornecedor" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {fornecedores.map((f) => (
+                        <SelectItem key={f.id} value={f.id}>
+                          {f.razao_social ?? f.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
               <div>
                 <label className="text-xs font-medium">Empresa emissora *</label>
@@ -791,7 +869,12 @@ export function GerarPPDrawer({
             </button>
             <button
               type="submit"
-              disabled={pending || !ppId || anexos.some((a) => a.status === "uploading")}
+              disabled={
+                pending ||
+                !ppId ||
+                anexos.some((a) => a.status === "uploading") ||
+                (verbaProducao ? !responsavelId : !fornecedorId)
+              }
               className="rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white hover:bg-california-red-hover disabled:opacity-50"
             >
               {pending ? "Gerando..." : "Gerar PP"}
