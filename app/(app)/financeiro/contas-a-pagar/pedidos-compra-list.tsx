@@ -47,7 +47,7 @@ export interface PPRow {
    * Prestação de contas vinculada (só existe se a PP for verba + já foi
    * prestada). Null quando não foi prestada ainda.
    */
-  prestacao?: (PPVerbaPrestacao & {
+  prestacao?: (Omit<PPVerbaPrestacao, "tenant_id" | "fechada_por"> & {
     fechada_por_profile: { nome: string } | null;
     anexos: Array<Pick<PPVerbaPrestacaoAnexo, "id" | "arquivo_nome_original" | "arquivo_tamanho_bytes" | "arquivo_mimetype">>;
   }) | null;

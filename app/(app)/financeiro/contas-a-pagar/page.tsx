@@ -248,8 +248,6 @@ export default async function PedidosCompraFinanceiroPage() {
     valor_gasto: number;
     valor_devolvido: number;
     fechada_em: string;
-    fechada_por: string;
-    tenant_id: string;
     fechada_por_profile: { nome: string } | null;
     anexos: Array<{
       id: string;
