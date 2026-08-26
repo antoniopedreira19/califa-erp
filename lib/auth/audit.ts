@@ -156,6 +156,8 @@ export type AuditAction =
   | "desembolso.parcela_paga"
   | "desembolso.parcela_baixa_estornada"
   | "verba_producao.prestacao_fechada"
+  | "pp_verba_devolucao.baixada"
+  | "pp_verba_devolucao.baixa_estornada"
   | "acao_negada";
 
 export interface AuditPayload {
