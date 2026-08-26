@@ -43,6 +43,7 @@ export default async function PedidosCompraFinanceiroPage() {
     desembolsosRes,
     desembolsosTitulosRes,
     prestacoesRes,
+    devolucoesRes,
   ] = await Promise.all([
     supabase
       .from("pedidos_compra")
@@ -118,14 +119,15 @@ export default async function PedidosCompraFinanceiroPage() {
     supabase
       .from("lancamentos_financeiros")
       .select(`
-        pedido_compra_parcela_id, conta_avulsa_id, desembolso_parcela_id, data_movimento,
+        pedido_compra_parcela_id, conta_avulsa_id, desembolso_parcela_id,
+        pp_verba_devolucao_id, data_movimento,
         forma_pagamento, cartao_credito_id,
         conta:contas_bancarias(nome, banco),
         tipo:plano_contas_tipos(codigo),
         subtipo:plano_contas_subtipos(nome)
       `)
       .eq("tenant_id", session.activeTenant.id)
-      .in("origem", ["pp_baixa", "avulsa_baixa", "desembolso_baixa"]),
+      .in("origem", ["pp_baixa", "avulsa_baixa", "desembolso_baixa", "pp_devolucao_verba"]),
     // Empresas ativas (dropdown do drawer)
     supabase
       .from("empresas")
@@ -230,6 +232,18 @@ export default async function PedidosCompraFinanceiroPage() {
         anexos:pp_verba_prestacoes_anexos(id, arquivo_nome_original, arquivo_tamanho_bytes, arquivo_mimetype)
       `)
       .eq("tenant_id", session.activeTenant.id),
+    // Devoluções de verba de produção — todas (a_pagar + pagas), para a
+    // aba Títulos a Pagar (Task 11). Fetch direto na tabela, sem view.
+    supabase
+      .from("pp_verba_devolucoes")
+      .select(`
+        id, tenant_id, empresa_id, valor, data_pagamento, data_pagamento_primeira,
+        pago_em, pago_por,
+        pp:pedidos_compra!pedido_compra_id(id, codigo, servico, job_id,
+          job:jobs(id, codigo, nome)
+        )
+      `)
+      .eq("tenant_id", session.activeTenant.id),
   ]);
 
   if (error) console.error("[financeiro.pp.list]", error.message);
@@ -240,6 +254,7 @@ export default async function PedidosCompraFinanceiroPage() {
   if (desembolsosRes.error) console.error("[financeiro.desembolsos.list]", desembolsosRes.error.message);
   if (desembolsosTitulosRes.error) console.error("[financeiro.desembolsos_titulos.list]", desembolsosTitulosRes.error.message);
   if (prestacoesRes.error) console.error("[financeiro.prestacoes.list]", prestacoesRes.error.message);
+  if (devolucoesRes.error) console.error("[financeiro.devolucoes.list]", devolucoesRes.error.message);
 
   // Mapa pedido_compra_id → prestação (com anexos e profile de quem fechou)
   type PrestacaoComAnexos = {
@@ -382,11 +397,13 @@ export default async function PedidosCompraFinanceiroPage() {
   const baixaPorParcela = new Map<string, BaixaInfo>();
   const baixaPorAvulsa = new Map<string, BaixaInfo>();
   const baixaPorDesembolsoParcela = new Map<string, BaixaInfo>();
+  const baixaPorDevolucao = new Map<string, BaixaInfo>();
 
   for (const l of (baixasRes.data ?? []) as unknown as Array<{
     pedido_compra_parcela_id: string | null;
     conta_avulsa_id: string | null;
     desembolso_parcela_id: string | null;
+    pp_verba_devolucao_id: string | null;
     data_movimento: string;
     forma_pagamento: FormaPagamento | null;
     cartao_credito_id: string | null;
@@ -409,6 +426,7 @@ export default async function PedidosCompraFinanceiroPage() {
     if (l.pedido_compra_parcela_id) baixaPorParcela.set(l.pedido_compra_parcela_id, info);
     if (l.conta_avulsa_id) baixaPorAvulsa.set(l.conta_avulsa_id, info);
     if (l.desembolso_parcela_id) baixaPorDesembolsoParcela.set(l.desembolso_parcela_id, info);
+    if (l.pp_verba_devolucao_id) baixaPorDevolucao.set(l.pp_verba_devolucao_id, info);
   }
 
   const titulos: TituloRow[] = [];
@@ -557,6 +575,50 @@ export default async function PedidosCompraFinanceiroPage() {
           : null,
       });
     }
+  }
+
+  // 5º loop — devoluções de verba de produção viram títulos de origem `pp_devolucao_verba`.
+  for (const dev of (devolucoesRes.data ?? []) as unknown as Array<{
+    id: string;
+    tenant_id: string;
+    empresa_id: string;
+    valor: string | number;
+    data_pagamento: string | null;
+    data_pagamento_primeira: string | null;
+    pago_em: string | null;
+    pago_por: string | null;
+    pp: {
+      id: string;
+      codigo: string;
+      servico: string;
+      job_id: string | null;
+      job: { id: string; codigo: string; nome: string } | null;
+    } | null;
+  }>) {
+    const baixa = baixaPorDevolucao.get(dev.id);
+    titulos.push({
+      id: dev.id,
+      origem: "pp_devolucao_verba",
+      origem_label: `DEVOLUÇÃO ${dev.pp?.codigo ?? ""}`,
+      descricao: `Devolução verba ${dev.pp?.codigo ?? ""} — ${dev.pp?.servico ?? ""}`,
+      fornecedor_nome: "",
+      job_codigo: dev.pp?.job?.codigo ?? "—",
+      data_pagamento: dev.data_pagamento,
+      venc_original: dev.data_pagamento_primeira,
+      data_pagamento_primeira: dev.data_pagamento_primeira,
+      valor: Number(dev.valor),
+      parcela_numero: 1,
+      parcela_total: 1,
+      status: dev.pago_em ? "pago" : "a_pagar",
+      empresa_id: dev.empresa_id,
+      plano_conta_tipo_id: null,
+      plano_conta_subtipo_id: null,
+      pago_em: dev.pago_em,
+      conta_nome: baixa?.conta ?? null,
+      centro_nome: baixa?.centro ?? null,
+      forma_pagamento: dev.pago_em ? baixa?.forma_pagamento ?? null : null,
+      cartao_credito_id: dev.pago_em ? baixa?.cartao_credito_id ?? null : null,
+    });
   }
 
   // Aba "Cartão" — TODOS os títulos de cartão (a pagar + pagos). O filtro

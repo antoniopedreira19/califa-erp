@@ -348,7 +348,9 @@ export function TitulosPagarList({
               ? `Recorrência · ${baixando.descricao}`
               : baixando.origem === "desembolso"
                 ? `Desembolso ${baixando.origem_label}`
-                : "Lançamento avulso",
+                : baixando.origem === "pp_devolucao_verba"
+                  ? `Devolução verba ${baixando.origem_label}`
+                  : "Lançamento avulso",
         parcela: `${baixando.parcela_numero}/${baixando.parcela_total}`,
         vencimento: baixando.data_pagamento,
         valor: baixando.valor,
@@ -368,7 +370,9 @@ export function TitulosPagarList({
               ? `Recorrência · ${conferindo.descricao}`
               : conferindo.origem === "desembolso"
                 ? `Desembolso ${conferindo.origem_label}`
-                : "Lançamento avulso",
+                : conferindo.origem === "pp_devolucao_verba"
+                  ? `Devolução verba ${conferindo.origem_label}`
+                  : "Lançamento avulso",
         parcela: `${conferindo.parcela_numero}/${conferindo.parcela_total}`,
         valor: conferindo.valor,
         pagoEm: conferindo.pago_em,
@@ -387,7 +391,9 @@ export function TitulosPagarList({
             ? `${editando.origem_label} · ${editando.parcela_numero}/${editando.parcela_total}`
             : editando.origem === "desembolso"
               ? `Desembolso ${editando.origem_label}`
-              : editando.origem_label,
+              : editando.origem === "pp_devolucao_verba"
+                ? `Devolução verba ${editando.origem_label}`
+                : editando.origem_label,
         vencOriginal: editando.venc_original,
         primeiraData: editando.data_pagamento_primeira,
         dataAtual: editando.data_pagamento,
@@ -589,7 +595,7 @@ export function TitulosPagarList({
                 >
                   <td className="px-2 py-3">
                     <div className="flex items-center justify-center gap-1.5">
-                      {!pago && (
+                      {!pago && r.origem !== "pp_devolucao_verba" && (
                         <button
                           type="button"
                           title="Editar data de pagamento"
@@ -635,8 +641,8 @@ export function TitulosPagarList({
                     </div>
                   </td>
                   <td className="px-3 py-3 text-xs text-muted-foreground">
-                    <span className="block truncate" title={r.fornecedor_nome}>
-                      {r.fornecedor_nome}
+                    <span className="block truncate" title={r.fornecedor_nome || "—"}>
+                      {r.fornecedor_nome || "—"}
                     </span>
                   </td>
                   <td className="whitespace-nowrap px-2 py-3 text-center font-mono text-xs text-muted-foreground">
@@ -652,8 +658,11 @@ export function TitulosPagarList({
                       {r.origem_label}
                     </span>
                   </td>
-                  <td className="whitespace-nowrap px-3 py-3 text-right font-semibold tabular-nums">
-                    {formatMoney(r.valor)}
+                  <td className={cn(
+                    "whitespace-nowrap px-3 py-3 text-right font-semibold tabular-nums",
+                    r.origem === "pp_devolucao_verba" && "text-emerald-700",
+                  )}>
+                    {r.origem === "pp_devolucao_verba" ? `+${formatMoney(r.valor)}` : formatMoney(r.valor)}
                   </td>
                   <td className="px-2 py-3 text-center font-mono text-xs text-muted-foreground">
                     {r.parcela_numero}/{r.parcela_total}

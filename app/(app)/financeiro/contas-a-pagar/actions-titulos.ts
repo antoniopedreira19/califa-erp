@@ -30,7 +30,7 @@ const dataSchema = z
   .regex(/^\d{4}-\d{2}-\d{2}$/, "Data deve estar em YYYY-MM-DD.");
 
 /** Origem do título — ver `OrigemTitulo` em `lib/types.ts`. */
-const origemSchema = z.enum(["pp", "avulso", "recorrencia", "desembolso"]);
+const origemSchema = z.enum(["pp", "avulso", "recorrencia", "desembolso", "pp_devolucao_verba"]);
 
 /**
  * A mensagem do Postgres não é para o usuário.
@@ -383,6 +383,55 @@ export async function darBaixaTitulo(input: unknown): Promise<Result> {
     return { ok: true };
   }
 
+  if (d.origem === "pp_devolucao_verba") {
+    const { data: devolucao } = await supabase
+      .from("pp_verba_devolucoes")
+      .select("id, valor, pago_em, pedido_compra_id, pp:pedidos_compra!pedido_compra_id(codigo, job_id)")
+      .eq("id", d.id)
+      .eq("tenant_id", session.activeTenant.id)
+      .maybeSingle<{
+        id: string;
+        valor: string | number;
+        pago_em: string | null;
+        pedido_compra_id: string;
+        pp: { codigo: string; job_id: string | null } | null;
+      }>();
+
+    if (!devolucao) return { ok: false, message: "Devolução não encontrada." };
+    if (devolucao.pago_em) return { ok: false, message: "Esta devolução já foi baixada." };
+
+    const { data: lancId, error } = await supabase.rpc("dar_baixa_devolucao_verba", {
+      p_devolucao_id: d.id,
+      p_pago_em: d.pago_em,
+      p_conta_bancaria_id: d.conta_bancaria_id,
+      p_plano_conta_tipo_id: d.plano_conta_tipo_id,
+      p_plano_conta_subtipo_id: d.plano_conta_subtipo_id,
+      p_criado_por: session.profile.id,
+    });
+    if (error) {
+      console.error("[titulos.baixa.devolucao_verba]", error.message);
+      return { ok: false, message: mensagemDeBaixa(error.message) };
+    }
+
+    await logAuditEvent({
+      acao: "pp_verba_devolucao.baixada",
+      tenantId: session.activeTenant.id,
+      entidadeTipo: "pp_verba_devolucao",
+      entidadeId: d.id,
+      metadata: {
+        pp_codigo: devolucao.pp?.codigo,
+        pedido_compra_id: devolucao.pedido_compra_id,
+        valor: Number(devolucao.valor),
+        pago_em: d.pago_em,
+        conta_bancaria_id: d.conta_bancaria_id,
+        lancamento_id: lancId,
+      },
+    });
+
+    revalidarFinanceiro(devolucao.pp?.job_id);
+    return { ok: true };
+  }
+
   const { data: avulsa } = await supabase
     .from("contas_avulsas")
     .select("id, status, descricao, valor, job_id, recorrente_id")
@@ -703,6 +752,10 @@ export async function estornarBaixaTitulo(input: unknown): Promise<Result> {
     return estornarBaixaDesembolsoParcela(d.id, d.motivo);
   }
 
+  if (d.origem === "pp_devolucao_verba") {
+    return estornarBaixaDevolucaoVerba(d.id, d.motivo);
+  }
+
   const { estornarBaixaAvulsa } = await import("./actions-avulsas");
   return estornarBaixaAvulsa({ conta_avulsa_id: d.id, motivo: d.motivo });
 }
@@ -788,5 +841,87 @@ async function estornarBaixaDesembolsoParcela(
   });
 
   revalidarFinanceiro();
+  return { ok: true };
+}
+
+/**
+ * Estorna a baixa de uma devolução de verba de produção.
+ *
+ * Mesmo padrão de `estornarBaixaDesembolsoParcela` mas chamando a RPC
+ * `estornar_baixa_devolucao_verba`.
+ */
+async function estornarBaixaDevolucaoVerba(
+  devolucaoId: string,
+  motivo: string,
+): Promise<Result> {
+  const gate = await checarGateFinanceiro(
+    "pp_verba_devolucao",
+    devolucaoId,
+    "pp_verba_devolucao.baixa_estornada",
+  );
+  if (!gate.ok) return gate;
+  const { session, supabase } = gate;
+
+  const { data: devolucao } = await supabase
+    .from("pp_verba_devolucoes")
+    .select(
+      "id, valor, pago_em, pedido_compra_id, pp:pedidos_compra!pedido_compra_id(codigo, job_id)",
+    )
+    .eq("id", devolucaoId)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle<{
+      id: string;
+      valor: string | number;
+      pago_em: string | null;
+      pedido_compra_id: string;
+      pp: { codigo: string; job_id: string | null } | null;
+    }>();
+
+  if (!devolucao) return { ok: false, message: "Devolução não encontrada." };
+  if (!devolucao.pago_em) {
+    return { ok: false, message: "Esta devolução não está baixada." };
+  }
+
+  const { data: reversoId, error } = await supabase.rpc(
+    "estornar_baixa_devolucao_verba",
+    {
+      p_devolucao_id: devolucaoId,
+      p_motivo: motivo,
+      p_criado_por: session.profile.id,
+    },
+  );
+
+  if (error) {
+    console.error("[titulos.estorno.devolucao_verba]", error.message);
+    return { ok: false, message: mensagemDeBaixa(error.message) };
+  }
+
+  await logAuditEvent({
+    acao: "pp_verba_devolucao.baixa_estornada",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "pp_verba_devolucao",
+    entidadeId: devolucao.id,
+    metadata: {
+      pp_codigo: devolucao.pp?.codigo,
+      pedido_compra_id: devolucao.pedido_compra_id,
+      valor: Number(devolucao.valor),
+      motivo,
+      lancamento_reverso_id: reversoId,
+    },
+  });
+
+  await logAuditEvent({
+    acao: "lancamento_financeiro.estornado",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "lancamento_financeiro",
+    entidadeId: (reversoId as string) ?? null,
+    metadata: {
+      origem: "pp_devolucao_verba_estornada",
+      pp_codigo: devolucao.pp?.codigo,
+      motivo,
+    },
+  });
+
+  revalidarFinanceiro(devolucao.pp?.job_id);
   return { ok: true };
 }
