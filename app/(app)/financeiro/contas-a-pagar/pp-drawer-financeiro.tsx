@@ -46,7 +46,7 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Badge } from "@/components/ui/badge";
 import { cn, formatCurrency } from "@/lib/utils";
-import { ppStatusLabel, type PPStatus } from "@/lib/types";
+import { ppStatusLabel, nomeContraparteBRPP, type PPStatus } from "@/lib/types";
 import type { PPRow } from "./pedidos-compra-list";
 import { rejeitarPedidoCompraFinanceiro } from "./actions";
 import { aprovarPPComData } from "./actions-titulos";
@@ -290,8 +290,12 @@ export function PPDrawerFinanceiro({ pp, open, onOpenChange, tenantId }: Props) 
             {/* Dados */}
             <div className="space-y-2 rounded-lg border border-border bg-muted/20 p-4 text-sm">
               <div className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1">
-                <span className="text-muted-foreground">Fornecedor</span>
-                <span className="font-medium">{pp.fornecedor_nome}</span>
+                <span className="text-muted-foreground">
+                  {pp.verba_producao ? "Responsável" : "Fornecedor"}
+                </span>
+                <span className="font-medium">
+                  {nomeContraparteBRPP({ verba_producao: pp.verba_producao, fornecedor: pp.fornecedor_nome ? { nome: pp.fornecedor_nome } : null, responsavel: pp.responsavel_nome ? { nome: pp.responsavel_nome } : null })}
+                </span>
                 <span className="text-muted-foreground">Empresa emissora</span>
                 <span>{pp.empresa_nome}</span>
                 <span className="text-muted-foreground">Cliente</span>

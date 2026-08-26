@@ -1254,6 +1254,8 @@ export interface PedidoCompraNaLista extends PedidoCompra {
     arquivo_nome_original: string;
     arquivo_tamanho_bytes: number;
   }>;
+  /** Perfil do responsável pela verba, quando verba_producao = true. */
+  responsavel?: { nome: string | null } | null;
 }
 
 export interface PedidoCompraAnexo {
@@ -1304,6 +1306,27 @@ export interface PPVerbaPrestacaoAnexo {
   arquivo_mimetype: string;
   created_by: string | null;
   created_at: string;
+}
+
+/**
+ * Rótulo da contraparte de uma PP.
+ *
+ * Quando é Verba de Produção, o "fornecedor" é o responsável pela verba,
+ * e o rótulo vira "Verba de Produção — {Nome do responsável}". Nas PPs
+ * normais, retorna a razão social ou o nome do fornecedor.
+ *
+ * Centraliza a decisão para garantir que qualquer lista de PP exiba o
+ * mesmo texto — sem divergência entre contas-a-pagar, chat e painel.
+ */
+export function nomeContraparteBRPP(pp: {
+  verba_producao?: boolean | null;
+  fornecedor?: { nome?: string | null; razao_social?: string | null } | null;
+  responsavel?: { nome?: string | null } | null;
+}): string {
+  if (pp.verba_producao) {
+    return `Verba de Produção — ${pp.responsavel?.nome ?? "sem responsável"}`;
+  }
+  return pp.fornecedor?.razao_social ?? pp.fornecedor?.nome ?? "";
 }
 
 export const PP_ANEXO_MIMETYPES_ACEITOS = [

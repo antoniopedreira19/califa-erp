@@ -135,7 +135,7 @@ export async function carregarDetalheDoJob(
     supabase
       .from("pedidos_compra")
       .select(
-        "*, emitido:profiles!emitida_por(nome), anexos:pedidos_compra_anexos(id, arquivo_nome_original, arquivo_tamanho_bytes), parcelas:pedidos_compra_parcelas(id, tenant_id, pedido_compra_id, numero, data_vencimento, valor, pdf_path, pago_em, pago_por, created_at, updated_at, created_by)",
+        "*, emitido:profiles!emitida_por(nome), responsavel:profiles!responsavel_verba_id(nome), anexos:pedidos_compra_anexos(id, arquivo_nome_original, arquivo_tamanho_bytes), parcelas:pedidos_compra_parcelas(id, tenant_id, pedido_compra_id, numero, data_vencimento, valor, pdf_path, pago_em, pago_por, created_at, updated_at, created_by)",
       )
       .eq("job_id", raw.id)
       .eq("tenant_id", session.activeTenant.id)
@@ -335,7 +335,7 @@ export async function carregarDetalheDoJob(
   // Um item pode ter VÁRIAS PPs desde 17/08/2026 (PPs parciais), então o
   // mapa guarda lista. A cancelada fica de fora: ela devolveu saldo ao
   // item e não conta nem no chip nem na conta do painel.
-  const ppsPorItemId = new Map<string, PedidoCompra[]>();
+  const ppsPorItemId = new Map<string, PedidoCompraNaLista[]>();
   for (const pp of ppsDoJob) {
     if (pp.status === "cancelada") continue;
     const atuais = ppsPorItemId.get(pp.item_realizado_id) ?? [];
