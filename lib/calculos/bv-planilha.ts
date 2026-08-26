@@ -231,6 +231,10 @@ export interface ItemParaBv {
   /** BV líquido congelado na aprovação. `null`/ausente ⇒ a versão ainda
    *  está aberta e a dedução é calculada a partir do BV vigente. */
   bv_liquido_planejado?: number | string | null;
+  /** A linha gera SAVE: é faturada aqui e o serviço não acontece neste
+   *  projeto. Fica fora da rentabilidade, porque não tem custo com que
+   *  comparar (docs/decisions/023-save-entre-jobs.md §9). */
+  em_save?: boolean | null;
 }
 
 /** O que a conta precisa saber do BV da linha. */
@@ -263,7 +267,17 @@ export function blocosDoItem(
    *  `realizadoBrutoDoItem`. Default `true` porque no orçamento não há
    *  job nenhum e o bloco não é exibido de todo jeito. */
   jobAberto = true,
-): { orcado: number; planejado: ValoresDoBloco; realizado: ValoresDoBloco } {
+): {
+  orcado: number;
+  /** O orçado que serve de BASE À RENTABILIDADE — zero na linha em save.
+   *  Separado de `orcado` de propósito: a coluna ORÇADO continua mostrando
+   *  o valor cheio (ele está sendo faturado), mas comparar esse valor com
+   *  um custo que não existe daria 100% de margem em toda planilha com
+   *  save (decisão 023 §9). */
+  orcadoRentabilidade: number;
+  planejado: ValoresDoBloco;
+  realizado: ValoresDoBloco;
+} {
   const orcado = Number(item.total_orcado ?? 0);
 
   const planejadoBruto = planejadoBrutoDoItem(
@@ -293,6 +307,9 @@ export function blocosDoItem(
 
   return {
     orcado,
+    // A linha em save é venda sem execução: ela fica fora da comparação
+    // orçado × custo, mas continua cheia na coluna ORÇADO.
+    orcadoRentabilidade: item.em_save === true ? 0 : orcado,
     planejado: valoresDoBloco(planejadoBruto, deducaoPlanejado),
     realizado: valoresDoBloco(
       realizadoBruto,
@@ -309,19 +326,32 @@ export function blocosDoItem(
 export function somarBlocosDosItens(
   blocos: Array<{
     orcado: number;
+    orcadoRentabilidade?: number;
     planejado: ValoresDoBloco;
     realizado: ValoresDoBloco;
   }>,
-): { orcado: number; planejado: ValoresDoBloco; realizado: ValoresDoBloco } {
+): {
+  orcado: number;
+  orcadoRentabilidade: number;
+  planejado: ValoresDoBloco;
+  realizado: ValoresDoBloco;
+} {
   let orcado = 0;
+  let orcadoRentabilidade = 0;
   let planejado = BLOCO_ZERO;
   let realizado = BLOCO_ZERO;
   for (const b of blocos) {
     orcado += b.orcado;
+    orcadoRentabilidade += b.orcadoRentabilidade ?? b.orcado;
     planejado = somarBlocos(planejado, b.planejado);
     realizado = somarBlocos(realizado, b.realizado);
   }
-  return { orcado: arredondar(orcado), planejado, realizado };
+  return {
+    orcado: arredondar(orcado),
+    orcadoRentabilidade: arredondar(orcadoRentabilidade),
+    planejado,
+    realizado,
+  };
 }
 
 /** Rótulo da coluna Total conforme a vista. Do design 3b. */

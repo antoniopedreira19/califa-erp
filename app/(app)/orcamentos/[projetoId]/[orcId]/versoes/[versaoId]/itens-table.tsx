@@ -418,6 +418,9 @@ export function ItensTable({
         total_orcado: totais.orcado,
         total_planejado: totais.planejado,
         bv_liquido_planejado: item.bv_liquido_planejado,
+        // Sem isto o subtotal do grupo contaria a linha em save na
+        // rentabilidade e discordaria do card de Totais logo abaixo.
+        em_save: item.em_save,
       },
       bvsPorItem[item.id] ?? null,
       0,
@@ -670,7 +673,9 @@ export function ItensTable({
   const subtotalOrcado = subtotais.orcado;
   const subtotalPlanejado = valorNaVisao(subtotais.planejado, visao);
   const { rentabilidade: resultado, percentualRentabilidade: percentualSubtotal } =
-    rentabilidadeDe(subtotalOrcado, subtotalPlanejado);
+    // Base da rentabilidade sem as linhas em save — a coluna Total do
+    // subtotal continua cheia, como manda o design.
+    rentabilidadeDe(subtotais.orcadoRentabilidade, subtotalPlanejado);
 
   const editavel = !readOnly;
 

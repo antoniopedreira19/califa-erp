@@ -7,6 +7,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { TruncateTooltip } from "@/components/ui/truncate-tooltip";
 import { cn } from "@/lib/utils";
+import type { EstadoSaveDaLinha } from "@/app/(app)/_planilha/save-coluna";
 import type {
   VersaoOrcamentoGrupo,
   VersaoOrcamentoItem,
@@ -33,6 +34,9 @@ interface Props {
   bvsPorItem: Record<string, ItemBv>;
   fornecedores: FornecedorOpcao[];
   versaoLabel: string;
+  saveVisivel?: boolean;
+  savePorItem?: Record<string, EstadoSaveDaLinha>;
+  onAbrirSave?: (item: VersaoOrcamentoItem) => void;
 }
 
 export function GrupoCard({
@@ -48,6 +52,9 @@ export function GrupoCard({
   bvsPorItem,
   fornecedores,
   versaoLabel,
+  saveVisivel,
+  savePorItem,
+  onAbrirSave,
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
@@ -207,6 +214,9 @@ export function GrupoCard({
         cabecalhoGrupo={cabecalho}
         acoesGrupo={acoes}
         abreCard={!error}
+        saveVisivel={saveVisivel}
+        savePorItem={savePorItem}
+        onAbrirSave={onAbrirSave}
       />
 
       <ConfirmDialog

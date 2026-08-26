@@ -26,6 +26,7 @@ import { ResumoRentabilidade } from "./resumo-rentabilidade";
 import { VersaoEditorDrawer } from "./versao-editor-drawer";
 import { ImportarPlanilhaDrawer } from "../importar-drawer";
 import { AprovacaoActions } from "./aprovacao-actions";
+import { saldosDeSaveDoCliente, saveDaVersao } from "@/lib/data/saves";
 import {
   BannersEstado,
   FluxoAbertura,
@@ -193,6 +194,10 @@ export default async function VersaoDetailPage({
     quantidade_planejada: Number(it.quantidade_planejada ?? 0),
     dias_meses_planejado: Number(it.dias_meses_planejado ?? 0),
     total_planejado: Number(it.total_planejado ?? 0),
+    // O save vem do banco como boolean e numeric; normalizar aqui evita
+    // que  de um select antigo vire NaN na conta.
+    em_save: it.em_save === true,
+    save_consumido: Number(it.save_consumido ?? 0),
   }));
 
   // Agrupa itens por grupo_id para passar para cada GrupoCard.
@@ -258,6 +263,14 @@ export default async function VersaoDetailPage({
   const clienteNome: string = projetoRaw?.cliente?.nome_fantasia ?? "—";
   const projetoNome: string = projetoRaw?.nome ?? "—";
   const projetoCodigo: string = projetoRaw?.codigo ?? "—";
+
+  // SAVE — o crédito entre jobs (docs/decisions/023-save-entre-jobs.md).
+  // As duas leituras são independentes e vão juntas: uma consulta em série
+  // aqui apareceria no TTFB da tela mais pesada do produto.
+  const [saldosDeSave, savePorItem] = await Promise.all([
+    saldosDeSaveDoCliente(supabase, session.activeTenant.id, clienteId),
+    saveDaVersao(supabase, session.activeTenant.id, params.versaoId, itens),
+  ]);
 
   const totais = calcularTotaisVersao(
     itens,
@@ -522,6 +535,12 @@ export default async function VersaoDetailPage({
         {/* Grupos e Totais sob a MESMA chave Bruto ⇄ Líquido — por isso os
             dois passaram a sair de um componente client só. */}
         <PlanilhaVersao
+          versaoId={params.versaoId}
+          clienteNome={clienteNome}
+          savePorPadrao={versao.save_por_padrao === true}
+          savePorItem={savePorItem}
+          saldosDeSave={saldosDeSave}
+          nomeDoGrupo={Object.fromEntries(grupos.map((g) => [g.id, g.nome]))}
           grupos={grupos}
           itens={itens}
           secoes={grupos.map((g) => ({

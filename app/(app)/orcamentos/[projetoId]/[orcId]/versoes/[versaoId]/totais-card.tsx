@@ -66,7 +66,17 @@ export function TotaisCard({
     imposto,
     faturamentoPrevisto,
     valorJob,
+    save,
+    faturamento,
+    job,
   } = calcularTotaisVersao(itens, percentualHonorarios, percentualImposto);
+
+  // Com save, o fechamento abre em três colunas: o mesmo subtotal por tipo
+  // repartido entre o que é pago por crédito de fora, o que vira crédito e
+  // o que este job de fato entrega. As três somam o subtotal, por
+  // construção — é a quebra que explica por que os dois números de baixo
+  // deixaram de ser iguais (docs/decisions/023-save-entre-jobs.md §3).
+  const temSave = save.totalSaveGerado > 0 || save.totalSaveUsado > 0;
 
   // O planejado passa pelos blocos com BV: em `A` e `D` ele espelha o
   // orçado, e na vista Líquido a comissão sai fora. O número aqui tem que
@@ -81,7 +91,7 @@ export function TotaisCard({
 
   const totalPlanejado = valorNaVisao(totais.planejado, visao);
   const { rentabilidade, percentual: percentualRentabilidade } =
-    calcularRentabilidade(totais.orcado, totalPlanejado);
+    calcularRentabilidade(totais.orcadoRentabilidade, totalPlanejado);
 
   const linhas = agruparPorGrupo(grupos, itens, blocosPorItem, visao);
 
@@ -311,28 +321,62 @@ export function TotaisCard({
             Fechamento do orçado · por tipo de custo
           </p>
           <div className="space-y-1.5">
-            {LINHAS_FECHAMENTO_POR_TIPO.map((linha) => (
-              <Linha
-                key={linha.chave}
-                label={linha.label}
-                value={somarLinhaFechamento(subtotaisPorTipo, linha.tipos)}
+            {temSave && (
+              <div className="grid grid-cols-[1fr_repeat(3,minmax(84px,auto))] gap-x-3 pb-1 text-right text-[9.5px] font-bold uppercase tracking-[0.06em] text-muted-foreground">
+                <span />
+                <span>Save usado</span>
+                <span>Save gerado</span>
+                <span>Custos do job</span>
+              </div>
+            )}
+            {LINHAS_FECHAMENTO_POR_TIPO.map((linha) =>
+              temSave ? (
+                <LinhaQuebrada
+                  key={linha.chave}
+                  label={linha.label}
+                  usado={somarLinhaFechamento(save.saveUsado, linha.tipos)}
+                  gerado={somarLinhaFechamento(save.saveGerado, linha.tipos)}
+                  custos={somarLinhaFechamento(save.custosDoJob, linha.tipos)}
+                  moeda={moeda}
+                />
+              ) : (
+                <Linha
+                  key={linha.chave}
+                  label={linha.label}
+                  value={somarLinhaFechamento(subtotaisPorTipo, linha.tipos)}
+                  moeda={moeda}
+                />
+              ),
+            )}
+            {temSave ? (
+              <LinhaQuebrada
+                label="Total dos custos"
+                usado={save.totalSaveUsado}
+                gerado={save.totalSaveGerado}
+                custos={save.totalCustosDoJob}
                 moeda={moeda}
+                destaque
               />
-            ))}
-            <Linha
-              label="Total dos custos"
-              value={subtotalGeral}
-              moeda={moeda}
-              destaque
-            />
+            ) : (
+              <Linha
+                label="Total dos custos"
+                value={subtotalGeral}
+                moeda={moeda}
+                destaque
+              />
+            )}
+            {/* Com save, estas duas são as do FATURAMENTO: são elas que
+                levam ao "Faturamento previsto" logo abaixo. As do valor do
+                job saem na nota, porque a conta é outra e mostrar só uma
+                deixaria um dos dois totais sem explicação na tela. */}
             <Linha
               label={`Honorários (${formatPct(percentualHonorarios)}%)`}
-              value={honorarios}
+              value={temSave ? faturamento.honorarios : honorarios}
               moeda={moeda}
             />
             <Linha
               label={`Impostos (${formatPct(percentualImposto)}%)`}
-              value={imposto}
+              value={temSave ? faturamento.imposto : imposto}
               moeda={moeda}
             />
             {/* Os dois fechamentos: o que a California emite nota e o que o
@@ -350,6 +394,44 @@ export function TotaisCard({
                 {formatCurrency(valorJob, moeda)}
               </span>
             </div>
+            {temSave && (
+              <>
+                <div className="flex items-baseline justify-between gap-3 pt-1">
+                  <span className="text-sm font-semibold text-[#5f5d57]">
+                    Saldo em save
+                  </span>
+                  <span className="whitespace-nowrap font-mono text-lg font-bold text-[#5f5d57]">
+                    {formatCurrency(save.totalSaveGerado, moeda)}
+                  </span>
+                </div>
+                <p className="pt-2 text-[10.5px] leading-relaxed text-muted-foreground">
+                  Os honorários e impostos acima correm sobre{" "}
+                  <strong>save gerado + custos do job</strong> (
+                  {formatCurrency(faturamento.base, moeda)}) — é o que esta
+                  nota cobra. O Valor do Job repete a mesma conta sobre{" "}
+                  <strong>save usado + custos do job</strong> (
+                  {formatCurrency(job.base, moeda)}): honorários{" "}
+                  {formatCurrency(job.honorarios, moeda)}, impostos{" "}
+                  {formatCurrency(job.imposto, moeda)}. Sem nenhuma linha em
+                  save os dois totais voltam a ser iguais:{" "}
+                  {save.itensEmSave > 0 && (
+                    <>
+                      {save.itensEmSave}{" "}
+                      {save.itensEmSave === 1 ? "linha gera" : "linhas geram"}{" "}
+                      crédito
+                    </>
+                  )}
+                  {save.itensEmSave > 0 && save.itensConsumindoSave > 0 && " e "}
+                  {save.itensConsumindoSave > 0 && (
+                    <>
+                      {save.itensConsumindoSave}{" "}
+                      {save.itensConsumindoSave === 1 ? "consome" : "consomem"}
+                    </>
+                  )}
+                  .
+                </p>
+              </>
+            )}
           </div>
         </div>
 
@@ -525,8 +607,10 @@ function agruparPorGrupo(
       .filter((b): b is NonNullable<typeof b> => b != null);
     const soma = somarBlocosDosItens(doGrupo);
     const planejado = valorNaVisao(soma.planejado, visao);
+    // `orcadoRentabilidade`, não `orcado`: a coluna ORÇADO mostra o valor
+    // cheio, mas a linha em save não entra na comparação com o custo.
     const { rentabilidade, percentual } = calcularRentabilidade(
-      soma.orcado,
+      soma.orcadoRentabilidade,
       planejado,
     );
     return {
@@ -586,6 +670,55 @@ function Linha({
       >
         {formatCurrency(value, moeda)}
       </span>
+    </div>
+  );
+}
+
+/** Linha do fechamento repartida em save usado, save gerado e custos do
+ *  job. As três somam o subtotal do tipo, por construção. */
+function LinhaQuebrada({
+  label,
+  usado,
+  gerado,
+  custos,
+  moeda,
+  destaque,
+}: {
+  label: string;
+  usado: number;
+  gerado: number;
+  custos: number;
+  moeda: string;
+  destaque?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "grid grid-cols-[1fr_repeat(3,minmax(84px,auto))] items-baseline gap-x-3",
+        destaque && "mt-3 border-t border-border pt-3",
+      )}
+    >
+      <span
+        className={cn(
+          "text-sm",
+          destaque ? "font-semibold" : "text-muted-foreground",
+        )}
+      >
+        {label}
+      </span>
+      {[usado, gerado, custos].map((v, i) => (
+        <span
+          key={i}
+          className={cn(
+            "whitespace-nowrap text-right font-mono text-[12.5px]",
+            destaque ? "font-bold" : "font-semibold",
+            v === 0 && "text-muted-foreground/50",
+            i < 2 && v !== 0 && "text-[#5f5d57]",
+          )}
+        >
+          {formatCurrency(v, moeda)}
+        </span>
+      ))}
     </div>
   );
 }
