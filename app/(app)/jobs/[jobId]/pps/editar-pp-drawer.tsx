@@ -114,7 +114,7 @@ export function EditarPPDrawer({
     sucessoRef.current = false;
     setErro(null);
     setUploadPrefix(null);
-    setFornecedorId(pp.fornecedor_id);
+    setFornecedorId(pp.fornecedor_id ?? "");
     setEmpresaId(pp.empresa_id);
     setPrazoPagamento(pp.prazo_pagamento);
     setServico(pp.servico);

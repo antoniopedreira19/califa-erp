@@ -957,7 +957,7 @@ export interface PedidoCompra {
   codigo: string;
   item_realizado_id: string;
   job_id: string;
-  fornecedor_id: string;
+  fornecedor_id: string | null;
   empresa_id: string;
   servico: string;
   quantidade: number;
@@ -966,6 +966,9 @@ export interface PedidoCompra {
   prazo_pagamento: string;
   pdf_path: string;
   emitida_por: string | null;
+  // Verba de Produção (subtipo de PP — pago ao responsável em vez do fornecedor)
+  verba_producao: boolean;
+  responsavel_verba_id: string | null;
   // Fase 2
   status: PPStatus;
   prazo_pagamento_financeiro: string | null;
