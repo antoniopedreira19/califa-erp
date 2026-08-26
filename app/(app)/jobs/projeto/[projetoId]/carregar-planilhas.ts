@@ -75,7 +75,7 @@ export async function carregarPlanilhasDosJobs(
         "id, job_id, item_versao_id, grupo_id, ordem, item, tipo_custo, categoria_id, " +
           "valor_unitario_orcado, quantidade_orcada, dias_meses_orcado, total_orcado, " +
           "valor_unitario_planejado, quantidade_planejada, dias_meses_planejado, total_planejado, " +
-          "bv_liquido_planejado",
+          "bv_liquido_planejado, em_save, save_consumido",
       )
       .eq("tenant_id", tenantId)
       .in("job_id", jobIds)

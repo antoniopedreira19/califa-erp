@@ -160,127 +160,382 @@ export function aceitaBV(tipo: string): boolean {
   return (TIPOS_COM_BV as readonly string[]).includes(tipo);
 }
 
-export interface VersaoTotais {
-  /** Soma dos totais por tipo. */
-  subtotaisPorTipo: Record<TipoCusto, number>;
-  /** Soma geral de todos os itens — o custo, independente de quem fatura. */
-  subtotalGeral: number;
-  /** Base sobre a qual incidem honorários. */
-  baseHonorarios: number;
-  /** Base sobre a qual incide o imposto (inclui os honorários). */
-  baseImposto: number;
-  /** Honorários calculados: baseHonorarios × %honor. */
-  honorarios: number;
-  /** Imposto em regime gross-up: base × taxa / (1 − taxa). */
-  imposto: number;
-  /**
-   * **Faturamento previsto** — o que a California emite nota.
-   * Só o principal dos tipos com `fatura: true`, mais honorários e imposto.
-   */
-  faturamentoPrevisto: number;
-  /**
-   * **Valor do job** — o compromisso total do cliente, somando o que passa
-   * pela agência e o que ele paga direto ao fornecedor. É o número que a
-   * planilha oficial chama de FATURAMENTO.
-   */
-  valorJob: number;
+/**
+ * Um item, do ponto de vista do fechamento.
+ *
+ * `em_save` e `save_consumido` são opcionais: item antigo, rascunho e
+ * qualquer `.select()` que ainda não os carregue caem no caso sem save, em
+ * que os três fechamentos coincidem e o resultado é o de sempre.
+ */
+export interface ItemParaTotais {
+  tipo_custo: TipoCusto;
+  total_orcado: number | string | null;
+  /** Linha em SAVE — o cliente paga, o serviço não acontece neste projeto.
+   *  Sai da base do VALOR DO JOB e permanece na do FATURAMENTO. */
+  em_save?: boolean | null;
+  /** Quanto desta linha é pago por saldo de save de outro job. Sai da base
+   *  do FATURAMENTO (já foi faturado lá) e fica na do VALOR DO JOB. */
+  save_consumido?: number | string | null;
 }
 
 /**
- * Fechamento da versão do orçamento (e da cópia orçada do job, que tem a
- * mesma forma).
- *
- * - **Honorários** incidem sobre os tipos com `honorarios: true`.
- * - **Imposto** usa (tipos com `imposto: true`) + honorários, em gross-up:
- *   a agência precisa faturar bruto o bastante para que, depois do imposto
- *   descontado, sobre exatamente a base líquida —
- *      imposto = base × taxa / (1 − taxa).
- *   Com %imp = 19,53 a taxa é 0,1953 e o multiplicador ≈ 0,2427.
- * - **Faturamento previsto** e **valor do job** compartilham honorários e
- *   imposto; mudam só em quais principais entram.
+ * Um dos lados do fechamento. A conta é a mesma dos dois lados — o que
+ * muda é o valor efetivo que cada item empresta a ela.
  */
-export function calcularTotaisVersao(
-  // Aceita tanto o item da versão quanto a cópia orçada do job — as duas
-  // têm tipo de custo e total, que é tudo que a conta precisa.
-  itens: Array<Pick<VersaoOrcamentoItem, "tipo_custo" | "total_orcado">>,
+export interface FechamentoLado {
+  /** Valor efetivo somado por tipo de custo NESTE lado. */
+  subtotaisPorTipo: Record<TipoCusto, number>;
+  /** Soma de todos os valores efetivos deste lado. */
+  base: number;
+  baseHonorarios: number;
+  honorarios: number;
+  baseImposto: number;
+  imposto: number;
+  /** Soma dos principais que este lado reconhece. */
+  principal: number;
+  /** principal + honorários + imposto. */
+  total: number;
+}
+
+/**
+ * Como o orçado de cada tipo se reparte entre as três naturezas — a
+ * quebra que o card de Totais mostra em três colunas.
+ *
+ * As três somam exatamente o subtotal do tipo, por construção:
+ *   save usado + save gerado + custos do job = total orçado.
+ */
+export interface QuebraSave {
+  /** Pago por saldo de save de outro job. */
+  saveUsado: Record<TipoCusto, number>;
+  /** Faturado aqui e guardado como crédito para outro projeto. */
+  saveGerado: Record<TipoCusto, number>;
+  /** O que este job de fato entrega e cobra. */
+  custosDoJob: Record<TipoCusto, number>;
+  totalSaveUsado: number;
+  totalSaveGerado: number;
+  totalCustosDoJob: number;
+  /** Quantas linhas geram save, e quantas consomem. */
+  itensEmSave: number;
+  itensConsumindoSave: number;
+}
+
+export interface VersaoTotais {
+  /** Soma CRUA dos totais por tipo — o custo, independente de save. */
+  subtotaisPorTipo: Record<TipoCusto, number>;
+  /** Soma geral de todos os itens. */
+  subtotalGeral: number;
+
+  /** O que a California emite nota: base = total − save consumido. */
+  faturamento: FechamentoLado;
+  /** O compromisso do cliente neste job: base = 0 quando a linha é save. */
+  job: FechamentoLado;
+  /** A conta como se o save não existisse. É o número de antes de
+   *  24/08/2026, e é o que a planilha exportada ao cliente mostra —
+   *  num orçamento de save o `job` é zero e o documento sairia vazio. */
+  bruto: FechamentoLado;
+
+  /** A repartição do orçado entre save usado, save gerado e custos. */
+  save: QuebraSave;
+  /** Orçado que serve de base à rentabilidade: o geral menos as linhas em
+   *  save, que não têm custo planejado para comparar. */
+  orcadoParaRentabilidade: number;
+
+  // --- Campos planos, preservados. Apontam para o lado `job`.
+  //
+  // `imposto` é o embutido no VALOR DO JOB porque é ele que
+  // `calcularResultadoOperacional(valorJob, imposto, custo)` precisa: a
+  // conta é `valorJob − imposto − custo`, e o imposto do faturamento daria
+  // margem errada em job com save.
+  baseHonorarios: number;
+  baseImposto: number;
+  honorarios: number;
+  imposto: number;
+  /** **Faturamento previsto** — o que a California emite nota. */
+  faturamentoPrevisto: number;
+  /** **Valor do job** — o compromisso total do cliente. */
+  valorJob: number;
+}
+
+const zerado = () =>
+  Object.fromEntries(TIPOS_CUSTO.map((t) => [t, 0])) as Record<
+    TipoCusto,
+    number
+  >;
+
+/** Fecha UM lado: subtotais por tipo -> honorários -> imposto -> principal. */
+function fecharLado(
+  subtotaisPorTipo: Record<TipoCusto, number>,
   percentualHonorarios: number,
   percentualImposto: number,
-): VersaoTotais {
-  const subtotaisPorTipo = Object.fromEntries(
-    TIPOS_CUSTO.map((t) => [t, 0]),
-  ) as Record<TipoCusto, number>;
-
-  for (const it of itens) {
-    // Tipo desconhecido (dado antigo ou enum novo ainda não mapeado) não
-    // pode virar `undefined + n = NaN` e contaminar a tela inteira.
-    if (subtotaisPorTipo[it.tipo_custo] === undefined) continue;
-    subtotaisPorTipo[it.tipo_custo] += Number(it.total_orcado ?? 0);
-  }
-
+): FechamentoLado {
   const somarOnde = (lever: keyof RegraTipoCusto) =>
     TIPOS_CUSTO.reduce(
       (s, t) => (REGRAS_TIPO_CUSTO[t][lever] ? s + subtotaisPorTipo[t] : s),
       0,
     );
 
-  const subtotalGeral = TIPOS_CUSTO.reduce(
-    (s, t) => s + subtotaisPorTipo[t],
-    0,
-  );
-
+  const base = TIPOS_CUSTO.reduce((s, t) => s + subtotaisPorTipo[t], 0);
   const baseHonorarios = somarOnde("honorarios");
   const honorarios = baseHonorarios * (percentualHonorarios / 100);
-
   const baseImposto = somarOnde("imposto") + honorarios;
   const taxa = Math.max(0, Math.min(0.9999, percentualImposto / 100));
   const imposto = taxa > 0 ? (baseImposto * taxa) / (1 - taxa) : 0;
 
   return {
     subtotaisPorTipo,
-    subtotalGeral,
+    base,
     baseHonorarios,
-    baseImposto,
     honorarios,
+    baseImposto,
     imposto,
-    faturamentoPrevisto: somarOnde("fatura") + honorarios + imposto,
-    valorJob: somarOnde("valorJob") + honorarios + imposto,
+    principal: 0, // preenchido por quem chama, que sabe qual alavanca usar
+    total: 0,
   };
 }
 
+/** Aplica a alavanca de principal e fecha o total do lado. */
+function comPrincipal(
+  lado: FechamentoLado,
+  lever: keyof RegraTipoCusto,
+): FechamentoLado {
+  const principal = TIPOS_CUSTO.reduce(
+    (s, t) =>
+      REGRAS_TIPO_CUSTO[t][lever] ? s + lado.subtotaisPorTipo[t] : s,
+    0,
+  );
+  return { ...lado, principal, total: principal + lado.honorarios + lado.imposto };
+}
+
 /**
- * Efeito de UM item quando seu total e/ou tipo de custo mudam por errata.
+ * Fechamento da versão do orçamento (e da cópia orçada do job, que tem a
+ * mesma forma).
+ *
+ * **A conta é uma só, rodada sobre duas bases** (decisão 023). Cada linha
+ * empresta um valor diferente a cada lado:
+ *
+ *     base de faturamento  = total orçado − save consumido
+ *     base de valor do job = está em save ? 0 : total orçado
+ *
+ * Sem nenhuma linha em save as duas bases são iguais ao total orçado, os
+ * fechamentos coincidem, e o resultado é exatamente o de antes de
+ * 24/08/2026 — é isso que garante que nenhum job existente muda de número.
+ *
+ * - **Honorários** incidem sobre os tipos com `honorarios: true`.
+ * - **Imposto** usa (tipos com `imposto: true`) + honorários, em gross-up:
+ *      imposto = base × taxa / (1 − taxa).
+ *   Com %imp = 19,53 a taxa é 0,1953 e o multiplicador ≈ 0,2427.
+ *
+ * Validado contra a planilha oficial "[INT] SJ PEPSI CG - NE - 2026" em
+ * 11/08/2026 e contra o design `Orcamento - Versao com Save.dc.html` em
+ * 24/08/2026 — ver `scripts/conferir-save.ts`.
+ */
+export function calcularTotaisVersao(
+  itens: ItemParaTotais[],
+  percentualHonorarios: number,
+  percentualImposto: number,
+): VersaoTotais {
+  const subtotaisPorTipo = zerado();
+  const saveUsado = zerado();
+  const saveGerado = zerado();
+  const custosDoJob = zerado();
+  let itensEmSave = 0;
+  let itensConsumindoSave = 0;
+
+  for (const it of itens) {
+    // Tipo desconhecido (dado antigo ou enum novo ainda não mapeado) não
+    // pode virar `undefined + n = NaN` e contaminar a tela inteira.
+    if (subtotaisPorTipo[it.tipo_custo] === undefined) continue;
+
+    const total = Number(it.total_orcado ?? 0);
+    const emSave = it.em_save === true;
+    // Consumo não pode passar do total da linha nem ser negativo: um dado
+    // torto no banco viraria base negativa e imposto negativo.
+    const consumido = emSave
+      ? 0
+      : Math.min(Math.max(Number(it.save_consumido ?? 0), 0), total);
+
+    subtotaisPorTipo[it.tipo_custo] += total;
+
+    if (emSave) {
+      saveGerado[it.tipo_custo] += total;
+      itensEmSave += 1;
+    } else {
+      saveUsado[it.tipo_custo] += consumido;
+      custosDoJob[it.tipo_custo] += total - consumido;
+      if (consumido > 0) itensConsumindoSave += 1;
+    }
+  }
+
+  const somar = (r: Record<TipoCusto, number>) =>
+    TIPOS_CUSTO.reduce((s, t) => s + r[t], 0);
+
+  // As duas bases, montadas a partir da mesma quebra.
+  const baseFaturamento = zerado();
+  const baseValorJob = zerado();
+  for (const t of TIPOS_CUSTO) {
+    baseFaturamento[t] = saveGerado[t] + custosDoJob[t];
+    baseValorJob[t] = saveUsado[t] + custosDoJob[t];
+  }
+
+  const faturamento = comPrincipal(
+    fecharLado(baseFaturamento, percentualHonorarios, percentualImposto),
+    "fatura",
+  );
+  const job = comPrincipal(
+    fecharLado(baseValorJob, percentualHonorarios, percentualImposto),
+    "valorJob",
+  );
+  const bruto = comPrincipal(
+    fecharLado(subtotaisPorTipo, percentualHonorarios, percentualImposto),
+    "valorJob",
+  );
+
+  const totalSaveGerado = somar(saveGerado);
+  const subtotalGeral = somar(subtotaisPorTipo);
+
+  return {
+    subtotaisPorTipo,
+    subtotalGeral,
+    faturamento,
+    job,
+    bruto,
+    save: {
+      saveUsado,
+      saveGerado,
+      custosDoJob,
+      totalSaveUsado: somar(saveUsado),
+      totalSaveGerado,
+      totalCustosDoJob: somar(custosDoJob),
+      itensEmSave,
+      itensConsumindoSave,
+    },
+    orcadoParaRentabilidade: subtotalGeral - totalSaveGerado,
+
+    baseHonorarios: job.baseHonorarios,
+    baseImposto: job.baseImposto,
+    honorarios: job.honorarios,
+    imposto: job.imposto,
+    faturamentoPrevisto: faturamento.total,
+    valorJob: job.total,
+  };
+}
+
+/** Estado de um item para efeito de errata. */
+export interface EstadoItemErrata {
+  total: number;
+  tipoCusto: TipoCusto;
+  /** A linha gera save. */
+  emSave?: boolean;
+  /** Quanto da linha é pago por save de outro job. */
+  saveConsumido?: number;
+}
+
+/** Os dois valores efetivos de um estado — as bases da decisão 023. */
+function basesDoEstado(e: EstadoItemErrata): {
+  faturamento: number;
+  job: number;
+} {
+  if (e.emSave) return { faturamento: e.total, job: 0 };
+  const consumido = Math.min(Math.max(e.saveConsumido ?? 0, 0), e.total);
+  return { faturamento: e.total - consumido, job: e.total };
+}
+
+/**
+ * Efeito de UM item quando seu total, tipo de custo, marca de save ou
+ * consumo de save mudam por errata.
  *
  * Honorários e imposto incidem sobre SOMAS, e as duas fórmulas são lineares
  * nelas — então o efeito de cada item é exato e a soma dos efeitos
  * individuais fecha com o delta total da errata. É isso que permite mostrar
  * "efeito" linha a linha.
  *
- * Devolve os dois números porque a mudança de tipo pode mexer num sem mexer
- * no outro: trocar A · Direto por A · Repasse move o faturamento previsto e
- * deixa o valor do job intacto.
+ * Desde 24/08/2026 são **dois deltas independentes**, um por base: os dois
+ * lados deixaram de compartilhar honorários e imposto, porque marcar uma
+ * linha como save mexe num sem mexer no outro. A linearidade continua
+ * valendo dentro de cada lado, então a propriedade que sustenta o card de
+ * Erratas continua verdadeira para os dois números.
+ *
+ * Devolve os dois porque a mudança pode mexer só num: trocar A · Direto por
+ * A · Repasse move o faturamento previsto e deixa o valor do job intacto;
+ * marcar uma linha como save faz o contrário.
  */
 export function calcularEfeitoDaMudanca(
-  de: { total: number; tipoCusto: TipoCusto },
-  para: { total: number; tipoCusto: TipoCusto },
+  de: EstadoItemErrata,
+  para: EstadoItemErrata,
   percentualHonorarios: number,
   percentualImposto: number,
 ): { faturamentoPrevisto: number; valorJob: number } {
   const h = percentualHonorarios / 100;
   const taxa = Math.max(0, Math.min(0.9999, percentualImposto / 100));
 
-  const delta = (lever: keyof RegraTipoCusto) =>
-    (REGRAS_TIPO_CUSTO[para.tipoCusto]?.[lever] ? para.total : 0) -
-    (REGRAS_TIPO_CUSTO[de.tipoCusto]?.[lever] ? de.total : 0);
+  const bDe = basesDoEstado(de);
+  const bPara = basesDoEstado(para);
 
-  const deltaHonorarios = delta("honorarios") * h;
-  const deltaBaseImposto = delta("imposto") + deltaHonorarios;
-  const deltaImposto = taxa > 0 ? (deltaBaseImposto * taxa) / (1 - taxa) : 0;
-  const comum = deltaHonorarios + deltaImposto;
+  const delta = (lado: "faturamento" | "job", lever: keyof RegraTipoCusto) =>
+    (REGRAS_TIPO_CUSTO[para.tipoCusto]?.[lever] ? bPara[lado] : 0) -
+    (REGRAS_TIPO_CUSTO[de.tipoCusto]?.[lever] ? bDe[lado] : 0);
+
+  const fechar = (
+    lado: "faturamento" | "job",
+    leverPrincipal: keyof RegraTipoCusto,
+  ) => {
+    const deltaHonorarios = delta(lado, "honorarios") * h;
+    const deltaBaseImposto = delta(lado, "imposto") + deltaHonorarios;
+    const deltaImposto = taxa > 0 ? (deltaBaseImposto * taxa) / (1 - taxa) : 0;
+    return delta(lado, leverPrincipal) + deltaHonorarios + deltaImposto;
+  };
 
   return {
-    faturamentoPrevisto: delta("fatura") + comum,
-    valorJob: delta("valorJob") + comum,
+    faturamentoPrevisto: fechar("faturamento", "fatura"),
+    valorJob: fechar("job", "valorJob"),
   };
+}
+
+/**
+ * O faturamento que UMA linha em save gera no job de origem: principal +
+ * honorários + imposto proporcionais (decisão 023 §4).
+ *
+ * É o **segundo** número do save. O primeiro é o saldo consumível, que é
+ * só o principal. Os dois são verdadeiros e servem a coisas diferentes: o
+ * saldo é o que o cliente tem a gastar; isto é o que a nota cobrou.
+ *
+ * Reaproveita `calcularEfeitoDaMudanca` de 0 até o total em vez de
+ * reescrever a conta — a fatia de uma linha é exata porque as fórmulas são
+ * lineares.
+ *
+ * R$ 30.000 tipo B a 10%/19,53% -> R$ 41.009,07.
+ * A mesma linha tipo A -> R$ 3.728,10: o principal do A não passa pela
+ * California, então só o honorário e o imposto dele migram.
+ */
+export function receitaDeFaturamentoDaLinha(
+  total: number,
+  tipoCusto: TipoCusto,
+  percentualHonorarios: number,
+  percentualImposto: number,
+): number {
+  return calcularEfeitoDaMudanca(
+    { total: 0, tipoCusto },
+    { total, tipoCusto },
+    percentualHonorarios,
+    percentualImposto,
+  ).faturamentoPrevisto;
+}
+
+/**
+ * Quanto da receita da origem migra para o job que consumiu, rateado pelo
+ * consumo do **principal** (decisão 023 §4).
+ *
+ * Consumir R$ 25.000 de um saldo de R$ 30.000 cuja receita foi
+ * R$ 41.009,07 migra R$ 34.174,23 — e o resto continua com a origem até
+ * alguém consumir.
+ */
+export function receitaSaveMigrada(
+  receitaOrigem: number,
+  principal: number,
+  consumido: number,
+): number {
+  if (!(principal > 0)) return 0;
+  return receitaOrigem * (Math.min(consumido, principal) / principal);
 }
 
 /**

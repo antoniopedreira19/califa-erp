@@ -230,7 +230,7 @@ export async function enviarJobParaAbertura(
   //    tela, mas não é o que dimensiona o job no financeiro.
   const { data: itensBrutos, error: itensErr } = await supabase
     .from("versoes_orcamento_itens")
-    .select("tipo_custo, total_orcado")
+    .select("tipo_custo, total_orcado, em_save, save_consumido")
     .eq("versao_orcamento_id", versaoId)
     .eq("tenant_id", session.activeTenant.id);
 

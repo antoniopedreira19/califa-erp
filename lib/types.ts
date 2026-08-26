@@ -312,6 +312,10 @@ export interface VersaoOrcamento {
   taxa_cambio: number;
   percentual_honorarios: number;
   percentual_imposto: number;
+  /** Orçamento de save: todo item NOVO nasce marcado. É default de linha
+   *  nova, não trava — desligar não desmarca o que já existe
+   *  (docs/decisions/023-save-entre-jobs.md §10). */
+  save_por_padrao: boolean;
   aprovado_em: string | null;
   aprovado_por: string | null;
   created_by: string | null;
@@ -365,6 +369,16 @@ export interface VersaoOrcamentoItem {
    *  aprovação o BV ainda muda (na planilha do job), e o planejado NÃO
    *  pode acompanhar — por isso o congelamento. */
   bv_liquido_planejado: number | null;
+
+  /** A linha gera SAVE: o cliente paga nesta nota, o serviço não acontece
+   *  neste projeto e o valor vira crédito dele para um projeto seguinte.
+   *  Sai da base do VALOR DO JOB e permanece na do FATURAMENTO
+   *  (docs/decisions/023-save-entre-jobs.md). */
+  em_save: boolean;
+  /** Quanto desta linha é pago por saldo de save de outro job. Sai da base
+   *  do FATURAMENTO — já foi faturado lá — e fica na do VALOR DO JOB.
+   *  Mantida por trigger a partir de `saves_consumos`; não escrever à mão. */
+  save_consumido: number;
   /** Legado do modelo antes de haver tabela de fornecedores por item.
    *  Mantido nullable no banco; não é mais usado nas telas. */
   fornecedor_id: string | null;
@@ -1073,6 +1087,16 @@ export interface ItemPlanilhaJob {
    *  envio para abertura. Editar o BV na planilha do job não mexe aqui:
    *  o valor novo só se materializa no REALIZADO, e só na confirmação. */
   bv_liquido_planejado: number | null;
+
+  /** A linha gera SAVE: o cliente paga nesta nota, o serviço não acontece
+   *  neste projeto e o valor vira crédito dele para um projeto seguinte.
+   *  Sai da base do VALOR DO JOB e permanece na do FATURAMENTO
+   *  (docs/decisions/023-save-entre-jobs.md). */
+  em_save: boolean;
+  /** Quanto desta linha é pago por saldo de save de outro job. Sai da base
+   *  do FATURAMENTO — já foi faturado lá — e fica na do VALOR DO JOB.
+   *  Mantida por trigger a partir de `saves_consumos`; não escrever à mão. */
+  save_consumido: number;
 }
 
 export interface JobErrata {
