@@ -307,6 +307,28 @@ export function montarMatrizFluxo(
 
   const indiceEmCurso = indice.get(mesAtual) ?? -1;
 
+  // Saldo de HOJE: só o que passou pela conta, e só até hoje.
+  //
+  // Decisão do Tiago, 26/08/2026. Era o acumulado da COLUNA do mês
+  // corrente, somando as três classes — e por isso engolia a previsão
+  // rolada. A previsão vencida sem documento rola para frente (decisão
+  // 018 §3): a do JOB-0013 caiu em 27/08, amanhã, mas ainda dentro de
+  // agosto, então a coluna a incluía e o card mostrava R$ 104.064,87
+  // "já movimentados" num job sem um centavo na conta.
+  //
+  // A régua passa a ser a que o subtítulo do card sempre prometeu:
+  // entradas menos saídas JÁ MOVIMENTADAS. Título em aberto fica de
+  // fora mesmo vencido — a PP não paga não é dinheiro que saiu.
+  //
+  // Contado direto das linhas, e não pela matriz, para não depender do
+  // recorte mensal nem do teto de 36 colunas.
+  let saldoHoje = 0;
+  for (const l of linhas) {
+    if (l.classe !== "movimento") continue;
+    if (l.dataEvento.slice(0, 10) > hoje) continue;
+    saldoHoje += l.natureza === "entrada" ? l.valor : -l.valor;
+  }
+
   return {
     meses,
     indiceEmCurso,
@@ -316,15 +338,7 @@ export function montarMatrizFluxo(
     saldo,
     detalhesReceber,
     detalhesPagar,
-    // Acumulado até o mês corrente. Sem mês corrente na faixa (tudo no
-    // passado ou tudo no futuro) o número honesto é o acumulado do que já
-    // passou, ou zero.
-    saldoHoje:
-      indiceEmCurso >= 0
-        ? saldo[indiceEmCurso]
-        : meses.length > 0 && meses[0] > mesAtual
-          ? 0
-          : (saldo[saldo.length - 1] ?? 0),
+    saldoHoje,
     saldoFim: saldo[saldo.length - 1] ?? 0,
     ultimoMesLabel: meses.length > 0 ? rotuloMes(meses[meses.length - 1]) : "—",
     porJob,

@@ -1950,7 +1950,15 @@ recorte por job eles só entram depois da baixa; no Fluxo de Caixa geral
 continuam como estão. Hoje não muda número: nenhuma das duas está
 vinculada a job.
 
-**5. Backfill.** 8 dos 10 jobs abertos ganharam previsão de recebimento
+**5. "Saldo do job hoje" era o mês inteiro, com as três classes.** Isso
+brigava com a rolagem da decisão 018 §3: a previsão do JOB-0013 rolou de
+19/08 para 27/08 — amanhã, mas ainda em agosto —, e a coluna do mês a
+trazia de volta. O card mostrava R$ 104.064,87 "já movimentados" num job
+sem um centavo na conta. Agora soma só a classe `movimento`, por DATA e
+até hoje, que é o que o subtítulo sempre prometeu. Título vencido e não
+pago fica de fora (decisão do Tiago). `saldoFim` não muda.
+
+**6. Backfill.** 8 dos 10 jobs abertos ganharam previsão de recebimento
 (parcela única = `faturamento_previsto` em `data_prevista_faturamento`).
 JOB-0001 e JOB-0002 ficaram sem — `data_prevista_faturamento` nula.
 
@@ -1990,3 +1998,23 @@ previsão o selo e a descrição repetiam a mesma frase (a descrição some
 quando é igual ao rótulo).
 
 **A verificação logada, na tela real, fica com o Tiago.**
+
+**Conferência logada (2026-08-26, Tiago logou e a sessão foi verificada
+na tela real):** JOB-0013 saiu de Entradas vazias e R$ 25.000,00 de saída
+para R$ 104.064,87 de entrada prevista e R$ 65.000,00 de saída, com os
+prazos de recebimento (0 e 2 dias) que antes eram travessão; JOB-0015
+passou a mostrar R$ 18.959,11 em "já movimentado" das Entradas — o
+recebimento de R$ 10.959,11 que sumia mais os dois estornos —, e a
+composição no hover nomeia cada um. Líquido do período abre com sinal. A
+lista "Visualizar Jobs" bate: JOB-0015 com `R$ 49.754,69 · 38% recebido`
+e `R$ 20.000,00 · 80% realizado`; JOB-0013 com `R$ 65.000,00 · sem
+realizado`. Depois do conserto do saldo de hoje, JOB-0013 mostra R$ 0,00
+e JOB-0015 segue em R$ 2.959,11. Console limpo.
+
+⚠️ **Armadilha de dev que custou tempo aqui:** um `ReferenceError:
+quantos is not defined` apareceu no console e derrubou a aba inteira pelo
+error boundary. Não era bug no código — era chunk velho de HMR, do
+instante em que a variável era usada antes de ser declarada. `tsc` passa
+e o repo está correto; o que resolve é parar o dev server, apagar
+`.next/cache/webpack` e subir de novo. Buffer de console também sobrevive
+ao restart: confira numa aba nova antes de acreditar no erro.
