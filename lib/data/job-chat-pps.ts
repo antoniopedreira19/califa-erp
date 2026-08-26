@@ -63,7 +63,7 @@ export function montarThreadChatPPs(
   // emissão.
   for (const pp of pps) {
     const fornecedorNome =
-      fornecedoresPorId[pp.fornecedor_id] ?? "Fornecedor";
+      (pp.fornecedor_id ? fornecedoresPorId[pp.fornecedor_id] : null) ?? "Fornecedor";
     const valorFmt = moeda(Number(pp.valor ?? 0), moedaCode);
 
     // Card de emissão (sempre existe)

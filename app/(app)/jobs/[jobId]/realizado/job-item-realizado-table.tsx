@@ -823,7 +823,7 @@ export function JobItemRealizadoTable({
                 id: pp.id,
                 codigo: pp.codigo,
                 status: pp.status,
-                fornecedorNome: nomeDoFornecedor(fornecedores, pp.fornecedor_id),
+                fornecedorNome: nomeDoFornecedor(fornecedores, pp.fornecedor_id ?? ""),
                 quantidade: Number(pp.quantidade ?? 0),
                 valor: Number(pp.valor ?? 0),
               }))}
