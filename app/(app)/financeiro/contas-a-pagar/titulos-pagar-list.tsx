@@ -128,6 +128,7 @@ const CHIP_ORIGEM: Array<{ key: "todas" | OrigemTitulo; label: string }> = [
   { key: "avulso", label: "Avulsos" },
   { key: "recorrencia", label: "Recorrências" },
   { key: "desembolso", label: "Desembolsos" },
+  { key: "pp_devolucao_verba", label: "Devoluções de verba" },
 ];
 
 /** Cores do chip de origem — copiadas do protótipo. */
@@ -141,6 +142,8 @@ function origemChipClass(origem: OrigemTitulo): string {
       return "border-blue-200 bg-blue-50 text-blue-700";
     case "desembolso":
       return "border-amber-200 bg-amber-50 text-amber-700";
+    case "pp_devolucao_verba":
+      return "border-teal-200 bg-teal-50 text-teal-700";
   }
 }
 
@@ -276,6 +279,7 @@ export function TitulosPagarList({
       avulso: base.filter((r) => r.origem === "avulso").length,
       recorrencia: base.filter((r) => r.origem === "recorrencia").length,
       desembolso: base.filter((r) => r.origem === "desembolso").length,
+      pp_devolucao_verba: base.filter((r) => r.origem === "pp_devolucao_verba").length,
     };
   }, [rows, busca, casaBusca, casaPeriodo]);
 
