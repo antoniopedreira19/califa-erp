@@ -5,14 +5,17 @@ import { ChevronRight, Filter, TrendingUp } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import {
   Popover,
+  PopoverAnchor,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
 import {
+  chaveComposicao,
   montarMatrizFluxo,
   rotuloMes,
   type ClasseFluxo,
   type DetalheFluxo,
+  type ItemComposicao,
   type LinhaFluxo,
   type NaturezaFluxo,
 } from "@/lib/calculos/fluxo-caixa-matriz";
@@ -141,7 +144,15 @@ export function FluxoCaixaJobs({
       {
         classe: "movimento" as ClasseFluxo,
         rotulo: "Já movimentado na conta",
-        sub: tom === "entrada" ? "recebimentos do cliente" : "PPs e contas pagas",
+        // Era "recebimentos do cliente" / "PPs e contas pagas". Desde
+        // 26/08/2026 o estorno soma nesta mesma linha, por decisão do
+        // Tiago — o número é o do extrato —, e um rótulo que promete só
+        // recebimento de cliente passaria a mentir. Quem discrimina é a
+        // composição no hover.
+        sub:
+          tom === "entrada"
+            ? "o que entrou na conta · passe o cursor para ver"
+            : "o que saiu da conta · passe o cursor para ver",
         valores: valores.movimento,
         detalhes: [] as DetalheFluxo[],
         detalheTitulo: "",
@@ -166,7 +177,10 @@ export function FluxoCaixaJobs({
       {
         classe: "previsao" as ClasseFluxo,
         rotulo: "Só previsão (abertura do job)",
-        sub: tom === "entrada" ? "parcelas de recebimento" : "curva de desembolso",
+        sub:
+          tom === "entrada"
+            ? "parcelas de recebimento"
+            : "cronograma de desembolsos",
         valores: valores.previsao,
         detalhes: [] as DetalheFluxo[],
         detalheTitulo: "",
@@ -335,7 +349,23 @@ export function FluxoCaixaJobs({
                       {tom === "entrada" ? "Entradas" : "Saídas"}
                     </td>
                     {totalDe(tom).map((v, i) => (
-                      <Celula key={i} valor={v} tom={tom} moeda={moeda} />
+                      <Celula
+                        key={i}
+                        valor={v}
+                        tom={tom}
+                        moeda={moeda}
+                        titulo={tom === "entrada" ? "Entradas" : "Saídas"}
+                        mes={rotuloMes(fluxo.meses[i])}
+                        quantos={
+                          fluxo.composicao[chaveComposicao(tom, "total", i)]
+                            ?.length ?? 0
+                        }
+                        itens={() =>
+                          fluxo.composicao[
+                            chaveComposicao(tom, "total", i)
+                          ] ?? []
+                        }
+                      />
                     ))}
                   </tr>
 
@@ -383,7 +413,24 @@ export function FluxoCaixaJobs({
                             </span>
                           </td>
                           {linha.valores.map((v, i) => (
-                            <Celula key={i} valor={v} tom={tom} moeda={moeda} />
+                            <Celula
+                              key={i}
+                              valor={v}
+                              tom={tom}
+                              moeda={moeda}
+                              titulo={linha.rotulo}
+                              mes={rotuloMes(fluxo.meses[i])}
+                              quantos={
+                                fluxo.composicao[
+                                  chaveComposicao(tom, linha.classe, i)
+                                ]?.length ?? 0
+                              }
+                              itens={() =>
+                                fluxo.composicao[
+                                  chaveComposicao(tom, linha.classe, i)
+                                ] ?? []
+                              }
+                            />
                           ))}
                         </tr>
 
@@ -414,6 +461,16 @@ export function FluxoCaixaJobs({
                                     tom={tom}
                                     moeda={moeda}
                                     discreta
+                                    titulo={`${job?.codigo ?? "Job"} · ${linha.rotulo}`}
+                                    mes={rotuloMes(fluxo.meses[i])}
+                                    quantos={v > 0 ? 1 : 0}
+                                    itens={() =>
+                                      (
+                                        fluxo.composicao[
+                                          chaveComposicao(tom, linha.classe, i)
+                                        ] ?? []
+                                      ).filter((x) => x.jobId === c.jobId)
+                                    }
                                   />
                                 ))}
                               </tr>
@@ -482,21 +539,24 @@ export function FluxoCaixaJobs({
                 <td className="px-5 py-[11px] text-[13px] font-semibold">
                   Líquido do período
                 </td>
-                {fluxo.liquido.map((v, i) => (
-                  <td
-                    key={i}
-                    className={cn(
-                      "whitespace-nowrap px-4 py-[11px] text-right font-mono text-[12.5px] font-semibold",
-                      v > 0
-                        ? "text-emerald-700"
-                        : v < 0
-                          ? "text-[#b3323c]"
-                          : "text-[#c9c9c9]",
-                    )}
-                  >
-                    {v === 0 ? "–" : formatCurrency(v, moeda)}
-                  </td>
-                ))}
+                {fluxo.liquido.map((v, i) => {
+                  const chave = chaveComposicao("liquido", "total", i);
+                  return (
+                    <Celula
+                      key={i}
+                      valor={v}
+                      // `tom` não decide cor nem sinal no líquido; quem
+                      // decide é o próprio valor.
+                      tom="entrada"
+                      liquido
+                      moeda={moeda}
+                      titulo="Líquido do período"
+                      mes={rotuloMes(fluxo.meses[i])}
+                      quantos={fluxo.composicao[chave]?.length ?? 0}
+                      itens={() => fluxo.composicao[chave] ?? []}
+                    />
+                  );
+                })}
               </tr>
 
               <tr className="border-t-2 border-foreground bg-[#f8f7f7]/90">
@@ -578,31 +638,213 @@ function SeletorFiltro({
   );
 }
 
+/**
+ * Uma célula da matriz, com a composição do valor no hover e no clique.
+ *
+ * Decisão do Tiago, 26/08/2026: o número sozinho não diz de onde veio, e
+ * na linha de movimento convivem recebimento de cliente e estorno de PP
+ * — que somam juntos, porque o extrato da conta é esse, mas não
+ * significam a mesma coisa. A composição é quem os separa.
+ *
+ * Hover abre com atraso curto (varrer a tabela com o mouse não pode
+ * disparar um popover por célula) e fecha ao sair. O clique FIXA, para
+ * dar tempo de ler uma lista longa e de rolar dentro dela.
+ */
 function Celula({
   valor,
   tom,
   moeda,
   discreta,
+  itens,
+  quantos = 0,
+  titulo,
+  mes,
+  liquido,
 }: {
   valor: number;
   tom: NaturezaFluxo;
   moeda: string;
   discreta?: boolean;
+  /** Thunk: a lista só é montada quando o popover abre. */
+  itens?: () => ItemComposicao[];
+  /** Quantos documentos há por trás — barato, decide se a célula abre. */
+  quantos?: number;
+  titulo?: string;
+  mes?: string;
+  /**
+   * Célula do "Líquido do período": o valor pode ser NEGATIVO, a cor sai
+   * do sinal e não da natureza, e a composição mistura entrada e saída —
+   * cada item aparece com o próprio sinal.
+   */
+  liquido?: boolean;
 }) {
-  return (
+  const [aberto, setAberto] = React.useState(false);
+  const [fixado, setFixado] = React.useState(false);
+  const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Quem manda é ter documento, não o valor: no líquido o zero pode ser
+  // entrada e saída que se anulam, e essa célula tem o que mostrar.
+  const temComposicao = Boolean(itens) && quantos > 0;
+
+  React.useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current);
+    },
+    [],
+  );
+
+  const entrar = () => {
+    if (!temComposicao) return;
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => setAberto(true), 140);
+  };
+
+  const sair = () => {
+    if (timer.current) clearTimeout(timer.current);
+    if (!fixado) setAberto(false);
+  };
+
+  const clicar = (e: React.MouseEvent) => {
+    if (!temComposicao) return;
+    // A linha inteira já tem onClick para expandir os documentos; sem
+    // isto, abrir a composição também sanfonaria a linha.
+    e.stopPropagation();
+    if (timer.current) clearTimeout(timer.current);
+    setFixado((f) => !f);
+    setAberto(true);
+  };
+
+  const lista = aberto && itens ? itens() : [];
+
+  const celula = (
     <td
+      onMouseEnter={entrar}
+      onMouseLeave={sair}
+      onClick={clicar}
       className={cn(
         "whitespace-nowrap px-4 text-right font-mono",
         discreta ? "py-2 text-[11.5px]" : "py-[11px] text-[12.5px]",
-        valor > 0
-          ? tom === "entrada"
-            ? cn("text-emerald-700", !discreta && "font-semibold")
-            : cn("text-[#b3323c]", !discreta && "font-semibold")
-          : "text-[#c9c9c9]",
+        temComposicao &&
+          "cursor-pointer underline-offset-[3px] hover:underline hover:decoration-dotted",
+        fixado && "bg-california-red/[0.05]",
+        liquido
+          ? // No líquido a cor sai do SINAL: sobrou dinheiro no mês (verde)
+            // ou faltou (vermelho). A natureza não decide nada aqui.
+            valor > 0
+            ? "font-semibold text-emerald-700"
+            : valor < 0
+              ? "font-semibold text-[#b3323c]"
+              : "text-[#c9c9c9]"
+          : valor > 0
+            ? tom === "entrada"
+              ? cn("text-emerald-700", !discreta && "font-semibold")
+              : cn("text-[#b3323c]", !discreta && "font-semibold")
+            : "text-[#c9c9c9]",
       )}
     >
-      {valor > 0 ? formatCurrency(valor, moeda) : "–"}
+      {(liquido ? valor !== 0 : valor > 0) ? formatCurrency(valor, moeda) : "–"}
     </td>
+  );
+
+  if (!temComposicao) return celula;
+
+  return (
+    <Popover
+      open={aberto}
+      onOpenChange={(o) => {
+        setAberto(o);
+        if (!o) setFixado(false);
+      }}
+    >
+      <PopoverAnchor asChild>{celula}</PopoverAnchor>
+      <PopoverContent
+        align="end"
+        className="w-[400px] p-0"
+        // Sem isto o popover de hover rouba o foco da tabela.
+        onOpenAutoFocus={(e) => e.preventDefault()}
+      >
+        <div className="border-b border-border px-3.5 py-2.5">
+          <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#8a8a8a]">
+            {titulo}
+            {mes ? ` · ${mes}` : ""}
+          </p>
+          <p className="mt-0.5 flex items-baseline justify-between gap-3">
+            <span
+              className={cn(
+                "font-mono text-[15px] font-bold",
+                (liquido ? valor >= 0 : tom === "entrada")
+                  ? "text-emerald-700"
+                  : "text-[#b3323c]",
+              )}
+            >
+              {formatCurrency(valor, moeda)}
+            </span>
+            <span className="text-[11px] text-muted-foreground">
+              {lista.length}{" "}
+              {lista.length === 1 ? "lançamento" : "lançamentos"}
+            </span>
+          </p>
+        </div>
+        <div className="max-h-[260px] overflow-y-auto px-2 py-2">
+          {lista.map((it) => (
+            <div
+              key={it.chave}
+              className={cn(
+                "rounded-lg px-2 py-[7px]",
+                it.estorno && "bg-amber-50/70",
+              )}
+            >
+              <div className="flex items-baseline justify-between gap-3">
+                {/* O código sozinho na primeira linha: dividindo-a com o
+                    selo, rótulo longo ("Cronograma de desembolsos")
+                    truncava o código, que é o que identifica o
+                    documento. */}
+                <span className="truncate font-mono text-[11.5px] font-bold text-california-red">
+                  {it.codigo}
+                </span>
+                {/* No líquido as duas naturezas convivem: sem o sinal
+                    não dá para ver o que soma e o que subtrai. */}
+                <span
+                  className={cn(
+                    "whitespace-nowrap font-mono text-[12px] font-semibold",
+                    liquido &&
+                      (it.natureza === "entrada"
+                        ? "text-emerald-700"
+                        : "text-[#b3323c]"),
+                  )}
+                >
+                  {liquido ? (it.natureza === "entrada" ? "+ " : "− ") : ""}
+                  {formatCurrency(it.valor, moeda)}
+                </span>
+              </div>
+              <p className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
+                <span
+                  className={cn(
+                    "shrink-0 whitespace-nowrap rounded-full border px-1.5 py-px text-[9px] font-bold uppercase tracking-[0.04em]",
+                    it.estorno
+                      ? "border-amber-300 bg-amber-100/70 text-amber-800"
+                      : "border-border bg-muted text-muted-foreground",
+                  )}
+                >
+                  {it.rotulo}
+                </span>
+                <span className="shrink-0 whitespace-nowrap font-mono text-[10.5px] text-[#8a8a8a]">
+                  {formatDataBr(it.data)}
+                </span>
+                {/* Nas linhas de previsão a descrição É o rótulo — a view
+                    monta "Cronograma de desembolsos · JOB-0013 1/2" —, e
+                    repetir a mesma frase ao lado do selo é ruído. */}
+                {it.descricao !== it.rotulo && (
+                  <span className="min-w-0 flex-1 truncate">
+                    {it.descricao}
+                  </span>
+                )}
+              </p>
+            </div>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
