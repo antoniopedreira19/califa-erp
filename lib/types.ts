@@ -1268,6 +1268,28 @@ export interface PedidoCompraAnexo {
   created_at: string;
 }
 
+export interface PPVerbaPrestacao {
+  id: string;
+  tenant_id: string;
+  pedido_compra_id: string;
+  valor_gasto: number;
+  valor_devolvido: number;
+  fechada_em: string;
+  fechada_por: string;
+}
+
+export interface PPVerbaPrestacaoAnexo {
+  id: string;
+  tenant_id: string;
+  prestacao_id: string;
+  arquivo_path: string;
+  arquivo_nome_original: string;
+  arquivo_tamanho_bytes: number;
+  arquivo_mimetype: string;
+  created_by: string | null;
+  created_at: string;
+}
+
 export const PP_ANEXO_MIMETYPES_ACEITOS = [
   "application/pdf",
   "image/jpeg",
