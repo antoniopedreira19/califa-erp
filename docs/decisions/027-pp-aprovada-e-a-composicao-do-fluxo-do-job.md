@@ -155,7 +155,38 @@ objetivo da mudança era acabar com dois nomes para uma coisa só.
 A tabela continua `jobs_previsao_custo`. Renomear tabela em uso é
 destrutivo e não traria nada.
 
-## 7. Backfill da previsão de recebimento legada
+## 7. "Saldo do job hoje" é só o que passou pela conta
+
+O card somava a COLUNA do mês corrente, com as três classes. Isso
+contradizia o próprio subtítulo ("Entradas menos saídas já movimentadas")
+e brigava com a rolagem da [018 §3](018-previsoes-no-fluxo-de-caixa.md):
+previsão vencida sem documento rola para frente, mas rolar de 19/08 para
+27/08 mantém a linha DENTRO de agosto, e a coluna a engolia de volta. O
+JOB-0013 mostrava R$ 104.064,87 "já movimentados" num job sem um centavo
+na conta.
+
+Decisão do Tiago (26/08/2026), nas palavras dele:
+
+> A regra da previsão deve permanecer, onde se a data da previsão tiver
+> se materializado e a previsão não tiver ocorrido ela deverá rolar para
+> frente, e desse modo, não fazer parte do saldo do job de hoje.
+
+A rolagem fica como está. O que muda é o card: passa a somar **só a
+classe `movimento`, e só até hoje**, contado por DATA e não por mês.
+
+Perguntado e decidido junto: **título vencido e não pago NÃO entra.** Uma
+PP aprovada que passou do vencimento tem data no passado e não rola, mas
+o dinheiro não saiu da conta — e o card promete "já movimentadas".
+Descartada a alternativa de somar as três classes com data ≤ hoje: daria
+o mesmo número hoje (nenhum job tem título vencido em aberto), mas no
+primeiro atraso o subtítulo passaria a mentir.
+
+O `saldoFim` não muda: a projeção do fim do job continua somando tudo.
+
+O cálculo saiu da matriz e passou a percorrer as linhas direto, para não
+depender do recorte mensal nem do teto de 36 colunas.
+
+## 8. Backfill da previsão de recebimento legada
 
 `jobs_previsao_recebimento` nasceu em 17/08/2026. Todo job aberto antes
 disso ficou sem previsão de entrada, e a aba nascia com a coluna
@@ -173,7 +204,7 @@ alguém informar a data pela tela "editar registro de abertura".
 `created_by` fica nulo no backfill — é o que distingue a linha gravada
 por régua da linha decidida por uma pessoa na abertura.
 
-## 8. O que esta decisão NÃO cobre
+## 9. O que esta decisão NÃO cobre
 
 - A composição na tela geral de Fluxo de Caixa (regra 5) — só o texto
   do banco chegou lá, não o popover.
