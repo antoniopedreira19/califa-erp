@@ -47,7 +47,15 @@ export function classificarFaturamento(
   temEnvio: boolean,
   titulos: TituloDaNota[],
   hoje: string,
+  /** Job cujo faturamento previsto é ZERO porque tudo nele é pago por
+   *  saldo de save de outro job. Ele **pula a etapa de faturamento** e se
+   *  comporta como já faturado: não há nota a emitir, ela já saiu no job
+   *  que gerou o crédito (decisão do Tiago em 27/08/2026, decisão 023
+   *  §11). Sem isto ele ficaria eternamente em "aguardando envio",
+   *  travado dos dois lados. */
+  nadaAFaturar = false,
 ): SituacaoFaturamento {
+  if (nadaAFaturar && !temNota) return "faturado";
   if (!temNota) return temEnvio ? "enviado" : "aguardando_envio";
 
   const emAberto = titulos.filter((t) => t.status !== "pago");

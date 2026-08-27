@@ -19,6 +19,10 @@ import { createClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
 import {
+  MENSAGEM_JA_ENVIADO,
+  jobJaEnviadoParaFaturamento,
+} from "@/lib/data/envio-faturamento";
+import {
   calcularTotaisVersao,
   type ItemParaTotais,
 } from "@/lib/calculos/versao-totais";
@@ -86,6 +90,10 @@ export async function registrarErrataDeSave(
       ok: false,
       message: "Job encerrado não aceita errata: os números dele estão congelados.",
     };
+  }
+
+  if (await jobJaEnviadoParaFaturamento(supabase, jobId, tenantId)) {
+    return { ok: false, message: MENSAGEM_JA_ENVIADO };
   }
 
   const pctHonorarios = Number(job.versao?.percentual_honorarios ?? 0);

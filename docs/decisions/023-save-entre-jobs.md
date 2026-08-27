@@ -141,7 +141,11 @@ quiser esperar.
 > recomendação, não decisão fechada. Se o save só puder ser consumido
 > depois da nota emitida, esta seção muda e a fatia 3 ganha uma trava.
 
-## 7. A sobra volta ao encerrar o job consumidor
+## 7. A sobra volta ao encerrar o job consumidor — ⚠️ APOSENTADA
+
+> Sem objeto desde 27/08/2026: o modelo de bolo não reserva nada, então
+> não há sobra a devolver. Ver a nota no fim deste arquivo. O texto
+> abaixo fica como registro do que se pensou.
 
 Se o job alocado não gastar tudo, a sobra **se desprende no encerramento** e
 volta ao saldo disponível do cliente, livre para outro job.
@@ -313,6 +317,55 @@ sistema é o da conta.
 | `scripts/conferir-save.ts` | Prova a conta contra o design E contra esta decisão |
 | `supabase/migrations/20260826000001_save_marca_e_padrao.sql` | `em_save`, `save_consumido`, `save_por_padrao`, e as travas de planejado e BV |
 | `supabase/migrations/20260826000002_save_consumos.sql` | `saves_consumos`, `vw_saves_por_job`, `vw_saves_linhas` e as invariantes do consumo |
+
+## ⚠️ Nota de 2026-08-27 — a §7 fica sem objeto, e o envio fecha a porta
+
+### A §7 está aposentada
+
+A §7 dizia que a sobra volta ao saldo do cliente quando o job consumidor
+encerra. Ela foi escrita no modelo de **alocação exclusiva**, em que uma
+linha de save ficava reservada para um job — e reserva sobra.
+
+O modelo virou **bolo**: o saldo é do job de origem e qualquer job do
+cliente consome dele. Aí o consumo é **gasto**, não reserva:
+
+| | Modelo antigo | Modelo atual |
+|---|---|---|
+| Job A gera | 30.000 | 30.000 |
+| Job B consome | 25.000 | 25.000 |
+| Os 5.000 restantes | ficavam **presos** ao B | **nunca saíram** do saldo |
+| Encerrar o B | soltava os 5.000 | não muda nada |
+
+Não há o que devolver: o que não foi consumido sempre esteve disponível.
+**A §7 não vale mais e não foi implementada.**
+
+### Depois do envio para faturamento, o orçado não se mexe
+
+Quando o job é enviado, `jobs_envio_faturamento` guarda uma **cópia
+congelada** do valor e as parcelas são definidas contra ela. Mexer no
+orçado depois — por errata ou por save — muda `jobs.faturamento_previsto`
+e a nota sairia pelo número velho.
+
+A partir de 27/08/2026, **nem errata nem save** depois do envio. Vale
+para os dois pelo mesmo motivo, e a mensagem é a mesma: para corrigir,
+peça ao financeiro para desfazer o envio.
+
+Isto **não reverte** a decisão 008 §3. Aquela seção descreve o que o
+resumo de fechamento faz *quando* a divergência existe — é rede de
+proteção, não autorização. Com a porta fechada, a divergência deixa de
+ser criada, e a rede fica para os jobs que já a tinham gravada.
+
+### Job sem o que faturar pula a etapa
+
+Confirmando a §11 com a redação do Tiago: um job cujo faturamento
+previsto é zero porque tudo nele é pago por save **passa automaticamente
+da etapa de faturamento e funciona como se já estivesse faturado**. Não é
+"encerra por exceção" — ele nem espera. A esteira mostra `faturado`, e o
+encerramento não pede envio.
+
+A condição é dupla de propósito: faturamento zero **e** consumo de save.
+Job com faturamento zero e sem save é outra coisa — um orçado vazio, que
+continua tendo de passar pelo faturamento.
 
 ## ⚠️ Nota de 2026-08-24 — o que ainda precisa do Tiago
 
