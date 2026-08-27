@@ -124,7 +124,7 @@ interface Props {
   rotuloTotal?: string;
   /** Liga a coluna SAVE. Mesma coluna da planilha do orçamento — no job
    *  ela é só leitura até a Errata, que é quem pode mexer no orçado
-   *  depois da abertura (decisão 023, nota de 26/08/2026). */
+   *  depois da abertura (decisão 028, nota de 26/08/2026). */
   saveVisivel?: boolean;
   savePorItem?: Record<string, EstadoSaveDaLinha>;
   onAbrirSave?: (item: ItemPlanilhaJob) => void;
@@ -770,7 +770,7 @@ export function JobItemRealizadoTable({
                   // Sem BV num job congelado não há o que consultar — a
                   // vaga fica vazia para não desalinhar as de baixo.
                   // Linha em save não tem fornecedor neste job: sem BV a
-                  // negociar e sem PP a emitir (decisão 023 §9). Os dois
+                  // negociar e sem PP a emitir (decisão 028 §9). Os dois
                   // lados já são recusados no banco — aqui a calha nem
                   // oferece.
                   const emSave = item.em_save === true;

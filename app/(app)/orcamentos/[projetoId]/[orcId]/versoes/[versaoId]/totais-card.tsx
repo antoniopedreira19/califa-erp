@@ -52,7 +52,7 @@ export function TotaisCard({
   // repartido entre o que é pago por crédito de fora, o que vira crédito e
   // o que este job de fato entrega. As três somam o subtotal, por
   // construção — é a quebra que explica por que os dois números de baixo
-  // deixaram de ser iguais (docs/decisions/023-save-entre-jobs.md §3).
+  // deixaram de ser iguais (docs/decisions/028-save-entre-jobs.md §3).
   const temSave = save.totalSaveGerado > 0 || save.totalSaveUsado > 0;
 
   // O planejado passa pelos blocos com BV: em `A` e `D` ele espelha o
@@ -70,7 +70,7 @@ export function TotaisCard({
   const { rentabilidade, percentual: percentualRentabilidade } =
     // `orcadoRentabilidade`, não `orcado`: a coluna ORÇADO mostra o valor
     // cheio (ele está sendo faturado), mas a linha em save fica fora da
-    // comparação com o custo (decisão 023 §9).
+    // comparação com o custo (decisão 028 §9).
     calcularRentabilidade(totais.orcadoRentabilidade, totalPlanejado);
 
   const temPlanejado = totalPlanejado > 0;

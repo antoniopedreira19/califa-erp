@@ -115,7 +115,7 @@ export async function faturamentoPorJob(
   // Job pago SÓ por saldo de save: faturamento previsto zero e consumo
   // registrado. Ele pula a etapa de faturamento e entra na esteira como
   // já faturado — a nota dele saiu no job que gerou o crédito (decisão
-  // 023 §11). Sem isto ficaria eternamente em "aguardando envio".
+  // 028 §11). Sem isto ficaria eternamente em "aguardando envio".
   const saveOnly = new Set<string>(
     ((saveOnlyRes.data ?? []) as any[])
       .map((o) => o.job_id as string)

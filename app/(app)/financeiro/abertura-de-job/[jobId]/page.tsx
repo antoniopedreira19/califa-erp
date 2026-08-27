@@ -79,7 +79,7 @@ export default async function AbrirJobNoFinanceiroPage({
   const faturamentoPrevisto =
     Math.round(Number(job.faturamento_previsto ?? 0) * 100) / 100;
 
-  // Quanto deste job é pago com crédito de outro (decisão 023). Quando o
+  // Quanto deste job é pago com crédito de outro (decisão 028). Quando o
   // faturamento previsto é zero, é isto que distingue "o cliente paga o
   // fornecedor direto" de "o cliente já pagou, num job anterior".
   const { data: consumoRes } = await supabase

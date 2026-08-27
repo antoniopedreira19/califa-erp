@@ -2,7 +2,7 @@
 
 /** Escritas do SAVE na versão do orçamento.
  *
- *  Regra em `docs/decisions/023-save-entre-jobs.md` (com a nota de
+ *  Regra em `docs/decisions/028-save-entre-jobs.md` (com a nota de
  *  26/08/2026). Três operações, todas sobre a versão — no job elas passam
  *  pela Errata, que é outro caminho.
  *
@@ -84,7 +84,7 @@ async function itemEditavel(
  * Liga ou desliga o SAVE de uma linha.
  *
  * Marcar tira a linha da base do valor do job e a deixa na do faturamento
- * (decisão 023 §1). O planejado dela zera sozinho — quem faz isso é o
+ * (decisão 028 §1). O planejado dela zera sozinho — quem faz isso é o
  * trigger `planejado_espelha_orcado`, não esta action.
  */
 export async function marcarSaveDaLinha(
@@ -165,7 +165,7 @@ export async function salvarConsumoDeSave(
 
   const total = limpas.reduce((s, o) => s + o.valor, 0);
   const orcado = Number(item.total_orcado ?? 0);
-  // Consumo parcial é permitido (decisão 023 §6): o que sobra segue
+  // Consumo parcial é permitido (decisão 028 §6): o que sobra segue
   // faturado normalmente. O que não pode é passar do orçado da linha.
   if (total > orcado + 0.005) {
     return {
@@ -224,7 +224,7 @@ export async function salvarConsumoDeSave(
  * Liga ou desliga o "Orçamento de save" da versão.
  *
  * É DEFAULT de linha nova, não trava: as linhas que já existem não mudam,
- * e desligar não desmarca nada (decisão 023 §10). Quem marca a linha nova
+ * e desligar não desmarca nada (decisão 028 §10). Quem marca a linha nova
  * é o trigger `item_nasce_em_save`.
  */
 export async function definirSavePorPadrao(

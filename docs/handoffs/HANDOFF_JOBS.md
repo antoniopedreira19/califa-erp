@@ -2016,7 +2016,7 @@ conferência da abertura do JOB-0012
 
 ## ⚠️ 24–27/08/2026 — o SAVE no job
 
-**Regra:** `docs/decisions/023-save-entre-jobs.md`.
+**Regra:** `docs/decisions/028-save-entre-jobs.md`.
 **Contexto no orçamento:** ver o handoff de Orçamentos, mesma data.
 
 O save é crédito entre jobs: a linha marcada é faturada no job de origem,

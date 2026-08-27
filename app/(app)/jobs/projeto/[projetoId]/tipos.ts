@@ -15,7 +15,7 @@ export interface ItemPlanilhaProjeto {
   orcDm: number;
   orcTotal: number;
   /** O orçado que serve de BASE À RENTABILIDADE — zero na linha em save,
-   *  igual a `orcTotal` no resto (decisão 023 §9). */
+   *  igual a `orcTotal` no resto (decisão 028 §9). */
   orcRentabilidade: number;
   planUnit: number;
   planQt: number;

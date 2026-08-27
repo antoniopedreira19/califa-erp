@@ -500,7 +500,7 @@ export function FaturarDrawer({
                       const parcial = !excede && valor > 0 && valor < l.saldo - 0.01;
                       // A parcela pode carregar saldo em save, e aí a nota
                       // sai com dois itens. Quem emite precisa ver isso
-                      // antes de assinar (docs/decisions/023).
+                      // antes de assinar (docs/decisions/028).
                       const quebra = repartirEmJobESave(valor, l.saldo_proprio);
                       const rotuloQuebra = rotuloDaQuebra(quebra);
                       return (

@@ -176,7 +176,7 @@ export default async function PlanilhaDaAberturaPage({
 
   // O save da conferência: é aqui que o financeiro entende por que o
   // faturamento previsto e o valor do job vieram diferentes, e por que
-  // três linhas estão sem planejado (decisão 023).
+  // três linhas estão sem planejado (decisão 028).
   const savePorItem = await saveDoJob(
     supabase,
     session.activeTenant.id,

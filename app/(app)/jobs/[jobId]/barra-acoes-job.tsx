@@ -29,7 +29,7 @@ interface Props {
   /** Quanto do faturamento previsto é saldo em save. */
   faturamentoSavePrevisto?: number;
   /** Job pago inteiramente com crédito de outro job: pula a etapa de
-   *  faturamento e já pode encerrar (decisão 023 §11). */
+   *  faturamento e já pode encerrar (decisão 028 §11). */
   pagoSoPorSave?: boolean;
   dataPrevistaFaturamento: string | null;
   portais: PortalOption[];

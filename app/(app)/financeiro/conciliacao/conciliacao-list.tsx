@@ -13,7 +13,7 @@ export function ConciliacaoList({
   const rowRefs = React.useRef<Record<string, HTMLTableRowElement | null>>({});
   // Transação com mais de uma origem abre um detalhe embaixo dela, com o
   // rateio. Fechada por padrão: o extrato é denso, e a maioria das linhas
-  // tem origem única (docs/decisions/023-save-entre-jobs.md).
+  // tem origem única (docs/decisions/028-save-entre-jobs.md).
   const [abertas, setAbertas] = React.useState<Set<string>>(new Set());
   const alternar = (id: string) =>
     setAbertas((prev) => {

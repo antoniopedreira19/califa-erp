@@ -578,7 +578,7 @@ export async function carregarDetalheDoJob(
   // Job pago INTEIRAMENTE por saldo de save: faturamento previsto zero e
   // consumo registrado. Ele pula a etapa de faturamento e se comporta
   // como já faturado — a nota dele saiu no job que gerou o crédito
-  // (decisão do Tiago em 27/08/2026, decisão 023 §11). Sem isto ele
+  // (decisão do Tiago em 27/08/2026, decisão 028 §11). Sem isto ele
   // travava dos dois lados: não dá para enviar (valor zero) e o
   // encerramento só aparecia depois do envio.
   //

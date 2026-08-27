@@ -67,7 +67,7 @@ interface Props {
   jobCodigo: string;
   /** Faturamento previsto atual — vai travado no formulário. */
   valorFaturado: number;
-  /** Quanto desse total é saldo em save (decisão 023). Zero em job sem
+  /** Quanto desse total é saldo em save (decisão 028). Zero em job sem
    *  save, e aí a leitura nem aparece. */
   valorSave?: number;
   /** Data prevista na abertura do job; o campo nasce com ela. */

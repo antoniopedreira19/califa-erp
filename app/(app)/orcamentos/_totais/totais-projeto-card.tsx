@@ -38,7 +38,7 @@ export interface LinhaTotaisProjeto {
   /** Rótulo curto à direita do nome — "v2 · aprovada", por exemplo. */
   detalhe?: string | null;
   orcado: number;
-  /** Base da rentabilidade — sem as linhas em save (decisão 023 §9).
+  /** Base da rentabilidade — sem as linhas em save (decisão 028 §9).
    *  Ausente = igual ao orçado, que é o caso de todo orçamento sem save. */
   orcadoRentabilidade?: number;
   planejado: number;

@@ -64,7 +64,7 @@ export interface FaturamentoPendenteRow {
   saldo_job: number;
   /** Quanto do saldo desta parcela ainda é faturamento PRÓPRIO do job.
    *  O que passar disso é saldo em save, e vira um segundo item de nota
-   *  (docs/decisions/023-save-entre-jobs.md). Numa parcela sem save é o
+   *  (docs/decisions/028-save-entre-jobs.md). Numa parcela sem save é o
    *  saldo inteiro. */
   saldo_proprio: number;
   /** Quanto do saldo desta parcela é saldo em save. Zero na maioria. */
@@ -463,7 +463,7 @@ export function FaturamentoList({
                       {/* A quebra da parcela: o que é faturamento do próprio
                           job e o que é saldo em save do cliente. São dois
                           itens na MESMA nota — quem fatura precisa saber
-                          disso antes de abrir o drawer (decisão 023). */}
+                          disso antes de abrir o drawer (decisão 028). */}
                       {p.saldo_save > 0.005 && (
                         <span className="text-[10.5px] text-[#5f5d57]">
                           job {formatMoney(p.saldo_proprio)} · save{" "}

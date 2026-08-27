@@ -1,7 +1,7 @@
 -- =====================================================================
 -- SAVE — a marca na linha e a chave do orçamento de save
 --
--- Materializa a decisão docs/decisions/023-save-entre-jobs.md. O cliente
+-- Materializa a decisão docs/decisions/028-save-entre-jobs.md. O cliente
 -- fecha um orçamento e não usa todas as linhas: elas são faturadas assim
 -- mesmo e o valor vira crédito para um projeto seguinte.
 --
@@ -46,9 +46,9 @@ alter table public.jobs_itens_orcado
   add column if not exists save_consumido numeric(14,2) not null default 0;
 
 comment on column public.versoes_orcamento_itens.em_save is
-  'A linha gera SAVE: o cliente paga nesta nota, o serviço não acontece neste projeto e o valor vira crédito do cliente. Sai da base do VALOR DO JOB e permanece na do FATURAMENTO (decisão 023 §1).';
+  'A linha gera SAVE: o cliente paga nesta nota, o serviço não acontece neste projeto e o valor vira crédito do cliente. Sai da base do VALOR DO JOB e permanece na do FATURAMENTO (decisão 028 §1).';
 comment on column public.versoes_orcamento_itens.save_consumido is
-  'Quanto desta linha é pago por saldo de save de outro job. Sai da base do FATURAMENTO (já faturado lá) e fica na do VALOR DO JOB (decisão 023 §2). Mantida por trigger a partir de saves_consumos — não escrever à mão.';
+  'Quanto desta linha é pago por saldo de save de outro job. Sai da base do FATURAMENTO (já faturado lá) e fica na do VALOR DO JOB (decisão 028 §2). Mantida por trigger a partir de saves_consumos — não escrever à mão.';
 comment on column public.jobs_itens_orcado.em_save is
   'Cópia da marca de save no job. Diverge da versão quando a errata marca ou desmarca depois da abertura.';
 comment on column public.jobs_itens_orcado.save_consumido is
@@ -97,7 +97,7 @@ alter table public.versoes_orcamento
   add column if not exists save_por_padrao boolean not null default false;
 
 comment on column public.versoes_orcamento.save_por_padrao is
-  'Orçamento de save: todo item NOVO nasce marcado. É default de linha nova, não trava — a linha pode ser desmarcada depois, e desligar a chave não desmarca o que já existe (decisão 023 §10).';
+  'Orçamento de save: todo item NOVO nasce marcado. É default de linha nova, não trava — a linha pode ser desmarcada depois, e desligar a chave não desmarca o que já existe (decisão 028 §10).';
 
 -- Só INSERT, de propósito: desmarcar uma linha depois é UPDATE, e o
 -- trigger não pode pisar em cima da decisão de quem desmarcou.
@@ -125,7 +125,7 @@ end;
 $$;
 
 comment on function public.item_nasce_em_save() is
-  'Orçamento de save: item novo nasce com em_save. Só no INSERT (decisão 023 §10).';
+  'Orçamento de save: item novo nasce com em_save. Só no INSERT (decisão 028 §10).';
 
 drop trigger if exists trg_item_nasce_em_save on public.versoes_orcamento_itens;
 create trigger trg_item_nasce_em_save
@@ -133,7 +133,7 @@ before insert on public.versoes_orcamento_itens
 for each row execute function public.item_nasce_em_save();
 
 -- ------------------------------- linha em save não tem custo planejado
--- Decisão 023 §9: o serviço não acontece neste projeto, então não há
+-- Decisão 028 §9: o serviço não acontece neste projeto, então não há
 -- fornecedor a pagar. O planejado zera, e a linha sai da rentabilidade.
 --
 -- A ORDEM IMPORTA: uma linha `A` em save tem que ZERAR, não espelhar o
@@ -159,7 +159,7 @@ end;
 $$;
 
 comment on function public.planejado_espelha_orcado() is
-  'Linha em save zera o planejado (decisão 023 §9); item A e D espelham o orçado (decisão 022). Trigger porque são seis caminhos de escrita diferentes.';
+  'Linha em save zera o planejado (decisão 028 §9); item A e D espelham o orçado (decisão 022). Trigger porque são seis caminhos de escrita diferentes.';
 
 -- `em_save` entra na lista de colunas que disparam o trigger: marcar uma
 -- linha existente precisa zerar o planejado dela na hora.
@@ -247,4 +247,4 @@ end;
 $$;
 
 comment on function public.bv_exige_item_com_bv() is
-  'BV só em item A, AR ou D, e nunca em linha que gera save (decisões 003, 022 e 023 §9). Confere o tipo na versão e, em fallback, na cópia do job, porque a errata pode ter trocado.';
+  'BV só em item A, AR ou D, e nunca em linha que gera save (decisões 003, 022 e 028 §9). Confere o tipo na versão e, em fallback, na cópia do job, porque a errata pode ter trocado.';

@@ -3,11 +3,11 @@
  *
  *  1. o design `Orcamento - Versao com Save.dc.html` (projeto Claude Design
  *     `69342d83`), que traz a planilha da Vega Alimentos fechada;
- *  2. a decisão `docs/decisions/023-save-entre-jobs.md`, com o par Job A /
+ *  2. a decisão `docs/decisions/028-save-entre-jobs.md`, com o par Job A /
  *     Job B e a invariante das duas somas iguais.
  *
  * Roda com `npx tsx scripts/conferir-save.ts`. Sem infraestrutura de teste
- * no projeto, é este script que sustenta a conta — a decisão 023 diz que a
+ * no projeto, é este script que sustenta a conta — a decisão 028 diz que a
  * invariante "soma dos faturamentos = soma dos valores de job" é testável,
  * e é aqui que ela é testada.
  */
@@ -109,7 +109,7 @@ console.log(
 if (v.save.itensEmSave + v.save.itensConsumindoSave !== 3) falhas += 1;
 
 // -------------------------------------------------------------- decisão
-console.log("\n=== 2. Decisão 023: Job A / Job B · honorários 10% · imposto 19,53% ===");
+console.log("\n=== 2. Decisão 028: Job A / Job B · honorários 10% · imposto 19,53% ===");
 
 const A = calcularTotaisVersao(
   [
@@ -198,7 +198,7 @@ const tudoConsumido = calcularTotaisVersao(
 conferir("Job 100% pago por save · faturamento", tudoConsumido.faturamentoPrevisto, 0, 0);
 console.log(`  ...e vale ${brl(tudoConsumido.valorJob)} de job`);
 
-// Consumo PARCIAL (decisão 023 §6, confirmada em 24/08/2026): item de
+// Consumo PARCIAL (decisão 028 §6, confirmada em 24/08/2026): item de
 // 40.000 puxando 30.000 -> 10.000 seguem faturados.
 const parcial = calcularTotaisVersao(
   [{ tipo_custo: "B", total_orcado: 40000, save_consumido: 30000 }],
@@ -245,7 +245,7 @@ conferir("Σ efeitos = valor do job", efeitos.job, v.valorJob, 0.005);
 // ------------------------------------------------- rentabilidade
 console.log("\n=== 7. Rentabilidade: gera sai, consome entra ===");
 
-// Mesma assimetria do valor do job (decisão 023 §9): a linha que GERA
+// Mesma assimetria do valor do job (decisão 028 §9): a linha que GERA
 // save é venda sem execução e não tem custo com que comparar; a que
 // CONSOME acontece aqui, tem custo, e entra na conta normalmente.
 const blocos = [

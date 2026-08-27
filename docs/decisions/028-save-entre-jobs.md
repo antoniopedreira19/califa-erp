@@ -1,8 +1,9 @@
-# 023 — O save fatura num job e vale em outro
+# 028 — O save fatura num job e vale em outro
 
 **Data:** 2026-08-24
 **Status:** aceita
-**Contexto:** planilha do orçamento (`/orcamentos/.../versoes/[versaoId]`),
+**Contexto:** planilha da versão do orçamento (aba `?v=` em
+`/orcamentos/[projetoId]/[orcId]`, desde a decisão 023),
 Planilha Interna do job (`/jobs/[jobId]`) e fila de faturamento
 (`/financeiro/contas-a-receber`), com efeito nas telas consolidadas de
 projeto e no encerramento do job. Brief de design:

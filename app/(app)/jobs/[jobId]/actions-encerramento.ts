@@ -122,7 +122,7 @@ export async function encerrarJob(jobId: string): Promise<ActionResult> {
   );
 
   if (imp.semEnvioFaturamento) {
-    // EXCEÇÃO DO SAVE (decisão 023 §11). Um job pago inteiramente por
+    // EXCEÇÃO DO SAVE (decisão 028 §11). Um job pago inteiramente por
     // saldo de save tem faturamento previsto ZERO — e aí ele trava dos
     // dois lados: `enviarJobParaFaturamento` recusa valor zero, e a
     // decisão 008 §1 só encerra quem foi enviado. O job ficaria aberto

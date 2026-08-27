@@ -372,7 +372,7 @@ export default async function OrcamentoDetailPage({
     console.error("[versao.contatos_job]", (contatosRes.error as any).message);
   }
 
-  // ONDA 3 — o SAVE (docs/decisions/023-save-entre-jobs.md). Depende dos
+  // ONDA 3 — o SAVE (docs/decisions/028-save-entre-jobs.md). Depende dos
   // itens da versão, que só existem depois da onda 2. As duas leituras são
   // independentes entre si e vão juntas: em série apareceriam no TTFB da
   // tela mais pesada do produto.
@@ -662,7 +662,7 @@ function VersaoSelecionada({
   cidadesIniciais: CidadeOpcao[];
   clienteNome: string;
   /** Estado do save por id do item, e os saldos que este cliente tem para
-   *  gastar (docs/decisions/023-save-entre-jobs.md). */
+   *  gastar (docs/decisions/028-save-entre-jobs.md). */
   savePorItem: Record<string, EstadoSaveDaLinha>;
   saldosDeSave: SaldoDeSave[];
   job: JobExistente | null;

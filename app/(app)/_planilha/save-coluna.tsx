@@ -135,7 +135,7 @@ export function CelulaSave({
       return {
         // "o saldo deste job", e não "esta linha": o crédito é do job, e
         // não existe vínculo entre uma linha em save e quem gastou o
-        // dinheiro (decisão 023, nota de 26/08/2026).
+        // dinheiro (decisão 028, nota de 26/08/2026).
         titulo: `Save gerado · ${formatCurrency(totalOrcado, moeda)}. O saldo deste job já foi consumido por ${resumoDasPontas(estado.destinos, moeda)}`,
         conteudo: (
           <span className={SAVE.botaoCodigo}>

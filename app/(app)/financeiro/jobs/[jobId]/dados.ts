@@ -185,7 +185,7 @@ export async function carregarJobNoFinanceiro(
         raw.status !== "aguardando_abertura" &&
           raw.status !== "rejeitado_financeiro",
         // Linha em save não tem custo neste job — nem o espelho do orçado
-        // dos tipos `A` e `D` (decisão 023 §9).
+        // dos tipos `A` e `D` (decisão 028 §9).
         i.em_save === true,
       ),
     0,

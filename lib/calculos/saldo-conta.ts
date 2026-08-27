@@ -18,7 +18,7 @@ export type LancamentoLinha = {
   rateio: Array<{ percentual: number; regional_nome: string }>;
   /** De onde vem o dinheiro desta transação, quando ela cobre mais de uma
    *  coisa: os jobs da nota e o saldo em save. Vazio na maioria dos
-   *  lançamentos (docs/decisions/023-save-entre-jobs.md). */
+   *  lançamentos (docs/decisions/028-save-entre-jobs.md). */
   origens: OrigemDaTransacao[];
 };
 
