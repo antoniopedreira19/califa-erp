@@ -434,6 +434,12 @@ export default async function PedidosCompraFinanceiroPage() {
     if (l.pp_verba_devolucao_id) baixaPorDevolucao.set(l.pp_verba_devolucao_id, info);
   }
 
+  // PP sempre nasce vinculada a um job. Custo de job cai em "Custo
+  // Operacional" (código 02) por convenção contábil — a UI usa esse id
+  // como default do tipo na tela de baixa. O financeiro pode trocar.
+  const custoOperacionalTipoId =
+    (tiposRes.data ?? []).find((t) => t.codigo === "02")?.id ?? null;
+
   const titulos: TituloRow[] = [];
 
   for (const pp of rows) {
@@ -458,8 +464,9 @@ export default async function PedidosCompraFinanceiroPage() {
         parcela_total: total,
         status: par.pago_em ? "pago" : "a_pagar",
         empresa_id: pp.empresa_id,
-        // A PP não carrega plano de contas — o financeiro escolhe na baixa.
-        plano_conta_tipo_id: null,
+        // PP sempre é custo de job → default Custo Operacional; subtipo
+        // fica em branco pro financeiro escolher entre os do tipo.
+        plano_conta_tipo_id: custoOperacionalTipoId,
         plano_conta_subtipo_id: null,
         pago_em: par.pago_em,
         conta_nome: baixa?.conta ?? null,
@@ -564,7 +571,9 @@ export default async function PedidosCompraFinanceiroPage() {
         parcela_total: total,
         status: par.pago_em ? "pago" : "a_pagar",
         empresa_id: des.empresa_id,
-        plano_conta_tipo_id: null, // desembolso escolhe na baixa
+        // Desembolso com job → default Custo Operacional. Sem job, o
+        // financeiro decide o tipo na baixa.
+        plano_conta_tipo_id: des.job ? custoOperacionalTipoId : null,
         plano_conta_subtipo_id: null,
         pago_em: par.pago_em,
         conta_nome: baixa?.conta ?? null,
