@@ -27,6 +27,8 @@ export const ITEM_VAZIO: Omit<ItemRascunho, "id"> = {
   quantidade_planejada: 1,
   dias_meses_planejado: 1,
   planilha_origem: null,
+  em_save: false,
+  save_consumido: 0,
   bv: null,
 };
 
@@ -68,11 +70,12 @@ export function comoItemDaVersao(
     quantidade_orcada: item.quantidade_orcada,
     dias_meses_orcado: item.dias_meses_orcado,
     total_orcado: totalOrcadoDe(item),
-    // O editor de rascunho é sandbox local e ainda não marca save: os dois
-    // campos entram neutros, que é o caso em que os três fechamentos de
-    // `calcularTotaisVersao` coincidem.
-    em_save: false,
-    save_consumido: 0,
+    // O editor multi-job não marca save — mas quando reabre um orçamento
+    // que já tem, a marca vem junto, senão o fechamento voltaria a ser o
+    // de antes do save. Linha nova nasce neutra, e aí os três fechamentos
+    // de `calcularTotaisVersao` coincidem.
+    em_save: item.em_save === true,
+    save_consumido: Number(item.save_consumido ?? 0),
     categoria_id: item.categoria_id,
     valor_unitario_planejado: item.valor_unitario_planejado,
     quantidade_planejada: item.quantidade_planejada,
@@ -112,6 +115,8 @@ export function itensDoJob(job: JobRascunho): ItemRascunho[] {
 
 export interface TotaisJob {
   orcado: number;
+  /** Base da rentabilidade — sem as linhas em save (decisão 023 §9). */
+  orcadoRentabilidade: number;
   planejado: number;
   rentabilidade: number;
   /** O que a California emite nota. */
@@ -154,6 +159,12 @@ export function totaisDoJob(
 ): TotaisJob {
   const itens = itensDoJob(job);
   const orcado = itens.reduce((s, it) => s + totalOrcadoDe(it), 0);
+  // Base da rentabilidade: sem as linhas em save, que são venda sem
+  // execução e não têm custo a comparar (decisão 023 §9).
+  const orcadoRentabilidade = itens.reduce(
+    (s, it) => s + (it.em_save === true ? 0 : totalOrcadoDe(it)),
+    0,
+  );
   const planejado = itens.reduce((s, it) => s + totalPlanejadoDe(it), 0);
   const percentualHonorarios = honorariosDoJob(job, parametros);
   const {
@@ -166,14 +177,17 @@ export function totaisDoJob(
       itens.map((it) => ({
         tipo_custo: it.tipo_custo,
         total_orcado: totalOrcadoDe(it),
+        em_save: it.em_save === true,
+        save_consumido: Number(it.save_consumido ?? 0),
       })),
       percentualHonorarios,
       parametros.percentual_imposto,
     );
   return {
     orcado,
+    orcadoRentabilidade,
     planejado,
-    rentabilidade: orcado - planejado,
+    rentabilidade: orcadoRentabilidade - planejado,
     faturamentoPrevisto,
     valorJob,
     imposto,

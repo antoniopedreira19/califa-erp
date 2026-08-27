@@ -1775,3 +1775,96 @@ components: este era o único caso.
 Na mesma conferência: os rótulos de coluna da visão agregada não
 acompanhavam a chave — os valores trocavam, mas o cabeçalho continuava
 "Total" em vez de "Total líquido". Corrigido nos dois cards.
+
+---
+
+## ⚠️ 24–27/08/2026 — o SAVE no financeiro
+
+**Regra:** `docs/decisions/023-save-entre-jobs.md`, com as regras de fluxo
+de caixa definidas pelo Tiago em 26/08/2026.
+**Contexto:** ver os handoffs de Orçamentos e de Jobs, mesma data.
+
+O save é crédito entre jobs. Para o financeiro ele aparece em cinco
+lugares, e a régua é sempre a mesma: **job primeiro, depois o save**.
+
+### 1. Conferência da abertura
+
+A planilha de conferência (`/financeiro/abertura-de-job/[jobId]/planilha`)
+ganhou a coluna SAVE e a quebra do fechamento. Sem isso o financeiro via
+"Faturamento previsto R$ 125.512,61" e "Valor do Job R$ 68.348,45"
+divergindo, e três linhas sem planejado, **sem nenhuma explicação na
+tela**.
+
+No formulário de abertura, o aviso de faturamento zero passou a
+distinguir os dois motivos: *"o cliente paga o fornecedor direto"* (o de
+sempre) e *"este job é pago com saldo em save de outro job — o cliente já
+pagou por ele numa nota anterior"*.
+
+### 2. Fila de faturamento
+
+A linha do job de origem mostra a quebra sob o valor da parcela:
+`job R$ 5.592,15 · save R$ 57.164,16`. Vem de `vw_faturamento_pendente`,
+que ganhou `valor_proprio_da_parcela`, `valor_save_da_parcela`,
+`saldo_proprio` e `saldo_save`.
+
+### 3. A nota sai com dois itens
+
+O drawer mostra a pastilha **Save** e a leitura "R$ 5.592,15 do job ·
+R$ 57.164,16 em saldo de save". `emitir_faturamento` grava dois
+`faturamento_itens` na MESMA nota:
+
+| origem_tipo | origem_id | valor |
+|---|---|---:|
+| `job` | JOB-0020 | 5.592,15 |
+| `save` | JOB-0020 | 57.164,16 |
+
+O enum `faturamento_origem` ganhou o valor `save` e o CHECK
+`chk_fat_item_origem` foi substituído para aceitá-lo — **o único item
+destrutivo da frente**, aprovado pelo Tiago.
+
+### 4. Fluxo de caixa
+
+Três origens novas, todas somando o mesmo dinheiro de sempre:
+
+| origem_tipo | O quê | job_id |
+|---|---|---|
+| `previsao_recebimento_save` / `titulo_save` / `lancamento_save` | saldo em save ainda sem dono | `null` |
+| `..._save_consumido` | a parte já consumida, **na data em que o dinheiro entrou** | o job consumidor |
+| as antigas | a parte própria do job | o job |
+
+`vw_titulo_partes` concentra a régua "job primeiro" num lugar só: a
+primeira parcela cobre a parte própria e o save ocupa o fim da fila; a
+parcela que cruza a fronteira parte em duas.
+
+### 5. Conciliação
+
+A transação de baixa ganhou as pastilhas **Rateado** e **Save** e um
+detalhe "De onde vem este dinheiro", com as origens somando o valor
+lançado. Lançamento de origem única **não** ganha expansão.
+
+### 6. Portão do cancelamento
+
+`cancelar_faturamento` recusa cancelar nota cujo saldo em save já foi
+consumido por job **encerrado** — o cancelamento reescreveria a margem de
+um job que a decisão 008 declara congelado.
+
+### Achados do teste ponta a ponta (27/08/2026)
+
+1. **A expansão da conciliação nunca aparecia.** A consulta pedia
+   `job:jobs!job_id(...)` embedado em `vw_lancamento_origens` — e o
+   PostgREST não tem chave estrangeira para inferir join a partir de uma
+   VIEW. O erro era silencioso (`data` vinha vazio) e a linha ficava sem
+   expansão. Passou a resolver o nome do job numa segunda leitura.
+2. **A fila não mostrava a quebra.** Os campos existiam no tipo e não
+   eram renderizados.
+3. **"Agrupada · 2 jobs" numa nota de um job só.** O badge contava
+   ITENS de nota; a nota com save tem dois itens do mesmo job. Passou a
+   contar jobs distintos (`qtd_jobs`), e a fila deixou de repetir o código
+   do job na linha do faturado.
+
+**Verificação:** conferido logado. JOB-0020 foi enviado em 2 parcelas
+(R$ 62.756,30 + R$ 62.756,31); a 1ª ficou toda no job, a 2ª partiu em
+`job R$ 5.592,15 + save R$ 57.164,16`; a NF 900500 saiu com os dois itens;
+a baixa gerou quatro linhas no fluxo (job, save sem dono e duas do save já
+consumido por JOB-0022), somando exatamente o título. `tsc`, `lint` e
+`build` limpos.

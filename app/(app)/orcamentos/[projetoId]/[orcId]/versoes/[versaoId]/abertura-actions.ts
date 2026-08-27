@@ -327,7 +327,7 @@ export async function enviarJobParaAbertura(
   const { data: itensDaVersao, error: errItensCopia } = await supabase
     .from("versoes_orcamento_itens")
     .select(
-      "id, grupo_id, ordem, item, tipo_custo, categoria_id, valor_unitario_orcado, quantidade_orcada, dias_meses_orcado, valor_unitario_planejado, quantidade_planejada, dias_meses_planejado, bv_liquido_planejado",
+      "id, grupo_id, ordem, item, tipo_custo, categoria_id, valor_unitario_orcado, quantidade_orcada, dias_meses_orcado, valor_unitario_planejado, quantidade_planejada, dias_meses_planejado, bv_liquido_planejado, em_save, save_consumido",
     )
     .eq("versao_orcamento_id", versaoId)
     .eq("tenant_id", session.activeTenant.id);
@@ -341,7 +341,7 @@ export async function enviarJobParaAbertura(
   }
 
   if ((itensDaVersao ?? []).length > 0) {
-    const { error: errCopia } = await supabase.from("jobs_itens_orcado").insert(
+    const { data: copiaCriada, error: errCopia } = await supabase.from("jobs_itens_orcado").insert(
       (itensDaVersao ?? []).map((i: any) => ({
         tenant_id: session.activeTenant.id,
         job_id: novo.id,
@@ -361,8 +361,14 @@ export async function enviarJobParaAbertura(
         // BV depois, na planilha do job, não mexe aqui — o compromisso do
         // planejado fecha neste ponto (docs/decisions/022).
         bv_liquido_planejado: i.bv_liquido_planejado,
+        // A marca de save atravessa junto. Sem ela a cópia do job nasceria
+        // "normal": o crédito não existiria, o planejado do tipo `A`
+        // voltaria a espelhar o orçado pelo trigger, e a Planilha Interna
+        // discordaria da versão aprovada logo na abertura (decisão 023).
+        em_save: i.em_save === true,
+        save_consumido: Number(i.save_consumido ?? 0),
       })),
-    );
+    ).select("id, item_versao_id");
 
     if (errCopia) {
       console.error("[abertura.copia_itens_insert]", errCopia.message);
@@ -370,6 +376,57 @@ export async function enviarJobParaAbertura(
         ok: false,
         message: "Job criado, mas a planilha interna não foi montada. Avise o suporte.",
       };
+    }
+
+    // 6b-bis. O consumo de save MUDA DE PONTA: sai da linha da versão e
+    //         passa a apontar para a cópia do job.
+    //
+    // `saves_consumos` nasce na versão (`item_versao_id`) enquanto o
+    // orçamento é rascunho, e ali ele é RESERVA: aparece na planilha e não
+    // move dinheiro no fluxo de ninguém. É aqui que ele vira consumo de um
+    // job de verdade — e é `job_item_orcado_id` que a `vw_fluxo_caixa` usa
+    // para migrar o dinheiro em save para quem o gastou, na data em que ele
+    // entrou (decisão 023, nota de 26/08/2026).
+    //
+    // As duas pontas nunca convivem (`chk_save_consumo_uma_ponta`), e é de
+    // propósito: a errata do job apaga e recria os consumos por
+    // `job_item_orcado_id`, e uma linha órfã do lado da versão seria
+    // contada duas vezes no saldo do job de origem. O `save_consumido` da
+    // versão aprovada não some junto — o trigger congela nela desde
+    // 27/08/2026.
+    const copiaPorItemVersao = new Map<string, string>(
+      ((copiaCriada ?? []) as any[]).map((c) => [c.item_versao_id, c.id]),
+    );
+    const idsDaVersao = (itensDaVersao ?? []).map((i: any) => i.id);
+    if (idsDaVersao.length > 0 && copiaPorItemVersao.size > 0) {
+      const { data: consumos, error: errConsumosLer } = await supabase
+        .from("saves_consumos")
+        .select("id, item_versao_id")
+        .eq("tenant_id", session.activeTenant.id)
+        .in("item_versao_id", idsDaVersao)
+        .is("job_item_orcado_id", null);
+
+      if (errConsumosLer) {
+        console.error("[abertura.saves_consumos_select]", errConsumosLer.message);
+      }
+
+      for (const c of (consumos ?? []) as any[]) {
+        const copiaId = copiaPorItemVersao.get(c.item_versao_id);
+        if (!copiaId) continue;
+        const { error: errConsumo } = await supabase
+          .from("saves_consumos")
+          .update({ job_item_orcado_id: copiaId, item_versao_id: null })
+          .eq("id", c.id)
+          .eq("tenant_id", session.activeTenant.id);
+        if (errConsumo) {
+          console.error("[abertura.saves_consumos_update]", errConsumo.message);
+          return {
+            ok: false,
+            message:
+              "Job criado, mas o consumo de save não foi transferido para a planilha do job. Avise o suporte.",
+          };
+        }
+      }
     }
 
     // 6c. Âncora do realizado, uma linha por item, zerada.

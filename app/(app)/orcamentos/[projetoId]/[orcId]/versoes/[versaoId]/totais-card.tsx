@@ -24,6 +24,7 @@ import { SubLinhaBv } from "@/app/(app)/_planilha/chave-bruto-liquido";
 import {
   ColunasFixas,
   LARGURA_MINIMA,
+  LARGURA_MINIMA_SAVE,
 } from "@/app/(app)/_planilha/grade-orcamento";
 import {
   ORCADO,
@@ -41,6 +42,11 @@ interface Props {
   bvsPorItem: Record<string, ItemBv>;
   /** Bruto ou Líquido (− BV). Tem que ser a MESMA dos grupos acima. */
   visao: VisaoBv;
+  /** A coluna de Save está aberta na planilha acima? O card NÃO ganha a
+   *  coluna (o Item dele absorve Save + Item de lá), mas precisa do MESMO
+   *  piso de largura — senão, em janela estreita, uma tabela rola e a
+   *  outra não, e as colunas de Total saem do eixo. */
+  saveVisivel?: boolean;
   percentualHonorarios: number;
   percentualImposto: number;
   moeda: string;
@@ -55,6 +61,7 @@ export function TotaisCard({
   itens,
   bvsPorItem,
   visao,
+  saveVisivel = false,
   percentualHonorarios,
   percentualImposto,
   moeda,
@@ -136,7 +143,7 @@ export function TotaisCard({
         <table
           className={cn(
             "w-full table-fixed border-collapse text-sm",
-            LARGURA_MINIMA,
+            saveVisivel ? LARGURA_MINIMA_SAVE : LARGURA_MINIMA,
           )}
         >
           <ColunasFixas />
@@ -414,19 +421,9 @@ export function TotaisCard({
                   {formatCurrency(job.honorarios, moeda)}, impostos{" "}
                   {formatCurrency(job.imposto, moeda)}. Sem nenhuma linha em
                   save os dois totais voltam a ser iguais:{" "}
-                  {save.itensEmSave > 0 && (
-                    <>
-                      {save.itensEmSave}{" "}
-                      {save.itensEmSave === 1 ? "linha gera" : "linhas geram"}{" "}
-                      crédito
-                    </>
-                  )}
-                  {save.itensEmSave > 0 && save.itensConsumindoSave > 0 && " e "}
-                  {save.itensConsumindoSave > 0 && (
-                    <>
-                      {save.itensConsumindoSave}{" "}
-                      {save.itensConsumindoSave === 1 ? "consome" : "consomem"}
-                    </>
+                  {frasePorQueDivergem(
+                    save.itensEmSave,
+                    save.itensConsumindoSave,
                   )}
                   .
                 </p>
@@ -721,4 +718,34 @@ function LinhaQuebrada({
       ))}
     </div>
   );
+}
+
+/**
+ * Por que os dois totais divergem, em português inteiro.
+ *
+ * O texto precisa fechar a frase "…voltam a ser iguais: X". Montado aqui e
+ * não inline porque a versão inline perdia o substantivo quando só havia
+ * consumo — saía "2 consomem", sem dizer o quê.
+ */
+function frasePorQueDivergem(gera: number, consome: number): string {
+  const partes: string[] = [];
+  if (gera > 0) {
+    partes.push(
+      gera === 1 ? "1 linha gera crédito" : `${gera} linhas geram crédito`,
+    );
+  }
+  if (consome > 0) {
+    // Com as duas metades, "consome crédito" repetiria a palavra na mesma
+    // frase; sozinha, ela é o que dá sentido ao número.
+    if (partes.length > 0) {
+      partes.push(consome === 1 ? "1 consome" : `${consome} consomem`);
+    } else {
+      partes.push(
+        consome === 1
+          ? "1 linha é paga com crédito de outro job"
+          : `${consome} linhas são pagas com crédito de outro job`,
+      );
+    }
+  }
+  return partes.join(" e ");
 }

@@ -275,6 +275,7 @@ export function JobRealizadoSection({
             realizadosMap={realizadosMap}
             bvsPorItem={bvsPorItem}
             visao={visao}
+            saveVisivel={temSave}
             jobAberto={!preAbertura}
             percentualHonorarios={versao.percentual_honorarios}
             percentualImposto={versao.percentual_imposto}

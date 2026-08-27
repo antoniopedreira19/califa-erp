@@ -10,6 +10,7 @@ import type {
   JobItemRealizado,
   VersaoOrcamentoGrupo,
 } from "@/lib/types";
+import { saveDoJob } from "@/lib/data/saves";
 import { PlanilhaConferencia } from "./planilha-conferencia";
 
 export const dynamic = "force-dynamic";
@@ -173,6 +174,21 @@ export default async function PlanilhaDaAberturaPage({
   for (const g of grupos) itensPorGrupo.set(g.id, []);
   for (const it of itens) itensPorGrupo.get(it.grupo_id)?.push(it);
 
+  // O save da conferência: é aqui que o financeiro entende por que o
+  // faturamento previsto e o valor do job vieram diferentes, e por que
+  // três linhas estão sem planejado (decisão 023).
+  const savePorItem = await saveDoJob(
+    supabase,
+    session.activeTenant.id,
+    (raw as any).id,
+    itens.map((i) => ({
+      id: i.id,
+      orcado_id: i.orcado_id,
+      em_save: i.em_save,
+      save_consumido: i.save_consumido,
+    })),
+  );
+
   return (
     <div className="flex flex-col gap-4 pb-6">
       <div className="flex flex-wrap items-center gap-3">
@@ -212,6 +228,7 @@ export default async function PlanilhaDaAberturaPage({
         realizadosMap={realizadosMap}
         categoriasMap={categoriasMap}
         bvsPorItem={bvsPorItem}
+        savePorItem={savePorItem}
         versaoLabel={`v${versao?.numero_versao ?? 1}`}
         moeda={versao?.moeda ?? "BRL"}
         percentualHonorarios={Number(versao?.percentual_honorarios ?? 0)}

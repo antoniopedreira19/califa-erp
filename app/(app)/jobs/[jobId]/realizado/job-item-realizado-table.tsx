@@ -568,7 +568,7 @@ export function JobItemRealizadoTable({
               <td colSpan={3} className={cn("border-t border-t-[#dcf5e8]", PLANEJADO.celulaVazia)} />
               <td className={cn("px-3 py-2 text-right whitespace-nowrap border-t border-t-[#dcf5e8]", PLANEJADO.celulaTotal)}>
                 <CelulaRentabilidade
-                  orcado={subtotais.orcado}
+                  orcado={subtotais.orcadoRentabilidade}
                   custo={valorNaVisao(subtotais.planejado, visao)}
                   moeda={moeda}
                   corValor={RENTAB_VALOR}
@@ -578,7 +578,7 @@ export function JobItemRealizadoTable({
               <td colSpan={3} className={cn("border-t border-t-[#fbd8b8]", REALIZADO.celulaVazia)} />
               <td className={cn("px-3 py-2 text-right whitespace-nowrap border-t border-t-[#fbd8b8]", REALIZADO.celulaTotal)}>
                 <CelulaRentabilidade
-                  orcado={subtotais.orcado}
+                  orcado={subtotais.orcadoRentabilidade}
                   custo={valorNaVisao(subtotais.realizado, visao)}
                   moeda={moeda}
                   corValor={RENTAB_VALOR}
@@ -621,7 +621,12 @@ export function JobItemRealizadoTable({
             const bv = bvsPorItem[item.id] ?? null;
             // Sem BV num job congelado não há o que consultar — a vaga
             // fica vazia para não desalinhar as linhas de baixo.
+            // Linha em save não tem fornecedor neste job: sem BV a
+            // negociar e sem PP a emitir (decisão 023 §9). Os dois lados
+            // já são recusados no banco — aqui a calha nem oferece.
+            const emSave = item.em_save === true;
             const mostraBv =
+              !emSave &&
               aceitaBV(item.tipo_custo) &&
               (podeAcoes || (!preAbertura && bv !== null));
             const travado =
@@ -649,7 +654,7 @@ export function JobItemRealizadoTable({
                     : null
                 }
                 pp={
-                  podeAcoes && tipoGeraDesembolso(item.tipo_custo)
+                  podeAcoes && !emSave && tipoGeraDesembolso(item.tipo_custo)
                     ? {
                         itemRealizadoId: realizadoId,
                         // Era o realizado. Com o realizado nascendo das

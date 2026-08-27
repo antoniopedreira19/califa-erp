@@ -389,6 +389,10 @@ export function ItensTable({
         num(valorAtual(item, "dias_meses_orcado"))
       : Number(item.total_orcado);
 
+    // Linha em save não tem custo (decisão 023 §9): o espelho de `A` e `D`
+    // não vale nela, senão o custo que o banco zerou voltaria pela tela.
+    if (item.em_save === true) return { orcado, planejado: 0 };
+
     // Em `A` e `D` o planejado É o orçado — inclusive enquanto o usuário
     // ainda está digitando o orçado, para o espelho não piscar atrasado.
     if (planejadoEspelhaOrcado(
@@ -446,6 +450,8 @@ export function ItensTable({
     (rowId: string): boolean => {
       const item = itens.find((it) => it.id === rowId);
       if (!item) return false;
+      // Em save o planejado é zero e não se digita — o Tab pula igual.
+      if (item.em_save === true) return true;
       return planejadoEspelhaOrcado(
         String(valorAtual(item, "tipo_custo")) as VersaoOrcamentoItem["tipo_custo"],
       );
@@ -693,6 +699,10 @@ export function ItensTable({
    *  orçamento nada disso existe ainda. A calha dividida é da planilha do
    *  job. */
   const temBv = (item: VersaoOrcamentoItem) =>
+    // Linha em save não negocia comissão: o serviço não acontece neste
+    // projeto, então não há fornecedor. O trigger `bv_exige_item_com_bv`
+    // recusa no banco; aqui o botão nem aparece.
+    item.em_save !== true &&
     aceitaBV(String(valorAtual(item, "tipo_custo")));
 
   // Em versão congelada a trilha não some: ela ainda mostra os BVs já
@@ -877,11 +887,18 @@ export function ItensTable({
                 const totais = totaisDoItem(item);
                 const blocos = blocosDe(item);
                 const planejadoNaVisao = valorNaVisao(blocos.planejado, visao);
-                const planejadoTravado = planejadoEspelhaOrcado(
-                  String(
-                    valorAtual(item, "tipo_custo"),
-                  ) as VersaoOrcamentoItem["tipo_custo"],
-                );
+                const emSave = item.em_save === true;
+                // Duas perguntas diferentes: o planejado ESPELHA o orçado
+                // (`A` e `D`), e o planejado está TRAVADO. A linha em save
+                // trava sem espelhar — ela não tem custo nenhum.
+                const planejadoEspelha =
+                  !emSave &&
+                  planejadoEspelhaOrcado(
+                    String(
+                      valorAtual(item, "tipo_custo"),
+                    ) as VersaoOrcamentoItem["tipo_custo"],
+                  );
+                const planejadoTravado = planejadoEspelha || emSave;
                 const categoriaId = valorAtual(item, "categoria_id") as
                   | string
                   | null;
@@ -1051,7 +1068,7 @@ export function ItensTable({
                         custo da agência É o orçado menos o BV. */}
                     <CelulaNumero
                       valor={
-                        planejadoTravado
+                        planejadoEspelha
                           ? num(valorAtual(item, "valor_unitario_orcado"))
                           : num(valorAtual(item, "valor_unitario_planejado"))
                       }
@@ -1073,7 +1090,7 @@ export function ItensTable({
                     />
                     <CelulaNumero
                       valor={
-                        planejadoTravado
+                        planejadoEspelha
                           ? num(valorAtual(item, "quantidade_orcada"))
                           : num(valorAtual(item, "quantidade_planejada"))
                       }
@@ -1093,7 +1110,7 @@ export function ItensTable({
                     />
                     <CelulaNumero
                       valor={
-                        planejadoTravado
+                        planejadoEspelha
                           ? num(valorAtual(item, "dias_meses_orcado"))
                           : num(valorAtual(item, "dias_meses_planejado"))
                       }

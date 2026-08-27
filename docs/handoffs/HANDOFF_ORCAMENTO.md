@@ -2108,3 +2108,89 @@ página `force-dynamic`.
 **Verificação:** `tsc --noEmit` e `next lint` limpos. Conferência logada
 no navegador **pendente** — entra na etapa final, junto com as demais
 telas.
+
+---
+
+## ⚠️ 24–27/08/2026 — o SAVE na tela do orçamento
+
+**Design:** `Orcamento - Versao com Save.dc.html` (projeto Claude Design).
+**Regra:** `docs/decisions/023-save-entre-jobs.md`.
+**Spec:** `docs/superpowers/specs/2026-08-24-save-design.md`.
+
+O cliente fecha o orçamento e não usa todas as linhas. Elas são faturadas
+assim mesmo e o valor vira crédito para um projeto seguinte — o **save**.
+Uma linha em save **sai do valor do job e continua no faturamento**; uma
+linha que **consome** save faz o inverso.
+
+### A conta
+
+`calcularTotaisVersao` passou a rodar a MESMA função sobre **duas bases**:
+
+```
+base de faturamento  = total orçado − save consumido
+base de valor do job = está em save ? 0 : total orçado
+```
+
+Sem save as duas bases são iguais e todos os números anteriores ficam bit
+a bit intactos — é o que garante que nenhum job existente mudou. A função
+devolve três fechamentos (`faturamento`, `job`, `bruto`), a quebra
+`save` (usado / gerado / custos do job) e `orcadoParaRentabilidade`.
+
+`scripts/conferir-save.ts` prova a conta em 8 seções — inclusive a
+invariante do desenho: **a soma dos dois lados dá o mesmo número**
+(R$ 129.862,06 nos dois, no exemplo da decisão).
+
+### O que apareceu na tela da versão
+
+| Onde | O quê |
+|---|---|
+| Grade | coluna **SAVE** à esquerda (13 → 14 colunas), ligada pelo menu "Exibir" |
+| Linha | pop-up com duas abas: *Gerar save nesta linha* e *Consumir save de outro job* |
+| Consumo | uma linha pode puxar de **vários jobs** de origem; o resto segue faturado |
+| Cabeçalho | chave **"Orçamento de save"** — todo item novo nasce em save |
+| Totais | o fechamento abre em três colunas (save usado · save gerado · custos do job), ganha "Saldo em save" e o parágrafo que explica por que os dois totais divergem |
+
+A linha em save fica hachurada, com planejado zerado e travado, sem BV e
+**fora da rentabilidade** — a coluna ORÇADO continua cheia, porque é ela
+que está sendo faturada.
+
+### Achados do teste ponta a ponta (27/08/2026)
+
+O teste rodou no projeto **TESTE-0005/26 · Revisão Save**, com cinco
+orçamentos. O que ele encontrou nesta frente:
+
+1. **O espelho de `A`/`D` ressuscitava o custo que o banco zerou.**
+   `planejadoBrutoDoItem` devolve o ORÇADO nos tipos que não geram PP —
+   e fazia isso também na linha em save, que não tem custo nenhum. Numa
+   linha tipo A de R$ 20.000 em save, a rentabilidade do grupo virava
+   **negativa**. `planejadoBrutoDoItem` e `realizadoBrutoDoItem` passaram
+   a receber `emSave`, e `blocosDoItem` passa a marca.
+2. **A rentabilidade só estava save-aware na tela da versão.** A Planilha
+   Interna do job, o card de Totais do job, a visão agregada do projeto
+   (produção e financeiro) e o consolidado do editor multi-job usavam
+   `orcado` como base. Todos passaram a usar `orcadoRentabilidade`, que
+   agora atravessa `lib/calculos/projeto-totais.ts` e os tipos da visão
+   agregada.
+3. **O editor multi-job perdia o save ao reabrir.** `ItemRascunho` ganhou
+   `em_save`/`save_consumido` (opcionais), o carregamento do agregado
+   passou a lê-los, e `totaisDoJob` devolve `orcadoRentabilidade`.
+4. **O XLSX do cliente sairia com o total errado.** O export mostrava
+   `valorJob` sob o rótulo FATURAMENTO — num orçamento com save esse
+   número desce, e num orçamento de save inteiro sairia **zerado**, com a
+   lista de itens somando outra coisa. Passou a usar o lado `bruto`, que
+   é a mesma conta sobre o orçado cheio: em orçamento sem save o arquivo é
+   byte a byte o de antes.
+5. **A frase dos Totais ficava sem substantivo** quando a versão só
+   consumia save ("2 consomem"). Virou `frasePorQueDivergem`.
+6. **O card de Totais e a planilha podiam sair do eixo.** Os dois usam o
+   mesmo `colgroup`, mas o piso de largura (`min-w`) divergia com a coluna
+   de Save aberta. O card passou a receber `saveVisivel` e a usar o mesmo
+   piso — a regra de `docs/09-identidade-visual-ui.md` volta a valer em
+   janela estreita.
+7. **BV na linha em save** deixou de ser oferecido na calha (o trigger
+   `bv_exige_item_com_bv` já recusava no banco).
+
+**Verificação:** `tsc --noEmit`, `next lint` e `npm run build` limpos;
+`scripts/conferir-save.ts` passando; e o fluxo inteiro conferido logado no
+navegador — marcar, consumir de dois jobs, aprovar, exportar e enviar para
+abertura.

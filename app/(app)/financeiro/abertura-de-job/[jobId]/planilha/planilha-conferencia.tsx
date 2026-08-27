@@ -26,6 +26,7 @@ import {
   BotaoRecolherTodos,
   useGruposRecolhiveis,
 } from "@/app/(app)/_planilha/recolher-grupos";
+import type { EstadoSaveDaLinha } from "@/app/(app)/_planilha/save-coluna";
 import { JobGrupoCard } from "@/app/(app)/jobs/[jobId]/realizado/job-grupo-card";
 import { JobTotaisCard } from "@/app/(app)/jobs/[jobId]/realizado/job-totais-card";
 
@@ -39,6 +40,10 @@ interface Props {
   realizadosMap: Map<string, JobItemRealizado>;
   categoriasMap: Map<string, string>;
   bvsPorItem: Record<string, ItemBv>;
+  /** Save por linha, só leitura: o financeiro precisa ver POR QUE o
+   *  faturamento previsto e o valor do job vieram diferentes. Vazio em
+   *  job sem save, e aí a coluna nem aparece. */
+  savePorItem: Record<string, EstadoSaveDaLinha>;
   versaoLabel: string;
   moeda: string;
   percentualHonorarios: number;
@@ -55,12 +60,14 @@ export function PlanilhaConferencia({
   realizadosMap,
   categoriasMap,
   bvsPorItem,
+  savePorItem,
   versaoLabel,
   moeda,
   percentualHonorarios,
   percentualImposto,
 }: Props) {
   const [visao, setVisao] = React.useState<VisaoBv>(VISAO_BV_PADRAO);
+  const temSave = Object.keys(savePorItem).length > 0;
   const gruposIds = React.useMemo(() => grupos.map((g) => g.id), [grupos]);
   const recolher = useGruposRecolhiveis(gruposIds);
 
@@ -112,6 +119,8 @@ export function PlanilhaConferencia({
             jobEmpresaId={jobEmpresaId}
             jobResponsavelId={jobResponsavelId}
             bvsPorItem={bvsPorItem}
+            saveVisivel={temSave}
+            savePorItem={savePorItem}
             versaoLabel={versaoLabel}
             cartoes={[]}
           />
@@ -124,6 +133,7 @@ export function PlanilhaConferencia({
         realizadosMap={realizadosMap}
         bvsPorItem={bvsPorItem}
         visao={visao}
+        saveVisivel={temSave}
         // A rota só existe enquanto o job aguarda abertura: o REALIZADO
         // inteiro fica zerado, inclusive nas linhas `A` e `D`.
         jobAberto={false}

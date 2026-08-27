@@ -152,7 +152,7 @@ export async function carregarJobNoFinanceiro(
     supabase
       .from("jobs_itens_orcado")
       .select(
-        "item_versao_id, tipo_custo, total_orcado, " +
+        "item_versao_id, tipo_custo, total_orcado, em_save, " +
           "realizado:jobs_itens_realizado!inner(total_realizado)",
       )
       .eq("job_id", jobId)
@@ -184,6 +184,9 @@ export async function carregarJobNoFinanceiro(
         // linhas `A` e `D`. Encerrado continua tendo: é histórico.
         raw.status !== "aguardando_abertura" &&
           raw.status !== "rejeitado_financeiro",
+        // Linha em save não tem custo neste job — nem o espelho do orçado
+        // dos tipos `A` e `D` (decisão 023 §9).
+        i.em_save === true,
       ),
     0,
   );

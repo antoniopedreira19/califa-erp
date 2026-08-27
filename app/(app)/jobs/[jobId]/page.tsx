@@ -122,6 +122,7 @@ export default async function JobDetailPage({
     naoLidasPPs,
     envioFaturamento,
     podeEnviarFaturamento,
+    pagoSoPorSave,
     portaisDoCliente,
     jobsDoProjeto,
     abertoPorNome,
@@ -379,6 +380,11 @@ export default async function JobDetailPage({
         envioFaturamento={envioFaturamento}
         podeEnviarFaturamento={podeEnviarFaturamento}
         faturamentoPrevisto={totaisJob.faturamentoPrevisto}
+        // Dos itens, e não da coluna `jobs.faturamento_save_previsto`: a
+        // coluna é espelho denormalizado, e o drawer não pode divergir da
+        // planilha que está logo acima dele.
+        faturamentoSavePrevisto={totaisJob.save.receita}
+        pagoSoPorSave={pagoSoPorSave}
         dataPrevistaFaturamento={job.data_prevista_faturamento}
         portais={portaisDoCliente}
         moeda={versaoAprovada.moeda}

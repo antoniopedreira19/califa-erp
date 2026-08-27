@@ -14,6 +14,9 @@ export interface ItemPlanilhaProjeto {
   orcQt: number;
   orcDm: number;
   orcTotal: number;
+  /** O orçado que serve de BASE À RENTABILIDADE — zero na linha em save,
+   *  igual a `orcTotal` no resto (decisão 023 §9). */
+  orcRentabilidade: number;
   planUnit: number;
   planQt: number;
   planDm: number;
@@ -33,6 +36,8 @@ export interface GrupoPlanilhaProjeto {
   nome: string;
   itens: ItemPlanilhaProjeto[];
   orcado: number;
+  /** Base da rentabilidade do grupo — sem as linhas em save. */
+  orcadoRentabilidade: number;
   planejado: ValoresDoBloco;
   realizado: ValoresDoBloco;
 }
@@ -49,6 +54,8 @@ export interface JobPlanilhaProjeto {
   grupos: GrupoPlanilhaProjeto[];
   /** Soma dos totais orçados dos itens (= "Total dos custos" do job). */
   orcado: number;
+  /** Base da rentabilidade do job — sem as linhas em save. */
+  orcadoRentabilidade: number;
   planejado: ValoresDoBloco;
   realizado: ValoresDoBloco;
   subtotaisPorTipo: Record<TipoCusto, number>;

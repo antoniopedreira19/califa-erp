@@ -436,6 +436,7 @@ export function EditorAgregado({
             }`
           : "novo",
         orcado: t.orcado,
+        orcadoRentabilidade: t.orcadoRentabilidade,
         planejado: t.planejado,
         honorarios: t.honorarios,
         imposto: t.imposto,

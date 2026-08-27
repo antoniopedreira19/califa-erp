@@ -67,6 +67,9 @@ interface Props {
   jobCodigo: string;
   /** Faturamento previsto atual — vai travado no formulário. */
   valorFaturado: number;
+  /** Quanto desse total é saldo em save (decisão 023). Zero em job sem
+   *  save, e aí a leitura nem aparece. */
+  valorSave?: number;
   /** Data prevista na abertura do job; o campo nasce com ela. */
   dataPrevistaFaturamento: string | null;
   portais: PortalOption[];
@@ -89,6 +92,7 @@ export function EnviarFaturamentoDrawer({
   jobId,
   jobCodigo,
   valorFaturado,
+  valorSave = 0,
   dataPrevistaFaturamento,
   portais,
   moeda,
@@ -203,6 +207,17 @@ export function EnviarFaturamentoDrawer({
               </div>
               <p className="text-xs text-muted-foreground">
                 Já considera as erratas registradas até agora.
+                {valorSave > 0.005 && (
+                  <>
+                    {" "}
+                    Deste total,{" "}
+                    <strong className="text-[#5f5d57]">
+                      {formatCurrency(valorSave, moeda)}
+                    </strong>{" "}
+                    é saldo em save: o cliente paga agora e gasta em outro
+                    job.
+                  </>
+                )}
               </p>
             </div>
 

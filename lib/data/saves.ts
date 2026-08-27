@@ -103,7 +103,8 @@ export async function saldosDeSaveDoCliente(
  * As duas pontas vêm de lugares diferentes:
  *
  *  - **origens** (esta linha é paga por fora) saem de `saves_consumos`
- *    apontando para o item da versão;
+ *    apontando para o item da versão enquanto o orçamento é rascunho, e
+ *    para a cópia do job depois da abertura — o consumo muda de ponta lá;
  *  - **destinos** (o crédito desta linha já foi gasto) só existem depois
  *    de a versão virar job: quem tem saldo é o job, então o caminho é
  *    item da versão → cópia no job → consumos daquele job de origem.
@@ -125,24 +126,56 @@ export async function saveDaVersao(
       .eq("tenant_id", tenantId)
       .in("item_versao_id", ids)
       .is("substituido_em", null),
-    // A cópia destas linhas no job, para achar o job de origem do crédito.
+    // A cópia destas linhas no job. Serve para duas coisas: achar o job de
+    // origem do crédito (destinos) e reencontrar os consumos que MUDARAM
+    // DE PONTA na abertura (origens) — ver abaixo.
     supabase
       .from("jobs_itens_orcado")
-      .select("item_versao_id, job_id")
+      .select("id, item_versao_id, job_id, em_save")
       .eq("tenant_id", tenantId)
-      .in("item_versao_id", ids)
-      .eq("em_save", true),
+      .in("item_versao_id", ids),
   ]);
 
+  const copias = (copiaRes.data ?? []) as any[];
+
   const origensPorItem = new Map<string, PontaDeSave[]>();
-  for (const c of (consumosRes.data ?? []) as any[]) {
-    const lista = origensPorItem.get(c.item_versao_id) ?? [];
+  const empilhaOrigem = (itemVersaoId: string, c: any) => {
+    const lista = origensPorItem.get(itemVersaoId) ?? [];
     lista.push({
       jobId: c.job_origem_id,
       codigo: c.jobs?.codigo ?? "—",
       valor: Number(c.valor ?? 0),
     });
-    origensPorItem.set(c.item_versao_id, lista);
+    origensPorItem.set(itemVersaoId, lista);
+  };
+
+  for (const c of (consumosRes.data ?? []) as any[]) {
+    empilhaOrigem(c.item_versao_id, c);
+  }
+
+  // Depois da abertura o consumo deixa de apontar para a linha da versão e
+  // passa a apontar para a cópia do job (`chk_save_consumo_uma_ponta` só
+  // admite uma ponta). A versão aprovada continua tendo que mostrar de
+  // onde veio o crédito, então o caminho aqui é o mesmo dos destinos:
+  // item da versão → cópia no job → consumos daquela cópia.
+  const copiaPorItemVersao = new Map<string, string>();
+  for (const o of copias) copiaPorItemVersao.set(o.item_versao_id, o.id);
+  const idsCopiaConsumidora = [...copiaPorItemVersao.values()];
+  if (idsCopiaConsumidora.length > 0) {
+    const { data: consumosDaCopia } = await supabase
+      .from("saves_consumos")
+      .select("job_item_orcado_id, valor, job_origem_id, jobs!inner(codigo)")
+      .eq("tenant_id", tenantId)
+      .in("job_item_orcado_id", idsCopiaConsumidora);
+
+    const versaoPorCopia = new Map<string, string>();
+    for (const [itemVersaoId, copiaId] of copiaPorItemVersao) {
+      versaoPorCopia.set(copiaId, itemVersaoId);
+    }
+    for (const c of (consumosDaCopia ?? []) as any[]) {
+      const itemVersaoId = versaoPorCopia.get(c.job_item_orcado_id);
+      if (itemVersaoId) empilhaOrigem(itemVersaoId, c);
+    }
   }
 
   // Para as linhas em save que já viraram job: quem consumiu o SALDO
@@ -155,8 +188,8 @@ export async function saveDaVersao(
   // pertence, e é assim que o tooltip fala. Atribuir consumo a uma linha
   // específica seria inventar um vínculo que a operação não tem.
   const jobPorItem = new Map<string, string>();
-  for (const o of (copiaRes.data ?? []) as any[]) {
-    jobPorItem.set(o.item_versao_id, o.job_id);
+  for (const o of copias) {
+    if (o.em_save === true) jobPorItem.set(o.item_versao_id, o.job_id);
   }
 
   const destinosPorJob = new Map<string, PontaDeSave[]>();

@@ -58,6 +58,9 @@ export interface TituloRow {
   fat_descricao: string;
   contraparte_nome: string;
   jobs_cobertos: string[];
+  /** Jobs DISTINTOS que a nota cobre. Não é `jobs_cobertos.length`: a nota
+   *  com save tem duas linhas do mesmo job. */
+  qtd_jobs?: number;
   /** Contatos de cobrança dos jobs que a nota cobre, sem repetição
    *  (docs/decisions/012). Vazio nos jobs anteriores a 17/08/2026. */
   contatos: ContatoCobranca[];
@@ -157,7 +160,7 @@ export function TitulosList({ rows, contas, tipos, subtipos }: Props) {
               const recebido = r.status === "pago";
               const cancelado = r.status === "cancelado";
               const adiada = r.data_previsao_recebimento !== r.data_vencimento;
-              const agrupada = r.jobs_cobertos.length > 1;
+              const agrupada = (r.qtd_jobs ?? r.jobs_cobertos.length) > 1;
               return (
                 <tr
                   key={r.id}
@@ -218,7 +221,8 @@ export function TitulosList({ rows, contas, tipos, subtipos }: Props) {
                       {agrupada && (
                         <span className="inline-flex w-fit items-center gap-1.5 whitespace-nowrap rounded-full border border-violet-200 bg-violet-50 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-violet-700">
                           <Layers className="h-3 w-3" />
-                          Agrupada · {r.jobs_cobertos.length} jobs
+                          Agrupada · {r.qtd_jobs ?? r.jobs_cobertos.length}{" "}
+                          jobs
                         </span>
                       )}
                       <span className="font-mono text-[11.5px] text-muted-foreground text-pretty">

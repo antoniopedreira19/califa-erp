@@ -26,7 +26,11 @@ import {
   type VisaoBv,
 } from "@/lib/calculos/bv-planilha";
 import { SubLinhaBv } from "@/app/(app)/_planilha/chave-bruto-liquido";
-import { ColunasJob, LARGURA_MINIMA_JOB } from "@/app/(app)/_planilha/grade-job";
+import {
+  ColunasJob,
+  LARGURA_MINIMA_JOB,
+  LARGURA_MINIMA_JOB_SAVE,
+} from "@/app/(app)/_planilha/grade-job";
 import {
   ORCADO,
   PLANEJADO,
@@ -51,6 +55,10 @@ interface Props {
   percentualHonorarios: number;
   percentualImposto: number;
   moeda: string;
+  /** A coluna de Save está aberta na planilha acima? O card não ganha a
+   *  coluna, mas precisa do MESMO piso de largura para as colunas de
+   *  Total caírem no mesmo eixo. */
+  saveVisivel?: boolean;
 }
 
 function formatarPercentual(p: number): string {
@@ -138,6 +146,7 @@ export function JobTotaisCard({
   percentualHonorarios,
   percentualImposto,
   moeda,
+  saveVisivel = false,
 }: Props) {
   const {
     subtotaisPorTipo,
@@ -146,7 +155,15 @@ export function JobTotaisCard({
     imposto,
     faturamentoPrevisto,
     valorJob,
+    save,
+    faturamento,
+    job,
   } = calcularTotaisVersao(itens, percentualHonorarios, percentualImposto);
+
+  // Com save, o fechamento abre em três colunas — o mesmo bloco da tela da
+  // versão do orçamento. Sem ele os dois totais de baixo divergiriam sem
+  // explicação nenhuma nesta tela (decisão 023 §3).
+  const temSave = save.totalSaveGerado > 0 || save.totalSaveUsado > 0;
 
   // Planejado e realizado passam pelos blocos com BV: o número que o card
   // mostra tem que ser o MESMO que os grupos acima somaram, e a única
@@ -185,6 +202,9 @@ export function JobTotaisCard({
         id: i.id,
         grupo_id: i.grupo_id,
         total_orcado: b?.orcado ?? 0,
+        // A linha em save fica fora da comparação orçado × custo, mas
+        // continua cheia na coluna ORÇADO (decisão 023 §9).
+        orcado_rentabilidade: b?.orcadoRentabilidade ?? 0,
         total_planejado: b ? valorNaVisao(b.planejado, visao) : 0,
       };
     }),
@@ -236,7 +256,7 @@ export function JobTotaisCard({
         <table
           className={cn(
             "w-full table-fixed border-collapse text-sm",
-            LARGURA_MINIMA_JOB,
+            saveVisivel ? LARGURA_MINIMA_JOB_SAVE : LARGURA_MINIMA_JOB,
           )}
         >
           <ColunasJob />
@@ -383,7 +403,7 @@ export function JobTotaisCard({
               <td colSpan={3} className={cn("border-t border-t-[#dcf5e8]", PLANEJADO.celulaVazia)} />
               <td className={cn("px-3 py-2.5 text-right whitespace-nowrap border-t border-t-[#dcf5e8]", PLANEJADO.celulaTotal)}>
                 <CelulaRentabilidade
-                  orcado={subtotalGeral}
+                  orcado={totais.orcadoRentabilidade}
                   custo={totalPlanejado}
                   moeda={moeda}
                   corValor={RENTAB_VALOR}
@@ -393,7 +413,7 @@ export function JobTotaisCard({
               <td colSpan={3} className={cn("border-t border-t-[#fbd8b8]", REALIZADO.celulaVazia)} />
               <td className={cn("px-3 py-2.5 text-right whitespace-nowrap border-t border-t-[#fbd8b8]", REALIZADO.celulaTotal)}>
                 <CelulaRentabilidade
-                  orcado={subtotalGeral}
+                  orcado={totais.orcadoRentabilidade}
                   custo={totalRealizado}
                   moeda={moeda}
                   corValor={RENTAB_VALOR}
@@ -411,30 +431,69 @@ export function JobTotaisCard({
             Fechamento do orçado · por tipo de custo
           </p>
           <div className="flex flex-col gap-1.5">
-            {LINHAS_FECHAMENTO_POR_TIPO.map((linha) => (
-              <LinhaValor
-                key={linha.chave}
-                rotulo={linha.label}
-                valor={formatCurrency(
-                  somarLinhaFechamento(subtotaisPorTipo, linha.tipos),
-                  moeda,
-                )}
-              />
-            ))}
-            <div className="mt-3 border-t border-border pt-3">
-              <LinhaValor
-                rotulo="Total dos custos"
-                valor={formatCurrency(subtotalGeral, moeda)}
+            {temSave && (
+              <div className="grid grid-cols-[1fr_repeat(3,minmax(84px,auto))] gap-x-3 pb-1 text-right text-[9.5px] font-bold uppercase tracking-[0.06em] text-muted-foreground">
+                <span />
+                <span>Save usado</span>
+                <span>Save gerado</span>
+                <span>Custos do job</span>
+              </div>
+            )}
+            {LINHAS_FECHAMENTO_POR_TIPO.map((linha) =>
+              temSave ? (
+                <LinhaQuebrada
+                  key={linha.chave}
+                  label={linha.label}
+                  usado={somarLinhaFechamento(save.saveUsado, linha.tipos)}
+                  gerado={somarLinhaFechamento(save.saveGerado, linha.tipos)}
+                  custos={somarLinhaFechamento(save.custosDoJob, linha.tipos)}
+                  moeda={moeda}
+                />
+              ) : (
+                <LinhaValor
+                  key={linha.chave}
+                  rotulo={linha.label}
+                  valor={formatCurrency(
+                    somarLinhaFechamento(subtotaisPorTipo, linha.tipos),
+                    moeda,
+                  )}
+                />
+              ),
+            )}
+            {temSave ? (
+              <LinhaQuebrada
+                label="Total dos custos"
+                usado={save.totalSaveUsado}
+                gerado={save.totalSaveGerado}
+                custos={save.totalCustosDoJob}
+                moeda={moeda}
                 destaque
               />
-            </div>
+            ) : (
+              <div className="mt-3 border-t border-border pt-3">
+                <LinhaValor
+                  rotulo="Total dos custos"
+                  valor={formatCurrency(subtotalGeral, moeda)}
+                  destaque
+                />
+              </div>
+            )}
+            {/* Com save, estas duas são as do FATURAMENTO: são elas que
+                levam ao "Faturamento previsto" logo abaixo. As do valor do
+                job saem na nota, porque a conta é outra. */}
             <LinhaValor
               rotulo={`Honorários (${formatarTaxa(percentualHonorarios)})`}
-              valor={formatCurrency(honorarios, moeda)}
+              valor={formatCurrency(
+                temSave ? faturamento.honorarios : honorarios,
+                moeda,
+              )}
             />
             <LinhaValor
               rotulo={`Impostos (${formatarTaxa(percentualImposto)})`}
-              valor={formatCurrency(imposto, moeda)}
+              valor={formatCurrency(
+                temSave ? faturamento.imposto : imposto,
+                moeda,
+              )}
             />
             {/* Os dois fechamentos: o que a California emite nota e o que o
                 cliente se compromete a gastar no total. Diferem pelos
@@ -453,6 +512,28 @@ export function JobTotaisCard({
                 {formatCurrency(valorJob, moeda)}
               </span>
             </div>
+            {temSave && (
+              <>
+                <div className="flex items-baseline justify-between gap-3 pt-1">
+                  <span className="text-sm font-semibold text-[#5f5d57]">
+                    Saldo em save
+                  </span>
+                  <span className="whitespace-nowrap font-mono text-lg font-bold text-[#5f5d57]">
+                    {formatCurrency(save.totalSaveGerado, moeda)}
+                  </span>
+                </div>
+                <p className="pt-2 text-[10.5px] leading-relaxed text-muted-foreground">
+                  Os honorários e impostos acima correm sobre{" "}
+                  <strong>save gerado + custos do job</strong> (
+                  {formatCurrency(faturamento.base, moeda)}) — é o que esta
+                  nota cobra. O Valor do Job repete a mesma conta sobre{" "}
+                  <strong>save usado + custos do job</strong> (
+                  {formatCurrency(job.base, moeda)}): honorários{" "}
+                  {formatCurrency(job.honorarios, moeda)}, impostos{" "}
+                  {formatCurrency(job.imposto, moeda)}.
+                </p>
+              </>
+            )}
           </div>
         </div>
 
@@ -462,7 +543,7 @@ export function JobTotaisCard({
         <PainelResultado
           valorJob={valorJob}
           imposto={imposto}
-          orcado={subtotalGeral}
+          orcado={totais.orcadoRentabilidade}
           custoPlanejado={totais.planejado.bruto}
           custoRealizado={totais.realizado.bruto}
           bvPlanejado={totais.planejado.deducaoBv}
@@ -474,6 +555,56 @@ export function JobTotaisCard({
       </div>
 
       <LegendaFechamento custo="custo (planejado ou realizado)" />
+    </div>
+  );
+}
+
+/** Linha do fechamento repartida em save usado / save gerado / custos do
+ *  job. Mesma forma do card de Totais da versão do orçamento — as duas
+ *  telas mostram a MESMA quebra, e o design é um só. */
+function LinhaQuebrada({
+  label,
+  usado,
+  gerado,
+  custos,
+  moeda,
+  destaque,
+}: {
+  label: string;
+  usado: number;
+  gerado: number;
+  custos: number;
+  moeda: string;
+  destaque?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "grid grid-cols-[1fr_repeat(3,minmax(84px,auto))] items-baseline gap-x-3",
+        destaque && "mt-3 border-t border-border pt-3",
+      )}
+    >
+      <span
+        className={cn(
+          "text-sm",
+          destaque ? "font-semibold" : "text-muted-foreground",
+        )}
+      >
+        {label}
+      </span>
+      {[usado, gerado, custos].map((v, i) => (
+        <span
+          key={i}
+          className={cn(
+            "whitespace-nowrap text-right font-mono text-[12.5px]",
+            destaque ? "font-bold" : "font-semibold",
+            v === 0 && "text-muted-foreground/50",
+            i < 2 && v !== 0 && "text-[#5f5d57]",
+          )}
+        >
+          {formatCurrency(v, moeda)}
+        </span>
+      ))}
     </div>
   );
 }

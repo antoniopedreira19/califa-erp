@@ -458,7 +458,19 @@ export function FaturamentoList({
                     </div>
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-muted-foreground">
-                    {formatMoney(p.valor_previsto)}
+                    <div className="flex flex-col items-end gap-0.5">
+                      <span>{formatMoney(p.valor_previsto)}</span>
+                      {/* A quebra da parcela: o que é faturamento do próprio
+                          job e o que é saldo em save do cliente. São dois
+                          itens na MESMA nota — quem fatura precisa saber
+                          disso antes de abrir o drawer (decisão 023). */}
+                      {p.saldo_save > 0.005 && (
+                        <span className="text-[10.5px] text-[#5f5d57]">
+                          job {formatMoney(p.saldo_proprio)} · save{" "}
+                          {formatMoney(p.saldo_save)}
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-muted-foreground/80">
                     {formatMoney(p.valor_ja_faturado)}
@@ -520,7 +532,10 @@ export function FaturamentoList({
                       {f.itens.map((i) => i.descricao.split(" — ")[0]).join(" + ")}
                     </span>
                     <span className="font-mono text-[11px] text-muted-foreground">
-                      {f.itens.map((i) => i.codigo).join(", ")}
+                      {/* Sem repetir: a nota com save tem DOIS itens do mesmo
+                          job (o próprio e o saldo em save), e listar o
+                          código duas vezes lê como erro. */}
+                      {[...new Set(f.itens.map((i) => i.codigo))].join(", ")}
                     </span>
                   </div>
                 </td>

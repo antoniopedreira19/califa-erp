@@ -199,7 +199,8 @@ export default async function OrcamentosAgregadoPage({
           .select(
             "id, versao_orcamento_id, grupo_id, ordem, item, tipo_custo, categoria_id, " +
               "planilha_origem, valor_unitario_orcado, quantidade_orcada, dias_meses_orcado, " +
-              "valor_unitario_planejado, quantidade_planejada, dias_meses_planejado",
+              "valor_unitario_planejado, quantidade_planejada, dias_meses_planejado, " +
+              "em_save, save_consumido",
           )
           .eq("tenant_id", tenantId)
           .in("versao_orcamento_id", versaoIds)
@@ -244,6 +245,8 @@ export default async function OrcamentosAgregadoPage({
       quantidade_planejada: num(it.quantidade_planejada),
       dias_meses_planejado: num(it.dias_meses_planejado),
       planilha_origem: it.planilha_origem ?? null,
+      em_save: it.em_save === true,
+      save_consumido: num(it.save_consumido),
       bv: bvPorItem.get(it.id) ?? null,
     });
     itensPorGrupo.set(it.grupo_id, lista);

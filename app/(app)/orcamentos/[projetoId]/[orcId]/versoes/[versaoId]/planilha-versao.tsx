@@ -153,6 +153,7 @@ export function PlanilhaVersao({
         itens={itens}
         bvsPorItem={bvsPorItem}
         visao={visao}
+        saveVisivel={saveVisivel}
         percentualHonorarios={percentualHonorarios}
         percentualImposto={percentualImposto}
         moeda={moeda}

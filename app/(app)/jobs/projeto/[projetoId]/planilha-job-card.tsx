@@ -699,7 +699,7 @@ export function PlanilhaJobCard({
                   )}
                 >
                   <CelulaRentabilidade
-                    orcado={job.orcado}
+                    orcado={job.orcadoRentabilidade}
                     custo={valorNaVisao(job.planejado, visao)}
                     moeda={moeda}
                     corValor={RENTAB_VALOR}
@@ -720,7 +720,7 @@ export function PlanilhaJobCard({
                   )}
                 >
                   <CelulaRentabilidade
-                    orcado={job.orcado}
+                    orcado={job.orcadoRentabilidade}
                     custo={valorNaVisao(job.realizado, visao)}
                     moeda={moeda}
                     corValor={RENTAB_VALOR}

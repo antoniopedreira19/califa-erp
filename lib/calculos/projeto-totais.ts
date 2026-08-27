@@ -11,6 +11,9 @@ export type LinhaGrupoProjeto = {
   chaveNormalizada: string;
   nomeExibicao: string;
   orcado: number;
+  /** O orçado que serve de BASE À RENTABILIDADE — a linha em save fica de
+   *  fora (decisão 023 §9). Igual a `orcado` quando não há save. */
+  orcadoRentabilidade: number;
   planejado: number;
   realizado: number;
 };
@@ -21,6 +24,8 @@ export type JobParaAgregar = {
     id: string;
     grupo_id: string;
     total_orcado: number | string | null;
+    /** Ausente = igual ao orçado. Só a linha em save difere. */
+    orcado_rentabilidade?: number | string | null;
     total_planejado: number | string | null;
   }[];
   realizadosPorItemId: Map<string, { total_realizado: number | string | null }>;
@@ -48,6 +53,7 @@ export function agregarRentabilidadePorProjeto(
     nomeMaisRecente: string;
     createdAtMaisRecente: string;
     orcado: number;
+    orcadoRentabilidade: number;
     planejado: number;
     realizado: number;
   };
@@ -60,6 +66,14 @@ export function agregarRentabilidadePorProjeto(
 
       const orcadoGrp = itensDoGrupo.reduce(
         (s, i) => s + toNumber(i.total_orcado),
+        0,
+      );
+      const orcadoRentGrp = itensDoGrupo.reduce(
+        (s, i) =>
+          s +
+          (i.orcado_rentabilidade === undefined
+            ? toNumber(i.total_orcado)
+            : toNumber(i.orcado_rentabilidade)),
         0,
       );
       const planejadoGrp = itensDoGrupo.reduce(
@@ -78,11 +92,13 @@ export function agregarRentabilidadePorProjeto(
           nomeMaisRecente: grupo.nome,
           createdAtMaisRecente: grupo.created_at,
           orcado: orcadoGrp,
+          orcadoRentabilidade: orcadoRentGrp,
           planejado: planejadoGrp,
           realizado: realizadoGrp,
         });
       } else {
         atual.orcado += orcadoGrp;
+        atual.orcadoRentabilidade += orcadoRentGrp;
         atual.planejado += planejadoGrp;
         atual.realizado += realizadoGrp;
         if (grupo.created_at > atual.createdAtMaisRecente) {
@@ -97,6 +113,7 @@ export function agregarRentabilidadePorProjeto(
     chaveNormalizada: a.chaveNormalizada,
     nomeExibicao: a.nomeMaisRecente,
     orcado: a.orcado,
+    orcadoRentabilidade: a.orcadoRentabilidade,
     planejado: a.planejado,
     realizado: a.realizado,
   }));
@@ -109,10 +126,11 @@ export function agregarRentabilidadePorProjeto(
   const total = linhas.reduce(
     (acc, l) => ({
       orcado: acc.orcado + l.orcado,
+      orcadoRentabilidade: acc.orcadoRentabilidade + l.orcadoRentabilidade,
       planejado: acc.planejado + l.planejado,
       realizado: acc.realizado + l.realizado,
     }),
-    { orcado: 0, planejado: 0, realizado: 0 },
+    { orcado: 0, orcadoRentabilidade: 0, planejado: 0, realizado: 0 },
   );
 
   return { linhas, total };

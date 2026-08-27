@@ -181,13 +181,18 @@ export async function carregarPlanilhasDosJobs(
               total_orcado: it.total_orcado,
               total_planejado: it.total_planejado,
               bv_liquido_planejado: it.bv_liquido_planejado,
+              // Sem isto a visão agregada contaria a linha em save na
+              // rentabilidade e discordaria da Planilha Interna do job.
+              em_save: it.em_save,
             },
             bvPorItemVersao.get(it.item_versao_id) ?? null,
             real?.total ?? 0,
             aliquotaDoJob,
             jobAberto,
           );
-          const daPP = realizadoVemDasPPs(tipo) || !jobAberto;
+          // Linha em save não tem custo: nem PP, nem espelho do orçado.
+          const emSave = it.em_save === true;
+          const daPP = emSave || realizadoVemDasPPs(tipo) || !jobAberto;
           return {
             id: it.id,
             nome: it.item,
@@ -199,14 +204,15 @@ export async function carregarPlanilhasDosJobs(
             orcQt: num(it.quantidade_orcada),
             orcDm: num(it.dias_meses_orcado),
             orcTotal: num(it.total_orcado),
+            orcRentabilidade: blocos.orcadoRentabilidade,
             planUnit: num(it.valor_unitario_planejado),
             planQt: num(it.quantidade_planejada),
             planDm: num(it.dias_meses_planejado),
             // A quebra do realizado descreve as PPs; em `A` e `D`, que não
             // têm PP, ela espelha o orçado, como na planilha do job.
-            realUnit: daPP ? (real?.unit ?? 0) : num(it.valor_unitario_orcado),
-            realQt: daPP ? (real?.qt ?? 0) : num(it.quantidade_orcada),
-            realDm: daPP ? (real?.dm ?? 0) : num(it.dias_meses_orcado),
+            realUnit: emSave ? 0 : daPP ? (real?.unit ?? 0) : num(it.valor_unitario_orcado),
+            realQt: emSave ? 0 : daPP ? (real?.qt ?? 0) : num(it.quantidade_orcada),
+            realDm: emSave ? 0 : daPP ? (real?.dm ?? 0) : num(it.dias_meses_orcado),
             planejado: blocos.planejado,
             realizado: blocos.realizado,
           };
@@ -215,6 +221,7 @@ export async function carregarPlanilhasDosJobs(
       const somaDoGrupo = somarBlocosDosItens(
         itens.map((i) => ({
           orcado: i.orcTotal,
+          orcadoRentabilidade: i.orcRentabilidade,
           planejado: i.planejado,
           realizado: i.realizado,
         })),
@@ -225,6 +232,7 @@ export async function carregarPlanilhasDosJobs(
         nome: g.nome,
         itens,
         orcado: somaDoGrupo.orcado,
+        orcadoRentabilidade: somaDoGrupo.orcadoRentabilidade,
         planejado: somaDoGrupo.planejado,
         realizado: somaDoGrupo.realizado,
       };
@@ -246,6 +254,10 @@ export async function carregarPlanilhasDosJobs(
       itensDoJob.map((it) => ({
         tipo_custo: it.tipo_custo as TipoCusto,
         total_orcado: num(it.total_orcado),
+        // Sem os dois campos o fechamento voltaria a ser o de antes do
+        // save: `valorJob` cheio e `faturamentoPrevisto` sem o crédito.
+        em_save: it.em_save === true,
+        save_consumido: num(it.save_consumido),
       })),
       percentualHonorarios,
       percentualImposto,
@@ -268,11 +280,16 @@ export async function carregarPlanilhasDosJobs(
         const soma = somarBlocosDosItens(
           grupos.map((g) => ({
             orcado: g.orcado,
+            orcadoRentabilidade: g.orcadoRentabilidade,
             planejado: g.planejado,
             realizado: g.realizado,
           })),
         );
-        return { planejado: soma.planejado, realizado: soma.realizado };
+        return {
+          orcadoRentabilidade: soma.orcadoRentabilidade,
+          planejado: soma.planejado,
+          realizado: soma.realizado,
+        };
       })(),
       subtotaisPorTipo,
       honorarios,

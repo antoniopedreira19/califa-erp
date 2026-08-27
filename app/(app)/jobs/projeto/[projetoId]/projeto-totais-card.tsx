@@ -131,11 +131,18 @@ export function ProjetoTotaisCard({
   visao: VisaoBv;
 }) {
   const totalOrcado = jobs.reduce((s, j) => s + j.orcado, 0);
+  // Base da rentabilidade: o orçado sem as linhas em save, que são venda
+  // sem execução e não têm custo a comparar (decisão 023 §9).
+  const totalOrcadoRentabilidade = jobs.reduce(
+    (s, j) => s + j.orcadoRentabilidade,
+    0,
+  );
   // Blocos, e não números: a linha "+ BVs" do Resultado precisa da
   // dedução separada do bruto.
   const somaDosJobs = somarBlocosDosItens(
     jobs.map((j) => ({
       orcado: j.orcado,
+      orcadoRentabilidade: j.orcadoRentabilidade,
       planejado: j.planejado,
       realizado: j.realizado,
     })),
@@ -343,7 +350,7 @@ export function ProjetoTotaisCard({
                 )}
               >
                 <CelulaRentabilidade
-                  orcado={totalOrcado}
+                  orcado={totalOrcadoRentabilidade}
                   custo={totalPlanejado}
                   moeda={moeda}
                   corValor={RENTAB_VALOR}
@@ -364,7 +371,7 @@ export function ProjetoTotaisCard({
                 )}
               >
                 <CelulaRentabilidade
-                  orcado={totalOrcado}
+                  orcado={totalOrcadoRentabilidade}
                   custo={totalRealizado}
                   moeda={moeda}
                   corValor={RENTAB_VALOR}
@@ -440,7 +447,7 @@ export function ProjetoTotaisCard({
         <PainelResultado
           valorJob={valorJob}
           imposto={imposto}
-          orcado={totalOrcado}
+          orcado={totalOrcadoRentabilidade}
           custoPlanejado={totalPlanejado}
           custoRealizado={totalRealizado}
           honorarios={honorarios}

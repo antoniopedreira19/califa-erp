@@ -1923,3 +1923,78 @@ Conferido logado em 21/08/2026:
 | Orçamento (sem regressão no refactor) | 7 linhas → 2, rótulo alterna, subtotal fica |
 
 Zero erros de console em aba limpa e zero rolagem horizontal.
+
+---
+
+## ⚠️ 24–27/08/2026 — o SAVE no job
+
+**Regra:** `docs/decisions/023-save-entre-jobs.md`.
+**Contexto no orçamento:** ver o handoff de Orçamentos, mesma data.
+
+O save é crédito entre jobs: a linha marcada é faturada no job de origem,
+não entra no valor dele, e vira saldo que **outro job do mesmo cliente**
+consome. O saldo é do **job**, não da linha (nota de 26/08/2026 na decisão
+023): qualquer job do cliente consome, uma linha pode beber de vários, e
+nada fica reservado.
+
+### O que apareceu na Planilha Interna
+
+- Coluna **SAVE** à esquerda (15 → 16 colunas), com as pastilhas de
+  origem (`JOB-0020`, `JOB-0020 +1`) e de destino (`o saldo deste job já
+  foi consumido por JOB-0022`).
+- Marcar save e definir consumo **depois da abertura passam pela
+  ERRATA** (`save-errata-actions.ts`): os dois mudam o faturamento
+  previsto e o valor do job, que é exatamente o que a errata registra.
+- Linha em save não oferece **BV nem PP** na calha — os dois já eram
+  recusados no banco; agora a calha nem os mostra.
+- O card de Totais do job ganhou a mesma quebra em três colunas da tela
+  da versão (save usado · save gerado · custos do job), o "Saldo em save"
+  e o parágrafo que explica a divergência entre os dois totais.
+
+### Achados do teste ponta a ponta (27/08/2026)
+
+1. **A abertura não copiava a marca de save.** `enviarJobParaAbertura`
+   montava `jobs_itens_orcado` sem `em_save`/`save_consumido`. O job
+   nascia com os totais certos (calculados da versão) e a planilha
+   "normal": o crédito não existia, e o planejado do tipo `A` voltava a
+   espelhar o orçado pelo trigger. **Este era o pior achado do teste** —
+   o save simplesmente não atravessava para o job.
+2. **O consumo não mudava de ponta.** `saves_consumos` nasce apontando
+   para a linha da versão; na abertura ele tem de passar a apontar para a
+   cópia do job (`chk_save_consumo_uma_ponta` só admite uma ponta). Sem
+   isso o dinheiro em save nunca migrava para o job consumidor no fluxo
+   de caixa, e a errata do job — que apaga e recria por
+   `job_item_orcado_id` — teria contado o consumo duas vezes.
+   Migration acompanhante: `20260827000003`, que **congela o
+   `save_consumido` da versão aprovada** para que a migração da ponta não
+   zere o registro do que o cliente aprovou.
+3. **O job pago 100% por save ficava preso.** Faturamento previsto zero:
+   `enviarJobParaFaturamento` recusa valor zero e o encerramento só
+   aparecia depois do envio. A regra do Tiago (27/08) é que ele **pula a
+   etapa e se comporta como já faturado** — o portão do servidor
+   (`encerrarJob`) já tinha a exceção, faltava a tela. `carregar-detalhe`
+   passou a calcular `pagoSoPorSave` (faturamento zero **e** consumo de
+   save) e a barra de ações mostra o encerramento, com a frase que explica
+   por quê. O resumo de fechamento ganhou a linha "Pago com saldo em save
+   de outro job".
+4. **O envio para faturamento não dizia quanto era save.** O drawer ganhou
+   a leitura "Deste total, R$ X é saldo em save: o cliente paga agora e
+   gasta em outro job".
+5. **Job recusado pelo financeiro continuava oferecendo crédito.**
+   `vw_saves_por_job` não olhava o status. Migration `20260827000002`
+   exclui `rejeitado_financeiro` e `cancelado`. `aguardando_abertura` e
+   `encerrado` continuam valendo — o crédito é do cliente e sobrevive ao
+   encerramento da origem.
+
+### Depois do envio para faturamento, o save congela
+
+Marcar save e mexer em consumo passam pelo mesmo portão da errata
+(`jobJaEnviadoParaFaturamento` + `MENSAGEM_JA_ENVIADO`): *"Este job já foi
+enviado para faturamento. O valor da nota está congelado… Para corrigir,
+peça ao financeiro para desfazer o envio."*
+
+**Verificação:** conferido logado, no projeto TESTE-0005/26 · Revisão
+Save. JOB-0020 gerou R$ 60.000 de crédito, JOB-0021 nasceu de um orçamento
+de save inteiro (valor do job R$ 0,00), JOB-0022 consumiu R$ 45.000 de
+duas origens e JOB-0023 foi pago 100% por save, pulou o faturamento e
+**encerrou**. `tsc`, `lint` e `build` limpos.
