@@ -48,6 +48,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MoneyInput } from "@/components/ui/money-input";
 import { cn } from "@/lib/utils";
+import {
+  repartirEmJobESave,
+  rotuloDaQuebra,
+} from "@/lib/calculos/save-faturamento";
 import type { PlanoContaTipo, PlanoContaSubtipo } from "@/lib/types";
 import { emitirFaturamento, uploadNfPdf, urlAnexoNf } from "./actions";
 import type { FaturamentoPendenteRow, FaturadoRow } from "./faturamento-list";
@@ -336,12 +340,40 @@ export function FaturarDrawer({
             valor: totalNf,
           },
         ]
-      : itensAtivos.map((l) => ({
-          origem_tipo: l.origem_tipo,
-          origem_id: l.origem_id,
-          envio_parcela_id: l.envio_parcela_id,
-          valor: valores[l.envio_parcela_id ?? l.origem_id] ?? 0,
-        }));
+      : itensAtivos.flatMap((l) => {
+          const valor = valores[l.envio_parcela_id ?? l.origem_id] ?? 0;
+          // A parcela do envio vale o faturamento previsto inteiro, save
+          // incluído — e na nota isso sai em DOIS itens, porque cada um
+          // tem destino diferente no fluxo de caixa. Job primeiro: o save
+          // só começa depois que a parte do job está coberta, então
+          // faturar parcial não toca no save.
+          const parte = repartirEmJobESave(valor, l.saldo_proprio);
+          const itensDaLinha: Array<{
+            origem_tipo: "job" | "bv" | "save";
+            origem_id: string | null;
+            envio_parcela_id: string | null;
+            valor: number;
+          }> = [];
+          if (parte.job > 0.004) {
+            itensDaLinha.push({
+              origem_tipo: l.origem_tipo,
+              origem_id: l.origem_id,
+              envio_parcela_id: l.envio_parcela_id,
+              valor: parte.job,
+            });
+          }
+          if (parte.save > 0.004) {
+            itensDaLinha.push({
+              // O save sai na nota do job que o GEROU, e é ele que o
+              // `origem_id` aponta — o que separa os dois itens é o tipo.
+              origem_tipo: "save",
+              origem_id: l.origem_id,
+              envio_parcela_id: l.envio_parcela_id,
+              valor: parte.save,
+            });
+          }
+          return itensDaLinha;
+        });
 
     startTransition(async () => {
       const res = await emitirFaturamento({
@@ -466,6 +498,11 @@ export function FaturarDrawer({
                       const valor = valores[k] ?? 0;
                       const excede = valor > l.saldo + 0.01;
                       const parcial = !excede && valor > 0 && valor < l.saldo - 0.01;
+                      // A parcela pode carregar saldo em save, e aí a nota
+                      // sai com dois itens. Quem emite precisa ver isso
+                      // antes de assinar (docs/decisions/023).
+                      const quebra = repartirEmJobESave(valor, l.saldo_proprio);
+                      const rotuloQuebra = rotuloDaQuebra(quebra);
                       return (
                         <div
                           key={k}
@@ -484,7 +521,28 @@ export function FaturarDrawer({
                                   Parcial
                                 </span>
                               )}
+                              {rotuloQuebra && (
+                                <span className="shrink-0 rounded-full border border-[#c9c6bf] bg-[#f3f2ee] px-2 py-0.5 text-[9.5px] font-bold uppercase tracking-wide text-[#5f5d57]">
+                                  Save
+                                </span>
+                              )}
                             </div>
+                            {rotuloQuebra && (
+                              <span className="text-[11px] text-[#5f5d57]">
+                                {quebra.job > 0.004 ? (
+                                  <>
+                                    {formatMoney(quebra.job)} do job ·{" "}
+                                    <strong>{formatMoney(quebra.save)}</strong>{" "}
+                                    em saldo de save
+                                  </>
+                                ) : (
+                                  <>
+                                    <strong>{formatMoney(quebra.save)}</strong>{" "}
+                                    inteiros em saldo de save
+                                  </>
+                                )}
+                              </span>
+                            )}
                             <span className="font-mono text-[11px] text-muted-foreground">
                               {l.codigo} · parcela {l.parcela_numero}/{l.parcela_total} ·
                               valor {formatMoney(l.saldo)}

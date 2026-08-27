@@ -205,6 +205,10 @@ export default async function ContasReceberPage() {
       valor_ja_faturado: Number(r.valor_ja_faturado),
       saldo: Number(r.saldo),
       saldo_job: Number(r.saldo_job ?? r.saldo),
+      // Sem save, `saldo_proprio` é o próprio saldo — o `??` cobre a
+      // janela entre o deploy do código e o da view.
+      saldo_proprio: Number(r.saldo_proprio ?? r.saldo),
+      saldo_save: Number(r.saldo_save ?? 0),
       parcela_numero: Number(r.parcela_numero ?? 1),
       parcela_total: Number(r.parcela_total ?? 1),
       data_prevista: (r.data_prevista as string | null) ?? null,
