@@ -149,7 +149,13 @@ Duas correções que a conferência precisou para servir de leitura:
   **orçamento de hoje**. Com o job enviado passa a vir de `herdados`, que
   é o que o job congelou — o orçamento pode ter mudado desde então.
 
-⚠️ **O modo `somenteLeitura` de `EnviarJobModal` ficou inalcançável.**
-Nada mais aponta para ele. Não foi removido junto porque são ~40
-condicionais espalhadas pelo componente e a limpeza tem risco próprio,
-num fluxo em uso. Remover em task própria.
+**O modo `somenteLeitura` de `EnviarJobModal` foi removido**, em task
+própria logo depois (27/08/2026), com a leitura pela conferência já
+aprovada no navegador. Eram 25 pontos no componente — título, descrição,
+oito `disabled`, os ramos travados de Regional e Cidade, o contato
+"nenhum registrado", os botões de remover e adicionar contato, o texto do
+rodapé e o par Fechar/Confirmar. **O formulário agora só sabe editar.**
+
+`HerdadosJob` manteve `cidadeNome` e `regionalNome`: quem passou a lê-los
+é o resumo da conferência, que com o job enviado precisa mostrar o que o
+JOB congelou — não o que está no orçamento hoje.

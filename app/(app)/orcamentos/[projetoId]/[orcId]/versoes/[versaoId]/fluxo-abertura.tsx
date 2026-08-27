@@ -412,7 +412,6 @@ export function FluxoAbertura({
         onConfirmar={() => setModal("envio")}
         dados={dados}
         onChange={(patch) => setDados((d) => ({ ...d, ...patch }))}
-        somenteLeitura={etapa === "enviada"}
         orcamentoCodigo={orcamentoCodigo}
         projetoNome={projetoNome}
         projetoCodigo={projetoCodigo}

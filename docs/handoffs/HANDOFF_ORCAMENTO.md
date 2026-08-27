@@ -2520,11 +2520,15 @@ próximo número, e passa a vir de `job.codigo`; e **Cidade · Regional**
 vinha do formulário, pré-preenchido com o orçamento **de hoje**, e passa a
 vir de `herdados`, que é o que o job congelou.
 
-⚠️ **O modo `somenteLeitura` de `EnviarJobModal` ficou inalcançável.**
-Nada mais aponta para ele. Não removi junto: são ~40 condicionais
-espalhadas pelo componente e a limpeza tem risco próprio, num fluxo em
-uso. **É a próxima task, combinada com o Tiago em 27/08/2026** — depois de
-a conferência em leitura ter sido aprovada no navegador.
+**O modo `somenteLeitura` de `EnviarJobModal` foi removido** na sequência,
+em task própria, com a leitura pela conferência já aprovada no navegador
+(27/08/2026). Eram 25 pontos no componente; **o formulário agora só sabe
+editar**. `HerdadosJob` manteve `cidadeNome`/`regionalNome` porque o
+resumo da conferência passou a lê-los — é de lá que sai o que o job
+congelou. ⚠️ Conferido na tela nos dois caminhos: o formulário com os 17
+campos, todos os inputs habilitados e o botão de remover contato de volta;
+e o "Ver dados do job" do JOB-0020 com título "Dados do job" e só
+"Fechar".
 
 ⚠️⚠️ **Um comentário JSX órfão apagou quatro campos, e `tsc`, `next lint`
 e `npm run build` passaram limpos nos três.** Ao reordenar a grade, o

@@ -65,8 +65,10 @@ export interface DadosJob {
  * vêm do orçamento. O servidor relê os três do banco na hora de gravar —
  * o modal não pode alterá-los.
  *
- * `cidadeNome` e `regionalNome` continuam aqui só para o modo somente
- * leitura, que mostra o que ficou congelado no job já enviado.
+ * `cidadeNome` e `regionalNome` continuam aqui, mas não são lidos por
+ * este modal: quem os usa é o resumo da conferência, que com o job já
+ * enviado precisa mostrar o que o JOB congelou — e não o que está no
+ * orçamento hoje. Ver `resumoEnvio` em `fluxo-abertura.tsx`.
  */
 export interface HerdadosJob {
   produtoNome: string | null;
@@ -135,7 +137,6 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   /** Avança para a confirmação final. O estado vive no pai. */
   onConfirmar: () => void;
-  somenteLeitura?: boolean;
 
   /** Controlado pelo pai — é o que preserva o preenchimento no "Voltar e revisar". */
   dados: DadosJob;
@@ -171,7 +172,6 @@ export function EnviarJobModal({
   open,
   onOpenChange,
   onConfirmar,
-  somenteLeitura = false,
   dados,
   onChange,
   orcamentoCodigo,
@@ -260,13 +260,9 @@ export function EnviarJobModal({
             <Briefcase className="h-5 w-5" />
           </div>
           <div className="min-w-0 space-y-1">
-            <DialogTitle className="text-xl">
-              {somenteLeitura ? "Dados do job" : "Enviar job para abertura"}
-            </DialogTitle>
+            <DialogTitle className="text-xl">Enviar job para abertura</DialogTitle>
             <DialogDescription>
-              {somenteLeitura
-                ? `Job já enviado para abertura. Estes são os dados gravados a partir de ${orcamentoCodigo}.`
-                : `Confira as informações essenciais. Alterações em nome, cidade, regional e datas são gravadas também no orçamento ${orcamentoCodigo}.`}
+              {`Confira as informações essenciais. Alterações em nome, cidade, regional e datas são gravadas também no orçamento ${orcamentoCodigo}.`}
             </DialogDescription>
           </div>
         </DialogHeader>
@@ -293,7 +289,6 @@ export function EnviarJobModal({
           >
             <Input
               value={dados.nome}
-              disabled={somenteLeitura}
               onChange={(e) => onChange({ nome: e.target.value })}
               maxLength={200}
               className={cn(
@@ -324,44 +319,38 @@ export function EnviarJobModal({
             obrigatorio
             erro={erroDe("regional_id")}
             apoio={
-              somenteLeitura
-                ? undefined
-                : regionaisDoProjeto.length === 0
-                  ? "O projeto não tem regional cadastrada. Edite o projeto."
-                  : "Opções vindas das regionais do projeto."
+              regionaisDoProjeto.length === 0
+                ? "O projeto não tem regional cadastrada. Edite o projeto."
+                : "Opções vindas das regionais do projeto."
             }
           >
-            {somenteLeitura ? (
-              <Travado valor={herdados.regionalNome ?? "— não informada"} />
-            ) : (
-              <Select
-                value={dados.regionalId}
-                onValueChange={(v) => onChange({ regionalId: v })}
-                disabled={regionaisDoProjeto.length === 0}
+            <Select
+              value={dados.regionalId}
+              onValueChange={(v) => onChange({ regionalId: v })}
+              disabled={regionaisDoProjeto.length === 0}
+            >
+              <SelectTrigger
+                className={cn(
+                  erroDe("regional_id") &&
+                    "border-california-red ring-2 ring-california-red/15",
+                )}
               >
-                <SelectTrigger
-                  className={cn(
-                    erroDe("regional_id") &&
-                      "border-california-red ring-2 ring-california-red/15",
-                  )}
-                >
-                  <SelectValue
-                    placeholder={
-                      regionaisDoProjeto.length === 0
-                        ? "Projeto sem regional cadastrada"
-                        : "Selecione a regional"
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {regionaisDoProjeto.map((r) => (
-                    <SelectItem key={r.id} value={r.id}>
-                      {r.nome}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
+                <SelectValue
+                  placeholder={
+                    regionaisDoProjeto.length === 0
+                      ? "Projeto sem regional cadastrada"
+                      : "Selecione a regional"
+                  }
+                />
+              </SelectTrigger>
+              <SelectContent>
+                {regionaisDoProjeto.map((r) => (
+                  <SelectItem key={r.id} value={r.id}>
+                    {r.nome}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </Campo>
 
           <Campo rotulo="GP Responsável">
@@ -376,26 +365,18 @@ export function EnviarJobModal({
             rotulo="Cidade"
             obrigatorio
             erro={erroDe("cidade_id")}
-            apoio={
-              somenteLeitura
-                ? undefined
-                : "Se alterar, o orçamento é atualizado na confirmação."
-            }
+            apoio="Se alterar, o orçamento é atualizado na confirmação."
           >
-            {somenteLeitura ? (
-              <Travado valor={herdados.cidadeNome ?? "— não informada"} />
-            ) : (
-              <CidadeCombobox
-                value={
-                  dados.cidadeId
-                    ? { id: dados.cidadeId, nome: dados.cidadeNome }
-                    : null
-                }
-                onChange={(c) => onChange({ cidadeId: c.id, cidadeNome: c.nome })}
-                iniciais={cidadesIniciais}
-                erro={Boolean(erroDe("cidade_id"))}
-              />
-            )}
+            <CidadeCombobox
+              value={
+                dados.cidadeId
+                  ? { id: dados.cidadeId, nome: dados.cidadeNome }
+                  : null
+              }
+              onChange={(c) => onChange({ cidadeId: c.id, cidadeNome: c.nome })}
+              iniciais={cidadesIniciais}
+              erro={Boolean(erroDe("cidade_id"))}
+            />
           </Campo>
 
           <Campo rotulo="Produtor Responsável">
@@ -412,7 +393,6 @@ export function EnviarJobModal({
               key={`inicio-${dados.dataInicio}`}
               name="__job_data_inicio"
               defaultValue={dados.dataInicio}
-              disabled={somenteLeitura}
               onDateChange={(d) => onChange({ dataInicio: d ? toIso(d) : "" })}
               className={cn(
                 erroDe("data_inicio_prevista") &&
@@ -426,7 +406,6 @@ export function EnviarJobModal({
               key={`fim-${dados.dataFim}`}
               name="__job_data_fim"
               defaultValue={dados.dataFim}
-              disabled={somenteLeitura}
               onDateChange={(d) => onChange({ dataFim: d ? toIso(d) : "" })}
               className={cn(
                 erroDe("data_fim_prevista") &&
@@ -444,7 +423,6 @@ export function EnviarJobModal({
               key={`evento-${dados.dataEvento}`}
               name="__job_data_evento"
               defaultValue={dados.dataEvento}
-              disabled={somenteLeitura}
               onDateChange={(d) => onChange({ dataEvento: d ? toIso(d) : "" })}
               className={cn(
                 erroDe("data_evento") &&
@@ -465,7 +443,6 @@ export function EnviarJobModal({
               key={`fat-${dados.dataFaturamento}`}
               name="__job_data_faturamento"
               defaultValue={dados.dataFaturamento}
-              disabled={somenteLeitura}
               onDateChange={(d) => onChange({ dataFaturamento: d ? toIso(d) : "" })}
               className={cn(
                 erroDe("data_prevista_faturamento") &&
@@ -481,93 +458,78 @@ export function EnviarJobModal({
               o financeiro usa para cobrar, e muda de job para job. */}
           <Campo
             rotulo="Contato de cobrança"
-            obrigatorio={!somenteLeitura}
+            obrigatorio
             className="md:col-span-3"
             erro={erroContatos}
             apoio="Quem recebe a cobrança no cliente. Número é opcional."
           >
-            {somenteLeitura && dados.contatos.length === 0 ? (
-              <Travado valor="— nenhum contato registrado" />
-            ) : (
-              <div className="space-y-2">
-                {dados.contatos.map((c, i) => (
-                  <div
-                    // Índice como chave: as linhas não têm id antes de
-                    // gravar, e remover sempre refaz o array inteiro.
-                    key={i}
-                    className="grid items-center gap-2 md:grid-cols-[1fr_1fr_1fr_36px]"
-                  >
-                    <Input
-                      value={c.nome}
-                      disabled={somenteLeitura}
-                      onChange={(e) => alterarContato(i, { nome: e.target.value })}
-                      maxLength={120}
-                      placeholder="Nome"
-                      aria-label={`Nome do contato ${i + 1}`}
-                      className={cn(
-                        tentou &&
-                          nomeContatoInvalido(c) &&
-                          "border-california-red ring-2 ring-california-red/15",
-                      )}
-                    />
-                    <Input
-                      value={c.numero}
-                      disabled={somenteLeitura}
-                      onChange={(e) =>
-                        alterarContato(i, { numero: e.target.value })
-                      }
-                      maxLength={40}
-                      placeholder="Número · opcional"
-                      aria-label={`Número do contato ${i + 1}`}
-                    />
-                    <Input
-                      type="email"
-                      value={c.email}
-                      disabled={somenteLeitura}
-                      onChange={(e) => alterarContato(i, { email: e.target.value })}
-                      maxLength={200}
-                      placeholder="E-mail"
-                      aria-label={`E-mail do contato ${i + 1}`}
-                      className={cn(
-                        tentou &&
-                          emailContatoInvalido(c) &&
-                          "border-california-red ring-2 ring-california-red/15",
-                      )}
-                    />
-                    {!somenteLeitura && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          onChange({
-                            contatos: dados.contatos.filter(
-                              (_, idx) => idx !== i,
-                            ),
-                          })
-                        }
-                        disabled={dados.contatos.length === 1}
-                        aria-label={`Remover contato ${i + 1}`}
-                        className="flex items-center justify-center rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-california-red transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
+            <div className="space-y-2">
+              {dados.contatos.map((c, i) => (
+                <div
+                  // Índice como chave: as linhas não têm id antes de
+                  // gravar, e remover sempre refaz o array inteiro.
+                  key={i}
+                  className="grid items-center gap-2 md:grid-cols-[1fr_1fr_1fr_36px]"
+                >
+                  <Input
+                    value={c.nome}
+                    onChange={(e) => alterarContato(i, { nome: e.target.value })}
+                    maxLength={120}
+                    placeholder="Nome"
+                    aria-label={`Nome do contato ${i + 1}`}
+                    className={cn(
+                      tentou &&
+                        nomeContatoInvalido(c) &&
+                        "border-california-red ring-2 ring-california-red/15",
                     )}
-                  </div>
-                ))}
-
-                {!somenteLeitura && (
+                  />
+                  <Input
+                    value={c.numero}
+                    onChange={(e) => alterarContato(i, { numero: e.target.value })}
+                    maxLength={40}
+                    placeholder="Número · opcional"
+                    aria-label={`Número do contato ${i + 1}`}
+                  />
+                  <Input
+                    type="email"
+                    value={c.email}
+                    onChange={(e) => alterarContato(i, { email: e.target.value })}
+                    maxLength={200}
+                    placeholder="E-mail"
+                    aria-label={`E-mail do contato ${i + 1}`}
+                    className={cn(
+                      tentou &&
+                        emailContatoInvalido(c) &&
+                        "border-california-red ring-2 ring-california-red/15",
+                    )}
+                  />
                   <button
                     type="button"
                     onClick={() =>
-                      onChange({ contatos: [...dados.contatos, contatoVazio()] })
+                      onChange({
+                        contatos: dados.contatos.filter((_, idx) => idx !== i),
+                      })
                     }
-                    className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-border bg-white px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:border-california-red/40 hover:text-foreground transition-colors"
+                    disabled={dados.contatos.length === 1}
+                    aria-label={`Remover contato ${i + 1}`}
+                    className="flex items-center justify-center rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-california-red transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
                   >
-                    <Plus className="h-3 w-3" />
-                    Adicionar contato
+                    <Trash2 className="h-3.5 w-3.5" />
                   </button>
-                )}
-              </div>
-            )}
+                </div>
+              ))}
+
+              <button
+                type="button"
+                onClick={() =>
+                  onChange({ contatos: [...dados.contatos, contatoVazio()] })
+                }
+                className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-border bg-white px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:border-california-red/40 hover:text-foreground transition-colors"
+              >
+                <Plus className="h-3 w-3" />
+                Adicionar contato
+              </button>
+            </div>
           </Campo>
 
           <div className="rounded-xl border border-border bg-muted/40 px-4 py-2.5 md:col-span-3">
@@ -629,7 +591,6 @@ export function EnviarJobModal({
           >
             <Textarea
               value={dados.observacoes}
-              disabled={somenteLeitura}
               onChange={(e) => onChange({ observacoes: e.target.value })}
               maxLength={OBSERVACOES_MAX}
               rows={2}
@@ -641,7 +602,7 @@ export function EnviarJobModal({
             />
           </Campo>
 
-          {!somenteLeitura && faltandoHerdados.length > 0 && (
+          {faltandoHerdados.length > 0 && (
             <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 md:col-span-3">
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
               <span>
@@ -660,14 +621,8 @@ export function EnviarJobModal({
 
         <div className="flex shrink-0 items-center justify-between gap-4 border-t border-border bg-muted/30 px-6 py-3">
           <span className="text-xs text-muted-foreground">
-            {somenteLeitura ? (
-              "Job já enviado — os dados não podem mais ser alterados por aqui."
-            ) : (
-              <>
-                Campos com <span className="text-california-red">*</span> são
-                obrigatórios para a abertura.
-              </>
-            )}
+            Campos com <span className="text-california-red">*</span> são
+            obrigatórios para a abertura.
           </span>
           <div className="flex items-center gap-2.5">
             <button
@@ -675,23 +630,21 @@ export function EnviarJobModal({
               onClick={() => onOpenChange(false)}
               className="rounded-lg border border-border bg-white px-4 py-2 text-sm font-semibold text-foreground hover:bg-accent transition-colors"
             >
-              {somenteLeitura ? "Fechar" : "Cancelar"}
+              Cancelar
             </button>
-            {!somenteLeitura && (
-              <button
-                type="button"
-                onClick={handleConfirmar}
-                className={cn(
-                  "inline-flex items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white transition-all",
-                  completo && faltandoHerdados.length === 0
-                    ? "hover:bg-california-red-hover hover:shadow-brand"
-                    : "opacity-50",
-                )}
-              >
-                Confirmar dados
-                <ArrowRight className="h-4 w-4" />
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={handleConfirmar}
+              className={cn(
+                "inline-flex items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white transition-all",
+                completo && faltandoHerdados.length === 0
+                  ? "hover:bg-california-red-hover hover:shadow-brand"
+                  : "opacity-50",
+              )}
+            >
+              Confirmar dados
+              <ArrowRight className="h-4 w-4" />
+            </button>
           </div>
         </div>
       </DialogContent>
