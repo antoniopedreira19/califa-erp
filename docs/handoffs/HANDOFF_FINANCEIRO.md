@@ -1778,6 +1778,247 @@ acompanhavam a chave — os valores trocavam, mas o cabeçalho continuava
 
 ---
 
+## ⚠️ 2026-08-24 — A planilha de conferência acompanhou a tabela única
+
+**Origem:** projeto Claude Design `69342d83`,
+`Planilha Interna - Grupos Unificados.dc.html`. Regra transversal em
+`docs/decisions/024-planilha-em-tabela-unica.md`.
+
+A conferência da abertura (`/financeiro/abertura-de-job/[jobId]/planilha`)
+e o job na visão do financeiro (`/financeiro/jobs/[jobId]`) mostram a
+MESMA planilha da produção — então mudaram junto, sem decisão própria:
+uma tabela só, agrupamento em linha, rentabilidade no vão de PLANEJADO e
+REALIZADO, e **TOTAL DA PLANILHA** fechando a tabela.
+
+Nada mudou no que estas telas permitem: a conferência segue leitura pura
+(sem errata, sem BV, sem PP) e o realizado segue zerado antes da abertura.
+O que era `JobGrupoCard` virou o próprio `JobItemRealizadoTable`, que
+agora recebe todos os agrupamentos de uma vez.
+
+O projeto do financeiro (`/financeiro/projetos/[projetoId]`) usa o mesmo
+`PlanilhasDoProjeto` da produção e acompanhou a correção da visão
+agregada — ver o handoff de Jobs.
+
+**Verificação:** conferido logado em 24/08/2026 na conferência do JOB-0012.
+
+---
+
+## ⚠️ 2026-08-24 — "Visualizar Jobs" ganhou Recebimentos, Custos e o seletor de organização
+
+**Origem:** projeto Claude Design `69342d83`,
+`Abertura de Job - Financeiro.dc.html`. Regra transversal em
+`docs/decisions/025-recebimentos-e-custos-na-lista-de-jobs.md`.
+
+**Isto altera a tabela descrita na seção 27** (`Jobs Abertos alinhado ao
+design`) e a coluna Faturamento da seção 29 continua exatamente como
+estava — as duas colunas novas ficam à direita dela, não a substituem.
+
+### As duas colunas novas
+
+**Recebimentos** (verde) e **Custos** (grafite-vermelho) mostram o número
+mais atual do job: movimentado + título + previsão em aberto, somados de
+`vw_fluxo_caixa` pela view nova `vw_fluxo_caixa_job_totais`. Cada célula
+traz uma segunda linha dizendo o que o número de cima não conta sozinho:
+
+| segunda linha | quando |
+| --- | --- |
+| `62% recebido` / `40% realizado` | há movimento na conta |
+| `nada recebido` / `sem realizado` | só previsão ou título, nada movimentado |
+| `previsto na abertura` | fallback — o job não tem nada daquele lado no caixa |
+| `sem previsão` | o total é zero |
+
+O fallback e o porquê dele estão na decisão 025, seção 4. Em resumo: sem
+ele, 9 dos 13 jobs de hoje nasceriam com Recebimentos R$ 0,00, porque são
+anteriores à `jobs_previsao_recebimento`.
+
+Os dois totais entraram na linha de resumo do topo (somando o que os
+filtros deixaram visível) e nas faixas de projeto, somando os jobs do
+grupo.
+
+### O seletor "Organizar por"
+
+Pastilha no canto direito da linha de resumo, mesma forma da chave
+Bruto/Líquido da planilha:
+
+- **Por projeto** (padrão) — a tela de sempre: faixa do projeto, jobs
+  embaixo, "Visão agregada" na faixa.
+- **Por job** — lista corrida, sem faixa, ordenada pela abertura mais
+  recente. O **código do projeto vira link** para a visão agregada
+  (`/financeiro/projetos/[id]`) — decisão do Tiago: sem a faixa, é por
+  ele que se chega lá. Job sem projeto do financeiro mostra o código da
+  produção como texto, porque essa tela não existe para ele.
+
+O padrão continua "Por projeto": é a arrumação que o financeiro já tinha.
+Os chips da esteira, os quatro filtros e a busca valem igual nas duas
+visões — a base é a mesma lista filtrada.
+
+### A coluna Empresa saiu
+
+Das duas visões. Decisão do Tiago (24/08/2026): "Empresa não precisa ser
+um campo visível em nenhum dos casos — sempre será a empresa
+selecionada". O seletor de empresa não existe ainda e não entra agora,
+então a coluna só ocupava largura. Saiu junto o embed
+`empresa:empresas(...)` da query, que não tinha outro consumidor.
+
+### Arquivos
+
+- `supabase/migrations/20260824000001_vw_fluxo_caixa_job_totais.sql` — view nova
+- `lib/data/caixa-por-job.ts` — leitura da view (novo)
+- `app/(app)/financeiro/abertura-de-job/dados-abertos.ts` — campos novos e o fallback
+- `app/(app)/financeiro/abertura-de-job/jobs-abertos-list.tsx` — as duas visões
+
+**Verificação (2026-08-24, logado):** `npx tsc --noEmit` e `npm run lint`
+limpos, `npm run build` passou. A view foi conferida pelo MCP — `SELECT`
+só para `authenticated`, nada para `anon`.
+
+Na tela, com os 13 jobs do tenant:
+
+- os números batem job a job com a `vw_fluxo_caixa`. JOB-0015 sai com
+  Recebimentos R$ 38.795,58 · `21% recebido` e Custos R$ 20.000,00 ·
+  `80% realizado`; JOB-0004 cai no fallback e mostra R$ 513.673,17 ·
+  `previsto na abertura`; JOB-0008 e JOB-0009, sem curva, mostram
+  R$ 0,00 · `sem previsão`;
+- os totais do topo fecham com a soma das faixas — Recebimentos
+  R$ 1.418.462,11 e Custos R$ 717.460,00;
+- as duas visões trocam pelo seletor, e os chips e filtros valem nas
+  duas: com "Faturado" (zero jobs hoje) a lista corrida cai no mesmo
+  empty state e os totais zeram;
+- na visão Por job, o código do projeto abre
+  `/financeiro/projetos/[id]` e o resto da linha abre
+  `/financeiro/jobs/[id]` — conferidos os dois.
+
+Console e log do servidor limpos. Uma correção saiu daqui: os códigos de
+job e de projeto quebravam em duas linhas nas colunas mais estreitas —
+`whitespace-nowrap` nos quatro pontos.
+
+---
+
+## ⚠️ 2026-08-26 — O fluxo de caixa do job perdia dinheiro em dois pontos
+
+Investigação a partir de um sintoma do Tiago: a aba **Fluxo de Caixa do
+Job** do JOB-0013 estava com a coluna Entradas inteira vazia e mostrava
+R$ 25.000,00 de saída onde a abertura previa R$ 65.000,00. A tela e o
+`lib/calculos/fluxo-caixa-matriz.ts` estavam certos — os dois furos eram
+de leitura, na `vw_fluxo_caixa`.
+
+Regras novas em [decisão 027](../decisions/027-pp-aprovada-e-a-composicao-do-fluxo-do-job.md).
+Migrations `20260826000001`, `20260826000002` e `20260826000003`.
+
+**1. PP em avaliação abatia a curva sem virar título.** `itens_com_pp`
+aceitava tudo que não fosse cancelada/rejeitada; o branch da PP só
+emitia `aprovada`/`pago`. Entre criar e aprovar, o custo sumia. No
+JOB-0013 escondia R$ 40.000,00 (planejado do item da PP-00008, que está
+`em_avaliacao`). Agora os dois filtros são o mesmo: **PP aprovada é
+título**.
+
+**2. Recebimento pago sumia do job.** `dar_baixa_titulo`,
+`dar_baixa_titulo_com_plano` e `estornar_baixa_titulo` gravam o
+lançamento **sem `job_id`** — as únicas três de oito RPCs de baixa que
+não gravam. A linha "Já movimentado / Entradas" era estruturalmente
+zero. O conserto não é preencher a coluna (uma nota soma vários jobs):
+a view passa a ratear o lançamento por `titulo_receber_id` →
+`fat_composicao`, a mesma régua da classe `titulo`. **Nenhuma RPC foi
+tocada** — inclusive para não encostar nas que a outra frente reescreveu
+em 25/08 (`20260825000002`, `20260825000005`).
+
+**3. Composição do valor no hover/clique.** Toda célula da matriz abre a
+lista dos documentos que a formam — as três sub-linhas, o total de cada
+natureza, o **Líquido do período** e a contribuição por job da visão
+agregada. É o que nomeia o estorno de PP como estorno *daquela* PP: ele
+continua somando na linha de movimento (o número é o do extrato, por
+decisão do Tiago), mas deixa de se passar por recebimento de cliente.
+Coluna nova `vw_fluxo_caixa.origem_lancamento` carrega
+`lancamentos_financeiros.origem` para isso.
+
+No líquido — a única célula onde entrada e saída convivem — cada item sai
+com sinal (`+` verde, `−` vermelho) e a cor do valor vem do sinal, não da
+natureza. O **Saldo acumulado** ficou de fora: sendo soma corrida, a
+composição dele seria a matriz inteira repetida em cada coluna.
+
+**3b. "Curva de desembolso" agora é "Cronograma de desembolsos".** O mesmo
+conceito tinha três nomes na interface. O nome único fica um nível abaixo
+de "Previsão de custos", que já é o `<h2>` da seção que o contém no form
+de Abertura do Job. Trocado na sub-linha da aba, no form de abertura
+(bloco, subtítulo e 4 mensagens de erro) e na `descricao` do branch 6 da
+view — que virou `Cronograma de desembolsos · JOB-0013 1/2`, no formato
+do branch de recebimento. ⚠️ Como esse texto vem do banco, a tela geral
+`/financeiro/fluxo-caixa` também passa a exibir o nome novo.
+
+**4. Avulsa e desembolso saem do título do job.** Só PP abate a curva,
+então avulsa/desembolso aprovados apareceriam como dívida a mais. No
+recorte por job eles só entram depois da baixa; no Fluxo de Caixa geral
+continuam como estão. Hoje não muda número: nenhuma das duas está
+vinculada a job.
+
+**5. "Saldo do job hoje" era o mês inteiro, com as três classes.** Isso
+brigava com a rolagem da decisão 018 §3: a previsão do JOB-0013 rolou de
+19/08 para 27/08 — amanhã, mas ainda em agosto —, e a coluna do mês a
+trazia de volta. O card mostrava R$ 104.064,87 "já movimentados" num job
+sem um centavo na conta. Agora soma só a classe `movimento`, por DATA e
+até hoje, que é o que o subtítulo sempre prometeu. Título vencido e não
+pago fica de fora (decisão do Tiago). `saldoFim` não muda.
+
+**6. Backfill.** 8 dos 10 jobs abertos ganharam previsão de recebimento
+(parcela única = `faturamento_previsto` em `data_prevista_faturamento`).
+JOB-0001 e JOB-0002 ficaram sem — `data_prevista_faturamento` nula.
+
+⚠️ **Os números da nota de 2026-08-24 acima envelheceram.** O JOB-0015
+saía com Recebimentos R$ 38.795,58 · `21% recebido` e Custos
+R$ 20.000,00 · `80% realizado`; depois destes consertos sai com
+Recebimentos R$ 49.754,69 · `38% recebido` e Custos R$ 20.000,00 ·
+`80% realizado`. O JOB-0013 saiu de R$ 25.000,00 para R$ 65.000,00 de
+custo. Os totais do topo mudam na mesma proporção.
+
+**Verificação (2026-08-26):** `npm run typecheck` e `npm run lint`
+limpos. Banco conferido pelo MCP: soma dos lançamentos preservada ao
+centavo depois do rateio e depois do rename (entrada R$ 18.959,11 e saída
+R$ 16.000,00 em `lancamentos_financeiros` e na classe `movimento` da
+view), `SELECT` só para `authenticated` nas duas views, backfill sem
+sobrescrever nenhuma previsão existente.
+
+O componente foi exercitado numa rota temporária sem sessão (removida em
+seguida, junto da liberação no `isPublicRoute`) com os dados reais do
+JOB-0015 mais um mês de líquido negativo montado de propósito. Conferidos
+no navegador:
+
+- a tabela não quebra com o `PopoverAnchor` no `<td>`;
+- Entradas 08/2026 = R$ 18.959,11 abre em `NF 900123/1 · RECEBIMENTO DE
+  TÍTULO` + 2 × `PP-00009 3/3 · ESTORNO DE PP` (fundo âmbar);
+- Saídas 08/2026 = R$ 16.000,00 abre em 2 × `BAIXA DE PP` + 2 ×
+  `BAIXA DE PP (ESTORNADA)` da mesma parcela 3/3 — que é a explicação do
+  número dobrado que o Tiago decidiu manter;
+- Líquido 09/2026 = −R$ 59.081,77 abre em `+ R$ 5.918,23` de faturamento
+  previsto e `− R$ 40.000,00` / `− R$ 25.000,00` de
+  `CRONOGRAMA DE DESEMBOLSOS`, nessa ordem, e a célula fica vermelha;
+- hover abre com atraso, clique fixa, e dois popovers fixados convivem.
+
+Duas correções saíram daí: o código do documento estava sendo truncado
+por dividir a linha com o selo (foi para linha própria), e nas linhas de
+previsão o selo e a descrição repetiam a mesma frase (a descrição some
+quando é igual ao rótulo).
+
+**A verificação logada, na tela real, fica com o Tiago.**
+
+**Conferência logada (2026-08-26, Tiago logou e a sessão foi verificada
+na tela real):** JOB-0013 saiu de Entradas vazias e R$ 25.000,00 de saída
+para R$ 104.064,87 de entrada prevista e R$ 65.000,00 de saída, com os
+prazos de recebimento (0 e 2 dias) que antes eram travessão; JOB-0015
+passou a mostrar R$ 18.959,11 em "já movimentado" das Entradas — o
+recebimento de R$ 10.959,11 que sumia mais os dois estornos —, e a
+composição no hover nomeia cada um. Líquido do período abre com sinal. A
+lista "Visualizar Jobs" bate: JOB-0015 com `R$ 49.754,69 · 38% recebido`
+e `R$ 20.000,00 · 80% realizado`; JOB-0013 com `R$ 65.000,00 · sem
+realizado`. Depois do conserto do saldo de hoje, JOB-0013 mostra R$ 0,00
+e JOB-0015 segue em R$ 2.959,11. Console limpo.
+
+⚠️ **Armadilha de dev que custou tempo aqui:** um `ReferenceError:
+quantos is not defined` apareceu no console e derrubou a aba inteira pelo
+error boundary. Não era bug no código — era chunk velho de HMR, do
+instante em que a variável era usada antes de ser declarada. `tsc` passa
+e o repo está correto; o que resolve é parar o dev server, apagar
+`.next/cache/webpack` e subir de novo. Buffer de console também sobrevive
+ao restart: confira numa aba nova antes de acreditar no erro.
+
 ## ⚠️ 24–27/08/2026 — o SAVE no financeiro
 
 **Regra:** `docs/decisions/023-save-entre-jobs.md`, com as regras de fluxo

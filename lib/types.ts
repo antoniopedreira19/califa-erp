@@ -977,7 +977,7 @@ export interface PedidoCompra {
   codigo: string;
   item_realizado_id: string;
   job_id: string;
-  fornecedor_id: string;
+  fornecedor_id: string | null;
   empresa_id: string;
   servico: string;
   quantidade: number;
@@ -986,6 +986,9 @@ export interface PedidoCompra {
   prazo_pagamento: string;
   pdf_path: string;
   emitida_por: string | null;
+  // Verba de Produção (subtipo de PP — pago ao responsável em vez do fornecedor)
+  verba_producao: boolean;
+  responsavel_verba_id: string | null;
   // Fase 2
   status: PPStatus;
   prazo_pagamento_financeiro: string | null;
@@ -998,8 +1001,6 @@ export interface PedidoCompra {
   rejeitada_por: string | null;
   rejeitada_em: string | null;
   motivo_rejeicao: string | null;
-  forma_pagamento: FormaPagamento | null;
-  cartao_credito_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -1283,6 +1284,8 @@ export interface PedidoCompraNaLista extends PedidoCompra {
     arquivo_nome_original: string;
     arquivo_tamanho_bytes: number;
   }>;
+  /** Perfil do responsável pela verba, quando verba_producao = true. */
+  responsavel?: { nome: string | null } | null;
 }
 
 export interface PedidoCompraAnexo {
@@ -1295,6 +1298,65 @@ export interface PedidoCompraAnexo {
   arquivo_mimetype: string;
   created_by: string | null;
   created_at: string;
+}
+
+export interface PPVerbaDevolucao {
+  id: string;
+  tenant_id: string;
+  empresa_id: string;
+  prestacao_id: string;
+  pedido_compra_id: string;
+  valor: number;
+  data_pagamento: string;
+  data_pagamento_primeira: string;
+  pago_em: string | null;
+  pago_por: string | null;
+  lancamento_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PPVerbaPrestacao {
+  id: string;
+  tenant_id: string;
+  pedido_compra_id: string;
+  valor_gasto: number;
+  valor_devolvido: number;
+  fechada_em: string;
+  fechada_por: string;
+}
+
+export interface PPVerbaPrestacaoAnexo {
+  id: string;
+  tenant_id: string;
+  prestacao_id: string;
+  arquivo_path: string;
+  arquivo_nome_original: string;
+  arquivo_tamanho_bytes: number;
+  arquivo_mimetype: string;
+  created_by: string | null;
+  created_at: string;
+}
+
+/**
+ * Rótulo da contraparte de uma PP.
+ *
+ * Quando é Verba de Produção, o "fornecedor" é o responsável pela verba,
+ * e o rótulo vira "Verba de Produção — {Nome do responsável}". Nas PPs
+ * normais, retorna a razão social ou o nome do fornecedor.
+ *
+ * Centraliza a decisão para garantir que qualquer lista de PP exiba o
+ * mesmo texto — sem divergência entre contas-a-pagar, chat e painel.
+ */
+export function nomeContraparteBRPP(pp: {
+  verba_producao?: boolean | null;
+  fornecedor?: { nome?: string | null; razao_social?: string | null } | null;
+  responsavel?: { nome?: string | null } | null;
+}): string {
+  if (pp.verba_producao) {
+    return `Verba de Produção — ${pp.responsavel?.nome ?? "sem responsável"}`;
+  }
+  return pp.fornecedor?.razao_social ?? pp.fornecedor?.nome ?? "";
 }
 
 export const PP_ANEXO_MIMETYPES_ACEITOS = [
@@ -1385,6 +1447,9 @@ export type OrigemLancamento =
   | "desembolso_baixa"
   | "desembolso_baixa_estornada"
   | "desembolso_estorno"
+  | "pp_devolucao_verba"
+  | "pp_devolucao_verba_estornada"
+  | "pp_devolucao_verba_estorno"
   | "manual";
 
 export interface LancamentoFinanceiro {
@@ -1419,6 +1484,18 @@ export interface LancamentoFinanceiro {
    * que não veio de baixa de parcela de desembolso.
    */
   desembolso_parcela_id: string | null;
+  /**
+   * Devolução de verba que este lançamento quitou (via pp_devolucao_verba)
+   * ou estornou. Nulo em outras origens.
+   */
+  pp_verba_devolucao_id: string | null;
+  /**
+   * Forma de pagamento efetivamente usada na baixa. Nulo em lançamentos
+   * anteriores a 25/08/2026 e em origem 'manual' sem forma definida.
+   */
+  forma_pagamento: FormaPagamento | null;
+  /** Cartão usado quando forma = cartao_credito. */
+  cartao_credito_id: string | null;
   estorno_de_lancamento_id: string | null;
   origem: OrigemLancamento;
   criado_por: string;
@@ -1666,15 +1743,22 @@ export interface ContaAvulsa {
  * não tem tabela própria (decisão do plano: sem tabela-espelho). Ela
  * nasce da união de duas fontes, e a origem se deduz assim:
  *
- *   pp          → parcela de `pedidos_compra_parcelas` de PP aprovada
- *   avulso      → `contas_avulsas` com `recorrente_id` nulo
- *   recorrencia → `contas_avulsas` com `recorrente_id` preenchido
- *                 (a ocorrência que `gerar_ocorrencias_recorrentes` cria)
+ *   pp                 → parcela de `pedidos_compra_parcelas` de PP aprovada
+ *   avulso             → `contas_avulsas` com `recorrente_id` nulo
+ *   recorrencia        → `contas_avulsas` com `recorrente_id` preenchido
+ *                        (a ocorrência que `gerar_ocorrencias_recorrentes` cria)
+ *   desembolso         → parcela de `desembolsos_parcelas` de desembolso aprovado
+ *   pp_devolucao_verba → linha de `pp_verba_devolucoes` (título negativo:
+ *                        entrada quando o gerente devolve saldo da verba)
  */
-export type OrigemTitulo = "pp" | "avulso" | "recorrencia" | "desembolso";
+export type OrigemTitulo = "pp" | "avulso" | "recorrencia" | "desembolso" | "pp_devolucao_verba";
 
 export const origemTituloLabel = (o: OrigemTitulo, ppCodigo?: string | null): string =>
-  o === "pp" ? (ppCodigo ?? "PP") : o === "avulso" ? "AVULSO" : o === "recorrencia" ? "RECORRÊNCIA" : "DESEMBOLSO";
+  o === "pp" ? (ppCodigo ?? "PP")
+    : o === "avulso" ? "AVULSO"
+    : o === "recorrencia" ? "RECORRÊNCIA"
+    : o === "desembolso" ? "DESEMBOLSO"
+    : "DEVOLUÇÃO VERBA";
 
 /** `a_pagar` enquanto não há baixa; `pago` depois dela. */
 export type TituloPagarStatus = "a_pagar" | "pago";
@@ -1751,8 +1835,6 @@ export interface Desembolso {
   empresa_id: string;
   descricao: string;
   valor: string; // numeric → string
-  forma_pagamento: FormaPagamento | null;
-  cartao_credito_id: string | null;
   status: DesembolsoStatus;
   fornecedor_id: string | null;
   cliente_id: string | null;

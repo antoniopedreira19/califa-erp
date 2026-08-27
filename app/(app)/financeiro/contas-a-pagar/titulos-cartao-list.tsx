@@ -1,22 +1,24 @@
 "use client";
 
 /**
- * Aba "Títulos a Pagar (Cartão)" — agrupa por cartão de crédito os títulos
- * pendentes com `forma_pagamento === 'cartao_credito'`.
+ * Aba "Cartão" — agrupa por cartão de crédito os títulos com
+ * `forma_pagamento === 'cartao_credito'`. Filtro de status interno (padrão
+ * "A pagar", com opções "Pagos" e "Todos").
  *
  * Responsabilidades:
+ * - Filtro de status (a_pagar | pago | todos).
  * - Filtrar por cartão (dropdown) e por período (`data_pagamento`).
  * - Agrupar em seções por `cartao_credito_id`.
- * - Seleção múltipla limitada a UM cartão por vez — tentar selecionar em
- *   outro grupo limpa a seleção anterior e exibe aviso inline.
- * - Barra sticky no rodapé quando há seleção.
- * - Abrir `BaixaLoteCartaoDialog` para confirmar a baixa.
- * - Após sucesso: `router.refresh()` + limpar seleção.
+ * - Seleção múltipla APENAS de títulos "a pagar", limitada a UM cartão por
+ *   vez — trocar de cartão limpa a seleção e exibe aviso.
+ * - Barra sticky no rodapé quando há seleção → abre `BaixaLoteCartaoDialog`.
+ * - Linhas pagas: sem checkbox, chip "Pago" e clique abre a conferência da
+ *   baixa (`BaixaRegistradaDialog`), com estorno se preciso.
  */
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { CheckCheck, CreditCard, Info } from "lucide-react";
+import { CheckCheck, CreditCard, Eye, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Select,
@@ -37,6 +39,13 @@ import {
   BaixaLoteCartaoDialog,
   type TituloSelecionado,
 } from "./baixa-lote-cartao-dialog";
+import {
+  BaixaRegistradaDialog,
+  type BaixaRegistradaAlvo,
+} from "@/components/financeiro/baixa-registrada-dialog";
+import { estornarBaixaTitulo } from "./actions-titulos";
+
+type StatusFiltro = "a_pagar" | "pago" | "todos";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -99,6 +108,8 @@ function origemChipClass(origem: OrigemTitulo): string {
       return "border-blue-200 bg-blue-50 text-blue-700";
     case "desembolso":
       return "border-amber-200 bg-amber-50 text-amber-700";
+    case "pp_devolucao_verba":
+      return "border-emerald-200 bg-emerald-50 text-emerald-700";
   }
 }
 
@@ -140,19 +151,21 @@ function GrupoCartaoHeader({
   cartaoSelecionadoAtual,
 }: GrupoHeaderProps) {
   const totalGrupo = titulos.reduce((s, t) => s + t.valor, 0);
-  const totalSelecionados = titulos.length;
+  const totalTitulos = titulos.length;
+  // "Selecionar todos" considera só os a pagar — pagos não entram no bulk.
+  const aPagar = titulos.filter((t) => t.status === "a_pagar");
+  const temAlgumSelecionavel = aPagar.length > 0;
   const todosSelecionados =
-    totalSelecionados > 0 && titulos.every((t) => selecionados.has(t.id));
+    temAlgumSelecionavel && aPagar.every((t) => selecionados.has(t.id));
   const algunsSelecionados =
-    !todosSelecionados && titulos.some((t) => selecionados.has(t.id));
+    !todosSelecionados && aPagar.some((t) => selecionados.has(t.id));
 
-  // Se há cartão diferente selecionado, o checkbox fica desabilitado
   const outroCartaoSelecionado =
     cartaoSelecionadoAtual !== null && cartaoSelecionadoAtual !== cartao.id;
 
   return (
     <div className="flex items-center gap-3 rounded-xl border border-border bg-muted/40 px-4 py-3">
-      {/* Checkbox "selecionar todos deste cartão" */}
+      {/* Checkbox "selecionar todos a pagar deste cartão" */}
       <input
         type="checkbox"
         checked={todosSelecionados}
@@ -160,19 +173,19 @@ function GrupoCartaoHeader({
           if (el) el.indeterminate = algunsSelecionados;
         }}
         onChange={() => onToggleTodos(cartao.id, titulos)}
-        disabled={outroCartaoSelecionado}
+        disabled={outroCartaoSelecionado || !temAlgumSelecionavel}
         className="h-4 w-4 cursor-pointer accent-california-red disabled:cursor-not-allowed disabled:opacity-40"
         title={
-          outroCartaoSelecionado
-            ? "Limpe a seleção do outro cartão antes de selecionar aqui"
-            : "Selecionar todos deste cartão"
+          !temAlgumSelecionavel
+            ? "Nenhum título a pagar neste grupo"
+            : outroCartaoSelecionado
+              ? "Limpe a seleção do outro cartão antes de selecionar aqui"
+              : "Selecionar todos a pagar deste cartão"
         }
       />
 
-      {/* Ícone do cartão */}
       <CreditCard className="h-4 w-4 shrink-0 text-muted-foreground" />
 
-      {/* Nome + últimos 4 */}
       <div className="flex min-w-0 flex-1 flex-col">
         <span className="font-semibold">{cartao.nome}</span>
         <span className="text-xs text-muted-foreground">
@@ -180,10 +193,9 @@ function GrupoCartaoHeader({
         </span>
       </div>
 
-      {/* Contador e total */}
       <div className="flex items-center gap-4 text-right">
         <span className="text-xs text-muted-foreground">
-          {totalSelecionados} título{totalSelecionados !== 1 ? "s" : ""}
+          {totalTitulos} título{totalTitulos !== 1 ? "s" : ""}
         </span>
         <span className="font-mono font-bold tabular-nums">
           {formatMoney(totalGrupo)}
@@ -197,13 +209,28 @@ function GrupoCartaoHeader({
 // Componente principal
 // ---------------------------------------------------------------------------
 
-export function TitulosCartaoList({ rows, cartoes, contas, tipos, subtipos }: Props) {
+export function TitulosCartaoList({ rows: rowsBruto, cartoes, contas, tipos, subtipos }: Props) {
   const router = useRouter();
+  const [pending, startTransition] = React.useTransition();
+
+  // Filtro de status — padrão "a pagar".
+  const [statusFiltro, setStatusFiltro] = React.useState<StatusFiltro>("a_pagar");
+  const rows = React.useMemo(
+    () =>
+      rowsBruto.filter((r) =>
+        statusFiltro === "todos" ? true : r.status === statusFiltro,
+      ),
+    [rowsBruto, statusFiltro],
+  );
 
   // Filtros
   const [filtroCartaoId, setFiltroCartaoId] = React.useState<string>("__todos__");
   const [dataDe, setDataDe] = React.useState<string>("");
   const [dataAte, setDataAte] = React.useState<string>("");
+
+  // Título pago aberto para conferência de baixa (e estorno).
+  const [conferindo, setConferindo] = React.useState<TituloRow | null>(null);
+  const [erroAcao, setErroAcao] = React.useState<string | null>(null);
 
   // Seleção — Map<cartaoId, Set<tituloId>>
   // Invariante: no máximo 1 cartão com Set não-vazio.
@@ -227,6 +254,12 @@ export function TitulosCartaoList({ rows, cartoes, contas, tipos, subtipos }: Pr
     const t = setTimeout(() => setToastSucesso(null), 4000);
     return () => clearTimeout(t);
   }, [toastSucesso]);
+
+  // Limpa seleção quando o filtro de status muda — evita seleção órfã de
+  // linhas que somem do recorte visível.
+  React.useEffect(() => {
+    setSelecao(new Map());
+  }, [statusFiltro]);
 
   // ---------------------------------------------------------------------------
   // Filtros em memória
@@ -341,8 +374,9 @@ export function TitulosCartaoList({ rows, cartoes, contas, tipos, subtipos }: Pr
   }
 
   /**
-   * Toggle "selecionar todos" de um grupo.
-   * Mesma regra: se havia outro cartão selecionado, descarta.
+   * Toggle "selecionar todos" de um grupo — considera SÓ os títulos "a pagar"
+   * do grupo. Pagos ficam de fora (não têm o que baixar de novo).
+   * Mesma regra de cartão único: se havia outro cartão selecionado, descarta.
    */
   function handleToggleTodos(cartaoId: string, titulosDoGrupo: TituloRow[]) {
     setSelecao((prev) => {
@@ -358,15 +392,15 @@ export function TitulosCartaoList({ rows, cartoes, contas, tipos, subtipos }: Pr
         setAvisoTroca("Seleção do cartão anterior descartada.");
       }
 
+      const aPagarDoGrupo = titulosDoGrupo.filter((t) => t.status === "a_pagar");
+      if (aPagarDoGrupo.length === 0) return next;
       const idsAtual = next.get(cartaoId) ?? new Set<string>();
-      const todosSelecionados = titulosDoGrupo.every((t) => idsAtual.has(t.id));
+      const todosSelecionados = aPagarDoGrupo.every((t) => idsAtual.has(t.id));
 
       if (todosSelecionados) {
-        // Desmarcar todos
         next.set(cartaoId, new Set());
       } else {
-        // Marcar todos
-        next.set(cartaoId, new Set(titulosDoGrupo.map((t) => t.id)));
+        next.set(cartaoId, new Set(aPagarDoGrupo.map((t) => t.id)));
       }
       return next;
     });
@@ -407,6 +441,28 @@ export function TitulosCartaoList({ rows, cartoes, contas, tipos, subtipos }: Pr
 
   return (
     <div className="space-y-4">
+      {/* Filtro de status — chip principal. Padrão "A pagar". */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Status
+        </span>
+        <StatusChip
+          ativo={statusFiltro === "a_pagar"}
+          onClick={() => setStatusFiltro("a_pagar")}
+          label="A pagar"
+        />
+        <StatusChip
+          ativo={statusFiltro === "pago"}
+          onClick={() => setStatusFiltro("pago")}
+          label="Pagos"
+        />
+        <StatusChip
+          ativo={statusFiltro === "todos"}
+          onClick={() => setStatusFiltro("todos")}
+          label="Todos"
+        />
+      </div>
+
       {/* ------------------------------------------------------------------ */}
       {/* Barra de filtros                                                     */}
       {/* ------------------------------------------------------------------ */}
@@ -482,7 +538,13 @@ export function TitulosCartaoList({ rows, cartoes, contas, tipos, subtipos }: Pr
 
         {/* Totalizador global */}
         <div className="ml-auto flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-2">
-          <span className="text-xs text-muted-foreground">Total a pagar:</span>
+          <span className="text-xs text-muted-foreground">
+            {statusFiltro === "a_pagar"
+              ? "Total a pagar:"
+              : statusFiltro === "pago"
+                ? "Total pago:"
+                : "Total (filtro):"}
+          </span>
           <span className="font-mono text-sm font-bold tabular-nums">
             {formatMoney(totalGlobal)}
           </span>
@@ -505,9 +567,13 @@ export function TitulosCartaoList({ rows, cartoes, contas, tipos, subtipos }: Pr
       {/* ------------------------------------------------------------------ */}
       {rowsFiltradas.length === 0 ? (
         <div className="rounded-2xl border border-border bg-card py-16 text-center text-sm text-muted-foreground shadow-soft">
-          {rows.length === 0
-            ? "Nenhum título de cartão a pagar. Crie um lançamento avulso com forma de pagamento Cartão de Crédito."
-            : "Nenhum título de cartão a pagar no período."}
+          {rowsBruto.length === 0
+            ? "Nenhum título de cartão. Crie um lançamento avulso com forma de pagamento Cartão de Crédito."
+            : statusFiltro === "a_pagar"
+              ? "Nenhum título de cartão a pagar no período."
+              : statusFiltro === "pago"
+                ? "Nenhum título de cartão pago no período."
+                : "Nenhum título de cartão no período."}
         </div>
       ) : (
         /* ------------------------------------------------------------------ */
@@ -546,40 +612,60 @@ export function TitulosCartaoList({ rows, cartoes, contas, tipos, subtipos }: Pr
                       <tr className="border-b border-border bg-muted/30 text-center text-[11px] uppercase tracking-wider text-muted-foreground">
                         <th className="w-[3%] px-2 py-3" />
                         <th className="w-[9%] px-2 py-3 font-semibold text-left">Origem</th>
-                        <th className="w-[24%] px-3 py-3 font-semibold text-left">Descrição</th>
-                        <th className="w-[18%] px-3 py-3 font-semibold text-left">Fornecedor</th>
-                        <th className="w-[8%] px-2 py-3 font-semibold">Job</th>
+                        <th className="w-[22%] px-3 py-3 font-semibold text-left">Descrição</th>
+                        <th className="w-[16%] px-3 py-3 font-semibold text-left">Fornecedor</th>
+                        <th className="w-[7%] px-2 py-3 font-semibold">Job</th>
                         <th className="w-[10%] px-2 py-3 font-semibold">Vencimento</th>
-                        <th className="w-[11%] px-3 py-3 font-semibold text-right">Valor</th>
+                        <th className="w-[7%] px-2 py-3 font-semibold">Status</th>
+                        <th className="w-[10%] px-3 py-3 font-semibold text-right">Valor</th>
+                        <th className="w-[6%] px-2 py-3 font-semibold">Ação</th>
                       </tr>
                     </thead>
                     <tbody>
                       {titulosGrupo
-                        .sort((a, b) =>
-                          (a.data_pagamento ?? "9999-12-31").localeCompare(
+                        .sort((a, b) => {
+                          // A pagar antes dos pagos; dentro de cada grupo,
+                          // por data (pagos mais recente primeiro).
+                          if (a.status !== b.status) {
+                            return a.status === "a_pagar" ? -1 : 1;
+                          }
+                          if (a.status === "pago") {
+                            return (b.pago_em ?? "").localeCompare(a.pago_em ?? "");
+                          }
+                          return (a.data_pagamento ?? "9999-12-31").localeCompare(
                             b.data_pagamento ?? "9999-12-31",
-                          ),
-                        )
+                          );
+                        })
                         .map((r) => {
+                          const pago = r.status === "pago";
                           const selecionado = idsDoGrupo.has(r.id);
                           return (
                             <tr
                               key={`${r.origem}-${r.id}`}
-                              onClick={() => handleToggleTitulo(cartaoId, r.id)}
+                              onClick={() => {
+                                if (pago) {
+                                  setErroAcao(null);
+                                  setConferindo(r);
+                                } else {
+                                  handleToggleTitulo(cartaoId, r.id);
+                                }
+                              }}
                               className={cn(
                                 "cursor-pointer border-b border-border transition-colors last:border-0 hover:bg-accent/40",
                                 selecionado && "bg-emerald-50 hover:bg-emerald-50",
                               )}
                             >
-                              {/* Checkbox */}
+                              {/* Checkbox — pagos não são selecionáveis. */}
                               <td className="px-2 py-3 text-center">
-                                <input
-                                  type="checkbox"
-                                  checked={selecionado}
-                                  onChange={() => handleToggleTitulo(cartaoId, r.id)}
-                                  onClick={(e) => e.stopPropagation()}
-                                  className="h-4 w-4 cursor-pointer accent-california-red"
-                                />
+                                {!pago && (
+                                  <input
+                                    type="checkbox"
+                                    checked={selecionado}
+                                    onChange={() => handleToggleTitulo(cartaoId, r.id)}
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="h-4 w-4 cursor-pointer accent-california-red"
+                                  />
+                                )}
                               </td>
                               {/* Origem */}
                               <td className="px-2 py-3">
@@ -594,12 +680,21 @@ export function TitulosCartaoList({ rows, cartoes, contas, tipos, subtipos }: Pr
                               </td>
                               {/* Descrição */}
                               <td className="px-3 py-3">
-                                <span className="break-words font-semibold">{r.descricao}</span>
-                                {r.parcela_total > 1 && (
-                                  <span className="ml-1 text-[11px] text-muted-foreground">
-                                    ({r.parcela_numero}/{r.parcela_total})
+                                <div className="flex min-w-0 flex-col gap-0.5">
+                                  <span className="break-words font-semibold">
+                                    {r.descricao}
+                                    {r.parcela_total > 1 && (
+                                      <span className="ml-1 text-[11px] font-normal text-muted-foreground">
+                                        ({r.parcela_numero}/{r.parcela_total})
+                                      </span>
+                                    )}
                                   </span>
-                                )}
+                                  {pago && (
+                                    <span className="text-[11px] text-muted-foreground">
+                                      Pago em {formatDate(r.pago_em)} · {r.conta_nome ?? "—"}
+                                    </span>
+                                  )}
+                                </div>
                               </td>
                               {/* Fornecedor */}
                               <td className="px-3 py-3 text-xs text-muted-foreground">
@@ -615,9 +710,40 @@ export function TitulosCartaoList({ rows, cartoes, contas, tipos, subtipos }: Pr
                               <td className="whitespace-nowrap px-2 py-3 text-center font-mono text-xs">
                                 {formatDate(r.data_pagamento)}
                               </td>
+                              {/* Status */}
+                              <td className="px-2 py-3 text-center">
+                                <span
+                                  className={cn(
+                                    "inline-flex items-center whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide",
+                                    pago
+                                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                      : "border-[#fde68a] bg-[#fffbeb] text-[#92400e]",
+                                  )}
+                                >
+                                  {pago ? "Pago" : "A pagar"}
+                                </span>
+                              </td>
                               {/* Valor */}
                               <td className="whitespace-nowrap px-3 py-3 text-right font-semibold tabular-nums">
                                 {formatMoney(r.valor)}
+                              </td>
+                              {/* Ação */}
+                              <td className="px-2 py-3 text-center">
+                                {pago && (
+                                  <button
+                                    type="button"
+                                    title="Ver a baixa registrada — e estornar, se preciso"
+                                    aria-label="Ver baixa registrada"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setErroAcao(null);
+                                      setConferindo(r);
+                                    }}
+                                    className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:border-california-red hover:text-california-red"
+                                  >
+                                    <Eye className="h-3.5 w-3.5" />
+                                  </button>
+                                )}
                               </td>
                             </tr>
                           );
@@ -706,6 +832,63 @@ export function TitulosCartaoList({ rows, cartoes, contas, tipos, subtipos }: Pr
         }}
       />
 
+      {/* Dialog de conferência da baixa (para linhas pagas). Espelha o
+          padrão do titulos-pagar-list: ver e, se preciso, estornar. */}
+      <BaixaRegistradaDialog
+        open={conferindo !== null}
+        onOpenChange={(o) => {
+          if (!o) {
+            setConferindo(null);
+            setErroAcao(null);
+          }
+        }}
+        alvo={
+          conferindo
+            ? ({
+                titulo: conferindo.descricao,
+                origem:
+                  conferindo.origem === "pp"
+                    ? `Pedido de produção ${conferindo.origem_label}`
+                    : conferindo.origem === "recorrencia"
+                      ? `Recorrência · ${conferindo.descricao}`
+                      : conferindo.origem === "desembolso"
+                        ? `Desembolso ${conferindo.origem_label}`
+                        : "Lançamento avulso",
+                parcela: `${conferindo.parcela_numero}/${conferindo.parcela_total}`,
+                valor: conferindo.valor,
+                pagoEm: conferindo.pago_em,
+                contaNome: conferindo.conta_nome,
+                centroNome: conferindo.centro_nome,
+                dataPagamento: conferindo.data_pagamento,
+                vencOriginal: conferindo.venc_original,
+              } as BaixaRegistradaAlvo)
+            : null
+        }
+        pending={pending}
+        erro={erroAcao}
+        onEstornar={(motivo) => {
+          const alvo = conferindo;
+          if (!alvo) return;
+          startTransition(async () => {
+            const res = await estornarBaixaTitulo({
+              origem: alvo.origem,
+              id: alvo.id,
+              motivo,
+            });
+            if (!res.ok) {
+              setErroAcao(res.message);
+              return;
+            }
+            setConferindo(null);
+            setErroAcao(null);
+            setToastSucesso(
+              `Baixa estornada · ${formatMoney(alvo.valor)} devolvido para "A pagar".`,
+            );
+            router.refresh();
+          });
+        }}
+      />
+
       {/* Toast de sucesso */}
       {toastSucesso && (
         <div
@@ -724,5 +907,30 @@ export function TitulosCartaoList({ rows, cartoes, contas, tipos, subtipos }: Pr
         </div>
       )}
     </div>
+  );
+}
+
+function StatusChip({
+  ativo,
+  onClick,
+  label,
+}: {
+  ativo: boolean;
+  onClick: () => void;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "inline-flex items-center whitespace-nowrap rounded-full border px-3 py-1 text-xs font-semibold transition-colors",
+        ativo
+          ? "border-california-red bg-california-red text-white"
+          : "border-border bg-white text-muted-foreground hover:border-california-red/50",
+      )}
+    >
+      {label}
+    </button>
   );
 }

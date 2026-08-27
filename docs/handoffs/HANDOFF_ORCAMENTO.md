@@ -2049,6 +2049,123 @@ orçamento foi gravado.
 
 ---
 
+## ⚠️ 21/08/2026 — a tela da versão deixou de existir: as versões viraram abas do orçamento
+
+Handoff `Orcamento - Versoes em Abas.dc.html`. A regra completa está em
+[`docs/decisions/023-versoes-em-abas-na-tela-do-orcamento.md`](../decisions/023-versoes-em-abas-na-tela-do-orcamento.md)
+— aqui fica só o que muda para quem já conhecia as duas telas.
+
+**As entregas 1 a 22 acima descrevem a tela da versão como uma página
+própria, em `/orcamentos/[projetoId]/[orcId]/versoes/[versaoId]`. Ela não
+é mais.** Os componentes continuam todos no mesmo lugar no disco (a pasta
+`versoes/[versaoId]/` não se mexeu) e o comportamento deles é o mesmo — o
+que mudou é **quem os renderiza**: agora é
+`/orcamentos/[projetoId]/[orcId]`, com a versão em `?v=<versaoId>`. A rota
+antiga sobreviveu como `permanentRedirect`, então nenhum link gravado
+quebrou.
+
+**O card "Versões do orçamento" saiu** (`versoes-list.tsx` removido). No
+lugar dele, uma fita de abas com o `+` à esquerda:
+
+- `+` → **criar do zero** / **copiar uma versão existente** (submenu com
+  "N itens · R$ X · honor. Y%" de cada uma) / **importar planilha**.
+- Selo **MAIS RECENTE** na mais nova (sempre a primeira à esquerda) e
+  **APROVADA** na aprovada.
+
+**Deletar versão** — no lugar do `X` "cancelar" de cada linha da lista —
+virou botão no cabeçalho, à direita de Duplicar, e incide sobre a aba
+selecionada. Apaga de verdade: versão, grupos, itens e os BVs deles.
+Disponível para todos os papéis por enquanto; o gate por perfil fica para
+a etapa de permissões (decisão do Tiago).
+
+Trava em três casos: versão **aprovada** (o botão nem aparece — apagá-la
+desfaria a aprovação em silêncio, porque a FK é SET NULL), versão que
+**virou job**, e a **última** versão do orçamento (aí o botão fica visível
+e desabilitado, com o motivo no tooltip). As três valem no servidor.
+
+**A versão mais recente é sempre a aba mais à esquerda** e leva o selo
+MAIS RECENTE — sem exceção, agora que versão fora do jogo é apagada em vez
+de virar "cancelada".
+
+**Moeda, Câmbio, Honorários e Impostos saíram do `VersaoEditorDrawer`** e
+viraram uma linha com "Editar" à direita de Impostos, que abre os quatro
+campos no lugar. Mesmas regras de antes — a server action é a mesma. O
+drawer continua no repositório, sem consumidor nesta tela.
+
+**A planilha não foi tocada.** Cores de `_planilha/blocos.ts`, calha de
+BV, chave Bruto ⇄ Líquido, "Recolher todos": tudo igual. A planilha
+desenhada no handoff é ilustrativa e traz a paleta invertida — não vale
+contra a decisão 015.
+
+**Pega geral, achada na conferência:** Server Action que chama
+`redirect()` devolve `undefined` ao cliente. `criarVersao`,
+`duplicarVersao` e `criarOrcamento` agora declaram
+`Promise<ActionResult | void>` e os call sites testam `res && !res.ok`.
+Antes o tipo mentia; o defeito ficava escondido porque o redirect trocava
+de página. Com orçamento e versão na mesma rota, ele apareceu na hora.
+
+**Verificação (logado, 21/08/2026):**
+
+- `TESTE-0003/26-01` (Teste Alterações Job 1): troca de aba v1 ⇄ v2,
+  edição no lugar do Câmbio (1 → 5,42 → 1, revertido), `+` → copiar v1
+  criando a v3 (1 grupo, 1 item) e **delete da v3** pelo botão do
+  cabeçalho. Conferido pelo MCP que grupo e item foram junto, sem órfão, e
+  que a auditoria gravou `numero_versao: 3, itens_apagados: 1`. Sem `?v=`
+  a tela volta para a v2.
+- `ORC-0001` (PEVETE-0001/26, job criado): as 5 abas, `+` e "Editar"
+  travados pelo estado protegido, v5 aprovada com os banners e o
+  `FluxoAbertura` intactos, v4 substituída abrindo com 9 grupos e 44
+  itens.
+- Rota antiga `.../versoes/<id da v3>` redirecionando para `?v=` com a
+  aba certa; `?v=` inválido caindo na aprovada, sem 404.
+- Export da v5 devolvendo `orcamento-ORC-0001-v5.xlsx` (200,
+  `content-type` de xlsx).
+- Criação de orçamento pelo formulário caindo em `?v=<v1>` — criado o
+  `TESTE-0003/26-07 Teste Abas Versoes` como dado de teste, com v1..v5
+  vazias (v2 pelo "criar do zero", v3 idem, v4 e v5 por "Duplicar").
+- **Trava nova de `duplicarVersao`, provada pelo bypass no console:** em
+  `ORC-0001` (job criado) a action recusa com "Não é possível criar versão
+  em orçamento job_criado", e num orçamento editável ela redireciona
+  normalmente. Duplicar cria uma versão, então tem que obedecer à mesma
+  regra de `criarVersao` — antes só `criarVersao` a aplicava, e o botão
+  "Duplicar" da lista não tinha gate nenhum.
+- `/orcamentos`, `/orcamentos/[projetoId]`, `/agregado`, `/multi`,
+  `/jobs`, `/jobs/[jobId]` e `/financeiro` abertos sem erro; zero erro de
+  console em aba nova.
+- **Travas do delete, pelo bypass no console** (por fora do cliente):
+  versão única → "O orçamento precisa de ao menos uma versão"; v5 aprovada
+  do `ORC-0001` → "Versão aprovada não pode ser deletada"; id inexistente
+  → "Versão não encontrada". Na aba aprovada o botão não é renderizado; na
+  aba de versão única ele aparece desabilitado com o motivo.
+
+---
+
+## ⚠️ 21/08/2026 — o que o delete de versão exigiu do banco
+
+Três migrations saíram junto com o botão, e valem como aviso para quem for
+mexer em delete neste esquema:
+
+1. **`20260821000003_remover_versoes_canceladas.sql`** — DESTRUTIVA,
+   autorizada pelo Tiago. Apagou as 2 versões que estavam `cancelada`
+   (`PEVETE-0002/26-01` v1 de 29/07 e a v3 criada na conferência). O valor
+   `cancelada` continua no enum; nenhum caminho da UI o produz mais.
+2. **`20260821000004_delete_de_versao_orcamento.sql`** —
+   `versoes_orcamento` **não tinha GRANT nem policy de DELETE**. Só
+   SELECT/INSERT/UPDATE, porque até então nada apagava versão. O sintoma
+   foi `permission denied for table versoes_orcamento` — que é o GRANT
+   faltando; a policy ausente, sozinha, teria dado 0 linhas afetadas **em
+   silêncio**, que é bem pior de diagnosticar.
+3. **`20260821000005_rpc_deletar_versao_orcamento.sql`** — apagar em três
+   chamadas ao PostgREST são três transações. A terceira falhou (o GRANT
+   acima), e a versão ficou sem itens e sem grupos, sem aviso. Virou RPC:
+   uma chamada, uma transação. `SECURITY INVOKER` — o RLS de tenant
+   continua valendo, não é bypass.
+
+**A ordem item → grupo → versão é obrigatória.** `versoes_orcamento` tem
+CASCADE para os dois, mas `versoes_orcamento_itens.grupo_id` referencia o
+grupo com **RESTRICT**, checado na hora. Um `delete from
+versoes_orcamento` seco pode bater nesse RESTRICT e falhar inteiro,
+dependendo da ordem em que o Postgres processar as cascatas.
 ## ⚠️ 21/08/2026 — cidade do orçamento virou combobox com busca no servidor
 
 Fecha o item 3 da seção 12.9. O formulário de orçamento
@@ -2110,6 +2227,154 @@ no navegador **pendente** — entra na etapa final, junto com as demais
 telas.
 
 ---
+
+## ⚠️ 2026-08-24 — A planilha virou uma tabela só (design "Grupos Unificados")
+
+**Origem:** projeto Claude Design `69342d83`, arquivo
+`Planilha Interna - Grupos Unificados.dc.html`, tela `2a Orçamento`.
+Regra transversal em `docs/decisions/024-planilha-em-tabela-unica.md` e
+`docs/09-identidade-visual-ui.md` ("Linha do agrupamento").
+
+**O que mudou nesta tela.** Os cards de grupo acabaram. A planilha da
+versão — e a de cada orçamento do rascunho, no `/agregado` e no `/multi` —
+é **um card e uma tabela**, com um `<thead>` só. Cada agrupamento é uma
+linha de 40px que carrega o próprio subtotal e a própria rentabilidade, os
+itens ficam indentados abaixo, e a tabela fecha com **TOTAL DO
+ORÇAMENTO** no `<tfoot>`. No rascunho esse rótulo leva o código
+(`Total do orçamento · TESTE-0003/26-04`) e substitui a faixa solta que
+ficava embaixo dos cards, cujas colunas nunca caíram no eixo das da
+planilha.
+
+**"Novo grupo" saiu da barra de ações** e virou a linha tracejada no pé do
+corpo da tabela. Mesmo drawer, mesma Server Action — só a forma do
+gatilho mudou (`variante="tracejada"` no `NovoGrupoDrawer`). Sem nenhum
+grupo ainda ele volta a ser o botão sólido, dentro do estado vazio.
+
+**Renomear e remover grupo:** o lápis foi para dentro da linha, ao lado do
+nome; a lixeira para a calha, na altura da linha do grupo. O contador de
+itens saiu da calha e entrou na linha. Decisão do Tiago, 24/08/2026.
+
+**O Tab atravessa os agrupamentos.** Antes cada grupo era uma tabela e a
+navegação morria no fim dele; agora a planilha é uma sequência só, e grupo
+recolhido é pulado. Decisão do Tiago, 24/08/2026.
+
+**O que o handoff pedia e não foi feito** (as duas decisões do Tiago,
+antes de codar): repintar os blocos do orçamento (ORÇADO grafite,
+PLANEJADO azul, RENTABILIDADE verde) — recusado, a paleta da decisão 015
+vale em toda tela; e dar ao card de Totais um `colgroup` próprio —
+recusado, o colgroup compartilhado é o que mantém as colunas no eixo.
+
+**A coluna Rentab. R$ foi de 9,5% para 11,5%** em
+`_planilha/grade-orcamento.tsx`. Ela é a única da planilha que carrega
+sinal negativo, e `-R$ 117.500,00` a 13px pede ~122px — no piso de 1060px
+os 9,5% davam 101px, e em `table-fixed` o excedente transborda por cima da
+coluna vizinha. **Já era assim antes desta entrega**: o card de Totais, a
+14px, transbordava ainda mais; o total novo no pé da tabela só tornou o
+defeito visível em mais um lugar. O espaço saiu do `%` (5,5% → 4,5%), que
+nunca passa de `-99,9%`, e o rodapé do card de Totais desceu de 14px para
+13px, igualando o da planilha. Como a grade é compartilhada, a correção
+vale para versão, rascunho e os dois cards de Totais de uma vez.
+
+**Estado vazio novo no rascunho:** orçamento com planilha criada e ainda
+sem nenhum agrupamento não tem tabela — e, portanto, não tem a linha
+tracejada onde o "Novo grupo" passou a morar. Sem um bloco próprio ele
+ficaria sem porta de entrada, já que o botão saiu da barra. Ganhou um
+convite tracejado com o mesmo gatilho.
+
+**Arquivos:** `itens-table.tsx` passou a receber `grupos` (todos), e
+`grupo-card.tsx` virou `grupo-linha.tsx`, exportando só `NomeDoGrupo` e
+`AcoesDoGrupo`. No rascunho, `grupo-rascunho-card.tsx` virou
+`grupo-rascunho-linha.tsx` pela mesma razão.
+
+**Verificação:** `tsc --noEmit`, `next lint` e `npm run build` limpos.
+Conferido logado em 24/08/2026: versão com 3 agrupamentos (uma tabela, um
+cabeçalho, colunas do Totais no mesmo eixo — medido no DOM), versão sem
+grupo (estado vazio com o gatilho sólido), rascunho do `/agregado` (tfoot
+com o código do orçamento), e o Tab cruzando de um grupo para o outro,
+inclusive pulando um grupo recolhido no meio.
+
+---
+
+## ⚠️ 2026-08-25 — O Totais perdeu a tabela de agrupamentos, e a linha nova nasce pelo teclado
+
+Regra transversal em
+`docs/decisions/026-agrupamentos-saem-do-totais-e-linha-nova-por-teclado.md`.
+
+**A tabela de agrupamentos saiu do card de Totais.** Ela listava
+"Grupo 1 · Grupo 2 · … / TOTAL DOS CUSTOS" com ORÇADO, PLANEJADO e
+RENTABILIDADE lado a lado. Depois da decisão 024, o subtotal de cada
+agrupamento mora na própria linha do grupo, na mesma grade — "Recolher
+todos" mostra exatamente aquela leitura, no lugar onde a pessoa já está.
+Era o mesmo número em duas grades para manter em sincronia. **Fechamento
+do orçado por tipo de custo, Resultado, "Composto por" e Resultado geral
+não mudaram em nada.**
+
+**O `TotaisCard` deixou de receber `grupos`** e, com a tabela, saíram do
+arquivo `agruparPorGrupo`, o `colgroup` compartilhado (`ColunasFixas`) e
+os módulos de cor de bloco. Ele continua recebendo `visao`: a
+rentabilidade do "Composto por" é calculada na vista ativa da chave.
+
+**A dica de teclado saiu de dentro do card** ("Clique em qualquer célula
+para editar · Tab e as setas andam · Enter desce · Esc desfaz"). Era uma
+faixa cinza colada no rodapé, abaixo do TOTAL DO ORÇAMENTO, e lia como se
+fosse mais uma linha da planilha. Virou texto solto embaixo do card,
+mesma fonte e mesmo tamanho. Decisão do Tiago, 25/08/2026.
+
+⚠️ **Consequência estrutural: o card da planilha agora é desenhado pela
+própria `ItensTable`.** Um componente não devolve nada fora de um card
+que o chamador é que desenha. `grupos-section.tsx` e (no rascunho)
+`orcamento-card.tsx` pararam de envolver a tabela com
+`rounded-2xl border bg-card shadow-soft` — a `ItensTable` fundiu essas
+classes no `div` que já era o `relative` da calha. No rascunho a `div`
+que sobrou existe só para o card e a dica ocuparem UMA vaga do `gap-4`
+da coluna. Se alguém envolver a `ItensTable` num card de novo, a dica
+volta para dentro do frame.
+
+**Enter e ↓ na última linha de um agrupamento abrem o "＋ Novo item"
+dele**, em vez de cair no primeiro item do grupo seguinte — o cursor vai
+para a **descrição**, não para a coluna de origem, porque é o campo sem o
+qual a linha não grava. Decisão do Tiago, 25/08/2026: quebra de propósito
+o "Enter desce na mesma coluna", já que o gesto é acrescentar item. **O
+Tab não mudou** (continua atravessando os grupos, decisão 024).
+
+**A linha nova em branco some sozinha** — no Esc e em qualquer clique
+fora dela. "Em branco" é *nenhum campo mexido* (Tipo B, 0 · 1 · 1, sem
+categoria), decisão do Tiago: quem digitou um valor sem descrição
+continua vendo a linha, e sai pelo X da calha. A regra de gravação é a de
+sempre: **sem descrição nada vai para o banco.**
+
+⚠️ **Quatro armadilhas que o descarte precisou respeitar** — mexer aqui
+sem elas quebra em silêncio:
+- O `pointerdown` chega **antes** do `blur`, e o campo só entrega o que
+  foi digitado no `blur`. Descartar na hora apaga a descrição
+  recém-digitada. O teste roda num `setTimeout(…, 0)`.
+- **O listener é de mount (`[]`) e lê o rascunho por ref.** Foi defeito
+  de verdade, pego no navegador em 25/08/2026: com o efeito dependendo de
+  `draft`, o `setDraft` do `blur` devolve um objeto NOVO, o efeito se
+  reinscreve e a limpeza cancela o `setTimeout` recém-agendado — a linha
+  em branco fica na tela. **Teste sintético não pega**: `dispatchEvent`
+  sem troca de foco não dispara `blur`, então nada se reinscreve. Só
+  aparece com clique de gente.
+- O menu do Radix abre em **portal fora da tabela**: sem excluir
+  `[data-radix-popper-content-wrapper]`, escolher um Tipo mata a linha.
+- "＋ Novo item" de outro grupo não fica mais travado por rascunho em
+  branco (o clique descarta e reabre); rascunho já mexido continua
+  bloqueando.
+
+**Verificação:** `tsc --noEmit`, `next lint` e `npm run build` limpos.
+Conferido logado em 25/08/2026 no orçamento Teste B3 (TESTE-0003/26-06,
+projeto Teste Alterações), medindo no DOM a cada passo: Totais com zero
+`<table>` e sem "Agrupamento", números do fechamento e do Resultado
+idênticos aos de antes; dica como `<p>` irmã do card, 8px abaixo dele, e
+no rascunho do `/agregado` os mesmos 8px; "Recolher todos" entregando a
+leitura que a tabela removida dava; Enter na última linha do Grupo 1 e ↓
+na do Grupo 2 abrindo a linha nova no grupo certo com foco na descrição;
+Esc, clique real fora e linha com QT digitada sobrevivendo ao clique
+fora. Também: item novo digitado e salvo por clique em outra célula
+(gravou, "8 itens no total"), depois removido — a planilha voltou aos 7
+itens e a R$ 68.000,00. Conferidos ainda o Realizado do JOB `ceedcfb5` e
+a conferência da abertura do JOB-0012, os dois sem a tabela e sem erro no
+console.
 
 ## ⚠️ 24–27/08/2026 — o SAVE na tela do orçamento
 

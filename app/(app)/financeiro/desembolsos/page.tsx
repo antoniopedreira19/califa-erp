@@ -3,7 +3,6 @@ import Link from "next/link";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { DesembolsosList, type DesembolsoRow } from "./desembolsos-list";
-import type { BandeiraCartao } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +16,7 @@ export default async function DesembolsosPage() {
   let query = supabase
     .from("desembolsos")
     .select(`
-      id, codigo, descricao, valor, status, forma_pagamento, cartao_credito_id,
+      id, codigo, descricao, valor, status,
       data_prevista_pagamento, criado_por, created_at,
       empresa:empresas(id, razao_social, nome_fantasia),
       fornecedor:fornecedores(id, nome, razao_social),
@@ -32,7 +31,6 @@ export default async function DesembolsosPage() {
 
   const [
     desembolsosRes,
-    cartoesRes,
     empresasRes,
     fornecedoresRes,
     clientesRes,
@@ -40,12 +38,6 @@ export default async function DesembolsosPage() {
     regionaisRes,
   ] = await Promise.all([
     query,
-    supabase
-      .from("cartoes_credito")
-      .select("id, nome, banco, bandeira, ultimos_4_digitos, dia_vencimento_fatura")
-      .eq("tenant_id", session.activeTenant.id)
-      .eq("ativo", true)
-      .order("nome"),
     supabase
       .from("empresas")
       .select("id, razao_social, nome_fantasia")
@@ -82,15 +74,6 @@ export default async function DesembolsosPage() {
   if (desembolsosRes.error) {
     console.error("[desembolsos.list]", desembolsosRes.error.message);
   }
-
-  const cartoes = (cartoesRes.data ?? []).map((c) => ({
-    id: c.id,
-    nome: c.nome,
-    banco: c.banco,
-    bandeira: c.bandeira as BandeiraCartao,
-    ultimos_4_digitos: c.ultimos_4_digitos,
-    dia_vencimento_fatura: c.dia_vencimento_fatura,
-  }));
 
   const empresasList = (empresasRes.data ?? []).map((e) => ({
     id: e.id,
@@ -148,7 +131,6 @@ export default async function DesembolsosPage() {
       <DesembolsosList
         rows={(desembolsosRes.data ?? []) as unknown as DesembolsoRow[]}
         tenantId={session.activeTenant.id}
-        cartoes={cartoes}
         empresas={empresasList}
         fornecedores={fornecedoresList}
         clientes={clientesList}

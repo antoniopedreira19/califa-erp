@@ -390,7 +390,7 @@ export default async function JobNoFinanceiroPage({
             ppsPorItemId={detalhe.ppsPorItemId}
             fornecedores={detalhe.fornecedores}
             empresas={detalhe.empresas}
-            cartoes={detalhe.cartoes}
+            responsaveis={detalhe.responsaveis}
             bvsPorItem={detalhe.bvsPorItem}
           />
         }

@@ -1346,7 +1346,7 @@ export function AberturaForm({
               <TrendingDown className="h-4 w-4 text-california-red" />
               <h2 className="text-[15px] font-semibold">Previsão de custos</h2>
               <span className="text-xs text-muted-foreground">
-                Custo planejado da planilha + curva de desembolso
+                Custo planejado da planilha + cronograma de desembolsos
               </span>
               <ContaSeletor
                 rotulo="Pagamento em"
@@ -1410,7 +1410,7 @@ export function AberturaForm({
                       Os custos deste job são pagos diretamente pelo cliente ao
                       fornecedor (itens de calha BV). O planejado da planilha
                       segue como controle interno, mas não gera previsão de
-                      custos — o job abre sem curva de desembolso.
+                      custos — o job abre sem cronograma de desembolsos.
                     </p>
                   </div>
                 </div>
@@ -1419,7 +1419,7 @@ export function AberturaForm({
                 <div className="flex flex-wrap items-center gap-2.5 border-b border-border bg-muted/60 px-4 py-2.5">
                   <CalendarDays className="h-3.5 w-3.5 text-muted-foreground" />
                   <p className="text-[12.5px] font-semibold">
-                    Curva de desembolso
+                    Cronograma de desembolsos
                   </p>
                   <span className="text-[11.5px] text-muted-foreground">
                     Janelas de pagamento (dias 08 e 20) entre{" "}

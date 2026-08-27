@@ -126,7 +126,6 @@ export default async function JobDetailPage({
     portaisDoCliente,
     jobsDoProjeto,
     abertoPorNome,
-    cartoes,
     totaisJob,
     custoPlanejadoJob,
     custoRealizadoJob,
@@ -334,8 +333,8 @@ export default async function JobDetailPage({
             ppsPorItemId={ppsPorItemId}
             fornecedores={fornecedores}
             empresas={empresas}
+            responsaveis={responsaveis}
             bvsPorItem={bvsPorItem}
-            cartoes={cartoes}
           />
         }
         ppsCount={ppsDoJob.filter((p) => p.status !== "cancelada").length}
