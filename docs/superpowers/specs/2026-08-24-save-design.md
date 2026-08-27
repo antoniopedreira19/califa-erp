@@ -12,7 +12,7 @@
 > gerar ou consumir save é **Errata**. Onde esta spec fala de `jobs_saves`
 > por linha e de alocação exclusiva (§4.2, §4.3), o que vale é
 > `saves_consumos` + `vw_saves_por_job`, como implementado em
-> `supabase/migrations/20260826000002_save_consumos.sql`. O resto da spec
+> `supabase/migrations/20260827010002_save_consumos.sql`. O resto da spec
 > — cálculo, faturamento, riscos, ordem de implementação — segue válido.
 
 ## Contexto

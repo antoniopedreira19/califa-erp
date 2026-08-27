@@ -4,7 +4,7 @@
 -- A parcela do envio vale o `faturamento_previsto` inteiro, save
 -- incluido. Quem emite a nota precisa ver quanto daquele saldo e do job e
 -- quanto e saldo em save — sao dois itens de nota diferentes, e o save
--- tem teto proprio (20260826000007).
+-- tem teto proprio (20260827010007).
 --
 -- Colunas novas, no FIM (o `create or replace view` exige que as antigas
 -- mantenham nome, tipo e ordem):

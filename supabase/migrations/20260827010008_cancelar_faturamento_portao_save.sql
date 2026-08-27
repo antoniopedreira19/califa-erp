@@ -18,7 +18,7 @@
 -- `save_consumo_valida` resolve na proxima escrita.
 --
 -- Por patch, e com as ancoras conferidas, pelo mesmo motivo da
--- 20260826000007.
+-- 20260827010007.
 -- =====================================================================
 
 do $patch$

@@ -1965,7 +1965,7 @@ nada fica reservado.
    isso o dinheiro em save nunca migrava para o job consumidor no fluxo
    de caixa, e a errata do job — que apaga e recria por
    `job_item_orcado_id` — teria contado o consumo duas vezes.
-   Migration acompanhante: `20260827000003`, que **congela o
+   Migration acompanhante: `20260827010012`, que **congela o
    `save_consumido` da versão aprovada** para que a migração da ponta não
    zere o registro do que o cliente aprovou.
 3. **O job pago 100% por save ficava preso.** Faturamento previsto zero:
@@ -1981,7 +1981,7 @@ nada fica reservado.
    a leitura "Deste total, R$ X é saldo em save: o cliente paga agora e
    gasta em outro job".
 5. **Job recusado pelo financeiro continuava oferecendo crédito.**
-   `vw_saves_por_job` não olhava o status. Migration `20260827000002`
+   `vw_saves_por_job` não olhava o status. Migration `20260827010011`
    exclui `rejeitado_financeiro` e `cancelado`. `aguardando_abertura` e
    `encerrado` continuam valendo — o crédito é do cliente e sobrevive ao
    encerramento da origem.
