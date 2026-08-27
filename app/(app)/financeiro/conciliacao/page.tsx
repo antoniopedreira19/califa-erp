@@ -76,7 +76,8 @@ export default async function ConciliacaoPage({
       .select(
         `id, data_movimento, descricao, natureza, valor, origem, created_at,
          fornecedores(nome, razao_social),
-         jobs(codigo),
+         jobs(codigo, regional:regionais(nome)),
+         empresas(regional:regionais(nome)),
          plano_contas_tipos!inner(codigo, nome),
          plano_contas_subtipos!inner(codigo, nome),
          conta_avulsa:contas_avulsas!conta_avulsa_id(
@@ -101,7 +102,8 @@ export default async function ConciliacaoPage({
       valor: string | number;
       origem: string;
       fornecedores: { nome: string | null; razao_social: string | null } | null;
-      jobs: { codigo: string } | null;
+      jobs: { codigo: string; regional: { nome: string } | null } | null;
+      empresas: { regional: { nome: string } | null } | null;
       plano_contas_tipos: { codigo: string; nome: string };
       plano_contas_subtipos: { codigo: string; nome: string };
       conta_avulsa: {
@@ -126,6 +128,19 @@ export default async function ConciliacaoPage({
         fornecedor_nome:
           r.fornecedores?.razao_social ?? r.fornecedores?.nome ?? null,
         job_codigo: r.jobs?.codigo ?? null,
+        // Mesma regra do `vw_fluxo_caixa`: a avulsa rateada manda, e o
+        // rateio de uma regional só resolve aqui mesmo; sem rateio, a
+        // regional do job; sem job, a da empresa. Com mais de uma regional
+        // isto fica nulo — a coluna diz "Rateada" e o detalhe abre a
+        // divisão, que é onde os percentuais cabem.
+        regional_nome:
+          rateio.length === 1
+            ? rateio[0].regional_nome
+            : rateio.length > 1
+              ? null
+              : (r.jobs?.regional?.nome ??
+                 r.empresas?.regional?.nome ??
+                 null),
         tipo_codigo: r.plano_contas_tipos.codigo,
         tipo_nome: r.plano_contas_tipos.nome,
         subtipo_codigo: r.plano_contas_subtipos.codigo,

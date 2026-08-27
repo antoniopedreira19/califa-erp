@@ -16,6 +16,14 @@ export type LancamentoLinha = {
   tipo_nome: string;
   subtipo_codigo: string;
   subtipo_nome: string;
+  /** Regional do lançamento, pela MESMA regra do `vw_fluxo_caixa`: a
+   *  avulsa rateada manda; sem rateio, a regional do job; sem job, a da
+   *  empresa. `null` quando nenhuma das três existe.
+   *
+   *  Quando a avulsa é rateada entre várias, isto vem `null` e quem conta
+   *  a história é `rateio` — a coluna mostra "Rateada" e o detalhe da
+   *  linha abre a divisão com os percentuais. */
+  regional_nome: string | null;
   origem: string;
   credito: number;
   debito: number;
