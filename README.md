@@ -164,12 +164,36 @@ npm run dev
 
 Aplicação em `http://localhost:3000`.
 
+**Duas armadilhas do servidor de desenvolvimento** — as duas já custaram
+tempo de investigação neste projeto:
+
+- **A tela não muda depois de editar o código?** Confira de qual
+  diretório o servidor está rodando antes de suspeitar de cache. Se
+  houver git worktree em `.claude/worktrees/`, um `npm run dev` iniciado
+  lá continua ocupando a 3000 e servindo o **outro checkout** — sem erro
+  nenhum que denuncie. No macOS:
+
+  ```bash
+  lsof -a -p $(lsof -ti tcp:3000) -d cwd -Fn
+  ```
+
+- **Não rode `npm run build` com o `npm run dev` de pé.** Os dois
+  escrevem no mesmo `.next`; o build corrompe o que o dev está servindo e
+  a aplicação perde o CSS. Pare o dev antes, ou rode o build numa cópia
+  do repositório.
+
 ### 8. Lint e typecheck
 
 ```powershell
 npm run lint
 npm run typecheck
 ```
+
+Os dois passam **e a tela ainda pode estar quebrada**: comentário JSX
+aberto e não fechado (`{/*` sem `*/}`) engole os componentes seguintes
+sem virar erro de sintaxe, e nem `tsc`, nem `next lint`, nem
+`npm run build` reclamam. Depois de mexer em bloco de JSX por
+recorte/colagem, **abra a tela**.
 
 ## Estrutura do projeto
 
