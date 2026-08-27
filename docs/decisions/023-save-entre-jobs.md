@@ -379,3 +379,66 @@ do `docs/FLUXO-BANCO.md` não se aplica sozinho: substituir o CHECK
 `chk_fat_item_origem` em `faturamento_itens` para aceitar a origem `save`.
 O CHECK novo é estritamente mais permissivo e a tabela tem 2 linhas, mas
 substituição de constraint exige confirmação explícita.
+
+---
+
+## ⚠️ Nota de 2026-08-27 — o que o teste ponta a ponta mudou
+
+O fluxo inteiro foi exercitado logado, no projeto **TESTE-0005/26 ·
+Revisão Save**: cinco orçamentos, quatro jobs, uma nota emitida e baixada.
+O registro completo está nos três handoffs. O que mudou de **regra** —
+e não só de código — é isto:
+
+### 1. Job recusado pelo financeiro não oferece crédito
+
+`vw_saves_por_job` não olhava o status do job de origem, então um job
+**reprovado na abertura** continuava aparecendo no seletor com saldo
+cheio. Job `rejeitado_financeiro` e `cancelado` saíram da view
+(migration `20260827000002`).
+
+`aguardando_abertura` **continua** oferecendo saldo: o crédito nasce do
+compromisso do cliente, e o ERP já trata `faturamento_previsto` como
+compromisso desde a abertura do job. `encerrado` também continua — o
+saldo é do cliente e sobrevive ao encerramento da origem.
+
+### 2. O consumo muda de ponta na abertura, e a versão aprovada congela
+
+`saves_consumos` nasce apontando para a linha da **versão**
+(`item_versao_id`). Na abertura ele passa a apontar para a **cópia do
+job** (`job_item_orcado_id`) — as duas pontas nunca convivem
+(`chk_save_consumo_uma_ponta`), e é de propósito: a errata do job apaga e
+recria os consumos por `job_item_orcado_id`, e uma linha órfã do lado da
+versão seria contada duas vezes no saldo do job de origem.
+
+Consequência: o `save_consumido` da linha da **versão aprovada** passou a
+ser congelado (migration `20260827000003`). É a mesma regra de
+`bv_liquido_planejado` na decisão 022 — o que a aprovação congela, a vida
+do job não reescreve. Enquanto a versão é rascunho o recálculo continua
+igual.
+
+### 3. Linha em save não tem custo — nem pelo espelho de `A` e `D`
+
+A §9 já dizia que a linha em save não tem planejado. Faltava dizer que
+isso vale **inclusive contra o espelho** dos tipos que não geram PP: em
+`A` e `D` a tela lê o ORÇADO no lugar da coluna planejado, e fazia isso
+também na linha em save, ressuscitando o custo que o trigger tinha
+zerado. A rentabilidade do grupo chegava a ficar negativa.
+
+### 4. A planilha do cliente mostra o orçamento cheio
+
+O XLSX exportado usa o lado **bruto** — a mesma conta sobre o total
+orçado, sem a mecânica do save. Num orçamento de save inteiro o valor do
+job é zero, e o arquivo sairia zerado enquanto a lista de itens somava
+outra coisa. Em orçamento sem save o arquivo continua idêntico.
+
+### 5. Os dois pontos da nota de 24/08 ficaram assim
+
+- **Quando o save vira consumível:** na criação do job de origem — o
+  seletor já o oferece com o job em `aguardando_abertura`. Exercitado no
+  teste.
+- **A errata pode marcar e desmarcar save:** **sim**, e é o caminho
+  oficial dentro do job (decisão do Tiago em 26/08/2026, implementada em
+  `save-errata-actions.ts`). O que fecha a porta é o **envio para
+  faturamento**, não a abertura.
+
+O item destrutivo (`chk_fat_item_origem`) foi aprovado e aplicado.

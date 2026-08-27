@@ -38,6 +38,9 @@ export interface LinhaTotaisProjeto {
   /** Rótulo curto à direita do nome — "v2 · aprovada", por exemplo. */
   detalhe?: string | null;
   orcado: number;
+  /** Base da rentabilidade — sem as linhas em save (decisão 023 §9).
+   *  Ausente = igual ao orçado, que é o caso de todo orçamento sem save. */
+  orcadoRentabilidade?: number;
   planejado: number;
   honorarios: number;
   imposto: number;
@@ -67,6 +70,10 @@ interface Props {
  */
 export function TotaisProjetoCard({ linhas, moeda, descricao }: Props) {
   const totalOrcado = linhas.reduce((s, l) => s + l.orcado, 0);
+  const totalOrcadoRentabilidade = linhas.reduce(
+    (s, l) => s + (l.orcadoRentabilidade ?? l.orcado),
+    0,
+  );
   const totalPlanejado = linhas.reduce((s, l) => s + l.planejado, 0);
   const honorarios = linhas.reduce((s, l) => s + l.honorarios, 0);
   const imposto = linhas.reduce((s, l) => s + l.imposto, 0);
@@ -102,7 +109,7 @@ export function TotaisProjetoCard({ linhas, moeda, descricao }: Props) {
   const {
     rentabilidade: rentabilidadeProjeto,
     percentual: percentualProjeto,
-  } = calcularRentabilidade(totalOrcado, totalPlanejado);
+  } = calcularRentabilidade(totalOrcadoRentabilidade, totalPlanejado);
 
   return (
     <div className="rounded-2xl border border-border bg-card shadow-soft">
@@ -188,7 +195,7 @@ export function TotaisProjetoCard({ linhas, moeda, descricao }: Props) {
             ) : (
               linhas.map((l) => {
                 const { rentabilidade, percentual } = calcularRentabilidade(
-                  l.orcado,
+                  l.orcadoRentabilidade ?? l.orcado,
                   l.planejado,
                 );
                 const semPlanejado = l.planejado <= 0;
@@ -380,7 +387,7 @@ export function TotaisProjetoCard({ linhas, moeda, descricao }: Props) {
         <PainelResultado
           valorJob={valorJob}
           imposto={imposto}
-          orcado={totalOrcado}
+          orcado={totalOrcadoRentabilidade}
           custoPlanejado={totalPlanejado}
           custoRealizado={0}
           honorarios={honorarios}

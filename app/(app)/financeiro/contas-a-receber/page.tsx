@@ -407,6 +407,13 @@ export default async function ContasReceberPage() {
                 ? `${job.codigo} · saldo em save`
                 : `${job.codigo} ${job.nome}`;
             }),
+      // Quantos JOBS distintos a nota cobre — e não quantos itens ela tem.
+      // A nota com save tem dois itens do MESMO job (o próprio e o saldo
+      // em save), e contá-los como dois jobs faria a nota de um job só se
+      // anunciar como agrupada (decisão 017 × decisão 023).
+      qtd_jobs: new Set(
+        itens.map((i) => i.origem_id).filter((id): id is string => !!id),
+      ).size,
       // NF agrupada cobre vários jobs (decisão 017): junta os contatos de
       // todos eles, sem repetir o mesmo e-mail duas vezes.
       contatos: dedupContatos(

@@ -228,8 +228,22 @@ export async function GET(
   // compromete a gastar. A quebra entre o que a California emite nota e o
   // que ele paga direto ao fornecedor é leitura interna (decisão do Tiago
   // em 11/08/2026) e não entra neste arquivo.
-  const { subtotaisPorTipo, subtotalGeral, honorarios, imposto, valorJob } =
-    calcularTotaisVersao(itens, honorPct, impPct);
+  //
+  // O lado BRUTO, e não o do job: a planilha do cliente mostra o orçamento
+  // como ele foi fechado, sem a mecânica interna do save. Num orçamento
+  // com linhas em save o "valor do job" desce (elas saem do valor do job)
+  // e o arquivo sairia com um TOTAL de itens que não bate com o
+  // FATURAMENTO logo abaixo — no orçamento de save inteiro sairia zerado.
+  // `bruto` roda a MESMA conta sobre o total orçado cheio, então em
+  // qualquer orçamento sem save o arquivo é byte a byte o de sempre.
+  const { subtotaisPorTipo, subtotalGeral, bruto } = calcularTotaisVersao(
+    itens,
+    honorPct,
+    impPct,
+  );
+  const honorarios = bruto.honorarios;
+  const imposto = bruto.imposto;
+  const valorJob = bruto.total;
 
   // 1 linha vazia
   ws.addRow([]);

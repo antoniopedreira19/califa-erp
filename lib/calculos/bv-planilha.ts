@@ -118,12 +118,20 @@ export function realizadoVemDasPPs(tipo: TipoCusto): boolean {
  *
  * Em `A` e `D` é o próprio orçado; nos demais é o que foi digitado na
  * coluna PLANEJADO.
+ *
+ * `emSave` vem antes de tudo: a linha em save é venda sem execução, e não
+ * tem custo nenhum neste job (decisão 023 §9). O trigger já grava zero nas
+ * três células do planejado, mas em `A` e `D` a tela não LÊ a coluna — ela
+ * espelha o orçado —, e sem esta guarda o espelho ressuscitaria o custo
+ * que o banco zerou, jogando a rentabilidade do grupo para negativa.
  */
 export function planejadoBrutoDoItem(
   tipo: TipoCusto,
   totalOrcado: number,
   totalPlanejado: number,
+  emSave = false,
 ): number {
+  if (emSave) return 0;
   return planejadoEspelhaOrcado(tipo)
     ? Number(totalOrcado ?? 0)
     : Number(totalPlanejado ?? 0);
@@ -141,7 +149,12 @@ export function realizadoBrutoDoItem(
   totalOrcado: number,
   somaDasPPs: number,
   jobAberto = true,
+  emSave = false,
 ): number {
+  // Linha em save não tem custo — nem planejado nem realizado. Em `A` e
+  // `D` o realizado é espelho do orçado, e sem esta guarda a linha que o
+  // cliente vai gastar noutro job apareceria gasta aqui.
+  if (emSave) return 0;
   // Job que o financeiro ainda não abriu não tem realizado nenhum — nem
   // o do orçado. A produção pode ter começado a gastar, mas o job ainda
   // pode voltar, e a linha `A` mostrando o orçado ali leria como "já
@@ -280,10 +293,13 @@ export function blocosDoItem(
 } {
   const orcado = Number(item.total_orcado ?? 0);
 
+  const emSave = item.em_save === true;
+
   const planejadoBruto = planejadoBrutoDoItem(
     item.tipo_custo,
     orcado,
     Number(item.total_planejado ?? 0),
+    emSave,
   );
 
   const congelado = item.bv_liquido_planejado;
@@ -299,6 +315,7 @@ export function blocosDoItem(
     orcado,
     somaDasPPs,
     jobAberto,
+    emSave,
   );
   const bvConfirmado = bv !== null && bvContaNoRealizado(bv.situacao);
   const deducaoRealizado = bvConfirmado
@@ -309,7 +326,7 @@ export function blocosDoItem(
     orcado,
     // A linha em save é venda sem execução: ela fica fora da comparação
     // orçado × custo, mas continua cheia na coluna ORÇADO.
-    orcadoRentabilidade: item.em_save === true ? 0 : orcado,
+    orcadoRentabilidade: emSave ? 0 : orcado,
     planejado: valoresDoBloco(planejadoBruto, deducaoPlanejado),
     realizado: valoresDoBloco(
       realizadoBruto,

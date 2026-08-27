@@ -144,15 +144,42 @@ export default async function ConciliacaoPage({
       Array<{ tipo: "job" | "save"; codigo: string | null; nome: string | null; valor: number }>
     >();
     if (ids.length > 0) {
-      const { data: origens } = await supabase
+      // Sem embed: `vw_lancamento_origens` é VIEW, e o PostgREST não tem
+      // chave estrangeira para inferir o join com `jobs` a partir dela —
+      // pedir `job:jobs!job_id(...)` volta erro, e o erro silencioso
+      // deixava a linha sem expansão nenhuma. O nome do job vem numa
+      // segunda leitura, pelos ids que a view devolveu.
+      const { data: origens, error: origensErro } = await supabase
         .from("vw_lancamento_origens")
-        .select("lancamento_id, tipo, valor, job:jobs!job_id(codigo, nome), save_job:jobs!save_job_id(codigo, nome)")
+        .select("lancamento_id, tipo, valor, job_id, save_job_id")
         .eq("tenant_id", session.activeTenant.id)
         .in("lancamento_id", ids);
 
+      if (origensErro) {
+        console.error("[conciliacao.origens]", origensErro.message);
+      }
+
+      const jobIds = [
+        ...new Set(
+          ((origens ?? []) as any[])
+            .map((o) => o.job_id ?? o.save_job_id)
+            .filter((id: string | null): id is string => !!id),
+        ),
+      ];
+      const { data: jobsDasOrigens } = jobIds.length
+        ? await supabase
+            .from("jobs")
+            .select("id, codigo, nome")
+            .eq("tenant_id", session.activeTenant.id)
+            .in("id", jobIds)
+        : { data: [] as any[] };
+      const jobPorId = new Map(
+        ((jobsDasOrigens ?? []) as any[]).map((j) => [j.id, j]),
+      );
+
       for (const o of (origens ?? []) as any[]) {
         const lista = origensPorLancamento.get(o.lancamento_id) ?? [];
-        const alvo = o.tipo === "save" ? o.save_job : o.job;
+        const alvo = jobPorId.get(o.tipo === "save" ? o.save_job_id : o.job_id);
         lista.push({
           tipo: o.tipo,
           codigo: alvo?.codigo ?? null,

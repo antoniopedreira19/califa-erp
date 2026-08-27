@@ -35,6 +35,14 @@ export interface ItemRascunho {
   dias_meses_planejado: number;
   /** Rastro da linha do XLSX, quando o item veio de importação. */
   planilha_origem: string | null;
+  /** A linha vira crédito para outro job (decisão 023). O editor
+   *  multi-job não MARCA save — quem marca é a tela da versão —, mas
+   *  precisa carregar a marca para o fechamento não mentir ao reabrir um
+   *  orçamento que já tem save. */
+  em_save?: boolean;
+  /** Quanto do principal desta linha é pago por crédito de outro job.
+   *  Ausente = zero: item novo e planilha importada nascem sem save. */
+  save_consumido?: number;
   bv: BvRascunho | null;
 }
 

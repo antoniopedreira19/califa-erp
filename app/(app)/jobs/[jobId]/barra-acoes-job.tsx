@@ -26,6 +26,11 @@ interface Props {
   envioFaturamento: EnvioFaturamento | null;
   podeEnviarFaturamento: boolean;
   faturamentoPrevisto: number;
+  /** Quanto do faturamento previsto é saldo em save. */
+  faturamentoSavePrevisto?: number;
+  /** Job pago inteiramente com crédito de outro job: pula a etapa de
+   *  faturamento e já pode encerrar (decisão 023 §11). */
+  pagoSoPorSave?: boolean;
   dataPrevistaFaturamento: string | null;
   portais: PortalOption[];
   moeda: string;
@@ -56,6 +61,8 @@ export function BarraAcoesJob({
   envioFaturamento,
   podeEnviarFaturamento,
   faturamentoPrevisto,
+  faturamentoSavePrevisto = 0,
+  pagoSoPorSave = false,
   dataPrevistaFaturamento,
   portais,
   moeda,
@@ -64,7 +71,8 @@ export function BarraAcoesJob({
   const aindaNaoAberto =
     status === "aguardando_abertura" || status === "rejeitado_financeiro";
   const transicoesVisiveis = aindaNaoAberto ? transicoes : [];
-  const mostrarEncerramento = status === "aberto" && envioFaturamento !== null;
+  const mostrarEncerramento =
+    status === "aberto" && (envioFaturamento !== null || pagoSoPorSave);
 
   const linhas = montarLinhas({
     status,
@@ -72,6 +80,7 @@ export function BarraAcoesJob({
     faturamentoPrevisto,
     moeda,
     mostrarEncerramento,
+    pagoSoPorSave,
   });
 
   return (
@@ -90,6 +99,7 @@ export function BarraAcoesJob({
             jobId={jobId}
             jobCodigo={jobCodigo}
             valorFaturado={faturamentoPrevisto}
+            valorSave={faturamentoSavePrevisto}
             dataPrevistaFaturamento={dataPrevistaFaturamento}
             portais={portais}
             moeda={moeda}
@@ -114,12 +124,14 @@ function montarLinhas({
   faturamentoPrevisto,
   moeda,
   mostrarEncerramento,
+  pagoSoPorSave,
 }: {
   status: JobStatus;
   envioFaturamento: EnvioFaturamento | null;
   faturamentoPrevisto: number;
   moeda: string;
   mostrarEncerramento: boolean;
+  pagoSoPorSave: boolean;
 }): React.ReactNode[] {
   if (status === "aguardando_abertura") {
     return [
@@ -177,6 +189,16 @@ function montarLinhas({
       mostrarEncerramento
         ? "Próximo passo: encerrar o job e travar o resultado."
         : "O encerramento acontece pelo resumo de fechamento.",
+    ];
+  }
+
+  if (pagoSoPorSave) {
+    return [
+      <>
+        Job {jobStatusLabel(status).toLowerCase()} · pago por saldo em save,
+        sem nota a emitir
+      </>,
+      "O cliente já pagou este job na nota do job que gerou o crédito. Não há faturamento a enviar — o encerramento já está disponível.",
     ];
   }
 

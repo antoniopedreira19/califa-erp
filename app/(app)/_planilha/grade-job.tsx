@@ -17,8 +17,11 @@ export function ColunasJob({ save = false }: { save?: boolean } = {}) {
           orçamento, para as duas telas se lerem igual. */}
       {save && <col className="w-[3.5%]" />}
       {/* Item com largura própria: sem ela absorve toda a folga tirada das
-          outras e a tabela volta a estourar pelas bordas. */}
-      <col className={save ? "w-[15.5%]" : "w-[18%]"} />
+          outras e a tabela volta a estourar pelas bordas.
+          `3.5 + 14.5 = 18`, de propósito: o card de Totais NÃO tem coluna
+          de Save e abre com um Item de 18%, então as duas tabelas só caem
+          no mesmo eixo se Save + Item aqui somarem exatamente aquilo. */}
+      <col className={save ? "w-[14.5%]" : "w-[18%]"} />
       <col className="w-[4%]" />
       <col className="w-[8.5%]" />
       {/* Orçado */}

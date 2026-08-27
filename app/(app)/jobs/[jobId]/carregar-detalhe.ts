@@ -584,6 +584,24 @@ export async function carregarDetalheDoJob(
     envioFaturamento === null &&
     totaisJob.faturamentoPrevisto > 0;
 
+  // Job pago INTEIRAMENTE por saldo de save: faturamento previsto zero e
+  // consumo registrado. Ele pula a etapa de faturamento e se comporta
+  // como já faturado — a nota dele saiu no job que gerou o crédito
+  // (decisão do Tiago em 27/08/2026, decisão 023 §11). Sem isto ele
+  // travava dos dois lados: não dá para enviar (valor zero) e o
+  // encerramento só aparecia depois do envio.
+  //
+  // A condição é DUPLA de propósito: faturamento zero sem save é outra
+  // coisa (orçado vazio), e esse continua tendo de passar pelo
+  // faturamento. Mesma régua de `lib/data/faturamento-por-job.ts` e do
+  // portão de `encerrarJob`.
+  const saveConsumidoNoJob = itens.reduce(
+    (soma, it) => soma + Number(it.save_consumido ?? 0),
+    0,
+  );
+  const pagoSoPorSave =
+    totaisJob.faturamentoPrevisto <= 0.004 && saveConsumidoNoJob > 0;
+
   if (jobsIrmaosRes.error)
     console.error("[job.irmaos]", jobsIrmaosRes.error.message);
 
@@ -623,13 +641,18 @@ export async function carregarDetalheDoJob(
     }));
 
   const resumoEncerramento: ResumoEncerramento | null =
-    job.status === "aberto" && envioFaturamento
+    job.status === "aberto" && (envioFaturamento || pagoSoPorSave)
       ? {
           faturamentoAbertura: job.faturamento_previsto_abertura,
           // "Faturamento" do fechamento é o faturamento previsto de agora,
           // recalculado dos itens — não o número congelado na abertura.
           faturamentoFechamento: totaisJob.faturamentoPrevisto,
-          valorEnviado: Number(envioFaturamento.valor_faturado),
+          // Sem envio (job que pulou a etapa) não há valor mandado
+          // faturar: zero, e o dialog não acusa divergência porque o
+          // faturamento previsto também é zero.
+          valorEnviado: envioFaturamento
+            ? Number(envioFaturamento.valor_faturado)
+            : 0,
           orcado: totaisJob.subtotalGeral,
           honorarios: totaisJob.honorarios,
           imposto: totaisJob.imposto,
@@ -637,6 +660,7 @@ export async function carregarDetalheDoJob(
           percentualImposto: Number(versaoAprovada.percentual_imposto),
           valorJob: totaisJob.valorJob,
           custoRealizado: custoRealizadoJob,
+          saveConsumido: saveConsumidoNoJob,
           moeda: versaoAprovada.moeda,
           ppsEmAberto,
           bvsEmAberto,
@@ -698,6 +722,7 @@ export async function carregarDetalheDoJob(
     naoLidasPPs,
     envioFaturamento,
     podeEnviarFaturamento,
+    pagoSoPorSave,
     portaisDoCliente,
     jobsDoProjeto,
     abertoPorNome,

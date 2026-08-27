@@ -79,6 +79,22 @@ export default async function AbrirJobNoFinanceiroPage({
   const faturamentoPrevisto =
     Math.round(Number(job.faturamento_previsto ?? 0) * 100) / 100;
 
+  // Quanto deste job é pago com crédito de outro (decisão 023). Quando o
+  // faturamento previsto é zero, é isto que distingue "o cliente paga o
+  // fornecedor direto" de "o cliente já pagou, num job anterior".
+  const { data: consumoRes } = await supabase
+    .from("jobs_itens_orcado")
+    .select("save_consumido")
+    .eq("tenant_id", session.activeTenant.id)
+    .eq("job_id", job.id);
+  const saveConsumido =
+    Math.round(
+      ((consumoRes ?? []) as any[]).reduce(
+        (s, i) => s + Number(i.save_consumido ?? 0),
+        0,
+      ) * 100,
+    ) / 100;
+
   const baseCompetencia = job.data_inicio_prevista ?? hojeIso;
   const anoSugerido = Number(baseCompetencia.slice(0, 4));
   const anoAtual = Number(hojeIso.slice(0, 4));
@@ -94,6 +110,7 @@ export default async function AbrirJobNoFinanceiroPage({
       contas={contas}
       custoPrevisto={custoPrevisto}
       faturamentoPrevisto={faturamentoPrevisto}
+      saveConsumido={saveConsumido}
       enviadoPorNome={enviadoPorNome}
       curvaInicial={sugerirCurva(
         custoPrevisto,

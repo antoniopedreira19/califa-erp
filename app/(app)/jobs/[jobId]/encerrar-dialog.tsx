@@ -29,6 +29,10 @@ export interface ResumoEncerramento {
   percentualImposto: number;
   valorJob: number;
   custoRealizado: number;
+  /** Quanto do orçado deste job foi pago com crédito de outro job. Zero
+   *  na maioria; quando cobre o job inteiro, é o que explica um
+   *  faturamento zerado (decisão 023). */
+  saveConsumido?: number;
   moeda: string;
   /** PPs sem baixa e BVs não recebidos — travam o encerramento. */
   ppsEmAberto: { codigo: string; status: string }[];
@@ -233,6 +237,12 @@ export function EncerrarDialog({ jobId, resumo, open, onOpenChange }: Props) {
             rotulo={`Encargos e impostos (${taxa(resumo.percentualImposto)})`}
             valor={formatCurrency(resumo.imposto, moeda)}
           />
+          {(resumo.saveConsumido ?? 0) > 0.005 && (
+            <Linha
+              rotulo="Pago com saldo em save de outro job"
+              valor={formatCurrency(resumo.saveConsumido ?? 0, moeda)}
+            />
+          )}
           <div className="mt-1 border-t border-border pt-2.5">
             <Linha
               rotulo="Valor do Job"
@@ -240,6 +250,14 @@ export function EncerrarDialog({ jobId, resumo, open, onOpenChange }: Props) {
               destaque
             />
           </div>
+          {(resumo.saveConsumido ?? 0) > 0.005 &&
+            faturamentoFechamento <= 0.004 && (
+              <p className="pt-1 text-[11.5px] leading-relaxed text-muted-foreground">
+                O faturamento deste job é zero porque ele foi pago
+                inteiramente com crédito de outro job — a nota já saiu lá.
+                Por isso ele pulou a etapa de faturamento.
+              </p>
+            )}
         </div>
 
         <div className="flex flex-col gap-2.5 rounded-xl border border-border px-4 py-4">

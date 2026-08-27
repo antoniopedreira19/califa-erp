@@ -118,6 +118,11 @@ interface Props {
   custoPrevisto: number;
   /** Base das parcelas de recebimento — o que a California prevê receber. */
   faturamentoPrevisto: number;
+  /** Quanto do orçado deste job é pago com crédito de outro job (save).
+   *  Só serve para EXPLICAR um faturamento previsto zerado: sem save, ele
+   *  significa "o cliente paga o fornecedor direto"; com save, significa
+   *  "o cliente já pagou isto, num job anterior" (decisão 023). */
+  saveConsumido?: number;
   /** Quem clicou em "Enviar job para abertura" na tela da versão. */
   enviadoPorNome: string | null;
   curvaInicial: CurvaLinha[];
@@ -206,6 +211,7 @@ export function AberturaForm({
   contas,
   custoPrevisto,
   faturamentoPrevisto,
+  saveConsumido = 0,
   enviadoPorNome,
   curvaInicial,
   recebimentoInicial,
@@ -1105,9 +1111,20 @@ export function AberturaForm({
                       Nenhum faturamento previsto pela California
                     </p>
                     <p className="mt-1 text-xs leading-relaxed text-amber-800/80">
-                      Todo o valor deste job é pago diretamente pelo cliente ao
-                      fornecedor — a California não emite nota. O job abre sem
-                      previsão de recebimento.
+                      {saveConsumido > 0.005 ? (
+                        <>
+                          Este job é pago com saldo em save de outro job — o
+                          cliente já pagou por ele numa nota anterior. Não há
+                          nota a emitir aqui, e o job abre sem previsão de
+                          recebimento.
+                        </>
+                      ) : (
+                        <>
+                          Todo o valor deste job é pago diretamente pelo cliente
+                          ao fornecedor — a California não emite nota. O job abre
+                          sem previsão de recebimento.
+                        </>
+                      )}
                     </p>
                   </div>
                 </div>

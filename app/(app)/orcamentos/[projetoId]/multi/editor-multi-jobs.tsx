@@ -515,6 +515,7 @@ export function EditorMultiJobs({
           codigo: codigoPrevisto(indice),
           nome: job.nome,
           orcado: t.orcado,
+          orcadoRentabilidade: t.orcadoRentabilidade,
           planejado: t.planejado,
           honorarios: t.honorarios,
           imposto: t.imposto,
