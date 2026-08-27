@@ -205,9 +205,12 @@ const baixaSchema = z
     plano_conta_subtipo_id: z
       .string()
       .uuid("Selecione o centro de custo do pagamento."),
-    forma_pagamento: z.enum(["pix", "transferencia", "boleto", "cartao_credito"], {
-      required_error: "Selecione a forma de pagamento.",
-    }),
+    // Nullable pra devolução de verba: a RPC de devolução não recebe forma
+    // e o dialog esconde o campo. Para as demais origens, superRefine
+    // abaixo exige que venha preenchido.
+    forma_pagamento: z
+      .enum(["pix", "transferencia", "boleto", "cartao_credito"])
+      .nullable(),
     cartao_credito_id: z
       .string()
       .uuid()
@@ -215,6 +218,27 @@ const baixaSchema = z
       .or(z.literal("").transform(() => null)),
   })
   .superRefine((data, ctx) => {
+    // Devolução de verba: forma_pagamento vem null e cartão também. Não
+    // exige nada.
+    if (data.origem === "pp_devolucao_verba") {
+      if (data.forma_pagamento !== null || data.cartao_credito_id !== null) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            "Devolução de verba não aceita forma de pagamento nem cartão.",
+          path: ["forma_pagamento"],
+        });
+      }
+      return;
+    }
+    if (data.forma_pagamento === null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Selecione a forma de pagamento.",
+        path: ["forma_pagamento"],
+      });
+      return;
+    }
     if (data.forma_pagamento === "cartao_credito" && !data.cartao_credito_id) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,

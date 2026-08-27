@@ -357,6 +357,7 @@ export function TitulosPagarList({
         empresaId: baixando.empresa_id,
         planoContaTipoId: baixando.plano_conta_tipo_id,
         planoContaSubtipoId: baixando.plano_conta_subtipo_id,
+        isDevolucao: baixando.origem === "pp_devolucao_verba",
       }
     : null;
 

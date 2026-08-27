@@ -1059,7 +1059,7 @@ export async function reenviarPedidoCompra(
   const { data: ppRow, error: ppErr } = await supabase
     .from("pedidos_compra")
     .select(
-      "id, tenant_id, codigo, job_id, item_realizado_id, status, pdf_path, prazo_pagamento_financeiro",
+      "id, tenant_id, codigo, job_id, item_realizado_id, status, pdf_path, prazo_pagamento_financeiro, verba_producao",
     )
     .eq("id", pp_id)
     .eq("tenant_id", session.activeTenant.id)
@@ -1071,6 +1071,17 @@ export async function reenviarPedidoCompra(
     return {
       ok: false,
       message: "Só PP rejeitada pelo financeiro pode ser corrigida e reenviada.",
+    };
+  }
+
+  // PP de Verba de Produção não pode ser reenviada por este formulário —
+  // o form de edição hoje pressupõe fornecedor. Se surgir demanda real de
+  // reenviar verba, é task própria (form condicional pro modo verba).
+  if (ppRow.verba_producao) {
+    return {
+      ok: false,
+      message:
+        "PP de Verba de Produção não pode ser reenviada neste momento. Cancele e emita uma nova.",
     };
   }
 
