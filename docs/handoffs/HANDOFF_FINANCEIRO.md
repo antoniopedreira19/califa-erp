@@ -2143,3 +2143,23 @@ era `subtipo_codigo`, acrescentado à query em `conciliacao/page.tsx`.
 O subtipo aparece com o código curto (`001`), e não com o composto que o
 Plano de Contas usa na árvore (`05.001`) — ao lado da coluna Tipo, repetir o
 `05.` seria redundante.
+
+**3. Coluna Regional**, à direita do Subtipo. A ordem final é
+`Data · Crédito · Débito · Saldo · Descrição · Fornecedor · Job · Tipo · Subtipo · Regional`.
+
+⚠️ **Não inventamos regra de regional aqui.** A coluna segue exatamente a
+que o `vw_fluxo_caixa` já usava (migration `20260817000006`), para as duas
+telas nunca discordarem sobre a mesma linha:
+
+1. **Conta avulsa rateada manda.** É a única origem que se divide entre
+   regionais.
+2. **Sem rateio, a regional do JOB.**
+3. **Sem job, a da EMPRESA.**
+
+O passo 3 não é detalhe: os lançamentos de `titulo_baixa` (recebimento de
+NF) têm `job_id` nulo, e sem o fallback metade do extrato ficaria com
+travessão.
+
+Quando a avulsa se divide entre **duas ou mais** regionais, a célula mostra
+**"Rateada"** — o nome de uma só seria mentira, e a divisão com os
+percentuais já vive no detalhe que o botão "Rateado" abre na própria linha.

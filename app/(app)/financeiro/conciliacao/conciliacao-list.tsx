@@ -69,6 +69,7 @@ export function ConciliacaoList({
             <th className="px-3 py-2 text-left">Job</th>
             <th className="px-3 py-2 text-left">Tipo</th>
             <th className="px-3 py-2 text-left">Subtipo</th>
+            <th className="px-3 py-2 text-left">Regional</th>
           </tr>
         </thead>
         <tbody>
@@ -152,11 +153,23 @@ export function ConciliacaoList({
                 <span className="font-mono">{l.subtipo_codigo}</span> ·{" "}
                 {l.subtipo_nome}
               </td>
+              {/* Conta avulsa é a única origem que se divide entre
+                  regionais. Aqui cabe o nome de UMA; a divisão com os
+                  percentuais vive no detalhe da linha, que o "Rateado" já
+                  abre. */}
+              <td className="whitespace-nowrap px-3 py-2 text-xs">
+                {l.regional_nome ??
+                  (l.rateio.length > 1 ? (
+                    <span className="text-muted-foreground">Rateada</span>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  ))}
+              </td>
             </tr>
             {aberta && (
               <tr className="border-b border-border bg-muted/20 last:border-0">
                 <td colSpan={4} />
-                <td colSpan={5} className="px-3 pb-3 pt-1">
+                <td colSpan={6} className="px-3 pb-3 pt-1">
                   <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.07em] text-muted-foreground">
                     De onde vem este dinheiro
                   </p>
