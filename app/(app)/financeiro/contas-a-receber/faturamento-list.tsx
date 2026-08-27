@@ -96,7 +96,9 @@ export interface FaturadoRow {
    *  1× (corrigido em 18/08/2026). */
   parcelas: Array<{ numero: number; valor: number; data_vencimento: string }>;
   itens: Array<{
-    origem_tipo: "job" | "bv" | "avulso";
+    // `save` só aparece no ITEM: é a fatia da nota que virou crédito do
+    // cliente em vez de faturamento deste job.
+    origem_tipo: "job" | "bv" | "avulso" | "save";
     codigo: string;
     descricao: string;
     valor: number;

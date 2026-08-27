@@ -237,7 +237,7 @@ export default async function ContasReceberPage() {
     plano_conta_subtipo_id: string | null;
     itens: Array<{
       id: string;
-      origem_tipo: "job" | "bv" | "avulso";
+      origem_tipo: "job" | "bv" | "avulso" | "save";
       origem_id: string | null;
       envio_parcela_id: string | null;
       valor: string | number;
@@ -309,7 +309,12 @@ export default async function ContasReceberPage() {
         return {
           origem_tipo: i.origem_tipo,
           codigo: job?.codigo ?? (i.origem_tipo === "bv" ? "BV" : "Avulso"),
-          descricao: job?.nome ?? f.descricao,
+          // Item de save aponta para o mesmo job do item próprio; o que
+          // os separa é o tipo. Sem isto a nota mostra o job duas vezes.
+          descricao:
+            i.origem_tipo === "save"
+              ? "Saldo em save — crédito do cliente"
+              : (job?.nome ?? f.descricao),
           valor: Number(i.valor),
         };
       }),
@@ -354,7 +359,7 @@ export default async function ContasReceberPage() {
       cliente: { nome_fantasia: string | null; razao_social: string | null } | null;
       fornecedor: { nome: string | null; razao_social: string | null } | null;
       itens: Array<{
-        origem_tipo: "job" | "bv" | "avulso";
+        origem_tipo: "job" | "bv" | "avulso" | "save";
         origem_id: string | null;
         envio_parcela_id: string | null;
         valor: string | number;
@@ -395,7 +400,12 @@ export default async function ContasReceberPage() {
                   ? `BV · ${r.faturamento.descricao}`
                   : `Avulso · ${r.faturamento.descricao}`;
               }
-              return `${job.codigo} ${job.nome}`;
+              // Item de save aponta para o MESMO job do item próprio — o
+              // que os separa é o tipo. Sem rótulo, a nota listaria o job
+              // duas vezes e ninguém saberia que parte virou crédito.
+              return i.origem_tipo === "save"
+                ? `${job.codigo} · saldo em save`
+                : `${job.codigo} ${job.nome}`;
             }),
       // NF agrupada cobre vários jobs (decisão 017): junta os contatos de
       // todos eles, sem repetir o mesmo e-mail duas vezes.
