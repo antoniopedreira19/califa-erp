@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ChevronDown, X } from "lucide-react";
+import { ChevronDown, Plus, Trash2, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { TruncateTooltip } from "@/components/ui/truncate-tooltip";
 import { cn, formatCurrency } from "@/lib/utils";
@@ -23,6 +23,9 @@ import { saldoDoItem, somaDasPPs } from "@/lib/calculos/pps-item";
 import { BvDialog } from "@/app/(app)/_bv/bv-dialog";
 import { acaoBv } from "@/app/(app)/_bv/bv-action-button";
 import { LARGURA_CALHA } from "@/app/(app)/_planilha/calha-acoes";
+import { ERRATA } from "@/app/(app)/_planilha/blocos";
+import { TIPOS_CUSTO } from "@/lib/calculos/versao-totais";
+import type { CampoErrata, RascunhoErrata } from "./errata-rascunho";
 import {
   Calha,
   LinhaDaCalha,
@@ -128,6 +131,13 @@ interface Props {
   saveVisivel?: boolean;
   savePorItem?: Record<string, EstadoSaveDaLinha>;
   onAbrirSave?: (item: ItemPlanilhaJob) => void;
+  /** O rascunho do modo errata. Ausente = planilha só de leitura, que é
+   *  como as outras telas que reusam esta tabela a consomem. */
+  errata?: RascunhoErrata;
+  /** Criar item normal e apagar linha ficam atrás de acesso; criar LINHA
+   *  VERMELHA, não. Hoje todo mundo passa — a separação existe para o dia
+   *  em que os papéis entrarem, e para o gate nascer num lugar só. */
+  podeEditarLinhas?: boolean;
 }
 
 /** Quem decide o conteúdo da calha é a coluna Tipo:
@@ -170,6 +180,81 @@ function formatarPercentual(p: number): string {
   return `${p.toFixed(1).replace(".", ",")}%`;
 }
 
+/**
+ * Uma célula do bloco ORÇADO — leitura fora do modo errata, input dentro.
+ *
+ * O input guarda TEXTO, não número: com número, digitar "1," volta a "1" e
+ * o cursor pula. A conversão para número acontece uma vez só, em
+ * `useRascunhoErrata`, e é de lá que sai o total da linha.
+ */
+function CelulaOrcadoErrata({
+  item,
+  campo,
+  editando,
+  errata,
+  moeda,
+  className,
+}: {
+  item: ItemPlanilhaJob;
+  campo: CampoErrata;
+  editando: boolean;
+  errata?: RascunhoErrata;
+  moeda: string;
+  className: string;
+}) {
+  // A linha vermelha nasce sem orçado e nunca ganha um: mostrar travessão
+  // é mais honesto do que mostrar zeros que ninguém pode mexer.
+  if (item.linha_vermelha) {
+    return (
+      <td
+        className={cn(
+          "px-3 text-right text-xs align-middle font-mono",
+          ERRATA.celulaVermelhaApagada,
+        )}
+      >
+        —
+      </td>
+    );
+  }
+
+  const valorSalvo =
+    campo === "unitario"
+      ? Number(item.valor_unitario_orcado ?? 0)
+      : campo === "quantidade"
+        ? Number(item.quantidade_orcada ?? 0)
+        : Number(item.dias_meses_orcado ?? 0);
+
+  if (!editando || !errata) {
+    return (
+      <td
+        className={cn(
+          "px-3 text-right text-xs align-middle",
+          campo === "unitario" && "font-mono",
+          className,
+        )}
+      >
+        {campo === "unitario" ? formatCurrency(valorSalvo, moeda) : valorSalvo}
+      </td>
+    );
+  }
+
+  const edicao = errata.edicaoDe(item.id);
+  const rotulo =
+    campo === "unitario" ? "R$ unitário" : campo === "quantidade" ? "QT" : "D/M";
+
+  return (
+    <td className={cn("px-1.5 align-middle", className, ERRATA.celulaEditavel)}>
+      <input
+        value={edicao ? edicao[campo] : String(valorSalvo)}
+        onChange={(e) => errata.editarCampo(item.id, campo, e.target.value)}
+        inputMode="decimal"
+        aria-label={`${rotulo} orçado de ${item.item || "item novo"}`}
+        className={ERRATA.input}
+      />
+    </td>
+  );
+}
+
 
 
 export function JobItemRealizadoTable({
@@ -196,7 +281,10 @@ export function JobItemRealizadoTable({
   saveVisivel = false,
   savePorItem,
   onAbrirSave,
+  errata,
+  podeEditarLinhas = true,
 }: Props) {
+  const editando = errata?.ativo === true;
   // Rail lateral PP
   const wrapperRef = React.useRef<HTMLDivElement>(null);
   const [painelOpen, setPainelOpen] = React.useState(false);
@@ -542,6 +630,7 @@ export function JobItemRealizadoTable({
                       className={cn(
                         ALTURA_LINHA,
                         "border-b border-border",
+                        item.linha_vermelha && ERRATA.linhaVermelha,
                         saveVisivel &&
                           classesDaLinhaComSave(
                             savePorItem?.[item.id] ?? SAVE_VAZIO,
@@ -556,13 +645,73 @@ export function JobItemRealizadoTable({
                       onAbrir={onAbrirSave ? () => onAbrirSave(item) : undefined}
                     />
                   )}
-                  <td className={cn("px-3 pl-[30px] text-xs align-middle", GRADE_NEUTRA)}>
-                    <TruncateTooltip text={item.item} />
+                  <td
+                    className={cn(
+                      "px-3 pl-[30px] text-xs align-middle",
+                      item.linha_vermelha
+                        ? ERRATA.celulaVermelha
+                        : GRADE_NEUTRA,
+                    )}
+                  >
+                    {editando && errata?.ehNova(item.id) ? (
+                      <input
+                        value={item.item}
+                        onChange={(e) =>
+                          errata.editarNome(item.id, e.target.value)
+                        }
+                        placeholder="Descrição do item"
+                        aria-label="Descrição do item novo"
+                        className={ERRATA.inputNome}
+                      />
+                    ) : (
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        <TruncateTooltip text={item.item} />
+                        {item.linha_vermelha && (
+                          <span className={cn(ERRATA.tagVermelha, "flex-none")}>
+                            só realizado
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </td>
-                  <td className={cn("px-3 text-xs align-middle", GRADE_NEUTRA)}>
-                    <Badge variant="outline">{item.tipo_custo}</Badge>
+                  <td
+                    className={cn(
+                      "px-3 text-xs align-middle",
+                      item.linha_vermelha
+                        ? ERRATA.celulaVermelha
+                        : GRADE_NEUTRA,
+                    )}
+                  >
+                    {editando ? (
+                      <select
+                        value={item.tipo_custo}
+                        onChange={(e) =>
+                          errata?.editarTipo(
+                            item.id,
+                            e.target.value as ItemPlanilhaJob["tipo_custo"],
+                          )
+                        }
+                        aria-label={`Tipo de custo de ${item.item || "item novo"}`}
+                        className="rounded-md border border-border bg-white px-1.5 py-1 text-[11px] font-semibold text-foreground outline-none focus:border-california-red"
+                      >
+                        {TIPOS_CUSTO.map((t) => (
+                          <option key={t} value={t}>
+                            {t}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <Badge variant="outline">{item.tipo_custo}</Badge>
+                    )}
                   </td>
-                  <td className={cn("px-3 text-xs align-middle", GRADE_NEUTRA)}>
+                  <td
+                    className={cn(
+                      "px-3 text-xs align-middle",
+                      item.linha_vermelha
+                        ? ERRATA.celulaVermelha
+                        : GRADE_NEUTRA,
+                    )}
+                  >
                     {categoria ? (
                       <span className="inline-flex max-w-full items-center truncate rounded-full border border-border bg-muted px-2 py-0.5 text-[10.5px] font-medium text-foreground">
                         {categoria}
@@ -571,17 +720,41 @@ export function JobItemRealizadoTable({
                       <span className="text-muted-foreground">—</span>
                     )}
                   </td>
-                  {/* Orcado (RO) */}
-                  <td className={cn("px-3 text-right text-xs font-mono align-middle", ORCADO.celulaAbre)}>
-                    {formatCurrency(Number(item.valor_unitario_orcado ?? 0), moeda)}
-                  </td>
-                  <td className={cn("px-3 text-right text-xs align-middle", ORCADO.celulaMeio)}>
-                    {Number(item.quantidade_orcada ?? 0)}
-                  </td>
-                  <td className={cn("px-3 text-right text-xs align-middle", ORCADO.celulaMeio)}>
-                    {Number(item.dias_meses_orcado ?? 0)}
-                  </td>
-                  <td className={cn("px-3 text-right text-xs font-mono font-semibold align-middle whitespace-nowrap", ORCADO.celulaTotal)}>
+                  {/* ORÇADO — o único bloco que o modo errata abre. A
+                      linha vermelha fica de fora: ela não tem orçado, e é
+                      o banco que garante isso. */}
+                  <CelulaOrcadoErrata
+                    item={item}
+                    campo="unitario"
+                    editando={editando}
+                    errata={errata}
+                    moeda={moeda}
+                    className={ORCADO.celulaAbre}
+                  />
+                  <CelulaOrcadoErrata
+                    item={item}
+                    campo="quantidade"
+                    editando={editando}
+                    errata={errata}
+                    moeda={moeda}
+                    className={ORCADO.celulaMeio}
+                  />
+                  <CelulaOrcadoErrata
+                    item={item}
+                    campo="diasMeses"
+                    editando={editando}
+                    errata={errata}
+                    moeda={moeda}
+                    className={ORCADO.celulaMeio}
+                  />
+                  <td
+                    className={cn(
+                      "px-3 text-right text-xs font-mono font-semibold align-middle whitespace-nowrap",
+                      item.linha_vermelha
+                        ? ERRATA.celulaVermelhaApagada
+                        : ORCADO.celulaTotal,
+                    )}
+                  >
                     {formatCurrency(Number(item.total_orcado ?? 0), moeda)}
                   </td>
                   {/* Planejado (RO) */}
@@ -649,6 +822,50 @@ export function JobItemRealizadoTable({
                 </tr>
                     );
                   })}
+
+                  {/* Os dois jeitos de criar linha, no pé do grupo.
+                      "Novo item" é a linha de sempre: tem orçado, entra na
+                      conta e depois recebe planejado. "Linha vermelha" é a
+                      outra coisa — ela nasce sem orçado e sem planejado e
+                      só recebe realizado, por PP. É o custo que o
+                      orçamento não previu e que alguém precisa pedir
+                      mesmo assim.
+
+                      Criar item normal fica atrás de acesso; criar linha
+                      vermelha, não. */}
+                  {abertoAqui && editando && errata && (
+                    <tr className="border-b border-border">
+                      <td
+                        colSpan={totalDeColunasJob(saveVisivel)}
+                        className={ERRATA.linhaAcao}
+                      >
+                        <div className="flex flex-wrap items-center gap-2 pl-[18px]">
+                          {podeEditarLinhas && (
+                            <button
+                              type="button"
+                              onClick={() => errata.adicionar(grupo.id, false)}
+                              className={ERRATA.botaoNovoItem}
+                            >
+                              <Plus className="h-3.5 w-3.5" />
+                              Novo item em {grupo.nome}
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => errata.adicionar(grupo.id, true)}
+                            className={ERRATA.botaoLinhaVermelha}
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                            Linha vermelha
+                          </button>
+                          <span className="text-[11px] text-muted-foreground">
+                            orçado e planejado zerados · só recebe realizado por
+                            PP
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
                 </React.Fragment>
               );
             })}
@@ -759,12 +976,42 @@ export function JobItemRealizadoTable({
           Job encerrado não some com a calha: os BVs já lançados seguem
           consultáveis, como na tela de Orçamentos. Só o que é ação
           (gerar PP, lançar BV novo) é que desaparece. */}
-      {(podeAcoes ||
+      {(editando ||
+        podeAcoes ||
         (!preAbertura && todosOsItens.some((i) => bvsPorItem[i.id]))) && (
         <Calha className={cn("pointer-events-none absolute left-full top-0 ml-2.5", LARGURA_CALHA)}>
           {grupos.map((grupo) =>
             estaAberto(grupo.id)
               ? grupo.itens.map((item) => {
+                  // No modo errata a calha troca de assunto: BV e PP são
+                  // ações sobre a linha como ela está, e ela está sendo
+                  // reescrita. O que cabe ali é remover.
+                  if (editando) {
+                    if (!errata || !podeEditarLinhas) return null;
+                    return (
+                      <LinhaDaCalha
+                        key={item.id}
+                        posicao={posicoesCalha[`i:${item.id}`]}
+                      >
+                        <div
+                          className={cn(
+                            "pointer-events-auto flex items-center",
+                            ALTURA_LINHA,
+                          )}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => errata.remover(item.id)}
+                            className="inline-flex items-center gap-1 rounded-lg border border-border bg-white px-2 py-1 text-[11px] font-semibold text-muted-foreground transition-colors hover:border-california-red/40 hover:text-california-red"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                            Remover
+                          </button>
+                        </div>
+                      </LinhaDaCalha>
+                    );
+                  }
+
                   // ---- BV: tipos A, AR e D ----
                   const bv = bvsPorItem[item.id] ?? null;
                   // Sem BV num job congelado não há o que consultar — a

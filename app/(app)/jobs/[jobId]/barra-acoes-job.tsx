@@ -1,9 +1,17 @@
+"use client";
+
+/* Client desde 27/08/2026 por uma razão só: ler `useModoErrata` e sair de
+ * cena enquanto a barra da errata está no ar. Todas as props já eram dados
+ * puros — os dois filhos (o drawer de faturamento e as ações de status) já
+ * eram client. */
+
 import Link from "next/link";
 import type { JobStatus } from "@/lib/types";
 import { jobEstaCongelado, jobStatusLabel } from "@/lib/types";
 import { formatCurrency } from "@/lib/utils";
 import { StatusActions } from "./status-actions";
 import { EnviarFaturamentoDrawer, type PortalOption } from "./enviar-faturamento-drawer";
+import { useModoErrataAtivo } from "./modo-errata";
 import type { ResumoEncerramento } from "./encerrar-dialog";
 
 function formatData(iso: string | null): string {
@@ -25,6 +33,14 @@ interface Props {
   transicoes: JobStatus[];
   envioFaturamento: EnvioFaturamento | null;
   podeEnviarFaturamento: boolean;
+  /**
+   * Uma errata mexeu no orçado depois da abertura e o financeiro ainda não
+   * reconferiu. O job segue aberto e a produção segue trabalhando — o que
+   * fecha é o envio para faturamento: previsão de recebimento, curva de
+   * desembolso e competência foram calculadas sobre números que já não
+   * valem (27/08/2026).
+   */
+  aberturaEmRevisao?: boolean;
   faturamentoPrevisto: number;
   /** Quanto do faturamento previsto é saldo em save. */
   faturamentoSavePrevisto?: number;
@@ -60,6 +76,7 @@ export function BarraAcoesJob({
   transicoes,
   envioFaturamento,
   podeEnviarFaturamento,
+  aberturaEmRevisao = false,
   faturamentoPrevisto,
   faturamentoSavePrevisto = 0,
   pagoSoPorSave = false,
@@ -68,6 +85,10 @@ export function BarraAcoesJob({
   moeda,
   resumoEncerramento,
 }: Props) {
+  // Enquanto a errata está aberta quem fala no rodapé é a barra dela: o
+  // design tem UMA barra com três estados, não duas empilhadas.
+  const errataAberta = useModoErrataAtivo();
+
   const aindaNaoAberto =
     status === "aguardando_abertura" || status === "rejeitado_financeiro";
   const transicoesVisiveis = aindaNaoAberto ? transicoes : [];
@@ -81,7 +102,10 @@ export function BarraAcoesJob({
     moeda,
     mostrarEncerramento,
     pagoSoPorSave,
+    aberturaEmRevisao,
   });
+
+  if (errataAberta) return null;
 
   return (
     <div className="sticky bottom-0 z-20 -mx-1 flex flex-wrap items-center justify-between gap-4 rounded-t-2xl border border-b-0 border-border bg-white/95 px-5 py-2 shadow-[0_-4px_16px_-8px_rgba(0,0,0,0.12)] backdrop-blur">
@@ -94,7 +118,7 @@ export function BarraAcoesJob({
       </div>
 
       <div className="flex flex-wrap items-center gap-2.5">
-        {podeEnviarFaturamento && (
+        {podeEnviarFaturamento && !aberturaEmRevisao && (
           <EnviarFaturamentoDrawer
             jobId={jobId}
             jobCodigo={jobCodigo}
@@ -125,6 +149,7 @@ function montarLinhas({
   moeda,
   mostrarEncerramento,
   pagoSoPorSave,
+  aberturaEmRevisao,
 }: {
   status: JobStatus;
   envioFaturamento: EnvioFaturamento | null;
@@ -132,6 +157,7 @@ function montarLinhas({
   moeda: string;
   mostrarEncerramento: boolean;
   pagoSoPorSave: boolean;
+  aberturaEmRevisao: boolean;
 }): React.ReactNode[] {
   if (status === "aguardando_abertura") {
     return [
@@ -199,6 +225,29 @@ function montarLinhas({
         sem nota a emitir
       </>,
       "O cliente já pagou este job na nota do job que gerou o crédito. Não há faturamento a enviar — o encerramento já está disponível.",
+    ];
+  }
+
+  if (aberturaEmRevisao) {
+    return [
+      <>
+        Abertura em revisão desde a última errata · faturamento previsto{" "}
+        <strong className="font-mono font-semibold text-foreground">
+          {formatCurrency(faturamentoPrevisto, moeda)}
+        </strong>
+      </>,
+      <>
+        O job está no mural do financeiro, em{" "}
+        <Link
+          href="/financeiro/abertura-de-job"
+          prefetch={false}
+          className="font-medium text-california-red hover:underline"
+        >
+          Abertura de Job
+        </Link>
+        . O envio para faturamento volta quando a revisão de recebimento e
+        custos for salva.
+      </>,
     ];
   }
 

@@ -58,6 +58,10 @@ function diasEntre(inicio: string | null, fim: string | null): number | null {
 
 export interface DadosAberturaChat {
   criadoEm: string;
+  /** Quando o financeiro abriu o job. `null` antes da abertura, e nos
+   *  jobs anteriores à tela de abertura. Só a errata posterior a esta
+   *  data devolve o job ao mural — é o que a nota do card diz. */
+  aberturaFinanceiroEm?: string | null;
   orcamentoCodigo: string | null;
   versaoNumero: number | null;
   versaoNome: string | null;
@@ -149,9 +153,17 @@ export function montarThreadChat(
 
     const linhas: ChatLinha[] = e.itens.map((i) => {
       const mudouTipo = i.tipo_custo_de !== i.tipo_custo_para;
-      const texto = mudouTipo
-        ? `Tipo de custo · ${i.item_nome}: ${tipoCustoLabel(i.tipo_custo_de)} → ${tipoCustoLabel(i.tipo_custo_para)}`
-        : `Valor · ${i.item_nome} ${moeda(i.total_de, moedaCode)} → ${moeda(i.total_para, moedaCode)}`;
+      // Desde 27/08/2026 a errata também cria e remove linha, e cada caso
+      // se conta de um jeito: "de → para" não diz nada quando um dos dois
+      // lados não existe.
+      const texto =
+        i.acao === "nova"
+          ? `Linha nova${i.linha_vermelha ? " (vermelha)" : ""} · ${i.item_nome} em ${i.grupo_nome}: ${moeda(i.total_para, moedaCode)}`
+          : i.acao === "removida"
+            ? `Linha removida · ${i.item_nome} (${moeda(i.total_de, moedaCode)})`
+            : mudouTipo
+              ? `Tipo de custo · ${i.item_nome}: ${tipoCustoLabel(i.tipo_custo_de)} → ${tipoCustoLabel(i.tipo_custo_para)}`
+              : `Valor · ${i.item_nome} ${moeda(i.total_de, moedaCode)} → ${moeda(i.total_para, moedaCode)}`;
       return {
         texto,
         valor: comSinal(i.efeito_valor_job, moedaCode),
@@ -159,11 +171,31 @@ export function montarThreadChat(
       };
     });
 
+    if (e.faturamento_previsto_depois !== null) {
+      linhas.push({
+        texto: "Novo faturamento previsto",
+        valor: moeda(e.faturamento_previsto_depois, moedaCode),
+        tom: "neutro",
+      });
+    }
+
     linhas.push({
       texto: "Novo valor do job",
       valor: moeda(e.valor_job_depois, moedaCode),
       tom: "neutro",
     });
+
+    // O resumo conta o que a errata FEZ; a descrição, por que ela foi
+    // feita. Até 27/08/2026 os dois moravam no mesmo `titulo` e o card
+    // ficava lendo "Reajuste de palco · 1 item orçado alterado".
+    const conta = (a: string) => e.itens.filter((i) => i.acao === a).length;
+    const partes: string[] = [];
+    const nAlt = conta("alterada");
+    const nNovas = conta("nova");
+    const nRem = conta("removida");
+    if (nAlt) partes.push(`${nAlt} ${nAlt === 1 ? "linha alterada" : "linhas alteradas"}`);
+    if (nNovas) partes.push(`${nNovas} ${nNovas === 1 ? "linha nova" : "linhas novas"}`);
+    if (nRem) partes.push(`${nRem} ${nRem === 1 ? "linha removida" : "linhas removidas"}`);
 
     itens.push({
       tipo: "sistema",
@@ -172,12 +204,23 @@ export function montarThreadChat(
       cor: soTipo ? "bege" : delta >= 0 ? "verde" : "vermelho",
       titulo: `Errata registrada · ${dataCurta(e.created_at)}`,
       quando: dataHora(e.created_at),
-      resumo: `${e.titulo} · ${e.itens.length} ${
-        e.itens.length === 1 ? "item orçado alterado" : "itens orçados alterados"
-      }.`,
+      resumo:
+        partes.length > 0
+          ? `${partes.join(" · ")} · orçado ${moeda(e.custo_orcado_depois, moedaCode)}.`
+          : `${e.itens.length} ${
+              e.itens.length === 1
+                ? "item orçado alterado"
+                : "itens orçados alterados"
+            }.`,
       valor: comSinal(delta, moedaCode),
       valorTom: delta >= 0 ? "positivo" : "negativo",
       linhas,
+      descricao: { texto: e.titulo, autor: e.autor_nome },
+      nota:
+        abertura.aberturaFinanceiroEm &&
+        e.created_at > abertura.aberturaFinanceiroEm
+          ? "Job devolvido ao mural de abertura para revisão de recebimento e custos."
+          : null,
       em: e.created_at,
     });
   }

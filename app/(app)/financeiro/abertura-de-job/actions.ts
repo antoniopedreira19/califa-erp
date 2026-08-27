@@ -845,6 +845,14 @@ export async function editarRegistroDaAbertura(
       competencia_trimestre: parsed.data.competencia_trimestre,
       competencia_ano: parsed.data.competencia_ano,
       custo_previsto_total: custoPrevisto,
+      // Salvar a abertura É a revisão da errata. O financeiro acabou de
+      // reconferir previsão de recebimento, curva de desembolso e
+      // competência sobre os números novos — que é exatamente o que a
+      // errata pediu ao devolver o job para cá. Some a marca, e o envio
+      // para faturamento volta (27/08/2026).
+      abertura_em_revisao: false,
+      abertura_revisao_desde: null,
+      abertura_revisao_errata_id: null,
     })
     .eq("id", jobId)
     .eq("tenant_id", session.activeTenant.id)

@@ -528,6 +528,7 @@ export async function carregarDetalheDoJob(
   const threadChat = montarThreadChat(
     {
       criadoEm: raw.created_at,
+      aberturaFinanceiroEm: raw.data_abertura_financeiro ?? null,
       orcamentoCodigo: raw.orcamento?.codigo ?? null,
       versaoNumero: raw.versao?.numero_versao ?? null,
       versaoNome: raw.versao?.nome ?? null,

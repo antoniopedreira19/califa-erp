@@ -1287,6 +1287,13 @@ export type ItemChat =
       valor: string | null;
       valorTom: Exclude<ChatTom, "texto">;
       linhas: ChatLinha[];
+      /** Texto que a pessoa escreveu — hoje só a descrição da errata. Vem
+       *  em bloco próprio, entre aspas, porque é a única parte do card que
+       *  não foi derivada de número (27/08/2026). */
+      descricao?: { texto: string; autor: string | null } | null;
+      /** Consequência que não está nos números. Na errata: o job voltou ao
+       *  mural de abertura. */
+      nota?: string | null;
       /** ISO, só pra ordenar a thread. */
       em: string;
     }

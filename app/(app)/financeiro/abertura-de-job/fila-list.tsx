@@ -1,12 +1,13 @@
 "use client";
 
 import * as React from "react";
-import { CheckCheck, ClipboardCheck, Search } from "lucide-react";
+import { CheckCheck, ClipboardCheck, FilePenLine, Search } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import type { JobNaFila } from "./dados";
 import { formatPeriodo } from "./formatos";
 import { ConferenciaDialog } from "./conferencia-dialog";
 import { ReprovarDialog } from "./reprovar-dialog";
+import { ResumoErrataDialog } from "./resumo-errata-dialog";
 
 export interface FilaLinha extends JobNaFila {
   /** "há 2 horas" — calculado no server para não divergir na hidratação. */
@@ -17,6 +18,7 @@ export function FilaAbertura({ linhas }: { linhas: FilaLinha[] }) {
   const [busca, setBusca] = React.useState("");
   const [conferindoId, setConferindoId] = React.useState<string | null>(null);
   const [reprovandoId, setReprovandoId] = React.useState<string | null>(null);
+  const [revisandoId, setRevisandoId] = React.useState<string | null>(null);
 
   const visiveis = React.useMemo(() => {
     const q = busca.trim().toLowerCase();
@@ -30,9 +32,114 @@ export function FilaAbertura({ linhas }: { linhas: FilaLinha[] }) {
     );
   }, [linhas, busca]);
 
+  // Duas faixas na MESMA tabela, e nenhuma cor nova: as erratas em cima
+  // porque são job já aberto esperando reconferência — quem está parado
+  // vem antes de quem está começando. A distinção fica no rótulo da faixa,
+  // no ícone e no texto do botão (design 4a, 27/08/2026).
+  const erratas = React.useMemo(
+    () => visiveis.filter((l) => l.revisao !== null),
+    [visiveis],
+  );
+  const novas = React.useMemo(
+    () => visiveis.filter((l) => l.revisao === null),
+    [visiveis],
+  );
+
   const total = visiveis.reduce((s, l) => s + (l.valor_total ?? 0), 0);
   const conferindo = linhas.find((l) => l.id === conferindoId) ?? null;
   const reprovando = linhas.find((l) => l.id === reprovandoId) ?? null;
+  const revisando = linhas.find((l) => l.id === revisandoId) ?? null;
+
+  /** Uma linha da fila. A faixa a que ela pertence decide o clique. */
+  function Linha({ l }: { l: FilaLinha }) {
+    const ehErrata = l.revisao !== null;
+    const abrir = () =>
+      ehErrata ? setRevisandoId(l.id) : setConferindoId(l.id);
+
+    return (
+      <tr
+        role="button"
+        tabIndex={0}
+        onClick={abrir}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            abrir();
+          }
+        }}
+        className="cursor-pointer border-b border-b-[#f4f2f2] transition-colors last:border-0 hover:bg-muted/70 focus-visible:bg-muted/70 focus-visible:outline-none"
+      >
+        <td className="px-4 py-3.5">
+          <span className="font-mono text-xs font-bold text-[#b3323c]">
+            {l.codigo}
+          </span>
+        </td>
+        <td className="px-4 py-3.5">
+          <div className="flex flex-col gap-0.5">
+            <span className="font-semibold">{l.nome}</span>
+            <span className="font-mono text-[11.5px] text-muted-foreground">
+              {formatPeriodo(l.data_inicio_prevista, l.data_fim_prevista)}
+            </span>
+          </div>
+        </td>
+        <td className="px-4 py-3.5">
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[13px]">
+              <span className="font-mono text-xs text-muted-foreground">
+                {l.projeto_codigo ?? "—"}
+              </span>{" "}
+              {l.projeto_nome ?? ""}
+            </span>
+            <span className="text-xs text-muted-foreground">
+              {[l.cliente_nome, l.produto].filter(Boolean).join(" · ") || "—"}
+            </span>
+          </div>
+        </td>
+        <td className="px-4 py-3.5 text-muted-foreground">
+          {l.responsavel_nome ?? "—"}
+        </td>
+        <td className="whitespace-nowrap px-4 py-3.5 text-right font-semibold tabular-nums">
+          {formatCurrency(l.valor_total)}
+        </td>
+        <td className="px-4 py-3.5 text-[12.5px] text-muted-foreground">
+          {l.enviado_em_label}
+        </td>
+        <td className="px-4 py-3.5">
+          <div className="flex items-center justify-end">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                abrir();
+              }}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-california-red px-3.5 py-2 text-[12.5px] font-semibold text-white transition-colors hover:bg-california-red-hover"
+            >
+              {ehErrata ? (
+                <FilePenLine className="h-3.5 w-3.5" />
+              ) : (
+                <ClipboardCheck className="h-3.5 w-3.5" />
+              )}
+              {ehErrata ? "Revisar abertura" : "Abrir job"}
+            </button>
+          </div>
+        </td>
+      </tr>
+    );
+  }
+
+  /** A faixa que separa as duas coortes — mesmo cinza das duas. */
+  function Faixa({ rotulo, quantos }: { rotulo: string; quantos: number }) {
+    return (
+      <tr className="border-b border-border bg-muted/50">
+        <td
+          colSpan={7}
+          className="px-4 py-2 text-[10.5px] font-bold uppercase tracking-[0.12em] text-muted-foreground"
+        >
+          {rotulo} · {quantos}
+        </td>
+      </tr>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -49,7 +156,9 @@ export function FilaAbertura({ linhas }: { linhas: FilaLinha[] }) {
         </div>
         {visiveis.length > 0 && (
           <span className="ml-auto text-[12.5px] text-muted-foreground">
-            {visiveis.length === 1 ? "1 job na fila" : `${visiveis.length} jobs na fila`}{" "}
+            {visiveis.length === 1 ? "1 job na fila" : `${visiveis.length} jobs na fila`}
+            {erratas.length > 0 &&
+              ` · ${erratas.length} ${erratas.length === 1 ? "revisão de errata" : "revisões de errata"}`}{" "}
             · {formatCurrency(total)}
           </span>
         )}
@@ -72,75 +181,19 @@ export function FilaAbertura({ linhas }: { linhas: FilaLinha[] }) {
               </tr>
             </thead>
             <tbody>
-              {visiveis.map((l) => (
-                <tr
-                  key={l.id}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => setConferindoId(l.id)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      setConferindoId(l.id);
-                    }
-                  }}
-                  className="cursor-pointer border-b border-b-[#f4f2f2] transition-colors last:border-0 hover:bg-muted/70 focus-visible:bg-muted/70 focus-visible:outline-none"
-                >
-                  <td className="px-4 py-3.5">
-                    <span className="font-mono text-xs font-bold text-[#b3323c]">
-                      {l.codigo}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3.5">
-                    <div className="flex flex-col gap-0.5">
-                      <span className="font-semibold">{l.nome}</span>
-                      <span className="font-mono text-[11.5px] text-muted-foreground">
-                        {formatPeriodo(
-                          l.data_inicio_prevista,
-                          l.data_fim_prevista,
-                        )}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3.5">
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-[13px]">
-                        <span className="font-mono text-xs text-muted-foreground">
-                          {l.projeto_codigo ?? "—"}
-                        </span>{" "}
-                        {l.projeto_nome ?? ""}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        {[l.cliente_nome, l.produto].filter(Boolean).join(" · ") ||
-                          "—"}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3.5 text-muted-foreground">
-                    {l.responsavel_nome ?? "—"}
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3.5 text-right font-semibold tabular-nums">
-                    {formatCurrency(l.valor_total)}
-                  </td>
-                  <td className="px-4 py-3.5 text-[12.5px] text-muted-foreground">
-                    {l.enviado_em_label}
-                  </td>
-                  <td className="px-4 py-3.5">
-                    <div className="flex items-center justify-end">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setConferindoId(l.id);
-                        }}
-                        className="inline-flex items-center gap-1.5 rounded-lg bg-california-red px-3.5 py-2 text-[12.5px] font-semibold text-white transition-colors hover:bg-california-red-hover"
-                      >
-                        <ClipboardCheck className="h-3.5 w-3.5" />
-                        Abrir job
-                      </button>
-                    </div>
-                  </td>
-                </tr>
+              {/* As faixas só aparecem quando as DUAS coortes existem. Com
+                  uma só, a tabela é a de sempre e o rótulo seria ruído. */}
+              {erratas.length > 0 && novas.length > 0 && (
+                <Faixa rotulo="Erratas" quantos={erratas.length} />
+              )}
+              {erratas.map((l) => (
+                <Linha key={l.id} l={l} />
+              ))}
+              {erratas.length > 0 && novas.length > 0 && (
+                <Faixa rotulo="Aberturas novas" quantos={novas.length} />
+              )}
+              {novas.map((l) => (
+                <Linha key={l.id} l={l} />
               ))}
             </tbody>
           </table>
@@ -172,6 +225,11 @@ export function FilaAbertura({ linhas }: { linhas: FilaLinha[] }) {
           onReprovar={() => setReprovandoId(conferindoId)}
         />
       )}
+
+      <ResumoErrataDialog
+        job={revisando}
+        onOpenChange={(aberto) => !aberto && setRevisandoId(null)}
+      />
 
       {reprovando && (
         <ReprovarDialog

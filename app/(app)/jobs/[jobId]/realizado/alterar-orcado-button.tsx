@@ -1,64 +1,39 @@
 "use client";
 
+/**
+ * O gatilho do modo errata.
+ *
+ * ⚠️ Até 27/08/2026 este botão abria um drawer com uma SEGUNDA tabela, na
+ * qual se editava o orçado longe da planilha. Ele agora só liga e desliga
+ * o modo errata na planilha que já está na tela — o estado mora em
+ * `JobRealizadoSection`, porque a barra do rodapé e o card de Totais
+ * precisam do mesmo rascunho.
+ */
+
 import * as React from "react";
-import { PencilLine, X } from "lucide-react";
-import type { ItemPlanilhaJob, VersaoOrcamentoGrupo } from "@/lib/types";
-import { AlterarOrcadoDrawer } from "./alterar-orcado-drawer";
+import { PencilLine } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { ERRATA } from "@/app/(app)/_planilha/blocos";
 
 interface Props {
-  jobId: string;
-  itens: ItemPlanilhaJob[];
-  grupos: VersaoOrcamentoGrupo[];
-  percentualHonorarios: number;
-  percentualImposto: number;
-  moeda: string;
+  ativo: boolean;
+  onAlternar: () => void;
 }
 
-export function AlterarOrcadoButton(props: Props) {
-  const [open, setOpen] = React.useState(false);
-  const [toast, setToast] = React.useState<string | null>(null);
-
-  React.useEffect(() => {
-    if (!toast) return;
-    const t = setTimeout(() => setToast(null), 5000);
-    return () => clearTimeout(t);
-  }, [toast]);
-
+export function AlterarOrcadoButton({ ativo, onAlternar }: Props) {
   return (
-    <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:border-california-red/30 hover:bg-california-red/[0.06]"
-      >
-        <PencilLine className="h-3.5 w-3.5 text-california-red" />
-        Alterar orçado
-      </button>
-
-      <AlterarOrcadoDrawer
-        {...props}
-        open={open}
-        onOpenChange={setOpen}
-        onSuccess={() =>
-          setToast("Errata registrada e orçado atualizado.")
-        }
-      />
-
-      {toast && (
-        <div
-          role="status"
-          className="fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 shadow-elevated"
-        >
-          <span className="text-sm font-medium text-emerald-800">{toast}</span>
-          <button
-            type="button"
-            onClick={() => setToast(null)}
-            className="text-emerald-700 hover:text-emerald-900"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
-        </div>
+    <button
+      type="button"
+      onClick={onAlternar}
+      aria-pressed={ativo}
+      className={cn(
+        ativo
+          ? ERRATA.botaoAtivo
+          : "inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:border-california-red/30 hover:bg-california-red/[0.06]",
       )}
-    </>
+    >
+      <PencilLine className="h-3.5 w-3.5 text-california-red" />
+      {ativo ? "Alterando orçado" : "Alterar orçado"}
+    </button>
   );
 }

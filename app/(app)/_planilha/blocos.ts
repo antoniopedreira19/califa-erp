@@ -232,3 +232,59 @@ export const SAVE = {
   /** Cor do ícone de direção. */
   icone: "text-[#5f5d57]",
 } as const;
+
+/** ERRATA — o modo de edição do Orçado na planilha do job.
+ *
+ *  Não é um bloco novo: é um ESTADO da planilha, e por isso não estreia
+ *  cor. Quem muda de tom é só o bloco ORÇADO, que fica um degrau mais
+ *  saturado enquanto está editável — o azul continua sendo o azul do
+ *  orçado, e a diferença diz "isto aqui aceita digitação".
+ *
+ *  A exceção é a LINHA VERMELHA. Ela não é decoração: é a linha que nasce
+ *  sem orçado e sem planejado e só recebe realizado, por Pedido de
+ *  Produção. O vermelho é o mesmo vermelho California do resto do
+ *  produto, aplicado à linha inteira porque a linha inteira se comporta
+ *  de um jeito diferente das outras.
+ *
+ *  Do design `Planilha Interna - Alterar Orcado (Errata).dc.html` (projeto
+ *  Claude Design `69342d83`), 27/08/2026.
+ */
+export const ERRATA = {
+  /** Célula do bloco Orçado enquanto ela aceita digitação. */
+  celulaEditavel: "bg-[#eff6ff]",
+  /** O input dentro da célula do Orçado. */
+  input:
+    "w-full min-w-0 rounded-md border border-[#9dc0ee] bg-white px-1.5 py-1 text-right font-mono text-[11.5px] font-semibold text-[#1e4fa3] outline-none focus:border-[#2f6fdb] focus:ring-1 focus:ring-[#2f6fdb]/30",
+  /** Input do nome, na linha recém-criada. */
+  inputNome:
+    "w-full min-w-0 rounded-md border border-border bg-white px-2 py-1 text-xs text-foreground outline-none focus:border-california-red focus:ring-1 focus:ring-california-red/25",
+  /** Linha inteira, quando é vermelha. */
+  linhaVermelha: "bg-[#fef2f2]",
+  /** Célula de texto de uma linha vermelha. */
+  celulaVermelha: "bg-[#fef2f2] text-[#b91c1c] border-r border-r-[#fecaca]",
+  /** Célula de número de uma linha vermelha — apagada no Orçado e no
+   *  Planejado, viva só no Realizado, que é o único que ela recebe. */
+  celulaVermelhaApagada: "bg-[#fef2f2] text-[#c88] border-r border-r-[#fecaca]",
+  celulaVermelhaViva:
+    "bg-[#fef2f2] text-[#b91c1c] border-r border-r-[#fecaca]",
+  /** Linha tracejada dos botões de criar item, no pé de cada grupo. */
+  linhaAcao: "px-3 py-2 bg-[#fcfcfb] border-b border-b-border",
+  /** "＋ Novo item" — mesma forma do "Novo grupo", que já existia. */
+  botaoNovoItem: BOTAO_NOVO_GRUPO,
+  /** "＋ Linha vermelha" — tracejado, mas no vermelho mais forte, porque
+   *  a linha que ele cria se comporta de outro jeito. */
+  botaoLinhaVermelha:
+    "inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-dashed border-[#dc2626] bg-[#fef2f2] px-3 py-1.5 text-xs font-semibold text-[#b91c1c] transition-colors hover:bg-[#fee2e2] disabled:cursor-not-allowed disabled:opacity-50",
+  /** Pastilha que marca a linha na tabela e no pop-up. */
+  tagAlterada:
+    "inline-flex items-center rounded-full border border-[#f3b4b9] bg-[#fdf2f3] px-1.5 py-px text-[9px] font-bold uppercase tracking-[0.05em] text-[#b83b45]",
+  tagNova:
+    "inline-flex items-center rounded-full border border-[#a7f3d0] bg-[#ecfdf5] px-1.5 py-px text-[9px] font-bold uppercase tracking-[0.05em] text-[#047857]",
+  tagVermelha:
+    "inline-flex items-center rounded-full border border-[#fca5a5] bg-[#fef2f2] px-1.5 py-px text-[9px] font-bold uppercase tracking-[0.05em] text-[#b91c1c]",
+  tagRemovida:
+    "inline-flex items-center rounded-full border border-border bg-muted px-1.5 py-px text-[9px] font-bold uppercase tracking-[0.05em] text-muted-foreground",
+  /** Botão "Alterar orçado" enquanto o modo está LIGADO. */
+  botaoAtivo:
+    "inline-flex items-center gap-1.5 rounded-lg border border-california-red bg-california-red/[0.07] px-3 py-1.5 text-xs font-bold text-[#b83b45] shadow-[inset_0_1px_2px_rgba(231,75,86,0.18)]",
+} as const;

@@ -86,9 +86,13 @@ perguntas ao time durante a execução.
 | **Cancelar PP** | Existe **só na aba de PPs do job**, e só pra PP em avaliação ou rejeitada. Saiu da Planilha Interna e da caixa do financeiro. |
 | **PDF no reenvio** | Regerado sobrescrevendo o anterior no mesmo path. É o documento que vai pro fornecedor e o que o financeiro confere — não pode contradizer a PP. |
 | **Errata: onde grava** | O job ganha **cópia própria** dos itens orçados. A versão aprovada continua sendo o documento que o cliente aprovou e segue read-only. |
-| **Errata: o que edita** | Só **R$ unitário e tipo de custo**. QT, D/M, adição e remoção de itens ficaram fora. |
-| **Errata: agrupamento** | Uma errata por sessão de edição, com título obrigatório e justificativa opcional. |
-| **Errata: permissão** | Liberada pra qualquer usuário nesta fase (decisão explícita do time, com intenção de travar mais tarde). Exige job em "Aberto". |
+| **Errata: o que edita** | ⚠️ **Mudou em 27/08/2026** (decisão 030). Era "só R$ unitário e tipo de custo; QT, D/M, adição e remoção ficaram fora". Agora a errata corrige **R$ unitário, QT, D/M e tipo**, **cria** linha (normal ou vermelha) e **remove** linha. |
+| **Errata: onde acontece** | ⚠️ **Mudou em 27/08/2026** (decisão 030). "Alterar orçado" abria um drawer com uma segunda tabela; agora ele liga o **modo errata** na própria Planilha Interna, e o rodapé vira a barra da errata. |
+| **Errata: agrupamento** | ⚠️ **Mudou em 27/08/2026** (decisão 030). Era "título obrigatório e justificativa opcional". Agora é **um campo só, "Descrição da errata", obrigatório** — ele grava em `titulo`, e `justificativa` deixou de ser preenchida. |
+| **Errata: permissão** | Liberada pra qualquer usuário nesta fase (decisão explícita do time, com intenção de travar mais tarde). Exige job em "Aberto". ⚠️ **27/08/2026:** criar linha normal e remover linha passaram a ter gate próprio (`podeEditarLinhas`), hoje aberto para todos; criar **linha vermelha** nunca terá gate. |
+| **Errata: depois de gravar** | ⚠️ **Novo em 27/08/2026** (decisão 030). Toda errata sobre job já aberto marca `jobs.abertura_em_revisao`: o job volta ao mural de abertura do financeiro e o **envio para faturamento fica fechado** até a abertura ser salva de novo. O status do job não muda. |
+| **Linha vermelha** | ⚠️ **Nova em 27/08/2026** (decisão 030). Orçado e planejado zerados (o banco cobra), só recebe realizado por PP, e é **isenta do teto do orçado** no `pp_valida_saldo_do_item`. |
+| **Chave da planilha** | ⚠️ **Mudou em 27/08/2026** (decisão 030). `ItemPlanilhaJob.id` era o id do item da VERSÃO; agora é o da **cópia do job** (`jobs_itens_orcado.id`). `jobs_itens_realizado` e `itens_bv` ganharam `job_item_orcado_id`. A linha criada por errata não existe na versão, e por isso a chave antiga não servia mais. |
 | **Status do job** | "Em produção" removido — nunca separou nada. "Finalizado" virou "Encerrado". |
 | **Chat: remetente** | A área vem do **papel**, não de um toggle. No mock qualquer um escolhia, o que permitiria um GP se passar pelo financeiro. |
 | **Chat: cards automáticos** | Montados na leitura, não gravados. |

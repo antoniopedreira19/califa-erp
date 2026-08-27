@@ -56,7 +56,7 @@ export async function enviarJobParaFaturamento(
   const { data: job } = await supabase
     .from("jobs")
     .select(
-      "id, status, faturamento_previsto, projeto_id, orcamento_id, projeto:projetos(cliente_id)",
+      "id, status, faturamento_previsto, abertura_em_revisao, projeto_id, orcamento_id, projeto:projetos(cliente_id)",
     )
     .eq("id", jobId)
     .eq("tenant_id", session.activeTenant.id)
@@ -64,6 +64,7 @@ export async function enviarJobParaFaturamento(
       id: string;
       status: JobStatus;
       faturamento_previsto: number | string | null;
+      abertura_em_revisao: boolean | null;
       projeto_id: string;
       orcamento_id: string;
       projeto: { cliente_id: string } | null;
@@ -77,6 +78,30 @@ export async function enviarJobParaFaturamento(
       message:
         "Só job aberto pode ser enviado para faturamento. Este está em " +
         `${job.status}.`,
+    };
+  }
+
+  // Errata depois da abertura reabre a conferência do financeiro. Enviar
+  // agora emitiria a nota sobre uma previsão de recebimento e uma curva de
+  // desembolso montadas com números que a errata já mudou. A barra esconde
+  // o botão; a regra mora aqui (27/08/2026).
+  if (job.abertura_em_revisao === true) {
+    await logAuditEvent({
+      acao: "acao_negada",
+      tenantId: session.activeTenant.id,
+      entidadeTipo: "job",
+      entidadeId: jobId,
+      metadata: {
+        acao_tentada: "job.enviado_faturamento",
+        motivo: "abertura_em_revisao",
+      },
+    });
+    return {
+      ok: false,
+      message:
+        "Uma errata mexeu no orçado depois da abertura e o financeiro ainda " +
+        "não reconferiu o job. O envio para faturamento volta quando a " +
+        "revisão de recebimento e custos for salva na Abertura de Job.",
     };
   }
 
