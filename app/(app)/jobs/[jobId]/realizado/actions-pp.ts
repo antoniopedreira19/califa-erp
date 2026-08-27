@@ -154,7 +154,12 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
         id: string;
         tenant_id: string;
         job_id: string;
-        item_id: string;
+        item_id: string | null;
+        /** A linha da planilha a que esta âncora pertence. */
+        job_item_orcado_id: string;
+        /** Linha vermelha: nasce com orçado zero para receber custo que o
+         *  orçamento não previu, e por isso NÃO tem teto de saldo. */
+        linha_vermelha: boolean;
         /** ORÇADO do item na cópia do job (`jobs_itens_orcado`) — a base
          *  da fatia da PP e o teto do saldo desde 21/08/2026. Vem da
          *  cópia, e não da versão aprovada, porque é a cópia que a errata
@@ -182,7 +187,7 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
 
   const { data: ancora, error: itemErr } = await supabase
     .from("jobs_itens_realizado")
-    .select("id, tenant_id, job_id, item_id")
+    .select("id, tenant_id, job_id, item_id, job_item_orcado_id")
     .eq("id", itemRealizadoId)
     .eq("tenant_id", session.activeTenant.id)
     .maybeSingle();
@@ -194,13 +199,20 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
   // A base da PP é o ORÇADO do item, e ele mora na cópia do job. Sem esta
   // linha não há como saber quanto o item comporta — e o trigger
   // `pp_valida_saldo_do_item` recusaria de todo jeito.
-  const { data: orcado, error: orcadoErr } = await supabase
+  // A busca é pela CÓPIA (27/08/2026). A chave antiga fica de rede para o
+  // realizado que por algum motivo não tenha sido repontado; a linha
+  // criada por errata só existe pela chave nova.
+  const buscaOrcado = supabase
     .from("jobs_itens_orcado")
-    .select("total_orcado, quantidade_orcada")
-    .eq("job_id", ancora.job_id)
-    .eq("item_versao_id", ancora.item_id)
-    .eq("tenant_id", session.activeTenant.id)
-    .maybeSingle();
+    .select("id, total_orcado, quantidade_orcada, linha_vermelha")
+    .eq("tenant_id", session.activeTenant.id);
+
+  const { data: orcado, error: orcadoErr } = ancora.job_item_orcado_id
+    ? await buscaOrcado.eq("id", ancora.job_item_orcado_id).maybeSingle()
+    : await buscaOrcado
+        .eq("job_id", ancora.job_id)
+        .eq("item_versao_id", ancora.item_id)
+        .maybeSingle();
 
   if (orcadoErr || !orcado) {
     return {
@@ -214,6 +226,8 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
     tenant_id: ancora.tenant_id,
     job_id: ancora.job_id,
     item_id: ancora.item_id,
+    job_item_orcado_id: (orcado as any).id as string,
+    linha_vermelha: (orcado as any).linha_vermelha === true,
     total_orcado: Number(orcado.total_orcado ?? 0),
     quantidade_orcada: Number(orcado.quantidade_orcada ?? 0),
   };

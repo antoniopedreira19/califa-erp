@@ -83,21 +83,22 @@ export async function carregarPlanilhasDosJobs(
     supabase
       .from("jobs_itens_realizado")
       .select(
-        "job_id, item_id, valor_unitario_realizado, quantidade_realizada, dias_meses_realizado, total_realizado",
+        "job_id, item_id, job_item_orcado_id, valor_unitario_realizado, quantidade_realizada, dias_meses_realizado, total_realizado",
       )
       .eq("tenant_id", tenantId)
       .in("job_id", jobIds),
     supabase.from("categorias").select("id, nome").eq("tenant_id", tenantId),
     // O BV entra na conta desde 21/08/2026: a vista Líquido desconta o
-    // líquido dele do planejado e do realizado. Chaveado pelo item da
-    // VERSÃO, que é a chave de `itens_bv`.
+    // líquido dele do planejado e do realizado. Chaveado pela CÓPIA do
+    // job desde 27/08/2026 — pelo caminho antigo (`!inner` na versão) a
+    // linha criada por errata sumia da conta em silêncio.
     supabase
       .from("itens_bv")
       .select(
-        "item_versao_id, valor, situacao, item:versoes_orcamento_itens!inner(versao_orcamento_id)",
+        "job_item_orcado_id, valor, situacao, copia:jobs_itens_orcado!inner(job_id)",
       )
       .eq("tenant_id", tenantId)
-      .in("item.versao_orcamento_id", versaoIds)
+      .in("copia.job_id", jobIds)
       .neq("situacao", "cancelado"),
   ]);
 
@@ -111,11 +112,13 @@ export async function carregarPlanilhasDosJobs(
     console.error("[planilhas-do-projeto.bvs]", bvsRes.error.message);
   }
 
-  const bvPorItemVersao = new Map<string, BvParaConta>(
-    (bvsRes.data ?? []).map((b: any) => [
-      b.item_versao_id as string,
-      { valor: b.valor, situacao: b.situacao },
-    ]),
+  const bvPorCopia = new Map<string, BvParaConta>(
+    (bvsRes.data ?? [])
+      .filter((b: any) => b.job_item_orcado_id)
+      .map((b: any) => [
+        b.job_item_orcado_id as string,
+        { valor: b.valor, situacao: b.situacao },
+      ]),
   );
 
   const categoriasMap = new Map<string, string>();
@@ -137,15 +140,16 @@ export async function carregarPlanilhasDosJobs(
     itensPorJob.set(it.job_id, arr);
   }
 
-  // Chave por job + item da versão: `jobs_itens_realizado.item_id` aponta
-  // pro item da versão, que se repete entre jobs de versões diferentes só
-  // por acaso — o job_id evita qualquer cruzamento.
-  const realizadosPorChave = new Map<
+  // Chave pela CÓPIA do job (`jobs_itens_realizado.job_item_orcado_id`),
+  // que é única por si — a chave antiga era o item da versão, e por isso
+  // precisava do job_id junto para não cruzar jobs de versões diferentes.
+  const realizadosPorCopia = new Map<
     string,
     { unit: number; qt: number; dm: number; total: number }
   >();
   for (const r of (realizadosRes.data ?? []) as any[]) {
-    realizadosPorChave.set(`${r.job_id}/${r.item_id}`, {
+    if (!r.job_item_orcado_id) continue;
+    realizadosPorCopia.set(r.job_item_orcado_id, {
       unit: num(r.valor_unitario_realizado),
       qt: num(r.quantidade_realizada),
       dm: num(r.dias_meses_realizado),
@@ -169,7 +173,7 @@ export async function carregarPlanilhasDosJobs(
       const itens: ItemPlanilhaProjeto[] = itensDoJob
         .filter((it) => it.grupo_id === g.id)
         .map((it) => {
-          const real = realizadosPorChave.get(`${j.id}/${it.item_versao_id}`);
+          const real = realizadosPorCopia.get(it.id);
           const tipo = it.tipo_custo as TipoCusto;
           // Mesma função da Planilha Interna do job: a visão agregada não
           // pode ter uma segunda implementação da conta, ou ela e a tela
@@ -185,7 +189,7 @@ export async function carregarPlanilhasDosJobs(
               // rentabilidade e discordaria da Planilha Interna do job.
               em_save: it.em_save,
             },
-            bvPorItemVersao.get(it.item_versao_id) ?? null,
+            bvPorCopia.get(it.id) ?? null,
             real?.total ?? 0,
             aliquotaDoJob,
             jobAberto,

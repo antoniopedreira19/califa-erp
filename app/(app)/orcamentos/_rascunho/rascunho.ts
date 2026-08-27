@@ -99,6 +99,8 @@ export function comoBvDaVersao(item: ItemRascunho): ItemBv | null {
     id: `bv-${item.id}`,
     tenant_id: "",
     item_versao_id: item.id,
+    // Rascunho não tem job, logo não tem cópia em que pendurar o BV.
+    job_item_orcado_id: null,
     fornecedor_id: item.bv.fornecedor_id,
     valor: item.bv.valor,
     prazo_repasse: item.bv.prazo_repasse,

@@ -63,7 +63,7 @@ export async function carregarDetalheDoJob(
     supabase
       .from("jobs")
       .select(
-        "id, tenant_id, empresa_id, codigo, nome, produto, cidade, data_inicio_prevista, data_fim_prevista, data_evento, data_prevista_faturamento, observacoes, responsavel_id, produtor_id, valor_total, faturamento_previsto, faturamento_save_previsto, valor_job_abertura, faturamento_previsto_abertura, status, motivo_rejeicao, projeto_id, orcamento_id, versao_orcamento_aprovada_id, regional_id, categoria_id, competencia_trimestre, competencia_ano, custo_previsto_total, nome_financeiro, data_abertura_financeiro, aberto_por, created_at, updated_at, responsavel:profiles!responsavel_id(id, nome), produtor:profiles!produtor_id(id, nome), regional:regionais(id, nome), categoria:categorias_dominio!categoria_id(id, nome), orcamento:orcamentos(id, codigo, nome, projeto_id), versao:versoes_orcamento!versao_orcamento_aprovada_id(id, numero_versao, nome, moeda, percentual_honorarios, percentual_imposto), projeto:projetos(id, codigo, nome, cliente_id, data_inicio_prevista, data_fim_prevista, cliente:clientes(id, nome_fantasia), categoria:categorias_dominio(id, nome))",
+        "id, tenant_id, empresa_id, codigo, nome, produto, cidade, data_inicio_prevista, data_fim_prevista, data_evento, data_prevista_faturamento, observacoes, responsavel_id, produtor_id, valor_total, faturamento_previsto, faturamento_save_previsto, valor_job_abertura, faturamento_previsto_abertura, abertura_em_revisao, abertura_revisao_desde, abertura_revisao_errata_id, status, motivo_rejeicao, projeto_id, orcamento_id, versao_orcamento_aprovada_id, regional_id, categoria_id, competencia_trimestre, competencia_ano, custo_previsto_total, nome_financeiro, data_abertura_financeiro, aberto_por, created_at, updated_at, responsavel:profiles!responsavel_id(id, nome), produtor:profiles!produtor_id(id, nome), regional:regionais(id, nome), categoria:categorias_dominio!categoria_id(id, nome), orcamento:orcamentos(id, codigo, nome, projeto_id), versao:versoes_orcamento!versao_orcamento_aprovada_id(id, numero_versao, nome, moeda, percentual_honorarios, percentual_imposto), projeto:projetos(id, codigo, nome, cliente_id, data_inicio_prevista, data_fim_prevista, cliente:clientes(id, nome_fantasia), categoria:categorias_dominio(id, nome))",
       )
       .eq("id", jobId)
       .eq("tenant_id", session.activeTenant.id)
@@ -181,18 +181,22 @@ export async function carregarDetalheDoJob(
       .eq("profile_id", session.profile.id)
       .eq("escopo", "geral")
       .maybeSingle(),
-    // BVs ATIVOS da versão aprovada. O BV é chaveado pelo item da VERSÃO,
-    // que é a mesma chave que `jobs_itens_orcado.item_versao_id` usa —
-    // por isso este é literalmente o mesmo registro que a tela de
-    // Orçamentos abre. O `!inner` serve de filtro, não de embed.
+    // BVs ATIVOS deste job. O filtro passou a ser pela CÓPIA do job em
+    // 27/08/2026, não mais pela versão: a linha criada por errata não tem
+    // item de versão, e pelo caminho antigo (`!inner` em
+    // `versoes_orcamento_itens`) ela sumiria da lista em silêncio.
+    //
+    // Continua sendo o mesmo registro que a tela de Orçamentos abre — quem
+    // veio da versão tem as duas chaves preenchidas. O `!inner` é filtro,
+    // não embed.
     supabase
       .from("itens_bv")
       .select(
-        "id, tenant_id, item_versao_id, fornecedor_id, valor, prazo_repasse, " +
+        "id, tenant_id, item_versao_id, job_item_orcado_id, fornecedor_id, valor, prazo_repasse, " +
           "situacao, created_by, created_at, updated_at, " +
-          "item:versoes_orcamento_itens!inner(versao_orcamento_id)",
+          "copia:jobs_itens_orcado!inner(job_id)",
       )
-      .eq("item.versao_orcamento_id", versaoAprovadaId)
+      .eq("copia.job_id", jobId)
       .eq("tenant_id", session.activeTenant.id)
       .neq("situacao", "cancelado"),
     // Mensagens do chat de PPs (escopo='pps'), separadas do chat geral.
@@ -261,19 +265,24 @@ export async function carregarDetalheDoJob(
     .filter((p) => p.cliente?.id === raw.projeto?.cliente_id)
     .map((p) => ({ id: p.id, nome: p.nome, url: p.url }));
 
-  // Indexado por item da versão: a calha consulta uma chave por linha.
+  // Indexado pela CÓPIA do job: a calha consulta uma chave por linha, e
+  // desde 27/08/2026 essa chave é a única que existe em toda linha.
   // Objeto, e não Map, porque só objeto atravessa a fronteira server →
   // client.
   const bvsPorItem: Record<string, ItemBv> = {};
   for (const raw of (bvsRes.data ?? []) as any[]) {
-    const { item: _joinFiltro, ...bv } = raw;
-    bvsPorItem[bv.item_versao_id] = { ...bv, valor: Number(bv.valor ?? 0) };
+    const { copia: _joinFiltro, ...bv } = raw;
+    if (!bv.job_item_orcado_id) continue;
+    bvsPorItem[bv.job_item_orcado_id] = { ...bv, valor: Number(bv.valor ?? 0) };
   }
-  // `id` segue sendo o id do item na versão: é a chave que o realizado e a
-  // PP usam. `orcado_id` é o que a errata altera.
+  // `id` é o id da CÓPIA do job — a chave que o realizado, o BV, a PP e o
+  // save usam. `orcado_id` carrega o mesmo valor e fica por compatibilidade;
+  // `item_versao_id` é `null` na linha que nasceu de uma errata.
   const itens: ItemPlanilhaJob[] = (itensRes.data ?? []).map((it: any) => ({
-    id: it.item_versao_id,
+    id: it.id,
     orcado_id: it.id,
+    item_versao_id: it.item_versao_id ?? null,
+    linha_vermelha: it.linha_vermelha === true,
     grupo_id: it.grupo_id,
     ordem: Number(it.ordem ?? 0),
     item: it.item,
@@ -304,17 +313,25 @@ export async function carregarDetalheDoJob(
     total_realizado: Number(r.total_realizado ?? 0),
   })) as JobItemRealizado[];
 
+  // Chaveado pela cópia do job desde 27/08/2026. A âncora da linha criada
+  // por errata não tem `item_id` — a chave antiga seria `null` nela.
   const realizadosMap = new Map<string, JobItemRealizado>();
-  for (const r of realizados) realizadosMap.set(r.item_id, r);
+  for (const r of realizados) {
+    if (r.job_item_orcado_id) realizadosMap.set(r.job_item_orcado_id, r);
+  }
 
   if (ppsRes.error) console.error("[job.pps]", ppsRes.error.message);
 
-  // Nome do grupo por item realizado: o realizado aponta pro item da versão,
-  // que aponta pro grupo. A aba de PPs mostra "{grupo} · emitida em ...".
+  // Nome do grupo por item realizado: o realizado aponta pra linha da
+  // planilha, que aponta pro grupo. A aba de PPs mostra "{grupo} · emitida
+  // em ...".
   const grupoNomePorId = new Map(grupos.map((g) => [g.id, g.nome]));
+  const itemPorId = new Map(itens.map((i) => [i.id, i]));
   const grupoPorItemRealizadoId = new Map<string, string>();
   for (const r of realizados) {
-    const item = itens.find((i) => i.id === r.item_id);
+    const item = r.job_item_orcado_id
+      ? itemPorId.get(r.job_item_orcado_id)
+      : undefined;
     const nome = item ? grupoNomePorId.get(item.grupo_id) : undefined;
     if (nome) grupoPorItemRealizadoId.set(r.id, nome);
   }
@@ -402,6 +419,9 @@ export async function carregarDetalheDoJob(
 
   const job: Job = {
     faturamento_save_previsto: Number(raw.faturamento_save_previsto ?? 0),
+    abertura_em_revisao: raw.abertura_em_revisao === true,
+    abertura_revisao_desde: raw.abertura_revisao_desde ?? null,
+    abertura_revisao_errata_id: raw.abertura_revisao_errata_id ?? null,
     id: raw.id,
     tenant_id: raw.tenant_id,
     empresa_id: raw.empresa_id,
@@ -619,10 +639,10 @@ export async function carregarDetalheDoJob(
     .filter((pp) => PP_STATUS_EM_ABERTO.includes(pp.status))
     .map((pp) => ({ codigo: pp.codigo, status: pp.status }));
   const nomeDoItem = new Map(itens.map((it) => [it.id, it.item]));
-  const bvsEmAberto = Object.values(bvsPorItem)
-    .filter((bv) => BV_SITUACAO_EM_ABERTO.includes(bv.situacao))
-    .map((bv) => ({
-      item: nomeDoItem.get(bv.item_versao_id) ?? "Item da planilha",
+  const bvsEmAberto = Object.entries(bvsPorItem)
+    .filter(([, bv]) => BV_SITUACAO_EM_ABERTO.includes(bv.situacao))
+    .map(([orcadoId, bv]) => ({
+      item: nomeDoItem.get(orcadoId) ?? "Item da planilha",
       situacao: bv.situacao,
     }));
 

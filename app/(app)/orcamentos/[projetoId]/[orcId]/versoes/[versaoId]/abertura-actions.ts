@@ -443,18 +443,26 @@ export async function enviarJobParaAbertura(
     // Item `A` e `D` também ganha a linha — ela não é usada (eles leem o
     // orçado), mas uma exceção aqui só criaria um caso a mais para quem
     // for ler isto depois.
+    //
+    // Desde 27/08/2026 a âncora nasce apontando para a CÓPIA
+    // (`job_item_orcado_id`), que é a chave que a planilha do job usa —
+    // `item_id` continua preenchido como rede. A linha criada por errata
+    // só tem a chave nova, e é por isso que ela virou a principal.
     const { error: errAncora } = await supabase
       .from("jobs_itens_realizado")
       .upsert(
-        (itensDaVersao ?? []).map((i: any) => ({
-          tenant_id: session.activeTenant.id,
-          job_id: novo.id,
-          item_id: i.id,
-          valor_unitario_realizado: 0,
-          quantidade_realizada: 0,
-          dias_meses_realizado: 0,
-          created_by: session.profile.id,
-        })),
+        (itensDaVersao ?? [])
+          .map((i: any) => ({
+            tenant_id: session.activeTenant.id,
+            job_id: novo.id,
+            item_id: i.id,
+            job_item_orcado_id: copiaPorItemVersao.get(i.id) ?? null,
+            valor_unitario_realizado: 0,
+            quantidade_realizada: 0,
+            dias_meses_realizado: 0,
+            created_by: session.profile.id,
+          }))
+          .filter((a: any) => a.job_item_orcado_id !== null),
         { onConflict: "job_id,item_id", ignoreDuplicates: true },
       );
 
@@ -467,6 +475,39 @@ export async function enviarJobParaAbertura(
       };
     }
 
+    // 6d. O BV lançado ainda no orçamento aponta para a linha da VERSÃO.
+    //     A planilha do job lê BV pela cópia desde 27/08/2026 — sem esta
+    //     ligação o BV existiria no banco e sumiria da tela do job.
+    //
+    //     Não é falha fatal: o BV continua íntegro do lado do orçamento e
+    //     a próxima gravação dele reencontra a cópia. Loga e segue, para
+    //     não derrubar uma abertura que já criou o job.
+    //
+    //     Uma leitura primeiro, e só então os updates: o normal é a versão
+    //     ter dezenas de itens e nenhum ou dois BVs. Sem este filtro
+    //     seriam dezenas de updates a cada abertura, para nada
+    //     (docs/PERFORMANCE.md, anti-padrão I).
+    const { data: bvsDaVersao } = await supabase
+      .from("itens_bv")
+      .select("id, item_versao_id")
+      .eq("tenant_id", session.activeTenant.id)
+      .in("item_versao_id", idsDaVersao)
+      .is("job_item_orcado_id", null);
+
+    for (const bv of (bvsDaVersao ?? []) as any[]) {
+      const copiaId = copiaPorItemVersao.get(bv.item_versao_id);
+      if (!copiaId) continue;
+
+      const { error: errBvCopia } = await supabase
+        .from("itens_bv")
+        .update({ job_item_orcado_id: copiaId })
+        .eq("id", bv.id)
+        .eq("tenant_id", session.activeTenant.id);
+
+      if (errBvCopia) {
+        console.error("[abertura.bv_copia]", bv.id, errBvCopia.message);
+      }
+    }
   }
 
   // 6c. Contatos de cobrança — quem o financeiro procura para cobrar. O
