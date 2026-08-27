@@ -1,19 +1,20 @@
 "use client";
 
 import * as React from "react";
-import { cn } from "@/lib/utils";
-import { MenuExibirColunas } from "@/app/(app)/_planilha/exibir-colunas";
-import type { EstadoSaveDaLinha } from "@/app/(app)/_planilha/save-coluna";
 import type {
   VersaoOrcamentoGrupo,
   VersaoOrcamentoItem,
   Categoria,
   ItemBv,
 } from "@/lib/types";
-import { GrupoCard } from "./grupo-card";
+import { ItensTable, type GrupoDaPlanilha } from "./itens-table";
+import { AcoesDoGrupo, NomeDoGrupo } from "./grupo-linha";
 import type { FornecedorOpcao } from "@/app/(app)/_bv/bv-dialog";
 import type { VisaoBv } from "@/lib/calculos/bv-planilha";
+import { cn } from "@/lib/utils";
 import { ChaveBrutoLiquido } from "@/app/(app)/_planilha/chave-bruto-liquido";
+import { MenuExibirColunas } from "@/app/(app)/_planilha/exibir-colunas";
+import type { EstadoSaveDaLinha } from "@/app/(app)/_planilha/save-coluna";
 import {
   BotaoRecolherTodos,
   useGruposRecolhiveis,
@@ -42,6 +43,10 @@ interface Props {
   bvsPorItem: Record<string, ItemBv>;
   fornecedores: FornecedorOpcao[];
   versaoLabel: string;
+  /** Gatilho de "Novo grupo" — desce até a linha tracejada no pé da
+   *  tabela, que é onde o grupo novo vai nascer. Vem da página porque é
+   *  ela que sabe se a versão aceita grupo novo. */
+  novoGrupo?: React.ReactNode;
   /** Liga a coluna SAVE nas tabelas dos grupos. */
   saveVisivel?: boolean;
   savePorItem?: Record<string, EstadoSaveDaLinha>;
@@ -64,6 +69,7 @@ export function GruposSection({
   bvsPorItem,
   fornecedores,
   versaoLabel,
+  novoGrupo,
   saveVisivel,
   savePorItem,
   onAbrirSave,
@@ -76,6 +82,16 @@ export function GruposSection({
   // usam a MESMA, e quatro cópias divergiriam na primeira correção.
   const ids = React.useMemo(() => secoes.map((s) => s.grupo.id), [secoes]);
   const recolher = useGruposRecolhiveis(ids);
+
+  const grupos = React.useMemo<GrupoDaPlanilha[]>(
+    () =>
+      secoes.map((s) => ({
+        id: s.grupo.id,
+        nome: s.grupo.nome,
+        itens: s.itens,
+      })),
+    [secoes],
+  );
 
   return (
     <div>
@@ -119,28 +135,30 @@ export function GruposSection({
         </div>
       )}
 
-      <div className="space-y-6">
-        {secoes.map((s) => (
-          <GrupoCard
-            key={s.grupo.id}
-            grupo={s.grupo}
-            itens={s.itens}
-            moeda={moeda}
-            percentualImposto={percentualImposto}
-            visao={visao}
-            readOnly={readOnly}
-            categorias={categorias}
-            aberto={recolher.estaAberto(s.grupo.id)}
-            onAlternar={() => recolher.alternar(s.grupo.id)}
-            bvsPorItem={bvsPorItem}
-            fornecedores={fornecedores}
-            versaoLabel={versaoLabel}
-            saveVisivel={saveVisivel}
-            savePorItem={savePorItem}
-            onAbrirSave={onAbrirSave}
-          />
-        ))}
-      </div>
+      {/* O card da planilha é desenhado pela própria `ItensTable` — a
+          dica de teclado que vem embaixo dele precisa ficar fora do
+          frame. */}
+      <ItensTable
+        grupos={grupos}
+        moeda={moeda}
+        percentualImposto={percentualImposto}
+        visao={visao}
+        readOnly={readOnly}
+        categorias={categorias}
+        estaAberto={recolher.estaAberto}
+        onAlternarGrupo={recolher.alternar}
+        nomeDoGrupo={(grupo) => <NomeDoGrupo grupo={grupo} readOnly={readOnly} />}
+        acoesDoGrupo={
+          readOnly ? undefined : (grupo) => <AcoesDoGrupo grupo={grupo} />
+        }
+        novoGrupo={novoGrupo}
+        bvsPorItem={bvsPorItem}
+        fornecedores={fornecedores}
+        versaoLabel={versaoLabel}
+        saveVisivel={saveVisivel}
+        savePorItem={savePorItem}
+        onAbrirSave={onAbrirSave}
+      />
     </div>
   );
 }

@@ -30,7 +30,7 @@ const dataSchema = z
   .regex(/^\d{4}-\d{2}-\d{2}$/, "Data deve estar em YYYY-MM-DD.");
 
 /** Origem do título — ver `OrigemTitulo` em `lib/types.ts`. */
-const origemSchema = z.enum(["pp", "avulso", "recorrencia", "desembolso"]);
+const origemSchema = z.enum(["pp", "avulso", "recorrencia", "desembolso", "pp_devolucao_verba"]);
 
 /**
  * A mensagem do Postgres não é para o usuário.
@@ -194,17 +194,65 @@ export async function aprovarPPComData(input: unknown): Promise<Result> {
 // Dar baixa num título
 // ---------------------------------------------------------------------
 
-const baixaSchema = z.object({
-  origem: origemSchema,
-  /** Id da parcela (origem `pp`) ou da conta avulsa (demais origens). */
-  id: z.string().uuid(),
-  pago_em: dataSchema,
-  conta_bancaria_id: z.string().uuid("Selecione a conta que realizará o pagamento."),
-  plano_conta_tipo_id: z.string().uuid("Selecione o centro de custo do pagamento."),
-  plano_conta_subtipo_id: z
-    .string()
-    .uuid("Selecione o centro de custo do pagamento."),
-});
+const baixaSchema = z
+  .object({
+    origem: origemSchema,
+    /** Id da parcela (origem `pp`) ou da conta avulsa (demais origens). */
+    id: z.string().uuid(),
+    pago_em: dataSchema,
+    conta_bancaria_id: z.string().uuid("Selecione a conta que realizará o pagamento."),
+    plano_conta_tipo_id: z.string().uuid("Selecione o centro de custo do pagamento."),
+    plano_conta_subtipo_id: z
+      .string()
+      .uuid("Selecione o centro de custo do pagamento."),
+    // Nullable pra devolução de verba: a RPC de devolução não recebe forma
+    // e o dialog esconde o campo. Para as demais origens, superRefine
+    // abaixo exige que venha preenchido.
+    forma_pagamento: z
+      .enum(["pix", "transferencia", "boleto", "cartao_credito"])
+      .nullable(),
+    cartao_credito_id: z
+      .string()
+      .uuid()
+      .nullable()
+      .or(z.literal("").transform(() => null)),
+  })
+  .superRefine((data, ctx) => {
+    // Devolução de verba: forma_pagamento vem null e cartão também. Não
+    // exige nada.
+    if (data.origem === "pp_devolucao_verba") {
+      if (data.forma_pagamento !== null || data.cartao_credito_id !== null) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            "Devolução de verba não aceita forma de pagamento nem cartão.",
+          path: ["forma_pagamento"],
+        });
+      }
+      return;
+    }
+    if (data.forma_pagamento === null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Selecione a forma de pagamento.",
+        path: ["forma_pagamento"],
+      });
+      return;
+    }
+    if (data.forma_pagamento === "cartao_credito" && !data.cartao_credito_id) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Selecione o cartão de crédito.",
+        path: ["cartao_credito_id"],
+      });
+    } else if (data.forma_pagamento !== "cartao_credito" && data.cartao_credito_id) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Cartão só pode ser informado quando a forma é cartão de crédito.",
+        path: ["cartao_credito_id"],
+      });
+    }
+  });
 
 /**
  * Baixa um título e o envia para a conciliação.
@@ -225,9 +273,21 @@ export async function darBaixaTitulo(input: unknown): Promise<Result> {
   const d = parsed.data;
 
   const gate = await checarGateFinanceiro(
-    d.origem === "pp" ? "pedido_compra" : "conta_avulsa",
+    d.origem === "pp"
+      ? "pedido_compra"
+      : d.origem === "pp_devolucao_verba"
+        ? "pp_verba_devolucao"
+        : d.origem === "desembolso"
+          ? "desembolso"
+          : "conta_avulsa",
     d.id,
-    d.origem === "pp" ? "pedido_compra.parcela_paga" : "conta_avulsa.baixada",
+    d.origem === "pp"
+      ? "pedido_compra.parcela_paga"
+      : d.origem === "pp_devolucao_verba"
+        ? "pp_verba_devolucao.baixada"
+        : d.origem === "desembolso"
+          ? "desembolso.parcela_paga"
+          : "conta_avulsa.baixada",
   );
   if (!gate.ok) return gate;
   const { session, supabase } = gate;
@@ -269,6 +329,8 @@ export async function darBaixaTitulo(input: unknown): Promise<Result> {
       p_plano_conta_tipo_id: d.plano_conta_tipo_id,
       p_plano_conta_subtipo_id: d.plano_conta_subtipo_id,
       p_criado_por: session.profile.id,
+      p_forma_pagamento: d.forma_pagamento,
+      p_cartao_credito_id: d.cartao_credito_id,
     });
     if (error) {
       console.error("[titulos.baixa.pp]", error.message);
@@ -289,6 +351,8 @@ export async function darBaixaTitulo(input: unknown): Promise<Result> {
         job_id: parcela.pedido.job_id,
         conta_bancaria_id: d.conta_bancaria_id,
         lancamento_id: lancId,
+        forma_pagamento: d.forma_pagamento,
+        cartao_credito_id: d.cartao_credito_id,
       },
     });
 
@@ -325,6 +389,8 @@ export async function darBaixaTitulo(input: unknown): Promise<Result> {
       p_plano_conta_tipo_id: d.plano_conta_tipo_id,
       p_plano_conta_subtipo_id: d.plano_conta_subtipo_id,
       p_criado_por: session.profile.id,
+      p_forma_pagamento: d.forma_pagamento,
+      p_cartao_credito_id: d.cartao_credito_id,
     });
     if (error) {
       console.error("[titulos.baixa.desembolso]", error.message);
@@ -344,10 +410,61 @@ export async function darBaixaTitulo(input: unknown): Promise<Result> {
         pago_em: d.pago_em,
         conta_bancaria_id: d.conta_bancaria_id,
         lancamento_id: lancId,
+        forma_pagamento: d.forma_pagamento,
+        cartao_credito_id: d.cartao_credito_id,
       },
     });
 
     revalidarFinanceiro();
+    return { ok: true };
+  }
+
+  if (d.origem === "pp_devolucao_verba") {
+    const { data: devolucao } = await supabase
+      .from("pp_verba_devolucoes")
+      .select("id, valor, pago_em, pedido_compra_id, pp:pedidos_compra!pedido_compra_id(codigo, job_id)")
+      .eq("id", d.id)
+      .eq("tenant_id", session.activeTenant.id)
+      .maybeSingle<{
+        id: string;
+        valor: string | number;
+        pago_em: string | null;
+        pedido_compra_id: string;
+        pp: { codigo: string; job_id: string | null } | null;
+      }>();
+
+    if (!devolucao) return { ok: false, message: "Devolução não encontrada." };
+    if (devolucao.pago_em) return { ok: false, message: "Esta devolução já foi baixada." };
+
+    const { data: lancId, error } = await supabase.rpc("dar_baixa_devolucao_verba", {
+      p_devolucao_id: d.id,
+      p_pago_em: d.pago_em,
+      p_conta_bancaria_id: d.conta_bancaria_id,
+      p_plano_conta_tipo_id: d.plano_conta_tipo_id,
+      p_plano_conta_subtipo_id: d.plano_conta_subtipo_id,
+      p_criado_por: session.profile.id,
+    });
+    if (error) {
+      console.error("[titulos.baixa.devolucao_verba]", error.message);
+      return { ok: false, message: mensagemDeBaixa(error.message) };
+    }
+
+    await logAuditEvent({
+      acao: "pp_verba_devolucao.baixada",
+      tenantId: session.activeTenant.id,
+      entidadeTipo: "pp_verba_devolucao",
+      entidadeId: d.id,
+      metadata: {
+        pp_codigo: devolucao.pp?.codigo,
+        pedido_compra_id: devolucao.pedido_compra_id,
+        valor: Number(devolucao.valor),
+        pago_em: d.pago_em,
+        conta_bancaria_id: d.conta_bancaria_id,
+        lancamento_id: lancId,
+      },
+    });
+
+    revalidarFinanceiro(devolucao.pp?.job_id);
     return { ok: true };
   }
 
@@ -372,6 +489,8 @@ export async function darBaixaTitulo(input: unknown): Promise<Result> {
     p_conta_bancaria_id: d.conta_bancaria_id,
     p_plano_conta_tipo_id: d.plano_conta_tipo_id,
     p_plano_conta_subtipo_id: d.plano_conta_subtipo_id,
+    p_forma_pagamento: d.forma_pagamento,
+    p_cartao_credito_id: d.cartao_credito_id,
   });
   if (error) {
     console.error("[titulos.baixa.avulsa]", error.message);
@@ -390,6 +509,8 @@ export async function darBaixaTitulo(input: unknown): Promise<Result> {
       origem: avulsa.recorrente_id ? "recorrencia" : "avulso",
       conta_bancaria_id: d.conta_bancaria_id,
       lancamento_id: lancId,
+      forma_pagamento: d.forma_pagamento,
+      cartao_credito_id: d.cartao_credito_id,
     },
   });
 
@@ -667,6 +788,10 @@ export async function estornarBaixaTitulo(input: unknown): Promise<Result> {
     return estornarBaixaDesembolsoParcela(d.id, d.motivo);
   }
 
+  if (d.origem === "pp_devolucao_verba") {
+    return estornarBaixaDevolucaoVerba(d.id, d.motivo);
+  }
+
   const { estornarBaixaAvulsa } = await import("./actions-avulsas");
   return estornarBaixaAvulsa({ conta_avulsa_id: d.id, motivo: d.motivo });
 }
@@ -752,5 +877,87 @@ async function estornarBaixaDesembolsoParcela(
   });
 
   revalidarFinanceiro();
+  return { ok: true };
+}
+
+/**
+ * Estorna a baixa de uma devolução de verba de produção.
+ *
+ * Mesmo padrão de `estornarBaixaDesembolsoParcela` mas chamando a RPC
+ * `estornar_baixa_devolucao_verba`.
+ */
+async function estornarBaixaDevolucaoVerba(
+  devolucaoId: string,
+  motivo: string,
+): Promise<Result> {
+  const gate = await checarGateFinanceiro(
+    "pp_verba_devolucao",
+    devolucaoId,
+    "pp_verba_devolucao.baixa_estornada",
+  );
+  if (!gate.ok) return gate;
+  const { session, supabase } = gate;
+
+  const { data: devolucao } = await supabase
+    .from("pp_verba_devolucoes")
+    .select(
+      "id, valor, pago_em, pedido_compra_id, pp:pedidos_compra!pedido_compra_id(codigo, job_id)",
+    )
+    .eq("id", devolucaoId)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle<{
+      id: string;
+      valor: string | number;
+      pago_em: string | null;
+      pedido_compra_id: string;
+      pp: { codigo: string; job_id: string | null } | null;
+    }>();
+
+  if (!devolucao) return { ok: false, message: "Devolução não encontrada." };
+  if (!devolucao.pago_em) {
+    return { ok: false, message: "Esta devolução não está baixada." };
+  }
+
+  const { data: reversoId, error } = await supabase.rpc(
+    "estornar_baixa_devolucao_verba",
+    {
+      p_devolucao_id: devolucaoId,
+      p_motivo: motivo,
+      p_criado_por: session.profile.id,
+    },
+  );
+
+  if (error) {
+    console.error("[titulos.estorno.devolucao_verba]", error.message);
+    return { ok: false, message: mensagemDeBaixa(error.message) };
+  }
+
+  await logAuditEvent({
+    acao: "pp_verba_devolucao.baixa_estornada",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "pp_verba_devolucao",
+    entidadeId: devolucao.id,
+    metadata: {
+      pp_codigo: devolucao.pp?.codigo,
+      pedido_compra_id: devolucao.pedido_compra_id,
+      valor: Number(devolucao.valor),
+      motivo,
+      lancamento_reverso_id: reversoId,
+    },
+  });
+
+  await logAuditEvent({
+    acao: "lancamento_financeiro.estornado",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "lancamento_financeiro",
+    entidadeId: (reversoId as string) ?? null,
+    metadata: {
+      origem: "pp_devolucao_verba_estornada",
+      pp_codigo: devolucao.pp?.codigo,
+      motivo,
+    },
+  });
+
+  revalidarFinanceiro(devolucao.pp?.job_id);
   return { ok: true };
 }

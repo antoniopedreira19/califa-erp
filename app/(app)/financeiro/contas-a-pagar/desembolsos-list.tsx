@@ -4,7 +4,7 @@ import * as React from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { DesembolsoStatus, FormaPagamento } from "@/lib/types";
+import type { DesembolsoStatus } from "@/lib/types";
 import { desembolsoStatusLabel } from "@/lib/types";
 import { AprovarDesembolsoDialog } from "./aprovar-desembolso-dialog";
 import { RejeitarDesembolsoDialog, type ModoDialog } from "./rejeitar-desembolso-dialog";
@@ -17,8 +17,6 @@ export interface DesembolsoRow {
   descricao: string;
   valor: number;
   status: DesembolsoStatus;
-  forma_pagamento: FormaPagamento | null;
-  cartao_credito_id: string | null;
   data_prevista_pagamento: string | null;
   motivo_rejeicao: string | null;
   motivo_cancelamento: string | null;

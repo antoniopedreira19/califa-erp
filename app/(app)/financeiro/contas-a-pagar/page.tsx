@@ -42,6 +42,8 @@ export default async function PedidosCompraFinanceiroPage() {
     cartoesRes,
     desembolsosRes,
     desembolsosTitulosRes,
+    prestacoesRes,
+    devolucoesRes,
   ] = await Promise.all([
     supabase
       .from("pedidos_compra")
@@ -50,16 +52,16 @@ export default async function PedidosCompraFinanceiroPage() {
         id, codigo, status, valor, quantidade, servico, especificacoes,
         prazo_pagamento, prazo_pagamento_financeiro, pdf_path, created_at,
         cancelada_em, motivo_cancelamento,
-        rejeitada_em, motivo_rejeicao, pago_em,
-        forma_pagamento, cartao_credito_id,
+        rejeitada_em, motivo_rejeicao, pago_em, verba_producao,
         fornecedor:fornecedores(id, nome, razao_social),
+        responsavel:profiles!responsavel_verba_id(id, nome),
         empresa:empresas(id, razao_social, nome_fantasia),
         cancelada_por_profile:profiles!cancelada_por(nome),
         emitida_por_profile:profiles!emitida_por(nome),
         rejeitada_por_profile:profiles!rejeitada_por(nome),
         pago_por_profile:profiles!pago_por(nome),
         job:jobs(
-          id, codigo, nome,
+          id, codigo, nome, regional_id,
           projeto:projetos(codigo, nome, cliente:clientes(nome_fantasia))
         ),
         anexos:pedidos_compra_anexos(id, arquivo_nome_original, arquivo_tamanho_bytes),
@@ -118,13 +120,15 @@ export default async function PedidosCompraFinanceiroPage() {
     supabase
       .from("lancamentos_financeiros")
       .select(`
-        pedido_compra_parcela_id, conta_avulsa_id, desembolso_parcela_id, data_movimento,
+        pedido_compra_parcela_id, conta_avulsa_id, desembolso_parcela_id,
+        pp_verba_devolucao_id, data_movimento,
+        forma_pagamento, cartao_credito_id,
         conta:contas_bancarias(nome, banco),
         tipo:plano_contas_tipos(codigo),
         subtipo:plano_contas_subtipos(nome)
       `)
       .eq("tenant_id", session.activeTenant.id)
-      .in("origem", ["pp_baixa", "avulsa_baixa", "desembolso_baixa"]),
+      .in("origem", ["pp_baixa", "avulsa_baixa", "desembolso_baixa", "pp_devolucao_verba"]),
     // Empresas ativas (dropdown do drawer)
     supabase
       .from("empresas")
@@ -194,7 +198,7 @@ export default async function PedidosCompraFinanceiroPage() {
     supabase
       .from("desembolsos")
       .select(`
-        id, codigo, descricao, valor, status, forma_pagamento, cartao_credito_id,
+        id, codigo, descricao, valor, status,
         data_prevista_pagamento, motivo_rejeicao, motivo_cancelamento,
         aprovada_em, rejeitada_em, cancelada_em, pago_em, created_at,
         empresa:empresas(id, razao_social, nome_fantasia),
@@ -208,7 +212,7 @@ export default async function PedidosCompraFinanceiroPage() {
     supabase
       .from("desembolsos")
       .select(`
-        id, codigo, descricao, status, forma_pagamento, cartao_credito_id,
+        id, codigo, descricao, status,
         empresa_id,
         fornecedor:fornecedores(nome, razao_social),
         job:jobs(codigo),
@@ -220,6 +224,27 @@ export default async function PedidosCompraFinanceiroPage() {
       .eq("tenant_id", session.activeTenant.id)
       .in("status", ["aprovada", "pago"])
       .order("created_at", { ascending: false }),
+    // Prestações de contas de PPs de Verba de Produção (Task 6).
+    supabase
+      .from("pp_verba_prestacoes")
+      .select(`
+        id, pedido_compra_id, valor_gasto, valor_devolvido, fechada_em,
+        fechada_por_profile:profiles!fechada_por(nome),
+        anexos:pp_verba_prestacoes_anexos(id, arquivo_nome_original, arquivo_tamanho_bytes, arquivo_mimetype)
+      `)
+      .eq("tenant_id", session.activeTenant.id),
+    // Devoluções de verba de produção — todas (a_pagar + pagas), para a
+    // aba Títulos a Pagar (Task 11). Fetch direto na tabela, sem view.
+    supabase
+      .from("pp_verba_devolucoes")
+      .select(`
+        id, tenant_id, empresa_id, valor, data_pagamento, data_pagamento_primeira,
+        pago_em, pago_por,
+        pp:pedidos_compra!pedido_compra_id(id, codigo, servico, job_id,
+          job:jobs(id, codigo, nome)
+        )
+      `)
+      .eq("tenant_id", session.activeTenant.id),
   ]);
 
   if (error) console.error("[financeiro.pp.list]", error.message);
@@ -229,6 +254,28 @@ export default async function PedidosCompraFinanceiroPage() {
   if (cartoesRes.error) console.error("[financeiro.cartoes.list]", cartoesRes.error.message);
   if (desembolsosRes.error) console.error("[financeiro.desembolsos.list]", desembolsosRes.error.message);
   if (desembolsosTitulosRes.error) console.error("[financeiro.desembolsos_titulos.list]", desembolsosTitulosRes.error.message);
+  if (prestacoesRes.error) console.error("[financeiro.prestacoes.list]", prestacoesRes.error.message);
+  if (devolucoesRes.error) console.error("[financeiro.devolucoes.list]", devolucoesRes.error.message);
+
+  // Mapa pedido_compra_id → prestação (com anexos e profile de quem fechou)
+  type PrestacaoComAnexos = {
+    id: string;
+    pedido_compra_id: string;
+    valor_gasto: number;
+    valor_devolvido: number;
+    fechada_em: string;
+    fechada_por_profile: { nome: string } | null;
+    anexos: Array<{
+      id: string;
+      arquivo_nome_original: string;
+      arquivo_tamanho_bytes: number;
+      arquivo_mimetype: string;
+    }>;
+  };
+  const prestacoesPorPP = new Map<string, PrestacaoComAnexos>();
+  for (const p of (prestacoesRes.data ?? []) as unknown as PrestacaoComAnexos[]) {
+    prestacoesPorPP.set(p.pedido_compra_id, p);
+  }
 
   const rows: PPRow[] = ((data ?? []) as unknown as Array<{
     id: string;
@@ -247,9 +294,9 @@ export default async function PedidosCompraFinanceiroPage() {
     rejeitada_em: string | null;
     motivo_rejeicao: string | null;
     pago_em: string | null;
-    forma_pagamento: FormaPagamento | null;
-    cartao_credito_id: string | null;
+    verba_producao: boolean;
     fornecedor: { id: string; nome: string; razao_social: string | null } | null;
+    responsavel: { id: string; nome: string } | null;
     empresa: { id: string; razao_social: string; nome_fantasia: string | null } | null;
     cancelada_por_profile: { nome: string } | null;
     emitida_por_profile: { nome: string } | null;
@@ -259,6 +306,7 @@ export default async function PedidosCompraFinanceiroPage() {
       id: string;
       codigo: string;
       nome: string;
+      regional_id: string | null;
       projeto: {
         codigo: string;
         nome: string;
@@ -305,13 +353,17 @@ export default async function PedidosCompraFinanceiroPage() {
     job_id: r.job?.id ?? "",
     job_codigo: r.job?.codigo ?? "",
     job_nome: r.job?.nome ?? "",
+    regional_id: r.job?.regional_id ?? null,
     projeto_codigo: r.job?.projeto?.codigo ?? null,
     projeto_nome: r.job?.projeto?.nome ?? null,
     cliente_nome: r.job?.projeto?.cliente?.nome_fantasia ?? null,
     cancelada_por_nome: r.cancelada_por_profile?.nome ?? null,
     emitida_por_nome: r.emitida_por_profile?.nome ?? null,
-    forma_pagamento: r.forma_pagamento,
-    cartao_credito_id: r.cartao_credito_id,
+    forma_pagamento: null,
+    cartao_credito_id: null,
+    verba_producao: r.verba_producao ?? false,
+    responsavel_nome: r.responsavel?.nome ?? null,
+    prestacao: prestacoesPorPP.get(r.id) ?? null,
     anexos: r.anexos ?? [],
     // Ordenadas aqui: o embed do PostgREST não garante ordem, e a lista
     // e o drawer mostram "1/3, 2/3, 3/3" na sequência.
@@ -339,17 +391,27 @@ export default async function PedidosCompraFinanceiroPage() {
   //   • `contas_avulsas` → `avulso` ou `recorrencia`, conforme
   //     `recorrente_id` (a recorrência materializa ocorrências ali)
 
-  type BaixaInfo = { pago_em: string; conta: string; centro: string };
+  type BaixaInfo = {
+    pago_em: string;
+    conta: string;
+    centro: string;
+    forma_pagamento: FormaPagamento | null;
+    cartao_credito_id: string | null;
+  };
 
   const baixaPorParcela = new Map<string, BaixaInfo>();
   const baixaPorAvulsa = new Map<string, BaixaInfo>();
   const baixaPorDesembolsoParcela = new Map<string, BaixaInfo>();
+  const baixaPorDevolucao = new Map<string, BaixaInfo>();
 
   for (const l of (baixasRes.data ?? []) as unknown as Array<{
     pedido_compra_parcela_id: string | null;
     conta_avulsa_id: string | null;
     desembolso_parcela_id: string | null;
+    pp_verba_devolucao_id: string | null;
     data_movimento: string;
+    forma_pagamento: FormaPagamento | null;
+    cartao_credito_id: string | null;
     conta: { nome: string | null; banco: string | null } | null;
     tipo: { codigo: string } | null;
     subtipo: { nome: string } | null;
@@ -363,11 +425,20 @@ export default async function PedidosCompraFinanceiroPage() {
         l.tipo?.codigo && l.subtipo?.nome
           ? `${l.tipo.codigo} · ${l.subtipo.nome}`
           : "—",
+      forma_pagamento: l.forma_pagamento,
+      cartao_credito_id: l.cartao_credito_id,
     };
     if (l.pedido_compra_parcela_id) baixaPorParcela.set(l.pedido_compra_parcela_id, info);
     if (l.conta_avulsa_id) baixaPorAvulsa.set(l.conta_avulsa_id, info);
     if (l.desembolso_parcela_id) baixaPorDesembolsoParcela.set(l.desembolso_parcela_id, info);
+    if (l.pp_verba_devolucao_id) baixaPorDevolucao.set(l.pp_verba_devolucao_id, info);
   }
+
+  // PP sempre nasce vinculada a um job. Custo de job cai em "Custo
+  // Operacional" (código 02) por convenção contábil — a UI usa esse id
+  // como default do tipo na tela de baixa. O financeiro pode trocar.
+  const custoOperacionalTipoId =
+    (tiposRes.data ?? []).find((t) => t.codigo === "02")?.id ?? null;
 
   const titulos: TituloRow[] = [];
 
@@ -393,15 +464,21 @@ export default async function PedidosCompraFinanceiroPage() {
         parcela_total: total,
         status: par.pago_em ? "pago" : "a_pagar",
         empresa_id: pp.empresa_id,
-        // A PP não carrega plano de contas — o financeiro escolhe na baixa.
-        plano_conta_tipo_id: null,
+        // PP sempre é custo de job → default Custo Operacional; subtipo
+        // fica em branco pro financeiro escolher entre os do tipo.
+        plano_conta_tipo_id: custoOperacionalTipoId,
         plano_conta_subtipo_id: null,
         pago_em: par.pago_em,
         conta_nome: baixa?.conta ?? null,
         centro_nome: baixa?.centro ?? null,
-        // Parcelas herdam forma_pagamento/cartao_credito_id da PP-pai.
-        forma_pagamento: pp.forma_pagamento,
-        cartao_credito_id: pp.cartao_credito_id,
+        // Se paga, usa a forma registrada na baixa; senão, null (planejado
+        // não existe para PP — Task 7 vai remover a coluna da PP-pai).
+        forma_pagamento: par.pago_em
+          ? baixa?.forma_pagamento ?? null
+          : null,
+        cartao_credito_id: par.pago_em
+          ? baixa?.cartao_credito_id ?? null
+          : null,
       });
     }
   }
@@ -446,8 +523,14 @@ export default async function PedidosCompraFinanceiroPage() {
       pago_em: a.pago_em,
       conta_nome: baixa?.conta ?? null,
       centro_nome: baixa?.centro ?? null,
-      forma_pagamento: a.forma_pagamento,
-      cartao_credito_id: a.cartao_credito_id,
+      // Se paga, prefere a forma registrada na baixa (realizado); senão,
+      // usa a forma planejada da origem (avulsa/recorrência).
+      forma_pagamento: a.pago_em
+        ? baixa?.forma_pagamento ?? a.forma_pagamento
+        : a.forma_pagamento,
+      cartao_credito_id: a.pago_em
+        ? baixa?.cartao_credito_id ?? a.cartao_credito_id
+        : a.cartao_credito_id,
     });
   }
 
@@ -457,8 +540,6 @@ export default async function PedidosCompraFinanceiroPage() {
     codigo: string;
     descricao: string;
     status: "aprovada" | "pago";
-    forma_pagamento: FormaPagamento | null;
-    cartao_credito_id: string | null;
     empresa_id: string;
     fornecedor: { nome: string | null; razao_social: string | null } | null;
     job: { codigo: string } | null;
@@ -490,28 +571,84 @@ export default async function PedidosCompraFinanceiroPage() {
         parcela_total: total,
         status: par.pago_em ? "pago" : "a_pagar",
         empresa_id: des.empresa_id,
-        plano_conta_tipo_id: null, // desembolso escolhe na baixa
+        // Desembolso com job → default Custo Operacional. Sem job, o
+        // financeiro decide o tipo na baixa.
+        plano_conta_tipo_id: des.job ? custoOperacionalTipoId : null,
         plano_conta_subtipo_id: null,
         pago_em: par.pago_em,
         conta_nome: baixa?.conta ?? null,
         centro_nome: baixa?.centro ?? null,
-        forma_pagamento: des.forma_pagamento,
-        cartao_credito_id: des.cartao_credito_id,
+        // Se paga, usa a forma registrada na baixa; senão, null (planejado
+        // não existe para desembolso-parcela — Task 7 vai remover a coluna
+        // do desembolso-pai).
+        forma_pagamento: par.pago_em
+          ? baixa?.forma_pagamento ?? null
+          : null,
+        cartao_credito_id: par.pago_em
+          ? baixa?.cartao_credito_id ?? null
+          : null,
       });
     }
   }
 
-  // Títulos de cartão de crédito pendentes — alimentam a 5ª aba.
-  const titulosCartao = titulos.filter(
-    (t) => t.forma_pagamento === "cartao_credito" && t.status === "a_pagar",
-  );
-  const titulosCartaoCount = titulosCartao.length;
+  // 5º loop — devoluções de verba de produção viram títulos de origem `pp_devolucao_verba`.
+  for (const dev of (devolucoesRes.data ?? []) as unknown as Array<{
+    id: string;
+    tenant_id: string;
+    empresa_id: string;
+    valor: string | number;
+    data_pagamento: string | null;
+    data_pagamento_primeira: string | null;
+    pago_em: string | null;
+    pago_por: string | null;
+    pp: {
+      id: string;
+      codigo: string;
+      servico: string;
+      job_id: string | null;
+      job: { id: string; codigo: string; nome: string } | null;
+    } | null;
+  }>) {
+    const baixa = baixaPorDevolucao.get(dev.id);
+    titulos.push({
+      id: dev.id,
+      origem: "pp_devolucao_verba",
+      origem_label: `DEVOLUÇÃO ${dev.pp?.codigo ?? ""}`,
+      descricao: `Devolução verba ${dev.pp?.codigo ?? ""} — ${dev.pp?.servico ?? ""}`,
+      fornecedor_nome: "",
+      job_codigo: dev.pp?.job?.codigo ?? "—",
+      data_pagamento: dev.data_pagamento,
+      venc_original: dev.data_pagamento_primeira,
+      data_pagamento_primeira: dev.data_pagamento_primeira,
+      valor: Number(dev.valor),
+      parcela_numero: 1,
+      parcela_total: 1,
+      status: dev.pago_em ? "pago" : "a_pagar",
+      empresa_id: dev.empresa_id,
+      plano_conta_tipo_id: null,
+      plano_conta_subtipo_id: null,
+      pago_em: dev.pago_em,
+      conta_nome: baixa?.conta ?? null,
+      centro_nome: baixa?.centro ?? null,
+      forma_pagamento: dev.pago_em ? baixa?.forma_pagamento ?? null : null,
+      cartao_credito_id: dev.pago_em ? baixa?.cartao_credito_id ?? null : null,
+    });
+  }
 
-  // Aba comum "Títulos a Pagar" exclui cartões pendentes (eles têm aba própria).
-  // Cartões PAGOS permanecem em "Títulos Pagos" (status "pago" não é filtrado aqui).
-  const titulosAPagarCount = titulos.filter(
-    (t) => t.status === "a_pagar" && t.forma_pagamento !== "cartao_credito",
-  ).length;
+  // Aba "Cartão" — TODOS os títulos de cartão (a pagar + pagos). O filtro
+  // de status é interno na lista, padrão "a pagar".
+  const titulosCartao = titulos.filter(
+    (t) => t.forma_pagamento === "cartao_credito",
+  );
+  // Badge da aba: só os "a pagar" (o padrão do filtro).
+  const titulosCartaoCount = titulosCartao.filter((t) => t.status === "a_pagar").length;
+
+  // Aba "Títulos a Pagar" — TODOS os não-cartão (a pagar + pagos). Filtro
+  // de status também é interno, padrão "a pagar".
+  const titulosNaoCartao = titulos.filter(
+    (t) => t.forma_pagamento !== "cartao_credito",
+  );
+  const titulosAPagarCount = titulosNaoCartao.filter((t) => t.status === "a_pagar").length;
 
   // Mapeamento das recorrências para RecorrenteRow
   const recorrentesRows: RecorrenteRow[] = ((recorrentesRes.data ?? []) as unknown as Array<{
@@ -602,8 +739,6 @@ export default async function PedidosCompraFinanceiroPage() {
       descricao: string;
       valor: string | number;
       status: DesembolsoStatus;
-      forma_pagamento: FormaPagamento | null;
-      cartao_credito_id: string | null;
       data_prevista_pagamento: string | null;
       motivo_rejeicao: string | null;
       motivo_cancelamento: string | null;
@@ -622,8 +757,6 @@ export default async function PedidosCompraFinanceiroPage() {
     descricao: d.descricao,
     valor: Number(d.valor),
     status: d.status,
-    forma_pagamento: d.forma_pagamento,
-    cartao_credito_id: d.cartao_credito_id,
     data_prevista_pagamento: d.data_prevista_pagamento,
     motivo_rejeicao: d.motivo_rejeicao,
     motivo_cancelamento: d.motivo_cancelamento,
@@ -685,20 +818,13 @@ export default async function PedidosCompraFinanceiroPage() {
       </header>
 
       <ContasPagarTabs
-        pps={<PedidosCompraList rows={rows} />}
+        pps={<PedidosCompraList rows={rows} tenantId={session.activeTenant.id} regionais={regionaisList} />}
         ppsPendentesCount={ppsPendentesCountRes.count ?? 0}
         desembolsos={<DesembolsosContasPagarList rows={desembolsosRows} />}
         desembolsosPendentesCount={desembolsosPendentesCount}
         titulos={
-          // Aba comum exclui cartões pendentes (eles têm aba própria).
-          // `t.status !== "a_pagar"` preserva cartões pagos para o modo "pagos"
-          // do mesmo componente — mas aqui só modo "a_pagar" recebe os rows
-          // filtrados; a aba de pagos usa rows sem filtro (veja titulosPagos abaixo).
           <TitulosPagarList
-            rows={titulos.filter(
-              (t) => t.status !== "a_pagar" || t.forma_pagamento !== "cartao_credito",
-            )}
-            modo="a_pagar"
+            rows={titulosNaoCartao}
             tenantId={session.activeTenant.id}
             contas={contasRes.data ?? []}
             tipos={tiposRes.data ?? []}
@@ -737,23 +863,6 @@ export default async function PedidosCompraFinanceiroPage() {
           />
         }
         titulosCartaoCount={titulosCartaoCount}
-        titulosPagos={
-          // "Títulos Pagos" recebe todos os rows (cartões pagos aparecem aqui).
-          <TitulosPagarList
-            rows={titulos}
-            modo="pagos"
-            tenantId={session.activeTenant.id}
-            contas={contasRes.data ?? []}
-            tipos={tiposRes.data ?? []}
-            subtipos={subtiposRes.data ?? []}
-            empresas={empresasList}
-            fornecedores={fornecedoresList}
-            clientes={clientesList}
-            jobs={jobsList}
-            regionais={regionaisList}
-            cartoes={cartoesList}
-          />
-        }
       />
     </div>
   );

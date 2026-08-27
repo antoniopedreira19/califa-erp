@@ -105,7 +105,6 @@ export async function carregarDetalheDoJob(
     portaisRes,
     jobsIrmaosRes,
     abertoPorRes,
-    cartoesRes,
   ] = await Promise.all([
     supabase
       .from("versoes_orcamento_grupos")
@@ -137,7 +136,7 @@ export async function carregarDetalheDoJob(
     supabase
       .from("pedidos_compra")
       .select(
-        "*, emitido:profiles!emitida_por(nome), anexos:pedidos_compra_anexos(id, arquivo_nome_original, arquivo_tamanho_bytes), parcelas:pedidos_compra_parcelas(id, tenant_id, pedido_compra_id, numero, data_vencimento, valor, pdf_path, pago_em, pago_por, created_at, updated_at, created_by)",
+        "*, emitido:profiles!emitida_por(nome), responsavel:profiles!responsavel_verba_id(nome), anexos:pedidos_compra_anexos(id, arquivo_nome_original, arquivo_tamanho_bytes), parcelas:pedidos_compra_parcelas(id, tenant_id, pedido_compra_id, numero, data_vencimento, valor, pdf_path, pago_em, pago_por, created_at, updated_at, created_by)",
       )
       .eq("job_id", raw.id)
       .eq("tenant_id", session.activeTenant.id)
@@ -246,14 +245,6 @@ export async function carregarDetalheDoJob(
           .eq("id", raw.aberto_por)
           .maybeSingle()
       : Promise.resolve({ data: null, error: null }),
-    // Cartões ativos: passados ao form de emissão de PP para o
-    // FormaPagamentoField. Uma query por page load — sem overhead extra.
-    supabase
-      .from("cartoes_credito")
-      .select("id, nome, banco, bandeira, ultimos_4_digitos, dia_vencimento_fatura")
-      .eq("tenant_id", session.activeTenant.id)
-      .eq("ativo", true)
-      .order("nome"),
   ]);
 
   const grupos = (gruposRes.data ?? []) as VersaoOrcamentoGrupo[];
@@ -347,7 +338,7 @@ export async function carregarDetalheDoJob(
   // Um item pode ter VÁRIAS PPs desde 17/08/2026 (PPs parciais), então o
   // mapa guarda lista. A cancelada fica de fora: ela devolveu saldo ao
   // item e não conta nem no chip nem na conta do painel.
-  const ppsPorItemId = new Map<string, PedidoCompra[]>();
+  const ppsPorItemId = new Map<string, PedidoCompraNaLista[]>();
   for (const pp of ppsDoJob) {
     if (pp.status === "cancelada") continue;
     const atuais = ppsPorItemId.get(pp.item_realizado_id) ?? [];
@@ -615,12 +606,6 @@ export async function carregarDetalheDoJob(
   const abertoPorNome =
     (abertoPorRes.data as { nome: string } | null)?.nome ?? null;
 
-  if (cartoesRes.error)
-    console.error("[job.cartoes]", cartoesRes.error.message);
-  // Cast via `any`: a bandeira vem como string do Supabase e CartaoOption
-  // a declara como BandeiraCartao — o banco tem constraint de enum e o cast é seguro.
-  const cartoes = (cartoesRes.data ?? []) as any[];
-
   const versaoLabel = raw.versao
     ? nomeVersao(raw.orcamento?.nome ?? job.nome, raw.versao.numero_versao)
     : "—";
@@ -726,7 +711,6 @@ export async function carregarDetalheDoJob(
     portaisDoCliente,
     jobsDoProjeto,
     abertoPorNome,
-    cartoes,
     totaisJob,
     custoPlanejadoJob,
     custoRealizadoJob,

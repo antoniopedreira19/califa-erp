@@ -13,6 +13,7 @@
  */
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { FolderTree } from "lucide-react";
 import type {
   Categoria,
@@ -22,11 +23,17 @@ import type {
 } from "@/lib/types";
 import { VISAO_BV_PADRAO, type VisaoBv } from "@/lib/calculos/bv-planilha";
 import type { FornecedorOpcao } from "@/app/(app)/_bv/bv-dialog";
-import { useRouter } from "next/navigation";
-import { SAVE_VAZIO, type EstadoSaveDaLinha } from "@/app/(app)/_planilha/save-coluna";
-import { SaveDialog, type LinhaDoSave } from "@/app/(app)/_planilha/save-dialog";
+import {
+  SAVE_VAZIO,
+  type EstadoSaveDaLinha,
+} from "@/app/(app)/_planilha/save-coluna";
+import {
+  SaveDialog,
+  type LinhaDoSave,
+} from "@/app/(app)/_planilha/save-dialog";
 import type { SaldoDeSave } from "@/lib/data/saves";
 import { GruposSection } from "./grupos-section";
+import { NovoGrupoDrawer } from "./novo-grupo-drawer";
 import { TotaisCard } from "./totais-card";
 import {
   definirSavePorPadrao,
@@ -47,8 +54,11 @@ interface Props {
   versaoLabel: string;
   percentualHonorarios: number;
   percentualImposto: number;
-  // ---- SAVE (docs/decisions/023-save-entre-jobs.md)
+  /** Necessário para o "Novo grupo", que desde 24/08/2026 mora DENTRO da
+   *  planilha — na linha tracejada do pé da tabela — em vez de na barra
+   *  de ações da página. */
   versaoId: string;
+  // ---- SAVE (docs/decisions/023-save-entre-jobs.md)
   /** Aparece no texto do formulário: o crédito é do cliente. */
   clienteNome: string;
   savePorPadrao: boolean;
@@ -79,8 +89,8 @@ export function PlanilhaVersao({
   saldosDeSave,
   nomeDoGrupo,
 }: Props) {
-  const router = useRouter();
   const [visao, setVisao] = React.useState<VisaoBv>(VISAO_BV_PADRAO);
+  const router = useRouter();
 
   // A coluna abre sozinha em quem já usa save, e fica fechada em quem
   // nunca usou: assim a planilha de sempre continua a de sempre.
@@ -117,6 +127,14 @@ export function PlanilhaVersao({
           <p className="mt-1 text-xs text-muted-foreground">
             Exemplos: Equipe, Ativação, Staff, Logística...
           </p>
+          {!readOnly && (
+            <div className="mt-5 flex justify-center">
+              {/* Sem nenhum grupo não há linha tracejada onde encaixar o
+                  gatilho: aqui ele é a única ação da tela, e por isso vem
+                  na forma sólida. */}
+              <NovoGrupoDrawer versaoId={versaoId} />
+            </div>
+          )}
         </div>
       ) : (
         <GruposSection
@@ -145,15 +163,18 @@ export function PlanilhaVersao({
                 }
               : undefined
           }
+          novoGrupo={
+            readOnly ? undefined : (
+              <NovoGrupoDrawer versaoId={versaoId} variante="tracejada" />
+            )
+          }
         />
       )}
 
       <TotaisCard
-        grupos={grupos}
         itens={itens}
         bvsPorItem={bvsPorItem}
         visao={visao}
-        saveVisivel={saveVisivel}
         percentualHonorarios={percentualHonorarios}
         percentualImposto={percentualImposto}
         moeda={moeda}

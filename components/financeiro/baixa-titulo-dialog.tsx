@@ -34,7 +34,12 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import { formatCurrency } from "@/lib/utils";
-import type { ContaBancaria, PlanoContaTipo, PlanoContaSubtipo } from "@/lib/types";
+import type { ContaBancaria, FormaPagamento, PlanoContaTipo, PlanoContaSubtipo } from "@/lib/types";
+import {
+  FormaPagamentoField,
+  type CartaoOption,
+  type FormaPagamentoValue,
+} from "@/components/financeiro/forma-pagamento-field";
 
 export interface BaixaTituloAlvo {
   titulo: string;
@@ -45,6 +50,14 @@ export interface BaixaTituloAlvo {
   empresaId: string;
   planoContaTipoId: string | null;
   planoContaSubtipoId: string | null;
+  /**
+   * `true` quando o título é uma devolução de verba de produção. Nesse
+   * caso: (a) o campo Forma de pagamento é escondido — a RPC de baixa da
+   * devolução não recebe forma; (b) o header do dialog troca para "Baixar
+   * devolução" e o rótulo "Data em que o dinheiro voltou". Nem forma nem
+   * cartão são coletados.
+   */
+  isDevolucao?: boolean;
 }
 
 export function BaixaTituloDialog({
@@ -54,6 +67,9 @@ export function BaixaTituloDialog({
   contas,
   tipos,
   subtipos,
+  cartoes,
+  formaPlanejada,
+  cartaoPlanejadoId,
   pending,
   erro,
   onConfirm,
@@ -64,6 +80,12 @@ export function BaixaTituloDialog({
   contas: ContaBancaria[];
   tipos: PlanoContaTipo[];
   subtipos: PlanoContaSubtipo[];
+  /** Cartões de crédito disponíveis para o seletor de forma de pagamento. */
+  cartoes: CartaoOption[];
+  /** Forma de pagamento pré-definida (avulso/recorrência herdam da origem). */
+  formaPlanejada?: FormaPagamento | null;
+  /** Cartão pré-selecionado quando `formaPlanejada` é "cartao_credito". */
+  cartaoPlanejadoId?: string | null;
   pending: boolean;
   erro: string | null;
   onConfirm: (payload: {
@@ -71,6 +93,9 @@ export function BaixaTituloDialog({
     conta_bancaria_id: string;
     plano_conta_tipo_id: string;
     plano_conta_subtipo_id: string;
+    /** `null` quando `alvo.isDevolucao` — a RPC de devolução não usa. */
+    forma_pagamento: FormaPagamento | null;
+    cartao_credito_id: string | null;
   }) => void;
 }) {
   const [erroLocal, setErroLocal] = React.useState<string | null>(null);
@@ -78,9 +103,14 @@ export function BaixaTituloDialog({
   const [contaId, setContaId] = React.useState("");
   const [tipoId, setTipoId] = React.useState("");
   const [subtipoId, setSubtipoId] = React.useState("");
+  const [formaPagamento, setFormaPagamento] = React.useState<FormaPagamentoValue>({
+    forma_pagamento: null,
+    cartao_credito_id: null,
+  });
 
-  // Ao abrir: hoje como data, conta em branco (sem padrão, por decisão) e
-  // centro de custo sugerido pela origem quando existe.
+  // Ao abrir: hoje como data, conta em branco (sem padrão, por decisão),
+  // centro de custo sugerido pela origem quando existe,
+  // e forma de pagamento pré-preenchida quando a origem já definiu.
   React.useEffect(() => {
     if (!open || !alvo) return;
     setErroLocal(null);
@@ -88,7 +118,11 @@ export function BaixaTituloDialog({
     setContaId("");
     setTipoId(alvo.planoContaTipoId ?? "");
     setSubtipoId(alvo.planoContaSubtipoId ?? "");
-  }, [open, alvo]);
+    setFormaPagamento({
+      forma_pagamento: formaPlanejada ?? null,
+      cartao_credito_id: cartaoPlanejadoId ?? null,
+    });
+  }, [open, alvo, formaPlanejada, cartaoPlanejadoId]);
 
   const contasDaEmpresa = contas.filter(
     (c) => c.empresa_id === alvo?.empresaId && c.ativo,
@@ -106,6 +140,18 @@ export function BaixaTituloDialog({
     );
   }
 
+  function handleFormaPagamento(
+    v: FormaPagamentoValue,
+    opts?: { dataPagamentoSugerida?: string },
+  ) {
+    setFormaPagamento(v);
+    setErroLocal(null);
+    // Se o cartão sugere uma data de pagamento, usa ela.
+    if (opts?.dataPagamentoSugerida) {
+      setPagoEm(opts.dataPagamentoSugerida);
+    }
+  }
+
   function handleSubmit() {
     setErroLocal(null);
     if (!pagoEm || !contaId) {
@@ -118,11 +164,29 @@ export function BaixaTituloDialog({
       setErroLocal("Selecione o centro de custo do pagamento.");
       return;
     }
+    // Devolução de verba: RPC não recebe forma, então não coletamos nem
+    // validamos.
+    const isDevolucao = alvo?.isDevolucao === true;
+    if (!isDevolucao) {
+      if (!formaPagamento.forma_pagamento) {
+        setErroLocal("Selecione a forma de pagamento.");
+        return;
+      }
+      if (
+        formaPagamento.forma_pagamento === "cartao_credito" &&
+        !formaPagamento.cartao_credito_id
+      ) {
+        setErroLocal("Selecione o cartão de crédito.");
+        return;
+      }
+    }
     onConfirm({
       pago_em: pagoEm,
       conta_bancaria_id: contaId,
       plano_conta_tipo_id: tipoId,
       plano_conta_subtipo_id: subtipoId,
+      forma_pagamento: isDevolucao ? null : formaPagamento.forma_pagamento,
+      cartao_credito_id: isDevolucao ? null : formaPagamento.cartao_credito_id,
     });
   }
 
@@ -135,7 +199,7 @@ export function BaixaTituloDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <CreditCard className="h-5 w-5 text-emerald-600" />
-            Dar baixa no pagamento
+            {alvo.isDevolucao ? "Baixar devolução" : "Dar baixa no pagamento"}
           </DialogTitle>
         </DialogHeader>
 
@@ -166,7 +230,10 @@ export function BaixaTituloDialog({
         <div className="space-y-3">
           <div className="space-y-1">
             <label className="text-xs font-semibold">
-              Data do pagamento <span className="text-california-red">*</span>
+              {alvo.isDevolucao
+                ? "Data em que o dinheiro voltou"
+                : "Data do pagamento"}{" "}
+              <span className="text-california-red">*</span>
             </label>
             <DatePicker
               name="pago_em"
@@ -180,7 +247,9 @@ export function BaixaTituloDialog({
 
           <div className="space-y-1">
             <label className="text-xs font-semibold">
-              Conta que realizará o pagamento{" "}
+              {alvo.isDevolucao
+                ? "Conta que receberá o dinheiro"
+                : "Conta que realizará o pagamento"}{" "}
               <span className="text-california-red">*</span>
             </label>
             <Select
@@ -209,6 +278,16 @@ export function BaixaTituloDialog({
               </SelectContent>
             </Select>
           </div>
+
+          {!alvo.isDevolucao && (
+            <FormaPagamentoField
+              cartoes={cartoes}
+              value={formaPagamento}
+              onChange={handleFormaPagamento}
+              disabled={pending}
+              obrigatorio
+            />
+          )}
 
           <div className="space-y-1">
             <label className="text-xs font-semibold">

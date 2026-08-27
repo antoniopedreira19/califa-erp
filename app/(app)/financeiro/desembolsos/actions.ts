@@ -66,8 +66,6 @@ export async function criarDesembolso(input: unknown): Promise<Result> {
       empresa_id: d.empresa_id,
       descricao: d.descricao,
       valor: d.valor,
-      forma_pagamento: d.forma_pagamento,
-      cartao_credito_id: d.cartao_credito_id,
       fornecedor_id: d.fornecedor_id,
       cliente_id: d.cliente_id,
       job_id: d.job_id,
@@ -120,8 +118,6 @@ export async function criarDesembolso(input: unknown): Promise<Result> {
     metadata: {
       codigo: desembolso.codigo,
       valor: Number(d.valor),
-      forma_pagamento: d.forma_pagamento,
-      cartao_credito_id: d.cartao_credito_id,
       qtd_parcelas: d.parcelas.length,
     },
   });

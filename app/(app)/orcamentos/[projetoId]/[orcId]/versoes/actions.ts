@@ -121,10 +121,18 @@ function mapVersaoDbError(msg: string): string {
   return "Não foi possível salvar a versão.";
 }
 
+/**
+ * Cria a versão e REDIRECIONA para ela.
+ *
+ * O retorno é `ActionResult | void` porque `redirect()` no servidor não
+ * devolve valor nenhum ao cliente: no caminho feliz o `await` do chamador
+ * resolve `undefined` e a navegação já aconteceu. Só o erro volta como
+ * objeto — por isso todo call site testa `res` antes de ler `res.ok`.
+ */
 export async function criarVersao(
   orcamentoId: string,
   formData: FormData,
-): Promise<ActionResult> {
+): Promise<ActionResult | void> {
   const session = await requireSession();
   const parsed = versaoSchema.safeParse(extractVersaoInput(formData));
 
@@ -198,7 +206,7 @@ export async function criarVersao(
   });
 
   revalidatePath(`/orcamentos/${projetoId}/${orcamentoId}`);
-  redirect(`/orcamentos/${projetoId}/${orcamentoId}/versoes/${data.id}`);
+  redirect(`/orcamentos/${projetoId}/${orcamentoId}?v=${data.id}`);
 }
 
 export async function atualizarVersao(
@@ -281,11 +289,14 @@ export async function atualizarVersao(
   const projetoIdAtual = orcAtual?.projeto_id;
 
   revalidatePath(`/orcamentos/${projetoIdAtual}/${atual.orcamento_id}`);
-  revalidatePath(`/orcamentos/${projetoIdAtual}/${atual.orcamento_id}/versoes/${versaoId}`);
   return { ok: true, id: versaoId };
 }
 
-export async function duplicarVersao(versaoId: string): Promise<ActionResult> {
+/** Duplica a versão e REDIRECIONA para a cópia. Ver `criarVersao` sobre o
+ *  `| void` do retorno. */
+export async function duplicarVersao(
+  versaoId: string,
+): Promise<ActionResult | void> {
   const session = await requireSession();
   const supabase = createClient();
 
@@ -297,6 +308,26 @@ export async function duplicarVersao(versaoId: string): Promise<ActionResult> {
     .maybeSingle<VersaoOrcamento>();
 
   if (!original) return { ok: false, message: "Versão original não encontrada." };
+
+  // Duplicar CRIA uma versão, então vale a mesma trava de `criarVersao`:
+  // orçamento com job criado ou cancelado não recebe versão nova. A checagem
+  // faltava aqui — o botão "Duplicar" da lista antiga não tinha gate nenhum,
+  // e um orçamento fechado aceitava ganhar uma v+1 pelo caminho da cópia.
+  // Traz status e projeto_id de uma vez: o status trava a operação aqui, o
+  // projeto_id monta o destino lá embaixo.
+  const { data: orcDup } = await supabase
+    .from("orcamentos")
+    .select("status, projeto_id")
+    .eq("id", original.orcamento_id)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle<{ status: string; projeto_id: string }>();
+
+  if (orcDup?.status === "job_criado" || orcDup?.status === "cancelado") {
+    return {
+      ok: false,
+      message: `Não é possível criar versão em orçamento ${orcDup.status}.`,
+    };
+  }
 
   const numero = await proximoNumeroVersao(
     original.orcamento_id,
@@ -406,62 +437,139 @@ export async function duplicarVersao(versaoId: string): Promise<ActionResult> {
     },
   });
 
-  const { data: orcDup } = await supabase
-    .from("orcamentos")
-    .select("projeto_id")
-    .eq("id", original.orcamento_id)
-    .eq("tenant_id", session.activeTenant.id)
-    .maybeSingle<{ projeto_id: string }>();
   const projetoIdDup = orcDup?.projeto_id;
 
   revalidatePath(`/orcamentos/${projetoIdDup}/${original.orcamento_id}`);
-  redirect(`/orcamentos/${projetoIdDup}/${original.orcamento_id}/versoes/${nova.id}`);
+  redirect(`/orcamentos/${projetoIdDup}/${original.orcamento_id}?v=${nova.id}`);
 }
 
-export async function cancelarVersao(versaoId: string): Promise<ActionResult> {
+/**
+ * Apaga a versão de verdade — grupos, itens e os BVs deles vão junto.
+ *
+ * Substituiu `cancelarVersao` em 21/08/2026. Cancelar marcava a versão como
+ * `cancelada` e a deixava no banco, ainda visível e selecionável nas abas;
+ * o Tiago apontou que isso não resolve nada, porque uma versão que continua
+ * existindo e navegável já está resolvida por simplesmente NÃO ser aprovada
+ * (decisão 023).
+ *
+ * Três coisas travam a exclusão, e as três respondem com texto em vez de
+ * erro de FK:
+ *
+ * 1. **Versão aprovada** — apagá-la esvaziaria `orcamentos.versao_aprovada_id`
+ *    em silêncio (a FK é ON DELETE SET NULL), desfazendo a aprovação sem
+ *    passar pelo fluxo dela. Quem quer mesmo usa "Cancelar aprovação" antes.
+ * 2. **Versão que virou job** — `jobs.versao_orcamento_aprovada_id` é ON
+ *    DELETE RESTRICT, então o banco já barraria; aqui a recusa é legível.
+ * 3. **Última versão do orçamento** — o orçamento nasce com a v1 e nunca
+ *    ficou sem nenhuma. Deletar a última criaria um estado que só existe no
+ *    código.
+ *
+ * O delete em si é UMA chamada à RPC `deletar_versao_orcamento`, e não três
+ * deletes seguidos pelo PostgREST. Três chamadas são três transações: se a
+ * última falhar, a versão fica no banco sem os itens e sem os grupos, em
+ * silêncio. Aconteceu na conferência desta entrega, quando o GRANT de DELETE
+ * ainda faltava. A RPC também fixa a ordem item → grupo → versão, que importa
+ * porque `versoes_orcamento_itens.grupo_id` é ON DELETE RESTRICT (ver a
+ * migration 20260821000005).
+ */
+export async function deletarVersao(versaoId: string): Promise<ActionResult> {
   const session = await requireSession();
   const supabase = createClient();
 
   const { data: atual } = await supabase
     .from("versoes_orcamento")
-    .select("orcamento_id, status")
+    .select("orcamento_id, numero_versao, status")
     .eq("id", versaoId)
     .eq("tenant_id", session.activeTenant.id)
-    .maybeSingle<{ orcamento_id: string; status: string }>();
+    .maybeSingle<{
+      orcamento_id: string;
+      numero_versao: number;
+      status: string;
+    }>();
 
   if (!atual) return { ok: false, message: "Versão não encontrada." };
+
   if (atual.status === "aprovada") {
-    return { ok: false, message: "Versão aprovada não pode ser cancelada." };
+    return {
+      ok: false,
+      message:
+        'Versão aprovada não pode ser deletada. Use "Cancelar aprovação" antes.',
+    };
   }
 
-  const { error } = await supabase
-    .from("versoes_orcamento")
-    .update({ status: "cancelada" })
-    .eq("id", versaoId)
+  const { count: jobsVinculados } = await supabase
+    .from("jobs")
+    .select("id", { count: "exact", head: true })
+    .eq("versao_orcamento_aprovada_id", versaoId)
     .eq("tenant_id", session.activeTenant.id);
 
+  if ((jobsVinculados ?? 0) > 0) {
+    return {
+      ok: false,
+      message: "Esta versão gerou um job e não pode ser deletada.",
+    };
+  }
+
+  const { count: totalVersoes } = await supabase
+    .from("versoes_orcamento")
+    .select("id", { count: "exact", head: true })
+    .eq("orcamento_id", atual.orcamento_id)
+    .eq("tenant_id", session.activeTenant.id);
+
+  if ((totalVersoes ?? 0) <= 1) {
+    return {
+      ok: false,
+      message:
+        "O orçamento precisa de ao menos uma versão. Crie outra antes de deletar esta.",
+    };
+  }
+
+  // O que a linha era, para a auditoria — depois do delete não há de onde ler.
+  const { count: qtdItens } = await supabase
+    .from("versoes_orcamento_itens")
+    .select("id", { count: "exact", head: true })
+    .eq("versao_orcamento_id", versaoId)
+    .eq("tenant_id", session.activeTenant.id);
+
+  const { error } = await supabase.rpc("deletar_versao_orcamento", {
+    p_versao_id: versaoId,
+  });
+
   if (error) {
-    console.error("[versoes.cancelar]", error.message);
-    return { ok: false, message: "Não foi possível cancelar." };
+    console.error("[versoes.deletar]", error.message);
+    // Sobrou alguma FK que as checagens acima não previram — a planilha
+    // interna de um job (`jobs_itens_orcado`) é a candidata. Dizer isso é
+    // mais útil que repetir "não foi possível".
+    const emUso = /foreign key|violates|referenced/i.test(error.message);
+    return {
+      ok: false,
+      message: emUso
+        ? "Não foi possível deletar: há dados de job apontando para os itens desta versão."
+        : "Não foi possível deletar a versão.",
+    };
   }
 
   await logAuditEvent({
-    acao: "versao_orcamento.editada",
+    acao: "versao_orcamento.deletada",
     tenantId: session.activeTenant.id,
     entidadeTipo: "versao_orcamento",
     entidadeId: versaoId,
-    metadata: { acao: "cancelada" },
+    metadata: {
+      orcamento_id: atual.orcamento_id,
+      numero_versao: atual.numero_versao,
+      status_anterior: atual.status,
+      itens_apagados: qtdItens ?? 0,
+    },
   });
 
-  const { data: orcCancel } = await supabase
+  const { data: orcDel } = await supabase
     .from("orcamentos")
     .select("projeto_id")
     .eq("id", atual.orcamento_id)
     .eq("tenant_id", session.activeTenant.id)
     .maybeSingle<{ projeto_id: string }>();
-  const projetoIdCancel = orcCancel?.projeto_id;
 
-  revalidatePath(`/orcamentos/${projetoIdCancel}/${atual.orcamento_id}`);
+  revalidatePath(`/orcamentos/${orcDel?.projeto_id}/${atual.orcamento_id}`);
   return { ok: true, id: versaoId };
 }
 
@@ -560,7 +668,7 @@ export async function criarGrupo(
     return { ok: false, message: mapGrupoDbError(error.message) };
   }
 
-  revalidatePath(`/orcamentos/${versao.projeto_id}/${versao.orcamento_id}/versoes/${versaoId}`);
+  revalidatePath(`/orcamentos/${versao.projeto_id}/${versao.orcamento_id}`);
   return { ok: true, id: data.id };
 }
 
@@ -610,9 +718,7 @@ export async function renomearGrupo(
     return { ok: false, message: mapGrupoDbError(error.message) };
   }
 
-  revalidatePath(
-    `/orcamentos/${versao.projeto_id}/${versao.orcamento_id}/versoes/${grupo.versao_orcamento_id}`,
-  );
+  revalidatePath(`/orcamentos/${versao.projeto_id}/${versao.orcamento_id}`);
   return { ok: true, id: grupoId };
 }
 
@@ -663,9 +769,7 @@ export async function removerGrupo(grupoId: string): Promise<ActionResult> {
     return { ok: false, message: "Não foi possível remover o grupo." };
   }
 
-  revalidatePath(
-    `/orcamentos/${versao.projeto_id}/${versao.orcamento_id}/versoes/${grupo.versao_orcamento_id}`,
-  );
+  revalidatePath(`/orcamentos/${versao.projeto_id}/${versao.orcamento_id}`);
   return { ok: true, id: grupoId };
 }
 
@@ -785,9 +889,7 @@ export async function adicionarItem(
     return { ok: false, message: "Não foi possível adicionar o item." };
   }
 
-  revalidatePath(
-    `/orcamentos/${check.projeto_id}/${check.orcamento_id}/versoes/${grupo.versao_orcamento_id}`,
-  );
+  revalidatePath(`/orcamentos/${check.projeto_id}/${check.orcamento_id}`);
   return { ok: true, id: data.id };
 }
 
@@ -833,9 +935,7 @@ export async function atualizarItem(
     return { ok: false, message: "Não foi possível atualizar o item." };
   }
 
-  revalidatePath(
-    `/orcamentos/${check.projeto_id}/${check.orcamento_id}/versoes/${item.versao_orcamento_id}`,
-  );
+  revalidatePath(`/orcamentos/${check.projeto_id}/${check.orcamento_id}`);
   return { ok: true, id: itemId };
 }
 
@@ -1018,9 +1118,7 @@ export async function atualizarCampoItem(
     .maybeSingle<{ projeto_id: string }>();
   const projetoIdCampo = orcCampo?.projeto_id;
 
-  revalidatePath(
-    `/orcamentos/${projetoIdCampo}/${item.versao.orcamento_id}/versoes/${item.versao_orcamento_id}`,
-  );
+  revalidatePath(`/orcamentos/${projetoIdCampo}/${item.versao.orcamento_id}`);
   return { ok: true, id: itemId };
 }
 
@@ -1054,9 +1152,7 @@ export async function removerItem(itemId: string): Promise<ActionResult> {
     return { ok: false, message: "Não foi possível remover o item." };
   }
 
-  revalidatePath(
-    `/orcamentos/${check.projeto_id}/${check.orcamento_id}/versoes/${item.versao_orcamento_id}`,
-  );
+  revalidatePath(`/orcamentos/${check.projeto_id}/${check.orcamento_id}`);
   return { ok: true, id: itemId };
 }
 
@@ -1235,7 +1331,6 @@ export async function aprovarVersao(versaoId: string): Promise<ActionResult> {
 
   revalidatePath(`/orcamentos/${orc.projeto_id}`);
   revalidatePath(`/orcamentos/${orc.projeto_id}/${versao.orcamento_id}`);
-  revalidatePath(`/orcamentos/${orc.projeto_id}/${versao.orcamento_id}/versoes/${versaoId}`);
   return { ok: true, id: versaoId };
 }
 
@@ -1354,6 +1449,5 @@ export async function cancelarAprovacaoVersao(
 
   revalidatePath(`/orcamentos/${orc.projeto_id}`);
   revalidatePath(`/orcamentos/${orc.projeto_id}/${versao.orcamento_id}`);
-  revalidatePath(`/orcamentos/${orc.projeto_id}/${versao.orcamento_id}/versoes/${versaoId}`);
   return { ok: true, id: versaoId };
 }

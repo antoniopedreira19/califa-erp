@@ -6,9 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { formatCurrency } from "@/lib/utils";
 import {
   desembolsoStatusLabel,
-  formaPagamentoLabel,
   type DesembolsoStatus,
-  type FormaPagamento,
 } from "@/lib/types";
 import { ParcelasLista } from "./parcelas-lista";
 import { BaixarAnexoDesembolsoButton } from "./baixar-anexo-button";
@@ -42,11 +40,6 @@ function statusBadgeClass(status: DesembolsoStatus): string {
   }
 }
 
-function formaPagamentoDisplay(fp: FormaPagamento | null): string {
-  if (!fp) return "—";
-  return formaPagamentoLabel(fp);
-}
-
 export default async function DesembolsoDetalhePage({
   params,
 }: {
@@ -72,8 +65,7 @@ export default async function DesembolsoDetalhePage({
           criador:profiles!desembolsos_criado_por_fkey(nome),
           aprovador:profiles!desembolsos_aprovada_por_fkey(nome),
           rejeitador:profiles!desembolsos_rejeitada_por_fkey(nome),
-          cancelador:profiles!desembolsos_cancelada_por_fkey(nome),
-          cartao:cartoes_credito(nome, banco, ultimos_4_digitos)
+          cancelador:profiles!desembolsos_cancelada_por_fkey(nome)
         `)
         .eq("id", params.id)
         .eq("tenant_id", session.activeTenant.id)
@@ -121,8 +113,6 @@ export default async function DesembolsoDetalhePage({
     empresa_id: string;
     descricao: string;
     valor: string;
-    forma_pagamento: FormaPagamento | null;
-    cartao_credito_id: string | null;
     status: DesembolsoStatus;
     fornecedor_id: string | null;
     cliente_id: string | null;
@@ -149,7 +139,6 @@ export default async function DesembolsoDetalhePage({
     aprovador: { nome: string } | null;
     rejeitador: { nome: string } | null;
     cancelador: { nome: string } | null;
-    cartao: { nome: string; banco: string; ultimos_4_digitos: string } | null;
   };
 
   if (!isAdminOrFinanceiro && d.criado_por !== session.profile.id) {
@@ -268,16 +257,6 @@ export default async function DesembolsoDetalhePage({
 
           <span className="text-muted-foreground">Empresa</span>
           <span>{empresaNome}</span>
-
-          <span className="text-muted-foreground">Forma de pagamento</span>
-          <span>
-            {formaPagamentoDisplay(d.forma_pagamento)}
-            {d.forma_pagamento === "cartao_credito" && d.cartao && (
-              <span className="ml-1.5 text-muted-foreground">
-                ({d.cartao.nome} · {d.cartao.banco} ····{d.cartao.ultimos_4_digitos})
-              </span>
-            )}
-          </span>
 
           <span className="text-muted-foreground">Fornecedor</span>
           <span>

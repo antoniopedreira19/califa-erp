@@ -111,7 +111,7 @@ export function JobPPsSection({
     return pps.filter((pp) => {
       if (filtro !== "todas" && pp.status !== filtro) return false;
       if (!termo) return true;
-      const fornecedor = fornecedoresPorId[pp.fornecedor_id] ?? "";
+      const fornecedor = (pp.fornecedor_id ? fornecedoresPorId[pp.fornecedor_id] : null) ?? "";
       return (
         pp.codigo.toLowerCase().includes(termo) ||
         pp.servico.toLowerCase().includes(termo) ||
@@ -358,7 +358,7 @@ export function JobPPsSection({
                       </div>
                     </td>
                     <td className="px-3.5 text-muted-foreground">
-                      {fornecedoresPorId[pp.fornecedor_id] ?? "—"}
+                      {(pp.fornecedor_id ? fornecedoresPorId[pp.fornecedor_id] : null) ?? "—"}
                     </td>
                     <td className="whitespace-nowrap px-3.5 font-mono text-xs">
                       {formatarData(vencimento)}

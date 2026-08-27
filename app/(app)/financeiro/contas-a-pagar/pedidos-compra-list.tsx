@@ -3,9 +3,16 @@
 import * as React from "react";
 import { Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import type { PPStatus, FormaPagamento } from "@/lib/types";
-import { ppStatusLabel } from "@/lib/types";
+import type { PPStatus, FormaPagamento, PPVerbaPrestacao, PPVerbaPrestacaoAnexo } from "@/lib/types";
+import { ppStatusLabel, nomeContraparteBRPP } from "@/lib/types";
 import { PPDrawerFinanceiro } from "./pp-drawer-financeiro";
 
 export interface PPRow {
@@ -30,6 +37,7 @@ export interface PPRow {
   job_id: string;
   job_codigo: string;
   job_nome: string;
+  regional_id: string | null;
   projeto_codigo: string | null;
   projeto_nome: string | null;
   cliente_nome: string | null;
@@ -39,8 +47,20 @@ export interface PPRow {
   pdf_path: string;
   cancelada_por_nome: string | null;
   emitida_por_nome: string | null;
-  forma_pagamento: FormaPagamento | null;
-  cartao_credito_id: string | null;
+  forma_pagamento: FormaPagamento | null; // sempre null para PP (coluna dropada na Task 7; populada via baixa no TituloRow)
+  cartao_credito_id: string | null; // idem
+  /** Verdadeiro quando a PP é do tipo Verba de Produção. */
+  verba_producao: boolean;
+  /** Nome do responsável pela verba — preenchido quando verba_producao = true. */
+  responsavel_nome: string | null;
+  /**
+   * Prestação de contas vinculada (só existe se a PP for verba + já foi
+   * prestada). Null quando não foi prestada ainda.
+   */
+  prestacao?: (Omit<PPVerbaPrestacao, "tenant_id" | "fechada_por"> & {
+    fechada_por_profile: { nome: string } | null;
+    anexos: Array<Pick<PPVerbaPrestacaoAnexo, "id" | "arquivo_nome_original" | "arquivo_tamanho_bytes" | "arquivo_mimetype">>;
+  }) | null;
   anexos: Array<{
     id: string;
     arquivo_nome_original: string;
@@ -102,29 +122,39 @@ const STATUS_FILTROS: Array<{ key: FiltroStatus; label: string }> = [
 
 interface PedidosCompraListProps {
   rows: PPRow[];
+  tenantId: string;
+  regionais: Array<{ id: string; nome: string; ativo: boolean }>;
 }
 
-export function PedidosCompraList({ rows }: PedidosCompraListProps) {
+export function PedidosCompraList({ rows, tenantId, regionais }: PedidosCompraListProps) {
   const [filtro, setFiltro] = React.useState<FiltroStatus>("em_avaliacao");
+  const [filtroRegional, setFiltroRegional] = React.useState<string>("todas");
   const [busca, setBusca] = React.useState("");
   const [ppSelecionada, setPpSelecionada] = React.useState<PPRow | null>(null);
 
+  // Regional recorta o universo ANTES das contagens de status, senão os
+  // chips mostram números que não batem com o que o usuário vê na tabela.
+  const rowsPorRegional = React.useMemo(() => {
+    if (filtroRegional === "todas") return rows;
+    return rows.filter((r) => r.regional_id === filtroRegional);
+  }, [rows, filtroRegional]);
+
   const contagens = React.useMemo(() => {
     const c: Record<FiltroStatus, number> = {
-      todas: rows.length,
+      todas: rowsPorRegional.length,
       em_avaliacao: 0,
       aprovada: 0,
       pago: 0,
       rejeitada: 0,
       cancelada: 0,
     };
-    for (const r of rows) c[r.status]++;
+    for (const r of rowsPorRegional) c[r.status]++;
     return c;
-  }, [rows]);
+  }, [rowsPorRegional]);
 
   const filtrados = React.useMemo(() => {
     const q = busca.trim().toLowerCase();
-    return rows.filter((r) => {
+    return rowsPorRegional.filter((r) => {
       if (filtro !== "todas" && r.status !== filtro) return false;
       if (q === "") return true;
       return (
@@ -134,7 +164,12 @@ export function PedidosCompraList({ rows }: PedidosCompraListProps) {
         r.job_nome.toLowerCase().includes(q)
       );
     });
-  }, [rows, filtro, busca]);
+  }, [rowsPorRegional, filtro, busca]);
+
+  const regionaisOrdenadas = React.useMemo(
+    () => [...regionais].filter((r) => r.ativo).sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")),
+    [regionais],
+  );
 
   return (
     <div className="space-y-4">
@@ -169,15 +204,33 @@ export function PedidosCompraList({ rows }: PedidosCompraListProps) {
               </button>
             );
           })}
-          <div className="relative ml-auto min-w-[240px] max-w-md flex-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <input
-              type="text"
-              value={busca}
-              onChange={(e) => setBusca(e.target.value)}
-              placeholder="Buscar por código, fornecedor ou job..."
-              className="w-full rounded-lg border border-border bg-white py-2 pl-9 pr-3 text-sm focus:border-california-red focus:outline-none"
-            />
+          <div className="ml-auto flex items-center gap-2">
+            <Select value={filtroRegional} onValueChange={setFiltroRegional}>
+              <SelectTrigger
+                aria-label="Filtrar por regional"
+                className="h-9 w-[190px] px-3 text-sm"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todas">Todas as regionais</SelectItem>
+                {regionaisOrdenadas.map((r) => (
+                  <SelectItem key={r.id} value={r.id}>
+                    {r.nome}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <div className="relative w-56">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <input
+                type="text"
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+                placeholder="Buscar..."
+                className="h-9 w-full rounded-lg border border-border bg-white pl-9 pr-3 text-sm focus:border-california-red focus:outline-none"
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -221,9 +274,16 @@ export function PedidosCompraList({ rows }: PedidosCompraListProps) {
                 className="border-b border-border last:border-0 hover:bg-accent/40 transition-colors cursor-pointer focus-visible:outline-none focus-visible:bg-accent/40"
               >
                 <td className="whitespace-nowrap px-4 py-3 font-mono text-xs font-bold text-california-red">
-                  {r.codigo}
+                  <span>{r.codigo}</span>
+                  {r.verba_producao && (
+                    <span className="ml-2 rounded-md bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
+                      Verba
+                    </span>
+                  )}
                 </td>
-                <td className="px-4 py-3">{r.fornecedor_nome}</td>
+                <td className="px-4 py-3">
+                  {nomeContraparteBRPP({ verba_producao: r.verba_producao, fornecedor: r.fornecedor_nome ? { nome: r.fornecedor_nome } : null, responsavel: r.responsavel_nome ? { nome: r.responsavel_nome } : null })}
+                </td>
                 <td className="px-4 py-3 text-muted-foreground">
                   <span className="font-mono text-xs">{r.job_codigo}</span>{" "}
                   <span>{r.job_nome}</span>
@@ -258,6 +318,7 @@ export function PedidosCompraList({ rows }: PedidosCompraListProps) {
         onOpenChange={(open) => {
           if (!open) setPpSelecionada(null);
         }}
+        tenantId={tenantId}
       />
     </div>
   );

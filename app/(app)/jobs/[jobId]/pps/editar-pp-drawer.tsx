@@ -114,7 +114,7 @@ export function EditarPPDrawer({
     sucessoRef.current = false;
     setErro(null);
     setUploadPrefix(null);
-    setFornecedorId(pp.fornecedor_id);
+    setFornecedorId(pp.fornecedor_id ?? "");
     setEmpresaId(pp.empresa_id);
     setPrazoPagamento(pp.prazo_pagamento);
     setServico(pp.servico);
@@ -258,7 +258,11 @@ export function EditarPPDrawer({
         const res = await reenviarPedidoCompra(
           ppId,
           {
+            // PP editada via este drawer é sempre não-verba: o formulário
+            // de edição não suporta troca de modo ainda (Task futura).
+            verba_producao: false as const,
             fornecedor_id: fornecedorId,
+            responsavel_verba_id: null,
             empresa_id: empresaId,
             prazo_pagamento: prazoPagamento,
             servico: servico.trim(),

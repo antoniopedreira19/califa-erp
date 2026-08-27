@@ -26,9 +26,12 @@ import {
   BotaoRecolherTodos,
   useGruposRecolhiveis,
 } from "@/app/(app)/_planilha/recolher-grupos";
-import type { EstadoSaveDaLinha } from "@/app/(app)/_planilha/save-coluna";
-import { JobGrupoCard } from "@/app/(app)/jobs/[jobId]/realizado/job-grupo-card";
+import {
+  JobItemRealizadoTable,
+  type GrupoDoJob,
+} from "@/app/(app)/jobs/[jobId]/realizado/job-item-realizado-table";
 import { JobTotaisCard } from "@/app/(app)/jobs/[jobId]/realizado/job-totais-card";
+import type { EstadoSaveDaLinha } from "@/app/(app)/_planilha/save-coluna";
 
 interface Props {
   jobId: string;
@@ -71,6 +74,18 @@ export function PlanilhaConferencia({
   const gruposIds = React.useMemo(() => grupos.map((g) => g.id), [grupos]);
   const recolher = useGruposRecolhiveis(gruposIds);
 
+  // A planilha inteira numa tabela só desde 24/08/2026 — a mesma
+  // composição da tela do job, que é a mesma planilha.
+  const gruposDaPlanilha = React.useMemo<GrupoDoJob[]>(
+    () =>
+      grupos.map((g) => ({
+        id: g.id,
+        nome: g.nome,
+        itens: itensPorGrupo.get(g.id) ?? [],
+      })),
+    [grupos, itensPorGrupo],
+  );
+
   if (grupos.length === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-border bg-muted/20 p-12 text-center">
@@ -91,49 +106,45 @@ export function PlanilhaConferencia({
         <ChaveBrutoLiquido visao={visao} onChange={setVisao} />
       </div>
 
-      <div className="space-y-4">
-        {grupos.map((g) => (
-          <JobGrupoCard
-            key={g.id}
-            grupo={g}
-            itens={itensPorGrupo.get(g.id) ?? []}
-            realizadosMap={realizadosMap}
-            categoriasMap={categoriasMap}
-            moeda={moeda}
-            percentualImposto={percentualImposto}
-            visao={visao}
-            aberto={recolher.estaAberto(g.id)}
-            onAlternar={() => recolher.alternar(g.id)}
-            // Leitura pura: nem errata, nem BV, nem PP.
-            podeAcoes={false}
-            // Esta rota só existe enquanto o job aguarda abertura (já
-            // aberto, ela redireciona para /jobs/[jobId]) — e nela a
-            // trilha lateral não aparece de jeito nenhum.
-            preAbertura
-            jobId={jobId}
-            // Job aguardando abertura não tem PP: ela só existe depois de
-            // aberto. O BV, sim — ele nasce no orçamento e chega aqui.
-            ppsPorItemId={new Map()}
-            fornecedores={[]}
-            empresas={[]}
-            jobEmpresaId={jobEmpresaId}
-            jobResponsavelId={jobResponsavelId}
-            bvsPorItem={bvsPorItem}
-            saveVisivel={temSave}
-            savePorItem={savePorItem}
-            versaoLabel={versaoLabel}
-            cartoes={[]}
-          />
-        ))}
+      {/* Um card para a planilha inteira — antes era um por grupo. Sem
+          `overflow-hidden`: nesta rota a calha não aparece, mas a moldura
+          é a mesma da tela do job e não pode divergir dela. */}
+      <div className="rounded-2xl border border-border bg-card shadow-soft">
+        <JobItemRealizadoTable
+          jobId={jobId}
+          grupos={gruposDaPlanilha}
+          realizadosMap={realizadosMap}
+          categoriasMap={categoriasMap}
+          moeda={moeda}
+          percentualImposto={percentualImposto}
+          visao={visao}
+          estaAberto={recolher.estaAberto}
+          onAlternarGrupo={recolher.alternar}
+          // Leitura pura: nem errata, nem BV, nem PP.
+          podeAcoes={false}
+          // Esta rota só existe enquanto o job aguarda abertura (já
+          // aberto, ela redireciona para /jobs/[jobId]) — e nela a
+          // calha lateral não aparece de jeito nenhum.
+          preAbertura
+          // Job aguardando abertura não tem PP: ela só existe depois de
+          // aberto. O BV, sim — ele nasce no orçamento e chega aqui.
+          ppsPorItemId={new Map()}
+          fornecedores={[]}
+          empresas={[]}
+          responsaveis={[]}
+          jobEmpresaId={jobEmpresaId}
+          jobResponsavelId={jobResponsavelId}
+          bvsPorItem={bvsPorItem}
+          versaoLabel={versaoLabel}
+          saveVisivel={temSave}
+          savePorItem={savePorItem}
+        />
       </div>
 
       <JobTotaisCard
-        grupos={grupos}
         itens={itens}
         realizadosMap={realizadosMap}
         bvsPorItem={bvsPorItem}
-        visao={visao}
-        saveVisivel={temSave}
         // A rota só existe enquanto o job aguarda abertura: o REALIZADO
         // inteiro fica zerado, inclusive nas linhas `A` e `D`.
         jobAberto={false}

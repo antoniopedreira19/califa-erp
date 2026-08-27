@@ -549,9 +549,7 @@ async function aplicarEdicao(
     },
   });
 
-  revalidatePath(
-    `/orcamentos/${projetoId}/${orcamento.id}/versoes/${versao.id}`,
-  );
+  revalidatePath(`/orcamentos/${projetoId}/${orcamento.id}`);
   return { ok: true, editados: 1, criados: 0, ids };
 }
 

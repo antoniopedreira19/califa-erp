@@ -30,13 +30,6 @@ const parcelaSchema = z.object({
     .refine((v) => !Number.isNaN(Number(v)) && Number(v) > 0, "Valor deve ser positivo."),
 });
 
-const formaPagamentoEnum = z.enum([
-  "pix",
-  "transferencia",
-  "boleto",
-  "cartao_credito",
-]);
-
 export const criarDesembolsoSchema = z
   .object({
     empresa_id: z.string().uuid("Selecione a empresa."),
@@ -44,12 +37,6 @@ export const criarDesembolsoSchema = z
     valor: z
       .string()
       .refine((v) => !Number.isNaN(Number(v)) && Number(v) > 0, "Valor deve ser positivo."),
-    forma_pagamento: formaPagamentoEnum,
-    cartao_credito_id: z
-      .string()
-      .uuid()
-      .nullable()
-      .or(z.literal("").transform(() => null)),
     data_prevista_pagamento: z
       .string()
       .regex(dateRegex, "Data em YYYY-MM-DD.")
@@ -86,32 +73,6 @@ export const criarDesembolsoSchema = z
       .default([]),
   })
   .superRefine((data, ctx) => {
-    if (data.forma_pagamento === "cartao_credito") {
-      if (!data.cartao_credito_id) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "Selecione o cartão de crédito.",
-          path: ["cartao_credito_id"],
-        });
-      }
-      const hoje = new Date().toISOString().slice(0, 10);
-      for (const [i, p] of data.parcelas.entries()) {
-        if (p.data_vencimento < hoje) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: "Cartão exige data futura para cada parcela.",
-            path: ["parcelas", i, "data_vencimento"],
-          });
-        }
-      }
-    } else if (data.cartao_credito_id) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Cartão só pode ser informado quando a forma é cartão de crédito.",
-        path: ["cartao_credito_id"],
-      });
-    }
-
     // Soma das parcelas bate com valor total
     const totalParcelas = data.parcelas.reduce((s, p) => s + Number(p.valor), 0);
     const totalDesembolso = Number(data.valor);

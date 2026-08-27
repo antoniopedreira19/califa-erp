@@ -32,7 +32,8 @@ export async function carregarLinhasDeFluxo(
   const { data, error } = await supabase
     .from("vw_fluxo_caixa")
     .select(
-      "job_id, conta_bancaria_id, classe, origem_tipo, data_evento, valor, natureza, descricao",
+      "job_id, conta_bancaria_id, classe, origem_tipo, origem_lancamento, " +
+        "data_evento, valor, natureza, descricao",
     )
     .eq("tenant_id", tenantId)
     .in("job_id", jobIds)
@@ -43,19 +44,52 @@ export async function carregarLinhasDeFluxo(
     return [];
   }
 
-  return ((data ?? []) as any[]).map((l) => {
-    const { codigo, descricao } = repartirDescricao(l.descricao, l.origem_tipo);
-    return {
-      jobId: l.job_id as string,
-      contaBancariaId: (l.conta_bancaria_id as string | null) ?? null,
-      classe: l.classe,
-      natureza: l.natureza,
-      dataEvento: l.data_evento as string,
-      valor: Number(l.valor ?? 0),
-      codigo,
-      descricao,
-    };
-  });
+  return ((data ?? []) as any[])
+    .filter((l) => !soDepoisDaBaixa(l.classe, l.origem_tipo))
+    .map((l) => {
+      const { codigo, descricao } = repartirDescricao(
+        l.descricao,
+        l.origem_tipo,
+      );
+      return {
+        jobId: l.job_id as string,
+        contaBancariaId: (l.conta_bancaria_id as string | null) ?? null,
+        classe: l.classe,
+        natureza: l.natureza,
+        dataEvento: l.data_evento as string,
+        valor: Number(l.valor ?? 0),
+        codigo,
+        descricao,
+        origemTipo: l.origem_tipo as string,
+        origemLancamento: (l.origem_lancamento as string | null) ?? null,
+      };
+    });
+}
+
+/**
+ * O que não é PP só entra no fluxo do JOB depois da baixa.
+ *
+ * Decisão do Tiago, 26/08/2026. Conta avulsa e desembolso aprovados são
+ * compromisso real da empresa e continuam no Fluxo de Caixa geral — mas
+ * no recorte por job eles só aparecem como movimento, depois de pagos.
+ *
+ * O motivo é o abatimento: a curva de desembolso da abertura só é
+ * abatida por PP (decisão 004). Uma avulsa aprovada somaria como título
+ * a pagar do job sem tirar nada da previsão, e o job apareceria devendo
+ * o mesmo dinheiro duas vezes.
+ *
+ * O filtro vive aqui, e não na view, justamente porque a view é lida
+ * também pela tesouraria, onde esses títulos TÊM de aparecer. A
+ * `vw_fluxo_caixa_job_totais` aplica o mesmo recorte do lado do banco,
+ * para a lista de jobs não divergir desta aba.
+ */
+function soDepoisDaBaixa(classe: string, origemTipo: string): boolean {
+  return (
+    classe === "titulo" &&
+    (origemTipo === "avulsa" ||
+      origemTipo === "recorrente" ||
+      origemTipo === "desembolso")
+  );
 }
 
 /** A matriz de UM job, montada no servidor — a aba do job não filtra. */
@@ -83,12 +117,37 @@ function repartirDescricao(
   origemTipo: string,
 ): { codigo: string; descricao: string } {
   const bruto = (bruta ?? "").trim();
-  const semPrefixo = bruto.replace(/^(PP|Título|Avulsa|Desembolso)\s+/i, "");
-  const [codigo, ...resto] = semPrefixo.split(" — ");
+  const semPrefixo = bruto.replace(
+    // "Estorno da baixa de" e "Recebimento" entraram em 26/08/2026, com a
+    // composição no hover: sem eles o código do estorno virava a frase
+    // inteira ("Estorno da baixa de PP-00009 3/3"), que não cabe na
+    // coluna e repete o que o rótulo já diz.
+    /^(Estorno da baixa de|Recebimento|PP|Título|Avulsa|Desembolso)\s+/i,
+    "",
+  );
+
+  if (semPrefixo.includes(" — ")) {
+    const [codigo, ...resto] = semPrefixo.split(" — ");
+    return {
+      codigo: codigo.trim() || rotuloDaOrigem(origemTipo),
+      descricao: resto.join(" — ").trim() || rotuloDaOrigem(origemTipo),
+    };
+  }
+
+  // As linhas de previsão não têm travessão — vêm como "Curva JOB-0013 ·
+  // desembolso 1/2". O ponto médio separa o que é rótulo do que é
+  // identificação da parcela, na ordem inversa.
+  if (semPrefixo.includes(" · ")) {
+    const corte = semPrefixo.indexOf(" · ");
+    return {
+      codigo: semPrefixo.slice(corte + 3).trim(),
+      descricao: semPrefixo.slice(0, corte).trim(),
+    };
+  }
 
   return {
-    codigo: codigo.trim() || rotuloDaOrigem(origemTipo),
-    descricao: resto.join(" — ").trim() || rotuloDaOrigem(origemTipo),
+    codigo: semPrefixo.trim() || rotuloDaOrigem(origemTipo),
+    descricao: rotuloDaOrigem(origemTipo),
   };
 }
 
@@ -96,9 +155,14 @@ function rotuloDaOrigem(origem: string): string {
   if (origem === "pp") return "Pedido de produção";
   if (origem === "titulo") return "Título a receber";
   if (origem === "avulsa") return "Conta avulsa";
+  if (origem === "recorrente") return "Conta recorrente";
   // `desembolso` entrou na view em 20/08/2026, pela frente do Antonio
   // (migration 20260820000010).
   if (origem === "desembolso") return "Desembolso";
+  if (origem === "lancamento") return "Movimento na conta";
+  if (origem === "previsao_custo") return "Cronograma de desembolsos";
+  if (origem === "previsao_recebimento") return "Previsão de recebimento";
+  if (origem === "envio_parcela") return "Faturamento previsto";
   return origem;
 }
 

@@ -21,7 +21,6 @@ import {
   PP_ANEXO_TAMANHO_MAX_BYTES,
   PP_ANEXOS_TAMANHO_TOTAL_MAX_BYTES,
   type PPAnexoMimetype,
-  type FormaPagamento,
 } from "@/lib/types";
 import {
   valorDaPP,
@@ -30,15 +29,6 @@ import {
   passaDoSaldo,
   proximoVencimento,
 } from "@/lib/calculos/pps-item";
-import {
-  parcelasParaFatura,
-  formatarISO,
-} from "@/lib/cartoes/proxima-fatura";
-import {
-  FormaPagamentoField,
-  type CartaoOption,
-  type FormaPagamentoValue,
-} from "@/components/financeiro/forma-pagamento-field";
 import {
   reservarPedidoCompra,
   finalizarPedidoCompra,
@@ -51,6 +41,8 @@ interface Props {
   jobId: string;
   fornecedores: Array<{ id: string; nome: string; razao_social: string | null }>;
   empresas: Array<{ id: string; razao_social: string; principal: boolean }>;
+  /** Membros ativos do tenant — exibidos quando switch Verba de Produção está ON. */
+  responsaveis: Array<{ id: string; nome: string }>;
   defaultEmpresaId: string;
   itemDescricao: string;
   /** ORÇADO do item — a base da fatia. Era o realizado até 21/08/2026;
@@ -59,8 +51,6 @@ interface Props {
   quantidadeOrcada: number;
   /** Quanto do orçado ainda não está em PP. É o teto desta PP. */
   saldoDisponivel: number;
-  /** Cartões de crédito ativos do tenant — buscados pelo server component pai. */
-  cartoes: CartaoOption[];
   onSuccess?: (codigo: string) => void;
 }
 
@@ -118,12 +108,12 @@ export function GerarPPDrawer({
   jobId,
   fornecedores,
   empresas,
+  responsaveis,
   defaultEmpresaId,
   itemDescricao,
   valorOrcado,
   quantidadeOrcada,
   saldoDisponivel,
-  cartoes,
   onSuccess,
 }: Props) {
   const router = useRouter();
@@ -134,7 +124,11 @@ export function GerarPPDrawer({
   const [uploadPrefix, setUploadPrefix] = React.useState<string | null>(null);
   const [erro, setErro] = React.useState<string | null>(null);
 
+  // Switch Verba de Produção: OFF (default) → fornecedor obrigatório;
+  // ON → responsável interno obrigatório, fornecedor escondido.
+  const [verbaProducao, setVerbaProducao] = React.useState(false);
   const [fornecedorId, setFornecedorId] = React.useState<string>("");
+  const [responsavelId, setResponsavelId] = React.useState<string>("");
   const [empresaId, setEmpresaId] = React.useState<string>(defaultEmpresaId);
   const [prazoPagamento, setPrazoPagamento] = React.useState<string>(defaultPrazoPagamento());
   // Descrição e quantidade abrem VAZIAS desde 17/08/2026: com PPs
@@ -146,11 +140,6 @@ export function GerarPPDrawer({
   // Parcelas: sempre ao menos uma, e a primeira acompanha o "Prazo de
   // pagamento" — ela É o prazo, não uma linha extra.
   const [parcelas, setParcelas] = React.useState<ParcelaLocal[]>([]);
-  // Forma de pagamento — inclui cartão de crédito quando aplicável.
-  const [formaPagamento, setFormaPagamento] = React.useState<FormaPagamentoValue>({
-    forma_pagamento: null,
-    cartao_credito_id: null,
-  });
 
   const [anexos, setAnexos] = React.useState<AnexoLocal[]>([]);
   const abortedRef = React.useRef(false);
@@ -169,7 +158,9 @@ export function GerarPPDrawer({
     setErro(null);
     setPpId(null);
     setUploadPrefix(null);
+    setVerbaProducao(false);
     setFornecedorId("");
+    setResponsavelId("");
     setEmpresaId(defaultEmpresaId);
     setPrazoPagamento(defaultPrazoPagamento());
     setServico("");
@@ -177,7 +168,6 @@ export function GerarPPDrawer({
     setEspecificacoes("");
     setParcelas([]);
     setAnexos([]);
-    setFormaPagamento({ forma_pagamento: null, cartao_credito_id: null });
     setDrawerKey((k) => k + 1);
 
     // Reserva pp_id + upload_prefix
@@ -329,63 +319,11 @@ export function GerarPPDrawer({
     [],
   );
 
-  /** Datas das parcelas para um cartão com dia_vencimento_fatura e N parcelas. */
-  function datasParaCartao(cartao: CartaoOption, n: number, valor: number): ParcelaLocal[] {
-    const datas = parcelasParaFatura(cartao.dia_vencimento_fatura, new Date(), n);
-    const valores = dividirEmParcelas(valor, n);
-    return datas.map((d, i) => ({
-      data_vencimento: formatarISO(d),
-      valor: valores[i].toFixed(2).replace(".", ","),
-    }));
-  }
-
-  /**
-   * Handler do FormaPagamentoField. Quando forma = cartão + cartão selecionado
-   * com parcelas > 1, auto-preenche as datas de parcelas pelo dia_vencimento_fatura.
-   * Para parcela única (ou sem parcelas), atualiza o prazo_pagamento.
-   */
-  function handleFormaPagamentoChange(
-    v: FormaPagamentoValue,
-    opts?: { dataPagamentoSugerida?: string },
-  ) {
-    setFormaPagamento(v);
-
-    if (v.forma_pagamento !== "cartao_credito" || !v.cartao_credito_id) return;
-
-    const cartao = cartoes.find((c) => c.id === v.cartao_credito_id);
-    if (!cartao) return;
-
-    const n = Math.max(parcelas.length, 1);
-
-    if (n > 1) {
-      // Parcelas já abertas: recalcula só as datas, mantém os valores.
-      const datas = parcelasParaFatura(cartao.dia_vencimento_fatura, new Date(), n);
-      setParcelas((prev) =>
-        prev.map((p, i) => ({
-          ...p,
-          data_vencimento: formatarISO(datas[i] ?? datas[datas.length - 1]),
-        })),
-      );
-    } else if (opts?.dataPagamentoSugerida) {
-      // Parcela única: atualiza prazo de pagamento.
-      setPrazoPagamento(opts.dataPagamentoSugerida);
-      setDrawerKey((k) => k + 1); // força remontagem do DatePicker do prazo
-    }
-  }
-
   function mudarNumeroDeParcelas(bruto: string) {
     const n = Math.max(1, Math.min(36, Math.floor(Number(bruto) || 1)));
     if (n === 1) {
       setParcelas([]);
       return;
-    }
-    // Se cartão selecionado, usa datas da fatura; senão usa escada de meses.
-    if (formaPagamento.forma_pagamento === "cartao_credito" && formaPagamento.cartao_credito_id) {
-      const cartao = cartoes.find((c) => c.id === formaPagamento.cartao_credito_id);
-      if (cartao) {
-        setParcelas(datasParaCartao(cartao, n, valorPP));
-        return;
-      }
     }
     setParcelas(montarParcelas(n, prazoPagamento, valorPP, parcelas));
   }
@@ -431,7 +369,11 @@ export function GerarPPDrawer({
     e.preventDefault();
     setErro(null);
     if (!ppId || !itemRealizadoId) return;
-    if (!fornecedorId) {
+    if (verbaProducao && !responsavelId) {
+      setErro("Escolha um responsável.");
+      return;
+    }
+    if (!verbaProducao && !fornecedorId) {
       setErro("Escolha um fornecedor.");
       return;
     }
@@ -459,14 +401,6 @@ export function GerarPPDrawer({
       setErro(
         `Esta PP (${formatCurrency(valorPP, "BRL")}) passa do saldo do item. Máximo aceito: ${formatCurrency(saldoDisponivel, "BRL")}.`,
       );
-      return;
-    }
-    if (!formaPagamento.forma_pagamento) {
-      setErro("Selecione a forma de pagamento.");
-      return;
-    }
-    if (formaPagamento.forma_pagamento === "cartao_credito" && !formaPagamento.cartao_credito_id) {
-      setErro("Selecione o cartão de crédito.");
       return;
     }
     const parcelasEnvio = parcelasParaEnvio();
@@ -497,19 +431,30 @@ export function GerarPPDrawer({
 
     startTransition(async () => {
       try {
+        const dadosBase = {
+          empresa_id: empresaId,
+          prazo_pagamento: prazoPagamento,
+          servico: servico.trim(),
+          quantidade: qtdNum,
+          especificacoes: especificacoes.trim() || null,
+          parcelas: parcelasEnvio,
+        };
+        const dados = verbaProducao
+          ? {
+              ...dadosBase,
+              verba_producao: true as const,
+              responsavel_verba_id: responsavelId,
+              fornecedor_id: null,
+            }
+          : {
+              ...dadosBase,
+              verba_producao: false as const,
+              fornecedor_id: fornecedorId,
+              responsavel_verba_id: null,
+            };
         const res = await finalizarPedidoCompra(
           ppId,
-          {
-            fornecedor_id: fornecedorId,
-            empresa_id: empresaId,
-            prazo_pagamento: prazoPagamento,
-            servico: servico.trim(),
-            quantidade: qtdNum,
-            especificacoes: especificacoes.trim() || null,
-            parcelas: parcelasEnvio,
-            forma_pagamento: formaPagamento.forma_pagamento as FormaPagamento,
-            cartao_credito_id: formaPagamento.cartao_credito_id ?? null,
-          },
+          dados,
           anexosOk.map((a) => ({
             anexo_id: a.anexo_id,
             path: a.path,
@@ -608,41 +553,79 @@ export function GerarPPDrawer({
               </p>
             </div>
 
-            {/* Forma de pagamento */}
-            <div className="space-y-3">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Pagamento
-              </h3>
-              <FormaPagamentoField
-                cartoes={cartoes}
-                value={formaPagamento}
-                onChange={handleFormaPagamentoChange}
-                disabled={pending}
-                obrigatorio
-              />
-            </div>
-
             {/* Fornecedor & Empresa */}
             <div className="space-y-3">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 Fornecedor & Empresa
               </h3>
 
-              <div>
-                <label className="text-xs font-medium">Fornecedor *</label>
-                <Select value={fornecedorId} onValueChange={setFornecedorId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Escolha o fornecedor" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {fornecedores.map((f) => (
-                      <SelectItem key={f.id} value={f.id}>
-                        {f.razao_social ?? f.nome}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              {/* Switch Verba de Produção */}
+              <label className="flex cursor-pointer items-center gap-2.5">
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={verbaProducao}
+                  onClick={() => {
+                    setVerbaProducao((v) => {
+                      if (!v) setFornecedorId(""); // vai ligar: limpa fornecedor
+                      else setResponsavelId("");   // vai desligar: limpa responsável
+                      return !v;
+                    });
+                  }}
+                  className={cn(
+                    "relative inline-flex h-5 w-9 flex-none items-center rounded-full border-2 border-transparent transition-colors",
+                    verbaProducao ? "bg-california-red" : "bg-muted-foreground/30",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "inline-block h-4 w-4 rounded-full bg-white shadow transition-transform",
+                      verbaProducao ? "translate-x-4" : "translate-x-0",
+                    )}
+                  />
+                </button>
+                <span className="text-sm font-medium">Verba de Produção</span>
+                {verbaProducao && (
+                  <span className="ml-auto text-[11px] text-muted-foreground">
+                    Pago ao responsável interno
+                  </span>
+                )}
+              </label>
+
+              {/* Fornecedor (modo normal) ou Responsável (modo verba) */}
+              {verbaProducao ? (
+                <div>
+                  <label className="text-xs font-medium">Responsável *</label>
+                  <Select value={responsavelId} onValueChange={setResponsavelId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Escolha um responsável" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {responsaveis.map((r) => (
+                        <SelectItem key={r.id} value={r.id}>
+                          {r.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : (
+                <div>
+                  <label className="text-xs font-medium">Fornecedor *</label>
+                  <Select value={fornecedorId} onValueChange={setFornecedorId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Escolha o fornecedor" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {fornecedores.map((f) => (
+                        <SelectItem key={f.id} value={f.id}>
+                          {f.razao_social ?? f.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
               <div>
                 <label className="text-xs font-medium">Empresa emissora *</label>
@@ -886,7 +869,12 @@ export function GerarPPDrawer({
             </button>
             <button
               type="submit"
-              disabled={pending || !ppId || anexos.some((a) => a.status === "uploading")}
+              disabled={
+                pending ||
+                !ppId ||
+                anexos.some((a) => a.status === "uploading") ||
+                (verbaProducao ? !responsavelId : !fornecedorId)
+              }
               className="rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white hover:bg-california-red-hover disabled:opacity-50"
             >
               {pending ? "Gerando..." : "Gerar PP"}

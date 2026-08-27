@@ -15,31 +15,39 @@ import Link from "next/link";
 import { Clock, ClipboardList } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { nomeVersao } from "@/lib/nome-versao";
-import { useRouter } from "next/navigation";
-import { MenuExibirColunas } from "@/app/(app)/_planilha/exibir-colunas";
-import { SAVE_VAZIO, type EstadoSaveDaLinha } from "@/app/(app)/_planilha/save-coluna";
-import { SaveDialog, type LinhaDoSave } from "@/app/(app)/_planilha/save-dialog";
-import type { SaldoDeSave } from "@/lib/data/saves";
-import { registrarErrataDeSave } from "./save-errata-actions";
 import type {
   Job,
   VersaoOrcamento,
   VersaoOrcamentoGrupo,
   ItemPlanilhaJob,
   JobItemRealizado,
-  PedidoCompra,
+  PedidoCompraNaLista,
   Fornecedor,
   Empresa,
   ItemBv,
 } from "@/lib/types";
-import type { CartaoOption } from "@/components/financeiro/forma-pagamento-field";
 import { VISAO_BV_PADRAO, type VisaoBv } from "@/lib/calculos/bv-planilha";
+import { useRouter } from "next/navigation";
 import { ChaveBrutoLiquido } from "@/app/(app)/_planilha/chave-bruto-liquido";
+import { MenuExibirColunas } from "@/app/(app)/_planilha/exibir-colunas";
+import {
+  SAVE_VAZIO,
+  type EstadoSaveDaLinha,
+} from "@/app/(app)/_planilha/save-coluna";
+import {
+  SaveDialog,
+  type LinhaDoSave,
+} from "@/app/(app)/_planilha/save-dialog";
+import type { SaldoDeSave } from "@/lib/data/saves";
+import { registrarErrataDeSave } from "./save-errata-actions";
 import {
   BotaoRecolherTodos,
   useGruposRecolhiveis,
 } from "@/app/(app)/_planilha/recolher-grupos";
-import { JobGrupoCard } from "./job-grupo-card";
+import {
+  JobItemRealizadoTable,
+  type GrupoDoJob,
+} from "./job-item-realizado-table";
 import { JobTotaisCard } from "./job-totais-card";
 import { AlterarOrcadoButton } from "./alterar-orcado-button";
 
@@ -64,9 +72,11 @@ interface Props {
   /** Errata, BV e Pedido de Produção — só com o job aberto. */
   podeAcoes: boolean;
   /** Todas as PPs ativas de cada item realizado (PPs parciais). */
-  ppsPorItemId: Map<string, PedidoCompra[]>;
+  ppsPorItemId: Map<string, PedidoCompraNaLista[]>;
   fornecedores: Array<Pick<Fornecedor, "id" | "nome" | "razao_social" | "status">>;
   empresas: Array<Pick<Empresa, "id" | "razao_social" | "nome_fantasia" | "ativo" | "principal">>;
+  /** Membros ativos do tenant — usados no combo de Responsável da Verba de Produção. */
+  responsaveis: Array<{ id: string; nome: string }>;
   /** BV por id do item da versão. Só existe em item tipo A, AR ou D. */
   bvsPorItem: Record<string, ItemBv>;
   /** Estado do save por id do item da VERSÃO, como o BV. */
@@ -75,8 +85,6 @@ interface Props {
   saldosDeSave: SaldoDeSave[];
   /** Nome do cliente — aparece no texto do formulário de save. */
   clienteNome: string;
-  /** Cartões de crédito ativos do tenant — buscados pelo server component pai. */
-  cartoes: CartaoOption[];
 }
 
 export function JobRealizadoSection({
@@ -88,15 +96,16 @@ export function JobRealizadoSection({
   realizadosMap,
   categoriasMap,
   podeAcoes,
-  savePorItem,
-  saldosDeSave,
-  clienteNome,
   ppsPorItemId,
   fornecedores,
   empresas,
+  responsaveis,
   bvsPorItem,
-  cartoes,
+  savePorItem,
+  saldosDeSave,
+  clienteNome,
 }: Props) {
+  const router = useRouter();
   // Uma chave para a página inteira. Abre em Bruto: é a tela de sempre,
   // e quem não lida com BV nunca precisa saber que a outra existe.
   const [visao, setVisao] = React.useState<VisaoBv>(VISAO_BV_PADRAO);
@@ -106,6 +115,32 @@ export function JobRealizadoSection({
   const gruposIds = React.useMemo(() => grupos.map((g) => g.id), [grupos]);
   const recolher = useGruposRecolhiveis(gruposIds);
 
+  // SAVE — a coluna abre sozinha em quem já usa save ou tem saldo a
+  // gastar; quem nunca usou liga pelo menu "Exibir", sem o qual não
+  // haveria como criar o primeiro save de um job.
+  const [saveLigado, setSaveLigado] = React.useState(
+    Object.keys(savePorItem).length > 0 ||
+      saldosDeSave.some((s) => s.disponivel > 0),
+  );
+  const temSave = saveLigado;
+  const [linhaSave, setLinhaSave] = React.useState<ItemPlanilhaJob | null>(
+    null,
+  );
+  // No job, mexer no save é ERRATA — e errata exige job aberto, a mesma
+  // porta de `AlterarOrcadoButton`. O financeiro chega aqui com
+  // `podeAcoes` falso e lê sem editar.
+  const podeMexerNoSave = podeAcoes;
+
+  const linhaDoDialog: LinhaDoSave | null = linhaSave
+    ? {
+        id: linhaSave.orcado_id,
+        nome: linhaSave.item,
+        grupoNome: grupos.find((g) => g.id === linhaSave.grupo_id)?.nome ?? "—",
+        tipoCusto: linhaSave.tipo_custo,
+        totalOrcado: Number(linhaSave.total_orcado ?? 0),
+      }
+    : null;
+
   // Antes da abertura a planilha aparece inteira — o que fica de fora são
   // as ações que geram documento. O aviso substitui o antigo bloco
   // "Realizado indisponível", que escondia a planilha toda.
@@ -113,12 +148,18 @@ export function JobRealizadoSection({
     job.status === "aguardando_abertura" ||
     job.status === "rejeitado_financeiro";
 
-  const itensPorGrupo = new Map<string, ItemPlanilhaJob[]>();
-  for (const g of grupos) itensPorGrupo.set(g.id, []);
-  for (const it of itens) {
-    const list = itensPorGrupo.get(it.grupo_id);
-    if (list) list.push(it);
-  }
+  // A planilha inteira numa tabela só desde 24/08/2026: os pares
+  // grupo → itens são montados aqui e vão de uma vez para a tabela.
+  const gruposDaPlanilha = React.useMemo<GrupoDoJob[]>(() => {
+    const porGrupo = new Map<string, ItemPlanilhaJob[]>();
+    for (const g of grupos) porGrupo.set(g.id, []);
+    for (const it of itens) porGrupo.get(it.grupo_id)?.push(it);
+    return grupos.map((g) => ({
+      id: g.id,
+      nome: g.nome,
+      itens: porGrupo.get(g.id) ?? [],
+    }));
+  }, [grupos, itens]);
 
   // A trilha lateral aparece quando há ação (BV/PP) OU quando há BV
   // lançado para consultar num job sem ação — é a mesma condição que a
@@ -129,35 +170,7 @@ export function JobRealizadoSection({
   // futura, o job pode ser devolvido, e a trilha tem que sumir por
   // inteiro — como o critério da Tela 2.1 pede (18/08/2026).
   const temBvLancado = itens.some((it) => bvsPorItem[it.id]);
-  const router = useRouter();
   const temCalha = podeAcoes || (temBvLancado && !preAbertura);
-
-  // SAVE — a coluna abre sozinha em quem já usa, e some em quem nunca
-  // usou: a Planilha Interna de sempre continua a de sempre.
-  // Abre sozinha em quem já usa save ou tem saldo a gastar; quem nunca
-  // usou liga pelo menu "Exibir" — sem ele não haveria como criar o
-  // primeiro save de um job.
-  const [saveLigado, setSaveLigado] = React.useState(
-    Object.keys(savePorItem).length > 0 ||
-      saldosDeSave.some((s) => s.disponivel > 0),
-  );
-  const temSave = saveLigado;
-  const [linhaSave, setLinhaSave] = React.useState<ItemPlanilhaJob | null>(null);
-  // No job, mexer no save é ERRATA — e errata exige job aberto, a mesma
-  // porta de `AlterarOrcadoButton`. O financeiro chega aqui com
-  // `podeAcoes` falso e lê sem editar.
-  const podeMexerNoSave = podeAcoes;
-
-  const linhaDoDialog: LinhaDoSave | null = linhaSave
-    ? {
-        id: linhaSave.orcado_id,
-        nome: linhaSave.item,
-        grupoNome:
-          grupos.find((g) => g.id === linhaSave.grupo_id)?.nome ?? "—",
-        tipoCusto: linhaSave.tipo_custo,
-        totalOrcado: Number(linhaSave.total_orcado ?? 0),
-      }
-    : null;
 
   return (
     // Quando dá pra gerar PP, reserva a calha da direita: a trilha de
@@ -239,43 +252,39 @@ export function JobRealizadoSection({
         </div>
       ) : (
         <>
-          <div className="space-y-4">
-            {grupos.map((g) => (
-              <JobGrupoCard
-                key={g.id}
-                saveVisivel={temSave}
-                savePorItem={savePorItem}
-                onAbrirSave={podeMexerNoSave ? setLinhaSave : undefined}
-                grupo={g}
-                itens={itensPorGrupo.get(g.id) ?? []}
-                realizadosMap={realizadosMap}
-                categoriasMap={categoriasMap}
-                moeda={versao.moeda}
-                percentualImposto={versao.percentual_imposto}
-                visao={visao}
-                aberto={recolher.estaAberto(g.id)}
-                onAlternar={() => recolher.alternar(g.id)}
-                podeAcoes={podeAcoes}
-                preAbertura={preAbertura}
-                jobId={job.id}
-                ppsPorItemId={ppsPorItemId}
-                fornecedores={fornecedores}
-                empresas={empresas}
-                jobEmpresaId={job.empresa_id ?? ""}
-                jobResponsavelId={job.responsavel_id ?? ""}
-                bvsPorItem={bvsPorItem}
-                versaoLabel={`v${versao.numero_versao}`}
-                cartoes={cartoes}
-              />
-            ))}
+          {/* Um card para a planilha inteira — antes era um por grupo.
+              Sem `overflow-hidden`: a calha de ações precisa escapar do
+              frame, e são os filhos que arredondam os cantos. */}
+          <div className="rounded-2xl border border-border bg-card shadow-soft">
+            <JobItemRealizadoTable
+              jobId={job.id}
+              grupos={gruposDaPlanilha}
+              realizadosMap={realizadosMap}
+              categoriasMap={categoriasMap}
+              moeda={versao.moeda}
+              percentualImposto={versao.percentual_imposto}
+              visao={visao}
+              estaAberto={recolher.estaAberto}
+              onAlternarGrupo={recolher.alternar}
+              podeAcoes={podeAcoes}
+              preAbertura={preAbertura}
+              ppsPorItemId={ppsPorItemId}
+              fornecedores={fornecedores}
+              empresas={empresas}
+              responsaveis={responsaveis}
+              jobEmpresaId={job.empresa_id ?? ""}
+              jobResponsavelId={job.responsavel_id ?? ""}
+              bvsPorItem={bvsPorItem}
+              versaoLabel={`v${versao.numero_versao}`}
+              saveVisivel={temSave}
+              savePorItem={savePorItem}
+              onAbrirSave={podeMexerNoSave ? setLinhaSave : undefined}
+            />
           </div>
           <JobTotaisCard
-            grupos={grupos}
             itens={itens}
             realizadosMap={realizadosMap}
             bvsPorItem={bvsPorItem}
-            visao={visao}
-            saveVisivel={temSave}
             jobAberto={!preAbertura}
             percentualHonorarios={versao.percentual_honorarios}
             percentualImposto={versao.percentual_imposto}

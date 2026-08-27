@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { X } from "lucide-react";
+import { ChevronDown, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { TruncateTooltip } from "@/components/ui/truncate-tooltip";
 import { cn, formatCurrency } from "@/lib/utils";
@@ -10,18 +10,25 @@ import type {
   ItemPlanilhaJob,
   JobItemRealizado,
   PedidoCompra,
+  PedidoCompraNaLista,
   Fornecedor,
   Empresa,
   ItemBv,
 } from "@/lib/types";
+import { nomeContraparteBRPP } from "@/lib/types";
 import { CalhaLinha } from "./calha-linha";
 import { GerarPPDrawer } from "./gerar-pp-drawer";
-import type { CartaoOption } from "@/components/financeiro/forma-pagamento-field";
 import { PainelPPsItem } from "./painel-pps-item";
 import { saldoDoItem, somaDasPPs } from "@/lib/calculos/pps-item";
 import { BvDialog } from "@/app/(app)/_bv/bv-dialog";
 import { acaoBv } from "@/app/(app)/_bv/bv-action-button";
 import { LARGURA_CALHA } from "@/app/(app)/_planilha/calha-acoes";
+import {
+  Calha,
+  LinhaDaCalha,
+  usePosicoesDaCalha,
+} from "@/app/(app)/_planilha/calha";
+import { RentabilidadeNoVao } from "@/app/(app)/_planilha/rentabilidade-inline";
 import { SubLinhaBv } from "@/app/(app)/_planilha/chave-bruto-liquido";
 import {
   ORCADO,
@@ -29,7 +36,8 @@ import {
   REALIZADO,
   FAIXA_ROTULO,
   FAIXA_GRUPO,
-  RENTAB_VALOR,
+  LINHA_GRUPO_NOME,
+  LINHA_TOTAL_ROTULO,
 } from "@/app/(app)/_planilha/blocos";
 import {
   ColunasJob,
@@ -52,22 +60,29 @@ import {
   blocosDoItem,
   realizadoVemDasPPs,
   rotuloColunaTotal,
-  rotuloSubtotal,
   somarBlocosDosItens,
   valorNaVisao,
   type ValoresDoBloco,
   type VisaoBv,
 } from "@/lib/calculos/bv-planilha";
 
-interface Props {
-  /** Liga a coluna SAVE. Mesma coluna da planilha do orçamento — no job
-   *  ela é só leitura até a Errata, que é quem pode mexer no orçado
-   *  depois da abertura (decisão 023, nota de 26/08/2026). */
-  saveVisivel?: boolean;
-  savePorItem?: Record<string, EstadoSaveDaLinha>;
-  onAbrirSave?: (item: ItemPlanilhaJob) => void;
-  jobId: string;
+/** Um agrupamento da planilha do job, com os itens já separados. */
+export interface GrupoDoJob {
+  id: string;
+  nome: string;
   itens: ItemPlanilhaJob[];
+}
+
+interface Props {
+  jobId: string;
+  /** TODOS os agrupamentos da planilha, na ordem.
+   *
+   *  Até 24/08/2026 esta tabela desenhava UM grupo e a tela empilhava um
+   *  card por grupo. O handoff "Planilha Interna - Grupos Unificados"
+   *  juntou tudo numa tabela só — um cabeçalho de colunas, uma calha de
+   *  números — e o grupo virou uma linha que carrega o próprio subtotal e
+   *  a própria rentabilidade. */
+  grupos: GrupoDoJob[];
   realizadosMap: Map<string, JobItemRealizado>;
   /** id da categoria -> nome. Itens sem categoria caem no travessão. */
   categoriasMap: Map<string, string>;
@@ -79,10 +94,11 @@ interface Props {
    *  `JobRealizadoSection`: dois grupos em modos diferentes deixariam o
    *  card de Totais sem bater com nenhum deles. */
   visao: VisaoBv;
-  /** Grupo recolhido esconde as LINHAS e a calha de ações. O subtotal e a
-   *  rentabilidade continuam visíveis — são o dado que justifica recolher,
-   *  mesma regra da planilha do orçamento. */
-  aberto?: boolean;
+  /** Grupo recolhido esconde as LINHAS e a calha de ações. A linha do
+   *  grupo — subtotal e rentabilidade — continua visível: é o dado que
+   *  justifica recolher, mesma regra da planilha do orçamento. */
+  estaAberto: (grupoId: string) => boolean;
+  onAlternarGrupo: (grupoId: string) => void;
   /** Trilha lateral de BV e Pedido de Produção — só com o job aberto.
    *  Antes da abertura a planilha é visível e o realizado é editável,
    *  mas nada que vire documento pode ser criado. */
@@ -92,24 +108,26 @@ interface Props {
    *  tem `podeAcoes` falso mas conserva os BVs lançados para consulta. */
   preAbertura: boolean;
   // PP rail — várias PPs por item desde 17/08/2026 (PPs parciais).
-  ppsPorItemId: Map<string, PedidoCompra[]>;
+  ppsPorItemId: Map<string, PedidoCompraNaLista[]>;
   fornecedores: Array<Pick<Fornecedor, "id" | "nome" | "razao_social" | "status">>;
   empresas: Array<Pick<Empresa, "id" | "razao_social" | "nome_fantasia" | "ativo" | "principal">>;
+  /** Membros ativos do tenant — usados no combo de Responsável da Verba de Produção. */
+  responsaveis: Array<{ id: string; nome: string }>;
   jobEmpresaId: string;
   jobResponsavelId: string;
   /** BV por id do item da versão. Só existe em item tipo A, AR ou D. */
   bvsPorItem: Record<string, ItemBv>;
   /** "v5" — aparece no subtítulo do formulário de BV. */
   versaoLabel: string;
-  grupoNome: string;
-  /** Cartões de crédito ativos do tenant — buscados pelo server component pai. */
-  cartoes: CartaoOption[];
-  /** Identidade do grupo — mora na PRIMEIRA linha do thead, na mesma
-   *  faixa de ORÇADO / PLANEJADO / REALIZADO. O card não tem mais barra
-   *  de título só para isso. */
-  cabecalhoGrupo?: React.ReactNode;
-  /** Contador de itens do grupo, na calha à direita da faixa. */
-  acoesGrupo?: React.ReactNode;
+  /** BASE do rótulo do pé da tabela. A vista Líquido acrescenta o sufixo
+   *  sozinha. Default: "Total da planilha". */
+  rotuloTotal?: string;
+  /** Liga a coluna SAVE. Mesma coluna da planilha do orçamento — no job
+   *  ela é só leitura até a Errata, que é quem pode mexer no orçado
+   *  depois da abertura (decisão 023, nota de 26/08/2026). */
+  saveVisivel?: boolean;
+  savePorItem?: Record<string, EstadoSaveDaLinha>;
+  onAbrirSave?: (item: ItemPlanilhaJob) => void;
 }
 
 /** Quem decide o conteúdo da calha é a coluna Tipo:
@@ -153,72 +171,34 @@ function formatarPercentual(p: number): string {
 }
 
 
-/** Célula "R$ x,xx / y,y%" usada nas linhas de Rentabilidade do rodapé. */
-function CelulaRentabilidade({
-  orcado,
-  custo,
-  moeda,
-  corValor,
-  corPercentual,
-}: {
-  orcado: number;
-  custo: number;
-  moeda: string;
-  corValor: string;
-  corPercentual: string;
-}) {
-  const { rentabilidade, percentual } = calcularRentabilidade(orcado, custo);
-
-  if (custo <= 0) {
-    return <span className="font-mono text-xs text-muted-foreground">—</span>;
-  }
-
-  return (
-    <div className="flex flex-col items-end gap-0.5">
-      <span className={cn("font-mono text-[12.5px] font-bold", corValor)}>
-        {formatCurrency(rentabilidade, moeda)}
-      </span>
-      {percentual !== null && (
-        <span className={cn("font-mono text-[10.5px]", corPercentual)}>
-          {formatarPercentual(percentual)}
-        </span>
-      )}
-    </div>
-  );
-}
 
 export function JobItemRealizadoTable({
-  saveVisivel = false,
-  savePorItem,
-  onAbrirSave,
   jobId,
-  itens,
+  grupos,
   realizadosMap,
   categoriasMap,
   moeda,
   percentualImposto,
   visao,
-  aberto = true,
+  estaAberto,
+  onAlternarGrupo,
   podeAcoes,
   preAbertura,
   ppsPorItemId,
   fornecedores,
   empresas,
+  responsaveis,
   jobEmpresaId,
   jobResponsavelId: _jobResponsavelId,
   bvsPorItem,
   versaoLabel,
-  grupoNome,
-  cartoes,
-  cabecalhoGrupo,
-  acoesGrupo,
+  rotuloTotal,
+  saveVisivel = false,
+  savePorItem,
+  onAbrirSave,
 }: Props) {
   // Rail lateral PP
   const wrapperRef = React.useRef<HTMLDivElement>(null);
-  const tbodyRef = React.useRef<HTMLTableSectionElement>(null);
-  const faixaRef = React.useRef<HTMLTableRowElement>(null);
-  const [railTop, setRailTop] = React.useState(0);
-  const [faixaAltura, setFaixaAltura] = React.useState(0);
   const [painelOpen, setPainelOpen] = React.useState(false);
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [itemIdAtual, setItemIdAtual] = React.useState<string | null>(null);
@@ -239,23 +219,23 @@ export function JobItemRealizadoTable({
     return () => clearTimeout(t);
   }, [toast]);
 
-  React.useLayoutEffect(() => {
-    const wrapper = wrapperRef.current;
-    const tbody = tbodyRef.current;
-    if (!wrapper || !tbody) return;
-    const medir = () => {
-      const topoWrapper = wrapper.getBoundingClientRect().top;
-      setRailTop(tbody.getBoundingClientRect().top - topoWrapper);
-      // A calha do grupo se alinha pela faixa medida, não por altura
-      // chutada — o thead muda de altura conforme a fonte carrega.
-      const faixa = faixaRef.current;
-      if (faixa) setFaixaAltura(faixa.getBoundingClientRect().height);
-    };
-    medir();
-    const observer = new ResizeObserver(medir);
-    observer.observe(wrapper);
-    return () => observer.disconnect();
-  }, [itens.length, visao, aberto, podeAcoes, preAbertura]);
+  /** Todos os itens da planilha, achatados — as contas e as buscas por
+   *  id atravessam os grupos e não podem depender de qual card era. */
+  const todosOsItens = React.useMemo(
+    () => grupos.flatMap((g) => g.itens),
+    [grupos],
+  );
+
+  // A calha vive fora do frame da tabela e agora acompanha linhas de
+  // alturas diferentes (grupo e item). Medir é a única forma de acertar —
+  // ver o cabeçalho de `_planilha/calha`.
+  const posicoesCalha = usePosicoesDaCalha(wrapperRef, [
+    grupos,
+    visao,
+    podeAcoes,
+    preAbertura,
+    grupos.map((g) => (estaAberto(g.id) ? "1" : "0")).join(""),
+  ]);
 
   /** O chip da calha abre o painel; o formulário só se chega por ele. */
   function abrirPainel(itemRealizadoId: string) {
@@ -277,7 +257,7 @@ export function JobItemRealizadoTable({
    */
   const blocosPorItem = React.useMemo(() => {
     const mapa = new Map<string, ReturnType<typeof blocosDoItem>>();
-    for (const it of itens) {
+    for (const it of todosOsItens) {
       mapa.set(
         it.id,
         blocosDoItem(
@@ -290,7 +270,7 @@ export function JobItemRealizadoTable({
       );
     }
     return mapa;
-  }, [itens, bvsPorItem, realizadosMap, percentualImposto, preAbertura]);
+  }, [todosOsItens, bvsPorItem, realizadosMap, percentualImposto, preAbertura]);
 
   const BLOCO_VAZIO = {
     orcado: 0,
@@ -298,14 +278,42 @@ export function JobItemRealizadoTable({
     realizado: BLOCO_ZERO,
   };
 
-  const subtotais = React.useMemo(
+  /** Subtotais de cada grupo e o fechamento da planilha inteira — a
+   *  mesma conta, aplicada a recortes diferentes da mesma lista. */
+  const subtotaisPorGrupo = React.useMemo(() => {
+    const mapa = new Map<string, ReturnType<typeof somarBlocosDosItens>>();
+    for (const g of grupos) {
+      mapa.set(
+        g.id,
+        somarBlocosDosItens(
+          g.itens.map((it) => blocosPorItem.get(it.id) ?? BLOCO_VAZIO),
+        ),
+      );
+    }
+    return mapa;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [grupos, blocosPorItem]);
+
+  const totais = React.useMemo(
     () =>
       somarBlocosDosItens(
-        itens.map((it) => blocosPorItem.get(it.id) ?? BLOCO_VAZIO),
+        todosOsItens.map((it) => blocosPorItem.get(it.id) ?? BLOCO_VAZIO),
       ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [itens, blocosPorItem],
+    [todosOsItens, blocosPorItem],
   );
+
+  /** O grupo a que um item pertence — o formulário de BV e o painel de
+   *  PPs mostram o nome dele no subtítulo. */
+  const grupoDoItem = React.useMemo(() => {
+    const mapa = new Map<string, string>();
+    for (const g of grupos) for (const it of g.itens) mapa.set(it.id, g.nome);
+    return mapa;
+  }, [grupos]);
+
+  const rotuloDoTotal = `${rotuloTotal ?? "Total da planilha"}${
+    visao === "liquido" ? " · líquido (− BV)" : ""
+  }`;
 
   /** Quanto do item ainda pode virar PP.
    *
@@ -326,12 +334,8 @@ export function JobItemRealizadoTable({
           BV vive no drawer que o produziu, junto do campo que o causou. */}
       <div ref={wrapperRef} className="relative">
       {/* Com o nome do grupo na faixa, a tabela abre e fecha o card. */}
-      <div
-        className={cn(
-          "overflow-x-auto rounded-b-2xl",
-          cabecalhoGrupo && "rounded-t-2xl",
-        )}
-      >
+      {/* A tabela abre e fecha o card: a planilha inteira é uma só. */}
+      <div className="overflow-x-auto rounded-b-2xl rounded-t-2xl">
         <table
           className={cn(
             "w-full table-fixed text-sm border-collapse",
@@ -340,13 +344,12 @@ export function JobItemRealizadoTable({
         >
           <ColunasJob save={saveVisivel} />
           <thead className="text-[10px] uppercase tracking-wider text-muted-foreground">
-            {/* Linha 1 — o nome do agrupamento divide a faixa com os
-                blocos, em vez de ocupar uma barra só dele acima. */}
-            <tr ref={faixaRef}>
+            {/* Linha 1 — a faixa dos blocos. Ela é UMA para a planilha
+                inteira: era esta repetição, um cabeçalho por grupo, que o
+                handoff "Grupos Unificados" veio eliminar. */}
+            <tr>
               {saveVisivel && <CabecalhoSaveFaixa />}
-              <th colSpan={3} className={FAIXA_GRUPO}>
-                {cabecalhoGrupo}
-              </th>
+              <th colSpan={3} className={FAIXA_GRUPO} />
               <th colSpan={4} className={cn(FAIXA_ROTULO, ORCADO.faixa)}>
                 ORÇADO
               </th>
@@ -359,7 +362,7 @@ export function JobItemRealizadoTable({
             </tr>
             <tr className="bg-muted/40">
               {saveVisivel && <CabecalhoSaveColuna />}
-              <th className="text-left font-semibold px-3 py-2 border-r border-r-border">Item</th>
+              <th className="text-left font-semibold px-3 py-2 border-r border-r-border">Grupo · Item</th>
               <th className="text-left font-semibold px-3 py-2 border-r border-r-border">Tipo</th>
               <th className="text-left font-semibold px-3 py-2 border-r border-r-border">Categoria</th>
               {/* Orcado */}
@@ -380,15 +383,147 @@ export function JobItemRealizadoTable({
             </tr>
           </thead>
 
-          <tbody ref={tbodyRef}>
-            {aberto && itens.length === 0 && (
-              <tr>
-                <td colSpan={totalDeColunasJob(saveVisivel)} className="py-8 text-center text-sm text-muted-foreground">
-                  Sem itens neste grupo.
-                </td>
-              </tr>
-            )}
-            {aberto && itens.map((item) => {
+          <tbody>
+            {grupos.map((grupo) => {
+              const abertoAqui = estaAberto(grupo.id);
+              const sub =
+                subtotaisPorGrupo.get(grupo.id) ??
+                somarBlocosDosItens([]);
+              const subPlanejado = valorNaVisao(sub.planejado, visao);
+              const subRealizado = valorNaVisao(sub.realizado, visao);
+
+              return (
+                <React.Fragment key={grupo.id}>
+                  {/* A LINHA DO GRUPO: nome à esquerda, subtotal já
+                      alinhado à coluna Total de cada bloco, e a
+                      rentabilidade ocupando o vão vazio de PLANEJADO e
+                      REALIZADO. Era um `tfoot` de duas linhas por card;
+                      agora é uma linha só. */}
+                  <tr data-calha={`g:${grupo.id}`} className="h-10">
+                    <td
+                      colSpan={colunasDoRotuloJob(saveVisivel)}
+                      className={LINHA_GRUPO_NOME}
+                    >
+                      <div className="flex min-w-0 items-center gap-2.5">
+                        <button
+                          type="button"
+                          onClick={() => onAlternarGrupo(grupo.id)}
+                          title={
+                            abertoAqui
+                              ? "Ocultar itens do grupo"
+                              : "Mostrar itens do grupo"
+                          }
+                          aria-expanded={abertoAqui}
+                          className="inline-flex h-5 w-5 flex-none items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-white hover:text-california-red"
+                        >
+                          <ChevronDown
+                            className={cn(
+                              "h-3.5 w-3.5 transition-transform duration-150",
+                              !abertoAqui && "-rotate-90",
+                            )}
+                          />
+                        </button>
+                        <TruncateTooltip
+                          text={grupo.nome}
+                          className="text-[13.5px] font-bold tracking-[-0.01em] text-foreground"
+                        />
+                        <span className="flex-none whitespace-nowrap text-[11px] text-muted-foreground">
+                          {grupo.itens.length}{" "}
+                          {grupo.itens.length === 1 ? "item" : "itens"}
+                          {!abertoAqui && grupo.itens.length > 0 && " ocultos"}
+                        </span>
+                      </div>
+                    </td>
+
+                    <td colSpan={3} className={ORCADO.grupoVazio} />
+                    <td
+                      className={cn(
+                        "px-3 text-right whitespace-nowrap font-mono text-[13px] font-bold",
+                        ORCADO.grupoValor,
+                      )}
+                    >
+                      {formatCurrency(sub.orcado, moeda)}
+                    </td>
+
+                    <td
+                      colSpan={3}
+                      className={cn("overflow-hidden px-3 text-right", PLANEJADO.grupoVazio)}
+                    >
+                      <RentabilidadeNoVao
+                        orcado={sub.orcadoRentabilidade}
+                        custo={subPlanejado}
+                        moeda={moeda}
+                        corRotulo={PLANEJADO.textoSuave}
+                      />
+                    </td>
+                    <td
+                      className={cn(
+                        "px-3 text-right whitespace-nowrap",
+                        PLANEJADO.grupoValor,
+                      )}
+                    >
+                      <div className="flex flex-col items-end">
+                        <span className="font-mono text-[13px] font-bold leading-[1.2]">
+                          {formatCurrency(subPlanejado, moeda)}
+                        </span>
+                        {visao === "liquido" && (
+                          <SubLinhaBv
+                            deducao={sub.planejado.deducaoBv}
+                            formatar={fmt}
+                            cor={PLANEJADO.texto}
+                            corRotulo={PLANEJADO.textoSuave}
+                          />
+                        )}
+                      </div>
+                    </td>
+
+                    <td
+                      colSpan={3}
+                      className={cn("overflow-hidden px-3 text-right", REALIZADO.grupoVazio)}
+                    >
+                      <RentabilidadeNoVao
+                        orcado={sub.orcadoRentabilidade}
+                        custo={subRealizado}
+                        moeda={moeda}
+                        corRotulo={REALIZADO.textoSuave}
+                      />
+                    </td>
+                    <td
+                      className={cn(
+                        "px-3 text-right whitespace-nowrap",
+                        REALIZADO.grupoValor,
+                      )}
+                    >
+                      <div className="flex flex-col items-end">
+                        <span className="font-mono text-[13px] font-bold leading-[1.2]">
+                          {sub.realizado.bruto > 0
+                            ? formatCurrency(subRealizado, moeda)
+                            : "—"}
+                        </span>
+                        {visao === "liquido" && (
+                          <SubLinhaBv
+                            deducao={sub.realizado.deducaoBv}
+                            formatar={fmt}
+                            cor={REALIZADO.texto}
+                            corRotulo={REALIZADO.textoSuave}
+                          />
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+
+                  {abertoAqui && grupo.itens.length === 0 && (
+                    <tr className="border-b border-border">
+                      <td
+                        colSpan={totalDeColunasJob(saveVisivel)}
+                        className="py-5 pl-[30px] pr-3 text-xs text-muted-foreground"
+                      >
+                        Sem itens neste grupo.
+                      </td>
+                    </tr>
+                  )}
+
+                  {abertoAqui && grupo.itens.map((item) => {
               const blocos = blocosPorItem.get(item.id) ?? BLOCO_VAZIO;
               const realizadoDoItem = realizadosMap.get(item.id);
               // A quebra do realizado espelha o orçado só em `A`/`D` COM o
@@ -402,14 +537,17 @@ export function JobItemRealizadoTable({
 
               return (
                 <tr
-                  key={item.id}
-                  className={cn(
-                    ALTURA_LINHA,
-                    "border-b border-border",
-                    saveVisivel &&
-                      classesDaLinhaComSave(savePorItem?.[item.id] ?? SAVE_VAZIO),
-                  )}
-                >
+                      key={item.id}
+                      data-calha={`i:${item.id}`}
+                      className={cn(
+                        ALTURA_LINHA,
+                        "border-b border-border",
+                        saveVisivel &&
+                          classesDaLinhaComSave(
+                            savePorItem?.[item.id] ?? SAVE_VAZIO,
+                          ),
+                      )}
+                    >
                   {saveVisivel && (
                     <CelulaSave
                       estado={savePorItem?.[item.id] ?? SAVE_VAZIO}
@@ -418,7 +556,7 @@ export function JobItemRealizadoTable({
                       onAbrir={onAbrirSave ? () => onAbrirSave(item) : undefined}
                     />
                   )}
-                  <td className={cn("px-3 text-xs align-middle", GRADE_NEUTRA)}>
+                  <td className={cn("px-3 pl-[30px] text-xs align-middle", GRADE_NEUTRA)}>
                     <TruncateTooltip text={item.item} />
                   </td>
                   <td className={cn("px-3 text-xs align-middle", GRADE_NEUTRA)}>
@@ -509,31 +647,64 @@ export function JobItemRealizadoTable({
                     corRotulo={REALIZADO.textoSuave}
                   />
                 </tr>
+                    );
+                  })}
+                </React.Fragment>
               );
             })}
           </tbody>
 
           <tfoot>
+            {/* O pé da tabela repete a forma da linha de grupo: subtotal
+                alinhado à coluna Total e a rentabilidade no vão. Antes
+                eram DUAS linhas por card — uma de subtotal e outra só de
+                "Rentabilidade" —, e elas viravam quatro na tela com dois
+                agrupamentos. */}
             <tr>
-              <td colSpan={colunasDoRotuloJob(saveVisivel)} className="px-3 py-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                {rotuloSubtotal(visao)}
+              <td
+                colSpan={colunasDoRotuloJob(saveVisivel)}
+                className={LINHA_TOTAL_ROTULO}
+              >
+                {rotuloDoTotal}
               </td>
+
               <td colSpan={3} className={ORCADO.subtotalVazio} />
-              <td className={cn("px-3 py-3 text-right whitespace-nowrap font-mono text-[13px] font-bold", ORCADO.subtotalValor)}>
-                {formatCurrency(subtotais.orcado, moeda)}
+              <td
+                className={cn(
+                  "px-3 py-2 text-right whitespace-nowrap font-mono text-[13px] font-bold",
+                  ORCADO.subtotalValor,
+                )}
+              >
+                {formatCurrency(totais.orcado, moeda)}
               </td>
-              {/* O subtotal repete a sub-linha das células, somando o BV
-                  de todos os itens do grupo — foi o que substituiu as
-                  pílulas de "BV do grupo" do design 3b. */}
-              <td colSpan={3} className={PLANEJADO.subtotalVazio} />
-              <td className={cn("px-3 py-3 text-right whitespace-nowrap", PLANEJADO.subtotalValor)}>
+
+              <td
+                colSpan={3}
+                className={cn("overflow-hidden px-3 py-2 text-right", PLANEJADO.subtotalVazio)}
+              >
+                <RentabilidadeNoVao
+                  orcado={totais.orcadoRentabilidade}
+                  custo={valorNaVisao(totais.planejado, visao)}
+                  moeda={moeda}
+                  corRotulo={PLANEJADO.textoSuave}
+                />
+              </td>
+              <td
+                className={cn(
+                  "px-3 py-2 text-right whitespace-nowrap",
+                  PLANEJADO.subtotalValor,
+                )}
+              >
                 <div className="flex flex-col items-end">
                   <span className="font-mono text-[13px] font-bold">
-                    {formatCurrency(valorNaVisao(subtotais.planejado, visao), moeda)}
+                    {formatCurrency(valorNaVisao(totais.planejado, visao), moeda)}
                   </span>
+                  {/* A soma dos BVs de todos os itens da planilha — foi o
+                      que substituiu as pílulas de "BV do grupo" do design
+                      3b. */}
                   {visao === "liquido" && (
                     <SubLinhaBv
-                      deducao={subtotais.planejado.deducaoBv}
+                      deducao={totais.planejado.deducaoBv}
                       formatar={fmt}
                       cor={PLANEJADO.texto}
                       corRotulo={PLANEJADO.textoSuave}
@@ -541,17 +712,33 @@ export function JobItemRealizadoTable({
                   )}
                 </div>
               </td>
-              <td colSpan={3} className={REALIZADO.subtotalVazio} />
-              <td className={cn("px-3 py-3 text-right whitespace-nowrap", REALIZADO.subtotalValor)}>
+
+              <td
+                colSpan={3}
+                className={cn("overflow-hidden px-3 py-2 text-right", REALIZADO.subtotalVazio)}
+              >
+                <RentabilidadeNoVao
+                  orcado={totais.orcadoRentabilidade}
+                  custo={valorNaVisao(totais.realizado, visao)}
+                  moeda={moeda}
+                  corRotulo={REALIZADO.textoSuave}
+                />
+              </td>
+              <td
+                className={cn(
+                  "px-3 py-2 text-right whitespace-nowrap",
+                  REALIZADO.subtotalValor,
+                )}
+              >
                 <div className="flex flex-col items-end">
                   <span className="font-mono text-[13px] font-bold">
-                    {subtotais.realizado.bruto > 0
-                      ? formatCurrency(valorNaVisao(subtotais.realizado, visao), moeda)
+                    {totais.realizado.bruto > 0
+                      ? formatCurrency(valorNaVisao(totais.realizado, visao), moeda)
                       : "—"}
                   </span>
                   {visao === "liquido" && (
                     <SubLinhaBv
-                      deducao={subtotais.realizado.deducaoBv}
+                      deducao={totais.realizado.deducaoBv}
                       formatar={fmt}
                       cor={REALIZADO.texto}
                       corRotulo={REALIZADO.textoSuave}
@@ -560,125 +747,94 @@ export function JobItemRealizadoTable({
                 </div>
               </td>
             </tr>
-            <tr>
-              <td colSpan={colunasDoRotuloJob(saveVisivel)} className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground border-t border-t-border">
-                Rentabilidade
-              </td>
-              <td colSpan={4} className={cn("border-t border-t-[#dfeafb]", ORCADO.celulaVazia)} />
-              <td colSpan={3} className={cn("border-t border-t-[#dcf5e8]", PLANEJADO.celulaVazia)} />
-              <td className={cn("px-3 py-2 text-right whitespace-nowrap border-t border-t-[#dcf5e8]", PLANEJADO.celulaTotal)}>
-                <CelulaRentabilidade
-                  orcado={subtotais.orcadoRentabilidade}
-                  custo={valorNaVisao(subtotais.planejado, visao)}
-                  moeda={moeda}
-                  corValor={RENTAB_VALOR}
-                  corPercentual={RENTAB_VALOR}
-                />
-              </td>
-              <td colSpan={3} className={cn("border-t border-t-[#fbd8b8]", REALIZADO.celulaVazia)} />
-              <td className={cn("px-3 py-2 text-right whitespace-nowrap border-t border-t-[#fbd8b8]", REALIZADO.celulaTotal)}>
-                <CelulaRentabilidade
-                  orcado={subtotais.orcadoRentabilidade}
-                  custo={valorNaVisao(subtotais.realizado, visao)}
-                  moeda={moeda}
-                  corValor={RENTAB_VALOR}
-                  corPercentual={RENTAB_VALOR}
-                />
-              </td>
-            </tr>
           </tfoot>
         </table>
       </div>
 
-      {/* Contador do grupo — calha à direita, na altura exata da faixa.
-          É para lá que ele foi quando a barra de título do card saiu. */}
-      {acoesGrupo && (
-        <div
-          className="absolute left-full top-0 ml-2.5 flex items-center"
-          style={{ height: faixaAltura || undefined }}
-        >
-          {acoesGrupo}
-        </div>
-      )}
+      {/* A calha — fora do frame da tabela, ao lado das linhas. Cada
+          pílula é presa à posição MEDIDA da linha que ela acompanha:
+          numa tabela só, as linhas têm alturas diferentes e altura
+          chutada acumularia erro a cada grupo.
 
-      {/* Fora do frame do card, como no design. A calha que recebe estes
-          botões é reservada por JobRealizadoSection — sem ela a trilha era
-          cortada na borda direita da página. */}
-      {/* Job encerrado não some com a trilha: os BVs já lançados seguem
+          Job encerrado não some com a calha: os BVs já lançados seguem
           consultáveis, como na tela de Orçamentos. Só o que é ação
           (gerar PP, lançar BV novo) é que desaparece. */}
-      {aberto &&
-        (podeAcoes || (!preAbertura && itens.some((i) => bvsPorItem[i.id]))) && (
-        <div
-          className={cn(
-            "absolute left-full ml-2.5 flex flex-col",
-            LARGURA_CALHA,
+      {(podeAcoes ||
+        (!preAbertura && todosOsItens.some((i) => bvsPorItem[i.id]))) && (
+        <Calha className={cn("pointer-events-none absolute left-full top-0 ml-2.5", LARGURA_CALHA)}>
+          {grupos.map((grupo) =>
+            estaAberto(grupo.id)
+              ? grupo.itens.map((item) => {
+                  // ---- BV: tipos A, AR e D ----
+                  const bv = bvsPorItem[item.id] ?? null;
+                  // Sem BV num job congelado não há o que consultar — a
+                  // vaga fica vazia para não desalinhar as de baixo.
+                  // Linha em save não tem fornecedor neste job: sem BV a
+                  // negociar e sem PP a emitir (decisão 023 §9). Os dois
+                  // lados já são recusados no banco — aqui a calha nem
+                  // oferece.
+                  const emSave = item.em_save === true;
+                  const mostraBv =
+                    !emSave &&
+                    aceitaBV(item.tipo_custo) &&
+                    (podeAcoes || (!preAbertura && bv !== null));
+                  const travado =
+                    !podeAcoes || (bv !== null && bv.situacao !== "a_negociar");
+
+                  // ---- PP: tipos de calha PP (AR, B, C, F, FI) ----
+                  // Job congelado não gera nem consulta PP na planilha: a
+                  // aba de Pedidos de Produção é quem guarda o histórico.
+                  const realizado = realizadosMap.get(item.id);
+                  const realizadoId = realizado?.id ?? "";
+                  const ppsDoItem = ppsPorItemId.get(realizadoId) ?? [];
+
+                  return (
+                    <LinhaDaCalha
+                      key={item.id}
+                      posicao={posicoesCalha[`i:${item.id}`]}
+                    >
+                      <CalhaLinha
+                        altura={ALTURA_LINHA}
+                        bv={
+                          mostraBv
+                            ? acaoBv({
+                                temBv: bv !== null,
+                                itemNome: item.item,
+                                somenteLeitura: travado,
+                                onClick: () => setBvAberto(item),
+                              })
+                            : null
+                        }
+                        pp={
+                          podeAcoes && !emSave && tipoGeraDesembolso(item.tipo_custo)
+                            ? {
+                                itemRealizadoId: realizadoId,
+                                // Era o realizado. Com o realizado nascendo
+                                // das PPs, esperar por ele deixava a metade
+                                // PP invisível para sempre — nunca haveria
+                                // a primeira PP. Quem libera agora é o
+                                // orçado.
+                                baseDisponivel: Number(item.total_orcado ?? 0),
+                                pedidos: ppsDoItem,
+                                otimista:
+                                  ppsDoItem.length > 0
+                                    ? null
+                                    : ppsOtimistas.get(realizadoId) ?? null,
+                                onAbrirPainel: abrirPainel,
+                              }
+                            : null
+                        }
+                      />
+                    </LinhaDaCalha>
+                  );
+                })
+              : null,
           )}
-          style={{ top: railTop }}
-        >
-          {itens.map((item) => {
-            // ---- BV: tipos A, AR e D ----
-            const bv = bvsPorItem[item.id] ?? null;
-            // Sem BV num job congelado não há o que consultar — a vaga
-            // fica vazia para não desalinhar as linhas de baixo.
-            // Linha em save não tem fornecedor neste job: sem BV a
-            // negociar e sem PP a emitir (decisão 023 §9). Os dois lados
-            // já são recusados no banco — aqui a calha nem oferece.
-            const emSave = item.em_save === true;
-            const mostraBv =
-              !emSave &&
-              aceitaBV(item.tipo_custo) &&
-              (podeAcoes || (!preAbertura && bv !== null));
-            const travado =
-              !podeAcoes || (bv !== null && bv.situacao !== "a_negociar");
-
-            // ---- PP: tipos de calha PP (AR, B, C, F, FI) ----
-            // Job congelado não gera nem consulta PP na planilha: a aba de
-            // Pedidos de Produção é quem guarda o histórico.
-            const realizado = realizadosMap.get(item.id);
-            const realizadoId = realizado?.id ?? "";
-            const ppsDoItem = ppsPorItemId.get(realizadoId) ?? [];
-
-            return (
-              <CalhaLinha
-                key={item.id}
-                altura={ALTURA_LINHA}
-                bv={
-                  mostraBv
-                    ? acaoBv({
-                        temBv: bv !== null,
-                        itemNome: item.item,
-                        somenteLeitura: travado,
-                        onClick: () => setBvAberto(item),
-                      })
-                    : null
-                }
-                pp={
-                  podeAcoes && !emSave && tipoGeraDesembolso(item.tipo_custo)
-                    ? {
-                        itemRealizadoId: realizadoId,
-                        // Era o realizado. Com o realizado nascendo das
-                        // PPs, esperar por ele deixava a metade PP
-                        // invisível para sempre — nunca haveria a
-                        // primeira PP. Quem libera agora é o orçado.
-                        baseDisponivel: Number(item.total_orcado ?? 0),
-                        pedidos: ppsDoItem,
-                        otimista:
-                          ppsDoItem.length > 0
-                            ? null
-                            : ppsOtimistas.get(realizadoId) ?? null,
-                        onAbrirPainel: abrirPainel,
-                      }
-                    : null
-                }
-              />
-            );
-          })}
-        </div>
+        </Calha>
       )}
       </div>
 
-      {aberto && podeAcoes && (
+      {podeAcoes && grupos.some((g) => estaAberto(g.id)) && (
         <div className="flex items-center justify-between gap-4 rounded-b-2xl border-t border-border bg-muted/40 px-6 py-3">
           <span className="text-[11px] text-muted-foreground">
             O Realizado não é digitado: ele é a soma dos Pedidos de Produção
@@ -689,7 +845,7 @@ export function JobItemRealizadoTable({
       )}
 
       {(() => {
-        const itemAtual = itens.find(
+        const itemAtual = todosOsItens.find(
           (i) => (realizadosMap.get(i.id)?.id ?? "") === itemIdAtual,
         );
         // A base do painel e do formulário é o ORÇADO do item: é dele que
@@ -714,7 +870,9 @@ export function JobItemRealizadoTable({
               open={painelOpen}
               onOpenChange={setPainelOpen}
               itemNome={itemAtual?.item ?? ""}
-              grupoNome={grupoNome}
+              grupoNome={
+                itemAtual ? grupoDoItem.get(itemAtual.id) ?? "" : ""
+              }
               moeda={moeda}
               totalOrcado={orcadoAtual}
               quantidadeOrcada={quantidadeOrcada}
@@ -722,7 +880,11 @@ export function JobItemRealizadoTable({
                 id: pp.id,
                 codigo: pp.codigo,
                 status: pp.status,
-                fornecedorNome: nomeDoFornecedor(fornecedores, pp.fornecedor_id),
+                fornecedorNome: nomeContraparteBRPP({
+                  verba_producao: pp.verba_producao,
+                  fornecedor: pp.fornecedor_id ? { nome: nomeDoFornecedor(fornecedores, pp.fornecedor_id) } : null,
+                  responsavel: pp.responsavel,
+                }) || nomeDoFornecedor(fornecedores, pp.fornecedor_id ?? ""),
                 quantidade: Number(pp.quantidade ?? 0),
                 valor: Number(pp.valor ?? 0),
               }))}
@@ -748,12 +910,12 @@ export function JobItemRealizadoTable({
               jobId={jobId}
               fornecedores={fornecedores}
               empresas={empresas}
+              responsaveis={responsaveis}
               defaultEmpresaId={jobEmpresaId}
               itemDescricao={itemAtual?.item ?? ""}
               valorOrcado={orcadoAtual}
               quantidadeOrcada={quantidadeOrcada}
               saldoDisponivel={saldo}
-              cartoes={cartoes}
               onSuccess={(codigo) => {
                 setToast(`Pedido de Produção ${codigo} gerado com sucesso!`);
                 // Estado otimista: o chip da calha já conta a PP nova antes
@@ -783,7 +945,7 @@ export function JobItemRealizadoTable({
               open
               onOpenChange={(o) => !o && setBvAberto(null)}
               item={bvAberto}
-              grupoNome={grupoNome}
+              grupoNome={grupoDoItem.get(bvAberto.id) ?? ""}
               versaoLabel={versaoLabel}
               categoriaNome={
                 bvAberto.categoria_id

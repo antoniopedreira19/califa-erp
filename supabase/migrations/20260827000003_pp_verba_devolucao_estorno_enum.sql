@@ -1,0 +1,25 @@
+-- =====================================================================
+-- Enum origem_lancamento ganha pp_devolucao_verba_estorno
+--
+-- Bug descoberto no E2E manual em 27/08/2026: a RPC
+-- estornar_baixa_devolucao_verba usava 'pp_devolucao_verba_estornada'
+-- pro reverso E pro original (atualizado). Isso viola o padrao dos
+-- outros estornos do sistema (pp_baixa/pp_estorno, avulsa_baixa/
+-- avulsa_estorno, titulo_baixa/titulo_estorno, desembolso_baixa/
+-- desembolso_estorno) — em cada par, o REVERSO tem sua propria origem
+-- (estorno_de_lancamento_id NOT NULL) e o ORIGINAL atualizado tem a
+-- origem "_estornada" (estorno_de_lancamento_id NULL, so marca).
+--
+-- Como o CHECK chk_estorno_consistente exige "estornos" = NOT NULL e
+-- todo o resto = NULL, misturar as duas semanticas na mesma origem
+-- gera CHECK violation garantida no UPDATE do original.
+--
+-- Fix: introduz pp_devolucao_verba_estorno (o REVERSO) e mantem
+-- pp_devolucao_verba_estornada apenas para marcar o original. A
+-- migration seguinte reescreve a RPC e ajusta os dois CHECKs.
+--
+-- Migration separada porque ADD VALUE precisa commit antes de ser
+-- usado em constraints/RPCs (padrao do projeto).
+-- =====================================================================
+
+alter type origem_lancamento add value if not exists 'pp_devolucao_verba_estorno';

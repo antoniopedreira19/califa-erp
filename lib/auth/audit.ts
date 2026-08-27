@@ -32,6 +32,12 @@ export type AuditAction =
   | "versao_orcamento.sobrescrita_por_importacao"
   | "versao_orcamento.aprovada"
   | "versao_orcamento.aprovacao_cancelada"
+  // Apaga a linha de verdade — grupos, itens e BVs vão junto. Substituiu
+  // o "cancelar versão" em 21/08/2026: marcar a versão como cancelada e
+  // deixá-la navegável não resolvia nada que simplesmente não aprová-la já
+  // não resolvesse. Como o registro deixa de existir, o metadata guarda o
+  // que ele era.
+  | "versao_orcamento.deletada"
   // SAVE — o crédito entre jobs (docs/decisions/023-save-entre-jobs.md).
   // Registrado porque marcar uma linha ou definir um consumo move
   // faturamento previsto e valor do job, e move dinheiro entre jobs.
@@ -157,6 +163,9 @@ export type AuditAction =
   | "desembolso.cancelada"
   | "desembolso.parcela_paga"
   | "desembolso.parcela_baixa_estornada"
+  | "verba_producao.prestacao_fechada"
+  | "pp_verba_devolucao.baixada"
+  | "pp_verba_devolucao.baixa_estornada"
   | "acao_negada";
 
 export interface AuditPayload {

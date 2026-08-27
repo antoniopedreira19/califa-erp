@@ -18,6 +18,7 @@ import {
 } from "@/app/(app)/_planilha/recolher-grupos";
 import { jobStatusLabel, type JobStatus } from "@/lib/types";
 import type { JobPlanilhaProjeto } from "./tipos";
+import { RentabilidadeNoVao } from "@/app/(app)/_planilha/rentabilidade-inline";
 import {
   ColunasJobsProjeto,
   LARGURA_MINIMA_JOBS_PROJETO,
@@ -27,7 +28,6 @@ import {
   PLANEJADO,
   REALIZADO,
   FAIXA_ROTULO,
-  RENTAB_VALOR,
 } from "@/app/(app)/_planilha/blocos";
 
 const GRADE_NEUTRA = "border-r border-r-[#f1f1f1]";
@@ -53,39 +53,6 @@ function formatarPercentual(p: number): string {
   return `${p.toFixed(1).replace(".", ",")}%`;
 }
 
-/** Célula "R$ x,xx / y,y%" das linhas de Rentabilidade do rodapé. */
-function CelulaRentabilidade({
-  orcado,
-  custo,
-  moeda,
-  corValor,
-  corPercentual,
-}: {
-  orcado: number;
-  custo: number;
-  moeda: string;
-  corValor: string;
-  corPercentual: string;
-}) {
-  const { rentabilidade, percentual } = calcularRentabilidade(orcado, custo);
-
-  if (custo <= 0) {
-    return <span className="font-mono text-xs text-muted-foreground">—</span>;
-  }
-
-  return (
-    <div className="flex flex-col items-end gap-0.5">
-      <span className={cn("font-mono text-[12.5px] font-bold", corValor)}>
-        {formatCurrency(rentabilidade, moeda)}
-      </span>
-      {percentual !== null && (
-        <span className={cn("font-mono text-[10.5px]", corPercentual)}>
-          {formatarPercentual(percentual)}
-        </span>
-      )}
-    </div>
-  );
-}
 
 /** Valor monetário que vira travessão quando ninguém lançou nada. */
 function moedaOuTraco(n: number, moeda: string): string {
@@ -440,7 +407,10 @@ export function PlanilhaJobCard({
                         gAberto && "bg-[#f8f7f7]/90",
                       )}
                     >
-                      <td colSpan={3} className="px-3 py-2.5">
+                      <td
+                        colSpan={3}
+                        className="border-b border-b-border border-t border-t-[#e3e1db] px-3 py-2.5"
+                      >
                         <div className="flex items-center gap-2">
                           <span
                             className={cn(
@@ -459,16 +429,11 @@ export function PlanilhaJobCard({
                           </span>
                         </div>
                       </td>
-                      <td
-                        colSpan={3}
-                        className={cn(
-                          ORCADO.celulaVazia,
-                        )}
-                      />
+                      <td colSpan={3} className={ORCADO.grupoVazio} />
                       <td
                         className={cn(
                           "whitespace-nowrap px-3 py-2.5 text-right font-mono text-[12.5px] font-semibold",
-                          ORCADO.celulaTotal,
+                          ORCADO.grupoValor,
                         )}
                       >
                         {formatCurrency(g.orcado, moeda)}
@@ -476,14 +441,22 @@ export function PlanilhaJobCard({
                       <td
                         colSpan={3}
                         className={cn(
-                          PLANEJADO.celulaVazia,
+                          "overflow-hidden px-3 py-2.5 text-right",
+                          PLANEJADO.grupoVazio,
                         )}
-                      />
+                      >
+                        <RentabilidadeNoVao
+                          orcado={g.orcadoRentabilidade}
+                          custo={valorNaVisao(g.planejado, visao)}
+                          moeda={moeda}
+                          corRotulo={PLANEJADO.textoSuave}
+                        />
+                      </td>
                       <TotalComBv
                         bloco={g.planejado}
                         visao={visao}
                         moeda={moeda}
-                        className={PLANEJADO.celulaTotal}
+                        className={PLANEJADO.grupoValor}
                         cor={PLANEJADO.texto}
                         corRotulo={PLANEJADO.textoSuave}
                         tamanho="text-[12.5px]"
@@ -491,14 +464,22 @@ export function PlanilhaJobCard({
                       <td
                         colSpan={3}
                         className={cn(
-                          REALIZADO.celulaVazia,
+                          "overflow-hidden px-3 py-2.5 text-right",
+                          REALIZADO.grupoVazio,
                         )}
-                      />
+                      >
+                        <RentabilidadeNoVao
+                          orcado={g.orcadoRentabilidade}
+                          custo={valorNaVisao(g.realizado, visao)}
+                          moeda={moeda}
+                          corRotulo={REALIZADO.textoSuave}
+                        />
+                      </td>
                       <TotalComBv
                         bloco={g.realizado}
                         visao={visao}
                         moeda={moeda}
-                        className={REALIZADO.celulaTotal}
+                        className={REALIZADO.grupoValor}
                         cor={REALIZADO.texto}
                         corRotulo={REALIZADO.textoSuave}
                         tamanho="text-[12.5px]"
@@ -655,7 +636,20 @@ export function PlanilhaJobCard({
                 >
                   {formatCurrency(job.orcado, moeda)}
                 </td>
-                <td colSpan={3} className={PLANEJADO.subtotalVazio} />
+                <td
+                  colSpan={3}
+                  className={cn(
+                    "overflow-hidden px-3 py-3 text-right",
+                    PLANEJADO.subtotalVazio,
+                  )}
+                >
+                  <RentabilidadeNoVao
+                    orcado={job.orcadoRentabilidade}
+                    custo={valorNaVisao(job.planejado, visao)}
+                    moeda={moeda}
+                    corRotulo={PLANEJADO.textoSuave}
+                  />
+                </td>
                 <td
                   className={cn(
                     "whitespace-nowrap px-3 py-3 text-right font-mono text-[13px] font-bold",
@@ -664,7 +658,20 @@ export function PlanilhaJobCard({
                 >
                   {moedaOuTraco(valorNaVisao(job.planejado, visao), moeda)}
                 </td>
-                <td colSpan={3} className={REALIZADO.subtotalVazio} />
+                <td
+                  colSpan={3}
+                  className={cn(
+                    "overflow-hidden px-3 py-3 text-right",
+                    REALIZADO.subtotalVazio,
+                  )}
+                >
+                  <RentabilidadeNoVao
+                    orcado={job.orcadoRentabilidade}
+                    custo={valorNaVisao(job.realizado, visao)}
+                    moeda={moeda}
+                    corRotulo={REALIZADO.textoSuave}
+                  />
+                </td>
                 <td
                   className={cn(
                     "whitespace-nowrap px-3 py-3 text-right font-mono text-[13px] font-bold",
@@ -672,60 +679,6 @@ export function PlanilhaJobCard({
                   )}
                 >
                   {moedaOuTraco(valorNaVisao(job.realizado, visao), moeda)}
-                </td>
-              </tr>
-              <tr>
-                <td
-                  colSpan={3}
-                  className="border-t border-t-border px-3 py-2.5 text-[10px] font-bold uppercase tracking-[0.07em] text-muted-foreground"
-                >
-                  Rentabilidade
-                </td>
-                <td
-                  colSpan={4}
-                  className={cn("border-t border-t-[#dfeafb]", ORCADO.celulaVazia)}
-                />
-                <td
-                  colSpan={3}
-                  className={cn(
-                    "border-t border-t-[#dcf5e8]",
-                    PLANEJADO.celulaVazia,
-                  )}
-                />
-                <td
-                  className={cn(
-                    "whitespace-nowrap px-3 py-2.5 text-right border-t border-t-[#dcf5e8]",
-                    PLANEJADO.celulaTotal,
-                  )}
-                >
-                  <CelulaRentabilidade
-                    orcado={job.orcadoRentabilidade}
-                    custo={valorNaVisao(job.planejado, visao)}
-                    moeda={moeda}
-                    corValor={RENTAB_VALOR}
-                    corPercentual={RENTAB_VALOR}
-                  />
-                </td>
-                <td
-                  colSpan={3}
-                  className={cn(
-                    "border-t border-t-[#fbd8b8]",
-                    REALIZADO.celulaVazia,
-                  )}
-                />
-                <td
-                  className={cn(
-                    "whitespace-nowrap px-3 py-2.5 text-right border-t border-t-[#fbd8b8]",
-                    REALIZADO.celulaTotal,
-                  )}
-                >
-                  <CelulaRentabilidade
-                    orcado={job.orcadoRentabilidade}
-                    custo={valorNaVisao(job.realizado, visao)}
-                    moeda={moeda}
-                    corValor={RENTAB_VALOR}
-                    corPercentual={RENTAB_VALOR}
-                  />
                 </td>
               </tr>
             </tfoot>

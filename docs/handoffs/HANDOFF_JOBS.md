@@ -1926,6 +1926,94 @@ Zero erros de console em aba limpa e zero rolagem horizontal.
 
 ---
 
+## ⚠️ 2026-08-24 — A Planilha Interna virou uma tabela só (design "Grupos Unificados")
+
+**Origem:** projeto Claude Design `69342d83`, arquivo
+`Planilha Interna - Grupos Unificados.dc.html`, tela `1b Job`. Regra
+transversal em `docs/decisions/024-planilha-em-tabela-unica.md` e
+`docs/09-identidade-visual-ui.md` ("Linha do agrupamento").
+
+**O que mudou nesta tela.** Os cards de grupo acabaram: a Planilha
+Interna é **um card e uma tabela**, com um `<thead>` só. Cada agrupamento
+é uma linha de 40px, e a tabela fecha com **TOTAL DA PLANILHA** no
+`<tfoot>`. Vale igual em `/jobs/[jobId]` e em `/financeiro/jobs/[jobId]`,
+que sempre mostraram a mesma planilha.
+
+**A sublinha "Rentabilidade" acabou.** Ela abria uma linha inteira embaixo
+do subtotal, em cada grupo — duas por card, quatro numa tela de dois
+agrupamentos. Agora a rentabilidade ocupa o **vão vazio** de PLANEJADO e
+REALIZADO, à esquerda do total, na mesma linha do subtotal. No ORÇADO ela
+não existe: ele é a base da comparação. Mesma mudança no card de Totais,
+nas linhas de agrupamento e no rodapé.
+
+**A calha deixou de contar linhas e passou a medi-las.** Com linhas de
+alturas diferentes na mesma tabela (grupo 40px, item 34px, sub-linha do BV
+crescendo na vista Líquido), `railTop` + altura fixa acumulava erro a cada
+agrupamento. Cada `<tr>` agora se marca com `data-calha` e
+`_planilha/calha.tsx` lê a posição real. O BV e a PP continuam na mesma
+calha de 116px, e o `pr-[116px]` da página não mudou.
+
+**Visão agregada do projeto:** a mesma correção. As linhas de agrupamento
+de cada bloco de job ganharam a rentabilidade no vão e o fundo forte da
+linha de grupo; as duas linhas de rodapé ("Total do job" + "Rentabilidade")
+viraram uma. Idem no card de Totais do projeto, nas linhas por job.
+
+**Cores:** nada mudou. ORÇADO azul, PLANEJADO verde, REALIZADO laranja,
+rentabilidade em grafite (decisão 015). O handoff só repinta a tela de
+orçamento, e essa parte foi recusada — ver a decisão 024.
+
+**Arquivos:** `job-item-realizado-table.tsx` passou a receber `grupos`
+(todos) e `job-grupo-card.tsx` deixou de existir — ele só dava moldura a
+um agrupamento.
+
+**Verificação:** `tsc --noEmit`, `next lint` e `npm run build` limpos.
+Conferido logado em 24/08/2026: JOB-0006 (3 agrupamentos, calha de PP e BV
+alinhada linha a linha — medido no DOM, zero célula transbordando),
+conferência da abertura (JOB-0012) e visão agregada do projeto
+`89f4c6b7` com os três jobs abertos.
+
+---
+
+## ⚠️ 2026-08-25 — O card de Totais perdeu a tabela de agrupamentos
+
+Regra transversal em
+`docs/decisions/026-agrupamentos-saem-do-totais-e-linha-nova-por-teclado.md`.
+A mudança nasceu na tela da versão do orçamento e veio para cá porque o
+motivo é o mesmo.
+
+**O que saiu.** A tabela do topo do `JobTotaisCard` — "Agrupamento /
+Grupo 1 / Grupo 2 / … / TOTAL DOS CUSTOS", com ORÇADO, PLANEJADO e
+REALIZADO lado a lado. Vale em `/jobs/[jobId]` (Planilha Interna) e na
+conferência da abertura, em
+`/financeiro/abertura-de-job/[jobId]/planilha`, que sempre usaram o mesmo
+card.
+
+**Por quê.** Desde a decisão 024 o subtotal do agrupamento mora na
+própria linha do grupo, já no eixo das colunas de cada bloco, e a
+Planilha Interna tem "Recolher todos" desde 21/08/2026: recolher deixa
+exatamente a lista de agrupamentos com os subtotais. A tabela do Totais
+virou uma segunda cópia do mesmo número.
+
+**O que NÃO mudou:** fechamento do orçado por tipo de custo, faturamento
+previsto, Valor do Job e o `PainelResultado` inteiro — mesmos números,
+mesmas contas. A visão agregada do projeto (`ProjetoTotaisCard`) e o
+Totais do `/agregado` e do `/multi` (`TotaisProjetoCard`) **não foram
+tocados**: as linhas deles são por job/planilha, não por agrupamento, e
+não há "Recolher todos" que mostre aquilo.
+
+⚠️ **O `JobTotaisCard` não recebe mais `visao` nem `grupos`.** A chave
+Bruto ⇄ Líquido continua valendo para a planilha acima dele; o que restou
+dentro do card lê o custo **bruto** e mostra o BV como linha própria
+(decisão 022), então já dava o mesmo número nas duas vistas. Quem chamar
+o card passando `visao` agora quebra o build — é de propósito.
+
+**Verificação:** `tsc --noEmit`, `next lint` e `npm run build` limpos.
+Conferido logado em 25/08/2026 na Planilha Interna do job `ceedcfb5` —
+Totais com zero `<table>`, sem "Agrupamento", sem overlay de erro,
+fechamento e `PainelResultado` (abas Planejada/Realizada) intactos — e na
+conferência da abertura do JOB-0012
+(`/financeiro/abertura-de-job/…/planilha`), idem.
+
 ## ⚠️ 24–27/08/2026 — o SAVE no job
 
 **Regra:** `docs/decisions/023-save-entre-jobs.md`.
