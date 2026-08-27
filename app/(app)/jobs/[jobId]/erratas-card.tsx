@@ -356,11 +356,6 @@ export function ErratasCard({
                     </tfoot>
                   </table>
                 </div>
-                {e.justificativa && (
-                  <p className="mt-3.5 text-[11.5px] text-muted-foreground">
-                    {e.justificativa}
-                  </p>
-                )}
               </div>
             )}
           </div>

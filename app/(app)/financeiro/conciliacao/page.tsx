@@ -78,7 +78,7 @@ export default async function ConciliacaoPage({
          fornecedores(nome, razao_social),
          jobs(codigo),
          plano_contas_tipos!inner(codigo, nome),
-         plano_contas_subtipos!inner(nome),
+         plano_contas_subtipos!inner(codigo, nome),
          conta_avulsa:contas_avulsas!conta_avulsa_id(
            rateio:contas_avulsas_regionais(
              percentual,
@@ -103,7 +103,7 @@ export default async function ConciliacaoPage({
       fornecedores: { nome: string | null; razao_social: string | null } | null;
       jobs: { codigo: string } | null;
       plano_contas_tipos: { codigo: string; nome: string };
-      plano_contas_subtipos: { nome: string };
+      plano_contas_subtipos: { codigo: string; nome: string };
       conta_avulsa: {
         rateio: Array<{
           percentual: number;
@@ -128,6 +128,7 @@ export default async function ConciliacaoPage({
         job_codigo: r.jobs?.codigo ?? null,
         tipo_codigo: r.plano_contas_tipos.codigo,
         tipo_nome: r.plano_contas_tipos.nome,
+        subtipo_codigo: r.plano_contas_subtipos.codigo,
         subtipo_nome: r.plano_contas_subtipos.nome,
         origem: r.origem,
         rateio,

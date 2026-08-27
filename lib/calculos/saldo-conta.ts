@@ -8,8 +8,13 @@ export type LancamentoLinha = {
   valor: number;
   fornecedor_nome: string | null;
   job_codigo: string | null;
+  /** Do plano de contas. A tela mostra os dois separados desde 27/08/2026:
+   *  até ali a coluna "Tipo" misturava o CÓDIGO do tipo com o NOME do
+   *  subtipo ("05 · Salário"), e o nome do tipo — "Despesa com Pessoal" —
+   *  não aparecia em lugar nenhum. */
   tipo_codigo: string;
   tipo_nome: string;
+  subtipo_codigo: string;
   subtipo_nome: string;
   origem: string;
   credito: number;

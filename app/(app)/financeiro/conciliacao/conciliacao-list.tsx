@@ -51,15 +51,24 @@ export function ConciliacaoList({
     <div className="overflow-hidden rounded-xl border border-border">
       <table className="w-full text-sm">
         <thead className="border-b border-border bg-muted/40 text-xs uppercase text-muted-foreground">
+          {/* O dinheiro vem logo depois da data (27/08/2026): é a ordem em
+              que se lê um extrato bancário, e era o que obrigava a
+              atravessar a tela inteira para conferir valor contra data.
+
+              Tipo e Subtipo são DUAS colunas. Até aqui havia uma só,
+              chamada "Tipo", que mostrava o código do tipo com o nome do
+              subtipo ("05 · Salário") — o nome do tipo ("Despesa com
+              Pessoal") não aparecia em lugar nenhum da tela. */}
           <tr>
             <th className="px-3 py-2 text-left">Data</th>
+            <th className="px-3 py-2 text-right">Crédito</th>
+            <th className="px-3 py-2 text-right">Débito</th>
+            <th className="px-3 py-2 text-right">Saldo</th>
             <th className="px-3 py-2 text-left">Descrição</th>
             <th className="px-3 py-2 text-left">Fornecedor</th>
             <th className="px-3 py-2 text-left">Job</th>
             <th className="px-3 py-2 text-left">Tipo</th>
-            <th className="px-3 py-2 text-right">Crédito</th>
-            <th className="px-3 py-2 text-right">Débito</th>
-            <th className="px-3 py-2 text-right">Saldo</th>
+            <th className="px-3 py-2 text-left">Subtipo</th>
           </tr>
         </thead>
         <tbody>
@@ -80,6 +89,15 @@ export function ConciliacaoList({
             >
               <td className="whitespace-nowrap px-3 py-2 font-mono text-xs">
                 {formatDate(l.data_movimento)}
+              </td>
+              <td className="px-3 py-2 text-right font-mono text-xs text-emerald-700">
+                {l.credito > 0 ? formatMoney(l.credito) : ""}
+              </td>
+              <td className="px-3 py-2 text-right font-mono text-xs text-california-red">
+                {l.debito > 0 ? formatMoney(l.debito) : ""}
+              </td>
+              <td className="px-3 py-2 text-right font-mono text-xs font-semibold">
+                {formatMoney(l.saldo)}
               </td>
               <td
                 className={`px-3 py-2 ${
@@ -128,22 +146,17 @@ export function ConciliacaoList({
               </td>
               <td className="px-3 py-2 text-xs">
                 <span className="font-mono">{l.tipo_codigo}</span> ·{" "}
+                {l.tipo_nome}
+              </td>
+              <td className="px-3 py-2 text-xs">
+                <span className="font-mono">{l.subtipo_codigo}</span> ·{" "}
                 {l.subtipo_nome}
-              </td>
-              <td className="px-3 py-2 text-right font-mono text-xs text-emerald-700">
-                {l.credito > 0 ? formatMoney(l.credito) : ""}
-              </td>
-              <td className="px-3 py-2 text-right font-mono text-xs text-california-red">
-                {l.debito > 0 ? formatMoney(l.debito) : ""}
-              </td>
-              <td className="px-3 py-2 text-right font-mono text-xs font-semibold">
-                {formatMoney(l.saldo)}
               </td>
             </tr>
             {aberta && (
               <tr className="border-b border-border bg-muted/20 last:border-0">
-                <td />
-                <td colSpan={7} className="px-3 pb-3 pt-1">
+                <td colSpan={4} />
+                <td colSpan={5} className="px-3 pb-3 pt-1">
                   <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.07em] text-muted-foreground">
                     De onde vem este dinheiro
                   </p>

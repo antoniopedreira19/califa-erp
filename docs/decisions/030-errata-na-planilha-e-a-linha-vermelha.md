@@ -51,8 +51,13 @@ num lugar só (`podeEditarLinhas`, em `JobItemRealizadoTable`).
 
 O pop-up de confirmação pede **um** campo, "Descrição da errata", e ele é
 obrigatório. Ele grava em `jobs_erratas.titulo`, que é a coluna que o
-histórico e o fio da Comunicação já liam; `justificativa` deixou de ser
-preenchida e fica só para as erratas anteriores a esta data.
+histórico e o fio da Comunicação já liam.
+
+**A coluna `justificativa` foi removida** (migration
+`20260827120001`), com autorização explícita do Tiago no mesmo dia: ela
+deixou de ser escrita e ficou sem leitor. O conteúdo que 2 das 8 erratas
+tinham ali foi junto — era o preço combinado para não manter uma coluna
+morta na tabela.
 
 O resumo do card ("2 linhas alteradas · 1 nova") passou a ser **derivado** de
 `jobs_erratas_itens.acao`, e não escrito por quem registra.
