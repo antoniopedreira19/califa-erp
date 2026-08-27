@@ -59,6 +59,31 @@ conferir("Total save usado", v.save.totalSaveUsado, 20000);
 conferir("Total save gerado", v.save.totalSaveGerado, 18000);
 conferir("Total custos do job", v.save.totalCustosDoJob, 16000);
 conferir("Orçado p/ rentabilidade", v.orcadoParaRentabilidade, 36000);
+// A receita do save tem que ser a MESMA que `receitaDeFaturamentoDaLinha`
+// daria somando as duas linhas em save (12.000 + 6.000, tipo B, 12%/19,53%).
+conferir(
+  "Receita do save (as duas linhas)",
+  v.save.receita,
+  receitaDeFaturamentoDaLinha(12000, "B", 12, 19.53) +
+    receitaDeFaturamentoDaLinha(6000, "B", 12, 19.53),
+);
+// E o faturamento previsto tem que ser EXATAMENTE a receita do save mais
+// o fechamento sobre os custos do job sozinhos — é a invariante que
+// permite materializar a receita do save em `jobs` sem ela divergir.
+const soCustos = calcularTotaisVersao(
+  [
+    { tipo_custo: "A", total_orcado: 6000 },
+    { tipo_custo: "B", total_orcado: 10000 },
+  ],
+  12,
+  19.53,
+);
+conferir(
+  "Faturamento = receita do save + custos do job",
+  v.save.receita + soCustos.faturamentoPrevisto,
+  v.faturamentoPrevisto,
+  0.005,
+);
 conferir("Honorários (faturamento)", v.faturamento.honorarios, 4080);
 conferir("Impostos (faturamento)", v.faturamento.imposto, 7785.78);
 conferir("Faturamento previsto", v.faturamentoPrevisto, 39865.78);

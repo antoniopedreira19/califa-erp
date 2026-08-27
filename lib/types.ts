@@ -639,6 +639,12 @@ export interface Job {
    * fornecedor (A, D, F). Gravado no envio do job e atualizado por errata.
    */
   faturamento_previsto: number | null;
+  /** Quanto de `faturamento_previsto` é saldo em save — o principal das
+   *  linhas em save mais honorários e imposto proporcionais. Espelho
+   *  escrito pelo TypeScript, como o de cima: a `vw_fluxo_caixa` usa este
+   *  número para dividir a previsão de recebimento entre "recebimento do
+   *  job" e "recebimento do save" (docs/decisions/023). */
+  faturamento_save_previsto: number;
   /** Valor do job congelado na abertura — base do card de Erratas. */
   valor_job_abertura: number | null;
   /** Faturamento previsto congelado na abertura — base do card de Erratas. */

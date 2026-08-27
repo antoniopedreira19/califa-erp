@@ -300,6 +300,10 @@ export async function enviarJobParaAbertura(
       // A coluna VIVA do faturamento previsto — sem ela o job nasceria
       // nulo e a listagem do financeiro leria "—" até a primeira errata.
       faturamento_previsto: Number(totais.faturamentoPrevisto.toFixed(2)),
+      // Quanto desse faturamento é saldo em save. Anda colado ao de cima:
+      // é a `vw_fluxo_caixa` que precisa dele para dividir a previsão de
+      // recebimento entre job e save (decisão 023).
+      faturamento_save_previsto: Number(totais.save.receita.toFixed(2)),
       // Congelado aqui e nunca mais alterado: é a base de comparação do
       // card de Erratas ("faturamento na abertura" x "atual").
       valor_job_abertura: Number(totais.valorJob.toFixed(2)),

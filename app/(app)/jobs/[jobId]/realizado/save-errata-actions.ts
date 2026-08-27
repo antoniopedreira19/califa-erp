@@ -290,6 +290,7 @@ export async function registrarErrataDeSave(
     .update({
       valor_total: dinheiro(depois.valorJob),
       faturamento_previsto: dinheiro(depois.faturamentoPrevisto),
+      faturamento_save_previsto: dinheiro(depois.save.receita),
     })
     .eq("id", jobId)
     .eq("tenant_id", tenantId);

@@ -63,7 +63,7 @@ export async function carregarDetalheDoJob(
     supabase
       .from("jobs")
       .select(
-        "id, tenant_id, empresa_id, codigo, nome, produto, cidade, data_inicio_prevista, data_fim_prevista, data_prevista_faturamento, observacoes, responsavel_id, produtor_id, valor_total, faturamento_previsto, valor_job_abertura, faturamento_previsto_abertura, status, motivo_rejeicao, projeto_id, orcamento_id, versao_orcamento_aprovada_id, regional_id, categoria_id, competencia_trimestre, competencia_ano, custo_previsto_total, nome_financeiro, data_abertura_financeiro, aberto_por, created_at, updated_at, responsavel:profiles!responsavel_id(id, nome), produtor:profiles!produtor_id(id, nome), regional:regionais(id, nome), categoria:categorias_dominio!categoria_id(id, nome), orcamento:orcamentos(id, codigo, nome, projeto_id), versao:versoes_orcamento!versao_orcamento_aprovada_id(id, numero_versao, nome, moeda, percentual_honorarios, percentual_imposto), projeto:projetos(id, codigo, nome, cliente_id, data_inicio_prevista, data_fim_prevista, cliente:clientes(id, nome_fantasia), categoria:categorias_dominio(id, nome))",
+        "id, tenant_id, empresa_id, codigo, nome, produto, cidade, data_inicio_prevista, data_fim_prevista, data_prevista_faturamento, observacoes, responsavel_id, produtor_id, valor_total, faturamento_previsto, faturamento_save_previsto, valor_job_abertura, faturamento_previsto_abertura, status, motivo_rejeicao, projeto_id, orcamento_id, versao_orcamento_aprovada_id, regional_id, categoria_id, competencia_trimestre, competencia_ano, custo_previsto_total, nome_financeiro, data_abertura_financeiro, aberto_por, created_at, updated_at, responsavel:profiles!responsavel_id(id, nome), produtor:profiles!produtor_id(id, nome), regional:regionais(id, nome), categoria:categorias_dominio!categoria_id(id, nome), orcamento:orcamentos(id, codigo, nome, projeto_id), versao:versoes_orcamento!versao_orcamento_aprovada_id(id, numero_versao, nome, moeda, percentual_honorarios, percentual_imposto), projeto:projetos(id, codigo, nome, cliente_id, data_inicio_prevista, data_fim_prevista, cliente:clientes(id, nome_fantasia), categoria:categorias_dominio(id, nome))",
       )
       .eq("id", jobId)
       .eq("tenant_id", session.activeTenant.id)
@@ -410,6 +410,7 @@ export async function carregarDetalheDoJob(
   const regionais = (regionaisRes.data ?? []) as Pick<Regional, "id" | "nome">[];
 
   const job: Job = {
+    faturamento_save_previsto: Number(raw.faturamento_save_previsto ?? 0),
     id: raw.id,
     tenant_id: raw.tenant_id,
     empresa_id: raw.empresa_id,
