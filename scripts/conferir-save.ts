@@ -173,6 +173,18 @@ const tudoSave = calcularTotaisVersao(
   19.53,
 );
 conferir("Orçamento de save · valor do job", tudoSave.valorJob, 0, 0);
+// O TETO DO SAVE num job 100% save tem de ser o faturamento INTEIRO.
+// `jobs.faturamento_save_previsto` sai daqui e vira o teto que
+// `emitir_faturamento` usa; se `receita` ficasse abaixo do faturamento
+// previsto, um orçamento de save nao conseguiria faturar a si mesmo.
+conferir(
+  "Orçamento de save · teto = faturamento inteiro",
+  tudoSave.save.receita,
+  tudoSave.faturamentoPrevisto,
+  0,
+);
+// E no outro extremo: sem linha em save, o teto do save e zero.
+conferir("Sem save · teto do save = 0", s.save.receita, 0, 0);
 console.log(`  ...e fatura ${brl(tudoSave.faturamentoPrevisto)} · bruto ${brl(tudoSave.bruto.total)}`);
 if (!(tudoSave.faturamentoPrevisto > 0)) falhas += 1;
 if (!(tudoSave.bruto.total > 0)) falhas += 1;
