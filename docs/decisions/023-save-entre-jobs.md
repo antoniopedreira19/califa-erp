@@ -315,8 +315,8 @@ sistema é o da conta.
 |---|---|
 | `lib/calculos/versao-totais.ts` | Os três fechamentos, os dois deltas da errata e os helpers de receita |
 | `scripts/conferir-save.ts` | Prova a conta contra o design E contra esta decisão |
-| `supabase/migrations/20260826000001_save_marca_e_padrao.sql` | `em_save`, `save_consumido`, `save_por_padrao`, e as travas de planejado e BV |
-| `supabase/migrations/20260826000002_save_consumos.sql` | `saves_consumos`, `vw_saves_por_job`, `vw_saves_linhas` e as invariantes do consumo |
+| `supabase/migrations/20260827010001_save_marca_e_padrao.sql` | `em_save`, `save_consumido`, `save_por_padrao`, e as travas de planejado e BV |
+| `supabase/migrations/20260827010002_save_consumos.sql` | `saves_consumos`, `vw_saves_por_job`, `vw_saves_linhas` e as invariantes do consumo |
 
 ## ⚠️ Nota de 2026-08-27 — a §7 fica sem objeto, e o envio fecha a porta
 
@@ -394,7 +394,7 @@ e não só de código — é isto:
 `vw_saves_por_job` não olhava o status do job de origem, então um job
 **reprovado na abertura** continuava aparecendo no seletor com saldo
 cheio. Job `rejeitado_financeiro` e `cancelado` saíram da view
-(migration `20260827000002`).
+(migration `20260827010011`).
 
 `aguardando_abertura` **continua** oferecendo saldo: o crédito nasce do
 compromisso do cliente, e o ERP já trata `faturamento_previsto` como
@@ -411,7 +411,7 @@ recria os consumos por `job_item_orcado_id`, e uma linha órfã do lado da
 versão seria contada duas vezes no saldo do job de origem.
 
 Consequência: o `save_consumido` da linha da **versão aprovada** passou a
-ser congelado (migration `20260827000003`). É a mesma regra de
+ser congelado (migration `20260827010012`). É a mesma regra de
 `bv_liquido_planejado` na decisão 022 — o que a aprovação congela, a vida
 do job não reescreve. Enquanto a versão é rascunho o recálculo continua
 igual.
