@@ -1419,6 +1419,7 @@ export type OrigemLancamento =
   | "desembolso_estorno"
   | "pp_devolucao_verba"
   | "pp_devolucao_verba_estornada"
+  | "pp_devolucao_verba_estorno"
   | "manual";
 
 export interface LancamentoFinanceiro {
