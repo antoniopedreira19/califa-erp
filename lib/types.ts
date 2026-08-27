@@ -476,7 +476,12 @@ export function bvSituacaoLabel(s: BvSituacao): string {
 export interface ItemBv {
   id: string;
   tenant_id: string;
-  item_versao_id: string;
+  /** Chave do BV na planilha do ORÇAMENTO. `null` só existiria em BV de
+   *  linha nascida de errata, que ainda não tem caminho de criação. */
+  item_versao_id: string | null;
+  /** Chave do BV na planilha do JOB. Preenchida na criação do BV e no
+   *  envio para abertura; é por ela que a planilha do job lê (27/08/2026). */
+  job_item_orcado_id: string | null;
   /** Opcional no orçamento: dá pra lançar o valor antes de fechar com
    *  quem. Fica em falta destacada no acompanhamento do job. */
   fornecedor_id: string | null;
@@ -649,6 +654,19 @@ export interface Job {
   valor_job_abertura: number | null;
   /** Faturamento previsto congelado na abertura — base do card de Erratas. */
   faturamento_previsto_abertura: number | null;
+  /**
+   * Uma errata mexeu no orçado depois que o financeiro já tinha aberto o
+   * job. O status NÃO muda — ele segue aberto e a produção segue emitindo
+   * PP e BV. O que reabre é a conferência: previsão de recebimento, curva
+   * de desembolso e competência foram calculadas sobre números que a
+   * errata acabou de mudar. Enquanto isto for `true`, o job volta ao mural
+   * de abertura e o envio para faturamento fica fechado (27/08/2026).
+   */
+  abertura_em_revisao: boolean;
+  /** Quando a errata devolveu o job ao mural. */
+  abertura_revisao_desde: string | null;
+  /** Errata que devolveu o job ao mural. */
+  abertura_revisao_errata_id: string | null;
   /** Data do EVENTO, informada no envio do job. Obrigatória no
    *  formulário desde 27/08/2026; nula nos jobs abertos antes disso. */
   data_evento: string | null;
@@ -962,7 +980,12 @@ export interface JobItemRealizado {
   id: string;
   tenant_id: string;
   job_id: string;
-  item_id: string;
+  /** Chave antiga: o item da VERSÃO. `null` na âncora da linha criada por
+   *  errata, que não existe na versão. Fica como rede — quem chaveia hoje
+   *  é `job_item_orcado_id`. */
+  item_id: string | null;
+  /** Linha da planilha do job a que este realizado pertence (27/08/2026). */
+  job_item_orcado_id: string | null;
   valor_unitario_realizado: number;
   quantidade_realizada: number;
   dias_meses_realizado: number;
@@ -1054,8 +1077,15 @@ export interface JobItemOrcado {
   id: string;
   tenant_id: string;
   job_id: string;
-  /** Item de origem na versão. Liga com `jobs_itens_realizado.item_id`. */
-  item_versao_id: string;
+  /** Item de origem na versão aprovada. `null` na linha criada por errata,
+   *  que não existe na versão — a versão é o registro do que o cliente
+   *  aprovou, e a errata fica registrada SOBRE ele. */
+  item_versao_id: string | null;
+  /** Linha que só recebe REALIZADO, por PP. Orçado e planejado ficam
+   *  zerados, e o banco garante isso (`chk_jio_linha_vermelha_zerada`). */
+  linha_vermelha: boolean;
+  /** Errata que criou esta linha. `null` na linha vinda da versão. */
+  errata_origem_id: string | null;
   grupo_id: string;
   ordem: number;
   item: string;
@@ -1074,14 +1104,25 @@ export interface JobItemOrcado {
 }
 
 /**
- * Item como a Planilha Interna consome: os valores vêm da cópia orçada do
- * job, mas `id` continua sendo o id do item na VERSÃO — é a chave que
- * `jobs_itens_realizado` e a geração de PP usam. `orcado_id` é o alvo da
- * errata.
+ * Item como a Planilha Interna consome.
+ *
+ * ⚠️ `id` mudou de significado em 27/08/2026. Antes ele era o id do item na
+ * VERSÃO; agora é o id da CÓPIA do job (`jobs_itens_orcado.id`) — a mesma
+ * coisa que `orcado_id`, que continua aqui só para o código antigo não
+ * quebrar. Foi a errata na planilha que forçou a mudança: uma linha criada
+ * ali não tem item de versão nenhum, e `jobs_itens_realizado` /
+ * `itens_bv` precisavam de uma chave que existisse em toda linha.
+ *
+ * `item_versao_id` é o que sobrou da chave antiga, e serve a quem
+ * realmente precisa falar com a versão aprovada (o BV, hoje).
  */
 export interface ItemPlanilhaJob {
   id: string;
   orcado_id: string;
+  /** `null` quando a linha nasceu de uma errata. */
+  item_versao_id: string | null;
+  /** Linha vermelha: orçado e planejado zerados, só recebe PP. */
+  linha_vermelha: boolean;
   grupo_id: string;
   ordem: number;
   item: string;
@@ -1129,17 +1170,43 @@ export interface JobErrata {
   created_at: string;
 }
 
+/** O que a errata fez com a linha. */
+export type ErrataAcao = "alterada" | "nova" | "removida";
+
+export function errataAcaoLabel(a: ErrataAcao): string {
+  switch (a) {
+    case "nova":
+      return "Nova";
+    case "removida":
+      return "Removida";
+    default:
+      return "Alterada";
+  }
+}
+
 export interface JobErrataItem {
   id: string;
   tenant_id: string;
   errata_id: string;
   job_item_orcado_id: string | null;
+  /** `alterada` em tudo que foi gravado antes de 27/08/2026 — até ali a
+   *  errata só sabia corrigir linha que já existia. */
+  acao: ErrataAcao;
+  /** A linha criada é vermelha (só realizado, por PP). */
+  linha_vermelha: boolean;
+  grupo_id: string | null;
   item_nome: string;
   grupo_nome: string;
   tipo_custo_de: TipoCusto;
   tipo_custo_para: TipoCusto;
   valor_unitario_de: number;
   valor_unitario_para: number;
+  /** QT e D/M passaram a ser editáveis em 27/08/2026. `null` nas erratas
+   *  anteriores, em que os dois ficavam como aprovados. */
+  quantidade_de: number | null;
+  quantidade_para: number | null;
+  dias_meses_de: number | null;
+  dias_meses_para: number | null;
   total_de: number;
   total_para: number;
   /** Efeito deste item no valor do job. */

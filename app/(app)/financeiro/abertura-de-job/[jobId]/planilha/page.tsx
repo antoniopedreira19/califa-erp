@@ -99,11 +99,11 @@ export default async function PlanilhaDaAberturaPage({
     supabase
       .from("itens_bv")
       .select(
-        "id, tenant_id, item_versao_id, fornecedor_id, valor, prazo_repasse, " +
+        "id, tenant_id, item_versao_id, job_item_orcado_id, fornecedor_id, valor, prazo_repasse, " +
           "situacao, created_by, created_at, updated_at, " +
-          "item:versoes_orcamento_itens!inner(versao_orcamento_id)",
+          "copia:jobs_itens_orcado!inner(job_id)",
       )
-      .eq("item.versao_orcamento_id", versaoAprovadaId)
+      .eq("copia.job_id", params.jobId)
       .eq("tenant_id", session.activeTenant.id)
       .neq("situacao", "cancelado"),
   ]);
@@ -123,8 +123,10 @@ export default async function PlanilhaDaAberturaPage({
   const grupos = gruposRes.data ?? [];
 
   const itens: ItemPlanilhaJob[] = (itensRes.data ?? []).map((it: any) => ({
-    id: it.item_versao_id,
+    id: it.id,
     orcado_id: it.id,
+    item_versao_id: it.item_versao_id ?? null,
+    linha_vermelha: it.linha_vermelha === true,
     grupo_id: it.grupo_id,
     ordem: Number(it.ordem ?? 0),
     item: it.item,
@@ -150,7 +152,8 @@ export default async function PlanilhaDaAberturaPage({
 
   const realizadosMap = new Map<string, JobItemRealizado>();
   for (const r of (realizadosRes.data ?? []) as any[]) {
-    realizadosMap.set(r.item_id, {
+    if (!r.job_item_orcado_id) continue;
+    realizadosMap.set(r.job_item_orcado_id, {
       ...r,
       valor_unitario_realizado: Number(r.valor_unitario_realizado ?? 0),
       quantidade_realizada: Number(r.quantidade_realizada ?? 0),
@@ -166,8 +169,9 @@ export default async function PlanilhaDaAberturaPage({
   // sem cerimônia, e é o formato que a planilha do job já espera.
   const bvsPorItem: Record<string, ItemBv> = {};
   for (const linha of (bvsRes.data ?? []) as any[]) {
-    const { item: _joinFiltro, ...bv } = linha;
-    bvsPorItem[bv.item_versao_id] = { ...bv, valor: Number(bv.valor ?? 0) };
+    const { copia: _joinFiltro, ...bv } = linha;
+    if (!bv.job_item_orcado_id) continue;
+    bvsPorItem[bv.job_item_orcado_id] = { ...bv, valor: Number(bv.valor ?? 0) };
   }
 
   const itensPorGrupo = new Map<string, ItemPlanilhaJob[]>();

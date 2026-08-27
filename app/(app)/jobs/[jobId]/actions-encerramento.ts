@@ -45,16 +45,15 @@ export async function levantarImpedimentos(
       .eq("job_id", jobId)
       .eq("tenant_id", tenantId)
       .in("status", PP_STATUS_EM_ABERTO),
-    // BV pendura no item da VERSÃO, não no job — o caminho passa pela
-    // versão aprovada. O `!inner` aqui é filtro, não embed, como na
-    // leitura de BVs da página do job.
+    // BV pendura na CÓPIA do job desde 27/08/2026 — pelo caminho antigo
+    // (versão aprovada) o BV de uma linha criada por errata ficaria de
+    // fora, e o job encerraria com comissão em aberto. O `!inner` aqui é
+    // filtro, não embed, como na leitura de BVs da página do job.
     supabase
       .from("itens_bv")
-      .select(
-        "situacao, item:versoes_orcamento_itens!inner(item, versao_orcamento_id)",
-      )
+      .select("situacao, copia:jobs_itens_orcado!inner(item, job_id)")
       .eq("tenant_id", tenantId)
-      .eq("item.versao_orcamento_id", versaoAprovadaId)
+      .eq("copia.job_id", jobId)
       .in("situacao", BV_SITUACAO_EM_ABERTO),
     supabase
       .from("jobs_envio_faturamento")
@@ -70,7 +69,7 @@ export async function levantarImpedimentos(
       status: p.status,
     })),
     bvsEmAberto: ((bvsRes.data ?? []) as any[]).map((b) => ({
-      item: b.item?.item ?? "Item",
+      item: b.copia?.item ?? "Item",
       situacao: b.situacao,
     })),
     semEnvioFaturamento: !envioRes.data,

@@ -34,6 +34,9 @@ interface ContextoItem {
   orcamento_id: string;
   projeto_id: string;
   job_id: string | null;
+  /** A cópia deste item na planilha do job. É por ela que a planilha do
+   *  job lê o BV desde 27/08/2026 — `null` enquanto o job não existe. */
+  job_item_orcado_id: string | null;
   item: string;
 }
 
@@ -93,11 +96,12 @@ async function carregarContexto(
       .maybeSingle<{ projeto_id: string }>(),
     supabase
       .from("jobs_itens_orcado")
-      .select("job_id, tipo_custo, job:jobs!inner(status)")
+      .select("id, job_id, tipo_custo, job:jobs!inner(status)")
       .eq("item_versao_id", itemVersaoId)
       .eq("tenant_id", tenantId)
       .neq("job.status", "cancelado")
       .maybeSingle<{
+        id: string;
         job_id: string;
         tipo_custo: string;
         job: { status: string };
@@ -145,6 +149,7 @@ async function carregarContexto(
     orcamento_id: data.versao.orcamento_id,
     projeto_id: orcRes.data?.projeto_id ?? "",
     job_id: copiaRes.data?.job_id ?? null,
+    job_item_orcado_id: copiaRes.data?.id ?? null,
     item: data.item,
   };
 }
@@ -233,6 +238,12 @@ export async function salvarBv(
   const payload = {
     tenant_id: session.activeTenant.id,
     item_versao_id: itemVersaoId,
+    // A planilha do job lê o BV por esta chave. Gravar aqui é o que
+    // impede o BV lançado no orçamento de sumir depois que o job nasce —
+    // e o `?? {}` deixa o BV pré-job em paz até a abertura preenchê-la.
+    ...(ctx.job_item_orcado_id
+      ? { job_item_orcado_id: ctx.job_item_orcado_id }
+      : {}),
     fornecedor_id: parsed.data.fornecedor_id,
     valor: parsed.data.valor,
     prazo_repasse: parsed.data.prazo_repasse,
