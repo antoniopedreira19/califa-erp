@@ -3,6 +3,13 @@
 import * as React from "react";
 import { Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import type { PPStatus, FormaPagamento, PPVerbaPrestacao, PPVerbaPrestacaoAnexo } from "@/lib/types";
 import { ppStatusLabel, nomeContraparteBRPP } from "@/lib/types";
@@ -198,19 +205,22 @@ export function PedidosCompraList({ rows, tenantId, regionais }: PedidosCompraLi
             );
           })}
           <div className="ml-auto flex items-center gap-2">
-            <select
-              value={filtroRegional}
-              onChange={(e) => setFiltroRegional(e.target.value)}
-              className="h-9 rounded-lg border border-border bg-white px-3 text-sm focus:border-california-red focus:outline-none"
-              aria-label="Filtrar por regional"
-            >
-              <option value="todas">Todas as regionais</option>
-              {regionaisOrdenadas.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.nome}
-                </option>
-              ))}
-            </select>
+            <Select value={filtroRegional} onValueChange={setFiltroRegional}>
+              <SelectTrigger
+                aria-label="Filtrar por regional"
+                className="h-9 w-[190px] px-3 text-sm"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todas">Todas as regionais</SelectItem>
+                {regionaisOrdenadas.map((r) => (
+                  <SelectItem key={r.id} value={r.id}>
+                    {r.nome}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <div className="relative w-56">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <input
@@ -218,7 +228,7 @@ export function PedidosCompraList({ rows, tenantId, regionais }: PedidosCompraLi
                 value={busca}
                 onChange={(e) => setBusca(e.target.value)}
                 placeholder="Buscar..."
-                className="w-full rounded-lg border border-border bg-white py-2 pl-9 pr-3 text-sm focus:border-california-red focus:outline-none"
+                className="h-9 w-full rounded-lg border border-border bg-white pl-9 pr-3 text-sm focus:border-california-red focus:outline-none"
               />
             </div>
           </div>
