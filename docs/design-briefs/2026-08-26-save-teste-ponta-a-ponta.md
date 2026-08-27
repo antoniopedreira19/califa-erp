@@ -63,22 +63,23 @@ lançamento de origem única (o caso comum) **não** ganha expansão.
 
 ## 2. Armadilhas conhecidas
 
-### 2.1 Job 100% pago por save não consegue ser enviado para faturamento
+### 2.1 Job 100% pago por save — RESOLVIDO em 27/08/2026
 
-Faturamento previsto zero, e `enviarJobParaFaturamento` recusa valor zero.
-A decisão 023 §11 criou a exceção (encerra sem faturar), **mas ela ainda
-não foi implementada**.
+Ele agora **pula a etapa de faturamento** e entra na esteira como
+`faturado`; o encerramento não pede envio. A condição é dupla:
+faturamento previsto zero **e** consumo de save.
 
-**No teste:** montar esse job e tentar encerrar. Hoje deve travar.
+**No teste:** montar esse job e conferir que a esteira o mostra como
+faturado e que ele encerra sem pedir envio.
 
-### 2.2 Consumo criado depois do envio para faturamento
+### 2.2 Mexer no orçado depois do envio — RESOLVIDO em 27/08/2026
 
-`jobs_envio_faturamento.valor_faturado` é cópia congelada. Mexer no save
-depois do envio faz os dois números divergirem. A trava está prevista na
-spec e **ainda não foi implementada**.
+Depois do envio, **nem errata nem save**. As duas portas usam a mesma
+checagem e a mesma mensagem.
 
-**No teste:** enviar um job para faturamento e depois tentar mexer no save
-dele.
+**No teste:** enviar um job para faturamento e depois tentar (a) mexer no
+save dele e (b) registrar uma errata. Os dois devem recusar, com a mesma
+mensagem.
 
 ### 2.3 NF agrupada e o ponto cego que já existia
 
@@ -90,10 +91,10 @@ dele.
 **No teste:** emitir uma nota agrupada que cubra dois jobs, um deles com
 save, e ver se a esteira reconhece os dois.
 
-### 2.4 A sobra do save ao encerrar o job consumidor
+### 2.4 A sobra do save — REGRA APOSENTADA em 27/08/2026
 
-Decisão 023 §7: a sobra volta ao saldo do cliente e o resumo de fechamento
-mostra "Saldo em save devolvido ao cliente". **Ainda não implementado.**
+A §7 ficou sem objeto no modelo de bolo: nada é reservado, então não há
+sobra a devolver. Não há o que testar.
 
 ### 2.5 Somar fluxos de job não dá o fluxo da empresa
 

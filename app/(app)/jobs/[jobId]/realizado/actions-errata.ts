@@ -6,6 +6,10 @@ import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { logAuditEvent } from "@/lib/auth/audit";
 import {
+  MENSAGEM_JA_ENVIADO,
+  jobJaEnviadoParaFaturamento,
+} from "@/lib/data/envio-faturamento";
+import {
   calcularTotaisVersao,
   calcularEfeitoDaMudanca,
   TIPOS_CUSTO,
@@ -209,6 +213,12 @@ export async function registrarErrata(
   const pctImposto = Number(versao.percentual_imposto ?? 0);
 
   // ---- Estado atual do orçado do job ----
+  // Depois do envio o valor da nota está congelado: mexer no orçado agora
+  // faria a nota sair por um número que não é mais o do job (27/08/2026).
+  if (await jobJaEnviadoParaFaturamento(supabase, jobId, session.activeTenant.id)) {
+    return { ok: false, message: MENSAGEM_JA_ENVIADO };
+  }
+
   const { data: itensAtuais, error: itensErr } = await supabase
     .from("jobs_itens_orcado")
     .select(

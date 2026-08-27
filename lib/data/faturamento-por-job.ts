@@ -39,7 +39,7 @@ export async function faturamentoPorJob(
 ): Promise<Map<string, FaturamentoDoJob>> {
   const supabase = createClient();
 
-  const [enviosRes, notasRes, titulosRes] = await Promise.all([
+  const [enviosRes, notasRes, titulosRes, saveOnlyRes] = await Promise.all([
     supabase
       .from("jobs_envio_faturamento")
       .select("job_id, valor_faturado, enviado_em")
@@ -58,6 +58,14 @@ export async function faturamentoPorJob(
       .select("faturamento_id, valor, data_vencimento, status")
       .eq("tenant_id", tenantId)
       .neq("status", "cancelado"),
+    // Linhas de job que consomem saldo de save. Cruzadas abaixo com o
+    // faturamento previsto zero, dão o job que pula a etapa.
+    supabase
+      .from("jobs_itens_orcado")
+      .select("job_id, jobs!inner(faturamento_previsto)")
+      .eq("tenant_id", tenantId)
+      .gt("save_consumido", 0)
+      .lte("jobs.faturamento_previsto", 0.004),
   ]);
 
   if (enviosRes.error) {
@@ -104,12 +112,23 @@ export async function faturamentoPorJob(
     titulosPorNota.set(t.faturamento_id, arr);
   }
 
-  // Todo job que apareceu em qualquer uma das três leituras entra no
-  // mapa. Job que não aparece em nenhuma não tem entrada — quem chamou
-  // trata como `aguardando_envio`.
+  // Job pago SÓ por saldo de save: faturamento previsto zero e consumo
+  // registrado. Ele pula a etapa de faturamento e entra na esteira como
+  // já faturado — a nota dele saiu no job que gerou o crédito (decisão
+  // 023 §11). Sem isto ficaria eternamente em "aguardando envio".
+  const saveOnly = new Set<string>(
+    ((saveOnlyRes.data ?? []) as any[])
+      .map((o) => o.job_id as string)
+      .filter(Boolean),
+  );
+
+  // Todo job que apareceu em qualquer uma das leituras entra no mapa. Job
+  // que não aparece em nenhuma não tem entrada — quem chamou trata como
+  // `aguardando_envio`.
   const jobIds = new Set<string>([
     ...envioPorJob.keys(),
     ...notaPorJob.keys(),
+    ...saveOnly,
   ]);
 
   const mapa = new Map<string, FaturamentoDoJob>();
@@ -124,7 +143,13 @@ export async function faturamentoPorJob(
       .reduce((s, t) => s + t.valor, 0);
 
     mapa.set(jobId, {
-      situacao: classificarFaturamento(!!nota, !!envio, titulos, hoje),
+      situacao: classificarFaturamento(
+        !!nota,
+        !!envio,
+        titulos,
+        hoje,
+        saveOnly.has(jobId) && !envio,
+      ),
       valor: nota?.valor ?? envio?.valor ?? null,
       numero_nf: nota?.numero ?? null,
       data_envio: envio?.em ?? null,

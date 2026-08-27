@@ -122,11 +122,41 @@ export async function encerrarJob(jobId: string): Promise<ActionResult> {
   );
 
   if (imp.semEnvioFaturamento) {
-    return {
-      ok: false,
-      message:
-        "Este job ainda não foi enviado para faturamento. Envie antes de encerrar.",
-    };
+    // EXCEÇÃO DO SAVE (decisão 023 §11). Um job pago inteiramente por
+    // saldo de save tem faturamento previsto ZERO — e aí ele trava dos
+    // dois lados: `enviarJobParaFaturamento` recusa valor zero, e a
+    // decisão 008 §1 só encerra quem foi enviado. O job ficaria aberto
+    // para sempre.
+    //
+    // Não há nota a emitir: ela já saiu no job que gerou o crédito. A
+    // condição é dupla de propósito — faturamento zero E consumo de save
+    // —, porque job com faturamento zero e SEM save é outra coisa (um
+    // orçado vazio, que continua tendo de passar pelo faturamento).
+    const previsto = Number(job.faturamento_previsto ?? 0);
+    const { count: consumosDeSave } = await supabase
+      .from("saves_consumos")
+      .select("id", { count: "exact", head: true })
+      .eq("tenant_id", session.activeTenant.id)
+      .in(
+        "job_item_orcado_id",
+        (
+          await supabase
+            .from("jobs_itens_orcado")
+            .select("id")
+            .eq("job_id", jobId)
+            .eq("tenant_id", session.activeTenant.id)
+        ).data?.map((o) => o.id) ?? [],
+      );
+
+    const pagoSoPorSave = previsto <= 0.004 && (consumosDeSave ?? 0) > 0;
+
+    if (!pagoSoPorSave) {
+      return {
+        ok: false,
+        message:
+          "Este job ainda não foi enviado para faturamento. Envie antes de encerrar.",
+      };
+    }
   }
 
   if (imp.ppsEmAberto.length > 0 || imp.bvsEmAberto.length > 0) {
