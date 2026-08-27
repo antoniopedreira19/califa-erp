@@ -134,7 +134,39 @@ export default async function ConciliacaoPage({
       };
     });
 
-    linhas = derivarSaldo(raw, saldoAnterior);
+    // De onde vem o dinheiro de cada baixa: os jobs cobertos pela nota e
+    // o saldo em save. Só existe em lançamento de título; nos demais a
+    // consulta volta vazia e a linha fica sem expansão
+    // (docs/decisions/023-save-entre-jobs.md).
+    const ids = raw.map((r) => r.id);
+    const origensPorLancamento = new Map<
+      string,
+      Array<{ tipo: "job" | "save"; codigo: string | null; nome: string | null; valor: number }>
+    >();
+    if (ids.length > 0) {
+      const { data: origens } = await supabase
+        .from("vw_lancamento_origens")
+        .select("lancamento_id, tipo, valor, job:jobs!job_id(codigo, nome), save_job:jobs!save_job_id(codigo, nome)")
+        .eq("tenant_id", session.activeTenant.id)
+        .in("lancamento_id", ids);
+
+      for (const o of (origens ?? []) as any[]) {
+        const lista = origensPorLancamento.get(o.lancamento_id) ?? [];
+        const alvo = o.tipo === "save" ? o.save_job : o.job;
+        lista.push({
+          tipo: o.tipo,
+          codigo: alvo?.codigo ?? null,
+          nome: alvo?.nome ?? null,
+          valor: Number(o.valor ?? 0),
+        });
+        origensPorLancamento.set(o.lancamento_id, lista);
+      }
+    }
+
+    linhas = derivarSaldo(
+      raw.map((r) => ({ ...r, origens: origensPorLancamento.get(r.id) ?? [] })),
+      saldoAnterior,
+    );
     creditos = linhas.reduce((acc, l) => acc + l.credito, 0);
     debitos = linhas.reduce((acc, l) => acc + l.debito, 0);
   }

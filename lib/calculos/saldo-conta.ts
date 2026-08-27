@@ -16,6 +16,19 @@ export type LancamentoLinha = {
   debito: number;
   saldo: number;
   rateio: Array<{ percentual: number; regional_nome: string }>;
+  /** De onde vem o dinheiro desta transação, quando ela cobre mais de uma
+   *  coisa: os jobs da nota e o saldo em save. Vazio na maioria dos
+   *  lançamentos (docs/decisions/023-save-entre-jobs.md). */
+  origens: OrigemDaTransacao[];
+};
+
+/** Uma origem do dinheiro de um lançamento. */
+export type OrigemDaTransacao = {
+  tipo: "job" | "save";
+  /** Código do job coberto, ou do job que gerou o saldo em save. */
+  codigo: string | null;
+  nome: string | null;
+  valor: number;
 };
 
 /**
@@ -67,8 +80,9 @@ export async function calcularSaldoAnterior(
  * Recebe raw rows já ordenadas por data_movimento ASC, created_at ASC.
  */
 export function derivarSaldo(
-  rows: (Omit<LancamentoLinha, "credito" | "debito" | "saldo"> & {
+  rows: (Omit<LancamentoLinha, "credito" | "debito" | "saldo" | "origens"> & {
     rateio?: Array<{ percentual: number; regional_nome: string }>;
+    origens?: OrigemDaTransacao[];
   })[],
   saldoAnterior: number,
 ): LancamentoLinha[] {
@@ -77,6 +91,13 @@ export function derivarSaldo(
     const credito = r.natureza === "entrada" ? r.valor : 0;
     const debito = r.natureza === "saida" ? r.valor : 0;
     saldo = saldo + credito - debito;
-    return { ...r, credito, debito, saldo, rateio: r.rateio ?? [] };
+    return {
+      ...r,
+      credito,
+      debito,
+      saldo,
+      rateio: r.rateio ?? [],
+      origens: r.origens ?? [],
+    };
   });
 }
