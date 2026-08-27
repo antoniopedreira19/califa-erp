@@ -36,6 +36,7 @@ function extractInput(formData: FormData) {
     regional_id: formData.get("regional_id")?.toString() ?? "",
     data_inicio_prevista: formData.get("data_inicio_prevista")?.toString() ?? "",
     data_fim_prevista: formData.get("data_fim_prevista")?.toString() ?? "",
+    data_evento: formData.get("data_evento")?.toString() ?? "",
     data_prevista_faturamento:
       formData.get("data_prevista_faturamento")?.toString() ?? "",
     observacoes: formData.get("observacoes")?.toString() ?? "",
@@ -287,6 +288,8 @@ export async function enviarJobParaAbertura(
       cidade: cidadeRes.data.nome,
       data_inicio_prevista: parsed.data.data_inicio_prevista,
       data_fim_prevista: parsed.data.data_fim_prevista,
+      // Só no job: `orcamentos` não tem data de evento (27/08/2026).
+      data_evento: parsed.data.data_evento,
       data_prevista_faturamento: parsed.data.data_prevista_faturamento,
       // Na tela chama "Descritivo do Job" desde 17/08/2026; a coluna
       // segue `observacoes`. O financeiro lê no diálogo de conferência da
@@ -522,6 +525,7 @@ export async function enviarJobParaAbertura(
       regional_id: parsed.data.regional_id,
       valor_total: Number(totais.valorJob.toFixed(2)),
       faturamento_previsto: Number(totais.faturamentoPrevisto.toFixed(2)),
+      data_evento: parsed.data.data_evento,
       data_prevista_faturamento: parsed.data.data_prevista_faturamento,
       // Quantos contatos de cobrança foram gravados (obrigatório ≥ 1
       // desde 17/08/2026). Sem e-mail nem nome no audit: dado pessoal do

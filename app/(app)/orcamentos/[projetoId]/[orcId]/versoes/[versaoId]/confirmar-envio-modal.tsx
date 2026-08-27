@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Check, Loader2, Send } from "lucide-react";
+import { Briefcase, Check, Loader2, Send } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -10,6 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn, formatCurrency } from "@/lib/utils";
+import { SAVE } from "@/app/(app)/_planilha/blocos";
 import { OBSERVACOES_MAX } from "@/lib/validations/abertura-job";
 import type { ContatoCobranca } from "./enviar-job-modal";
 
@@ -18,6 +19,11 @@ import type { ContatoCobranca } from "./enviar-job-modal";
  * handoff pede ícone próprio, botão de confirmar em vermelho com check e
  * um card de resumo — combinação que o componente compartilhado não faz
  * sem virar um canivete de props.
+ *
+ * Em `somenteLeitura` ele vira a tela "Dados do job" do orçamento com o
+ * job já enviado (27/08/2026). É a MESMA conferência de antes do envio,
+ * de propósito: quem volta ao orçamento quer rever o que foi conferido,
+ * não um formulário travado com campo por campo.
  */
 export function ConfirmarEnvioModal({
   open,
@@ -25,10 +31,12 @@ export function ConfirmarEnvioModal({
   onConfirmar,
   onVoltar,
   pending,
+  somenteLeitura = false,
   orcamentoCodigo,
   linhas,
   valorTotal,
   faturamentoPrevisto,
+  totalGeradoEmSave,
   moeda,
   contatos,
   observacoes,
@@ -39,12 +47,17 @@ export function ConfirmarEnvioModal({
   onConfirmar: () => void;
   onVoltar: () => void;
   pending: boolean;
+  /** Job já enviado: some o que decide (confirmar, voltar e revisar) e
+   *  fica só a leitura do que foi gravado. */
+  somenteLeitura?: boolean;
   orcamentoCodigo: string;
   linhas: { rotulo: string; valor: string; mono?: boolean }[];
   /** Valor do Job — o que vai para `jobs.valor_total`. */
   valorTotal: number;
   /** O que a California emite nota nesta versão. */
   faturamentoPrevisto: number;
+  /** Crédito gerado pelas linhas em save. Zero não vira linha. */
+  totalGeradoEmSave: number;
   moeda: string;
   /** Contatos de cobrança digitados no formulário — dado digitado tem de
    *  ser conferível antes de gravar. */
@@ -58,18 +71,37 @@ export function ConfirmarEnvioModal({
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <div className="flex h-11 w-11 items-center justify-center rounded-full bg-california-red/10 text-california-red">
-            <Send className="h-[21px] w-[21px]" />
+            {somenteLeitura ? (
+              <Briefcase className="h-[21px] w-[21px]" />
+            ) : (
+              <Send className="h-[21px] w-[21px]" />
+            )}
           </div>
           <DialogTitle className="pt-4 text-xl leading-snug">
-            Tem certeza que quer enviar esse job para a abertura?
+            {somenteLeitura
+              ? "Dados do job"
+              : "Tem certeza que quer enviar esse job para a abertura?"}
           </DialogTitle>
           <DialogDescription className="pt-1 leading-relaxed">
-            O job será criado e enviado ao financeiro. Nome e datas alterados aqui
-            serão gravados no orçamento{" "}
-            <strong className="font-semibold text-foreground">
-              {orcamentoCodigo}
-            </strong>
-            .
+            {somenteLeitura ? (
+              <>
+                Job já enviado para abertura. Estes são os dados gravados a
+                partir de{" "}
+                <strong className="font-semibold text-foreground">
+                  {orcamentoCodigo}
+                </strong>
+                .
+              </>
+            ) : (
+              <>
+                O job será criado e enviado ao financeiro. Nome e datas
+                alterados aqui serão gravados no orçamento{" "}
+                <strong className="font-semibold text-foreground">
+                  {orcamentoCodigo}
+                </strong>
+                .
+              </>
+            )}
           </DialogDescription>
         </DialogHeader>
 
@@ -106,6 +138,20 @@ export function ConfirmarEnvioModal({
               {formatCurrency(valorTotal, moeda)}
             </span>
           </div>
+          {/* Mesma regra do formulário: sem save, sem linha. */}
+          {totalGeradoEmSave > 0 && (
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="text-[13px] font-semibold">Save</span>
+              <span
+                className={cn(
+                  "font-mono text-[14px] font-bold",
+                  SAVE.textoApagado,
+                )}
+              >
+                {formatCurrency(totalGeradoEmSave, moeda)}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Contato de cobrança: nome na linha, e-mail (e número, quando
@@ -149,7 +195,9 @@ export function ConfirmarEnvioModal({
             {observacoes || "—"}
           </div>
           <span className="text-[11px] text-muted-foreground">
-            Para alterar, use &quot;Voltar e revisar&quot;.
+            {somenteLeitura
+              ? "Job já enviado — os dados não podem mais ser alterados por aqui."
+              : 'Para alterar, use "Voltar e revisar".'}
           </span>
         </div>
 
@@ -158,27 +206,39 @@ export function ConfirmarEnvioModal({
         )}
 
         <div className="flex items-center justify-end gap-2.5">
-          <button
-            type="button"
-            onClick={onVoltar}
-            disabled={pending}
-            className="rounded-lg border border-border bg-white px-4 py-2 text-sm font-semibold text-foreground hover:bg-accent transition-colors disabled:opacity-50"
-          >
-            Voltar e revisar
-          </button>
-          <button
-            type="button"
-            onClick={onConfirmar}
-            disabled={pending}
-            className="inline-flex items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-california-red-hover hover:shadow-brand transition-all disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            {pending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Check className="h-4 w-4" />
-            )}
-            Sim, enviar job
-          </button>
+          {somenteLeitura ? (
+            <button
+              type="button"
+              onClick={() => onOpenChange(false)}
+              className="rounded-lg border border-border bg-white px-4 py-2 text-sm font-semibold text-foreground hover:bg-accent transition-colors"
+            >
+              Fechar
+            </button>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={onVoltar}
+                disabled={pending}
+                className="rounded-lg border border-border bg-white px-4 py-2 text-sm font-semibold text-foreground hover:bg-accent transition-colors disabled:opacity-50"
+              >
+                Voltar e revisar
+              </button>
+              <button
+                type="button"
+                onClick={onConfirmar}
+                disabled={pending}
+                className="inline-flex items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-california-red-hover hover:shadow-brand transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {pending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Check className="h-4 w-4" />
+                )}
+                Sim, enviar job
+              </button>
+            </>
+          )}
         </div>
       </DialogContent>
     </Dialog>

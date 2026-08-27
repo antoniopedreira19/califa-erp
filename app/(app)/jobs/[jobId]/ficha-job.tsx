@@ -180,7 +180,7 @@ export function FichaJob({
                   "—"
                 )}
               </Campo>
-              <Campo rotulo="Prev. faturamento" mono ultimo>
+              <Campo rotulo="Prev. recebimento" mono ultimo>
                 {formatData(job.dataPrevistaFaturamento)}
               </Campo>
             </div>

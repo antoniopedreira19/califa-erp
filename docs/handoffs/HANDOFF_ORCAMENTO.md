@@ -2459,3 +2459,101 @@ orçamentos. O que ele encontrou nesta frente:
 `scripts/conferir-save.ts` passando; e o fluxo inteiro conferido logado no
 navegador — marcar, consumir de dois jobs, aprovar, exportar e enviar para
 abertura.
+
+---
+
+## 27/08/2026 — Envio do job: ordem dos campos, Data Evento, "recebimento" e a leitura pela conferência
+
+Design `Enviar Job - Ajustes de Campos.dc.html` (telas 1a, 1b, 1c). Regra
+completa em [decisão 029](../decisions/029-data-do-evento-recebimento-e-visao-liquida.md).
+
+**A planilha abre em Líquido (− BV).** `VISAO_BV_PADRAO` foi de `"bruto"`
+para `"liquido"`. ⚠️ **A constante serve seis telas, não as três que o
+design cita**: além da versão do orçamento, do agregado e do multi-jobs,
+ela também abre a conferência da abertura, as planilhas do projeto e o
+Realizado do job. Todas passaram a abrir em Líquido.
+
+**Formulário "Enviar job para abertura"** — as três colunas ficaram sempre
+cheias, sem espaçador nenhum a não ser o da última linha de datas:
+Produto · Regional · GP; Categoria · Cidade · Produtor; início · fim ·
+**Data Evento**; e o recebimento sozinho embaixo.
+
+⚠️ **Cidade e Regional foram separadas** — o comentário antigo do modal
+afirmava que as regionais dependiam da cidade. **Não dependem:** as opções
+vêm de `regionaisDoProjeto`, que sai do **projeto**. O comentário estava
+errado e foi corrigido junto.
+
+**Data Evento é campo novo e obrigatório.** Coluna `jobs.data_evento`
+**nullable** de propósito (os jobs anteriores não têm o dado); quem exige
+é o Zod. ⚠️ **Ela NÃO volta para o orçamento** — `orcamentos` não tem o
+campo. Nome, cidade, regional, início e fim continuam voltando. ⚠️ Não
+confundir com `vw_fluxo_caixa.data_evento`, que é a data do evento
+**financeiro** de uma linha do fluxo e já existia.
+
+**"Faturamento" virou "recebimento" em TODA data.** Regra do Tiago: a
+palavra fica para o valor a faturar e para o processo de emitir a nota;
+data em que o dinheiro entra chama recebimento. Mudou em oito lugares —
+formulário, conferência do orçamento, barra da versão, banner do job
+enviado, diálogo da fila do financeiro, resumo e parcelas da abertura, e
+ficha do job (tabela na decisão 029 §3). ⚠️ **A coluna continua
+`data_prevista_faturamento`**, o campo do form continua `dataFaturamento`
+e a chave de erro continua a mesma — renomear quebraria o financeiro, o
+fluxo de caixa e a fila de abertura. Ficaram intocados "Faturamento
+previsto", "Faturamento save previsto" e "Enviado para faturamento em",
+que falam de valor e de processo.
+
+**"Total gerado em save"** entra no card de fechamento e como **Save** no
+pop-up, **escondido quando zerado**. Vem de `totais.save.totalSaveGerado`
+— o mesmo número que o card de Totais mostra como "Saldo em save". ⚠️ **A
+cor não seguiu o design**: o desenho pinta de azul `#1e4fa3`, mas o save
+entrou no produto com grafite `#5f5d57` (`SAVE` em `_planilha/blocos.ts`).
+Azul aqui deixaria o mesmo número em duas cores a dois cliques de
+distância. As duas hipóteses foram montadas lado a lado e **o Tiago
+escolheu o grafite em 27/08/2026**, depois de ver as duas telas reais —
+não é dedução minha, é decisão dele.
+
+**"Ver dados do job" abre a conferência, não o formulário.** Com o job
+enviado, o botão passa a abrir o pop-up de conferência em modo leitura
+(título "Dados do job", ícone de pasta, só "Fechar"). Duas correções que
+isso exigiu: o **Código** vinha de `proximoCodigoJob`, que é preview do
+próximo número, e passa a vir de `job.codigo`; e **Cidade · Regional**
+vinha do formulário, pré-preenchido com o orçamento **de hoje**, e passa a
+vir de `herdados`, que é o que o job congelou.
+
+⚠️ **O modo `somenteLeitura` de `EnviarJobModal` ficou inalcançável.**
+Nada mais aponta para ele. Não removi junto: são ~40 condicionais
+espalhadas pelo componente e a limpeza tem risco próprio, num fluxo em
+uso. **É a próxima task, combinada com o Tiago em 27/08/2026** — depois de
+a conferência em leitura ter sido aprovada no navegador.
+
+⚠️⚠️ **Um comentário JSX órfão apagou quatro campos, e `tsc`, `next lint`
+e `npm run build` passaram limpos nos três.** Ao reordenar a grade, o
+recorte do bloco da Regional levou junto as duas primeiras linhas do
+comentário do espaçador antigo — o `{/*` entrou, o `*/}` ficou para trás.
+JSX então engoliu tudo até o comentário seguinte: **GP Responsável,
+Categoria, Cidade e Produtor Responsável sumiram da tela**, e Cidade é
+campo obrigatório. Nada disso é erro de sintaxe, então nenhuma das três
+verificações viu. Só o navegador pegou.
+
+**A lição:** comentário JSX desbalanceado é invisível para o compilador.
+Depois de mexer em bloco de JSX por recorte/colagem, conferir que
+`{/*` e `*/}` batem em número no arquivo — e, principalmente, **abrir a
+tela**. Build limpo não é prova de que a tela existe.
+
+**Verificação:** `tsc --noEmit`, `next lint` e `npm run build` limpos, e
+**conferido logado em 27/08/2026** no orçamento TESTE-0003/26-07 (projeto
+Teste Alterações) e no TESTE-0005/26-04 (projeto Revisão Save): planilha
+abrindo em Líquido (− BV); os 17 campos do formulário na ordem do design;
+"Total gerado em save · R$ 25.000,00" batendo com o "Saldo em save" do
+card de Totais; e "Ver dados do job" do JOB-0020 abrindo a conferência em
+leitura, com o código certo, "Recebimento em" e "Save · R$ 60.000,00".
+
+⚠️ O build rodou numa **cópia isolada** do repositório (scratchpad, com
+`node_modules` por symlink) porque `npm run build` com dev server ligado
+corrompe o `.next` e derruba o CSS do preview.
+
+⚠️ **O `next dev` da porta 3000 é o do worktree `determined-hodgkin`, não
+o do repositório principal.** Meia hora foi gasta achando isso: a tela
+não mudava porque o servidor servia outro checkout. Para conferir o
+`main`, subir servidor próprio (`preview_start`, que pega outra porta) —
+o cookie de sessão do `localhost` vale para qualquer porta.

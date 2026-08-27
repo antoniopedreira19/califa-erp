@@ -5,9 +5,10 @@
  * aparecia no formulário e não mexia em número nenhum da planilha. Agora
  * ele participa da conta, e participa em DUAS leituras da mesma tela:
  *
- * - **Bruto** — o custo cheio, como sempre foi. É o padrão.
+ * - **Bruto** — o custo cheio, como sempre foi.
  * - **Líquido (− BV)** — o custo sem a comissão que volta para a
- *   California. É o número que o financeiro persegue.
+ *   California. É o número que o financeiro persegue, e é o padrão
+ *   desde 27/08/2026.
  *
  * A chave que alterna as duas é uma por página (job e orçamento) e mexe
  * só em PLANEJADO e REALIZADO: o ORÇADO não recebe BV e é idêntico nos
@@ -31,7 +32,16 @@ function arredondar(v: number): number {
 /** Qual das duas leituras da planilha está ativa. */
 export type VisaoBv = "bruto" | "liquido";
 
-export const VISAO_BV_PADRAO: VisaoBv = "bruto";
+/**
+ * Como a planilha ABRE, em toda tela que usa a chave.
+ *
+ * Era "bruto" até 27/08/2026. O design "Enviar Job - Ajustes de Campos"
+ * inverteu: quem abre a tela quer o número que o financeiro persegue, e
+ * o bruto passa a ser a escolha explícita do usuário. A chave continua
+ * valendo para grupos, itens e totais ao mesmo tempo, e continua sem ser
+ * memorizada entre sessões.
+ */
+export const VISAO_BV_PADRAO: VisaoBv = "liquido";
 
 /**
  * Imposto sobre o BV: multiplicação direta pela alíquota do job.

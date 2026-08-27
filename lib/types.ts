@@ -649,7 +649,12 @@ export interface Job {
   valor_job_abertura: number | null;
   /** Faturamento previsto congelado na abertura — base do card de Erratas. */
   faturamento_previsto_abertura: number | null;
-  /** Data prevista para o faturamento, informada no envio do job. */
+  /** Data do EVENTO, informada no envio do job. Obrigatória no
+   *  formulário desde 27/08/2026; nula nos jobs abertos antes disso. */
+  data_evento: string | null;
+  /** Data prevista para o RECEBIMENTO, informada no envio do job. A
+   *  coluna segue `data_prevista_faturamento`: só o rótulo da tela virou
+   *  "Data prevista para recebimento", em 27/08/2026. */
   data_prevista_faturamento: string | null;
   /**
    * Contexto livre da produção, lido no modal de conferência do financeiro.
