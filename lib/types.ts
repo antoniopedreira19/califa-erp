@@ -1427,7 +1427,15 @@ export interface LancamentoFinanceiro {
 
 // ---------- Task 008: contas a receber (faturamento) ----------
 
+/** Origem da NOTA. Continua com três valores: a nota é do job, do BV ou
+ *  avulsa — nunca "de save". */
 export type FaturamentoOrigemTipo = "job" | "bv" | "avulso";
+
+/** Origem de um ITEM da nota. Aqui existe `save`, e é o que separa o
+ *  faturamento próprio do job do saldo em save que a mesma nota cobre
+ *  (docs/decisions/023-save-entre-jobs.md). Espelha o enum
+ *  `faturamento_origem` do Postgres, que tem os quatro. */
+export type FaturamentoItemOrigemTipo = FaturamentoOrigemTipo | "save";
 export type FaturamentoStatus = "emitido" | "cancelado";
 export type TituloReceberStatus = "em_aberto" | "pago" | "cancelado";
 
@@ -1491,7 +1499,7 @@ export interface FaturamentoItem {
   id: string;
   tenant_id: string;
   faturamento_id: string;
-  origem_tipo: FaturamentoOrigemTipo;
+  origem_tipo: FaturamentoItemOrigemTipo;
   origem_id: string | null;
   /** Parcela do envio consumida. Só existe em item de job. */
   envio_parcela_id: string | null;
