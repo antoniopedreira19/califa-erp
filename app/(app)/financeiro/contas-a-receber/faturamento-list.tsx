@@ -62,6 +62,13 @@ export interface FaturamentoPendenteRow {
   saldo: number;
   /** Soma dos saldos de TODAS as parcelas do job — o "total do job". */
   saldo_job: number;
+  /** Quanto do saldo desta parcela ainda é faturamento PRÓPRIO do job.
+   *  O que passar disso é saldo em save, e vira um segundo item de nota
+   *  (docs/decisions/023-save-entre-jobs.md). Numa parcela sem save é o
+   *  saldo inteiro. */
+  saldo_proprio: number;
+  /** Quanto do saldo desta parcela é saldo em save. Zero na maioria. */
+  saldo_save: number;
   parcela_numero: number;
   parcela_total: number;
   data_prevista: string | null;

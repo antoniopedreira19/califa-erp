@@ -99,7 +99,10 @@ const parcelaSchema = z.object({
  * faz o saldo baixar na linha certa da aba Faturamento.
  */
 const itemSchema = z.object({
-  origem_tipo: z.enum(["job", "bv", "avulso"]),
+  // `save` só existe no ITEM, nunca no cabeçalho: a nota continua sendo
+  // do job, e o que separa o faturamento próprio do saldo em save são os
+  // itens (docs/decisions/023-save-entre-jobs.md).
+  origem_tipo: z.enum(["job", "bv", "avulso", "save"]),
   origem_id: z.string().uuid().nullable(),
   envio_parcela_id: z.string().uuid().nullable(),
   valor: z.number().positive(),

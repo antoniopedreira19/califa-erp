@@ -12,6 +12,7 @@
  * e é aqui que ela é testada.
  */
 import { blocosDoItem, somarBlocosDosItens } from "../lib/calculos/bv-planilha";
+import { repartirEmJobESave } from "../lib/calculos/save-faturamento";
 import {
   calcularTotaisVersao,
   calcularEfeitoDaMudanca,
@@ -285,6 +286,32 @@ conferir(
 console.log(
   `  a linha que gera save sai (30.000 fora da base) e a que consome entra (20.000 dentro)`,
 );
+
+// ---------------------------------------- a parcela vira itens de nota
+console.log("\n=== 8. A parcela do envio vira dois itens de nota ===");
+
+// JOB-0015 do teste no banco: parcela de 13.918,23 com 1.391,82 de saldo
+// proprio; o resto e save.
+const p1 = repartirEmJobESave(13918.23, 1391.82);
+conferir("Parcela partida · job", p1.job, 1391.82, 0);
+conferir("Parcela partida · save", p1.save, 12526.41, 0);
+conferir("As duas somam a parcela", p1.job + p1.save, 13918.23, 0.005);
+
+// Parcela que cabe inteira na parte do job: nada de save.
+const p2 = repartirEmJobESave(13918.23, 13918.23);
+conferir("Parcela sem save · job", p2.job, 13918.23, 0);
+conferir("Parcela sem save · save", p2.save, 0, 0);
+
+// Job 100% save: a parcela inteira e save.
+const p3 = repartirEmJobESave(50000, 0);
+conferir("Job so de save · job", p3.job, 0, 0);
+conferir("Job so de save · save", p3.save, 50000, 0);
+
+// Faturamento PARCIAL de uma parcela que tem save: como o job vem
+// primeiro, faturar menos que o saldo proprio nao toca no save.
+const p4 = repartirEmJobESave(1000, 1391.82);
+conferir("Faturamento parcial · job", p4.job, 1000, 0);
+conferir("Faturamento parcial · save", p4.save, 0, 0);
 
 console.log(
   falhas === 0
