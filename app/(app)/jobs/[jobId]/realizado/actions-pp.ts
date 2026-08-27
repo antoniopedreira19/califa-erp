@@ -687,19 +687,22 @@ async function finalizarPedidoCompraImpl(
   // confere na hora de pagar. Tudo idêntico entre eles, menos o Prazo de
   // Pagto, a linha "Parcela: N/T" e o valor em destaque.
   //
-  // Verba de Produção não tem fornecedor — o PDF que o modelo atual
-  // renderiza é orientado ao fornecedor externo. Por ora, verba omite
-  // geração de PDF (os anexos são o documento); Task futura adaptará o
-  // modelo para verba interna.
+  // Verba de Produção também gera PDF, mas com layout adaptado (trocado
+  // bloco Fornecedor por Responsável, omitido bloco de dados bancários) —
+  // ver `lib/pdf/pedido-compra.ts`. Vai como comprovante interno do
+  // adiantamento ao gerente.
   const parcelas = (parcelasCriadas ?? []).slice().sort((a, b) => a.numero - b.numero);
   const documentos: Array<{ parcelaId: string; path: string; buffer: Buffer }> = [];
 
-  if (!d.verba_producao) {
+  {
     try {
       // Import dinâmico: só carrega pdfmake QUANDO vai gerar PDF, isolando
       // seus side-effects de inicialização do resto do módulo.
       const { renderPedidoCompraPDF } = await import("@/lib/pdf/pedido-compra");
       const emitidoEm = new Date().toISOString();
+      const responsavelVerbaNome = d.verba_producao
+        ? (responsavelRes.data?.nome ?? "")
+        : null;
 
       for (const parcela of parcelas) {
         const buffer = await renderPedidoCompraPDF({
@@ -711,9 +714,11 @@ async function finalizarPedidoCompraImpl(
             valor,
             prazo_pagamento: parcela.data_vencimento,
             created_at: emitidoEm,
+            verba_producao: d.verba_producao,
           },
           empresa: empRes.data as never,
-          fornecedor: fornRes.data as never,
+          fornecedor: (fornRes.data ?? null) as never,
+          responsavelVerbaNome,
           job: { nome: job.nome, produto: job.produto ?? "" },
           projeto: {
             codigo: projeto?.codigo ?? "",
