@@ -50,6 +50,14 @@ export interface BaixaTituloAlvo {
   empresaId: string;
   planoContaTipoId: string | null;
   planoContaSubtipoId: string | null;
+  /**
+   * `true` quando o título é uma devolução de verba de produção. Nesse
+   * caso: (a) o campo Forma de pagamento é escondido — a RPC de baixa da
+   * devolução não recebe forma; (b) o header do dialog troca para "Baixar
+   * devolução" e o rótulo "Data em que o dinheiro voltou". Nem forma nem
+   * cartão são coletados.
+   */
+  isDevolucao?: boolean;
 }
 
 export function BaixaTituloDialog({
@@ -85,7 +93,8 @@ export function BaixaTituloDialog({
     conta_bancaria_id: string;
     plano_conta_tipo_id: string;
     plano_conta_subtipo_id: string;
-    forma_pagamento: FormaPagamento;
+    /** `null` quando `alvo.isDevolucao` — a RPC de devolução não usa. */
+    forma_pagamento: FormaPagamento | null;
     cartao_credito_id: string | null;
   }) => void;
 }) {
@@ -155,24 +164,29 @@ export function BaixaTituloDialog({
       setErroLocal("Selecione o centro de custo do pagamento.");
       return;
     }
-    if (!formaPagamento.forma_pagamento) {
-      setErroLocal("Selecione a forma de pagamento.");
-      return;
-    }
-    if (
-      formaPagamento.forma_pagamento === "cartao_credito" &&
-      !formaPagamento.cartao_credito_id
-    ) {
-      setErroLocal("Selecione o cartão de crédito.");
-      return;
+    // Devolução de verba: RPC não recebe forma, então não coletamos nem
+    // validamos.
+    const isDevolucao = alvo?.isDevolucao === true;
+    if (!isDevolucao) {
+      if (!formaPagamento.forma_pagamento) {
+        setErroLocal("Selecione a forma de pagamento.");
+        return;
+      }
+      if (
+        formaPagamento.forma_pagamento === "cartao_credito" &&
+        !formaPagamento.cartao_credito_id
+      ) {
+        setErroLocal("Selecione o cartão de crédito.");
+        return;
+      }
     }
     onConfirm({
       pago_em: pagoEm,
       conta_bancaria_id: contaId,
       plano_conta_tipo_id: tipoId,
       plano_conta_subtipo_id: subtipoId,
-      forma_pagamento: formaPagamento.forma_pagamento,
-      cartao_credito_id: formaPagamento.cartao_credito_id,
+      forma_pagamento: isDevolucao ? null : formaPagamento.forma_pagamento,
+      cartao_credito_id: isDevolucao ? null : formaPagamento.cartao_credito_id,
     });
   }
 
@@ -185,7 +199,7 @@ export function BaixaTituloDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <CreditCard className="h-5 w-5 text-emerald-600" />
-            Dar baixa no pagamento
+            {alvo.isDevolucao ? "Baixar devolução" : "Dar baixa no pagamento"}
           </DialogTitle>
         </DialogHeader>
 
@@ -216,7 +230,10 @@ export function BaixaTituloDialog({
         <div className="space-y-3">
           <div className="space-y-1">
             <label className="text-xs font-semibold">
-              Data do pagamento <span className="text-california-red">*</span>
+              {alvo.isDevolucao
+                ? "Data em que o dinheiro voltou"
+                : "Data do pagamento"}{" "}
+              <span className="text-california-red">*</span>
             </label>
             <DatePicker
               name="pago_em"
@@ -230,7 +247,9 @@ export function BaixaTituloDialog({
 
           <div className="space-y-1">
             <label className="text-xs font-semibold">
-              Conta que realizará o pagamento{" "}
+              {alvo.isDevolucao
+                ? "Conta que receberá o dinheiro"
+                : "Conta que realizará o pagamento"}{" "}
               <span className="text-california-red">*</span>
             </label>
             <Select
@@ -260,13 +279,15 @@ export function BaixaTituloDialog({
             </Select>
           </div>
 
-          <FormaPagamentoField
-            cartoes={cartoes}
-            value={formaPagamento}
-            onChange={handleFormaPagamento}
-            disabled={pending}
-            obrigatorio
-          />
+          {!alvo.isDevolucao && (
+            <FormaPagamentoField
+              cartoes={cartoes}
+              value={formaPagamento}
+              onChange={handleFormaPagamento}
+              disabled={pending}
+              obrigatorio
+            />
+          )}
 
           <div className="space-y-1">
             <label className="text-xs font-semibold">

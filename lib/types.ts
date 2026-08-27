@@ -1704,10 +1704,13 @@ export interface ContaAvulsa {
  * não tem tabela própria (decisão do plano: sem tabela-espelho). Ela
  * nasce da união de duas fontes, e a origem se deduz assim:
  *
- *   pp          → parcela de `pedidos_compra_parcelas` de PP aprovada
- *   avulso      → `contas_avulsas` com `recorrente_id` nulo
- *   recorrencia → `contas_avulsas` com `recorrente_id` preenchido
- *                 (a ocorrência que `gerar_ocorrencias_recorrentes` cria)
+ *   pp                 → parcela de `pedidos_compra_parcelas` de PP aprovada
+ *   avulso             → `contas_avulsas` com `recorrente_id` nulo
+ *   recorrencia        → `contas_avulsas` com `recorrente_id` preenchido
+ *                        (a ocorrência que `gerar_ocorrencias_recorrentes` cria)
+ *   desembolso         → parcela de `desembolsos_parcelas` de desembolso aprovado
+ *   pp_devolucao_verba → linha de `pp_verba_devolucoes` (título negativo:
+ *                        entrada quando o gerente devolve saldo da verba)
  */
 export type OrigemTitulo = "pp" | "avulso" | "recorrencia" | "desembolso" | "pp_devolucao_verba";
 
