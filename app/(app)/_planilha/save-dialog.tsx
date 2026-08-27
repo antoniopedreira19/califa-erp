@@ -11,7 +11,7 @@
  *   - **Consumir** — esta linha é paga por saldo de outros jobs, e por
  *     isso sai do faturamento e entra no valor do job.
  *
- *  O saldo é do JOB, não da linha (decisão 023, nota de 26/08/2026): cada
+ *  O saldo é do JOB, não da linha (decisão 028, nota de 26/08/2026): cada
  *  origem desconta do saldo do job dela, e uma linha pode beber de vários.
  *  As linhas que formaram cada saldo aparecem no detalhe, mas não são
  *  escolhidas uma a uma — não é assim que a operação trata o crédito.
@@ -559,7 +559,7 @@ function ModoConsumir({
         </span>
         <span className="pb-2.5 text-[12.5px] text-muted-foreground">
           {/* O design pedia que fechasse exato com o orçado; o Tiago manteve
-              o consumo parcial da decisão 023 §6 — o que sobra é faturado
+              o consumo parcial da decisão 028 §6 — o que sobra é faturado
               normalmente. */}
           {passouDoOrcado
             ? "não pode passar do orçado da linha"

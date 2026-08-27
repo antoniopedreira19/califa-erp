@@ -58,7 +58,7 @@ interface Props {
    *  planilha — na linha tracejada do pé da tabela — em vez de na barra
    *  de ações da página. */
   versaoId: string;
-  // ---- SAVE (docs/decisions/023-save-entre-jobs.md)
+  // ---- SAVE (docs/decisions/028-save-entre-jobs.md)
   /** Aparece no texto do formulário: o crédito é do cliente. */
   clienteNome: string;
   savePorPadrao: boolean;

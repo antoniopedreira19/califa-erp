@@ -31,7 +31,7 @@ export interface ResumoEncerramento {
   custoRealizado: number;
   /** Quanto do orçado deste job foi pago com crédito de outro job. Zero
    *  na maioria; quando cobre o job inteiro, é o que explica um
-   *  faturamento zerado (decisão 023). */
+   *  faturamento zerado (decisão 028). */
   saveConsumido?: number;
   moeda: string;
   /** PPs sem baixa e BVs não recebidos — travam o encerramento. */

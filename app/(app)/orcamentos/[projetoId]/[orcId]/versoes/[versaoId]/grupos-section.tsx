@@ -164,7 +164,7 @@ export function GruposSection({
 }
 
 /** A chave do "Orçamento de save" — default de linha nova, não trava
- *  (decisão 023 §10). Fica na barra da planilha, e não no cabeçalho da
+ *  (decisão 028 §10). Fica na barra da planilha, e não no cabeçalho da
  *  página como no design: é ajuste de comportamento da planilha, e o
  *  cabeçalho é server component. */
 function ChaveOrcamentoDeSave({

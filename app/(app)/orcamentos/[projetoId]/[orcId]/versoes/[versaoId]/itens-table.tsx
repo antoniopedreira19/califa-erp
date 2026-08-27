@@ -485,7 +485,7 @@ export function ItensTable({
         num(valorAtual(item, "dias_meses_orcado"))
       : Number(item.total_orcado);
 
-    // Linha em save não tem custo (decisão 023 §9): o espelho de `A` e `D`
+    // Linha em save não tem custo (decisão 028 §9): o espelho de `A` e `D`
     // não vale nela, senão o custo que o banco zerou voltaria pela tela.
     if (item.em_save === true) return { orcado, planejado: 0 };
 
@@ -1177,7 +1177,7 @@ export function ItensTable({
                         // Duas perguntas diferentes: o planejado ESPELHA o
                         // orçado (`A` e `D`), e o planejado está TRAVADO. A
                         // linha em save trava sem espelhar — ela não tem
-                        // custo nenhum (decisão 023 §9).
+                        // custo nenhum (decisão 028 §9).
                         const planejadoEspelha =
                           !emSave &&
                           planejadoEspelhaOrcado(

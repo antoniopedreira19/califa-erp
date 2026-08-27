@@ -120,7 +120,7 @@ export function realizadoVemDasPPs(tipo: TipoCusto): boolean {
  * coluna PLANEJADO.
  *
  * `emSave` vem antes de tudo: a linha em save é venda sem execução, e não
- * tem custo nenhum neste job (decisão 023 §9). O trigger já grava zero nas
+ * tem custo nenhum neste job (decisão 028 §9). O trigger já grava zero nas
  * três células do planejado, mas em `A` e `D` a tela não LÊ a coluna — ela
  * espelha o orçado —, e sem esta guarda o espelho ressuscitaria o custo
  * que o banco zerou, jogando a rentabilidade do grupo para negativa.
@@ -246,7 +246,7 @@ export interface ItemParaBv {
   bv_liquido_planejado?: number | string | null;
   /** A linha gera SAVE: é faturada aqui e o serviço não acontece neste
    *  projeto. Fica fora da rentabilidade, porque não tem custo com que
-   *  comparar (docs/decisions/023-save-entre-jobs.md §9). */
+   *  comparar (docs/decisions/028-save-entre-jobs.md §9). */
   em_save?: boolean | null;
 }
 
@@ -286,7 +286,7 @@ export function blocosDoItem(
    *  Separado de `orcado` de propósito: a coluna ORÇADO continua mostrando
    *  o valor cheio (ele está sendo faturado), mas comparar esse valor com
    *  um custo que não existe daria 100% de margem em toda planilha com
-   *  save (decisão 023 §9). */
+   *  save (decisão 028 §9). */
   orcadoRentabilidade: number;
   planejado: ValoresDoBloco;
   realizado: ValoresDoBloco;

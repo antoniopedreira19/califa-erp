@@ -46,7 +46,7 @@ alter view public.vw_titulo_partes set (security_invoker = on);
 grant select on public.vw_titulo_partes to authenticated;
 
 comment on view public.vw_titulo_partes is
-  'JOB PRIMEIRO, DEPOIS O SAVE: como cada titulo de uma nota se divide entre o faturamento proprio do job e o saldo em save. Fonte UNICA dessa regra (decisao 023).';
+  'JOB PRIMEIRO, DEPOIS O SAVE: como cada titulo de uma nota se divide entre o faturamento proprio do job e o saldo em save. Fonte UNICA dessa regra (decisao 028).';
 
 create or replace view public.vw_lancamento_origens as
  with comp as (
@@ -80,7 +80,7 @@ alter view public.vw_lancamento_origens set (security_invoker = on);
 grant select on public.vw_lancamento_origens to authenticated;
 
 comment on view public.vw_lancamento_origens is
-  'De onde vem o dinheiro de uma baixa: uma linha por job coberto pela nota e uma para o saldo em save. E o que a conciliacao mostra ao expandir (decisao 023).';
+  'De onde vem o dinheiro de uma baixa: uma linha por job coberto pela nota e uma para o saldo em save. E o que a conciliacao mostra ao expandir (decisao 028).';
 
 -- `vw_fluxo_caixa` passa a ler a regra da view extraida, em vez de ter a
 -- copia dela num CTE proprio.

@@ -50,7 +50,7 @@ export function classificarFaturamento(
   /** Job cujo faturamento previsto é ZERO porque tudo nele é pago por
    *  saldo de save de outro job. Ele **pula a etapa de faturamento** e se
    *  comporta como já faturado: não há nota a emitir, ela já saiu no job
-   *  que gerou o crédito (decisão do Tiago em 27/08/2026, decisão 023
+   *  que gerou o crédito (decisão do Tiago em 27/08/2026, decisão 028
    *  §11). Sem isto ele ficaria eternamente em "aguardando envio",
    *  travado dos dois lados. */
   nadaAFaturar = false,

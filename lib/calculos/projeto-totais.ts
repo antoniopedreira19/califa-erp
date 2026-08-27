@@ -12,7 +12,7 @@ export type LinhaGrupoProjeto = {
   nomeExibicao: string;
   orcado: number;
   /** O orçado que serve de BASE À RENTABILIDADE — a linha em save fica de
-   *  fora (decisão 023 §9). Igual a `orcado` quando não há save. */
+   *  fora (decisão 028 §9). Igual a `orcado` quando não há save. */
   orcadoRentabilidade: number;
   planejado: number;
   realizado: number;

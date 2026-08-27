@@ -314,7 +314,7 @@ export interface VersaoOrcamento {
   percentual_imposto: number;
   /** Orçamento de save: todo item NOVO nasce marcado. É default de linha
    *  nova, não trava — desligar não desmarca o que já existe
-   *  (docs/decisions/023-save-entre-jobs.md §10). */
+   *  (docs/decisions/028-save-entre-jobs.md §10). */
   save_por_padrao: boolean;
   aprovado_em: string | null;
   aprovado_por: string | null;
@@ -373,7 +373,7 @@ export interface VersaoOrcamentoItem {
   /** A linha gera SAVE: o cliente paga nesta nota, o serviço não acontece
    *  neste projeto e o valor vira crédito dele para um projeto seguinte.
    *  Sai da base do VALOR DO JOB e permanece na do FATURAMENTO
-   *  (docs/decisions/023-save-entre-jobs.md). */
+   *  (docs/decisions/028-save-entre-jobs.md). */
   em_save: boolean;
   /** Quanto desta linha é pago por saldo de save de outro job. Sai da base
    *  do FATURAMENTO — já foi faturado lá — e fica na do VALOR DO JOB.
@@ -643,7 +643,7 @@ export interface Job {
    *  linhas em save mais honorários e imposto proporcionais. Espelho
    *  escrito pelo TypeScript, como o de cima: a `vw_fluxo_caixa` usa este
    *  número para dividir a previsão de recebimento entre "recebimento do
-   *  job" e "recebimento do save" (docs/decisions/023). */
+   *  job" e "recebimento do save" (docs/decisions/028). */
   faturamento_save_previsto: number;
   /** Valor do job congelado na abertura — base do card de Erratas. */
   valor_job_abertura: number | null;
@@ -1098,7 +1098,7 @@ export interface ItemPlanilhaJob {
   /** A linha gera SAVE: o cliente paga nesta nota, o serviço não acontece
    *  neste projeto e o valor vira crédito dele para um projeto seguinte.
    *  Sai da base do VALOR DO JOB e permanece na do FATURAMENTO
-   *  (docs/decisions/023-save-entre-jobs.md). */
+   *  (docs/decisions/028-save-entre-jobs.md). */
   em_save: boolean;
   /** Quanto desta linha é pago por saldo de save de outro job. Sai da base
    *  do FATURAMENTO — já foi faturado lá — e fica na do VALOR DO JOB.
@@ -1510,7 +1510,7 @@ export type FaturamentoOrigemTipo = "job" | "bv" | "avulso";
 
 /** Origem de um ITEM da nota. Aqui existe `save`, e é o que separa o
  *  faturamento próprio do job do saldo em save que a mesma nota cobre
- *  (docs/decisions/023-save-entre-jobs.md). Espelha o enum
+ *  (docs/decisions/028-save-entre-jobs.md). Espelha o enum
  *  `faturamento_origem` do Postgres, que tem os quatro. */
 export type FaturamentoItemOrigemTipo = FaturamentoOrigemTipo | "save";
 export type FaturamentoStatus = "emitido" | "cancelado";

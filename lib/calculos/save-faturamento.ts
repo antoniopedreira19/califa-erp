@@ -4,7 +4,7 @@
  *  incluído. Na nota isso precisa sair em DOIS itens — `origem_tipo`
  *  `job` e `save` —, porque cada um tem um destino diferente no fluxo de
  *  caixa: o do job é dele, o do save entra sem dono até alguém consumir
- *  (docs/decisions/023-save-entre-jobs.md).
+ *  (docs/decisions/028-save-entre-jobs.md).
  *
  *  A regra de repartição é a mesma do resto do sistema, definida pelo
  *  Tiago em 26/08/2026: **job primeiro, depois o save**.

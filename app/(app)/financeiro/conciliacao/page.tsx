@@ -137,7 +137,7 @@ export default async function ConciliacaoPage({
     // De onde vem o dinheiro de cada baixa: os jobs cobertos pela nota e
     // o saldo em save. Só existe em lançamento de título; nos demais a
     // consulta volta vazia e a linha fica sem expansão
-    // (docs/decisions/023-save-entre-jobs.md).
+    // (docs/decisions/028-save-entre-jobs.md).
     const ids = raw.map((r) => r.id);
     const origensPorLancamento = new Map<
       string,

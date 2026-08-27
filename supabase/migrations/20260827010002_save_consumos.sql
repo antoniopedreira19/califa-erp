@@ -1,7 +1,7 @@
 -- =====================================================================
 -- SAVE — o consumo do saldo, e o saldo em si
 --
--- Decisão docs/decisions/023-save-entre-jobs.md, com as regras revistas em
+-- Decisão docs/decisions/028-save-entre-jobs.md, com as regras revistas em
 -- 26/08/2026 depois do design `Orcamento - Versao com Save.dc.html`:
 --
 --  * O consumo sai do SALDO DO JOB de origem, não de uma linha específica.
@@ -37,7 +37,7 @@ create table if not exists public.saves_consumos (
   job_item_orcado_id uuid references public.jobs_itens_orcado(id) on delete cascade,
 
   -- Quanto do PRINCIPAL do saldo esta linha consome. Só o principal:
-  -- honorários e imposto não são saldo, migram por rateio (decisão 023 §4).
+  -- honorários e imposto não são saldo, migram por rateio (decisão 028 §4).
   valor numeric(14,2) not null,
 
   -- Preenchido na abertura do job, na linha da VERSÃO, quando o consumo é
@@ -70,7 +70,7 @@ create index if not exists idx_save_consumo_item_versao on public.saves_consumos
 create index if not exists idx_save_consumo_item_job on public.saves_consumos(job_item_orcado_id);
 
 comment on table public.saves_consumos is
-  'Consumo de saldo de save: uma linha por (job de origem, linha consumidora). A linha pode consumir de vários jobs. Nasce no orçamento e é copiada para o job na abertura (decisão 023).';
+  'Consumo de saldo de save: uma linha por (job de origem, linha consumidora). A linha pode consumir de vários jobs. Nasce no orçamento e é copiada para o job na abertura (decisão 028).';
 comment on column public.saves_consumos.substituido_em is
   'Na linha da VERSÃO: momento em que a abertura do job copiou este consumo. Marcado, ele para de contar — quem conta passa a ser a cópia do job.';
 
@@ -163,7 +163,7 @@ select j.id                              as job_id,
  where coalesce(g.gerado, 0) > 0;
 
 comment on view public.vw_saves_por_job is
-  'Saldo de save por job de origem. NÃO filtra status do job: o saldo é do cliente e sobrevive ao encerramento da origem (decisão 023 §8).';
+  'Saldo de save por job de origem. NÃO filtra status do job: o saldo é do cliente e sobrevive ao encerramento da origem (decisão 028 §8).';
 
 grant select on public.vw_saves_consumos_firmes to authenticated;
 grant select on public.vw_saves_por_job to authenticated;
@@ -275,7 +275,7 @@ begin
 
   -- 3. A soma dos consumos da LINHA (de todas as origens) não passa do
   --    orçado dela. Consumo parcial é permitido — o resto segue faturado
-  --    normalmente (decisão 023 §6) —, mas passar do total deixaria a base
+  --    normalmente (decisão 028 §6) —, mas passar do total deixaria a base
   --    de faturamento negativa.
   select coalesce(sum(c.valor), 0) into v_ja_consumido
     from public.saves_consumos c
@@ -334,7 +334,7 @@ before insert or update on public.saves_consumos
 for each row execute function public.save_consumo_valida();
 
 comment on function public.save_consumo_valida() is
-  'Invariantes do consumo de save que cruzam linhas: teto do orçado da linha, saldo do job de origem, linha não é save, não consome de si mesma (decisão 023).';
+  'Invariantes do consumo de save que cruzam linhas: teto do orçado da linha, saldo do job de origem, linha não é save, não consome de si mesma (decisão 028).';
 
 -- ================================================ security_invoker: SIM
 -- Aqui SIM, ao contrário das views antigas do schema.

@@ -67,4 +67,4 @@ end;
 $function$;
 
 comment on function public.save_consumido_recalcula is
-  'Mantem save_consumido da linha (versao em rascunho e copia do job) a partir de saves_consumos. Versao APROVADA fica congelada: ver docs/decisions/023-save-entre-jobs.md.';
+  'Mantem save_consumido da linha (versao em rascunho e copia do job) a partir de saves_consumos. Versao APROVADA fica congelada: ver docs/decisions/028-save-entre-jobs.md.';

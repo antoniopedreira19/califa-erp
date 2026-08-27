@@ -121,7 +121,7 @@ interface Props {
   /** Quanto do orçado deste job é pago com crédito de outro job (save).
    *  Só serve para EXPLICAR um faturamento previsto zerado: sem save, ele
    *  significa "o cliente paga o fornecedor direto"; com save, significa
-   *  "o cliente já pagou isto, num job anterior" (decisão 023). */
+   *  "o cliente já pagou isto, num job anterior" (decisão 028). */
   saveConsumido?: number;
   /** Quem clicou em "Enviar job para abertura" na tela da versão. */
   enviadoPorNome: string | null;

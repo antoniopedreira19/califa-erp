@@ -9,7 +9,7 @@
 --
 -- O que NÃO muda: `aguardando_abertura` segue oferecendo saldo. O crédito
 -- nasce do compromisso do cliente, e o ERP já trata `faturamento_previsto`
--- como compromisso desde a abertura do job (decisão 023). Encerrado também
+-- como compromisso desde a abertura do job (decisão 028). Encerrado também
 -- segue: o saldo é do cliente e sobrevive ao encerramento da origem.
 --
 -- Recriada inteira porque `create or replace view` não aceita mudança de
@@ -60,4 +60,4 @@ grant select on public.vw_saves_por_job to authenticated;
 comment on view public.vw_saves_por_job is
   'Saldo de save por JOB de origem: gerado, consumido (firme), reservado '
   '(rascunho) e disponível. Exclui job recusado pelo financeiro e job '
-  'cancelado. Ver docs/decisions/023-save-entre-jobs.md.';
+  'cancelado. Ver docs/decisions/028-save-entre-jobs.md.';

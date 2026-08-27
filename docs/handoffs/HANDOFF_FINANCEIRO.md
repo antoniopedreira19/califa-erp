@@ -2021,7 +2021,7 @@ ao restart: confira numa aba nova antes de acreditar no erro.
 
 ## ⚠️ 24–27/08/2026 — o SAVE no financeiro
 
-**Regra:** `docs/decisions/023-save-entre-jobs.md`, com as regras de fluxo
+**Regra:** `docs/decisions/028-save-entre-jobs.md`, com as regras de fluxo
 de caixa definidas pelo Tiago em 26/08/2026.
 **Contexto:** ver os handoffs de Orçamentos e de Jobs, mesma data.
 

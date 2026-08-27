@@ -302,7 +302,7 @@ export async function enviarJobParaAbertura(
       faturamento_previsto: Number(totais.faturamentoPrevisto.toFixed(2)),
       // Quanto desse faturamento é saldo em save. Anda colado ao de cima:
       // é a `vw_fluxo_caixa` que precisa dele para dividir a previsão de
-      // recebimento entre job e save (decisão 023).
+      // recebimento entre job e save (decisão 028).
       faturamento_save_previsto: Number(totais.save.receita.toFixed(2)),
       // Congelado aqui e nunca mais alterado: é a base de comparação do
       // card de Erratas ("faturamento na abertura" x "atual").
@@ -364,7 +364,7 @@ export async function enviarJobParaAbertura(
         // A marca de save atravessa junto. Sem ela a cópia do job nasceria
         // "normal": o crédito não existiria, o planejado do tipo `A`
         // voltaria a espelhar o orçado pelo trigger, e a Planilha Interna
-        // discordaria da versão aprovada logo na abertura (decisão 023).
+        // discordaria da versão aprovada logo na abertura (decisão 028).
         em_save: i.em_save === true,
         save_consumido: Number(i.save_consumido ?? 0),
       })),
@@ -386,7 +386,7 @@ export async function enviarJobParaAbertura(
     // move dinheiro no fluxo de ninguém. É aqui que ele vira consumo de um
     // job de verdade — e é `job_item_orcado_id` que a `vw_fluxo_caixa` usa
     // para migrar o dinheiro em save para quem o gastou, na data em que ele
-    // entrou (decisão 023, nota de 26/08/2026).
+    // entrou (decisão 028, nota de 26/08/2026).
     //
     // As duas pontas nunca convivem (`chk_save_consumo_uma_ponta`), e é de
     // propósito: a errata do job apaga e recria os consumos por

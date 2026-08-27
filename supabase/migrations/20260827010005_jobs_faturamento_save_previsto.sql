@@ -30,4 +30,4 @@ alter table public.jobs
   add column if not exists faturamento_save_previsto numeric(14,2) not null default 0;
 
 comment on column public.jobs.faturamento_save_previsto is
-  'Quanto de `faturamento_previsto` é saldo em save: o principal das linhas em save mais os honorários e o imposto proporcionais (decisão 023 §4). Espelho escrito pelo TypeScript, como `faturamento_previsto` — não calcular em SQL.';
+  'Quanto de `faturamento_previsto` é saldo em save: o principal das linhas em save mais os honorários e o imposto proporcionais (decisão 028 §4). Espelho escrito pelo TypeScript, como `faturamento_previsto` — não calcular em SQL.';

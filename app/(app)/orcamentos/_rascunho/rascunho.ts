@@ -115,7 +115,7 @@ export function itensDoJob(job: JobRascunho): ItemRascunho[] {
 
 export interface TotaisJob {
   orcado: number;
-  /** Base da rentabilidade — sem as linhas em save (decisão 023 §9). */
+  /** Base da rentabilidade — sem as linhas em save (decisão 028 §9). */
   orcadoRentabilidade: number;
   planejado: number;
   rentabilidade: number;
@@ -160,7 +160,7 @@ export function totaisDoJob(
   const itens = itensDoJob(job);
   const orcado = itens.reduce((s, it) => s + totalOrcadoDe(it), 0);
   // Base da rentabilidade: sem as linhas em save, que são venda sem
-  // execução e não têm custo a comparar (decisão 023 §9).
+  // execução e não têm custo a comparar (decisão 028 §9).
   const orcadoRentabilidade = itens.reduce(
     (s, it) => s + (it.em_save === true ? 0 : totalOrcadoDe(it)),
     0,

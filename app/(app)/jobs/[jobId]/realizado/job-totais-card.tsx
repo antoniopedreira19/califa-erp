@@ -89,7 +89,7 @@ export function JobTotaisCard({
 
   // Com save, o fechamento abre em três colunas — o mesmo bloco da tela da
   // versão do orçamento. Sem ele os dois totais de baixo divergiriam sem
-  // explicação nenhuma nesta tela (decisão 023 §3).
+  // explicação nenhuma nesta tela (decisão 028 §3).
   const temSave = save.totalSaveGerado > 0 || save.totalSaveUsado > 0;
 
   // Planejado e realizado passam pelos blocos com BV: o número que o card

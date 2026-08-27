@@ -38,7 +38,7 @@ export type AuditAction =
   // não resolvesse. Como o registro deixa de existir, o metadata guarda o
   // que ele era.
   | "versao_orcamento.deletada"
-  // SAVE — o crédito entre jobs (docs/decisions/023-save-entre-jobs.md).
+  // SAVE — o crédito entre jobs (docs/decisions/028-save-entre-jobs.md).
   // Registrado porque marcar uma linha ou definir um consumo move
   // faturamento previsto e valor do job, e move dinheiro entre jobs.
   | "save.linha.marcada"

@@ -215,7 +215,7 @@ export interface QuebraSave {
   totalSaveGerado: number;
   totalCustosDoJob: number;
   /** O FATURAMENTO que as linhas em save geram — principal + honorários +
-   *  imposto proporcionais. É o segundo número do save (decisão 023 §4):
+   *  imposto proporcionais. É o segundo número do save (decisão 028 §4):
    *  o crédito que o cliente tem a gastar é `totalSaveGerado`; este aqui é
    *  o que a nota cobra por causa delas, e é o que migra para quem
    *  consumir.
@@ -320,7 +320,7 @@ function comPrincipal(
  * Fechamento da versão do orçamento (e da cópia orçada do job, que tem a
  * mesma forma).
  *
- * **A conta é uma só, rodada sobre duas bases** (decisão 023). Cada linha
+ * **A conta é uma só, rodada sobre duas bases** (decisão 028). Cada linha
  * empresta um valor diferente a cada lado:
  *
  *     base de faturamento  = total orçado − save consumido
@@ -448,7 +448,7 @@ export interface EstadoItemErrata {
   saveConsumido?: number;
 }
 
-/** Os dois valores efetivos de um estado — as bases da decisão 023. */
+/** Os dois valores efetivos de um estado — as bases da decisão 028. */
 function basesDoEstado(e: EstadoItemErrata): {
   faturamento: number;
   job: number;
@@ -511,7 +511,7 @@ export function calcularEfeitoDaMudanca(
 
 /**
  * O faturamento que UMA linha em save gera no job de origem: principal +
- * honorários + imposto proporcionais (decisão 023 §4).
+ * honorários + imposto proporcionais (decisão 028 §4).
  *
  * É o **segundo** número do save. O primeiro é o saldo consumível, que é
  * só o principal. Os dois são verdadeiros e servem a coisas diferentes: o
@@ -541,7 +541,7 @@ export function receitaDeFaturamentoDaLinha(
 
 /**
  * Quanto da receita da origem migra para o job que consumiu, rateado pelo
- * consumo do **principal** (decisão 023 §4).
+ * consumo do **principal** (decisão 028 §4).
  *
  * Consumir R$ 25.000 de um saldo de R$ 30.000 cuja receita foi
  * R$ 41.009,07 migra R$ 34.174,23 — e o resto continua com a origem até

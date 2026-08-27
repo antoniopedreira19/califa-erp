@@ -2,10 +2,10 @@
 
 **Data:** 2026-08-24
 **Status:** proposto, aguardando o layout do Claude Design
-**Decisão de negócio:** [`docs/decisions/023-save-entre-jobs.md`](../../decisions/023-save-entre-jobs.md)
+**Decisão de negócio:** [`docs/decisions/028-save-entre-jobs.md`](../../decisions/028-save-entre-jobs.md)
 **Brief de design:** [`docs/design-briefs/2026-08-24-save-brief.md`](../../design-briefs/2026-08-24-save-brief.md)
 
-> ⚠️ **Superada em parte pela nota de 26/08/2026 da decisão 023.** Depois
+> ⚠️ **Superada em parte pela nota de 26/08/2026 da decisão 028.** Depois
 > do design `Orcamento - Versao com Save.dc.html`, o modelo mudou: o saldo
 > é do **job**, não da linha; uma linha consome de **vários jobs**; acabou
 > a alocação exclusiva; rascunho **reserva** mas não segura saldo; e no job
@@ -475,7 +475,7 @@ planilha e Totais, calha de 116px que não alarga, strings em pt-BR completo.
 
 ### 9.1. Ainda aguardando o Tiago
 
-- **Save consumível antes de a NF sair?** Recomendação: sim (decisão 023 §6).
+- **Save consumível antes de a NF sair?** Recomendação: sim (decisão 028 §6).
 - **Errata pode marcar/desmarcar save?** Recomendação: não, na fatia 1.
 - **O CHECK de `faturamento_itens`** (§6.2) — item destrutivo.
 
@@ -484,7 +484,7 @@ planilha e Totais, calha de 116px que não alarga, strings em pt-BR completo.
 Todas as linhas pagas por save ⇒ `faturamento_previsto = 0` ⇒
 `enviarJobParaFaturamento` recusa (`actions-faturamento.ts:84-90`) ⇒ e a
 decisão 008 §1 só encerra quem foi enviado. **O job ficaria preso.**
-Resolvido pela regra 15 da decisão 023: exceção explícita.
+Resolvido pela regra 15 da decisão 028: exceção explícita.
 
 ### 9.3. Consumo criado depois do envio para faturamento
 
@@ -511,7 +511,7 @@ O save agrava. Decidir na fatia 4 se entra no escopo ou fica como pendência.
 
 ### 9.6. Encerrar o job de origem com save não consumido
 
-O saldo **sobrevive** (regra 8 da decisão 023). É contra-intuitivo e está
+O saldo **sobrevive** (regra 8 da decisão 028). É contra-intuitivo e está
 documentado; `vw_saves` não filtra status da origem de propósito.
 
 ### 9.7. Backfill

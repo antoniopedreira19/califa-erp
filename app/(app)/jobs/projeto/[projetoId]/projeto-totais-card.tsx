@@ -99,7 +99,7 @@ export function ProjetoTotaisCard({
 }) {
   const totalOrcado = jobs.reduce((s, j) => s + j.orcado, 0);
   // Base da rentabilidade: o orçado sem as linhas em save, que são venda
-  // sem execução e não têm custo a comparar (decisão 023 §9).
+  // sem execução e não têm custo a comparar (decisão 028 §9).
   const totalOrcadoRentabilidade = jobs.reduce(
     (s, j) => s + j.orcadoRentabilidade,
     0,

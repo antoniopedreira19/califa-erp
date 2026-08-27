@@ -1,6 +1,6 @@
 /** Leitura do SAVE — o crédito que passa de um job para outro.
  *
- *  Regra em `docs/decisions/023-save-entre-jobs.md`, com a nota de
+ *  Regra em `docs/decisions/028-save-entre-jobs.md`, com a nota de
  *  26/08/2026: o saldo é do JOB, não da linha. As linhas que geraram o
  *  saldo continuam sendo o detalhe (o pop-up mostra quais são), mas quem
  *  tem saldo é o job, e uma linha consumidora pode beber de vários.
@@ -21,7 +21,7 @@ export interface SaldoDeSave {
   /** Já consumido por consumos firmes. */
   consumido: number;
   /** Segurado por rascunhos ainda não aprovados. Informativo: rascunho não
-   *  segura saldo (decisão 023, nota de 26/08/2026). */
+   *  segura saldo (decisão 028, nota de 26/08/2026). */
   reservado: number;
   /** gerado − consumido. É o que cabe consumir. */
   disponivel: number;
@@ -36,7 +36,7 @@ export interface SaldoDeSave {
 /**
  * Saldos de save disponíveis para um CLIENTE.
  *
- * O crédito é do cliente e vale mesmo em outro projeto (decisão 023 §8),
+ * O crédito é do cliente e vale mesmo em outro projeto (decisão 028 §8),
  * então o filtro é por cliente, não por projeto. `excluirJobId` tira o
  * próprio job da lista: ninguém consome o próprio saldo.
  */
@@ -182,7 +182,7 @@ export async function saveDaVersao(
   // daquele job.
   //
   // Atenção ao que este número significa. Desde a nota de 26/08/2026 na
-  // decisão 023 o saldo é do JOB, não da linha — não existe vínculo entre
+  // decisão 028 o saldo é do JOB, não da linha — não existe vínculo entre
   // "a Trilha sonora gerou R$ 6.000" e "o JB-0044 gastou R$ 6.000". O que
   // a coluna mostra na linha em save é o destino do saldo DO JOB a que ela
   // pertence, e é assim que o tooltip fala. Atribuir consumo a uma linha
@@ -300,7 +300,7 @@ export async function saveDoJob(
       .eq("tenant_id", tenantId)
       .in("job_item_orcado_id", orcadoIds),
     // Quem consumiu o saldo DESTE job. O saldo é do job, então o destino
-    // vale para todas as linhas em save dele (decisão 023, nota de 26/08).
+    // vale para todas as linhas em save dele (decisão 028, nota de 26/08).
     supabase
       .from("saves_consumos")
       .select("valor, job_item_orcado_id, item_versao_id")

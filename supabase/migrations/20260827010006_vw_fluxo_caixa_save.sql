@@ -2,7 +2,7 @@
 -- SAVE — o fluxo de caixa separa job de save, e o save migra para quem
 -- o consome
 --
--- Decisao docs/decisions/023, com as regras de fluxo definidas pelo Tiago
+-- Decisao docs/decisions/028, com as regras de fluxo definidas pelo Tiago
 -- em 26/08/2026:
 --
 --   * JOB PRIMEIRO, DEPOIS O SAVE. Onde o recebimento se divide em
@@ -65,7 +65,7 @@ create or replace view public.vw_fluxo_caixa as
           WHERE l.conta_avulsa_id IS NULL
 
 -- ---------------------------------------------------------------------
--- SAVE (docs/decisions/023): a nota separa o que e do job do que e saldo
+-- SAVE (docs/decisions/028): a nota separa o que e do job do que e saldo
 -- em save. `fat_composicao` passa a EXCLUIR os itens de save, e por isso
 -- `fat_total` vira "o proprio da nota" — o denominador do rateio entre os
 -- jobs que ela cobre continua sendo so a parte deles.
@@ -243,7 +243,7 @@ create or replace view public.vw_fluxo_caixa as
          WINDOW w AS (PARTITION BY f.save_job_id ORDER BY f.data_evento, f.origem_tipo, f.origem_id)
 
 -- Quanto de DINHEIRO cada consumo leva. O consumo e em principal; a
--- receita migrada e proporcional (decisao 023 §4):
+-- receita migrada e proporcional (decisao 028 §4):
 --   migrado = faturamento_save_previsto × consumido / principal_gerado
 -- So consumo ja copiado para o job conta: enquanto o orcamento nao virou
 -- job, e reserva, e nao aparece no fluxo de ninguem.

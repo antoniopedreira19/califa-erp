@@ -2379,7 +2379,7 @@ console.
 ## ⚠️ 24–27/08/2026 — o SAVE na tela do orçamento
 
 **Design:** `Orcamento - Versao com Save.dc.html` (projeto Claude Design).
-**Regra:** `docs/decisions/023-save-entre-jobs.md`.
+**Regra:** `docs/decisions/028-save-entre-jobs.md`.
 **Spec:** `docs/superpowers/specs/2026-08-24-save-design.md`.
 
 O cliente fecha o orçamento e não usa todas as linhas. Elas são faturadas
