@@ -214,6 +214,16 @@ export interface QuebraSave {
   totalSaveUsado: number;
   totalSaveGerado: number;
   totalCustosDoJob: number;
+  /** O FATURAMENTO que as linhas em save geram — principal + honorários +
+   *  imposto proporcionais. É o segundo número do save (decisão 023 §4):
+   *  o crédito que o cliente tem a gastar é `totalSaveGerado`; este aqui é
+   *  o que a nota cobra por causa delas, e é o que migra para quem
+   *  consumir.
+   *
+   *  Sai de rodar o MESMO fechamento sobre a base do save sozinha. As
+   *  duas fórmulas são lineares na base, então a fatia é exata e
+   *  `receita + (fechamento sobre custos do job) = faturamento previsto`. */
+  receita: number;
   /** Quantas linhas geram save, e quantas consomem. */
   itensEmSave: number;
   itensConsumindoSave: number;
@@ -393,6 +403,13 @@ export function calcularTotaisVersao(
   const totalSaveGerado = somar(saveGerado);
   const subtotalGeral = somar(subtotaisPorTipo);
 
+  // O faturamento atribuível às linhas em save. Mesmo `fecharLado`, sobre
+  // a base do save sozinha — e não uma fórmula nova.
+  const receitaDoSave = comPrincipal(
+    fecharLado(saveGerado, percentualHonorarios, percentualImposto),
+    "fatura",
+  ).total;
+
   return {
     subtotaisPorTipo,
     subtotalGeral,
@@ -406,6 +423,7 @@ export function calcularTotaisVersao(
       totalSaveUsado: somar(saveUsado),
       totalSaveGerado,
       totalCustosDoJob: somar(custosDoJob),
+      receita: receitaDoSave,
       itensEmSave,
       itensConsumindoSave,
     },

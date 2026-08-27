@@ -471,6 +471,7 @@ export async function registrarErrata(
     .update({
       valor_total: Number(depois.valorJob.toFixed(2)),
       faturamento_previsto: Number(depois.faturamentoPrevisto.toFixed(2)),
+      faturamento_save_previsto: Number(depois.save.receita.toFixed(2)),
     })
     .eq("id", jobId)
     .eq("tenant_id", session.activeTenant.id);
