@@ -1,5 +1,6 @@
 "use client";
 import * as React from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import type { LancamentoLinha } from "@/lib/calculos/saldo-conta";
 
 export function ConciliacaoList({
@@ -10,6 +11,17 @@ export function ConciliacaoList({
   highlight?: string;
 }) {
   const rowRefs = React.useRef<Record<string, HTMLTableRowElement | null>>({});
+  // Transação com mais de uma origem abre um detalhe embaixo dela, com o
+  // rateio. Fechada por padrão: o extrato é denso, e a maioria das linhas
+  // tem origem única (docs/decisions/023-save-entre-jobs.md).
+  const [abertas, setAbertas] = React.useState<Set<string>>(new Set());
+  const alternar = (id: string) =>
+    setAbertas((prev) => {
+      const proximo = new Set(prev);
+      if (proximo.has(id)) proximo.delete(id);
+      else proximo.add(id);
+      return proximo;
+    });
 
   React.useEffect(() => {
     if (!highlight) return;
@@ -51,9 +63,16 @@ export function ConciliacaoList({
           </tr>
         </thead>
         <tbody>
-          {linhas.map((l) => (
+          {linhas.map((l) => {
+            // Tem detalhe quando o dinheiro vem de mais de um lugar: dois
+            // ou mais jobs na nota, uma fatia em save, ou rateio de
+            // regional.
+            const temSave = l.origens.some((o) => o.tipo === "save");
+            const temDetalhe = l.origens.length > 1 || l.rateio.length > 1;
+            const aberta = abertas.has(l.id);
+            return (
+            <React.Fragment key={l.id}>
             <tr
-              key={l.id}
               ref={(el) => {
                 rowRefs.current[l.id] = el;
               }}
@@ -79,14 +98,24 @@ export function ConciliacaoList({
                     Avulsa
                   </span>
                 )}
-                {l.rateio && l.rateio.length > 1 && (
-                  <span
-                    className="ml-2 inline-flex items-center rounded border border-slate-300 bg-slate-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-slate-700"
-                    title={l.rateio
-                      .map((r) => `${r.regional_nome}: ${r.percentual.toFixed(2)}%`)
-                      .join("\n")}
+                {temDetalhe && (
+                  <button
+                    type="button"
+                    onClick={() => alternar(l.id)}
+                    aria-expanded={aberta}
+                    className="mr-2 inline-flex items-center gap-1 rounded border border-slate-300 bg-slate-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-slate-700 transition-colors hover:bg-slate-200"
                   >
+                    {aberta ? (
+                      <ChevronDown className="h-2.5 w-2.5" />
+                    ) : (
+                      <ChevronRight className="h-2.5 w-2.5" />
+                    )}
                     Rateado
+                  </button>
+                )}
+                {temSave && (
+                  <span className="mr-2 inline-flex items-center rounded border border-[#c9c6bf] bg-[#f3f2ee] px-1.5 py-0.5 text-[9px] font-semibold uppercase text-[#5f5d57]">
+                    Save
                   </span>
                 )}
                 {l.descricao}
@@ -111,7 +140,53 @@ export function ConciliacaoList({
                 {formatMoney(l.saldo)}
               </td>
             </tr>
-          ))}
+            {aberta && (
+              <tr className="border-b border-border bg-muted/20 last:border-0">
+                <td />
+                <td colSpan={7} className="px-3 pb-3 pt-1">
+                  <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.07em] text-muted-foreground">
+                    De onde vem este dinheiro
+                  </p>
+                  <div className="flex flex-col gap-1">
+                    {l.origens.map((o, i) => (
+                      <div
+                        key={`${o.tipo}-${o.codigo ?? i}`}
+                        className="flex items-baseline justify-between gap-4 text-xs"
+                      >
+                        <span className="flex items-baseline gap-2">
+                          <span className="font-mono font-semibold">
+                            {o.codigo ?? "—"}
+                          </span>
+                          <span className={o.tipo === "save" ? "text-[#5f5d57]" : ""}>
+                            {o.tipo === "save"
+                              ? "saldo em save — crédito do cliente"
+                              : (o.nome ?? "")}
+                          </span>
+                        </span>
+                        <span className="whitespace-nowrap font-mono font-semibold">
+                          {formatMoney(o.valor)}
+                        </span>
+                      </div>
+                    ))}
+                    {l.rateio.length > 1 &&
+                      l.rateio.map((r) => (
+                        <div
+                          key={r.regional_nome}
+                          className="flex items-baseline justify-between gap-4 text-xs text-muted-foreground"
+                        >
+                          <span>Regional {r.regional_nome}</span>
+                          <span className="font-mono">
+                            {r.percentual.toFixed(2)}%
+                          </span>
+                        </div>
+                      ))}
+                  </div>
+                </td>
+              </tr>
+            )}
+            </React.Fragment>
+            );
+          })}
         </tbody>
       </table>
     </div>

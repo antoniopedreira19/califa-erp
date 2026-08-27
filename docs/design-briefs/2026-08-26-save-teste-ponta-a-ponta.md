@@ -46,6 +46,19 @@ dinheiro **na data da baixa** — anterior à abertura dele. Atenção: a
 classe `previsao` empurra data passada para amanhã, e isso é regra
 antiga, não do save. Só a `movimento` guarda a data real.
 
+### 1.4 A expansão da conciliação
+
+A conciliação passou a abrir um detalhe com as origens do dinheiro. A
+camada de dados está verificada no banco — num lançamento de R$ 10.959,11
+saíram duas origens, `job JOB-0015 = 3.918,23` e `save de JOB-0015 =
+7.040,88`, somando exatamente o lançamento —, mas **a tela não foi vista
+logada**: a sessão do navegador tinha expirado e a senha é do Tiago.
+
+**No teste:** dar baixa numa nota com save e conferir que a linha ganha a
+pastilha "Rateado" clicável e o rótulo "Save", e que ao expandir aparecem
+as duas origens somando o valor da transação. Conferir também que
+lançamento de origem única (o caso comum) **não** ganha expansão.
+
 ---
 
 ## 2. Armadilhas conhecidas
