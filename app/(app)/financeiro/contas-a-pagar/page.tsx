@@ -61,7 +61,7 @@ export default async function PedidosCompraFinanceiroPage() {
         rejeitada_por_profile:profiles!rejeitada_por(nome),
         pago_por_profile:profiles!pago_por(nome),
         job:jobs(
-          id, codigo, nome,
+          id, codigo, nome, regional_id,
           projeto:projetos(codigo, nome, cliente:clientes(nome_fantasia))
         ),
         anexos:pedidos_compra_anexos(id, arquivo_nome_original, arquivo_tamanho_bytes),
@@ -306,6 +306,7 @@ export default async function PedidosCompraFinanceiroPage() {
       id: string;
       codigo: string;
       nome: string;
+      regional_id: string | null;
       projeto: {
         codigo: string;
         nome: string;
@@ -352,6 +353,7 @@ export default async function PedidosCompraFinanceiroPage() {
     job_id: r.job?.id ?? "",
     job_codigo: r.job?.codigo ?? "",
     job_nome: r.job?.nome ?? "",
+    regional_id: r.job?.regional_id ?? null,
     projeto_codigo: r.job?.projeto?.codigo ?? null,
     projeto_nome: r.job?.projeto?.nome ?? null,
     cliente_nome: r.job?.projeto?.cliente?.nome_fantasia ?? null,
@@ -807,7 +809,7 @@ export default async function PedidosCompraFinanceiroPage() {
       </header>
 
       <ContasPagarTabs
-        pps={<PedidosCompraList rows={rows} tenantId={session.activeTenant.id} />}
+        pps={<PedidosCompraList rows={rows} tenantId={session.activeTenant.id} regionais={regionaisList} />}
         ppsPendentesCount={ppsPendentesCountRes.count ?? 0}
         desembolsos={<DesembolsosContasPagarList rows={desembolsosRows} />}
         desembolsosPendentesCount={desembolsosPendentesCount}

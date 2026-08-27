@@ -30,6 +30,7 @@ export interface PPRow {
   job_id: string;
   job_codigo: string;
   job_nome: string;
+  regional_id: string | null;
   projeto_codigo: string | null;
   projeto_nome: string | null;
   cliente_nome: string | null;
@@ -115,29 +116,38 @@ const STATUS_FILTROS: Array<{ key: FiltroStatus; label: string }> = [
 interface PedidosCompraListProps {
   rows: PPRow[];
   tenantId: string;
+  regionais: Array<{ id: string; nome: string; ativo: boolean }>;
 }
 
-export function PedidosCompraList({ rows, tenantId }: PedidosCompraListProps) {
+export function PedidosCompraList({ rows, tenantId, regionais }: PedidosCompraListProps) {
   const [filtro, setFiltro] = React.useState<FiltroStatus>("em_avaliacao");
+  const [filtroRegional, setFiltroRegional] = React.useState<string>("todas");
   const [busca, setBusca] = React.useState("");
   const [ppSelecionada, setPpSelecionada] = React.useState<PPRow | null>(null);
 
+  // Regional recorta o universo ANTES das contagens de status, senão os
+  // chips mostram números que não batem com o que o usuário vê na tabela.
+  const rowsPorRegional = React.useMemo(() => {
+    if (filtroRegional === "todas") return rows;
+    return rows.filter((r) => r.regional_id === filtroRegional);
+  }, [rows, filtroRegional]);
+
   const contagens = React.useMemo(() => {
     const c: Record<FiltroStatus, number> = {
-      todas: rows.length,
+      todas: rowsPorRegional.length,
       em_avaliacao: 0,
       aprovada: 0,
       pago: 0,
       rejeitada: 0,
       cancelada: 0,
     };
-    for (const r of rows) c[r.status]++;
+    for (const r of rowsPorRegional) c[r.status]++;
     return c;
-  }, [rows]);
+  }, [rowsPorRegional]);
 
   const filtrados = React.useMemo(() => {
     const q = busca.trim().toLowerCase();
-    return rows.filter((r) => {
+    return rowsPorRegional.filter((r) => {
       if (filtro !== "todas" && r.status !== filtro) return false;
       if (q === "") return true;
       return (
@@ -147,7 +157,12 @@ export function PedidosCompraList({ rows, tenantId }: PedidosCompraListProps) {
         r.job_nome.toLowerCase().includes(q)
       );
     });
-  }, [rows, filtro, busca]);
+  }, [rowsPorRegional, filtro, busca]);
+
+  const regionaisOrdenadas = React.useMemo(
+    () => [...regionais].filter((r) => r.ativo).sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")),
+    [regionais],
+  );
 
   return (
     <div className="space-y-4">
@@ -182,15 +197,30 @@ export function PedidosCompraList({ rows, tenantId }: PedidosCompraListProps) {
               </button>
             );
           })}
-          <div className="relative ml-auto min-w-[240px] max-w-md flex-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <input
-              type="text"
-              value={busca}
-              onChange={(e) => setBusca(e.target.value)}
-              placeholder="Buscar por código, fornecedor ou job..."
-              className="w-full rounded-lg border border-border bg-white py-2 pl-9 pr-3 text-sm focus:border-california-red focus:outline-none"
-            />
+          <div className="ml-auto flex items-center gap-2">
+            <select
+              value={filtroRegional}
+              onChange={(e) => setFiltroRegional(e.target.value)}
+              className="h-9 rounded-lg border border-border bg-white px-3 text-sm focus:border-california-red focus:outline-none"
+              aria-label="Filtrar por regional"
+            >
+              <option value="todas">Todas as regionais</option>
+              {regionaisOrdenadas.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.nome}
+                </option>
+              ))}
+            </select>
+            <div className="relative w-56">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <input
+                type="text"
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+                placeholder="Buscar..."
+                className="w-full rounded-lg border border-border bg-white py-2 pl-9 pr-3 text-sm focus:border-california-red focus:outline-none"
+              />
+            </div>
           </div>
         </div>
       </div>
