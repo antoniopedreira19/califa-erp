@@ -2110,3 +2110,36 @@ um job que a decisão 008 declara congelado.
 a baixa gerou quatro linhas no fluxo (job, save sem dono e duas do save já
 consumido por JOB-0022), somando exatamente o título. `tsc`, `lint` e
 `build` limpos.
+
+
+---
+
+## ⚠️ Conciliação — colunas (27/08/2026)
+
+Duas mudanças na tabela de `/financeiro/conciliacao`, a pedido do Tiago:
+
+**1. O dinheiro subiu.** A ordem passou a ser
+`Data · Crédito · Débito · Saldo · Descrição · Fornecedor · Job · Tipo · Subtipo`.
+Crédito, Débito e Saldo ficavam no fim da linha, e conferir valor contra
+data obrigava a atravessar a tela inteira — que é o oposto de como se lê um
+extrato bancário.
+
+**2. "Tipo" mostrava o subtipo.** A coluna era uma só e renderizava
+`tipo_codigo · subtipo_nome` — na tela, `05 · Salário`. O **05** é o código
+do tipo (*Despesa com Pessoal*), mas o **Salário** é o nome do SUBTIPO, e o
+nome do tipo não aparecia em lugar nenhum.
+
+Agora são duas colunas, cada uma com o `código · nome` do seu nível do plano
+de contas:
+
+| | Antes (uma coluna "Tipo") | Agora |
+|---|---|---|
+| **Tipo** | `05 · Salário` | `05 · Despesa com Pessoal` |
+| **Subtipo** | — | `001 · Salário` |
+
+`LancamentoLinha` já carregava `tipo_nome` sem ninguém usar; o que faltava
+era `subtipo_codigo`, acrescentado à query em `conciliacao/page.tsx`.
+
+O subtipo aparece com o código curto (`001`), e não com o composto que o
+Plano de Contas usa na árvore (`05.001`) — ao lado da coluna Tipo, repetir o
+`05.` seria redundante.

@@ -61,7 +61,6 @@ export async function registrarErrataDeSave(
   jobId: string,
   jobItemOrcadoId: string,
   mudanca: MudancaDeSave,
-  justificativa?: string,
 ): Promise<ActionResult> {
   const session = await requireSession();
   const supabase = createClient();
@@ -208,7 +207,6 @@ export async function registrarErrataDeSave(
       tenant_id: tenantId,
       job_id: jobId,
       titulo,
-      justificativa: justificativa?.trim() || null,
       custo_orcado_antes: dinheiro(antes.subtotalGeral),
       custo_orcado_depois: dinheiro(depois.subtotalGeral),
       valor_job_antes: dinheiro(antes.valorJob),

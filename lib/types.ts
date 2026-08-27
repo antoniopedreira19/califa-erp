@@ -1156,8 +1156,10 @@ export interface JobErrata {
   id: string;
   tenant_id: string;
   job_id: string;
+  /** A "Descrição da errata" do pop-up. Era um título curto ao lado de uma
+   *  `justificativa` opcional; desde 27/08/2026 é o único texto da errata,
+   *  e é obrigatório (decisão 030). */
   titulo: string;
-  justificativa: string | null;
   custo_orcado_antes: number;
   custo_orcado_depois: number;
   valor_job_antes: number;
