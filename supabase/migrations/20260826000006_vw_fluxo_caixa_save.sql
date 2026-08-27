@@ -1,35 +1,46 @@
 -- =====================================================================
--- SAVE — o fluxo de caixa separa "recebimento do job" de "saldo em save"
+-- SAVE — o fluxo de caixa separa job de save, e o save migra para quem
+-- o consome
 --
 -- Decisao docs/decisions/023, com as regras de fluxo definidas pelo Tiago
 -- em 26/08/2026:
 --
---   * O dinheiro em save entra no fluxo SEM JOB. Ele nao e do job que
---     faturou nem de ninguem, ate que um job o consuma — mas a origem
---     nunca se perde: a descricao carrega "saldo em save de JOB-XXXX".
 --   * JOB PRIMEIRO, DEPOIS O SAVE. Onde o recebimento se divide em
 --     parcelas, as primeiras cobrem a parte propria do job e o save ocupa
---     o fim da fila. Vale para a previsao da abertura, para o saldo do
---     envio, para os titulos da nota e para as baixas.
---   * Em nota agrupada, os jobs se dividem entre si proporcionalmente
---     (como ja faziam) e o save vem por ultimo.
+--     o fim da fila; a parcela que cruza a fronteira parte em duas. Vale
+--     para a previsao da abertura, o saldo do envio, os titulos da nota e
+--     as baixas. Em nota agrupada os jobs se dividem entre si
+--     proporcionalmente, como ja faziam, e o save vem por ultimo.
+--   * O dinheiro em save entra SEM JOB — nao e do job que faturou nem de
+--     ninguem — mas a origem nunca se perde: "saldo em save de JOB-XXXX".
+--   * Quando um job consome, o valor correspondente passa a ser DELE, NA
+--     DATA EM QUE O DINHEIRO ENTROU, mesmo que anterior a abertura dele.
+--     A linha de save encolhe na mesma medida, entao o total da empresa
+--     no periodo nao muda: so muda de quem e. Consumido tudo, a linha de
+--     save zera e sobram so os jobs.
 --
--- NAO MUDA NADA ONDE NAO HA SAVE. Sem itens de save, `valor_proprio` e o
--- total, cada parcela sai inteira como propria e o rateio entre jobs usa
--- o mesmo denominador de antes. Conferido por impressao digital da saida
--- da view antes e depois: 35 linhas, R$ 2.174.187,25, md5 identico.
+-- COMO A ATRIBUICAO E FEITA: `save_fatias_ord` poe todo o dinheiro em
+-- save de um job de origem numa lista cronologica, cada fatia com um
+-- intervalo [ini, fim) num eixo de dinheiro acumulado.
+-- `save_consumo_ord` faz o mesmo com os consumos, ja convertidos de
+-- principal para dinheiro (`faturamento_save_previsto × consumido /
+-- principal`). `save_alocado` cruza os dois pela SOBREPOSICAO dos
+-- intervalos — o padrao de "alocar A sobre B" — e o resultado e o consumo
+-- cronologico: o job consumidor leva os pedacos mais antigos primeiro, e
+-- por isso o dinheiro ja recebido aparece no fluxo dele na data em que de
+-- fato entrou.
 --
--- De onde vem "quanto e save":
---   * na nota  -> `faturamento_itens.origem_tipo = 'save'`
---   * no job   -> `jobs.faturamento_save_previsto`, escrito pelo
---                 TypeScript. A matriz de REGRAS_TIPO_CUSTO NAO se repete
---                 aqui — foi para isso que a coluna existe.
+-- So conta consumo ja copiado para o job (`job_item_orcado_id`). Enquanto
+-- o orcamento nao virou job, e RESERVA: aparece na planilha e nao move
+-- dinheiro no fluxo de ninguem.
 --
--- Ramos novos: `titulo_save`, `previsao_recebimento_save` e
--- `envio_parcela_save`, todos com `job_id` nulo.
+-- NAO MUDA NADA ONDE NAO HA SAVE. Conferido por impressao digital da
+-- saida da view antes e depois: 35 linhas, R$ 2.174.187,25, md5 igual.
 --
--- O que ainda NAO esta aqui: a atribuicao do save ao job que o consome.
--- Entra na proxima migration.
+-- De onde vem "quanto e save": da nota, por `origem_tipo = 'save'`; do
+-- job, por `jobs.faturamento_save_previsto`. A matriz de
+-- REGRAS_TIPO_CUSTO NAO se repete em SQL — foi para isso que a coluna
+-- existe.
 -- =====================================================================
 
 create or replace view public.vw_fluxo_caixa as
@@ -167,19 +178,116 @@ create or replace view public.vw_fluxo_caixa as
               - (sum(pa.valor) OVER (PARTITION BY pa.envio_id ORDER BY pa.ordem, pa.id) - pa.valor)
             ))::numeric(14,2) AS bruto_proprio
            FROM jobs_envio_faturamento_parcelas pa JOIN jobs j ON j.id = pa.job_id
+
+-- ---------------------------------------------------------------------
+-- O SALDO EM SAVE E QUEM O CONSOME
+--
+-- Todo dinheiro em save de um job de origem, em UMA lista, na ordem
+-- cronologica: a baixa ja realizada, o titulo em aberto, a previsao da
+-- abertura e o saldo do envio. Cada fatia ganha o intervalo [ini, fim)
+-- num eixo de dinheiro acumulado.
+-- ---------------------------------------------------------------------
+        ), save_fatias AS (
+         SELECT lj.save_job_id, 'realizado'::text AS situacao, 'movimento'::text AS classe,
+            'lancamento_save'::text AS origem_tipo, l.id AS origem_id, l.tenant_id, l.empresa_id,
+            l.conta_bancaria_id, l.data_movimento AS data_evento,
+            (l.valor * lr.fator * lj.fator)::numeric(14,2) AS valor,
+            l.descricao AS base, l.cliente_id, l.fornecedor_id, lr.regional_id,
+            l.origem::text AS origem_lancamento
+           FROM lancamentos_financeiros l
+             JOIN lancamento_rateio lr ON lr.lancamento_id = l.id
+             JOIN lancamento_job lj ON lj.lancamento_id = l.id
+          WHERE lj.save_job_id IS NOT NULL
+        UNION ALL
+         SELECT tp.save_job_id, 'previsto'::text, 'titulo'::text, 'titulo_save'::text, t.id,
+            t.tenant_id, t.empresa_id, NULL::uuid,
+            COALESCE(t.data_previsao_recebimento, t.data_vencimento),
+            (t.valor - tp.valor_proprio)::numeric(14,2),
+            ('Título NF ' || f.numero_nf) || '/' || t.numero_parcela::text,
+            f.cliente_id, f.fornecedor_id, COALESCE(sj.regional_id, e.regional_id), NULL::text
+           FROM titulos_receber t
+             JOIN titulo_partes tp ON tp.titulo_id = t.id
+             JOIN faturamentos f ON f.id = t.faturamento_id
+             LEFT JOIN jobs sj ON sj.id = tp.save_job_id
+             LEFT JOIN empresas e ON e.id = t.empresa_id
+          WHERE t.status = 'em_aberto'::titulo_receber_status AND t.valor > tp.valor_proprio
+        UNION ALL
+         SELECT p.job_id, 'previsto'::text, 'previsao'::text, 'previsao_recebimento_save'::text, p.id,
+            p.tenant_id, j.empresa_id, NULL::uuid,
+            CASE WHEN p.data_prevista < CURRENT_DATE THEN CURRENT_DATE + 1 ELSE p.data_prevista END,
+            (p.valor - p.valor_proprio)::numeric(14,2),
+            ('Previsão de recebimento · ' || j.codigo || ' ' || p.ordem || '/' || p.total_parcelas),
+            pj.cliente_id, NULL::uuid, j.regional_id, NULL::text
+           FROM previsao_recebimento p JOIN jobs j ON j.id = p.job_id
+             LEFT JOIN projetos pj ON pj.id = j.projeto_id
+          WHERE p.valor > p.valor_proprio
+            AND (j.status = ANY (ARRAY['aberto'::job_status, 'em_producao'::job_status]))
+            AND NOT (EXISTS ( SELECT 1 FROM jobs_com_envio ce WHERE ce.job_id = p.job_id))
+        UNION ALL
+         SELECT s.job_id, 'previsto'::text, 'previsao'::text, 'envio_parcela_save'::text, s.id,
+            s.tenant_id, j.empresa_id, NULL::uuid,
+            CASE WHEN s.data_vencimento < CURRENT_DATE THEN CURRENT_DATE + 1 ELSE s.data_vencimento END,
+            (s.valor - LEAST(s.valor, s.bruto_proprio))::numeric(14,2),
+            ('Faturamento previsto · ' || j.codigo || ' parcela ' || s.ordem || '/' || s.total_parcelas),
+            pj.cliente_id, NULL::uuid, j.regional_id, NULL::text
+           FROM envio_saldo s JOIN jobs j ON j.id = s.job_id
+             LEFT JOIN projetos pj ON pj.id = j.projeto_id
+          WHERE s.valor > LEAST(s.valor, s.bruto_proprio)
+            AND (j.status = ANY (ARRAY['aberto'::job_status, 'em_producao'::job_status]))
+        ), save_fatias_ord AS (
+         SELECT f.*,
+            sum(f.valor) OVER w - f.valor AS ini,
+            sum(f.valor) OVER w AS fim
+           FROM save_fatias f
+          WHERE f.valor > 0::numeric
+         WINDOW w AS (PARTITION BY f.save_job_id ORDER BY f.data_evento, f.origem_tipo, f.origem_id)
+
+-- Quanto de DINHEIRO cada consumo leva. O consumo e em principal; a
+-- receita migrada e proporcional (decisao 023 §4):
+--   migrado = faturamento_save_previsto × consumido / principal_gerado
+-- So consumo ja copiado para o job conta: enquanto o orcamento nao virou
+-- job, e reserva, e nao aparece no fluxo de ninguem.
+        ), save_gerado AS (
+         SELECT o.job_id, sum(o.total_orcado) AS principal
+           FROM jobs_itens_orcado o WHERE o.em_save GROUP BY o.job_id
+        ), save_consumo_ord AS (
+         SELECT c.job_origem_id, oc.job_id AS job_consumidor, c.id,
+            ((c.valor / NULLIF(g.principal, 0::numeric)) * COALESCE(jo.faturamento_save_previsto, 0::numeric))::numeric(14,2) AS valor,
+            sum(((c.valor / NULLIF(g.principal, 0::numeric)) * COALESCE(jo.faturamento_save_previsto, 0::numeric))::numeric(14,2)) OVER w2
+              - ((c.valor / NULLIF(g.principal, 0::numeric)) * COALESCE(jo.faturamento_save_previsto, 0::numeric))::numeric(14,2) AS ini,
+            sum(((c.valor / NULLIF(g.principal, 0::numeric)) * COALESCE(jo.faturamento_save_previsto, 0::numeric))::numeric(14,2)) OVER w2 AS fim
+           FROM saves_consumos c
+             JOIN jobs_itens_orcado oc ON oc.id = c.job_item_orcado_id
+             JOIN jobs jo ON jo.id = c.job_origem_id
+             JOIN save_gerado g ON g.job_id = c.job_origem_id
+          WHERE c.job_item_orcado_id IS NOT NULL
+         WINDOW w2 AS (PARTITION BY c.job_origem_id ORDER BY c.created_at, c.id)
+
+-- O cruzamento: sobreposicao dos dois intervalos no eixo do dinheiro.
+-- E o mesmo consumo cronologico do resto do sistema — o job consumidor
+-- leva os pedacos mais antigos primeiro, e por isso o dinheiro ja
+-- recebido aparece no fluxo dele na data em que de fato entrou.
+        ), save_alocado AS (
+         SELECT f.origem_id, f.origem_tipo, f.situacao, f.classe, f.tenant_id, f.empresa_id,
+            f.conta_bancaria_id, f.data_evento, f.base, f.cliente_id, f.fornecedor_id,
+            f.origem_lancamento, f.save_job_id, c.job_consumidor, c.id AS consumo_id,
+            (LEAST(f.fim, c.fim) - GREATEST(f.ini, c.ini))::numeric(14,2) AS valor,
+            jc.regional_id
+           FROM save_fatias_ord f
+             JOIN save_consumo_ord c ON c.job_origem_id = f.save_job_id
+             JOIN jobs jc ON jc.id = c.job_consumidor
+          WHERE LEAST(f.fim, c.fim) - GREATEST(f.ini, c.ini) > 0.004
         )
  SELECT 'realizado'::text AS situacao, 'lancamento'::text AS origem_tipo, l.id AS origem_id,
     l.tenant_id, l.empresa_id, l.conta_bancaria_id, l.data_movimento AS data_evento,
     (l.valor * lr.fator * lj.fator)::numeric(14,2) AS valor, l.natureza,
-    CASE WHEN lj.save_job_id IS NOT NULL
-         THEN l.descricao || ' · saldo em save de ' || COALESCE(sj.codigo, '—')
-         ELSE l.descricao END AS descricao,
+    l.descricao,
     l.fornecedor_id, l.cliente_id, lj.job_id, 'movimento'::text AS classe,
     lr.regional_id, l.origem::text AS origem_lancamento
    FROM lancamentos_financeiros l
      JOIN lancamento_rateio lr ON lr.lancamento_id = l.id
      JOIN lancamento_job lj ON lj.lancamento_id = l.id
-     LEFT JOIN jobs sj ON sj.id = lj.save_job_id
+  WHERE lj.save_job_id IS NULL
 UNION ALL
  SELECT 'previsto'::text, 'pp'::text, par.id, pp.tenant_id, pp.empresa_id, NULL::uuid,
     par.data_pagamento, par.valor::numeric(14,2), 'saida'::natureza_lancamento,
@@ -225,20 +333,6 @@ UNION ALL
      LEFT JOIN empresas e ON e.id = t.empresa_id
   WHERE t.status = 'em_aberto'::titulo_receber_status AND tp.valor_proprio > 0::numeric
 UNION ALL
--- Titulo em aberto: a parte em save, SEM JOB ate alguem consumir.
- SELECT 'previsto'::text, 'titulo_save'::text, t.id, t.tenant_id, t.empresa_id, NULL::uuid,
-    COALESCE(t.data_previsao_recebimento, t.data_vencimento),
-    (t.valor - tp.valor_proprio)::numeric(14,2), 'entrada'::natureza_lancamento,
-    ((('Título NF '::text || f.numero_nf) || '/'::text) || t.numero_parcela::text) || ' · saldo em save de ' || COALESCE(sj.codigo, '—'),
-    f.fornecedor_id, f.cliente_id, NULL::uuid, 'titulo'::text,
-    COALESCE(sj.regional_id, e.regional_id), NULL::text
-   FROM titulos_receber t
-     JOIN titulo_partes tp ON tp.titulo_id = t.id
-     JOIN faturamentos f ON f.id = t.faturamento_id
-     LEFT JOIN jobs sj ON sj.id = tp.save_job_id
-     LEFT JOIN empresas e ON e.id = t.empresa_id
-  WHERE t.status = 'em_aberto'::titulo_receber_status AND t.valor > tp.valor_proprio
-UNION ALL
  SELECT 'previsto'::text, 'previsao_custo'::text, r.id, r.tenant_id, j.empresa_id, NULL::uuid,
     CASE WHEN r.data_prevista < CURRENT_DATE THEN fc_proxima_janela_pagamento(CURRENT_DATE) ELSE r.data_prevista END,
     r.valor, 'saida'::natureza_lancamento,
@@ -257,16 +351,6 @@ UNION ALL
   WHERE p.valor_proprio > 0::numeric AND (j.status = ANY (ARRAY['aberto'::job_status, 'em_producao'::job_status]))
     AND NOT (EXISTS ( SELECT 1 FROM jobs_com_envio ce WHERE ce.job_id = p.job_id))
 UNION ALL
--- Previsao de recebimento: a parte em save, sem job.
- SELECT 'previsto'::text, 'previsao_recebimento_save'::text, p.id, p.tenant_id, j.empresa_id, NULL::uuid,
-    CASE WHEN p.data_prevista < CURRENT_DATE THEN CURRENT_DATE + 1 ELSE p.data_prevista END,
-    (p.valor - p.valor_proprio)::numeric(14,2), 'entrada'::natureza_lancamento,
-    ((('Previsão de recebimento · '::text || j.codigo) || ' '::text) || p.ordem) || '/'::text || p.total_parcelas || ' · saldo em save',
-    NULL::uuid, pj.cliente_id, NULL::uuid, 'previsao'::text, j.regional_id, NULL::text
-   FROM previsao_recebimento p JOIN jobs j ON j.id = p.job_id LEFT JOIN projetos pj ON pj.id = j.projeto_id
-  WHERE p.valor > p.valor_proprio AND (j.status = ANY (ARRAY['aberto'::job_status, 'em_producao'::job_status]))
-    AND NOT (EXISTS ( SELECT 1 FROM jobs_com_envio ce WHERE ce.job_id = p.job_id))
-UNION ALL
 -- Saldo do envio ainda nao faturado: parte propria e parte em save.
  SELECT 'previsto'::text, 'envio_parcela'::text, s.id, s.tenant_id, j.empresa_id, NULL::uuid,
     CASE WHEN s.data_vencimento < CURRENT_DATE THEN CURRENT_DATE + 1 ELSE s.data_vencimento END,
@@ -276,14 +360,6 @@ UNION ALL
    FROM envio_saldo s JOIN jobs j ON j.id = s.job_id LEFT JOIN projetos pj ON pj.id = j.projeto_id
   WHERE LEAST(s.valor, s.bruto_proprio) > 0::numeric AND (j.status = ANY (ARRAY['aberto'::job_status, 'em_producao'::job_status]))
 UNION ALL
- SELECT 'previsto'::text, 'envio_parcela_save'::text, s.id, s.tenant_id, j.empresa_id, NULL::uuid,
-    CASE WHEN s.data_vencimento < CURRENT_DATE THEN CURRENT_DATE + 1 ELSE s.data_vencimento END,
-    (s.valor - LEAST(s.valor, s.bruto_proprio))::numeric(14,2), 'entrada'::natureza_lancamento,
-    ((((('Faturamento previsto · '::text || j.codigo) || ' parcela '::text) || s.ordem) || '/'::text) || s.total_parcelas) || ' · saldo em save',
-    NULL::uuid, pj.cliente_id, NULL::uuid, 'previsao'::text, j.regional_id, NULL::text
-   FROM envio_saldo s JOIN jobs j ON j.id = s.job_id LEFT JOIN projetos pj ON pj.id = j.projeto_id
-  WHERE s.valor > LEAST(s.valor, s.bruto_proprio) AND (j.status = ANY (ARRAY['aberto'::job_status, 'em_producao'::job_status]))
-UNION ALL
  SELECT 'previsto'::text, 'pp_devolucao_verba'::text, d.id, d.tenant_id, d.empresa_id, NULL::uuid,
     d.data_pagamento, d.valor, 'entrada'::natureza_lancamento,
     (('Devolução verba '::text || pp.codigo) || ' — '::text) || "substring"(pp.servico, 1, 140),
@@ -291,4 +367,30 @@ UNION ALL
    FROM pp_verba_devolucoes d
      JOIN pedidos_compra pp ON pp.id = d.pedido_compra_id
      LEFT JOIN jobs jb ON jb.id = pp.job_id
-  WHERE d.pago_em IS NULL;
+  WHERE d.pago_em IS NULL
+UNION ALL
+-- O SALDO EM SAVE que ainda ninguem consumiu. Sem job, e com a origem na
+-- descricao: o dinheiro entrou, mas ainda nao custeia trabalho nenhum.
+ SELECT f.situacao, f.origem_tipo, f.origem_id, f.tenant_id, f.empresa_id, f.conta_bancaria_id,
+    f.data_evento,
+    (f.valor - COALESCE(al.alocado, 0::numeric))::numeric(14,2),
+    'entrada'::natureza_lancamento,
+    f.base || ' · saldo em save de ' || COALESCE(sj.codigo, '—'),
+    f.fornecedor_id, f.cliente_id, NULL::uuid, f.classe, f.regional_id, f.origem_lancamento
+   FROM save_fatias_ord f
+     LEFT JOIN jobs sj ON sj.id = f.save_job_id
+     LEFT JOIN LATERAL ( SELECT sum(a.valor) AS alocado FROM save_alocado a
+                          WHERE a.origem_id = f.origem_id AND a.origem_tipo = f.origem_tipo) al ON true
+  WHERE f.valor - COALESCE(al.alocado, 0::numeric) > 0.004
+UNION ALL
+-- O SAVE JA CONSUMIDO, atribuido ao job que o gastou e NA DATA EM QUE O
+-- DINHEIRO ENTROU — que pode ser anterior a abertura desse job (decisao
+-- do Tiago, 26/08/2026). A linha de save acima encolhe na mesma medida,
+-- entao o total da empresa no periodo nao muda: so muda de quem e.
+ SELECT a.situacao, a.origem_tipo || '_consumido', a.origem_id, a.tenant_id, a.empresa_id,
+    a.conta_bancaria_id, a.data_evento, a.valor, 'entrada'::natureza_lancamento,
+    a.base || ' · save de ' || COALESCE(so.codigo, '—') || ' consumido por ' || COALESCE(jc.codigo, '—'),
+    a.fornecedor_id, a.cliente_id, a.job_consumidor, a.classe, a.regional_id, a.origem_lancamento
+   FROM save_alocado a
+     LEFT JOIN jobs so ON so.id = a.save_job_id
+     LEFT JOIN jobs jc ON jc.id = a.job_consumidor;
