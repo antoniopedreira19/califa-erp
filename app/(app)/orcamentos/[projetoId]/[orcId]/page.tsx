@@ -192,7 +192,7 @@ export default async function OrcamentoDetailPage({
     supabase
       .from("jobs")
       .select(
-        "id, codigo, nome, produto, cidade, regional_id, data_inicio_prevista, data_fim_prevista, data_prevista_faturamento, observacoes",
+        "id, codigo, nome, produto, cidade, regional_id, data_inicio_prevista, data_fim_prevista, data_evento, data_prevista_faturamento, observacoes",
       )
       .eq("orcamento_id", params.orcId)
       .eq("tenant_id", session.activeTenant.id)
@@ -752,6 +752,9 @@ function VersaoSelecionada({
     regionalId: orcamento.regional_id ?? "",
     dataInicio: job?.data_inicio_prevista ?? orcamento.data_inicio_prevista ?? "",
     dataFim: job?.data_fim_prevista ?? orcamento.data_fim_prevista ?? "",
+    // Só o job tem data de evento — não há de onde pré-preencher antes
+    // do envio (o orçamento não guarda o campo).
+    dataEvento: job?.data_evento ?? "",
     dataFaturamento: job?.data_prevista_faturamento ?? "",
     observacoes: job?.observacoes ?? "",
     // Job já enviado mostra o que foi gravado (lista vazia nos jobs
@@ -913,6 +916,7 @@ function VersaoSelecionada({
         percentualImposto={Number(versao.percentual_imposto)}
         custoPlanejado={custoPlanejado}
         faturamentoPrevisto={totais.faturamentoPrevisto}
+        totalGeradoEmSave={totais.save.totalSaveGerado}
         valorJob={totais.valorJob}
         moeda={versao.moeda}
         clienteNome={clienteNome}

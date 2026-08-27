@@ -35,6 +35,7 @@ export interface JobExistente {
   regional_id: string | null;
   data_inicio_prevista: string | null;
   data_fim_prevista: string | null;
+  data_evento: string | null;
   observacoes: string | null;
   nome: string;
 }
@@ -58,6 +59,9 @@ interface Props {
   custoPlanejado: number;
   /** O que a California emite nota. */
   faturamentoPrevisto: number;
+  /** Crédito que as linhas em save da versão geram para o cliente.
+   *  Zerado, some do formulário e da confirmação. */
+  totalGeradoEmSave: number;
   /** Compromisso total do cliente — é o que vai para `jobs.valor_total`. */
   valorJob: number;
   moeda: string;
@@ -93,6 +97,7 @@ export function FluxoAbertura({
   percentualImposto,
   custoPlanejado,
   faturamentoPrevisto,
+  totalGeradoEmSave,
   valorJob,
   moeda,
   clienteNome,
@@ -177,6 +182,7 @@ export function FluxoAbertura({
     formData.set("regional_id", dados.regionalId);
     formData.set("data_inicio_prevista", dados.dataInicio);
     formData.set("data_fim_prevista", dados.dataFim);
+    formData.set("data_evento", dados.dataEvento);
     formData.set("data_prevista_faturamento", dados.dataFaturamento);
     formData.set("observacoes", dados.observacoes);
     // Único campo composto do formulário: vai como JSON e a action
@@ -210,7 +216,7 @@ export function FluxoAbertura({
 
   const resumoEnvio = [
     { rotulo: "Job", valor: dados.nome || "—" },
-    { rotulo: "Código", valor: proximoCodigoJob, mono: true },
+    { rotulo: "Código", valor: job?.codigo ?? proximoCodigoJob, mono: true },
     { rotulo: "Projeto", valor: `${projetoNome} · ${projetoCodigo}` },
     { rotulo: "Cliente", valor: clienteNome },
     { rotulo: "Produto", valor: herdados.produtoNome ?? "— não informado" },
@@ -221,12 +227,18 @@ export function FluxoAbertura({
       valor: herdados.categoriaNome ?? "— não informada",
     },
     {
-      // O que o usuário escolheu no formulário — não o que estava no
-      // orçamento antes de ele abrir o modal.
+      // Antes do envio, o que o usuário escolheu no formulário — não o
+      // que estava no orçamento antes de ele abrir o modal. Depois do
+      // envio, o que o JOB congelou: o orçamento pode ter mudado desde
+      // então, e a conferência é do job.
       rotulo: "Cidade · Regional",
-      valor: `${dados.cidadeNome || "—"} · ${
-        regionaisDoProjeto.find((r) => r.id === dados.regionalId)?.nome ?? "—"
-      }`,
+      valor:
+        etapa === "enviada"
+          ? `${herdados.cidadeNome ?? "—"} · ${herdados.regionalNome ?? "—"}`
+          : `${dados.cidadeNome || "—"} · ${
+              regionaisDoProjeto.find((r) => r.id === dados.regionalId)?.nome ??
+              "—"
+            }`,
     },
     { rotulo: "GP Responsável", valor: herdados.gpNome ?? "— não informado" },
     {
@@ -239,7 +251,14 @@ export function FluxoAbertura({
       mono: true,
     },
     {
-      rotulo: "Faturamento em",
+      rotulo: "Data evento",
+      valor: formatarData(dados.dataEvento),
+      mono: true,
+    },
+    {
+      // Era "Faturamento em" até 27/08/2026 — o campo é o mesmo
+      // (`data_prevista_faturamento`), só o rótulo mudou.
+      rotulo: "Recebimento em",
       valor: formatarData(dados.dataFaturamento),
       mono: true,
     },
@@ -301,7 +320,7 @@ export function FluxoAbertura({
               </span>
               <span className="text-xs text-muted-foreground">
                 {job.data_prevista_faturamento
-                  ? `Faturamento previsto para ${formatarData(job.data_prevista_faturamento)}`
+                  ? `Recebimento previsto para ${formatarData(job.data_prevista_faturamento)}`
                   : "Aguardando abertura pelo financeiro"}
               </span>
             </>
@@ -334,7 +353,7 @@ export function FluxoAbertura({
           {etapa === "enviada" && (
             <button
               type="button"
-              onClick={() => setModal("form")}
+              onClick={() => setModal("envio")}
               className="inline-flex items-center gap-2 rounded-lg border border-border bg-white px-4 py-2 text-[13px] font-semibold text-foreground hover:border-california-red/40 hover:text-california-red transition-colors"
             >
               <FileText className="h-4 w-4" />
@@ -402,6 +421,7 @@ export function FluxoAbertura({
         versaoLabel={versaoLabel}
         valorTotal={valorJob}
         faturamentoPrevisto={faturamentoPrevisto}
+        totalGeradoEmSave={totalGeradoEmSave}
         moeda={moeda}
         herdados={herdados}
         regionaisDoProjeto={regionaisDoProjeto}
@@ -410,17 +430,23 @@ export function FluxoAbertura({
         erroGeral={erroGeral}
       />
 
-      {/* Pop-up 3 — confirmar envio. Voltar NÃO limpa o formulário. */}
+      {/* Pop-up 3 — confirmar envio. Voltar NÃO limpa o formulário.
+          Com o job já enviado ele é a tela "Dados do job": mesma
+          conferência, sem os botões que decidem (27/08/2026). */}
       <ConfirmarEnvioModal
         open={modal === "envio"}
-        onOpenChange={(o) => !o && setModal("form")}
+        onOpenChange={(o) =>
+          !o && setModal(etapa === "enviada" ? null : "form")
+        }
         onVoltar={() => setModal("form")}
         onConfirmar={handleEnviar}
         pending={pending}
+        somenteLeitura={etapa === "enviada"}
         orcamentoCodigo={orcamentoCodigo}
         linhas={resumoEnvio}
         valorTotal={valorJob}
         faturamentoPrevisto={faturamentoPrevisto}
+        totalGeradoEmSave={totalGeradoEmSave}
         moeda={moeda}
         contatos={dados.contatos}
         observacoes={dados.observacoes}
@@ -481,7 +507,7 @@ export function BannersEstado({
             <p className="mt-0.5 text-xs text-muted-foreground">
               Aguardando abertura pelo financeiro
               {job.data_prevista_faturamento
-                ? ` · faturamento previsto para ${formatarData(job.data_prevista_faturamento)}`
+                ? ` · recebimento previsto para ${formatarData(job.data_prevista_faturamento)}`
                 : ""}
             </p>
           </div>

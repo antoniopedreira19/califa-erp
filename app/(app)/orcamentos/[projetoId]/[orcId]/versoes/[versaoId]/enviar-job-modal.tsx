@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { TruncateTooltip } from "@/components/ui/truncate-tooltip";
 import { cn, formatCurrency } from "@/lib/utils";
+import { SAVE } from "@/app/(app)/_planilha/blocos";
 import { OBSERVACOES_MAX } from "@/lib/validations/abertura-job";
 import {
   CidadeCombobox,
@@ -48,6 +49,10 @@ export interface DadosJob {
   regionalId: string;
   dataInicio: string;
   dataFim: string;
+  /** Data do evento. Só do job — o orçamento não tem o campo. */
+  dataEvento: string;
+  /** Coluna `data_prevista_faturamento`; na tela é "Data prevista para
+   *  recebimento" desde 27/08/2026. */
   dataFaturamento: string;
   observacoes: string;
   /** Quem recebe a cobrança no cliente. Ao menos um é obrigatório para
@@ -81,6 +86,7 @@ type CampoObrigatorio =
   | "regional_id"
   | "data_inicio_prevista"
   | "data_fim_prevista"
+  | "data_evento"
   | "data_prevista_faturamento"
   | "contatos_cobranca";
 
@@ -103,6 +109,7 @@ export function faltamCampos(d: DadosJob): Record<CampoObrigatorio, boolean> {
     regional_id: !d.regionalId,
     data_inicio_prevista: !d.dataInicio,
     data_fim_prevista: !d.dataFim,
+    data_evento: !d.dataEvento,
     data_prevista_faturamento: !d.dataFaturamento,
     // Espelha o schema do servidor: ao menos uma linha, e TODA linha com
     // nome e e-mail. Número em branco não conta como pendência.
@@ -144,6 +151,9 @@ interface Props {
   valorTotal: number;
   /** O que a California emite nota nesta versão. */
   faturamentoPrevisto: number;
+  /** Crédito que as linhas em save geram para o cliente. Zero esconde a
+   *  linha — versão sem save não ganha uma linha a explicar. */
+  totalGeradoEmSave: number;
   moeda: string;
 
   herdados: HerdadosJob;
@@ -172,6 +182,7 @@ export function EnviarJobModal({
   versaoLabel,
   valorTotal,
   faturamentoPrevisto,
+  totalGeradoEmSave,
   moeda,
   herdados,
   regionaisDoProjeto,
@@ -295,49 +306,17 @@ export function EnviarJobModal({
             <Travado valor={clienteNome} />
           </Campo>
 
-          {/* Linhas 3 e 4 — Produto e Categoria, um por linha, os dois
-              travados: vêm do projeto e do orçamento. Cada um leva dois
-              espaçadores para fechar a linha, porque a Categoria precisa
-              ficar entre o Produto e o par Cidade/Regional — que não pode
-              se separar, já que as regionais dependem da cidade. No
-              mobile a grade vira uma coluna e os espaçadores somem. */}
+          {/* Linhas 3 e 4 — as três colunas ficam sempre cheias. Até
+              26/08/2026 Produto e Categoria vinham sozinhos, cada um com
+              dois espaçadores, e Cidade/Regional dividiam a linha
+              seguinte; o design "Enviar Job - Ajustes de Campos" fechou
+              os buracos e separou o par.
+
+              Separar Cidade de Regional é seguro: as opções de regional
+              saem do PROJETO (`regionaisDoProjeto`), não da cidade
+              escolhida — uma nunca dependeu da outra. */}
           <Campo rotulo="Produto" apoio="Cadastrado no projeto.">
             <Travado valor={herdados.produtoNome ?? "— não informado"} />
-          </Campo>
-          <div className="hidden md:col-span-2 md:block" aria-hidden />
-
-          <Campo rotulo="Categoria" apoio="Cadastrada no orçamento.">
-            <Travado valor={herdados.categoriaNome ?? "— não informada"} />
-          </Campo>
-          <div className="hidden md:col-span-2 md:block" aria-hidden />
-
-          {/* Linha 5 — cidade e regional chegam pré-preenchidas com o
-              orçamento e podem ser trocadas aqui. Com o job já enviado,
-              as duas só exibem. */}
-          <Campo
-            rotulo="Cidade"
-            obrigatorio
-            erro={erroDe("cidade_id")}
-            apoio={
-              somenteLeitura
-                ? undefined
-                : "Se alterar, o orçamento é atualizado na confirmação."
-            }
-          >
-            {somenteLeitura ? (
-              <Travado valor={herdados.cidadeNome ?? "— não informada"} />
-            ) : (
-              <CidadeCombobox
-                value={
-                  dados.cidadeId
-                    ? { id: dados.cidadeId, nome: dados.cidadeNome }
-                    : null
-                }
-                onChange={(c) => onChange({ cidadeId: c.id, cidadeNome: c.nome })}
-                iniciais={cidadesIniciais}
-                erro={Boolean(erroDe("cidade_id"))}
-              />
-            )}
           </Campo>
 
           <Campo
@@ -385,12 +364,45 @@ export function EnviarJobModal({
             )}
           </Campo>
 
-          {/* Cidade e Regional ocupam duas das três colunas; sem este
-              espaçador a "Data de início" subiria para o buraco que
-              sobra e as três datas ficariam partidas em duas linhas. */}
-          <div className="hidden md:block" aria-hidden />
+          <Campo rotulo="GP Responsável">
+            <Travado valor={herdados.gpNome ?? "— não informado"} />
+          </Campo>
 
-          {/* Linha 6 — as três datas. */}
+          <Campo rotulo="Categoria" apoio="Cadastrada no orçamento.">
+            <Travado valor={herdados.categoriaNome ?? "— não informada"} />
+          </Campo>
+
+          <Campo
+            rotulo="Cidade"
+            obrigatorio
+            erro={erroDe("cidade_id")}
+            apoio={
+              somenteLeitura
+                ? undefined
+                : "Se alterar, o orçamento é atualizado na confirmação."
+            }
+          >
+            {somenteLeitura ? (
+              <Travado valor={herdados.cidadeNome ?? "— não informada"} />
+            ) : (
+              <CidadeCombobox
+                value={
+                  dados.cidadeId
+                    ? { id: dados.cidadeId, nome: dados.cidadeNome }
+                    : null
+                }
+                onChange={(c) => onChange({ cidadeId: c.id, cidadeNome: c.nome })}
+                iniciais={cidadesIniciais}
+                erro={Boolean(erroDe("cidade_id"))}
+              />
+            )}
+          </Campo>
+
+          <Campo rotulo="Produtor Responsável">
+            <Travado valor={herdados.produtorNome ?? "— não informado"} />
+          </Campo>
+
+          {/* Linha 5 — início, fim e o evento. */}
           <Campo
             rotulo="Data de início"
             obrigatorio
@@ -424,7 +436,28 @@ export function EnviarJobModal({
           </Campo>
 
           <Campo
-            rotulo="Data prevista para faturamento"
+            rotulo="Data Evento"
+            obrigatorio
+            erro={erroDe("data_evento")}
+          >
+            <DatePicker
+              key={`evento-${dados.dataEvento}`}
+              name="__job_data_evento"
+              defaultValue={dados.dataEvento}
+              disabled={somenteLeitura}
+              onDateChange={(d) => onChange({ dataEvento: d ? toIso(d) : "" })}
+              className={cn(
+                erroDe("data_evento") &&
+                  "border-california-red ring-2 ring-california-red/15",
+              )}
+            />
+          </Campo>
+
+          {/* Linha 6 — o recebimento desce sozinho, no lugar que era do
+              faturamento. O espaçador segura as duas colunas que sobram
+              para o contato de cobrança começar em linha própria. */}
+          <Campo
+            rotulo="Data prevista para recebimento"
             obrigatorio
             erro={erroDe("data_prevista_faturamento")}
           >
@@ -441,16 +474,10 @@ export function EnviarJobModal({
             />
           </Campo>
 
-          {/* Linha 5 — os dois responsáveis do orçamento, também travados. */}
-          <Campo rotulo="GP Responsável">
-            <Travado valor={herdados.gpNome ?? "— não informado"} />
-          </Campo>
-          <Campo rotulo="Produtor Responsável">
-            <Travado valor={herdados.produtorNome ?? "— não informado"} />
-          </Campo>
-          <div className="md:col-span-1" />
+          <div className="hidden md:col-span-2 md:block" aria-hidden />
 
-          {/* Linha 5b — contato de cobrança. Uma linha por pessoa: é o que
+
+          {/* Linha 7 — contato de cobrança. Uma linha por pessoa: é o que
               o financeiro usa para cobrar, e muda de job para job. */}
           <Campo
             rotulo="Contato de cobrança"
@@ -559,9 +586,36 @@ export function EnviarJobModal({
                 {formatCurrency(valorTotal, moeda)}
               </span>
             </div>
+            {/* Save zerado não vira linha: o card só ganha a explicação
+                quando há crédito a explicar (design de 27/08/2026). */}
+            {totalGeradoEmSave > 0 && (
+              <div className="mt-1.5 flex flex-wrap items-baseline justify-between gap-3 border-t border-border pt-2">
+                <span className="flex flex-col">
+                  <span className="text-sm font-semibold">
+                    Total gerado em save
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    Crédito gerado pelos itens desta versão.
+                  </span>
+                </span>
+                {/* Grafite do SAVE, de `blocos.ts` — a mesma cor da linha
+                    "Saldo em save" do card de Totais. O design desenhou
+                    esta linha em azul (#1e4fa3), mas foi antes de o save
+                    entrar no produto com identidade própria; seguir o
+                    desenho aqui deixaria o mesmo número em duas cores. */}
+                <span
+                  className={cn(
+                    "whitespace-nowrap font-mono text-lg font-bold",
+                    SAVE.textoApagado,
+                  )}
+                >
+                  {formatCurrency(totalGeradoEmSave, moeda)}
+                </span>
+              </div>
+            )}
           </div>
 
-          {/* Linha 6 — descritivo, linha inteira. Rótulo renomeado em
+          {/* Linha 9 — descritivo, linha inteira. Rótulo renomeado em
               17/08/2026; o campo e a coluna seguem `observacoes`. */}
           <Campo
             rotulo="Descritivo"

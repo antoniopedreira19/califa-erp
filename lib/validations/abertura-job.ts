@@ -58,7 +58,8 @@ export type ContatoCobrancaInput = z.infer<typeof contatoCobrancaSchema>;
  * dos itens da versão aprovada. Valor de faturamento não vem do cliente.
  *
  * Nome, datas, cidade e regional são gravados TAMBÉM no orçamento — ver
- * `enviarJobParaAbertura`.
+ * `enviarJobParaAbertura`. `data_evento` é a exceção: fica só no job,
+ * porque `orcamentos` não tem o campo (27/08/2026).
  *
  * `contatos_cobranca` é o único campo que não vira coluna de `jobs`: vai
  * para a tabela `jobs_contatos`, uma linha por contato, com `tipo`
@@ -79,9 +80,17 @@ export const aberturaJobSchema = z
     data_fim_prevista: z
       .string()
       .regex(/^\d{4}-\d{2}-\d{2}$/, "Data de fim é obrigatória."),
+    // Data do evento. Entre o fim e o recebimento na tela; obrigatória
+    // desde 27/08/2026. A coluna `jobs.data_evento` é nullable só por
+    // causa dos jobs anteriores — daqui pra frente nenhum job nasce sem.
+    data_evento: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, "Data do evento é obrigatória."),
+    // Coluna `data_prevista_faturamento`; o rótulo da tela virou "Data
+    // prevista para recebimento" em 27/08/2026.
     data_prevista_faturamento: z
       .string()
-      .regex(/^\d{4}-\d{2}-\d{2}$/, "Data prevista para faturamento é obrigatória."),
+      .regex(/^\d{4}-\d{2}-\d{2}$/, "Data prevista para recebimento é obrigatória."),
     observacoes: z
       .string()
       .trim()

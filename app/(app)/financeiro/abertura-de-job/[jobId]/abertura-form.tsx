@@ -643,7 +643,9 @@ export function AberturaForm({
       mono: true,
     },
     {
-      rotulo: "Faturamento em",
+      // Mesma regra do diálogo de conferência: a data é de
+      // recebimento, não de faturamento (27/08/2026).
+      rotulo: "Recebimento em",
       valor: formatDataBr(job.data_prevista_faturamento),
       mono: true,
     },
@@ -1136,7 +1138,7 @@ export function AberturaForm({
                       Parcelas de recebimento
                     </p>
                     <span className="text-[11.5px] text-muted-foreground">
-                      Faturamento previsto para{" "}
+                      Recebimento previsto para{" "}
                       {formatDataBr(job.data_prevista_faturamento)}
                     </span>
                     {!travado && (
