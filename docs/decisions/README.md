@@ -53,6 +53,7 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 027 | [PP aprovada é título, e a composição do valor no fluxo do job](027-pp-aprovada-e-a-composicao-do-fluxo-do-job.md) | 2026-08-26 |
 | 028 | [O save fatura num job e vale em outro](028-save-entre-jobs.md) | 2026-08-24 |
 | 029 | [Data do evento, "recebimento" no lugar de "faturamento" nas datas, e a planilha abrindo em Líquido](029-data-do-evento-recebimento-e-visao-liquida.md) | 2026-08-27 |
+| 030 | [A errata acontece na planilha, e existe linha vermelha](030-errata-na-planilha-e-a-linha-vermelha.md) | 2026-08-27 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a

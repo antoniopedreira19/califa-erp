@@ -50,11 +50,19 @@ import {
 } from "./job-item-realizado-table";
 import { JobTotaisCard } from "./job-totais-card";
 import { AlterarOrcadoButton } from "./alterar-orcado-button";
+import { useRascunhoErrata } from "./errata-rascunho";
+import { ErrataBarra } from "./errata-barra";
+import { ErrataConfirmarDialog } from "./errata-confirmar-dialog";
+import { registrarErrata } from "./actions-errata";
+import { calcularTotaisVersao } from "@/lib/calculos/versao-totais";
+import { definirModoErrata } from "../modo-errata";
 
 interface Props {
   job: Pick<
     Job,
     | "id"
+    | "codigo"
+    | "nome"
     | "status"
     | "projeto_id"
     | "orcamento_id"
@@ -110,6 +118,63 @@ export function JobRealizadoSection({
   // e quem não lida com BV nunca precisa saber que a outra existe.
   const [visao, setVisao] = React.useState<VisaoBv>(VISAO_BV_PADRAO);
 
+  // MODO ERRATA — mesma razão da chave acima, levada ao extremo: a errata
+  // muda a planilha, o card de Totais e a barra do rodapé ao mesmo tempo,
+  // então o rascunho tem que morar no ancestral comum dos três. Antes de
+  // 27/08/2026 isto era um drawer com uma segunda tabela, e o problema não
+  // existia porque nada da tela reagia.
+  const errata = useRascunhoErrata(itens);
+  // A barra de ações do job é irmã das abas e precisa sair de cena
+  // enquanto a barra da errata está no ar — as duas grudam no mesmo pé de
+  // janela. Nas telas que não têm barra de ações (financeiro, conferência
+  // de abertura) ninguém escuta, e o sinal se perde sem efeito.
+  React.useEffect(() => {
+    definirModoErrata(errata.ativo);
+    return () => definirModoErrata(false);
+  }, [errata.ativo]);
+
+  const [confirmando, setConfirmando] = React.useState(false);
+  const [salvando, setSalvando] = React.useState(false);
+  const [erroErrata, setErroErrata] = React.useState<string | null>(null);
+
+  // Os dois lados da conta, pela MESMA função que o card de Totais e o
+  // servidor usam. Reimplementar aqui faria a barra mostrar um número e a
+  // gravação outro.
+  const paraTotais = React.useCallback(
+    (lista: ItemPlanilhaJob[]) =>
+      calcularTotaisVersao(
+        lista.map((i) => ({
+          tipo_custo: i.tipo_custo,
+          total_orcado: Number(i.total_orcado ?? 0),
+          em_save: i.em_save,
+          save_consumido: Number(i.save_consumido ?? 0),
+        })),
+        versao.percentual_honorarios,
+        versao.percentual_imposto,
+      ),
+    [versao.percentual_honorarios, versao.percentual_imposto],
+  );
+
+  const totaisAntes = React.useMemo(() => paraTotais(itens), [paraTotais, itens]);
+  const totaisDepois = React.useMemo(
+    () => paraTotais(errata.itens),
+    [paraTotais, errata.itens],
+  );
+
+  async function confirmarErrata(descricao: string) {
+    setSalvando(true);
+    setErroErrata(null);
+    const r = await registrarErrata(job.id, errata.payload(descricao));
+    setSalvando(false);
+    if (!r.ok) {
+      setErroErrata(r.message);
+      return;
+    }
+    setConfirmando(false);
+    errata.descartar();
+    router.refresh();
+  }
+
   // Recolher agrupamento, igual à planilha do orçamento: o subtotal e a
   // rentabilidade continuam à vista, que é o que justifica recolher.
   const gruposIds = React.useMemo(() => grupos.map((g) => g.id), [grupos]);
@@ -150,16 +215,21 @@ export function JobRealizadoSection({
 
   // A planilha inteira numa tabela só desde 24/08/2026: os pares
   // grupo → itens são montados aqui e vão de uma vez para a tabela.
+  //
+  // A lista vem do RASCUNHO, não das props: com o modo errata desligado
+  // ela é idêntica aos itens salvos, e com ele ligado já traz as linhas
+  // novas e sem as removidas. É o que faz a planilha, o card de Totais e a
+  // barra do rodapé mostrarem o mesmo número enquanto se digita.
   const gruposDaPlanilha = React.useMemo<GrupoDoJob[]>(() => {
     const porGrupo = new Map<string, ItemPlanilhaJob[]>();
     for (const g of grupos) porGrupo.set(g.id, []);
-    for (const it of itens) porGrupo.get(it.grupo_id)?.push(it);
+    for (const it of errata.itens) porGrupo.get(it.grupo_id)?.push(it);
     return grupos.map((g) => ({
       id: g.id,
       nome: g.nome,
       itens: porGrupo.get(g.id) ?? [],
     }));
-  }, [grupos, itens]);
+  }, [grupos, errata.itens]);
 
   // A trilha lateral aparece quando há ação (BV/PP) OU quando há BV
   // lançado para consultar num job sem ação — é a mesma condição que a
@@ -226,12 +296,10 @@ export function JobRealizadoSection({
           />
           {podeAcoes && (
             <AlterarOrcadoButton
-              jobId={job.id}
-              itens={itens}
-              grupos={grupos}
-              percentualHonorarios={versao.percentual_honorarios}
-              percentualImposto={versao.percentual_imposto}
-              moeda={versao.moeda}
+              ativo={errata.ativo}
+              onAlternar={() =>
+                errata.ativo ? errata.descartar() : errata.ligar()
+              }
             />
           )}
           <Link
@@ -278,11 +346,14 @@ export function JobRealizadoSection({
               versaoLabel={`v${versao.numero_versao}`}
               saveVisivel={temSave}
               savePorItem={savePorItem}
-              onAbrirSave={podeMexerNoSave ? setLinhaSave : undefined}
+              onAbrirSave={
+                podeMexerNoSave && !errata.ativo ? setLinhaSave : undefined
+              }
+              errata={podeAcoes ? errata : undefined}
             />
           </div>
           <JobTotaisCard
-            itens={itens}
+            itens={errata.itens}
             realizadosMap={realizadosMap}
             bvsPorItem={bvsPorItem}
             jobAberto={!preAbertura}
@@ -331,6 +402,55 @@ export function JobRealizadoSection({
               }
             : undefined
         }
+      />
+
+      {errata.ativo && (
+        <ErrataBarra
+          resumo={errata.resumo}
+          temMudanca={errata.temMudanca}
+          faturamento={{
+            antes: totaisAntes.faturamentoPrevisto,
+            depois: totaisDepois.faturamentoPrevisto,
+          }}
+          valorJob={{
+            antes: totaisAntes.valorJob,
+            depois: totaisDepois.valorJob,
+          }}
+          moeda={versao.moeda}
+          onDescartar={errata.descartar}
+          onConfirmar={() => {
+            setErroErrata(null);
+            setConfirmando(true);
+          }}
+        />
+      )}
+
+      <ErrataConfirmarDialog
+        open={confirmando}
+        onOpenChange={(aberto) => {
+          if (!salvando) setConfirmando(aberto);
+        }}
+        jobCodigo={job.codigo}
+        jobNome={job.nome}
+        resumo={errata.resumo}
+        mudancas={errata.mudancas}
+        orcado={{
+          antes: totaisAntes.subtotalGeral,
+          depois: totaisDepois.subtotalGeral,
+        }}
+        faturamento={{
+          antes: totaisAntes.faturamentoPrevisto,
+          depois: totaisDepois.faturamentoPrevisto,
+        }}
+        valorJob={{
+          antes: totaisAntes.valorJob,
+          depois: totaisDepois.valorJob,
+        }}
+        moeda={versao.moeda}
+        faltaNomear={errata.faltaNomear}
+        salvando={salvando}
+        erro={erroErrata}
+        onConfirmar={confirmarErrata}
       />
     </div>
   );

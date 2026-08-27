@@ -215,7 +215,7 @@ function CardSistema({
         />
       </button>
 
-      {aberto && item.linhas.length > 0 && (
+      {aberto && (item.linhas.length > 0 || item.descricao || item.nota) && (
         <div className="flex flex-col gap-[9px] border-t border-border bg-[#f5f5f5]/50 px-3.5 py-3">
           {item.linhas.map((l, i) => (
             <div
@@ -229,6 +229,31 @@ function CardSistema({
               </span>
             </div>
           ))}
+          {/* A descrição da errata — a única parte do card que uma pessoa
+              escreveu. Fica em bloco próprio, entre aspas, para não se
+              perder no meio dos números derivados (27/08/2026). */}
+          {item.descricao && item.descricao.texto.trim() !== "" && (
+            <div className="mt-0.5 rounded-lg border border-border bg-card px-3 py-2.5">
+              <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
+                Descrição da errata
+              </p>
+              <p className="mt-1 text-[12px] italic leading-relaxed text-foreground">
+                “{item.descricao.texto}”
+              </p>
+              {item.descricao.autor && (
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  {item.descricao.autor}
+                </p>
+              )}
+            </div>
+          )}
+
+          {item.nota && (
+            <p className="text-[11.5px] leading-relaxed text-muted-foreground">
+              {item.nota}
+            </p>
+          )}
+
           {irParaInformacoes && (
             <button
               type="button"

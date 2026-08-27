@@ -41,9 +41,10 @@ desembolso. O job entrava "aberto" sem nada que o financeiro pudesse usar.
 
 | Rota | O que faz |
 |---|---|
-| `/financeiro/abertura-de-job` | fila dos jobs aguardando abertura, com busca e resumo |
+| `/financeiro/abertura-de-job` | fila dos jobs aguardando abertura, com busca e resumo. ⚠️ **27/08/2026 (decisão 030):** a fila passou a ter **duas coortes** — a faixa **Erratas**, com jobs JÁ ABERTOS que uma errata devolveu para reconferência (botão "Revisar abertura", que abre o resumo da errata), e a faixa **Aberturas novas**, a de sempre. As faixas só aparecem quando as duas existem. |
+| — resumo da errata | ⚠️ **Novo em 27/08/2026.** Descrição escrita pelo GP, faturamento e valor do job antes/depois, contagem de linhas afetadas, e "Prosseguir para abertura". |
 | — modal de conferência | dados vindos da produção, resumo real da planilha, observações, atalho para a Planilha Interna |
-| `/financeiro/abertura-de-job/[jobId]` | formulário de registro financeiro, com rodapé fixo que bloqueia até estar completo |
+| `/financeiro/abertura-de-job/[jobId]` | formulário de registro financeiro, com rodapé fixo que bloqueia até estar completo. ⚠️ **27/08/2026 (decisão 030):** **salvar aqui É o que encerra a revisão de uma errata** — limpa `jobs.abertura_em_revisao` e libera o envio para faturamento. Não há botão separado de "confirmar revisão". |
 
 A rota antiga `/financeiro/jobs-aguardando-abertura` **virou redirect** — havia
 links salvos e `revalidatePath` apontando para ela.

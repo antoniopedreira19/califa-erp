@@ -71,6 +71,31 @@ export interface JobNaFila {
    *  (docs/decisions/012); job anterior a 17/08/2026 vem com lista
    *  vazia, que é estado legítimo. */
   contatos: ContatoCobranca[];
+  /** Preenchido só quando o job está no mural por causa de uma errata. */
+  revisao: RevisaoDeErrata | null;
+}
+
+/**
+ * A errata que devolveu um job JÁ ABERTO ao mural.
+ *
+ * O job não voltou para a fila de aberturas novas — ele continua aberto e
+ * a produção continua trabalhando nele. O que voltou é a conferência: a
+ * errata mexeu no orçado, e previsão de recebimento, curva de desembolso e
+ * competência foram calculadas sobre os números antigos (27/08/2026).
+ */
+export interface RevisaoDeErrata {
+  errataId: string;
+  /** A descrição escrita no pop-up de confirmação da errata. */
+  descricao: string;
+  autorNome: string | null;
+  em: string;
+  faturamentoAntes: number | null;
+  faturamentoDepois: number | null;
+  valorJobAntes: number;
+  valorJobDepois: number;
+  linhasAlteradas: number;
+  linhasNovas: number;
+  linhasRemovidas: number;
 }
 
 export interface TotaisPlanilhaJob {
@@ -156,6 +181,7 @@ function montarJobNaFila(
   j: any,
   totais?: TotaisPlanilhaJob,
   contatos?: ContatoCobranca[],
+  revisao?: RevisaoDeErrata | null,
 ): JobNaFila {
   return {
     id: j.id,
@@ -195,6 +221,7 @@ function montarJobNaFila(
     planilha_planejado: totais?.planejado ?? 0,
     planilha_desembolso: totais?.desembolso ?? 0,
     contatos: contatos ?? [],
+    revisao: revisao ?? null,
   };
 }
 
@@ -263,11 +290,15 @@ export async function listarFilaDeAbertura(
 ): Promise<JobNaFila[]> {
   const supabase = createClient();
 
+  // Duas coortes na mesma fila desde 27/08/2026: os jobs que nunca foram
+  // abertos e os que uma errata devolveu para reconferência. O `.or` é o
+  // que evita uma segunda query — e `abertura_em_revisao` tem índice
+  // parcial próprio (`idx_jobs_abertura_em_revisao`).
   const { data, error } = await supabase
     .from("jobs")
-    .select(SELECT_JOB_FILA)
+    .select(`${SELECT_JOB_FILA}, abertura_em_revisao, abertura_revisao_desde, abertura_revisao_errata_id`)
     .eq("tenant_id", tenantId)
-    .eq("status", "aguardando_abertura")
+    .or("status.eq.aguardando_abertura,abertura_em_revisao.is.true")
     .order("created_at", { ascending: true });
 
   if (error) {
@@ -277,12 +308,83 @@ export async function listarFilaDeAbertura(
 
   const linhas = (data ?? []) as any[];
   const ids = linhas.map((j) => j.id as string);
-  const [totais, contatos] = await Promise.all([
+  const [totais, contatos, revisoes] = await Promise.all([
     totaisDasPlanilhas(ids),
     contatosDeCobrancaPorJob(ids, tenantId),
+    revisoesDeErrata(
+      linhas
+        .filter((j) => j.abertura_revisao_errata_id)
+        .map((j) => j.abertura_revisao_errata_id as string),
+      tenantId,
+    ),
   ]);
 
   return linhas.map((j) =>
-    montarJobNaFila(j, totais.get(j.id), contatos.get(j.id)),
+    montarJobNaFila(
+      j,
+      totais.get(j.id),
+      contatos.get(j.id),
+      j.abertura_revisao_errata_id
+        ? (revisoes.get(j.abertura_revisao_errata_id) ?? null)
+        : null,
+    ),
   );
+}
+
+/**
+ * As erratas que devolveram jobs ao mural, numa query só.
+ *
+ * Uma por job — a última, que é a que `jobs.abertura_revisao_errata_id`
+ * guarda. Os itens vêm no mesmo embed porque o mural mostra "1 alterada ·
+ * 0 novas · 0 removidas", e uma query por job seria N+1 na tela mais
+ * movimentada do financeiro (docs/PERFORMANCE.md, anti-padrão I).
+ */
+async function revisoesDeErrata(
+  errataIds: string[],
+  tenantId: string,
+): Promise<Map<string, RevisaoDeErrata>> {
+  const mapa = new Map<string, RevisaoDeErrata>();
+  if (errataIds.length === 0) return mapa;
+
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("jobs_erratas")
+    .select(
+      "id, titulo, created_at, valor_job_antes, valor_job_depois, " +
+        "faturamento_previsto_antes, faturamento_previsto_depois, " +
+        "autor:profiles!created_by(nome), itens:jobs_erratas_itens(acao)",
+    )
+    .eq("tenant_id", tenantId)
+    .in("id", errataIds);
+
+  if (error) {
+    console.error("[abertura-job.revisoes]", error.message);
+    return mapa;
+  }
+
+  for (const e of (data ?? []) as any[]) {
+    const itens = (e.itens ?? []) as Array<{ acao: string }>;
+    const conta = (a: string) => itens.filter((i) => i.acao === a).length;
+    mapa.set(e.id, {
+      errataId: e.id,
+      descricao: e.titulo,
+      autorNome: e.autor?.nome ?? null,
+      em: e.created_at,
+      faturamentoAntes:
+        e.faturamento_previsto_antes === null
+          ? null
+          : Number(e.faturamento_previsto_antes),
+      faturamentoDepois:
+        e.faturamento_previsto_depois === null
+          ? null
+          : Number(e.faturamento_previsto_depois),
+      valorJobAntes: Number(e.valor_job_antes ?? 0),
+      valorJobDepois: Number(e.valor_job_depois ?? 0),
+      linhasAlteradas: conta("alterada"),
+      linhasNovas: conta("nova"),
+      linhasRemovidas: conta("removida"),
+    });
+  }
+
+  return mapa;
 }

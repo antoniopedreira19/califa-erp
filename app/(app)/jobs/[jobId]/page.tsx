@@ -310,6 +310,8 @@ export default async function JobDetailPage({
             clienteNome={detalhe.clienteNome}
             job={{
               id: job.id,
+              codigo: job.codigo,
+              nome: job.nome,
               status: job.status,
               projeto_id: job.projeto_id,
               orcamento_id: job.orcamento_id,
@@ -378,6 +380,7 @@ export default async function JobDetailPage({
         transicoes={transicoes}
         envioFaturamento={envioFaturamento}
         podeEnviarFaturamento={podeEnviarFaturamento}
+        aberturaEmRevisao={job.abertura_em_revisao}
         faturamentoPrevisto={totaisJob.faturamentoPrevisto}
         // Dos itens, e não da coluna `jobs.faturamento_save_previsto`: a
         // coluna é espelho denormalizado, e o drawer não pode divergir da

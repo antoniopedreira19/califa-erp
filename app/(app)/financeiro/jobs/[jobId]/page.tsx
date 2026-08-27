@@ -365,6 +365,8 @@ export default async function JobNoFinanceiroPage({
             clienteNome={detalhe.clienteNome}
             job={{
               id: job.id,
+              codigo: job.codigo,
+              nome: job.nome,
               status: job.status,
               projeto_id: job.projeto_id,
               orcamento_id: job.orcamento_id,
