@@ -149,9 +149,17 @@ interface Dados {
     | "valor"
     | "prazo_pagamento"
     | "created_at"
-  >;
+  > & {
+    /** Quando true, o PDF troca "Fornecedor" por "Responsável" nos blocos,
+     * omite os DADOS BANCÁRIOS (verba é interna, não paga fornecedor) e usa
+     * `responsavelVerbaNome` no lugar do nome do fornecedor. */
+    verba_producao?: boolean;
+  };
   empresa: Empresa;
-  fornecedor: Fornecedor;
+  /** Null quando `pp.verba_producao === true` — não há fornecedor. */
+  fornecedor: Fornecedor | null;
+  /** Nome do responsável interno da verba. Obrigatório quando `pp.verba_producao === true`. */
+  responsavelVerbaNome?: string | null;
   job: Pick<Job, "nome" | "produto">;
   projeto: Pick<Projeto, "codigo" | "campanha">;
   orcamento: Pick<Orcamento, "codigo">;
@@ -183,6 +191,7 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
     pp,
     empresa,
     fornecedor,
+    responsavelVerbaNome,
     job,
     projeto,
     orcamento,
@@ -190,6 +199,14 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
     responsavelNome,
     parcela,
   } = dados;
+
+  const isVerba = pp.verba_producao === true;
+
+  // Nome do contraparte pra usar nos blocos de identificação. Em verba,
+  // é o responsável interno; nas demais, o fornecedor externo.
+  const nomeContraparte = isVerba
+    ? (responsavelVerbaNome ?? "")
+    : (fornecedor?.razao_social ?? fornecedor?.nome ?? "");
 
   const enderecoEmpresa = [
     empresa.logradouro,
@@ -200,16 +217,18 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
     .filter(Boolean)
     .join(", ");
 
-  const enderecoFornecedor = [
-    fornecedor.logradouro,
-    fornecedor.numero,
-    fornecedor.complemento,
-    fornecedor.bairro,
-  ]
-    .filter(Boolean)
-    .join(", ");
-
-  const nomeFornecedor = fornecedor.razao_social ?? fornecedor.nome;
+  // Endereço/CNPJ/etc só existem em fornecedor externo. Verba usa dados
+  // internos e não estampa nada disso.
+  const enderecoFornecedor = fornecedor
+    ? [
+        fornecedor.logradouro,
+        fornecedor.numero,
+        fornecedor.complemento,
+        fornecedor.bairro,
+      ]
+        .filter(Boolean)
+        .join(", ")
+    : "";
 
   // ===== 1. HEADER — logo | dados empresa | box PP =====
   const headerTable: Content = {
@@ -290,7 +309,10 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
           {
             stack: [
               lv("Cliente", cliente.nome_fantasia),
-              lv("Fornecedor", nomeFornecedor),
+              lv(
+                isVerba ? "Responsável" : "Fornecedor",
+                nomeContraparte,
+              ),
               lv("Produto", job.produto ?? ""),
               lv("Título", job.nome),
               lv("Campanha", projeto.campanha ?? ""),
@@ -421,53 +443,62 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
   };
 
   // ===== 6. DADOS BANCÁRIOS DO FORNECEDOR =====
-  const bancoLabel = [fornecedor.banco_codigo, fornecedor.banco_nome]
-    .filter(Boolean)
-    .join(" - ");
-  const contaCompleta = `${fornecedor.conta ?? ""}${fornecedor.conta_dv ? "-" + fornecedor.conta_dv : ""}`;
-  const bancariosTable: Content = {
-    table: {
-      widths: ["18%", "32%", "18%", "32%"],
-      body: [
-        [
-          { text: "Banco:", bold: true, fontSize: 8 },
-          { text: bancoLabel, fontSize: 8 },
-          { text: "Agência:", bold: true, fontSize: 8 },
-          { text: fornecedor.agencia ?? "", fontSize: 8 },
-        ],
-        [
-          { text: "Conta:", bold: true, fontSize: 8 },
-          { text: contaCompleta, fontSize: 8 },
-          { text: "Tipo de Conta:", bold: true, fontSize: 8 },
-          { text: fornecedor.tipo_conta ?? "", fontSize: 8 },
-        ],
-        [
-          { text: "Nome:", bold: true, fontSize: 8 },
-          { text: nomeFornecedor, fontSize: 8 },
-          { text: "CNPJ/CPF:", bold: true, fontSize: 8 },
-          { text: fmtCPFCNPJ(fornecedor.cpf_cnpj), fontSize: 8 },
-        ],
-        [
-          { text: "Tipo de Chave PIX:", bold: true, fontSize: 8 },
-          { text: fornecedor.pix_tipo ?? "", fontSize: 8 },
-          { text: "Chave PIX:", bold: true, fontSize: 8 },
-          { text: fornecedor.pix_chave ?? "", fontSize: 8 },
-        ],
-        [
-          { text: "E-mail:", bold: true, fontSize: 8 },
-          {
-            text: fornecedor.email ?? "",
-            colSpan: 3,
-            fontSize: 8,
+  // Verba de Produção não paga fornecedor externo — o dinheiro vai pro
+  // caixa do responsável, então esta seção não existe pra ela.
+  const bancoLabel = fornecedor
+    ? [fornecedor.banco_codigo, fornecedor.banco_nome].filter(Boolean).join(" - ")
+    : "";
+  const contaCompleta = fornecedor
+    ? `${fornecedor.conta ?? ""}${fornecedor.conta_dv ? "-" + fornecedor.conta_dv : ""}`
+    : "";
+  const bancariosBloco: Content[] = isVerba
+    ? []
+    : [
+        secaoHeader("DADOS BANCÁRIOS DO FORNECEDOR PARA PAGAMENTO"),
+        {
+          table: {
+            widths: ["18%", "32%", "18%", "32%"],
+            body: [
+              [
+                { text: "Banco:", bold: true, fontSize: 8 },
+                { text: bancoLabel, fontSize: 8 },
+                { text: "Agência:", bold: true, fontSize: 8 },
+                { text: fornecedor?.agencia ?? "", fontSize: 8 },
+              ],
+              [
+                { text: "Conta:", bold: true, fontSize: 8 },
+                { text: contaCompleta, fontSize: 8 },
+                { text: "Tipo de Conta:", bold: true, fontSize: 8 },
+                { text: fornecedor?.tipo_conta ?? "", fontSize: 8 },
+              ],
+              [
+                { text: "Nome:", bold: true, fontSize: 8 },
+                { text: nomeContraparte, fontSize: 8 },
+                { text: "CNPJ/CPF:", bold: true, fontSize: 8 },
+                { text: fmtCPFCNPJ(fornecedor?.cpf_cnpj ?? null), fontSize: 8 },
+              ],
+              [
+                { text: "Tipo de Chave PIX:", bold: true, fontSize: 8 },
+                { text: fornecedor?.pix_tipo ?? "", fontSize: 8 },
+                { text: "Chave PIX:", bold: true, fontSize: 8 },
+                { text: fornecedor?.pix_chave ?? "", fontSize: 8 },
+              ],
+              [
+                { text: "E-mail:", bold: true, fontSize: 8 },
+                {
+                  text: fornecedor?.email ?? "",
+                  colSpan: 3,
+                  fontSize: 8,
+                },
+                { text: "" },
+                { text: "" },
+              ],
+            ],
           },
-          { text: "" },
-          { text: "" },
-        ],
-      ],
-    },
-    layout: BORDA,
-    margin: [0, 0, 0, 0],
-  };
+          layout: BORDA,
+          margin: [0, 0, 0, 0],
+        } as Content,
+      ];
 
   // ===== 7. VALOR destacado =====
   // O que está em destaque é o valor DA PARCELA — é o que vai ser pago
@@ -514,62 +545,83 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
     margin: [0, 0, 0, 0],
   };
 
-  // ===== 8. DADOS DO FORNECEDOR =====
-  const fornecedorTable: Content = {
-    table: {
-      widths: ["18%", "50%", "12%", "20%"],
-      body: [
-        [
-          { text: "Razão Social:", bold: true, fontSize: 8 },
-          { text: nomeFornecedor, fontSize: 8 },
-          { text: "Fone:", bold: true, fontSize: 8 },
-          { text: fmtFone(fornecedor.telefone), fontSize: 8 },
-        ],
-        [
-          { text: "Endereço:", bold: true, fontSize: 8 },
-          {
-            text: enderecoFornecedor,
-            colSpan: 3,
-            fontSize: 8,
-          },
-          { text: "" },
-          { text: "" },
-        ],
-        [
-          { text: "Município:", bold: true, fontSize: 8 },
-          {
-            text: `${fornecedor.cidade ?? ""}/${fornecedor.uf ?? ""} CEP: ${fmtCEP(fornecedor.cep)}`,
-            colSpan: 3,
-            fontSize: 8,
-          },
-          { text: "" },
-          { text: "" },
-        ],
-        [
-          { text: "CNPJ/CPF:", bold: true, fontSize: 8 },
-          {
-            text: fmtCPFCNPJ(fornecedor.cpf_cnpj),
-            colSpan: 3,
-            fontSize: 8,
-          },
-          { text: "" },
-          { text: "" },
-        ],
-        [
-          { text: "E-mail:", bold: true, fontSize: 8 },
-          {
-            text: fornecedor.email ?? "",
-            colSpan: 3,
-            fontSize: 8,
-          },
-          { text: "" },
-          { text: "" },
-        ],
-      ],
-    },
-    layout: BORDA,
-    margin: [0, 0, 0, 0],
-  };
+  // ===== 8. DADOS DO FORNECEDOR (ou DO RESPONSÁVEL, quando verba) =====
+  const contraparteTable: Content = isVerba
+    ? {
+        table: {
+          widths: ["18%", "*"],
+          body: [
+            [
+              { text: "Nome:", bold: true, fontSize: 8 },
+              { text: nomeContraparte, fontSize: 8 },
+            ],
+            [
+              { text: "Natureza:", bold: true, fontSize: 8 },
+              {
+                text: "Verba de Produção — o dinheiro fica sob responsabilidade do funcionário nomeado acima e será prestado contas ao final.",
+                fontSize: 8,
+              },
+            ],
+          ],
+        },
+        layout: BORDA,
+        margin: [0, 0, 0, 0],
+      }
+    : {
+        table: {
+          widths: ["18%", "50%", "12%", "20%"],
+          body: [
+            [
+              { text: "Razão Social:", bold: true, fontSize: 8 },
+              { text: nomeContraparte, fontSize: 8 },
+              { text: "Fone:", bold: true, fontSize: 8 },
+              { text: fmtFone(fornecedor?.telefone ?? null), fontSize: 8 },
+            ],
+            [
+              { text: "Endereço:", bold: true, fontSize: 8 },
+              {
+                text: enderecoFornecedor,
+                colSpan: 3,
+                fontSize: 8,
+              },
+              { text: "" },
+              { text: "" },
+            ],
+            [
+              { text: "Município:", bold: true, fontSize: 8 },
+              {
+                text: `${fornecedor?.cidade ?? ""}/${fornecedor?.uf ?? ""} CEP: ${fmtCEP(fornecedor?.cep ?? null)}`,
+                colSpan: 3,
+                fontSize: 8,
+              },
+              { text: "" },
+              { text: "" },
+            ],
+            [
+              { text: "CNPJ/CPF:", bold: true, fontSize: 8 },
+              {
+                text: fmtCPFCNPJ(fornecedor?.cpf_cnpj ?? null),
+                colSpan: 3,
+                fontSize: 8,
+              },
+              { text: "" },
+              { text: "" },
+            ],
+            [
+              { text: "E-mail:", bold: true, fontSize: 8 },
+              {
+                text: fornecedor?.email ?? "",
+                colSpan: 3,
+                fontSize: 8,
+              },
+              { text: "" },
+              { text: "" },
+            ],
+          ],
+        },
+        layout: BORDA,
+        margin: [0, 0, 0, 0],
+      };
 
   // ===== 9. ASSINATURAS =====
   const assinaturasTable: Content = {
@@ -598,7 +650,9 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
                 ],
               },
               {
-                text: "Assinatura do Fornecedor",
+                text: isVerba
+                  ? "Assinatura do Responsável"
+                  : "Assinatura do Fornecedor",
                 alignment: "center",
                 fontSize: 8,
                 margin: [0, 3, 0, 6],
@@ -656,11 +710,10 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
     ...especificacoesBloco,
     secaoHeader("DADOS PARA FATURAMENTO DA COBRANÇA"),
     faturamentoTable,
-    secaoHeader("DADOS BANCÁRIOS DO FORNECEDOR PARA PAGAMENTO"),
-    bancariosTable,
+    ...bancariosBloco,
     valorBlock,
-    secaoHeader("DADOS DO FORNECEDOR"),
-    fornecedorTable,
+    secaoHeader(isVerba ? "DADOS DO RESPONSÁVEL" : "DADOS DO FORNECEDOR"),
+    contraparteTable,
     { text: "", margin: [0, 6, 0, 0] }, // espaço antes das assinaturas
     assinaturasTable,
   ];
