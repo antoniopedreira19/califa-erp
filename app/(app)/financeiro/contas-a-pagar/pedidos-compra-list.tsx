@@ -11,7 +11,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import type { PPStatus, FormaPagamento, PPVerbaPrestacao, PPVerbaPrestacaoAnexo } from "@/lib/types";
+import type {
+  PPStatus,
+  FormaPagamento,
+  PPVerbaPrestacao,
+  PPVerbaPrestacaoAnexo,
+  PlanoContaTipo,
+  PlanoContaSubtipo,
+} from "@/lib/types";
+import type { CartaoOption } from "@/components/financeiro/forma-pagamento-field";
 import { ppStatusLabel, nomeContraparteBRPP } from "@/lib/types";
 import { PPDrawerFinanceiro } from "./pp-drawer-financeiro";
 
@@ -47,8 +55,21 @@ export interface PPRow {
   pdf_path: string;
   cancelada_por_nome: string | null;
   emitida_por_nome: string | null;
-  forma_pagamento: FormaPagamento | null; // sempre null para PP (coluna dropada na Task 7; populada via baixa no TituloRow)
-  cartao_credito_id: string | null; // idem
+  /**
+   * Por onde a PP vai ser paga, escolhida na APROVAÇÃO pelo financeiro
+   * (29/08/2026). Antes disso era sempre null — a forma só existia na
+   * baixa. Continua null quando o financeiro não escolhe nada e deixa
+   * para decidir parcela a parcela.
+   */
+  forma_pagamento: FormaPagamento | null;
+  cartao_credito_id: string | null;
+  /**
+   * Plano de contas da PP. Só é preenchido quando ela vai para o cartão:
+   * lá não existe baixa individual onde escolhê-lo, e o fechamento da
+   * fatura precisa dele para classificar o lançamento.
+   */
+  plano_conta_tipo_id: string | null;
+  plano_conta_subtipo_id: string | null;
   /** Verdadeiro quando a PP é do tipo Verba de Produção. */
   verba_producao: boolean;
   /** Nome do responsável pela verba — preenchido quando verba_producao = true. */
@@ -81,6 +102,12 @@ export interface PPRow {
     data_pagamento_primeira: string | null;
     valor: number;
     pago_em: string | null;
+    /**
+     * A fatura em que esta parcela caiu, quando a PP é paga no cartão.
+     * Uma parcela, uma fatura — pela data da parcela. É o que faz a
+     * parcela aparecer na aba Cartão em vez de Títulos a Pagar.
+     */
+    fatura_cartao_id: string | null;
   }>;
 }
 
@@ -124,9 +151,21 @@ interface PedidosCompraListProps {
   rows: PPRow[];
   tenantId: string;
   regionais: Array<{ id: string; nome: string; ativo: boolean }>;
+  /** Só o drawer usa: a aprovação passou a escolher a forma de pagamento
+   *  e, no cartão, o centro de custo (29/08/2026). */
+  cartoes: CartaoOption[];
+  tipos: PlanoContaTipo[];
+  subtipos: PlanoContaSubtipo[];
 }
 
-export function PedidosCompraList({ rows, tenantId, regionais }: PedidosCompraListProps) {
+export function PedidosCompraList({
+  rows,
+  tenantId,
+  regionais,
+  cartoes,
+  tipos,
+  subtipos,
+}: PedidosCompraListProps) {
   const [filtro, setFiltro] = React.useState<FiltroStatus>("em_avaliacao");
   const [filtroRegional, setFiltroRegional] = React.useState<string>("todas");
   const [busca, setBusca] = React.useState("");
@@ -319,6 +358,9 @@ export function PedidosCompraList({ rows, tenantId, regionais }: PedidosCompraLi
           if (!open) setPpSelecionada(null);
         }}
         tenantId={tenantId}
+        cartoes={cartoes}
+        tipos={tipos}
+        subtipos={subtipos}
       />
     </div>
   );

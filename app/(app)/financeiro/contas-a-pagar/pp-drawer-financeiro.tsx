@@ -43,6 +43,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { DatePicker } from "@/components/ui/date-picker";
+import type { CartaoOption } from "@/components/financeiro/forma-pagamento-field";
+import type { PlanoContaTipo, PlanoContaSubtipo } from "@/lib/types";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Badge } from "@/components/ui/badge";
 import { cn, formatCurrency } from "@/lib/utils";
@@ -59,6 +61,10 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   tenantId: string;
+  /** Para a PP paga no cartão, escolhido na aprovação (29/08/2026). */
+  cartoes: CartaoOption[];
+  tipos: PlanoContaTipo[];
+  subtipos: PlanoContaSubtipo[];
 }
 
 function formatDate(iso: string | null): string {
@@ -97,12 +103,29 @@ function iconePorMime(nome: string): typeof FileText {
   return FileText;
 }
 
-export function PPDrawerFinanceiro({ pp, open, onOpenChange, tenantId }: Props) {
+export function PPDrawerFinanceiro({
+  pp,
+  open,
+  onOpenChange,
+  tenantId,
+  cartoes,
+  tipos,
+  subtipos,
+}: Props) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
   const [erro, setErro] = React.useState<string | null>(null);
   const [toast, setToast] = React.useState<string | null>(null);
   const [dataPagamento, setDataPagamento] = React.useState<string>("");
+  // Por onde a PP vai ser paga. Escolhido AQUI, na aprovação, pelo
+  // financeiro: quem abre a PP é a produção, e ela não decide por onde o
+  // dinheiro sai (28/08/2026). Vazio = decidir depois, na baixa, uma
+  // parcela por vez — que é como sempre funcionou.
+  const [formaPagamento, setFormaPagamento] = React.useState<string>("");
+  const [cartaoId, setCartaoId] = React.useState<string>("");
+  const [tipoId, setTipoId] = React.useState<string>("");
+  const [subtipoId, setSubtipoId] = React.useState<string>("");
+  const noCartao = formaPagamento === "cartao_credito";
   const [askRejeitar, setAskRejeitar] = React.useState(false);
   const [motivo, setMotivo] = React.useState("");
   const [docsAbertos, setDocsAbertos] = React.useState(false);
@@ -149,6 +172,10 @@ export function PPDrawerFinanceiro({ pp, open, onOpenChange, tenantId }: Props) 
       const res = await aprovarPPComData({
         pp_id: pp.id,
         data_pagamento: dataPagamento,
+        forma_pagamento: formaPagamento || null,
+        cartao_credito_id: noCartao ? cartaoId || null : null,
+        plano_conta_tipo_id: noCartao ? tipoId || null : null,
+        plano_conta_subtipo_id: noCartao ? subtipoId || null : null,
       });
       if (!res.ok) {
         setErro(res.message);
@@ -540,6 +567,91 @@ export function PPDrawerFinanceiro({ pp, open, onOpenChange, tenantId }: Props) 
                   <strong className="font-semibold text-california-red">{hoje}</strong> —
                   destacado no calendário.
                 </p>
+
+                {/* Como vai ser pago — a decisão do financeiro. Vazio
+                    mantém o comportamento de sempre: escolher na baixa,
+                    uma parcela por vez (29/08/2026). */}
+                <div className="space-y-2 border-t border-border pt-3">
+                  <p className="text-sm font-bold">Como vai ser pago</p>
+                  <select
+                    value={formaPagamento}
+                    disabled={pending}
+                    onChange={(e) => {
+                      setFormaPagamento(e.target.value);
+                      setCartaoId("");
+                      setTipoId("");
+                      setSubtipoId("");
+                      setErro(null);
+                    }}
+                    className="h-10 w-full rounded-lg border border-border bg-white px-3 text-sm outline-none focus:border-california-red disabled:opacity-50"
+                  >
+                    <option value="">Decidir na baixa, parcela a parcela</option>
+                    <option value="pix">PIX</option>
+                    <option value="transferencia">Transferência</option>
+                    <option value="boleto">Boleto</option>
+                    <option value="cartao_credito">Cartão de Crédito</option>
+                  </select>
+
+                  {noCartao && (
+                    <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                      <p className="text-[11.5px] leading-relaxed text-amber-900">
+                        No cartão, cada parcela entra na fatura da{" "}
+                        <strong>data dela</strong> e sai na baixa da fatura
+                        inteira — não existe baixa individual. Por isso o
+                        centro de custo é escolhido agora.
+                      </p>
+
+                      <select
+                        value={cartaoId}
+                        disabled={pending}
+                        onChange={(e) => setCartaoId(e.target.value)}
+                        className="h-9 w-full rounded-lg border border-border bg-white px-2 text-xs outline-none focus:border-california-red"
+                      >
+                        <option value="">Escolha o cartão…</option>
+                        {cartoes.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.nome} · {c.bandeira.toUpperCase()} · ••••
+                            {c.ultimos_4_digitos}
+                          </option>
+                        ))}
+                      </select>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <select
+                          value={tipoId}
+                          disabled={pending}
+                          onChange={(e) => {
+                            setTipoId(e.target.value);
+                            setSubtipoId("");
+                          }}
+                          className="h-9 w-full rounded-lg border border-border bg-white px-2 text-xs outline-none focus:border-california-red"
+                        >
+                          <option value="">Tipo…</option>
+                          {tipos.map((t) => (
+                            <option key={t.id} value={t.id}>
+                              {t.codigo} · {t.nome}
+                            </option>
+                          ))}
+                        </select>
+                        <select
+                          value={subtipoId}
+                          disabled={pending || tipoId === ""}
+                          onChange={(e) => setSubtipoId(e.target.value)}
+                          className="h-9 w-full rounded-lg border border-border bg-white px-2 text-xs outline-none focus:border-california-red disabled:bg-muted/40"
+                        >
+                          <option value="">Subtipo…</option>
+                          {subtipos
+                            .filter((sub) => sub.tipo_id === tipoId)
+                            .map((sub) => (
+                              <option key={sub.id} value={sub.id}>
+                                {sub.codigo} · {sub.nome}
+                              </option>
+                            ))}
+                        </select>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
