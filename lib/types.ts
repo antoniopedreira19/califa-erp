@@ -1790,8 +1790,10 @@ export interface CartaoCredito {
    *  `null` em cartão cadastrado antes de 28/08/2026; a conta cai no
    *  comportamento antigo, que usava o vencimento como fronteira. */
   dia_fechamento_fatura: number | null;
-  /** Empresa dona do cartão. A conta espelho herda daqui. */
-  empresa_id: string;
+  /** Empresa dona do cartão, quando faz sentido dizer. NÃO restringe: o
+   *  cartão paga despesa de qualquer empresa, como as contas bancárias
+   *  fazem. A empresa de cada despesa vem do item (28/08/2026). */
+  empresa_id: string | null;
   ativo: boolean;
   created_at: string;
   created_by: string | null;
