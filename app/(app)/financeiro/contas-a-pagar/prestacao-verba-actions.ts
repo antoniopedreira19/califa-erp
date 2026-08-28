@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { logAuditEvent } from "@/lib/auth/audit";
+import { DOCUMENTO_TIPOS } from "@/lib/types";
 
 const BUCKET = "pedidos-compra";
 const ANEXO_TTL_SEGUNDOS = 3600;
@@ -18,6 +19,10 @@ const anexoSchema = z.object({
   nome_original: z.string().min(1).max(500),
   tamanho_bytes: z.number().int().positive(),
   mimetype: z.string().min(1).max(200),
+  // É aqui que as notas da verba de produção entram: a PP de verba sai sem
+  // anexo, e o documento só existe depois que o responsável gasta.
+  documento_tipo: z.enum(DOCUMENTO_TIPOS).nullable().default(null),
+  documento_numero: z.string().trim().max(60).nullable().default(null),
 });
 
 const payloadSchema = z.object({
@@ -79,6 +84,8 @@ export async function fecharPrestacaoVerba(
     arquivo_nome_original: a.nome_original,
     arquivo_tamanho_bytes: a.tamanho_bytes,
     arquivo_mimetype: a.mimetype,
+    documento_tipo: a.documento_tipo,
+    documento_numero: a.documento_tipo ? a.documento_numero : null,
     created_by: session.profile.id,
   }));
 

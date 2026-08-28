@@ -2203,3 +2203,56 @@ isso o PostgREST não escolhe e **a query inteira falha**.
 O sintoma é traiçoeiro: a página lia `const { data } = await …` sem olhar o
 erro, e o resultado era a tela dizer *"nenhum lançamento nesse período"* —
 indistinguível de um período vazio de verdade. O erro passou a ser logado.
+
+**5. Coluna Documento** (28/08/2026), à direita da Origem. O comprovante
+fiscal — `NF 4471`, `Recibo 88` — como link que abre o arquivo.
+
+### O cadastro que ela exigiu
+
+Não existia. O único documento fiscal estruturado do sistema era a **NF de
+saída** (`faturamentos.numero_nf` + `serie`), que só aparece em recebimento.
+Do lado da despesa havia apenas `arquivo_path` + `arquivo_nome_original`: o
+sistema sabia que tinha um PDF chamado `nota-fornecedor.pdf`, não que era
+uma NF nº 4471.
+
+Migration `20260828110001`: enum `documento_tipo` (`nota_fiscal`, `recibo`,
+`boleto`, `contrato`, `outro`) e o par `documento_tipo` + `documento_numero`
+nas **quatro** tabelas de anexo — PP, conta avulsa, desembolso e prestação
+de contas de verba.
+
+**Os campos ficam na LINHA DO ANEXO, não no título.** Uma PP pode ter NF,
+boleto e contrato juntos; no título só caberia um, e os outros ficariam sem
+identificação. O componente é um só
+(`components/financeiro/documento-do-anexo-field.tsx`) para o rótulo e a
+lista de tipos não divergirem entre as quatro telas — foi o que aconteceu
+com as cores das planilhas.
+
+A coluna mostra o primeiro anexo tipado como **nota ou recibo**
+(`DOCUMENTO_TIPOS_FISCAIS`). Contrato e boleto acompanham a compra, mas não
+são o documento que a contabilidade procura.
+
+### Onde cada documento entra
+
+| Origem | Quando o documento é informado |
+|---|---|
+| PP normal | Na emissão — o anexo já é obrigatório ali |
+| **PP de Verba de Produção** | Na **prestação de contas**. A PP de verba sai sem anexo (ver HANDOFF_JOBS): ela é adiantamento, e a nota só existe depois que o responsável gasta |
+| Conta avulsa | Na criação |
+| Desembolso | Na criação |
+| Recebimento | Já vinha pronto de `faturamentos` |
+
+⚠️ **O link NÃO recebe bucket e caminho do cliente.** A action
+`abrirDocumentoDoLancamento` recebe o **id do lançamento** e re-deriva o
+arquivo no servidor. A versão óbvia — o cliente manda `{bucket, path}` e o
+servidor assina — deixaria qualquer pessoa logada pedir URL assinada para
+qualquer arquivo de qualquer tenant. São quatro origens em três buckets
+(`pedidos-compra`, `desembolsos`, `contas-avulsas`, `faturamentos-nf`), e a
+tentação de passar o par pronto é grande.
+
+A URL vive 60 segundos e é gerada no clique, não com a página: assinada no
+carregamento, ela venceria para quem deixa o extrato aberto.
+
+**Ponta solta:** o tipo é **opcional**. Anexo antigo não tem o que
+preencher, e nada obriga a preencher no novo — se ninguém preencher, a
+coluna fica em travessão. Tornar obrigatório é uma linha em cada um dos
+quatro formulários, quando o time decidir.

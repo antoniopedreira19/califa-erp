@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { DocumentoDoAnexoField } from "@/components/financeiro/documento-do-anexo-field";
 import {
   Select,
   SelectContent,
@@ -38,6 +39,7 @@ import type {
   PlanoContaSubtipo,
   RateioLinhaInput,
 } from "@/lib/types";
+import type { DocumentoDoAnexo } from "@/lib/types";
 import { RateioRegionalEditor } from "./rateio-regional-editor";
 import {
   FormaPagamentoField,
@@ -60,6 +62,9 @@ interface AnexoPendente {
   nome: string;
   tamanho: number;
   mimetype: string;
+  /** Que documento este arquivo é. Alimenta a coluna Documento da
+   *  Conciliação (28/08/2026). */
+  documento: DocumentoDoAnexo;
 }
 
 type EmpresaResumida = { id: string; nome: string };
@@ -335,7 +340,13 @@ export function ContaAvulsaDrawer(props: Props) {
       }
 
       totalAcumulado += file.size;
-      novos.push({ path, nome: file.name, tamanho: file.size, mimetype: file.type });
+      novos.push({
+        path,
+        nome: file.name,
+        tamanho: file.size,
+        mimetype: file.type,
+        documento: { tipo: null, numero: null },
+      });
     }
 
     if (novos.length > 0) {
@@ -787,9 +798,10 @@ export function ContaAvulsaDrawer(props: Props) {
                     {anexos.map((a, idx) => (
                       <li
                         key={idx}
-                        className="flex items-center justify-between rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm"
+                        className="flex flex-col gap-1.5 rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm"
                       >
-                        <span className="flex items-center gap-2 truncate">
+                        <div className="flex items-center justify-between">
+                          <span className="flex items-center gap-2 truncate">
                           <Paperclip className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                           <span className="truncate">{a.nome}</span>
                           <span className="shrink-0 text-xs text-muted-foreground">
@@ -804,6 +816,21 @@ export function ContaAvulsaDrawer(props: Props) {
                         >
                           <X className="h-3.5 w-3.5" />
                         </button>
+                      </div>
+
+                      {/* Que documento é este arquivo — alimenta a coluna
+                          Documento da Conciliação. */}
+                      <DocumentoDoAnexoField
+                        valor={a.documento}
+                        descricaoArquivo={a.nome}
+                        onChange={(doc) =>
+                          setAnexos((prev) =>
+                            prev.map((p, i) =>
+                              i === idx ? { ...p, documento: doc } : p,
+                            ),
+                          )
+                        }
+                      />
                       </li>
                     ))}
                   </ul>
