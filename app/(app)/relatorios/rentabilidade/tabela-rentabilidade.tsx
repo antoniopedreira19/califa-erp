@@ -30,10 +30,12 @@ export function TabelaRentabilidade({
   grupos,
   totalBases,
 }: Props) {
-  const [expandidos, setExpandidos] = React.useState<Set<string>>(new Set());
+  // Padrão: todos os grupos EXPANDIDOS. Rastreamos os RECOLHIDOS —
+  // set vazio = tudo aberto, que é o comportamento esperado por default.
+  const [recolhidos, setRecolhidos] = React.useState<Set<string>>(new Set());
 
-  const toggleExpandir = (chave: string) => {
-    setExpandidos((s) => {
+  const toggleRecolher = (chave: string) => {
+    setRecolhidos((s) => {
       const novo = new Set(s);
       if (novo.has(chave)) novo.delete(chave);
       else novo.add(chave);
@@ -89,8 +91,8 @@ export function TabelaRentabilidade({
           </tr>
 
           {grupos.map((g) => {
-            const expandido = expandidos.has(g.chave);
-            const podeExpandir = visao !== "job" && g.jobs.length > 1;
+            const expandido = !recolhidos.has(g.chave);
+            const podeExpandir = visao !== "job";
             return (
               <React.Fragment key={g.chave}>
                 <tr
@@ -99,7 +101,7 @@ export function TabelaRentabilidade({
                     podeExpandir && "cursor-pointer hover:bg-muted/40",
                   )}
                   onClick={
-                    podeExpandir ? () => toggleExpandir(g.chave) : undefined
+                    podeExpandir ? () => toggleRecolher(g.chave) : undefined
                   }
                 >
                   <td className="px-4 py-3">
