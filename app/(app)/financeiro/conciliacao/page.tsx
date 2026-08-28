@@ -100,6 +100,7 @@ export default async function ConciliacaoPage({
            anexos:desembolsos_anexos(arquivo_path, documento_tipo, documento_numero)
          ),
          cartao:cartoes_credito(nome, ultimos_4_digitos),
+         fatura:faturas_cartao(codigo),
          titulo:titulos_receber!lancamentos_financeiros_titulo_receber_id_fkey(
            faturamento:faturamentos(numero_nf, serie, anexo_nf_path)
          ),
@@ -137,6 +138,7 @@ export default async function ConciliacaoPage({
       plano_contas_tipos: { codigo: string; nome: string };
       plano_contas_subtipos: { codigo: string; nome: string };
       forma_pagamento: string | null;
+      fatura: { codigo: string } | null;
       pedido_compra: { codigo: string; anexos: AnexoRaw[] } | null;
       desembolso: { codigo: string; anexos: AnexoRaw[] } | null;
       cartao: { nome: string; ultimos_4_digitos: string } | null;
@@ -230,7 +232,13 @@ export default async function ConciliacaoPage({
           r.pedido_compra?.codigo ??
           r.desembolso?.codigo ??
           r.conta_avulsa?.codigo ??
-          numeroDaNota(r.titulo?.faturamento ?? null),
+          numeroDaNota(r.titulo?.faturamento ?? null) ??
+          // Fecha a lista: o pagamento da fatura e o ajuste de IOF não
+          // vêm de documento nenhum, mas vêm de uma fatura — e sem isso
+          // eles apareciam com travessão, sem dizer de onde saíram
+          // (28/08/2026).
+          r.fatura?.codigo ??
+          null,
         origem_recorrente: r.conta_avulsa?.recorrente_id != null,
         cartao_label:
           r.forma_pagamento === "cartao_credito" && r.cartao

@@ -356,7 +356,9 @@ export function TitulosPagarList({
                 ? `Desembolso ${baixando.origem_label}`
                 : baixando.origem === "pp_devolucao_verba"
                   ? `Devolução verba ${baixando.origem_label}`
-                  : "Lançamento avulso",
+                  : baixando.origem === "fatura_cartao"
+                    ? `Fatura de cartão ${baixando.origem_label}`
+                    : "Lançamento avulso",
         parcela: `${baixando.parcela_numero}/${baixando.parcela_total}`,
         vencimento: baixando.data_pagamento,
         valor: baixando.valor,
@@ -364,6 +366,7 @@ export function TitulosPagarList({
         planoContaTipoId: baixando.plano_conta_tipo_id,
         planoContaSubtipoId: baixando.plano_conta_subtipo_id,
         isDevolucao: baixando.origem === "pp_devolucao_verba",
+        semCartao: baixando.origem === "fatura_cartao",
       }
     : null;
 
@@ -379,7 +382,9 @@ export function TitulosPagarList({
                 ? `Desembolso ${conferindo.origem_label}`
                 : conferindo.origem === "pp_devolucao_verba"
                   ? `Devolução verba ${conferindo.origem_label}`
-                  : "Lançamento avulso",
+                  : conferindo.origem === "fatura_cartao"
+                    ? `Fatura de cartão ${conferindo.origem_label}`
+                    : "Lançamento avulso",
         parcela: `${conferindo.parcela_numero}/${conferindo.parcela_total}`,
         valor: conferindo.valor,
         pagoEm: conferindo.pago_em,

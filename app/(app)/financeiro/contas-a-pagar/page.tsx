@@ -7,6 +7,7 @@ import { PedidosCompraList, type PPRow } from "./pedidos-compra-list";
 import { ContasPagarTabs } from "./contas-pagar-tabs";
 import { TitulosPagarList, type TituloRow } from "./titulos-pagar-list";
 import { TitulosCartaoList } from "./titulos-cartao-list";
+import type { FaturaAberta } from "./fechar-fatura-dialog";
 import { RecorrentesList, type RecorrenteRow } from "./recorrentes-list";
 import { DesembolsosContasPagarList, type DesembolsoRow } from "./desembolsos-list";
 import type { PPStatus, PlanoContaTipo, PlanoContaSubtipo, ContaBancaria, FormaPagamento, BandeiraCartao, DesembolsoStatus } from "@/lib/types";
@@ -636,6 +637,40 @@ export default async function PedidosCompraFinanceiroPage() {
     });
   }
 
+  // ---- Faturas ABERTAS, para o fechamento na aba Cartão ----
+  //
+  // A soma vem dos ITENS que apontam para a fatura, e não de uma coluna
+  // guardada: enquanto a fatura está aberta o time ainda lança e remaneja,
+  // e um total gravado envelheceria a cada mexida.
+  const { data: faturasAbertasRes } = await supabase
+    .from("faturas_cartao")
+    .select(
+      "id, codigo, cartao_credito_id, competencia_fechamento, data_vencimento, " +
+        "itens:contas_avulsas(valor, status)",
+    )
+    .eq("tenant_id", session.activeTenant.id)
+    .eq("status", "aberta")
+    // Ordem de competência: quando um cartão tem mais de uma aberta — a
+    // compra que chegou depois do fechamento e rolou para a seguinte —, a
+    // que fecha primeiro é a que o financeiro fecha primeiro.
+    .order("competencia_fechamento", { ascending: true });
+
+  const faturasAbertas: FaturaAberta[] = ((faturasAbertasRes ?? []) as any[]).map(
+    (f) => {
+      const itens = ((f.itens ?? []) as Array<{ valor: number; status: string }>)
+        .filter((i) => i.status === "aprovada");
+      return {
+        id: f.id,
+        codigo: f.codigo,
+        cartao_credito_id: f.cartao_credito_id,
+        competencia_fechamento: f.competencia_fechamento,
+        data_vencimento: f.data_vencimento,
+        soma_itens: itens.reduce((s, i) => s + Number(i.valor ?? 0), 0),
+        qtd_itens: itens.length,
+      };
+    },
+  );
+
   // ---- Faturas de cartão FECHADAS ----
   //
   // A fatura desce para Títulos a Pagar como UM título. Os itens de dentro
@@ -658,13 +693,20 @@ export default async function PedidosCompraFinanceiroPage() {
     console.error("[contas-a-pagar.faturas-cartao]", faturasErr.message);
   }
 
+  // ISO vira dd/mm/aaaa aqui e não no cliente: esta string entra no título
+  // que o financeiro lê na lista, e data ISO na tela é ruído.
+  const dataBR = (iso: string) => {
+    const [a, m, d] = iso.slice(0, 10).split("-");
+    return `${d}/${m}/${a}`;
+  };
+
   for (const f of (faturasRes ?? []) as any[]) {
     const cartaoNome = f.cartao?.nome ?? "Cartão";
     titulos.push({
       id: f.id,
       origem: "fatura_cartao",
       origem_label: f.codigo,
-      descricao: `Fatura ${cartaoNome} · fecha ${f.competencia_fechamento}`,
+      descricao: `Fatura ${cartaoNome} · fecha ${dataBR(f.competencia_fechamento)}`,
       fornecedor_nome: cartaoNome,
       job_codigo: "—",
       data_pagamento: f.data_vencimento,
@@ -911,7 +953,6 @@ export default async function PedidosCompraFinanceiroPage() {
           <TitulosCartaoList
             rows={titulosCartao}
             cartoes={cartoesList}
-            contas={contasRes.data ?? []}
             tipos={tiposRes.data ?? []}
             subtipos={subtiposRes.data ?? []}
             tenantId={session.activeTenant.id}
@@ -920,6 +961,7 @@ export default async function PedidosCompraFinanceiroPage() {
             clientes={clientesList}
             jobs={jobsList}
             regionais={regionaisList}
+            faturasAbertas={faturasAbertas}
           />
         }
         titulosCartaoCount={titulosCartaoCount}
