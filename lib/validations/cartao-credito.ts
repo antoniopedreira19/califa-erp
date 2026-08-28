@@ -21,9 +21,15 @@ export const criarCartaoSchema = z.object({
     .string()
     .regex(/^\d{4}$/, "Digite exatamente 4 números."),
   dono: z.string().trim().min(2, "Informe o dono do cartão.").max(80),
-  // A conta espelho do cartão herda esta empresa, e é ela que impede
-  // um cartão de pagar título de outra empresa (28/08/2026).
-  empresa_id: z.string().uuid("Selecione a empresa dona do cartão."),
+  // Informativo, não restritivo (28/08/2026). As contas bancárias da
+  // California pagam despesa de mais de uma empresa, e o cartão segue a
+  // mesma lógica — a empresa de cada despesa vem do ITEM, não do cartão.
+  empresa_id: z
+    .string()
+    .uuid()
+    .nullable()
+    .or(z.literal("").transform(() => null))
+    .default(null),
   dia_vencimento_fatura: z
     .number({ invalid_type_error: "Informe o dia do vencimento." })
     .int("Deve ser um número inteiro.")

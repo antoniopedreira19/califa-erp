@@ -208,26 +208,28 @@ export function CartaoDrawer(props: Props) {
               </Select>
             </div>
 
-            {/* Empresa dona: a conta espelho do cartão herda daqui, e é o
-                que impede o cartão de uma empresa pagar título da outra. */}
+            {/* Informativo, não restritivo: o cartão paga despesa de
+                qualquer empresa, como as contas bancárias fazem. A empresa
+                de cada despesa vem do item (28/08/2026). */}
             <div className="space-y-2">
-              <Label htmlFor="empresa_id">Empresa *</Label>
+              <Label htmlFor="empresa_id">Empresa do cartão</Label>
               <select
                 id="empresa_id"
                 name="empresa_id"
-                required
                 defaultValue={cartao?.empresa_id ?? ""}
                 className="h-10 w-full rounded-lg border border-border bg-white px-3 text-sm outline-none focus:border-california-red"
               >
-                <option value="" disabled>
-                  Selecione a empresa
-                </option>
+                <option value="">Nenhuma em especial</option>
                 {props.empresas.map((e) => (
                   <option key={e.id} value={e.id}>
                     {e.nome}
                   </option>
                 ))}
               </select>
+              <p className="text-[11px] leading-relaxed text-muted-foreground">
+                Só informativo. O cartão pode pagar despesa de qualquer
+                empresa — quem define a empresa da despesa é o lançamento.
+              </p>
             </div>
 
             {/* Últimos 4 dígitos ocupa a linha sozinho: as duas datas vão
