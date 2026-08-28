@@ -75,6 +75,7 @@ export function ConciliacaoList({
             const temSave = l.origens.some((o) => o.tipo === "save");
             const temRateio = l.rateio.length > 1;
             const temOrigensMultiplas = l.origens.length > 1;
+            const jobParaColuna = derivarJobParaColuna(l);
             return (
               <tr
                 key={l.id}
@@ -109,14 +110,18 @@ export function ConciliacaoList({
                   )}
                 </td>
                 <td className="whitespace-nowrap px-3 py-2 font-mono text-xs">
-                  {l.job_id && l.job_codigo ? (
+                  {jobParaColuna.tipo === "link" ? (
                     <Link
-                      href={`/jobs/${l.job_id}?from=financeiro`}
+                      href={`/jobs/${jobParaColuna.id}?from=financeiro`}
                       prefetch={false}
                       className="text-california-red hover:underline"
                     >
-                      {l.job_codigo}
+                      {jobParaColuna.codigo}
                     </Link>
+                  ) : jobParaColuna.tipo === "multi" ? (
+                    <span className="italic text-muted-foreground/70 font-sans">
+                      Múltiplos
+                    </span>
                   ) : (
                     <span className="italic text-muted-foreground/70 font-sans">
                       Não Vinculado
@@ -144,6 +149,9 @@ export function ConciliacaoList({
                     temOrigensMultiplas={temOrigensMultiplas}
                   />
                 </td>
+                {/* variáveis temSave/temRateio/temOrigensMultiplas continuam
+                    sendo lidas pelo popover pra decidir qual seção mostrar,
+                    mas o ESTILO do botão não muda mais entre linhas. */}
               </tr>
             );
           })}
@@ -158,10 +166,10 @@ export function ConciliacaoList({
  * (com Recorrente e Cartão), Documento, além do detalhe de rateio de
  * regionais e do breakdown de origens (jobs cobertos + save).
  *
- * O ícone Info fica visível o tempo todo — a ausência dele significaria
- * "esta linha não tem contexto", o que não é verdade nunca. Cor mais
- * viva quando existe save ou rateio, avisando que o clique traz algo
- * além do metadado padrão.
+ * Cor do botão é sempre a mesma (vermelho California suave). A ideia
+ * anterior de mudar a cor quando havia save/rateio/multi-origem foi
+ * rejeitada — a distinção confundia mais do que ajudava. O popover se
+ * adapta: seções de save/rateio só aparecem quando existem.
  */
 function DetalhesPopover({
   linha,
@@ -174,7 +182,6 @@ function DetalhesPopover({
   temRateio: boolean;
   temOrigensMultiplas: boolean;
 }) {
-  const alerta = temSave || temRateio || temOrigensMultiplas;
   const origemTag = tagDaOrigem(linha.origem);
 
   return (
@@ -183,10 +190,7 @@ function DetalhesPopover({
         <button
           type="button"
           aria-label="Ver detalhes do lançamento"
-          className={cn(
-            "inline-flex h-7 w-7 items-center justify-center rounded-full border border-border transition-colors hover:bg-muted",
-            alerta && "border-california-red/40 text-california-red",
-          )}
+          className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-california-red/40 text-california-red transition-colors hover:bg-california-red/5"
         >
           <Info className="h-3.5 w-3.5" />
         </button>
@@ -384,6 +388,40 @@ function tagDaOrigem(
 function formatDate(iso: string): string {
   const [y, m, d] = iso.split("-");
   return `${d}/${m}/${y.slice(2)}`;
+}
+
+/**
+ * Decide o que mostrar na coluna Job da tabela:
+ *
+ * 1. FK direta `lançamento.job_id` set → link pra esse job (PP, avulsa
+ *    de job específico, desembolso de job).
+ * 2. FK null MAS as origens (`vw_lancamento_origens`) apontam pra UM
+ *    único job → link. É o caso do recebimento de NF que cobre um job
+ *    só, direto e/ou via save do próprio job.
+ * 3. Mais de um job nas origens → "Múltiplos". A pessoa abre o popover
+ *    pra ver o breakdown de "de onde vem este dinheiro".
+ * 4. Nenhum job em nenhum lugar → "Não Vinculado" (fatura de cartão,
+ *    lançamento manual, ajuste, etc).
+ */
+function derivarJobParaColuna(
+  linha: LancamentoLinha,
+):
+  | { tipo: "link"; id: string; codigo: string }
+  | { tipo: "multi" }
+  | { tipo: "nao_vinculado" } {
+  if (linha.job_id && linha.job_codigo) {
+    return { tipo: "link", id: linha.job_id, codigo: linha.job_codigo };
+  }
+  const jobsUnicos = new Map<string, string>();
+  for (const o of linha.origens) {
+    if (o.job_id && o.codigo) jobsUnicos.set(o.job_id, o.codigo);
+  }
+  const arr = Array.from(jobsUnicos.entries());
+  if (arr.length === 1) {
+    return { tipo: "link", id: arr[0][0], codigo: arr[0][1] };
+  }
+  if (arr.length > 1) return { tipo: "multi" };
+  return { tipo: "nao_vinculado" };
 }
 
 /**

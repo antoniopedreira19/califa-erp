@@ -66,6 +66,10 @@ export type LancamentoLinha = {
 /** Uma origem do dinheiro de um lançamento. */
 export type OrigemDaTransacao = {
   tipo: "job" | "save";
+  /** ID do job — permite a coluna Job da conciliação linkar quando o
+   *  lançamento não tem `job_id` direto (recebimento de NF que cobre um
+   *  ou mais jobs). */
+  job_id: string | null;
   /** Código do job coberto, ou do job que gerou o saldo em save. */
   codigo: string | null;
   nome: string | null;
