@@ -860,6 +860,12 @@ export default async function PedidosCompraFinanceiroPage() {
             contas={contasRes.data ?? []}
             tipos={tiposRes.data ?? []}
             subtipos={subtiposRes.data ?? []}
+            tenantId={session.activeTenant.id}
+            empresas={empresasList}
+            fornecedores={fornecedoresList}
+            clientes={clientesList}
+            jobs={jobsList}
+            regionais={regionaisList}
           />
         }
         titulosCartaoCount={titulosCartaoCount}
