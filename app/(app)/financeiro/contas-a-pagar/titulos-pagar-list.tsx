@@ -129,6 +129,7 @@ const CHIP_ORIGEM: Array<{ key: "todas" | OrigemTitulo; label: string }> = [
   { key: "recorrencia", label: "Recorrências" },
   { key: "desembolso", label: "Desembolsos" },
   { key: "pp_devolucao_verba", label: "Devoluções de verba" },
+  { key: "fatura_cartao", label: "Faturas de cartão" },
 ];
 
 /** Cores do chip de origem — copiadas do protótipo. */
@@ -142,6 +143,10 @@ function origemChipClass(origem: OrigemTitulo): string {
       return "border-blue-200 bg-blue-50 text-blue-700";
     case "desembolso":
       return "border-amber-200 bg-amber-50 text-amber-700";
+    case "fatura_cartao":
+      // Grafite: a fatura não é uma despesa nova, é o agregado do que já
+      // foi classificado item a item no fechamento.
+      return "border-slate-300 bg-slate-100 text-slate-700";
     case "pp_devolucao_verba":
       return "border-emerald-200 bg-emerald-50 text-emerald-700";
   }
@@ -280,6 +285,7 @@ export function TitulosPagarList({
       recorrencia: base.filter((r) => r.origem === "recorrencia").length,
       desembolso: base.filter((r) => r.origem === "desembolso").length,
       pp_devolucao_verba: base.filter((r) => r.origem === "pp_devolucao_verba").length,
+      fatura_cartao: base.filter((r) => r.origem === "fatura_cartao").length,
     };
   }, [rows, busca, casaBusca, casaPeriodo]);
 

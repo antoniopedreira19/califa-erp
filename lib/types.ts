@@ -1897,14 +1897,44 @@ export interface ContaAvulsa {
  *   pp_devolucao_verba → linha de `pp_verba_devolucoes` (título negativo:
  *                        entrada quando o gerente devolve saldo da verba)
  */
-export type OrigemTitulo = "pp" | "avulso" | "recorrencia" | "desembolso" | "pp_devolucao_verba";
+export type OrigemTitulo =
+  | "pp"
+  | "avulso"
+  | "recorrencia"
+  | "desembolso"
+  | "pp_devolucao_verba"
+  /** Fatura de cartão FECHADA. Ela desce para Títulos a Pagar como UM
+   *  título — os itens de dentro dela nunca aparecem ali, senão a tela
+   *  teria dezenas de linhas para uma única baixa (28/08/2026). */
+  | "fatura_cartao";
 
 export const origemTituloLabel = (o: OrigemTitulo, ppCodigo?: string | null): string =>
   o === "pp" ? (ppCodigo ?? "PP")
     : o === "avulso" ? "AVULSO"
     : o === "recorrencia" ? "RECORRÊNCIA"
     : o === "desembolso" ? "DESEMBOLSO"
+    : o === "fatura_cartao" ? "FATURA CARTÃO"
     : "DEVOLUÇÃO VERBA";
+
+/** Status de uma fatura de cartão. */
+export type FaturaCartaoStatus = "aberta" | "fechada" | "paga" | "cancelada";
+
+export interface FaturaCartao {
+  id: string;
+  tenant_id: string;
+  cartao_credito_id: string;
+  codigo: string;
+  /** A linha de corte desta fatura — decide o que entra nela. */
+  competencia_fechamento: string;
+  data_vencimento: string;
+  status: FaturaCartaoStatus;
+  /** O que o banco cobrou. Informado no fechamento. */
+  valor_cobrado: number | null;
+  fechada_em: string | null;
+  fechada_por: string | null;
+  created_at: string;
+  created_by: string | null;
+}
 
 /** `a_pagar` enquanto não há baixa; `pago` depois dela. */
 export type TituloPagarStatus = "a_pagar" | "pago";
