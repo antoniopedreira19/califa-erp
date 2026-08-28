@@ -258,12 +258,6 @@ function DetalhesPopover({
             )}
           </Grupo>
 
-          <Grupo label="Plano de contas (código)">
-            <span className="font-mono text-muted-foreground">
-              {linha.tipo_codigo} · {linha.subtipo_codigo}
-            </span>
-          </Grupo>
-
           {(temSave || temOrigensMultiplas) && (
             <div className="border-t border-border pt-2">
               <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.07em] text-muted-foreground">
