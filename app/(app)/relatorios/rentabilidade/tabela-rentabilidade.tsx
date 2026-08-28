@@ -5,6 +5,7 @@ import { ChevronRight, ChevronDown } from "lucide-react";
 import { formatCurrency, cn } from "@/lib/utils";
 import {
   classificarRentBadge,
+  computarResultado,
   type GrupoRentabilidade,
   type ModoRentabilidade,
   type VisaoRentabilidade,
@@ -40,13 +41,9 @@ export function TabelaRentabilidade({
     });
   };
 
-  // Total = base filtrada; Rent% do total recalculado.
-  const resultOpTotal =
-    totalBases.faturamento - totalBases.imposto - (totalBases.custo - totalBases.bv);
-  const rentTotalPct =
-    totalBases.faturamento > 0
-      ? (resultOpTotal / totalBases.faturamento) * 100
-      : null;
+  // Total = base filtrada; Rent% do total recalculado via helper único.
+  const { resultadoOperacional: resultOpTotal, resultadoGeral: rentTotalPct } =
+    computarResultado(totalBases);
 
   const rotuloVisao =
     visao === "cliente" ? "Clientes" : visao === "marca" ? "Marcas" : "Jobs";
@@ -81,7 +78,7 @@ export function TabelaRentabilidade({
               {formatCurrency(totalBases.faturamento, "BRL")}
             </td>
             <td className="px-4 py-3 text-right font-mono">
-              {formatCurrency(resultOpTotal, "BRL")}
+              {resultOpTotal === null ? "—" : formatCurrency(resultOpTotal, "BRL")}
             </td>
             <td className="px-4 py-3 text-center">
               <BadgeRent pct={rentTotalPct} />
@@ -138,6 +135,7 @@ export function TabelaRentabilidade({
                 {expandido &&
                   g.jobs.map((j) => {
                     const fatJ = faturamentoDaLinha(j, modo);
+                    const resultOpJ = resultOpDaLinha(j, modo);
                     return (
                       <tr key={j.job_id} className="bg-muted/10">
                         <td className="px-4 py-2 pl-12 text-muted-foreground">
@@ -147,7 +145,7 @@ export function TabelaRentabilidade({
                           {formatCurrency(fatJ, "BRL")}
                         </td>
                         <td className="px-4 py-2 text-right font-mono text-muted-foreground">
-                          {formatCurrency(resultOpDaLinha(j, modo), "BRL")}
+                          {resultOpJ === null ? "—" : formatCurrency(resultOpJ, "BRL")}
                         </td>
                         <td className="px-4 py-2 text-center">
                           <BadgeRent pct={rentDaLinha(j, modo)} />
@@ -171,26 +169,30 @@ export function TabelaRentabilidade({
   );
 }
 
-// Helpers de linha individual — mesma formula, sobre o job sozinho.
-// `modo` vem via prop e e o mesmo que o server usou pra agregar (spec §5.4).
+// Helpers de linha individual — mesma fórmula, sobre o job sozinho.
+// `modo` vem via prop e é o mesmo que o server usou pra agregar (spec §5.4).
 function faturamentoDaLinha(l: LinhaJobRentabilidade, modo: ModoRentabilidade) {
   return modo === "previsto" ? l.faturamento_previsto : l.faturamento_realizado;
 }
 function impostoDaLinha(l: LinhaJobRentabilidade, modo: ModoRentabilidade) {
   return modo === "previsto" ? l.imposto_previsto : l.imposto_realizado;
 }
+function basesDaLinha(l: LinhaJobRentabilidade, modo: ModoRentabilidade) {
+  return {
+    faturamento: faturamentoDaLinha(l, modo),
+    imposto: impostoDaLinha(l, modo),
+    custo: l.custo_realizado,
+    bv: l.bv_realizado,
+  };
+}
 function resultOpDaLinha(l: LinhaJobRentabilidade, modo: ModoRentabilidade) {
-  const fat = faturamentoDaLinha(l, modo);
-  const imp = impostoDaLinha(l, modo);
-  return fat - imp - (l.custo_realizado - l.bv_realizado);
+  return computarResultado(basesDaLinha(l, modo)).resultadoOperacional;
 }
 function rentDaLinha(
   l: LinhaJobRentabilidade,
   modo: ModoRentabilidade,
 ): number | null {
-  const fat = faturamentoDaLinha(l, modo);
-  if (fat <= 0) return null;
-  return (resultOpDaLinha(l, modo) / fat) * 100;
+  return computarResultado(basesDaLinha(l, modo)).resultadoGeral;
 }
 
 function BadgeRent({ pct }: { pct: number | null }) {
