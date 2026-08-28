@@ -2256,3 +2256,48 @@ carregamento, ela venceria para quem deixa o extrato aberto.
 preencher, e nada obriga a preencher no novo — se ninguém preencher, a
 coluna fica em travessão. Tornar obrigatório é uma linha em cada um dos
 quatro formulários, quando o time decidir.
+
+
+---
+
+## ⚠️ Cartão: fechamento ≠ vencimento (28/08/2026)
+
+Primeira fatia do módulo de Fatura de Cartão. `cartoes_credito` ganhou
+`dia_fechamento_fatura`, e as duas datas passaram a ter papéis distintos:
+
+- **FECHAMENTO** decide em QUAL fatura a compra cai.
+- **VENCIMENTO** decide QUANDO essa fatura é paga.
+
+### O bug que isso conserta
+
+`proxima_fatura_cartao` usava o vencimento como fronteira: compra até o dia
+do vencimento caía na fatura do mês, depois disso na seguinte. Só acerta
+quando as duas datas coincidem.
+
+No cartão comum — fecha 25, vence 5 — a conta errava **uma fatura inteira**:
+
+| Compra | Antes | Agora |
+|---|---|---|
+| 10/08 (antes do fechamento) | 05/09 | 05/09 ✅ |
+| 28/08 (depois do fechamento) | **05/09** ❌ | **05/10** ✅ |
+| 28/12 (vira o ano) | 05/01 ❌ | 05/02 ✅ |
+
+Isso já afetava as **recorrências**, que chamam esta função para decidir a
+data de pagamento de cada ocorrência gerada.
+
+### Duas implementações da mesma conta
+
+⚠️ `proxima_fatura_cartao` (banco) e `proximaFatura` (`lib/cartoes/proxima-fatura.ts`)
+calculam a mesma coisa e **precisam concordar**. A de TypeScript é o que o
+usuário VÊ ao escolher o cartão no formulário; a do banco é o que fica
+GRAVADO. Divergir entre elas é mostrar uma data e salvar outra.
+
+As duas foram alteradas juntas, com os mesmos casos de referência
+documentados no cabeçalho do arquivo TS.
+
+### Compatibilidade
+
+A coluna é anulável e a conta cai no comportamento antigo quando ela está
+vazia — sem isso, cartão cadastrado antes de hoje passaria a receber `null`
+e a recorrência quebraria. O **cadastro passou a exigir** o campo, então
+todo cartão novo nasce correto; os antigos precisam ser editados uma vez.

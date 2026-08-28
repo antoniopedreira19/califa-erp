@@ -189,7 +189,7 @@ export default async function PedidosCompraFinanceiroPage() {
     // Cartões de crédito ativos (para o drawer de conta avulsa e Task 10)
     supabase
       .from("cartoes_credito")
-      .select("id, nome, banco, bandeira, ultimos_4_digitos, dia_vencimento_fatura")
+      .select("id, nome, banco, bandeira, ultimos_4_digitos, dia_vencimento_fatura, dia_fechamento_fatura")
       .eq("tenant_id", session.activeTenant.id)
       .eq("ativo", true)
       .order("nome"),
@@ -782,6 +782,7 @@ export default async function PedidosCompraFinanceiroPage() {
       bandeira: string;
       ultimos_4_digitos: string;
       dia_vencimento_fatura: number;
+      dia_fechamento_fatura: number | null;
     }) => ({
       id: c.id,
       nome: c.nome,
@@ -791,6 +792,7 @@ export default async function PedidosCompraFinanceiroPage() {
       bandeira: c.bandeira as BandeiraCartao,
       ultimos_4_digitos: c.ultimos_4_digitos,
       dia_vencimento_fatura: c.dia_vencimento_fatura,
+      dia_fechamento_fatura: c.dia_fechamento_fatura ?? null,
     }),
   );
 

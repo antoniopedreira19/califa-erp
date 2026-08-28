@@ -24,6 +24,9 @@ export interface CartaoOption {
   bandeira: BandeiraCartao;
   ultimos_4_digitos: string;
   dia_vencimento_fatura: number;
+  /** Decide em QUAL fatura a compra cai. Ausente = cartão cadastrado
+   *  antes de 28/08/2026; a conta cai no comportamento antigo. */
+  dia_fechamento_fatura?: number | null;
 }
 
 export interface FormaPagamentoValue {
@@ -73,7 +76,9 @@ export function FormaPagamentoField({
     if (cartoes.length === 1) {
       const unico = cartoes[0];
       const dia = unico.dia_vencimento_fatura;
-      const data = formatarISO(proximaFatura(dia, new Date()));
+      const data = formatarISO(
+        proximaFatura(dia, new Date(), unico.dia_fechamento_fatura),
+      );
       onChange(
         { forma_pagamento: "cartao_credito", cartao_credito_id: unico.id },
         { dataPagamentoSugerida: data },
@@ -86,7 +91,9 @@ export function FormaPagamentoField({
   function handleCartaoChange(cartaoId: string) {
     const c = cartoes.find((c) => c.id === cartaoId);
     if (!c) return;
-    const data = formatarISO(proximaFatura(c.dia_vencimento_fatura, new Date()));
+    const data = formatarISO(
+      proximaFatura(c.dia_vencimento_fatura, new Date(), c.dia_fechamento_fatura),
+    );
     onChange(
       { forma_pagamento: "cartao_credito", cartao_credito_id: cartaoId },
       { dataPagamentoSugerida: data },

@@ -1786,6 +1786,10 @@ export interface CartaoCredito {
   ultimos_4_digitos: string;
   dono: string;
   dia_vencimento_fatura: number;
+  /** Dia em que a fatura FECHA — decide em qual fatura a compra cai.
+   *  `null` em cartão cadastrado antes de 28/08/2026; a conta cai no
+   *  comportamento antigo, que usava o vencimento como fronteira. */
+  dia_fechamento_fatura: number | null;
   ativo: boolean;
   created_at: string;
   created_by: string | null;
