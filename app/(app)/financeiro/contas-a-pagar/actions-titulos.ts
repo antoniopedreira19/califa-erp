@@ -123,10 +123,70 @@ function revalidarFinanceiro(jobId?: string | null) {
 // Aprovar PP definindo a data de pagamento
 // ---------------------------------------------------------------------
 
-const aprovarSchema = z.object({
-  pp_id: z.string().uuid(),
-  data_pagamento: dataSchema,
-});
+const aprovarSchema = z
+  .object({
+    pp_id: z.string().uuid(),
+    data_pagamento: dataSchema,
+    /**
+     * Por onde a PP vai ser paga. Escolhida AQUI, na aprovação, pelo
+     * financeiro — quem abre a PP é a produção, que não decide por onde o
+     * dinheiro sai (28/08/2026). Null mantém o comportamento antigo: a
+     * forma é escolhida na baixa, uma parcela por vez.
+     */
+    forma_pagamento: z
+      .enum(["pix", "transferencia", "boleto", "cartao_credito"])
+      .nullable()
+      .default(null),
+    cartao_credito_id: z
+      .string()
+      .uuid()
+      .nullable()
+      .or(z.literal("").transform(() => null))
+      .default(null),
+    /**
+     * Só no cartão. Na PP normal o plano de contas é escolhido na baixa;
+     * no cartão não existe baixa individual — ela sai na baixa da fatura
+     * inteira —, então ele tem que vir agora, senão o fechamento não teria
+     * como classificar o lançamento (29/08/2026).
+     */
+    plano_conta_tipo_id: z
+      .string()
+      .uuid()
+      .nullable()
+      .or(z.literal("").transform(() => null))
+      .default(null),
+    plano_conta_subtipo_id: z
+      .string()
+      .uuid()
+      .nullable()
+      .or(z.literal("").transform(() => null))
+      .default(null),
+  })
+  .superRefine((d, ctx) => {
+    if (d.forma_pagamento === "cartao_credito") {
+      if (!d.cartao_credito_id) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Escolha o cartão.",
+          path: ["cartao_credito_id"],
+        });
+      }
+      if (!d.plano_conta_tipo_id || !d.plano_conta_subtipo_id) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            "No cartão, o centro de custo é escolhido agora: não haverá baixa individual onde escolhê-lo.",
+          path: ["plano_conta_subtipo_id"],
+        });
+      }
+    } else if (d.cartao_credito_id) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Cartão só pode ser informado quando a forma é cartão de crédito.",
+        path: ["cartao_credito_id"],
+      });
+    }
+  });
 
 /**
  * Aprova a PP e transforma as parcelas dela em títulos a pagar.
@@ -180,6 +240,36 @@ export async function aprovarPPComData(input: unknown): Promise<Result> {
   });
   if (error) return { ok: false, message: `Falha ao aprovar: ${error.message}` };
 
+  // Cartão: cada parcela entra na fatura da DATA DELA — a PP de 30/60/90
+  // dias vira três itens em três faturas, pelo prazo que a produção
+  // negociou (29/08/2026). Em função separada, e não em parâmetros novos
+  // de `aprovar_pp_com_data`, porque aquela é da outra frente.
+  if (parsed.data.forma_pagamento === "cartao_credito") {
+    const { error: errCartao } = await supabase.rpc("rotear_pp_para_cartao", {
+      p_pp_id: parsed.data.pp_id,
+      p_cartao_id: parsed.data.cartao_credito_id,
+      p_tipo_id: parsed.data.plano_conta_tipo_id,
+      p_subtipo_id: parsed.data.plano_conta_subtipo_id,
+    });
+    if (errCartao) {
+      // A PP já está aprovada neste ponto. Não desfaço a aprovação: ela é
+      // válida, só não foi para o cartão — e a mensagem diz isso, para o
+      // financeiro repetir o roteamento em vez de reaprovar.
+      console.error("[pp.rotear_cartao]", errCartao.message);
+      return {
+        ok: false,
+        message: `PP aprovada, mas não foi para o cartão: ${errCartao.message}`,
+      };
+    }
+  } else if (parsed.data.forma_pagamento) {
+    // Fora do cartão a forma fica registrada como intenção; a baixa
+    // individual continua podendo mudá-la.
+    await supabase
+      .from("pedidos_compra")
+      .update({ forma_pagamento: parsed.data.forma_pagamento })
+      .eq("id", parsed.data.pp_id);
+  }
+
   await logAuditEvent({
     acao: "pedido_compra.aprovada",
     tenantId: session.activeTenant.id,
@@ -190,6 +280,8 @@ export async function aprovarPPComData(input: unknown): Promise<Result> {
       valor: Number(pp.valor),
       job_id: pp.job_id,
       data_pagamento: parsed.data.data_pagamento,
+      forma_pagamento: parsed.data.forma_pagamento,
+      cartao_credito_id: parsed.data.cartao_credito_id,
     },
   });
 

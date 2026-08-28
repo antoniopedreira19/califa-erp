@@ -54,6 +54,7 @@ export default async function PedidosCompraFinanceiroPage() {
         prazo_pagamento, prazo_pagamento_financeiro, pdf_path, created_at,
         cancelada_em, motivo_cancelamento,
         rejeitada_em, motivo_rejeicao, pago_em, verba_producao,
+        forma_pagamento, cartao_credito_id,
         fornecedor:fornecedores(id, nome, razao_social),
         responsavel:profiles!responsavel_verba_id(id, nome),
         empresa:empresas(id, razao_social, nome_fantasia),
@@ -68,7 +69,7 @@ export default async function PedidosCompraFinanceiroPage() {
         anexos:pedidos_compra_anexos(id, arquivo_nome_original, arquivo_tamanho_bytes),
         parcelas:pedidos_compra_parcelas(
           id, numero, data_vencimento, data_pagamento, data_pagamento_primeira,
-          valor, pago_em
+          valor, pago_em, fatura_cartao_id
         )
       `,
       )
@@ -298,6 +299,10 @@ export default async function PedidosCompraFinanceiroPage() {
     motivo_rejeicao: string | null;
     pago_em: string | null;
     verba_producao: boolean;
+    forma_pagamento: FormaPagamento | null;
+    cartao_credito_id: string | null;
+    plano_conta_tipo_id: string | null;
+    plano_conta_subtipo_id: string | null;
     fornecedor: { id: string; nome: string; razao_social: string | null } | null;
     responsavel: { id: string; nome: string } | null;
     empresa: { id: string; razao_social: string; nome_fantasia: string | null } | null;
@@ -329,6 +334,7 @@ export default async function PedidosCompraFinanceiroPage() {
       data_pagamento_primeira: string | null;
       valor: string | number;
       pago_em: string | null;
+      fatura_cartao_id: string | null;
     }> | null;
   }>).map((r) => ({
     id: r.id,
@@ -362,8 +368,12 @@ export default async function PedidosCompraFinanceiroPage() {
     cliente_nome: r.job?.projeto?.cliente?.nome_fantasia ?? null,
     cancelada_por_nome: r.cancelada_por_profile?.nome ?? null,
     emitida_por_nome: r.emitida_por_profile?.nome ?? null,
-    forma_pagamento: null,
-    cartao_credito_id: null,
+    // Escolhidos na aprovação, pelo financeiro (29/08/2026). Antes disso
+    // eram sempre null: a forma só existia na baixa.
+    forma_pagamento: r.forma_pagamento ?? null,
+    cartao_credito_id: r.cartao_credito_id ?? null,
+    plano_conta_tipo_id: r.plano_conta_tipo_id ?? null,
+    plano_conta_subtipo_id: r.plano_conta_subtipo_id ?? null,
     verba_producao: r.verba_producao ?? false,
     responsavel_nome: r.responsavel?.nome ?? null,
     prestacao: prestacoesPorPP.get(r.id) ?? null,
@@ -379,6 +389,7 @@ export default async function PedidosCompraFinanceiroPage() {
         data_pagamento_primeira: p.data_pagamento_primeira,
         valor: Number(p.valor),
         pago_em: p.pago_em,
+        fatura_cartao_id: p.fatura_cartao_id ?? null,
       }))
       .sort((a, b) => a.numero - b.numero),
   }));
@@ -467,21 +478,29 @@ export default async function PedidosCompraFinanceiroPage() {
         parcela_total: total,
         status: par.pago_em ? "pago" : "a_pagar",
         empresa_id: pp.empresa_id,
-        // PP sempre é custo de job → default Custo Operacional; subtipo
-        // fica em branco pro financeiro escolher entre os do tipo.
-        plano_conta_tipo_id: custoOperacionalTipoId,
-        plano_conta_subtipo_id: null,
+        // No cartão o plano de contas foi escolhido na aprovação e está na
+        // PP; fora dele, PP é custo de job → default Custo Operacional,
+        // com o subtipo em branco pro financeiro escolher na baixa.
+        plano_conta_tipo_id:
+          pp.plano_conta_tipo_id ?? custoOperacionalTipoId,
+        plano_conta_subtipo_id: pp.plano_conta_subtipo_id ?? null,
         pago_em: par.pago_em,
         conta_nome: baixa?.conta ?? null,
         centro_nome: baixa?.centro ?? null,
-        // Se paga, usa a forma registrada na baixa; senão, null (planejado
-        // não existe para PP — Task 7 vai remover a coluna da PP-pai).
-        forma_pagamento: par.pago_em
-          ? baixa?.forma_pagamento ?? null
-          : null,
-        cartao_credito_id: par.pago_em
-          ? baixa?.cartao_credito_id ?? null
-          : null,
+        // A parcela roteada para o cartão carrega a forma da PP mesmo
+        // antes de paga — é o que a faz aparecer na aba Cartão em vez de
+        // Títulos a Pagar (29/08/2026). Fora do cartão continua como
+        // antes: só a forma registrada na baixa.
+        forma_pagamento: par.fatura_cartao_id
+          ? "cartao_credito"
+          : par.pago_em
+            ? baixa?.forma_pagamento ?? null
+            : null,
+        cartao_credito_id: par.fatura_cartao_id
+          ? pp.cartao_credito_id ?? null
+          : par.pago_em
+            ? baixa?.cartao_credito_id ?? null
+            : null,
         // Nenhuma destas origens é estorno nem parcela de cartão: as duas
         // coisas só existem em compra de cartão, que vem do laço das
         // avulsas.
@@ -710,7 +729,11 @@ export default async function PedidosCompraFinanceiroPage() {
     .from("faturas_cartao")
     .select(
       "id, codigo, cartao_credito_id, competencia_fechamento, data_vencimento, " +
-        "status, valor_cobrado, itens:contas_avulsas(valor, status, natureza)",
+        "status, valor_cobrado, itens:contas_avulsas(valor, status, natureza), " +
+        // A fatura tem duas fontes de item desde 29/08/2026: conta avulsa
+        // e parcela de PP aprovada no cartão. Somar só a primeira faria a
+        // faixa não bater com a tabela.
+        "parcelas_pp:pedidos_compra_parcelas(valor, pago_em)",
     )
     .eq("tenant_id", session.activeTenant.id)
     // Fechada entra junto: ela ainda mora na aba Cartão, com o botão de
@@ -730,13 +753,20 @@ export default async function PedidosCompraFinanceiroPage() {
       status: string;
       natureza: "entrada" | "saida";
     }>;
-    // Na aberta os itens estão em "aprovada"; na fechada eles já viraram
-    // lançamento e foram para "baixada". Contar só os aprovados na
-    // fechada daria zero itens e zero reais.
+    const ppTodas = (f.parcelas_pp ?? []) as Array<{
+      valor: number;
+      pago_em: string | null;
+    }>;
+    // Na aberta os itens estão em "aprovada" (e a parcela de PP com
+    // pago_em nulo); na fechada os dois já viraram lançamento. Contar só
+    // os abertos numa fatura fechada daria zero itens e zero reais.
     const fechada = f.status === "fechada";
     const itens = fechada
       ? todos
       : todos.filter((i) => i.status === "aprovada");
+    const parcelasPP = fechada
+      ? ppTodas
+      : ppTodas.filter((p) => p.pago_em === null);
     return {
       id: f.id,
       codigo: f.codigo,
@@ -756,8 +786,11 @@ export default async function PedidosCompraFinanceiroPage() {
                 ? -Number(i.valor ?? 0)
                 : Number(i.valor ?? 0)),
             0,
-          ),
-      qtd_itens: itens.length,
+          ) +
+          // Parcela de PP é sempre saída: não há estorno de PP no cartão
+          // (decidido em 29/08/2026).
+          parcelasPP.reduce((s, p) => s + Number(p.valor ?? 0), 0),
+      qtd_itens: itens.length + parcelasPP.length,
       status: f.status as "aberta" | "fechada",
     };
   });
@@ -1038,7 +1071,16 @@ export default async function PedidosCompraFinanceiroPage() {
       </header>
 
       <ContasPagarTabs
-        pps={<PedidosCompraList rows={rows} tenantId={session.activeTenant.id} regionais={regionaisList} />}
+        pps={
+          <PedidosCompraList
+            rows={rows}
+            tenantId={session.activeTenant.id}
+            regionais={regionaisList}
+            cartoes={cartoesList}
+            tipos={tiposRes.data ?? []}
+            subtipos={subtiposRes.data ?? []}
+          />
+        }
         ppsPendentesCount={ppsPendentesCountRes.count ?? 0}
         desembolsos={<DesembolsosContasPagarList rows={desembolsosRows} />}
         desembolsosPendentesCount={desembolsosPendentesCount}

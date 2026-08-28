@@ -111,13 +111,36 @@ pagas continuam pagas.
 
 ---
 
+## 7. PP paga no cartão (29/08/2026, mesma sessão)
+
+A fatura passa a ter duas fontes de item: conta avulsa e parcela de PP.
+
+**A forma é escolhida na aprovação, pelo financeiro** — quem abre a PP é a
+produção, que não decide por onde o dinheiro sai.
+
+⚠️ **E o plano de contas também**, quando é cartão. Na PP normal ele é
+escolhido na baixa; no cartão não existe baixa individual, então tem que
+vir antes — senão o fechamento não teria como classificar o lançamento.
+
+**Uma parcela, uma fatura, pela data dela.** A PP de 30/60/90 dias vira
+três itens em três faturas, pelo prazo que a produção negociou. Duas
+parcelas podem cair na mesma fatura quando a competência de uma já foi
+paga, e está certo: aqui as datas vêm negociadas de fora, e a regra é
+respeitá-las — diferente do parcelamento da compra avulsa, onde o sistema
+gera as datas e por isso garante competências distintas.
+
+**Estorno de parcela de PP fica de fora**: devolução de fornecedor numa PP
+no cartão entra como ajuste do fechamento. A PP já tem devolução de verba,
+que é outra coisa.
+
+---
+
 ## O que ficou em aberto
 
-- **PP paga no cartão**: falta `forma_pagamento` e `cartao_credito_id` no
-  pedido de compra, escolhidos na aprovação, pelo financeiro. É o que
-  falta para a fatura conter mais do que avulsa.
-- **Exportação contábil** a partir da conta do cartão — depende do layout
-  que o contador precisa.
+- **Exportação contábil** — junto com a exportação das contas, quando o
+  layout do sistema do contador estiver definido, para sair tudo de uma
+  vez. Não fazer por partes.
+- **Teste ponta a ponta da errata**, combinado para uma sessão conjunta.
 
 ## Onde está escrito
 

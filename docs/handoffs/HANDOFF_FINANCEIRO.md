@@ -2799,3 +2799,77 @@ nenhum depois do fechamento.
    layout do sistema do contador estiver definido, para sair tudo de uma
    vez e do jeito certo. Não fazer por partes.
 
+---
+
+## ⚠️ PP paga no cartão (29/08/2026)
+
+Última peça do cartão. A fatura passa a ter **duas fontes de item**:
+
+```text
+contas_avulsas          → compra avulsa, assinatura, estorno
+pedidos_compra_parcelas → parcela de PP aprovada no cartão
+```
+
+Cada uma vira um lançamento próprio na conta do cartão, com o SEU plano de
+contas. É a razão de o cartão ser uma conta: a granularidade do DRE
+sobrevive à agregação da fatura.
+
+### Quem escolhe, e quando
+
+A forma de pagamento da PP é escolhida **na aprovação, pelo financeiro** —
+quem abre a PP é a produção, e ela não decide por onde o dinheiro sai. O
+drawer de aprovação ganhou "Como vai ser pago"; vazio mantém o
+comportamento de sempre (decidir na baixa, parcela a parcela).
+
+### ⚠️ Por que a PP no cartão precisa de plano de contas na aprovação
+
+Na PP normal o plano é escolhido **na baixa**. Na PP no cartão **não
+existe baixa individual** — ela sai na baixa da fatura inteira. Então o
+plano tem que ser escolhido antes, e o único momento natural é a
+aprovação, onde o financeiro já está escolhendo o cartão. Sem isso o
+fechamento não teria como classificar o lançamento.
+
+Por isso a constraint `chk_pp_cartao_coerente` exige tipo e subtipo
+quando `forma_pagamento = 'cartao_credito'`.
+
+### Uma parcela, uma fatura — pela data DELA
+
+A PP de 30/60/90 dias vira três itens em três faturas, pelo prazo que a
+produção negociou com o fornecedor. Testado com a PP-00011 (12 parcelas
+mensais de R$ 200): caíram em 12 competências seguidas.
+
+⚠️ **Duas parcelas podem cair na MESMA fatura**, e está certo: se a
+competência natural de uma delas já foi paga, ela rola para a próxima
+aberta e pode alcançar a seguinte. Foi o que aconteceu no teste com as
+parcelas 1/12 (09/09) e 2/12 (09/10) — setembro já estava pago.
+
+Isso é diferente do parcelamento da compra avulsa, onde EU gero as datas e
+por isso ancoro cada parcela na competência da anterior. Aqui as datas vêm
+de fora, negociadas, e a regra é respeitá-las.
+
+### Trava e reabertura
+
+`dar_baixa_pp_parcela` recusa parcela que está numa fatura — mesma regra
+da avulsa, mesmo patch cirúrgico. E na tela ela nem aparece em Títulos a
+Pagar: a parcela roteada carrega `forma_pagamento = cartao_credito` e vai
+para a aba Cartão.
+
+Reabrir devolve os dois lados: a parcela volta a `pago_em = null` e a PP
+que tinha virado 'pago' volta para 'aprovada'. A auditoria conta quantas.
+
+### O que NÃO entra
+
+**Estorno de parcela de PP.** Decidido em 29/08/2026 que fica de fora:
+devolução de fornecedor numa PP paga no cartão entra como ajuste do
+fechamento. A PP já tem devolução de verba, que é outra coisa, e misturar
+as duas confundiria.
+
+### Testado no navegador (29/08/2026)
+
+PP-00011 (R$ 2.400 em 12x) aprovada no cartão → 12 parcelas em 12
+faturas; FC-00001 fechada misturando 3 avulsas e 2 parcelas de PP →
+5 lançamentos, cada um com seu plano de contas (avulsas em Material
+escritório, PP em Alimentação); reaberta → 5 lançamentos apagados, 3
+itens e 2 parcelas de PP devolvidos, PP de volta a 'aprovada', as quatro
+pernas do pagamento antigo intactas.
+
