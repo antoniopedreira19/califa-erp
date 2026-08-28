@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { DocumentoDoAnexoField } from "@/components/financeiro/documento-do-anexo-field";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -25,6 +26,7 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { createClient } from "@/lib/supabase/client";
 import { criarDesembolso } from "./actions";
 import type { RateioLinhaInput } from "@/lib/types";
+import type { DocumentoDoAnexo } from "@/lib/types";
 import { RateioRegionalEditor } from "@/app/(app)/financeiro/contas-a-pagar/rateio-regional-editor";
 
 // ---------------------------------------------------------------------------
@@ -49,6 +51,9 @@ interface AnexoPendente {
   nome: string;
   tamanho: number;
   mimetype: string;
+  /** Que documento este arquivo é. Alimenta a coluna Documento da
+   *  Conciliação (28/08/2026). */
+  documento: DocumentoDoAnexo;
 }
 
 interface Props {
@@ -277,6 +282,7 @@ export function DesembolsoDrawer({
         nome: file.name,
         tamanho: file.size,
         mimetype: file.type,
+        documento: { tipo: null, numero: null },
       });
     }
 
@@ -589,9 +595,10 @@ export function DesembolsoDrawer({
                   {anexos.map((a, idx) => (
                     <li
                       key={idx}
-                      className="flex items-center justify-between rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm"
+                      className="flex flex-col gap-1.5 rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm"
                     >
-                      <span className="flex items-center gap-2 truncate">
+                      <div className="flex items-center justify-between">
+                        <span className="flex items-center gap-2 truncate">
                         <Paperclip className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                         <span className="truncate">{a.nome}</span>
                         <span className="shrink-0 text-xs text-muted-foreground">
@@ -606,6 +613,21 @@ export function DesembolsoDrawer({
                       >
                         <X className="h-3.5 w-3.5" />
                       </button>
+                    </div>
+
+                    {/* Que documento é este arquivo — alimenta a coluna
+                        Documento da Conciliação. */}
+                    <DocumentoDoAnexoField
+                      valor={a.documento}
+                      descricaoArquivo={a.nome}
+                      onChange={(doc) =>
+                        setAnexos((prev) =>
+                          prev.map((p, i) =>
+                            i === idx ? { ...p, documento: doc } : p,
+                          ),
+                        )
+                      }
+                    />
                     </li>
                   ))}
                 </ul>

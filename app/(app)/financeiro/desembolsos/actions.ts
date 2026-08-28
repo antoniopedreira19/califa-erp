@@ -104,6 +104,8 @@ export async function criarDesembolso(input: unknown): Promise<Result> {
       arquivo_path: a.path,
       arquivo_nome_original: a.nome,
       arquivo_tamanho_bytes: a.tamanho,
+      documento_tipo: a.documento_tipo,
+      documento_numero: a.documento_tipo ? a.documento_numero : null,
       criado_por: session.profile.id,
     }));
     const { error: errAnx } = await supabase.from("desembolsos_anexos").insert(anexosPayload);

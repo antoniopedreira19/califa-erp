@@ -1449,6 +1449,61 @@ export const PP_ANEXO_MIMETYPES_ACEITOS = [
 
 export type PPAnexoMimetype = (typeof PP_ANEXO_MIMETYPES_ACEITOS)[number];
 
+// ---------- Documento do anexo (28/08/2026) ----------
+
+/**
+ * Que documento um anexo é.
+ *
+ * Vive na LINHA DO ANEXO, e não no título: uma PP pode ter NF, boleto e
+ * contrato juntos, e no título só caberia um deles. É o que alimenta a
+ * coluna Documento da Conciliação.
+ *
+ * Acrescentar valor aqui é aditivo — o enum começou no conjunto mínimo
+ * que o time nomeou.
+ */
+export const DOCUMENTO_TIPOS = [
+  "nota_fiscal",
+  "recibo",
+  "boleto",
+  "contrato",
+  "outro",
+] as const;
+
+export type DocumentoTipo = (typeof DOCUMENTO_TIPOS)[number];
+
+/** Rótulo curto, como aparece na coluna e no chip. */
+export function documentoTipoLabel(t: DocumentoTipo): string {
+  switch (t) {
+    case "nota_fiscal":
+      return "NF";
+    case "recibo":
+      return "Recibo";
+    case "boleto":
+      return "Boleto";
+    case "contrato":
+      return "Contrato";
+    default:
+      return "Outro";
+  }
+}
+
+/**
+ * Os tipos que valem como comprovante FISCAL da despesa. A coluna
+ * Documento mostra o primeiro anexo que cai aqui — contrato e boleto
+ * acompanham a compra, mas não são o documento que a contabilidade
+ * procura.
+ */
+export const DOCUMENTO_TIPOS_FISCAIS: readonly DocumentoTipo[] = [
+  "nota_fiscal",
+  "recibo",
+];
+
+/** O documento de um anexo, como as telas o consomem. */
+export interface DocumentoDoAnexo {
+  tipo: DocumentoTipo | null;
+  numero: string | null;
+}
+
 export const PP_ANEXO_TAMANHO_MAX_BYTES = 8 * 1024 * 1024;
 export const PP_ANEXOS_TAMANHO_TOTAL_MAX_BYTES = 25 * 1024 * 1024;
 

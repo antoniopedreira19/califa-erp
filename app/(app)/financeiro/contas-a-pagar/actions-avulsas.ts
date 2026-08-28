@@ -143,6 +143,8 @@ export async function criarContaAvulsa(input: unknown): Promise<Result> {
       arquivo_nome_original: a.nome,
       arquivo_tamanho_bytes: a.tamanho,
       arquivo_mimetype: a.mimetype,
+      documento_tipo: a.documento_tipo,
+      documento_numero: a.documento_tipo ? a.documento_numero : null,
       created_by: session.profile.id,
     }));
     const { error: anexErr } = await supabase

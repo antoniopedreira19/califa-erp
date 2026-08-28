@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DOCUMENTO_TIPOS } from "@/lib/types";
 
 const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -68,6 +69,10 @@ export const criarDesembolsoSchema = z
           nome: z.string().min(1),
           tamanho: z.number().int().positive(),
           mimetype: z.string().min(1),
+          // Que documento este arquivo é (28/08/2026). O par anda junto:
+          // número sem tipo não identifica nada.
+          documento_tipo: z.enum(DOCUMENTO_TIPOS).nullable().default(null),
+          documento_numero: z.string().trim().max(60).nullable().default(null),
         }),
       )
       .default([]),

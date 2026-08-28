@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { logAuditEvent } from "@/lib/auth/audit";
+import { DOCUMENTO_TIPOS } from "@/lib/types";
 import { gerarCodigoPP } from "@/lib/codigos/pedidos-compra";
 import {
   valorDaPP,
@@ -134,6 +135,10 @@ const dadosSchema = dadosBaseSchema;
 
 const anexoUploadedSchema = z.object({
   anexo_id: z.string().uuid(),
+  /** Que documento este arquivo é, e com que número (28/08/2026). O par
+   *  anda junto: número sem tipo não identifica nada. */
+  documento_tipo: z.enum(DOCUMENTO_TIPOS).nullable().default(null),
+  documento_numero: z.string().trim().max(60).nullable().default(null),
   path: z.string().min(1),
   nome_original: z.string().min(1),
   tamanho_bytes: z.number().int().positive(),
@@ -648,6 +653,8 @@ async function finalizarPedidoCompraImpl(
     arquivo_nome_original: a.nome_original,
     arquivo_tamanho_bytes: a.tamanho_bytes,
     arquivo_mimetype: a.mimetype,
+    documento_tipo: a.documento_tipo,
+    documento_numero: a.documento_tipo ? a.documento_numero : null,
     created_by: session.profile.id,
   }));
   const { error: anexosErr } = await supabase
@@ -1411,6 +1418,8 @@ export async function reenviarPedidoCompra(
           arquivo_nome_original: a.nome_original,
           arquivo_tamanho_bytes: a.tamanho_bytes,
           arquivo_mimetype: a.mimetype,
+          documento_tipo: a.documento_tipo,
+          documento_numero: a.documento_tipo ? a.documento_numero : null,
           created_by: session.profile.id,
         })),
       );

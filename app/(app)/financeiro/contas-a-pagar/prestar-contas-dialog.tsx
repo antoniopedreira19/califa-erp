@@ -31,6 +31,8 @@ import {
   PP_ANEXOS_TAMANHO_TOTAL_MAX_BYTES,
   type PPAnexoMimetype,
 } from "@/lib/types";
+import type { DocumentoDoAnexo } from "@/lib/types";
+import { DocumentoDoAnexoField } from "@/components/financeiro/documento-do-anexo-field";
 import { fecharPrestacaoVerba } from "./prestacao-verba-actions";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -63,6 +65,10 @@ interface AnexoLocal {
   path: string;
   status: "selecionado" | "uploading" | "ok" | "erro" | "rejeitado";
   mensagem?: string;
+  /** É AQUI que as notas da verba de produção entram: a PP de verba sai
+   *  sem anexo, e o documento só existe depois que o responsável gasta
+   *  (28/08/2026). */
+  documento: DocumentoDoAnexo;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -130,7 +136,12 @@ export function PrestarContasDialog({ open, onOpenChange, pp, tenantId, onSucces
 
     for (const file of Array.from(files)) {
       const anexo_id = crypto.randomUUID();
-      const base = { anexo_id, file, path: "" };
+      const base = {
+        anexo_id,
+        file,
+        path: "",
+        documento: { tipo: null, numero: null } as DocumentoDoAnexo,
+      };
 
       if (!PP_ANEXO_MIMETYPES_ACEITOS.includes(file.type as PPAnexoMimetype)) {
         novos.push({
@@ -260,6 +271,10 @@ export function PrestarContasDialog({ open, onOpenChange, pp, tenantId, onSucces
             nome_original: a.file.name,
             tamanho_bytes: a.file.size,
             mimetype: a.file.type,
+            documento_tipo: a.documento.tipo,
+            documento_numero: a.documento.tipo
+              ? (a.documento.numero?.trim() || null)
+              : null,
           })),
         });
 
@@ -420,10 +435,11 @@ export function PrestarContasDialog({ open, onOpenChange, pp, tenantId, onSucces
                     <li
                       key={a.anexo_id}
                       className={cn(
-                        "flex items-center gap-2 rounded border p-2 text-xs",
+                        "flex flex-col gap-1.5 rounded border p-2 text-xs",
                         cor,
                       )}
                     >
+                      <div className="flex items-center gap-2">
                       <Icon className="h-4 w-4 shrink-0" />
                       <span className="flex-1 truncate">{a.file.name}</span>
                       <span className="text-muted-foreground">
@@ -446,6 +462,23 @@ export function PrestarContasDialog({ open, onOpenChange, pp, tenantId, onSucces
                       >
                         <Trash2 className="h-3 w-3" />
                       </button>
+                      </div>
+
+                      {a.status === "ok" && (
+                        <DocumentoDoAnexoField
+                          valor={a.documento}
+                          descricaoArquivo={a.file.name}
+                          onChange={(doc) =>
+                            setAnexos((prev) =>
+                              prev.map((p) =>
+                                p.anexo_id === a.anexo_id
+                                  ? { ...p, documento: doc }
+                                  : p,
+                              ),
+                            )
+                          }
+                        />
+                      )}
                     </li>
                   );
                 })}

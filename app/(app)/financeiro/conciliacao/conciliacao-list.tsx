@@ -1,7 +1,13 @@
 "use client";
 import * as React from "react";
-import { ChevronDown, ChevronRight, CreditCard } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  CreditCard,
+  ExternalLink,
+} from "lucide-react";
 import type { LancamentoLinha } from "@/lib/calculos/saldo-conta";
+import { abrirDocumentoDoLancamento } from "./actions-documento";
 
 export function ConciliacaoList({
   linhas,
@@ -71,6 +77,7 @@ export function ConciliacaoList({
             <th className="px-3 py-2 text-left">Subtipo</th>
             <th className="px-3 py-2 text-left">Regional</th>
             <th className="px-3 py-2 text-left">Origem</th>
+            <th className="px-3 py-2 text-left">Documento</th>
           </tr>
         </thead>
         <tbody>
@@ -190,11 +197,28 @@ export function ConciliacaoList({
                   <span className="text-muted-foreground">—</span>
                 )}
               </td>
+              {/* O comprovante fiscal. Tipo e número numa célula só: eles
+                  se leem juntos ("NF 4471"), e uma célula é um alvo de
+                  clique só para abrir o arquivo. */}
+              <td className="whitespace-nowrap px-3 py-2 text-xs">
+                {l.documento_label ? (
+                  l.documento_path ? (
+                    <BotaoDocumento
+                      lancamentoId={l.id}
+                      label={l.documento_label}
+                    />
+                  ) : (
+                    <span className="font-mono">{l.documento_label}</span>
+                  )
+                ) : (
+                  <span className="text-muted-foreground">—</span>
+                )}
+              </td>
             </tr>
             {aberta && (
               <tr className="border-b border-border bg-muted/20 last:border-0">
                 <td colSpan={4} />
-                <td colSpan={7} className="px-3 pb-3 pt-1">
+                <td colSpan={8} className="px-3 pb-3 pt-1">
                   <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.07em] text-muted-foreground">
                     De onde vem este dinheiro
                   </p>
@@ -241,6 +265,50 @@ export function ConciliacaoList({
         </tbody>
       </table>
     </div>
+  );
+}
+
+/**
+ * Abre o documento fiscal numa aba.
+ *
+ * A URL é assinada na hora e vive um minuto, então ela não pode sair
+ * pronta do servidor com a página — sairia vencida para quem deixa o
+ * extrato aberto. O clique pede, e a action deriva o arquivo do id do
+ * lançamento (nunca de bucket/caminho vindos daqui).
+ */
+function BotaoDocumento({
+  lancamentoId,
+  label,
+}: {
+  lancamentoId: string;
+  label: string;
+}) {
+  const [carregando, setCarregando] = React.useState(false);
+  const [erro, setErro] = React.useState<string | null>(null);
+
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <button
+        type="button"
+        disabled={carregando}
+        onClick={async () => {
+          setCarregando(true);
+          setErro(null);
+          const r = await abrirDocumentoDoLancamento(lancamentoId);
+          setCarregando(false);
+          if (!r.ok) {
+            setErro(r.message);
+            return;
+          }
+          window.open(r.url, "_blank", "noopener,noreferrer");
+        }}
+        className="inline-flex items-center gap-1 font-mono text-california-red hover:underline disabled:opacity-50"
+      >
+        {label}
+        <ExternalLink className="h-2.5 w-2.5" />
+      </button>
+      {erro && <span className="text-[10px] text-california-red">{erro}</span>}
+    </span>
   );
 }
 

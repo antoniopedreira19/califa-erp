@@ -3,7 +3,11 @@ import { Receipt } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
-import type { ContaBancaria } from "@/lib/types";
+import type { ContaBancaria, DocumentoTipo } from "@/lib/types";
+import {
+  DOCUMENTO_TIPOS_FISCAIS,
+  documentoTipoLabel,
+} from "@/lib/types";
 import {
   calcularSaldoAnterior,
   derivarSaldo,
@@ -87,15 +91,22 @@ export default async function ConciliacaoPage({
          plano_contas_tipos!inner(codigo, nome),
          plano_contas_subtipos!inner(codigo, nome),
          forma_pagamento,
-         pedido_compra:pedidos_compra(codigo),
-         desembolso:desembolsos(codigo),
+         pedido_compra:pedidos_compra(
+           codigo,
+           anexos:pedidos_compra_anexos(arquivo_path, documento_tipo, documento_numero)
+         ),
+         desembolso:desembolsos(
+           codigo,
+           anexos:desembolsos_anexos(arquivo_path, documento_tipo, documento_numero)
+         ),
          cartao:cartoes_credito(nome, ultimos_4_digitos),
          titulo:titulos_receber!lancamentos_financeiros_titulo_receber_id_fkey(
-           faturamento:faturamentos(numero_nf, serie)
+           faturamento:faturamentos(numero_nf, serie, anexo_nf_path)
          ),
          conta_avulsa:contas_avulsas!conta_avulsa_id(
            codigo,
            recorrente_id,
+           anexos:contas_avulsas_anexos(arquivo_path, documento_tipo, documento_numero),
            rateio:contas_avulsas_regionais(
              percentual,
              regional:regionais(nome)
@@ -126,20 +137,54 @@ export default async function ConciliacaoPage({
       plano_contas_tipos: { codigo: string; nome: string };
       plano_contas_subtipos: { codigo: string; nome: string };
       forma_pagamento: string | null;
-      pedido_compra: { codigo: string } | null;
-      desembolso: { codigo: string } | null;
+      pedido_compra: { codigo: string; anexos: AnexoRaw[] } | null;
+      desembolso: { codigo: string; anexos: AnexoRaw[] } | null;
       cartao: { nome: string; ultimos_4_digitos: string } | null;
       titulo: {
-        faturamento: { numero_nf: string | null; serie: string | null } | null;
+        faturamento: {
+          numero_nf: string | null;
+          serie: string | null;
+          anexo_nf_path: string | null;
+        } | null;
       } | null;
       conta_avulsa: {
         codigo: string | null;
         recorrente_id: string | null;
+        anexos: AnexoRaw[];
         rateio: Array<{
           percentual: number;
           regional: { nome: string } | null;
         }>;
       } | null;
+    };
+
+    type AnexoRaw = {
+      arquivo_path: string;
+      documento_tipo: DocumentoTipo | null;
+      documento_numero: string | null;
+    };
+
+    /**
+     * O comprovante FISCAL de uma origem: o primeiro anexo tipado como
+     * nota ou recibo. Contrato e boleto acompanham a compra, mas não são
+     * o documento que a contabilidade procura — por isso ficam de fora.
+     */
+    const documentoFiscal = (
+      anexos: AnexoRaw[] | undefined,
+    ): { label: string; path: string } | null => {
+      const alvo = (anexos ?? []).find(
+        (a) =>
+          a.documento_tipo !== null &&
+          DOCUMENTO_TIPOS_FISCAIS.includes(a.documento_tipo),
+      );
+      if (!alvo?.documento_tipo) return null;
+      const rotulo = documentoTipoLabel(alvo.documento_tipo);
+      return {
+        label: alvo.documento_numero
+          ? `${rotulo} ${alvo.documento_numero}`
+          : rotulo,
+        path: alvo.arquivo_path,
+      };
     };
 
     /** "NF 900123/1" — a nota como ela é lida, com a série quando existe. */
@@ -191,6 +236,20 @@ export default async function ConciliacaoPage({
           r.forma_pagamento === "cartao_credito" && r.cartao
             ? `${r.cartao.nome} ·${r.cartao.ultimos_4_digitos}`
             : null,
+        // Mesma ordem da Origem. No recebimento a NOTA é o documento: ela
+        // já vem estruturada em `faturamentos`, e não depende de ninguém
+        // ter identificado anexo nenhum.
+        documento_label:
+          documentoFiscal(r.pedido_compra?.anexos)?.label ??
+          documentoFiscal(r.desembolso?.anexos)?.label ??
+          documentoFiscal(r.conta_avulsa?.anexos)?.label ??
+          numeroDaNota(r.titulo?.faturamento ?? null),
+        documento_path:
+          documentoFiscal(r.pedido_compra?.anexos)?.path ??
+          documentoFiscal(r.desembolso?.anexos)?.path ??
+          documentoFiscal(r.conta_avulsa?.anexos)?.path ??
+          r.titulo?.faturamento?.anexo_nf_path ??
+          null,
         tipo_codigo: r.plano_contas_tipos.codigo,
         tipo_nome: r.plano_contas_tipos.nome,
         subtipo_codigo: r.plano_contas_subtipos.codigo,

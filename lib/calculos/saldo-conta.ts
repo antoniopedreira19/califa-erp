@@ -38,6 +38,14 @@ export type LancamentoLinha = {
    *  PAGAMENTO, não origem: por isso acompanha o código em vez de
    *  substituí-lo. */
   cartao_label: string | null;
+  /** O comprovante fiscal da origem: "NF 4471", "Recibo 88". Vem do
+   *  primeiro anexo tipado como nota ou recibo; no recebimento vem da
+   *  própria nota emitida. `null` quando ninguém identificou o anexo — ou
+   *  quando não há anexo (28/08/2026). */
+  documento_label: string | null;
+  /** Caminho do arquivo no Storage, para o link. `null` quando o
+   *  documento foi identificado mas o arquivo não está acessível. */
+  documento_path: string | null;
   origem: string;
   credito: number;
   debito: number;
