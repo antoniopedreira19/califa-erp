@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { ChevronRight, Receipt } from "lucide-react";
+import { ArrowLeft, Receipt } from "lucide-react";
 import Link from "next/link";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
@@ -451,14 +451,16 @@ export default async function ContasReceberPage() {
   // pagina nunca rola na horizontal.
   return (
     <div className="mx-auto max-w-[1560px] space-y-8">
+      <div>
+        <Link
+          href="/financeiro"
+          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ArrowLeft className="h-3 w-3" />
+          Voltar para central financeira
+        </Link>
+      </div>
       <header className="space-y-2">
-        <nav className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Link href="/financeiro" className="transition-colors hover:text-california-red">
-            Financeiro
-          </Link>
-          <ChevronRight className="h-3 w-3" />
-          <span className="text-california-red">Contas a Receber</span>
-        </nav>
         <div className="flex items-center gap-3">
           <div className="rounded-lg bg-california-red/10 p-2">
             <Receipt className="h-5 w-5 text-california-red" />

@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
-import { ChevronRight, FileText, Paperclip, Wallet } from "lucide-react";
+import { ArrowLeft, FileText, Paperclip, Wallet } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { formatCurrency } from "@/lib/utils";
@@ -170,28 +170,16 @@ export default async function DesembolsoDetalhePage({
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
-      {/* Breadcrumb + Header */}
+      <div>
+        <Link
+          href="/financeiro/desembolsos"
+          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ArrowLeft className="h-3 w-3" />
+          Voltar para desembolsos
+        </Link>
+      </div>
       <header className="space-y-2">
-        <nav className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Link
-            href="/financeiro"
-            prefetch={false}
-            className="hover:text-california-red transition-colors"
-          >
-            Financeiro
-          </Link>
-          <ChevronRight className="h-3 w-3" />
-          <Link
-            href="/financeiro/desembolsos"
-            prefetch={false}
-            className="hover:text-california-red transition-colors"
-          >
-            Desembolsos
-          </Link>
-          <ChevronRight className="h-3 w-3" />
-          <span className="text-california-red">{d.codigo}</span>
-        </nav>
-
         <div className="flex items-center gap-3">
           <div className="rounded-lg bg-california-red/10 p-2">
             <Wallet className="h-5 w-5 text-california-red" />

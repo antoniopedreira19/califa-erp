@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Landmark } from "lucide-react";
+import { ArrowLeft, Landmark } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { listarFilaDeAbertura } from "./dados";
 import { listarJobsDoFinanceiro } from "./dados-abertos";
@@ -40,13 +40,16 @@ export default async function AberturaDeJobPage({
 
   return (
     <div className="space-y-6">
-      <header className="space-y-2">
+      <div>
         <Link
           href="/financeiro"
-          className="text-[11px] font-semibold uppercase tracking-[0.18em] text-california-red hover:text-california-red-hover"
+          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
-          Central Financeira
+          <ArrowLeft className="h-3 w-3" />
+          Voltar para central financeira
         </Link>
+      </div>
+      <header className="space-y-2">
         <div className="flex items-center gap-3">
           <div className="rounded-lg bg-california-red/10 p-2">
             <Landmark className="h-5 w-5 text-california-red" />
