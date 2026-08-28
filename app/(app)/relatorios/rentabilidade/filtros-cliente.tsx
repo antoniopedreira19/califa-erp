@@ -14,10 +14,10 @@ import {
 import { useModo } from "./modo-provider";
 
 const TRIMESTRES: readonly { value: Trimestre; label: string }[] = [
-  { value: "Q1", label: "Q1" },
-  { value: "Q2", label: "Q2" },
-  { value: "Q3", label: "Q3" },
-  { value: "Q4", label: "Q4" },
+  { value: "Q1", label: "T1" },
+  { value: "Q2", label: "T2" },
+  { value: "Q3", label: "T3" },
+  { value: "Q4", label: "T4" },
 ];
 
 interface Props {
