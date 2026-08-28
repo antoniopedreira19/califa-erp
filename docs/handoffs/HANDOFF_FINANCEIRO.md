@@ -2755,3 +2755,47 @@ e o diálogo diz "(compra em 3x)" com o total. Testado: estorno de R$ 100
 numa compra 3x de 33,34+33,33+33,33 — o crédito caiu na fatura aberta e
 as três parcelas seguiram "a pagar" nas faturas delas.
 
+---
+
+## Onde a fatura mora em cada status (confirmado em 29/08/2026)
+
+Pergunta do Tiago, verificada rodando o ciclo inteiro na tela:
+
+| Status da fatura | Aba Cartão | Títulos a Pagar |
+|---|---|---|
+| **aberta** | sim, com "Fechar fatura" | **não** |
+| **fechada**, valor > 0 | sim, com "Reabrir fatura" | **sim**, como título único, "a pagar" |
+| **fechada**, valor ≤ 0 (credora) | sim, com "Reabrir fatura" | **não** — não há o que pagar |
+| **paga** | não | sim, "pago" |
+
+O ciclo, medido:
+
+```text
+FC-00004 aberta ................ Títulos a Pagar: 2 · em aberto 6.000,00
+  ↓ fechar por 220
+FC-00004 fechada ............... Títulos a Pagar: 3 · em aberto 6.220,00
+  ↓ reabrir
+FC-00004 aberta ................ Títulos a Pagar: 2 · em aberto 6.000,00
+  ↓ fechar de novo, agora por 240 (ajuste de 20 classificado)
+FC-00004 fechada ............... Títulos a Pagar: 3 · em aberto 6.240,00
+```
+
+**O código não muda.** Volta como FC-00004, com o valor novo. E o razão do
+cartão fica com exatamente dois lançamentos (item 220 + ajuste 20) — a
+reabertura apagou os do primeiro fechamento, o segundo recriou. Sem
+duplicata.
+
+⚠️ **A única exceção ao "fechou, desceu":** a fatura credora. Ela fecha,
+some da fila de pagamento e continua visível só na aba Cartão. Foi por
+isso que a aba passou a listar fechadas — antes ela não existia em lugar
+nenhum depois do fechamento.
+
+### Ordem combinada das pendências (29/08/2026)
+
+1. **PP paga no cartão** — o próximo. É o que falta para a fatura conter
+   mais do que avulsa.
+2. **Teste ponta a ponta da errata** — depois do ajuste da PP.
+3. **Exportação contábil** — junto com a exportação das contas, quando o
+   layout do sistema do contador estiver definido, para sair tudo de uma
+   vez e do jeito certo. Não fazer por partes.
+
