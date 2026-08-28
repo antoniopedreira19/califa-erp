@@ -58,6 +58,12 @@ export interface BaixaTituloAlvo {
    * cartão são coletados.
    */
   isDevolucao?: boolean;
+  /**
+   * `true` na baixa da fatura de cartão: o campo Forma de pagamento
+   * aparece, mas sem a opção "Cartão de Crédito" — fatura de cartão não
+   * se paga com outro cartão, e o banco recusa (28/08/2026).
+   */
+  semCartao?: boolean;
 }
 
 export function BaixaTituloDialog({
@@ -286,6 +292,7 @@ export function BaixaTituloDialog({
               onChange={handleFormaPagamento}
               disabled={pending}
               obrigatorio
+              semCartao={alvo.semCartao === true}
             />
           )}
 

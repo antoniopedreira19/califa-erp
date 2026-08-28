@@ -9,17 +9,22 @@
  * - Filtro de status (a_pagar | pago | todos).
  * - Filtrar por cartão (dropdown) e por período (`data_pagamento`).
  * - Agrupar em seções por `cartao_credito_id`.
- * - Seleção múltipla APENAS de títulos "a pagar", limitada a UM cartão por
- *   vez — trocar de cartão limpa a seleção e exibe aviso.
- * - Barra sticky no rodapé quando há seleção → abre `BaixaLoteCartaoDialog`.
- * - Linhas pagas: sem checkbox, chip "Pago" e clique abre a conferência da
- *   baixa (`BaixaRegistradaDialog`), com estorno se preciso.
+ * - Fechar a fatura aberta do cartão (`FecharFaturaDialog`).
+ * - Linhas pagas: chip "Pago" e clique abre a conferência da baixa
+ *   (`BaixaRegistradaDialog`), com estorno se preciso.
+ *
+ * ⚠️ Aqui NÃO se dá baixa. Item de cartão não sai da conta bancária um a
+ * um: ele espera a fatura fechar e sai na baixa dela, uma só, na aba
+ * Títulos a Pagar. A seleção múltipla e o "Baixar" em lote que existiam
+ * nesta tela faziam o contrário — um lançamento no banco por item — e
+ * foram removidos em 28/08/2026, junto com a trava que o banco passou a
+ * impor em `dar_baixa_avulsa_com_plano`.
  */
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { CheckCheck, CreditCard, Eye, Info, Plus } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
 import {
   Select,
   SelectTrigger,
@@ -28,7 +33,6 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import type {
-  ContaBancaria,
   PlanoContaTipo,
   PlanoContaSubtipo,
   OrigemTitulo,
@@ -36,15 +40,15 @@ import type {
 import type { CartaoOption } from "@/components/financeiro/forma-pagamento-field";
 import type { TituloRow } from "./titulos-pagar-list";
 import {
-  BaixaLoteCartaoDialog,
-  type TituloSelecionado,
-} from "./baixa-lote-cartao-dialog";
-import {
   BaixaRegistradaDialog,
   type BaixaRegistradaAlvo,
 } from "@/components/financeiro/baixa-registrada-dialog";
 import { estornarBaixaTitulo } from "./actions-titulos";
 import { ContaAvulsaDrawer } from "./conta-avulsa-drawer";
+import {
+  FecharFaturaDialog,
+  type FaturaAberta,
+} from "./fechar-fatura-dialog";
 
 type StatusFiltro = "a_pagar" | "pago" | "todos";
 
@@ -131,7 +135,7 @@ interface Props {
   rows: TituloRow[];
   /** Cartões ativos — para filtro e para nome/bandeira do grupo. */
   cartoes: CartaoOption[];
-  contas: ContaBancaria[];
+  /** Plano de contas — só para classificar a diferença no fechamento. */
   tipos: PlanoContaTipo[];
   subtipos: PlanoContaSubtipo[];
   /** Daqui para baixo, só o que o drawer de conta avulsa precisa para o
@@ -148,6 +152,10 @@ interface Props {
     regional_id: string | null;
   }>;
   regionais: Array<{ id: string; nome: string; ativo: boolean }>;
+  /** Faturas ainda abertas, uma por cartão. É delas que sai o botão de
+   *  fechar — e é o fechamento que transforma os itens em lançamentos e
+   *  faz a fatura descer para Títulos a Pagar (28/08/2026). */
+  faturasAbertas: FaturaAberta[];
 }
 
 // ---------------------------------------------------------------------------
@@ -157,52 +165,14 @@ interface Props {
 interface GrupoHeaderProps {
   cartao: CartaoOption;
   titulos: TituloRow[];
-  selecionados: Set<string>;
-  onToggleTodos: (cartaoId: string, titulosDoGrupo: TituloRow[]) => void;
-  cartaoSelecionadoAtual: string | null;
 }
 
-function GrupoCartaoHeader({
-  cartao,
-  titulos,
-  selecionados,
-  onToggleTodos,
-  cartaoSelecionadoAtual,
-}: GrupoHeaderProps) {
+function GrupoCartaoHeader({ cartao, titulos }: GrupoHeaderProps) {
   const totalGrupo = titulos.reduce((s, t) => s + t.valor, 0);
   const totalTitulos = titulos.length;
-  // "Selecionar todos" considera só os a pagar — pagos não entram no bulk.
-  const aPagar = titulos.filter((t) => t.status === "a_pagar");
-  const temAlgumSelecionavel = aPagar.length > 0;
-  const todosSelecionados =
-    temAlgumSelecionavel && aPagar.every((t) => selecionados.has(t.id));
-  const algunsSelecionados =
-    !todosSelecionados && aPagar.some((t) => selecionados.has(t.id));
-
-  const outroCartaoSelecionado =
-    cartaoSelecionadoAtual !== null && cartaoSelecionadoAtual !== cartao.id;
 
   return (
     <div className="flex items-center gap-3 rounded-xl border border-border bg-muted/40 px-4 py-3">
-      {/* Checkbox "selecionar todos a pagar deste cartão" */}
-      <input
-        type="checkbox"
-        checked={todosSelecionados}
-        ref={(el) => {
-          if (el) el.indeterminate = algunsSelecionados;
-        }}
-        onChange={() => onToggleTodos(cartao.id, titulos)}
-        disabled={outroCartaoSelecionado || !temAlgumSelecionavel}
-        className="h-4 w-4 cursor-pointer accent-california-red disabled:cursor-not-allowed disabled:opacity-40"
-        title={
-          !temAlgumSelecionavel
-            ? "Nenhum título a pagar neste grupo"
-            : outroCartaoSelecionado
-              ? "Limpe a seleção do outro cartão antes de selecionar aqui"
-              : "Selecionar todos a pagar deste cartão"
-        }
-      />
-
       <CreditCard className="h-4 w-4 shrink-0 text-muted-foreground" />
 
       <div className="flex min-w-0 flex-1 flex-col">
@@ -231,7 +201,6 @@ function GrupoCartaoHeader({
 export function TitulosCartaoList({
   rows: rowsBruto,
   cartoes,
-  contas,
   tipos,
   subtipos,
   tenantId,
@@ -240,7 +209,11 @@ export function TitulosCartaoList({
   clientes,
   jobs,
   regionais,
+  faturasAbertas,
 }: Props) {
+  const [fechandoFatura, setFechandoFatura] = React.useState<FaturaAberta | null>(
+    null,
+  );
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
 
@@ -263,21 +236,7 @@ export function TitulosCartaoList({
   const [conferindo, setConferindo] = React.useState<TituloRow | null>(null);
   const [erroAcao, setErroAcao] = React.useState<string | null>(null);
 
-  // Seleção — Map<cartaoId, Set<tituloId>>
-  // Invariante: no máximo 1 cartão com Set não-vazio.
-  const [selecao, setSelecao] = React.useState<Map<string, Set<string>>>(new Map());
-  const [avisoTroca, setAvisoTroca] = React.useState<string | null>(null);
   const [toastSucesso, setToastSucesso] = React.useState<string | null>(null);
-
-  // Modal de baixa em lote
-  const [modalAberto, setModalAberto] = React.useState(false);
-
-  // Auto-esconder aviso após 4s
-  React.useEffect(() => {
-    if (!avisoTroca) return;
-    const t = setTimeout(() => setAvisoTroca(null), 4000);
-    return () => clearTimeout(t);
-  }, [avisoTroca]);
 
   // Auto-esconder toast de sucesso após 4s
   React.useEffect(() => {
@@ -285,12 +244,6 @@ export function TitulosCartaoList({
     const t = setTimeout(() => setToastSucesso(null), 4000);
     return () => clearTimeout(t);
   }, [toastSucesso]);
-
-  // Limpa seleção quando o filtro de status muda — evita seleção órfã de
-  // linhas que somem do recorte visível.
-  React.useEffect(() => {
-    setSelecao(new Map());
-  }, [statusFiltro]);
 
   // ---------------------------------------------------------------------------
   // Filtros em memória
@@ -333,115 +286,6 @@ export function TitulosCartaoList({
   );
 
   // ---------------------------------------------------------------------------
-  // Estado da seleção — cartão ativo e ids selecionados
-  // ---------------------------------------------------------------------------
-
-  /** O único cartão que tem seleção ativa (ou null se vazio). */
-  const cartaoSelecionadoId = React.useMemo<string | null>(() => {
-    for (const [cid, ids] of selecao.entries()) {
-      if (ids.size > 0) return cid;
-    }
-    return null;
-  }, [selecao]);
-
-  const idsSelecionados: Set<string> = React.useMemo(
-    () => (cartaoSelecionadoId ? (selecao.get(cartaoSelecionadoId) ?? new Set()) : new Set()),
-    [selecao, cartaoSelecionadoId],
-  );
-
-  const titulosSelecionadosRows = React.useMemo<TituloRow[]>(() => {
-    if (!cartaoSelecionadoId) return [];
-    const grupo = grupos.find(([cid]) => cid === cartaoSelecionadoId)?.[1] ?? [];
-    return grupo.filter((r) => idsSelecionados.has(r.id));
-  }, [cartaoSelecionadoId, grupos, idsSelecionados]);
-
-  const titulosSelecionados: TituloSelecionado[] = React.useMemo(
-    () =>
-      titulosSelecionadosRows.map((r) => ({
-        origem: r.origem,
-        id: r.id,
-        descricao: r.descricao,
-        valor: r.valor,
-      })),
-    [titulosSelecionadosRows],
-  );
-
-  const totalSelecionado = titulosSelecionados.reduce((s, t) => s + t.valor, 0);
-
-  // ---------------------------------------------------------------------------
-  // Handlers de seleção
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Toggle de um título individual.
-   * Se o título pertence a um cartão DIFERENTE do atual, limpa a seleção
-   * anterior e avisa o usuário.
-   */
-  function handleToggleTitulo(cartaoId: string, tituloId: string) {
-    setSelecao((prev) => {
-      const next = new Map(prev);
-
-      // Há outro cartão selecionado?
-      let cartaoAtual: string | null = null;
-      for (const [cid, ids] of next.entries()) {
-        if (ids.size > 0) { cartaoAtual = cid; break; }
-      }
-
-      if (cartaoAtual !== null && cartaoAtual !== cartaoId) {
-        // Limpar seleção anterior
-        next.set(cartaoAtual, new Set());
-        setAvisoTroca("Seleção do cartão anterior descartada. Agora selecionando neste cartão.");
-      }
-
-      const ids = new Set(next.get(cartaoId) ?? []);
-      if (ids.has(tituloId)) {
-        ids.delete(tituloId);
-      } else {
-        ids.add(tituloId);
-      }
-      next.set(cartaoId, ids);
-      return next;
-    });
-  }
-
-  /**
-   * Toggle "selecionar todos" de um grupo — considera SÓ os títulos "a pagar"
-   * do grupo. Pagos ficam de fora (não têm o que baixar de novo).
-   * Mesma regra de cartão único: se havia outro cartão selecionado, descarta.
-   */
-  function handleToggleTodos(cartaoId: string, titulosDoGrupo: TituloRow[]) {
-    setSelecao((prev) => {
-      const next = new Map(prev);
-
-      let cartaoAtual: string | null = null;
-      for (const [cid, ids] of next.entries()) {
-        if (ids.size > 0) { cartaoAtual = cid; break; }
-      }
-
-      if (cartaoAtual !== null && cartaoAtual !== cartaoId) {
-        next.set(cartaoAtual, new Set());
-        setAvisoTroca("Seleção do cartão anterior descartada.");
-      }
-
-      const aPagarDoGrupo = titulosDoGrupo.filter((t) => t.status === "a_pagar");
-      if (aPagarDoGrupo.length === 0) return next;
-      const idsAtual = next.get(cartaoId) ?? new Set<string>();
-      const todosSelecionados = aPagarDoGrupo.every((t) => idsAtual.has(t.id));
-
-      if (todosSelecionados) {
-        next.set(cartaoId, new Set());
-      } else {
-        next.set(cartaoId, new Set(aPagarDoGrupo.map((t) => t.id)));
-      }
-      return next;
-    });
-  }
-
-  function limparSelecao() {
-    setSelecao(new Map());
-  }
-
-  // ---------------------------------------------------------------------------
   // Atalhos de data
   // ---------------------------------------------------------------------------
 
@@ -456,15 +300,6 @@ export function TitulosCartaoList({
     setDataDe(de);
     setDataAte(ate);
   }
-
-  // ---------------------------------------------------------------------------
-  // Cartão selecionado — nome para a barra sticky
-  // ---------------------------------------------------------------------------
-
-  const cartaoSelecionado: CartaoOption | null = React.useMemo(() => {
-    if (!cartaoSelecionadoId) return null;
-    return cartoes.find((c) => c.id === cartaoSelecionadoId) ?? null;
-  }, [cartaoSelecionadoId, cartoes]);
 
   // ---------------------------------------------------------------------------
   // Render
@@ -618,14 +453,6 @@ export function TitulosCartaoList({
         </div>
       </div>
 
-      {/* Aviso de troca de cartão */}
-      {avisoTroca && (
-        <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
-          <Info className="h-4 w-4 shrink-0" />
-          {avisoTroca}
-        </div>
-      )}
-
       {/* ------------------------------------------------------------------ */}
       {/* Estado vazio                                                          */}
       {/* ------------------------------------------------------------------ */}
@@ -656,27 +483,59 @@ export function TitulosCartaoList({
               dia_vencimento_fatura: 0,
             };
 
-            const idsDoGrupo = selecao.get(cartaoId) ?? new Set<string>();
-
             return (
               <div key={cartaoId} className="space-y-2">
+                {/* As faturas abertas deste cartão — o que cada uma está
+                    acumulando e o botão que a fecha. Sem fatura aberta,
+                    nada aqui: o cartão ainda não recebeu compra nenhuma.
+
+                    No dia a dia é uma só. Mas uma compra que chega depois
+                    do fechamento rola para a competência seguinte, e aí
+                    duas ficam abertas ao mesmo tempo — mostrar só a
+                    primeira faria a soma da faixa não bater com a da
+                    tabela (28/08/2026). */}
+                {faturasAbertas
+                  .filter((f) => f.cartao_credito_id === cartaoId)
+                  .map((fatura) => (
+                    <div
+                      key={fatura.id}
+                      className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-muted/40 px-4 py-2.5"
+                    >
+                      <div className="flex items-baseline gap-2 text-[12.5px]">
+                        <span className="font-mono font-semibold text-[#b3323c]">
+                          {fatura.codigo}
+                        </span>
+                        <span className="text-muted-foreground">
+                          fatura aberta · fecha{" "}
+                          {formatDate(fatura.competencia_fechamento)} ·{" "}
+                          {fatura.qtd_itens}{" "}
+                          {fatura.qtd_itens === 1 ? "item" : "itens"} ·{" "}
+                          <span className="font-mono font-semibold text-foreground">
+                            {formatCurrency(fatura.soma_itens)}
+                          </span>
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setFechandoFatura(fatura)}
+                        className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-california-red bg-white px-3 py-1.5 text-xs font-semibold text-california-red transition-colors hover:bg-california-red/[0.06]"
+                      >
+                        <CreditCard className="h-3.5 w-3.5" />
+                        Fechar fatura
+                      </button>
+                    </div>
+                  ))}
+
                 {/* Cabeçalho do grupo */}
-                <GrupoCartaoHeader
-                  cartao={cartaoInfo}
-                  titulos={titulosGrupo}
-                  selecionados={idsDoGrupo}
-                  onToggleTodos={handleToggleTodos}
-                  cartaoSelecionadoAtual={cartaoSelecionadoId}
-                />
+                <GrupoCartaoHeader cartao={cartaoInfo} titulos={titulosGrupo} />
 
                 {/* Tabela do grupo */}
                 <div className="rounded-2xl border border-border bg-card shadow-soft">
                   <table className="w-full table-fixed text-sm">
                     <thead>
                       <tr className="border-b border-border bg-muted/30 text-center text-[11px] uppercase tracking-wider text-muted-foreground">
-                        <th className="w-[3%] px-2 py-3" />
                         <th className="w-[9%] px-2 py-3 font-semibold text-left">Origem</th>
-                        <th className="w-[22%] px-3 py-3 font-semibold text-left">Descrição</th>
+                        <th className="w-[25%] px-3 py-3 font-semibold text-left">Descrição</th>
                         <th className="w-[16%] px-3 py-3 font-semibold text-left">Fornecedor</th>
                         <th className="w-[7%] px-2 py-3 font-semibold">Job</th>
                         <th className="w-[10%] px-2 py-3 font-semibold">Vencimento</th>
@@ -702,35 +561,22 @@ export function TitulosCartaoList({
                         })
                         .map((r) => {
                           const pago = r.status === "pago";
-                          const selecionado = idsDoGrupo.has(r.id);
                           return (
                             <tr
                               key={`${r.origem}-${r.id}`}
                               onClick={() => {
-                                if (pago) {
-                                  setErroAcao(null);
-                                  setConferindo(r);
-                                } else {
-                                  handleToggleTitulo(cartaoId, r.id);
-                                }
+                                // Só a linha paga abre alguma coisa: a
+                                // conferência da baixa. A linha a pagar não
+                                // tem ação própria — ela espera a fatura.
+                                if (!pago) return;
+                                setErroAcao(null);
+                                setConferindo(r);
                               }}
                               className={cn(
-                                "cursor-pointer border-b border-border transition-colors last:border-0 hover:bg-accent/40",
-                                selecionado && "bg-emerald-50 hover:bg-emerald-50",
+                                "border-b border-border transition-colors last:border-0",
+                                pago && "cursor-pointer hover:bg-accent/40",
                               )}
                             >
-                              {/* Checkbox — pagos não são selecionáveis. */}
-                              <td className="px-2 py-3 text-center">
-                                {!pago && (
-                                  <input
-                                    type="checkbox"
-                                    checked={selecionado}
-                                    onChange={() => handleToggleTitulo(cartaoId, r.id)}
-                                    onClick={(e) => e.stopPropagation()}
-                                    className="h-4 w-4 cursor-pointer accent-california-red"
-                                  />
-                                )}
-                              </td>
                               {/* Origem */}
                               <td className="px-2 py-3">
                                 <span
@@ -826,75 +672,10 @@ export function TitulosCartaoList({
       {/* ------------------------------------------------------------------ */}
       <p className="flex items-center gap-2 text-xs text-muted-foreground">
         <Info className="h-3.5 w-3.5" />
-        Selecione os títulos de um cartão e clique em &ldquo;Baixar&rdquo; para registrar o pagamento da fatura.
-        Somente títulos do mesmo cartão podem ser baixados juntos.
+        Item de cartão não se baixa aqui. Ele espera a fatura fechar — e a
+        fatura fechada vira um título único em &ldquo;Títulos a Pagar&rdquo;,
+        onde a baixa acontece uma vez só.
       </p>
-
-      {/* ------------------------------------------------------------------ */}
-      {/* Barra sticky no rodapé — aparece quando há seleção                  */}
-      {/* ------------------------------------------------------------------ */}
-      {idsSelecionados.size > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-border bg-white px-6 py-3 shadow-elevated">
-          <div className="mx-auto flex max-w-7xl items-center gap-4">
-            <CreditCard className="h-5 w-5 shrink-0 text-emerald-700" />
-            <span className="flex-1 text-sm">
-              <strong>{idsSelecionados.size}</strong> título
-              {idsSelecionados.size !== 1 ? "s" : ""} selecionado
-              {idsSelecionados.size !== 1 ? "s" : ""} de{" "}
-              <strong>
-                {cartaoSelecionado ? nomeCartao(cartaoSelecionado) : "cartão desconhecido"}
-              </strong>{" "}
-              — Total{" "}
-              <strong className="text-emerald-700">{formatMoney(totalSelecionado)}</strong>
-            </span>
-            <button
-              type="button"
-              onClick={limparSelecao}
-              className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted"
-            >
-              Limpar seleção
-            </button>
-            <button
-              type="button"
-              onClick={() => setModalAberto(true)}
-              className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
-            >
-              <CreditCard className="h-4 w-4" />
-              Baixar
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Espaço extra no rodapé quando a barra sticky está visível */}
-      {idsSelecionados.size > 0 && <div className="h-16" />}
-
-      {/* ------------------------------------------------------------------ */}
-      {/* Modal de baixa em lote                                               */}
-      {/* ------------------------------------------------------------------ */}
-      <BaixaLoteCartaoDialog
-        open={modalAberto}
-        onOpenChange={(o) => {
-          if (!o) setModalAberto(false);
-        }}
-        cartaoNome={
-          cartaoSelecionado ? nomeCartao(cartaoSelecionado) : "Cartão desconhecido"
-        }
-        cartaoId={cartaoSelecionadoId ?? ""}
-        titulosSelecionados={titulosSelecionados}
-        contas={contas}
-        tipos={tipos}
-        subtipos={subtipos}
-        onSucesso={() => {
-          setModalAberto(false);
-          limparSelecao();
-          const n = titulosSelecionados.length;
-          setToastSucesso(
-            `Baixa registrada — ${n} título${n !== 1 ? "s" : ""} enviado${n !== 1 ? "s" : ""} para a conciliação.`,
-          );
-          router.refresh();
-        }}
-      />
 
       {/* Dialog de conferência da baixa (para linhas pagas). Espelha o
           padrão do titulos-pagar-list: ver e, se preciso, estornar. */}
@@ -970,6 +751,17 @@ export function TitulosCartaoList({
           </button>
         </div>
       )}
+      <FecharFaturaDialog
+        fatura={fechandoFatura}
+        cartaoNome={
+          cartoes.find((c) => c.id === fechandoFatura?.cartao_credito_id)?.nome ??
+          "Cartão"
+        }
+        tipos={tipos}
+        subtipos={subtipos}
+        onOpenChange={(aberto) => !aberto && setFechandoFatura(null)}
+      />
+
     </div>
   );
 }

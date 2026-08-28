@@ -48,6 +48,13 @@ interface Props {
   ) => void;
   disabled?: boolean;
   obrigatorio?: boolean;
+  /**
+   * Esconde "Cartão de Crédito" da lista. É para o pagamento em que o
+   * cartão não faz sentido nenhum — a baixa da fatura de cartão, que não
+   * se paga com outro cartão. O banco já recusa; sem isto a tela
+   * oferecia um caminho que só terminava em erro (28/08/2026).
+   */
+  semCartao?: boolean;
   /** Erro do formulário, exibido abaixo do campo. */
   error?: string;
 }
@@ -59,14 +66,18 @@ const FORMAS: FormaPagamento[] = [
   "cartao_credito",
 ];
 
+const FORMAS_SEM_CARTAO = FORMAS.filter((f) => f !== "cartao_credito");
+
 export function FormaPagamentoField({
   cartoes,
   value,
   onChange,
   disabled,
   obrigatorio = true,
+  semCartao = false,
   error,
 }: Props) {
+  const formas = semCartao ? FORMAS_SEM_CARTAO : FORMAS;
   function handleFormaChange(nova: FormaPagamento) {
     if (nova !== "cartao_credito") {
       onChange({ forma_pagamento: nova, cartao_credito_id: null });
@@ -116,7 +127,7 @@ export function FormaPagamentoField({
             <SelectValue placeholder="Selecione a forma" />
           </SelectTrigger>
           <SelectContent>
-            {FORMAS.map((f) => (
+            {formas.map((f) => (
               <SelectItem key={f} value={f}>
                 {formaPagamentoLabel(f)}
               </SelectItem>

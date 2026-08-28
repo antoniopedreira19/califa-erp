@@ -2369,3 +2369,171 @@ aditivo, nenhuma linha existente deixa de passar.
 A conta existe e a Conciliação a abre (saldo zero, extrato vazio). **Nada
 roteia compra para ela ainda** — isso é a fatia 3, junto com a fatura. Até
 lá, pagamento no cartão continua debitando o banco como antes.
+
+---
+
+## ⚠️ A fatura de cartão, de ponta a ponta (28/08/2026)
+
+Fecha a fatia 4. O que era "nada roteia compra para a conta do cartão"
+agora é um ciclo inteiro, testado no navegador duas vezes.
+
+### O ciclo
+
+```text
+compra no cartão  →  aba Cartão, dentro de uma fatura ABERTA
+                     (nenhuma baixa individual aqui)
+      ↓ Fechar fatura
+cada item vira UM lançamento na conta do cartão, com o plano de contas DELE
++ a diferença para o valor cobrado vira um lançamento de ajuste classificado
++ a fatura desce para Títulos a Pagar como UM título (FC-00001)
+      ↓ Baixar
+saída no banco  +  entrada na conta do cartão  →  saldo do cartão volta a zero
+```
+
+**Uma baixa por fatura, não uma por item.** É a regra que o Tiago fixou em
+28/08/2026: "caso venhamos a lançar uma avulsa no cartão ela deverá ser
+encaminhada à aba de cartão para depois podermos dar baixa em toda a fatura
+do cartão (uma baixa)".
+
+### O que saiu da aba Cartão
+
+**A seleção múltipla e o botão "Baixar" em lote foram removidos.** Eles
+faziam exatamente o contrário: um lançamento no banco por item
+selecionado. Com `dar_baixa_avulsa_com_plano` passando a recusar forma
+cartão, aquele botão só terminaria em erro.
+
+`baixa-lote-cartao-dialog.tsx` e `darBaixaLoteCartao` (em
+`actions-cartao.ts`) ficaram órfãos — nada importa mais nenhum dos dois.
+Foram deixados no repositório para o Tiago decidir se apaga. A RPC
+`dar_baixa_lote_cartao` continua no banco pelo mesmo motivo.
+
+### Fechar: o ajuste é obrigatório quando há diferença
+
+`fechar_fatura_cartao(fatura, valor_cobrado, ajuste_tipo, ajuste_subtipo,
+ajuste_descricao)`. Se a soma dos itens não bate com o que o banco cobrou,
+a RPC **recusa fechar sem plano de contas do ajuste**, e a mensagem já traz
+os dois números e a diferença. IOF, anuidade e juros aparecem em toda
+fatura e ninguém os lança; sem esse lugar a fatura nunca bateria com o
+extrato.
+
+O diálogo (`fechar-fatura-dialog.tsx`) só mostra Tipo/Subtipo quando existe
+diferença, e aí eles são obrigatórios.
+
+### Pagar: dois lançamentos, um par
+
+`dar_baixa_fatura_cartao` grava saída no banco **e** entrada na conta do
+cartão, ambos com o mesmo plano de contas — é uma transferência entre
+contas, não uma despesa nova. A despesa já está nos lançamentos por item.
+
+⚠️ **Para quem for construir o DRE:** não conte esse par como despesa. A
+despesa do cartão são os lançamentos por item na conta do cartão, com o
+plano de contas de cada compra. O par de pagamento existe para o extrato
+bancário fechar e para o saldo do cartão voltar a zero.
+
+⚠️ **Fatura de cartão não se paga com outro cartão.** Trava na RPC, e o
+diálogo de baixa agora esconde "Cartão de Crédito" da forma de pagamento
+(`BaixaTituloAlvo.semCartao`) em vez de oferecer um caminho que só dá erro.
+
+### Três bugs que o teste achou — e um que não era meu
+
+**1. A conta avulsa nunca era criada.** `criarContaAvulsa` não gravava
+`aprovada_em`/`aprovada_por`, e `chk_avulsa_aprovada_consistente` (de
+12/08/2026) exige os dois em toda linha. `contas_avulsas` estava **vazia**:
+nenhuma avulsa jamais entrou pela tela desde então. O caminho de
+recorrência do banco já carimbava os dois — só o insert da tela não.
+Corrigido em `actions-avulsas.ts`.
+
+**2. A compra entrava em fatura já fechada.** `fatura_aberta_do_cartao`
+procurava a fatura da competência **sem olhar o status**. Lancei uma compra
+depois de pagar a FC-00001 e ela caiu dentro da FC-00001 paga — a fatura
+paga em 312,50 passou a ter 450,00 em itens, sem aviso nenhum. Agora a
+busca exige `status = 'aberta'` e, se a competência já fechou, a compra
+**rola para a seguinte**, como o banco faz. Migration `…200003`, com índice
+único `(cartao_credito_id, competencia_fechamento)` de brinde.
+
+**3. A compra caía uma competência atrasada.** Duas voltas do mesmo
+cálculo: a tela, ao escolher o cartão, preenchia "Data prevista de
+pagamento" com o **vencimento** da próxima fatura (05/10 para uma compra de
+28/08); o gatilho lia esse campo como se fosse a data da compra e calculava
+de novo, chegando na fatura que fecha em 25/10. Agora **a data da compra
+escolhe a fatura** (`current_date`) e a data de pagamento é consequência —
+o vencimento da fatura em que ela caiu. No drawer, o campo de data some
+quando a forma é cartão e vira a frase "Vem da fatura".
+
+⚠️ **Fica em aberto: não existe campo "data da compra".** Uma compra
+lançada com atraso entra na fatura aberta do dia em que foi lançada, não na
+do dia em que foi feita. Combinar com o Tiago se o financeiro precisa
+lançar compra retroativa.
+
+### Duas faturas abertas ao mesmo tempo
+
+Acontece quando uma compra chega depois do fechamento e rola para a
+competência seguinte. A faixa da aba Cartão passou a mostrar **uma por
+fatura aberta**, em ordem de competência — antes mostrava só a primeira, e
+a soma da faixa não batia com a da tabela.
+
+### Arquivos
+
+| Arquivo | O quê |
+|---|---|
+| `_/contas-a-pagar/actions-fatura-cartao.ts` | fechar (gate admin/financeiro + auditoria) |
+| `_/contas-a-pagar/fechar-fatura-dialog.tsx` | soma × cobrado, diferença ao vivo, ajuste |
+| `_/contas-a-pagar/titulos-cartao-list.tsx` | faixas de fatura aberta; sem seleção nem baixa |
+| `_/contas-a-pagar/page.tsx` | faturas abertas (soma pelos itens) e fechadas (viram título) |
+| `_/contas-a-pagar/actions-titulos.ts` | origem `fatura_cartao` → `dar_baixa_fatura_cartao` |
+| `components/financeiro/baixa-titulo-dialog.tsx` | `semCartao` |
+| `_/conciliacao/page.tsx` | Origem cai para o código da fatura quando não há documento |
+
+---
+
+## ⚠️ A conta bancária paga despesa de mais de uma empresa (28/08/2026)
+
+**Mudança de regra, decidida pelo Tiago, que atravessa o financeiro
+inteiro. Vale a pena ler antes de mexer em qualquer baixa.**
+
+### Como era
+
+`lancamentos_financeiros` tinha uma **FK composta**:
+
+```sql
+fk_lancamento_conta_empresa
+FOREIGN KEY (conta_bancaria_id, empresa_id) REFERENCES contas_bancarias(id, empresa_id)
+```
+
+Todo lançamento tinha que carregar a empresa da conta em que caía. Na
+prática: **uma conta bancária pertencia a uma empresa e só pagava despesa
+dela.** A mesma regra estava escrita mais duas vezes, em texto, dentro de
+`dar_baixa_pp` ("Conta bancária não pertence à empresa da PP.") e
+`dar_baixa_avulsa_com_plano`.
+
+### Como é
+
+Quem diz a empresa da despesa é o **documento** — a PP, a avulsa, o item do
+cartão —, não a conta de onde o dinheiro saiu. A FK foi derrubada e as duas
+travas de texto saíram. As funções já gravavam `v_pp.empresa_id` /
+`v_avulsa.empresa_id`; só a trava mudou, a origem do dado é a mesma.
+
+### Por que ninguém tinha esbarrado
+
+Só existe uma conta bancária real (California Santander, da CALIFÓRNIA) e
+as 12 PPs são todas da mesma empresa. O primeiro documento de outra empresa
+a chegar num lançamento foi uma avulsa da HITLAB no cartão, no teste de
+28/08/2026, e ela estourou a FK. **Uma PP da HITLAB paga pela Santander
+daria o mesmo erro hoje** — o cartão só foi o primeiro a chegar lá.
+
+### ⚠️ O que ficou de fora, de propósito
+
+A mesma trava de texto existe em mais **seis** funções:
+
+`dar_baixa_avulsa`, `dar_baixa_pp_parcela`, `dar_baixa_titulo`,
+`dar_baixa_titulo_com_plano`, `dar_baixa_desembolso_parcela`,
+`dar_baixa_devolucao_verba`.
+
+Sem a FK elas não quebram nada — só seguem recusando o cruzamento de
+empresas nos caminhos delas. Cada uma é um caminho de pagamento com teste
+próprio e merece uma passada própria. **Enquanto isso não for feito, o
+sistema está incoerente:** cartão e as duas funções corrigidas aceitam
+empresas cruzadas; as outras seis, não.
+
+Migration `20260828200001_conta_bancaria_paga_de_varias_empresas.sql`.
+
