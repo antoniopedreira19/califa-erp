@@ -110,7 +110,7 @@ export default async function PedidosCompraFinanceiroPage() {
         pago_em, created_at, empresa_id, recorrente_id,
         plano_conta_tipo_id, plano_conta_subtipo_id,
         forma_pagamento, cartao_credito_id,
-        estorno_de_avulsa_id,
+        estorno_de_avulsa_id, parcela_numero, parcela_total, parcela_de_avulsa_id,
         fornecedor:fornecedores(nome, razao_social),
         job:jobs(codigo)
       `)
@@ -482,9 +482,12 @@ export default async function PedidosCompraFinanceiroPage() {
         cartao_credito_id: par.pago_em
           ? baixa?.cartao_credito_id ?? null
           : null,
-        // Nenhuma destas origens é estorno: estorno só existe em compra
-        // de cartão, que vem do laço das avulsas.
+        // Nenhuma destas origens é estorno nem parcela de cartão: as duas
+        // coisas só existem em compra de cartão, que vem do laço das
+        // avulsas.
         estorno_de_avulsa_id: null,
+        compra_id: "",
+        compra_total: 0,
         estornado: 0,
       });
     }
@@ -506,6 +509,9 @@ export default async function PedidosCompraFinanceiroPage() {
     forma_pagamento: FormaPagamento | null;
     cartao_credito_id: string | null;
     estorno_de_avulsa_id: string | null;
+    parcela_numero: number | null;
+    parcela_total: number | null;
+    parcela_de_avulsa_id: string | null;
     fornecedor: { nome: string | null; razao_social: string | null } | null;
     job: { codigo: string } | null;
   }>) {
@@ -521,8 +527,8 @@ export default async function PedidosCompraFinanceiroPage() {
       venc_original: a.data_prevista_pagamento,
       data_pagamento_primeira: a.data_pagamento_primeira,
       valor: Number(a.valor),
-      parcela_numero: 1,
-      parcela_total: 1,
+      parcela_numero: a.parcela_numero ?? 1,
+      parcela_total: a.parcela_total ?? 1,
       status: a.status === "baixada" ? "pago" : "a_pagar",
       empresa_id: a.empresa_id,
       // Sugestão do centro de custo: o plano escolhido na criação.
@@ -540,26 +546,43 @@ export default async function PedidosCompraFinanceiroPage() {
         ? baixa?.cartao_credito_id ?? a.cartao_credito_id
         : a.cartao_credito_id,
       estorno_de_avulsa_id: a.estorno_de_avulsa_id,
-      // Preenchido logo abaixo, quando já existirem todas as linhas: o
-      // estorno pode vir antes da compra nesta ordenação.
+      // A parcela do meio pertence à cabeça; a cabeça e a compra à vista
+      // pertencem a si mesmas.
+      compra_id: a.parcela_de_avulsa_id ?? a.id,
+      // Os dois abaixo são preenchidos na passada seguinte: a parcela 3
+      // pode aparecer antes da 1 nesta ordenação, e o estorno antes das
+      // duas (29/08/2026).
+      compra_total: 0,
       estornado: 0,
     });
   }
 
-  // Quanto de cada compra já foi estornado. Uma passada só, depois que
-  // todas as avulsas viraram linha — o estorno pode aparecer antes da
-  // compra na ordem por data (29/08/2026).
+  // Total de cada compra e quanto dela já foi estornado. Uma passada só,
+  // depois que todas as avulsas viraram linha.
   {
+    const totalPorCompra = new Map<string, number>();
     const estornadoPorCompra = new Map<string, number>();
+
     for (const t of titulos) {
-      if (!t.estorno_de_avulsa_id) continue;
-      estornadoPorCompra.set(
-        t.estorno_de_avulsa_id,
-        (estornadoPorCompra.get(t.estorno_de_avulsa_id) ?? 0) + t.valor,
-      );
+      if (t.origem !== "avulso" && t.origem !== "recorrencia") continue;
+      if (t.estorno_de_avulsa_id) {
+        estornadoPorCompra.set(
+          t.estorno_de_avulsa_id,
+          (estornadoPorCompra.get(t.estorno_de_avulsa_id) ?? 0) + t.valor,
+        );
+      } else {
+        // Soma as parcelas na cabeça. À vista, soma em si mesma.
+        totalPorCompra.set(
+          t.compra_id,
+          (totalPorCompra.get(t.compra_id) ?? 0) + t.valor,
+        );
+      }
     }
+
     for (const t of titulos) {
-      t.estornado = estornadoPorCompra.get(t.id) ?? 0;
+      if (t.origem !== "avulso" && t.origem !== "recorrencia") continue;
+      t.compra_total = totalPorCompra.get(t.compra_id) ?? t.valor;
+      t.estornado = estornadoPorCompra.get(t.compra_id) ?? 0;
     }
   }
 
@@ -616,9 +639,12 @@ export default async function PedidosCompraFinanceiroPage() {
         cartao_credito_id: par.pago_em
           ? baixa?.cartao_credito_id ?? null
           : null,
-        // Nenhuma destas origens é estorno: estorno só existe em compra
-        // de cartão, que vem do laço das avulsas.
+        // Nenhuma destas origens é estorno nem parcela de cartão: as duas
+        // coisas só existem em compra de cartão, que vem do laço das
+        // avulsas.
         estorno_de_avulsa_id: null,
+        compra_id: "",
+        compra_total: 0,
         estornado: 0,
       });
     }
@@ -665,9 +691,12 @@ export default async function PedidosCompraFinanceiroPage() {
       centro_nome: baixa?.centro ?? null,
       forma_pagamento: dev.pago_em ? baixa?.forma_pagamento ?? null : null,
       cartao_credito_id: dev.pago_em ? baixa?.cartao_credito_id ?? null : null,
-      // Nenhuma destas origens é estorno: estorno só existe em compra
-      // de cartão, que vem do laço das avulsas.
+      // Nenhuma destas origens é estorno nem parcela de cartão: as duas
+      // coisas só existem em compra de cartão, que vem do laço das
+      // avulsas.
       estorno_de_avulsa_id: null,
+      compra_id: "",
+      compra_total: 0,
       estornado: 0,
     });
   }
@@ -814,9 +843,12 @@ export default async function PedidosCompraFinanceiroPage() {
       // banco. Sem isto ela cairia na aba Cartão junto com os itens dela.
       forma_pagamento: null,
       cartao_credito_id: null,
-      // Nenhuma destas origens é estorno: estorno só existe em compra
-      // de cartão, que vem do laço das avulsas.
+      // Nenhuma destas origens é estorno nem parcela de cartão: as duas
+      // coisas só existem em compra de cartão, que vem do laço das
+      // avulsas.
       estorno_de_avulsa_id: null,
+      compra_id: "",
+      compra_total: 0,
       estornado: 0,
     });
   }

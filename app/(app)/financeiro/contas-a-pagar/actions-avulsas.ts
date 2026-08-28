@@ -150,6 +150,7 @@ export async function criarContaAvulsa(input: unknown): Promise<Result> {
     return { ok: false, message: error?.message ?? "Falha ao criar conta avulsa." };
   }
 
+
   // Anexos em bulk
   if (d.anexos.length > 0) {
     const rows = d.anexos.map((a) => ({
@@ -210,6 +211,30 @@ export async function criarContaAvulsa(input: unknown): Promise<Result> {
       ok: false,
       message: `Falha ao salvar rateio: ${rateioErr.message}`,
     };
+  }
+
+  // Compra parcelada no cartão: o valor que veio é o TOTAL, e a RPC
+  // reparte. As N linhas nascem numa transação só — três parcelas com a
+  // segunda faltando seria pior do que nenhuma.
+  //
+  // ⚠️ Tem que vir DEPOIS do rateio: a RPC copia o rateio da cabeça para
+  // as irmãs, e rodando antes ela não achava nada para copiar — as
+  // parcelas nasciam sem regional enquanto a primeira tinha (29/08/2026).
+  if (d.parcelas > 1 && d.forma_pagamento === "cartao_credito") {
+    const { error: errParcelas } = await supabase.rpc(
+      "parcelar_compra_cartao",
+      { p_cabeca_id: conta.id, p_parcelas: d.parcelas },
+    );
+    if (errParcelas) {
+      // Aqui SIM desfaz: uma compra que devia ser em 3x e ficou em 1x
+      // com o valor cheio na primeira fatura é pior que erro na tela.
+      await supabase.from("contas_avulsas").delete().eq("id", conta.id);
+      console.error("[avulsa.parcelar]", errParcelas.message);
+      return {
+        ok: false,
+        message: errParcelas.message ?? "Falha ao parcelar a compra.",
+      };
+    }
   }
 
   await logAuditEvent({

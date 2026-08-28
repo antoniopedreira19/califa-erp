@@ -88,11 +88,17 @@ function valorComSinal(r: TituloRow): number {
   return r.estorno_de_avulsa_id ? -r.valor : r.valor;
 }
 
-/** Uma compra ainda aceita estorno enquanto sobra saldo dela. */
+/**
+ * Quanto da COMPRA ainda cabe estornar.
+ *
+ * Mede pelo total do grupo, não pela linha: numa compra em 3x, cada
+ * parcela mostra o botão, mas o teto é a compra inteira — estorná-la é
+ * um crédito só (29/08/2026).
+ */
 function sobraParaEstornar(r: TituloRow): number {
   if (r.estorno_de_avulsa_id) return 0;
   if (r.forma_pagamento !== "cartao_credito") return 0;
-  return r.valor - r.estornado;
+  return r.compra_total - r.estornado;
 }
 
 function hojeISO(): string {
@@ -738,10 +744,14 @@ export function TitulosCartaoList({
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       setEstornando({
-                                        id: r.id,
+                                        // A cabeça, nunca a parcela.
+                                        id: r.compra_id,
                                         codigo: origemLabel(r),
-                                        descricao: r.descricao,
-                                        valor: r.valor,
+                                        descricao:
+                                          r.parcela_total > 1
+                                            ? `${r.descricao} (compra em ${r.parcela_total}x)`
+                                            : r.descricao,
+                                        valor: r.compra_total,
                                         estornado: r.estornado,
                                       });
                                     }}

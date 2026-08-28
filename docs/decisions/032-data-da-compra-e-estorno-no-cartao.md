@@ -83,12 +83,41 @@ dizendo o porquê.
 
 ---
 
+## 5. A fatura volta atrás (29/08/2026, mesma sessão)
+
+```text
+aberta  ⇄  fechada  ⇄  paga
+        reabrir     estornar a baixa
+```
+
+**Reabrir apaga** os lançamentos do fechamento — eles são derivados,
+nascem inteiros a partir dos itens, e nenhum é dinheiro que saiu do
+banco. **Estornar contra-lança**, porque aí o dinheiro saiu. Fatura paga
+não reabre direto: estorna primeiro. Motivo obrigatório nos dois, e vai
+para a auditoria.
+
+## 6. Compra parcelada (29/08/2026, mesma sessão)
+
+Cada parcela é uma avulsa irmã, não uma linha de tabela de parcelas: no
+cartão a parcela **é** a linha da fatura daquele mês.
+
+⚠️ A parcela anda por **competência**, não por mês de calendário. Espaçar
+por mês fazia duas parcelas caírem na mesma fatura quando a primeira
+rolava por competência fechada.
+
+O estorno aponta para a **cabeça** e o teto é o **total do grupo** — a
+compra em 3x estornada por inteiro é um crédito só, e as parcelas já
+pagas continuam pagas.
+
+---
+
 ## O que ficou em aberto
 
 - **PP paga no cartão**: falta `forma_pagamento` e `cartao_credito_id` no
-  pedido de compra, escolhidos na aprovação, pelo financeiro.
-- **Parcelamento** da compra no cartão.
-- **Exportação contábil** a partir da conta do cartão.
+  pedido de compra, escolhidos na aprovação, pelo financeiro. É o que
+  falta para a fatura conter mais do que avulsa.
+- **Exportação contábil** a partir da conta do cartão — depende do layout
+  que o contador precisa.
 
 ## Onde está escrito
 
