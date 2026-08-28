@@ -2,7 +2,12 @@
 
 import * as React from "react";
 import { formatCurrency, cn } from "@/lib/utils";
-import { classificarRentBadge, type GrupoRentabilidade, type VisaoRentabilidade } from "@/lib/relatorios/rentabilidade";
+import {
+  classificarRentBadge,
+  computarResultado,
+  type GrupoRentabilidade,
+  type VisaoRentabilidade,
+} from "@/lib/relatorios/rentabilidade";
 
 interface Props {
   visao: VisaoRentabilidade;
@@ -98,9 +103,13 @@ function somaTotal(grupos: GrupoRentabilidade[]) {
   const imposto = grupos.reduce((s, g) => s + g.bases.imposto, 0);
   const custo = grupos.reduce((s, g) => s + g.bases.custo, 0);
   const bv = grupos.reduce((s, g) => s + g.bases.bv, 0);
-  const resultOp = faturamento - imposto - (custo - bv);
-  const resultGeral = faturamento > 0 ? (resultOp / faturamento) * 100 : null;
-  return { faturamento, imposto, custo, bv, resultadoOperacional: resultOp, resultadoGeral: resultGeral };
+  const { resultadoOperacional, resultadoGeral } = computarResultado({
+    faturamento,
+    imposto,
+    custo,
+    bv,
+  });
+  return { faturamento, imposto, custo, bv, resultadoOperacional, resultadoGeral };
 }
 
 function ColunasBloco({

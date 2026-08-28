@@ -41,6 +41,31 @@ export interface GrupoRentabilidade {
 export const THRESHOLD_RENT_VERDE = 20;
 
 /**
+ * Fórmula-central do Result. Op + Rent% sobre bases já somadas.
+ * Fonte-única para: linha total da tabela, linhas de job individual,
+ * comparativo, e agregarBases. Evita 4 implementações inline da mesma conta.
+ *
+ * `custo - bv` porque BV retorna pra agência, restituindo custo (decisão 022,
+ * mesma lógica de components/resumo-resultado.tsx). `resultadoGeral` volta
+ * `null` quando faturamento = 0 — `calcularResultadoOperacional` só olha o
+ * custo, então precisamos travar o % aqui.
+ */
+export function computarResultado(bases: {
+  faturamento: number;
+  imposto: number;
+  custo: number;
+  bv: number;
+}): { resultadoOperacional: number | null; resultadoGeral: number | null } {
+  const { resultadoOperacional, resultadoGeral } = calcularResultadoOperacional(
+    bases.faturamento,
+    bases.imposto,
+    bases.custo - bases.bv,
+  );
+  const resultadoGeralFinal = bases.faturamento > 0 ? resultadoGeral : null;
+  return { resultadoOperacional, resultadoGeral: resultadoGeralFinal };
+}
+
+/**
  * Soma as bases das linhas e roda a fórmula UMA vez sobre a soma.
  * A regra dura da spec §3.9: `Rent% do grupo` não é média dos `Rent%`
  * dos jobs — é `Result.Op / Faturamento` recalculado das somas.
@@ -60,18 +85,13 @@ export function agregarBases(
   const custo = linhas.reduce((s, l) => s + l.custo_realizado, 0);
   const bv = linhas.reduce((s, l) => s + l.bv_realizado, 0);
 
-  // `custo - bv` porque BV retorna pra agência, restituindo custo
-  // (decisão 022, mesma lógica de components/resumo-resultado.tsx).
-  const { resultadoOperacional, resultadoGeral } = calcularResultadoOperacional(
+  const { resultadoOperacional, resultadoGeral } = computarResultado({
     faturamento,
     imposto,
-    custo - bv,
-  );
-
-  // `calcularResultadoOperacional` só considera custo — se faturamento zerou,
-  // devolveu resultado sem sentido pra %. Força null.
-  const resultadoGeralFinal = faturamento > 0 ? resultadoGeral : null;
-  return { faturamento, imposto, custo, bv, resultadoOperacional, resultadoGeral: resultadoGeralFinal };
+    custo,
+    bv,
+  });
+  return { faturamento, imposto, custo, bv, resultadoOperacional, resultadoGeral };
 }
 
 /**
