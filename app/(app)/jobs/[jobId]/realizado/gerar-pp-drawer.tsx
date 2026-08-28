@@ -414,8 +414,14 @@ export function GerarPPDrawer({
       );
       return;
     }
+    // Verba de Produção é adiantamento: a PP sai ANTES de existir nota —
+    // é justamente para o responsável ir comprar. As notas entram depois,
+    // na prestação de contas, que exige no mínimo uma (27/08/2026).
+    //
+    // Nas demais PPs o anexo continua obrigatório na emissão: ali a nota
+    // do fornecedor já existe, e é ela que justifica o pedido.
     const anexosOk = anexos.filter((a) => a.status === "ok");
-    if (anexosOk.length === 0) {
+    if (!verbaProducao && anexosOk.length === 0) {
       setErro("Pelo menos um anexo com upload concluído é obrigatório.");
       return;
     }
@@ -778,8 +784,16 @@ export function GerarPPDrawer({
             {/* Anexos */}
             <div className="space-y-2">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Anexos * (min 1, max 8MB/arquivo, 25MB total)
+                Anexos{verbaProducao ? "" : " *"} (
+                {verbaProducao ? "opcional" : "min 1"}, max 8MB/arquivo, 25MB
+                total)
               </h3>
+              {verbaProducao && (
+                <p className="text-[11.5px] leading-relaxed text-muted-foreground">
+                  Verba de Produção é adiantamento: as notas entram depois, na
+                  prestação de contas.
+                </p>
+              )}
 
               {uploadPrefix ? (
                 <label className="flex cursor-pointer items-center gap-2 rounded border border-dashed border-border p-3 text-sm hover:border-california-red/40">
