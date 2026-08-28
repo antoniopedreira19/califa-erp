@@ -100,7 +100,7 @@ export function ConciliacaoList({
                     estornada && "text-muted-foreground line-through",
                   )}
                 >
-                  {l.descricao}
+                  {limparPrefixoDescricao(l.descricao, l.origem)}
                 </td>
                 <td className="px-3 py-2 text-xs">
                   {l.fornecedor_nome ?? (
@@ -375,6 +375,23 @@ function tagDaOrigem(
 function formatDate(iso: string): string {
   const [y, m, d] = iso.split("-");
   return `${d}/${m}/${y.slice(2)}`;
+}
+
+/**
+ * A descrição gravada no banco vem prefixada com "PP" ou "Avulsa" pra
+ * origens de compra ("PP PP-00009 1/3 — ..."). Com a tag movida pro
+ * popover, esse prefixo virou redundante — vira "PP PP-00009 1/3" na
+ * tela. Remove só quando bate com o tipo de origem, pra não estropiar
+ * descrições que legitimamente começam com essas letras.
+ */
+function limparPrefixoDescricao(descricao: string, origem: string): string {
+  if (origem.startsWith("pp_") && descricao.startsWith("PP ")) {
+    return descricao.slice(3);
+  }
+  if (origem.startsWith("avulsa_") && descricao.startsWith("Avulsa ")) {
+    return descricao.slice(7);
+  }
+  return descricao;
 }
 
 function trimestreDe(iso: string): string {
