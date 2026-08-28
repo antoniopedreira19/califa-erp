@@ -12,6 +12,10 @@ import {
   classificarRentBadge,
   THRESHOLD_RENT_VERDE,
 } from "../lib/relatorios/rentabilidade";
+import {
+  parseFiltros,
+  filtrosParaQueryString,
+} from "../app/(app)/relatorios/rentabilidade/parse-filtros";
 import type { LinhaJobRentabilidade } from "../lib/types";
 
 let falhas = 0;
@@ -127,6 +131,53 @@ assert("25% é verde", classificarRentBadge(25) === "verde");
 assert("15% é laranja", classificarRentBadge(15) === "laranja");
 assert("0% é laranja", classificarRentBadge(0) === "laranja");
 assert("-5% é vermelho", classificarRentBadge(-5) === "vermelho");
+
+console.log("\n=== 8. parseFiltros defaults ===");
+{
+  const anoAtual = new Date().getFullYear();
+
+  const f = parseFiltros({});
+  assert("ano default = corrente", f.ano === anoAtual);
+  assert("trimestres vazio", f.trimestres.length === 0);
+  assert("visao default = cliente", f.visao === "cliente");
+  assert("modo default = previsto", f.modo === "previsto");
+  assert("compararAno null", f.compararAno === null);
+  assert("faturamentoMinimo null", f.faturamentoMinimo === null);
+}
+
+console.log("\n=== 9. parseFiltros lê multi-select CSV e coerce ===");
+{
+  const f = parseFiltros({
+    ano: "2026",
+    trimestre: "Q1,Q3",
+    cliente: "c1,c2",
+    modo: "realizado",
+    visao: "marca",
+    comparar: "2025",
+    fatmin: "1000000",
+  });
+  assert("ano parsed", f.ano === 2026);
+  assert("2 trimestres", f.trimestres.length === 2);
+  assert("Q1 presente", f.trimestres.includes("Q1"));
+  assert("2 clientes", f.clientesIds.length === 2);
+  assert("modo realizado", f.modo === "realizado");
+  assert("visao marca", f.visao === "marca");
+  assert("compararAno 2025", f.compararAno === 2025);
+  assert("faturamentoMinimo 1000000", f.faturamentoMinimo === 1000000);
+}
+
+console.log("\n=== 10. filtrosParaQueryString roundtrip ===");
+{
+  const original = parseFiltros({
+    ano: "2026", trimestre: "Q1", cliente: "c1", modo: "realizado", visao: "job",
+  });
+  const qs = filtrosParaQueryString(original);
+  const parsed = parseFiltros(Object.fromEntries(new URLSearchParams(qs)));
+  assert("roundtrip ano", parsed.ano === original.ano);
+  assert("roundtrip trimestres", parsed.trimestres.join(",") === original.trimestres.join(","));
+  assert("roundtrip modo", parsed.modo === original.modo);
+  assert("roundtrip visao", parsed.visao === original.visao);
+}
 
 console.log(`\n${falhas === 0 ? "OK" : "FALHOU"}: ${falhas} erro(s)`);
 process.exit(falhas === 0 ? 0 : 1);
