@@ -551,14 +551,17 @@ export function ContaAvulsaDrawer(props: Props) {
                 forma_pagamento: formaPagamento,
                 cartao_credito_id: cartaoCreditoId,
               }}
-              onChange={(v, opts) => {
+              onChange={(v) => {
                 setFormaPagamento(v.forma_pagamento);
                 setCartaoCreditoId(v.cartao_credito_id);
-                if (
-                  v.forma_pagamento === "cartao_credito" &&
-                  opts?.dataPagamentoSugerida
-                ) {
-                  setDataPrevista(opts.dataPagamentoSugerida);
+                // Nada de sugerir data aqui. Quem decide quando um item
+                // de cartão é pago é a fatura em que ele cai, e quem
+                // escolhe a fatura é o banco — a partir da data da
+                // compra. Preencher este campo com o vencimento da
+                // fatura fazia o gatilho recalcular a partir dele e
+                // jogar a compra uma competência à frente (28/08/2026).
+                if (v.forma_pagamento === "cartao_credito") {
+                  setDataPrevista("");
                 }
               }}
               disabled={pending}
@@ -612,7 +615,17 @@ export function ContaAvulsaDrawer(props: Props) {
               ))}
             </div>
 
-            {/* Data prevista de pagamento */}
+            {/* Data prevista de pagamento — no cartão ela não se escolhe:
+                sai do vencimento da fatura em que a compra cair. */}
+            {formaPagamento === "cartao_credito" ? (
+              <div className="space-y-2">
+                <Label>Data prevista de pagamento</Label>
+                <p className="rounded-lg border border-border bg-muted/40 px-3 py-2.5 text-xs leading-relaxed text-muted-foreground">
+                  Vem da fatura. A compra entra na fatura aberta do cartão
+                  e vence junto com ela.
+                </p>
+              </div>
+            ) : (
             <div className="space-y-2">
               <Label>Data prevista de pagamento</Label>
               <DatePicker
@@ -638,6 +651,7 @@ export function ContaAvulsaDrawer(props: Props) {
                 </p>
               ))}
             </div>
+            )}
 
             {/* Job — vem antes de Cliente porque escolher job preenche
                 cliente automaticamente (herdado do projeto do job). */}
