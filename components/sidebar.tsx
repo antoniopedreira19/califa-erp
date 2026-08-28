@@ -18,6 +18,7 @@ import {
   X,
   Lock,
   Wallet,
+  BarChart3,
 } from "lucide-react";
 
 type NavLink = {
@@ -54,6 +55,7 @@ const links: NavLink[] = [
     icon: Wallet,
     activePathPrefixes: ["/financeiro/desembolsos"],
   },
+  { href: "/relatorios", label: "Relatórios", icon: BarChart3 },
   {
     href: "/admin",
     label: "Administração",
