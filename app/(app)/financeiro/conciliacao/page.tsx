@@ -281,7 +281,7 @@ export default async function ConciliacaoPage({
     const ids = raw.map((r) => r.id);
     const origensPorLancamento = new Map<
       string,
-      Array<{ tipo: "job" | "save"; codigo: string | null; nome: string | null; valor: number }>
+      Array<{ tipo: "job" | "save"; job_id: string | null; codigo: string | null; nome: string | null; valor: number }>
     >();
     if (ids.length > 0) {
       // Sem embed: `vw_lancamento_origens` é VIEW, e o PostgREST não tem
@@ -322,6 +322,7 @@ export default async function ConciliacaoPage({
         const alvo = jobPorId.get(o.tipo === "save" ? o.save_job_id : o.job_id);
         lista.push({
           tipo: o.tipo,
+          job_id: alvo?.id ?? null,
           codigo: alvo?.codigo ?? null,
           nome: alvo?.nome ?? null,
           valor: Number(o.valor ?? 0),
