@@ -85,6 +85,23 @@ export const criarContaAvulsaSchema = z
       .regex(dateRegex, "Data em YYYY-MM-DD.")
       .nullable()
       .or(z.literal("").transform(() => null)),
+    // O dia em que a compra aconteceu — é ele que escolhe a fatura do
+    // cartão. Vazio = hoje (29/08/2026).
+    data_compra: z
+      .string()
+      .regex(dateRegex, "Data em YYYY-MM-DD.")
+      .nullable()
+      .or(z.literal("").transform(() => null))
+      .default(null),
+    // A compra que este lançamento estorna. Aponta para a COMPRA, nunca
+    // para a parcela: uma compra em 3x estornada por inteiro é UM estorno
+    // do valor cheio, com as parcelas já pagas seguindo pagas.
+    estorno_de_avulsa_id: z
+      .string()
+      .uuid()
+      .nullable()
+      .or(z.literal("").transform(() => null))
+      .default(null),
     // Fornecedor = destinatário do pagamento; Cliente = rastreabilidade de
     // custo (a qual cliente esse gasto pertence). Podem coexistir.
     fornecedor_id: z

@@ -90,6 +90,17 @@ export interface TituloRow {
   forma_pagamento: FormaPagamento | null;
   /** Cartão de crédito associado. Null para PP ou formas sem cartão. */
   cartao_credito_id: string | null;
+  /**
+   * Preenchido quando ESTA linha é um estorno — o id da compra que ela
+   * desfaz. A aba Cartão mostra a linha como crédito e a subtrai da
+   * fatura (29/08/2026).
+   */
+  estorno_de_avulsa_id: string | null;
+  /**
+   * Quanto desta compra já foi estornado. Serve para a aba Cartão saber
+   * se ainda cabe estorno e qual o teto. Sempre 0 fora do cartão.
+   */
+  estornado: number;
 }
 
 // ---------------------------------------------------------------------------

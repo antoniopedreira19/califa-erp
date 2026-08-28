@@ -160,6 +160,16 @@ export function ContaAvulsaDrawer(props: Props) {
   // Contas a pagar são sempre saída. Se um dia entrar recebimento avulso,
   // vira outra aba/módulo — não este drawer.
   const natureza: "saida" = "saida";
+
+  // O dia em que a compra aconteceu. Só existe no cartão, e é ele que
+  // escolhe a fatura — nasce em hoje porque lançar no dia é o caso comum
+  // (29/08/2026).
+  const [dataCompra, setDataCompra] = React.useState<string>(() => {
+    const d = new Date();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const dia = String(d.getDate()).padStart(2, "0");
+    return `${d.getFullYear()}-${m}-${dia}`;
+  });
   const [descricao, setDescricao] = React.useState<string>(
     conta?.descricao ?? "",
   );
@@ -401,6 +411,12 @@ export function ContaAvulsaDrawer(props: Props) {
       valor,
       natureza,
       data_prevista_pagamento: dataPrevista || null,
+      // Só faz sentido no cartão: fora dele ninguém escolhe fatura.
+      data_compra:
+        formaPagamento === "cartao_credito" ? dataCompra || null : null,
+      // O estorno não nasce por aqui — ele tem tela própria, a partir da
+      // compra que ele desfaz (aba Cartão).
+      estorno_de_avulsa_id: null,
       fornecedor_id: fornecedorId === "__none__" ? null : fornecedorId,
       cliente_id: clienteId === "__none__" ? null : clienteId,
       job_id: jobId === "__none__" ? null : jobId,
@@ -619,10 +635,19 @@ export function ContaAvulsaDrawer(props: Props) {
                 sai do vencimento da fatura em que a compra cair. */}
             {formaPagamento === "cartao_credito" ? (
               <div className="space-y-2">
-                <Label>Data prevista de pagamento</Label>
-                <p className="rounded-lg border border-border bg-muted/40 px-3 py-2.5 text-xs leading-relaxed text-muted-foreground">
-                  Vem da fatura. A compra entra na fatura aberta do cartão
-                  e vence junto com ela.
+                <Label htmlFor="data_compra">Data da compra *</Label>
+                <input
+                  id="data_compra"
+                  type="date"
+                  value={dataCompra}
+                  disabled={pending}
+                  onChange={(e) => setDataCompra(e.target.value)}
+                  className="h-10 w-full rounded-lg border border-border bg-white px-3 text-sm outline-none focus:border-california-red disabled:opacity-50"
+                />
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  É ela que escolhe a fatura. A data de pagamento vem da
+                  fatura em que a compra cair — se a competência dela já
+                  fechou, a compra entra na seguinte.
                 </p>
               </div>
             ) : (

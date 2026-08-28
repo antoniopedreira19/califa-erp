@@ -1879,6 +1879,27 @@ export interface ContaAvulsa {
   recorrente_id: string | null;
   forma_pagamento: FormaPagamento | null;
   cartao_credito_id: string | null;
+  /**
+   * O dia em que a compra aconteceu. É ele que escolhe a fatura do
+   * cartão; vazio significa hoje. Não confundir com
+   * `data_prevista_pagamento`, que no cartão é CONSEQUÊNCIA — o
+   * vencimento da fatura em que a compra caiu (29/08/2026).
+   */
+  data_compra: string | null;
+  /**
+   * A compra que este lançamento estorna, quando ele é um estorno.
+   *
+   * Aponta para a COMPRA, nunca para a parcela: uma compra em 3x
+   * estornada por inteiro é UM estorno do valor cheio, e as parcelas já
+   * pagas continuam pagas — o crédito cai na fatura aberta do dia do
+   * estorno. Se o parcelamento re-apontar isso para a parcela, quebra.
+   *
+   * Quando preenchido, o banco força `natureza = 'entrada'` e copia
+   * empresa, plano de contas, job, fornecedor e cliente da compra: um
+   * estorno com plano diferente do da compra não se anula no DRE, e
+   * anular é a razão de ele existir.
+   */
+  estorno_de_avulsa_id: string | null;
   criado_por: string;
   created_at: string;
   updated_at: string;

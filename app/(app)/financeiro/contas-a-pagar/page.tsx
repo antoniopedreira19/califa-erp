@@ -110,6 +110,7 @@ export default async function PedidosCompraFinanceiroPage() {
         pago_em, created_at, empresa_id, recorrente_id,
         plano_conta_tipo_id, plano_conta_subtipo_id,
         forma_pagamento, cartao_credito_id,
+        estorno_de_avulsa_id,
         fornecedor:fornecedores(nome, razao_social),
         job:jobs(codigo)
       `)
@@ -481,6 +482,10 @@ export default async function PedidosCompraFinanceiroPage() {
         cartao_credito_id: par.pago_em
           ? baixa?.cartao_credito_id ?? null
           : null,
+        // Nenhuma destas origens é estorno: estorno só existe em compra
+        // de cartão, que vem do laço das avulsas.
+        estorno_de_avulsa_id: null,
+        estornado: 0,
       });
     }
   }
@@ -500,6 +505,7 @@ export default async function PedidosCompraFinanceiroPage() {
     plano_conta_subtipo_id: string;
     forma_pagamento: FormaPagamento | null;
     cartao_credito_id: string | null;
+    estorno_de_avulsa_id: string | null;
     fornecedor: { nome: string | null; razao_social: string | null } | null;
     job: { codigo: string } | null;
   }>) {
@@ -533,7 +539,28 @@ export default async function PedidosCompraFinanceiroPage() {
       cartao_credito_id: a.pago_em
         ? baixa?.cartao_credito_id ?? a.cartao_credito_id
         : a.cartao_credito_id,
+      estorno_de_avulsa_id: a.estorno_de_avulsa_id,
+      // Preenchido logo abaixo, quando já existirem todas as linhas: o
+      // estorno pode vir antes da compra nesta ordenação.
+      estornado: 0,
     });
+  }
+
+  // Quanto de cada compra já foi estornado. Uma passada só, depois que
+  // todas as avulsas viraram linha — o estorno pode aparecer antes da
+  // compra na ordem por data (29/08/2026).
+  {
+    const estornadoPorCompra = new Map<string, number>();
+    for (const t of titulos) {
+      if (!t.estorno_de_avulsa_id) continue;
+      estornadoPorCompra.set(
+        t.estorno_de_avulsa_id,
+        (estornadoPorCompra.get(t.estorno_de_avulsa_id) ?? 0) + t.valor,
+      );
+    }
+    for (const t of titulos) {
+      t.estornado = estornadoPorCompra.get(t.id) ?? 0;
+    }
   }
 
   // 4º loop — parcelas de desembolso aprovado/pago viram títulos de origem `desembolso`.
@@ -589,6 +616,10 @@ export default async function PedidosCompraFinanceiroPage() {
         cartao_credito_id: par.pago_em
           ? baixa?.cartao_credito_id ?? null
           : null,
+        // Nenhuma destas origens é estorno: estorno só existe em compra
+        // de cartão, que vem do laço das avulsas.
+        estorno_de_avulsa_id: null,
+        estornado: 0,
       });
     }
   }
@@ -634,6 +665,10 @@ export default async function PedidosCompraFinanceiroPage() {
       centro_nome: baixa?.centro ?? null,
       forma_pagamento: dev.pago_em ? baixa?.forma_pagamento ?? null : null,
       cartao_credito_id: dev.pago_em ? baixa?.cartao_credito_id ?? null : null,
+      // Nenhuma destas origens é estorno: estorno só existe em compra
+      // de cartão, que vem do laço das avulsas.
+      estorno_de_avulsa_id: null,
+      estornado: 0,
     });
   }
 
@@ -646,7 +681,7 @@ export default async function PedidosCompraFinanceiroPage() {
     .from("faturas_cartao")
     .select(
       "id, codigo, cartao_credito_id, competencia_fechamento, data_vencimento, " +
-        "itens:contas_avulsas(valor, status)",
+        "itens:contas_avulsas(valor, status, natureza)",
     )
     .eq("tenant_id", session.activeTenant.id)
     .eq("status", "aberta")
@@ -657,15 +692,27 @@ export default async function PedidosCompraFinanceiroPage() {
 
   const faturasAbertas: FaturaAberta[] = ((faturasAbertasRes ?? []) as any[]).map(
     (f) => {
-      const itens = ((f.itens ?? []) as Array<{ valor: number; status: string }>)
-        .filter((i) => i.status === "aprovada");
+      const itens = (
+        (f.itens ?? []) as Array<{
+          valor: number;
+          status: string;
+          natureza: "entrada" | "saida";
+        }>
+      ).filter((i) => i.status === "aprovada");
       return {
         id: f.id,
         codigo: f.codigo,
         cartao_credito_id: f.cartao_credito_id,
         competencia_fechamento: f.competencia_fechamento,
         data_vencimento: f.data_vencimento,
-        soma_itens: itens.reduce((s, i) => s + Number(i.valor ?? 0), 0),
+        // Com sinal: o estorno é 'entrada' e ABATE a fatura. Somar tudo
+        // como positivo inflaria o total e faria o fechamento pedir um
+        // ajuste que não existe (29/08/2026).
+        soma_itens: itens.reduce(
+          (s, i) =>
+            s + (i.natureza === "entrada" ? -Number(i.valor ?? 0) : Number(i.valor ?? 0)),
+          0,
+        ),
         qtd_itens: itens.length,
       };
     },
@@ -701,6 +748,12 @@ export default async function PedidosCompraFinanceiroPage() {
   };
 
   for (const f of (faturasRes ?? []) as any[]) {
+    // Fatura credora — estorno maior que as compras do mês — não desce
+    // para Títulos a Pagar: não há o que pagar. O crédito fica na conta
+    // do cartão e abate a próxima fatura, que é o que a operadora faz
+    // (29/08/2026).
+    if (Number(f.valor_cobrado ?? 0) <= 0) continue;
+
     const cartaoNome = f.cartao?.nome ?? "Cartão";
     titulos.push({
       id: f.id,
@@ -726,6 +779,10 @@ export default async function PedidosCompraFinanceiroPage() {
       // banco. Sem isto ela cairia na aba Cartão junto com os itens dela.
       forma_pagamento: null,
       cartao_credito_id: null,
+      // Nenhuma destas origens é estorno: estorno só existe em compra
+      // de cartão, que vem do laço das avulsas.
+      estorno_de_avulsa_id: null,
+      estornado: 0,
     });
   }
 

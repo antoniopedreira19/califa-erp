@@ -151,6 +151,7 @@ export type AuditAction =
   // lançamentos; pagar é a transferência banco -> cartão.
   | "fatura_cartao.fechada"
   | "fatura_cartao.paga"
+  | "cartao.estorno_lancado"
   | "cartao_credito.criado"
   | "cartao_credito.atualizado"
   | "cartao_credito.inativado"
