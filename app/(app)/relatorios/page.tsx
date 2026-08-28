@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BarChart3, ArrowRight, TrendingUp, type LucideIcon } from "lucide-react";
+import { BarChart3, ArrowRight, TrendingUp, FileText, type LucideIcon } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
@@ -31,6 +31,12 @@ export default async function RelatoriosPage() {
           icon={TrendingUp}
           title="Rentabilidade de Jobs"
           description="Faturamento, resultado operacional e rentabilidade por cliente, marca ou job. Comparativo entre períodos."
+        />
+        <RelatorioCard
+          href="/relatorios/faturamento"
+          icon={FileText}
+          title="Faturamento de Jobs"
+          description="Valor contratado × valor faturado por job, com saldo e status (Não Faturado, Parcial, Faturado)."
         />
       </div>
     </div>
