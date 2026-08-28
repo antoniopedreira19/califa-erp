@@ -23,7 +23,15 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { CheckCheck, CreditCard, Eye, Info, Plus, Undo2 } from "lucide-react";
+import {
+  CheckCheck,
+  CreditCard,
+  Eye,
+  Info,
+  Unlock,
+  Plus,
+  Undo2,
+} from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import {
   Select,
@@ -45,13 +53,14 @@ import {
 } from "@/components/financeiro/baixa-registrada-dialog";
 import { estornarBaixaTitulo } from "./actions-titulos";
 import { ContaAvulsaDrawer } from "./conta-avulsa-drawer";
+import { ReabrirFaturaDialog } from "./reabrir-fatura-dialog";
 import {
   EstornarCompraDialog,
   type CompraParaEstorno,
 } from "./estornar-compra-dialog";
 import {
   FecharFaturaDialog,
-  type FaturaAberta,
+  type FaturaDoCartao,
 } from "./fechar-fatura-dialog";
 
 type StatusFiltro = "a_pagar" | "pago" | "todos";
@@ -172,10 +181,18 @@ interface Props {
     regional_id: string | null;
   }>;
   regionais: Array<{ id: string; nome: string; ativo: boolean }>;
-  /** Faturas ainda abertas, uma por cartão. É delas que sai o botão de
-   *  fechar — e é o fechamento que transforma os itens em lançamentos e
-   *  faz a fatura descer para Títulos a Pagar (28/08/2026). */
-  faturasAbertas: FaturaAberta[];
+  /**
+   * As faturas que ainda moram nesta aba: abertas e fechadas.
+   *
+   * Da aberta sai o botão de FECHAR — e é o fechamento que transforma os
+   * itens em lançamentos e faz a fatura descer para Títulos a Pagar.
+   * Da fechada sai o de REABRIR, para quando aparece compra retroativa ou
+   * o valor não bate com o extrato (29/08/2026).
+   *
+   * A paga não vem: ela vive em Títulos a Pagar, e desfazê-la é estorno
+   * da baixa, não reabertura.
+   */
+  faturasDoCartao: FaturaDoCartao[];
 }
 
 // ---------------------------------------------------------------------------
@@ -229,9 +246,11 @@ export function TitulosCartaoList({
   clientes,
   jobs,
   regionais,
-  faturasAbertas,
+  faturasDoCartao,
 }: Props) {
-  const [fechandoFatura, setFechandoFatura] = React.useState<FaturaAberta | null>(
+  const [reabrindoFatura, setReabrindoFatura] =
+    React.useState<FaturaDoCartao | null>(null);
+  const [fechandoFatura, setFechandoFatura] = React.useState<FaturaDoCartao | null>(
     null,
   );
   const router = useRouter();
@@ -508,46 +527,81 @@ export function TitulosCartaoList({
 
             return (
               <div key={cartaoId} className="space-y-2">
-                {/* As faturas abertas deste cartão — o que cada uma está
-                    acumulando e o botão que a fecha. Sem fatura aberta,
-                    nada aqui: o cartão ainda não recebeu compra nenhuma.
+                {/* As faturas deste cartão que ainda moram aqui.
 
-                    No dia a dia é uma só. Mas uma compra que chega depois
-                    do fechamento rola para a competência seguinte, e aí
-                    duas ficam abertas ao mesmo tempo — mostrar só a
-                    primeira faria a soma da faixa não bater com a da
-                    tabela (28/08/2026). */}
-                {faturasAbertas
+                    ABERTA: acumulando, com o botão que a fecha. No dia a
+                    dia é uma só, mas uma compra que chega depois do
+                    fechamento rola para a competência seguinte e aí duas
+                    ficam abertas ao mesmo tempo — mostrar só a primeira
+                    faria a soma da faixa não bater com a da tabela
+                    (28/08/2026).
+
+                    FECHADA: já virou lançamento e desceu para Títulos a
+                    Pagar, mas continua visível aqui com o botão de
+                    reabrir — é por onde se corrige compra retroativa ou
+                    valor que não bate com o extrato. A fatura credora,
+                    que não gera título, só existe aqui (29/08/2026). */}
+                {faturasDoCartao
                   .filter((f) => f.cartao_credito_id === cartaoId)
-                  .map((fatura) => (
-                    <div
-                      key={fatura.id}
-                      className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-muted/40 px-4 py-2.5"
-                    >
-                      <div className="flex items-baseline gap-2 text-[12.5px]">
-                        <span className="font-mono font-semibold text-[#b3323c]">
-                          {fatura.codigo}
-                        </span>
-                        <span className="text-muted-foreground">
-                          fatura aberta · fecha{" "}
-                          {formatDate(fatura.competencia_fechamento)} ·{" "}
-                          {fatura.qtd_itens}{" "}
-                          {fatura.qtd_itens === 1 ? "item" : "itens"} ·{" "}
-                          <span className="font-mono font-semibold text-foreground">
-                            {formatCurrency(fatura.soma_itens)}
-                          </span>
-                        </span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setFechandoFatura(fatura)}
-                        className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-california-red bg-white px-3 py-1.5 text-xs font-semibold text-california-red transition-colors hover:bg-california-red/[0.06]"
+                  .map((fatura) => {
+                    const fechada = fatura.status === "fechada";
+                    const credora = fechada && fatura.soma_itens <= 0;
+                    return (
+                      <div
+                        key={fatura.id}
+                        className={cn(
+                          "flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-2.5",
+                          fechada
+                            ? "border-[#d7d7d7] bg-white"
+                            : "border-border bg-muted/40",
+                        )}
                       >
-                        <CreditCard className="h-3.5 w-3.5" />
-                        Fechar fatura
-                      </button>
-                    </div>
-                  ))}
+                        <div className="flex items-baseline gap-2 text-[12.5px]">
+                          <span className="font-mono font-semibold text-[#b3323c]">
+                            {fatura.codigo}
+                          </span>
+                          <span className="text-muted-foreground">
+                            {fechada ? "fatura fechada" : "fatura aberta"} ·
+                            fecha {formatDate(fatura.competencia_fechamento)} ·{" "}
+                            {fatura.qtd_itens}{" "}
+                            {fatura.qtd_itens === 1 ? "item" : "itens"} ·{" "}
+                            <span className="font-mono font-semibold text-foreground">
+                              {formatCurrency(fatura.soma_itens)}
+                            </span>
+                            {credora && (
+                              <span className="ml-1 text-[#047857]">
+                                · credora, nada a pagar
+                              </span>
+                            )}
+                            {fechada && !credora && (
+                              <span className="ml-1">
+                                · aguardando baixa em Títulos a Pagar
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                        {fechada ? (
+                          <button
+                            type="button"
+                            onClick={() => setReabrindoFatura(fatura)}
+                            className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:border-california-red hover:text-california-red"
+                          >
+                            <Unlock className="h-3.5 w-3.5" />
+                            Reabrir fatura
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setFechandoFatura(fatura)}
+                            className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-california-red bg-white px-3 py-1.5 text-xs font-semibold text-california-red transition-colors hover:bg-california-red/[0.06]"
+                          >
+                            <CreditCard className="h-3.5 w-3.5" />
+                            Fechar fatura
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
 
                 {/* Cabeçalho do grupo */}
                 <GrupoCartaoHeader cartao={cartaoInfo} titulos={titulosGrupo} />
@@ -808,6 +862,12 @@ export function TitulosCartaoList({
           </button>
         </div>
       )}
+      <ReabrirFaturaDialog
+        fatura={reabrindoFatura}
+        onOpenChange={(aberto) => !aberto && setReabrindoFatura(null)}
+        onSucesso={setToastSucesso}
+      />
+
       <EstornarCompraDialog
         compra={estornando}
         onOpenChange={(aberto) => !aberto && setEstornando(null)}

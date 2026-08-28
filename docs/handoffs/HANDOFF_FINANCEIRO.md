@@ -2612,3 +2612,87 @@ painel de fatura credora → fecha sem gerar título → saldo do cartão
 segue zero. Teto do estorno barrado no cliente e no banco. Compra
 retroativa cai na competência certa.
 
+---
+
+## ⚠️ A fatura volta atrás: reabrir e estornar (29/08/2026)
+
+Fechar era porta de mão única. Se aparecesse compra retroativa depois do
+fechamento, ou se o valor não batesse com o extrato, não havia o que
+fazer. Agora a escada tem os dois sentidos:
+
+```text
+aberta  ⇄  fechada  ⇄  paga
+        reabrir     estornar a baixa
+```
+
+### A diferença entre os dois — e por que ela importa
+
+**REABRIR apaga.** Os lançamentos do fechamento são derivados: nascem
+inteiros a partir dos itens, e nenhum corresponde a dinheiro que saiu do
+banco (a fatura não foi paga). O fechamento seguinte os recria idênticos.
+Contra-lançar aqui encheria o razão do cartão de pares +150/−150 a cada
+correção, sem ganho nenhum.
+
+**ESTORNAR contra-lança.** Aqui o dinheiro saiu de verdade, e o extrato
+do banco também vai mostrar as duas pernas.
+
+Fatura paga **não reabre direto**: estorna a baixa (volta para fechada) e
+só então reabre. A RPC recusa e explica.
+
+### `lancamentos_financeiros.papel_na_fatura`
+
+`item` | `ajuste` | `pagamento` | `pagamento_estorno`. Null fora do cartão.
+
+Existe porque reabrir precisa apagar **exatamente** o que o fechamento
+criou, sem encostar no pagamento. Dava para deduzir por conta + origem +
+forma de pagamento, e essa dedução quebraria em silêncio no dia em que
+alguém mudasse qualquer um dos três. Migration com backfill do que já
+existia.
+
+### A fatura fechada voltou a ser visível
+
+A aba Cartão agora lista abertas **e** fechadas. Antes, fatura fechada
+sumia daqui e só existia como título em Títulos a Pagar — e a fatura
+CREDORA, que não gera título, não existia em lugar nenhum depois de
+fechada. A faixa da fechada diz "aguardando baixa em Títulos a Pagar" ou
+"credora, nada a pagar", e traz o botão de reabrir.
+
+### Bug corrigido: estornar a baixa da fatura não funcionava
+
+`estornarBaixaTitulo` não tinha ramo para `fatura_cartao`, então a fatura
+caía no caminho da conta avulsa com o id da FATURA e respondia "Conta
+avulsa não encontrada". Entrou junto o preenchimento de "Pago em ·
+conta · centro de custo" na conferência da baixa, que abria com três
+travessões.
+
+---
+
+## 🔥 Regressão de 28/08 que eu mesmo causei — leia antes de mexer em FK
+
+A migration `20260828200001` derrubou a FK COMPOSTA
+`fk_lancamento_conta_empresa (conta_bancaria_id, empresa_id)` para soltar
+a conta da empresa. **O que passou batido: aquela era a ÚNICA chave
+estrangeira entre `lancamentos_financeiros` e `contas_bancarias`.**
+
+Derrubá-la não soltou só a empresa — soltou a conta inteira.
+
+**O que quebrou, por um dia:**
+
+1. **Integridade.** Nada impedia um lançamento de apontar para uma conta
+   inexistente. (Nenhuma linha ficou órfã; conferido antes de recriar.)
+2. **PostgREST.** Sem FK ele não conhece a relação, e **todo** embed
+   `conta:contas_bancarias(...)` a partir de lançamentos passou a
+   responder `Could not find a relationship ... in the schema cache` —
+   derrubando a query inteira, não só o embed. Na aba Títulos a Pagar
+   isso apagou o "Pago em · conta · centro de custo" das linhas pagas.
+
+Corrigido em `20260829120001`, com a FK simples que sempre deveria ter
+existido ao lado da composta, mais índice em
+`(conta_bancaria_id, data_movimento)` — o lado que a Conciliação varre.
+
+⚠️ **A lição, para a próxima:** ao derrubar constraint da outra frente,
+verifique o que MAIS ela sustentava. FK composta costuma ser duas regras
+coladas no mesmo objeto, e o `\d` da tabela não avisa qual delas alguém
+mais está usando. Rodar a tela depois da migration teria pego isto — eu
+rodei a aba Cartão, não a Títulos a Pagar > Pagos.
+

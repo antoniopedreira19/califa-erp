@@ -7,7 +7,7 @@ import { PedidosCompraList, type PPRow } from "./pedidos-compra-list";
 import { ContasPagarTabs } from "./contas-pagar-tabs";
 import { TitulosPagarList, type TituloRow } from "./titulos-pagar-list";
 import { TitulosCartaoList } from "./titulos-cartao-list";
-import type { FaturaAberta } from "./fechar-fatura-dialog";
+import type { FaturaDoCartao } from "./fechar-fatura-dialog";
 import { RecorrentesList, type RecorrenteRow } from "./recorrentes-list";
 import { DesembolsosContasPagarList, type DesembolsoRow } from "./desembolsos-list";
 import type { PPStatus, PlanoContaTipo, PlanoContaSubtipo, ContaBancaria, FormaPagamento, BandeiraCartao, DesembolsoStatus } from "@/lib/types";
@@ -681,42 +681,57 @@ export default async function PedidosCompraFinanceiroPage() {
     .from("faturas_cartao")
     .select(
       "id, codigo, cartao_credito_id, competencia_fechamento, data_vencimento, " +
-        "itens:contas_avulsas(valor, status, natureza)",
+        "status, valor_cobrado, itens:contas_avulsas(valor, status, natureza)",
     )
     .eq("tenant_id", session.activeTenant.id)
-    .eq("status", "aberta")
+    // Fechada entra junto: ela ainda mora na aba Cartão, com o botão de
+    // reabrir. A paga não — essa vive em Títulos a Pagar, e desfazê-la é
+    // estorno da baixa, não reabertura (29/08/2026).
+    .in("status", ["aberta", "fechada"])
     // Ordem de competência: quando um cartão tem mais de uma aberta — a
     // compra que chegou depois do fechamento e rolou para a seguinte —, a
     // que fecha primeiro é a que o financeiro fecha primeiro.
     .order("competencia_fechamento", { ascending: true });
 
-  const faturasAbertas: FaturaAberta[] = ((faturasAbertasRes ?? []) as any[]).map(
-    (f) => {
-      const itens = (
-        (f.itens ?? []) as Array<{
-          valor: number;
-          status: string;
-          natureza: "entrada" | "saida";
-        }>
-      ).filter((i) => i.status === "aprovada");
-      return {
-        id: f.id,
-        codigo: f.codigo,
-        cartao_credito_id: f.cartao_credito_id,
-        competencia_fechamento: f.competencia_fechamento,
-        data_vencimento: f.data_vencimento,
-        // Com sinal: o estorno é 'entrada' e ABATE a fatura. Somar tudo
-        // como positivo inflaria o total e faria o fechamento pedir um
-        // ajuste que não existe (29/08/2026).
-        soma_itens: itens.reduce(
-          (s, i) =>
-            s + (i.natureza === "entrada" ? -Number(i.valor ?? 0) : Number(i.valor ?? 0)),
-          0,
-        ),
-        qtd_itens: itens.length,
-      };
-    },
-  );
+  const faturasDoCartao: FaturaDoCartao[] = (
+    (faturasAbertasRes ?? []) as any[]
+  ).map((f) => {
+    const todos = (f.itens ?? []) as Array<{
+      valor: number;
+      status: string;
+      natureza: "entrada" | "saida";
+    }>;
+    // Na aberta os itens estão em "aprovada"; na fechada eles já viraram
+    // lançamento e foram para "baixada". Contar só os aprovados na
+    // fechada daria zero itens e zero reais.
+    const fechada = f.status === "fechada";
+    const itens = fechada
+      ? todos
+      : todos.filter((i) => i.status === "aprovada");
+    return {
+      id: f.id,
+      codigo: f.codigo,
+      cartao_credito_id: f.cartao_credito_id,
+      competencia_fechamento: f.competencia_fechamento,
+      data_vencimento: f.data_vencimento,
+      // Com sinal: o estorno é 'entrada' e ABATE a fatura. Somar tudo
+      // como positivo inflaria o total e faria o fechamento pedir um
+      // ajuste que não existe (29/08/2026). Na fechada quem manda é o
+      // valor cobrado, que já embute o ajuste.
+      soma_itens: fechada
+        ? Number(f.valor_cobrado ?? 0)
+        : itens.reduce(
+            (s, i) =>
+              s +
+              (i.natureza === "entrada"
+                ? -Number(i.valor ?? 0)
+                : Number(i.valor ?? 0)),
+            0,
+          ),
+      qtd_itens: itens.length,
+      status: f.status as "aberta" | "fechada",
+    };
+  });
 
   // ---- Faturas de cartão FECHADAS ----
   //
@@ -731,7 +746,15 @@ export default async function PedidosCompraFinanceiroPage() {
     .from("faturas_cartao")
     .select(
       "id, codigo, competencia_fechamento, data_vencimento, status, valor_cobrado, " +
-        "cartao:cartoes_credito!inner(nome, ultimos_4_digitos, empresa_id)",
+        "cartao:cartoes_credito!inner(nome, ultimos_4_digitos, empresa_id), " +
+        // A perna bancária do pagamento: é dela que saem "Pago em",
+        // "Conta" e "Centro de custo" na conferência da baixa. Sem isso a
+        // fatura paga abria com três travessões (29/08/2026). O filtro
+        // por papel evita pegar o lançamento do cartão ou o do estorno.
+        "pagamentos:lancamentos_financeiros!fatura_cartao_id(" +
+        "data_movimento, papel_na_fatura, " +
+        "conta:contas_bancarias(nome, banco, cartao_credito_id), " +
+        "tipo:plano_contas_tipos(codigo), subtipo:plano_contas_subtipos(nome))",
     )
     .eq("tenant_id", session.activeTenant.id)
     .in("status", ["fechada", "paga"]);
@@ -755,6 +778,13 @@ export default async function PedidosCompraFinanceiroPage() {
     if (Number(f.valor_cobrado ?? 0) <= 0) continue;
 
     const cartaoNome = f.cartao?.nome ?? "Cartão";
+
+    // Só a perna do BANCO: a do cartão é a contrapartida interna, e
+    // mostrá-la na conferência diria "pago pela conta do próprio cartão".
+    const pagoBanco = (f.pagamentos ?? []).find(
+      (l: any) =>
+        l.papel_na_fatura === "pagamento" && !l.conta?.cartao_credito_id,
+    );
     titulos.push({
       id: f.id,
       origem: "fatura_cartao",
@@ -772,9 +802,14 @@ export default async function PedidosCompraFinanceiroPage() {
       empresa_id: f.cartao?.empresa_id ?? "",
       plano_conta_tipo_id: null,
       plano_conta_subtipo_id: null,
-      pago_em: null,
-      conta_nome: null,
-      centro_nome: null,
+      pago_em: pagoBanco?.data_movimento ?? null,
+      conta_nome: pagoBanco?.conta?.nome
+        ? `${pagoBanco.conta.nome}${pagoBanco.conta.banco ? ` · ${pagoBanco.conta.banco}` : ""}`
+        : null,
+      centro_nome:
+        pagoBanco?.tipo?.codigo && pagoBanco?.subtipo?.nome
+          ? `${pagoBanco.tipo.codigo} · ${pagoBanco.subtipo.nome}`
+          : null,
       // A fatura NÃO é um título "no cartão": ela é o que se paga PELO
       // banco. Sem isto ela cairia na aba Cartão junto com os itens dela.
       forma_pagamento: null,
@@ -1018,7 +1053,7 @@ export default async function PedidosCompraFinanceiroPage() {
             clientes={clientesList}
             jobs={jobsList}
             regionais={regionaisList}
-            faturasAbertas={faturasAbertas}
+            faturasDoCartao={faturasDoCartao}
           />
         }
         titulosCartaoCount={titulosCartaoCount}

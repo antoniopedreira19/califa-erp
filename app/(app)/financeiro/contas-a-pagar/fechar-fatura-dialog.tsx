@@ -29,19 +29,25 @@ import { formatCurrency, cn } from "@/lib/utils";
 import type { PlanoContaTipo, PlanoContaSubtipo } from "@/lib/types";
 import { fecharFaturaCartao } from "./actions-fatura-cartao";
 
-export interface FaturaAberta {
+export interface FaturaDoCartao {
   id: string;
   codigo: string;
   cartao_credito_id: string;
   competencia_fechamento: string;
   data_vencimento: string;
-  /** Soma dos itens que estão nesta fatura. */
+  /**
+   * Aberta: soma dos itens, com sinal. Fechada: o valor cobrado que foi
+   * informado no fechamento — os itens já viraram lançamento e saíram do
+   * "aprovada", então somá-los de novo daria zero.
+   */
   soma_itens: number;
   qtd_itens: number;
+  /** `paga` não aparece aqui: ela vive em Títulos a Pagar. */
+  status: "aberta" | "fechada";
 }
 
 interface Props {
-  fatura: FaturaAberta | null;
+  fatura: FaturaDoCartao | null;
   cartaoNome: string;
   tipos: PlanoContaTipo[];
   subtipos: PlanoContaSubtipo[];
