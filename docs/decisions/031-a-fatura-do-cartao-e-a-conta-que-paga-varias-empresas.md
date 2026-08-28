@@ -78,27 +78,35 @@ todas as 12 PPs são da mesma empresa. O primeiro documento de outra
 empresa a chegar num lançamento foi uma avulsa da HITLAB no cartão, no
 teste de 28/08/2026, e ela estourou a FK.
 
-⚠️ **A mudança está incompleta de propósito.** A mesma trava existe em
-mais seis funções de baixa (`dar_baixa_avulsa`, `dar_baixa_pp_parcela`,
+✅ **Completada em 29/08/2026.** A mesma trava existia em mais seis
+funções de baixa (`dar_baixa_avulsa`, `dar_baixa_pp_parcela`,
 `dar_baixa_titulo`, `dar_baixa_titulo_com_plano`,
-`dar_baixa_desembolso_parcela`, `dar_baixa_devolucao_verba`). Sem a FK
-elas não quebram — só seguem recusando o cruzamento de empresas nos
-caminhos delas. Cada uma é um caminho de pagamento com teste próprio.
+`dar_baixa_desembolso_parcela`, `dar_baixa_devolucao_verba`) e saiu de
+todas — migration `20260829100001`. O Tiago fechou a regra assim:
+
+> "Jobs sempre estarão associados a empresas, e os faturamentos e NFs
+> também, visto que sempre serão emitidas por uma empresa. Porém, as
+> contas em si não são específicas de uma empresa."
+
+O patch é cirúrgico de propósito: pega a definição exata que está no
+banco, recorta só o `if` da empresa e recompila o resto idêntico. Assim
+a migration não congela o código da outra frente, e aborta com mensagem
+se alguma das seis não estiver no formato esperado.
 
 ---
 
 ## O que ficou em aberto
 
-- **Não existe campo "data da compra".** A compra escolhe a fatura pela
-  data em que é lançada. Uma compra lançada com atraso entra na fatura
-  aberta de hoje, não na do dia em que foi feita.
 - **PP paga no cartão** ainda não existe: falta `forma_pagamento` e
   `cartao_credito_id` no pedido de compra, escolhidos **na aprovação, pelo
   financeiro** (decidido, não implementado).
 - **Parcelamento** da compra no cartão: um título com N parcelas
-  (decidido, não implementado).
-- **As seis funções de baixa** acima.
+  (decidido, não implementado). Ver a [032](032-data-da-compra-e-estorno-no-cartao.md)
+  para o que o estorno já espera dele.
 - **Exportação contábil** a partir da conta do cartão.
+
+A "data da compra" e as seis funções de baixa saíram desta lista em
+29/08/2026 — ver a [032](032-data-da-compra-e-estorno-no-cartao.md).
 
 ## Onde está escrito
 

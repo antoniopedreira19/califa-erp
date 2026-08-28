@@ -296,6 +296,8 @@ export default async function AvulsaDetalhesPage({
     recorrente_id: (c.recorrente_id as string | null) ?? null,
     forma_pagamento: c.forma_pagamento as FormaPagamento | null,
     cartao_credito_id: (c.cartao_credito_id as string | null) ?? null,
+    data_compra: (c.data_compra as string | null) ?? null,
+    estorno_de_avulsa_id: (c.estorno_de_avulsa_id as string | null) ?? null,
     criado_por: c.criado_por,
     created_at: c.created_at,
     updated_at: c.updated_at,

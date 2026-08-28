@@ -23,7 +23,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { CheckCheck, CreditCard, Eye, Info, Plus } from "lucide-react";
+import { CheckCheck, CreditCard, Eye, Info, Plus, Undo2 } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import {
   Select,
@@ -46,6 +46,10 @@ import {
 import { estornarBaixaTitulo } from "./actions-titulos";
 import { ContaAvulsaDrawer } from "./conta-avulsa-drawer";
 import {
+  EstornarCompraDialog,
+  type CompraParaEstorno,
+} from "./estornar-compra-dialog";
+import {
   FecharFaturaDialog,
   type FaturaAberta,
 } from "./fechar-fatura-dialog";
@@ -64,6 +68,22 @@ function formatDate(iso: string | null): string {
 
 function formatMoney(n: number): string {
   return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+/**
+ * O valor da linha COM SINAL. O estorno é crédito: ele abate a fatura.
+ * Somar tudo como positivo inflaria o total do cartão e faria a faixa da
+ * fatura não bater com a tabela (29/08/2026).
+ */
+function valorComSinal(r: TituloRow): number {
+  return r.estorno_de_avulsa_id ? -r.valor : r.valor;
+}
+
+/** Uma compra ainda aceita estorno enquanto sobra saldo dela. */
+function sobraParaEstornar(r: TituloRow): number {
+  if (r.estorno_de_avulsa_id) return 0;
+  if (r.forma_pagamento !== "cartao_credito") return 0;
+  return r.valor - r.estornado;
 }
 
 function hojeISO(): string {
@@ -168,7 +188,7 @@ interface GrupoHeaderProps {
 }
 
 function GrupoCartaoHeader({ cartao, titulos }: GrupoHeaderProps) {
-  const totalGrupo = titulos.reduce((s, t) => s + t.valor, 0);
+  const totalGrupo = titulos.reduce((s, t) => s + valorComSinal(t), 0);
   const totalTitulos = titulos.length;
 
   return (
@@ -237,6 +257,9 @@ export function TitulosCartaoList({
   const [erroAcao, setErroAcao] = React.useState<string | null>(null);
 
   const [toastSucesso, setToastSucesso] = React.useState<string | null>(null);
+  const [estornando, setEstornando] = React.useState<CompraParaEstorno | null>(
+    null,
+  );
 
   // Auto-esconder toast de sucesso após 4s
   React.useEffect(() => {
@@ -281,7 +304,7 @@ export function TitulosCartaoList({
 
   // Total global (após filtro)
   const totalGlobal = React.useMemo(
-    () => rowsFiltradas.reduce((s, r) => s + r.valor, 0),
+    () => rowsFiltradas.reduce((s, r) => s + valorComSinal(r), 0),
     [rowsFiltradas],
   );
 
@@ -561,6 +584,8 @@ export function TitulosCartaoList({
                         })
                         .map((r) => {
                           const pago = r.status === "pago";
+                          const estorno = r.estorno_de_avulsa_id !== null;
+                          const sobra = sobraParaEstornar(r);
                           return (
                             <tr
                               key={`${r.origem}-${r.id}`}
@@ -633,12 +658,44 @@ export function TitulosCartaoList({
                                   {pago ? "Pago" : "A pagar"}
                                 </span>
                               </td>
-                              {/* Valor */}
-                              <td className="whitespace-nowrap px-3 py-3 text-right font-semibold tabular-nums">
+                              {/* Valor — o estorno aparece negativo e em
+                                  verde: ele é crédito, e o olho tem que
+                                  separar isso de uma compra na varrida. */}
+                              <td
+                                className={cn(
+                                  "whitespace-nowrap px-3 py-3 text-right font-semibold tabular-nums",
+                                  estorno && "text-[#047857]",
+                                )}
+                              >
+                                {estorno ? "−" : ""}
                                 {formatMoney(r.valor)}
                               </td>
                               {/* Ação */}
                               <td className="px-2 py-3 text-center">
+                                {/* Estornar continua valendo em compra já
+                                    paga: devolução de compra de fatura
+                                    fechada é justamente o caso comum, e o
+                                    crédito cai na fatura aberta de hoje. */}
+                                {sobra > 0.005 && (
+                                  <button
+                                    type="button"
+                                    title={`Estornar esta compra (sobram ${formatMoney(sobra)})`}
+                                    aria-label="Estornar compra"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setEstornando({
+                                        id: r.id,
+                                        codigo: origemLabel(r),
+                                        descricao: r.descricao,
+                                        valor: r.valor,
+                                        estornado: r.estornado,
+                                      });
+                                    }}
+                                    className="mr-1 inline-flex h-7 w-7 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:border-emerald-600 hover:text-emerald-700"
+                                  >
+                                    <Undo2 className="h-3.5 w-3.5" />
+                                  </button>
+                                )}
                                 {pago && (
                                   <button
                                     type="button"
@@ -751,6 +808,12 @@ export function TitulosCartaoList({
           </button>
         </div>
       )}
+      <EstornarCompraDialog
+        compra={estornando}
+        onOpenChange={(aberto) => !aberto && setEstornando(null)}
+        onSucesso={setToastSucesso}
+      />
+
       <FecharFaturaDialog
         fatura={fechandoFatura}
         cartaoNome={

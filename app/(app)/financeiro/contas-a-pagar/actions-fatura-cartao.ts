@@ -25,9 +25,12 @@ type Result = { ok: true } | { ok: false; message: string };
 
 const schema = z.object({
   fatura_id: z.string().uuid(),
-  valor_cobrado: z
-    .number({ invalid_type_error: "Informe o valor cobrado pelo banco." })
-    .positive("O valor cobrado precisa ser maior que zero."),
+  // Sem `.positive()`: a fatura credora — estorno maior que as compras do
+  // mês — fecha com valor zero ou negativo, e nesse caso simplesmente não
+  // vira título (29/08/2026).
+  valor_cobrado: z.number({
+    invalid_type_error: "Informe o valor cobrado pelo banco.",
+  }),
   ajuste_tipo_id: z
     .string()
     .uuid()

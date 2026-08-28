@@ -98,10 +98,13 @@ export function FecharFaturaDialog({
     [subtipos, tipoId],
   );
 
+  // Zero e negativo passam: com estorno maior que as compras do mês a
+  // fatura é credora e o banco não cobra nada (29/08/2026).
+  const credora = valorCobrado !== null && valorCobrado <= 0;
+
   const podeFechar =
     fatura !== null &&
     valorCobrado !== null &&
-    valorCobrado > 0 &&
     (!temDiferenca || (tipoId !== "" && subtipoId !== "")) &&
     !salvando;
 
@@ -201,6 +204,7 @@ export function FecharFaturaDialog({
                 <p className="text-[11px] leading-relaxed text-muted-foreground">
                   O total da fatura como ele veio do banco. Vem preenchido com
                   a soma dos itens — corrija se o banco cobrou outro valor.
+                  Negativo é válido: significa que o cartão ficou credor.
                 </p>
               </div>
 
@@ -269,12 +273,21 @@ export function FecharFaturaDialog({
                 </div>
               )}
 
-              <p className="text-[11.5px] leading-relaxed text-muted-foreground">
-                Fechar transforma cada item num lançamento na conta do cartão,
-                com o plano de contas dele, e faz a fatura descer para Títulos
-                a Pagar como um título único. Depois disso ela não recebe mais
-                compra.
-              </p>
+              {credora ? (
+                <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-3 text-[11.5px] leading-relaxed text-emerald-900">
+                  Fatura credora: os estornos cobriram as compras e não há o
+                  que pagar. Ela <strong>não desce</strong> para Títulos a
+                  Pagar — o crédito fica na conta do cartão e abate a próxima
+                  fatura, como a operadora faz.
+                </p>
+              ) : (
+                <p className="text-[11.5px] leading-relaxed text-muted-foreground">
+                  Fechar transforma cada item num lançamento na conta do
+                  cartão, com o plano de contas dele, e faz a fatura descer
+                  para Títulos a Pagar como um título único. Depois disso ela
+                  não recebe mais compra.
+                </p>
+              )}
 
               {erro && (
                 <div

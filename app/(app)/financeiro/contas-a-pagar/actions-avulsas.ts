@@ -124,6 +124,13 @@ export async function criarContaAvulsa(input: unknown): Promise<Result> {
       plano_conta_subtipo_id: d.plano_conta_subtipo_id,
       forma_pagamento: d.forma_pagamento,
       cartao_credito_id: d.cartao_credito_id,
+      // O dia da compra escolhe a fatura; o estorno diz qual compra ele
+      // desfaz. Do estorno, o gatilho `avulsa_estorno_herda_da_compra`
+      // sobrescreve natureza, empresa, plano de contas, job, fornecedor e
+      // cliente com os da compra — mandar aqui é conveniência de tela, a
+      // palavra final é do banco (29/08/2026).
+      data_compra: d.data_compra,
+      estorno_de_avulsa_id: d.estorno_de_avulsa_id,
       criado_por: session.profile.id,
       // A avulsa nasce aprovada — o status default do banco diz isso, e
       // `chk_avulsa_aprovada_consistente` EXIGE os dois carimbos em toda

@@ -2537,3 +2537,78 @@ empresas cruzadas; as outras seis, não.
 
 Migration `20260828200001_conta_bancaria_paga_de_varias_empresas.sql`.
 
+---
+
+## ⚠️ Data da compra, estorno, e fatura credora (29/08/2026)
+
+Fecha as pontas de 28/08 e acrescenta o estorno. Regra completa na
+[decisão 032](../decisions/032-data-da-compra-e-estorno-no-cartao.md).
+
+### A trava de empresa saiu das seis últimas funções
+
+`dar_baixa_avulsa`, `dar_baixa_pp_parcela`, `dar_baixa_titulo`,
+`dar_baixa_titulo_com_plano`, `dar_baixa_desembolso_parcela` e
+`dar_baixa_devolucao_verba`. O sistema deixou de estar incoerente.
+
+⚠️ **A migration `20260829100001` é diferente das outras: ela faz um
+patch cirúrgico.** Em vez de reescrever os corpos — o que congelaria o
+código da outra frente dentro dela e desfaria calado qualquer coisa que o
+Antonio mexesse depois —, ela pega `pg_get_functiondef` de cada uma,
+recorta só o `if` da empresa por regex e recompila o resto idêntico. Se
+alguma não estiver no formato esperado, **aborta**. Se você for repetir
+essa técnica, mantenha o aborto: migration que não faz nada em silêncio é
+pior que migration que quebra.
+
+### `contas_avulsas.data_compra`
+
+Quem escolhe a fatura. Vazio = hoje. No drawer, o campo só aparece quando
+a forma é cartão — fora do cartão ninguém escolhe fatura — e substitui o
+"Data prevista de pagamento", que no cartão é consequência.
+
+Compra retroativa cuja competência já fechou rola para a competência
+aberta seguinte. Testado: compra de 10/08 lançada em 28/08 criou a fatura
+que fecha em 25/08 e vence em 05/09.
+
+### `contas_avulsas.estorno_de_avulsa_id`
+
+O estorno é uma avulsa de `natureza = 'entrada'` apontando para a compra.
+Nasce pelo ícone ↩ na coluna Ação da aba Cartão — a partir da compra, que
+é justamente o "apontar".
+
+**O gatilho `avulsa_estorno_herda_da_compra` é quem manda.** Ele copia
+empresa, plano de contas, job, fornecedor e cliente da compra e valida o
+teto (valor da compra − já estornado). A action manda os mesmos valores
+só porque as colunas são NOT NULL e o insert passa pelo PostgREST antes
+de o gatilho rodar — a palavra final é do banco. O rateio de regional é
+copiado pela action, num insert separado que não derruba o estorno se
+falhar.
+
+Duas travas de banco fecham o cerco: estorno só existe no cartão e é
+sempre `entrada`; e crédito no cartão **sem** compra apontada não entra —
+o que não vem de uma compra específica (IOF, anuidade, cashback) é o
+ajuste do fechamento, que tem lugar próprio.
+
+⚠️ **PARA O PARCELAMENTO:** o estorno aponta para a COMPRA, nunca para a
+parcela. Compra em 3x estornada por inteiro = UM estorno do valor cheio,
+com as parcelas já pagas seguindo pagas. Se o parcelamento re-apontar
+para a parcela, quebra.
+
+### Fatura credora
+
+Soma da fatura agora é **com sinal** — em `fechar_fatura_cartao`, na
+faixa da aba Cartão e nos totais. Somar estorno como positivo inflaria o
+total e faria o fechamento pedir um ajuste que não existe.
+
+Fatura que fecha em zero ou negativo **não vira título**: `page.tsx`
+pula fatura fechada com `valor_cobrado <= 0`, e
+`dar_baixa_fatura_cartao` recusa pagá-la. O crédito fica na conta do
+cartão e abate a próxima.
+
+### Testado no navegador (29/08/2026)
+
+Compra de 150 → estorno parcial de 50 (fatura vai a 100) → estorno dos
+100 restantes (fatura a 0, botão de estornar some) → fechamento mostra o
+painel de fatura credora → fecha sem gerar título → saldo do cartão
+segue zero. Teto do estorno barrado no cliente e no banco. Compra
+retroativa cai na competência certa.
+
