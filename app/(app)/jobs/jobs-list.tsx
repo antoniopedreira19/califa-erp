@@ -233,13 +233,13 @@ export function JobsList({
               <th className="w-8 px-2 py-3" aria-label="Expandir" />
               <th className="px-4 py-3 font-semibold">Código</th>
               <th className="px-4 py-3 font-semibold">Nome</th>
-              <th className="px-4 py-3 font-semibold">Empresa</th>
+              <th className="px-4 py-3 text-center font-semibold">Empresa</th>
               <th className="px-4 py-3 font-semibold">Projeto</th>
               <th className="px-4 py-3 font-semibold">Cliente</th>
               <th className="px-4 py-3 font-semibold">Responsável</th>
-              <th className="px-4 py-3 font-semibold">Início</th>
+              <th className="px-4 py-3 text-center font-semibold">Início</th>
               <th className="px-4 py-3 text-right font-semibold">Valor total</th>
-              <th className="px-4 py-3 font-semibold">Status</th>
+              <th className="px-4 py-3 text-center font-semibold">Status</th>
             </tr>
           </thead>
           <tbody>
@@ -345,9 +345,9 @@ export function JobsList({
                         </Link>
                       </td>
                       <td className="px-4 py-3 font-medium">{j.nome}</td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3 text-center">
                         {j.empresa_nome ? (
-                          <span className="inline-flex items-center rounded-full border border-border bg-muted/80 px-2.5 py-0.5 text-[11px] font-medium text-foreground">
+                          <span className="inline-flex items-center whitespace-nowrap rounded-full border border-border bg-muted/80 px-2.5 py-0.5 text-[11px] font-medium text-foreground">
                             {j.empresa_nome}
                           </span>
                         ) : (
@@ -360,21 +360,24 @@ export function JobsList({
                         </span>{" "}
                         <span>{j.projeto_nome ?? ""}</span>
                       </td>
-                      <td className="px-4 py-3 text-muted-foreground">
+                      <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
                         {j.cliente_nome ?? "—"}
                       </td>
-                      <td className="px-4 py-3 text-muted-foreground">
+                      <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
                         {j.responsavel_nome ?? "—"}
                       </td>
-                      <td className="px-4 py-3 text-muted-foreground">
+                      <td className="whitespace-nowrap px-4 py-3 text-center text-muted-foreground">
                         {formatDate(j.data_inicio_prevista)}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-right font-semibold tabular-nums">
                         {formatMoney(j.valor_total)}
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="whitespace-nowrap px-4 py-3 text-center">
                         <Badge
-                          className={cn("border", statusBadgeClasses(j.status))}
+                          className={cn(
+                            "whitespace-nowrap border",
+                            statusBadgeClasses(j.status),
+                          )}
                         >
                           {jobStatusLabel(j.status)}
                         </Badge>
