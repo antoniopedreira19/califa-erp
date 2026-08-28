@@ -85,6 +85,7 @@ export default async function ConciliacaoPage({
       .from("lancamentos_financeiros")
       .select(
         `id, data_movimento, descricao, natureza, valor, origem, created_at,
+         papel_na_fatura, fatura_cartao_id,
          fornecedores(nome, razao_social),
          jobs(id, codigo, regional:regionais(nome)),
          empresas(nome_fantasia, razao_social, regional:regionais(nome)),
@@ -132,6 +133,8 @@ export default async function ConciliacaoPage({
       natureza: "entrada" | "saida";
       valor: string | number;
       origem: string;
+      papel_na_fatura: string | null;
+      fatura_cartao_id: string | null;
       fornecedores: { nome: string | null; razao_social: string | null } | null;
       jobs: { id: string; codigo: string; regional: { nome: string } | null } | null;
       empresas: {
@@ -270,6 +273,8 @@ export default async function ConciliacaoPage({
         empresa_nome:
           r.empresas?.nome_fantasia ?? r.empresas?.razao_social ?? null,
         origem: r.origem,
+        papel_na_fatura: r.papel_na_fatura,
+        fatura_cartao_id: r.fatura_cartao_id,
         rateio,
       };
     });
@@ -331,8 +336,32 @@ export default async function ConciliacaoPage({
       }
     }
 
+    // Faturas cujo pagamento foi estornado: têm no MESMO fatura_cartao_id
+    // um lançamento com papel_na_fatura = 'pagamento' E outro com
+    // 'pagamento_estorno' (o contra-lançamento inserido pela RPC de
+    // estorno). Sinaliza pra riscar o `pagamento` original — o backend
+    // não marca a origem (deixa como `manual`), diferente do PP/Avulsa.
+    const faturasComEstorno = new Set<string>();
+    for (const r of raw) {
+      if (
+        r.papel_na_fatura === "pagamento_estorno" &&
+        r.fatura_cartao_id !== null
+      ) {
+        faturasComEstorno.add(r.fatura_cartao_id);
+      }
+    }
+
     linhas = derivarSaldo(
-      raw.map((r) => ({ ...r, origens: origensPorLancamento.get(r.id) ?? [] })),
+      raw.map((r) => ({
+        ...r,
+        estornada:
+          r.origem === "pp_baixa_estornada" ||
+          r.origem === "avulsa_baixa_estornada" ||
+          (r.papel_na_fatura === "pagamento" &&
+            r.fatura_cartao_id !== null &&
+            faturasComEstorno.has(r.fatura_cartao_id)),
+        origens: origensPorLancamento.get(r.id) ?? [],
+      })),
       saldoAnterior,
     );
     creditos = linhas.reduce((acc, l) => acc + l.credito, 0);

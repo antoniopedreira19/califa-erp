@@ -53,6 +53,21 @@ export type LancamentoLinha = {
    *  documento foi identificado mas o arquivo não está acessível. */
   documento_path: string | null;
   origem: string;
+  /**
+   * O lançamento foi desfeito por um contra-lançamento posterior. Renderiza
+   * com strikethrough na conciliação.
+   *
+   * Duas fontes:
+   * - `pp_baixa_estornada` / `avulsa_baixa_estornada` — o próprio backend
+   *   marca a origem quando a baixa é estornada (o lançamento original é
+   *   UPDATED).
+   * - Fatura de cartão — o backend NÃO marca o lançamento original ao
+   *   estornar a baixa; insere um contra-lançamento com `papel_na_fatura =
+   *   'pagamento_estorno'`. Aqui o cálculo é feito na leitura: se a mesma
+   *   fatura tem ambos, o `pagamento` original ganha `estornada = true`
+   *   pra visual consistency com o PP.
+   */
+  estornada: boolean;
   credito: number;
   debito: number;
   saldo: number;

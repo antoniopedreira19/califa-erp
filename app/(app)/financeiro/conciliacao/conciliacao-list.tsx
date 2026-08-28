@@ -69,9 +69,7 @@ export function ConciliacaoList({
         </thead>
         <tbody>
           {linhas.map((l) => {
-            const estornada =
-              l.origem === "pp_baixa_estornada" ||
-              l.origem === "avulsa_baixa_estornada";
+            const estornada = l.estornada;
             const temSave = l.origens.some((o) => o.tipo === "save");
             const temRateio = l.rateio.length > 1;
             const temOrigensMultiplas = l.origens.length > 1;
