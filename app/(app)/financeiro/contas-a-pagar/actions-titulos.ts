@@ -859,6 +859,17 @@ export async function estornarBaixaTitulo(input: unknown): Promise<Result> {
     return estornarBaixaDevolucaoVerba(d.id, d.motivo);
   }
 
+  // ⚠️ Sem este ramo a fatura caía no caminho da conta avulsa logo
+  // abaixo, com o id da FATURA no lugar do id da avulsa, e respondia
+  // "Conta avulsa não encontrada" — estornar a baixa de uma fatura
+  // simplesmente não funcionava (corrigido em 29/08/2026).
+  if (d.origem === "fatura_cartao") {
+    const { estornarBaixaFaturaCartao } = await import(
+      "./actions-fatura-cartao"
+    );
+    return estornarBaixaFaturaCartao(d.id, d.motivo);
+  }
+
   const { estornarBaixaAvulsa } = await import("./actions-avulsas");
   return estornarBaixaAvulsa({ conta_avulsa_id: d.id, motivo: d.motivo });
 }

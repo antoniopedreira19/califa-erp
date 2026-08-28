@@ -152,6 +152,8 @@ export type AuditAction =
   | "fatura_cartao.fechada"
   | "fatura_cartao.paga"
   | "cartao.estorno_lancado"
+  | "fatura_cartao.reaberta"
+  | "fatura_cartao.baixa_estornada"
   | "cartao_credito.criado"
   | "cartao_credito.atualizado"
   | "cartao_credito.inativado"
