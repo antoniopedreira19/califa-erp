@@ -23,6 +23,10 @@ export default async function ContasBancariasPage() {
       .from("contas_bancarias")
       .select("*, empresas!inner(razao_social, nome_fantasia)")
       .eq("tenant_id", session.activeTenant.id)
+      // A conta do cartão não se cadastra aqui: ela nasce e morre com o
+      // cartão, pelo trigger. Editá-la ou apagá-la por esta tela deixaria
+      // o cartão sem onde lançar compra (28/08/2026).
+      .is("cartao_credito_id", null)
       .order("ordem", { ascending: true })
       .order("nome", { ascending: true })
       .returns<ContaBancariaComEmpresa[]>(),

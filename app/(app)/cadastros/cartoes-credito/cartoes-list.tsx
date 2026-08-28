@@ -14,12 +14,18 @@ import {
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import type { CartaoCredito } from "@/lib/types";
 import { bandeiraCartaoLabel } from "@/lib/types";
-import { CartaoDrawer } from "./cartao-drawer";
+import { CartaoDrawer, type EmpresaOpcao } from "./cartao-drawer";
 import { inativarCartao, reativarCartao } from "./actions";
 
 type StatusFiltro = "ativos" | "inativos" | "todos";
 
-export function CartoesList({ rows }: { rows: CartaoCredito[] }) {
+export function CartoesList({
+  rows,
+  empresas,
+}: {
+  rows: CartaoCredito[];
+  empresas: EmpresaOpcao[];
+}) {
   const router = useRouter();
   const [busca, setBusca] = React.useState("");
   const [status, setStatus] = React.useState<StatusFiltro>("ativos");
@@ -88,7 +94,7 @@ export function CartoesList({ rows }: { rows: CartaoCredito[] }) {
             </SelectContent>
           </Select>
         </div>
-        <CartaoDrawer mode="criar" />
+        <CartaoDrawer mode="criar" empresas={empresas} />
       </div>
 
       {filtered.length === 0 ? (
@@ -206,6 +212,7 @@ export function CartoesList({ rows }: { rows: CartaoCredito[] }) {
 
       {editando && (
         <CartaoDrawer
+          empresas={empresas}
           mode="editar"
           cartao={editando}
           open={!!editando}

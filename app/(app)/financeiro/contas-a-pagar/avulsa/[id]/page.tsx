@@ -99,7 +99,9 @@ export default async function AvulsaDetalhesPage({
       .select("*")
       .eq("tenant_id", session.activeTenant.id)
       .eq("empresa_id", (conta as unknown as { empresa_id: string }).empresa_id)
-      .eq("ativo", true),
+      .eq("ativo", true)
+      // Dinheiro não sai pela conta espelho do cartão.
+      .neq("tipo", "cartao_credito"),
     supabase
       .from("empresas")
       .select("id, razao_social, nome_fantasia")

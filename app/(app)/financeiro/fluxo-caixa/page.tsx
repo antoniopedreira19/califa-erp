@@ -63,6 +63,7 @@ export default async function FluxoCaixaPage() {
       .select("id, nome, banco")
       .eq("tenant_id", session.activeTenant.id)
       .eq("ativo", true)
+      .neq("tipo", "cartao_credito")
       .order("ordem"),
     supabase
       .from("regionais")

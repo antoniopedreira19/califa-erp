@@ -2301,3 +2301,71 @@ A coluna é anulável e a conta cai no comportamento antigo quando ela está
 vazia — sem isso, cartão cadastrado antes de hoje passaria a receber `null`
 e a recorrência quebraria. O **cadastro passou a exigir** o campo, então
 todo cartão novo nasce correto; os antigos precisam ser editados uma vez.
+
+
+---
+
+## ⚠️ Cartão vira conta (28/08/2026)
+
+Segunda fatia do módulo de Fatura de Cartão, e a decisão estrutural dele.
+
+**Cada compra no cartão gera lançamento NA CONTA DO CARTÃO**, com o plano de
+contas do item. Pagar a fatura será uma transferência banco → cartão. Assim
+o DRE mantém a granularidade por item **e** o extrato bancário mostra um
+débito só, igual ao banco.
+
+A alternativa — a fatura virar UM lançamento com um plano de contas só —
+faria a assinatura, o fornecedor e o material de escritório de dentro dela
+virarem uma linha indistinta no DRE.
+
+### Como o cartão vira conta
+
+O cartão nasce com uma **conta espelho** em `contas_bancarias`
+(`tipo = 'cartao_credito'`, `cartao_credito_id` preenchido), criada e
+mantida pelo trigger `trg_conta_do_cartao`. Nome, banco, empresa e status
+seguem o cartão nos dois sentidos — inativar o cartão inativa a conta.
+
+**Trigger, e não action**, porque é invariante: cartão sem conta é um cartão
+em que nenhuma compra pode ser lançada, e o erro só apareceria muito depois.
+
+⚠️ **Por que espelho e não um segundo tipo de conta em paralelo:**
+`lancamentos_financeiros.conta_bancaria_id` é NOT NULL, e Conciliação, fluxo
+de caixa e saldo já sabem lê-lo. Um conceito paralelo obrigaria os três a
+aprender que existe outra espécie de conta.
+
+O cartão passou a ter **`empresa_id`** — a conta espelho precisa dele
+(NOT NULL em `contas_bancarias`), e é o que impede o cartão de uma empresa
+de pagar título da outra.
+
+### ⚠️ Onde a conta do cartão aparece — e onde NÃO aparece
+
+| Tela | Conta do cartão |
+|---|---|
+| **Conciliação** | **aparece** — é o extrato do cartão |
+| Contas a Pagar | não |
+| Contas a Receber | não |
+| Fluxo de Caixa | não |
+| Abertura de Job (contas do job) | não |
+| Cadastro de Contas Bancárias | não |
+
+Dinheiro **não sai nem entra** pela conta do cartão direto: o que ela recebe
+é a compra; quem a zera é o pagamento da fatura. Toda tela que escolhe conta
+para pagar ou receber filtra `tipo <> 'cartao_credito'`; o cadastro de
+contas filtra `cartao_credito_id is null`, porque a conta do cartão nasce e
+morre com o cartão e editá-la ali deixaria o cartão sem onde lançar.
+
+**Ao criar tela nova que escolha conta bancária, decida em qual lado dessa
+tabela ela cai.** O default seguro é excluir.
+
+### Armadilha encontrada no teste
+
+`contas_bancarias.tipo` é `text`, mas **não é livre**: `chk_conta_tipo_valido`
+limitava a corrente/poupanca/investimento/caixa. A primeira criação de
+cartão morreu com erro de constraint. O CHECK foi ampliado — ampliar é
+aditivo, nenhuma linha existente deixa de passar.
+
+### Estado atual
+
+A conta existe e a Conciliação a abre (saldo zero, extrato vazio). **Nada
+roteia compra para ela ainda** — isso é a fatia 3, junto com a fatura. Até
+lá, pagamento no cartão continua debitando o banco como antes.
