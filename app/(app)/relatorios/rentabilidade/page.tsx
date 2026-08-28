@@ -1,3 +1,5 @@
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -176,6 +178,15 @@ export default async function RentabilidadePage({ searchParams }: Props) {
   return (
     <ModoProvider modoInicial={filtros.modo}>
       <div className="space-y-6">
+        <div>
+          <Link
+            href="/relatorios"
+            className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ArrowLeft className="h-3 w-3" />
+            Voltar para relatórios
+          </Link>
+        </div>
         <header className="space-y-2">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-california-red">
             Relatórios · Rentabilidade
