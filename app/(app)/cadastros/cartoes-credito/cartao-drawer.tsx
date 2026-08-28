@@ -89,6 +89,9 @@ export function CartaoDrawer(props: Props) {
     const dono = formData.get("dono")?.toString().trim() ?? "";
     const ultimos_4_digitos = formData.get("ultimos_4_digitos")?.toString().trim() ?? "";
     const diaRaw = formData.get("dia_vencimento_fatura")?.toString() ?? "";
+    const diaFechaRaw =
+      formData.get("dia_fechamento_fatura")?.toString() ?? "";
+    const diaFecha = Number(diaFechaRaw);
     const dia = parseInt(diaRaw, 10);
 
     const input = {
@@ -98,6 +101,7 @@ export function CartaoDrawer(props: Props) {
       ultimos_4_digitos,
       dono,
       dia_vencimento_fatura: isNaN(dia) ? undefined : dia,
+      dia_fechamento_fatura: isNaN(diaFecha) ? undefined : diaFecha,
       ...(isEditar && cartao ? { id: cartao.id } : {}),
     };
 
@@ -199,7 +203,8 @@ export function CartaoDrawer(props: Props) {
               </Select>
             </div>
 
-            {/* Últimos 4 dígitos + Dono (2 colunas) */}
+            {/* Últimos 4 dígitos ocupa a linha sozinho: as duas datas vão
+                na linha seguinte, juntas. */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="ultimos_4_digitos">Últimos 4 dígitos *</Label>
@@ -213,6 +218,30 @@ export function CartaoDrawer(props: Props) {
                   placeholder="1234"
                 />
               </div>
+            </div>
+
+            {/* Fechamento e vencimento na MESMA linha: são um par, e ler
+                um sem o outro é o que confundia (28/08/2026). */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="dia_fechamento_fatura">Dia do fechamento *</Label>
+                <Input
+                  id="dia_fechamento_fatura"
+                  name="dia_fechamento_fatura"
+                  type="number"
+                  min="1"
+                  max="31"
+                  step="1"
+                  required
+                  defaultValue={cartao?.dia_fechamento_fatura ?? ""}
+                  placeholder="25"
+                  className="[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                />
+                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                  Decide em qual fatura a compra cai. Compra depois deste dia
+                  entra na fatura seguinte.
+                </p>
+              </div>
               <div className="space-y-2">
                 <Label htmlFor="dia_vencimento_fatura">Dia do vencimento *</Label>
                 <Input
@@ -224,9 +253,12 @@ export function CartaoDrawer(props: Props) {
                   step="1"
                   required
                   defaultValue={cartao?.dia_vencimento_fatura ?? ""}
-                  placeholder="15"
+                  placeholder="5"
                   className="[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
+                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                  Decide quando a fatura é paga.
+                </p>
               </div>
             </div>
 

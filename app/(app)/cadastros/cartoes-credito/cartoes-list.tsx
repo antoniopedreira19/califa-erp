@@ -114,7 +114,7 @@ export function CartoesList({ rows }: { rows: CartaoCredito[] }) {
                   Número
                 </th>
                 <th className="px-4 py-3 text-left font-medium text-muted-foreground w-40">
-                  Vencimento fatura
+                  Fatura
                 </th>
                 <th className="px-4 py-3 text-left font-medium text-muted-foreground w-28">
                   Status
@@ -145,7 +145,9 @@ export function CartoesList({ rows }: { rows: CartaoCredito[] }) {
                     •••• {c.ultimos_4_digitos}
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">
-                    Todo dia {c.dia_vencimento_fatura}
+                    {c.dia_fechamento_fatura
+                      ? `Fecha ${c.dia_fechamento_fatura} · vence ${c.dia_vencimento_fatura}`
+                      : `Todo dia ${c.dia_vencimento_fatura}`}
                   </td>
                   <td className="px-4 py-3">
                     <span
