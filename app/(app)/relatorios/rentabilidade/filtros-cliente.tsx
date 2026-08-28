@@ -5,6 +5,13 @@ import { useRouter, usePathname } from "next/navigation";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import {
   type FiltrosRentabilidade,
@@ -81,17 +88,21 @@ export function FiltrosCliente({
     >
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Campo label="Ano">
-          <select
-            value={filtros.ano}
-            onChange={(e) => aplicar({ ano: Number(e.target.value) })}
-            className="h-9 w-full rounded-md border border-border bg-background px-3 text-sm"
+          <Select
+            value={String(filtros.ano)}
+            onValueChange={(v) => aplicar({ ano: Number(v) })}
           >
-            {anos.map((a) => (
-              <option key={a} value={a}>
-                {a}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger className="h-9">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {anos.map((a) => (
+                <SelectItem key={a} value={String(a)}>
+                  {a}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </Campo>
 
         <Campo label="Trimestres">
@@ -216,19 +227,23 @@ export function FiltrosCliente({
             Comparar 2 períodos
           </Label>
           {filtros.compararAno !== null && (
-            <select
-              value={filtros.compararAno}
-              onChange={(e) => aplicar({ compararAno: Number(e.target.value) })}
-              className="h-8 rounded-md border border-border bg-background px-2 text-xs"
+            <Select
+              value={String(filtros.compararAno)}
+              onValueChange={(v) => aplicar({ compararAno: Number(v) })}
             >
-              {anos
-                .filter((a) => a !== filtros.ano)
-                .map((a) => (
-                  <option key={a} value={a}>
-                    {a}
-                  </option>
-                ))}
-            </select>
+              <SelectTrigger className="h-8 w-auto min-w-[80px] text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {anos
+                  .filter((a) => a !== filtros.ano)
+                  .map((a) => (
+                    <SelectItem key={a} value={String(a)}>
+                      {a}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
           )}
         </div>
       </div>
