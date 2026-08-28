@@ -1,16 +1,113 @@
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
-import { agruparEComputar } from "@/lib/relatorios/rentabilidade";
+import {
+  agruparEComputar,
+  type GrupoRentabilidade,
+} from "@/lib/relatorios/rentabilidade";
+import type { LinhaJobRentabilidade } from "@/lib/types";
 import { parseFiltros } from "./parse-filtros";
 import { carregarLinhas } from "./carregar-linhas";
+import { carregarDimensoesRelatorio } from "./carregar-dimensoes";
 import { FiltrosCliente } from "./filtros-cliente";
-import { TabelaRentabilidade } from "./tabela-rentabilidade";
-import { TabelaComparativo } from "./tabela-comparativo";
+import { ModoProvider } from "./modo-provider";
+import { SecaoTabela } from "./secao-tabela";
 
 export const dynamic = "force-dynamic";
 
 interface Props {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
+}
+
+/**
+ * Encapsula agrupar+filtrar por modo pros DOIS modos. Roda depois que o
+ * server já tem as linhas do período. Retorna grupos e totais prontos
+ * pra cliente escolher no modo toggle (P7).
+ */
+function computarPorModo(
+  linhas: LinhaJobRentabilidade[],
+  visao: Parameters<typeof agruparEComputar>[1],
+  resolveRotulo: (chave: string) => string,
+) {
+  const gruposPrevisto = agruparEComputar(linhas, visao, "previsto", resolveRotulo);
+  const linhasComFat = linhas.filter((l) => l.faturamento_realizado > 0);
+  const gruposRealizado = agruparEComputar(
+    linhasComFat,
+    visao,
+    "realizado",
+    resolveRotulo,
+  );
+
+  const somarBases = (grupos: GrupoRentabilidade[]) => ({
+    faturamento: grupos.reduce((s, g) => s + g.bases.faturamento, 0),
+    imposto: grupos.reduce((s, g) => s + g.bases.imposto, 0),
+    custo: grupos.reduce((s, g) => s + g.bases.custo, 0),
+    bv: grupos.reduce((s, g) => s + g.bases.bv, 0),
+  });
+
+  return {
+    grupos: { previsto: gruposPrevisto, realizado: gruposRealizado },
+    totais: {
+      previsto: somarBases(gruposPrevisto),
+      realizado: somarBases(gruposRealizado),
+    },
+  };
+}
+
+/**
+ * Aplica `faturamentoMinimo` mantendo a semântica original: o filtro
+ * atua no GRUPO (spec §3.6). Como agora computamos os dois modos, o
+ * filtro roda em cada modo separadamente — cliente que passa em previsto
+ * mas não em realizado pode aparecer/sumir ao trocar o toggle, o que é
+ * consistente com a definição "faturamento do grupo >= min".
+ */
+function filtrarPorFaturamentoMinimo(
+  gruposPorModo: { previsto: GrupoRentabilidade[]; realizado: GrupoRentabilidade[] },
+  minimo: number | null,
+): { previsto: GrupoRentabilidade[]; realizado: GrupoRentabilidade[] } {
+  if (minimo === null) return gruposPorModo;
+  return {
+    previsto: gruposPorModo.previsto.filter(
+      (g) => g.bases.faturamento >= minimo,
+    ),
+    realizado: gruposPorModo.realizado.filter(
+      (g) => g.bases.faturamento >= minimo,
+    ),
+  };
+}
+
+/**
+ * Interseção de chaves entre A e B com regra "aparece em pelo menos um".
+ * Idem à lógica que existia antes, agora aplicada por modo.
+ */
+function filtrarComparativo(
+  gruposA: { previsto: GrupoRentabilidade[]; realizado: GrupoRentabilidade[] },
+  gruposB: { previsto: GrupoRentabilidade[]; realizado: GrupoRentabilidade[] },
+  minimo: number | null,
+) {
+  if (minimo === null) return { gruposA, gruposB };
+
+  const passaEm = (grupos: GrupoRentabilidade[]) =>
+    new Set(
+      grupos.filter((g) => g.bases.faturamento >= minimo).map((g) => g.chave),
+    );
+
+  const chavesPrevisto = new Set<string>([
+    ...passaEm(gruposA.previsto),
+    ...passaEm(gruposB.previsto),
+  ]);
+  const chavesRealizado = new Set<string>([
+    ...passaEm(gruposA.realizado),
+    ...passaEm(gruposB.realizado),
+  ]);
+
+  const filtrar = (
+    grupos: { previsto: GrupoRentabilidade[]; realizado: GrupoRentabilidade[] },
+  ) => ({
+    previsto: grupos.previsto.filter((g) => chavesPrevisto.has(g.chave)),
+    realizado: grupos.realizado.filter((g) => chavesRealizado.has(g.chave)),
+  });
+
+  return { gruposA: filtrar(gruposA), gruposB: filtrar(gruposB) };
 }
 
 export default async function RentabilidadePage({ searchParams }: Props) {
@@ -20,51 +117,19 @@ export default async function RentabilidadePage({ searchParams }: Props) {
   const supabase = createClient();
   const tenantId = session.activeTenant.id;
 
-  // Dimensoes pra rotular grupos e alimentar dropdowns.
-  const [
-    linhasPeriodoA,
-    linhasPeriodoB,
-    clientesRes,
-    marcasRes,
-    empresasRes,
-    regionaisRes,
-  ] = await Promise.all([
+  // As linhas da view dependem dos filtros e do período — não são cached.
+  // As dimensões (clientes, marcas, empresas, regionais) mudam raro —
+  // vêm de cache com TTL de 5 min (P2 do diagnóstico de perf).
+  const [linhasPeriodoA, linhasPeriodoB, dimensoes] = await Promise.all([
     carregarLinhas(supabase, tenantId, filtros.ano, filtros),
     filtros.compararAno !== null
       ? carregarLinhas(supabase, tenantId, filtros.compararAno, filtros)
       : Promise.resolve(null),
-    supabase
-      .from("clientes")
-      .select("id, nome_fantasia, razao_social")
-      .eq("tenant_id", tenantId)
-      .eq("status", "ativo"),
-    supabase
-      .from("cliente_produtos")
-      .select("id, nome, cliente_id")
-      .eq("tenant_id", tenantId)
-      .eq("ativo", true),
-    supabase
-      .from("empresas")
-      .select("id, nome_fantasia, razao_social")
-      .eq("tenant_id", tenantId)
-      .eq("ativo", true),
-    supabase
-      .from("regionais")
-      .select("id, nome")
-      .eq("tenant_id", tenantId)
-      .eq("ativo", true),
+    carregarDimensoesRelatorio(tenantId),
   ]);
 
-  const nomeCliente = (
-    c: { nome_fantasia: string | null; razao_social: string },
-  ) => c.nome_fantasia ?? c.razao_social;
-
-  const clientesById = new Map(
-    (clientesRes.data ?? []).map((c) => [c.id, nomeCliente(c)]),
-  );
-  const marcasById = new Map(
-    (marcasRes.data ?? []).map((m) => [m.id, m.nome as string]),
-  );
+  const clientesById = new Map(dimensoes.clientes.map((c) => [c.id, c.nome]));
+  const marcasById = new Map(dimensoes.marcas.map((m) => [m.id, m.nome]));
   const jobsById = new Map(
     linhasPeriodoA.map((l) => [l.job_id, `${l.job_codigo} · ${l.job_nome}`]),
   );
@@ -75,114 +140,73 @@ export default async function RentabilidadePage({ searchParams }: Props) {
     return jobsById.get(chave) ?? chave;
   };
 
-  // Filtra pelo modo (Realizado esconde jobs sem NF — spec §3.4).
-  const filtrarPorModo = (linhas: typeof linhasPeriodoA) =>
-    filtros.modo === "realizado"
-      ? linhas.filter((l) => l.faturamento_realizado > 0)
-      : linhas;
-
-  const gruposA = agruparEComputar(
-    filtrarPorModo(linhasPeriodoA),
-    filtros.visao,
-    filtros.modo,
-    resolveRotulo,
-  );
-
-  // Grupos do 2o periodo pro comparativo (se houver).
-  const gruposB = linhasPeriodoB
-    ? agruparEComputar(
-        filtrarPorModo(linhasPeriodoB),
-        filtros.visao,
-        filtros.modo,
-        resolveRotulo,
-      )
+  const computadoA = computarPorModo(linhasPeriodoA, filtros.visao, resolveRotulo);
+  const computadoB = linhasPeriodoB
+    ? computarPorModo(linhasPeriodoB, filtros.visao, resolveRotulo)
     : null;
 
-  // Aplica faturamentoMinimo (filtro no grupo, nao no job — spec §3.6).
-  // No comparativo, a semantica e "cliente entra se fatA >= min OR fatB >= min":
-  // caso contrario o bloco B mostra clientes que fatmin excluiria e os dados
-  // ficam incoerentes entre os dois periodos (fix I2 do review).
-  const chavesQuePassam =
-    filtros.faturamentoMinimo !== null
-      ? new Set<string>([
-          ...gruposA
-            .filter((g) => g.bases.faturamento >= filtros.faturamentoMinimo!)
-            .map((g) => g.chave),
-          ...(gruposB ?? [])
-            .filter((g) => g.bases.faturamento >= filtros.faturamentoMinimo!)
-            .map((g) => g.chave),
-        ])
-      : null;
+  // faturamentoMinimo aplicado APÓS agregação (spec §3.6). No comparativo,
+  // semântica "cliente aparece se fat >= min em A OU B" (fix I2 do review).
+  const gruposFiltrados = computadoB
+    ? filtrarComparativo(
+        computadoA.grupos,
+        computadoB.grupos,
+        filtros.faturamentoMinimo,
+      )
+    : {
+        gruposA: filtrarPorFaturamentoMinimo(
+          computadoA.grupos,
+          filtros.faturamentoMinimo,
+        ),
+        gruposB: null,
+      };
 
-  const gruposFiltradosA = chavesQuePassam
-    ? gruposA.filter((g) => chavesQuePassam.has(g.chave))
-    : gruposA;
-
-  const gruposFiltradosB =
-    gruposB && chavesQuePassam
-      ? gruposB.filter((g) => chavesQuePassam.has(g.chave))
-      : gruposB;
-
-  const totalBases = {
-    faturamento: gruposFiltradosA.reduce((s, g) => s + g.bases.faturamento, 0),
-    imposto: gruposFiltradosA.reduce((s, g) => s + g.bases.imposto, 0),
-    custo: gruposFiltradosA.reduce((s, g) => s + g.bases.custo, 0),
-    bv: gruposFiltradosA.reduce((s, g) => s + g.bases.bv, 0),
+  // Totais recalculados sobre grupos filtrados.
+  const somarBases = (grupos: GrupoRentabilidade[]) => ({
+    faturamento: grupos.reduce((s, g) => s + g.bases.faturamento, 0),
+    imposto: grupos.reduce((s, g) => s + g.bases.imposto, 0),
+    custo: grupos.reduce((s, g) => s + g.bases.custo, 0),
+    bv: grupos.reduce((s, g) => s + g.bases.bv, 0),
+  });
+  const totalBasesA = {
+    previsto: somarBases(gruposFiltrados.gruposA.previsto),
+    realizado: somarBases(gruposFiltrados.gruposA.realizado),
   };
 
   return (
-    <div className="space-y-6">
-      <header className="space-y-2">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-california-red">
-          Relatórios · Rentabilidade
-        </p>
-        <h1 className="text-3xl font-bold tracking-tight">
-          Rentabilidade de Jobs {filtros.ano}
-          {filtros.compararAno !== null && ` vs ${filtros.compararAno}`}
-        </h1>
-        <p className="text-sm text-muted-foreground max-w-2xl">
-          Faturamento, resultado operacional e rentabilidade por cliente, marca ou job.
-          Data de referência: abertura financeira do job.
-        </p>
-      </header>
+    <ModoProvider modoInicial={filtros.modo}>
+      <div className="space-y-6">
+        <header className="space-y-2">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-california-red">
+            Relatórios · Rentabilidade
+          </p>
+          <h1 className="text-3xl font-bold tracking-tight">
+            Rentabilidade de Jobs {filtros.ano}
+            {filtros.compararAno !== null && ` vs ${filtros.compararAno}`}
+          </h1>
+          <p className="text-sm text-muted-foreground max-w-2xl">
+            Faturamento, resultado operacional e rentabilidade por cliente, marca ou job.
+            Data de referência: abertura financeira do job.
+          </p>
+        </header>
 
-      <FiltrosCliente
-        filtros={filtros}
-        clientes={(clientesRes.data ?? []).map((c) => ({
-          id: c.id,
-          nome: nomeCliente(c),
-        }))}
-        marcas={(marcasRes.data ?? []).map((m) => ({
-          id: m.id,
-          nome: m.nome,
-          clienteId: m.cliente_id,
-        }))}
-        empresas={(empresasRes.data ?? []).map((e) => ({
-          id: e.id,
-          nome: e.nome_fantasia ?? e.razao_social,
-        }))}
-        regionais={(regionaisRes.data ?? []).map((r) => ({
-          id: r.id,
-          nome: r.nome,
-        }))}
-      />
+        <FiltrosCliente
+          filtros={filtros}
+          clientes={dimensoes.clientes}
+          marcas={dimensoes.marcas}
+          empresas={dimensoes.empresas}
+          regionais={dimensoes.regionais}
+        />
 
-      {gruposFiltradosB ? (
-        <TabelaComparativo
+        <SecaoTabela
           visao={filtros.visao}
-          gruposA={gruposFiltradosA}
-          gruposB={gruposFiltradosB}
+          gruposA={gruposFiltrados.gruposA}
+          totalBasesA={totalBasesA}
+          gruposB={gruposFiltrados.gruposB}
           anoA={filtros.ano}
-          anoB={filtros.compararAno!}
+          anoB={filtros.compararAno}
         />
-      ) : (
-        <TabelaRentabilidade
-          visao={filtros.visao}
-          modo={filtros.modo}
-          grupos={gruposFiltradosA}
-          totalBases={totalBases}
-        />
-      )}
-    </div>
+      </div>
+    </ModoProvider>
   );
 }

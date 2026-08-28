@@ -11,6 +11,7 @@ import {
   filtrosParaQueryString,
   type Trimestre,
 } from "./parse-filtros";
+import { useModo } from "./modo-provider";
 
 const TRIMESTRES: readonly { value: Trimestre; label: string }[] = [
   { value: "Q1", label: "Q1" },
@@ -36,9 +37,16 @@ export function FiltrosCliente({
 }: Props) {
   const router = useRouter();
   const pathname = usePathname();
+  // `useTransition` mantém a UI interativa enquanto o Server Component
+  // re-renderiza. `isPending` ativa o dimming da section pra sinalizar
+  // que algo está em curso (P1 do diagnóstico de perf).
+  const [isPending, startTransition] = React.useTransition();
+  const { modo, setModo } = useModo();
 
   const aplicar = (mudanca: Partial<FiltrosRentabilidade>) => {
-    const novo = { ...filtros, ...mudanca };
+    // `modo` vem do provider (client state), não do prop `filtros` — senão
+    // trocar modo client-side seria revertido no próximo router.push.
+    const novo = { ...filtros, modo, ...mudanca };
     // Regra 3.7: se cliente saiu, remover marcas orfas.
     if (mudanca.clientesIds !== undefined) {
       const clientesValidos = new Set(mudanca.clientesIds);
@@ -50,7 +58,9 @@ export function FiltrosCliente({
       }
     }
     const qs = filtrosParaQueryString(novo);
-    router.push(qs ? `${pathname}?${qs}` : pathname);
+    startTransition(() => {
+      router.push(qs ? `${pathname}?${qs}` : pathname);
+    });
   };
 
   // Marcas oferecidas ao usuario: filtradas pelos clientes selecionados (spec §3.7).
@@ -62,7 +72,13 @@ export function FiltrosCliente({
   const anos = anosDisponiveis();
 
   return (
-    <section className="rounded-2xl border border-border bg-card p-5 shadow-soft space-y-4">
+    <section
+      data-pending={isPending || undefined}
+      className={cn(
+        "rounded-2xl border border-border bg-card p-5 shadow-soft space-y-4 transition-opacity",
+        isPending && "opacity-60",
+      )}
+    >
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Campo label="Ano">
           <select
@@ -163,14 +179,16 @@ export function FiltrosCliente({
       </div>
 
       <div className="flex flex-wrap items-center gap-4 border-t border-border pt-4">
+        {/* Modo NÃO usa `aplicar` — vive no ModoProvider e troca sem re-render
+            do server (P7). A URL é sincronizada via history.replaceState. */}
         <TogglePill
           label="Modo"
           opcoes={[
             { valor: "previsto", rotulo: "Previsto" },
             { valor: "realizado", rotulo: "Realizado" },
           ]}
-          valor={filtros.modo}
-          onChange={(v) => aplicar({ modo: v as FiltrosRentabilidade["modo"] })}
+          valor={modo}
+          onChange={setModo}
         />
 
         <TogglePill
