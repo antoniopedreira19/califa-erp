@@ -1,6 +1,6 @@
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
-import { ChevronRight, FileText, Paperclip } from "lucide-react";
+import { ArrowLeft, FileText, Paperclip } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { formatCurrency } from "@/lib/utils";
@@ -308,28 +308,16 @@ export default async function AvulsaDetalhesPage({
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
-      {/* Breadcrumb + Header */}
+      <div>
+        <Link
+          href="/financeiro/contas-a-pagar"
+          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ArrowLeft className="h-3 w-3" />
+          Voltar para contas a pagar
+        </Link>
+      </div>
       <header className="space-y-2">
-        <nav className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Link href="/financeiro" className="hover:text-california-red">
-            Financeiro
-          </Link>
-          <ChevronRight className="h-3 w-3" />
-          <Link
-            href="/financeiro/contas-a-pagar"
-            prefetch={false}
-            className="hover:text-california-red"
-          >
-            Contas a Pagar
-          </Link>
-          <ChevronRight className="h-3 w-3" />
-          <span className="text-california-red">
-            {c.descricao.length > 60
-              ? c.descricao.slice(0, 60) + "..."
-              : c.descricao}
-          </span>
-        </nav>
-
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="rounded-lg bg-california-red/10 p-2">

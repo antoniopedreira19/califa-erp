@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ChevronRight, TrendingUp } from "lucide-react";
+import { ArrowLeft, TrendingUp } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { FluxoCaixaView, type FluxoItem, type ContaOpcao } from "./fluxo-caixa-view";
@@ -107,18 +107,16 @@ export default async function FluxoCaixaPage() {
 
   return (
     <div className="space-y-8 max-w-[1560px] mx-auto">
+      <div>
+        <Link
+          href="/financeiro"
+          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ArrowLeft className="h-3 w-3" />
+          Voltar para central financeira
+        </Link>
+      </div>
       <header className="space-y-2">
-        <nav className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Link
-            href="/financeiro"
-            prefetch={false}
-            className="hover:text-california-red transition-colors"
-          >
-            Financeiro
-          </Link>
-          <ChevronRight className="h-3 w-3" />
-          <span className="text-california-red">Fluxo de caixa</span>
-        </nav>
         <div className="flex items-center gap-3">
           <div className="rounded-lg bg-california-red/10 p-2">
             <TrendingUp className="h-5 w-5 text-california-red" />

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Receipt } from "lucide-react";
+import { ArrowLeft, Receipt } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
@@ -335,10 +335,16 @@ export default async function ConciliacaoPage({
 
   return (
     <div className="space-y-6">
+      <div>
+        <Link
+          href="/financeiro"
+          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ArrowLeft className="h-3 w-3" />
+          Voltar para central financeira
+        </Link>
+      </div>
       <header className="space-y-1">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-california-red">
-          Financeiro
-        </p>
         <div className="flex items-center gap-3">
           <div className="rounded-lg bg-california-red/10 p-2">
             <Receipt className="h-5 w-5 text-california-red" />
