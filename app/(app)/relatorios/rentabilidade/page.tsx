@@ -88,19 +88,6 @@ export default async function RentabilidadePage({ searchParams }: Props) {
     resolveRotulo,
   );
 
-  // Aplica faturamentoMinimo (filtro no grupo, nao no job — spec §3.6).
-  const gruposFiltradosA =
-    filtros.faturamentoMinimo !== null
-      ? gruposA.filter((g) => g.bases.faturamento >= filtros.faturamentoMinimo!)
-      : gruposA;
-
-  const totalBases = {
-    faturamento: gruposFiltradosA.reduce((s, g) => s + g.bases.faturamento, 0),
-    imposto: gruposFiltradosA.reduce((s, g) => s + g.bases.imposto, 0),
-    custo: gruposFiltradosA.reduce((s, g) => s + g.bases.custo, 0),
-    bv: gruposFiltradosA.reduce((s, g) => s + g.bases.bv, 0),
-  };
-
   // Grupos do 2o periodo pro comparativo (se houver).
   const gruposB = linhasPeriodoB
     ? agruparEComputar(
@@ -110,6 +97,38 @@ export default async function RentabilidadePage({ searchParams }: Props) {
         resolveRotulo,
       )
     : null;
+
+  // Aplica faturamentoMinimo (filtro no grupo, nao no job — spec §3.6).
+  // No comparativo, a semantica e "cliente entra se fatA >= min OR fatB >= min":
+  // caso contrario o bloco B mostra clientes que fatmin excluiria e os dados
+  // ficam incoerentes entre os dois periodos (fix I2 do review).
+  const chavesQuePassam =
+    filtros.faturamentoMinimo !== null
+      ? new Set<string>([
+          ...gruposA
+            .filter((g) => g.bases.faturamento >= filtros.faturamentoMinimo!)
+            .map((g) => g.chave),
+          ...(gruposB ?? [])
+            .filter((g) => g.bases.faturamento >= filtros.faturamentoMinimo!)
+            .map((g) => g.chave),
+        ])
+      : null;
+
+  const gruposFiltradosA = chavesQuePassam
+    ? gruposA.filter((g) => chavesQuePassam.has(g.chave))
+    : gruposA;
+
+  const gruposFiltradosB =
+    gruposB && chavesQuePassam
+      ? gruposB.filter((g) => chavesQuePassam.has(g.chave))
+      : gruposB;
+
+  const totalBases = {
+    faturamento: gruposFiltradosA.reduce((s, g) => s + g.bases.faturamento, 0),
+    imposto: gruposFiltradosA.reduce((s, g) => s + g.bases.imposto, 0),
+    custo: gruposFiltradosA.reduce((s, g) => s + g.bases.custo, 0),
+    bv: gruposFiltradosA.reduce((s, g) => s + g.bases.bv, 0),
+  };
 
   return (
     <div className="space-y-6">
@@ -148,11 +167,11 @@ export default async function RentabilidadePage({ searchParams }: Props) {
         }))}
       />
 
-      {gruposB ? (
+      {gruposFiltradosB ? (
         <TabelaComparativo
           visao={filtros.visao}
           gruposA={gruposFiltradosA}
-          gruposB={gruposB}
+          gruposB={gruposFiltradosB}
           anoA={filtros.ano}
           anoB={filtros.compararAno!}
         />
