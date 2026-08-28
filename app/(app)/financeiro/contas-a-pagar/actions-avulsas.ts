@@ -87,10 +87,26 @@ export async function criarContaAvulsa(input: unknown): Promise<Result> {
     };
   }
 
+  // Código próprio, como PP e desembolso já tinham. É ele que identifica a
+  // avulsa na coluna Origem da Conciliação — a descrição é texto livre e
+  // não serve de identificador (28/08/2026).
+  //
+  // Falha aqui não derruba a criação: a avulsa sem código continua íntegra
+  // e a coluna mostra travessão. Perder um lançamento por causa de um
+  // rótulo seria pior do que ficar sem o rótulo.
+  const { data: codigo, error: errCodigo } = await supabase.rpc(
+    "gerar_codigo_avulsa",
+    { p_tenant_id: session.activeTenant.id },
+  );
+  if (errCodigo) {
+    console.error("[avulsa.codigo]", errCodigo.message);
+  }
+
   const { data: conta, error } = await supabase
     .from("contas_avulsas")
     .insert({
       tenant_id: session.activeTenant.id,
+      codigo: (codigo as string | null) ?? null,
       empresa_id: d.empresa_id,
       descricao: d.descricao,
       valor: d.valor,

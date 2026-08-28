@@ -71,7 +71,13 @@ export default async function ConciliacaoPage({
     });
     saldoAnterior = s.saldoAnterior;
 
-    const { data } = await supabase
+    // ⚠️ O erro é LIDO. Ele era descartado, e o efeito de qualquer engano
+    // na query — um embed ambíguo, por exemplo — era a tela dizer
+    // "nenhum lançamento nesse período", que é indistinguível de um
+    // período vazio de verdade. Foi assim que a coluna Origem entrou
+    // quebrada em 28/08/2026: `titulos_receber` tem FK nas DUAS direções
+    // e o PostgREST não escolhe sozinho.
+    const { data, error: lancamentosErr } = await supabase
       .from("lancamentos_financeiros")
       .select(
         `id, data_movimento, descricao, natureza, valor, origem, created_at,
@@ -80,7 +86,16 @@ export default async function ConciliacaoPage({
          empresas(regional:regionais(nome)),
          plano_contas_tipos!inner(codigo, nome),
          plano_contas_subtipos!inner(codigo, nome),
+         forma_pagamento,
+         pedido_compra:pedidos_compra(codigo),
+         desembolso:desembolsos(codigo),
+         cartao:cartoes_credito(nome, ultimos_4_digitos),
+         titulo:titulos_receber!lancamentos_financeiros_titulo_receber_id_fkey(
+           faturamento:faturamentos(numero_nf, serie)
+         ),
          conta_avulsa:contas_avulsas!conta_avulsa_id(
+           codigo,
+           recorrente_id,
            rateio:contas_avulsas_regionais(
              percentual,
              regional:regionais(nome)
@@ -94,6 +109,10 @@ export default async function ConciliacaoPage({
       .order("data_movimento", { ascending: true })
       .order("created_at", { ascending: true });
 
+    if (lancamentosErr) {
+      console.error("[conciliacao.lancamentos]", lancamentosErr.message);
+    }
+
     type RawRow = {
       id: string;
       data_movimento: string;
@@ -106,12 +125,29 @@ export default async function ConciliacaoPage({
       empresas: { regional: { nome: string } | null } | null;
       plano_contas_tipos: { codigo: string; nome: string };
       plano_contas_subtipos: { codigo: string; nome: string };
+      forma_pagamento: string | null;
+      pedido_compra: { codigo: string } | null;
+      desembolso: { codigo: string } | null;
+      cartao: { nome: string; ultimos_4_digitos: string } | null;
+      titulo: {
+        faturamento: { numero_nf: string | null; serie: string | null } | null;
+      } | null;
       conta_avulsa: {
+        codigo: string | null;
+        recorrente_id: string | null;
         rateio: Array<{
           percentual: number;
           regional: { nome: string } | null;
         }>;
       } | null;
+    };
+
+    /** "NF 900123/1" — a nota como ela é lida, com a série quando existe. */
+    const numeroDaNota = (
+      f: { numero_nf: string | null; serie: string | null } | null,
+    ): string | null => {
+      if (!f?.numero_nf) return null;
+      return f.serie ? `NF ${f.numero_nf}/${f.serie}` : `NF ${f.numero_nf}`;
     };
 
     const raw = ((data ?? []) as unknown as RawRow[]).map((r) => {
@@ -141,6 +177,20 @@ export default async function ConciliacaoPage({
               : (r.jobs?.regional?.nome ??
                  r.empresas?.regional?.nome ??
                  null),
+        // A ordem é a das origens que têm identificador próprio. O
+        // recebimento fica por último porque ali a origem É a nota — o
+        // faturamento não tem código interno, e inventar um só faria a
+        // coluna Documento repetir esta.
+        origem_codigo:
+          r.pedido_compra?.codigo ??
+          r.desembolso?.codigo ??
+          r.conta_avulsa?.codigo ??
+          numeroDaNota(r.titulo?.faturamento ?? null),
+        origem_recorrente: r.conta_avulsa?.recorrente_id != null,
+        cartao_label:
+          r.forma_pagamento === "cartao_credito" && r.cartao
+            ? `${r.cartao.nome} ·${r.cartao.ultimos_4_digitos}`
+            : null,
         tipo_codigo: r.plano_contas_tipos.codigo,
         tipo_nome: r.plano_contas_tipos.nome,
         subtipo_codigo: r.plano_contas_subtipos.codigo,

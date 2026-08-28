@@ -24,6 +24,20 @@ export type LancamentoLinha = {
    *  a história é `rateio` — a coluna mostra "Rateada" e o detalhe da
    *  linha abre a divisão com os percentuais. */
   regional_nome: string | null;
+  /** De ONDE o lançamento veio, pelo identificador interno da origem:
+   *  `PP-00009`, `DES-00004`, `AV-00001`, ou o número da nota no
+   *  recebimento — ali a origem É o documento, e não existe código
+   *  interno (`faturamentos` não tem `codigo`). `null` em lançamento
+   *  manual (28/08/2026). */
+  origem_codigo: string | null;
+  /** A avulsa nasceu de uma recorrência (assinatura, mensalidade). Vira um
+   *  distintivo ao lado do código — chamar de "avulsa" o que se repete
+   *  todo mês confunde quem lê o extrato. */
+  origem_recorrente: boolean;
+  /** "Nubank ·4471" quando o lançamento foi pago no cartão. É forma de
+   *  PAGAMENTO, não origem: por isso acompanha o código em vez de
+   *  substituí-lo. */
+  cartao_label: string | null;
   origem: string;
   credito: number;
   debito: number;

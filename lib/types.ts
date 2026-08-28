@@ -1786,6 +1786,10 @@ export interface ContaAvulsaRecorrente {
 export interface ContaAvulsa {
   id: string;
   tenant_id: string;
+  /** `AV-00001`. Identifica a avulsa na coluna Origem da Conciliação —
+   *  `descricao` é texto livre e não serve de identificador. `null` nas
+   *  linhas anteriores a 28/08/2026. */
+  codigo: string | null;
   empresa_id: string;
   descricao: string;
   valor: string; // numeric → string do supabase-js
