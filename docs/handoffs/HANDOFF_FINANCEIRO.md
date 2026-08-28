@@ -2163,3 +2163,43 @@ travessão.
 Quando a avulsa se divide entre **duas ou mais** regionais, a célula mostra
 **"Rateada"** — o nome de uma só seria mentira, e a divisão com os
 percentuais já vive no detalhe que o botão "Rateado" abre na própria linha.
+
+**4. Coluna Origem** (28/08/2026), à direita da Regional. De onde o
+lançamento veio, pelo identificador interno:
+
+| Origem do lançamento | O que a coluna mostra |
+|---|---|
+| Pedido de Produção | `PP-00009` |
+| Desembolso | `DES-00004` |
+| Conta avulsa | `AV-00001` — **código novo**, ver abaixo |
+| Recebimento de título | `NF 900123/1` |
+| Manual | — |
+
+A avulsa **ganhou código** (migration `20260828100001`). Era a única origem
+sem identificador: `descricao` é texto livre, e duas avulsas diferentes
+ficavam indistinguíveis. O código nasce nos dois caminhos de criação — a
+avulsa manual (`actions-avulsas.ts`) e a ocorrência de recorrência, que é
+gerada dentro da função `gerar_ocorrencias_recorrentes`.
+
+O **recebimento não tem código interno**, e isso é deliberado: `faturamentos`
+não tem `codigo`, e num título a receber a origem *é* a nota. Criar um
+`FAT-` só faria a futura coluna Documento repetir esta.
+
+Dois distintivos acompanham o código, sem substituí-lo:
+
+- **Recorrente** — a avulsa nasceu de uma recorrência (assinatura,
+  mensalidade). Chamar de "avulso" o que se repete todo mês confunde.
+- **Cartão** (`Nubank ·4471`) — forma de PAGAMENTO, não origem. Fica ao
+  lado do código de propósito: duas PPs iguais não podem aparecer
+  diferentes só porque uma passou no cartão.
+
+⚠️ **Armadilha desta query, para quem for mexer.** `titulos_receber` tem FK
+para `lancamentos_financeiros` **nas duas direções**
+(`lancamentos_financeiros.titulo_receber_id` e `titulos_receber.lancamento_id`),
+então o embed precisa nomear a constraint
+(`titulos_receber!lancamentos_financeiros_titulo_receber_id_fkey`). Sem
+isso o PostgREST não escolhe e **a query inteira falha**.
+
+O sintoma é traiçoeiro: a página lia `const { data } = await …` sem olhar o
+erro, e o resultado era a tela dizer *"nenhum lançamento nesse período"* —
+indistinguível de um período vazio de verdade. O erro passou a ser logado.

@@ -273,6 +273,7 @@ export default async function AvulsaDetalhesPage({
   const contaParaDrawer: ContaAvulsa = {
     id: c.id,
     tenant_id: c.tenant_id,
+    codigo: (c.codigo as string | null) ?? null,
     empresa_id: c.empresa_id,
     descricao: c.descricao,
     valor: c.valor,

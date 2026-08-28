@@ -1,6 +1,6 @@
 "use client";
 import * as React from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, CreditCard } from "lucide-react";
 import type { LancamentoLinha } from "@/lib/calculos/saldo-conta";
 
 export function ConciliacaoList({
@@ -70,6 +70,7 @@ export function ConciliacaoList({
             <th className="px-3 py-2 text-left">Tipo</th>
             <th className="px-3 py-2 text-left">Subtipo</th>
             <th className="px-3 py-2 text-left">Regional</th>
+            <th className="px-3 py-2 text-left">Origem</th>
           </tr>
         </thead>
         <tbody>
@@ -165,11 +166,35 @@ export function ConciliacaoList({
                     <span className="text-muted-foreground">—</span>
                   ))}
               </td>
+              {/* De onde o lançamento veio. O cartão acompanha o código em
+                  vez de substituí-lo: ele é forma de PAGAMENTO, e duas PPs
+                  iguais não podem aparecer diferentes só porque uma passou
+                  no cartão. */}
+              <td className="whitespace-nowrap px-3 py-2 text-xs">
+                {l.origem_codigo ? (
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="font-mono">{l.origem_codigo}</span>
+                    {l.origem_recorrente && (
+                      <span className="inline-flex items-center rounded border border-border bg-muted px-1.5 py-0.5 text-[9px] font-semibold uppercase text-muted-foreground">
+                        Recorrente
+                      </span>
+                    )}
+                    {l.cartao_label && (
+                      <span className="inline-flex items-center gap-1 rounded border border-slate-300 bg-slate-100 px-1.5 py-0.5 text-[9px] font-semibold text-slate-700">
+                        <CreditCard className="h-2.5 w-2.5" />
+                        {l.cartao_label}
+                      </span>
+                    )}
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground">—</span>
+                )}
+              </td>
             </tr>
             {aberta && (
               <tr className="border-b border-border bg-muted/20 last:border-0">
                 <td colSpan={4} />
-                <td colSpan={6} className="px-3 pb-3 pt-1">
+                <td colSpan={7} className="px-3 pb-3 pt-1">
                   <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.07em] text-muted-foreground">
                     De onde vem este dinheiro
                   </p>
