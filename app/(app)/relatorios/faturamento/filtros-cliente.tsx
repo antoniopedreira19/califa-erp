@@ -4,6 +4,13 @@ import * as React from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import {
   type FiltrosFaturamento,
@@ -78,17 +85,21 @@ export function FiltrosCliente({
     >
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Campo label="Ano">
-          <select
-            value={filtros.ano}
-            onChange={(e) => aplicar({ ano: Number(e.target.value) })}
-            className="h-9 w-full rounded-md border border-border bg-background px-3 text-sm"
+          <Select
+            value={String(filtros.ano)}
+            onValueChange={(v) => aplicar({ ano: Number(v) })}
           >
-            {anos.map((a) => (
-              <option key={a} value={a}>
-                {a}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger className="h-9">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {anos.map((a) => (
+                <SelectItem key={a} value={String(a)}>
+                  {a}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </Campo>
 
         <Campo label="Trimestres">
