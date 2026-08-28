@@ -23,14 +23,18 @@ import {
 import { criarCartao, atualizarCartao } from "./actions";
 import type { CartaoCredito, BandeiraCartao } from "@/lib/types";
 
+export type EmpresaOpcao = { id: string; nome: string };
+
 type Props =
   | {
       mode: "criar";
+      empresas: EmpresaOpcao[];
       trigger?: React.ReactNode;
     }
   | {
       mode: "editar";
       cartao: CartaoCredito;
+      empresas: EmpresaOpcao[];
       trigger?: React.ReactNode;
       open?: boolean;
       onOpenChange?: (open: boolean) => void;
@@ -102,6 +106,7 @@ export function CartaoDrawer(props: Props) {
       dono,
       dia_vencimento_fatura: isNaN(dia) ? undefined : dia,
       dia_fechamento_fatura: isNaN(diaFecha) ? undefined : diaFecha,
+      empresa_id: formData.get("empresa_id")?.toString() || undefined,
       ...(isEditar && cartao ? { id: cartao.id } : {}),
     };
 
@@ -201,6 +206,28 @@ export function CartaoDrawer(props: Props) {
                   <SelectItem value="outra">Outra</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+
+            {/* Empresa dona: a conta espelho do cartão herda daqui, e é o
+                que impede o cartão de uma empresa pagar título da outra. */}
+            <div className="space-y-2">
+              <Label htmlFor="empresa_id">Empresa *</Label>
+              <select
+                id="empresa_id"
+                name="empresa_id"
+                required
+                defaultValue={cartao?.empresa_id ?? ""}
+                className="h-10 w-full rounded-lg border border-border bg-white px-3 text-sm outline-none focus:border-california-red"
+              >
+                <option value="" disabled>
+                  Selecione a empresa
+                </option>
+                {props.empresas.map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {e.nome}
+                  </option>
+                ))}
+              </select>
             </div>
 
             {/* Últimos 4 dígitos ocupa a linha sozinho: as duas datas vão

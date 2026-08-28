@@ -18,15 +18,35 @@ export default async function CartoesCreditoPage() {
   }
 
   const supabase = createClient();
-  const { data, error } = await supabase
-    .from("cartoes_credito")
-    .select("*")
-    .eq("tenant_id", session.activeTenant.id)
-    .order("ativo", { ascending: false })
-    .order("nome")
-    .returns<CartaoCredito[]>();
+  // As duas em paralelo, nunca em série (docs/PERFORMANCE.md).
+  const [{ data, error }, empresasRes] = await Promise.all([
+    supabase
+      .from("cartoes_credito")
+      .select("*")
+      .eq("tenant_id", session.activeTenant.id)
+      .order("ativo", { ascending: false })
+      .order("nome")
+      .returns<CartaoCredito[]>(),
+    supabase
+      .from("empresas")
+      .select("id, razao_social, nome_fantasia")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("ativo", true)
+      .order("principal", { ascending: false })
+      .order("razao_social"),
+  ]);
 
   if (error) console.error("[cadastros.cartoes]", error.message);
+  if (empresasRes.error) {
+    console.error("[cadastros.cartoes.empresas]", empresasRes.error.message);
+  }
+
+  const empresas = (empresasRes.data ?? []).map(
+    (e: { id: string; razao_social: string; nome_fantasia: string | null }) => ({
+      id: e.id,
+      nome: e.nome_fantasia ?? e.razao_social,
+    }),
+  );
 
   return (
     <div className="space-y-8 max-w-5xl mx-auto">
@@ -56,7 +76,7 @@ export default async function CartoesCreditoPage() {
         </p>
       </header>
 
-      <CartoesList rows={data ?? []} />
+      <CartoesList rows={data ?? []} empresas={empresas} />
     </div>
   );
 }

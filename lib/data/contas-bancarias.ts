@@ -42,6 +42,10 @@ export async function listarContasBancarias(
       )
       .eq("tenant_id", tenantId)
       .eq("ativo", true)
+      // A conta espelho do CARTÃO fica de fora: ela não recebe nem paga
+      // direto. Quem escolhe conta aqui é a abertura do job, para dizer
+      // por onde o dinheiro entra e sai de verdade (28/08/2026).
+      .neq("tipo", "cartao_credito")
       .order("ordem", { ascending: true })
       .order("nome", { ascending: true }),
     supabase.rpc("fc_saldos_por_conta", { p_data: hoje }),

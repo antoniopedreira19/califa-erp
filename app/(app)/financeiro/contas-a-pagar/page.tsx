@@ -78,6 +78,7 @@ export default async function PedidosCompraFinanceiroPage() {
       .select("*")
       .eq("tenant_id", session.activeTenant.id)
       .eq("ativo", true)
+      .neq("tipo", "cartao_credito")
       .returns<ContaBancaria[]>(),
     supabase
       .from("plano_contas_tipos")
