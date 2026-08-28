@@ -126,6 +126,20 @@ export function PPDrawerFinanceiro({
   const [tipoId, setTipoId] = React.useState<string>("");
   const [subtipoId, setSubtipoId] = React.useState<string>("");
   const noCartao = formaPagamento === "cartao_credito";
+
+  /**
+   * PP sempre nasce vinculada a um job, e custo de job cai em "Custo
+   * Operacional" (código 02) por convenção contábil. É o mesmo default
+   * que a tela de baixa já usava — aqui ele só chegou antes, porque no
+   * cartão não existe baixa individual onde escolher (29/08/2026).
+   *
+   * O subtipo fica em branco de propósito: ele é a escolha real do
+   * financeiro, e pré-preencher os dois faria a tela decidir sozinha.
+   */
+  const custoOperacionalId = React.useMemo(
+    () => tipos.find((t) => t.codigo === "02")?.id ?? "",
+    [tipos],
+  );
   const [askRejeitar, setAskRejeitar] = React.useState(false);
   const [motivo, setMotivo] = React.useState("");
   const [docsAbertos, setDocsAbertos] = React.useState(false);
@@ -577,9 +591,14 @@ export function PPDrawerFinanceiro({
                     value={formaPagamento}
                     disabled={pending}
                     onChange={(e) => {
-                      setFormaPagamento(e.target.value);
+                      const nova = e.target.value;
+                      setFormaPagamento(nova);
                       setCartaoId("");
-                      setTipoId("");
+                      // No cartão o tipo já vem em Custo Operacional; o
+                      // subtipo continua em branco, que é a escolha real.
+                      setTipoId(
+                        nova === "cartao_credito" ? custoOperacionalId : "",
+                      );
                       setSubtipoId("");
                       setErro(null);
                     }}

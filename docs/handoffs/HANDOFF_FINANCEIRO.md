@@ -2832,6 +2832,16 @@ fechamento não teria como classificar o lançamento.
 Por isso a constraint `chk_pp_cartao_coerente` exige tipo e subtipo
 quando `forma_pagamento = 'cartao_credito'`.
 
+**O tipo já vem preenchido em "02 · Custo Operacional"** assim que a forma
+vira cartão. É a mesma convenção que a tela de baixa já usava — PP nasce
+vinculada a job, e custo de job cai em Custo Operacional. Aqui ela só
+chegou antes, porque no cartão não existe baixa onde escolher.
+
+⚠️ **O subtipo fica em branco de propósito.** Ele é a escolha real do
+financeiro; pré-preencher os dois faria a tela decidir sozinha e o
+lançamento sairia classificado por default, sem ninguém ter olhado. O
+tipo pode ser trocado — o default é atalho, não trava.
+
 ### Uma parcela, uma fatura — pela data DELA
 
 A PP de 30/60/90 dias vira três itens em três faturas, pelo prazo que a
@@ -2872,4 +2882,7 @@ faturas; FC-00001 fechada misturando 3 avulsas e 2 parcelas de PP →
 escritório, PP em Alimentação); reaberta → 5 lançamentos apagados, 3
 itens e 2 parcelas de PP devolvidos, PP de volta a 'aprovada', as quatro
 pernas do pagamento antigo intactas.
+
+PP-00003 aprovada no cartão com o tipo default: gravou `02 · Custo
+Operacional` sem ninguém tocar no campo, com o subtipo escolhido à mão.
 
