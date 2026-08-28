@@ -1,5 +1,6 @@
 "use client";
 import * as React from "react";
+import Link from "next/link";
 import { CreditCard, ExternalLink, Info } from "lucide-react";
 import type { LancamentoLinha } from "@/lib/calculos/saldo-conta";
 import {
@@ -108,7 +109,15 @@ export function ConciliacaoList({
                   )}
                 </td>
                 <td className="whitespace-nowrap px-3 py-2 font-mono text-xs">
-                  {l.job_codigo ?? (
+                  {l.job_id && l.job_codigo ? (
+                    <Link
+                      href={`/jobs/${l.job_id}?from=financeiro`}
+                      prefetch={false}
+                      className="text-california-red hover:underline"
+                    >
+                      {l.job_codigo}
+                    </Link>
+                  ) : (
                     <span className="italic text-muted-foreground/70 font-sans">
                       Não Vinculado
                     </span>
