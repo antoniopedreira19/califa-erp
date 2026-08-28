@@ -16,6 +16,11 @@ export type LancamentoLinha = {
   tipo_nome: string;
   subtipo_codigo: string;
   subtipo_nome: string;
+  /** Empresa que possui a conta bancária do lançamento — o `nome_fantasia`
+   *  quando existe, senão a `razao_social`. Sempre presente porque a conta
+   *  bancária tem FK obrigatória para empresa. `null` só num caso limite
+   *  de dado torto. */
+  empresa_nome: string | null;
   /** Regional do lançamento, pela MESMA regra do `vw_fluxo_caixa`: a
    *  avulsa rateada manda; sem rateio, a regional do job; sem job, a da
    *  empresa. `null` quando nenhuma das três existe.

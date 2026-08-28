@@ -87,7 +87,7 @@ export default async function ConciliacaoPage({
         `id, data_movimento, descricao, natureza, valor, origem, created_at,
          fornecedores(nome, razao_social),
          jobs(codigo, regional:regionais(nome)),
-         empresas(regional:regionais(nome)),
+         empresas(nome_fantasia, razao_social, regional:regionais(nome)),
          plano_contas_tipos!inner(codigo, nome),
          plano_contas_subtipos!inner(codigo, nome),
          forma_pagamento,
@@ -134,7 +134,11 @@ export default async function ConciliacaoPage({
       origem: string;
       fornecedores: { nome: string | null; razao_social: string | null } | null;
       jobs: { codigo: string; regional: { nome: string } | null } | null;
-      empresas: { regional: { nome: string } | null } | null;
+      empresas: {
+        nome_fantasia: string | null;
+        razao_social: string | null;
+        regional: { nome: string } | null;
+      } | null;
       plano_contas_tipos: { codigo: string; nome: string };
       plano_contas_subtipos: { codigo: string; nome: string };
       forma_pagamento: string | null;
@@ -262,6 +266,8 @@ export default async function ConciliacaoPage({
         tipo_nome: r.plano_contas_tipos.nome,
         subtipo_codigo: r.plano_contas_subtipos.codigo,
         subtipo_nome: r.plano_contas_subtipos.nome,
+        empresa_nome:
+          r.empresas?.nome_fantasia ?? r.empresas?.razao_social ?? null,
         origem: r.origem,
         rateio,
       };
