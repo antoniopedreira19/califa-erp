@@ -97,7 +97,19 @@ export interface TituloRow {
    */
   estorno_de_avulsa_id: string | null;
   /**
-   * Quanto desta compra já foi estornado. Serve para a aba Cartão saber
+   * A COMPRA a que esta linha pertence — ela mesma, se for compra à vista
+   * ou a primeira parcela; a cabeça, se for parcela do meio.
+   *
+   * É neste id que o estorno se prende: compra em 3x estornada por
+   * inteiro é UM estorno do valor cheio, apontando para a cabeça
+   * (29/08/2026). Fora do cartão, é o próprio id.
+   */
+  compra_id: string;
+  /** Total da compra: a soma das parcelas dela. Uma parcela sozinha não
+   *  é o teto do estorno. */
+  compra_total: number;
+  /**
+   * Quanto desta COMPRA já foi estornado. Serve para a aba Cartão saber
    * se ainda cabe estorno e qual o teto. Sempre 0 fora do cartão.
    */
   estornado: number;

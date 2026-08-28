@@ -40,6 +40,7 @@ import type {
   RateioLinhaInput,
 } from "@/lib/types";
 import type { DocumentoDoAnexo } from "@/lib/types";
+import { formatCurrency } from "@/lib/utils";
 import { RateioRegionalEditor } from "./rateio-regional-editor";
 import {
   FormaPagamentoField,
@@ -161,6 +162,10 @@ export function ContaAvulsaDrawer(props: Props) {
   // vira outra aba/módulo — não este drawer.
   const natureza: "saida" = "saida";
 
+  // Em quantas vezes. Só existe no cartão; o valor digitado é sempre o
+  // TOTAL da compra e o banco reparte (29/08/2026).
+  const [parcelas, setParcelas] = React.useState("1");
+
   // O dia em que a compra aconteceu. Só existe no cartão, e é ele que
   // escolhe a fatura — nasce em hoje porque lançar no dia é o caso comum
   // (29/08/2026).
@@ -176,6 +181,8 @@ export function ContaAvulsaDrawer(props: Props) {
   const [valor, setValor] = React.useState<string>(
     conta ? String(Number(conta.valor)) : "",
   );
+  /** Só para montar "3x de R$ 33,34" no seletor de parcelas. */
+  const valorNumero = Number(valor) || 0;
   const [dataPrevista, setDataPrevista] = React.useState<string>(
     conta?.data_prevista_pagamento ?? "",
   );
@@ -414,6 +421,8 @@ export function ContaAvulsaDrawer(props: Props) {
       // Só faz sentido no cartão: fora dele ninguém escolhe fatura.
       data_compra:
         formaPagamento === "cartao_credito" ? dataCompra || null : null,
+      parcelas:
+        formaPagamento === "cartao_credito" ? Number(parcelas) || 1 : 1,
       // O estorno não nasce por aqui — ele tem tela própria, a partir da
       // compra que ele desfaz (aba Cartão).
       estorno_de_avulsa_id: null,
@@ -649,6 +658,31 @@ export function ContaAvulsaDrawer(props: Props) {
                   fatura em que a compra cair — se a competência dela já
                   fechou, a compra entra na seguinte.
                 </p>
+
+                <div className="space-y-2 pt-1">
+                  <Label htmlFor="parcelas">Parcelas</Label>
+                  <select
+                    id="parcelas"
+                    value={parcelas}
+                    disabled={pending}
+                    onChange={(e) => setParcelas(e.target.value)}
+                    className="h-10 w-full rounded-lg border border-border bg-white px-3 text-sm outline-none focus:border-california-red disabled:opacity-50"
+                  >
+                    {Array.from({ length: 24 }, (_, i) => i + 1).map((n) => (
+                      <option key={n} value={String(n)}>
+                        {n === 1 ? "À vista" : `${n}x`}
+                        {n > 1 && valorNumero > 0
+                          ? ` de ${formatCurrency(valorNumero / n)}`
+                          : ""}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    O valor acima é o <strong>total</strong> da compra. Cada
+                    parcela cai numa fatura, uma por mês — o resto da divisão
+                    vai na primeira.
+                  </p>
+                </div>
               </div>
             ) : (
             <div className="space-y-2">

@@ -93,6 +93,14 @@ export const criarContaAvulsaSchema = z
       .nullable()
       .or(z.literal("").transform(() => null))
       .default(null),
+    // Em quantas vezes a compra foi feita no cartão. 1 = à vista. O valor
+    // informado é sempre o TOTAL da compra; o banco divide (29/08/2026).
+    parcelas: z.coerce
+      .number()
+      .int()
+      .min(1, "Mínimo 1 parcela.")
+      .max(36, "No máximo 36 parcelas.")
+      .default(1),
     // A compra que este lançamento estorna. Aponta para a COMPRA, nunca
     // para a parcela: uma compra em 3x estornada por inteiro é UM estorno
     // do valor cheio, com as parcelas já pagas seguindo pagas.

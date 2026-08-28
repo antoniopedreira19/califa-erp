@@ -2696,3 +2696,62 @@ coladas no mesmo objeto, e o `\d` da tabela não avisa qual delas alguém
 mais está usando. Rodar a tela depois da migration teria pego isto — eu
 rodei a aba Cartão, não a Títulos a Pagar > Pagos.
 
+---
+
+## ⚠️ Compra parcelada no cartão (29/08/2026)
+
+Uma compra em 3x cai em três faturas seguidas.
+
+### Cada parcela é uma avulsa — não há tabela de parcelas
+
+A PP tem `pedidos_compra_parcelas` porque é um documento só pago em
+pedaços. No cartão é diferente: cada parcela **é** uma linha da fatura
+daquele mês, com valor, competência e lançamento próprios. Uma tabela de
+parcelas obrigaria o fechamento, a aba Cartão, os totais e a Conciliação
+a unir duas fontes — e todas já sabem lidar com avulsa.
+
+A compra em 3x nasce como **três avulsas irmãs**. A primeira é a CABEÇA
+(`parcela_numero = 1`, `parcela_de_avulsa_id = null`); as outras apontam
+para ela.
+
+### ⚠️ A parcela anda por COMPETÊNCIA, não por mês de calendário
+
+Primeira versão: parcela n com `data_compra` = compra + (n−1) meses, cada
+uma escolhendo a fatura sozinha. **Errado**, e o primeiro teste pegou.
+`fatura_aberta_do_cartao` ROLA a compra quando a competência dela já
+fechou — e aí duas parcelas se encontram:
+
+```text
+compra 28/08 em 3x, fatura de setembro já paga
+  parcela 1 → 25/09 (paga) → rola → 25/10   ← FC-00001
+  parcela 2 → 25/10 (aberta)                ← FC-00001  ✗ mesma fatura
+  parcela 3 → 25/11 (aberta)                ← FC-00002
+```
+
+Agora cada parcela é ancorada na competência da **anterior**: depois de
+inserir a parcela n, lê-se a fatura que ela realmente recebeu, e a n+1
+parte do dia seguinte ao fechamento dessa. Se essa também estiver
+fechada, o rolamento leva adiante e a n+2 parte de onde a n+1 parou.
+
+Migration `20260829130002`. Testado: R$ 100 em 3x → 33,34 + 33,33 + 33,33
+em 25/10, 25/11 e 25/12.
+
+### ⚠️ Ordem na action: parcelar vem DEPOIS do rateio
+
+`parcelar_compra_cartao` copia o rateio de regional da cabeça para as
+irmãs. Rodando antes do insert do rateio ela não achava nada para copiar,
+e as parcelas nasciam sem regional enquanto a primeira tinha. Pego no
+mesmo teste.
+
+### Estorno de compra parcelada
+
+Regra do Tiago: *"o estorno aconteceria inteiro e as parcelas continuariam
+pagas"*. O estorno aponta para a **cabeça** e o teto é o **total do
+grupo** — não o valor de uma parcela. O banco recusa estorno apontado
+para uma parcela do meio, com mensagem dizendo qual é a primeira.
+
+Na tela, o botão ↩ aparece em qualquer parcela mas sempre mira a cabeça,
+e o diálogo diz "(compra em 3x)" com o total. Testado: estorno de R$ 100
+numa compra 3x de 33,34+33,33+33,33 — o crédito caiu na fatura aberta e
+as três parcelas seguiram "a pagar" nas faturas delas.
+

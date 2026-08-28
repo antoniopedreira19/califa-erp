@@ -1900,6 +1900,19 @@ export interface ContaAvulsa {
    * anular é a razão de ele existir.
    */
   estorno_de_avulsa_id: string | null;
+  /**
+   * Compra parcelada no cartão. A primeira parcela é a CABEÇA
+   * (`parcela_numero = 1`, `parcela_de_avulsa_id = null`) e as outras
+   * apontam para ela; cada uma tem `data_compra` um mês à frente, e por
+   * isso cai sozinha na competência seguinte.
+   *
+   * Não há tabela de parcelas: cada parcela É uma avulsa, porque cada uma
+   * é uma linha da fatura daquele mês, com valor e lançamento próprios.
+   * O estorno se prende à cabeça e mede o teto pelo grupo.
+   */
+  parcela_numero: number;
+  parcela_total: number;
+  parcela_de_avulsa_id: string | null;
   criado_por: string;
   created_at: string;
   updated_at: string;
