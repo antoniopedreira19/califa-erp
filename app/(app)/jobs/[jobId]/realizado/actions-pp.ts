@@ -458,8 +458,13 @@ async function finalizarPedidoCompraImpl(
     };
   }
 
-  // Valida anexos array
-  if (anexos.length < 1) {
+  // Valida anexos array.
+  //
+  // Verba de Produção sai sem nota: ela é adiantamento, e a nota só existe
+  // depois que o responsável gasta. As notas dela entram na prestação de
+  // contas, que exige no mínimo uma (`fecharPrestacaoVerba`). A UI esconde
+  // o asterisco; a regra mora aqui (27/08/2026).
+  if (!d.verba_producao && anexos.length < 1) {
     return { ok: false, message: "Pelo menos um anexo é obrigatório." };
   }
   const anexosParsed = z.array(anexoUploadedSchema).safeParse(anexos);
