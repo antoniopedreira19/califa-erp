@@ -714,6 +714,32 @@ export interface Job {
 }
 
 /**
+ * Uma linha da view `vw_job_rentabilidade`: um job, com todas as bases
+ * agregadas prontas pra fórmula gerencial rodar em memória.
+ *
+ * A view soma os itens; a fórmula de Result.Op continua em
+ * `lib/calculos/versao-totais.ts`. Ver spec 2026-08-28.
+ */
+export interface LinhaJobRentabilidade {
+  job_id: string;
+  tenant_id: string;
+  empresa_id: string;
+  regional_id: string | null;
+  cliente_id: string;
+  marca_id: string | null;
+  job_codigo: string;
+  job_nome: string;
+  data_abertura_financeiro: string;
+
+  faturamento_previsto: number;
+  imposto_previsto: number;
+  faturamento_realizado: number;
+  imposto_realizado: number;
+  custo_realizado: number;
+  bv_realizado: number;
+}
+
+/**
  * Tipo de contato do job. Hoje a aplicação só grava 'cobranca' — quem
  * recebe a cobrança no cliente. O CHECK do banco já aceita 'pagamento'
  * para não exigir migration se o contato de pagamento voltar à mesa
