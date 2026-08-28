@@ -636,6 +636,57 @@ export default async function PedidosCompraFinanceiroPage() {
     });
   }
 
+  // ---- Faturas de cartão FECHADAS ----
+  //
+  // A fatura desce para Títulos a Pagar como UM título. Os itens de dentro
+  // dela nunca aparecem aqui: seriam dezenas de linhas para uma única
+  // baixa, e é exatamente isso que a aba Cartão existe para evitar
+  // (28/08/2026).
+  //
+  // Só fechada e paga: a fatura ABERTA ainda recebe compra, e não faz
+  // sentido oferecer baixa de um valor que ainda vai mudar.
+  const { data: faturasRes, error: faturasErr } = await supabase
+    .from("faturas_cartao")
+    .select(
+      "id, codigo, competencia_fechamento, data_vencimento, status, valor_cobrado, " +
+        "cartao:cartoes_credito!inner(nome, ultimos_4_digitos, empresa_id)",
+    )
+    .eq("tenant_id", session.activeTenant.id)
+    .in("status", ["fechada", "paga"]);
+
+  if (faturasErr) {
+    console.error("[contas-a-pagar.faturas-cartao]", faturasErr.message);
+  }
+
+  for (const f of (faturasRes ?? []) as any[]) {
+    const cartaoNome = f.cartao?.nome ?? "Cartão";
+    titulos.push({
+      id: f.id,
+      origem: "fatura_cartao",
+      origem_label: f.codigo,
+      descricao: `Fatura ${cartaoNome} · fecha ${f.competencia_fechamento}`,
+      fornecedor_nome: cartaoNome,
+      job_codigo: "—",
+      data_pagamento: f.data_vencimento,
+      venc_original: f.data_vencimento,
+      data_pagamento_primeira: f.data_vencimento,
+      valor: Number(f.valor_cobrado ?? 0),
+      parcela_numero: 1,
+      parcela_total: 1,
+      status: f.status === "paga" ? "pago" : "a_pagar",
+      empresa_id: f.cartao?.empresa_id ?? "",
+      plano_conta_tipo_id: null,
+      plano_conta_subtipo_id: null,
+      pago_em: null,
+      conta_nome: null,
+      centro_nome: null,
+      // A fatura NÃO é um título "no cartão": ela é o que se paga PELO
+      // banco. Sem isto ela cairia na aba Cartão junto com os itens dela.
+      forma_pagamento: null,
+      cartao_credito_id: null,
+    });
+  }
+
   // Aba "Cartão" — TODOS os títulos de cartão (a pagar + pagos). O filtro
   // de status é interno na lista, padrão "a pagar".
   const titulosCartao = titulos.filter(

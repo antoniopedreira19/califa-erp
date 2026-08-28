@@ -147,6 +147,10 @@ export type AuditAction =
   | "conta_recorrente.ocorrencia_gerada"
   | "conta_avulsa.rateio_alterado"
   | "conta_recorrente.rateio_alterado"
+  // Fatura de cartão (28/08/2026): fechar transforma os itens em
+  // lançamentos; pagar é a transferência banco -> cartão.
+  | "fatura_cartao.fechada"
+  | "fatura_cartao.paga"
   | "cartao_credito.criado"
   | "cartao_credito.atualizado"
   | "cartao_credito.inativado"

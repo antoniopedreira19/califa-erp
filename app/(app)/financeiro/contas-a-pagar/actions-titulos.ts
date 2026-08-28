@@ -30,7 +30,14 @@ const dataSchema = z
   .regex(/^\d{4}-\d{2}-\d{2}$/, "Data deve estar em YYYY-MM-DD.");
 
 /** Origem do título — ver `OrigemTitulo` em `lib/types.ts`. */
-const origemSchema = z.enum(["pp", "avulso", "recorrencia", "desembolso", "pp_devolucao_verba"]);
+const origemSchema = z.enum([
+  "pp",
+  "avulso",
+  "recorrencia",
+  "desembolso",
+  "pp_devolucao_verba",
+  "fatura_cartao",
+]);
 
 /**
  * A mensagem do Postgres não é para o usuário.
@@ -220,6 +227,18 @@ const baixaSchema = z
   .superRefine((data, ctx) => {
     // Devolução de verba: forma_pagamento vem null e cartão também. Não
     // exige nada.
+    // Fatura de cartão: quem paga é o banco, e o que ela quita é o próprio
+    // cartão. Não aceita cartão como forma — seria pagar cartão com cartão.
+    if (data.origem === "fatura_cartao") {
+      if (data.cartao_credito_id !== null) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Fatura de cartão não se paga com outro cartão.",
+          path: ["cartao_credito_id"],
+        });
+      }
+      return;
+    }
     if (data.origem === "pp_devolucao_verba") {
       if (data.forma_pagamento !== null || data.cartao_credito_id !== null) {
         ctx.addIssue({
@@ -279,7 +298,9 @@ export async function darBaixaTitulo(input: unknown): Promise<Result> {
         ? "pp_verba_devolucao"
         : d.origem === "desembolso"
           ? "desembolso"
-          : "conta_avulsa",
+          : d.origem === "fatura_cartao"
+            ? "fatura_cartao"
+            : "conta_avulsa",
     d.id,
     d.origem === "pp"
       ? "pedido_compra.parcela_paga"
@@ -287,7 +308,9 @@ export async function darBaixaTitulo(input: unknown): Promise<Result> {
         ? "pp_verba_devolucao.baixada"
         : d.origem === "desembolso"
           ? "desembolso.parcela_paga"
-          : "conta_avulsa.baixada",
+          : d.origem === "fatura_cartao"
+            ? "fatura_cartao.paga"
+            : "conta_avulsa.baixada",
   );
   if (!gate.ok) return gate;
   const { session, supabase } = gate;
@@ -416,6 +439,50 @@ export async function darBaixaTitulo(input: unknown): Promise<Result> {
     });
 
     revalidarFinanceiro();
+    return { ok: true };
+  }
+
+  // ---- Fatura de cartão: a transferência banco -> cartão ----
+  // Dois lançamentos, não um: a saída no banco (que bate com o extrato) e a
+  // entrada no cartão (que quita o que ele acumulou).
+  if (d.origem === "fatura_cartao") {
+    const { data: fatura } = await supabase
+      .from("faturas_cartao")
+      .select("id, codigo, status, valor_cobrado")
+      .eq("id", d.id)
+      .eq("tenant_id", session.activeTenant.id)
+      .maybeSingle();
+
+    if (!fatura) return { ok: false, message: "Fatura não encontrada." };
+
+    const { data: ids, error } = await supabase.rpc("dar_baixa_fatura_cartao", {
+      p_fatura_id: d.id,
+      p_pago_em: d.pago_em,
+      p_conta_bancaria_id: d.conta_bancaria_id,
+      p_plano_conta_tipo_id: d.plano_conta_tipo_id,
+      p_plano_conta_subtipo_id: d.plano_conta_subtipo_id,
+    });
+
+    if (error) {
+      console.error("[titulos.baixa.fatura_cartao]", error.message);
+      return { ok: false, message: mensagemDeBaixa(error.message) };
+    }
+
+    await logAuditEvent({
+      acao: "fatura_cartao.paga",
+      tenantId: session.activeTenant.id,
+      entidadeTipo: "fatura_cartao",
+      entidadeId: d.id,
+      metadata: {
+        codigo: fatura.codigo,
+        valor: Number(fatura.valor_cobrado ?? 0),
+        pago_em: d.pago_em,
+        conta_bancaria_id: d.conta_bancaria_id,
+        lancamentos: ids,
+      },
+    });
+
+    revalidarFinanceiro(null);
     return { ok: true };
   }
 
