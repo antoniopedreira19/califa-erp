@@ -18,7 +18,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { CheckCheck, CreditCard, Eye, Info } from "lucide-react";
+import { CheckCheck, CreditCard, Eye, Info, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Select,
@@ -44,6 +44,7 @@ import {
   type BaixaRegistradaAlvo,
 } from "@/components/financeiro/baixa-registrada-dialog";
 import { estornarBaixaTitulo } from "./actions-titulos";
+import { ContaAvulsaDrawer } from "./conta-avulsa-drawer";
 
 type StatusFiltro = "a_pagar" | "pago" | "todos";
 
@@ -129,6 +130,20 @@ interface Props {
   contas: ContaBancaria[];
   tipos: PlanoContaTipo[];
   subtipos: PlanoContaSubtipo[];
+  /** Daqui para baixo, só o que o drawer de conta avulsa precisa para o
+   *  atalho "Lançar pagamento" (28/08/2026). */
+  tenantId: string;
+  empresas: Array<{ id: string; nome: string }>;
+  fornecedores: Array<{ id: string; nome: string }>;
+  clientes: Array<{ id: string; nome: string }>;
+  jobs: Array<{
+    id: string;
+    codigo: string;
+    nome: string;
+    cliente_id: string | null;
+    regional_id: string | null;
+  }>;
+  regionais: Array<{ id: string; nome: string; ativo: boolean }>;
 }
 
 // ---------------------------------------------------------------------------
@@ -209,7 +224,19 @@ function GrupoCartaoHeader({
 // Componente principal
 // ---------------------------------------------------------------------------
 
-export function TitulosCartaoList({ rows: rowsBruto, cartoes, contas, tipos, subtipos }: Props) {
+export function TitulosCartaoList({
+  rows: rowsBruto,
+  cartoes,
+  contas,
+  tipos,
+  subtipos,
+  tenantId,
+  empresas,
+  fornecedores,
+  clientes,
+  jobs,
+  regionais,
+}: Props) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
 
@@ -486,6 +513,39 @@ export function TitulosCartaoList({ rows: rowsBruto, cartoes, contas, tipos, sub
             </SelectContent>
           </Select>
         </div>
+
+        {/* Lançar pagamento — a despesa que NASCE no cartão.
+            Uma assinatura, uma compra sem pedido anterior: no sistema ela
+            é uma conta avulsa como qualquer outra, e ganha código `AV-`.
+            O atalho existe só para quem está olhando a fatura não ter que
+            reencontrar o cartão na mão (28/08/2026).
+
+            Com "Todos os cartões" o drawer abre sem pré-seleção — não dá
+            para adivinhar em qual cartão a compra caiu. */}
+        <ContaAvulsaDrawer
+          mode="criar"
+          tenantId={tenantId}
+          empresas={empresas}
+          tipos={tipos}
+          subtipos={subtipos}
+          fornecedores={fornecedores}
+          clientes={clientes}
+          jobs={jobs}
+          regionais={regionais}
+          cartoes={cartoes}
+          cartaoPreSelecionadoId={
+            filtroCartaoId === "__todos__" ? undefined : filtroCartaoId
+          }
+          trigger={
+            <button
+              type="button"
+              className="inline-flex items-center gap-2 whitespace-nowrap rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-california-red-hover"
+            >
+              <Plus className="h-4 w-4" />
+              Lançar pagamento
+            </button>
+          }
+        />
 
         {/* Filtro de data De */}
         <div className="flex items-center gap-1.5">

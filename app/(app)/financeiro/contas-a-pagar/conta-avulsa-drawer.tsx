@@ -85,6 +85,14 @@ type Props =
       regionais: RegionalResumida[];
       /** Cartões de crédito ativos. Se omitido, combobox de cartão não aparece. */
       cartoes?: CartaoOption[];
+      /**
+       * Abre o drawer já com forma de pagamento "cartão" e este cartão
+       * escolhido. É o "Lançar pagamento" da aba Cartão (28/08/2026): a
+       * despesa que nasce no cartão — uma assinatura, uma compra avulsa —
+       * é uma conta avulsa como qualquer outra, e o atalho existe para
+       * quem está olhando a fatura não ter que reencontrar o cartão na mão.
+       */
+      cartaoPreSelecionadoId?: string;
       trigger?: React.ReactNode;
       /**
        * Habilita o botão "Criar e dar baixa" da Tela 3.2: cria o
@@ -221,8 +229,14 @@ export function ContaAvulsaDrawer(props: Props) {
       setJobId("__none__");
       setTipoId("");
       setSubtipoId("");
-      setFormaPagamento(null);
-      setCartaoCreditoId(null);
+      // Vindo do atalho da aba Cartão, o drawer já abre no cartão certo.
+      // Os dois campos andam juntos: `cartao_credito_id` sem
+      // `forma_pagamento` não seria lido por ninguém.
+      const preCartao = !isEditar
+        ? (props as Extract<Props, { mode: "criar" }>).cartaoPreSelecionadoId
+        : undefined;
+      setFormaPagamento(preCartao ? "cartao_credito" : null);
+      setCartaoCreditoId(preCartao ?? null);
       setRateio([]);
       setAnexos([]);
       setUploadError(null);
