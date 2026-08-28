@@ -125,6 +125,15 @@ export async function criarContaAvulsa(input: unknown): Promise<Result> {
       forma_pagamento: d.forma_pagamento,
       cartao_credito_id: d.cartao_credito_id,
       criado_por: session.profile.id,
+      // A avulsa nasce aprovada — o status default do banco diz isso, e
+      // `chk_avulsa_aprovada_consistente` EXIGE os dois carimbos em toda
+      // linha. Sem eles nenhuma avulsa entrava: a tabela estava vazia
+      // desde 12/08/2026, quando a constraint chegou (28/08/2026).
+      //
+      // Quem aprova é quem cria: o gate acima só deixa passar admin ou
+      // financeiro, que é exatamente quem aprovaria depois.
+      aprovada_em: new Date().toISOString(),
+      aprovada_por: session.profile.id,
     })
     .select("id")
     .single();
