@@ -86,7 +86,7 @@ export default async function ConciliacaoPage({
       .select(
         `id, data_movimento, descricao, natureza, valor, origem, created_at,
          fornecedores(nome, razao_social),
-         jobs(codigo, regional:regionais(nome)),
+         jobs(id, codigo, regional:regionais(nome)),
          empresas(nome_fantasia, razao_social, regional:regionais(nome)),
          plano_contas_tipos!inner(codigo, nome),
          plano_contas_subtipos!inner(codigo, nome),
@@ -133,7 +133,7 @@ export default async function ConciliacaoPage({
       valor: string | number;
       origem: string;
       fornecedores: { nome: string | null; razao_social: string | null } | null;
-      jobs: { codigo: string; regional: { nome: string } | null } | null;
+      jobs: { id: string; codigo: string; regional: { nome: string } | null } | null;
       empresas: {
         nome_fantasia: string | null;
         razao_social: string | null;
@@ -214,6 +214,7 @@ export default async function ConciliacaoPage({
         valor: Number(r.valor),
         fornecedor_nome:
           r.fornecedores?.razao_social ?? r.fornecedores?.nome ?? null,
+        job_id: r.jobs?.id ?? null,
         job_codigo: r.jobs?.codigo ?? null,
         // Mesma regra do `vw_fluxo_caixa`: a avulsa rateada manda, e o
         // rateio de uma regional só resolve aqui mesmo; sem rateio, a

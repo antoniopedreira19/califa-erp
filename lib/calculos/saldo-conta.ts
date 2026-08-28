@@ -7,6 +7,7 @@ export type LancamentoLinha = {
   natureza: "entrada" | "saida";
   valor: number;
   fornecedor_nome: string | null;
+  job_id: string | null;
   job_codigo: string | null;
   /** Do plano de contas. A tela mostra os dois separados desde 27/08/2026:
    *  até ali a coluna "Tipo" misturava o CÓDIGO do tipo com o NOME do
