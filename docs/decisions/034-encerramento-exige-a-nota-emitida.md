@@ -54,22 +54,43 @@ pé. Job com faturamento previsto zero e consumo de save registrado pula o
 faturamento e encerra direto: a nota dele saiu no job que gerou o
 crédito, e ele não tem parcela nenhuma para conferir.
 
+## 5. Não existe escape, e é assim de propósito
+
+Levantei a hipótese de o job legitimamente não ser faturado por inteiro —
+cliente que cancela parte do escopo, valor renegociado para menos depois
+do envio — e de a trava deixar esse job preso aberto.
+
+**Não acontece** (Tiago, 31/08/2026):
+
+> "A negociação já terá terminado no momento de envio para faturamento, e
+> novas erratas realmente não deverão poder ser feitas."
+
+O envio para faturamento é o ponto em que o valor deixa de ser negociável.
+Por isso:
+
+- **Não se cancela nem se reduz o envio.** `jobs_envio_faturamento` é
+  única por job e nenhuma tela a apaga.
+- **Não há errata nem save depois do envio** — a porta da
+  [030](030-errata-na-planilha-e-a-linha-vermelha.md), agora fechada
+  também na planilha do job.
+- **Não há escape para o encerramento.** O saldo a faturar vira nota, ou o
+  job não encerra.
+
+As três travas são a mesma regra vista de três lugares. A trava do
+encerramento é bloqueio simples porque não deve mesmo haver saída.
+
+⚠️ A mensagem das portas de errata e save mandava "peça ao financeiro para
+desfazer o envio" — atrás de algo que ninguém pode fazer. Corrigida na
+mesma data.
+
 ---
 
 ## ⚠️ O que ficou em aberto
 
-**1. Job que legitimamente não será faturado por inteiro.** Cliente que
-cancela parte do escopo, valor renegociado para menos depois do envio. Com
-esta trava, esse job fica aberto para sempre: não há como cancelar o
-envio, corrigir as parcelas nem fazer errata depois do envio. A saída
-provável é permitir ao financeiro **cancelar ou reduzir o envio**, mas isso
-é decisão de outra sessão — a trava foi escrita como bloqueio simples de
-propósito, para não inventar um caminho de escape que ninguém combinou.
-
-**2. Os dois jobs que já encerraram com saldo.** `JOB-0027` e `JOB-0009`
-estão fora da fila hoje. A trava impede novos casos; não conserta os
-antigos. Trazê-los de volta é reabrir o job — o que a decisão 008 não
-prevê — ou faturar por fora. Precisa de decisão.
+**Os dois jobs que já encerraram com saldo.** `JOB-0027` (R$ 30.073,32) e
+`JOB-0009` (R$ 149,12) estão fora da fila hoje. A trava impede novos
+casos; não conserta os antigos. Trazê-los de volta é reabrir o job — o que
+a decisão 008 não prevê — ou faturar por fora. Precisa de decisão.
 
 ## Onde está escrito
 

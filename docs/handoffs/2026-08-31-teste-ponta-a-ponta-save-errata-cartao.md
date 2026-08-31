@@ -142,11 +142,20 @@ impedimentos da PP sem baixa e do BV não recebido. A conta mora em
 (028 §11) continua de pé — job pago só por save não tem parcela e encerra
 direto.
 
+**Não existe escape, e é de propósito.** Perguntei ao Tiago se um job
+legitimamente não faturado por inteiro não ficaria preso aberto, já que não
+há como cancelar o envio: "a negociação já terá terminado no momento de
+envio para faturamento, e novas erratas realmente não deverão poder ser
+feitas". Envio congelado, errata fechada e encerramento travado são a mesma
+regra vista de três lugares (decisão 034 §5).
+
+Junto: a mensagem das portas de errata e save mandava "peça ao financeiro
+para desfazer o envio", e esse caminho **não existe** — o único `delete` em
+`jobs_envio_faturamento` é o rollback de um insert que falhou. Reescrita.
+
 **Dois jobs já encerraram com saldo antes da trava** e continuam fora da
 fila: `JOB-0027` (R$ 30.073,32) e `JOB-0009` (R$ 149,12). A trava impede
-novos; não conserta os antigos. E job que legitimamente não será faturado
-por inteiro agora fica preso aberto, porque não há como cancelar o envio.
-Os dois pontos estão em "o que ficou em aberto" da decisão 034.
+novos; não conserta os antigos — é o que restou em aberto na decisão 034.
 
 ## 4. Segunda rodada de correções (mesma sessão)
 

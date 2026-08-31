@@ -204,7 +204,7 @@ export function JobRealizadoSection({
   const podeErrata = podeAcoes && !jaEnviadoParaFaturamento;
   const podeMexerNoSave = podeErrata;
   const motivoErrataTravada = jaEnviadoParaFaturamento
-    ? "Job já enviado para faturamento: o valor da nota está congelado. Para corrigir, peça ao financeiro para desfazer o envio."
+    ? "Job já enviado para faturamento: o valor da nota está congelado e não há mais errata. Fale com o financeiro antes da emissão da nota."
     : null;
 
   // Cmd+Z / Ctrl+Z desfaz um passo do rascunho da errata.
