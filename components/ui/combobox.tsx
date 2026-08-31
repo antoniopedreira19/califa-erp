@@ -34,6 +34,18 @@ export function Combobox({
 }: ComboboxProps) {
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
+  const gatilhoRef = React.useRef<HTMLButtonElement>(null);
+  const [dentroDeDialog, setDentroDeDialog] = React.useState(false);
+
+  /** Ver o comentário do `modal` no Popover, mais abaixo. */
+  function aoAbrirOuFechar(proximo: boolean) {
+    if (proximo) {
+      setDentroDeDialog(
+        Boolean(gatilhoRef.current?.closest('[role="dialog"]')),
+      );
+    }
+    setOpen(proximo);
+  }
 
   const selected = React.useMemo(
     () => items.find((i) => i.value === value) ?? null,
@@ -49,9 +61,22 @@ export function Combobox({
   return (
     <>
       {name && <input type="hidden" name={name} value={value ?? ""} />}
-      <Popover open={open} onOpenChange={setOpen}>
+      {/* `modal` só quando o campo está dentro de um diálogo.
+
+          O Radix Dialog trava a rolagem com react-remove-scroll e libera
+          apenas o próprio conteúdo (via `shards`). Como o popover é
+          portalado no `body`, ele fica FORA dessa área liberada: a roda do
+          mouse era cancelada e só restava arrastar a barra da lista.
+          Popover modal empilha o próprio lock, que passa a ser o do topo —
+          o lock do diálogo se cala e a lista volta a rolar (31/08/2026).
+
+          Fora de diálogo o modal NÃO entra: ali ele travaria a rolagem da
+          página inteira e deslocaria o layout ao compensar a barra. É o
+          caso do formulário de fornecedor, que roda solto na página. */}
+      <Popover open={open} onOpenChange={aoAbrirOuFechar} modal={dentroDeDialog}>
         <PopoverTrigger asChild>
           <button
+            ref={gatilhoRef}
             type="button"
             id={id}
             role="combobox"
