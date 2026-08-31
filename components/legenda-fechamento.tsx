@@ -1,3 +1,4 @@
+import * as React from "react";
 import { Info } from "lucide-react";
 
 /**
@@ -15,10 +16,20 @@ export function LegendaFechamento({
   /** Rótulo do custo descontado no resultado. A versão do orçamento só tem
    *  planejado; o job alterna entre planejado e realizado. */
   custo = "custo planejado",
+  extra,
 }: {
   custo?: string;
+  /** Um SEGUNDO tópico, com o mesmo ícone e o mesmo peso do primeiro.
+   *
+   *  Existe porque a explicação do save carrega números da tela (as duas
+   *  bases, os honorários e os impostos do valor do job) e não cabe num
+   *  texto fixo aqui dentro. Antes ela morava espremida no fim da coluna
+   *  do fechamento, onde competia com os valores em vez de explicá-los
+   *  (31/08/2026). Ausente ⇒ a legenda é exatamente a de sempre. */
+  extra?: React.ReactNode;
 }) {
   return (
+    <>
     <div className="flex items-start gap-2 border-t border-border bg-muted/30 px-6 py-4 text-xs leading-relaxed text-muted-foreground">
       <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
       <p>
@@ -37,5 +48,12 @@ export function LegendaFechamento({
         operacional ÷ valor do job.
       </p>
     </div>
+    {extra && (
+      <div className="flex items-start gap-2 border-t border-border bg-muted/30 px-6 py-4 text-xs leading-relaxed text-muted-foreground">
+        <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+        <p>{extra}</p>
+      </div>
+    )}
+    </>
   );
 }

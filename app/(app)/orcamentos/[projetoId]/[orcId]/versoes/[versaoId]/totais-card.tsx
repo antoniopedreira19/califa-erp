@@ -1,4 +1,12 @@
-import { Calculator } from "lucide-react";
+"use client";
+
+// Client por causa do liga-desliga das colunas de save no fechamento. O
+// único consumidor (`PlanilhaVersao`) já é client; a diretiva aqui é para
+// a regra ficar explícita se alguém renderizar este card de um server
+// component amanhã.
+
+import * as React from "react";
+import { Calculator, Columns3 } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import { LegendaFechamento } from "@/components/legenda-fechamento";
 import {
@@ -55,6 +63,13 @@ export function TotaisCard({
   // deixaram de ser iguais (docs/decisions/028-save-entre-jobs.md §3).
   const temSave = save.totalSaveGerado > 0 || save.totalSaveUsado > 0;
 
+  // Divisão dos tipos de custo por função do save (usado / gerado / custos
+  // do job). Nasce ABERTA porque é o que a tela já mostrava — o botão
+  // serve para voltar à coluna única. No protótipo o padrão é o contrário;
+  // manter o de hoje evita esconder número que já estava à vista.
+  const [colunasSave, setColunasSave] = React.useState(true);
+  const quebrarPorSave = temSave && colunasSave;
+
   // O planejado passa pelos blocos com BV: em `A` e `D` ele espelha o
   // orçado, e na vista Líquido a comissão sai fora. O número aqui tem que
   // ser o MESMO que os grupos somaram — por isso é a mesma função.
@@ -109,11 +124,35 @@ export function TotaisCard({
       <div className="grid md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-border">
         {/* Fechamento do orçado */}
         <div className="p-6">
-          <p className="mb-3.5 text-[13px] font-bold uppercase tracking-[0.07em] text-foreground">
-            Fechamento do orçado · por tipo de custo
-          </p>
-          <div className="space-y-1.5">
+          <div className="mb-3.5 flex items-center justify-between gap-3">
+            <p className="text-[13px] font-bold uppercase tracking-[0.07em] text-foreground">
+              Fechamento do orçado · por tipo de custo
+            </p>
+            {/* Só aparece quando há save: sem ele não existe o que dividir. */}
             {temSave && (
+              <button
+                type="button"
+                onClick={() => setColunasSave((v) => !v)}
+                title={
+                  colunasSave
+                    ? "Fechar as colunas de save"
+                    : "Abrir as colunas de save nos sub-totais"
+                }
+                aria-pressed={colunasSave}
+                className={cn(
+                  "inline-flex flex-none items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-semibold transition-colors",
+                  colunasSave
+                    ? "border-[#5f5d57] bg-[#f3f2ee] text-foreground"
+                    : "border-border bg-card text-muted-foreground hover:border-[#5f5d57]",
+                )}
+              >
+                <Columns3 className="h-3 w-3" />
+                Save
+              </button>
+            )}
+          </div>
+          <div className="space-y-1.5">
+            {quebrarPorSave && (
               <div className="grid grid-cols-[1fr_repeat(3,minmax(84px,auto))] gap-x-3 pb-1 text-right text-[9.5px] font-bold uppercase tracking-[0.06em] text-muted-foreground">
                 <span />
                 <span>Save usado</span>
@@ -122,7 +161,7 @@ export function TotaisCard({
               </div>
             )}
             {LINHAS_FECHAMENTO_POR_TIPO.map((linha) =>
-              temSave ? (
+              quebrarPorSave ? (
                 <LinhaQuebrada
                   key={linha.chave}
                   label={linha.label}
@@ -140,7 +179,7 @@ export function TotaisCard({
                 />
               ),
             )}
-            {temSave ? (
+            {quebrarPorSave ? (
               <LinhaQuebrada
                 label="Total dos custos"
                 usado={save.totalSaveUsado}
@@ -186,33 +225,17 @@ export function TotaisCard({
                 {formatCurrency(valorJob, moeda)}
               </span>
             </div>
+            {/* A explicação das duas bases saiu daqui e virou o segundo
+                tópico da legenda, no pé do card. */}
             {temSave && (
-              <>
-                <div className="flex items-baseline justify-between gap-3 pt-1">
-                  <span className="text-sm font-semibold text-[#5f5d57]">
-                    Saldo em save
-                  </span>
-                  <span className="whitespace-nowrap font-mono text-lg font-bold text-[#5f5d57]">
-                    {formatCurrency(save.totalSaveGerado, moeda)}
-                  </span>
-                </div>
-                <p className="pt-2 text-[10.5px] leading-relaxed text-muted-foreground">
-                  Os honorários e impostos acima correm sobre{" "}
-                  <strong>save gerado + custos do job</strong> (
-                  {formatCurrency(faturamento.base, moeda)}) — é o que esta
-                  nota cobra. O Valor do Job repete a mesma conta sobre{" "}
-                  <strong>save usado + custos do job</strong> (
-                  {formatCurrency(job.base, moeda)}): honorários{" "}
-                  {formatCurrency(job.honorarios, moeda)}, impostos{" "}
-                  {formatCurrency(job.imposto, moeda)}. Sem nenhuma linha em
-                  save os dois totais voltam a ser iguais:{" "}
-                  {frasePorQueDivergem(
-                    save.itensEmSave,
-                    save.itensConsumindoSave,
-                  )}
-                  .
-                </p>
-              </>
+              <div className="flex items-baseline justify-between gap-3 pt-1">
+                <span className="text-sm font-semibold text-[#5f5d57]">
+                  Save gerado
+                </span>
+                <span className="whitespace-nowrap font-mono text-lg font-bold text-[#5f5d57]">
+                  {formatCurrency(save.totalSaveGerado, moeda)}
+                </span>
+              </div>
             )}
           </div>
         </div>
@@ -354,7 +377,33 @@ export function TotaisCard({
       </div>
 
       <div className="overflow-hidden rounded-b-2xl">
-        <LegendaFechamento />
+        <LegendaFechamento
+          extra={
+            temSave ? (
+              <>
+                Os honorários e impostos do fechamento correm sobre{" "}
+                <strong className="text-foreground">
+                  save gerado + custos do job
+                </strong>{" "}
+                ({formatCurrency(faturamento.base, moeda)}) — é o que esta
+                nota cobra. O <strong className="text-foreground">Valor do
+                Job</strong> repete a mesma conta sobre{" "}
+                <strong className="text-foreground">
+                  save usado + custos do job
+                </strong>{" "}
+                ({formatCurrency(job.base, moeda)}): honorários{" "}
+                {formatCurrency(job.honorarios, moeda)}, impostos{" "}
+                {formatCurrency(job.imposto, moeda)}. Sem nenhuma linha em
+                save os dois totais voltam a ser iguais:{" "}
+                {frasePorQueDivergem(
+                  save.itensEmSave,
+                  save.itensConsumindoSave,
+                )}
+                .
+              </>
+            ) : undefined
+          }
+        />
       </div>
     </div>
   );
