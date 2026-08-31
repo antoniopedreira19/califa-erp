@@ -3033,3 +3033,91 @@ Os botões dentro da linha (checkbox, "Faturar", "NF ####", `i`) chamam
 para `anon`). **Nenhum BV está `confirmado` na base hoje**, então o ramo do
 BV foi conferido por query e não em tela. Conferência logada combinada para
 o fim da entrega 3.
+
+---
+
+## ⚠️ 31/08/2026 — Contas a Receber, entrega 3: inadimplência e a aba Títulos
+
+**Regra:** `docs/decisions/033-a-descricao-da-nf-vem-do-gp-e-o-cnae-do-financeiro.md`.
+
+### A regra da inadimplência
+
+1. Inadimplente é o título que passou do **vencimento** sem ser recebido. O
+   vencimento nunca muda — quem anda é a previsão.
+2. A previsão nasce igual ao vencimento e continua editável a qualquer
+   momento.
+3. Passou do vencimento e ninguém repactuou? A previsão rola sozinha para o
+   **mesmo dia da semana na semana seguinte**, e volta a rolar toda semana
+   enquanto o título não for pago.
+4. O fato de ter atrasado sobrevive ao pagamento, para o relatório.
+
+`titulos_receber.inadimplente_desde` guarda o ponto 4: um status sozinho
+viraria `pago` na baixa e levaria a informação embora.
+
+A rotina é `public.rolar_previsao_de_titulos_vencidos()`, no cron
+`rolar-previsao-titulos-vencidos`, às **06:00 UTC** — mesmo horário do
+`gerar-recorrentes-diario` que já existia, e não por acaso: às 03:00 de
+Brasília a data UTC e a brasileira são a mesma, então `current_date` está
+certo. A função é `security definer`, roda como `postgres` e teve o
+`execute` **revogado** de `authenticated` e `anon`: é manutenção, não porta
+de usuário.
+
+**A pastilha da tela não depende da rotina.** "Inadimplente" e o "N dias de
+atraso" derivam de `data_vencimento < hoje`. Se o cron falhar ou atrasar, a
+tela continua certa; o que se perde é o registro histórico, que a execução
+seguinte recupera.
+
+### ⚠️ Ponto em aberto: `inadimplente` NÃO virou valor de enum
+
+`titulo_receber_status` continua `em_aberto | pago | cancelado`. Medi o
+alcance antes e o valor novo quebraria cinco objetos do banco e três do
+código:
+
+| Onde | O que aconteceria |
+| --- | --- |
+| `dar_baixa_titulo_com_plano` | recusa `status <> 'em_aberto'` → **a baixa pararia justamente no inadimplente** |
+| `dar_baixa_titulo` | idem |
+| `estornar_baixa_titulo` | devolve o título para `em_aberto`, não para inadimplente |
+| `cancelar_faturamento` | compara com `em_aberto` |
+| `vw_fluxo_caixa` | filtra `em_aberto` em 2 trechos → **o inadimplente sumiria do fluxo de caixa** |
+| `actions.ts:346` | recusa repactuar previsão fora de `em_aberto` — o oposto da regra |
+| `page.tsx` | contador da aba |
+| `lib/types.ts` | o tipo |
+
+Está aguardando decisão do Tiago. `inadimplente_desde` já entrega o
+relatório sem tocar em nada disso.
+
+### A aba
+
+| Mudança | Detalhe |
+| --- | --- |
+| Chips de status | Todos · Em aberto · Inadimplentes · Recebidos, com contagem |
+| Coluna Status | pastilha vermelha `Inadimplente` + `N dias de atraso` embaixo |
+| Jobs cobertos | jobs **distintos**, sem repetição, e sem os contatos |
+| Botão `i` | na calha, fora do frame, como na aba Faturamento |
+| Botão da linha | "Baixar" virou **"Dar baixa"** |
+| Linha recebida | ganhou o botão de olho: abre a baixa registrada, com o estorno em dois tempos |
+
+O olho reabre a decisão 016 §9, que tinha tirado o estorno desta tela. É a
+mesma reversão que Títulos a Pagar já tinha feito em 18/08/2026, agora do
+lado de cá — a pedido do Tiago. **O protótipo mostra só o texto
+"Conciliação" na linha recebida**: é o quarto ponto em que ele está
+desatualizado.
+
+`BaixaRegistradaDialog` ganhou `sentido?: "pagar" | "receber"`, que troca
+só três frases — em Contas a Receber o dinheiro entra, e "Pago em" ou
+"volta para A pagar" seriam mentira na tela. O padrão é `"pagar"`, então a
+aba de origem não mudou em nada.
+
+A repetição do job na coluna "Jobs cobertos" era real e aparecia em duas
+notas de teste: a NF 900123 tem dois itens do JOB-0015 (dois faturamentos
+parciais) e a NF 900500 tem um item de job e um de save do JOB-0020.
+
+**Verificação:** `tsc`, `lint` e `build` limpos. Migration aplicada e
+conferida pelo MCP: coluna, índice parcial, `execute` revogado e o cron
+ativo rodando como `postgres` com privilégio de executar a função. A
+aritmética da rolagem foi provada por query em cinco cenários (venceu
+ontem, há 8 dias, há 30 dias, vence hoje, vence em 5 dias): sempre cai no
+mesmo dia da semana, nunca no passado. **Não há título vencido na base**,
+então a rotina não teve o que processar — a execução real fica para a
+conferência logada.

@@ -109,11 +109,44 @@ frase.
 dentro de uma coluna de 44px — é o terceiro ponto em que ele está
 desatualizado.
 
-## 7. O que fica para a entrega 3
+## 7. Inadimplência (entrega 3)
 
-Aba Títulos a Receber: inadimplência (valor novo de enum,
-`inadimplente_desde`, rolagem semanal da previsão), jobs cobertos sem
-repetição, botão `i` na calha, e o botão da linha já baixada.
+Inadimplente é o título que passou do **vencimento** sem ser recebido. A
+previsão nasce igual ao vencimento, continua editável, e — passado o
+vencimento sem repactuação — rola sozinha para o mesmo dia da semana na
+semana seguinte, toda semana, enquanto o título não for pago.
+
+`titulos_receber.inadimplente_desde` guarda o dia do primeiro atraso e
+**sobrevive ao pagamento**: um status sozinho viraria `pago` na baixa e
+levaria a informação embora, e o relatório não conseguiria mais listar
+quem atrasou. A rotina diária é
+`rolar_previsao_de_titulos_vencidos()`, no cron das 06:00 UTC.
+
+**A tela não depende da rotina.** A pastilha "Inadimplente" e o "N dias de
+atraso" derivam de `data_vencimento < hoje`. Cron que falha não faz a aba
+mentir; só atrasa o registro histórico.
+
+**O valor `inadimplente` NÃO entrou no enum**, e isso está aguardando
+decisão. Medido antes de mexer, ele quebraria cinco objetos do banco e três
+do código — entre eles `dar_baixa_titulo_com_plano`, que recusa
+`status <> 'em_aberto'` e faria a baixa parar justamente no inadimplente, e
+`vw_fluxo_caixa`, que sumiria com ele do fluxo de caixa. O
+`inadimplente_desde` entrega o relatório sem esse risco.
+
+## 8. A aba Títulos a Receber, e a quinta divergência do protótipo
+
+Chips de status com contagem, pastilha vermelha com os dias de atraso,
+jobs cobertos sem repetição, contatos fora da célula, botão `i` na calha e
+"Baixar" renomeado para "Dar baixa".
+
+A linha já recebida ganhou o **botão de olho**, que abre a baixa
+registrada com o estorno em dois tempos — a mesma reversão da decisão
+016 §9 que Títulos a Pagar já tinha feito em 18/08/2026. O protótipo mostra
+só o texto "Conciliação" ali: é o quarto ponto em que ele está
+desatualizado, e o Tiago avisou disso ao entregar o arquivo.
+
+`BaixaRegistradaDialog` ganhou `sentido?: "pagar" | "receber"`, que troca
+apenas três frases. O padrão é `"pagar"`, então Contas a Pagar não mudou.
 
 Uma ideia registrada e **não** implementada: uma PO pode se referir a mais
 de um job, e hoje isso é o mesmo texto digitado em N envios. Um cadastro de

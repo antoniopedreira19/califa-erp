@@ -1776,6 +1776,17 @@ export interface TituloReceber {
   data_previsao_recebimento: string | null;
   /** Primeira previsão registrada. Congelada por trigger. */
   data_previsao_recebimento_primeira: string | null;
+  /**
+   * Dia em que o título passou do vencimento sem ser recebido
+   * (`data_vencimento + 1`). Gravada uma vez pela rotina diária
+   * `rolar_previsao_de_titulos_vencidos` e nunca limpa: sobrevive à baixa,
+   * para o relatório conseguir listar quem atrasou. Nula em título que
+   * nunca atrasou.
+   *
+   * A pastilha "Inadimplente" da tela NÃO sai daqui — ela deriva de
+   * `data_vencimento < hoje`, para não depender de a rotina ter rodado.
+   */
+  inadimplente_desde: string | null;
   status: TituloReceberStatus;
   pago_em: string | null;
   pago_por: string | null;
