@@ -2091,3 +2091,37 @@ Save. JOB-0020 gerou R$ 60.000 de crédito, JOB-0021 nasceu de um orçamento
 de save inteiro (valor do job R$ 0,00), JOB-0022 consumiu R$ 45.000 de
 duas origens e JOB-0023 foi pago 100% por save, pulou o faturamento e
 **encerrou**. `tsc`, `lint` e `build` limpos.
+
+---
+
+## ⚠️ 31/08/2026 — o envio para faturamento troca o CNAE pela descrição da NF
+
+**Regra:** `docs/decisions/033-a-descricao-da-nf-vem-do-gp-e-o-cnae-do-financeiro.md`.
+
+O formulário "Enviar job para faturamento" **perdeu o campo CNAE** e
+**ganhou "Descrição a constar na nota fiscal"**, obrigatório, num
+`Textarea` de 3 linhas.
+
+O CNAE estava na mão errada: é classificação fiscal da nota, e quem emite
+a nota é o financeiro. O GP não tinha como saber, e digitava qualquer
+coisa porque o campo era obrigatório. Ele agora é pedido ao financeiro, no
+drawer "Faturar" de Contas a Receber.
+
+No lugar entrou o que só o GP sabe: como o cliente exige que a nota seja
+descrita. O financeiro recebe esse texto pronto e o copia para a NF.
+
+| Onde | O que mudou |
+| --- | --- |
+| `enviar-faturamento-drawer.tsx` | campo `cnae` → `descricao_nf` (`Textarea`, 2000 caracteres) |
+| `lib/validations/envio-faturamento.ts` | `cnae` sai do schema; `descricao_nf` entra, obrigatória |
+| `actions-faturamento.ts` | grava `descricao_nf`; o audit registra `tem_descricao_nf` |
+| `carregar-detalhe.ts` | o `select` do envio troca `cnae` por `descricao_nf` |
+| Banco | `jobs_envio_faturamento.descricao_nf` nasce; `cnae` perde `not null` e o CHECK |
+
+O CNAE já gravado nos envios antigos **não foi apagado** — é o registro do
+que a produção declarou e serve de rastro. Envios anteriores a 31/08/2026
+ficam sem `descricao_nf`, e isso é estado legítimo: o financeiro vê o vazio
+nomeado no botão de informações e escreve a descrição na mão.
+
+**Verificação:** `tsc`, `lint` e `build` limpos. Conferência logada
+combinada para o fim das três entregas de Contas a Receber.

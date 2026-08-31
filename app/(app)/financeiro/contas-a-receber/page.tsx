@@ -10,6 +10,7 @@ import {
   type FaturadoRow,
 } from "./faturamento-list";
 import { TitulosList, type TituloRow } from "./titulos-list";
+import type { InfoJob } from "./faturar-drawer";
 import {
   contatosDeCobrancaPorJob,
   type ContatoCobranca,
@@ -45,6 +46,7 @@ export default async function ContasReceberPage() {
     clientesRes,
     fornecedoresRes,
     jobsRes,
+    enviosRes,
   ] = await Promise.all([
     supabase
       .from("vw_faturamento_pendente")
@@ -55,7 +57,7 @@ export default async function ContasReceberPage() {
     supabase
       .from("faturamentos")
       .select(`
-        id, numero_nf, data_emissao, valor_total, descricao, anexo_nf_path,
+        id, numero_nf, data_emissao, valor_total, descricao, cnae, anexo_nf_path,
         empresa_id, origem_tipo, cliente_id, fornecedor_id,
         plano_conta_tipo_id, plano_conta_subtipo_id,
         itens:faturamento_itens(id, origem_tipo, origem_id, envio_parcela_id, valor)
@@ -139,12 +141,21 @@ export default async function ContasReceberPage() {
       .eq("tenant_id", tenantId)
       .order("codigo", { ascending: false })
       .limit(500),
+    // O que a produção mandou no envio para faturamento: a PO e a instrução
+    // do GP sobre como a nota deve ser descrita. É o conteúdo do botão `i`
+    // (31/08/2026). Um registro por job, tabela pequena — entra na mesma
+    // onda paralela, sem custo de ida e volta extra.
+    supabase
+      .from("jobs_envio_faturamento")
+      .select("job_id, numero_po, descricao_nf")
+      .eq("tenant_id", tenantId),
   ]);
 
   for (const [nome, res] of [
     ["pendentes", pendentesRes],
     ["faturados", faturadosRes],
     ["titulos", titulosRes],
+    ["envios", enviosRes],
   ] as const) {
     if (res.error) console.error(`[cr.${nome}]`, res.error.message);
   }
@@ -184,6 +195,36 @@ export default async function ContasReceberPage() {
     jobsList.map((j) => j.id),
     session.activeTenant.id,
   );
+
+  /**
+   * O que o botão `i` mostra de cada job: PO, a instrução do GP sobre a
+   * descrição da nota e a quem cobrar.
+   *
+   * Só entra job que TEM envio para faturamento — BV não tem, e é por isso
+   * que a chave é o `job_id` e não a linha da tabela. Job sem entrada aqui
+   * cai nos vazios do modal, que são estado legítimo e não erro.
+   */
+  const infoPorJob: Record<string, InfoJob> = {};
+  for (const e of (enviosRes.data ?? []) as unknown as Array<{
+    job_id: string;
+    numero_po: string | null;
+    descricao_nf: string | null;
+  }>) {
+    infoPorJob[e.job_id] = {
+      po: e.numero_po,
+      descricaoNf: e.descricao_nf,
+      contatos: contatosPorJob.get(e.job_id) ?? [],
+    };
+  }
+  // Job com contato mas sem envio ainda não aparece na fila de faturamento,
+  // então não precisa de entrada — mas a nota já emitida pode reabrir em
+  // leitura apontando para um job cujo envio foi apagado. Completa o mapa
+  // para o modal não ficar sem os contatos nesse caso.
+  for (const [jobId, contatos] of contatosPorJob) {
+    if (!infoPorJob[jobId]) {
+      infoPorJob[jobId] = { po: null, descricaoNf: null, contatos };
+    }
+  }
 
   // --- Aba Faturamento: pendentes -----------------------------------------
 
@@ -229,6 +270,7 @@ export default async function ContasReceberPage() {
     data_emissao: string;
     valor_total: string | number;
     descricao: string;
+    cnae: string;
     anexo_nf_path: string;
     empresa_id: string;
     origem_tipo: "job" | "bv" | "avulso";
@@ -305,10 +347,12 @@ export default async function ContasReceberPage() {
       qtd_parcelas: parc?.qtd ?? 1,
       primeiro_vencimento: parc?.primeiroVenc ?? null,
       parcelas: parc?.parcelas ?? [],
+      cnae: f.cnae,
       itens: f.itens.map((i) => {
         const job = i.origem_id ? jobPorId.get(i.origem_id) : undefined;
         return {
           origem_tipo: i.origem_tipo,
+          origem_id: i.origem_id,
           codigo: job?.codigo ?? (i.origem_tipo === "bv" ? "BV" : "Avulso"),
           // Item de save aponta para o mesmo job do item próprio; o que
           // os separa é o tipo. Sem isto a nota mostra o job duas vezes.
@@ -489,6 +533,7 @@ export default async function ContasReceberPage() {
             fornecedores={fornecedoresList}
             jobs={jobsList}
             proximoNf={proximoNf}
+            infoPorJob={infoPorJob}
           />
         }
         faturamentoCount={pendentes.length}

@@ -220,7 +220,7 @@ export async function carregarDetalheDoJob(
     // encerramento.
     supabase
       .from("jobs_envio_faturamento")
-      .select("id, valor_faturado, data_faturamento, numero_po, cnae, portal_url, enviado_em")
+      .select("id, valor_faturado, data_faturamento, numero_po, descricao_nf, portal_url, enviado_em")
       .eq("job_id", jobId)
       .eq("tenant_id", session.activeTenant.id)
       .maybeSingle(),

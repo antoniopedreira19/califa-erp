@@ -13,6 +13,7 @@ import {
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { DatePicker } from "@/components/ui/date-picker";
 import {
   Select,
@@ -86,7 +87,14 @@ function hojeIso(): string {
  *
  * O valor é read-only de propósito — vem do faturamento previsto do job e
  * é relido no servidor. Quem envia informa o que só a produção sabe: PO,
- * vencimento, CNAE e em qual portal do cliente a nota é lançada.
+ * vencimento, como o cliente exige que a nota seja descrita e em qual
+ * portal dele ela é lançada.
+ *
+ * O CNAE saiu daqui em 31/08/2026. Era o campo errado na mão errada —
+ * classificação fiscal é da nota, e quem emite a nota é o financeiro, que
+ * agora o informa no drawer "Faturar". No lugar entrou a descrição da NF,
+ * que é justamente o que só o GP sabe: o texto que o cliente exige ver na
+ * nota para aceitá-la, e que hoje viajava por fora do sistema.
  */
 export function EnviarFaturamentoDrawer({
   jobId,
@@ -110,7 +118,7 @@ export function EnviarFaturamentoDrawer({
   const [dataFaturamento, setDataFaturamento] = React.useState(
     dataPrevistaFaturamento ?? hojeIso(),
   );
-  const [cnae, setCnae] = React.useState("");
+  const [descricaoNf, setDescricaoNf] = React.useState("");
   const [portalId, setPortalId] = React.useState(SEM_PORTAL);
   const [parcelas, setParcelas] = React.useState<ParcelaEnvio[]>(() => [
     { valor: valorFaturado, data_vencimento: dataPrevistaFaturamento ?? hojeIso() },
@@ -125,7 +133,7 @@ export function EnviarFaturamentoDrawer({
   );
 
   const podeEnviar =
-    cnae.trim().length > 0 &&
+    descricaoNf.trim().length > 0 &&
     dataFaturamento.length === 10 &&
     somaFecha &&
     parcelasCompletas;
@@ -149,7 +157,7 @@ export function EnviarFaturamentoDrawer({
       const res = await enviarJobParaFaturamento(jobId, {
         numero_po: numeroPo.trim() || null,
         data_faturamento: dataFaturamento,
-        cnae: cnae.trim(),
+        descricao_nf: descricaoNf.trim(),
         portal_id: portalId === SEM_PORTAL ? null : portalId,
         parcelas: parcelas.map((p, i) => ({
           ordem: i + 1,
@@ -376,18 +384,24 @@ export function EnviarFaturamentoDrawer({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="cnae">
-                CNAE a ser utilizado{" "}
+              <Label htmlFor="descricao-nf">
+                Descrição a constar na nota fiscal{" "}
                 <span className="text-california-red">*</span>
               </Label>
-              <Input
-                id="cnae"
-                value={cnae}
-                onChange={(e) => setCnae(e.target.value)}
-                maxLength={120}
-                placeholder="Ex.: 7311-4/00 — Agências de publicidade"
+              <Textarea
+                id="descricao-nf"
+                rows={3}
+                value={descricaoNf}
+                onChange={(e) => setDescricaoNf(e.target.value)}
+                maxLength={2000}
+                placeholder="Ex.: Serviços de produção audiovisual referentes à campanha X, conforme PO 4500123456."
               />
-              {fieldErrors.cnae?.map((m, i) => (
+              <p className="text-xs text-muted-foreground">
+                É este texto que o financeiro vai copiar para a nota. Escreva
+                como o cliente exige ver — se a nota voltar por descrição
+                errada, o recebimento atrasa.
+              </p>
+              {fieldErrors.descricao_nf?.map((m, i) => (
                 <p key={i} className="text-xs text-california-red">
                   {m}
                 </p>

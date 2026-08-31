@@ -797,7 +797,18 @@ export interface JobEnvioFaturamento {
   numero_po: string | null;
   /** Vencimento acordado com o cliente. */
   data_faturamento: string;
-  cnae: string;
+  /**
+   * Como o GP quer que a nota seja descrita — o texto que o cliente exige
+   * ver na NF. O financeiro copia daqui na emissão. Nulo nos envios
+   * anteriores a 31/08/2026, quando o campo passou a existir.
+   */
+  descricao_nf: string | null;
+  /**
+   * Histórico: até 31/08/2026 o CNAE era pedido à produção aqui. Saiu do
+   * formulário de envio — o CNAE que vale para a nota é o de
+   * `Faturamento.cnae`, informado pelo financeiro na emissão.
+   */
+  cnae: string | null;
   portal_id: string | null;
   /** Snapshot da URL: o cadastro do portal pode mudar depois. */
   portal_url: string | null;
@@ -1712,6 +1723,12 @@ export interface Faturamento {
   data_emissao: string;
   valor_total: number;
   descricao: string;
+  /**
+   * Classificação fiscal usada na emissão, informada pelo financeiro no
+   * drawer "Faturar". Texto livre — não existe cadastro de CNAE no
+   * projeto. Antes de 31/08/2026 era pedido à produção no envio.
+   */
+  cnae: string;
   anexo_nf_path: string;
   /**
    * Preenchido só no faturamento avulso (campo "Centro de custo" do

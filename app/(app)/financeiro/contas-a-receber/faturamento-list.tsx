@@ -34,7 +34,11 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { PlanoContaTipo, PlanoContaSubtipo } from "@/lib/types";
-import { FaturarDrawer, type DrawerState } from "./faturar-drawer";
+import {
+  FaturarDrawer,
+  type DrawerState,
+  type InfoJob,
+} from "./faturar-drawer";
 import {
   ContatosCobrancaInline,
   type ContatoCobranca,
@@ -83,6 +87,8 @@ export interface FaturadoRow {
   data_emissao: string;
   valor_total: number;
   descricao: string;
+  /** CNAE usado na emissão — informado pelo financeiro desde 31/08/2026. */
+  cnae: string;
   anexo_nf_path: string;
   empresa_id: string;
   origem_tipo: "job" | "bv" | "avulso";
@@ -99,6 +105,9 @@ export interface FaturadoRow {
     // `save` só aparece no ITEM: é a fatia da nota que virou crédito do
     // cliente em vez de faturamento deste job.
     origem_tipo: "job" | "bv" | "avulso" | "save";
+    /** Job (ou BV) que o item cobre. Nulo no avulso, que não tem origem.
+     *  É a chave do botão `i` quando a nota é reaberta em leitura. */
+    origem_id: string | null;
     codigo: string;
     descricao: string;
     valor: number;
@@ -137,6 +146,8 @@ interface Props {
   fornecedores: Array<{ id: string; nome: string }>;
   jobs: Array<{ id: string; codigo: string; nome: string }>;
   proximoNf: string;
+  /** PO, instrução do GP e contatos, por job — o conteúdo do botão `i`. */
+  infoPorJob: Record<string, InfoJob>;
 }
 
 export function FaturamentoList({
@@ -149,6 +160,7 @@ export function FaturamentoList({
   fornecedores,
   jobs,
   proximoNf,
+  infoPorJob,
 }: Props) {
   const [drawer, setDrawer] = React.useState<DrawerState | null>(null);
   const [modoSelecao, setModoSelecao] = React.useState(false);
@@ -681,6 +693,7 @@ export function FaturamentoList({
           clientes={clientes}
           fornecedores={fornecedores}
           jobs={jobs}
+          infoPorJob={infoPorJob}
           proximoNf={proximoNf}
         />
       )}

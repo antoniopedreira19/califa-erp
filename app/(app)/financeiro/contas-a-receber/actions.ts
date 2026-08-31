@@ -118,6 +118,14 @@ const emitirSchema = z.object({
   data_emissao: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data de emissão inválida."),
   valor_total: z.number().positive("O valor total da NF precisa ser maior que zero."),
   descricao: z.string().trim().min(3, "Escreva a descrição que vai na nota fiscal."),
+  // Classificação fiscal da nota. Até 31/08/2026 era pedida à produção no
+  // envio para faturamento; virou responsabilidade de quem emite a nota.
+  // Texto livre — não existe cadastro de CNAE no projeto.
+  cnae: z
+    .string()
+    .trim()
+    .min(1, "Informe o CNAE a ser utilizado na nota.")
+    .max(120, "Máximo 120 caracteres."),
   anexo_nf_path: z.string().min(1, "Anexe o PDF da nota fiscal antes de emitir."),
   // Só o avulso informa (é o campo "Centro de custo" do formulário). Em
   // job/BV a classificação que vale é a da baixa do título.
@@ -198,6 +206,7 @@ export async function emitirFaturamento(
       data_emissao: d.data_emissao,
       valor_total: d.valor_total,
       descricao: d.descricao,
+      cnae: d.cnae,
       anexo_nf_path: d.anexo_nf_path,
       plano_conta_tipo_id: d.plano_conta_tipo_id,
       plano_conta_subtipo_id: d.plano_conta_subtipo_id,

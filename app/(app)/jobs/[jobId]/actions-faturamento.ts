@@ -23,7 +23,9 @@ function formatarBRL(n: number): string {
  *
  * A partir daqui o job entra na fila de faturamento
  * (`vw_faturamento_pendente`), levando junto o que só a produção sabe:
- * número da PO, CNAE a usar, portal do cliente e o vencimento acordado.
+ * número da PO, como a nota deve ser descrita, portal do cliente e o
+ * vencimento acordado. O CNAE saiu daqui em 31/08/2026 — é do financeiro,
+ * que o informa na emissão da nota.
  *
  * O valor NÃO vem do formulário — é relido de `jobs.faturamento_previsto`
  * aqui dentro. É valor de nota fiscal; o navegador não é fonte confiável
@@ -174,7 +176,7 @@ export async function enviarJobParaFaturamento(
       valor_faturado: valor,
       numero_po: parsed.data.numero_po,
       data_faturamento: parsed.data.data_faturamento,
-      cnae: parsed.data.cnae,
+      descricao_nf: parsed.data.descricao_nf,
       portal_id: parsed.data.portal_id,
       portal_url: portalUrl,
       enviado_por: session.profile.id,
@@ -223,7 +225,7 @@ export async function enviarJobParaFaturamento(
     metadata: {
       valor_faturado: valor,
       data_faturamento: parsed.data.data_faturamento,
-      cnae: parsed.data.cnae,
+      tem_descricao_nf: parsed.data.descricao_nf.length > 0,
       tem_po: parsed.data.numero_po !== null,
       tem_portal: parsed.data.portal_id !== null,
       qtd_parcelas: parsed.data.parcelas.length,

@@ -52,6 +52,12 @@ import {
   repartirEmJobESave,
   rotuloDaQuebra,
 } from "@/lib/calculos/save-faturamento";
+import {
+  BotaoInfo,
+  InfoFaturamentoModal,
+  type InfoFaturamento,
+} from "@/components/financeiro/info-faturamento-modal";
+import type { ContatoCobranca } from "@/lib/data/contatos-cobranca";
 import type { PlanoContaTipo, PlanoContaSubtipo } from "@/lib/types";
 import { emitirFaturamento, uploadNfPdf, urlAnexoNf } from "./actions";
 import type { FaturamentoPendenteRow, FaturadoRow } from "./faturamento-list";
@@ -76,6 +82,23 @@ interface Props {
   fornecedores: Array<{ id: string; nome: string }>;
   jobs: Array<{ id: string; codigo: string; nome: string }>;
   proximoNf: string;
+  /**
+   * O que o envio para faturamento trouxe de cada job — PO, a instrução do
+   * GP sobre a descrição da nota, e a quem cobrar. É o conteúdo do botão
+   * `i` de cada linha (31/08/2026).
+   *
+   * Chave é o `job_id`. Não tem entrada para BV (que não tem envio) nem
+   * para job anterior a 31/08/2026, e isso é estado legítimo — o modal
+   * sabe mostrar cada vazio.
+   */
+  infoPorJob: Record<string, InfoJob>;
+}
+
+/** O que o botão `i` mostra sobre um job. */
+export interface InfoJob {
+  po: string | null;
+  descricaoNf: string | null;
+  contatos: ContatoCobranca[];
 }
 
 function formatMoney(n: number): string {
@@ -93,6 +116,7 @@ export function FaturarDrawer({
   fornecedores,
   jobs,
   proximoNf,
+  infoPorJob,
 }: Props) {
   const router = useRouter();
 
@@ -109,6 +133,33 @@ export function FaturarDrawer({
   const [pending, startTransition] = React.useTransition();
   const [uploading, setUploading] = React.useState(false);
   const [erro, setErro] = React.useState<string | null>(null);
+  // O `i` de cada job da nota. Fica aqui, e não na tabela, porque a
+  // instrução do GP precisa poder ser lida NA HORA de escrever a
+  // descrição da nota — inclusive na agrupada, job a job (31/08/2026).
+  const [info, setInfo] = React.useState<InfoFaturamento | null>(null);
+
+  /**
+   * Monta o conteúdo do modal `i` para um job desta nota.
+   *
+   * Job sem entrada no mapa é estado legítimo — BV não tem envio para
+   * faturamento, e job anterior a 31/08/2026 foi enviado antes de o campo
+   * de descrição existir. O modal mostra cada vazio com a frase certa, em
+   * vez de esconder o bloco.
+   */
+  function montarInfo(
+    jobId: string,
+    referencia: string,
+    quebra: { job: number; save: number } | null = null,
+  ): InfoFaturamento {
+    const dados = infoPorJob[jobId];
+    return {
+      referencia,
+      po: dados?.po ?? null,
+      descricaoNf: dados?.descricaoNf ?? null,
+      contatos: dados?.contatos ?? [],
+      quebra,
+    };
+  }
 
   // Jobs desta NF: o usuário pode tirar um do grupo antes de emitir.
   const [removidos, setRemovidos] = React.useState<Set<string>>(new Set());
@@ -130,12 +181,23 @@ export function FaturarDrawer({
   const [dataEmissao, setDataEmissao] = React.useState(
     nota?.data_emissao ?? format(new Date(), "yyyy-MM-dd"),
   );
+  // Classificação fiscal da nota. Saiu do envio para faturamento em
+  // 31/08/2026 — lá era pedida ao GP, que não tem como saber. Quem emite a
+  // nota é quem responde por ela.
+  const [cnae, setCnae] = React.useState(nota?.cnae ?? "");
+
   const [descricao, setDescricao] = React.useState(() => {
     if (nota) return nota.descricao;
-    if (linhas.length > 1) {
-      return `Serviços prestados — ${linhas.map((l) => l.codigo).join(", ")}`;
-    }
-    return primeira?.descricao ?? "";
+    // NF agrupada nasce em BRANCO de propósito (decisão do Tiago,
+    // 31/08/2026): cada job tem a sua instrução do GP, e emendar as três
+    // produziria um texto que nenhum dos clientes pediu. Quem emite lê uma
+    // a uma pelo botão `i` da linha do job e escreve a descrição da nota.
+    if (linhas.length > 1) return "";
+    // Job único: nasce com o que o GP mandou. Sem instrução — envio
+    // anterior a 31/08/2026 ou BV, que não tem envio — cai no nome do job,
+    // que é o que a tela sugeria antes.
+    const info = primeira ? infoPorJob[primeira.origem_id] : undefined;
+    return info?.descricaoNf?.trim() || primeira?.descricao || "";
   });
   const [anexoPath, setAnexoPath] = React.useState<string | null>(
     nota?.anexo_nf_path ?? null,
@@ -315,6 +377,10 @@ export function FaturarDrawer({
       setErro("Escreva a descrição que vai na nota fiscal.");
       return;
     }
+    if (cnae.trim().length === 0) {
+      setErro("Informe o CNAE a ser utilizado na nota.");
+      return;
+    }
     if (!anexoPath) {
       setErro("Anexe o PDF da nota fiscal antes de emitir.");
       return;
@@ -386,6 +452,7 @@ export function FaturarDrawer({
         data_emissao: dataEmissao,
         valor_total: totalNf,
         descricao: descricao.trim(),
+        cnae: cnae.trim(),
         anexo_nf_path: anexoPath,
         plano_conta_tipo_id: avulso ? avTipoId : null,
         plano_conta_subtipo_id: avulso ? avSubtipoId : null,
@@ -425,7 +492,8 @@ export function FaturarDrawer({
   const obrigatorio = leitura ? null : <span className="text-california-red">*</span>;
 
   return (
-    <Dialog
+    <>
+      <Dialog
       open
       onOpenChange={(o) => {
         if (!o) onClose();
@@ -491,6 +559,16 @@ export function FaturarDrawer({
                         <span className="whitespace-nowrap font-mono text-sm font-bold">
                           {formatMoney(i.valor)}
                         </span>
+                        {/* O item de save aponta para o MESMO job do item
+                            próprio: dois botões abririam o mesmo modal. */}
+                        {i.origem_tipo !== "save" && i.origem_id && (
+                          <BotaoInfo
+                            className="shrink-0"
+                            onClick={() =>
+                              setInfo(montarInfo(i.origem_id!, `${i.codigo} · ${i.descricao}`))
+                            }
+                          />
+                        )}
                       </div>
                     ))
                   : itensAtivos.map((l, idx) => {
@@ -591,6 +669,19 @@ export function FaturarDrawer({
                               </span>
                             )}
                           </div>
+
+                          <BotaoInfo
+                            className="shrink-0"
+                            onClick={() =>
+                              setInfo(
+                                montarInfo(
+                                  l.origem_id,
+                                  `${l.codigo ?? l.descricao} · parcela ${l.parcela_numero}/${l.parcela_total}`,
+                                  quebra.save > 0.004 ? quebra : null,
+                                ),
+                              )
+                            }
+                          />
 
                           <button
                             type="button"
@@ -806,6 +897,22 @@ export function FaturarDrawer({
             </div>
           </div>
 
+          {/* CNAE — entre o número da nota e a descrição, a pedido do
+              Tiago (31/08/2026). Antes era pedido à produção no envio; é
+              classificação fiscal da nota, então é de quem a emite. */}
+          <div className="space-y-1.5">
+            <Label htmlFor="cnae-nf">CNAE a ser utilizado {obrigatorio}</Label>
+            <Input
+              id="cnae-nf"
+              type="text"
+              value={cnae}
+              readOnly={leitura}
+              onChange={(e) => setCnae(e.target.value)}
+              maxLength={120}
+              placeholder="Ex: 7311-4/00 — Agências de publicidade"
+            />
+          </div>
+
           {/* Descrição */}
           <div className="space-y-1.5">
             <Label htmlFor="descricao-nf">Descrição da NF {obrigatorio}</Label>
@@ -815,13 +922,14 @@ export function FaturarDrawer({
               value={descricao}
               readOnly={leitura}
               onChange={(e) => setDescricao(e.target.value)}
-              maxLength={200}
+              maxLength={2000}
               placeholder="Ex: Serviços prestados em agosto/2026"
               className="w-full resize-none rounded-lg border border-border px-3 py-2.5 text-[13px] focus:border-california-red/40 focus:outline-none"
             />
-            <p className="text-[11.5px] text-muted-foreground">
-              Texto que vai na nota fiscal — quando há jobs vinculados, vem sugerido a
-              partir deles.
+            <p className="text-[11.5px] text-muted-foreground text-pretty">
+              {linhas.length > 1
+                ? "Cada job traz a instrução do seu gerente de projetos — leia uma a uma no botão de informações da linha e escreva aqui o texto da nota."
+                : "Texto que vai na nota fiscal. Vem sugerido pela instrução que o gerente de projetos mandou no envio."}
             </p>
           </div>
 
@@ -1053,7 +1161,20 @@ export function FaturarDrawer({
           </div>
         </div>
       </DrawerContent>
-    </Dialog>
+      </Dialog>
+
+      {/* Fora do <Dialog> do drawer, como o ConfirmDialog de Contas a Pagar:
+          Radix aninha mal quando o segundo Root fica dentro do primeiro. O
+          modal abre POR CIMA do drawer sem fechá-lo — quem está escrevendo a
+          descrição não pode perder o formulário para consultar a instrução
+          do GP. */}
+      <InfoFaturamentoModal
+        info={info}
+        onOpenChange={(aberto) => {
+          if (!aberto) setInfo(null);
+        }}
+      />
+    </>
   );
 }
 
