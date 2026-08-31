@@ -11,6 +11,14 @@
  *  Desde 27/08/2026, por decisão do Tiago, a divergência deixa de ser
  *  criada: depois do envio, nem errata nem save. A rede da 008 §3 fica
  *  para os jobs que já a tinham gravada.
+ *
+ *  ⚠️ Esta porta NÃO tem volta, e é assim de propósito. Não existe
+ *  "desfazer o envio": `jobs_envio_faturamento` é única por job e nenhuma
+ *  tela a apaga. A regra que sustenta isso é do Tiago (31/08/2026): a
+ *  negociação com o cliente já terminou quando o job é enviado para
+ *  faturamento, então errata depois do envio realmente não deve existir.
+ *  A mensagem abaixo chegou a mandar o usuário pedir o desfazimento ao
+ *  financeiro — mandava atrás de algo que ninguém pode fazer.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -30,6 +38,7 @@ export async function jobJaEnviadoParaFaturamento(
 
 /** A mensagem única das duas portas — errata e save falam igual. */
 export const MENSAGEM_JA_ENVIADO =
-  "Este job já foi enviado para faturamento. O valor da nota está congelado, " +
-  "e alterá-lo agora faria a nota sair por um número que não é mais o do job. " +
-  "Para corrigir, peça ao financeiro para desfazer o envio.";
+  "Este job já foi enviado para faturamento e o valor da nota está " +
+  "congelado: alterá-lo agora faria a nota sair por um número que não é " +
+  "mais o do job. Daqui em diante não há errata nem save. Se algo estiver " +
+  "errado, fale com o financeiro antes da emissão da nota.";

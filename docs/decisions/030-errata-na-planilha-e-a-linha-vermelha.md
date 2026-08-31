@@ -106,6 +106,18 @@ pontas desde a decisão 028.
 - **Não roda depois do envio para faturamento.** A porta é a mesma do save
   (`lib/data/envio-faturamento.ts`).
 
+  > ⚠️ **31/08/2026 — a porta existia na regra, não na planilha do job.**
+  > A trava estava escrita aqui e valia nas server actions, mas a tela do
+  > realizado continuava oferecendo "Alterar orçado" e a coluna de save
+  > num job já enviado: quem clicava só descobria no erro. Os botões agora
+  > nascem desabilitados, com o motivo na ponta.
+  >
+  > O Tiago confirmou a regra na mesma data — "a negociação já terá
+  > terminado no momento de envio para faturamento, e novas erratas
+  > realmente não deverão poder ser feitas" —, o que também fecha a
+  > pergunta que a [034](034-encerramento-exige-a-nota-emitida.md) tinha
+  > deixado em aberto sobre um caminho de volta. Não há, e não deve haver.
+
 ## Limitação conhecida
 
 A linha nascida de errata **não tem caminho para lançar BV**. As ações de BV
