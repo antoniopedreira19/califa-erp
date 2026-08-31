@@ -10,11 +10,18 @@
  *  Sem "use client" de propósito — a planilha é client, o card de Totais
  *  é server, e ambos importam daqui.
  */
-export function ColunasJobsProjeto() {
+export function ColunasJobsProjeto({ save = false }: { save?: boolean } = {}) {
   return (
     <colgroup>
+      {/* Save é a calha de estado do crédito entre jobs, à ESQUERDA.
+          `3.5 + 13.5 = 17`, de propósito e pelo mesmo motivo da
+          `grade-job`: o card de Totais NÃO tem coluna de Save e abre com
+          um Agrupamento de 17%, então as duas tabelas só caem no mesmo
+          eixo se Save + Agrupamento aqui somarem exatamente aquilo. O
+          `min-width` é compartilhado pelas duas e não pode divergir. */}
+      {save && <col className="w-[3.5%]" />}
       {/* Agrupamento · item absorve a sobra; as demais são proporcionais. */}
-      <col className="w-[17%]" />
+      <col className={save ? "w-[13.5%]" : "w-[17%]"} />
       <col className="w-[4%]" />
       <col className="w-[8%]" />
       {/* Orçado */}
@@ -39,3 +46,14 @@ export function ColunasJobsProjeto() {
 /** Piso para as colunas de moeda não cortarem o valor. Abaixo disso o
  *  card rola na horizontal em vez de espremer as colunas. */
 export const LARGURA_MINIMA_JOBS_PROJETO = "min-w-[1320px]";
+
+/** Quantas colunas a tabela tem — para o `colSpan` das linhas cheias
+ *  (estado vazio, faixas de erro). */
+export function totalDeColunasJobsProjeto(save = false): number {
+  return save ? 16 : 15;
+}
+
+/** Quantas colunas o rótulo à esquerda ocupa antes do primeiro bloco. */
+export function colunasDoRotuloJobsProjeto(save = false): number {
+  return save ? 4 : 3;
+}

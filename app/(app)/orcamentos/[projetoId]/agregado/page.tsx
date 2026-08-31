@@ -1,6 +1,8 @@
 import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
+import { saveDaVersao } from "@/lib/data/saves";
+import type { EstadoSaveDaLinha } from "@/app/(app)/_planilha/save-coluna";
 import { listActiveMembers } from "@/lib/data/members";
 import { listarCidadesIniciais } from "@/lib/data/cidades";
 import { HONORARIOS_PADRAO_FALLBACK } from "@/lib/validations/clientes";
@@ -252,6 +254,31 @@ export default async function OrcamentosAgregadoPage({
     itensPorGrupo.set(it.grupo_id, lista);
   }
 
+  // O save de cada versão do agregado. Em paralelo: são consultas
+  // independentes, e a regra da casa é `Promise.all` (docs/PERFORMANCE).
+  // A coluna mostra aqui o mesmo estado da planilha da versão — em
+  // leitura: marcar save continua na tela da versão.
+  const savePorVersao = await Promise.all(
+    versaoIds.map((vid) =>
+      saveDaVersao(
+        supabase,
+        tenantId,
+        vid,
+        ((itensRes.data ?? []) as any[])
+          .filter((it) => it.versao_orcamento_id === vid)
+          .map((it) => ({
+            id: it.id,
+            em_save: it.em_save === true,
+            save_consumido: num(it.save_consumido),
+          })),
+      ),
+    ),
+  );
+  const savePorItem = Object.assign({}, ...savePorVersao) as Record<
+    string,
+    EstadoSaveDaLinha
+  >;
+
   const gruposPorVersao = new Map<string, any[]>();
   for (const g of (gruposRes.data ?? []) as any[]) {
     const lista = gruposPorVersao.get(g.versao_orcamento_id) ?? [];
@@ -333,6 +360,7 @@ export default async function OrcamentosAgregadoPage({
 
   return (
     <EditorAgregado
+      savePorItem={savePorItem}
       projeto={{
         id: projeto.id,
         codigo: projeto.codigo,

@@ -59,6 +59,7 @@ import { salvarAlteracoesDoProjeto } from "./actions";
 import { aceitaBV } from "@/lib/calculos/versao-totais";
 import { VISAO_BV_PADRAO, type VisaoBv } from "@/lib/calculos/bv-planilha";
 import { ChaveBrutoLiquido } from "@/app/(app)/_planilha/chave-bruto-liquido";
+import type { EstadoSaveDaLinha } from "@/app/(app)/_planilha/save-coluna";
 
 interface Props {
   projeto: {
@@ -84,6 +85,10 @@ interface Props {
   produtores: Pick<Profile, "id" | "nome">[];
   categoriasItem: Categoria[];
   fornecedores: FornecedorOpcao[];
+  /** Estado da coluna Save por item, de TODAS as versões desta tela. Só
+   *  leitura nesta etapa: a coluna mostra os quatro estados e não abre o
+   *  diálogo — marcar save segue na planilha da versão. */
+  savePorItem?: Record<string, EstadoSaveDaLinha>;
 }
 
 /** Tipos em que o cliente paga o fornecedor direto — os únicos com BV. */
@@ -113,6 +118,7 @@ type Modal =
  */
 export function EditorAgregado({
   projeto,
+  savePorItem,
   honorariosCliente,
   orcamentosExistentes,
   inicial,
@@ -128,6 +134,12 @@ export function EditorAgregado({
   // Uma chave para a página inteira, como na tela da versão: vários
   // orçamentos na mesma tela em modos diferentes não teriam leitura.
   const [visao, setVisao] = React.useState<VisaoBv>(VISAO_BV_PADRAO);
+  // A coluna Save nasce aberta em quem já usa save e fechada em quem
+  // nunca usou — a mesma regra da planilha da versão. Estado da PÁGINA:
+  // os cards e o Totais dividem a leitura.
+  const [saveVisivel, setSaveVisivel] = React.useState(
+    Object.keys(savePorItem ?? {}).length > 0,
+  );
   const [orcamentos, setOrcamentos] =
     React.useState<OrcamentoRascunho[]>(inicial);
   const [modal, setModal] = React.useState<Modal>(null);
@@ -716,6 +728,9 @@ export function EditorAgregado({
           const bloqueio = orc.origemBanco?.bloqueio ?? null;
           return (
             <JobRascunhoCard
+              savePorItem={savePorItem}
+              saveVisivel={saveVisivel}
+              onAlternarSave={() => setSaveVisivel((v) => !v)}
               key={orc.id}
               job={orc}
               codigo={codigo}

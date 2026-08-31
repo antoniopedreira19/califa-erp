@@ -36,6 +36,7 @@ import {
   RENTABILIDADE,
   type Bloco,
 } from "@/app/(app)/_planilha/blocos";
+import type { EstadoSaveDaLinha } from "@/app/(app)/_planilha/save-coluna";
 import type { JobRascunho, ParametrosVersao } from "./tipos";
 import {
   comoBvDaVersao,
@@ -71,6 +72,15 @@ interface Props {
   bloqueio?: string | null;
   /** Rótulo do estado: "Rascunho", "Importado", "v2 · aprovada"... */
   badge?: string;
+  /** Estado da coluna Save por item da versão. A visão agregada mostra o
+   *  mesmo que a planilha da versão — em LEITURA nesta etapa: a célula
+   *  não abre o diálogo (marcar save segue na tela da versão). */
+  savePorItem?: Record<string, EstadoSaveDaLinha>;
+  /** Coluna Save aberta. Estado da PÁGINA, não do card: o agregado tem
+   *  vários cards mais o de Totais, e todos se leem juntos. */
+  saveVisivel?: boolean;
+  /** Liga-desliga da coluna. Ausente ⇒ sem alça. */
+  onAlternarSave?: () => void;
   /** Abre os parâmetros deste orçamento. Ausente ⇒ botão não aparece. */
   onEditarParametros?: () => void;
 }
@@ -88,6 +98,9 @@ export function JobRascunhoCard({
   codigo,
   parametros,
   visao,
+  savePorItem,
+  saveVisivel,
+  onAlternarSave,
   descricao,
   categorias,
   fornecedores,
@@ -337,6 +350,9 @@ export function JobRascunhoCard({
                     visao={visao}
                     readOnly={readOnly}
                     categorias={categorias}
+                    savePorItem={savePorItem}
+                    saveVisivel={saveVisivel}
+                    onAlternarSave={onAlternarSave}
                     estaAberto={recolher.estaAberto}
                     onAlternarGrupo={recolher.alternar}
                     nomeDoGrupo={(g) => (

@@ -291,6 +291,11 @@ export default async function ProjetoNoFinanceiroPage({
                 planilhas={planilhas}
                 moeda={moedaProjeto}
                 jobHrefBase="/financeiro/jobs"
+                // No financeiro a coluna Save é sempre presente e não tem
+                // liga-desliga: é aqui que se confere o crédito entre
+                // jobs, e esconder a coluna esconderia o motivo de o
+                // faturamento previsto e o valor do job divergirem.
+                saveSempreVisivel
               />
             </>
           }

@@ -7,6 +7,7 @@ import {
   type BvParaConta,
 } from "@/lib/calculos/bv-planilha";
 import { nomeDoJobNoFinanceiro, type JobStatus, type TipoCusto } from "@/lib/types";
+import { saveDosJobs } from "@/lib/data/saves";
 import type {
   GrupoPlanilhaProjeto,
   ItemPlanilhaProjeto,
@@ -157,6 +158,24 @@ export async function carregarPlanilhasDosJobs(
     });
   }
 
+  // O save de TODAS as linhas de TODOS os jobs, em três consultas. Em
+  // lote de propósito: um `saveDoJob` por bloco custaria três consultas
+  // para cada job desta tela, que é justamente a que já custou uma
+  // regressão de navegação (`docs/PERFORMANCE.md`).
+  const savePorItem = await saveDosJobs(
+    supabase,
+    tenantId,
+    ((itensRes.data ?? []) as any[]).map((it) => ({
+      // A tela chaveia a linha pelo id da CÓPIA no job, que é o mesmo id
+      // por onde `saves_consumos` aponta — aqui os dois coincidem.
+      id: it.id,
+      orcado_id: it.id,
+      jobId: it.job_id,
+      em_save: it.em_save === true,
+      save_consumido: num(it.save_consumido),
+    })),
+  );
+
   return jobs.map((j) => {
     const itensDoJob = itensPorJob.get(j.id) ?? [];
     // Lida ANTES dos grupos: é ela que transforma o valor do BV em
@@ -219,6 +238,7 @@ export async function carregarPlanilhasDosJobs(
             realDm: emSave ? 0 : daPP ? (real?.dm ?? 0) : num(it.dias_meses_orcado),
             planejado: blocos.planejado,
             realizado: blocos.realizado,
+            save: savePorItem[it.id],
           };
         });
 
@@ -300,6 +320,13 @@ export async function carregarPlanilhasDosJobs(
       imposto,
       faturamentoPrevisto,
       valorJob,
+      // Uma linha "toca" save quando gera crédito ou é paga por saldo de
+      // fora — a mesma regra do `linhaTocaSave` da coluna.
+      temSave: itensDoJob.some(
+        (it) =>
+          it.em_save === true ||
+          (savePorItem[it.id]?.origens.length ?? 0) > 0,
+      ),
     };
   });
 }
