@@ -814,7 +814,7 @@ export default async function PedidosCompraFinanceiroPage() {
         // fatura paga abria com três travessões (29/08/2026). O filtro
         // por papel evita pegar o lançamento do cartão ou o do estorno.
         "pagamentos:lancamentos_financeiros!fatura_cartao_id(" +
-        "data_movimento, papel_na_fatura, " +
+        "data_movimento, papel_na_fatura, origem, " +
         "conta:contas_bancarias(nome, banco, cartao_credito_id), " +
         "tipo:plano_contas_tipos(codigo), subtipo:plano_contas_subtipos(nome))",
     )
@@ -843,9 +843,18 @@ export default async function PedidosCompraFinanceiroPage() {
 
     // Só a perna do BANCO: a do cartão é a contrapartida interna, e
     // mostrá-la na conferência diria "pago pela conta do próprio cartão".
-    const pagoBanco = (f.pagamentos ?? []).find(
+    //
+    // E só a baixa VIVA: uma fatura que já foi paga, estornada e paga de
+    // novo guarda os dois pagamentos, e o `find` pegava o primeiro — a
+    // conferência mostrava a data, a conta e o centro de custo da baixa
+    // que já tinha sido desfeita (31/08/2026). Quem responde isso é a
+    // `origem` da própria linha, no mesmo padrão dos outros cinco
+    // documentos estornáveis: `fatura_cartao_baixa` está valendo,
+    // `fatura_cartao_baixa_estornada` já foi desfeita (migration
+    // 20260831150002).
+    const pagoBanco = ((f.pagamentos ?? []) as any[]).find(
       (l: any) =>
-        l.papel_na_fatura === "pagamento" && !l.conta?.cartao_credito_id,
+        l.origem === "fatura_cartao_baixa" && !l.conta?.cartao_credito_id,
     );
     titulos.push({
       id: f.id,
