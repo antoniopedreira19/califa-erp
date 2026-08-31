@@ -201,9 +201,29 @@ export const BOTAO_NOVO_GRUPO =
  *  `69342d83`), 26/08/2026.
  */
 export const SAVE = {
-  /** Faixa da coluna no cabeçalho, alinhada com as faixas dos blocos. */
-  faixa:
-    "text-[#5f5d57] bg-[#f3f2ef] border-b-[3px] border-b-[#5f5d57] border-r border-r-[#e2e0da]",
+  /** Célula da coluna na FAIXA dos blocos — vazia, e branca como a faixa
+   *  do agrupamento ao lado. A coluna não é um bloco e não ganha rótulo
+   *  lá em cima: quem a nomeia é o sub-cabeçalho, uma linha abaixo, junto
+   *  de "Grupo · Item" e "Tipo". */
+  faixaVazia: "bg-card border-b border-b-[#e8e7e3] border-r border-r-[#e2e0da]",
+  /** SUB-cabeçalho da coluna — é aqui que "Save" aparece escrito. O cinza
+   *  é um degrau mais claro que o dos irmãos (#6b6b6b) porque a coluna é
+   *  calha de estado: o rótulo situa, mas não disputa com "Grupo · Item". */
+  cabecalho:
+    "text-center p-0 font-semibold text-[#8a8880] border-b border-b-[#e8e7e3] border-r border-r-[#e2e0da]",
+  /** A alça na borda esquerda da planilha com a coluna ABERTA: discreta,
+   *  só o chevron apontando para onde a coluna vai sumir. */
+  alca: "mt-10 h-[34px] w-[15px] items-center justify-center rounded-l-[7px] border border-r-0 border-[#dedcd7] bg-[#f3f2ee] text-[#6b6b6b]",
+  /** A mesma alça com a coluna RECOLHIDA: mais alta e mais escura, porque
+   *  passa a ser a única coisa que lembra que a coluna existe — e é por
+   *  isso que só neste estado ela carrega o rótulo. */
+  alcaRecolhida:
+    "mt-10 h-[94px] w-[15px] flex-col items-center justify-center gap-[5px] rounded-l-[7px] border border-r-0 border-[#c9c6bf] bg-[#eceae5] text-[#282828]",
+  /** As letras S-A-V-E empilhadas dentro da alça recolhida. Empilhadas, e
+   *  não rotacionadas: a alça tem 15px de largura e texto girado dentro
+   *  dela sai da caixa em vez de caber. */
+  alcaRotulo:
+    "flex flex-col items-center text-[8px] font-bold leading-[1.25] tracking-[.02em]",
   /** Célula da coluna Save numa linha qualquer. */
   celula: "text-center border-r border-r-[#e8e7e3]",
   /** Textura da linha que GERA save — aplicada na célula do Save e nas

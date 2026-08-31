@@ -77,27 +77,25 @@ export function linhaTocaSave(estado: EstadoSaveDaLinha): boolean {
   return estado.emSave || estado.origens.length > 0;
 }
 
-/** Cabeçalho da coluna, na mesma faixa de ORÇADO / PLANEJADO. O rótulo é
- *  vertical porque a coluna tem 4% da largura: "SAVE" deitado forçaria a
- *  coluna a alargar, e alargar aqui é tirar espaço do Item. */
+/** Célula da coluna na FAIXA dos blocos — vazia de propósito.
+ *
+ *  A coluna Save não é um bloco: ela não ganha rótulo na faixa colorida,
+ *  fica branca como a célula do agrupamento ao lado e só segura o lugar
+ *  para a grade não escorregar uma casa. É o design que manda assim
+ *  (`Orcamento - Versao com Save.dc.html`), e havia sido implementado ao
+ *  contrário — "SAVE" na faixa e o sub-cabeçalho vazio (31/08/2026). */
 export function CabecalhoSaveFaixa() {
-  return (
-    <th
-      className={cn(
-        "text-center align-middle px-0 py-2 text-[9px] font-extrabold tracking-[0.16em]",
-        SAVE.faixa,
-      )}
-      title="Save — crédito entre jobs"
-    >
-      SAVE
-    </th>
-  );
+  return <th className={SAVE.faixaVazia} aria-hidden />;
 }
 
-/** Sub-cabeçalho: a coluna não tem sub-rótulo próprio, mas precisa da
- *  célula para a grade não escorregar uma casa. */
+/** Sub-cabeçalho da coluna: é AQUI que "Save" aparece escrito, na mesma
+ *  linha de "Grupo · Item" e "Tipo". */
 export function CabecalhoSaveColuna() {
-  return <th className="border-r border-r-border" aria-hidden />;
+  return (
+    <th className={SAVE.cabecalho} title="Save — crédito entre jobs">
+      Save
+    </th>
+  );
 }
 
 function resumoDasPontas(pontas: PontaDeSave[], moeda: string): string {

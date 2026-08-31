@@ -15,6 +15,7 @@
 import * as React from "react";
 import { Check, ChevronLeft, ChevronRight, Columns3 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { SAVE } from "./blocos";
 
 export interface BlocoNoMenu {
   chave: string;
@@ -103,7 +104,13 @@ export function MenuExibirColunas({ blocos }: { blocos: BlocoNoMenu[] }) {
 }
 
 /** A alça colada na borda esquerda da planilha, para recolher e trazer de
- *  volta a coluna Save sem abrir o menu. */
+ *  volta a coluna Save sem abrir o menu.
+ *
+ *  O chevron aponta para o DESTINO do clique, não para o estado atual:
+ *  com a coluna aberta ele aponta para a direita (é para lá que ela vai
+ *  sumir) e, recolhida, para a esquerda (é de lá que ela volta). Estava
+ *  invertido, e a alça recolhida ainda vinha sem o rótulo — corrigido
+ *  contra o design em 31/08/2026. */
 export function AlcaDaColunaSave({
   visivel,
   onAlternar,
@@ -111,16 +118,29 @@ export function AlcaDaColunaSave({
   visivel: boolean;
   onAlternar: () => void;
 }) {
-  const Icone = visivel ? ChevronLeft : ChevronRight;
+  const Icone = visivel ? ChevronRight : ChevronLeft;
   return (
     <button
       type="button"
       onClick={onAlternar}
       title={visivel ? "Ocultar a coluna Save" : "Mostrar a coluna Save"}
       aria-label={visivel ? "Ocultar a coluna Save" : "Mostrar a coluna Save"}
-      className="mt-10 flex h-[34px] w-[15px] flex-none items-center justify-center rounded-l-[7px] border border-r-0 border-[#dedcd7] bg-muted/60 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+      className={cn(
+        "flex flex-none transition-colors hover:brightness-95",
+        visivel ? SAVE.alca : SAVE.alcaRecolhida,
+      )}
     >
-      <Icone className="h-3 w-3" />
+      <Icone className="h-[11px] w-[11px]" />
+      {/* O rótulo só existe recolhido: aberto, quem nomeia a coluna é o
+          sub-cabeçalho dela dentro da tabela. */}
+      {!visivel && (
+        <span className={SAVE.alcaRotulo} aria-hidden>
+          <span>S</span>
+          <span>A</span>
+          <span>V</span>
+          <span>E</span>
+        </span>
+      )}
     </button>
   );
 }
