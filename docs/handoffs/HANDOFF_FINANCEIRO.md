@@ -2954,3 +2954,82 @@ desatualizado.
 conferidas pelo MCP (colunas, CHECK, `not null`, backfill das duas notas e
 a RPC gravando o CNAE). Conferência logada combinada para o fim das três
 entregas.
+
+---
+
+## ⚠️ 31/08/2026 — Contas a Receber, entrega 2: a aba Faturamento
+
+**Regra:** `docs/decisions/033-a-descricao-da-nf-vem-do-gp-e-o-cnae-do-financeiro.md`.
+
+### O filtro de cliente virou combobox
+
+A barra de chips não escala: com o cadastro real seriam dezenas de nomes
+empilhados antes da busca. Agora é um campo de 290px onde se digita, com
+dropdown de **5 nomes** e o rodapé `+ N clientes — continue digitando para
+refinar`. Cada opção traz a contagem. O `X` limpa o filtro.
+
+A contagem agora soma pendentes **e** faturados, porque o filtro atravessa
+os dois. O `Chip` que servia à barra antiga foi removido — virou código
+morto.
+
+### Filtro novo: Tudo · A faturar · Faturados
+
+Segmented control ao lado do combobox. As duas listas sempre conviveram na
+mesma tabela (pendente em branco, faturada em verde); agora dá para olhar
+uma de cada vez. Nasce em **Tudo**.
+
+### O botão `i` fica na calha, e não numa coluna
+
+O protótipo desenhou o `i` da aba Faturamento **dentro** da tabela, numa
+coluna de 44px. O Tiago pediu fora da célula nas duas abas, como o "Gerar
+PP" da planilha interna — vale a instrução dele.
+
+A caixa da tabela reserva 46px com `mr-[46px]`, e a pílula mora numa `<td>`
+de largura **zero**, posicionada em `absolute left-3`. É a mesma regra da
+calha das planilhas: ela nunca alarga a tabela
+(`app/(app)/_planilha/calha.tsx`).
+
+### O que saiu das células
+
+| Coluna | O que saiu | Para onde foi |
+| --- | --- | --- |
+| Cliente | `ContatosCobrancaInline` | botão `i` |
+| Valor | quebra `job X · save Y` | botão `i`, bloco "Composição do valor" |
+
+O campo `contatos` de `FaturamentoPendenteRow` foi removido: ficou órfão
+quando o contato saiu da célula. Quem alimenta o modal é o `infoPorJob`.
+
+### O BV passou a dizer de qual job saiu
+
+`vw_faturamento_pendente` ganhou `job_id` e, no ramo do BV, `codigo` deixou
+de ser nulo. O caminho é
+`itens_bv.job_item_orcado_id → jobs_itens_orcado.job_id → jobs`, `LEFT
+JOIN` para BV órfão continuar na fila sem código.
+
+**`origem_id` não mudou** — continua sendo o id do BV. É ele que o item da
+nota aponta e é por ele que a view sabe que o BV já foi faturado; confundir
+os dois quebraria a emissão.
+
+**O `i` do BV mostra o job e explica cada vazio** (decisão do Tiago): PO,
+instrução do GP e contato de cobrança são todos do JOB, e o BV é cobrado do
+FORNECEDOR. Nenhum se aplica, então em vez da frase genérica o modal diz
+por que cada bloco está vazio.
+
+### Clique na linha
+
+| Situação | O que o clique faz |
+| --- | --- |
+| Linha pendente, modo normal | abre o formulário de faturar |
+| Linha pendente, Faturamento Agrupado | marca/desmarca a linha |
+| Linha pendente de BV, agrupado | nada — BV não agrupa |
+| Linha faturada, modo normal | reabre o formulário em leitura |
+| Linha faturada, agrupado | nada — o agrupamento só serve para faturar |
+
+Os botões dentro da linha (checkbox, "Faturar", "NF ####", `i`) chamam
+`stopPropagation`, senão o clique contaria duas vezes.
+
+**Verificação:** `tsc`, `lint` e `build` limpos; view conferida pelo MCP
+(colunas, `job_id` resolvido nos 6 BVs, `GRANT` para `authenticated` e nada
+para `anon`). **Nenhum BV está `confirmado` na base hoje**, então o ramo do
+BV foi conferido por query e não em tela. Conferência logada combinada para
+o fim da entrega 3.

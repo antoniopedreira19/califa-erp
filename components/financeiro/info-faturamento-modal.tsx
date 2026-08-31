@@ -41,16 +41,33 @@ export interface QuebraSave {
   save: number;
 }
 
+/** A PO de um job. Uma NF agrupada traz uma entrada por job coberto. */
+export interface PoDoJob {
+  /** Código do job, para nomear a PO quando há mais de uma. */
+  job: string;
+  po: string | null;
+}
+
 export interface InfoFaturamento {
   /** Linha do subtítulo: `JOB-0020 · Cliente · parcela 1/2`. */
   referencia: string;
-  /** PO do envio para faturamento. Nem todo job tem, e BV nunca tem. */
-  po: string | null;
+  /**
+   * Uma entrada por job. Com uma só, a PO aparece sozinha; com várias, cada
+   * uma vem nomeada pelo job — uma PO pode cobrir mais de um job, e sem o
+   * rótulo ninguém sabe qual é qual (Tiago, 31/08/2026).
+   */
+  pos: PoDoJob[];
   /** Instrução do GP sobre como a nota deve ser descrita. */
   descricaoNf: string | null;
   contatos: ContatoCobranca[];
   /** Só quando há saldo em save nesta linha. */
   quebra?: QuebraSave | null;
+  /**
+   * Linha de BV: os três blocos são do JOB, e o BV é cobrado do fornecedor.
+   * Nenhum deles se aplica, então cada vazio explica o porquê em vez de
+   * repetir a frase genérica (decisão do Tiago, 31/08/2026).
+   */
+  ehBv?: boolean;
 }
 
 function formatMoney(n: number): string {
@@ -90,6 +107,10 @@ export function InfoFaturamentoModal({
   info: InfoFaturamento | null;
   onOpenChange: (aberto: boolean) => void;
 }) {
+  // Job sem PO não vira linha vazia na lista: some. Se nenhum tem, o bloco
+  // inteiro cai no texto de vazio.
+  const comPo = (info?.pos ?? []).filter((x) => x.po?.trim());
+
   return (
     <Dialog open={info !== null} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-[470px] gap-0 p-0">
@@ -108,12 +129,34 @@ export function InfoFaturamentoModal({
         <div className="flex max-h-[70vh] flex-col gap-4 overflow-y-auto px-5 py-4">
           <div className="flex flex-col gap-1.5">
             <Rotulo>Envio para faturamento · PO</Rotulo>
-            {info?.po ? (
+            {comPo.length === 0 ? (
+              <Vazio>
+                {info?.ehBv
+                  ? "BV não tem PO — ela pertence ao envio do job."
+                  : "Sem PO registrado no envio para faturamento."}
+              </Vazio>
+            ) : comPo.length === 1 ? (
               <span className="self-start rounded-lg border border-border bg-muted/70 px-2.5 py-1.5 font-mono text-[13px] font-bold">
-                {info.po}
+                {comPo[0].po}
               </span>
             ) : (
-              <Vazio>Sem PO registrado no envio para faturamento.</Vazio>
+              // Nota agrupada: uma PO por job, nomeada. A mesma PO pode
+              // cobrir vários jobs, e sem o rótulo ninguém sabe qual é qual.
+              <div className="flex flex-col gap-1">
+                {comPo.map((x, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center gap-2.5 rounded-lg border border-border bg-muted/70 px-2.5 py-1.5"
+                  >
+                    <span className="font-mono text-[11px] text-muted-foreground">
+                      {x.job}
+                    </span>
+                    <span className="font-mono text-[13px] font-bold">
+                      {x.po}
+                    </span>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
 
@@ -127,7 +170,9 @@ export function InfoFaturamentoModal({
               </p>
             ) : (
               <Vazio>
-                O gerente de projetos não informou a descrição no envio.
+                {info?.ehBv
+                  ? "A instrução do gerente de projetos é da nota do job, não da do BV."
+                  : "O gerente de projetos não informou a descrição no envio."}
               </Vazio>
             )}
           </div>
@@ -184,7 +229,11 @@ export function InfoFaturamentoModal({
                 </div>
               ))
             ) : (
-              <Vazio>Sem contato de cobrança cadastrado.</Vazio>
+              <Vazio>
+                {info?.ehBv
+                  ? "O BV é cobrado do fornecedor; o contato de cobrança é do cliente."
+                  : "Sem contato de cobrança cadastrado."}
+              </Vazio>
             )}
           </div>
         </div>
