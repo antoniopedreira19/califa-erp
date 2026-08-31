@@ -84,6 +84,12 @@ export interface RascunhoErrata {
   ligar: () => void;
   /** Sai do modo errata e joga fora tudo que foi digitado. */
   descartar: () => void;
+  /** Volta um passo do rascunho. Cada ação estrutural (linha nova, linha
+   *  removida, troca de tipo) é um passo; a digitação num mesmo campo é
+   *  um passo só, e não um por tecla. */
+  desfazer: () => void;
+  /** Há passo para voltar — o botão e o atalho ficam desligados sem isto. */
+  podeDesfazer: boolean;
   edicaoDe: (chave: string) => EdicaoLinha | undefined;
   editarCampo: (chave: string, campo: CampoErrata, valor: string) => void;
   editarTipo: (chave: string, tipo: TipoCusto) => void;
@@ -136,10 +142,48 @@ export function useRascunhoErrata(
   // provar que ele é puro. Um clique em "Linha vermelha" criava duas.
   const seqRef = React.useRef(0);
 
+  // ---- Desfazer ----------------------------------------------------
+  // Pilha de fotos do rascunho, tirada ANTES de cada mudança. Vinte
+  // passos é bem mais do que uma errata costuma ter e não pesa: cada foto
+  // é um punhado de strings.
+  //
+  // A digitação COALESCE: só tira foto quando o alvo (linha + campo) muda.
+  // Sem isso o Cmd+Z voltaria uma tecla por vez, e o que o usuário quer
+  // desfazer é "a alteração daquela célula", não "o último caractere".
+  const [historico, setHistorico] = React.useState<
+    { edicoes: Record<string, EdicaoLinha>; novas: LinhaNovaRascunho[]; removidas: string[] }[]
+  >([]);
+  const alvoRef = React.useRef<string | null>(null);
+  const atualRef = React.useRef({ edicoes, novas, removidas });
+  atualRef.current = { edicoes, novas, removidas };
+
+  const fotografar = React.useCallback((alvo: string | null) => {
+    // `alvo` null = ação estrutural, sempre vira passo.
+    if (alvo !== null && alvo === alvoRef.current) return;
+    alvoRef.current = alvo;
+    const { edicoes: e, novas: n, removidas: r } = atualRef.current;
+    setHistorico((h) => [...h.slice(-19), { edicoes: { ...e }, novas: [...n], removidas: [...r] }]);
+  }, []);
+
+  const desfazer = React.useCallback(() => {
+    setHistorico((h) => {
+      if (h.length === 0) return h;
+      const anterior = h[h.length - 1];
+      setEdicoes(anterior.edicoes);
+      setNovas(anterior.novas);
+      setRemovidas(anterior.removidas);
+      // O próximo caractere digitado volta a valer como passo novo.
+      alvoRef.current = null;
+      return h.slice(0, -1);
+    });
+  }, []);
+
   const zerar = React.useCallback(() => {
     setEdicoes({});
     setNovas([]);
     setRemovidas([]);
+    setHistorico([]);
+    alvoRef.current = null;
     seqRef.current = 0;
   }, []);
 
@@ -151,6 +195,8 @@ export function useRascunhoErrata(
     setEdicoes(inicial);
     setNovas([]);
     setRemovidas([]);
+    setHistorico([]);
+    alvoRef.current = null;
     seqRef.current = 0;
     setAtivo(true);
   }, [itensSalvos]);
@@ -162,6 +208,7 @@ export function useRascunhoErrata(
 
   const editarCampo = React.useCallback(
     (chave: string, campo: CampoErrata, valor: string) => {
+      fotografar(`${chave}:${campo}`);
       setNovas((lista) =>
         lista.map((n) => (n.chave === chave ? { ...n, [campo]: valor } : n)),
       );
@@ -169,25 +216,28 @@ export function useRascunhoErrata(
         mapa[chave] ? { ...mapa, [chave]: { ...mapa[chave], [campo]: valor } } : mapa,
       );
     },
-    [],
+    [fotografar],
   );
 
   const editarTipo = React.useCallback((chave: string, tipo: TipoCusto) => {
+    fotografar(null);
     setNovas((lista) =>
       lista.map((n) => (n.chave === chave ? { ...n, tipo } : n)),
     );
     setEdicoes((mapa) =>
       mapa[chave] ? { ...mapa, [chave]: { ...mapa[chave], tipo } } : mapa,
     );
-  }, []);
+  }, [fotografar]);
 
   const editarNome = React.useCallback((chave: string, nome: string) => {
+    fotografar(`${chave}:nome`);
     setNovas((lista) =>
       lista.map((n) => (n.chave === chave ? { ...n, item: nome } : n)),
     );
-  }, []);
+  }, [fotografar]);
 
   const adicionar = React.useCallback((grupoId: string, vermelha: boolean) => {
+    fotografar(null);
     seqRef.current += 1;
     const chave = `nova:${seqRef.current}`;
     setNovas((lista) => [
@@ -205,9 +255,10 @@ export function useRascunhoErrata(
         tipo: "B",
       },
     ]);
-  }, []);
+  }, [fotografar]);
 
   const remover = React.useCallback((chave: string) => {
+    fotografar(null);
     if (chave.startsWith("nova:")) {
       setNovas((lista) => lista.filter((n) => n.chave !== chave));
       return;
@@ -215,7 +266,7 @@ export function useRascunhoErrata(
     setRemovidas((lista) =>
       lista.includes(chave) ? lista : [...lista, chave],
     );
-  }, []);
+  }, [fotografar]);
 
   const edicaoDe = React.useCallback(
     (chave: string): EdicaoLinha | undefined => {
@@ -401,6 +452,8 @@ export function useRascunhoErrata(
     ativo,
     ligar,
     descartar,
+    desfazer,
+    podeDesfazer: historico.length > 0,
     edicaoDe,
     editarCampo,
     editarTipo,

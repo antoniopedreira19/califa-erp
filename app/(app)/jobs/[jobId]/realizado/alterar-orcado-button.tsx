@@ -18,18 +18,27 @@ import { ERRATA } from "@/app/(app)/_planilha/blocos";
 interface Props {
   ativo: boolean;
   onAlternar: () => void;
+  /** Motivo pelo qual a errata não pode abrir. Presente ⇒ botão travado,
+   *  com o motivo no `title`. Hoje só existe um: o envio para faturamento
+   *  já congelou o valor da nota (decisão 028, nota de 27/08/2026). */
+  travadoPor?: string | null;
 }
 
-export function AlterarOrcadoButton({ ativo, onAlternar }: Props) {
+export function AlterarOrcadoButton({ ativo, onAlternar, travadoPor }: Props) {
+  const travado = Boolean(travadoPor);
   return (
     <button
       type="button"
       onClick={onAlternar}
       aria-pressed={ativo}
+      disabled={travado}
+      title={travadoPor ?? undefined}
       className={cn(
         ativo
           ? ERRATA.botaoAtivo
           : "inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:border-california-red/30 hover:bg-california-red/[0.06]",
+        travado &&
+          "cursor-not-allowed opacity-45 hover:border-border hover:bg-white",
       )}
     >
       <PencilLine className="h-3.5 w-3.5 text-california-red" />

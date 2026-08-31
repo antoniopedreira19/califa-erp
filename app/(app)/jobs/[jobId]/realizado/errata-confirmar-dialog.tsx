@@ -83,7 +83,17 @@ function LinhaDeValor({
   moeda: string;
   forte?: boolean;
 }) {
-  const delta = par.depois - par.antes;
+  // O delta é a diferença entre os DOIS VALORES QUE O JOB PASSA A TER, e
+  // não entre os intermediários da conta: `jobs.faturamento_previsto` e
+  // `jobs.valor_total` são gravados com duas casas, e é sobre eles que a
+  // errata fica registrada. Subtrair os números crus fazia a barra mostrar
+  // "R$ 20.504,54 → R$ 24.605,44 +R$ 4.100,91" — um delta que não fecha
+  // com os dois valores ao lado dele, porque o gross-up caiu em meio
+  // centavo. Arredondar antes de subtrair faz os três números sempre
+  // fecharem, e é o mesmo que o card de Erratas já faz ao ler as colunas
+  // gravadas (31/08/2026).
+  const centavos = (n: number) => Math.round(n * 100);
+  const delta = (centavos(par.depois) - centavos(par.antes)) / 100;
   return (
     <div className="flex items-center justify-between gap-4 py-1.5">
       <span
