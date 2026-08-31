@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
+import { saldoAFaturarDoJob } from "@/lib/data/saldo-a-faturar";
 import {
   PP_STATUS_EM_ABERTO,
   BV_SITUACAO_EM_ABERTO,
@@ -14,11 +15,17 @@ export type ActionResult =
   | { ok: true; id: string }
   | { ok: false; message: string };
 
+function formatarBRL(n: number): string {
+  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
 /** O que impede o encerramento agora. Vazio = pode encerrar. */
 export interface ImpedimentosEncerramento {
   ppsEmAberto: { codigo: string; status: string }[];
   bvsEmAberto: { item: string; situacao: string }[];
   semEnvioFaturamento: boolean;
+  /** Quanto do envio ainda não virou nota emitida. Zero = tudo faturado. */
+  saldoAFaturar: number;
 }
 
 /**
@@ -30,6 +37,13 @@ export interface ImpedimentosEncerramento {
  * "Em aberto" é PP que ainda não foi paga e BV que ainda não foi
  * recebido — rejeitada e cancelada não contam, porque não são
  * compromisso nem desembolso.
+ *
+ * E não encerra com saldo a faturar (31/08/2026). Até aqui o portão era
+ * só o ENVIO: bastava a produção ter mandado o job para a fila, mesmo
+ * que nenhuma nota tivesse saído. Como `vw_faturamento_pendente` filtra
+ * `status = 'aberto'`, o job encerrado sumia da fila levando junto o que
+ * faltava faturar, sem aviso e sem caminho de volta — aconteceu com o
+ * JOB-0027, encerrado com R$ 30.073,32 em duas parcelas nunca emitidas.
  */
 export async function levantarImpedimentos(
   tenantId: string,
@@ -38,7 +52,7 @@ export async function levantarImpedimentos(
 ): Promise<ImpedimentosEncerramento> {
   const supabase = createClient();
 
-  const [ppsRes, bvsRes, envioRes] = await Promise.all([
+  const [ppsRes, bvsRes, envioRes, saldoAFaturar] = await Promise.all([
     supabase
       .from("pedidos_compra")
       .select("codigo, status")
@@ -61,6 +75,7 @@ export async function levantarImpedimentos(
       .eq("job_id", jobId)
       .eq("tenant_id", tenantId)
       .maybeSingle(),
+    saldoAFaturarDoJob(tenantId, jobId),
   ]);
 
   return {
@@ -73,6 +88,7 @@ export async function levantarImpedimentos(
       situacao: b.situacao,
     })),
     semEnvioFaturamento: !envioRes.data,
+    saldoAFaturar,
   };
 }
 
@@ -158,7 +174,11 @@ export async function encerrarJob(jobId: string): Promise<ActionResult> {
     }
   }
 
-  if (imp.ppsEmAberto.length > 0 || imp.bvsEmAberto.length > 0) {
+  if (
+    imp.ppsEmAberto.length > 0 ||
+    imp.bvsEmAberto.length > 0 ||
+    imp.saldoAFaturar > 0
+  ) {
     const partes: string[] = [];
     if (imp.ppsEmAberto.length > 0) {
       partes.push(
@@ -172,6 +192,12 @@ export async function encerrarJob(jobId: string): Promise<ActionResult> {
         `${imp.bvsEmAberto.length} ${imp.bvsEmAberto.length === 1 ? "BV não recebido" : "BVs não recebidos"}`,
       );
     }
+    // O saldo a faturar entra na MESMA lista, e não numa trava à parte,
+    // para quem tenta encerrar ver de uma vez tudo o que falta — em vez
+    // de resolver a PP, tentar de novo e esbarrar na nota.
+    if (imp.saldoAFaturar > 0) {
+      partes.push(`${formatarBRL(imp.saldoAFaturar)} ainda a faturar`);
+    }
     await logAuditEvent({
       acao: "acao_negada",
       tenantId: session.activeTenant.id,
@@ -181,11 +207,18 @@ export async function encerrarJob(jobId: string): Promise<ActionResult> {
         acao_tentada: "job.encerrado",
         pps_em_aberto: imp.ppsEmAberto.length,
         bvs_em_aberto: imp.bvsEmAberto.length,
+        saldo_a_faturar: imp.saldoAFaturar,
       },
     });
+    const comoResolver =
+      imp.saldoAFaturar > 0
+        ? imp.ppsEmAberto.length > 0 || imp.bvsEmAberto.length > 0
+          ? " Dê baixa nos documentos e peça ao financeiro a nota do saldo."
+          : " O financeiro precisa emitir a nota do saldo antes do encerramento."
+        : " Dê baixa antes.";
     return {
       ok: false,
-      message: `Não é possível encerrar: ${partes.join(" e ")}. Dê baixa antes.`,
+      message: `Não é possível encerrar: ${partes.join(" e ")}.${comoResolver}`,
     };
   }
 

@@ -31,6 +31,7 @@ import type {
   ItemBv,
 } from "@/lib/types";
 import type { ResumoEncerramento } from "./encerrar-dialog";
+import { saldoAFaturarDoJob } from "@/lib/data/saldo-a-faturar";
 
 /**
  * Todo o detalhe de um job, carregado uma vez e servido às duas telas
@@ -636,6 +637,16 @@ export async function carregarDetalheDoJob(
   // antes disso não há o que encerrar. Os impedimentos saem dos dados que
   // a página já carregou (nenhuma query nova); o servidor refaz a conta
   // na hora de gravar, porque esta tela pode estar velha.
+  // Saldo a faturar: as parcelas do envio que ainda não viraram nota
+  // emitida. Trava o encerramento junto com PP e BV desde 31/08/2026 —
+  // job encerrado sai de `vw_faturamento_pendente` e não volta.
+  // Só é lido quando há resumo a montar; nas outras abas seria uma ida ao
+  // banco por nada.
+  const saldoAFaturar =
+    job.status === "aberto" && envioFaturamento
+      ? await saldoAFaturarDoJob(session.activeTenant.id, jobId)
+      : 0;
+
   const ppsEmAberto = ppsDoJob
     .filter((pp) => PP_STATUS_EM_ABERTO.includes(pp.status))
     .map((pp) => ({ codigo: pp.codigo, status: pp.status }));
@@ -671,6 +682,7 @@ export async function carregarDetalheDoJob(
           moeda: versaoAprovada.moeda,
           ppsEmAberto,
           bvsEmAberto,
+          saldoAFaturar,
         }
       : null;
 
