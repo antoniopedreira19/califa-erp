@@ -31,9 +31,12 @@ export type ParcelaFaturamentoInput = z.infer<typeof parcelaFaturamentoSchema>;
  * quem diz é o banco.
  *
  * `portal_id` é opcional porque nem todo cliente tem portal, e `numero_po`
- * porque nem todo cliente emite PO. O CNAE é obrigatório e, nesta fase, é
- * texto livre — não existe cadastro de CNAE no projeto
- * (decisão do time, 13/08/2026).
+ * porque nem todo cliente emite PO.
+ *
+ * `descricao_nf` é obrigatória e é a razão de o CNAE ter saído daqui
+ * (31/08/2026): CNAE é classificação fiscal da nota e quem a emite é o
+ * financeiro, que agora o informa no drawer "Faturar". O que só o GP sabe
+ * é como o cliente exige que a nota seja descrita — e é isso que ele manda.
  */
 export const envioFaturamentoSchema = z.object({
   // `nullable` além de `optional`: o formulário manda `null` quando o
@@ -50,11 +53,11 @@ export const envioFaturamentoSchema = z.object({
   data_faturamento: z
     .string()
     .regex(dateRegex, "Informe a data de faturamento."),
-  cnae: z
+  descricao_nf: z
     .string()
     .trim()
-    .min(1, "Informe o CNAE a ser utilizado.")
-    .max(120, "Máximo 120 caracteres."),
+    .min(1, "Informe a descrição que deve constar na nota fiscal.")
+    .max(2000, "Máximo 2000 caracteres."),
   // Mensagem em português mesmo num caminho improvável: o que vaza do
   // Zod sem mensagem custom vaza em inglês, na cara do usuário.
   portal_id: z

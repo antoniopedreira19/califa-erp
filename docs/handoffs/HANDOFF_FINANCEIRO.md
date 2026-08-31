@@ -2886,3 +2886,71 @@ pernas do pagamento antigo intactas.
 PP-00003 aprovada no cartão com o tipo default: gravou `02 · Custo
 Operacional` sem ninguém tocar no campo, com o subtipo escolhido à mão.
 
+
+---
+
+## ⚠️ 31/08/2026 — Contas a Receber, entrega 1: o CNAE chega ao drawer
+
+**Regra:** `docs/decisions/033-a-descricao-da-nf-vem-do-gp-e-o-cnae-do-financeiro.md`.
+
+Primeira de três entregas da reforma de Contas a Receber. Esta mexe só no
+drawer "Faturar" e no banco; as tabelas das duas abas continuam como
+estavam e vêm nas entregas 2 e 3.
+
+### O drawer ganhou um campo
+
+**"CNAE a ser utilizado"**, obrigatório, entre a linha do `Nº NF / Emissão`
+e a `Descrição da NF` — a posição foi pedida pelo Tiago. Antes o CNAE era
+pedido à produção no envio para faturamento; é classificação fiscal da
+nota, então passou para quem a emite.
+
+Texto livre, como já era no envio: não existe cadastro de CNAE no projeto.
+A trava é do banco (`faturamentos.cnae` é `not null` com CHECK) e a RPC
+`emitir_faturamento` recusa a emissão com mensagem em português antes de
+qualquer escrita.
+
+### A Descrição da NF agora vem da produção
+
+| Caso | Como o campo nasce |
+| --- | --- |
+| Job único, envio com instrução do GP | preenchido com a instrução |
+| Job único, envio antigo ou BV | nome do job (o que a tela sugeria antes) |
+| **NF agrupada** | **em branco** |
+| Avulso | em branco |
+
+A agrupada nasce vazia de propósito: cada job tem a sua instrução, e
+emendar as três produziria um texto que nenhum dos clientes pediu. O limite
+do campo subiu de 200 para 2000 caracteres, para caber a instrução do GP.
+
+### O botão de informações
+
+`components/financeiro/info-faturamento-modal.tsx` — componente novo,
+compartilhado, que as entregas 2 e 3 vão reusar nas tabelas. Quatro blocos:
+
+| Bloco | De onde vem | Quando fica vazio |
+| --- | --- | --- |
+| Envio para faturamento · PO | `jobs_envio_faturamento.numero_po` | BV, e job sem PO |
+| Descrição de NF | `jobs_envio_faturamento.descricao_nf` | envio anterior a 31/08/2026 |
+| Composição do valor | `repartirEmJobESave` | só aparece com saldo em save |
+| Contatos de cobrança | `contatosDeCobrancaPorJob` | job anterior a 17/08/2026 |
+
+Nesta entrega ele aparece **dentro do drawer**, um por job da nota (na
+agrupada, um por linha): a instrução do GP precisa ser legível na hora de
+escrever a descrição. Item de save não ganha botão próprio — aponta para o
+mesmo job do item próprio, e abriria o mesmo modal.
+
+A **composição job × save** saiu da coluna Valor da fila de faturamento e
+passou a viver aqui. Lá ela disputava espaço com o número que a coluna
+existe para mostrar.
+
+### Duas divergências do protótipo
+
+O `Contas a Receber - Faturamento Agrupado.dc.html` **não tem** o campo de
+CNAE no drawer nem o bloco de composição no modal. Os dois entraram por
+decisão do Tiago em 31/08/2026 — nesses dois pontos é o protótipo que está
+desatualizado.
+
+**Verificação:** `tsc`, `lint` e `build` limpos; migrations aplicadas e
+conferidas pelo MCP (colunas, CHECK, `not null`, backfill das duas notas e
+a RPC gravando o CNAE). Conferência logada combinada para o fim das três
+entregas.
