@@ -520,14 +520,21 @@ function ModoConsumir({
           );
         })}
 
+        {/* Sem nenhum saldo escolhido, o gatilho é um convite — "Selecionar
+            job", sem o "+", porque não há a que ACRESCENTAR. Com um saldo
+            já em uso ele vira "+ Selecionar outro job". O rótulo anterior
+            ("+ Adicionar outro job") dizia "outro" para uma lista vazia
+            (31/08/2026). */}
         {editavel && naoEscolhidos.length > 0 && !adicionando && (
           <button
             type="button"
             onClick={() => setAdicionando(true)}
             className="inline-flex items-center gap-1.5 self-start rounded-[10px] border border-dashed border-[#c9c6bf] bg-card px-3 py-2 text-xs font-semibold text-[#5f5d57] hover:border-[#5f5d57]"
           >
-            <Plus className="h-3 w-3" />
-            Adicionar outro job
+            {origens.length > 0 && <Plus className="h-3 w-3" />}
+            {origens.length === 0
+              ? "Selecionar job"
+              : "Selecionar outro job"}
           </button>
         )}
 
