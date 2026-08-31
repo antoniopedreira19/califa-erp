@@ -70,7 +70,7 @@ export default async function ContasReceberPage() {
       .select(`
         id, numero_parcela, valor, data_vencimento, status,
         data_previsao_recebimento, data_previsao_recebimento_primeira,
-        pago_em, empresa_id, faturamento_id,
+        inadimplente_desde, pago_em, empresa_id, faturamento_id,
         faturamento:faturamentos!inner(
           id, numero_nf, data_emissao, descricao, status, origem_tipo,
           cliente:clientes(id, nome_fantasia, razao_social),
@@ -404,6 +404,7 @@ export default async function ContasReceberPage() {
     data_vencimento: string;
     data_previsao_recebimento: string | null;
     data_previsao_recebimento_primeira: string | null;
+    inadimplente_desde: string | null;
     status: TituloReceberStatus;
     pago_em: string | null;
     empresa_id: string;
@@ -426,6 +427,18 @@ export default async function ContasReceberPage() {
   }>).map((r) => {
     const baixa = detalheBaixa.get(r.id);
     const itens = r.faturamento.itens ?? [];
+    // Um job por vez, na ordem em que aparece nos itens. O Set é o que
+    // impede o job de sair duas vezes quando a nota tem item de save ou
+    // dois faturamentos parciais dele.
+    const vistos = new Set<string>();
+    const jobsDaNota: Array<{ id: string; codigo: string; nome: string }> = [];
+    for (const i of itens) {
+      if (!i.origem_id || vistos.has(i.origem_id)) continue;
+      const job = jobPorId.get(i.origem_id);
+      if (!job) continue;
+      vistos.add(i.origem_id);
+      jobsDaNota.push(job);
+    }
     return {
       id: r.id,
       numero_parcela: r.numero_parcela,
@@ -448,37 +461,20 @@ export default async function ContasReceberPage() {
         r.faturamento.cliente?.razao_social ??
         r.faturamento.cliente?.nome_fantasia ??
         "—",
-      jobs_cobertos:
-        itens.length === 0
-          ? [r.faturamento.descricao]
-          : itens.map((i) => {
-              const job = i.origem_id ? jobPorId.get(i.origem_id) : undefined;
-              if (!job) {
-                return i.origem_tipo === "bv"
-                  ? `BV · ${r.faturamento.descricao}`
-                  : `Avulso · ${r.faturamento.descricao}`;
-              }
-              // Item de save aponta para o MESMO job do item próprio — o
-              // que os separa é o tipo. Sem rótulo, a nota listaria o job
-              // duas vezes e ninguém saberia que parte virou crédito.
-              return i.origem_tipo === "save"
-                ? `${job.codigo} · saldo em save`
-                : `${job.codigo} ${job.nome}`;
-            }),
-      // Quantos JOBS distintos a nota cobre — e não quantos itens ela tem.
-      // A nota com save tem dois itens do MESMO job (o próprio e o saldo
-      // em save), e contá-los como dois jobs faria a nota de um job só se
-      // anunciar como agrupada (decisão 017 × decisão 028).
-      qtd_jobs: new Set(
-        itens.map((i) => i.origem_id).filter((id): id is string => !!id),
-      ).size,
-      // NF agrupada cobre vários jobs (decisão 017): junta os contatos de
-      // todos eles, sem repetir o mesmo e-mail duas vezes.
-      contatos: dedupContatos(
-        itens.flatMap((i) =>
-          i.origem_id ? (contatosPorJob.get(i.origem_id) ?? []) : [],
-        ),
-      ),
+      // Os jobs DISTINTOS da nota, uma vez cada. A nota com save e a com
+      // dois faturamentos parciais têm mais de um item do MESMO job, e
+      // listá-lo duas vezes lia como erro na tela (31/08/2026). A parte que
+      // virou crédito do cliente aparece no botão `i`, em "Composição do
+      // valor" — não mais nesta coluna.
+      jobs_cobertos: jobsDaNota.length
+        ? jobsDaNota.map((j) => `${j.codigo} ${j.nome}`)
+        : [
+            itens.length === 0 || itens[0]?.origem_tipo === "avulso"
+              ? `Avulso · ${r.faturamento.descricao}`
+              : `BV · ${r.faturamento.descricao}`,
+          ],
+      jobs: jobsDaNota.map((j) => ({ job_id: j.id, codigo: j.codigo })),
+      inadimplente_desde: r.inadimplente_desde ?? null,
       conta_nome: baixa?.conta ?? null,
       centro_nome: baixa?.centro ?? null,
     };
@@ -556,28 +552,11 @@ export default async function ContasReceberPage() {
             contas={contasRes.data ?? []}
             tipos={tiposRes.data ?? []}
             subtipos={subtiposRes.data ?? []}
+            infoPorJob={infoPorJob}
           />
         }
         titulosCount={titulosRows.filter((t) => t.status === "em_aberto").length}
       />
     </div>
   );
-}
-
-/**
- * Uma NF agrupada pode cobrir vários jobs do mesmo cliente, e o mesmo
- * contato costuma responder por todos. Repetir o nome três vezes na
- * linha do título não informa nada — a chave é o e-mail, que é o que o
- * financeiro usa para cobrar; contato sem e-mail cai no nome.
- */
-function dedupContatos(lista: ContatoCobranca[]): ContatoCobranca[] {
-  const vistos = new Set<string>();
-  const saida: ContatoCobranca[] = [];
-  for (const c of lista) {
-    const chave = (c.email || c.nome || "").trim().toLowerCase();
-    if (!chave || vistos.has(chave)) continue;
-    vistos.add(chave);
-    saida.push(c);
-  }
-  return saida;
 }

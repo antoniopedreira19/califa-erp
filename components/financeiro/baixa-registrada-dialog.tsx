@@ -18,6 +18,11 @@
  * depois o campo de motivo com o confirmar. É a ação mais destrutiva da
  * aba — desfaz dinheiro que já foi para a conciliação —, então não fica a
  * um clique de distância de quem só queria conferir a baixa.
+ *
+ * Desde 31/08/2026 serve às DUAS pontas. `sentido` só troca as três frases
+ * que falavam de pagamento — em Contas a Receber o dinheiro entra, e
+ * "Pago em" ou "volta para A pagar" seriam mentira na tela. O padrão é
+ * `"pagar"`, então a aba de origem não muda em nada.
  */
 
 import * as React from "react";
@@ -65,6 +70,7 @@ export function BaixaRegistradaDialog({
   pending,
   erro,
   onEstornar,
+  sentido = "pagar",
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -72,7 +78,13 @@ export function BaixaRegistradaDialog({
   pending: boolean;
   erro: string | null;
   onEstornar: (motivo: string) => void;
+  /** Lado da conta. Só muda rótulos; a mecânica é a mesma. */
+  sentido?: "pagar" | "receber";
 }) {
+  const ehReceber = sentido === "receber";
+  const rotuloData = ehReceber ? "Data de recebimento" : "Data de pagamento";
+  const rotuloBaixa = ehReceber ? "Recebido em" : "Pago em";
+  const voltaPara = ehReceber ? "Em aberto" : "A pagar";
   const [confirmando, setConfirmando] = React.useState(false);
   const [motivo, setMotivo] = React.useState("");
   const [erroLocal, setErroLocal] = React.useState<string | null>(null);
@@ -122,7 +134,7 @@ export function BaixaRegistradaDialog({
           <span className="font-mono text-xs">
             {formatarData(alvo.vencOriginal)}
           </span>
-          <span className="text-muted-foreground">Data de pagamento</span>
+          <span className="text-muted-foreground">{rotuloData}</span>
           <span className="font-mono text-xs">
             {formatarData(alvo.dataPagamento)}
           </span>
@@ -139,7 +151,7 @@ export function BaixaRegistradaDialog({
             Enviado para a conciliação
           </p>
           <div className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1 text-sm">
-            <span className="text-muted-foreground">Pago em</span>
+            <span className="text-muted-foreground">{rotuloBaixa}</span>
             <span className="font-mono text-xs">
               {formatarData(alvo.pagoEm)}
             </span>
@@ -163,9 +175,9 @@ export function BaixaRegistradaDialog({
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-california-red" />
               <span>
                 O título volta para{" "}
-                <span className="font-semibold">A pagar</span> e um lançamento
-                reverso é gerado na mesma conta bancária, mantendo o histórico
-                contábil. O motivo fica no log de auditoria.
+                <span className="font-semibold">{voltaPara}</span> e um
+                lançamento reverso é gerado na mesma conta bancária, mantendo
+                o histórico contábil. O motivo fica no log de auditoria.
               </span>
             </p>
             <div className="space-y-1">
