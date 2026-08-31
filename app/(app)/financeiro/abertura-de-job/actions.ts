@@ -397,10 +397,19 @@ async function conferirProjetoEContas(
     conta_pagamento_id: string | null;
   },
 ): Promise<string | null> {
-  const contasPedidas = [
-    input.conta_recebimento_id,
-    input.conta_pagamento_id,
-  ].filter((c): c is string => Boolean(c));
+  // Sem `Set` aqui a conferência quebra no caso mais comum da casa:
+  // a California tem UMA conta bancária real, então recebimento e
+  // pagamento apontam para o mesmo id. A lista vinha com 2 entradas
+  // iguais, o `.in()` devolvia 1 linha, e o `length !==` reprovava a
+  // abertura com "Conta bancária inválida." mesmo com a conta escolhida
+  // e ativa (31/08/2026).
+  const contasPedidas = Array.from(
+    new Set(
+      [input.conta_recebimento_id, input.conta_pagamento_id].filter(
+        (c): c is string => Boolean(c),
+      ),
+    ),
+  );
 
   const [projetoRes, contasRes] = await Promise.all([
     supabase
