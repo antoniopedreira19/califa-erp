@@ -49,6 +49,15 @@ const DialogContent = React.forwardRef<
       ref={ref}
       className={cn(
         "fixed left-1/2 top-1/2 z-50 grid w-full max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4 rounded-2xl border border-border bg-card p-6 shadow-elevated",
+        // Teto de altura no PRIMITIVO, e não em cada tela: o diálogo é
+        // centrado por translate, então um conteúdo mais alto que a
+        // janela escapa pelos DOIS lados — some o título em cima e os
+        // botões embaixo, sem barra de rolagem nenhuma. Foi o que
+        // aconteceu com a confirmação do envio do job numa tela de
+        // 840px: "Sim, enviar job" ficava fora do alcance do mouse
+        // (31/08/2026). Quem já declara o próprio `max-h` continua
+        // mandando — o `className` entra depois no `cn`.
+        "max-h-[88vh] overflow-y-auto",
         "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
         className,
       )}
