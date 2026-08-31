@@ -13,7 +13,7 @@
  */
 
 import * as React from "react";
-import { FilePenLine, X } from "lucide-react";
+import { FilePenLine, X, Undo2 } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 
 interface ParDeValores {
@@ -28,6 +28,9 @@ interface Props {
   valorJob: ParDeValores;
   moeda: string;
   onDescartar: () => void;
+  /** Volta um passo do rascunho. O mesmo que Cmd+Z / Ctrl+Z. */
+  onDesfazer: () => void;
+  podeDesfazer: boolean;
   onConfirmar: () => void;
 }
 
@@ -54,7 +57,17 @@ function Par({
   par: ParDeValores;
   moeda: string;
 }) {
-  const delta = par.depois - par.antes;
+  // O delta é a diferença entre os DOIS VALORES QUE O JOB PASSA A TER, e
+  // não entre os intermediários da conta: `jobs.faturamento_previsto` e
+  // `jobs.valor_total` são gravados com duas casas, e é sobre eles que a
+  // errata fica registrada. Subtrair os números crus fazia a barra mostrar
+  // "R$ 20.504,54 → R$ 24.605,44 +R$ 4.100,91" — um delta que não fecha
+  // com os dois valores ao lado dele, porque o gross-up caiu em meio
+  // centavo. Arredondar antes de subtrair faz os três números sempre
+  // fecharem, e é o mesmo que o card de Erratas já faz ao ler as colunas
+  // gravadas (31/08/2026).
+  const centavos = (n: number) => Math.round(n * 100);
+  const delta = (centavos(par.depois) - centavos(par.antes)) / 100;
   return (
     <div className="flex flex-col gap-0.5">
       <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
@@ -83,6 +96,8 @@ export function ErrataBarra({
   moeda,
   onDescartar,
   onConfirmar,
+  onDesfazer,
+  podeDesfazer,
 }: Props) {
   return (
     // `sticky` e não `fixed`: a barra pertence à planilha, e a sidebar do
@@ -110,6 +125,19 @@ export function ErrataBarra({
           <Par rotulo="Valor do job" par={valorJob} moeda={moeda} />
 
           <div className="flex items-center gap-2">
+            {/* Desfazer antes de Descartar: um volta um passo, o outro
+                joga tudo fora. Sem ele, uma linha removida por engano só
+                tinha a saída destrutiva — a errata inteira ia junto. */}
+            <button
+              type="button"
+              onClick={onDesfazer}
+              disabled={!podeDesfazer}
+              title="Desfazer o último passo (Cmd+Z / Ctrl+Z)"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:border-[#d7d7d7] hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-border disabled:hover:text-muted-foreground"
+            >
+              <Undo2 className="h-3.5 w-3.5" />
+              Desfazer
+            </button>
             <button
               type="button"
               onClick={onDescartar}

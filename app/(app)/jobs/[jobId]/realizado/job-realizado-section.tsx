@@ -79,6 +79,11 @@ interface Props {
   categoriasMap: Map<string, string>;
   /** Errata, BV e Pedido de Produção — só com o job aberto. */
   podeAcoes: boolean;
+  /** Job já enviado para faturamento: o valor da nota está congelado em
+   *  `jobs_envio_faturamento` e nem errata nem save podem mexer nele
+   *  (decisão 028, nota de 27/08/2026). O servidor já recusava — sem
+   *  isto a tela deixava montar a errata inteira antes de reprovar. */
+  jaEnviadoParaFaturamento?: boolean;
   /** Todas as PPs ativas de cada item realizado (PPs parciais). */
   ppsPorItemId: Map<string, PedidoCompraNaLista[]>;
   fornecedores: Array<Pick<Fornecedor, "id" | "nome" | "razao_social" | "status">>;
@@ -104,6 +109,7 @@ export function JobRealizadoSection({
   realizadosMap,
   categoriasMap,
   podeAcoes,
+  jaEnviadoParaFaturamento = false,
   ppsPorItemId,
   fornecedores,
   empresas,
@@ -193,8 +199,36 @@ export function JobRealizadoSection({
   );
   // No job, mexer no save é ERRATA — e errata exige job aberto, a mesma
   // porta de `AlterarOrcadoButton`. O financeiro chega aqui com
-  // `podeAcoes` falso e lê sem editar.
-  const podeMexerNoSave = podeAcoes;
+  // `podeAcoes` falso e lê sem editar. Depois do envio para faturamento
+  // as duas portas fecham juntas, pelo mesmo motivo.
+  const podeErrata = podeAcoes && !jaEnviadoParaFaturamento;
+  const podeMexerNoSave = podeErrata;
+  const motivoErrataTravada = jaEnviadoParaFaturamento
+    ? "Job já enviado para faturamento: o valor da nota está congelado. Para corrigir, peça ao financeiro para desfazer o envio."
+    : null;
+
+  // Cmd+Z / Ctrl+Z desfaz um passo do rascunho da errata.
+  //
+  // O listener é da janela porque a edição acontece em dezenas de inputs
+  // da planilha, e o alvo do atalho é o RASCUNHO, não o campo focado —
+  // esses inputs são controlados pelo React, então o desfazer nativo do
+  // navegador não voltaria nada de qualquer jeito.
+  //
+  // O `textarea` fica de fora: é a descrição da errata, no pop-up de
+  // confirmação, e lá o desfazer nativo é o certo.
+  React.useEffect(() => {
+    if (!errata.ativo) return;
+    const aoTeclar = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.shiftKey) return;
+      if (e.key.toLowerCase() !== "z") return;
+      const alvo = document.activeElement;
+      if (alvo instanceof HTMLTextAreaElement) return;
+      e.preventDefault();
+      errata.desfazer();
+    };
+    window.addEventListener("keydown", aoTeclar);
+    return () => window.removeEventListener("keydown", aoTeclar);
+  }, [errata]);
 
   const linhaDoDialog: LinhaDoSave | null = linhaSave
     ? {
@@ -297,6 +331,7 @@ export function JobRealizadoSection({
           {podeAcoes && (
             <AlterarOrcadoButton
               ativo={errata.ativo}
+              travadoPor={motivoErrataTravada}
               onAlternar={() =>
                 errata.ativo ? errata.descartar() : errata.ligar()
               }
@@ -345,11 +380,12 @@ export function JobRealizadoSection({
               bvsPorItem={bvsPorItem}
               versaoLabel={`v${versao.numero_versao}`}
               saveVisivel={temSave}
+              onAlternarSave={() => setSaveLigado((v) => !v)}
               savePorItem={savePorItem}
               onAbrirSave={
                 podeMexerNoSave && !errata.ativo ? setLinhaSave : undefined
               }
-              errata={podeAcoes ? errata : undefined}
+              errata={podeErrata ? errata : undefined}
             />
           </div>
           <JobTotaisCard
@@ -418,6 +454,8 @@ export function JobRealizadoSection({
           }}
           moeda={versao.moeda}
           onDescartar={errata.descartar}
+          onDesfazer={errata.desfazer}
+          podeDesfazer={errata.podeDesfazer}
           onConfirmar={() => {
             setErroErrata(null);
             setConfirmando(true);

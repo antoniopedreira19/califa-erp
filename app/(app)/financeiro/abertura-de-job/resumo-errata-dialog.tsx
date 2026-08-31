@@ -169,8 +169,18 @@ export function ResumoErrataDialog({
                 >
                   Fechar
                 </button>
+                {/* O registro da abertura de um job JÁ ABERTO mora em
+                    `/financeiro/jobs/[jobId]` — é lá que
+                    `editarRegistroDaAbertura` roda e apaga
+                    `abertura_em_revisao`. `/financeiro/abertura-de-job/
+                    [jobId]` só atende quem ainda está
+                    `aguardando_abertura` e redireciona todo o resto para
+                    a página do job: o botão devolvia o financeiro para
+                    uma tela de leitura e a revisão não tinha como ser
+                    encerrada — o job ficava preso fora do faturamento
+                    para sempre (31/08/2026). */}
                 <Link
-                  href={`/financeiro/abertura-de-job/${job.id}`}
+                  href={`/financeiro/jobs/${job.id}`}
                   prefetch={false}
                   className="inline-flex items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-california-red-hover"
                 >

@@ -70,13 +70,14 @@ export async function registrarErrataDeSave(
   const { data: job, error: jobErr } = await supabase
     .from("jobs")
     .select(
-      "id, status, versao:versoes_orcamento!jobs_versao_orcamento_aprovada_id_fkey(percentual_honorarios, percentual_imposto)",
+      "id, status, data_abertura_financeiro, versao:versoes_orcamento!jobs_versao_orcamento_aprovada_id_fkey(percentual_honorarios, percentual_imposto)",
     )
     .eq("id", jobId)
     .eq("tenant_id", tenantId)
     .maybeSingle<{
       id: string;
       status: string;
+      data_abertura_financeiro: string | null;
       versao: { percentual_honorarios: number; percentual_imposto: number } | null;
     }>();
 
@@ -291,12 +292,30 @@ export async function registrarErrataDeSave(
     }
   }
 
+  // A errata de save é errata: ela move o faturamento previsto e o valor
+  // do job, e por isso devolve o job ao mural de abertura como qualquer
+  // outra (decisão 030). Sem isto, mudar um consumo depois da abertura
+  // mexia no faturamento previsto sem que ninguém reconferisse as
+  // parcelas de recebimento — e o job seguia liberado para faturamento
+  // com a previsão apontando para o número velho (31/08/2026).
+  //
+  // Só quando o financeiro JÁ abriu: antes disso não há registro a
+  // revisar, e o job ainda está na fila de abertura normal.
+  const devolveAoMural = job.data_abertura_financeiro !== null;
+
   await supabase
     .from("jobs")
     .update({
       valor_total: dinheiro(depois.valorJob),
       faturamento_previsto: dinheiro(depois.faturamentoPrevisto),
       faturamento_save_previsto: dinheiro(depois.save.receita),
+      ...(devolveAoMural
+        ? {
+            abertura_em_revisao: true,
+            abertura_revisao_desde: new Date().toISOString(),
+            abertura_revisao_errata_id: errata.id,
+          }
+        : {}),
     })
     .eq("id", jobId)
     .eq("tenant_id", tenantId);
@@ -310,6 +329,7 @@ export async function registrarErrataDeSave(
       errata_id: errata.id,
       titulo,
       origem: "save",
+      devolveu_ao_mural: devolveAoMural,
       valor_job_antes: antes.valorJob,
       valor_job_depois: depois.valorJob,
       faturamento_previsto_antes: antes.faturamentoPrevisto,
@@ -318,5 +338,9 @@ export async function registrarErrataDeSave(
   });
 
   revalidatePath(`/jobs/${jobId}`);
+  // As mesmas três telas da errata comum: a do job, o registro da
+  // abertura e o mural — que passa a listar este job na faixa Erratas.
+  revalidatePath(`/financeiro/jobs/${jobId}`);
+  revalidatePath("/financeiro/abertura-de-job");
   return { ok: true };
 }

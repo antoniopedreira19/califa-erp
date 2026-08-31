@@ -548,10 +548,12 @@ export async function registrarErrata(
       tenant_id: session.activeTenant.id,
       job_id: jobId,
       // A "Descrição da errata" do pop-up mora aqui: é a coluna que o
-      // histórico e o chat já liam. `justificativa` deixou de ser
-      // preenchida em 27/08/2026 e fica só para as erratas antigas.
+      // histórico e o chat já liam. A `justificativa` NÃO entra: a
+      // migration 20260827120001 removeu a coluna (decisão 030), e
+      // mandá-la fazia o PostgREST recusar o insert inteiro com
+      // "Could not find the 'justificativa' column" — a errata nunca
+      // chegava a gravar (corrigido em 31/08/2026).
       titulo: descricao,
-      justificativa: null,
       // Duas casas em tudo que é dinheiro: `jobs.valor_total` e
       // `valor_job_abertura` também são gravados assim, e sem isso o
       // card de Erratas mostra o mesmo delta com 1 centavo de diferença.
