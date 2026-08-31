@@ -42,12 +42,19 @@ export const projetoSchema = z
     empresa_id: z.string().uuid("Selecione a empresa."),
     cliente_id: z.string().uuid("Selecione um cliente válido."),
     produto_id: z.string().uuid("Selecione um produto do cadastro do cliente."),
+    // Os dois chegam de `formData.getAll`, e a conferência do servidor
+    // compara o tamanho da lista com o número de linhas que o `.in()`
+    // devolveu — que vem deduplicado. Um id repetido reprovaria com
+    // "Regional inválida." mesmo estando tudo certo, e ainda estouraria
+    // a unique do vínculo no insert. Dedupe aqui, num lugar só.
     responsavel_ids: z
       .array(z.string().uuid("Responsável inválido."))
-      .min(1, "Selecione ao menos um responsável."),
+      .min(1, "Selecione ao menos um responsável.")
+      .transform((v) => Array.from(new Set(v))),
     regional_ids: z
       .array(z.string().uuid("Regional inválida."))
-      .min(1, "Selecione ao menos uma regional."),
+      .min(1, "Selecione ao menos uma regional.")
+      .transform((v) => Array.from(new Set(v))),
     categoria_id: z.string().uuid("Selecione um serviço para continuar."),
     data_inicio_prevista: z
       .string()
