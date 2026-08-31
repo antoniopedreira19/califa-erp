@@ -37,6 +37,8 @@ export interface ResumoEncerramento {
   /** PPs sem baixa e BVs não recebidos — travam o encerramento. */
   ppsEmAberto: { codigo: string; status: string }[];
   bvsEmAberto: { item: string; situacao: string }[];
+  /** Quanto do envio ainda não virou nota emitida — também trava. */
+  saldoAFaturar: number;
 }
 
 interface Props {
@@ -98,8 +100,9 @@ function Linha({
  *
  * O encerramento é travado enquanto houver PP sem baixa ou BV não
  * recebido: o custo realizado ainda pode mudar, e a margem daqui seria
- * mentira. A trava é refeita no servidor — esta é a explicação, não a
- * regra.
+ * mentira. Também trava com saldo a faturar: o job encerrado sai da fila
+ * de faturamento e não tem como voltar (31/08/2026). A trava é refeita no
+ * servidor — esta é a explicação, não a regra.
  */
 export function EncerrarDialog({ jobId, resumo, open, onOpenChange }: Props) {
   const router = useRouter();
@@ -110,12 +113,14 @@ export function EncerrarDialog({ jobId, resumo, open, onOpenChange }: Props) {
     moeda,
     ppsEmAberto,
     bvsEmAberto,
+    saldoAFaturar,
     faturamentoAbertura,
     faturamentoFechamento,
     valorEnviado,
   } = resumo;
 
-  const travado = ppsEmAberto.length > 0 || bvsEmAberto.length > 0;
+  const travado =
+    ppsEmAberto.length > 0 || bvsEmAberto.length > 0 || saldoAFaturar > 0;
 
   const { resultadoOperacional: margem, resultadoGeral: margemPct } =
     calcularResultadoOperacional(
@@ -186,10 +191,27 @@ export function EncerrarDialog({ jobId, resumo, open, onOpenChange }: Props) {
                   : {bvsEmAberto.map((b) => b.item).join(", ")}.
                 </p>
               )}
-              <p className="text-muted-foreground">
-                Dê baixa nesses documentos — pagamento da PP, recebimento do BV
-                — e volte aqui.
-              </p>
+              {saldoAFaturar > 0 && (
+                <p className="text-muted-foreground">
+                  <strong className="font-mono text-california-red">
+                    {formatCurrency(saldoAFaturar, moeda)}
+                  </strong>{" "}
+                  ainda não viraram nota. Encerrar agora tiraria o job da fila
+                  de faturamento sem caminho de volta.
+                </p>
+              )}
+              {(ppsEmAberto.length > 0 || bvsEmAberto.length > 0) && (
+                <p className="text-muted-foreground">
+                  Dê baixa nesses documentos — pagamento da PP, recebimento do
+                  BV — e volte aqui.
+                </p>
+              )}
+              {saldoAFaturar > 0 && (
+                <p className="text-muted-foreground">
+                  Peça ao financeiro a emissão da nota do saldo antes de
+                  encerrar.
+                </p>
+              )}
             </div>
           </div>
         )}
@@ -309,7 +331,13 @@ export function EncerrarDialog({ jobId, resumo, open, onOpenChange }: Props) {
             disabled={travado || pending}
             title={
               travado
-                ? "Dê baixa nas PPs e nos BVs em aberto antes de encerrar"
+                ? saldoAFaturar > 0 &&
+                  ppsEmAberto.length === 0 &&
+                  bvsEmAberto.length === 0
+                  ? "Falta emitir a nota do saldo antes de encerrar"
+                  : saldoAFaturar > 0
+                    ? "Resolva as pendências acima antes de encerrar"
+                    : "Dê baixa nas PPs e nos BVs em aberto antes de encerrar"
                 : undefined
             }
             className="inline-flex items-center gap-1.5 rounded-lg bg-california-red px-[18px] py-2.5 text-[13.5px] font-bold text-white transition-colors hover:bg-california-red-hover disabled:cursor-not-allowed disabled:opacity-50"

@@ -57,9 +57,10 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 031 | [A fatura do cartão, e a conta bancária que paga várias empresas](031-a-fatura-do-cartao-e-a-conta-que-paga-varias-empresas.md) | 2026-08-28 |
 | 032 | [A data da compra, o estorno, e a fatura credora](032-data-da-compra-e-estorno-no-cartao.md) | 2026-08-29 |
 | 033 | [A descrição da NF vem do GP, e o CNAE vem do financeiro](033-a-descricao-da-nf-vem-do-gp-e-o-cnae-do-financeiro.md) | 2026-08-31 |
+| 034 | [O job não encerra com saldo a faturar](034-encerramento-exige-a-nota-emitida.md) | 2026-08-31 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
 > data é a da decisão, não a da posição na fila.
 
-**Próximo número livre: 034.**
+**Próximo número livre: 035.**
