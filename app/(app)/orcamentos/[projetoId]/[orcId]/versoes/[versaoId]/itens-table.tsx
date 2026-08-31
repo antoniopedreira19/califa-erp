@@ -43,6 +43,7 @@ import {
   classesDaLinhaComSave,
   type EstadoSaveDaLinha,
 } from "@/app/(app)/_planilha/save-coluna";
+import { AlcaDaColunaSave } from "@/app/(app)/_planilha/exibir-colunas";
 import {
   celulaVizinha,
   direcaoDaTecla,
@@ -159,6 +160,9 @@ interface Props {
   /** Liga a coluna SAVE. Desligada, a grade volta às 13 colunas de sempre
    *  e nada nesta tabela muda — é o estado de quem nunca usou save. */
   saveVisivel?: boolean;
+  /** Liga e desliga a coluna Save pela alça colada na borda esquerda
+   *  da planilha. Ausente ⇒ a alça não aparece. */
+  onAlternarSave?: () => void;
   /** Estado do save por id do item da versão. Item ausente = linha limpa. */
   savePorItem?: Record<string, EstadoSaveDaLinha>;
   /** Abre o formulário de save da linha. Ausente ⇒ a coluna mostra o
@@ -341,6 +345,7 @@ export function ItensTable({
   novoGrupo,
   rotuloTotal,
   saveVisivel = false,
+  onAlternarSave,
   savePorItem,
   onAbrirSave,
 }: Props) {
@@ -893,6 +898,21 @@ export function ItensTable({
         ref={wrapperRef}
         className="relative rounded-2xl border border-border bg-card shadow-soft"
       >
+        {/* A alça da coluna Save, colada na borda ESQUERDA e fora do
+            frame — o lado oposto ao da calha de BV e PP. É o caminho de
+            um clique para trazer a coluna de volta; o menu "Exibir" faz o
+            mesmo em dois. O componente existia desde 26/08/2026 e nunca
+            tinha sido ligado: quem fechava a coluna, ou abria o orçamento
+            de um cliente sem save nenhum, ficava sem porta visível para
+            marcar a primeira linha (31/08/2026). */}
+        {onAlternarSave && (
+          <div className="absolute right-full top-0 flex h-full items-start">
+            <AlcaDaColunaSave
+              visivel={saveVisivel}
+              onAlternar={onAlternarSave}
+            />
+          </div>
+        )}
         {erro && (
           <div className="flex items-center justify-between gap-3 rounded-t-2xl border-b border-california-red/20 bg-california-red/5 px-6 py-2 text-xs text-california-red">
             <span>{erro}</span>

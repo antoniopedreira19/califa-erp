@@ -156,6 +156,7 @@ export function GruposSection({
         fornecedores={fornecedores}
         versaoLabel={versaoLabel}
         saveVisivel={saveVisivel}
+        onAlternarSave={onAlternarSave}
         savePorItem={savePorItem}
         onAbrirSave={onAbrirSave}
       />

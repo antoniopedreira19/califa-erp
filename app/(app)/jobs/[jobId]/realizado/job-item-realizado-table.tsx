@@ -57,6 +57,7 @@ import {
   classesDaLinhaComSave,
   type EstadoSaveDaLinha,
 } from "@/app/(app)/_planilha/save-coluna";
+import { AlcaDaColunaSave } from "@/app/(app)/_planilha/exibir-colunas";
 import { aceitaBV, tipoGeraDesembolso } from "@/lib/calculos/versao-totais";
 import {
   BLOCO_ZERO,
@@ -129,6 +130,9 @@ interface Props {
    *  ela é só leitura até a Errata, que é quem pode mexer no orçado
    *  depois da abertura (decisão 028, nota de 26/08/2026). */
   saveVisivel?: boolean;
+  /** Liga e desliga a coluna Save pela alça na borda esquerda da
+   *  planilha. Ausente ⇒ a alça não aparece. */
+  onAlternarSave?: () => void;
   savePorItem?: Record<string, EstadoSaveDaLinha>;
   onAbrirSave?: (item: ItemPlanilhaJob) => void;
   /** O rascunho do modo errata. Ausente = planilha só de leitura, que é
@@ -279,6 +283,7 @@ export function JobItemRealizadoTable({
   versaoLabel,
   rotuloTotal,
   saveVisivel = false,
+  onAlternarSave,
   savePorItem,
   onAbrirSave,
   errata,
@@ -421,6 +426,13 @@ export function JobItemRealizadoTable({
           realizado, que deixou de existir em 21/08/2026. Erro de PP e de
           BV vive no drawer que o produziu, junto do campo que o causou. */}
       <div ref={wrapperRef} className="relative">
+      {/* A alça da coluna Save — mesma da planilha do orçamento, no
+          lado oposto ao da calha de BV e PP. */}
+      {onAlternarSave && (
+        <div className="absolute right-full top-0 flex h-full items-start">
+          <AlcaDaColunaSave visivel={saveVisivel} onAlternar={onAlternarSave} />
+        </div>
+      )}
       {/* Com o nome do grupo na faixa, a tabela abre e fecha o card. */}
       {/* A tabela abre e fecha o card: a planilha inteira é uma só. */}
       <div className="overflow-x-auto rounded-b-2xl rounded-t-2xl">
@@ -988,6 +1000,20 @@ export function JobItemRealizadoTable({
                   // reescrita. O que cabe ali é remover.
                   if (editando) {
                     if (!errata || !podeEditarLinhas) return null;
+                    // Linha com save não se remove — `barrarRemocao`, em
+                    // `actions-errata.ts`, recusa no servidor porque o
+                    // `on delete cascade` de `saves_consumos` devolveria
+                    // crédito ao job de origem em silêncio. Oferecer o
+                    // botão fazia o usuário montar a errata inteira,
+                    // escrever a descrição e só então tomar o erro — com
+                    // a linha já sumida da tabela e sem desfazer
+                    // (31/08/2026). O gate é o mesmo dos dois lados.
+                    const travadaPorSave =
+                      item.em_save === true ||
+                      Number(item.save_consumido ?? 0) > 0;
+                    const motivoDaTrava = item.em_save
+                      ? "Linha marcada como save: tire a marca antes de remover."
+                      : "Linha paga com saldo de save de outro job: desfaça o consumo antes de remover.";
                     return (
                       <LinhaDaCalha
                         key={item.id}
@@ -1002,7 +1028,9 @@ export function JobItemRealizadoTable({
                           <button
                             type="button"
                             onClick={() => errata.remover(item.id)}
-                            className="inline-flex items-center gap-1 rounded-lg border border-border bg-white px-2 py-1 text-[11px] font-semibold text-muted-foreground transition-colors hover:border-california-red/40 hover:text-california-red"
+                            disabled={travadaPorSave}
+                            title={travadaPorSave ? motivoDaTrava : undefined}
+                            className="inline-flex items-center gap-1 rounded-lg border border-border bg-white px-2 py-1 text-[11px] font-semibold text-muted-foreground transition-colors hover:border-california-red/40 hover:text-california-red disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-border disabled:hover:text-muted-foreground"
                           >
                             <Trash2 className="h-3 w-3" />
                             Remover
