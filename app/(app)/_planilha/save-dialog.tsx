@@ -83,7 +83,10 @@ export function SaveDialog({
   onSalvarConsumo,
 }: Props) {
   const editavel = Boolean(onMarcarSave && onSalvarConsumo);
-  const [modo, setModo] = React.useState<"gerar" | "consumir">("consumir");
+  // Abre em "Gerar save": é o gesto mais comum e o que dá nome à coluna.
+  // Quem já tem consumo gravado cai em "Consumir" pelo efeito abaixo
+  // (31/08/2026, decisão do Tiago).
+  const [modo, setModo] = React.useState<"gerar" | "consumir">("gerar");
   const [origens, setOrigens] = React.useState<OrigemNaTela[]>([]);
   const [erro, setErro] = React.useState<string | null>(null);
   const [salvando, setSalvando] = React.useState(false);
@@ -93,7 +96,9 @@ export function SaveDialog({
   React.useEffect(() => {
     if (!open) return;
     setErro(null);
-    setModo(estado.emSave ? "gerar" : "consumir");
+    // A linha diz em que aba ela abre: quem gera cai em "Gerar", quem já
+    // consome cai em "Consumir", e a linha em branco abre em "Gerar".
+    setModo(estado.origens.length > 0 && !estado.emSave ? "consumir" : "gerar");
     setOrigens(
       estado.origens.map((o) => ({ jobOrigemId: o.jobId, valor: o.valor })),
     );
@@ -113,6 +118,24 @@ export function SaveDialog({
   const passouDoOrcado = totalConsumido > orcado + 0.005;
 
   const saldoDe = (jobId: string) => saldos.find((s) => s.jobId === jobId);
+  // Quanto ESTA linha já consome de cada job, como está gravado. O
+  // `disponivel` que vem do banco já desconta este consumo — sem devolvê-lo
+  // aqui, reabrir a linha mostrava "livre R$ 0,00 · sobra −R$ 30.000,00"
+  // para um consumo que está perfeitamente dentro do saldo, e pintava a
+  // linha de vermelho (31/08/2026).
+  // Sem `useMemo`: este trecho roda depois do `if (!linha) return null`
+  // acima, e um hook aqui muda a contagem de hooks entre renders
+  // ("Rendered fewer hooks than expected"). O laço é sobre uma lista de
+  // no máximo um punhado de origens.
+  const jaGravadoPorOrigem = new Map<string, number>();
+  for (const o of estado.origens) {
+    jaGravadoPorOrigem.set(
+      o.jobId,
+      (jaGravadoPorOrigem.get(o.jobId) ?? 0) + Number(o.valor ?? 0),
+    );
+  }
+  const livreDe = (jobId: string) =>
+    (saldoDe(jobId)?.disponivel ?? 0) + (jaGravadoPorOrigem.get(jobId) ?? 0);
   const naoEscolhidos = saldos.filter(
     (s) => !origens.some((o) => o.jobOrigemId === s.jobId) && s.disponivel > 0,
   );
@@ -217,6 +240,7 @@ export function SaveDialog({
               setOrigens={setOrigens}
               saldos={saldos}
               saldoDe={saldoDe}
+              livreDe={livreDe}
               naoEscolhidos={naoEscolhidos}
               moeda={moeda}
               orcado={orcado}
@@ -396,6 +420,7 @@ function ModoConsumir({
   setOrigens,
   saldos,
   saldoDe,
+  livreDe,
   naoEscolhidos,
   moeda,
   orcado,
@@ -408,6 +433,8 @@ function ModoConsumir({
   setOrigens: React.Dispatch<React.SetStateAction<OrigemNaTela[]>>;
   saldos: SaldoDeSave[];
   saldoDe: (id: string) => SaldoDeSave | undefined;
+  /** Saldo do job de origem COM o consumo desta linha devolvido. */
+  livreDe: (id: string) => number;
   naoEscolhidos: SaldoDeSave[];
   moeda: string;
   orcado: number;
@@ -436,7 +463,8 @@ function ModoConsumir({
       <div className="flex flex-col gap-2">
         {origens.map((o, i) => {
           const s = saldoDe(o.jobOrigemId);
-          const sobraDoJob = (s?.disponivel ?? 0) - o.valor;
+          const livre = livreDe(o.jobOrigemId);
+          const sobraDoJob = livre - o.valor;
           return (
             <div
               key={o.jobOrigemId}
@@ -455,7 +483,7 @@ function ModoConsumir({
                       : "text-muted-foreground",
                   )}
                 >
-                  livre {formatCurrency(s?.disponivel ?? 0, moeda)} · sobra{" "}
+                  livre {formatCurrency(livre, moeda)} · sobra{" "}
                   {formatCurrency(sobraDoJob, moeda)}
                 </span>
               </div>
