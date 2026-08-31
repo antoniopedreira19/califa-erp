@@ -778,8 +778,18 @@ export function FaturamentoList({
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex flex-col gap-0.5">
+                    {/* Sem repetir, pela mesma razão do código logo abaixo: a
+                        NF 900123 tem DOIS itens do mesmo job (faturamento
+                        parcial em duas vezes) e saía como "Teste Alterações
+                        Job 3 + Teste Alterações Job 3". O item de save tem
+                        descrição própria e continua somando — ali o "+" diz
+                        algo (31/08/2026). */}
                     <span className="font-semibold">
-                      {f.itens.map((i) => i.descricao.split(" — ")[0]).join(" + ")}
+                      {[
+                        ...new Set(
+                          f.itens.map((i) => i.descricao.split(" — ")[0]),
+                        ),
+                      ].join(" + ")}
                     </span>
                     <span className="font-mono text-[11px] text-muted-foreground">
                       {/* Sem repetir: a nota com save tem DOIS itens do mesmo

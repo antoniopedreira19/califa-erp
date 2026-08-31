@@ -3121,3 +3121,72 @@ ontem, há 8 dias, há 30 dias, vence hoje, vence em 5 dias): sempre cai no
 mesmo dia da semana, nunca no passado. **Não há título vencido na base**,
 então a rotina não teve o que processar — a execução real fica para a
 conferência logada.
+
+---
+
+## ✅ 31/08/2026 — verificação logada das três entregas
+
+Conferido no navegador, logado, contra o banco real. O que passou:
+
+### Aba Faturamento
+
+| O quê | Resultado |
+| --- | --- |
+| Combobox de cliente | abre com `Todos os clientes 8 · Pevetech 2 · teste 1 · TESTE 5` (2+1+5 = 8, pendentes + faturados) |
+| Digitar filtra | `peve` reduz a lista a Pevetech; selecionar deixa a tabela com as 2 linhas dela; o `X` limpa |
+| Segmented control | Tudo 8 · A faturar 6 · Faturados 2 |
+| Botão `i` na calha | fora do frame, `margin-right: 46px` medido no DOM; célula de largura zero |
+| Clique na linha | abre o formulário; em Faturamento Agrupado **seleciona** em vez de abrir; linha faturada reabre "NF 900500 emitida" em leitura, e no agrupamento não seleciona |
+| Contatos e quebra save | fora das células, no botão `i` |
+
+### Drawer Faturar
+
+Ordem dos campos confirmada: `Nº NF / Emissão` → **CNAE a ser utilizado \*** → `Descrição da NF \*` → Anexo. O CNAE nasce vazio e obrigatório.
+
+O botão `i` de cada job abre **por cima** do drawer sem fechá-lo — os dois
+diálogos ficam abertos ao mesmo tempo, que é o ponto: a instrução do GP
+precisa ser legível enquanto se escreve a descrição.
+
+### Aba Títulos a Receber
+
+| O quê | Resultado |
+| --- | --- |
+| Chips | `Todos 3 · Em aberto 1 · Inadimplentes 0 · Recebidos 2`; filtrar por cada um devolve a contagem certa, e Inadimplentes mostra "Nenhum título com esse status." |
+| Jobs cobertos | `JOB-0015 Teste Alterações Job 3` e `JOB-0020 A2 · Gera save`, **uma vez cada** — a duplicação e a pastilha falsa "Agrupada · 2 jobs" sumiram |
+| Botão `i` | `NF 900123 · parcela 1/2 · TESTE`, com os dois contatos (Maria Cobrança e João Financeiro) que saíram da célula |
+| Ação | "Dar baixa" na linha em aberto; olho na recebida |
+| Baixa registrada | abre com **"Data de recebimento"** e **"Recebido em"**, e o aviso diz "O título volta para **Em aberto**" — o `sentido="receber"` funciona. O estorno NÃO foi confirmado |
+
+### Teste ponta a ponta do envio (JOB-0016)
+
+Enviado pelo formulário real, no projeto de teste:
+
+1. O formulário de envio **não tem mais CNAE** e tem "Descrição a constar na nota fiscal", obrigatória.
+2. Gravou `numero_po = PO-2026-TESTE-016`, `descricao_nf` com as duas linhas e **`cnae = null`** — a coluna aceita nulo, como a migration previu.
+3. Na fila, o `i` do JOB-0016 mostra a PO e a instrução **com a quebra de linha preservada** (`whitespace-pre-line`).
+4. O drawer Faturar abre com a Descrição da NF **pré-preenchida com o texto do GP**, e o CNAE vazio.
+
+Sem erro no console. `tsc`, `lint` e `build` limpos.
+
+### ⚠️ Um defeito encontrado e corrigido na conferência
+
+A linha faturada da NF 900123 saía como **"Teste Alterações Job 3 + Teste
+Alterações Job 3"**: a nota tem dois itens `job` do mesmo JOB-0015 (dois
+faturamentos parciais) e o código já era deduplicado, mas a descrição não.
+Corrigido. O item de save continua somando com `+`, porque ali ele tem
+descrição própria e o `+` diz algo — "A2 · Gera save + Saldo em save".
+
+### O que NÃO deu para exercitar em tela
+
+Três casos não existem na base, e por isso ficaram provados só por query e
+por código:
+
+| Caso | Por quê | Como ficou provado |
+| --- | --- | --- |
+| Pastilha **Inadimplente** e a rolagem semanal | nenhum título vencido — os três vencem 17/09, 17/10 e 30/10 | aritmética conferida por query em 5 cenários (mesmo dia da semana, nunca no passado); cron ativo, rodando como `postgres`, com privilégio de executar a função |
+| Linha de **BV** com o job | nenhum BV está `confirmado` | o join resolve o código do job nos 6 BVs da base |
+| Bloco **Composição do valor** | o save do JOB-0020 já foi todo faturado na NF 900500, então `saldo_save = 0` em toda a fila | o bloco corretamente não aparece; a regra é a mesma de `repartirEmJobESave`, coberta por `scripts/conferir-save.ts` |
+
+Criar o vencido exigiria emitir uma NF com data passada, e a emissão pede
+anexo em PDF — que a conferência automatizada não consegue subir. Fica para
+uma passada manual.
