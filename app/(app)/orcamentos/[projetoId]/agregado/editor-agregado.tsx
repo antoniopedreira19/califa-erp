@@ -27,6 +27,7 @@ import type {
   Profile,
   Regional,
   TipoCusto,
+  VersaoOrcamentoItem,
 } from "@/lib/types";
 import type { CidadeOption } from "../../cidade-combobox";
 import type { AdaptadorItens } from "../[orcId]/versoes/[versaoId]/itens-table";
@@ -60,6 +61,13 @@ import { aceitaBV } from "@/lib/calculos/versao-totais";
 import { VISAO_BV_PADRAO, type VisaoBv } from "@/lib/calculos/bv-planilha";
 import { ChaveBrutoLiquido } from "@/app/(app)/_planilha/chave-bruto-liquido";
 import type { EstadoSaveDaLinha } from "@/app/(app)/_planilha/save-coluna";
+import { SAVE_VAZIO } from "@/app/(app)/_planilha/save-coluna";
+import { SaveDialog, type LinhaDoSave } from "@/app/(app)/_planilha/save-dialog";
+import type { SaldoDeSave } from "@/lib/data/saves";
+import {
+  marcarSaveDaLinha,
+  salvarConsumoDeSave,
+} from "../[orcId]/versoes/[versaoId]/save-actions";
 
 interface Props {
   projeto: {
@@ -89,6 +97,12 @@ interface Props {
    *  leitura nesta etapa: a coluna mostra os quatro estados e não abre o
    *  diálogo — marcar save segue na planilha da versão. */
   savePorItem?: Record<string, EstadoSaveDaLinha>;
+  /** Saldos de save que este cliente tem para gastar — alimentam o
+   *  formulário de "consumir save de outro job". */
+  saldosDeSave?: SaldoDeSave[];
+  /** Nome do grupo por id, de todos os orçamentos da tela: o formulário
+   *  mostra de qual grupo a linha veio. */
+  nomeDoGrupo?: Record<string, string>;
 }
 
 /** Tipos em que o cliente paga o fornecedor direto — os únicos com BV. */
@@ -119,6 +133,8 @@ type Modal =
 export function EditorAgregado({
   projeto,
   savePorItem,
+  saldosDeSave,
+  nomeDoGrupo,
   honorariosCliente,
   orcamentosExistentes,
   inicial,
@@ -140,6 +156,17 @@ export function EditorAgregado({
   const [saveVisivel, setSaveVisivel] = React.useState(
     Object.keys(savePorItem ?? {}).length > 0,
   );
+  // A linha cujo formulário de save está aberto, junto do orçamento dela.
+  // O orçamento vem junto porque cada um desta tela tem moeda, honorários
+  // e imposto PRÓPRIOS — o formulário calcula a receita que migra com as
+  // taxas do orçamento de origem, não com uma taxa da página.
+  //
+  // Só entra aqui linha de orçamento JÁ SALVO: as actions gravam por id
+  // do item no banco, e o orçamento novo ainda tem id local.
+  const [linhaSave, setLinhaSave] = React.useState<{
+    item: VersaoOrcamentoItem;
+    parametros: ParametrosVersao;
+  } | null>(null);
   const [orcamentos, setOrcamentos] =
     React.useState<OrcamentoRascunho[]>(inicial);
   const [modal, setModal] = React.useState<Modal>(null);
@@ -731,6 +758,12 @@ export function EditorAgregado({
               savePorItem={savePorItem}
               saveVisivel={saveVisivel}
               onAlternarSave={() => setSaveVisivel((v) => !v)}
+              onAbrirSave={
+                orc.origemBanco && !bloqueio
+                  ? (item) =>
+                      setLinhaSave({ item, parametros: orc.parametros })
+                  : undefined
+              }
               key={orc.id}
               job={orc}
               codigo={codigo}
@@ -895,6 +928,53 @@ export function EditorAgregado({
           setBaseline(assinatura(orcamentos));
           router.push(`/orcamentos/${projeto.id}`);
         }}
+      />
+
+      <SaveDialog
+        open={linhaSave !== null}
+        onOpenChange={(aberto) => !aberto && setLinhaSave(null)}
+        linha={
+          linhaSave
+            ? {
+                id: linhaSave.item.id,
+                nome: linhaSave.item.item,
+                grupoNome: nomeDoGrupo?.[linhaSave.item.grupo_id] ?? "—",
+                tipoCusto: linhaSave.item.tipo_custo,
+                totalOrcado: Number(linhaSave.item.total_orcado ?? 0),
+              }
+            : null
+        }
+        estado={
+          linhaSave
+            ? (savePorItem?.[linhaSave.item.id] ?? SAVE_VAZIO)
+            : SAVE_VAZIO
+        }
+        saldos={saldosDeSave ?? []}
+        moeda={linhaSave?.parametros.moeda ?? "BRL"}
+        percentualHonorarios={linhaSave?.parametros.percentual_honorarios ?? 0}
+        percentualImposto={linhaSave?.parametros.percentual_imposto ?? 0}
+        clienteNome={projeto.cliente ?? "cliente"}
+        onMarcarSave={
+          linhaSave
+            ? async (marcar) => {
+                const r = await marcarSaveDaLinha(linhaSave.item.id, marcar);
+                if (r.ok) router.refresh();
+                return r;
+              }
+            : undefined
+        }
+        onSalvarConsumo={
+          linhaSave
+            ? async (origens) => {
+                const r = await salvarConsumoDeSave(
+                  linhaSave.item.id,
+                  origens,
+                );
+                if (r.ok) router.refresh();
+                return r;
+              }
+            : undefined
+        }
       />
     </div>
   );
