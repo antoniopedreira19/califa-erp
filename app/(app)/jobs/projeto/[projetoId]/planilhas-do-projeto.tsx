@@ -17,6 +17,7 @@ import * as React from "react";
 import { ClipboardList, Lock } from "lucide-react";
 import { VISAO_BV_PADRAO, type VisaoBv } from "@/lib/calculos/bv-planilha";
 import { ChaveBrutoLiquido } from "@/app/(app)/_planilha/chave-bruto-liquido";
+import { MenuExibirColunas } from "@/app/(app)/_planilha/exibir-colunas";
 import { PlanilhaJobCard } from "./planilha-job-card";
 import { ProjetoTotaisCard } from "./projeto-totais-card";
 import type { JobPlanilhaProjeto } from "./tipos";
@@ -25,6 +26,7 @@ export function PlanilhasDoProjeto({
   planilhas,
   moeda,
   jobHrefBase,
+  saveSempreVisivel = false,
 }: {
   planilhas: JobPlanilhaProjeto[];
   moeda: string;
@@ -40,8 +42,18 @@ export function PlanilhasDoProjeto({
    *  assim — só abrir a rota pega. A função é montada aqui, do lado
    *  client, onde ela é inofensiva. */
   jobHrefBase?: string;
+  /** Financeiro: a coluna Save fica SEMPRE presente e sem liga-desliga —
+   *  aquele módulo confere o crédito entre jobs, e esconder a coluna
+   *  esconderia justamente o que ele foi ver. */
+  saveSempreVisivel?: boolean;
 }) {
   const [visao, setVisao] = React.useState<VisaoBv>(VISAO_BV_PADRAO);
+
+  // A coluna nasce aberta em quem já usa save e fechada em quem nunca
+  // usou — a mesma regra das planilhas internas.
+  const algumJobTemSave = planilhas.some((j) => j.temSave);
+  const [saveLigado, setSaveLigado] = React.useState(algumJobTemSave);
+  const saveVisivel = saveSempreVisivel || saveLigado;
 
   const rotaDoJob = React.useMemo(
     () =>
@@ -61,6 +73,28 @@ export function PlanilhasDoProjeto({
         </div>
         <div className="flex items-center gap-3">
           <ChaveBrutoLiquido visao={visao} onChange={setVisao} />
+          {/* O liga-desliga da coluna Save fica AQUI, e não colado na
+              tabela como nas planilhas internas, por dois motivos: o
+              estado é um só para a tela (o card de Totais divide o
+              `colgroup` com os blocos e não teria qual alça seguir), e o
+              card de cada job é `overflow-hidden` — uma alça em
+              `right-full` seria cortada pela borda dele. É o mesmo
+              controle das internas, no mesmo lugar da barra. */}
+          {!saveSempreVisivel && (
+            <MenuExibirColunas
+              blocos={[
+                {
+                  chave: "save",
+                  rotulo: "Save",
+                  visivel: saveVisivel,
+                  onAlternar: () => setSaveLigado((v) => !v),
+                },
+                { chave: "orcado", rotulo: "Orçado", visivel: true },
+                { chave: "planejado", rotulo: "Planejado", visivel: true },
+                { chave: "realizado", rotulo: "Realizado", visivel: true },
+              ]}
+            />
+          )}
           <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-[11px] py-1 text-[11px] font-semibold text-muted-foreground">
             <Lock className="h-[11px] w-[11px]" />
             Somente leitura
@@ -73,6 +107,7 @@ export function PlanilhasDoProjeto({
           key={j.id}
           job={j}
           visao={visao}
+          saveVisivel={saveVisivel}
           jobHref={rotaDoJob?.(j.id)}
         />
       ))}

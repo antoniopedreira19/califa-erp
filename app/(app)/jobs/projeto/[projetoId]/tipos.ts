@@ -4,6 +4,7 @@
 
 import type { JobStatus, TipoCusto } from "@/lib/types";
 import type { ValoresDoBloco } from "@/lib/calculos/bv-planilha";
+import type { EstadoSaveDaLinha } from "@/app/(app)/_planilha/save-coluna";
 
 export interface ItemPlanilhaProjeto {
   id: string;
@@ -29,6 +30,13 @@ export interface ItemPlanilhaProjeto {
   /** Idem para o REALIZADO. Em item `A` e `D` o bruto é o ORÇADO: eles
    *  não geram PP, então não há soma de PPs de onde tirá-lo. */
   realizado: ValoresDoBloco;
+  /** Estado da coluna Save desta linha. A visão agregada mostra o mesmo
+   *  que as planilhas internas — em leitura, sem abrir o diálogo.
+   *
+   *  Opcional porque o carregador só devolve as linhas que TÊM save, e
+   *  ele roda no servidor: o `SAVE_VAZIO` mora num módulo `"use client"`,
+   *  então quem completa o vazio é a tela, que é client. */
+  save?: EstadoSaveDaLinha;
 }
 
 export interface GrupoPlanilhaProjeto {
@@ -65,4 +73,7 @@ export interface JobPlanilhaProjeto {
   faturamentoPrevisto: number;
   /** Compromisso total do cliente. É o "valor" do job na árvore. */
   valorJob: number;
+  /** `true` quando alguma linha deste job tem relação com save. É o que
+   *  decide se a coluna nasce aberta na tela do projeto. */
+  temSave: boolean;
 }

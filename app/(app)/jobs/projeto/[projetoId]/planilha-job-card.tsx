@@ -22,7 +22,16 @@ import { RentabilidadeNoVao } from "@/app/(app)/_planilha/rentabilidade-inline";
 import {
   ColunasJobsProjeto,
   LARGURA_MINIMA_JOBS_PROJETO,
+  colunasDoRotuloJobsProjeto,
+  totalDeColunasJobsProjeto,
 } from "@/app/(app)/_planilha/grade-jobs-projeto";
+import {
+  CabecalhoSaveColuna,
+  CabecalhoSaveFaixa,
+  CelulaSave,
+  SAVE_VAZIO,
+  classesDaLinhaComSave,
+} from "@/app/(app)/_planilha/save-coluna";
 import {
   ORCADO,
   PLANEJADO,
@@ -106,11 +115,16 @@ export function PlanilhaJobCard({
   job,
   jobHref,
   visao,
+  saveVisivel = false,
 }: {
   job: JobPlanilhaProjeto;
   /** Bruto ou Líquido (− BV). Vem da página: a chave vale para todos os
    *  jobs do projeto e para o card de Totais, juntos. */
   visao: VisaoBv;
+  /** Coluna Save aberta. Como a chave Bruto ⇄ Líquido, o estado é UM para
+   *  a tela inteira: o card de Totais divide o `colgroup` com os blocos,
+   *  e com um estado por bloco ele não teria qual seguir. */
+  saveVisivel?: boolean;
   /**
    * Para onde "Abrir job" leva. Default é a página de Jobs. O financeiro
    * passa `/financeiro/jobs/[id]`: aquele módulo não encaminha para telas
@@ -273,9 +287,10 @@ export function PlanilhaJobCard({
               LARGURA_MINIMA_JOBS_PROJETO,
             )}
           >
-            <ColunasJobsProjeto />
+            <ColunasJobsProjeto save={saveVisivel} />
             <thead>
               <tr>
+                {saveVisivel && <CabecalhoSaveFaixa />}
                 <th colSpan={3} className="border-b border-border bg-muted/40" />
                 <th colSpan={4} className={cn(FAIXA_ROTULO, ORCADO.faixa)}>
                   ORÇADO
@@ -288,6 +303,7 @@ export function PlanilhaJobCard({
                 </th>
               </tr>
               <tr className="bg-muted/40 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                {saveVisivel && <CabecalhoSaveColuna />}
                 <th className="border-r border-r-border px-3 py-2 text-left">
                   Agrupamento · item
                 </th>
@@ -380,7 +396,7 @@ export function PlanilhaJobCard({
               {job.grupos.length === 0 && (
                 <tr>
                   <td
-                    colSpan={15}
+                    colSpan={totalDeColunasJobsProjeto(saveVisivel)}
                     className="py-8 text-center text-sm text-muted-foreground"
                   >
                     A versão aprovada deste job não tem agrupamentos.
@@ -408,7 +424,7 @@ export function PlanilhaJobCard({
                       )}
                     >
                       <td
-                        colSpan={3}
+                        colSpan={colunasDoRotuloJobsProjeto(saveVisivel)}
                         className="border-b border-b-border border-t border-t-[#e3e1db] px-3 py-2.5"
                       >
                         <div className="flex items-center gap-2">
@@ -488,7 +504,24 @@ export function PlanilhaJobCard({
 
                     {gAberto &&
                       g.itens.map((it) => (
-                        <tr key={it.id} className="border-b border-b-[#f4f2f2]">
+                        <tr
+                          key={it.id}
+                          className={cn(
+                            "border-b border-b-[#f4f2f2]",
+                            saveVisivel &&
+                              classesDaLinhaComSave(it.save ?? SAVE_VAZIO),
+                          )}
+                        >
+                          {/* Só leitura: sem `onAbrir`, a célula mostra o
+                              estado e não abre o diálogo. Marcar save
+                              continua na planilha interna do job. */}
+                          {saveVisivel && (
+                            <CelulaSave
+                              estado={it.save ?? SAVE_VAZIO}
+                              moeda={moeda}
+                              totalOrcado={it.orcTotal}
+                            />
+                          )}
                           <td
                             className={cn(
                               "py-2.5 pl-[34px] pr-3 text-xs",
@@ -622,7 +655,7 @@ export function PlanilhaJobCard({
             <tfoot>
               <tr>
                 <td
-                  colSpan={3}
+                  colSpan={colunasDoRotuloJobsProjeto(saveVisivel)}
                   className="border-t border-t-border px-3 py-3 text-[10px] font-bold uppercase tracking-[0.07em] text-muted-foreground"
                 >
                   Total do job
