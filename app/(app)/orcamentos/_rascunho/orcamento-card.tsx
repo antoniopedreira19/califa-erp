@@ -37,6 +37,7 @@ import {
   type Bloco,
 } from "@/app/(app)/_planilha/blocos";
 import type { EstadoSaveDaLinha } from "@/app/(app)/_planilha/save-coluna";
+import type { VersaoOrcamentoItem } from "@/lib/types";
 import type { JobRascunho, ParametrosVersao } from "./tipos";
 import {
   comoBvDaVersao,
@@ -81,6 +82,10 @@ interface Props {
   saveVisivel?: boolean;
   /** Liga-desliga da coluna. Ausente ⇒ sem alça. */
   onAlternarSave?: () => void;
+  /** Abre o formulário de save da linha. Ausente ⇒ a coluna mostra o
+   *  estado e não deixa mexer — é assim no orçamento ainda não salvo (o
+   *  item nem tem id no banco) e no que está bloqueado. */
+  onAbrirSave?: (item: VersaoOrcamentoItem) => void;
   /** Abre os parâmetros deste orçamento. Ausente ⇒ botão não aparece. */
   onEditarParametros?: () => void;
 }
@@ -101,6 +106,7 @@ export function JobRascunhoCard({
   savePorItem,
   saveVisivel,
   onAlternarSave,
+  onAbrirSave,
   descricao,
   categorias,
   fornecedores,
@@ -353,6 +359,7 @@ export function JobRascunhoCard({
                     savePorItem={savePorItem}
                     saveVisivel={saveVisivel}
                     onAlternarSave={onAlternarSave}
+                    onAbrirSave={onAbrirSave}
                     estaAberto={recolher.estaAberto}
                     onAlternarGrupo={recolher.alternar}
                     nomeDoGrupo={(g) => (

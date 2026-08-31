@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
-import { saveDaVersao } from "@/lib/data/saves";
+import { saveDaVersao, saldosDeSaveDoCliente } from "@/lib/data/saves";
+import type { SaldoDeSave } from "@/lib/data/saves";
 import type { EstadoSaveDaLinha } from "@/app/(app)/_planilha/save-coluna";
 import { listActiveMembers } from "@/lib/data/members";
 import { listarCidadesIniciais } from "@/lib/data/cidades";
@@ -72,7 +73,7 @@ export default async function OrcamentosAgregadoPage({
     supabase
       .from("projetos")
       .select(
-        "id, codigo, nome, cliente:clientes(nome_fantasia, percentual_honorarios_padrao), responsavel:profiles!responsavel_id(nome)",
+        "id, codigo, nome, cliente_id, cliente:clientes(nome_fantasia, percentual_honorarios_padrao), responsavel:profiles!responsavel_id(nome)",
       )
       .eq("id", params.projetoId)
       .eq("tenant_id", tenantId)
@@ -279,6 +280,24 @@ export default async function OrcamentosAgregadoPage({
     EstadoSaveDaLinha
   >;
 
+  // Os saldos que este cliente tem para gastar. É o que alimenta o
+  // "consumir save de outro job" do formulário — sem eles a aba abre
+  // vazia e a linha só consegue GERAR crédito.
+  const saldosDeSave: SaldoDeSave[] = (projeto as any).cliente_id
+    ? await saldosDeSaveDoCliente(
+        supabase,
+        tenantId,
+        (projeto as any).cliente_id as string,
+      )
+    : [];
+
+  // O formulário mostra de qual grupo a linha veio; aqui a tela tem
+  // vários orçamentos, então o mapa cobre os grupos de todos eles.
+  const nomeDoGrupo: Record<string, string> = {};
+  for (const g of (gruposRes.data ?? []) as any[]) {
+    nomeDoGrupo[g.id] = g.nome;
+  }
+
   const gruposPorVersao = new Map<string, any[]>();
   for (const g of (gruposRes.data ?? []) as any[]) {
     const lista = gruposPorVersao.get(g.versao_orcamento_id) ?? [];
@@ -361,6 +380,8 @@ export default async function OrcamentosAgregadoPage({
   return (
     <EditorAgregado
       savePorItem={savePorItem}
+      saldosDeSave={saldosDeSave}
+      nomeDoGrupo={nomeDoGrupo}
       projeto={{
         id: projeto.id,
         codigo: projeto.codigo,
