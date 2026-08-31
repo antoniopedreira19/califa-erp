@@ -24,6 +24,7 @@ import {
   AlertCircle,
   Building2,
   Check,
+  ChevronDown,
   FileCheck2,
   FileText,
   Hourglass,
@@ -31,6 +32,7 @@ import {
   Layers,
   Plus,
   Search,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { PlanoContaTipo, PlanoContaSubtipo } from "@/lib/types";
@@ -39,10 +41,12 @@ import {
   type DrawerState,
   type InfoJob,
 } from "./faturar-drawer";
+import type { ContatoCobranca } from "@/lib/data/contatos-cobranca";
 import {
-  ContatosCobrancaInline,
-  type ContatoCobranca,
-} from "@/components/financeiro/contatos-cobranca";
+  BotaoInfo,
+  InfoFaturamentoModal,
+  type InfoFaturamento,
+} from "@/components/financeiro/info-faturamento-modal";
 
 // ---------------------------------------------------------------------------
 // Tipos das linhas
@@ -50,7 +54,11 @@ import {
 
 export interface FaturamentoPendenteRow {
   origem_tipo: "job" | "bv";
+  /** O que o item da nota aponta: o job, ou o BV. */
   origem_id: string;
+  /** O JOB da linha — no BV é o job de origem, e não o BV
+   *  (`vw_faturamento_pendente`, 31/08/2026). Chave do botão `i`. */
+  job_id: string | null;
   /** Parcela do envio que esta linha representa. Nulo em BV. */
   envio_parcela_id: string | null;
   empresa_id: string;
@@ -76,9 +84,6 @@ export interface FaturamentoPendenteRow {
   parcela_numero: number;
   parcela_total: number;
   data_prevista: string | null;
-  /** Quem cobrar quando esta parcela virar nota (docs/decisions/012).
-   *  Vazio em BV, que não tem job, e nos jobs anteriores a 17/08/2026. */
-  contatos: ContatoCobranca[];
 }
 
 export interface FaturadoRow {
@@ -101,6 +106,9 @@ export interface FaturadoRow {
    *  parcela sintética com o total da NF, e uma nota 2× aparecia como
    *  1× (corrigido em 18/08/2026). */
   parcelas: Array<{ numero: number; valor: number; data_vencimento: string }>;
+  /** Jobs DISTINTOS que a nota cobre, na ordem dos itens — o botão `i`
+   *  mostra a PO de cada um. Vazio no avulso. */
+  jobs_cobertos: Array<{ job_id: string; codigo: string }>;
   itens: Array<{
     // `save` só aparece no ITEM: é a fatia da nota que virou crédito do
     // cliente em vez de faturamento deste job.
@@ -126,6 +134,17 @@ function formatDate(iso: string | null): string {
 
 function formatMoney(n: number): string {
   return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+/** NF agrupada junta os contatos de todos os jobs — sem repetir o mesmo. */
+function dedupContatos(lista: ContatoCobranca[]): ContatoCobranca[] {
+  const vistos = new Set<string>();
+  return lista.filter((c) => {
+    const chave = `${c.nome?.trim() ?? ""}|${c.email?.trim().toLowerCase() ?? ""}`;
+    if (vistos.has(chave)) return false;
+    vistos.add(chave);
+    return true;
+  });
 }
 
 function chaveLinha(r: FaturamentoPendenteRow): string {
@@ -168,8 +187,18 @@ export function FaturamentoList({
   const [erroTitulo, setErroTitulo] = React.useState<string | null>(null);
   const [erroDetalhe, setErroDetalhe] = React.useState<string | null>(null);
   const [filtroContraparte, setFiltroContraparte] = React.useState("todos");
+  // Combobox de cliente: a barra de chips não escala. Com o cadastro real
+  // seriam dezenas de nomes empilhados antes da busca (Tiago, 31/08/2026).
+  const [cliBusca, setCliBusca] = React.useState("");
+  const [cliAberto, setCliAberto] = React.useState(false);
+  // Tudo / A faturar / Faturados. As duas listas convivem na mesma tabela
+  // desde sempre; agora dá para ver uma de cada vez.
+  const [filtroFat, setFiltroFat] = React.useState<
+    "todos" | "pendentes" | "faturados"
+  >("todos");
   const [busca, setBusca] = React.useState("");
   const [toast, setToast] = React.useState<string | null>(null);
+  const [info, setInfo] = React.useState<InfoFaturamento | null>(null);
 
   React.useEffect(() => {
     if (!toast) return;
@@ -182,20 +211,44 @@ export function FaturamentoList({
     setErroDetalhe(null);
   }
 
-  // Chips por contraparte. BV aparece sob o FORNECEDOR, rotulado, porque é
-  // dele que a nota cobra.
-  const chips = React.useMemo(() => {
+  // Contagem por contraparte. BV aparece sob o FORNECEDOR, rotulado, porque
+  // é dele que a nota cobra.
+  const contagemPorNome = React.useMemo(() => {
     const contagem = new Map<string, number>();
     for (const p of pendentes) {
       const nome =
         p.origem_tipo === "bv" ? `${p.contraparte_nome} (fornecedor)` : p.contraparte_nome;
       contagem.set(nome, (contagem.get(nome) ?? 0) + 1);
     }
-    return [
-      { chave: "todos", rotulo: "Todos os clientes", n: pendentes.length },
-      ...Array.from(contagem, ([rotulo, n]) => ({ chave: rotulo, rotulo, n })),
-    ];
-  }, [pendentes]);
+    for (const f of faturados) {
+      contagem.set(f.contraparte_nome, (contagem.get(f.contraparte_nome) ?? 0) + 1);
+    }
+    return contagem;
+  }, [pendentes, faturados]);
+
+  /** Quantos nomes o dropdown mostra antes de mandar refinar pela digitação. */
+  const LIMITE_CLIENTES = 5;
+
+  const cliFiltrados = React.useMemo(() => {
+    const q = cliBusca.trim().toLowerCase();
+    return Array.from(contagemPorNome.keys()).filter(
+      (nome) => !q || nome.toLowerCase().includes(q),
+    );
+  }, [contagemPorNome, cliBusca]);
+
+  const cliOpcoes = [
+    {
+      chave: "todos",
+      rotulo: "Todos os clientes",
+      n: pendentes.length + faturados.length,
+    },
+    ...cliFiltrados.slice(0, LIMITE_CLIENTES).map((nome) => ({
+      chave: nome,
+      rotulo: nome,
+      n: contagemPorNome.get(nome) ?? 0,
+    })),
+  ];
+  const clientesOcultos = Math.max(0, cliFiltrados.length - LIMITE_CLIENTES);
 
   function rotuloContraparte(p: FaturamentoPendenteRow): string {
     return p.origem_tipo === "bv"
@@ -203,11 +256,69 @@ export function FaturamentoList({
       : p.contraparte_nome;
   }
 
+  /**
+   * O conteúdo do botão `i` de uma linha da fila.
+   *
+   * BV é caso à parte: PO, instrução do GP e contato de cobrança são todos
+   * do JOB, e o BV é cobrado do FORNECEDOR. Nenhum se aplica, então o modal
+   * mostra o job na referência e explica cada vazio (Tiago, 31/08/2026).
+   */
+  function infoDaPendente(p: FaturamentoPendenteRow): InfoFaturamento {
+    const referencia =
+      `${p.codigo ?? p.descricao} · ${p.contraparte_nome}` +
+      ` · parcela ${p.parcela_numero}/${p.parcela_total}`;
+    if (p.origem_tipo === "bv") {
+      return {
+        referencia,
+        pos: [],
+        descricaoNf: null,
+        contatos: [],
+        ehBv: true,
+      };
+    }
+    const dados = p.job_id ? infoPorJob[p.job_id] : undefined;
+    return {
+      referencia,
+      pos: [{ job: p.codigo ?? "", po: dados?.po ?? null }],
+      descricaoNf: dados?.descricaoNf ?? null,
+      contatos: dados?.contatos ?? [],
+      quebra:
+        p.saldo_save > 0.005
+          ? { job: p.saldo_proprio, save: p.saldo_save }
+          : null,
+    };
+  }
+
+  /** O mesmo botão, na linha de uma nota já emitida. */
+  function infoDaNota(f: FaturadoRow): InfoFaturamento {
+    return {
+      referencia: `NF ${f.numero_nf} · ${f.contraparte_nome}`,
+      // Uma PO por job coberto: a mesma PO pode valer para vários jobs, e o
+      // modal nomeia cada uma quando há mais de um.
+      pos: f.jobs_cobertos.map((j) => ({
+        job: j.codigo,
+        po: infoPorJob[j.job_id]?.po ?? null,
+      })),
+      // Nota emitida: o que vale é a descrição que SAIU nela, não mais a
+      // instrução que o GP mandou no envio.
+      descricaoNf: f.descricao,
+      contatos: dedupContatos(
+        f.jobs_cobertos.flatMap((j) => infoPorJob[j.job_id]?.contatos ?? []),
+      ),
+      ehBv: f.origem_tipo === "bv",
+    };
+  }
+
+  /** O que o campo mostra quando não está sendo digitado. */
+  const rotuloClienteAtivo =
+    filtroContraparte === "todos" ? "" : filtroContraparte;
+
   const q = busca.trim().toLowerCase();
 
   const visiveis = React.useMemo(
     () =>
       pendentes.filter((p) => {
+        if (filtroFat === "faturados") return false;
         if (filtroContraparte !== "todos" && rotuloContraparte(p) !== filtroContraparte) {
           return false;
         }
@@ -216,12 +327,13 @@ export function FaturamentoList({
           .toLowerCase()
           .includes(q);
       }),
-    [pendentes, filtroContraparte, q],
+    [pendentes, filtroContraparte, filtroFat, q],
   );
 
   const faturadosVisiveis = React.useMemo(
     () =>
       faturados.filter((f) => {
+        if (filtroFat === "pendentes") return false;
         if (filtroContraparte !== "todos" && f.contraparte_nome !== filtroContraparte) {
           return false;
         }
@@ -232,7 +344,7 @@ export function FaturamentoList({
           .toLowerCase()
           .includes(q);
       }),
-    [faturados, filtroContraparte, q],
+    [faturados, filtroContraparte, filtroFat, q],
   );
 
   const selecionados = React.useMemo(
@@ -307,16 +419,115 @@ export function FaturamentoList({
     <div className="space-y-4">
       {/* Chips de cliente + busca + ações */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-1.5">
-          {chips.map((c) => (
-            <Chip
-              key={c.chave}
-              ativo={filtroContraparte === c.chave}
-              onClick={() => setFiltroContraparte(c.chave)}
-              label={c.rotulo}
-              count={c.n}
-            />
-          ))}
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Combobox de cliente. A barra de chips não escala: com o cadastro
+              real seriam dezenas de nomes empilhados antes da busca. Mostra
+              os 5 primeiros e manda digitar para refinar. */}
+          <div className="relative w-[290px]">
+            <div
+              className={cn(
+                "flex h-[34px] items-center gap-2 rounded-lg border bg-white px-3 transition-colors",
+                cliAberto || filtroContraparte !== "todos"
+                  ? "border-california-red/40"
+                  : "border-border",
+              )}
+            >
+              <Building2 className="h-3.5 w-3.5 flex-none text-muted-foreground" />
+              <input
+                type="text"
+                value={cliAberto ? cliBusca : rotuloClienteAtivo}
+                onChange={(e) => setCliBusca(e.target.value)}
+                onFocus={() => {
+                  setCliAberto(true);
+                  setCliBusca("");
+                }}
+                onBlur={() => {
+                  // Timeout para o clique na opção acontecer antes do blur
+                  // fechar a lista — sem isso a seleção nunca chega.
+                  window.setTimeout(() => setCliAberto(false), 120);
+                }}
+                placeholder="Cliente — digite para filtrar"
+                className="min-w-0 flex-1 border-0 bg-transparent text-[12.5px] font-medium outline-none"
+              />
+              {filtroContraparte !== "todos" && (
+                <button
+                  type="button"
+                  title="Limpar filtro de cliente"
+                  onClick={() => {
+                    setFiltroContraparte("todos");
+                    setCliBusca("");
+                  }}
+                  className="flex-none text-muted-foreground transition-colors hover:text-california-red"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+              <ChevronDown className="h-3.5 w-3.5 flex-none text-muted-foreground" />
+            </div>
+            {cliAberto && (
+              <div className="absolute left-0 right-0 top-[38px] z-40 overflow-hidden rounded-xl border border-border bg-white shadow-elevated">
+                {cliOpcoes.map((c) => (
+                  <button
+                    key={c.chave}
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => {
+                      setFiltroContraparte(c.chave);
+                      setCliBusca("");
+                      setCliAberto(false);
+                    }}
+                    className={cn(
+                      "flex w-full items-center gap-2 px-3 py-2.5 text-left text-[12.5px] font-medium transition-colors hover:bg-muted/60",
+                      filtroContraparte === c.chave &&
+                        "bg-california-red/[0.07] text-california-red",
+                    )}
+                  >
+                    <span className="min-w-0 flex-1 truncate">{c.rotulo}</span>
+                    <span className="font-mono text-[11px] font-semibold tabular-nums text-muted-foreground">
+                      {c.n}
+                    </span>
+                  </button>
+                ))}
+                {clientesOcultos > 0 && (
+                  <div className="border-t border-border px-3 py-2 text-[11px] text-muted-foreground">
+                    + {clientesOcultos} cliente{clientesOcultos > 1 ? "s" : ""} —
+                    continue digitando para refinar
+                  </div>
+                )}
+                {cliOpcoes.length === 1 && cliBusca.trim() !== "" && (
+                  <div className="px-3 py-3 text-xs text-muted-foreground">
+                    Nenhum cliente encontrado.
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* O que já saiu em nota continua na mesma tabela, em verde. Este
+              filtro é o que permite olhar uma coisa de cada vez. */}
+          <div className="flex items-center rounded-lg border border-border bg-muted p-[3px]">
+            {(
+              [
+                { chave: "todos", rotulo: "Tudo" },
+                { chave: "pendentes", rotulo: "A faturar" },
+                { chave: "faturados", rotulo: "Faturados" },
+              ] as const
+            ).map((c) => (
+              <button
+                key={c.chave}
+                type="button"
+                onClick={() => setFiltroFat(c.chave)}
+                className={cn(
+                  "whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-semibold transition-colors",
+                  filtroFat === c.chave
+                    ? "bg-white text-california-red shadow-sm"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {c.rotulo}
+              </button>
+            ))}
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-2.5">
           <div className="relative">
@@ -366,8 +577,14 @@ export function FaturamentoList({
         </span>
       </div>
 
-      {/* Tabela */}
-      <div className="overflow-x-auto rounded-2xl border border-border bg-card shadow-soft">
+      {/* Tabela.
+          O botão `i` fica FORA do frame, na calha à direita — mesmo padrão
+          do "Gerar PP" da planilha interna, a pedido do Tiago (o protótipo
+          o desenhou dentro da tabela nesta aba). A caixa reserva os 46px
+          com um `mr-`, e a pílula mora numa célula de largura ZERO: assim
+          a calha nunca alarga a tabela (`app/(app)/_planilha/calha.tsx`). */}
+      <div className="overflow-x-auto pb-1.5">
+      <div className="mr-[46px] box-border w-max min-w-[calc(100%-46px)] rounded-2xl border border-border bg-card shadow-soft">
         <table className="w-full min-w-[1120px] text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/30 text-left text-[11px] uppercase tracking-wider text-muted-foreground">
@@ -397,6 +614,8 @@ export function FaturamentoList({
               <th className="w-[72px] px-3 py-3 font-semibold">Parcela</th>
               <th className="w-[110px] px-4 py-3 font-semibold">Vencimento</th>
               <th className="w-[110px] px-4 py-3 text-right font-semibold">Ação</th>
+              {/* A calha não é coluna: largura zero, e o botão sai do frame. */}
+              <th className="w-0 p-0" />
             </tr>
           </thead>
           <tbody>
@@ -418,10 +637,20 @@ export function FaturamentoList({
               return (
                 <tr
                   key={k}
+                  onClick={() => {
+                    // No agrupamento o clique marca a linha; fora dele, abre
+                    // o formulário. Espelha o protótipo `clicarLinha`.
+                    if (modoSelecao) {
+                      if (agrupavel) alternarLinha(p);
+                      return;
+                    }
+                    limparErro();
+                    setDrawer({ modo: "origem", linhas: [p] });
+                  }}
                   className={cn(
-                    "border-b border-border transition-colors last:border-0 hover:bg-accent/40",
+                    "cursor-pointer border-b border-border transition-colors last:border-0 hover:bg-accent/40",
                     marcado && "bg-california-red/[0.05]",
-                    modoSelecao && !agrupavel && "opacity-55",
+                    modoSelecao && !agrupavel && "cursor-not-allowed opacity-55",
                   )}
                 >
                   {modoSelecao && (
@@ -429,7 +658,10 @@ export function FaturamentoList({
                       <button
                         type="button"
                         disabled={!agrupavel}
-                        onClick={() => alternarLinha(p)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          alternarLinha(p);
+                        }}
                         title={
                           agrupavel ? "Incluir nesta NF" : "BV é faturado individualmente"
                         }
@@ -459,30 +691,17 @@ export function FaturamentoList({
                       )}
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-xs">
-                    <div className="flex flex-col gap-1">
-                      <span className="text-muted-foreground">
-                        {p.contraparte_nome}
-                      </span>
-                      {/* Quem cobrar, ao lado de quem é cobrado — é aqui
-                          que a nota nasce (docs/decisions/012). */}
-                      <ContatosCobrancaInline contatos={p.contatos} />
-                    </div>
+                  {/* Só o nome. O contato de cobrança mudou para o botão `i`
+                      em 31/08/2026: dentro da célula ele empurrava a linha
+                      para três alturas e mostrava só nome e e-mail. */}
+                  <td className="px-4 py-3 text-xs text-muted-foreground">
+                    {p.contraparte_nome}
                   </td>
+                  {/* A quebra job × save saiu daqui em 31/08/2026 e foi para
+                      o botão `i`: disputava espaço com o número que a coluna
+                      existe para mostrar (decisão 033). */}
                   <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-muted-foreground">
-                    <div className="flex flex-col items-end gap-0.5">
-                      <span>{formatMoney(p.valor_previsto)}</span>
-                      {/* A quebra da parcela: o que é faturamento do próprio
-                          job e o que é saldo em save do cliente. São dois
-                          itens na MESMA nota — quem fatura precisa saber
-                          disso antes de abrir o drawer (decisão 028). */}
-                      {p.saldo_save > 0.005 && (
-                        <span className="text-[10.5px] text-[#5f5d57]">
-                          job {formatMoney(p.saldo_proprio)} · save{" "}
-                          {formatMoney(p.saldo_save)}
-                        </span>
-                      )}
-                    </div>
+                    {formatMoney(p.valor_previsto)}
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-muted-foreground/80">
                     {formatMoney(p.valor_ja_faturado)}
@@ -506,7 +725,8 @@ export function FaturamentoList({
                   <td className="px-4 py-3 text-right">
                     <button
                       type="button"
-                      onClick={() => {
+                      onClick={(e) => {
+                        e.stopPropagation();
                         limparErro();
                         setDrawer({ modo: "origem", linhas: [p] });
                       }}
@@ -516,6 +736,15 @@ export function FaturamentoList({
                       Faturar
                     </button>
                   </td>
+                  <td className="relative w-0 p-0">
+                    <BotaoInfo
+                      className="absolute left-3 top-1/2 h-[30px] w-[30px] -translate-y-1/2 shadow-sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setInfo(infoDaPendente(p));
+                      }}
+                    />
+                  </td>
                 </tr>
               );
             })}
@@ -523,7 +752,16 @@ export function FaturamentoList({
             {faturadosVisiveis.map((f) => (
               <tr
                 key={f.faturamento_id}
-                className="border-b border-border bg-emerald-50/35 transition-colors last:border-0"
+                onClick={() => {
+                  // Nota já emitida abre o mesmo formulário em leitura — o
+                  // agrupamento não a seleciona, porque só serve para faturar.
+                  if (modoSelecao) return;
+                  setDrawer({ modo: "leitura", nota: f });
+                }}
+                className={cn(
+                  "border-b border-border bg-emerald-50/35 transition-colors last:border-0",
+                  modoSelecao ? "opacity-55" : "cursor-pointer hover:bg-emerald-50/70",
+                )}
               >
                 {modoSelecao && (
                   <td className="py-3 pl-4">
@@ -573,17 +811,30 @@ export function FaturamentoList({
                   <button
                     type="button"
                     title="Ver formulário e NF anexada"
-                    onClick={() => setDrawer({ modo: "leitura", nota: f })}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDrawer({ modo: "leitura", nota: f });
+                    }}
                     className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 font-mono text-[11.5px] font-bold text-emerald-700 transition-colors hover:bg-emerald-100"
                   >
                     <FileCheck2 className="h-3.5 w-3.5" />
                     NF {f.numero_nf}
                   </button>
                 </td>
+                <td className="relative w-0 p-0">
+                  <BotaoInfo
+                    className="absolute left-3 top-1/2 h-[30px] w-[30px] -translate-y-1/2 shadow-sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setInfo(infoDaNota(f));
+                    }}
+                  />
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
+      </div>
       </div>
 
       <p className="flex items-start gap-2 text-xs text-muted-foreground text-pretty">
@@ -698,6 +949,13 @@ export function FaturamentoList({
         />
       )}
 
+      <InfoFaturamentoModal
+        info={info}
+        onOpenChange={(aberto) => {
+          if (!aberto) setInfo(null);
+        }}
+      />
+
       {toast && (
         <div
           role="status"
@@ -734,40 +992,5 @@ function ChipOrigem({ tipo }: { tipo: "job" | "bv" }) {
     >
       {tipo === "bv" ? "BV" : "Job"}
     </span>
-  );
-}
-
-function Chip({
-  ativo,
-  onClick,
-  label,
-  count,
-}: {
-  ativo: boolean;
-  onClick: () => void;
-  label: string;
-  count: number;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-3 py-1 text-xs font-medium transition-colors",
-        ativo
-          ? "border-california-red bg-california-red/10 text-california-red"
-          : "border-border bg-white text-muted-foreground hover:bg-muted/50",
-      )}
-    >
-      {label}
-      <span
-        className={cn(
-          "font-semibold tabular-nums",
-          ativo ? "text-california-red" : "text-muted-foreground/70",
-        )}
-      >
-        {count}
-      </span>
-    </button>
   );
 }

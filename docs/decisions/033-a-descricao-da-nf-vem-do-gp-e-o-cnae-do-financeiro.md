@@ -90,15 +90,30 @@ o campo de CNAE no drawer nem o bloco de composição no modal. Os dois
 entraram por decisão do Tiago em 31/08/2026, e o protótipo é que está
 desatualizado nesses dois pontos.
 
-## 6. O que fica para as próximas entregas
+## 6. O BV, e onde o botão `i` fica (entrega 2)
 
-- **Entrega 2 — aba Faturamento:** combobox de cliente, filtro
-  Tudo/A faturar/Faturados, botão `i` em coluna própria, contatos fora da
-  célula do cliente, o job por trás do BV, clique na linha abrindo o
-  formulário.
-- **Entrega 3 — aba Títulos a Receber:** inadimplência (valor novo de
-  enum, `inadimplente_desde`, rolagem semanal da previsão), jobs cobertos
-  sem repetição, botão `i` na calha.
+`vw_faturamento_pendente` ganhou `job_id` e, no ramo do BV, `codigo`
+deixou de ser nulo: BV sempre pertence a um job, e o caminho
+`itens_bv.job_item_orcado_id → jobs_itens_orcado.job_id` já existia
+preenchido em 100% dos casos. `origem_id` **não** mudou — continua sendo o
+id do BV, que é o que o item da nota aponta.
+
+**O `i` do BV nomeia o job e explica cada vazio.** PO, instrução do GP e
+contato de cobrança são todos do JOB, e o BV é cobrado do FORNECEDOR.
+Mostrar o contato do cliente numa linha que se cobra do fornecedor seria
+errado; esconder o bloco não diria por quê. Então cada vazio tem a sua
+frase.
+
+**O botão fica na calha nas duas abas**, fora do frame da tabela, como o
+"Gerar PP" da planilha interna. O protótipo desenhou o da aba Faturamento
+dentro de uma coluna de 44px — é o terceiro ponto em que ele está
+desatualizado.
+
+## 7. O que fica para a entrega 3
+
+Aba Títulos a Receber: inadimplência (valor novo de enum,
+`inadimplente_desde`, rolagem semanal da previsão), jobs cobertos sem
+repetição, botão `i` na calha, e o botão da linha já baixada.
 
 Uma ideia registrada e **não** implementada: uma PO pode se referir a mais
 de um job, e hoje isso é o mesmo texto digitado em N envios. Um cadastro de

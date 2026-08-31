@@ -234,6 +234,9 @@ export default async function ContasReceberPage() {
     return {
       origem_tipo: r.origem_tipo as FaturamentoPendenteRow["origem_tipo"],
       origem_id: r.origem_id as string,
+      // No BV o job é OUTRO id: `origem_id` é o BV, `job_id` é o job de
+      // onde ele saiu (view revista em 31/08/2026).
+      job_id: (r.job_id as string | null) ?? null,
       envio_parcela_id: (r.envio_parcela_id as string | null) ?? null,
       empresa_id: (r.empresa_id as string | null) ?? "",
       codigo: (r.codigo as string | null) ?? null,
@@ -254,11 +257,6 @@ export default async function ContasReceberPage() {
       parcela_numero: Number(r.parcela_numero ?? 1),
       parcela_total: Number(r.parcela_total ?? 1),
       data_prevista: (r.data_prevista as string | null) ?? null,
-      // BV não tem job, logo não tem contato de cobrança do job.
-      contatos:
-        r.origem_tipo === "job"
-          ? (contatosPorJob.get(r.origem_id as string) ?? [])
-          : [],
     };
   });
 
@@ -348,6 +346,21 @@ export default async function ContasReceberPage() {
       primeiro_vencimento: parc?.primeiroVenc ?? null,
       parcelas: parc?.parcelas ?? [],
       cnae: f.cnae,
+      // Jobs DISTINTOS da nota, na ordem dos itens. O item de save aponta o
+      // mesmo job do item próprio, então o Set é o que impede a PO de
+      // aparecer duas vezes no botão `i`.
+      jobs_cobertos: (() => {
+        const vistos = new Set<string>();
+        const lista: Array<{ job_id: string; codigo: string }> = [];
+        for (const i of f.itens) {
+          if (!i.origem_id || vistos.has(i.origem_id)) continue;
+          const job = jobPorId.get(i.origem_id);
+          if (!job) continue;
+          vistos.add(i.origem_id);
+          lista.push({ job_id: i.origem_id, codigo: job.codigo });
+        }
+        return lista;
+      })(),
       itens: f.itens.map((i) => {
         const job = i.origem_id ? jobPorId.get(i.origem_id) : undefined;
         return {

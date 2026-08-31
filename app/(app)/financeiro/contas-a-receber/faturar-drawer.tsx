@@ -147,17 +147,34 @@ export function FaturarDrawer({
    * vez de esconder o bloco.
    */
   function montarInfo(
-    jobId: string,
+    jobId: string | null,
     referencia: string,
-    quebra: { job: number; save: number } | null = null,
+    opcoes: {
+      quebra?: { job: number; save: number } | null;
+      codigoJob?: string | null;
+      ehBv?: boolean;
+    } = {},
   ): InfoFaturamento {
-    const dados = infoPorJob[jobId];
+    const dados = jobId ? infoPorJob[jobId] : undefined;
+    // No BV nada disso é dele: PO, instrução do GP e contato de cobrança são
+    // do job, e o BV é cobrado do fornecedor. O modal explica cada vazio
+    // (decisão do Tiago, 31/08/2026).
+    if (opcoes.ehBv) {
+      return {
+        referencia,
+        pos: [],
+        descricaoNf: null,
+        contatos: [],
+        quebra: opcoes.quebra ?? null,
+        ehBv: true,
+      };
+    }
     return {
       referencia,
-      po: dados?.po ?? null,
+      pos: [{ job: opcoes.codigoJob ?? "", po: dados?.po ?? null }],
       descricaoNf: dados?.descricaoNf ?? null,
       contatos: dados?.contatos ?? [],
-      quebra,
+      quebra: opcoes.quebra ?? null,
     };
   }
 
@@ -565,7 +582,13 @@ export function FaturarDrawer({
                           <BotaoInfo
                             className="shrink-0"
                             onClick={() =>
-                              setInfo(montarInfo(i.origem_id!, `${i.codigo} · ${i.descricao}`))
+                              setInfo(
+                                montarInfo(
+                                  i.origem_id,
+                                  `${i.codigo} · ${i.descricao}`,
+                                  { codigoJob: i.codigo },
+                                ),
+                              )
                             }
                           />
                         )}
@@ -675,9 +698,13 @@ export function FaturarDrawer({
                             onClick={() =>
                               setInfo(
                                 montarInfo(
-                                  l.origem_id,
+                                  l.job_id,
                                   `${l.codigo ?? l.descricao} · parcela ${l.parcela_numero}/${l.parcela_total}`,
-                                  quebra.save > 0.004 ? quebra : null,
+                                  {
+                                    quebra: quebra.save > 0.004 ? quebra : null,
+                                    codigoJob: l.codigo,
+                                    ehBv: l.origem_tipo === "bv",
+                                  },
                                 ),
                               )
                             }
