@@ -94,9 +94,9 @@ manda continua sendo a coluna `valor`.
 
 Migration: `20260901130001_pp_guarda_unitario_e_dias_meses.sql`.
 
-## 7. O REALIZADO da planilha soma o trio das PPs
+## 7. O REALIZADO só mostra a decomposição quando há UMA PP
 
-Decidido pelo Tiago em 01/09/2026, junto com esta rodada.
+Decidido pelo Tiago em 01/09/2026, em duas etapas no mesmo dia.
 
 `recalcular_realizado_do_item` derivava a decomposição por rateio:
 `quantidade` era a soma das PPs, mas `dias_meses` era forçado a 1 e o
@@ -106,23 +106,29 @@ decomposição para oferecer — e por isso a planilha passou a contradizer o
 formulário: a PP digitada como `R$ 1.234,00 × 3 × 2` aparecia no
 REALIZADO como `R$ 2.468,00 × 3 × 1`.
 
-Agora as três colunas **somam** o que as PPs não canceladas do item têm:
-`sum(valor_unitario)`, `sum(quantidade)`, `sum(dias_meses)`. Com uma PP
-no item — o caso comum — a linha do REALIZADO fica idêntica ao que o GP
-digitou.
+**A regra final:**
 
-**⚠️ Consequência conhecida e aceita.** Com mais de uma PP no item, a
-linha deixa de multiplicar: `total_realizado` continua sendo a soma dos
-`valor` (menos devoluções de verba), e **não** o produto das somas. O
-item "Locação de som e luz", com 2 PPs somando R$ 18.000, exibe
-`R$ 48.000,00 × 0,75 × 2`, cujo produto seria R$ 72.000.
+- **Uma PP no item** — as três colunas trazem o trio daquela PP, e a linha
+  do REALIZADO fica idêntica ao que o GP digitou.
+- **Mais de uma PP** — as três ficam **zeradas**, e a planilha mostra
+  `— · — · —`. Quem quiser a quebra abre a tela de PPs do item, que é
+  onde ela existe de verdade: o chip `PPs · N` da calha já leva para lá.
+- **`total_realizado` não muda nos dois casos.** Continua sendo a soma dos
+  `valor` das PPs menos as devoluções de verba, e continua correto.
 
-Isso é tolerável porque **nenhum cálculo do sistema deriva dinheiro
-dessas três colunas** — quem manda é `total_realizado`, e as outras são
-exibição. Se um dia incomodar, a saída natural é mostrar a decomposição
-só quando o item tem uma PP, e um traço quando tem várias.
+A primeira tentativa foi **somar** as três colunas sempre. Funciona com
+uma PP, mas com várias a soma não descreve compra nenhuma: o item
+"Locação de som e luz", com 2 PPs somando R$ 18.000, exibia
+`R$ 48.000,00 × 0,75 × 2`, cujo produto seria R$ 72.000. Um unitário de
+R$ 48.000 para um custo de R$ 18.000 não é só inútil — é enganoso, porque
+parece um preço contratado e não é.
 
-Migration: `20260901160002_realizado_soma_o_trio_das_pps.sql`, com
+Zerar bastou, sem nenhuma mudança de UI: as duas telas que leem essas
+colunas já tratam zero como travessão — `CelulaLeitura` na Planilha
+Interna e os formatadores do card da visão agregada.
+
+Migrations: `20260901160002_realizado_soma_o_trio_das_pps.sql` e
+`20260901180001_decomposicao_do_realizado_so_com_uma_pp.sql`, ambas com
 reprocessamento das linhas existentes.
 
 ## 8. Fora desta mudança
