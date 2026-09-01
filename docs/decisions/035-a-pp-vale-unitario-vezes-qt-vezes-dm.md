@@ -94,25 +94,36 @@ manda continua sendo a coluna `valor`.
 
 Migration: `20260901130001_pp_guarda_unitario_e_dias_meses.sql`.
 
-## 7. Em aberto: a decomposição do REALIZADO na planilha
+## 7. O REALIZADO da planilha soma o trio das PPs
 
-Verificado em 01/09/2026 com a PP-00015 (`R$ 1.234,00 × 3 × 2 = R$ 7.404,00`,
-item Logistica Ceno do Summit Califa 2026). A PP gravou o trio correto,
-mas as colunas do REALIZADO na planilha mostram **`R$ 2.468,00 × 3 × 1`**.
+Decidido pelo Tiago em 01/09/2026, junto com esta rodada.
 
-A causa é `recalcular_realizado_do_item`, que soma `valor` e `quantidade`
-das PPs do item e deriva `dias_meses_realizado = 1` e
-`valor_unitario_realizado = total ÷ quantidade` — o mesmo rateio que esta
-decisão acabou de tirar do formulário. Ele foi escrito assim na
-[022](022-bv-liquido-e-realizado-por-pp.md), quando a PP **não tinha**
-decomposição para oferecer.
+`recalcular_realizado_do_item` derivava a decomposição por rateio:
+`quantidade` era a soma das PPs, mas `dias_meses` era forçado a 1 e o
+unitário saía de `total ÷ quantidade`. Escrita assim na
+[022](022-bv-liquido-e-realizado-por-pp.md), quando a PP não **tinha**
+decomposição para oferecer — e por isso a planilha passou a contradizer o
+formulário: a PP digitada como `R$ 1.234,00 × 3 × 2` aparecia no
+REALIZADO como `R$ 2.468,00 × 3 × 1`.
 
-O total continua certo em todo lugar; o que diverge é a decomposição.
-**Não foi alterado nesta rodada porque a regra não é óbvia:** com mais de
-uma PP no mesmo item, e unitários diferentes entre elas, não existe um
-unitário único do realizado. Decidir se ele passa a ser a média
-ponderada, o da última PP, ou se some quando as PPs divergem, é escolha
-do Tiago — e vale para toda a planilha, não só para este formulário.
+Agora as três colunas **somam** o que as PPs não canceladas do item têm:
+`sum(valor_unitario)`, `sum(quantidade)`, `sum(dias_meses)`. Com uma PP
+no item — o caso comum — a linha do REALIZADO fica idêntica ao que o GP
+digitou.
+
+**⚠️ Consequência conhecida e aceita.** Com mais de uma PP no item, a
+linha deixa de multiplicar: `total_realizado` continua sendo a soma dos
+`valor` (menos devoluções de verba), e **não** o produto das somas. O
+item "Locação de som e luz", com 2 PPs somando R$ 18.000, exibe
+`R$ 48.000,00 × 0,75 × 2`, cujo produto seria R$ 72.000.
+
+Isso é tolerável porque **nenhum cálculo do sistema deriva dinheiro
+dessas três colunas** — quem manda é `total_realizado`, e as outras são
+exibição. Se um dia incomodar, a saída natural é mostrar a decomposição
+só quando o item tem uma PP, e um traço quando tem várias.
+
+Migration: `20260901160002_realizado_soma_o_trio_das_pps.sql`, com
+reprocessamento das linhas existentes.
 
 ## 8. Fora desta mudança
 
