@@ -534,6 +534,7 @@ export function EditorMultiJobs({
           faturamentoPrevisto: t.faturamentoPrevisto,
           valorJob: t.valorJob,
           subtotaisPorTipo: t.subtotaisPorTipo,
+        save: t.save,
           percentualHonorarios: t.percentualHonorarios,
           percentualImposto: parametros.percentual_imposto,
         };

@@ -274,6 +274,7 @@ export async function carregarPlanilhasDosJobs(
       imposto,
       faturamentoPrevisto,
       valorJob,
+      save: quebraSave,
     } = calcularTotaisVersao(
       itensDoJob.map((it) => ({
         tipo_custo: it.tipo_custo as TipoCusto,
@@ -320,6 +321,7 @@ export async function carregarPlanilhasDosJobs(
       imposto,
       faturamentoPrevisto,
       valorJob,
+      save: quebraSave,
       // Uma linha "toca" save quando gera crédito ou é paga por saldo de
       // fora — a mesma regra do `linhaTocaSave` da coluna.
       temSave: itensDoJob.some(

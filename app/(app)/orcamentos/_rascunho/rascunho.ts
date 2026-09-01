@@ -1,5 +1,8 @@
 import type { ItemBv, TipoCusto, VersaoOrcamentoItem } from "@/lib/types";
-import { calcularTotaisVersao } from "@/lib/calculos/versao-totais";
+import {
+  calcularTotaisVersao,
+  type QuebraSave,
+} from "@/lib/calculos/versao-totais";
 import type {
   GrupoRascunho,
   ItemRascunho,
@@ -128,6 +131,9 @@ export interface TotaisJob {
   imposto: number;
   honorarios: number;
   subtotaisPorTipo: Record<TipoCusto, number>;
+  /** A repartição do orçado entre save usado, save gerado e custos do job
+   *  — alimenta a divisão por função do save no card de Totais. */
+  save: QuebraSave;
   /** Taxa efetivamente usada neste job — a do cabeçalho, ou a detectada na
    *  planilha importada. O consolidado do projeto mostra a média delas. */
   percentualHonorarios: number;
@@ -175,6 +181,7 @@ export function totaisDoJob(
     imposto,
     honorarios,
     subtotaisPorTipo,
+    save,
   } = calcularTotaisVersao(
       itens.map((it) => ({
         tipo_custo: it.tipo_custo,
@@ -195,6 +202,7 @@ export function totaisDoJob(
     imposto,
     honorarios,
     subtotaisPorTipo,
+    save,
     percentualHonorarios,
   };
 }
