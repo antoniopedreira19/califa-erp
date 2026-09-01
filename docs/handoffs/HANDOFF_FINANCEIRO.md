@@ -3190,3 +3190,26 @@ por código:
 Criar o vencido exigiria emitir uma NF com data passada, e a emissão pede
 anexo em PDF — que a conferência automatizada não consegue subir. Fica para
 uma passada manual.
+
+---
+
+## ⚠️ Nota de 2026-09-01 — save nas telas do financeiro
+
+O financeiro não tem card de Totais próprio: a conferência da abertura
+reusa o do job e a visão de projeto reusa a das agregadas de Jobs. Então
+as duas herdaram o que mudou lá. O que é específico daqui:
+
+- **A visão agregada do projeto (`/financeiro/projetos/[id]`) ganhou a
+  coluna Save, SEMPRE presente e sem liga-desliga.** Foi decisão do
+  Tiago: é aqui que se confere o crédito entre jobs, e esconder a coluna
+  esconderia justamente por que faturamento previsto e valor do job
+  divergem. Nas telas de Orçamento e Jobs a coluna tem liga-desliga.
+- **A divisão do fechamento por função do save** (save usado · save
+  gerado · custos do job) existe nas duas telas, atrás do botão "Save" e
+  **fechada por padrão**.
+- **O save só é oferecido para consumo depois do envio para
+  faturamento** — e o envio é o único gatilho. **O saldo não expira**:
+  segue oferecido depois da nota emitida, depois do recebimento e depois
+  do encerramento do job. A regra mora em `vw_saves_por_job` (migrations
+  `20260901100001` e `20260901110001`) e está explicada na nota de
+  2026-09-01 da decisão 028.

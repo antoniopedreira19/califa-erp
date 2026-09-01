@@ -2413,7 +2413,7 @@ invariante do desenho: **a soma dos dois lados dá o mesmo número**
 | Linha | pop-up com duas abas: *Gerar save nesta linha* e *Consumir save de outro job* |
 | Consumo | uma linha pode puxar de **vários jobs** de origem; o resto segue faturado |
 | Cabeçalho | chave **"Orçamento de save"** — todo item novo nasce em save |
-| Totais | o fechamento abre em três colunas (save usado · save gerado · custos do job), ganha "Saldo em save" e o parágrafo que explica por que os dois totais divergem |
+| Totais | o fechamento se divide em três colunas (save usado · save gerado · custos do job) — ⚠️ desde 01/09/2026 **fechadas por padrão**, atrás do botão "Save"; a linha "Saldo em save" virou **"Save gerado"** e o parágrafo das duas bases virou tópico da legenda. Ver a nota de 2026-09-01 |
 
 A linha em save fica hachurada, com planejado zerado e travado, sem BV e
 **fora da rentabilidade** — a coluna ORÇADO continua cheia, porque é ela
@@ -2561,3 +2561,52 @@ o do repositório principal.** Meia hora foi gasta achando isso: a tela
 não mudava porque o servidor servia outro checkout. Para conferir o
 `main`, subir servidor próprio (`preview_start`, que pega outra porta) —
 o cookie de sessão do `localhost` vale para qualquer porta.
+
+---
+
+## ⚠️ Nota de 2026-09-01 — a coluna Save fora da planilha da versão
+
+Três entregas seguidas mexeram no save e o corpo deste handoff, escrito
+antes delas, ficou descrevendo o estado antigo em alguns pontos. O que
+vale hoje:
+
+### 1. A coluna Save também nas visões agregadas
+
+Ela existia só na planilha da versão e na planilha interna do job. Agora
+está nas três visões agregadas — Orçamento, Jobs e Financeiro. Em
+Orçamento e Jobs com liga-desliga (o menu "Exibir" das agregadas de
+jobs/financeiro; a alça colada na tabela no agregado de orçamento); no
+Financeiro **sempre presente**, porque é ali que se confere o crédito
+entre jobs.
+
+No agregado de **Orçamento** a coluna é editável (o `+` abre o mesmo
+formulário da versão); em Jobs e Financeiro é só leitura. Só orçamento
+**já salvo** abre o formulário: as actions gravam por id do item no banco,
+e orçamento novo ainda tem id local.
+
+### 2. A divisão do fechamento nasce FECHADA, e está nas quatro telas
+
+A divisão em save usado · save gerado · custos do job ganhou botão
+(`components/fechamento-por-save.tsx`) e passou a existir nas quatro
+planilhas de acompanhamento: versão do orçamento, agregada de orçamentos,
+planilha interna do job e agregada de jobs/financeiro. **Nasce fechada**,
+como no design — antes a versão do orçamento abria dividida.
+
+O card de Totais **não** ganhou coluna de Save: o alinhamento sai de
+Save + Item somarem a largura do Item do Totais, como já fazia a
+`grade-job`.
+
+### 3. "Saldo em save" agora é "Save gerado"
+
+E a explicação das duas bases (por que faturamento previsto e valor do job
+divergem) saiu do rodapé da coluna e virou o **segundo tópico da legenda**,
+com o mesmo ícone do primeiro. Vale nas duas planilhas internas.
+
+### 4. O save só é oferecido depois do envio para faturamento
+
+Regra nova, do Tiago: o seletor de consumo só lista job **já enviado para
+faturamento**. Isso reverte o que a decisão 028 §6 dizia — está tudo
+explicado na nota de 2026-09-01 daquele documento, inclusive o ponto que
+mais importa na operação: **o saldo não expira**. Uma vez oferecido, ele
+segue oferecido depois da nota emitida, depois do recebimento e depois do
+encerramento do job.
