@@ -4,6 +4,7 @@
 
 import type { JobStatus, TipoCusto } from "@/lib/types";
 import type { ValoresDoBloco } from "@/lib/calculos/bv-planilha";
+import type { QuebraSave } from "@/lib/calculos/versao-totais";
 import type { EstadoSaveDaLinha } from "@/app/(app)/_planilha/save-coluna";
 
 export interface ItemPlanilhaProjeto {
@@ -73,6 +74,10 @@ export interface JobPlanilhaProjeto {
   faturamentoPrevisto: number;
   /** Compromisso total do cliente. É o "valor" do job na árvore. */
   valorJob: number;
+  /** A repartição do orçado entre save usado, save gerado e custos do
+   *  job. Alimenta a divisão por função do save no card de Totais — a
+   *  mesma que a planilha interna mostra, agora somada por projeto. */
+  save: QuebraSave;
   /** `true` quando alguma linha deste job tem relação com save. É o que
    *  decide se a coluna nasce aberta na tela do projeto. */
   temSave: boolean;

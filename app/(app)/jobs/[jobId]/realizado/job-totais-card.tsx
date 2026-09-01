@@ -1,3 +1,9 @@
+"use client";
+
+// Client por causa do liga-desliga das colunas de save. Os consumidores
+// (`JobRealizadoSection` e a conferência do financeiro) já são client.
+
+import * as React from "react";
 import { Calculator } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import {
@@ -7,6 +13,11 @@ import {
 } from "@/lib/calculos/versao-totais";
 import { PainelResultado } from "@/components/painel-resultado";
 import { LegendaFechamento } from "@/components/legenda-fechamento";
+import {
+  BotaoColunasSave,
+  CabecalhoColunasSave,
+  LinhaQuebradaPorSave,
+} from "@/components/fechamento-por-save";
 import {
   type ItemPlanilhaJob,
   type ItemBv,
@@ -92,6 +103,11 @@ export function JobTotaisCard({
   // explicação nenhuma nesta tela (decisão 028 §3).
   const temSave = save.totalSaveGerado > 0 || save.totalSaveUsado > 0;
 
+  // Mesma divisão e mesmo padrão FECHADO do card da versão do orçamento —
+  // as duas telas mostram o mesmo fechamento e não podem se ler diferente.
+  const [colunasSave, setColunasSave] = React.useState(false);
+  const quebrarPorSave = temSave && colunasSave;
+
   // Planejado e realizado passam pelos blocos com BV: o número que o card
   // mostra tem que ser o MESMO que os grupos acima somaram, e a única
   // forma de garantir isso é a conta ser a mesma função.
@@ -126,21 +142,22 @@ export function JobTotaisCard({
 
       <div className="grid grid-cols-1 md:grid-cols-2">
         <div className="border-b border-border p-6 md:border-b-0 md:border-r">
-          <p className="mb-3.5 text-[13px] font-bold uppercase tracking-wider">
-            Fechamento do orçado · por tipo de custo
-          </p>
-          <div className="flex flex-col gap-1.5">
+          <div className="mb-3.5 flex items-center justify-between gap-3">
+            <p className="text-[13px] font-bold uppercase tracking-wider">
+              Fechamento do orçado · por tipo de custo
+            </p>
             {temSave && (
-              <div className="grid grid-cols-[1fr_repeat(3,minmax(84px,auto))] gap-x-3 pb-1 text-right text-[9.5px] font-bold uppercase tracking-[0.06em] text-muted-foreground">
-                <span />
-                <span>Save usado</span>
-                <span>Save gerado</span>
-                <span>Custos do job</span>
-              </div>
+              <BotaoColunasSave
+                aberto={colunasSave}
+                onAlternar={() => setColunasSave((v) => !v)}
+              />
             )}
+          </div>
+          <div className="flex flex-col gap-1.5">
+            {quebrarPorSave && <CabecalhoColunasSave />}
             {LINHAS_FECHAMENTO_POR_TIPO.map((linha) =>
-              temSave ? (
-                <LinhaQuebrada
+              quebrarPorSave ? (
+                <LinhaQuebradaPorSave
                   key={linha.chave}
                   label={linha.label}
                   usado={somarLinhaFechamento(save.saveUsado, linha.tipos)}
@@ -159,8 +176,8 @@ export function JobTotaisCard({
                 />
               ),
             )}
-            {temSave ? (
-              <LinhaQuebrada
+            {quebrarPorSave ? (
+              <LinhaQuebradaPorSave
                 label="Total dos custos"
                 usado={save.totalSaveUsado}
                 gerado={save.totalSaveGerado}
@@ -210,27 +227,17 @@ export function JobTotaisCard({
                 {formatCurrency(valorJob, moeda)}
               </span>
             </div>
+            {/* A explicação das duas bases saiu daqui e virou o segundo
+                tópico da legenda, no pé do card — igual ao da versão. */}
             {temSave && (
-              <>
-                <div className="flex items-baseline justify-between gap-3 pt-1">
-                  <span className="text-sm font-semibold text-[#5f5d57]">
-                    Saldo em save
-                  </span>
-                  <span className="whitespace-nowrap font-mono text-lg font-bold text-[#5f5d57]">
-                    {formatCurrency(save.totalSaveGerado, moeda)}
-                  </span>
-                </div>
-                <p className="pt-2 text-[10.5px] leading-relaxed text-muted-foreground">
-                  Os honorários e impostos acima correm sobre{" "}
-                  <strong>save gerado + custos do job</strong> (
-                  {formatCurrency(faturamento.base, moeda)}) — é o que esta
-                  nota cobra. O Valor do Job repete a mesma conta sobre{" "}
-                  <strong>save usado + custos do job</strong> (
-                  {formatCurrency(job.base, moeda)}): honorários{" "}
-                  {formatCurrency(job.honorarios, moeda)}, impostos{" "}
-                  {formatCurrency(job.imposto, moeda)}.
-                </p>
-              </>
+              <div className="flex items-baseline justify-between gap-3 pt-1">
+                <span className="text-sm font-semibold text-[#5f5d57]">
+                  Save gerado
+                </span>
+                <span className="whitespace-nowrap font-mono text-lg font-bold text-[#5f5d57]">
+                  {formatCurrency(save.totalSaveGerado, moeda)}
+                </span>
+              </div>
             )}
           </div>
         </div>
@@ -252,7 +259,29 @@ export function JobTotaisCard({
         />
       </div>
 
-      <LegendaFechamento custo="custo (planejado ou realizado)" />
+      <LegendaFechamento
+        custo="custo (planejado ou realizado)"
+        extra={
+          temSave ? (
+            <>
+              Os honorários e impostos do fechamento correm sobre{" "}
+              <strong className="text-foreground">
+                save gerado + custos do job
+              </strong>{" "}
+              ({formatCurrency(faturamento.base, moeda)}) — é o que esta nota
+              cobra. O{" "}
+              <strong className="text-foreground">Valor do Job</strong> repete
+              a mesma conta sobre{" "}
+              <strong className="text-foreground">
+                save usado + custos do job
+              </strong>{" "}
+              ({formatCurrency(job.base, moeda)}): honorários{" "}
+              {formatCurrency(job.honorarios, moeda)}, impostos{" "}
+              {formatCurrency(job.imposto, moeda)}.
+            </>
+          ) : undefined
+        }
+      />
     </div>
   );
 }
@@ -260,49 +289,3 @@ export function JobTotaisCard({
 /** Linha do fechamento repartida em save usado / save gerado / custos do
  *  job. Mesma forma do card de Totais da versão do orçamento — as duas
  *  telas mostram a MESMA quebra, e o design é um só. */
-function LinhaQuebrada({
-  label,
-  usado,
-  gerado,
-  custos,
-  moeda,
-  destaque,
-}: {
-  label: string;
-  usado: number;
-  gerado: number;
-  custos: number;
-  moeda: string;
-  destaque?: boolean;
-}) {
-  return (
-    <div
-      className={cn(
-        "grid grid-cols-[1fr_repeat(3,minmax(84px,auto))] items-baseline gap-x-3",
-        destaque && "mt-3 border-t border-border pt-3",
-      )}
-    >
-      <span
-        className={cn(
-          "text-sm",
-          destaque ? "font-semibold" : "text-muted-foreground",
-        )}
-      >
-        {label}
-      </span>
-      {[usado, gerado, custos].map((v, i) => (
-        <span
-          key={i}
-          className={cn(
-            "whitespace-nowrap text-right font-mono text-[12.5px]",
-            destaque ? "font-bold" : "font-semibold",
-            v === 0 && "text-muted-foreground/50",
-            i < 2 && v !== 0 && "text-[#5f5d57]",
-          )}
-        >
-          {formatCurrency(v, moeda)}
-        </span>
-      ))}
-    </div>
-  );
-}

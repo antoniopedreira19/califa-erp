@@ -482,6 +482,7 @@ export function EditorAgregado({
         faturamentoPrevisto: t.faturamentoPrevisto,
         valorJob: t.valorJob,
         subtotaisPorTipo: t.subtotaisPorTipo,
+        save: t.save,
         percentualHonorarios: t.percentualHonorarios,
         percentualImposto: orc.parametros.percentual_imposto,
       };

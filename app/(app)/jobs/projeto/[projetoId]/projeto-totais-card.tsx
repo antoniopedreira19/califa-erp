@@ -1,3 +1,9 @@
+"use client";
+
+// Client por causa do liga-desliga das colunas de save. O pai
+// (`PlanilhasDoProjeto`) já é client.
+
+import * as React from "react";
 import Link from "next/link";
 import { Calculator } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
@@ -15,6 +21,11 @@ import {
 } from "@/lib/calculos/bv-planilha";
 import { PainelResultado } from "@/components/painel-resultado";
 import { LegendaFechamento } from "@/components/legenda-fechamento";
+import {
+  BotaoColunasSave,
+  CabecalhoColunasSave,
+  LinhaQuebradaPorSave,
+} from "@/components/fechamento-por-save";
 import { type TipoCusto } from "@/lib/types";
 import type { JobPlanilhaProjeto } from "./tipos";
 import { RentabilidadeNoVao } from "@/app/(app)/_planilha/rentabilidade-inline";
@@ -134,6 +145,42 @@ export function ProjetoTotaisCard({
       number
     >,
   );
+
+  // A quebra por função do save, somada entre os jobs do projeto. As três
+  // colunas somam o subtotal do tipo em cada job, então somam o do projeto
+  // também — a propriedade vale por construção (`QuebraSave`).
+  const saveDoProjeto = React.useMemo(() => {
+    const zero = () =>
+      Object.fromEntries(TIPOS_CUSTO.map((t) => [t, 0])) as Record<
+        TipoCusto,
+        number
+      >;
+    const acc = {
+      saveUsado: zero(),
+      saveGerado: zero(),
+      custosDoJob: zero(),
+      totalSaveUsado: 0,
+      totalSaveGerado: 0,
+      totalCustosDoJob: 0,
+    };
+    for (const j of jobs) {
+      for (const t of TIPOS_CUSTO) {
+        acc.saveUsado[t] += j.save.saveUsado[t];
+        acc.saveGerado[t] += j.save.saveGerado[t];
+        acc.custosDoJob[t] += j.save.custosDoJob[t];
+      }
+      acc.totalSaveUsado += j.save.totalSaveUsado;
+      acc.totalSaveGerado += j.save.totalSaveGerado;
+      acc.totalCustosDoJob += j.save.totalCustosDoJob;
+    }
+    return acc;
+  }, [jobs]);
+
+  const temSave =
+    saveDoProjeto.totalSaveGerado > 0 || saveDoProjeto.totalSaveUsado > 0;
+  // Mesmo padrão FECHADO das planilhas internas.
+  const [colunasSave, setColunasSave] = React.useState(false);
+  const quebrarPorSave = temSave && colunasSave;
 
   const temRealizado = totalRealizado > 0;
 
@@ -350,27 +397,67 @@ export function ProjetoTotaisCard({
 
       <div className="grid grid-cols-1 border-t border-border md:grid-cols-2">
         <div className="border-b border-border p-6 md:border-b-0 md:border-r">
-          <p className="mb-3.5 text-[13px] font-bold uppercase tracking-wider">
-            Fechamento do orçado · por tipo de custo
-          </p>
-          <div className="flex flex-col gap-1.5">
-            {LINHAS_FECHAMENTO_POR_TIPO.map((linha) => (
-              <LinhaValor
-                key={linha.chave}
-                rotulo={linha.label}
-                valor={formatCurrency(
-                  somarLinhaFechamento(subtotaisPorTipo, linha.tipos),
-                  moeda,
-                )}
+          <div className="mb-3.5 flex items-center justify-between gap-3">
+            <p className="text-[13px] font-bold uppercase tracking-wider">
+              Fechamento do orçado · por tipo de custo
+            </p>
+            {temSave && (
+              <BotaoColunasSave
+                aberto={colunasSave}
+                onAlternar={() => setColunasSave((v) => !v)}
               />
-            ))}
-            <div className="mt-3 border-t border-border pt-3">
-              <LinhaValor
-                rotulo="Total dos custos"
-                valor={formatCurrency(totalOrcado, moeda)}
+            )}
+          </div>
+          <div className="flex flex-col gap-1.5">
+            {quebrarPorSave && <CabecalhoColunasSave />}
+            {LINHAS_FECHAMENTO_POR_TIPO.map((linha) =>
+              quebrarPorSave ? (
+                <LinhaQuebradaPorSave
+                  key={linha.chave}
+                  label={linha.label}
+                  usado={somarLinhaFechamento(
+                    saveDoProjeto.saveUsado,
+                    linha.tipos,
+                  )}
+                  gerado={somarLinhaFechamento(
+                    saveDoProjeto.saveGerado,
+                    linha.tipos,
+                  )}
+                  custos={somarLinhaFechamento(
+                    saveDoProjeto.custosDoJob,
+                    linha.tipos,
+                  )}
+                  moeda={moeda}
+                />
+              ) : (
+                <LinhaValor
+                  key={linha.chave}
+                  rotulo={linha.label}
+                  valor={formatCurrency(
+                    somarLinhaFechamento(subtotaisPorTipo, linha.tipos),
+                    moeda,
+                  )}
+                />
+              ),
+            )}
+            {quebrarPorSave ? (
+              <LinhaQuebradaPorSave
+                label="Total dos custos"
+                usado={saveDoProjeto.totalSaveUsado}
+                gerado={saveDoProjeto.totalSaveGerado}
+                custos={saveDoProjeto.totalCustosDoJob}
+                moeda={moeda}
                 destaque
               />
-            </div>
+            ) : (
+              <div className="mt-3 border-t border-border pt-3">
+                <LinhaValor
+                  rotulo="Total dos custos"
+                  valor={formatCurrency(totalOrcado, moeda)}
+                  destaque
+                />
+              </div>
+            )}
             <LinhaValor
               rotulo={
                 <>
