@@ -17,38 +17,17 @@
  * saldo e o "máximo aceito", e a server action usa para recusar. Duas
  * implementações da mesma conta é como o número da tela e o do servidor
  * começam a divergir.
+ *
+ * ⚠️ O VALOR da PP deixou de ser rateio do orçado em 01/09/2026: agora é
+ * `valorDaPPPorUnidade` (R$ Unit. × QT × D/M), no fim do arquivo. As
+ * funções `unitarioEfetivo`/`valorDaPP` que faziam o rateio foram
+ * removidas junto — deixá-las por perto era convite a reintroduzir a
+ * conta antiga em algum caminho novo.
  */
 
 /** Centavo é a menor unidade: toda conta arredonda para 2 casas. */
 function arredondar(v: number): number {
   return Math.round(v * 100) / 100;
-}
-
-/**
- * R$ por unidade da BASE do item — é o preço que a PP parcial usa.
- *
- * Sai de `total / quantidade`, e não do unitário gravado, de propósito: o
- * total do item é unitário × QT × D/M, então um item com D/M = 2 custa o
- * dobro por unidade entregue. Dividir o total pela quantidade embute o
- * D/M sozinho e vale para os dois casos.
- */
-export function unitarioEfetivo(
-  totalDaBase: number,
-  quantidadeDaBase: number,
-): number {
-  if (quantidadeDaBase <= 0) return 0;
-  return totalDaBase / quantidadeDaBase;
-}
-
-/** Valor de uma PP que leva `quantidade` unidades do item. */
-export function valorDaPP(
-  quantidade: number,
-  totalDaBase: number,
-  quantidadeDaBase: number,
-): number {
-  return arredondar(
-    quantidade * unitarioEfetivo(totalDaBase, quantidadeDaBase),
-  );
 }
 
 export interface PPParaSaldo {
@@ -133,4 +112,28 @@ export function proximoVencimento(iso: string): string {
   const ultimoDia = new Date(Date.UTC(proximoAno, proximoMes, 0)).getUTCDate();
   const diaFinal = Math.min(dia, ultimoDia);
   return `${proximoAno}-${String(proximoMes).padStart(2, "0")}-${String(diaFinal).padStart(2, "0")}`;
+}
+
+/**
+ * Valor de uma PP montada como a linha da planilha: R$ Unit. × QT × D/M.
+ *
+ * Substitui o rateio pelo orçado que valia até 01/09/2026. Ali o valor
+ * saía de `quantidade × (total do item / quantidade do item)`, o que
+ * embutia o D/M dentro do "unitário" e fazia o formulário chamar de
+ * unitário um número que era o total: o item de R$ 5.000 × 1 × 2
+ * aparecia como "R$ 10.000,00 por unidade do orçado".
+ *
+ * Agora os três fatores são do GP e nenhum deles é derivado do orçado. O
+ * unitário da PP pode ser diferente do orçado — é o desconto que o
+ * fornecedor deu. O que continua limitando é o saldo em R$ do item
+ * (`passaDoSaldo`), nunca a quantidade: 4 diárias a R$ 2.500 cabem num
+ * item orçado como 2 diárias a R$ 5.000.
+ */
+export function valorDaPPPorUnidade(
+  unitario: number,
+  quantidade: number,
+  diasMeses: number,
+): number {
+  if (unitario <= 0 || quantidade <= 0 || diasMeses <= 0) return 0;
+  return arredondar(unitario * quantidade * diasMeses);
 }

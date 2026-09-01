@@ -35,6 +35,7 @@ import {
   type PPAnexoMimetype,
   type PedidoCompraNaLista,
 } from "@/lib/types";
+import { valorDaPPPorUnidade } from "@/lib/calculos/pps-item";
 import {
   prefixoAnexosPedidoCompra,
   reenviarPedidoCompra,
@@ -96,7 +97,11 @@ export function EditarPPDrawer({
   const [empresaId, setEmpresaId] = React.useState("");
   const [prazoPagamento, setPrazoPagamento] = React.useState("");
   const [servico, setServico] = React.useState("");
+  // Mesmo trio da emissão (01/09/2026): a correção precisa refazer a
+  // MESMA conta, senão reenviar sem mexer em nada reescreveria o valor.
+  const [unitario, setUnitario] = React.useState("");
   const [quantidade, setQuantidade] = React.useState("");
+  const [dm, setDm] = React.useState("");
   const [especificacoes, setEspecificacoes] = React.useState("");
 
   const [anexosNovos, setAnexosNovos] = React.useState<AnexoLocal[]>([]);
@@ -109,6 +114,13 @@ export function EditarPPDrawer({
 
   const ppId = pp?.id ?? null;
 
+  /** Prévia do valor corrigido — a mesma conta que o servidor refaz. */
+  const valorCorrigido = valorDaPPPorUnidade(
+    Number(unitario.replace(",", ".")) || 0,
+    Number(quantidade.replace(",", ".")) || 0,
+    Number(dm.replace(",", ".")) || 0,
+  );
+
   React.useEffect(() => {
     if (!open || !pp) return;
     sucessoRef.current = false;
@@ -118,7 +130,12 @@ export function EditarPPDrawer({
     setEmpresaId(pp.empresa_id);
     setPrazoPagamento(pp.prazo_pagamento);
     setServico(pp.servico);
+    // Correção nasce com o que a PP já tem — diferente da emissão, onde
+    // os campos abrem vazios: aqui o GP está consertando um documento
+    // existente, não montando uma fatia nova.
+    setUnitario(String(pp.valor_unitario));
     setQuantidade(String(pp.quantidade));
+    setDm(String(pp.dias_meses));
     setEspecificacoes(pp.especificacoes ?? "");
     setAnexosNovos([]);
     setRemovidos(new Set());
@@ -236,9 +253,17 @@ export function EditarPPDrawer({
     if (!prazoPagamento) return setErro("Prazo de pagamento é obrigatório.");
     if (!servico.trim()) return setErro("Descrição do serviço é obrigatória.");
 
+    const unitNum = Number(unitario.replace(",", "."));
+    if (!Number.isFinite(unitNum) || unitNum <= 0) {
+      return setErro("R$ Unit. deve ser um número positivo.");
+    }
     const qtdNum = Number(quantidade.replace(",", "."));
     if (!Number.isFinite(qtdNum) || qtdNum <= 0) {
-      return setErro("Quantidade deve ser um número positivo.");
+      return setErro("QT deve ser um número positivo.");
+    }
+    const dmNum = Number(dm.replace(",", "."));
+    if (!Number.isFinite(dmNum) || dmNum <= 0) {
+      return setErro("D/M deve ser um número positivo.");
     }
 
     if (anexosNovos.some((a) => a.status === "uploading" || a.status === "selecionado")) {
@@ -266,7 +291,9 @@ export function EditarPPDrawer({
             empresa_id: empresaId,
             prazo_pagamento: prazoPagamento,
             servico: servico.trim(),
+            valor_unitario: unitNum,
             quantidade: qtdNum,
+            dias_meses: dmNum,
             especificacoes: especificacoes.trim() || null,
           },
           novosOk.map((a) => ({
@@ -398,14 +425,46 @@ export function EditarPPDrawer({
                 />
               </div>
 
-              <div>
-                <label className="text-xs font-medium">Quantidade</label>
-                <Input
-                  value={quantidade}
-                  onChange={(e) => setQuantidade(e.target.value)}
-                  className="no-spinner"
-                  inputMode="decimal"
-                />
+              <div className="space-y-2 rounded-lg border border-border bg-muted/20 p-3">
+                <div className="grid grid-cols-[1.5fr_0.75fr_0.75fr] gap-2.5">
+                  <div>
+                    <label className="text-xs font-medium">R$ Unit. *</label>
+                    <Input
+                      value={unitario}
+                      onChange={(e) => setUnitario(e.target.value)}
+                      className="no-spinner text-right font-mono font-semibold"
+                      inputMode="decimal"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium">QT *</label>
+                    <Input
+                      value={quantidade}
+                      onChange={(e) => setQuantidade(e.target.value)}
+                      className="no-spinner text-right font-mono font-semibold"
+                      inputMode="decimal"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium">D/M *</label>
+                    <Input
+                      value={dm}
+                      onChange={(e) => setDm(e.target.value)}
+                      className="no-spinner text-right font-mono font-semibold"
+                      inputMode="decimal"
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center justify-between border-t border-border pt-2">
+                  <span className="text-[11px] text-muted-foreground">
+                    Valor desta PP
+                  </span>
+                  <span className="font-mono text-sm font-semibold">
+                    {valorCorrigido > 0
+                      ? formatCurrency(valorCorrigido, "BRL")
+                      : "—"}
+                  </span>
+                </div>
               </div>
 
               <div>

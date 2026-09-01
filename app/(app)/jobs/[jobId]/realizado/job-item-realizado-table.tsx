@@ -1131,6 +1131,14 @@ export function JobItemRealizadoTable({
         const quantidadeOrcada = itemAtual
           ? Number(itemAtual.quantidade_orcada ?? 0)
           : 0;
+        // Decomposição do orçado — referência do cartão do formulário de
+        // PP, que mostra "R$ Unit. × QT × D/M" de onde os campos vêm.
+        const unitarioOrcado = itemAtual
+          ? Number(itemAtual.valor_unitario_orcado ?? 0)
+          : 0;
+        const dmOrcado = itemAtual
+          ? Number(itemAtual.dias_meses_orcado ?? 0)
+          : 0;
         const ppsDoItem = itemIdAtual
           ? (ppsPorItemId.get(itemIdAtual) ?? [])
           : [];
@@ -1190,6 +1198,8 @@ export function JobItemRealizadoTable({
               itemDescricao={itemAtual?.item ?? ""}
               valorOrcado={orcadoAtual}
               quantidadeOrcada={quantidadeOrcada}
+              unitarioOrcado={unitarioOrcado}
+              dmOrcado={dmOrcado}
               saldoDisponivel={saldo}
               onSuccess={(codigo) => {
                 setToast(`Pedido de Produção ${codigo} gerado com sucesso!`);

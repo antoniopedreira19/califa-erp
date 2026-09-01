@@ -339,7 +339,11 @@ export async function carregarDetalheDoJob(
 
   const ppsDoJob: PedidoCompraNaLista[] = (ppsRes.data ?? []).map((pp: any) => ({
     ...pp,
+    // numeric do Postgres chega como string: sem o Number, o formulário
+    // de correção abriria com "1.000" no D/M e "2500.00" no unitário.
+    valor_unitario: Number(pp.valor_unitario ?? 0),
     quantidade: Number(pp.quantidade),
+    dias_meses: Number(pp.dias_meses ?? 0),
     valor: Number(pp.valor),
     emitida_por_nome: pp.emitido?.nome ?? null,
     grupo_nome: grupoPorItemRealizadoId.get(pp.item_realizado_id) ?? null,

@@ -1045,7 +1045,13 @@ export interface PedidoCompra {
   fornecedor_id: string | null;
   empresa_id: string;
   servico: string;
+  /** O trio que forma o valor, espelhando as colunas do item na planilha:
+   *  valor = valor_unitario × quantidade × dias_meses (01/09/2026). O
+   *  unitário é o CONTRATADO nesta PP e pode diferir do orçado do item —
+   *  o teto é o saldo em R$, não o unitário. */
+  valor_unitario: number;
   quantidade: number;
+  dias_meses: number;
   especificacoes: string | null;
   valor: number;
   prazo_pagamento: string;
