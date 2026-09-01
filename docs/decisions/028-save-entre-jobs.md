@@ -132,15 +132,20 @@ na base do faturamento pelos R$ 10.000 que sobraram.
 A alocação acontece na **planilha do job consumidor**: ao marcar um item
 como consumidor, um seletor lista os saves disponíveis do cliente.
 
-O save é **consumível desde a abertura do job de origem**, antes de a nota
-sair. O ERP já trata `faturamento_previsto` como compromisso desde a
+> ⚠️ **SUPERADO em 01/09/2026.** O parágrafo abaixo virou histórico: o
+> save deixou de ser consumível desde a abertura e passou a depender do
+> **envio para faturamento**. Ver a nota de 2026-09-01, no fim deste
+> documento.
+
+~~O save é **consumível desde a abertura do job de origem**, antes de a
+nota sair. O ERP já trata `faturamento_previsto` como compromisso desde a
 abertura, e esperar a nota criaria uma fila que a operação não tem como
 cumprir. O seletor mostra o estado — "faturado" ou "a faturar" — para quem
-quiser esperar.
+quiser esperar.~~
 
-> ⚠️ **Aguardando confirmação do Tiago** (24/08/2026): este parágrafo é
-> recomendação, não decisão fechada. Se o save só puder ser consumido
-> depois da nota emitida, esta seção muda e a fatia 3 ganha uma trava.
+> A pergunta que este parágrafo deixou aberta em 24/08/2026 — "e se o save
+> só puder ser consumido depois?" — foi respondida duas vezes: em 27/08
+> ficou na abertura, e em 01/09 passou para o envio ao faturamento.
 
 ## 7. A sobra volta ao encerrar o job consumidor — ⚠️ APOSENTADA
 
@@ -434,12 +439,59 @@ outra coisa. Em orçamento sem save o arquivo continua idêntico.
 
 ### 5. Os dois pontos da nota de 24/08 ficaram assim
 
-- **Quando o save vira consumível:** na criação do job de origem — o
-  seletor já o oferece com o job em `aguardando_abertura`. Exercitado no
-  teste.
+- **Quando o save vira consumível:** ~~na criação do job de origem — o
+  seletor já o oferece com o job em `aguardando_abertura`~~. ⚠️ **Superado
+  em 01/09/2026**: agora é o **envio para faturamento**. Ver a nota de
+  2026-09-01.
 - **A errata pode marcar e desmarcar save:** **sim**, e é o caminho
   oficial dentro do job (decisão do Tiago em 26/08/2026, implementada em
   `save-errata-actions.ts`). O que fecha a porta é o **envio para
   faturamento**, não a abertura.
 
 O item destrutivo (`chk_fat_item_origem`) foi aprovado e aplicado.
+
+---
+
+## ⚠️ Nota de 2026-09-01 — o gatilho passou a ser o envio para faturamento
+
+Decisão do Tiago (01/09/2026): **só o save de um job já enviado para
+faturamento fica disponível para consumo.**
+
+Isso substitui o que a §6 e a nota de 26/08 diziam — que o save era
+consumível desde a abertura do job de origem, porque o
+`faturamento_previsto` já é compromisso do cliente. Compromisso deixou de
+bastar: enquanto o job não é enviado, **errata e save ainda podem mexer no
+número que geraria o crédito**. Depois do envio o valor está congelado
+(`lib/data/envio-faturamento.ts`), e é só aí que o saldo para de se mexer.
+
+### O gatilho é o envio — e ele é o ÚNICO
+
+O teste é a existência de linha em `jobs_envio_faturamento`, o mesmo que
+`jobJaEnviadoParaFaturamento` faz no TypeScript e que agora
+`vw_saves_por_job` faz no banco (migration `20260901100001`).
+
+**Uma vez disponível, o saldo continua disponível.** Nada depois do envio
+tira o crédito da oferta:
+
+| Depois do envio | O saldo continua sendo oferecido? |
+|---|---|
+| Nota emitida — job faturado | **Sim.** Faturar não é status de job e não mexe no envio. |
+| Recebimento realizado | **Sim.** Contas a receber não toca em `jobs` nem no envio. |
+| Job encerrado | **Sim.** `encerrado` não está entre os status recusados. |
+
+Conferido no banco e no código em 01/09/2026:
+
+- dos seis valores de `job_status`, a view recusa apenas
+  `rejeitado_financeiro` e `cancelado` — `encerrado` passa;
+- o único `delete` em `jobs_envio_faturamento` (`actions-faturamento.ts`)
+  é o rollback de um envio que falhou ao gravar as parcelas, ou seja, de
+  um envio que não chegou a existir;
+- o encerramento (`actions-encerramento.ts`) lê o envio e só faz
+  `update status`; não apaga nada nem mexe em `em_save`.
+
+### O que não muda
+
+Consumo **já gravado** continua valendo: a view monta a oferta, não desfaz
+alocação. Na virada da regra, o único saldo que saiu do seletor foi o do
+JOB-0021 (R$ 1.000,00, sem envio) — e os R$ 13.000,00 já consumidos dele
+em 27/08 seguem de pé.

@@ -2041,7 +2041,9 @@ nada fica reservado.
 - Linha em save não oferece **BV nem PP** na calha — os dois já eram
   recusados no banco; agora a calha nem os mostra.
 - O card de Totais do job ganhou a mesma quebra em três colunas da tela
-  da versão (save usado · save gerado · custos do job), o "Saldo em save"
+  da versão (save usado · save gerado · custos do job) — ⚠️ desde
+  01/09/2026 **fechadas por padrão**, atrás do botão "Save", e a linha
+  "Saldo em save" passou a se chamar **"Save gerado"**. O "Saldo em save"
   e o parágrafo que explica a divergência entre os dois totais.
 
 ### Achados do teste ponta a ponta (27/08/2026)
@@ -2125,3 +2127,25 @@ nomeado no botão de informações e escreve a descrição na mão.
 
 **Verificação:** `tsc`, `lint` e `build` limpos. Conferência logada
 combinada para o fim das três entregas de Contas a Receber.
+
+---
+
+## ⚠️ Nota de 2026-09-01 — save no módulo de Jobs
+
+O que mudou nas telas daqui. O detalhe completo está na nota de
+2026-09-01 do `HANDOFF_ORCAMENTO.md`; aqui fica só o que é de Jobs.
+
+- **Visão agregada do projeto ganhou a coluna Save**, em leitura. O
+  liga-desliga fica no menu "Exibir" da barra do topo, e não colado na
+  tabela como nas planilhas internas: o card de cada job é
+  `overflow-hidden` e uma alça em `right-full` seria cortada. O estado é
+  um só para a tela — o card de Totais divide o `colgroup` com os blocos e
+  não teria qual alça seguir.
+- **A divisão do fechamento por função do save** agora existe na planilha
+  interna E na agregada, com botão nas duas, **fechada por padrão**.
+- **"Saldo em save" virou "Save gerado"** e a explicação das duas bases
+  virou o segundo tópico da legenda, igual à tela da versão.
+- **O save só é oferecido depois do envio para faturamento** (regra nova).
+  Ponto que importa na operação: **o saldo não expira** — segue oferecido
+  depois da nota emitida, do recebimento e do **encerramento do job**.
+  Detalhe e prova na nota de 2026-09-01 da decisão 028.
