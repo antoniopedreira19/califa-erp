@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { DOCUMENTO_TIPOS } from "@/lib/types";
 import { gerarCodigoPP } from "@/lib/codigos/pedidos-compra";
+import { listActiveMembers } from "@/lib/data/members";
 import {
   valorDaPPPorUnidade,
   saldoDoItem,
@@ -539,13 +540,18 @@ async function finalizarPedidoCompraImpl(
       .eq("tenant_id", session.activeTenant.id)
       .eq("ativo", true)
       .maybeSingle(),
+    // O responsável precisa ser membro ATIVO do tenant, e a checagem usa a
+    // MESMA fonte que a tela usa para montar a lista — senão o formulário
+    // oferece nomes que o servidor recusa.
+    //
+    // ⚠️ Corrigido em 01/09/2026: filtrava `profiles.tenant_id`, coluna que
+    // não existe. O PostgREST devolvia erro, `data` vinha nulo e TODA PP de
+    // Verba de Produção morria em "Responsável inválido ou não encontrado".
+    // O vínculo com o tenant mora em `tenant_members`.
     d.verba_producao
-      ? supabase
-          .from("profiles")
-          .select("id, nome")
-          .eq("id", d.responsavel_verba_id as string)
-          .eq("tenant_id", session.activeTenant.id)
-          .maybeSingle()
+      ? listActiveMembers(session.activeTenant.id).then((membros) => ({
+          data: membros.find((m) => m.id === d.responsavel_verba_id) ?? null,
+        }))
       : Promise.resolve({ data: null }),
   ]);
 
