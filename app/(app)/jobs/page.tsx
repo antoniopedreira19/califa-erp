@@ -15,6 +15,11 @@ export default async function JobsPage() {
       .from("jobs")
       .select(
         "id, codigo, nome, status, valor_total, data_inicio_prevista, empresa_id, projeto_id, " +
+          // Produto e Regional saem do PRÓPRIO job, não do projeto (decisão
+          // do Tiago, 01/09/2026): os dois divergem na base — o JOB-0003 é
+          // "Ativação de marca" num projeto "Pevetech".
+          "produto, regional_id, responsavel_id, " +
+          "regional:regionais(nome), " +
           "projeto:projetos(codigo, nome, cliente:clientes(nome_fantasia)), " +
           "responsavel:profiles!responsavel_id(nome), " +
           "empresa:empresas(id, razao_social, nome_fantasia)",
@@ -34,6 +39,10 @@ export default async function JobsPage() {
     valor_total: r.valor_total !== null ? Number(r.valor_total) : null,
     data_inicio_prevista: r.data_inicio_prevista,
     projeto_id: r.projeto_id,
+    produto: r.produto ?? null,
+    regional_id: r.regional_id ?? null,
+    regional_nome: r.regional?.nome ?? null,
+    responsavel_id: r.responsavel_id ?? null,
     projeto_codigo: r.projeto?.codigo ?? null,
     projeto_nome: r.projeto?.nome ?? null,
     cliente_nome: r.projeto?.cliente?.nome_fantasia ?? null,
@@ -72,7 +81,11 @@ export default async function JobsPage() {
           </p>
         </div>
       ) : (
-        <JobsList rows={rows} empresas={empresas} />
+        <JobsList
+          rows={rows}
+          empresas={empresas}
+          usuarioId={session.profile.id}
+        />
       )}
     </div>
   );

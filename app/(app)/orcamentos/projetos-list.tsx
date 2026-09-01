@@ -15,6 +15,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { Cliente, ProjetoStatus } from "@/lib/types";
+import { ChaveMeusTodos } from "@/components/ui/chave-meus-todos";
 import { projetoStatusLabel } from "@/lib/types";
 
 export interface ProjetoRow {
@@ -47,6 +48,9 @@ export interface ProjetoRow {
 interface Props {
   projetos: ProjetoRow[];
   clientes: Pick<Cliente, "id" | "nome_fantasia">[];
+  /** Projetos em que o usuário é responsável ou produtor de algum job —
+   *  a regra de "Meus" desta lista. Vem pronta do servidor. */
+  meusProjetoIds: string[];
 }
 
 function statusBadgeClasses(status: ProjetoStatus): string {
@@ -76,8 +80,11 @@ function CelulaFunil({ valor }: { valor: number }) {
   );
 }
 
-export function ProjetosList({ projetos, clientes }: Props) {
+export function ProjetosList({ projetos, clientes, meusProjetoIds }: Props) {
   const router = useRouter();
+  // Meus é o padrão, igual à lista de Jobs: quem abre quer o próprio
+  // trabalho, e "Todos" fica a um clique.
+  const [meus, setMeus] = React.useState(true);
   const [busca, setBusca] = React.useState("");
   const [clienteFiltro, setClienteFiltro] = React.useState<string>("todos");
   const [produtoFiltro, setProdutoFiltro] = React.useState<string>("todos");
@@ -113,9 +120,15 @@ export function ProjetosList({ projetos, clientes }: Props) {
     return [...anos].sort((a, b) => b.localeCompare(a));
   }, [projetos]);
 
+  const meusIds = React.useMemo(
+    () => new Set(meusProjetoIds),
+    [meusProjetoIds],
+  );
+
   const filtrados = React.useMemo(() => {
     const q = busca.trim().toLowerCase();
     return projetos.filter((p) => {
+      if (meus && !meusIds.has(p.id)) return false;
       if (clienteFiltro !== "todos" && p.cliente_id !== clienteFiltro) return false;
       if (produtoFiltro !== "todos" && p.produto_id !== produtoFiltro) return false;
       if (
@@ -133,11 +146,24 @@ export function ProjetosList({ projetos, clientes }: Props) {
       }
       return true;
     });
-  }, [projetos, busca, clienteFiltro, produtoFiltro, regionalFiltro, anoFiltro, statusFiltro]);
+  }, [
+    projetos,
+    meus,
+    meusIds,
+    busca,
+    clienteFiltro,
+    produtoFiltro,
+    regionalFiltro,
+    anoFiltro,
+    statusFiltro,
+  ]);
 
   return (
     <div className="space-y-4">
+      {/* A chave "Meus/Todos" abre a barra, na mesma posição da lista de
+          Jobs — o recorte é a primeira decisão de quem chega. */}
       <div className="flex flex-wrap items-center gap-3">
+        <ChaveMeusTodos meus={meus} onChange={setMeus} />
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
@@ -290,7 +316,9 @@ export function ProjetosList({ projetos, clientes }: Props) {
             {filtrados.length === 0 && (
               <tr>
                 <td colSpan={12} className="px-4 py-10 text-center text-sm text-muted-foreground">
-                  Nenhum projeto encontrado com esses filtros.
+                  {meus
+                    ? "Nenhum projeto com esse recorte. Você não é responsável nem produtor de nenhum job dos projetos que combinam com os filtros."
+                    : "Nenhum projeto encontrado com esses filtros."}
                 </td>
               </tr>
             )}

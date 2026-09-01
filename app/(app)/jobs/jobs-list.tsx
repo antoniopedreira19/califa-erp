@@ -12,6 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ChaveMeusTodos } from "@/components/ui/chave-meus-todos";
 import { cn } from "@/lib/utils";
 import { jobStatusLabel, type JobStatus } from "@/lib/types";
 
@@ -23,6 +24,12 @@ export interface JobRow {
   valor_total: number | null;
   data_inicio_prevista: string | null;
   projeto_id: string;
+  /** Produto e Regional do PRÓPRIO job — não do projeto. Divergem na
+   *  base, e é o do job que descreve o trabalho desta linha. */
+  produto: string | null;
+  regional_id: string | null;
+  regional_nome: string | null;
+  responsavel_id: string | null;
   projeto_codigo: string | null;
   projeto_nome: string | null;
   cliente_nome: string | null;
@@ -80,19 +87,45 @@ interface GrupoProjeto {
 export function JobsList({
   rows,
   empresas,
+  usuarioId,
 }: {
   rows: JobRow[];
   empresas: { id: string; razao_social: string; nome_fantasia: string | null }[];
+  /** Quem está logado — define o recorte "Meus". */
+  usuarioId: string;
 }) {
   const router = useRouter();
-  const [statusAtivos, setStatusAtivos] = React.useState<Set<JobStatus>>(
-    new Set(),
-  );
+  // Meus é o padrão: quem abre a lista quer o próprio trabalho.
+  const [meus, setMeus] = React.useState(true);
+  // Status virou seleção ÚNICA (design 01/09/2026). Eram cinco pílulas
+  // combináveis; ocupavam a barra inteira e não deixavam espaço para
+  // Produto e Regional.
+  const [statusFiltro, setStatusFiltro] = React.useState<string>("todos");
+  const [produtoFiltro, setProdutoFiltro] = React.useState<string>("todos");
+  const [regionalFiltro, setRegionalFiltro] = React.useState<string>("todas");
   const [busca, setBusca] = React.useState("");
   // Grupos nascem abertos, como no design. Guardamos os FECHADOS pra não
   // precisar semear o state com os ids dos projetos no mount.
   const [fechadosIds, setFechadosIds] = React.useState<Set<string>>(new Set());
   const [empresaFiltro, setEmpresaFiltro] = React.useState<string>("todas");
+
+  /** Produtos e regionais que EXISTEM nos jobs desta tela — oferecer
+   *  opção que não filtra nada é convite a um resultado vazio. */
+  const produtosOpcoes = React.useMemo(() => {
+    const set = new Set<string>();
+    for (const r of rows) if (r.produto?.trim()) set.add(r.produto.trim());
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "pt-BR"));
+  }, [rows]);
+
+  const regionaisOpcoes = React.useMemo(() => {
+    const mapa = new Map<string, string>();
+    for (const r of rows) {
+      if (r.regional_id && r.regional_nome) mapa.set(r.regional_id, r.regional_nome);
+    }
+    return Array.from(mapa, ([id, nome]) => ({ id, nome })).sort((a, b) =>
+      a.nome.localeCompare(b.nome, "pt-BR"),
+    );
+  }, [rows]);
 
   const gruposPorProjeto = React.useMemo(() => {
     const map = new Map<string, JobRow[]>();
@@ -106,11 +139,23 @@ export function JobsList({
 
   const grupos = React.useMemo<GrupoProjeto[]>(() => {
     const q = busca.trim().toLowerCase();
+    // "Meus" também conta como filtro ativo: com ele ligado o grupo tem
+    // que abrir, senão esconde justamente o job que sobrou.
     const filtroAtivo =
-      statusAtivos.size > 0 || q !== "" || empresaFiltro !== "todas";
+      meus ||
+      statusFiltro !== "todos" ||
+      produtoFiltro !== "todos" ||
+      regionalFiltro !== "todas" ||
+      q !== "" ||
+      empresaFiltro !== "todas";
 
     function combina(r: JobRow): boolean {
-      if (statusAtivos.size > 0 && !statusAtivos.has(r.status)) return false;
+      if (meus && r.responsavel_id !== usuarioId) return false;
+      if (statusFiltro !== "todos" && r.status !== statusFiltro) return false;
+      if (produtoFiltro !== "todos" && (r.produto?.trim() ?? "") !== produtoFiltro)
+        return false;
+      if (regionalFiltro !== "todas" && r.regional_id !== regionalFiltro)
+        return false;
       if (empresaFiltro !== "todas" && r.empresa_id !== empresaFiltro)
         return false;
       if (q === "") return true;
@@ -148,16 +193,17 @@ export function JobsList({
     }
 
     return out;
-  }, [gruposPorProjeto, statusAtivos, busca, empresaFiltro, fechadosIds]);
-
-  function toggleStatus(s: JobStatus) {
-    setStatusAtivos((prev) => {
-      const next = new Set(prev);
-      if (next.has(s)) next.delete(s);
-      else next.add(s);
-      return next;
-    });
-  }
+  }, [
+    gruposPorProjeto,
+    meus,
+    usuarioId,
+    statusFiltro,
+    produtoFiltro,
+    regionalFiltro,
+    busca,
+    empresaFiltro,
+    fechadosIds,
+  ]);
 
   function toggleGrupo(id: string) {
     setFechadosIds((prev) => {
@@ -170,27 +216,82 @@ export function JobsList({
 
   return (
     <div className="space-y-4">
-      {/* Chips de filtro + empresa + busca */}
+      {/* Meus/Todos · Status · Produto · Regional · Empresa · busca.
+          A chave vem primeiro nas duas listas; os três Selects do meio
+          substituíram as pílulas de status, que ocupavam a barra inteira. */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
-          {STATUS_FILTROS.map((s) => {
-            const ativo = statusAtivos.has(s);
-            return (
-              <button
-                key={s}
-                type="button"
-                onClick={() => toggleStatus(s)}
+          <ChaveMeusTodos meus={meus} onChange={setMeus} />
+          <Select value={statusFiltro} onValueChange={setStatusFiltro}>
+            <SelectTrigger
+              className={cn(
+                "h-9 w-[190px] px-2.5 text-[13px]",
+                statusFiltro !== "todos" && "border-california-red",
+              )}
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent
+              side="bottom"
+              avoidCollisions={false}
+              className="w-[--radix-select-trigger-width]"
+            >
+              <SelectItem value="todos">Todos os status</SelectItem>
+              {STATUS_FILTROS.map((s) => (
+                <SelectItem key={s} value={s}>
+                  {jobStatusLabel(s)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {produtosOpcoes.length > 0 && (
+            <Select value={produtoFiltro} onValueChange={setProdutoFiltro}>
+              <SelectTrigger
                 className={cn(
-                  "rounded-full border px-[13px] py-[5px] text-xs font-semibold transition-colors",
-                  ativo
-                    ? "border-california-red bg-california-red text-white"
-                    : "border-border bg-white text-muted-foreground hover:border-california-red/40 hover:text-california-red",
+                  "h-9 w-[180px] px-2.5 text-[13px]",
+                  produtoFiltro !== "todos" && "border-california-red",
                 )}
               >
-                {jobStatusLabel(s)}
-              </button>
-            );
-          })}
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent
+                side="bottom"
+                avoidCollisions={false}
+                className="w-[--radix-select-trigger-width]"
+              >
+                <SelectItem value="todos">Todos os produtos</SelectItem>
+                {produtosOpcoes.map((p) => (
+                  <SelectItem key={p} value={p}>
+                    {p}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          {regionaisOpcoes.length > 0 && (
+            <Select value={regionalFiltro} onValueChange={setRegionalFiltro}>
+              <SelectTrigger
+                className={cn(
+                  "h-9 w-[175px] px-2.5 text-[13px]",
+                  regionalFiltro !== "todas" && "border-california-red",
+                )}
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent
+                side="bottom"
+                avoidCollisions={false}
+                className="w-[--radix-select-trigger-width]"
+              >
+                <SelectItem value="todas">Todas as regionais</SelectItem>
+                {regionaisOpcoes.map((r) => (
+                  <SelectItem key={r.id} value={r.id}>
+                    {r.nome}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {empresas.length > 0 && (
@@ -227,7 +328,7 @@ export function JobsList({
 
       {/* Tabela */}
       <div className="overflow-x-auto rounded-2xl border border-border bg-card shadow-soft">
-        <table className="w-full min-w-[1120px] border-collapse text-sm">
+        <table className="w-full min-w-[1320px] border-collapse text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/60 text-left text-xs font-semibold uppercase tracking-[0.06em] text-muted-foreground">
               <th className="w-8 px-2 py-3" aria-label="Expandir" />
@@ -235,6 +336,8 @@ export function JobsList({
               <th className="px-4 py-3 font-semibold">Nome</th>
               <th className="px-4 py-3 text-center font-semibold">Empresa</th>
               <th className="px-4 py-3 font-semibold">Projeto</th>
+              <th className="px-4 py-3 font-semibold">Produto</th>
+              <th className="px-4 py-3 font-semibold">Regional</th>
               <th className="px-4 py-3 font-semibold">Cliente</th>
               <th className="px-4 py-3 font-semibold">Responsável</th>
               <th className="px-4 py-3 text-center font-semibold">Início</th>
@@ -361,6 +464,12 @@ export function JobsList({
                         <span>{j.projeto_nome ?? ""}</span>
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
+                        {j.produto?.trim() ? j.produto : "—"}
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
+                        {j.regional_nome ?? "—"}
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
                         {j.cliente_nome ?? "—"}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
@@ -390,9 +499,28 @@ export function JobsList({
         </table>
 
         {grupos.length === 0 && (
-          <p className="px-4 py-12 text-center text-sm text-muted-foreground">
-            Nenhum job encontrado com esses filtros.
-          </p>
+          <div className="flex flex-col items-center gap-2 px-4 py-12 text-center">
+            <p className="text-sm font-semibold">Nenhum job com esse recorte</p>
+            <p className="text-xs text-muted-foreground">
+              {meus
+                ? "Você não é responsável por nenhum job que combine com os filtros."
+                : "Nenhum job combina com os filtros escolhidos."}
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setMeus(false);
+                setStatusFiltro("todos");
+                setProdutoFiltro("todos");
+                setRegionalFiltro("todas");
+                setEmpresaFiltro("todas");
+                setBusca("");
+              }}
+              className="mt-1 rounded-lg border border-border bg-white px-3.5 py-1.5 text-xs font-semibold hover:border-california-red/40 hover:text-california-red"
+            >
+              Ver todos os jobs
+            </button>
+          </div>
         )}
       </div>
     </div>

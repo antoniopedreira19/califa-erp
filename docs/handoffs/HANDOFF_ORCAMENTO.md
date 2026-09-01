@@ -2610,3 +2610,30 @@ explicado na nota de 2026-09-01 daquele documento, inclusive o ponto que
 mais importa na operação: **o saldo não expira**. Uma vez oferecido, ele
 segue oferecido depois da nota emitida, depois do recebimento e depois do
 encerramento do job.
+
+---
+
+## ⚠️ Nota de 2026-09-01 — a chave "Meus / Todos" na lista de projetos
+
+Decisão [036](../decisions/036-filtro-meus-e-produto-regional-nas-listas.md),
+do design `Listas - Filtro Meus e Colunas Produto Regional`.
+
+A barra de `/orcamentos` passa a abrir com a chave **Meus / Todos**
+(`components/ui/chave-meus-todos.tsx`), primeiro item, à esquerda da
+busca — a mesma posição e o mesmo componente da lista de Jobs.
+
+**Meus é o padrão.** Um projeto é "meu" quando eu sou **responsável ou
+produtor de algum job** dele: mesma ideia de "meu" das duas telas. São 7
+dos 18 projetos ativos hoje.
+
+⚠️ **Projeto que ainda não gerou job nunca é "meu"** — ninguém foi
+designado nele. Quem acabou de criar um projeto precisa clicar em "Todos"
+para encontrá-lo. Foi decisão consciente do Tiago, entre três regras
+candidatas medidas com os números reais.
+
+O `meusProjetoIds` sai da **query de jobs que a página já fazia** para
+montar o funil, sem consulta nova (`docs/PERFORMANCE.md`).
+
+**O resto da barra não mudou.** O mock do design mostra ali um filtro de
+"empresas" que **não** foi adicionado, e omite o de **Ano**, que
+permanece — a instrução foi usar só os filtros novos e manter o resto.
