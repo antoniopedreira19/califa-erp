@@ -51,6 +51,10 @@ export default async function ProjetosPage() {
   // Regionais do projeto: N:N, então vêm numa query própria em vez de
   // embed na listagem (o embed devolveria a linha do projeto repetida).
   const regionaisMap = new Map<string, { id: string; nome: string }[]>();
+  /** Projetos em que EU sou responsável ou produtor de algum job — a regra
+   *  de "Meus" desta lista (decisão do Tiago, 01/09/2026). Projeto que
+   *  ainda não gerou job nunca é "meu": ninguém foi designado nele. */
+  const meusProjetoIds = new Set<string>();
 
   if (projetoIds.length > 0) {
     const [orcsRes, jobsRes, vinculosRes] = await Promise.all([
@@ -61,7 +65,12 @@ export default async function ProjetosPage() {
         .eq("tenant_id", session.activeTenant.id),
       supabase
         .from("jobs")
-        .select("orcamento_id, status, created_at")
+        // `projeto_id`, `responsavel_id` e `produtor_id` entram para o
+        // recorte "Meus" da lista — aproveitando esta query em vez de
+        // abrir uma segunda (ver docs/PERFORMANCE.md).
+        .select(
+          "orcamento_id, status, created_at, projeto_id, responsavel_id, produtor_id",
+        )
         .in("projeto_id", projetoIds)
         .eq("tenant_id", session.activeTenant.id),
       supabase
@@ -79,6 +88,13 @@ export default async function ProjetosPage() {
       const atuais = jobsPorOrcamento.get(j.orcamento_id) ?? [];
       atuais.push({ status: j.status as JobStatus, created_at: j.created_at });
       jobsPorOrcamento.set(j.orcamento_id, atuais);
+      if (
+        j.projeto_id &&
+        (j.responsavel_id === session.profile.id ||
+          j.produtor_id === session.profile.id)
+      ) {
+        meusProjetoIds.add(j.projeto_id);
+      }
     }
 
     for (const o of ((orcsRes.data ?? []) as any[])) {
@@ -173,7 +189,11 @@ export default async function ProjetosPage() {
           }
         />
       ) : (
-        <ProjetosList projetos={projetos} clientes={clientes} />
+        <ProjetosList
+          projetos={projetos}
+          clientes={clientes}
+          meusProjetoIds={Array.from(meusProjetoIds)}
+        />
       )}
     </div>
   );
