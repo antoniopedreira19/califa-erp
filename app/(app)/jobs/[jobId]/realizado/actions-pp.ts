@@ -8,7 +8,7 @@ import { logAuditEvent } from "@/lib/auth/audit";
 import { DOCUMENTO_TIPOS } from "@/lib/types";
 import { gerarCodigoPP } from "@/lib/codigos/pedidos-compra";
 import {
-  valorDaPP,
+  valorDaPPPorUnidade,
   saldoDoItem,
   passaDoSaldo,
   parcelasFecham,
@@ -78,10 +78,13 @@ const dadosBaseSchema = z.object({
   // financeiro e as views leem hoje.
   prazo_pagamento: dataSchema,
   servico: z.string().trim().min(1).max(500),
-  // Quantidade do item que ESTA PP leva. Desde 17/08/2026 é ela que
-  // define o valor da PP (quantidade × R$/un do realizado), então deixou
-  // de ser texto solto do documento.
+  // O trio que define o valor da PP, espelhando as colunas do item na
+  // planilha (01/09/2026). Antes só vinha `quantidade` e o valor era
+  // rateado do orçado — o que embutia o D/M dentro do "unitário". Agora
+  // os três são do GP e o valor é o produto deles.
+  valor_unitario: z.number().positive(),
   quantidade: z.number().positive(),
+  dias_meses: z.number().positive(),
   especificacoes: z.string().max(2000).nullable().optional(),
   // Uma linha por parcela, sempre — PP sem parcelamento manda 1.
   parcelas: z
@@ -110,7 +113,9 @@ const dadosCamposBase = z.object({
   empresa_id: z.string().uuid(),
   prazo_pagamento: dataSchema,
   servico: z.string().trim().min(1).max(500),
+  valor_unitario: z.number().positive(),
   quantidade: z.number().positive(),
+  dias_meses: z.number().positive(),
   especificacoes: z.string().max(2000).nullable().optional(),
 });
 
@@ -427,19 +432,22 @@ async function finalizarPedidoCompraImpl(
   const d = dadosParsed.data;
 
   // ---- Valor da PP e saldo do item ----
-  // O valor é a fatia que ESTA PP leva: quantidade × R$/un do ORÇADO. A
-  // soma das PPs não canceladas do item não pode passar do orçado — a
-  // mesma conta que o painel "Destrinchar realizado" mostra, e que o
-  // trigger `pp_valida_saldo_do_item` reforça no banco.
-  const valor = valorDaPP(
+  // O valor é o produto do trio que o GP digitou: R$ Unit. × QT × D/M. É
+  // recalculado aqui de propósito — o cliente manda os três fatores, nunca
+  // o total. O que limita é o SALDO EM R$: a soma das PPs não canceladas
+  // do item não pode passar do orçado, a mesma conta que o painel
+  // "Destrinchar realizado" mostra e que o trigger
+  // `pp_valida_saldo_do_item` reforça no banco. A quantidade NÃO limita:
+  // 4 diárias a R$ 2.500 cabem num item orçado como 2 a R$ 5.000.
+  const valor = valorDaPPPorUnidade(
+    d.valor_unitario,
     d.quantidade,
-    item.total_orcado,
-    item.quantidade_orcada,
+    d.dias_meses,
   );
   if (valor <= 0) {
     return {
       ok: false,
-      message: "Quantidade inválida: o valor da PP ficaria zerado.",
+      message: "R$ Unit., QT e D/M inválidos: o valor da PP ficaria zerado.",
     };
   }
 
@@ -573,7 +581,9 @@ async function finalizarPedidoCompraImpl(
     responsavel_verba_id: d.verba_producao ? (d.responsavel_verba_id ?? null) : null,
     empresa_id: d.empresa_id,
     servico: d.servico,
+    valor_unitario: d.valor_unitario,
     quantidade: d.quantidade,
+    dias_meses: d.dias_meses,
     especificacoes: d.especificacoes ?? null,
     valor,
     // Continua sendo o vencimento da 1ª parcela: é o que as views do
@@ -873,7 +883,9 @@ async function finalizarPedidoCompraImpl(
     metadata: {
       pp_codigo: codigo,
       valor,
+      valor_unitario: d.valor_unitario,
       quantidade: d.quantidade,
+      dias_meses: d.dias_meses,
       parcelas: parcelasFinais.length,
       saldo_do_item_antes: saldo,
       verba_producao: d.verba_producao,
@@ -1236,18 +1248,22 @@ export async function reenviarPedidoCompra(
 
   const projeto = projetoRes.data as ProjetoEnriquecido;
   const orcamento = orcRes.data as { codigo: string } | null;
-  // Valor recalculado da quantidade corrigida, e conferido contra o saldo
-  // SEM contar esta PP — ela já ocupa o saldo desde a emissão, e não pode
+  // Valor recalculado do trio corrigido, e conferido contra o saldo SEM
+  // contar esta PP — ela já ocupa o saldo desde a emissão, e não pode
   // competir consigo mesma.
-  const valor = valorDaPP(
+  //
+  // Tem que ser a MESMA conta da emissão: enquanto aqui rateava o orçado
+  // e lá multiplicava o trio, corrigir uma PP de R$ 2.500 × 1 × 2 sem
+  // mexer em número nenhum a reescreveria como R$ 10.000 sozinha.
+  const valor = valorDaPPPorUnidade(
+    d.valor_unitario,
     d.quantidade,
-    item.total_orcado,
-    item.quantidade_orcada,
+    d.dias_meses,
   );
   if (valor <= 0) {
     return {
       ok: false,
-      message: "Quantidade inválida: o valor da PP ficaria zerado.",
+      message: "R$ Unit., QT e D/M inválidos: o valor da PP ficaria zerado.",
     };
   }
 
@@ -1371,7 +1387,9 @@ export async function reenviarPedidoCompra(
       fornecedor_id: d.fornecedor_id,
       empresa_id: d.empresa_id,
       servico: d.servico,
+      valor_unitario: d.valor_unitario,
       quantidade: d.quantidade,
+      dias_meses: d.dias_meses,
       especificacoes: d.especificacoes ?? null,
       valor,
       prazo_pagamento: d.prazo_pagamento,

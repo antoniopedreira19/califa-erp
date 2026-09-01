@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { X, Upload, FileText, Image as ImageIcon, Trash2 } from "lucide-react";
+import { X, Upload, FileText, Image as ImageIcon, Trash2, AlertTriangle } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Dialog, DrawerContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
@@ -24,7 +24,7 @@ import {
   type DocumentoDoAnexo,
 } from "@/lib/types";
 import {
-  valorDaPP,
+  valorDaPPPorUnidade,
   dividirEmParcelas,
   parcelasFecham,
   passaDoSaldo,
@@ -50,6 +50,11 @@ interface Props {
    *  agora o realizado é justamente o que estas PPs vão construir. */
   valorOrcado: number;
   quantidadeOrcada: number;
+  /** Decomposição do orçado do item — R$ Unit. e D/M, para o cartão
+   *  mostrar de onde os três campos vêm. São referência apenas: os
+   *  campos da PP nascem vazios (decisão do Tiago, 01/09/2026). */
+  unitarioOrcado: number;
+  dmOrcado: number;
   /** Quanto do orçado ainda não está em PP. É o teto desta PP. */
   saldoDisponivel: number;
   onSuccess?: (codigo: string) => void;
@@ -96,6 +101,19 @@ function dateToIso(date: Date | null): string {
   return date ? format(date, "yyyy-MM-dd") : "";
 }
 
+/** Fator (QT, D/M) sem zeros à direita: "2", não "2,000". */
+function formatFator(n: number): string {
+  return n.toLocaleString("pt-BR", { maximumFractionDigits: 3 });
+}
+
+/** Dinheiro sem o "R$" — a moeda já está no rótulo da coluna. */
+function formatUnitario(n: number): string {
+  return n.toLocaleString("pt-BR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
 /** Aceita "1.234,56" e "1234.56", como o resto das grades do sistema. */
 function parseNumeroLocal(bruto: string): number {
   const s = bruto.trim();
@@ -119,6 +137,8 @@ export function GerarPPDrawer({
   itemDescricao,
   valorOrcado,
   quantidadeOrcada,
+  unitarioOrcado,
+  dmOrcado,
   saldoDisponivel,
   onSuccess,
 }: Props) {
@@ -141,8 +161,15 @@ export function GerarPPDrawer({
   // parciais, herdar o nome e a quantidade do item induzia a pedir o item
   // inteiro para um fornecedor só, que é o oposto do que a tela faz.
   const [servico, setServico] = React.useState<string>("");
-  const [quantidade, setQuantidade] = React.useState<string>("");
   const [especificacoes, setEspecificacoes] = React.useState<string>("");
+  // O trio que define o valor da PP, espelhando as colunas do item na
+  // planilha (01/09/2026). Nascem VAZIOS de propósito: preenchidos com o
+  // orçado, induziriam a pedir o item inteiro a um fornecedor só, que é o
+  // oposto do que a tela de PPs parciais faz. A decomposição do orçado
+  // fica no cartão de cima, como referência do que digitar.
+  const [unitario, setUnitario] = React.useState<string>("");
+  const [quantidade, setQuantidade] = React.useState<string>("");
+  const [dm, setDm] = React.useState<string>("");
   // Parcelas: sempre ao menos uma, e a primeira acompanha o "Prazo de
   // pagamento" — ela É o prazo, não uma linha extra.
   const [parcelas, setParcelas] = React.useState<ParcelaLocal[]>([]);
@@ -170,7 +197,9 @@ export function GerarPPDrawer({
     setEmpresaId(defaultEmpresaId);
     setPrazoPagamento(defaultPrazoPagamento());
     setServico("");
+    setUnitario("");
     setQuantidade("");
+    setDm("");
     setEspecificacoes("");
     setParcelas([]);
     setAnexos([]);
@@ -303,12 +332,15 @@ export function GerarPPDrawer({
     }
   }
 
-  // ---- Valor da PP: quantidade × R$/un do orçado ----
-  // Não existe campo de valor. A PP é uma fatia do orçado do item, e
-  // é a quantidade que diz o tamanho da fatia (design "PPs Parciais").
+  // ---- Valor da PP: R$ Unit. × QT × D/M ----
+  // A PP é montada como a linha da planilha. Os três fatores são do GP —
+  // nenhum é derivado do orçado, então o unitário pode ser o desconto que
+  // o fornecedor deu. O que limita é o saldo em R$, nunca a quantidade.
+  const unitNum = parseNumeroLocal(unitario);
   const qtdNum = parseNumeroLocal(quantidade);
-  const valorPP =
-    qtdNum > 0 ? valorDaPP(qtdNum, valorOrcado, quantidadeOrcada) : 0;
+  const dmNum = parseNumeroLocal(dm);
+  const valorPP = valorDaPPPorUnidade(unitNum, qtdNum, dmNum);
+  const excedeSaldo = passaDoSaldo(valorPP, saldoDisponivel);
 
   /** Refaz as parcelas mantendo as datas que já existem. */
   const montarParcelas = React.useCallback(
@@ -347,22 +379,34 @@ export function GerarPPDrawer({
     }
   }
 
+  /** Valor da PP mudou: redivide as parcelas preservando as datas. */
+  function redividirParcelas(valor: number) {
+    if (parcelas.length === 0) return;
+    const valores = dividirEmParcelas(valor, parcelas.length);
+    setParcelas((prev) =>
+      prev.map((p, i) => ({
+        ...p,
+        valor: valores[i].toFixed(2).replace(".", ","),
+      })),
+    );
+  }
+
+  // Um handler por campo do trio: cada um refaz a conta com o valor novo
+  // do seu campo e os dois já digitados nos outros. `unitNum`/`qtdNum`/
+  // `dmNum` são do render atual, então não há estado atrasado aqui.
+  function mudarUnitario(bruto: string) {
+    setUnitario(bruto);
+    redividirParcelas(valorDaPPPorUnidade(parseNumeroLocal(bruto), qtdNum, dmNum));
+  }
+
   function mudarQuantidade(bruto: string) {
     setQuantidade(bruto);
-    if (parcelas.length > 0) {
-      const novo = parseNumeroLocal(bruto);
-      const valor =
-        novo > 0 ? valorDaPP(novo, valorOrcado, quantidadeOrcada) : 0;
-      // Valor da PP mudou: redivide os valores, preservando as datas
-      // (cartão ou mês a mês conforme configuração atual).
-      const valores = dividirEmParcelas(valor, parcelas.length);
-      setParcelas((prev) =>
-        prev.map((p, i) => ({
-          ...p,
-          valor: valores[i].toFixed(2).replace(".", ","),
-        })),
-      );
-    }
+    redividirParcelas(valorDaPPPorUnidade(unitNum, parseNumeroLocal(bruto), dmNum));
+  }
+
+  function mudarDm(bruto: string) {
+    setDm(bruto);
+    redividirParcelas(valorDaPPPorUnidade(unitNum, qtdNum, parseNumeroLocal(bruto)));
   }
 
   /** O que vai para a action: PP sem parcelamento manda 1 parcela. */
@@ -400,15 +444,23 @@ export function GerarPPDrawer({
       setErro("Serviço é obrigatório.");
       return;
     }
+    if (unitNum <= 0) {
+      setErro("R$ Unit. deve ser um número positivo.");
+      return;
+    }
     if (qtdNum <= 0) {
-      setErro("Quantidade deve ser um número positivo.");
+      setErro("QT deve ser um número positivo.");
+      return;
+    }
+    if (dmNum <= 0) {
+      setErro("D/M deve ser um número positivo.");
       return;
     }
     if (valorPP <= 0) {
-      setErro("O valor desta PP ficaria zerado. Confira a quantidade.");
+      setErro("O valor desta PP ficaria zerado. Confira R$ Unit., QT e D/M.");
       return;
     }
-    if (passaDoSaldo(valorPP, saldoDisponivel)) {
+    if (excedeSaldo) {
       setErro(
         `Esta PP (${formatCurrency(valorPP, "BRL")}) passa do saldo do item. Máximo aceito: ${formatCurrency(saldoDisponivel, "BRL")}.`,
       );
@@ -452,7 +504,9 @@ export function GerarPPDrawer({
           empresa_id: empresaId,
           prazo_pagamento: prazoPagamento,
           servico: servico.trim(),
+          valor_unitario: unitNum,
           quantidade: qtdNum,
+          dias_meses: dmNum,
           especificacoes: especificacoes.trim() || null,
           parcelas: parcelasEnvio,
         };
@@ -540,39 +594,33 @@ export function GerarPPDrawer({
             <div className="rounded-lg border border-border bg-muted/30 p-3">
               <p className="text-xs text-muted-foreground">Item</p>
               <p className="font-medium">{itemDescricao}</p>
-              <div className="mt-2 grid grid-cols-3 gap-3">
+              {/* Duas colunas: o "Valor desta PP" saiu daqui e virou o
+                  bloco editável abaixo do switch — dois lugares mostrando
+                  a mesma conta. No lugar dele, a decomposição do orçado,
+                  que é a referência de onde os três campos vêm. */}
+              <div className="mt-2 grid grid-cols-2 gap-3">
                 <div>
                   <p className="text-xs text-muted-foreground">Orçado do item</p>
                   <p className="font-mono font-semibold">
                     {formatCurrency(valorOrcado, "BRL")}
                   </p>
+                  <p className="font-mono text-[11px] text-muted-foreground">
+                    {formatUnitario(unitarioOrcado)} ×{" "}
+                    {formatFator(quantidadeOrcada)} × {formatFator(dmOrcado)}
+                  </p>
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground">Máximo aceito</p>
+                  <p className="text-xs text-muted-foreground">
+                    Máximo aceito nesta PP
+                  </p>
                   <p className="font-mono font-semibold">
                     {formatCurrency(saldoDisponivel, "BRL")}
                   </p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Valor desta PP</p>
-                  <p
-                    className={cn(
-                      "font-mono font-semibold",
-                      passaDoSaldo(valorPP, saldoDisponivel) &&
-                        "text-california-red",
-                    )}
-                  >
-                    {valorPP > 0 ? formatCurrency(valorPP, "BRL") : "—"}
+                  <p className="text-[11px] text-muted-foreground">
+                    saldo do item ainda sem PP
                   </p>
                 </div>
               </div>
-              <p className="mt-2 text-[11px] text-muted-foreground">
-                O valor sai da quantidade:{" "}
-                {quantidadeOrcada > 0
-                  ? `${formatCurrency(valorOrcado / quantidadeOrcada, "BRL")} por unidade do orçado`
-                  : "o item não tem quantidade orçada"}
-                .
-              </p>
             </div>
 
             {/* Fornecedor & Empresa */}
@@ -613,6 +661,85 @@ export function GerarPPDrawer({
                   </span>
                 )}
               </label>
+
+              {/* Valor desta PP — as mesmas colunas do item na planilha.
+                  Fica logo abaixo do switch porque primeiro se decide se é
+                  verba de produção, depois quanto vale a PP: quando o prazo
+                  de pagamento é escolhido, o dinheiro já está definido. */}
+              <div className="space-y-3 rounded-lg border border-border bg-muted/20 p-3">
+                <div className="flex items-baseline justify-between gap-3">
+                  <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Valor desta PP
+                  </h4>
+                  <span className="text-[11px] text-muted-foreground">
+                    mesmas colunas do item na planilha
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-[1.5fr_0.75fr_0.75fr] gap-2.5">
+                  <div>
+                    <label className="text-xs font-medium">R$ Unit. *</label>
+                    <Input
+                      value={unitario}
+                      onChange={(e) => mudarUnitario(e.target.value)}
+                      className="no-spinner text-right font-mono font-semibold"
+                      inputMode="decimal"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium">QT *</label>
+                    <Input
+                      value={quantidade}
+                      onChange={(e) => mudarQuantidade(e.target.value)}
+                      className="no-spinner text-right font-mono font-semibold"
+                      inputMode="decimal"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium">D/M *</label>
+                    <Input
+                      value={dm}
+                      onChange={(e) => mudarDm(e.target.value)}
+                      className="no-spinner text-right font-mono font-semibold"
+                      inputMode="decimal"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-end justify-between gap-4 border-t border-border pt-3">
+                  <div>
+                    <p className="text-[11px] text-muted-foreground">
+                      Valor desta PP
+                    </p>
+                    <p className="font-mono text-[11px] text-muted-foreground">
+                      {valorPP > 0
+                        ? `${formatUnitario(unitNum)} × ${formatFator(qtdNum)} × ${formatFator(dmNum)}`
+                        : "preencha os três campos"}
+                    </p>
+                  </div>
+                  <span
+                    className={cn(
+                      "font-mono text-[22px] font-bold leading-none",
+                      excedeSaldo && "text-california-red",
+                    )}
+                  >
+                    {valorPP > 0 ? formatCurrency(valorPP, "BRL") : "—"}
+                  </span>
+                </div>
+
+                {/* O aviso mora aqui, ao vivo, em vez de só no erro do topo
+                    ao clicar em Gerar PP. */}
+                {excedeSaldo && (
+                  <div className="flex items-start gap-2 rounded-lg border border-california-red/35 bg-california-red/[0.07] px-3 py-2.5">
+                    <AlertTriangle className="mt-px h-3.5 w-3.5 flex-none text-california-red" />
+                    <span className="text-[11px] leading-relaxed text-california-red">
+                      Passa do saldo do item — máximo aceito{" "}
+                      {formatCurrency(saldoDisponivel, "BRL")}. Ajuste R$ Unit.,
+                      QT ou D/M.
+                    </span>
+                  </div>
+                )}
+              </div>
 
               {/* Fornecedor (modo normal) ou Responsável (modo verba) */}
               {verbaProducao ? (
@@ -770,21 +897,9 @@ export function GerarPPDrawer({
                 />
               </div>
 
-              <div>
-                <label className="text-xs font-medium">Quantidade *</label>
-                <Input
-                  value={quantidade}
-                  onChange={(e) => mudarQuantidade(e.target.value)}
-                  className="no-spinner"
-                  inputMode="decimal"
-                  placeholder={
-                    quantidadeOrcada > 0
-                      ? `Até ${quantidadeOrcada} do orçado`
-                      : ""
-                  }
-                />
-              </div>
-
+              {/* QT saiu daqui: era o mesmo número do bloco de valor, em
+                  dois campos distantes um do outro. Serviço fica só com
+                  descrição e especificações. */}
               <div>
                 <label className="text-xs font-medium">Especificações (opcional)</label>
                 <textarea
