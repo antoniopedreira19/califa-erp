@@ -61,9 +61,10 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 035 | [A PP vale R$ Unit. × QT × D/M](035-a-pp-vale-unitario-vezes-qt-vezes-dm.md) | 2026-09-01 |
 | 036 | [Filtro "Meus" nas listas, e Produto/Regional em Jobs](036-filtro-meus-e-produto-regional-nas-listas.md) | 2026-09-01 |
 | 037 | [Serviço no orçamento, Equipe no projeto, e "Produto" vira "Marca"](037-servico-no-orcamento-equipe-no-projeto-e-marca.md) | 2026-09-02 |
+| 038 | [As duas previsões do job viraram um card só, "Previsões"](038-previsoes-em-tabela-unica.md) | 2026-09-02 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
 > data é a da decisão, não a da posição na fila.
 
-**Próximo número livre: 038.**
+**Próximo número livre: 039.**
