@@ -61,7 +61,12 @@ export default async function ProjetoDetailPage({
       .maybeSingle(),
     supabase
       .from("orcamentos")
-      .select("id, codigo, nome, status, versao_aprovada_id, produtor_id, data_inicio_prevista, data_fim_prevista, created_at, categoria:categorias_dominio(nome)")
+      .select(
+        // `!categoria_id` é obrigatório desde 02/09/2026: `orcamentos` passou
+        // a ter DUAS FKs para `categorias_dominio` (categoria e servico), e
+        // sem desambiguar o PostgREST recusa o embed e devolve zero linhas.
+        "id, codigo, nome, status, versao_aprovada_id, produtor_id, data_inicio_prevista, data_fim_prevista, created_at, categoria:categorias_dominio!categoria_id(nome)",
+      )
       .eq("projeto_id", params.projetoId)
       .eq("tenant_id", session.activeTenant.id)
       .order("created_at", { ascending: false }),
