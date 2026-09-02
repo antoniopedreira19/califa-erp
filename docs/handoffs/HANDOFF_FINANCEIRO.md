@@ -3213,3 +3213,55 @@ as duas herdaram o que mudou lá. O que é específico daqui:
   do encerramento do job. A regra mora em `vw_saves_por_job` (migrations
   `20260901100001` e `20260901110001`) e está explicada na nota de
   2026-09-01 da decisão 028.
+
+---
+
+## ⚠️ Nota de 2026-09-02 — os dois cards de previsão viraram um, "Previsões"
+
+**Isto muda a seção 33 e o formulário descrito nas seções 3 a 6.** Regra
+em `docs/decisions/038-previsoes-em-tabela-unica.md`. Design de
+referência: `Abertura de Job - Financeiro.dc.html` (projeto Claude Design
+`69342d83`), layout **D · Uma tabela, dois blocos**.
+
+Os cards "Previsão de recebimento" e "Previsão de custos" **não existem
+mais como dois cards**. No lugar deles há um único card **"Previsões"**,
+com:
+
+- **Três tiles no topo** — Valor total do job (legenda "Fechamento do
+  orçamento aprovado"), Faturamento previsto e Custo previsto total. O
+  "Valor total do job" aparecia duas vezes, uma em cada card, com
+  legendas diferentes; ficou a do orçamento aprovado.
+- **As duas contas bancárias no mesmo cabeçalho** do card ("Recebimento
+  em" e "Pagamento em"), lado a lado.
+- **Uma tabela só, com dois blocos**: `PARCELAS DE RECEBIMENTO` (faixa
+  verde) em cima e `CUSTOS · CRONOGRAMA DE DESEMBOLSOS` (faixa vermelha)
+  embaixo. As linhas ganharam prefixo, `R01…` e `C01…`, porque agora
+  dividem a mesma numeração.
+- **O selo de conferência subiu para a faixa do bloco**, ao lado do botão
+  "Distribuir" (que perdeu o "igualmente" — vira "Distribuir o saldo"
+  quando há parcela congelada, como antes).
+- **A soma de cada bloco virou linha da própria tabela**, ao lado de
+  "Adicionar parcela" / "Adicionar data", com o % do total na coluna.
+- **O card fecha com a margem prevista** e a contagem das linhas dos dois
+  blocos.
+- **Um parágrafo de rodapé só**, no lugar dos dois. Ele mantém as duas
+  informações que estavam separadas: as janelas de pagamento (dias 08 e
+  20) e o abatimento da previsão pela nota emitida e por cada PP emitida.
+
+Nada mudou nos cálculos, nas validações do rodapé fixo, no congelamento
+de parcela já consumida (`lib/calculos/previsao-congelada.ts`), nos
+estados de faturamento zero / custo zero — que viraram linha de largura
+total com fundo âmbar dentro da tabela — nem no que a tela grava.
+
+**Vale nas três aparições**, porque é um componente só
+(`abertura-de-job/[jobId]/abertura-form.tsx`): a abertura na fila
+(modo `abertura`), a aba "Abertura" do job já aberto em leitura (modo
+`leitura`) e a mesma aba destravada para editar (modo `edicao`), que é
+por onde passa a revisão de errata.
+
+**Fugimos do design em três pontos**, todos decididos pelo Tiago em
+02/09/2026: o título é "Previsões" (o design escrevia "Previsão de
+recebimento e de custos"); os rótulos dos blocos seguem os termos do
+sistema, com "cronograma de desembolsos" e não "curva"; e o texto de
+rodapé é o nosso, porque o do protótipo descrevia um comportamento de
+curva de custos que não é o nosso.

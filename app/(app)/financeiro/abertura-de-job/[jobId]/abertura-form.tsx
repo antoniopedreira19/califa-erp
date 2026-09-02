@@ -27,7 +27,6 @@ import {
   Table2,
   Trash2,
   TrendingDown,
-  TrendingUp,
   X,
 } from "lucide-react";
 import {
@@ -378,6 +377,19 @@ export function AberturaForm({
   const margem = emCentavos(faturamentoPrevisto - custoPrevisto);
   const margemPct =
     faturamentoPrevisto > 0 ? (margem / faturamentoPrevisto) * 100 : 0;
+
+  // Contagem das linhas de cada bloco: aparece no rodapé da tabela de
+  // previsões e no resumo do registro, na lateral.
+  const qtdRecebimentosLabel = semRecebimento
+    ? "Sem faturamento"
+    : recebimento.length === 1
+      ? "1 recebimento"
+      : `${recebimento.length} recebimentos`;
+  const qtdDatasCustoLabel = semDesembolso
+    ? "Sem desembolso"
+    : curva.length === 1
+      ? "1 data"
+      : `${curva.length} datas`;
 
   const textoValidacao = !nomeOk
     ? "Informe o nome do job."
@@ -1046,32 +1058,52 @@ export function AberturaForm({
             </div>
           </section>
 
-          {/* Previsão de recebimento */}
+          {/* Previsões — recebimento e custos numa tabela só.
+              Layout D do protótipo "Abertura de Job - Financeiro":
+              os dois cards viraram um, com três tiles no topo e a
+              tabela partida em dois blocos (entrada em cima, saída
+              embaixo). Um cabeçalho só, uma grade só — as colunas de
+              recebimento e de custo passam a alinhar entre si, que era
+              o motivo da fusão. */}
           <section className="rounded-2xl border border-border bg-card shadow-soft">
             <header className="flex flex-wrap items-center gap-2.5 rounded-t-2xl border-b border-border bg-muted/50 px-5 py-3.5">
-              <TrendingUp className="h-4 w-4 text-california-red" />
-              <h2 className="text-[15px] font-semibold">
-                Previsão de recebimento
-              </h2>
+              <TrendingDown className="h-4 w-4 text-california-red" />
+              <h2 className="text-[15px] font-semibold">Previsões</h2>
               <span className="text-xs text-muted-foreground">
-                Faturamento previsto do orçamento + parcelas
+                Faturamento do orçamento + custo planejado da planilha
               </span>
-              <ContaSeletor
-                rotulo="Recebimento em"
-                contas={contas}
-                selecionada={contaReceb}
-                travado={travado}
-                aberto={dropConta === "recebimento"}
-                onAbrir={(o) => setDropConta(o ? "recebimento" : null)}
-                onEscolher={(id) => {
-                  setContaRecebId(id);
-                  setDropConta(null);
-                }}
-              />
+              {/* As duas contas moram no mesmo cabeçalho: a que recebe e
+                  a que paga. */}
+              <div className="ml-auto flex flex-wrap items-center gap-2">
+                <ContaSeletor
+                  rotulo="Recebimento em"
+                  contas={contas}
+                  selecionada={contaReceb}
+                  travado={travado}
+                  aberto={dropConta === "recebimento"}
+                  onAbrir={(o) => setDropConta(o ? "recebimento" : null)}
+                  onEscolher={(id) => {
+                    setContaRecebId(id);
+                    setDropConta(null);
+                  }}
+                />
+                <ContaSeletor
+                  rotulo="Pagamento em"
+                  contas={contas}
+                  selecionada={contaPag}
+                  travado={travado}
+                  aberto={dropConta === "pagamento"}
+                  onAbrir={(o) => setDropConta(o ? "pagamento" : null)}
+                  onEscolher={(id) => {
+                    setContaPagId(id);
+                    setDropConta(null);
+                  }}
+                />
+              </div>
             </header>
 
             <div className="flex flex-col gap-[18px] p-5">
-              <div className="grid gap-3.5 sm:grid-cols-2">
+              <div className="grid gap-3.5 sm:grid-cols-3">
                 <div className="rounded-xl border border-border px-4 py-3">
                   <p className="text-[10px] font-bold uppercase tracking-[0.09em] text-muted-foreground">
                     Valor total do job
@@ -1100,284 +1132,6 @@ export function AberturaForm({
                     Total a receber do cliente neste job
                   </p>
                 </div>
-              </div>
-
-              {/* Faturamento previsto zero: nada a receber pela California
-                  (o cliente paga tudo direto ao fornecedor). O aviso
-                  substitui a tabela, como na curva de custos. */}
-              {semRecebimento ? (
-                <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3.5">
-                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
-                  <div>
-                    <p className="text-[13px] font-semibold text-amber-800">
-                      Nenhum faturamento previsto pela California
-                    </p>
-                    <p className="mt-1 text-xs leading-relaxed text-amber-800/80">
-                      {saveConsumido > 0.005 ? (
-                        <>
-                          Este job é pago com saldo em save de outro job — o
-                          cliente já pagou por ele numa nota anterior. Não há
-                          nota a emitir aqui, e o job abre sem previsão de
-                          recebimento.
-                        </>
-                      ) : (
-                        <>
-                          Todo o valor deste job é pago diretamente pelo cliente
-                          ao fornecedor — a California não emite nota. O job abre
-                          sem previsão de recebimento.
-                        </>
-                      )}
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <div className="overflow-hidden rounded-xl border border-border">
-                  <div className="flex flex-wrap items-center gap-2.5 border-b border-border bg-emerald-50/50 px-4 py-2.5">
-                    <CalendarCheck className="h-3.5 w-3.5 text-emerald-700" />
-                    <p className="text-[12.5px] font-semibold">
-                      Parcelas de recebimento
-                    </p>
-                    <span className="text-[11.5px] text-muted-foreground">
-                      Recebimento previsto para{" "}
-                      {formatDataBr(job.data_prevista_faturamento)}
-                    </span>
-                    {!travado && (
-                      <button
-                        type="button"
-                        onClick={distribuirRecebimento}
-                        className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-1.5 text-[11.5px] font-semibold text-muted-foreground transition-colors hover:border-[#d7d7d7] hover:text-foreground"
-                      >
-                        <Split className="h-3 w-3" />
-                        {congeladoReceb > 0
-                          ? "Distribuir o saldo"
-                          : "Distribuir igualmente"}
-                      </button>
-                    )}
-                  </div>
-
-                  <table className="w-full border-collapse text-[13.5px]">
-                    <thead>
-                      <tr className="border-b border-border text-left text-[10px] font-semibold uppercase tracking-[0.07em] text-muted-foreground">
-                        <th className="w-14 px-4 py-2.5 font-semibold">#</th>
-                        <th className="px-4 py-2.5 font-semibold">
-                          Data prevista
-                        </th>
-                        <th className="px-4 py-2.5 text-right font-semibold">
-                          Valor
-                        </th>
-                        <th className="w-28 px-4 py-2.5 text-right font-semibold">
-                          % do total
-                        </th>
-                        <th className="w-14 px-4 py-2.5" aria-label="Remover" />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {recebimento.map((linha, i) => {
-                        const valor = parseMoeda(linha.valorTexto);
-                        const pct =
-                          faturamentoPrevisto > 0
-                            ? (valor / faturamentoPrevisto) * 100
-                            : 0;
-
-                        return (
-                          <tr
-                            key={linha.id}
-                            className="border-b border-b-[#f4f2f2] last:border-0"
-                          >
-                            <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">
-                              {String(i + 1).padStart(2, "0")}
-                            </td>
-                            <td className="px-4 py-2.5">
-                              <div className="w-[190px]">
-                                {linha.congelada || travado ? (
-                                  <LinhaTravada
-                                    texto={formatDataBr(linha.data)}
-                                    congelada={Boolean(linha.congelada)}
-                                    titulo={
-                                      linha.congelada
-                                        ? "Já faturado — esta parcela não pode mudar"
-                                        : undefined
-                                    }
-                                  />
-                                ) : (
-                                  /* Recebimento não segue as janelas de
-                                     pagamento: quem manda na data de entrada
-                                     é o cliente, não o calendário com que a
-                                     California paga fornecedor. */
-                                  <DatePicker
-                                    name={`recebimento-data-${linha.id}`}
-                                    defaultValue={linha.data}
-                                    className="h-9 text-[13px]"
-                                    onDateChange={(d) =>
-                                      atualizarRecebimento(linha.id, {
-                                        data: d
-                                          ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
-                                          : "",
-                                      })
-                                    }
-                                  />
-                                )}
-                              </div>
-                            </td>
-                            <td className="px-4 py-2.5">
-                              {linha.congelada || travado ? (
-                                <p className="text-right font-mono text-[13px] font-semibold">
-                                  {formatCurrency(valor)}
-                                </p>
-                              ) : (
-                                <div className="ml-auto flex h-9 w-[180px] items-center gap-1.5 rounded-lg border border-border px-3">
-                                  <span className="text-xs font-semibold text-muted-foreground">
-                                    R$
-                                  </span>
-                                  <input
-                                    aria-label={`Valor da parcela ${i + 1}`}
-                                    value={linha.valorTexto}
-                                    onChange={(e) =>
-                                      atualizarRecebimento(linha.id, {
-                                        valorTexto: e.target.value,
-                                      })
-                                    }
-                                    onBlur={() =>
-                                      atualizarRecebimento(linha.id, {
-                                        valorTexto: formatMoedaTexto(
-                                          parseMoeda(linha.valorTexto),
-                                        ),
-                                      })
-                                    }
-                                    inputMode="decimal"
-                                    className="w-full min-w-0 border-0 bg-transparent text-right font-mono text-[13px] font-semibold outline-none"
-                                  />
-                                </div>
-                              )}
-                            </td>
-                            <td className="px-4 py-2.5 text-right font-mono text-[12.5px] text-muted-foreground">
-                              {faturamentoPrevisto > 0
-                                ? formatPercentual(pct)
-                                : "—"}
-                            </td>
-                            <td className="px-4 py-2.5">
-                              {travado ? null : (
-                              <button
-                                type="button"
-                                onClick={() => removerDoRecebimento(linha.id)}
-                                disabled={!podeRemover(recebimento, linha.id)}
-                                aria-label={`Remover a parcela ${i + 1}`}
-                                title={
-                                  linha.congelada
-                                    ? "Parcela já faturada — não pode ser removida"
-                                    : !podeRemover(recebimento, linha.id)
-                                      ? "A previsão precisa de pelo menos uma parcela"
-                                      : "Remover parcela"
-                                }
-                                className="inline-flex h-[30px] w-[30px] items-center justify-center rounded-lg border border-border bg-white text-california-red transition-colors hover:bg-california-red/5 disabled:cursor-not-allowed disabled:text-[#d7d7d7] disabled:hover:bg-white"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-
-                  <div className="flex flex-wrap items-center gap-3 border-t border-border bg-muted/40 px-4 py-3">
-                    {!travado && (
-                      <button
-                        type="button"
-                        onClick={adicionarParcelaRecebimento}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-[#d7d7d7] bg-white px-3 py-2 text-xs font-semibold text-muted-foreground transition-colors hover:border-california-red hover:text-california-red"
-                      >
-                        <Plus className="h-3 w-3" />
-                        Adicionar parcela
-                      </button>
-                    )}
-                    <div className="ml-auto flex flex-wrap items-center gap-4">
-                      <span className="text-[12.5px] text-muted-foreground">
-                        Soma das parcelas{" "}
-                        <strong className="font-mono text-foreground">
-                          {formatCurrency(somaDoRecebimento)}
-                        </strong>
-                      </span>
-                      <span className="text-[12.5px] text-muted-foreground">
-                        Faturamento previsto{" "}
-                        <strong className="font-mono text-foreground">
-                          {formatCurrency(faturamentoPrevisto)}
-                        </strong>
-                      </span>
-                      <span
-                        className={cn(
-                          "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11.5px] font-semibold",
-                          recebBate
-                            ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                            : "border-amber-200 bg-amber-50 text-amber-700",
-                        )}
-                      >
-                        {recebBate ? (
-                          <Check className="h-3 w-3" />
-                        ) : (
-                          <AlertTriangle className="h-3 w-3" />
-                        )}
-                        {recebBate
-                          ? "Parcelas fecham com o faturamento"
-                          : difReceb > 0
-                            ? `Sobra de ${formatCurrency(Math.abs(difReceb))}`
-                            : `Falta ${formatCurrency(Math.abs(difReceb))}`}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <div className="flex items-start gap-2.5 rounded-xl border border-border bg-muted/50 px-3.5 py-3">
-                <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                <p className="text-xs leading-relaxed text-muted-foreground">
-                  A previsão de recebimento alimenta o fluxo de caixa de
-                  entrada. A primeira parcela vem da data de faturamento do
-                  orçamento; divida em quantas precisar — a soma tem que fechar
-                  com o faturamento previsto. Quando a nota for emitida, o
-                  título a receber abate esta previsão.
-                </p>
-              </div>
-            </div>
-          </section>
-
-          {/* Previsão de custos */}
-          <section className="rounded-2xl border border-border bg-card shadow-soft">
-            <header className="flex flex-wrap items-center gap-2.5 rounded-t-2xl border-b border-border bg-muted/50 px-5 py-3.5">
-              <TrendingDown className="h-4 w-4 text-california-red" />
-              <h2 className="text-[15px] font-semibold">Previsão de custos</h2>
-              <span className="text-xs text-muted-foreground">
-                Custo planejado da planilha + cronograma de desembolsos
-              </span>
-              <ContaSeletor
-                rotulo="Pagamento em"
-                contas={contas}
-                selecionada={contaPag}
-                travado={travado}
-                aberto={dropConta === "pagamento"}
-                onAbrir={(o) => setDropConta(o ? "pagamento" : null)}
-                onEscolher={(id) => {
-                  setContaPagId(id);
-                  setDropConta(null);
-                }}
-              />
-            </header>
-
-            <div className="flex flex-col gap-[18px] p-5">
-              <div className="grid gap-3.5 sm:grid-cols-2">
-                <div className="rounded-xl border border-border px-4 py-3">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.09em] text-muted-foreground">
-                    Valor total do job
-                  </p>
-                  <p className="mt-1.5 whitespace-nowrap font-mono text-base font-bold">
-                    {formatCurrency(job.valor_total)}
-                  </p>
-                  <p className="mt-1 text-[11px] text-muted-foreground">
-                    Compromisso total do cliente, somando o que ele paga direto
-                    ao fornecedor
-                  </p>
-                </div>
                 <div className="rounded-xl border border-california-red/25 bg-california-red/5 px-4 py-3">
                   <p className="text-[10px] font-bold uppercase tracking-[0.09em] text-[#b3323c]">
                     Custo previsto total
@@ -1399,49 +1153,7 @@ export function AberturaForm({
                 </div>
               </div>
 
-              {/* Curva de desembolso. Sem item de calha PP não há o que
-                  distribuir — o aviso substitui a tabela inteira. */}
-              {semDesembolso ? (
-                <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3.5">
-                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
-                  <div>
-                    <p className="text-[13px] font-semibold text-amber-800">
-                      Nenhum desembolso previsto pela California
-                    </p>
-                    <p className="mt-1 text-xs leading-relaxed text-amber-800/80">
-                      Os custos deste job são pagos diretamente pelo cliente ao
-                      fornecedor (itens de calha BV). O planejado da planilha
-                      segue como controle interno, mas não gera previsão de
-                      custos — o job abre sem cronograma de desembolsos.
-                    </p>
-                  </div>
-                </div>
-              ) : (
               <div className="overflow-hidden rounded-xl border border-border">
-                <div className="flex flex-wrap items-center gap-2.5 border-b border-border bg-muted/60 px-4 py-2.5">
-                  <CalendarDays className="h-3.5 w-3.5 text-muted-foreground" />
-                  <p className="text-[12.5px] font-semibold">
-                    Cronograma de desembolsos
-                  </p>
-                  <span className="text-[11.5px] text-muted-foreground">
-                    Janelas de pagamento (dias 08 e 20) entre{" "}
-                    {formatDataBr(job.data_inicio_prevista)} e{" "}
-                    {formatDataBr(job.data_fim_prevista)}
-                  </span>
-                  {!travado && (
-                    <button
-                      type="button"
-                      onClick={distribuirCurva}
-                      className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-1.5 text-[11.5px] font-semibold text-muted-foreground transition-colors hover:border-[#d7d7d7] hover:text-foreground"
-                    >
-                      <Split className="h-3 w-3" />
-                      {congeladoCurva > 0
-                        ? "Distribuir o saldo"
-                        : "Distribuir igualmente"}
-                    </button>
-                  )}
-                </div>
-
                 <table className="w-full border-collapse text-[13.5px]">
                   <thead>
                     <tr className="border-b border-border text-left text-[10px] font-semibold uppercase tracking-[0.07em] text-muted-foreground">
@@ -1459,179 +1171,508 @@ export function AberturaForm({
                     </tr>
                   </thead>
                   <tbody>
-                    {curva.map((linha, i) => {
-                      const valor = parseMoeda(linha.valorTexto);
-                      const pct =
-                        custoPrevisto > 0 ? (valor / custoPrevisto) * 100 : 0;
-                      const fora =
-                        linha.data.length === 10 &&
-                        foraDaCompetencia(linha.data, trimestre, ano);
+                    {/* ---------- Bloco de entrada ---------- */}
+                    <tr>
+                      <td colSpan={5} className="p-0">
+                        <div className="flex flex-wrap items-center gap-2.5 border-y border-border bg-emerald-50/50 px-4 py-2.5">
+                          <CalendarCheck className="h-3.5 w-3.5 text-emerald-700" />
+                          <p className="text-[11px] font-bold uppercase tracking-[0.07em] text-emerald-700">
+                            Parcelas de recebimento
+                          </p>
+                          <span className="text-[11.5px] text-muted-foreground">
+                            Recebimento previsto para{" "}
+                            {formatDataBr(job.data_prevista_faturamento)}
+                          </span>
+                          {!semRecebimento && (
+                            <span className="ml-auto inline-flex items-center gap-2">
+                              <span
+                                className={cn(
+                                  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11.5px] font-semibold",
+                                  recebBate
+                                    ? "border-emerald-200 bg-white text-emerald-700"
+                                    : "border-amber-200 bg-amber-50 text-amber-700",
+                                )}
+                              >
+                                {recebBate ? (
+                                  <Check className="h-3 w-3" />
+                                ) : (
+                                  <AlertTriangle className="h-3 w-3" />
+                                )}
+                                {recebBate
+                                  ? "Parcelas fecham com o faturamento"
+                                  : difReceb > 0
+                                    ? `Sobra de ${formatCurrency(Math.abs(difReceb))}`
+                                    : `Falta ${formatCurrency(Math.abs(difReceb))}`}
+                              </span>
+                              {!travado && (
+                                <button
+                                  type="button"
+                                  onClick={distribuirRecebimento}
+                                  className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-2.5 py-1.5 text-[11.5px] font-semibold text-muted-foreground transition-colors hover:border-[#d7d7d7] hover:text-foreground"
+                                >
+                                  <Split className="h-3 w-3" />
+                                  {congeladoReceb > 0
+                                    ? "Distribuir o saldo"
+                                    : "Distribuir"}
+                                </button>
+                              )}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
 
-                      return (
-                        <tr
-                          key={linha.id}
-                          className="border-b border-b-[#f4f2f2] last:border-0"
-                        >
-                          <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">
-                            {String(i + 1).padStart(2, "0")}
-                          </td>
-                          <td className="px-4 py-2.5">
-                            <div className="w-[190px]">
-                              {linha.congelada || travado ? (
-                                <LinhaTravada
-                                  texto={formatDataBr(linha.data)}
-                                  congelada={Boolean(linha.congelada)}
-                                  titulo={
-                                    linha.congelada
-                                      ? "Já consumida por PP emitida — esta data não pode mudar"
-                                      : undefined
-                                  }
-                                />
-                              ) : (
-                                <DatePicker
-                                  name={`curva-data-${linha.id}`}
-                                  defaultValue={linha.data}
-                                  className="h-9 text-[13px]"
-                                  // Pagamento só nas janelas: qualquer outro
-                                  // dia fica apagado no calendário.
-                                  dateDisabled={(d) =>
-                                    !ehJanelaDePagamento(
-                                      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`,
-                                    )
-                                  }
-                                  onDateChange={(d) =>
-                                    atualizarCurva(linha.id, {
-                                      data: d
-                                        ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
-                                        : "",
-                                    })
-                                  }
-                                />
-                              )}
-                              {fora && !linha.congelada && (
-                                <span className="mt-1 inline-flex items-center gap-1 text-[10.5px] font-medium text-amber-700">
-                                  <AlertTriangle className="h-2.5 w-2.5" />
-                                  Fora da competência {competenciaLabel}
-                                </span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-4 py-2.5">
-                            {linha.congelada || travado ? (
-                              <p className="text-right font-mono text-[13px] font-semibold">
-                                {formatCurrency(valor)}
+                    {/* Faturamento previsto zero: nada a receber pela
+                        California (o cliente paga tudo direto ao
+                        fornecedor). O aviso substitui as linhas, como no
+                        bloco de custos. */}
+                    {semRecebimento ? (
+                      <tr className="border-b border-border">
+                        <td colSpan={5} className="bg-amber-50/60 px-4 py-3.5">
+                          <div className="flex items-start gap-3">
+                            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
+                            <div>
+                              <p className="text-[13px] font-semibold text-amber-800">
+                                Nenhum faturamento previsto pela California
                               </p>
-                            ) : (
-                              <div className="ml-auto flex h-9 w-[180px] items-center gap-1.5 rounded-lg border border-border px-3">
-                                <span className="text-xs font-semibold text-muted-foreground">
-                                  R$
-                                </span>
-                                <input
-                                  aria-label={`Valor da data ${i + 1}`}
-                                  value={linha.valorTexto}
-                                  onChange={(e) =>
-                                    atualizarCurva(linha.id, {
-                                      valorTexto: e.target.value,
-                                    })
-                                  }
-                                  onBlur={() =>
-                                    atualizarCurva(linha.id, {
-                                      valorTexto: formatMoedaTexto(
-                                        parseMoeda(linha.valorTexto),
-                                      ),
-                                    })
-                                  }
-                                  inputMode="decimal"
-                                  className="w-full min-w-0 border-0 bg-transparent text-right font-mono text-[13px] font-semibold outline-none"
-                                />
-                              </div>
-                            )}
-                          </td>
-                          <td className="px-4 py-2.5 text-right font-mono text-[12.5px] text-muted-foreground">
-                            {custoPrevisto > 0 ? formatPercentual(pct) : "—"}
-                          </td>
-                          <td className="px-4 py-2.5">
-                            {travado ? null : (
-                            <button
-                              type="button"
-                              onClick={() => removerDaCurva(linha.id)}
-                              disabled={!podeRemover(curva, linha.id)}
-                              aria-label={`Remover a data ${i + 1}`}
-                              title={
-                                linha.congelada
-                                  ? "Data já consumida por PP emitida — não pode ser removida"
-                                  : !podeRemover(curva, linha.id)
-                                    ? "A curva precisa de pelo menos uma data"
-                                    : "Remover data"
-                              }
-                              className="inline-flex h-[30px] w-[30px] items-center justify-center rounded-lg border border-border bg-white text-california-red transition-colors hover:bg-california-red/5 disabled:cursor-not-allowed disabled:text-[#d7d7d7] disabled:hover:bg-white"
+                              <p className="mt-1 text-xs leading-relaxed text-amber-800/80">
+                                {saveConsumido > 0.005 ? (
+                                  <>
+                                    Este job é pago com saldo em save de outro
+                                    job — o cliente já pagou por ele numa nota
+                                    anterior. Não há nota a emitir aqui, e o
+                                    job abre sem previsão de recebimento.
+                                  </>
+                                ) : (
+                                  <>
+                                    Todo o valor deste job é pago diretamente
+                                    pelo cliente ao fornecedor — a California
+                                    não emite nota. O job abre sem previsão de
+                                    recebimento.
+                                  </>
+                                )}
+                              </p>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : (
+                      <>
+                        {recebimento.map((linha, i) => {
+                          const valor = parseMoeda(linha.valorTexto);
+                          const pct =
+                            faturamentoPrevisto > 0
+                              ? (valor / faturamentoPrevisto) * 100
+                              : 0;
+
+                          return (
+                            <tr
+                              key={linha.id}
+                              className="border-b border-b-[#f4f2f2]"
                             >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
+                              <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">
+                                {`R${String(i + 1).padStart(2, "0")}`}
+                              </td>
+                              <td className="px-4 py-2.5">
+                                <div className="w-[190px]">
+                                  {linha.congelada || travado ? (
+                                    <LinhaTravada
+                                      texto={formatDataBr(linha.data)}
+                                      congelada={Boolean(linha.congelada)}
+                                      titulo={
+                                        linha.congelada
+                                          ? "Já faturado — esta parcela não pode mudar"
+                                          : undefined
+                                      }
+                                    />
+                                  ) : (
+                                    /* Recebimento não segue as janelas de
+                                       pagamento: quem manda na data de entrada
+                                       é o cliente, não o calendário com que a
+                                       California paga fornecedor. */
+                                    <DatePicker
+                                      name={`recebimento-data-${linha.id}`}
+                                      defaultValue={linha.data}
+                                      className="h-9 text-[13px]"
+                                      onDateChange={(d) =>
+                                        atualizarRecebimento(linha.id, {
+                                          data: d
+                                            ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+                                            : "",
+                                        })
+                                      }
+                                    />
+                                  )}
+                                </div>
+                              </td>
+                              <td className="px-4 py-2.5">
+                                {linha.congelada || travado ? (
+                                  <p className="text-right font-mono text-[13px] font-semibold">
+                                    {formatCurrency(valor)}
+                                  </p>
+                                ) : (
+                                  <div className="ml-auto flex h-9 w-[180px] items-center gap-1.5 rounded-lg border border-border px-3">
+                                    <span className="text-xs font-semibold text-muted-foreground">
+                                      R$
+                                    </span>
+                                    <input
+                                      aria-label={`Valor da parcela ${i + 1}`}
+                                      value={linha.valorTexto}
+                                      onChange={(e) =>
+                                        atualizarRecebimento(linha.id, {
+                                          valorTexto: e.target.value,
+                                        })
+                                      }
+                                      onBlur={() =>
+                                        atualizarRecebimento(linha.id, {
+                                          valorTexto: formatMoedaTexto(
+                                            parseMoeda(linha.valorTexto),
+                                          ),
+                                        })
+                                      }
+                                      inputMode="decimal"
+                                      className="w-full min-w-0 border-0 bg-transparent text-right font-mono text-[13px] font-semibold outline-none"
+                                    />
+                                  </div>
+                                )}
+                              </td>
+                              <td className="px-4 py-2.5 text-right font-mono text-[12.5px] text-muted-foreground">
+                                {faturamentoPrevisto > 0
+                                  ? formatPercentual(pct)
+                                  : "—"}
+                              </td>
+                              <td className="px-4 py-2.5">
+                                {travado ? null : (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      removerDoRecebimento(linha.id)
+                                    }
+                                    disabled={
+                                      !podeRemover(recebimento, linha.id)
+                                    }
+                                    aria-label={`Remover a parcela ${i + 1}`}
+                                    title={
+                                      linha.congelada
+                                        ? "Parcela já faturada — não pode ser removida"
+                                        : !podeRemover(recebimento, linha.id)
+                                          ? "A previsão precisa de pelo menos uma parcela"
+                                          : "Remover parcela"
+                                    }
+                                    className="inline-flex h-[30px] w-[30px] items-center justify-center rounded-lg border border-border bg-white text-california-red transition-colors hover:bg-california-red/5 disabled:cursor-not-allowed disabled:text-[#d7d7d7] disabled:hover:bg-white"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                        <tr className="border-b border-border bg-muted/40">
+                          <td className="px-4 py-2.5" />
+                          <td className="px-4 py-2.5">
+                            {!travado && (
+                              <button
+                                type="button"
+                                onClick={adicionarParcelaRecebimento}
+                                className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-[#d7d7d7] bg-white px-3 py-2 text-xs font-semibold text-muted-foreground transition-colors hover:border-california-red hover:text-california-red"
+                              >
+                                <Plus className="h-3 w-3" />
+                                Adicionar parcela
+                              </button>
                             )}
                           </td>
+                          <td className="px-4 py-2.5 text-right">
+                            <span className="text-[11.5px] text-muted-foreground">
+                              Soma{" "}
+                            </span>
+                            <strong className="font-mono text-[13px]">
+                              {formatCurrency(somaDoRecebimento)}
+                            </strong>
+                          </td>
+                          <td className="px-4 py-2.5 text-right font-mono text-xs text-muted-foreground">
+                            {faturamentoPrevisto > 0
+                              ? formatPercentual(
+                                  (somaDoRecebimento / faturamentoPrevisto) *
+                                    100,
+                                )
+                              : "—"}
+                          </td>
+                          <td className="px-4 py-2.5" />
                         </tr>
-                      );
-                    })}
+                      </>
+                    )}
+
+                    {/* ---------- Bloco de saída ---------- */}
+                    <tr>
+                      <td colSpan={5} className="p-0">
+                        <div className="flex flex-wrap items-center gap-2.5 border-y border-border bg-california-red/[0.045] px-4 py-2.5">
+                          <CalendarDays className="h-3.5 w-3.5 text-[#b3323c]" />
+                          <p className="text-[11px] font-bold uppercase tracking-[0.07em] text-[#b3323c]">
+                            Custos · cronograma de desembolsos
+                          </p>
+                          <span className="text-[11.5px] text-muted-foreground">
+                            Janelas de pagamento (dias 08 e 20) entre{" "}
+                            {formatDataBr(job.data_inicio_prevista)} e{" "}
+                            {formatDataBr(job.data_fim_prevista)}
+                          </span>
+                          {!semDesembolso && (
+                            <span className="ml-auto inline-flex items-center gap-2">
+                              <span
+                                className={cn(
+                                  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11.5px] font-semibold",
+                                  curvaBate
+                                    ? "border-emerald-200 bg-white text-emerald-700"
+                                    : "border-amber-200 bg-amber-50 text-amber-700",
+                                )}
+                              >
+                                {curvaBate ? (
+                                  <Check className="h-3 w-3" />
+                                ) : (
+                                  <AlertTriangle className="h-3 w-3" />
+                                )}
+                                {curvaBate
+                                  ? "Curva fecha com o total"
+                                  : difCurva > 0
+                                    ? `Sobra de ${formatCurrency(Math.abs(difCurva))}`
+                                    : `Falta ${formatCurrency(Math.abs(difCurva))}`}
+                              </span>
+                              {!travado && (
+                                <button
+                                  type="button"
+                                  onClick={distribuirCurva}
+                                  className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-2.5 py-1.5 text-[11.5px] font-semibold text-muted-foreground transition-colors hover:border-[#d7d7d7] hover:text-foreground"
+                                >
+                                  <Split className="h-3 w-3" />
+                                  {congeladoCurva > 0
+                                    ? "Distribuir o saldo"
+                                    : "Distribuir"}
+                                </button>
+                              )}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+
+                    {/* Sem item de calha PP não há o que distribuir — o
+                        aviso substitui as linhas do bloco. */}
+                    {semDesembolso ? (
+                      <tr>
+                        <td colSpan={5} className="bg-amber-50/60 px-4 py-3.5">
+                          <div className="flex items-start gap-3">
+                            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
+                            <div>
+                              <p className="text-[13px] font-semibold text-amber-800">
+                                Nenhum desembolso previsto pela California
+                              </p>
+                              <p className="mt-1 text-xs leading-relaxed text-amber-800/80">
+                                Os custos deste job são pagos diretamente pelo
+                                cliente ao fornecedor (itens de calha BV). O
+                                planejado da planilha segue como controle
+                                interno, mas não gera previsão de custos — o
+                                job abre sem cronograma de desembolsos.
+                              </p>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : (
+                      <>
+                        {curva.map((linha, i) => {
+                          const valor = parseMoeda(linha.valorTexto);
+                          const pct =
+                            custoPrevisto > 0
+                              ? (valor / custoPrevisto) * 100
+                              : 0;
+                          const fora =
+                            linha.data.length === 10 &&
+                            foraDaCompetencia(linha.data, trimestre, ano);
+
+                          return (
+                            <tr
+                              key={linha.id}
+                              className="border-b border-b-[#f4f2f2]"
+                            >
+                              <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">
+                                {`C${String(i + 1).padStart(2, "0")}`}
+                              </td>
+                              <td className="px-4 py-2.5">
+                                <div className="w-[190px]">
+                                  {linha.congelada || travado ? (
+                                    <LinhaTravada
+                                      texto={formatDataBr(linha.data)}
+                                      congelada={Boolean(linha.congelada)}
+                                      titulo={
+                                        linha.congelada
+                                          ? "Já consumida por PP emitida — esta data não pode mudar"
+                                          : undefined
+                                      }
+                                    />
+                                  ) : (
+                                    <DatePicker
+                                      name={`curva-data-${linha.id}`}
+                                      defaultValue={linha.data}
+                                      className="h-9 text-[13px]"
+                                      // Pagamento só nas janelas: qualquer outro
+                                      // dia fica apagado no calendário.
+                                      dateDisabled={(d) =>
+                                        !ehJanelaDePagamento(
+                                          `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`,
+                                        )
+                                      }
+                                      onDateChange={(d) =>
+                                        atualizarCurva(linha.id, {
+                                          data: d
+                                            ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+                                            : "",
+                                        })
+                                      }
+                                    />
+                                  )}
+                                  {fora && !linha.congelada && (
+                                    <span className="mt-1 inline-flex items-center gap-1 text-[10.5px] font-medium text-amber-700">
+                                      <AlertTriangle className="h-2.5 w-2.5" />
+                                      Fora da competência {competenciaLabel}
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="px-4 py-2.5">
+                                {linha.congelada || travado ? (
+                                  <p className="text-right font-mono text-[13px] font-semibold">
+                                    {formatCurrency(valor)}
+                                  </p>
+                                ) : (
+                                  <div className="ml-auto flex h-9 w-[180px] items-center gap-1.5 rounded-lg border border-border px-3">
+                                    <span className="text-xs font-semibold text-muted-foreground">
+                                      R$
+                                    </span>
+                                    <input
+                                      aria-label={`Valor da data ${i + 1}`}
+                                      value={linha.valorTexto}
+                                      onChange={(e) =>
+                                        atualizarCurva(linha.id, {
+                                          valorTexto: e.target.value,
+                                        })
+                                      }
+                                      onBlur={() =>
+                                        atualizarCurva(linha.id, {
+                                          valorTexto: formatMoedaTexto(
+                                            parseMoeda(linha.valorTexto),
+                                          ),
+                                        })
+                                      }
+                                      inputMode="decimal"
+                                      className="w-full min-w-0 border-0 bg-transparent text-right font-mono text-[13px] font-semibold outline-none"
+                                    />
+                                  </div>
+                                )}
+                              </td>
+                              <td className="px-4 py-2.5 text-right font-mono text-[12.5px] text-muted-foreground">
+                                {custoPrevisto > 0
+                                  ? formatPercentual(pct)
+                                  : "—"}
+                              </td>
+                              <td className="px-4 py-2.5">
+                                {travado ? null : (
+                                  <button
+                                    type="button"
+                                    onClick={() => removerDaCurva(linha.id)}
+                                    disabled={!podeRemover(curva, linha.id)}
+                                    aria-label={`Remover a data ${i + 1}`}
+                                    title={
+                                      linha.congelada
+                                        ? "Data já consumida por PP emitida — não pode ser removida"
+                                        : !podeRemover(curva, linha.id)
+                                          ? "A curva precisa de pelo menos uma data"
+                                          : "Remover data"
+                                    }
+                                    className="inline-flex h-[30px] w-[30px] items-center justify-center rounded-lg border border-border bg-white text-california-red transition-colors hover:bg-california-red/5 disabled:cursor-not-allowed disabled:text-[#d7d7d7] disabled:hover:bg-white"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                        <tr className="bg-muted/40">
+                          <td className="px-4 py-2.5" />
+                          <td className="px-4 py-2.5">
+                            {!travado && (
+                              <button
+                                type="button"
+                                onClick={adicionarData}
+                                className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-[#d7d7d7] bg-white px-3 py-2 text-xs font-semibold text-muted-foreground transition-colors hover:border-california-red hover:text-california-red"
+                              >
+                                <Plus className="h-3 w-3" />
+                                Adicionar data
+                              </button>
+                            )}
+                          </td>
+                          <td className="px-4 py-2.5 text-right">
+                            <span className="text-[11.5px] text-muted-foreground">
+                              Soma{" "}
+                            </span>
+                            <strong className="font-mono text-[13px]">
+                              {formatCurrency(somaDaCurva)}
+                            </strong>
+                          </td>
+                          <td className="px-4 py-2.5 text-right font-mono text-xs text-muted-foreground">
+                            {custoPrevisto > 0
+                              ? formatPercentual(
+                                  (somaDaCurva / custoPrevisto) * 100,
+                                )
+                              : "—"}
+                          </td>
+                          <td className="px-4 py-2.5" />
+                        </tr>
+                      </>
+                    )}
                   </tbody>
                 </table>
 
-                <div className="flex flex-wrap items-center gap-3 border-t border-border bg-muted/40 px-4 py-3">
-                  {!travado && (
-                    <button
-                      type="button"
-                      onClick={adicionarData}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-[#d7d7d7] bg-white px-3 py-2 text-xs font-semibold text-muted-foreground transition-colors hover:border-california-red hover:text-california-red"
-                    >
-                      <Plus className="h-3 w-3" />
-                      Adicionar data
-                    </button>
-                  )}
-                  <div className="ml-auto flex flex-wrap items-center gap-4">
-                    <span className="text-[12.5px] text-muted-foreground">
-                      Soma das datas{" "}
-                      <strong className="font-mono text-foreground">
-                        {formatCurrency(somaDaCurva)}
-                      </strong>
-                    </span>
-                    <span className="text-[12.5px] text-muted-foreground">
-                      Custo previsto{" "}
-                      <strong className="font-mono text-foreground">
-                        {formatCurrency(custoPrevisto)}
-                      </strong>
-                    </span>
-                    <span
+                {/* O fechamento da tabela: entrada menos saída, e a
+                    contagem das linhas dos dois blocos. */}
+                <div className="flex flex-wrap items-center gap-5 border-t border-border bg-muted/60 px-4 py-3">
+                  <span className="text-xs text-muted-foreground">
+                    Margem prevista{" "}
+                    <strong
                       className={cn(
-                        "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11.5px] font-semibold",
-                        curvaBate
-                          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                          : "border-amber-200 bg-amber-50 text-amber-700",
+                        "font-mono text-sm",
+                        margem >= 0
+                          ? "text-emerald-700"
+                          : "text-california-red",
                       )}
                     >
-                      {curvaBate ? (
-                        <Check className="h-3 w-3" />
-                      ) : (
-                        <AlertTriangle className="h-3 w-3" />
-                      )}
-                      {curvaBate
-                        ? "Curva fecha com o total"
-                        : difCurva > 0
-                          ? `Sobra de ${formatCurrency(Math.abs(difCurva))}`
-                          : `Falta ${formatCurrency(Math.abs(difCurva))}`}
-                    </span>
-                  </div>
+                      {formatCurrency(margem)}
+                      {faturamentoPrevisto > 0
+                        ? ` · ${formatPercentual(margemPct)}`
+                        : ""}
+                    </strong>
+                  </span>
+                  <span className="ml-auto text-xs text-muted-foreground">
+                    {qtdRecebimentosLabel} ·{" "}
+                    {semDesembolso
+                      ? qtdDatasCustoLabel
+                      : `${qtdDatasCustoLabel} de custo`}
+                  </span>
                 </div>
               </div>
-              )}
 
               <div className="flex items-start gap-2.5 rounded-xl border border-border bg-muted/50 px-3.5 py-3">
                 <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                 <p className="text-xs leading-relaxed text-muted-foreground">
-                  A previsão não trava o realizado: ela alimenta o fluxo de
-                  caixa do financeiro e vai sendo abatida conforme as PPs do
-                  job forem emitidas. As datas seguem as janelas de pagamento
-                  (dias 08 e 20, ou o dia útil seguinte); datas fora da
-                  competência escolhida ficam sinalizadas.
+                  As duas previsões alimentam o fluxo de caixa do financeiro: o
+                  bloco de cima é a entrada, o de baixo é a saída. A primeira
+                  parcela de recebimento vem da data de faturamento do
+                  orçamento e a soma tem que fechar com o faturamento previsto;
+                  as datas de custo seguem as janelas de pagamento (dias 08 e
+                  20, ou o dia útil seguinte) e fecham com o custo previsto.
+                  Nada disso trava o realizado — a nota emitida abate a
+                  previsão de recebimento, e cada PP emitida abate a de custos.
+                  Datas fora da competência escolhida ficam sinalizadas.
                 </p>
               </div>
             </div>
@@ -1768,11 +1809,7 @@ export function AberturaForm({
                 Recebimentos
               </span>
               <span className="text-[12.5px] font-semibold">
-                {semRecebimento
-                  ? "Sem faturamento"
-                  : recebimento.length === 1
-                    ? "1 recebimento"
-                    : `${recebimento.length} recebimentos`}
+                {qtdRecebimentosLabel}
               </span>
             </div>
             <div className="flex items-baseline justify-between gap-3">
@@ -1788,11 +1825,7 @@ export function AberturaForm({
                 Datas previstas
               </span>
               <span className="text-[12.5px] font-semibold">
-                {semDesembolso
-                  ? "Sem desembolso"
-                  : curva.length === 1
-                    ? "1 data"
-                    : `${curva.length} datas`}
+                {qtdDatasCustoLabel}
               </span>
             </div>
             <div className="flex items-baseline justify-between gap-3 border-t border-border pt-2.5">
@@ -2037,7 +2070,7 @@ function ContaSeletor({
   if (contas.length === 0) return null;
 
   return (
-    <div className="ml-auto">
+    <div>
       <Popover open={aberto} onOpenChange={(o) => !travado && onAbrir(o)}>
         <PopoverTrigger asChild>
           <button
