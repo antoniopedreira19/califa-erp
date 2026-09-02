@@ -17,6 +17,10 @@ export interface OrcamentoRow {
   codigo: string;
   nome: string;
   categoria_nome: string | null;
+  /** Serviço do job deste orçamento. Desceu do projeto em 02/09/2026
+   *  (037) — cada orçamento tem o seu, e por isso ele é coluna aqui em
+   *  vez de uma linha no resumo do projeto. */
+  servico_nome: string | null;
   /** Estágio do funil comercial (lib/calculos/funil.ts) — a mesma
    *  semântica que a lista de projetos usa pra contar. */
   estagio: EstagioFunil;
@@ -50,6 +54,7 @@ export function OrcamentosList({ projetoId, orcamentos }: Props) {
             <th className="px-4 py-3 font-semibold">Código</th>
             <th className="px-4 py-3 font-semibold">Nome</th>
             <th className="px-4 py-3 font-semibold">Categoria</th>
+            <th className="px-4 py-3 font-semibold">Serviço</th>
             <th className="px-4 py-3 font-semibold">Início previsto</th>
             <th className="px-4 py-3 font-semibold">Fim previsto</th>
             <th className="px-4 py-3 font-semibold text-right">Valor do Job</th>
@@ -84,6 +89,7 @@ export function OrcamentosList({ projetoId, orcamentos }: Props) {
               </td>
               <td className="px-4 py-3 font-medium">{o.nome}</td>
               <td className="px-4 py-3 text-muted-foreground">{o.categoria_nome ?? "—"}</td>
+              <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">{o.servico_nome ?? "—"}</td>
               <td className="px-4 py-3 text-muted-foreground">{formatDate(o.data_inicio_prevista)}</td>
               <td className="px-4 py-3 text-muted-foreground">{formatDate(o.data_fim_prevista)}</td>
               <td className="px-4 py-3 text-right tabular-nums">

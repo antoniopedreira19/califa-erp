@@ -41,6 +41,11 @@ ficou, e o helper `lib/data/servicos.ts` explica a herança.
 Coluna preservada com o dado histórico e marcada como legada no
 comentário: remover coluna populada é destrutivo. Nada mais escreve nela.
 
+**No resumo do projeto o Serviço saiu do cabeçalho** e virou **coluna da
+tabela de orçamentos**, logo depois de Categoria. Mostrar um serviço só no
+cabeçalho — vindo da coluna legada `projetos.categoria_id` — contradizia a
+tabela logo abaixo, onde cada orçamento tem o seu.
+
 **A coluna "Serviço" saiu da lista de projetos** e deu lugar a **GP
 Responsável** (decisão do Tiago no mesmo dia). Ela chegou a ler os
 orçamentos por algumas horas, mas a conclusão foi mais simples: se o

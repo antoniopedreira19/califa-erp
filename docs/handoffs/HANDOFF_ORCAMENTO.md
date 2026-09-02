@@ -2663,7 +2663,9 @@ já separava as listas — `projeto` (Always On, Ativação, Fee, Interno) e
 `lib/data/servicos.ts` guarda essa explicação.
 
 `projetos.categoria_id` **fica no banco** com o dado histórico, marcada
-como legada. A coluna **"Serviço" saiu da lista de projetos** e deu lugar
+como legada — mas **saiu do resumo do projeto**: o Serviço virou **coluna
+da tabela de orçamentos**, depois de Categoria, porque cada orçamento tem
+o seu e um valor único no cabeçalho contradiria a tabela abaixo. A coluna **"Serviço" saiu da lista de projetos** e deu lugar
 a **GP Responsável** (primeiro nome + contador `+N`, como as regionais):
 se o serviço virou assunto do job, a lista de projetos não precisa
 representá-lo. Sai da mesma consulta de `projeto_responsaveis` que
