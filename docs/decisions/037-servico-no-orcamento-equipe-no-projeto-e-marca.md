@@ -41,10 +41,17 @@ ficou, e o helper `lib/data/servicos.ts` explica a herança.
 Coluna preservada com o dado histórico e marcada como legada no
 comentário: remover coluna populada é destrutivo. Nada mais escreve nela.
 
-**A coluna "Serviço" da lista de projetos** passou a ler os orçamentos —
-os serviços distintos, com contador `+N` a partir do segundo, igual às
-regionais. Como todo orçamento herdou o serviço do projeto no backfill, a
-lista exibe hoje exatamente os mesmos valores de antes.
+**A coluna "Serviço" saiu da lista de projetos** e deu lugar a **GP
+Responsável** (decisão do Tiago no mesmo dia). Ela chegou a ler os
+orçamentos por algumas horas, mas a conclusão foi mais simples: se o
+serviço virou assunto do job, a lista de PROJETOS não precisa
+representá-lo — o que ela precisa mostrar é quem responde pelo projeto.
+
+GP Responsável mostra os GPs do projeto, o primeiro inteiro e um contador
+`+N` a partir do segundo, igual às regionais. Sai de
+`projeto_responsaveis` com papel `gp` — a mesma consulta que alimenta o
+recorte "Meus" da [036](036-filtro-meus-e-produto-regional-nas-listas.md),
+sem ida extra ao banco.
 
 ## 2. O projeto ganha Equipe, obrigatória e nunca vazia
 
@@ -81,7 +88,23 @@ negociação. Lá segue **editável**: é ponto de partida, não valor travado.
 Job já enviado manda no que aparece — sobrescrever com o do orçamento
 apagaria a edição feita no modal.
 
-## 4. "Produto" vira "Marca" em todo o sistema
+## 4. Categoria do orçamento: "Ativação" vira "Evento", e entram três
+
+Pedido do Tiago em 02/09/2026, **só no escopo `orcamento`** — a lista da
+Categoria. Entram **Clearance**, **Prod. Musical** e **Cachê Artístico**;
+"Ativação" é **renomeada** para "Evento".
+
+⚠️ O rename é na linha existente, então os **23 orçamentos e 19 jobs** que
+já apontavam para ela passam a exibir "Evento". É o pretendido: a
+categoria é a mesma, mudou o nome. Criar "Evento" do zero e inativar
+"Ativação" deixaria esses 42 registros com uma opção que o formulário não
+oferece mais.
+
+⚠️ Existe uma **segunda "Ativação" no escopo `projeto`** — a lista do
+Serviço, hoje em 35 orçamentos. Ela **não** foi tocada: é outro campo,
+com outro significado. Todo comando da migration filtra o escopo.
+
+## 5. "Produto" vira "Marca" em todo o sistema
 
 Rótulo trocado em: formulário e detalhe do projeto, coluna e filtro das
 listas de Projetos e de Jobs, ficha e editor do job, telas de abertura no
@@ -91,7 +114,7 @@ Financeiro, modal de envio, PDF da PP e o cadastro do cliente.
 `jobs.produto`. Renomear coluna e tabela em uso é destrutivo, exigiria
 parar a outra frente, e não muda nada para quem usa o sistema.
 
-## 5. O que NÃO mudou
+## 6. O que NÃO mudou
 
 Instrução do Tiago: usar só o que o design traz.
 

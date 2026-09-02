@@ -71,12 +71,11 @@ export default async function ProjetosPage() {
    * ampliar o recorte, não para estreitar.
    */
   const meusProjetoIds = new Set<string>();
-  /** Serviços distintos dos orçamentos de cada projeto. O Serviço deixou
-   *  de ser designação do projeto em 02/09/2026 — a coluna passa a mostrar
-   *  o que os jobs dele estão fazendo. Como todo orçamento existente
-   *  herdou o serviço do projeto no backfill, a lista exibe hoje os mesmos
-   *  valores de antes. */
-  const servicosPorProjeto = new Map<string, string[]>();
+  /** GPs Responsáveis de cada projeto, por nome. A coluna Serviço saiu da
+   *  lista em 02/09/2026 e deu lugar a esta: Serviço passou a ser
+   *  designação do job (037), e quem a lista precisa mostrar é quem
+   *  responde pelo projeto. */
+  const gpsPorProjeto = new Map<string, string[]>();
   for (const p of projetosBrutos) {
     if (p.responsavel_id === session.profile.id || p.created_by === session.profile.id) {
       meusProjetoIds.add(p.id);
@@ -84,15 +83,12 @@ export default async function ProjetosPage() {
   }
 
   if (projetoIds.length > 0) {
-    const [orcsRes, jobsRes, vinculosRes, equipeRes, versoesMinhasRes] =
+    const [orcsRes, jobsRes, vinculosRes, responsaveisRes, versoesMinhasRes] =
       await Promise.all([
       supabase
         .from("orcamentos")
         .select(
-          "id, projeto_id, status, gp_responsavel_id, produtor_id, created_by, " +
-            // O Serviço desceu para o orçamento em 02/09/2026 (037): a
-            // coluna da lista lê daqui, não mais de `projetos.categoria_id`.
-            "servico:categorias_dominio!servico_id(nome)",
+          "id, projeto_id, status, gp_responsavel_id, produtor_id, created_by",
         )
         .in("projeto_id", projetoIds)
         .eq("tenant_id", session.activeTenant.id),
@@ -114,10 +110,12 @@ export default async function ProjetosPage() {
       // As duas pontas do recorte "Meus" que não cabem nas queries acima.
       // Ambas já filtradas por MIM: voltam poucas linhas, e não uma
       // varredura para depois descartar no cliente.
+      // Uma consulta só: alimenta a coluna GP Responsável E o recorte
+      // "Meus". Filtrar por mim aqui pediria uma segunda ida ao banco para
+      // a coluna, e são poucas linhas (uma por vínculo de projeto).
       supabase
         .from("projeto_responsaveis")
-        .select("projeto_id")
-        .eq("profile_id", session.profile.id)
+        .select("projeto_id, profile_id, papel, profile:profiles(nome)")
         .in("projeto_id", projetoIds)
         .eq("tenant_id", session.activeTenant.id),
       supabase
@@ -156,12 +154,6 @@ export default async function ProjetosPage() {
       ) {
         meusProjetoIds.add(o.projeto_id);
       }
-      const nomeServico = o.servico?.nome as string | undefined;
-      if (nomeServico) {
-        const atuais = servicosPorProjeto.get(o.projeto_id) ?? [];
-        if (!atuais.includes(nomeServico)) atuais.push(nomeServico);
-        servicosPorProjeto.set(o.projeto_id, atuais);
-      }
       orcamentosCountMap.set(o.projeto_id, (orcamentosCountMap.get(o.projeto_id) ?? 0) + 1);
       const jobStatus = escolherJobDoFunil(jobsPorOrcamento.get(o.id) ?? []);
       const estagio = estagioFunil(o.status as OrcamentoStatus, jobStatus);
@@ -175,8 +167,16 @@ export default async function ProjetosPage() {
       // "orcamento" e "cancelado" ficam fora do funil: contam só no total.
     }
 
-    for (const e of ((equipeRes.data ?? []) as any[])) {
-      if (e.projeto_id) meusProjetoIds.add(e.projeto_id);
+    for (const v of ((responsaveisRes.data ?? []) as any[])) {
+      if (!v.projeto_id) continue;
+      // Qualquer vínculo — GP ou equipe — faz o projeto ser "meu" (036).
+      if (v.profile_id === session.profile.id) meusProjetoIds.add(v.projeto_id);
+      // A coluna mostra só os GPs; membros de equipe não respondem por ele.
+      if (v.papel !== "equipe" && v.profile?.nome) {
+        const atuais = gpsPorProjeto.get(v.projeto_id) ?? [];
+        if (!atuais.includes(v.profile.nome)) atuais.push(v.profile.nome);
+        gpsPorProjeto.set(v.projeto_id, atuais);
+      }
     }
 
     for (const v of ((versoesMinhasRes.data ?? []) as any[])) {
@@ -200,10 +200,7 @@ export default async function ProjetosPage() {
     codigo: p.codigo,
     nome: p.nome,
     campanha: p.campanha,
-    // Serviço vem dos orçamentos do projeto (037). Sem orçamento, sem
-    // serviço — a coluna mostra travessão, que é a verdade: o trabalho
-    // ainda não foi descrito em job nenhum.
-    servicos: (servicosPorProjeto.get(p.id) ?? []).sort((a, b) =>
+    gps: (gpsPorProjeto.get(p.id) ?? []).sort((a, b) =>
       a.localeCompare(b, "pt-BR"),
     ),
     status: p.status as Projeto["status"],
