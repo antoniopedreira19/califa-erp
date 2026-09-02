@@ -2622,17 +2622,24 @@ A barra de `/orcamentos` passa a abrir com a chave **Meus / Todos**
 (`components/ui/chave-meus-todos.tsx`), primeiro item, à esquerda da
 busca — a mesma posição e o mesmo componente da lista de Jobs.
 
-**Meus é o padrão.** Um projeto é "meu" quando eu sou **responsável ou
-produtor de algum job** dele: mesma ideia de "meu" das duas telas. São 7
-dos 18 projetos ativos hoje.
+**Meus é o padrão.** ⚠️ **Regra ampliada em 02/09/2026:** um projeto é
+"meu" quando estou **associado a ele ou a um orçamento dentro dele**,
+como designado **ou** como criador. São sete vínculos, e basta um —
+projeto (`responsavel_id`, `created_by`, `projeto_responsaveis`),
+orçamento (`gp_responsavel_id`, `produtor_id`, `created_by`) e versão
+(`created_by`). São 12 dos 18 projetos ativos hoje.
 
-⚠️ **Projeto que ainda não gerou job nunca é "meu"** — ninguém foi
-designado nele. Quem acabou de criar um projeto precisa clicar em "Todos"
-para encontrá-lo. Foi decisão consciente do Tiago, entre três regras
-candidatas medidas com os números reais.
+Nasceu em 01/09 mais estreita ("responsável ou produtor de algum job",
+7 de 18) e com a ressalva de que projeto sem job nunca seria "meu". **Essa
+ressalva caiu**: hoje um projeto recém-criado já aparece para quem o
+criou. O vínculo por job continua valendo por cima, embora medido na base
+ele já seja redundante.
 
-O `meusProjetoIds` sai da **query de jobs que a página já fazia** para
-montar o funil, sem consulta nova (`docs/PERFORMANCE.md`).
+O `meusProjetoIds` sai das queries que a página **já fazia** (projetos,
+orçamentos e jobs) mais duas leves — `projeto_responsaveis` e
+`versoes_orcamento` —, ambas filtradas pelo próprio usuário
+(`docs/PERFORMANCE.md`). O índice
+`idx_versoes_orcamento_created_by` nasceu com essa mudança.
 
 **O resto da barra não mudou.** O mock do design mostra ali um filtro de
 "empresas" que **não** foi adicionado, e omite o de **Ano**, que

@@ -19,6 +19,9 @@ export default async function ProjetosPage() {
       .select(
         "id, codigo, nome, campanha, status, cliente_id, produto_id, " +
           "data_inicio_prevista, created_at, " +
+          // Vínculos do recorte "Meus" (decisão 036, ampliada em
+          // 02/09/2026): designado OU criador.
+          "responsavel_id, created_by, " +
           "cliente:clientes(id, nome_fantasia), " +
           "produto:cliente_produtos(id, nome), " +
           "categoria:categorias_dominio(nome)",
@@ -51,16 +54,37 @@ export default async function ProjetosPage() {
   // Regionais do projeto: N:N, então vêm numa query própria em vez de
   // embed na listagem (o embed devolveria a linha do projeto repetida).
   const regionaisMap = new Map<string, { id: string; nome: string }[]>();
-  /** Projetos em que EU sou responsável ou produtor de algum job — a regra
-   *  de "Meus" desta lista (decisão do Tiago, 01/09/2026). Projeto que
-   *  ainda não gerou job nunca é "meu": ninguém foi designado nele. */
+  /**
+   * Projetos do recorte "Meus" — decisão 036, ampliada pelo Tiago em
+   * 02/09/2026: **qualquer usuário associado ao projeto ou a um orçamento
+   * dentro dele**, seja como designado ou como criador.
+   *
+   * São sete vínculos, e basta UM:
+   * - projeto: `responsavel_id`, `created_by`, `projeto_responsaveis`
+   * - orçamento: `gp_responsavel_id`, `produtor_id`, `created_by`
+   * - versão do orçamento: `created_by`
+   *
+   * O vínculo por JOB (responsável/produtor) continua valendo por cima
+   * disso. Ele era a regra inteira até 01/09 e hoje é redundante na base
+   * — todo projeto que ele alcança já vem por outro vínculo —, mas sair
+   * dele tiraria projetos de quem só está no job, e a mudança era para
+   * ampliar o recorte, não para estreitar.
+   */
   const meusProjetoIds = new Set<string>();
+  for (const p of projetosBrutos) {
+    if (p.responsavel_id === session.profile.id || p.created_by === session.profile.id) {
+      meusProjetoIds.add(p.id);
+    }
+  }
 
   if (projetoIds.length > 0) {
-    const [orcsRes, jobsRes, vinculosRes] = await Promise.all([
+    const [orcsRes, jobsRes, vinculosRes, equipeRes, versoesMinhasRes] =
+      await Promise.all([
       supabase
         .from("orcamentos")
-        .select("id, projeto_id, status")
+        .select(
+          "id, projeto_id, status, gp_responsavel_id, produtor_id, created_by",
+        )
         .in("projeto_id", projetoIds)
         .eq("tenant_id", session.activeTenant.id),
       supabase
@@ -77,6 +101,20 @@ export default async function ProjetosPage() {
         .from("projeto_regionais")
         .select("projeto_id, regional:regionais(id, nome)")
         .in("projeto_id", projetoIds)
+        .eq("tenant_id", session.activeTenant.id),
+      // As duas pontas do recorte "Meus" que não cabem nas queries acima.
+      // Ambas já filtradas por MIM: voltam poucas linhas, e não uma
+      // varredura para depois descartar no cliente.
+      supabase
+        .from("projeto_responsaveis")
+        .select("projeto_id")
+        .eq("profile_id", session.profile.id)
+        .in("projeto_id", projetoIds)
+        .eq("tenant_id", session.activeTenant.id),
+      supabase
+        .from("versoes_orcamento")
+        .select("orcamento_id")
+        .eq("created_by", session.profile.id)
         .eq("tenant_id", session.activeTenant.id),
     ]);
     if (jobsRes.error) console.error("[projetos.jobs]", jobsRes.error.message);
@@ -97,7 +135,18 @@ export default async function ProjetosPage() {
       }
     }
 
+    // A versão sabe o orçamento, não o projeto — este mapa faz a ponte.
+    const projetoPorOrcamento = new Map<string, string>();
+
     for (const o of ((orcsRes.data ?? []) as any[])) {
+      projetoPorOrcamento.set(o.id, o.projeto_id);
+      if (
+        o.gp_responsavel_id === session.profile.id ||
+        o.produtor_id === session.profile.id ||
+        o.created_by === session.profile.id
+      ) {
+        meusProjetoIds.add(o.projeto_id);
+      }
       orcamentosCountMap.set(o.projeto_id, (orcamentosCountMap.get(o.projeto_id) ?? 0) + 1);
       const jobStatus = escolherJobDoFunil(jobsPorOrcamento.get(o.id) ?? []);
       const estagio = estagioFunil(o.status as OrcamentoStatus, jobStatus);
@@ -109,6 +158,15 @@ export default async function ProjetosPage() {
         abertosCountMap.set(o.projeto_id, (abertosCountMap.get(o.projeto_id) ?? 0) + 1);
       }
       // "orcamento" e "cancelado" ficam fora do funil: contam só no total.
+    }
+
+    for (const e of ((equipeRes.data ?? []) as any[])) {
+      if (e.projeto_id) meusProjetoIds.add(e.projeto_id);
+    }
+
+    for (const v of ((versoesMinhasRes.data ?? []) as any[])) {
+      const projetoId = projetoPorOrcamento.get(v.orcamento_id);
+      if (projetoId) meusProjetoIds.add(projetoId);
     }
 
     for (const v of ((vinculosRes.data ?? []) as any[])) {
