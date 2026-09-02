@@ -115,7 +115,9 @@ const SELECT_JOB_FILA =
   "regional:regionais(nome), " +
   "responsavel:profiles!responsavel_id(nome), " +
   "produtor:profiles!produtor_id(nome), " +
-  "orcamento:orcamentos(codigo, categoria_id, categoria:categorias_dominio(nome))";
+  // `!categoria_id`: `orcamentos` tem duas FKs para `categorias_dominio`
+  // desde 02/09/2026 (categoria e servico).
+  "orcamento:orcamentos(codigo, categoria_id, categoria:categorias_dominio!categoria_id(nome))";
 
 /**
  * Soma o orçado e o planejado da planilha interna de vários jobs numa
