@@ -23,10 +23,10 @@ export interface ProjetoRow {
   codigo: string;
   nome: string;
   campanha: string | null;
-  /** Serviços dos ORÇAMENTOS do projeto, já ordenados e sem repetição.
-   *  O Serviço deixou de ser designação do projeto em 02/09/2026 (037):
-   *  esta coluna passou a mostrar o que os jobs dele fazem. */
-  servicos: string[];
+  /** GPs Responsáveis do projeto, por nome, ordenados. Substituíram a
+   *  coluna Serviço em 02/09/2026: Serviço virou designação do job (037),
+   *  e o que a lista de projetos precisa mostrar é quem responde por ele. */
+  gps: string[];
   status: ProjetoStatus;
   cliente_id: string;
   cliente_nome: string | null;
@@ -245,7 +245,7 @@ export function ProjetosList({ projetos, clientes, meusProjetoIds }: Props) {
               <th className="px-4 py-3 font-semibold">Cliente</th>
               <th className="px-4 py-3 font-semibold">Marca</th>
               <th className="px-4 py-3 font-semibold">Regional</th>
-              <th className="px-4 py-3 font-semibold">Serviço</th>
+              <th className="px-4 py-3 font-semibold">GP Responsável</th>
               <th className="px-4 py-3 font-semibold">Início</th>
               <th className="px-4 py-3 font-semibold text-center">Orçamentos</th>
               <th className="px-4 py-3 font-semibold text-center">Aprovados</th>
@@ -303,20 +303,20 @@ export function ProjetosList({ projetos, clientes, meusProjetoIds }: Props) {
                     </span>
                   )}
                 </td>
-                <td className="px-4 py-3 text-muted-foreground">
-                  {p.servicos.length === 0 ? (
+                <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
+                  {p.gps.length === 0 ? (
                     "—"
                   ) : (
                     // Mesmo tratamento das regionais: o primeiro inteiro, e
                     // um contador a partir do segundo.
                     <span className="inline-flex items-center gap-1">
-                      <span>{p.servicos[0]}</span>
-                      {p.servicos.length > 1 && (
+                      <span>{p.gps[0]}</span>
+                      {p.gps.length > 1 && (
                         <span
-                          title={p.servicos.join(", ")}
+                          title={p.gps.join(", ")}
                           className="inline-flex items-center rounded-full border border-border bg-muted/40 px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground"
                         >
-                          +{p.servicos.length - 1}
+                          +{p.gps.length - 1}
                         </span>
                       )}
                     </span>

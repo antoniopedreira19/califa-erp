@@ -2663,9 +2663,17 @@ já separava as listas — `projeto` (Always On, Ativação, Fee, Interno) e
 `lib/data/servicos.ts` guarda essa explicação.
 
 `projetos.categoria_id` **fica no banco** com o dado histórico, marcada
-como legada. A coluna "Serviço" da lista de projetos passou a ler os
-orçamentos, com contador `+N` como o das regionais — e por causa do
-backfill exibe os mesmos valores de antes.
+como legada. A coluna **"Serviço" saiu da lista de projetos** e deu lugar
+a **GP Responsável** (primeiro nome + contador `+N`, como as regionais):
+se o serviço virou assunto do job, a lista de projetos não precisa
+representá-lo. Sai da mesma consulta de `projeto_responsaveis` que
+alimenta o recorte "Meus", sem ida extra ao banco.
+
+**Categoria do orçamento** ganhou **Clearance**, **Prod. Musical** e
+**Cachê Artístico**, e "Ativação" virou **"Evento"** — renomeada na linha
+existente, então os 23 orçamentos e 19 jobs que já a usavam passaram a
+exibir "Evento". A "Ativação" do escopo `projeto` (o Serviço) **não** foi
+tocada.
 
 **O projeto ganhou Equipe**, obrigatória, na vaga do Serviço. Criador, GPs
 Responsáveis e produtores dos orçamentos entram **travados** (chip sem
