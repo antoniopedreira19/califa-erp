@@ -46,7 +46,7 @@ export function ConferenciaDialog({ job, onOpenChange, onReprovar }: Props) {
       valor: [job.projeto_nome, job.projeto_codigo].filter(Boolean).join(" · ") || "—",
     },
     { rotulo: "Cliente", valor: job.cliente_nome ?? "—" },
-    { rotulo: "Produto", valor: job.produto ?? "—" },
+    { rotulo: "Marca", valor: job.produto ?? "—" },
     // Vem do orçamento: é a categoria que a produção deu ao job e a que a
     // tela de abertura pré-seleciona.
     { rotulo: "Categoria", valor: job.categoria_nome ?? "— não informada" },

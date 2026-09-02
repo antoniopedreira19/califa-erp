@@ -28,6 +28,10 @@ export const orcamentoSchema = z
       }),
     // Obrigatória desde 17/08/2026, no mesmo padrão dos campos abaixo.
     categoria_id: z.string().uuid("Selecione a categoria."),
+    // Serviço desceu do projeto em 02/09/2026 (decisão 037). Lê
+    // `categorias_dominio` com escopo `projeto` — lista diferente da
+    // Categoria acima, que usa escopo `orcamento`.
+    servico_id: z.string().uuid("Selecione o serviço."),
     // Obrigatórios desde 06/08/2026. Nullable no banco por causa dos
     // orçamentos gravados antes desta mudança — a exigência vive aqui.
     // `regional_id` precisa ser uma das regionais do projeto; isso a
@@ -36,6 +40,15 @@ export const orcamentoSchema = z
     cidade_id: z.string().uuid("Selecione a cidade."),
     gp_responsavel_id: z.string().uuid("Selecione o GP responsável."),
     produtor_id: z.string().uuid("Selecione o produtor responsável."),
+    // Adianta o Descritivo do envio para abertura (`jobs.observacoes`),
+    // onde segue editável. Mesmo teto de lá — texto maior aqui não
+    // caberia no destino.
+    descritivo: z
+      .string()
+      .trim()
+      .max(500, "Máximo 500 caracteres.")
+      .optional()
+      .transform((v) => (v && v.length > 0 ? v : null)),
     data_inicio_prevista: z
       .string()
       .optional()

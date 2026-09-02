@@ -19,6 +19,8 @@ function extractInput(formData: FormData) {
     nome: formData.get("nome")?.toString() ?? "",
     status: (formData.get("status")?.toString() ?? "rascunho") as any,
     categoria_id: formData.get("categoria_id")?.toString() ?? "",
+    servico_id: formData.get("servico_id")?.toString() ?? "",
+    descritivo: formData.get("descritivo")?.toString() ?? "",
     regional_id: formData.get("regional_id")?.toString() ?? "",
     cidade_id: formData.get("cidade_id")?.toString() ?? "",
     gp_responsavel_id: formData.get("gp_responsavel_id")?.toString() ?? "",
@@ -37,6 +39,12 @@ function mapDbError(msg: string): string {
   }
   if (msg.includes("orcamentos_regional_id_fkey")) {
     return "Regional inválida.";
+  }
+  if (msg.includes("orcamentos_servico_id_fkey")) {
+    return "Serviço inválido.";
+  }
+  if (msg.includes("orcamentos_descritivo_tamanho")) {
+    return "O descritivo passa de 500 caracteres.";
   }
   if (msg.includes("orcamentos_cidade_id_fkey")) {
     return "Cidade inválida.";

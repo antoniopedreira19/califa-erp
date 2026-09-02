@@ -60,9 +60,10 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 034 | [O job não encerra com saldo a faturar](034-encerramento-exige-a-nota-emitida.md) | 2026-08-31 |
 | 035 | [A PP vale R$ Unit. × QT × D/M](035-a-pp-vale-unitario-vezes-qt-vezes-dm.md) | 2026-09-01 |
 | 036 | [Filtro "Meus" nas listas, e Produto/Regional em Jobs](036-filtro-meus-e-produto-regional-nas-listas.md) | 2026-09-01 |
+| 037 | [Serviço no orçamento, Equipe no projeto, e "Produto" vira "Marca"](037-servico-no-orcamento-equipe-no-projeto-e-marca.md) | 2026-09-02 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
 > data é a da decisão, não a da posição na fila.
 
-**Próximo número livre: 037.**
+**Próximo número livre: 038.**

@@ -126,7 +126,7 @@ export function faltamCampos(d: DadosJob): Record<CampoObrigatorio, boolean> {
  *  campos do formulário desde 12/08/2026 e o usuário resolve na hora. */
 export function herdadosIncompletos(h: HerdadosJob): string[] {
   const faltando: string[] = [];
-  if (!h.produtoNome) faltando.push("Produto (no projeto)");
+  if (!h.produtoNome) faltando.push("Marca (no projeto)");
   if (!h.gpNome) faltando.push("GP responsável (no orçamento)");
   if (!h.produtorNome) faltando.push("Produtor responsável (no orçamento)");
   return faltando;
@@ -310,7 +310,7 @@ export function EnviarJobModal({
               Separar Cidade de Regional é seguro: as opções de regional
               saem do PROJETO (`regionaisDoProjeto`), não da cidade
               escolhida — uma nunca dependeu da outra. */}
-          <Campo rotulo="Produto" apoio="Cadastrado no projeto.">
+          <Campo rotulo="Marca" apoio="Cadastrada no projeto.">
             <Travado valor={herdados.produtoNome ?? "— não informado"} />
           </Campo>
 

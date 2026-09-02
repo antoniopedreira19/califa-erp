@@ -84,11 +84,11 @@ export function ProdutoDrawer(props: Props) {
       )}
       <DrawerContent>
         <DialogHeader className="border-b border-border p-6">
-          <DialogTitle>{isEdit ? "Editar produto" : "Novo produto"}</DialogTitle>
+          <DialogTitle>{isEdit ? "Editar marca" : "Nova marca"}</DialogTitle>
           <DialogDescription>
             {isEdit
               ? "Renomear afeta o dropdown de novos jobs; os jobs já abertos guardam o nome que estava valendo."
-              : "O produto fica disponível no dropdown de abertura de job deste cliente. O código é gerado automaticamente."}
+              : "A marca fica disponível no dropdown de abertura de job deste cliente. O código é gerado automaticamente."}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="flex-1 flex flex-col overflow-hidden">

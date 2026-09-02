@@ -20,6 +20,10 @@ interface MultiSelectProps {
   placeholder?: string;
   /** Texto do rodapé quando a lista de opções está vazia. */
   vazio?: string;
+  /** Valores que NÃO podem ser removidos: o chip vem sem o "x" e a opção
+   *  não desmarca na lista. Serve à Equipe do projeto, onde criador, GPs
+   *  e produtores entram por direito e não saem na mão (02/09/2026). */
+  travados?: ReadonlyArray<string>;
   disabled?: boolean;
   className?: string;
   id?: string;
@@ -39,6 +43,7 @@ export function MultiSelect({
   onChange,
   placeholder = "Selecione...",
   vazio = "Nenhuma opção disponível.",
+  travados,
   disabled,
   className,
   id,
@@ -72,7 +77,14 @@ export function MultiSelect({
     [items, value],
   );
 
+  const travadosSet = React.useMemo(
+    () => new Set(travados ?? []),
+    [travados],
+  );
+
   function alternar(v: string) {
+    // Travado não sai — nem pelo chip nem pela lista.
+    if (travadosSet.has(v) && value.includes(v)) return;
     onChange(
       value.includes(v) ? value.filter((x) => x !== v) : [...value, v],
     );
@@ -121,20 +133,24 @@ export function MultiSelect({
                 >
                   {s.label}
                   {/* <span> e não <button>: o gatilho já é um botão e
-                      HTML não permite botão aninhado. */}
-                  <span
-                    role="button"
-                    tabIndex={-1}
-                    aria-label={`Remover ${s.label}`}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      alternar(s.value);
-                    }}
-                    className="text-muted-foreground hover:text-california-red"
-                  >
-                    <X className="h-3 w-3" />
-                  </span>
+                      HTML não permite botão aninhado. Chip travado não
+                      ganha o "x": oferecer um botão que não faz nada é
+                      pior do que não oferecer. */}
+                  {!travadosSet.has(s.value) && (
+                    <span
+                      role="button"
+                      tabIndex={-1}
+                      aria-label={`Remover ${s.label}`}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        alternar(s.value);
+                      }}
+                      className="text-muted-foreground hover:text-california-red"
+                    >
+                      <X className="h-3 w-3" />
+                    </span>
+                  )}
                 </span>
               ))}
             </span>

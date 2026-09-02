@@ -85,6 +85,9 @@ interface Props {
   /** Estado inicial, montado no servidor a partir da versão vigente. */
   inicial: OrcamentoRascunho[];
   categorias: Pick<CategoriaDominio, "id" | "nome">[];
+  /** Serviço do job — escopo `projeto` de `categorias_dominio`,
+   *  lista distinta das categorias acima (decisão 037). */
+  servicos: Pick<CategoriaDominio, "id" | "nome">[];
   regionaisDoProjeto: Pick<Regional, "id" | "nome">[];
   /** Primeiras cidades do cadastro — o combobox do formulário busca o
    *  resto no servidor. O rótulo do card sai de `orc.cidade_nome`. */
@@ -139,6 +142,7 @@ export function EditorAgregado({
   orcamentosExistentes,
   inicial,
   categorias,
+  servicos,
   regionaisDoProjeto,
   cidadesIniciais,
   gpsDoProjeto,
@@ -576,6 +580,8 @@ export function EditorAgregado({
       novos: novos.map((o) => ({
         nome: o.nome,
         categoria_id: o.categoria_id,
+        servico_id: o.servico_id,
+        descritivo: o.descritivo,
         regional_id: o.regional_id,
         cidade_id: o.cidade_id,
         gp_responsavel_id: o.gp_responsavel_id,
@@ -882,6 +888,7 @@ export function EditorAgregado({
           <OrcamentoForm
             projetoId={projeto.id}
             categorias={categorias}
+            servicos={servicos}
             regionaisDoProjeto={regionaisDoProjeto}
             cidadesIniciais={cidadesIniciais}
             gpsDoProjeto={gpsDoProjeto}

@@ -22,7 +22,7 @@ function extractInput(formData: FormData) {
     // item alimenta as colunas de compatibilidade em `projetos`.
     responsavel_ids: formData.getAll("responsavel_ids").map((v) => v.toString()),
     regional_ids: formData.getAll("regional_ids").map((v) => v.toString()),
-    categoria_id: formData.get("categoria_id")?.toString() ?? "",
+    equipe_ids: formData.getAll("equipe_ids").map((v) => v.toString()),
     data_inicio_prevista: formData.get("data_inicio_prevista")?.toString() ?? "",
     data_fim_prevista: formData.get("data_fim_prevista")?.toString() ?? "",
     descricao: formData.get("descricao")?.toString() ?? "",
@@ -100,7 +100,7 @@ async function validarProdutoERegionais(
     return {
       ok: false,
       message: "Produto inválido para este cliente.",
-      fieldErrors: { produto_id: ["Selecione um produto do cadastro do cliente."] },
+      fieldErrors: { produto_id: ["Selecione uma marca do cadastro do cliente."] },
     };
   }
   if ((regionaisRes.data ?? []).length !== regionalIds.length) {
@@ -121,6 +121,11 @@ async function sincronizarVinculos(
   projetoId: string,
   regionalIds: string[],
   responsavelIds: string[],
+  /** Acréscimos MANUAIS à Equipe (papel `equipe`). Criador, GPs e
+   *  produtores dos orçamentos NÃO entram aqui: são derivados na leitura,
+   *  e gravá-los exigiria re-sincronizar a cada troca de GP ou orçamento
+   *  novo (decisão 037). */
+  equipeIds: string[] = [],
 ): Promise<{ ok: true } | { ok: false; message: string }> {
   const [delReg, delResp] = await Promise.all([
     supabase.from("projeto_regionais").delete().eq("projeto_id", projetoId).eq("tenant_id", tenantId),
@@ -140,13 +145,24 @@ async function sincronizarVinculos(
         tenant_id: tenantId,
       })),
     ),
-    supabase.from("projeto_responsaveis").insert(
-      responsavelIds.map((profile_id) => ({
+    supabase.from("projeto_responsaveis").insert([
+      ...responsavelIds.map((profile_id) => ({
         projeto_id: projetoId,
         profile_id,
         tenant_id: tenantId,
+        papel: "gp" as const,
       })),
-    ),
+      // Quem já é GP não vira linha de equipe: a PK é (projeto, profile) e
+      // a segunda linha estouraria a unique.
+      ...equipeIds
+        .filter((id) => !responsavelIds.includes(id))
+        .map((profile_id) => ({
+          projeto_id: projetoId,
+          profile_id,
+          tenant_id: tenantId,
+          papel: "equipe" as const,
+        })),
+    ]),
   ]);
 
   if (insReg.error || insResp.error) {
@@ -171,7 +187,7 @@ export async function criarProjeto(formData: FormData): Promise<ActionResult> {
 
   const supabase = createClient();
 
-  const { regional_ids, responsavel_ids, ...campos } = parsed.data;
+  const { regional_ids, responsavel_ids, equipe_ids, ...campos } = parsed.data;
 
   const check = await validarProdutoERegionais(
     supabase,
@@ -221,6 +237,7 @@ export async function criarProjeto(formData: FormData): Promise<ActionResult> {
     data.id,
     regional_ids,
     responsavel_ids,
+    equipe_ids,
   );
   if (!vinculos.ok) return vinculos;
 
@@ -253,7 +270,7 @@ export async function atualizarProjeto(
 
   const supabase = createClient();
 
-  const { regional_ids, responsavel_ids, ...campos } = parsed.data;
+  const { regional_ids, responsavel_ids, equipe_ids, ...campos } = parsed.data;
 
   const check = await validarProdutoERegionais(
     supabase,
@@ -295,6 +312,7 @@ export async function atualizarProjeto(
     id,
     regional_ids,
     responsavel_ids,
+    equipe_ids,
   );
   if (!vinculos.ok) return vinculos;
 

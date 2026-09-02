@@ -41,7 +41,7 @@ export const projetoSchema = z
       .transform((v) => (v && v.length > 0 ? v : null)),
     empresa_id: z.string().uuid("Selecione a empresa."),
     cliente_id: z.string().uuid("Selecione um cliente válido."),
-    produto_id: z.string().uuid("Selecione um produto do cadastro do cliente."),
+    produto_id: z.string().uuid("Selecione uma marca do cadastro do cliente."),
     // Os dois chegam de `formData.getAll`, e a conferência do servidor
     // compara o tamanho da lista com o número de linhas que o `.in()`
     // devolveu — que vem deduplicado. Um id repetido reprovaria com
@@ -55,7 +55,17 @@ export const projetoSchema = z
       .array(z.string().uuid("Regional inválida."))
       .min(1, "Selecione ao menos uma regional.")
       .transform((v) => Array.from(new Set(v))),
-    categoria_id: z.string().uuid("Selecione um serviço para continuar."),
+    // ⚠️ `categoria_id` (o antigo Serviço) saiu do formulário em
+    // 02/09/2026 (decisão 037): virou `orcamentos.servico_id`. A coluna
+    // continua no banco pelo dado histórico, mas nada mais escreve nela.
+    //
+    // Acréscimos MANUAIS à Equipe. Pode vir vazia: criador, GPs e
+    // produtores dos orçamentos entram por derivação no servidor, e são
+    // eles que garantem que a equipe nunca fique sem ninguém.
+    equipe_ids: z
+      .array(z.string().uuid("Membro de equipe inválido."))
+      .transform((v) => Array.from(new Set(v)))
+      .default([]),
     data_inicio_prevista: z
       .string()
       .regex(/^\d{4}-\d{2}-\d{2}$/, "Data de início é obrigatória."),
