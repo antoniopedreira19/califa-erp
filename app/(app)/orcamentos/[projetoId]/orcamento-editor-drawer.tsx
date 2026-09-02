@@ -21,6 +21,9 @@ interface Props {
   projetoId: string;
   orcamento: Orcamento;
   categorias: Pick<CategoriaDominio, "id" | "nome">[];
+  /** Serviço do job — escopo `projeto` de `categorias_dominio`,
+   *  lista distinta das categorias acima (decisão 037). */
+  servicos: Pick<CategoriaDominio, "id" | "nome">[];
   regionaisDoProjeto: Pick<Regional, "id" | "nome">[];
   cidadesIniciais: CidadeOption[];
   cidadeAtual: CidadeOption | null;
@@ -34,6 +37,7 @@ export function OrcamentoEditorDrawer({
   projetoId,
   orcamento,
   categorias,
+  servicos,
   regionaisDoProjeto,
   cidadesIniciais,
   cidadeAtual,
@@ -80,6 +84,7 @@ export function OrcamentoEditorDrawer({
               projetoId={projetoId}
               orcamento={orcamento}
               categorias={categorias}
+              servicos={servicos}
               regionaisDoProjeto={regionaisDoProjeto}
               cidadesIniciais={cidadesIniciais}
               cidadeAtual={cidadeAtual}

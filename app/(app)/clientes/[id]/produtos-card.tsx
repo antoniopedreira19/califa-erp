@@ -47,7 +47,7 @@ export function ProdutosCard({
           <Package className="h-5 w-5 text-california-red" />
           <div>
             <h2 className="text-lg font-semibold leading-none tracking-tight">
-              Produtos
+              Marcas
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
               Aparecem no dropdown de Produto do projeto. O primeiro
@@ -63,7 +63,7 @@ export function ProdutosCard({
           <div className="rounded-xl border border-dashed border-border bg-muted/20 p-8 text-center">
             <Package className="h-7 w-7 text-muted-foreground/50 mx-auto mb-3" />
             <p className="text-sm text-muted-foreground">
-              Nenhum produto cadastrado.
+              Nenhuma marca cadastrada.
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
               Sem produto cadastrado não é possível abrir job para este cliente.
@@ -182,8 +182,8 @@ export function ProdutosCard({
           }}
           title={
             confirmando.acao === "inativar"
-              ? "Inativar produto?"
-              : "Reativar produto?"
+              ? "Inativar marca?"
+              : "Reativar marca?"
           }
           description={
             confirmando.acao === "inativar"

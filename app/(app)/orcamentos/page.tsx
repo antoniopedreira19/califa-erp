@@ -71,6 +71,12 @@ export default async function ProjetosPage() {
    * ampliar o recorte, não para estreitar.
    */
   const meusProjetoIds = new Set<string>();
+  /** Serviços distintos dos orçamentos de cada projeto. O Serviço deixou
+   *  de ser designação do projeto em 02/09/2026 — a coluna passa a mostrar
+   *  o que os jobs dele estão fazendo. Como todo orçamento existente
+   *  herdou o serviço do projeto no backfill, a lista exibe hoje os mesmos
+   *  valores de antes. */
+  const servicosPorProjeto = new Map<string, string[]>();
   for (const p of projetosBrutos) {
     if (p.responsavel_id === session.profile.id || p.created_by === session.profile.id) {
       meusProjetoIds.add(p.id);
@@ -83,7 +89,10 @@ export default async function ProjetosPage() {
       supabase
         .from("orcamentos")
         .select(
-          "id, projeto_id, status, gp_responsavel_id, produtor_id, created_by",
+          "id, projeto_id, status, gp_responsavel_id, produtor_id, created_by, " +
+            // O Serviço desceu para o orçamento em 02/09/2026 (037): a
+            // coluna da lista lê daqui, não mais de `projetos.categoria_id`.
+            "servico:categorias_dominio!servico_id(nome)",
         )
         .in("projeto_id", projetoIds)
         .eq("tenant_id", session.activeTenant.id),
@@ -147,6 +156,12 @@ export default async function ProjetosPage() {
       ) {
         meusProjetoIds.add(o.projeto_id);
       }
+      const nomeServico = o.servico?.nome as string | undefined;
+      if (nomeServico) {
+        const atuais = servicosPorProjeto.get(o.projeto_id) ?? [];
+        if (!atuais.includes(nomeServico)) atuais.push(nomeServico);
+        servicosPorProjeto.set(o.projeto_id, atuais);
+      }
       orcamentosCountMap.set(o.projeto_id, (orcamentosCountMap.get(o.projeto_id) ?? 0) + 1);
       const jobStatus = escolherJobDoFunil(jobsPorOrcamento.get(o.id) ?? []);
       const estagio = estagioFunil(o.status as OrcamentoStatus, jobStatus);
@@ -185,7 +200,12 @@ export default async function ProjetosPage() {
     codigo: p.codigo,
     nome: p.nome,
     campanha: p.campanha,
-    categoria_nome: p.categoria?.nome ?? null,
+    // Serviço vem dos orçamentos do projeto (037). Sem orçamento, sem
+    // serviço — a coluna mostra travessão, que é a verdade: o trabalho
+    // ainda não foi descrito em job nenhum.
+    servicos: (servicosPorProjeto.get(p.id) ?? []).sort((a, b) =>
+      a.localeCompare(b, "pt-BR"),
+    ),
     status: p.status as Projeto["status"],
     cliente_id: p.cliente_id,
     cliente_nome: p.cliente?.nome_fantasia ?? null,

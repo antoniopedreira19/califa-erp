@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { servicosDoOrcamentoQuery, type ServicoOption } from "@/lib/data/servicos";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { saveDaVersao, saldosDeSaveDoCliente } from "@/lib/data/saves";
@@ -63,6 +64,7 @@ export default async function OrcamentosAgregadoPage({
     projRes,
     orcsRes,
     categoriasOrcRes,
+    servicosRes,
     cidadesIniciais,
     categoriasItemRes,
     fornecedoresRes,
@@ -81,7 +83,7 @@ export default async function OrcamentosAgregadoPage({
     supabase
       .from("orcamentos")
       .select(
-        "id, codigo, nome, status, versao_aprovada_id, categoria_id, regional_id, " +
+        "id, codigo, nome, status, versao_aprovada_id, categoria_id, servico_id, descritivo, regional_id, " +
           "cidade_id, cidade:cidades(nome), gp_responsavel_id, produtor_id, " +
           "data_inicio_prevista, data_fim_prevista",
       )
@@ -96,6 +98,8 @@ export default async function OrcamentosAgregadoPage({
       .eq("escopo", "orcamento")
       .eq("ativo", true)
       .order("nome"),
+    // Serviço: mesma tabela, escopo `projeto` — a outra lista (037).
+    servicosDoOrcamentoQuery(supabase, tenantId),
     // Só as primeiras cidades: o combobox do formulário busca o resto no
     // servidor a cada digitação. O nome da cidade de cada orçamento já
     // gravado vem no embed acima.
@@ -136,6 +140,8 @@ export default async function OrcamentosAgregadoPage({
     status: string;
     versao_aprovada_id: string | null;
     categoria_id: string | null;
+    servico_id: string | null;
+    descritivo: string | null;
     regional_id: string;
     cidade_id: string;
     cidade: { nome: string } | null;
@@ -320,6 +326,8 @@ export default async function OrcamentosAgregadoPage({
       id: orc.id,
       nome: orc.nome,
       categoria_id: orc.categoria_id,
+      servico_id: orc.servico_id ?? null,
+      descritivo: orc.descritivo ?? null,
       regional_id: orc.regional_id,
       cidade_id: orc.cidade_id,
       cidade_nome: orc.cidade?.nome ?? "",
@@ -379,6 +387,7 @@ export default async function OrcamentosAgregadoPage({
 
   return (
     <EditorAgregado
+      servicos={(servicosRes.data ?? []) as ServicoOption[]}
       savePorItem={savePorItem}
       saldosDeSave={saldosDeSave}
       nomeDoGrupo={nomeDoGrupo}

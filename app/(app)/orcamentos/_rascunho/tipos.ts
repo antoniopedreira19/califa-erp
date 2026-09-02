@@ -56,6 +56,11 @@ export interface GrupoRascunho {
 export interface DadosOrcamentoRascunho {
   nome: string;
   categoria_id: string | null;
+  /** Serviço do job. Desceu do projeto em 02/09/2026 (decisão 037) e lê
+   *  `categorias_dominio` com escopo `projeto`. */
+  servico_id: string | null;
+  /** Adianta o Descritivo do envio para abertura. */
+  descritivo: string | null;
   regional_id: string;
   cidade_id: string;
   gp_responsavel_id: string;

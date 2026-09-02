@@ -61,7 +61,7 @@ export default async function ProjetoDetailPage({
       .maybeSingle(),
     supabase
       .from("orcamentos")
-      .select("id, codigo, nome, status, versao_aprovada_id, data_inicio_prevista, data_fim_prevista, created_at, categoria:categorias_dominio(nome)")
+      .select("id, codigo, nome, status, versao_aprovada_id, produtor_id, data_inicio_prevista, data_fim_prevista, created_at, categoria:categorias_dominio(nome)")
       .eq("projeto_id", params.projetoId)
       .eq("tenant_id", session.activeTenant.id)
       .order("created_at", { ascending: false }),
@@ -99,7 +99,7 @@ export default async function ProjetoDetailPage({
       .eq("tenant_id", session.activeTenant.id),
     supabase
       .from("projeto_responsaveis")
-      .select("profile_id, profile:profiles(id, nome)")
+      .select("profile_id, papel, profile:profiles(id, nome)")
       .eq("projeto_id", params.projetoId)
       .eq("tenant_id", session.activeTenant.id),
   ]);
@@ -145,10 +145,27 @@ export default async function ProjetoDetailPage({
     .map((v) => ({ id: v.regional.id as string, nome: v.regional.nome as string }))
     .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
 
-  const responsaveisDoProjeto = ((vinculosRespRes.data ?? []) as any[])
-    .filter((v) => v.profile)
+  const vinculosResp = (vinculosRespRes.data ?? []) as any[];
+
+  // GPs são papel `gp`; papel `equipe` são os acréscimos manuais. Linhas
+  // antigas nasceram todas como `gp` no backfill da migration.
+  const responsaveisDoProjeto = vinculosResp
+    .filter((v) => v.profile && v.papel !== "equipe")
     .map((v) => ({ id: v.profile.id as string, nome: v.profile.nome as string }))
     .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")) as Pick<Profile, "id" | "nome">[];
+
+  const equipeManualDoProjeto = vinculosResp
+    .filter((v) => v.profile && v.papel === "equipe")
+    .map((v) => v.profile.id as string);
+
+  // Produtores dos orçamentos entram na Equipe travados (decisão 037).
+  const produtoresDosOrcamentos = Array.from(
+    new Set(
+      ((orcsRes.data ?? []) as any[])
+        .map((o) => o.produtor_id as string | null)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  );
 
   const orcamentosBrutos = (orcsRes.data ?? []) as any[];
   const orcamentoIds = orcamentosBrutos.map((o) => o.id);
@@ -302,6 +319,8 @@ export default async function ProjetoDetailPage({
               categorias={categoriasProjeto}
               regionaisSelecionadas={regionaisDoProjeto.map((r) => r.id)}
               responsaveisSelecionados={responsaveisDoProjeto.map((r) => r.id)}
+              equipeSelecionada={equipeManualDoProjeto}
+              produtoresDosOrcamentos={produtoresDosOrcamentos}
             />
           </div>
 
@@ -314,7 +333,7 @@ export default async function ProjetoDetailPage({
               <>
                 <span aria-hidden className="text-border">·</span>
                 <span>
-                  <span className="text-foreground/60">Produto:</span>{" "}
+                  <span className="text-foreground/60">Marca:</span>{" "}
                   <span className="text-foreground font-medium">{produtoNome}</span>
                 </span>
               </>

@@ -30,6 +30,10 @@ interface Props {
   categorias: Pick<CategoriaDominio, "id" | "nome">[];
   regionaisSelecionadas: string[];
   responsaveisSelecionados: string[];
+  /** Acréscimos manuais à Equipe já gravados (papel `equipe`). */
+  equipeSelecionada?: string[];
+  /** Produtores dos orçamentos do projeto — entram na Equipe travados. */
+  produtoresDosOrcamentos?: string[];
 }
 
 export function ProjetoEditorDrawer({
@@ -42,6 +46,8 @@ export function ProjetoEditorDrawer({
   categorias,
   regionaisSelecionadas,
   responsaveisSelecionados,
+  equipeSelecionada,
+  produtoresDosOrcamentos,
 }: Props) {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
@@ -104,6 +110,9 @@ export function ProjetoEditorDrawer({
               categorias={categorias}
               regionaisSelecionadas={regionaisSelecionadas}
               responsaveisSelecionados={responsaveisSelecionados}
+              equipeSelecionada={equipeSelecionada}
+              produtoresDosOrcamentos={produtoresDosOrcamentos}
+              criadorId={projeto.created_by ?? undefined}
               onSuccess={() => setOpen(false)}
               onCancel={() => setOpen(false)}
             />

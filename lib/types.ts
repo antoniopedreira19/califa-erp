@@ -239,6 +239,13 @@ export interface Orcamento {
   status: OrcamentoStatus;
   versao_aprovada_id: string | null;
   categoria_id: string | null;
+  /** Serviço do job deste orçamento. Desceu do projeto em 02/09/2026 e lê
+   *  `categorias_dominio` com escopo `projeto` — lista diferente da
+   *  `categoria_id` acima, que usa escopo `orcamento`. */
+  servico_id: string | null;
+  /** Contexto escrito já no orçamento. Pré-preenche o Descritivo do envio
+   *  para abertura (`jobs.observacoes`), onde segue editável. */
+  descritivo: string | null;
   /** Uma das regionais cadastradas no projeto. */
   regional_id: string | null;
   cidade_id: string | null;

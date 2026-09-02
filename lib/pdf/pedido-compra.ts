@@ -313,7 +313,7 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
                 isVerba ? "Responsável" : "Fornecedor",
                 nomeContraparte,
               ),
-              lv("Produto", job.produto ?? ""),
+              lv("Marca", job.produto ?? ""),
               lv("Título", job.nome),
               lv("Campanha", projeto.campanha ?? ""),
             ],

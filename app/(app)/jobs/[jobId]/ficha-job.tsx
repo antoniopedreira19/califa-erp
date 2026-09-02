@@ -149,7 +149,7 @@ export function FichaJob({
                 {job.nome}
               </Campo>
               <Campo rotulo="Categoria do job">{job.categoriaNome ?? "—"}</Campo>
-              <Campo rotulo="Produto">{job.produto ?? "—"}</Campo>
+              <Campo rotulo="Marca">{job.produto ?? "—"}</Campo>
               <Campo rotulo="Regional · Cidade">
                 {[job.regionalNome, job.cidade].filter(Boolean).join(" · ") ||
                   "—"}

@@ -14,6 +14,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DatePicker } from "@/components/ui/date-picker";
+import { Textarea } from "@/components/ui/textarea";
+import { Lock } from "lucide-react";
+import { OBSERVACOES_MAX } from "@/lib/validations/abertura-job";
 import {
   ORCAMENTO_STATUS_EDITAVEIS,
   orcamentoStatusLabel,
@@ -36,6 +39,8 @@ import {
 export interface DadosOrcamento {
   nome: string;
   categoria_id: string;
+  servico_id: string;
+  descritivo: string | null;
   regional_id: string;
   cidade_id: string;
   /** Nome da cidade escolhida. Vai junto porque quem consome o rascunho
@@ -52,6 +57,14 @@ interface Props {
   projetoId: string;
   orcamento?: Orcamento;
   categorias: Pick<CategoriaDominio, "id" | "nome">[];
+  /** Opções de Serviço — `categorias_dominio` de escopo `projeto`. Lista
+   *  diferente das categorias acima; o campo desceu do projeto em
+   *  02/09/2026. */
+  servicos: Pick<CategoriaDominio, "id" | "nome">[];
+  /** Nome e código do projeto de origem. O campo aparece travado no
+   *  formulário: quem chegou aqui já escolheu o projeto. */
+  projetoNome?: string;
+  projetoCodigo?: string;
   /** Só as regionais cadastradas no projeto — a peça não sai da praça
    *  que a iniciativa cobre. */
   regionaisDoProjeto: Pick<Regional, "id" | "nome">[];
@@ -80,6 +93,9 @@ export function OrcamentoForm({
   projetoId,
   orcamento,
   categorias,
+  servicos,
+  projetoNome,
+  projetoCodigo,
   regionaisDoProjeto,
   cidadesIniciais,
   cidadeAtual,
@@ -105,6 +121,10 @@ export function OrcamentoForm({
   const [categoriaId, setCategoriaId] = React.useState(
     orcamento?.categoria_id ?? "",
   );
+  const [servicoId, setServicoId] = React.useState(orcamento?.servico_id ?? "");
+  const [descritivo, setDescritivo] = React.useState(
+    orcamento?.descritivo ?? "",
+  );
   const [regionalId, setRegionalId] = React.useState(orcamento?.regional_id ?? "");
   const [cidade, setCidade] = React.useState<CidadeOption | null>(
     cidadeAtual ?? null,
@@ -127,6 +147,7 @@ export function OrcamentoForm({
     const formData = new FormData(e.currentTarget);
     if (isEdit) formData.set("status", status);
     formData.set("categoria_id", categoriaId);
+    formData.set("servico_id", servicoId);
     formData.set("regional_id", regionalId);
     formData.set("cidade_id", cidade?.id ?? "");
     formData.set("gp_responsavel_id", gpId);
@@ -140,6 +161,8 @@ export function OrcamentoForm({
         nome: formData.get("nome")?.toString() ?? "",
         status: "rascunho",
         categoria_id: formData.get("categoria_id")?.toString() ?? "",
+        servico_id: servicoId,
+        descritivo: descritivo,
         regional_id: regionalId,
         cidade_id: cidade?.id ?? "",
         gp_responsavel_id: gpId,
@@ -199,6 +222,48 @@ export function OrcamentoForm({
             />
           </Field>
         )}
+
+        {/* Projeto — pré-preenchido e travado. Quem chegou aqui veio de
+            dentro do projeto; repetir a escolha só abriria espaço para
+            criar o orçamento no lugar errado. Mesmo cinza dos campos
+            travados do envio para abertura. */}
+        {!isEdit && projetoNome && (
+          <Field label="Projeto" name="projeto_id" errors={fieldErrors}>
+            <div className="flex h-10 items-center justify-between gap-2 rounded-md border border-border bg-muted/50 px-3 text-sm font-medium text-muted-foreground">
+              <span className="truncate">
+                {projetoNome}
+                {projetoCodigo ? (
+                  <span className="ml-1.5 font-mono text-xs">
+                    {projetoCodigo}
+                  </span>
+                ) : null}
+              </span>
+              <Lock className="h-3.5 w-3.5 flex-none" aria-hidden="true" />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Pré-preenchido pelo projeto de origem. Não editável.
+            </p>
+          </Field>
+        )}
+
+        {/* Serviço vem imediatamente antes de Categoria, os dois na mesma
+            linha. Desceu do projeto em 02/09/2026: descreve o trabalho
+            deste job, não a iniciativa inteira do cliente. A lista é a de
+            escopo `projeto`, diferente da Categoria ao lado. */}
+        <Field label="Serviço" name="servico_id" required errors={fieldErrors}>
+          <Select value={servicoId} onValueChange={setServicoId}>
+            <SelectTrigger className={erroClasses("servico_id")}>
+              <SelectValue placeholder="Selecione um serviço" />
+            </SelectTrigger>
+            <SelectContent>
+              {servicos.map((sv) => (
+                <SelectItem key={sv.id} value={sv.id}>
+                  {sv.nome}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
 
         <Field label="Categoria" name="categoria_id" required errors={fieldErrors}>
           <Select value={categoriaId} onValueChange={setCategoriaId}>
@@ -326,6 +391,34 @@ export function OrcamentoForm({
           />
         </Field>
 
+        {/* Descritivo — última linha, largura inteira. Escrito aqui, no
+            calor da negociação, ele PRÉ-PREENCHE o Descritivo do envio
+            para abertura (`jobs.observacoes`), que hoje só nascia no fim
+            da linha, quando quem escreve já perdeu o contexto. Lá segue
+            editável: isto é ponto de partida, não valor travado. */}
+        <div className="md:col-span-2">
+          <Field
+            label="Descritivo"
+            name="descritivo"
+            errors={fieldErrors}
+            apoio={
+              descritivo.length > 0
+                ? `${descritivo.length} / ${OBSERVACOES_MAX}`
+                : "Opcional · adianta o descritivo do envio para abertura"
+            }
+          >
+            <Textarea
+              name="descritivo"
+              value={descritivo}
+              onChange={(e) => setDescritivo(e.target.value)}
+              maxLength={OBSERVACOES_MAX}
+              rows={3}
+              className="min-h-[84px] resize-y leading-relaxed"
+              placeholder="Contexto para quem abre o job: condições comerciais, dependências, o que combinamos com o cliente..."
+            />
+          </Field>
+        </div>
+
         {isEdit && (
           <Field label="Status" name="status" errors={fieldErrors}>
             <Select value={status} onValueChange={(v) => setStatus(v as OrcamentoStatus)}>
@@ -393,21 +486,29 @@ function Field({
   name,
   required,
   errors,
+  apoio,
   children,
 }: {
   label: string;
   name: string;
   required?: boolean;
   errors: Record<string, string[]>;
+  /** Texto de apoio à direita do rótulo — contador ou "Opcional". */
+  apoio?: string;
   children: React.ReactNode;
 }) {
   const fieldErrors = errors[name];
   return (
     <div className="space-y-2">
-      <Label htmlFor={name}>
-        {label}
-        {required && <span className="text-california-red ml-1">*</span>}
-      </Label>
+      <div className="flex items-baseline justify-between gap-3">
+        <Label htmlFor={name}>
+          {label}
+          {required && <span className="text-california-red ml-1">*</span>}
+        </Label>
+        {apoio && (
+          <span className="text-[11px] text-muted-foreground">{apoio}</span>
+        )}
+      </div>
       {children}
       {fieldErrors?.map((msg, i) => (
         <p key={i} className="text-xs text-california-red">{msg}</p>

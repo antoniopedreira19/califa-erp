@@ -219,7 +219,7 @@ export function FluxoAbertura({
     { rotulo: "Código", valor: job?.codigo ?? proximoCodigoJob, mono: true },
     { rotulo: "Projeto", valor: `${projetoNome} · ${projetoCodigo}` },
     { rotulo: "Cliente", valor: clienteNome },
-    { rotulo: "Produto", valor: herdados.produtoNome ?? "— não informado" },
+    { rotulo: "Marca", valor: herdados.produtoNome ?? "— não informada" },
     {
       // Herdada do orçamento — é a categoria com que o job chega ao
       // financeiro na abertura.

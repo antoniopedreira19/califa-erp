@@ -18,8 +18,15 @@ export default async function NovoOrcamentoPage({
   const session = await requireSession();
   const supabase = createClient();
 
-  const [{ data: projeto }, categoriasRes, regionaisRes, respRes, cidadesIniciais, produtores] =
-    await Promise.all([
+  const [
+    { data: projeto },
+    categoriasRes,
+    servicosRes,
+    regionaisRes,
+    respRes,
+    cidadesIniciais,
+    produtores,
+  ] = await Promise.all([
       supabase
         .from("projetos")
         .select("id, codigo, nome")
@@ -31,6 +38,16 @@ export default async function NovoOrcamentoPage({
         .select("id, nome")
         .eq("tenant_id", session.activeTenant.id)
         .eq("escopo", "orcamento")
+        .eq("ativo", true)
+        .order("nome"),
+      // Serviço lê o escopo `projeto` — outra lista, ainda que a mesma
+      // tabela. É o que permite Serviço e Categoria lado a lado sem
+      // repetir opção (decisão 037).
+      supabase
+        .from("categorias_dominio")
+        .select("id, nome")
+        .eq("tenant_id", session.activeTenant.id)
+        .eq("escopo", "projeto")
         .eq("ativo", true)
         .order("nome"),
       // Regional e GP do orçamento saem do que foi cadastrado no projeto.
@@ -53,6 +70,7 @@ export default async function NovoOrcamentoPage({
   if (!projeto) notFound();
 
   const categorias = (categoriasRes.data ?? []) as Pick<CategoriaDominio, "id" | "nome">[];
+  const servicos = (servicosRes.data ?? []) as Pick<CategoriaDominio, "id" | "nome">[];
 
   const regionaisDoProjeto = ((regionaisRes.data ?? []) as any[])
     .filter((v) => v.regional)
@@ -85,6 +103,9 @@ export default async function NovoOrcamentoPage({
         <OrcamentoForm
           projetoId={params.projetoId}
           categorias={categorias}
+          servicos={servicos}
+          projetoNome={projeto.nome}
+          projetoCodigo={projeto.codigo}
           regionaisDoProjeto={regionaisDoProjeto}
           cidadesIniciais={cidadesIniciais}
           gpsDoProjeto={gpsDoProjeto}

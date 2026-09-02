@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { servicosDoOrcamentoQuery, type ServicoOption } from "@/lib/data/servicos";
 import { notFound } from "next/navigation";
 import { ArrowLeft, FileStack, FolderTree, Lock } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
@@ -146,6 +147,7 @@ export default async function OrcamentoDetailPage({
     projRes,
     versoesRes,
     categoriasOrcRes,
+    servicosRes,
     jobRes,
     regionaisProjRes,
     respProjRes,
@@ -159,7 +161,7 @@ export default async function OrcamentoDetailPage({
     supabase
       .from("orcamentos")
       .select(
-        "id, tenant_id, projeto_id, codigo, nome, status, categoria_id, regional_id, cidade_id, gp_responsavel_id, produtor_id, data_inicio_prevista, data_fim_prevista, versao_aprovada_id, created_by, created_at, updated_at, " +
+        "id, tenant_id, projeto_id, codigo, nome, status, categoria_id, servico_id, descritivo, regional_id, cidade_id, gp_responsavel_id, produtor_id, data_inicio_prevista, data_fim_prevista, versao_aprovada_id, created_by, created_at, updated_at, " +
           "categoria:categorias_dominio(nome), regional:regionais(nome), cidade:cidades(id, nome), " +
           "gp:profiles!gp_responsavel_id(nome), produtor:profiles!produtor_id(nome)",
       )
@@ -189,6 +191,8 @@ export default async function OrcamentoDetailPage({
       .eq("escopo", "orcamento")
       .eq("ativo", true)
       .order("nome"),
+    // Serviço: mesma tabela, escopo `projeto` — a outra lista (037).
+    servicosDoOrcamentoQuery(supabase, session.activeTenant.id),
     supabase
       .from("jobs")
       .select(
@@ -263,6 +267,7 @@ export default async function OrcamentoDetailPage({
   const responsavelNome: string | null = projetoRaw.responsavel?.nome ?? null;
   const empresaNome: string | null =
     projetoRaw.empresa?.nome_fantasia ?? projetoRaw.empresa?.razao_social ?? null;
+  const servicos = (servicosRes.data ?? []) as ServicoOption[];
   const categoriasOrcamento = (categoriasOrcRes.data ?? []) as Pick<
     CategoriaDominio,
     "id" | "nome"
@@ -462,6 +467,7 @@ export default async function OrcamentoDetailPage({
               projetoId={params.projetoId}
               orcamento={orcamento}
               categorias={categoriasOrcamento}
+              servicos={servicos}
               regionaisDoProjeto={regionaisDoProjeto}
               cidadesIniciais={cidadesIniciais}
               cidadeAtual={cidadeAtual}
@@ -756,7 +762,11 @@ function VersaoSelecionada({
     // do envio (o orçamento não guarda o campo).
     dataEvento: job?.data_evento ?? "",
     dataFaturamento: job?.data_prevista_faturamento ?? "",
-    observacoes: job?.observacoes ?? "",
+    // O Descritivo do orçamento adianta o do envio (decisão 037): quem
+    // escreveu no calor da negociação não reescreve aqui. O job manda
+    // quando já existe — ali o texto já foi ajustado neste modal, e
+    // sobrescrever com o do orçamento apagaria a edição.
+    observacoes: job?.observacoes ?? orcamento.descritivo ?? "",
     // Job já enviado mostra o que foi gravado (lista vazia nos jobs
     // anteriores a 17/08/2026, que não tinham contato).
     contatos:

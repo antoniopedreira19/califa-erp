@@ -256,7 +256,7 @@ export function JobsAbertosList({ linhas }: { linhas: JobAberto[] }) {
     },
     {
       key: "produto",
-      rotulo: "Produto",
+      rotulo: "Marca",
       valor: produto,
       set: setProduto,
       opcoes: opcoesDe(linhas, (j) => j.produto),

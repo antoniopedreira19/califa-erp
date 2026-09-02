@@ -626,7 +626,7 @@ export function AberturaForm({
         "—",
     },
     { rotulo: "Cliente", valor: job.cliente_nome ?? "—" },
-    { rotulo: "Produto", valor: job.produto ?? "—" },
+    { rotulo: "Marca", valor: job.produto ?? "—" },
     // A que veio do orçamento — fixa. O que o financeiro escolher no
     // campo ao lado aparece no "Resumo do registro", não aqui: este
     // painel é o que a produção mandou.

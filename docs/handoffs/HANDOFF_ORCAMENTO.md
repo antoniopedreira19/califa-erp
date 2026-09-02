@@ -2644,3 +2644,39 @@ orçamentos e jobs) mais duas leves — `projeto_responsaveis` e
 **O resto da barra não mudou.** O mock do design mostra ali um filtro de
 "empresas" que **não** foi adicionado, e omite o de **Ano**, que
 permanece — a instrução foi usar só os filtros novos e manter o resto.
+
+---
+
+## ⚠️ Nota de 2026-09-02 — Serviço, Equipe, Descritivo e "Marca"
+
+Decisão [037](../decisions/037-servico-no-orcamento-equipe-no-projeto-e-marca.md),
+do design `Projeto e Orcamento - Equipe e Servico`.
+
+**Serviço saiu do formulário de projeto e entrou no de orçamento**, antes
+de Categoria. Grava `orcamentos.servico_id`. Os 46 orçamentos existentes
+herdaram o serviço do projeto no backfill (45 preenchidos; o de fora é do
+projeto que não tinha).
+
+Serviço e Categoria leem a mesma tabela e **não** repetem opção: `escopo`
+já separava as listas — `projeto` (Always On, Ativação, Fee, Interno) e
+`orcamento` (Ativação, Conteúdo, Extra, Influencer). O helper
+`lib/data/servicos.ts` guarda essa explicação.
+
+`projetos.categoria_id` **fica no banco** com o dado histórico, marcada
+como legada. A coluna "Serviço" da lista de projetos passou a ler os
+orçamentos, com contador `+N` como o das regionais — e por causa do
+backfill exibe os mesmos valores de antes.
+
+**O projeto ganhou Equipe**, obrigatória, na vaga do Serviço. Criador, GPs
+Responsáveis e produtores dos orçamentos entram **travados** (chip sem
+"x") e são **derivados na leitura**, não copiados;
+`projeto_responsaveis.papel` separa `gp` de acréscimo manual (`equipe`).
+`MultiSelect` ganhou a prop `travados` para isso.
+
+**O orçamento ganhou Descritivo** (500 caracteres, o mesmo teto de
+`jobs.observacoes`). Ele pré-preenche o Descritivo do envio para abertura,
+onde segue editável — job já enviado manda no que aparece.
+
+**"Produto" virou "Marca"** em toda a interface. Os nomes técnicos
+(`produto_id`, `cliente_produtos`, `jobs.produto`) **não** mudaram:
+renomear coluna em uso é destrutivo e não muda nada para quem usa.

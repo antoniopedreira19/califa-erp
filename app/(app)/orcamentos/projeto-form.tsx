@@ -51,6 +51,15 @@ interface Props {
   /** Ids já vinculados ao projeto, na ordem gravada. */
   regionaisSelecionadas?: string[];
   responsaveisSelecionados?: string[];
+  /** Acréscimos manuais à Equipe já gravados (papel `equipe`). Os
+   *  automáticos NÃO vêm aqui: são derivados na hora. */
+  equipeSelecionada?: string[];
+  /** Quem já é produtor de algum orçamento do projeto. Entra na Equipe
+   *  travado, junto do criador e dos GPs. Vazio na criação — o projeto
+   *  ainda não tem orçamento. */
+  produtoresDosOrcamentos?: string[];
+  /** Quem criou o projeto. Na criação é quem está logado. */
+  criadorId?: string;
   onSuccess?: () => void;
   onCancel?: () => void;
 }
@@ -66,6 +75,9 @@ export function ProjetoForm({
   categorias,
   regionaisSelecionadas,
   responsaveisSelecionados,
+  equipeSelecionada,
+  produtoresDosOrcamentos,
+  criadorId,
   onSuccess,
   onCancel,
 }: Props) {
@@ -85,8 +97,35 @@ export function ProjetoForm({
   const [regionalIds, setRegionalIds] = React.useState<string[]>(
     regionaisSelecionadas ?? (projeto?.regional_id ? [projeto.regional_id] : []),
   );
-  const [categoriaId, setCategoriaId] = React.useState(projeto?.categoria_id ?? "");
   const [descricao, setDescricao] = React.useState(projeto?.descricao ?? "");
+  // Só os ACRÉSCIMOS manuais. Os automáticos entram por derivação abaixo.
+  const [equipeManual, setEquipeManual] = React.useState<string[]>(
+    equipeSelecionada ?? [],
+  );
+
+  /**
+   * Equipe travada: criador do projeto, GPs Responsáveis e produtores dos
+   * orçamentos. Regra do Tiago (02/09/2026) — esses três entram sozinhos e
+   * não podem ser removidos, o que é o que garante que o campo, sendo
+   * obrigatório, nunca fique vazio.
+   *
+   * Derivada, não copiada: os GPs vivem no campo ao lado e mudam enquanto
+   * o formulário está aberto, e os produtores só existem depois que há
+   * orçamento. Copiar exigiria re-sincronizar nos dois casos.
+   */
+  const equipeTravada = React.useMemo(() => {
+    const ids = new Set<string>();
+    if (criadorId) ids.add(criadorId);
+    for (const id of responsavelIds) ids.add(id);
+    for (const id of produtoresDosOrcamentos ?? []) ids.add(id);
+    return Array.from(ids);
+  }, [criadorId, responsavelIds, produtoresDosOrcamentos]);
+
+  /** O que o campo mostra: travados primeiro, na ordem, depois o resto. */
+  const equipeVisivel = React.useMemo(() => {
+    const travados = new Set(equipeTravada);
+    return [...equipeTravada, ...equipeManual.filter((id) => !travados.has(id))];
+  }, [equipeTravada, equipeManual]);
 
   // Produto é cadastrado por cliente: trocar de cliente invalida a escolha.
   const produtosDoCliente = React.useMemo(
@@ -117,7 +156,10 @@ export function ProjetoForm({
     formData.set("empresa_id", empresaId);
     formData.set("cliente_id", clienteId);
     formData.set("produto_id", produtoId);
-    formData.set("categoria_id", categoriaId);
+    // Só os acréscimos manuais vão ao servidor: os travados ele deriva de
+    // novo, e mandá-los daqui abriria caminho para um payload adulterado
+    // gravar alguém como equipe manual.
+    for (const id of equipeManual) formData.append("equipe_ids", id);
     // `append` numa chave repetida: o servidor lê com `getAll` e a ordem
     // define quem vai para as colunas de compatibilidade do projeto.
     for (const id of responsavelIds) formData.append("responsavel_ids", id);
@@ -178,21 +220,6 @@ export function ProjetoForm({
           />
         </Field>
 
-        <Field
-          label="GPs Responsáveis"
-          name="responsavel_ids"
-          required
-          errors={fieldErrors}
-        >
-          <MultiSelect
-            items={responsaveis.map((r) => ({ value: r.id, label: r.nome }))}
-            value={responsavelIds}
-            onChange={setResponsavelIds}
-            placeholder="Selecione um ou mais GPs"
-            className={erroClasses("responsavel_ids")}
-          />
-        </Field>
-
         <Field label="Cliente" name="cliente_id" required errors={fieldErrors}>
           <Select value={clienteId} onValueChange={handleClienteChange}>
             <SelectTrigger className={erroClasses("cliente_id")}>
@@ -209,7 +236,7 @@ export function ProjetoForm({
           </Select>
         </Field>
 
-        <Field label="Produto" name="produto_id" required errors={fieldErrors}>
+        <Field label="Marca" name="produto_id" required errors={fieldErrors}>
           <Select
             value={produtoId}
             onValueChange={setProdutoId}
@@ -221,8 +248,8 @@ export function ProjetoForm({
                   !clienteId
                     ? "Selecione o cliente primeiro"
                     : produtosDoCliente.length === 0
-                      ? "Nenhum produto cadastrado"
-                      : "Selecione o produto"
+                      ? "Nenhuma marca cadastrada"
+                      : "Selecione a marca"
                 }
               />
             </SelectTrigger>
@@ -239,7 +266,7 @@ export function ProjetoForm({
           </Select>
           {clienteId && produtosDoCliente.length === 0 && (
             <p className="text-xs text-muted-foreground">
-              Este cliente ainda não tem produtos.{" "}
+              Este cliente ainda não tem marcas.{" "}
               <Link
                 href={`/clientes/${clienteId}`}
                 prefetch={false}
@@ -262,19 +289,23 @@ export function ProjetoForm({
           />
         </Field>
 
-        <Field label="Serviço" name="categoria_id" required errors={fieldErrors}>
-          <Select value={categoriaId} onValueChange={setCategoriaId}>
-            <SelectTrigger className={erroClasses("categoria_id")}>
-              <SelectValue placeholder="Selecione um serviço" />
-            </SelectTrigger>
-            <SelectContent>
-              {categorias.map((c) => (
-                <SelectItem key={c.id} value={c.id}>
-                  {c.nome}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        {/* Serviço saiu daqui em 02/09/2026 (decisão 037): ele descreve o
+            trabalho de um job, não a iniciativa inteira do cliente, e
+            agora vive no formulário do orçamento. GPs Responsáveis ocupa a
+            vaga, ao lado de Regionais, como no design. */}
+        <Field
+          label="GPs Responsáveis"
+          name="responsavel_ids"
+          required
+          errors={fieldErrors}
+        >
+          <MultiSelect
+            items={responsaveis.map((r) => ({ value: r.id, label: r.nome }))}
+            value={responsavelIds}
+            onChange={setResponsavelIds}
+            placeholder="Selecione um ou mais GPs"
+            className={erroClasses("responsavel_ids")}
+          />
         </Field>
 
         <Field
@@ -303,6 +334,28 @@ export function ProjetoForm({
             className={erroClasses("data_fim_prevista")}
             placeholder="Selecione a data"
           />
+        </Field>
+
+        {/* Equipe — obrigatória, e nunca vazia por construção: criador,
+            GPs e produtores dos orçamentos entram travados (sem "x"). O
+            campo aceita acrescentar quem mais participa. */}
+        <Field label="Equipe" name="equipe_ids" required errors={fieldErrors}>
+          <MultiSelect
+            items={responsaveis.map((r) => ({ value: r.id, label: r.nome }))}
+            value={equipeVisivel}
+            travados={equipeTravada}
+            onChange={(ids) =>
+              // Guarda só o que não é travado: o resto é derivado e voltaria
+              // sozinho no próximo render de qualquer forma.
+              setEquipeManual(ids.filter((id) => !equipeTravada.includes(id)))
+            }
+            placeholder="Selecione quem participa do projeto"
+            className={erroClasses("equipe_ids")}
+          />
+          <p className="text-xs text-muted-foreground">
+            Criador, GPs Responsáveis e produtores dos orçamentos entram
+            automaticamente e não podem ser removidos.
+          </p>
         </Field>
 
         <div className="md:col-span-2">

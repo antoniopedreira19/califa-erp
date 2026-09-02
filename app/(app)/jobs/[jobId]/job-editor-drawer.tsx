@@ -86,7 +86,7 @@ export function JobEditorDrawer({ job, regionais, responsaveis }: Props) {
                 {fieldErrors.nome?.map((m, i) => <p key={i} className="text-xs text-california-red">{m}</p>)}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="produto">Produto</Label>
+                <Label htmlFor="produto">Marca</Label>
                 <Input id="produto" name="produto" maxLength={120} defaultValue={job.produto ?? ""} />
               </div>
               <div className="space-y-2">

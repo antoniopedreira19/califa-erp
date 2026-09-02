@@ -78,6 +78,9 @@ interface Props {
   /** Quantos orçamentos o projeto já tem — base do código previsto. */
   orcamentosExistentes: number;
   categorias: Pick<CategoriaDominio, "id" | "nome">[];
+  /** Serviço do job — escopo `projeto` de `categorias_dominio`,
+   *  lista distinta das categorias acima (decisão 037). */
+  servicos: Pick<CategoriaDominio, "id" | "nome">[];
   regionaisDoProjeto: Pick<Regional, "id" | "nome">[];
   /** Primeiras cidades do cadastro — o combobox do formulário busca o
    *  resto no servidor. O rótulo do card sai de `job.cidade_nome`. */
@@ -119,6 +122,7 @@ export function EditorMultiJobs({
   clienteNome,
   orcamentosExistentes,
   categorias,
+  servicos,
   regionaisDoProjeto,
   cidadesIniciais,
   gpsDoProjeto,
@@ -576,6 +580,8 @@ export function EditorMultiJobs({
       jobs: jobs.map((job) => ({
         nome: job.nome,
         categoria_id: job.categoria_id,
+        servico_id: job.servico_id,
+        descritivo: job.descritivo,
         regional_id: job.regional_id,
         cidade_id: job.cidade_id,
         gp_responsavel_id: job.gp_responsavel_id,
@@ -907,6 +913,7 @@ export function EditorMultiJobs({
           <OrcamentoForm
             projetoId={projeto.id}
             categorias={categorias}
+            servicos={servicos}
             regionaisDoProjeto={regionaisDoProjeto}
             cidadesIniciais={cidadesIniciais}
             gpsDoProjeto={gpsDoProjeto}

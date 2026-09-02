@@ -83,6 +83,7 @@ export default async function NovoProjetoPage() {
           regionais={regionais}
           produtos={produtos}
           categorias={categorias}
+          criadorId={session.profile.id}
         />
       </div>
     </div>

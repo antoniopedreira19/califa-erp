@@ -167,7 +167,7 @@ export async function enviarJobParaAbertura(
   if (!projeto) return { ok: false, message: "Projeto não encontrado." };
 
   const faltando: string[] = [];
-  if (!projeto.produto_id) faltando.push("Produto (no projeto)");
+  if (!projeto.produto_id) faltando.push("Marca (no projeto)");
   if (!orc.gp_responsavel_id) faltando.push("GP responsável (no orçamento)");
   if (!orc.produtor_id) faltando.push("Produtor responsável (no orçamento)");
 

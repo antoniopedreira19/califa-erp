@@ -23,7 +23,10 @@ export interface ProjetoRow {
   codigo: string;
   nome: string;
   campanha: string | null;
-  categoria_nome: string | null;
+  /** Serviços dos ORÇAMENTOS do projeto, já ordenados e sem repetição.
+   *  O Serviço deixou de ser designação do projeto em 02/09/2026 (037):
+   *  esta coluna passou a mostrar o que os jobs dele fazem. */
+  servicos: string[];
   status: ProjetoStatus;
   cliente_id: string;
   cliente_nome: string | null;
@@ -193,7 +196,7 @@ export function ProjetosList({ projetos, clientes, meusProjetoIds }: Props) {
             avoidCollisions={false}
             className="w-[--radix-select-trigger-width]"
           >
-            <SelectItem value="todos">Todos os produtos</SelectItem>
+            <SelectItem value="todos">Todas as marcas</SelectItem>
             {produtosOpcoes.map((p) => (
               <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>
             ))}
@@ -240,7 +243,7 @@ export function ProjetosList({ projetos, clientes, meusProjetoIds }: Props) {
               <th className="px-4 py-3 font-semibold">Código</th>
               <th className="px-4 py-3 font-semibold">Nome</th>
               <th className="px-4 py-3 font-semibold">Cliente</th>
-              <th className="px-4 py-3 font-semibold">Produto</th>
+              <th className="px-4 py-3 font-semibold">Marca</th>
               <th className="px-4 py-3 font-semibold">Regional</th>
               <th className="px-4 py-3 font-semibold">Serviço</th>
               <th className="px-4 py-3 font-semibold">Início</th>
@@ -300,7 +303,25 @@ export function ProjetosList({ projetos, clientes, meusProjetoIds }: Props) {
                     </span>
                   )}
                 </td>
-                <td className="px-4 py-3 text-muted-foreground">{p.categoria_nome ?? "—"}</td>
+                <td className="px-4 py-3 text-muted-foreground">
+                  {p.servicos.length === 0 ? (
+                    "—"
+                  ) : (
+                    // Mesmo tratamento das regionais: o primeiro inteiro, e
+                    // um contador a partir do segundo.
+                    <span className="inline-flex items-center gap-1">
+                      <span>{p.servicos[0]}</span>
+                      {p.servicos.length > 1 && (
+                        <span
+                          title={p.servicos.join(", ")}
+                          className="inline-flex items-center rounded-full border border-border bg-muted/40 px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground"
+                        >
+                          +{p.servicos.length - 1}
+                        </span>
+                      )}
+                    </span>
+                  )}
+                </td>
                 <td className="px-4 py-3 text-muted-foreground">{formatDate(p.data_inicio_prevista)}</td>
                 <td className="px-4 py-3 text-center tabular-nums">{p.orcamentos_count}</td>
                 <CelulaFunil valor={p.aprovados_count} />

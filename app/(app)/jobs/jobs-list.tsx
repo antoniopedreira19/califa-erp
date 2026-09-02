@@ -259,7 +259,7 @@ export function JobsList({
                 avoidCollisions={false}
                 className="w-[--radix-select-trigger-width]"
               >
-                <SelectItem value="todos">Todos os produtos</SelectItem>
+                <SelectItem value="todos">Todas as marcas</SelectItem>
                 {produtosOpcoes.map((p) => (
                   <SelectItem key={p} value={p}>
                     {p}
@@ -336,7 +336,7 @@ export function JobsList({
               <th className="px-4 py-3 font-semibold">Nome</th>
               <th className="px-4 py-3 text-center font-semibold">Empresa</th>
               <th className="px-4 py-3 font-semibold">Projeto</th>
-              <th className="px-4 py-3 font-semibold">Produto</th>
+              <th className="px-4 py-3 font-semibold">Marca</th>
               <th className="px-4 py-3 font-semibold">Regional</th>
               <th className="px-4 py-3 font-semibold">Cliente</th>
               <th className="px-4 py-3 font-semibold">Responsável</th>

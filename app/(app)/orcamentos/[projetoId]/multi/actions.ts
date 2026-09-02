@@ -150,6 +150,8 @@ export async function salvarOrcamentosDoProjeto(
       nome: job.nome ?? "",
       status: "rascunho",
       categoria_id: job.categoria_id ?? "",
+      servico_id: job.servico_id ?? "",
+      descritivo: job.descritivo ?? "",
       regional_id: job.regional_id ?? "",
       cidade_id: job.cidade_id ?? "",
       gp_responsavel_id: job.gp_responsavel_id ?? "",

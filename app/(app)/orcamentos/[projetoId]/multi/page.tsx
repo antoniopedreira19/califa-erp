@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { servicosDoOrcamentoQuery, type ServicoOption } from "@/lib/data/servicos";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { listActiveMembers } from "@/lib/data/members";
@@ -32,6 +33,7 @@ export default async function OrcamentoDoProjetoPage({
   const [
     projRes,
     categoriasOrcRes,
+    servicosRes,
     cidadesIniciais,
     categoriasItemRes,
     fornecedoresRes,
@@ -68,6 +70,8 @@ export default async function OrcamentoDoProjetoPage({
       .eq("escopo", "orcamento")
       .eq("ativo", true)
       .order("nome"),
+    // Serviço: mesma tabela, escopo `projeto` — a outra lista (037).
+    servicosDoOrcamentoQuery(supabase, tenantId),
     // Só as primeiras cidades: o combobox do formulário busca o resto no
     // servidor a cada digitação. O cadastro comporta o Brasil inteiro.
     listarCidadesIniciais(tenantId),
@@ -129,6 +133,7 @@ export default async function OrcamentoDoProjetoPage({
 
   return (
     <EditorMultiJobs
+      servicos={(servicosRes.data ?? []) as ServicoOption[]}
       projeto={projeto}
       honorariosCliente={Number(
         projeto.cliente?.percentual_honorarios_padrao ??
