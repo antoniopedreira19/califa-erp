@@ -27,7 +27,7 @@ import { ProjetoEditorDrawer } from "../projeto-editor-drawer";
 import type { ProdutoOption } from "../projeto-form";
 import { NovoOrcamentoMenu } from "./novo-orcamento-menu";
 import { OrcamentosList, type OrcamentoRow } from "./orcamentos-list";
-import { BotaoImportarOrcamentos } from "../_selecao/botao-importar-orcamentos";
+import { ImportarOrcamentosDrawer } from "../_selecao/importar-orcamentos-drawer";
 import {
   ExportarOrcamentosMenu,
   type OrcamentoExportavel,
@@ -356,7 +356,7 @@ export default async function ProjetoDetailPage({
             />
             {/* Importar e Exportar logo depois de "Editar projeto", como no
                 design "Exportar e Exibir - Projeto e Visao Agregada". */}
-            <BotaoImportarOrcamentos />
+            <ImportarOrcamentosDrawer projetoId={projeto.id} />
             <ExportarOrcamentosMenu projetoId={projeto.id} orcamentos={exportaveis} />
           </div>
 

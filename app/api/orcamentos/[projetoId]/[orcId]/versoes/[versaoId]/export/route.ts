@@ -15,10 +15,11 @@ export const dynamic = "force-dynamic";
 /**
  * Exportação de UMA versão — a planilha que vai para o cliente.
  *
- * O desenho da aba mora em `lib/exportacao/planilha-orcamento.ts` desde
- * 03/09/2026, compartilhado com a exportação de vários orçamentos do
- * projeto (`app/api/orcamentos/[projetoId]/export`). Esta rota só busca a
- * versão e monta o workbook com uma aba.
+ * O desenho da planilha mora em `lib/exportacao/planilha-orcamento.ts`
+ * desde 03/09/2026, compartilhado com a exportação consolidada do projeto
+ * (`app/api/orcamentos/[projetoId]/export`). Esta rota só busca a versão
+ * e monta o workbook com uma seção sem título. Com fórmulas e ids
+ * ocultos, como a do projeto (decisão 041).
  */
 export async function GET(
   _req: Request,
@@ -90,18 +91,29 @@ export async function GET(
   wb.creator = "California ERP";
   wb.created = new Date();
 
-  adicionarAbaOrcamento(wb, "Orçamento", {
-    codigo: orcamento.codigo,
-    nome: orcamento.nome,
-    clienteNome,
-    tituloVersao: nomeVersao(orcamento.nome, versao.numero_versao),
-    percentualHonorarios: Number(versao.percentual_honorarios ?? 0),
-    percentualImposto: Number(versao.percentual_imposto ?? 0),
-    grupos: grupos.map((grupo) => ({
-      nome: grupo.nome,
-      itens: itens.filter((i) => i.grupo_id === grupo.id),
-    })),
-  });
+  adicionarAbaOrcamento(
+    wb,
+    "Orçamento",
+    {
+      identificacao: `${orcamento.codigo} · ${orcamento.nome}`,
+      clienteNome,
+      titulo: nomeVersao(orcamento.nome, versao.numero_versao),
+      secoes: [
+        {
+          orcamentoId: orcamento.id,
+          versaoId: versao.id,
+          percentualHonorarios: Number(versao.percentual_honorarios ?? 0),
+          percentualImposto: Number(versao.percentual_imposto ?? 0),
+          grupos: grupos.map((grupo) => ({
+            id: grupo.id,
+            nome: grupo.nome,
+            itens: itens.filter((i) => i.grupo_id === grupo.id),
+          })),
+        },
+      ],
+    },
+    { formulas: true },
+  );
 
   // ---------- resposta ----------
   const buffer = await wb.xlsx.writeBuffer();

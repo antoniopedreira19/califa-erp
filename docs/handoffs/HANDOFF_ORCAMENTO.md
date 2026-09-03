@@ -2693,100 +2693,108 @@ renomear coluna em uso é destrutivo e não muda nada para quem usa.
 
 ---
 
-## ⚠️ Nota de 2026-09-03 — Exportar vários orçamentos, e "Exibir" na visão agregada
+## ⚠️ Nota de 2026-09-03 — Planilha única do projeto: Exportar, Importar e "Exibir"
 
 Design `Exportar e Exibir - Projeto e Visao Agregada.dc.html` (projeto
-Claude Design `69342d83`, lido pelo `DesignSync`). A decisão formal em
-`docs/decisions/` fica para quando a **importação** da mesma planilha
-estiver definida — os dois botões nasceram juntos no design e a regra
-de um depende da do outro.
+Claude Design `69342d83`, lido pelo `DesignSync`). Regra em
+[decisão 041](../decisions/041-planilha-unica-do-projeto-exportar-e-importar.md);
+esta nota registra o que entrou e como foi conferido. Saiu em duas
+entregas no mesmo dia: a primeira (commit `229d8dc`) exportava **uma aba
+por orçamento**, como o design sugeria; a segunda trocou para a
+**planilha única** e trouxe a importação, depois das respostas do Tiago.
 
-### O que entrou
+### Onde os botões ficaram
 
-**Página do projeto** (`/orcamentos/[projetoId]`): dois botões depois de
-"Editar projeto" — **Importar** e **Exportar** — no mesmo padrão do
-"Exportar" da versão (outline, ícone pequeno, popover ancorado, fecha com
-clique fora ou Esc).
+**Página do projeto** (`/orcamentos/[projetoId]`): **Importar** e
+**Exportar** depois de "Editar projeto", no padrão do "Exportar" da
+versão (outline, ícone pequeno, popover ancorado, fecha com clique fora
+ou Esc).
 
 **Visão agregada** (`/orcamentos/[projetoId]/agregado`): **Exibir**,
-**Importar** e **Exportar** na linha de resumo, ao lado de "N orçamentos".
-O `<p>` dessa linha virou `<div>` para conter os popovers.
+**Importar** e **Exportar** na linha de resumo, ao lado de "N
+orçamentos". O `<p>` dessa linha virou `<div>` para conter os popovers.
 
-**Exportar** (`_selecao/exportar-orcamentos-menu.tsx`, compartilhado
-pelas duas telas — as seleções são independentes):
+### Exportar
 
-- lista os orçamentos do projeto (menos os cancelados) com o rótulo
-  `nome - v{n}`, o chip do estágio do funil (`lib/calculos/funil.ts`) e o
-  valor; orçamento sem versão aparece travado, com "sem versão";
-- **job aberto não sai**: a linha marcada fica em alerta, o rodapé trava
-  e o aviso oferece "Desmarcar job aberto";
-- **aprovado (ou enviado para abertura) pede confirmação**: "Exportar
-  orçamento aprovado?" — a planilha sai da versão aprovada vigente;
-- rodapé com "TOTAL SELECIONADO · N DE M" e o botão que baixa o arquivo.
+`_selecao/exportar-orcamentos-menu.tsx`, compartilhado pelas duas telas
+com seleções independentes. Lista os orçamentos do projeto (menos os
+cancelados) com `nome - v{n}`, o chip do estágio do funil e o valor;
+orçamento sem versão aparece travado. **Job aberto** marcado põe a linha
+em alerta, trava o rodapé e oferece "Desmarcar job aberto". **Aprovado**
+(ou enviado para abertura) pede confirmação. O valor de cada linha é o
+**FATURAMENTO que a planilha imprime** — o lado bruto (decisão 028),
+calculado na agregada sobre o que está gravado, porque a exportação lê o
+banco e não o rascunho da tela.
 
-O **valor da lista é o FATURAMENTO que a aba imprime** — o lado bruto do
-fechamento (decisão 028), com as linhas em save incluídas. Em orçamento
-sem save é o mesmo "Valor do Job" da tabela. Na visão agregada ele é
-calculado sobre o que está **gravado**, não sobre o rascunho da tela: a
-exportação lê o banco.
-
-**Rota nova** `GET /api/orcamentos/[projetoId]/export?orcamentos=a,b`:
-um `.xlsx`, **uma aba por orçamento** (nome do job, sanitizado para os
-31 caracteres do Excel, com sufixo numérico se repetir), cada aba idêntica
-à exportação de orçamento único. A versão que sai é a aprovada e, sem
-aprovada, a mais recente — a regra do "Valor do Job" da página. As
-travas do seletor são reconferidas na rota (job aberto → 400; sem
-versão → 400; orçamento de outro projeto → 404). Arquivo:
-`orcamentos-{código do projeto}.xlsx`, barra trocada por hífen.
+Rota `GET /api/orcamentos/[projetoId]/export?orcamentos=a,b`: **uma
+aba**, uma **seção por orçamento** (título azul escuro, subtotal
+próprio), fechamento único. Versão que sai: aprovada, senão a mais
+recente (`lib/calculos/versao-vigente.ts`, agora fonte única dessa
+escolha para exportação e importação). Travas reconferidas na rota (job
+aberto → 400; sem versão → 400; orçamento de outro projeto → 404).
+Arquivo `orcamentos-{código do projeto}.xlsx`.
 
 **Gerador compartilhado** `lib/exportacao/planilha-orcamento.ts`: o
-desenho da aba saiu da rota da versão única para cá; as duas rotas o
-chamam. A rota da versão única continua gerando exatamente o arquivo de
-antes (valores), conferido baixando pelo botão de sempre.
+desenho da planilha saiu da rota da versão única para cá; as duas rotas
+o chamam — a da versão é o caso de uma seção sem título. **Fórmulas** em
+tudo que é calculado (TT, subtotais de grupo e de seção, SUMIF por tipo,
+TOTAL, HONORÁRIOS, IMPOSTO em gross-up, FATURAMENTO), derivadas de
+`REGRAS_TIPO_CUSTO`, com resultado em cache. Seções com percentuais
+diferentes viram parcelas por seção em HONORÁRIOS e IMPOSTO, e o rótulo
+perde o "%". **Coluna H oculta** com `orc:|v:`, `grp:` e `it:` — na
+versão única, o `orc:|v:` fica na H1. A exportação de versão única passou
+a ter fórmulas e ids também (decisão do Tiago).
 
-**Fórmulas do Excel** (`{ formulas: true }`, ligado só na exportação em
-lote por enquanto): TT de item (`C*D*E`), subtotal de grupo (`SUM`),
-SUB-TOTAL por tipo (`SUMIF` sobre a coluna do tipo), TOTAL, HONORÁRIOS,
-IMPOSTO (gross-up `base × taxa ÷ (1 − taxa)`) e FATURAMENTO. Os tipos de
-cada linha são derivados de `REGRAS_TIPO_CUSTO`, não escritos à mão. Cada
-fórmula sai com o **resultado em cache**, então quem lê sem recalcular —
-o nosso parser de importação inclusive — enxerga o número. Provado por
-script: 21 células de fórmula batem com `calcularTotaisVersao().bruto` em
-todos os sete tipos, com linha em save e grupo vazio.
+Detalhe do ExcelJS: fórmula cujo resultado é **zero** sai sem o valor em
+cache (`result` omitido). O Excel recalcula ao abrir e o parser não lê
+essas células, então não afeta nada — mas quem inspecionar o arquivo
+sem recalcular vê a célula vazia.
 
-**Exibir** (`_selecao/exibir-orcamentos-menu.tsx`, só na agregada):
-filtro de TELA. Cards e linhas de Totais seguem a seleção; os três
-indicadores do topo (Valor do job, Custo planejado, Resultado geral) são
-do projeto inteiro e não seguem — como o design pediu. Uma faixa âmbar
-avisa "Exibindo N de M orçamentos" com "Exibir todos". Nada é salvo, e o
-que está escondido continua entrando no "Salvar alterações" como estava.
-Orçamento criado na sessão sempre aparece. O código de cada orçamento
-passou a ser calculado uma vez sobre a lista inteira (`codigos`), para o
-filtro não renumerar os novos.
+### Importar
+
+`_selecao/importar-orcamentos-drawer.tsx` + `importar-actions.ts`
+(preview e confirmação, as duas releem o arquivo). Parser próprio em
+`lib/importacao/parser-projeto.ts` — a planilha exportada tem outro
+layout que a oficial da agência (`parser-oficial.ts` continua servindo a
+importação da tela do orçamento e da versão). O plano de cada seção sai
+de `lib/importacao/diff-projeto.ts`, puro e provado por script.
+
+O preview lista orçamento a orçamento: o que muda (alteradas, novas,
+apagadas, grupos), o orçado antes → depois, o resultado (`→ v{n}`, "sem
+versão nova", "não entra" com o motivo) e, em destaque, quem terá a
+aprovação desfeita. Confirmar cria as versões e mostra o que entrou;
+"Fechar" recarrega a tela.
 
 `OrigemBanco` ganhou `estagio?` (o chip dos seletores); a página da
 agregada passou a carregar `jobs` (leve, no `Promise.all` das versões)
 para calcular o funil.
 
-### O que NÃO entrou — em definição com o Tiago
+### Exibir
 
-**Importar** está no lugar, **desabilitado**, com o motivo no tooltip. A
-ideia é a planilha exportada do projeto voltar, depois de editada (pelo
-cliente inclusive), como **versão nova de cada orçamento**, com o orçado
-atualizado e o **planejado preservado**. Ficaram abertas: uma aba por
-orçamento ou uma planilha única para o cliente; como casar linha da
-planilha com linha da versão; o planejado de linha nova; e se a versão
-nova nasce para todos os orçamentos do arquivo ou só para os que mudaram.
+`_selecao/exibir-orcamentos-menu.tsx`, só na agregada: filtro de tela,
+faixa "Exibindo N de M" com "Exibir todos", indicadores do topo intactos.
+O código de cada orçamento passou a ser calculado uma vez sobre a lista
+inteira (`codigos`), para o filtro não renumerar os novos.
 
-### Verificação (03/09/2026, servidor próprio na porta 61019, logado)
+### ⚠️ Ponta solta apontada ao Tiago
+
+Orçamento que **já virou job e foi rejeitado pelo financeiro**
+(`job_criado` + job `rejeitado_financeiro`) aparece no funil como
+"Orçamento Aprovado" e **é exportável** com confirmação — mas **não é
+importável**, porque `job_criado` não recebe versão nova (a mesma trava
+do "Nova versão"). O preview diz isso na linha; a regra não foi mudada.
+
+### Verificação (03/09/2026, servidor próprio, logado no Chrome)
 
 | Tela | O que foi conferido |
 |---|---|
-| Projeto Teste (`0-0001/26`) | Importar desabilitado com tooltip; Exportar abre com Job 2 (job aberto) em alerta, rodapé travado; "Desmarcar job aberto" libera; Exportar → "Exportar orçamento aprovado?" → "Sim, exportar" baixou `orcamentos-0-0001-26.xlsx` |
-| Arquivo baixado | aba "Job 1", 2 grupos / 5 itens, fórmulas com cache, FATURAMENTO `=…` → R$ 135.259,35, igual ao Valor do Job da tela |
-| Rota, pelo `fetch` | com o job aberto na lista → 400 "Job 2 já é um job aberto e não pode ser exportado." |
-| Visão agregada | Exibir desmarca Job 2 → faixa "Exibindo 1 de 2", só o card do Job 1, Totais com uma linha, indicadores do topo intactos; "Exibir todos" restaura; Exportar igual ao da página do projeto |
-| Versão única (`Job 1 · v1`) | "Exportar planilha" de sempre baixou `orcamento-0-0001_26-01-v1.xlsx` com aba "Orçamento" e valores, como antes |
+| Projeto Teste `0-0001/26` (1ª entrega) | Exportar com Job 2 (job aberto) em alerta; "Desmarcar" libera; confirmação do aprovado; download; rota recusa job aberto com 400 |
+| Visão agregada `0-0001/26` | Exibir desmarca Job 2 → faixa "Exibindo 1 de 2", um card, Totais com uma linha, indicadores intactos; "Exibir todos" restaura |
+| Teste Alterações `TESTE-0003/26` — Exportar | 7 orçamentos listados; 2 jobs abertos em alerta; "Desmarcar jobs abertos" → 5 de 7; confirmação dos aprovados; `orcamentos-TESTE-0003-26.xlsx` baixado: 1 aba, 5 seções, H oculta com ids, HONORÁRIOS 12% direto e IMPOSTO por seção (0% e 19,53% misturados), FATURAMENTO R$ 186.053,64 = total do seletor |
+| Teste Alterações — Importar | Arquivo editado por script (B2: Item B3 15.000 → 18.000 e Item B2 apagado; B1: grupo renomeado e linha nova sem id) enviado pelo drawer. Preview: Job 1 "Nada mudou"; B1 "1 nova · 1 grupo renomeado, R$ 100 → R$ 600 → v2"; B2 "1 alterada · 1 apagada, R$ 15.200 → R$ 18.000 → v2, aprovação desfeita"; B3 "já virou job — não entra"; Abas Versões "Nada mudou". "Criar 2 versões" → "2 versões criadas" |
+| Banco, depois da importação | B1 v2 rascunho: "Grupo renomeado", Item B1 com planejado 100/1/1 **preservado**, linha nova 250×2×1 com planejado 0/0/0 e rastro "linha 9". B2: status `em_revisao`, `versao_aprovada_id` nulo, v1 `em_revisao`, v2 rascunho só com Item B3 a 18.000 e planejado 12.000 preservado. 2 linhas em `orcamento_importacoes` com o arquivo no bucket; auditoria `versao_orcamento.importada` ×2 e `aprovacao_cancelada` ×1 |
+| Tela do orçamento B1 | v2 "mais recente" com o grupo renomeado e as duas linhas; "Exportar planilha" baixou a versão única com fórmulas e `orc:|v:` na H1 |
+| Provas por script | 24 fórmulas do consolidado (2 seções, taxas diferentes) batem com a soma dos fechamentos brutos; parser lê de volta 2 seções / 7 itens; diff sem edição = nada; com edição = 2 alteradas, 1 nova, 1 apagada, 1 grupo renomeado, 1 casada por descrição, planejado 900 preservado |
 
 `tsc --noEmit`, `next lint` e `next build` (em cópia isolada) limpos.
 Único erro de console: `trancy-version`, atributo injetado por extensão

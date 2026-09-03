@@ -38,9 +38,9 @@ interface Props {
 /**
  * "Exportar" da página do projeto e da visão agregada.
  *
- * Um arquivo `.xlsx`, uma aba por orçamento marcado, cada aba no modelo
- * da exportação de orçamento único. Duas regras do seletor, as duas
- * reconferidas na rota:
+ * Um arquivo `.xlsx` com uma planilha só: os orçamentos marcados em
+ * sequência e um fechamento único — para o cliente, um orçamento
+ * (decisão 041). Duas regras do seletor, as duas reconferidas na rota:
  *
  * - **Job aberto não sai.** A linha marcada fica em alerta, o rodapé
  *   trava e um aviso oferece desmarcar de uma vez.
@@ -194,9 +194,10 @@ export function ExportarOrcamentosMenu({ projetoId, orcamentos }: Props) {
                   );
                 })}
                 <p className="mx-1.5 mb-1 mt-0.5 text-[10.5px] leading-relaxed text-muted-foreground">
-                  Uma aba por orçamento, no modelo da exportação de orçamento
-                  único. O valor é o FATURAMENTO que a aba mostra — com as
-                  linhas em save incluídas, quando houver.
+                  Uma planilha só: os orçamentos marcados entram em sequência,
+                  com um fechamento único — para o cliente, um orçamento. O
+                  valor é o FATURAMENTO de cada um, com as linhas em save
+                  incluídas, quando houver.
                 </p>
               </div>
 
