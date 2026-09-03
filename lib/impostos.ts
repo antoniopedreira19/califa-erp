@@ -20,6 +20,18 @@
  */
 export const ALIQUOTAS_IMPOSTO = [19.53, 24.269914] as const;
 
+/**
+ * Alíquota que já vem escolhida quando um orçamento NOVO nasce
+ * (03/09/2026). É a praticada na maioria dos jobs; a de 24,269914 é a
+ * exceção, e quem precisa dela troca no seletor.
+ *
+ * Vale só para orçamento novo — versão nova de orçamento existente
+ * continua sem palpite, porque ali o parâmetro é decisão da versão. Ver
+ * `criarVersaoInicial` (formulário) e `PARAMETROS_PADRAO` (editores
+ * multi e agregado).
+ */
+export const ALIQUOTA_IMPOSTO_PADRAO: number = ALIQUOTAS_IMPOSTO[0];
+
 /** Valor do <SelectItem>. Number(...) reverte sem perda. */
 export function aliquotaParaValor(aliquota: number): string {
   return String(aliquota);

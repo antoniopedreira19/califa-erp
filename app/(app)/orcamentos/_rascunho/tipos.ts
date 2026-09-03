@@ -1,5 +1,6 @@
 import type { TipoCusto } from "@/lib/types";
 import type { EstagioFunil } from "@/lib/calculos/funil";
+import { ALIQUOTA_IMPOSTO_PADRAO } from "@/lib/impostos";
 
 /**
  * O rascunho do orçamento do projeto.
@@ -216,9 +217,12 @@ export interface AlteracoesProjetoPayload {
   parametrosNovos: ParametrosVersao[];
 }
 
+/** Parâmetros de um orçamento NOVO nos editores multi e agregado. Os
+ *  honorários chegam por cima, do cadastro do cliente; a alíquota de
+ *  imposto já vem escolhida desde 03/09/2026. */
 export const PARAMETROS_PADRAO: ParametrosVersao = {
   moeda: "BRL",
   taxa_cambio: 1,
   percentual_honorarios: 0,
-  percentual_imposto: 0,
+  percentual_imposto: ALIQUOTA_IMPOSTO_PADRAO,
 };
