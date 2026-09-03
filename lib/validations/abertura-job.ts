@@ -91,12 +91,15 @@ export const aberturaJobSchema = z
     data_prevista_faturamento: z
       .string()
       .regex(/^\d{4}-\d{2}-\d{2}$/, "Data prevista para recebimento é obrigatória."),
+    // Obrigatório desde 03/09/2026, e só AQUI: é o texto que a produção
+    // deixa para quem abre o job no financeiro. A coluna
+    // `jobs.observacoes` segue nullable — 27 dos 30 jobs existentes
+    // foram enviados sem descritivo, e um NOT NULL exigiria backfill.
     observacoes: z
       .string()
       .trim()
-      .max(OBSERVACOES_MAX, `Máximo ${OBSERVACOES_MAX} caracteres.`)
-      .optional()
-      .transform((v) => (v && v.length > 0 ? v : null)),
+      .min(1, "Informe o descritivo do job.")
+      .max(OBSERVACOES_MAX, `Máximo ${OBSERVACOES_MAX} caracteres.`),
     // Chega como JSON num campo do FormData e é parseado antes de validar
     // (ver `extractInput`). Ao menos um contato é obrigatório desde
     // 17/08/2026: sem ele o financeiro não sabe a quem cobrar.

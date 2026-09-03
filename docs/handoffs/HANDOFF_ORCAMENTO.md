@@ -270,6 +270,7 @@ Cores computadas conferidas contra o spec do design: `#f1f0ec`, `#e8f0fd`/`#1e4f
 - **Colunas nullable de propósito:** já existem projetos gravados e um NOT NULL exigiria backfill. A obrigatoriedade (Regional, Cidade, Final previsto, Categoria) vive só no Zod.
 - Em `jobs` cidade é texto livre; no projeto virou FK — padronizar o dado antes de a base crescer. `regional_id` e `data_fim_prevista` já existiam em `jobs` e agora sobem para o projeto.
 - Formulário: Nome em linha inteira; Cliente/Regional, Cidade/Categoria e Início/Final em duas colunas; Descrição opcional com contador que só aparece ao digitar. Categoria perde a opção "Sem categoria".
+- ⚠️ **2026-09-03: a Descrição virou obrigatória** (decisão 043), no criar e no editar. A coluna segue nullable — os 12 projetos gravados sem descrição só salvam depois de ganhar uma.
 - **Campanha** sai da tela; coluna e dados preservados (a busca da lista ainda casa por campanha).
 - **Responsável** sai da tela e passa a ser o usuário logado; rótulo vira "Criado por" na lista, no detalhe e no filtro. A coluna continua `responsavel_id` — renomear colidiria com o `created_by` existente. `profiles.id` **é** o id do `auth.users`, então o mesmo valor serve às duas.
 - ⚠️ **`campanha` seria zerada em toda edição.** Campo opcional no Zod não basta: o `transform` devolve `null` para entrada ausente, então a chave entra no `UPDATE`. `atualizarProjeto` remove a chave quando o form não a envia. Vale para qualquer campo que saia de um form compartilhado entre criar e editar.
@@ -1817,6 +1818,10 @@ Três alterações nos dois modais do envio de job
    com ela o campo do form, o schema Zod e `OBSERVACOES_MAX` — mudou o
    rótulo, não o dado. O comentário defasado na action (que dizia que o
    financeiro ainda não lia o campo) foi corrigido.
+   ⚠️ **2026-09-03: o Descritivo virou obrigatório** (decisão 043), e só
+   neste modal — nas telas do financeiro ele continua sendo leitura. A
+   coluna `jobs.observacoes` segue nullable: 27 dos 30 jobs foram enviados
+   sem descritivo e um NOT NULL exigiria backfill.
 2. **Seção "Contato de cobrança"** entre a linha GP/Produtor e o card de
    Fechamento da versão: grid de 3 colunas (Nome · Número · E-mail) +
    lixeira por linha, botão "+ Adicionar contato" abaixo. Nome e e-mail
