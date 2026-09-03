@@ -34,6 +34,7 @@ import {
   LARGURA_MINIMA_SAVE,
   colunasDoRotulo,
   totalDeColunas,
+  type ColunasVisiveis,
 } from "@/app/(app)/_planilha/grade-orcamento";
 import {
   CabecalhoSaveColuna,
@@ -169,6 +170,13 @@ interface Props {
    *  estado mas não deixa mexer: é como o financeiro e a versão aprovada
    *  leem a planilha. */
   onAbrirSave?: (item: VersaoOrcamentoItem) => void;
+  /** Blocos ocultáveis pelo menu "Exibir" (03/09/2026). Default: visíveis
+   *  — é assim que as agregadas e o rascunho do projeto leem a planilha.
+   *  Escondido, o bloco sai da grade INTEIRA: faixa, sub-cabeçalho,
+   *  linha de grupo, linhas de item, linha nova e total. As colunas do
+   *  Orçado também saem da ordem do Tab. PLANEJADO não é ocultável. */
+  orcadoVisivel?: boolean;
+  rentabilidadeVisivel?: boolean;
 }
 
 /** Campos que a grade edita — espelha o allowlist do server action. */
@@ -196,6 +204,14 @@ const CAMPOS_NAVEGAVEIS: readonly Campo[] = [
   "valor_unitario_planejado",
   "quantidade_planejada",
   "dias_meses_planejado",
+];
+
+/** As três colunas do bloco ORÇADO — as que saem da ordem do Tab quando
+ *  o bloco está escondido. */
+const CAMPOS_ORCADO: readonly Campo[] = [
+  "valor_unitario_orcado",
+  "quantidade_orcada",
+  "dias_meses_orcado",
 ];
 
 /** As três colunas do bloco PLANEJADO — as que `A` e `D` travam. */
@@ -348,6 +364,8 @@ export function ItensTable({
   onAlternarSave,
   savePorItem,
   onAbrirSave,
+  orcadoVisivel = true,
+  rentabilidadeVisivel = true,
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
@@ -377,6 +395,25 @@ export function ItensTable({
   const persistindoRef = React.useRef(false);
 
   const editavel = !readOnly;
+
+  /** Quais colunas esta tela está desenhando. Vai para o `colgroup` e
+   *  para todos os `colSpan` de linha inteira — os três têm que sair da
+   *  MESMA fonte, senão a tabela desalinha sem erro de compilação. */
+  const colunas: ColunasVisiveis = {
+    save: saveVisivel,
+    orcado: orcadoVisivel,
+    rentabilidade: rentabilidadeVisivel,
+  };
+
+  /** A ordem do Tab acompanha a tela: com o Orçado escondido, as três
+   *  colunas dele não existem para receber o cursor. */
+  const campos = React.useMemo(
+    () =>
+      orcadoVisivel
+        ? CAMPOS_NAVEGAVEIS
+        : CAMPOS_NAVEGAVEIS.filter((c) => !CAMPOS_ORCADO.includes(c)),
+    [orcadoVisivel],
+  );
 
   /** Todos os itens da planilha, achatados — a navegação e a busca por
    *  id atravessam os grupos e não podem depender de qual card era. */
@@ -613,7 +650,7 @@ export function ItensTable({
 
       let alvo = celulaVizinha(
         linhasNavegaveis,
-        CAMPOS_NAVEGAVEIS,
+        campos,
         { linhaId: rowId, campo },
         destino,
       );
@@ -621,25 +658,27 @@ export function ItensTable({
       // Anda até sair de célula travada. O teto é o tamanho da grade:
       // uma planilha inteira de itens `A` não pode virar laço infinito —
       // aí não há para onde ir e a edição encerra.
-      const teto = linhasNavegaveis.length * CAMPOS_NAVEGAVEIS.length;
+      const teto = linhasNavegaveis.length * campos.length;
       for (let i = 0; alvo && i < teto; i++) {
         const travada =
           CAMPOS_PLANEJADO.includes(alvo.campo) &&
           planejadoTravadoEm(alvo.linhaId);
         if (!travada) break;
-        alvo = celulaVizinha(
-          linhasNavegaveis,
-          CAMPOS_NAVEGAVEIS,
-          alvo,
-          destino,
-        );
+        alvo = celulaVizinha(linhasNavegaveis, campos, alvo, destino);
       }
 
       return alvo
         ? { rowId: alvo.linhaId, campo: alvo.campo, porTeclado: true }
         : null;
     },
-    [linhasNavegaveis, planejadoTravadoEm, grupoDoUltimoItem, draft, editavel],
+    [
+      linhasNavegaveis,
+      campos,
+      planejadoTravadoEm,
+      grupoDoUltimoItem,
+      draft,
+      editavel,
+    ],
   );
 
   function gravar(
@@ -941,7 +980,7 @@ export function ItensTable({
               saveVisivel ? LARGURA_MINIMA_SAVE : LARGURA_MINIMA,
             )}
           >
-            <ColunasFixas save={saveVisivel} />
+            <ColunasFixas {...colunas} />
             <thead className="text-[10px] uppercase tracking-wider text-muted-foreground">
               {/* Linha 1 — a faixa dos blocos. Ela é UMA para a planilha
                   inteira: era esta repetição, um cabeçalho por grupo, que
@@ -949,18 +988,22 @@ export function ItensTable({
               <tr>
                 {saveVisivel && <CabecalhoSaveFaixa />}
                 <th colSpan={3} className={FAIXA_GRUPO} />
-                <th colSpan={4} className={cn(FAIXA_ROTULO, ORCADO.faixa)}>
-                  ORÇADO
-                </th>
+                {orcadoVisivel && (
+                  <th colSpan={4} className={cn(FAIXA_ROTULO, ORCADO.faixa)}>
+                    ORÇADO
+                  </th>
+                )}
                 <th colSpan={4} className={cn(FAIXA_ROTULO, PLANEJADO.faixa)}>
                   PLANEJADO
                 </th>
-                <th
-                  colSpan={2}
-                  className={cn(FAIXA_ROTULO, RENTABILIDADE.faixa)}
-                >
-                  RENTABILIDADE
-                </th>
+                {rentabilidadeVisivel && (
+                  <th
+                    colSpan={2}
+                    className={cn(FAIXA_ROTULO, RENTABILIDADE.faixa)}
+                  >
+                    RENTABILIDADE
+                  </th>
+                )}
               </tr>
 
               {/* Linha 2 — sub-cabeçalho de colunas */}
@@ -974,38 +1017,42 @@ export function ItensTable({
                 </th>
                 <th className="text-left font-semibold px-3 py-2">Categoria</th>
                 {/* bloco ORÇADO */}
-                <th
-                  className={cn(
-                    "text-right font-semibold px-3 py-2",
-                    ORCADO.cabecalhoAbre,
-                  )}
-                >
-                  R$ Unit.
-                </th>
-                <th
-                  className={cn(
-                    "text-right font-semibold px-3 py-2",
-                    ORCADO.cabecalhoMeio,
-                  )}
-                >
-                  QT
-                </th>
-                <th
-                  className={cn(
-                    "text-right font-semibold px-3 py-2",
-                    ORCADO.cabecalhoMeio,
-                  )}
-                >
-                  D/M
-                </th>
-                <th
-                  className={cn(
-                    "text-right font-semibold px-3 py-2",
-                    ORCADO.cabecalhoFim,
-                  )}
-                >
-                  Total
-                </th>
+                {orcadoVisivel && (
+                  <>
+                    <th
+                      className={cn(
+                        "text-right font-semibold px-3 py-2",
+                        ORCADO.cabecalhoAbre,
+                      )}
+                    >
+                      R$ Unit.
+                    </th>
+                    <th
+                      className={cn(
+                        "text-right font-semibold px-3 py-2",
+                        ORCADO.cabecalhoMeio,
+                      )}
+                    >
+                      QT
+                    </th>
+                    <th
+                      className={cn(
+                        "text-right font-semibold px-3 py-2",
+                        ORCADO.cabecalhoMeio,
+                      )}
+                    >
+                      D/M
+                    </th>
+                    <th
+                      className={cn(
+                        "text-right font-semibold px-3 py-2",
+                        ORCADO.cabecalhoFim,
+                      )}
+                    >
+                      Total
+                    </th>
+                  </>
+                )}
                 {/* bloco PLANEJADO */}
                 <th
                   className={cn(
@@ -1040,22 +1087,26 @@ export function ItensTable({
                   {rotuloColunaTotal(visao)}
                 </th>
                 {/* bloco RENTABILIDADE */}
-                <th
-                  className={cn(
-                    "text-right font-semibold px-3 py-2",
-                    RENTABILIDADE.cabecalhoAbre,
-                  )}
-                >
-                  R$
-                </th>
-                <th
-                  className={cn(
-                    "text-right font-semibold px-3 py-2",
-                    RENTABILIDADE.cabecalhoFim,
-                  )}
-                >
-                  %
-                </th>
+                {rentabilidadeVisivel && (
+                  <>
+                    <th
+                      className={cn(
+                        "text-right font-semibold px-3 py-2",
+                        RENTABILIDADE.cabecalhoAbre,
+                      )}
+                    >
+                      R$
+                    </th>
+                    <th
+                      className={cn(
+                        "text-right font-semibold px-3 py-2",
+                        RENTABILIDADE.cabecalhoFim,
+                      )}
+                    >
+                      %
+                    </th>
+                  </>
+                )}
               </tr>
             </thead>
 
@@ -1081,7 +1132,7 @@ export function ItensTable({
                         `tfoot` de um card inteiro; agora é uma linha. */}
                     <tr data-calha={`g:${grupo.id}`} className="h-10">
                       <td
-                        colSpan={colunasDoRotulo(saveVisivel)}
+                        colSpan={colunasDoRotulo(colunas)}
                         className={LINHA_GRUPO_NOME}
                       >
                         <div className="flex min-w-0 items-center gap-2.5">
@@ -1118,15 +1169,19 @@ export function ItensTable({
                           </span>
                         </div>
                       </td>
-                      <td colSpan={3} className={ORCADO.grupoVazio} />
-                      <td
-                        className={cn(
-                          "px-3 text-right whitespace-nowrap font-mono text-[13px] font-bold",
-                          ORCADO.grupoValor,
-                        )}
-                      >
-                        {formatCurrency(subOrcado, moeda)}
-                      </td>
+                      {orcadoVisivel && (
+                        <>
+                          <td colSpan={3} className={ORCADO.grupoVazio} />
+                          <td
+                            className={cn(
+                              "px-3 text-right whitespace-nowrap font-mono text-[13px] font-bold",
+                              ORCADO.grupoValor,
+                            )}
+                          >
+                            {formatCurrency(subOrcado, moeda)}
+                          </td>
+                        </>
+                      )}
                       <td colSpan={3} className={PLANEJADO.grupoVazio} />
                       <td
                         className={cn(
@@ -1149,27 +1204,31 @@ export function ItensTable({
                           )}
                         </div>
                       </td>
-                      <td
-                        className={cn(
-                          "px-3 text-right whitespace-nowrap font-mono text-xs font-semibold",
-                          RENTABILIDADE.bordaAbre,
-                          RENTABILIDADE.grupoValor,
-                        )}
-                      >
-                        {formatCurrency(subResultado, moeda)}
-                      </td>
-                      <td
-                        className={cn(
-                          "px-3 text-right whitespace-nowrap font-mono text-xs font-semibold",
-                          RENTABILIDADE.grupoValor,
-                        )}
-                      >
-                        {subPercentual === null ? (
-                          <span className="text-muted-foreground">—</span>
-                        ) : (
-                          formatarPercentual(subPercentual)
-                        )}
-                      </td>
+                      {rentabilidadeVisivel && (
+                        <>
+                          <td
+                            className={cn(
+                              "px-3 text-right whitespace-nowrap font-mono text-xs font-semibold",
+                              RENTABILIDADE.bordaAbre,
+                              RENTABILIDADE.grupoValor,
+                            )}
+                          >
+                            {formatCurrency(subResultado, moeda)}
+                          </td>
+                          <td
+                            className={cn(
+                              "px-3 text-right whitespace-nowrap font-mono text-xs font-semibold",
+                              RENTABILIDADE.grupoValor,
+                            )}
+                          >
+                            {subPercentual === null ? (
+                              <span className="text-muted-foreground">—</span>
+                            ) : (
+                              formatarPercentual(subPercentual)
+                            )}
+                          </td>
+                        </>
+                      )}
                     </tr>
 
                     {aberto &&
@@ -1177,7 +1236,7 @@ export function ItensTable({
                       draft?.grupoId !== grupo.id && (
                         <tr className="border-b border-border">
                           <td
-                            colSpan={totalDeColunas(saveVisivel)}
+                            colSpan={totalDeColunas(colunas)}
                             className="py-5 pl-[30px] pr-3 text-xs text-muted-foreground"
                           >
                             Sem itens neste grupo ainda.
@@ -1336,71 +1395,75 @@ export function ItensTable({
                               )}
                             </CelulaSelect>
 
-                            <CelulaNumero
-                              valor={num(
-                                valorAtual(item, "valor_unitario_orcado"),
-                              )}
-                              formato="moeda"
-                              moeda={moeda}
-                              editando={ativaAqui("valor_unitario_orcado")}
-                              editavel={editavel}
-                              onAtivar={() =>
-                                setAtiva({
-                                  rowId: item.id,
-                                  campo: "valor_unitario_orcado",
-                                })
-                              }
-                              onConfirmar={(raw, d) =>
-                                confirmarNumero(
-                                  item,
-                                  "valor_unitario_orcado",
-                                  raw,
-                                  d,
-                                )
-                              }
-                              onCancelar={() => setAtiva(null)}
-                              tdClassName={cn("font-mono", ORCADO.celulaAbre)}
-                            />
-                            <CelulaNumero
-                              valor={num(valorAtual(item, "quantidade_orcada"))}
-                              editando={ativaAqui("quantidade_orcada")}
-                              editavel={editavel}
-                              onAtivar={() =>
-                                setAtiva({
-                                  rowId: item.id,
-                                  campo: "quantidade_orcada",
-                                })
-                              }
-                              onConfirmar={(raw, d) =>
-                                confirmarNumero(item, "quantidade_orcada", raw, d)
-                              }
-                              onCancelar={() => setAtiva(null)}
-                              tdClassName={ORCADO.celulaMeio}
-                            />
-                            <CelulaNumero
-                              valor={num(valorAtual(item, "dias_meses_orcado"))}
-                              editando={ativaAqui("dias_meses_orcado")}
-                              editavel={editavel}
-                              onAtivar={() =>
-                                setAtiva({
-                                  rowId: item.id,
-                                  campo: "dias_meses_orcado",
-                                })
-                              }
-                              onConfirmar={(raw, d) =>
-                                confirmarNumero(item, "dias_meses_orcado", raw, d)
-                              }
-                              onCancelar={() => setAtiva(null)}
-                              tdClassName={ORCADO.celulaMeio}
-                            />
-                            <td
-                              className={cn(
-                                "px-3 text-right font-mono text-xs font-semibold whitespace-nowrap",
-                                ORCADO.celulaTotal,
-                              )}
-                            >
-                              {formatCurrency(totais.orcado, moeda)}
-                            </td>
+                            {orcadoVisivel && (
+                              <>
+                                <CelulaNumero
+                                  valor={num(
+                                    valorAtual(item, "valor_unitario_orcado"),
+                                  )}
+                                  formato="moeda"
+                                  moeda={moeda}
+                                  editando={ativaAqui("valor_unitario_orcado")}
+                                  editavel={editavel}
+                                  onAtivar={() =>
+                                    setAtiva({
+                                      rowId: item.id,
+                                      campo: "valor_unitario_orcado",
+                                    })
+                                  }
+                                  onConfirmar={(raw, d) =>
+                                    confirmarNumero(
+                                      item,
+                                      "valor_unitario_orcado",
+                                      raw,
+                                      d,
+                                    )
+                                  }
+                                  onCancelar={() => setAtiva(null)}
+                                  tdClassName={cn("font-mono", ORCADO.celulaAbre)}
+                                />
+                                <CelulaNumero
+                                  valor={num(valorAtual(item, "quantidade_orcada"))}
+                                  editando={ativaAqui("quantidade_orcada")}
+                                  editavel={editavel}
+                                  onAtivar={() =>
+                                    setAtiva({
+                                      rowId: item.id,
+                                      campo: "quantidade_orcada",
+                                    })
+                                  }
+                                  onConfirmar={(raw, d) =>
+                                    confirmarNumero(item, "quantidade_orcada", raw, d)
+                                  }
+                                  onCancelar={() => setAtiva(null)}
+                                  tdClassName={ORCADO.celulaMeio}
+                                />
+                                <CelulaNumero
+                                  valor={num(valorAtual(item, "dias_meses_orcado"))}
+                                  editando={ativaAqui("dias_meses_orcado")}
+                                  editavel={editavel}
+                                  onAtivar={() =>
+                                    setAtiva({
+                                      rowId: item.id,
+                                      campo: "dias_meses_orcado",
+                                    })
+                                  }
+                                  onConfirmar={(raw, d) =>
+                                    confirmarNumero(item, "dias_meses_orcado", raw, d)
+                                  }
+                                  onCancelar={() => setAtiva(null)}
+                                  tdClassName={ORCADO.celulaMeio}
+                                />
+                                <td
+                                  className={cn(
+                                    "px-3 text-right font-mono text-xs font-semibold whitespace-nowrap",
+                                    ORCADO.celulaTotal,
+                                  )}
+                                >
+                                  {formatCurrency(totais.orcado, moeda)}
+                                </td>
+                              </>
+                            )}
 
                             {/* Planejado espelha o Orçado: zero é
                                 "R$ 0,00 · 0 · 0", não travessão. Em `A` e
@@ -1508,11 +1571,13 @@ export function ItensTable({
                               </div>
                             </td>
 
-                            <CelulasRentabilidade
-                              orcado={totais.orcado}
-                              planejado={planejadoNaVisao}
-                              moeda={moeda}
-                            />
+                            {rentabilidadeVisivel && (
+                              <CelulasRentabilidade
+                                orcado={totais.orcado}
+                                planejado={planejadoNaVisao}
+                                moeda={moeda}
+                              />
+                            )}
                           </tr>
                         );
                       })}
@@ -1522,6 +1587,8 @@ export function ItensTable({
                       <LinhaDraft
                         draft={draft}
                         saveVisivel={saveVisivel}
+                        orcadoVisivel={orcadoVisivel}
+                        rentabilidadeVisivel={rentabilidadeVisivel}
                         moeda={moeda}
                         categorias={categorias}
                         ativa={ativa}
@@ -1549,7 +1616,7 @@ export function ItensTable({
                     {aberto && editavel && (
                       <tr className="h-[30px] border-b border-border">
                         <td
-                          colSpan={totalDeColunas(saveVisivel)}
+                          colSpan={totalDeColunas(colunas)}
                           className="pl-[30px] pr-3"
                         >
                           <button
@@ -1579,7 +1646,7 @@ export function ItensTable({
               {novoGrupo && (
                 <tr>
                   <td
-                    colSpan={totalDeColunas(saveVisivel)}
+                    colSpan={totalDeColunas(colunas)}
                     className={LINHA_NOVO_GRUPO}
                   >
                     <div className="flex items-center gap-2.5">
@@ -1595,18 +1662,22 @@ export function ItensTable({
 
             <tfoot>
               <tr>
-                <td colSpan={colunasDoRotulo(saveVisivel)} className={LINHA_TOTAL_ROTULO}>
+                <td colSpan={colunasDoRotulo(colunas)} className={LINHA_TOTAL_ROTULO}>
                   {rotuloDoTotal}
                 </td>
-                <td colSpan={3} className={ORCADO.subtotalVazio} />
-                <td
-                  className={cn(
-                    "px-3 py-2 text-right whitespace-nowrap font-mono text-[13px] font-bold",
-                    ORCADO.subtotalValor,
-                  )}
-                >
-                  {formatCurrency(totalOrcado, moeda)}
-                </td>
+                {orcadoVisivel && (
+                  <>
+                    <td colSpan={3} className={ORCADO.subtotalVazio} />
+                    <td
+                      className={cn(
+                        "px-3 py-2 text-right whitespace-nowrap font-mono text-[13px] font-bold",
+                        ORCADO.subtotalValor,
+                      )}
+                    >
+                      {formatCurrency(totalOrcado, moeda)}
+                    </td>
+                  </>
+                )}
                 <td colSpan={3} className={PLANEJADO.subtotalVazio} />
                 <td
                   className={cn(
@@ -1628,27 +1699,31 @@ export function ItensTable({
                     )}
                   </div>
                 </td>
-                <td
-                  className={cn(
-                    "px-3 py-2 text-right whitespace-nowrap font-mono text-[13px] font-bold",
-                    RENTABILIDADE.bordaAbre,
-                    RENTABILIDADE.subtotalValor,
-                  )}
-                >
-                  {formatCurrency(resultadoTotal, moeda)}
-                </td>
-                <td
-                  className={cn(
-                    "px-3 py-2 text-right whitespace-nowrap font-mono text-[13px] font-bold",
-                    RENTABILIDADE.subtotalValor,
-                  )}
-                >
-                  {percentualTotal === null ? (
-                    <span className="text-muted-foreground">—</span>
-                  ) : (
-                    formatarPercentual(percentualTotal)
-                  )}
-                </td>
+                {rentabilidadeVisivel && (
+                  <>
+                    <td
+                      className={cn(
+                        "px-3 py-2 text-right whitespace-nowrap font-mono text-[13px] font-bold",
+                        RENTABILIDADE.bordaAbre,
+                        RENTABILIDADE.subtotalValor,
+                      )}
+                    >
+                      {formatCurrency(resultadoTotal, moeda)}
+                    </td>
+                    <td
+                      className={cn(
+                        "px-3 py-2 text-right whitespace-nowrap font-mono text-[13px] font-bold",
+                        RENTABILIDADE.subtotalValor,
+                      )}
+                    >
+                      {percentualTotal === null ? (
+                        <span className="text-muted-foreground">—</span>
+                      ) : (
+                        formatarPercentual(percentualTotal)
+                      )}
+                    </td>
+                  </>
+                )}
               </tr>
             </tfoot>
           </table>
@@ -2068,6 +2143,8 @@ function LinhaDraft({
   onNavegar,
   onFecharCelula,
   saveVisivel,
+  orcadoVisivel = true,
+  rentabilidadeVisivel = true,
 }: {
   draft: Draft;
   moeda: string;
@@ -2086,6 +2163,10 @@ function LinhaDraft({
    *  vaga, senão ela escorrega uma casa em relação às de cima. A linha
    *  ainda não existe no banco, então não há save a definir nela. */
   saveVisivel?: boolean;
+  /** Os mesmos blocos da grade acima — a linha nova tem que ter as
+   *  MESMAS colunas das linhas de item, senão ela escorrega. */
+  orcadoVisivel?: boolean;
+  rentabilidadeVisivel?: boolean;
 }) {
   const ativaAqui = (campo: Campo) =>
     ativa?.rowId === DRAFT_ID && ativa.campo === campo;
@@ -2172,43 +2253,53 @@ function LinhaDraft({
         )}
       </CelulaSelect>
 
-      <CelulaNumero
-        valor={draft.valor_unitario_orcado}
-        formato="moeda"
-        moeda={moeda}
-        editando={ativaAqui("valor_unitario_orcado")}
-        editavel
-        onAtivar={() => onAtivar("valor_unitario_orcado")}
-        onConfirmar={(raw, d) => onConfirmarNumero("valor_unitario_orcado", raw, d)}
-        onCancelar={onFechar}
-        tdClassName={cn("font-mono", ORCADO.celulaAbre)}
-      />
-      <CelulaNumero
-        valor={draft.quantidade_orcada}
-        editando={ativaAqui("quantidade_orcada")}
-        editavel
-        onAtivar={() => onAtivar("quantidade_orcada")}
-        onConfirmar={(raw, d) => onConfirmarNumero("quantidade_orcada", raw, d)}
-        onCancelar={onFechar}
-        tdClassName={ORCADO.celulaMeio}
-      />
-      <CelulaNumero
-        valor={draft.dias_meses_orcado}
-        editando={ativaAqui("dias_meses_orcado")}
-        editavel
-        onAtivar={() => onAtivar("dias_meses_orcado")}
-        onConfirmar={(raw, d) => onConfirmarNumero("dias_meses_orcado", raw, d)}
-        onCancelar={onFechar}
-        tdClassName={ORCADO.celulaMeio}
-      />
-      <td
-        className={cn(
-          "px-3 text-right font-mono text-xs font-semibold whitespace-nowrap",
-          ORCADO.celulaTotal,
-        )}
-      >
-        {formatCurrency(totalOrcado, moeda)}
-      </td>
+      {orcadoVisivel && (
+        <>
+          <CelulaNumero
+            valor={draft.valor_unitario_orcado}
+            formato="moeda"
+            moeda={moeda}
+            editando={ativaAqui("valor_unitario_orcado")}
+            editavel
+            onAtivar={() => onAtivar("valor_unitario_orcado")}
+            onConfirmar={(raw, d) =>
+              onConfirmarNumero("valor_unitario_orcado", raw, d)
+            }
+            onCancelar={onFechar}
+            tdClassName={cn("font-mono", ORCADO.celulaAbre)}
+          />
+          <CelulaNumero
+            valor={draft.quantidade_orcada}
+            editando={ativaAqui("quantidade_orcada")}
+            editavel
+            onAtivar={() => onAtivar("quantidade_orcada")}
+            onConfirmar={(raw, d) =>
+              onConfirmarNumero("quantidade_orcada", raw, d)
+            }
+            onCancelar={onFechar}
+            tdClassName={ORCADO.celulaMeio}
+          />
+          <CelulaNumero
+            valor={draft.dias_meses_orcado}
+            editando={ativaAqui("dias_meses_orcado")}
+            editavel
+            onAtivar={() => onAtivar("dias_meses_orcado")}
+            onConfirmar={(raw, d) =>
+              onConfirmarNumero("dias_meses_orcado", raw, d)
+            }
+            onCancelar={onFechar}
+            tdClassName={ORCADO.celulaMeio}
+          />
+          <td
+            className={cn(
+              "px-3 text-right font-mono text-xs font-semibold whitespace-nowrap",
+              ORCADO.celulaTotal,
+            )}
+          >
+            {formatCurrency(totalOrcado, moeda)}
+          </td>
+        </>
+      )}
 
       {/* Sem vazioComoTraco: na linha nova o planejado espelha o orçado —
           R$ 0,00 · 1 · 1 em vez de três travessões. */}
@@ -2250,11 +2341,13 @@ function LinhaDraft({
         {formatCurrency(totalPlanejado, moeda)}
       </td>
 
-      <CelulasRentabilidade
-        orcado={totalOrcado}
-        planejado={totalPlanejado}
-        moeda={moeda}
-      />
+      {rentabilidadeVisivel && (
+        <CelulasRentabilidade
+          orcado={totalOrcado}
+          planejado={totalPlanejado}
+          moeda={moeda}
+        />
+      )}
     </tr>
   );
 }

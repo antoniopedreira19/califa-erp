@@ -65,9 +65,10 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 039 | [A PP nasce gerada, e enviar ao financeiro é outra ação](039-pp-nasce-gerada-e-o-envio-ao-financeiro-e-uma-acao.md) | 2026-09-02 |
 | 040 | [A errata não toca linha com PP no financeiro, e trava o envio de PP até a revisão da abertura](040-errata-nao-toca-linha-com-pp-e-trava-o-envio-de-pp.md) | 2026-09-02 |
 | 041 | [A planilha única do projeto: exportar vários orçamentos e trazê-la de volta como versão nova](041-planilha-unica-do-projeto-exportar-e-importar.md) | 2026-09-03 |
+| 042 | [O menu "Exibir" esconde blocos de verdade, e orçamento não tem Realizado](042-blocos-ocultaveis-na-planilha-do-orcamento.md) | 2026-09-03 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
 > data é a da decisão, não a da posição na fila.
 
-**Próximo número livre: 042.**
+**Próximo número livre: 043.**

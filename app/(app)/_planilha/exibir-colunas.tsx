@@ -5,11 +5,19 @@
  *  Do design `Orcamento - Versao com Save.dc.html` (projeto Claude Design
  *  `69342d83`), 26/08/2026.
  *
- *  ⚠️ Só a pastilha **Save** é clicável, e é assim no design: Orçado,
- *  Planejado e Realizado aparecem para dizer o que a planilha está
- *  mostrando, mas não têm liga/desliga — no mock eles são texto, não
- *  botão. Ligar os três de verdade mexe nas grades compartilhadas e em
- *  todos os `colSpan` das planilhas, e é entrega própria.
+ *  Item COM `onAlternar` é botão e liga/desliga o bloco; item sem ele é
+ *  texto — mostra o estado e explica no `title` por que não reage. No
+ *  design original só a pastilha Save era clicável; desde 03/09/2026 a
+ *  planilha da versão liga e desliga Orçado e Rentabilidade de verdade
+ *  (só o Planejado ficou fixo), e por isso o liga/desliga passou a ser a
+ *  regra em vez da exceção.
+ *
+ *  ⚠️ Quem lista os blocos é a TELA, porque as grades não são a mesma:
+ *  a planilha do orçamento (`grade-orcamento`) fecha em Orçado ·
+ *  Planejado · Rentabilidade, e a do job (`grade-job`) em Orçado ·
+ *  Planejado · Realizado. Orçamento não tem realizado — ele nasce da PP,
+ *  depois da abertura do job. As planilhas de job seguem com os blocos em
+ *  só leitura: lá a grade é outra, e o colSpan dela é entrega própria.
  */
 
 import * as React from "react";
@@ -23,6 +31,9 @@ export interface BlocoNoMenu {
   visivel: boolean;
   /** Sem isto o item é só leitura — mostra o estado e não reage. */
   onAlternar?: () => void;
+  /** Por que este item não reage. Vira o `title` do item só leitura, para
+   *  quem clicar nele saber que não foi um defeito. */
+  dica?: string;
 }
 
 export function MenuExibirColunas({ blocos }: { blocos: BlocoNoMenu[] }) {
@@ -88,7 +99,11 @@ export function MenuExibirColunas({ blocos }: { blocos: BlocoNoMenu[] }) {
                   {conteudo}
                 </button>
               ) : (
-                <div key={b.chave} className={classes}>
+                <div
+                  key={b.chave}
+                  className={cn(classes, "cursor-default")}
+                  title={b.dica}
+                >
                   {conteudo}
                 </div>
               );
