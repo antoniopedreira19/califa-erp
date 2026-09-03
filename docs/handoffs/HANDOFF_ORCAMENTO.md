@@ -1606,6 +1606,14 @@ planilha dela, em vez de `/orcamentos/[projetoId]/[orcId]`. A v1 nasce
 com honorários do cadastro do cliente, BRL, câmbio 1 e **sem alíquota**
 (decisão 006 — quem cobra é a aprovação).
 
+⚠️ **2026-09-03: a v1 nasce com a alíquota padrão de 19,53%**
+(decisão 044). A exigência da 006 continua valendo na aprovação — o que
+mudou é que o orçamento novo já chega com a alíquota da maioria dos jobs
+escolhida, em vez do 0 que o seletor lia como "em branco". Vale também
+para os orçamentos novos do editor multi e da visão agregada
+(`PARAMETROS_PADRAO`); versão nova de orçamento existente segue sem
+palpite.
+
 Falhando a leitura dos honorários, a v1 não é criada e o destino volta a
 ser a tela do orçamento, com log no servidor: versão com base de
 honorários errada produz fechamento errado em silêncio, e voltar para o
