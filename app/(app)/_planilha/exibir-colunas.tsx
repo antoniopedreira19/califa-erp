@@ -36,7 +36,28 @@ export interface BlocoNoMenu {
   dica?: string;
 }
 
-export function MenuExibirColunas({ blocos }: { blocos: BlocoNoMenu[] }) {
+/** Uma seção a mais no menu, abaixo da lista principal — no job é a de
+ *  "Rentabilidade", com as duas colunas que entram dentro dos blocos. */
+export interface SecaoDoMenu {
+  titulo: string;
+  itens: BlocoNoMenu[];
+  /** Explicação curta no pé da seção. */
+  dica?: string;
+}
+
+export function MenuExibirColunas({
+  blocos,
+  titulo = "Exibir colunas",
+  dica = "Cada bloco leva R$ Unit., QT, D/M e Total juntos.",
+  secoes,
+}: {
+  blocos: BlocoNoMenu[];
+  /** Cabeçalho da lista principal. Com seções, o design escreve só
+   *  "Colunas" — o resto do menu já diz o que cada parte exibe. */
+  titulo?: string;
+  dica?: string;
+  secoes?: SecaoDoMenu[];
+}) {
   const [aberto, setAberto] = React.useState(false);
   const caixa = React.useRef<HTMLDivElement>(null);
 
@@ -64,56 +85,77 @@ export function MenuExibirColunas({ blocos }: { blocos: BlocoNoMenu[] }) {
       </button>
 
       {aberto && (
-        <div className="absolute right-0 top-full z-30 mt-2 w-[238px] overflow-hidden rounded-xl border border-[#d7d5cf] bg-card text-left shadow-[0_14px_30px_-12px_rgba(0,0,0,.28)]">
+        <div
+          className={cn(
+            "absolute right-0 top-full z-30 mt-2 overflow-hidden rounded-xl border border-[#d7d5cf] bg-card text-left shadow-[0_14px_30px_-12px_rgba(0,0,0,.28)]",
+            // Com seções os rótulos são mais longos ("Rentabilidade
+            // planejada") — o menu abre mais largo, como no design.
+            secoes ? "w-[300px]" : "w-[238px]",
+          )}
+        >
           <p className="border-b border-border px-3 pb-1.5 pt-2.5 text-[9.5px] font-bold uppercase tracking-[0.07em] text-muted-foreground">
-            Exibir colunas
+            {titulo}
           </p>
           <div className="p-1.5">
-            {blocos.map((b) => {
-              const conteudo = (
-                <>
-                  <span
-                    className={cn(
-                      "flex h-[15px] w-[15px] flex-none items-center justify-center rounded",
-                      b.visivel
-                        ? "bg-foreground text-background"
-                        : "border border-[#d7d5cf] bg-card",
-                    )}
-                  >
-                    {b.visivel && <Check className="h-[11px] w-[11px]" />}
-                  </span>
-                  {b.rotulo}
-                </>
-              );
-              const classes = cn(
-                "flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-[12.5px] font-semibold",
-                b.visivel ? "text-foreground" : "text-muted-foreground",
-              );
-              return b.onAlternar ? (
-                <button
-                  key={b.chave}
-                  type="button"
-                  onClick={b.onAlternar}
-                  className={cn(classes, "hover:bg-muted")}
-                >
-                  {conteudo}
-                </button>
-              ) : (
-                <div
-                  key={b.chave}
-                  className={cn(classes, "cursor-default")}
-                  title={b.dica}
-                >
-                  {conteudo}
-                </div>
-              );
-            })}
+            {blocos.map(itemDoMenu)}
             <p className="mx-1.5 mb-1 mt-0.5 text-[10.5px] leading-relaxed text-muted-foreground">
-              Cada bloco leva R$ Unit., QT, D/M e Total juntos.
+              {dica}
             </p>
           </div>
+          {secoes?.map((secao) => (
+            <React.Fragment key={secao.titulo}>
+              <p className="border-y border-border px-3 pb-1.5 pt-2 text-[9.5px] font-bold uppercase tracking-[0.07em] text-muted-foreground">
+                {secao.titulo}
+              </p>
+              <div className="p-1.5">
+                {secao.itens.map(itemDoMenu)}
+                {secao.dica && (
+                  <p className="mx-1.5 mb-1 mt-0.5 text-[10.5px] leading-relaxed text-muted-foreground">
+                    {secao.dica}
+                  </p>
+                )}
+              </div>
+            </React.Fragment>
+          ))}
         </div>
       )}
+    </div>
+  );
+}
+
+/** Um item do menu: botão quando liga/desliga, texto quando só mostra. */
+function itemDoMenu(b: BlocoNoMenu) {
+  const conteudo = (
+    <>
+      <span
+        className={cn(
+          "flex h-[15px] w-[15px] flex-none items-center justify-center rounded",
+          b.visivel
+            ? "bg-foreground text-background"
+            : "border border-[#d7d5cf] bg-card",
+        )}
+      >
+        {b.visivel && <Check className="h-[11px] w-[11px]" />}
+      </span>
+      {b.rotulo}
+    </>
+  );
+  const classes = cn(
+    "flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-[12.5px] font-semibold",
+    b.visivel ? "text-foreground" : "text-muted-foreground",
+  );
+  return b.onAlternar ? (
+    <button
+      key={b.chave}
+      type="button"
+      onClick={b.onAlternar}
+      className={cn(classes, "hover:bg-muted")}
+    >
+      {conteudo}
+    </button>
+  ) : (
+    <div key={b.chave} className={cn(classes, "cursor-default")} title={b.dica}>
+      {conteudo}
     </div>
   );
 }

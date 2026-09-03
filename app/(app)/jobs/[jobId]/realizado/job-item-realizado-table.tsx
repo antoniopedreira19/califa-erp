@@ -42,13 +42,15 @@ import {
   FAIXA_GRUPO,
   LINHA_GRUPO_NOME,
   LINHA_TOTAL_ROTULO,
+  RENTAB_VALOR,
+  type Bloco,
 } from "@/app/(app)/_planilha/blocos";
 import {
   ColunasJob,
-  LARGURA_MINIMA_JOB,
-  LARGURA_MINIMA_JOB_SAVE,
   colunasDoRotuloJob,
+  larguraMinimaJob,
   totalDeColunasJob,
+  type ColunasJobVisiveis,
 } from "@/app/(app)/_planilha/grade-job";
 import {
   CabecalhoSaveColuna,
@@ -146,6 +148,15 @@ interface Props {
    *  VERMELHA, não. Hoje todo mundo passa — a separação existe para o dia
    *  em que os papéis entrarem, e para o gate nascer num lugar só. */
   podeEditarLinhas?: boolean;
+  /** Menu "Exibir" (decisão 045). Default: a planilha de sempre — os
+   *  três blocos, sem colunas de rentabilidade. Escondido, o ORÇADO sai
+   *  da grade inteira; ligada, cada rentabilidade entra como as duas
+   *  últimas colunas do bloco que a gera (Rentab. R$ · Rentab. %), e o
+   *  "rentab." que morava no vão da linha de grupo e do total sai —
+   *  a informação passa a ter um lugar só. */
+  orcadoVisivel?: boolean;
+  rentabPlanejadaVisivel?: boolean;
+  rentabRealizadaVisivel?: boolean;
 }
 
 /** Quem decide o conteúdo da calha é a coluna Tipo:
@@ -305,8 +316,21 @@ export function JobItemRealizadoTable({
   onAbrirSave,
   errata,
   podeEditarLinhas = true,
+  orcadoVisivel = true,
+  rentabPlanejadaVisivel = false,
+  rentabRealizadaVisivel = false,
 }: Props) {
   const editando = errata?.ativo === true;
+  /** Quais colunas a grade desenha. Vai para o `colgroup`, para o piso
+   *  de largura e para todos os `colSpan` de linha inteira — os três têm
+   *  que sair da MESMA fonte, senão a tabela desalinha sem erro. */
+  const colunas: ColunasJobVisiveis = {
+    save: saveVisivel,
+    orcado: orcadoVisivel,
+    rentabPlanejada: rentabPlanejadaVisivel,
+    rentabRealizada: rentabRealizadaVisivel,
+  };
+  const temRentab = rentabPlanejadaVisivel || rentabRealizadaVisivel;
   // Rail lateral PP
   const wrapperRef = React.useRef<HTMLDivElement>(null);
   const [painelOpen, setPainelOpen] = React.useState(false);
@@ -406,6 +430,7 @@ export function JobItemRealizadoTable({
 
   const BLOCO_VAZIO = {
     orcado: 0,
+    orcadoRentabilidade: 0,
     planejado: BLOCO_ZERO,
     realizado: BLOCO_ZERO,
   };
@@ -433,6 +458,16 @@ export function JobItemRealizadoTable({
       ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [todosOsItens, blocosPorItem],
+  );
+  /** A rentabilidade realizada do total só sobre os itens com PP. */
+  const realizadaDaPlanilha = React.useMemo(
+    () =>
+      rentabilidadeRealizadaDe(
+        todosOsItens.map((it) => blocosPorItem.get(it.id) ?? BLOCO_VAZIO),
+        visao,
+      ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [todosOsItens, blocosPorItem, visao],
   );
 
   /** O grupo a que um item pertence — o formulário de BV e o painel de
@@ -482,12 +517,10 @@ export function JobItemRealizadoTable({
       {/* A tabela abre e fecha o card: a planilha inteira é uma só. */}
       <div className="overflow-x-auto rounded-b-2xl rounded-t-2xl">
         <table
-          className={cn(
-            "w-full table-fixed text-sm border-collapse",
-            saveVisivel ? LARGURA_MINIMA_JOB_SAVE : LARGURA_MINIMA_JOB,
-          )}
+          className="w-full table-fixed text-sm border-collapse"
+          style={{ minWidth: larguraMinimaJob(colunas) }}
         >
-          <ColunasJob save={saveVisivel} />
+          <ColunasJob {...colunas} />
           <thead className="text-[10px] uppercase tracking-wider text-muted-foreground">
             {/* Linha 1 — a faixa dos blocos. Ela é UMA para a planilha
                 inteira: era esta repetição, um cabeçalho por grupo, que o
@@ -495,13 +528,24 @@ export function JobItemRealizadoTable({
             <tr>
               {saveVisivel && <CabecalhoSaveFaixa />}
               <th colSpan={3} className={FAIXA_GRUPO} />
-              <th colSpan={4} className={cn(FAIXA_ROTULO, ORCADO.faixa)}>
-                ORÇADO
-              </th>
-              <th colSpan={4} className={cn(FAIXA_ROTULO, PLANEJADO.faixa)}>
+              {orcadoVisivel && (
+                <th colSpan={4} className={cn(FAIXA_ROTULO, ORCADO.faixa)}>
+                  ORÇADO
+                </th>
+              )}
+              {/* A faixa cobre a rentabilidade do bloco quando ela está
+                  ligada: são as duas últimas colunas DELE, não um quarto
+                  bloco. */}
+              <th
+                colSpan={rentabPlanejadaVisivel ? 6 : 4}
+                className={cn(FAIXA_ROTULO, PLANEJADO.faixa)}
+              >
                 PLANEJADO
               </th>
-              <th colSpan={4} className={cn(FAIXA_ROTULO, REALIZADO.faixa)}>
+              <th
+                colSpan={rentabRealizadaVisivel ? 6 : 4}
+                className={cn(FAIXA_ROTULO, REALIZADO.faixa)}
+              >
                 REALIZADO
               </th>
             </tr>
@@ -511,20 +555,27 @@ export function JobItemRealizadoTable({
               <th className="text-left font-semibold px-3 py-2 border-r border-r-border">Tipo</th>
               <th className="text-left font-semibold px-3 py-2 border-r border-r-border">Categoria</th>
               {/* Orcado */}
-              <th className={cn("text-right font-semibold px-3 py-2", ORCADO.cabecalhoAbre)}>R$ Unit.</th>
-              <th className={cn("text-right font-semibold px-3 py-2", ORCADO.cabecalhoMeio)}>QT</th>
-              <th className={cn("text-right font-semibold px-3 py-2", ORCADO.cabecalhoMeio)}>D/M</th>
-              <th className={cn("text-right font-semibold px-3 py-2", ORCADO.cabecalhoFim)}>Total</th>
-              {/* Planejado */}
+              {orcadoVisivel && (
+                <>
+                  <th className={cn("text-right font-semibold px-3 py-2", ORCADO.cabecalhoAbre)}>R$ Unit.</th>
+                  <th className={cn("text-right font-semibold px-3 py-2", ORCADO.cabecalhoMeio)}>QT</th>
+                  <th className={cn("text-right font-semibold px-3 py-2", ORCADO.cabecalhoMeio)}>D/M</th>
+                  <th className={cn("text-right font-semibold px-3 py-2", ORCADO.cabecalhoFim)}>Total</th>
+                </>
+              )}
+              {/* Planejado — com a rentabilidade ligada, o Total deixa de
+                  ser a última coluna do bloco e ganha o fio de 1px. */}
               <th className={cn("text-right font-semibold px-3 py-2", PLANEJADO.cabecalhoAbre)}>R$ Unit.</th>
               <th className={cn("text-right font-semibold px-3 py-2", PLANEJADO.cabecalhoMeio)}>QT</th>
               <th className={cn("text-right font-semibold px-3 py-2", PLANEJADO.cabecalhoMeio)}>D/M</th>
-              <th className={cn("text-right font-semibold px-3 py-2", PLANEJADO.cabecalhoFim)}>{rotuloColunaTotal(visao)}</th>
+              <th className={cn("text-right font-semibold px-3 py-2", rentabPlanejadaVisivel ? PLANEJADO.cabecalhoMeio : PLANEJADO.cabecalhoFim)}>{rotuloColunaTotal(visao)}</th>
+              {rentabPlanejadaVisivel && <CabecalhosRentabilidade bloco={PLANEJADO} />}
               {/* Realizado */}
               <th className={cn("text-right font-semibold px-3 py-2", REALIZADO.cabecalhoAbre)}>R$ Unit.</th>
               <th className={cn("text-right font-semibold px-3 py-2", REALIZADO.cabecalhoMeio)}>QT</th>
               <th className={cn("text-right font-semibold px-3 py-2", REALIZADO.cabecalhoMeio)}>D/M</th>
-              <th className={cn("text-right font-semibold px-3 py-2", REALIZADO.cabecalhoFim)}>{rotuloColunaTotal(visao)}</th>
+              <th className={cn("text-right font-semibold px-3 py-2", rentabRealizadaVisivel ? REALIZADO.cabecalhoMeio : REALIZADO.cabecalhoFim)}>{rotuloColunaTotal(visao)}</th>
+              {rentabRealizadaVisivel && <CabecalhosRentabilidade bloco={REALIZADO} />}
             </tr>
           </thead>
 
@@ -536,6 +587,14 @@ export function JobItemRealizadoTable({
                 somarBlocosDosItens([]);
               const subPlanejado = valorNaVisao(sub.planejado, visao);
               const subRealizado = valorNaVisao(sub.realizado, visao);
+              // A realizada do grupo conta só os itens que já têm PP
+              // (decisão 045): somar o orçado de quem ainda não pediu
+              // nada inflaria a margem como se o custo não fosse
+              // acontecer.
+              const realizadaDoGrupo = rentabilidadeRealizadaDe(
+                grupo.itens.map((it) => blocosPorItem.get(it.id) ?? BLOCO_VAZIO),
+                visao,
+              );
 
               return (
                 <React.Fragment key={grupo.id}>
@@ -546,7 +605,7 @@ export function JobItemRealizadoTable({
                       agora é uma linha só. */}
                   <tr data-calha={`g:${grupo.id}`} className="h-10">
                     <td
-                      colSpan={colunasDoRotuloJob(saveVisivel)}
+                      colSpan={colunasDoRotuloJob(colunas)}
                       className={LINHA_GRUPO_NOME}
                     >
                       <div className="flex min-w-0 items-center gap-2.5">
@@ -580,26 +639,34 @@ export function JobItemRealizadoTable({
                       </div>
                     </td>
 
-                    <td colSpan={3} className={ORCADO.grupoVazio} />
-                    <td
-                      className={cn(
-                        "px-3 text-right whitespace-nowrap font-mono text-[13px] font-bold",
-                        ORCADO.grupoValor,
-                      )}
-                    >
-                      {formatCurrency(sub.orcado, moeda)}
-                    </td>
+                    {orcadoVisivel && (
+                      <>
+                        <td colSpan={3} className={ORCADO.grupoVazio} />
+                        <td
+                          className={cn(
+                            "px-3 text-right whitespace-nowrap font-mono text-[13px] font-bold",
+                            ORCADO.grupoValor,
+                          )}
+                        >
+                          {formatCurrency(sub.orcado, moeda)}
+                        </td>
+                      </>
+                    )}
 
+                    {/* O "rentab." no vão só existe enquanto a
+                        rentabilidade não tem colunas próprias. */}
                     <td
                       colSpan={3}
                       className={cn("overflow-hidden px-3 text-right", PLANEJADO.grupoVazio)}
                     >
-                      <RentabilidadeNoVao
-                        orcado={sub.orcadoRentabilidade}
-                        custo={subPlanejado}
-                        moeda={moeda}
-                        corRotulo={PLANEJADO.textoSuave}
-                      />
+                      {!rentabPlanejadaVisivel && (
+                        <RentabilidadeNoVao
+                          orcado={sub.orcadoRentabilidade}
+                          custo={subPlanejado}
+                          moeda={moeda}
+                          corRotulo={PLANEJADO.textoSuave}
+                        />
+                      )}
                     </td>
                     <td
                       className={cn(
@@ -621,17 +688,29 @@ export function JobItemRealizadoTable({
                         )}
                       </div>
                     </td>
+                    {rentabPlanejadaVisivel && (
+                      <CelulasRentabilidade
+                        bloco={PLANEJADO}
+                        linha="grupo"
+                        orcado={sub.orcadoRentabilidade}
+                        custo={subPlanejado}
+                        temCusto={sub.planejado.bruto > 0}
+                        moeda={moeda}
+                      />
+                    )}
 
                     <td
                       colSpan={3}
                       className={cn("overflow-hidden px-3 text-right", REALIZADO.grupoVazio)}
                     >
-                      <RentabilidadeNoVao
-                        orcado={sub.orcadoRentabilidade}
-                        custo={subRealizado}
-                        moeda={moeda}
-                        corRotulo={REALIZADO.textoSuave}
-                      />
+                      {!rentabRealizadaVisivel && (
+                        <RentabilidadeNoVao
+                          orcado={sub.orcadoRentabilidade}
+                          custo={subRealizado}
+                          moeda={moeda}
+                          corRotulo={REALIZADO.textoSuave}
+                        />
+                      )}
                     </td>
                     <td
                       className={cn(
@@ -655,12 +734,23 @@ export function JobItemRealizadoTable({
                         )}
                       </div>
                     </td>
+                    {rentabRealizadaVisivel && (
+                      <CelulasRentabilidade
+                        bloco={REALIZADO}
+                        linha="grupo"
+                        orcado={realizadaDoGrupo.orcado}
+                        custo={realizadaDoGrupo.custo}
+                        temCusto={realizadaDoGrupo.temCusto}
+                        parcial={realizadaDoGrupo.parcial}
+                        moeda={moeda}
+                      />
+                    )}
                   </tr>
 
                   {abertoAqui && grupo.itens.length === 0 && (
                     <tr className="border-b border-border">
                       <td
-                        colSpan={totalDeColunasJob(saveVisivel)}
+                        colSpan={totalDeColunasJob(colunas)}
                         className="py-5 pl-[30px] pr-3 text-xs text-muted-foreground"
                       >
                         Sem itens neste grupo.
@@ -787,44 +877,49 @@ export function JobItemRealizadoTable({
                   </td>
                   {/* ORÇADO — o único bloco que o modo errata abre. A
                       linha vermelha fica de fora: ela não tem orçado, e é
-                      o banco que garante isso. */}
-                  <CelulaOrcadoErrata
-                    item={item}
-                    campo="unitario"
-                    editando={editando}
-                    errata={errata}
-                    moeda={moeda}
-                    className={ORCADO.celulaAbre}
-                    travada={travadasPorPP.has(item.id)}
-                  />
-                  <CelulaOrcadoErrata
-                    item={item}
-                    campo="quantidade"
-                    editando={editando}
-                    errata={errata}
-                    moeda={moeda}
-                    className={ORCADO.celulaMeio}
-                    travada={travadasPorPP.has(item.id)}
-                  />
-                  <CelulaOrcadoErrata
-                    item={item}
-                    campo="diasMeses"
-                    editando={editando}
-                    errata={errata}
-                    moeda={moeda}
-                    className={ORCADO.celulaMeio}
-                    travada={travadasPorPP.has(item.id)}
-                  />
-                  <td
-                    className={cn(
-                      "px-3 text-right text-xs font-mono font-semibold align-middle whitespace-nowrap",
-                      item.linha_vermelha
-                        ? ERRATA.celulaVermelhaApagada
-                        : ORCADO.celulaTotal,
-                    )}
-                  >
-                    {formatCurrency(Number(item.total_orcado ?? 0), moeda)}
-                  </td>
+                      o banco que garante isso. Escondido pelo menu, sai
+                      inteiro — a errata liga o bloco de volta ao entrar. */}
+                  {orcadoVisivel && (
+                    <>
+                      <CelulaOrcadoErrata
+                        item={item}
+                        campo="unitario"
+                        editando={editando}
+                        errata={errata}
+                        moeda={moeda}
+                        className={ORCADO.celulaAbre}
+                        travada={travadasPorPP.has(item.id)}
+                      />
+                      <CelulaOrcadoErrata
+                        item={item}
+                        campo="quantidade"
+                        editando={editando}
+                        errata={errata}
+                        moeda={moeda}
+                        className={ORCADO.celulaMeio}
+                        travada={travadasPorPP.has(item.id)}
+                      />
+                      <CelulaOrcadoErrata
+                        item={item}
+                        campo="diasMeses"
+                        editando={editando}
+                        errata={errata}
+                        moeda={moeda}
+                        className={ORCADO.celulaMeio}
+                        travada={travadasPorPP.has(item.id)}
+                      />
+                      <td
+                        className={cn(
+                          "px-3 text-right text-xs font-mono font-semibold align-middle whitespace-nowrap",
+                          item.linha_vermelha
+                            ? ERRATA.celulaVermelhaApagada
+                            : ORCADO.celulaTotal,
+                        )}
+                      >
+                        {formatCurrency(Number(item.total_orcado ?? 0), moeda)}
+                      </td>
+                    </>
+                  )}
                   {/* Planejado (RO) */}
                   <td className={cn("px-3 text-right text-xs font-mono align-middle", PLANEJADO.celulaAbre)}>
                     {Number(item.valor_unitario_planejado ?? 0) > 0
@@ -845,10 +940,25 @@ export function JobItemRealizadoTable({
                     bloco={blocos.planejado}
                     visao={visao}
                     moeda={moeda}
-                    className={PLANEJADO.celulaTotal}
+                    // Com a rentabilidade ligada o Total ganha o fio de
+                    // 1px à direita: ele deixou de fechar o bloco.
+                    className={cn(
+                      rentabPlanejadaVisivel && PLANEJADO.celulaMeio,
+                      PLANEJADO.celulaTotal,
+                    )}
                     cor={PLANEJADO.texto}
                     corRotulo={PLANEJADO.textoSuave}
                   />
+                  {rentabPlanejadaVisivel && (
+                    <CelulasRentabilidade
+                      bloco={PLANEJADO}
+                      linha="item"
+                      orcado={blocos.orcadoRentabilidade}
+                      custo={valorNaVisao(blocos.planejado, visao)}
+                      temCusto={blocos.planejado.bruto > 0}
+                      moeda={moeda}
+                    />
+                  )}
                   {/* Realizado — leitura. Em item que gera PP, a quebra
                       descreve as PPs emitidas (quantidade somada e o
                       unitário que ela implica); em A e D, que não geram
@@ -883,10 +993,25 @@ export function JobItemRealizadoTable({
                     bloco={blocos.realizado}
                     visao={visao}
                     moeda={moeda}
-                    className={REALIZADO.celulaTotal}
+                    className={cn(
+                      rentabRealizadaVisivel && REALIZADO.celulaMeio,
+                      REALIZADO.celulaTotal,
+                    )}
                     cor={REALIZADO.texto}
                     corRotulo={REALIZADO.textoSuave}
                   />
+                  {/* Item sem PP emitida ainda não tem rentabilidade
+                      realizada: travessão, e não zero. */}
+                  {rentabRealizadaVisivel && (
+                    <CelulasRentabilidade
+                      bloco={REALIZADO}
+                      linha="item"
+                      orcado={blocos.orcadoRentabilidade}
+                      custo={valorNaVisao(blocos.realizado, visao)}
+                      temCusto={blocos.realizado.bruto > 0}
+                      moeda={moeda}
+                    />
+                  )}
                 </tr>
                     );
                   })}
@@ -904,7 +1029,7 @@ export function JobItemRealizadoTable({
                   {abertoAqui && editando && errata && (
                     <tr className="border-b border-border">
                       <td
-                        colSpan={totalDeColunasJob(saveVisivel)}
+                        colSpan={totalDeColunasJob(colunas)}
                         className={ERRATA.linhaAcao}
                       >
                         <div className="flex flex-wrap items-center gap-2 pl-[18px]">
@@ -947,32 +1072,38 @@ export function JobItemRealizadoTable({
                 agrupamentos. */}
             <tr>
               <td
-                colSpan={colunasDoRotuloJob(saveVisivel)}
+                colSpan={colunasDoRotuloJob(colunas)}
                 className={LINHA_TOTAL_ROTULO}
               >
                 {rotuloDoTotal}
               </td>
 
-              <td colSpan={3} className={ORCADO.subtotalVazio} />
-              <td
-                className={cn(
-                  "px-3 py-2 text-right whitespace-nowrap font-mono text-[13px] font-bold",
-                  ORCADO.subtotalValor,
-                )}
-              >
-                {formatCurrency(totais.orcado, moeda)}
-              </td>
+              {orcadoVisivel && (
+                <>
+                  <td colSpan={3} className={ORCADO.subtotalVazio} />
+                  <td
+                    className={cn(
+                      "px-3 py-2 text-right whitespace-nowrap font-mono text-[13px] font-bold",
+                      ORCADO.subtotalValor,
+                    )}
+                  >
+                    {formatCurrency(totais.orcado, moeda)}
+                  </td>
+                </>
+              )}
 
               <td
                 colSpan={3}
                 className={cn("overflow-hidden px-3 py-2 text-right", PLANEJADO.subtotalVazio)}
               >
-                <RentabilidadeNoVao
-                  orcado={totais.orcadoRentabilidade}
-                  custo={valorNaVisao(totais.planejado, visao)}
-                  moeda={moeda}
-                  corRotulo={PLANEJADO.textoSuave}
-                />
+                {!rentabPlanejadaVisivel && (
+                  <RentabilidadeNoVao
+                    orcado={totais.orcadoRentabilidade}
+                    custo={valorNaVisao(totais.planejado, visao)}
+                    moeda={moeda}
+                    corRotulo={PLANEJADO.textoSuave}
+                  />
+                )}
               </td>
               <td
                 className={cn(
@@ -997,17 +1128,29 @@ export function JobItemRealizadoTable({
                   )}
                 </div>
               </td>
+              {rentabPlanejadaVisivel && (
+                <CelulasRentabilidade
+                  bloco={PLANEJADO}
+                  linha="total"
+                  orcado={totais.orcadoRentabilidade}
+                  custo={valorNaVisao(totais.planejado, visao)}
+                  temCusto={totais.planejado.bruto > 0}
+                  moeda={moeda}
+                />
+              )}
 
               <td
                 colSpan={3}
                 className={cn("overflow-hidden px-3 py-2 text-right", REALIZADO.subtotalVazio)}
               >
-                <RentabilidadeNoVao
-                  orcado={totais.orcadoRentabilidade}
-                  custo={valorNaVisao(totais.realizado, visao)}
-                  moeda={moeda}
-                  corRotulo={REALIZADO.textoSuave}
-                />
+                {!rentabRealizadaVisivel && (
+                  <RentabilidadeNoVao
+                    orcado={totais.orcadoRentabilidade}
+                    custo={valorNaVisao(totais.realizado, visao)}
+                    moeda={moeda}
+                    corRotulo={REALIZADO.textoSuave}
+                  />
+                )}
               </td>
               <td
                 className={cn(
@@ -1031,6 +1174,17 @@ export function JobItemRealizadoTable({
                   )}
                 </div>
               </td>
+              {rentabRealizadaVisivel && (
+                <CelulasRentabilidade
+                  bloco={REALIZADO}
+                  linha="total"
+                  orcado={realizadaDaPlanilha.orcado}
+                  custo={realizadaDaPlanilha.custo}
+                  temCusto={realizadaDaPlanilha.temCusto}
+                  parcial={realizadaDaPlanilha.parcial}
+                  moeda={moeda}
+                />
+              )}
             </tr>
           </tfoot>
         </table>
@@ -1173,14 +1327,24 @@ export function JobItemRealizadoTable({
       )}
       </div>
 
-      {podeAcoes && grupos.some((g) => estaAberto(g.id)) && (
-        <div className="flex items-center justify-between gap-4 rounded-b-2xl border-t border-border bg-muted/40 px-6 py-3">
-          <span className="text-[11px] text-muted-foreground">
-            O Realizado não é digitado: ele é a soma dos Pedidos de Produção
-            enviados ao financeiro no item — PP só gerada ainda não conta. Em
-            custo <strong>A</strong> e <strong>D</strong>, que não geram PP,
-            ele espelha o Orçado.
-          </span>
+      {(podeAcoes || temRentab) && grupos.some((g) => estaAberto(g.id)) && (
+        <div className="flex flex-col gap-1 rounded-b-2xl border-t border-border bg-muted/40 px-6 py-3">
+          {podeAcoes && (
+            <span className="text-[11px] text-muted-foreground">
+              O Realizado não é digitado: ele é a soma dos Pedidos de Produção
+              enviados ao financeiro no item — PP só gerada ainda não conta. Em
+              custo <strong>A</strong> e <strong>D</strong>, que não geram PP,
+              ele espelha o Orçado.
+            </span>
+          )}
+          {temRentab && (
+            <span className="text-[11px] text-muted-foreground">
+              Rentabilidade = Orçado − custo, em R$ e % do orçado. Item sem PP
+              emitida ainda não tem rentabilidade realizada; no grupo e no
+              total, a realizada marcada com <strong>*</strong> conta só os
+              itens que já têm PP.
+            </span>
+          )}
         </div>
       )}
 
@@ -1447,4 +1611,111 @@ function CelulaTotalComBv({
       </div>
     </td>
   );
+}
+
+/** Os dois cabeçalhos da rentabilidade de um bloco — as últimas colunas
+ *  dele, na cor do bloco como as outras. */
+function CabecalhosRentabilidade({ bloco }: { bloco: Bloco }) {
+  return (
+    <>
+      <th className={cn("text-right font-semibold px-3 py-2 whitespace-nowrap", bloco.cabecalhoMeio)}>
+        Rentab. R$
+      </th>
+      <th className={cn("text-right font-semibold px-2 py-2 whitespace-nowrap", bloco.cabecalhoFim)}>
+        Rentab. %
+      </th>
+    </>
+  );
+}
+
+/** As duas células de rentabilidade de um bloco (R$ · %), numa linha de
+ *  item, de grupo ou de total. As classes de fundo e fio vêm do bloco; os
+ *  dois valores são grafite (`RENTAB_VALOR`), positivos ou negativos — a
+ *  cor do bloco fica no cabeçalho, na faixa e no Total.
+ *
+ *  `temCusto` falso é "ainda não há custo lançado": travessão, e não
+ *  "R$ 0,00 · 0%", que diria que a margem é zero. `parcial` marca a
+ *  realizada de grupo/total que deixou item sem PP fora da conta. */
+function CelulasRentabilidade({
+  bloco,
+  linha,
+  orcado,
+  custo,
+  temCusto,
+  parcial = false,
+  moeda,
+}: {
+  bloco: Bloco;
+  linha: "item" | "grupo" | "total";
+  orcado: number;
+  custo: number;
+  temCusto: boolean;
+  parcial?: boolean;
+  moeda: string;
+}) {
+  const { rentabilidade, percentual } = calcularRentabilidade(orcado, custo);
+  const classes =
+    linha === "item"
+      ? { valor: bloco.celulaMeio, pct: bloco.celulaTotal, texto: "text-xs font-semibold" }
+      : linha === "grupo"
+        ? { valor: bloco.grupoValor, pct: bloco.grupoValor, texto: "text-[13px] font-bold" }
+        : { valor: bloco.subtotalValor, pct: bloco.subtotalValor, texto: "py-2 text-[13px] font-bold" };
+  const base = cn(
+    "px-3 text-right align-middle whitespace-nowrap font-mono",
+    classes.texto,
+  );
+  const titulo = parcial
+    ? "Rentabilidade parcial: há item sem PP emitida, fora desta conta."
+    : undefined;
+  return (
+    <>
+      <td className={cn(base, classes.valor, RENTAB_VALOR)} title={titulo}>
+        {temCusto ? (
+          formatCurrency(rentabilidade, moeda)
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        )}
+      </td>
+      <td className={cn(base, classes.pct, RENTAB_VALOR)} title={titulo}>
+        {temCusto && percentual !== null ? (
+          <>
+            {formatarPercentual(percentual)}
+            {parcial && " *"}
+          </>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        )}
+      </td>
+    </>
+  );
+}
+
+/** A rentabilidade REALIZADA de um recorte (grupo ou planilha), contando
+ *  só os itens que já têm realizado — decisão 045. Item com orçado e sem
+ *  PP fica fora da base e marca a conta como parcial; a linha vermelha
+ *  (sem orçado, só realizado) entra pelo custo, como o imprevisto que é;
+ *  a linha em save (sem base e sem custo) não conta para nada. */
+function rentabilidadeRealizadaDe(
+  blocos: Array<{ orcadoRentabilidade: number; realizado: ValoresDoBloco }>,
+  visao: VisaoBv,
+): { orcado: number; custo: number; temCusto: boolean; parcial: boolean } {
+  let orcado = 0;
+  let custo = 0;
+  let comRealizado = 0;
+  let esperandoPP = 0;
+  for (const b of blocos) {
+    if (b.realizado.bruto > 0) {
+      orcado += b.orcadoRentabilidade;
+      custo += valorNaVisao(b.realizado, visao);
+      comRealizado += 1;
+    } else if (b.orcadoRentabilidade > 0) {
+      esperandoPP += 1;
+    }
+  }
+  return {
+    orcado,
+    custo,
+    temCusto: comRealizado > 0,
+    parcial: comRealizado > 0 && esperandoPP > 0,
+  };
 }

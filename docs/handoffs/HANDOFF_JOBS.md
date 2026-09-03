@@ -2246,3 +2246,69 @@ logado, no JOB-0016 (projeto Teste Alterações), JOB-0013 e JOB-0002:
 | JOB-0016 com `abertura_em_revisao` ligada por SQL (revertida depois) | painel com a faixa âmbar e "Enviar" travado; `enviarPedidoCompraAoFinanceiro(id, true)` chamada direto pelo console recusou com a mensagem da revisão; JOB-0030 (em revisão de verdade) mostrou o selo novo na barra |
 
 PPs de teste (PP-00018 a PP-00021) ficaram `cancelada`, que é o fim normal.
+
+---
+
+## ⚠️ Nota de 2026-09-03 — rentabilidade por item na planilha do job, e o "Exibir" que liga
+
+Regra em [decisão 045](../decisions/045-rentabilidade-por-item-na-planilha-do-job.md);
+esta nota registra o que entrou e como foi conferido. Design `Planilha
+Interna do Job - Rentabilidade por Item.dc.html`, turno 1b. Vale para a
+planilha do job no GP (`/jobs/[jobId]`) e no financeiro
+(`/financeiro/jobs/[jobId]`) — é a mesma `JobRealizadoSection`.
+
+### O menu "Exibir"
+
+| Seção | Item | Comportamento |
+|---|---|---|
+| Colunas | Save | liga/desliga a coluna (como antes) |
+| Colunas | Orçado | **liga/desliga o bloco inteiro** — só leitura enquanto a errata está ligada ("Na errata o Orçado fica sempre aberto."), e ligar a errata traz o bloco de volta |
+| Colunas | Planejado | sempre exibido (dica no `title`) |
+| Colunas | Realizado | sempre exibido — "é por ele que se acompanham as PPs" |
+| Rentabilidade | Rentabilidade planejada | liga **Rentab. R$ · Rentab. %** como as duas últimas colunas do PLANEJADO |
+| Rentabilidade | Rentabilidade realizada | idem, no REALIZADO |
+
+As duas rentabilidades nascem **desligadas**: com elas fechadas a
+planilha é bit a bit a de antes, "rentab." no vão da linha de grupo e do
+total incluído. Ligada uma delas, o "rentab." daquele bloco sai do vão.
+
+### A conta
+
+- Por item: Orçado (base da rentabilidade, sem as linhas em save) −
+  custo do bloco na vista escolhida; % sobre o orçado. Sem custo lançado
+  ⇒ "–" (item sem PP não tem rentabilidade realizada).
+- Grupo e total, **planejada**: a mesma de sempre.
+- Grupo e total, **realizada**: só sobre os itens que já têm realizado,
+  marcada com `*` (e `title`) quando deixou item com orçado de fora. A
+  linha vermelha entra pelo custo; a linha em save não conta.
+- Legenda no pé do card quando alguma coluna está ligada.
+
+### A grade
+
+`_planilha/grade-job.tsx`: 15 a 20 colunas. Larguras em `style` como
+pesos renormalizados (os percentuais de sempre), piso de largura por
+combinação (`larguraMinimaJob`). Com tudo ligado a tabela passa de
+1500px e rola dentro do card; com o Orçado escondido e as duas
+rentabilidades ligadas ela cabe. `totalDeColunasJob` e
+`colunasDoRotuloJob` recebem o objeto `ColunasJobVisiveis` — nunca
+literais.
+
+**Fora desta entrega:** a visão agregada de jobs do projeto
+(`/jobs/projeto/[id]`), por decisão do Tiago — lá o card de Totais
+divide o `colgroup`. A conferência do financeiro usa a tabela com os
+defaults e não mudou.
+
+### Verificação (03/09/2026, servidor próprio na 3000, logado no Chrome)
+
+| Tela | O que foi conferido |
+|---|---|
+| JOB-0016 (Teste Alterações Job 2, aberto) — padrão | planilha idêntica à anterior: três blocos, "rentab." no vão (Novo grupo 37,5% no realizado, total 64,3%) |
+| idem — menu | "Colunas" Save · Orçado · Planejado · Realizado + "Rentabilidade" planejada · realizada, com as duas dicas |
+| idem — as duas rentabilidades ligadas | PLANEJADO e REALIZADO com 6 colunas; "rentab." saiu do vão. Planejada: Montagem R$ 8.047 · 32,2%, Item 2 R$ 5.000 · 33,3%, Novo grupo R$ 13.047 · 32,6%, Infraestrutura R$ 10.000 · 33,3%, total R$ 23.047 · 32,9%. Realizada: Montagem (A) R$ 0,00 · 0,0%; Item 2 sem PP "–"; Novo grupo **R$ 0,00 · 0,0% \*** (só a Montagem na conta, e não os 37,5% de antes); Infraestrutura "–"; total **R$ 0,00 · 0,0% \***. Legenda no pé |
+| idem — Orçado escondido com as duas ligadas | 16 colunas alinhadas, tabela cabe sem rolar; cabeçalhos "Rentab. R$ / Rentab. %" numa linha só |
+| JOB-0029 (Job 2 do `0-0001/26`, aberto, sem faturamento) — Orçado escondido | 12 colunas, "rentab." no vão (Grupo 1: planejada R$ 2.000 · 20,0%; realizada R$ 0,00 · 0,0%) |
+| idem — "Alterar orçado" com o Orçado escondido | o bloco voltou com os inputs da errata, "Novo item" e "Linha vermelha" no pé do grupo; no menu, Orçado marcado e só leitura. Errata descartada sem gravar |
+| JOB-0016 e JOB-0015 | já enviados para faturamento: "Alterar orçado" travado, como manda a decisão 028 — por isso a errata foi conferida no JOB-0029 |
+| `/financeiro/jobs/JOB-0029` | mesma seção, mesmo menu; console só com `trancy-version` (extensão do navegador) |
+
+`tsc --noEmit`, `next lint` e `next build` limpos.
