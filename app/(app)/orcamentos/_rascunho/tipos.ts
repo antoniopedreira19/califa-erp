@@ -1,4 +1,5 @@
 import type { TipoCusto } from "@/lib/types";
+import type { EstagioFunil } from "@/lib/calculos/funil";
 
 /**
  * O rascunho do orçamento do projeto.
@@ -119,6 +120,10 @@ export interface OrigemBanco {
   /** `null` = editável. Preenchido, é o motivo de a planilha ser só leitura
    *  (versão aprovada, job já aberto pelo financeiro). */
   bloqueio: string | null;
+  /** Estágio do funil comercial (`lib/calculos/funil.ts`) — o chip dos
+   *  seletores "Exibir" e "Exportar" da visão agregada. Opcional porque o
+   *  editor multi-jobs, que também usa este tipo, não carrega jobs. */
+  estagio?: EstagioFunil;
 }
 
 export interface OrcamentoRascunho extends JobRascunho {
