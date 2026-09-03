@@ -4,24 +4,34 @@ import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { nomeVersao } from "@/lib/nome-versao";
 import { escolherJobDoFunil, estagioFunil } from "@/lib/calculos/funil";
+import { escolherVersaoVigente } from "@/lib/calculos/versao-vigente";
 import {
   adicionarAbaOrcamento,
-  nomeDeAbaSeguro,
   nomeDeArquivoSeguro,
+  type SecaoDaAba,
 } from "@/lib/exportacao/planilha-orcamento";
 import type { JobStatus, OrcamentoStatus, TipoCusto } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
+function dataBr(d: Date): string {
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  return `${dd}/${mm}/${d.getFullYear()}`;
+}
+
 /**
- * Exportação de VÁRIOS orçamentos do projeto num arquivo só.
+ * Exportação de VÁRIOS orçamentos do projeto numa planilha única.
  *
  * `GET /api/orcamentos/[projetoId]/export?orcamentos=id1,id2,…`
  *
- * Uma aba por orçamento, cada uma idêntica à exportação de orçamento
- * único (`lib/exportacao/planilha-orcamento.ts`): a versão que sai é a
- * aprovada e, sem aprovada, a mais recente — a mesma regra do "Valor do
- * Job" da página do projeto e da versão vigente da visão agregada.
+ * Uma aba só: os orçamentos marcados entram em sequência, cada um numa
+ * seção com título, e o fechamento no fim é um só — para o cliente é um
+ * orçamento; para a agência, continuam sendo N (decisão 041). A versão
+ * que sai de cada um é a aprovada e, sem aprovada, a mais recente — a
+ * mesma regra do "Valor do Job" da página do projeto e da versão vigente
+ * da visão agregada. Os ids ocultos da coluna H são o que a importação
+ * da mesma planilha usa para casar cada linha de volta.
  *
  * As travas do seletor valem aqui também, porque a regra não pode morar
  * só na tela: orçamento que já é job aberto não sai no arquivo, e
@@ -146,17 +156,10 @@ export async function GET(
   const versaoAlvo = new Map<string, VersaoLeve>();
   const semVersao: string[] = [];
   for (const o of orcamentos) {
-    const versoes = versoesPorOrcamento.get(o.id) ?? [];
-    const aprovada = o.versao_aprovada_id
-      ? versoes.find((v) => v.id === o.versao_aprovada_id)
-      : undefined;
-    const alvo =
-      aprovada ??
-      [...versoes].sort(
-        (a, b) =>
-          b.numero_versao - a.numero_versao ||
-          b.created_at.localeCompare(a.created_at),
-      )[0];
+    const alvo = escolherVersaoVigente(
+      versoesPorOrcamento.get(o.id) ?? [],
+      o.versao_aprovada_id,
+    );
     if (alvo) versaoAlvo.set(o.id, alvo);
     else semVersao.push(o.nome);
   }
@@ -199,6 +202,7 @@ export async function GET(
   for (const it of ((itensRes.data ?? []) as any[])) {
     const atuais = itensPorGrupo.get(it.grupo_id) ?? [];
     atuais.push({
+      id: it.id as string,
       item: it.item as string,
       tipo_custo: it.tipo_custo as TipoCusto,
       valor_unitario_orcado: Number(it.valor_unitario_orcado ?? 0),
@@ -216,42 +220,33 @@ export async function GET(
   wb.creator = "California ERP";
   wb.created = new Date();
 
-  // Nome de aba precisa ser único no arquivo; dois jobs com o mesmo nome
-  // ganham sufixo numérico em vez de derrubar a exportação inteira.
-  const nomesUsados = new Set<string>();
-  const nomeUnico = (base: string): string => {
-    let nome = nomeDeAbaSeguro(base);
-    let n = 2;
-    while (nomesUsados.has(nome.toLowerCase())) {
-      const sufixo = ` (${n})`;
-      nome = nomeDeAbaSeguro(base.slice(0, 31 - sufixo.length)) + sufixo;
-      n += 1;
-    }
-    nomesUsados.add(nome.toLowerCase());
-    return nome;
-  };
-
-  for (const o of orcamentos) {
+  const secoes: SecaoDaAba[] = orcamentos.map((o) => {
     const versao = versaoAlvo.get(o.id)!;
-    const grupos = gruposPorVersao.get(versao.id) ?? [];
-    adicionarAbaOrcamento(
-      wb,
-      nomeUnico(o.nome),
-      {
-        codigo: o.codigo,
-        nome: o.nome,
-        clienteNome,
-        tituloVersao: nomeVersao(o.nome, versao.numero_versao),
-        percentualHonorarios: Number(versao.percentual_honorarios ?? 0),
-        percentualImposto: Number(versao.percentual_imposto ?? 0),
-        grupos: grupos.map((g) => ({
-          nome: g.nome,
-          itens: itensPorGrupo.get(g.id) ?? [],
-        })),
-      },
-      { formulas: true },
-    );
-  }
+    return {
+      titulo: `${o.codigo} · ${nomeVersao(o.nome, versao.numero_versao)}`,
+      orcamentoId: o.id,
+      versaoId: versao.id,
+      percentualHonorarios: Number(versao.percentual_honorarios ?? 0),
+      percentualImposto: Number(versao.percentual_imposto ?? 0),
+      grupos: (gruposPorVersao.get(versao.id) ?? []).map((g) => ({
+        id: g.id,
+        nome: g.nome,
+        itens: itensPorGrupo.get(g.id) ?? [],
+      })),
+    };
+  });
+
+  adicionarAbaOrcamento(
+    wb,
+    "Orçamento",
+    {
+      identificacao: `${projeto.codigo} · ${projeto.nome}`,
+      clienteNome,
+      titulo: `Orçamento · ${dataBr(new Date())}`,
+      secoes,
+    },
+    { formulas: true },
+  );
 
   // ---------- resposta ----------
   const buffer = await wb.xlsx.writeBuffer();

@@ -70,7 +70,7 @@ import {
   estagioFunilBadgeClasses,
   estagioFunilLabel,
 } from "@/lib/calculos/funil";
-import { BotaoImportarOrcamentos } from "../../_selecao/botao-importar-orcamentos";
+import { ImportarOrcamentosDrawer } from "../../_selecao/importar-orcamentos-drawer";
 import {
   ExibirOrcamentosMenu,
   type OrcamentoExibivel,
@@ -759,7 +759,7 @@ export function EditorAgregado({
                   exibidos={exibidos}
                   onChange={setExibidos}
                 />
-                <BotaoImportarOrcamentos />
+                <ImportarOrcamentosDrawer projetoId={projeto.id} />
                 <ExportarOrcamentosMenu
                   projetoId={projeto.id}
                   orcamentos={exportaveis}
