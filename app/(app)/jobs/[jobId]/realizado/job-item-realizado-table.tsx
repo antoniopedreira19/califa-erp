@@ -26,7 +26,29 @@ import { acaoBv } from "@/app/(app)/_bv/bv-action-button";
 import { LARGURA_CALHA } from "@/app/(app)/_planilha/calha-acoes";
 import { ERRATA } from "@/app/(app)/_planilha/blocos";
 import { TIPOS_CUSTO } from "@/lib/calculos/versao-totais";
-import type { CampoErrata, RascunhoErrata } from "./errata-rascunho";
+import {
+  parseNumero,
+  type CampoErrata,
+  type RascunhoErrata,
+} from "./errata-rascunho";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { direcaoNoCampo, type Direcao } from "@/app/(app)/_planilha/navegacao";
+import {
+  Miolo,
+  RodapeSelecao,
+  useSelecaoPlanilha,
+  type CelulaSelecionada,
+  type ColunaDaGrade,
+  type EstadoDoRodape,
+  type Selecao,
+  type TipoEditor,
+} from "@/app/(app)/_planilha/selecao";
 import {
   Calha,
   LinhaDaCalha,
@@ -205,12 +227,140 @@ function formatarPercentual(p: number): string {
   return `${p.toFixed(1).replace(".", ",")}%`;
 }
 
+type NavDaCelula = ReturnType<Selecao["celulaProps"]>;
+
+/** Mesma forma do campo da planilha do orçamento — o teclado é um só. */
+const CAMPO_LISTA =
+  "h-[26px] w-full rounded-md border border-california-red/40 bg-white px-2 text-xs outline-none focus:border-california-red";
+
+/** As colunas que a seleção percorre, na ordem da tela. */
+const COLUNAS_NEUTRAS: ColunaDaGrade[] = [
+  { chave: "item", rotulo: "Item" },
+  { chave: "tipo_custo", rotulo: "Tipo" },
+  { chave: "categoria_id", rotulo: "Categoria" },
+];
+const COLUNAS_ORCADO: ColunaDaGrade[] = [
+  { chave: "valor_unitario_orcado", rotulo: "R$ Unit.", bloco: "Orçado" },
+  { chave: "quantidade_orcada", rotulo: "QT", bloco: "Orçado" },
+  { chave: "dias_meses_orcado", rotulo: "D/M", bloco: "Orçado" },
+  { chave: "total_orcado", rotulo: "Total", bloco: "Orçado" },
+];
+const COLUNAS_PLANEJADO: ColunaDaGrade[] = [
+  { chave: "valor_unitario_planejado", rotulo: "R$ Unit.", bloco: "Planejado" },
+  { chave: "quantidade_planejada", rotulo: "QT", bloco: "Planejado" },
+  { chave: "dias_meses_planejado", rotulo: "D/M", bloco: "Planejado" },
+  { chave: "total_planejado", rotulo: "Total", bloco: "Planejado" },
+];
+const COLUNAS_RENTAB_PLAN: ColunaDaGrade[] = [
+  { chave: "rentab_plan_valor", rotulo: "Rentab. R$", bloco: "Planejado" },
+  { chave: "rentab_plan_pct", rotulo: "Rentab. %", bloco: "Planejado" },
+];
+const COLUNAS_REALIZADO: ColunaDaGrade[] = [
+  { chave: "valor_unitario_realizado", rotulo: "R$ Unit.", bloco: "Realizado" },
+  { chave: "quantidade_realizada", rotulo: "QT", bloco: "Realizado" },
+  { chave: "dias_meses_realizado", rotulo: "D/M", bloco: "Realizado" },
+  { chave: "total_realizado", rotulo: "Total", bloco: "Realizado" },
+];
+const COLUNAS_RENTAB_REAL: ColunaDaGrade[] = [
+  { chave: "rentab_real_valor", rotulo: "Rentab. R$", bloco: "Realizado" },
+  { chave: "rentab_real_pct", rotulo: "Rentab. %", bloco: "Realizado" },
+];
+
+/** Uma célula do job com moldura de seleção: `<td>` + miolo. */
+function CelulaJob({
+  nav,
+  moldura,
+  className,
+  title,
+  children,
+}: {
+  nav: NavDaCelula;
+  moldura: string;
+  className?: string;
+  title?: string;
+  children: React.ReactNode;
+}) {
+  const { className: navClasse, ...handlers } = nav;
+  return (
+    <td
+      className={cn("px-3 text-xs align-middle", className, navClasse)}
+      title={title}
+      {...handlers}
+    >
+      <Miolo moldura={moldura}>{children}</Miolo>
+    </td>
+  );
+}
+
+/** Foco no campo recém-aberto: por Enter, o conteúdo inteiro selecionado;
+ *  por um caractere digitado, o cursor no fim dele. */
+function focarCampo(el: HTMLInputElement, semente?: string) {
+  if (semente === undefined) {
+    el.select();
+    return;
+  }
+  const fim = el.value.length;
+  el.setSelectionRange(fim, fim);
+}
+
+/** O campo aberto numa célula da errata (descrição da linha nova, ou
+ *  R$ Unit. / QT / D/M do Orçado). Tab, Enter e setas confirmam e andam;
+ *  Esc cancela; sair pelo clique confirma. */
+function CampoDaErrata({
+  valor,
+  semente,
+  numerico,
+  onConfirmar,
+  onCancelar,
+  className,
+  ariaLabel,
+}: {
+  valor: string;
+  semente?: string;
+  numerico?: boolean;
+  onConfirmar: (raw: string, destino?: Direcao) => void;
+  onCancelar: () => void;
+  className: string;
+  ariaLabel: string;
+}) {
+  const finalizado = React.useRef(false);
+  return (
+    <input
+      autoFocus
+      defaultValue={semente ?? valor}
+      inputMode={numerico ? "decimal" : undefined}
+      onFocus={(e) => focarCampo(e.currentTarget, semente)}
+      onKeyDown={(e) => {
+        const destino = direcaoNoCampo(e, e.currentTarget);
+        if (destino) {
+          e.preventDefault();
+          finalizado.current = true;
+          onConfirmar(e.currentTarget.value, destino);
+          return;
+        }
+        if (e.key === "Escape") {
+          e.preventDefault();
+          finalizado.current = true;
+          onCancelar();
+        }
+      }}
+      onBlur={(e) => {
+        if (!finalizado.current) onConfirmar(e.currentTarget.value);
+      }}
+      aria-label={ariaLabel}
+      className={className}
+    />
+  );
+}
+
 /**
- * Uma célula do bloco ORÇADO — leitura fora do modo errata, input dentro.
+ * Célula do bloco ORÇADO — a que a errata abre.
  *
- * O input guarda TEXTO, não número: com número, digitar "1," volta a "1" e
- * o cursor pula. A conversão para número acontece uma vez só, em
- * `useRascunhoErrata`, e é de lá que sai o total da linha.
+ * Fora da errata é leitura. Na errata, mostra o que está no rascunho e
+ * abre pelo mesmo caminho da planilha do orçamento (Enter, digitar,
+ * duplo clique — decisão 046); o input guarda TEXTO, não número: com
+ * número, digitar "1," volta a "1" e o cursor pula. A conversão acontece
+ * uma vez só, em `useRascunhoErrata`, e é de lá que sai o total da linha.
  */
 function CelulaOrcadoErrata({
   item,
@@ -220,6 +370,12 @@ function CelulaOrcadoErrata({
   moeda,
   className,
   travada = false,
+  aberta,
+  semente,
+  nav,
+  moldura,
+  onConfirmar,
+  onCancelar,
 }: {
   item: ItemPlanilhaJob;
   campo: CampoErrata;
@@ -230,19 +386,24 @@ function CelulaOrcadoErrata({
   /** Linha com PP já no financeiro não entra em errata (decisão 040): a
    *  célula fica de leitura mesmo com o modo ligado. */
   travada?: boolean;
+  aberta: boolean;
+  semente?: string;
+  nav: NavDaCelula;
+  moldura: string;
+  onConfirmar: (raw: string, destino?: Direcao) => void;
+  onCancelar: () => void;
 }) {
   // A linha vermelha nasce sem orçado e nunca ganha um: mostrar travessão
   // é mais honesto do que mostrar zeros que ninguém pode mexer.
   if (item.linha_vermelha) {
     return (
-      <td
-        className={cn(
-          "px-3 text-right text-xs align-middle font-mono",
-          ERRATA.celulaVermelhaApagada,
-        )}
+      <CelulaJob
+        nav={nav}
+        moldura={moldura}
+        className={cn("text-right font-mono", ERRATA.celulaVermelhaApagada)}
       >
         —
-      </td>
+      </CelulaJob>
     );
   }
 
@@ -252,41 +413,47 @@ function CelulaOrcadoErrata({
       : campo === "quantidade"
         ? Number(item.quantidade_orcada ?? 0)
         : Number(item.dias_meses_orcado ?? 0);
+  const podeEditar = editando && !!errata && !travada;
+  const rotulo =
+    campo === "unitario" ? "R$ unitário" : campo === "quantidade" ? "QT" : "D/M";
 
-  if (!editando || !errata || travada) {
+  if (podeEditar && aberta) {
+    const edicao = errata.edicaoDe(item.id);
     return (
-      <td
-        title={editando && travada ? MOTIVO_TRAVA_PP : undefined}
-        className={cn(
-          "px-3 text-right text-xs align-middle",
-          campo === "unitario" && "font-mono",
-          editando && travada && "text-muted-foreground",
-          className,
-        )}
-      >
-        {campo === "unitario" ? formatCurrency(valorSalvo, moeda) : valorSalvo}
+      <td className={cn("px-1.5 align-middle", className, ERRATA.celulaEditavel)}>
+        <CampoDaErrata
+          valor={edicao ? edicao[campo] : String(valorSalvo)}
+          semente={semente}
+          numerico
+          onConfirmar={onConfirmar}
+          onCancelar={onCancelar}
+          className={ERRATA.input}
+          ariaLabel={`${rotulo} orçado de ${item.item || "item novo"}`}
+        />
       </td>
     );
   }
 
-  const edicao = errata.edicaoDe(item.id);
-  const rotulo =
-    campo === "unitario" ? "R$ unitário" : campo === "quantidade" ? "QT" : "D/M";
-
+  // Na errata o número mostrado é o do RASCUNHO — o que foi digitado.
+  const texto = podeEditar ? errata.edicaoDe(item.id)?.[campo] : undefined;
+  const numero = texto !== undefined ? (parseNumero(texto) ?? 0) : valorSalvo;
   return (
-    <td className={cn("px-1.5 align-middle", className, ERRATA.celulaEditavel)}>
-      <input
-        value={edicao ? edicao[campo] : String(valorSalvo)}
-        onChange={(e) => errata.editarCampo(item.id, campo, e.target.value)}
-        inputMode="decimal"
-        aria-label={`${rotulo} orçado de ${item.item || "item novo"}`}
-        className={ERRATA.input}
-      />
-    </td>
+    <CelulaJob
+      nav={nav}
+      moldura={moldura}
+      title={editando && travada ? MOTIVO_TRAVA_PP : undefined}
+      className={cn(
+        "text-right",
+        campo === "unitario" && "font-mono",
+        editando && travada && "text-muted-foreground",
+        className,
+        podeEditar && ERRATA.celulaEditavel,
+      )}
+    >
+      {campo === "unitario" ? formatCurrency(numero, moeda) : numero}
+    </CelulaJob>
   );
 }
-
-
 
 export function JobItemRealizadoTable({
   jobId,
@@ -500,12 +667,242 @@ export function JobItemRealizadoTable({
 
   const fmt = (v: number) => formatCurrency(v, moeda);
 
+  // ---- SELEÇÃO E TECLADO (decisão 046) --------------------------------
+  /** A célula ABERTA — só existe na errata. */
+  const [aberta, setAberta] = React.useState<{
+    rowId: string;
+    campo: string;
+    semente?: string;
+  } | null>(null);
+
+  const colunasDaGrade = React.useMemo<ColunaDaGrade[]>(
+    () => [
+      ...COLUNAS_NEUTRAS,
+      ...(orcadoVisivel ? COLUNAS_ORCADO : []),
+      ...COLUNAS_PLANEJADO,
+      ...(rentabPlanejadaVisivel ? COLUNAS_RENTAB_PLAN : []),
+      ...COLUNAS_REALIZADO,
+      ...(rentabRealizadaVisivel ? COLUNAS_RENTAB_REAL : []),
+    ],
+    [orcadoVisivel, rentabPlanejadaVisivel, rentabRealizadaVisivel],
+  );
+
+  /** As linhas na ordem da tela; grupo recolhido fica fora. */
+  const linhasNavegaveis = React.useMemo(() => {
+    const ids: string[] = [];
+    for (const g of grupos) {
+      if (!estaAberto(g.id)) continue;
+      for (const it of g.itens) ids.push(it.id);
+    }
+    return ids;
+  }, [grupos, estaAberto]);
+
+  /** Último item visível de cada grupo → id do grupo. É por aqui que o ↓
+   *  da última linha abre o "Novo item" DESTE grupo na errata. */
+  const grupoDoUltimoItem = React.useMemo(() => {
+    const mapa = new Map<string, string>();
+    for (const g of grupos) {
+      if (!estaAberto(g.id)) continue;
+      const ultimo = g.itens[g.itens.length - 1];
+      if (ultimo) mapa.set(ultimo.id, g.id);
+    }
+    return mapa;
+  }, [grupos, estaAberto]);
+
+  const itemPorId = React.useMemo(
+    () => new Map(todosOsItens.map((it) => [it.id, it])),
+    [todosOsItens],
+  );
+
+  /** O que cada célula abre — só na errata. Fora dela tudo é leitura:
+   *  seleciona, mas não abre. */
+  const editorDe = React.useCallback(
+    (rowId: string, coluna: string): TipoEditor | null => {
+      if (!editando || !errata) return null;
+      const item = itemPorId.get(rowId);
+      if (!item || travadasPorPP.has(rowId)) return null;
+      if (coluna === "item") return errata.ehNova(rowId) ? "texto" : null;
+      if (coluna === "tipo_custo") return "lista";
+      if (
+        coluna === "valor_unitario_orcado" ||
+        coluna === "quantidade_orcada" ||
+        coluna === "dias_meses_orcado"
+      ) {
+        return item.linha_vermelha ? null : "numero";
+      }
+      return null;
+    },
+    [editando, errata, itemPorId, travadasPorPP],
+  );
+
+  /** Cria a linha nova e já abre a descrição dela — é o que o input
+   *  sempre aberto fazia antes de a errata ganhar o mesmo teclado da
+   *  planilha do orçamento. */
+  function abrirLinhaNova(grupoId: string, vermelha: boolean) {
+    if (!errata) return;
+    const chave = errata.adicionar(grupoId, vermelha);
+    selecao.selecionar({ linhaId: chave, coluna: "item" });
+    setAberta({ rowId: chave, campo: "item" });
+  }
+
+  const selecao: Selecao = useSelecaoPlanilha({
+    linhas: linhasNavegaveis,
+    colunas: colunasDaGrade,
+    editorDe,
+    onAbrir: (c, semente) => setAberta({ rowId: c.linhaId, campo: c.coluna, semente }),
+    // ↓ na última linha do grupo, na errata, abre o "Novo item" dele —
+    // menos quando a última linha é uma nova ainda sem nome.
+    aoDescer: (rowId) => {
+      if (!editando || !errata || !podeEditarLinhas) return false;
+      const grupoId = grupoDoUltimoItem.get(rowId);
+      if (!grupoId) return false;
+      const item = itemPorId.get(rowId);
+      if (item && errata.ehNova(rowId) && item.item.trim() === "") return false;
+      abrirLinhaNova(grupoId, false);
+      return true;
+    },
+    editando: aberta !== null,
+    wrapperRef,
+  });
+  const selecaoRef = React.useRef(selecao.celula);
+  selecaoRef.current = selecao.celula;
+
+  // Campo fechou: o foco volta ao card, para as setas continuarem.
+  const abertaAnterior = React.useRef(aberta);
+  React.useEffect(() => {
+    if (abertaAnterior.current !== null && aberta === null && selecaoRef.current) {
+      selecao.focar();
+    }
+    abertaAnterior.current = aberta;
+  }, [aberta, selecao]);
+
+  // Errata desligada: nenhuma célula fica aberta.
+  React.useEffect(() => {
+    if (!editando) setAberta(null);
+  }, [editando]);
+
+  function fecharEMover(de: CelulaSelecionada, destino?: Direcao) {
+    setAberta(null);
+    if (destino) selecao.mover(destino, de);
+  }
+
+  /** Fecha a lista SE ela ainda for a aberta — o Radix avisa que fechou
+   *  também quando é desmontado pela navegação. */
+  const fecharCelula = React.useCallback((rowId: string, campo: string) => {
+    setAberta((atual) =>
+      atual && atual.rowId === rowId && atual.campo === campo ? null : atual,
+    );
+  }, []);
+
+  /** O valor da célula selecionada, como ela o mostra — para o rodapé. */
+  function valorExibido(rowId: string, coluna: string): string {
+    const item = itemPorId.get(rowId);
+    if (!item) return "—";
+    const blocos = blocosPorItem.get(item.id) ?? BLOCO_VAZIO;
+    const realizadoDoItem = realizadosMap.get(item.id);
+    const quebraDasPPs = realizadoVemDasPPs(item.tipo_custo) || preAbertura;
+    const traco = (v: number, moeda_?: boolean) =>
+      v > 0 ? (moeda_ ? fmt(v) : String(v)) : "—";
+    const pct = (p: number | null) => (p === null ? "—" : formatarPercentual(p));
+    const rp = calcularRentabilidade(
+      blocos.orcadoRentabilidade,
+      valorNaVisao(blocos.planejado, visao),
+    );
+    const rr = calcularRentabilidade(
+      blocos.orcadoRentabilidade,
+      valorNaVisao(blocos.realizado, visao),
+    );
+    const edicao = editando ? errata?.edicaoDe(item.id) : undefined;
+    const orcadoDe = (campo: CampoErrata, salvo: number) =>
+      edicao ? (parseNumero(edicao[campo]) ?? 0) : salvo;
+    const mapa: Record<string, string> = {
+      item: item.item || "—",
+      tipo_custo: item.tipo_custo,
+      categoria_id: item.categoria_id
+        ? categoriasMap.get(item.categoria_id) ?? "—"
+        : "—",
+      valor_unitario_orcado: item.linha_vermelha
+        ? "—"
+        : fmt(orcadoDe("unitario", Number(item.valor_unitario_orcado ?? 0))),
+      quantidade_orcada: item.linha_vermelha
+        ? "—"
+        : String(orcadoDe("quantidade", Number(item.quantidade_orcada ?? 0))),
+      dias_meses_orcado: item.linha_vermelha
+        ? "—"
+        : String(orcadoDe("diasMeses", Number(item.dias_meses_orcado ?? 0))),
+      total_orcado: fmt(Number(item.total_orcado ?? 0)),
+      valor_unitario_planejado: traco(Number(item.valor_unitario_planejado ?? 0), true),
+      quantidade_planejada: traco(Number(item.quantidade_planejada ?? 0)),
+      dias_meses_planejado: traco(Number(item.dias_meses_planejado ?? 0)),
+      total_planejado:
+        blocos.planejado.bruto > 0 ? fmt(valorNaVisao(blocos.planejado, visao)) : "—",
+      rentab_plan_valor: blocos.planejado.bruto > 0 ? fmt(rp.rentabilidade) : "—",
+      rentab_plan_pct: blocos.planejado.bruto > 0 ? pct(rp.percentual) : "—",
+      valor_unitario_realizado: traco(
+        quebraDasPPs
+          ? Number(realizadoDoItem?.valor_unitario_realizado ?? 0)
+          : Number(item.valor_unitario_orcado ?? 0),
+        true,
+      ),
+      quantidade_realizada: traco(
+        quebraDasPPs
+          ? Number(realizadoDoItem?.quantidade_realizada ?? 0)
+          : Number(item.quantidade_orcada ?? 0),
+      ),
+      dias_meses_realizado: traco(
+        quebraDasPPs
+          ? Number(realizadoDoItem?.dias_meses_realizado ?? 0)
+          : Number(item.dias_meses_orcado ?? 0),
+      ),
+      total_realizado:
+        blocos.realizado.bruto > 0 ? fmt(valorNaVisao(blocos.realizado, visao)) : "—",
+      rentab_real_valor: blocos.realizado.bruto > 0 ? fmt(rr.rentabilidade) : "—",
+      rentab_real_pct: blocos.realizado.bruto > 0 ? pct(rr.percentual) : "—",
+    };
+    return mapa[coluna] ?? "—";
+  }
+
+  const temRodape = grupos.some((g) => estaAberto(g.id));
+  const estadoDoRodape: EstadoDoRodape = (() => {
+    const sel = selecao.celula;
+    const col = selecao.colunaSelecionada;
+    if (!sel || !col) {
+      return { endereco: null, valor: null, modo: null, aberta: false, editavel: editando };
+    }
+    const nome = itemPorId.get(sel.linhaId)?.item || "Item novo";
+    const tipo = editorDe(sel.linhaId, sel.coluna);
+    const estaAberta =
+      aberta !== null && aberta.rowId === sel.linhaId && aberta.campo === sel.coluna;
+    return {
+      endereco: `${nome} · ${col.bloco ? `${col.bloco} · ` : ""}${col.rotulo}`,
+      valor: valorExibido(sel.linhaId, sel.coluna),
+      modo: estaAberta
+        ? tipo === "lista"
+          ? "Lista aberta"
+          : "Editando"
+        : tipo
+          ? "Enter abre"
+          : editando
+            ? "Calculada"
+            : "Só leitura",
+      aberta: estaAberta,
+      editavel: editando,
+    };
+  })();
+
   return (
     <>
       {/* A faixa de erro que ficava aqui era do lançamento inline do
           realizado, que deixou de existir em 21/08/2026. Erro de PP e de
           BV vive no drawer que o produziu, junto do campo que o causou. */}
-      <div ref={wrapperRef} className="relative">
+      <div
+        ref={wrapperRef}
+        // O card recebe as teclas da seleção; sem anel — a moldura da
+        // célula é o foco visível.
+        tabIndex={0}
+        onKeyDown={selecao.onKeyDown}
+        className="relative outline-none"
+      >
       {/* A alça da coluna Save — mesma da planilha do orçamento, no
           lado oposto ao da calha de BV e PP. */}
       {onAlternarSave && (
@@ -515,7 +912,7 @@ export function JobItemRealizadoTable({
       )}
       {/* Com o nome do grupo na faixa, a tabela abre e fecha o card. */}
       {/* A tabela abre e fecha o card: a planilha inteira é uma só. */}
-      <div className="overflow-x-auto rounded-b-2xl rounded-t-2xl">
+      <div className={cn("overflow-x-auto rounded-t-2xl", !temRodape && "rounded-b-2xl")}>
         <table
           className="w-full table-fixed text-sm border-collapse"
           style={{ minWidth: larguraMinimaJob(colunas) }}
@@ -759,260 +1156,326 @@ export function JobItemRealizadoTable({
                   )}
 
                   {abertoAqui && grupo.itens.map((item) => {
-              const blocos = blocosPorItem.get(item.id) ?? BLOCO_VAZIO;
-              const realizadoDoItem = realizadosMap.get(item.id);
-              // A quebra do realizado espelha o orçado só em `A`/`D` COM o
-              // job aberto. Na pré-abertura ela vem da linha de realizado,
-              // que está zerada — e zero vira travessão, igual ao Total.
-              const quebraDasPPs =
-                realizadoVemDasPPs(item.tipo_custo) || preAbertura;
-              const categoria = item.categoria_id
-                ? categoriasMap.get(item.categoria_id)
-                : null;
+                    const blocos = blocosPorItem.get(item.id) ?? BLOCO_VAZIO;
+                    const realizadoDoItem = realizadosMap.get(item.id);
+                    // A quebra do realizado espelha o orçado só em `A`/`D`
+                    // COM o job aberto. Na pré-abertura ela vem da linha
+                    // de realizado, que está zerada — e zero vira
+                    // travessão, igual ao Total.
+                    const quebraDasPPs =
+                      realizadoVemDasPPs(item.tipo_custo) || preAbertura;
+                    const categoria = item.categoria_id
+                      ? categoriasMap.get(item.categoria_id)
+                      : null;
+                    const travada = travadasPorPP.has(item.id);
+                    const abertaAqui = (campo: string) =>
+                      aberta?.rowId === item.id && aberta.campo === campo;
+                    const sementeDe = (campo: string) =>
+                      abertaAqui(campo) ? aberta?.semente : undefined;
+                    const nav = (coluna: string) => selecao.celulaProps(item.id, coluna);
+                    const moldura = (coluna: string) => selecao.moldura(item.id, coluna);
+                    const classeNeutra = item.linha_vermelha
+                      ? ERRATA.celulaVermelha
+                      : GRADE_NEUTRA;
+                    const celulaOrcado = (
+                      campo: CampoErrata,
+                      coluna: string,
+                      classe: string,
+                    ) => (
+                      <CelulaOrcadoErrata
+                        item={item}
+                        campo={campo}
+                        editando={editando}
+                        errata={errata}
+                        moeda={moeda}
+                        className={classe}
+                        travada={travada}
+                        aberta={abertaAqui(coluna)}
+                        semente={sementeDe(coluna)}
+                        nav={nav(coluna)}
+                        moldura={moldura(coluna)}
+                        onConfirmar={(raw, d) => {
+                          errata?.editarCampo(item.id, campo, raw);
+                          fecharEMover({ linhaId: item.id, coluna }, d);
+                        }}
+                        onCancelar={() => setAberta(null)}
+                      />
+                    );
 
-              return (
-                <tr
-                      key={item.id}
-                      data-calha={`i:${item.id}`}
-                      className={cn(
-                        ALTURA_LINHA,
-                        "border-b border-border",
-                        item.linha_vermelha && ERRATA.linhaVermelha,
-                        saveVisivel &&
-                          classesDaLinhaComSave(
-                            savePorItem?.[item.id] ?? SAVE_VAZIO,
-                          ),
-                      )}
-                    >
-                  {saveVisivel && (
-                    <CelulaSave
-                      estado={savePorItem?.[item.id] ?? SAVE_VAZIO}
-                      moeda={moeda}
-                      totalOrcado={Number(item.total_orcado ?? 0)}
-                      onAbrir={onAbrirSave ? () => onAbrirSave(item) : undefined}
-                    />
-                  )}
-                  <td
-                    className={cn(
-                      "px-3 pl-[30px] text-xs align-middle",
-                      item.linha_vermelha
-                        ? ERRATA.celulaVermelha
-                        : GRADE_NEUTRA,
-                    )}
-                  >
-                    {editando && errata?.ehNova(item.id) ? (
-                      <input
-                        value={item.item}
-                        onChange={(e) =>
-                          errata.editarNome(item.id, e.target.value)
-                        }
-                        placeholder="Descrição do item"
-                        aria-label="Descrição do item novo"
-                        className={ERRATA.inputNome}
-                      />
-                    ) : (
-                      <div className="flex min-w-0 items-center gap-1.5">
-                        {editando && travadasPorPP.has(item.id) && (
-                          <Lock
-                            className="h-3 w-3 flex-none text-muted-foreground"
-                            aria-label={MOTIVO_TRAVA_PP}
-                          >
-                            <title>{MOTIVO_TRAVA_PP}</title>
-                          </Lock>
-                        )}
-                        <TruncateTooltip text={item.item} />
-                        {item.linha_vermelha && (
-                          <span className={cn(ERRATA.tagVermelha, "flex-none")}>
-                            só realizado
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </td>
-                  <td
-                    className={cn(
-                      "px-3 text-xs align-middle",
-                      item.linha_vermelha
-                        ? ERRATA.celulaVermelha
-                        : GRADE_NEUTRA,
-                    )}
-                  >
-                    {editando && !travadasPorPP.has(item.id) ? (
-                      <select
-                        value={item.tipo_custo}
-                        onChange={(e) =>
-                          errata?.editarTipo(
-                            item.id,
-                            e.target.value as ItemPlanilhaJob["tipo_custo"],
-                          )
-                        }
-                        aria-label={`Tipo de custo de ${item.item || "item novo"}`}
-                        className="rounded-md border border-border bg-white px-1.5 py-1 text-[11px] font-semibold text-foreground outline-none focus:border-california-red"
-                      >
-                        {TIPOS_CUSTO.map((t) => (
-                          <option key={t} value={t}>
-                            {t}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <Badge variant="outline">{item.tipo_custo}</Badge>
-                    )}
-                  </td>
-                  <td
-                    className={cn(
-                      "px-3 text-xs align-middle",
-                      item.linha_vermelha
-                        ? ERRATA.celulaVermelha
-                        : GRADE_NEUTRA,
-                    )}
-                  >
-                    {categoria ? (
-                      <span className="inline-flex max-w-full items-center truncate rounded-full border border-border bg-muted px-2 py-0.5 text-[10.5px] font-medium text-foreground">
-                        {categoria}
-                      </span>
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
-                  </td>
-                  {/* ORÇADO — o único bloco que o modo errata abre. A
-                      linha vermelha fica de fora: ela não tem orçado, e é
-                      o banco que garante isso. Escondido pelo menu, sai
-                      inteiro — a errata liga o bloco de volta ao entrar. */}
-                  {orcadoVisivel && (
-                    <>
-                      <CelulaOrcadoErrata
-                        item={item}
-                        campo="unitario"
-                        editando={editando}
-                        errata={errata}
-                        moeda={moeda}
-                        className={ORCADO.celulaAbre}
-                        travada={travadasPorPP.has(item.id)}
-                      />
-                      <CelulaOrcadoErrata
-                        item={item}
-                        campo="quantidade"
-                        editando={editando}
-                        errata={errata}
-                        moeda={moeda}
-                        className={ORCADO.celulaMeio}
-                        travada={travadasPorPP.has(item.id)}
-                      />
-                      <CelulaOrcadoErrata
-                        item={item}
-                        campo="diasMeses"
-                        editando={editando}
-                        errata={errata}
-                        moeda={moeda}
-                        className={ORCADO.celulaMeio}
-                        travada={travadasPorPP.has(item.id)}
-                      />
-                      <td
+                    return (
+                      <tr
+                        key={item.id}
+                        data-calha={`i:${item.id}`}
                         className={cn(
-                          "px-3 text-right text-xs font-mono font-semibold align-middle whitespace-nowrap",
-                          item.linha_vermelha
-                            ? ERRATA.celulaVermelhaApagada
-                            : ORCADO.celulaTotal,
+                          ALTURA_LINHA,
+                          "border-b border-border",
+                          item.linha_vermelha && ERRATA.linhaVermelha,
+                          saveVisivel &&
+                            classesDaLinhaComSave(
+                              savePorItem?.[item.id] ?? SAVE_VAZIO,
+                            ),
                         )}
                       >
-                        {formatCurrency(Number(item.total_orcado ?? 0), moeda)}
-                      </td>
-                    </>
-                  )}
-                  {/* Planejado (RO) */}
-                  <td className={cn("px-3 text-right text-xs font-mono align-middle", PLANEJADO.celulaAbre)}>
-                    {Number(item.valor_unitario_planejado ?? 0) > 0
-                      ? formatCurrency(Number(item.valor_unitario_planejado), moeda)
-                      : "—"}
-                  </td>
-                  <td className={cn("px-3 text-right text-xs align-middle", PLANEJADO.celulaMeio)}>
-                    {Number(item.quantidade_planejada ?? 0) > 0
-                      ? Number(item.quantidade_planejada)
-                      : "—"}
-                  </td>
-                  <td className={cn("px-3 text-right text-xs align-middle", PLANEJADO.celulaMeio)}>
-                    {Number(item.dias_meses_planejado ?? 0) > 0
-                      ? Number(item.dias_meses_planejado)
-                      : "—"}
-                  </td>
-                  <CelulaTotalComBv
-                    bloco={blocos.planejado}
-                    visao={visao}
-                    moeda={moeda}
-                    // Com a rentabilidade ligada o Total ganha o fio de
-                    // 1px à direita: ele deixou de fechar o bloco.
-                    className={cn(
-                      rentabPlanejadaVisivel && PLANEJADO.celulaMeio,
-                      PLANEJADO.celulaTotal,
-                    )}
-                    cor={PLANEJADO.texto}
-                    corRotulo={PLANEJADO.textoSuave}
-                  />
-                  {rentabPlanejadaVisivel && (
-                    <CelulasRentabilidade
-                      bloco={PLANEJADO}
-                      linha="item"
-                      orcado={blocos.orcadoRentabilidade}
-                      custo={valorNaVisao(blocos.planejado, visao)}
-                      temCusto={blocos.planejado.bruto > 0}
-                      moeda={moeda}
-                    />
-                  )}
-                  {/* Realizado — leitura. Em item que gera PP, a quebra
-                      descreve as PPs emitidas (quantidade somada e o
-                      unitário que ela implica); em A e D, que não geram
-                      PP, ela espelha o orçado. */}
-                  <CelulaLeitura
-                    valor={
-                      quebraDasPPs
-                        ? Number(realizadoDoItem?.valor_unitario_realizado ?? 0)
-                        : Number(item.valor_unitario_orcado ?? 0)
-                    }
-                    formato="moeda"
-                    moeda={moeda}
-                    className={cn("font-mono", REALIZADO.celulaAbre)}
-                  />
-                  <CelulaLeitura
-                    valor={
-                      quebraDasPPs
-                        ? Number(realizadoDoItem?.quantidade_realizada ?? 0)
-                        : Number(item.quantidade_orcada ?? 0)
-                    }
-                    className={REALIZADO.celulaMeio}
-                  />
-                  <CelulaLeitura
-                    valor={
-                      quebraDasPPs
-                        ? Number(realizadoDoItem?.dias_meses_realizado ?? 0)
-                        : Number(item.dias_meses_orcado ?? 0)
-                    }
-                    className={REALIZADO.celulaMeio}
-                  />
-                  <CelulaTotalComBv
-                    bloco={blocos.realizado}
-                    visao={visao}
-                    moeda={moeda}
-                    className={cn(
-                      rentabRealizadaVisivel && REALIZADO.celulaMeio,
-                      REALIZADO.celulaTotal,
-                    )}
-                    cor={REALIZADO.texto}
-                    corRotulo={REALIZADO.textoSuave}
-                  />
-                  {/* Item sem PP emitida ainda não tem rentabilidade
-                      realizada: travessão, e não zero. */}
-                  {rentabRealizadaVisivel && (
-                    <CelulasRentabilidade
-                      bloco={REALIZADO}
-                      linha="item"
-                      orcado={blocos.orcadoRentabilidade}
-                      custo={valorNaVisao(blocos.realizado, visao)}
-                      temCusto={blocos.realizado.bruto > 0}
-                      moeda={moeda}
-                    />
-                  )}
-                </tr>
+                        {saveVisivel && (
+                          <CelulaSave
+                            estado={savePorItem?.[item.id] ?? SAVE_VAZIO}
+                            moeda={moeda}
+                            totalOrcado={Number(item.total_orcado ?? 0)}
+                            onAbrir={onAbrirSave ? () => onAbrirSave(item) : undefined}
+                          />
+                        )}
+
+                        {/* Item — só a linha NOVA da errata tem nome
+                            editável; as outras vêm da versão aprovada. */}
+                        {abertaAqui("item") && errata ? (
+                          <td className={cn("px-1.5 pl-[18px] align-middle", classeNeutra)}>
+                            <CampoDaErrata
+                              valor={item.item}
+                              semente={sementeDe("item")}
+                              onConfirmar={(v, d) => {
+                                errata.editarNome(item.id, v);
+                                fecharEMover({ linhaId: item.id, coluna: "item" }, d);
+                              }}
+                              onCancelar={() => setAberta(null)}
+                              className={ERRATA.inputNome}
+                              ariaLabel="Descrição do item novo"
+                            />
+                          </td>
+                        ) : (
+                          <CelulaJob
+                            nav={nav("item")}
+                            moldura={moldura("item")}
+                            className={cn("pl-[30px]", classeNeutra)}
+                          >
+                            <div className="flex min-w-0 items-center gap-1.5">
+                              {editando && travada && (
+                                <Lock
+                                  className="h-3 w-3 flex-none text-muted-foreground"
+                                  aria-label={MOTIVO_TRAVA_PP}
+                                >
+                                  <title>{MOTIVO_TRAVA_PP}</title>
+                                </Lock>
+                              )}
+                              {item.item ? (
+                                <TruncateTooltip text={item.item} />
+                              ) : (
+                                <span className="text-muted-foreground">
+                                  {editando && errata?.ehNova(item.id)
+                                    ? "Descrição do item"
+                                    : "—"}
+                                </span>
+                              )}
+                              {item.linha_vermelha && (
+                                <span className={cn(ERRATA.tagVermelha, "flex-none")}>
+                                  só realizado
+                                </span>
+                              )}
+                            </div>
+                          </CelulaJob>
+                        )}
+
+                        {/* Tipo — lista, como na planilha do orçamento:
+                            escolher grava e FICA na célula. */}
+                        {abertaAqui("tipo_custo") && errata ? (
+                          <td className={cn("px-1.5 align-middle", classeNeutra)}>
+                            <Select
+                              value={item.tipo_custo}
+                              defaultOpen
+                              onValueChange={(v) =>
+                                errata.editarTipo(
+                                  item.id,
+                                  v as ItemPlanilhaJob["tipo_custo"],
+                                )
+                              }
+                              onOpenChange={(o) => {
+                                if (!o) fecharCelula(item.id, "tipo_custo");
+                              }}
+                            >
+                              <SelectTrigger
+                                className={cn(CAMPO_LISTA, "justify-between gap-1 py-0")}
+                                aria-label={`Tipo de custo de ${item.item || "item novo"}`}
+                              >
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent
+                                onKeyDown={(e) => {
+                                  if (e.key !== "Tab") return;
+                                  e.preventDefault();
+                                  fecharEMover(
+                                    { linhaId: item.id, coluna: "tipo_custo" },
+                                    e.shiftKey ? "anterior" : "proxima",
+                                  );
+                                }}
+                              >
+                                {TIPOS_CUSTO.map((t) => (
+                                  <SelectItem key={t} value={t}>
+                                    {t}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </td>
+                        ) : (
+                          <CelulaJob
+                            nav={nav("tipo_custo")}
+                            moldura={moldura("tipo_custo")}
+                            className={classeNeutra}
+                          >
+                            <Badge variant="outline">{item.tipo_custo}</Badge>
+                          </CelulaJob>
+                        )}
+
+                        <CelulaJob
+                          nav={nav("categoria_id")}
+                          moldura={moldura("categoria_id")}
+                          className={classeNeutra}
+                        >
+                          {categoria ? (
+                            <span className="inline-flex max-w-full items-center truncate rounded-full border border-border bg-muted px-2 py-0.5 text-[10.5px] font-medium text-foreground">
+                              {categoria}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </CelulaJob>
+
+                        {/* ORÇADO — o único bloco que o modo errata abre.
+                            Escondido pelo menu, sai inteiro — a errata
+                            liga o bloco de volta ao entrar. */}
+                        {orcadoVisivel && (
+                          <>
+                            {celulaOrcado("unitario", "valor_unitario_orcado", ORCADO.celulaAbre)}
+                            {celulaOrcado("quantidade", "quantidade_orcada", ORCADO.celulaMeio)}
+                            {celulaOrcado("diasMeses", "dias_meses_orcado", ORCADO.celulaMeio)}
+                            <CelulaJob
+                              nav={nav("total_orcado")}
+                              moldura={moldura("total_orcado")}
+                              className={cn(
+                                "text-right font-mono font-semibold whitespace-nowrap",
+                                item.linha_vermelha
+                                  ? ERRATA.celulaVermelhaApagada
+                                  : ORCADO.celulaTotal,
+                              )}
+                            >
+                              {formatCurrency(Number(item.total_orcado ?? 0), moeda)}
+                            </CelulaJob>
+                          </>
+                        )}
+
+                        {/* Planejado (RO) */}
+                        <CelulaLeitura
+                          valor={Number(item.valor_unitario_planejado ?? 0)}
+                          formato="moeda"
+                          moeda={moeda}
+                          className={cn("font-mono", PLANEJADO.celulaAbre)}
+                          nav={nav("valor_unitario_planejado")}
+                          moldura={moldura("valor_unitario_planejado")}
+                        />
+                        <CelulaLeitura
+                          valor={Number(item.quantidade_planejada ?? 0)}
+                          className={PLANEJADO.celulaMeio}
+                          nav={nav("quantidade_planejada")}
+                          moldura={moldura("quantidade_planejada")}
+                        />
+                        <CelulaLeitura
+                          valor={Number(item.dias_meses_planejado ?? 0)}
+                          className={PLANEJADO.celulaMeio}
+                          nav={nav("dias_meses_planejado")}
+                          moldura={moldura("dias_meses_planejado")}
+                        />
+                        <CelulaTotalComBv
+                          bloco={blocos.planejado}
+                          visao={visao}
+                          moeda={moeda}
+                          // Com a rentabilidade ligada o Total ganha o fio
+                          // de 1px à direita: ele deixou de fechar o bloco.
+                          className={cn(
+                            rentabPlanejadaVisivel && PLANEJADO.celulaMeio,
+                            PLANEJADO.celulaTotal,
+                          )}
+                          cor={PLANEJADO.texto}
+                          corRotulo={PLANEJADO.textoSuave}
+                          nav={nav("total_planejado")}
+                          moldura={moldura("total_planejado")}
+                        />
+                        {rentabPlanejadaVisivel && (
+                          <CelulasRentabilidade
+                            bloco={PLANEJADO}
+                            linha="item"
+                            orcado={blocos.orcadoRentabilidade}
+                            custo={valorNaVisao(blocos.planejado, visao)}
+                            temCusto={blocos.planejado.bruto > 0}
+                            moeda={moeda}
+                            selecao={selecao}
+                            linhaId={item.id}
+                            colunas={["rentab_plan_valor", "rentab_plan_pct"]}
+                          />
+                        )}
+
+                        {/* Realizado — leitura. Em item que gera PP, a
+                            quebra descreve as PPs emitidas; em A e D, que
+                            não geram PP, ela espelha o orçado. */}
+                        <CelulaLeitura
+                          valor={
+                            quebraDasPPs
+                              ? Number(realizadoDoItem?.valor_unitario_realizado ?? 0)
+                              : Number(item.valor_unitario_orcado ?? 0)
+                          }
+                          formato="moeda"
+                          moeda={moeda}
+                          className={cn("font-mono", REALIZADO.celulaAbre)}
+                          nav={nav("valor_unitario_realizado")}
+                          moldura={moldura("valor_unitario_realizado")}
+                        />
+                        <CelulaLeitura
+                          valor={
+                            quebraDasPPs
+                              ? Number(realizadoDoItem?.quantidade_realizada ?? 0)
+                              : Number(item.quantidade_orcada ?? 0)
+                          }
+                          className={REALIZADO.celulaMeio}
+                          nav={nav("quantidade_realizada")}
+                          moldura={moldura("quantidade_realizada")}
+                        />
+                        <CelulaLeitura
+                          valor={
+                            quebraDasPPs
+                              ? Number(realizadoDoItem?.dias_meses_realizado ?? 0)
+                              : Number(item.dias_meses_orcado ?? 0)
+                          }
+                          className={REALIZADO.celulaMeio}
+                          nav={nav("dias_meses_realizado")}
+                          moldura={moldura("dias_meses_realizado")}
+                        />
+                        <CelulaTotalComBv
+                          bloco={blocos.realizado}
+                          visao={visao}
+                          moeda={moeda}
+                          className={cn(
+                            rentabRealizadaVisivel && REALIZADO.celulaMeio,
+                            REALIZADO.celulaTotal,
+                          )}
+                          cor={REALIZADO.texto}
+                          corRotulo={REALIZADO.textoSuave}
+                          nav={nav("total_realizado")}
+                          moldura={moldura("total_realizado")}
+                        />
+                        {/* Item sem PP emitida ainda não tem rentabilidade
+                            realizada: travessão, e não zero. */}
+                        {rentabRealizadaVisivel && (
+                          <CelulasRentabilidade
+                            bloco={REALIZADO}
+                            linha="item"
+                            orcado={blocos.orcadoRentabilidade}
+                            custo={valorNaVisao(blocos.realizado, visao)}
+                            temCusto={blocos.realizado.bruto > 0}
+                            moeda={moeda}
+                            selecao={selecao}
+                            linhaId={item.id}
+                            colunas={["rentab_real_valor", "rentab_real_pct"]}
+                          />
+                        )}
+                      </tr>
                     );
                   })}
 
@@ -1036,7 +1499,7 @@ export function JobItemRealizadoTable({
                           {podeEditarLinhas && (
                             <button
                               type="button"
-                              onClick={() => errata.adicionar(grupo.id, false)}
+                              onClick={() => abrirLinhaNova(grupo.id, false)}
                               className={ERRATA.botaoNovoItem}
                             >
                               <Plus className="h-3.5 w-3.5" />
@@ -1045,7 +1508,7 @@ export function JobItemRealizadoTable({
                           )}
                           <button
                             type="button"
-                            onClick={() => errata.adicionar(grupo.id, true)}
+                            onClick={() => abrirLinhaNova(grupo.id, true)}
                             className={ERRATA.botaoLinhaVermelha}
                           >
                             <Plus className="h-3.5 w-3.5" />
@@ -1327,8 +1790,8 @@ export function JobItemRealizadoTable({
       )}
       </div>
 
-      {(podeAcoes || temRentab) && grupos.some((g) => estaAberto(g.id)) && (
-        <div className="flex flex-col gap-1 rounded-b-2xl border-t border-border bg-muted/40 px-6 py-3">
+      {(podeAcoes || temRentab) && temRodape && (
+        <div className="flex flex-col gap-1 border-t border-border bg-muted/40 px-6 py-3">
           {podeAcoes && (
             <span className="text-[11px] text-muted-foreground">
               O Realizado não é digitado: ele é a soma dos Pedidos de Produção
@@ -1347,6 +1810,7 @@ export function JobItemRealizadoTable({
           )}
         </div>
       )}
+      {temRodape && <RodapeSelecao estado={estadoDoRodape} />}
 
       {(() => {
         const itemAtual = todosOsItens.find(
@@ -1532,33 +1996,40 @@ export function JobItemRealizadoTable({
   );
 }
 
-/** Célula de leitura do bloco Realizado.
+/** Célula de leitura dos blocos Planejado e Realizado.
  *
  *  Substituiu a `CelulaRealNum`, que era um input disfarçado de célula.
  *  Zero vira travessão: "R$ 0,00" numa linha sem PP diria "custou zero",
- *  quando o que houve foi "ainda não se pediu nada". */
+ *  quando o que houve foi "ainda não se pediu nada". Seleciona, mas não
+ *  abre — é o que "só leitura" quer dizer. */
 function CelulaLeitura({
   valor,
   formato,
   moeda,
   className,
+  nav,
+  moldura,
 }: {
   valor: number;
   formato?: "moeda";
   moeda?: string;
   className?: string;
+  nav: NavDaCelula;
+  moldura: string;
 }) {
   const vazio = valor <= 0;
   return (
-    <td
+    <CelulaJob
+      nav={nav}
+      moldura={moldura}
       className={cn(
-        "whitespace-nowrap px-3 text-right align-middle text-xs",
+        "whitespace-nowrap text-right",
         className,
         vazio && "text-muted-foreground",
       )}
     >
       {vazio ? "—" : formato === "moeda" ? formatCurrency(valor, moeda) : valor}
-    </td>
+    </CelulaJob>
   );
 }
 
@@ -1574,6 +2045,8 @@ function CelulaTotalComBv({
   className,
   cor,
   corRotulo,
+  nav,
+  moldura,
 }: {
   bloco: ValoresDoBloco;
   visao: VisaoBv;
@@ -1581,14 +2054,15 @@ function CelulaTotalComBv({
   className?: string;
   cor: string;
   corRotulo: string;
+  nav: NavDaCelula;
+  moldura: string;
 }) {
   const valor = valorNaVisao(bloco, visao);
   return (
-    <td
-      className={cn(
-        "whitespace-nowrap px-3 text-right align-middle",
-        className,
-      )}
+    <CelulaJob
+      nav={nav}
+      moldura={moldura}
+      className={cn("whitespace-nowrap text-right", className)}
     >
       <div className="flex flex-col items-end">
         <span
@@ -1609,7 +2083,7 @@ function CelulaTotalComBv({
           />
         )}
       </div>
-    </td>
+    </CelulaJob>
   );
 }
 
@@ -1644,6 +2118,9 @@ function CelulasRentabilidade({
   temCusto,
   parcial = false,
   moeda,
+  selecao,
+  linhaId,
+  colunas,
 }: {
   bloco: Bloco;
   linha: "item" | "grupo" | "total";
@@ -1652,6 +2129,10 @@ function CelulasRentabilidade({
   temCusto: boolean;
   parcial?: boolean;
   moeda: string;
+  /** Só a linha de ITEM é navegável: grupo e total ficam fora da seleção. */
+  selecao?: Selecao;
+  linhaId?: string;
+  colunas?: [string, string];
 }) {
   const { rentabilidade, percentual } = calcularRentabilidade(orcado, custo);
   const classes =
@@ -1667,24 +2148,49 @@ function CelulasRentabilidade({
   const titulo = parcial
     ? "Rentabilidade parcial: há item sem PP emitida, fora desta conta."
     : undefined;
+  const valorNode = temCusto ? (
+    formatCurrency(rentabilidade, moeda)
+  ) : (
+    <span className="text-muted-foreground">—</span>
+  );
+  const pctNode =
+    temCusto && percentual !== null ? (
+      <>
+        {formatarPercentual(percentual)}
+        {parcial && " *"}
+      </>
+    ) : (
+      <span className="text-muted-foreground">—</span>
+    );
+  if (selecao && linhaId && colunas) {
+    return (
+      <>
+        <CelulaJob
+          nav={selecao.celulaProps(linhaId, colunas[0])}
+          moldura={selecao.moldura(linhaId, colunas[0])}
+          className={cn(base, classes.valor, RENTAB_VALOR)}
+          title={titulo}
+        >
+          {valorNode}
+        </CelulaJob>
+        <CelulaJob
+          nav={selecao.celulaProps(linhaId, colunas[1])}
+          moldura={selecao.moldura(linhaId, colunas[1])}
+          className={cn(base, classes.pct, RENTAB_VALOR)}
+          title={titulo}
+        >
+          {pctNode}
+        </CelulaJob>
+      </>
+    );
+  }
   return (
     <>
       <td className={cn(base, classes.valor, RENTAB_VALOR)} title={titulo}>
-        {temCusto ? (
-          formatCurrency(rentabilidade, moeda)
-        ) : (
-          <span className="text-muted-foreground">—</span>
-        )}
+        {valorNode}
       </td>
       <td className={cn(base, classes.pct, RENTAB_VALOR)} title={titulo}>
-        {temCusto && percentual !== null ? (
-          <>
-            {formatarPercentual(percentual)}
-            {parcial && " *"}
-          </>
-        ) : (
-          <span className="text-muted-foreground">—</span>
-        )}
+        {pctNode}
       </td>
     </>
   );

@@ -46,11 +46,20 @@ import {
 } from "@/app/(app)/_planilha/save-coluna";
 import { AlcaDaColunaSave } from "@/app/(app)/_planilha/exibir-colunas";
 import {
-  celulaVizinha,
   direcaoDaTecla,
   direcaoNoCampo,
   type Direcao,
 } from "@/app/(app)/_planilha/navegacao";
+import {
+  Miolo,
+  RodapeSelecao,
+  useSelecaoPlanilha,
+  type CelulaSelecionada,
+  type ColunaDaGrade,
+  type EstadoDoRodape,
+  type Selecao,
+  type TipoEditor,
+} from "@/app/(app)/_planilha/selecao";
 import {
   ORCADO,
   PLANEJADO,
@@ -191,30 +200,12 @@ type Campo =
   | "quantidade_planejada"
   | "dias_meses_planejado";
 
-/** Ordem em que o Tab percorre a linha — a mesma da tela, da esquerda
- *  para a direita. Total e Rentabilidade não entram porque são calculadas:
- *  o Tab passa por cima delas sem precisar saber que existem. */
-const CAMPOS_NAVEGAVEIS: readonly Campo[] = [
-  "item",
-  "tipo_custo",
-  "categoria_id",
-  "valor_unitario_orcado",
-  "quantidade_orcada",
-  "dias_meses_orcado",
-  "valor_unitario_planejado",
-  "quantidade_planejada",
-  "dias_meses_planejado",
-];
-
-/** As três colunas do bloco ORÇADO — as que saem da ordem do Tab quando
- *  o bloco está escondido. */
+/** Os campos numéricos do bloco ORÇADO e do PLANEJADO. */
 const CAMPOS_ORCADO: readonly Campo[] = [
   "valor_unitario_orcado",
   "quantidade_orcada",
   "dias_meses_orcado",
 ];
-
-/** As três colunas do bloco PLANEJADO — as que `A` e `D` travam. */
 const CAMPOS_PLANEJADO: readonly Campo[] = [
   "valor_unitario_planejado",
   "quantidade_planejada",
@@ -232,7 +223,50 @@ type CelulaAtiva = {
   rowId: string;
   campo: Campo;
   porTeclado?: boolean;
+  /** O caractere que abriu a célula ao ser digitado sobre ela: o campo
+   *  nasce com ele no lugar do conteúdo, como numa planilha. */
+  semente?: string;
 } | null;
+
+/** As colunas que a seleção percorre, na ordem da tela — inclusive as
+ *  calculadas (Total, Rentabilidade), que selecionam mas não abrem. */
+const COLUNA_ITEM: ColunaDaGrade[] = [
+  { chave: "item", rotulo: "Item" },
+  { chave: "tipo_custo", rotulo: "Tipo" },
+  { chave: "categoria_id", rotulo: "Categoria" },
+];
+const COLUNAS_ORCADO: ColunaDaGrade[] = [
+  { chave: "valor_unitario_orcado", rotulo: "R$ Unit.", bloco: "Orçado" },
+  { chave: "quantidade_orcada", rotulo: "QT", bloco: "Orçado" },
+  { chave: "dias_meses_orcado", rotulo: "D/M", bloco: "Orçado" },
+  { chave: "total_orcado", rotulo: "Total", bloco: "Orçado" },
+];
+const COLUNAS_PLANEJADO: ColunaDaGrade[] = [
+  { chave: "valor_unitario_planejado", rotulo: "R$ Unit.", bloco: "Planejado" },
+  { chave: "quantidade_planejada", rotulo: "QT", bloco: "Planejado" },
+  { chave: "dias_meses_planejado", rotulo: "D/M", bloco: "Planejado" },
+  { chave: "total_planejado", rotulo: "Total", bloco: "Planejado" },
+];
+const COLUNAS_RENTAB: ColunaDaGrade[] = [
+  { chave: "rentab_valor", rotulo: "R$", bloco: "Rentabilidade" },
+  { chave: "rentab_pct", rotulo: "%", bloco: "Rentabilidade" },
+];
+const CAMPOS_LISTA: readonly Campo[] = ["tipo_custo", "categoria_id"];
+
+/** Uma linha nova que já saiu da tela do rascunho e está indo para o
+ *  banco. Ela é desenhada como item — com um id provisório — para o
+ *  cursor não ter que esperar a resposta do servidor (decisão 046). */
+interface Provisorio {
+  /** `tmp:N` enquanto grava; o id real assim que o servidor responde. */
+  id: string;
+  grupoId: string;
+  item: VersaoOrcamentoItem;
+  estado: "gravando" | "gravado" | "erro";
+  /** O rascunho de origem, para a linha voltar a ser editável se o
+   *  servidor recusar. */
+  rascunho: Draft;
+  erro?: string;
+}
 
 type Overrides = Record<string, Partial<Record<Campo, ValorCampo>>>;
 
@@ -300,6 +334,42 @@ function draftIntocado(d: Draft): boolean {
   return (Object.keys(zero) as Array<keyof Draft>).every(
     (campo) => d[campo] === zero[campo],
   );
+}
+
+/** O item que a linha provisória mostra enquanto o banco não responde.
+ *  Os campos que só o banco sabe (tenant, versão, datas) ficam vazios —
+ *  ninguém os lê na tabela, e o item real os traz no refresh. */
+function itemProvisorio(id: string, d: Draft): VersaoOrcamentoItem {
+  return {
+    id,
+    tenant_id: "",
+    versao_orcamento_id: "",
+    grupo_id: d.grupoId,
+    ordem: Number.MAX_SAFE_INTEGER,
+    planilha_origem: null,
+    item: d.item,
+    tipo_custo: d.tipo_custo,
+    valor_unitario_orcado: d.valor_unitario_orcado,
+    quantidade_orcada: d.quantidade_orcada,
+    dias_meses_orcado: d.dias_meses_orcado,
+    total_orcado:
+      d.valor_unitario_orcado * d.quantidade_orcada * d.dias_meses_orcado,
+    categoria_id: d.categoria_id,
+    valor_unitario_planejado: d.valor_unitario_planejado,
+    quantidade_planejada: d.quantidade_planejada,
+    dias_meses_planejado: d.dias_meses_planejado,
+    total_planejado:
+      d.valor_unitario_planejado *
+      d.quantidade_planejada *
+      d.dias_meses_planejado,
+    bv_liquido_planejado: null,
+    em_save: false,
+    save_consumido: 0,
+    fornecedor_id: null,
+    observacoes: null,
+    created_at: "",
+    updated_at: "",
+  };
 }
 
 /** Aceita "1.234,56" e "1234.56". Vírgula presente ⇒ ponto é milhar. */
@@ -392,9 +462,41 @@ export function ItensTable({
   );
 
   const wrapperRef = React.useRef<HTMLDivElement>(null);
-  const persistindoRef = React.useRef(false);
+  /** Linhas novas a caminho do banco (decisão 046). */
+  const [provisorios, setProvisorios] = React.useState<Provisorio[]>([]);
+  const seqProvisorio = React.useRef(0);
+  /** Rascunhos já enviados: o handler de confirmação pode rodar duas
+   *  vezes (blur + tecla), e o segundo disparo não pode inserir de novo. */
+  const persistidos = React.useRef(new WeakSet<Draft>());
 
   const editavel = !readOnly;
+
+  /** Os grupos COMO A TELA OS MOSTRA: os itens do banco mais as linhas
+   *  provisórias de cada grupo. Tudo abaixo — navegação, subtotais,
+   *  calha — lê daqui, para a linha nova contar em tudo desde o
+   *  primeiro instante. A provisória some sozinha quando o item real
+   *  chega pelas props. */
+  const gruposDaTela = React.useMemo<GrupoDaPlanilha[]>(() => {
+    if (provisorios.length === 0) return grupos;
+    return grupos.map((g) => {
+      const reais = new Set(g.itens.map((i) => i.id));
+      const extras = provisorios
+        .filter((p) => p.grupoId === g.id && !reais.has(p.id))
+        .map((p) => p.item);
+      return extras.length === 0 ? g : { ...g, itens: [...g.itens, ...extras] };
+    });
+  }, [grupos, provisorios]);
+
+  // O item real chegou (refresh depois do `adicionar`): a provisória
+  // cumpriu o papel. Sem isso ela duplicaria a linha para sempre.
+  React.useEffect(() => {
+    setProvisorios((prev) => {
+      if (prev.length === 0) return prev;
+      const reais = new Set(grupos.flatMap((g) => g.itens.map((i) => i.id)));
+      const restantes = prev.filter((p) => !reais.has(p.id));
+      return restantes.length === prev.length ? prev : restantes;
+    });
+  }, [grupos]);
 
   /** Quais colunas esta tela está desenhando. Vai para o `colgroup` e
    *  para todos os `colSpan` de linha inteira — os três têm que sair da
@@ -405,40 +507,41 @@ export function ItensTable({
     rentabilidade: rentabilidadeVisivel,
   };
 
-  /** A ordem do Tab acompanha a tela: com o Orçado escondido, as três
-   *  colunas dele não existem para receber o cursor. */
-  const campos = React.useMemo(
-    () =>
-      orcadoVisivel
-        ? CAMPOS_NAVEGAVEIS
-        : CAMPOS_NAVEGAVEIS.filter((c) => !CAMPOS_ORCADO.includes(c)),
-    [orcadoVisivel],
+  /** As colunas que a seleção percorre, na ordem da tela. */
+  const colunasDaGrade = React.useMemo<ColunaDaGrade[]>(
+    () => [
+      ...COLUNA_ITEM,
+      ...(orcadoVisivel ? COLUNAS_ORCADO : []),
+      ...COLUNAS_PLANEJADO,
+      ...(rentabilidadeVisivel ? COLUNAS_RENTAB : []),
+    ],
+    [orcadoVisivel, rentabilidadeVisivel],
   );
 
   /** Todos os itens da planilha, achatados — a navegação e a busca por
-   *  id atravessam os grupos e não podem depender de qual card era. */
+   *  id atravessam os gruposDaTela e não podem depender de qual card era. */
   const itensPorId = React.useMemo(() => {
     const mapa = new Map<string, VersaoOrcamentoItem>();
-    for (const g of grupos) for (const it of g.itens) mapa.set(it.id, it);
+    for (const g of gruposDaTela) for (const it of g.itens) mapa.set(it.id, it);
     return mapa;
-  }, [grupos]);
+  }, [gruposDaTela]);
 
   const todosOsItens = React.useMemo(
-    () => grupos.flatMap((g) => g.itens),
-    [grupos],
+    () => gruposDaTela.flatMap((g) => g.itens),
+    [gruposDaTela],
   );
 
   // A calha vive fora do frame da tabela e agora acompanha linhas de
   // alturas diferentes (grupo, item, "Novo item"). Medir é a única forma
   // de acertar — ver o cabeçalho de `_planilha/calha`.
   const posicoesCalha = usePosicoesDaCalha(wrapperRef, [
-    grupos,
+    gruposDaTela,
     draft,
     readOnly,
     visao,
     // Recolher/expandir muda o que existe no DOM e, com isso, todos os
     // offsets abaixo do grupo que se moveu.
-    grupos.map((g) => (estaAberto(g.id) ? "1" : "0")).join(""),
+    gruposDaTela.map((g) => (estaAberto(g.id) ? "1" : "0")).join(""),
   ]);
 
   // O handler de clique-fora lê o rascunho por ref, e não pela closure:
@@ -580,26 +683,26 @@ export function ItensTable({
    *  onde ela aparece. */
   const linhasNavegaveis = React.useMemo(() => {
     const ids: string[] = [];
-    for (const g of grupos) {
+    for (const g of gruposDaTela) {
       if (!estaAberto(g.id)) continue;
       for (const it of g.itens) ids.push(it.id);
       if (draft?.grupoId === g.id) ids.push(DRAFT_ID);
     }
     return ids;
-  }, [grupos, draft, estaAberto]);
+  }, [gruposDaTela, draft, estaAberto]);
 
   /** Último item visível de cada grupo → id do grupo dele. É por aqui
    *  que o Enter/↓ da última linha sabe que o destino não é o primeiro
    *  item do grupo de baixo, e sim o "Novo item" DESTE grupo. */
   const grupoDoUltimoItem = React.useMemo(() => {
     const mapa = new Map<string, string>();
-    for (const g of grupos) {
+    for (const g of gruposDaTela) {
       if (!estaAberto(g.id)) continue;
       const ultimo = g.itens[g.itens.length - 1];
       if (ultimo) mapa.set(ultimo.id, g.id);
     }
     return mapa;
-  }, [grupos, estaAberto]);
+  }, [gruposDaTela, estaAberto]);
 
   /** As três colunas de PLANEJADO travadas nesta linha.
    *
@@ -625,71 +728,80 @@ export function ItensTable({
     [itensPorId, overrides],
   );
 
-  /** Para onde o teclado leva a partir daqui. `null` encerra a edição. */
-  const celulaDirecao = React.useCallback(
-    (rowId: string, campo: Campo, destino?: Direcao): CelulaAtiva => {
-      if (!destino) return null; // blur / clique fora: só confirma e sai
-
-      // Enter/↓ na última linha do grupo abre o "Novo item" DELE em vez
-      // de cair no grupo seguinte (pedido do Tiago, 25/08/2026): é assim
-      // que se acrescenta item sem tirar a mão do teclado. O cursor vai
-      // para a descrição, que é o campo sem o qual a linha não grava.
-      // Rascunho já aberto em OUTRO grupo e ainda em branco é
-      // descartado no caminho — em branco ele não vale nada.
-      if (destino === "abaixo" && editavel) {
-        const grupoId = grupoDoUltimoItem.get(rowId);
-        if (
-          grupoId &&
-          (!draft ||
-            (draft.grupoId !== grupoId && draftIntocado(draft)))
-        ) {
-          setDraft(draftVazio(grupoId));
-          return { rowId: DRAFT_ID, campo: "item", porTeclado: true };
-        }
-      }
-
-      let alvo = celulaVizinha(
-        linhasNavegaveis,
-        campos,
-        { linhaId: rowId, campo },
-        destino,
-      );
-
-      // Anda até sair de célula travada. O teto é o tamanho da grade:
-      // uma planilha inteira de itens `A` não pode virar laço infinito —
-      // aí não há para onde ir e a edição encerra.
-      const teto = linhasNavegaveis.length * campos.length;
-      for (let i = 0; alvo && i < teto; i++) {
-        const travada =
-          CAMPOS_PLANEJADO.includes(alvo.campo) &&
-          planejadoTravadoEm(alvo.linhaId);
-        if (!travada) break;
-        alvo = celulaVizinha(linhasNavegaveis, campos, alvo, destino);
-      }
-
-      return alvo
-        ? { rowId: alvo.linhaId, campo: alvo.campo, porTeclado: true }
-        : null;
-    },
-    [
-      linhasNavegaveis,
-      campos,
-      planejadoTravadoEm,
-      grupoDoUltimoItem,
-      draft,
-      editavel,
-    ],
+  /** A linha provisória ainda sem id real não abre célula: qualquer
+   *  escrita nela iria para um id que o banco não conhece. */
+  const provisoriaTravada = React.useCallback(
+    (rowId: string) =>
+      provisorios.some((p) => p.id === rowId && p.estado !== "gravado"),
+    [provisorios],
   );
 
-  function gravar(
-    itemId: string,
-    campo: Campo,
-    valor: ValorCampo,
-    proxima: CelulaAtiva,
-  ) {
+  /** O que cada célula abre. `null` = calculada, travada ou só leitura:
+   *  seleciona, mas não abre. */
+  const editorDe = React.useCallback(
+    (rowId: string, coluna: string): TipoEditor | null => {
+      if (!editavel) return null;
+      if (rowId !== DRAFT_ID && provisoriaTravada(rowId)) return null;
+      if (coluna === "item") return "texto";
+      if ((CAMPOS_LISTA as readonly string[]).includes(coluna)) return "lista";
+      if ((CAMPOS_ORCADO as readonly string[]).includes(coluna)) return "numero";
+      if ((CAMPOS_PLANEJADO as readonly string[]).includes(coluna)) {
+        return rowId !== DRAFT_ID && planejadoTravadoEm(rowId) ? null : "numero";
+      }
+      return null;
+    },
+    [editavel, provisoriaTravada, planejadoTravadoEm],
+  );
+
+  const selecao: Selecao = useSelecaoPlanilha({
+    linhas: linhasNavegaveis,
+    colunas: colunasDaGrade,
+    editorDe,
+    onAbrir: (c, semente) =>
+      setAtiva({ rowId: c.linhaId, campo: c.coluna as Campo, porTeclado: true, semente }),
+    // ↓ na última linha do grupo abre o "Novo item" DELE em vez de cair no
+    // grupo seguinte (pedido do Tiago, 25/08/2026): é assim que se
+    // acrescenta item sem tirar a mão do teclado. Rascunho em branco em
+    // OUTRO grupo é descartado no caminho; ↓ num rascunho em branco o
+    // descarta e segue para o grupo de baixo.
+    aoDescer: (rowId) => {
+      if (!editavel) return false;
+      if (rowId === DRAFT_ID) {
+        if (draft && draftIntocado(draft)) setDraft(null);
+        return false;
+      }
+      const grupoId = grupoDoUltimoItem.get(rowId);
+      if (!grupoId) return false;
+      if (draft && !(draft.grupoId !== grupoId && draftIntocado(draft))) return false;
+      abrirDraft(grupoId);
+      return true;
+    },
+    editando: ativa !== null,
+    wrapperRef,
+  });
+  const selecaoRef = React.useRef(selecao.celula);
+  selecaoRef.current = selecao.celula;
+
+  // Campo fechou: o foco volta ao card, para as setas continuarem de
+  // onde a célula ficou. Só quando há seleção — no primeiro render
+  // ninguém pediu foco.
+  const ativaAnterior = React.useRef(ativa);
+  React.useEffect(() => {
+    if (ativaAnterior.current !== null && ativa === null && selecaoRef.current) {
+      selecao.focar();
+    }
+    ativaAnterior.current = ativa;
+  }, [ativa, selecao]);
+
+  /** Fecha a célula aberta e anda a seleção. */
+  function fecharEMover(de: CelulaSelecionada, destino?: Direcao) {
+    setAtiva(null);
+    if (destino) selecao.mover(destino, de);
+  }
+
+  function gravar(itemId: string, campo: Campo, valor: ValorCampo) {
     const anterior = overrides[itemId];
     setErro(null);
-    setAtiva(proxima);
     setOverrides((prev) => ({
       ...prev,
       [itemId]: { ...prev[itemId], [campo]: valor },
@@ -726,21 +838,20 @@ export function ItensTable({
     });
   }
 
-  /** Confirma uma célula de item já existente e move o foco. */
+  /** Confirma uma célula de item já existente e anda a seleção. */
   function confirmarCampo(
     item: VersaoOrcamentoItem,
     campo: Campo,
     valor: ValorCampo,
     destino?: Direcao,
   ) {
-    const proxima = celulaDirecao(item.id, campo, destino);
+    const de = { linhaId: item.id, coluna: campo };
     // Valor igual não vira escrita — mas a navegação acontece do mesmo
     // jeito, senão passar por uma célula sem alterar nada mataria o Tab.
-    if (mesmoValor(valorAtual(item, campo), valor)) {
-      setAtiva(proxima);
-      return;
+    if (!mesmoValor(valorAtual(item, campo), valor)) {
+      gravar(item.id, campo, valor);
     }
-    gravar(item.id, campo, valor, proxima);
+    fecharEMover(de, destino);
   }
 
   function confirmarNumero(
@@ -766,21 +877,46 @@ export function ItensTable({
    *  navegação — sem esta guarda, o aviso de fechamento chegaria depois
    *  do `setAtiva` da próxima célula e cancelaria o Tab. */
   const fecharCelula = React.useCallback((rowId: string, campo: Campo) => {
-    // Updater, e não leitura direta: o Radix avisa que fechou no mesmo
-    // tick em que a escolha já mandou a edição para a próxima célula, e
-    // sem olhar o estado MAIS RECENTE este aviso atrasado fecharia a
-    // célula errada — matando o Tab que acabou de acontecer.
     setAtiva((atual) =>
       atual && atual.rowId === rowId && atual.campo === campo ? null : atual,
     );
   }, []);
 
-  /** Salva a linha nova assim que ela tem descrição.
-   *  O ref é trava de reentrância: sem ela, qualquer re-execução do
-   *  handler insere o item de novo. */
-  function persistirDraft(d: Draft, proxima: CelulaAtiva) {
-    if (persistindoRef.current) return;
-    persistindoRef.current = true;
+  /** A linha nova vira item PROVISÓRIO na hora e vai ao banco por trás
+   *  (decisão 046). Antes ela ficava como rascunho até a resposta chegar,
+   *  com o "Novo item" e a navegação travados no meio do caminho.
+   *
+   *  A seleção sai do rascunho para a provisória e anda como pediram; o
+   *  id provisório é trocado pelo real quando o servidor responde, e a
+   *  linha some quando o item de verdade chega pelo refresh. */
+  function persistirDraft(d: Draft, campo: Campo, destino?: Direcao) {
+    if (persistidos.current.has(d)) return;
+    persistidos.current.add(d);
+
+    seqProvisorio.current += 1;
+    const tmpId = `tmp:${seqProvisorio.current}`;
+    setProvisorios((prev) => [
+      ...prev,
+      {
+        id: tmpId,
+        grupoId: d.grupoId,
+        item: itemProvisorio(tmpId, d),
+        estado: "gravando",
+        rascunho: d,
+      },
+    ]);
+    setDraft(null);
+    setAtiva(null);
+    // O destino é calculado a partir da posição do rascunho — a
+    // provisória nasce exatamente nela — e depois religado ao id novo.
+    const alvo = destino
+      ? selecao.mover(destino, { linhaId: DRAFT_ID, coluna: campo })
+      : null;
+    selecao.selecionar(
+      alvo && alvo.linhaId !== DRAFT_ID
+        ? alvo
+        : { linhaId: tmpId, coluna: alvo?.coluna ?? campo },
+    );
 
     const formData = new FormData();
     formData.set("item", d.item);
@@ -797,46 +933,79 @@ export function ItensTable({
     formData.set("dias_meses_planejado", String(d.dias_meses_planejado));
 
     startTransition(async () => {
+      let res: ActionResult;
       try {
-        const res = await acoes.adicionar(d.grupoId, formData);
-        if (!res.ok) {
-          setErro(res.message);
-          return;
-        }
-        setDraft(null);
-        // A linha nova troca de identidade ao ser salva: o `__draft__`
-        // deixa de existir e nasce um item com id do banco. Sem religar o
-        // destino a esse id, o Tab que disparou o salvamento cairia numa
-        // linha que não está mais na tela e a edição morreria no meio da
-        // digitação. As três origens de escrita (banco, multi-jobs e
-        // agregado) devolvem o id justamente para isto.
-        setAtiva(
-          proxima && proxima.rowId === DRAFT_ID && res.id
-            ? { rowId: res.id, campo: proxima.campo }
-            : proxima,
-        );
-        acoes.aposEscrita();
-      } finally {
-        // Sem o finally, uma falha de rede deixaria a trava presa e o
-        // "Novo item" morto até recarregar a página.
-        persistindoRef.current = false;
+        res = await acoes.adicionar(d.grupoId, formData);
+      } catch (e) {
+        marcarErro(tmpId, "Falha ao gravar a linha. Confira a conexão e tente de novo.");
+        throw e;
       }
+      if (!res.ok) {
+        marcarErro(tmpId, res.message);
+        return;
+      }
+      const idReal = res.id;
+      if (!idReal) {
+        // Origem que não devolve id: sem como casar com o item real, a
+        // provisória sai e o refresh a traz de volta como item.
+        setProvisorios((prev) => prev.filter((p) => p.id !== tmpId));
+        acoes.aposEscrita();
+        return;
+      }
+      // Troca o id provisório pelo real: a linha passa a aceitar edição
+      // ANTES do refresh, porque o id já é o do banco.
+      setProvisorios((prev) =>
+        prev.map((p) =>
+          p.id === tmpId
+            ? { ...p, id: idReal, item: { ...p.item, id: idReal }, estado: "gravado" }
+            : p,
+        ),
+      );
+      const sel = selecaoRef.current;
+      if (sel && sel.linhaId === tmpId) {
+        selecao.selecionar({ linhaId: idReal, coluna: sel.coluna });
+      }
+      acoes.aposEscrita();
     });
   }
+
+  /** O servidor recusou a linha nova: ela não some com o que foi
+   *  digitado. Se o rascunho estiver livre, volta a ser rascunho no
+   *  mesmo lugar; senão fica marcada na grade até ser clicada. */
+  function marcarErro(tmpId: string, mensagem: string) {
+    setErro(mensagem);
+    setProvisorios((prev) =>
+      prev.map((p) => (p.id === tmpId ? { ...p, estado: "erro", erro: mensagem } : p)),
+    );
+    restaurarComoDraft(tmpId);
+  }
+
+  function restaurarComoDraft(tmpId: string) {
+    setDraft((atual) => {
+      if (atual && !draftIntocado(atual)) return atual; // ocupado
+      const prov = provisoriosRef.current.find((p) => p.id === tmpId);
+      if (!prov) return atual;
+      setProvisorios((prev) => prev.filter((p) => p.id !== tmpId));
+      const sel = selecaoRef.current;
+      selecao.selecionar({ linhaId: DRAFT_ID, coluna: sel?.linhaId === tmpId ? sel.coluna : "item" });
+      return { ...prov.rascunho };
+    });
+  }
+  const provisoriosRef = React.useRef(provisorios);
+  provisoriosRef.current = provisorios;
 
   function confirmarDraft(campo: Campo, valor: ValorCampo, destino?: Direcao) {
     if (!draft) return;
     const atualizado = { ...draft, [campo]: valor } as Draft;
-    const proxima = celulaDirecao(DRAFT_ID, campo, destino);
     setErro(null);
-    setDraft(atualizado);
     // Sem descrição o banco recusa: a linha fica local até ter texto, e a
     // navegação segue dentro do próprio rascunho.
     if (atualizado.item.trim().length > 0) {
-      persistirDraft(atualizado, proxima);
+      persistirDraft(atualizado, campo, destino);
       return;
     }
-    setAtiva(proxima);
+    setDraft(atualizado);
+    fecharEMover({ linhaId: DRAFT_ID, coluna: campo }, destino);
   }
 
   function confirmarDraftNumero(campo: Campo, raw: string, destino?: Direcao) {
@@ -863,7 +1032,8 @@ export function ItensTable({
   /** Abre a linha nova NO grupo pedido, com o cursor na descrição. */
   function abrirDraft(grupoId: string) {
     setDraft(draftVazio(grupoId));
-    setAtiva({ rowId: DRAFT_ID, campo: "item" });
+    selecao.selecionar({ linhaId: DRAFT_ID, coluna: "item" });
+    setAtiva({ rowId: DRAFT_ID, campo: "item", porTeclado: true });
   }
 
   /** Esc numa célula da linha nova: em branco, ela some junto. */
@@ -891,12 +1061,12 @@ export function ItensTable({
    *  mesma conta, aplicada a recortes diferentes da mesma lista. */
   const subtotaisPorGrupo = React.useMemo(() => {
     const mapa = new Map<string, ReturnType<typeof somarBlocosDosItens>>();
-    for (const g of grupos) {
+    for (const g of gruposDaTela) {
       mapa.set(g.id, somarBlocosDosItens(g.itens.map(blocosDe)));
     }
     return mapa;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [grupos, overrides, bvsPorItem, percentualImposto]);
+  }, [gruposDaTela, overrides, bvsPorItem, percentualImposto]);
 
   const totaisDaPlanilha = React.useMemo(
     () => somarBlocosDosItens(todosOsItens.map(blocosDe)),
@@ -922,8 +1092,100 @@ export function ItensTable({
   const temBvVisivel = todosOsItens.some((it) => bvsPorItem[it.id]);
   const temCalha = editavel || temBvVisivel;
 
-  /** A barra de dica só faz sentido com células à vista. */
-  const temDica = editavel && grupos.some((g) => estaAberto(g.id));
+  /** O rodapé de navegação só faz sentido com células à vista. */
+  const temRodape = gruposDaTela.some((g) => estaAberto(g.id));
+
+  /** Índice das linhas provisórias, para a linha de item se desenhar. */
+  const provisorioPorId = React.useMemo(
+    () => new Map(provisorios.map((p) => [p.id, p])),
+    [provisorios],
+  );
+
+  /** O valor da célula selecionada, como ela o mostra — para o rodapé. */
+  function valorExibido(rowId: string, coluna: string): string {
+    const fmt = (v: number) => formatCurrency(v, moeda);
+    if (rowId === DRAFT_ID) {
+      if (!draft) return "—";
+      const o = draft.valor_unitario_orcado * draft.quantidade_orcada * draft.dias_meses_orcado;
+      const pl = draft.valor_unitario_planejado * draft.quantidade_planejada * draft.dias_meses_planejado;
+      const r = rentabilidadeDe(o, pl);
+      const mapa: Record<string, string> = {
+        item: draft.item || "—",
+        tipo_custo: draft.tipo_custo,
+        categoria_id: categorias.find((c) => c.id === draft.categoria_id)?.nome ?? "—",
+        valor_unitario_orcado: fmt(draft.valor_unitario_orcado),
+        quantidade_orcada: String(draft.quantidade_orcada),
+        dias_meses_orcado: String(draft.dias_meses_orcado),
+        total_orcado: fmt(o),
+        valor_unitario_planejado: fmt(draft.valor_unitario_planejado),
+        quantidade_planejada: String(draft.quantidade_planejada),
+        dias_meses_planejado: String(draft.dias_meses_planejado),
+        total_planejado: fmt(pl),
+        rentab_valor: pl > 0 ? fmt(r.rentabilidade) : "—",
+        rentab_pct: r.percentualRentabilidade === null ? "—" : formatarPercentual(r.percentualRentabilidade),
+      };
+      return mapa[coluna] ?? "—";
+    }
+    const item = itensPorId.get(rowId);
+    if (!item) return "—";
+    const totais = totaisDoItem(item);
+    const blocos = blocosDe(item);
+    const pl = valorNaVisao(blocos.planejado, visao);
+    const r = rentabilidadeDe(totais.orcado, pl);
+    const espelha = planejadoTravadoEm(rowId) && item.em_save !== true;
+    const numero = (campo: Campo) => num(valorAtual(item, campo));
+    const mapa: Record<string, string> = {
+      item: String(valorAtual(item, "item") ?? ""),
+      tipo_custo: String(valorAtual(item, "tipo_custo")),
+      categoria_id:
+        categorias.find((c) => c.id === valorAtual(item, "categoria_id"))?.nome ?? "—",
+      valor_unitario_orcado: fmt(numero("valor_unitario_orcado")),
+      quantidade_orcada: String(numero("quantidade_orcada")),
+      dias_meses_orcado: String(numero("dias_meses_orcado")),
+      total_orcado: fmt(totais.orcado),
+      valor_unitario_planejado: fmt(
+        espelha ? numero("valor_unitario_orcado") : numero("valor_unitario_planejado"),
+      ),
+      quantidade_planejada: String(
+        espelha ? numero("quantidade_orcada") : numero("quantidade_planejada"),
+      ),
+      dias_meses_planejado: String(
+        espelha ? numero("dias_meses_orcado") : numero("dias_meses_planejado"),
+      ),
+      total_planejado: fmt(pl),
+      rentab_valor: pl > 0 ? fmt(r.rentabilidade) : "—",
+      rentab_pct: r.percentualRentabilidade === null ? "—" : formatarPercentual(r.percentualRentabilidade),
+    };
+    return mapa[coluna] ?? "—";
+  }
+
+  const estadoDoRodape: EstadoDoRodape = (() => {
+    const sel = selecao.celula;
+    const col = selecao.colunaSelecionada;
+    if (!sel || !col) return { endereco: null, valor: null, modo: null, aberta: false, editavel };
+    const nome =
+      sel.linhaId === DRAFT_ID
+        ? draft?.item || "Linha nova"
+        : itensPorId.get(sel.linhaId)?.item || "Item";
+    const tipo = editorDe(sel.linhaId, sel.coluna);
+    const aberta =
+      ativa !== null && ativa.rowId === sel.linhaId && ativa.campo === sel.coluna;
+    return {
+      endereco: `${nome} · ${col.bloco ? `${col.bloco} · ` : ""}${col.rotulo}`,
+      valor: valorExibido(sel.linhaId, sel.coluna),
+      modo: aberta
+        ? tipo === "lista"
+          ? "Lista aberta"
+          : "Editando"
+        : tipo
+          ? "Enter abre"
+          : editavel
+            ? "Calculada"
+            : "Só leitura",
+      aberta,
+      editavel,
+    };
+  })();
 
   return (
     <>
@@ -935,7 +1197,11 @@ export function ItensTable({
           arredondam os cantos. */}
       <div
         ref={wrapperRef}
-        className="relative rounded-2xl border border-border bg-card shadow-soft"
+        // O card é quem recebe as teclas da seleção: `tabIndex` para
+        // poder ter foco, sem anel — a moldura da célula é o foco visível.
+        tabIndex={0}
+        onKeyDown={selecao.onKeyDown}
+        className="relative rounded-2xl border border-border bg-card shadow-soft outline-none"
       >
         {/* A alça da coluna Save, colada na borda ESQUERDA e fora do
             frame — o lado oposto ao da calha de BV e PP. É o caminho de
@@ -970,8 +1236,9 @@ export function ItensTable({
             dentro do frame. */}
         <div
           className={cn(
-            "overflow-x-auto rounded-b-2xl",
+            "overflow-x-auto",
             !erro && "rounded-t-2xl",
+            !temRodape && "rounded-b-2xl",
           )}
         >
           <table
@@ -1111,7 +1378,7 @@ export function ItensTable({
             </thead>
 
             <tbody>
-              {grupos.map((grupo) => {
+              {gruposDaTela.map((grupo) => {
                 const aberto = estaAberto(grupo.id);
                 const sub =
                   subtotaisPorGrupo.get(grupo.id) ??
@@ -1274,16 +1541,32 @@ export function ItensTable({
                         );
                         const ativaAqui = (campo: Campo) =>
                           ativa?.rowId === item.id && ativa.campo === campo;
+                        const sementeDe = (campo: Campo) =>
+                          ativaAqui(campo) ? ativa?.semente : undefined;
+                        const provisorio = provisorioPorId.get(item.id);
 
                         return (
                           <tr
                             key={item.id}
                             data-calha={`i:${item.id}`}
+                            // Gravando: a linha já está na grade, mais
+                            // clara, e as células selecionam mas não
+                            // abrem. Recusada: fica marcada, e o clique
+                            // a devolve ao rascunho com o que foi digitado.
+                            title={provisorio?.estado === "erro" ? provisorio.erro : undefined}
+                            onClick={
+                              provisorio?.estado === "erro"
+                                ? () => restaurarComoDraft(item.id)
+                                : undefined
+                            }
                             className={cn(
                               ALTURA_LINHA,
                               "border-b border-border transition-colors",
                               editavel && "hover:bg-accent/40",
                               saveVisivel && classesDaLinhaComSave(save),
+                              provisorio?.estado === "gravando" && "opacity-60",
+                              provisorio?.estado === "erro" &&
+                                "cursor-pointer bg-california-red/5",
                             )}
                           >
                             {saveVisivel && (
@@ -1302,10 +1585,9 @@ export function ItensTable({
                             <CelulaTexto
                               valor={String(valorAtual(item, "item") ?? "")}
                               editando={ativaAqui("item")}
-                              editavel={editavel}
-                              onAtivar={() =>
-                                setAtiva({ rowId: item.id, campo: "item" })
-                              }
+                              semente={sementeDe("item")}
+                              nav={selecao.celulaProps(item.id, "item")}
+                              moldura={selecao.moldura(item.id, "item")}
                               onConfirmar={(v, d) =>
                                 confirmarCampo(item, "item", v.trim(), d)
                               }
@@ -1319,25 +1601,18 @@ export function ItensTable({
 
                             <CelulaSelect
                               editando={ativaAqui("tipo_custo")}
-                              editavel={editavel}
                               valor={String(valorAtual(item, "tipo_custo"))}
                               opcoes={TIPOS_CUSTO.map((t) => ({
                                 value: t,
                                 label: tipoCustoLabel(t),
                               }))}
-                              onAtivar={() =>
-                                setAtiva({ rowId: item.id, campo: "tipo_custo" })
-                              }
-                              onConfirmar={(v) =>
-                                confirmarCampo(
-                                  item,
-                                  "tipo_custo",
-                                  v,
-                                  ativa?.porTeclado ? "proxima" : undefined,
-                                )
-                              }
+                              nav={selecao.celulaProps(item.id, "tipo_custo")}
+                              moldura={selecao.moldura(item.id, "tipo_custo")}
+                              // Escolher grava e FICA na célula — quem
+                              // anda é a seta ou o Tab (decisão 046).
+                              onConfirmar={(v) => confirmarCampo(item, "tipo_custo", v)}
                               onNavegar={(d) =>
-                                setAtiva(celulaDirecao(item.id, "tipo_custo", d))
+                                fecharEMover({ linhaId: item.id, coluna: "tipo_custo" }, d)
                               }
                               onFechar={() => fecharCelula(item.id, "tipo_custo")}
                               tdClassName={cn(GRADE_NEUTRA, "px-2")}
@@ -1349,7 +1624,6 @@ export function ItensTable({
 
                             <CelulaSelect
                               editando={ativaAqui("categoria_id")}
-                              editavel={editavel}
                               valor={categoriaId ?? SEM_CATEGORIA}
                               opcoes={[
                                 { value: SEM_CATEGORIA, label: "Nenhuma" },
@@ -1365,24 +1639,17 @@ export function ItensTable({
                                   })),
                               ]}
                               vazio="Nenhuma categoria cadastrada em /categorias"
-                              onAtivar={() =>
-                                setAtiva({
-                                  rowId: item.id,
-                                  campo: "categoria_id",
-                                })
-                              }
+                              nav={selecao.celulaProps(item.id, "categoria_id")}
+                              moldura={selecao.moldura(item.id, "categoria_id")}
                               onConfirmar={(v) =>
                                 confirmarCampo(
                                   item,
                                   "categoria_id",
                                   v === SEM_CATEGORIA ? null : v,
-                                  ativa?.porTeclado ? "proxima" : undefined,
                                 )
                               }
                               onNavegar={(d) =>
-                                setAtiva(
-                                  celulaDirecao(item.id, "categoria_id", d),
-                                )
+                                fecharEMover({ linhaId: item.id, coluna: "categoria_id" }, d)
                               }
                               onFechar={() =>
                                 fecharCelula(item.id, "categoria_id")
@@ -1404,13 +1671,9 @@ export function ItensTable({
                                   formato="moeda"
                                   moeda={moeda}
                                   editando={ativaAqui("valor_unitario_orcado")}
-                                  editavel={editavel}
-                                  onAtivar={() =>
-                                    setAtiva({
-                                      rowId: item.id,
-                                      campo: "valor_unitario_orcado",
-                                    })
-                                  }
+                                  semente={sementeDe("valor_unitario_orcado")}
+                                  nav={selecao.celulaProps(item.id, "valor_unitario_orcado")}
+                              moldura={selecao.moldura(item.id, "valor_unitario_orcado")}
                                   onConfirmar={(raw, d) =>
                                     confirmarNumero(
                                       item,
@@ -1425,13 +1688,9 @@ export function ItensTable({
                                 <CelulaNumero
                                   valor={num(valorAtual(item, "quantidade_orcada"))}
                                   editando={ativaAqui("quantidade_orcada")}
-                                  editavel={editavel}
-                                  onAtivar={() =>
-                                    setAtiva({
-                                      rowId: item.id,
-                                      campo: "quantidade_orcada",
-                                    })
-                                  }
+                                  semente={sementeDe("quantidade_orcada")}
+                                  nav={selecao.celulaProps(item.id, "quantidade_orcada")}
+                              moldura={selecao.moldura(item.id, "quantidade_orcada")}
                                   onConfirmar={(raw, d) =>
                                     confirmarNumero(item, "quantidade_orcada", raw, d)
                                   }
@@ -1441,27 +1700,23 @@ export function ItensTable({
                                 <CelulaNumero
                                   valor={num(valorAtual(item, "dias_meses_orcado"))}
                                   editando={ativaAqui("dias_meses_orcado")}
-                                  editavel={editavel}
-                                  onAtivar={() =>
-                                    setAtiva({
-                                      rowId: item.id,
-                                      campo: "dias_meses_orcado",
-                                    })
-                                  }
+                                  semente={sementeDe("dias_meses_orcado")}
+                                  nav={selecao.celulaProps(item.id, "dias_meses_orcado")}
+                              moldura={selecao.moldura(item.id, "dias_meses_orcado")}
                                   onConfirmar={(raw, d) =>
                                     confirmarNumero(item, "dias_meses_orcado", raw, d)
                                   }
                                   onCancelar={() => setAtiva(null)}
                                   tdClassName={ORCADO.celulaMeio}
                                 />
-                                <td
-                                  className={cn(
-                                    "px-3 text-right font-mono text-xs font-semibold whitespace-nowrap",
-                                    ORCADO.celulaTotal,
-                                  )}
+                                <CelulaCalculada
+                                  selecao={selecao}
+                                  linhaId={item.id}
+                                  coluna="total_orcado"
+                                  className={cn("font-mono font-semibold", ORCADO.celulaTotal)}
                                 >
                                   {formatCurrency(totais.orcado, moeda)}
-                                </td>
+                                </CelulaCalculada>
                               </>
                             )}
 
@@ -1482,13 +1737,9 @@ export function ItensTable({
                               formato="moeda"
                               moeda={moeda}
                               editando={ativaAqui("valor_unitario_planejado")}
-                              editavel={editavel && !planejadoTravado}
-                              onAtivar={() =>
-                                setAtiva({
-                                  rowId: item.id,
-                                  campo: "valor_unitario_planejado",
-                                })
-                              }
+                              semente={sementeDe("valor_unitario_planejado")}
+                              nav={selecao.celulaProps(item.id, "valor_unitario_planejado")}
+                              moldura={selecao.moldura(item.id, "valor_unitario_planejado")}
                               onConfirmar={(raw, d) =>
                                 confirmarNumero(
                                   item,
@@ -1507,13 +1758,9 @@ export function ItensTable({
                                   : num(valorAtual(item, "quantidade_planejada"))
                               }
                               editando={ativaAqui("quantidade_planejada")}
-                              editavel={editavel && !planejadoTravado}
-                              onAtivar={() =>
-                                setAtiva({
-                                  rowId: item.id,
-                                  campo: "quantidade_planejada",
-                                })
-                              }
+                              semente={sementeDe("quantidade_planejada")}
+                              nav={selecao.celulaProps(item.id, "quantidade_planejada")}
+                              moldura={selecao.moldura(item.id, "quantidade_planejada")}
                               onConfirmar={(raw, d) =>
                                 confirmarNumero(
                                   item,
@@ -1532,13 +1779,9 @@ export function ItensTable({
                                   : num(valorAtual(item, "dias_meses_planejado"))
                               }
                               editando={ativaAqui("dias_meses_planejado")}
-                              editavel={editavel && !planejadoTravado}
-                              onAtivar={() =>
-                                setAtiva({
-                                  rowId: item.id,
-                                  campo: "dias_meses_planejado",
-                                })
-                              }
+                              semente={sementeDe("dias_meses_planejado")}
+                              nav={selecao.celulaProps(item.id, "dias_meses_planejado")}
+                              moldura={selecao.moldura(item.id, "dias_meses_planejado")}
                               onConfirmar={(raw, d) =>
                                 confirmarNumero(
                                   item,
@@ -1550,11 +1793,11 @@ export function ItensTable({
                               onCancelar={() => setAtiva(null)}
                               tdClassName={PLANEJADO.celulaMeio}
                             />
-                            <td
-                              className={cn(
-                                "px-3 text-right whitespace-nowrap",
-                                PLANEJADO.celulaTotal,
-                              )}
+                            <CelulaCalculada
+                              selecao={selecao}
+                              linhaId={item.id}
+                              coluna="total_planejado"
+                              className={PLANEJADO.celulaTotal}
                             >
                               <div className="flex flex-col items-end">
                                 <span className="font-mono text-xs font-semibold leading-[1.2]">
@@ -1569,10 +1812,12 @@ export function ItensTable({
                                   />
                                 )}
                               </div>
-                            </td>
+                            </CelulaCalculada>
 
                             {rentabilidadeVisivel && (
                               <CelulasRentabilidade
+                                selecao={selecao}
+                                linhaId={item.id}
                                 orcado={totais.orcado}
                                 planejado={planejadoNaVisao}
                                 moeda={moeda}
@@ -1592,9 +1837,18 @@ export function ItensTable({
                         moeda={moeda}
                         categorias={categorias}
                         ativa={ativa}
-                        onAtivar={(campo) => setAtiva({ rowId: DRAFT_ID, campo })}
+                        selecao={selecao}
                         onFechar={() => {
                           setAtiva(null);
+                          // Esc num rascunho em branco o descarta — e a
+                          // seleção volta para a última linha do grupo,
+                          // em vez de morrer junto com ele.
+                          if (draft && draftIntocado(draft)) {
+                            const ultimo = grupo.itens[grupo.itens.length - 1];
+                            selecao.selecionar(
+                              ultimo ? { linhaId: ultimo.id, coluna: "item" } : null,
+                            );
+                          }
                           descartarDraftIntocado();
                         }}
                         onConfirmarTexto={(campo, v, d) =>
@@ -1604,7 +1858,7 @@ export function ItensTable({
                           confirmarDraftNumero(campo, raw, d)
                         }
                         onNavegar={(campo, d) =>
-                          setAtiva(celulaDirecao(DRAFT_ID, campo, d))
+                          fecharEMover({ linhaId: DRAFT_ID, coluna: campo }, d)
                         }
                         onFecharCelula={(campo) => fecharCelula(DRAFT_ID, campo)}
                       />
@@ -1625,10 +1879,7 @@ export function ItensTable({
                             // Rascunho em branco não trava nada: o clique
                             // aqui o descarta (pointerdown, acima) e abre
                             // a linha nova neste grupo.
-                            disabled={
-                              (draft !== null && !draftIntocado(draft)) ||
-                              pending
-                            }
+                            disabled={draft !== null && !draftIntocado(draft)}
                             className="inline-flex items-center gap-1.5 whitespace-nowrap text-[11.5px] font-semibold text-california-red transition-colors hover:text-california-red-hover disabled:cursor-not-allowed disabled:opacity-50"
                           >
                             <Plus className="h-3 w-3" />
@@ -1729,13 +1980,15 @@ export function ItensTable({
           </table>
         </div>
 
+        {temRodape && <RodapeSelecao estado={estadoDoRodape} />}
+
         {/* A calha — fora do frame da tabela, ao lado das linhas. Cada
             pílula é presa à posição MEDIDA da linha que ela acompanha:
             numa tabela só, as linhas têm alturas diferentes e altura
             chutada acumularia erro a cada grupo. */}
         {temCalha && (
           <Calha>
-            {grupos.map((grupo) => {
+            {gruposDaTela.map((grupo) => {
               const aberto = estaAberto(grupo.id);
               const acoesGrupo = acoesDoGrupo?.(grupo);
 
@@ -1760,6 +2013,10 @@ export function ItensTable({
                       // consultar — a vaga fica vazia para não desalinhar.
                       const mostraBv = temBv(item) && (editavel || bv !== null);
                       if (!mostraBv && !editavel) return null;
+                      // Ainda sem id real não há o que remover nem a que
+                      // prender um BV — a vaga fica vazia para as de
+                      // baixo não desalinharem.
+                      if (provisoriaTravada(item.id)) return null;
 
                       return (
                         <LinhaDaCalha
@@ -1791,7 +2048,6 @@ export function ItensTable({
                             <button
                               type="button"
                               onClick={() => setRemovendo(item)}
-                              disabled={pending}
                               title={`Remover ${item.item}`}
                               className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-california-red disabled:opacity-50"
                             >
@@ -1830,18 +2086,6 @@ export function ItensTable({
         )}
       </div>
 
-      {/* A dica de teclado vive FORA do card (pedido do Tiago,
-          25/08/2026): colada no rodapé, dentro do frame, ela lia como se
-          fosse mais uma linha da planilha. */}
-      {temDica && (
-        <p className="mt-2 px-1 text-[11px] text-muted-foreground">
-          Clique em qualquer célula para editar ·{" "}
-          <kbd className="font-mono">Tab</kbd> e as{" "}
-          <kbd className="font-mono">setas</kbd> andam ·{" "}
-          <kbd className="font-mono">Enter</kbd> desce ·{" "}
-          <kbd className="font-mono">Esc</kbd> desfaz
-        </p>
-      )}
 
       {bvAberto && (
         <BvDialog
@@ -1849,7 +2093,7 @@ export function ItensTable({
           onOpenChange={(o) => !o && setBvAberto(null)}
           item={bvAberto}
           grupoNome={
-            grupos.find((g) => g.itens.some((i) => i.id === bvAberto.id))
+            gruposDaTela.find((g) => g.itens.some((i) => i.id === bvAberto.id))
               ?.nome ?? ""
           }
           versaoLabel={versaoLabel}
@@ -1875,7 +2119,7 @@ export function ItensTable({
             <strong className="text-foreground">{removendo?.item}</strong> será
             removido do grupo{" "}
             <strong className="text-foreground">
-              {grupos.find((g) => g.itens.some((i) => i.id === removendo?.id))
+              {gruposDaTela.find((g) => g.itens.some((i) => i.id === removendo?.id))
                 ?.nome ?? ""}
             </strong>
             . Você pode adicionar novamente depois se precisar.
@@ -1897,19 +2141,61 @@ export function ItensTable({
 
 const TD_BASE = "text-xs align-middle";
 
+type NavDaCelula = ReturnType<Selecao["celulaProps"]>;
+
+/** Foco no campo recém-aberto. Aberto por Enter, o conteúdo inteiro fica
+ *  selecionado (digitar substitui). Aberto por um caractere digitado, o
+ *  caractere já está lá e o cursor fica no fim dele. */
+function focarCampo(el: HTMLInputElement, semente?: string) {
+  if (semente === undefined) {
+    el.select();
+    return;
+  }
+  const fim = el.value.length;
+  el.setSelectionRange(fim, fim);
+}
+
+/** Célula calculada (Total, Rentabilidade): seleciona, não abre. Também
+ *  serve de moldura para qualquer célula só de leitura. */
+function CelulaCalculada({
+  selecao,
+  linhaId,
+  coluna,
+  className,
+  children,
+}: {
+  selecao: Selecao;
+  linhaId: string;
+  coluna: string;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  const { className: navClasse, ...handlers } = selecao.celulaProps(linhaId, coluna);
+  return (
+    <td
+      className={cn(TD_BASE, "px-3 text-right whitespace-nowrap", className, navClasse)}
+      {...handlers}
+    >
+      <Miolo moldura={selecao.moldura(linhaId, coluna)}>{children}</Miolo>
+    </td>
+  );
+}
+
 function CelulaTexto({
   valor,
   editando,
-  editavel,
-  onAtivar,
+  nav,
+  moldura,
+  semente,
   onConfirmar,
   onCancelar,
   tdClassName,
 }: {
   valor: string;
   editando: boolean;
-  editavel: boolean;
-  onAtivar: () => void;
+  nav: NavDaCelula;
+  moldura: string;
+  semente?: string;
   onConfirmar: (valor: string, destino?: Direcao) => void;
   onCancelar: () => void;
   tdClassName?: string;
@@ -1929,8 +2215,8 @@ function CelulaTexto({
       <td className={cn(TD_BASE, "px-1.5", tdClassName)}>
         <input
           autoFocus
-          defaultValue={valor}
-          onFocus={(e) => e.currentTarget.select()}
+          defaultValue={semente ?? valor}
+          onFocus={(e) => focarCampo(e.currentTarget, semente)}
           onKeyDown={(e) => {
             const destino = direcaoNoCampo(e, e.currentTarget);
             if (destino) {
@@ -1957,12 +2243,12 @@ function CelulaTexto({
     );
   }
 
+  const { className: navClasse, ...handlers } = nav;
   return (
-    <td
-      className={cn(TD_BASE, "px-3", tdClassName, editavel && "cursor-pointer")}
-      onClick={editavel ? onAtivar : undefined}
-    >
-      <TruncateTooltip text={valor} />
+    <td className={cn(TD_BASE, "px-3", tdClassName, navClasse)} {...handlers}>
+      <Miolo moldura={moldura}>
+        <TruncateTooltip text={valor} />
+      </Miolo>
     </td>
   );
 }
@@ -1972,8 +2258,9 @@ function CelulaNumero({
   formato,
   moeda,
   editando,
-  editavel,
-  onAtivar,
+  nav,
+  moldura,
+  semente,
   onConfirmar,
   onCancelar,
   tdClassName,
@@ -1982,8 +2269,9 @@ function CelulaNumero({
   formato?: "moeda";
   moeda?: string;
   editando: boolean;
-  editavel: boolean;
-  onAtivar: () => void;
+  nav: NavDaCelula;
+  moldura: string;
+  semente?: string;
   onConfirmar: (raw: string, destino?: Direcao) => void;
   onCancelar: () => void;
   tdClassName?: string;
@@ -2000,8 +2288,8 @@ function CelulaNumero({
         <input
           autoFocus
           inputMode="decimal"
-          defaultValue={paraEdicao(valor)}
-          onFocus={(e) => e.currentTarget.select()}
+          defaultValue={semente ?? paraEdicao(valor)}
+          onFocus={(e) => focarCampo(e.currentTarget, semente)}
           onKeyDown={(e) => {
             const destino = direcaoNoCampo(e, e.currentTarget);
             if (destino) {
@@ -2025,17 +2313,15 @@ function CelulaNumero({
     );
   }
 
+  const { className: navClasse, ...handlers } = nav;
   return (
     <td
-      className={cn(
-        TD_BASE,
-        "px-3 text-right whitespace-nowrap",
-        tdClassName,
-        editavel && "cursor-pointer",
-      )}
-      onClick={editavel ? onAtivar : undefined}
+      className={cn(TD_BASE, "px-3 text-right whitespace-nowrap", tdClassName, navClasse)}
+      {...handlers}
     >
-      {formato === "moeda" ? formatCurrency(valor, moeda) : valor}
+      <Miolo moldura={moldura}>
+        {formato === "moeda" ? formatCurrency(valor, moeda) : valor}
+      </Miolo>
     </td>
   );
 }
@@ -2043,16 +2329,16 @@ function CelulaNumero({
 /** Célula de escolha (Tipo, Categoria).
  *
  *  As setas aqui são do dropdown — é com elas que se percorrem as opções
- *  —, então esta célula navega só por Tab e Enter. Escolher um valor
- *  fecha a lista mas NÃO sai da célula: o gatilho continua com o foco e
- *  é o Tab seguinte que anda, como o time pediu em 13/08/2026. */
+ *  —, então esta célula navega só por Tab. Escolher um valor fecha a
+ *  lista e a seleção FICA na célula: não desce nem pula para a próxima.
+ *  Quem quer andar usa a seta ou o Tab (decisão 046, como no Excel). */
 function CelulaSelect({
   valor,
   opcoes,
   vazio,
   editando,
-  editavel,
-  onAtivar,
+  nav,
+  moldura,
   onConfirmar,
   onNavegar,
   onFechar,
@@ -2064,15 +2350,14 @@ function CelulaSelect({
   /** Texto auxiliar quando só existe a opção "Nenhuma". */
   vazio?: string;
   editando: boolean;
-  editavel: boolean;
-  onAtivar: () => void;
-  onConfirmar: (valor: string, destino?: Direcao) => void;
+  nav: NavDaCelula;
+  moldura: string;
+  onConfirmar: (valor: string) => void;
   onNavegar: (destino: Direcao) => void;
   onFechar: () => void;
   tdClassName?: string;
   children: React.ReactNode;
 }) {
-
   /** Só o Tab é nosso: ele atravessa a coluna sem escolher nada. O Enter
    *  pertence ao Radix, que o usa para confirmar a opção destacada —
    *  interceptá-lo aqui deixaria o dropdown sem como escolher pelo
@@ -2089,8 +2374,6 @@ function CelulaSelect({
         <Select
           value={valor}
           defaultOpen
-          // Escolher grava E decide para onde ir — quem sabe disso é o
-          // pai, que conhece o `porTeclado` da célula. Aqui só repassa.
           onValueChange={onConfirmar}
           onOpenChange={(aberto) => {
             if (!aberto) onFechar();
@@ -2118,14 +2401,14 @@ function CelulaSelect({
     );
   }
 
+  const { className: navClasse, ...handlers } = nav;
   return (
     // px-3 antes de tdClassName: a coluna Tipo tem só 4,5% da largura e
     // precisa reduzir o padding para o badge não ser cortado.
-    <td
-      className={cn(TD_BASE, "px-3", tdClassName, editavel && "cursor-pointer")}
-      onClick={editavel ? onAtivar : undefined}
-    >
-      <div className="max-w-[160px] truncate">{children}</div>
+    <td className={cn(TD_BASE, "px-3", tdClassName, navClasse)} {...handlers}>
+      <Miolo moldura={moldura} className="max-w-[160px] truncate">
+        {children}
+      </Miolo>
     </td>
   );
 }
@@ -2136,7 +2419,7 @@ function LinhaDraft({
   moeda,
   categorias,
   ativa,
-  onAtivar,
+  selecao,
   onFechar,
   onConfirmarTexto,
   onConfirmarNumero,
@@ -2150,7 +2433,7 @@ function LinhaDraft({
   moeda: string;
   categorias: Categoria[];
   ativa: CelulaAtiva;
-  onAtivar: (campo: Campo) => void;
+  selecao: Selecao;
   onFechar: () => void;
   onConfirmarTexto: (campo: Campo, valor: ValorCampo, destino?: Direcao) => void;
   onConfirmarNumero: (campo: Campo, raw: string, destino?: Direcao) => void;
@@ -2170,6 +2453,8 @@ function LinhaDraft({
 }) {
   const ativaAqui = (campo: Campo) =>
     ativa?.rowId === DRAFT_ID && ativa.campo === campo;
+  const sementeDe = (campo: Campo) =>
+    ativaAqui(campo) ? ativa?.semente : undefined;
   const totalOrcado =
     draft.valor_unitario_orcado *
     draft.quantidade_orcada *
@@ -2194,25 +2479,20 @@ function LinhaDraft({
       <CelulaTexto
         valor={draft.item}
         editando={ativaAqui("item")}
-        editavel
-        onAtivar={() => onAtivar("item")}
+        semente={sementeDe("item")}
+        nav={selecao.celulaProps(DRAFT_ID, "item")}
+        moldura={selecao.moldura(DRAFT_ID, "item")}
         onConfirmar={(v, d) => onConfirmarTexto("item", v.trim(), d)}
         onCancelar={onFechar}
         tdClassName={cn("text-foreground", RECUO_ITEM, GRADE_NEUTRA)}
       />
       <CelulaSelect
         editando={ativaAqui("tipo_custo")}
-        editavel
         valor={draft.tipo_custo}
         opcoes={TIPOS_CUSTO.map((t) => ({ value: t, label: tipoCustoLabel(t) }))}
-        onAtivar={() => onAtivar("tipo_custo")}
-        onConfirmar={(v) =>
-          onConfirmarTexto(
-            "tipo_custo",
-            v,
-            ativa?.porTeclado ? "proxima" : undefined,
-          )
-        }
+        nav={selecao.celulaProps(DRAFT_ID, "tipo_custo")}
+        moldura={selecao.moldura(DRAFT_ID, "tipo_custo")}
+        onConfirmar={(v) => onConfirmarTexto("tipo_custo", v)}
         onNavegar={(d) => onNavegar("tipo_custo", d)}
         onFechar={() => onFecharCelula("tipo_custo")}
         tdClassName={cn(GRADE_NEUTRA, "px-2")}
@@ -2223,7 +2503,6 @@ function LinhaDraft({
       </CelulaSelect>
       <CelulaSelect
         editando={ativaAqui("categoria_id")}
-        editavel
         valor={draft.categoria_id ?? SEM_CATEGORIA}
         opcoes={[
           { value: SEM_CATEGORIA, label: "Nenhuma" },
@@ -2235,13 +2514,10 @@ function LinhaDraft({
             })),
         ]}
         vazio="Nenhuma categoria cadastrada em /categorias"
-        onAtivar={() => onAtivar("categoria_id")}
+        nav={selecao.celulaProps(DRAFT_ID, "categoria_id")}
+        moldura={selecao.moldura(DRAFT_ID, "categoria_id")}
         onConfirmar={(v) =>
-          onConfirmarTexto(
-            "categoria_id",
-            v === SEM_CATEGORIA ? null : v,
-            ativa?.porTeclado ? "proxima" : undefined,
-          )
+          onConfirmarTexto("categoria_id", v === SEM_CATEGORIA ? null : v)
         }
         onNavegar={(d) => onNavegar("categoria_id", d)}
         onFechar={() => onFecharCelula("categoria_id")}
@@ -2260,8 +2536,9 @@ function LinhaDraft({
             formato="moeda"
             moeda={moeda}
             editando={ativaAqui("valor_unitario_orcado")}
-            editavel
-            onAtivar={() => onAtivar("valor_unitario_orcado")}
+            semente={sementeDe("valor_unitario_orcado")}
+            nav={selecao.celulaProps(DRAFT_ID, "valor_unitario_orcado")}
+        moldura={selecao.moldura(DRAFT_ID, "valor_unitario_orcado")}
             onConfirmar={(raw, d) =>
               onConfirmarNumero("valor_unitario_orcado", raw, d)
             }
@@ -2271,8 +2548,9 @@ function LinhaDraft({
           <CelulaNumero
             valor={draft.quantidade_orcada}
             editando={ativaAqui("quantidade_orcada")}
-            editavel
-            onAtivar={() => onAtivar("quantidade_orcada")}
+            semente={sementeDe("quantidade_orcada")}
+            nav={selecao.celulaProps(DRAFT_ID, "quantidade_orcada")}
+        moldura={selecao.moldura(DRAFT_ID, "quantidade_orcada")}
             onConfirmar={(raw, d) =>
               onConfirmarNumero("quantidade_orcada", raw, d)
             }
@@ -2282,22 +2560,23 @@ function LinhaDraft({
           <CelulaNumero
             valor={draft.dias_meses_orcado}
             editando={ativaAqui("dias_meses_orcado")}
-            editavel
-            onAtivar={() => onAtivar("dias_meses_orcado")}
+            semente={sementeDe("dias_meses_orcado")}
+            nav={selecao.celulaProps(DRAFT_ID, "dias_meses_orcado")}
+        moldura={selecao.moldura(DRAFT_ID, "dias_meses_orcado")}
             onConfirmar={(raw, d) =>
               onConfirmarNumero("dias_meses_orcado", raw, d)
             }
             onCancelar={onFechar}
             tdClassName={ORCADO.celulaMeio}
           />
-          <td
-            className={cn(
-              "px-3 text-right font-mono text-xs font-semibold whitespace-nowrap",
-              ORCADO.celulaTotal,
-            )}
+          <CelulaCalculada
+            selecao={selecao}
+            linhaId={DRAFT_ID}
+            coluna="total_orcado"
+            className={cn("font-mono font-semibold", ORCADO.celulaTotal)}
           >
             {formatCurrency(totalOrcado, moeda)}
-          </td>
+          </CelulaCalculada>
         </>
       )}
 
@@ -2308,8 +2587,9 @@ function LinhaDraft({
         formato="moeda"
         moeda={moeda}
         editando={ativaAqui("valor_unitario_planejado")}
-        editavel
-        onAtivar={() => onAtivar("valor_unitario_planejado")}
+        semente={sementeDe("valor_unitario_planejado")}
+        nav={selecao.celulaProps(DRAFT_ID, "valor_unitario_planejado")}
+        moldura={selecao.moldura(DRAFT_ID, "valor_unitario_planejado")}
         onConfirmar={(raw, d) => onConfirmarNumero("valor_unitario_planejado", raw, d)}
         onCancelar={onFechar}
         tdClassName={cn("font-mono", PLANEJADO.celulaAbre)}
@@ -2317,8 +2597,9 @@ function LinhaDraft({
       <CelulaNumero
         valor={draft.quantidade_planejada}
         editando={ativaAqui("quantidade_planejada")}
-        editavel
-        onAtivar={() => onAtivar("quantidade_planejada")}
+        semente={sementeDe("quantidade_planejada")}
+        nav={selecao.celulaProps(DRAFT_ID, "quantidade_planejada")}
+        moldura={selecao.moldura(DRAFT_ID, "quantidade_planejada")}
         onConfirmar={(raw, d) => onConfirmarNumero("quantidade_planejada", raw, d)}
         onCancelar={onFechar}
         tdClassName={PLANEJADO.celulaMeio}
@@ -2326,23 +2607,26 @@ function LinhaDraft({
       <CelulaNumero
         valor={draft.dias_meses_planejado}
         editando={ativaAqui("dias_meses_planejado")}
-        editavel
-        onAtivar={() => onAtivar("dias_meses_planejado")}
+        semente={sementeDe("dias_meses_planejado")}
+        nav={selecao.celulaProps(DRAFT_ID, "dias_meses_planejado")}
+        moldura={selecao.moldura(DRAFT_ID, "dias_meses_planejado")}
         onConfirmar={(raw, d) => onConfirmarNumero("dias_meses_planejado", raw, d)}
         onCancelar={onFechar}
         tdClassName={PLANEJADO.celulaMeio}
       />
-      <td
-        className={cn(
-          "px-3 text-right font-mono text-xs font-semibold whitespace-nowrap",
-          PLANEJADO.celulaTotal,
-        )}
+      <CelulaCalculada
+        selecao={selecao}
+        linhaId={DRAFT_ID}
+        coluna="total_planejado"
+        className={cn("font-mono font-semibold", PLANEJADO.celulaTotal)}
       >
         {formatCurrency(totalPlanejado, moeda)}
-      </td>
+      </CelulaCalculada>
 
       {rentabilidadeVisivel && (
         <CelulasRentabilidade
+          selecao={selecao}
+          linhaId={DRAFT_ID}
           orcado={totalOrcado}
           planejado={totalPlanejado}
           moeda={moeda}
@@ -2353,12 +2637,17 @@ function LinhaDraft({
 }
 
 /** Rentabilidade da linha: valor absoluto e percentual sobre o orçado.
- *  Sem planejado ainda não há rentabilidade a mostrar. */
+ *  Sem planejado ainda não há rentabilidade a mostrar. Selecionáveis,
+ *  como toda célula calculada — é assim que se destaca um número. */
 function CelulasRentabilidade({
+  selecao,
+  linhaId,
   orcado,
   planejado,
   moeda,
 }: {
+  selecao: Selecao;
+  linhaId: string;
   orcado: number;
   planejado: number;
   moeda: string;
@@ -2371,11 +2660,11 @@ function CelulasRentabilidade({
 
   return (
     <>
-      <td
-        className={cn(
-          "px-3 text-right font-mono text-xs whitespace-nowrap",
-          RENTABILIDADE.celulaAbre,
-        )}
+      <CelulaCalculada
+        selecao={selecao}
+        linhaId={linhaId}
+        coluna="rentab_valor"
+        className={cn("font-mono", RENTABILIDADE.celulaAbre)}
       >
         {semPlanejado ? (
           <span className="text-muted-foreground">—</span>
@@ -2384,12 +2673,12 @@ function CelulasRentabilidade({
             {formatCurrency(rentabilidade, moeda)}
           </span>
         )}
-      </td>
-      <td
-        className={cn(
-          "px-3 text-right font-mono text-xs whitespace-nowrap",
-          RENTABILIDADE.celulaTotal,
-        )}
+      </CelulaCalculada>
+      <CelulaCalculada
+        selecao={selecao}
+        linhaId={linhaId}
+        coluna="rentab_pct"
+        className={cn("font-mono", RENTABILIDADE.celulaTotal)}
       >
         {percentualRentabilidade === null ? (
           <span className="text-muted-foreground">—</span>
@@ -2398,7 +2687,7 @@ function CelulasRentabilidade({
             {formatarPercentual(percentualRentabilidade)}
           </span>
         )}
-      </td>
+      </CelulaCalculada>
     </>
   );
 }
