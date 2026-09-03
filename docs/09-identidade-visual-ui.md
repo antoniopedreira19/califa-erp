@@ -144,6 +144,27 @@ São três grades, uma por formato de tela:
 | Job — planilha interna | 15 | `app/(app)/_planilha/grade-job.tsx` |
 | Job — visão agregada do projeto | 15 | `app/(app)/_planilha/grade-jobs-projeto.tsx` |
 
+**⚠️ Blocos ocultáveis (03/09/2026, decisão 042).** Na planilha da
+**versão do orçamento**, o menu "Exibir" esconde os blocos **Orçado** e
+**Rentabilidade** — PLANEJADO nunca sai. Quem esconde um bloco passa as
+MESMAS flags (`ColunasVisiveis`) para tudo que divide a grade na mesma
+tela; `totalDeColunas()` e `colunasDoRotulo()` são a fonte única dos
+`colSpan`, e nunca literais. Um bloco escondido sai de **todas** as
+linhas: faixa, sub-cabeçalho, linha de grupo, linha de item, linha nova
+e `tfoot` — e as colunas de entrada dele saem também da ordem do Tab.
+
+**A largura liberada volta para os blocos, não para o Item.** Os três
+blocos somam 72% da tabela; ao esconder um, os 72% são redistribuídos
+entre os que ficaram, na mesma proporção (sem Orçado: Planejado
+16,5 · 5,5 · 5,5 · 18 e Rentab. 19 · 7). Sem isso os 28% do bloco
+escondido cairiam no Item, que absorve a sobra, e a planilha ficaria com
+um paredão de branco à esquerda e as colunas de moeda no mesmo lugar. As
+larguras são classes **literais**, uma combinação por vez — o Tailwind
+varre o fonte, e `w-[${x}%]` não existiria no CSS.
+
+As planilhas de **job** não têm isso: lá o card de Totais divide o
+`colgroup` com os blocos, e o menu lista os blocos em só leitura.
+
 **A coluna Rentab. R$ do orçamento tem 11,5%**, e não a mesma largura das outras colunas de moeda: ela é a única da planilha que carrega sinal negativo, e `-R$ 117.500,00` a 13px pede ~122px. O espaço saiu do `%` ao lado, que nunca passa de `-99,9%` (24/08/2026). Em `table-fixed` o número que não cabe **transborda por cima da coluna vizinha** — não encolhe, não quebra.
 
 **Proibido:** layout automático (tabela sem `table-fixed`/`colgroup`) em planilha ou Totais. Com larguras automáticas cada tabela se dimensiona pelo próprio conteúdo — duas tabelas com conteúdos diferentes nunca alinham, e o alinhamento não tem como se sustentar.

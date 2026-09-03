@@ -2824,3 +2824,62 @@ saíram. Registrado na decisão 041.
 `TESTE-0003/26-05` desaprovado com v2, `TESTE-0003/26-07` desaprovado
 com v5. Para voltar cada um: deletar a versão nova e aprovar a anterior
 pela tela. Detalhe no registro de testes local.
+
+---
+
+## ⚠️ Nota de 2026-09-03 — o menu "Exibir" da versão: sai Realizado, entra Rentabilidade, e os blocos ligam de verdade
+
+Regra em [decisão 042](../decisions/042-blocos-ocultaveis-na-planilha-do-orcamento.md);
+esta nota registra o que entrou e como foi conferido.
+
+**O defeito:** o menu "Exibir colunas" da planilha da versão trazia
+**Realizado** desmarcado — bloco que não existe nesta tela (ele nasce da
+PP, dentro do job) — e **não** listava a **Rentabilidade**, que é o
+terceiro bloco que a planilha de fato desenha. Os três eram texto, sem
+liga/desliga, como no design original.
+
+**O que passou a valer:**
+
+| Item do menu | Comportamento |
+|---|---|
+| Save | liga/desliga a coluna (como antes) |
+| Orçado | **liga/desliga o bloco inteiro** |
+| Planejado | sempre exibido — item marcado, `title` "O Planejado é sempre exibido." |
+| Rentabilidade | **liga/desliga o bloco inteiro** |
+| ~~Realizado~~ | removido |
+
+Esconder um bloco tira as 4 colunas dele (2 na Rentabilidade) do
+`colgroup`, da faixa, do sub-cabeçalho, da linha de grupo, das linhas de
+item, da linha nova, do `tfoot` **e da ordem do Tab**. Os 72% que os
+blocos dividem são redistribuídos entre os que ficaram, para a largura
+liberada não virar branco na coluna Item — a tabela de larguras por
+combinação está na decisão 042 e em
+`docs/09-identidade-visual-ui.md` ("Grades compartilhadas").
+
+Estado de **tela**: não vai para o banco nem para a URL, e recarregar
+traz a planilha inteira de volta. Nenhum número muda — Totais,
+fechamento e rentabilidade são os mesmos com o bloco escondido.
+
+Os menus das planilhas de **job** (`jobs/[jobId]/realizado` e a agregada
+em `jobs/projeto/[projetoId]`) **não mudaram**: lá a grade é a
+`grade-job`, que tem Realizado de verdade, não tem bloco de
+rentabilidade, e o card de Totais divide o `colgroup` com os blocos. As
+agregadas de orçamento (`/agregado`, `/multi`) também seguem intactas —
+os defaults de `ColunasFixas` são "tudo visível".
+
+### Verificação (03/09/2026, servidor próprio na 3000, logado no Chrome)
+
+| Tela | O que foi conferido |
+|---|---|
+| Versão **aprovada** — Job 1 do `0-0001/26` | menu com Save · Orçado · Planejado · Rentabilidade, sem Realizado; Planejado sem reação e com a dica |
+| idem, sem Orçado | faixa, cabeçalho e todas as linhas perdem as 4 colunas; Planejado e Rentabilidade crescem e o Item fica na largura de sempre; total R$ 79.000,00 · R$ 27.000,00 · 25,5% intactos |
+| idem, só Planejado | 4 colunas ocupando os 72%; total R$ 79.000,00 |
+| idem, sem Rentabilidade + coluna Save aberta | 12 colunas alinhadas, R$ 106.000,00 · R$ 79.000,00 |
+| ida e volta | religando os dois, a planilha volta idêntica à original (R$ 106.000,00 · R$ 79.000,00 · R$ 27.000,00 · 25,5%) |
+| Versão **rascunho** — `TESTE-0003/26-04` v3 | com o Orçado escondido: **Shift+Tab** a partir do "R$ Unit." do Planejado volta para **Categoria** (e não para o D/M do Orçado) — a ordem do Tab acompanha a tela |
+| idem, linha nova | "Novo item" nasce com as MESMAS colunas das linhas acima, sem escorregar; descartada em branco, o grupo voltou a 2 itens e nada foi gravado |
+| Banco | nenhuma escrita: só navegação e valores inalterados (`mesmoValor` não grava) |
+
+`tsc --noEmit`, `next lint` e `next build` limpos. Único erro de
+console: `trancy-version`, atributo injetado por extensão do navegador —
+não é do app.
