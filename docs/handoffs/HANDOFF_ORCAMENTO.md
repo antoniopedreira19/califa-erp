@@ -2896,3 +2896,49 @@ os defaults de `ColunasFixas` são "tudo visível".
 `tsc --noEmit`, `next lint` e `next build` limpos. Único erro de
 console: `trancy-version`, atributo injetado por extensão do navegador —
 não é do app.
+
+---
+
+## ⚠️ Nota de 2026-09-03 — a célula selecionada: navegação pelo teclado e a linha nova provisória
+
+Regra em [decisão 046](../decisions/046-navegacao-por-teclado-nas-planilhas.md);
+esta nota registra o que entrou na planilha da versão (e, por tabela,
+nos editores de rascunho do projeto, que usam a mesma `ItensTable`).
+
+### O que mudou na tela
+
+| Antes | Agora |
+|---|---|
+| clicar numa célula abria o campo | clicar **seleciona** (moldura vermelha); clicar de novo, duplo clique, Enter, F2 ou digitar abrem |
+| Tab abria a próxima célula editável, pulando as calculadas | ← → ↑ ↓ e Tab andam a **seleção** por toda célula de item, inclusive Total e Rentabilidade |
+| escolher na lista (Tipo, Categoria) pulava para a próxima célula | escolher grava e a seleção **fica na célula** |
+| Enter num campo descia | continua descendo (decisão do Tiago); Tab, ↑ e ↓ confirmam e andam; Esc cancela |
+| dica de teclado fora do card | **rodapé** dentro do card: endereço da célula · valor · modo (Editando / Lista aberta / Enter abre / Calculada) · teclas |
+| linha nova esperava o servidor: "Novo item" e lixeiras desligados até o refresh | a linha vira **item provisório** na hora (mais clara, sem ação na calha), o cursor segue, o id real entra por baixo; recusada, volta a rascunho com o que foi digitado |
+
+↓ ou Enter na última linha do grupo continuam abrindo o "Novo item"
+dele; ↓ num rascunho em branco o descarta e segue; Esc num rascunho em
+branco o descarta e devolve a seleção à última linha do grupo. Linha de
+grupo, total e a coluna Save ficam fora da seleção. Esconder um bloco
+pelo "Exibir" tira as colunas dele da navegação.
+
+A máquina de seleção mora em `_planilha/selecao.tsx` e é a mesma da
+planilha do job — não reimplementar por tabela.
+
+### Verificação (03/09/2026, servidor próprio na 3000, logado no Chrome — `TESTE-0003/26-04` v3)
+
+| O quê | Resultado |
+|---|---|
+| clique em "R$ 120,00" (Orçado, Item B1) | moldura vermelha na célula; rodapé "Item B1 · Orçado · R$ Unit. · R$ 120,00 · Enter abre" |
+| ↓ → → → | seleção anda para o Total da linha 2: "Item novo do cliente · Orçado · Total · R$ 500,00 · **Calculada**" |
+| ← Enter | D/M abre com "1" selecionado, chip "Editando" |
+| Esc, tecla `3` | a célula abre já com "3" no lugar do conteúdo |
+| Esc, Tab | Tab anda a seleção para o Total sem abrir nada |
+| Home → Enter (Tipo) | a lista abre (A · Direto … B · Bi-trib. marcado); ↓ e Esc fecham sem mudar, e a seleção continua no Tipo |
+| ↓ na última linha | "Novo item" nasce com a descrição aberta; Esc descarta em branco |
+| ↓, "Linha teste navegacao", Enter | a linha aparece **no mesmo instante**, mais clara, "3 itens", rodapé "Calculada" e sem lixeira; ~3s depois está sólida, com lixeira e "Enter abre" — o id real chegou e o refresh passou |
+| lixeira → Remover | a linha de teste saiu; a versão voltou a 2 itens (dado restaurado) |
+
+⚠️ Para o Chrome MCP: clique por coordenada ou por `ref` não chega ao
+`<td>` da célula — selecione por `document.querySelector('[data-cel=…]').click()`
+no `javascript_tool` e depois use as teclas de verdade.

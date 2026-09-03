@@ -94,7 +94,9 @@ export interface RascunhoErrata {
   editarCampo: (chave: string, campo: CampoErrata, valor: string) => void;
   editarTipo: (chave: string, tipo: TipoCusto) => void;
   editarNome: (chave: string, nome: string) => void;
-  adicionar: (grupoId: string, vermelha: boolean) => void;
+  /** Devolve a chave da linha nova (`nova:N`), para a tela selecioná-la
+   *  e abrir a descrição na hora. */
+  adicionar: (grupoId: string, vermelha: boolean) => string;
   remover: (chave: string) => void;
   /** É uma linha criada agora, ainda sem id no banco. */
   ehNova: (chave: string) => boolean;
@@ -236,7 +238,7 @@ export function useRascunhoErrata(
     );
   }, [fotografar]);
 
-  const adicionar = React.useCallback((grupoId: string, vermelha: boolean) => {
+  const adicionar = React.useCallback((grupoId: string, vermelha: boolean): string => {
     fotografar(null);
     seqRef.current += 1;
     const chave = `nova:${seqRef.current}`;
@@ -255,6 +257,7 @@ export function useRascunhoErrata(
         tipo: "B",
       },
     ]);
+    return chave;
   }, [fotografar]);
 
   const remover = React.useCallback((chave: string) => {

@@ -308,3 +308,42 @@ export const ERRATA = {
   botaoAtivo:
     "inline-flex items-center gap-1.5 rounded-lg border border-california-red bg-california-red/[0.07] px-3 py-1.5 text-xs font-bold text-[#b83b45] shadow-[inset_0_1px_2px_rgba(231,75,86,0.18)]",
 } as const;
+
+/** SELEÇÃO — a célula selecionada da planilha e o rodapé de navegação.
+ *
+ *  A célula selecionada ganha a MESMA moldura arredondada do campo em
+ *  edição: 6px de raio, borda vermelha California e um anel suave em
+ *  volta. Nada mais é destacado — nem a linha, nem o cabeçalho. A moldura
+ *  vai no CONTEÚDO da célula, e não no `<td>`: em tabela `border-collapse`
+ *  o raio da célula é ignorado, e é o raio que faz a moldura ser a mesma
+ *  do campo.
+ *
+ *  Do design `Planilha Interna do Job - Rentabilidade por Item.dc.html`,
+ *  turno 2a (projeto Claude Design `69342d83`), 03/09/2026.
+ */
+export const SELECAO = {
+  /** A moldura, no `<div>` que envolve o conteúdo da célula. As margens
+   *  negativas comem parte do padding da célula, para a moldura ficar
+   *  colada no número e não encostar nos fios. */
+  moldura:
+    "relative z-[1] -mx-[7px] rounded-md border border-california-red bg-white px-1.5 py-0.5 shadow-[0_0_0_3px_rgba(231,75,86,.22)]",
+  /** Célula que aceita seleção: cursor de célula, como numa planilha. */
+  celula: "cursor-cell",
+  /** Rodapé de navegação, colado no pé do card. */
+  rodape:
+    "flex flex-wrap items-center gap-3.5 rounded-b-2xl border-t border-border bg-[#fcfcfb] px-3.5 py-2",
+  /** Chip com o endereço da célula (Item · Bloco · Coluna). */
+  chipEndereco:
+    "inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-[#f3b4b9] bg-[#fdf2f3] px-2.5 py-1 text-[11.5px] font-bold text-[#b83b45]",
+  /** O valor da célula selecionada, em mono. */
+  valor: "whitespace-nowrap font-mono text-[12.5px] font-semibold text-foreground",
+  /** Chip do modo, com a célula ABERTA (Editando / Lista aberta). */
+  chipEdicao:
+    "inline-flex items-center whitespace-nowrap rounded-lg border border-[#9dc0ee] bg-[#eff6ff] px-2 py-1 text-[11px] font-bold text-[#1e4fa3]",
+  /** Chip do modo, só selecionada (Enter abre / Calculada / Só leitura). */
+  chipLeitura:
+    "inline-flex items-center whitespace-nowrap rounded-lg border border-border bg-card px-2 py-1 text-[11px] font-semibold text-muted-foreground",
+  /** As dicas de tecla, à direita. */
+  dicas: "ml-auto flex items-center gap-2.5 whitespace-nowrap text-[10.5px] text-muted-foreground",
+  tecla: "font-mono font-bold text-foreground",
+} as const;

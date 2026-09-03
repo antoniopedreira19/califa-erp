@@ -2312,3 +2312,39 @@ defaults e não mudou.
 | `/financeiro/jobs/JOB-0029` | mesma seção, mesmo menu; console só com `trancy-version` (extensão do navegador) |
 
 `tsc --noEmit`, `next lint` e `next build` limpos.
+
+---
+
+## ⚠️ Nota de 2026-09-03 — a célula selecionada na planilha do job, e a errata no mesmo teclado
+
+Regra em [decisão 046](../decisions/046-navegacao-por-teclado-nas-planilhas.md);
+a máquina de seleção é a mesma da planilha do orçamento
+(`_planilha/selecao.tsx`) — ver a nota do mesmo dia no
+`HANDOFF_ORCAMENTO.md` para o modelo completo.
+
+### O que mudou na planilha do job
+
+| Onde | Antes | Agora |
+|---|---|---|
+| fora da errata | nada reagia ao teclado | toda célula de item **seleciona** (moldura vermelha) e as setas andam; nada abre; rodapé com endereço · valor · "Só leitura" |
+| errata — Orçado | as três células viravam inputs de uma vez | mostram o valor do rascunho; Enter, digitar, duplo clique ou clique na célula selecionada abrem o campo; Tab/Enter/setas confirmam e andam |
+| errata — Tipo | `<select>` nativo sempre aberto | a lista do Radix, como no orçamento: Enter abre, escolher grava e a seleção fica |
+| errata — linha nova | input do nome sempre aberto | "Novo item" e "Linha vermelha" criam a linha **com a descrição já aberta** (`adicionar` devolve a chave); ↓ ou Enter na última linha do grupo também criam |
+| célula travada (PP no financeiro) | input desligado | seleciona, não abre; Enter só desce |
+| menu "Exibir" | — | ligar a errata traz o Orçado de volta; esconder um bloco tira as colunas dele da navegação |
+
+O rodapé de navegação fecha o card, depois da nota sobre o Realizado.
+A visão agregada de jobs (`/jobs/projeto/[id]`) **ainda não tem
+seleção** — é o passo seguinte se o Tiago pedir; a máquina já existe.
+
+### Verificação (03/09/2026, servidor próprio na 3000, logado no Chrome — JOB-0029)
+
+| O quê | Resultado |
+|---|---|
+| leitura: clique no Total realizado, ← | moldura no D/M do Realizado; rodapé "Item 1 · Realizado · D/M · 1 · Só leitura", sem as dicas de Enter |
+| "Alterar orçado", clique no R$ Unit. do Item 1 (travado por PP), Enter | não abre (travada); o Enter desce e, na última linha do grupo, **abre a linha nova** com a descrição já aberta |
+| Esc, Tab, tecla `5` no Tipo | a lista abre (A · AR · B…); Esc fecha sem mudar |
+| "Novo item em Grupo 1", "Item da errata", Tab, Enter | nome gravado no rascunho, seleção no Tipo, Enter abre a lista ("Item da errata · Tipo · B · Lista aberta"); barra da errata "2 linhas novas" |
+| Descartar | errata descartada, nada gravado; planilha de volta a 1 item |
+
+`tsc --noEmit`, `next lint` e `next build` limpos.

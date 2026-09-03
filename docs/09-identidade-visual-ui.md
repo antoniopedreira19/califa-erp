@@ -184,6 +184,27 @@ de fora: lá o card de Totais divide o `colgroup` com os blocos.
 
 **Case study** (2026-08-11): a visão agregada de jobs tinha sido deliberadamente posta em layout automático (04/08) para casar proporções com um mock. Era justamente o que deixava as colunas dos Totais desalinhadas das da planilha. Trocada por `table-fixed` + colgroup compartilhado; medido no navegador, os blocos numéricos ficaram com ~356px cada em viewport de 1660px — não encolheram. No mesmo dia, a agregada de orçamento ganhou o bloco RENTABILIDADE, que existia nos cards de grupo mas faltava no Totais.
 
+## Célula selecionada e rodapé de navegação
+
+**Regra (03/09/2026, decisão 046):** toda planilha de itens tem uma
+**célula selecionada**, distinta da célula aberta. Ela ganha a mesma
+moldura arredondada do campo em edição — 6px de raio, borda vermelha
+California, anel suave de 3px (`SELECAO.moldura` em
+`app/(app)/_planilha/blocos.ts`). Nada mais é destacado: nem a linha,
+nem o cabeçalho.
+
+A moldura vai no **conteúdo** da célula (`<Miolo>`), não no `<td>`: em
+tabela `border-collapse` o raio da célula é ignorado, e é o raio que
+faz a moldura ser a mesma do campo. As margens negativas da moldura
+comem parte do padding da célula para ela ficar colada no número.
+
+O **rodapé** do card (`RodapeSelecao`, em `_planilha/selecao.tsx`)
+mostra o endereço da célula (chip vermelho: Item · Bloco · Coluna), o
+valor em mono, o chip do modo (azul aberta, cinza selecionada) e as
+teclas. Ele fecha o card — a tabela só arredonda embaixo quando não há
+rodapé. Fonte única das classes: `SELECAO`. **Nunca escrever direto no
+JSX.**
+
 ## Linha do agrupamento (tabela única)
 
 **Regra (24/08/2026, decisão 024):** a planilha inteira é **uma tabela só** — um card, um `<thead>`, uma calha de números. Não existe mais card por agrupamento.
