@@ -128,6 +128,12 @@ marca de save. Linha nova nasce com a marca de save que a versão dá a
 linha nova (`save_por_padrao`). **BVs e consumos de save não são
 copiados** — como no "Duplicar versão".
 
+Em `A` e `D` o planejado **espelha o orçado** por trigger
+(`trg_planejado_espelha_orcado`, decisão 022): a linha casada desses
+tipos chega com o orçado novo e o banco põe o planejado igual a ele.
+"Preservar o planejado" vale para os tipos que têm planejado próprio —
+`AR`, `B`, `C`, `F` e `FI`.
+
 Honorários, imposto, moeda e câmbio vêm da **versão**, nunca da
 planilha: a planilha do cliente nem os tem por orçamento.
 

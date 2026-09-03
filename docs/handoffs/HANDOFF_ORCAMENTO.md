@@ -2799,3 +2799,28 @@ do "Nova versão"). O preview diz isso na linha; a regra não foi mudada.
 `tsc --noEmit`, `next lint` e `next build` (em cópia isolada) limpos.
 Único erro de console: `trancy-version`, atributo injetado por extensão
 do navegador — não é do app.
+
+### Verificação no servidor AO VIVO (03/09/2026, `www.sistemacalifa.com.br`, deploy do `32df7e5`)
+
+Tudo repetido em produção, logado no Chrome, no mesmo projeto de teste:
+
+| Tela | O que foi conferido |
+|---|---|
+| Projeto `TESTE-0003/26` — Exportar | 7 orçamentos listados com o valor de cada um; Job 2 e Job 3 (jobs abertos) em alerta e rodapé travado; "Desmarcar jobs abertos" → 5 de 7, R$ 190.559,29; confirmação dos aprovados; download de `orcamentos-TESTE-0003-26.xlsx`: 1 aba, 5 seções, ids na H oculta, fórmulas com cache, FATURAMENTO = total do seletor |
+| Visão agregada — Exibir | desmarcar Job 1 → faixa "Exibindo 6 de 7", o card do Job 1 some, indicadores do topo intactos; "Exibir todos" restaura; Exportar da agregada abre com a mesma lista e a mesma trava |
+| Projeto — Importar | arquivo exportado de produção e editado por script (B1: "Item B1" 100 → 120; Abas Versões, aprovado: linha nova "Fotografia" 800 × 1 × 2). Preview: Job 1 e B2 "Nada mudou"; B1 "1 alterada, R$ 600 → R$ 620 → v3"; B3 "já virou job — não entra"; Abas Versões "1 nova, R$ 47.000 → R$ 48.600 → v5, aprovação desfeita". "Criar 2 versões" → "2 versões criadas"; a lista recarregou com Abas Versões em "Orçamento" e 5 versões |
+| Banco, depois | B1 v3 rascunho com "Item B1" a 120 e "Item novo do cliente" intacto. Abas Versões: orçamento `em_revisao`, sem `versao_aprovada_id`, v4 `em_revisao`, v1–v3 (eram `substituida`) de volta a `em_revisao` pela cascata do "Cancelar aprovação", v5 rascunho com os 5 itens e o planejado de cada um **preservado** (AR 1.300, B 11.000, B 2.500…) mais "Fotografia" com planejado zero e rastro "linha 30". 2 linhas em `orcamento_importacoes` com o arquivo no bucket; auditoria `importada` ×2 e `aprovacao_cancelada` ×1 |
+| Tela do orçamento B1 | v3 "mais recente", Valor do Job R$ 694,40; "Exportar planilha" baixou `orcamento-TESTE-0003_26-04-v3.xlsx` com fórmulas e `orc:|v:` na H1 |
+
+**Achado da verificação ao vivo:** em `A` e `D` o planejado da linha
+casada **não** fica o da versão anterior — o trigger
+`trg_planejado_espelha_orcado` (decisão 022) o iguala ao orçado novo
+("Item B1", tipo A, chegou com planejado 120, e não 100). É o
+comportamento certo desses tipos; "preservar o planejado" vale para
+`AR`, `B`, `C`, `F` e `FI`, e foi assim que os itens do Abas Versões
+saíram. Registrado na decisão 041.
+
+⚠️ **Dado de teste que ficou:** `TESTE-0003/26-04` com v2 e v3,
+`TESTE-0003/26-05` desaprovado com v2, `TESTE-0003/26-07` desaprovado
+com v5. Para voltar cada um: deletar a versão nova e aprovar a anterior
+pela tela. Detalhe no registro de testes local.
