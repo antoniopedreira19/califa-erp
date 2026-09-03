@@ -137,7 +137,7 @@ export async function carregarDetalheDoJob(
     supabase
       .from("pedidos_compra")
       .select(
-        "*, emitido:profiles!emitida_por(nome), responsavel:profiles!responsavel_verba_id(nome), anexos:pedidos_compra_anexos(id, arquivo_nome_original, arquivo_tamanho_bytes), parcelas:pedidos_compra_parcelas(id, tenant_id, pedido_compra_id, numero, data_vencimento, valor, pdf_path, pago_em, pago_por, created_at, updated_at, created_by)",
+        "*, emitido:profiles!emitida_por(nome), enviado:profiles!enviada_financeiro_por(nome), responsavel:profiles!responsavel_verba_id(nome), anexos:pedidos_compra_anexos(id, arquivo_nome_original, arquivo_tamanho_bytes), parcelas:pedidos_compra_parcelas(id, tenant_id, pedido_compra_id, numero, data_vencimento, valor, pdf_path, pago_em, pago_por, created_at, updated_at, created_by)",
       )
       .eq("job_id", raw.id)
       .eq("tenant_id", session.activeTenant.id)
@@ -346,6 +346,7 @@ export async function carregarDetalheDoJob(
     dias_meses: Number(pp.dias_meses ?? 0),
     valor: Number(pp.valor),
     emitida_por_nome: pp.emitido?.nome ?? null,
+    enviada_financeiro_por_nome: pp.enviado?.nome ?? null,
     grupo_nome: grupoPorItemRealizadoId.get(pp.item_realizado_id) ?? null,
     parcelas: (pp.parcelas ?? [])
       .map((p: any) => ({ ...p, valor: Number(p.valor ?? 0) }))

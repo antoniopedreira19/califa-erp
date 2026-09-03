@@ -28,13 +28,11 @@ import {
 
 export interface DadosPpLinha {
   itemRealizadoId: string;
-  /** Quanto o item permite em PPs — o ORÇADO dele. Era o realizado até
-   *  21/08/2026; com o realizado passando a ser a própria soma das PPs,
-   *  esperar por ele deixaria a metade PP invisível para sempre, porque
-   *  a primeira PP nunca poderia nascer. */
-  baseDisponivel: number;
   /** Todas as PPs ativas do item — desde 17/08/2026 podem ser várias. */
   pedidos: PedidoCompra[];
+  /** Quantas dessas ainda estão GERADAS, sem envio ao financeiro. Vira o
+   *  círculo vermelho no canto do chip (02/09/2026). */
+  pendentes: number;
   /** Placeholder otimista antes do refresh do server chegar. Só tem
    *  `codigo`. Some quando a PP real chega via prop. */
   otimista: { codigo: string } | null;
@@ -72,36 +70,47 @@ export function CalhaLinha({
 
 /** Regra de quando a PP aparece — e o que a metade faz.
  *
- *  Item sem orçado não tem o que pedir, e é só isso que esconde a metade
- *  hoje. Até 21/08/2026 quem mandava aqui era o realizado lançado à mão;
- *  em A · Repasse isso fazia a linha começar com a pílula inteira do BV e
- *  só se dividir depois. Agora ela já nasce dividida — a PP é justamente
- *  o que vai construir o realizado.
+ *  Quem decide se a linha tem PP é o TIPO de custo, na tabela. Aqui não
+ *  há mais filtro por valor: até 02/09/2026 item com orçado zero escondia
+ *  a metade, o que deixava a linha vermelha — que nasce zerada de
+ *  propósito — sem caminho nenhum para a PP que é a única coisa que ela
+ *  faz. Com o teto por PP fora, o valor do item não decide mais nada.
  *
  *  Desde 17/08/2026 os dois caminhos levam ao MESMO lugar: o painel
  *  "Destrinchar realizado". Um item pode ter várias PPs, então "Ver PP"
  *  não sabia mais qual PDF abrir — quem escolhe é o painel, que lista
  *  todas. O que muda é só o rótulo: sem PP é criação ("Gerar PP", em
- *  vermelho); com PP é consulta ("PPs · N", neutro), como o design pede. */
+ *  vermelho); com PP é consulta ("PPs · N", neutro), como o design pede.
+ *
+ *  O chip carrega o contador de PPs geradas e ainda não enviadas ao
+ *  financeiro (02/09/2026) — as pendências ficam visíveis sem abrir o
+ *  painel. Zerado, o círculo não aparece. */
 function descreverPp(pp: DadosPpLinha | null): AcaoCalha | null {
   if (!pp) return null;
-  if (pp.baseDisponivel <= 0) return null;
 
   const quantas = pp.pedidos.length + (pp.otimista ? 1 : 0);
+  // A PP otimista acabou de ser gerada: é pendência até o refresh trazer
+  // a linha real.
+  const pendentes = pp.pendentes + (pp.otimista ? 1 : 0);
   const abrir = () => pp.onAbrirPainel(pp.itemRealizadoId);
 
   if (quantas > 0) {
+    const base =
+      quantas === 1
+        ? "1 Pedido de Produção neste item"
+        : `${quantas} Pedidos de Produção neste item`;
     return {
       chave: "pp",
       rotulo: `PPs · ${quantas}`,
       sigla: `PP·${quantas}`,
       titulo:
-        quantas === 1
-          ? "1 Pedido de Produção neste item"
-          : `${quantas} Pedidos de Produção neste item`,
+        pendentes > 0
+          ? `${base} · ${pendentes} aguardando envio ao financeiro`
+          : base,
       icone: Eye,
       criar: false,
       onClick: abrir,
+      badge: pendentes,
     };
   }
 

@@ -62,9 +62,11 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 036 | [Filtro "Meus" nas listas, e Produto/Regional em Jobs](036-filtro-meus-e-produto-regional-nas-listas.md) | 2026-09-01 |
 | 037 | [Serviço no orçamento, Equipe no projeto, e "Produto" vira "Marca"](037-servico-no-orcamento-equipe-no-projeto-e-marca.md) | 2026-09-02 |
 | 038 | [As duas previsões do job viraram um card só, "Previsões"](038-previsoes-em-tabela-unica.md) | 2026-09-02 |
+| 039 | [A PP nasce gerada, e enviar ao financeiro é outra ação](039-pp-nasce-gerada-e-o-envio-ao-financeiro-e-uma-acao.md) | 2026-09-02 |
+| 040 | [A errata não toca linha com PP no financeiro, e trava o envio de PP até a revisão da abertura](040-errata-nao-toca-linha-com-pp-e-trava-o-envio-de-pp.md) | 2026-09-02 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
 > data é a da decisão, não a da posição na fila.
 
-**Próximo número livre: 039.**
+**Próximo número livre: 041.**

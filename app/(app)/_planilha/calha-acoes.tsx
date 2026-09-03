@@ -82,6 +82,27 @@ export interface AcaoCalha {
   criar: boolean;
   disabled?: boolean;
   onClick?: () => void;
+  /** Contador de pendências da ação — o círculo vermelho no canto da
+   *  pílula. Zero ou ausente: nenhum círculo. Nasceu para as PPs geradas
+   *  e ainda não enviadas ao financeiro (02/09/2026). */
+  badge?: number;
+}
+
+/** O círculo de pendências, no canto superior direito da pílula.
+ *
+ *  Fica FORA da moldura de propósito (top/right negativos): dentro dela a
+ *  pílula dividida, que tem `overflow-hidden`, cortaria o círculo. Por
+ *  isso ele é desenhado por `CalhaAcoes`, num invólucro relativo, e não
+ *  por cada metade. */
+function Notificacao({ n }: { n: number }) {
+  return (
+    <span
+      aria-label={`${n} ${n === 1 ? "pendência" : "pendências"}`}
+      className="pointer-events-none absolute -right-[7px] -top-[7px] box-border inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full border-2 border-white bg-california-red px-1 font-mono text-[10.5px] font-bold leading-none text-white"
+    >
+      {n}
+    </span>
+  );
 }
 
 /** Ícone da consulta em cinza, como na pílula de hoje: o verbo é do
@@ -149,18 +170,31 @@ function Inteira({ acao }: { acao: AcaoCalha }) {
 export function CalhaAcoes({ acoes }: { acoes: AcaoCalha[] }) {
   if (acoes.length === 0) return null;
 
-  if (acoes.length === 1) return <Inteira acao={acoes[0]} />;
+  const corpo =
+    acoes.length === 1 ? (
+      <Inteira acao={acoes[0]} />
+    ) : (
+      <span className={cn(MOLDURA, "inline-flex items-stretch overflow-hidden")}>
+        {acoes.map((acao, i) => (
+          <React.Fragment key={acao.chave}>
+            {i > 0 && (
+              <span className="w-px flex-none bg-border" aria-hidden />
+            )}
+            <Meia acao={acao} />
+          </React.Fragment>
+        ))}
+      </span>
+    );
+
+  // Uma pílula, um círculo: as pendências das ações da linha somam. Hoje
+  // só a PP tem contador, então a soma é ela mesma.
+  const pendencias = acoes.reduce((s, a) => s + (a.badge ?? 0), 0);
+  if (pendencias <= 0) return corpo;
 
   return (
-    <span className={cn(MOLDURA, "inline-flex items-stretch overflow-hidden")}>
-      {acoes.map((acao, i) => (
-        <React.Fragment key={acao.chave}>
-          {i > 0 && (
-            <span className="w-px flex-none bg-border" aria-hidden />
-          )}
-          <Meia acao={acao} />
-        </React.Fragment>
-      ))}
+    <span className="relative inline-flex">
+      {corpo}
+      <Notificacao n={pendencias} />
     </span>
   );
 }

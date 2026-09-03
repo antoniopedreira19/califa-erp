@@ -2159,3 +2159,90 @@ O que mudou nas telas daqui. O detalhe completo está na nota de
   Ponto que importa na operação: **o saldo não expira** — segue oferecido
   depois da nota emitida, do recebimento e do **encerramento do job**.
   Detalhe e prova na nota de 2026-09-01 da decisão 028.
+
+---
+
+## ⚠️ Nota de 2026-09-02 — a PP nasce gerada; a errata não toca linha com PP
+
+Regras em `docs/decisions/039-pp-nasce-gerada-e-o-envio-ao-financeiro-e-uma-acao.md`
+e `040-errata-nao-toca-linha-com-pp-e-trava-o-envio-de-pp.md`. Design:
+`PPs - Gerar e Enviar ao Financeiro.dc.html` (projeto Claude Design
+`69342d83`). Migrations `20260902160001` e `20260902160002`.
+
+**Isto muda as seções 4, 20, 33 e a nota de 21/08 ("O saldo da PP vem do
+orçado").**
+
+### O que mudou para quem gera PP
+
+- **"Gerar PP" não envia mais.** A PP nasce com status `gerada`, com
+  código e PDF, e fica no job. O painel "Destrinchar realizado" ganhou
+  dois blocos: **Aguardando envio** (com Enviar ao financeiro, editar,
+  ver e cancelar por PP) e **Já no financeiro** (status + ver).
+- **Planejado no lugar do orçado**, no painel e no formulário. "Em PPs
+  emitidas" soma só o que já chegou ao financeiro e acende em vermelho
+  acima do planejado. O Saldo e o "máximo aceito" saíram.
+- **Sem teto por PP.** O trigger `pp_valida_saldo_do_item` foi removido.
+  Passar do planejado não impede gerar; no envio, pede o responsável do
+  job ou administrador, com o pop-up "Enviar PP acima do planejado?".
+  Linha vermelha (planejado zero) sempre cai nele — e finalmente aparece
+  na calha, que escondia a metade PP em item de valor zero.
+- **Anexo opcional para gerar, obrigatório para enviar** (fora da verba
+  de produção). A PP sem anexo mostra o pedido de NF em vermelho na
+  própria linha, com o botão de enviar desabilitado.
+- **Editar PP gerada** reabre o mesmo formulário (`GerarPPDrawer`, com
+  `ppEditando`), permite mudar tudo — parcelamento e verba inclusive — e
+  regera os PDFs. Server action `editarPedidoCompraGerada`.
+- **Cancelar PP gerada** é o cancelamento de sempre (status `cancelada`).
+- **O chip `PPs · N` da calha carrega um círculo vermelho** com as PPs
+  geradas e não enviadas (`AcaoCalha.badge`, desenhado por `CalhaAcoes`
+  fora da moldura para a pílula dividida não cortá-lo).
+- **Aba "Pedidos de Produção":** chip "Gerada", cancelar da gerada e o
+  número de PPs aguardando envio no card de resumo. Enviar e editar a
+  gerada ficam no painel do item, onde o design os desenhou.
+- **Fio de Comunicação de PPs:** a PP gerada fica fora; o card "PP
+  emitida" é o envio (`enviada_financeiro_em` / `_por`).
+
+### O que mudou para quem faz errata
+
+- **Linha com PP no financeiro não entra em errata** — nem valor, QT,
+  D/M, tipo, nem remover. Cadeado ao lado do nome, células de leitura,
+  Remover desabilitado com o motivo. Servidor:
+  `barrarLinhaComPPNoFinanceiro`. A regra de §20 (trava só na troca de
+  tipo) caiu; `barrarTrocaDeTipo` ficou só com o BV.
+- **Com a abertura em revisão, nenhuma PP é enviada** (nem reenviada).
+  Servidor: `barrarEnvioEmRevisao`. Barra do job: "Aguardando revisão da
+  abertura desde a última errata". O status do job continua `aberto`.
+
+### Arquivos
+
+| Arquivo | Mudança |
+|---|---|
+| `realizado/actions-pp.ts` | `gerada` no insert; sem saldo; `enviarPedidoCompraAoFinanceiro`, `editarPedidoCompraGerada`; PDFs por `renderizarDocumentosDaPP` (um helper para geração, edição e reenvio) |
+| `realizado/painel-pps-item.tsx` | reescrito no layout do design |
+| `realizado/gerar-pp-drawer.tsx` | planejado, prévia de "Em PPs emitidas", modo edição, anexo opcional |
+| `realizado/calha-linha.tsx` · `_planilha/calha-acoes.tsx` | contador de pendências; sem filtro por valor |
+| `realizado/job-item-realizado-table.tsx` | fiação nova; `travadasPorPP` no modo errata |
+| `realizado/actions-errata.ts` | `barrarLinhaComPPNoFinanceiro` |
+| `pps/editar-pp-drawer.tsx` | confirmação acima do planejado no reenvio |
+| `lib/calculos/pps-item.ts` | `somaDasPPsEmitidas`, `contarPendentes`, `passaDoPlanejado`; `saldoDoItem`/`passaDoSaldo` removidos |
+| `lib/types.ts` | `PPStatus` com `gerada`; `ppChegouAoFinanceiro`; `PP_STATUS_EM_ABERTO` inclui gerada |
+
+### Verificado ao vivo (02–03/09/2026)
+
+`tsc --noEmit`, `next lint` e `npm run build` limpos (build numa cópia
+isolada, para não corromper o `.next` do dev server). No navegador,
+logado, no JOB-0016 (projeto Teste Alterações), JOB-0013 e JOB-0002:
+
+| Cenário | Resultado |
+|---|---|
+| Gerar PP sem anexo, R$ 12.000 > planejado 10.000 (PP-00018) | nasceu `gerada`; realizado do item seguiu 0; chip com círculo "1"; aviso âmbar no formulário |
+| Painel do item | "Enviar ao financeiro" travado, pedido de NF em vermelho na linha |
+| Editar a gerada para R$ 9.000 | gravou; parcela e PDF regerados; auditoria `gerada` + `editada`. **Achado:** `pedidos_compra_parcelas` não tinha DELETE — migration `20260902160003` |
+| PP de verba R$ 21.000 > planejado 20.000 (PP-00019) → Enviar | pop-up "Enviar PP acima do planejado?" com os números → `em_avaliacao`, `enviada_financeiro_por` = Tiago, realizado 21.000, chip sem círculo |
+| Gerar PP com NF anexada pelo formulário (PP-00020, R$ 5.000) → Enviar | anexo liberou o botão; dentro do planejado foi direto, sem pop-up |
+| Cancelar gerada (painel) e em avaliação (aba de PPs) | canceladas; realizado voltou; aba com chip "Gerada" e "aguardando envio" no card |
+| JOB-0013, modo errata | Item 1 (PP-00008 em avaliação): cadeado, células de leitura, tipo sem seletor, Remover desabilitado com o motivo; Item 2 editável. Descartado sem gravar |
+| JOB-0002, corrigir PP-00006 rejeitada (R$ 18.000 > planejado 16.000) | "Salvar e reenviar" abriu "Reenviar PP acima do planejado?" com os números; "Voltar" — nada gravado |
+| JOB-0016 com `abertura_em_revisao` ligada por SQL (revertida depois) | painel com a faixa âmbar e "Enviar" travado; `enviarPedidoCompraAoFinanceiro(id, true)` chamada direto pelo console recusou com a mensagem da revisão; JOB-0030 (em revisão de verdade) mostrou o selo novo na barra |
+
+PPs de teste (PP-00018 a PP-00021) ficaram `cancelada`, que é o fim normal.

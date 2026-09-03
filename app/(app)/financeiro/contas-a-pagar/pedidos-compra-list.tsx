@@ -113,6 +113,10 @@ export interface PPRow {
 
 function statusBadgeClasses(status: PPStatus): string {
   switch (status) {
+    // Gerada nunca chega a esta tela (o financeiro só lê a partir de
+    // em_avaliacao); o caso existe para o mapa continuar exaustivo.
+    case "gerada":
+      return "bg-[#f6f6f6] text-foreground border-[#d7d7d7]";
     case "em_avaliacao":
       return "bg-[#fffbeb] text-[#92400e] border-[#fde68a]";
     case "aprovada":
@@ -181,6 +185,7 @@ export function PedidosCompraList({
   const contagens = React.useMemo(() => {
     const c: Record<FiltroStatus, number> = {
       todas: rowsPorRegional.length,
+      gerada: 0,
       em_avaliacao: 0,
       aprovada: 0,
       pago: 0,

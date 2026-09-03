@@ -28,6 +28,7 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
 import { format } from "date-fns";
 import { cn, formatCurrency } from "@/lib/utils";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   PP_ANEXO_MIMETYPES_ACEITOS,
   PP_ANEXO_TAMANHO_MAX_BYTES,
@@ -39,6 +40,7 @@ import { valorDaPPPorUnidade } from "@/lib/calculos/pps-item";
 import {
   prefixoAnexosPedidoCompra,
   reenviarPedidoCompra,
+  type AcimaDoPlanejado,
 } from "../realizado/actions-pp";
 
 interface Props {
@@ -111,6 +113,11 @@ export function EditarPPDrawer({
   const [drawerKey, setDrawerKey] = React.useState(0);
   const submittingRef = React.useRef(false);
   const sucessoRef = React.useRef(false);
+  /** O reenvio passaria do planejado do item: o servidor devolveu os
+   *  números e espera o "sim" antes de aceitar (02/09/2026). */
+  const [confirmando, setConfirmando] = React.useState<AcimaDoPlanejado | null>(
+    null,
+  );
 
   const ppId = pp?.id ?? null;
 
@@ -243,7 +250,7 @@ export function EditarPPDrawer({
     }
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  function handleSubmit(e: React.FormEvent, confirmarAcimaDoPlanejado = false) {
     e.preventDefault();
     setErro(null);
     if (!ppId) return;
@@ -304,13 +311,21 @@ export function EditarPPDrawer({
             mimetype: a.file.type as PPAnexoMimetype,
           })),
           Array.from(removidos),
+          confirmarAcimaDoPlanejado,
         );
 
         if (!res.ok) {
+          // Reenviar é enviar: acima do planejado pede o "tem certeza?"
+          // com os números do servidor, e volta aqui com o flag.
+          if (res.acimaDoPlanejado) {
+            setConfirmando(res.acimaDoPlanejado);
+            return;
+          }
           setErro(res.message);
           return;
         }
 
+        setConfirmando(null);
         sucessoRef.current = true;
         onSuccess?.(pp?.codigo ?? "");
         onOpenChange(false);
@@ -328,6 +343,38 @@ export function EditarPPDrawer({
         <DialogHeader className="border-b border-border px-6 pb-4 pt-6">
           <DialogTitle>Editar Pedido de Produção · {pp.codigo}</DialogTitle>
         </DialogHeader>
+
+        <ConfirmDialog
+          open={confirmando !== null}
+          onOpenChange={(o) => !o && setConfirmando(null)}
+          title="Reenviar PP acima do planejado?"
+          description={
+            confirmando ? (
+              <>
+                Com {pp.codigo} corrigida o item passa a ter{" "}
+                <strong className="font-mono text-foreground">
+                  {formatCurrency(confirmando.emPPsDepois, "BRL")}
+                </strong>{" "}
+                em PPs,{" "}
+                <strong className="font-mono text-foreground">
+                  {formatCurrency(confirmando.excedente, "BRL")}
+                </strong>{" "}
+                acima do planejado de{" "}
+                {formatCurrency(confirmando.planejado, "BRL")}. O reenvio ao
+                financeiro é registrado no seu nome.
+              </>
+            ) : null
+          }
+          confirmLabel="Sim, reenviar"
+          cancelLabel="Voltar"
+          pending={pending}
+          onConfirm={() =>
+            handleSubmit(
+              { preventDefault() {} } as React.FormEvent,
+              true,
+            )
+          }
+        />
 
         <form onSubmit={handleSubmit} className="flex flex-1 flex-col overflow-hidden">
           <div className="flex-1 space-y-4 overflow-y-auto p-6">

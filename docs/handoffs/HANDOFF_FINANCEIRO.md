@@ -3265,3 +3265,37 @@ recebimento e de custos"); os rótulos dos blocos seguem os termos do
 sistema, com "cronograma de desembolsos" e não "curva"; e o texto de
 rodapé é o nosso, porque o do protótipo descrevia um comportamento de
 curva de custos que não é o nosso.
+
+---
+
+## ⚠️ Nota de 2026-09-02 — PP gerada é invisível aqui; revisão de abertura trava o envio de PP
+
+Regras em `docs/decisions/039` e `040`. O que muda para o financeiro:
+
+- **A PP passa a nascer `gerada`, no job.** Só entra em Contas a Pagar
+  (em avaliação) quando o GP a envia — `pedidos_compra.enviada_financeiro_em`
+  e `enviada_financeiro_por` registram o envio; `emitida_por` continua
+  sendo quem gerou. As 17 PPs existentes foram backfilladas com a data e
+  o autor da geração, que era o único caminho até então.
+- **Nada do financeiro vê PP gerada**: a leitura de Contas a Pagar
+  (`contas-a-pagar/page.tsx`) e o card de PPs do job (`financeiro/jobs/
+  [jobId]/dados.ts`) ganharam `.neq("status", "gerada")` — sem isso o chip
+  "Todas" de Contas a Pagar mostraria a gerada —, e o consumo que congela
+  a previsão da abertura (`abertura-de-job/consumo.ts`) exclui a gerada.
+  `vw_a_pagar` e `vw_fluxo_caixa` já filtravam `aprovada`/`pago`.
+- **`recalcular_realizado_do_item`** passou a excluir `gerada` além de
+  `cancelada`. O realizado da planilha é só o que chegou ao financeiro.
+- **O trigger `pp_valida_saldo_do_item` foi removido** (autorização do
+  Tiago, 02/09/2026): não há mais teto por PP no banco.
+- **Enquanto `jobs.abertura_em_revisao` estiver ligada, nenhuma PP chega
+  aqui** — o envio é recusado no servidor. O status do job segue
+  `aberto`; o que encerra a revisão continua sendo salvar a abertura
+  (decisão 030).
+
+**Verificado ao vivo (03/09/2026):** PP gerada não apareceu em Contas a
+Pagar nem no card de PPs do job; a enviada (PP-00020) entrou em avaliação
+com `enviada_financeiro_por` preenchido; com `abertura_em_revisao` ligada
+no JOB-0016 o servidor recusou o envio mesmo chamado direto pelo console.
+Achado na verificação: a leitura de `contas-a-pagar/page.tsx` não filtrava
+status e mostraria a gerada no chip "Todas" — ganhou `.neq("status",
+"gerada")`.

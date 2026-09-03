@@ -10,8 +10,8 @@ import { gerarCodigoPP } from "@/lib/codigos/pedidos-compra";
 import { listActiveMembers } from "@/lib/data/members";
 import {
   valorDaPPPorUnidade,
-  saldoDoItem,
-  passaDoSaldo,
+  somaDasPPsEmitidas,
+  passaDoPlanejado,
   parcelasFecham,
   dividirEmParcelas,
   proximoVencimento,
@@ -168,13 +168,14 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
         item_id: string | null;
         /** A linha da planilha a que esta âncora pertence. */
         job_item_orcado_id: string;
-        /** Linha vermelha: nasce com orçado zero para receber custo que o
-         *  orçamento não previu, e por isso NÃO tem teto de saldo. */
+        /** Linha vermelha: nasce com orçado e planejado zero para receber
+         *  custo que o orçamento não previu. Toda PP dela passa do
+         *  planejado, então todo envio dela passa pelo GP (02/09/2026). */
         linha_vermelha: boolean;
-        /** ORÇADO do item na cópia do job (`jobs_itens_orcado`) — a base
-         *  da fatia da PP e o teto do saldo desde 21/08/2026. Vem da
-         *  cópia, e não da versão aprovada, porque é a cópia que a errata
-         *  altera. */
+        /** PLANEJADO do item na cópia do job (`jobs_itens_orcado`) — a
+         *  referência da PP desde 02/09/2026 (era o orçado). Vem da cópia,
+         *  e não da versão aprovada, porque é a cópia que a errata altera. */
+        total_planejado: number;
         total_orcado: number;
         quantidade_orcada: number;
       };
@@ -188,6 +189,9 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
         nome: string;
         projeto_id: string | null;
         orcamento_id: string | null;
+        /** Errata devolveu o job ao mural: nenhuma PP sai para o
+         *  financeiro até a revisão da abertura ser salva (decisão 040). */
+        abertura_em_revisao: boolean;
       };
       supabase: ReturnType<typeof createClient>;
     }
@@ -207,15 +211,13 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
     return { ok: false, message: "Item realizado não encontrado." };
   }
 
-  // A base da PP é o ORÇADO do item, e ele mora na cópia do job. Sem esta
-  // linha não há como saber quanto o item comporta — e o trigger
-  // `pp_valida_saldo_do_item` recusaria de todo jeito.
+  // A referência da PP é o PLANEJADO do item, e ele mora na cópia do job.
   // A busca é pela CÓPIA (27/08/2026). A chave antiga fica de rede para o
   // realizado que por algum motivo não tenha sido repontado; a linha
   // criada por errata só existe pela chave nova.
   const buscaOrcado = supabase
     .from("jobs_itens_orcado")
-    .select("id, total_orcado, quantidade_orcada, linha_vermelha")
+    .select("id, total_orcado, total_planejado, quantidade_orcada, linha_vermelha")
     .eq("tenant_id", session.activeTenant.id);
 
   const { data: orcado, error: orcadoErr } = ancora.job_item_orcado_id
@@ -239,22 +241,27 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
     item_id: ancora.item_id,
     job_item_orcado_id: (orcado as any).id as string,
     linha_vermelha: (orcado as any).linha_vermelha === true,
+    total_planejado: Number((orcado as any).total_planejado ?? 0),
     total_orcado: Number(orcado.total_orcado ?? 0),
     quantidade_orcada: Number(orcado.quantidade_orcada ?? 0),
   };
 
-  const { data: job, error: jobErr } = await supabase
+  const { data: jobRow, error: jobErr } = await supabase
     .from("jobs")
     .select(
-      "id, tenant_id, status, responsavel_id, empresa_id, produto, nome, projeto_id, orcamento_id",
+      "id, tenant_id, status, responsavel_id, empresa_id, produto, nome, projeto_id, orcamento_id, abertura_em_revisao",
     )
     .eq("id", item.job_id)
     .eq("tenant_id", session.activeTenant.id)
     .maybeSingle();
 
-  if (jobErr || !job) {
+  if (jobErr || !jobRow) {
     return { ok: false, message: "Job não encontrado." };
   }
+  const job = {
+    ...jobRow,
+    abertura_em_revisao: (jobRow as any).abertura_em_revisao === true,
+  };
 
   // PP continua exigindo o job ABERTO, mesmo agora que a planilha
   // aparece na pré-abertura (17/08/2026): o pedido é compromisso de
@@ -266,7 +273,7 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
       entidadeTipo: "pedido_compra",
       entidadeId: null,
       metadata: {
-        acao_tentada: "pedido_compra.emitida",
+        acao_tentada: "pedido_compra.gerada",
         motivo: "status_bloqueia_edicao",
         status_atual: job.status,
       },
@@ -289,7 +296,7 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
       entidadeTipo: "pedido_compra",
       entidadeId: null,
       metadata: {
-        acao_tentada: "pedido_compra.emitida",
+        acao_tentada: "pedido_compra.gerada",
         motivo: "usuario_nao_e_responsavel_nem_admin",
       },
     });
@@ -303,36 +310,234 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
 }
 
 /**
- * Quanto do ORÇADO do item ainda pode virar PP.
+ * O que o item já tem em PPs que CHEGARAM ao financeiro — a base do teste
+ * do planejado no envio (02/09/2026).
  *
- * Era o realizado até 21/08/2026. Trocou porque o realizado passou a SER
- * a soma das PPs: comparar a soma com ela mesma nunca barraria nada, e a
- * primeira PP de um item nunca caberia.
+ * A gerada fica de fora: ela ainda pode ser editada ou cancelada sem
+ * passar por ninguém, e contá-la faria o item parecer mais gasto do que
+ * está. A rejeitada entra: vai ser corrigida e reenviada, então o
+ * dinheiro segue comprometido.
  *
- * `excetoPPId` serve ao reenvio: a PP que está sendo corrigida não pode
- * competir consigo mesma pelo saldo. Só o cancelamento devolve saldo —
- * PP rejeitada continua ocupando, porque vai ser corrigida e reenviada.
+ * `excetoPPId` serve ao reenvio da rejeitada: a PP que está sendo
+ * corrigida já está na soma, e não pode competir consigo mesma.
  */
-async function saldoDisponivelDoItem(
+async function somaEmitidasDoItem(
   supabase: ReturnType<typeof createClient>,
   tenantId: string,
   itemRealizadoId: string,
-  totalOrcado: number,
   excetoPPId?: string,
 ): Promise<number> {
   const query = supabase
     .from("pedidos_compra")
     .select("valor, status")
     .eq("item_realizado_id", itemRealizadoId)
-    .eq("tenant_id", tenantId)
-    .neq("status", "cancelada");
+    .eq("tenant_id", tenantId);
 
   const { data } = excetoPPId ? await query.neq("id", excetoPPId) : await query;
 
-  return saldoDoItem(
-    totalOrcado,
+  return somaDasPPsEmitidas(
     (data ?? []).map((pp) => ({ valor: Number(pp.valor), status: pp.status })),
   );
+}
+
+/**
+ * O envio pediu confirmação: o item passaria do planejado.
+ *
+ * Não é erro de validação — é a regra de 02/09/2026: acima do planejado,
+ * só o responsável do job ou administrador envia, e depois de ver o
+ * quanto o item fica acima. O cliente mostra o "tem certeza?" com estes
+ * números e chama de novo com `confirmarAcimaDoPlanejado = true`.
+ */
+export interface AcimaDoPlanejado {
+  planejado: number;
+  emPPsDepois: number;
+  excedente: number;
+}
+
+export type ResultadoEnvio =
+  | { ok: true; codigo: string }
+  | { ok: false; message: string; acimaDoPlanejado?: AcimaDoPlanejado };
+
+/** O que o PDF da PP carrega além dela: projeto, orçamento, cliente e o
+ *  responsável do projeto. Uma leitura só, usada pela geração, pela edição
+ *  e pelo reenvio — os três documentos têm que sair iguais. */
+interface ContextoPdf {
+  projeto: { codigo: string; campanha: string | null };
+  orcamento: { codigo: string };
+  cliente: { nome_fantasia: string };
+  responsavelNome: string;
+}
+
+async function carregarContextoPdf(
+  supabase: ReturnType<typeof createClient>,
+  tenantId: string,
+  job: { projeto_id: string | null; orcamento_id: string | null },
+): Promise<ContextoPdf> {
+  const [projetoRes, orcRes] = await Promise.all([
+    supabase
+      .from("projetos")
+      .select(
+        "id, codigo, campanha, cliente:clientes(nome_fantasia), responsavel:profiles!responsavel_id(nome)",
+      )
+      .eq("id", job.projeto_id ?? "")
+      .eq("tenant_id", tenantId)
+      .maybeSingle(),
+    supabase
+      .from("orcamentos")
+      .select("id, codigo")
+      .eq("id", job.orcamento_id ?? "")
+      .eq("tenant_id", tenantId)
+      .maybeSingle(),
+  ]);
+
+  const projeto = projetoRes.data as {
+    codigo: string;
+    campanha: string | null;
+    cliente: { nome_fantasia: string } | null;
+    responsavel: { nome: string } | null;
+  } | null;
+  const orcamento = orcRes.data as { codigo: string } | null;
+
+  return {
+    projeto: { codigo: projeto?.codigo ?? "", campanha: projeto?.campanha ?? null },
+    orcamento: { codigo: orcamento?.codigo ?? "" },
+    cliente: { nome_fantasia: projeto?.cliente?.nome_fantasia ?? "" },
+    responsavelNome: projeto?.responsavel?.nome ?? "",
+  };
+}
+
+/**
+ * Um documento POR PARCELA (Tela 2.3), renderizado em memória.
+ *
+ * O fornecedor recebe um PDF por vencimento, e é ele que o financeiro
+ * confere na hora de pagar. Tudo idêntico entre eles, menos o Prazo de
+ * Pagto, a linha "Parcela: N/T" e o valor em destaque. Verba de Produção
+ * também gera PDF, com layout adaptado — ver `lib/pdf/pedido-compra.ts`.
+ *
+ * Quem chama decide o que fazer com o buffer: a geração desfaz a PP se o
+ * upload falhar; a edição e o reenvio sobrescrevem o documento anterior.
+ */
+async function renderizarDocumentosDaPP(args: {
+  tenantId: string;
+  jobId: string;
+  ppId: string;
+  codigo: string;
+  pp: {
+    servico: string;
+    quantidade: number;
+    especificacoes: string | null;
+    valor: number;
+    verba_producao: boolean;
+  };
+  empresa: unknown;
+  fornecedor: unknown | null;
+  responsavelVerbaNome: string | null;
+  job: { nome: string; produto: string };
+  contexto: ContextoPdf;
+  parcelas: Array<{ id: string; numero: number; data_vencimento: string; valor: number }>;
+}): Promise<Array<{ parcelaId: string; path: string; buffer: Buffer }>> {
+  // Import dinâmico: só carrega pdfmake QUANDO vai gerar PDF, isolando
+  // seus side-effects de inicialização do resto do módulo.
+  const { renderPedidoCompraPDF } = await import("@/lib/pdf/pedido-compra");
+  const emitidoEm = new Date().toISOString();
+  const documentos: Array<{ parcelaId: string; path: string; buffer: Buffer }> = [];
+
+  for (const parcela of args.parcelas) {
+    const buffer = await renderPedidoCompraPDF({
+      pp: {
+        codigo: args.codigo,
+        servico: args.pp.servico,
+        quantidade: args.pp.quantidade,
+        especificacoes: args.pp.especificacoes,
+        valor: args.pp.valor,
+        prazo_pagamento: parcela.data_vencimento,
+        created_at: emitidoEm,
+        verba_producao: args.pp.verba_producao,
+      },
+      empresa: args.empresa as never,
+      fornecedor: (args.fornecedor ?? null) as never,
+      responsavelVerbaNome: args.responsavelVerbaNome,
+      job: args.job,
+      projeto: args.contexto.projeto,
+      orcamento: args.contexto.orcamento,
+      cliente: args.contexto.cliente,
+      responsavelNome: args.contexto.responsavelNome,
+      parcela: {
+        numero: parcela.numero,
+        total: args.parcelas.length,
+        data_vencimento: parcela.data_vencimento,
+        valor: parcela.valor,
+      },
+    });
+    documentos.push({
+      parcelaId: parcela.id,
+      path: caminhoPdfParcela(
+        args.tenantId,
+        args.jobId,
+        args.ppId,
+        args.codigo,
+        parcela.numero,
+        args.parcelas.length,
+      ),
+      buffer,
+    });
+  }
+
+  return documentos;
+}
+
+/**
+ * A errata devolveu o job ao mural: nenhuma PP sai para o financeiro até
+ * a revisão da abertura ser salva (decisão 040, 02/09/2026).
+ *
+ * Gerar, editar e cancelar continuam liberados — é o ENVIO que fecha,
+ * junto com o faturamento, que já fechava desde a decisão 030.
+ */
+async function barrarEnvioEmRevisao(
+  tenantId: string,
+  ppId: string,
+  job: { id: string; abertura_em_revisao: boolean },
+): Promise<Err | null> {
+  if (!job.abertura_em_revisao) return null;
+  await logAuditEvent({
+    acao: "acao_negada",
+    tenantId,
+    entidadeTipo: "pedido_compra",
+    entidadeId: ppId,
+    metadata: {
+      acao_tentada: "pedido_compra.enviada_financeiro",
+      motivo: "abertura_em_revisao",
+      job_id: job.id,
+    },
+  });
+  return {
+    ok: false,
+    message:
+      "A abertura deste job está em revisão no financeiro desde a última errata. Nenhuma PP pode ser enviada até a revisão ser salva — a PP fica gerada, no job.",
+  };
+}
+
+/**
+ * Acima do planejado, o envio pede confirmação explícita (02/09/2026).
+ *
+ * Devolve o pedido de confirmação com os números, ou null quando o envio
+ * pode seguir — seja porque cabe no planejado, seja porque quem envia já
+ * confirmou. Quem PODE confirmar é o mesmo gate de gerar: responsável do
+ * job ou administrador (decisão do Tiago, 02/09/2026).
+ */
+function pedirConfirmacaoAcimaDoPlanejado(
+  emPPsDepois: number,
+  planejado: number,
+  confirmado: boolean,
+): ResultadoEnvio | null {
+  if (!passaDoPlanejado(emPPsDepois, planejado)) return null;
+  if (confirmado) return null;
+  const excedente = Math.round((emPPsDepois - planejado) * 100) / 100;
+  return {
+    ok: false,
+    message: `Com esta PP o item passa a ter ${brl(emPPsDepois)} em PPs, ${brl(excedente)} acima do planejado de ${brl(planejado)}. Confirme o envio.`,
+    acimaDoPlanejado: { planejado, emPPsDepois, excedente },
+  };
 }
 
 /**
@@ -361,30 +566,12 @@ async function reservarPedidoCompraImpl(
   const gate = await checarGatesRealizado(itemRealizadoId);
   if (!gate.ok) return gate;
 
-  const { item, job, session, supabase } = gate;
+  const { job, session } = gate;
 
-  if (item.total_orcado <= 0) {
-    return { ok: false, message: "Item sem valor orçado — não há o que pedir." };
-  }
-
-  // PP já existente não bloqueia mais: o item aceita quantas PPs forem
-  // necessárias, de quantos fornecedores forem (17/08/2026). O que
-  // bloqueia é o item já estar inteiro em PPs — sem saldo não há o que
-  // pedir, e o usuário merece saber disso ANTES de preencher o formulário.
-  const saldo = await saldoDisponivelDoItem(
-    supabase,
-    session.activeTenant.id,
-    itemRealizadoId,
-    item.total_orcado,
-  );
-  if (saldo <= 0) {
-    return {
-      ok: false,
-      message:
-        "O orçado deste item já está inteiro em PPs. Cancele uma PP ou faça uma errata no orçado para pedir mais.",
-    };
-  }
-
+  // Nada barra a reserva desde 02/09/2026: o item aceita quantas PPs
+  // forem necessárias, sem teto por PP. Passar do planejado não impede
+  // gerar — muda quem pode ENVIAR, e isso se decide no envio. A linha
+  // vermelha, que nasce zerada, finalmente ganha caminho para PP.
   const pp_id = crypto.randomUUID();
   const upload_prefix = `${session.activeTenant.id}/${job.id}/${pp_id}/anexos/`;
 
@@ -432,14 +619,12 @@ async function finalizarPedidoCompraImpl(
   }
   const d = dadosParsed.data;
 
-  // ---- Valor da PP e saldo do item ----
+  // ---- Valor da PP ----
   // O valor é o produto do trio que o GP digitou: R$ Unit. × QT × D/M. É
   // recalculado aqui de propósito — o cliente manda os três fatores, nunca
-  // o total. O que limita é o SALDO EM R$: a soma das PPs não canceladas
-  // do item não pode passar do orçado, a mesma conta que o painel
-  // "Destrinchar realizado" mostra e que o trigger
-  // `pp_valida_saldo_do_item` reforça no banco. A quantidade NÃO limita:
-  // 4 diárias a R$ 2.500 cabem num item orçado como 2 a R$ 5.000.
+  // o total. Nada limita o valor na geração (02/09/2026): o teto por PP
+  // saiu, e passar do planejado só muda quem pode enviar. A quantidade
+  // nunca limitou: 4 diárias a R$ 2.500 cabem num item de 2 a R$ 5.000.
   const valor = valorDaPPPorUnidade(
     d.valor_unitario,
     d.quantidade,
@@ -452,18 +637,12 @@ async function finalizarPedidoCompraImpl(
     };
   }
 
-  const saldo = await saldoDisponivelDoItem(
+  // Só para o registro de auditoria: o envio refaz esta conta na hora.
+  const emPPsAntes = await somaEmitidasDoItem(
     supabase,
     session.activeTenant.id,
     itemRealizadoId,
-    item.total_orcado,
   );
-  if (passaDoSaldo(valor, saldo)) {
-    return {
-      ok: false,
-      message: `A PP de ${brl(valor)} passa do saldo do item. Máximo aceito: ${brl(saldo)}.`,
-    };
-  }
 
   if (!parcelasFecham(d.parcelas.map((p) => p.valor), valor)) {
     return {
@@ -474,13 +653,11 @@ async function finalizarPedidoCompraImpl(
 
   // Valida anexos array.
   //
-  // Verba de Produção sai sem nota: ela é adiantamento, e a nota só existe
-  // depois que o responsável gasta. As notas dela entram na prestação de
-  // contas, que exige no mínimo uma (`fecharPrestacaoVerba`). A UI esconde
-  // o asterisco; a regra mora aqui (27/08/2026).
-  if (!d.verba_producao && anexos.length < 1) {
-    return { ok: false, message: "Pelo menos um anexo é obrigatório." };
-  }
+  // O anexo deixou de travar a GERAÇÃO em 02/09/2026: a PP pode nascer sem
+  // nota e ficar no job. O que exige o anexo é o ENVIO ao financeiro
+  // (`enviarPedidoCompraAoFinanceiro`). Verba de Produção segue sem anexo
+  // nos dois momentos: é adiantamento, e as notas entram na prestação de
+  // contas (27/08/2026).
   const anexosParsed = z.array(anexoUploadedSchema).safeParse(anexos);
   if (!anexosParsed.success) {
     return { ok: false, message: "Formato de anexo inválido." };
@@ -597,6 +774,8 @@ async function finalizarPedidoCompraImpl(
     prazo_pagamento: parcelasFinais[0].data_vencimento,
     pdf_path: "",
     emitida_por: session.profile.id,
+    // Nasce no job. O financeiro só a vê depois do envio (02/09/2026).
+    status: "gerada",
   });
 
   if (insertErr) {
@@ -693,36 +872,7 @@ async function finalizarPedidoCompraImpl(
   }
 
   // Carrega dados enriquecidos pro PDF
-  const [projetoRes, orcRes] = await Promise.all([
-    supabase
-      .from("projetos")
-      .select(
-        "id, codigo, campanha, cliente:clientes(nome_fantasia), responsavel:profiles!responsavel_id(nome)",
-      )
-      .eq("id", job.projeto_id ?? "")
-      .eq("tenant_id", session.activeTenant.id)
-      .maybeSingle(),
-    supabase
-      .from("orcamentos")
-      .select("id, codigo")
-      .eq("id", job.orcamento_id ?? "")
-      .eq("tenant_id", session.activeTenant.id)
-      .maybeSingle(),
-  ]);
-
-  type ProjetoEnriquecido = {
-    id: string;
-    codigo: string;
-    campanha: string | null;
-    cliente: { nome_fantasia: string } | null;
-    responsavel: { nome: string } | null;
-  } | null;
-  type OrcamentoRow = { id: string; codigo: string } | null;
-
-  const projeto = projetoRes.data as ProjetoEnriquecido;
-  const orcamento = orcRes.data as OrcamentoRow;
-  const responsavelNome = projeto?.responsavel?.nome ?? "";
-  const clienteNome = projeto?.cliente?.nome_fantasia ?? "";
+  const contexto = await carregarContextoPdf(supabase, session.activeTenant.id, job);
 
   // ---- Um documento POR PARCELA (Tela 2.3) ----
   // O fornecedor recebe um PDF por vencimento, e é ele que o financeiro
@@ -738,57 +888,34 @@ async function finalizarPedidoCompraImpl(
 
   {
     try {
-      // Import dinâmico: só carrega pdfmake QUANDO vai gerar PDF, isolando
-      // seus side-effects de inicialização do resto do módulo.
-      const { renderPedidoCompraPDF } = await import("@/lib/pdf/pedido-compra");
-      const emitidoEm = new Date().toISOString();
-      const responsavelVerbaNome = d.verba_producao
-        ? (responsavelRes.data?.nome ?? "")
-        : null;
-
-      for (const parcela of parcelas) {
-        const buffer = await renderPedidoCompraPDF({
+      documentos.push(
+        ...(await renderizarDocumentosDaPP({
+          tenantId: session.activeTenant.id,
+          jobId: job.id,
+          ppId: pp_id,
+          codigo,
           pp: {
-            codigo,
             servico: d.servico,
             quantidade: d.quantidade,
             especificacoes: d.especificacoes ?? null,
             valor,
-            prazo_pagamento: parcela.data_vencimento,
-            created_at: emitidoEm,
             verba_producao: d.verba_producao,
           },
-          empresa: empRes.data as never,
-          fornecedor: (fornRes.data ?? null) as never,
-          responsavelVerbaNome,
+          empresa: empRes.data,
+          fornecedor: fornRes.data ?? null,
+          responsavelVerbaNome: d.verba_producao
+            ? (responsavelRes.data?.nome ?? "")
+            : null,
           job: { nome: job.nome, produto: job.produto ?? "" },
-          projeto: {
-            codigo: projeto?.codigo ?? "",
-            campanha: projeto?.campanha ?? null,
-          },
-          orcamento: { codigo: orcamento?.codigo ?? "" },
-          cliente: { nome_fantasia: clienteNome },
-          responsavelNome,
-          parcela: {
-            numero: parcela.numero,
-            total: parcelas.length,
-            data_vencimento: parcela.data_vencimento,
-            valor: Number(parcela.valor),
-          },
-        });
-        documentos.push({
-          parcelaId: parcela.id,
-          path: caminhoPdfParcela(
-            session.activeTenant.id,
-            job.id,
-            pp_id,
-            codigo,
-            parcela.numero,
-            parcelas.length,
-          ),
-          buffer,
-        });
-      }
+          contexto,
+          parcelas: parcelas.map((p) => ({
+            id: p.id,
+            numero: p.numero,
+            data_vencimento: p.data_vencimento,
+            valor: Number(p.valor),
+          })),
+        })),
+      );
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       await supabase
@@ -882,7 +1009,7 @@ async function finalizarPedidoCompraImpl(
 
   // Audit
   await logAuditEvent({
-    acao: "pedido_compra.emitida",
+    acao: "pedido_compra.gerada",
     tenantId: session.activeTenant.id,
     entidadeTipo: "pedido_compra",
     entidadeId: pp_id,
@@ -893,7 +1020,10 @@ async function finalizarPedidoCompraImpl(
       quantidade: d.quantidade,
       dias_meses: d.dias_meses,
       parcelas: parcelasFinais.length,
-      saldo_do_item_antes: saldo,
+      planejado_do_item: item.total_planejado,
+      em_pps_emitidas_antes: emPPsAntes,
+      acima_do_planejado: passaDoPlanejado(emPPsAntes + valor, item.total_planejado),
+      anexos: anexosParsed.data.length,
       verba_producao: d.verba_producao,
       fornecedor_id: d.verba_producao ? null : (d.fornecedor_id ?? null),
       responsavel_verba_id: d.verba_producao ? (d.responsavel_verba_id ?? null) : null,
@@ -971,15 +1101,18 @@ export async function cancelarPedidoCompra(pp_id: string): Promise<Result> {
 
   if (ppErr || !pp) return { ok: false, message: "PP não encontrada." };
 
-  // Só PP em avaliação ou rejeitada pode ser cancelada. Paga, não: o
+  // PP gerada, em avaliação ou rejeitada pode ser cancelada. Paga, não: o
   // dinheiro já saiu, e desfazer isso é estorno, não cancelamento.
+  // Aprovada também não: ela já é título a pagar (decisão 027).
   if (!podeCancelarPP(pp.status as PPStatus)) {
     return {
       ok: false,
       message:
         pp.status === "cancelada"
           ? "PP já está cancelada."
-          : "PP já foi paga — cancelar exigiria estorno pelo financeiro.",
+          : pp.status === "aprovada"
+            ? "PP já foi aprovada pelo financeiro — é título a pagar. Peça a desaprovação antes de cancelar."
+            : "PP já foi paga — cancelar exigiria estorno pelo financeiro.",
     };
   }
 
@@ -1065,8 +1198,13 @@ export async function prefixoAnexosPedidoCompra(
     .maybeSingle();
 
   if (error || !pp) return { ok: false, message: "PP não encontrada." };
-  if (pp.status !== "rejeitada") {
-    return { ok: false, message: "Só PP rejeitada pode receber novos anexos." };
+  // Gerada: a edição antes do envio (02/09/2026). Rejeitada: a correção
+  // para reenvio. Nos dois casos o documento ainda não foi aceito.
+  if (pp.status !== "rejeitada" && pp.status !== "gerada") {
+    return {
+      ok: false,
+      message: "Só PP gerada ou rejeitada pode receber novos anexos.",
+    };
   }
 
   const gate = await checarGatesRealizado(pp.item_realizado_id);
@@ -1101,7 +1239,8 @@ export async function reenviarPedidoCompra(
   dados: z.input<typeof dadosReenvioSchema>,
   anexosNovos: z.input<typeof anexoUploadedSchema>[],
   anexosRemovidosIds: string[],
-): Promise<Result> {
+  confirmarAcimaDoPlanejado = false,
+): Promise<ResultadoEnvio> {
   const session = await requireSession();
   const supabase = createClient();
 
@@ -1138,6 +1277,15 @@ export async function reenviarPedidoCompra(
   const gate = await checarGatesRealizado(ppRow.item_realizado_id);
   if (!gate.ok) return gate;
   const { item, job } = gate;
+
+  // Reenviar É enviar ao financeiro: vale a mesma porta da revisão de
+  // abertura (decisão 040).
+  const bloqueioRevisao = await barrarEnvioEmRevisao(
+    session.activeTenant.id,
+    pp_id,
+    job,
+  );
+  if (bloqueioRevisao) return bloqueioRevisao;
 
   const dadosParsed = dadosReenvioSchema.safeParse(dados);
   if (!dadosParsed.success) {
@@ -1228,35 +1376,8 @@ export async function reenviarPedidoCompra(
   if (!empRes.data)
     return { ok: false, message: "Empresa emissora inválida ou inativa." };
 
-  const [projetoRes, orcRes] = await Promise.all([
-    supabase
-      .from("projetos")
-      .select(
-        "id, codigo, campanha, cliente:clientes(nome_fantasia), responsavel:profiles!responsavel_id(nome)",
-      )
-      .eq("id", job.projeto_id ?? "")
-      .eq("tenant_id", session.activeTenant.id)
-      .maybeSingle(),
-    supabase
-      .from("orcamentos")
-      .select("id, codigo")
-      .eq("id", job.orcamento_id ?? "")
-      .eq("tenant_id", session.activeTenant.id)
-      .maybeSingle(),
-  ]);
-
-  type ProjetoEnriquecido = {
-    codigo: string;
-    campanha: string | null;
-    cliente: { nome_fantasia: string } | null;
-    responsavel: { nome: string } | null;
-  } | null;
-
-  const projeto = projetoRes.data as ProjetoEnriquecido;
-  const orcamento = orcRes.data as { codigo: string } | null;
-  // Valor recalculado do trio corrigido, e conferido contra o saldo SEM
-  // contar esta PP — ela já ocupa o saldo desde a emissão, e não pode
-  // competir consigo mesma.
+  const contexto = await carregarContextoPdf(supabase, session.activeTenant.id, job);
+  // Valor recalculado do trio corrigido.
   //
   // Tem que ser a MESMA conta da emissão: enquanto aqui rateava o orçado
   // e lá multiplicava o trio, corrigir uma PP de R$ 2.500 × 1 × 2 sem
@@ -1273,19 +1394,21 @@ export async function reenviarPedidoCompra(
     };
   }
 
-  const saldoSemEsta = await saldoDisponivelDoItem(
+  // O teto saiu (02/09/2026). O que existe é a confirmação acima do
+  // planejado — a soma é SEM esta PP, que já está no item e não pode
+  // competir consigo mesma.
+  const emPPsSemEsta = await somaEmitidasDoItem(
     supabase,
     session.activeTenant.id,
     ppRow.item_realizado_id,
-    item.total_orcado,
     pp_id,
   );
-  if (passaDoSaldo(valor, saldoSemEsta)) {
-    return {
-      ok: false,
-      message: `A PP de ${brl(valor)} passa do saldo do item. Máximo aceito: ${brl(saldoSemEsta)}.`,
-    };
-  }
+  const pedidoDeConfirmacao = pedirConfirmacaoAcimaDoPlanejado(
+    emPPsSemEsta + valor,
+    item.total_planejado,
+    confirmarAcimaDoPlanejado,
+  );
+  if (pedidoDeConfirmacao) return pedidoDeConfirmacao;
 
   // ---- Parcelas: valores redivididos, datas conforme a 1ª ----
   // Precisa vir ANTES do PDF: cada documento carrega o vencimento e o
@@ -1321,52 +1444,27 @@ export async function reenviarPedidoCompra(
   // Um por parcela, como na emissão. Aqui o snapshot É regerado de
   // propósito: a PP foi corrigida, e o papel que o fornecedor recebe não
   // pode contradizer o que o financeiro vai aprovar.
-  const documentos: Array<{ parcelaId: string; path: string; buffer: Buffer }> = [];
+  let documentos: Array<{ parcelaId: string; path: string; buffer: Buffer }> = [];
   try {
-    const { renderPedidoCompraPDF } = await import("@/lib/pdf/pedido-compra");
-    const emitidoEm = new Date().toISOString();
-
-    for (const parcela of parcelasNovas) {
-      const buffer = await renderPedidoCompraPDF({
-        pp: {
-          codigo: ppRow.codigo,
-          servico: d.servico,
-          quantidade: d.quantidade,
-          especificacoes: d.especificacoes ?? null,
-          valor,
-          prazo_pagamento: parcela.data_vencimento,
-          created_at: emitidoEm,
-        },
-        empresa: empRes.data as never,
-        fornecedor: fornRes.data as never,
-        job: { nome: job.nome, produto: job.produto ?? "" },
-        projeto: {
-          codigo: projeto?.codigo ?? "",
-          campanha: projeto?.campanha ?? null,
-        },
-        orcamento: { codigo: orcamento?.codigo ?? "" },
-        cliente: { nome_fantasia: projeto?.cliente?.nome_fantasia ?? "" },
-        responsavelNome: projeto?.responsavel?.nome ?? "",
-        parcela: {
-          numero: parcela.numero,
-          total: parcelasNovas.length,
-          data_vencimento: parcela.data_vencimento,
-          valor: parcela.valor,
-        },
-      });
-      documentos.push({
-        parcelaId: parcela.id,
-        path: caminhoPdfParcela(
-          session.activeTenant.id,
-          job.id,
-          pp_id,
-          ppRow.codigo,
-          parcela.numero,
-          parcelasNovas.length,
-        ),
-        buffer,
-      });
-    }
+    documentos = await renderizarDocumentosDaPP({
+      tenantId: session.activeTenant.id,
+      jobId: job.id,
+      ppId: pp_id,
+      codigo: ppRow.codigo,
+      pp: {
+        servico: d.servico,
+        quantidade: d.quantidade,
+        especificacoes: d.especificacoes ?? null,
+        valor,
+        verba_producao: false,
+      },
+      empresa: empRes.data,
+      fornecedor: fornRes.data,
+      responsavelVerbaNome: null,
+      job: { nome: job.nome, produto: job.produto ?? "" },
+      contexto,
+      parcelas: parcelasNovas,
+    });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     return { ok: false, message: `Falha ao gerar PDF: ${msg}` };
@@ -1490,12 +1588,15 @@ export async function reenviarPedidoCompra(
       job_id: job.id,
       anexos_adicionados: anexosParsed.data.length,
       anexos_removidos: paraRemover.length,
+      planejado_do_item: item.total_planejado,
+      em_pps_emitidas_depois: emPPsSemEsta + valor,
+      acima_do_planejado: passaDoPlanejado(emPPsSemEsta + valor, item.total_planejado),
     },
   });
 
   revalidatePath(`/jobs/${job.id}`);
   revalidatePath("/financeiro/contas-a-pagar");
-  return { ok: true };
+  return { ok: true, codigo: ppRow.codigo };
 }
 
 export async function signedUrlPdf(
@@ -1585,4 +1686,524 @@ export async function signedUrlAnexo(
   if (error || !data)
     return { ok: false, message: error?.message ?? "Falha URL" };
   return { ok: true, url: data.signedUrl };
+}
+
+/**
+ * Envia ao financeiro uma PP que está GERADA (02/09/2026, decisão 039).
+ *
+ * É a metade que "Gerar PP" perdeu: até aqui gerar e enviar eram o mesmo
+ * clique. Agora a PP nasce no job e só entra em avaliação quando alguém a
+ * envia — esta action. O que ela confere:
+ *
+ *   1. O job aceita ação de planilha e quem envia é o responsável do job
+ *      ou administrador (mesmo gate de gerar).
+ *   2. A abertura NÃO está em revisão por errata (decisão 040).
+ *   3. PP que não é verba de produção tem pelo menos um anexo — o anexo
+ *      deixou de travar a geração e passou a travar o envio.
+ *   4. Se, com esta PP, o item passa do PLANEJADO, o envio exige
+ *      `confirmarAcimaDoPlanejado`. Sem o flag a action devolve os
+ *      números para o "tem certeza?" da tela. Linha vermelha tem
+ *      planejado zero, então toda PP dela cai aqui — regra literal.
+ */
+export async function enviarPedidoCompraAoFinanceiro(
+  pp_id: string,
+  confirmarAcimaDoPlanejado = false,
+): Promise<ResultadoEnvio> {
+  const session = await requireSession();
+  const supabase = createClient();
+
+  const { data: ppRow, error: ppErr } = await supabase
+    .from("pedidos_compra")
+    .select(
+      "id, codigo, job_id, item_realizado_id, status, valor, verba_producao, anexos:pedidos_compra_anexos(id)",
+    )
+    .eq("id", pp_id)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle<{
+      id: string;
+      codigo: string;
+      job_id: string;
+      item_realizado_id: string;
+      status: PPStatus;
+      valor: number | string;
+      verba_producao: boolean;
+      anexos: Array<{ id: string }> | null;
+    }>();
+
+  if (ppErr || !ppRow) return { ok: false, message: "PP não encontrada." };
+
+  if (ppRow.status !== "gerada") {
+    return {
+      ok: false,
+      message:
+        ppRow.status === "cancelada"
+          ? "PP cancelada não pode ser enviada."
+          : `${ppRow.codigo} já está no financeiro.`,
+    };
+  }
+
+  const gate = await checarGatesRealizado(ppRow.item_realizado_id);
+  if (!gate.ok) return gate;
+  const { item, job } = gate;
+
+  const bloqueioRevisao = await barrarEnvioEmRevisao(
+    session.activeTenant.id,
+    pp_id,
+    job,
+  );
+  if (bloqueioRevisao) return bloqueioRevisao;
+
+  // Verba de Produção é adiantamento: sai antes de existir nota, e as
+  // notas entram na prestação de contas. Nas demais, a nota do fornecedor
+  // é o que justifica o pedido — e é ela que o financeiro vai conferir.
+  if (!ppRow.verba_producao && (ppRow.anexos ?? []).length < 1) {
+    return {
+      ok: false,
+      message:
+        "Anexe a nota fiscal do fornecedor antes de enviar esta PP ao financeiro.",
+    };
+  }
+
+  const valor = Number(ppRow.valor ?? 0);
+  const emPPsAntes = await somaEmitidasDoItem(
+    supabase,
+    session.activeTenant.id,
+    ppRow.item_realizado_id,
+  );
+  const emPPsDepois = Math.round((emPPsAntes + valor) * 100) / 100;
+  const pedidoDeConfirmacao = pedirConfirmacaoAcimaDoPlanejado(
+    emPPsDepois,
+    item.total_planejado,
+    confirmarAcimaDoPlanejado,
+  );
+  if (pedidoDeConfirmacao) return pedidoDeConfirmacao;
+
+  // `.eq("status", "gerada")` é a trava de corrida: dois envios ao mesmo
+  // tempo, só um passa. O `select` diz se ESTE passou.
+  const agora = new Date().toISOString();
+  const { data: atualizada, error: updErr } = await supabase
+    .from("pedidos_compra")
+    .update({
+      status: "em_avaliacao",
+      enviada_financeiro_em: agora,
+      enviada_financeiro_por: session.profile.id,
+    })
+    .eq("id", pp_id)
+    .eq("tenant_id", session.activeTenant.id)
+    .eq("status", "gerada")
+    .select("id");
+
+  if (updErr) {
+    return { ok: false, message: `Falha ao enviar PP: ${updErr.message}` };
+  }
+  if (!atualizada || atualizada.length === 0) {
+    return { ok: false, message: `${ppRow.codigo} já tinha saído de gerada.` };
+  }
+
+  await logAuditEvent({
+    acao: "pedido_compra.enviada_financeiro",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "pedido_compra",
+    entidadeId: pp_id,
+    metadata: {
+      pp_codigo: ppRow.codigo,
+      valor,
+      job_id: job.id,
+      item_realizado_id: ppRow.item_realizado_id,
+      planejado_do_item: item.total_planejado,
+      em_pps_emitidas_depois: emPPsDepois,
+      acima_do_planejado: passaDoPlanejado(emPPsDepois, item.total_planejado),
+      confirmado_acima_do_planejado: confirmarAcimaDoPlanejado,
+      verba_producao: ppRow.verba_producao,
+    },
+  });
+
+  revalidatePath(`/jobs/${job.id}`);
+  revalidatePath(`/financeiro/jobs/${job.id}`);
+  revalidatePath("/financeiro/contas-a-pagar");
+  revalidatePath("/financeiro");
+  return { ok: true, codigo: ppRow.codigo };
+}
+
+/**
+ * Edita uma PP que ainda está GERADA (02/09/2026, decisão 039).
+ *
+ * Diferente da correção da rejeitada (`reenviarPedidoCompra`), aqui tudo
+ * pode mudar — inclusive o parcelamento e o modo verba de produção —,
+ * porque a PP ainda não saiu do job: ninguém combinou vencimento com
+ * fornecedor nem o financeiro viu o documento. Os PDFs são regerados e
+ * sobrescrevem os anteriores; a PP continua gerada.
+ *
+ * Anexo segue opcional: quem exige é o envio.
+ */
+export async function editarPedidoCompraGerada(
+  pp_id: string,
+  dados: z.input<typeof dadosSchema>,
+  anexosNovos: z.input<typeof anexoUploadedSchema>[],
+  anexosRemovidosIds: string[],
+): Promise<Result<{ codigo: string }>> {
+  try {
+    return await editarPedidoCompraGeradaImpl(
+      pp_id,
+      dados,
+      anexosNovos,
+      anexosRemovidosIds,
+    );
+  } catch (err) {
+    console.error("[pp.editar.exception]", err);
+    return {
+      ok: false,
+      message: `Falha ao salvar a PP: ${err instanceof Error ? err.message : "erro desconhecido"}.`,
+    };
+  }
+}
+
+async function editarPedidoCompraGeradaImpl(
+  pp_id: string,
+  dados: z.input<typeof dadosSchema>,
+  anexosNovos: z.input<typeof anexoUploadedSchema>[],
+  anexosRemovidosIds: string[],
+): Promise<Result<{ codigo: string }>> {
+  const session = await requireSession();
+  const supabase = createClient();
+
+  const { data: ppRow, error: ppErr } = await supabase
+    .from("pedidos_compra")
+    .select("id, codigo, job_id, item_realizado_id, status, pdf_path")
+    .eq("id", pp_id)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle();
+
+  if (ppErr || !ppRow) return { ok: false, message: "PP não encontrada." };
+  if (ppRow.status !== "gerada") {
+    return {
+      ok: false,
+      message:
+        "Só PP gerada pode ser editada aqui. PP rejeitada é corrigida pela aba de Pedidos de Produção.",
+    };
+  }
+
+  const gate = await checarGatesRealizado(ppRow.item_realizado_id);
+  if (!gate.ok) return gate;
+  const { item, job } = gate;
+
+  const dadosParsed = dadosSchema.safeParse(dados);
+  if (!dadosParsed.success) {
+    return {
+      ok: false,
+      message: `Dados inválidos: ${dadosParsed.error.issues[0]?.message ?? "erro"}.`,
+    };
+  }
+  const d = dadosParsed.data;
+
+  const valor = valorDaPPPorUnidade(d.valor_unitario, d.quantidade, d.dias_meses);
+  if (valor <= 0) {
+    return {
+      ok: false,
+      message: "R$ Unit., QT e D/M inválidos: o valor da PP ficaria zerado.",
+    };
+  }
+  if (!parcelasFecham(d.parcelas.map((p) => p.valor), valor)) {
+    return {
+      ok: false,
+      message: `A soma das parcelas precisa fechar com o valor da PP (${brl(valor)}).`,
+    };
+  }
+
+  // ---- Anexos: os novos são validados antes de mexer em qualquer coisa ----
+  const anexosParsed = z.array(anexoUploadedSchema).safeParse(anexosNovos);
+  if (!anexosParsed.success) {
+    return { ok: false, message: "Formato de anexo inválido." };
+  }
+  const expectedPrefix = `${session.activeTenant.id}/${job.id}/${pp_id}/anexos/`;
+  for (const a of anexosParsed.data) {
+    if (a.tamanho_bytes > PP_ANEXO_TAMANHO_MAX_BYTES) {
+      return { ok: false, message: `Anexo ${a.nome_original} > 8 MB.` };
+    }
+    if (!a.path.startsWith(expectedPrefix)) {
+      return { ok: false, message: "Anexo em path inválido." };
+    }
+  }
+
+  const { data: anexosAtuais } = await supabase
+    .from("pedidos_compra_anexos")
+    .select("id, arquivo_path, arquivo_tamanho_bytes")
+    .eq("pedido_compra_id", pp_id)
+    .eq("tenant_id", session.activeTenant.id);
+  const removidos = new Set(anexosRemovidosIds);
+  const mantidos = (anexosAtuais ?? []).filter((a) => !removidos.has(a.id));
+
+  const somaBytes =
+    mantidos.reduce((s, a) => s + Number(a.arquivo_tamanho_bytes ?? 0), 0) +
+    anexosParsed.data.reduce((s, a) => s + a.tamanho_bytes, 0);
+  if (somaBytes > PP_ANEXOS_TAMANHO_TOTAL_MAX_BYTES) {
+    return { ok: false, message: "Anexos somam mais que 25 MB." };
+  }
+
+  if (anexosParsed.data.length > 0) {
+    const { data: arquivosNoBucket, error: listErr } = await supabase.storage
+      .from(BUCKET)
+      .list(expectedPrefix.replace(/\/$/, ""));
+    if (listErr) {
+      return { ok: false, message: `Falha ao listar anexos: ${listErr.message}` };
+    }
+    const nomes = new Set(
+      (arquivosNoBucket ?? []).map((f) => `${expectedPrefix}${f.name}`),
+    );
+    for (const a of anexosParsed.data) {
+      if (!nomes.has(a.path)) {
+        return {
+          ok: false,
+          message: `Anexo ${a.nome_original} não foi encontrado no bucket. Refaça o upload.`,
+        };
+      }
+    }
+  }
+
+  // ---- FKs, como na geração ----
+  const [fornRes, empRes, responsavelRes] = await Promise.all([
+    d.verba_producao
+      ? Promise.resolve({ data: null })
+      : supabase
+          .from("fornecedores")
+          .select("*")
+          .eq("id", d.fornecedor_id as string)
+          .eq("tenant_id", session.activeTenant.id)
+          .eq("status", "ativo")
+          .maybeSingle(),
+    supabase
+      .from("empresas")
+      .select("*")
+      .eq("id", d.empresa_id)
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("ativo", true)
+      .maybeSingle(),
+    d.verba_producao
+      ? listActiveMembers(session.activeTenant.id).then((membros) => ({
+          data: membros.find((m) => m.id === d.responsavel_verba_id) ?? null,
+        }))
+      : Promise.resolve({ data: null }),
+  ]);
+
+  if (!d.verba_producao && !fornRes.data)
+    return { ok: false, message: "Fornecedor inválido ou inativo." };
+  if (d.verba_producao && !responsavelRes.data)
+    return { ok: false, message: "Responsável inválido ou não encontrado." };
+  if (!empRes.data)
+    return { ok: false, message: "Empresa emissora inválida ou inativa." };
+
+  // ---- Parcelas: refeitas do zero ----
+  // A PP gerada não tem parcela paga, roteada em fatura nem vista pelo
+  // financeiro, então o parcelamento pode ser redefinido inteiro.
+  const { data: parcelasAntigas } = await supabase
+    .from("pedidos_compra_parcelas")
+    .select("id, pdf_path")
+    .eq("pedido_compra_id", pp_id)
+    .eq("tenant_id", session.activeTenant.id);
+  const caminhosAntigos = new Set<string>(
+    [
+      ...(parcelasAntigas ?? []).map((p) => p.pdf_path as string | null),
+      ppRow.pdf_path as string | null,
+    ].filter((c): c is string => Boolean(c)),
+  );
+
+  const { error: delParcelasErr } = await supabase
+    .from("pedidos_compra_parcelas")
+    .delete()
+    .eq("pedido_compra_id", pp_id)
+    .eq("tenant_id", session.activeTenant.id);
+  if (delParcelasErr) {
+    return {
+      ok: false,
+      message: `Falha ao refazer as parcelas: ${delParcelasErr.message}`,
+    };
+  }
+
+  const { data: parcelasCriadas, error: parcelasErr } = await supabase
+    .from("pedidos_compra_parcelas")
+    .insert(
+      d.parcelas.map((p, i) => ({
+        tenant_id: session.activeTenant.id,
+        pedido_compra_id: pp_id,
+        numero: i + 1,
+        data_vencimento: p.data_vencimento,
+        valor: p.valor,
+        created_by: session.profile.id,
+      })),
+    )
+    .select("id, numero, data_vencimento, valor");
+  if (parcelasErr) {
+    return {
+      ok: false,
+      message: `Falha ao salvar as parcelas: ${parcelasErr.message}`,
+    };
+  }
+  const parcelas = (parcelasCriadas ?? [])
+    .slice()
+    .sort((a, b) => a.numero - b.numero)
+    .map((p) => ({
+      id: p.id as string,
+      numero: p.numero as number,
+      data_vencimento: String(p.data_vencimento).slice(0, 10),
+      valor: Number(p.valor),
+    }));
+
+  // ---- PDFs novos, sobrescrevendo os antigos ----
+  const contexto = await carregarContextoPdf(supabase, session.activeTenant.id, job);
+  let documentos: Array<{ parcelaId: string; path: string; buffer: Buffer }> = [];
+  try {
+    documentos = await renderizarDocumentosDaPP({
+      tenantId: session.activeTenant.id,
+      jobId: job.id,
+      ppId: pp_id,
+      codigo: ppRow.codigo,
+      pp: {
+        servico: d.servico,
+        quantidade: d.quantidade,
+        especificacoes: d.especificacoes ?? null,
+        valor,
+        verba_producao: d.verba_producao,
+      },
+      empresa: empRes.data,
+      fornecedor: fornRes.data ?? null,
+      responsavelVerbaNome: d.verba_producao
+        ? (responsavelRes.data?.nome ?? "")
+        : null,
+      job: { nome: job.nome, produto: job.produto ?? "" },
+      contexto,
+      parcelas,
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { ok: false, message: `Falha ao gerar PDF: ${msg}` };
+  }
+
+  for (const doc of documentos) {
+    const { error: uploadErr } = await supabase.storage
+      .from(BUCKET)
+      .upload(doc.path, doc.buffer, {
+        contentType: "application/pdf",
+        upsert: true,
+      });
+    if (uploadErr) {
+      return { ok: false, message: `Falha ao subir PDF: ${uploadErr.message}` };
+    }
+  }
+  const pdfPath = documentos[0]?.path ?? ppRow.pdf_path;
+
+  // ---- Persiste a PP, ainda gerada ----
+  const { error: updErr } = await supabase
+    .from("pedidos_compra")
+    .update({
+      verba_producao: d.verba_producao,
+      fornecedor_id: d.verba_producao ? null : (d.fornecedor_id ?? null),
+      responsavel_verba_id: d.verba_producao ? (d.responsavel_verba_id ?? null) : null,
+      empresa_id: d.empresa_id,
+      servico: d.servico,
+      valor_unitario: d.valor_unitario,
+      quantidade: d.quantidade,
+      dias_meses: d.dias_meses,
+      especificacoes: d.especificacoes ?? null,
+      valor,
+      prazo_pagamento: parcelas[0]?.data_vencimento ?? d.prazo_pagamento,
+      pdf_path: pdfPath,
+    })
+    .eq("id", pp_id)
+    .eq("tenant_id", session.activeTenant.id)
+    .eq("status", "gerada");
+  if (updErr) {
+    return { ok: false, message: `Falha ao salvar a PP: ${updErr.message}` };
+  }
+
+  for (const doc of documentos) {
+    const { error: errPath } = await supabase
+      .from("pedidos_compra_parcelas")
+      .update({ pdf_path: doc.path })
+      .eq("id", doc.parcelaId)
+      .eq("tenant_id", session.activeTenant.id);
+    if (errPath) console.error("[pp.editar.parcela.pdf_path]", errPath.message);
+  }
+
+  // Documento antigo que não foi sobrescrito (mudou o número de parcelas)
+  // sai do bucket — senão fica um PDF órfão dizendo outra coisa.
+  const caminhosNovos = new Set(documentos.map((x) => x.path));
+  const orfaos = Array.from(caminhosAntigos).filter((c) => !caminhosNovos.has(c));
+  if (orfaos.length > 0) {
+    await supabase.storage.from(BUCKET).remove(orfaos);
+  }
+
+  if (anexosParsed.data.length > 0) {
+    const { error: insAnexoErr } = await supabase
+      .from("pedidos_compra_anexos")
+      .insert(
+        anexosParsed.data.map((a) => ({
+          id: a.anexo_id,
+          tenant_id: session.activeTenant.id,
+          pedido_compra_id: pp_id,
+          arquivo_path: a.path,
+          arquivo_nome_original: a.nome_original,
+          arquivo_tamanho_bytes: a.tamanho_bytes,
+          arquivo_mimetype: a.mimetype,
+          documento_tipo: a.documento_tipo,
+          documento_numero: a.documento_tipo ? a.documento_numero : null,
+          created_by: session.profile.id,
+        })),
+      );
+    if (insAnexoErr) {
+      return {
+        ok: false,
+        message: `PP salva, mas falhou ao registrar anexos: ${insAnexoErr.message}`,
+      };
+    }
+  }
+
+  const paraRemover = (anexosAtuais ?? []).filter((a) => removidos.has(a.id));
+  if (paraRemover.length > 0) {
+    await supabase
+      .from("pedidos_compra_anexos")
+      .delete()
+      .in("id", paraRemover.map((a) => a.id))
+      .eq("tenant_id", session.activeTenant.id);
+    await supabase.storage
+      .from(BUCKET)
+      .remove(paraRemover.map((a) => a.arquivo_path));
+  }
+
+  if (!d.verba_producao) {
+    await supabase
+      .from("jobs_itens_realizado")
+      .update({ fornecedor_id: d.fornecedor_id ?? null })
+      .eq("id", ppRow.item_realizado_id)
+      .eq("tenant_id", session.activeTenant.id);
+  }
+
+  const emPPsEmitidas = await somaEmitidasDoItem(
+    supabase,
+    session.activeTenant.id,
+    ppRow.item_realizado_id,
+  );
+
+  await logAuditEvent({
+    acao: "pedido_compra.editada",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "pedido_compra",
+    entidadeId: pp_id,
+    metadata: {
+      pp_codigo: ppRow.codigo,
+      valor,
+      valor_unitario: d.valor_unitario,
+      quantidade: d.quantidade,
+      dias_meses: d.dias_meses,
+      parcelas: parcelas.length,
+      verba_producao: d.verba_producao,
+      job_id: job.id,
+      planejado_do_item: item.total_planejado,
+      acima_do_planejado: passaDoPlanejado(emPPsEmitidas + valor, item.total_planejado),
+      anexos_adicionados: anexosParsed.data.length,
+      anexos_removidos: paraRemover.length,
+    },
+  });
+
+  revalidatePath(`/jobs/${job.id}`);
+  return { ok: true, codigo: ppRow.codigo };
 }
