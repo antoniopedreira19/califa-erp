@@ -27,6 +27,11 @@ import { ProjetoEditorDrawer } from "../projeto-editor-drawer";
 import type { ProdutoOption } from "../projeto-form";
 import { NovoOrcamentoMenu } from "./novo-orcamento-menu";
 import { OrcamentosList, type OrcamentoRow } from "./orcamentos-list";
+import { BotaoImportarOrcamentos } from "../_selecao/botao-importar-orcamentos";
+import {
+  ExportarOrcamentosMenu,
+  type OrcamentoExportavel,
+} from "../_selecao/exportar-orcamentos-menu";
 
 export const dynamic = "force-dynamic";
 
@@ -192,6 +197,9 @@ export default async function ProjetoDetailPage({
   // Valor do job por orçamento: versão APROVADA quando existir; senão a
   // mais recente (número em negociação). Sem versão → null (travessão).
   const valorJobMap = new Map<string, number>();
+  // O que o seletor "Exportar" mostra por orçamento: a versão que sai no
+  // arquivo e o FATURAMENTO que a aba imprime (lado bruto, decisão 028).
+  const exportavelMap = new Map<string, { numeroVersao: number; valor: number }>();
 
   if (orcamentoIds.length > 0) {
     const [versoesRes, jobsRes] = await Promise.all([
@@ -270,6 +278,10 @@ export default async function ProjetoDetailPage({
           Number(versao.percentual_imposto ?? 0),
         );
         valorJobMap.set(orcId, totais.valorJob);
+        exportavelMap.set(orcId, {
+          numeroVersao: versao.numero_versao,
+          valor: totais.bruto.total,
+        });
       }
     }
   }
@@ -290,6 +302,19 @@ export default async function ProjetoDetailPage({
     versoes_count: versoesCountMap.get(o.id) ?? 0,
     created_at: o.created_at,
   }));
+
+  // Cancelado fica fora do seletor de exportação: saiu da mesa e a visão
+  // agregada também não o lista.
+  const exportaveis: OrcamentoExportavel[] = orcamentos
+    .filter((o) => o.estagio !== "cancelado")
+    .map((o) => ({
+      id: o.id,
+      codigo: o.codigo,
+      nome: o.nome,
+      numeroVersao: exportavelMap.get(o.id)?.numeroVersao ?? null,
+      estagio: o.estagio,
+      valor: exportavelMap.get(o.id)?.valor ?? null,
+    }));
 
   const clientes = (clientesRes.data ?? []) as Pick<
     Cliente,
@@ -329,6 +354,10 @@ export default async function ProjetoDetailPage({
               equipeSelecionada={equipeManualDoProjeto}
               produtoresDosOrcamentos={produtoresDosOrcamentos}
             />
+            {/* Importar e Exportar logo depois de "Editar projeto", como no
+                design "Exportar e Exibir - Projeto e Visao Agregada". */}
+            <BotaoImportarOrcamentos />
+            <ExportarOrcamentosMenu projetoId={projeto.id} orcamentos={exportaveis} />
           </div>
 
           <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">

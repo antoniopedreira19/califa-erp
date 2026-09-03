@@ -3,7 +3,15 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertCircle, ArrowLeft, FolderKanban, Plus, Save, X } from "lucide-react";
+import {
+  AlertCircle,
+  ArrowLeft,
+  EyeOff,
+  FolderKanban,
+  Plus,
+  Save,
+  X,
+} from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   Dialog,
@@ -58,6 +66,19 @@ import {
 } from "../../_rascunho/tipos";
 import { salvarAlteracoesDoProjeto } from "./actions";
 import { aceitaBV } from "@/lib/calculos/versao-totais";
+import {
+  estagioFunilBadgeClasses,
+  estagioFunilLabel,
+} from "@/lib/calculos/funil";
+import { BotaoImportarOrcamentos } from "../../_selecao/botao-importar-orcamentos";
+import {
+  ExibirOrcamentosMenu,
+  type OrcamentoExibivel,
+} from "../../_selecao/exibir-orcamentos-menu";
+import {
+  ExportarOrcamentosMenu,
+  type OrcamentoExportavel,
+} from "../../_selecao/exportar-orcamentos-menu";
 import { VISAO_BV_PADRAO, type VisaoBv } from "@/lib/calculos/bv-planilha";
 import { ChaveBrutoLiquido } from "@/app/(app)/_planilha/chave-bruto-liquido";
 import type { EstadoSaveDaLinha } from "@/app/(app)/_planilha/save-coluna";
@@ -84,6 +105,10 @@ interface Props {
   orcamentosExistentes: number;
   /** Estado inicial, montado no servidor a partir da versão vigente. */
   inicial: OrcamentoRascunho[];
+  /** Os orçamentos gravados, como o seletor "Exportar" os vê — versão
+   *  vigente e o valor que a aba imprime, calculados sobre o que está no
+   *  banco. A exportação lê o banco, não o rascunho da tela. */
+  exportaveis: OrcamentoExportavel[];
   categorias: Pick<CategoriaDominio, "id" | "nome">[];
   /** Serviço do job — escopo `projeto` de `categorias_dominio`,
    *  lista distinta das categorias acima (decisão 037). */
@@ -141,6 +166,7 @@ export function EditorAgregado({
   honorariosCliente,
   orcamentosExistentes,
   inicial,
+  exportaveis,
   categorias,
   servicos,
   regionaisDoProjeto,
@@ -173,6 +199,13 @@ export function EditorAgregado({
   } | null>(null);
   const [orcamentos, setOrcamentos] =
     React.useState<OrcamentoRascunho[]>(inicial);
+  // "Exibir": filtro de TELA. Cards e Totais seguem esta lista; os três
+  // indicadores do topo são do projeto inteiro e não seguem. Nada é
+  // salvo — o que está escondido continua entrando no "Salvar
+  // alterações" como estava.
+  const [exibidos, setExibidos] = React.useState<string[]>(() =>
+    inicial.map((o) => o.id),
+  );
   const [modal, setModal] = React.useState<Modal>(null);
   const [erro, setErro] = React.useState<string | null>(null);
   const [askSair, setAskSair] = React.useState(false);
@@ -270,11 +303,15 @@ export function EditorAgregado({
   }
 
   function criarOrcamento(dados: DadosOrcamento) {
+    const id = novoId("orc");
+    // O orçamento recém-criado sempre aparece, mesmo com a tela filtrada:
+    // ninguém cria um orçamento para não vê-lo.
+    setExibidos((atuais) => [...atuais, id]);
     setOrcamentos((atuais) => [
       ...atuais,
       {
         ...dados,
-        id: novoId("orc"),
+        id,
         aberto: true,
         origem: null,
         grupos: [],
@@ -294,6 +331,7 @@ export function EditorAgregado({
   function removerOrcamento(id: string) {
     arquivos.current.delete(id);
     setOrcamentos((atuais) => atuais.filter((o) => o.id !== id));
+    setExibidos((atuais) => atuais.filter((x) => x !== id));
   }
 
   function criarPlanilha(id: string) {
@@ -464,14 +502,26 @@ export function EditorAgregado({
   );
 
   // ---------- consolidado ----------
-  const linhasTotais = React.useMemo(() => {
+  // Código de cada orçamento, calculado uma vez sobre a lista INTEIRA: os
+  // novos numeram pela posição entre os novos, e o filtro "Exibir" não
+  // pode renumerar ninguém ao esconder um deles.
+  const codigos = React.useMemo(() => {
     let novos = -1;
+    return new Map(
+      orcamentos.map((orc) => {
+        if (!orc.origemBanco) novos += 1;
+        return [orc.id, codigoDe(orc, novos)] as const;
+      }),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orcamentos, orcamentosExistentes, projeto.codigo]);
+
+  const linhasTodas = React.useMemo(() => {
     return orcamentos.map((orc) => {
-      if (!orc.origemBanco) novos += 1;
       const t = totaisDoJob(orc, orc.parametros);
       return {
         id: orc.id,
-        codigo: codigoDe(orc, novos),
+        codigo: codigos.get(orc.id) ?? "",
         nome: orc.nome,
         detalhe: orc.origemBanco
           ? `v${orc.origemBanco.numeroVersao}${
@@ -491,8 +541,24 @@ export function EditorAgregado({
         percentualImposto: orc.parametros.percentual_imposto,
       };
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orcamentos, orcamentosExistentes, projeto.codigo]);
+  }, [orcamentos, codigos]);
+
+  // O que a tela mostra: cards e Totais seguem o "Exibir".
+  const visiveis = orcamentos.filter((o) => exibidos.includes(o.id));
+  const linhasTotais = linhasTodas.filter((l) => exibidos.includes(l.id));
+
+  const opcoesExibir: OrcamentoExibivel[] = orcamentos.map((orc) => ({
+    id: orc.id,
+    rotulo: orc.origemBanco
+      ? `${orc.nome} - v${orc.origemBanco.numeroVersao}`
+      : orc.nome,
+    chip: orc.origemBanco?.estagio
+      ? estagioFunilLabel(orc.origemBanco.estagio)
+      : "Novo",
+    chipClasses: orc.origemBanco?.estagio
+      ? estagioFunilBadgeClasses(orc.origemBanco.estagio)
+      : "bg-muted text-muted-foreground border-border",
+  }));
 
   /** Planilhas importadas cujo % de honorários não é o do orçamento. O
    *  percentual gravado vence — aqui só se avisa quem importou. */
@@ -513,7 +579,9 @@ export function EditorAgregado({
     [orcamentos],
   );
 
-  const resumo = linhasTotais.reduce(
+  // Os três indicadores do topo são do projeto INTEIRO — não seguem o
+  // filtro de exibição (design, 03/09/2026).
+  const resumo = linhasTodas.reduce(
     (acc, l) => ({
       faturamentoPrevisto: acc.faturamentoPrevisto + l.faturamentoPrevisto,
       valorJob: acc.valorJob + l.valorJob,
@@ -641,8 +709,6 @@ export function EditorAgregado({
     ? orcamentos.find((o) => o.id === modalParametros.orcamentoId)
     : null;
 
-  let contadorNovos = -1;
-
   return (
     <div className="flex flex-col gap-6 pb-4">
       <div>
@@ -666,7 +732,7 @@ export function EditorAgregado({
                 {projeto.nome}
               </h1>
             </div>
-            <p className="mt-2 flex flex-wrap items-center gap-x-3.5 gap-y-1 text-sm text-muted-foreground">
+            <div className="mt-2 flex flex-wrap items-center gap-x-3.5 gap-y-1.5 text-sm text-muted-foreground">
               <span>
                 Cliente:{" "}
                 <strong className="font-semibold text-foreground">
@@ -685,7 +751,21 @@ export function EditorAgregado({
                 {orcamentos.length}{" "}
                 {orcamentos.length === 1 ? "orçamento" : "orçamentos"}
               </span>
-            </p>
+              {/* "Exibir", "Importar" e "Exportar" ao lado da contagem, como
+                  no design "Exportar e Exibir - Projeto e Visao Agregada". */}
+              <span className="flex items-center gap-2">
+                <ExibirOrcamentosMenu
+                  orcamentos={opcoesExibir}
+                  exibidos={exibidos}
+                  onChange={setExibidos}
+                />
+                <BotaoImportarOrcamentos />
+                <ExportarOrcamentosMenu
+                  projetoId={projeto.id}
+                  orcamentos={exportaveis}
+                />
+              </span>
+            </div>
           </div>
 
           <ResumoRentabilidade
@@ -745,6 +825,24 @@ export function EditorAgregado({
         </div>
       )}
 
+      {visiveis.length < orcamentos.length && (
+        <div className="flex items-center gap-2.5 rounded-xl border border-amber-500/30 bg-amber-500/[0.07] px-3.5 py-2.5 text-[12.5px] text-amber-800">
+          <EyeOff className="h-[15px] w-[15px] flex-none" />
+          <span>
+            {visiveis.length === 0
+              ? "Nenhum orçamento selecionado para exibição — cards e Totais estão vazios."
+              : `Exibindo ${visiveis.length} de ${orcamentos.length} orçamentos. Cards e Totais seguem esta seleção.`}
+          </span>
+          <button
+            type="button"
+            onClick={() => setExibidos(orcamentos.map((o) => o.id))}
+            className="ml-auto text-xs font-semibold text-amber-800 underline"
+          >
+            Exibir todos
+          </button>
+        </div>
+      )}
+
       {/* Orçamentos e Totais dividem a mesma calha: é o que faz as colunas
           Total / Rentab. / % do card de Totais caírem exatamente sob as
           mesmas colunas das planilhas dos grupos. O pr reserva a trilha de
@@ -756,9 +854,8 @@ export function EditorAgregado({
         <div className="flex justify-end">
           <ChaveBrutoLiquido visao={visao} onChange={setVisao} />
         </div>
-        {orcamentos.map((orc) => {
-          if (!orc.origemBanco) contadorNovos += 1;
-          const codigo = codigoDe(orc, contadorNovos);
+        {visiveis.map((orc) => {
+          const codigo = codigos.get(orc.id) ?? "";
           const bloqueio = orc.origemBanco?.bloqueio ?? null;
           return (
             <JobRascunhoCard
@@ -904,7 +1001,7 @@ export function EditorAgregado({
         <ImportarPlanilhaModal
           open
           onOpenChange={(o) => !o && setModal(null)}
-          codigo={codigoDe(orcImportando, 0)}
+          codigo={codigos.get(orcImportando.id) ?? ""}
           onImportado={(planilha) =>
             aplicarImportacao(orcImportando.id, planilha)
           }
