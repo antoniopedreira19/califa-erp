@@ -42,6 +42,7 @@ interface LinhaPP {
 
 const CHIPS: Array<{ key: Filtro; label: string }> = [
   { key: "todas", label: "Todas" },
+  { key: "gerada", label: "Gerada" },
   { key: "em_avaliacao", label: "Em avaliação" },
   { key: "pago", label: "Pago" },
   { key: "rejeitada", label: "Rejeitado" },
@@ -176,6 +177,7 @@ export function JobPPsSection({
   const ativas = pps.filter((p) => p.status !== "cancelada");
   const resumo = {
     geradas: ativas.length,
+    aguardandoEnvio: ativas.filter((p) => p.status === "gerada").length,
     emAvaliacao: ativas.filter((p) => p.status === "em_avaliacao").length,
     pagas: ativas.filter((p) => p.status === "pago").length,
     total: ativas.reduce((s, p) => s + Number(p.valor ?? 0), 0),
@@ -229,7 +231,18 @@ export function JobPPsSection({
     // frame da tabela — sem ela os botões eram cortados na borda da página.
     <div className={cn("space-y-3.5", editable && "pr-[114px]")}>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <CardResumo rotulo="PPs geradas" valor={String(resumo.geradas)} />
+        <CardResumo
+          rotulo="PPs geradas"
+          valor={String(resumo.geradas)}
+          // Quantas ainda não foram enviadas ao financeiro (02/09/2026).
+          // O envio, a edição e o cancelamento da PP gerada moram no
+          // painel do item, na Planilha Interna.
+          detalhe={
+            resumo.aguardandoEnvio > 0
+              ? `${resumo.aguardandoEnvio} aguardando envio`
+              : undefined
+          }
+        />
         <CardResumo
           rotulo="Em avaliação"
           valor={String(resumo.emAvaliacao)}
@@ -504,11 +517,14 @@ function CardResumo({
   valor,
   cor,
   mono,
+  detalhe,
 }: {
   rotulo: string;
   valor: string;
   cor?: string;
   mono?: boolean;
+  /** Linha curta embaixo do número, em vermelho — é pendência. */
+  detalhe?: string;
 }) {
   return (
     <div className="flex flex-col gap-1 rounded-2xl border border-border bg-card px-4 py-3.5 shadow-soft">
@@ -520,6 +536,11 @@ function CardResumo({
       >
         {valor}
       </strong>
+      {detalhe && (
+        <span className="text-[11px] font-semibold text-california-red">
+          {detalhe}
+        </span>
+      )}
     </div>
   );
 }

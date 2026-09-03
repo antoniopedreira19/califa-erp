@@ -103,6 +103,11 @@ export type AuditAction =
   | "cliente_portal.editado"
   | "cliente_portal.removido"
   | "pedido_compra.emitida"
+  // 02/09/2026: gerar deixou de enviar. `gerada` é a criação, `editada` a
+  // correção enquanto ainda não foi enviada, `enviada_financeiro` o envio.
+  | "pedido_compra.gerada"
+  | "pedido_compra.editada"
+  | "pedido_compra.enviada_financeiro"
   | "pedido_compra.cancelada"
   | "pedido_compra.prazo_financeiro_atualizado"
   | "pedido_compra.paga"

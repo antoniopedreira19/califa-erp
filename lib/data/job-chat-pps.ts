@@ -62,7 +62,16 @@ export function montarThreadChatPPs(
   // corresponde ao ESTADO ATUAL (pago/rejeitada/cancelada) e sobe pra
   // updated_at. Uma PP que ainda está "em_avaliacao" só gera o card de
   // emissão.
+  //
+  // PP GERADA fica fora do fio (02/09/2026): ela ainda não foi enviada ao
+  // financeiro, e este fio é a conversa com o financeiro. O card de
+  // emissão passa a ser o ENVIO — data e autor de `enviada_financeiro_*`;
+  // a PP anterior a essa data foi enviada na própria geração, então os
+  // dois carimbos coincidem e nada muda para ela.
   for (const pp of pps) {
+    if (pp.status === "gerada") continue;
+    const enviadaEm = pp.enviada_financeiro_em ?? pp.created_at;
+    const enviadaPorNome = pp.enviada_financeiro_por_nome ?? pp.emitida_por_nome;
     const fornecedorLookup = pp.fornecedor_id ? fornecedoresPorId[pp.fornecedor_id] : null;
     const fornecedorNome = nomeContraparteBRPP({
       verba_producao: pp.verba_producao,
@@ -78,27 +87,27 @@ export function montarThreadChatPPs(
       icone: "file-text",
       cor: "azul",
       titulo: "PP emitida",
-      quando: dataHora(pp.created_at),
+      quando: dataHora(enviadaEm),
       resumo: `${pp.codigo} · ${pp.servico} · ${fornecedorNome}`,
       valor: valorFmt,
       valorTom: "neutro",
       linhas: [
         {
           texto: "Prazo de pagamento",
-          valor: prazoEmDias(pp.created_at, pp.prazo_pagamento),
+          valor: prazoEmDias(enviadaEm, pp.prazo_pagamento),
           tom: "texto",
         },
-        ...(pp.emitida_por_nome
+        ...(enviadaPorNome
           ? ([
               {
                 texto: "Emitida por",
-                valor: pp.emitida_por_nome,
+                valor: enviadaPorNome,
                 tom: "texto",
               },
             ] as const)
           : []),
       ],
-      em: pp.created_at,
+      em: enviadaEm,
     });
 
     // Card de estado terminal (se houver)

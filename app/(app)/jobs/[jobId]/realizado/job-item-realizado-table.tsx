@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ChevronDown, Plus, Trash2, X } from "lucide-react";
+import { ChevronDown, Lock, Plus, Trash2, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { TruncateTooltip } from "@/components/ui/truncate-tooltip";
 import { cn, formatCurrency } from "@/lib/utils";
@@ -19,7 +19,8 @@ import { nomeContraparteBRPP } from "@/lib/types";
 import { CalhaLinha } from "./calha-linha";
 import { GerarPPDrawer } from "./gerar-pp-drawer";
 import { PainelPPsItem } from "./painel-pps-item";
-import { saldoDoItem, somaDasPPs } from "@/lib/calculos/pps-item";
+import { somaDasPPsEmitidas, contarPendentes } from "@/lib/calculos/pps-item";
+import { ppChegouAoFinanceiro } from "@/lib/types";
 import { BvDialog } from "@/app/(app)/_bv/bv-dialog";
 import { acaoBv } from "@/app/(app)/_bv/bv-action-button";
 import { LARGURA_CALHA } from "@/app/(app)/_planilha/calha-acoes";
@@ -111,6 +112,9 @@ interface Props {
    *  `rejeitado_financeiro`). Distingue-se do job ENCERRADO, que também
    *  tem `podeAcoes` falso mas conserva os BVs lançados para consulta. */
   preAbertura: boolean;
+  /** Errata devolveu o job ao mural: o envio de PP ao financeiro fica
+   *  fechado até a revisão da abertura ser salva (decisão 040). */
+  aberturaEmRevisao?: boolean;
   // PP rail — várias PPs por item desde 17/08/2026 (PPs parciais).
   ppsPorItemId: Map<string, PedidoCompraNaLista[]>;
   fornecedores: Array<Pick<Fornecedor, "id" | "nome" | "razao_social" | "status">>;
@@ -169,6 +173,12 @@ interface Props {
  *  desta tabela. Mexer no realizado agora é emitir ou cancelar PP. */
 const ALTURA_LINHA = "h-[34px]";
 
+/** Por que a linha não entra na errata — o mesmo texto do servidor
+ *  (`barrarLinhaComPPNoFinanceiro`), para a tela não prometer o que a
+ *  action recusa. */
+const MOTIVO_TRAVA_PP =
+  "Linha com Pedido de Produção já no financeiro não entra em errata. Corrija o que falta em outra linha, ou cancele a PP antes.";
+
 const GRADE_NEUTRA = "border-r border-r-[#f1f1f1]";
 
 /** Razão social quando existe — é o nome que o PDF da PP usa. */
@@ -198,6 +208,7 @@ function CelulaOrcadoErrata({
   errata,
   moeda,
   className,
+  travada = false,
 }: {
   item: ItemPlanilhaJob;
   campo: CampoErrata;
@@ -205,6 +216,9 @@ function CelulaOrcadoErrata({
   errata?: RascunhoErrata;
   moeda: string;
   className: string;
+  /** Linha com PP já no financeiro não entra em errata (decisão 040): a
+   *  célula fica de leitura mesmo com o modo ligado. */
+  travada?: boolean;
 }) {
   // A linha vermelha nasce sem orçado e nunca ganha um: mostrar travessão
   // é mais honesto do que mostrar zeros que ninguém pode mexer.
@@ -228,12 +242,14 @@ function CelulaOrcadoErrata({
         ? Number(item.quantidade_orcada ?? 0)
         : Number(item.dias_meses_orcado ?? 0);
 
-  if (!editando || !errata) {
+  if (!editando || !errata || travada) {
     return (
       <td
+        title={editando && travada ? MOTIVO_TRAVA_PP : undefined}
         className={cn(
           "px-3 text-right text-xs align-middle",
           campo === "unitario" && "font-mono",
+          editando && travada && "text-muted-foreground",
           className,
         )}
       >
@@ -273,6 +289,7 @@ export function JobItemRealizadoTable({
   onAlternarGrupo,
   podeAcoes,
   preAbertura,
+  aberturaEmRevisao = false,
   ppsPorItemId,
   fornecedores,
   empresas,
@@ -294,6 +311,9 @@ export function JobItemRealizadoTable({
   const wrapperRef = React.useRef<HTMLDivElement>(null);
   const [painelOpen, setPainelOpen] = React.useState(false);
   const [drawerOpen, setDrawerOpen] = React.useState(false);
+  /** PP gerada aberta no formulário para edição. Null = gerar nova. */
+  const [ppEditando, setPpEditando] =
+    React.useState<PedidoCompraNaLista | null>(null);
   const [itemIdAtual, setItemIdAtual] = React.useState<string | null>(null);
   const [bvAberto, setBvAberto] = React.useState<ItemPlanilhaJob | null>(null);
   const [toast, setToast] = React.useState<string | null>(null);
@@ -311,6 +331,25 @@ export function JobItemRealizadoTable({
     const t = setTimeout(() => setToast(null), 4000);
     return () => clearTimeout(t);
   }, [toast]);
+
+  // O placeholder otimista morre quando a PP real chega via prop. Sem
+  // isto ele ficava no mapa para sempre e, com o cancelar dentro do
+  // próprio painel (02/09/2026), ressuscitava: cancelada a única PP do
+  // item, `ppsDoItem` voltava a vazio e o chip mostrava "PPs · 1" de uma
+  // PP que já não existia.
+  React.useEffect(() => {
+    setPpsOtimistas((prev) => {
+      let mudou = false;
+      const next = new Map(prev);
+      for (const realizadoId of prev.keys()) {
+        if ((ppsPorItemId.get(realizadoId) ?? []).length > 0) {
+          next.delete(realizadoId);
+          mudou = true;
+        }
+      }
+      return mudou ? next : prev;
+    });
+  }, [ppsPorItemId]);
 
   /** Todos os itens da planilha, achatados — as contas e as buscas por
    *  id atravessam os grupos e não podem depender de qual card era. */
@@ -408,15 +447,21 @@ export function JobItemRealizadoTable({
     visao === "liquido" ? " · líquido (− BV)" : ""
   }`;
 
-  /** Quanto do item ainda pode virar PP.
-   *
-   *  Sai do ORÇADO desde 21/08/2026, não mais do realizado: com o
-   *  realizado virando a própria soma das PPs, ele se limitaria sozinho.
-   *  Mesma conta do trigger `pp_valida_saldo_do_item`. */
-  function saldoParaPPs(itemId: string, itemRealizadoId: string): number {
-    const orcado = blocosPorItem.get(itemId)?.orcado ?? 0;
-    return saldoDoItem(orcado, ppsPorItemId.get(itemRealizadoId) ?? []);
-  }
+  /** Linhas que a errata NÃO pode tocar: as que já têm PP no financeiro
+   *  (decisão 040). O mesmo recorte de `barrarLinhaComPPNoFinanceiro`,
+   *  no servidor — a tela nasce travada para o usuário não montar a
+   *  errata inteira e só então tomar o erro. A gerada não trava: ela
+   *  ainda é rascunho do job. */
+  const travadasPorPP = React.useMemo(() => {
+    const travadas = new Set<string>();
+    for (const it of todosOsItens) {
+      const realizadoId = realizadosMap.get(it.id)?.id;
+      if (!realizadoId) continue;
+      const pps = ppsPorItemId.get(realizadoId) ?? [];
+      if (pps.some((pp) => ppChegouAoFinanceiro(pp.status))) travadas.add(it.id);
+    }
+    return travadas;
+  }, [todosOsItens, realizadosMap, ppsPorItemId]);
 
   const fmt = (v: number) => formatCurrency(v, moeda);
 
@@ -677,6 +722,14 @@ export function JobItemRealizadoTable({
                       />
                     ) : (
                       <div className="flex min-w-0 items-center gap-1.5">
+                        {editando && travadasPorPP.has(item.id) && (
+                          <Lock
+                            className="h-3 w-3 flex-none text-muted-foreground"
+                            aria-label={MOTIVO_TRAVA_PP}
+                          >
+                            <title>{MOTIVO_TRAVA_PP}</title>
+                          </Lock>
+                        )}
                         <TruncateTooltip text={item.item} />
                         {item.linha_vermelha && (
                           <span className={cn(ERRATA.tagVermelha, "flex-none")}>
@@ -694,7 +747,7 @@ export function JobItemRealizadoTable({
                         : GRADE_NEUTRA,
                     )}
                   >
-                    {editando ? (
+                    {editando && !travadasPorPP.has(item.id) ? (
                       <select
                         value={item.tipo_custo}
                         onChange={(e) =>
@@ -742,6 +795,7 @@ export function JobItemRealizadoTable({
                     errata={errata}
                     moeda={moeda}
                     className={ORCADO.celulaAbre}
+                    travada={travadasPorPP.has(item.id)}
                   />
                   <CelulaOrcadoErrata
                     item={item}
@@ -750,6 +804,7 @@ export function JobItemRealizadoTable({
                     errata={errata}
                     moeda={moeda}
                     className={ORCADO.celulaMeio}
+                    travada={travadasPorPP.has(item.id)}
                   />
                   <CelulaOrcadoErrata
                     item={item}
@@ -758,6 +813,7 @@ export function JobItemRealizadoTable({
                     errata={errata}
                     moeda={moeda}
                     className={ORCADO.celulaMeio}
+                    travada={travadasPorPP.has(item.id)}
                   />
                   <td
                     className={cn(
@@ -1011,9 +1067,16 @@ export function JobItemRealizadoTable({
                     const travadaPorSave =
                       item.em_save === true ||
                       Number(item.save_consumido ?? 0) > 0;
-                    const motivoDaTrava = item.em_save
-                      ? "Linha marcada como save: tire a marca antes de remover."
-                      : "Linha paga com saldo de save de outro job: desfaça o consumo antes de remover.";
+                    // PP no financeiro trava a linha inteira (decisão
+                    // 040) — remover inclusive. O servidor já recusava
+                    // qualquer PP no histórico (`barrarRemocao`); a
+                    // tela passa a dizer isso antes do clique.
+                    const travadaPorPP = travadasPorPP.has(item.id);
+                    const motivoDaTrava = travadaPorPP
+                      ? MOTIVO_TRAVA_PP
+                      : item.em_save
+                        ? "Linha marcada como save: tire a marca antes de remover."
+                        : "Linha paga com saldo de save de outro job: desfaça o consumo antes de remover.";
                     return (
                       <LinhaDaCalha
                         key={item.id}
@@ -1028,8 +1091,12 @@ export function JobItemRealizadoTable({
                           <button
                             type="button"
                             onClick={() => errata.remover(item.id)}
-                            disabled={travadaPorSave}
-                            title={travadaPorSave ? motivoDaTrava : undefined}
+                            disabled={travadaPorSave || travadaPorPP}
+                            title={
+                              travadaPorSave || travadaPorPP
+                                ? motivoDaTrava
+                                : undefined
+                            }
                             className="inline-flex items-center gap-1 rounded-lg border border-border bg-white px-2 py-1 text-[11px] font-semibold text-muted-foreground transition-colors hover:border-california-red/40 hover:text-california-red disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-border disabled:hover:text-muted-foreground"
                           >
                             <Trash2 className="h-3 w-3" />
@@ -1084,13 +1151,10 @@ export function JobItemRealizadoTable({
                           podeAcoes && !emSave && tipoGeraDesembolso(item.tipo_custo)
                             ? {
                                 itemRealizadoId: realizadoId,
-                                // Era o realizado. Com o realizado nascendo
-                                // das PPs, esperar por ele deixava a metade
-                                // PP invisível para sempre — nunca haveria
-                                // a primeira PP. Quem libera agora é o
-                                // orçado.
-                                baseDisponivel: Number(item.total_orcado ?? 0),
                                 pedidos: ppsDoItem,
+                                // PPs geradas e não enviadas: o círculo
+                                // vermelho do chip (02/09/2026).
+                                pendentes: contarPendentes(ppsDoItem),
                                 otimista:
                                   ppsDoItem.length > 0
                                     ? null
@@ -1113,8 +1177,9 @@ export function JobItemRealizadoTable({
         <div className="flex items-center justify-between gap-4 rounded-b-2xl border-t border-border bg-muted/40 px-6 py-3">
           <span className="text-[11px] text-muted-foreground">
             O Realizado não é digitado: ele é a soma dos Pedidos de Produção
-            emitidos no item. Em custo <strong>A</strong> e <strong>D</strong>,
-            que não geram PP, ele espelha o Orçado.
+            enviados ao financeiro no item — PP só gerada ainda não conta. Em
+            custo <strong>A</strong> e <strong>D</strong>, que não geram PP,
+            ele espelha o Orçado.
           </span>
         </div>
       )}
@@ -1123,29 +1188,28 @@ export function JobItemRealizadoTable({
         const itemAtual = todosOsItens.find(
           (i) => (realizadosMap.get(i.id)?.id ?? "") === itemIdAtual,
         );
-        // A base do painel e do formulário é o ORÇADO do item: é dele que
-        // sai o saldo, e é sobre a quantidade orçada que a fatia da PP é
-        // medida. O realizado não serve mais de base — ele É a soma das
-        // PPs, e se limitaria sozinho.
-        const orcadoAtual = itemAtual ? Number(itemAtual.total_orcado ?? 0) : 0;
-        const quantidadeOrcada = itemAtual
-          ? Number(itemAtual.quantidade_orcada ?? 0)
+        // A referência do painel e do formulário é o PLANEJADO do item
+        // (02/09/2026, decisão 039). Era o orçado; antes disso, o
+        // realizado — que É a soma das PPs e se limitaria sozinho.
+        const planejadoAtual = itemAtual
+          ? Number(itemAtual.total_planejado ?? 0)
           : 0;
-        // Decomposição do orçado — referência do cartão do formulário de
-        // PP, que mostra "R$ Unit. × QT × D/M" de onde os campos vêm.
-        const unitarioOrcado = itemAtual
-          ? Number(itemAtual.valor_unitario_orcado ?? 0)
+        // Decomposição do planejado — referência do cartão do formulário
+        // de PP, que mostra "R$ Unit. × QT × D/M" de onde os campos vêm.
+        const unitarioPlanejado = itemAtual
+          ? Number(itemAtual.valor_unitario_planejado ?? 0)
           : 0;
-        const dmOrcado = itemAtual
-          ? Number(itemAtual.dias_meses_orcado ?? 0)
+        const quantidadePlanejada = itemAtual
+          ? Number(itemAtual.quantidade_planejada ?? 0)
+          : 0;
+        const dmPlanejado = itemAtual
+          ? Number(itemAtual.dias_meses_planejado ?? 0)
           : 0;
         const ppsDoItem = itemIdAtual
           ? (ppsPorItemId.get(itemIdAtual) ?? [])
           : [];
-        const emPPs = somaDasPPs(ppsDoItem);
-        const saldo = itemAtual
-          ? saldoParaPPs(itemAtual.id, itemIdAtual ?? "")
-          : 0;
+        // Só o que já chegou ao financeiro: a gerada conta na pendência.
+        const emPPs = somaDasPPsEmitidas(ppsDoItem);
 
         return (
           <>
@@ -1157,8 +1221,7 @@ export function JobItemRealizadoTable({
                 itemAtual ? grupoDoItem.get(itemAtual.id) ?? "" : ""
               }
               moeda={moeda}
-              totalOrcado={orcadoAtual}
-              quantidadeOrcada={quantidadeOrcada}
+              totalPlanejado={planejadoAtual}
               pps={ppsDoItem.map((pp) => ({
                 id: pp.id,
                 codigo: pp.codigo,
@@ -1168,27 +1231,44 @@ export function JobItemRealizadoTable({
                   fornecedor: pp.fornecedor_id ? { nome: nomeDoFornecedor(fornecedores, pp.fornecedor_id) } : null,
                   responsavel: pp.responsavel,
                 }) || nomeDoFornecedor(fornecedores, pp.fornecedor_id ?? ""),
-                quantidade: Number(pp.quantidade ?? 0),
                 valor: Number(pp.valor ?? 0),
+                verbaProducao: pp.verba_producao === true,
+                temAnexo: (pp.anexos ?? []).length > 0,
               }))}
               emPPs={emPPs}
-              saldo={saldo}
+              aberturaEmRevisao={aberturaEmRevisao}
               onNovaPP={
                 podeAcoes
                   ? () => {
                       // O painel some enquanto o formulário está aberto:
                       // dois drawers empilhados na direita brigariam pelo
                       // mesmo espaço.
+                      setPpEditando(null);
                       setPainelOpen(false);
                       setDrawerOpen(true);
                     }
                   : null
               }
+              onEditar={
+                podeAcoes
+                  ? (pp) => {
+                      const completa = ppsDoItem.find((x) => x.id === pp.id);
+                      if (!completa) return;
+                      setPpEditando(completa);
+                      setPainelOpen(false);
+                      setDrawerOpen(true);
+                    }
+                  : null
+              }
+              onMensagem={setToast}
             />
 
             <GerarPPDrawer
               open={drawerOpen}
-              onOpenChange={setDrawerOpen}
+              onOpenChange={(aberto) => {
+                setDrawerOpen(aberto);
+                if (!aberto) setPpEditando(null);
+              }}
               itemRealizadoId={itemIdAtual}
               jobId={jobId}
               fornecedores={fornecedores}
@@ -1196,13 +1276,20 @@ export function JobItemRealizadoTable({
               responsaveis={responsaveis}
               defaultEmpresaId={jobEmpresaId}
               itemDescricao={itemAtual?.item ?? ""}
-              valorOrcado={orcadoAtual}
-              quantidadeOrcada={quantidadeOrcada}
-              unitarioOrcado={unitarioOrcado}
-              dmOrcado={dmOrcado}
-              saldoDisponivel={saldo}
-              onSuccess={(codigo) => {
-                setToast(`Pedido de Produção ${codigo} gerado com sucesso!`);
+              valorPlanejado={planejadoAtual}
+              unitarioPlanejado={unitarioPlanejado}
+              quantidadePlanejada={quantidadePlanejada}
+              dmPlanejado={dmPlanejado}
+              emPPsEmitidas={emPPs}
+              ppEditando={ppEditando}
+              onSuccess={(codigo, modo) => {
+                if (modo === "editada") {
+                  setToast(`${codigo} salva — segue gerada, no job.`);
+                  return;
+                }
+                setToast(
+                  `Pedido de Produção ${codigo} gerado. Envie ao financeiro pelo painel do item.`,
+                );
                 // Estado otimista: o chip da calha já conta a PP nova antes
                 // do router.refresh() completar. Some sozinho quando a PP
                 // real chega via prop (ppsPorItemId do server).

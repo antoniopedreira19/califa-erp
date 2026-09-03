@@ -136,3 +136,16 @@ reprocessamento das linhas existentes.
 O **PDF da PP** continua imprimindo `quantidade` e `valor`, sem a
 decomposição. O documento que vai ao fornecedor não mudou de forma, e o
 design desta rodada não o cobre.
+
+## ⚠️ Nota de 2026-09-02 — o teto saiu (decisão 039)
+
+O §3 ("O teto é o saldo em R$, nunca a quantidade") deixou de valer: não
+há mais teto por PP. O trigger `pp_valida_saldo_do_item` foi removido e o
+"máximo aceito nesta PP" sumiu do formulário. A referência do item passou
+do orçado para o **planejado**, e passar dele não impede gerar — muda
+quem pode enviar ao financeiro. Ver
+[039](039-pp-nasce-gerada-e-o-envio-ao-financeiro-e-uma-acao.md) §3.
+
+O §2 (o valor é R$ Unit. × QT × D/M) e o §7 (decomposição do realizado só
+com uma PP) continuam. No §7, o realizado passou a contar só as PPs que
+chegaram ao financeiro — a PP gerada fica de fora.
