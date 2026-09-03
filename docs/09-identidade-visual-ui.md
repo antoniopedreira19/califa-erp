@@ -162,8 +162,17 @@ um paredão de branco à esquerda e as colunas de moeda no mesmo lugar. As
 larguras são classes **literais**, uma combinação por vez — o Tailwind
 varre o fonte, e `w-[${x}%]` não existiria no CSS.
 
-As planilhas de **job** não têm isso: lá o card de Totais divide o
-`colgroup` com os blocos, e o menu lista os blocos em só leitura.
+**⚠️ Na planilha do job (03/09/2026, decisão 045)** o menu esconde o
+**Orçado** e liga duas colunas de rentabilidade **dentro** do PLANEJADO
+e do REALIZADO (Rentab. R$ · Rentab. %, as últimas do bloco — a faixa
+passa a cobrir 6). Planejado e Realizado nunca saem. A grade
+(`grade-job.tsx`) vai de 15 a 20 colunas: as larguras são os percentuais
+de sempre como **pesos** renormalizados para a mesma soma, em `style`
+(16 combinações não cabem em classes literais), e o piso de largura
+cresce por par de rentabilidade. Com as colunas desligadas a planilha é
+bit a bit a de antes, "rentab." no vão incluído; ligada uma delas, o
+"rentab." daquele bloco sai do vão. A **visão agregada de jobs** ficou
+de fora: lá o card de Totais divide o `colgroup` com os blocos.
 
 **A coluna Rentab. R$ do orçamento tem 11,5%**, e não a mesma largura das outras colunas de moeda: ela é a única da planilha que carrega sinal negativo, e `-R$ 117.500,00` a 13px pede ~122px. O espaço saiu do `%` ao lado, que nunca passa de `-99,9%` (24/08/2026). Em `table-fixed` o número que não cabe **transborda por cima da coluna vizinha** — não encolhe, não quebra.
 

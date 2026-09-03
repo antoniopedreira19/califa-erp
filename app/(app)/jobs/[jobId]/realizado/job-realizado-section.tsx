@@ -202,6 +202,15 @@ export function JobRealizadoSection({
   const [linhaSave, setLinhaSave] = React.useState<ItemPlanilhaJob | null>(
     null,
   );
+
+  // MENU "EXIBIR" (decisão 045). Estado de tela: não vai para o banco nem
+  // para a URL. Orçado liga/desliga; Planejado e Realizado nunca saem —
+  // o realizado é por onde se acompanham as PPs, e o planejado é o custo
+  // com que ele se compara. As duas rentabilidades nascem fechadas: com
+  // elas desligadas a planilha é a de sempre.
+  const [orcadoVisivel, setOrcadoVisivel] = React.useState(true);
+  const [rentabPlanejada, setRentabPlanejada] = React.useState(false);
+  const [rentabRealizada, setRentabRealizada] = React.useState(false);
   // No job, mexer no save é ERRATA — e errata exige job aberto, a mesma
   // porta de `AlterarOrcadoButton`. O financeiro chega aqui com
   // `podeAcoes` falso e lê sem editar. Depois do envio para faturamento
@@ -321,6 +330,7 @@ export function JobRealizadoSection({
           )}
           <ChaveBrutoLiquido visao={visao} onChange={setVisao} />
           <MenuExibirColunas
+            titulo="Colunas"
             blocos={[
               {
                 chave: "save",
@@ -328,18 +338,67 @@ export function JobRealizadoSection({
                 visivel: saveLigado,
                 onAlternar: () => setSaveLigado((v) => !v),
               },
-              { chave: "orcado", rotulo: "Orçado", visivel: true },
-              { chave: "planejado", rotulo: "Planejado", visivel: true },
-              { chave: "realizado", rotulo: "Realizado", visivel: true },
+              // A errata edita o Orçado: enquanto ela está ligada o bloco
+              // não pode sair da tela, e o item explica por quê.
+              {
+                chave: "orcado",
+                rotulo: "Orçado",
+                visivel: orcadoVisivel,
+                onAlternar: errata.ativo
+                  ? undefined
+                  : () => setOrcadoVisivel((v) => !v),
+                dica: errata.ativo
+                  ? "Na errata o Orçado fica sempre aberto."
+                  : undefined,
+              },
+              {
+                chave: "planejado",
+                rotulo: "Planejado",
+                visivel: true,
+                dica: "O Planejado é sempre exibido.",
+              },
+              {
+                chave: "realizado",
+                rotulo: "Realizado",
+                visivel: true,
+                dica: "O Realizado é sempre exibido — é por ele que se acompanham as PPs.",
+              },
+            ]}
+            secoes={[
+              {
+                titulo: "Rentabilidade",
+                itens: [
+                  {
+                    chave: "rentab_planejada",
+                    rotulo: "Rentabilidade planejada",
+                    visivel: rentabPlanejada,
+                    onAlternar: () => setRentabPlanejada((v) => !v),
+                  },
+                  {
+                    chave: "rentab_realizada",
+                    rotulo: "Rentabilidade realizada",
+                    visivel: rentabRealizada,
+                    onAlternar: () => setRentabRealizada((v) => !v),
+                  },
+                ],
+                dica: "Cada uma entra logo depois do bloco que a gera.",
+              },
             ]}
           />
           {podeAcoes && (
             <AlterarOrcadoButton
               ativo={errata.ativo}
               travadoPor={motivoErrataTravada}
-              onAlternar={() =>
-                errata.ativo ? errata.descartar() : errata.ligar()
-              }
+              onAlternar={() => {
+                if (errata.ativo) {
+                  errata.descartar();
+                  return;
+                }
+                // A errata é edição do Orçado: o bloco volta à tela
+                // junto com ela, esteja escondido ou não.
+                setOrcadoVisivel(true);
+                errata.ligar();
+              }}
             />
           )}
           <Link
@@ -392,6 +451,9 @@ export function JobRealizadoSection({
                 podeMexerNoSave && !errata.ativo ? setLinhaSave : undefined
               }
               errata={podeErrata ? errata : undefined}
+              orcadoVisivel={orcadoVisivel}
+              rentabPlanejadaVisivel={rentabPlanejada}
+              rentabRealizadaVisivel={rentabRealizada}
             />
           </div>
           <JobTotaisCard

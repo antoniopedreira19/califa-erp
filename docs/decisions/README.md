@@ -68,9 +68,10 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 042 | [O menu "Exibir" esconde blocos de verdade, e orçamento não tem Realizado](042-blocos-ocultaveis-na-planilha-do-orcamento.md) | 2026-09-03 |
 | 043 | [Descrição do projeto e descritivo do job viram obrigatórios](043-descricao-do-projeto-e-descritivo-do-job-obrigatorios.md) | 2026-09-03 |
 | 044 | [A alíquota de 19,53% já vem escolhida no orçamento novo](044-aliquota-padrao-no-orcamento-novo.md) | 2026-09-03 |
+| 045 | [Rentabilidade por item na planilha do job, e o "Exibir" que liga de verdade](045-rentabilidade-por-item-na-planilha-do-job.md) | 2026-09-03 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
 > data é a da decisão, não a da posição na fila.
 
-**Próximo número livre: 045.**
+**Próximo número livre: 046.**
