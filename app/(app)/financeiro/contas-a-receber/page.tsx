@@ -24,7 +24,11 @@ import type {
 
 export const dynamic = "force-dynamic";
 
-export default async function ContasReceberPage() {
+export default async function ContasReceberPage({
+  searchParams,
+}: {
+  searchParams?: { filtro?: string };
+}) {
   const session = await requireSession();
   if (session.activeRole !== "administrador" && session.activeRole !== "financeiro") {
     redirect("/home?reason=sem_permissao_financeira");
@@ -32,6 +36,7 @@ export default async function ContasReceberPage() {
 
   const supabase = createClient();
   const tenantId = session.activeTenant.id;
+  const hoje = new Date().toISOString().slice(0, 10);
 
   // Todas as leituras em paralelo — regra de performance do projeto.
   const [
@@ -65,21 +70,30 @@ export default async function ContasReceberPage() {
       .eq("tenant_id", tenantId)
       .eq("status", "emitido")
       .order("data_emissao", { ascending: false }),
-    supabase
-      .from("titulos_receber")
-      .select(`
-        id, numero_parcela, valor, data_vencimento, status,
-        data_previsao_recebimento, data_previsao_recebimento_primeira,
-        inadimplente_desde, pago_em, empresa_id, faturamento_id,
-        faturamento:faturamentos!inner(
-          id, numero_nf, data_emissao, descricao, status, origem_tipo,
-          cliente:clientes(id, nome_fantasia, razao_social),
-          fornecedor:fornecedores(id, nome, razao_social),
-          itens:faturamento_itens(origem_tipo, origem_id, envio_parcela_id, valor)
-        )
-      `)
-      .eq("tenant_id", tenantId)
-      .order("data_vencimento", { ascending: true }),
+    (() => {
+      // Filtro de aterrissagem da home
+      let q = supabase
+        .from("titulos_receber")
+        .select(`
+          id, numero_parcela, valor, data_vencimento, status,
+          data_previsao_recebimento, data_previsao_recebimento_primeira,
+          inadimplente_desde, pago_em, empresa_id, faturamento_id,
+          faturamento:faturamentos!inner(
+            id, numero_nf, data_emissao, descricao, status, origem_tipo,
+            cliente:clientes(id, nome_fantasia, razao_social),
+            fornecedor:fornecedores(id, nome, razao_social),
+            itens:faturamento_itens(origem_tipo, origem_id, envio_parcela_id, valor)
+          )
+        `)
+        .eq("tenant_id", tenantId)
+        .order("data_vencimento", { ascending: true });
+      if (searchParams?.filtro === "vencidas") {
+        q = q
+          .lt("data_previsao_recebimento", hoje)
+          .is("pago_em", null);
+      }
+      return q;
+    })(),
     // Conta e centro de custo da baixa — o "Conciliação · conta · centro"
     // da linha recebida. Query separada porque só as linhas pagas usam.
     supabase

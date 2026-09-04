@@ -14,7 +14,14 @@ import type { PPStatus, PlanoContaTipo, PlanoContaSubtipo, ContaBancaria, FormaP
 
 export const dynamic = "force-dynamic";
 
-export default async function PedidosCompraFinanceiroPage() {
+// TODO: filtro=pps_em_avaliacao — join com pedidos_compra ainda nao implementado
+// TODO: filtro=faturas_cartao — precisa distinguir origem; implementar em fase 2
+
+export default async function PedidosCompraFinanceiroPage({
+  searchParams,
+}: {
+  searchParams?: { filtro?: string };
+}) {
   const session = await requireSession();
   if (
     session.activeRole !== "administrador" &&
@@ -106,21 +113,31 @@ export default async function PedidosCompraFinanceiroPage() {
       .eq("status", "em_avaliacao"),
     // Contas avulsas (todos os status) — viram títulos de origem AVULSO ou
     // RECORRÊNCIA na aba unificada, conforme `recorrente_id`.
-    supabase
-      .from("contas_avulsas")
-      .select(`
-        id, descricao, valor, natureza, data_prevista_pagamento,
-        data_pagamento, data_pagamento_primeira, status,
-        pago_em, created_at, empresa_id, recorrente_id,
-        plano_conta_tipo_id, plano_conta_subtipo_id,
-        forma_pagamento, cartao_credito_id,
-        estorno_de_avulsa_id, parcela_numero, parcela_total, parcela_de_avulsa_id,
-        fornecedor:fornecedores(nome, razao_social),
-        job:jobs(codigo)
-      `)
-      .eq("tenant_id", session.activeTenant.id)
-      .order("data_prevista_pagamento", { ascending: true })
-      .order("created_at", { ascending: false }),
+    (() => {
+      const hoje = new Date().toISOString().slice(0, 10);
+      let q = supabase
+        .from("contas_avulsas")
+        .select(`
+          id, descricao, valor, natureza, data_prevista_pagamento,
+          data_pagamento, data_pagamento_primeira, status,
+          pago_em, created_at, empresa_id, recorrente_id,
+          plano_conta_tipo_id, plano_conta_subtipo_id,
+          forma_pagamento, cartao_credito_id,
+          estorno_de_avulsa_id, parcela_numero, parcela_total, parcela_de_avulsa_id,
+          fornecedor:fornecedores(nome, razao_social),
+          job:jobs(codigo)
+        `)
+        .eq("tenant_id", session.activeTenant.id)
+        .order("data_prevista_pagamento", { ascending: true })
+        .order("created_at", { ascending: false });
+      // Filtro de aterrissagem: vencidas = data prevista passada e ainda não baixadas
+      if (searchParams?.filtro === "vencidas") {
+        q = q
+          .lt("data_prevista_pagamento", hoje)
+          .neq("status", "baixada");
+      }
+      return q;
+    })(),
     // Baixas já realizadas — só o que a linha paga exibe no subtítulo
     // ("Pago em X · conta · centro de custo"). Sem embed pesado: três
     // nomes e nada mais.
