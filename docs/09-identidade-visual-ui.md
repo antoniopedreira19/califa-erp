@@ -144,6 +144,36 @@ São três grades, uma por formato de tela:
 | Job — planilha interna | 15 | `app/(app)/_planilha/grade-job.tsx` |
 | Job — visão agregada do projeto | 15 | `app/(app)/_planilha/grade-jobs-projeto.tsx` |
 
+**⚠️ Blocos ocultáveis (03/09/2026, decisão 042).** Na planilha da
+**versão do orçamento**, o menu "Exibir" esconde os blocos **Orçado** e
+**Rentabilidade** — PLANEJADO nunca sai. Quem esconde um bloco passa as
+MESMAS flags (`ColunasVisiveis`) para tudo que divide a grade na mesma
+tela; `totalDeColunas()` e `colunasDoRotulo()` são a fonte única dos
+`colSpan`, e nunca literais. Um bloco escondido sai de **todas** as
+linhas: faixa, sub-cabeçalho, linha de grupo, linha de item, linha nova
+e `tfoot` — e as colunas de entrada dele saem também da ordem do Tab.
+
+**A largura liberada volta para os blocos, não para o Item.** Os três
+blocos somam 72% da tabela; ao esconder um, os 72% são redistribuídos
+entre os que ficaram, na mesma proporção (sem Orçado: Planejado
+16,5 · 5,5 · 5,5 · 18 e Rentab. 19 · 7). Sem isso os 28% do bloco
+escondido cairiam no Item, que absorve a sobra, e a planilha ficaria com
+um paredão de branco à esquerda e as colunas de moeda no mesmo lugar. As
+larguras são classes **literais**, uma combinação por vez — o Tailwind
+varre o fonte, e `w-[${x}%]` não existiria no CSS.
+
+**⚠️ Na planilha do job (03/09/2026, decisão 045)** o menu esconde o
+**Orçado** e liga duas colunas de rentabilidade **dentro** do PLANEJADO
+e do REALIZADO (Rentab. R$ · Rentab. %, as últimas do bloco — a faixa
+passa a cobrir 6). Planejado e Realizado nunca saem. A grade
+(`grade-job.tsx`) vai de 15 a 20 colunas: as larguras são os percentuais
+de sempre como **pesos** renormalizados para a mesma soma, em `style`
+(16 combinações não cabem em classes literais), e o piso de largura
+cresce por par de rentabilidade. Com as colunas desligadas a planilha é
+bit a bit a de antes, "rentab." no vão incluído; ligada uma delas, o
+"rentab." daquele bloco sai do vão. A **visão agregada de jobs** ficou
+de fora: lá o card de Totais divide o `colgroup` com os blocos.
+
 **A coluna Rentab. R$ do orçamento tem 11,5%**, e não a mesma largura das outras colunas de moeda: ela é a única da planilha que carrega sinal negativo, e `-R$ 117.500,00` a 13px pede ~122px. O espaço saiu do `%` ao lado, que nunca passa de `-99,9%` (24/08/2026). Em `table-fixed` o número que não cabe **transborda por cima da coluna vizinha** — não encolhe, não quebra.
 
 **Proibido:** layout automático (tabela sem `table-fixed`/`colgroup`) em planilha ou Totais. Com larguras automáticas cada tabela se dimensiona pelo próprio conteúdo — duas tabelas com conteúdos diferentes nunca alinham, e o alinhamento não tem como se sustentar.
@@ -153,6 +183,28 @@ São três grades, uma por formato de tela:
 **Case study** (2026-08-24): o handoff "Planilha Interna - Grupos Unificados" dava ao card de Totais um `colgroup` PRÓPRIO — 7 colunas no orçamento, 8 no job — em que as colunas Total não caíam sob as da planilha acima. Recusado: mantida a grade compartilhada. A consequência é que, no Totais, a rentabilidade também mora no vão do bloco em vez de ganhar colunas próprias — mesma leitura da planilha, e o eixo vertical se sustenta.
 
 **Case study** (2026-08-11): a visão agregada de jobs tinha sido deliberadamente posta em layout automático (04/08) para casar proporções com um mock. Era justamente o que deixava as colunas dos Totais desalinhadas das da planilha. Trocada por `table-fixed` + colgroup compartilhado; medido no navegador, os blocos numéricos ficaram com ~356px cada em viewport de 1660px — não encolheram. No mesmo dia, a agregada de orçamento ganhou o bloco RENTABILIDADE, que existia nos cards de grupo mas faltava no Totais.
+
+## Célula selecionada e rodapé de navegação
+
+**Regra (03/09/2026, decisão 046):** toda planilha de itens tem uma
+**célula selecionada**, distinta da célula aberta. Ela ganha a mesma
+moldura arredondada do campo em edição — 6px de raio, borda vermelha
+California, anel suave de 3px (`SELECAO.moldura` em
+`app/(app)/_planilha/blocos.ts`). Nada mais é destacado: nem a linha,
+nem o cabeçalho.
+
+A moldura vai no **conteúdo** da célula (`<Miolo>`), não no `<td>`: em
+tabela `border-collapse` o raio da célula é ignorado, e é o raio que
+faz a moldura ser a mesma do campo. As margens negativas da moldura
+comem parte do padding da célula para ela ficar colada no número.
+
+A **linha de dicas de tecla** (`DicasDeTeclado`, em
+`_planilha/selecao.tsx`) fica **fora do card**, logo abaixo dele
+(pedido do Tiago em 25/08 e 03/09/2026: dentro do frame ela lia como
+mais uma linha da planilha). O rodapé do design com endereço, valor e
+modo da célula não entrou — a moldura já diz qual célula está
+selecionada. Fonte única das classes: `SELECAO`. **Nunca escrever
+direto no JSX.**
 
 ## Linha do agrupamento (tabela única)
 

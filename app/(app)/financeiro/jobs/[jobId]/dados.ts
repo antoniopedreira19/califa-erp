@@ -118,11 +118,14 @@ export async function carregarJobNoFinanceiro(
       .eq("job_id", jobId)
       .eq("tenant_id", tenantId)
       .order("ordem", { ascending: true }),
+    // PP gerada ainda está no job, sem envio: o financeiro não a vê
+    // (02/09/2026, decisão 039).
     supabase
       .from("pedidos_compra")
       .select("id, codigo, valor, status, fornecedor:fornecedores(nome)")
       .eq("job_id", jobId)
       .eq("tenant_id", tenantId)
+      .neq("status", "gerada")
       .order("codigo", { ascending: true }),
     supabase
       .from("jobs_itens_orcado")

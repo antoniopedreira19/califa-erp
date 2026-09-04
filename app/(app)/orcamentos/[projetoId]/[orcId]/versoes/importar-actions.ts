@@ -231,6 +231,10 @@ export async function confirmarImportacao(
       moeda: "BRL",
       taxa_cambio: 1,
       percentual_honorarios: honorariosCliente.percentual,
+      // Zerada de propósito: versão importada abre com o seletor de
+      // alíquota em branco e obriga a escolha manual antes de aprovar
+      // (decisão 044, 03/09/2026). A padrão de 19,53% vale para versão
+      // que nasce do zero, não para planilha que veio de fora.
       percentual_imposto: 0,
       created_by: session.profile.id,
     })

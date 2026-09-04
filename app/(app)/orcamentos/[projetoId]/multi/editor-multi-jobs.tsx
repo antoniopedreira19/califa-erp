@@ -485,12 +485,9 @@ export function EditorMultiJobs({
       valorJob += t.valorJob;
       imposto += t.imposto;
     }
-    const { resultadoGeral } = calcularResultadoOperacional(
-      valorJob,
-      imposto,
-      planejado,
-    );
-    return { planejado, valorJob, resultadoGeral };
+    const { resultadoOperacional, resultadoGeral } =
+      calcularResultadoOperacional(valorJob, imposto, planejado);
+    return { planejado, valorJob, resultadoOperacional, resultadoGeral };
   }, [jobs, parametros]);
 
   /** Planilhas cujo % de honorários não é o do cadastro do cliente. Não
@@ -705,8 +702,20 @@ export function EditorMultiJobs({
               valor={formatCurrency(resumo.valorJob, parametros.moeda)}
             />
             <Kpi
-              rotulo="Custo planejado"
-              valor={formatCurrency(resumo.planejado, parametros.moeda)}
+              rotulo="Resultado Op. (Planejado)"
+              valor={
+                resumo.resultadoOperacional === null
+                  ? "—"
+                  : formatCurrency(resumo.resultadoOperacional, parametros.moeda)
+              }
+              tomVerde={
+                resumo.resultadoOperacional !== null &&
+                resumo.resultadoOperacional >= 0
+              }
+              tomVermelho={
+                resumo.resultadoOperacional !== null &&
+                resumo.resultadoOperacional < 0
+              }
               borda
             />
             <Kpi
@@ -717,6 +726,9 @@ export function EditorMultiJobs({
                   : formatarPercentual(resumo.resultadoGeral)
               }
               tomVerde={resumo.resultadoGeral !== null && resumo.resultadoGeral >= 0}
+              tomVermelho={
+                resumo.resultadoGeral !== null && resumo.resultadoGeral < 0
+              }
               borda
             />
           </div>
@@ -976,21 +988,24 @@ function Kpi({
   valor,
   borda,
   tomVerde,
+  tomVermelho,
 }: {
   rotulo: string;
   valor: string;
   borda?: boolean;
   tomVerde?: boolean;
+  tomVermelho?: boolean;
 }) {
   return (
     <div className={cn("px-6 py-3.5", borda && "border-l border-border")}>
-      <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+      <p className="whitespace-nowrap text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
         {rotulo}
       </p>
       <p
         className={cn(
           "mt-1.5 whitespace-nowrap font-mono text-xl font-bold leading-none",
           tomVerde && "text-emerald-700",
+          tomVermelho && "text-california-red",
         )}
       >
         {valor}

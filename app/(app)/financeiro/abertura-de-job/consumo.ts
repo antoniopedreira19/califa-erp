@@ -14,9 +14,11 @@ import type { CurvaLinha } from "./curva";
  *
  * O que conta como consumo:
  *
- *   * CUSTO — PPs que não foram canceladas nem rejeitadas. Mesma conta do
- *     card de PPs da página do job (`pps-card.tsx`): `em_avaliacao`,
- *     `aprovada` e `pago` seguem pesando no caixa previsto.
+ *   * CUSTO — PPs que não foram canceladas nem rejeitadas, e que já
+ *     CHEGARAM ao financeiro: a `gerada` fica de fora (02/09/2026,
+ *     decisão 039) — ela ainda pode ser editada ou cancelada sem passar
+ *     por ninguém. Mesma conta do card de PPs da página do job
+ *     (`pps-card.tsx`): `em_avaliacao`, `aprovada` e `pago` pesam.
  *   * RECEBIMENTO — notas emitidas do job. Nota cancelada não conta, pelo
  *     mesmo motivo que não conta na esteira de faturamento.
  */
@@ -55,7 +57,12 @@ export async function consumoDasPrevisoes(
   const custo = (
     (ppsRes.data ?? []) as { valor: number | string; status: string }[]
   )
-    .filter((p) => p.status !== "cancelada" && p.status !== "rejeitada")
+    .filter(
+      (p) =>
+        p.status !== "cancelada" &&
+        p.status !== "rejeitada" &&
+        p.status !== "gerada",
+    )
     .reduce((s, p) => s + Number(p.valor ?? 0), 0);
 
   const recebimento = (

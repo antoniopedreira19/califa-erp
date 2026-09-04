@@ -9,6 +9,7 @@ import { checarPermissao } from "@/lib/permissoes";
 import { orcamentoSchema } from "@/lib/validations/orcamentos";
 import { gerarCodigoOrcamento } from "@/lib/codigos/orcamentos";
 import { honorariosDoOrcamento } from "@/lib/data/clientes";
+import { ALIQUOTA_IMPOSTO_PADRAO } from "@/lib/impostos";
 
 export type ActionResult =
   | { ok: true; id?: string }
@@ -246,7 +247,9 @@ async function criarVersaoInicial(
       moeda: "BRL",
       taxa_cambio: 1,
       percentual_honorarios: honorarios.percentual,
-      percentual_imposto: 0,
+      // Alíquota padrão já escolhida (03/09/2026): a v1 nasce pronta para
+      // aprovar, sem o passo extra de abrir "Editar" só para o imposto.
+      percentual_imposto: ALIQUOTA_IMPOSTO_PADRAO,
       created_by: profileId,
     })
     .select("id")

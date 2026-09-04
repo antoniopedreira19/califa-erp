@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  ALIQUOTA_IMPOSTO_PADRAO,
   ALIQUOTAS_IMPOSTO,
   aliquotaParaValor,
   formatarAliquota,
@@ -61,7 +62,11 @@ export function NovaVersaoDrawer({
   const [fieldErrors, setFieldErrors] = React.useState<
     Record<string, string[]>
   >({});
-  const [imposto, setImposto] = React.useState("");
+  // Já abre na alíquota padrão (03/09/2026): versão nova sem alíquota
+  // escolhida trava na aprovação, e quem precisa da outra troca aqui mesmo.
+  const [imposto, setImposto] = React.useState(
+    aliquotaParaValor(ALIQUOTA_IMPOSTO_PADRAO),
+  );
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -69,9 +74,9 @@ export function NovaVersaoDrawer({
     setFieldErrors({});
 
     const formData = new FormData(e.currentTarget);
-    // O Select é controlado e não tem `name`: o valor entra aqui. Deixar em
-    // branco é permitido — a alíquota só é exigida para aprovar a versão, não
-    // para criá-la; sem escolha a action grava o default 0.
+    // O Select é controlado e não tem `name`: o valor entra aqui. Ele abre
+    // preenchido com a alíquota padrão, mas o `if` continua — se algum dia
+    // o campo voltar a poder ficar vazio, quem decide o default é a action.
     if (imposto !== "") formData.set("percentual_imposto", imposto);
 
     startTransition(async () => {

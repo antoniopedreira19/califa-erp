@@ -495,3 +495,20 @@ Consumo **já gravado** continua valendo: a view monta a oferta, não desfaz
 alocação. Na virada da regra, o único saldo que saiu do seletor foi o do
 JOB-0021 (R$ 1.000,00, sem envio) — e os R$ 13.000,00 já consumidos dele
 em 27/08 seguem de pé.
+
+---
+
+## ⚠️ Nota de 2026-09-04 — a planilha do cliente abate o save consumido
+
+A nota de 27/08 (item 4) dizia que o XLSX exportado usa o lado **bruto**.
+Isso tratou só do orçamento que **gera** save; o que **consome** nunca
+tinha sido discutido para a planilha, e saía cheio — o cliente que
+recebesse as planilhas da origem e do consumidor veria a receita do save
+cobrada duas vezes (R$ 41.009,07 no par `TESTE-0006/26-01`/`-02`).
+
+Decisão do Tiago em 04/09/2026: a planilha do cliente mostra o
+fechamento **`cliente`** — linha em save entra, crédito consumido sai,
+principal pela alavanca do valor do job — com uma linha "(−) pago com
+crédito de saldo anterior" entre o TOTAL e o IMPOSTO. Regra e
+apresentação na [decisão 041](041-planilha-unica-do-projeto-exportar-e-importar.md).
+O `bruto` continua existindo no motor, sem uso nas telas.

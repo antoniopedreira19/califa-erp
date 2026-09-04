@@ -36,9 +36,10 @@ interface Props {
   /**
    * Uma errata mexeu no orçado depois da abertura e o financeiro ainda não
    * reconferiu. O job segue aberto e a produção segue trabalhando — o que
-   * fecha é o envio para faturamento: previsão de recebimento, curva de
-   * desembolso e competência foram calculadas sobre números que já não
-   * valem (27/08/2026).
+   * fecha é o envio para faturamento (27/08/2026) e, desde 02/09/2026, o
+   * envio de PPs ao financeiro (decisão 040): previsão de recebimento,
+   * cronograma de desembolsos e competência foram calculados sobre
+   * números que já não valem.
    */
   aberturaEmRevisao?: boolean;
   faturamentoPrevisto: number;
@@ -231,7 +232,8 @@ function montarLinhas({
   if (aberturaEmRevisao) {
     return [
       <>
-        Abertura em revisão desde a última errata · faturamento previsto{" "}
+        Aguardando revisão da abertura desde a última errata · faturamento
+        previsto{" "}
         <strong className="font-mono font-semibold text-foreground">
           {formatCurrency(faturamentoPrevisto, moeda)}
         </strong>
@@ -245,8 +247,9 @@ function montarLinhas({
         >
           Abertura de Job
         </Link>
-        . O envio para faturamento volta quando a revisão de recebimento e
-        custos for salva.
+        . O envio de PPs ao financeiro e o envio para faturamento voltam
+        quando a revisão de recebimento e custos for salva — gerar PP segue
+        liberado.
       </>,
     ];
   }

@@ -308,3 +308,31 @@ export const ERRATA = {
   botaoAtivo:
     "inline-flex items-center gap-1.5 rounded-lg border border-california-red bg-california-red/[0.07] px-3 py-1.5 text-xs font-bold text-[#b83b45] shadow-[inset_0_1px_2px_rgba(231,75,86,0.18)]",
 } as const;
+
+/** SELEÇÃO — a célula selecionada da planilha e a linha de dicas.
+ *
+ *  A célula selecionada ganha a MESMA moldura arredondada do campo em
+ *  edição: 6px de raio, borda vermelha California e um anel suave em
+ *  volta. Nada mais é destacado — nem a linha, nem o cabeçalho. A moldura
+ *  vai no CONTEÚDO da célula, e não no `<td>`: em tabela `border-collapse`
+ *  o raio da célula é ignorado, e é o raio que faz a moldura ser a mesma
+ *  do campo.
+ *
+ *  Do design `Planilha Interna do Job - Rentabilidade por Item.dc.html`,
+ *  turno 2a (projeto Claude Design `69342d83`), 03/09/2026.
+ */
+export const SELECAO = {
+  /** A moldura, no `<div>` que envolve o conteúdo da célula. As margens
+   *  negativas comem parte do padding da célula, para a moldura ficar
+   *  colada no número e não encostar nos fios. */
+  moldura:
+    "relative z-[1] -mx-[7px] rounded-md border border-california-red bg-white px-1.5 py-0.5 shadow-[0_0_0_3px_rgba(231,75,86,.22)]",
+  /** Célula que aceita seleção: cursor de célula, como numa planilha. */
+  celula: "cursor-cell",
+  /** A linha de dicas de tecla, FORA do card (pedido do Tiago, 25/08 e
+   *  03/09/2026): dentro do frame ela lia como mais uma linha da
+   *  planilha. O design trazia um rodapé com o endereço e o valor da
+   *  célula; saiu — a moldura já diz qual célula está selecionada. */
+  dicas: "mt-2 flex flex-wrap items-center gap-2.5 px-1 text-[11px] text-muted-foreground",
+  tecla: "font-mono font-semibold text-foreground",
+} as const;

@@ -2,7 +2,15 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { X, Upload, FileText, Image as ImageIcon, Trash2, AlertTriangle } from "lucide-react";
+import {
+  X,
+  Upload,
+  FileText,
+  Image as ImageIcon,
+  Trash2,
+  AlertTriangle,
+  Plus,
+} from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Dialog, DrawerContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
@@ -22,18 +30,23 @@ import {
   PP_ANEXOS_TAMANHO_TOTAL_MAX_BYTES,
   type PPAnexoMimetype,
   type DocumentoDoAnexo,
+  type PedidoCompraNaLista,
 } from "@/lib/types";
 import {
   valorDaPPPorUnidade,
   dividirEmParcelas,
   parcelasFecham,
-  passaDoSaldo,
+  passaDoPlanejado,
   proximoVencimento,
 } from "@/lib/calculos/pps-item";
 import {
   reservarPedidoCompra,
   finalizarPedidoCompra,
+  prefixoAnexosPedidoCompra,
+  editarPedidoCompraGerada,
 } from "./actions-pp";
+import { NovoFornecedorDialog } from "@/app/(app)/fornecedores/novo-fornecedor-dialog";
+import type { FornecedorResumo } from "@/app/(app)/fornecedores/actions";
 
 interface Props {
   open: boolean;
@@ -46,18 +59,22 @@ interface Props {
   responsaveis: Array<{ id: string; nome: string }>;
   defaultEmpresaId: string;
   itemDescricao: string;
-  /** ORÇADO do item — a base da fatia. Era o realizado até 21/08/2026;
-   *  agora o realizado é justamente o que estas PPs vão construir. */
-  valorOrcado: number;
-  quantidadeOrcada: number;
-  /** Decomposição do orçado do item — R$ Unit. e D/M, para o cartão
+  /** PLANEJADO do item — a referência da PP desde 02/09/2026 (era o
+   *  orçado). É contra ele que "Em PPs emitidas" acende em vermelho. */
+  valorPlanejado: number;
+  /** Decomposição do planejado — R$ Unit. × QT × D/M, para o cartão
    *  mostrar de onde os três campos vêm. São referência apenas: os
    *  campos da PP nascem vazios (decisão do Tiago, 01/09/2026). */
-  unitarioOrcado: number;
-  dmOrcado: number;
-  /** Quanto do orçado ainda não está em PP. É o teto desta PP. */
-  saldoDisponivel: number;
-  onSuccess?: (codigo: string) => void;
+  unitarioPlanejado: number;
+  quantidadePlanejada: number;
+  dmPlanejado: number;
+  /** O que o item já tem em PPs que CHEGARAM ao financeiro. A prévia do
+   *  cartão soma esta PP por cima. Sem teto: passar do planejado não
+   *  impede gerar — muda quem pode enviar. */
+  emPPsEmitidas: number;
+  /** PP gerada sendo editada. Null = gerar uma nova (02/09/2026). */
+  ppEditando: PedidoCompraNaLista | null;
+  onSuccess?: (codigo: string, modo: "gerada" | "editada") => void;
 }
 
 /** Uma linha do parcelamento no formulário. */
@@ -135,13 +152,15 @@ export function GerarPPDrawer({
   responsaveis,
   defaultEmpresaId,
   itemDescricao,
-  valorOrcado,
-  quantidadeOrcada,
-  unitarioOrcado,
-  dmOrcado,
-  saldoDisponivel,
+  valorPlanejado,
+  unitarioPlanejado,
+  quantidadePlanejada,
+  dmPlanejado,
+  emPPsEmitidas,
+  ppEditando,
   onSuccess,
 }: Props) {
+  const editando = ppEditando !== null;
   const router = useRouter();
   const supabase = React.useMemo(() => createClient(), []);
   const [pending, startTransition] = React.useTransition();
@@ -154,6 +173,48 @@ export function GerarPPDrawer({
   // ON → responsável interno obrigatório, fornecedor escondido.
   const [verbaProducao, setVerbaProducao] = React.useState(false);
   const [fornecedorId, setFornecedorId] = React.useState<string>("");
+  // Cadastro rápido de fornecedor (04/09/2026, decisão 048). O combo vem
+  // do server component, então o fornecedor que acabou de nascer só
+  // chegaria nele depois do `router.refresh()`; enquanto isso ele mora
+  // aqui, mesclado à lista — igual ao projeto novo da abertura.
+  const [novoFornecedorOpen, setNovoFornecedorOpen] = React.useState(false);
+  const [fornecedorNovo, setFornecedorNovo] =
+    React.useState<FornecedorResumo | null>(null);
+  const fornecedoresVisiveis = React.useMemo(() => {
+    if (!fornecedorNovo || fornecedores.some((f) => f.id === fornecedorNovo.id)) {
+      return fornecedores;
+    }
+    return [...fornecedores, fornecedorNovo].sort((a, b) =>
+      (a.razao_social ?? a.nome).localeCompare(b.razao_social ?? b.nome),
+    );
+  }, [fornecedores, fornecedorNovo]);
+
+  // A seleção entra em dois tempos, de propósito. O Select do Radix
+  // espelha o valor num <select> nativo escondido, e se o valor e a
+  // <option> nova chegam na mesma renderização o nativo ainda não tem a
+  // opção: ele volta pra "" e dispara `onValueChange("")`, apagando a
+  // escolha (visto em 04/09/2026). Então primeiro o fornecedor entra na
+  // lista, e só quando ele já está lá o efeito abaixo seleciona.
+  const [fornecedorPendenteId, setFornecedorPendenteId] =
+    React.useState<string | null>(null);
+  React.useEffect(() => {
+    if (!fornecedorPendenteId) return;
+    if (fornecedoresVisiveis.some((f) => f.id === fornecedorPendenteId)) {
+      setFornecedorId(fornecedorPendenteId);
+      setFornecedorPendenteId(null);
+    }
+  }, [fornecedorPendenteId, fornecedoresVisiveis]);
+
+  /** Selecionar um fornecedor que pode não estar na lista do server
+   *  ainda (o recém-criado, ou o existente achado pelo documento). */
+  function adotarFornecedor(f: FornecedorResumo) {
+    if (!fornecedores.some((x) => x.id === f.id)) setFornecedorNovo(f);
+    setFornecedorPendenteId(f.id);
+    // Sem `router.refresh()` aqui, de propósito: o refresh no meio do
+    // preenchimento re-renderiza a página inteira e zerava o formulário
+    // (visto em 04/09/2026). A lista mesclada segura o fornecedor novo
+    // até o drawer fechar — e o fechamento já dispara o refresh.
+  }
   const [responsavelId, setResponsavelId] = React.useState<string>("");
   const [empresaId, setEmpresaId] = React.useState<string>(defaultEmpresaId);
   const [prazoPagamento, setPrazoPagamento] = React.useState<string>(defaultPrazoPagamento());
@@ -175,6 +236,9 @@ export function GerarPPDrawer({
   const [parcelas, setParcelas] = React.useState<ParcelaLocal[]>([]);
 
   const [anexos, setAnexos] = React.useState<AnexoLocal[]>([]);
+  /** Anexos já gravados da PP em edição que o GP marcou para remover.
+   *  Só somem de fato no salvar. */
+  const [removidos, setRemovidos] = React.useState<Set<string>>(new Set());
   const abortedRef = React.useRef(false);
   // Lock sincrono contra double-submit: `pending` do useTransition ativa
   // 1 render depois, então dois cliques rápidos passam pelo disabled=pending.
@@ -184,13 +248,67 @@ export function GerarPPDrawer({
   // Chave para forcar remontagem do DatePicker ao reabrir o drawer
   const [drawerKey, setDrawerKey] = React.useState(0);
 
-  // Reset ao abrir
+  // Reset ao abrir — e SÓ ao abrir. A chave diz qual sessão do
+  // formulário está de pé (item + gerar/editar); enquanto ela não muda,
+  // nenhum re-render do pai mexe no que a pessoa digitou. Antes o
+  // efeito dependia de props que trocam de identidade num
+  // `router.refresh()`, e o formulário zerava no meio do caminho
+  // (04/09/2026).
+  const chaveSessao = open
+    ? `${itemRealizadoId ?? ""}|${ppEditando?.id ?? "nova"}`
+    : null;
+  const sessaoRef = React.useRef<string | null>(null);
   React.useEffect(() => {
-    if (!open || !itemRealizadoId) return;
+    if (!open || !itemRealizadoId) {
+      sessaoRef.current = null;
+      return;
+    }
+    if (sessaoRef.current === chaveSessao) return;
+    sessaoRef.current = chaveSessao;
     abortedRef.current = false;
     setErro(null);
     setPpId(null);
+    setFornecedorPendenteId(null);
     setUploadPrefix(null);
+    setAnexos([]);
+    setRemovidos(new Set());
+    setDrawerKey((k) => k + 1);
+
+    if (ppEditando) {
+      // Edição abre COM o que a PP já tem — o GP está consertando um
+      // rascunho que existe, não montando uma fatia nova (mesma exceção
+      // da correção de rejeitada, decisão 035 §4).
+      setVerbaProducao(ppEditando.verba_producao);
+      setFornecedorId(ppEditando.fornecedor_id ?? "");
+      setResponsavelId(ppEditando.responsavel_verba_id ?? "");
+      setEmpresaId(ppEditando.empresa_id);
+      setPrazoPagamento(ppEditando.prazo_pagamento.slice(0, 10));
+      setServico(ppEditando.servico);
+      setUnitario(formatUnitario(ppEditando.valor_unitario));
+      setQuantidade(formatFator(ppEditando.quantidade));
+      setDm(formatFator(ppEditando.dias_meses));
+      setEspecificacoes(ppEditando.especificacoes ?? "");
+      const parcelasDaPP = ppEditando.parcelas ?? [];
+      setParcelas(
+        parcelasDaPP.length > 1
+          ? parcelasDaPP.map((p) => ({
+              data_vencimento: p.data_vencimento.slice(0, 10),
+              valor: Number(p.valor).toFixed(2).replace(".", ","),
+            }))
+          : [],
+      );
+      setPpId(ppEditando.id);
+      (async () => {
+        const res = await prefixoAnexosPedidoCompra(ppEditando.id);
+        if (!res.ok) {
+          setErro(res.message);
+          return;
+        }
+        setUploadPrefix(res.upload_prefix);
+      })();
+      return;
+    }
+
     setVerbaProducao(false);
     setFornecedorId("");
     setResponsavelId("");
@@ -202,8 +320,6 @@ export function GerarPPDrawer({
     setDm("");
     setEspecificacoes("");
     setParcelas([]);
-    setAnexos([]);
-    setDrawerKey((k) => k + 1);
 
     // Reserva pp_id + upload_prefix
     (async () => {
@@ -215,7 +331,10 @@ export function GerarPPDrawer({
       setPpId(res.pp_id);
       setUploadPrefix(res.upload_prefix);
     })();
-  }, [open, itemRealizadoId, defaultEmpresaId, itemDescricao, quantidadeOrcada]);
+    // A chave resume as deps que importam; as demais (defaultEmpresaId,
+    // ppEditando inteiro) só seriam relidas numa sessão nova.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, itemRealizadoId, chaveSessao]);
 
   // DESABILITADO — o cleanup automatico estava disparando entre upload e
   // finalizar (quando ppId mudava por qualquer re-render), apagando os
@@ -239,7 +358,9 @@ export function GerarPPDrawer({
       return;
     }
 
-    const somaAtual = anexos.reduce((s, a) => s + a.file.size, 0);
+    const somaAtual =
+      anexos.reduce((s, a) => s + a.file.size, 0) +
+      anexosMantidos.reduce((s, a) => s + a.arquivo_tamanho_bytes, 0);
     let somaAcumulada = somaAtual;
     // Cada arquivo vira uma linha imediatamente — mesmo rejeitados.
     // User sempre vê feedback do que aconteceu com cada arquivo escolhido.
@@ -334,13 +455,22 @@ export function GerarPPDrawer({
 
   // ---- Valor da PP: R$ Unit. × QT × D/M ----
   // A PP é montada como a linha da planilha. Os três fatores são do GP —
-  // nenhum é derivado do orçado, então o unitário pode ser o desconto que
-  // o fornecedor deu. O que limita é o saldo em R$, nunca a quantidade.
+  // nenhum é derivado do planejado, então o unitário pode ser o desconto
+  // que o fornecedor deu. Nada limita o valor (02/09/2026): o teto por PP
+  // saiu. Passar do planejado não impede gerar — no envio, pede o
+  // responsável do job ou administrador, com confirmação.
   const unitNum = parseNumeroLocal(unitario);
   const qtdNum = parseNumeroLocal(quantidade);
   const dmNum = parseNumeroLocal(dm);
   const valorPP = valorDaPPPorUnidade(unitNum, qtdNum, dmNum);
-  const excedeSaldo = passaDoSaldo(valorPP, saldoDisponivel);
+  // Prévia de "Em PPs emitidas" com esta PP. A PP em edição ainda é
+  // gerada, então não está na base — não há o que descontar.
+  const previaEmPPs = Math.round((emPPsEmitidas + valorPP) * 100) / 100;
+  const passaPlanejado = valorPP > 0 && passaDoPlanejado(previaEmPPs, valorPlanejado);
+  /** Anexos já gravados que continuam (modo edição). */
+  const anexosMantidos = (ppEditando?.anexos ?? []).filter(
+    (a) => !removidos.has(a.id),
+  );
 
   /** Refaz as parcelas mantendo as datas que já existem. */
   const montarParcelas = React.useCallback(
@@ -460,12 +590,6 @@ export function GerarPPDrawer({
       setErro("O valor desta PP ficaria zerado. Confira R$ Unit., QT e D/M.");
       return;
     }
-    if (excedeSaldo) {
-      setErro(
-        `Esta PP (${formatCurrency(valorPP, "BRL")}) passa do saldo do item. Máximo aceito: ${formatCurrency(saldoDisponivel, "BRL")}.`,
-      );
-      return;
-    }
     const parcelasEnvio = parcelasParaEnvio();
     if (parcelasEnvio.some((p) => !p.data_vencimento)) {
       setErro("Toda parcela precisa de uma data de vencimento.");
@@ -477,19 +601,13 @@ export function GerarPPDrawer({
       );
       return;
     }
-    // Verba de Produção é adiantamento: a PP sai ANTES de existir nota —
-    // é justamente para o responsável ir comprar. As notas entram depois,
-    // na prestação de contas, que exige no mínimo uma (27/08/2026).
-    //
-    // Nas demais PPs o anexo continua obrigatório na emissão: ali a nota
-    // do fornecedor já existe, e é ela que justifica o pedido.
+    // O anexo deixou de travar a geração (02/09/2026): a PP pode nascer
+    // sem nota e ficar no job. Quem exige a NF é o envio ao financeiro,
+    // no painel do item. Verba de Produção segue sem anexo nos dois
+    // momentos — é adiantamento, e as notas entram na prestação de contas.
     const anexosOk = anexos.filter((a) => a.status === "ok");
-    if (!verbaProducao && anexosOk.length === 0) {
-      setErro("Pelo menos um anexo com upload concluído é obrigatório.");
-      return;
-    }
     if (anexos.some((a) => a.status === "uploading" || a.status === "selecionado")) {
-      setErro("Aguarde os uploads terminarem antes de gerar a PP.");
+      setErro("Aguarde os uploads terminarem antes de continuar.");
       return;
     }
 
@@ -523,23 +641,31 @@ export function GerarPPDrawer({
               fornecedor_id: fornecedorId,
               responsavel_verba_id: null,
             };
-        const res = await finalizarPedidoCompra(
-          ppId,
-          dados,
-          anexosOk.map((a) => ({
-            anexo_id: a.anexo_id,
-            path: a.path,
-            nome_original: a.file.name,
-            tamanho_bytes: a.file.size,
-            mimetype: a.file.type as PPAnexoMimetype,
-            // Número sem tipo não identifica nada — vai nulo junto.
-            documento_tipo: a.documento.tipo,
-            documento_numero: a.documento.tipo
-              ? (a.documento.numero?.trim() || null)
-              : null,
-          })),
-          itemRealizadoId,
-        );
+        const anexosParaAction = anexosOk.map((a) => ({
+          anexo_id: a.anexo_id,
+          path: a.path,
+          nome_original: a.file.name,
+          tamanho_bytes: a.file.size,
+          mimetype: a.file.type as PPAnexoMimetype,
+          // Número sem tipo não identifica nada — vai nulo junto.
+          documento_tipo: a.documento.tipo,
+          documento_numero: a.documento.tipo
+            ? (a.documento.numero?.trim() || null)
+            : null,
+        }));
+        const res = ppEditando
+          ? await editarPedidoCompraGerada(
+              ppId,
+              dados,
+              anexosParaAction,
+              Array.from(removidos),
+            )
+          : await finalizarPedidoCompra(
+              ppId,
+              dados,
+              anexosParaAction,
+              itemRealizadoId,
+            );
 
         if (!res.ok) {
           setErro(res.message);
@@ -551,7 +677,7 @@ export function GerarPPDrawer({
         // ser priorizado corretamente pelo React scheduler — dentro dele o
         // re-render dos server components fica low-priority e demora.
         abortedRef.current = true;
-        onSuccess?.(res.codigo);
+        onSuccess?.(res.codigo, ppEditando ? "editada" : "gerada");
         onOpenChange(false);
       } finally {
         submittingRef.current = false;
@@ -577,7 +703,11 @@ export function GerarPPDrawer({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DrawerContent className="sm:max-w-2xl">
         <DialogHeader className="px-6 pt-6 pb-4 border-b border-border">
-          <DialogTitle>Gerar Pedido de Produção</DialogTitle>
+          <DialogTitle>
+            {editando
+              ? `Editar Pedido de Produção · ${ppEditando.codigo}`
+              : "Gerar Pedido de Produção"}
+          </DialogTitle>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
@@ -594,30 +724,34 @@ export function GerarPPDrawer({
             <div className="rounded-lg border border-border bg-muted/30 p-3">
               <p className="text-xs text-muted-foreground">Item</p>
               <p className="font-medium">{itemDescricao}</p>
-              {/* Duas colunas: o "Valor desta PP" saiu daqui e virou o
-                  bloco editável abaixo do switch — dois lugares mostrando
-                  a mesma conta. No lugar dele, a decomposição do orçado,
-                  que é a referência de onde os três campos vêm. */}
+              {/* Duas colunas, como no design de 02/09/2026: a referência
+                  do item virou o PLANEJADO (era o orçado), e o "Máximo
+                  aceito" deu lugar à prévia de "Em PPs emitidas" com esta
+                  PP — sem teto, ela só avisa quando passa do planejado. */}
               <div className="mt-2 grid grid-cols-2 gap-3">
                 <div>
-                  <p className="text-xs text-muted-foreground">Orçado do item</p>
+                  <p className="text-xs text-muted-foreground">Planejado do item</p>
                   <p className="font-mono font-semibold">
-                    {formatCurrency(valorOrcado, "BRL")}
+                    {formatCurrency(valorPlanejado, "BRL")}
                   </p>
                   <p className="font-mono text-[11px] text-muted-foreground">
-                    {formatUnitario(unitarioOrcado)} ×{" "}
-                    {formatFator(quantidadeOrcada)} × {formatFator(dmOrcado)}
+                    {formatUnitario(unitarioPlanejado)} ×{" "}
+                    {formatFator(quantidadePlanejada)} ×{" "}
+                    {formatFator(dmPlanejado)}
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground">
-                    Máximo aceito nesta PP
-                  </p>
-                  <p className="font-mono font-semibold">
-                    {formatCurrency(saldoDisponivel, "BRL")}
+                  <p className="text-xs text-muted-foreground">Em PPs emitidas</p>
+                  <p
+                    className={cn(
+                      "font-mono font-semibold",
+                      passaPlanejado && "text-california-red",
+                    )}
+                  >
+                    {formatCurrency(previaEmPPs, "BRL")}
                   </p>
                   <p className="text-[11px] text-muted-foreground">
-                    saldo do item ainda sem PP
+                    com esta PP · sem teto por PP
                   </p>
                 </div>
               </div>
@@ -717,25 +851,21 @@ export function GerarPPDrawer({
                         : "preencha os três campos"}
                     </p>
                   </div>
-                  <span
-                    className={cn(
-                      "font-mono text-[22px] font-bold leading-none",
-                      excedeSaldo && "text-california-red",
-                    )}
-                  >
+                  <span className="font-mono text-[22px] font-bold leading-none">
                     {valorPP > 0 ? formatCurrency(valorPP, "BRL") : "—"}
                   </span>
                 </div>
 
-                {/* O aviso mora aqui, ao vivo, em vez de só no erro do topo
-                    ao clicar em Gerar PP. */}
-                {excedeSaldo && (
-                  <div className="flex items-start gap-2 rounded-lg border border-california-red/35 bg-california-red/[0.07] px-3 py-2.5">
-                    <AlertTriangle className="mt-px h-3.5 w-3.5 flex-none text-california-red" />
-                    <span className="text-[11px] leading-relaxed text-california-red">
-                      Passa do saldo do item — máximo aceito{" "}
-                      {formatCurrency(saldoDisponivel, "BRL")}. Ajuste R$ Unit.,
-                      QT ou D/M.
+                {/* O aviso mora aqui, ao vivo. Não barra: passar do
+                    planejado muda quem pode ENVIAR, não se dá para gerar. */}
+                {passaPlanejado && (
+                  <div className="flex items-start gap-2 rounded-lg border border-amber-300/70 bg-amber-50 px-3 py-2.5">
+                    <AlertTriangle className="mt-px h-3.5 w-3.5 flex-none text-amber-700" />
+                    <span className="text-[11px] leading-relaxed text-amber-900">
+                      Com esta PP o item passa do planejado. Ela é gerada do
+                      mesmo jeito — o <strong>envio ao financeiro</strong>{" "}
+                      pedirá confirmação do responsável do job ou de um
+                      administrador.
                     </span>
                   </div>
                 )}
@@ -761,18 +891,35 @@ export function GerarPPDrawer({
               ) : (
                 <div>
                   <label className="text-xs font-medium">Fornecedor *</label>
-                  <Select value={fornecedorId} onValueChange={setFornecedorId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Escolha o fornecedor" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {fornecedores.map((f) => (
-                        <SelectItem key={f.id} value={f.id}>
-                          {f.razao_social ?? f.nome}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="flex items-center gap-2">
+                    <div className="min-w-0 flex-1">
+                      <Select value={fornecedorId} onValueChange={setFornecedorId}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Escolha o fornecedor" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {fornecedoresVisiveis.map((f) => (
+                            <SelectItem key={f.id} value={f.id}>
+                              {f.razao_social ?? f.nome}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {/* Cadastrar o fornecedor sem sair da PP: abre o
+                        cadastro completo num dialog e volta com ele
+                        selecionado (decisão 048). */}
+                    <button
+                      type="button"
+                      onClick={() => setNovoFornecedorOpen(true)}
+                      disabled={pending}
+                      title="Cadastrar fornecedor"
+                      aria-label="Cadastrar fornecedor"
+                      className="inline-flex h-10 w-10 flex-none items-center justify-center rounded-lg border border-border bg-white text-california-red transition-colors hover:border-california-red/40 hover:bg-california-red/[0.06] disabled:opacity-50"
+                    >
+                      <Plus className="h-[17px] w-[17px]" />
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -912,19 +1059,44 @@ export function GerarPPDrawer({
               </div>
             </div>
 
-            {/* Anexos */}
+            {/* Anexos — opcional para gerar, obrigatório para enviar
+                (02/09/2026). Verba de produção segue sem anexo. */}
             <div className="space-y-2">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Anexos{verbaProducao ? "" : " *"} (
-                {verbaProducao ? "opcional" : "min 1"}, max 8MB/arquivo, 25MB
-                total)
+                {verbaProducao
+                  ? "Anexos (não exigidos na verba de produção)"
+                  : "Anexos (opcional para gerar · obrigatório para enviar)"}
               </h3>
-              {verbaProducao && (
-                <p className="text-[11.5px] leading-relaxed text-muted-foreground">
-                  Verba de Produção é adiantamento: as notas entram depois, na
-                  prestação de contas.
-                </p>
-              )}
+              <p className="text-[11.5px] leading-relaxed text-muted-foreground">
+                {verbaProducao
+                  ? "Verba de produção é adiantamento: a PP sai antes de existir nota e as notas entram na prestação de contas."
+                  : "A PP pode ser gerada sem anexo. O envio ao financeiro só libera com pelo menos uma NF anexada."}{" "}
+                Máximo de 8 MB por arquivo, 25 MB no total.
+              </p>
+
+              {anexosMantidos.map((a) => (
+                <div
+                  key={a.id}
+                  className="flex items-center gap-2 rounded border border-border bg-white px-3 py-2 text-xs"
+                >
+                  <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="flex-1 truncate">{a.arquivo_nome_original}</span>
+                  <span className="text-muted-foreground">
+                    {(a.arquivo_tamanho_bytes / 1024).toFixed(0)} KB
+                  </span>
+                  <button
+                    type="button"
+                    title="Remover anexo"
+                    aria-label={`Remover ${a.arquivo_nome_original}`}
+                    onClick={() =>
+                      setRemovidos((prev) => new Set(prev).add(a.id))
+                    }
+                    className="text-california-red hover:opacity-70"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
 
               {uploadPrefix ? (
                 <label className="flex cursor-pointer items-center gap-2 rounded border border-dashed border-border p-3 text-sm hover:border-california-red/40">
@@ -1024,29 +1196,49 @@ export function GerarPPDrawer({
             </div>
           </div>
 
-          <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border">
-            <button
-              type="button"
-              onClick={() => onOpenChange(false)}
-              disabled={pending}
-              className="rounded-lg border border-border px-4 py-2 text-sm font-medium hover:bg-accent disabled:opacity-50"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={
-                pending ||
-                !ppId ||
-                anexos.some((a) => a.status === "uploading") ||
-                (verbaProducao ? !responsavelId : !fornecedorId)
-              }
-              className="rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white hover:bg-california-red-hover disabled:opacity-50"
-            >
-              {pending ? "Gerando..." : "Gerar PP"}
-            </button>
+          <div className="flex items-center justify-between gap-3 px-6 py-4 border-t border-border">
+            <span className="max-w-[280px] text-[11px] leading-snug text-muted-foreground">
+              {editando
+                ? "Salvar mantém a PP como gerada — ela segue no job até ser enviada."
+                : "A PP é criada como gerada. O envio ao financeiro é uma ação separada, no painel do item."}
+            </span>
+            <span className="flex flex-none items-center gap-2">
+              <button
+                type="button"
+                onClick={() => onOpenChange(false)}
+                disabled={pending}
+                className="rounded-lg border border-border px-4 py-2 text-sm font-medium hover:bg-accent disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={
+                  pending ||
+                  !ppId ||
+                  anexos.some((a) => a.status === "uploading") ||
+                  (verbaProducao ? !responsavelId : !fornecedorId)
+                }
+                className="rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white hover:bg-california-red-hover disabled:opacity-50"
+              >
+                {pending
+                  ? editando
+                    ? "Salvando..."
+                    : "Gerando..."
+                  : editando
+                    ? "Salvar alterações"
+                    : "Gerar PP"}
+              </button>
+            </span>
           </div>
         </form>
+
+        <NovoFornecedorDialog
+          open={novoFornecedorOpen}
+          onOpenChange={setNovoFornecedorOpen}
+          onCriado={adotarFornecedor}
+          onSelecionarExistente={adotarFornecedor}
+        />
       </DrawerContent>
     </Dialog>
   );

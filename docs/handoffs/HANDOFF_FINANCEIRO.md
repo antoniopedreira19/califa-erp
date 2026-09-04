@@ -3213,3 +3213,110 @@ as duas herdaram o que mudou lá. O que é específico daqui:
   do encerramento do job. A regra mora em `vw_saves_por_job` (migrations
   `20260901100001` e `20260901110001`) e está explicada na nota de
   2026-09-01 da decisão 028.
+
+---
+
+## ⚠️ Nota de 2026-09-02 — os dois cards de previsão viraram um, "Previsões"
+
+**Isto muda a seção 33 e o formulário descrito nas seções 3 a 6.** Regra
+em `docs/decisions/038-previsoes-em-tabela-unica.md`. Design de
+referência: `Abertura de Job - Financeiro.dc.html` (projeto Claude Design
+`69342d83`), layout **D · Uma tabela, dois blocos**.
+
+Os cards "Previsão de recebimento" e "Previsão de custos" **não existem
+mais como dois cards**. No lugar deles há um único card **"Previsões"**,
+com:
+
+- **Três tiles no topo** — Valor total do job (legenda "Fechamento do
+  orçamento aprovado"), Faturamento previsto e Custo previsto total. O
+  "Valor total do job" aparecia duas vezes, uma em cada card, com
+  legendas diferentes; ficou a do orçamento aprovado.
+- **As duas contas bancárias no mesmo cabeçalho** do card ("Recebimento
+  em" e "Pagamento em"), lado a lado.
+- **Uma tabela só, com dois blocos**: `PARCELAS DE RECEBIMENTO` (faixa
+  verde) em cima e `CUSTOS · CRONOGRAMA DE DESEMBOLSOS` (faixa vermelha)
+  embaixo. As linhas ganharam prefixo, `R01…` e `C01…`, porque agora
+  dividem a mesma numeração.
+- **O selo de conferência subiu para a faixa do bloco**, ao lado do botão
+  "Distribuir" (que perdeu o "igualmente" — vira "Distribuir o saldo"
+  quando há parcela congelada, como antes).
+- **A soma de cada bloco virou linha da própria tabela**, ao lado de
+  "Adicionar parcela" / "Adicionar data", com o % do total na coluna.
+- **O card fecha com a margem prevista** e a contagem das linhas dos dois
+  blocos.
+- **Um parágrafo de rodapé só**, no lugar dos dois. Ele mantém as duas
+  informações que estavam separadas: as janelas de pagamento (dias 08 e
+  20) e o abatimento da previsão pela nota emitida e por cada PP emitida.
+
+Nada mudou nos cálculos, nas validações do rodapé fixo, no congelamento
+de parcela já consumida (`lib/calculos/previsao-congelada.ts`), nos
+estados de faturamento zero / custo zero — que viraram linha de largura
+total com fundo âmbar dentro da tabela — nem no que a tela grava.
+
+**Vale nas três aparições**, porque é um componente só
+(`abertura-de-job/[jobId]/abertura-form.tsx`): a abertura na fila
+(modo `abertura`), a aba "Abertura" do job já aberto em leitura (modo
+`leitura`) e a mesma aba destravada para editar (modo `edicao`), que é
+por onde passa a revisão de errata.
+
+**Fugimos do design em três pontos**, todos decididos pelo Tiago em
+02/09/2026: o título é "Previsões" (o design escrevia "Previsão de
+recebimento e de custos"); os rótulos dos blocos seguem os termos do
+sistema, com "cronograma de desembolsos" e não "curva"; e o texto de
+rodapé é o nosso, porque o do protótipo descrevia um comportamento de
+curva de custos que não é o nosso.
+
+---
+
+## ⚠️ Nota de 2026-09-02 — PP gerada é invisível aqui; revisão de abertura trava o envio de PP
+
+Regras em `docs/decisions/039` e `040`. O que muda para o financeiro:
+
+- **A PP passa a nascer `gerada`, no job.** Só entra em Contas a Pagar
+  (em avaliação) quando o GP a envia — `pedidos_compra.enviada_financeiro_em`
+  e `enviada_financeiro_por` registram o envio; `emitida_por` continua
+  sendo quem gerou. As 17 PPs existentes foram backfilladas com a data e
+  o autor da geração, que era o único caminho até então.
+- **Nada do financeiro vê PP gerada**: a leitura de Contas a Pagar
+  (`contas-a-pagar/page.tsx`) e o card de PPs do job (`financeiro/jobs/
+  [jobId]/dados.ts`) ganharam `.neq("status", "gerada")` — sem isso o chip
+  "Todas" de Contas a Pagar mostraria a gerada —, e o consumo que congela
+  a previsão da abertura (`abertura-de-job/consumo.ts`) exclui a gerada.
+  `vw_a_pagar` e `vw_fluxo_caixa` já filtravam `aprovada`/`pago`.
+- **`recalcular_realizado_do_item`** passou a excluir `gerada` além de
+  `cancelada`. O realizado da planilha é só o que chegou ao financeiro.
+- **O trigger `pp_valida_saldo_do_item` foi removido** (autorização do
+  Tiago, 02/09/2026): não há mais teto por PP no banco.
+- **Enquanto `jobs.abertura_em_revisao` estiver ligada, nenhuma PP chega
+  aqui** — o envio é recusado no servidor. O status do job segue
+  `aberto`; o que encerra a revisão continua sendo salvar a abertura
+  (decisão 030).
+
+**Verificado ao vivo (03/09/2026):** PP gerada não apareceu em Contas a
+Pagar nem no card de PPs do job; a enviada (PP-00020) entrou em avaliação
+com `enviada_financeiro_por` preenchido; com `abertura_em_revisao` ligada
+no JOB-0016 o servidor recusou o envio mesmo chamado direto pelo console.
+Achado na verificação: a leitura de `contas-a-pagar/page.tsx` não filtrava
+status e mostraria a gerada no chip "Todas" — ganhou `.neq("status",
+"gerada")`.
+
+---
+
+## O resumo do cabeçalho mostra o resultado operacional (2026-09-04)
+
+⚠️ **Decisão 047.** Os resumos ancorados à direita do título em
+`/financeiro/jobs/[jobId]` e `/financeiro/projetos/[projetoId]` deixaram
+de mostrar o **custo** planejado e realizado: cada linha traz agora o
+**resultado operacional** daquele cenário, em R$, com verde/vermelho pelo
+sinal. O `rentab. %` que já fechava a linha continua no lugar — os dois
+são o mesmo fato em unidades diferentes.
+
+Nada mudou aqui em código: as duas telas consomem
+[`components/resumo-resultado.tsx`](components/resumo-resultado.tsx), o
+mesmo componente da produção, e a mudança foi dentro dele. A conta segue
+`calcularResultadoOperacional(valorJob, imposto, custo − bvLíquido)`,
+BV incluso como sempre esteve (decisão 022) — nenhum número do financeiro
+mudou de valor, mudou o que o cabeçalho escolhe mostrar.
+
+O custo continua visível onde se audita a conta: card de Totais, planilha
+e a linha `− Custo planejado` do painel de Resultado.

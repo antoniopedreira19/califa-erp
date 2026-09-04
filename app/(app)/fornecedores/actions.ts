@@ -6,14 +6,33 @@ import { createClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { checarPermissao } from "@/lib/permissoes";
-import { fornecedorSchema } from "@/lib/validations/fornecedores";
+import {
+  fornecedorSchema,
+  fornecedorCompletoSchema,
+} from "@/lib/validations/fornecedores";
 import { getBancoByCodigo } from "@/lib/dados/bancos-febraban";
 import { onlyDigits } from "@/lib/utils";
 import type { PixTipoChave } from "@/lib/types";
 
+/** O que o combo de fornecedor precisa saber de um cadastro — é o que o
+ *  cadastro rápido devolve para a PP selecionar sem esperar o refresh. */
+export interface FornecedorResumo {
+  id: string;
+  nome: string;
+  razao_social: string | null;
+  status: "ativo" | "inativo";
+}
+
 export type ActionResult =
-  | { ok: true; id?: string }
-  | { ok: false; message: string; fieldErrors?: Record<string, string[]> };
+  | { ok: true; id?: string; fornecedor?: FornecedorResumo }
+  | {
+      ok: false;
+      message: string;
+      fieldErrors?: Record<string, string[]>;
+      /** O documento já pertence a este cadastro (04/09/2026). A tela
+       *  oferece selecioná-lo em vez de criar outro. */
+      duplicado?: FornecedorResumo;
+    };
 
 function extractInput(formData: FormData) {
   return {
@@ -86,16 +105,25 @@ function mapDbError(msg: string): string {
   return "Não foi possível salvar. Tente novamente.";
 }
 
-export async function criarFornecedor(
+/**
+ * O miolo de criar um fornecedor: valida, deriva banco e PIX, insere e
+ * audita. Dois callers — a página de cadastro (que redireciona) e o
+ * cadastro rápido de dentro da PP (que devolve o registro para a tela
+ * selecionar). O que muda entre eles é só o schema e o que fazer depois.
+ */
+async function inserirFornecedor(
   formData: FormData,
+  schema: typeof fornecedorSchema | typeof fornecedorCompletoSchema,
+  origem: "cadastro" | "pp",
 ): Promise<ActionResult> {
   const session = await requireSession();
-  // Criar fornecedor cobre a via da tela (/fornecedores/novo, so ADM) e a
-  // via inline dentro de PP (drawer rapido). O gate mais amplo (inline)
-  // libera Admin/GP/Produtor — Freelancer e Financeiro ficam de fora.
+  // Cobre os dois callers do miolo: a tela /fornecedores/novo (criarFornecedor)
+  // e o cadastro rapido dentro do PP (criarFornecedorRapido, decisao 048). O
+  // gate mais amplo (inline) libera Admin/GP/Produtor — Freelancer e
+  // Financeiro ficam de fora dos dois fluxos.
   const gate = await checarPermissao(session, "cadastros.fornecedores.inline");
   if (!gate.ok) return gate;
-  const parsed = fornecedorSchema.safeParse(extractInput(formData));
+  const parsed = schema.safeParse(extractInput(formData));
 
   if (!parsed.success) {
     return {
@@ -116,6 +144,30 @@ export async function criarFornecedor(
   );
 
   const supabase = createClient();
+
+  // Documento repetido: a conferência ANTES do insert devolve quem já tem
+  // o documento, para a tela oferecer selecioná-lo (04/09/2026). O índice
+  // único `uniq_fornecedores_documento_por_tenant` continua sendo a
+  // garantia — se dois cadastros correrem ao mesmo tempo, o segundo cai
+  // no `mapDbError` abaixo.
+  if (parsed.data.cpf_cnpj) {
+    const existente = await buscarPorDocumento(
+      supabase,
+      session.activeTenant.id,
+      parsed.data.cpf_cnpj,
+    );
+    if (existente) {
+      return {
+        ok: false,
+        message: `Já existe um fornecedor com este ${
+          parsed.data.tipo_pessoa === "fisica" ? "CPF" : "CNPJ"
+        }: ${existente.razao_social ?? existente.nome}.`,
+        fieldErrors: { cpf_cnpj: ["Documento já cadastrado."] },
+        duplicado: existente,
+      };
+    }
+  }
+
   const { data, error } = await supabase
     .from("fornecedores")
     .insert({
@@ -125,7 +177,7 @@ export async function criarFornecedor(
       tenant_id: session.activeTenant.id,
       created_by: session.profile.id,
     })
-    .select("id")
+    .select("id, nome, razao_social, status")
     .single();
 
   if (error) {
@@ -138,11 +190,91 @@ export async function criarFornecedor(
     tenantId: session.activeTenant.id,
     entidadeTipo: "fornecedor",
     entidadeId: data.id,
-    metadata: { nome: parsed.data.nome, tipo_pessoa: parsed.data.tipo_pessoa },
+    metadata: {
+      nome: parsed.data.nome,
+      tipo_pessoa: parsed.data.tipo_pessoa,
+      origem,
+    },
   });
 
   revalidatePath("/fornecedores");
+  return {
+    ok: true,
+    id: data.id,
+    fornecedor: {
+      id: data.id,
+      nome: data.nome,
+      razao_social: data.razao_social ?? null,
+      status: data.status as FornecedorResumo["status"],
+    },
+  };
+}
+
+async function buscarPorDocumento(
+  supabase: ReturnType<typeof createClient>,
+  tenantId: string,
+  documento: string,
+  excludeId?: string,
+): Promise<FornecedorResumo | null> {
+  let query = supabase
+    .from("fornecedores")
+    .select("id, nome, razao_social, status")
+    .eq("tenant_id", tenantId)
+    .eq("cpf_cnpj", documento)
+    .limit(1);
+  if (excludeId) query = query.neq("id", excludeId);
+  const { data, error } = await query.maybeSingle();
+  if (error || !data) return null;
+  return {
+    id: data.id,
+    nome: data.nome,
+    razao_social: data.razao_social ?? null,
+    status: data.status as FornecedorResumo["status"],
+  };
+}
+
+export async function criarFornecedor(
+  formData: FormData,
+): Promise<ActionResult> {
+  const res = await inserirFornecedor(formData, fornecedorSchema, "cadastro");
+  if (!res.ok) return res;
   redirect("/fornecedores");
+}
+
+/**
+ * Cadastro rápido de dentro do formulário de PP (04/09/2026, decisão 048).
+ *
+ * Exige documento, e-mail, telefone e um meio de pagamento
+ * (`fornecedorCompletoSchema`) e devolve o registro criado, sem
+ * redirecionar: quem chamou seleciona o fornecedor no combo e segue com
+ * a PP.
+ */
+export async function criarFornecedorRapido(
+  formData: FormData,
+): Promise<ActionResult> {
+  return inserirFornecedor(formData, fornecedorCompletoSchema, "pp");
+}
+
+/**
+ * Já existe fornecedor com este CPF/CNPJ neste tenant? A tela pergunta
+ * ao sair do campo, antes de a pessoa preencher o resto do cadastro.
+ * Inativo também conta: o documento é um só, e o caminho é reativar.
+ */
+export async function buscarFornecedorPorDocumento(
+  documento: string,
+  excludeId?: string,
+): Promise<{ existe: true; fornecedor: FornecedorResumo } | { existe: false }> {
+  const digits = onlyDigits(documento ?? "");
+  if (digits.length !== 11 && digits.length !== 14) return { existe: false };
+  const session = await requireSession();
+  const supabase = createClient();
+  const existente = await buscarPorDocumento(
+    supabase,
+    session.activeTenant.id,
+    digits,
+    excludeId,
+  );
+  return existente ? { existe: true, fornecedor: existente } : { existe: false };
 }
 
 export async function atualizarFornecedor(

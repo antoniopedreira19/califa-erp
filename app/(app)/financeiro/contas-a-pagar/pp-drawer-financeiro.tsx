@@ -80,6 +80,9 @@ function formatDateTime(iso: string | null): string {
 
 function statusBadgeClasses(status: PPStatus): string {
   switch (status) {
+    // Gerada não chega ao financeiro; o caso mantém o mapa exaustivo.
+    case "gerada":
+      return "bg-[#f6f6f6] text-foreground border-[#d7d7d7]";
     case "em_avaliacao":
       return "bg-[#fffbeb] text-[#92400e] border-[#fde68a]";
     case "aprovada":

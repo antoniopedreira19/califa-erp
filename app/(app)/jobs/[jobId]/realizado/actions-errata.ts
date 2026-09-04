@@ -31,15 +31,25 @@ interface AlvoTroca {
 }
 
 /**
- * Barra a troca de tipo de custo em item que já tem documento emitido.
+ * Barra QUALQUER alteração em linha que já tem PP no financeiro.
  *
- * Por item, não pela errata inteira (decisão do time): quem está
- * corrigindo dez linhas não perde o trabalho por causa de uma. E só na
- * troca de TIPO — mudar valor, QT ou D/M com PP ativa segue permitido.
+ * Regra do Tiago (02/09/2026, decisão 040): a errata não mexe em linha
+ * onde uma PP já foi emitida — nem valor, nem QT, nem D/M, nem tipo. O
+ * que já pesa no realizado não se reescreve por cima. "Emitida" aqui é a
+ * PP que CHEGOU ao financeiro: em avaliação, rejeitada, aprovada ou paga.
+ * A gerada (rascunho no job) e a cancelada não travam.
+ *
+ * Substitui a regra anterior, que só travava a troca de TIPO e deixava
+ * valor, QT e D/M livres com PP ativa (handoff de Jobs, §20).
+ *
+ * Por item, não pela errata inteira: quem está corrigindo dez linhas não
+ * perde o trabalho por causa de uma — a mensagem nomeia o item. A tela já
+ * nasce travada nessas linhas (`linhaTravadaPorPP`, na tabela), então
+ * chegar aqui é payload montado à mão ou tela desatualizada.
  *
  * Retorna a mensagem de bloqueio, ou null quando a errata pode seguir.
  */
-async function barrarTrocaDeTipo(
+async function barrarLinhaComPPNoFinanceiro(
   jobId: string,
   tenantId: string,
   alvos: AlvoTroca[],
@@ -64,34 +74,57 @@ async function barrarTrocaDeTipo(
       r.job_item_orcado_id as string,
     ]),
   );
+  if (copiaPorRealizado.size === 0) return null;
 
-  const [ppsRes, bvsRes] = await Promise.all([
-    copiaPorRealizado.size > 0
-      ? supabase
-          .from("pedidos_compra")
-          .select("item_realizado_id, codigo")
-          .eq("job_id", jobId)
-          .eq("tenant_id", tenantId)
-          .neq("status", "cancelada")
-          .in("item_realizado_id", Array.from(copiaPorRealizado.keys()))
-      : Promise.resolve({ data: [] as any[], error: null }),
-    supabase
-      .from("itens_bv")
-      .select("job_item_orcado_id, situacao")
-      .eq("tenant_id", tenantId)
-      .in("job_item_orcado_id", copiaIds),
-  ]);
+  const { data: pps } = await supabase
+    .from("pedidos_compra")
+    .select("item_realizado_id, codigo, status")
+    .eq("job_id", jobId)
+    .eq("tenant_id", tenantId)
+    .not("status", "in", "(cancelada,gerada)")
+    .in("item_realizado_id", Array.from(copiaPorRealizado.keys()));
 
-  const pp = (ppsRes.data ?? [])[0] as
-    | { item_realizado_id: string; codigo: string }
+  const pp = (pps ?? [])[0] as
+    | { item_realizado_id: string; codigo: string; status: string }
     | undefined;
-  if (pp) {
-    const copiaId = copiaPorRealizado.get(pp.item_realizado_id) ?? "";
-    const nome = nomePorCopiaId.get(copiaId) ?? "o item";
-    return `"${nome}" tem o Pedido de Produção ${pp.codigo} ativo. Cancele a PP antes de mudar o tipo de custo deste item.`;
-  }
+  if (!pp) return null;
 
-  const bvTravado = (bvsRes.data ?? []).find(
+  const copiaId = copiaPorRealizado.get(pp.item_realizado_id) ?? "";
+  const nome = nomePorCopiaId.get(copiaId) ?? "o item";
+  return `"${nome}" já tem o Pedido de Produção ${pp.codigo} no financeiro. Linha com PP emitida não entra em errata — corrija o que falta em outra linha, ou cancele a PP antes.`;
+}
+
+/**
+ * Barra a troca de tipo de custo em item com BV já confirmado ou
+ * recebido.
+ *
+ * Até 02/09/2026 esta função também barrava a troca de tipo em item com
+ * PP ativa. Esse ramo saiu: `barrarLinhaComPPNoFinanceiro` trava a linha
+ * inteira, o que inclui o tipo. Fica só o BV, que não tem outra porta.
+ *
+ * Por item, não pela errata inteira (decisão do time): quem está
+ * corrigindo dez linhas não perde o trabalho por causa de uma.
+ *
+ * Retorna a mensagem de bloqueio, ou null quando a errata pode seguir.
+ */
+async function barrarTrocaDeTipo(
+  jobId: string,
+  tenantId: string,
+  alvos: AlvoTroca[],
+): Promise<string | null> {
+  const supabase = createClient();
+  const copiaIds = alvos.map((a) => a.copiaId).filter(Boolean);
+  if (copiaIds.length === 0) return null;
+
+  const nomePorCopiaId = new Map(alvos.map((a) => [a.copiaId, a.itemNome]));
+
+  const { data: bvs } = await supabase
+    .from("itens_bv")
+    .select("job_item_orcado_id, situacao")
+    .eq("tenant_id", tenantId)
+    .in("job_item_orcado_id", copiaIds);
+
+  const bvTravado = (bvs ?? []).find(
     (b: any) => b.situacao === "confirmado" || b.situacao === "recebido",
   ) as { job_item_orcado_id: string; situacao: string } | undefined;
   if (bvTravado) {
@@ -475,12 +508,28 @@ export async function registrarErrata(
     return { ok: false, message: "Nenhum valor foi alterado." };
   }
 
-  // ---- Trava de troca de tipo: PP ativa ou BV já confirmado ----
-  // Só a troca de TIPO é barrada — corrigir valor, QT ou D/M de um item
-  // com PP ativa continua permitido, como sempre foi. É a troca de tipo
-  // que faz BV e PP trocarem de lugar na calha, e ela não pode passar por
-  // cima de um documento que já saiu (a PP) nem de dinheiro que já foi ao
-  // financeiro (o BV confirmado).
+  // ---- Trava de linha com PP no financeiro (decisão 040) ----
+  // Qualquer correção — valor, QT, D/M ou tipo — em linha que já tem PP
+  // emitida é recusada. O realizado dela já existe, e reescrever o orçado
+  // por cima seria mudar a régua depois da medida.
+  const alteradas = mudancas.filter((m) => m.acao === "alterada");
+  if (alteradas.length > 0) {
+    const bloqueio = await barrarLinhaComPPNoFinanceiro(
+      jobId,
+      session.activeTenant.id,
+      alteradas.map((m) => ({
+        copiaId: m.copiaId ?? "",
+        itemNome: m.itemNome,
+      })),
+    );
+    if (bloqueio) return { ok: false, message: bloqueio };
+  }
+
+  // ---- Trava de troca de tipo: BV já confirmado ----
+  // É a troca de tipo que faz BV e PP trocarem de lugar na calha, e ela
+  // não pode passar por cima de dinheiro que já foi ao financeiro (o BV
+  // confirmado). A PP ativa deixou de ser caso daqui: a trava acima cobre
+  // a linha inteira.
   const trocasDeTipo = mudancas.filter(
     (m) => m.acao === "alterada" && m.tipoDe !== m.tipoPara,
   );
@@ -914,7 +963,7 @@ async function barrarRemocao(
     | undefined;
   if (pp) {
     const copiaId = copiaPorRealizado.get(pp.item_realizado_id) ?? "";
-    return `"${nome(copiaId)}" tem o Pedido de Produção ${pp.codigo} no histórico. Uma linha com PP não pode ser removida — corrija o valor dela em vez de apagá-la.`;
+    return `"${nome(copiaId)}" tem o Pedido de Produção ${pp.codigo} no histórico. Uma linha com PP não pode ser removida.`;
   }
 
   const bv = (bvsRes.data ?? [])[0] as

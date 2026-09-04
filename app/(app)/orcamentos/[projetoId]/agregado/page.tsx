@@ -8,9 +8,13 @@ import type { EstadoSaveDaLinha } from "@/app/(app)/_planilha/save-coluna";
 import { listActiveMembers } from "@/lib/data/members";
 import { listarCidadesIniciais } from "@/lib/data/cidades";
 import { HONORARIOS_PADRAO_FALLBACK } from "@/lib/validations/clientes";
+import { escolherJobDoFunil, estagioFunil } from "@/lib/calculos/funil";
+import { calcularTotaisVersao } from "@/lib/calculos/versao-totais";
 import type {
   Categoria,
   CategoriaDominio,
+  JobStatus,
+  OrcamentoStatus,
   Profile,
   Regional,
   TipoCusto,
@@ -18,6 +22,7 @@ import type {
 } from "@/lib/types";
 import { EditorAgregado } from "./editor-agregado";
 import type { OrcamentoRascunho } from "../../_rascunho/tipos";
+import type { OrcamentoExportavel } from "../../_selecao/exportar-orcamentos-menu";
 
 export const dynamic = "force-dynamic";
 
@@ -152,23 +157,47 @@ export default async function OrcamentosAgregadoPage({
   }>;
 
   // Versões utilizáveis de todos os orçamentos em uma consulta só — a
-  // escolha de qual vale acontece em memória.
-  const { data: versoesRaw } =
+  // escolha de qual vale acontece em memória. Os jobs vêm junto, leves,
+  // só para o estágio do funil que os seletores "Exibir" e "Exportar"
+  // mostram no chip de cada orçamento.
+  const [{ data: versoesRaw }, { data: jobsRaw }] =
     orcamentos.length > 0
-      ? await supabase
-          .from("versoes_orcamento")
-          .select(
-            "id, orcamento_id, numero_versao, status, moeda, taxa_cambio, " +
-              "percentual_honorarios, percentual_imposto",
-          )
-          .in(
-            "orcamento_id",
-            orcamentos.map((o) => o.id),
-          )
-          .eq("tenant_id", tenantId)
-          .neq("status", "cancelada")
-          .order("numero_versao", { ascending: false })
-      : { data: [] as any[] };
+      ? await Promise.all([
+          supabase
+            .from("versoes_orcamento")
+            .select(
+              "id, orcamento_id, numero_versao, status, moeda, taxa_cambio, " +
+                "percentual_honorarios, percentual_imposto",
+            )
+            .in(
+              "orcamento_id",
+              orcamentos.map((o) => o.id),
+            )
+            .eq("tenant_id", tenantId)
+            .neq("status", "cancelada")
+            .order("numero_versao", { ascending: false }),
+          supabase
+            .from("jobs")
+            .select("orcamento_id, status, created_at")
+            .in(
+              "orcamento_id",
+              orcamentos.map((o) => o.id),
+            )
+            .eq("tenant_id", tenantId),
+        ])
+      : [{ data: [] as any[] }, { data: [] as any[] }];
+
+  const jobsPorOrcamento = new Map<string, { status: JobStatus; created_at: string }[]>();
+  for (const j of ((jobsRaw ?? []) as any[])) {
+    const atuais = jobsPorOrcamento.get(j.orcamento_id) ?? [];
+    atuais.push({ status: j.status as JobStatus, created_at: j.created_at });
+    jobsPorOrcamento.set(j.orcamento_id, atuais);
+  }
+  const estagioDe = (orc: { id: string; status: string }) =>
+    estagioFunil(
+      orc.status as OrcamentoStatus,
+      escolherJobDoFunil(jobsPorOrcamento.get(orc.id) ?? []),
+    );
 
   const versoes = (versoesRaw ?? []) as Array<{
     id: string;
@@ -356,6 +385,7 @@ export default async function OrcamentosAgregadoPage({
             statusOrcamento: orc.status,
             statusVersao: versao.status,
             bloqueio,
+            estagio: estagioDe(orc),
           }
         : {
             orcamentoId: orc.id,
@@ -365,7 +395,43 @@ export default async function OrcamentosAgregadoPage({
             statusOrcamento: orc.status,
             statusVersao: "",
             bloqueio,
+            estagio: estagioDe(orc),
           },
+    };
+  });
+
+  // O que o seletor "Exportar" mostra por orçamento: a versão vigente e o
+  // FATURAMENTO que a planilha imprime — o lado `cliente` (decisão 041):
+  // save gerado dentro, crédito consumido fora. Calculado
+  // aqui, sobre o que está GRAVADO — a exportação lê o banco, e a tela
+  // pode estar com alteração ainda não salva.
+  const exportaveis: OrcamentoExportavel[] = inicial.map((orc) => {
+    const origem = orc.origemBanco!;
+    const temVersao = origem.versaoId !== "";
+    const valor = temVersao
+      ? calcularTotaisVersao(
+          orc.grupos.flatMap((g) =>
+            g.itens.map((it) => ({
+              tipo_custo: it.tipo_custo,
+              total_orcado:
+                it.valor_unitario_orcado *
+                it.quantidade_orcada *
+                it.dias_meses_orcado,
+              em_save: it.em_save === true,
+              save_consumido: Number(it.save_consumido ?? 0),
+            })),
+          ),
+          orc.parametros.percentual_honorarios,
+          orc.parametros.percentual_imposto,
+        ).cliente.total
+      : null;
+    return {
+      id: orc.id,
+      codigo: origem.codigo,
+      nome: orc.nome,
+      numeroVersao: temVersao ? origem.numeroVersao : null,
+      estagio: origem.estagio ?? "orcamento",
+      valor,
     };
   });
 
@@ -404,6 +470,7 @@ export default async function OrcamentosAgregadoPage({
       )}
       orcamentosExistentes={orcamentos.length}
       inicial={inicial}
+      exportaveis={exportaveis}
       categorias={(categoriasOrcRes.data ?? []) as Pick<
         CategoriaDominio,
         "id" | "nome"

@@ -5,11 +5,19 @@
  *  Do design `Orcamento - Versao com Save.dc.html` (projeto Claude Design
  *  `69342d83`), 26/08/2026.
  *
- *  ⚠️ Só a pastilha **Save** é clicável, e é assim no design: Orçado,
- *  Planejado e Realizado aparecem para dizer o que a planilha está
- *  mostrando, mas não têm liga/desliga — no mock eles são texto, não
- *  botão. Ligar os três de verdade mexe nas grades compartilhadas e em
- *  todos os `colSpan` das planilhas, e é entrega própria.
+ *  Item COM `onAlternar` é botão e liga/desliga o bloco; item sem ele é
+ *  texto — mostra o estado e explica no `title` por que não reage. No
+ *  design original só a pastilha Save era clicável; desde 03/09/2026 a
+ *  planilha da versão liga e desliga Orçado e Rentabilidade de verdade
+ *  (só o Planejado ficou fixo), e por isso o liga/desliga passou a ser a
+ *  regra em vez da exceção.
+ *
+ *  ⚠️ Quem lista os blocos é a TELA, porque as grades não são a mesma:
+ *  a planilha do orçamento (`grade-orcamento`) fecha em Orçado ·
+ *  Planejado · Rentabilidade, e a do job (`grade-job`) em Orçado ·
+ *  Planejado · Realizado. Orçamento não tem realizado — ele nasce da PP,
+ *  depois da abertura do job. As planilhas de job seguem com os blocos em
+ *  só leitura: lá a grade é outra, e o colSpan dela é entrega própria.
  */
 
 import * as React from "react";
@@ -23,9 +31,33 @@ export interface BlocoNoMenu {
   visivel: boolean;
   /** Sem isto o item é só leitura — mostra o estado e não reage. */
   onAlternar?: () => void;
+  /** Por que este item não reage. Vira o `title` do item só leitura, para
+   *  quem clicar nele saber que não foi um defeito. */
+  dica?: string;
 }
 
-export function MenuExibirColunas({ blocos }: { blocos: BlocoNoMenu[] }) {
+/** Uma seção a mais no menu, abaixo da lista principal — no job é a de
+ *  "Rentabilidade", com as duas colunas que entram dentro dos blocos. */
+export interface SecaoDoMenu {
+  titulo: string;
+  itens: BlocoNoMenu[];
+  /** Explicação curta no pé da seção. */
+  dica?: string;
+}
+
+export function MenuExibirColunas({
+  blocos,
+  titulo = "Exibir colunas",
+  dica = "Cada bloco leva R$ Unit., QT, D/M e Total juntos.",
+  secoes,
+}: {
+  blocos: BlocoNoMenu[];
+  /** Cabeçalho da lista principal. Com seções, o design escreve só
+   *  "Colunas" — o resto do menu já diz o que cada parte exibe. */
+  titulo?: string;
+  dica?: string;
+  secoes?: SecaoDoMenu[];
+}) {
   const [aberto, setAberto] = React.useState(false);
   const caixa = React.useRef<HTMLDivElement>(null);
 
@@ -53,52 +85,77 @@ export function MenuExibirColunas({ blocos }: { blocos: BlocoNoMenu[] }) {
       </button>
 
       {aberto && (
-        <div className="absolute right-0 top-full z-30 mt-2 w-[238px] overflow-hidden rounded-xl border border-[#d7d5cf] bg-card text-left shadow-[0_14px_30px_-12px_rgba(0,0,0,.28)]">
+        <div
+          className={cn(
+            "absolute right-0 top-full z-30 mt-2 overflow-hidden rounded-xl border border-[#d7d5cf] bg-card text-left shadow-[0_14px_30px_-12px_rgba(0,0,0,.28)]",
+            // Com seções os rótulos são mais longos ("Rentabilidade
+            // planejada") — o menu abre mais largo, como no design.
+            secoes ? "w-[300px]" : "w-[238px]",
+          )}
+        >
           <p className="border-b border-border px-3 pb-1.5 pt-2.5 text-[9.5px] font-bold uppercase tracking-[0.07em] text-muted-foreground">
-            Exibir colunas
+            {titulo}
           </p>
           <div className="p-1.5">
-            {blocos.map((b) => {
-              const conteudo = (
-                <>
-                  <span
-                    className={cn(
-                      "flex h-[15px] w-[15px] flex-none items-center justify-center rounded",
-                      b.visivel
-                        ? "bg-foreground text-background"
-                        : "border border-[#d7d5cf] bg-card",
-                    )}
-                  >
-                    {b.visivel && <Check className="h-[11px] w-[11px]" />}
-                  </span>
-                  {b.rotulo}
-                </>
-              );
-              const classes = cn(
-                "flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-[12.5px] font-semibold",
-                b.visivel ? "text-foreground" : "text-muted-foreground",
-              );
-              return b.onAlternar ? (
-                <button
-                  key={b.chave}
-                  type="button"
-                  onClick={b.onAlternar}
-                  className={cn(classes, "hover:bg-muted")}
-                >
-                  {conteudo}
-                </button>
-              ) : (
-                <div key={b.chave} className={classes}>
-                  {conteudo}
-                </div>
-              );
-            })}
+            {blocos.map(itemDoMenu)}
             <p className="mx-1.5 mb-1 mt-0.5 text-[10.5px] leading-relaxed text-muted-foreground">
-              Cada bloco leva R$ Unit., QT, D/M e Total juntos.
+              {dica}
             </p>
           </div>
+          {secoes?.map((secao) => (
+            <React.Fragment key={secao.titulo}>
+              <p className="border-y border-border px-3 pb-1.5 pt-2 text-[9.5px] font-bold uppercase tracking-[0.07em] text-muted-foreground">
+                {secao.titulo}
+              </p>
+              <div className="p-1.5">
+                {secao.itens.map(itemDoMenu)}
+                {secao.dica && (
+                  <p className="mx-1.5 mb-1 mt-0.5 text-[10.5px] leading-relaxed text-muted-foreground">
+                    {secao.dica}
+                  </p>
+                )}
+              </div>
+            </React.Fragment>
+          ))}
         </div>
       )}
+    </div>
+  );
+}
+
+/** Um item do menu: botão quando liga/desliga, texto quando só mostra. */
+function itemDoMenu(b: BlocoNoMenu) {
+  const conteudo = (
+    <>
+      <span
+        className={cn(
+          "flex h-[15px] w-[15px] flex-none items-center justify-center rounded",
+          b.visivel
+            ? "bg-foreground text-background"
+            : "border border-[#d7d5cf] bg-card",
+        )}
+      >
+        {b.visivel && <Check className="h-[11px] w-[11px]" />}
+      </span>
+      {b.rotulo}
+    </>
+  );
+  const classes = cn(
+    "flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-[12.5px] font-semibold",
+    b.visivel ? "text-foreground" : "text-muted-foreground",
+  );
+  return b.onAlternar ? (
+    <button
+      key={b.chave}
+      type="button"
+      onClick={b.onAlternar}
+      className={cn(classes, "hover:bg-muted")}
+    >
+      {conteudo}
+    </button>
+  ) : (
+    <div key={b.chave} className={cn(classes, "cursor-default")} title={b.dica}>
+      {conteudo}
     </div>
   );
 }

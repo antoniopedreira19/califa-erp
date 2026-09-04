@@ -951,8 +951,14 @@ export const JOB_STATUS_TRANSICOES: Record<JobStatus, JobStatus[]> = {
 export const ENCERRAMENTO_INDISPONIVEL =
   "Encerre pelo resumo de fechamento, na barra de ações do rodapé";
 
-/** PP que ainda não saiu do caixa — impede o encerramento do job. */
-export const PP_STATUS_EM_ABERTO: PPStatus[] = ["em_avaliacao", "aprovada"];
+/** PP que ainda não saiu do caixa — impede o encerramento do job.
+ *  A gerada entra (02/09/2026): é um rascunho que ninguém enviou nem
+ *  cancelou, e o job não fecha com pendência solta. */
+export const PP_STATUS_EM_ABERTO: PPStatus[] = [
+  "gerada",
+  "em_avaliacao",
+  "aprovada",
+];
 
 /** BV que ainda não foi recebido — impede o encerramento do job. */
 export const BV_SITUACAO_EM_ABERTO: BvSituacao[] = [
@@ -1072,7 +1078,13 @@ export interface PedidoCompra {
   valor: number;
   prazo_pagamento: string;
   pdf_path: string;
+  /** Quem GEROU a PP. Desde 02/09/2026 gerar não envia — ver
+   *  `enviada_financeiro_por`. */
   emitida_por: string | null;
+  /** Quando e por quem a PP saiu de `gerada` e entrou no financeiro
+   *  (02/09/2026). Nulos enquanto gerada. */
+  enviada_financeiro_em: string | null;
+  enviada_financeiro_por: string | null;
   // Verba de Produção (subtipo de PP — pago ao responsável em vez do fornecedor)
   verba_producao: boolean;
   responsavel_verba_id: string | null;
@@ -1093,20 +1105,40 @@ export interface PedidoCompra {
 }
 
 /**
- * Ciclo de vida da PP. Nasce em `em_avaliacao` (o GP emitiu, o financeiro
- * ainda não olhou) e termina em `pago`, `rejeitada` ou `cancelada`.
+ * Ciclo de vida da PP.
+ *
+ * Nasce `gerada` (02/09/2026): fica no job, editável, até alguém enviá-la
+ * ao financeiro. O envio a leva a `em_avaliacao`, e dali ela termina em
+ * `pago`, `rejeitada` ou `cancelada`. Até 02/09/2026 gerar e enviar eram
+ * o mesmo clique e a PP nascia direto em avaliação.
  *
  * `rejeitada` não é terminal de verdade: o GP corrige e reenvia, e a PP
- * volta pra `em_avaliacao`. Por isso ela continua ocupando o SALDO do
- * item — quem devolve saldo é só o cancelamento. (Até 17/08/2026 quem
- * dizia isso era o índice `uniq_pp_ativa_por_item_realizado`, que
- * permitia uma PP ativa por item; ele saiu quando as PPs parciais
- * entraram, e a regra passou para o trigger `pp_valida_saldo_do_item`.)
+ * volta pra `em_avaliacao`. Por isso ela continua contando no realizado
+ * do item — quem tira uma PP do item é só o cancelamento.
+ *
+ * `gerada` conta só nas pendências: fora do realizado, fora do consumo
+ * que congela a previsão da abertura e invisível para o financeiro.
+ * (Decisão 039.)
  */
-export type PPStatus = "em_avaliacao" | "aprovada" | "pago" | "rejeitada" | "cancelada";
+export type PPStatus =
+  | "gerada"
+  | "em_avaliacao"
+  | "aprovada"
+  | "pago"
+  | "rejeitada"
+  | "cancelada";
+
+/** A PP já chegou ao financeiro? Gerada e cancelada, não. É o recorte que
+ *  pesa no realizado do item, no "Em PPs emitidas" do painel e na trava
+ *  da errata (decisões 039 e 040). */
+export function ppChegouAoFinanceiro(s: PPStatus): boolean {
+  return s !== "gerada" && s !== "cancelada";
+}
 
 export function ppStatusLabel(s: PPStatus): string {
   switch (s) {
+    case "gerada":
+      return "Gerada";
     case "em_avaliacao":
       return "Em avaliação";
     case "aprovada":
@@ -1120,9 +1152,9 @@ export function ppStatusLabel(s: PPStatus): string {
   }
 }
 
-/** Só PP em avaliação ou rejeitada pode ser cancelada — paga, não. */
+/** PP gerada, em avaliação ou rejeitada pode ser cancelada — paga, não. */
 export function podeCancelarPP(s: PPStatus): boolean {
-  return s === "em_avaliacao" || s === "rejeitada";
+  return s === "gerada" || s === "em_avaliacao" || s === "rejeitada";
 }
 
 // ---------- Erratas: orçado próprio do job ----------
@@ -1416,6 +1448,8 @@ export interface PedidoCompraParcela {
 /** PP com os campos que as telas de lista mostram junto. */
 export interface PedidoCompraNaLista extends PedidoCompra {
   emitida_por_nome: string | null;
+  /** Quem enviou ao financeiro. Nulo enquanto gerada (02/09/2026). */
+  enviada_financeiro_por_nome: string | null;
   grupo_nome: string | null;
   /** Sempre ao menos uma, ordenada por `numero`. */
   parcelas: PedidoCompraParcela[];

@@ -163,7 +163,9 @@ export default async function OrcamentoDetailPage({
       .from("orcamentos")
       .select(
         "id, tenant_id, projeto_id, codigo, nome, status, categoria_id, servico_id, descritivo, regional_id, cidade_id, gp_responsavel_id, produtor_id, data_inicio_prevista, data_fim_prevista, versao_aprovada_id, created_by, created_at, updated_at, " +
-          "categoria:categorias_dominio(nome), regional:regionais(nome), cidade:cidades(id, nome), " +
+          // `!categoria_id`: `orcamentos` tem duas FKs para `categorias_dominio`
+          // desde 02/09/2026 (categoria e servico).
+          "categoria:categorias_dominio!categoria_id(nome), regional:regionais(nome), cidade:cidades(id, nome), " +
           "gp:profiles!gp_responsavel_id(nome), produtor:profiles!produtor_id(nome)",
       )
       .eq("id", params.orcId)
@@ -752,7 +754,7 @@ function VersaoSelecionada({
         : s,
     0,
   );
-  const { resultadoGeral } = calcularResultadoOperacional(
+  const { resultadoOperacional, resultadoGeral } = calcularResultadoOperacional(
     totais.valorJob,
     totais.imposto,
     custoPlanejado - bvLiquidoDaVersao,
@@ -844,7 +846,7 @@ function VersaoSelecionada({
 
         <ResumoRentabilidade
           valorJob={totais.valorJob}
-          custoPlanejado={custoPlanejado}
+          resultadoOperacional={resultadoOperacional}
           resultadoGeral={resultadoGeral}
           moeda={versao.moeda}
         />

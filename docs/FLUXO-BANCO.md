@@ -164,3 +164,52 @@ sempre.
 **Por isso: toda migration que mexe em coluna de tabela usada pelo
 frontend termina com a atualização do tipo correspondente em
 `lib/types.ts`, no mesmo commit.**
+
+---
+
+## ⚠️ FK nova para uma tabela já embutida quebra os embeds existentes
+
+**Caso real, 02/09/2026.** A migration que criou `orcamentos.servico_id`
+era aditiva e correta. Mesmo assim derrubou a tela de orçamentos do
+projeto em produção.
+
+O motivo: `orcamentos` passou a ter **duas** FKs para
+`categorias_dominio` (`categoria_id` e `servico_id`). A partir daí todo
+embed escrito assim ficou ambíguo:
+
+```ts
+// Quebra quando existe mais de uma FK entre as duas tabelas.
+.select("id, nome, categoria:categorias_dominio(nome)")
+```
+
+O PostgREST não sabe por qual chave juntar, **recusa a consulta inteira**
+e devolve erro. Como quase todo código nosso lê só `.data`, o resultado é
+uma **lista vazia em silêncio** — a tela diz "nenhum registro" num lugar
+que tem registros.
+
+**A correção é dizer a chave:**
+
+```ts
+.select("id, nome, categoria:categorias_dominio!categoria_id(nome)")
+```
+
+### Por que ninguém pega isso antes
+
+- A string do `select` é **opaca para o TypeScript**: `tsc`, `lint` e
+  `build` passam limpos.
+- O erro só aparece **em runtime, contra o banco de verdade**.
+- E ele atinge **o código que já estava no ar**: a migration vale para
+  todo mundo assim que é aplicada, inclusive para a versão anterior do
+  app, que não conhece a coluna nova. Ou seja, **quebra antes do deploy**.
+
+### O que fazer ao acrescentar uma FK
+
+Antes de aplicar a migration, procure quem já embute a tabela de destino:
+
+```bash
+grep -rn "nome_da_tabela_destino(" --include="*.ts" --include="*.tsx" app lib
+```
+
+Todo embed **a partir da tabela que ganhou a FK nova** precisa do hint
+`!coluna`. Os que partem de outras tabelas seguem válidos — o que conta é
+o número de FKs entre *aquele* par de tabelas, não a existência da coluna.

@@ -125,3 +125,23 @@ A linha nascida de errata **não tem caminho para lançar BV**. As ações de BV
 que a linha de errata não tem. Na prática não estorva hoje: linha nova nasce
 tipo `B`, e B não aceita BV. A coluna `itens_bv.job_item_orcado_id` já
 existe, então a costura é só do lado da action quando alguém precisar.
+
+## ⚠️ Nota de 2026-09-02 — decisões 039 e 040
+
+Duas frases desta decisão deixaram de valer:
+
+- **"O status do job não muda: ele segue aberto, e a produção segue
+  emitindo PP e BV."** O status continua não mudando, mas enquanto a
+  abertura está em revisão **nenhuma PP sai para o financeiro** — gerar,
+  editar e cancelar seguem; enviar e reenviar, não. BV não mudou.
+  ([040](040-errata-nao-toca-linha-com-pp-e-trava-o-envio-de-pp.md) §2)
+- **"O tipo de custo continua editável, com a trava de PP ativa"** e
+  "corrigir valor unitário de item com PP ativa continua permitido": a
+  linha que já tem PP no financeiro (em avaliação, rejeitada, aprovada ou
+  paga) **não entra mais em errata** — nem valor, nem QT, nem D/M, nem
+  tipo, nem remover. PP só gerada não trava. ([040](040-errata-nao-toca-linha-com-pp-e-trava-o-envio-de-pp.md) §1)
+
+E a linha vermelha deixou de ser "isenta do teto do orçado": o teto
+saiu para todo item ([039](039-pp-nasce-gerada-e-o-envio-ao-financeiro-e-uma-acao.md) §3).
+O que existe é a confirmação acima do planejado no envio — e, como ela
+nasce com planejado zero, toda PP dela passa por essa confirmação.
