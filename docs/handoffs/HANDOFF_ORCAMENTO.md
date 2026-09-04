@@ -3064,3 +3064,12 @@ no fechamento") e cruzadas na 028.
 | Visão agregada — seletor | mesmos quatro valores |
 
 `tsc --noEmit`, `next lint` e `next build` (em cópia isolada) limpos.
+
+### Verificação no servidor AO VIVO (04/09/2026, `www.sistemacalifa.com.br`, deploy do `34b1ba3`)
+
+| Onde | O que foi conferido |
+|---|---|
+| Projeto `TESTE-0006/26` — seletor | Revisao 1 **R$ 133.714,18**, Pago só por save **R$ 0,00**, Consome o Save 20.504,54, Origem do Save 109.357,52; total dos quatro R$ 263.576,24 (antes do deploy, R$ 324.070,83) |
+| Arquivo baixado de produção (`Revisao 1`) | coluna I oculta com 10.000 no Item 4; TOTAL 112.000; **(−) PAGO COM CRÉDITO DE SALDO ANTERIOR −10.000**; IMPOSTO 19.474,18; HONORÁRIOS 12% 12.240; FATURAMENTO **133.714,18** — idêntico ao arquivo local |
+
+Nada foi gravado no banco nesta rodada: só exportação.
