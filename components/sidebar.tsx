@@ -6,6 +6,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn, initials } from "@/lib/utils";
 import { roleLabel, type AppRole } from "@/lib/types";
+import { pode, type Recurso } from "@/lib/permissoes";
 import {
   Home,
   FileText,
@@ -29,38 +30,59 @@ type NavLink = {
   activePathPrefixes?: string[];
   disabled?: boolean;
   disabledReason?: string;
-  /** Roles que podem ver este item. Undefined = visível para todos. */
-  roles?: AppRole[];
+  /**
+   * Recurso na matriz de permissoes que controla visibilidade.
+   * `undefined` = visivel para qualquer role autenticada (fallback).
+   * Fonte-verdade em `lib/permissoes.ts`.
+   */
+  permissao?: Recurso;
 };
 
 const links: NavLink[] = [
-  { href: "/home", label: "Home", icon: Home },
+  { href: "/home", label: "Home", icon: Home, permissao: "sidebar.home" },
   {
     href: "/cadastros",
     label: "Cadastros",
     icon: FolderKanban,
     activePathPrefixes: ["/clientes", "/fornecedores"],
+    permissao: "sidebar.cadastros",
   },
-  { href: "/orcamentos", label: "Orçamentos", icon: FileText },
-  { href: "/jobs", label: "Jobs", icon: Briefcase },
+  {
+    href: "/orcamentos",
+    label: "Orçamentos",
+    icon: FileText,
+    permissao: "sidebar.orcamentos",
+  },
+  {
+    href: "/jobs",
+    label: "Jobs",
+    icon: Briefcase,
+    permissao: "sidebar.jobs",
+  },
   {
     href: "/financeiro",
     label: "Financeiro",
     icon: Landmark,
-    roles: ["administrador", "financeiro"],
+    permissao: "sidebar.financeiro",
   },
   {
     href: "/financeiro/desembolsos",
     label: "Desembolsos",
     icon: Wallet,
     activePathPrefixes: ["/financeiro/desembolsos"],
+    permissao: "sidebar.desembolsos",
   },
-  { href: "/relatorios", label: "Relatórios", icon: BarChart3 },
+  {
+    href: "/relatorios",
+    label: "Relatórios",
+    icon: BarChart3,
+    permissao: "sidebar.relatorios",
+  },
   {
     href: "/admin",
     label: "Administração",
     icon: ShieldCheck,
-    roles: ["administrador"],
+    permissao: "sidebar.administracao",
   },
 ];
 
@@ -87,7 +109,9 @@ export function Sidebar({
 
   const expanded = hovered || mobileOpen;
 
-  const visibleLinks = links.filter((l) => (!l.roles || l.roles.includes(role)));
+  const visibleLinks = links.filter(
+    (l) => !l.permissao || pode(role, l.permissao),
+  );
 
   // Largura do bg de cada item — animável porque são valores numéricos px.
   const itemBgWidth = expanded ? ITEM_W_EXPANDED : ITEM_W_COLLAPSED;

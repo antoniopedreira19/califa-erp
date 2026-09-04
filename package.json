@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
+    "test:permissoes": "node --import tsx --test lib/permissoes.test.ts",
     "atualizar:bancos": "tsx scripts/atualizar-bancos-febraban.ts"
   },
   "dependencies": {
