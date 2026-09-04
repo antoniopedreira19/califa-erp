@@ -401,7 +401,8 @@ export default async function OrcamentosAgregadoPage({
   });
 
   // O que o seletor "Exportar" mostra por orçamento: a versão vigente e o
-  // FATURAMENTO que a aba imprime (lado bruto, decisão 028). Calculado
+  // FATURAMENTO que a planilha imprime — o lado `cliente` (decisão 041):
+  // save gerado dentro, crédito consumido fora. Calculado
   // aqui, sobre o que está GRAVADO — a exportação lê o banco, e a tela
   // pode estar com alteração ainda não salva.
   const exportaveis: OrcamentoExportavel[] = inicial.map((orc) => {
@@ -422,7 +423,7 @@ export default async function OrcamentosAgregadoPage({
           ),
           orc.parametros.percentual_honorarios,
           orc.parametros.percentual_imposto,
-        ).bruto.total
+        ).cliente.total
       : null;
     return {
       id: orc.id,

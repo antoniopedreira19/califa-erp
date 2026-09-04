@@ -51,9 +51,39 @@ versão vigente da visão agregada e da aba padrão da tela do orçamento
 
 ### O que sai no fechamento
 
-O lado **bruto** de cada orçamento (decisão 028), somado: a planilha do
-cliente mostra o orçamento como foi fechado, com as linhas em save
-incluídas. É o número que o seletor mostra ao lado de cada orçamento.
+> ⚠️ **Revisto em 04/09/2026.** Até aqui a planilha usava o lado
+> **bruto** (decisão 028), que inclui tudo. O Tiago conferiu a regra e
+> fechou o que segue.
+
+O lado **cliente** de cada orçamento, somado — um fechamento que nasceu
+com esta revisão (`calcularTotaisVersao().cliente`):
+
+- **Linha em save entra.** O cliente paga por ela agora, mesmo que o
+  serviço fique para outro projeto (é o que a decisão 028 já dizia para
+  a planilha).
+- **O que é pago com crédito de outro job sai.** Ele já pagou por isso
+  no job de origem; cobrar de novo seria cobrar duas vezes. No par
+  origem e consumidor do banco (`TESTE-0006/26-01` e `-02`), as duas
+  planilhas passam a somar **R$ 129.862,06** — o compromisso total do
+  cliente da decisão 028 — em vez dos R$ 170.871,13 de antes.
+- A alavanca de principal continua a do **valor do job**: o documento
+  do cliente mostra o compromisso total dele, inclusive o que paga
+  direto ao fornecedor (tipo A). É o que separa este fechamento do
+  "faturamento previsto".
+
+Sem save, `cliente` coincide com `bruto` e com o Valor do Job das telas.
+
+**Os itens continuam listados cheios**, e o TOTAL continua sendo a soma
+deles. O abatimento aparece numa linha própria do fechamento, entre o
+TOTAL e o IMPOSTO — **"(−) PAGO COM CRÉDITO DE SALDO ANTERIOR"** — só
+quando há consumo, para a conta fechar à vista. Um orçamento pago
+inteiramente por crédito sai com FATURAMENTO **zero** e a linha de
+abatimento explicando (decisão do Tiago: é aceitável). Abater na própria
+linha do item, ou omiti-la, perdeu: esconderia o serviço que o cliente
+vai receber.
+
+O número que o seletor "Exportar" mostra ao lado de cada orçamento é
+este mesmo — o que a planilha imprime.
 
 Cada seção fecha com **os seus** percentuais de honorários e imposto.
 Quando todos coincidem, HONORÁRIOS e IMPOSTO são fórmulas diretas sobre
@@ -74,7 +104,10 @@ mesmas fórmulas (decisão do Tiago, 03/09/2026).
 ### Ids ocultos
 
 A coluna **H**, escondida, carrega `orc:<id>|v:<id>` no título da
-seção, `grp:<id>` na linha do grupo e `it:<id>` na linha do item. Na
+seção, `grp:<id>` na linha do grupo e `it:<id>` na linha do item. A
+coluna **I**, também escondida, carrega o crédito consumido de cada item
+— é dela que saem a linha "(−) pago com crédito" e as bases líquidas de
+HONORÁRIOS, IMPOSTO e FATURAMENTO (`SUMIF` sobre a H e a I). Na
 exportação de versão única, sem linha de seção, o `orc:|v:` vai na
 coluna H da linha 1. É com isso que a importação casa cada linha de
 volta, mesmo depois de o cliente reescrever descrições ou reordenar.

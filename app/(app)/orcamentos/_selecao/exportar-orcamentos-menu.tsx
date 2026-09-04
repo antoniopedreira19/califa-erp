@@ -25,8 +25,9 @@ export interface OrcamentoExportavel {
    *  `null` = orçamento sem versão, que não tem o que exportar. */
   numeroVersao: number | null;
   estagio: EstagioFunil;
-  /** O FATURAMENTO que a aba vai mostrar — o lado bruto do fechamento,
-   *  com as linhas em save incluídas (decisão 028). `null` sem versão. */
+  /** O FATURAMENTO que a planilha vai mostrar — o lado `cliente` do
+   *  fechamento (decisão 041): linhas em save incluídas, crédito
+   *  consumido de outro job abatido. `null` sem versão. */
   valor: number | null;
 }
 
@@ -196,8 +197,8 @@ export function ExportarOrcamentosMenu({ projetoId, orcamentos }: Props) {
                 <p className="mx-1.5 mb-1 mt-0.5 text-[10.5px] leading-relaxed text-muted-foreground">
                   Uma planilha só: os orçamentos marcados entram em sequência,
                   com um fechamento único — para o cliente, um orçamento. O
-                  valor é o FATURAMENTO de cada um, com as linhas em save
-                  incluídas, quando houver.
+                  valor é o FATURAMENTO de cada um: linhas em save incluídas
+                  e o que é pago com crédito de outro job já abatido.
                 </p>
               </div>
 

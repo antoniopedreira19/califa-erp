@@ -20,9 +20,12 @@ import type { TipoCusto } from "@/lib/types";
  * é um orçamento; para a agência, continuam sendo N. A exportação de
  * versão única é o caso de uma seção sem título.
  *
- * O bloco de totais é o lado BRUTO do fechamento (decisão 028): a planilha
- * do cliente mostra o orçamento como foi fechado, sem a mecânica interna
- * do save. Em orçamento sem save é exatamente a conta de sempre.
+ * O bloco de totais é o lado CLIENTE do fechamento (decisão 041,
+ * 04/09/2026): as linhas em save entram — o cliente paga por elas agora —
+ * e o que é pago com crédito de outro job sai, numa linha própria
+ * "(−) pago com crédito de saldo anterior" entre o TOTAL e o IMPOSTO, para
+ * a conta fechar à vista. Em orçamento sem save é exatamente a conta de
+ * sempre.
  *
  * **Fórmulas.** Com `formulas: true` as células calculadas — TT de cada
  * item, subtotal de grupo e de seção, SUB-TOTAL por tipo, TOTAL, IMPOSTO,
@@ -59,6 +62,9 @@ const FORMATO_MOEDA = '"R$" #,##0.00';
 
 /** Coluna escondida com o id da linha. */
 export const COLUNA_ID = 8; // H
+/** Coluna escondida com o quanto da linha é pago com crédito de save de
+ *  outro job — a base da linha "(−) pago com crédito" do fechamento. */
+export const COLUNA_CONSUMIDO = 9; // I
 export const MARCA_ORCAMENTO = "orc:";
 export const MARCA_VERSAO = "v:";
 export const MARCA_GRUPO = "grp:";
@@ -131,32 +137,56 @@ function letra(col: number): string {
 
 const F = letra(6);
 const G = letra(7);
+const I = letra(COLUNA_CONSUMIDO);
+
+interface Faixa {
+  de: number;
+  ate: number;
+}
 
 /** Tipos em que a alavanca está ligada. */
 function tiposCom(alavanca: keyof RegraTipoCusto): TipoCusto[] {
   return TIPOS_CUSTO.filter((t) => REGRAS_TIPO_CUSTO[t][alavanca]);
 }
 
-/** `F12+F15+F18` — as linhas de SUB-TOTAL dos tipos com a alavanca. */
+/** `SUMIF($G$4:$G$10,"A",$I$4:$I$10)` — o crédito consumido pelas
+ *  linhas de um tipo dentro de uma faixa. */
+function consumidoDoTipo(faixa: Faixa, t: TipoCusto): string {
+  return `SUMIF($${G}$${faixa.de}:$${G}$${faixa.ate},"${t}",$${I}$${faixa.de}:$${I}$${faixa.ate})`;
+}
+
+/** `F12+F15+F18` — as linhas de SUB-TOTAL dos tipos com a alavanca. Com
+ *  crédito consumido na planilha cada parcela vira `(F12-SUMIF(…))`, a
+ *  base líquida do tipo. */
 function somaDosSubtotais(
   linhaDoTipo: Record<TipoCusto, number>,
   alavanca: keyof RegraTipoCusto,
+  credito: Faixa | null,
 ): string {
   return tiposCom(alavanca)
-    .map((t) => `${F}${linhaDoTipo[t]}`)
+    .map((t) =>
+      credito
+        ? `(${F}${linhaDoTipo[t]}-${consumidoDoTipo(credito, t)})`
+        : `${F}${linhaDoTipo[t]}`,
+    )
     .join("+");
 }
 
 /** `SUMIF($G$4:$G$10,"A",$F$4:$F$10)+…` — o orçado dos tipos com a
- *  alavanca dentro de uma faixa de linhas (uma seção). */
+ *  alavanca dentro de uma faixa de linhas (uma seção), líquido do
+ *  crédito consumido quando ele existe. */
 function somaNaFaixa(
-  faixa: { de: number; ate: number },
+  faixa: Faixa,
   alavanca: keyof RegraTipoCusto,
+  comCredito: boolean,
 ): string {
   const tipos = `$${G}$${faixa.de}:$${G}$${faixa.ate}`;
   const totais = `$${F}$${faixa.de}:$${F}$${faixa.ate}`;
   return tiposCom(alavanca)
-    .map((t) => `SUMIF(${tipos},"${t}",${totais})`)
+    .map((t) => {
+      const cheio = `SUMIF(${tipos},"${t}",${totais})`;
+      return comCredito ? `(${cheio}-${consumidoDoTipo(faixa, t)})` : cheio;
+    })
     .join("+");
 }
 
@@ -208,8 +238,10 @@ export function adicionarAbaOrcamento(
     { header: "", key: "tt", width: 16 }, // F · total
     { header: "", key: "tipo", width: 6 }, // G · tipo A/B/C/D
     { header: "", key: "id", width: 2 }, // H · id oculto
+    { header: "", key: "consumido", width: 2 }, // I · crédito consumido, oculto
   ];
   ws.getColumn(COLUNA_ID).hidden = true;
+  ws.getColumn(COLUNA_CONSUMIDO).hidden = true;
 
   // -------- Linha 1: cabeçalho de identificação --------
   ws.getRow(1).values = [
@@ -370,6 +402,14 @@ export function adicionarAbaOrcamento(
           it.total_orcado,
           it.tipo_custo,
           it.id ? `${MARCA_ITEM}${it.id}` : "",
+          // Consumo não passa do total nem é negativo — a mesma guarda
+          // de `calcularTotaisVersao`. Linha em save não consome.
+          it.em_save
+            ? 0
+            : Math.min(
+                Math.max(Number(it.save_consumido ?? 0), 0),
+                it.total_orcado,
+              ),
         ]);
         row.height = 18;
         for (let col = 1; col <= 7; col++) {
@@ -437,13 +477,13 @@ export function adicionarAbaOrcamento(
   // que ele paga direto ao fornecedor é leitura interna (decisão do Tiago
   // em 11/08/2026) e não entra neste arquivo.
   //
-  // O lado BRUTO, e não o do job: a planilha do cliente mostra o orçamento
-  // como ele foi fechado, sem a mecânica interna do save. Num orçamento
-  // com linhas em save o "valor do job" desce (elas saem do valor do job)
-  // e o arquivo sairia com um TOTAL de itens que não bate com o
-  // FATURAMENTO logo abaixo — no orçamento de save inteiro sairia zerado.
-  // `bruto` roda a MESMA conta sobre o total orçado cheio, então em
-  // qualquer orçamento sem save o arquivo é byte a byte o de sempre.
+  // O lado CLIENTE (decisão 041, 04/09/2026), e não o do job nem o bruto:
+  // a linha em save ENTRA — o cliente paga por ela agora, mesmo que o
+  // serviço fique para outro projeto — e o que é pago com crédito de
+  // outro job SAI, porque ele já pagou lá e cobrar de novo seria cobrar
+  // duas vezes. Os itens continuam listados cheios; o abatimento aparece
+  // numa linha própria entre o TOTAL e o IMPOSTO, para a conta fechar à
+  // vista. Sem save é exatamente a conta de sempre.
   //
   // Com várias seções, cada uma fecha com os SEUS percentuais e o
   // arquivo soma os fechamentos — é o que a visão agregada faz.
@@ -451,6 +491,7 @@ export function adicionarAbaOrcamento(
     TIPOS_CUSTO.map((t) => [t, 0]),
   ) as Record<TipoCusto, number>;
   let subtotalGeral = 0;
+  let creditoUsado = 0;
   let honorarios = 0;
   let imposto = 0;
   let valorJob = 0;
@@ -462,10 +503,12 @@ export function adicionarAbaOrcamento(
     );
     for (const t of TIPOS_CUSTO) subtotaisPorTipo[t] += totais.subtotaisPorTipo[t];
     subtotalGeral += totais.subtotalGeral;
-    honorarios += totais.bruto.honorarios;
-    imposto += totais.bruto.imposto;
-    valorJob += totais.bruto.total;
+    creditoUsado += totais.save.totalSaveUsado;
+    honorarios += totais.cliente.honorarios;
+    imposto += totais.cliente.imposto;
+    valorJob += totais.cliente.total;
   }
+  const temCredito = creditoUsado > 0;
 
   const percentuaisHonorarios = Array.from(
     new Set(faixas.map((f) => numeroExcel(f.percentualHonorarios))),
@@ -484,7 +527,7 @@ export function adicionarAbaOrcamento(
   ws.addRow([]);
 
   type LinhaResumo = {
-    chave: "tipo" | "total" | "imposto" | "honorarios" | "faturamento";
+    chave: "tipo" | "total" | "credito" | "imposto" | "honorarios" | "faturamento";
     label: string;
     value: number;
     tipo?: TipoCusto;
@@ -499,6 +542,17 @@ export function adicionarAbaOrcamento(
       tipo: t,
     })),
     { chave: "total", label: "TOTAL", value: subtotalGeral, bold: true },
+    // Só quando há crédito consumido: é a linha que explica por que o
+    // FATURAMENTO fica abaixo do TOTAL. Sem consumo ela não aparece.
+    ...(temCredito
+      ? [
+          {
+            chave: "credito" as const,
+            label: "(−) PAGO COM CRÉDITO DE SALDO ANTERIOR",
+            value: -creditoUsado,
+          },
+        ]
+      : []),
     { chave: "imposto", label: "IMPOSTO", value: imposto },
     {
       chave: "honorarios",
@@ -520,6 +574,7 @@ export function adicionarAbaOrcamento(
 
   const linhaDoTipo = {} as Record<TipoCusto, number>;
   let linhaTotal = 0;
+  let linhaCredito = 0;
   let linhaImposto = 0;
   let linhaHonorarios = 0;
   let linhaFaturamento = 0;
@@ -567,6 +622,9 @@ export function adicionarAbaOrcamento(
       case "total":
         linhaTotal = row.number;
         break;
+      case "credito":
+        linhaCredito = row.number;
+        break;
       case "imposto":
         linhaImposto = row.number;
         break;
@@ -610,12 +668,23 @@ export function adicionarAbaOrcamento(
       subtotalGeral,
     );
 
-    // HONORÁRIOS: % sobre os tipos com a alavanca `honorarios`. Taxa
-    // única → direto sobre os SUB-TOTAIS; taxas diferentes → uma parcela
-    // por seção, cada uma com a sua.
+    // (−) crédito: a coluna oculta de consumo somada, com sinal trocado.
+    const credito: Faixa | null = temCredito && faixaToda ? faixaToda : null;
+    if (credito) {
+      definirFormula(
+        ws,
+        `${F}${linhaCredito}`,
+        `-SUM($${I}$${credito.de}:$${I}$${credito.ate})`,
+        -creditoUsado,
+      );
+    }
+
+    // HONORÁRIOS: % sobre os tipos com a alavanca `honorarios`, líquidos
+    // do crédito consumido. Taxa única → direto sobre os SUB-TOTAIS;
+    // taxas diferentes → uma parcela por seção, cada uma com a sua.
     const honorariosDaSecao = (f: FaixaDaSecao) =>
-      `(${somaNaFaixa(f, "honorarios")})*${numeroExcel(f.percentualHonorarios)}/100`;
-    const baseHonorarios = somaDosSubtotais(linhaDoTipo, "honorarios");
+      `(${somaNaFaixa(f, "honorarios", temCredito)})*${numeroExcel(f.percentualHonorarios)}/100`;
+    const baseHonorarios = somaDosSubtotais(linhaDoTipo, "honorarios", credito);
     if (honorariosUniforme) {
       if (baseHonorarios) {
         definirFormula(
@@ -640,7 +709,7 @@ export function adicionarAbaOrcamento(
       const taxa = taxaDe(impPct);
       if (taxa > 0) {
         const partes = [
-          somaDosSubtotais(linhaDoTipo, "imposto"),
+          somaDosSubtotais(linhaDoTipo, "imposto", credito),
           `${F}${linhaHonorarios}`,
         ].filter(Boolean);
         definirFormula(
@@ -655,7 +724,7 @@ export function adicionarAbaOrcamento(
         .filter((f) => taxaDe(f.percentualImposto) > 0)
         .map((f) => {
           const taxa = numeroExcel(taxaDe(f.percentualImposto));
-          const base = [somaNaFaixa(f, "imposto"), honorariosDaSecao(f)]
+          const base = [somaNaFaixa(f, "imposto", temCredito), honorariosDaSecao(f)]
             .filter(Boolean)
             .join("+");
           return `(${base})*${taxa}/(1-${taxa})`;
@@ -670,8 +739,9 @@ export function adicionarAbaOrcamento(
       }
     }
 
-    // FATURAMENTO: principal (alavanca `valorJob`) + honorários + imposto.
-    const principal = somaDosSubtotais(linhaDoTipo, "valorJob");
+    // FATURAMENTO: principal (alavanca `valorJob`, líquido do crédito) +
+    // honorários + imposto.
+    const principal = somaDosSubtotais(linhaDoTipo, "valorJob", credito);
     const partesFat = [
       principal,
       `${F}${linhaHonorarios}`,
