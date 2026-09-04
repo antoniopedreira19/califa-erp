@@ -18,7 +18,6 @@ export async function HomeFreelancer({
     <div className="space-y-8">
       <CabecalhoHome
         nome={session.profile.nome}
-        papel="Freelancer"
         subtitulo="Seus jobs, seu realizado e seu chat — o que precisa da sua atenção."
       />
 

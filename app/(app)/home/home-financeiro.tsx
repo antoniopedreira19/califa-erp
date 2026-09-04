@@ -17,8 +17,7 @@ export async function HomeFinanceiro({
     <div className="space-y-8">
       <CabecalhoHome
         nome={session.profile.nome}
-        papel="Financeiro"
-        subtitulo="Suas filas do dia: aprovações, faturas e vencimentos. KPIs do mês na base."
+        subtitulo="Suas filas do dia: aprovações, faturas e vencimentos. Números do mês na base."
       />
 
       <section className="space-y-3">
