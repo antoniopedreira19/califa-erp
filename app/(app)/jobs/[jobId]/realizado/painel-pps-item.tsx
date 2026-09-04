@@ -35,6 +35,7 @@ import {
   Paperclip,
   AlertTriangle,
   Lock,
+  CheckCircle2,
 } from "lucide-react";
 import { Dialog, DrawerContent } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -47,6 +48,10 @@ import {
   cancelarPedidoCompra,
   type AcimaDoPlanejado,
 } from "./actions-pp";
+import {
+  marcarPPsConcluidasDoItem,
+  reabrirItemParaNovaPP,
+} from "./actions-conclusao";
 
 export interface PPDoItem {
   id: string;
@@ -73,6 +78,15 @@ interface Props {
   emPPs: number;
   /** Errata devolveu o job ao mural: o envio fica fechado. */
   aberturaEmRevisao: boolean;
+  /** Id da âncora do realizado — o marco "todas as PPs geradas" é
+   *  gravado nela (decisão 052). */
+  itemRealizadoId: string;
+  /** O item já está marcado. Troca o rodapé: some o botão de marcar, e
+   *  "Nova PP" passa a pedir confirmação. */
+  concluido: boolean;
+  /** Quem marcou e quando — a faixa verde do topo. */
+  concluidoPorNome: string | null;
+  concluidoEmLabel: string | null;
   /** Quem pode gerar também pode enviar, editar e cancelar. Null quando o
    *  usuário só lê — a tela do financeiro, o job congelado. */
   onNovaPP: (() => void) | null;
@@ -91,6 +105,10 @@ export function PainelPPsItem({
   pps,
   emPPs,
   aberturaEmRevisao,
+  itemRealizadoId,
+  concluido,
+  concluidoPorNome,
+  concluidoEmLabel,
   onNovaPP,
   onEditar,
   onMensagem,
@@ -103,6 +121,8 @@ export function PainelPPsItem({
     numeros: AcimaDoPlanejado;
   } | null>(null);
   const [cancelando, setCancelando] = React.useState<PPDoItem | null>(null);
+  /** Aviso de "gerar nova PP num item completo" (decisão 052). */
+  const [avisandoNovaPP, setAvisandoNovaPP] = React.useState(false);
 
   const podeAgir = onNovaPP !== null;
   const pendentes = pps.filter((pp) => pp.status === "gerada");
@@ -114,8 +134,50 @@ export function PainelPPsItem({
       setErro(null);
       setConfirmando(null);
       setCancelando(null);
+      setAvisandoNovaPP(false);
     }
   }, [open]);
+
+  /** "Todas as PPs deste item já foram geradas" — o botão do rodapé.
+   *  Não gera nem envia nada: só fecha o item. */
+  function marcar() {
+    setErro(null);
+    startTransition(async () => {
+      const res = await marcarPPsConcluidasDoItem(itemRealizadoId);
+      if (!res.ok) {
+        setErro(res.message);
+        return;
+      }
+      onMensagem?.("Item marcado: todas as PPs dele já foram geradas.");
+      router.refresh();
+    });
+  }
+
+  /** Nova PP: direto no item em aberto; com aviso no item marcado, porque
+   *  gerar mais uma PP ali REABRE o item e devolve o saldo do planejado
+   *  para a previsão de custo. */
+  function pedirNovaPP() {
+    if (!onNovaPP) return;
+    if (!concluido) {
+      onNovaPP();
+      return;
+    }
+    setAvisandoNovaPP(true);
+  }
+
+  function confirmarNovaPP() {
+    setErro(null);
+    startTransition(async () => {
+      const res = await reabrirItemParaNovaPP(itemRealizadoId);
+      if (!res.ok) {
+        setErro(res.message);
+        return;
+      }
+      setAvisandoNovaPP(false);
+      router.refresh();
+      onNovaPP?.();
+    });
+  }
 
   function verPdf(ppId: string) {
     startTransition(async () => {
@@ -205,6 +267,26 @@ export function PainelPPsItem({
           </button>
         </div>
 
+        {/* O item está fechado: não sai mais PP daqui, e a previsão de
+            custo dele já passou a valer o que as PPs dizem. */}
+        {concluido && (
+          <div className="flex items-start gap-2.5 border-b border-emerald-100 bg-emerald-50/70 px-6 py-3">
+            <CheckCircle2 className="mt-0.5 h-[15px] w-[15px] shrink-0 text-emerald-700" />
+            <div className="flex min-w-0 flex-col gap-0.5">
+              <span className="text-[12.5px] font-bold text-emerald-700">
+                Todas as PPs deste item foram geradas
+              </span>
+              <span className="text-[11px] leading-snug text-emerald-800/80">
+                {[concluidoPorNome, concluidoEmLabel]
+                  .filter(Boolean)
+                  .join(" · ")}
+                {concluidoPorNome || concluidoEmLabel ? " · " : ""}
+                a previsão de custo passa a usar as PPs do item
+              </span>
+            </div>
+          </div>
+        )}
+
         <div className="relative flex flex-1 flex-col gap-[18px] overflow-y-auto px-6 py-4">
           {erro && (
             <div className="flex items-center justify-between gap-3 rounded-lg border border-california-red/30 bg-california-red/5 px-3 py-2 text-xs text-california-red">
@@ -242,8 +324,10 @@ export function PainelPPsItem({
           )}
 
           {pps.length === 0 && (
-            <div className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-xs text-muted-foreground">
-              Nenhuma PP gerada para este item ainda.
+            <div className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-xs leading-relaxed text-muted-foreground">
+              {concluido
+                ? "Nenhuma PP neste item, e ele está marcado: é custo que não vai gerar PP. O planejado dele saiu da previsão de custo."
+                : "Nenhuma PP gerada para este item ainda."}
             </div>
           )}
 
@@ -437,15 +521,85 @@ export function PainelPPsItem({
         </div>
 
         {onNovaPP && (
-          <div className="border-t border-border bg-muted/30 px-6 py-4">
+          <div className="flex flex-col gap-2.5 border-t border-border bg-muted/30 px-6 py-4">
+            {/* Marcar não abre formulário e não despacha nada: só declara
+                que não sairão mais PPs deste item (decisão 052). */}
+            {!concluido && (
+              <button
+                type="button"
+                onClick={marcar}
+                disabled={pending}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-[12.5px] font-bold text-emerald-700 transition-colors hover:bg-emerald-100 disabled:opacity-50"
+              >
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                Marcar: todas as PPs geradas
+              </button>
+            )}
             <button
               type="button"
-              onClick={onNovaPP}
-              className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-border bg-card px-3.5 py-2.5 text-[13px] font-semibold transition-colors hover:bg-muted"
+              onClick={pedirNovaPP}
+              disabled={pending}
+              className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-border bg-card px-3.5 py-2.5 text-[13px] font-semibold transition-colors hover:bg-muted disabled:opacity-50"
             >
               <FilePlus className="h-3.5 w-3.5 text-california-red" />
               Nova PP para este item
             </button>
+            <span className="text-center text-[11px] leading-snug text-muted-foreground">
+              {concluido
+                ? "O item está completo: gerar nova PP aqui pede confirmação e reabre o item."
+                : pps.length === 0
+                  ? "Item sem PP pode ser marcado: serve para custo que não vai gerar PP."
+                  : "Marcar não envia nada ao financeiro — só diz que não sairão mais PPs deste item."}
+            </span>
+          </div>
+        )}
+
+        {/* Reabrir não é botão: é consequência de pedir mais uma PP num
+            item já fechado. O aviso explica o efeito no fluxo de caixa
+            antes de o formulário abrir (decisão 052). */}
+        {avisandoNovaPP && (
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-[#282828]/30 p-5">
+            <div className="flex w-full flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-elevated">
+              <div className="flex flex-col gap-2.5 px-[18px] pb-3.5 pt-[18px]">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-california-red" />
+                  <h3 className="text-[15px] font-bold tracking-tight">
+                    Gerar nova PP num item completo?
+                  </h3>
+                </div>
+                <p className="text-[12.5px] leading-relaxed text-muted-foreground">
+                  <strong className="text-foreground">{itemNome}</strong> está
+                  marcado como{" "}
+                  <strong className="text-foreground">
+                    todas as PPs geradas
+                  </strong>
+                  . Continuar reabre o item: a previsão de custo volta a usar o
+                  planejado até alguém marcar de novo.
+                </p>
+                <p className="text-[11px] leading-snug text-muted-foreground">
+                  As PPs já geradas continuam valendo. A reabertura fica
+                  registrada no chat da Comunicação, com autor e data.
+                </p>
+              </div>
+              <div className="flex items-center justify-end gap-2 border-t border-border bg-muted/30 px-[18px] py-3">
+                <button
+                  type="button"
+                  onClick={() => setAvisandoNovaPP(false)}
+                  disabled={pending}
+                  className="rounded-[10px] border border-border bg-card px-3.5 py-2 text-[12.5px] font-semibold hover:bg-muted disabled:opacity-50"
+                >
+                  Voltar
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmarNovaPP}
+                  disabled={pending}
+                  className="rounded-[10px] bg-california-red px-[15px] py-2 text-[12.5px] font-bold text-white hover:bg-california-red-hover disabled:opacity-50"
+                >
+                  {pending ? "Reabrindo…" : "Sim, gerar nova PP"}
+                </button>
+              </div>
+            </div>
           </div>
         )}
 

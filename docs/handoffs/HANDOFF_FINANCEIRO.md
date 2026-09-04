@@ -3321,3 +3321,26 @@ mudou de valor, mudou o que o cabeçalho escolhe mostrar.
 
 O custo continua visível onde se audita a conta: card de Totais, planilha
 e a linha `− Custo planejado` do painel de Resultado.
+
+## ⚠️ Nota de 2026-09-04 — a previsão de custo passou a ser por item (decisão 052)
+
+O Cronograma de desembolsos deixou de perder o planejado inteiro de um
+item assim que a primeira PP dele é aprovada. Agora cada item pesa:
+
+- **item em aberto** → planejado − PPs que viraram título (piso zero);
+- **item marcado** como "todas as PPs geradas" → só as PPs que ainda não
+  são título (gerada, em avaliação, rejeitada).
+
+Quem marca é a produção, na Planilha Interna do job. PP continua virando
+título só na aprovação (decisão 027) — o que mudou é o abatimento da
+curva, nas CTEs `pps_do_item` e `abatimento_curva` da `vw_fluxo_caixa`.
+
+O abatimento também passou a ler o planejado da **cópia do job**
+(`jobs_itens_orcado`), não da versão aprovada: pela versão, a errata
+mudava a planilha e o fluxo seguia com o número velho, e a linha vermelha
+ficava fora da conta.
+
+**Efeito no dado existente:** a previsão de custo de todos os jobs subiu
+no dia da migration (R$ 1.810.880 → R$ 1.822.880 no total), porque o
+planejado não gasto de itens com PP aprovada voltou para a curva até
+alguém marcar os itens.

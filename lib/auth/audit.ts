@@ -106,6 +106,12 @@ export type AuditAction =
   | "cliente_portal.criado"
   | "cliente_portal.editado"
   | "cliente_portal.removido"
+  // O marco "todas as PPs deste item já foram geradas" (decisão 052).
+  // Registrado porque ele MOVE DINHEIRO na previsão: marcado, o saldo do
+  // planejado sai do Cronograma de desembolsos e o item passa a valer o
+  // que as PPs dizem. Reabrir devolve o saldo.
+  | "item_realizado.pps_concluidas"
+  | "item_realizado.pps_reabertas"
   | "pedido_compra.emitida"
   // 02/09/2026: gerar deixou de enviar. `gerada` é a criação, `editada` a
   // correção enquanto ainda não foi enviada, `enviada_financeiro` o envio.

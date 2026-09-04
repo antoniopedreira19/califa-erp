@@ -18,7 +18,7 @@
  *  "Destrinchar realizado" — é lá que cada PP tem o seu "Ver PP".
  */
 
-import { FilePlus, Eye } from "lucide-react";
+import { FilePlus, Eye, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { PedidoCompra } from "@/lib/types";
 import {
@@ -36,6 +36,10 @@ export interface DadosPpLinha {
   /** Placeholder otimista antes do refresh do server chegar. Só tem
    *  `codigo`. Some quando a PP real chega via prop. */
   otimista: { codigo: string } | null;
+  /** Alguém já confirmou que não sairão mais PPs deste item (decisão
+   *  052). Troca o ícone da pílula por um ✓ verde — o rótulo e a
+   *  contagem não mudam. */
+  concluido: boolean;
   /** Abre o painel "Destrinchar realizado" do item. */
   onAbrirPainel: (itemRealizadoId: string) => void;
 }
@@ -94,32 +98,49 @@ function descreverPp(pp: DadosPpLinha | null): AcaoCalha | null {
   const pendentes = pp.pendentes + (pp.otimista ? 1 : 0);
   const abrir = () => pp.onAbrirPainel(pp.itemRealizadoId);
 
+  // Os dois sinais convivem, e dizem coisas diferentes (decisão 052): o ✓
+  // verde é "não sai mais PP deste item"; o círculo vermelho é "tem PP
+  // gerada esperando ir ao financeiro". Um item pode ter os dois.
+  const CONCLUIDO = "text-emerald-700";
+
   if (quantas > 0) {
     const base =
       quantas === 1
         ? "1 Pedido de Produção neste item"
         : `${quantas} Pedidos de Produção neste item`;
+    const pendencia =
+      pendentes > 0
+        ? ` · ${pendentes} aguardando envio ao financeiro`
+        : "";
     return {
       chave: "pp",
       rotulo: `PPs · ${quantas}`,
       sigla: `PP·${quantas}`,
-      titulo:
-        pendentes > 0
-          ? `${base} · ${pendentes} aguardando envio ao financeiro`
-          : base,
-      icone: Eye,
+      titulo: pp.concluido
+        ? `${base}${pendencia} · todas as PPs deste item já foram geradas`
+        : `${base}${pendencia}`,
+      icone: pp.concluido ? CheckCircle2 : Eye,
+      corIcone: pp.concluido ? CONCLUIDO : undefined,
       criar: false,
       onClick: abrir,
       badge: pendentes,
     };
   }
 
+  // Item sem nenhuma PP segue com o "Gerar PP" de sempre. Marcado, ele
+  // ganha só o ✓: é o custo que não vai gerar PP nenhuma, e o caminho de
+  // criar continua aberto para quem mudar de ideia.
   return {
     chave: "pp",
     rotulo: "Gerar PP",
     sigla: "PP",
-    titulo: "Gerar PP",
-    icone: FilePlus,
+    titulo: pp.concluido
+      ? "Item marcado: nenhuma PP sairá daqui. Abre o painel do item."
+      : "Gerar PP",
+    icone: pp.concluido ? CheckCircle2 : FilePlus,
+    corIcone: pp.concluido ? CONCLUIDO : undefined,
+    // O rótulo continua vermelho mesmo marcado, como o design pede: a
+    // ação ainda é criar, e o ✓ verde é quem diz que ninguém precisa.
     criar: true,
     onClick: abrir,
   };

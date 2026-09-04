@@ -17,6 +17,7 @@ import {
   dividirEmParcelas,
   proximoVencimento,
 } from "@/lib/calculos/pps-item";
+import { aplicarConclusaoDoItem } from "./conclusao-item";
 // NÃO importar renderPedidoCompraPDF estaticamente. O módulo pedido-compra.ts
 // puxa pdfmake, que tem side-effects de inicialização que falham em runtime
 // serverless Vercel. Se importarmos aqui, TODAS as actions do arquivo caem
@@ -179,6 +180,9 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
         total_planejado: number;
         total_orcado: number;
         quantidade_orcada: number;
+        /** Nome do item na planilha — o chat e a auditoria da marcação
+         *  precisam dele para dizer de qual linha estão falando. */
+        item_nome: string;
       };
       job: {
         id: string;
@@ -218,7 +222,7 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
   // criada por errata só existe pela chave nova.
   const buscaOrcado = supabase
     .from("jobs_itens_orcado")
-    .select("id, total_orcado, total_planejado, quantidade_orcada, linha_vermelha")
+    .select("id, item, total_orcado, total_planejado, quantidade_orcada, linha_vermelha")
     .eq("tenant_id", session.activeTenant.id);
 
   const { data: orcado, error: orcadoErr } = ancora.job_item_orcado_id
@@ -242,6 +246,7 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
     item_id: ancora.item_id,
     job_item_orcado_id: (orcado as any).id as string,
     linha_vermelha: (orcado as any).linha_vermelha === true,
+    item_nome: ((orcado as any).item as string) ?? "Item",
     total_planejado: Number((orcado as any).total_planejado ?? 0),
     total_orcado: Number(orcado.total_orcado ?? 0),
     quantidade_orcada: Number(orcado.quantidade_orcada ?? 0),
@@ -591,12 +596,28 @@ export async function finalizarPedidoCompra(
   dados: z.input<typeof dadosSchema>,
   anexos: z.input<typeof anexoUploadedSchema>[],
   itemRealizadoId: string,
+  /** "Esta é a última PP deste item?" — obrigatória no formulário desde
+   *  a decisão 052. `true` marca o item; `false` o deixa (ou o devolve)
+   *  em aberto. */
+  ultimaPPDoItem: boolean,
 ): Promise<Result<{ codigo: string }>> {
   const session = await requireSession();
   const gate = await checarPermissao(session, "jobs.emitir_pp");
   if (!gate.ok) return gate;
+  if (typeof ultimaPPDoItem !== "boolean") {
+    return {
+      ok: false,
+      message: "Responda se esta é a última PP deste item.",
+    };
+  }
   try {
-    return await finalizarPedidoCompraImpl(pp_id, dados, anexos, itemRealizadoId);
+    return await finalizarPedidoCompraImpl(
+      pp_id,
+      dados,
+      anexos,
+      itemRealizadoId,
+      ultimaPPDoItem,
+    );
   } catch (err) {
     console.error("[pp.finalizar.exception]", err);
     return {
@@ -611,6 +632,7 @@ async function finalizarPedidoCompraImpl(
   dados: z.input<typeof dadosSchema>,
   anexos: z.input<typeof anexoUploadedSchema>[],
   itemRealizadoId: string,
+  ultimaPPDoItem: boolean,
 ): Promise<Result<{ codigo: string }>> {
   const gate = await checarGatesRealizado(itemRealizadoId);
   if (!gate.ok) return gate;
@@ -1013,6 +1035,22 @@ async function finalizarPedidoCompraImpl(
       message: `Falha ao finalizar: ${updPP.error?.message ?? updReal.error?.message}`,
     };
   }
+
+  // A resposta da pergunta obrigatória vale para o ITEM, não para a PP:
+  // "sim" fecha o item, "não" o mantém (ou o devolve) em aberto. Falha
+  // aqui não derruba a PP, que já existe — o botão do painel continua
+  // sendo o caminho manual.
+  const marcacao = await aplicarConclusaoDoItem(supabase, {
+    tenantId: session.activeTenant.id,
+    jobId: job.id,
+    itemRealizadoId,
+    profileId: session.profile.id,
+    papel: session.activeRole,
+    itemNome: item.item_nome,
+    concluido: ultimaPPDoItem,
+    origem: "formulario_pp",
+  });
+  if (!marcacao.ok) console.error("[pp.finalizar.marcacao]", marcacao.message);
 
   // Audit
   await logAuditEvent({
@@ -1854,13 +1892,23 @@ export async function editarPedidoCompraGerada(
   dados: z.input<typeof dadosSchema>,
   anexosNovos: z.input<typeof anexoUploadedSchema>[],
   anexosRemovidosIds: string[],
+  /** A mesma pergunta obrigatória da emissão: editar uma PP gerada
+   *  reabre a decisão sobre o item (decisão 052). */
+  ultimaPPDoItem: boolean,
 ): Promise<Result<{ codigo: string }>> {
+  if (typeof ultimaPPDoItem !== "boolean") {
+    return {
+      ok: false,
+      message: "Responda se esta é a última PP deste item.",
+    };
+  }
   try {
     return await editarPedidoCompraGeradaImpl(
       pp_id,
       dados,
       anexosNovos,
       anexosRemovidosIds,
+      ultimaPPDoItem,
     );
   } catch (err) {
     console.error("[pp.editar.exception]", err);
@@ -1876,6 +1924,7 @@ async function editarPedidoCompraGeradaImpl(
   dados: z.input<typeof dadosSchema>,
   anexosNovos: z.input<typeof anexoUploadedSchema>[],
   anexosRemovidosIds: string[],
+  ultimaPPDoItem: boolean,
 ): Promise<Result<{ codigo: string }>> {
   const session = await requireSession();
   const supabase = createClient();
@@ -2195,6 +2244,18 @@ async function editarPedidoCompraGeradaImpl(
     session.activeTenant.id,
     ppRow.item_realizado_id,
   );
+
+  const marcacao = await aplicarConclusaoDoItem(supabase, {
+    tenantId: session.activeTenant.id,
+    jobId: job.id,
+    itemRealizadoId: ppRow.item_realizado_id,
+    profileId: session.profile.id,
+    papel: session.activeRole,
+    itemNome: item.item_nome,
+    concluido: ultimaPPDoItem,
+    origem: "formulario_pp",
+  });
+  if (!marcacao.ok) console.error("[pp.editar.marcacao]", marcacao.message);
 
   await logAuditEvent({
     acao: "pedido_compra.editada",

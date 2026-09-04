@@ -214,3 +214,12 @@ por régua da linha decidida por uma pessoa na abertura.
   `20260818000001`.
 - Prazo de recebimento como dado do cliente ou do job — hoje não existe,
   e é o que obrigaria o backfill a usar a data de faturamento.
+
+## ⚠️ Nota de 2026-09-04 — o abatimento da curva virou por item
+
+O §1 continua valendo no que diz sobre TÍTULO: PP só vira título quando é
+aprovada. O que mudou é o ABATIMENTO da curva de custo. Ele deixou de ser
+"o planejado inteiro do item que tem PP aprovada" e passou a ser calculado
+por item, contra o valor das PPs — e o saldo do planejado só morre quando
+alguém confirma que todas as PPs daquele item já foram geradas. Ver
+[052](052-todas-as-pps-do-item-foram-geradas.md).

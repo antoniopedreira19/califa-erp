@@ -39,6 +39,9 @@ export interface ResumoEncerramento {
   bvsEmAberto: { item: string; situacao: string }[];
   /** Quanto do envio ainda não virou nota emitida — também trava. */
   saldoAFaturar: number;
+  /** Itens de custo que ainda não disseram se sai mais PP deles. Travam
+   *  o encerramento desde 04/09/2026 (decisão 052). */
+  itensSemMarcacao: { item: string }[];
 }
 
 interface Props {
@@ -114,13 +117,17 @@ export function EncerrarDialog({ jobId, resumo, open, onOpenChange }: Props) {
     ppsEmAberto,
     bvsEmAberto,
     saldoAFaturar,
+    itensSemMarcacao,
     faturamentoAbertura,
     faturamentoFechamento,
     valorEnviado,
   } = resumo;
 
   const travado =
-    ppsEmAberto.length > 0 || bvsEmAberto.length > 0 || saldoAFaturar > 0;
+    ppsEmAberto.length > 0 ||
+    bvsEmAberto.length > 0 ||
+    saldoAFaturar > 0 ||
+    itensSemMarcacao.length > 0;
 
   const { resultadoOperacional: margem, resultadoGeral: margemPct } =
     calcularResultadoOperacional(
@@ -200,10 +207,25 @@ export function EncerrarDialog({ jobId, resumo, open, onOpenChange }: Props) {
                   de faturamento sem caminho de volta.
                 </p>
               )}
+              {itensSemMarcacao.length > 0 && (
+                <p className="text-muted-foreground">
+                  {itensSemMarcacao.length === 1
+                    ? "1 item de custo ainda não disse se sai mais PP"
+                    : `${itensSemMarcacao.length} itens de custo ainda não disseram se sai mais PP`}
+                  : {itensSemMarcacao.map((i) => i.item).join(", ")}.
+                </p>
+              )}
               {(ppsEmAberto.length > 0 || bvsEmAberto.length > 0) && (
                 <p className="text-muted-foreground">
                   Dê baixa nesses documentos — pagamento da PP, recebimento do
                   BV — e volte aqui.
+                </p>
+              )}
+              {itensSemMarcacao.length > 0 && (
+                <p className="text-muted-foreground">
+                  No painel de cada item, na Planilha Interna, marque que todas
+                  as PPs dele já foram geradas — vale também para o item que
+                  não vai gerar PP nenhuma.
                 </p>
               )}
               {saldoAFaturar > 0 && (
@@ -331,13 +353,7 @@ export function EncerrarDialog({ jobId, resumo, open, onOpenChange }: Props) {
             disabled={travado || pending}
             title={
               travado
-                ? saldoAFaturar > 0 &&
-                  ppsEmAberto.length === 0 &&
-                  bvsEmAberto.length === 0
-                  ? "Falta emitir a nota do saldo antes de encerrar"
-                  : saldoAFaturar > 0
-                    ? "Resolva as pendências acima antes de encerrar"
-                    : "Dê baixa nas PPs e nos BVs em aberto antes de encerrar"
+                ? "Resolva as pendências acima antes de encerrar"
                 : undefined
             }
             className="inline-flex items-center gap-1.5 rounded-lg bg-california-red px-[18px] py-2.5 text-[13.5px] font-bold text-white transition-colors hover:bg-california-red-hover disabled:cursor-not-allowed disabled:opacity-50"

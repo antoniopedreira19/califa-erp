@@ -11,6 +11,14 @@ import {
   BV_SITUACAO_EM_ABERTO,
   type JobStatus,
 } from "@/lib/types";
+import { TIPOS_CUSTO, tipoGeraDesembolso } from "@/lib/calculos/versao-totais";
+
+/** Tipos de custo cuja linha oferece PP na calha — os mesmos da previsão
+ *  de desembolso (decisão 003). A e D pagam por BV: não geram PP e não
+ *  entram na trava de encerramento (decisão do Tiago, 04/09/2026). A
+ *  lista sai da matriz de tipos, não de um array escrito à mão: tipo novo
+ *  entra aqui sozinho. */
+const TIPOS_QUE_GERAM_PP = TIPOS_CUSTO.filter(tipoGeraDesembolso);
 
 export type ActionResult =
   | { ok: true; id: string }
@@ -27,6 +35,10 @@ export interface ImpedimentosEncerramento {
   semEnvioFaturamento: boolean;
   /** Quanto do envio ainda não virou nota emitida. Zero = tudo faturado. */
   saldoAFaturar: number;
+  /** Itens de custo que ainda não disseram se sairá mais PP deles
+   *  (decisão 052). Só as linhas de calha PP — A e D não geram PP e não
+   *  têm o que marcar. */
+  itensSemMarcacao: { item: string }[];
 }
 
 /**
@@ -38,6 +50,13 @@ export interface ImpedimentosEncerramento {
  * "Em aberto" é PP que ainda não foi paga e BV que ainda não foi
  * recebido — rejeitada e cancelada não contam, porque não são
  * compromisso nem desembolso.
+ *
+ * E não encerra com item de custo em aberto (04/09/2026, decisão 052):
+ * toda linha que gera PP precisa dizer que não sairá mais PP dela — até
+ * a que nunca gerou nenhuma, porque "não vai gerar" também é resposta.
+ * Enquanto falta resposta, a previsão de custo do job ainda conta com
+ * dinheiro que ninguém sabe se vai sair, e a margem do fechamento seria
+ * um chute.
  *
  * E não encerra com saldo a faturar (31/08/2026). Até aqui o portão era
  * só o ENVIO: bastava a produção ter mandado o job para a fila, mesmo
@@ -53,7 +72,8 @@ export async function levantarImpedimentos(
 ): Promise<ImpedimentosEncerramento> {
   const supabase = createClient();
 
-  const [ppsRes, bvsRes, envioRes, saldoAFaturar] = await Promise.all([
+  const [ppsRes, bvsRes, envioRes, saldoAFaturar, semMarcacaoRes] =
+    await Promise.all([
     supabase
       .from("pedidos_compra")
       .select("codigo, status")
@@ -77,6 +97,19 @@ export async function levantarImpedimentos(
       .eq("tenant_id", tenantId)
       .maybeSingle(),
     saldoAFaturarDoJob(tenantId, jobId),
+    // A âncora do realizado é quem guarda o marco; o tipo de custo e o
+    // nome vêm da CÓPIA do job, que é o que a planilha mostra.
+    supabase
+      .from("jobs_itens_realizado")
+      .select("id, copia:jobs_itens_orcado!inner(item, tipo_custo, em_save)")
+      .eq("tenant_id", tenantId)
+      .eq("job_id", jobId)
+      .is("pps_concluidas_em", null)
+      .in("copia.tipo_custo", TIPOS_QUE_GERAM_PP)
+      // Linha em save não emite PP neste job (decisão 028 §9): a calha
+      // dela nem oferece o botão, então não há o que marcar — e travar o
+      // encerramento nela deixaria o job preso para sempre.
+      .eq("copia.em_save", false),
   ]);
 
   return {
@@ -90,6 +123,9 @@ export async function levantarImpedimentos(
     })),
     semEnvioFaturamento: !envioRes.data,
     saldoAFaturar,
+    itensSemMarcacao: ((semMarcacaoRes.data ?? []) as any[]).map((i) => ({
+      item: i.copia?.item ?? "Item",
+    })),
   };
 }
 
@@ -180,7 +216,8 @@ export async function encerrarJob(jobId: string): Promise<ActionResult> {
   if (
     imp.ppsEmAberto.length > 0 ||
     imp.bvsEmAberto.length > 0 ||
-    imp.saldoAFaturar > 0
+    imp.saldoAFaturar > 0 ||
+    imp.itensSemMarcacao.length > 0
   ) {
     const partes: string[] = [];
     if (imp.ppsEmAberto.length > 0) {
@@ -201,6 +238,15 @@ export async function encerrarJob(jobId: string): Promise<ActionResult> {
     if (imp.saldoAFaturar > 0) {
       partes.push(`${formatarBRL(imp.saldoAFaturar)} ainda a faturar`);
     }
+    if (imp.itensSemMarcacao.length > 0) {
+      partes.push(
+        `${imp.itensSemMarcacao.length} ${
+          imp.itensSemMarcacao.length === 1
+            ? "item de custo sem dizer se ainda sai PP"
+            : "itens de custo sem dizer se ainda sai PP"
+        }`,
+      );
+    }
     await logAuditEvent({
       acao: "acao_negada",
       tenantId: session.activeTenant.id,
@@ -211,8 +257,13 @@ export async function encerrarJob(jobId: string): Promise<ActionResult> {
         pps_em_aberto: imp.ppsEmAberto.length,
         bvs_em_aberto: imp.bvsEmAberto.length,
         saldo_a_faturar: imp.saldoAFaturar,
+        itens_sem_marcacao: imp.itensSemMarcacao.length,
       },
     });
+    const marcacaoPendente =
+      imp.itensSemMarcacao.length > 0
+        ? " Marque nos itens que faltam, pelo painel do item na Planilha Interna, que todas as PPs deles já foram geradas."
+        : "";
     const comoResolver =
       imp.saldoAFaturar > 0
         ? imp.ppsEmAberto.length > 0 || imp.bvsEmAberto.length > 0
@@ -221,7 +272,7 @@ export async function encerrarJob(jobId: string): Promise<ActionResult> {
         : " Dê baixa antes.";
     return {
       ok: false,
-      message: `Não é possível encerrar: ${partes.join(" e ")}.${comoResolver}`,
+      message: `Não é possível encerrar: ${partes.join(" e ")}.${comoResolver}${marcacaoPendente}`,
     };
   }
 

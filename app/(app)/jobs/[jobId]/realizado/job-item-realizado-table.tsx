@@ -1675,6 +1675,11 @@ export function JobItemRealizadoTable({
                                 // PPs geradas e não enviadas: o círculo
                                 // vermelho do chip (02/09/2026).
                                 pendentes: contarPendentes(ppsDoItem),
+                                // ✓ verde: ninguém gera mais PP daqui
+                                // (decisão 052). Convive com o círculo
+                                // vermelho das pendências de envio.
+                                concluido:
+                                  realizado?.pps_concluidas_em != null,
                                 otimista:
                                   ppsDoItem.length > 0
                                     ? null
@@ -1740,6 +1745,20 @@ export function JobItemRealizadoTable({
           : [];
         // Só o que já chegou ao financeiro: a gerada conta na pendência.
         const emPPs = somaDasPPsEmitidas(ppsDoItem);
+        // O marco "todas as PPs deste item já foram geradas" mora na
+        // âncora do realizado (decisão 052).
+        const realizadoAtual = itemAtual
+          ? realizadosMap.get(itemAtual.id)
+          : undefined;
+        const itemConcluido = realizadoAtual?.pps_concluidas_em != null;
+        const concluidoPorNome =
+          responsaveis.find((r) => r.id === realizadoAtual?.pps_concluidas_por)
+            ?.nome ?? null;
+        const concluidoEmLabel = realizadoAtual?.pps_concluidas_em
+          ? new Date(realizadoAtual.pps_concluidas_em).toLocaleDateString(
+              "pt-BR",
+            )
+          : null;
 
         return (
           <>
@@ -1767,6 +1786,10 @@ export function JobItemRealizadoTable({
               }))}
               emPPs={emPPs}
               aberturaEmRevisao={aberturaEmRevisao}
+              itemRealizadoId={itemIdAtual ?? ""}
+              concluido={itemConcluido}
+              concluidoPorNome={concluidoPorNome}
+              concluidoEmLabel={concluidoEmLabel}
               onNovaPP={
                 podeAcoes
                   ? () => {
@@ -1819,6 +1842,7 @@ export function JobItemRealizadoTable({
               dmPlanejado={dmPlanejado}
               emPPsEmitidas={emPPs}
               ppEditando={ppEditando}
+              itemConcluido={itemConcluido}
               onSuccess={(codigo, modo) => {
                 if (modo === "editada") {
                   setToast(`${codigo} salva — segue gerada, no job.`);
