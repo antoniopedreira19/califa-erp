@@ -78,6 +78,7 @@ Legenda: **V** = ver · **E** = editar/criar · **A** = aprovar ou ação críti
 | **Cadastros globais** | | | | | |
 | Clientes, fornecedores (via tela `/fornecedores`), empresas | E | — | — | — | — |
 | Fornecedor via "cadastro inline" (dentro de PP) | E | E | E | — | — |
+| Portal do cliente via "cadastro inline" (dentro do envio para faturamento — decisão 050) | E | E | — | — | — |
 | Contas bancárias, plano de contas, cartões | E | — | — | — | E |
 | Categorias de orçamento, regionais, cidades | E | — | — | — | — |
 | Usuários e permissões | E | — | — | — | — |
