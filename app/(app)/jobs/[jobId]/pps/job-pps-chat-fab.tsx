@@ -18,6 +18,11 @@ interface Props {
   itens: ItemChat[];
   minhaArea: ChatArea;
   naoLidasIniciais: number;
+  /**
+   * Se `false`, o campo de escrita nao renderiza (Financeiro e Freelancer
+   * so leem). Fonte-verdade: `lib/permissoes.ts`, recurso `chat.enviar`.
+   */
+  podeEnviar?: boolean;
 }
 
 /**
@@ -37,6 +42,7 @@ export function JobPPsChatFab({
   itens,
   minhaArea,
   naoLidasIniciais,
+  podeEnviar = true,
 }: Props) {
   const [open, setOpen] = React.useState(false);
   const [badge, setBadge] = React.useState(naoLidasIniciais);
@@ -120,6 +126,7 @@ export function JobPPsChatFab({
             itens={itens}
             minhaArea={minhaArea}
             onLidoInicial={zerarBadge}
+            podeEnviar={podeEnviar}
           />
         )}
       </DrawerContent>

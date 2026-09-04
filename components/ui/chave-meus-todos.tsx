@@ -12,7 +12,13 @@
  * Quem é "meu" muda por tela e mora em quem chama:
  * - Jobs — `jobs.responsavel_id` é o usuário.
  * - Projetos — o usuário é responsável OU produtor de algum job do projeto
- *   (decisão do Tiago, 01/09/2026).
+ *   (decisão do Tiago, 01/09/2026). Desde a matriz de permissões (03/09/2026),
+ *   entrar como Equipe do projeto também conta como "meu".
+ *
+ * `visivel=false` esconde a chave inteira — usado pro Freelancer, que sempre
+ * fica em "Meus" forçado (ele so ve os projetos onde participa e nao faz
+ * sentido oferecer "Todos"). Fonte-verdade da regra: `lib/permissoes.ts`,
+ * recurso `listas.chave_meus_todos`.
  */
 
 "use client";
@@ -25,11 +31,15 @@ export function ChaveMeusTodos({
   meus,
   onChange,
   className,
+  visivel = true,
 }: {
   meus: boolean;
   onChange: (meus: boolean) => void;
   className?: string;
+  /** Se false, componente nao renderiza (Freelancer). */
+  visivel?: boolean;
 }) {
+  if (!visivel) return null;
   return (
     <div
       role="group"

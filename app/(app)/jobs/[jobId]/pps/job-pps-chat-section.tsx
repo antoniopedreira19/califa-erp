@@ -22,6 +22,11 @@ interface Props {
   /** Chamado uma vez, quando a section marca a thread como lida pela
    * primeira vez após aberta. O FAB usa isso pra zerar o badge local. */
   onLidoInicial: () => void;
+  /**
+   * Se `false`, o campo de escrita nao renderiza (Financeiro e Freelancer
+   * so leem). Fonte-verdade: `lib/permissoes.ts`, recurso `chat.enviar`.
+   */
+  podeEnviar?: boolean;
 }
 
 function classeValor(tom: ChatTom): string {
@@ -42,6 +47,7 @@ export function JobPPsChatSection({
   itens,
   minhaArea,
   onLidoInicial,
+  podeEnviar = true,
 }: Props) {
   const router = useRouter();
   const [pending, setPending] = React.useState(false);
@@ -135,14 +141,16 @@ export function JobPPsChatSection({
         <div ref={fimRef} />
       </div>
 
-      <ChatInput
-        minhaArea={minhaArea}
-        pending={pending}
-        erro={erro}
-        onLimparErro={() => setErro(null)}
-        onEnviar={handleEnviar}
-        placeholder="Escreva sobre uma PP…"
-      />
+      {podeEnviar && (
+        <ChatInput
+          minhaArea={minhaArea}
+          pending={pending}
+          erro={erro}
+          onLimparErro={() => setErro(null)}
+          onEnviar={handleEnviar}
+          placeholder="Escreva sobre uma PP…"
+        />
+      )}
     </div>
   );
 }

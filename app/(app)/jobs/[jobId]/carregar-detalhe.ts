@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { nomeVersao } from "@/lib/nome-versao";
+import { pode } from "@/lib/permissoes";
 import { listActiveMembers } from "@/lib/data/members";
 import { contatosDeCobrancaDoJob } from "@/lib/data/contatos-cobranca";
 import { montarThreadChat } from "@/lib/data/job-chat";
@@ -594,10 +595,12 @@ export async function carregarDetalheDoJob(
       (!lidaAtePPs || m.created_at > lidaAtePPs),
   ).length;
 
-  // Envio para faturamento: quem produz é quem libera, porque PO, CNAE e
-  // portal são informação da produção. Financeiro e admin também podem,
-  // para não travar o fluxo quando o GP estiver fora.
+  // Envio para faturamento: quem produz e quem libera, porque PO, CNAE e
+  // portal sao informacao da producao. So Admin e Gerente de Producao
+  // podem enviar/aprovar (matriz `jobs.enviar_faturamento`); os demais
+  // papeis nao veem o botao.
   const podeEnviarFaturamento =
+    pode(session.activeRole, "jobs.enviar_faturamento") &&
     job.status === "aberto" &&
     envioFaturamento === null &&
     totaisJob.faturamentoPrevisto > 0;
@@ -690,13 +693,21 @@ export async function carregarDetalheDoJob(
         }
       : null;
 
-  // Mesmo perfil de permissão nos dois flags — o que muda é o status.
+  // Mesmo perfil de permissao nos dois flags — o que muda e o status.
   // O realizado passou a valer antes da abertura (17/08/2026); errata,
-  // BV e PP continuam presos ao job já aberto pelo financeiro. As duas
-  // regras moram em `lib/types.ts`, que é de onde as server actions leem.
+  // BV e PP continuam presos ao job ja aberto pelo financeiro. As duas
+  // regras moram em `lib/types.ts`, que e de onde as server actions leem.
+  //
+  // Dupla barreira desde 03/09/2026 (Task 3 do projeto de permissoes):
+  // (a) o PAPEL precisa poder editar job — barra Financeiro/Freelancer
+  //     antes de entrar na regra operacional;
+  // (b) dentro dos papeis que podem, seguimos com a regra "admin OU
+  //     responsavel do job", que protege operacionalmente contra GP/PROD
+  //     mexerem em job alheio.
   const quemPodeMexer =
-    session.activeRole === "administrador" ||
-    job.responsavel_id === session.profile.id;
+    pode(session.activeRole, "jobs.editar") &&
+    (session.activeRole === "administrador" ||
+      job.responsavel_id === session.profile.id);
 
   const podeEditarRealizado = quemPodeMexer && jobAceitaRealizado(job.status);
   const podeAcoesPlanilha = quemPodeMexer && jobAceitaAcoesPlanilha(job.status);

@@ -2,6 +2,7 @@ import { Briefcase } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { listEmpresasAtivas } from "@/lib/data/empresas";
+import { pode } from "@/lib/permissoes";
 import { JobsList, type JobRow } from "./jobs-list";
 
 export const dynamic = "force-dynamic";
@@ -85,6 +86,7 @@ export default async function JobsPage() {
           rows={rows}
           empresas={empresas}
           usuarioId={session.profile.id}
+          podeAlternarMeusTodos={pode(session.activeRole, "listas.chave_meus_todos")}
         />
       )}
     </div>
