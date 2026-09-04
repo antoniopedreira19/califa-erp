@@ -209,6 +209,29 @@ Para validar a Task 4 (UI) e Task 5 (RLS) end-to-end. Cada linha é um "logar co
 - [ ] Vê `/financeiro/*` (contas a pagar/receber, conciliação, fluxo de caixa, abertura de job).
 - [ ] Consegue cadastrar/editar contas bancárias, plano de contas, cartões (em `/cadastros/*`).
 
+## Homes por papel — comportamento observado (04/09/2026)
+
+Snapshot logo depois da implementação da Task 7 do projeto de permissões (ver [docs/superpowers/specs/2026-09-04-home-por-papel-design.md](superpowers/specs/2026-09-04-home-por-papel-design.md)). Contagens abaixo obtidas simulando cada usuário via `set_config('request.jwt.claim.sub', <uuid>)` + `set local role authenticated` no Postgres — a home real deve mostrar exatamente esses números na primeira carga.
+
+| Papel | Pendências visíveis (contagem > 0) | KPIs mostrados | Observações |
+|---|---|---|---|
+| Administrador (Antonio) | Jobs aguardando abertura: **3** · PPs em avaliação: **7** · Jobs com faturamento próximo: **2**. Total: 3 cards. | Saldo em bancos (soma `saldo_inicial`) · Previsto a pagar do mês · Previsto a receber do mês · Jobs em andamento: **22** | Contas a pagar/receber vencidas, Desembolsos em avaliação e Orçamentos parados estão em 0 — cards somem. Saldo hoje usa `saldo_inicial` (TODO na V1). |
+| Gerente de Produção (`gp_teste`) | Nenhuma (todos os cards zeram: gp_teste não é `gp_responsavel_id` de versão nem responsável direto de job pronto pra faturar). Estado vazio: "Nada precisa da sua atenção agora." | Meus jobs em andamento · Meus orçamentos abertos (ambos calculados via `projetoIdsDoUsuario` — expandido) | O usuário de teste tem 1 job onde é `responsavel_id`; se o filtro expandido incluir esse projeto, o KPI reflete. |
+| Produtor (`produtor_teste`) | Nenhuma (mesmo motivo — produtor_teste não emitiu PP rejeitada nem é responsável direto de job com realizado pendente). Estado vazio: "Tudo em dia por aqui." | Meus jobs em andamento · PPs que emiti este mês | KPI de PPs no mês usa `created_at` (não `emitida_em` que não existe). |
+| Freelancer (`freelancer_teste`) | Nenhuma (SEBRAE não tem job criado — RLS filtra pra 0). Estado vazio grande: **"Nenhum job atribuído a você ainda. Fale com o gestor do projeto."** | Meus jobs ativos: **0** | Assim que o SEBRAE ganhar seu primeiro job, cards e KPIs voltam a fazer sentido. |
+| Financeiro (`financeiro_teste`) | Jobs aguardando abertura: **3** · PPs em avaliação: **7** · Faturas de cartão aguardando pagamento: **1**. Total: 3 cards. | Saldo em bancos · Previsto a pagar do mês · Previsto a receber do mês | Card "Contas a pagar/receber vencidas" e "Desembolsos em avaliação" zerados hoje. |
+
+**Filtros de aterrissagem implementados** (Task 5 do plano `2026-09-04-home-por-papel.md`):
+
+- ✓ `/financeiro/contas-a-pagar?filtro=vencidas`
+- ✓ `/financeiro/contas-a-receber?filtro=vencidas`
+- ✓ `/financeiro/desembolsos?filtro=avaliacao`
+- ✓ `/jobs?filtro=faturamento_proximo`
+- ✓ `/jobs?filtro=realizado_pendente`
+- ✓ `/orcamentos?filtro=parados`
+- ✓ `/orcamentos?filtro=aguardando_aprovacao`
+- ⧗ TODO (link funciona, filtro ainda não aplicado): `filtro=pps_em_avaliacao`, `faturas_cartao`, `faturamento_pronto`, `encerrar_pronto`, `chat_pendente`, `pps_rejeitadas`, `minhas_pps`.
+
 ## Limpeza dos usuários de teste
 
 Quando não precisar mais:
