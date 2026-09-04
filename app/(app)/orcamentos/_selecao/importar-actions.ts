@@ -481,11 +481,12 @@ export async function confirmarImportacaoProjeto(
     //    não vêm da planilha: são da versão, e a planilha do cliente nem
     //    os tem por orçamento.
     //
-    //    O imposto é a exceção: versão IMPORTADA nasce zerada, ou seja,
-    //    com o seletor em branco, para forçar a escolha manual da
-    //    alíquota antes de aprovar (decisão 044, 03/09/2026). Herdar a
-    //    da vigente carregaria uma alíquota que ninguém conferiu para
-    //    dentro de uma planilha que veio de fora.
+    //    O imposto herda de propósito, e isso foi reconfirmado em
+    //    04/09/2026 (decisão 044): reimportar o projeto inteiro pode
+    //    criar versão em vários orçamentos de uma vez, e zerar a
+    //    alíquota obrigaria a reescolher uma a uma. Quem nasce zerada é
+    //    a versão do "Importar planilha" da tela da versão, que vem de
+    //    uma planilha avulsa e não tem vigente de onde herdar contexto.
     const { data: nova, error: versaoErr } = await supabase
       .from("versoes_orcamento")
       .insert({
@@ -496,7 +497,7 @@ export async function confirmarImportacaoProjeto(
         moeda: vigente.moeda,
         taxa_cambio: num(vigente.taxa_cambio) || 1,
         percentual_honorarios: num(vigente.percentual_honorarios),
-        percentual_imposto: 0,
+        percentual_imposto: num(vigente.percentual_imposto),
         save_por_padrao: vigente.save_por_padrao === true,
         created_by: session.profile.id,
       })

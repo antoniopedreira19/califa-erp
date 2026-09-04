@@ -1612,10 +1612,11 @@ mudou é que a versão já chega com a alíquota da maioria dos jobs
 escolhida, em vez do 0 que o seletor lia como "em branco". Vale para toda
 versão que nasce do zero: v1 do orçamento novo, orçamentos novos do editor
 multi e da visão agregada (`PARAMETROS_PADRAO`) e o drawer "Nova versão".
-**Versão criada por importação é a exceção e nasce zerada**, para obrigar
-a escolha manual — inclusive a da planilha única do projeto, que até então
-herdava a alíquota da versão vigente. "Duplicar" segue copiando a da
-origem.
+**A versão criada pelo "Importar planilha" da tela da versão é a exceção e
+nasce zerada**, para obrigar a escolha manual: vem de planilha avulsa e não
+tem vigente de onde herdar. A importação da planilha única do projeto
+**herda o imposto da vigente**, como sempre fez (reconfirmado em
+04/09/2026), e "Duplicar" segue copiando a da origem.
 
 Falhando a leitura dos honorários, a v1 não é criada e o destino volta a
 ser a tela do orçamento, com log no servidor: versão com base de
@@ -2781,13 +2782,14 @@ versão nova", "não entra" com o motivo) e, em destaque, quem terá a
 aprovação desfeita. Confirmar cria as versões e mostra o que entrou;
 "Fechar" recarrega a tela.
 
-⚠️ **2026-09-03: a versão criada pela importação nasce com imposto 0**
-(decisão 044). Moeda, câmbio, honorários e `save_por_padrao` continuam
-sendo herdados da vigente; só a alíquota deixou de ser, para obrigar a
-escolha manual antes de aprovar. Vale igual para o "Importar planilha" da
-tela da versão, que já gravava 0. O "Como funciona" do drawer foi
-corrigido junto: dizia "Honorários e imposto vêm da versão" e agora
-avisa que a alíquota entra em branco.
+⚠️ **2026-09-04: a importação do projeto continua herdando o imposto da
+vigente.** Em 03/09 ela passou a zerar a alíquota junto com o "Importar
+planilha" da tela da versão (decisão 044) e foi **revertida no dia
+seguinte**: aqui a importação cria versão em vários orçamentos de uma vez,
+e zerar obrigaria a reescolher a alíquota um a um. Moeda, câmbio,
+honorários, `save_por_padrao` e imposto seguem vindo da vigente, e o "Como
+funciona" do drawer voltou a dizer "Honorários e imposto vêm da versão".
+Quem nasce zerada é só a versão do "Importar planilha" da tela da versão.
 
 `OrigemBanco` ganhou `estagio?` (o chip dos seletores); a página da
 agregada passou a carregar `jobs` (leve, no `Promise.all` das versões)
