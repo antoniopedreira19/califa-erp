@@ -41,11 +41,9 @@ import {
 import { direcaoNoCampo, type Direcao } from "@/app/(app)/_planilha/navegacao";
 import {
   Miolo,
-  RodapeSelecao,
   useSelecaoPlanilha,
   type CelulaSelecionada,
   type ColunaDaGrade,
-  type EstadoDoRodape,
   type Selecao,
   type TipoEditor,
 } from "@/app/(app)/_planilha/selecao";
@@ -794,101 +792,6 @@ export function JobItemRealizadoTable({
     );
   }, []);
 
-  /** O valor da célula selecionada, como ela o mostra — para o rodapé. */
-  function valorExibido(rowId: string, coluna: string): string {
-    const item = itemPorId.get(rowId);
-    if (!item) return "—";
-    const blocos = blocosPorItem.get(item.id) ?? BLOCO_VAZIO;
-    const realizadoDoItem = realizadosMap.get(item.id);
-    const quebraDasPPs = realizadoVemDasPPs(item.tipo_custo) || preAbertura;
-    const traco = (v: number, moeda_?: boolean) =>
-      v > 0 ? (moeda_ ? fmt(v) : String(v)) : "—";
-    const pct = (p: number | null) => (p === null ? "—" : formatarPercentual(p));
-    const rp = calcularRentabilidade(
-      blocos.orcadoRentabilidade,
-      valorNaVisao(blocos.planejado, visao),
-    );
-    const rr = calcularRentabilidade(
-      blocos.orcadoRentabilidade,
-      valorNaVisao(blocos.realizado, visao),
-    );
-    const edicao = editando ? errata?.edicaoDe(item.id) : undefined;
-    const orcadoDe = (campo: CampoErrata, salvo: number) =>
-      edicao ? (parseNumero(edicao[campo]) ?? 0) : salvo;
-    const mapa: Record<string, string> = {
-      item: item.item || "—",
-      tipo_custo: item.tipo_custo,
-      categoria_id: item.categoria_id
-        ? categoriasMap.get(item.categoria_id) ?? "—"
-        : "—",
-      valor_unitario_orcado: item.linha_vermelha
-        ? "—"
-        : fmt(orcadoDe("unitario", Number(item.valor_unitario_orcado ?? 0))),
-      quantidade_orcada: item.linha_vermelha
-        ? "—"
-        : String(orcadoDe("quantidade", Number(item.quantidade_orcada ?? 0))),
-      dias_meses_orcado: item.linha_vermelha
-        ? "—"
-        : String(orcadoDe("diasMeses", Number(item.dias_meses_orcado ?? 0))),
-      total_orcado: fmt(Number(item.total_orcado ?? 0)),
-      valor_unitario_planejado: traco(Number(item.valor_unitario_planejado ?? 0), true),
-      quantidade_planejada: traco(Number(item.quantidade_planejada ?? 0)),
-      dias_meses_planejado: traco(Number(item.dias_meses_planejado ?? 0)),
-      total_planejado:
-        blocos.planejado.bruto > 0 ? fmt(valorNaVisao(blocos.planejado, visao)) : "—",
-      rentab_plan_valor: blocos.planejado.bruto > 0 ? fmt(rp.rentabilidade) : "—",
-      rentab_plan_pct: blocos.planejado.bruto > 0 ? pct(rp.percentual) : "—",
-      valor_unitario_realizado: traco(
-        quebraDasPPs
-          ? Number(realizadoDoItem?.valor_unitario_realizado ?? 0)
-          : Number(item.valor_unitario_orcado ?? 0),
-        true,
-      ),
-      quantidade_realizada: traco(
-        quebraDasPPs
-          ? Number(realizadoDoItem?.quantidade_realizada ?? 0)
-          : Number(item.quantidade_orcada ?? 0),
-      ),
-      dias_meses_realizado: traco(
-        quebraDasPPs
-          ? Number(realizadoDoItem?.dias_meses_realizado ?? 0)
-          : Number(item.dias_meses_orcado ?? 0),
-      ),
-      total_realizado:
-        blocos.realizado.bruto > 0 ? fmt(valorNaVisao(blocos.realizado, visao)) : "—",
-      rentab_real_valor: blocos.realizado.bruto > 0 ? fmt(rr.rentabilidade) : "—",
-      rentab_real_pct: blocos.realizado.bruto > 0 ? pct(rr.percentual) : "—",
-    };
-    return mapa[coluna] ?? "—";
-  }
-
-  const temRodape = grupos.some((g) => estaAberto(g.id));
-  const estadoDoRodape: EstadoDoRodape = (() => {
-    const sel = selecao.celula;
-    const col = selecao.colunaSelecionada;
-    if (!sel || !col) {
-      return { endereco: null, valor: null, modo: null, aberta: false, editavel: editando };
-    }
-    const nome = itemPorId.get(sel.linhaId)?.item || "Item novo";
-    const tipo = editorDe(sel.linhaId, sel.coluna);
-    const estaAberta =
-      aberta !== null && aberta.rowId === sel.linhaId && aberta.campo === sel.coluna;
-    return {
-      endereco: `${nome} · ${col.bloco ? `${col.bloco} · ` : ""}${col.rotulo}`,
-      valor: valorExibido(sel.linhaId, sel.coluna),
-      modo: estaAberta
-        ? tipo === "lista"
-          ? "Lista aberta"
-          : "Editando"
-        : tipo
-          ? "Enter abre"
-          : editando
-            ? "Calculada"
-            : "Só leitura",
-      aberta: estaAberta,
-      editavel: editando,
-    };
-  })();
 
   return (
     <>
@@ -912,7 +815,7 @@ export function JobItemRealizadoTable({
       )}
       {/* Com o nome do grupo na faixa, a tabela abre e fecha o card. */}
       {/* A tabela abre e fecha o card: a planilha inteira é uma só. */}
-      <div className={cn("overflow-x-auto rounded-t-2xl", !temRodape && "rounded-b-2xl")}>
+      <div className="overflow-x-auto rounded-b-2xl rounded-t-2xl">
         <table
           className="w-full table-fixed text-sm border-collapse"
           style={{ minWidth: larguraMinimaJob(colunas) }}
@@ -1790,8 +1693,8 @@ export function JobItemRealizadoTable({
       )}
       </div>
 
-      {(podeAcoes || temRentab) && temRodape && (
-        <div className="flex flex-col gap-1 border-t border-border bg-muted/40 px-6 py-3">
+      {(podeAcoes || temRentab) && grupos.some((g) => estaAberto(g.id)) && (
+        <div className="flex flex-col gap-1 rounded-b-2xl border-t border-border bg-muted/40 px-6 py-3">
           {podeAcoes && (
             <span className="text-[11px] text-muted-foreground">
               O Realizado não é digitado: ele é a soma dos Pedidos de Produção
@@ -1810,7 +1713,6 @@ export function JobItemRealizadoTable({
           )}
         </div>
       )}
-      {temRodape && <RodapeSelecao estado={estadoDoRodape} />}
 
       {(() => {
         const itemAtual = todosOsItens.find(

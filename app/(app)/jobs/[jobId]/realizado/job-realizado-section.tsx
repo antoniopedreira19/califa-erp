@@ -30,6 +30,7 @@ import { VISAO_BV_PADRAO, type VisaoBv } from "@/lib/calculos/bv-planilha";
 import { useRouter } from "next/navigation";
 import { ChaveBrutoLiquido } from "@/app/(app)/_planilha/chave-bruto-liquido";
 import { MenuExibirColunas } from "@/app/(app)/_planilha/exibir-colunas";
+import { DicasDeTeclado } from "@/app/(app)/_planilha/selecao";
 import {
   SAVE_VAZIO,
   type EstadoSaveDaLinha,
@@ -456,6 +457,9 @@ export function JobRealizadoSection({
               rentabRealizadaVisivel={rentabRealizada}
             />
           </div>
+          {/* Fora do card, como na planilha do orçamento. Fora da errata a
+              planilha é só leitura: só as setas. */}
+          <DicasDeTeclado editavel={errata.ativo} />
           <JobTotaisCard
             itens={errata.itens}
             realizadosMap={realizadosMap}

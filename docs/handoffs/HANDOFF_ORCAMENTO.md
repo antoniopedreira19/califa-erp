@@ -2913,7 +2913,7 @@ nos editores de rascunho do projeto, que usam a mesma `ItensTable`).
 | Tab abria a próxima célula editável, pulando as calculadas | ← → ↑ ↓ e Tab andam a **seleção** por toda célula de item, inclusive Total e Rentabilidade |
 | escolher na lista (Tipo, Categoria) pulava para a próxima célula | escolher grava e a seleção **fica na célula** |
 | Enter num campo descia | continua descendo (decisão do Tiago); Tab, ↑ e ↓ confirmam e andam; Esc cancela |
-| dica de teclado fora do card | **rodapé** dentro do card: endereço da célula · valor · modo (Editando / Lista aberta / Enter abre / Calculada) · teclas |
+| dica de teclado fora do card | continua fora, agora com as teclas novas (setas, Enter abre, digitar substitui, Home/End, Esc). O rodapé do design — endereço · valor · modo da célula — foi implementado e **retirado no mesmo dia** a pedido do Tiago: desnecessário, a moldura já diz qual célula está selecionada |
 | linha nova esperava o servidor: "Novo item" e lixeiras desligados até o refresh | a linha vira **item provisório** na hora (mais clara, sem ação na calha), o cursor segue, o id real entra por baixo; recusada, volta a rascunho com o que foi digitado |
 
 ↓ ou Enter na última linha do grupo continuam abrindo o "Novo item"
@@ -2929,14 +2929,14 @@ planilha do job — não reimplementar por tabela.
 
 | O quê | Resultado |
 |---|---|
-| clique em "R$ 120,00" (Orçado, Item B1) | moldura vermelha na célula; rodapé "Item B1 · Orçado · R$ Unit. · R$ 120,00 · Enter abre" |
-| ↓ → → → | seleção anda para o Total da linha 2: "Item novo do cliente · Orçado · Total · R$ 500,00 · **Calculada**" |
-| ← Enter | D/M abre com "1" selecionado, chip "Editando" |
+| clique em "R$ 120,00" (Orçado, Item B1) | moldura vermelha na célula (na hora, o rodapé ainda existia e mostrava "Item B1 · Orçado · R$ Unit. · R$ 120,00 · Enter abre") |
+| ↓ → → → | seleção anda para o Total da linha 2, calculada — selecionável, não abre |
+| ← Enter | D/M abre com "1" selecionado |
 | Esc, tecla `3` | a célula abre já com "3" no lugar do conteúdo |
 | Esc, Tab | Tab anda a seleção para o Total sem abrir nada |
 | Home → Enter (Tipo) | a lista abre (A · Direto … B · Bi-trib. marcado); ↓ e Esc fecham sem mudar, e a seleção continua no Tipo |
 | ↓ na última linha | "Novo item" nasce com a descrição aberta; Esc descarta em branco |
-| ↓, "Linha teste navegacao", Enter | a linha aparece **no mesmo instante**, mais clara, "3 itens", rodapé "Calculada" e sem lixeira; ~3s depois está sólida, com lixeira e "Enter abre" — o id real chegou e o refresh passou |
+| ↓, "Linha teste navegacao", Enter | a linha aparece **no mesmo instante**, mais clara, "3 itens", sem lixeira e sem abrir célula; ~3s depois está sólida, com lixeira e editável — o id real chegou e o refresh passou |
 | lixeira → Remover | a linha de teste saiu; a versão voltou a 2 itens (dado restaurado) |
 
 ⚠️ Para o Chrome MCP: clique por coordenada ou por `ref` não chega ao

@@ -198,12 +198,13 @@ tabela `border-collapse` o raio da célula é ignorado, e é o raio que
 faz a moldura ser a mesma do campo. As margens negativas da moldura
 comem parte do padding da célula para ela ficar colada no número.
 
-O **rodapé** do card (`RodapeSelecao`, em `_planilha/selecao.tsx`)
-mostra o endereço da célula (chip vermelho: Item · Bloco · Coluna), o
-valor em mono, o chip do modo (azul aberta, cinza selecionada) e as
-teclas. Ele fecha o card — a tabela só arredonda embaixo quando não há
-rodapé. Fonte única das classes: `SELECAO`. **Nunca escrever direto no
-JSX.**
+A **linha de dicas de tecla** (`DicasDeTeclado`, em
+`_planilha/selecao.tsx`) fica **fora do card**, logo abaixo dele
+(pedido do Tiago em 25/08 e 03/09/2026: dentro do frame ela lia como
+mais uma linha da planilha). O rodapé do design com endereço, valor e
+modo da célula não entrou — a moldura já diz qual célula está
+selecionada. Fonte única das classes: `SELECAO`. **Nunca escrever
+direto no JSX.**
 
 ## Linha do agrupamento (tabela única)
 
