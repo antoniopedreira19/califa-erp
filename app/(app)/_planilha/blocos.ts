@@ -309,7 +309,7 @@ export const ERRATA = {
     "inline-flex items-center gap-1.5 rounded-lg border border-california-red bg-california-red/[0.07] px-3 py-1.5 text-xs font-bold text-[#b83b45] shadow-[inset_0_1px_2px_rgba(231,75,86,0.18)]",
 } as const;
 
-/** SELEÇÃO — a célula selecionada da planilha e o rodapé de navegação.
+/** SELEÇÃO — a célula selecionada da planilha e a linha de dicas.
  *
  *  A célula selecionada ganha a MESMA moldura arredondada do campo em
  *  edição: 6px de raio, borda vermelha California e um anel suave em
@@ -329,21 +329,10 @@ export const SELECAO = {
     "relative z-[1] -mx-[7px] rounded-md border border-california-red bg-white px-1.5 py-0.5 shadow-[0_0_0_3px_rgba(231,75,86,.22)]",
   /** Célula que aceita seleção: cursor de célula, como numa planilha. */
   celula: "cursor-cell",
-  /** Rodapé de navegação, colado no pé do card. */
-  rodape:
-    "flex flex-wrap items-center gap-3.5 rounded-b-2xl border-t border-border bg-[#fcfcfb] px-3.5 py-2",
-  /** Chip com o endereço da célula (Item · Bloco · Coluna). */
-  chipEndereco:
-    "inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-[#f3b4b9] bg-[#fdf2f3] px-2.5 py-1 text-[11.5px] font-bold text-[#b83b45]",
-  /** O valor da célula selecionada, em mono. */
-  valor: "whitespace-nowrap font-mono text-[12.5px] font-semibold text-foreground",
-  /** Chip do modo, com a célula ABERTA (Editando / Lista aberta). */
-  chipEdicao:
-    "inline-flex items-center whitespace-nowrap rounded-lg border border-[#9dc0ee] bg-[#eff6ff] px-2 py-1 text-[11px] font-bold text-[#1e4fa3]",
-  /** Chip do modo, só selecionada (Enter abre / Calculada / Só leitura). */
-  chipLeitura:
-    "inline-flex items-center whitespace-nowrap rounded-lg border border-border bg-card px-2 py-1 text-[11px] font-semibold text-muted-foreground",
-  /** As dicas de tecla, à direita. */
-  dicas: "ml-auto flex items-center gap-2.5 whitespace-nowrap text-[10.5px] text-muted-foreground",
-  tecla: "font-mono font-bold text-foreground",
+  /** A linha de dicas de tecla, FORA do card (pedido do Tiago, 25/08 e
+   *  03/09/2026): dentro do frame ela lia como mais uma linha da
+   *  planilha. O design trazia um rodapé com o endereço e o valor da
+   *  célula; saiu — a moldura já diz qual célula está selecionada. */
+  dicas: "mt-2 flex flex-wrap items-center gap-2.5 px-1 text-[11px] text-muted-foreground",
+  tecla: "font-mono font-semibold text-foreground",
 } as const;

@@ -31,7 +31,6 @@
  */
 
 import * as React from "react";
-import { MousePointerSquareDashed } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Direcao } from "./navegacao";
 import { SELECAO } from "./blocos";
@@ -344,58 +343,31 @@ export function Miolo({
   return <div className={cn("min-w-0", className, moldura)}>{children}</div>;
 }
 
-/** O que o rodapé mostra sobre a célula. A tabela monta; o rodapé só
- *  desenha. */
-export interface EstadoDoRodape {
-  /** "Item 1 · Planejado · R$ Unit." — ou nada, sem seleção. */
-  endereco: string | null;
-  /** O valor da célula, já formatado. */
-  valor: string | null;
-  /** "Editando", "Lista aberta", "Enter abre", "Calculada", "Só leitura". */
-  modo: string | null;
-  /** O chip do modo em azul (célula aberta) ou cinza (só selecionada). */
-  aberta: boolean;
-  /** A planilha abre célula? Sem isso as dicas de Enter e digitação
-   *  somem — numa planilha só de leitura elas mentiriam. */
-  editavel: boolean;
-}
-
-/** O rodapé de navegação, colado no pé do card da planilha. */
-export function RodapeSelecao({ estado }: { estado: EstadoDoRodape }) {
+/** A linha de dicas de teclado, FORA do card — a tabela (ou a tela que
+ *  desenha o card) a põe logo abaixo dele. Sem endereço nem valor da
+ *  célula: a moldura já diz qual está selecionada (Tiago, 03/09/2026).
+ *  Numa planilha só de leitura as dicas de Enter e digitação somem —
+ *  elas mentiriam. */
+export function DicasDeTeclado({ editavel }: { editavel: boolean }) {
   return (
-    <div className={SELECAO.rodape}>
-      <span className={SELECAO.chipEndereco}>
-        <MousePointerSquareDashed className="h-[13px] w-[13px]" />
-        {estado.endereco ?? "Clique numa célula de item"}
+    <p className={SELECAO.dicas}>
+      <span>
+        <span className={SELECAO.tecla}>↑ ↓ ← →</span> anda
       </span>
-      <span className={SELECAO.valor}>{estado.valor ?? "—"}</span>
-      {estado.modo && (
-        <span className={estado.aberta ? SELECAO.chipEdicao : SELECAO.chipLeitura}>
-          {estado.modo}
-        </span>
+      {editavel && (
+        <>
+          <span>· <span className={SELECAO.tecla}>Enter</span> abre a célula</span>
+          <span>· digitar já substitui</span>
+          <span>· <span className={SELECAO.tecla}>Enter</span> no campo desce</span>
+        </>
       )}
-      <span className={SELECAO.dicas}>
-        <span>
-          <span className={SELECAO.tecla}>↑ ↓ ← →</span> anda
-        </span>
-        {estado.editavel && (
-          <>
-            <span>
-              <span className={SELECAO.tecla}>Enter</span> abre a célula
-            </span>
-            <span>
-              digitar já <strong className="text-foreground">substitui</strong>
-            </span>
-          </>
-        )}
-        <span>
-          <span className={SELECAO.tecla}>Home</span> /{" "}
-          <span className={SELECAO.tecla}>End</span> extremos
-        </span>
-        <span>
-          <span className={SELECAO.tecla}>Esc</span> cancela
-        </span>
+      <span>
+        · <span className={SELECAO.tecla}>Home</span> /{" "}
+        <span className={SELECAO.tecla}>End</span> extremos
       </span>
-    </div>
+      <span>
+        · <span className={SELECAO.tecla}>Esc</span> cancela
+      </span>
+    </p>
   );
 }

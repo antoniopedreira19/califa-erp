@@ -51,12 +51,11 @@ import {
   type Direcao,
 } from "@/app/(app)/_planilha/navegacao";
 import {
+  DicasDeTeclado,
   Miolo,
-  RodapeSelecao,
   useSelecaoPlanilha,
   type CelulaSelecionada,
   type ColunaDaGrade,
-  type EstadoDoRodape,
   type Selecao,
   type TipoEditor,
 } from "@/app/(app)/_planilha/selecao";
@@ -1092,8 +1091,8 @@ export function ItensTable({
   const temBvVisivel = todosOsItens.some((it) => bvsPorItem[it.id]);
   const temCalha = editavel || temBvVisivel;
 
-  /** O rodapé de navegação só faz sentido com células à vista. */
-  const temRodape = gruposDaTela.some((g) => estaAberto(g.id));
+  /** A linha de dicas só faz sentido com células à vista. */
+  const temDica = gruposDaTela.some((g) => estaAberto(g.id));
 
   /** Índice das linhas provisórias, para a linha de item se desenhar. */
   const provisorioPorId = React.useMemo(
@@ -1101,91 +1100,6 @@ export function ItensTable({
     [provisorios],
   );
 
-  /** O valor da célula selecionada, como ela o mostra — para o rodapé. */
-  function valorExibido(rowId: string, coluna: string): string {
-    const fmt = (v: number) => formatCurrency(v, moeda);
-    if (rowId === DRAFT_ID) {
-      if (!draft) return "—";
-      const o = draft.valor_unitario_orcado * draft.quantidade_orcada * draft.dias_meses_orcado;
-      const pl = draft.valor_unitario_planejado * draft.quantidade_planejada * draft.dias_meses_planejado;
-      const r = rentabilidadeDe(o, pl);
-      const mapa: Record<string, string> = {
-        item: draft.item || "—",
-        tipo_custo: draft.tipo_custo,
-        categoria_id: categorias.find((c) => c.id === draft.categoria_id)?.nome ?? "—",
-        valor_unitario_orcado: fmt(draft.valor_unitario_orcado),
-        quantidade_orcada: String(draft.quantidade_orcada),
-        dias_meses_orcado: String(draft.dias_meses_orcado),
-        total_orcado: fmt(o),
-        valor_unitario_planejado: fmt(draft.valor_unitario_planejado),
-        quantidade_planejada: String(draft.quantidade_planejada),
-        dias_meses_planejado: String(draft.dias_meses_planejado),
-        total_planejado: fmt(pl),
-        rentab_valor: pl > 0 ? fmt(r.rentabilidade) : "—",
-        rentab_pct: r.percentualRentabilidade === null ? "—" : formatarPercentual(r.percentualRentabilidade),
-      };
-      return mapa[coluna] ?? "—";
-    }
-    const item = itensPorId.get(rowId);
-    if (!item) return "—";
-    const totais = totaisDoItem(item);
-    const blocos = blocosDe(item);
-    const pl = valorNaVisao(blocos.planejado, visao);
-    const r = rentabilidadeDe(totais.orcado, pl);
-    const espelha = planejadoTravadoEm(rowId) && item.em_save !== true;
-    const numero = (campo: Campo) => num(valorAtual(item, campo));
-    const mapa: Record<string, string> = {
-      item: String(valorAtual(item, "item") ?? ""),
-      tipo_custo: String(valorAtual(item, "tipo_custo")),
-      categoria_id:
-        categorias.find((c) => c.id === valorAtual(item, "categoria_id"))?.nome ?? "—",
-      valor_unitario_orcado: fmt(numero("valor_unitario_orcado")),
-      quantidade_orcada: String(numero("quantidade_orcada")),
-      dias_meses_orcado: String(numero("dias_meses_orcado")),
-      total_orcado: fmt(totais.orcado),
-      valor_unitario_planejado: fmt(
-        espelha ? numero("valor_unitario_orcado") : numero("valor_unitario_planejado"),
-      ),
-      quantidade_planejada: String(
-        espelha ? numero("quantidade_orcada") : numero("quantidade_planejada"),
-      ),
-      dias_meses_planejado: String(
-        espelha ? numero("dias_meses_orcado") : numero("dias_meses_planejado"),
-      ),
-      total_planejado: fmt(pl),
-      rentab_valor: pl > 0 ? fmt(r.rentabilidade) : "—",
-      rentab_pct: r.percentualRentabilidade === null ? "—" : formatarPercentual(r.percentualRentabilidade),
-    };
-    return mapa[coluna] ?? "—";
-  }
-
-  const estadoDoRodape: EstadoDoRodape = (() => {
-    const sel = selecao.celula;
-    const col = selecao.colunaSelecionada;
-    if (!sel || !col) return { endereco: null, valor: null, modo: null, aberta: false, editavel };
-    const nome =
-      sel.linhaId === DRAFT_ID
-        ? draft?.item || "Linha nova"
-        : itensPorId.get(sel.linhaId)?.item || "Item";
-    const tipo = editorDe(sel.linhaId, sel.coluna);
-    const aberta =
-      ativa !== null && ativa.rowId === sel.linhaId && ativa.campo === sel.coluna;
-    return {
-      endereco: `${nome} · ${col.bloco ? `${col.bloco} · ` : ""}${col.rotulo}`,
-      valor: valorExibido(sel.linhaId, sel.coluna),
-      modo: aberta
-        ? tipo === "lista"
-          ? "Lista aberta"
-          : "Editando"
-        : tipo
-          ? "Enter abre"
-          : editavel
-            ? "Calculada"
-            : "Só leitura",
-      aberta,
-      editavel,
-    };
-  })();
 
   return (
     <>
@@ -1236,9 +1150,8 @@ export function ItensTable({
             dentro do frame. */}
         <div
           className={cn(
-            "overflow-x-auto",
+            "overflow-x-auto rounded-b-2xl",
             !erro && "rounded-t-2xl",
-            !temRodape && "rounded-b-2xl",
           )}
         >
           <table
@@ -1980,8 +1893,6 @@ export function ItensTable({
           </table>
         </div>
 
-        {temRodape && <RodapeSelecao estado={estadoDoRodape} />}
-
         {/* A calha — fora do frame da tabela, ao lado das linhas. Cada
             pílula é presa à posição MEDIDA da linha que ela acompanha:
             numa tabela só, as linhas têm alturas diferentes e altura
@@ -2086,6 +1997,9 @@ export function ItensTable({
         )}
       </div>
 
+      {/* A dica de teclado vive FORA do card (pedido do Tiago, 25/08 e
+          03/09/2026): dentro do frame ela lia como mais uma linha. */}
+      {temDica && <DicasDeTeclado editavel={editavel} />}
 
       {bvAberto && (
         <BvDialog

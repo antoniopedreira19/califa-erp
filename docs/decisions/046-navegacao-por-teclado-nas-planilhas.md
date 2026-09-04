@@ -22,9 +22,10 @@ Rentabilidade por Item.dc.html`, turno 2a (projeto Claude Design
    **desce**; Tab, ↑ e ↓ confirmam e andam; Esc cancela. Na lista (Tipo,
    Categoria), Enter abre, ↑↓ escolhem, escolher confirma e a seleção
    **fica na célula** — como no Excel.
-4. **O rodapé do card** mostra o endereço da célula (Item · Bloco ·
-   Coluna), o valor dela, o modo (Editando · Lista aberta · Enter abre ·
-   Calculada · Só leitura) e as teclas.
+4. **A linha de dicas de tecla fica FORA do card**, como já era. O
+   rodapé do design — endereço da célula, valor e modo — **não entrou**:
+   o Tiago o achou desnecessário (03/09/2026); a moldura já diz qual
+   célula está selecionada.
 5. **A linha nova não trava mais nada.** Confirmada a descrição, ela vira
    item provisório na hora, o cursor segue, dá para abrir outra enquanto
    a primeira grava, e o id real entra por baixo.
@@ -55,8 +56,8 @@ abre. Clique fora do card limpa a seleção; Esc também.
 - **Linhas de grupo e de total** — não têm as colunas de um item, e
   "descer" de QT para dentro delas não teria onde cair (B2).
 - **A coluna Save** — é um botão que abre um pop-up (B3).
-- **No job, fora da errata, nada abre**: toda célula é só leitura, e o
-  rodapé diz isso. Na errata, o Orçado, o Tipo e a descrição da linha
+- **No job, fora da errata, nada abre**: toda célula é só leitura, e a
+  linha de dicas mostra só as setas. Na errata, o Orçado, o Tipo e a descrição da linha
   nova abrem pelo mesmo caminho da planilha do orçamento (B5) — os
   inputs sempre abertos de antes saíram.
 
@@ -95,10 +96,10 @@ qualquer escrita iria para um id que o banco não conhece.
 ## Arquivos
 
 - `app/(app)/_planilha/selecao.tsx` — `useSelecaoPlanilha`, `Miolo`,
-  `RodapeSelecao`.
-- `app/(app)/_planilha/blocos.ts` — `SELECAO` (moldura, rodapé, chips).
+  `DicasDeTeclado`.
+- `app/(app)/_planilha/blocos.ts` — `SELECAO` (moldura e dicas).
 - `app/(app)/orcamentos/[projetoId]/[orcId]/versoes/[versaoId]/itens-table.tsx`
-  — seleção, provisórios, células com moldura, rodapé.
+  — seleção, provisórios, células com moldura, linha de dicas.
 - `app/(app)/jobs/[jobId]/realizado/job-item-realizado-table.tsx` —
   seleção em leitura e na errata; `CelulaJob`, `CampoDaErrata`.
 - `app/(app)/jobs/[jobId]/realizado/errata-rascunho.ts` — `adicionar`
