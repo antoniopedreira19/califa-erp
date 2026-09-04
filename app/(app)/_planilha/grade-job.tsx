@@ -47,8 +47,10 @@ const PESO = {
   /** A coluna de R$ da rentabilidade é a única que carrega sinal
    *  negativo — precisa de um dígito a mais que as outras de moeda. */
   rentabValor: 8,
-  /** "Rentab. %" no cabeçalho pede um pouco mais que o "%" sozinho. */
-  rentabPct: 5,
+  /** O cabeçalho "Rentab. %" quebra em duas linhas (como "Total
+   *  líquido"), e "RENTAB." sozinho pede ~55px + padding. Com 5% ele
+   *  ainda vazava para a coluna vizinha em produção (04/09/2026). */
+  rentabPct: 5.5,
 } as const;
 
 /** Soma dos pesos no estado de sempre: 18 + 4 + 8,5 + 3 × 22. */

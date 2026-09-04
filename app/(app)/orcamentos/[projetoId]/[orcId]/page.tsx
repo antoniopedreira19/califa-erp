@@ -735,7 +735,7 @@ function VersaoSelecionada({
         : s,
     0,
   );
-  const { resultadoGeral } = calcularResultadoOperacional(
+  const { resultadoOperacional, resultadoGeral } = calcularResultadoOperacional(
     totais.valorJob,
     totais.imposto,
     custoPlanejado - bvLiquidoDaVersao,
@@ -824,7 +824,7 @@ function VersaoSelecionada({
 
         <ResumoRentabilidade
           valorJob={totais.valorJob}
-          custoPlanejado={custoPlanejado}
+          resultadoOperacional={resultadoOperacional}
           resultadoGeral={resultadoGeral}
           moeda={versao.moeda}
         />

@@ -3299,3 +3299,24 @@ no JOB-0016 o servidor recusou o envio mesmo chamado direto pelo console.
 Achado na verificação: a leitura de `contas-a-pagar/page.tsx` não filtrava
 status e mostraria a gerada no chip "Todas" — ganhou `.neq("status",
 "gerada")`.
+
+---
+
+## O resumo do cabeçalho mostra o resultado operacional (2026-09-04)
+
+⚠️ **Decisão 047.** Os resumos ancorados à direita do título em
+`/financeiro/jobs/[jobId]` e `/financeiro/projetos/[projetoId]` deixaram
+de mostrar o **custo** planejado e realizado: cada linha traz agora o
+**resultado operacional** daquele cenário, em R$, com verde/vermelho pelo
+sinal. O `rentab. %` que já fechava a linha continua no lugar — os dois
+são o mesmo fato em unidades diferentes.
+
+Nada mudou aqui em código: as duas telas consomem
+[`components/resumo-resultado.tsx`](components/resumo-resultado.tsx), o
+mesmo componente da produção, e a mudança foi dentro dele. A conta segue
+`calcularResultadoOperacional(valorJob, imposto, custo − bvLíquido)`,
+BV incluso como sempre esteve (decisão 022) — nenhum número do financeiro
+mudou de valor, mudou o que o cabeçalho escolhe mostrar.
+
+O custo continua visível onde se audita a conta: card de Totais, planilha
+e a linha `− Custo planejado` do painel de Resultado.
