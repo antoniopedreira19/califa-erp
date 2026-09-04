@@ -225,7 +225,7 @@ export async function convidarUsuario(
 
   // Atualiza o profile recém-criado pelo trigger handle_new_user:
   // - `nome` (opcional): sobrescreve o fallback do split de e-mail.
-  // - `role`: o trigger grava 'gestao_projetos' hardcoded; sincronizamos
+  // - `role`: o trigger grava 'gerente_producao' hardcoded; sincronizamos
   //   com a role escolhida no drawer pra bater com tenant_members.role.
   const profileUpdate: Record<string, unknown> = { role };
   if (nome) profileUpdate.nome = nome;

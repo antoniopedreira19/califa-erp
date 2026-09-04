@@ -22,7 +22,13 @@ import {
 import { roleLabel, type AppRole } from "@/lib/types";
 import { convidarUsuario, type ActionResult } from "./actions";
 
-const ROLES: AppRole[] = ["gestao_projetos", "financeiro", "administrador"];
+const ROLES: AppRole[] = [
+  "gerente_producao",
+  "produtor",
+  "freelancer",
+  "financeiro",
+  "administrador",
+];
 
 export function ConvidarUsuarioDrawer() {
   const [open, setOpen] = React.useState(false);
@@ -32,7 +38,7 @@ export function ConvidarUsuarioDrawer() {
     Record<string, string[]>
   >({});
   const [sucesso, setSucesso] = React.useState<string | null>(null);
-  const [role, setRole] = React.useState<AppRole>("gestao_projetos");
+  const [role, setRole] = React.useState<AppRole>("gerente_producao");
 
   function reset() {
     setError(null);
@@ -58,7 +64,7 @@ export function ConvidarUsuarioDrawer() {
       setTimeout(() => {
         setOpen(false);
         reset();
-        setRole("gestao_projetos");
+        setRole("gerente_producao");
       }, 1200);
     });
   }

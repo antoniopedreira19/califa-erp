@@ -3,7 +3,12 @@
  * Espelham os enums e tabelas criados pela migration da Task 001.
  */
 
-export type AppRole = "administrador" | "gestao_projetos" | "financeiro";
+export type AppRole =
+  | "administrador"
+  | "gerente_producao"
+  | "financeiro"
+  | "produtor"
+  | "freelancer";
 
 export type TenantStatus = "ativo" | "inativo";
 
@@ -61,10 +66,14 @@ export function roleLabel(role: AppRole): string {
   switch (role) {
     case "administrador":
       return "Administrador";
-    case "gestao_projetos":
-      return "Gestão de Projetos";
+    case "gerente_producao":
+      return "Gerente de Produção";
     case "financeiro":
       return "Financeiro";
+    case "produtor":
+      return "Produtor";
+    case "freelancer":
+      return "Freelancer";
   }
 }
 

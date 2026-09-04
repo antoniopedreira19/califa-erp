@@ -1,6 +1,12 @@
 import { z } from "zod";
 
-const ROLES = ["administrador", "gestao_projetos", "financeiro"] as const;
+const ROLES = [
+  "administrador",
+  "gerente_producao",
+  "financeiro",
+  "produtor",
+  "freelancer",
+] as const;
 
 export const conviteSchema = z.object({
   email: z
