@@ -180,7 +180,9 @@ export function ImportarOrcamentosDrawer({ projetoId }: Props) {
                       desfeita. Job aberto não recebe versão.
                     </li>
                     <li>
-                      Honorários e imposto vêm da versão, não da planilha.
+                      Honorários vêm da versão, não da planilha. A{" "}
+                      <b>alíquota de imposto entra em branco</b> e precisa ser
+                      escolhida antes de aprovar.
                     </li>
                   </ul>
                 </div>

@@ -480,6 +480,12 @@ export async function confirmarImportacaoProjeto(
     // 1) A versão, com os parâmetros da vigente. Honorários e imposto
     //    não vêm da planilha: são da versão, e a planilha do cliente nem
     //    os tem por orçamento.
+    //
+    //    O imposto é a exceção: versão IMPORTADA nasce zerada, ou seja,
+    //    com o seletor em branco, para forçar a escolha manual da
+    //    alíquota antes de aprovar (decisão 044, 03/09/2026). Herdar a
+    //    da vigente carregaria uma alíquota que ninguém conferiu para
+    //    dentro de uma planilha que veio de fora.
     const { data: nova, error: versaoErr } = await supabase
       .from("versoes_orcamento")
       .insert({
@@ -490,7 +496,7 @@ export async function confirmarImportacaoProjeto(
         moeda: vigente.moeda,
         taxa_cambio: num(vigente.taxa_cambio) || 1,
         percentual_honorarios: num(vigente.percentual_honorarios),
-        percentual_imposto: num(vigente.percentual_imposto),
+        percentual_imposto: 0,
         save_por_padrao: vigente.save_por_padrao === true,
         created_by: session.profile.id,
       })

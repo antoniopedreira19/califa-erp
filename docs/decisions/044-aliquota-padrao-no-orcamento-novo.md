@@ -1,4 +1,4 @@
-# 044 — A alíquota de 19,53% já vem escolhida no orçamento novo
+# 044 — A alíquota de 19,53% já vem escolhida na versão que nasce do zero
 
 **Data:** 2026-09-03
 **Decidido por:** Tiago
@@ -9,7 +9,9 @@ orçamento nascia com **0**, o que na prática significava "em branco" —
 nenhuma das duas casa com zero, então o seletor abria vazio e a aprovação
 travava com *"Escolha a alíquota de impostos da versão antes de aprovar"*.
 
-A **19,53%** é a alíquota da maioria dos jobs. Ela passa a vir escolhida.
+A **19,53%** é a alíquota da maioria dos jobs. Ela passa a vir escolhida em
+toda versão que nasce do zero. **Versão que vem de importação é a exceção:
+nasce zerada e obriga a escolha manual** — ver a seção 2.
 
 Isto não revoga a **decisão 006**: escolher alíquota continua sendo
 exigido para aprovar a versão. O que muda é o ponto de partida — em vez de
@@ -18,28 +20,48 @@ praticada.
 
 ---
 
-## 1. Onde vale
+## 1. Onde a padrão vale
+
+Toda versão que nasce **do zero**, seja o orçamento novo ou uma versão nova
+de um orçamento que já existe:
 
 | Porta de entrada | Antes | Agora |
 | --- | --- | --- |
 | "Criar orçamento de um job" (`/orcamentos/[projetoId]/novo`) | v1 com 0 | v1 com **19,53%** |
 | "Criar orçamento do projeto" (editor multi) | 0 | **19,53%** |
 | Orçamento novo dentro da visão agregada | 0 | **19,53%** |
+| Drawer "Nova versão" de um orçamento existente | seletor em branco | abre em **19,53%** |
 
-## 2. Onde NÃO vale, e por quê
+No drawer a padrão aparece **escolhida na tela**, e não só no servidor: quem
+precisa da 24,269914% troca ali mesmo, antes de criar.
 
-- **Versão nova de orçamento existente** (drawer "Nova versão"): o seletor
-  continua abrindo em branco. Ali a alíquota é decisão daquela versão, e
-  quem cria já está com o orçamento na frente — o palpite atrapalharia
-  mais do que ajuda.
-- **Versão importada de planilha** (`versoes/importar-actions.ts`):
-  continua em 0, mesma razão.
-- **Duplicar versão** e **importar a planilha única do projeto**: seguem
-  copiando a alíquota da origem, que é o comportamento certo — não é
-  orçamento novo, é continuação de um que já tem parâmetro escolhido.
+## 2. Onde a versão nasce ZERADA, de propósito
 
-A 24,269914% não sumiu: quem precisa dela troca no seletor, na criação ou
-depois, pelo "Editar" da versão.
+**Importação.** A versão criada a partir de uma planilha que veio de fora
+nasce com o seletor em branco e **obriga a escolha manual** da alíquota
+antes de aprovar. Vale para as duas portas de importação:
+
+- **"Importar planilha" na tela da versão** (`versoes/importar-actions.ts`)
+  — já era 0; agora é 0 declarado, com o motivo escrito no código.
+- **"Importar" a planilha única do projeto** (`_selecao/importar-actions.ts`)
+  — **mudou**: herdava a alíquota da versão vigente e agora zera. Os
+  outros parâmetros (moeda, câmbio, honorários, save) continuam sendo
+  herdados; só o imposto é zerado.
+
+O motivo é o mesmo nas duas: planilha que veio de fora não traz alíquota, e
+carregar a de outra versão faria o número entrar sem ninguém conferir.
+Zerado, o seletor abre vazio e a barra de aprovação cobra a escolha — que é
+exatamente o aviso que a tela já sabia dar (decisão 006). Por isso **não há
+notificação nova**: a trava da aprovação é o aviso.
+
+## 2.1 Duplicar continua herdando
+
+O botão **"Duplicar"** copia a alíquota da versão de origem, inclusive a
+24,269914%. Duplicata não é versão nova do zero nem planilha de fora: é a
+continuação de uma versão cujo parâmetro já foi decidido e conferido.
+
+A 24,269914% não sumiu de lugar nenhum: quem precisa dela troca no seletor,
+na criação ou depois, pelo "Editar" da versão.
 
 ## 3. Onde está
 
@@ -49,3 +71,10 @@ depois, pelo "Editar" da versão.
 - `app/(app)/orcamentos/[projetoId]/actions.ts` — `criarVersaoInicial`.
 - `app/(app)/orcamentos/_rascunho/tipos.ts` — `PARAMETROS_PADRAO`, que
   alimenta o editor multi e o agregado.
+- `app/(app)/orcamentos/[projetoId]/[orcId]/versoes/nova-versao-drawer.tsx`
+  — estado inicial do seletor.
+- `app/(app)/orcamentos/[projetoId]/[orcId]/versoes/actions.ts` —
+  `extractVersaoInput`, o default do servidor quando o campo chega vazio.
+- `app/(app)/orcamentos/[projetoId]/[orcId]/versoes/importar-actions.ts` e
+  `app/(app)/orcamentos/_selecao/importar-actions.ts` — os dois imports,
+  que gravam 0.

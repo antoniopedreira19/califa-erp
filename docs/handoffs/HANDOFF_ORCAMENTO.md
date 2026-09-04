@@ -1608,11 +1608,14 @@ com honorários do cadastro do cliente, BRL, câmbio 1 e **sem alíquota**
 
 ⚠️ **2026-09-03: a v1 nasce com a alíquota padrão de 19,53%**
 (decisão 044). A exigência da 006 continua valendo na aprovação — o que
-mudou é que o orçamento novo já chega com a alíquota da maioria dos jobs
-escolhida, em vez do 0 que o seletor lia como "em branco". Vale também
-para os orçamentos novos do editor multi e da visão agregada
-(`PARAMETROS_PADRAO`); versão nova de orçamento existente segue sem
-palpite.
+mudou é que a versão já chega com a alíquota da maioria dos jobs
+escolhida, em vez do 0 que o seletor lia como "em branco". Vale para toda
+versão que nasce do zero: v1 do orçamento novo, orçamentos novos do editor
+multi e da visão agregada (`PARAMETROS_PADRAO`) e o drawer "Nova versão".
+**Versão criada por importação é a exceção e nasce zerada**, para obrigar
+a escolha manual — inclusive a da planilha única do projeto, que até então
+herdava a alíquota da versão vigente. "Duplicar" segue copiando a da
+origem.
 
 Falhando a leitura dos honorários, a v1 não é criada e o destino volta a
 ser a tela do orçamento, com log no servidor: versão com base de
@@ -2777,6 +2780,14 @@ apagadas, grupos), o orçado antes → depois, o resultado (`→ v{n}`, "sem
 versão nova", "não entra" com o motivo) e, em destaque, quem terá a
 aprovação desfeita. Confirmar cria as versões e mostra o que entrou;
 "Fechar" recarrega a tela.
+
+⚠️ **2026-09-03: a versão criada pela importação nasce com imposto 0**
+(decisão 044). Moeda, câmbio, honorários e `save_por_padrao` continuam
+sendo herdados da vigente; só a alíquota deixou de ser, para obrigar a
+escolha manual antes de aprovar. Vale igual para o "Importar planilha" da
+tela da versão, que já gravava 0. O "Como funciona" do drawer foi
+corrigido junto: dizia "Honorários e imposto vêm da versão" e agora
+avisa que a alíquota entra em branco.
 
 `OrigemBanco` ganhou `estagio?` (o chip dos seletores); a página da
 agregada passou a carregar `jobs` (leve, no `Promise.all` das versões)
