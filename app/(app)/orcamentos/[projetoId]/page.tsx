@@ -27,6 +27,11 @@ import { ProjetoEditorDrawer } from "../projeto-editor-drawer";
 import type { ProdutoOption } from "../projeto-form";
 import { NovoOrcamentoMenu } from "./novo-orcamento-menu";
 import { OrcamentosList, type OrcamentoRow } from "./orcamentos-list";
+import { ImportarOrcamentosDrawer } from "../_selecao/importar-orcamentos-drawer";
+import {
+  ExportarOrcamentosMenu,
+  type OrcamentoExportavel,
+} from "../_selecao/exportar-orcamentos-menu";
 
 export const dynamic = "force-dynamic";
 
@@ -54,14 +59,21 @@ export default async function ProjetoDetailPage({
     supabase
       .from("projetos")
       .select(
-        "id, tenant_id, empresa_id, codigo, nome, campanha, status, cliente_id, produto_id, responsavel_id, regional_id, cidade_id, categoria_id, data_inicio_prevista, data_fim_prevista, descricao, created_by, created_at, updated_at, cliente:clientes(id, nome_fantasia), produto:cliente_produtos(id, nome), categoria:categorias_dominio(id, nome), empresa:empresas(id, razao_social, nome_fantasia)",
+        "id, tenant_id, empresa_id, codigo, nome, campanha, status, cliente_id, produto_id, responsavel_id, regional_id, cidade_id, categoria_id, data_inicio_prevista, data_fim_prevista, descricao, created_by, created_at, updated_at, cliente:clientes(id, nome_fantasia), produto:cliente_produtos(id, nome), empresa:empresas(id, razao_social, nome_fantasia)",
       )
       .eq("id", params.projetoId)
       .eq("tenant_id", session.activeTenant.id)
       .maybeSingle(),
     supabase
       .from("orcamentos")
-      .select("id, codigo, nome, status, versao_aprovada_id, produtor_id, data_inicio_prevista, data_fim_prevista, created_at, categoria:categorias_dominio(nome)")
+      .select(
+        // `!categoria_id` é obrigatório desde 02/09/2026: `orcamentos` passou
+        // a ter DUAS FKs para `categorias_dominio` (categoria e servico), e
+        // sem desambiguar o PostgREST recusa o embed e devolve zero linhas.
+        "id, codigo, nome, status, versao_aprovada_id, produtor_id, data_inicio_prevista, data_fim_prevista, created_at, " +
+          "categoria:categorias_dominio!categoria_id(nome), " +
+          "servico:categorias_dominio!servico_id(nome)",
+      )
       .eq("projeto_id", params.projetoId)
       .eq("tenant_id", session.activeTenant.id)
       .order("created_at", { ascending: false }),
@@ -131,7 +143,6 @@ export default async function ProjetoDetailPage({
   };
   const clienteNome: string | null = raw.cliente?.nome_fantasia ?? null;
   const produtoNome: string | null = raw.produto?.nome ?? null;
-  const categoriaNome: string | null = raw.categoria?.nome ?? null;
   const empresaNome: string | null = raw.empresa?.nome_fantasia ?? raw.empresa?.razao_social ?? null;
 
   const regionais = (regionaisRes.data ?? []) as Pick<Regional, "id" | "nome">[];
@@ -186,6 +197,10 @@ export default async function ProjetoDetailPage({
   // Valor do job por orçamento: versão APROVADA quando existir; senão a
   // mais recente (número em negociação). Sem versão → null (travessão).
   const valorJobMap = new Map<string, number>();
+  // O que o seletor "Exportar" mostra por orçamento: a versão que sai no
+  // arquivo e o FATURAMENTO que a planilha imprime — o lado `cliente`
+  // (decisão 041): save gerado dentro, crédito consumido fora.
+  const exportavelMap = new Map<string, { numeroVersao: number; valor: number }>();
 
   if (orcamentoIds.length > 0) {
     const [versoesRes, jobsRes] = await Promise.all([
@@ -264,6 +279,10 @@ export default async function ProjetoDetailPage({
           Number(versao.percentual_imposto ?? 0),
         );
         valorJobMap.set(orcId, totais.valorJob);
+        exportavelMap.set(orcId, {
+          numeroVersao: versao.numero_versao,
+          valor: totais.cliente.total,
+        });
       }
     }
   }
@@ -273,6 +292,7 @@ export default async function ProjetoDetailPage({
     codigo: o.codigo,
     nome: o.nome,
     categoria_nome: o.categoria?.nome ?? null,
+    servico_nome: o.servico?.nome ?? null,
     estagio: estagioFunil(
       o.status as Orcamento["status"],
       escolherJobDoFunil(jobsPorOrcamento.get(o.id) ?? []),
@@ -283,6 +303,19 @@ export default async function ProjetoDetailPage({
     versoes_count: versoesCountMap.get(o.id) ?? 0,
     created_at: o.created_at,
   }));
+
+  // Cancelado fica fora do seletor de exportação: saiu da mesa e a visão
+  // agregada também não o lista.
+  const exportaveis: OrcamentoExportavel[] = orcamentos
+    .filter((o) => o.estagio !== "cancelado")
+    .map((o) => ({
+      id: o.id,
+      codigo: o.codigo,
+      nome: o.nome,
+      numeroVersao: exportavelMap.get(o.id)?.numeroVersao ?? null,
+      estagio: o.estagio,
+      valor: exportavelMap.get(o.id)?.valor ?? null,
+    }));
 
   const clientes = (clientesRes.data ?? []) as Pick<
     Cliente,
@@ -322,6 +355,10 @@ export default async function ProjetoDetailPage({
               equipeSelecionada={equipeManualDoProjeto}
               produtoresDosOrcamentos={produtoresDosOrcamentos}
             />
+            {/* Importar e Exportar logo depois de "Editar projeto", como no
+                design "Exportar e Exibir - Projeto e Visao Agregada". */}
+            <ImportarOrcamentosDrawer projetoId={projeto.id} />
+            <ExportarOrcamentosMenu projetoId={projeto.id} orcamentos={exportaveis} />
           </div>
 
           <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
@@ -377,15 +414,11 @@ export default async function ProjetoDetailPage({
                   : ""}
               </span>
             </span>
-            {categoriaNome && (
-              <>
-                <span aria-hidden className="text-border">·</span>
-                <span>
-                  <span className="text-foreground/60">Serviço:</span>{" "}
-                  <span className="text-foreground font-medium">{categoriaNome}</span>
-                </span>
-              </>
-            )}
+            {/* "Serviço" saiu do resumo do projeto em 02/09/2026 (037): ele
+                virou designação do JOB, e cada orçamento tem o seu — mostrar
+                um só aqui, vindo da coluna legada `projetos.categoria_id`,
+                contradiria a tabela logo abaixo. Ele agora vive numa coluna
+                dela. */}
             {projeto.campanha && (
               <>
                 <span aria-hidden className="text-border">·</span>

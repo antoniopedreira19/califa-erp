@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { AlertCircle, AlertTriangle, Save } from "lucide-react";
+import { AlertCircle, AlertTriangle, Save, UserCheck } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,8 +21,11 @@ import type {
 import {
   atualizarFornecedor,
   criarFornecedor,
+  criarFornecedorRapido,
+  buscarFornecedorPorDocumento,
   verificarPixDuplicado,
   type ActionResult,
+  type FornecedorResumo,
 } from "./actions";
 
 const UFS: UF[] = [
@@ -186,11 +189,35 @@ function Field({
 
 interface Props {
   fornecedor?: Fornecedor;
+  /**
+   * `pagina` (default) é o cadastro de sempre: rodapé fixo, Cancelar volta
+   * para a lista, criar redireciona. `dialog` é o cadastro rápido de
+   * dentro da PP (04/09/2026, decisão 048): documento, e-mail e telefone
+   * obrigatórios, Cancelar fecha o dialog, criar devolve o registro para
+   * quem abriu selecionar no combo.
+   */
+  modo?: "pagina" | "dialog";
+  onCancelar?: () => void;
+  onCriado?: (fornecedor: FornecedorResumo) => void;
+  /** O documento já é de outro cadastro: em vez de criar, selecionar. */
+  onSelecionarExistente?: (fornecedor: FornecedorResumo) => void;
 }
 
-export function FornecedorForm({ fornecedor }: Props) {
+export function FornecedorForm({
+  fornecedor,
+  modo = "pagina",
+  onCancelar,
+  onCriado,
+  onSelecionarExistente,
+}: Props) {
   const router = useRouter();
   const isEdit = Boolean(fornecedor);
+  const emDialog = modo === "dialog";
+  /** Quem já tem o CPF/CNPJ digitado. Conferido ao sair do campo e de
+   *  novo no servidor; enquanto estiver aqui, o formulário não grava. */
+  const [duplicado, setDuplicado] = React.useState<FornecedorResumo | null>(
+    null,
+  );
   const [pending, startTransition] = React.useTransition();
   const [error, setError] = React.useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = React.useState<Record<string, string[]>>({});
@@ -258,6 +285,20 @@ export function FornecedorForm({ fornecedor }: Props) {
     }
   }
 
+  // Documento repetido: pergunta ao servidor ao sair do campo, com o
+  // tamanho certo para o tipo de pessoa. É a verificação que evita o
+  // cadastro duplicado sem esperar o erro do índice único (04/09/2026).
+  async function handleDocumentoBlur() {
+    const digits = onlyDigits(cpfCnpjRef.current?.value ?? "");
+    const tamanho = tipoPessoa === "fisica" ? 11 : 14;
+    if (digits.length !== tamanho) {
+      setDuplicado(null);
+      return;
+    }
+    const res = await buscarFornecedorPorDocumento(digits, fornecedor?.id);
+    setDuplicado(res.existe ? res.fornecedor : null);
+  }
+
   // PIX duplicate debounce check
   React.useEffect(() => {
     if (!pixTipo || !pixChave) {
@@ -310,14 +351,25 @@ export function FornecedorForm({ fornecedor }: Props) {
     formData.set("telefone", onlyDigits(formData.get("telefone")?.toString() ?? ""));
     formData.set("cep", onlyDigits(formData.get("cep")?.toString() ?? ""));
 
+    if (duplicado && !isEdit) {
+      setError(
+        `Este documento já pertence a "${duplicado.razao_social ?? duplicado.nome}". Selecione o cadastro existente em vez de criar outro.`,
+      );
+      setFieldErrors({ cpf_cnpj: ["Documento já cadastrado."] });
+      return;
+    }
+
     startTransition(async () => {
       const res: ActionResult = isEdit
         ? await atualizarFornecedor(fornecedor!.id, formData)
-        : await criarFornecedor(formData);
+        : emDialog
+          ? await criarFornecedorRapido(formData)
+          : await criarFornecedor(formData);
 
       if (!res.ok) {
         setError(res.message);
         if (res.fieldErrors) setFieldErrors(res.fieldErrors);
+        if (res.duplicado) setDuplicado(res.duplicado);
         // Scroll to first field with error
         const firstField = res.fieldErrors ? Object.keys(res.fieldErrors)[0] : null;
         if (firstField) {
@@ -326,12 +378,48 @@ export function FornecedorForm({ fornecedor }: Props) {
         }
         return;
       }
-      if (isEdit) router.refresh();
+      if (isEdit) {
+        router.refresh();
+        return;
+      }
+      if (emDialog && res.fornecedor) onCriado?.(res.fornecedor);
     });
   }
 
+  /** O aviso de documento repetido, com a saída: selecionar o existente. */
+  const avisoDuplicado = duplicado && !isEdit && (
+    <div
+      className="flex flex-col items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800"
+      data-field="cpf_cnpj_duplicado"
+    >
+      <span className="flex items-start gap-1.5">
+        <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-700" />
+        <span>
+        {tipoPessoa === "fisica" ? "CPF" : "CNPJ"} já cadastrado como{" "}
+        <strong>{duplicado.razao_social ?? duplicado.nome}</strong>
+        {duplicado.status === "inativo"
+          ? " — fornecedor inativo. Reative-o em Fornecedores para usá-lo numa PP."
+          : "."}
+        </span>
+      </span>
+      {onSelecionarExistente && duplicado.status === "ativo" && (
+        <button
+          type="button"
+          onClick={() => onSelecionarExistente(duplicado)}
+          className="inline-flex items-center gap-1.5 rounded-md border border-amber-300 bg-white px-2.5 py-1 text-[11.5px] font-semibold text-amber-900 hover:bg-amber-100"
+        >
+          <UserCheck className="h-3.5 w-3.5" />
+          Selecionar este fornecedor
+        </button>
+      )}
+    </div>
+  );
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-6 pb-24">
+    <form
+      onSubmit={handleSubmit}
+      className={cn("space-y-6", emDialog ? "pb-2" : "pb-24")}
+    >
 
       {/* ------------------------------------------------------------------ */}
       {/* Section 1: Identificação                                            */}
@@ -347,7 +435,10 @@ export function FornecedorForm({ fornecedor }: Props) {
               <button
                 type="button"
                 key={tp}
-                onClick={() => setTipoPessoa(tp)}
+                onClick={() => {
+                  setTipoPessoa(tp);
+                  setDuplicado(null);
+                }}
                 className={cn(
                   "px-4 py-1.5 text-sm font-medium rounded-md transition-colors",
                   tipoPessoa === tp
@@ -380,6 +471,7 @@ export function FornecedorForm({ fornecedor }: Props) {
           <Field
             label={tipoPessoa === "fisica" ? "CPF" : "CNPJ"}
             name="cpf_cnpj"
+            required={emDialog}
             errors={fieldErrors}
           >
             <MaskedInput
@@ -388,18 +480,27 @@ export function FornecedorForm({ fornecedor }: Props) {
               name="cpf_cnpj"
               defaultValue={initialDoc}
               ref={cpfCnpjRef}
+              onBlur={handleDocumentoBlur}
+              required={emDialog}
+            />
+            {avisoDuplicado}
+          </Field>
+
+          <Field label="E-mail" name="email" required={emDialog} errors={fieldErrors}>
+            <Input
+              name="email"
+              type="email"
+              defaultValue={fornecedor?.email ?? ""}
+              required={emDialog}
             />
           </Field>
 
-          <Field label="E-mail" name="email" errors={fieldErrors}>
-            <Input name="email" type="email" defaultValue={fornecedor?.email ?? ""} />
-          </Field>
-
-          <Field label="Telefone" name="telefone" errors={fieldErrors}>
+          <Field label="Telefone" name="telefone" required={emDialog} errors={fieldErrors}>
             <MaskedInput
               mask="telefone"
               name="telefone"
               defaultValue={fornecedor?.telefone ?? ""}
+              required={emDialog}
             />
           </Field>
         </div>
@@ -626,9 +727,26 @@ export function FornecedorForm({ fornecedor }: Props) {
       )}
 
       {/* ------------------------------------------------------------------ */}
-      {/* Sticky footer                                                        */}
+      {/* Rodapé — fixo na página, corrido no dialog                          */}
       {/* ------------------------------------------------------------------ */}
-      <div className="sticky bottom-0 -mx-6 border-t border-border bg-white/95 backdrop-blur px-6 py-4 flex items-center justify-end gap-3">
+      <div
+        className={cn(
+          "flex items-center justify-end gap-3 border-t border-border px-6 py-4",
+          emDialog
+            ? "-mx-6 -mb-2"
+            : "sticky bottom-0 -mx-6 bg-white/95 backdrop-blur",
+        )}
+      >
+        {emDialog ? (
+          <button
+            type="button"
+            onClick={onCancelar}
+            disabled={pending}
+            className="inline-flex items-center rounded-lg border border-border bg-white px-5 py-2.5 text-sm font-semibold text-foreground hover:bg-accent transition-colors disabled:opacity-60"
+          >
+            Cancelar
+          </button>
+        ) : (
         <Link
           href="/fornecedores"
           prefetch={false}
@@ -636,6 +754,7 @@ export function FornecedorForm({ fornecedor }: Props) {
         >
           Cancelar
         </Link>
+        )}
         <button
           type="submit"
           disabled={pending}
@@ -649,7 +768,11 @@ export function FornecedorForm({ fornecedor }: Props) {
           ) : (
             <>
               <Save className="h-4 w-4" />
-              {isEdit ? "Salvar alterações" : "Criar fornecedor"}
+              {isEdit
+                ? "Salvar alterações"
+                : emDialog
+                  ? "Criar e selecionar"
+                  : "Criar fornecedor"}
             </>
           )}
         </button>

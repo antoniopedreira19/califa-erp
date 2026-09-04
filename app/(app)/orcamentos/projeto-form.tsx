@@ -359,10 +359,11 @@ export function ProjetoForm({
         </Field>
 
         <div className="md:col-span-2">
+          {/* Obrigatória desde 03/09/2026 — era "Opcional" no handoff. */}
           <Field
             label="Descrição"
             name="descricao"
-            opcional
+            required
             errors={fieldErrors}
           >
             <Textarea
@@ -371,7 +372,9 @@ export function ProjetoForm({
               onChange={(e) => setDescricao(e.target.value)}
               maxLength={DESCRICAO_MAX}
               rows={4}
-              className="min-h-[104px] resize-y leading-relaxed"
+              className={`min-h-[104px] resize-y leading-relaxed ${erroClasses(
+                "descricao",
+              )}`}
               placeholder="Contexto, entregáveis, observações internas sobre o projeto…"
             />
             {/* Contador só aparece com texto — não polui o formulário vazio. */}

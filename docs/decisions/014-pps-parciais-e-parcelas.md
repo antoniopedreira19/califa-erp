@@ -133,3 +133,11 @@ O parágrafo final ("Baixar o realizado do item para menos que a soma das
 PPs continua possível") passou a valer para o **orçado**, via errata.
 
 Ver `022-bv-liquido-e-realizado-por-pp.md`.
+
+## ⚠️ Nota de 2026-09-02 — o saldo deixou de limitar (decisão 039)
+
+O §1 ("O que limita é o saldo") e a nota de 21/08 ("a base do saldo
+virou o ORÇADO") deixaram de valer: não há mais teto por PP. A PP também
+deixou de nascer em avaliação — nasce **gerada** e é enviada ao financeiro
+por uma ação própria, no painel do item. Ver
+[039](039-pp-nasce-gerada-e-o-envio-ao-financeiro-e-uma-acao.md).

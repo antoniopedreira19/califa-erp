@@ -83,6 +83,13 @@ export function GruposSection({
   const ids = React.useMemo(() => secoes.map((s) => s.grupo.id), [secoes]);
   const recolher = useGruposRecolhiveis(ids);
 
+  // Blocos ocultáveis pelo menu "Exibir" (03/09/2026). Estado de TELA:
+  // não vai para o banco nem para a URL — recarregar a página traz a
+  // planilha inteira de volta, que é o estado em que ela deve nascer.
+  // PLANEJADO não entra: é o bloco que sempre fica.
+  const [orcadoVisivel, setOrcadoVisivel] = React.useState(true);
+  const [rentabilidadeVisivel, setRentabilidadeVisivel] = React.useState(true);
+
   const grupos = React.useMemo<GrupoDaPlanilha[]>(
     () =>
       secoes.map((s) => ({
@@ -108,21 +115,46 @@ export function GruposSection({
             />
           )}
           <ChaveBrutoLiquido visao={visao} onChange={onMudarVisao} />
-          {onAlternarSave && (
-            <MenuExibirColunas
-              blocos={[
-                {
-                  chave: "save",
-                  rotulo: "Save",
-                  visivel: saveVisivel ?? false,
-                  onAlternar: onAlternarSave,
-                },
-                { chave: "orcado", rotulo: "Orçado", visivel: true },
-                { chave: "planejado", rotulo: "Planejado", visivel: true },
-                { chave: "realizado", rotulo: "Realizado", visivel: false },
-              ]}
-            />
-          )}
+          <MenuExibirColunas
+            blocos={[
+              // Save só entra quando a tela sabe ligar e desligar a
+              // coluna — sem isso não haveria o que a pastilha fizesse.
+              ...(onAlternarSave
+                ? [
+                    {
+                      chave: "save",
+                      rotulo: "Save",
+                      visivel: saveVisivel ?? false,
+                      onAlternar: onAlternarSave,
+                    },
+                  ]
+                : []),
+              {
+                chave: "orcado",
+                rotulo: "Orçado",
+                visivel: orcadoVisivel,
+                onAlternar: () => setOrcadoVisivel((v) => !v),
+              },
+              // Sempre exibido: escondê-lo deixaria a planilha sem o
+              // custo, que é o número que ela existe para mostrar.
+              {
+                chave: "planejado",
+                rotulo: "Planejado",
+                visivel: true,
+                dica: "O Planejado é sempre exibido.",
+              },
+              // Aqui NÃO existe Realizado: ele nasce da PP, dentro do
+              // job. O terceiro bloco da planilha do orçamento é a
+              // Rentabilidade (Orçado × Planejado), e é ela que o menu
+              // precisa nomear.
+              {
+                chave: "rentabilidade",
+                rotulo: "Rentabilidade",
+                visivel: rentabilidadeVisivel,
+                onAlternar: () => setRentabilidadeVisivel((v) => !v),
+              },
+            ]}
+          />
         </div>
       </div>
 
@@ -159,6 +191,8 @@ export function GruposSection({
         onAlternarSave={onAlternarSave}
         savePorItem={savePorItem}
         onAbrirSave={onAbrirSave}
+        orcadoVisivel={orcadoVisivel}
+        rentabilidadeVisivel={rentabilidadeVisivel}
       />
     </div>
   );

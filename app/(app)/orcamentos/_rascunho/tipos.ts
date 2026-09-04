@@ -1,4 +1,6 @@
 import type { TipoCusto } from "@/lib/types";
+import type { EstagioFunil } from "@/lib/calculos/funil";
+import { ALIQUOTA_IMPOSTO_PADRAO } from "@/lib/impostos";
 
 /**
  * O rascunho do orçamento do projeto.
@@ -119,6 +121,10 @@ export interface OrigemBanco {
   /** `null` = editável. Preenchido, é o motivo de a planilha ser só leitura
    *  (versão aprovada, job já aberto pelo financeiro). */
   bloqueio: string | null;
+  /** Estágio do funil comercial (`lib/calculos/funil.ts`) — o chip dos
+   *  seletores "Exibir" e "Exportar" da visão agregada. Opcional porque o
+   *  editor multi-jobs, que também usa este tipo, não carrega jobs. */
+  estagio?: EstagioFunil;
 }
 
 export interface OrcamentoRascunho extends JobRascunho {
@@ -211,9 +217,12 @@ export interface AlteracoesProjetoPayload {
   parametrosNovos: ParametrosVersao[];
 }
 
+/** Parâmetros de um orçamento NOVO nos editores multi e agregado. Os
+ *  honorários chegam por cima, do cadastro do cliente; a alíquota de
+ *  imposto já vem escolhida desde 03/09/2026. */
 export const PARAMETROS_PADRAO: ParametrosVersao = {
   moeda: "BRL",
   taxa_cambio: 1,
   percentual_honorarios: 0,
-  percentual_imposto: 0,
+  percentual_imposto: ALIQUOTA_IMPOSTO_PADRAO,
 };

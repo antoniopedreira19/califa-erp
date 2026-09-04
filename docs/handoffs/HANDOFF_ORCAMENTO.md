@@ -270,6 +270,7 @@ Cores computadas conferidas contra o spec do design: `#f1f0ec`, `#e8f0fd`/`#1e4f
 - **Colunas nullable de propósito:** já existem projetos gravados e um NOT NULL exigiria backfill. A obrigatoriedade (Regional, Cidade, Final previsto, Categoria) vive só no Zod.
 - Em `jobs` cidade é texto livre; no projeto virou FK — padronizar o dado antes de a base crescer. `regional_id` e `data_fim_prevista` já existiam em `jobs` e agora sobem para o projeto.
 - Formulário: Nome em linha inteira; Cliente/Regional, Cidade/Categoria e Início/Final em duas colunas; Descrição opcional com contador que só aparece ao digitar. Categoria perde a opção "Sem categoria".
+- ⚠️ **2026-09-03: a Descrição virou obrigatória** (decisão 043), no criar e no editar. A coluna segue nullable — os 12 projetos gravados sem descrição só salvam depois de ganhar uma.
 - **Campanha** sai da tela; coluna e dados preservados (a busca da lista ainda casa por campanha).
 - **Responsável** sai da tela e passa a ser o usuário logado; rótulo vira "Criado por" na lista, no detalhe e no filtro. A coluna continua `responsavel_id` — renomear colidiria com o `created_by` existente. `profiles.id` **é** o id do `auth.users`, então o mesmo valor serve às duas.
 - ⚠️ **`campanha` seria zerada em toda edição.** Campo opcional no Zod não basta: o `transform` devolve `null` para entrada ausente, então a chave entra no `UPDATE`. `atualizarProjeto` remove a chave quando o form não a envia. Vale para qualquer campo que saia de um form compartilhado entre criar e editar.
@@ -431,6 +432,19 @@ Três números ancorados à direita do título: **Faturamento previsto · Custo 
 - Sem planejado lançado: travessão + legenda "sem planejado". Mesma regra do card de Totais, que se recusa a transformar faturamento inteiro em lucro.
 - Faturamento em preto (`text-foreground`) e não em vermelho — ajuste pedido pelo time depois da primeira versão. Só o resultado geral tem cor semântica (verde/vermelho pelo sinal).
 - **Não é sticky**, por decisão do time: rola junto com o cabeçalho.
+
+⚠️ **2026-09-04 (decisão 047): o bloco do meio virou "Resultado Op.
+(Planejado)".** Ele mostra agora o **resultado operacional em R$** —
+`valorJob − imposto − (planejado − BV líquido)` — no lugar do custo
+planejado, com verde/vermelho pelo sinal. Os outros dois blocos não
+mudaram. O rótulo diz **(Planejado)** e não "(Orçado)" justamente pela
+razão registrada dois itens acima: com custo orçado a conta daria os
+honorários, e não seria informação nova. A prop `custoPlanejado` do
+componente virou `resultadoOperacional: number | null`; os dois
+chamadores (`[orcId]/page.tsx` e `agregado/editor-agregado.tsx`) passaram
+a desestruturar os dois campos de `calcularResultadoOperacional`. O KPI
+"Custo planejado" do rascunho multi-jobs (`multi/editor-multi-jobs.tsx`)
+mudou junto, para as duas telas não divergirem.
 
 ### Fonte única do cálculo
 
@@ -1605,6 +1619,18 @@ planilha dela, em vez de `/orcamentos/[projetoId]/[orcId]`. A v1 nasce
 com honorários do cadastro do cliente, BRL, câmbio 1 e **sem alíquota**
 (decisão 006 — quem cobra é a aprovação).
 
+⚠️ **2026-09-03: a v1 nasce com a alíquota padrão de 19,53%**
+(decisão 044). A exigência da 006 continua valendo na aprovação — o que
+mudou é que a versão já chega com a alíquota da maioria dos jobs
+escolhida, em vez do 0 que o seletor lia como "em branco". Vale para toda
+versão que nasce do zero: v1 do orçamento novo, orçamentos novos do editor
+multi e da visão agregada (`PARAMETROS_PADRAO`) e o drawer "Nova versão".
+**A versão criada pelo "Importar planilha" da tela da versão é a exceção e
+nasce zerada**, para obrigar a escolha manual: vem de planilha avulsa e não
+tem vigente de onde herdar. A importação da planilha única do projeto
+**herda o imposto da vigente**, como sempre fez (reconfirmado em
+04/09/2026), e "Duplicar" segue copiando a da origem.
+
 Falhando a leitura dos honorários, a v1 não é criada e o destino volta a
 ser a tela do orçamento, com log no servidor: versão com base de
 honorários errada produz fechamento errado em silêncio, e voltar para o
@@ -1817,6 +1843,10 @@ Três alterações nos dois modais do envio de job
    com ela o campo do form, o schema Zod e `OBSERVACOES_MAX` — mudou o
    rótulo, não o dado. O comentário defasado na action (que dizia que o
    financeiro ainda não lia o campo) foi corrigido.
+   ⚠️ **2026-09-03: o Descritivo virou obrigatório** (decisão 043), e só
+   neste modal — nas telas do financeiro ele continua sendo leitura. A
+   coluna `jobs.observacoes` segue nullable: 27 dos 30 jobs foram enviados
+   sem descritivo e um NOT NULL exigiria backfill.
 2. **Seção "Contato de cobrança"** entre a linha GP/Produtor e o card de
    Fechamento da versão: grid de 3 colunas (Nome · Número · E-mail) +
    lixeira por linha, botão "+ Adicionar contato" abaixo. Nome e e-mail
@@ -2663,7 +2693,9 @@ já separava as listas — `projeto` (Always On, Ativação, Fee, Interno) e
 `lib/data/servicos.ts` guarda essa explicação.
 
 `projetos.categoria_id` **fica no banco** com o dado histórico, marcada
-como legada. A coluna **"Serviço" saiu da lista de projetos** e deu lugar
+como legada — mas **saiu do resumo do projeto**: o Serviço virou **coluna
+da tabela de orçamentos**, depois de Categoria, porque cada orçamento tem
+o seu e um valor único no cabeçalho contradiria a tabela abaixo. A coluna **"Serviço" saiu da lista de projetos** e deu lugar
 a **GP Responsável** (primeiro nome + contador `+N`, como as regionais):
 se o serviço virou assunto do job, a lista de projetos não precisa
 representá-lo. Sai da mesma consulta de `projeto_responsaveis` que
@@ -2688,3 +2720,356 @@ onde segue editável — job já enviado manda no que aparece.
 **"Produto" virou "Marca"** em toda a interface. Os nomes técnicos
 (`produto_id`, `cliente_produtos`, `jobs.produto`) **não** mudaram:
 renomear coluna em uso é destrutivo e não muda nada para quem usa.
+
+---
+
+## ⚠️ Nota de 2026-09-03 — Planilha única do projeto: Exportar, Importar e "Exibir"
+
+Design `Exportar e Exibir - Projeto e Visao Agregada.dc.html` (projeto
+Claude Design `69342d83`, lido pelo `DesignSync`). Regra em
+[decisão 041](../decisions/041-planilha-unica-do-projeto-exportar-e-importar.md);
+esta nota registra o que entrou e como foi conferido. Saiu em duas
+entregas no mesmo dia: a primeira (commit `229d8dc`) exportava **uma aba
+por orçamento**, como o design sugeria; a segunda trocou para a
+**planilha única** e trouxe a importação, depois das respostas do Tiago.
+
+### Onde os botões ficaram
+
+**Página do projeto** (`/orcamentos/[projetoId]`): **Importar** e
+**Exportar** depois de "Editar projeto", no padrão do "Exportar" da
+versão (outline, ícone pequeno, popover ancorado, fecha com clique fora
+ou Esc).
+
+**Visão agregada** (`/orcamentos/[projetoId]/agregado`): **Exibir**,
+**Importar** e **Exportar** na linha de resumo, ao lado de "N
+orçamentos". O `<p>` dessa linha virou `<div>` para conter os popovers.
+
+### Exportar
+
+`_selecao/exportar-orcamentos-menu.tsx`, compartilhado pelas duas telas
+com seleções independentes. Lista os orçamentos do projeto (menos os
+cancelados) com `nome - v{n}`, o chip do estágio do funil e o valor;
+orçamento sem versão aparece travado. **Job aberto** marcado põe a linha
+em alerta, trava o rodapé e oferece "Desmarcar job aberto". **Aprovado**
+(ou enviado para abertura) pede confirmação. O valor de cada linha é o
+**FATURAMENTO que a planilha imprime** — o lado bruto (decisão 028),
+calculado na agregada sobre o que está gravado, porque a exportação lê o
+banco e não o rascunho da tela.
+
+Rota `GET /api/orcamentos/[projetoId]/export?orcamentos=a,b`: **uma
+aba**, uma **seção por orçamento** (título azul escuro, subtotal
+próprio), fechamento único. Versão que sai: aprovada, senão a mais
+recente (`lib/calculos/versao-vigente.ts`, agora fonte única dessa
+escolha para exportação e importação). Travas reconferidas na rota (job
+aberto → 400; sem versão → 400; orçamento de outro projeto → 404).
+Arquivo `orcamentos-{código do projeto}.xlsx`.
+
+**Gerador compartilhado** `lib/exportacao/planilha-orcamento.ts`: o
+desenho da planilha saiu da rota da versão única para cá; as duas rotas
+o chamam — a da versão é o caso de uma seção sem título. **Fórmulas** em
+tudo que é calculado (TT, subtotais de grupo e de seção, SUMIF por tipo,
+TOTAL, HONORÁRIOS, IMPOSTO em gross-up, FATURAMENTO), derivadas de
+`REGRAS_TIPO_CUSTO`, com resultado em cache. Seções com percentuais
+diferentes viram parcelas por seção em HONORÁRIOS e IMPOSTO, e o rótulo
+perde o "%". **Coluna H oculta** com `orc:|v:`, `grp:` e `it:` — na
+versão única, o `orc:|v:` fica na H1. A exportação de versão única passou
+a ter fórmulas e ids também (decisão do Tiago).
+
+Detalhe do ExcelJS: fórmula cujo resultado é **zero** sai sem o valor em
+cache (`result` omitido). O Excel recalcula ao abrir e o parser não lê
+essas células, então não afeta nada — mas quem inspecionar o arquivo
+sem recalcular vê a célula vazia.
+
+### Importar
+
+`_selecao/importar-orcamentos-drawer.tsx` + `importar-actions.ts`
+(preview e confirmação, as duas releem o arquivo). Parser próprio em
+`lib/importacao/parser-projeto.ts` — a planilha exportada tem outro
+layout que a oficial da agência (`parser-oficial.ts` continua servindo a
+importação da tela do orçamento e da versão). O plano de cada seção sai
+de `lib/importacao/diff-projeto.ts`, puro e provado por script.
+
+O preview lista orçamento a orçamento: o que muda (alteradas, novas,
+apagadas, grupos), o orçado antes → depois, o resultado (`→ v{n}`, "sem
+versão nova", "não entra" com o motivo) e, em destaque, quem terá a
+aprovação desfeita. Confirmar cria as versões e mostra o que entrou;
+"Fechar" recarrega a tela.
+
+⚠️ **2026-09-04: a importação do projeto continua herdando o imposto da
+vigente.** Em 03/09 ela passou a zerar a alíquota junto com o "Importar
+planilha" da tela da versão (decisão 044) e foi **revertida no dia
+seguinte**: aqui a importação cria versão em vários orçamentos de uma vez,
+e zerar obrigaria a reescolher a alíquota um a um. Moeda, câmbio,
+honorários, `save_por_padrao` e imposto seguem vindo da vigente, e o "Como
+funciona" do drawer voltou a dizer "Honorários e imposto vêm da versão".
+Quem nasce zerada é só a versão do "Importar planilha" da tela da versão.
+
+`OrigemBanco` ganhou `estagio?` (o chip dos seletores); a página da
+agregada passou a carregar `jobs` (leve, no `Promise.all` das versões)
+para calcular o funil.
+
+### Exibir
+
+`_selecao/exibir-orcamentos-menu.tsx`, só na agregada: filtro de tela,
+faixa "Exibindo N de M" com "Exibir todos", indicadores do topo intactos.
+O código de cada orçamento passou a ser calculado uma vez sobre a lista
+inteira (`codigos`), para o filtro não renumerar os novos.
+
+### ⚠️ Ponta solta apontada ao Tiago
+
+Orçamento que **já virou job e foi rejeitado pelo financeiro**
+(`job_criado` + job `rejeitado_financeiro`) aparece no funil como
+"Orçamento Aprovado" e **é exportável** com confirmação — mas **não é
+importável**, porque `job_criado` não recebe versão nova (a mesma trava
+do "Nova versão"). O preview diz isso na linha; a regra não foi mudada.
+
+### Verificação (03/09/2026, servidor próprio, logado no Chrome)
+
+| Tela | O que foi conferido |
+|---|---|
+| Projeto Teste `0-0001/26` (1ª entrega) | Exportar com Job 2 (job aberto) em alerta; "Desmarcar" libera; confirmação do aprovado; download; rota recusa job aberto com 400 |
+| Visão agregada `0-0001/26` | Exibir desmarca Job 2 → faixa "Exibindo 1 de 2", um card, Totais com uma linha, indicadores intactos; "Exibir todos" restaura |
+| Teste Alterações `TESTE-0003/26` — Exportar | 7 orçamentos listados; 2 jobs abertos em alerta; "Desmarcar jobs abertos" → 5 de 7; confirmação dos aprovados; `orcamentos-TESTE-0003-26.xlsx` baixado: 1 aba, 5 seções, H oculta com ids, HONORÁRIOS 12% direto e IMPOSTO por seção (0% e 19,53% misturados), FATURAMENTO R$ 186.053,64 = total do seletor |
+| Teste Alterações — Importar | Arquivo editado por script (B2: Item B3 15.000 → 18.000 e Item B2 apagado; B1: grupo renomeado e linha nova sem id) enviado pelo drawer. Preview: Job 1 "Nada mudou"; B1 "1 nova · 1 grupo renomeado, R$ 100 → R$ 600 → v2"; B2 "1 alterada · 1 apagada, R$ 15.200 → R$ 18.000 → v2, aprovação desfeita"; B3 "já virou job — não entra"; Abas Versões "Nada mudou". "Criar 2 versões" → "2 versões criadas" |
+| Banco, depois da importação | B1 v2 rascunho: "Grupo renomeado", Item B1 com planejado 100/1/1 **preservado**, linha nova 250×2×1 com planejado 0/0/0 e rastro "linha 9". B2: status `em_revisao`, `versao_aprovada_id` nulo, v1 `em_revisao`, v2 rascunho só com Item B3 a 18.000 e planejado 12.000 preservado. 2 linhas em `orcamento_importacoes` com o arquivo no bucket; auditoria `versao_orcamento.importada` ×2 e `aprovacao_cancelada` ×1 |
+| Tela do orçamento B1 | v2 "mais recente" com o grupo renomeado e as duas linhas; "Exportar planilha" baixou a versão única com fórmulas e `orc:|v:` na H1 |
+| Provas por script | 24 fórmulas do consolidado (2 seções, taxas diferentes) batem com a soma dos fechamentos brutos; parser lê de volta 2 seções / 7 itens; diff sem edição = nada; com edição = 2 alteradas, 1 nova, 1 apagada, 1 grupo renomeado, 1 casada por descrição, planejado 900 preservado |
+
+`tsc --noEmit`, `next lint` e `next build` (em cópia isolada) limpos.
+Único erro de console: `trancy-version`, atributo injetado por extensão
+do navegador — não é do app.
+
+### Verificação no servidor AO VIVO (03/09/2026, `www.sistemacalifa.com.br`, deploy do `32df7e5`)
+
+Tudo repetido em produção, logado no Chrome, no mesmo projeto de teste:
+
+| Tela | O que foi conferido |
+|---|---|
+| Projeto `TESTE-0003/26` — Exportar | 7 orçamentos listados com o valor de cada um; Job 2 e Job 3 (jobs abertos) em alerta e rodapé travado; "Desmarcar jobs abertos" → 5 de 7, R$ 190.559,29; confirmação dos aprovados; download de `orcamentos-TESTE-0003-26.xlsx`: 1 aba, 5 seções, ids na H oculta, fórmulas com cache, FATURAMENTO = total do seletor |
+| Visão agregada — Exibir | desmarcar Job 1 → faixa "Exibindo 6 de 7", o card do Job 1 some, indicadores do topo intactos; "Exibir todos" restaura; Exportar da agregada abre com a mesma lista e a mesma trava |
+| Projeto — Importar | arquivo exportado de produção e editado por script (B1: "Item B1" 100 → 120; Abas Versões, aprovado: linha nova "Fotografia" 800 × 1 × 2). Preview: Job 1 e B2 "Nada mudou"; B1 "1 alterada, R$ 600 → R$ 620 → v3"; B3 "já virou job — não entra"; Abas Versões "1 nova, R$ 47.000 → R$ 48.600 → v5, aprovação desfeita". "Criar 2 versões" → "2 versões criadas"; a lista recarregou com Abas Versões em "Orçamento" e 5 versões |
+| Banco, depois | B1 v3 rascunho com "Item B1" a 120 e "Item novo do cliente" intacto. Abas Versões: orçamento `em_revisao`, sem `versao_aprovada_id`, v4 `em_revisao`, v1–v3 (eram `substituida`) de volta a `em_revisao` pela cascata do "Cancelar aprovação", v5 rascunho com os 5 itens e o planejado de cada um **preservado** (AR 1.300, B 11.000, B 2.500…) mais "Fotografia" com planejado zero e rastro "linha 30". 2 linhas em `orcamento_importacoes` com o arquivo no bucket; auditoria `importada` ×2 e `aprovacao_cancelada` ×1 |
+| Tela do orçamento B1 | v3 "mais recente", Valor do Job R$ 694,40; "Exportar planilha" baixou `orcamento-TESTE-0003_26-04-v3.xlsx` com fórmulas e `orc:|v:` na H1 |
+
+**Achado da verificação ao vivo:** em `A` e `D` o planejado da linha
+casada **não** fica o da versão anterior — o trigger
+`trg_planejado_espelha_orcado` (decisão 022) o iguala ao orçado novo
+("Item B1", tipo A, chegou com planejado 120, e não 100). É o
+comportamento certo desses tipos; "preservar o planejado" vale para
+`AR`, `B`, `C`, `F` e `FI`, e foi assim que os itens do Abas Versões
+saíram. Registrado na decisão 041.
+
+⚠️ **Dado de teste que ficou:** `TESTE-0003/26-04` com v2 e v3,
+`TESTE-0003/26-05` desaprovado com v2, `TESTE-0003/26-07` desaprovado
+com v5. Para voltar cada um: deletar a versão nova e aprovar a anterior
+pela tela. Detalhe no registro de testes local.
+
+---
+
+## ⚠️ Nota de 2026-09-03 — o menu "Exibir" da versão: sai Realizado, entra Rentabilidade, e os blocos ligam de verdade
+
+Regra em [decisão 042](../decisions/042-blocos-ocultaveis-na-planilha-do-orcamento.md);
+esta nota registra o que entrou e como foi conferido.
+
+**O defeito:** o menu "Exibir colunas" da planilha da versão trazia
+**Realizado** desmarcado — bloco que não existe nesta tela (ele nasce da
+PP, dentro do job) — e **não** listava a **Rentabilidade**, que é o
+terceiro bloco que a planilha de fato desenha. Os três eram texto, sem
+liga/desliga, como no design original.
+
+**O que passou a valer:**
+
+| Item do menu | Comportamento |
+|---|---|
+| Save | liga/desliga a coluna (como antes) |
+| Orçado | **liga/desliga o bloco inteiro** |
+| Planejado | sempre exibido — item marcado, `title` "O Planejado é sempre exibido." |
+| Rentabilidade | **liga/desliga o bloco inteiro** |
+| ~~Realizado~~ | removido |
+
+Esconder um bloco tira as 4 colunas dele (2 na Rentabilidade) do
+`colgroup`, da faixa, do sub-cabeçalho, da linha de grupo, das linhas de
+item, da linha nova, do `tfoot` **e da ordem do Tab**. Os 72% que os
+blocos dividem são redistribuídos entre os que ficaram, para a largura
+liberada não virar branco na coluna Item — a tabela de larguras por
+combinação está na decisão 042 e em
+`docs/09-identidade-visual-ui.md` ("Grades compartilhadas").
+
+Estado de **tela**: não vai para o banco nem para a URL, e recarregar
+traz a planilha inteira de volta. Nenhum número muda — Totais,
+fechamento e rentabilidade são os mesmos com o bloco escondido.
+
+Os menus das planilhas de **job** (`jobs/[jobId]/realizado` e a agregada
+em `jobs/projeto/[projetoId]`) **não mudaram**: lá a grade é a
+`grade-job`, que tem Realizado de verdade, não tem bloco de
+rentabilidade, e o card de Totais divide o `colgroup` com os blocos. As
+agregadas de orçamento (`/agregado`, `/multi`) também seguem intactas —
+os defaults de `ColunasFixas` são "tudo visível".
+
+### Verificação (03/09/2026, servidor próprio na 3000, logado no Chrome)
+
+| Tela | O que foi conferido |
+|---|---|
+| Versão **aprovada** — Job 1 do `0-0001/26` | menu com Save · Orçado · Planejado · Rentabilidade, sem Realizado; Planejado sem reação e com a dica |
+| idem, sem Orçado | faixa, cabeçalho e todas as linhas perdem as 4 colunas; Planejado e Rentabilidade crescem e o Item fica na largura de sempre; total R$ 79.000,00 · R$ 27.000,00 · 25,5% intactos |
+| idem, só Planejado | 4 colunas ocupando os 72%; total R$ 79.000,00 |
+| idem, sem Rentabilidade + coluna Save aberta | 12 colunas alinhadas, R$ 106.000,00 · R$ 79.000,00 |
+| ida e volta | religando os dois, a planilha volta idêntica à original (R$ 106.000,00 · R$ 79.000,00 · R$ 27.000,00 · 25,5%) |
+| Versão **rascunho** — `TESTE-0003/26-04` v3 | com o Orçado escondido: **Shift+Tab** a partir do "R$ Unit." do Planejado volta para **Categoria** (e não para o D/M do Orçado) — a ordem do Tab acompanha a tela |
+| idem, linha nova | "Novo item" nasce com as MESMAS colunas das linhas acima, sem escorregar; descartada em branco, o grupo voltou a 2 itens e nada foi gravado |
+| Banco | nenhuma escrita: só navegação e valores inalterados (`mesmoValor` não grava) |
+
+`tsc --noEmit`, `next lint` e `next build` limpos. Único erro de
+console: `trancy-version`, atributo injetado por extensão do navegador —
+não é do app.
+
+---
+
+## ⚠️ Nota de 2026-09-03 — a célula selecionada: navegação pelo teclado e a linha nova provisória
+
+Regra em [decisão 046](../decisions/046-navegacao-por-teclado-nas-planilhas.md);
+esta nota registra o que entrou na planilha da versão (e, por tabela,
+nos editores de rascunho do projeto, que usam a mesma `ItensTable`).
+
+### O que mudou na tela
+
+| Antes | Agora |
+|---|---|
+| clicar numa célula abria o campo | clicar **seleciona** (moldura vermelha); clicar de novo, duplo clique, Enter, F2 ou digitar abrem |
+| Tab abria a próxima célula editável, pulando as calculadas | ← → ↑ ↓ e Tab andam a **seleção** por toda célula de item, inclusive Total e Rentabilidade |
+| escolher na lista (Tipo, Categoria) pulava para a próxima célula | escolher grava e a seleção **fica na célula** |
+| Enter num campo descia | continua descendo (decisão do Tiago); Tab, ↑ e ↓ confirmam e andam; Esc cancela |
+| dica de teclado fora do card | continua fora, agora com as teclas novas (setas, Enter abre, digitar substitui, Home/End, Esc). O rodapé do design — endereço · valor · modo da célula — foi implementado e **retirado no mesmo dia** a pedido do Tiago: desnecessário, a moldura já diz qual célula está selecionada |
+| linha nova esperava o servidor: "Novo item" e lixeiras desligados até o refresh | a linha vira **item provisório** na hora (mais clara, sem ação na calha), o cursor segue, o id real entra por baixo; recusada, volta a rascunho com o que foi digitado |
+
+↓ ou Enter na última linha do grupo continuam abrindo o "Novo item"
+dele; ↓ num rascunho em branco o descarta e segue; Esc num rascunho em
+branco o descarta e devolve a seleção à última linha do grupo. Linha de
+grupo, total e a coluna Save ficam fora da seleção. Esconder um bloco
+pelo "Exibir" tira as colunas dele da navegação.
+
+A máquina de seleção mora em `_planilha/selecao.tsx` e é a mesma da
+planilha do job — não reimplementar por tabela.
+
+### Verificação (03/09/2026, servidor próprio na 3000, logado no Chrome — `TESTE-0003/26-04` v3)
+
+| O quê | Resultado |
+|---|---|
+| clique em "R$ 120,00" (Orçado, Item B1) | moldura vermelha na célula (na hora, o rodapé ainda existia e mostrava "Item B1 · Orçado · R$ Unit. · R$ 120,00 · Enter abre") |
+| ↓ → → → | seleção anda para o Total da linha 2, calculada — selecionável, não abre |
+| ← Enter | D/M abre com "1" selecionado |
+| Esc, tecla `3` | a célula abre já com "3" no lugar do conteúdo |
+| Esc, Tab | Tab anda a seleção para o Total sem abrir nada |
+| Home → Enter (Tipo) | a lista abre (A · Direto … B · Bi-trib. marcado); ↓ e Esc fecham sem mudar, e a seleção continua no Tipo |
+| ↓ na última linha | "Novo item" nasce com a descrição aberta; Esc descarta em branco |
+| ↓, "Linha teste navegacao", Enter | a linha aparece **no mesmo instante**, mais clara, "3 itens", sem lixeira e sem abrir célula; ~3s depois está sólida, com lixeira e editável — o id real chegou e o refresh passou |
+| lixeira → Remover | a linha de teste saiu; a versão voltou a 2 itens (dado restaurado) |
+
+⚠️ Para o Chrome MCP: clique por coordenada ou por `ref` não chega ao
+`<td>` da célula — selecione por `document.querySelector('[data-cel=…]').click()`
+no `javascript_tool` e depois use as teclas de verdade.
+
+---
+
+## ⚠️ Nota de 2026-09-04 — a lixeira do grupo leva os itens junto
+
+Regra em [decisão 049](../decisions/049-remover-grupo-leva-os-itens-junto.md);
+esta nota registra o que mudou na planilha da versão.
+
+### O que mudou na tela
+
+| Antes | Agora |
+|---|---|
+| grupo com item dentro recusava a remoção: "O grupo X tem N itens. Remova os itens primeiro para poder excluir o grupo." | a confirmação avisa: "O grupo **X** e os N itens dentro dele saem da planilha. Essa ação não pode ser desfeita." |
+| botão "Remover" (que não removia nada quando havia item) | botão **"Remover grupo e N itens"** — o número está no botão, não só no texto |
+| grupo vazio: removia | igual, mesma frase e botão "Remover" |
+
+A recusa também sumiu do servidor: `removerGrupo` não conta mais itens
+para barrar, conta para **auditar**. Ela grava
+`grupo_orcamento.removido` com `itens_apagados` no metadata — depois do
+delete não há de onde ler quantas linhas existiam.
+
+Continuam de pé: versão aprovada não perde grupo (a calha nem mostra a
+lixeira em tela `readOnly`), e a lixeira da linha do item continua
+removendo item a item.
+
+### O que mudou no banco
+
+RPC nova `deletar_grupo_orcamento(uuid)`
+([migration `20260904100001`](../../supabase/migrations/20260904100001_rpc_deletar_grupo_orcamento.sql)),
+`SECURITY INVOKER`, `execute` só para `authenticated`. Ela apaga item →
+grupo **numa transação só**, pela mesma razão da RPC de deletar versão
+(`20260821000005`): dois deletes pelo PostgREST são duas transações, e a
+falha da segunda deixaria os itens apagados e o grupo de pé. A ordem é
+explícita porque `versoes_orcamento_itens.grupo_id` é `ON DELETE
+RESTRICT`; `itens_bv` e `saves_consumos` caem por CASCADE a partir do
+item.
+
+### Verificação (04/09/2026, servidor próprio na 3000, logado no Chrome — `TESTE-0003/26-07` v6)
+
+| O quê | Resultado |
+|---|---|
+| grupo "Grupo teste remocao" criado com 2 itens pelos fluxos da tela | planilha em 2 grupos · 8 itens |
+| lixeira do grupo | "Remover grupo? O grupo **Grupo teste remocao** e os 2 itens dentro dele saem da planilha." + botão "Remover grupo e 2 itens" |
+| confirmar | grupo e os 2 itens somem; planilha volta a 1 grupo · 6 itens, total R$ 49.100,00, "Aprovar versão" habilitado de novo |
+| conferência no banco | grupo apagado, **0 itens órfãos**, os 6 itens do "Grupo 1" intactos |
+| `audit_events` | `grupo_orcamento.removido` · `{"nome":"Grupo teste remocao","itens_apagados":2}` |
+| grupo vazio ("Grupo vazio teste") | frase antiga ("O grupo está vazio…") e botão "Remover"; removeu |
+| console | só o aviso de hidratação de uma extensão do Chrome (`trancy-version`), alheio ao ERP |
+
+O dado de teste criado para esta conferência foi removido junto: a v6
+está exatamente como estava antes.
+
+---
+
+## ⚠️ Nota de 2026-09-04 — a planilha do cliente abate o crédito de save consumido
+
+O Tiago conferiu a regra da planilha exportada (decisão 041) e apontou
+uma metade que nunca tinha sido implementada: o save **gerado** já
+entrava (nota de 27/08 na decisão 028), mas o save **consumido** de
+outro job saía cheio — o cliente que recebesse as planilhas da origem e
+do consumidor veria a receita cobrada duas vezes. Conferido em dinheiro
+no par `TESTE-0006/26-01`/`-02`: as duas planilhas somavam
+R$ 170.871,13; agora somam **R$ 129.862,06**, o compromisso da decisão
+028. Regra e apresentação atualizadas na decisão 041 (seção "O que sai
+no fechamento") e cruzadas na 028.
+
+### O que mudou
+
+- **`calcularTotaisVersao().cliente`** — quarto fechamento: base do
+  `faturamento` (save gerado dentro, consumido fora) com a alavanca de
+  principal do `job` (o cliente compromete também o que paga direto ao
+  fornecedor). Sem save, coincide com `bruto` e `job`. O `bruto`
+  continua no motor, sem uso nas telas.
+- **Planilha** (`lib/exportacao/planilha-orcamento.ts`): itens seguem
+  cheios; linha nova **"(−) PAGO COM CRÉDITO DE SALDO ANTERIOR"** entre
+  TOTAL e IMPOSTO, só quando há consumo; HONORÁRIOS, IMPOSTO e
+  FATURAMENTO passam a ser líquidos do crédito. Coluna **I oculta** com o
+  consumo por item alimenta as fórmulas (`SUMIF` sobre G e I); a linha de
+  crédito é `-SUM(I)`. Orçamento pago inteiramente por crédito sai com
+  FATURAMENTO **R$ 0,00** e a linha explicando — aceito pelo Tiago.
+- **Seletor "Exportar"** das duas telas mostra o mesmo número da planilha
+  (`cliente.total`); a nota de rodapé do seletor diz que o crédito já
+  está abatido.
+- Parser e importação não mudam: a coluna I não é lida.
+
+### Verificação (04/09/2026, servidor próprio na porta 57426, logado)
+
+| Onde | O que foi conferido |
+|---|---|
+| Script sobre os itens reais do `Revisao 1` | bruto 147.632,41 · job 136.497,83 · faturamento 125.714,18 · **cliente 133.714,18**; sem save os três coincidem |
+| Script do gerador (2 seções, taxas diferentes, 1.500 de crédito) | 25 fórmulas batem com a soma dos `cliente`; linha de crédito `-SUM($I$4:$I$15)` = −1.500; coluna I oculta; parser e diff inalterados |
+| Projeto `TESTE-0006/26` — seletor | Revisao 1 **R$ 133.714,18**; Pago só por save **R$ 0,00**; Consome o Save 20.504,54; Origem do Save 109.357,52 — os mesmos números da conferência |
+| Arquivo baixado (`Revisao 1`) | Item 4 com 10.000 na coluna I oculta; TOTAL 112.000; **(−) PAGO COM CRÉDITO DE SALDO ANTERIOR −10.000**; IMPOSTO 19.474,18; HONORÁRIOS 12% 12.240; FATURAMENTO **133.714,18** = seletor |
+| Visão agregada — seletor | mesmos quatro valores |
+
+`tsc --noEmit`, `next lint` e `next build` (em cópia isolada) limpos.
+
+### Verificação no servidor AO VIVO (04/09/2026, `www.sistemacalifa.com.br`, deploy do `34b1ba3`)
+
+| Onde | O que foi conferido |
+|---|---|
+| Projeto `TESTE-0006/26` — seletor | Revisao 1 **R$ 133.714,18**, Pago só por save **R$ 0,00**, Consome o Save 20.504,54, Origem do Save 109.357,52; total dos quatro R$ 263.576,24 (antes do deploy, R$ 324.070,83) |
+| Arquivo baixado de produção (`Revisao 1`) | coluna I oculta com 10.000 no Item 4; TOTAL 112.000; **(−) PAGO COM CRÉDITO DE SALDO ANTERIOR −10.000**; IMPOSTO 19.474,18; HONORÁRIOS 12% 12.240; FATURAMENTO **133.714,18** — idêntico ao arquivo local |
+
+Nada foi gravado no banco nesta rodada: só exportação.

@@ -90,6 +90,7 @@ type CampoObrigatorio =
   | "data_fim_prevista"
   | "data_evento"
   | "data_prevista_faturamento"
+  | "observacoes"
   | "contatos_cobranca";
 
 /** Versão curta da regra do servidor: só evita que o usuário descubra o
@@ -113,6 +114,9 @@ export function faltamCampos(d: DadosJob): Record<CampoObrigatorio, boolean> {
     data_fim_prevista: !d.dataFim,
     data_evento: !d.dataEvento,
     data_prevista_faturamento: !d.dataFaturamento,
+    // Descritivo obrigatório desde 03/09/2026 — é o recado da produção
+    // para quem abre o job no financeiro.
+    observacoes: d.observacoes.trim().length === 0,
     // Espelha o schema do servidor: ao menos uma linha, e TODA linha com
     // nome e e-mail. Número em branco não conta como pendência.
     contatos_cobranca:
@@ -578,11 +582,14 @@ export function EnviarJobModal({
           </div>
 
           {/* Linha 9 — descritivo, linha inteira. Rótulo renomeado em
-              17/08/2026; o campo e a coluna seguem `observacoes`. */}
+              17/08/2026; o campo e a coluna seguem `observacoes`.
+              Obrigatório desde 03/09/2026 — era o único campo editável
+              opcional do modal. */}
           <Campo
             rotulo="Descritivo"
-            opcional
+            obrigatorio
             className="md:col-span-3"
+            erro={erroDe("observacoes")}
             apoio={
               dados.observacoes.length > 0
                 ? `${dados.observacoes.length} / ${OBSERVACOES_MAX}`
@@ -597,7 +604,11 @@ export function EnviarJobModal({
               // Duas linhas de partida (era três) pelo mesmo motivo das
               // medidas do diálogo: é o último campo e continua resize-y
               // para quem precisa escrever mais.
-              className="min-h-[68px] resize-y leading-relaxed"
+              className={cn(
+                "min-h-[68px] resize-y leading-relaxed",
+                erroDe("observacoes") &&
+                  "border-california-red ring-2 ring-california-red/15",
+              )}
               placeholder="Contexto para quem abre o job: condições comerciais, dependências, o que combinamos com o cliente..."
             />
           </Campo>

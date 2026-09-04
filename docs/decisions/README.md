@@ -61,9 +61,20 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 035 | [A PP vale R$ Unit. × QT × D/M](035-a-pp-vale-unitario-vezes-qt-vezes-dm.md) | 2026-09-01 |
 | 036 | [Filtro "Meus" nas listas, e Produto/Regional em Jobs](036-filtro-meus-e-produto-regional-nas-listas.md) | 2026-09-01 |
 | 037 | [Serviço no orçamento, Equipe no projeto, e "Produto" vira "Marca"](037-servico-no-orcamento-equipe-no-projeto-e-marca.md) | 2026-09-02 |
+| 038 | [As duas previsões do job viraram um card só, "Previsões"](038-previsoes-em-tabela-unica.md) | 2026-09-02 |
+| 039 | [A PP nasce gerada, e enviar ao financeiro é outra ação](039-pp-nasce-gerada-e-o-envio-ao-financeiro-e-uma-acao.md) | 2026-09-02 |
+| 040 | [A errata não toca linha com PP no financeiro, e trava o envio de PP até a revisão da abertura](040-errata-nao-toca-linha-com-pp-e-trava-o-envio-de-pp.md) | 2026-09-02 |
+| 041 | [A planilha única do projeto: exportar vários orçamentos e trazê-la de volta como versão nova](041-planilha-unica-do-projeto-exportar-e-importar.md) | 2026-09-03 |
+| 042 | [O menu "Exibir" esconde blocos de verdade, e orçamento não tem Realizado](042-blocos-ocultaveis-na-planilha-do-orcamento.md) | 2026-09-03 |
+| 043 | [Descrição do projeto e descritivo do job viram obrigatórios](043-descricao-do-projeto-e-descritivo-do-job-obrigatorios.md) | 2026-09-03 |
+| 044 | [A alíquota de 19,53% já vem escolhida na versão que nasce do zero](044-aliquota-padrao-no-orcamento-novo.md) | 2026-09-03 |
+| 045 | [Rentabilidade por item na planilha do job, e o "Exibir" que liga de verdade](045-rentabilidade-por-item-na-planilha-do-job.md) | 2026-09-03 |
+| 046 | [A célula selecionada: as planilhas se navegam pelo teclado, e a linha nova não trava](046-navegacao-por-teclado-nas-planilhas.md) | 2026-09-03 |
+| 047 | [O resumo do cabeçalho mostra o resultado operacional, não o custo](047-resumo-do-cabecalho-mostra-resultado-operacional.md) | 2026-09-04 |
+| 048 | [O fornecedor nasce de dentro da PP, e o formulário de PP volta ao painel](048-fornecedor-nasce-de-dentro-da-pp.md) | 2026-09-04 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
 > data é a da decisão, não a da posição na fila.
 
-**Próximo número livre: 038.**
+**Próximo número livre: 049.**

@@ -339,6 +339,7 @@ export default async function JobDetailPage({
             categoriasMap={categoriasMap}
             podeAcoes={podeAcoesPlanilha}
             jaEnviadoParaFaturamento={envioFaturamento !== null}
+            aberturaEmRevisao={job.abertura_em_revisao}
             ppsPorItemId={ppsPorItemId}
             fornecedores={fornecedores}
             empresas={empresas}

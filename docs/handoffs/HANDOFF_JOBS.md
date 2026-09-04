@@ -1634,6 +1634,20 @@ rentabilidade que ele produz.
 telas**, não numa variante só do job. A conta (`calcularResultadoOperacional`)
 não mudou; o travessão com "sem planejado"/"sem realizado" também não.
 
+⚠️ **2026-09-04 (decisão 047): o número do meio deixou de ser o custo.**
+Cada linha mostra o **resultado operacional** daquele cenário —
+`RESULTADO OP. (PLANEJADO) · R$ 3.300,00 · rentab. 23,5%` no JOB-0029,
+onde antes se lia `PLANEJADO · R$ 8.000,00 · rentab. 23,5%`. O R$ ganhou
+cor semântica (verde/vermelho), como o Resultado operacional do card de
+Totais; o custo era neutro porque custo não tem sinal. A conta segue a
+mesma `calcularResultadoOperacional` — ela já devolvia os dois campos, o
+cabeçalho é que descartava o primeiro. O rótulo passou a reservar
+**176px** (medido: é o que o texto ocupa em Inter Bold 10.5px com
+`tracking-[0.07em]`); com 162px ele encostava no número. O card foi de
+~578px para 694px, e o cabeçalho `flex-wrap` absorve isso pela coluna do
+título. Vale também para os dois espelhos do financeiro, que consomem o
+mesmo componente.
+
 ### O descritivo saiu do pé da ficha
 
 `jobs.observacoes` — rotulado "Descritivo do Job" desde 17/08/2026 — passou
@@ -2159,3 +2173,239 @@ O que mudou nas telas daqui. O detalhe completo está na nota de
   Ponto que importa na operação: **o saldo não expira** — segue oferecido
   depois da nota emitida, do recebimento e do **encerramento do job**.
   Detalhe e prova na nota de 2026-09-01 da decisão 028.
+
+---
+
+## ⚠️ Nota de 2026-09-02 — a PP nasce gerada; a errata não toca linha com PP
+
+Regras em `docs/decisions/039-pp-nasce-gerada-e-o-envio-ao-financeiro-e-uma-acao.md`
+e `040-errata-nao-toca-linha-com-pp-e-trava-o-envio-de-pp.md`. Design:
+`PPs - Gerar e Enviar ao Financeiro.dc.html` (projeto Claude Design
+`69342d83`). Migrations `20260902160001` e `20260902160002`.
+
+**Isto muda as seções 4, 20, 33 e a nota de 21/08 ("O saldo da PP vem do
+orçado").**
+
+### O que mudou para quem gera PP
+
+- **"Gerar PP" não envia mais.** A PP nasce com status `gerada`, com
+  código e PDF, e fica no job. O painel "Destrinchar realizado" ganhou
+  dois blocos: **Aguardando envio** (com Enviar ao financeiro, editar,
+  ver e cancelar por PP) e **Já no financeiro** (status + ver).
+- **Planejado no lugar do orçado**, no painel e no formulário. "Em PPs
+  emitidas" soma só o que já chegou ao financeiro e acende em vermelho
+  acima do planejado. O Saldo e o "máximo aceito" saíram.
+- **Sem teto por PP.** O trigger `pp_valida_saldo_do_item` foi removido.
+  Passar do planejado não impede gerar; no envio, pede o responsável do
+  job ou administrador, com o pop-up "Enviar PP acima do planejado?".
+  Linha vermelha (planejado zero) sempre cai nele — e finalmente aparece
+  na calha, que escondia a metade PP em item de valor zero.
+- **Anexo opcional para gerar, obrigatório para enviar** (fora da verba
+  de produção). A PP sem anexo mostra o pedido de NF em vermelho na
+  própria linha, com o botão de enviar desabilitado.
+- **Editar PP gerada** reabre o mesmo formulário (`GerarPPDrawer`, com
+  `ppEditando`), permite mudar tudo — parcelamento e verba inclusive — e
+  regera os PDFs. Server action `editarPedidoCompraGerada`.
+- **Cancelar PP gerada** é o cancelamento de sempre (status `cancelada`).
+- **O chip `PPs · N` da calha carrega um círculo vermelho** com as PPs
+  geradas e não enviadas (`AcaoCalha.badge`, desenhado por `CalhaAcoes`
+  fora da moldura para a pílula dividida não cortá-lo).
+- **Aba "Pedidos de Produção":** chip "Gerada", cancelar da gerada e o
+  número de PPs aguardando envio no card de resumo. Enviar e editar a
+  gerada ficam no painel do item, onde o design os desenhou.
+- **Fio de Comunicação de PPs:** a PP gerada fica fora; o card "PP
+  emitida" é o envio (`enviada_financeiro_em` / `_por`).
+
+### O que mudou para quem faz errata
+
+- **Linha com PP no financeiro não entra em errata** — nem valor, QT,
+  D/M, tipo, nem remover. Cadeado ao lado do nome, células de leitura,
+  Remover desabilitado com o motivo. Servidor:
+  `barrarLinhaComPPNoFinanceiro`. A regra de §20 (trava só na troca de
+  tipo) caiu; `barrarTrocaDeTipo` ficou só com o BV.
+- **Com a abertura em revisão, nenhuma PP é enviada** (nem reenviada).
+  Servidor: `barrarEnvioEmRevisao`. Barra do job: "Aguardando revisão da
+  abertura desde a última errata". O status do job continua `aberto`.
+
+### Arquivos
+
+| Arquivo | Mudança |
+|---|---|
+| `realizado/actions-pp.ts` | `gerada` no insert; sem saldo; `enviarPedidoCompraAoFinanceiro`, `editarPedidoCompraGerada`; PDFs por `renderizarDocumentosDaPP` (um helper para geração, edição e reenvio) |
+| `realizado/painel-pps-item.tsx` | reescrito no layout do design |
+| `realizado/gerar-pp-drawer.tsx` | planejado, prévia de "Em PPs emitidas", modo edição, anexo opcional |
+| `realizado/calha-linha.tsx` · `_planilha/calha-acoes.tsx` | contador de pendências; sem filtro por valor |
+| `realizado/job-item-realizado-table.tsx` | fiação nova; `travadasPorPP` no modo errata |
+| `realizado/actions-errata.ts` | `barrarLinhaComPPNoFinanceiro` |
+| `pps/editar-pp-drawer.tsx` | confirmação acima do planejado no reenvio |
+| `lib/calculos/pps-item.ts` | `somaDasPPsEmitidas`, `contarPendentes`, `passaDoPlanejado`; `saldoDoItem`/`passaDoSaldo` removidos |
+| `lib/types.ts` | `PPStatus` com `gerada`; `ppChegouAoFinanceiro`; `PP_STATUS_EM_ABERTO` inclui gerada |
+
+### Verificado ao vivo (02–03/09/2026)
+
+`tsc --noEmit`, `next lint` e `npm run build` limpos (build numa cópia
+isolada, para não corromper o `.next` do dev server). No navegador,
+logado, no JOB-0016 (projeto Teste Alterações), JOB-0013 e JOB-0002:
+
+| Cenário | Resultado |
+|---|---|
+| Gerar PP sem anexo, R$ 12.000 > planejado 10.000 (PP-00018) | nasceu `gerada`; realizado do item seguiu 0; chip com círculo "1"; aviso âmbar no formulário |
+| Painel do item | "Enviar ao financeiro" travado, pedido de NF em vermelho na linha |
+| Editar a gerada para R$ 9.000 | gravou; parcela e PDF regerados; auditoria `gerada` + `editada`. **Achado:** `pedidos_compra_parcelas` não tinha DELETE — migration `20260902160003` |
+| PP de verba R$ 21.000 > planejado 20.000 (PP-00019) → Enviar | pop-up "Enviar PP acima do planejado?" com os números → `em_avaliacao`, `enviada_financeiro_por` = Tiago, realizado 21.000, chip sem círculo |
+| Gerar PP com NF anexada pelo formulário (PP-00020, R$ 5.000) → Enviar | anexo liberou o botão; dentro do planejado foi direto, sem pop-up |
+| Cancelar gerada (painel) e em avaliação (aba de PPs) | canceladas; realizado voltou; aba com chip "Gerada" e "aguardando envio" no card |
+| JOB-0013, modo errata | Item 1 (PP-00008 em avaliação): cadeado, células de leitura, tipo sem seletor, Remover desabilitado com o motivo; Item 2 editável. Descartado sem gravar |
+| JOB-0002, corrigir PP-00006 rejeitada (R$ 18.000 > planejado 16.000) | "Salvar e reenviar" abriu "Reenviar PP acima do planejado?" com os números; "Voltar" — nada gravado |
+| JOB-0016 com `abertura_em_revisao` ligada por SQL (revertida depois) | painel com a faixa âmbar e "Enviar" travado; `enviarPedidoCompraAoFinanceiro(id, true)` chamada direto pelo console recusou com a mensagem da revisão; JOB-0030 (em revisão de verdade) mostrou o selo novo na barra |
+
+PPs de teste (PP-00018 a PP-00021) ficaram `cancelada`, que é o fim normal.
+
+---
+
+## ⚠️ Nota de 2026-09-03 — rentabilidade por item na planilha do job, e o "Exibir" que liga
+
+Regra em [decisão 045](../decisions/045-rentabilidade-por-item-na-planilha-do-job.md);
+esta nota registra o que entrou e como foi conferido. Design `Planilha
+Interna do Job - Rentabilidade por Item.dc.html`, turno 1b. Vale para a
+planilha do job no GP (`/jobs/[jobId]`) e no financeiro
+(`/financeiro/jobs/[jobId]`) — é a mesma `JobRealizadoSection`.
+
+### O menu "Exibir"
+
+| Seção | Item | Comportamento |
+|---|---|---|
+| Colunas | Save | liga/desliga a coluna (como antes) |
+| Colunas | Orçado | **liga/desliga o bloco inteiro** — só leitura enquanto a errata está ligada ("Na errata o Orçado fica sempre aberto."), e ligar a errata traz o bloco de volta |
+| Colunas | Planejado | sempre exibido (dica no `title`) |
+| Colunas | Realizado | sempre exibido — "é por ele que se acompanham as PPs" |
+| Rentabilidade | Rentabilidade planejada | liga **Rentab. R$ · Rentab. %** como as duas últimas colunas do PLANEJADO |
+| Rentabilidade | Rentabilidade realizada | idem, no REALIZADO |
+
+As duas rentabilidades nascem **desligadas**: com elas fechadas a
+planilha é bit a bit a de antes, "rentab." no vão da linha de grupo e do
+total incluído. Ligada uma delas, o "rentab." daquele bloco sai do vão.
+
+### A conta
+
+- Por item: Orçado (base da rentabilidade, sem as linhas em save) −
+  custo do bloco na vista escolhida; % sobre o orçado. Sem custo lançado
+  ⇒ "–" (item sem PP não tem rentabilidade realizada).
+- Grupo e total, **planejada**: a mesma de sempre.
+- Grupo e total, **realizada**: só sobre os itens que já têm realizado,
+  marcada com `*` (e `title`) quando deixou item com orçado de fora. A
+  linha vermelha entra pelo custo; a linha em save não conta.
+- Legenda no pé do card quando alguma coluna está ligada.
+
+### A grade
+
+`_planilha/grade-job.tsx`: 15 a 20 colunas. Larguras em `style` como
+pesos renormalizados (os percentuais de sempre), piso de largura por
+combinação (`larguraMinimaJob`). Com tudo ligado a tabela passa de
+1500px e rola dentro do card; com o Orçado escondido e as duas
+rentabilidades ligadas ela cabe. `totalDeColunasJob` e
+`colunasDoRotuloJob` recebem o objeto `ColunasJobVisiveis` — nunca
+literais.
+
+⚠️ **04/09/2026:** em produção o cabeçalho "RENTAB. %" vazava para a
+coluna vizinha — o `th` tinha `whitespace-nowrap`. Saiu o `nowrap`, o
+padding dos dois cabeçalhos de rentabilidade caiu para `px-2` e o peso
+da coluna "%" subiu de 5 para 5,5: o rótulo quebra em duas linhas
+("RENTAB." / "%"), como "TOTAL LÍQUIDO" já fazia. Com os três blocos e as
+duas rentabilidades a tabela pede ~1540px e **rola na horizontal** em
+janela comum — caber inteira exigiria encolher fonte ou padding de
+todas as células; com o Orçado escondido ela cabe.
+
+**Fora desta entrega:** a visão agregada de jobs do projeto
+(`/jobs/projeto/[id]`), por decisão do Tiago — lá o card de Totais
+divide o `colgroup`. A conferência do financeiro usa a tabela com os
+defaults e não mudou.
+
+### Verificação (03/09/2026, servidor próprio na 3000, logado no Chrome)
+
+| Tela | O que foi conferido |
+|---|---|
+| JOB-0016 (Teste Alterações Job 2, aberto) — padrão | planilha idêntica à anterior: três blocos, "rentab." no vão (Novo grupo 37,5% no realizado, total 64,3%) |
+| idem — menu | "Colunas" Save · Orçado · Planejado · Realizado + "Rentabilidade" planejada · realizada, com as duas dicas |
+| idem — as duas rentabilidades ligadas | PLANEJADO e REALIZADO com 6 colunas; "rentab." saiu do vão. Planejada: Montagem R$ 8.047 · 32,2%, Item 2 R$ 5.000 · 33,3%, Novo grupo R$ 13.047 · 32,6%, Infraestrutura R$ 10.000 · 33,3%, total R$ 23.047 · 32,9%. Realizada: Montagem (A) R$ 0,00 · 0,0%; Item 2 sem PP "–"; Novo grupo **R$ 0,00 · 0,0% \*** (só a Montagem na conta, e não os 37,5% de antes); Infraestrutura "–"; total **R$ 0,00 · 0,0% \***. Legenda no pé |
+| idem — Orçado escondido com as duas ligadas | 16 colunas alinhadas, tabela cabe sem rolar; cabeçalhos "Rentab. R$ / Rentab. %" numa linha só |
+| JOB-0029 (Job 2 do `0-0001/26`, aberto, sem faturamento) — Orçado escondido | 12 colunas, "rentab." no vão (Grupo 1: planejada R$ 2.000 · 20,0%; realizada R$ 0,00 · 0,0%) |
+| idem — "Alterar orçado" com o Orçado escondido | o bloco voltou com os inputs da errata, "Novo item" e "Linha vermelha" no pé do grupo; no menu, Orçado marcado e só leitura. Errata descartada sem gravar |
+| JOB-0016 e JOB-0015 | já enviados para faturamento: "Alterar orçado" travado, como manda a decisão 028 — por isso a errata foi conferida no JOB-0029 |
+| `/financeiro/jobs/JOB-0029` | mesma seção, mesmo menu; console só com `trancy-version` (extensão do navegador) |
+
+`tsc --noEmit`, `next lint` e `next build` limpos.
+
+---
+
+## ⚠️ Nota de 2026-09-03 — a célula selecionada na planilha do job, e a errata no mesmo teclado
+
+Regra em [decisão 046](../decisions/046-navegacao-por-teclado-nas-planilhas.md);
+a máquina de seleção é a mesma da planilha do orçamento
+(`_planilha/selecao.tsx`) — ver a nota do mesmo dia no
+`HANDOFF_ORCAMENTO.md` para o modelo completo.
+
+### O que mudou na planilha do job
+
+| Onde | Antes | Agora |
+|---|---|---|
+| fora da errata | nada reagia ao teclado | toda célula de item **seleciona** (moldura vermelha) e as setas andam; nada abre; a linha de dicas fora do card mostra só as setas |
+| errata — Orçado | as três células viravam inputs de uma vez | mostram o valor do rascunho; Enter, digitar, duplo clique ou clique na célula selecionada abrem o campo; Tab/Enter/setas confirmam e andam |
+| errata — Tipo | `<select>` nativo sempre aberto | a lista do Radix, como no orçamento: Enter abre, escolher grava e a seleção fica |
+| errata — linha nova | input do nome sempre aberto | "Novo item" e "Linha vermelha" criam a linha **com a descrição já aberta** (`adicionar` devolve a chave); ↓ ou Enter na última linha do grupo também criam |
+| célula travada (PP no financeiro) | input desligado | seleciona, não abre; Enter só desce |
+| menu "Exibir" | — | ligar a errata traz o Orçado de volta; esconder um bloco tira as colunas dele da navegação |
+
+A linha de dicas de tecla fica **fora do card** (a seção a desenha,
+depois dele); o rodapé do design com endereço e valor da célula foi
+retirado a pedido do Tiago no mesmo dia. A visão agregada de jobs (`/jobs/projeto/[id]`) **ainda não tem
+seleção** — é o passo seguinte se o Tiago pedir; a máquina já existe.
+
+### Verificação (03/09/2026, servidor próprio na 3000, logado no Chrome — JOB-0029)
+
+| O quê | Resultado |
+|---|---|
+| leitura: clique no Total realizado, ← | moldura no D/M do Realizado; célula só de leitura, não abre |
+| "Alterar orçado", clique no R$ Unit. do Item 1 (travado por PP), Enter | não abre (travada); o Enter desce e, na última linha do grupo, **abre a linha nova** com a descrição já aberta |
+| Esc, Tab, tecla `5` no Tipo | a lista abre (A · AR · B…); Esc fecha sem mudar |
+| "Novo item em Grupo 1", "Item da errata", Tab, Enter | nome gravado no rascunho, seleção no Tipo, Enter abre a lista; barra da errata "2 linhas novas" |
+| Descartar | errata descartada, nada gravado; planilha de volta a 1 item |
+
+`tsc --noEmit`, `next lint` e `next build` limpos.
+
+---
+
+## ⚠️ Nota de 2026-09-04 — o formulário de PP volta ao painel, e o fornecedor nasce ali (decisão 048)
+
+- **Gerar PP, Salvar alterações e Cancelar** do `GerarPPDrawer` reabrem o
+  painel "Destrinchar realizado" (`onOpenChange(false)` na tabela liga
+  `painelOpen`). A PP nova aparece em "Aguardando envio" quando o
+  refresh chega.
+- **"+" ao lado do combo de fornecedor** abre `NovoFornecedorDialog`
+  (`app/(app)/fornecedores/novo-fornecedor-dialog.tsx`): o
+  `FornecedorForm` de sempre no modo `dialog`, com documento, e-mail e
+  telefone obrigatórios (`fornecedorCompletoSchema`) além do endereço e do
+  pagamento. Ao criar, `criarFornecedorRapido` devolve o registro e o
+  drawer o seleciona na hora (`fornecedorNovo` mesclado à lista, como o
+  projeto novo da abertura). **Sem `router.refresh()` nesse momento** —
+  ele zerava o formulário da PP; o refresh fica para o fechamento.
+- **Seleção em dois tempos** (`fornecedorPendenteId` → `fornecedorId`
+  num efeito, só quando o id já está em `fornecedoresVisiveis`): o
+  `Select` do Radix espelha o valor num `<select>` nativo e, se valor e
+  `<option>` chegam na mesma renderização, ele devolve `""` pelo
+  `onValueChange` e a escolha some. Custou uma tarde de depuração.
+- **Bug antigo corrigido de passagem:** `tipo_conta` e `pix_tipo` eram
+  `z.enum` sem `nullIfEmpty`; o `<select>` vazio mandava `""` e o
+  cadastro sem banco/PIX falhava com "Invalid enum value" (na página
+  também).
+- **Verificado ao vivo em 04/09/2026** (JOB-0016, item 1, projeto "Teste
+  Alterações"): criar no dialog → selecionado → Gerar PP → painel reabre
+  com a PP em "Aguardando envio"; documento repetido (ativo) → aviso e
+  "Selecionar este fornecedor" funciona; Cancelar → painel. Os
+  fornecedores de teste ficaram inativos e a PP de teste, cancelada.
+- **CPF/CNPJ repetido:** `buscarFornecedorPorDocumento` no blur do campo →
+  aviso âmbar com "Selecionar este fornecedor" (só se ativo); o servidor
+  confere de novo e devolve `duplicado`; o índice único é a rede final.
+- `criarFornecedor` (página) passou a usar o mesmo `inserirFornecedor`;
+  comportamento da página não mudou, exceto que o documento repetido agora
+  é detectado antes do insert, com a mesma mensagem.

@@ -72,12 +72,14 @@ export const projetoSchema = z
     data_fim_prevista: z
       .string()
       .regex(/^\d{4}-\d{2}-\d{2}$/, "Data final é obrigatória."),
+    // Obrigatória desde 03/09/2026. A coluna segue nullable: 12 dos 18
+    // projetos existentes nasceram sem descrição e um NOT NULL exigiria
+    // backfill — a regra vale daqui pra frente, no schema e no formulário.
     descricao: z
       .string()
       .trim()
-      .max(DESCRICAO_MAX, `Máximo ${DESCRICAO_MAX} caracteres.`)
-      .optional()
-      .transform((v) => (v && v.length > 0 ? v : null)),
+      .min(1, "Informe a descrição do projeto.")
+      .max(DESCRICAO_MAX, `Máximo ${DESCRICAO_MAX} caracteres.`),
   })
   .refine((d) => d.data_fim_prevista >= d.data_inicio_prevista, {
     message: "A data final não pode ser anterior à data de início.",

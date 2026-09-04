@@ -8,6 +8,7 @@ import { logAuditEvent } from "@/lib/auth/audit";
 import { checarPermissao, pode } from "@/lib/permissoes";
 import { honorariosDoOrcamento } from "@/lib/data/clientes";
 import { bloqueioAprovacaoVersao, versaoSchema } from "@/lib/validations/versoes";
+import { ALIQUOTA_IMPOSTO_PADRAO, aliquotaParaValor } from "@/lib/impostos";
 import {
   itemSchema,
   camposItemEditaveis,
@@ -43,7 +44,13 @@ function extractVersaoInput(formData: FormData) {
     moeda: get("moeda", "BRL"),
     taxa_cambio: get("taxa_cambio", "1"),
     percentual_honorarios: get("percentual_honorarios", "0"),
-    percentual_imposto: get("percentual_imposto", "0"),
+    // Versão nova sem alíquota escolhida nasce na padrão (03/09/2026), não
+    // em 0 — zero não casa com nenhuma alíquota da lista e travava a
+    // aprovação. O drawer já manda a padrão; este default é a rede.
+    percentual_imposto: get(
+      "percentual_imposto",
+      aliquotaParaValor(ALIQUOTA_IMPOSTO_PADRAO),
+    ),
     status: (formData.get("status")?.toString() ?? "rascunho") as any,
   };
 }
