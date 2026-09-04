@@ -3,8 +3,12 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Search } from "lucide-react";
+import { Pencil, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import {
+  DescritivoPopover,
+  DescritivoRodapeNota,
+} from "@/components/ui/descritivo-popover";
 import {
   Select,
   SelectContent,
@@ -23,6 +27,10 @@ export interface ProjetoRow {
   codigo: string;
   nome: string;
   campanha: string | null;
+  /** Descrição do projeto — obrigatória desde a decisão 043, e mostrada
+   *  aqui no cartão do ícone ao lado do nome. Nula nos 12 projetos
+   *  anteriores à regra: nesses o ícone fica apagado. */
+  descricao: string | null;
   /** GPs Responsáveis do projeto, por nome, ordenados. Substituíram a
    *  coluna Serviço em 02/09/2026: Serviço virou designação do job (037),
    *  e o que a lista de projetos precisa mostrar é quem responde por ele. */
@@ -101,6 +109,11 @@ export function ProjetosList({
   const [regionalFiltro, setRegionalFiltro] = React.useState<string>("todas");
   const [anoFiltro, setAnoFiltro] = React.useState<string>("todos");
   const [statusFiltro, setStatusFiltro] = React.useState<string>("ativos");
+  // Qual cartão de descritivo está aberto, por id do projeto. Um state só
+  // para a lista inteira é o que garante um cartão por vez.
+  const [descritivoAberto, setDescritivoAberto] = React.useState<string | null>(
+    null,
+  );
 
   // As opções de Produto, Regional e Ano saem dos próprios projetos: o
   // dropdown só oferece o que de fato filtra alguma linha, e não custa
@@ -291,7 +304,27 @@ export function ProjetosList({
                   </Link>
                 </td>
                 <td className="px-4 py-3">
-                  <span className="font-medium">{p.nome}</span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="font-medium">{p.nome}</span>
+                    <DescritivoPopover
+                      rotulo="Descritivo do projeto"
+                      codigo={p.codigo}
+                      nome={p.nome}
+                      texto={p.descricao}
+                      aberto={descritivoAberto === p.id}
+                      onAbertoChange={(v) =>
+                        setDescritivoAberto(v ? p.id : null)
+                      }
+                      rodape={
+                        <DescritivoRodapeNota
+                          icone={<Pencil className="h-3 w-3 flex-none" />}
+                        >
+                          Campo obrigatório do projeto · alterar em Editar
+                          projeto
+                        </DescritivoRodapeNota>
+                      }
+                    />
+                  </span>
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">{p.cliente_nome ?? "—"}</td>
                 <td className="px-4 py-3 text-muted-foreground">{p.produto_nome ?? "—"}</td>

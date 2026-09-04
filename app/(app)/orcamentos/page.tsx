@@ -20,6 +20,11 @@ export default async function ProjetosPage() {
       .select(
         "id, codigo, nome, campanha, status, cliente_id, produto_id, " +
           "data_inicio_prevista, created_at, " +
+          // Descrição do projeto: alimenta o cartão do ícone na coluna
+          // Nome (handoff "Descritivos nas Listas", 04/09/2026). É texto
+          // curto — média de 80 caracteres, teto de 600 — e vem junto da
+          // linha em vez de abrir uma segunda query.
+          "descricao, " +
           // Vínculos do recorte "Meus" (decisão 036, ampliada em
           // 02/09/2026): designado OU criador.
           "responsavel_id, created_by, " +
@@ -201,6 +206,7 @@ export default async function ProjetosPage() {
     codigo: p.codigo,
     nome: p.nome,
     campanha: p.campanha,
+    descricao: p.descricao ?? null,
     gps: (gpsPorProjeto.get(p.id) ?? []).sort((a, b) =>
       a.localeCompare(b, "pt-BR"),
     ),

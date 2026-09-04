@@ -20,8 +20,14 @@ export default async function JobsPage() {
           // do Tiago, 01/09/2026): os dois divergem na base — o JOB-0003 é
           // "Ativação de marca" num projeto "Pevetech".
           "produto, regional_id, responsavel_id, " +
+          // Os dois descritivos que a lista mostra em cartão (handoff
+          // "Descritivos nas Listas", 04/09/2026): o do job na linha e o
+          // do projeto na faixa do grupo. Texto curto — tetos de 500 e
+          // 600 caracteres — e já vem no embed que a lista faz de todo
+          // jeito, sem query nova.
+          "observacoes, " +
           "regional:regionais(nome), " +
-          "projeto:projetos(codigo, nome, cliente:clientes(nome_fantasia)), " +
+          "projeto:projetos(codigo, nome, descricao, cliente:clientes(nome_fantasia)), " +
           "responsavel:profiles!responsavel_id(nome), " +
           "empresa:empresas(id, razao_social, nome_fantasia)",
       )
@@ -44,8 +50,10 @@ export default async function JobsPage() {
     regional_id: r.regional_id ?? null,
     regional_nome: r.regional?.nome ?? null,
     responsavel_id: r.responsavel_id ?? null,
+    observacoes: r.observacoes ?? null,
     projeto_codigo: r.projeto?.codigo ?? null,
     projeto_nome: r.projeto?.nome ?? null,
+    projeto_descricao: r.projeto?.descricao ?? null,
     cliente_nome: r.projeto?.cliente?.nome_fantasia ?? null,
     responsavel_nome: r.responsavel?.nome ?? null,
     empresa_id: r.empresa_id ?? null,
