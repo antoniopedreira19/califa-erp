@@ -37,22 +37,27 @@ precisa da 24,269914% troca ali mesmo, antes de criar.
 
 ## 2. Onde a versão nasce ZERADA, de propósito
 
-**Importação.** A versão criada a partir de uma planilha que veio de fora
-nasce com o seletor em branco e **obriga a escolha manual** da alíquota
-antes de aprovar. Vale para as duas portas de importação:
+**"Importar planilha" na tela da versão** (`versoes/importar-actions.ts`).
+Planilha avulsa, que veio de fora e não traz alíquota: a versão nasce com o
+seletor em branco e **obriga a escolha manual** antes de aprovar. Já era 0
+antes desta decisão; agora é 0 declarado, com o motivo escrito no código.
 
-- **"Importar planilha" na tela da versão** (`versoes/importar-actions.ts`)
-  — já era 0; agora é 0 declarado, com o motivo escrito no código.
-- **"Importar" a planilha única do projeto** (`_selecao/importar-actions.ts`)
-  — **mudou**: herdava a alíquota da versão vigente e agora zera. Os
-  outros parâmetros (moeda, câmbio, honorários, save) continuam sendo
-  herdados; só o imposto é zerado.
-
-O motivo é o mesmo nas duas: planilha que veio de fora não traz alíquota, e
-carregar a de outra versão faria o número entrar sem ninguém conferir.
 Zerado, o seletor abre vazio e a barra de aprovação cobra a escolha — que é
 exatamente o aviso que a tela já sabia dar (decisão 006). Por isso **não há
 notificação nova**: a trava da aprovação é o aviso.
+
+### A planilha única do projeto continua HERDANDO (04/09/2026)
+
+A importação do projeto inteiro (`_selecao/importar-actions.ts`) chegou a
+zerar a alíquota junto com a de cima, e **foi revertida no dia seguinte**:
+ela cria versão em **vários orçamentos de uma vez**, e zerar obrigaria a
+reescolher a alíquota um a um, a cada reimportação. Ali existe uma versão
+vigente com parâmetro já conferido, e é dela que a nova herda — moeda,
+câmbio, honorários, save e **imposto**, como antes da 044.
+
+A diferença entre as duas importações é essa: uma parte de uma planilha
+avulsa e não tem de onde herdar contexto; a outra é a continuação de
+orçamentos que já existem no sistema.
 
 ## 2.1 Duplicar continua herdando
 

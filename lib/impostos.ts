@@ -10,9 +10,10 @@
  * lista não tem.
  *
  * Escolher NÃO é obrigatório para criar ou editar a versão: editar preserva o
- * que estava lá, e a versão que nasce de uma importação nasce zerada de
- * propósito. A exigência vale só na aprovação, que é quando os valores travam
- * e viram job: ver `bloqueioAprovacaoVersao` em lib/validations/versoes.ts.
+ * que estava lá, e a versão que nasce do "Importar planilha" da tela da versão
+ * nasce zerada de propósito. A exigência vale só na aprovação, que é quando os
+ * valores travam e viram job: ver `bloqueioAprovacaoVersao` em
+ * lib/validations/versoes.ts.
  *
  * Os seis decimais de 24,269914 só cabem porque a coluna virou numeric(10,6)
  * na migration 20260813000002_imposto_seis_casas.sql. Antes dela o banco
@@ -29,8 +30,9 @@ export const ALIQUOTAS_IMPOSTO = [19.53, 24.269914] as const;
  * `PARAMETROS_PADRAO` (editores multi e agregado) — e versão nova de
  * orçamento existente, pelo drawer "Nova versão".
  *
- * Onde NÃO vale: versão criada por IMPORTAÇÃO, que nasce zerada para
- * forçar a escolha manual, e `duplicarVersao`, que copia a alíquota da
+ * Onde NÃO vale: a versão criada pelo "Importar planilha" da tela da
+ * versão, que nasce zerada para forçar a escolha manual; a importação da
+ * planilha única do projeto e o `duplicarVersao`, que herdam a alíquota da
  * versão de origem.
  */
 export const ALIQUOTA_IMPOSTO_PADRAO: number = ALIQUOTAS_IMPOSTO[0];
