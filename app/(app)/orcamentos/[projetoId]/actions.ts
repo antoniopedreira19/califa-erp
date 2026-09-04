@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
+import { checarPermissao } from "@/lib/permissoes";
 import { orcamentoSchema } from "@/lib/validations/orcamentos";
 import { gerarCodigoOrcamento } from "@/lib/codigos/orcamentos";
 import { honorariosDoOrcamento } from "@/lib/data/clientes";
@@ -129,6 +130,8 @@ export async function criarOrcamento(
   formData: FormData,
 ): Promise<ActionResult | void> {
   const session = await requireSession();
+  const gate = await checarPermissao(session, "orcamentos.criar");
+  if (!gate.ok) return gate;
   const parsed = orcamentoSchema.safeParse(extractInput(formData));
 
   if (!parsed.success) {
@@ -289,6 +292,8 @@ export async function atualizarOrcamento(
   formData: FormData,
 ): Promise<ActionResult> {
   const session = await requireSession();
+  const gate = await checarPermissao(session, "orcamentos.editar");
+  if (!gate.ok) return gate;
   const parsed = orcamentoSchema.safeParse(extractInput(formData));
 
   if (!parsed.success) {

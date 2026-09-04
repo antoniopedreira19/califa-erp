@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
+import { checarPermissao } from "@/lib/permissoes";
 import { bvSchema } from "@/lib/validations/bv";
 import type { BvSituacao, ItemBv, JobStatus } from "@/lib/types";
 import { jobEstaCongelado, jobAceitaAcoesPlanilha } from "@/lib/types";
@@ -200,6 +201,8 @@ export async function salvarBv(
   origem: OrigemBv = "orcamento",
 ): Promise<ActionResult> {
   const session = await requireSession();
+  const gate = await checarPermissao(session, "orcamentos.editar");
+  if (!gate.ok) return gate;
 
   const parsed = bvSchema.safeParse(extractBvInput(formData));
   if (!parsed.success) {
@@ -317,6 +320,8 @@ export async function confirmarBv(
   itemVersaoId: string,
 ): Promise<ActionResult> {
   const session = await requireSession();
+  const gate = await checarPermissao(session, "orcamentos.editar");
+  if (!gate.ok) return gate;
 
   const ctx = await carregarContexto(itemVersaoId, session.activeTenant.id, "job");
   if ("error" in ctx) return { ok: false, message: ctx.error };
@@ -386,6 +391,8 @@ export async function cancelarBv(
   origem: OrigemBv = "orcamento",
 ): Promise<ActionResult> {
   const session = await requireSession();
+  const gate = await checarPermissao(session, "orcamentos.editar");
+  if (!gate.ok) return gate;
 
   const ctx = await carregarContexto(
     itemVersaoId,

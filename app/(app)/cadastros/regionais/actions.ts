@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
+import { checarPermissao } from "@/lib/permissoes";
 import { createClient } from "@/lib/supabase/server";
 import { regionalSchema } from "@/lib/validations/regionais";
 
@@ -22,6 +23,8 @@ function mapRegionalDbError(msg: string): string {
 
 export async function criarRegional(formData: FormData): Promise<ActionResult> {
   const session = await requireSession();
+  const gate = await checarPermissao(session, "cadastros.regionais.editar");
+  if (!gate.ok) return gate;
   const parsed = regionalSchema.safeParse({
     nome: formData.get("nome")?.toString() ?? "",
   });
@@ -67,6 +70,8 @@ export async function editarRegional(
   formData: FormData,
 ): Promise<ActionResult> {
   const session = await requireSession();
+  const gate = await checarPermissao(session, "cadastros.regionais.editar");
+  if (!gate.ok) return gate;
   const parsed = regionalSchema.safeParse({
     nome: formData.get("nome")?.toString() ?? "",
   });
@@ -104,9 +109,8 @@ export async function editarRegional(
 
 export async function inativarRegional(id: string): Promise<ActionResult> {
   const session = await requireSession();
-  if (session.activeRole !== "administrador") {
-    return { ok: false, message: "Só administradores podem inativar regionais." };
-  }
+  const gate = await checarPermissao(session, "cadastros.regionais.editar");
+  if (!gate.ok) return gate;
 
   const supabase = createClient();
   const { error } = await supabase
@@ -134,9 +138,8 @@ export async function inativarRegional(id: string): Promise<ActionResult> {
 
 export async function reativarRegional(id: string): Promise<ActionResult> {
   const session = await requireSession();
-  if (session.activeRole !== "administrador") {
-    return { ok: false, message: "Só administradores podem reativar regionais." };
-  }
+  const gate = await checarPermissao(session, "cadastros.regionais.editar");
+  if (!gate.ok) return gate;
 
   const supabase = createClient();
   const { error } = await supabase

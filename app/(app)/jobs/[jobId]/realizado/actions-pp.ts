@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { logAuditEvent } from "@/lib/auth/audit";
+import { checarPermissao } from "@/lib/permissoes";
 import { DOCUMENTO_TIPOS } from "@/lib/types";
 import { gerarCodigoPP } from "@/lib/codigos/pedidos-compra";
 import { listActiveMembers } from "@/lib/data/members";
@@ -342,6 +343,9 @@ async function saldoDisponivelDoItem(
 export async function reservarPedidoCompra(
   itemRealizadoId: string,
 ): Promise<Result<{ pp_id: string; upload_prefix: string }>> {
+  const session = await requireSession();
+  const gate = await checarPermissao(session, "jobs.emitir_pp");
+  if (!gate.ok) return gate;
   try {
     return await reservarPedidoCompraImpl(itemRealizadoId);
   } catch (err) {
@@ -401,6 +405,9 @@ export async function finalizarPedidoCompra(
   anexos: z.input<typeof anexoUploadedSchema>[],
   itemRealizadoId: string,
 ): Promise<Result<{ codigo: string }>> {
+  const session = await requireSession();
+  const gate = await checarPermissao(session, "jobs.emitir_pp");
+  if (!gate.ok) return gate;
   try {
     return await finalizarPedidoCompraImpl(pp_id, dados, anexos, itemRealizadoId);
   } catch (err) {
@@ -915,6 +922,8 @@ export async function abortarReserva(
   jobId: string,
 ): Promise<Result> {
   const session = await requireSession();
+  const gate = await checarPermissao(session, "jobs.emitir_pp");
+  if (!gate.ok) return gate;
   const supabase = createClient();
 
   // Guard: se pp_id ja esta persistido em pedidos_compra, e uma PP finalizada.
@@ -958,6 +967,8 @@ export async function abortarReserva(
 
 export async function cancelarPedidoCompra(pp_id: string): Promise<Result> {
   const session = await requireSession();
+  const gate = await checarPermissao(session, "jobs.cancelar_pp");
+  if (!gate.ok) return gate;
   const supabase = createClient();
 
   const { data: pp, error: ppErr } = await supabase
@@ -1103,6 +1114,8 @@ export async function reenviarPedidoCompra(
   anexosRemovidosIds: string[],
 ): Promise<Result> {
   const session = await requireSession();
+  const gatePermissao = await checarPermissao(session, "jobs.emitir_pp");
+  if (!gatePermissao.ok) return gatePermissao;
   const supabase = createClient();
 
   const { data: ppRow, error: ppErr } = await supabase

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
+import { checarPermissao } from "@/lib/permissoes";
 import { createClient } from "@/lib/supabase/server";
 import { cidadeSchema } from "@/lib/validations/cidades";
 
@@ -22,6 +23,8 @@ function mapCidadeDbError(msg: string): string {
 
 export async function criarCidade(formData: FormData): Promise<ActionResult> {
   const session = await requireSession();
+  const gate = await checarPermissao(session, "cadastros.cidades.editar");
+  if (!gate.ok) return gate;
   const parsed = cidadeSchema.safeParse({
     nome: formData.get("nome")?.toString() ?? "",
   });
@@ -67,6 +70,8 @@ export async function editarCidade(
   formData: FormData,
 ): Promise<ActionResult> {
   const session = await requireSession();
+  const gate = await checarPermissao(session, "cadastros.cidades.editar");
+  if (!gate.ok) return gate;
   const parsed = cidadeSchema.safeParse({
     nome: formData.get("nome")?.toString() ?? "",
   });
@@ -104,9 +109,8 @@ export async function editarCidade(
 
 export async function inativarCidade(id: string): Promise<ActionResult> {
   const session = await requireSession();
-  if (session.activeRole !== "administrador") {
-    return { ok: false, message: "Só administradores podem inativar cidades." };
-  }
+  const gate = await checarPermissao(session, "cadastros.cidades.editar");
+  if (!gate.ok) return gate;
 
   const supabase = createClient();
   const { error } = await supabase
@@ -134,9 +138,8 @@ export async function inativarCidade(id: string): Promise<ActionResult> {
 
 export async function reativarCidade(id: string): Promise<ActionResult> {
   const session = await requireSession();
-  if (session.activeRole !== "administrador") {
-    return { ok: false, message: "Só administradores podem reativar cidades." };
-  }
+  const gate = await checarPermissao(session, "cadastros.cidades.editar");
+  if (!gate.ok) return gate;
 
   const supabase = createClient();
   const { error } = await supabase

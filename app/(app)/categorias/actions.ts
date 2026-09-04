@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
+import { checarPermissao } from "@/lib/permissoes";
 import { createClient } from "@/lib/supabase/server";
 import { categoriaSchema } from "@/lib/validations/categorias";
 
@@ -22,6 +23,11 @@ function mapCategoriaDbError(msg: string): string {
 
 export async function criarCategoria(formData: FormData): Promise<ActionResult> {
   const session = await requireSession();
+  const gate = await checarPermissao(
+    session,
+    "cadastros.categorias_orcamento.editar",
+  );
+  if (!gate.ok) return gate;
   const parsed = categoriaSchema.safeParse({
     nome: formData.get("nome")?.toString() ?? "",
   });
@@ -67,6 +73,11 @@ export async function editarCategoria(
   formData: FormData,
 ): Promise<ActionResult> {
   const session = await requireSession();
+  const gate = await checarPermissao(
+    session,
+    "cadastros.categorias_orcamento.editar",
+  );
+  if (!gate.ok) return gate;
   const parsed = categoriaSchema.safeParse({
     nome: formData.get("nome")?.toString() ?? "",
   });
@@ -104,12 +115,11 @@ export async function editarCategoria(
 
 export async function inativarCategoria(id: string): Promise<ActionResult> {
   const session = await requireSession();
-  if (session.activeRole !== "administrador") {
-    return {
-      ok: false,
-      message: "Só administradores podem inativar categorias.",
-    };
-  }
+  const gate = await checarPermissao(
+    session,
+    "cadastros.categorias_orcamento.editar",
+  );
+  if (!gate.ok) return gate;
 
   const supabase = createClient();
   const { error } = await supabase
@@ -137,12 +147,11 @@ export async function inativarCategoria(id: string): Promise<ActionResult> {
 
 export async function reativarCategoria(id: string): Promise<ActionResult> {
   const session = await requireSession();
-  if (session.activeRole !== "administrador") {
-    return {
-      ok: false,
-      message: "Só administradores podem reativar categorias.",
-    };
-  }
+  const gate = await checarPermissao(
+    session,
+    "cadastros.categorias_orcamento.editar",
+  );
+  if (!gate.ok) return gate;
 
   const supabase = createClient();
   const { error } = await supabase

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
+import { checarPermissao } from "@/lib/permissoes";
 import { jobSchema, rejeicaoAberturaSchema } from "@/lib/validations/jobs";
 import {
   JOB_STATUS_TRANSICOES,
@@ -46,6 +47,8 @@ export async function atualizarJob(
   formData: FormData,
 ): Promise<ActionResult> {
   const session = await requireSession();
+  const gate = await checarPermissao(session, "jobs.editar_metadata");
+  if (!gate.ok) return gate;
   const parsed = jobSchema.safeParse(extractInput(formData));
 
   if (!parsed.success) {
@@ -124,6 +127,8 @@ export async function atualizarStatusJob(
   novoStatus: JobStatus,
 ): Promise<ActionResult> {
   const session = await requireSession();
+  const gate = await checarPermissao(session, "jobs.editar_metadata");
+  if (!gate.ok) return gate;
   const supabase = createClient();
 
   const { data: job } = await supabase
@@ -258,6 +263,8 @@ export async function rejeitarAberturaJob(
 
 export async function reenviarJobParaAprovacao(jobId: string): Promise<ActionResult> {
   const session = await requireSession();
+  const gate = await checarPermissao(session, "jobs.editar_metadata");
+  if (!gate.ok) return gate;
   const supabase = createClient();
 
   const { data: job } = await supabase

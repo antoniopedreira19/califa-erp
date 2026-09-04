@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
+import { checarPermissao } from "@/lib/permissoes";
 import { projetoSchema } from "@/lib/validations/projetos";
 import { gerarCodigoProjeto } from "@/lib/codigos/projetos";
 
@@ -175,6 +176,10 @@ async function sincronizarVinculos(
 
 export async function criarProjeto(formData: FormData): Promise<ActionResult> {
   const session = await requireSession();
+  // Projeto e guarda-chuva de orcamento — quem pode criar orcamento pode
+  // criar/atualizar projeto tambem.
+  const gate = await checarPermissao(session, "orcamentos.criar");
+  if (!gate.ok) return gate;
   const parsed = projetoSchema.safeParse(extractInput(formData));
 
   if (!parsed.success) {
@@ -258,6 +263,8 @@ export async function atualizarProjeto(
   formData: FormData,
 ): Promise<ActionResult> {
   const session = await requireSession();
+  const gate = await checarPermissao(session, "orcamentos.editar");
+  if (!gate.ok) return gate;
   const parsed = projetoSchema.safeParse(extractInput(formData));
 
   if (!parsed.success) {
@@ -330,6 +337,8 @@ export async function atualizarProjeto(
 
 export async function arquivarProjeto(id: string): Promise<ActionResult> {
   const session = await requireSession();
+  const gate = await checarPermissao(session, "orcamentos.editar");
+  if (!gate.ok) return gate;
   const supabase = createClient();
 
   // Bloqueia se houver orçamento não-cancelado no projeto.
@@ -377,6 +386,8 @@ export async function arquivarProjeto(id: string): Promise<ActionResult> {
 
 export async function reativarProjeto(id: string): Promise<ActionResult> {
   const session = await requireSession();
+  const gate = await checarPermissao(session, "orcamentos.editar");
+  if (!gate.ok) return gate;
   const supabase = createClient();
 
   const { error } = await supabase
