@@ -1634,6 +1634,20 @@ rentabilidade que ele produz.
 telas**, não numa variante só do job. A conta (`calcularResultadoOperacional`)
 não mudou; o travessão com "sem planejado"/"sem realizado" também não.
 
+⚠️ **2026-09-04 (decisão 047): o número do meio deixou de ser o custo.**
+Cada linha mostra o **resultado operacional** daquele cenário —
+`RESULTADO OP. (PLANEJADO) · R$ 3.300,00 · rentab. 23,5%` no JOB-0029,
+onde antes se lia `PLANEJADO · R$ 8.000,00 · rentab. 23,5%`. O R$ ganhou
+cor semântica (verde/vermelho), como o Resultado operacional do card de
+Totais; o custo era neutro porque custo não tem sinal. A conta segue a
+mesma `calcularResultadoOperacional` — ela já devolvia os dois campos, o
+cabeçalho é que descartava o primeiro. O rótulo passou a reservar
+**176px** (medido: é o que o texto ocupa em Inter Bold 10.5px com
+`tracking-[0.07em]`); com 162px ele encostava no número. O card foi de
+~578px para 694px, e o cabeçalho `flex-wrap` absorve isso pela coluna do
+título. Vale também para os dois espelhos do financeiro, que consomem o
+mesmo componente.
+
 ### O descritivo saiu do pé da ficha
 
 `jobs.observacoes` — rotulado "Descritivo do Job" desde 17/08/2026 — passou
@@ -2292,6 +2306,15 @@ combinação (`larguraMinimaJob`). Com tudo ligado a tabela passa de
 rentabilidades ligadas ela cabe. `totalDeColunasJob` e
 `colunasDoRotuloJob` recebem o objeto `ColunasJobVisiveis` — nunca
 literais.
+
+⚠️ **04/09/2026:** em produção o cabeçalho "RENTAB. %" vazava para a
+coluna vizinha — o `th` tinha `whitespace-nowrap`. Saiu o `nowrap`, o
+padding dos dois cabeçalhos de rentabilidade caiu para `px-2` e o peso
+da coluna "%" subiu de 5 para 5,5: o rótulo quebra em duas linhas
+("RENTAB." / "%"), como "TOTAL LÍQUIDO" já fazia. Com os três blocos e as
+duas rentabilidades a tabela pede ~1540px e **rola na horizontal** em
+janela comum — caber inteira exigiria encolher fonte ou padding de
+todas as células; com o Orçado escondido ela cabe.
 
 **Fora desta entrega:** a visão agregada de jobs do projeto
 (`/jobs/projeto/[id]`), por decisão do Tiago — lá o card de Totais

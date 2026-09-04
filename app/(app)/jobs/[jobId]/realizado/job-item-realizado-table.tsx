@@ -1992,12 +1992,15 @@ function CelulaTotalComBv({
 /** Os dois cabeçalhos da rentabilidade de um bloco — as últimas colunas
  *  dele, na cor do bloco como as outras. */
 function CabecalhosRentabilidade({ bloco }: { bloco: Bloco }) {
+  // Sem `whitespace-nowrap`, de propósito: com ele "RENTAB. %" vazava
+  // para a coluna vizinha em produção (04/09/2026). Quebrando, vira duas
+  // linhas — como "Total líquido" já faz — e cabe na coluna estreita.
   return (
     <>
-      <th className={cn("text-right font-semibold px-3 py-2 whitespace-nowrap", bloco.cabecalhoMeio)}>
+      <th className={cn("text-right font-semibold px-2 py-2 leading-tight", bloco.cabecalhoMeio)}>
         Rentab. R$
       </th>
-      <th className={cn("text-right font-semibold px-2 py-2 whitespace-nowrap", bloco.cabecalhoFim)}>
+      <th className={cn("text-right font-semibold px-2 py-2 leading-tight", bloco.cabecalhoFim)}>
         Rentab. %
       </th>
     </>

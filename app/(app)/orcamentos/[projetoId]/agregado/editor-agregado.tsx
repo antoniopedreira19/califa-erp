@@ -590,7 +590,7 @@ export function EditorAgregado({
     }),
     { faturamentoPrevisto: 0, valorJob: 0, imposto: 0, planejado: 0 },
   );
-  const { resultadoGeral } = calcularResultadoOperacional(
+  const { resultadoOperacional, resultadoGeral } = calcularResultadoOperacional(
     resumo.valorJob,
     resumo.imposto,
     resumo.planejado,
@@ -770,7 +770,7 @@ export function EditorAgregado({
 
           <ResumoRentabilidade
             valorJob={resumo.valorJob}
-            custoPlanejado={resumo.planejado}
+            resultadoOperacional={resultadoOperacional}
             resultadoGeral={resultadoGeral}
             moeda={moedaProjeto}
           />

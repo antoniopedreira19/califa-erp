@@ -433,6 +433,19 @@ Três números ancorados à direita do título: **Faturamento previsto · Custo 
 - Faturamento em preto (`text-foreground`) e não em vermelho — ajuste pedido pelo time depois da primeira versão. Só o resultado geral tem cor semântica (verde/vermelho pelo sinal).
 - **Não é sticky**, por decisão do time: rola junto com o cabeçalho.
 
+⚠️ **2026-09-04 (decisão 047): o bloco do meio virou "Resultado Op.
+(Planejado)".** Ele mostra agora o **resultado operacional em R$** —
+`valorJob − imposto − (planejado − BV líquido)` — no lugar do custo
+planejado, com verde/vermelho pelo sinal. Os outros dois blocos não
+mudaram. O rótulo diz **(Planejado)** e não "(Orçado)" justamente pela
+razão registrada dois itens acima: com custo orçado a conta daria os
+honorários, e não seria informação nova. A prop `custoPlanejado` do
+componente virou `resultadoOperacional: number | null`; os dois
+chamadores (`[orcId]/page.tsx` e `agregado/editor-agregado.tsx`) passaram
+a desestruturar os dois campos de `calcularResultadoOperacional`. O KPI
+"Custo planejado" do rascunho multi-jobs (`multi/editor-multi-jobs.tsx`)
+mudou junto, para as duas telas não divergirem.
+
 ### Fonte única do cálculo
 
 `calcularResultadoOperacional(faturamento, imposto, custoPlanejado)` entrou em [`lib/calculos/versao-totais.ts`](lib/calculos/versao-totais.ts) e o card de Totais passou a consumi-la no lugar do cálculo inline. Duas telas mostrando o mesmo resultado por fórmulas duplicadas é divergência esperando para acontecer. Retorna `null` nos dois campos quando `custoPlanejado <= 0`.

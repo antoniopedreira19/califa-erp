@@ -27,13 +27,17 @@ interface Props {
  * Formato de duas linhas desde 19/08/2026 (handoff "Job · Informações —
  * Cabeçalho", turno 1b): o Valor do Job fica isolado à esquerda porque é o
  * único número que não tem par, e cada linha da direita é um cenário
- * fechado — o custo e a rentabilidade que ele produz. A régua anterior
- * tinha cinco blocos irmãos, e planejado e realizado só se pareavam na
- * cabeça de quem lia.
+ * fechado. A régua anterior tinha cinco blocos irmãos, e planejado e
+ * realizado só se pareavam na cabeça de quem lia.
  *
- * Resultado = (valor do job − impostos − custo) ÷ valor do job, a mesma conta
- * do "Resultado geral" do card de Totais. Sem custo lançado a conta não
- * existe: travessão, nunca um percentual inflado pelo faturamento inteiro.
+ * Desde 04/09/2026 cada linha mostra o **resultado operacional** daquele
+ * cenário — não mais o custo. O custo é o que sai, e sozinho não dizia se o
+ * job estava de pé; o resultado operacional e a rentabilidade são o mesmo
+ * fato em R$ e em %, o par que a planilha já usa na Rentabilidade.
+ *
+ * Resultado operacional = valor do job − impostos − custo (+ BVs), a mesma
+ * conta do card de Totais. Sem custo lançado a conta não existe: travessão,
+ * nunca um resultado inflado pelo faturamento inteiro.
  */
 export function ResumoResultado({
   valorJob,
@@ -48,12 +52,12 @@ export function ResumoResultado({
   // a mesma operação que o painel Resultado escreve como linha "+ BVs".
   // Sem isto o resumo do cabeçalho e o card de Totais mostrariam
   // percentuais diferentes para o mesmo projeto (docs/decisions/022).
-  const { resultadoGeral: resultadoPlanejado } = calcularResultadoOperacional(
+  const planejado = calcularResultadoOperacional(
     valorJob,
     imposto,
     custoPlanejado - bvPlanejado,
   );
-  const { resultadoGeral: resultadoRealizado } = calcularResultadoOperacional(
+  const realizado = calcularResultadoOperacional(
     valorJob,
     imposto,
     custoRealizado - bvRealizado,
@@ -72,18 +76,18 @@ export function ResumoResultado({
 
       <div className="flex flex-col">
         <Linha
-          rotulo="Planejado"
-          custo={custoPlanejado}
-          resultado={resultadoPlanejado}
+          rotulo="Resultado Op. (Planejado)"
+          resultadoOperacional={planejado.resultadoOperacional}
+          resultado={planejado.resultadoGeral}
           ausente="sem planejado"
           moeda={moeda}
         />
         {/* Divisória mais leve que a borda do card: separa duas linhas do
             mesmo bloco, não dois blocos. */}
         <Linha
-          rotulo="Realizado"
-          custo={custoRealizado}
-          resultado={resultadoRealizado}
+          rotulo="Resultado Op. (Realizado)"
+          resultadoOperacional={realizado.resultadoOperacional}
+          resultado={realizado.resultadoGeral}
           ausente="sem realizado"
           moeda={moeda}
           separador
@@ -95,14 +99,14 @@ export function ResumoResultado({
 
 function Linha({
   rotulo,
-  custo,
+  resultadoOperacional,
   resultado,
   ausente,
   moeda,
   separador,
 }: {
   rotulo: string;
-  custo: number;
+  resultadoOperacional: number | null;
   resultado: number | null;
   ausente: string;
   moeda: string;
@@ -115,16 +119,22 @@ function Linha({
         separador && "border-t border-border/60",
       )}
     >
-      <span className="w-[74px] text-[10.5px] font-bold uppercase tracking-[0.07em] text-muted-foreground">
+      <span className="w-[176px] whitespace-nowrap text-[10.5px] font-bold uppercase tracking-[0.07em] text-muted-foreground">
         {rotulo}
       </span>
       <span
         className={cn(
           "w-[140px] whitespace-nowrap text-right font-mono text-base font-semibold",
-          custo > 0 ? "text-foreground" : "text-muted-foreground",
+          resultadoOperacional === null
+            ? "text-muted-foreground"
+            : resultadoOperacional >= 0
+              ? "text-emerald-700"
+              : "text-california-red",
         )}
       >
-        {custo > 0 ? formatCurrency(custo, moeda) : "—"}
+        {resultadoOperacional === null
+          ? "—"
+          : formatCurrency(resultadoOperacional, moeda)}
       </span>
       <span className="flex min-w-[118px] items-baseline justify-end gap-1.5">
         {resultado === null ? (

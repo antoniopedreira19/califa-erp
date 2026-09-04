@@ -70,9 +70,10 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 044 | [A alíquota de 19,53% já vem escolhida na versão que nasce do zero](044-aliquota-padrao-no-orcamento-novo.md) | 2026-09-03 |
 | 045 | [Rentabilidade por item na planilha do job, e o "Exibir" que liga de verdade](045-rentabilidade-por-item-na-planilha-do-job.md) | 2026-09-03 |
 | 046 | [A célula selecionada: as planilhas se navegam pelo teclado, e a linha nova não trava](046-navegacao-por-teclado-nas-planilhas.md) | 2026-09-03 |
+| 047 | [O resumo do cabeçalho mostra o resultado operacional, não o custo](047-resumo-do-cabecalho-mostra-resultado-operacional.md) | 2026-09-04 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
 > data é a da decisão, não a da posição na fila.
 
-**Próximo número livre: 047.**
+**Próximo número livre: 048.**
