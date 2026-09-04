@@ -3,8 +3,19 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, ChevronRight, Search } from "lucide-react";
+import {
+  ArrowRight,
+  CheckCircle2,
+  ChevronRight,
+  CornerUpLeft,
+  Pencil,
+  Search,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import {
+  DescritivoPopover,
+  DescritivoRodapeNota,
+} from "@/components/ui/descritivo-popover";
 import {
   Select,
   SelectContent,
@@ -30,8 +41,15 @@ export interface JobRow {
   regional_id: string | null;
   regional_nome: string | null;
   responsavel_id: string | null;
+  /** Descritivo do job (coluna `jobs.observacoes`) — obrigatório no envio
+   *  para abertura desde a decisão 043. Nulo nos 27 jobs anteriores à
+   *  regra, e nesses o ícone da linha fica apagado. */
+  observacoes: string | null;
   projeto_codigo: string | null;
   projeto_nome: string | null;
+  /** Descrição do projeto, mostrada na faixa do grupo. Vem repetida em
+   *  todas as linhas do mesmo projeto — é o embed do projeto. */
+  projeto_descricao: string | null;
   cliente_nome: string | null;
   responsavel_nome: string | null;
   empresa_id: string | null;
@@ -79,6 +97,7 @@ interface GrupoProjeto {
   codigo: string | null;
   nome: string | null;
   cliente: string | null;
+  descricao: string | null;
   jobs: JobRow[];
   total: number;
   aberto: boolean;
@@ -120,6 +139,13 @@ export function JobsList({
   // precisar semear o state com os ids dos projetos no mount.
   const [fechadosIds, setFechadosIds] = React.useState<Set<string>>(new Set());
   const [empresaFiltro, setEmpresaFiltro] = React.useState<string>("todas");
+  // Qual cartão de descritivo está aberto. A chave carrega o tipo porque
+  // a tela tem dois: `g:<projetoId>` na faixa do grupo e `j:<jobId>` na
+  // linha. Um state só é o que garante um cartão por vez E o que deixa o
+  // "Ver descritivo do projeto" do cartão do job abrir o cartão do grupo.
+  const [descritivoAberto, setDescritivoAberto] = React.useState<string | null>(
+    null,
+  );
 
   /** Produtos e regionais que EXISTEM nos jobs desta tela — oferecer
    *  opção que não filtra nada é convite a um resultado vazio. */
@@ -196,6 +222,7 @@ export function JobsList({
         codigo: primeiro.projeto_codigo,
         nome: primeiro.projeto_nome,
         cliente: primeiro.cliente_nome,
+        descricao: primeiro.projeto_descricao,
         jobs: visiveis,
         total: visiveis.reduce((s, j) => s + (j.valor_total ?? 0), 0),
         // Com filtro ativo o grupo abre sempre: fechado ele esconderia
@@ -380,7 +407,11 @@ export function JobsList({
                     g.aberto ? "bg-muted/90" : "bg-muted/40",
                   )}
                 >
-                  <td colSpan={10} className="p-0">
+                  {/* A faixa cobre a tabela INTEIRA: são 12 colunas no
+                      cabeçalho e nas linhas de job. Estava em 10 e a faixa
+                      morria antes de Valor total e Status, deixando o fim
+                      de cada linha de projeto em branco (04/09/2026). */}
+                  <td colSpan={12} className="p-0">
                     <div className="grid grid-cols-[32px_1fr_auto_auto_auto] items-center gap-4 py-[11px] pl-2 pr-4">
                       <div className="flex items-center justify-center">
                         <span
@@ -399,6 +430,24 @@ export function JobsList({
                         <span className="text-[13.5px] font-semibold">
                           {g.nome ?? "Projeto"}
                         </span>
+                        <DescritivoPopover
+                          rotulo="Descritivo do projeto"
+                          codigo={g.codigo}
+                          nome={g.nome}
+                          texto={g.descricao}
+                          aberto={descritivoAberto === `g:${g.projetoId}`}
+                          onAbertoChange={(v) =>
+                            setDescritivoAberto(v ? `g:${g.projetoId}` : null)
+                          }
+                          rodape={
+                            <DescritivoRodapeNota
+                              icone={<Pencil className="h-3 w-3 flex-none" />}
+                            >
+                              Campo obrigatório do projeto · alterar em Editar
+                              projeto
+                            </DescritivoRodapeNota>
+                          }
+                        />
                         <span className="h-3 w-px bg-[#dcdcdc]" />
                         <span className="text-xs text-muted-foreground">
                           {g.cliente ?? "—"}
@@ -463,7 +512,48 @@ export function JobsList({
                           {j.codigo}
                         </Link>
                       </td>
-                      <td className="px-4 py-3 font-medium">{j.nome}</td>
+                      <td className="px-4 py-3 font-medium">
+                        <span className="inline-flex items-center gap-1.5">
+                          {j.nome}
+                          <DescritivoPopover
+                            rotulo="Descritivo do job"
+                            codigo={j.codigo}
+                            nome={j.nome}
+                            texto={j.observacoes}
+                            aberto={descritivoAberto === `j:${j.id}`}
+                            onAbertoChange={(v) =>
+                              setDescritivoAberto(v ? `j:${j.id}` : null)
+                            }
+                            rodape={
+                              <>
+                                <DescritivoRodapeNota
+                                  icone={
+                                    <CheckCircle2 className="h-3 w-3 flex-none" />
+                                  }
+                                >
+                                  Exigido no envio do job para abertura
+                                </DescritivoRodapeNota>
+                                {/* Troca de cartão sem fechar: o do grupo
+                                    assume no lugar deste. Só aparece se o
+                                    projeto tiver descritivo — senão o
+                                    cartão abriria vazio. */}
+                                {g.descricao?.trim() && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setDescritivoAberto(`g:${g.projetoId}`)
+                                    }
+                                    className="flex items-center gap-1.5 text-left text-[11.5px] font-semibold text-california-red hover:text-california-red-hover"
+                                  >
+                                    <CornerUpLeft className="h-3 w-3 flex-none" />
+                                    Ver descritivo do projeto
+                                  </button>
+                                )}
+                              </>
+                            }
+                          />
+                        </span>
+                      </td>
                       <td className="px-4 py-3 text-center">
                         {j.empresa_nome ? (
                           <span className="inline-flex items-center whitespace-nowrap rounded-full border border-border bg-muted/80 px-2.5 py-0.5 text-[11px] font-medium text-foreground">

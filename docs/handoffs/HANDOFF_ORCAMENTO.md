@@ -271,6 +271,13 @@ Cores computadas conferidas contra o spec do design: `#f1f0ec`, `#e8f0fd`/`#1e4f
 - Em `jobs` cidade é texto livre; no projeto virou FK — padronizar o dado antes de a base crescer. `regional_id` e `data_fim_prevista` já existiam em `jobs` e agora sobem para o projeto.
 - Formulário: Nome em linha inteira; Cliente/Regional, Cidade/Categoria e Início/Final em duas colunas; Descrição opcional com contador que só aparece ao digitar. Categoria perde a opção "Sem categoria".
 - ⚠️ **2026-09-03: a Descrição virou obrigatória** (decisão 043), no criar e no editar. A coluna segue nullable — os 12 projetos gravados sem descrição só salvam depois de ganhar uma.
+- ⚠️ **2026-09-04: a Descrição se lê na lista** (decisão 051). Na lista de
+  projetos, um ícone ao lado do Nome abre a descrição num **cartão ancorado**
+  sobre a tabela — a lista não muda de tamanho. Fecha com clique fora, X ou
+  `Esc`; o clique dentro NÃO fecha, para dar para copiar o texto. Projeto sem
+  descrição (12 dos 19) fica com o **ícone apagado**. A busca **não** passou a
+  olhar a descrição — segue em código, nome, campanha e cliente (decisão do
+  Tiago, 04/09). Componente: `components/ui/descritivo-popover.tsx`.
 - **Campanha** sai da tela; coluna e dados preservados (a busca da lista ainda casa por campanha).
 - **Responsável** sai da tela e passa a ser o usuário logado; rótulo vira "Criado por" na lista, no detalhe e no filtro. A coluna continua `responsavel_id` — renomear colidiria com o `created_by` existente. `profiles.id` **é** o id do `auth.users`, então o mesmo valor serve às duas.
 - ⚠️ **`campanha` seria zerada em toda edição.** Campo opcional no Zod não basta: o `transform` devolve `null` para entrada ausente, então a chave entra no `UPDATE`. `atualizarProjeto` remove a chave quando o form não a envia. Vale para qualquer campo que saia de um form compartilhado entre criar e editar.
