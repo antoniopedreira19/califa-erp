@@ -744,6 +744,18 @@ export async function renomearGrupo(
   return { ok: true, id: grupoId };
 }
 
+/** Remove o grupo E os itens dele.
+ *
+ *  Até 04/09/2026 esta action recusava grupo com item dentro ("Remova os N
+ *  itens do grupo antes de excluí-lo"). Numa planilha importada, com dezenas
+ *  de linhas por grupo, isso virava trabalho manual que o sistema podia
+ *  fazer — decisão do Tiago (04/09/2026): a lixeira do grupo leva os itens
+ *  junto, e quem avisa é a confirmação da tela, que diz quantos são.
+ *
+ *  O delete vai por RPC (`deletar_grupo_orcamento`, migration
+ *  20260904100001) porque itens e grupo precisam sair na MESMA transação:
+ *  em duas chamadas separadas, se a segunda falhasse, os itens sumiriam e
+ *  sobraria um grupo vazio que ninguém pediu. */
 export async function removerGrupo(grupoId: string): Promise<ActionResult> {
   const session = await requireSession();
   const gate = await checarPermissao(session, "orcamentos.editar");
@@ -752,10 +764,10 @@ export async function removerGrupo(grupoId: string): Promise<ActionResult> {
 
   const { data: grupo } = await supabase
     .from("versoes_orcamento_grupos")
-    .select("versao_orcamento_id")
+    .select("versao_orcamento_id, nome")
     .eq("id", grupoId)
     .eq("tenant_id", session.activeTenant.id)
-    .maybeSingle<Pick<VersaoOrcamentoGrupo, "versao_orcamento_id">>();
+    .maybeSingle<Pick<VersaoOrcamentoGrupo, "versao_orcamento_id" | "nome">>();
 
   if (!grupo) return { ok: false, message: "Grupo não encontrado." };
 
@@ -768,30 +780,43 @@ export async function removerGrupo(grupoId: string): Promise<ActionResult> {
     return { ok: false, message: "Versão aprovada não permite remover grupo." };
   }
 
-  const supabase2 = createClient();
-  const { count } = await supabase2
+  // Quantos itens saem junto — para a auditoria. Depois do delete não há de
+  // onde ler.
+  const { count } = await supabase
     .from("versoes_orcamento_itens")
     .select("id", { count: "exact", head: true })
     .eq("grupo_id", grupoId)
     .eq("tenant_id", session.activeTenant.id);
 
-  if ((count ?? 0) > 0) {
-    return {
-      ok: false,
-      message: `Remova os ${count} ${count === 1 ? "item" : "itens"} do grupo antes de excluí-lo.`,
-    };
-  }
-
-  const { error } = await supabase
-    .from("versoes_orcamento_grupos")
-    .delete()
-    .eq("id", grupoId)
-    .eq("tenant_id", session.activeTenant.id);
+  const { error } = await supabase.rpc("deletar_grupo_orcamento", {
+    p_grupo_id: grupoId,
+  });
 
   if (error) {
     console.error("[grupos.remover]", error.message);
-    return { ok: false, message: "Não foi possível remover o grupo." };
+    // A versão não está aprovada, então job não deveria haver — mas
+    // `jobs_itens_orcado` aponta para os itens com NO ACTION, e se sobrou
+    // algum, dizer isso é mais útil que repetir "não foi possível".
+    const emUso = /foreign key|violates|referenced/i.test(error.message);
+    return {
+      ok: false,
+      message: emUso
+        ? "Não foi possível remover: há dados de job apontando para os itens deste grupo."
+        : "Não foi possível remover o grupo.",
+    };
   }
+
+  await logAuditEvent({
+    acao: "grupo_orcamento.removido",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "grupo_orcamento",
+    entidadeId: grupoId,
+    metadata: {
+      versao_orcamento_id: grupo.versao_orcamento_id,
+      nome: grupo.nome,
+      itens_apagados: count ?? 0,
+    },
+  });
 
   revalidatePath(`/orcamentos/${versao.projeto_id}/${versao.orcamento_id}`);
   return { ok: true, id: grupoId };

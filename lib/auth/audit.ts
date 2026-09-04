@@ -38,6 +38,10 @@ export type AuditAction =
   // não resolvesse. Como o registro deixa de existir, o metadata guarda o
   // que ele era.
   | "versao_orcamento.deletada"
+  // Remoção de um agrupamento da planilha da versão. Desde 04/09/2026 ela
+  // leva os itens do grupo junto, então o metadata guarda quantos foram —
+  // é o único rastro de que aquelas linhas existiram.
+  | "grupo_orcamento.removido"
   // SAVE — o crédito entre jobs (docs/decisions/028-save-entre-jobs.md).
   // Registrado porque marcar uma linha ou definir um consumo move
   // faturamento previsto e valor do job, e move dinheiro entre jobs.
