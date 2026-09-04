@@ -103,8 +103,12 @@ aparece no bloco "Aguardando envio" assim que o refresh chega.
 
 ## 6. Fora desta decisão
 
-- O "+" no formulário de **correção da PP rejeitada**
-  (`pps/editar-pp-drawer.tsx`) e nos combos de fornecedor do financeiro
-  (conta avulsa e recorrente). O dialog está pronto para ser reusado ali;
-  não foi pedido.
+- Os combos de fornecedor do **financeiro** (conta avulsa e recorrente).
+  O dialog está pronto para ser reusado ali; não foi pedido.
+
+  > ⚠️ **04/09/2026:** o "+" entrou também no formulário de **correção da
+  > PP rejeitada** (`pps/editar-pp-drawer.tsx`), a pedido do Tiago. Mesmo
+  > dialog, mesma seleção em dois tempos — a PP rejeitada volta muitas
+  > vezes porque o fornecedor estava errado, e trocar por um que ainda não
+  > existe exigia abandonar a correção no meio.
 - Exigir documento, e-mail e telefone na página `/fornecedores/novo`.

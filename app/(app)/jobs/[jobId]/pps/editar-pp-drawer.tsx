@@ -9,6 +9,7 @@ import {
   Image as ImageIcon,
   Trash2,
   AlertCircle,
+  Plus,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -37,6 +38,8 @@ import {
   type PedidoCompraNaLista,
 } from "@/lib/types";
 import { valorDaPPPorUnidade } from "@/lib/calculos/pps-item";
+import { NovoFornecedorDialog } from "@/app/(app)/fornecedores/novo-fornecedor-dialog";
+import type { FornecedorResumo } from "@/app/(app)/fornecedores/actions";
 import {
   prefixoAnexosPedidoCompra,
   reenviarPedidoCompra,
@@ -96,6 +99,38 @@ export function EditarPPDrawer({
   const [erro, setErro] = React.useState<string | null>(null);
 
   const [fornecedorId, setFornecedorId] = React.useState("");
+  // O mesmo cadastro rápido da emissão (decisão 048): a PP rejeitada
+  // muitas vezes volta porque o fornecedor estava errado, e trocar por um
+  // que ainda não existe exigia abandonar a correção no meio.
+  const [novoFornecedorOpen, setNovoFornecedorOpen] = React.useState(false);
+  const [fornecedorNovo, setFornecedorNovo] =
+    React.useState<FornecedorResumo | null>(null);
+  const fornecedoresVisiveis = React.useMemo(() => {
+    if (!fornecedorNovo || fornecedores.some((f) => f.id === fornecedorNovo.id)) {
+      return fornecedores;
+    }
+    return [...fornecedores, fornecedorNovo].sort((a, b) =>
+      (a.razao_social ?? a.nome).localeCompare(b.razao_social ?? b.nome),
+    );
+  }, [fornecedores, fornecedorNovo]);
+  // Seleção em dois tempos — o <select> nativo do Radix ainda não tem a
+  // <option> nova na renderização em que o valor chega, e devolve "".
+  const [fornecedorPendenteId, setFornecedorPendenteId] =
+    React.useState<string | null>(null);
+  React.useEffect(() => {
+    if (!fornecedorPendenteId) return;
+    if (fornecedoresVisiveis.some((f) => f.id === fornecedorPendenteId)) {
+      setFornecedorId(fornecedorPendenteId);
+      setFornecedorPendenteId(null);
+    }
+  }, [fornecedorPendenteId, fornecedoresVisiveis]);
+
+  /** Adota o fornecedor recém-criado (ou o existente achado pelo
+   *  documento) sem esperar o refresh do server. */
+  function adotarFornecedor(f: FornecedorResumo) {
+    if (!fornecedores.some((x) => x.id === f.id)) setFornecedorNovo(f);
+    setFornecedorPendenteId(f.id);
+  }
   const [empresaId, setEmpresaId] = React.useState("");
   const [prazoPagamento, setPrazoPagamento] = React.useState("");
   const [servico, setServico] = React.useState("");
@@ -134,6 +169,7 @@ export function EditarPPDrawer({
     setErro(null);
     setUploadPrefix(null);
     setFornecedorId(pp.fornecedor_id ?? "");
+    setFornecedorPendenteId(null);
     setEmpresaId(pp.empresa_id);
     setPrazoPagamento(pp.prazo_pagamento);
     setServico(pp.servico);
@@ -416,18 +452,33 @@ export function EditarPPDrawer({
 
               <div>
                 <label className="text-xs font-medium">Fornecedor *</label>
-                <Select value={fornecedorId} onValueChange={setFornecedorId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Escolha o fornecedor" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {fornecedores.map((f) => (
-                      <SelectItem key={f.id} value={f.id}>
-                        {f.razao_social ?? f.nome}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex items-center gap-2">
+                  <div className="min-w-0 flex-1">
+                    <Select value={fornecedorId} onValueChange={setFornecedorId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Escolha o fornecedor" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {fornecedoresVisiveis.map((f) => (
+                          <SelectItem key={f.id} value={f.id}>
+                            {f.razao_social ?? f.nome}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {/* Cadastro completo sem sair da correção (decisão 048). */}
+                  <button
+                    type="button"
+                    onClick={() => setNovoFornecedorOpen(true)}
+                    disabled={pending}
+                    title="Cadastrar fornecedor"
+                    aria-label="Cadastrar fornecedor"
+                    className="inline-flex h-10 w-10 flex-none items-center justify-center rounded-lg border border-border bg-white text-california-red transition-colors hover:border-california-red/40 hover:bg-california-red/[0.06] disabled:opacity-50"
+                  >
+                    <Plus className="h-[17px] w-[17px]" />
+                  </button>
+                </div>
               </div>
 
               <div>
@@ -641,6 +692,13 @@ export function EditarPPDrawer({
             </button>
           </div>
         </form>
+
+        <NovoFornecedorDialog
+          open={novoFornecedorOpen}
+          onOpenChange={setNovoFornecedorOpen}
+          onCriado={adotarFornecedor}
+          onSelecionarExistente={adotarFornecedor}
+        />
       </DrawerContent>
     </Dialog>
   );
