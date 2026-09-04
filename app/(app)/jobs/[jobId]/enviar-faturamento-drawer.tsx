@@ -24,7 +24,10 @@ import {
 } from "@/components/ui/select";
 import { MoneyInput } from "@/components/ui/money-input";
 import { cn, formatCurrency } from "@/lib/utils";
-import { enviarJobParaFaturamento } from "./actions-faturamento";
+import {
+  cadastrarPortalDoClienteDoJob,
+  enviarJobParaFaturamento,
+} from "./actions-faturamento";
 
 const SEM_PORTAL = "__sem_portal__";
 
@@ -124,7 +127,75 @@ export function EnviarFaturamentoDrawer({
     { valor: valorFaturado, data_vencimento: dataPrevistaFaturamento ?? hojeIso() },
   ]);
 
-  const portalEscolhido = portais.find((p) => p.id === portalId) ?? null;
+  // Cadastro do portal sem sair do envio (decisão 050, 04/09/2026). A
+  // lista vem do server component, então o portal que acabou de nascer
+  // só chegaria nela depois de um refresh — e refresh no meio do
+  // preenchimento zera o formulário (048). Enquanto isso ele mora aqui,
+  // mesclado à lista e deduplicado por id.
+  const [cadastrandoPortal, setCadastrandoPortal] = React.useState(false);
+  const [portalNome, setPortalNome] = React.useState("");
+  const [portalUrl, setPortalUrl] = React.useState("");
+  const [portalErro, setPortalErro] = React.useState<string | null>(null);
+  const [portalFieldErrors, setPortalFieldErrors] = React.useState<
+    Record<string, string[]>
+  >({});
+  const [salvandoPortal, startSalvarPortal] = React.useTransition();
+  const [portaisNovos, setPortaisNovos] = React.useState<PortalOption[]>([]);
+  const portaisVisiveis = React.useMemo(() => {
+    const extras = portaisNovos.filter(
+      (n) => !portais.some((p) => p.id === n.id),
+    );
+    if (extras.length === 0) return portais;
+    return [...portais, ...extras].sort((a, b) =>
+      a.nome.localeCompare(b.nome),
+    );
+  }, [portais, portaisNovos]);
+
+  // A seleção entra em dois tempos, de propósito: o Select do Radix
+  // espelha o valor num <select> nativo escondido, e se o valor e a
+  // <option> nova chegam na mesma renderização ele volta pra "" e dispara
+  // `onValueChange("")`, apagando a escolha. Primeiro o portal entra na
+  // lista; só quando já está lá o efeito seleciona.
+  const [portalPendenteId, setPortalPendenteId] = React.useState<
+    string | null
+  >(null);
+  React.useEffect(() => {
+    if (!portalPendenteId) return;
+    if (portaisVisiveis.some((p) => p.id === portalPendenteId)) {
+      setPortalId(portalPendenteId);
+      setPortalPendenteId(null);
+    }
+  }, [portalPendenteId, portaisVisiveis]);
+
+  const portalEscolhido =
+    portaisVisiveis.find((p) => p.id === portalId) ?? null;
+
+  function abrirCadastroPortal() {
+    setPortalNome("");
+    setPortalUrl("");
+    setPortalErro(null);
+    setPortalFieldErrors({});
+    setCadastrandoPortal(true);
+  }
+
+  function handleSalvarPortal() {
+    setPortalErro(null);
+    setPortalFieldErrors({});
+    startSalvarPortal(async () => {
+      const res = await cadastrarPortalDoClienteDoJob(jobId, {
+        nome: portalNome.trim(),
+        url: portalUrl.trim(),
+      });
+      if (!res.ok) {
+        setPortalErro(res.message);
+        if (res.fieldErrors) setPortalFieldErrors(res.fieldErrors);
+        return;
+      }
+      setPortaisNovos((atuais) => [...atuais, res.portal]);
+      setPortalPendenteId(res.portal.id);
+      setCadastrandoPortal(false);
+    });
+  }
 
   const somaParcelas = parcelas.reduce((s, p) => s + p.valor, 0);
   const somaFecha = Math.abs(somaParcelas - valorFaturado) < 0.01;
@@ -132,11 +203,15 @@ export function EnviarFaturamentoDrawer({
     (p) => p.valor > 0 && p.data_vencimento.length === 10,
   );
 
+  // Com o cadastro do portal aberto o envio espera: ou a pessoa salva o
+  // portal e ele entra selecionado, ou cancela — mas não manda o job com
+  // um portal pela metade na tela.
   const podeEnviar =
     descricaoNf.trim().length > 0 &&
     dataFaturamento.length === 10 &&
     somaFecha &&
-    parcelasCompletas;
+    parcelasCompletas &&
+    !cadastrandoPortal;
 
   /**
    * A data de faturamento é o vencimento da 1ª parcela. Mexer nela
@@ -410,28 +485,140 @@ export function EnviarFaturamentoDrawer({
 
             <div className="space-y-2">
               <Label htmlFor="portal">Portal de fornecedor do cliente</Label>
-              {portais.length === 0 ? (
-                <p className="rounded-lg border border-dashed border-border px-3.5 py-3 text-xs text-muted-foreground">
-                  Este cliente não tem portal cadastrado. Cadastre em
-                  Cadastros › Clientes se a nota precisar ser lançada em um.
-                </p>
+              {portaisVisiveis.length === 0 ? (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashed border-border px-3.5 py-3">
+                  <p className="text-xs text-muted-foreground">
+                    Este cliente não tem portal cadastrado. Se a nota
+                    precisar ser lançada em um, cadastre aqui mesmo.
+                  </p>
+                  {!cadastrandoPortal && (
+                    <button
+                      type="button"
+                      onClick={abrirCadastroPortal}
+                      disabled={pending}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-semibold transition-colors hover:border-california-red hover:text-california-red disabled:opacity-50"
+                    >
+                      <Plus className="h-3 w-3" />
+                      Cadastrar portal
+                    </button>
+                  )}
+                </div>
               ) : (
-                <Select value={portalId} onValueChange={setPortalId}>
-                  <SelectTrigger id="portal">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={SEM_PORTAL}>
-                      Sem portal
-                    </SelectItem>
-                    {portais.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>
-                        {p.nome}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex items-center gap-2">
+                  <div className="min-w-0 flex-1">
+                    <Select value={portalId} onValueChange={setPortalId}>
+                      <SelectTrigger id="portal">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={SEM_PORTAL}>
+                          Sem portal
+                        </SelectItem>
+                        {portaisVisiveis.map((p) => (
+                          <SelectItem key={p.id} value={p.id}>
+                            {p.nome}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {/* Cadastrar outro portal sem sair do envio — o mesmo
+                      "+" do fornecedor na PP (decisão 048). */}
+                  <button
+                    type="button"
+                    onClick={abrirCadastroPortal}
+                    disabled={pending || cadastrandoPortal}
+                    title="Cadastrar portal"
+                    aria-label="Cadastrar portal"
+                    className="inline-flex h-10 w-10 flex-none items-center justify-center rounded-lg border border-border bg-white text-california-red transition-colors hover:border-california-red/40 hover:bg-california-red/[0.06] disabled:opacity-50"
+                  >
+                    <Plus className="h-[17px] w-[17px]" />
+                  </button>
+                </div>
               )}
+
+              {cadastrandoPortal && (
+                <div className="space-y-3 rounded-xl border border-california-red/30 bg-california-red/[0.03] p-4">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-wider">
+                      Novo portal deste cliente
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Fica no cadastro do cliente e vale para os próximos
+                      jobs dele. Ao salvar, já entra selecionado aqui.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="portal-nome">
+                      Nome <span className="text-california-red">*</span>
+                    </Label>
+                    <Input
+                      id="portal-nome"
+                      value={portalNome}
+                      onChange={(e) => setPortalNome(e.target.value)}
+                      maxLength={80}
+                      autoFocus
+                      placeholder="Ex.: Coupa, Ariba, Portal NF"
+                    />
+                    {portalFieldErrors.nome?.map((m, i) => (
+                      <p key={i} className="text-xs text-california-red">
+                        {m}
+                      </p>
+                    ))}
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="portal-url">
+                      Link <span className="text-california-red">*</span>
+                    </Label>
+                    <Input
+                      id="portal-url"
+                      value={portalUrl}
+                      onChange={(e) => setPortalUrl(e.target.value)}
+                      maxLength={500}
+                      placeholder="https://..."
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          if (!salvandoPortal) handleSalvarPortal();
+                        }
+                      }}
+                    />
+                    {portalFieldErrors.url?.map((m, i) => (
+                      <p key={i} className="text-xs text-california-red">
+                        {m}
+                      </p>
+                    ))}
+                  </div>
+                  {portalErro && (
+                    <p className="rounded-lg border border-california-red/20 bg-california-red/5 px-3 py-2 text-xs text-california-red">
+                      {portalErro}
+                    </p>
+                  )}
+                  <div className="flex items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setCadastrandoPortal(false)}
+                      disabled={salvandoPortal}
+                      className="rounded-lg px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted disabled:opacity-50"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSalvarPortal}
+                      disabled={
+                        salvandoPortal ||
+                        portalNome.trim().length === 0 ||
+                        portalUrl.trim().length === 0
+                      }
+                      className="rounded-lg bg-california-red px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-california-red-hover disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {salvandoPortal ? "Salvando..." : "Salvar e selecionar"}
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {portalEscolhido && (
                 <a
                   href={portalEscolhido.url}

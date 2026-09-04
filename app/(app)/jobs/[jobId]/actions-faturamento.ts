@@ -6,7 +6,9 @@ import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { checarPermissao } from "@/lib/permissoes-server";
 import {
+  clientePortalSchema,
   envioFaturamentoSchema,
+  type ClientePortalInput,
   type EnvioFaturamentoInput,
 } from "@/lib/validations/envio-faturamento";
 import type { JobStatus } from "@/lib/types";
@@ -14,6 +16,111 @@ import type { JobStatus } from "@/lib/types";
 export type ActionResult =
   | { ok: true; id: string }
   | { ok: false; message: string; fieldErrors?: Record<string, string[]> };
+
+/** O portal como o drawer de envio o lista: id, nome e link. */
+export interface PortalCriado {
+  id: string;
+  nome: string;
+  url: string;
+}
+
+export type PortalResult =
+  | { ok: true; portal: PortalCriado }
+  | { ok: false; message: string; fieldErrors?: Record<string, string[]> };
+
+/**
+ * Cadastra um portal de fornecedor do cliente DE DENTRO do envio para
+ * faturamento (decisão 050, 04/09/2026).
+ *
+ * O cliente não vem do formulário: é o do job, relido aqui. Quem está
+ * enviando o job não precisa (nem deve) dizer para qual cliente o portal
+ * vai — é sempre o cliente daquele job. Devolve o registro para o drawer
+ * selecioná-lo na hora, sem esperar o refresh da página.
+ *
+ * O gate é `cadastros.clientes.portal_inline`, que espelha
+ * `jobs.enviar_faturamento`: o cadastro do cliente inteiro continua sendo
+ * do administrador; o que abre aqui é só o portal, e só para quem envia.
+ */
+export async function cadastrarPortalDoClienteDoJob(
+  jobId: string,
+  input: ClientePortalInput,
+): Promise<PortalResult> {
+  const session = await requireSession();
+  const gate = await checarPermissao(session, "cadastros.clientes.portal_inline");
+  if (!gate.ok) return gate;
+
+  const parsed = clientePortalSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      message: "Verifique os campos destacados.",
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
+
+  const supabase = createClient();
+
+  const { data: job } = await supabase
+    .from("jobs")
+    .select("id, projeto:projetos(cliente_id)")
+    .eq("id", jobId)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle<{ id: string; projeto: { cliente_id: string } | null }>();
+
+  if (!job) return { ok: false, message: "Job não encontrado." };
+
+  const clienteId = job.projeto?.cliente_id ?? null;
+  if (!clienteId) {
+    return {
+      ok: false,
+      message: "Este job não tem cliente vinculado — não há onde cadastrar o portal.",
+    };
+  }
+
+  const { data: novo, error } = await supabase
+    .from("cliente_portais")
+    .insert({
+      tenant_id: session.activeTenant.id,
+      cliente_id: clienteId,
+      nome: parsed.data.nome,
+      url: parsed.data.url,
+      created_by: session.profile.id,
+    })
+    .select("id, nome, url")
+    .single<PortalCriado>();
+
+  if (error || !novo) {
+    console.error("[cliente_portais.criar.envio]", error?.message);
+    // O nome é único por cliente (`uniq_cliente_portal_nome`). O drawer só
+    // lista os ativos, então a colisão que a pessoa não vê é com um portal
+    // inativo — e o caminho para esse é reativar, não recriar.
+    if (error?.message.includes("uniq_cliente_portal_nome")) {
+      return {
+        ok: false,
+        message:
+          "Já existe um portal com esse nome para este cliente. Se ele " +
+          "estiver inativo, reative em Cadastros › Clientes.",
+        fieldErrors: { nome: ["Nome já usado neste cliente."] },
+      };
+    }
+    return { ok: false, message: "Não foi possível cadastrar o portal." };
+  }
+
+  await logAuditEvent({
+    acao: "cliente_portal.criado",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "cliente",
+    entidadeId: clienteId,
+    metadata: { nome: parsed.data.nome, origem: "envio_faturamento", job_id: jobId },
+  });
+
+  // A página do cliente lista os portais; a do job NÃO entra aqui de
+  // propósito — o drawer segura o portal novo na lista dele até fechar, e
+  // o refresh no meio do preenchimento é o que zerava formulário (048).
+  revalidatePath(`/clientes/${clienteId}`);
+
+  return { ok: true, portal: novo };
+}
 
 function formatarBRL(n: number): string {
   return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
