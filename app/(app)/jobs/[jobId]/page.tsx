@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { nomeVersao } from "@/lib/nome-versao";
 import { createClient } from "@/lib/supabase/server";
+import { pode } from "@/lib/permissoes";
 import { listActiveMembers } from "@/lib/data/members";
 import { contatosDeCobrancaDoJob } from "@/lib/data/contatos-cobranca";
 import type { Job, JobStatus, Regional } from "@/lib/types";
@@ -184,14 +185,17 @@ export default async function JobDetailPage({
               <Badge className={cn("border", statusBadgeClasses(job.status))}>
                 {jobStatusLabel(job.status)}
               </Badge>
-              {/* Encerrado e cancelado são histórico: sem edição. */}
-              {!jobEstaCongelado(job.status) && (
-                <JobEditorDrawer
-                  job={job}
-                  regionais={regionais}
-                  responsaveis={responsaveis}
-                />
-              )}
+              {/* Encerrado e cancelado sao historico: sem edicao. Papeis
+                  sem `jobs.editar_metadata` (Financeiro, Freelancer) tambem
+                  nao veem o botao. */}
+              {!jobEstaCongelado(job.status) &&
+                pode(session.activeRole, "jobs.editar_metadata") && (
+                  <JobEditorDrawer
+                    job={job}
+                    regionais={regionais}
+                    responsaveis={responsaveis}
+                  />
+                )}
             </div>
           </div>
 
@@ -221,9 +225,11 @@ export default async function JobDetailPage({
             Motivo da rejeição pelo financeiro
           </p>
           <p className="text-sm text-foreground whitespace-pre-wrap">{job.motivo_rejeicao}</p>
-          <div className="mt-4">
-            <ReenviarAprovacaoButton jobId={job.id} />
-          </div>
+          {pode(session.activeRole, "jobs.editar_metadata") && (
+            <div className="mt-4">
+              <ReenviarAprovacaoButton jobId={job.id} />
+            </div>
+          )}
         </div>
       )}
 
@@ -357,6 +363,7 @@ export default async function JobDetailPage({
             itens={threadChatPPs}
             minhaArea={areaDoPapel(session.activeRole)}
             naoLidasIniciais={naoLidasPPs}
+            podeEnviar={pode(session.activeRole, "chat.enviar")}
           />
         }
         chatCount={naoLidas}
@@ -367,6 +374,7 @@ export default async function JobDetailPage({
             itens={threadChat}
             naoLidas={naoLidas}
             minhaArea={areaDoPapel(session.activeRole)}
+            podeEnviar={pode(session.activeRole, "chat.enviar")}
           />
         }
       />

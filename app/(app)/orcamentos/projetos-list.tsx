@@ -83,11 +83,18 @@ function CelulaFunil({ valor }: { valor: number }) {
   );
 }
 
-export function ProjetosList({ projetos, clientes, meusProjetoIds }: Props) {
+export function ProjetosList({
+  projetos,
+  clientes,
+  meusProjetoIds,
+  podeAlternarMeusTodos = true,
+}: Props & { podeAlternarMeusTodos?: boolean }) {
   const router = useRouter();
-  // Meus é o padrão, igual à lista de Jobs: quem abre quer o próprio
-  // trabalho, e "Todos" fica a um clique.
-  const [meus, setMeus] = React.useState(true);
+  // Meus é o padrão pra quem pode alternar. Freelancer nao pode alternar
+  // e comeca em "todos" — o RLS ja restringiu a lista aos projetos onde
+  // ele participa. Fonte-verdade: `lib/permissoes.ts`, recurso
+  // `listas.chave_meus_todos`.
+  const [meus, setMeus] = React.useState(podeAlternarMeusTodos);
   const [busca, setBusca] = React.useState("");
   const [clienteFiltro, setClienteFiltro] = React.useState<string>("todos");
   const [produtoFiltro, setProdutoFiltro] = React.useState<string>("todos");
@@ -166,7 +173,11 @@ export function ProjetosList({ projetos, clientes, meusProjetoIds }: Props) {
       {/* A chave "Meus/Todos" abre a barra, na mesma posição da lista de
           Jobs — o recorte é a primeira decisão de quem chega. */}
       <div className="flex flex-wrap items-center gap-3">
-        <ChaveMeusTodos meus={meus} onChange={setMeus} />
+        <ChaveMeusTodos
+          meus={meus}
+          onChange={setMeus}
+          visivel={podeAlternarMeusTodos}
+        />
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input

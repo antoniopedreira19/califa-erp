@@ -23,6 +23,11 @@ interface Props {
   naoLidas: number;
   /** Área de quem está logado — vem do papel, não é escolhida. */
   minhaArea: ChatArea;
+  /**
+   * Se `false`, o campo de escrita nao renderiza (Financeiro e Freelancer
+   * so leem). Fonte-verdade: `lib/permissoes.ts`, recurso `chat.enviar`.
+   */
+  podeEnviar?: boolean;
 }
 
 function classeValor(tom: ChatTom): string {
@@ -44,6 +49,7 @@ export function JobChatSection({
   itens,
   naoLidas,
   minhaArea,
+  podeEnviar = true,
 }: Props) {
   const router = useRouter();
   const [pending, setPending] = React.useState(false);
@@ -149,13 +155,15 @@ export function JobChatSection({
         <div ref={fimRef} />
       </div>
 
-      <ChatInput
-        minhaArea={minhaArea}
-        pending={pending}
-        erro={erro}
-        onLimparErro={() => setErro(null)}
-        onEnviar={handleEnviar}
-      />
+      {podeEnviar && (
+        <ChatInput
+          minhaArea={minhaArea}
+          pending={pending}
+          erro={erro}
+          onLimparErro={() => setErro(null)}
+          onEnviar={handleEnviar}
+        />
+      )}
     </div>
   );
 }

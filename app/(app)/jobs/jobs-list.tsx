@@ -88,15 +88,27 @@ export function JobsList({
   rows,
   empresas,
   usuarioId,
+  podeAlternarMeusTodos = true,
 }: {
   rows: JobRow[];
   empresas: { id: string; razao_social: string; nome_fantasia: string | null }[];
   /** Quem está logado — define o recorte "Meus". */
   usuarioId: string;
+  /**
+   * Se `false`, a chave "Meus/Todos" nao aparece e o filtro `meus`
+   * comeca em `false` (mostra todos os jobs que o RLS deixou passar).
+   * Usado pro Freelancer, que so ve jobs onde participa da equipe do
+   * projeto — RLS ja fez esse recorte, entao filtrar por
+   * `responsavel_id` na tela retornaria zero. Fonte-verdade da regra:
+   * `lib/permissoes.ts`, recurso `listas.chave_meus_todos`.
+   */
+  podeAlternarMeusTodos?: boolean;
 }) {
   const router = useRouter();
-  // Meus é o padrão: quem abre a lista quer o próprio trabalho.
-  const [meus, setMeus] = React.useState(true);
+  // Meus é o padrão pra quem pode alternar — quem abre a lista quer o
+  // próprio trabalho. Freelancer nao pode alternar; comeca em "todos" e
+  // conta com o filtro do RLS.
+  const [meus, setMeus] = React.useState(podeAlternarMeusTodos);
   // Status virou seleção ÚNICA (design 01/09/2026). Eram cinco pílulas
   // combináveis; ocupavam a barra inteira e não deixavam espaço para
   // Produto e Regional.
@@ -221,7 +233,11 @@ export function JobsList({
           substituíram as pílulas de status, que ocupavam a barra inteira. */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
-          <ChaveMeusTodos meus={meus} onChange={setMeus} />
+          <ChaveMeusTodos
+            meus={meus}
+            onChange={setMeus}
+            visivel={podeAlternarMeusTodos}
+          />
           <Select value={statusFiltro} onValueChange={setStatusFiltro}>
             <SelectTrigger
               className={cn(

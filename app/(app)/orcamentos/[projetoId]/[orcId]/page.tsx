@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, FileStack, FolderTree, Lock } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
+import { pode } from "@/lib/permissoes";
 import { listActiveMembers } from "@/lib/data/members";
 import { listarCidadesIniciais, type CidadeOpcao } from "@/lib/data/cidades";
 import {
@@ -304,13 +305,24 @@ export default async function OrcamentoDetailPage({
   const versoesTodas = (versoesRes.data ?? []) as VersaoOrcamento[];
   const versaoAtiva = escolherVersaoAtiva(versoesTodas, versaoPedida);
 
+  // Financeiro (e outros papeis sem editar_orcamento) entram no mesmo
+  // mecanismo de read-only da versao aprovada: nenhum botao de acao
+  // aparece, nenhum campo edita. Task 3 ja fecha o servidor; esta
+  // camada tira a UI enganosa. Fonte-verdade: `lib/permissoes.ts`.
+  const readOnlyPeloPapel = !pode(session.activeRole, "orcamentos.editar");
   const protegido =
-    orcamento.status === "aprovado" || orcamento.status === "job_criado";
+    orcamento.status === "aprovado" ||
+    orcamento.status === "job_criado" ||
+    readOnlyPeloPapel;
   const podeCriarVersao =
-    orcamento.status !== "job_criado" && orcamento.status !== "cancelado";
-  const motivoBloqueio = podeCriarVersao
-    ? undefined
-    : `Orçamento ${orcamentoStatusLabel(orcamento.status).toLowerCase()} não aceita novas versões.`;
+    orcamento.status !== "job_criado" &&
+    orcamento.status !== "cancelado" &&
+    !readOnlyPeloPapel;
+  const motivoBloqueio = readOnlyPeloPapel
+    ? "Seu papel não permite editar orçamentos."
+    : podeCriarVersao
+      ? undefined
+      : `Orçamento ${orcamentoStatusLabel(orcamento.status).toLowerCase()} não aceita novas versões.`;
 
   // ONDA 2 — depende da aba selecionada (e do job, já conhecido).
   // `agregado` cobre TODAS as versões: é o resumo "N itens · R$ X" que o
@@ -481,8 +493,9 @@ export default async function OrcamentoDetailPage({
               }
             />
             {/* Exportar / Duplicar / Cancelar incidem sobre a ABA
-                selecionada — por isso só existem quando há uma. */}
-            {versaoAtiva && (
+                selecionada — por isso só existem quando há uma. Papeis
+                sem `orcamentos.editar` (Financeiro, Freelancer) nao veem. */}
+            {versaoAtiva && !readOnlyPeloPapel && (
               <AcoesVersao
                 projetoId={params.projetoId}
                 orcamentoId={orcamento.id}
@@ -709,7 +722,13 @@ function VersaoSelecionada({
     bvsPorItem[bv.item_versao_id] = { ...bv, valor: Number(bv.valor ?? 0) };
   }
 
-  const readOnly = versao.status === "aprovada" || versao.status === "cancelada";
+  // Financeiro cai aqui como se a versao estivesse aprovada (ver `readOnlyPeloPapel`
+  // na page): a planilha inteira e os controles secundarios ficam read-only.
+  const readOnlyPeloPapel = !pode(session.activeRole, "orcamentos.editar");
+  const readOnly =
+    versao.status === "aprovada" ||
+    versao.status === "cancelada" ||
+    readOnlyPeloPapel;
   const temBv = Object.keys(bvsPorItem).length > 0;
 
   const totais = calcularTotaisVersao(
@@ -806,18 +825,21 @@ function VersaoSelecionada({
             taxaCambio={Number(versao.taxa_cambio)}
             percentualHonorarios={Number(versao.percentual_honorarios)}
             percentualImposto={Number(versao.percentual_imposto)}
-            // Honorários nasce do cadastro do cliente; divergir dele nesta
-            // versão é ato de administrador (decisão de 11/08/2026).
-            podeEditarHonorarios={session.activeRole === "administrador"}
+            // Honorarios nasce do cadastro do cliente; divergir dele nesta
+            // versao e ato de quem tem `orcamentos.editar_impostos`
+            // (Admin + GP a partir de 03/09/2026 — antes era so admin).
+            podeEditarHonorarios={pode(session.activeRole, "orcamentos.editar_impostos")}
             clienteNome={clienteNome}
             readOnly={versao.status === "aprovada"}
             readOnlyReason="Versão aprovada não pode ser editada."
           />
-          <AprovacaoActions
-            versaoId={versao.id}
-            status={versao.status}
-            temJobAtivo={temJobAtivo}
-          />
+          {pode(session.activeRole, "orcamentos.aprovar") && (
+            <AprovacaoActions
+              versaoId={versao.id}
+              status={versao.status}
+              temJobAtivo={temJobAtivo}
+            />
+          )}
         </div>
 
         <ResumoRentabilidade

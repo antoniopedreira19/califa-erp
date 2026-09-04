@@ -4,6 +4,7 @@ import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { escolherJobDoFunil, estagioFunil } from "@/lib/calculos/funil";
 import type { Cliente, JobStatus, OrcamentoStatus, Projeto } from "@/lib/types";
+import { pode } from "@/lib/permissoes";
 import { EmptyState } from "@/components/empty-state";
 import { ProjetosList, type ProjetoRow } from "./projetos-list";
 
@@ -268,6 +269,7 @@ export default async function ProjetosPage() {
           projetos={projetos}
           clientes={clientes}
           meusProjetoIds={Array.from(meusProjetoIds)}
+          podeAlternarMeusTodos={pode(session.activeRole, "listas.chave_meus_todos")}
         />
       )}
     </div>
