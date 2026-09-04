@@ -1,5 +1,12 @@
 import Link from "next/link";
-import { ArrowLeft, MailWarning, ShieldCheck, UserPlus, Users } from "lucide-react";
+import {
+  ArrowLeft,
+  MailWarning,
+  ShieldCheck,
+  Table2,
+  UserPlus,
+  Users,
+} from "lucide-react";
 import { requireAdmin } from "@/lib/auth/session";
 import { createServiceClient } from "@/lib/supabase/server";
 import { roleLabel, type AppRole } from "@/lib/types";
@@ -118,7 +125,17 @@ export default async function AdminUsuariosPage() {
             recebe um e-mail com link para definir a senha e ativar o acesso.
           </p>
         </div>
-        <ConvidarUsuarioDrawer />
+        <div className="flex items-center gap-2">
+          <Link
+            href="/admin/usuarios/permissoes"
+            prefetch={false}
+            className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2.5 text-sm font-semibold text-foreground shadow-sm hover:bg-accent transition-colors"
+          >
+            <Table2 className="h-4 w-4" />
+            Ver matriz de permissões
+          </Link>
+          <ConvidarUsuarioDrawer />
+        </div>
       </header>
 
       <div className="rounded-2xl border border-border bg-card shadow-soft overflow-hidden">
