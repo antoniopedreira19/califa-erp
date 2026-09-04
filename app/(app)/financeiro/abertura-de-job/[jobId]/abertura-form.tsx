@@ -581,7 +581,12 @@ export function AberturaForm({
       }
 
       setConfirmarAberto(false);
-      router.push(`/jobs/${job.id}?from=financeiro`);
+      // Volta para a fila de abertura, e nao para o detalhe do job: quem
+      // abre job costuma abrir varios em sequencia, e cair no modulo Jobs
+      // obrigava a refazer o caminho de volta a cada um. O `?aba=` e o
+      // mesmo destino que o "Reprovar job" ja usa (decisao do Tiago,
+      // 04/09/2026).
+      router.push("/financeiro/abertura-de-job?aba=aguardando");
       router.refresh();
     });
   }
