@@ -1049,6 +1049,13 @@ export interface JobItemRealizado {
   quantidade_realizada: number;
   dias_meses_realizado: number;
   total_realizado: number;
+  /** Quando alguém confirmou que TODAS as PPs deste item já foram
+   *  geradas (decisão 052). Null = item em aberto: a previsão de custo
+   *  dele segue ancorada no planejado. Marcado, o item passa a valer o
+   *  que as PPs dizem. */
+  pps_concluidas_em: string | null;
+  /** Quem confirmou. Some junto com a data quando o item é reaberto. */
+  pps_concluidas_por: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;

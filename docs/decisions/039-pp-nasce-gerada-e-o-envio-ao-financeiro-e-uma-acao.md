@@ -151,3 +151,11 @@ Gerar PP, Salvar alterações e Cancelar passaram a devolver para o painel
 "Destrinchar realizado" em vez de fechar tudo, e o combo de fornecedor
 ganhou um "+" que cadastra o fornecedor ali mesmo, com trava de documento
 repetido. Ver [048](048-fornecedor-nasce-de-dentro-da-pp.md).
+
+## ⚠️ Nota de 2026-09-04 — a PP passou a sair com uma resposta
+
+O formulário ganhou uma pergunta obrigatória — *"Esta é a última PP deste
+item?"* — e o chip da calha ganhou um ✓ verde que convive com o círculo
+vermelho das pendências de envio. A resposta é sobre o item, e é ela que
+troca a base da previsão de custo dele. Ver
+[052](052-todas-as-pps-do-item-foram-geradas.md).

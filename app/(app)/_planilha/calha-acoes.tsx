@@ -86,6 +86,11 @@ export interface AcaoCalha {
    *  pílula. Zero ou ausente: nenhum círculo. Nasceu para as PPs geradas
    *  e ainda não enviadas ao financeiro (02/09/2026). */
   badge?: number;
+  /** Classe de cor do ÍCONE, quando ele precisa dizer algo que o rótulo
+   *  não diz. Hoje só o ✓ do item com todas as PPs geradas usa isto
+   *  (decisão 052): o texto segue "PPs · N", em neutro, e o verde é o
+   *  único sinal de que aquele item está fechado. */
+  corIcone?: string;
 }
 
 /** O círculo de pendências, no canto superior direito da pílula.
@@ -107,8 +112,11 @@ function Notificacao({ n }: { n: number }) {
 
 /** Ícone da consulta em cinza, como na pílula de hoje: o verbo é do
  *  texto, não do ícone. Na criação o ícone acompanha a cor do rótulo. */
-function classeIcone(criar: boolean) {
-  return cn("h-3.5 w-3.5 flex-none", !criar && "text-muted-foreground");
+function classeIcone(criar: boolean, corIcone?: string) {
+  return cn(
+    "h-3.5 w-3.5 flex-none",
+    corIcone ?? (!criar ? "text-muted-foreground" : undefined),
+  );
 }
 
 function Meia({ acao }: { acao: AcaoCalha }) {
@@ -128,7 +136,7 @@ function Meia({ acao }: { acao: AcaoCalha }) {
             acao.criar ? HOVER_CRIAR : HOVER_CONSULTAR,
           )}
         >
-          <Icone className={classeIcone(acao.criar)} />
+          <Icone className={classeIcone(acao.criar, acao.corIcone)} />
           {acao.sigla}
         </button>
       </TooltipTrigger>
@@ -154,7 +162,7 @@ function Inteira({ acao }: { acao: AcaoCalha }) {
             acao.criar ? BORDA_HOVER_CRIAR : BORDA_HOVER_CONSULTAR,
           )}
         >
-          <Icone className={classeIcone(acao.criar)} />
+          <Icone className={classeIcone(acao.criar, acao.corIcone)} />
           {acao.rotulo}
         </button>
       </TooltipTrigger>

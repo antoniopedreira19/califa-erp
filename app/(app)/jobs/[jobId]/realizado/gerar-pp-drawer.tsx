@@ -74,6 +74,11 @@ interface Props {
   emPPsEmitidas: number;
   /** PP gerada sendo editada. Null = gerar uma nova (02/09/2026). */
   ppEditando: PedidoCompraNaLista | null;
+  /** O item já está marcado como "todas as PPs geradas"? Só a edição
+   *  começa com a pergunta respondida — a PP nova sempre pergunta do
+   *  zero, porque gerar PP num item marcado exige reabri-lo antes
+   *  (decisão 052). */
+  itemConcluido: boolean;
   onSuccess?: (codigo: string, modo: "gerada" | "editada") => void;
 }
 
@@ -157,6 +162,7 @@ export function GerarPPDrawer({
   quantidadePlanejada,
   dmPlanejado,
   emPPsEmitidas,
+  itemConcluido,
   ppEditando,
   onSuccess,
 }: Props) {
@@ -215,6 +221,10 @@ export function GerarPPDrawer({
     // (visto em 04/09/2026). A lista mesclada segura o fornecedor novo
     // até o drawer fechar — e o fechamento já dispara o refresh.
   }
+  // "Esta é a última PP deste item?" — obrigatória (decisão 052). Null é
+  // "ainda não respondeu", e é o que segura o botão de gerar.
+  const [ultimaPP, setUltimaPP] = React.useState<boolean | null>(null);
+  const [faltaResposta, setFaltaResposta] = React.useState(false);
   const [responsavelId, setResponsavelId] = React.useState<string>("");
   const [empresaId, setEmpresaId] = React.useState<string>(defaultEmpresaId);
   const [prazoPagamento, setPrazoPagamento] = React.useState<string>(defaultPrazoPagamento());
@@ -269,6 +279,10 @@ export function GerarPPDrawer({
     setErro(null);
     setPpId(null);
     setFornecedorPendenteId(null);
+    setFaltaResposta(false);
+    // Editar uma PP gerada não pergunta do zero: a resposta que vale é a
+    // situação atual do item, e o GP muda se quiser.
+    setUltimaPP(ppEditando ? itemConcluido : null);
     setUploadPrefix(null);
     setAnexos([]);
     setRemovidos(new Set());
@@ -558,6 +572,11 @@ export function GerarPPDrawer({
       setErro("Escolha um responsável.");
       return;
     }
+    if (ultimaPP === null) {
+      setFaltaResposta(true);
+      setErro("Responda se esta é a última PP deste item.");
+      return;
+    }
     if (!verbaProducao && !fornecedorId) {
       setErro("Escolha um fornecedor.");
       return;
@@ -659,12 +678,14 @@ export function GerarPPDrawer({
               dados,
               anexosParaAction,
               Array.from(removidos),
+              ultimaPP,
             )
           : await finalizarPedidoCompra(
               ppId,
               dados,
               anexosParaAction,
               itemRealizadoId,
+              ultimaPP,
             );
 
         if (!res.ok) {
@@ -1194,6 +1215,75 @@ export function GerarPPDrawer({
                 </ul>
               )}
             </div>
+          </div>
+
+          {/* A pergunta que fecha (ou mantém aberto) o item — último
+              campo antes dos botões, como o design pede. Ela não é sobre
+              esta PP: é sobre o ITEM, e é o que troca a base da previsão
+              de custo dele no fluxo de caixa (decisão 052). */}
+          <div className="flex flex-col gap-2 border-t border-border px-6 pb-5 pt-4">
+            <span className="text-xs font-medium">
+              Esta é a última PP deste item? *
+            </span>
+            <div className="grid grid-cols-2 gap-2.5">
+              {[
+                { valor: false, rotulo: "Não, ainda faltam PPs" },
+                { valor: true, rotulo: "Sim, é a última" },
+              ].map((opcao) => {
+                const escolhida = ultimaPP === opcao.valor;
+                return (
+                  <button
+                    key={opcao.rotulo}
+                    type="button"
+                    role="radio"
+                    aria-checked={escolhida}
+                    onClick={() => {
+                      setUltimaPP(opcao.valor);
+                      setFaltaResposta(false);
+                    }}
+                    disabled={pending}
+                    className={cn(
+                      "flex items-center gap-2.5 rounded-[10px] border px-3 py-2.5 text-left text-[13px] font-semibold transition-colors disabled:opacity-50",
+                      escolhida && opcao.valor
+                        ? "border-emerald-600 bg-emerald-50"
+                        : escolhida
+                          ? "border-foreground bg-muted"
+                          : faltaResposta
+                            ? "border-california-red bg-white"
+                            : "border-border bg-white hover:bg-muted/60",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "inline-flex h-[15px] w-[15px] flex-none items-center justify-center rounded-full border-[1.5px]",
+                        escolhida
+                          ? opcao.valor
+                            ? "border-emerald-700"
+                            : "border-foreground"
+                          : "border-[#C9C4B8]",
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "h-[7px] w-[7px] rounded-full",
+                          escolhida
+                            ? opcao.valor
+                              ? "bg-emerald-700"
+                              : "bg-foreground"
+                            : "bg-transparent",
+                        )}
+                      />
+                    </span>
+                    {opcao.rotulo}
+                  </button>
+                );
+              })}
+            </div>
+            <span className="text-[11px] leading-snug text-muted-foreground">
+              {ultimaPP === true
+                ? `A previsão de custo deste item deixa de usar o planejado (${formatCurrency(valorPlanejado, "BRL")}) e passa a valer o que as PPs dizem (${formatCurrency(previaEmPPs, "BRL")}).`
+                : "Enquanto houver PP por vir, a previsão de custo do item segue pelo planejado."}
+            </span>
           </div>
 
           <div className="flex items-center justify-between gap-3 px-6 py-4 border-t border-border">

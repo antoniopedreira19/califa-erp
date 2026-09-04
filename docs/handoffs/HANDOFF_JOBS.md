@@ -2447,3 +2447,32 @@ do formulário e sem perder o que já foi digitado.
 - **Ponta solta:** as actions do card de portais na página do cliente
   (`clientes/[id]/portais-actions.ts`) não têm gate de papel — ver §3 da
   decisão 050.
+
+## ⚠️ Nota de 2026-09-04 — o item diz quando parou de gerar PP (decisão 052)
+
+- **Pergunta obrigatória no formulário da PP:** *"Esta é a última PP deste
+  item?"*, último campo antes dos botões. Sem resposta, "Gerar PP" não
+  passa (`ultimaPPDoItem` em `finalizarPedidoCompra` e
+  `editarPedidoCompraGerada`). A correção da PP **rejeitada** não pergunta.
+- **Botão no painel do item:** "Marcar: todas as PPs geradas", no rodapé,
+  sem abrir formulário. Serve para o item antigo, para a resposta dada
+  errado e para o custo que **nunca** vai gerar PP.
+- **Reabrir não é botão.** "Nova PP" num item marcado abre um aviso; ao
+  confirmar, o item é reaberto (`reabrirItemParaNovaPP`), a reabertura vai
+  para o chat da Comunicação e só então o formulário abre.
+- **Calha:** ✓ verde no chip quando o item está marcado, convivendo com o
+  círculo vermelho das PPs geradas e não enviadas.
+- **Encerramento travado** enquanto houver item de custo sem resposta. Só
+  as linhas que geram PP (AR, B, C, F, FI) e fora do save; o diálogo de
+  fechamento lista os itens que faltam pelo nome. **Job em andamento vai
+  sentir:** nenhum item nasce marcado, então todo job aberto hoje precisa
+  passar item a item antes de encerrar.
+- **Quem pode marcar e reabrir:** qualquer pessoa com acesso ao job — não
+  é a mesma regra de gerar PP, que exige responsável ou administrador.
+- **Verificado ao vivo em 04/09/2026** (JOB-0016, "Teste Alterações Job 2"):
+  marcar item sem PP, ✓ na calha, aviso de nova PP, reabertura com recado
+  no chat, pergunta obrigatória barrando o envio, PP gerada com "Sim, é a
+  última" e a trava do encerramento listando o item que faltou. A previsão
+  de custo do job saiu de R$ 30.000 → R$ 10.000 (item marcado sem PP) →
+  R$ 15.000 (com a PP gerada de R$ 5.000 segurando previsão). Ficou uma PP
+  de teste gerada (PP-00025, R$ 5.000, fornecedor Antonio) no item 1.

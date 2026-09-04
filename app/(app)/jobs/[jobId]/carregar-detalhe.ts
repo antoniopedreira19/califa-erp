@@ -7,6 +7,7 @@ import { montarThreadChat } from "@/lib/data/job-chat";
 import { montarThreadChatPPs } from "@/lib/data/job-chat-pps";
 import {
   calcularTotaisVersao,
+  tipoGeraDesembolso,
 } from "@/lib/calculos/versao-totais";
 import { saldosDeSaveDoCliente, saveDoJob } from "@/lib/data/saves";
 import { blocosDoItem, somarBlocosDosItens } from "@/lib/calculos/bv-planilha";
@@ -666,6 +667,21 @@ export async function carregarDetalheDoJob(
       situacao: bv.situacao,
     }));
 
+  // Itens de custo que ainda não disseram se sai mais PP (decisão 052).
+  // Sai dos dados já carregados: a linha da planilha diz o tipo, e a
+  // âncora do realizado guarda o marco. A e D ficam de fora — eles pagam
+  // por BV e não têm o que marcar.
+  const itensSemMarcacao = itens
+    .filter(
+      (it) =>
+        tipoGeraDesembolso(it.tipo_custo) &&
+        // Linha em save não emite PP neste job: sem calha de PP, não há
+        // o que marcar (decisão 028 §9).
+        it.em_save !== true &&
+        realizadosMap.get(it.id)?.pps_concluidas_em == null,
+    )
+    .map((it) => ({ item: it.item }));
+
   const resumoEncerramento: ResumoEncerramento | null =
     job.status === "aberto" && (envioFaturamento || pagoSoPorSave)
       ? {
@@ -691,6 +707,7 @@ export async function carregarDetalheDoJob(
           ppsEmAberto,
           bvsEmAberto,
           saldoAFaturar,
+          itensSemMarcacao,
         }
       : null;
 
