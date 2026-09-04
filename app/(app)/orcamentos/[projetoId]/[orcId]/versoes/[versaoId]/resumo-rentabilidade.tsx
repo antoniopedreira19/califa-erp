@@ -53,7 +53,7 @@ export function ResumoRentabilidade({
         )}
       </Bloco>
 
-      <Bloco label="Resultado geral">
+      <Bloco label="Rentab.">
         {resultadoGeral === null ? (
           <span className="flex items-baseline gap-1.5">
             <span className="font-mono text-base font-bold text-muted-foreground">

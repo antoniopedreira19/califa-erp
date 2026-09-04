@@ -2409,3 +2409,39 @@ seleção** — é o passo seguinte se o Tiago pedir; a máquina já existe.
 - `criarFornecedor` (página) passou a usar o mesmo `inserirFornecedor`;
   comportamento da página não mudou, exceto que o documento repetido agora
   é detectado antes do insert, com a mesma mensagem.
+
+---
+
+## ⚠️ 04/09/2026 — o portal do cliente nasce de dentro do envio para faturamento
+
+**Regra:** `docs/decisions/050-portal-do-cliente-nasce-de-dentro-do-envio-para-faturamento.md`.
+
+O campo "Portal de fornecedor do cliente" do drawer "Enviar job para
+faturamento" **cadastra o portal ali mesmo**. Sem portal, o aviso "Este
+cliente não tem portal cadastrado" ganhou o botão **Cadastrar portal**; com
+portal, há um **"+"** ao lado do combo (o mesmo desenho do fornecedor na
+PP, decisão 048). Os dois abrem um bloco com Nome e Link dentro do próprio
+drawer; **Salvar e selecionar** grava e deixa o portal escolhido, sem sair
+do formulário e sem perder o que já foi digitado.
+
+| Onde | O que mudou |
+| --- | --- |
+| `enviar-faturamento-drawer.tsx` | bloco inline (`cadastrandoPortal`), lista mesclada `portaisVisiveis`, seleção em dois tempos (`portalPendenteId`); **Enviar desabilitado enquanto o bloco está aberto** |
+| `actions-faturamento.ts` | `cadastrarPortalDoClienteDoJob(jobId, { nome, url })` — o cliente é relido do job no servidor; devolve o portal; revalida só `/clientes/[id]` |
+| `lib/permissoes.ts` | `cadastros.clientes.portal_inline` = Admin + GP (espelho de `jobs.enviar_faturamento`); teste de contrato em `lib/permissoes.test.ts` |
+| Banco | nada — tabela, unique e policies de 13/08 já bastavam |
+
+- **Nome repetido** (`uniq_cliente_portal_nome`): mensagem em português
+  apontando que o portal pode estar inativo e o caminho é reativar em
+  Cadastros › Clientes. O drawer só lista ativos.
+- **Sem `router.refresh()` e sem revalidar `/jobs/[id]`** no cadastro —
+  o refresh no meio do preenchimento zerava o formulário (048).
+- **Verificado ao vivo em 04/09/2026** (JOB-0018, cliente "Teste"):
+  link sem `https://` → erro do servidor no campo; link certo → portal
+  gravado, selecionado no combo, URL clicável abaixo, "+" aparece; nome
+  repetido → mensagem de duplicado; Cancelar fecha o bloco e mantém a
+  seleção; a página do cliente lista o portal novo. O job **não foi
+  enviado**; o portal de teste ficou inativo.
+- **Ponta solta:** as actions do card de portais na página do cliente
+  (`clientes/[id]/portais-actions.ts`) não têm gate de papel — ver §3 da
+  decisão 050.
