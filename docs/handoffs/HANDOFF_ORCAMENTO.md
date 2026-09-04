@@ -446,6 +446,16 @@ a desestruturar os dois campos de `calcularResultadoOperacional`. O KPI
 "Custo planejado" do rascunho multi-jobs (`multi/editor-multi-jobs.tsx`)
 mudou junto, para as duas telas não divergirem.
 
+⚠️ **2026-09-04, mesmo dia: o terceiro bloco virou "Rentab."** Era
+"Resultado geral" desde o commit `75cbb22`, enquanto o resumo do job
+fecha a linha com "rentab." — mesmo número, dois nomes. Instrução do
+Tiago: unificar no termo que a produção já lê nas planilhas. Vale para
+este resumo e para o KPI do rascunho multi-jobs. **Só o rótulo** — a prop
+`resultadoGeral` e a conta não mudaram. "Resultado geral" **fica** no
+card de Totais, no `painel-resultado.tsx` e na `legenda-fechamento.tsx`,
+que define o termo: ali é a última linha de uma conta auditável, com nome
+fixado na decisão 003, não um resumo de canto.
+
 ### Fonte única do cálculo
 
 `calcularResultadoOperacional(faturamento, imposto, custoPlanejado)` entrou em [`lib/calculos/versao-totais.ts`](lib/calculos/versao-totais.ts) e o card de Totais passou a consumi-la no lugar do cálculo inline. Duas telas mostrando o mesmo resultado por fórmulas duplicadas é divergência esperando para acontecer. Retorna `null` nos dois campos quando `custoPlanejado <= 0`.

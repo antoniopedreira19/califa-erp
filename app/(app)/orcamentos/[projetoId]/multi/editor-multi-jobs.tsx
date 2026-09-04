@@ -719,7 +719,7 @@ export function EditorMultiJobs({
               borda
             />
             <Kpi
-              rotulo="Resultado geral"
+              rotulo="Rentab."
               valor={
                 resumo.resultadoGeral === null
                   ? "—"
