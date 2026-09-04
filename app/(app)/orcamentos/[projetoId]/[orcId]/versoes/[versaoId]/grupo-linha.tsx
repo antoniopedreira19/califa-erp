@@ -169,9 +169,9 @@ export function AcoesDoGrupo({ grupo }: { grupo: GrupoDaPlanilha }) {
           grupo.itens.length > 0 ? (
             <>
               O grupo <strong className="text-foreground">{grupo.nome}</strong>{" "}
-              tem {grupo.itens.length}{" "}
-              {grupo.itens.length === 1 ? "item" : "itens"}. Remova os itens
-              primeiro para poder excluir o grupo.
+              e os {grupo.itens.length}{" "}
+              {grupo.itens.length === 1 ? "item" : "itens"} dentro dele saem da
+              planilha. Essa ação não pode ser desfeita.
             </>
           ) : (
             <>
@@ -180,7 +180,11 @@ export function AcoesDoGrupo({ grupo }: { grupo: GrupoDaPlanilha }) {
             </>
           )
         }
-        confirmLabel="Remover"
+        confirmLabel={
+          grupo.itens.length > 0
+            ? `Remover grupo e ${grupo.itens.length} ${grupo.itens.length === 1 ? "item" : "itens"}`
+            : "Remover"
+        }
         cancelLabel="Voltar"
         variant="destructive"
         pending={pending}
