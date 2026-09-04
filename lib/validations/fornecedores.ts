@@ -68,10 +68,19 @@ export const fornecedorSchema = z
       z.string().nullable().optional().transform((v) => (v ? v : null)),
     ),
     conta_dv: z.preprocess(nullIfEmpty, z.string().max(1).nullable().optional()),
-    tipo_conta: z.enum(["corrente", "poupanca", "pagamento"]).nullable().optional(),
+    // `nullIfEmpty` nos dois enums (04/09/2026): o <select> vazio manda "",
+    // e o enum recusava com "Invalid enum value" — o bloco não preenchido
+    // (banco sem PIX, ou PIX sem banco) nunca passava pela validação.
+    tipo_conta: z.preprocess(
+      nullIfEmpty,
+      z.enum(["corrente", "poupanca", "pagamento"]).nullable().optional(),
+    ),
 
     // === PIX (opcional individualmente; coerência no superRefine) ===
-    pix_tipo: z.enum(["cpf", "cnpj", "email", "telefone", "aleatoria"]).nullable().optional(),
+    pix_tipo: z.preprocess(
+      nullIfEmpty,
+      z.enum(["cpf", "cnpj", "email", "telefone", "aleatoria"]).nullable().optional(),
+    ),
     pix_chave: z.preprocess(nullIfEmpty, z.string().nullable().optional()),
   })
   .superRefine((data, ctx) => {
@@ -173,3 +182,37 @@ export const fornecedorSchema = z
   });
 
 export type FornecedorInput = z.infer<typeof fornecedorSchema>;
+
+/**
+ * O cadastro rápido de dentro da PP (04/09/2026, decisão 048).
+ *
+ * Mesmo formulário e mesmas regras do cadastro completo, com três campos
+ * a mais obrigatórios: documento (CPF ou CNPJ), e-mail e telefone. O
+ * documento é o que impede a duplicidade — sem ele a verificação não
+ * tem o que comparar; e-mail e telefone são o que o financeiro precisa
+ * para cobrar a nota do fornecedor que acabou de nascer numa PP.
+ *
+ * O bloco de pagamento (banco OU PIX) já é obrigatório no schema base.
+ */
+export const fornecedorCompletoSchema = fornecedorSchema.superRefine(
+  (data, ctx) => {
+    if (!data.cpf_cnpj) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["cpf_cnpj"],
+        message:
+          data.tipo_pessoa === "fisica" ? "CPF obrigatório." : "CNPJ obrigatório.",
+      });
+    }
+    if (!data.email) {
+      ctx.addIssue({ code: "custom", path: ["email"], message: "E-mail obrigatório." });
+    }
+    if (!data.telefone) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["telefone"],
+        message: "Telefone obrigatório.",
+      });
+    }
+  },
+);

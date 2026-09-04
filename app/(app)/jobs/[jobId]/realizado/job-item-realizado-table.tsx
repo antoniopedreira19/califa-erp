@@ -1797,7 +1797,14 @@ export function JobItemRealizadoTable({
               open={drawerOpen}
               onOpenChange={(aberto) => {
                 setDrawerOpen(aberto);
-                if (!aberto) setPpEditando(null);
+                if (!aberto) {
+                  setPpEditando(null);
+                  // O formulário nunca fecha tudo (04/09/2026): Gerar PP,
+                  // Salvar alterações e Cancelar devolvem para o painel
+                  // do item, que é de onde ele foi aberto — a PP nova
+                  // aparece lá assim que o refresh chega.
+                  setPainelOpen(true);
+                }
               }}
               itemRealizadoId={itemIdAtual}
               jobId={jobId}
