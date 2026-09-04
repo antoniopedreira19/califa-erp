@@ -48,8 +48,8 @@ function diasNoFuturo(dias: number): string {
  * - titulos_a_pagar → vw_a_pagar (data_prevista, sem data_pagamento)
  * - titulos_a_receber → titulos_receber (data_previsao_recebimento, pago_em)
  * - contas_bancarias.saldo_atual → saldo_inicial (aproximacao V1)
- * - jobs.status "em_producao" removido (nao existe); apenas "aberto"
- * - orcamentos.status "enviado_cliente" removido; substituido por "rascunho"
+ * - jobs.status inclui "em_producao" (enum existe — ruling anterior errou)
+ * - orcamentos.status "enviado_cliente" EXISTE no enum (ruling anterior errou)
  * - Card "Transacoes nao conciliadas" removido (tabela nao existe)
  * Total: 7 pendencias (ADM), 6 (Financeiro)
  */
@@ -104,20 +104,21 @@ export async function carregarHomeAdmin(
       .select("id", { count: "exact", head: true })
       .eq("tenant_id", tenantId)
       .eq("status", "em_avaliacao"),
-    // jobs.status nao tem "em_producao"; apenas "aberto" (adendo §5)
+    // jobs em andamento: "aberto" ou "em_producao" (enum real)
     supabase
       .from("jobs")
       .select("id", { count: "exact", head: true })
       .eq("tenant_id", tenantId)
-      .eq("status", "aberto")
+      .in("status", ["aberto", "em_producao"])
       .gte("data_prevista_faturamento", hoje)
       .lte("data_prevista_faturamento", em7dias),
-    // orcamentos.status nao tem "enviado_cliente"; substituido por "rascunho" (adendo §6)
+    // orcamentos parados: "em_revisao" + "enviado_cliente" (enum real)
+    // rascunho = editing normal, nao abandono; por isso excluido
     supabase
       .from("orcamentos")
       .select("id", { count: "exact", head: true })
       .eq("tenant_id", tenantId)
-      .in("status", ["rascunho", "em_revisao"])
+      .in("status", ["em_revisao", "enviado_cliente"])
       .lt("updated_at", ha15dias),
     // saldo_inicial como aproximacao (adendo §3)
     // TODO: virar RPC de saldo_atual quando o modulo de conciliacao existir
@@ -141,12 +142,12 @@ export async function carregarHomeAdmin(
       .gte("data_previsao_recebimento", primeiro)
       .lte("data_previsao_recebimento", ultimo)
       .is("pago_em", null),
-    // jobs em andamento: apenas "aberto" (adendo §5)
+    // jobs em andamento: "aberto" + "em_producao" (enum real)
     supabase
       .from("jobs")
       .select("id", { count: "exact", head: true })
       .eq("tenant_id", tenantId)
-      .eq("status", "aberto"),
+      .in("status", ["aberto", "em_producao"]),
   ]);
 
   const saldoBancosTotal = (saldoBancosRes.data ?? []).reduce(
@@ -426,7 +427,7 @@ export async function carregarHomeFinanceiro(
  * precisam de filtro adicional de projeto_id.
  *
  * Substituicoes do adendo:
- * - jobs.status "em_producao" removido; apenas "aberto" (adendo §5)
+ * - jobs.status inclui "em_producao" (enum real — ruling anterior errou)
  * - jobs_itens_realizado.valor_total_realizado → total_realizado (adendo §8)
  */
 export async function carregarHomeFreelancer(
@@ -437,18 +438,19 @@ export async function carregarHomeFreelancer(
 
   const [meusJobsAtivos, realizadoPendente, mensagensNaoLidas] =
     await Promise.all([
-      // jobs.status nao tem "em_producao"; apenas "aberto" (adendo §5)
+      // jobs ativos: "aberto" + "em_producao" (enum real)
       supabase
         .from("jobs")
         .select("id", { count: "exact", head: true })
         .eq("tenant_id", tenantId)
-        .eq("status", "aberto"),
+        .in("status", ["aberto", "em_producao"]),
       // jobs_itens_realizado.total_realizado (adendo §8)
       supabase
         .from("jobs_itens_realizado")
         .select("id", { count: "exact", head: true })
         .eq("tenant_id", tenantId)
         .is("total_realizado", null),
+      // TODO: migrar pra join com jobs_chat_leituras pra contar so "nao lidas" de verdade
       supabase
         .from("jobs_mensagens")
         .select("id", { count: "exact", head: true })
@@ -465,9 +467,9 @@ export async function carregarHomeFreelancer(
       icone: FileText,
     },
     {
-      titulo: "Mensagens não lidas",
+      titulo: "Mensagens no chat",
       contagem: mensagensNaoLidas.count ?? 0,
-      subtitulo: "No chat dos seus jobs",
+      subtitulo: "Nos jobs em que você participa",
       href: "/jobs?filtro=chat_pendente",
       icone: MessageSquare,
     },
@@ -495,11 +497,11 @@ export async function carregarHomeFreelancer(
  *
  * Cards de CONTEXTO usam o escopo expandido via `projetoIdsDoUsuario`.
  *
- * Substituicoes do adendo Task 4:
- * - versoes_orcamento.status: "enviada_cliente" nao existe → apenas "em_revisao"
+ * Notas de schema real (enum completo verificado):
+ * - versoes_orcamento.status: "enviada_cliente" EXISTE no enum
  * - jobs_envio_faturamento: sem coluna status → presenca do registro basta (!inner)
- * - jobs.status: "em_producao" nao existe → apenas "aberto"
- * - orcamentos.status: "enviado_cliente" nao existe → apenas ["rascunho","em_revisao"]
+ * - jobs.status: "em_producao" EXISTE no enum
+ * - orcamentos.status: "enviado_cliente" EXISTE no enum
  */
 export async function carregarHomeGerenteProducao(
   session: SessionContext,
@@ -523,8 +525,8 @@ export async function carregarHomeGerenteProducao(
     meusJobsAndamento,
     meusOrcamentosAbertos,
   ] = await Promise.all([
-    // ESTRITO: versoes em revisao onde eu sou o GP do orcamento
-    // Adendo §1: "enviada_cliente" nao existe → apenas "em_revisao"
+    // ESTRITO: versoes aguardando revisao ou enviadas ao cliente, onde eu sou o GP
+    // "enviada_cliente" EXISTE no enum — incluido agora
     supabase
       .from("versoes_orcamento")
       .select("id, orcamento:orcamentos!inner(gp_responsavel_id)", {
@@ -532,7 +534,7 @@ export async function carregarHomeGerenteProducao(
         head: true,
       })
       .eq("tenant_id", tenantId)
-      .eq("status", "em_revisao")
+      .in("status", ["em_revisao", "enviada_cliente"])
       .eq("orcamento.gp_responsavel_id", userId),
     // ESTRITO: meus jobs abertos com faturamento previsto > 0 e sem errata pendente.
     supabase
@@ -556,7 +558,7 @@ export async function carregarHomeGerenteProducao(
       .eq("responsavel_id", userId)
       .eq("status", "aberto"),
     // CONTEXTO: jobs proximos do vencimento nos meus projetos
-    // Adendo §4: "em_producao" nao existe → apenas "aberto"
+    // "aberto" + "em_producao" (enum real)
     semProjetos
       ? Promise.resolve({ count: 0 })
       : supabase
@@ -564,10 +566,11 @@ export async function carregarHomeGerenteProducao(
           .select("id", { count: "exact", head: true })
           .eq("tenant_id", tenantId)
           .in("projeto_id", projetoIds)
-          .eq("status", "aberto")
+          .in("status", ["aberto", "em_producao"])
           .gte("data_prevista_faturamento", hoje)
           .lte("data_prevista_faturamento", em7dias),
-    // CONTEXTO: mensagens nao lidas nos jobs onde participo
+    // CONTEXTO: mensagens no chat dos jobs onde participo
+    // TODO: migrar pra join com jobs_chat_leituras pra contar so "nao lidas" de verdade
     semProjetos
       ? Promise.resolve({ count: 0 })
       : supabase
@@ -580,7 +583,7 @@ export async function carregarHomeGerenteProducao(
           .in("job.projeto_id", projetoIds)
           .neq("autor_id", userId),
     // CONTEXTO KPI: jobs em andamento nos meus projetos
-    // Adendo §5: "em_producao" nao existe → apenas "aberto"
+    // "aberto" + "em_producao" (enum real)
     semProjetos
       ? Promise.resolve({ count: 0 })
       : supabase
@@ -588,9 +591,9 @@ export async function carregarHomeGerenteProducao(
           .select("id", { count: "exact", head: true })
           .eq("tenant_id", tenantId)
           .in("projeto_id", projetoIds)
-          .eq("status", "aberto"),
+          .in("status", ["aberto", "em_producao"]),
     // CONTEXTO KPI: orcamentos abertos nos meus projetos
-    // Adendo §6: "enviado_cliente" nao existe → apenas ["rascunho","em_revisao"]
+    // "enviado_cliente" EXISTE no enum — incluido agora
     semProjetos
       ? Promise.resolve({ count: 0 })
       : supabase
@@ -598,7 +601,7 @@ export async function carregarHomeGerenteProducao(
           .select("id", { count: "exact", head: true })
           .eq("tenant_id", tenantId)
           .in("projeto_id", projetoIds)
-          .in("status", ["rascunho", "em_revisao"]),
+          .in("status", ["rascunho", "em_revisao", "enviado_cliente"]),
   ]);
 
   const pendencias: CardPendencia[] = [
@@ -631,9 +634,9 @@ export async function carregarHomeGerenteProducao(
       icone: CalendarClock,
     },
     {
-      titulo: "Mensagens não lidas",
+      titulo: "Mensagens no chat",
       contagem: mensagensNaoLidas.count ?? 0,
-      subtitulo: "Chat dos jobs do seu time",
+      subtitulo: "Chat dos jobs em que você participa",
       href: "/jobs?filtro=chat_pendente&meus=1",
       icone: MessageSquare,
     },
@@ -643,14 +646,14 @@ export async function carregarHomeGerenteProducao(
     {
       titulo: "Meus jobs em andamento",
       valor: String(meusJobsAndamento.count ?? 0),
-      subtitulo: "Time inteiro, aberto",
+      subtitulo: "Time inteiro, aberto ou em produção",
       href: "/jobs?meus=1",
       icone: Briefcase,
     },
     {
       titulo: "Meus orçamentos abertos",
       valor: String(meusOrcamentosAbertos.count ?? 0),
-      subtitulo: "Rascunho ou em revisão",
+      subtitulo: "Rascunho, em revisão ou enviado ao cliente",
       href: "/orcamentos?meus=1",
       icone: FileText,
     },
@@ -663,9 +666,9 @@ export async function carregarHomeGerenteProducao(
  * Home do Produtor. Cards de acao sobre coisas dele (PPs que ele emitiu,
  * jobs sob sua responsabilidade); contexto no time.
  *
- * Substituicoes do adendo Task 4:
+ * Notas de schema real (enum completo verificado):
  * - jobs_itens_realizado.valor_total_realizado → total_realizado (adendo §7)
- * - jobs.status "em_producao" nao existe → apenas "aberto" (adendo §8)
+ * - jobs.status inclui "em_producao" (enum real — ruling anterior errou)
  * - pedidos_compra.emitida_em nao existe → usar created_at (adendo §9)
  */
 export async function carregarHomeProdutor(
@@ -695,7 +698,9 @@ export async function carregarHomeProdutor(
       .eq("status", "rejeitada"),
     // ESTRITO: itens sem valor realizado em jobs onde sou responsavel ou produtor
     // Adendo §7: "valor_total_realizado" nao existe → "total_realizado"
-    // Adendo §8: "em_producao" nao existe → apenas "aberto"
+    // CRITICAL fix: .or() em coluna de embed EXIGE referencedTable; sem isso PostgREST
+    // tenta match top-level e retorna zero silenciosamente.
+    // "em_producao" EXISTE no enum — incluido (realizado tambem acontece em producao)
     supabase
       .from("jobs_itens_realizado")
       .select("id, job:jobs!inner(responsavel_id, produtor_id, status)", {
@@ -704,11 +709,12 @@ export async function carregarHomeProdutor(
       })
       .eq("tenant_id", tenantId)
       .is("total_realizado", null)
-      .eq("job.status", "aberto")
-      .or(
-        `job.responsavel_id.eq.${userId},job.produtor_id.eq.${userId}`,
-      ),
-    // CONTEXTO: mensagens nao lidas nos jobs onde participo
+      .in("job.status", ["aberto", "em_producao"])
+      .or(`responsavel_id.eq.${userId},produtor_id.eq.${userId}`, {
+        referencedTable: "job",
+      }),
+    // CONTEXTO: mensagens no chat dos jobs onde participo
+    // TODO: migrar pra join com jobs_chat_leituras pra contar so "nao lidas" de verdade
     semProjetos
       ? Promise.resolve({ count: 0 })
       : supabase
@@ -721,7 +727,7 @@ export async function carregarHomeProdutor(
           .in("job.projeto_id", projetoIds)
           .neq("autor_id", userId),
     // KPI CONTEXTO: jobs em andamento no time
-    // Adendo §8: "em_producao" nao existe → apenas "aberto"
+    // "aberto" + "em_producao" (enum real)
     semProjetos
       ? Promise.resolve({ count: 0 })
       : supabase
@@ -729,7 +735,7 @@ export async function carregarHomeProdutor(
           .select("id", { count: "exact", head: true })
           .eq("tenant_id", tenantId)
           .in("projeto_id", projetoIds)
-          .eq("status", "aberto"),
+          .in("status", ["aberto", "em_producao"]),
     // KPI ESTRITO: PPs que eu emiti este mes
     // Adendo §9: "emitida_em" nao existe → usar "created_at"
     supabase
@@ -757,9 +763,9 @@ export async function carregarHomeProdutor(
       icone: FileText,
     },
     {
-      titulo: "Mensagens não lidas",
+      titulo: "Mensagens no chat",
       contagem: mensagensNaoLidas.count ?? 0,
-      subtitulo: "Chat dos jobs do seu time",
+      subtitulo: "Chat dos jobs em que você participa",
       href: "/jobs?filtro=chat_pendente&meus=1",
       icone: MessageSquare,
     },
@@ -769,7 +775,7 @@ export async function carregarHomeProdutor(
     {
       titulo: "Meus jobs em andamento",
       valor: String(meusJobsAndamento.count ?? 0),
-      subtitulo: "Time inteiro, aberto",
+      subtitulo: "Time inteiro, aberto ou em produção",
       href: "/jobs?meus=1",
       icone: Briefcase,
     },
