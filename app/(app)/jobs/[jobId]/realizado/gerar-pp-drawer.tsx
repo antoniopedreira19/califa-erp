@@ -2,7 +2,15 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { X, Upload, FileText, Image as ImageIcon, Trash2, AlertTriangle } from "lucide-react";
+import {
+  X,
+  Upload,
+  FileText,
+  Image as ImageIcon,
+  Trash2,
+  AlertTriangle,
+  Plus,
+} from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Dialog, DrawerContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
@@ -37,6 +45,8 @@ import {
   prefixoAnexosPedidoCompra,
   editarPedidoCompraGerada,
 } from "./actions-pp";
+import { NovoFornecedorDialog } from "@/app/(app)/fornecedores/novo-fornecedor-dialog";
+import type { FornecedorResumo } from "@/app/(app)/fornecedores/actions";
 
 interface Props {
   open: boolean;
@@ -163,6 +173,48 @@ export function GerarPPDrawer({
   // ON → responsável interno obrigatório, fornecedor escondido.
   const [verbaProducao, setVerbaProducao] = React.useState(false);
   const [fornecedorId, setFornecedorId] = React.useState<string>("");
+  // Cadastro rápido de fornecedor (04/09/2026, decisão 048). O combo vem
+  // do server component, então o fornecedor que acabou de nascer só
+  // chegaria nele depois do `router.refresh()`; enquanto isso ele mora
+  // aqui, mesclado à lista — igual ao projeto novo da abertura.
+  const [novoFornecedorOpen, setNovoFornecedorOpen] = React.useState(false);
+  const [fornecedorNovo, setFornecedorNovo] =
+    React.useState<FornecedorResumo | null>(null);
+  const fornecedoresVisiveis = React.useMemo(() => {
+    if (!fornecedorNovo || fornecedores.some((f) => f.id === fornecedorNovo.id)) {
+      return fornecedores;
+    }
+    return [...fornecedores, fornecedorNovo].sort((a, b) =>
+      (a.razao_social ?? a.nome).localeCompare(b.razao_social ?? b.nome),
+    );
+  }, [fornecedores, fornecedorNovo]);
+
+  // A seleção entra em dois tempos, de propósito. O Select do Radix
+  // espelha o valor num <select> nativo escondido, e se o valor e a
+  // <option> nova chegam na mesma renderização o nativo ainda não tem a
+  // opção: ele volta pra "" e dispara `onValueChange("")`, apagando a
+  // escolha (visto em 04/09/2026). Então primeiro o fornecedor entra na
+  // lista, e só quando ele já está lá o efeito abaixo seleciona.
+  const [fornecedorPendenteId, setFornecedorPendenteId] =
+    React.useState<string | null>(null);
+  React.useEffect(() => {
+    if (!fornecedorPendenteId) return;
+    if (fornecedoresVisiveis.some((f) => f.id === fornecedorPendenteId)) {
+      setFornecedorId(fornecedorPendenteId);
+      setFornecedorPendenteId(null);
+    }
+  }, [fornecedorPendenteId, fornecedoresVisiveis]);
+
+  /** Selecionar um fornecedor que pode não estar na lista do server
+   *  ainda (o recém-criado, ou o existente achado pelo documento). */
+  function adotarFornecedor(f: FornecedorResumo) {
+    if (!fornecedores.some((x) => x.id === f.id)) setFornecedorNovo(f);
+    setFornecedorPendenteId(f.id);
+    // Sem `router.refresh()` aqui, de propósito: o refresh no meio do
+    // preenchimento re-renderiza a página inteira e zerava o formulário
+    // (visto em 04/09/2026). A lista mesclada segura o fornecedor novo
+    // até o drawer fechar — e o fechamento já dispara o refresh.
+  }
   const [responsavelId, setResponsavelId] = React.useState<string>("");
   const [empresaId, setEmpresaId] = React.useState<string>(defaultEmpresaId);
   const [prazoPagamento, setPrazoPagamento] = React.useState<string>(defaultPrazoPagamento());
@@ -196,12 +248,27 @@ export function GerarPPDrawer({
   // Chave para forcar remontagem do DatePicker ao reabrir o drawer
   const [drawerKey, setDrawerKey] = React.useState(0);
 
-  // Reset ao abrir
+  // Reset ao abrir — e SÓ ao abrir. A chave diz qual sessão do
+  // formulário está de pé (item + gerar/editar); enquanto ela não muda,
+  // nenhum re-render do pai mexe no que a pessoa digitou. Antes o
+  // efeito dependia de props que trocam de identidade num
+  // `router.refresh()`, e o formulário zerava no meio do caminho
+  // (04/09/2026).
+  const chaveSessao = open
+    ? `${itemRealizadoId ?? ""}|${ppEditando?.id ?? "nova"}`
+    : null;
+  const sessaoRef = React.useRef<string | null>(null);
   React.useEffect(() => {
-    if (!open || !itemRealizadoId) return;
+    if (!open || !itemRealizadoId) {
+      sessaoRef.current = null;
+      return;
+    }
+    if (sessaoRef.current === chaveSessao) return;
+    sessaoRef.current = chaveSessao;
     abortedRef.current = false;
     setErro(null);
     setPpId(null);
+    setFornecedorPendenteId(null);
     setUploadPrefix(null);
     setAnexos([]);
     setRemovidos(new Set());
@@ -264,7 +331,10 @@ export function GerarPPDrawer({
       setPpId(res.pp_id);
       setUploadPrefix(res.upload_prefix);
     })();
-  }, [open, itemRealizadoId, defaultEmpresaId, itemDescricao, ppEditando]);
+    // A chave resume as deps que importam; as demais (defaultEmpresaId,
+    // ppEditando inteiro) só seriam relidas numa sessão nova.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, itemRealizadoId, chaveSessao]);
 
   // DESABILITADO — o cleanup automatico estava disparando entre upload e
   // finalizar (quando ppId mudava por qualquer re-render), apagando os
@@ -821,18 +891,35 @@ export function GerarPPDrawer({
               ) : (
                 <div>
                   <label className="text-xs font-medium">Fornecedor *</label>
-                  <Select value={fornecedorId} onValueChange={setFornecedorId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Escolha o fornecedor" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {fornecedores.map((f) => (
-                        <SelectItem key={f.id} value={f.id}>
-                          {f.razao_social ?? f.nome}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="flex items-center gap-2">
+                    <div className="min-w-0 flex-1">
+                      <Select value={fornecedorId} onValueChange={setFornecedorId}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Escolha o fornecedor" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {fornecedoresVisiveis.map((f) => (
+                            <SelectItem key={f.id} value={f.id}>
+                              {f.razao_social ?? f.nome}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {/* Cadastrar o fornecedor sem sair da PP: abre o
+                        cadastro completo num dialog e volta com ele
+                        selecionado (decisão 048). */}
+                    <button
+                      type="button"
+                      onClick={() => setNovoFornecedorOpen(true)}
+                      disabled={pending}
+                      title="Cadastrar fornecedor"
+                      aria-label="Cadastrar fornecedor"
+                      className="inline-flex h-10 w-10 flex-none items-center justify-center rounded-lg border border-border bg-white text-california-red transition-colors hover:border-california-red/40 hover:bg-california-red/[0.06] disabled:opacity-50"
+                    >
+                      <Plus className="h-[17px] w-[17px]" />
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -1145,6 +1232,13 @@ export function GerarPPDrawer({
             </span>
           </div>
         </form>
+
+        <NovoFornecedorDialog
+          open={novoFornecedorOpen}
+          onOpenChange={setNovoFornecedorOpen}
+          onCriado={adotarFornecedor}
+          onSelecionarExistente={adotarFornecedor}
+        />
       </DrawerContent>
     </Dialog>
   );

@@ -144,3 +144,10 @@ Perguntadas antes de codar, em 02/09/2026:
 - **PP de verba de produção rejeitada** continua sem reenvio, como antes.
 - **Job de limpeza de anexos órfãos** no bucket — mesma pendência de
   17/08/2026.
+
+## ⚠️ Nota de 2026-09-04 — o formulário volta ao painel; fornecedor de dentro da PP
+
+Gerar PP, Salvar alterações e Cancelar passaram a devolver para o painel
+"Destrinchar realizado" em vez de fechar tudo, e o combo de fornecedor
+ganhou um "+" que cadastra o fornecedor ali mesmo, com trava de documento
+repetido. Ver [048](048-fornecedor-nasce-de-dentro-da-pp.md).

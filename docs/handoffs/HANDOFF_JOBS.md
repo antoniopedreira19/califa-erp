@@ -2372,3 +2372,40 @@ seleção** — é o passo seguinte se o Tiago pedir; a máquina já existe.
 | Descartar | errata descartada, nada gravado; planilha de volta a 1 item |
 
 `tsc --noEmit`, `next lint` e `next build` limpos.
+
+---
+
+## ⚠️ Nota de 2026-09-04 — o formulário de PP volta ao painel, e o fornecedor nasce ali (decisão 048)
+
+- **Gerar PP, Salvar alterações e Cancelar** do `GerarPPDrawer` reabrem o
+  painel "Destrinchar realizado" (`onOpenChange(false)` na tabela liga
+  `painelOpen`). A PP nova aparece em "Aguardando envio" quando o
+  refresh chega.
+- **"+" ao lado do combo de fornecedor** abre `NovoFornecedorDialog`
+  (`app/(app)/fornecedores/novo-fornecedor-dialog.tsx`): o
+  `FornecedorForm` de sempre no modo `dialog`, com documento, e-mail e
+  telefone obrigatórios (`fornecedorCompletoSchema`) além do endereço e do
+  pagamento. Ao criar, `criarFornecedorRapido` devolve o registro e o
+  drawer o seleciona na hora (`fornecedorNovo` mesclado à lista, como o
+  projeto novo da abertura). **Sem `router.refresh()` nesse momento** —
+  ele zerava o formulário da PP; o refresh fica para o fechamento.
+- **Seleção em dois tempos** (`fornecedorPendenteId` → `fornecedorId`
+  num efeito, só quando o id já está em `fornecedoresVisiveis`): o
+  `Select` do Radix espelha o valor num `<select>` nativo e, se valor e
+  `<option>` chegam na mesma renderização, ele devolve `""` pelo
+  `onValueChange` e a escolha some. Custou uma tarde de depuração.
+- **Bug antigo corrigido de passagem:** `tipo_conta` e `pix_tipo` eram
+  `z.enum` sem `nullIfEmpty`; o `<select>` vazio mandava `""` e o
+  cadastro sem banco/PIX falhava com "Invalid enum value" (na página
+  também).
+- **Verificado ao vivo em 04/09/2026** (JOB-0016, item 1, projeto "Teste
+  Alterações"): criar no dialog → selecionado → Gerar PP → painel reabre
+  com a PP em "Aguardando envio"; documento repetido (ativo) → aviso e
+  "Selecionar este fornecedor" funciona; Cancelar → painel. Os
+  fornecedores de teste ficaram inativos e a PP de teste, cancelada.
+- **CPF/CNPJ repetido:** `buscarFornecedorPorDocumento` no blur do campo →
+  aviso âmbar com "Selecionar este fornecedor" (só se ativo); o servidor
+  confere de novo e devolve `duplicado`; o índice único é a rede final.
+- `criarFornecedor` (página) passou a usar o mesmo `inserirFornecedor`;
+  comportamento da página não mudou, exceto que o documento repetido agora
+  é detectado antes do insert, com a mesma mensagem.
