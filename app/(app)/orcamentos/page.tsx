@@ -10,9 +10,14 @@ import { ProjetosList, type ProjetoRow } from "./projetos-list";
 
 export const dynamic = "force-dynamic";
 
-export default async function ProjetosPage() {
+export default async function ProjetosPage({
+  searchParams,
+}: {
+  searchParams?: { filtro?: string };
+}) {
   const session = await requireSession();
   const supabase = createClient();
+  const filtro = searchParams?.filtro;
 
   const [projRes, clientesRes] = await Promise.all([
     supabase
@@ -91,13 +96,27 @@ export default async function ProjetosPage() {
   if (projetoIds.length > 0) {
     const [orcsRes, jobsRes, vinculosRes, responsaveisRes, versoesMinhasRes] =
       await Promise.all([
-      supabase
-        .from("orcamentos")
-        .select(
-          "id, projeto_id, status, gp_responsavel_id, produtor_id, created_by",
-        )
-        .in("projeto_id", projetoIds)
-        .eq("tenant_id", session.activeTenant.id),
+      (() => {
+        // Filtro de aterrissagem da home: orcamentos por status/data
+        let q = supabase
+          .from("orcamentos")
+          .select(
+            "id, projeto_id, status, gp_responsavel_id, produtor_id, created_by, updated_at",
+          )
+          .in("projeto_id", projetoIds)
+          .eq("tenant_id", session.activeTenant.id);
+        if (filtro === "aguardando_aprovacao") {
+          q = q.eq("status", "em_revisao");
+        } else if (filtro === "parados") {
+          const ha15 = new Date();
+          ha15.setDate(ha15.getDate() - 15);
+          const ha15iso = ha15.toISOString().slice(0, 10);
+          q = q
+            .in("status", ["rascunho", "em_revisao"])
+            .lt("updated_at", ha15iso);
+        }
+        return q;
+      })(),
       supabase
         .from("jobs")
         // `projeto_id`, `responsavel_id` e `produtor_id` entram para o
@@ -201,7 +220,14 @@ export default async function ProjetosPage() {
     }
   }
 
-  const projetos: ProjetoRow[] = projetosBrutos.map((p) => ({
+  // Quando há filtro de aterrissagem, mostrar só projetos com orçamentos
+  // que bateram o filtro (orcamentosCountMap só tem projetos do orcsRes filtrado).
+  const projetosVisiveis =
+    filtro === "parados" || filtro === "aguardando_aprovacao"
+      ? projetosBrutos.filter((p) => (orcamentosCountMap.get(p.id) ?? 0) > 0)
+      : projetosBrutos;
+
+  const projetos: ProjetoRow[] = projetosVisiveis.map((p) => ({
     id: p.id,
     codigo: p.codigo,
     nome: p.nome,

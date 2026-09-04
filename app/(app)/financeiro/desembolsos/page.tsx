@@ -6,7 +6,11 @@ import { DesembolsosList, type DesembolsoRow } from "./desembolsos-list";
 
 export const dynamic = "force-dynamic";
 
-export default async function DesembolsosPage() {
+export default async function DesembolsosPage({
+  searchParams,
+}: {
+  searchParams?: { filtro?: string };
+}) {
   const session = await requireSession();
   const supabase = createClient();
   const isAdminOrFinanceiro =
@@ -27,6 +31,11 @@ export default async function DesembolsosPage() {
 
   if (!isAdminOrFinanceiro) {
     query = query.eq("criado_por", session.profile.id);
+  }
+
+  // Filtro de aterrissagem da home
+  if (searchParams?.filtro === "avaliacao") {
+    query = query.eq("status", "em_avaliacao");
   }
 
   const [

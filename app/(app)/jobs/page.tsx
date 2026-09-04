@@ -7,32 +7,90 @@ import { JobsList, type JobRow } from "./jobs-list";
 
 export const dynamic = "force-dynamic";
 
-export default async function JobsPage() {
+// TODO: filtro=faturamento_pronto — precisa lógica combinada de status + faturamento_previsto; implementar em fase 2
+// TODO: filtro=encerrar_pronto — precisa join com jobs_envio_faturamento; implementar em fase 2
+// TODO: filtro=chat_pendente — precisa join com jobs_chat_leituras; implementar em fase 2
+// TODO: filtro=pps_rejeitadas — precisa join com pedidos_compra; implementar em fase 2
+// TODO: filtro=minhas_pps — precisa join com pedidos_compra; implementar em fase 2
+
+export default async function JobsPage({
+  searchParams,
+}: {
+  searchParams?: { filtro?: string };
+}) {
   const session = await requireSession();
   const supabase = createClient();
+  const filtro = searchParams?.filtro;
+
+  // Para filtro=realizado_pendente precisamos dos IDs dos jobs com pendência
+  // antes de montar a query principal.
+  let jobIdsComPendencia: string[] | null = null;
+  if (filtro === "realizado_pendente") {
+    const { data: comPendencia } = await supabase
+      .from("jobs_itens_realizado")
+      .select("job_id")
+      .eq("tenant_id", session.activeTenant.id)
+      .is("total_realizado", null);
+    const ids = Array.from(
+      new Set(
+        (comPendencia ?? [])
+          .map((r: { job_id: string | null }) => r.job_id)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    );
+    // Guarda null significa "não aplicar este filtro"; array vazio = forçar zero rows
+    jobIdsComPendencia = ids;
+  }
+
+  // Query base de jobs
+  let jobsQuery = supabase
+    .from("jobs")
+    .select(
+      "id, codigo, nome, status, valor_total, data_inicio_prevista, empresa_id, projeto_id, " +
+        // Produto e Regional saem do PRÓPRIO job, não do projeto (decisão
+        // do Tiago, 01/09/2026): os dois divergem na base — o JOB-0003 é
+        // "Ativação de marca" num projeto "Pevetech".
+        "produto, regional_id, responsavel_id, " +
+        // Os dois descritivos que a lista mostra em cartão (handoff
+        // "Descritivos nas Listas", 04/09/2026): o do job na linha e o
+        // do projeto na faixa do grupo. Texto curto — tetos de 500 e
+        // 600 caracteres — e já vem no embed que a lista faz de todo
+        // jeito, sem query nova.
+        "observacoes, " +
+        "regional:regionais(nome), " +
+        "projeto:projetos(codigo, nome, descricao, cliente:clientes(nome_fantasia)), " +
+        "responsavel:profiles!responsavel_id(nome), " +
+        "empresa:empresas(id, razao_social, nome_fantasia)",
+    )
+    .eq("tenant_id", session.activeTenant.id)
+    .order("codigo", { ascending: true });
+
+  // Aplicar filtros de aterrissagem simples (status/data)
+  if (filtro === "faturamento_proximo") {
+    const hoje = new Date().toISOString().slice(0, 10);
+    const em7 = new Date();
+    em7.setDate(em7.getDate() + 7);
+    const em7iso = em7.toISOString().slice(0, 10);
+    jobsQuery = jobsQuery
+      .eq("status", "aberto")
+      .gte("data_prevista_faturamento", hoje)
+      .lte("data_prevista_faturamento", em7iso);
+  } else if (filtro === "realizado_pendente") {
+    if (jobIdsComPendencia !== null && jobIdsComPendencia.length === 0) {
+      // Nenhum job com pendência — força resultado vazio
+      jobsQuery = jobsQuery.eq("id", "00000000-0000-0000-0000-000000000000");
+    } else if (jobIdsComPendencia !== null && jobIdsComPendencia.length > 0) {
+      jobsQuery = jobsQuery.in("id", jobIdsComPendencia);
+    }
+  }
+  // TODO: filtro=faturamento_pronto — precisa lógica combinada; deixar sem filtro por ora (link funciona, retorna lista completa)
+  // TODO: filtro=encerrar_pronto — join com jobs_envio_faturamento; deixar sem filtro por ora
+  // TODO: filtro=chat_pendente — join com jobs_chat_leituras; deixar sem filtro por ora
+  // TODO: filtro=pps_rejeitadas — join com pedidos_compra; deixar sem filtro por ora
+  // TODO: filtro=minhas_pps — join com pedidos_compra; deixar sem filtro por ora
 
   const [jobsRes, empresas] = await Promise.all([
-    supabase
-      .from("jobs")
-      .select(
-        "id, codigo, nome, status, valor_total, data_inicio_prevista, empresa_id, projeto_id, " +
-          // Produto e Regional saem do PRÓPRIO job, não do projeto (decisão
-          // do Tiago, 01/09/2026): os dois divergem na base — o JOB-0003 é
-          // "Ativação de marca" num projeto "Pevetech".
-          "produto, regional_id, responsavel_id, " +
-          // Os dois descritivos que a lista mostra em cartão (handoff
-          // "Descritivos nas Listas", 04/09/2026): o do job na linha e o
-          // do projeto na faixa do grupo. Texto curto — tetos de 500 e
-          // 600 caracteres — e já vem no embed que a lista faz de todo
-          // jeito, sem query nova.
-          "observacoes, " +
-          "regional:regionais(nome), " +
-          "projeto:projetos(codigo, nome, descricao, cliente:clientes(nome_fantasia)), " +
-          "responsavel:profiles!responsavel_id(nome), " +
-          "empresa:empresas(id, razao_social, nome_fantasia)",
-      )
-      .eq("tenant_id", session.activeTenant.id)
-      .order("codigo", { ascending: true }),
+    jobsQuery,
     listEmpresasAtivas(session.activeTenant.id),
   ]);
 
