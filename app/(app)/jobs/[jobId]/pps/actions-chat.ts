@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { areaDoPapel } from "@/lib/types";
+import { checarPermissao } from "@/lib/permissoes";
 
 type Ok = { ok: true };
 type Err = { ok: false; message: string };
@@ -26,6 +27,8 @@ export async function enviarMensagemPP(
   texto: string,
 ): Promise<Result> {
   const session = await requireSession();
+  const gate = await checarPermissao(session, "chat.enviar");
+  if (!gate.ok) return gate;
   const supabase = createClient();
 
   const parsed = textoSchema.safeParse(texto);

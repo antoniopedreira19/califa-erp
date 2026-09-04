@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
+import { checarPermissao } from "@/lib/permissoes";
 import { createClient } from "@/lib/supabase/server";
 import { categoriaDominioSchema } from "@/lib/validations/categorias-dominio";
 
@@ -24,6 +25,11 @@ export async function criarCategoriaDominio(
   formData: FormData,
 ): Promise<ActionResult> {
   const session = await requireSession();
+  const gate = await checarPermissao(
+    session,
+    "cadastros.categorias_orcamento.editar",
+  );
+  if (!gate.ok) return gate;
   const parsed = categoriaDominioSchema.safeParse({
     escopo: formData.get("escopo")?.toString() ?? "",
     nome: formData.get("nome")?.toString() ?? "",
@@ -71,6 +77,11 @@ export async function editarCategoriaDominio(
   formData: FormData,
 ): Promise<ActionResult> {
   const session = await requireSession();
+  const gate = await checarPermissao(
+    session,
+    "cadastros.categorias_orcamento.editar",
+  );
+  if (!gate.ok) return gate;
   const parsed = categoriaDominioSchema.safeParse({
     escopo: formData.get("escopo")?.toString() ?? "",
     nome: formData.get("nome")?.toString() ?? "",
@@ -111,12 +122,11 @@ export async function inativarCategoriaDominio(
   id: string,
 ): Promise<ActionResult> {
   const session = await requireSession();
-  if (session.activeRole !== "administrador") {
-    return {
-      ok: false,
-      message: "Só administradores podem inativar categorias.",
-    };
-  }
+  const gate = await checarPermissao(
+    session,
+    "cadastros.categorias_orcamento.editar",
+  );
+  if (!gate.ok) return gate;
 
   const supabase = createClient();
   const { error } = await supabase
@@ -146,12 +156,11 @@ export async function reativarCategoriaDominio(
   id: string,
 ): Promise<ActionResult> {
   const session = await requireSession();
-  if (session.activeRole !== "administrador") {
-    return {
-      ok: false,
-      message: "Só administradores podem reativar categorias.",
-    };
-  }
+  const gate = await checarPermissao(
+    session,
+    "cadastros.categorias_orcamento.editar",
+  );
+  if (!gate.ok) return gate;
 
   const supabase = createClient();
   const { error } = await supabase

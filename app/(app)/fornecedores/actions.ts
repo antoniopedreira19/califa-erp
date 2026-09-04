@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
+import { checarPermissao } from "@/lib/permissoes";
 import { fornecedorSchema } from "@/lib/validations/fornecedores";
 import { getBancoByCodigo } from "@/lib/dados/bancos-febraban";
 import { onlyDigits } from "@/lib/utils";
@@ -89,6 +90,11 @@ export async function criarFornecedor(
   formData: FormData,
 ): Promise<ActionResult> {
   const session = await requireSession();
+  // Criar fornecedor cobre a via da tela (/fornecedores/novo, so ADM) e a
+  // via inline dentro de PP (drawer rapido). O gate mais amplo (inline)
+  // libera Admin/GP/Produtor — Freelancer e Financeiro ficam de fora.
+  const gate = await checarPermissao(session, "cadastros.fornecedores.inline");
+  if (!gate.ok) return gate;
   const parsed = fornecedorSchema.safeParse(extractInput(formData));
 
   if (!parsed.success) {
@@ -144,6 +150,8 @@ export async function atualizarFornecedor(
   formData: FormData,
 ): Promise<ActionResult> {
   const session = await requireSession();
+  const gate = await checarPermissao(session, "cadastros.fornecedores.editar");
+  if (!gate.ok) return gate;
   const parsed = fornecedorSchema.safeParse(extractInput(formData));
 
   if (!parsed.success) {
@@ -223,6 +231,8 @@ export async function verificarPixDuplicado(
 
 export async function inativarFornecedor(id: string): Promise<ActionResult> {
   const session = await requireSession();
+  const gate = await checarPermissao(session, "cadastros.fornecedores.editar");
+  if (!gate.ok) return gate;
   const supabase = createClient();
 
   const { error } = await supabase
@@ -249,6 +259,8 @@ export async function inativarFornecedor(id: string): Promise<ActionResult> {
 
 export async function reativarFornecedor(id: string): Promise<ActionResult> {
   const session = await requireSession();
+  const gate = await checarPermissao(session, "cadastros.fornecedores.editar");
+  if (!gate.ok) return gate;
   const supabase = createClient();
 
   const { error } = await supabase

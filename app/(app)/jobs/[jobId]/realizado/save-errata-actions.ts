@@ -18,6 +18,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
+import { checarPermissao } from "@/lib/permissoes";
 import {
   MENSAGEM_JA_ENVIADO,
   jobJaEnviadoParaFaturamento,
@@ -63,6 +64,9 @@ export async function registrarErrataDeSave(
   mudanca: MudancaDeSave,
 ): Promise<ActionResult> {
   const session = await requireSession();
+  // E uma errata que muda saldo entre jobs — gate especifico do save.
+  const gate = await checarPermissao(session, "jobs.consumir_save");
+  if (!gate.ok) return gate;
   const supabase = createClient();
   const tenantId = session.activeTenant.id;
 

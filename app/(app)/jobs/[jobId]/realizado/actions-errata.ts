@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { logAuditEvent } from "@/lib/auth/audit";
+import { checarPermissao } from "@/lib/permissoes";
 import {
   MENSAGEM_JA_ENVIADO,
   jobJaEnviadoParaFaturamento,
@@ -203,6 +204,8 @@ export async function registrarErrata(
   payload: PayloadErrata,
 ): Promise<Result> {
   const session = await requireSession();
+  const gate = await checarPermissao(session, "jobs.criar_errata");
+  if (!gate.ok) return gate;
   const supabase = createClient();
 
   const parsed = payloadSchema.safeParse(payload);

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
+import { checarPermissao } from "@/lib/permissoes";
 import { honorariosDoProjeto } from "@/lib/data/clientes";
 import { extrairArquivoXlsx } from "@/lib/importacao/arquivo";
 import {
@@ -80,6 +81,8 @@ export async function salvarOrcamentosDoProjeto(
   formData: FormData,
 ): Promise<SalvarResult> {
   const session = await requireSession();
+  const gate = await checarPermissao(session, "orcamentos.criar");
+  if (!gate.ok) return gate;
   const tenantId = session.activeTenant.id;
 
   const bruto = formData.get("payload")?.toString();

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
+import { checarPermissao } from "@/lib/permissoes";
 import {
   envioFaturamentoSchema,
   type EnvioFaturamentoInput,
@@ -43,6 +44,8 @@ export async function enviarJobParaFaturamento(
   input: EnvioFaturamentoInput,
 ): Promise<ActionResult> {
   const session = await requireSession();
+  const gate = await checarPermissao(session, "jobs.enviar_faturamento");
+  if (!gate.ok) return gate;
 
   const parsed = envioFaturamentoSchema.safeParse(input);
   if (!parsed.success) {

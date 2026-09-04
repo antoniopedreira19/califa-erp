@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
+import { checarPermissao, pode } from "@/lib/permissoes";
 import { honorariosDoOrcamento } from "@/lib/data/clientes";
 import { bloqueioAprovacaoVersao, versaoSchema } from "@/lib/validations/versoes";
 import {
@@ -134,6 +135,8 @@ export async function criarVersao(
   formData: FormData,
 ): Promise<ActionResult | void> {
   const session = await requireSession();
+  const gate = await checarPermissao(session, "orcamentos.criar");
+  if (!gate.ok) return gate;
   const parsed = versaoSchema.safeParse(extractVersaoInput(formData));
 
   if (!parsed.success) {
@@ -214,6 +217,8 @@ export async function atualizarVersao(
   formData: FormData,
 ): Promise<ActionResult> {
   const session = await requireSession();
+  const gate = await checarPermissao(session, "orcamentos.editar");
+  if (!gate.ok) return gate;
   const updates = extractVersaoPartial(formData);
 
   const supabase = createClient();
@@ -237,20 +242,21 @@ export async function atualizarVersao(
     };
   }
 
-  // Honorários é o único campo desta tela com trava de papel: o padrão vem
-  // do cadastro do cliente e só administrador pode divergir dele aqui.
-  // Não é gate de tela — quem não pode nem tem o campo habilitado, e sem
-  // esta checagem um POST direto passaria por cima disso.
+  // Honorarios e o unico campo desta tela com trava de papel adicional:
+  // o padrao vem do cadastro do cliente e so quem tem `orcamentos.editar_impostos`
+  // (Admin + Gerente de Producao) pode divergir dele. Nao e gate de tela
+  // — quem nao pode nem tem o campo habilitado, e sem esta checagem um
+  // POST direto passaria por cima.
   const honorariosNovo = updates.percentual_honorarios;
   const honorariosMudou =
     typeof honorariosNovo === "number" &&
     Number(atual.percentual_honorarios) !== honorariosNovo;
 
-  if (honorariosMudou && session.activeRole !== "administrador") {
+  if (honorariosMudou && !pode(session.activeRole, "orcamentos.editar_impostos")) {
     return {
       ok: false,
       message:
-        "Só administrador altera os honorários da versão. O padrão vem do cadastro do cliente.",
+        "Só administrador ou gerente de produção altera os honorários da versão. O padrão vem do cadastro do cliente.",
     };
   }
   if (!honorariosMudou) delete updates.percentual_honorarios;
@@ -298,6 +304,8 @@ export async function duplicarVersao(
   versaoId: string,
 ): Promise<ActionResult | void> {
   const session = await requireSession();
+  const gate = await checarPermissao(session, "orcamentos.duplicar");
+  if (!gate.ok) return gate;
   const supabase = createClient();
 
   const { data: original } = await supabase
@@ -474,6 +482,8 @@ export async function duplicarVersao(
  */
 export async function deletarVersao(versaoId: string): Promise<ActionResult> {
   const session = await requireSession();
+  const gate = await checarPermissao(session, "orcamentos.editar");
+  if (!gate.ok) return gate;
   const supabase = createClient();
 
   const { data: atual } = await supabase
@@ -629,6 +639,8 @@ export async function criarGrupo(
   formData: FormData,
 ): Promise<ActionResult> {
   const session = await requireSession();
+  const gate = await checarPermissao(session, "orcamentos.editar");
+  if (!gate.ok) return gate;
   const parsed = grupoSchema.safeParse({
     nome: formData.get("nome")?.toString() ?? "",
   });
@@ -677,6 +689,8 @@ export async function renomearGrupo(
   formData: FormData,
 ): Promise<ActionResult> {
   const session = await requireSession();
+  const gate = await checarPermissao(session, "orcamentos.editar");
+  if (!gate.ok) return gate;
   const parsed = grupoSchema.safeParse({
     nome: formData.get("nome")?.toString() ?? "",
   });
@@ -724,6 +738,8 @@ export async function renomearGrupo(
 
 export async function removerGrupo(grupoId: string): Promise<ActionResult> {
   const session = await requireSession();
+  const gate = await checarPermissao(session, "orcamentos.editar");
+  if (!gate.ok) return gate;
   const supabase = createClient();
 
   const { data: grupo } = await supabase
@@ -841,6 +857,8 @@ export async function adicionarItem(
   formData: FormData,
 ): Promise<ActionResult> {
   const session = await requireSession();
+  const gate = await checarPermissao(session, "orcamentos.editar");
+  if (!gate.ok) return gate;
   const parsed = itemSchema.safeParse(extractItemInput(formData));
 
   if (!parsed.success) {
@@ -898,6 +916,8 @@ export async function atualizarItem(
   formData: FormData,
 ): Promise<ActionResult> {
   const session = await requireSession();
+  const gate = await checarPermissao(session, "orcamentos.editar");
+  if (!gate.ok) return gate;
   const parsed = itemSchema.safeParse(extractItemInput(formData));
 
   if (!parsed.success) {
@@ -1022,6 +1042,8 @@ export async function atualizarCampoItem(
   valor: string | null,
 ): Promise<ActionResult> {
   const session = await requireSession();
+  const gate = await checarPermissao(session, "orcamentos.editar");
+  if (!gate.ok) return gate;
 
   if (!isCampoItemEditavel(campo)) {
     return { ok: false, message: "Campo não editável." };
@@ -1124,6 +1146,8 @@ export async function atualizarCampoItem(
 
 export async function removerItem(itemId: string): Promise<ActionResult> {
   const session = await requireSession();
+  const gate = await checarPermissao(session, "orcamentos.editar");
+  if (!gate.ok) return gate;
   const supabase = createClient();
 
   const { data: item } = await supabase
@@ -1162,6 +1186,8 @@ export async function removerItem(itemId: string): Promise<ActionResult> {
 
 export async function aprovarVersao(versaoId: string): Promise<ActionResult> {
   const session = await requireSession();
+  const gate = await checarPermissao(session, "orcamentos.aprovar");
+  if (!gate.ok) return gate;
   const supabase = createClient();
 
   // 1. Fetch versão + orçamento (com projeto_id pra revalidatePath)
@@ -1338,6 +1364,8 @@ export async function cancelarAprovacaoVersao(
   versaoId: string,
 ): Promise<ActionResult> {
   const session = await requireSession();
+  const gate = await checarPermissao(session, "orcamentos.aprovar");
+  if (!gate.ok) return gate;
   const supabase = createClient();
 
   // 1. Fetch versão

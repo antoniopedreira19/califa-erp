@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
+import { checarPermissao } from "@/lib/permissoes";
 import {
   clienteSchema,
   HONORARIOS_PADRAO_FALLBACK,
@@ -56,6 +57,8 @@ function mapDbError(msg: string): string {
 
 export async function criarCliente(formData: FormData): Promise<ActionResult> {
   const session = await requireSession();
+  const gate = await checarPermissao(session, "cadastros.clientes.editar");
+  if (!gate.ok) return gate;
   const parsed = clienteSchema.safeParse(extractInput(formData));
 
   if (!parsed.success) {
@@ -147,6 +150,8 @@ export async function atualizarCliente(
   formData: FormData,
 ): Promise<ActionResult> {
   const session = await requireSession();
+  const gate = await checarPermissao(session, "cadastros.clientes.editar");
+  if (!gate.ok) return gate;
   const parsed = clienteSchema.safeParse(
     extractInput(formData, { honorariosVazioVale12: true }),
   );
@@ -241,6 +246,8 @@ export async function atualizarCliente(
 
 export async function inativarCliente(id: string): Promise<ActionResult> {
   const session = await requireSession();
+  const gate = await checarPermissao(session, "cadastros.clientes.editar");
+  if (!gate.ok) return gate;
   const supabase = createClient();
 
   const { error } = await supabase
@@ -267,6 +274,8 @@ export async function inativarCliente(id: string): Promise<ActionResult> {
 
 export async function reativarCliente(id: string): Promise<ActionResult> {
   const session = await requireSession();
+  const gate = await checarPermissao(session, "cadastros.clientes.editar");
+  if (!gate.ok) return gate;
   const supabase = createClient();
 
   const { error } = await supabase

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
+import { checarPermissao } from "@/lib/permissoes";
 import { saldoAFaturarDoJob } from "@/lib/data/saldo-a-faturar";
 import {
   PP_STATUS_EM_ABERTO,
@@ -103,6 +104,8 @@ export async function levantarImpedimentos(
  */
 export async function encerrarJob(jobId: string): Promise<ActionResult> {
   const session = await requireSession();
+  const gate = await checarPermissao(session, "jobs.encerrar");
+  if (!gate.ok) return gate;
   const supabase = createClient();
 
   const { data: job } = await supabase
