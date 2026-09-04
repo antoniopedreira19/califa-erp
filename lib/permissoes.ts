@@ -52,6 +52,12 @@ export const permissoes = {
   "cadastros.fornecedores.editar":          ["administrador"],
   /** Cadastro rapido de fornecedor DENTRO do fluxo de PP (drawer inline). */
   "cadastros.fornecedores.inline":          ["administrador", "gerente_producao", "produtor"],
+  /**
+   * Cadastro rapido de portal de fornecedor do cliente DENTRO do envio do
+   * job para faturamento (decisao 050). Espelha `jobs.enviar_faturamento`:
+   * quem pode enviar precisa poder cadastrar o portal que o envio pede.
+   */
+  "cadastros.clientes.portal_inline":       ["administrador", "gerente_producao"],
   "cadastros.empresas.editar":              ["administrador"],
   "cadastros.contas_bancarias.editar":      ["administrador", "financeiro"],
   "cadastros.plano_contas.editar":          ["administrador", "financeiro"],

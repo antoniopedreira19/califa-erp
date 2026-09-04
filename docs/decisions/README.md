@@ -73,9 +73,10 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 047 | [O resumo do cabeçalho mostra o resultado operacional, não o custo](047-resumo-do-cabecalho-mostra-resultado-operacional.md) | 2026-09-04 |
 | 048 | [O fornecedor nasce de dentro da PP, e o formulário de PP volta ao painel](048-fornecedor-nasce-de-dentro-da-pp.md) | 2026-09-04 |
 | 049 | [Remover o grupo leva os itens dele junto](049-remover-grupo-leva-os-itens-junto.md) | 2026-09-04 |
+| 050 | [O portal do cliente nasce de dentro do envio para faturamento](050-portal-do-cliente-nasce-de-dentro-do-envio-para-faturamento.md) | 2026-09-04 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
 > data é a da decisão, não a da posição na fila.
 
-**Próximo número livre: 050.**
+**Próximo número livre: 051.**

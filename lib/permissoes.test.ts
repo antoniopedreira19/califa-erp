@@ -273,6 +273,19 @@ test("GP e Produtor cadastram fornecedor INLINE (exceção do PP)", () => {
   assert.equal(pode("produtor", "cadastros.fornecedores.editar"), false);
 });
 
+test("Quem envia job para faturamento cadastra portal do cliente INLINE (decisao 050)", () => {
+  const inline = new Set(getRolesFor("cadastros.clientes.portal_inline"));
+  const envia = new Set(getRolesFor("jobs.enviar_faturamento"));
+  assert.deepEqual(inline, envia);
+  assert.ok(inline.has("administrador"));
+  assert.ok(inline.has("gerente_producao"));
+  // Mas nao via a tela cheia de clientes
+  assert.equal(pode("gerente_producao", "cadastros.clientes.editar"), false);
+  assert.equal(pode("produtor", "cadastros.clientes.portal_inline"), false);
+  assert.equal(pode("financeiro", "cadastros.clientes.portal_inline"), false);
+  assert.equal(pode("freelancer", "cadastros.clientes.portal_inline"), false);
+});
+
 test("So Administrador e Financeiro veem/gerenciam contas bancarias, plano de contas e cartoes", () => {
   const esperado = new Set<AppRole>(["administrador", "financeiro"]);
   assert.deepEqual(new Set(getRolesFor("cadastros.contas_bancarias.editar")), esperado);
