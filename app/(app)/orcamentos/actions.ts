@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
-import { checarPermissao } from "@/lib/permissoes";
+import { checarPermissao } from "@/lib/permissoes-server";
 import { projetoSchema } from "@/lib/validations/projetos";
 import { gerarCodigoProjeto } from "@/lib/codigos/projetos";
 

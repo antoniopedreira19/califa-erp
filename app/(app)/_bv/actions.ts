@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
-import { checarPermissao } from "@/lib/permissoes";
+import { checarPermissao } from "@/lib/permissoes-server";
 import { bvSchema } from "@/lib/validations/bv";
 import type { BvSituacao, ItemBv, JobStatus } from "@/lib/types";
 import { jobEstaCongelado, jobAceitaAcoesPlanilha } from "@/lib/types";
