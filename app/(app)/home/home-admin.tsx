@@ -13,8 +13,7 @@ export async function HomeAdmin({ session }: { session: SessionContext }) {
     <div className="space-y-8">
       <CabecalhoHome
         nome={session.profile.nome}
-        papel="Administração"
-        subtitulo="Painel operacional do tenant: pendências primeiro, números do mês em seguida."
+        subtitulo="O que precisa da sua atenção hoje, e como estão os números do mês."
       />
 
       <section className="space-y-3">

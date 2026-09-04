@@ -17,7 +17,6 @@ export async function HomeGerenteProducao({
     <div className="space-y-8">
       <CabecalhoHome
         nome={session.profile.nome}
-        papel="Gestão de Produção"
         subtitulo="Aprovações que dependem de você e o volume do seu time."
       />
 

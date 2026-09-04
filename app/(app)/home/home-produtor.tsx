@@ -17,7 +17,6 @@ export async function HomeProdutor({
     <div className="space-y-8">
       <CabecalhoHome
         nome={session.profile.nome}
-        papel="Produção"
         subtitulo="O que precisa de você nos jobs em andamento e o seu volume."
       />
 
