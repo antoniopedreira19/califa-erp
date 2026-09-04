@@ -56,8 +56,8 @@ que o cabeçalho já mostrava antes da mudança.
 ## No orçamento é um bloco só
 
 Em orçamento não existe realizado, então o resumo mantém os três blocos —
-**Valor do Job · Resultado Op. (Planejado) · Resultado geral (%)** — e só
-o do meio muda de conteúdo. O rótulo diz **(Planejado)**, e não
+**Valor do Job · Resultado Op. (Planejado) · Rentab. (%)** — e só o do
+meio muda de conteúdo. O rótulo diz **(Planejado)**, e não
 "(Orçado)", porque o número sai do custo do bloco PLANEJADO da planilha:
 com custo **orçado** a conta daria exatamente os honorários, que é a
 razão registrada no handoff do orçamento para o resumo nunca ter usado o
@@ -84,3 +84,33 @@ e no pior caso o resumo desce para a própria linha.
 | [`resumo-rentabilidade.tsx`](app/(app)/orcamentos/[projetoId]/[orcId]/versoes/[versaoId]/resumo-rentabilidade.tsx) | orçamento — bloco do meio; prop `custoPlanejado` virou `resultadoOperacional` |
 | [`orcamentos/[projetoId]/[orcId]/page.tsx`](app/(app)/orcamentos/[projetoId]/[orcId]/page.tsx) · [`agregado/editor-agregado.tsx`](app/(app)/orcamentos/[projetoId]/agregado/editor-agregado.tsx) | passam `resultadoOperacional` |
 | [`multi/editor-multi-jobs.tsx`](app/(app)/orcamentos/[projetoId]/multi/editor-multi-jobs.tsx) | o KPI "Custo planejado" do rascunho; `Kpi` ganhou `tomVermelho` |
+
+## Addendum 2026-09-04 — o terceiro bloco chama-se "Rentab."
+
+O bloco do percentual no resumo do orçamento vinha rotulado **"Resultado
+geral"** desde que o resumo nasceu (commit `75cbb22`), enquanto o resumo
+do job fecha a linha com **"rentab."**. Mesmo número, dois nomes: quem
+passa de uma tela para a outra tinha de reconhecer que 30,4% ali e 23,5%
+lá eram a mesma conta. Instrução do Tiago em 04/09/2026: **unificar em
+"Rentab."**, que é o termo que a produção já lê nas planilhas.
+
+Mudou em duas telas, as duas do orçamento:
+
+| Arquivo | Antes | Agora |
+| --- | --- | --- |
+| [`resumo-rentabilidade.tsx`](app/(app)/orcamentos/[projetoId]/[orcId]/versoes/[versaoId]/resumo-rentabilidade.tsx) | `Resultado geral` | `Rentab.` |
+| [`multi/editor-multi-jobs.tsx`](app/(app)/orcamentos/[projetoId]/multi/editor-multi-jobs.tsx) (KPI do rascunho) | `Resultado geral` | `Rentab.` |
+
+Só o rótulo. A prop `resultadoGeral` e a conta seguem com o nome de
+sempre — identificador de código não é string de tela.
+
+⚠️ **"Resultado geral" continua existindo, de propósito, em três
+lugares:** a linha do card de Totais
+([`totais-card.tsx`](app/(app)/orcamentos/[projetoId]/[orcId]/versoes/[versaoId]/totais-card.tsx)),
+o [`painel-resultado.tsx`](components/painel-resultado.tsx) e a
+[`legenda-fechamento.tsx`](components/legenda-fechamento.tsx), que
+**define** o termo. Ali ele não é um resumo de canto: é a última linha de
+uma conta que se audita de cima para baixo, e o nome está fixado na
+decisão 003. Renomear nesses três é mudar vocabulário de fechamento, não
+alinhar rótulo de cabeçalho — fica para uma decisão própria, se o time
+quiser.
