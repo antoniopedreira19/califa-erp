@@ -2968,3 +2968,99 @@ planilha do job — não reimplementar por tabela.
 ⚠️ Para o Chrome MCP: clique por coordenada ou por `ref` não chega ao
 `<td>` da célula — selecione por `document.querySelector('[data-cel=…]').click()`
 no `javascript_tool` e depois use as teclas de verdade.
+
+---
+
+## ⚠️ Nota de 2026-09-04 — a lixeira do grupo leva os itens junto
+
+Regra em [decisão 049](../decisions/049-remover-grupo-leva-os-itens-junto.md);
+esta nota registra o que mudou na planilha da versão.
+
+### O que mudou na tela
+
+| Antes | Agora |
+|---|---|
+| grupo com item dentro recusava a remoção: "O grupo X tem N itens. Remova os itens primeiro para poder excluir o grupo." | a confirmação avisa: "O grupo **X** e os N itens dentro dele saem da planilha. Essa ação não pode ser desfeita." |
+| botão "Remover" (que não removia nada quando havia item) | botão **"Remover grupo e N itens"** — o número está no botão, não só no texto |
+| grupo vazio: removia | igual, mesma frase e botão "Remover" |
+
+A recusa também sumiu do servidor: `removerGrupo` não conta mais itens
+para barrar, conta para **auditar**. Ela grava
+`grupo_orcamento.removido` com `itens_apagados` no metadata — depois do
+delete não há de onde ler quantas linhas existiam.
+
+Continuam de pé: versão aprovada não perde grupo (a calha nem mostra a
+lixeira em tela `readOnly`), e a lixeira da linha do item continua
+removendo item a item.
+
+### O que mudou no banco
+
+RPC nova `deletar_grupo_orcamento(uuid)`
+([migration `20260904100001`](../../supabase/migrations/20260904100001_rpc_deletar_grupo_orcamento.sql)),
+`SECURITY INVOKER`, `execute` só para `authenticated`. Ela apaga item →
+grupo **numa transação só**, pela mesma razão da RPC de deletar versão
+(`20260821000005`): dois deletes pelo PostgREST são duas transações, e a
+falha da segunda deixaria os itens apagados e o grupo de pé. A ordem é
+explícita porque `versoes_orcamento_itens.grupo_id` é `ON DELETE
+RESTRICT`; `itens_bv` e `saves_consumos` caem por CASCADE a partir do
+item.
+
+### Verificação (04/09/2026, servidor próprio na 3000, logado no Chrome — `TESTE-0003/26-07` v6)
+
+| O quê | Resultado |
+|---|---|
+| grupo "Grupo teste remocao" criado com 2 itens pelos fluxos da tela | planilha em 2 grupos · 8 itens |
+| lixeira do grupo | "Remover grupo? O grupo **Grupo teste remocao** e os 2 itens dentro dele saem da planilha." + botão "Remover grupo e 2 itens" |
+| confirmar | grupo e os 2 itens somem; planilha volta a 1 grupo · 6 itens, total R$ 49.100,00, "Aprovar versão" habilitado de novo |
+| conferência no banco | grupo apagado, **0 itens órfãos**, os 6 itens do "Grupo 1" intactos |
+| `audit_events` | `grupo_orcamento.removido` · `{"nome":"Grupo teste remocao","itens_apagados":2}` |
+| grupo vazio ("Grupo vazio teste") | frase antiga ("O grupo está vazio…") e botão "Remover"; removeu |
+| console | só o aviso de hidratação de uma extensão do Chrome (`trancy-version`), alheio ao ERP |
+
+O dado de teste criado para esta conferência foi removido junto: a v6
+está exatamente como estava antes.
+
+---
+
+## ⚠️ Nota de 2026-09-04 — a planilha do cliente abate o crédito de save consumido
+
+O Tiago conferiu a regra da planilha exportada (decisão 041) e apontou
+uma metade que nunca tinha sido implementada: o save **gerado** já
+entrava (nota de 27/08 na decisão 028), mas o save **consumido** de
+outro job saía cheio — o cliente que recebesse as planilhas da origem e
+do consumidor veria a receita cobrada duas vezes. Conferido em dinheiro
+no par `TESTE-0006/26-01`/`-02`: as duas planilhas somavam
+R$ 170.871,13; agora somam **R$ 129.862,06**, o compromisso da decisão
+028. Regra e apresentação atualizadas na decisão 041 (seção "O que sai
+no fechamento") e cruzadas na 028.
+
+### O que mudou
+
+- **`calcularTotaisVersao().cliente`** — quarto fechamento: base do
+  `faturamento` (save gerado dentro, consumido fora) com a alavanca de
+  principal do `job` (o cliente compromete também o que paga direto ao
+  fornecedor). Sem save, coincide com `bruto` e `job`. O `bruto`
+  continua no motor, sem uso nas telas.
+- **Planilha** (`lib/exportacao/planilha-orcamento.ts`): itens seguem
+  cheios; linha nova **"(−) PAGO COM CRÉDITO DE SALDO ANTERIOR"** entre
+  TOTAL e IMPOSTO, só quando há consumo; HONORÁRIOS, IMPOSTO e
+  FATURAMENTO passam a ser líquidos do crédito. Coluna **I oculta** com o
+  consumo por item alimenta as fórmulas (`SUMIF` sobre G e I); a linha de
+  crédito é `-SUM(I)`. Orçamento pago inteiramente por crédito sai com
+  FATURAMENTO **R$ 0,00** e a linha explicando — aceito pelo Tiago.
+- **Seletor "Exportar"** das duas telas mostra o mesmo número da planilha
+  (`cliente.total`); a nota de rodapé do seletor diz que o crédito já
+  está abatido.
+- Parser e importação não mudam: a coluna I não é lida.
+
+### Verificação (04/09/2026, servidor próprio na porta 57426, logado)
+
+| Onde | O que foi conferido |
+|---|---|
+| Script sobre os itens reais do `Revisao 1` | bruto 147.632,41 · job 136.497,83 · faturamento 125.714,18 · **cliente 133.714,18**; sem save os três coincidem |
+| Script do gerador (2 seções, taxas diferentes, 1.500 de crédito) | 25 fórmulas batem com a soma dos `cliente`; linha de crédito `-SUM($I$4:$I$15)` = −1.500; coluna I oculta; parser e diff inalterados |
+| Projeto `TESTE-0006/26` — seletor | Revisao 1 **R$ 133.714,18**; Pago só por save **R$ 0,00**; Consome o Save 20.504,54; Origem do Save 109.357,52 — os mesmos números da conferência |
+| Arquivo baixado (`Revisao 1`) | Item 4 com 10.000 na coluna I oculta; TOTAL 112.000; **(−) PAGO COM CRÉDITO DE SALDO ANTERIOR −10.000**; IMPOSTO 19.474,18; HONORÁRIOS 12% 12.240; FATURAMENTO **133.714,18** = seletor |
+| Visão agregada — seletor | mesmos quatro valores |
+
+`tsc --noEmit`, `next lint` e `next build` (em cópia isolada) limpos.

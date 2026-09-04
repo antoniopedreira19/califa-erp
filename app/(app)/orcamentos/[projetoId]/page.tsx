@@ -198,7 +198,8 @@ export default async function ProjetoDetailPage({
   // mais recente (número em negociação). Sem versão → null (travessão).
   const valorJobMap = new Map<string, number>();
   // O que o seletor "Exportar" mostra por orçamento: a versão que sai no
-  // arquivo e o FATURAMENTO que a aba imprime (lado bruto, decisão 028).
+  // arquivo e o FATURAMENTO que a planilha imprime — o lado `cliente`
+  // (decisão 041): save gerado dentro, crédito consumido fora.
   const exportavelMap = new Map<string, { numeroVersao: number; valor: number }>();
 
   if (orcamentoIds.length > 0) {
@@ -280,7 +281,7 @@ export default async function ProjetoDetailPage({
         valorJobMap.set(orcId, totais.valorJob);
         exportavelMap.set(orcId, {
           numeroVersao: versao.numero_versao,
-          valor: totais.bruto.total,
+          valor: totais.cliente.total,
         });
       }
     }

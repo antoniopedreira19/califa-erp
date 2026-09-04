@@ -240,9 +240,17 @@ export interface VersaoTotais {
   /** O compromisso do cliente neste job: base = 0 quando a linha é save. */
   job: FechamentoLado;
   /** A conta como se o save não existisse. É o número de antes de
-   *  24/08/2026, e é o que a planilha exportada ao cliente mostra —
-   *  num orçamento de save o `job` é zero e o documento sairia vazio. */
+   *  24/08/2026. Foi o que a planilha exportada ao cliente mostrou até
+   *  04/09/2026 (hoje ela usa `cliente`). */
   bruto: FechamentoLado;
+  /** O que a **planilha do cliente** mostra (decisão 041, 04/09/2026):
+   *  as linhas em save ENTRAM — o cliente paga por elas agora — e o que é
+   *  pago com crédito de outro job SAI — ele já pagou lá, e cobrar de
+   *  novo seria cobrar duas vezes. A base é a do `faturamento`; a
+   *  alavanca de principal é a do `job`, porque o documento do cliente
+   *  mostra o compromisso total dele, inclusive o que paga direto ao
+   *  fornecedor. Sem save, coincide com `bruto` e `job`. */
+  cliente: FechamentoLado;
 
   /** A repartição do orçado entre save usado, save gerado e custos. */
   save: QuebraSave;
@@ -399,6 +407,12 @@ export function calcularTotaisVersao(
     fecharLado(subtotaisPorTipo, percentualHonorarios, percentualImposto),
     "valorJob",
   );
+  // A planilha do cliente: base do faturamento (save gerado dentro, save
+  // consumido fora), alavanca do valor do job.
+  const cliente = comPrincipal(
+    fecharLado(baseFaturamento, percentualHonorarios, percentualImposto),
+    "valorJob",
+  );
 
   const totalSaveGerado = somar(saveGerado);
   const subtotalGeral = somar(subtotaisPorTipo);
@@ -416,6 +430,7 @@ export function calcularTotaisVersao(
     faturamento,
     job,
     bruto,
+    cliente,
     save: {
       saveUsado,
       saveGerado,
