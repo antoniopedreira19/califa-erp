@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
-import { checarPermissao } from "@/lib/permissoes";
+import { checarPermissao } from "@/lib/permissoes-server";
 import { createClient } from "@/lib/supabase/server";
 import { categoriaDominioSchema } from "@/lib/validations/categorias-dominio";
 

@@ -26,10 +26,10 @@ import {
   pode,
   getRolesFor,
   recursos,
-  requirePermissao,
   PermissaoNegadaError,
   type Recurso,
 } from "./permissoes";
+import { requirePermissao } from "./permissoes-server";
 
 const ROLES_VALIDAS: readonly AppRole[] = [
   "administrador",

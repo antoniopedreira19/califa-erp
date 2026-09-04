@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { areaDoPapel } from "@/lib/types";
-import { checarPermissao } from "@/lib/permissoes";
+import { checarPermissao } from "@/lib/permissoes-server";
 
 type Ok = { ok: true };
 type Err = { ok: false; message: string };

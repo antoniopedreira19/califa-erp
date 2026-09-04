@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { logAuditEvent } from "@/lib/auth/audit";
-import { checarPermissao } from "@/lib/permissoes";
+import { checarPermissao } from "@/lib/permissoes-server";
 import {
   MENSAGEM_JA_ENVIADO,
   jobJaEnviadoParaFaturamento,

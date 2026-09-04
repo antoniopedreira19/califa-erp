@@ -1,12 +1,13 @@
 /**
- * Matriz de permissoes do ERP California.
+ * Matriz de permissoes do ERP California — parte PURA (client-safe).
  *
- * Fonte-verdade unica de quem pode o que. Consumida por:
- *   - components/sidebar.tsx           (visibilidade dos itens de menu)
- *   - server actions                   (requirePermissao no inicio)
- *   - server components de pagina      (deriva podeEditar pra UI condicional)
- *   - politicas RLS                    (via helpers SQL espelho — supabase/migrations)
- *   - docs/PERMISSOES.md               (matriz renderizada pra humano)
+ * Este arquivo NAO importa nada que puxe next/headers ou audit. Client
+ * components (ex.: components/sidebar.tsx) importam daqui em seguranca.
+ *
+ * As duas funcoes que fazem side-effect (`checarPermissao` e
+ * `requirePermissao`, que gravam `acao_negada` na auditoria) moram em
+ * `lib/permissoes-server.ts`. Server actions e server components devem
+ * importar daquele modulo.
  *
  * Sempre que uma permissao nova nascer, adicione uma linha na tabela
  * `permissoes` e o resto se propaga automaticamente. A propria tela do
@@ -15,8 +16,7 @@
  * Ver spec: docs/superpowers/specs/2026-09-03-permissoes-e-papeis-design.md.
  */
 
-import type { AppRole, SessionContext } from "./types";
-import { logAuditEvent } from "./auth/audit";
+import type { AppRole } from "./types";
 
 /**
  * Cada chave e um "recurso.acao" (ex: "orcamentos.aprovar"). O valor e
@@ -161,41 +161,9 @@ export function pode(role: AppRole, recurso: Recurso): boolean {
 }
 
 /**
- * Server actions devem chamar isso no inicio, apos requireSession().
- * Lanca `PermissaoNegadaError` se o papel nao autoriza e grava tentativa
- * em audit_events como `acao_negada`.
- *
- * O metadata opcional entra no evento — util pra registrar `{ orcamentoId,
- * versaoId }` etc. e permitir reconstituir o que o usuario tentou.
- */
-export async function requirePermissao(
-  session: SessionContext,
-  recurso: Recurso,
-  metadata?: Record<string, unknown>,
-): Promise<void> {
-  if (pode(session.activeRole, recurso)) return;
-
-  // Registra tentativa negada. Falhas de auditoria nao bloqueiam a
-  // negativa — logAuditEvent ja engole erros internamente.
-  await logAuditEvent({
-    acao: "acao_negada",
-    tenantId: session.activeTenant.id,
-    entidadeTipo: "permissao",
-    entidadeId: recurso,
-    metadata: {
-      recurso,
-      papel: session.activeRole,
-      ...(metadata ?? {}),
-    },
-  });
-
-  throw new PermissaoNegadaError(recurso);
-}
-
-/**
  * Utilitario pra montar respostas amigaveis em server actions que ja
- * usam o padrao `{ ok: false, message }`. Chame dentro do catch de
- * PermissaoNegadaError.
+ * usam o padrao `{ ok: false, message }`. Puro — nao grava audit; a
+ * gravacao acontece dentro de `checarPermissao` (lib/permissoes-server).
  */
 export function respostaPermissaoNegada(recurso: Recurso): {
   ok: false;
@@ -209,41 +177,4 @@ export function respostaPermissaoNegada(recurso: Recurso): {
     code: "permissao_negada",
     recurso,
   };
-}
-
-/**
- * Variante nao-throw de `requirePermissao` que devolve um Result no
- * mesmo formato que as server actions ja usam. Padrao pra gate no topo
- * de acao:
- *
- *   const session = await requireSession();
- *   const gate = await checarPermissao(session, "orcamentos.aprovar");
- *   if (!gate.ok) return gate;
- *
- * Registra tentativa negada em audit_events do mesmo jeito que
- * requirePermissao.
- */
-export async function checarPermissao(
-  session: SessionContext,
-  recurso: Recurso,
-  metadata?: Record<string, unknown>,
-): Promise<
-  | { ok: true }
-  | { ok: false; message: string; code: "permissao_negada"; recurso: Recurso }
-> {
-  if (pode(session.activeRole, recurso)) return { ok: true };
-
-  await logAuditEvent({
-    acao: "acao_negada",
-    tenantId: session.activeTenant.id,
-    entidadeTipo: "permissao",
-    entidadeId: recurso,
-    metadata: {
-      recurso,
-      papel: session.activeRole,
-      ...(metadata ?? {}),
-    },
-  });
-
-  return respostaPermissaoNegada(recurso);
 }

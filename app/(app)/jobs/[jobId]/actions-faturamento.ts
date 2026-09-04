@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
-import { checarPermissao } from "@/lib/permissoes";
+import { checarPermissao } from "@/lib/permissoes-server";
 import {
   envioFaturamentoSchema,
   type EnvioFaturamentoInput,
