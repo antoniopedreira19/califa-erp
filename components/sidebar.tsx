@@ -308,53 +308,6 @@ export function Sidebar({
           })}
         </nav>
 
-        {/* Configurações (engrenagem) */}
-        {podeConfiguracoes && (
-          <div className="px-3 pt-3 pb-1 flex justify-center">
-            <Link
-              href="/configuracoes"
-              onClick={() => setMobileOpen(false)}
-              title={!expanded ? "Configurações" : undefined}
-              className="group flex justify-center"
-            >
-              <div
-                style={{ ...transitionStyle, width: `${itemBgWidth}px` }}
-                className={cn(
-                  "relative flex items-center h-11 rounded-lg overflow-hidden text-sm font-medium shrink-0",
-                  configuracoesAtivo
-                    ? "bg-[#3E3E3E] text-white"
-                    : "text-white/60 group-hover:text-white group-hover:bg-white/5",
-                )}
-              >
-                {configuracoesAtivo && (
-                  <span className="absolute inset-y-0 left-0 w-1 bg-california-red" />
-                )}
-                <div className="flex h-full w-11 shrink-0 items-center justify-center">
-                  <Settings
-                    className={cn(
-                      "h-[18px] w-[18px] transition-colors",
-                      configuracoesAtivo
-                        ? "text-california-red"
-                        : "text-white/50 group-hover:text-white/80",
-                    )}
-                  />
-                </div>
-                <div
-                  style={transitionStyle}
-                  className={cn(
-                    "flex flex-1 items-center gap-2 pr-3 min-w-0",
-                    expanded ? "opacity-100" : "opacity-0",
-                  )}
-                >
-                  <span className="truncate whitespace-nowrap flex-1">
-                    Configurações
-                  </span>
-                </div>
-              </div>
-            </Link>
-          </div>
-        )}
-
         {/* User footer */}
         <div className="p-3 flex justify-center">
           <div
@@ -386,6 +339,21 @@ export function Sidebar({
                   {roleLabel(role)}
                 </p>
               </div>
+              {podeConfiguracoes && (
+                <Link
+                  href="/configuracoes"
+                  onClick={() => setMobileOpen(false)}
+                  title="Configurações"
+                  className={cn(
+                    "shrink-0 p-2 rounded-lg transition-colors",
+                    configuracoesAtivo
+                      ? "text-california-red bg-white/10"
+                      : "text-white/50 hover:text-white hover:bg-white/10",
+                  )}
+                >
+                  <Settings className="h-4 w-4" />
+                </Link>
+              )}
               <form action="/api/auth/logout" method="post" className="shrink-0">
                 <button
                   type="submit"
