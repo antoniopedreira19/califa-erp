@@ -26,6 +26,33 @@
  * `valorDaPPPorUnidade` (R$ Unit. × QT × D/M), no fim do arquivo.
  */
 
+import type { TipoCusto } from "@/lib/types";
+import { TIPOS_CUSTO, tipoGeraDesembolso } from "./versao-totais";
+
+/**
+ * A linha precisa dizer se ainda sai PP dela? (decisão 052)
+ *
+ * Fonte única do recorte, e por isso mora AQUI, num módulo puro: a barra
+ * da planilha é client component, a trava do encerramento é server
+ * action e a página do job calcula em memória. Os três leem daqui.
+ *
+ *   * `A · Direto` e `D · Interno` pagam por BV, não têm calha de PP e
+ *     não entram na previsão de custo;
+ *   * linha em SAVE não emite PP neste job (decisão 028 §9) — a calha
+ *     dela nem oferece o botão, então travaria o encerramento para
+ *     sempre.
+ */
+export function itemPrecisaDeConclusao(
+  tipoCusto: TipoCusto,
+  emSave: boolean,
+): boolean {
+  return tipoGeraDesembolso(tipoCusto) && !emSave;
+}
+
+/** Os tipos de custo que geram PP — a lista sai da matriz de tipos, não
+ *  de um array escrito à mão: tipo novo entra aqui sozinho. */
+export const TIPOS_QUE_GERAM_PP = TIPOS_CUSTO.filter(tipoGeraDesembolso);
+
 /** Centavo é a menor unidade: toda conta arredonda para 2 casas. */
 function arredondar(v: number): number {
   return Math.round(v * 100) / 100;

@@ -23,6 +23,46 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { areaDoPapel } from "@/lib/types";
+// O recorte de quais linhas precisam responder é PURO e mora em
+// `pps-item.ts`: este arquivo puxa `logAuditEvent`, que puxa o client de
+// servidor, e a barra da planilha — que é client component — não pode
+// importar nada daqui.
+import { TIPOS_QUE_GERAM_PP } from "@/lib/calculos/pps-item";
+
+/** Uma âncora de item que ainda não disse se sai mais PP dela. */
+export interface ItemSemConclusao {
+  itemRealizadoId: string;
+  nome: string;
+}
+
+/**
+ * As linhas do job que ainda não responderam — a consulta que o
+ * encerramento e o botão da barra compartilham.
+ */
+export async function itensSemConclusaoDoJob(
+  supabase: SupabaseClient,
+  tenantId: string,
+  jobId: string,
+): Promise<ItemSemConclusao[]> {
+  const { data, error } = await supabase
+    .from("jobs_itens_realizado")
+    .select("id, copia:jobs_itens_orcado!inner(item, tipo_custo, em_save)")
+    .eq("tenant_id", tenantId)
+    .eq("job_id", jobId)
+    .is("pps_concluidas_em", null)
+    .in("copia.tipo_custo", TIPOS_QUE_GERAM_PP)
+    .eq("copia.em_save", false);
+
+  if (error) {
+    console.error("[item.conclusao.pendentes]", error.message);
+    return [];
+  }
+
+  return ((data ?? []) as any[]).map((linha) => ({
+    itemRealizadoId: linha.id as string,
+    nome: (linha.copia?.item as string) ?? "Item",
+  }));
+}
 
 export interface AplicarConclusaoArgs {
   tenantId: string;

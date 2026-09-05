@@ -13,7 +13,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { Clock, ClipboardList } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
 import { nomeVersao } from "@/lib/nome-versao";
 import type {
   Job,
@@ -51,6 +51,14 @@ import {
 } from "./job-item-realizado-table";
 import { JobTotaisCard } from "./job-totais-card";
 import { AlterarOrcadoButton } from "./alterar-orcado-button";
+import {
+  ConcluirPPsButton,
+  type ItemEmAberto,
+} from "./concluir-pps-button";
+import {
+  itemPrecisaDeConclusao,
+  somaDasPPsEmitidas,
+} from "@/lib/calculos/pps-item";
 import { useRascunhoErrata } from "./errata-rascunho";
 import { ErrataBarra } from "./errata-barra";
 import { ErrataConfirmarDialog } from "./errata-confirmar-dialog";
@@ -144,6 +152,33 @@ export function JobRealizadoSection({
     definirModoErrata(errata.ativo);
     return () => definirModoErrata(false);
   }, [errata.ativo]);
+
+  // Quem ainda não disse se sai mais PP (decisão 052) — o alcance do
+  // botão "Concluir PPs" da barra. O servidor refaz esta lista antes de
+  // gravar; aqui ela serve para contar, listar no aviso e apagar o botão
+  // quando não sobrou ninguém.
+  const itensEmAberto: ItemEmAberto[] = React.useMemo(() => {
+    const lista: ItemEmAberto[] = [];
+    for (const item of itens) {
+      if (!itemPrecisaDeConclusao(item.tipo_custo, item.em_save === true)) {
+        continue;
+      }
+      const realizado = realizadosMap.get(item.id);
+      if (!realizado || realizado.pps_concluidas_em != null) continue;
+
+      const pps = ppsPorItemId.get(realizado.id) ?? [];
+      const emPPs = somaDasPPsEmitidas(pps);
+      lista.push({
+        itemRealizadoId: realizado.id,
+        nome: item.item,
+        situacao:
+          pps.length === 0
+            ? "nenhuma PP"
+            : `${pps.length} ${pps.length === 1 ? "PP" : "PPs"} · ${formatCurrency(emPPs, versao.moeda)}`,
+      });
+    }
+    return lista;
+  }, [itens, realizadosMap, ppsPorItemId, versao.moeda]);
 
   const [confirmando, setConfirmando] = React.useState(false);
   const [salvando, setSalvando] = React.useState(false);
@@ -400,6 +435,12 @@ export function JobRealizadoSection({
                 setOrcadoVisivel(true);
                 errata.ligar();
               }}
+            />
+          )}
+          {podeAcoes && (
+            <ConcluirPPsButton
+              jobId={job.id}
+              itensEmAberto={itensEmAberto}
             />
           )}
           <Link

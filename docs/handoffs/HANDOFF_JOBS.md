@@ -2476,3 +2476,41 @@ do formulário e sem perder o que já foi digitado.
   de custo do job saiu de R$ 30.000 → R$ 10.000 (item marcado sem PP) →
   R$ 15.000 (com a PP gerada de R$ 5.000 segurando previsão). Ficou uma PP
   de teste gerada (PP-00025, R$ 5.000, fornecedor Antonio) no item 1.
+
+## ⚠️ Nota de 2026-09-05 — "Concluir PPs" resolve a planilha inteira (decisão 052)
+
+- **Botão na barra da planilha**, ao lado de "Alterar orçado"
+  (`concluir-pps-button.tsx`). Marca de uma vez todos os itens que geram
+  PP e ainda não responderam. O aviso conta quantos são e, em "Ver
+  quais", lista cada um com a situação (*"2 PPs · R$ 10.000,00"* ou
+  *"nenhuma PP"*). Sem ninguém em aberto ele vira o selo apagado "PPs
+  concluídas".
+- **A lista é refeita no servidor** (`concluirPPsDoJob`) antes de gravar:
+  um UPDATE só e um evento de auditoria só
+  (`item_realizado.pps_concluidas_em_lote`, com os nomes no metadata).
+  Marcar não escreve no chat — só a reabertura escreve.
+- **O recorte de quais linhas precisam responder virou função pura**,
+  `itemPrecisaDeConclusao` em `lib/calculos/pps-item.ts`, lida pelos três
+  lugares: a barra (client), a trava do encerramento (server action) e a
+  página do job (memória).
+  ⚠️ Ela mora em `pps-item.ts`, e não em `conclusao-item.ts`, porque este
+  puxa `logAuditEvent` → `lib/supabase/server.ts`: importar de um client
+  component quebra o build com *"You're importing a component that needs
+  next/headers"*. `tsc` e `eslint` passam limpos — só o dev server e o
+  `next build` pegam.
+- **Teste ponta a ponta em 05/09/2026** (JOB-0018 "Teste Reunião", curva
+  de R$ 14.000: GP 8.000, Palco 3.000, Iluminação 3.000, mais Produtor
+  tipo A fora da conta). Cada passo conferido no fluxo de caixa:
+
+  | Passo | Previsão | Títulos |
+  |---|---|---|
+  | Início (PP-00012 em avaliação, PP-00022 gerada) | 14.000 | 0 |
+  | PP-00026 (2.500) gerada no Palco com "Sim, é a última" | 13.500 | 0 |
+  | PP-00026 enviada ao financeiro | 13.500 | 0 |
+  | PP-00026 **aprovada** | 11.000 | 2.500 |
+  | PP-00012 (10.000) **aprovada** — GP em aberto, passa do planejado | 3.000 | 12.500 |
+  | "Concluir PPs" marca GP e Iluminação | **4.000** | 12.500 |
+
+  Os R$ 4.000 do fim são a PP-00022, gerada e ainda não aprovada,
+  segurando previsão no item marcado — exatamente a regra. Ficaram no job
+  de teste: duas PPs aprovadas e os três itens marcados.

@@ -11,14 +11,7 @@ import {
   BV_SITUACAO_EM_ABERTO,
   type JobStatus,
 } from "@/lib/types";
-import { TIPOS_CUSTO, tipoGeraDesembolso } from "@/lib/calculos/versao-totais";
-
-/** Tipos de custo cuja linha oferece PP na calha — os mesmos da previsão
- *  de desembolso (decisão 003). A e D pagam por BV: não geram PP e não
- *  entram na trava de encerramento (decisão do Tiago, 04/09/2026). A
- *  lista sai da matriz de tipos, não de um array escrito à mão: tipo novo
- *  entra aqui sozinho. */
-const TIPOS_QUE_GERAM_PP = TIPOS_CUSTO.filter(tipoGeraDesembolso);
+import { itensSemConclusaoDoJob } from "./realizado/conclusao-item";
 
 export type ActionResult =
   | { ok: true; id: string }
@@ -97,19 +90,9 @@ export async function levantarImpedimentos(
       .eq("tenant_id", tenantId)
       .maybeSingle(),
     saldoAFaturarDoJob(tenantId, jobId),
-    // A âncora do realizado é quem guarda o marco; o tipo de custo e o
-    // nome vêm da CÓPIA do job, que é o que a planilha mostra.
-    supabase
-      .from("jobs_itens_realizado")
-      .select("id, copia:jobs_itens_orcado!inner(item, tipo_custo, em_save)")
-      .eq("tenant_id", tenantId)
-      .eq("job_id", jobId)
-      .is("pps_concluidas_em", null)
-      .in("copia.tipo_custo", TIPOS_QUE_GERAM_PP)
-      // Linha em save não emite PP neste job (decisão 028 §9): a calha
-      // dela nem oferece o botão, então não há o que marcar — e travar o
-      // encerramento nela deixaria o job preso para sempre.
-      .eq("copia.em_save", false),
+    // Mesma consulta que o botão "Concluir PPs" da barra usa para saber
+    // quem ele vai marcar — o recorte mora num lugar só (decisão 052).
+    itensSemConclusaoDoJob(supabase, tenantId, jobId),
   ]);
 
   return {
@@ -123,9 +106,7 @@ export async function levantarImpedimentos(
     })),
     semEnvioFaturamento: !envioRes.data,
     saldoAFaturar,
-    itensSemMarcacao: ((semMarcacaoRes.data ?? []) as any[]).map((i) => ({
-      item: i.copia?.item ?? "Item",
-    })),
+    itensSemMarcacao: semMarcacaoRes.map((i) => ({ item: i.nome })),
   };
 }
 
