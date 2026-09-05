@@ -7,8 +7,8 @@ import { montarThreadChat } from "@/lib/data/job-chat";
 import { montarThreadChatPPs } from "@/lib/data/job-chat-pps";
 import {
   calcularTotaisVersao,
-  tipoGeraDesembolso,
 } from "@/lib/calculos/versao-totais";
+import { itemPrecisaDeConclusao } from "@/lib/calculos/pps-item";
 import { saldosDeSaveDoCliente, saveDoJob } from "@/lib/data/saves";
 import { blocosDoItem, somarBlocosDosItens } from "@/lib/calculos/bv-planilha";
 import {
@@ -674,10 +674,9 @@ export async function carregarDetalheDoJob(
   const itensSemMarcacao = itens
     .filter(
       (it) =>
-        tipoGeraDesembolso(it.tipo_custo) &&
-        // Linha em save não emite PP neste job: sem calha de PP, não há
-        // o que marcar (decisão 028 §9).
-        it.em_save !== true &&
+        // Mesmo recorte da trava do encerramento e do botão "Concluir
+        // PPs" — aqui em memória, porque a página já carregou tudo.
+        itemPrecisaDeConclusao(it.tipo_custo, it.em_save === true) &&
         realizadosMap.get(it.id)?.pps_concluidas_em == null,
     )
     .map((it) => ({ item: it.item }));

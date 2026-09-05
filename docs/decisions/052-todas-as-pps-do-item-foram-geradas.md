@@ -4,8 +4,10 @@
 **Status:** aceita
 **Migrations:** `20260904200001_pps_concluidas_por_item.sql`,
 `20260904200002_previsao_de_custo_por_item_marcado.sql`
+**Revisão:** 05/09/2026 — o marco ganhou o alcance da planilha inteira
 **Design:** `Planilha Interna - Item com Todas as PPs.dc.html`, projeto
-Claude Design `69342d83`
+Claude Design `69342d83` (revisto em 05/09/2026, quando ganhou o botão
+da barra)
 **Contexto:** Planilha Interna do job (`/jobs/[jobId]`), fluxo de caixa e
 encerramento do job. Completa a [027](027-pp-aprovada-e-a-composicao-do-fluxo-do-job.md)
 e a [004](004-previsao-de-desembolso.md).
@@ -63,6 +65,21 @@ ninguém vai gastar.
    abrir formulário e sem gerar nada. É o caminho do item antigo, da
    resposta dada errado, e do **item que nunca vai gerar PP** — que
    também precisa ser marcado.
+3. **Na barra da planilha, em "Concluir PPs"** (05/09/2026): o mesmo
+   marco para a planilha INTEIRA, de uma vez. É o caminho do fim do job,
+   quando a produção sabe que não sai mais nada de lugar nenhum — item a
+   item seriam trinta cliques.
+
+   O aviso antes de gravar conta quantos itens serão marcados e, no
+   "Ver quais", lista cada um com a situação dele (*"2 PPs · R$ 10.000,00"*
+   ou *"nenhuma PP"*). Não é formalidade: marcar tira o saldo do
+   planejado da previsão de cada um, e num job de trinta linhas ninguém
+   tem de cabeça quais estão em aberto. Quem já está marcado não é
+   tocado, e a lista é **refeita no servidor** antes de gravar — a da
+   tela é explicação, não regra.
+
+   Sem ninguém em aberto o botão vira um selo apagado, *"PPs
+   concluídas"*, e não abre nada.
 
 **Não existe "Reabrir item".** Quem precisa de mais uma PP num item
 marcado clica em "Nova PP"; um aviso explica que isso reabre o item e
@@ -100,7 +117,9 @@ travaria o encerramento para sempre.
 |---|---|
 | As colunas do marco | `jobs_itens_realizado.pps_concluidas_em` / `_por` |
 | A gravação (compartilhada) | `app/(app)/jobs/[jobId]/realizado/conclusao-item.ts` |
-| Marcar e reabrir | `app/(app)/jobs/[jobId]/realizado/actions-conclusao.ts` |
+| Marcar, reabrir e concluir o job inteiro | `app/(app)/jobs/[jobId]/realizado/actions-conclusao.ts` |
+| O botão da barra e o aviso | `app/(app)/jobs/[jobId]/realizado/concluir-pps-button.tsx` |
+| Quais linhas precisam responder | `lib/calculos/pps-item.ts` — `itemPrecisaDeConclusao` |
 | A pergunta obrigatória | `gerar-pp-drawer.tsx` + `actions-pp.ts` (`finalizarPedidoCompra`, `editarPedidoCompraGerada`) |
 | Faixa, botão e aviso | `painel-pps-item.tsx` |
 | O ✓ da calha | `calha-linha.tsx` (e `corIcone` em `_planilha/calha-acoes.tsx`) |
@@ -114,8 +133,11 @@ vermelha — que não existe na versão — ficava fora da conta inteira.
 
 ## Fora desta decisão
 
-- **Marcar em lote**, por grupo ou pela planilha inteira. Hoje é item a
-  item, pelo painel ou pelo formulário.
+- **Marcar por grupo.** O alcance é o item ou a planilha inteira; um
+  agrupamento no meio do caminho não foi pedido.
+- **Faixa de status do job** abaixo da planilha ("N itens ainda em
+  aberto"), que o design de 05/09 desenha. O botão já diz o número, e a
+  trava do encerramento diz o resto.
 - **Aviso na tela do financeiro** de que a previsão de um job mudou de
   base. O fluxo de caixa mostra o número novo, sem histórico da troca.
 - **A pergunta na correção da PP rejeitada** (`pps/editar-pp-drawer.tsx`).

@@ -20,9 +20,37 @@ import { createClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { jobAceitaAcoesPlanilha, type JobStatus } from "@/lib/types";
-import { aplicarConclusaoDoItem } from "./conclusao-item";
+import {
+  aplicarConclusaoDoItem,
+  itensSemConclusaoDoJob,
+} from "./conclusao-item";
 
 type Result = { ok: true } | { ok: false; message: string };
+
+/** Portões do job, para as ações que não miram um item específico. */
+async function gateDoJob(jobId: string) {
+  const session = await requireSession();
+  const supabase = createClient();
+
+  const { data: job } = await supabase
+    .from("jobs")
+    .select("id, status")
+    .eq("id", jobId)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle<{ id: string; status: JobStatus }>();
+
+  if (!job) return { ok: false as const, message: "Job não encontrado." };
+
+  if (!jobAceitaAcoesPlanilha(job.status)) {
+    return {
+      ok: false as const,
+      message:
+        "Os itens só podem ser marcados com o job em 'Aberto' ou 'Em produção'.",
+    };
+  }
+
+  return { ok: true as const, session, supabase };
+}
 
 async function gate(itemRealizadoId: string) {
   const session = await requireSession();
@@ -142,4 +170,68 @@ export async function reabrirItemParaNovaPP(
 
   revalidatePath(`/jobs/${g.jobId}`);
   return { ok: true };
+}
+
+/**
+ * "Concluir PPs" — o marco aplicado à planilha inteira, de uma vez.
+ *
+ * A lista de quem será marcado é refeita AQUI, com
+ * `itensSemConclusaoDoJob`: a tela pode estar velha, e o que ela mostra
+ * no aviso é explicação, não a regra. Item já marcado não é tocado.
+ *
+ * Um UPDATE só e um evento de auditoria só, com a lista no metadata —
+ * são N linhas mudando juntas, e passar item a item pelo
+ * `aplicarConclusaoDoItem` seria uma ida ao banco por linha sem nada em
+ * troca: marcar (ao contrário de reabrir) não escreve no chat.
+ */
+export async function concluirPPsDoJob(
+  jobId: string,
+): Promise<{ ok: true; marcados: number } | { ok: false; message: string }> {
+  const g = await gateDoJob(jobId);
+  if (!g.ok) return g;
+
+  const pendentes = await itensSemConclusaoDoJob(
+    g.supabase,
+    g.session.activeTenant.id,
+    jobId,
+  );
+
+  if (pendentes.length === 0) {
+    return { ok: true, marcados: 0 };
+  }
+
+  const { error } = await g.supabase
+    .from("jobs_itens_realizado")
+    .update({
+      pps_concluidas_em: new Date().toISOString(),
+      pps_concluidas_por: g.session.profile.id,
+    })
+    .eq("tenant_id", g.session.activeTenant.id)
+    .eq("job_id", jobId)
+    .is("pps_concluidas_em", null)
+    .in(
+      "id",
+      pendentes.map((p) => p.itemRealizadoId),
+    );
+
+  if (error) {
+    console.error("[item.conclusao.lote]", error.message);
+    return { ok: false, message: "Falha ao concluir as PPs dos itens." };
+  }
+
+  await logAuditEvent({
+    acao: "item_realizado.pps_concluidas_em_lote",
+    tenantId: g.session.activeTenant.id,
+    entidadeTipo: "job",
+    entidadeId: jobId,
+    metadata: {
+      total: pendentes.length,
+      itens: pendentes.map((p) => p.nome),
+      item_realizado_ids: pendentes.map((p) => p.itemRealizadoId),
+      origem: "barra_planilha",
+    },
+  });
+
+  revalidatePath(`/jobs/${jobId}`);
+  return { ok: true, marcados: pendentes.length };
 }

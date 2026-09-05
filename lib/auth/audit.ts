@@ -112,6 +112,10 @@ export type AuditAction =
   // que as PPs dizem. Reabrir devolve o saldo.
   | "item_realizado.pps_concluidas"
   | "item_realizado.pps_reabertas"
+  // O mesmo marco, aplicado à planilha inteira pelo botão "Concluir PPs"
+  // da barra. Um evento só, com a lista dos itens no metadata: são N
+  // linhas mudando de uma vez, e o que interessa reconstituir é o lote.
+  | "item_realizado.pps_concluidas_em_lote"
   | "pedido_compra.emitida"
   // 02/09/2026: gerar deixou de enviar. `gerada` é a criação, `editada` a
   // correção enquanto ainda não foi enviada, `enviada_financeiro` o envio.
