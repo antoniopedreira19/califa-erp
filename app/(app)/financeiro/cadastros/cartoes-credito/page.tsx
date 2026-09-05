@@ -53,10 +53,10 @@ export default async function CartoesCreditoPage() {
       <header className="space-y-2">
         <nav className="flex items-center gap-2 text-xs text-muted-foreground">
           <Link
-            href="/cadastros"
+            href="/financeiro/cadastros"
             className="hover:text-california-red transition-colors"
           >
-            Cadastros
+            Cadastros do Financeiro
           </Link>
           <ChevronRight className="h-3 w-3" />
           <span className="text-california-red">Cartões de Crédito</span>

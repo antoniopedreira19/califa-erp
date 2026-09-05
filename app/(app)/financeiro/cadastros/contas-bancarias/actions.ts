@@ -105,7 +105,7 @@ export async function criarContaBancaria(
     metadata: { nome: d.nome, banco: d.banco, empresa_id: d.empresa_id },
   });
 
-  revalidatePath("/cadastros/contas-bancarias");
+  revalidatePath("/financeiro/cadastros/contas-bancarias");
   revalidatePath("/cadastros");
   return { ok: true, id: data.id };
 }
@@ -220,7 +220,7 @@ export async function editarContaBancaria(
     metadata: { nome: d.nome, banco: d.banco, empresa_id: d.empresa_id },
   });
 
-  revalidatePath("/cadastros/contas-bancarias");
+  revalidatePath("/financeiro/cadastros/contas-bancarias");
   revalidatePath("/cadastros");
   return { ok: true, id };
 }
@@ -286,7 +286,7 @@ export async function inativarContaBancaria(id: string): Promise<ActionResult> {
     metadata: { nome: contaInfo.nome, banco: contaInfo.banco, empresa_id: contaInfo.empresa_id },
   });
 
-  revalidatePath("/cadastros/contas-bancarias");
+  revalidatePath("/financeiro/cadastros/contas-bancarias");
   revalidatePath("/cadastros");
   return { ok: true, id };
 }
@@ -329,7 +329,7 @@ export async function reativarContaBancaria(id: string): Promise<ActionResult> {
     metadata: { nome: contaInfo.nome, banco: contaInfo.banco, empresa_id: contaInfo.empresa_id },
   });
 
-  revalidatePath("/cadastros/contas-bancarias");
+  revalidatePath("/financeiro/cadastros/contas-bancarias");
   revalidatePath("/cadastros");
   return { ok: true, id };
 }

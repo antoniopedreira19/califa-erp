@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Landmark, Clock, ArrowRight, FileText, Receipt, TrendingUp, Wallet, BookOpen, type LucideIcon } from "lucide-react";
+import { Landmark, Clock, ArrowRight, FileText, Receipt, TrendingUp, Wallet, BookOpen, FolderKanban, type LucideIcon } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 
@@ -91,6 +91,12 @@ export default async function CentralFinanceiraPage() {
           icon={BookOpen}
           title="Conciliação Bancária"
           description="Extrato por conta bancária. Base pra bater com o extrato do banco e pra o DRE."
+        />
+        <FinanceiroCard
+          href="/financeiro/cadastros"
+          icon={FolderKanban}
+          title="Cadastros do Financeiro"
+          description="Contas bancárias, plano de contas e cartões de crédito — a base pra operar o financeiro."
         />
         {/* Cards futuros: DRE, aprovações de pagamentos */}
       </div>

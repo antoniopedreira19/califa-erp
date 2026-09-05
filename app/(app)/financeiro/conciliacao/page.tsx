@@ -427,7 +427,7 @@ export default async function ConciliacaoPage({
           <p className="text-sm text-muted-foreground">
             Nenhuma conta bancária cadastrada. Vá em{" "}
             <Link
-              href="/cadastros/contas-bancarias"
+              href="/financeiro/cadastros/contas-bancarias"
               prefetch={false}
               className="text-california-red hover:underline"
             >

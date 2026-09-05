@@ -97,7 +97,7 @@ export async function criarTipo(formData: FormData): Promise<ActionResult> {
     metadata: { codigo: d.codigo, nome: d.nome },
   });
 
-  revalidatePath("/cadastros/plano-de-contas");
+  revalidatePath("/financeiro/cadastros/plano-de-contas");
   revalidatePath("/cadastros");
   return { ok: true, id: data.id };
 }
@@ -193,7 +193,7 @@ export async function atualizarTipo(
     metadata: { codigo: d.codigo, nome: d.nome },
   });
 
-  revalidatePath("/cadastros/plano-de-contas");
+  revalidatePath("/financeiro/cadastros/plano-de-contas");
   return { ok: true, id };
 }
 
@@ -277,7 +277,7 @@ export async function inativarTipo(id: string): Promise<ActionResult> {
     metadata: { codigo: tipoInfo.codigo, nome: tipoInfo.nome },
   });
 
-  revalidatePath("/cadastros/plano-de-contas");
+  revalidatePath("/financeiro/cadastros/plano-de-contas");
   revalidatePath("/cadastros");
   return { ok: true, id };
 }
@@ -324,7 +324,7 @@ export async function reativarTipo(id: string): Promise<ActionResult> {
     metadata: { codigo: tipoInfo.codigo, nome: tipoInfo.nome },
   });
 
-  revalidatePath("/cadastros/plano-de-contas");
+  revalidatePath("/financeiro/cadastros/plano-de-contas");
   revalidatePath("/cadastros");
   return { ok: true, id };
 }
@@ -385,7 +385,7 @@ export async function criarSubtipo(formData: FormData): Promise<ActionResult> {
     metadata: { tipo_id: d.tipo_id, codigo: d.codigo, nome: d.nome },
   });
 
-  revalidatePath("/cadastros/plano-de-contas");
+  revalidatePath("/financeiro/cadastros/plano-de-contas");
   return { ok: true, id: data.id };
 }
 
@@ -479,7 +479,7 @@ export async function atualizarSubtipo(
     metadata: { tipo_id: d.tipo_id, codigo: d.codigo, nome: d.nome },
   });
 
-  revalidatePath("/cadastros/plano-de-contas");
+  revalidatePath("/financeiro/cadastros/plano-de-contas");
   return { ok: true, id };
 }
 
@@ -552,7 +552,7 @@ export async function inativarSubtipo(id: string): Promise<ActionResult> {
     },
   });
 
-  revalidatePath("/cadastros/plano-de-contas");
+  revalidatePath("/financeiro/cadastros/plano-de-contas");
   return { ok: true, id };
 }
 
@@ -602,6 +602,6 @@ export async function reativarSubtipo(id: string): Promise<ActionResult> {
     },
   });
 
-  revalidatePath("/cadastros/plano-de-contas");
+  revalidatePath("/financeiro/cadastros/plano-de-contas");
   return { ok: true, id };
 }
