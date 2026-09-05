@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ChevronRight, Tags } from "lucide-react";
+import { ArrowLeft, Tags } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import type { Categoria, CategoriaDominio } from "@/lib/types";
@@ -38,29 +38,31 @@ export default async function CategoriasHubPage() {
 
   return (
     <div className="space-y-6">
-      <header className="space-y-1">
-        <nav className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-muted-foreground">
-          <Link href="/orcamentos" className="hover:text-foreground">
-            Projetos &amp; Orçamentos
-          </Link>
-          <ChevronRight className="h-3 w-3" />
-          <span>Categorias</span>
-        </nav>
-        <div className="flex items-center gap-3">
-          <div className="rounded-lg bg-california-red/10 p-2">
-            <Tags className="h-5 w-5 text-california-red" />
+      <div>
+        <Link
+          href="/orcamentos"
+          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ArrowLeft className="h-3 w-3" />
+          Voltar para projetos
+        </Link>
+        <header className="mt-3 space-y-2">
+          <div className="flex items-center gap-3">
+            <div className="rounded-lg bg-california-red/10 p-2">
+              <Tags className="h-5 w-5 text-california-red" />
+            </div>
+            <h1 className="text-3xl font-bold tracking-tight">Categorias</h1>
           </div>
-          <h1 className="text-3xl font-bold tracking-tight">Categorias</h1>
-        </div>
-        <p className="text-sm text-muted-foreground max-w-3xl">
-          <strong>Categorias de Item</strong> classificam cada linha da
-          versão do orçamento (verbas).{" "}
-          <strong>Categorias do Orçamento/Projeto</strong> classificam a
-          iniciativa como um todo — projeto (Fee, Ativação...) ou orçamento
-          (Cachê Artístico, Influencer...); o job herda a categoria do
-          orçamento que o originou.
-        </p>
-      </header>
+          <p className="text-sm text-muted-foreground max-w-3xl">
+            <strong>Categorias de Item</strong> classificam cada linha da
+            versão do orçamento (verbas).{" "}
+            <strong>Categorias do Orçamento/Projeto</strong> classificam a
+            iniciativa como um todo — projeto (Fee, Ativação...) ou orçamento
+            (Cachê Artístico, Influencer...); o job herda a categoria do
+            orçamento que o originou.
+          </p>
+        </header>
+      </div>
 
       <CategoriasTabs
         categoriasItem={itensRes.data ?? []}
