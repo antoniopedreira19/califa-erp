@@ -209,17 +209,73 @@ Para validar a Task 4 (UI) e Task 5 (RLS) end-to-end. Cada linha é um "logar co
 - [ ] Vê `/financeiro/*` (contas a pagar/receber, conciliação, fluxo de caixa, abertura de job).
 - [ ] Consegue cadastrar/editar contas bancárias, plano de contas, cartões (em `/cadastros/*`).
 
-## Homes por papel — comportamento observado (04/09/2026)
+## Homes por papel — comportamento observado (05/09/2026)
 
-Snapshot logo depois da implementação da Task 7 do projeto de permissões (ver [docs/superpowers/specs/2026-09-04-home-por-papel-design.md](superpowers/specs/2026-09-04-home-por-papel-design.md)). Contagens abaixo obtidas simulando cada usuário via `set_config('request.jwt.claim.sub', <uuid>)` + `set local role authenticated` no Postgres — a home real deve mostrar exatamente esses números na primeira carga.
+Snapshot depois da fix wave do whole-branch review (commit `202f8ed`) e da remoção do kicker de papel no cabeçalho (`e3bc0b8`). Contagens abaixo obtidas simulando cada usuário via `set_config('request.jwt.claim.sub', <uuid>)` + `set local role authenticated` no Postgres — a home real mostra exatamente esses números na primeira carga.
 
-| Papel | Pendências visíveis (contagem > 0) | KPIs mostrados | Observações |
-|---|---|---|---|
-| Administrador (Antonio) | Jobs aguardando abertura: **3** · PPs em avaliação: **7** · Jobs com faturamento próximo: **2**. Total: 3 cards. | Saldo em bancos (soma `saldo_inicial`) · Previsto a pagar do mês · Previsto a receber do mês · Jobs em andamento: **22** | Contas a pagar/receber vencidas, Desembolsos em avaliação e Orçamentos parados estão em 0 — cards somem. Saldo hoje usa `saldo_inicial` (TODO na V1). |
-| Gerente de Produção (`gp_teste`) | Nenhuma (todos os cards zeram: gp_teste não é `gp_responsavel_id` de versão nem responsável direto de job pronto pra faturar). Estado vazio: "Nada precisa da sua atenção agora." | Meus jobs em andamento · Meus orçamentos abertos (ambos calculados via `projetoIdsDoUsuario` — expandido) | O usuário de teste tem 1 job onde é `responsavel_id`; se o filtro expandido incluir esse projeto, o KPI reflete. |
-| Produtor (`produtor_teste`) | Nenhuma (mesmo motivo — produtor_teste não emitiu PP rejeitada nem é responsável direto de job com realizado pendente). Estado vazio: "Tudo em dia por aqui." | Meus jobs em andamento · PPs que emiti este mês | KPI de PPs no mês usa `created_at` (não `emitida_em` que não existe). |
-| Freelancer (`freelancer_teste`) | Nenhuma (SEBRAE não tem job criado — RLS filtra pra 0). Estado vazio grande: **"Nenhum job atribuído a você ainda. Fale com o gestor do projeto."** | Meus jobs ativos: **0** | Assim que o SEBRAE ganhar seu primeiro job, cards e KPIs voltam a fazer sentido. |
-| Financeiro (`financeiro_teste`) | Jobs aguardando abertura: **3** · PPs em avaliação: **7** · Faturas de cartão aguardando pagamento: **1**. Total: 3 cards. | Saldo em bancos · Previsto a pagar do mês · Previsto a receber do mês | Card "Contas a pagar/receber vencidas" e "Desembolsos em avaliação" zerados hoje. |
+### Administrador (`antonio@pevetech.com.br`)
+
+**Precisa da sua atenção** — 3 cards visíveis (contagem > 0):
+
+| Card | Contagem |
+|---|:---:|
+| Jobs aguardando abertura | 3 |
+| PPs em avaliação | 7 |
+| Jobs com faturamento próximo (7 dias) | 2 |
+
+Somem: Contas a pagar vencidas (0) · Contas a receber vencidas (0) · Desembolsos em avaliação (0) · Orçamentos parados > 15 dias (0).
+
+**Números do mês:** Saldo em bancos R$ 100.000,00 · Previsto a pagar R$ 8.200,00 · Previsto a receber R$ 0,00 · Jobs em andamento 22.
+
+_Nota: saldo hoje usa `saldo_inicial` (TODO pra virar RPC de saldo_atual quando o módulo de conciliação existir)._
+
+### Financeiro (`financeiro_teste@califa-erp.local`)
+
+**Aguardando você** — 3 cards visíveis:
+
+| Card | Contagem |
+|---|:---:|
+| Jobs aguardando abertura | 3 |
+| PPs em avaliação | 7 |
+| Faturas de cartão aguardando pagamento | 1 |
+
+Somem: Contas a pagar/receber vencidas (0) · Desembolsos em avaliação (0).
+
+**Números do mês:** Saldo em bancos R$ 100.000,00 · Previsto a pagar R$ 8.200,00 · Previsto a receber R$ 0,00.
+
+### Gerente de Produção (`gp_teste@califa-erp.local`)
+
+**Aguardando você** — 1 card visível:
+
+| Card | Contagem |
+|---|:---:|
+| Jobs prontos pra enviar pra faturamento | 1 |
+
+Somem: Versões aguardando sua aprovação (0) · Jobs prontos pra encerrar (0) · Jobs com faturamento próximo (0) · Mensagens no chat (0).
+
+**Seu time:** Meus jobs em andamento 1 · Meus orçamentos abertos 0.
+
+_Contexto: gp_teste participa de 1 projeto (via `projeto_responsaveis`) e é `responsavel_id` de 1 job aberto com `faturamento_previsto > 0` — daí o card único acender._
+
+### Produtor (`produtor_teste@califa-erp.local`)
+
+**Precisa da sua atenção** — 0 cards. Estado vazio: **"Tudo em dia por aqui."**
+
+**Seu volume no mês:** Meus jobs em andamento 0 · PPs emitidas por mim 0.
+
+_Contexto: produtor_teste não é `produtor_id` de nenhum orçamento nem `responsavel_id` de nenhum job, e não está em `projeto_responsaveis`. Home dele fica zerada até vincular. KPI de PPs no mês usa `created_at` (não `emitida_em`, que não existe na tabela)._
+
+### Freelancer (`freelancer_teste@califa-erp.local`)
+
+Estado vazio da página inteira: **"Nenhum job atribuído a você ainda. Fale com o gestor do projeto."**
+
+Como `jobsAtivos === 0`, a página pula direto pro estado vazio grande — cards e KPIs não renderizam.
+
+_Contexto: freelancer_teste é `equipe` do projeto SEBRAE NOSSO CANTO 2026 (RLS deixa passar 1 projeto), mas o SEBRAE não tem job criado. Assim que o primeiro job for aberto lá, os cards e KPIs entram em cena._
+
+### Cabeçalho (todas as 5 homes)
+
+Ícone de casa + "Bem-vindo, {primeiro nome}" + subtítulo em muted. **Sem kicker vermelho de área/papel** — a home é a única page do ERP sem esse kicker, porque o papel do usuário já aparece na sidebar e a home não tem navegação para contextualizar. Subtítulo pt-BR sem jargão técnico (sem "tenant" nem "KPI").
 
 **Filtros de aterrissagem implementados** (Task 5 do plano `2026-09-04-home-por-papel.md`):
 
