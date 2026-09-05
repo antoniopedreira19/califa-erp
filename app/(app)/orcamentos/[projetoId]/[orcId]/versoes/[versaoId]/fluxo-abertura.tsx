@@ -77,7 +77,7 @@ interface Props {
 
   /** Opções de cidade e regional do modal — ver <EnviarJobModal>. */
   regionaisDoProjeto: { id: string; nome: string }[];
-  cidadesIniciais: { id: string; nome: string }[];
+  cidadesIniciais: { id: string; nome: string; uf: string | null }[];
 
   /** Valores que pré-preenchem o modal, vindos do orçamento. */
   inicial: DadosJob;

@@ -68,6 +68,7 @@ export type AuditAction =
   | "empresa.desativada"
   | "empresa.reativada"
   | "cidade.criada"
+  | "cidade.criada_inline_ibge"
   | "cidade.editada"
   | "cidade.inativada"
   | "cidade.reativada"

@@ -584,13 +584,24 @@ export interface Regional {
 
 // ---------- Cidades ----------
 
+/** Origem do registro. `ibge` = importado da API pública; `manual` = criado
+ *  pelo usuário. Cidade IBGE sempre tem `uf` e `ibge_codigo` (constraint). */
+export type CidadeFonte = "manual" | "ibge";
+
 /** Cadastro próprio (não é o texto livre de `jobs.cidade`): o projeto
- *  referencia por FK para padronizar o dado. */
+ *  referencia por FK para padronizar o dado. Combobox do orçamento
+ *  aceita seleção da lista local e sugestões da API do IBGE
+ *  (ver `lib/data/ibge-municipios.ts`). */
 export interface Cidade {
   id: string;
   tenant_id: string;
   nome: string;
   ativo: boolean;
+  /** UF de 2 letras (RJ, BA...). Null em cidades manuais legadas sem estado. */
+  uf: string | null;
+  /** Código IBGE de 7 dígitos. Null quando `fonte='manual'`. */
+  ibge_codigo: string | null;
+  fonte: CidadeFonte;
   created_by: string | null;
   created_at: string;
   updated_at: string;
