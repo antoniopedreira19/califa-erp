@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { CreditCard, ChevronRight } from "lucide-react";
+import { CreditCard, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
@@ -50,31 +50,30 @@ export default async function CartoesCreditoPage() {
 
   return (
     <div className="space-y-8 max-w-5xl mx-auto">
-      <header className="space-y-2">
-        <nav className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Link
-            href="/financeiro/cadastros"
-            className="hover:text-california-red transition-colors"
-          >
-            Cadastros do Financeiro
-          </Link>
-          <ChevronRight className="h-3 w-3" />
-          <span className="text-california-red">Cartões de Crédito</span>
-        </nav>
-        <div className="flex items-center gap-3">
-          <div className="rounded-lg bg-california-red/10 p-2">
-            <CreditCard className="h-5 w-5 text-california-red" />
+      <div>
+        <Link
+          href="/financeiro/cadastros"
+          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ArrowLeft className="h-3 w-3" />
+          Voltar para cadastros do financeiro
+        </Link>
+        <header className="mt-3 space-y-2">
+          <div className="flex items-center gap-3">
+            <div className="rounded-lg bg-california-red/10 p-2">
+              <CreditCard className="h-5 w-5 text-california-red" />
+            </div>
+            <h1 className="text-3xl font-bold tracking-tight">
+              Cartões de Crédito
+            </h1>
           </div>
-          <h1 className="text-3xl font-bold tracking-tight">
-            Cartões de Crédito
-          </h1>
-        </div>
-        <p className="text-sm text-muted-foreground max-w-2xl text-pretty">
-          Cartões usados como forma de pagamento em PPs, contas avulsas e
-          recorrências. O dia de vencimento da fatura preenche a data de
-          pagamento dos títulos automaticamente.
-        </p>
-      </header>
+          <p className="text-sm text-muted-foreground max-w-2xl text-pretty">
+            Cartões usados como forma de pagamento em PPs, contas avulsas e
+            recorrências. O dia de vencimento da fatura preenche a data de
+            pagamento dos títulos automaticamente.
+          </p>
+        </header>
+      </div>
 
       <CartoesList rows={data ?? []} empresas={empresas} />
     </div>

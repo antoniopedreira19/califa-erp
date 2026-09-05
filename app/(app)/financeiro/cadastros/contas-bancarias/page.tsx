@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ChevronRight, Wallet } from "lucide-react";
+import { ArrowLeft, Wallet } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import type { ContaBancaria, Empresa } from "@/lib/types";
@@ -48,24 +48,26 @@ export default async function ContasBancariasPage() {
 
   return (
     <div className="space-y-6">
-      <header className="space-y-1">
-        <nav className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-muted-foreground">
-          <Link href="/financeiro/cadastros" className="hover:text-foreground">
-            Cadastros do Financeiro
-          </Link>
-          <ChevronRight className="h-3 w-3" />
-          <span>Contas bancárias</span>
-        </nav>
-        <div className="flex items-center gap-3">
-          <div className="rounded-lg bg-california-red/10 p-2">
-            <Wallet className="h-5 w-5 text-california-red" />
+      <div>
+        <Link
+          href="/financeiro/cadastros"
+          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ArrowLeft className="h-3 w-3" />
+          Voltar para cadastros do financeiro
+        </Link>
+        <header className="mt-3 space-y-2">
+          <div className="flex items-center gap-3">
+            <div className="rounded-lg bg-california-red/10 p-2">
+              <Wallet className="h-5 w-5 text-california-red" />
+            </div>
+            <h1 className="text-3xl font-bold tracking-tight">Contas bancárias</h1>
           </div>
-          <h1 className="text-3xl font-bold tracking-tight">Contas bancárias</h1>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          Contas onde os pagamentos entram e saem, com saldo inicial e empresa associada.
-        </p>
-      </header>
+          <p className="text-sm text-muted-foreground">
+            Contas onde os pagamentos entram e saem, com saldo inicial e empresa associada.
+          </p>
+        </header>
+      </div>
 
       <ContasBancariasList
         contas={contas}
