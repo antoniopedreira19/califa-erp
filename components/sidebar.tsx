@@ -52,17 +52,17 @@ const links: NavLink[] = [
     permissao: "sidebar.jobs",
   },
   {
-    href: "/financeiro",
-    label: "Financeiro",
-    icon: Landmark,
-    permissao: "sidebar.financeiro",
-  },
-  {
     href: "/financeiro/desembolsos",
     label: "Desembolsos",
     icon: Wallet,
     activePathPrefixes: ["/financeiro/desembolsos"],
     permissao: "sidebar.desembolsos",
+  },
+  {
+    href: "/financeiro",
+    label: "Financeiro",
+    icon: Landmark,
+    permissao: "sidebar.financeiro",
   },
   {
     href: "/relatorios",
@@ -114,9 +114,7 @@ export function Sidebar({
     pathname === "/clientes" ||
     pathname.startsWith("/clientes/") ||
     pathname === "/fornecedores" ||
-    pathname.startsWith("/fornecedores/") ||
-    pathname === "/categorias" ||
-    pathname.startsWith("/categorias/");
+    pathname.startsWith("/fornecedores/");
 
   // Largura do bg de cada item — animável porque são valores numéricos px.
   const itemBgWidth = expanded ? ITEM_W_EXPANDED : ITEM_W_COLLAPSED;

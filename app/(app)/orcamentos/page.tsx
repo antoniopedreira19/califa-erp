@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { FolderKanban, Plus, FileText } from "lucide-react";
+import { FolderKanban, Plus, FileText, Tags } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { escolherJobDoFunil, estagioFunil } from "@/lib/calculos/funil";
@@ -270,14 +270,24 @@ export default async function ProjetosPage({
             Clique num projeto para ver seus orçamentos e versões.
           </p>
         </div>
-        <Link
-          href="/orcamentos/novo"
-          prefetch={false}
-          className="inline-flex items-center justify-center gap-2 rounded-lg bg-california-red px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-california-red-hover hover:shadow-brand transition-all"
-        >
-          <Plus className="h-4 w-4" />
-          Novo projeto
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/orcamentos/categorias"
+            prefetch={false}
+            className="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2.5 text-sm font-semibold text-foreground shadow-sm hover:border-california-red/30 hover:text-california-red transition-all"
+          >
+            <Tags className="h-4 w-4" />
+            Categorias
+          </Link>
+          <Link
+            href="/orcamentos/novo"
+            prefetch={false}
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-california-red px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-california-red-hover hover:shadow-brand transition-all"
+          >
+            <Plus className="h-4 w-4" />
+            Novo projeto
+          </Link>
+        </div>
       </header>
 
       {projetos.length === 0 ? (

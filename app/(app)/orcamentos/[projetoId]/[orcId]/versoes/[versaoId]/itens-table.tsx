@@ -1551,7 +1551,7 @@ export function ItensTable({
                                       : `${c.nome} (inativa)`,
                                   })),
                               ]}
-                              vazio="Nenhuma categoria cadastrada em /categorias"
+                              vazio="Nenhuma categoria cadastrada em /orcamentos/categorias"
                               nav={selecao.celulaProps(item.id, "categoria_id")}
                               moldura={selecao.moldura(item.id, "categoria_id")}
                               onConfirmar={(v) =>
@@ -2427,7 +2427,7 @@ function LinhaDraft({
               label: c.ativo ? c.nome : `${c.nome} (inativa)`,
             })),
         ]}
-        vazio="Nenhuma categoria cadastrada em /categorias"
+        vazio="Nenhuma categoria cadastrada em /orcamentos/categorias"
         nav={selecao.celulaProps(DRAFT_ID, "categoria_id")}
         moldura={selecao.moldura(DRAFT_ID, "categoria_id")}
         onConfirmar={(v) =>
