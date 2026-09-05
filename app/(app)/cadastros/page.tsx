@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Users, Building2, MapPin, Building, Wallet, ListTree, CreditCard, ArrowRight, FolderKanban, type LucideIcon } from "lucide-react";
+import { Users, Building2, MapPin, Building, ArrowRight, FolderKanban, type LucideIcon } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 
@@ -10,8 +10,10 @@ export default async function CadastrosPage() {
   const supabase = createClient();
 
   // Contagens de ativos em paralelo para cada cadastro do hub.
-  // Categorias (item e de orçamento) foram movidas pra /orcamentos/categorias.
-  const [clientesRes, fornecedoresRes, regionaisRes, cidadesRes, contasBancariasRes, tiposPlanoRes, cartoesCreditoRes] = await Promise.all([
+  // Cadastros do financeiro (contas bancárias, plano de contas, cartões)
+  // moraram aqui até 2026-09-05; hoje estão em /financeiro/cadastros.
+  // Categorias (item e de orçamento) estão em /orcamentos/categorias.
+  const [clientesRes, fornecedoresRes, regionaisRes, cidadesRes] = await Promise.all([
     supabase
       .from("clientes")
       .select("*", { count: "exact", head: true })
@@ -32,30 +34,12 @@ export default async function CadastrosPage() {
       .select("*", { count: "exact", head: true })
       .eq("tenant_id", session.activeTenant.id)
       .eq("ativo", true),
-    supabase
-      .from("contas_bancarias")
-      .select("*", { count: "exact", head: true })
-      .eq("tenant_id", session.activeTenant.id)
-      .eq("ativo", true),
-    supabase
-      .from("plano_contas_tipos")
-      .select("*", { count: "exact", head: true })
-      .eq("tenant_id", session.activeTenant.id)
-      .eq("ativo", true),
-    supabase
-      .from("cartoes_credito")
-      .select("*", { count: "exact", head: true })
-      .eq("tenant_id", session.activeTenant.id)
-      .eq("ativo", true),
   ]);
 
   if (clientesRes.error) console.error("[cadastros.clientes]", clientesRes.error.message);
   if (fornecedoresRes.error) console.error("[cadastros.fornecedores]", fornecedoresRes.error.message);
   if (regionaisRes.error) console.error("[cadastros.regionais]", regionaisRes.error.message);
   if (cidadesRes.error) console.error("[cadastros.cidades]", cidadesRes.error.message);
-  if (contasBancariasRes.error) console.error("[cadastros.contas_bancarias]", contasBancariasRes.error.message);
-  if (tiposPlanoRes.error) console.error("[cadastros.plano_contas_tipos]", tiposPlanoRes.error.message);
-  if (cartoesCreditoRes.error) console.error("[cadastros.cartoes_credito]", cartoesCreditoRes.error.message);
 
   return (
     <div className="space-y-8">
@@ -103,27 +87,6 @@ export default async function CadastrosPage() {
           title="Cidades"
           description="Vocabulário usado ao criar projetos — ex.: Salvador, São Paulo."
           count={cidadesRes.count ?? 0}
-        />
-        <CadastroCard
-          href="/cadastros/contas-bancarias"
-          icon={Wallet}
-          title="Contas bancárias"
-          description="Contas onde os pagamentos entram e saem, com saldo inicial e empresa associada."
-          count={contasBancariasRes.count ?? 0}
-        />
-        <CadastroCard
-          href="/cadastros/plano-de-contas"
-          icon={ListTree}
-          title="Plano de contas"
-          description="Tipos e subtipos usados para classificar cada lançamento financeiro. Base do DRE."
-          count={tiposPlanoRes.count ?? 0}
-        />
-        <CadastroCard
-          href="/cadastros/cartoes-credito"
-          icon={CreditCard}
-          title="Cartões de crédito"
-          description="Cartões usados como forma de pagamento. O dia da fatura preenche a data de pagamento dos títulos automaticamente."
-          count={cartoesCreditoRes.count ?? 0}
         />
       </div>
     </div>

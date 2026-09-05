@@ -160,7 +160,7 @@ export function FormaPagamentoField({
         <p className="text-xs text-muted-foreground">
           Nenhum cartão cadastrado.{" "}
           <Link
-            href="/cadastros/cartoes-credito"
+            href="/financeiro/cadastros/cartoes-credito"
             target="_blank"
             className="text-california-red underline hover:no-underline"
           >

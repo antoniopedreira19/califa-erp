@@ -125,7 +125,7 @@ export function BaixarAvulsaModal({
               <SelectContent>
                 {contas.length === 0 ? (
                   <div className="px-2 py-1.5 text-xs text-muted-foreground">
-                    Nenhuma conta ativa para esta empresa. Cadastre em /cadastros/contas-bancarias.
+                    Nenhuma conta ativa para esta empresa. Cadastre em /financeiro/cadastros/contas-bancarias.
                   </div>
                 ) : (
                   contas.map((c) => (

@@ -272,7 +272,7 @@ export function BaixaTituloDialog({
                 {contasDaEmpresa.length === 0 ? (
                   <div className="px-2 py-1.5 text-xs text-muted-foreground">
                     Nenhuma conta ativa dessa empresa. Cadastre em
-                    /cadastros/contas-bancarias.
+                    /financeiro/cadastros/contas-bancarias.
                   </div>
                 ) : (
                   contasDaEmpresa.map((c) => (

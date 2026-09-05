@@ -76,7 +76,7 @@ export async function criarCartao(input: unknown): Promise<Result> {
     },
   });
 
-  revalidatePath("/cadastros/cartoes-credito");
+  revalidatePath("/financeiro/cadastros/cartoes-credito");
   revalidatePath("/cadastros");
   revalidatePath("/financeiro/contas-a-pagar");
   return { ok: true };
@@ -118,7 +118,7 @@ export async function atualizarCartao(input: unknown): Promise<Result> {
     metadata: { diff: patch },
   });
 
-  revalidatePath("/cadastros/cartoes-credito");
+  revalidatePath("/financeiro/cadastros/cartoes-credito");
   revalidatePath("/cadastros");
   revalidatePath("/financeiro/contas-a-pagar");
   return { ok: true };
@@ -145,7 +145,7 @@ export async function inativarCartao(input: unknown): Promise<Result> {
     metadata: {},
   });
 
-  revalidatePath("/cadastros/cartoes-credito");
+  revalidatePath("/financeiro/cadastros/cartoes-credito");
   revalidatePath("/financeiro/contas-a-pagar");
   return { ok: true };
 }
@@ -171,7 +171,7 @@ export async function reativarCartao(input: unknown): Promise<Result> {
     metadata: {},
   });
 
-  revalidatePath("/cadastros/cartoes-credito");
+  revalidatePath("/financeiro/cadastros/cartoes-credito");
   revalidatePath("/financeiro/contas-a-pagar");
   return { ok: true };
 }

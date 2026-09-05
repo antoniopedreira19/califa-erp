@@ -69,8 +69,8 @@ export default async function PlanoDeContasPage() {
     <div className="space-y-6">
       <header className="space-y-1">
         <nav className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-muted-foreground">
-          <Link href="/cadastros" className="hover:text-foreground">
-            Cadastros
+          <Link href="/financeiro/cadastros" className="hover:text-foreground">
+            Cadastros do Financeiro
           </Link>
           <ChevronRight className="h-3 w-3" />
           <span>Plano de contas</span>
