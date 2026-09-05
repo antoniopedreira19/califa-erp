@@ -1,5 +1,4 @@
-import { ArrowLeft, Wallet } from "lucide-react";
-import Link from "next/link";
+import { Wallet } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { DesembolsosList, type DesembolsoRow } from "./desembolsos-list";
@@ -113,15 +112,6 @@ export default async function DesembolsosPage({
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto">
-      <div>
-        <Link
-          href="/financeiro"
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-3 w-3" />
-          Voltar para central financeira
-        </Link>
-      </div>
       <header className="space-y-2">
         <div className="flex items-center gap-3">
           <div className="rounded-lg bg-california-red/10 p-2">
