@@ -54,6 +54,9 @@ supabase/.temp
 # pacote de design recebido do time (referência local, não é código)
 design_handoff_califa/
 
+# CSVs de importação one-shot (dados sensíveis; ficam no disco local)
+*.csv
+
 # IDE
 .idea/
 .vscode/*
