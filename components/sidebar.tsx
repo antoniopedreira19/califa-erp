@@ -10,16 +10,15 @@ import { pode, type Recurso } from "@/lib/permissoes";
 import {
   Home,
   FileText,
-  FolderKanban,
   Briefcase,
   Landmark,
-  ShieldCheck,
   LogOut,
   Menu,
   X,
   Lock,
   Wallet,
   BarChart3,
+  Settings,
 } from "lucide-react";
 
 type NavLink = {
@@ -40,13 +39,6 @@ type NavLink = {
 
 const links: NavLink[] = [
   { href: "/home", label: "Home", icon: Home, permissao: "sidebar.home" },
-  {
-    href: "/cadastros",
-    label: "Cadastros",
-    icon: FolderKanban,
-    activePathPrefixes: ["/clientes", "/fornecedores"],
-    permissao: "sidebar.cadastros",
-  },
   {
     href: "/orcamentos",
     label: "Orçamentos",
@@ -78,12 +70,6 @@ const links: NavLink[] = [
     icon: BarChart3,
     permissao: "sidebar.relatorios",
   },
-  {
-    href: "/admin",
-    label: "Administração",
-    icon: ShieldCheck,
-    permissao: "sidebar.administracao",
-  },
 ];
 
 // Larguras fixas em px pra animação de width funcionar (CSS não interpola auto/full).
@@ -112,6 +98,25 @@ export function Sidebar({
   const visibleLinks = links.filter(
     (l) => !l.permissao || pode(role, l.permissao),
   );
+
+  // Engrenagem no footer: agrupa Cadastros e Administração (ex-itens de nav).
+  // Só aparece se o usuário puder ver pelo menos uma das duas áreas — assim
+  // Freelancer e Produtor não veem um botão que abre uma página vazia.
+  const podeConfiguracoes =
+    pode(role, "sidebar.cadastros") || pode(role, "sidebar.administracao");
+  const configuracoesAtivo =
+    pathname === "/configuracoes" ||
+    pathname.startsWith("/configuracoes/") ||
+    pathname === "/cadastros" ||
+    pathname.startsWith("/cadastros/") ||
+    pathname === "/admin" ||
+    pathname.startsWith("/admin/") ||
+    pathname === "/clientes" ||
+    pathname.startsWith("/clientes/") ||
+    pathname === "/fornecedores" ||
+    pathname.startsWith("/fornecedores/") ||
+    pathname === "/categorias" ||
+    pathname.startsWith("/categorias/");
 
   // Largura do bg de cada item — animável porque são valores numéricos px.
   const itemBgWidth = expanded ? ITEM_W_EXPANDED : ITEM_W_COLLAPSED;
@@ -302,6 +307,53 @@ export function Sidebar({
             );
           })}
         </nav>
+
+        {/* Configurações (engrenagem) */}
+        {podeConfiguracoes && (
+          <div className="px-3 pt-3 pb-1 flex justify-center">
+            <Link
+              href="/configuracoes"
+              onClick={() => setMobileOpen(false)}
+              title={!expanded ? "Configurações" : undefined}
+              className="group flex justify-center"
+            >
+              <div
+                style={{ ...transitionStyle, width: `${itemBgWidth}px` }}
+                className={cn(
+                  "relative flex items-center h-11 rounded-lg overflow-hidden text-sm font-medium shrink-0",
+                  configuracoesAtivo
+                    ? "bg-[#3E3E3E] text-white"
+                    : "text-white/60 group-hover:text-white group-hover:bg-white/5",
+                )}
+              >
+                {configuracoesAtivo && (
+                  <span className="absolute inset-y-0 left-0 w-1 bg-california-red" />
+                )}
+                <div className="flex h-full w-11 shrink-0 items-center justify-center">
+                  <Settings
+                    className={cn(
+                      "h-[18px] w-[18px] transition-colors",
+                      configuracoesAtivo
+                        ? "text-california-red"
+                        : "text-white/50 group-hover:text-white/80",
+                    )}
+                  />
+                </div>
+                <div
+                  style={transitionStyle}
+                  className={cn(
+                    "flex flex-1 items-center gap-2 pr-3 min-w-0",
+                    expanded ? "opacity-100" : "opacity-0",
+                  )}
+                >
+                  <span className="truncate whitespace-nowrap flex-1">
+                    Configurações
+                  </span>
+                </div>
+              </div>
+            </Link>
+          </div>
+        )}
 
         {/* User footer */}
         <div className="p-3 flex justify-center">
