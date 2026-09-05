@@ -43,7 +43,7 @@ export default async function AdminPage() {
             <ShieldCheck className="h-5 w-5 text-california-red" />
           </div>
           <h1 className="text-3xl font-bold tracking-tight">
-            Configurações do sistema
+            Administração
           </h1>
         </div>
         <p className="text-sm text-muted-foreground max-w-2xl">
