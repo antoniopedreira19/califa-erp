@@ -374,7 +374,7 @@ export function EnviarJobModal({
             <CidadeCombobox
               value={
                 dados.cidadeId
-                  ? { id: dados.cidadeId, nome: dados.cidadeNome }
+                  ? { id: dados.cidadeId, nome: dados.cidadeNome, uf: null }
                   : null
               }
               onChange={(c) => onChange({ cidadeId: c.id, cidadeNome: c.nome })}

@@ -279,7 +279,11 @@ export default async function OrcamentoDetailPage({
   // limitado a 30, ela pode não estar entre as primeiras, e o editor
   // precisa exibi-la mesmo assim.
   const cidadeAtual: CidadeOpcao | null = orcamentoRaw.cidade
-    ? { id: orcamentoRaw.cidade.id as string, nome: orcamentoRaw.cidade.nome as string }
+    ? {
+        id: orcamentoRaw.cidade.id as string,
+        nome: orcamentoRaw.cidade.nome as string,
+        uf: (orcamentoRaw.cidade.uf as string | null) ?? null,
+      }
     : null;
   const categorias = (categoriasRes.data ?? []) as Categoria[];
   const fornecedores = (fornecedoresRes.data ?? []) as {

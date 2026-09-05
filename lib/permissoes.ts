@@ -65,6 +65,12 @@ export const permissoes = {
   "cadastros.categorias_orcamento.editar":  ["administrador"],
   "cadastros.regionais.editar":             ["administrador"],
   "cadastros.cidades.editar":               ["administrador"],
+  /**
+   * Criação rápida de cidade DENTRO do combobox do orçamento (fluxo IBGE
+   * ou manual). Espelha `cadastros.fornecedores.inline`: quem cria
+   * orçamento precisa poder adicionar cidade sem sair do formulário.
+   */
+  "cadastros.cidades.inline":               ["administrador", "gerente_producao", "produtor"],
   "cadastros.usuarios.editar":              ["administrador"],
   "auditoria.ver":                          ["administrador"],
 

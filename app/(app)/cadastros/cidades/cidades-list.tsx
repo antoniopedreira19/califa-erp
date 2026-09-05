@@ -103,6 +103,8 @@ export function CidadesList({
             <thead className="border-b border-border bg-muted/40">
               <tr>
                 <th className="px-4 py-3 text-left font-medium text-muted-foreground">Nome</th>
+                <th className="px-4 py-3 text-left font-medium text-muted-foreground w-16">UF</th>
+                <th className="px-4 py-3 text-left font-medium text-muted-foreground w-24">Origem</th>
                 <th className="px-4 py-3 text-left font-medium text-muted-foreground w-32">Status</th>
                 <th className="px-4 py-3 text-right font-medium text-muted-foreground w-24">Ações</th>
               </tr>
@@ -115,6 +117,18 @@ export function CidadesList({
                   className="cursor-pointer border-b border-border last:border-0 transition-colors hover:bg-muted/50"
                 >
                   <td className="px-4 py-3">{r.nome}</td>
+                  <td className="px-4 py-3 text-muted-foreground font-mono text-xs">
+                    {r.uf ?? "—"}
+                  </td>
+                  <td className="px-4 py-3">
+                    {r.fonte === "ibge" ? (
+                      <span className="inline-flex items-center rounded-md bg-california-red/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-california-red">
+                        IBGE
+                      </span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">Manual</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3">
                     <span
                       className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${
