@@ -3344,3 +3344,56 @@ ficava fora da conta.
 no dia da migration (R$ 1.810.880 → R$ 1.822.880 no total), porque o
 planejado não gasto de itens com PP aprovada voltou para a curva até
 alguém marcar os itens.
+
+## ⚠️ Nota de 2026-09-07 — Abertura de Job ganhou a aba "Calendário de Jobs" (decisão 053)
+
+Design: `Calendario de Jobs.dc.html`. Regra completa em
+[053](../decisions/053-calendario-de-jobs.md).
+
+A barra de abas de `/financeiro/abertura-de-job` passou de **duas para
+três**: "Jobs aguardando abertura", "Visualizar Jobs" e, agora,
+"Calendário de Jobs" (`?aba=calendario`). A aba nova é **sem badge** de
+propósito — ela mostra o MESMO conjunto de "Visualizar Jobs", e repetir o
+número faria pensar que são coisas diferentes.
+
+São duas visões do mesmo conjunto:
+
+- **Eventos no mês** — grade mensal marcada pela `jobs.data_evento`. Cada
+  célula traz no canto **quantos jobs estão ativos naquele dia**, e o
+  clique abre os eventos da data;
+- **Jobs ativos numa data** — tudo que corre entre `data_inicio_prevista`
+  e `data_fim_prevista`, com busca, filtro por regional e GP,
+  agrupamento e ordenação. A linha abre `/financeiro/jobs/[id]`, como na
+  aba ao lado.
+
+### ⚠️ Todo job passou a ter data de evento
+
+O backfill `20260907100001` gravou `data_evento = data_fim_prevista` nos
+**24 jobs** que estavam sem ela (a coluna só virou obrigatória em
+27/08/2026). Decisão do Tiago: é build de teste, e em produção todo job
+chegará com a data de verdade.
+
+**A data do backfill não se distingue de uma informada pela produção** —
+mesma coluna, sem marca de procedência. Quem for ler `data_evento` em
+outra tela (conferência, detalhe do job) precisa saber disso.
+
+### ⚠️ A cor do calendário é o SERVIÇO, não a categoria
+
+O design colore por categoria; no dado real a categoria é "Evento" em 20
+dos 25 jobs e a grade sairia de uma cor só. A legenda usa
+`orcamentos.servico_id` (Always On, Ativação, Fee, Interno), preenchido
+em 24 dos 25. A coluna **Categoria** continua na tabela — mudou só o que
+a cor separa. A cor sai da ordem alfabética dos serviços presentes, não
+de coluna no banco.
+
+### ⚠️ `JobAberto` cresceu, e o serviço não vem por embed
+
+`dados-abertos.ts` passou a trazer `data_evento`,
+`data_inicio_prevista`, `data_fim_prevista` e `servico_nome`.
+
+O serviço mora no **orçamento**, e é cruzado em memória por
+`servicoPorOrcamento` (`lib/data/servicos.ts`), dentro do `Promise.all`
+que já existia. **Não** por embed aninhado: `orcamentos` tem duas FKs
+para `categorias_dominio`, e embed ambíguo no PostgREST derruba a query
+inteira — a aba "Visualizar Jobs" voltaria vazia, em silêncio, por causa
+de uma coluna que nem é dela.

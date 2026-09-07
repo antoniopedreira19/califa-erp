@@ -38,6 +38,19 @@ export default async function AberturaDeJobPage({
     enviado_em_label: formatEnviadoEm(j.created_at, agora),
   }));
 
+  // O "hoje" do calendário sai daqui, no fuso de Brasília, pelo mesmo
+  // motivo do rótulo acima: calculado dentro do client component, o
+  // servidor renderizaria numa data e o navegador em outra sempre que a
+  // máquina de quem usa estivesse noutro fuso — e o React acusaria
+  // divergência de hidratação. `en-CA` porque é o locale que já formata
+  // em `YYYY-MM-DD`, que é a forma com que o calendário compara datas.
+  const hoje = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(agora);
+
   return (
     <div className="space-y-6">
       <div>
@@ -65,8 +78,11 @@ export default async function AberturaDeJobPage({
       <AberturaTabs
         fila={linhas}
         abertos={abertos}
+        hoje={hoje}
         abaInicial={
-          searchParams?.aba === "abertos" || searchParams?.aba === "aguardando"
+          searchParams?.aba === "abertos" ||
+          searchParams?.aba === "aguardando" ||
+          searchParams?.aba === "calendario"
             ? (searchParams.aba as Aba)
             : undefined
         }

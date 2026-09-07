@@ -7,6 +7,7 @@ import {
   FATURAMENTO_VAZIO,
 } from "@/lib/data/faturamento-por-job";
 import { caixaPorJob, CAIXA_VAZIO } from "@/lib/data/caixa-por-job";
+import { servicoPorOrcamento } from "@/lib/data/servicos";
 
 export type { SituacaoFaturamento };
 
@@ -59,6 +60,32 @@ export interface JobAberto {
   responsavel_nome: string | null;
   regional_nome: string | null;
   produto: string | null;
+  /**
+   * As três datas que sustentam o Calendário de Jobs (aba de 07/09/2026).
+   *
+   * `data_evento` é a marca da grade do mês; início e fim definem em que
+   * dias o job está EM ANDAMENTO — é a conta por trás do "N jobs ativos"
+   * de cada célula e da visão "Jobs ativos numa data".
+   *
+   * Desde o backfill de 07/09/2026 todo job tem data de evento: quem não
+   * tinha recebeu a `data_fim_prevista`. A coluna segue anulável no banco
+   * e o tipo acompanha — job criado por caminho que não passe pelo
+   * formulário de envio ainda pode chegar sem ela.
+   */
+  data_evento: string | null;
+  data_inicio_prevista: string | null;
+  data_fim_prevista: string | null;
+  /**
+   * Serviço do job (Always On, Ativação, Fee, Interno). Mora no ORÇAMENTO
+   * de origem — `orcamentos.servico_id`, escopo `projeto` das
+   * `categorias_dominio` —, não em `jobs`, e por isso é cruzado em
+   * memória por `servicoPorOrcamento`, e não por embed.
+   *
+   * É o campo que COLORE o Calendário de Jobs (decisão do Tiago,
+   * 07/09/2026): a categoria, que o design original usava, hoje é
+   * "Evento" em 20 dos 25 jobs e deixaria o calendário monocromático.
+   */
+  servico_nome: string | null;
   situacao_faturamento: SituacaoFaturamento;
   /**
    * O número da linha na coluna Faturamento: valor da nota quando ela
@@ -104,7 +131,15 @@ const SELECT_JOB_ABERTO =
   // de desembolso mostra o que a abertura previu.
   "custo_previsto_total, " +
   "data_abertura_financeiro, " +
+  // As datas do Calendário de Jobs. São colunas da própria `jobs` — não
+  // custam junção nenhuma.
+  "data_evento, data_inicio_prevista, data_fim_prevista, " +
   "competencia_trimestre, competencia_ano, projeto_id, produto, " +
+  // `orcamento_id` desce cru: o SERVIÇO do job mora no orçamento e é
+  // cruzado em memória, por `servicoPorOrcamento`. Não vem por embed de
+  // propósito — `orcamentos` tem duas FKs para `categorias_dominio`, e
+  // embed ambíguo derruba a query inteira em vez de só a coluna.
+  "orcamento_id, " +
   "projeto_financeiro_id, " +
   "projeto_financeiro:projetos_financeiro(codigo, nome), " +
   "categoria:categorias_dominio(nome), " +
@@ -144,12 +179,13 @@ export async function listarJobsDoFinanceiro(
 ): Promise<JobAberto[]> {
   const supabase = createClient();
 
-  // Três leituras independentes: os jobs, a esteira de faturamento do
-  // tenant inteiro e os totais de caixa por job. A esteira mora em
+  // Quatro leituras independentes: os jobs, a esteira de faturamento do
+  // tenant inteiro, os totais de caixa por job e o serviço de cada
+  // orçamento (a coluna Serviço do calendário). A esteira mora em
   // `lib/data/faturamento-por-job` — a visão agregada do projeto usa a
   // MESMA classificação, e duas cópias dela divergiriam na primeira nota
   // cancelada. Em paralelo, nunca em série (`docs/PERFORMANCE.md`).
-  const [jobsRes, esteira, caixa] = await Promise.all([
+  const [jobsRes, esteira, caixa, servicos] = await Promise.all([
     supabase
       .from("jobs")
       .select(SELECT_JOB_ABERTO)
@@ -158,6 +194,7 @@ export async function listarJobsDoFinanceiro(
       .order("codigo", { ascending: true }),
     faturamentoPorJob(tenantId, hoje),
     caixaPorJob(tenantId),
+    servicoPorOrcamento(supabase, tenantId),
   ]);
 
   const { data, error } = jobsRes;
@@ -198,6 +235,10 @@ export async function listarJobsDoFinanceiro(
       responsavel_nome: j.responsavel?.nome ?? null,
       regional_nome: j.regional?.nome ?? null,
       produto: j.produto,
+      data_evento: j.data_evento ?? null,
+      data_inicio_prevista: j.data_inicio_prevista ?? null,
+      data_fim_prevista: j.data_fim_prevista ?? null,
+      servico_nome: servicos.get(j.orcamento_id) ?? null,
       situacao_faturamento: fat.situacao,
       // Sem nota nem envio, a coluna mostra o que a abertura previu.
       valor_faturamento:
