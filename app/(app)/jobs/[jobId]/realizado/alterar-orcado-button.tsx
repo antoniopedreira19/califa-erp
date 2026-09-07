@@ -3,6 +3,13 @@
 /**
  * O gatilho do modo errata.
  *
+ * ⚠️ 07/09/2026: o rótulo passou de "Alterar orçado" para "Realizar
+ * errata" (pedido do Tiago). A errata deixou de ser só do orçado — ela
+ * abre o planejado da linha cujo orçado mudou (decisão 054) —, e o nome
+ * antigo prometia menos do que o botão faz. O arquivo e o componente
+ * mantêm o nome antigo de propósito: renomear os dois arrastaria a
+ * seção, o handoff e o histórico do git por uma mudança de rótulo.
+ *
  * ⚠️ Até 27/08/2026 este botão abria um drawer com uma SEGUNDA tabela, na
  * qual se editava o orçado longe da planilha. Ele agora só liga e desliga
  * o modo errata na planilha que já está na tela — o estado mora em
@@ -42,7 +49,7 @@ export function AlterarOrcadoButton({ ativo, onAlternar, travadoPor }: Props) {
       )}
     >
       <PencilLine className="h-3.5 w-3.5 text-california-red" />
-      {ativo ? "Alterando orçado" : "Alterar orçado"}
+      {ativo ? "Realizando errata" : "Realizar errata"}
     </button>
   );
 }

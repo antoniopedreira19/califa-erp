@@ -1320,6 +1320,18 @@ export interface JobErrataItem {
   dias_meses_para: number | null;
   total_de: number;
   total_para: number;
+  /** PLANEJADO da linha, antes e depois. A errata passou a corrigir o
+   *  planejado junto com o orçado em 07/09/2026 (decisão 054); `null` nas
+   *  erratas anteriores, que não o tocavam. Em A e D o "para" é o espelho
+   *  do orçado, gravado pelo trigger `planejado_espelha_orcado`. */
+  valor_unitario_planejado_de: number | null;
+  valor_unitario_planejado_para: number | null;
+  quantidade_planejada_de: number | null;
+  quantidade_planejada_para: number | null;
+  dias_meses_planejado_de: number | null;
+  dias_meses_planejado_para: number | null;
+  total_planejado_de: number | null;
+  total_planejado_para: number | null;
   /** Efeito deste item no valor do job. */
   efeito_valor_job: number;
   /** Efeito no faturamento previsto. `null` nas erratas antigas. */

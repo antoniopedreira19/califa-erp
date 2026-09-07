@@ -16,6 +16,7 @@ import {
   TIPOS_CUSTO,
   aceitaBV,
 } from "@/lib/calculos/versao-totais";
+import { planejadoEspelhaOrcado } from "@/lib/calculos/bv-planilha";
 import type { TipoCusto, JobStatus, ErrataAcao } from "@/lib/types";
 import { jobAceitaAcoesPlanilha } from "@/lib/types";
 
@@ -137,12 +138,22 @@ async function barrarTrocaDeTipo(
   return null;
 }
 
+/** O PLANEJADO da linha, opcional nos dois schemas: a errata passou a
+ *  corrigi-lo em 07/09/2026 (decisão 054), e um payload sem ele continua
+ *  válido — a linha fica com o planejado que já tinha. */
+const planejadoSchema = {
+  valor_unitario_planejado: z.number().nonnegative().optional(),
+  quantidade_planejada: z.number().nonnegative().optional(),
+  dias_meses_planejado: z.number().nonnegative().optional(),
+};
+
 const alteracaoSchema = z.object({
   job_item_orcado_id: z.string().uuid(),
   valor_unitario: z.number().nonnegative(),
   quantidade: z.number().nonnegative(),
   dias_meses: z.number().nonnegative(),
   tipo_custo: z.enum(TIPOS),
+  ...planejadoSchema,
 });
 
 const novaSchema = z.object({
@@ -158,6 +169,7 @@ const novaSchema = z.object({
   valor_unitario: z.number().nonnegative(),
   quantidade: z.number().nonnegative(),
   dias_meses: z.number().nonnegative(),
+  ...planejadoSchema,
 });
 
 const payloadSchema = z.object({
@@ -207,7 +219,59 @@ interface Mudanca {
   dmPara: number;
   totalDe: number;
   totalPara: number;
+  /** O PLANEJADO da linha, antes e depois (decisão 054). */
+  planUnitDe: number;
+  planUnitPara: number;
+  planQtdDe: number;
+  planQtdPara: number;
+  planDmDe: number;
+  planDmPara: number;
+  planTotalDe: number;
+  planTotalPara: number;
   efeito: { faturamentoPrevisto: number; valorJob: number };
+}
+
+interface Trio {
+  unit: number;
+  qtd: number;
+  dm: number;
+}
+
+/**
+ * O planejado que a linha PASSA a ter — a regra da decisão 054, do lado
+ * do servidor, para um payload montado à mão não gravar o que a tela não
+ * deixaria:
+ *
+ * - linha vermelha: zero (o banco cobra em `chk_jio_linha_vermelha_zerada`);
+ * - linha em save: zero (o trigger zera de todo jeito);
+ * - custo `A`/`D`: espelho do orçado NOVO (o trigger faria o mesmo — aqui
+ *   é para o histórico gravar o número certo);
+ * - orçado alterado e planejado informado: o informado;
+ * - nada disso: o planejado que já estava lá.
+ */
+function planejadoQueFica(
+  linha: { vermelha: boolean; emSave: boolean; tipoPara: TipoCusto },
+  orcadoMudou: boolean,
+  orcadoPara: Trio,
+  planejadoAtual: Trio,
+  informado: Partial<{
+    valor_unitario_planejado: number;
+    quantidade_planejada: number;
+    dias_meses_planejado: number;
+  }>,
+): Trio {
+  if (linha.vermelha || linha.emSave) return { unit: 0, qtd: 0, dm: 0 };
+  if (planejadoEspelhaOrcado(linha.tipoPara)) return orcadoPara;
+  const temInformado =
+    informado.valor_unitario_planejado !== undefined ||
+    informado.quantidade_planejada !== undefined ||
+    informado.dias_meses_planejado !== undefined;
+  if (!orcadoMudou || !temInformado) return planejadoAtual;
+  return {
+    unit: informado.valor_unitario_planejado ?? planejadoAtual.unit,
+    qtd: informado.quantidade_planejada ?? planejadoAtual.qtd,
+    dm: informado.dias_meses_planejado ?? planejadoAtual.dm,
+  };
 }
 
 /**
@@ -217,7 +281,10 @@ interface Mudanca {
  *
  * - **corrige** uma linha: R$ unitário, QT, D/M e tipo de custo. QT e D/M
  *   entraram junto com o modo errata na própria planilha — antes eles
- *   ficavam congelados como aprovados.
+ *   ficavam congelados como aprovados. Desde 07/09/2026 (decisão 054) o
+ *   PLANEJADO da linha vai junto, mas só quando o orçado dela mudou:
+ *   planejado sozinho não é errata, e o servidor ignora o que vier sem
+ *   mudança no orçado (`planejadoQueFica`).
  * - **cria** linha, normal ou VERMELHA. A vermelha nasce zerada no orçado
  *   e no planejado e serve só para receber PP: é o custo que o orçamento
  *   não previu e que alguém precisa pedir mesmo assim.
@@ -320,6 +387,7 @@ export async function registrarErrata(
     .select(
       "id, item_versao_id, item, grupo_id, ordem, tipo_custo, linha_vermelha, " +
         "valor_unitario_orcado, quantidade_orcada, dias_meses_orcado, total_orcado, " +
+        "valor_unitario_planejado, quantidade_planejada, dias_meses_planejado, total_planejado, " +
         "em_save, save_consumido",
     )
     .eq("job_id", jobId)
@@ -372,11 +440,13 @@ export async function registrarErrata(
     const dmDe = Number(atual.dias_meses_orcado ?? 1);
     const tipoDe = atual.tipo_custo as TipoCusto;
 
-    const mudou =
+    const orcadoMudou =
       alt.valor_unitario !== unitarioDe ||
       alt.quantidade !== qtdDe ||
-      alt.dias_meses !== dmDe ||
-      alt.tipo_custo !== tipoDe;
+      alt.dias_meses !== dmDe;
+    const mudou = orcadoMudou || alt.tipo_custo !== tipoDe;
+    // Planejado sozinho não é errata (decisão 054): sem mudança no orçado
+    // ou no tipo, o que veio no planejado é ignorado.
     if (!mudou) continue;
 
     const totalAntes = Number(atual.total_orcado ?? 0);
@@ -384,6 +454,23 @@ export async function registrarErrata(
       alt.valor_unitario,
       alt.quantidade,
       alt.dias_meses,
+    );
+
+    const planAtual: Trio = {
+      unit: Number(atual.valor_unitario_planejado ?? 0),
+      qtd: Number(atual.quantidade_planejada ?? 0),
+      dm: Number(atual.dias_meses_planejado ?? 0),
+    };
+    const planPara = planejadoQueFica(
+      {
+        vermelha: atual.linha_vermelha === true,
+        emSave: atual.em_save === true,
+        tipoPara: alt.tipo_custo,
+      },
+      orcadoMudou,
+      { unit: alt.valor_unitario, qtd: alt.quantidade, dm: alt.dias_meses },
+      planAtual,
+      alt,
     );
 
     mudancas.push({
@@ -403,6 +490,14 @@ export async function registrarErrata(
       dmPara: alt.dias_meses,
       totalDe: totalAntes,
       totalPara: totalDepois,
+      planUnitDe: planAtual.unit,
+      planUnitPara: planPara.unit,
+      planQtdDe: planAtual.qtd,
+      planQtdPara: planPara.qtd,
+      planDmDe: planAtual.dm,
+      planDmPara: planPara.dm,
+      planTotalDe: Number(atual.total_planejado ?? 0),
+      planTotalPara: totalDe(planPara.unit, planPara.qtd, planPara.dm),
       // Os DOIS efeitos: mudar o tipo pode mexer num sem mexer no outro
       // (A · Direto -> A · Repasse move só o faturamento previsto).
       efeito: efeitoDe(
@@ -455,6 +550,14 @@ export async function registrarErrata(
         dmPara: 0,
         totalDe: totalAntes,
         totalPara: 0,
+        planUnitDe: Number(atual.valor_unitario_planejado ?? 0),
+        planUnitPara: 0,
+        planQtdDe: Number(atual.quantidade_planejada ?? 0),
+        planQtdPara: 0,
+        planDmDe: Number(atual.dias_meses_planejado ?? 0),
+        planDmPara: 0,
+        planTotalDe: Number(atual.total_planejado ?? 0),
+        planTotalPara: 0,
         efeito: efeitoDe(
           { total: totalAntes, tipoCusto: tipo },
           { total: 0, tipoCusto: tipo },
@@ -479,6 +582,15 @@ export async function registrarErrata(
     const qtd = nova.linha_vermelha ? 1 : nova.quantidade;
     const dm = nova.linha_vermelha ? 1 : nova.dias_meses;
     const total = totalDe(unit, qtd, dm);
+    // A linha nova é orçado novo por definição: o planejado dela vem do
+    // payload (decisão 054). Sem ele, nasce zerado como antes.
+    const plan = planejadoQueFica(
+      { vermelha: nova.linha_vermelha, emSave: false, tipoPara: nova.tipo_custo },
+      true,
+      { unit, qtd, dm },
+      { unit: 0, qtd: 0, dm: 0 },
+      nova,
+    );
 
     mudancas.push({
       acao: "nova",
@@ -497,6 +609,14 @@ export async function registrarErrata(
       dmPara: dm,
       totalDe: 0,
       totalPara: total,
+      planUnitDe: 0,
+      planUnitPara: plan.unit,
+      planQtdDe: 0,
+      planQtdPara: plan.qtd,
+      planDmDe: 0,
+      planDmPara: plan.dm,
+      planTotalDe: 0,
+      planTotalPara: totalDe(plan.unit, plan.qtd, plan.dm),
       efeito: efeitoDe(
         { total: 0, tipoCusto: nova.tipo_custo },
         { total, tipoCusto: nova.tipo_custo },
@@ -662,12 +782,13 @@ export async function registrarErrata(
         valor_unitario_orcado: m.unitarioPara,
         quantidade_orcada: m.qtdPara,
         dias_meses_orcado: m.dmPara,
-        // O planejado nasce zerado e é preenchido no fluxo normal do
-        // planejado. Na vermelha ele fica zerado para sempre — o banco
-        // cobra isso em `chk_jio_linha_vermelha_zerada`.
-        valor_unitario_planejado: 0,
-        quantidade_planejada: 0,
-        dias_meses_planejado: 0,
+        // O planejado vem da própria errata desde 07/09/2026 (decisão
+        // 054). Na vermelha ele fica zerado para sempre — o banco cobra
+        // isso em `chk_jio_linha_vermelha_zerada`; em A/D o trigger
+        // espelha o orçado, e `planejadoQueFica` já mandou o mesmo número.
+        valor_unitario_planejado: m.planUnitPara,
+        quantidade_planejada: m.planQtdPara,
+        dias_meses_planejado: m.planDmPara,
       })
       .select("id")
       .single();
@@ -735,6 +856,14 @@ export async function registrarErrata(
         dias_meses_para: m.dmPara,
         total_de: dinheiro(m.totalDe),
         total_para: dinheiro(m.totalPara),
+        valor_unitario_planejado_de: m.planUnitDe,
+        valor_unitario_planejado_para: m.planUnitPara,
+        quantidade_planejada_de: m.planQtdDe,
+        quantidade_planejada_para: m.planQtdPara,
+        dias_meses_planejado_de: m.planDmDe,
+        dias_meses_planejado_para: m.planDmPara,
+        total_planejado_de: dinheiro(m.planTotalDe),
+        total_planejado_para: dinheiro(m.planTotalPara),
         efeito_valor_job: dinheiro(m.efeito.valorJob),
         efeito_faturamento_previsto: dinheiro(m.efeito.faturamentoPrevisto),
       })),
@@ -762,6 +891,11 @@ export async function registrarErrata(
         quantidade_orcada: m.qtdPara,
         dias_meses_orcado: m.dmPara,
         tipo_custo: m.tipoPara,
+        // Igual ao atual quando o planejado não abriu — gravar o mesmo
+        // número é inócuo, e o trigger tem a última palavra em A/D e save.
+        valor_unitario_planejado: m.planUnitPara,
+        quantidade_planejada: m.planQtdPara,
+        dias_meses_planejado: m.planDmPara,
         updated_at: new Date().toISOString(),
       })
       .eq("id", m.copiaId as string)
