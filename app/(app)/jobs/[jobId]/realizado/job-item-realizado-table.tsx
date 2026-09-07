@@ -191,7 +191,9 @@ interface Props {
  *  A pílula dividida cabe na MESMA calha de sempre (116px), então a
  *  reserva da página não muda e a tabela não perde um pixel. */
 
-/** ⚠️ Nenhuma célula desta planilha é editável desde 21/08/2026.
+/** ⚠️ Nenhuma célula desta planilha é editável desde 21/08/2026 — fora
+ *  do modo errata, que abre o Orçado (decisão 030) e, desde 07/09/2026,
+ *  o Planejado da linha cujo orçado mudou (decisão 054).
  *
  *  O Orçado e o Planejado sempre vieram da versão aprovada e da errata. O
  *  REALIZADO era o único bloco digitável — e deixou de ser: ele nasce
@@ -352,13 +354,19 @@ function CampoDaErrata({
 }
 
 /**
- * Célula do bloco ORÇADO — a que a errata abre.
+ * Célula do bloco ORÇADO — a que a errata abre — e, desde 07/09/2026, do
+ * bloco PLANEJADO (campos `plan*`, decisão 054).
  *
  * Fora da errata é leitura. Na errata, mostra o que está no rascunho e
  * abre pelo mesmo caminho da planilha do orçamento (Enter, digitar,
  * duplo clique — decisão 046); o input guarda TEXTO, não número: com
  * número, digitar "1," volta a "1" e o cursor pula. A conversão acontece
  * uma vez só, em `useRascunhoErrata`, e é de lá que sai o total da linha.
+ *
+ * No Planejado a célula só abre quando `errata.planejadoLiberado` diz que
+ * sim — o orçado da linha mudou, ou a linha é nova. Travada, ela mostra o
+ * motivo no `title` e continua de leitura, com a forma de sempre (zero
+ * vira travessão, como em `CelulaLeitura`).
  */
 function CelulaOrcadoErrata({
   item,
@@ -391,8 +399,12 @@ function CelulaOrcadoErrata({
   onConfirmar: (raw: string, destino?: Direcao) => void;
   onCancelar: () => void;
 }) {
-  // A linha vermelha nasce sem orçado e nunca ganha um: mostrar travessão
-  // é mais honesto do que mostrar zeros que ninguém pode mexer.
+  const doPlanejado = campo.startsWith("plan");
+  const unitario = campo === "unitario" || campo === "planUnitario";
+
+  // A linha vermelha nasce sem orçado nem planejado e nunca ganha um:
+  // mostrar travessão é mais honesto do que mostrar zeros que ninguém
+  // pode mexer.
   if (item.linha_vermelha) {
     return (
       <CelulaJob
@@ -405,50 +417,82 @@ function CelulaOrcadoErrata({
     );
   }
 
+  // `item` já é a linha do RASCUNHO (a seção monta os grupos a partir de
+  // `errata.itens`): no Planejado este é o número que vale, digitado ou
+  // não. No Orçado o texto do rascunho é lido abaixo, como sempre foi.
   const valorSalvo =
     campo === "unitario"
       ? Number(item.valor_unitario_orcado ?? 0)
       : campo === "quantidade"
         ? Number(item.quantidade_orcada ?? 0)
-        : Number(item.dias_meses_orcado ?? 0);
-  const podeEditar = editando && !!errata && !travada;
-  const rotulo =
-    campo === "unitario" ? "R$ unitário" : campo === "quantidade" ? "QT" : "D/M";
+        : campo === "diasMeses"
+          ? Number(item.dias_meses_orcado ?? 0)
+          : campo === "planUnitario"
+            ? Number(item.valor_unitario_planejado ?? 0)
+            : campo === "planQuantidade"
+              ? Number(item.quantidade_planejada ?? 0)
+              : Number(item.dias_meses_planejado ?? 0);
+  const liberado = doPlanejado ? !!errata && errata.planejadoLiberado(item.id) : true;
+  const podeEditar = editando && !!errata && !travada && liberado;
+  const rotulo = unitario
+    ? "R$ unitário"
+    : campo === "quantidade" || campo === "planQuantidade"
+      ? "QT"
+      : "D/M";
+  const bloco = doPlanejado ? "planejado" : "orçado";
 
   if (podeEditar && aberta) {
     const edicao = errata.edicaoDe(item.id);
     return (
-      <td className={cn("px-1.5 align-middle", className, ERRATA.celulaEditavel)}>
+      <td
+        className={cn(
+          "px-1.5 align-middle",
+          className,
+          doPlanejado ? ERRATA.celulaEditavelPlanejado : ERRATA.celulaEditavel,
+        )}
+      >
         <CampoDaErrata
           valor={edicao ? edicao[campo] : String(valorSalvo)}
           semente={semente}
           numerico
           onConfirmar={onConfirmar}
           onCancelar={onCancelar}
-          className={ERRATA.input}
-          ariaLabel={`${rotulo} orçado de ${item.item || "item novo"}`}
+          className={doPlanejado ? ERRATA.inputPlanejado : ERRATA.input}
+          ariaLabel={`${rotulo} ${bloco} de ${item.item || "item novo"}`}
         />
       </td>
     );
   }
 
   // Na errata o número mostrado é o do RASCUNHO — o que foi digitado.
-  const texto = podeEditar ? errata.edicaoDe(item.id)?.[campo] : undefined;
+  const texto =
+    podeEditar && !doPlanejado ? errata.edicaoDe(item.id)?.[campo] : undefined;
   const numero = texto !== undefined ? (parseNumero(texto) ?? 0) : valorSalvo;
+  // Planejado de leitura: zero vira travessão, a forma de sempre da
+  // planilha. Aberto para edição, o zero aparece — é um campo.
+  const vazio = doPlanejado && !podeEditar && numero <= 0;
+  const motivoPlanejado =
+    editando && doPlanejado && !travada && !liberado && errata
+      ? errata.motivoPlanejadoTravado(item.id)
+      : null;
   return (
     <CelulaJob
       nav={nav}
       moldura={moldura}
-      title={editando && travada ? MOTIVO_TRAVA_PP : undefined}
+      title={
+        editando && travada ? MOTIVO_TRAVA_PP : (motivoPlanejado ?? undefined)
+      }
       className={cn(
-        "text-right",
-        campo === "unitario" && "font-mono",
+        "text-right whitespace-nowrap",
+        unitario && "font-mono",
         editando && travada && "text-muted-foreground",
+        vazio && "text-muted-foreground",
         className,
-        podeEditar && ERRATA.celulaEditavel,
+        podeEditar &&
+          (doPlanejado ? ERRATA.celulaEditavelPlanejado : ERRATA.celulaEditavel),
       )}
     >
-      {campo === "unitario" ? formatCurrency(numero, moeda) : numero}
+      {vazio ? "—" : unitario ? formatCurrency(numero, moeda) : numero}
     </CelulaJob>
   );
 }
@@ -727,6 +771,15 @@ export function JobItemRealizadoTable({
         coluna === "dias_meses_orcado"
       ) {
         return item.linha_vermelha ? null : "numero";
+      }
+      // O Planejado só abre com o orçado da linha alterado (decisão 054);
+      // a regra inteira mora no rascunho.
+      if (
+        coluna === "valor_unitario_planejado" ||
+        coluna === "quantidade_planejada" ||
+        coluna === "dias_meses_planejado"
+      ) {
+        return errata.planejadoLiberado(rowId) ? "numero" : null;
       }
       return null;
     },
@@ -1265,27 +1318,12 @@ export function JobItemRealizadoTable({
                           </>
                         )}
 
-                        {/* Planejado (RO) */}
-                        <CelulaLeitura
-                          valor={Number(item.valor_unitario_planejado ?? 0)}
-                          formato="moeda"
-                          moeda={moeda}
-                          className={cn("font-mono", PLANEJADO.celulaAbre)}
-                          nav={nav("valor_unitario_planejado")}
-                          moldura={moldura("valor_unitario_planejado")}
-                        />
-                        <CelulaLeitura
-                          valor={Number(item.quantidade_planejada ?? 0)}
-                          className={PLANEJADO.celulaMeio}
-                          nav={nav("quantidade_planejada")}
-                          moldura={moldura("quantidade_planejada")}
-                        />
-                        <CelulaLeitura
-                          valor={Number(item.dias_meses_planejado ?? 0)}
-                          className={PLANEJADO.celulaMeio}
-                          nav={nav("dias_meses_planejado")}
-                          moldura={moldura("dias_meses_planejado")}
-                        />
+                        {/* Planejado — leitura, salvo na errata, em que
+                            ele abre para a linha cujo orçado mudou
+                            (decisão 054). */}
+                        {celulaOrcado("planUnitario", "valor_unitario_planejado", PLANEJADO.celulaAbre)}
+                        {celulaOrcado("planQuantidade", "quantidade_planejada", PLANEJADO.celulaMeio)}
+                        {celulaOrcado("planDiasMeses", "dias_meses_planejado", PLANEJADO.celulaMeio)}
                         <CelulaTotalComBv
                           bloco={blocos.planejado}
                           visao={visao}
@@ -1384,7 +1422,8 @@ export function JobItemRealizadoTable({
 
                   {/* Os dois jeitos de criar linha, no pé do grupo.
                       "Novo item" é a linha de sempre: tem orçado, entra na
-                      conta e depois recebe planejado. "Linha vermelha" é a
+                      conta e o planejado dela abre na própria errata
+                      (decisão 054). "Linha vermelha" é a
                       outra coisa — ela nasce sem orçado e sem planejado e
                       só recebe realizado, por PP. É o custo que o
                       orçamento não previu e que alguém precisa pedir

@@ -275,6 +275,12 @@ export const ERRATA = {
   /** O input dentro da célula do Orçado. */
   input:
     "w-full min-w-0 rounded-md border border-[#9dc0ee] bg-white px-1.5 py-1 text-right font-mono text-[11.5px] font-semibold text-[#1e4fa3] outline-none focus:border-[#2f6fdb] focus:ring-1 focus:ring-[#2f6fdb]/30",
+  /** Célula do bloco Planejado enquanto ela aceita digitação — o mesmo
+   *  tratamento do Orçado, na cor do PLANEJADO (decisão 054). */
+  celulaEditavelPlanejado: "bg-[#e6faf0]",
+  /** O input dentro da célula do Planejado. */
+  inputPlanejado:
+    "w-full min-w-0 rounded-md border border-[#8fd9b8] bg-white px-1.5 py-1 text-right font-mono text-[11.5px] font-semibold text-[#047857] outline-none focus:border-[#059669] focus:ring-1 focus:ring-[#059669]/30",
   /** Input do nome, na linha recém-criada. */
   inputNome:
     "w-full min-w-0 rounded-md border border-border bg-white px-2 py-1 text-xs text-foreground outline-none focus:border-california-red focus:ring-1 focus:ring-california-red/25",
@@ -304,7 +310,8 @@ export const ERRATA = {
     "inline-flex items-center rounded-full border border-[#fca5a5] bg-[#fef2f2] px-1.5 py-px text-[9px] font-bold uppercase tracking-[0.05em] text-[#b91c1c]",
   tagRemovida:
     "inline-flex items-center rounded-full border border-border bg-muted px-1.5 py-px text-[9px] font-bold uppercase tracking-[0.05em] text-muted-foreground",
-  /** Botão "Alterar orçado" enquanto o modo está LIGADO. */
+  /** Botão "Realizar errata" (era "Alterar orçado" até 07/09/2026)
+   *  enquanto o modo está LIGADO. */
   botaoAtivo:
     "inline-flex items-center gap-1.5 rounded-lg border border-california-red bg-california-red/[0.07] px-3 py-1.5 text-xs font-bold text-[#b83b45] shadow-[inset_0_1px_2px_rgba(231,75,86,0.18)]",
 } as const;

@@ -75,7 +75,7 @@ export function ErratasCard({
           Erratas
         </h2>
         <span className="text-[11.5px] text-muted-foreground">
-          Alterações de itens orçados e tipos de custo após a abertura do job
+          Alterações de itens orçados, planejado e tipos de custo após a abertura do job
         </span>
 
         {/* Sem errata não há "antes x depois" que faça sentido: mostra só o
@@ -141,7 +141,7 @@ export function ErratasCard({
       {vazio && (
         <p className="px-6 py-5 text-sm text-muted-foreground">
           Nenhuma errata registrada. Alterações no orçado do job são feitas pelo
-          botão <strong className="text-foreground">Alterar orçado</strong>, na
+          botão <strong className="text-foreground">Realizar errata</strong>, na
           aba Planilha Interna, e aparecem aqui.
         </p>
       )}
@@ -223,6 +223,9 @@ export function ErratasCard({
                         <th className="w-[200px] px-2 py-2.5 text-right">
                           Valor orçado
                         </th>
+                        <th className="w-[200px] px-2 py-2.5 text-right">
+                          Planejado
+                        </th>
                         <th className="w-[130px] px-2 py-2.5 text-right">
                           Efeito no fat. previsto
                         </th>
@@ -289,6 +292,32 @@ export function ErratasCard({
                                 </span>
                               </div>
                             </td>
+                            {/* O planejado entrou na errata em 07/09/2026
+                                (decisão 054). Nas erratas anteriores as
+                                colunas são nulas e a célula mostra
+                                travessão — não há número a inventar. */}
+                            <td className="px-2 py-2.5 text-right align-top">
+                              {i.total_planejado_para === null ? (
+                                <span className="font-mono text-xs text-muted-foreground">
+                                  —
+                                </span>
+                              ) : (
+                                <div className="flex flex-wrap items-center justify-end gap-1.5">
+                                  {i.total_planejado_de !== null &&
+                                    i.total_planejado_de !== i.total_planejado_para && (
+                                      <>
+                                        <span className="whitespace-nowrap font-mono text-xs text-muted-foreground line-through">
+                                          {formatCurrency(i.total_planejado_de, moeda)}
+                                        </span>
+                                        <ArrowRight className="h-3 w-3 text-[#c9c9c9]" />
+                                      </>
+                                    )}
+                                  <span className="whitespace-nowrap font-mono text-xs text-[#047857]">
+                                    {formatCurrency(i.total_planejado_para, moeda)}
+                                  </span>
+                                </div>
+                              )}
+                            </td>
                             <td className="px-2 py-2.5 text-right align-top">
                               <span
                                 className={cn(
@@ -335,6 +364,7 @@ export function ErratasCard({
                         <td className="whitespace-nowrap px-2 pt-3 text-right font-mono text-xs text-muted-foreground">
                           Orçado {comSinal(deltaCusto, moeda)}
                         </td>
+                        <td />
                         <td className="whitespace-nowrap px-2 pt-3 text-right font-mono text-xs text-muted-foreground">
                           {deltaErrataFat === null
                             ? "—"

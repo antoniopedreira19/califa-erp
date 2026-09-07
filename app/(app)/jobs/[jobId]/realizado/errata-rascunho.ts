@@ -20,14 +20,33 @@
 
 import * as React from "react";
 import type { ItemPlanilhaJob, TipoCusto } from "@/lib/types";
+import { planejadoEspelhaOrcado } from "@/lib/calculos/bv-planilha";
 
-/** Campos do bloco Orçado que a errata abre para edição. */
-export type CampoErrata = "unitario" | "quantidade" | "diasMeses";
+/** Campos que a errata abre para edição: os três do bloco Orçado e, desde
+ *  07/09/2026 (decisão 054), os três do bloco Planejado. */
+export type CampoErrata =
+  | "unitario"
+  | "quantidade"
+  | "diasMeses"
+  | "planUnitario"
+  | "planQuantidade"
+  | "planDiasMeses";
+
+export const CAMPOS_ORCADO: readonly CampoErrata[] = [
+  "unitario",
+  "quantidade",
+  "diasMeses",
+];
 
 export interface EdicaoLinha {
   unitario: string;
   quantidade: string;
   diasMeses: string;
+  /** O PLANEJADO da linha. Só vale quando `planejadoLiberado` — fora
+   *  disso a linha fica com o planejado salvo, e o texto aqui é ignorado. */
+  planUnitario: string;
+  planQuantidade: string;
+  planDiasMeses: string;
   tipo: TipoCusto;
 }
 
@@ -49,6 +68,11 @@ export interface MudancaErrata {
   totalDe: number;
   totalPara: number;
   delta: number;
+  /** Total PLANEJADO da linha, antes e depois. O pop-up mostra o par
+   *  quando ele difere — a errata passou a mexer no planejado em
+   *  07/09/2026 (decisão 054). */
+  planejadoDe: number;
+  planejadoPara: number;
 }
 
 export function parseNumero(raw: string): number | null {
@@ -75,7 +99,33 @@ function edicaoDoItem(i: ItemPlanilhaJob): EdicaoLinha {
     unitario: paraEdicao(Number(i.valor_unitario_orcado ?? 0)),
     quantidade: paraEdicao(Number(i.quantidade_orcada ?? 1)),
     diasMeses: paraEdicao(Number(i.dias_meses_orcado ?? 1)),
+    planUnitario: paraEdicao(Number(i.valor_unitario_planejado ?? 0)),
+    planQuantidade: paraEdicao(Number(i.quantidade_planejada ?? 0)),
+    planDiasMeses: paraEdicao(Number(i.dias_meses_planejado ?? 0)),
     tipo: i.tipo_custo,
+  };
+}
+
+/** O orçado digitado difere do que está salvo? É a chave da regra do
+ *  planejado (decisão 054): sem mudança no orçado, o planejado não abre. */
+function orcadoDifere(e: EdicaoLinha, salvo: ItemPlanilhaJob): boolean {
+  return (
+    numeroDe(e.unitario, 0) !== Number(salvo.valor_unitario_orcado ?? 0) ||
+    numeroDe(e.quantidade, 0) !== Number(salvo.quantidade_orcada ?? 0) ||
+    numeroDe(e.diasMeses, 0) !== Number(salvo.dias_meses_orcado ?? 0)
+  );
+}
+
+/** Devolve o texto do planejado ao valor salvo. Usado quando o orçado da
+ *  linha volta ao original: o planejado que tinha sido digitado perde a
+ *  razão de existir, e deixá-lo guardado faria ele reaparecer do nada na
+ *  próxima correção do orçado. */
+function planejadoSalvo(e: EdicaoLinha, salvo: ItemPlanilhaJob): EdicaoLinha {
+  return {
+    ...e,
+    planUnitario: paraEdicao(Number(salvo.valor_unitario_planejado ?? 0)),
+    planQuantidade: paraEdicao(Number(salvo.quantidade_planejada ?? 0)),
+    planDiasMeses: paraEdicao(Number(salvo.dias_meses_planejado ?? 0)),
   };
 }
 
@@ -91,6 +141,15 @@ export interface RascunhoErrata {
   /** Há passo para voltar — o botão e o atalho ficam desligados sem isto. */
   podeDesfazer: boolean;
   edicaoDe: (chave: string) => EdicaoLinha | undefined;
+  /** O PLANEJADO desta linha aceita digitação? Regra do Tiago (07/09/2026,
+   *  decisão 054): só quando o ORÇADO dela também mudou — linha nova, ou
+   *  linha existente com R$ Unit., QT ou D/M do orçado diferentes do
+   *  salvo. Nunca em linha vermelha, em save, nem em `A`/`D`, onde o
+   *  planejado espelha o orçado por trigger. */
+  planejadoLiberado: (chave: string) => boolean;
+  /** Por que o planejado NÃO abre — o `title` da célula. `null` quando ele
+   *  abre, ou quando a célula nem mostra número (linha vermelha). */
+  motivoPlanejadoTravado: (chave: string) => string | null;
   editarCampo: (chave: string, campo: CampoErrata, valor: string) => void;
   editarTipo: (chave: string, tipo: TipoCusto) => void;
   editarNome: (chave: string, nome: string) => void;
@@ -116,6 +175,9 @@ export interface RascunhoErrata {
       quantidade: number;
       dias_meses: number;
       tipo_custo: TipoCusto;
+      valor_unitario_planejado: number;
+      quantidade_planejada: number;
+      dias_meses_planejado: number;
     }>;
     novas: Array<{
       grupo_id: string;
@@ -125,6 +187,9 @@ export interface RascunhoErrata {
       valor_unitario: number;
       quantidade: number;
       dias_meses: number;
+      valor_unitario_planejado: number;
+      quantidade_planejada: number;
+      dias_meses_planejado: number;
     }>;
     remocoes: string[];
   };
@@ -208,17 +273,31 @@ export function useRascunhoErrata(
     zerar();
   }, [zerar]);
 
+  const salvosPorId = React.useMemo(
+    () => new Map(itensSalvos.map((i) => [i.id, i])),
+    [itensSalvos],
+  );
+
   const editarCampo = React.useCallback(
     (chave: string, campo: CampoErrata, valor: string) => {
       fotografar(`${chave}:${campo}`);
       setNovas((lista) =>
         lista.map((n) => (n.chave === chave ? { ...n, [campo]: valor } : n)),
       );
-      setEdicoes((mapa) =>
-        mapa[chave] ? { ...mapa, [chave]: { ...mapa[chave], [campo]: valor } } : mapa,
-      );
+      setEdicoes((mapa) => {
+        if (!mapa[chave]) return mapa;
+        let proxima: EdicaoLinha = { ...mapa[chave], [campo]: valor };
+        // Orçado de volta ao salvo ⇒ o planejado digitado cai junto. É a
+        // regra da decisão 054 aplicada no sentido inverso: sem mudança
+        // no orçado não há mudança no planejado.
+        const salvo = salvosPorId.get(chave);
+        if (salvo && CAMPOS_ORCADO.includes(campo) && !orcadoDifere(proxima, salvo)) {
+          proxima = planejadoSalvo(proxima, salvo);
+        }
+        return { ...mapa, [chave]: proxima };
+      });
     },
-    [fotografar],
+    [fotografar, salvosPorId],
   );
 
   const editarTipo = React.useCallback((chave: string, tipo: TipoCusto) => {
@@ -254,6 +333,11 @@ export function useRascunhoErrata(
         unitario: "0",
         quantidade: "1",
         diasMeses: "1",
+        // O planejado nasce com a mesma forma do orçado: quem digita o
+        // unitário dos dois já tem QT e D/M em 1.
+        planUnitario: "0",
+        planQuantidade: vermelha ? "0" : "1",
+        planDiasMeses: vermelha ? "0" : "1",
         tipo: "B",
       },
     ]);
@@ -285,6 +369,44 @@ export function useRascunhoErrata(
     [],
   );
 
+  /** A regra do planejado num lugar só — a tabela e a conta dos itens
+   *  leem daqui. Devolve o motivo da trava, ou null quando ele abre. */
+  const travaDoPlanejado = React.useCallback(
+    (chave: string): string | null => {
+      const nova = novas.find((n) => n.chave === chave);
+      if (nova) {
+        if (nova.vermelha) return null;
+        if (planejadoEspelhaOrcado(nova.tipo)) {
+          return "Em custo A e D o planejado espelha o orçado.";
+        }
+        return null;
+      }
+      const salvo = salvosPorId.get(chave);
+      const e = edicoes[chave];
+      if (!salvo || !e) return "Linha fora da errata.";
+      if (salvo.linha_vermelha) return null;
+      if (salvo.em_save) return "Linha em save não tem planejado.";
+      if (planejadoEspelhaOrcado(e.tipo)) {
+        return "Em custo A e D o planejado espelha o orçado.";
+      }
+      if (!orcadoDifere(e, salvo)) {
+        return "O planejado só abre depois de corrigir o orçado desta linha.";
+      }
+      return null;
+    },
+    [novas, salvosPorId, edicoes],
+  );
+
+  const planejadoLiberado = React.useCallback(
+    (chave: string): boolean => {
+      if (travaDoPlanejado(chave) !== null) return false;
+      const nova = novas.find((n) => n.chave === chave);
+      if (nova) return !nova.vermelha;
+      return !salvosPorId.get(chave)?.linha_vermelha;
+    },
+    [travaDoPlanejado, novas, salvosPorId],
+  );
+
   /** A planilha como ela ficaria depois de confirmar. */
   const itens = React.useMemo<ItemPlanilhaJob[]>(() => {
     if (!ativo) return itensSalvos;
@@ -299,6 +421,24 @@ export function useRascunhoErrata(
         const unit = numeroDe(e.unitario, 0);
         const qtd = numeroDe(e.quantidade, 0);
         const dm = numeroDe(e.diasMeses, 0);
+        // O planejado segue a mesma regra que o banco vai aplicar: em
+        // `A`/`D` é o espelho do orçado (trigger); liberado, é o que foi
+        // digitado; nos demais casos fica como está salvo.
+        const plan = i.em_save
+          ? { u: 0, q: 0, d: 0 }
+          : planejadoEspelhaOrcado(e.tipo)
+            ? { u: unit, q: qtd, d: dm }
+            : travaDoPlanejado(i.id) === null
+              ? {
+                  u: numeroDe(e.planUnitario, 0),
+                  q: numeroDe(e.planQuantidade, 0),
+                  d: numeroDe(e.planDiasMeses, 0),
+                }
+              : {
+                  u: Number(i.valor_unitario_planejado ?? 0),
+                  q: Number(i.quantidade_planejada ?? 0),
+                  d: Number(i.dias_meses_planejado ?? 0),
+                };
         return {
           ...i,
           tipo_custo: e.tipo,
@@ -306,6 +446,10 @@ export function useRascunhoErrata(
           quantidade_orcada: qtd,
           dias_meses_orcado: dm,
           total_orcado: unit * qtd * dm,
+          valor_unitario_planejado: plan.u,
+          quantidade_planejada: plan.q,
+          dias_meses_planejado: plan.d,
+          total_planejado: plan.u * plan.q * plan.d,
         };
       });
 
@@ -313,6 +457,17 @@ export function useRascunhoErrata(
       const unit = n.vermelha ? 0 : numeroDe(n.unitario, 0);
       const qtd = n.vermelha ? 1 : numeroDe(n.quantidade, 0);
       const dm = n.vermelha ? 1 : numeroDe(n.diasMeses, 0);
+      // A linha nova tem orçado novo por definição, então o planejado dela
+      // abre junto (decisão 054). Vermelha fica zerada; `A`/`D` espelham.
+      const plan = n.vermelha
+        ? { u: 0, q: 0, d: 0 }
+        : planejadoEspelhaOrcado(n.tipo)
+          ? { u: unit, q: qtd, d: dm }
+          : {
+              u: numeroDe(n.planUnitario, 0),
+              q: numeroDe(n.planQuantidade, 0),
+              d: numeroDe(n.planDiasMeses, 0),
+            };
       return {
         id: n.chave,
         orcado_id: n.chave,
@@ -329,12 +484,10 @@ export function useRascunhoErrata(
         quantidade_orcada: qtd,
         dias_meses_orcado: dm,
         total_orcado: unit * qtd * dm,
-        // O planejado da linha nova nasce zerado e é preenchido depois,
-        // pelo fluxo normal do planejado. Na vermelha ele fica zerado.
-        valor_unitario_planejado: 0,
-        quantidade_planejada: 0,
-        dias_meses_planejado: 0,
-        total_planejado: 0,
+        valor_unitario_planejado: plan.u,
+        quantidade_planejada: plan.q,
+        dias_meses_planejado: plan.d,
+        total_planejado: plan.u * plan.q * plan.d,
         bv_liquido_planejado: null,
         em_save: false,
         save_consumido: 0,
@@ -342,7 +495,7 @@ export function useRascunhoErrata(
     });
 
     return [...vivos, ...criadas];
-  }, [ativo, itensSalvos, edicoes, novas, removidas]);
+  }, [ativo, itensSalvos, edicoes, novas, removidas, travaDoPlanejado]);
 
   const mudancas = React.useMemo<MudancaErrata[]>(() => {
     if (!ativo) return [];
@@ -361,14 +514,25 @@ export function useRascunhoErrata(
           totalDe: 0,
           totalPara: total,
           delta: total,
+          planejadoDe: 0,
+          planejadoPara: Number(i.total_planejado ?? 0),
         });
         continue;
       }
       const de = Number(base.total_orcado ?? 0);
       const para = Number(i.total_orcado ?? 0);
+      const planDe = Number(base.total_planejado ?? 0);
+      const planPara = Number(i.total_planejado ?? 0);
       // O tipo de custo muda o faturamento sem mexer no total orçado — por
-      // isso ele conta como mudança mesmo com os dois totais iguais.
-      if (de === para && base.tipo_custo === i.tipo_custo) continue;
+      // isso ele conta como mudança mesmo com os dois totais iguais. O
+      // planejado sozinho não muda nada aqui: ele só abre com o orçado
+      // alterado (decisão 054), e QT × D/M trocados com o mesmo total
+      // orçado já são mudança de unitário, QT ou D/M.
+      const orcadoMudou =
+        Number(base.valor_unitario_orcado ?? 0) !== Number(i.valor_unitario_orcado ?? 0) ||
+        Number(base.quantidade_orcada ?? 0) !== Number(i.quantidade_orcada ?? 0) ||
+        Number(base.dias_meses_orcado ?? 0) !== Number(i.dias_meses_orcado ?? 0);
+      if (!orcadoMudou && base.tipo_custo === i.tipo_custo) continue;
       lista.push({
         chave: i.id,
         acao: "alterada",
@@ -377,6 +541,8 @@ export function useRascunhoErrata(
         totalDe: de,
         totalPara: para,
         delta: para - de,
+        planejadoDe: planDe,
+        planejadoPara: planPara,
       });
     }
 
@@ -392,6 +558,8 @@ export function useRascunhoErrata(
         totalDe: de,
         totalPara: 0,
         delta: -de,
+        planejadoDe: Number(base.total_planejado ?? 0),
+        planejadoPara: 0,
       });
     }
 
@@ -421,7 +589,9 @@ export function useRascunhoErrata(
         .filter((i) => {
           const base = porId.get(i.id)!;
           return (
-            Number(base.total_orcado ?? 0) !== Number(i.total_orcado ?? 0) ||
+            Number(base.valor_unitario_orcado ?? 0) !== Number(i.valor_unitario_orcado ?? 0) ||
+            Number(base.quantidade_orcada ?? 0) !== Number(i.quantidade_orcada ?? 0) ||
+            Number(base.dias_meses_orcado ?? 0) !== Number(i.dias_meses_orcado ?? 0) ||
             base.tipo_custo !== i.tipo_custo
           );
         })
@@ -431,20 +601,35 @@ export function useRascunhoErrata(
           quantidade: Number(i.quantidade_orcada ?? 0),
           dias_meses: Number(i.dias_meses_orcado ?? 0),
           tipo_custo: i.tipo_custo,
+          // Já passou pela regra da 054 em `itens`: é o digitado quando o
+          // planejado abriu, e o salvo quando não abriu.
+          valor_unitario_planejado: Number(i.valor_unitario_planejado ?? 0),
+          quantidade_planejada: Number(i.quantidade_planejada ?? 0),
+          dias_meses_planejado: Number(i.dias_meses_planejado ?? 0),
         }));
+
+      const criadasPorChave = new Map(
+        itens.filter((i) => !porId.has(i.id)).map((i) => [i.id, i]),
+      );
 
       return {
         descricao,
         alteracoes,
-        novas: novas.map((n) => ({
-          grupo_id: n.grupoId,
-          item: n.item.trim(),
-          tipo_custo: n.tipo,
-          linha_vermelha: n.vermelha,
-          valor_unitario: n.vermelha ? 0 : numeroDe(n.unitario, 0),
-          quantidade: n.vermelha ? 1 : numeroDe(n.quantidade, 0),
-          dias_meses: n.vermelha ? 1 : numeroDe(n.diasMeses, 0),
-        })),
+        novas: novas.map((n) => {
+          const criada = criadasPorChave.get(n.chave);
+          return {
+            grupo_id: n.grupoId,
+            item: n.item.trim(),
+            tipo_custo: n.tipo,
+            linha_vermelha: n.vermelha,
+            valor_unitario: n.vermelha ? 0 : numeroDe(n.unitario, 0),
+            quantidade: n.vermelha ? 1 : numeroDe(n.quantidade, 0),
+            dias_meses: n.vermelha ? 1 : numeroDe(n.diasMeses, 0),
+            valor_unitario_planejado: Number(criada?.valor_unitario_planejado ?? 0),
+            quantidade_planejada: Number(criada?.quantidade_planejada ?? 0),
+            dias_meses_planejado: Number(criada?.dias_meses_planejado ?? 0),
+          };
+        }),
         remocoes: removidas,
       };
     },
@@ -458,6 +643,8 @@ export function useRascunhoErrata(
     desfazer,
     podeDesfazer: historico.length > 0,
     edicaoDe,
+    planejadoLiberado,
+    motivoPlanejadoTravado: travaDoPlanejado,
     editarCampo,
     editarTipo,
     editarNome,

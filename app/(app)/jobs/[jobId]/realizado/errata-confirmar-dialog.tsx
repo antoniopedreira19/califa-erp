@@ -178,31 +178,50 @@ export function ErrataConfirmarDialog({
             <ul className="divide-y divide-border">
               {mudancas.map((m) => {
                 const tag = tagDaMudanca(m);
+                // O planejado só muda junto com o orçado (decisão 054); a
+                // sublinha aparece quando ele de fato mudou, e não na
+                // linha removida — ali os dois somem.
+                const planejadoMudou =
+                  m.acao !== "removida" && m.planejadoDe !== m.planejadoPara;
                 return (
                   <li
                     key={m.chave}
-                    className="flex items-center justify-between gap-3 px-3.5 py-2"
+                    className="flex flex-col gap-0.5 px-3.5 py-2"
                   >
-                    <div className="flex min-w-0 items-center gap-2">
-                      <span className={tag.classe}>{tag.texto}</span>
-                      <span className="truncate text-[12.5px] text-foreground">
-                        {m.item}
-                      </span>
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span className={tag.classe}>{tag.texto}</span>
+                        <span className="truncate text-[12.5px] text-foreground">
+                          {m.item}
+                        </span>
+                      </div>
+                      <div className="flex items-baseline gap-2 whitespace-nowrap font-mono text-[11.5px]">
+                        <span className="text-muted-foreground">
+                          {m.acao === "nova" ? "—" : formatCurrency(m.totalDe, moeda)}
+                        </span>
+                        <span className="text-muted-foreground">→</span>
+                        <span className="text-foreground">
+                          {m.acao === "removida"
+                            ? "—"
+                            : formatCurrency(m.totalPara, moeda)}
+                        </span>
+                        <span className={cn("font-bold", corDoDelta(m.delta))}>
+                          {comSinal(m.delta, moeda)}
+                        </span>
+                      </div>
                     </div>
-                    <div className="flex items-baseline gap-2 whitespace-nowrap font-mono text-[11.5px]">
-                      <span className="text-muted-foreground">
-                        {m.acao === "nova" ? "—" : formatCurrency(m.totalDe, moeda)}
-                      </span>
-                      <span className="text-muted-foreground">→</span>
-                      <span className="text-foreground">
-                        {m.acao === "removida"
-                          ? "—"
-                          : formatCurrency(m.totalPara, moeda)}
-                      </span>
-                      <span className={cn("font-bold", corDoDelta(m.delta))}>
-                        {comSinal(m.delta, moeda)}
-                      </span>
-                    </div>
+                    {planejadoMudou && (
+                      <div className="flex items-baseline justify-end gap-2 whitespace-nowrap font-mono text-[10.5px]">
+                        <span className="text-[#3f8a70]">planejado</span>
+                        <span className="text-muted-foreground">
+                          {m.acao === "nova" ? "—" : formatCurrency(m.planejadoDe, moeda)}
+                        </span>
+                        <span className="text-muted-foreground">→</span>
+                        <span className="text-[#047857]">
+                          {formatCurrency(m.planejadoPara, moeda)}
+                        </span>
+                      </div>
+                    )}
                   </li>
                 );
               })}

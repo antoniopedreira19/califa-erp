@@ -101,6 +101,7 @@ perguntas ao time durante a execução.
 | **Errata: onde grava** | O job ganha **cópia própria** dos itens orçados. A versão aprovada continua sendo o documento que o cliente aprovou e segue read-only. |
 | **Errata: o que edita** | ⚠️ **Mudou em 27/08/2026** (decisão 030). Era "só R$ unitário e tipo de custo; QT, D/M, adição e remoção ficaram fora". Agora a errata corrige **R$ unitário, QT, D/M e tipo**, **cria** linha (normal ou vermelha) e **remove** linha. |
 | **Errata: onde acontece** | ⚠️ **Mudou em 27/08/2026** (decisão 030). "Alterar orçado" abria um drawer com uma segunda tabela; agora ele liga o **modo errata** na própria Planilha Interna, e o rodapé vira a barra da errata. |
+| **Errata: o botão e o planejado** | ⚠️ **Mudou em 07/09/2026** (decisão 054). O botão passou a se chamar **"Realizar errata"** ("Realizando errata" quando ligado). E a errata abre o **PLANEJADO** (R$ Unit., QT, D/M) da linha nova e da linha existente cujo **orçado mudou** — planejado sozinho não é errata; sem mudança no orçado as células ficam de leitura com o motivo no `title`. `A`/`D` seguem espelhando; vermelha e save seguem zeradas. O histórico (`jobs_erratas_itens`) gravou os oito números do planejado e o card de Erratas ganhou a coluna **Planejado**. |
 | **Errata: agrupamento** | ⚠️ **Mudou em 27/08/2026** (decisão 030). Era "título obrigatório e justificativa opcional". Agora é **um campo só, "Descrição da errata", obrigatório** — ele grava em `titulo`, e a coluna `justificativa` **foi removida do banco** no mesmo dia. |
 | **Errata: permissão** | Liberada pra qualquer usuário nesta fase (decisão explícita do time, com intenção de travar mais tarde). Exige job em "Aberto". ⚠️ **27/08/2026:** criar linha normal e remover linha passaram a ter gate próprio (`podeEditarLinhas`), hoje aberto para todos; criar **linha vermelha** nunca terá gate. |
 | **Errata: depois de gravar** | ⚠️ **Novo em 27/08/2026** (decisão 030). Toda errata sobre job já aberto marca `jobs.abertura_em_revisao`: o job volta ao mural de abertura do financeiro e o **envio para faturamento fica fechado** até a abertura ser salva de novo. O status do job não muda. |
@@ -2536,3 +2537,71 @@ do formulário e sem perder o que já foi digitado.
   Os R$ 4.000 do fim são a PP-00022, gerada e ainda não aprovada,
   segurando previsão no item marcado — exatamente a regra. Ficaram no job
   de teste: duas PPs aprovadas e os três itens marcados.
+
+---
+
+## ⚠️ Nota de 2026-09-07 — "Realizar errata", e a errata abre o planejado (decisão 054)
+
+**Commit:** ver `git log` desta data.
+**Migration:** `20260907210001_errata_registra_planejado.sql` (aditiva:
+oito colunas nulas em `jobs_erratas_itens`).
+**Regra:** `docs/decisions/054-errata-abre-o-planejado-junto-com-o-orcado.md`.
+
+Pedido do Tiago em 07/09/2026, em três partes:
+
+1. **O botão da Planilha Interna passou de "Alterar orçado" para
+   "Realizar errata"** ("Realizando errata" quando ligado). O arquivo e o
+   componente continuam `alterar-orcado-button.tsx` / `AlterarOrcadoButton`
+   — renomear arrastaria seção, handoff e histórico por uma troca de
+   rótulo. O estado vazio do card de Erratas foi junto.
+2. **A linha nova (não vermelha) da errata tem o planejado editável**
+   — R$ Unit., QT e D/M do bloco PLANEJADO abrem como os do Orçado, na
+   cor do bloco (`ERRATA.celulaEditavelPlanejado` / `inputPlanejado`).
+   Ela nasce com QT e D/M em 1 nos dois blocos.
+3. **A linha existente cujo orçado foi corrigido também abre o
+   planejado** — e **só ela**. Com o orçado igual ao salvo, as três
+   células ficam de leitura com o motivo no `title` ("O planejado só
+   abre depois de corrigir o orçado desta linha."). Orçado devolvido ao
+   valor original ⇒ o planejado digitado volta ao salvo na hora.
+
+### Onde a regra mora
+
+| Lugar | O quê |
+|---|---|
+| `realizado/errata-rascunho.ts` | `EdicaoLinha` ganhou `planUnitario/planQuantidade/planDiasMeses`; `CampoErrata` ganhou os três nomes. `planejadoLiberado(chave)` e `motivoPlanejadoTravado(chave)` são a regra num lugar só; `itens` (a planilha como ficaria) já a aplica: liberado → digitado; `A`/`D` → espelho do orçado; senão → salvo. `editarCampo` num campo do orçado que volta ao salvo reseta o planejado. `MudancaErrata` carrega `planejadoDe/Para`; o payload leva `valor_unitario_planejado`, `quantidade_planejada`, `dias_meses_planejado` em `alteracoes` e `novas`. |
+| `realizado/job-item-realizado-table.tsx` | `CelulaOrcadoErrata` atende os dois blocos (campos `plan*`); as três `CelulaLeitura` do Planejado saíram. `editorDe` abre as colunas do planejado só com `planejadoLiberado`. Fora da errata a célula continua com a forma de sempre (zero = travessão). |
+| `realizado/actions-errata.ts` | Os três campos do planejado são **opcionais** nos dois schemas. `planejadoQueFica` decide o que grava: vermelha e save → zero; `A`/`D` → espelho do orçado novo; orçado alterado e planejado informado → o informado; senão → o atual. Planejado sem mudança no orçado é **ignorado**. O UPDATE da correção e o INSERT da linha nova passaram a gravar os três; `jobs_erratas_itens` recebe os oito números. |
+| `erratas-card.tsx` | Coluna **Planejado** entre "Valor orçado" e "Efeito no fat. previsto": travessão nas erratas anteriores (colunas nulas), `de → para` riscado quando mudou. |
+| `errata-confirmar-dialog.tsx` | Sublinha "planejado R$ X → R$ Y" na linha em que ele mudou. |
+| `_planilha/blocos.ts` | `ERRATA.celulaEditavelPlanejado` e `ERRATA.inputPlanejado`, no verde do PLANEJADO. |
+| `lib/types.ts` | `JobErrataItem` com os oito campos, `number | null`. |
+
+### O que fica como estava
+
+- **`A` e `D` continuam espelhando o orçado** na errata (dica "Em custo A
+  e D o planejado espelha o orçado."). O destravamento decidido em 04/09
+  segue parado à espera da regra do REALIZADO; quando sair, a única
+  função consultada é `planejadoEspelhaOrcado` — tela, rascunho e
+  servidor — mais o trigger.
+- Faturamento previsto e valor do job **não** mexem por planejado. A
+  linha vermelha, o save e a linha com PP no financeiro seguem como na
+  030 e na 040.
+
+### Verificado em 07/09/2026 (JOB-0007 "Teste", só rascunho — nada gravado)
+
+| Passo | Resultado |
+|---|---|
+| Botão | "Realizar errata" / "Realizando errata" |
+| Errata ligada, GP (B) sem mexer | as três células do planejado de leitura, `title` com o motivo; Teste (A) idem com a dica do espelho |
+| GP: R$ Unit. do orçado 2.000 → 2.500 | planejado abre (fundo verde), barra "1 linha alterada" |
+| GP: R$ Unit. do planejado 1.500 → 1.800 | total planejado R$ 1.800,00; total da planilha R$ 7.500,00 |
+| GP: orçado de volta a 2.000 | planejado volta a 1.500 e tranca; barra "nenhuma alteração ainda" |
+| "Novo item em Equipe", orçado 1.000, planejado 700 | linha `nova:1` com os dois totais; barra "1 linha nova" |
+| Pop-up | GP: `R$ 2.000,00 → R$ 2.500,00 +R$ 500,00` e sublinha `planejado R$ 1.500,00 → R$ 1.800,00`; Item novo: `— → R$ 1.000,00` e `planejado — → R$ 700,00`; Total do orçado 7.000 → 8.500 |
+| Descartar | planilha de volta ao salvo, botão "Realizar errata" |
+
+⚠️ **`registrarErrata` continua sem teste de gravação** (pendência de
+28/08): o caminho novo do servidor — `planejadoQueFica`, o UPDATE com o
+planejado e as oito colunas do histórico — passou por `tsc`, `eslint` e
+build, não por uma errata real. Entra no mesmo roteiro de
+`docs/design-briefs/2026-08-28-errata-teste-ponta-a-ponta.md`.
