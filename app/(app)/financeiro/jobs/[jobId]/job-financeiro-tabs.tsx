@@ -3,7 +3,7 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 
-type TabKey = "abertura" | "info" | "planilha" | "fluxo" | "chat";
+import type { TabKey } from "./abas";
 
 interface Props {
   abertura: React.ReactNode;

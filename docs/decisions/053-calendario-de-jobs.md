@@ -74,6 +74,28 @@ cores dos que vêm depois dele no alfabeto — é o preço de não ter coluna
 de cor no banco, e é aceitável porque a legenda está sempre na tela, ao
 lado da grade.
 
+## Clicar numa linha abre o job em "Informações do Job"
+
+As linhas do calendário — no pop-up do dia e na tabela de ativos — abrem
+`/financeiro/jobs/[id]**?aba=info**`, e não a aba padrão da página, que é
+"Abertura do Job" (decisão do Tiago, 07/09/2026).
+
+Quem chega pelo calendário está perguntando QUE job é aquele na agenda:
+cliente, período, o que ele é. O registro da abertura é a pergunta de
+quem vem da fila ou de "Visualizar Jobs" — e essas duas **seguem** caindo
+na aba de abertura. Por isso o `?aba=` fica no calendário e não virou o
+novo padrão da página.
+
+`?aba=` aceita as cinco abas (`abertura`, `info`, `planilha`, `fluxo`,
+`chat`); valor desconhecido cai no padrão.
+
+⚠️ O helper que lê esse parâmetro mora em `abas.ts`, **fora** do
+`job-financeiro-tabs.tsx`. Aquele arquivo é `"use client"`, e o Next
+substitui os exports de um módulo client por referências de cliente:
+componente atravessa a fronteira, função comum não. Importar `abaDaUrl`
+de lá deu `is not a function` em tempo de execução — e o `tsc` passou
+limpo, porque os tipos batem dos dois lados.
+
 ## Serviço mora no orçamento, e não desce por embed
 
 `jobs` não tem `servico_id`: o campo é do **orçamento** de origem

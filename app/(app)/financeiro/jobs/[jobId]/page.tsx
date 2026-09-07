@@ -29,6 +29,7 @@ import { SITUACAO_META } from "../../abertura-de-job/situacao-faturamento";
 import { carregarLinhasDeFluxo, carregarPrazosDosJobs } from "./fluxo-do-job";
 import { FluxoCaixaJobs } from "@/components/financeiro/fluxo-caixa-jobs";
 import { JobFinanceiroTabs } from "./job-financeiro-tabs";
+import { abaDaUrl } from "./abas";
 
 export const dynamic = "force-dynamic";
 
@@ -49,8 +50,19 @@ export const dynamic = "force-dynamic";
  */
 export default async function JobNoFinanceiroPage({
   params,
+  searchParams,
 }: {
   params: { jobId: string };
+  /**
+   * `?aba=` escolhe em qual das cinco abas a página abre. Sem ela, abre
+   * em "Abertura do Job", que é de onde vem quem clica na fila e na
+   * lista de "Visualizar Jobs".
+   *
+   * Quem usa: o Calendário de Jobs, que manda `?aba=info` — lá a pessoa
+   * está procurando QUE job é aquele na agenda, não o registro da
+   * abertura (decisão do Tiago, 07/09/2026).
+   */
+  searchParams?: { aba?: string };
 }) {
   const session = await requireSession();
   if (
@@ -254,6 +266,7 @@ export default async function JobNoFinanceiroPage({
       </div>
 
       <JobFinanceiroTabs
+        abaInicial={abaDaUrl(searchParams?.aba)}
         chatCount={detalhe.naoLidas}
         abertura={
           <AberturaForm
