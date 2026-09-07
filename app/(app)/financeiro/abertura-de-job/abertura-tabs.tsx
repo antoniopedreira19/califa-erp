@@ -4,26 +4,36 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 import { FilaAbertura, type FilaLinha } from "./fila-list";
 import { JobsAbertosList } from "./jobs-abertos-list";
+import { CalendarioJobs } from "./calendario-jobs";
 import type { JobAberto } from "./dados-abertos";
 
-export type Aba = "aguardando" | "abertos";
+export type Aba = "aguardando" | "abertos" | "calendario";
 
 /**
- * As duas abas da Abertura de Job, como no design: a fila do que ainda
- * precisa ser aberto e a lista do que já foi.
+ * As três abas da Abertura de Job: a fila do que ainda precisa ser
+ * aberto, a lista do que já foi, e o calendário desse mesmo conjunto
+ * (design "Calendário de Jobs", 07/09/2026).
  *
- * As duas listas descem prontas do server component e a aba é só estado
- * de tela — trocar de aba não refaz query. São dois SELECTs leves (a fila
+ * As listas descem prontas do server component e a aba é só estado de
+ * tela — trocar de aba não refaz query. São dois SELECTs leves (a fila
  * costuma ter poucas linhas), carregados em paralelo, o que também mantém
- * as duas contagens do cabeçalho sempre verdadeiras.
+ * as contagens do cabeçalho sempre verdadeiras.
+ *
+ * O calendário NÃO tem query própria de propósito: ele lê a mesma
+ * `abertos` de "Visualizar Jobs". Duas leituras do mesmo conjunto
+ * divergiriam no primeiro job que mudasse de status entre uma e outra, e
+ * a pessoa veria contagens diferentes em duas abas da mesma tela.
  */
 export function AberturaTabs({
   fila,
   abertos,
+  hoje,
   abaInicial,
 }: {
   fila: FilaLinha[];
   abertos: JobAberto[];
+  /** "hoje" em `YYYY-MM-DD`, no fuso de Brasília, vindo do servidor. */
+  hoje: string;
   /**
    * Aba pedida pela URL (`?aba=`). Quem volta da visão agregada ou do
    * detalhe de um job cai de novo em "Visualizar Jobs" — sem isso a
@@ -55,13 +65,17 @@ export function AberturaTabs({
     }
   }
 
-  const abas: { key: Aba; rotulo: string; contagem: number }[] = [
+  const abas: { key: Aba; rotulo: string; contagem: number | null }[] = [
     { key: "aguardando", rotulo: "Jobs aguardando abertura", contagem: fila.length },
     // "Visualizar Jobs", e não "Jobs abertos": esta aba é a porta de
     // entrada do job já aberto no financeiro — dela se chega ao registro
     // da abertura, à planilha, ao fluxo de caixa e à comunicação
     // (decisão do Tiago, 20/08/2026).
     { key: "abertos", rotulo: "Visualizar Jobs", contagem: abertos.length },
+    // Sem contagem: o calendário mostra o MESMO conjunto da aba ao lado,
+    // e repetir o número aqui só faria pensar que são coisas diferentes.
+    // O design já traz esta aba sem badge.
+    { key: "calendario", rotulo: "Calendário de Jobs", contagem: null },
   ];
 
   return (
@@ -88,16 +102,18 @@ export function AberturaTabs({
               )}
             >
               {a.rotulo}
-              <span
-                className={cn(
-                  "inline-flex items-center rounded-full px-2.5 py-0.5 font-mono text-[11px] font-bold",
-                  ativo
-                    ? "bg-california-red/10 text-[#b3323c]"
-                    : "bg-[#f1f0ec] text-muted-foreground",
-                )}
-              >
-                {a.contagem}
-              </span>
+              {a.contagem !== null && (
+                <span
+                  className={cn(
+                    "inline-flex items-center rounded-full px-2.5 py-0.5 font-mono text-[11px] font-bold",
+                    ativo
+                      ? "bg-california-red/10 text-[#b3323c]"
+                      : "bg-[#f1f0ec] text-muted-foreground",
+                  )}
+                >
+                  {a.contagem}
+                </span>
+              )}
             </button>
           );
         })}
@@ -109,6 +125,14 @@ export function AberturaTabs({
       <div role="tabpanel" className={cn(aba === "abertos" ? "" : "hidden")}>
         <JobsAbertosList linhas={abertos} />
       </div>
+      {/* O calendário só monta quando a aba é escolhida: ele varre a
+          lista inteira por dia da grade, e manter isso rodando escondido
+          atrás das outras duas abas custaria em toda visita à tela. */}
+      {aba === "calendario" && (
+        <div role="tabpanel">
+          <CalendarioJobs linhas={abertos} hoje={hoje} />
+        </div>
+      )}
     </div>
   );
 }

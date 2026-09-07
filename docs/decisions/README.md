@@ -76,9 +76,10 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 050 | [O portal do cliente nasce de dentro do envio para faturamento](050-portal-do-cliente-nasce-de-dentro-do-envio-para-faturamento.md) | 2026-09-04 |
 | 051 | [O descritivo se lê na lista, num cartão ancorado](051-descritivo-em-cartao-nas-listas.md) | 2026-09-04 |
 | 052 | ["Todas as PPs deste item já foram geradas", e a previsão de custo por item](052-todas-as-pps-do-item-foram-geradas.md) | 2026-09-04 |
+| 053 | [Calendário de Jobs, e o serviço como eixo de cor](053-calendario-de-jobs.md) | 2026-09-07 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
 > data é a da decisão, não a da posição na fila.
 
-**Próximo número livre: 053.**
+**Próximo número livre: 054.**
