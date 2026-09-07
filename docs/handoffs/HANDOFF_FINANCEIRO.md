@@ -3397,3 +3397,21 @@ que já existia. **Não** por embed aninhado: `orcamentos` tem duas FKs
 para `categorias_dominio`, e embed ambíguo no PostgREST derruba a query
 inteira — a aba "Visualizar Jobs" voltaria vazia, em silêncio, por causa
 de uma coluna que nem é dela.
+
+### ⚠️ A página do job passou a aceitar `?aba=`
+
+`/financeiro/jobs/[jobId]` abria sempre em "Abertura do Job". Agora
+`?aba=` escolhe entre as cinco (`abertura`, `info`, `planilha`, `fluxo`,
+`chat`), com o padrão inalterado quando o parâmetro falta ou vem
+desconhecido — fila, "Visualizar Jobs" e a tela de projeto seguem caindo
+na abertura, como antes.
+
+Quem usa é o **calendário**: linha clicada no pop-up do dia ou na tabela
+de ativos abre em `?aba=info`, porque ali a pergunta é que job é aquele
+na agenda, não o registro da abertura.
+
+O helper `abaDaUrl` mora em `app/(app)/financeiro/jobs/[jobId]/abas.ts`,
+e não no `job-financeiro-tabs.tsx`, que é `"use client"`. Server
+component não consegue chamar função comum importada de módulo client —
+o Next troca os exports por referências e estoura `is not a function` em
+tempo de execução, sem o `tsc` reclamar.

@@ -365,6 +365,22 @@ export function CalendarioJobs({
     setPopupAberto(true);
   }
 
+  /**
+   * Clique numa linha do calendário — no pop-up do dia ou na tabela de
+   * ativos — abre o job direto em **Informações do Job**, e não em
+   * "Abertura do Job", que é o padrão da página (decisão do Tiago,
+   * 07/09/2026).
+   *
+   * Quem chega pelo calendário está perguntando QUE job é aquele na
+   * agenda: cliente, período, o que ele é. O registro da abertura é a
+   * pergunta de quem vem da fila ou de "Visualizar Jobs" — essas duas
+   * seguem caindo na aba de abertura, e por isso o `?aba=` fica aqui e
+   * não vira o novo padrão da página.
+   */
+  function abrirJob(id: string) {
+    router.push(`/financeiro/jobs/${id}?aba=info`);
+  }
+
   function alternarGrupo(rotulo: string) {
     setFechados((prev) => {
       const next = new Set(prev);
@@ -889,7 +905,7 @@ export function CalendarioJobs({
                             job={j}
                             dia={dia}
                             cor={cor(j)}
-                            onAbrir={() => router.push(`/financeiro/jobs/${j.id}`)}
+                            onAbrir={() => abrirJob(j.id)}
                           />
                         ))}
                     </div>
@@ -972,7 +988,7 @@ export function CalendarioJobs({
                     cor={cor(j)}
                     onAbrir={() => {
                       setPopupAberto(false);
-                      router.push(`/financeiro/jobs/${j.id}`);
+                      abrirJob(j.id);
                     }}
                   />
                 ))}
