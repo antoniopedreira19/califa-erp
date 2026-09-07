@@ -36,6 +36,26 @@ O escopo se chama `projeto` porque o campo nasceu lá. Renomear um valor
 de enum em uso mexeria nas linhas gravadas sem devolver nada — o nome
 ficou, e o helper `lib/data/servicos.ts` explica a herança.
 
+### Seguimento em 07/09/2026 — a ficha do job alcança a decisão
+
+A aba **Informações do Job** ficou 5 dias exibindo "Tipo do projeto" na
+coluna do Projeto, lendo justamente a `projetos.categoria_id` legada. Isso
+já tinha virado bug visível: **JOB-0031 mostrava "—"**, porque o projeto
+dele nasceu depois de 02/09 e a coluna legada nunca foi escrita.
+
+Decisão do Tiago: *"não existe mais um Tipo do Projeto; esse campo passou a
+se tratar do tipo de Serviço do Job"*. A linha então **mudou de coluna e de
+origem** — sai do Projeto, entra no Job, e passa a ler
+`orcamentos.servico_id`. Para não gastar duas linhas com as duas
+classificações do job, elas dividem uma: rótulo `Categoria · Serviço`,
+valor `Evento · Ativação`. O separador é o "·" que a mesma ficha já usa em
+"Regional · Cidade" — o hífen foi cogitado e descartado por ler como
+palavra composta.
+
+Detalhe do `select`: `orcamentos` tem duas FKs para `categorias_dominio`
+(categoria e serviço), então o embed **precisa** da dica
+`servico:categorias_dominio!servico_id(...)`.
+
 ### `projetos.categoria_id` fica
 
 Coluna preservada com o dado histórico e marcada como legada no

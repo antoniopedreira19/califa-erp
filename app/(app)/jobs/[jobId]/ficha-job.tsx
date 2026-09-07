@@ -23,6 +23,14 @@ export interface JobDaFicha {
   codigo: string;
   nome: string;
   categoriaNome: string | null;
+  /**
+   * Serviço do job — `orcamentos.servico_id`, escopo 'projeto' das
+   * `categorias_dominio` (Always On, Ativação, Fee, Interno). Era exibido
+   * como "Tipo do projeto" na coluna do PROJETO até 07/09/2026, lendo a
+   * `projetos.categoria_id` legada; virou informação do job porque
+   * descreve o trabalho de um job, não a iniciativa inteira do cliente.
+   */
+  servicoNome: string | null;
   produto: string | null;
   regionalNome: string | null;
   cidade: string | null;
@@ -40,8 +48,6 @@ export interface ProjetoDaFicha {
   codigo: string;
   nome: string;
   clienteNome: string | null;
-  /** Categoria do projeto (`categorias_dominio`, escopo 'projeto'). */
-  tipoNome: string | null;
   dataInicio: string | null;
   dataFim: string | null;
 }
@@ -148,7 +154,15 @@ export function FichaJob({
               <Campo rotulo="Nome do job" destaque>
                 {job.nome}
               </Campo>
-              <Campo rotulo="Categoria do job">{job.categoriaNome ?? "—"}</Campo>
+              {/* Categoria e Serviço na mesma linha, separadas pelo "·"
+                  que a ficha já usa em "Regional · Cidade": são as duas
+                  classificações do job e vinham de listas irmãs
+                  (`categorias_dominio`, escopos 'orcamento' e 'projeto'). */}
+              <Campo rotulo="Categoria · Serviço">
+                {[job.categoriaNome, job.servicoNome]
+                  .filter(Boolean)
+                  .join(" · ") || "—"}
+              </Campo>
               <Campo rotulo="Marca">{job.produto ?? "—"}</Campo>
               <Campo rotulo="Regional · Cidade">
                 {[job.regionalNome, job.cidade].filter(Boolean).join(" · ") ||
@@ -199,7 +213,6 @@ export function FichaJob({
                 {projeto.nome}
               </Campo>
               <Campo rotulo="Cliente">{projeto.clienteNome ?? "—"}</Campo>
-              <Campo rotulo="Tipo do projeto">{projeto.tipoNome ?? "—"}</Campo>
               <Campo rotulo="Período do projeto" mono ultimo>
                 {formatPeriodo(projeto.dataInicio, projeto.dataFim)}
               </Campo>

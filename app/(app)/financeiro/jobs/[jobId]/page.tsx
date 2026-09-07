@@ -287,6 +287,7 @@ export default async function JobNoFinanceiroPage({
                 codigo: job.codigo,
                 nome: jobNaFila.nome,
                 categoriaNome: detalhe.raw.categoria?.nome ?? null,
+                servicoNome: detalhe.raw.orcamento?.servico?.nome ?? null,
                 produto: job.produto,
                 regionalNome: detalhe.raw.regional?.nome ?? null,
                 cidade: job.cidade,
@@ -300,9 +301,8 @@ export default async function JobNoFinanceiroPage({
               }}
               projeto={{
                 // O projeto do FINANCEIRO, com fallback no da produção
-                // para job anterior à migration 20260820000011. Datas e
-                // tipo continuam vindo do projeto da produção: são dados
-                // que só existem lá.
+                // para job anterior à migration 20260820000011. As datas
+                // continuam vindo do projeto da produção: só existem lá.
                 id: jobNaFila.projeto_financeiro_id ?? detalhe.raw.projeto_id,
                 codigo:
                   jobNaFila.projeto_financeiro_codigo ??
@@ -314,7 +314,6 @@ export default async function JobNoFinanceiroPage({
                   "—",
                 clienteNome:
                   detalhe.raw.projeto?.cliente?.nome_fantasia ?? null,
-                tipoNome: detalhe.raw.projeto?.categoria?.nome ?? null,
                 dataInicio: detalhe.raw.projeto?.data_inicio_prevista ?? null,
                 dataFim: detalhe.raw.projeto?.data_fim_prevista ?? null,
               }}

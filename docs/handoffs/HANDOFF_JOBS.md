@@ -1666,19 +1666,41 @@ colunas da mesma tabela:
 | Coluna **Job** | Coluna **Projeto** |
 |---|---|
 | Nome do job | Nome do projeto |
-| Categoria do job (`categorias_dominio`, escopo `orcamento`) | Cliente — `clientes.nome_fantasia`, o de verdade |
-| Produto | Tipo do projeto |
-| Regional · Cidade | Período do projeto |
-| Competência | *Jobs do projeto* (lista, com badge de status) |
+| **Categoria · Serviço** | Cliente — `clientes.nome_fantasia`, o de verdade |
+| Marca | Período do projeto |
+| Regional · Cidade | *Jobs do projeto* (lista, com badge de status) |
+| Competência | |
 | Período | |
 | Abertura (data · quem abriu) | |
-| Prev. faturamento | |
+| Prev. recebimento | |
 
-**"Tipo do projeto" é a categoria do projeto** — `projetos.categoria_id`,
-`categorias_dominio` escopo `projeto` (Always On, Ativação, Fee, Interno).
-Decisão do Tiago em 19/08. Não confundir com a categoria do **job**, que sai
-do mesmo catálogo mas do escopo `orcamento` — os dois vocabulários têm
-"Ativação" e é fácil trocar um pelo outro lendo a tela.
+⚠️ **07/09/2026 — "Tipo do projeto" saiu da coluna do Projeto e virou o
+"Serviço" do job.** A linha era `projetos.categoria_id`, que a
+[decisão 037](../decisions/037-servico-no-orcamento-equipe-no-projeto-e-marca.md)
+aposentou em 02/09: o Serviço desceu para `orcamentos.servico_id` porque
+descreve o trabalho de **um job**, não a iniciativa inteira do cliente. A
+ficha tinha ficado para trás lendo a coluna legada — **JOB-0031 já exibia
+"—"**, porque projeto criado depois de 02/09 nasce com ela vazia.
+
+Agora **Categoria e Serviço dividem uma linha só na coluna do Job**,
+rotulada `Categoria · Serviço` e escrita `Evento · Ativação`. O separador é
+o mesmo "·" de "Regional · Cidade", logo abaixo. As duas classificações
+seguem vindo de listas irmãs, e continua fácil trocar uma pela outra lendo
+a tela:
+
+| campo | origem | escopo em `categorias_dominio` | opções |
+|---|---|---|---|
+| Categoria | `jobs.categoria_id` | `orcamento` | Cachê Artístico · Clearance · Conteúdo · Evento · Extra · Influencer · Prod. Musical |
+| Serviço | `orcamentos.servico_id` | `projeto` | Always On · Ativação · Fee · Interno |
+
+Quando um dos dois falta, a linha mostra só o outro (sem "·" solto); só
+mostra "—" quando faltam os dois. Um único job no banco cai nesse caso — o
+JOB-0004, cujo orçamento nunca teve serviço.
+
+O `select` de `carregar-detalhe.ts` **exige a dica de FK**
+(`servico:categorias_dominio!servico_id(...)`): `orcamentos` tem duas FKs
+para `categorias_dominio` e sem ela o embed fica ambíguo. O embed da
+categoria do projeto saiu do `select` no mesmo passo — nada mais o lia.
 
 Cinco campos **nunca tinham aparecido no módulo de Jobs**, embora já
 existissem no banco e na Central Financeira: categoria do job, competência,

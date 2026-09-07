@@ -243,6 +243,10 @@ export default async function JobDetailPage({
                 codigo: job.codigo,
                 nome: job.nome,
                 categoriaNome: raw.categoria?.nome ?? null,
+                // Serviço do job = `orcamentos.servico_id`. Antes esta
+                // ficha lia a categoria do PROJETO, que virou legada em
+                // 02/09/2026 e fica vazia em projeto novo.
+                servicoNome: raw.orcamento?.servico?.nome ?? null,
                 produto: job.produto,
                 regionalNome: raw.regional?.nome ?? null,
                 cidade: job.cidade,
@@ -261,10 +265,6 @@ export default async function JobDetailPage({
                 // Cliente de verdade, do cadastro — antes desta tela o card
                 // rotulava "Cliente" e mostrava o nome do PROJETO.
                 clienteNome: raw.projeto?.cliente?.nome_fantasia ?? null,
-                // Categoria do projeto (`categorias_dominio`, escopo
-                // 'projeto'). Não confundir com a categoria do job, que sai
-                // do mesmo catálogo mas do escopo 'orcamento'.
-                tipoNome: raw.projeto?.categoria?.nome ?? null,
                 dataInicio: raw.projeto?.data_inicio_prevista ?? null,
                 dataFim: raw.projeto?.data_fim_prevista ?? null,
               }}
