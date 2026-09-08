@@ -2636,9 +2636,28 @@ mural de abertura do financeiro**, com o envio para faturamento fechado
 — que é o efeito correto de toda errata. Sai quando alguém salvar a
 revisão da abertura.
 
-⚠️ **O resto do roteiro de 28/08 segue aberto:** a isenção do teto na
-linha vermelha e as travas de remoção (`barrarRemocao`, com o
-`on delete cascade` de `saves_consumos`) continuam sem teste real —
+⚠️ **Correção de 08/09/2026 — "isenção do teto" não é mais pendência
+nenhuma.** A versão anterior desta nota listava, entre o que falta
+testar, "a isenção do teto do orçado na linha vermelha". **Esse item
+morreu em 02/09/2026**: a decisão 039 §4 tirou o teto de TODO item e a
+migration `20260902160002` derrubou o trigger `pp_valida_saldo_do_item`
+— conferido no banco em 08/09, o trigger não existe. Não há teto, logo
+não há isenção a exercitar. A frase veio de uma anotação de 28/08 que
+ficou para trás, e a nota de 02/09 na decisão 030 já a corrigia.
+
+**O que rege a linha vermelha hoje** é o que ela sempre foi: nasce com
+orçado e planejado zerados (o banco cobra em
+`chk_jio_linha_vermelha_zerada`) e só recebe REALIZADO, por PP. Como o
+planejado é zero, **toda PP dela passa do planejado** e cai na
+confirmação do envio (`pedirConfirmacaoAcimaDoPlanejado`), que pede
+responsável do job ou administrador. Isso não é exceção dela: é a regra
+geral aplicada a um planejado zero.
+
+⚠️ **Do roteiro de 28/08, segue aberto só um item:** as travas de
+remoção de linha em errata (`barrarRemocao` — save marcado, save
+consumido, PP em qualquer status e BV não cancelado). Continua sem teste
+real, e importa porque `saves_consumos` é `on delete cascade`: uma falha
+ali devolve crédito de save ao job de origem em silêncio.
 `docs/design-briefs/2026-08-28-errata-teste-ponta-a-ponta.md`.
 
 
