@@ -46,6 +46,7 @@ import {
   FormaPagamentoField,
   type CartaoOption,
 } from "@/components/financeiro/forma-pagamento-field";
+import { ConfirmTrocaEmpresaDialog } from "@/components/ui/confirm-troca-empresa-dialog";
 
 // ---------------------------------------------------------------------------
 // Constantes de validação de upload
@@ -158,6 +159,8 @@ export function ContaAvulsaDrawer(props: Props) {
   const [empresaId, setEmpresaId] = React.useState<string>(
     conta?.empresa_id ?? "",
   );
+  const [dialogTrocaEmpresa, setDialogTrocaEmpresa] = React.useState(false);
+  const [empresaPendente, setEmpresaPendente] = React.useState<string>("");
   // Contas a pagar são sempre saída. Se um dia entrar recebimento avulso,
   // vira outra aba/módulo — não este drawer.
   const natureza: "saida" = "saida";
@@ -213,6 +216,21 @@ export function ContaAvulsaDrawer(props: Props) {
     ? ((props as Extract<Props, { mode: "editar" }>).rateioInicial ?? [])
     : [];
   const [rateio, setRateio] = React.useState<RateioLinhaInput[]>(rateioInicialEditar);
+
+  const handleEmpresaChange = (nova: string) => {
+    if (nova === empresaId) return;
+    if (rateio.length > 0) {
+      setEmpresaPendente(nova);
+      setDialogTrocaEmpresa(true);
+    } else {
+      setEmpresaId(nova);
+    }
+  };
+
+  const confirmarTrocaEmpresa = () => {
+    setEmpresaId(empresaPendente);
+    setRateio([]);
+  };
 
   // Anexos (só em modo criar)
   const [anexos, setAnexos] = React.useState<AnexoPendente[]>([]);
@@ -547,7 +565,7 @@ export function ContaAvulsaDrawer(props: Props) {
               </Label>
               <Select
                 value={empresaId}
-                onValueChange={setEmpresaId}
+                onValueChange={handleEmpresaChange}
                 disabled={isEditar}
                 required
               >
@@ -1009,6 +1027,13 @@ export function ContaAvulsaDrawer(props: Props) {
             </div>
           </div>
         </form>
+
+        <ConfirmTrocaEmpresaDialog
+          open={dialogTrocaEmpresa}
+          onOpenChange={setDialogTrocaEmpresa}
+          onConfirm={confirmarTrocaEmpresa}
+          contexto="rateio"
+        />
       </DrawerContent>
     </Dialog>
   );
