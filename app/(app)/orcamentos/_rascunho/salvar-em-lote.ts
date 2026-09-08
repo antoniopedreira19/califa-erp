@@ -15,7 +15,7 @@ import { orcamentoSchema } from "@/lib/validations/orcamentos";
 import { grupoSchema } from "@/lib/validations/grupos";
 import { itemSchema } from "@/lib/validations/itens";
 import { bvSchema } from "@/lib/validations/bv";
-import type { GrupoPayload, OrcamentoProjetoPayload } from "../../_rascunho/tipos";
+import type { GrupoPayload, OrcamentoProjetoPayload } from "./tipos";
 import { aceitaBV } from "@/lib/calculos/versao-totais";
 
 const BUCKET = "orcamento-importacoes";

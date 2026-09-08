@@ -1001,6 +1001,14 @@ de uma vez.
 
 ### 15.1 O seletor de "+ Novo orçamento"
 
+⚠️ **Revisto em 2026-09-08 (decisão 060).** O seletor acabou: "+ Novo
+orçamento" é um `<Link>` direto para `/orcamentos/[projetoId]/novo`, e a
+porta "Criar orçamento do projeto" saiu junto com o editor multi-jobs
+(`/multi`). O que segue nesta seção e na 15.2 descreve como a entrega
+nasceu; o que dela continua vivo é a visão agregada (`/agregado`), que
+ainda cria orçamento novo pelo mesmo motor. Ver a nota do dia, no fim
+deste arquivo.
+
 Na lista de orçamentos do projeto o botão virou menu com duas portas:
 
 - **Criar orçamento de um job** — o fluxo de sempre, intacto.
@@ -1160,7 +1168,7 @@ excluído da comparação — expandir um card não é alteração de conteúdo.
 |---|---|
 | `orcamentos/_rascunho/` | tipos, helpers, card de orçamento, card de grupo, modais de importação e parâmetros, action de parse |
 | `orcamentos/_totais/` | card de Totais consolidado, usado pelas duas telas |
-| `[projetoId]/multi/` | editor do orçamento do projeto + action de gravação em lote |
+| ~~`[projetoId]/multi/`~~ | apagado em 2026-09-08 (decisão 060); a action de gravação em lote foi para `_rascunho/salvar-em-lote.ts` |
 | `[projetoId]/agregado/` | visão agregada editável + action de "Salvar alterações" |
 
 Mesma convenção do `_bv/`: pasta com prefixo `_` não vira rota.
@@ -3158,3 +3166,49 @@ estado é do `FluxoAbertura`).
 A verificação no navegador está na nota do `HANDOFF_JOBS.md` de hoje —
 duas rodadas, incluindo a devolução de save e de BV à versão, o bloqueio
 por PP e o gate do job já aberto.
+
+---
+
+## ⚠️ Nota de 2026-09-08 — o orçamento nasce um a um, e o editor multi-jobs sai (decisão 060)
+
+**Commit:** ver `git log` desta data.
+**Migrations:** nenhuma.
+**Regra:** `docs/decisions/060-orcamento-nasce-um-a-um-e-o-editor-multi-jobs-sai.md`.
+
+Pedido do Tiago: o orçamento do projeto deixa de ser uma forma de criar
+orçamentos e passa a ser só o conjunto dos que já existem — a visão
+agregada, o Exportar e o Importar da 041.
+
+### O que mudou na lista do projeto (`[projetoId]/page.tsx`)
+
+- **"+ Novo orçamento" vai direto ao formulário** de
+  `/orcamentos/[projetoId]/novo`. É um `<Link prefetch={false}>` com a
+  mesma classe vermelha que o botão do menu tinha; sem `ChevronDown`,
+  sem pop-up.
+- `novo-orcamento-menu.tsx` **foi apagado**. Era o menu feito à mão sem
+  Radix (§15.1); não sobrou quem o usasse.
+
+### O que saiu
+
+- `[projetoId]/multi/page.tsx` e `multi/editor-multi-jobs.tsx`
+  **apagados**. A URL `/multi` cai em 404. O Tiago escolheu apagar em vez
+  de deixar a tela viva sem link.
+- `[projetoId]/multi/actions.ts` **virou `_rascunho/salvar-em-lote.ts`**,
+  sem alteração no conteúdo além do import relativo de `./tipos`. A
+  visão agregada continua importando `salvarOrcamentosDoProjeto` dela
+  (`agregado/actions.ts`) para gravar os orçamentos criados na tela.
+
+### O que NÃO mudou
+
+- **A visão agregada continua criando orçamento** pelo "Novo orçamento
+  de job" (modal com o `OrcamentoForm`, código gerado no salvar). O Tiago
+  decidiu manter.
+- `_rascunho/` inteiro (card, linha de grupo, modais, parse) segue igual:
+  agora serve só à agregada.
+- Exportar e Importar do projeto e da agregada (041) não foram tocados.
+
+### Onde `/multi` ainda aparece neste arquivo
+
+As seções 15, 21 e as verificações de 21/08, 24/08 e 03/09 citam o
+`/multi` como tela existente. São registro do que foi feito na época e
+ficam como estão; a partir desta nota a rota não existe.

@@ -13,7 +13,7 @@ import type {
   OrcamentoEdicaoPayload,
   ParametrosVersao,
 } from "../../_rascunho/tipos";
-import { salvarOrcamentosDoProjeto } from "../multi/actions";
+import { salvarOrcamentosDoProjeto } from "../../_rascunho/salvar-em-lote";
 import { aceitaBV } from "@/lib/calculos/versao-totais";
 
 /** Tipos em que o cliente paga o fornecedor direto — os únicos com BV. */
