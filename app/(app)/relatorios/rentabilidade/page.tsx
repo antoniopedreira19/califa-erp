@@ -119,13 +119,31 @@ export default async function RentabilidadePage({ searchParams }: Props) {
   const supabase = createClient();
   const tenantId = session.activeTenant.id;
 
+  // Empresa ativa como default: se nenhuma empresa foi explicitamente filtrada
+  // via URL e há uma empresa ativa no topbar, pré-filtra por ela.
+  // Chip visual usa empresaFiltroId (string | null) para nomear a empresa.
+  const empresaFiltroId: string | null =
+    filtros.empresasIds.length === 0 && session.activeEmpresa
+      ? session.activeEmpresa.id
+      : filtros.empresasIds.length === 1
+        ? filtros.empresasIds[0]
+        : null;
+
+  const filtrosComDefault = {
+    ...filtros,
+    empresasIds:
+      filtros.empresasIds.length === 0 && session.activeEmpresa
+        ? [session.activeEmpresa.id]
+        : filtros.empresasIds,
+  };
+
   // As linhas da view dependem dos filtros e do período — não são cached.
   // As dimensões (clientes, marcas, empresas, regionais) mudam raro —
   // vêm de cache com TTL de 5 min (P2 do diagnóstico de perf).
   const [linhasPeriodoA, linhasPeriodoB, dimensoes] = await Promise.all([
-    carregarLinhas(supabase, tenantId, filtros.ano, filtros),
+    carregarLinhas(supabase, tenantId, filtros.ano, filtrosComDefault),
     filtros.compararAno !== null
-      ? carregarLinhas(supabase, tenantId, filtros.compararAno, filtros)
+      ? carregarLinhas(supabase, tenantId, filtros.compararAno, filtrosComDefault)
       : Promise.resolve(null),
     carregarDimensoesRelatorio(tenantId),
   ]);
@@ -200,6 +218,26 @@ export default async function RentabilidadePage({ searchParams }: Props) {
             Data de referência: abertura financeira do job.
           </p>
         </header>
+
+        {empresaFiltroId && (
+          <div className="flex items-center gap-2 text-xs">
+            <span className="rounded-full bg-california-red/10 px-3 py-1 text-california-red font-medium">
+              Empresa: {session.empresas.find((e) => e.id === empresaFiltroId)?.nome_fantasia ?? session.empresas.find((e) => e.id === empresaFiltroId)?.razao_social ?? "—"}
+              {empresaFiltroId !== session.activeEmpresa?.id && (() => {
+                const sp = new URLSearchParams();
+                for (const [k, v] of Object.entries(params)) {
+                  if (k !== "empresa" && typeof v === "string") sp.set(k, v);
+                }
+                const hrefVoltar = `/relatorios/rentabilidade${sp.toString() ? `?${sp}` : ""}`;
+                return (
+                  <Link href={hrefVoltar} className="ml-2 underline">
+                    voltar para ativa
+                  </Link>
+                );
+              })()}
+            </span>
+          </div>
+        )}
 
         <FiltrosCliente
           filtros={filtros}

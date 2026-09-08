@@ -47,7 +47,7 @@ interface EditarProps {
   fornecedores: FornecedorResumido[];
   clientes: ClienteResumido[];
   jobs: JobResumido[];
-  regionais: Array<{ id: string; nome: string; ativo: boolean }>;
+  regionais: Array<{ id: string; nome: string; ativo: boolean; empresa_id: string }>;
   cartoes: CartaoOption[];
   rateioInicial?: RateioLinhaInput[];
 }

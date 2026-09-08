@@ -84,7 +84,7 @@ export async function carregarDetalheDoJob(
       .maybeSingle(),
     supabase
       .from("regionais")
-      .select("id, nome")
+      .select("id, nome, empresa_id")
       .eq("tenant_id", session.activeTenant.id)
       .eq("ativo", true)
       .order("nome"),
@@ -444,7 +444,7 @@ export async function carregarDetalheDoJob(
 
   const transicoes = JOB_STATUS_TRANSICOES[raw.status as JobStatus];
 
-  const regionais = (regionaisRes.data ?? []) as Pick<Regional, "id" | "nome">[];
+  const regionais = (regionaisRes.data ?? []) as Pick<Regional, "id" | "nome" | "empresa_id">[];
 
   const job: Job = {
     faturamento_save_previsto: Number(raw.faturamento_save_previsto ?? 0),

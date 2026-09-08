@@ -87,7 +87,7 @@ interface Props {
   fornecedores: Array<{ id: string; nome: string }>;
   clientes: Array<{ id: string; nome: string }>;
   jobs: Array<{ id: string; codigo: string; nome: string; cliente_id: string | null; regional_id: string | null }>;
-  regionais: Array<{ id: string; nome: string; ativo: boolean }>;
+  regionais: Array<{ id: string; nome: string; ativo: boolean; empresa_id: string }>;
   cartoes: CartaoOption[];
 }
 

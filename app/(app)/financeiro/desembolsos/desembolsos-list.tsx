@@ -33,7 +33,7 @@ interface Props {
   fornecedores: Array<{ id: string; nome: string }>;
   clientes: Array<{ id: string; nome: string }>;
   jobs: Array<{ id: string; codigo: string; nome: string }>;
-  regionais: Array<{ id: string; nome: string; ativo: boolean }>;
+  regionais: Array<{ id: string; nome: string; ativo: boolean; empresa_id: string }>;
   isAdminOrFinanceiro: boolean;
 }
 

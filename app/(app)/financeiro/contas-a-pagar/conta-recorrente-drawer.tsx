@@ -28,6 +28,7 @@ import {
   FormaPagamentoField,
   type CartaoOption,
 } from "@/components/financeiro/forma-pagamento-field";
+import { ConfirmTrocaEmpresaDialog } from "@/components/ui/confirm-troca-empresa-dialog";
 import type {
   ContaAvulsaRecorrente,
   FrequenciaRecorrencia,
@@ -45,7 +46,7 @@ type EmpresaResumida = { id: string; nome: string };
 type FornecedorResumido = { id: string; nome: string };
 type ClienteResumido = { id: string; nome: string };
 type JobResumido = { id: string; codigo: string; nome: string; cliente_id: string | null; regional_id: string | null };
-type RegionalResumida = { id: string; nome: string; ativo: boolean };
+type RegionalResumida = { id: string; nome: string; ativo: boolean; empresa_id: string };
 
 // ---------------------------------------------------------------------------
 // Utilitário de data
@@ -126,6 +127,8 @@ export function ContaRecorrenteDrawer(props: Props) {
   const [empresaId, setEmpresaId] = React.useState<string>(
     recorrente?.empresa_id ?? "",
   );
+  const [dialogTrocaEmpresa, setDialogTrocaEmpresa] = React.useState(false);
+  const [empresaPendente, setEmpresaPendente] = React.useState<string>("");
   const [descricao, setDescricao] = React.useState<string>(
     recorrente?.descricao ?? "",
   );
@@ -287,6 +290,21 @@ export function ContaRecorrenteDrawer(props: Props) {
     (r) => props.regionais.find((rr) => rr.id === r.regional_id)?.ativo === false,
   );
 
+  const handleEmpresaChange = (nova: string) => {
+    if (nova === empresaId) return;
+    if (rateio.length > 0) {
+      setEmpresaPendente(nova);
+      setDialogTrocaEmpresa(true);
+    } else {
+      setEmpresaId(nova);
+    }
+  };
+
+  const confirmarTrocaEmpresa = () => {
+    setEmpresaId(empresaPendente);
+    setRateio([]);
+  };
+
   function handleFornecedorChange(v: string | null) {
     setFornecedorId(v ?? "__none__");
   }
@@ -446,7 +464,7 @@ export function ContaRecorrenteDrawer(props: Props) {
               </Label>
               <Select
                 value={empresaId}
-                onValueChange={setEmpresaId}
+                onValueChange={handleEmpresaChange}
                 disabled={isEditar}
                 required
               >
@@ -597,7 +615,7 @@ export function ContaRecorrenteDrawer(props: Props) {
             <RateioRegionalEditor
               linhas={rateio}
               onChange={setRateio}
-              regionais={props.regionais}
+              regionais={props.regionais.filter((r) => r.empresa_id === empresaId)}
               jobRegionalId={jobSelecionado?.regional_id ?? null}
               disabled={pending}
             />
@@ -922,6 +940,13 @@ export function ContaRecorrenteDrawer(props: Props) {
             </div>
           </div>
         </form>
+
+        <ConfirmTrocaEmpresaDialog
+          open={dialogTrocaEmpresa}
+          onOpenChange={setDialogTrocaEmpresa}
+          onConfirm={confirmarTrocaEmpresa}
+          contexto="rateio"
+        />
       </DrawerContent>
     </Dialog>
   );
