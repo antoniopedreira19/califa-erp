@@ -98,9 +98,13 @@ O destino é diferente de propósito. Nas listas — calendário e
 Ali não: quem está lendo a planilha consolidada do projeto e abre um job
 quer a planilha DAQUELE job.
 
-São três os links atingidos, todos na mesma tela: a árvore de jobs do
-cabeçalho, o "ABRIR JOB →" de cada bloco da planilha e os jobs do card
-de Totais. Os dois últimos saem do mesmo `rotaDoJob`, em
+No mesmo dia, o box **"Jobs do projeto"** da ficha (os jobs irmãos)
+passou a mandar `?aba=info`, fechando a última porta de entrada que ainda
+caía na abertura. Sobra só a URL digitada à mão.
+
+São três os links atingidos na visão agregada, todos na mesma tela: a
+árvore de jobs do cabeçalho, o "ABRIR JOB →" de cada bloco da planilha e
+os jobs do card de Totais. Os dois últimos saem do mesmo `rotaDoJob`, em
 `planilhas-do-projeto.tsx`, que ganhou um `jobHrefSuffix` opcional — a
 visão agregada da PRODUÇÃO não passa nada e segue em `?from=jobs`, como
 sempre.
