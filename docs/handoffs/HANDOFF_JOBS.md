@@ -2749,24 +2749,52 @@ nenhuma superfície do módulo os chama para cancelar.
 
 ### Verificado em 08/09/2026 (servidor próprio, logado no Chrome)
 
+Duas rodadas: a primeira cobriu o caminho feliz; a segunda, pedida pelo
+Tiago, fechou os caminhos que tinham ficado de fora — e achou um erro.
+
+**Rodada 1 — reenvio e cancelamento**
+
 | Job | Passo | Resultado |
 |---|---|---|
 | JOB-0014 (`rejeitado_financeiro`, projeto "Teste A") | página do job | cartão com o motivo e "Revisar abertura"; barra "Job devolvido pelo financeiro. Revise a abertura pelo orçamento…", sem botão |
 | JOB-0014 | "Revisar abertura" | abriu o orçamento com o formulário preenchido (JOB-0014, 17→31/08, recebimento 20/08); `abertura=revisar` saiu da URL |
-| JOB-0014 | reenvio, 1ª tentativa | **falhou** em "permission denied for table jobs_contatos": a tabela nasceu sem DELETE. Migration `20260908100002` + a action passou a trocar os contatos ANTES de mexer no status. Resíduo: o job ficou `aguardando_abertura` sem contato — resolvido pelo cancelamento abaixo |
+| JOB-0014 | reenvio, 1ª tentativa | **falhou** em "permission denied for table jobs_contatos": a tabela nasceu sem DELETE. Migration `20260908100002` + a action passou a trocar os contatos ANTES de mexer no status |
 | JOB-0017 "Teste B3" (`rejeitado_financeiro`, "Teste Alterações") | reenvio, 2ª tentativa | pop-up "Tem certeza que quer reenviar…", "no mesmo código", botão "Sim, reenviar job"; gravou: `aguardando_abertura`, motivo nulo, descritivo novo, contato substituído, auditoria `job.reenviado_para_aprovacao` |
 | JOB-0017 | página do job depois | barra "Aguardando abertura… Para cancelar o envio, use o orçamento", sem botão |
-| JOB-0014 (`aguardando_abertura`) | "Cancelar envio à abertura" no orçamento | diálogo de confirmação; gravou: job `cancelado`, NOV-0002/26-02 de volta a **`aprovado`**, barra com "Enviar Job para Abertura"; auditoria `job.envio_abertura_cancelado` com `status_anterior` e `qtd_saves_devolvidos: 0` |
+| JOB-0014 (`aguardando_abertura`) | "Cancelar envio à abertura" no orçamento | job `cancelado`, NOV-0002/26-02 de volta a **`aprovado`**, barra com "Enviar Job para Abertura"; auditoria com `status_anterior` e `qtd_saves_devolvidos: 0` |
 
-⚠️ **Não exercitado:** o bloqueio por PP gerada ou realizado lançado
-(nenhum job de pré-abertura tinha um nem outro), o gate "o financeiro já
-abriu este job", e a devolução de saves e BVs à versão (os dois jobs de
-teste não tinham nenhum). Os três são código direto na action.
+**Rodada 2 — os caminhos que faltavam**
 
-⚠️ **Resíduos do teste:** JOB-0014 ficou **cancelado** e o orçamento
-NOV-0002/26-02 voltou a `aprovado`, pronto para um envio novo; JOB-0017
-está na fila do financeiro (`aguardando_abertura`) com o descritivo
-"Reenvio de teste da decisão 057 no JOB-0017.".
+| Cenário | Como | Resultado |
+|---|---|---|
+| Gate "o financeiro já abriu" | bypass da action pelo console, com o id do **JOB-0001** (`aberto`) | recusou: *"O financeiro já abriu este job. O cancelamento depois da abertura é ação do financeiro."* |
+| Bloqueio por PP gerada | PP-00028 (R$ 1.000, fornecedor PRIME) gerada no Item c do **JOB-0017**, depois "Cancelar envio" no orçamento | barrou: *"Antes de cancelar o envio, cancele a PP gerada na aba de Pedidos de Produção do job."* Job seguiu `aguardando_abertura` e o orçamento `job_criado`. PP cancelada em seguida |
+| Devolução de **BV** à versão | **JOB-0011** (`rejeitado_financeiro`, BV de R$ 1.500) teve o envio cancelado | BV manteve `item_versao_id` e soltou `job_item_orcado_id`; job `cancelado`, TESTE-0001/26-03 → `aprovado` |
+| Devolução de **save** à versão | TESTE-0006/26-04 (save de R$ 10.000 na versão) aprovado → enviado (**JOB-0032**) → envio cancelado | no envio o save foi para a cópia do job; no cancelamento voltou **para a mesma linha da versão**, valor intacto; auditoria `qtd_saves_devolvidos: 1`. A aprovação foi desfeita depois |
+| Rejeição → banner do orçamento | JOB-0017 reprovado pela fila do financeiro | saiu da fila; o orçamento passou a mostrar "Abertura devolvida pelo financeiro · JOB-0017" com o motivo, e a barra com os dois botões |
+
+### ⚠️ O erro que a rodada 2 achou: o realizado não entra no bloqueio
+
+O bloqueio nasceu somando **PP e realizado**, como a pergunta 4 foi
+respondida. Está errado: **o realizado não é digitado desde 21/08/2026**
+(`jobs/[jobId]/actions-realizado.ts` guarda o aviso no lugar da action
+removida). Ele é derivado das PPs pelo trigger
+`recalcular_realizado_do_item`, que soma as **não canceladas** — e em job
+de pré-abertura a PP só pode estar `gerada`, que o trigger ignora. Logo o
+realizado ali é sempre zero.
+
+Pior que redundante, a mensagem era impossível de cumprir: mandava
+"zerar o realizado lançado no item" numa célula que nenhuma tela edita.
+
+O bloqueio ficou só na PP. O texto do diálogo de confirmação também: "Se
+houver PP gerada no job, cancele-a antes."
+
+⚠️ **Resíduos do teste:** JOB-0014 (NOV-0002/26-02) e JOB-0011
+(TESTE-0001/26-03) ficaram **cancelados**, com os dois orçamentos de volta
+em `aprovado` e prontos para novo envio; JOB-0032 nasceu e foi cancelado
+no mesmo teste, e TESTE-0006/26-04 voltou a `em_revisao` (era `rascunho`
+antes — a desaprovação não devolve a `rascunho`); PP-00027 e PP-00028
+ficam canceladas no JOB-0017, que está de novo `rejeitado_financeiro`.
 
 ⚠️ **Chrome MCP:** clicar em textarea por `ref` e digitar em seguida
 mandou o texto para o campo "Nome do Job" (o clique não moveu o foco).

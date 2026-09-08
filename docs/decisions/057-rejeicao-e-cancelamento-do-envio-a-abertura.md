@@ -41,10 +41,10 @@ TESTE-0005/26-01 e o JOB-0019.
 
 | # | Pergunta | Decisão |
 |---|---|---|
-| 1 | Reenvio: mesmo job ou job novo? | **Mesmo job.** O rejeitado guarda a cópia da planilha, o consumo de save, os BVs, as PPs geradas (056) e o realizado lançado. Job novo obrigaria a mover tudo isso. |
+| 1 | Reenvio: mesmo job ou job novo? | **Mesmo job.** O rejeitado guarda a cópia da planilha, o consumo de save, os BVs e as PPs já geradas (056). Job novo obrigaria a mover tudo isso. |
 | 2 | Orçamento volta a `aprovado` no banco com o job rejeitado? | **Não: fica `job_criado`.** A regra 3 continua verdadeira, "Nova versão" segue travada (a planilha já foi copiada para o job) e nenhuma migration é preciso. A tela é que muda: banner com o motivo e o botão de envio de volta, decididos pelo status do **job**. |
 | 3 | Cancelar envio: o que acontece com o job? | **`cancelado`**, orçamento de volta a `aprovado`, saves e BVs devolvidos à versão. É o inverso exato do envio, com histórico e auditoria. O código JOB-NNNN fica queimado, como em qualquer job cancelado. Apagar a linha reaproveitaria o código, mas sumiria com o rastro. |
-| 4 | Cancelar envio com PP gerada ou realizado lançado? | **Bloqueia, sem cascata.** A PP gerada é contratação fechada com fornecedor; quem desfaz é o usuário, uma a uma, na aba de PPs. A mensagem diz o que falta: "Antes de cancelar o envio, cancele as 2 PPs geradas e zere o realizado lançado no item na página do job." |
+| 4 | Cancelar envio com PP gerada ou realizado lançado? | **Bloqueia com PP gerada, sem cascata.** A PP gerada é contratação fechada com fornecedor; quem desfaz é o usuário, uma a uma, na aba de PPs. A mensagem diz o que falta: "Antes de cancelar o envio, cancele a PP gerada na aba de Pedidos de Produção do job." **O realizado saiu da conta** — ver a nota logo abaixo. |
 | 5 | "Cancelar job" na página do job, antes da abertura? | **Sai.** Dois botões em dois módulos fazendo quase a mesma coisa foi o que prendeu o TESTE-0005/26-01. A barra passa a apontar para o orçamento. A action `atualizarStatusJob` continua aceitando o cancelamento (020) — nenhuma superfície do módulo de Jobs a oferece. |
 | 6 | TESTE-0005/26-01 preso | **Corrigido na migration** `20260908100001`, com `update` restrito a `job_criado` sem job vivo. Uma linha, idempotente. |
 
@@ -72,7 +72,9 @@ cuja barra ganhou "Para cancelar o envio, use o orçamento".
 Com `?abertura=revisar` o formulário abre sozinho, preenchido com o que o
 job devolvido tinha (nome, cidade, regional, datas, data do evento,
 recebimento, descritivo e contatos). O parâmetro é retirado da URL com
-`history.replaceState`, para um reload não reabrir o modal.
+`router.replace`, para um reload não reabrir o modal — um
+`history.replaceState` solto não serve: o router do Next ressincroniza a
+URL na primeira server action e o parâmetro volta.
 
 O "Cancelar envio à abertura" vale nos dois status de pré-abertura: o job
 devolvido também precisa de uma saída além do reenvio, e o "Cancelar job"
@@ -85,9 +87,9 @@ cria job**: atualiza no mesmo registro o que o formulário decide (nome,
 produto, cidade, regional, datas, data do evento, recebimento, descritivo,
 GP e produtor relidos do orçamento), volta o status a `aguardando_abertura`,
 apaga o motivo, substitui os contatos de cobrança e grava as mesmas
-alterações no orçamento. Valor do job, cópia da planilha, saves, BVs, PPs
-e realizado ficam como estão — a versão aprovada não mudou (errata só
-existe depois da abertura). Auditoria `job.reenviado_para_aprovacao`, com
+alterações no orçamento. Valor do job, cópia da planilha, saves, BVs e
+PPs ficam como estão — a versão aprovada não mudou (errata só existe
+depois da abertura). Auditoria `job.reenviado_para_aprovacao`, com
 os mesmos campos do envio.
 
 Qualquer outro job vivo continua barrando ("Este orçamento já tem um job
@@ -95,13 +97,36 @@ ativo"). A antiga `reenviarJobParaAprovacao` foi removida: mantida, seria
 um caminho paralelo que devolve o job à fila sem ninguém rever o que o
 financeiro apontou.
 
+### Por que o realizado não entra no bloqueio
+
+A pergunta 4 foi respondida com "PP **ou** realizado lançado", e a
+primeira versão do código somava os dois. **Está errado, e a verificação
+de 08/09/2026 mostrou por quê:** o realizado não é digitado desde
+21/08/2026. `app/(app)/jobs/[jobId]/actions-realizado.ts` guarda o aviso
+no lugar da action removida, e hoje o valor é derivado das PPs pelo
+trigger `recalcular_realizado_do_item`, que soma as não canceladas.
+
+Duas consequências:
+
+1. **Contar os dois é contar a mesma PP duas vezes.** Em job de
+   pré-abertura o realizado é sempre zero, porque a PP só pode estar
+   `gerada` e o trigger ignora essa.
+2. **A mensagem mandava fazer o impossível.** "Zere o realizado lançado
+   no item" aponta para uma célula que não é editável em tela nenhuma —
+   quem lesse ficaria sem saída.
+
+O bloqueio ficou só na PP, que é o que de fato existe e o que o usuário
+consegue desfazer. O único caso que o realizado pegaria são linhas
+digitadas antes de 21/08/2026; nelas o cancelamento agora passa, e nada
+se perde: as linhas ficam no job cancelado, que é histórico.
+
 ### O cancelamento (`cancelarEnvioParaAbertura`)
 
 Permissão `jobs.editar_metadata`, a mesma do antigo reenvio. Ordem:
 
 1. job em `aguardando_abertura` ou `rejeitado_financeiro`, senão recusa
    ("o cancelamento depois da abertura é ação do financeiro");
-2. bloqueio da decisão 4 (PP fora de `cancelada`, realizado > 0);
+2. bloqueio da decisão 4 — PP fora de `cancelada`;
 3. `saves_consumos` das cópias do job voltam para `item_versao_id` da
    linha da versão — as duas pontas nunca convivem
    (`chk_save_consumo_uma_ponta`), então é um update por consumo;
