@@ -78,9 +78,10 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 052 | ["Todas as PPs deste item já foram geradas", e a previsão de custo por item](052-todas-as-pps-do-item-foram-geradas.md) | 2026-09-04 |
 | 053 | [Calendário de Jobs, e o serviço como eixo de cor](053-calendario-de-jobs.md) | 2026-09-07 |
 | 054 | ["Realizar errata": a errata abre o planejado junto com o orçado](054-errata-abre-o-planejado-junto-com-o-orcado.md) | 2026-09-07 |
+| 055 | [O serviço entra no job, e a competência vira rateio entre trimestres](055-servico-no-job-e-rateio-de-competencia.md) | 2026-09-07 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
 > data é a da decisão, não a da posição na fila.
 
-**Próximo número livre: 055.**
+**Próximo número livre: 056.**

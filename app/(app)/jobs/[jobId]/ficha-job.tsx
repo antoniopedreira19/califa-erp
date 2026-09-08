@@ -2,8 +2,13 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { LinkSaidaDeModulo } from "@/components/financeiro/link-saida-de-modulo";
 import { cn } from "@/lib/utils";
-import { competenciaLabelLongo, jobStatusLabel } from "@/lib/types";
-import type { JobStatus } from "@/lib/types";
+import {
+  competenciaLabelLongo,
+  formatPercentualRateio,
+  jobStatusLabel,
+  ordenarCompetencias,
+} from "@/lib/types";
+import type { JobCompetencia, JobStatus } from "@/lib/types";
 import type { ContatoCobranca } from "@/lib/data/contatos-cobranca";
 
 /** "17/08/2026" a partir de um `date` ou de um `timestamptz` do banco. */
@@ -24,7 +29,9 @@ export interface JobDaFicha {
   nome: string;
   categoriaNome: string | null;
   /**
-   * Serviço do job — `orcamentos.servico_id`, escopo 'projeto' das
+   * Serviço do job — `jobs.servico_id` desde a decisão 055 (gravado na
+   * abertura; o financeiro pode trocá-lo sem alterar o orçamento), com
+   * `orcamentos.servico_id` como fallback. Escopo 'projeto' das
    * `categorias_dominio` (Always On, Ativação, Fee, Interno). Era exibido
    * como "Tipo do projeto" na coluna do PROJETO até 07/09/2026, lendo a
    * `projetos.categoria_id` legada; virou informação do job porque
@@ -34,8 +41,15 @@ export interface JobDaFicha {
   produto: string | null;
   regionalNome: string | null;
   cidade: string | null;
+  /** A PRIMEIRA competência — o que `jobs` guarda. */
   competenciaTrimestre: number | null;
   competenciaAno: number | null;
+  /**
+   * O rateio inteiro (`jobs_competencias`, decisão 055). Com mais de uma
+   * linha a ficha lista cada trimestre com o seu percentual; com uma só,
+   * ou sem nada gravado, mostra a competência única.
+   */
+  competencias?: JobCompetencia[];
   dataInicio: string | null;
   dataFim: string | null;
   dataAbertura: string | null;
@@ -169,9 +183,23 @@ export function FichaJob({
                   "—"}
               </Campo>
               <Campo rotulo="Competência">
-                {competenciaLabelLongo(
-                  job.competenciaTrimestre,
-                  job.competenciaAno,
+                {job.competencias && job.competencias.length > 1 ? (
+                  <span className="flex flex-col gap-0.5">
+                    {ordenarCompetencias(job.competencias).map((c) => (
+                      <span key={`${c.ano}-${c.trimestre}`}>
+                        {competenciaLabelLongo(c.trimestre, c.ano)}
+                        <span className="font-mono text-muted-foreground">
+                          {" "}
+                          · {formatPercentualRateio(c.percentual)}
+                        </span>
+                      </span>
+                    ))}
+                  </span>
+                ) : (
+                  competenciaLabelLongo(
+                    job.competenciaTrimestre,
+                    job.competenciaAno,
+                  )
                 )}
               </Campo>
               <Campo rotulo="Período" mono>

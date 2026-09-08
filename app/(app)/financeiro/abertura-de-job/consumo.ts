@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { emCentavos } from "./curva";
 import type { CurvaLinha } from "./curva";
+import type { JobCompetencia } from "@/lib/types";
 
 /**
  * Quanto de cada previsão do job já foi consumido, e as previsões
@@ -115,4 +116,34 @@ export async function previsoesGravadas(
     curva: paraLinhas(curvaRes.data ?? []),
     recebimento: paraLinhas(recebRes.data ?? []),
   };
+}
+
+/**
+ * O rateio de competência gravado para o job (`jobs_competencias`,
+ * decisão 055), em ordem de ano e trimestre. Vazio em job que ainda não
+ * passou pela abertura — a página cai na competência sugerida.
+ */
+export async function competenciasGravadas(
+  supabase: SupabaseClient,
+  tenantId: string,
+  jobId: string,
+): Promise<JobCompetencia[]> {
+  const { data, error } = await supabase
+    .from("jobs_competencias")
+    .select("trimestre, ano, percentual")
+    .eq("job_id", jobId)
+    .eq("tenant_id", tenantId)
+    .order("ano", { ascending: true })
+    .order("trimestre", { ascending: true });
+
+  if (error) {
+    console.error("[abertura-job.competencias]", error.message);
+    return [];
+  }
+
+  return ((data ?? []) as any[]).map((c) => ({
+    trimestre: Number(c.trimestre),
+    ano: Number(c.ano),
+    percentual: Number(c.percentual ?? 0),
+  }));
 }

@@ -90,6 +90,15 @@ function formatDataBr(iso: string | null): string {
   return `${dia}/${mes}/${ano}`;
 }
 
+/**
+ * Os anos em que o job tem competência, como texto do filtro. O rateio
+ * (decisão 055) manda; job sem rateio gravado cai no ano da coluna.
+ */
+function anosDeCompetencia(j: JobAberto): string[] {
+  if (j.competencia_anos.length > 0) return j.competencia_anos.map(String);
+  return j.competencia_ano ? [String(j.competencia_ano)] : [];
+}
+
 /** Opções de um filtro, na ordem em que aparecem, sem repetir e sem vazio. */
 function opcoesDe(linhas: JobAberto[], campo: (j: JobAberto) => string | null) {
   const vistos: string[] = [];
@@ -267,10 +276,14 @@ export function JobsAbertosList({ linhas }: { linhas: JobAberto[] }) {
       valor: ano,
       set: setAno,
       // Ano da COMPETÊNCIA — o eixo contábil do financeiro, não o do
-      // calendário do job.
-      opcoes: opcoesDe(linhas, (j) =>
-        j.competencia_ano ? String(j.competencia_ano) : null,
-      ),
+      // calendário do job. Job rateado em dois anos entra nas duas
+      // opções (decisão 055).
+      opcoes: [
+        TODOS,
+        ...Array.from(
+          new Set(linhas.flatMap((j) => anosDeCompetencia(j))),
+        ).sort(),
+      ],
     },
   ];
 
@@ -291,7 +304,7 @@ export function JobsAbertosList({ linhas }: { linhas: JobAberto[] }) {
       if (regional !== TODOS && j.regional_nome !== regional) return false;
       if (gp !== TODOS && j.responsavel_nome !== gp) return false;
       if (produto !== TODOS && j.produto !== produto) return false;
-      if (ano !== TODOS && String(j.competencia_ano ?? "") !== ano) return false;
+      if (ano !== TODOS && !anosDeCompetencia(j).includes(ano)) return false;
       if (q === "") return true;
       // Busca também pelo nome da produção: quem procura pode lembrar do
       // nome antigo, não do que o financeiro deu.

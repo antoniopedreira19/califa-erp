@@ -53,6 +53,60 @@ export const previsaoRecebimentoSchema = z
   )
   .max(60, "Máximo de 60 parcelas de recebimento.");
 
+/**
+ * Tolerância da soma do rateio de competência. Existe pelo centésimo de
+ * arredondamento ao dividir 100 por 3 (33,33 + 33,33 + 33,33 = 99,99) —
+ * a tela "Igualar" devolve 33,34 numa das linhas, mas quem digita à mão
+ * merece a mesma folga.
+ */
+export const TOLERANCIA_RATEIO = 0.011;
+
+/**
+ * Rateio da competência do job entre trimestres (decisão 055): de 1 a N
+ * linhas (trimestre, ano, percentual) que somam 100%. O caso simples é
+ * uma linha só, de 100%.
+ *
+ * Só percentual, sem valor: receita e custo têm bases diferentes e quem
+ * consome o rateio aplica o percentual sobre a base que lhe interessa.
+ */
+export const rateioCompetenciasSchema = z
+  .array(
+    z.object({
+      trimestre: z
+        .number()
+        .int()
+        .min(1, "Trimestre inválido.")
+        .max(4, "Trimestre inválido."),
+      ano: z
+        .number()
+        .int()
+        .min(2000, "Ano inválido.")
+        .max(2100, "Ano inválido."),
+      percentual: z
+        .number({ invalid_type_error: "Informe o percentual da competência." })
+        .gt(0, "Cada competência precisa de um percentual maior que zero.")
+        .max(100, "Nenhuma competência pode passar de 100%."),
+    }),
+  )
+  .min(1, "Informe ao menos uma competência.")
+  .max(12, "Máximo de 12 competências no rateio.")
+  .refine(
+    (linhas) =>
+      new Set(linhas.map((l) => `${l.ano}-${l.trimestre}`)).size ===
+      linhas.length,
+    { message: "Cada trimestre entra uma vez só no rateio." },
+  )
+  .refine(
+    (linhas) =>
+      Math.abs(linhas.reduce((s, l) => s + l.percentual, 0) - 100) <=
+      TOLERANCIA_RATEIO,
+    { message: "O rateio de competências precisa somar 100%." },
+  );
+
+export type RateioCompetenciaLinhaInput = z.infer<
+  typeof rateioCompetenciasSchema
+>[number];
+
 export const aberturaFinanceiraSchema = z.object({
   /**
    * Nome do job NO FINANCEIRO. Não sobrescreve o nome da produção — quem
@@ -80,16 +134,13 @@ export const aberturaFinanceiraSchema = z.object({
   conta_recebimento_id: z.string().uuid().nullable(),
   conta_pagamento_id: z.string().uuid().nullable(),
   categoria_id: z.string().uuid("Selecione a categoria do job."),
-  competencia_trimestre: z
-    .number()
-    .int()
-    .min(1, "Trimestre inválido.")
-    .max(4, "Trimestre inválido."),
-  competencia_ano: z
-    .number()
-    .int()
-    .min(2000, "Ano inválido.")
-    .max(2100, "Ano inválido."),
+  /**
+   * Serviço do job (categorias_dominio, escopo 'projeto'). Obrigatório
+   * como no design: vem pré-preenchido pelo orçamento de origem e pode
+   * ser trocado aqui sem alterar o orçamento (decisão 055).
+   */
+  servico_id: z.string().uuid("Selecione o serviço do job."),
+  competencias: rateioCompetenciasSchema,
   curva: curvaDesembolsoSchema,
   recebimento: previsaoRecebimentoSchema,
 });

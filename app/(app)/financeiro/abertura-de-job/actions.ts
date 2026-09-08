@@ -13,7 +13,13 @@ import {
   type CriarProjetoFinanceiroInput,
   type EdicaoRegistroAberturaInput,
 } from "@/lib/validations/abertura-financeiro";
-import type { JobStatus, TipoCusto } from "@/lib/types";
+import {
+  ordenarCompetencias,
+  rateioLabel,
+  type JobCompetencia,
+  type JobStatus,
+  type TipoCusto,
+} from "@/lib/types";
 import { tipoGeraDesembolso } from "@/lib/calculos/versao-totais";
 import { gerarCodigoProjetoFinanceiro } from "@/lib/codigos/projetos-financeiro";
 import { edicaoRespeitaConsumido } from "@/lib/calculos/previsao-congelada";
@@ -23,6 +29,72 @@ import { ehJanelaDePagamento, emCentavos, somaCurva } from "./curva";
 export type ActionResult =
   | { ok: true; id: string }
   | { ok: false; message: string; fieldErrors?: Record<string, string[]> };
+
+/**
+ * O serviço do job é uma `categorias_dominio` de escopo 'projeto' (Always
+ * On, Ativação, Fee, Interno), do mesmo tenant, ativa. Sem esta
+ * conferência um id de CATEGORIA passaria pela FK — as duas listas moram
+ * na mesma tabela (decisão 037).
+ */
+async function conferirServico(
+  supabase: ReturnType<typeof createClient>,
+  tenantId: string,
+  servicoId: string,
+): Promise<string | null> {
+  const { data: servico } = await supabase
+    .from("categorias_dominio")
+    .select("id, escopo, ativo")
+    .eq("id", servicoId)
+    .eq("tenant_id", tenantId)
+    .maybeSingle<{ id: string; escopo: string; ativo: boolean }>();
+
+  if (!servico || servico.escopo !== "projeto") {
+    return "Serviço de job inválido.";
+  }
+  if (!servico.ativo) {
+    return "Este serviço foi inativado. Escolha outro.";
+  }
+  return null;
+}
+
+/**
+ * Regrava o rateio de competência do job inteiro (`jobs_competencias`,
+ * decisão 055): apaga e reinsere, como as previsões. Devolve a mensagem
+ * de erro, ou null.
+ */
+async function gravarRateio(
+  supabase: ReturnType<typeof createClient>,
+  tenantId: string,
+  jobId: string,
+  linhas: JobCompetencia[],
+  userId: string,
+): Promise<string | null> {
+  const { error: deleteErro } = await supabase
+    .from("jobs_competencias")
+    .delete()
+    .eq("job_id", jobId)
+    .eq("tenant_id", tenantId);
+  if (deleteErro) {
+    console.error("[abertura-job.rateio-delete]", deleteErro.message);
+    return deleteErro.message;
+  }
+
+  const { error: insertErro } = await supabase.from("jobs_competencias").insert(
+    ordenarCompetencias(linhas).map((c) => ({
+      tenant_id: tenantId,
+      job_id: jobId,
+      trimestre: c.trimestre,
+      ano: c.ano,
+      percentual: Math.round(c.percentual * 100) / 100,
+      created_by: userId,
+    })),
+  );
+  if (insertErro) {
+    console.error("[abertura-job.rateio-insert]", insertErro.message);
+    return insertErro.message;
+  }
+  return null;
+}
 
 /**
  * Abre o job no financeiro: grava o registro contábil (nome financeiro,
@@ -121,6 +193,17 @@ export async function abrirJobNoFinanceiro(
       message: "Esta categoria foi inativada. Escolha outra para abrir o job.",
     };
   }
+
+  const servicoErro = await conferirServico(
+    supabase,
+    session.activeTenant.id,
+    parsed.data.servico_id,
+  );
+  if (servicoErro) return { ok: false, message: servicoErro };
+
+  // A primeira competência do rateio é a que `jobs` guarda (decisão 055).
+  const rateio = ordenarCompetencias(parsed.data.competencias);
+  const primeiraCompetencia = rateio[0];
 
   const refsErro = await conferirProjetoEContas(
     supabase,
@@ -241,8 +324,9 @@ export async function abrirJobNoFinanceiro(
       conta_recebimento_id: parsed.data.conta_recebimento_id,
       conta_pagamento_id: parsed.data.conta_pagamento_id,
       categoria_id: parsed.data.categoria_id,
-      competencia_trimestre: parsed.data.competencia_trimestre,
-      competencia_ano: parsed.data.competencia_ano,
+      servico_id: parsed.data.servico_id,
+      competencia_trimestre: primeiraCompetencia.trimestre,
+      competencia_ano: primeiraCompetencia.ano,
       custo_previsto_total: custoPrevisto,
       data_abertura_financeiro: agora,
       aberto_por: session.profile.id,
@@ -256,6 +340,31 @@ export async function abrirJobNoFinanceiro(
   if (updateErro) {
     console.error("[abertura-job.update]", updateErro.message);
     return { ok: false, message: "Não foi possível abrir o job." };
+  }
+
+  // O rateio de competência, logo depois do registro — o job já está
+  // aberto quando isto roda; falha aqui é reportada, não desfaz a
+  // abertura (mesmo contrato das previsões, abaixo).
+  const rateioErro = await gravarRateio(
+    supabase,
+    session.activeTenant.id,
+    jobId,
+    rateio,
+    session.profile.id,
+  );
+  if (rateioErro) {
+    await logAuditEvent({
+      acao: "job.aberto_no_financeiro",
+      tenantId: session.activeTenant.id,
+      entidadeTipo: "job",
+      entidadeId: jobId,
+      metadata: { rateio_falhou: true, erro: rateioErro },
+    });
+    return {
+      ok: false,
+      message:
+        "O job foi aberto, mas o rateio de competência não foi gravado. Edite o registro na aba Abertura do Job.",
+    };
   }
 
   // As duas previsões são regravadas inteiras: apaga o que houver e
@@ -356,7 +465,9 @@ export async function abrirJobNoFinanceiro(
       conta_recebimento_id: parsed.data.conta_recebimento_id,
       conta_pagamento_id: parsed.data.conta_pagamento_id,
       categoria_id: parsed.data.categoria_id,
-      competencia: `${parsed.data.competencia_trimestre}T/${parsed.data.competencia_ano}`,
+      servico_id: parsed.data.servico_id,
+      competencia: rateioLabel(rateio),
+      competencias: rateio,
       custo_previsto_total: custoPrevisto,
       datas_na_curva: parsed.data.curva.length,
       sem_desembolso: semDesembolso,
@@ -594,7 +705,7 @@ export async function criarProjetoFinanceiro(
  * registro", do protótipo).
  *
  * O que muda: nome no financeiro, projeto do financeiro, contas,
- * categoria, competência e as duas previsões.
+ * categoria, serviço, rateio de competência e as duas previsões.
  *
  * O que NUNCA muda: `data_abertura_financeiro`, `aberto_por` e `status`.
  * A abertura aconteceu uma vez — reescrever quem conferiu apagaria a
@@ -658,7 +769,7 @@ export async function editarRegistroDaAbertura(
     .select(
       "id, status, projeto_id, orcamento_id, faturamento_previsto, " +
         "nome_financeiro, projeto_financeiro_id, conta_recebimento_id, " +
-        "conta_pagamento_id, categoria_id, competencia_trimestre, " +
+        "conta_pagamento_id, categoria_id, servico_id, competencia_trimestre, " +
         "competencia_ano, projeto:projetos(cliente_id)",
     )
     .eq("id", jobId)
@@ -690,6 +801,16 @@ export async function editarRegistroDaAbertura(
       message: "Esta categoria foi inativada. Escolha outra.",
     };
   }
+
+  const servicoErro = await conferirServico(
+    supabase,
+    session.activeTenant.id,
+    parsed.data.servico_id,
+  );
+  if (servicoErro) return { ok: false, message: servicoErro };
+
+  const rateio = ordenarCompetencias(parsed.data.competencias);
+  const primeiraCompetencia = rateio[0];
 
   const refsErro = await conferirProjetoEContas(
     supabase,
@@ -726,7 +847,7 @@ export async function editarRegistroDaAbertura(
   );
   const faturamentoPrevisto = emCentavos(Number(job.faturamento_previsto ?? 0));
 
-  const [consumo, curvaAtualRes, recebAtualRes] = await Promise.all([
+  const [consumo, curvaAtualRes, recebAtualRes, rateioAtualRes] = await Promise.all([
     consumoDasPrevisoes(supabase, session.activeTenant.id, jobId),
     supabase
       .from("jobs_previsao_custo")
@@ -740,7 +861,21 @@ export async function editarRegistroDaAbertura(
       .eq("job_id", jobId)
       .eq("tenant_id", session.activeTenant.id)
       .order("data_prevista", { ascending: true }),
+    // O rateio como estava — só para o de/para da auditoria.
+    supabase
+      .from("jobs_competencias")
+      .select("trimestre, ano, percentual")
+      .eq("job_id", jobId)
+      .eq("tenant_id", session.activeTenant.id),
   ]);
+
+  const rateioGuardado: JobCompetencia[] = (
+    (rateioAtualRes.data ?? []) as any[]
+  ).map((c) => ({
+    trimestre: Number(c.trimestre),
+    ano: Number(c.ano),
+    percentual: Number(c.percentual ?? 0),
+  }));
 
   const curvaGuardada = ((curvaAtualRes.data ?? []) as any[]).map((l) => ({
     data_prevista: l.data_prevista as string,
@@ -851,8 +986,9 @@ export async function editarRegistroDaAbertura(
       conta_recebimento_id: parsed.data.conta_recebimento_id,
       conta_pagamento_id: parsed.data.conta_pagamento_id,
       categoria_id: parsed.data.categoria_id,
-      competencia_trimestre: parsed.data.competencia_trimestre,
-      competencia_ano: parsed.data.competencia_ano,
+      servico_id: parsed.data.servico_id,
+      competencia_trimestre: primeiraCompetencia.trimestre,
+      competencia_ano: primeiraCompetencia.ano,
       custo_previsto_total: custoPrevisto,
       // Salvar a abertura É a revisão da errata. O financeiro acabou de
       // reconferir previsão de recebimento, curva de desembolso e
@@ -871,6 +1007,28 @@ export async function editarRegistroDaAbertura(
   if (updateErro) {
     console.error("[abertura-job.editar-update]", updateErro.message);
     return { ok: false, message: "Não foi possível salvar as alterações." };
+  }
+
+  const rateioErro = await gravarRateio(
+    supabase,
+    session.activeTenant.id,
+    jobId,
+    rateio,
+    session.profile.id,
+  );
+  if (rateioErro) {
+    await logAuditEvent({
+      acao: "job.registro_abertura_editado",
+      tenantId: session.activeTenant.id,
+      entidadeTipo: "job",
+      entidadeId: jobId,
+      metadata: { rateio_falhou: true, erro: rateioErro },
+    });
+    return {
+      ok: false,
+      message:
+        "Os dados do registro foram salvos, mas o rateio de competência não foi regravado. Confira a competência na aba Abertura do Job.",
+    };
   }
 
   // As previsões são regravadas inteiras — mesmo caminho da abertura.
@@ -962,7 +1120,9 @@ export async function editarRegistroDaAbertura(
         conta_recebimento_id: job.conta_recebimento_id,
         conta_pagamento_id: job.conta_pagamento_id,
         categoria_id: job.categoria_id,
-        competencia: `${job.competencia_trimestre}T/${job.competencia_ano}`,
+        servico_id: job.servico_id,
+        competencia: rateioLabel(rateioGuardado),
+        competencias: ordenarCompetencias(rateioGuardado),
         curva: curvaGuardada,
         recebimento: recebGuardado,
       },
@@ -972,7 +1132,9 @@ export async function editarRegistroDaAbertura(
         conta_recebimento_id: parsed.data.conta_recebimento_id,
         conta_pagamento_id: parsed.data.conta_pagamento_id,
         categoria_id: parsed.data.categoria_id,
-        competencia: `${parsed.data.competencia_trimestre}T/${parsed.data.competencia_ano}`,
+        servico_id: parsed.data.servico_id,
+        competencia: rateioLabel(rateio),
+        competencias: rateio,
         curva: parsed.data.curva,
         recebimento: parsed.data.recebimento,
       },

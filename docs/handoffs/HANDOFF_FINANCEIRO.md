@@ -3415,3 +3415,46 @@ e não no `job-financeiro-tabs.tsx`, que é `"use client"`. Server
 component não consegue chamar função comum importada de módulo client —
 o Next troca os exports por referências e estoura `is not a function` em
 tempo de execução, sem o `tsc` reclamar.
+
+## ⚠️ Nota de 2026-09-07 — Serviço no job e rateio de competência (decisão 055)
+
+Design: `Abertura de Job - Servico e Rateio de Competencia.dc.html`. Regra
+completa em [055](../decisions/055-servico-no-job-e-rateio-de-competencia.md).
+Migration `20260907230001_servico_no_job_e_rateio_de_competencia.sql`.
+
+O formulário "Registro no financeiro" (fila e aba "Abertura do Job")
+mudou de grade: **Nome · Projeto / Categoria · Serviço / Data de abertura
+· Competência**, e um bloco **"Rateio entre competências"** de largura
+inteira quando há mais de um trimestre.
+
+### ⚠️ Serviço virou campo do job
+
+`jobs.servico_id` (FK para `categorias_dominio`, escopo `projeto`).
+Obrigatório na abertura, pré-preenchido pelo orçamento de origem,
+trocável sem alterar o orçamento — o mesmo contrato da categoria.
+`JobNaFila` ganhou `servico_id`, `servico_nome` (o do job, com o do
+orçamento como fallback) e `servico_producao_nome` (o do orçamento,
+fixo, mostrado em "Dados da produção"). Ficha, "Visualizar Jobs" e
+Calendário leem o do job primeiro.
+
+**`jobs` agora tem DUAS FKs para `categorias_dominio`.** Todo embed
+`categoria:categorias_dominio(...)` a partir de `jobs` precisa de
+`!categoria_id` — sem a dica a query inteira volta vazia, em silêncio.
+
+### ⚠️ Competência virou rateio
+
+Tabela `jobs_competencias` (trimestre, ano, percentual): de 1 a N linhas
+somando 100%, regravadas inteiras a cada edição, como as previsões.
+`jobs.competencia_trimestre` / `competencia_ano` **seguem gravadas com a
+primeira competência** (a mais antiga) — o filtro "Ano", a ficha e o
+aviso das previsões continuam funcionando; o filtro "Ano" passou a casar
+com **qualquer ano do rateio** (`JobAberto.competencia_anos`).
+
+Só percentual, sem valor: quem consumir (relatório por trimestre, DRE)
+aplica sobre a base que lhe interessa. Nenhuma tela calcula valor por
+competência nesta entrega.
+
+O payload das duas actions trocou `competencia_trimestre` /
+`competencia_ano` por `competencias: [{trimestre, ano, percentual}]` e
+ganhou `servico_id`. A auditoria grava `competencia` como texto
+(`"3T/2026 50% · 4T/2026 50%"`) e `competencias` com as linhas.
