@@ -3610,10 +3610,11 @@ TESTE DO REALTIME".
 
 ---
 
-## ⚠️ Nota de 2026-09-08 — Títulos a Receber: a conciliação saiu da linha, e o subtipo ganhou linha própria
+## ⚠️ Nota de 2026-09-08 — a baixa registrada sai da linha nas três abas, e o subtipo ganha linha própria
 
-Pedido do Tiago, olhando a aba "Títulos a Receber". Duas coisas, e as
-duas são de leitura da tela — nada de banco, nada de regra.
+Pedido do Tiago, olhando a aba "Títulos a Receber" e depois estendido a
+Contas a Pagar e à aba Cartão. Duas coisas, e as duas são de leitura da
+tela — nada de banco, nada de regra.
 
 ### A coluna Ação da linha recebida é só o olho
 
@@ -3640,16 +3641,49 @@ Agora são duas linhas:
 | Centro de custo | `01 · Receita` — código e nome do **tipo** |
 | Subtipo | `Geral (provisório)` — só o nome, como no seletor da baixa |
 
-`BaixaRegistradaAlvo` ganhou **`subtipoNome?: string | null`**, e o
-`?` é de propósito: **Títulos a Pagar e a aba Cartão não mandam o
-campo** e seguem exibindo o par concatenado numa linha só, exatamente
-como antes. Quando essas duas abas forem separar o par também, é
-`page.tsx` de contas a pagar que muda — o `detalheBaixa` de lá ainda
-monta `${tipo.codigo} · ${subtipo.nome ?? tipo.nome}`.
+`BaixaRegistradaAlvo` ganhou **`subtipoNome?: string | null`**. O `?`
+sobrou de quando só Contas a Receber mandava o campo; **no mesmo dia
+Títulos a Pagar e a aba Cartão passaram a mandar também**, então hoje as
+três abas mostram as duas linhas. O opcional fica como porta para
+qualquer chamador novo que ainda não separe o par.
 
 O `detalheBaixa` de `contas-a-receber/page.tsx` passou a devolver
 `{ conta, centro, subtipo }`, com `centro` = tipo e `subtipo` = nome do
 subtipo (ou `null`, que a tela mostra como `—`).
+
+### ⚠️ Contas a Pagar e a aba Cartão, no mesmo dia
+
+O mesmo pedido, aplicado às outras duas abas.
+
+**A linha paga perdeu o subtítulo.** Em Títulos a Pagar era
+`Pago em X · conta · centro de custo`; na aba Cartão,
+`Pago em X · conta`. As duas ficavam numa segunda linha embaixo da
+descrição, e as duas saíram — o olho da linha paga abre o
+`BaixaRegistradaDialog` com tudo, inclusive o `Pago em`, que é a única
+informação que a tabela não mostra em coluna própria (a coluna
+`DATA PGTO.` é a data **vigente** de pagamento, não a da baixa).
+
+**Aqui não houve mudança de largura de coluna**, ao contrário de Contas
+a Receber: o texto era uma segunda LINHA dentro da coluna Título, não
+uma coluna à parte. As linhas pagas ficaram mais baixas, e nada mais
+se mexeu.
+
+**O `BaixaInfo` de `contas-a-pagar/page.tsx`** virou
+`{ pago_em, conta, centro, subtipo, forma_pagamento, cartao_credito_id }`
+e serve às **quatro** origens de uma vez (parcela de PP, conta avulsa,
+parcela de desembolso e devolução de verba). A fatura de cartão paga
+pelo banco monta o par à parte, no bloco do `pagoBanco`, e também
+ganhou `subtipo_nome`.
+
+⚠️ **As duas queries de baixa precisaram do `nome` do tipo.** Elas
+traziam só `tipo:plano_contas_tipos(codigo)`, porque o código era tudo
+que o par concatenado usava. Sem o `nome`, "Centro de custo" ficaria em
+`04 · undefined`. Agora as duas pedem `(codigo, nome)` — a de
+`lancamentos_financeiros` e a que vem embutida em `faturas_cartao`.
+
+`TituloRow` (o tipo compartilhado por Títulos a Pagar e Cartão) ganhou
+`subtipo_nome: string | null`. `conta_nome` e `centro_nome` continuam lá:
+não aparecem mais na linha, só alimentam o modal.
 
 ## ⚠️ Nota de 2026-09-08 — a revisão da abertura e as fotos (decisão 059)
 

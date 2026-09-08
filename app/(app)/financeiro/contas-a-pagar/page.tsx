@@ -152,7 +152,7 @@ export default async function PedidosCompraFinanceiroPage({
         pp_verba_devolucao_id, data_movimento,
         forma_pagamento, cartao_credito_id,
         conta:contas_bancarias(nome, banco),
-        tipo:plano_contas_tipos(codigo),
+        tipo:plano_contas_tipos(codigo, nome),
         subtipo:plano_contas_subtipos(nome)
       `)
       .eq("tenant_id", session.activeTenant.id)
@@ -437,7 +437,10 @@ export default async function PedidosCompraFinanceiroPage({
   type BaixaInfo = {
     pago_em: string;
     conta: string;
+    /** O centro de custo — o TIPO do plano de contas, "04 · Custo Fixo". */
     centro: string;
+    /** O subtipo, que vai numa linha própria da conferência da baixa. */
+    subtipo: string | null;
     forma_pagamento: FormaPagamento | null;
     cartao_credito_id: string | null;
   };
@@ -456,7 +459,7 @@ export default async function PedidosCompraFinanceiroPage({
     forma_pagamento: FormaPagamento | null;
     cartao_credito_id: string | null;
     conta: { nome: string | null; banco: string | null } | null;
-    tipo: { codigo: string } | null;
+    tipo: { codigo: string; nome: string } | null;
     subtipo: { nome: string } | null;
   }>) {
     const info: BaixaInfo = {
@@ -464,10 +467,11 @@ export default async function PedidosCompraFinanceiroPage({
       conta: l.conta?.nome
         ? `${l.conta.nome}${l.conta.banco ? ` · ${l.conta.banco}` : ""}`
         : "—",
-      centro:
-        l.tipo?.codigo && l.subtipo?.nome
-          ? `${l.tipo.codigo} · ${l.subtipo.nome}`
-          : "—",
+      // Separados desde 08/09/2026. Juntos, o par saía como
+      // "04 · Aluguel / Condomínio / IPTU" — o código do TIPO com o nome
+      // do SUBTIPO —, e "Custo Fixo" não aparecia em lugar nenhum.
+      centro: l.tipo ? `${l.tipo.codigo} · ${l.tipo.nome}` : "—",
+      subtipo: l.subtipo?.nome ?? null,
       forma_pagamento: l.forma_pagamento,
       cartao_credito_id: l.cartao_credito_id,
     };
@@ -516,6 +520,7 @@ export default async function PedidosCompraFinanceiroPage({
         pago_em: par.pago_em,
         conta_nome: baixa?.conta ?? null,
         centro_nome: baixa?.centro ?? null,
+        subtipo_nome: baixa?.subtipo ?? null,
         // A parcela roteada para o cartão carrega a forma da PP mesmo
         // antes de paga — é o que a faz aparecer na aba Cartão em vez de
         // Títulos a Pagar (29/08/2026). Fora do cartão continua como
@@ -585,6 +590,7 @@ export default async function PedidosCompraFinanceiroPage({
       pago_em: a.pago_em,
       conta_nome: baixa?.conta ?? null,
       centro_nome: baixa?.centro ?? null,
+      subtipo_nome: baixa?.subtipo ?? null,
       // Se paga, prefere a forma registrada na baixa (realizado); senão,
       // usa a forma planejada da origem (avulsa/recorrência).
       forma_pagamento: a.pago_em
@@ -678,6 +684,7 @@ export default async function PedidosCompraFinanceiroPage({
         pago_em: par.pago_em,
         conta_nome: baixa?.conta ?? null,
         centro_nome: baixa?.centro ?? null,
+        subtipo_nome: baixa?.subtipo ?? null,
         // Se paga, usa a forma registrada na baixa; senão, null (planejado
         // não existe para desembolso-parcela — Task 7 vai remover a coluna
         // do desembolso-pai).
@@ -737,6 +744,7 @@ export default async function PedidosCompraFinanceiroPage({
       pago_em: dev.pago_em,
       conta_nome: baixa?.conta ?? null,
       centro_nome: baixa?.centro ?? null,
+      subtipo_nome: baixa?.subtipo ?? null,
       forma_pagamento: dev.pago_em ? baixa?.forma_pagamento ?? null : null,
       cartao_credito_id: dev.pago_em ? baixa?.cartao_credito_id ?? null : null,
       // Nenhuma destas origens é estorno nem parcela de cartão: as duas
@@ -845,7 +853,7 @@ export default async function PedidosCompraFinanceiroPage({
         "pagamentos:lancamentos_financeiros!fatura_cartao_id(" +
         "data_movimento, papel_na_fatura, origem, " +
         "conta:contas_bancarias(nome, banco, cartao_credito_id), " +
-        "tipo:plano_contas_tipos(codigo), subtipo:plano_contas_subtipos(nome))",
+        "tipo:plano_contas_tipos(codigo, nome), subtipo:plano_contas_subtipos(nome))",
     )
     .eq("tenant_id", session.activeTenant.id)
     .in("status", ["fechada", "paga"]);
@@ -906,10 +914,10 @@ export default async function PedidosCompraFinanceiroPage({
       conta_nome: pagoBanco?.conta?.nome
         ? `${pagoBanco.conta.nome}${pagoBanco.conta.banco ? ` · ${pagoBanco.conta.banco}` : ""}`
         : null,
-      centro_nome:
-        pagoBanco?.tipo?.codigo && pagoBanco?.subtipo?.nome
-          ? `${pagoBanco.tipo.codigo} · ${pagoBanco.subtipo.nome}`
-          : null,
+      centro_nome: pagoBanco?.tipo?.codigo
+        ? `${pagoBanco.tipo.codigo} · ${pagoBanco.tipo.nome}`
+        : null,
+      subtipo_nome: pagoBanco?.subtipo?.nome ?? null,
       // A fatura NÃO é um título "no cartão": ela é o que se paga PELO
       // banco. Sem isto ela cairia na aba Cartão junto com os itens dela.
       forma_pagamento: null,

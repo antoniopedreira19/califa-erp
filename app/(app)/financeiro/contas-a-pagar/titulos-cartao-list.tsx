@@ -11,7 +11,10 @@
  * - Agrupar em seções por `cartao_credito_id`.
  * - Fechar a fatura aberta do cartão (`FecharFaturaDialog`).
  * - Linhas pagas: chip "Pago" e clique abre a conferência da baixa
- *   (`BaixaRegistradaDialog`), com estorno se preciso.
+ *   (`BaixaRegistradaDialog`), com estorno se preciso. Desde 08/09/2026 é
+ *   o ÚNICO lugar onde a baixa se lê: o subtítulo "Pago em X · conta" que
+ *   ficava sob a descrição saiu, como em Títulos a Pagar e em Contas a
+ *   Receber.
  *
  * ⚠️ Aqui NÃO se dá baixa. Item de cartão não sai da conta bancária um a
  * um: ele espera a fatura fechar e sai na baixa dela, uma só, na aba
@@ -684,11 +687,10 @@ export function TitulosCartaoList({
                                       </span>
                                     )}
                                   </span>
-                                  {pago && (
-                                    <span className="text-[11px] text-muted-foreground">
-                                      Pago em {formatDate(r.pago_em)} · {r.conta_nome ?? "—"}
-                                    </span>
-                                  )}
+                                  {/* "Pago em X · conta" saiu daqui em
+                                      08/09/2026, junto com o de Títulos a
+                                      Pagar: o olho da linha paga abre a
+                                      baixa registrada com tudo. */}
                                 </div>
                               </td>
                               {/* Fornecedor */}
@@ -825,6 +827,7 @@ export function TitulosCartaoList({
                 pagoEm: conferindo.pago_em,
                 contaNome: conferindo.conta_nome,
                 centroNome: conferindo.centro_nome,
+                subtipoNome: conferindo.subtipo_nome,
                 dataPagamento: conferindo.data_pagamento,
                 vencOriginal: conferindo.venc_original,
               } as BaixaRegistradaAlvo)
