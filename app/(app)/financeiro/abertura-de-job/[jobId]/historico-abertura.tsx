@@ -21,6 +21,8 @@
 
 import * as React from "react";
 import {
+  ChevronDown,
+  ChevronUp,
   Eye,
   FilePenLine,
   History,
@@ -65,7 +67,17 @@ export function HistoricoDaAbertura({
   onEditar?: () => void;
 }) {
   const [aberta, setAberta] = React.useState<FotoDaAbertura | null>(null);
+  // A lista abre mostrando só a versão mais recente (decisão do Tiago,
+  // 08/09/2026): é ela que o formulário abaixo reflete, e as anteriores
+  // só interessam a quem foi procurá-las. Da mais nova para a mais
+  // antiga, para a linha visível ser sempre a primeira.
+  const [expandido, setExpandido] = React.useState(false);
   const atual = fotos[fotos.length - 1] ?? null;
+  const anteriores = fotos.length - 1;
+  const visiveis = React.useMemo(() => {
+    const desc = [...fotos].reverse();
+    return expandido ? desc : desc.slice(0, 1);
+  }, [fotos, expandido]);
 
   return (
     <div className="rounded-2xl border border-border bg-card shadow-soft">
@@ -93,7 +105,7 @@ export function HistoricoDaAbertura({
 
       {fotos.length > 0 && (
         <ul className="divide-y divide-border border-t border-border">
-          {fotos.map((foto) => (
+          {visiveis.map((foto) => (
             <li
               key={foto.id}
               className="flex flex-wrap items-center gap-x-3 gap-y-1 px-[18px] py-2"
@@ -128,6 +140,26 @@ export function HistoricoDaAbertura({
               </button>
             </li>
           ))}
+          {anteriores > 0 && (
+            <li className="px-[18px] py-1.5">
+              <button
+                type="button"
+                onClick={() => setExpandido((v) => !v)}
+                className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-muted-foreground transition-colors hover:text-foreground"
+              >
+                {expandido ? (
+                  <ChevronUp className="h-3.5 w-3.5" />
+                ) : (
+                  <ChevronDown className="h-3.5 w-3.5" />
+                )}
+                {expandido
+                  ? "Ocultar as versões anteriores"
+                  : anteriores === 1
+                    ? "Ver a versão anterior"
+                    : `Ver as ${anteriores} versões anteriores`}
+              </button>
+            </li>
+          )}
         </ul>
       )}
 
