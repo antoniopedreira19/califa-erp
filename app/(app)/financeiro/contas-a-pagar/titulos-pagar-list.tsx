@@ -8,6 +8,12 @@
  * O que a aba FAZ é uma coisa só: dar baixa e repactuar data. Aprovar e
  * rejeitar PP continua na aba de Pedidos de Produção — é a regra que o
  * protótipo escreve no rodapé e que o aviso ao pé da tabela repete.
+ *
+ * A linha PAGA não repete mais a baixa (08/09/2026). O subtítulo "Pago em
+ * X · conta · centro de custo" que ficava sob a descrição saiu: o olho da
+ * linha abre o `BaixaRegistradaDialog` com tudo aquilo, e lá o centro de
+ * custo e o subtipo ocupam linhas próprias. Mesmo movimento feito na aba
+ * Cartão e em Contas a Receber, no mesmo dia.
  */
 
 import * as React from "react";
@@ -80,8 +86,11 @@ export interface TituloRow {
   plano_conta_tipo_id: string | null;
   plano_conta_subtipo_id: string | null;
   pago_em: string | null;
+  /** Conta, centro de custo (tipo) e subtipo da baixa. NÃO aparecem mais
+   *  na linha (08/09/2026): só o olho, que abre a baixa registrada. */
   conta_nome: string | null;
   centro_nome: string | null;
+  subtipo_nome: string | null;
   /**
    * Forma de pagamento da conta avulsa ou recorrência.
    * Parcelas de PP ficam null (PP não tem forma_pagamento ainda).
@@ -413,6 +422,7 @@ export function TitulosPagarList({
         pagoEm: conferindo.pago_em,
         contaNome: conferindo.conta_nome,
         centroNome: conferindo.centro_nome,
+        subtipoNome: conferindo.subtipo_nome,
         dataPagamento: conferindo.data_pagamento,
         vencOriginal: conferindo.venc_original,
       }
@@ -666,13 +676,10 @@ export function TitulosPagarList({
                   </td>
                   <td className="px-3 py-3">
                     <div className="flex min-w-0 flex-col gap-0.5">
+                      {/* "Pago em X · conta · centro de custo" saiu daqui em
+                          08/09/2026: repetia, em corpo 11 e numa segunda
+                          linha, o que o olho da linha paga já abre inteiro. */}
                       <span className="break-words font-semibold">{r.descricao}</span>
-                      {pago && (
-                        <span className="text-[11px] text-muted-foreground">
-                          Pago em {formatDate(r.pago_em)} · {r.conta_nome ?? "—"} ·{" "}
-                          {r.centro_nome ?? "—"}
-                        </span>
-                      )}
                     </div>
                   </td>
                   <td className="px-3 py-3 text-xs text-muted-foreground">
