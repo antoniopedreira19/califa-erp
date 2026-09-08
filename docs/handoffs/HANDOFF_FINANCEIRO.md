@@ -3714,3 +3714,27 @@ não aparecem mais na linha, só alimentam o modal.
   R$ 3.500 de custo e R$ 8.927,55 de recebimento, e a aba lista "Abertura
   (reconstituída)" e "Revisão 1 · errata" com as fotos abrindo. Uma
   edição livre em seguida virou "Revisão 2 · edição do registro".
+
+## ⚠️ Nota de 2026-09-08 — as previsões se redistribuem inteiras (decisão 061)
+
+A trava que congelava a parte da curva já consumida por PP emitida (e a
+da previsão de recebimento já consumida por nota) **caiu**, nos dois
+caminhos: revisão de errata e "Editar registro". Não há mais cadeado nas
+linhas, o "Distribuir o saldo" voltou a ser "Distribuir", e
+`lib/calculos/previsao-congelada.ts` foi apagado.
+
+**O caso que derrubou:** JOB-0029. Uma PP de R$ 10.000 num item planejado
+em R$ 8.000 consumia mais que a curva inteira → todas as linhas
+congelavam, e a comparação da fatia congelada recusava até acrescentar a
+data que a errata exigia. O job não tinha como sair da revisão.
+
+O total continua fechando com o custo previsto e o faturamento previsto.
+`consumoDasPrevisoes` sobrevive só no metadata da auditoria da edição;
+a página do job no financeiro deixou de chamá-la (uma query a menos).
+
+**Verificado ao vivo em 08/09/2026 no JOB-0029**, que estava preso: sem
+cadeados, "Distribuir" fechou a curva em 2 × R$ 8.000 (R$ 16.000, o custo
+depois da errata) e o recebimento em R$ 27.273,52, a revisão foi
+registrada, o job saiu do mural e o fluxo de caixa passou a mostrar
+R$ 16.000 de previsão de custo. A foto nº 2 (`revisao_errata`) ficou
+gravada.

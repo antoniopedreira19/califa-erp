@@ -249,3 +249,10 @@ Job" como "Revisão N · edição do registro" — a decisão de 20/08 ("auditor
 sim, bloco de histórico na tela não") foi revista pelo Tiago. E a faixa do
 topo, que era só "aberto em … por …", virou o histórico das fotos. Ver
 [059](059-revisao-da-abertura-editavel-e-o-historico-das-fotos.md).
+
+## ⚠️ Nota de 2026-09-08 — a trava das parcelas consumidas caiu
+
+A regra de 20/08 ("só será congelado o que for consumido") **não vale
+mais**. As duas previsões se redistribuem inteiras na edição do registro
+e na revisão de errata; o total continua fechando com o custo e o
+faturamento previstos. Ver [061](061-as-previsoes-se-redistribuem-inteiras.md).

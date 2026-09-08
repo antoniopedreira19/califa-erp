@@ -83,7 +83,6 @@ import {
 } from "./historico-abertura";
 import type { ProjetoFinanceiroOpcao } from "@/lib/data/projetos-financeiro";
 import type { ContaBancariaOpcao } from "@/lib/data/contas-bancarias";
-import { repartirPrevisao } from "@/lib/calculos/previsao-congelada";
 
 interface CategoriaOption {
   id: string;
@@ -157,13 +156,6 @@ interface LinhaPrevisaoForm {
   id: string;
   data: string;
   valorTexto: string;
-  /**
-   * Parcela já consumida por PP emitida (curva) ou nota emitida
-   * (recebimento). Data e valor travados: o dinheiro já saiu ou já foi
-   * faturado. Só existe na edição de job aberto — na abertura, nada foi
-   * consumido ainda.
-   */
-  congelada?: boolean;
 }
 
 /**
@@ -219,12 +211,6 @@ interface Props {
   agoraLabel: string;
   /** Default `abertura` — a fila continua chamando sem passar nada. */
   modo?: ModoAbertura;
-  /**
-   * Quanto de cada previsão já foi consumido por PP emitida / nota
-   * emitida. Só chega no job aberto; congela as parcelas mais próximas
-   * (`lib/calculos/previsao-congelada.ts`).
-   */
-  consumo?: { custo: number; recebimento: number };
   /** Quando e por quem o job foi aberto — o rodapé do modo leitura. */
   abertoEmLabel?: string | null;
   abertoPorNome?: string | null;
@@ -259,38 +245,19 @@ function formatPercentual(n: number): string {
 }
 
 /**
- * Transforma a previsão guardada nas linhas da tela, repartindo o que já
- * foi consumido.
+ * Transforma a previsão guardada nas linhas da tela.
  *
- * A regra do que congela é a MESMA do servidor
- * (`lib/calculos/previsao-congelada.ts`): o consumo anda em ordem de
- * data, da parcela mais próxima para a mais distante, e a parcela que
- * ele alcança pela metade parte em duas — a fatia congelada e o resto.
- * Sem `consumido` (que é o caso da abertura) nada congela e o resultado
- * é o mapeamento direto.
+ * ⚠️ Até 08/09/2026 esta função repartia a previsão em fatia CONGELADA
+ * (a que PP ou nota emitida já tinha consumido, travada) e fatia livre —
+ * a regra da decisão 021. A trava caiu inteira (decisão 061): quem edita
+ * o registro redistribui as duas previsões à vontade, e o histórico de
+ * fotos da decisão 059 é o que guarda como elas estavam antes.
  */
-function paraForm(
-  linhas: CurvaLinha[],
-  consumido = 0,
-): LinhaPrevisaoForm[] {
-  if (consumido <= 0) {
-    return linhas.map((l) => ({
-      id: l.id,
-      data: l.data,
-      valorTexto: formatMoedaTexto(l.valor),
-    }));
-  }
-
-  return repartirPrevisao(
-    linhas.map((l) => ({ data_prevista: l.data, valor: l.valor })),
-    consumido,
-  ).map((l, i) => ({
-    // A repartição pode partir uma linha em duas, então o id da previsão
-    // guardada não serve mais como chave — a posição serve.
-    id: `linha-${i}-${l.data_prevista}-${l.congelada ? "c" : "l"}`,
-    data: l.data_prevista,
+function paraForm(linhas: CurvaLinha[]): LinhaPrevisaoForm[] {
+  return linhas.map((l) => ({
+    id: l.id,
+    data: l.data,
     valorTexto: formatMoedaTexto(l.valor),
-    congelada: l.congelada,
   }));
 }
 
@@ -313,7 +280,6 @@ export function AberturaForm({
   hojeIso,
   agoraLabel,
   modo = "abertura",
-  consumo,
   abertoEmLabel,
   abertoPorNome,
   fotos = [],
@@ -331,9 +297,6 @@ export function AberturaForm({
   const ehEdicao =
     modo === "edicao" || ehRevisao || (modo === "leitura" && editando);
   const ultimaFoto = fotos.length > 0 ? fotos[fotos.length - 1] : null;
-
-  const consumoCusto = consumo?.custo ?? 0;
-  const consumoReceb = consumo?.recebimento ?? 0;
 
   // Na abertura o nome vem do job da produção; num job já aberto vem do
   // nome que o financeiro gravou (`dados-abertos` já resolve o fallback).
@@ -397,10 +360,10 @@ export function AberturaForm({
   // competência.
   const [anoAtivo, setAnoAtivo] = React.useState(compsIniciais[0].ano);
   const [curva, setCurva] = React.useState<LinhaPrevisaoForm[]>(() =>
-    paraForm(curvaInicial, consumo?.custo ?? 0),
+    paraForm(curvaInicial),
   );
   const [recebimento, setRecebimento] = React.useState<LinhaPrevisaoForm[]>(
-    () => paraForm(recebimentoInicial, consumo?.recebimento ?? 0),
+    () => paraForm(recebimentoInicial),
   );
   const [confirmarAberto, setConfirmarAberto] = React.useState(false);
   const [reprovarAberto, setReprovarAberto] = React.useState(false);
@@ -508,22 +471,6 @@ export function AberturaForm({
   const contaReceb = contas.find((c) => c.id === contaRecebId) ?? null;
   const contaPag = contas.find((c) => c.id === contaPagId) ?? null;
 
-  // ---------- Parte livre das previsões ----------
-  // Distribuir e conferir só valem sobre o saldo: o que PP/nota já
-  // consumiu está congelado e não entra na conta.
-  const congeladoCurva = emCentavos(
-    curva
-      .filter((l) => l.congelada)
-      .reduce((s, l) => s + parseMoeda(l.valorTexto), 0),
-  );
-  const congeladoReceb = emCentavos(
-    recebimento
-      .filter((l) => l.congelada)
-      .reduce((s, l) => s + parseMoeda(l.valorTexto), 0),
-  );
-  const livreCusto = emCentavos(custoPrevisto - congeladoCurva);
-  const livreReceb = emCentavos(faturamentoPrevisto - congeladoReceb);
-  const temCongelado = congeladoCurva > 0 || congeladoReceb > 0;
 
   // Margem prevista: o que a California recebe menos o que ela
   // desembolsa. Não entra o que o cliente paga direto ao fornecedor —
@@ -590,32 +537,27 @@ export function AberturaForm({
     );
   }
 
-  /**
-   * Distribuir divide só o SALDO entre as linhas livres. As congeladas
-   * ficam onde estão: o dinheiro delas já saiu (PP emitida) ou já foi
-   * faturado (nota emitida). Sem nada congelado — que é o caso da
-   * abertura — o saldo é o total e o comportamento é o de sempre.
-   */
-  function distribuirEntreLivres(
+  /** Divide o total em partes iguais entre as linhas — todas elas,
+   *  desde que a trava das parcelas consumidas caiu (decisão 061). */
+  function distribuirEntreLinhas(
     linhas: LinhaPrevisaoForm[],
-    totalLivre: number,
+    total: number,
   ): LinhaPrevisaoForm[] {
-    const livres = linhas.filter((l) => !l.congelada);
-    const valores = dividirEmParcelas(Math.max(0, totalLivre), livres.length);
-    let i = 0;
-    return linhas.map((l) =>
-      l.congelada
-        ? l
-        : { ...l, valorTexto: formatMoedaTexto(valores[i++] ?? 0) },
-    );
+    const valores = dividirEmParcelas(Math.max(0, total), linhas.length);
+    return linhas.map((l, i) => ({
+      ...l,
+      valorTexto: formatMoedaTexto(valores[i] ?? 0),
+    }));
   }
 
   function distribuirCurva() {
-    setCurva((atual) => distribuirEntreLivres(atual, livreCusto));
+    setCurva((atual) => distribuirEntreLinhas(atual, custoPrevisto));
   }
 
   function distribuirRecebimento() {
-    setRecebimento((atual) => distribuirEntreLivres(atual, livreReceb));
+    setRecebimento((atual) =>
+      distribuirEntreLinhas(atual, faturamentoPrevisto),
+    );
   }
 
   function adicionarData() {
@@ -649,16 +591,11 @@ export function AberturaForm({
     ]);
   }
 
-  /**
-   * Linha congelada nunca sai, e a última linha livre também não: a
-   * previsão precisa de pelo menos um lugar para o saldo pousar. Quando
-   * TUDO está congelado (consumo cobriu a previsão inteira) não há linha
-   * livre nenhuma, e aí não há o que remover mesmo.
-   */
+  /** A última linha não sai: a previsão precisa de pelo menos um lugar
+   *  para o total pousar. */
   function podeRemover(linhas: LinhaPrevisaoForm[], id: string): boolean {
-    const alvo = linhas.find((l) => l.id === id);
-    if (!alvo || alvo.congelada) return false;
-    return linhas.filter((l) => !l.congelada).length > 1;
+    if (!linhas.some((l) => l.id === id)) return false;
+    return linhas.length > 1;
   }
 
   function removerDaCurva(id: string) {
@@ -862,8 +799,8 @@ export function AberturaForm({
     );
     setComps(compsIniciais);
     setAnoAtivo(compsIniciais[0].ano);
-    setCurva(paraForm(curvaInicial, consumoCusto));
-    setRecebimento(paraForm(recebimentoInicial, consumoReceb));
+    setCurva(paraForm(curvaInicial));
+    setRecebimento(paraForm(recebimentoInicial));
     setCriandoProjeto(false);
     setProjetoAberto(false);
     setDropConta(null);
@@ -1666,9 +1603,7 @@ export function AberturaForm({
                                   className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-2.5 py-1.5 text-[11.5px] font-semibold text-muted-foreground transition-colors hover:border-[#d7d7d7] hover:text-foreground"
                                 >
                                   <Split className="h-3 w-3" />
-                                  {congeladoReceb > 0
-                                    ? "Distribuir o saldo"
-                                    : "Distribuir"}
+                                  Distribuir
                                 </button>
                               )}
                             </span>
@@ -1730,16 +1665,8 @@ export function AberturaForm({
                               </td>
                               <td className="px-4 py-2.5">
                                 <div className="w-[190px]">
-                                  {linha.congelada || travado ? (
-                                    <LinhaTravada
-                                      texto={formatDataBr(linha.data)}
-                                      congelada={Boolean(linha.congelada)}
-                                      titulo={
-                                        linha.congelada
-                                          ? "Já faturado — esta parcela não pode mudar"
-                                          : undefined
-                                      }
-                                    />
+                                  {travado ? (
+                                    <LinhaTravada texto={formatDataBr(linha.data)} />
                                   ) : (
                                     /* Recebimento não segue as janelas de
                                        pagamento: quem manda na data de entrada
@@ -1761,7 +1688,7 @@ export function AberturaForm({
                                 </div>
                               </td>
                               <td className="px-4 py-2.5">
-                                {linha.congelada || travado ? (
+                                {travado ? (
                                   <p className="text-right font-mono text-[13px] font-semibold">
                                     {formatCurrency(valor)}
                                   </p>
@@ -1808,11 +1735,9 @@ export function AberturaForm({
                                     }
                                     aria-label={`Remover a parcela ${i + 1}`}
                                     title={
-                                      linha.congelada
-                                        ? "Parcela já faturada — não pode ser removida"
-                                        : !podeRemover(recebimento, linha.id)
-                                          ? "A previsão precisa de pelo menos uma parcela"
-                                          : "Remover parcela"
+                                      !podeRemover(recebimento, linha.id)
+                                        ? "A previsão precisa de pelo menos uma parcela"
+                                        : "Remover parcela"
                                     }
                                     className="inline-flex h-[30px] w-[30px] items-center justify-center rounded-lg border border-border bg-white text-california-red transition-colors hover:bg-california-red/5 disabled:cursor-not-allowed disabled:text-[#d7d7d7] disabled:hover:bg-white"
                                   >
@@ -1899,9 +1824,7 @@ export function AberturaForm({
                                   className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-2.5 py-1.5 text-[11.5px] font-semibold text-muted-foreground transition-colors hover:border-[#d7d7d7] hover:text-foreground"
                                 >
                                   <Split className="h-3 w-3" />
-                                  {congeladoCurva > 0
-                                    ? "Distribuir o saldo"
-                                    : "Distribuir"}
+                                  Distribuir
                                 </button>
                               )}
                             </span>
@@ -1954,16 +1877,8 @@ export function AberturaForm({
                               </td>
                               <td className="px-4 py-2.5">
                                 <div className="w-[190px]">
-                                  {linha.congelada || travado ? (
-                                    <LinhaTravada
-                                      texto={formatDataBr(linha.data)}
-                                      congelada={Boolean(linha.congelada)}
-                                      titulo={
-                                        linha.congelada
-                                          ? "Já consumida por PP emitida — esta data não pode mudar"
-                                          : undefined
-                                      }
-                                    />
+                                  {travado ? (
+                                    <LinhaTravada texto={formatDataBr(linha.data)} />
                                   ) : (
                                     <DatePicker
                                       name={`curva-data-${linha.id}`}
@@ -1985,7 +1900,7 @@ export function AberturaForm({
                                       }
                                     />
                                   )}
-                                  {fora && !linha.congelada && (
+                                  {fora && (
                                     <span className="mt-1 inline-flex items-center gap-1 text-[10.5px] font-medium text-amber-700">
                                       <AlertTriangle className="h-2.5 w-2.5" />
                                       Fora da competência {competenciaResumo}
@@ -1994,7 +1909,7 @@ export function AberturaForm({
                                 </div>
                               </td>
                               <td className="px-4 py-2.5">
-                                {linha.congelada || travado ? (
+                                {travado ? (
                                   <p className="text-right font-mono text-[13px] font-semibold">
                                     {formatCurrency(valor)}
                                   </p>
@@ -2037,11 +1952,9 @@ export function AberturaForm({
                                     disabled={!podeRemover(curva, linha.id)}
                                     aria-label={`Remover a data ${i + 1}`}
                                     title={
-                                      linha.congelada
-                                        ? "Data já consumida por PP emitida — não pode ser removida"
-                                        : !podeRemover(curva, linha.id)
-                                          ? "A curva precisa de pelo menos uma data"
-                                          : "Remover data"
+                                      !podeRemover(curva, linha.id)
+                                        ? "A curva precisa de pelo menos uma data"
+                                        : "Remover data"
                                     }
                                     className="inline-flex h-[30px] w-[30px] items-center justify-center rounded-lg border border-border bg-white text-california-red transition-colors hover:bg-california-red/5 disabled:cursor-not-allowed disabled:text-[#d7d7d7] disabled:hover:bg-white"
                                   >
@@ -2653,32 +2566,16 @@ function ContaSeletor({
 }
 
 /**
- * A data de uma linha que não aceita edição.
+ * A data de uma linha com o formulário em leitura — job aberto, ninguém
+ * clicou em "Editar registro". Sem cadeado, porque nada ali é definitivo:
+ * está travado no momento, não para sempre.
  *
- * Duas razões diferentes caem aqui, e a tela distingue as duas: a linha
- * está CONGELADA (PP ou nota já consumiu aquele dinheiro — cadeado) ou o
- * formulário inteiro está em leitura (job aberto, ninguém clicou em
- * "Editar registro" — sem cadeado, porque nada ali é definitivo, só está
- * travado no momento).
+ * ⚠️ Havia um segundo motivo até 08/09/2026: a linha CONGELADA, que PP ou
+ * nota emitida já tinha consumido. Essa trava caiu (decisão 061).
  */
-function LinhaTravada({
-  texto,
-  congelada,
-  titulo,
-}: {
-  texto: string;
-  congelada: boolean;
-  titulo?: string;
-}) {
+function LinhaTravada({ texto }: { texto: string }) {
   return (
-    <span
-      title={titulo}
-      className={cn(
-        "inline-flex h-9 items-center gap-1.5 font-mono text-[13px] font-medium",
-        congelada ? "text-foreground" : "text-muted-foreground",
-      )}
-    >
-      {congelada && <Lock className="h-3 w-3 shrink-0 text-muted-foreground" />}
+    <span className="inline-flex h-9 items-center gap-1.5 font-mono text-[13px] font-medium text-muted-foreground">
       {texto}
     </span>
   );

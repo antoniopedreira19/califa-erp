@@ -29,7 +29,6 @@ import {
 import { fotosDaAbertura } from "../../abertura-de-job/fotos";
 import {
   competenciasGravadas,
-  consumoDasPrevisoes,
   previsoesGravadas,
 } from "../../abertura-de-job/consumo";
 import { servicosDoOrcamentoQuery } from "@/lib/data/servicos";
@@ -94,7 +93,6 @@ export default async function JobNoFinanceiroPage({
     linhasDeFluxo,
     prazosDoJob,
     previsoes,
-    consumo,
     notaRes,
     categoriasRes,
     servicosRes,
@@ -107,7 +105,6 @@ export default async function JobNoFinanceiroPage({
     carregarLinhasDeFluxo(tenantId, [params.jobId]),
     carregarPrazosDosJobs(tenantId, [params.jobId]),
     previsoesGravadas(supabase, tenantId, params.jobId),
-    consumoDasPrevisoes(supabase, tenantId, params.jobId),
     // Nota emitida do job: decide o badge de faturamento e datou o prazo
     // de recebimento.
     supabase
@@ -346,7 +343,6 @@ export default async function JobNoFinanceiroPage({
             anos={anos}
             hojeIso={hoje}
             agoraLabel={formatDataHoraBr(new Date())}
-            consumo={consumo}
             abertoEmLabel={formatDataHoraBr(job.data_abertura_financeiro)}
             abertoPorNome={detalhe.abertoPorNome}
           />
