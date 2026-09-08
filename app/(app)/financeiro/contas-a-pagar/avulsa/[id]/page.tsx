@@ -278,6 +278,7 @@ export default async function AvulsaDetalhesPage({
     tenant_id: c.tenant_id,
     codigo: (c.codigo as string | null) ?? null,
     empresa_id: c.empresa_id,
+    regional_id: (c.regional_id as string | null) ?? null,
     descricao: c.descricao,
     valor: c.valor,
     natureza: c.natureza,

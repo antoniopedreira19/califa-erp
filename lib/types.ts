@@ -97,7 +97,6 @@ export type UF =
 export interface Empresa {
   id: string;
   tenant_id: string;
-  regional_id: string;
   razao_social: string;
   nome_fantasia: string | null;
   cnpj: string;                  // 14 dígitos
@@ -575,6 +574,7 @@ export function categoriaDominioEscopoLabel(e: CategoriaDominioEscopo): string {
 export interface Regional {
   id: string;
   tenant_id: string;
+  empresa_id: string;
   nome: string;
   ativo: boolean;
   created_by: string | null;
@@ -1867,6 +1867,7 @@ export interface LancamentoFinanceiro {
   id: string;
   tenant_id: string;
   empresa_id: string;
+  regional_id: string | null;
   conta_bancaria_id: string;
   data_movimento: string; // YYYY-MM-DD
   valor: string; // numeric — Number(...)
@@ -2005,6 +2006,7 @@ export interface TituloReceber {
   id: string;
   tenant_id: string;
   empresa_id: string;
+  regional_id: string | null;
   faturamento_id: string;
   numero_parcela: number;
   valor: number;
@@ -2146,6 +2148,7 @@ export interface ContaAvulsa {
    *  linhas anteriores a 28/08/2026. */
   codigo: string | null;
   empresa_id: string;
+  regional_id: string | null;
   descricao: string;
   valor: string; // numeric → string do supabase-js
   natureza: NaturezaLancamento;
