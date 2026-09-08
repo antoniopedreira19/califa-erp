@@ -4,6 +4,7 @@ import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import type { PlanoContaTipo, PlanoContaSubtipo } from "@/lib/types";
 import { PlanoContasTree } from "./plano-contas-tree";
+import { PageHeader } from "@/components/ui/page-header";
 
 export const dynamic = "force-dynamic";
 
@@ -75,18 +76,12 @@ export default async function PlanoDeContasPage() {
           <ArrowLeft className="h-3 w-3" />
           Voltar para cadastros do financeiro
         </Link>
-        <header className="mt-3 space-y-2">
-          <div className="flex items-center gap-3">
-            <div className="rounded-lg bg-california-red/10 p-2">
-              <ListTree className="h-5 w-5 text-california-red" />
-            </div>
-            <h1 className="text-3xl font-bold tracking-tight">Plano de contas</h1>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            Estrutura hierárquica de tipos e subtipos usada para classificar cada
-            lançamento. Base do DRE.
-          </p>
-        </header>
+        <PageHeader
+          eyebrow="FINANCEIRO"
+          title="Plano de contas"
+          description="Estrutura hierárquica de tipos e subtipos usada para classificar cada lançamento. Base do DRE."
+          icon={ListTree}
+        />
       </div>
 
       <PlanoContasTree

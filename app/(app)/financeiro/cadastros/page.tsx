@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowLeft, ArrowRight, Wallet, ListTree, CreditCard, FolderKanban, type LucideIcon } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
+import { PageHeader } from "@/components/ui/page-header";
 
 export const dynamic = "force-dynamic";
 
@@ -41,18 +42,12 @@ export default async function CadastrosFinanceiroPage() {
           <ArrowLeft className="h-3 w-3" />
           Voltar para central financeira
         </Link>
-        <header className="mt-3 space-y-2">
-          <div className="flex items-center gap-3">
-            <div className="rounded-lg bg-california-red/10 p-2">
-              <FolderKanban className="h-5 w-5 text-california-red" />
-            </div>
-            <h1 className="text-3xl font-bold tracking-tight">Cadastros do Financeiro</h1>
-          </div>
-          <p className="text-sm text-muted-foreground max-w-2xl">
-            Estruturas de base pra operar o financeiro: onde o dinheiro entra e
-            sai, como classificar cada lançamento e que cartões existem.
-          </p>
-        </header>
+        <PageHeader
+          eyebrow="FINANCEIRO"
+          title="Cadastros do Financeiro"
+          description="Estruturas de base pra operar o financeiro: onde o dinheiro entra e sai, como classificar cada lançamento e que cartões existem."
+          icon={FolderKanban}
+        />
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">

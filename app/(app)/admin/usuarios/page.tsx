@@ -13,6 +13,7 @@ import { roleLabel, type AppRole } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { ConvidarUsuarioDrawer } from "./convidar-drawer";
 import { ReenviarConviteButton } from "./reenviar-convite-button";
+import { PageHeader } from "@/components/ui/page-header";
 
 export const dynamic = "force-dynamic";
 
@@ -100,7 +101,6 @@ export default async function AdminUsuariosPage() {
 
   return (
     <div className="space-y-8">
-      {/* Breadcrumb */}
       <Link
         href="/admin"
         className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-california-red transition-colors"
@@ -109,34 +109,25 @@ export default async function AdminUsuariosPage() {
         Voltar para Administração
       </Link>
 
-      <header className="flex items-start justify-between gap-6">
-        <div className="space-y-2">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-california-red">
-            Administração
-          </p>
-          <div className="flex items-center gap-3">
-            <div className="rounded-lg bg-california-red/10 p-2">
-              <Users className="h-5 w-5 text-california-red" />
-            </div>
-            <h1 className="text-3xl font-bold tracking-tight">Usuários</h1>
-          </div>
-          <p className="text-sm text-muted-foreground max-w-2xl">
-            Convide novos membros do time para o California ERP. O usuário
-            recebe um e-mail com link para definir a senha e ativar o acesso.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Link
-            href="/admin/usuarios/permissoes"
-            prefetch={false}
-            className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2.5 text-sm font-semibold text-foreground shadow-sm hover:bg-accent transition-colors"
-          >
-            <Table2 className="h-4 w-4" />
-            Ver matriz de permissões
-          </Link>
-          <ConvidarUsuarioDrawer />
-        </div>
-      </header>
+      <PageHeader
+        eyebrow="ADMINISTRAÇÃO"
+        title="Usuários"
+        description="Convide novos membros do time para o California ERP. O usuário recebe um e-mail com link para definir a senha e ativar o acesso."
+        icon={Users}
+        actions={
+          <>
+            <Link
+              href="/admin/usuarios/permissoes"
+              prefetch={false}
+              className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2.5 text-sm font-semibold text-foreground shadow-sm hover:bg-accent transition-colors"
+            >
+              <Table2 className="h-4 w-4" />
+              Ver matriz de permissões
+            </Link>
+            <ConvidarUsuarioDrawer />
+          </>
+        }
+      />
 
       <div className="rounded-2xl border border-border bg-card shadow-soft overflow-hidden">
         {rows.length === 0 ? (
