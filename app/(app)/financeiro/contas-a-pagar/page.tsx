@@ -211,7 +211,7 @@ export default async function PedidosCompraFinanceiroPage({
     // Regionais (para o editor de rateio no drawer da avulsa)
     supabase
       .from("regionais")
-      .select("id, nome, ativo")
+      .select("id, nome, ativo, empresa_id")
       .eq("tenant_id", session.activeTenant.id)
       .order("nome"),
     // Cartões de crédito ativos (para o drawer de conta avulsa e Task 10)
@@ -1018,10 +1018,11 @@ export default async function PedidosCompraFinanceiroPage({
   );
 
   const regionaisList = (regionaisRes.data ?? []).map(
-    (r: { id: string; nome: string; ativo: boolean }) => ({
+    (r: { id: string; nome: string; ativo: boolean; empresa_id: string }) => ({
       id: r.id,
       nome: r.nome,
       ativo: r.ativo,
+      empresa_id: r.empresa_id,
     }),
   );
 

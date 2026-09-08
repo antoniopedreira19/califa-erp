@@ -45,7 +45,7 @@ type EmpresaResumida = { id: string; nome: string };
 type FornecedorResumido = { id: string; nome: string };
 type ClienteResumido = { id: string; nome: string };
 type JobResumido = { id: string; codigo: string; nome: string; cliente_id: string | null; regional_id: string | null };
-type RegionalResumida = { id: string; nome: string; ativo: boolean };
+type RegionalResumida = { id: string; nome: string; ativo: boolean; empresa_id: string };
 
 // ---------------------------------------------------------------------------
 // Utilitário de data
@@ -597,7 +597,7 @@ export function ContaRecorrenteDrawer(props: Props) {
             <RateioRegionalEditor
               linhas={rateio}
               onChange={setRateio}
-              regionais={props.regionais}
+              regionais={props.regionais.filter((r) => r.empresa_id === empresaId)}
               jobRegionalId={jobSelecionado?.regional_id ?? null}
               disabled={pending}
             />

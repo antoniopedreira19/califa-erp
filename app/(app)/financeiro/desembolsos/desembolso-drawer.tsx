@@ -28,6 +28,7 @@ import { criarDesembolso } from "./actions";
 import type { RateioLinhaInput } from "@/lib/types";
 import type { DocumentoDoAnexo } from "@/lib/types";
 import { RateioRegionalEditor } from "@/app/(app)/financeiro/contas-a-pagar/rateio-regional-editor";
+import { ConfirmTrocaEmpresaDialog } from "@/components/ui/confirm-troca-empresa-dialog";
 
 // ---------------------------------------------------------------------------
 // Constantes
@@ -64,7 +65,7 @@ interface Props {
   fornecedores: Array<{ id: string; nome: string }>;
   clientes: Array<{ id: string; nome: string }>;
   jobs: Array<{ id: string; codigo: string; nome: string }>;
-  regionais: Array<{ id: string; nome: string; ativo: boolean }>;
+  regionais: Array<{ id: string; nome: string; ativo: boolean; empresa_id: string }>;
 }
 
 // ---------------------------------------------------------------------------
@@ -138,6 +139,8 @@ export function DesembolsoDrawer({
 
   // Campos do formulário
   const [empresaId, setEmpresaId] = React.useState("");
+  const [dialogTrocaEmpresa, setDialogTrocaEmpresa] = React.useState(false);
+  const [empresaPendente, setEmpresaPendente] = React.useState<string>("");
   const [descricao, setDescricao] = React.useState("");
   const [fornecedorId, setFornecedorId] = React.useState<string>("__none__");
   const [clienteId, setClienteId] = React.useState<string>("__none__");
@@ -151,6 +154,25 @@ export function DesembolsoDrawer({
   const [uploadError, setUploadError] = React.useState<string | null>(null);
   const [uploadingFile, setUploadingFile] = React.useState<string | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  // ---------------------------------------------------------------------------
+  // Handlers de troca de empresa
+  // ---------------------------------------------------------------------------
+
+  const handleEmpresaChange = (nova: string) => {
+    if (nova === empresaId) return;
+    if (rateio.length > 0) {
+      setEmpresaPendente(nova);
+      setDialogTrocaEmpresa(true);
+    } else {
+      setEmpresaId(nova);
+    }
+  };
+
+  const confirmarTrocaEmpresa = () => {
+    setEmpresaId(empresaPendente);
+    setRateio([]);
+  };
 
   // Reset ao abrir
   React.useEffect(() => {
@@ -392,7 +414,7 @@ export function DesembolsoDrawer({
               <Label htmlFor="empresa_id">Empresa *</Label>
               <Select
                 value={empresaId}
-                onValueChange={setEmpresaId}
+                onValueChange={handleEmpresaChange}
                 required
               >
                 <SelectTrigger id="empresa_id">
@@ -570,7 +592,7 @@ export function DesembolsoDrawer({
             <RateioRegionalEditor
               linhas={rateio}
               onChange={setRateio}
-              regionais={regionais}
+              regionais={regionais.filter((r) => r.empresa_id === empresaId)}
               disabled={pending}
             />
 
@@ -719,6 +741,13 @@ export function DesembolsoDrawer({
           </div>
         </form>
       </DrawerContent>
+
+      <ConfirmTrocaEmpresaDialog
+        open={dialogTrocaEmpresa}
+        onOpenChange={setDialogTrocaEmpresa}
+        onConfirm={confirmarTrocaEmpresa}
+        contexto="rateio"
+      />
     </Dialog>
   );
 }

@@ -146,7 +146,7 @@ export default async function RecorrenteDetalhesPage({
     // Regionais ativas (para o editor de rateio no drawer)
     supabase
       .from("regionais")
-      .select("id, nome, ativo")
+      .select("id, nome, ativo, empresa_id")
       .eq("tenant_id", session.activeTenant.id)
       .order("nome"),
     // Cartões de crédito ativos (para o drawer de edição)
@@ -206,10 +206,11 @@ export default async function RecorrenteDetalhesPage({
 
   // Regionais (para o editor de rateio no drawer)
   const regionaisList = (regionaisRes.data ?? []).map(
-    (r: { id: string; nome: string; ativo: boolean }) => ({
+    (r: { id: string; nome: string; ativo: boolean; empresa_id: string }) => ({
       id: r.id,
       nome: r.nome,
       ativo: r.ativo,
+      empresa_id: r.empresa_id,
     }),
   );
 
@@ -236,7 +237,7 @@ export default async function RecorrenteDetalhesPage({
 
   // Mapeamento de regionais por ID (para o card de rateio)
   const regionaisPorId = new Map(
-    (regionaisRes.data ?? []).map((reg: { id: string; nome: string; ativo: boolean }) => [
+    (regionaisRes.data ?? []).map((reg: { id: string; nome: string; ativo: boolean; empresa_id: string }) => [
       reg.id,
       { nome: reg.nome, ativo: reg.ativo },
     ]),
