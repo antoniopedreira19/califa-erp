@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { empresaSchema } from "@/lib/validations/empresas";
+import { regionalSchema } from "@/lib/validations/regionais";
 
 export type ActionResult =
   | { ok: true; id?: string; message?: string }
@@ -277,6 +278,164 @@ export async function desativarEmpresa(id: string): Promise<ActionResult> {
   revalidatePath("/admin/empresas");
   revalidatePath("/admin");
   return { ok: true, id, message: "Empresa desativada." };
+}
+
+// ---------- Regionais (organograma dentro do card de empresa) ----------
+
+function mapRegionalDbError(msg: string): string {
+  if (msg.includes("idx_regionais_empresa_nome") || msg.includes("uniq_regional_nome_por_tenant")) {
+    return "Já existe uma regional com esse nome nesta empresa.";
+  }
+  if (msg.includes("regionais_nome_nao_vazio")) {
+    return "Nome da regional não pode ficar vazio.";
+  }
+  return "Não foi possível salvar a regional.";
+}
+
+export async function criarRegional(formData: FormData): Promise<ActionResult> {
+  const session = await requireAdmin();
+  const parsed = regionalSchema.safeParse({
+    empresa_id: formData.get("empresa_id")?.toString() ?? "",
+    nome: formData.get("nome")?.toString() ?? "",
+  });
+  if (!parsed.success) {
+    return {
+      ok: false,
+      message: "Verifique os campos destacados.",
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
+
+  const supabase = createClient();
+  const tenantId = session.activeTenant.id;
+
+  const { data, error } = await supabase
+    .from("regionais")
+    .insert({
+      tenant_id: tenantId,
+      empresa_id: parsed.data.empresa_id,
+      nome: parsed.data.nome,
+      created_by: session.profile.id,
+    })
+    .select("id")
+    .single();
+
+  if (error) {
+    console.error("[admin.regionais.criar]", error.message);
+    return { ok: false, message: mapRegionalDbError(error.message) };
+  }
+
+  await logAuditEvent({
+    acao: "regional.criada",
+    tenantId,
+    entidadeTipo: "regional",
+    entidadeId: data.id,
+    metadata: { nome: parsed.data.nome, empresa_id: parsed.data.empresa_id },
+  });
+
+  revalidatePath("/admin/empresas");
+  return { ok: true, id: data.id, message: "Regional cadastrada." };
+}
+
+export async function editarRegional(
+  id: string,
+  formData: FormData,
+): Promise<ActionResult> {
+  const session = await requireAdmin();
+  const parsed = regionalSchema.safeParse({
+    empresa_id: formData.get("empresa_id")?.toString() ?? "",
+    nome: formData.get("nome")?.toString() ?? "",
+  });
+  if (!parsed.success) {
+    return {
+      ok: false,
+      message: "Verifique os campos destacados.",
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
+
+  const supabase = createClient();
+  const tenantId = session.activeTenant.id;
+
+  // Não permitimos mover regional entre empresas por essa tela — o form
+  // não expõe combobox de empresa. Renomear só. `empresa_id` do payload
+  // é usado como sanity-check no update para garantir consistência.
+  const { error } = await supabase
+    .from("regionais")
+    .update({ nome: parsed.data.nome })
+    .eq("id", id)
+    .eq("tenant_id", tenantId)
+    .eq("empresa_id", parsed.data.empresa_id);
+
+  if (error) {
+    console.error("[admin.regionais.editar]", error.message);
+    return { ok: false, message: mapRegionalDbError(error.message) };
+  }
+
+  await logAuditEvent({
+    acao: "regional.editada",
+    tenantId,
+    entidadeTipo: "regional",
+    entidadeId: id,
+    metadata: { nome: parsed.data.nome },
+  });
+
+  revalidatePath("/admin/empresas");
+  return { ok: true, id, message: "Regional atualizada." };
+}
+
+export async function inativarRegional(id: string): Promise<ActionResult> {
+  const session = await requireAdmin();
+  const supabase = createClient();
+  const tenantId = session.activeTenant.id;
+
+  const { error } = await supabase
+    .from("regionais")
+    .update({ ativo: false })
+    .eq("id", id)
+    .eq("tenant_id", tenantId);
+
+  if (error) {
+    console.error("[admin.regionais.inativar]", error.message);
+    return { ok: false, message: "Não foi possível inativar." };
+  }
+
+  await logAuditEvent({
+    acao: "regional.inativada",
+    tenantId,
+    entidadeTipo: "regional",
+    entidadeId: id,
+  });
+
+  revalidatePath("/admin/empresas");
+  return { ok: true, id, message: "Regional inativada." };
+}
+
+export async function reativarRegional(id: string): Promise<ActionResult> {
+  const session = await requireAdmin();
+  const supabase = createClient();
+  const tenantId = session.activeTenant.id;
+
+  const { error } = await supabase
+    .from("regionais")
+    .update({ ativo: true })
+    .eq("id", id)
+    .eq("tenant_id", tenantId);
+
+  if (error) {
+    console.error("[admin.regionais.reativar]", error.message);
+    return { ok: false, message: "Não foi possível reativar." };
+  }
+
+  await logAuditEvent({
+    acao: "regional.reativada",
+    tenantId,
+    entidadeTipo: "regional",
+    entidadeId: id,
+  });
+
+  revalidatePath("/admin/empresas");
+  return { ok: true, id, message: "Regional reativada." };
 }
 
 /** Reativa uma empresa soft-deletada. */

@@ -23,7 +23,7 @@ import {
 import type { UF } from "@/lib/types";
 import { UFS, apenasDigitos, formatarCNPJ, formatarCEP, formatarTelefone } from "@/lib/utils/formato-fiscal";
 import { criarEmpresa, atualizarEmpresa, type ActionResult } from "./actions";
-import type { EmpresaRow } from "./empresas-list";
+import type { EmpresaRow } from "./types";
 
 type Props =
   | {

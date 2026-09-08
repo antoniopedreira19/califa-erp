@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Users, Building2, MapPin, Building, ArrowRight, FolderKanban, type LucideIcon } from "lucide-react";
+import { Users, Building2, Building, ArrowRight, FolderKanban, type LucideIcon } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/page-header";
@@ -14,7 +14,9 @@ export default async function CadastrosPage() {
   // Cadastros do financeiro (contas bancárias, plano de contas, cartões)
   // moraram aqui até 2026-09-05; hoje estão em /financeiro/cadastros.
   // Categorias (item e de orçamento) estão em /orcamentos/categorias.
-  const [clientesRes, fornecedoresRes, regionaisRes, cidadesRes] = await Promise.all([
+  // Regionais mudaram-se para /admin/empresas em 2026-09-08 — passaram a
+  // viver dentro do organograma da empresa dona.
+  const [clientesRes, fornecedoresRes, cidadesRes] = await Promise.all([
     supabase
       .from("clientes")
       .select("*", { count: "exact", head: true })
@@ -26,11 +28,6 @@ export default async function CadastrosPage() {
       .eq("tenant_id", session.activeTenant.id)
       .eq("status", "ativo"),
     supabase
-      .from("regionais")
-      .select("*", { count: "exact", head: true })
-      .eq("tenant_id", session.activeTenant.id)
-      .eq("ativo", true),
-    supabase
       .from("cidades")
       .select("*", { count: "exact", head: true })
       .eq("tenant_id", session.activeTenant.id)
@@ -39,7 +36,6 @@ export default async function CadastrosPage() {
 
   if (clientesRes.error) console.error("[cadastros.clientes]", clientesRes.error.message);
   if (fornecedoresRes.error) console.error("[cadastros.fornecedores]", fornecedoresRes.error.message);
-  if (regionaisRes.error) console.error("[cadastros.regionais]", regionaisRes.error.message);
   if (cidadesRes.error) console.error("[cadastros.cidades]", cidadesRes.error.message);
 
   return (
@@ -65,13 +61,6 @@ export default async function CadastrosPage() {
           title="Fornecedores"
           description="Pessoas físicas ou jurídicas que aparecem como custo nos itens da versão do orçamento."
           count={fornecedoresRes.count ?? 0}
-        />
-        <CadastroCard
-          href="/cadastros/regionais"
-          icon={MapPin}
-          title="Regionais"
-          description="Vocabulário usado ao criar jobs — ex.: SP, Nordeste, Rio de Janeiro."
-          count={regionaisRes.count ?? 0}
         />
         <CadastroCard
           href="/cadastros/cidades"

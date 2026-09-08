@@ -2,10 +2,9 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Plus } from "lucide-react";
+import { AlertCircle } from "lucide-react";
 import {
   Dialog,
-  DialogTrigger,
   DialogHeader,
   DialogTitle,
   DialogDescription,
@@ -16,33 +15,40 @@ import { Label } from "@/components/ui/label";
 import { criarRegional, editarRegional } from "./actions";
 import type { Regional } from "@/lib/types";
 
-type Props =
-  | { mode: "criar"; regional?: undefined; trigger?: React.ReactNode }
-  | {
-      mode: "editar";
-      regional: Regional;
-      trigger?: React.ReactNode;
-      open?: boolean;
-      onOpenChange?: (open: boolean) => void;
-    };
+type Props = {
+  /** Empresa dona da regional. Vem do contexto do card — não é escolhida no form. */
+  empresaId: string;
+  empresaNome: string;
+  /** Regional existente para editar; ausente = criar. */
+  regional?: Regional;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+};
 
-export function RegionalDrawer(props: Props) {
+/**
+ * Drawer de criar/editar regional dentro do organograma de /admin/empresas.
+ * A empresa vem do card em que o botão foi clicado — sem combobox de
+ * empresa aqui, o contexto é o próprio card.
+ */
+export function RegionalDrawer({
+  empresaId,
+  empresaNome,
+  regional,
+  open,
+  onOpenChange,
+}: Props) {
   const router = useRouter();
-  const [internalOpen, setInternalOpen] = React.useState(false);
+  const isEdit = Boolean(regional);
   const [pending, startTransition] = React.useTransition();
   const [error, setError] = React.useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = React.useState<Record<string, string[]>>({});
-
-  const isControlled = props.mode === "editar" && props.open !== undefined;
-  const open = isControlled ? (props as any).open : internalOpen;
-  const setOpen = isControlled ? (props as any).onOpenChange : setInternalOpen;
 
   function handleOpenChange(next: boolean) {
     if (!next) {
       setError(null);
       setFieldErrors({});
     }
-    setOpen(next);
+    onOpenChange(next);
   }
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -50,12 +56,12 @@ export function RegionalDrawer(props: Props) {
     setError(null);
     setFieldErrors({});
     const formData = new FormData(e.currentTarget);
+    formData.set("empresa_id", empresaId);
 
     startTransition(async () => {
-      const res =
-        props.mode === "criar"
-          ? await criarRegional(formData)
-          : await editarRegional(props.regional.id, formData);
+      const res = isEdit
+        ? await editarRegional(regional!.id, formData)
+        : await criarRegional(formData);
 
       if (!res.ok) {
         setError(res.message);
@@ -67,34 +73,20 @@ export function RegionalDrawer(props: Props) {
     });
   }
 
-  const initialNome = props.mode === "editar" ? props.regional.nome : "";
-  const title = props.mode === "criar" ? "Nova regional" : "Editar regional";
-  const submitLabel =
-    props.mode === "criar"
-      ? pending ? "Criando..." : "Criar regional"
-      : pending ? "Salvando..." : "Salvar";
+  const title = isEdit ? "Editar regional" : "Nova regional";
+  const submitLabel = isEdit
+    ? pending ? "Salvando..." : "Salvar"
+    : pending ? "Criando..." : "Criar regional";
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      {props.trigger && <DialogTrigger asChild>{props.trigger}</DialogTrigger>}
-      {props.mode === "criar" && !props.trigger && (
-        <DialogTrigger asChild>
-          <button
-            type="button"
-            className="inline-flex items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-sm font-medium text-white hover:bg-california-red/90 transition-colors"
-          >
-            <Plus className="h-4 w-4" />
-            Nova regional
-          </button>
-        </DialogTrigger>
-      )}
       <DrawerContent>
         <DialogHeader className="border-b border-border p-6">
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>
-            {props.mode === "criar"
-              ? "Regionais ficam disponíveis pra todos os jobs do tenant."
-              : "Renomear afeta todos os jobs já associados a esta regional."}
+            {isEdit
+              ? `Renomear afeta todos os jobs já associados a esta regional. Empresa: ${empresaNome}.`
+              : `Nova regional da empresa ${empresaNome}.`}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="flex-1 flex flex-col overflow-hidden">
@@ -107,7 +99,7 @@ export function RegionalDrawer(props: Props) {
                 autoFocus
                 required
                 maxLength={80}
-                defaultValue={initialNome}
+                defaultValue={regional?.nome ?? ""}
                 placeholder="Ex.: SP, Nordeste, Rio de Janeiro"
               />
               {fieldErrors.nome?.map((msg, i) => (
