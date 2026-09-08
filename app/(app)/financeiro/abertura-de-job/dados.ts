@@ -362,6 +362,16 @@ export async function listarFilaDeAbertura(
  * 0 novas · 0 removidas", e uma query por job seria N+1 na tela mais
  * movimentada do financeiro (docs/PERFORMANCE.md, anti-padrão I).
  */
+/** A errata que devolveu UM job ao mural — a página do job usa no modo
+ *  de revisão (decisão 059). */
+export async function revisaoDeErrata(
+  errataId: string,
+  tenantId: string,
+): Promise<RevisaoDeErrata | null> {
+  const mapa = await revisoesDeErrata([errataId], tenantId);
+  return mapa.get(errataId) ?? null;
+}
+
 async function revisoesDeErrata(
   errataIds: string[],
   tenantId: string,

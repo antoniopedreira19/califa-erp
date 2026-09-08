@@ -55,9 +55,10 @@ import {
   ordenarCompetencias,
   rateioLabel,
   type JobCompetencia,
+  type FotoDaAbertura,
 } from "@/lib/types";
 import type { ServicoOption } from "@/lib/data/servicos";
-import type { JobNaFila } from "../dados";
+import type { JobNaFila, RevisaoDeErrata } from "../dados";
 import { formatDataBr, formatPeriodo } from "../formatos";
 import {
   curvaFecha,
@@ -76,6 +77,10 @@ import {
   editarRegistroDaAbertura,
 } from "../actions";
 import { ReprovarDialog } from "../reprovar-dialog";
+import {
+  HistoricoDaAbertura,
+  ResumoDaAberturaAnterior,
+} from "./historico-abertura";
 import type { ProjetoFinanceiroOpcao } from "@/lib/data/projetos-financeiro";
 import type { ContaBancariaOpcao } from "@/lib/data/contas-bancarias";
 import { repartirPrevisao } from "@/lib/calculos/previsao-congelada";
@@ -162,15 +167,20 @@ interface LinhaPrevisaoForm {
 }
 
 /**
- * A mesma tela serve três momentos, como no protótipo:
+ * A mesma tela serve quatro momentos, como no protótipo:
  *
  *   * `abertura` — job na fila, tudo editável, termina em "Abrir job no
  *     financeiro" ou "Reprovar job";
  *   * `leitura`  — job já aberto, aba "Abertura do Job": o registro como
- *     foi confirmado, com o botão "Editar registro";
- *   * `edicao`   — o mesmo job aberto, destravado para salvar alterações.
+ *     foi confirmado, com o histórico das fotos e o botão "Editar
+ *     registro";
+ *   * `edicao`   — o mesmo job aberto, destravado para salvar alterações;
+ *   * `revisao`  — job devolvido ao mural por uma errata (decisão 059):
+ *     nasce EDITÁVEL, igual à abertura, mostra a abertura anterior no
+ *     topo e termina em "Registrar revisão de abertura" — que fecha a
+ *     revisão e devolve para a fila.
  */
-export type ModoAbertura = "abertura" | "leitura" | "edicao";
+export type ModoAbertura = "abertura" | "leitura" | "edicao" | "revisao";
 
 interface Props {
   job: JobNaFila;
@@ -218,6 +228,11 @@ interface Props {
   /** Quando e por quem o job foi aberto — o rodapé do modo leitura. */
   abertoEmLabel?: string | null;
   abertoPorNome?: string | null;
+  /** As fotos do registro, da abertura à última revisão (decisão 059).
+   *  Só chegam no job aberto. */
+  fotos?: FotoDaAbertura[];
+  /** A errata que devolveu o job ao mural — só no modo `revisao`. */
+  revisao?: RevisaoDeErrata | null;
 }
 
 function parseMoeda(texto: string): number {
@@ -301,13 +316,21 @@ export function AberturaForm({
   consumo,
   abertoEmLabel,
   abertoPorNome,
+  fotos = [],
+  revisao = null,
 }: Props) {
   const router = useRouter();
 
   // Modo leitura só destrava quando alguém clica em "Editar registro".
+  // A revisão já nasce destravada: reconferir a abertura depois de uma
+  // errata É editar, e pedir um clique a mais para isso era o que deixava
+  // o financeiro numa tela de leitura sem saber por quê (decisão 059).
   const [editando, setEditando] = React.useState(false);
+  const ehRevisao = modo === "revisao";
   const travado = modo === "leitura" && !editando;
-  const ehEdicao = modo === "edicao" || (modo === "leitura" && editando);
+  const ehEdicao =
+    modo === "edicao" || ehRevisao || (modo === "leitura" && editando);
+  const ultimaFoto = fotos.length > 0 ? fotos[fotos.length - 1] : null;
 
   const consumoCusto = consumo?.custo ?? 0;
   const consumoReceb = consumo?.recebimento ?? 0;
@@ -798,6 +821,28 @@ export function AberturaForm({
     });
   }
 
+  /**
+   * "Registrar revisão de abertura" — a mesma gravação da edição, mas o
+   * destino é a fila, como na abertura: quem revisa costuma ter mais de
+   * um job no mural, e a revisão fecha o ciclo da errata (decisão 059).
+   */
+  function confirmarRevisao() {
+    setErro(null);
+    startTransition(async () => {
+      const res = await editarRegistroDaAbertura(job.id, montarPayload());
+
+      if (!res.ok) {
+        setErro(res.message);
+        setConfirmarAberto(false);
+        return;
+      }
+
+      setConfirmarAberto(false);
+      router.push("/financeiro/abertura-de-job?aba=aguardando");
+      router.refresh();
+    });
+  }
+
   /** Desfaz a edição voltando tudo ao que veio do servidor. */
   function cancelarEdicao() {
     setErro(null);
@@ -873,37 +918,24 @@ export function AberturaForm({
       {/* ---------- Cabeçalho ---------- */}
       {/* Job já aberto, registro travado: a faixa conta quando e por quem
           a abertura foi confirmada, e é dela que sai o "Editar registro". */}
+      {/* A faixa virou o histórico (decisão 059): a abertura e cada
+          revisão ou edição depois dela, cada uma com o seu "Visualizar".
+          O "Editar registro" continua morando aqui. */}
       {travado && (
-        <div className="flex flex-wrap items-center gap-2.5 rounded-2xl border border-border bg-card px-[18px] py-3 shadow-soft">
-          <Lock className="h-3.5 w-3.5 text-muted-foreground" />
-          <span className="text-[12.5px] font-semibold">
-            Formulário de abertura · somente leitura
-          </span>
-          <span className="text-[12.5px] text-muted-foreground">
-            o registro como foi confirmado
-          </span>
-          <span className="ml-auto text-[12.5px] text-muted-foreground">
-            Aberto em{" "}
-            <span className="font-mono text-foreground">
-              {abertoEmLabel ?? "—"}
-            </span>
-            {abertoPorNome ? ` por ${abertoPorNome}` : ""}
-          </span>
-          <button
-            type="button"
-            onClick={() => setEditando(true)}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-3.5 py-[7px] text-[12.5px] font-semibold transition-colors hover:border-california-red hover:text-california-red"
-          >
-            <Pencil className="h-3.5 w-3.5" />
-            Editar registro
-          </button>
-        </div>
+        <HistoricoDaAbertura fotos={fotos} onEditar={() => setEditando(true)} />
+      )}
+
+      {/* Revisando depois de uma errata: a errata e a abertura anterior
+          no topo, com a foto inteira a um clique — é olhando para ela que
+          se reconfere o resto (decisão 059). */}
+      {ehRevisao && (
+        <ResumoDaAberturaAnterior foto={ultimaFoto} revisao={revisao} />
       )}
 
       {/* Editando um job já aberto: o aviso do que está em jogo. O que
           esta edição NÃO toca (data e usuário da abertura) está dito de
           propósito — é a dúvida que aparece na hora de salvar. */}
-      {modo !== "abertura" && ehEdicao && (
+      {modo !== "abertura" && ehEdicao && !ehRevisao && (
         <div className="flex flex-wrap items-center gap-2.5 rounded-2xl border border-california-red/30 bg-california-red/[0.04] px-[18px] py-3">
           <Pencil className="h-3.5 w-3.5 text-california-red" />
           <span className="text-[12.5px] font-semibold">
@@ -2310,7 +2342,26 @@ export function AberturaForm({
             {textoValidacao}
           </span>
           <div className="flex items-center gap-2.5">
-            {ehEdicao ? (
+            {ehRevisao ? (
+              <>
+                <Link
+                  href="/financeiro/abertura-de-job?aba=aguardando"
+                  prefetch={false}
+                  className="rounded-lg border border-border bg-white px-4 py-2.5 text-[13.5px] font-semibold transition-colors hover:bg-muted"
+                >
+                  Voltar para a fila
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => setConfirmarAberto(true)}
+                  disabled={!podeAbrir || pending}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-5 py-2.5 text-[13.5px] font-bold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                  <Check className="h-4 w-4" />
+                  Registrar revisão de abertura
+                </button>
+              </>
+            ) : ehEdicao ? (
               <>
                 <button
                   type="button"
@@ -2363,11 +2414,14 @@ export function AberturaForm({
               <CheckCircle2 className="h-5 w-5" />
             </div>
             <DialogTitle className="pt-4 text-[19px]">
-              Abrir {job.codigo} no financeiro?
+              {ehRevisao
+                ? `Registrar a revisão da abertura de ${job.codigo}?`
+                : `Abrir ${job.codigo} no financeiro?`}
             </DialogTitle>
             <DialogDescription className="text-[13.5px] leading-relaxed">
-              O job passa a existir no financeiro, aceita lançamentos e entra na
-              lista de jobs abertos. A data de abertura é registrada agora.
+              {ehRevisao
+                ? "As previsões de recebimento e de custo passam a valer como estão aqui, a revisão da errata fecha, e o envio de PPs e o faturamento voltam. A data e o usuário da abertura não mudam."
+                : "O job passa a existir no financeiro, aceita lançamentos e entra na lista de jobs abertos. A data de abertura é registrada agora."}
             </DialogDescription>
           </DialogHeader>
 
@@ -2377,7 +2431,11 @@ export function AberturaForm({
             <ResumoLinha rotulo="Categoria" valor={categoriaNome} />
             <ResumoLinha rotulo="Serviço" valor={servicoNome} />
             <ResumoLinha rotulo="Competência" valor={competenciaLabel} mono />
-            <ResumoLinha rotulo="Data de abertura" valor={agoraLabel} mono />
+            <ResumoLinha
+              rotulo="Data de abertura"
+              valor={ehRevisao ? (abertoEmLabel ?? "—") : agoraLabel}
+              mono
+            />
             <ResumoLinha
               rotulo="Recebimento"
               valor={
@@ -2433,12 +2491,18 @@ export function AberturaForm({
             </button>
             <button
               type="button"
-              onClick={confirmarAbertura}
+              onClick={ehRevisao ? confirmarRevisao : confirmarAbertura}
               disabled={pending}
               className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-[18px] py-2.5 text-[13.5px] font-bold text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
             >
               <Check className="h-4 w-4" />
-              {pending ? "Abrindo..." : "Sim, abrir job"}
+              {pending
+                ? ehRevisao
+                  ? "Registrando..."
+                  : "Abrindo..."
+                : ehRevisao
+                  ? "Sim, registrar revisão"
+                  : "Sim, abrir job"}
             </button>
           </div>
         </DialogContent>

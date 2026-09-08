@@ -82,3 +82,13 @@ financeiro — não. BV não mudou.
 > ele não precisar saber qual das duas portas fechou. A regra desta
 > decisão não mudou: em revisão, gerar segue e enviar não.
 | Quem encerra a revisão | `editarRegistroDaAbertura` (`financeiro/abertura-de-job/actions.ts`), como na 030 | — |
+
+## ⚠️ Nota de 2026-09-08 — a revisão da abertura mudou de cara
+
+O botão do resumo da errata chama-se **"Revisar abertura"**, o formulário
+que ele abre já vem **editável** (modo `revisao`), termina em **"Registrar
+revisão de abertura"** e devolve para a fila. A abertura anterior fica
+visível no topo, com a foto inteira a um clique. Quem encerra a revisão
+continua sendo `editarRegistroDaAbertura`, que agora audita como
+`job.abertura_revisada` e grava a foto. Ver
+[059](059-revisao-da-abertura-editavel-e-o-historico-das-fotos.md).

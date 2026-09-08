@@ -239,3 +239,13 @@ pulando a confirmação.
 `app/(app)/financeiro/contas-a-pagar/pp-drawer-financeiro.tsx` ainda
 aponta para `/jobs/[id]`. Não foi corrigido nesta rodada porque o arquivo
 tem commits do Antonio, e o Tiago preferiu não colidir com a frente dele.
+
+## ⚠️ Nota de 2026-09-08 — a edição deixou de ser só auditoria
+
+"Editar registro" continua existindo e continua sem mexer na data e no
+usuário da abertura. O que mudou: cada "Salvar alterações" agora deixa
+uma **foto** do registro em `jobs_aberturas`, listada na aba "Abertura do
+Job" como "Revisão N · edição do registro" — a decisão de 20/08 ("auditoria
+sim, bloco de histórico na tela não") foi revista pelo Tiago. E a faixa do
+topo, que era só "aberto em … por …", virou o histórico das fotos. Ver
+[059](059-revisao-da-abertura-editavel-e-o-historico-das-fotos.md).

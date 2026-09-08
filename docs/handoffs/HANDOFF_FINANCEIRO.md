@@ -42,7 +42,7 @@ desembolso. O job entrava "aberto" sem nada que o financeiro pudesse usar.
 | Rota | O que faz |
 |---|---|
 | `/financeiro/abertura-de-job` | fila dos jobs aguardando abertura, com busca e resumo. ⚠️ **27/08/2026 (decisão 030):** a fila passou a ter **duas coortes** — a faixa **Erratas**, com jobs JÁ ABERTOS que uma errata devolveu para reconferência (botão "Revisar abertura", que abre o resumo da errata), e a faixa **Aberturas novas**, a de sempre. As faixas só aparecem quando as duas existem. |
-| — resumo da errata | ⚠️ **Novo em 27/08/2026.** Descrição escrita pelo GP, faturamento e valor do job antes/depois, contagem de linhas afetadas, e "Prosseguir para abertura". |
+| — resumo da errata | ⚠️ **Novo em 27/08/2026.** Descrição escrita pelo GP, faturamento e valor do job antes/depois, contagem de linhas afetadas, e "Revisar abertura" (era "Prosseguir para abertura" até 08/09/2026 — decisão 059). |
 | — modal de conferência | dados vindos da produção, resumo real da planilha, observações, atalho para a Planilha Interna |
 | `/financeiro/abertura-de-job/[jobId]` | formulário de registro financeiro, com rodapé fixo que bloqueia até estar completo. ⚠️ **27/08/2026 (decisão 030):** **salvar aqui É o que encerra a revisão de uma errata** — limpa `jobs.abertura_em_revisao` e libera o envio para faturamento. Não há botão separado de "confirmar revisão". |
 | — depois de "Sim, abrir job" | ⚠️ **04/09/2026:** a confirmação volta para `/financeiro/abertura-de-job?aba=aguardando`, a fila. Antes ela empurrava para `/jobs/[id]?from=financeiro`, o detalhe do job no módulo Jobs — quem abre job costuma abrir vários em sequência e tinha de refazer o caminho de volta a cada um. É o mesmo destino que "Reprovar job" já usava. |
@@ -3650,3 +3650,33 @@ monta `${tipo.codigo} · ${subtipo.nome ?? tipo.nome}`.
 O `detalheBaixa` de `contas-a-receber/page.tsx` passou a devolver
 `{ conta, centro, subtipo }`, com `centro` = tipo e `subtipo` = nome do
 subtipo (ou `null`, que a tela mostra como `—`).
+
+## ⚠️ Nota de 2026-09-08 — a revisão da abertura e as fotos (decisão 059)
+
+- **`jobs_aberturas`**: uma foto por registro confirmado — a abertura
+  (nº 1) e cada revisão de errata ou edição livre. Imutável (sem
+  update/delete). Backfill: os 25 jobs já abertos ganharam a foto nº 1
+  reconstituída do estado do dia, marcada `reconstituida`.
+- **O mural chama "Revisar abertura"**, e o formulário abre editável
+  (modo `revisao` do `AberturaForm`), com a errata e a abertura anterior
+  na faixa do topo e "Ver abertura anterior". Termina em "Registrar
+  revisão de abertura" → confirmação → **volta para a fila**. A trava das
+  parcelas consumidas continua a mesma da edição.
+- **A aba "Abertura do Job" lista as fotos** com "Visualizar" cada uma
+  (`historico-abertura.tsx`). "Editar registro" continua, e agora também
+  gera foto ("Revisão N · edição do registro").
+- **Bug corrigido:** a tela lia `custo_previsto_total` (gravado na
+  abertura) em vez da planilha de hoje. Job aberto só com custo A que
+  recebia uma linha B por errata ficava com "nenhum item de calha PP" e
+  sem como montar a curva — o servidor exigia uma curva que a tela não
+  deixava criar. Agora `custoPrevisto` vem de `planilha_desembolso`.
+- **No cabeçalho da página**, em revisão, o selo "Somente leitura" dá
+  lugar a "Revisão da abertura pendente".
+- **Verificado ao vivo em 08/09/2026 no JOB-0008** ("Teste Orçamento",
+  em revisão desde a errata que incluiu "Produtor" em B): custo previsto
+  passou de R$ 0,00 para R$ 3.500,00 na tela, a curva apareceu e fechou,
+  o recebimento fechou em R$ 8.927,55, a revisão foi registrada, a página
+  voltou para a fila, o job saiu do mural, o fluxo de caixa mostra
+  R$ 3.500 de custo e R$ 8.927,55 de recebimento, e a aba lista "Abertura
+  (reconstituída)" e "Revisão 1 · errata" com as fotos abrindo. Uma
+  edição livre em seguida virou "Revisão 2 · edição do registro".
