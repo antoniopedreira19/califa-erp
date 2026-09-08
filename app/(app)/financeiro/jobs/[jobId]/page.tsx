@@ -308,7 +308,6 @@ export default async function JobNoFinanceiroPage({
                 imposto={totaisJob.imposto}
                 custoPlanejado={custoPlanejadoJob}
                 custoRealizado={custoRealizadoJob}
-                bvPlanejado={bvPlanejadoJob}
                 bvRealizado={bvRealizadoJob}
                 moeda={versaoAprovada.moeda}
               />

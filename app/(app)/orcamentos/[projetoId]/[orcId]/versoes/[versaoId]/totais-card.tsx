@@ -33,7 +33,7 @@ interface Props {
   itens: VersaoOrcamentoItem[];
   /** BV por id do item — a dedução da vista Líquido e a linha "+ BVs" do
    *  Resultado saem daqui. */
-  bvsPorItem: Record<string, ItemBv>;
+  bvsPorItem: Record<string, ItemBv[]>;
   /** Bruto ou Líquido (− BV). Tem que ser a MESMA dos grupos acima. */
   visao: VisaoBv;
   percentualHonorarios: number;
@@ -74,14 +74,13 @@ export function TotaisCard({
   const [colunasSave, setColunasSave] = React.useState(false);
   const quebrarPorSave = temSave && colunasSave;
 
-  // O planejado passa pelos blocos com BV: em `A` e `D` ele espelha o
-  // orçado, e na vista Líquido a comissão sai fora. O número aqui tem que
-  // ser o MESMO que os grupos somaram — por isso é a mesma função.
+  // O planejado passa pela MESMA função que os grupos somaram — duas
+  // implementações da mesma conta é como o subtotal e o total começam a
+  // divergir. Desde 08/09/2026 (decisão 062) o planejado é sempre o custo
+  // digitado, e o BV não desconta nada aqui: ele vive no realizado, que
+  // esta tela nem mostra.
   const blocosPorItem = new Map(
-    itens.map((it) => [
-      it.id,
-      blocosDoItem(it, bvsPorItem[it.id] ?? null, 0, percentualImposto),
-    ]),
+    itens.map((it) => [it.id, blocosDoItem(it, bvsPorItem[it.id] ?? [], 0)]),
   );
   const totais = somarBlocosDosItens([...blocosPorItem.values()]);
 
@@ -100,14 +99,14 @@ export function TotaisCard({
   // A base é o VALOR DO JOB, não o faturamento previsto: o custo planejado
   // inclui os itens pagos direto ao fornecedor, então a receita comparada
   // precisa incluí-los também.
-  // O BV entra como REDUÇÃO do custo na conta, e como linha somando na
-  // leitura — as duas escritas da mesma operação. Consequência de
-  // propósito: o Resultado dá o mesmo número nas duas vistas da chave.
-  const bvNoResultado = totais.planejado.deducaoBv;
+  // ⚠️ O BV saiu desta conta em 08/09/2026 (decisão 062). Ele entrava
+  // como redução do custo planejado e reaparecia como linha "+ BVs" — as
+  // duas escritas da mesma operação. Com o BV fora do planejado, somá-lo
+  // aqui faria o painel discordar da coluna PLANEJADO logo ao lado.
   const { resultadoOperacional, resultadoGeral } = calcularResultadoOperacional(
     valorJob,
     imposto,
-    totais.planejado.bruto - bvNoResultado,
+    totais.planejado.bruto,
   );
 
   return (
@@ -235,13 +234,6 @@ export function TotaisCard({
               value={totais.planejado.bruto}
               moeda={moeda}
             />
-            {bvNoResultado > 0 && (
-              <Linha
-                label="+ BVs (planejados, líquidos)"
-                value={bvNoResultado}
-                moeda={moeda}
-              />
-            )}
             <div className="mt-3 pt-3 border-t border-border flex items-baseline justify-between gap-3">
               <span className="text-sm font-semibold">
                 Resultado operacional

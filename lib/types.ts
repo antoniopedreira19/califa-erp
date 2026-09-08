@@ -510,6 +510,14 @@ export interface ItemBv {
   fornecedor_id: string | null;
   valor: number;
   prazo_repasse: string | null;
+  /** Alíquota do imposto DESTE BV, em pontos percentuais (19.53 =
+   *  19,53%). `null` enquanto se negocia; obrigatória para confirmar, que
+   *  é o envio ao contas a receber (decisão 062, 08/09/2026).
+   *
+   *  Não alimenta a planilha: o REALIZADO desconta o BV **bruto**. Ela
+   *  serve ao que o financeiro emite, e ao líquido que o formulário
+   *  mostra. Antes de 08/09/2026 a alíquota vinha do job. */
+  percentual_imposto: number | null;
   situacao: BvSituacao;
   created_by: string | null;
   created_at: string;

@@ -28,9 +28,11 @@ import { blocosDoItem, somarBlocosDosItens } from "@/lib/calculos/bv-planilha";
 interface Props {
   itens: ItemPlanilhaJob[];
   realizadosMap: Map<string, JobItemRealizado>;
-  /** BV por id do item da versão — a dedução da vista Líquido e a linha
-   *  "+ BVs" do painel Resultado saem daqui. */
-  bvsPorItem: Record<string, ItemBv>;
+  /** BVs por id do item da versão — a dedução da vista Líquido e a linha
+   *  "+ BVs" do painel Resultado saem daqui. LISTA desde 08/09/2026: um
+   *  item pode ter vários, e o realizado desconta a soma dos brutos que
+   *  já contam (decisão 062). */
+  bvsPorItem: Record<string, ItemBv[]>;
   /** Job já aberto pelo financeiro. Falso zera o REALIZADO — inclusive o
    *  dos tipos `A` e `D`, que fora isso espelhariam o orçado. */
   jobAberto: boolean;
@@ -116,9 +118,8 @@ export function JobTotaisCard({
       it.id,
       blocosDoItem(
         it,
-        bvsPorItem[it.id] ?? null,
+        bvsPorItem[it.id] ?? [],
         Number(realizadosMap.get(it.id)?.total_realizado ?? 0),
-        percentualImposto,
         jobAberto,
       ),
     ]),
@@ -251,7 +252,6 @@ export function JobTotaisCard({
           orcado={totais.orcadoRentabilidade}
           custoPlanejado={totais.planejado.bruto}
           custoRealizado={totais.realizado.bruto}
-          bvPlanejado={totais.planejado.deducaoBv}
           bvRealizado={totais.realizado.deducaoBv}
           honorarios={honorarios}
           taxaHonorarios={formatarTaxa(percentualHonorarios)}

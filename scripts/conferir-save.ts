@@ -252,24 +252,21 @@ const blocos = [
   // normal: 10.000 orçado, 8.000 planejado
   blocosDoItem(
     { tipo_custo: "B", total_orcado: 10000, total_planejado: 8000 },
-    null,
+    [],
     0,
-    19.53,
   ),
   // GERA save: 30.000 orçado, planejado zerado pelo trigger
   blocosDoItem(
     { tipo_custo: "B", total_orcado: 30000, total_planejado: 0, em_save: true },
-    null,
+    [],
     0,
-    19.53,
   ),
   // CONSOME save: 20.000 orçado, 16.000 planejado — linha normal para a
   // rentabilidade, porque o serviço acontece aqui.
   blocosDoItem(
     { tipo_custo: "B", total_orcado: 20000, total_planejado: 16000 },
-    null,
+    [],
     0,
-    19.53,
   ),
 ];
 const soma = somarBlocosDosItens(blocos);

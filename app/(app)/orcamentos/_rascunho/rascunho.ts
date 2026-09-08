@@ -84,8 +84,9 @@ export function comoItemDaVersao(
     quantidade_planejada: item.quantidade_planejada,
     dias_meses_planejado: item.dias_meses_planejado,
     total_planejado: totalPlanejadoDe(item),
-    // Rascunho não tem BV congelado: nada foi aprovado ainda, então a
-    // dedução é sempre calculada a partir do BV que está na tela.
+    // ⚠️ Coluna morta desde 08/09/2026 (decisão 062): o BV saiu do
+    // planejado, então não há mais congelamento. Fica aqui só porque o
+    // tipo do banco ainda a declara.
     bv_liquido_planejado: null,
     fornecedor_id: null,
     observacoes: null,
@@ -107,6 +108,9 @@ export function comoBvDaVersao(item: ItemRascunho): ItemBv | null {
     fornecedor_id: item.bv.fornecedor_id,
     valor: item.bv.valor,
     prazo_repasse: item.bv.prazo_repasse,
+    // O rascunho não pede alíquota: ela só é exigida no envio ao contas
+    // a receber, que acontece muito depois — o job nem existe ainda.
+    percentual_imposto: null,
     situacao: "a_negociar",
     created_by: null,
     created_at: "",

@@ -27,7 +27,13 @@ import { AREA_PRODUCAO } from "@/lib/types";
 // `pps-item.ts`: este arquivo puxa `logAuditEvent`, que puxa o client de
 // servidor, e a barra da planilha — que é client component — não pode
 // importar nada daqui.
-import { TIPOS_QUE_GERAM_PP } from "@/lib/calculos/pps-item";
+import {
+  TIPOS_QUE_GERAM_PP,
+  exigeSomaIgualAoOrcado,
+  faltaParaFecharOOrcado,
+  somaDasPPsNaoCanceladas,
+} from "@/lib/calculos/pps-item";
+import type { TipoCusto } from "@/lib/types";
 
 /** Uma âncora de item que ainda não disse se sai mais PP dela. */
 export interface ItemSemConclusao {
@@ -106,10 +112,18 @@ export async function aplicarConclusaoDoItem(
 
   const { data: atual, error: erroLeitura } = await supabase
     .from("jobs_itens_realizado")
-    .select("id, pps_concluidas_em")
+    .select(
+      "id, pps_concluidas_em, copia:jobs_itens_orcado!inner(tipo_custo, em_save, total_orcado)",
+    )
     .eq("id", itemRealizadoId)
     .eq("tenant_id", tenantId)
-    .maybeSingle<{ id: string; pps_concluidas_em: string | null }>();
+    .maybeSingle<{
+      id: string;
+      pps_concluidas_em: string | null;
+      copia:
+        | { tipo_custo: TipoCusto; em_save: boolean; total_orcado: number }
+        | Array<{ tipo_custo: TipoCusto; em_save: boolean; total_orcado: number }>;
+    }>();
 
   if (erroLeitura || !atual) {
     return { ok: false, message: "Item não encontrado na planilha do job." };
@@ -117,6 +131,51 @@ export async function aplicarConclusaoDoItem(
 
   const jaMarcado = atual.pps_concluidas_em !== null;
   if (jaMarcado === concluido) return { ok: true, mudou: false };
+
+  // A trava do `A · Repasse` (decisão 062): o item não fecha enquanto as
+  // PPs não cobrirem o orçado. Mora AQUI, e não em cada chamador, porque
+  // os três caminhos de marcação passam por esta função — o formulário da
+  // PP, o painel do item e o "Concluir PPs" da barra, que marca a
+  // planilha inteira de uma vez.
+  //
+  // O embed é `!inner` e 1:1, mas o PostgREST devolve objeto ou array
+  // conforme a inferência da FK: normalizar aqui evita a trava sumir em
+  // silêncio por ler `undefined`.
+  if (concluido) {
+    const copia = Array.isArray(atual.copia) ? atual.copia[0] : atual.copia;
+    if (
+      copia &&
+      exigeSomaIgualAoOrcado(copia.tipo_custo, copia.em_save === true)
+    ) {
+      const { data: pps } = await supabase
+        .from("pedidos_compra")
+        .select("valor, status")
+        .eq("item_realizado_id", itemRealizadoId)
+        .eq("tenant_id", tenantId);
+
+      const soma = somaDasPPsNaoCanceladas(
+        ((pps ?? []) as any[]).map((pp) => ({
+          valor: Number(pp.valor),
+          status: pp.status as string,
+        })),
+      );
+      const falta = faltaParaFecharOOrcado(
+        soma,
+        Number(copia.total_orcado ?? 0),
+      );
+      if (falta > 0) {
+        const brl = (n: number) =>
+          n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+        return {
+          ok: false,
+          message:
+            `Em custo A · Repasse o item só fecha quando as PPs cobrem o orçado. ` +
+            `"${itemNome}" tem ${brl(soma)} em PPs de um orçado de ` +
+            `${brl(Number(copia.total_orcado ?? 0))} — faltam ${brl(falta)}.`,
+        };
+      }
+    }
+  }
 
   const { error } = await supabase
     .from("jobs_itens_realizado")

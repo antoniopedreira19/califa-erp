@@ -293,11 +293,14 @@ export async function carregarDetalheDoJob(
   // desde 27/08/2026 essa chave é a única que existe em toda linha.
   // Objeto, e não Map, porque só objeto atravessa a fronteira server →
   // client.
-  const bvsPorItem: Record<string, ItemBv> = {};
+  const bvsPorItem: Record<string, ItemBv[]> = {};
   for (const raw of (bvsRes.data ?? []) as any[]) {
     const { copia: _joinFiltro, ...bv } = raw;
     if (!bv.job_item_orcado_id) continue;
-    bvsPorItem[bv.job_item_orcado_id] = { ...bv, valor: Number(bv.valor ?? 0) };
+    (bvsPorItem[bv.job_item_orcado_id] ??= []).push({
+      ...bv,
+      valor: Number(bv.valor ?? 0),
+    });
   }
   // `id` é o id da CÓPIA do job — a chave que o realizado, o BV, a PP e o
   // save usam. `orcado_id` carrega o mesmo valor e fica por compatibilidade;
@@ -543,9 +546,8 @@ export async function carregarDetalheDoJob(
     itens.map((it) =>
       blocosDoItem(
         it,
-        bvsPorItem[it.id] ?? null,
+        bvsPorItem[it.id] ?? [],
         Number(realizadosMap.get(it.id)?.total_realizado ?? 0),
-        Number(versaoAprovada.percentual_imposto),
         jobJaAberto,
       ),
     ),
@@ -693,12 +695,17 @@ export async function carregarDetalheDoJob(
     .filter((pp) => PP_STATUS_EM_ABERTO.includes(pp.status))
     .map((pp) => ({ codigo: pp.codigo, status: pp.status }));
   const nomeDoItem = new Map(itens.map((it) => [it.id, it.item]));
-  const bvsEmAberto = Object.entries(bvsPorItem)
-    .filter(([, bv]) => BV_SITUACAO_EM_ABERTO.includes(bv.situacao))
-    .map(([orcadoId, bv]) => ({
-      item: nomeDoItem.get(orcadoId) ?? "Item da planilha",
-      situacao: bv.situacao,
-    }));
+  // Um item pode ter vários BVs (decisão 062): cada um em aberto vira uma
+  // pendência própria no diálogo de encerramento, com o nome do item
+  // repetido — é o BV que trava, não o item.
+  const bvsEmAberto = Object.entries(bvsPorItem).flatMap(([orcadoId, bvs]) =>
+    bvs
+      .filter((bv) => BV_SITUACAO_EM_ABERTO.includes(bv.situacao))
+      .map((bv) => ({
+        item: nomeDoItem.get(orcadoId) ?? "Item da planilha",
+        situacao: bv.situacao,
+      })),
+  );
 
   // Itens de custo que ainda não disseram se sai mais PP (decisão 052).
   // Sai dos dados já carregados: a linha da planilha diz o tipo, e a

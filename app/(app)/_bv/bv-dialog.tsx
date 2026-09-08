@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { BadgePercent, Save, SendHorizonal, Trash2, X } from "lucide-react";
+import { BadgePercent, Plus, Save, SendHorizonal, Trash2, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Combobox } from "@/components/ui/combobox";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -48,8 +48,13 @@ export interface FornecedorOpcao {
  *  rascunho: lá o item ainda não tem id, e a linha em `itens_bv` só nasce
  *  no "Salvar orçamentos", depois que os itens existem. */
 export interface AdaptadorBv {
-  salvar: (itemId: string, formData: FormData) => Promise<ActionResult>;
-  cancelar: (itemId: string) => Promise<ActionResult>;
+  /** `bvId` ausente ⇒ BV novo na linha (decisão 062: vários por item). */
+  salvar: (
+    itemId: string,
+    formData: FormData,
+    bvId?: string | null,
+  ) => Promise<ActionResult>;
+  cancelar: (bvId: string) => Promise<ActionResult>;
   /** No-op no rascunho: o estado do React já é a fonte. */
   aposEscrita: () => void;
 }
@@ -88,12 +93,15 @@ interface Props {
   versaoLabel: string;
   categoriaNome: string | null;
   moeda: string;
-  bv: ItemBv | null;
+  /** TODOS os BVs ativos da linha. Um item pode ter vários desde
+   *  08/09/2026 (decisão 062), cada um com fornecedor, alíquota e
+   *  situação próprios. Lista vazia ⇒ o formulário abre criando o
+   *  primeiro. */
+  bvs: ItemBv[];
   fornecedores: FornecedorOpcao[];
-  /** Alíquota do job (`versoes_orcamento.percentual_imposto`), aplicada
-   *  sobre o valor do BV para chegar ao líquido — que é o único número
-   *  que a planilha subtrai. Multiplicação direta, não o gross-up do
-   *  fechamento da versão. */
+  /** Alíquota do job (`versoes_orcamento.percentual_imposto`). Serve só
+   *  de SUGESTÃO ao campo do BV novo — desde 08/09/2026 cada BV tem a
+   *  própria alíquota, e é ela que vale (decisão 062). */
   percentualImposto: number;
   /** Muda o rodapé e o terceiro bloco de valores. */
   origem: OrigemBv;
@@ -201,7 +209,7 @@ export function BvDialog({
   versaoLabel,
   categoriaNome,
   moeda,
-  bv,
+  bvs,
   fornecedores,
   percentualImposto,
   origem,
@@ -215,8 +223,9 @@ export function BvDialog({
   const acoes = React.useMemo<AdaptadorBv>(
     () =>
       adaptador ?? {
-        salvar: (itemId, formData) => salvarBv(itemId, formData, origem),
-        cancelar: (itemId) => cancelarBv(itemId, origem),
+        salvar: (itemId, formData, bvId) =>
+          salvarBv(itemId, formData, origem, bvId),
+        cancelar: (bvId) => cancelarBv(bvId, origem),
         aposEscrita: () => router.refresh(),
       },
     [adaptador, origem, router],
@@ -227,27 +236,55 @@ export function BvDialog({
 
   const [fornecedorId, setFornecedorId] = React.useState<string | null>(null);
   const [valorRaw, setValorRaw] = React.useState("");
+  const [aliquotaRaw, setAliquotaRaw] = React.useState("");
+
+  /** Qual BV da lista o formulário está editando. `null` = está criando
+   *  um BV novo, que é como a linha sem nenhum BV abre. */
+  const [selecionadoId, setSelecionadoId] = React.useState<string | null>(null);
 
   const noJob = origem === "job";
 
-  /** Sem BV na linha, o formulário está criando um — e todo BV nasce em
-   *  "A negociar". As páginas só entregam BVs ativos, então cancelado
-   *  nunca chega aqui. */
-  const situacaoAtual: BvSituacao = bv?.situacao ?? "a_negociar";
+  const bvSelecionado = React.useMemo(
+    () => bvs.find((b) => b.id === selecionadoId) ?? null,
+    [bvs, selecionadoId],
+  );
+
+  /** Criando um BV, o formulário está em branco — e todo BV nasce em "A
+   *  negociar". As páginas só entregam BVs ativos, então cancelado nunca
+   *  chega aqui. */
+  const situacaoAtual: BvSituacao = bvSelecionado?.situacao ?? "a_negociar";
 
   /** Confirmado já foi ao financeiro; recebido já teve baixa no contas a
-   *  receber. Nos dois casos ninguém altera mais nada. */
+   *  receber. Nos dois casos ninguém altera mais nada NESTE BV — os
+   *  outros da mesma linha seguem editáveis (decisão 062). */
   const travadoPorSituacao = situacaoAtual !== "a_negociar";
   const somenteLeitura = Boolean(readOnly) || travadoPorSituacao;
 
-  // Reabrir o formulário tem que trazer os valores do banco de volta, e
-  // um BV recém-cancelado não pode deixar resíduo no próximo item aberto.
+  // Abrir a linha seleciona o primeiro BV editável; não havendo nenhum, a
+  // lista abre no formulário de BV novo. Sem isto, uma linha só com BVs
+  // já confirmados abriria travada e sem caminho para lançar o próximo.
   React.useEffect(() => {
     if (!open) return;
-    setFornecedorId(bv?.fornecedor_id ?? null);
-    setValorRaw(paraEdicao(Number(bv?.valor ?? 0)));
+    const editavel = bvs.find((b) => b.situacao === "a_negociar");
+    setSelecionadoId(editavel?.id ?? bvs[0]?.id ?? null);
     setErro(null);
-  }, [open, bv]);
+  }, [open, bvs]);
+
+  // Trocar de BV na lista (ou voltar para "BV novo") tem que trazer os
+  // valores daquele BV — senão o formulário mostraria os do anterior.
+  React.useEffect(() => {
+    if (!open) return;
+    setFornecedorId(bvSelecionado?.fornecedor_id ?? null);
+    setValorRaw(paraEdicao(Number(bvSelecionado?.valor ?? 0)));
+    setAliquotaRaw(
+      bvSelecionado
+        ? bvSelecionado.percentual_imposto === null ||
+          bvSelecionado.percentual_imposto === undefined
+          ? ""
+          : String(bvSelecionado.percentual_imposto).replace(".", ",")
+        : "",
+    );
+  }, [open, bvSelecionado]);
 
   const totalOrcado = Number(item.total_orcado);
   const totalPlanejado = Number(item.total_planejado);
@@ -259,11 +296,27 @@ export function BvDialog({
   // Percentual sobre o orçado: é sobre esse total que o BV é negociado.
   const percentualBv = totalOrcado > 0 ? (valorBv / totalOrcado) * 100 : null;
 
-  // O que a California de fato recebe — e o único número que a planilha
-  // subtrai do item. Acompanha a digitação: o usuário vê o líquido mudar
-  // enquanto negocia, que é o ponto de mostrá-lo aqui.
-  const impostoBv = impostoDoBv(valorBv, percentualImposto);
-  const liquidoBv = bvLiquido(valorBv, percentualImposto);
+  // A alíquota deste BV. Vazia enquanto se negocia — aí não há imposto a
+  // mostrar, e o líquido é o próprio bruto até alguém informá-la.
+  const aliquotaDoBv = parseNumero(aliquotaRaw);
+  const temAliquota = aliquotaDoBv !== null;
+
+  // O que a California de fato recebe. Informativo desde 08/09/2026: o
+  // que a planilha subtrai do REALIZADO é o BRUTO (decisão 062).
+  // Acompanha a digitação — o usuário vê o líquido mudar enquanto
+  // negocia, que é o ponto de mostrá-lo aqui.
+  const impostoBv = temAliquota ? impostoDoBv(valorBv, aliquotaDoBv) : 0;
+  const liquidoBv = temAliquota ? bvLiquido(valorBv, aliquotaDoBv) : valorBv;
+
+  /** Soma dos BVs que já descontam o realizado — o número que a planilha
+   *  mostra na sub-linha. Só faz sentido com mais de um BV na linha. */
+  const somaQueDesconta = bvs.reduce(
+    (acc, b) =>
+      b.situacao === "confirmado" || b.situacao === "recebido"
+        ? acc + Number(b.valor ?? 0)
+        : acc,
+    0,
+  );
 
   const prazoRef = React.useRef<HTMLFormElement>(null);
 
@@ -274,9 +327,16 @@ export function BvDialog({
       setErro("Informe o valor do BV.");
       return null;
     }
+    if (aliquotaRaw.trim() !== "" && aliquotaDoBv === null) {
+      setErro("Alíquota inválida.");
+      return null;
+    }
     const formData = new FormData();
     if (fornecedorId) formData.set("fornecedor_id", fornecedorId);
     formData.set("valor", String(valor));
+    if (aliquotaDoBv !== null) {
+      formData.set("percentual_imposto", String(aliquotaDoBv));
+    }
     const prazo = prazoRef.current
       ? new FormData(prazoRef.current).get("prazo_repasse")
       : null;
@@ -293,7 +353,7 @@ export function BvDialog({
 
     setErro(null);
     startTransition(async () => {
-      const res = await acoes.salvar(item.id, formData);
+      const res = await acoes.salvar(item.id, formData, selecionadoId);
       if (!res.ok) {
         setErro(res.message);
         return;
@@ -314,6 +374,15 @@ export function BvDialog({
       setErro("Informe o valor do BV.");
       return;
     }
+    // A alíquota só é cobrada AQUI — é o envio ao contas a receber que
+    // precisa dela (decisão 062). Lançar e negociar o BV sem alíquota
+    // continua valendo.
+    if (aliquotaDoBv === null) {
+      setErro(
+        "Informe a alíquota do imposto antes de enviar o BV ao contas a receber.",
+      );
+      return;
+    }
     setErro(null);
     setAskConfirmar(true);
   }
@@ -327,13 +396,22 @@ export function BvDialog({
         setAskConfirmar(false);
         return;
       }
-      const salvo = await acoes.salvar(item.id, formData);
+      const salvo = await acoes.salvar(item.id, formData, selecionadoId);
       if (!salvo.ok) {
         setAskConfirmar(false);
         setErro(salvo.message);
         return;
       }
-      const res = await confirmarBv(item.id);
+      // O id vem do salvamento: num BV recém-criado ele só existe depois
+      // de gravar, e confirmar pelo id do item deixaria de funcionar com
+      // vários BVs na linha.
+      const alvo = selecionadoId ?? salvo.id;
+      if (!alvo) {
+        setAskConfirmar(false);
+        setErro("Não foi possível identificar o BV para confirmar.");
+        return;
+      }
+      const res = await confirmarBv(alvo);
       setAskConfirmar(false);
       if (!res.ok) {
         setErro(res.message);
@@ -345,8 +423,12 @@ export function BvDialog({
   }
 
   function handleRemover() {
+    if (!selecionadoId) {
+      setAskRemover(false);
+      return;
+    }
     startTransition(async () => {
-      const res = await acoes.cancelar(item.id);
+      const res = await acoes.cancelar(selecionadoId);
       setAskRemover(false);
       if (!res.ok) {
         setErro(res.message);
@@ -473,12 +555,86 @@ export function BvDialog({
 
               {/* Coluna direita — o BV propriamente dito. */}
               <div className="flex flex-col gap-4 bg-muted/30 px-6 py-5">
-                <div className="flex items-center gap-2">
-                  <BadgePercent className="h-4 w-4 text-california-red" />
-                  <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-foreground">
-                    BV do item
-                  </span>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <BadgePercent className="h-4 w-4 text-california-red" />
+                    <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-foreground">
+                      BV do item
+                    </span>
+                  </div>
+                  {bvs.length > 0 && (
+                    <span className="font-mono text-[11px] font-semibold text-muted-foreground">
+                      {bvs.length === 1 ? "1 BV" : `${bvs.length} BVs`}
+                    </span>
+                  )}
                 </div>
+
+                {/* A LISTA dos BVs da linha, no desenho do painel de PPs:
+                    um item pode ter vários desde 08/09/2026 (decisão 062),
+                    e cada um anda sozinho — tem fornecedor, alíquota e
+                    situação próprios, e é confirmado sozinho.
+
+                    Ela só aparece quando há BV lançado: numa linha vazia
+                    seria uma caixa vazia acima de um formulário que já é
+                    o caminho certo. */}
+                {bvs.length > 0 && (
+                  <div className="flex flex-col gap-1.5">
+                    {bvs.map((b) => {
+                      const ativo = b.id === selecionadoId;
+                      const nomeFornecedor =
+                        fornecedores.find((f) => f.id === b.fornecedor_id)
+                          ?.nome ?? "Sem fornecedor";
+                      return (
+                        <button
+                          key={b.id}
+                          type="button"
+                          onClick={() => {
+                            setSelecionadoId(b.id);
+                            setErro(null);
+                          }}
+                          className={cn(
+                            "flex items-center justify-between gap-3 rounded-xl border px-3 py-2 text-left transition-colors",
+                            ativo
+                              ? "border-foreground bg-white shadow-[0_1px_2px_rgba(0,0,0,0.06)]"
+                              : "border-border bg-white/60 hover:border-[#d7d7d7]",
+                          )}
+                        >
+                          <span className="flex min-w-0 flex-col gap-0.5">
+                            <span className="truncate text-[12.5px] font-semibold text-foreground">
+                              {nomeFornecedor}
+                            </span>
+                            <span className="font-mono text-[11px] text-muted-foreground">
+                              {formatCurrency(Number(b.valor ?? 0), moeda)}
+                            </span>
+                          </span>
+                          <PilulaSituacao situacao={b.situacao} />
+                        </button>
+                      );
+                    })}
+
+                    {/* "Novo BV" é o que permite somar uma comissão depois
+                        de outra já confirmada — o caso que motivou a
+                        lista. Fica fora quando a tela é de consulta. */}
+                    {!readOnly && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelecionadoId(null);
+                          setErro(null);
+                        }}
+                        className={cn(
+                          "flex items-center justify-center gap-1.5 rounded-xl border border-dashed px-3 py-2 text-[12.5px] font-semibold transition-colors",
+                          selecionadoId === null
+                            ? "border-california-red bg-california-red/5 text-california-red"
+                            : "border-border text-muted-foreground hover:border-california-red/40 hover:text-california-red",
+                        )}
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        Novo BV
+                      </button>
+                    )}
+                  </div>
+                )}
 
                 <div className="flex flex-col gap-1.5">
                   <label
@@ -560,32 +716,60 @@ export function BvDialog({
                     Prazo de repasse
                   </span>
                   <DatePicker
+                    // `key` força o DatePicker a remontar ao trocar de BV
+                    // na lista: ele lê o valor só no defaultValue, e sem
+                    // isto a data do BV anterior ficaria na tela.
+                    key={selecionadoId ?? "novo"}
                     name="prazo_repasse"
-                    defaultValue={bv?.prazo_repasse ?? ""}
+                    defaultValue={bvSelecionado?.prazo_repasse ?? ""}
                     disabled={somenteLeitura || pending}
                     placeholder="Selecione a data"
                     className="rounded-xl"
                   />
                 </div>
 
-                {/* O corpo termina na conta: quanto do BV vira imposto e
-                    quanto de fato volta para a California. O líquido é o
-                    ÚNICO número que a planilha subtrai do item — por isso
-                    ele fecha o formulário, em vez de ficar implícito. */}
+                {/* A alíquota é DIGITADA desde 08/09/2026 (decisão 062).
+                    Ela pode ficar vazia enquanto se negocia — quem a cobra
+                    é o Confirmar, que é o envio ao contas a receber. E ela
+                    não mexe mais na planilha: o realizado desconta o
+                    BRUTO. */}
                 <div className="flex flex-col gap-1.5">
-                  <span className="text-[13px] font-semibold text-foreground">
+                  <label
+                    htmlFor="bv-aliquota"
+                    className="text-[13px] font-semibold text-foreground"
+                  >
                     Impostos
-                  </span>
-                  <div className="flex items-center justify-between gap-2.5 rounded-xl border border-border bg-muted/50 px-3.5 py-2.5">
-                    <span className="font-mono text-sm font-semibold text-foreground">
-                      {formatarAliquota(percentualImposto)}
+                    {noJob && (
+                      <span className="ml-1 text-california-red">*</span>
+                    )}
+                  </label>
+                  <div
+                    className={cn(
+                      "flex items-center gap-2.5 rounded-xl border border-border bg-white px-3.5 py-2.5 transition-colors",
+                      "focus-within:border-foreground focus-within:ring-[3px] focus-within:ring-foreground/[0.07]",
+                      somenteLeitura && "opacity-70",
+                    )}
+                  >
+                    <input
+                      id="bv-aliquota"
+                      inputMode="decimal"
+                      value={aliquotaRaw}
+                      onChange={(e) => setAliquotaRaw(e.target.value)}
+                      disabled={somenteLeitura || pending}
+                      placeholder={formatarAliquota(percentualImposto)}
+                      className="min-w-0 flex-1 bg-transparent font-mono text-sm font-semibold text-foreground outline-none placeholder:font-normal placeholder:text-muted-foreground/60"
+                    />
+                    <span className="font-mono text-[13px] text-muted-foreground">
+                      %
                     </span>
                     <span className="whitespace-nowrap font-mono text-sm text-muted-foreground">
                       − {formatCurrency(impostoBv, moeda)}
                     </span>
                   </div>
                   <span className="text-[11.5px] leading-relaxed text-muted-foreground">
-                    Alíquota configurada no job, aplicada sobre o valor do BV.
+                    {temAliquota
+                      ? "Alíquota deste BV, aplicada sobre o valor dele."
+                      : `Em branco usa a do job (${formatarAliquota(percentualImposto)}) só como referência. Obrigatória para enviar ao contas a receber.`}
                   </span>
                 </div>
 
@@ -606,14 +790,23 @@ export function BvDialog({
                       ? situacaoAtual === "recebido"
                         ? "Já teve baixa no contas a receber — nada mais muda neste BV."
                         : "Já foi enviado ao financeiro — nada mais muda neste BV."
-                      : "É este o valor que a planilha desconta do item na vista Líquido."}
+                      : "É o que sobra da comissão depois do imposto. A planilha desconta o valor BRUTO do realizado."}
                   </span>
+                  {somaQueDesconta > 0 && (
+                    <span className="text-[11.5px] leading-relaxed text-muted-foreground">
+                      Este item já desconta{" "}
+                      <strong className="font-semibold text-foreground">
+                        {formatCurrency(somaQueDesconta, moeda)}
+                      </strong>{" "}
+                      do realizado, somando os BVs confirmados.
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
 
             <div className="flex items-center justify-between gap-4 border-t border-border bg-card px-6 py-4">
-              {bv && !somenteLeitura ? (
+              {bvSelecionado && !somenteLeitura ? (
                 <button
                   type="button"
                   onClick={() => setAskRemover(true)}

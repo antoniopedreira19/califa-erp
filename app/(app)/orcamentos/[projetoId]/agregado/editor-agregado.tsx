@@ -79,8 +79,7 @@ import {
   ExportarOrcamentosMenu,
   type OrcamentoExportavel,
 } from "../../_selecao/exportar-orcamentos-menu";
-import { VISAO_BV_PADRAO, type VisaoBv } from "@/lib/calculos/bv-planilha";
-import { ChaveBrutoLiquido } from "@/app/(app)/_planilha/chave-bruto-liquido";
+import { type VisaoBv } from "@/lib/calculos/bv-planilha";
 import type { EstadoSaveDaLinha } from "@/app/(app)/_planilha/save-coluna";
 import { SAVE_VAZIO } from "@/app/(app)/_planilha/save-coluna";
 import { SaveDialog, type LinhaDoSave } from "@/app/(app)/_planilha/save-dialog";
@@ -179,7 +178,11 @@ export function EditorAgregado({
   const router = useRouter();
   // Uma chave para a página inteira, como na tela da versão: vários
   // orçamentos na mesma tela em modos diferentes não teriam leitura.
-  const [visao, setVisao] = React.useState<VisaoBv>(VISAO_BV_PADRAO);
+  // ⚠️ FIXA em "bruto" desde 08/09/2026 (decisão 062). O BV saiu do
+  // planejado, então nesta tela as duas vistas dariam o mesmo número — e
+  // a chave que as alternava foi removida daqui. Deixar em "líquido"
+  // manteria o rótulo "Total líquido" numa coluna que não deduz nada.
+  const visao: VisaoBv = "bruto";
   // A coluna Save nasce aberta em quem já usa save e fechada em quem
   // nunca usou — a mesma regra da planilha da versão. Estado da PÁGINA:
   // os cards e o Totais dividem a leitura.
@@ -851,9 +854,9 @@ export function EditorAgregado({
           (26px) + o gap. Mesmo arranjo da tela da versão individual. */}
       <div className="flex flex-col gap-6 pr-[154px]">
       <div className="flex flex-col gap-4">
-        <div className="flex justify-end">
-          <ChaveBrutoLiquido visao={visao} onChange={setVisao} />
-        </div>
+        {/* ⚠️ A chave Bruto ⇄ Líquido saiu daqui em 08/09/2026 (decisão
+            062), pelo mesmo motivo da tela da versão: o BV passou a
+            descontar só o REALIZADO, e o rascunho não tem realizado. */}
         {visiveis.map((orc) => {
           const codigo = codigos.get(orc.id) ?? "";
           const bloqueio = orc.origemBanco?.bloqueio ?? null;

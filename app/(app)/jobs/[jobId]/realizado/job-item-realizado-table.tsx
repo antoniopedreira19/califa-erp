@@ -151,7 +151,7 @@ interface Props {
   jobEmpresaId: string;
   jobResponsavelId: string;
   /** BV por id do item da versão. Só existe em item tipo A, AR ou D. */
-  bvsPorItem: Record<string, ItemBv>;
+  bvsPorItem: Record<string, ItemBv[]>;
   /** "v5" — aparece no subtítulo do formulário de BV. */
   versaoLabel: string;
   /** BASE do rótulo do pé da tabela. A vista Líquido acrescenta o sufixo
@@ -617,14 +617,15 @@ export function JobItemRealizadoTable({
   /**
    * Os três blocos de UMA linha, já com a dedução de BV separada.
    *
-   * - **Orçado** nunca recebe BV: é idêntico nas duas vistas.
-   * - **Planejado** deduz o BV CONGELADO no envio para abertura
-   *   (`bv_liquido_planejado`). Editar o BV depois, aqui na planilha, não
-   *   mexe nele — o compromisso do planejado já foi fechado. O valor novo
-   *   só reaparece no realizado, e só na confirmação.
-   * - **Realizado** deduz o BV vigente, e só a partir de `confirmado`.
-   *   Enquanto ele está `a_negociar` a linha diz "BV não emitido" em vez
-   *   de deduzir zero — que pareceria "não tem BV".
+   * - **Orçado** nunca recebeu BV: é idêntico nas duas vistas.
+   * - **Planejado** também não recebe mais, desde 08/09/2026 (decisão
+   *   062). Ele é o custo que o GP registrou, e só isso — a comissão
+   *   entra onde ela acontece, que é no realizado. Com isso caiu o
+   *   congelamento do BV na aprovação: não havia mais o que congelar.
+   * - **Realizado** deduz a SOMA dos BVs `confirmado` e `recebido` da
+   *   linha, pelo valor BRUTO. Havendo BV ainda `a_negociar`, a linha diz
+   *   "BV não emitido" em vez de deduzir zero — que pareceria "não tem
+   *   BV".
    */
   const blocosPorItem = React.useMemo(() => {
     const mapa = new Map<string, ReturnType<typeof blocosDoItem>>();
@@ -633,15 +634,14 @@ export function JobItemRealizadoTable({
         it.id,
         blocosDoItem(
           it,
-          bvsPorItem[it.id] ?? null,
+          bvsPorItem[it.id] ?? [],
           Number(realizadosMap.get(it.id)?.total_realizado ?? 0),
-          percentualImposto,
           !preAbertura,
         ),
       );
     }
     return mapa;
-  }, [todosOsItens, bvsPorItem, realizadosMap, percentualImposto, preAbertura]);
+  }, [todosOsItens, bvsPorItem, realizadosMap, preAbertura]);
 
   const BLOCO_VAZIO = {
     orcado: 0,
@@ -1674,7 +1674,7 @@ export function JobItemRealizadoTable({
                   }
 
                   // ---- BV: tipos A, AR e D ----
-                  const bv = bvsPorItem[item.id] ?? null;
+                  const bvsDaLinha = bvsPorItem[item.id] ?? [];
                   // Sem BV num job congelado não há o que consultar — a
                   // vaga fica vazia para não desalinhar as de baixo.
                   // Linha em save não tem fornecedor neste job: sem BV a
@@ -1685,9 +1685,11 @@ export function JobItemRealizadoTable({
                   const mostraBv =
                     !emSave &&
                     aceitaBV(item.tipo_custo) &&
-                    (podeAcoes || (!preAbertura && bv !== null));
-                  const travado =
-                    !podeAcoes || (bv !== null && bv.situacao !== "a_negociar");
+                    (podeAcoes || (!preAbertura && bvsDaLinha.length > 0));
+                  // Com vários BVs na linha (decisão 062), um confirmado
+                  // não fecha a porta: o que trava a calha é o job não
+                  // aceitar ações. Cada BV se defende sozinho lá dentro.
+                  const travado = !podeAcoes;
 
                   // ---- PP: tipos de calha PP (AR, B, C, F, FI) ----
                   // Job congelado não gera nem consulta PP na planilha: a
@@ -1706,7 +1708,7 @@ export function JobItemRealizadoTable({
                         bv={
                           mostraBv
                             ? acaoBv({
-                                temBv: bv !== null,
+                                temBv: bvsDaLinha.length > 0,
                                 itemNome: item.item,
                                 somenteLeitura: travado,
                                 onClick: () => setBvAberto(item),
@@ -1941,7 +1943,7 @@ export function JobItemRealizadoTable({
                   : null
               }
               moeda={moeda}
-              bv={bvsPorItem[bvAberto.id] ?? null}
+              bvs={bvsPorItem[bvAberto.id] ?? []}
               fornecedores={fornecedores.map((f) => ({
                 id: f.id,
                 nome: f.razao_social ?? f.nome,

@@ -20,7 +20,6 @@
 
 import * as React from "react";
 import type { ItemPlanilhaJob, TipoCusto } from "@/lib/types";
-import { planejadoEspelhaOrcado } from "@/lib/calculos/bv-planilha";
 
 /** Campos que a errata abre para edição: os três do bloco Orçado e, desde
  *  07/09/2026 (decisão 054), os três do bloco Planejado. */
@@ -374,21 +373,12 @@ export function useRascunhoErrata(
   const travaDoPlanejado = React.useCallback(
     (chave: string): string | null => {
       const nova = novas.find((n) => n.chave === chave);
-      if (nova) {
-        if (nova.vermelha) return null;
-        if (planejadoEspelhaOrcado(nova.tipo)) {
-          return "Em custo A e D o planejado espelha o orçado.";
-        }
-        return null;
-      }
+      if (nova) return null;
       const salvo = salvosPorId.get(chave);
       const e = edicoes[chave];
       if (!salvo || !e) return "Linha fora da errata.";
       if (salvo.linha_vermelha) return null;
       if (salvo.em_save) return "Linha em save não tem planejado.";
-      if (planejadoEspelhaOrcado(e.tipo)) {
-        return "Em custo A e D o planejado espelha o orçado.";
-      }
       if (!orcadoDifere(e, salvo)) {
         return "O planejado só abre depois de corrigir o orçado desta linha.";
       }
@@ -421,14 +411,12 @@ export function useRascunhoErrata(
         const unit = numeroDe(e.unitario, 0);
         const qtd = numeroDe(e.quantidade, 0);
         const dm = numeroDe(e.diasMeses, 0);
-        // O planejado segue a mesma regra que o banco vai aplicar: em
-        // `A`/`D` é o espelho do orçado (trigger); liberado, é o que foi
-        // digitado; nos demais casos fica como está salvo.
+        // O planejado segue a mesma regra que o banco vai aplicar:
+        // liberado, é o que foi digitado; nos demais casos fica como está
+        // salvo. O espelho de `A`/`D` saiu em 08/09/2026 (decisão 062).
         const plan = i.em_save
           ? { u: 0, q: 0, d: 0 }
-          : planejadoEspelhaOrcado(e.tipo)
-            ? { u: unit, q: qtd, d: dm }
-            : travaDoPlanejado(i.id) === null
+          : travaDoPlanejado(i.id) === null
               ? {
                   u: numeroDe(e.planUnitario, 0),
                   q: numeroDe(e.planQuantidade, 0),
@@ -458,16 +446,15 @@ export function useRascunhoErrata(
       const qtd = n.vermelha ? 1 : numeroDe(n.quantidade, 0);
       const dm = n.vermelha ? 1 : numeroDe(n.diasMeses, 0);
       // A linha nova tem orçado novo por definição, então o planejado dela
-      // abre junto (decisão 054). Vermelha fica zerada; `A`/`D` espelham.
+      // abre junto (decisão 054). Só a vermelha fica zerada — o espelho de
+      // `A`/`D` saiu em 08/09/2026 (decisão 062).
       const plan = n.vermelha
         ? { u: 0, q: 0, d: 0 }
-        : planejadoEspelhaOrcado(n.tipo)
-          ? { u: unit, q: qtd, d: dm }
-          : {
-              u: numeroDe(n.planUnitario, 0),
-              q: numeroDe(n.planQuantidade, 0),
-              d: numeroDe(n.planDiasMeses, 0),
-            };
+        : {
+            u: numeroDe(n.planUnitario, 0),
+            q: numeroDe(n.planQuantidade, 0),
+            d: numeroDe(n.planDiasMeses, 0),
+          };
       return {
         id: n.chave,
         orcado_id: n.chave,

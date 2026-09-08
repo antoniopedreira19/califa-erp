@@ -23,7 +23,6 @@ import type {
   VersaoOrcamentoItem,
 } from "@/lib/types";
 import { aceitaBV } from "@/lib/calculos/versao-totais";
-import { bvLiquido, planejadoEspelhaOrcado } from "@/lib/calculos/bv-planilha";
 
 export type ActionResult =
   | { ok: true; id?: string }
@@ -1132,28 +1131,14 @@ export async function atualizarCampoItem(
     if (bloqueio) return { ok: false, message: bloqueio };
   }
 
-  // `A` e `D`: o planejado ESPELHA o orçado e não é digitado. A tela já
-  // trava as células, mas Server Action é endpoint — sem esta guarda a
-  // escrita seguiria alcançável pelo console do navegador, e o item
-  // ficaria com um planejado que a planilha não mostra.
-  const tipoDepois = (
-    campo === "tipo_custo" ? String(parsed.data) : item.tipo_custo
-  ) as TipoCusto;
-  const espelha = planejadoEspelhaOrcado(tipoDepois);
-
-  if (espelha && CAMPOS_PLANEJADO_DO_ITEM.includes(campo)) {
-    return {
-      ok: false,
-      message:
-        "Em custo A e D o planejado acompanha o orçado — não é digitado.",
-    };
-  }
-
-  // Quem GRAVA o espelho é o trigger `trg_planejado_espelha_orcado`, no
-  // Postgres — são seis caminhos de escrita diferentes chegando nesta
-  // tabela, e replicar a conta em cada um é como ela se perde. Aqui fica
-  // só a recusa, que é o que devolve uma mensagem em português ao usuário
-  // em vez de um erro de banco.
+  // ⚠️ Aqui ficava a recusa de gravar planejado em item `A`/`D`, que
+  // espelhava o orçado. Ela saiu em 08/09/2026 (decisão 062): os dois
+  // tipos voltaram a ter planejado digitado, como o `AR` sempre teve.
+  //
+  // O que continua valendo é o zeramento da linha em SAVE, e ele mora no
+  // trigger `trg_planejado_espelha_orcado` — são seis caminhos de escrita
+  // chegando nesta tabela, e replicar a regra em cada um é como ela se
+  // perde.
   const { error } = await supabase
     .from("versoes_orcamento_itens")
     .update({ [campo]: parsed.data })
@@ -1310,39 +1295,21 @@ export async function aprovarVersao(versaoId: string): Promise<ActionResult> {
 
   const agora = new Date().toISOString();
 
-  // 3b. CONGELA o BV de cada item no planejado.
+  // 3b. ⚠️ O CONGELAMENTO DO BV NO PLANEJADO SAIU EM 08/09/2026.
   //
-  // Depois da aprovação o BV continua editável — mas na planilha do JOB,
-  // e lá ele já não pode mexer no planejado: o planejado é o compromisso
-  // que o financeiro confere e abre. Sem este congelamento, editar o BV
-  // no job reescreveria retroativamente o custo planejado da versão
-  // aprovada. O valor novo se materializa no REALIZADO, e só quando
-  // confirmado (docs/decisions/022).
+  // Entre 21/08 e 08/09/2026 a aprovação gravava
+  // `versoes_orcamento_itens.bv_liquido_planejado`, para que editar o BV
+  // depois — já na planilha do job — não reescrevesse retroativamente o
+  // custo planejado da versão aprovada (decisão 022 §3).
   //
-  // Falhar aqui NÃO aborta a aprovação: sem o congelamento a conta cai no
-  // cálculo ao vivo, que dá o mesmo número enquanto ninguém mexer no BV.
-  // Derrubar uma aprovação por causa disso seria pior que o defeito.
-  const { data: bvsDaVersao, error: errBvs } = await supabase
-    .from("itens_bv")
-    .select("valor, item_versao_id, item:versoes_orcamento_itens!inner(versao_orcamento_id)")
-    .eq("item.versao_orcamento_id", versaoId)
-    .eq("tenant_id", session.activeTenant.id)
-    .neq("situacao", "cancelado");
-
-  if (errBvs) {
-    console.error("[versao.aprovar.bv_congelar]", errBvs.message);
-  } else {
-    const taxa = Number(versao.percentual_imposto);
-    await Promise.all(
-      (bvsDaVersao ?? []).map((b: any) =>
-        supabase
-          .from("versoes_orcamento_itens")
-          .update({ bv_liquido_planejado: bvLiquido(Number(b.valor ?? 0), taxa) })
-          .eq("id", b.item_versao_id)
-          .eq("tenant_id", session.activeTenant.id),
-      ),
-    );
-  }
+  // A decisão 062 tirou o BV do planejado: ele desconta só o REALIZADO.
+  // Sem dedução no planejado não há o que congelar, e insistir no
+  // congelamento seria pior que inútil — desde a 062 um item pode ter
+  // VÁRIOS BVs, cada um com alíquota própria, e o valor único desta
+  // coluna não representaria nenhum deles.
+  //
+  // A coluna continua no banco com o que já foi congelado antes da
+  // mudança. É histórico, e ninguém mais a lê.
 
   // 4. Update versão (dispara trigger cascata pras outras versões)
   const { error: errUpdVer } = await supabase

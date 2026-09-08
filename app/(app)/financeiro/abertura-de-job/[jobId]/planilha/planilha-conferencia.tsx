@@ -42,7 +42,7 @@ interface Props {
   itensPorGrupo: Map<string, ItemPlanilhaJob[]>;
   realizadosMap: Map<string, JobItemRealizado>;
   categoriasMap: Map<string, string>;
-  bvsPorItem: Record<string, ItemBv>;
+  bvsPorItem: Record<string, ItemBv[]>;
   /** Save por linha, só leitura: o financeiro precisa ver POR QUE o
    *  faturamento previsto e o valor do job vieram diferentes. Vazio em
    *  job sem save, e aí a coluna nem aparece. */

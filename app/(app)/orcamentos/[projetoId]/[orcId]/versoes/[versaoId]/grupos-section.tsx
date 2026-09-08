@@ -12,7 +12,6 @@ import { AcoesDoGrupo, NomeDoGrupo } from "./grupo-linha";
 import type { FornecedorOpcao } from "@/app/(app)/_bv/bv-dialog";
 import type { VisaoBv } from "@/lib/calculos/bv-planilha";
 import { cn } from "@/lib/utils";
-import { ChaveBrutoLiquido } from "@/app/(app)/_planilha/chave-bruto-liquido";
 import { MenuExibirColunas } from "@/app/(app)/_planilha/exibir-colunas";
 import type { EstadoSaveDaLinha } from "@/app/(app)/_planilha/save-coluna";
 import {
@@ -32,15 +31,16 @@ interface Props {
   moeda: string;
   /** Alíquota da versão — vira o BV líquido da vista Líquido. */
   percentualImposto: number;
-  /** Bruto ou Líquido (− BV). O estado mora em `PlanilhaVersao`, acima
-   *  daqui, porque o card de Totais precisa da MESMA vista. */
+  /** Bruto ou Líquido (− BV). Fixa em "bruto" nesta tela desde
+   *  08/09/2026 (decisão 062) — o BV saiu do planejado e a chave que a
+   *  alternava foi removida daqui. A prop continua porque o card de
+   *  Totais precisa da MESMA vista, e a planilha do job ainda alterna. */
   visao: VisaoBv;
-  onMudarVisao: (v: VisaoBv) => void;
   readOnly?: boolean;
   categorias: Categoria[];
   /** BV por id do item — indexado, e não Map, porque Map não atravessa a
    *  fronteira server → client. */
-  bvsPorItem: Record<string, ItemBv>;
+  bvsPorItem: Record<string, ItemBv[]>;
   fornecedores: FornecedorOpcao[];
   versaoLabel: string;
   /** Gatilho de "Novo grupo" — desce até a linha tracejada no pé da
@@ -63,7 +63,6 @@ export function GruposSection({
   moeda,
   percentualImposto,
   visao,
-  onMudarVisao,
   readOnly,
   categorias,
   bvsPorItem,
@@ -114,7 +113,11 @@ export function GruposSection({
               onChange={onAlternarSavePadrao}
             />
           )}
-          <ChaveBrutoLiquido visao={visao} onChange={onMudarVisao} />
+          {/* ⚠️ A chave Bruto ⇄ Líquido saiu daqui em 08/09/2026
+              (decisão 062). O BV deixou de descontar o PLANEJADO e passou
+              a descontar só o REALIZADO — que não existe nesta tela.
+              Clicar nela não mudaria número nenhum. Ela continua nas
+              telas do job, que é onde o realizado vive. */}
           <MenuExibirColunas
             blocos={[
               // Save só entra quando a tela sabe ligar e desligar a

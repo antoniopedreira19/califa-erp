@@ -138,7 +138,6 @@ export default async function ProjetoNoFinanceiroPage({
       // card de Totais da aba (docs/decisions/022).
       planejado: acc.planejado + j.planejado.bruto,
       realizado: acc.realizado + j.realizado.bruto,
-      bvPlanejado: acc.bvPlanejado + j.planejado.deducaoBv,
       bvRealizado: acc.bvRealizado + j.realizado.deducaoBv,
     }),
     {
@@ -146,7 +145,6 @@ export default async function ProjetoNoFinanceiroPage({
       imposto: 0,
       planejado: 0,
       realizado: 0,
-      bvPlanejado: 0,
       bvRealizado: 0,
     },
   );
@@ -189,7 +187,6 @@ export default async function ProjetoNoFinanceiroPage({
                 imposto={resumo.imposto}
                 custoPlanejado={resumo.planejado}
                 custoRealizado={resumo.realizado}
-                bvPlanejado={resumo.bvPlanejado}
                 bvRealizado={resumo.bvRealizado}
                 moeda={moedaProjeto}
               />

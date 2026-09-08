@@ -227,13 +227,16 @@ for (const linha of linhasView as any[]) {
         Number(r.total_realizado ?? 0),
     );
   }
-  const bvPorItem = new Map<string, BvParaConta>();
+  // Vários BVs por item desde 08/09/2026 (decisão 062): a conferência
+  // precisa somá-los, senão ela valida uma conta que o produto não faz.
+  const bvPorItem = new Map<string, BvParaConta[]>();
   for (const b of bvs) {
     if (!b.job_item_orcado_id) continue;
-    bvPorItem.set(b.job_item_orcado_id, {
-      valor: Number(b.valor ?? 0),
-      situacao: b.situacao,
-    });
+    const chave = b.job_item_orcado_id as string;
+    const lista = bvPorItem.get(chave);
+    const bv = { valor: Number(b.valor ?? 0), situacao: b.situacao };
+    if (lista) lista.push(bv);
+    else bvPorItem.set(chave, [bv]);
   }
 
   const blocos = itens.map((it) => {
@@ -241,17 +244,13 @@ for (const linha of linhasView as any[]) {
       tipo_custo: it.tipo_custo,
       total_orcado: Number(it.total_orcado ?? 0),
       total_planejado: Number(it.total_planejado ?? 0),
-      bv_liquido_planejado:
-        it.bv_liquido_planejado === null || it.bv_liquido_planejado === undefined
-          ? null
-          : Number(it.bv_liquido_planejado),
       em_save: it.em_save === true,
     };
-    const bv = bvPorItem.get(it.id) ?? null;
+    const bvs = bvPorItem.get(it.id) ?? [];
     const somaPPs = somaRealPorItem.get(it.id) ?? 0;
     // Job aparece na view com filtro NOT IN (cancelado, aguardando_abertura,
     // rejeitado_financeiro) — sempre aberto no sentido do cálculo.
-    return blocosDoItem(itemBv, bv, somaPPs, pctImp, true);
+    return blocosDoItem(itemBv, bvs, somaPPs, true);
   });
   const soma = somarBlocosDosItens(blocos);
 
