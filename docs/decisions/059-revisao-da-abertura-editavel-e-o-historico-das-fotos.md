@@ -57,6 +57,14 @@ curva que a tela não deixava montar (JOB-0008, 08/09/2026).
 | "Editar registro" (edição livre, decisão 021) continua? | **Continua, e entra no histórico**, rotulada "edição do registro". |
 | Parcelas já consumidas (PP emitida, nota emitida) continuam travadas na revisão? | **Sim.** A revisão redistribui só o saldo — e o que a errata acrescentou. |
 
+## Como a lista se lê
+
+A lista abre **recolhida na versão mais recente** — é ela que o
+formulário abaixo reflete. "Ver as N versões anteriores" expande, da
+mais nova para a mais antiga, e cada uma tem o seu "Visualizar"
+(decisão do Tiago, 08/09/2026, olhando a lista completa pela primeira
+vez: quatro linhas no topo de todo job era ruído).
+
 ## Como a foto se lê
 
 `Abertura` → `Revisão 1 · errata "…"` → `Revisão 2 · edição do registro`.
