@@ -324,7 +324,7 @@ export function Sidebar({
           <div className="px-3 pb-2">
             <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
               <p className="text-[10px] uppercase tracking-wider text-white/50">
-                Empresa
+                Empresa ativa
               </p>
               <p className="text-sm font-medium text-white truncate">
                 {empresas[0].nome_fantasia ?? empresas[0].razao_social}
@@ -344,7 +344,7 @@ export function Sidebar({
                 router.refresh();
               }}
             >
-              <SelectTrigger className="bg-white/5 border-white/10 text-white text-sm">
+              <SelectTrigger className="w-full bg-white/5 border-white/10 text-white text-sm">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
