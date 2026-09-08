@@ -3566,16 +3566,44 @@ Custaram a verificação desta entrega e vão pegar a próxima assinatura:
 
 ### Verificação (2026-09-08, navegador logado)
 
-Badge da aba e do FAB, lista com as 12 conversas na ordem certa, busca
-sem acento, fio aberto com os cards de PP, envio pelos dois lados
-(mensagem do financeiro à esquerda em azul, da produção à direita em
-vermelho, mesmo usuário administrador), reordenação da lista, realtime
-chegando com o drawer aberto e o badge zerando na leitura. Rotas abertas:
-`/financeiro/contas-a-pagar`, `/jobs/[jobId]`, `/financeiro/jobs/[jobId]`,
-`/admin/usuarios/permissoes`. Console sem erro de aplicação.
+**Chat de PPs no financeiro:** badge da aba e do FAB, lista com as 12
+conversas na ordem certa (3 com mensagem no topo, 9 só com PP abaixo),
+busca sem acento achando pelo projeto, fio aberto com os cards de PP,
+envio pelos dois lados, reordenação da lista, realtime chegando com o
+drawer aberto e o badge caindo de 4 para 3 na leitura.
 
-⚠️ **Resíduos do teste:** duas mensagens escritas pela UI no JOB-0015
-(uma por cada lado) e **três inseridas por SQL** no JOB-0029, JOB-0006 e
-JOB-0013 para exercitar o realtime — estas últimas aparecem como se
-fossem do Antonio Pedreira e o texto começa com "MENSAGEM DE TESTE DO
-REALTIME". Devem sair.
+**Área por tela de origem, exercitada nos QUATRO pontos de escrita**, com
+o mesmo usuário administrador, conferindo `jobs_mensagens.area` no banco
+a cada envio:
+
+| Onde | Rótulo no "Enviando como" | `area` gravada |
+|------|---------------------------|----------------|
+| `/financeiro/contas-a-pagar` — chat de PPs | Financeiro | `financeiro` ✅ |
+| `/jobs/[jobId]` — aba PPs | Produção | `producao` ✅ |
+| `/jobs/[jobId]` — aba Comunicação | Produção | `producao` ✅ |
+| `/financeiro/jobs/[jobId]` — aba Comunicação | Financeiro | `financeiro` ✅ |
+
+A **mensagem automática de reabertura de item** também foi exercitada de
+verdade (JOB-0016, "Nova PP para este item" → confirmar → cancelar o
+formulário): gravou `producao`. O item foi remarcado como "todas as PPs
+geradas" logo depois — remarcar não escreve no chat — e nenhuma PP foi
+gerada.
+
+Rotas abertas: `/financeiro/contas-a-pagar`, `/jobs/[jobId]` (Informações,
+Planilha Interna, PPs, Comunicação), `/financeiro/jobs/[jobId]` (Abertura
+e Comunicação), `/admin/usuarios/permissoes`.
+
+⚠️ **Console: o `Cannot read properties of null (reading 'useContext')`
+em `updateDehydratedSuspenseComponent` é HMR, não a aplicação.** Ele
+apareceu em `/financeiro/jobs/[jobId]` depois de várias navegações no
+mesmo dev server e **não se reproduz em aba nova** — duas cargas limpas
+seguidas só trouxeram o aviso da extensão Trancy do Chrome
+(`Extra attributes from the server: trancy-version`), que não é do
+código. Zero erro de aplicação.
+
+⚠️ **Resíduos do teste** (o Tiago decidiu em 08/09 deixar todos no banco):
+duas mensagens de PPs e duas de Comunicação escritas pela UI no JOB-0015,
+uma automática de reabertura a mais no JOB-0016, e **três inseridas por
+SQL** no JOB-0029, JOB-0006 e JOB-0013 para exercitar o realtime — estas
+aparecem como se fossem do Antonio Pedreira e começam com "MENSAGEM DE
+TESTE DO REALTIME".
