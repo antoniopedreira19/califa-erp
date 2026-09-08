@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { Landmark, Clock, ArrowRight, FileText, Receipt, TrendingUp, Wallet, BookOpen, FolderKanban, type LucideIcon } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
+import { PageHeader } from "@/components/ui/page-header";
 
 export const dynamic = "force-dynamic";
 
@@ -43,20 +44,12 @@ export default async function CentralFinanceiraPage() {
 
   return (
     <div className="space-y-8">
-      <header className="space-y-2">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-california-red">
-          Financeiro
-        </p>
-        <div className="flex items-center gap-3">
-          <div className="rounded-lg bg-california-red/10 p-2">
-            <Landmark className="h-5 w-5 text-california-red" />
-          </div>
-          <h1 className="text-3xl font-bold tracking-tight">Central Financeira</h1>
-        </div>
-        <p className="text-sm text-muted-foreground max-w-2xl">
-          Ponto central pra decisões financeiras. Mais cards (DRE, conciliação, aprovações) chegam nas próximas fases.
-        </p>
-      </header>
+      <PageHeader
+        eyebrow="FINANCEIRO"
+        title="Central Financeira"
+        description="Ponto central pra decisões financeiras. Mais cards (DRE, conciliação, aprovações) chegam nas próximas fases."
+        icon={Landmark}
+      />
 
       <div className="grid gap-4 md:grid-cols-2">
         <FinanceiroCard

@@ -145,7 +145,7 @@ export function DesembolsosList({
           <div className="relative ml-auto flex-1 min-w-[220px] max-w-sm">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <input
-              value={busca}
+              value={busca ?? ""}
               onChange={(e) => setBusca(e.target.value)}
               placeholder="Buscar por código, descrição ou fornecedor..."
               className="w-full rounded-lg border border-border bg-white py-2 pl-9 pr-3 text-sm focus:border-california-red focus:outline-none"

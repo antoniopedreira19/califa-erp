@@ -99,12 +99,37 @@ export const loadSession = cache(async (): Promise<SessionResult> => {
 
   const empresas = (empresasData ?? []) as Empresa[];
 
+  // Migração automática do cookie da Fase 2A (active_empresa_id → active_empresa_ids).
+  // Primeira request de cada user com cookie antigo: converte e apaga o velho.
   const { cookies } = await import("next/headers");
-  const cookieEmpresaId = cookies().get("active_empresa_id")?.value;
-  const activeEmpresa =
-    cookieEmpresaId && cookieEmpresaId.length > 0
-      ? (empresas.find((e) => e.id === cookieEmpresaId) ?? null)
-      : null;
+  const cookieStore = cookies();
+  const cookieAntigo = cookieStore.get("active_empresa_id")?.value;
+  let cookieNovo = cookieStore.get("active_empresa_ids")?.value;
+
+  if (cookieAntigo && cookieAntigo.length > 0 && !cookieNovo) {
+    cookieNovo = cookieAntigo;
+    cookieStore.set("active_empresa_ids", cookieNovo, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+    });
+    cookieStore.delete("active_empresa_id");
+  } else if (cookieAntigo) {
+    // cookie novo já existe; só apaga o velho
+    cookieStore.delete("active_empresa_id");
+  }
+
+  const idsSelecionados: string[] =
+    cookieNovo && cookieNovo.length > 0
+      ? cookieNovo.split(",").filter((id) => id.length > 0)
+      : [];
+
+  // activeEmpresas = empresas do tenant que ainda existem E estão no cookie.
+  // Ids que sumiram (empresa desativada, deletada) são ignorados silenciosamente.
+  const activeEmpresas: Empresa[] = idsSelecionados
+    .map((id) => empresas.find((e) => e.id === id))
+    .filter((e): e is Empresa => e !== undefined);
 
   return {
     kind: "ok",
@@ -113,7 +138,7 @@ export const loadSession = cache(async (): Promise<SessionResult> => {
       memberships,
       activeTenant: active.tenant,
       activeRole: active.role,
-      activeEmpresa,
+      activeEmpresas,
       empresas,
     },
   };

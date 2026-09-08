@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
-import { ArrowLeft, FileText } from "lucide-react";
-import Link from "next/link";
+import { Wallet } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
+import { PageHeader } from "@/components/ui/page-header";
 import { createClient } from "@/lib/supabase/server";
 import { pode } from "@/lib/permissoes";
 import { listarConversasPPs } from "@/lib/data/chat-pps-conversas";
@@ -27,10 +27,16 @@ export default async function PedidosCompraFinanceiroPage({
 }) {
   const session = await requireSession();
 
-  const empresaFiltroId: string | null =
+  const empresaFiltroIds: string[] =
     typeof searchParams?.empresa === "string" && searchParams.empresa.length > 0
-      ? searchParams.empresa
-      : (session.activeEmpresa?.id ?? null);
+      ? searchParams.empresa.split(",").filter((id) => id.length > 0)
+      : session.activeEmpresas.map((e) => e.id);
+
+  const activeEmpresasEfetivas =
+    empresaFiltroIds.length > 0
+      ? session.empresas.filter((e) => empresaFiltroIds.includes(e.id))
+      : [];
+
   if (
     session.activeRole !== "administrador" &&
     session.activeRole !== "financeiro"
@@ -94,7 +100,7 @@ export default async function PedidosCompraFinanceiroPage({
         // PP gerada ainda está no job, sem envio: o financeiro não a vê —
         // nem no chip "Todas" (02/09/2026, decisão 039).
         .neq("status", "gerada");
-      if (empresaFiltroId) q = q.eq("empresa_id", empresaFiltroId);
+      if (empresaFiltroIds.length > 0) q = q.in("empresa_id", empresaFiltroIds);
       return q.order("created_at", { ascending: false });
     })(),
     supabase
@@ -148,7 +154,7 @@ export default async function PedidosCompraFinanceiroPage({
           .lt("data_prevista_pagamento", hoje)
           .neq("status", "baixada");
       }
-      if (empresaFiltroId) q = q.eq("empresa_id", empresaFiltroId);
+      if (empresaFiltroIds.length > 0) q = q.in("empresa_id", empresaFiltroIds);
       return q;
     })(),
     // Baixas já realizadas — só o que a linha paga exibe no subtítulo
@@ -212,7 +218,7 @@ export default async function PedidosCompraFinanceiroPage({
         .eq("tenant_id", session.activeTenant.id)
         .order("ativo", { ascending: false })
         .order("proxima_data", { ascending: true });
-      if (empresaFiltroId) q = q.eq("empresa_id", empresaFiltroId);
+      if (empresaFiltroIds.length > 0) q = q.in("empresa_id", empresaFiltroIds);
       return q;
     })(),
     // Contagem de recorrências ativas
@@ -222,7 +228,7 @@ export default async function PedidosCompraFinanceiroPage({
         .select("id", { count: "exact", head: true })
         .eq("tenant_id", session.activeTenant.id)
         .eq("ativo", true);
-      if (empresaFiltroId) q = q.eq("empresa_id", empresaFiltroId);
+      if (empresaFiltroIds.length > 0) q = q.in("empresa_id", empresaFiltroIds);
       return q;
     })(),
     // Regionais (para o editor de rateio no drawer da avulsa)
@@ -252,7 +258,7 @@ export default async function PedidosCompraFinanceiroPage({
         criador:profiles!desembolsos_criado_por_fkey(nome)
       `)
         .eq("tenant_id", session.activeTenant.id);
-      if (empresaFiltroId) q = q.eq("empresa_id", empresaFiltroId);
+      if (empresaFiltroIds.length > 0) q = q.in("empresa_id", empresaFiltroIds);
       return q.order("created_at", { ascending: false });
     })(),
     // Desembolsos para Títulos a Pagar — apenas aprovada|pago, com parcelas
@@ -272,7 +278,7 @@ export default async function PedidosCompraFinanceiroPage({
       `)
         .eq("tenant_id", session.activeTenant.id)
         .in("status", ["aprovada", "pago"]);
-      if (empresaFiltroId) q = q.eq("empresa_id", empresaFiltroId);
+      if (empresaFiltroIds.length > 0) q = q.in("empresa_id", empresaFiltroIds);
       return q.order("created_at", { ascending: false });
     })(),
     // Prestações de contas de PPs de Verba de Produção (Task 6).
@@ -1119,41 +1125,15 @@ export default async function PedidosCompraFinanceiroPage({
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto">
-      <div>
-        <Link
-          href="/financeiro"
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-3 w-3" />
-          Voltar para central financeira
-        </Link>
-      </div>
-      <header className="space-y-2">
-        <div className="flex items-center gap-3">
-          <div className="rounded-lg bg-california-red/10 p-2">
-            <FileText className="h-5 w-5 text-california-red" />
-          </div>
-          <h1 className="text-3xl font-bold tracking-tight">Contas a Pagar</h1>
-        </div>
-        <p className="text-sm text-muted-foreground max-w-2xl text-pretty">
-          Pedidos de Produção, títulos a pagar e recorrências que envolvem
-          dinheiro a sair. Aprove e rejeite os PPs; dê baixa nos títulos para
-          enviá-los à conciliação.
-        </p>
-      </header>
-
-      {empresaFiltroId && (
-        <div className="flex items-center gap-2 text-xs">
-          <span className="rounded-full bg-california-red/10 px-3 py-1 text-california-red font-medium">
-            Empresa: {session.empresas.find((e) => e.id === empresaFiltroId)?.nome_fantasia ?? session.empresas.find((e) => e.id === empresaFiltroId)?.razao_social ?? "—"}
-            {empresaFiltroId !== session.activeEmpresa?.id && (
-              <Link href="/financeiro/contas-a-pagar" className="ml-2 underline">
-                voltar para ativa
-              </Link>
-            )}
-          </span>
-        </div>
-      )}
+      <PageHeader
+        eyebrow="FINANCEIRO"
+        title="Contas a Pagar"
+        description="Pedidos de Produção, títulos a pagar e recorrências que envolvem dinheiro a sair. Aprove e rejeite os PPs; dê baixa nos títulos para enviá-los à conciliação."
+        icon={Wallet}
+        showEmpresaFilter
+        empresas={session.empresas}
+        activeEmpresas={activeEmpresasEfetivas}
+      />
 
       <ChatPPsProvider
         conversasIniciais={conversasChatPPs}

@@ -13,8 +13,6 @@ export default async function AppLayout({
       <Sidebar
         role={session.activeRole}
         nome={session.profile.nome}
-        activeEmpresa={session.activeEmpresa}
-        empresas={session.empresas}
       />
       {/* pl-[76px] = largura colapsada da sidebar.
           Ao hover, ela expande POR CIMA do conteúdo. */}
