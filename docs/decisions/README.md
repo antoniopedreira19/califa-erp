@@ -86,9 +86,10 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 060 | [O orçamento nasce um a um, e o editor multi-jobs sai](060-orcamento-nasce-um-a-um-e-o-editor-multi-jobs-sai.md) | 2026-09-08 |
 | 061 | [As previsões se redistribuem inteiras: a trava do consumido cai](061-as-previsoes-se-redistribuem-inteiras.md) | 2026-09-08 |
 | 062 | [O BV sai do planejado, vira vários por item e ganha alíquota própria; e o A · Repasse precisa fechar o orçado](062-bv-so-no-realizado-multiplo-e-com-aliquota-propria.md) | 2026-09-08 |
+| 063 | [O import lê o agrupamento pela coluna A, e item sem valor entra zerado](063-import-le-o-agrupamento-pela-coluna-a.md) | 2026-09-08 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
 > data é a da decisão, não a da posição na fila.
 
-**Próximo número livre: 063.**
+**Próximo número livre: 064.**
