@@ -3403,12 +3403,19 @@ de uma coluna que nem é dela.
 `/financeiro/jobs/[jobId]` abria sempre em "Abertura do Job". Agora
 `?aba=` escolhe entre as cinco (`abertura`, `info`, `planilha`, `fluxo`,
 `chat`), com o padrão inalterado quando o parâmetro falta ou vem
-desconhecido — fila, "Visualizar Jobs" e a tela de projeto seguem caindo
-na abertura, como antes.
+desconhecido.
 
-Quem usa é o **calendário**: linha clicada no pop-up do dia ou na tabela
-de ativos abre em `?aba=info`, porque ali a pergunta é que job é aquele
-na agenda, não o registro da abertura.
+Quem manda `?aba=info` (08/09/2026):
+
+* o **calendário**, no pop-up do dia e na tabela de jobs ativos;
+* a aba **"Visualizar Jobs"**, nas duas arrumações — por projeto e por
+  job.
+
+Em ambas a pergunta é que job é aquele, não o registro da abertura.
+
+⚠️ A tela de **projeto do financeiro** (`/financeiro/projetos/[projetoId]`)
+continua abrindo o job em "Abertura do Job" — é a única porta de entrada
+sem `?aba=`. Não foi pedida; alinhar é uma linha, em `page.tsx:208`.
 
 O helper `abaDaUrl` mora em `app/(app)/financeiro/jobs/[jobId]/abas.ts`,
 e não no `job-financeiro-tabs.tsx`, que é `"use client"`. Server

@@ -397,8 +397,16 @@ export function JobsAbertosList({ linhas }: { linhas: JobAberto[] }) {
     });
   }
 
+  /**
+   * A linha clicada abre o job em **Informações do Job**, e não em
+   * "Abertura do Job", que é o padrão da página (decisão do Tiago,
+   * 08/09/2026, estendendo o que já valia no Calendário de Jobs).
+   *
+   * Vale para as duas arrumações — por projeto e por job —, porque as
+   * duas passam por aqui.
+   */
   function abrirJob(id: string) {
-    router.push(`/financeiro/jobs/${id}`);
+    router.push(`/financeiro/jobs/${id}?aba=info`);
   }
 
   const vazio = (

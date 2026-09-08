@@ -80,11 +80,18 @@ As linhas do calendário — no pop-up do dia e na tabela de ativos — abrem
 `/financeiro/jobs/[id]**?aba=info**`, e não a aba padrão da página, que é
 "Abertura do Job" (decisão do Tiago, 07/09/2026).
 
-Quem chega pelo calendário está perguntando QUE job é aquele na agenda:
-cliente, período, o que ele é. O registro da abertura é a pergunta de
-quem vem da fila ou de "Visualizar Jobs" — e essas duas **seguem** caindo
-na aba de abertura. Por isso o `?aba=` fica no calendário e não virou o
-novo padrão da página.
+Quem chega por uma lista está perguntando QUE job é aquele: cliente,
+período, o que ele é. O registro da abertura é outra pergunta, de quem
+foi conferir o que o financeiro gravou.
+
+⚠️ **Revisão de 08/09/2026:** a aba **"Visualizar Jobs"** passou a fazer
+o mesmo, nas duas arrumações (por projeto e por job). A versão original
+desta decisão dizia que ela seguiria caindo na abertura — não segue mais.
+
+Sobrou uma porta de entrada sem `?aba=`: a tela de **projeto do
+financeiro** (`/financeiro/projetos/[projetoId]`), que continua abrindo o
+job em "Abertura do Job". Não é esquecimento — não foi pedida; se um dia
+incomodar, é a mesma linha.
 
 `?aba=` aceita as cinco abas (`abertura`, `info`, `planilha`, `fluxo`,
 `chat`); valor desconhecido cai no padrão.
