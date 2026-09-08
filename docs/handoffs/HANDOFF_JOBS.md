@@ -2588,7 +2588,7 @@ Pedido do Tiago em 07/09/2026, em três partes:
   linha vermelha, o save e a linha com PP no financeiro seguem como na
   030 e na 040.
 
-### Verificado em 07/09/2026 (JOB-0007 "Teste", só rascunho — nada gravado)
+### Verificado em 07/09/2026 (JOB-0007 "Teste", rascunho)
 
 | Passo | Resultado |
 |---|---|
@@ -2601,10 +2601,44 @@ Pedido do Tiago em 07/09/2026, em três partes:
 | Pop-up | GP: `R$ 2.000,00 → R$ 2.500,00 +R$ 500,00` e sublinha `planejado R$ 1.500,00 → R$ 1.800,00`; Item novo: `— → R$ 1.000,00` e `planejado — → R$ 700,00`; Total do orçado 7.000 → 8.500 |
 | Descartar | planilha de volta ao salvo, botão "Realizar errata" |
 
-⚠️ **`registrarErrata` continua sem teste de gravação** (pendência de
-28/08): o caminho novo do servidor — `planejadoQueFica`, o UPDATE com o
-planejado e as oito colunas do histórico — passou por `tsc`, `eslint` e
-build, não por uma errata real. Entra no mesmo roteiro de
+### Gravação verificada em 08/09/2026 — a errata rodou de verdade
+
+A pendência de 28/08 ("`registrarErrata` nunca gravou") **fechou para o
+caminho do planejado**. Uma errata real foi registrada no JOB-0007
+"Teste", com as três formas de linha na mesma errata:
+
+| Linha | Orçado | Planejado | O que provava |
+|---|---|---|---|
+| GP (`B`) | 2.000 → 2.500 | 1.500 → **1.800** | o planejado destrava com o orçado e grava o digitado |
+| Teste (`A`) | 5.000 → 5.500 | 5.000 → **5.500** | `A` espelha sozinho, e o espelho **entra no histórico** |
+| Item novo com planejado (`B`, nova) | — → 1.000 | — → **700** | a linha nova nasce com o planejado da errata |
+
+Conferido no banco depois de gravar:
+
+- `jobs_erratas_itens`: as **oito colunas novas preenchidas** nas 3
+  linhas (unitário, QT, D/M e total do planejado, antes e depois).
+- `jobs_itens_orcado`: GP com `valor_unitario_planejado = 1800`, Teste
+  (`A`) espelhado em `5500`, e a linha nova com `700` e
+  `errata_origem_id` preenchido.
+- Card de Erratas: coluna **PLANEJADO** com 7 colunas no cabeçalho e nas
+  linhas, `de → para` riscado. **Errata antiga (JOB-0002) mostra "—"** —
+  as colunas nulas se comportam como o previsto.
+- Job devolvido ao mural, faturamento fechado, e a barra dizendo "gerar
+  PP segue liberado" (a 040 e a 056 convivendo no mesmo texto).
+
+**Bypass da action pelo console**, com payload adulterado que mexe só no
+planejado e deixa o orçado como está: `registrarErrata` recusou com
+*"Nenhum valor foi alterado."*, e o `valor_unitario_planejado` do GP
+ficou em 1800. A regra da 054 vale no servidor, não só na tela.
+
+⚠️ **Resíduo do teste:** o JOB-0007 ficou com essa errata gravada e **no
+mural de abertura do financeiro**, com o envio para faturamento fechado
+— que é o efeito correto de toda errata. Sai quando alguém salvar a
+revisão da abertura.
+
+⚠️ **O resto do roteiro de 28/08 segue aberto:** a isenção do teto na
+linha vermelha e as travas de remoção (`barrarRemocao`, com o
+`on delete cascade` de `saves_consumos`) continuam sem teste real —
 `docs/design-briefs/2026-08-28-errata-teste-ponta-a-ponta.md`.
 
 
