@@ -3413,9 +3413,17 @@ Quem manda `?aba=info` (08/09/2026):
 
 Em ambas a pergunta é que job é aquele, não o registro da abertura.
 
-⚠️ A tela de **projeto do financeiro** (`/financeiro/projetos/[projetoId]`)
-continua abrindo o job em "Abertura do Job" — é a única porta de entrada
-sem `?aba=`. Não foi pedida; alinhar é uma linha, em `page.tsx:208`.
+A **visão agregada do projeto** (`/financeiro/projetos/[projetoId]`, a
+tela do "Visão agregada →") manda **`?aba=planilha`**, e não `info`:
+quem está lendo a planilha consolidada e abre um job quer a planilha
+daquele job, não a ficha. Vale para os três links da tela — árvore de
+jobs do cabeçalho, "ABRIR JOB →" de cada bloco e os jobs do card de
+Totais.
+
+Os dois últimos saem do `rotaDoJob` de `planilhas-do-projeto.tsx`, que
+ganhou um `jobHrefSuffix` opcional. ⚠️ Esse componente é COMPARTILHADO
+com a visão agregada da produção, que não passa o sufixo e segue em
+`/jobs/[id]?from=jobs` — conferido no navegador.
 
 O helper `abaDaUrl` mora em `app/(app)/financeiro/jobs/[jobId]/abas.ts`,
 e não no `job-financeiro-tabs.tsx`, que é `"use client"`. Server
