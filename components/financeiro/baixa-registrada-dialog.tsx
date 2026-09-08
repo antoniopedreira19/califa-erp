@@ -19,6 +19,10 @@
  * aba — desfaz dinheiro que já foi para a conciliação —, então não fica a
  * um clique de distância de quem só queria conferir a baixa.
  *
+ * O centro de custo e o subtipo ocupam LINHAS SEPARADAS quando a aba manda
+ * `subtipoNome` (08/09/2026). Vindos juntos num campo só, o par lia como
+ * "01 · Geral (provisório)" e escondia o nome do tipo.
+ *
  * Desde 31/08/2026 serve às DUAS pontas. `sentido` só troca as três frases
  * que falavam de pagamento — em Contas a Receber o dinheiro entra, e
  * "Pago em" ou "volta para A pagar" seriam mentira na tela. O padrão é
@@ -48,7 +52,11 @@ export interface BaixaRegistradaAlvo {
   /** Data em que o pagamento saiu — o `pago_em` do título. */
   pagoEm: string | null;
   contaNome: string | null;
+  /** O centro de custo — o TIPO do plano de contas, "01 · Receita". */
   centroNome: string | null;
+  /** O subtipo, na linha de baixo. Opcional: a aba que ainda manda o par
+   *  concatenado em `centroNome` simplesmente não mostra a segunda linha. */
+  subtipoNome?: string | null;
   /** Data de pagamento vigente e vencimento original, para a conferência
    *  ficar completa sem obrigar a fechar o modal. */
   dataPagamento: string | null;
@@ -159,6 +167,15 @@ export function BaixaRegistradaDialog({
             <span>{alvo.contaNome ?? "—"}</span>
             <span className="text-muted-foreground">Centro de custo</span>
             <span>{alvo.centroNome ?? "—"}</span>
+            {/* O subtipo em linha própria (08/09/2026). Concatenado ao
+                centro, saía "01 · Geral (provisório)" — o código do tipo com
+                o nome do subtipo, e nenhum dos dois legível como tal. */}
+            {alvo.subtipoNome !== undefined && (
+              <>
+                <span className="text-muted-foreground">Subtipo</span>
+                <span className="font-medium">{alvo.subtipoNome ?? "—"}</span>
+              </>
+            )}
           </div>
         </div>
 

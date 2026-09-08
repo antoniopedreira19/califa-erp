@@ -3607,3 +3607,46 @@ uma automática de reabertura a mais no JOB-0016, e **três inseridas por
 SQL** no JOB-0029, JOB-0006 e JOB-0013 para exercitar o realtime — estas
 aparecem como se fossem do Antonio Pedreira e começam com "MENSAGEM DE
 TESTE DO REALTIME".
+
+---
+
+## ⚠️ Nota de 2026-09-08 — Títulos a Receber: a conciliação saiu da linha, e o subtipo ganhou linha própria
+
+Pedido do Tiago, olhando a aba "Títulos a Receber". Duas coisas, e as
+duas são de leitura da tela — nada de banco, nada de regra.
+
+### A coluna Ação da linha recebida é só o olho
+
+Sai da linha o bloco **"Conciliação · conta · centro de custo"**. Ele
+ocupava a metade direita da tabela para repetir, em corpo 11, o que o
+botão de olho já abre por inteiro. A coluna Ação encolheu de `160px`
+para `110px` — a largura que "Dar baixa" pede — e o que sobrou volta
+para "Cliente" e "Jobs cobertos".
+
+`TituloRow.conta_nome` / `centro_nome` **continuam existindo**: agora
+servem só de alimento para o `BaixaRegistradaDialog`.
+
+### Centro de custo e subtipo em linhas separadas
+
+O modal mostrava `Centro de custo: 01 · Geral (provisório)` — o
+**código do tipo** colado no **nome do subtipo**. "Receita", que é o
+nome do tipo, não aparecia em lugar nenhum, e quem lia entendia que o
+centro de custo era "Geral (provisório)".
+
+Agora são duas linhas:
+
+| Campo | Conteúdo |
+| --- | --- |
+| Centro de custo | `01 · Receita` — código e nome do **tipo** |
+| Subtipo | `Geral (provisório)` — só o nome, como no seletor da baixa |
+
+`BaixaRegistradaAlvo` ganhou **`subtipoNome?: string | null`**, e o
+`?` é de propósito: **Títulos a Pagar e a aba Cartão não mandam o
+campo** e seguem exibindo o par concatenado numa linha só, exatamente
+como antes. Quando essas duas abas forem separar o par também, é
+`page.tsx` de contas a pagar que muda — o `detalheBaixa` de lá ainda
+monta `${tipo.codigo} · ${subtipo.nome ?? tipo.nome}`.
+
+O `detalheBaixa` de `contas-a-receber/page.tsx` passou a devolver
+`{ conta, centro, subtipo }`, com `centro` = tipo e `subtipo` = nome do
+subtipo (ou `null`, que a tela mostra como `—`).

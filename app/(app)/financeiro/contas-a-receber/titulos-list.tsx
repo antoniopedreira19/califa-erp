@@ -16,9 +16,12 @@
  * A aba dá baixa e, desde 31/08/2026, deixa CONFERIR a baixa já feita —
  * o botão de olho da linha recebida abre o `BaixaRegistradaDialog`, o
  * mesmo de Títulos a Pagar, com o estorno em dois tempos lá dentro. É a
- * simetria que o Tiago pediu; o protótipo desta tela ainda mostra só o
- * texto "Conciliação" na linha recebida. Cancelamento de NF continua sem
- * porta aqui (decisão 016 §9).
+ * simetria que o Tiago pediu. Cancelamento de NF continua sem porta aqui
+ * (decisão 016 §9).
+ *
+ * A coluna Ação da linha recebida é SÓ o olho (08/09/2026). O bloco
+ * "Conciliação · conta · centro" que morava ali comia largura de tabela
+ * para repetir, em letra miúda, o que o modal já mostra inteiro.
  *
  * INADIMPLÊNCIA (31/08/2026): a pastilha vermelha e o "N dias de atraso"
  * saem de `data_vencimento < hoje`, e NÃO da coluna `inadimplente_desde`.
@@ -87,8 +90,11 @@ export interface TituloRow {
   /** Dia em que passou do vencimento sem ser recebido. Registro histórico:
    *  sobrevive à baixa. A pastilha da tela NÃO depende dele. */
   inadimplente_desde: string | null;
+  /** Conta, centro de custo (tipo) e subtipo da baixa. NÃO aparecem mais na
+   *  linha (08/09/2026): só o olho, que abre a baixa registrada. */
   conta_nome: string | null;
   centro_nome: string | null;
+  subtipo_nome: string | null;
 }
 
 interface Props {
@@ -251,6 +257,7 @@ export function TitulosList({
         pagoEm: conferindo.pago_em,
         contaNome: conferindo.conta_nome,
         centroNome: conferindo.centro_nome,
+        subtipoNome: conferindo.subtipo_nome,
         dataPagamento: conferindo.pago_em,
         vencOriginal: conferindo.data_vencimento,
       }
@@ -318,7 +325,7 @@ export function TitulosList({
               <th className="px-4 py-3 text-right font-semibold">Valor</th>
               <th className="w-[72px] px-3 py-3 font-semibold">Parcela</th>
               <th className="w-[96px] px-3.5 py-3 font-semibold">Status</th>
-              <th className="w-[160px] px-4 py-3 text-right font-semibold">Ação</th>
+              <th className="w-[110px] px-4 py-3 text-right font-semibold">Ação</th>
               <th className="w-0 p-0" />
             </tr>
           </thead>
@@ -466,18 +473,12 @@ export function TitulosList({
                   </td>
                   <td className="px-4 py-3 text-right">
                     {recebido ? (
-                      <div className="flex items-center justify-end gap-2.5">
-                        <div className="flex flex-col items-end gap-0.5">
-                          <span className="text-[11.5px] text-muted-foreground">
-                            Conciliação
-                          </span>
-                          <span className="whitespace-nowrap text-[11px] text-muted-foreground/80">
-                            {r.conta_nome ?? "—"} · {r.centro_nome ?? "—"}
-                          </span>
-                        </div>
+                      <div className="flex items-center justify-end">
                         {/* Simetria com Títulos a Pagar (31/08/2026): a linha
                             baixada abre a baixa registrada, e é lá dentro
-                            que mora o estorno, em dois tempos. */}
+                            que mora o estorno, em dois tempos. Conta e centro
+                            de custo saíram daqui em 08/09/2026 — ocupavam meia
+                            tabela para repetir o que o olho já mostra. */}
                         <button
                           type="button"
                           title="Ver a baixa registrada — e estornar, se preciso"
