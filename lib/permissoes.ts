@@ -115,7 +115,20 @@ export const permissoes = {
   // Chat de job
   // ==================================================================
   "chat.ver":                     ["administrador", "gerente_producao", "produtor", "freelancer", "financeiro"],
+  /**
+   * Escrever pelo lado da PRODUÇÃO — os chats dentro de `/jobs`. A
+   * mensagem sai marcada como "Produção" (decisão 058), então quem passa
+   * aqui é quem trabalha nesse lado.
+   */
   "chat.enviar":                  ["administrador", "gerente_producao", "produtor"],
+  /**
+   * Escrever pelo lado do FINANCEIRO — o chat de PPs em Contas a Pagar e
+   * o chat do job em `/financeiro/jobs`. A mensagem sai marcada como
+   * "Financeiro". São gates separados de propósito: o papel `financeiro`
+   * responde a produção, mas não escreve de dentro do módulo Jobs
+   * (decisão 058).
+   */
+  "chat.enviar_financeiro":       ["administrador", "financeiro"],
 
   // ==================================================================
   // Financeiro (contas, conciliacao, fluxo)

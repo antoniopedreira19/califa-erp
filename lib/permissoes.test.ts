@@ -202,6 +202,7 @@ test("Freelancer NAO cria errata, PP nem consome Save", () => {
 test("Freelancer VE chat mas NAO envia", () => {
   assert.equal(pode("freelancer", "chat.ver"), true);
   assert.equal(pode("freelancer", "chat.enviar"), false);
+  assert.equal(pode("freelancer", "chat.enviar_financeiro"), false);
 });
 
 test("Financeiro NAO cria/aprova/edita em orcamento", () => {
@@ -225,9 +226,25 @@ test("Financeiro NAO edita metadata nem realizado, mas ABRE job no financeiro", 
   assert.equal(pode("financeiro", "jobs.abrir_financeiro"), true);
 });
 
-test("Financeiro NAO envia chat (so Producao envia)", () => {
+test("Financeiro responde pelo lado dele, nao pelo lado da Producao", () => {
+  // Os dois gates existem separados porque a AREA da mensagem vem da tela
+  // de origem (decisao 058): quem passa em `chat.enviar` fala como
+  // "Producao", quem passa em `chat.enviar_financeiro` fala como
+  // "Financeiro". O papel financeiro responde de Contas a Pagar e do
+  // job dele no financeiro — nunca de dentro do modulo Jobs.
   assert.equal(pode("financeiro", "chat.enviar"), false);
+  assert.equal(pode("financeiro", "chat.enviar_financeiro"), true);
   assert.equal(pode("financeiro", "chat.ver"), true);
+});
+
+test("Producao NAO fala pelo lado do Financeiro", () => {
+  assert.equal(pode("gerente_producao", "chat.enviar_financeiro"), false);
+  assert.equal(pode("produtor", "chat.enviar_financeiro"), false);
+});
+
+test("Administrador fala pelos dois lados", () => {
+  assert.equal(pode("administrador", "chat.enviar"), true);
+  assert.equal(pode("administrador", "chat.enviar_financeiro"), true);
 });
 
 test("So Administrador e Gerente de Producao aprovam versao", () => {

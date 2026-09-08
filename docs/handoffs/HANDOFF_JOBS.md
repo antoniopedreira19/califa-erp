@@ -2799,3 +2799,35 @@ ficam canceladas no JOB-0017, que está de novo `rejeitado_financeiro`.
 ⚠️ **Chrome MCP:** clicar em textarea por `ref` e digitar em seguida
 mandou o texto para o campo "Nome do Job" (o clique não moveu o foco).
 `form_input` por `ref` funciona; digitar, não.
+
+---
+
+## Chat de PPs: a área da mensagem passou a vir da tela (2026-09-08)
+
+Decisão 058. O detalhe completo está em `HANDOFF_FINANCEIRO.md`; aqui fica
+o que muda para quem mexe no módulo Jobs.
+
+⚠️ **`areaDoPapel()` não existe mais.** Toda mensagem escrita de dentro de
+`/jobs` grava `area = 'producao'`, via a constante `AREA_PRODUCAO`
+(`lib/types.ts`) — nas duas abas (PPs e Comunicação) e na mensagem
+automática de reabertura de item (`realizado/conclusao-item.ts`).
+
+Antes a área vinha do papel, e o mapa carimbava `administrador` como
+"Financeiro". Como 19 dos 20 usuários são administradores, **toda
+mensagem escrita no Jobs saía rotulada como do financeiro**. As 5
+anteriores a 08/09/2026 continuam assim no banco: corrigir é mudança
+destrutiva e depende de decisão.
+
+⚠️ **O papel `financeiro` continua sem escrever aqui.** Ele ganhou
+`chat.enviar_financeiro`, que vale em Contas a Pagar e em
+`/financeiro/jobs`. O gate das telas de `/jobs` segue sendo
+`chat.enviar` (administrador, GP, produtor).
+
+⚠️ **O miolo da thread virou componente compartilhado.** Cards de PP e
+balões saíram de `pps/job-pps-chat-section.tsx` para
+`components/chat/thread-pps.tsx`, que o financeiro também renderiza — o
+pedido era "o mesmo layout", e essa é a forma de continuar sendo. Quem
+mexer no visual do fio mexe nos dois de uma vez, o que é o ponto.
+
+O badge do FAB do job **continua contando MENSAGENS** não lidas (aqui há
+um fio só). No financeiro ele conta CHATS.

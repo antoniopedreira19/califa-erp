@@ -4,7 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
-import { areaDoPapel } from "@/lib/types";
+import { AREA_PRODUCAO } from "@/lib/types";
 import { checarPermissao } from "@/lib/permissoes-server";
 
 type Ok = { ok: true };
@@ -18,9 +18,10 @@ const textoSchema = z
   .max(2000, "Mensagem passa de 2000 caracteres.");
 
 /**
- * Envia mensagem no chat de PPs do job. Escopo fixo em 'pps' — o chat de
- * Comunicação tem sua própria action, não parametrizei pra manter cada
- * uma óbvia sem argumento extra.
+ * Envia mensagem no chat de PPs pelo lado da PRODUÇÃO — esta action só é
+ * chamada de dentro de `/jobs`. Escopo fixo em 'pps' e área fixa em
+ * "producao" (decisão 058); o lado do financeiro tem a action dele em
+ * `app/(app)/financeiro/contas-a-pagar/chat/actions.ts`.
  */
 export async function enviarMensagemPP(
   jobId: string,
@@ -52,7 +53,7 @@ export async function enviarMensagemPP(
     tenant_id: session.activeTenant.id,
     job_id: jobId,
     autor_id: session.profile.id,
-    area: areaDoPapel(session.activeRole),
+    area: AREA_PRODUCAO,
     escopo: "pps",
     texto: parsed.data,
   });

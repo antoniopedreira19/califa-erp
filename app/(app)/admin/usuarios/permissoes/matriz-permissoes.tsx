@@ -183,10 +183,18 @@ const LINHAS: readonly Linha[] = [
   },
 
   // ---- Chat ----
-  { modulo: "Chat do job", item: "Mensagens",
+  // Duas linhas porque a AREA da mensagem vem da tela de origem: quem
+  // escreve por Jobs fala como "Producao", quem escreve pelo Financeiro
+  // fala como "Financeiro" (decisao 058).
+  { modulo: "Chat do job", item: "Mensagens (lado Produção)",
     permissoes: {
       ver: "chat.ver",
       criar: "chat.enviar",
+    },
+  },
+  { modulo: "Chat do job", item: "Mensagens (lado Financeiro)",
+    permissoes: {
+      criar: "chat.enviar_financeiro",
     },
   },
 
