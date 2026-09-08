@@ -21,7 +21,7 @@ import type {
   VersaoOrcamentoGrupo,
   VersaoOrcamentoItem,
 } from "@/lib/types";
-import { VISAO_BV_PADRAO, type VisaoBv } from "@/lib/calculos/bv-planilha";
+import { type VisaoBv } from "@/lib/calculos/bv-planilha";
 import type { FornecedorOpcao } from "@/app/(app)/_bv/bv-dialog";
 import {
   SAVE_VAZIO,
@@ -49,7 +49,7 @@ interface Props {
   moeda: string;
   readOnly?: boolean;
   categorias: Categoria[];
-  bvsPorItem: Record<string, ItemBv>;
+  bvsPorItem: Record<string, ItemBv[]>;
   fornecedores: FornecedorOpcao[];
   versaoLabel: string;
   percentualHonorarios: number;
@@ -89,7 +89,11 @@ export function PlanilhaVersao({
   saldosDeSave,
   nomeDoGrupo,
 }: Props) {
-  const [visao, setVisao] = React.useState<VisaoBv>(VISAO_BV_PADRAO);
+  // ⚠️ FIXA em "bruto" desde 08/09/2026 (decisão 062). O BV saiu do
+  // planejado, então nesta tela as duas vistas dariam o mesmo número — e
+  // a chave que as alternava foi removida daqui. Deixar em "líquido"
+  // manteria o rótulo "Total líquido" numa coluna que não deduz nada.
+  const visao: VisaoBv = "bruto";
   const router = useRouter();
 
   // A coluna abre sozinha em quem já usa save, e fica fechada em quem
@@ -142,7 +146,6 @@ export function PlanilhaVersao({
           moeda={moeda}
           percentualImposto={percentualImposto}
           visao={visao}
-          onMudarVisao={setVisao}
           readOnly={readOnly}
           categorias={categorias}
           bvsPorItem={bvsPorItem}

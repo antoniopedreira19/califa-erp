@@ -115,6 +115,74 @@ export function passaDoPlanejado(soma: number, planejado: number): boolean {
   return soma - planejado > TOLERANCIA_PLANEJADO;
 }
 
+// ---------------------------------------------------------------------
+// A · Repasse: a soma das PPs precisa fechar o orçado
+// ---------------------------------------------------------------------
+
+/**
+ * O item exige que as PPs FECHEM o orçado antes de sair do lugar?
+ *
+ * Só o `AR` (decisão 062, 08/09/2026). Nele o principal passa pela
+ * California e é REPASSADO ao fornecedor — não é margem, é dinheiro de
+ * passagem. Fechar o item deixando saldo sem repassar significaria a
+ * agência ficando com o que era do fornecedor.
+ *
+ * Nos demais tipos de calha PP (`B`, `C`, `F`, `FI`) o orçado é preço, e
+ * gastar menos que ele é lucro legítimo: eles seguem como a decisão 039
+ * deixou, sem teto e sem piso.
+ *
+ * Linha em SAVE fica de fora: ela não emite PP neste job (decisão 028
+ * §9), então travaria para sempre.
+ */
+export function exigeSomaIgualAoOrcado(
+  tipoCusto: TipoCusto,
+  emSave: boolean,
+): boolean {
+  return tipoCusto === "AR" && !emSave;
+}
+
+/**
+ * As PPs que contam para essa trava: **todas menos as canceladas**.
+ *
+ * Inclui a `gerada`, que ainda não foi ao financeiro. Tem que incluir:
+ * a trava barra o ENVIO, então contar só as enviadas seria esperar
+ * exatamente o que ela impede — o item nunca destravaria. Na prática a
+ * regra diz "gere todas as PPs do item antes de enviar a primeira".
+ *
+ * A `rejeitada` também conta, pela regra de sempre: ela vai ser corrigida
+ * e reenviada, e o dinheiro segue comprometido.
+ */
+export function somaDasPPsNaoCanceladas(pps: PPParaSoma[]): number {
+  return arredondar(
+    pps
+      .filter((pp) => pp.status !== "cancelada")
+      .reduce((s, pp) => s + Number(pp.valor ?? 0), 0),
+  );
+}
+
+/**
+ * Quanto falta o item `AR` gerar em PPs para fechar o orçado. Zero (ou
+ * negativo) = pode enviar e pode concluir.
+ *
+ * ⚠️ É "não pode ser MENOR que o orçado", e não igualdade estrita.
+ * Passar do orçado já tem tratamento próprio desde a decisão 039 — o
+ * envio acima do planejado pede confirmação do responsável do job —, e
+ * exigir igualdade exata criaria um beco: a errata pode baixar o orçado
+ * depois, e não existe "des-enviar PP". A trava existe para impedir o
+ * caso real, que é fechar deixando saldo por repassar.
+ *
+ * A mesma folga de meio centavo do planejado, e pelo mesmo motivo: o
+ * valor da PP é R$ Unit. × QT × D/M arredondado, e unitário com dízima
+ * fecha um centavo fora.
+ */
+export function faltaParaFecharOOrcado(
+  somaDasPPs: number,
+  orcado: number,
+): number {
+  const falta = arredondar(orcado - somaDasPPs);
+  return falta > TOLERANCIA_PLANEJADO ? falta : 0;
+}
+
 /**
  * Divisão do valor da PP entre N parcelas.
  *

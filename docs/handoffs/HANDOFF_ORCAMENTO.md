@@ -3229,3 +3229,52 @@ Projeto "Projeto Teste" (`0-0001/26`, quatro orçamentos):
   tela monta.
 - Zero erro de console nas três telas, em aba nova. `tsc`, `next lint` e
   `npm run build` limpos.
+
+---
+
+## ⚠️ O planejado de `A` e `D` destrava, e o BV sai da conta do orçamento (2026-09-08)
+
+Decisão [062](../decisions/062-bv-so-no-realizado-multiplo-e-com-aliquota-propria.md).
+Do lado do ORÇAMENTO, três coisas mudaram na planilha da versão e no
+editor agregado do rascunho.
+
+### 1. `A · Direto` e `D · Interno` voltam a ter planejado digitado
+
+As três células do bloco PLANEJADO **abrem para edição** nesses dois
+tipos, como já abriam em `AR`, `B`, `C`, `F` e `FI`. O Tab não pula mais
+por cima delas, e a Server Action deixou de recusar a escrita.
+
+Some com isso a frase que estas seções repetiam desde 21/08/2026 — *"em
+custo A e D o planejado espelha o orçado e não é digitado"*. **Não é mais
+verdade.** O único caso que ainda trava o planejado é a **linha em save**,
+que tem custo zero neste projeto ([028 §9](../decisions/028-save-entre-jobs.md)).
+
+Nenhum número existente mudou: os 34 itens `A` das versões estavam com
+`planejado = orçado`, e continuam — o que mudou é que agora dá para
+editar.
+
+### 2. O BV não mexe em nada nesta tela
+
+O BV passou a descontar **só o REALIZADO**, que só existe depois que o
+job abre. Consequências aqui:
+
+- **A chave Bruto ⇄ Líquido saiu** da planilha da versão e do editor
+  agregado. Ela não mudaria número nenhum. A vista dessas telas ficou
+  fixa em "bruto" — deixá-la em "líquido" manteria a coluna rotulada
+  "Total líquido" sem deduzir nada. Nas telas do job a chave continua.
+- **A linha `+ BVs (planejados, líquidos)` saiu do card de Totais** e do
+  resumo do cabeçalho. O Resultado operacional planejado passou a ser
+  `Valor do Job − Impostos − Custo planejado`, sem BV.
+- **A aprovação da versão não congela mais** `bv_liquido_planejado`. A
+  coluna continua no banco com o que já foi congelado; ninguém a lê.
+
+### 3. O BV continua sendo lançável aqui, e agora são vários
+
+O "+ Adicionar BV" da calha **fica** (decisão do Tiago): ele registra a
+comissão já combinada e viaja para o job na abertura. O que mudou é o
+formulário — ele virou **lista**, um item aceita **vários BVs**, e cada um
+tem fornecedor, prazo, situação e **alíquota próprios**. A alíquota é
+campo digitado, pode ficar vazia aqui e só é exigida no Confirmar, que
+acontece na planilha do job.
+
+Detalhe de banco: caíram `uniq_bv_item` e `uniq_bv_por_copia`.

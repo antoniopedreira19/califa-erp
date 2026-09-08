@@ -109,7 +109,7 @@ interface Props {
   /** Membros ativos do tenant — usados no combo de Responsável da Verba de Produção. */
   responsaveis: Array<{ id: string; nome: string }>;
   /** BV por id do item da versão. Só existe em item tipo A, AR ou D. */
-  bvsPorItem: Record<string, ItemBv>;
+  bvsPorItem: Record<string, ItemBv[]>;
   /** Estado do save por id do item da VERSÃO, como o BV. */
   savePorItem: Record<string, EstadoSaveDaLinha>;
   /** Saldos de save que o cliente deste job tem para gastar. */

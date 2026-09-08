@@ -156,13 +156,18 @@ export function JobRascunhoCard({
     [job.grupos],
   );
 
+  // Lista por item, como as telas gravadas (decisão 062). No rascunho a
+  // lista tem no máximo um: o editor local ainda guarda um BV por linha,
+  // e vários BVs só passam a existir depois que o orçamento é salvo.
   const bvsPorItem = React.useMemo(() => {
-    const mapa: Record<string, NonNullable<ReturnType<typeof comoBvDaVersao>>> =
-      {};
+    const mapa: Record<
+      string,
+      NonNullable<ReturnType<typeof comoBvDaVersao>>[]
+    > = {};
     for (const g of job.grupos) {
       for (const it of g.itens) {
         const bv = comoBvDaVersao(it);
-        if (bv) mapa[it.id] = bv;
+        if (bv) mapa[it.id] = [bv];
       }
     }
     return mapa;

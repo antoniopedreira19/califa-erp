@@ -167,11 +167,14 @@ export default async function PlanilhaDaAberturaPage({
 
   // Objeto, e não Map: só objeto atravessa a fronteira server → client
   // sem cerimônia, e é o formato que a planilha do job já espera.
-  const bvsPorItem: Record<string, ItemBv> = {};
+  const bvsPorItem: Record<string, ItemBv[]> = {};
   for (const linha of (bvsRes.data ?? []) as any[]) {
     const { copia: _joinFiltro, ...bv } = linha;
     if (!bv.job_item_orcado_id) continue;
-    bvsPorItem[bv.job_item_orcado_id] = { ...bv, valor: Number(bv.valor ?? 0) };
+    (bvsPorItem[bv.job_item_orcado_id] ??= []).push({
+      ...bv,
+      valor: Number(bv.valor ?? 0),
+    });
   }
 
   const itensPorGrupo = new Map<string, ItemPlanilhaJob[]>();

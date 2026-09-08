@@ -1,7 +1,27 @@
 # 022 — BV líquido na planilha, e o realizado montado pelas PPs
 
 **Data:** 2026-08-21
-**Status:** aceita
+**Status:** aceita — **revista em 08/09/2026 pela
+[062](062-bv-so-no-realizado-multiplo-e-com-aliquota-propria.md)**
+
+> ⚠️ **O que desta decisão deixou de valer (2026-09-08).** A 062 mudou
+> quatro coisas escritas aqui:
+>
+> - **§4 caiu por inteiro.** `A` e `D` voltaram a ter planejado
+>   **digitado**; nenhum tipo espelha mais o orçado. O trigger
+>   `planejado_espelha_orcado` ficou só com o ramo do save.
+> - **§3 caiu.** O BV não desconta mais o PLANEJADO — só o REALIZADO. Com
+>   isso acabou o congelamento na aprovação; `bv_liquido_planejado`
+>   permanece no banco como histórico e ninguém a lê.
+> - **§1 e §2:** o que a planilha subtrai passou a ser o **BV BRUTO**. A
+>   alíquota virou campo do próprio BV, exigida só para confirmar. Com
+>   isso some a assimetria descrita em **§8** — a fila de faturamento e a
+>   planilha passaram a usar o mesmo número.
+> - **§7:** a linha `+ BVs` saiu da ótica PLANEJADA do painel Resultado.
+>   Na realizada ela continua, com o bruto.
+>
+> O que **continua valendo**: §5 (o realizado vem das PPs, e em `A`/`D`
+> espelha o orçado), §6 e §9. E um item passou a aceitar **vários** BVs.
 **Contexto:** planilha do orçamento (`/orcamentos/.../versoes/[versaoId]`)
 e Planilha Interna do job (`/jobs/[jobId]`), com efeito nas telas
 consolidadas de projeto e na conferência do financeiro. Design de

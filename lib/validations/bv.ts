@@ -38,6 +38,20 @@ export const bvSchema = z.object({
       .regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida.")
       .nullable(),
   ).default(null),
+  /** Alíquota DESTE BV, em pontos percentuais (19.53 = 19,53%).
+   *
+   *  Opcional aqui pelo mesmo motivo do fornecedor: enquanto se negocia,
+   *  ela pode não estar definida. Quem a cobra é `confirmarBv`, que é o
+   *  envio ao contas a receber (decisão 062, 08/09/2026).
+   *
+   *  Antes de 08/09/2026 a alíquota vinha do job e nem passava por aqui. */
+  percentual_imposto: vazioComoNulo(
+    z.coerce
+      .number({ invalid_type_error: "Alíquota inválida." })
+      .min(0, "A alíquota não pode ser negativa.")
+      .lt(100, "A alíquota precisa ser menor que 100%.")
+      .nullable(),
+  ).default(null),
 });
 
 export type BvInput = z.infer<typeof bvSchema>;

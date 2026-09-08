@@ -102,7 +102,6 @@ export default async function ProjetoAgregadoPage({
       // resumo do cabeçalho bater com o card de Totais logo abaixo.
       planejado: acc.planejado + j.planejado.bruto,
       realizado: acc.realizado + j.realizado.bruto,
-      bvPlanejado: acc.bvPlanejado + j.planejado.deducaoBv,
       bvRealizado: acc.bvRealizado + j.realizado.deducaoBv,
     }),
     {
@@ -111,7 +110,6 @@ export default async function ProjetoAgregadoPage({
       imposto: 0,
       planejado: 0,
       realizado: 0,
-      bvPlanejado: 0,
       bvRealizado: 0,
     },
   );
@@ -162,7 +160,6 @@ export default async function ProjetoAgregadoPage({
               imposto={resumoProjeto.imposto}
               custoPlanejado={resumoProjeto.planejado}
               custoRealizado={resumoProjeto.realizado}
-              bvPlanejado={resumoProjeto.bvPlanejado}
               bvRealizado={resumoProjeto.bvRealizado}
               moeda={moedaProjeto}
             />

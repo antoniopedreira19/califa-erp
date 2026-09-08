@@ -16,7 +16,6 @@ import {
   TIPOS_CUSTO,
   aceitaBV,
 } from "@/lib/calculos/versao-totais";
-import { planejadoEspelhaOrcado } from "@/lib/calculos/bv-planilha";
 import type { TipoCusto, JobStatus, ErrataAcao } from "@/lib/types";
 import { jobAceitaAcoesPlanilha } from "@/lib/types";
 
@@ -93,6 +92,51 @@ async function barrarLinhaComPPNoFinanceiro(
   const copiaId = copiaPorRealizado.get(pp.item_realizado_id) ?? "";
   const nome = nomePorCopiaId.get(copiaId) ?? "o item";
   return `"${nome}" já tem o Pedido de Produção ${pp.codigo} no financeiro. Linha com PP emitida não entra em errata — corrija o que falta em outra linha, ou cancele a PP antes.`;
+}
+
+/**
+ * Barra a errata em linha `A · Repasse` já marcada como concluída.
+ *
+ * O resguardo pedido pelo Tiago em 08/09/2026 (decisão 062). No `AR` a
+ * soma das PPs precisa cobrir o orçado para o item fechar; deixar o
+ * orçado se mover DEPOIS do fechamento quebraria a invariante por trás
+ * das costas de quem já repassou.
+ *
+ * Na prática o caso quase não acontece — em custo A, AR e D o repasse só
+ * sai depois de o cliente pagar, e a essa altura o job está faturado e a
+ * errata já não abre. A trava existe para o "quase".
+ *
+ * Só o `AR`: em B, C, F e FI não há amarração entre PPs e orçado, e a
+ * errata segue como a decisão 040 deixou. A trava de PP no financeiro,
+ * essa sim, continua valendo para todos.
+ */
+async function barrarARConcluido(
+  jobId: string,
+  tenantId: string,
+  alvos: AlvoTroca[],
+): Promise<string | null> {
+  const supabase = createClient();
+  const copiaIds = alvos.map((a) => a.copiaId).filter(Boolean);
+  if (copiaIds.length === 0) return null;
+
+  const nomePorCopiaId = new Map(alvos.map((a) => [a.copiaId, a.itemNome]));
+
+  const { data } = await supabase
+    .from("jobs_itens_realizado")
+    .select("job_item_orcado_id, copia:jobs_itens_orcado!inner(tipo_custo)")
+    .eq("job_id", jobId)
+    .eq("tenant_id", tenantId)
+    .in("job_item_orcado_id", copiaIds)
+    .not("pps_concluidas_em", "is", null)
+    .eq("copia.tipo_custo", "AR");
+
+  const travada = (data ?? [])[0] as
+    | { job_item_orcado_id: string }
+    | undefined;
+  if (!travada) return null;
+
+  const nome = nomePorCopiaId.get(travada.job_item_orcado_id) ?? "o item";
+  return `"${nome}" é custo A · Repasse e já foi marcado como concluído — as PPs dele fecham o orçado. Linha assim não entra em errata: reabra o item gerando uma PP nova antes de corrigir o orçado.`;
 }
 
 /**
@@ -244,13 +288,16 @@ interface Trio {
  *
  * - linha vermelha: zero (o banco cobra em `chk_jio_linha_vermelha_zerada`);
  * - linha em save: zero (o trigger zera de todo jeito);
- * - custo `A`/`D`: espelho do orçado NOVO (o trigger faria o mesmo — aqui
- *   é para o histórico gravar o número certo);
  * - orçado alterado e planejado informado: o informado;
  * - nada disso: o planejado que já estava lá.
+ *
+ * ⚠️ O caso `A`/`D` — espelho do orçado novo — saiu em 08/09/2026
+ * (decisão 062). Esses dois tipos passaram a ter planejado digitado como
+ * qualquer outro, então a errata trata todos igual e o `tipoPara` deixou
+ * de pesar aqui.
  */
 function planejadoQueFica(
-  linha: { vermelha: boolean; emSave: boolean; tipoPara: TipoCusto },
+  linha: { vermelha: boolean; emSave: boolean },
   orcadoMudou: boolean,
   orcadoPara: Trio,
   planejadoAtual: Trio,
@@ -261,7 +308,6 @@ function planejadoQueFica(
   }>,
 ): Trio {
   if (linha.vermelha || linha.emSave) return { unit: 0, qtd: 0, dm: 0 };
-  if (planejadoEspelhaOrcado(linha.tipoPara)) return orcadoPara;
   const temInformado =
     informado.valor_unitario_planejado !== undefined ||
     informado.quantidade_planejada !== undefined ||
@@ -465,7 +511,6 @@ export async function registrarErrata(
       {
         vermelha: atual.linha_vermelha === true,
         emSave: atual.em_save === true,
-        tipoPara: alt.tipo_custo,
       },
       orcadoMudou,
       { unit: alt.valor_unitario, qtd: alt.quantidade, dm: alt.dias_meses },
@@ -585,7 +630,7 @@ export async function registrarErrata(
     // A linha nova é orçado novo por definição: o planejado dela vem do
     // payload (decisão 054). Sem ele, nasce zerado como antes.
     const plan = planejadoQueFica(
-      { vermelha: nova.linha_vermelha, emSave: false, tipoPara: nova.tipo_custo },
+      { vermelha: nova.linha_vermelha, emSave: false },
       true,
       { unit, qtd, dm },
       { unit: 0, qtd: 0, dm: 0 },
@@ -643,6 +688,17 @@ export async function registrarErrata(
       })),
     );
     if (bloqueio) return { ok: false, message: bloqueio };
+
+    // ---- Trava do A · Repasse já concluído (decisão 062) ----
+    const bloqueioAR = await barrarARConcluido(
+      jobId,
+      session.activeTenant.id,
+      alteradas.map((m) => ({
+        copiaId: m.copiaId ?? "",
+        itemNome: m.itemNome,
+      })),
+    );
+    if (bloqueioAR) return { ok: false, message: bloqueioAR };
   }
 
   // ---- Trava de troca de tipo: BV já confirmado ----

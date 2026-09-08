@@ -10,13 +10,15 @@
  *   California. É o número que o financeiro persegue, e é o padrão
  *   desde 27/08/2026.
  *
- * A chave que alterna as duas é uma por página (job e orçamento) e mexe
- * só em PLANEJADO e REALIZADO: o ORÇADO não recebe BV e é idêntico nos
- * dois modos.
+ * A chave que alterna as duas mexe **só no REALIZADO** desde 08/09/2026
+ * (decisão 062): o ORÇADO nunca recebeu BV, e o PLANEJADO deixou de
+ * receber. Por isso ela só existe nas telas do job — no orçamento não
+ * havia mais o que ela mudar.
  *
- * O que se subtrai é **sempre o líquido** — valor do BV menos o imposto
- * da alíquota do job. O bruto nunca entra na planilha: a parte que vira
- * imposto não volta para a agência.
+ * O que se subtrai é o **BV bruto**, o valor cheio negociado com o
+ * fornecedor. Até 08/09/2026 era o líquido (valor menos a alíquota do
+ * job); a alíquota virou campo do próprio BV e passou a servir só ao que
+ * o financeiro emite, não à planilha (decisão 062).
  *
  * Fonte única das contas: tela, server action e export leem daqui.
  */
@@ -52,9 +54,14 @@ export const VISAO_BV_PADRAO: VisaoBv = "liquido";
  * é uma fatia dele. Do design "Job - A com Repasse - BV e PP", tela 4a:
  * R$ 10.000,00 a 19,54% dá R$ 1.954,00, e não R$ 2.428,52.
  *
- * A alíquota sai de `versoes_orcamento.percentual_imposto`. Versão
- * aprovada é read-only inteira, então ela já não se move depois da
- * abertura do job — não há snapshot a guardar.
+ * A alíquota é a **do próprio BV** (`itens_bv.percentual_imposto`) desde
+ * 08/09/2026. Antes ela vinha do job; agora é digitada no formulário,
+ * pode ficar vazia enquanto se negocia e é exigida para confirmar
+ * (decisão 062).
+ *
+ * ⚠️ Isto NÃO alimenta mais a planilha. O REALIZADO desconta o bruto. O
+ * líquido continua sendo o que de fato sobra para a California, e é o
+ * que o formulário mostra e o financeiro usa.
  */
 export function impostoDoBv(
   valorBv: number,
@@ -64,8 +71,8 @@ export function impostoDoBv(
   return arredondar(Number(valorBv ?? 0) * taxa);
 }
 
-/** O que de fato volta para a California — e o único número que a
- *  planilha subtrai. */
+/** O que de fato volta para a California, já descontado o imposto.
+ *  Informativo desde 08/09/2026: a planilha subtrai o BRUTO. */
 export function bvLiquido(valorBv: number, percentualImposto: number): number {
   return arredondar(
     Number(valorBv ?? 0) - impostoDoBv(valorBv, percentualImposto),
@@ -73,15 +80,17 @@ export function bvLiquido(valorBv: number, percentualImposto: number): number {
 }
 
 /**
- * BVs que contam no PLANEJADO: todos os ativos.
+ * O PLANEJADO não recebe BV (decisão 062, 08/09/2026).
  *
- * O planejado é projeção — a comissão ainda em negociação já conta,
- * porque é ela que o GP considerou ao montar o custo. Só o cancelado
- * sai, e ele já nem chega às telas (as páginas carregam apenas ativos).
+ * Até aqui ele descontava todos os BVs ativos, por um valor congelado na
+ * aprovação da versão (`bv_liquido_planejado`). O planejado passou a ser
+ * o custo que o GP registra, e só isso; a comissão aparece quando ela
+ * acontece, que é no REALIZADO.
+ *
+ * A função ficou como constante para que a intenção seja legível na
+ * conta — e não um zero solto que o próximo leitor tome por bug.
  */
-export function bvContaNoPlanejado(situacao: BvSituacao): boolean {
-  return situacao !== "cancelado";
-}
+const DEDUCAO_BV_NO_PLANEJADO = 0;
 
 /**
  * BVs que contam no REALIZADO: só a partir de `confirmado`.
@@ -95,20 +104,26 @@ export function bvContaNoRealizado(situacao: BvSituacao): boolean {
 }
 
 /**
- * O planejado do item é digitado, ou é espelho do orçado?
+ * Quanto os BVs de UMA linha descontam do realizado dela.
  *
- * `A` e `D` são os tipos em que o cliente paga o fornecedor diretamente
- * (calha BV, sem Pedido de Produção). Neles a agência não escolhe um
- * custo próprio: o custo É o orçado, e o que ela ganha é a comissão. Por
- * isso o planejado deixou de ser editável neles em 21/08/2026 e passou a
- * espelhar o orçado, com o BV descontado na vista Líquido.
- *
- * `AR` fica de fora de propósito: nele o principal passa pela California
- * e é repassado ao fornecedor, então há um custo próprio a planejar — e
- * ele continua digitado, como em B, C, F e FI.
+ * Soma o **bruto** dos que já contam. Um item pode ter vários BVs desde
+ * 08/09/2026 (decisão 062), cada um com situação própria — então isto é
+ * uma soma filtrada, e não mais a leitura de um registro só.
  */
-export function planejadoEspelhaOrcado(tipo: TipoCusto): boolean {
-  return !tipoGeraDesembolso(tipo);
+export function deducaoBvDoRealizado(bvs: readonly BvParaConta[]): number {
+  return arredondar(
+    bvs.reduce(
+      (s, bv) =>
+        bvContaNoRealizado(bv.situacao) ? s + Number(bv.valor ?? 0) : s,
+      0,
+    ),
+  );
+}
+
+/** Há BV lançado na linha que ainda NÃO conta para o realizado — o que
+ *  produz o rótulo "BV não emitido" em vez de uma dedução de zero. */
+export function temBvPendente(bvs: readonly BvParaConta[]): boolean {
+  return bvs.some((bv) => !bvContaNoRealizado(bv.situacao) && bv.situacao !== "cancelado");
 }
 
 /**
@@ -124,27 +139,26 @@ export function realizadoVemDasPPs(tipo: TipoCusto): boolean {
 }
 
 /**
- * Planejado BRUTO do item — o custo cheio, antes do BV.
+ * Planejado do item — o custo que o GP registrou.
  *
- * Em `A` e `D` é o próprio orçado; nos demais é o que foi digitado na
- * coluna PLANEJADO.
+ * É a coluna PLANEJADO, em TODOS os tipos. Até 08/09/2026 `A` e `D`
+ * ignoravam a coluna e espelhavam o orçado; a decisão 062 acabou com o
+ * espelho, e com ele acabou a única razão de esta função consultar o
+ * tipo de custo.
  *
- * `emSave` vem antes de tudo: a linha em save é venda sem execução, e não
- * tem custo nenhum neste job (decisão 028 §9). O trigger já grava zero nas
- * três células do planejado, mas em `A` e `D` a tela não LÊ a coluna — ela
- * espelha o orçado —, e sem esta guarda o espelho ressuscitaria o custo
- * que o banco zerou, jogando a rentabilidade do grupo para negativa.
+ * `emSave` continua vindo antes: a linha em save é venda sem execução, e
+ * não tem custo nenhum neste job (decisão 028 §9). O trigger já grava
+ * zero nas três células, e a guarda aqui é o cinto — uma leitura que
+ * chegue com valor velho em cache não ressuscita o custo.
+ *
+ * Não há mais dedução de BV neste bloco: o BV desconta o REALIZADO.
  */
 export function planejadoBrutoDoItem(
-  tipo: TipoCusto,
-  totalOrcado: number,
   totalPlanejado: number,
   emSave = false,
 ): number {
   if (emSave) return 0;
-  return planejadoEspelhaOrcado(tipo)
-    ? Number(totalOrcado ?? 0)
-    : Number(totalPlanejado ?? 0);
+  return Number(totalPlanejado ?? 0);
 }
 
 /**
@@ -246,21 +260,23 @@ export const BLOCO_ZERO: ValoresDoBloco = {
 };
 
 /** O que a conta precisa saber de um item da planilha. `ItemPlanilhaJob`
- *  (job) e `VersaoOrcamentoItem` (orçamento) satisfazem os dois. */
+ *  (job) e `VersaoOrcamentoItem` (orçamento) satisfazem os dois.
+ *
+ *  `bv_liquido_planejado` saiu daqui em 08/09/2026: com o BV fora do
+ *  planejado, o congelamento da aprovação não tem mais o que congelar. A
+ *  COLUNA continua no banco, guardando o que já foi congelado — é
+ *  histórico, não entrada de conta. */
 export interface ItemParaBv {
   tipo_custo: TipoCusto;
   total_orcado: number | string | null;
   total_planejado: number | string | null;
-  /** BV líquido congelado na aprovação. `null`/ausente ⇒ a versão ainda
-   *  está aberta e a dedução é calculada a partir do BV vigente. */
-  bv_liquido_planejado?: number | string | null;
   /** A linha gera SAVE: é faturada aqui e o serviço não acontece neste
    *  projeto. Fica fora da rentabilidade, porque não tem custo com que
    *  comparar (docs/decisions/028-save-entre-jobs.md §9). */
   em_save?: boolean | null;
 }
 
-/** O que a conta precisa saber do BV da linha. */
+/** O que a conta precisa saber de UM BV da linha. */
 export interface BvParaConta {
   valor: number | string | null;
   situacao: BvSituacao;
@@ -273,19 +289,19 @@ export interface BvParaConta {
  *  conta é como o número da linha e o número do subtotal começam a
  *  divergir.
  *
- *  A assimetria entre os dois blocos é deliberada:
+ *  **Só o REALIZADO desconta BV** (decisão 062, 08/09/2026), e desconta a
+ *  SOMA do bruto de todos os BVs do item que já contam — `confirmado` e
+ *  `recebido`. O PLANEJADO mostra sempre o custo cheio que o GP
+ *  registrou; a comissão entra na conta quando ela acontece.
  *
- *  - **Planejado** usa o BV CONGELADO (`bv_liquido_planejado`). Editar o
- *    BV depois da abertura não mexe nele — o planejado é o compromisso
- *    fechado no envio para abertura.
- *  - **Realizado** usa o BV vigente, e só a partir de `confirmado`. É lá
- *    que o valor novo se materializa.
+ *  Isso desfez a assimetria que existia entre os dois blocos, e com ela o
+ *  congelamento do BV na aprovação: não há mais nada a congelar.
  */
 export function blocosDoItem(
   item: ItemParaBv,
-  bv: BvParaConta | null,
+  /** TODOS os BVs da linha. Lista vazia = linha sem BV. */
+  bvs: readonly BvParaConta[],
   somaDasPPs: number,
-  percentualImposto: number,
   /** O financeiro já abriu o job? Falso zera o REALIZADO inteiro — ver
    *  `realizadoBrutoDoItem`. Default `true` porque no orçamento não há
    *  job nenhum e o bloco não é exibido de todo jeito. */
@@ -306,19 +322,9 @@ export function blocosDoItem(
   const emSave = item.em_save === true;
 
   const planejadoBruto = planejadoBrutoDoItem(
-    item.tipo_custo,
-    orcado,
     Number(item.total_planejado ?? 0),
     emSave,
   );
-
-  const congelado = item.bv_liquido_planejado;
-  const deducaoPlanejado =
-    bv && bvContaNoPlanejado(bv.situacao)
-      ? congelado === null || congelado === undefined
-        ? bvLiquido(Number(bv.valor ?? 0), percentualImposto)
-        : Number(congelado)
-      : 0;
 
   const realizadoBruto = realizadoBrutoDoItem(
     item.tipo_custo,
@@ -327,23 +333,20 @@ export function blocosDoItem(
     jobAberto,
     emSave,
   );
-  const bvConfirmado = bv !== null && bvContaNoRealizado(bv.situacao);
-  const deducaoRealizado = bvConfirmado
-    ? bvLiquido(Number(bv.valor ?? 0), percentualImposto)
-    : 0;
+  const deducaoRealizado = deducaoBvDoRealizado(bvs);
 
   return {
     orcado,
     // A linha em save é venda sem execução: ela fica fora da comparação
     // orçado × custo, mas continua cheia na coluna ORÇADO.
     orcadoRentabilidade: emSave ? 0 : orcado,
-    planejado: valoresDoBloco(planejadoBruto, deducaoPlanejado),
+    planejado: valoresDoBloco(planejadoBruto, DEDUCAO_BV_NO_PLANEJADO),
     realizado: valoresDoBloco(
       realizadoBruto,
       deducaoRealizado,
       // "BV não emitido" só faz sentido quando há bruto de onde deduzir:
       // numa linha ainda sem PP o aviso seria ruído.
-      bv !== null && !bvConfirmado && realizadoBruto > 0,
+      temBvPendente(bvs) && realizadoBruto > 0,
     ),
   };
 }

@@ -12,7 +12,10 @@ import { listActiveMembers } from "@/lib/data/members";
 import {
   valorDaPPPorUnidade,
   somaDasPPsEmitidas,
+  somaDasPPsNaoCanceladas,
   passaDoPlanejado,
+  exigeSomaIgualAoOrcado,
+  faltaParaFecharOOrcado,
   parcelasFecham,
   dividirEmParcelas,
   proximoVencimento,
@@ -32,6 +35,7 @@ import {
   jobAceitaEnvioDePP,
   type PPStatus,
   type JobStatus,
+  type TipoCusto,
 } from "@/lib/types";
 
 const BUCKET = "pedidos-compra";
@@ -181,6 +185,13 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
         total_planejado: number;
         total_orcado: number;
         quantidade_orcada: number;
+        /** Tipo de custo NA CÓPIA do job — a errata pode tê-lo trocado, e
+         *  a versão aprovada não acompanha de propósito. É ele que decide
+         *  a trava do `AR` (decisão 062). */
+        tipo_custo: TipoCusto;
+        /** Linha em save não emite PP neste job (decisão 028 §9): fica
+         *  fora da trava do `AR`, senão travaria para sempre. */
+        em_save: boolean;
         /** Nome do item na planilha — o chat e a auditoria da marcação
          *  precisam dele para dizer de qual linha estão falando. */
         item_nome: string;
@@ -223,7 +234,9 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
   // criada por errata só existe pela chave nova.
   const buscaOrcado = supabase
     .from("jobs_itens_orcado")
-    .select("id, item, total_orcado, total_planejado, quantidade_orcada, linha_vermelha")
+    .select(
+      "id, item, total_orcado, total_planejado, quantidade_orcada, linha_vermelha, tipo_custo, em_save",
+    )
     .eq("tenant_id", session.activeTenant.id);
 
   const { data: orcado, error: orcadoErr } = ancora.job_item_orcado_id
@@ -251,6 +264,8 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
     total_planejado: Number((orcado as any).total_planejado ?? 0),
     total_orcado: Number(orcado.total_orcado ?? 0),
     quantidade_orcada: Number(orcado.quantidade_orcada ?? 0),
+    tipo_custo: (orcado as any).tipo_custo as TipoCusto,
+    em_save: (orcado as any).em_save === true,
   };
 
   const { data: jobRow, error: jobErr } = await supabase
@@ -349,6 +364,65 @@ async function somaEmitidasDoItem(
   return somaDasPPsEmitidas(
     (data ?? []).map((pp) => ({ valor: Number(pp.valor), status: pp.status })),
   );
+}
+
+/** Mesmo formato das mensagens de encerramento — o usuário lê os dois
+ *  avisos no mesmo fluxo. */
+function formatarBRL(n: number): string {
+  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+/**
+ * A trava do `A · Repasse`: enquanto a soma das PPs do item não cobre o
+ * orçado, nenhuma PP dele sai para o financeiro e o item não pode ser
+ * marcado como concluído (decisão 062, 08/09/2026).
+ *
+ * No `AR` o principal passa pela California e é REPASSADO ao fornecedor.
+ * Fechar o item com PPs somando menos que o orçado deixaria a agência com
+ * dinheiro que era do fornecedor — por isso a trava é sobre a FALTA, e
+ * passar do orçado segue livre (quem cuida do excesso é a confirmação
+ * acima do planejado, da decisão 039).
+ *
+ * Conta as NÃO CANCELADAS, a `gerada` inclusive: contar só as enviadas
+ * seria esperar o que a própria trava impede.
+ *
+ * Devolve a mensagem de recusa, ou `null` quando o item pode seguir.
+ * Fonte única das duas chamadas — envio e conclusão —, porque duas
+ * implementações da mesma trava divergem no primeiro ajuste.
+ */
+async function barrarARComOrcadoEmAberto(
+  supabase: ReturnType<typeof createClient>,
+  tenantId: string,
+  item: {
+    id: string;
+    item_nome: string;
+    tipo_custo: TipoCusto;
+    em_save: boolean;
+    total_orcado: number;
+  },
+): Promise<Err | null> {
+  if (!exigeSomaIgualAoOrcado(item.tipo_custo, item.em_save)) return null;
+
+  const { data } = await supabase
+    .from("pedidos_compra")
+    .select("valor, status")
+    .eq("item_realizado_id", item.id)
+    .eq("tenant_id", tenantId);
+
+  const soma = somaDasPPsNaoCanceladas(
+    (data ?? []).map((pp) => ({ valor: Number(pp.valor), status: pp.status })),
+  );
+  const falta = faltaParaFecharOOrcado(soma, item.total_orcado);
+  if (falta <= 0) return null;
+
+  return {
+    ok: false,
+    message:
+      `Em custo A · Repasse as PPs precisam fechar o orçado do item antes de ir ao financeiro. ` +
+      `"${item.item_nome}" tem ${formatarBRL(soma)} em PPs de um orçado de ` +
+      `${formatarBRL(item.total_orcado)} — faltam ${formatarBRL(falta)}. ` +
+      `Gere as PPs que faltam e envie todas juntas.`,
+  };
 }
 
 /**
@@ -1788,6 +1862,9 @@ export async function signedUrlAnexo(
  *      `confirmarAcimaDoPlanejado`. Sem o flag a action devolve os
  *      números para o "tem certeza?" da tela. Linha vermelha tem
  *      planejado zero, então toda PP dela cai aqui — regra literal.
+ *   5. Em item `A · Repasse`, a soma das PPs precisa cobrir o ORÇADO
+ *      (decisão 062). Diferente da 4, esta BARRA: não há confirmação que
+ *      libere repassar menos do que se recebeu para repassar.
  */
 export async function enviarPedidoCompraAoFinanceiro(
   pp_id: string,
@@ -1847,6 +1924,16 @@ export async function enviarPedidoCompraAoFinanceiro(
         "Anexe a nota fiscal do fornecedor antes de enviar esta PP ao financeiro.",
     };
   }
+
+  // A trava do AR vem ANTES da conta do planejado: ela barra de vez, e
+  // deixar o "tem certeza?" aparecer primeiro faria o usuário confirmar
+  // um envio que vai ser recusado logo em seguida.
+  const bloqueioAR = await barrarARComOrcadoEmAberto(
+    supabase,
+    session.activeTenant.id,
+    item,
+  );
+  if (bloqueioAR) return bloqueioAR;
 
   const valor = Number(ppRow.valor ?? 0);
   const emPPsAntes = await somaEmitidasDoItem(

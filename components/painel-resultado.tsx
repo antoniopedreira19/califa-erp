@@ -25,7 +25,7 @@ interface Props {
   custoPlanejado: number;
   custoRealizado: number;
   /**
-   * BV líquido a somar de volta, por ótica.
+   * BV bruto a somar de volta, na ótica REALIZADA.
    *
    * A conta é `Valor do Job − Impostos − Custo bruto + BVs`, e ela é
    * ALGEBRICAMENTE a mesma coisa que `− Custo líquido`: o BV que a
@@ -36,10 +36,14 @@ interface Props {
    * Consequência de propósito: o Resultado dá o MESMO número nas duas
    * vistas da chave Bruto ⇄ Líquido. Ele não segue a chave.
    *
-   * Na ótica planejada somam todos os BVs ativos (é projeção); na
-   * realizada, só os confirmados. Quem filtra é quem monta os blocos.
+   * ⚠️ Só a ótica REALIZADA tem BV desde 08/09/2026 (decisão 062). Havia
+   * um `bvPlanejado` aqui, somando os BVs ativos como projeção; ele saiu
+   * junto com a dedução de BV no planejado. Somar comissão numa ótica que
+   * a planilha não desconta faria o painel discordar da coluna ao lado.
+   *
+   * Entram os `confirmado` e `recebido`, pelo valor BRUTO. Quem filtra e
+   * soma é quem monta os blocos (`deducaoBvDoRealizado`).
    */
-  bvPlanejado?: number;
   bvRealizado?: number;
   honorarios: number;
   /**
@@ -94,7 +98,6 @@ export function PainelResultado({
   orcado,
   custoPlanejado,
   custoRealizado,
-  bvPlanejado = 0,
   bvRealizado = 0,
   honorarios,
   taxaHonorarios,
@@ -107,7 +110,9 @@ export function PainelResultado({
   const planejada = somentePlanejada || visao === "planejada";
 
   const custo = planejada ? custoPlanejado : custoRealizado;
-  const bv = planejada ? bvPlanejado : bvRealizado;
+  // Planejada não tem BV (decisão 062): a comissão só entra onde ela
+  // acontece, que é no realizado.
+  const bv = planejada ? 0 : bvRealizado;
   const temCusto = custo > 0;
 
   // O BV entra como REDUÇÃO do custo na conta, e como linha somando na
@@ -165,9 +170,7 @@ export function PainelResultado({
             rotulo={
               <>
                 + BVs{" "}
-                <span className="text-xs">
-                  ({planejada ? "planejados" : "confirmados"}, líquidos)
-                </span>
+                <span className="text-xs">(confirmados)</span>
               </>
             }
             valor={formatCurrency(bv, moeda)}

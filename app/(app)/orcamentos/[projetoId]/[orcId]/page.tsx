@@ -27,7 +27,6 @@ import {
   calcularTotaisVersao,
   calcularResultadoOperacional,
 } from "@/lib/calculos/versao-totais";
-import { bvContaNoPlanejado, bvLiquido } from "@/lib/calculos/bv-planilha";
 import { OrcamentoEditorDrawer } from "../orcamento-editor-drawer";
 import { AbasVersoes, type VersaoAba } from "./abas-versoes";
 import { AcoesVersao } from "./acoes-versao";
@@ -734,10 +733,16 @@ function VersaoSelecionada({
 
   // Indexado por item: a calha consulta uma chave por linha. Objeto, e
   // não Map, porque só objeto atravessa a fronteira server → client.
-  const bvsPorItem: Record<string, ItemBv> = {};
+  //
+  // LISTA por item desde 08/09/2026 (decisão 062): um item pode ter vários
+  // BVs, cada um com fornecedor, alíquota e situação próprios.
+  const bvsPorItem: Record<string, ItemBv[]> = {};
   for (const raw of bvsBrutos) {
     const { item: _joinFiltro, ...bv } = raw;
-    bvsPorItem[bv.item_versao_id] = { ...bv, valor: Number(bv.valor ?? 0) };
+    (bvsPorItem[bv.item_versao_id] ??= []).push({
+      ...bv,
+      valor: Number(bv.valor ?? 0),
+    });
   }
 
   // Financeiro cai aqui como se a versao estivesse aprovada (ver `readOnlyPeloPapel`
@@ -759,21 +764,18 @@ function VersaoSelecionada({
     0,
   );
 
-  // O BV volta para a agência, então ele REDUZ o custo na conta do
-  // resultado — a mesma operação que o card de Totais escreve como linha
-  // "+ BVs" (docs/decisions/022). O bloco "Custo planejado" do resumo
-  // segue mostrando o BRUTO, como o card.
-  const bvLiquidoDaVersao = Object.values(bvsPorItem).reduce(
-    (s, bv) =>
-      bvContaNoPlanejado(bv.situacao)
-        ? s + bvLiquido(Number(bv.valor ?? 0), Number(versao.percentual_imposto))
-        : s,
-    0,
-  );
+  // ⚠️ O BV saiu da conta do resultado PLANEJADO em 08/09/2026 (decisão
+  // 062). Até aqui ele era somado de volta como "+ BVs", espelhando a
+  // dedução que a planilha fazia no planejado. Sem a dedução, somá-lo
+  // aqui faria o painel e a coluna PLANEJADO contarem histórias
+  // diferentes sobre o mesmo item.
+  //
+  // A comissão volta a aparecer no REALIZADO, na planilha do job — que é
+  // onde ela de fato acontece.
   const { resultadoOperacional, resultadoGeral } = calcularResultadoOperacional(
     totais.valorJob,
     totais.imposto,
-    custoPlanejado - bvLiquidoDaVersao,
+    custoPlanejado,
   );
 
   // Preview do código: o definitivo é gerado no insert. Serve só pra tela

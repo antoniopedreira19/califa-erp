@@ -87,7 +87,6 @@ import {
 import { aceitaBV, TIPOS_CUSTO } from "@/lib/calculos/versao-totais";
 import {
   blocosDoItem,
-  planejadoEspelhaOrcado,
   rotuloColunaTotal,
   somarBlocosDosItens,
   valorNaVisao,
@@ -138,7 +137,7 @@ interface Props {
   readOnly?: boolean;
   categorias: Categoria[];
   /** BV por id do item. Só existe em item tipo A, AR ou D. */
-  bvsPorItem: Record<string, ItemBv>;
+  bvsPorItem: Record<string, ItemBv[]>;
   fornecedores: FornecedorOpcao[];
   /** "v5" — aparece no subtítulo do formulário de BV. */
   versaoLabel: string;
@@ -633,14 +632,8 @@ export function ItensTable({
     // não vale nela, senão o custo que o banco zerou voltaria pela tela.
     if (item.em_save === true) return { orcado, planejado: 0 };
 
-    // Em `A` e `D` o planejado É o orçado — inclusive enquanto o usuário
-    // ainda está digitando o orçado, para o espelho não piscar atrasado.
-    if (planejadoEspelhaOrcado(
-      String(valorAtual(item, "tipo_custo")) as VersaoOrcamentoItem["tipo_custo"],
-    )) {
-      return { orcado, planejado: orcado };
-    }
-
+    // ⚠️ O espelho de `A`/`D` saiu em 08/09/2026 (decisão 062): os dois
+    // tipos voltaram a ter planejado digitado, como todos os outros.
     const planejado = overrides[item.id]
       ? num(valorAtual(item, "valor_unitario_planejado")) *
         num(valorAtual(item, "quantidade_planejada")) *
@@ -661,14 +654,12 @@ export function ItensTable({
         ) as VersaoOrcamentoItem["tipo_custo"],
         total_orcado: totais.orcado,
         total_planejado: totais.planejado,
-        bv_liquido_planejado: item.bv_liquido_planejado,
         // Sem isto o subtotal do grupo contaria a linha em save na
         // rentabilidade e discordaria do card de Totais logo abaixo.
         em_save: item.em_save,
       },
-      bvsPorItem[item.id] ?? null,
+      bvsPorItem[item.id] ?? [],
       0,
-      percentualImposto,
     );
   }
 
@@ -705,26 +696,20 @@ export function ItensTable({
 
   /** As três colunas de PLANEJADO travadas nesta linha.
    *
-   *  Em `A` e `D` o planejado espelha o orçado e não se digita — o Tab
-   *  precisa PULAR essas células, senão a navegação morre numa célula
-   *  que não abre para edição. A linha nova (draft) nasce sem tipo
-   *  definido, então nunca trava. */
+   *  Sobrou UM caso: a linha em SAVE, cujo planejado é zero e não se
+   *  digita — o Tab precisa PULAR essas células, senão a navegação morre
+   *  numa célula que não abre para edição.
+   *
+   *  ⚠️ O caso `A`/`D` saiu em 08/09/2026 (decisão 062). O planejado dos
+   *  dois voltou a ser digitado, e com isso o tipo de custo deixou de
+   *  decidir qualquer coisa aqui. */
   const planejadoTravadoEm = React.useCallback(
     (rowId: string): boolean => {
       const item = itensPorId.get(rowId);
       if (!item) return false;
-      // Em save o planejado é zero e não se digita — o Tab pula igual.
-      if (item.em_save === true) return true;
-      const campos = overrides[rowId];
-      const tipo =
-        campos && "tipo_custo" in campos
-          ? campos.tipo_custo
-          : item.tipo_custo;
-      return planejadoEspelhaOrcado(
-        String(tipo) as VersaoOrcamentoItem["tipo_custo"],
-      );
+      return item.em_save === true;
     },
-    [itensPorId, overrides],
+    [itensPorId],
   );
 
   /** A linha provisória ainda sem id real não abre célula: qualquer
@@ -1433,18 +1418,11 @@ export function ItensTable({
                           visao,
                         );
                         const emSave = item.em_save === true;
-                        // Duas perguntas diferentes: o planejado ESPELHA o
-                        // orçado (`A` e `D`), e o planejado está TRAVADO. A
-                        // linha em save trava sem espelhar — ela não tem
-                        // custo nenhum (decisão 028 §9).
-                        const planejadoEspelha =
-                          !emSave &&
-                          planejadoEspelhaOrcado(
-                            String(
-                              valorAtual(item, "tipo_custo"),
-                            ) as VersaoOrcamentoItem["tipo_custo"],
-                          );
-                        const planejadoTravado = planejadoEspelha || emSave;
+                        // Sobrou uma pergunta só: o planejado está TRAVADO,
+                        // e ele só trava na linha em save, que não tem
+                        // custo nenhum (decisão 028 §9). O espelho de
+                        // `A`/`D` saiu em 08/09/2026 (decisão 062).
+                        const planejadoTravado = emSave;
                         const save = savePorItem?.[item.id] ?? SAVE_VAZIO;
                         const categoriaId = valorAtual(item, "categoria_id") as
                           | string
@@ -1633,20 +1611,15 @@ export function ItensTable({
                               </>
                             )}
 
-                            {/* Planejado espelha o Orçado: zero é
-                                "R$ 0,00 · 0 · 0", não travessão. Em `A` e
-                                `D` o espelho é literal e as células não
-                                abrem: lá o cliente paga o fornecedor
-                                direto, e o custo da agência É o orçado
-                                menos o BV. */}
+                            {/* O planejado é digitado em TODOS os tipos
+                                desde 08/09/2026 (decisão 062). Zero aqui é
+                                "R$ 0,00 · 0 · 0", não travessão: a célula
+                                existe e está vazia, e é diferente de não
+                                existir. */}
                             <CelulaNumero
-                              valor={
-                                planejadoEspelha
-                                  ? num(valorAtual(item, "valor_unitario_orcado"))
-                                  : num(
-                                      valorAtual(item, "valor_unitario_planejado"),
-                                    )
-                              }
+                              valor={num(
+                                valorAtual(item, "valor_unitario_planejado"),
+                              )}
                               formato="moeda"
                               moeda={moeda}
                               editando={ativaAqui("valor_unitario_planejado")}
@@ -1665,11 +1638,7 @@ export function ItensTable({
                               tdClassName={cn("font-mono", PLANEJADO.celulaAbre)}
                             />
                             <CelulaNumero
-                              valor={
-                                planejadoEspelha
-                                  ? num(valorAtual(item, "quantidade_orcada"))
-                                  : num(valorAtual(item, "quantidade_planejada"))
-                              }
+                              valor={num(valorAtual(item, "quantidade_planejada"))}
                               editando={ativaAqui("quantidade_planejada")}
                               semente={sementeDe("quantidade_planejada")}
                               nav={selecao.celulaProps(item.id, "quantidade_planejada")}
@@ -1686,11 +1655,7 @@ export function ItensTable({
                               tdClassName={PLANEJADO.celulaMeio}
                             />
                             <CelulaNumero
-                              valor={
-                                planejadoEspelha
-                                  ? num(valorAtual(item, "dias_meses_orcado"))
-                                  : num(valorAtual(item, "dias_meses_planejado"))
-                              }
+                              valor={num(valorAtual(item, "dias_meses_planejado"))}
                               editando={ativaAqui("dias_meses_planejado")}
                               semente={sementeDe("dias_meses_planejado")}
                               nav={selecao.celulaProps(item.id, "dias_meses_planejado")}
@@ -1919,10 +1884,11 @@ export function ItensTable({
 
                   {aberto &&
                     grupo.itens.map((item) => {
-                      const bv = bvsPorItem[item.id] ?? null;
+                      const bvsDaLinha = bvsPorItem[item.id] ?? [];
                       // Sem BV numa versão congelada não há nada a
                       // consultar — a vaga fica vazia para não desalinhar.
-                      const mostraBv = temBv(item) && (editavel || bv !== null);
+                      const mostraBv =
+                        temBv(item) && (editavel || bvsDaLinha.length > 0);
                       if (!mostraBv && !editavel) return null;
                       // Ainda sem id real não há o que remover nem a que
                       // prender um BV — a vaga fica vazia para as de
@@ -1942,13 +1908,20 @@ export function ItensTable({
                           >
                             {mostraBv && (
                               <BvActionButton
-                                temBv={bv !== null}
+                                temBv={bvsDaLinha.length > 0}
                                 itemNome={item.item}
-                                // BV que já saiu para o financeiro abre em
-                                // consulta mesmo com a versão aberta.
+                                // Só vira consulta quando NENHUM BV da
+                                // linha ainda pode ser mexido: com vários
+                                // BVs (decisão 062), um confirmado não
+                                // fecha a porta dos outros — nem a de
+                                // lançar mais um.
                                 somenteLeitura={
                                   !editavel ||
-                                  (bv !== null && bv.situacao !== "a_negociar")
+                                  (bvsDaLinha.length > 0 &&
+                                    bvsDaLinha.every(
+                                      (b) => b.situacao !== "a_negociar",
+                                    ) &&
+                                    !editavel)
                                 }
                                 onClick={() => setBvAberto(item)}
                               />
@@ -2015,7 +1988,7 @@ export function ItensTable({
             categorias.find((c) => c.id === bvAberto.categoria_id)?.nome ?? null
           }
           moeda={moeda}
-          bv={bvsPorItem[bvAberto.id] ?? null}
+          bvs={bvsPorItem[bvAberto.id] ?? []}
           fornecedores={fornecedores}
           percentualImposto={percentualImposto}
           origem="orcamento"

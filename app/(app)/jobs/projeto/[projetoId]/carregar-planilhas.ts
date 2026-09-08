@@ -89,10 +89,11 @@ export async function carregarPlanilhasDosJobs(
       .eq("tenant_id", tenantId)
       .in("job_id", jobIds),
     supabase.from("categorias").select("id, nome").eq("tenant_id", tenantId),
-    // O BV entra na conta desde 21/08/2026: a vista Líquido desconta o
-    // líquido dele do planejado e do realizado. Chaveado pela CÓPIA do
-    // job desde 27/08/2026 — pelo caminho antigo (`!inner` na versão) a
-    // linha criada por errata sumia da conta em silêncio.
+    // O BV entra na conta desde 21/08/2026. Desde 08/09/2026 (decisão
+    // 062) ele desconta o BRUTO e SÓ do realizado, e um item pode ter
+    // vários. Chaveado pela CÓPIA do job desde 27/08/2026 — pelo caminho
+    // antigo (`!inner` na versão) a linha criada por errata sumia da
+    // conta em silêncio.
     supabase
       .from("itens_bv")
       .select(
@@ -113,14 +114,16 @@ export async function carregarPlanilhasDosJobs(
     console.error("[planilhas-do-projeto.bvs]", bvsRes.error.message);
   }
 
-  const bvPorCopia = new Map<string, BvParaConta>(
-    (bvsRes.data ?? [])
-      .filter((b: any) => b.job_item_orcado_id)
-      .map((b: any) => [
-        b.job_item_orcado_id as string,
-        { valor: b.valor, situacao: b.situacao },
-      ]),
-  );
+  // Lista por cópia: vários BVs no mesmo item somam (decisão 062).
+  const bvPorCopia = new Map<string, BvParaConta[]>();
+  for (const b of (bvsRes.data ?? []) as any[]) {
+    if (!b.job_item_orcado_id) continue;
+    const chave = b.job_item_orcado_id as string;
+    const lista = bvPorCopia.get(chave);
+    const bv = { valor: b.valor, situacao: b.situacao };
+    if (lista) lista.push(bv);
+    else bvPorCopia.set(chave, [bv]);
+  }
 
   const categoriasMap = new Map<string, string>();
   for (const c of (categoriasRes.data ?? []) as any[]) {
@@ -203,14 +206,12 @@ export async function carregarPlanilhasDosJobs(
               tipo_custo: tipo,
               total_orcado: it.total_orcado,
               total_planejado: it.total_planejado,
-              bv_liquido_planejado: it.bv_liquido_planejado,
               // Sem isto a visão agregada contaria a linha em save na
               // rentabilidade e discordaria da Planilha Interna do job.
               em_save: it.em_save,
             },
-            bvPorCopia.get(it.id) ?? null,
+            bvPorCopia.get(it.id) ?? [],
             real?.total ?? 0,
-            aliquotaDoJob,
             jobAberto,
           );
           // Linha em save não tem custo: nem PP, nem espelho do orçado.

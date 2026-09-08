@@ -2850,3 +2850,78 @@ mexer no visual do fio mexe nos dois de uma vez, o que é o ponto.
 
 O badge do FAB do job **continua contando MENSAGENS** não lidas (aqui há
 um fio só). No financeiro ele conta CHATS.
+
+---
+
+## ⚠️ O BV vira lista e desconta o bruto; o A · Repasse precisa fechar o orçado (2026-09-08)
+
+Decisão [062](../decisions/062-bv-so-no-realizado-multiplo-e-com-aliquota-propria.md).
+Do lado dos JOBS são quatro mudanças na Planilha Interna, mais uma trava
+nova no envio de PP.
+
+### 1. O BV desconta o REALIZADO, e pelo BRUTO
+
+A dedução **saiu do PLANEJADO** e ficou só no REALIZADO. E o que se
+subtrai passou a ser o **valor cheio** do BV, não o líquido.
+
+Some daqui a frase de 21/08/2026 sobre o **BV congelado no envio para
+abertura**: sem dedução no planejado, não há o que congelar.
+`bv_liquido_planejado` continua na cópia do job como histórico e ninguém
+a lê. A linha `+ BVs` do painel Resultado ficou só na **ótica realizada**
+— na planejada ela sumiu, e a prop `bvPlanejado` foi removida do
+`PainelResultado`.
+
+A chave Bruto ⇄ Líquido **continua nas três telas do job** (Planilha
+Interna, conferência da abertura no financeiro, visão agregada de jobs do
+projeto). Ela saiu só das telas de orçamento, onde não há realizado.
+
+### 2. Vários BVs por item, cada um andando sozinho
+
+O painel "BV do item" virou **lista**, no desenho do painel de PPs. Cada
+BV tem fornecedor, prazo, situação e **alíquota próprios**, e é
+confirmado e enviado ao contas a receber **individualmente** — dá para
+lançar um BV novo num item que já tem outro confirmado ou recebido.
+
+O realizado desconta a **soma** dos que estão `confirmado` ou `recebido`.
+
+Na calha: o chip só vira consulta quando o job não aceita ações. Antes,
+um BV confirmado travava a linha inteira — com vários, isso fecharia a
+porta dos outros.
+
+### 3. A alíquota do BV é digitada, e obrigatória só no Confirmar
+
+Era a alíquota do job, exibida em leitura. Agora é
+`itens_bv.percentual_imposto`, digitada, podendo ficar vazia enquanto se
+negocia. O campo em branco mostra a do job como *placeholder*, só de
+referência. `confirmarBv` recusa sem ela, e o banco também
+(`chk_bv_confirmado_tem_aliquota`).
+
+### 4. `A` e `D` têm planejado digitado; o realizado deles não mudou
+
+O planejado desses dois tipos **destravou** (ver o handoff de Orçamento).
+O **realizado** continua espelhando o **orçado** — eles não geram PP e
+não há de onde montá-lo.
+
+### 5. Trava nova: em `A · Repasse` as PPs precisam cobrir o orçado
+
+Enquanto a soma das PPs **não canceladas** do item (a `gerada` inclusive)
+for menor que o `total_orcado` da cópia do job:
+
+- **nenhuma PP do item sai para o financeiro**;
+- **o item não pode ser marcado como "todas as PPs já foram geradas"**.
+
+Na prática: **gere todas as PPs do item `AR` antes de enviar a primeira.**
+
+Vale **só para `AR`** — nele o principal é repasse ao fornecedor, não
+margem. `B`, `C`, `F` e `FI` seguem como a
+[039](../decisions/039-pp-nasce-gerada-e-o-envio-ao-financeiro-e-uma-acao.md)
+deixou. Linha em save fica de fora.
+
+A trava é sobre a FALTA (`soma < orçado`), não igualdade estrita: passar
+do orçado já tem o "tem certeza?" da 039, e exigir exatidão criaria um
+beco, porque não existe "des-enviar PP".
+
+⚠️ **Resguardo junto:** item `AR` já marcado como concluído **não entra
+em errata**. Soma-se à trava da
+[040](../decisions/040-errata-nao-toca-linha-com-pp-e-trava-o-envio-de-pp.md),
+que já barra qualquer linha com PP no financeiro.
