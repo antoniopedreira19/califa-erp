@@ -1,6 +1,6 @@
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { BarChart3 } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
+import { PageHeader } from "@/components/ui/page-header";
 import { createClient } from "@/lib/supabase/server";
 import {
   agruparEComputar,
@@ -119,22 +119,21 @@ export default async function RentabilidadePage({ searchParams }: Props) {
   const supabase = createClient();
   const tenantId = session.activeTenant.id;
 
-  // Empresa ativa como default: se nenhuma empresa foi explicitamente filtrada
-  // via URL e há uma empresa ativa no topbar, pré-filtra por ela.
-  // Chip visual usa empresaFiltroId (string | null) para nomear a empresa.
-  const empresaFiltroId: string | null =
-    filtros.empresasIds.length === 0 && session.activeEmpresa
-      ? session.activeEmpresa.id
-      : filtros.empresasIds.length === 1
-        ? filtros.empresasIds[0]
-        : null;
+  // Empresas ativas como default: se nenhuma empresa foi explicitamente filtrada
+  // via URL, pré-filtra pelas empresas ativas no topbar (multi-empresa).
+  const empresaFiltroIds: string[] =
+    filtros.empresasIds.length > 0
+      ? filtros.empresasIds
+      : session.activeEmpresas.map((e) => e.id);
+
+  const activeEmpresasEfetivas =
+    empresaFiltroIds.length > 0
+      ? session.empresas.filter((e) => empresaFiltroIds.includes(e.id))
+      : [];
 
   const filtrosComDefault = {
     ...filtros,
-    empresasIds:
-      filtros.empresasIds.length === 0 && session.activeEmpresa
-        ? [session.activeEmpresa.id]
-        : filtros.empresasIds,
+    empresasIds: empresaFiltroIds,
   };
 
   // As linhas da view dependem dos filtros e do período — não são cached.
@@ -196,48 +195,15 @@ export default async function RentabilidadePage({ searchParams }: Props) {
   return (
     <ModoProvider modoInicial={filtros.modo}>
       <div className="space-y-6">
-        <div>
-          <Link
-            href="/relatorios"
-            className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <ArrowLeft className="h-3 w-3" />
-            Voltar para relatórios
-          </Link>
-        </div>
-        <header className="space-y-2">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-california-red">
-            Relatórios · Rentabilidade
-          </p>
-          <h1 className="text-3xl font-bold tracking-tight">
-            Rentabilidade de Jobs {filtros.ano}
-            {filtros.compararAno !== null && ` vs ${filtros.compararAno}`}
-          </h1>
-          <p className="text-sm text-muted-foreground max-w-2xl">
-            Faturamento, resultado operacional e rentabilidade por cliente, marca ou job.
-            Data de referência: abertura financeira do job.
-          </p>
-        </header>
-
-        {empresaFiltroId && (
-          <div className="flex items-center gap-2 text-xs">
-            <span className="rounded-full bg-california-red/10 px-3 py-1 text-california-red font-medium">
-              Empresa: {session.empresas.find((e) => e.id === empresaFiltroId)?.nome_fantasia ?? session.empresas.find((e) => e.id === empresaFiltroId)?.razao_social ?? "—"}
-              {empresaFiltroId !== session.activeEmpresa?.id && (() => {
-                const sp = new URLSearchParams();
-                for (const [k, v] of Object.entries(params)) {
-                  if (k !== "empresa" && typeof v === "string") sp.set(k, v);
-                }
-                const hrefVoltar = `/relatorios/rentabilidade${sp.toString() ? `?${sp}` : ""}`;
-                return (
-                  <Link href={hrefVoltar} className="ml-2 underline">
-                    voltar para ativa
-                  </Link>
-                );
-              })()}
-            </span>
-          </div>
-        )}
+        <PageHeader
+          eyebrow="RELATÓRIOS"
+          title={`Rentabilidade de Jobs ${filtros.ano}${filtros.compararAno !== null ? ` vs ${filtros.compararAno}` : ""}`}
+          description="Faturamento, resultado operacional e rentabilidade por cliente, marca ou job. Data de referência: abertura financeira do job."
+          icon={BarChart3}
+          showEmpresaFilter
+          empresas={session.empresas}
+          activeEmpresas={activeEmpresasEfetivas}
+        />
 
         <FiltrosCliente
           filtros={filtros}
