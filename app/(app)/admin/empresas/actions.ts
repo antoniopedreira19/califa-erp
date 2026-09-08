@@ -12,7 +12,6 @@ export type ActionResult =
 
 function extractInput(formData: FormData) {
   return {
-    regional_id: formData.get("regional_id")?.toString() ?? "",
     razao_social: formData.get("razao_social")?.toString() ?? "",
     nome_fantasia: formData.get("nome_fantasia")?.toString() ?? "",
     cnpj: formData.get("cnpj")?.toString() ?? "",
@@ -38,9 +37,6 @@ function mapDbError(msg: string): string {
   }
   if (msg.includes("uniq_empresas_principal_por_tenant")) {
     return "Já existe outra empresa marcada como principal — recarregue a lista.";
-  }
-  if (msg.includes("empresas_regional_id_fkey")) {
-    return "Regional inválida.";
   }
   if (msg.includes("chk_empresas_cnpj_formato")) {
     return "CNPJ inválido: deve ter 14 dígitos.";
