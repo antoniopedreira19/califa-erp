@@ -44,12 +44,19 @@ export default async function CadastrosPage() {
 
   return (
     <div className="space-y-8">
-      <PageHeader
-        eyebrow="CADASTROS"
-        title="Cadastros da empresa"
-        description="Ponto central para gerenciar as entidades do negócio. Novos tipos de cadastro aparecem aqui à medida que os módulos vão sendo liberados."
-        icon={FolderKanban}
-      />
+      {/* DIAG: PageHeader removido temporariamente pra isolar bug em prod */}
+      <div className="space-y-2">
+        <p className="text-xs font-semibold uppercase tracking-wider text-california-red">CADASTROS</p>
+        <div className="flex items-center gap-3">
+          <div className="rounded-lg bg-california-red/10 p-2">
+            <FolderKanban className="h-5 w-5 text-california-red" />
+          </div>
+          <h1 className="text-3xl font-bold tracking-tight">Cadastros da empresa</h1>
+        </div>
+        <p className="text-sm text-muted-foreground max-w-2xl">
+          Ponto central para gerenciar as entidades do negócio. Novos tipos de cadastro aparecem aqui à medida que os módulos vão sendo liberados.
+        </p>
+      </div>
 
       <div className="grid gap-4 md:grid-cols-2">
         <CadastroCard
