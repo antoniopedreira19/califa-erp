@@ -28,6 +28,7 @@ import {
   FormaPagamentoField,
   type CartaoOption,
 } from "@/components/financeiro/forma-pagamento-field";
+import { ConfirmTrocaEmpresaDialog } from "@/components/ui/confirm-troca-empresa-dialog";
 import type {
   ContaAvulsaRecorrente,
   FrequenciaRecorrencia,
@@ -126,6 +127,8 @@ export function ContaRecorrenteDrawer(props: Props) {
   const [empresaId, setEmpresaId] = React.useState<string>(
     recorrente?.empresa_id ?? "",
   );
+  const [dialogTrocaEmpresa, setDialogTrocaEmpresa] = React.useState(false);
+  const [empresaPendente, setEmpresaPendente] = React.useState<string>("");
   const [descricao, setDescricao] = React.useState<string>(
     recorrente?.descricao ?? "",
   );
@@ -287,6 +290,21 @@ export function ContaRecorrenteDrawer(props: Props) {
     (r) => props.regionais.find((rr) => rr.id === r.regional_id)?.ativo === false,
   );
 
+  const handleEmpresaChange = (nova: string) => {
+    if (nova === empresaId) return;
+    if (rateio.length > 0) {
+      setEmpresaPendente(nova);
+      setDialogTrocaEmpresa(true);
+    } else {
+      setEmpresaId(nova);
+    }
+  };
+
+  const confirmarTrocaEmpresa = () => {
+    setEmpresaId(empresaPendente);
+    setRateio([]);
+  };
+
   function handleFornecedorChange(v: string | null) {
     setFornecedorId(v ?? "__none__");
   }
@@ -446,7 +464,7 @@ export function ContaRecorrenteDrawer(props: Props) {
               </Label>
               <Select
                 value={empresaId}
-                onValueChange={setEmpresaId}
+                onValueChange={handleEmpresaChange}
                 disabled={isEditar}
                 required
               >
@@ -922,6 +940,13 @@ export function ContaRecorrenteDrawer(props: Props) {
             </div>
           </div>
         </form>
+
+        <ConfirmTrocaEmpresaDialog
+          open={dialogTrocaEmpresa}
+          onOpenChange={setDialogTrocaEmpresa}
+          onConfirm={confirmarTrocaEmpresa}
+          contexto="rateio"
+        />
       </DrawerContent>
     </Dialog>
   );
