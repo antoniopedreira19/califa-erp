@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowLeft, ShieldCheck } from "lucide-react";
 import { requireAdmin } from "@/lib/auth/session";
 import { MatrizPermissoes } from "./matriz-permissoes";
+import { PageHeader } from "@/components/ui/page-header";
 
 export const dynamic = "force-dynamic";
 
@@ -20,24 +21,12 @@ export default async function AdminPermissoesPage() {
         Voltar para Usuários
       </Link>
 
-      <header className="space-y-2">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-california-red">
-          Administração
-        </p>
-        <div className="flex items-center gap-3">
-          <div className="rounded-lg bg-california-red/10 p-2">
-            <ShieldCheck className="h-5 w-5 text-california-red" />
-          </div>
-          <h1 className="text-3xl font-bold tracking-tight">
-            Permissões por papel
-          </h1>
-        </div>
-        <p className="text-sm text-muted-foreground max-w-3xl">
-          Escolha um papel no topo pra ver o que ele pode fazer no sistema.
-          As marcações são somente leitura — pra mudar uma permissão, edite
-          a matriz no código e ela se propaga automaticamente.
-        </p>
-      </header>
+      <PageHeader
+        eyebrow="ADMINISTRAÇÃO"
+        title="Permissões por papel"
+        description="Escolha um papel no topo pra ver o que ele pode fazer no sistema. As marcações são somente leitura — pra mudar uma permissão, edite a matriz no código e ela se propaga automaticamente."
+        icon={ShieldCheck}
+      />
 
       <MatrizPermissoes />
     </div>

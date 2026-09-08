@@ -3,17 +3,9 @@
 import * as React from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { cn, initials } from "@/lib/utils";
-import { roleLabel, type AppRole, type Empresa } from "@/lib/types";
-import { setActiveEmpresa } from "@/app/actions/set-active-empresa";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { roleLabel, type AppRole } from "@/lib/types";
 import { pode, type Recurso } from "@/lib/permissoes";
 import {
   Home,
@@ -93,16 +85,11 @@ const TRANSITION_MS = 300;
 export function Sidebar({
   role,
   nome,
-  activeEmpresa,
-  empresas,
 }: {
   role: AppRole;
   nome: string;
-  activeEmpresa: Empresa | null;
-  empresas: Empresa[];
 }) {
   const pathname = usePathname();
-  const router = useRouter();
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const [hovered, setHovered] = React.useState(false);
 
@@ -318,46 +305,6 @@ export function Sidebar({
             );
           })}
         </nav>
-
-        {/* Empresa ativa */}
-        {expanded && empresas.length === 1 && (
-          <div className="px-3 pb-2">
-            <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
-              <p className="text-[10px] uppercase tracking-wider text-white/50">
-                Empresa ativa
-              </p>
-              <p className="text-sm font-medium text-white truncate">
-                {empresas[0].nome_fantasia ?? empresas[0].razao_social}
-              </p>
-            </div>
-          </div>
-        )}
-        {expanded && empresas.length >= 2 && (
-          <div className="px-3 pb-2">
-            <p className="text-[10px] uppercase tracking-wider text-white/50 mb-1 px-1">
-              Empresa ativa
-            </p>
-            <Select
-              value={activeEmpresa?.id ?? "todas"}
-              onValueChange={async (val) => {
-                await setActiveEmpresa(val === "todas" ? null : val);
-                router.refresh();
-              }}
-            >
-              <SelectTrigger className="w-full bg-white/5 border-white/10 text-white text-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todas">Todas as empresas</SelectItem>
-                {empresas.map((e) => (
-                  <SelectItem key={e.id} value={e.id}>
-                    {e.nome_fantasia ?? e.razao_social}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
 
         {/* User footer */}
         <div className="p-3 flex justify-center">

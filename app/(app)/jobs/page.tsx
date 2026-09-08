@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { listEmpresasAtivas } from "@/lib/data/empresas";
 import { pode } from "@/lib/permissoes";
 import { JobsList, type JobRow } from "./jobs-list";
+import { PageHeader } from "@/components/ui/page-header";
 
 export const dynamic = "force-dynamic";
 
@@ -16,11 +17,21 @@ export const dynamic = "force-dynamic";
 export default async function JobsPage({
   searchParams,
 }: {
-  searchParams?: { filtro?: string };
+  searchParams?: { filtro?: string; empresa?: string };
 }) {
   const session = await requireSession();
   const supabase = createClient();
   const filtro = searchParams?.filtro;
+
+  const empresaFiltroIds: string[] =
+    typeof searchParams?.empresa === "string" && searchParams.empresa.length > 0
+      ? searchParams.empresa.split(",").filter((id) => id.length > 0)
+      : session.activeEmpresas.map((e) => e.id);
+
+  const activeEmpresasEfetivas =
+    empresaFiltroIds.length > 0
+      ? session.empresas.filter((e) => empresaFiltroIds.includes(e.id))
+      : [];
 
   // Para filtro=realizado_pendente precisamos dos IDs dos jobs com pendência
   // antes de montar a query principal.
@@ -64,6 +75,11 @@ export default async function JobsPage({
     )
     .eq("tenant_id", session.activeTenant.id)
     .order("codigo", { ascending: true });
+
+  // Filtro multi-empresa
+  if (empresaFiltroIds.length > 0) {
+    jobsQuery = jobsQuery.in("empresa_id", empresaFiltroIds);
+  }
 
   // Aplicar filtros de aterrissagem simples (status/data)
   if (filtro === "faturamento_proximo") {
@@ -120,21 +136,15 @@ export default async function JobsPage({
 
   return (
     <div className="space-y-8">
-      <header className="space-y-2">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-california-red">
-          Operação
-        </p>
-        <div className="flex items-center gap-3">
-          <div className="rounded-lg bg-california-red/10 p-2">
-            <Briefcase className="h-5 w-5 text-california-red" />
-          </div>
-          <h1 className="text-3xl font-bold tracking-tight">Jobs</h1>
-        </div>
-        <p className="text-sm text-muted-foreground max-w-2xl">
-          Todos os jobs criados. Aprovados pelo financeiro liberam a gestão do
-          realizado.
-        </p>
-      </header>
+      <PageHeader
+        eyebrow="PRODUÇÃO"
+        title="Jobs"
+        description="Jobs vindos de orçamentos aprovados. Filtre por status e finalize os pendentes."
+        icon={Briefcase}
+        showEmpresaFilter
+        empresas={session.empresas}
+        activeEmpresas={activeEmpresasEfetivas}
+      />
 
       {rows.length === 0 ? (
         <div className="rounded-2xl border border-border bg-card p-12 shadow-soft text-center max-w-2xl mx-auto">

@@ -4,6 +4,7 @@ import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import type { ContaBancaria, Empresa } from "@/lib/types";
 import { ContasBancariasList } from "./contas-bancarias-list";
+import { PageHeader } from "@/components/ui/page-header";
 
 export const dynamic = "force-dynamic";
 
@@ -56,17 +57,12 @@ export default async function ContasBancariasPage() {
           <ArrowLeft className="h-3 w-3" />
           Voltar para cadastros do financeiro
         </Link>
-        <header className="mt-3 space-y-2">
-          <div className="flex items-center gap-3">
-            <div className="rounded-lg bg-california-red/10 p-2">
-              <Wallet className="h-5 w-5 text-california-red" />
-            </div>
-            <h1 className="text-3xl font-bold tracking-tight">Contas bancárias</h1>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            Contas onde os pagamentos entram e saem, com saldo inicial e empresa associada.
-          </p>
-        </header>
+        <PageHeader
+          eyebrow="FINANCEIRO"
+          title="Contas bancárias"
+          description="Contas onde os pagamentos entram e saem, com saldo inicial e empresa associada."
+          icon={Wallet}
+        />
       </div>
 
       <ContasBancariasList

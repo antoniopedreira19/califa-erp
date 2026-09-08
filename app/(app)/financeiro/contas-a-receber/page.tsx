@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { ArrowLeft, Receipt } from "lucide-react";
 import Link from "next/link";
+import { PageHeader } from "@/components/ui/page-header";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { ContasReceberTabs } from "./tabs";
@@ -534,22 +535,12 @@ export default async function ContasReceberPage({
           Voltar para central financeira
         </Link>
       </div>
-      <header className="space-y-2">
-        <div className="flex items-center gap-3">
-          <div className="rounded-lg bg-california-red/10 p-2">
-            <Receipt className="h-5 w-5 text-california-red" />
-          </div>
-          <h1 className="text-3xl font-bold tracking-tight">Contas a Receber</h1>
-        </div>
-        <p className="max-w-3xl text-sm text-muted-foreground text-pretty">
-          Jobs e BVs aguardando nota fiscal, e os títulos já faturados. Fature um
-          job por vez ou use o{" "}
-          <strong className="font-semibold text-foreground">
-            Faturamento Agrupado
-          </strong>{" "}
-          para emitir uma única NF cobrindo vários jobs do mesmo cliente.
-        </p>
-      </header>
+      <PageHeader
+        eyebrow="FINANCEIRO"
+        title="Contas a Receber"
+        description="Jobs e BVs aguardando nota fiscal, e os títulos já faturados. Fature um job por vez ou use o Faturamento Agrupado para emitir uma única NF cobrindo vários jobs do mesmo cliente."
+        icon={Receipt}
+      />
 
       <ContasReceberTabs
         faturamento={

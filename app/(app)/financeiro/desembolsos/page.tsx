@@ -1,7 +1,7 @@
-import Link from "next/link";
 import { Wallet } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
+import { PageHeader } from "@/components/ui/page-header";
 import { DesembolsosList, type DesembolsoRow } from "./desembolsos-list";
 
 export const dynamic = "force-dynamic";
@@ -16,10 +16,15 @@ export default async function DesembolsosPage({
   const isAdminOrFinanceiro =
     session.activeRole === "administrador" || session.activeRole === "financeiro";
 
-  const empresaFiltroId: string | null =
+  const empresaFiltroIds: string[] =
     typeof searchParams?.empresa === "string" && searchParams.empresa.length > 0
-      ? searchParams.empresa
-      : (session.activeEmpresa?.id ?? null);
+      ? searchParams.empresa.split(",").filter((id) => id.length > 0)
+      : session.activeEmpresas.map((e) => e.id);
+
+  const activeEmpresasEfetivas =
+    empresaFiltroIds.length > 0
+      ? session.empresas.filter((e) => empresaFiltroIds.includes(e.id))
+      : [];
 
   // Base query — user comum vê só os seus
   let query = supabase
@@ -43,8 +48,8 @@ export default async function DesembolsosPage({
     query = query.eq("status", "em_avaliacao");
   }
 
-  if (empresaFiltroId) {
-    query = query.eq("empresa_id", empresaFiltroId);
+  if (empresaFiltroIds.length > 0) {
+    query = query.in("empresa_id", empresaFiltroIds);
   }
 
   const [
@@ -123,31 +128,15 @@ export default async function DesembolsosPage({
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto">
-      <header className="space-y-2">
-        <div className="flex items-center gap-3">
-          <div className="rounded-lg bg-california-red/10 p-2">
-            <Wallet className="h-5 w-5 text-california-red" />
-          </div>
-          <h1 className="text-3xl font-bold tracking-tight">Desembolsos</h1>
-        </div>
-        <p className="text-sm text-muted-foreground max-w-2xl text-pretty">
-          Lance suas despesas e acompanhe o status. Ao ser aprovado pelo
-          financeiro, o desembolso vira título a pagar.
-        </p>
-      </header>
-
-      {empresaFiltroId && (
-        <div className="flex items-center gap-2 text-xs">
-          <span className="rounded-full bg-california-red/10 px-3 py-1 text-california-red font-medium">
-            Empresa: {session.empresas.find((e) => e.id === empresaFiltroId)?.nome_fantasia ?? session.empresas.find((e) => e.id === empresaFiltroId)?.razao_social ?? "—"}
-            {empresaFiltroId !== session.activeEmpresa?.id && (
-              <Link href="/financeiro/desembolsos" className="ml-2 underline">
-                voltar para ativa
-              </Link>
-            )}
-          </span>
-        </div>
-      )}
+      <PageHeader
+        eyebrow="FINANCEIRO"
+        title="Desembolsos"
+        description="Lance suas despesas e acompanhe o status. Ao ser aprovado pelo financeiro, o desembolso vira título a pagar."
+        icon={Wallet}
+        showEmpresaFilter
+        empresas={session.empresas}
+        activeEmpresas={activeEmpresasEfetivas}
+      />
 
       <DesembolsosList
         rows={(desembolsosRes.data ?? []) as unknown as DesembolsoRow[]}

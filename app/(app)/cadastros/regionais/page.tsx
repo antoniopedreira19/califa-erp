@@ -4,6 +4,7 @@ import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import type { Regional } from "@/lib/types";
 import { RegionaisList } from "./regionais-list";
+import { PageHeader } from "@/components/ui/page-header";
 
 export const dynamic = "force-dynamic";
 
@@ -33,17 +34,12 @@ export default async function RegionaisPage() {
           <ArrowLeft className="h-3 w-3" />
           Voltar para cadastros
         </Link>
-        <header className="mt-3 space-y-2">
-          <div className="flex items-center gap-3">
-            <div className="rounded-lg bg-california-red/10 p-2">
-              <MapPin className="h-5 w-5 text-california-red" />
-            </div>
-            <h1 className="text-3xl font-bold tracking-tight">Regionais</h1>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            Vocabulário de regionais compartilhado pelo tenant. Usado ao criar jobs.
-          </p>
-        </header>
+        <PageHeader
+          eyebrow="CADASTROS"
+          title="Regionais"
+          description="Vocabulário de regionais compartilhado pelo tenant. Usado ao criar jobs."
+          icon={MapPin}
+        />
       </div>
 
       <RegionaisList regionais={rows} isAdmin={isAdmin} />
