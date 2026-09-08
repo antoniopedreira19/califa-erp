@@ -57,7 +57,7 @@ export async function parsePlanilhaRascunho(
       ok: false,
       message:
         parsed.warnings[0]?.motivo ??
-        "Nenhum item encontrado na planilha. Confira a aba 'Oficial'.",
+        "Nenhum item encontrado na planilha. Confira se a aba 'Padrão' traz o agrupamento na coluna A, o nome do item na B e o tipo de custo na G.",
     };
   }
 

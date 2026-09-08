@@ -3,35 +3,56 @@ import type { ImportacaoWarning, TipoCusto } from "@/lib/types";
 import { TIPOS_CUSTO } from "@/lib/calculos/versao-totais";
 
 /**
- * Parser da planilha padrão da Agência California ("aba Oficial").
+ * Parser da planilha padrão da Agência California.
  *
- * Layout REAL da planilha (a que foi validada com um exemplo do usuário):
- *   Linha 1 (superior): agrupa "ORÇAMENTO", "PLANEJADO", "REALIZADO"
- *   Linha 2 (headers de coluna):
- *     A · PLANILHA (categoria longa, ex: "INTERNA - Corona - Ativação...")
- *     B · CATEGORIA (opcional; ignorada no MVP)
- *     C · ITEM (nome do item de custo)
- *     D · R$ (valor unitário do ORÇAMENTO)
- *     E · QT
- *     F · D/M
- *     G · TT (total do ORÇAMENTO)
- *     H · Tipo A/B/C/D (bloco ORÇAMENTO)
- *     I → col do bloco PLANEJADO (ignorado)
- *     N → col do bloco REALIZADO (ignorado)
+ * Layout REAL (conferido célula a célula em 08/09/2026 contra o modelo
+ * "Modelo Planilha interna.xlsx", aba "Padrão", enviado pelo Tiago):
+ *
+ *   Linha 2 · faixas dos blocos: C:F ORÇAMENTO · H:L PLANEJADO · M:Q REALIZADO
+ *   Linha 3 · header das colunas:
+ *     A · CATEGORIA  — o AGRUPAMENTO do item (repetido em cada linha)
+ *     B · ITEM       — nome do item
+ *     C · R$         — valor unitário orçado
+ *     D · QT
+ *     E · D/M
+ *     F · TT         — subtotal/total (só leitura visual; nada é lido daqui)
+ *     G · (sem header) tipo de custo
+ *     H · R$ · I · QT · J · D/M · K · TT · L · RENTA   → bloco PLANEJADO
+ *     M..Q                                            → bloco REALIZADO (ignorado)
+ *
+ * É o MESMO layout que `lib/exportacao/planilha-orcamento.ts` escreve, com
+ * uma diferença: a exportação põe o nome do grupo na coluna A de uma LINHA
+ * DE GRUPO e deixa a coluna A dos itens vazia; o modelo do Tiago põe o nome
+ * na coluna B da linha de grupo e repete o grupo na coluna A de cada item.
+ * O parser aceita os dois — ver "Classificação de linha".
  *
  * Classificação de linha (depois do header):
- *   - GRUPO   : col A tem texto + col D vazia + col G tem número (subtotal)
- *   - ITEM    : col D tem número
- *   - RESUMO  : col D contém SUB-TOTAL / TOTAL / IMPOSTO / HONORÁRIOS /
- *               FATURAMENTO — ignora, mas tenta extrair % de honorários.
- *   - Outras  : warning "linha não reconhecida" (só se tiver conteúdo).
+ *   - RESUMO : coluna A vazia + SUB-TOTAL/TOTAL/IMPOSTO/HONORÁRIOS/
+ *              FATURAMENTO em A..E. Ignorada; é dela que sai o % de
+ *              honorários (coluna E, ver `extrairPercentualHonorarios`).
+ *              A exigência de "A vazia" protege item cujo NOME contenha
+ *              uma dessas palavras — item sempre tem a coluna A ou o tipo.
+ *   - GRUPO  : sem valor em C e sem tipo em G, com nome só em A (formato da
+ *              exportação) ou só em B (formato do modelo). Cria o grupo e
+ *              passa a ser o grupo corrente.
+ *   - ITEM   : todo o resto. O grupo sai da coluna A quando ela tem texto
+ *              (regra do Tiago, 08/09/2026); quando está vazia, herda o
+ *              último grupo visto (formato da exportação).
  *
- * Tipo do item vem da col H. Se for A/B/C/D → usa. Se for outra coisa
- * (ex.: "F", "A e D", vazia), o item é DESCARTADO com warning de severidade
- * 'ignorada', porque hoje o modelo de tributação só cobre A/B/C/D.
+ * Decisões do Tiago em 08/09/2026:
+ *   1. O agrupamento é a COLUNA A. As linhas de grupo do modelo têm
+ *      subtotal com intervalo errado (ESTRUTURA soma F5:F14, mas os itens
+ *      vão até a 18), então nada é lido delas além do nome.
+ *   2. Item sem valor unitário ENTRA, com R$ 0,00 — o modelo é um gabarito
+ *      em branco, e o nome do item é o que interessa preservar. Quem barra
+ *      orçado zerado é o salvar do rascunho, na tela, não o parser.
+ *   3. A coluna A só agrupa: `categoria_id` continua nascendo vazia.
+ *   4. O % de honorários vem da coluna E da linha HONORÁRIOS (0,12 → 12).
  *
- * planilha_origem: guardamos a col A do item no campo `planilha_origem` da
- * tabela versoes_orcamento_itens (usa a categoria longa como rastro).
+ * Grupo vazio (nome que aparece numa linha de grupo mas em nenhum item) é
+ * descartado no fim. É o que resolve o "CONTEUDO" sem acento da linha de
+ * grupo contra o "CONTEÚDO" com acento da coluna A dos itens: sobra um só,
+ * o que tem itens.
  */
 
 const KEYWORDS_RESUMO = [
@@ -44,9 +65,14 @@ const KEYWORDS_RESUMO = [
   "faturamento",
 ];
 
-const KEYWORDS_HEADER = ["planilha", "item", "r$", "qt", "d/m", "tt"];
+/** "planilha" continua na lista: é o header que a exportação escreve na
+ *  coluna A, e "categoria" é o do modelo. Os dois formatos passam. */
+const KEYWORDS_HEADER = ["categoria", "planilha", "item", "r$", "qt", "d/m", "tt"];
 
 const TIPOS_VALIDOS: readonly TipoCusto[] = TIPOS_CUSTO;
+
+/** Nomes de aba que o parser procura antes de cair na primeira. */
+const ABAS_CONHECIDAS = ["padrao", "oficial"];
 
 export interface ParseItem {
   ordem: number;
@@ -58,7 +84,8 @@ export interface ParseItem {
   valor_unitario_planejado: number;
   quantidade_planejada: number;
   dias_meses_planejado: number;
-  /** Categoria longa vinda da col A (ex.: "INTERNA - Corona - ..."). */
+  /** Sempre null desde 08/09/2026: a coluna A virou o AGRUPAMENTO do item,
+   *  então guardá-la de novo aqui seria repetir o nome do grupo. */
   planilha_origem: string | null;
   /** Linha do XLSX de onde veio (para debug/warnings). */
   linha_xlsx: number;
@@ -152,6 +179,15 @@ function letra(col: number): string {
   return String.fromCharCode(64 + col); // 1 → 'A'
 }
 
+/** Minúscula e sem acento — para comparar nome de aba. */
+function semAcento(s: string): string {
+  return s
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+}
+
 // ---------- helpers de classificação ----------
 
 function ehLinhaHeader(cells: string[]): boolean {
@@ -160,15 +196,40 @@ function ehLinhaHeader(cells: string[]): boolean {
   return hits >= 3;
 }
 
+/**
+ * Linha de fechamento (SUB-TOTAL, TOTAL, IMPOSTO, HONORÁRIOS, FATURAMENTO).
+ *
+ * Exige a coluna A vazia: no layout novo o fechamento fica em C..E com A e B
+ * vazias, e essa exigência impede que um ITEM chamado, por exemplo, "TOTEM
+ * DE TOTAL" seja engolido — item sempre tem a coluna A preenchida (modelo)
+ * ou o tipo em G (exportação).
+ */
 function ehLinhaResumo(cells: string[]): boolean {
-  // Palavra-chave em qualquer uma das 4 primeiras cols (A-D) resolve.
-  const alvo = cells.slice(0, 4).map((s) => s.toLowerCase());
+  if (cells[0] !== "") return false;
+  const alvo = cells.slice(0, 5).map((s) => s.toLowerCase());
   return alvo.some((c) => KEYWORDS_RESUMO.some((k) => c.includes(k)));
 }
 
-function extrairPercentualHonorarios(cells: string[]): number | null {
+/**
+ * % de honorários de uma linha de fechamento.
+ *
+ * Formato do modelo (08/09/2026): C = "HONORÁRIOS", E = 0,12 → 12.
+ * Um número acima de 1 é lido como já percentual ("12" → 12), porque as
+ * planilhas antigas escreviam assim. O fallback continua sendo o texto com
+ * "%" em qualquer coluna, que é como as versões mais velhas guardavam.
+ */
+function extrairPercentualHonorarios(
+  cells: string[],
+  valorColE: unknown,
+): number | null {
   const joined = cells.slice(0, 8).join(" ").toLowerCase();
   if (!joined.includes("honor")) return null;
+
+  const daColunaE = toNumber(valorColE);
+  if (daColunaE.ok && daColunaE.n > 0) {
+    return daColunaE.n <= 1 ? daColunaE.n * 100 : daColunaE.n;
+  }
+
   const m = joined.match(/([0-9]+(?:[.,][0-9]+)?)\s*%/);
   if (!m) return null;
   const n = Number(m[1].replace(",", "."));
@@ -185,8 +246,8 @@ export async function parseOficial(
   // não bate com o Buffer generic novo do @types/node — cast explícito.
   await wb.xlsx.load(buffer as any);
 
-  let ws = wb.worksheets.find(
-    (w) => w.name.trim().toLowerCase() === "oficial",
+  let ws = wb.worksheets.find((w) =>
+    ABAS_CONHECIDAS.includes(semAcento(w.name)),
   );
   if (!ws) ws = wb.worksheets[0];
 
@@ -210,6 +271,7 @@ export async function parseOficial(
 
   const warnings: ImportacaoWarning[] = [];
   const grupos: ParseGrupo[] = [];
+  /** Último grupo resolvido — é ele que recolhe item com a coluna A vazia. */
   let grupoAtual: ParseGrupo | null = null;
   let percentualHonorarios: number | null = null;
 
@@ -217,9 +279,20 @@ export async function parseOficial(
   let linhasLidas = 0;
   let linhasImportadas = 0;
   let linhasIgnoradas = 0;
+  let viuLinhaDeGrupo = false;
+
+  /** Acha o grupo pelo nome ou cria um novo, preservando a ordem de entrada. */
+  function grupoPorNome(nome: string): ParseGrupo {
+    const existente = grupos.find((g) => g.nome === nome);
+    if (existente) return existente;
+    const novo: ParseGrupo = { nome, ordem: grupos.length + 1, itens: [] };
+    grupos.push(novo);
+    return novo;
+  }
 
   ws.eachRow({ includeEmpty: false }, (row, rowNumber) => {
-    // Lê colunas A–L (12 colunas).
+    // Lê colunas A–L (12 colunas): até J basta para orçado + planejado, e as
+    // duas a mais mantêm a checagem de "linha vazia" honesta.
     const cells: string[] = [];
     for (let c = 1; c <= 12; c++) {
       cells.push(normalizar(row.getCell(c).value));
@@ -234,9 +307,9 @@ export async function parseOficial(
       return;
     }
 
-    // Resumo (SUB-TOTAL, TOTAL, IMPOSTO, HONORÁRIOS, FATURAMENTO)?
+    // Fechamento (SUB-TOTAL, TOTAL, IMPOSTO, HONORÁRIOS, FATURAMENTO)?
     if (ehLinhaResumo(cells)) {
-      const pct = extrairPercentualHonorarios(cells);
+      const pct = extrairPercentualHonorarios(cells, row.getCell(5).value);
       if (pct !== null && percentualHonorarios === null) {
         percentualHonorarios = pct;
       }
@@ -244,132 +317,201 @@ export async function parseOficial(
       return;
     }
 
-    const [colA, , colC, colD, colE, colF, colG, colH] = cells;
-    const valorD = toNumber(colD);
-    const totalG = toNumber(colG);
+    const [colA, colB, colC, colD, colE, , colG, colH, colI, colJ] = cells;
+    const valorC = toNumber(colC);
+    const tipoUpper = colG.toUpperCase().trim();
+    const temTipoValido = TIPOS_VALIDOS.includes(tipoUpper as TipoCusto);
 
-    // GRUPO: col A tem texto + col D vazia + col G tem valor (subtotal do grupo).
-    if (colA !== "" && colD === "" && totalG.ok) {
-      const ordem = grupos.length + 1;
-      grupoAtual = { nome: colA, ordem, itens: [] };
-      grupos.push(grupoAtual);
+    // GRUPO: sem valor unitário e sem tipo, com nome em exatamente UMA das
+    // duas primeiras colunas — `A` é o formato da exportação, `B` o do
+    // modelo. Nas duas, ou em nenhuma, não é linha de grupo.
+    const nomeSoEmUmaColuna = (colA === "") !== (colB === "");
+    if (!valorC.ok && !temTipoValido && nomeSoEmUmaColuna) {
+      const nome = colA !== "" ? colA : colB;
+      grupoAtual = grupoPorNome(nome);
+      viuLinhaDeGrupo = true;
+      linhasIgnoradas++;
       return;
     }
 
-    // ITEM: col D tem número (valor unitário obrigatório).
-    if (valorD.ok) {
-      if (!grupoAtual) {
-        grupoAtual = {
-          nome: "Sem grupo",
-          ordem: grupos.length + 1,
-          itens: [],
-        };
-        grupos.push(grupoAtual);
-        warnings.push({
-          linha: rowNumber,
-          motivo:
-            "Item encontrado antes de qualquer grupo — agrupado em 'Sem grupo'.",
-          severidade: "ajuste",
-        });
-      }
+    // Sobrou linha sem nada em A e em B, e sem valor nem tipo: legenda,
+    // nota solta, rodapé. Ignora em silêncio — avisar sobre isso só
+    // enche a lista de warnings de coisa que ninguém quer importar.
+    if (colA === "" && colB === "" && !valorC.ok && !temTipoValido) {
+      linhasIgnoradas++;
+      return;
+    }
 
-      // Valida tipo (col H). Se não for A/B/C/D, DESCARTA a linha com warning.
-      const tipoUpper = colH.toUpperCase().trim();
-      if (!TIPOS_VALIDOS.includes(tipoUpper as TipoCusto)) {
-        warnings.push({
-          linha: rowNumber,
-          coluna: letra(8),
-          motivo:
-            tipoUpper === ""
-              ? "Tipo de custo ausente na coluna H — linha descartada."
-              : `Tipo "${colH}" ainda não é suportado (apenas A/B/C/D) — linha descartada.`,
-          severidade: "ignorada",
-        });
-        linhasIgnoradas++;
-        return;
-      }
+    // ---------- ITEM ----------
 
-      const qtd = toNumber(colE);
-      const dm = toNumber(colF);
-
-      if (!qtd.ok && colE !== "") {
-        warnings.push({
-          linha: rowNumber,
-          coluna: letra(5),
-          motivo: `Quantidade inválida ("${colE}") — assumida 1.`,
-          severidade: "ajuste",
-        });
-      }
-      if (!dm.ok && colF !== "") {
-        warnings.push({
-          linha: rowNumber,
-          coluna: letra(6),
-          motivo: `Dias/meses inválido ("${colF}") — assumido 1.`,
-          severidade: "ajuste",
-        });
-      }
-
-      // Nome do item vem da col C. Se estiver vazia, cai para col A como fallback.
-      const nomeItem = colC !== "" ? colC : colA;
-      if (colC === "") {
-        warnings.push({
-          linha: rowNumber,
-          coluna: letra(3),
-          motivo:
-            "Nome do item vazio na coluna C — usamos o texto da coluna A como fallback.",
-          severidade: "ajuste",
-        });
-      }
-
-      // Planejado (cols I=R$, J=QT, K=D/M). Cols L (TT) e M (RENTA) ignoradas.
-      const rawColI = row.getCell(9).value;
-      const rawColJ = row.getCell(10).value;
-      const rawColK = row.getCell(11).value;
-
-      const valorPlanejado = toNumber(rawColI);
-      const qtdPlanejada = toNumber(rawColJ);
-      const dmPlanejado = toNumber(rawColK);
-
-      grupoAtual.itens.push({
-        ordem: grupoAtual.itens.length + 1,
-        item: nomeItem,
-        tipo_custo: tipoUpper as TipoCusto,
-        valor_unitario_orcado: valorD.n,
-        quantidade_orcada: qtd.ok ? qtd.n : 1,
-        dias_meses_orcado: dm.ok ? dm.n : 1,
-        valor_unitario_planejado: valorPlanejado.ok ? valorPlanejado.n : 0,
-        quantidade_planejada: qtdPlanejada.ok ? qtdPlanejada.n : 0,
-        dias_meses_planejado: dmPlanejado.ok ? dmPlanejado.n : 0,
-        planilha_origem: colA !== "" ? colA : null,
-        linha_xlsx: rowNumber,
+    // O grupo sai da coluna A quando ela tem texto (decisão do Tiago em
+    // 08/09/2026); vazia, o item cai no último grupo visto.
+    if (colA !== "") {
+      grupoAtual = grupoPorNome(colA);
+    } else if (!grupoAtual) {
+      grupoAtual = grupoPorNome("Sem grupo");
+      warnings.push({
+        linha: rowNumber,
+        coluna: letra(1),
+        motivo:
+          "Item sem agrupamento na coluna A e sem grupo anterior — agrupado em 'Sem grupo'.",
+        severidade: "ajuste",
       });
-      linhasImportadas++;
+    }
+
+    // Tipo de custo (coluna G). Sem tipo válido a linha não entra: é ele
+    // que decide tributação, honorário e faturamento do item.
+    if (!temTipoValido) {
+      warnings.push({
+        linha: rowNumber,
+        coluna: letra(7),
+        motivo:
+          tipoUpper === ""
+            ? `Tipo de custo ausente na coluna G — linha descartada. Aceitos: ${TIPOS_VALIDOS.join(", ")}.`
+            : `Tipo "${colG}" não é suportado (aceitos: ${TIPOS_VALIDOS.join(", ")}) — linha descartada.`,
+        severidade: "ignorada",
+      });
+      linhasIgnoradas++;
       return;
     }
 
-    // Nenhum padrão bate — anômala.
-    warnings.push({
-      linha: rowNumber,
-      motivo: "Linha não reconhecida — descartada.",
-      severidade: "ignorada",
+    // Nome do item vem da coluna B.
+    const nomeItem = colB !== "" ? colB : colA;
+    if (colB === "" && colA === "") {
+      warnings.push({
+        linha: rowNumber,
+        coluna: letra(2),
+        motivo: "Linha com tipo mas sem nome de item — descartada.",
+        severidade: "ignorada",
+      });
+      linhasIgnoradas++;
+      return;
+    }
+    if (colB === "") {
+      warnings.push({
+        linha: rowNumber,
+        coluna: letra(2),
+        motivo:
+          "Nome do item vazio na coluna B — usamos o texto da coluna A como fallback.",
+        severidade: "ajuste",
+      });
+    }
+
+    // Valor unitário (coluna C). Vazio entra como zero — decisão do Tiago
+    // em 08/09/2026. Quem barra orçado zerado é o salvar, na tela.
+    let valorUnitario = valorC.ok ? valorC.n : 0;
+    if (!valorC.ok && colC !== "") {
+      warnings.push({
+        linha: rowNumber,
+        coluna: letra(3),
+        motivo: `Valor unitário inválido ("${colC}") — assumido R$ 0,00.`,
+        severidade: "ajuste",
+      });
+    }
+    if (valorUnitario < 0) {
+      warnings.push({
+        linha: rowNumber,
+        coluna: letra(3),
+        motivo: `Valor unitário negativo (${colC}) — assumido R$ 0,00.`,
+        severidade: "ajuste",
+      });
+      valorUnitario = 0;
+    }
+
+    // QT e D/M precisam ser POSITIVOS: o banco tem CHECK
+    // `itens_quantidade_positiva` e `itens_dias_meses_positivo`. Zero ou
+    // negativo derrubaria o insert inteiro, então vira 1 com aviso.
+    const qtd = toNumber(colD);
+    const dm = toNumber(colE);
+
+    let quantidade = qtd.ok ? qtd.n : 1;
+    if (!qtd.ok && colD !== "") {
+      warnings.push({
+        linha: rowNumber,
+        coluna: letra(4),
+        motivo: `Quantidade inválida ("${colD}") — assumida 1.`,
+        severidade: "ajuste",
+      });
+    }
+    if (quantidade <= 0) {
+      warnings.push({
+        linha: rowNumber,
+        coluna: letra(4),
+        motivo: `Quantidade ${colD || "0"} não é aceita (precisa ser maior que zero) — assumida 1.`,
+        severidade: "ajuste",
+      });
+      quantidade = 1;
+    }
+
+    let diasMeses = dm.ok ? dm.n : 1;
+    if (!dm.ok && colE !== "") {
+      warnings.push({
+        linha: rowNumber,
+        coluna: letra(5),
+        motivo: `Dias/meses inválido ("${colE}") — assumido 1.`,
+        severidade: "ajuste",
+      });
+    }
+    if (diasMeses <= 0) {
+      warnings.push({
+        linha: rowNumber,
+        coluna: letra(5),
+        motivo: `Dias/meses ${colE || "0"} não é aceito (precisa ser maior que zero) — assumido 1.`,
+        severidade: "ajuste",
+      });
+      diasMeses = 1;
+    }
+
+    // Bloco PLANEJADO: H · R$, I · QT, J · D/M. K (TT) e L (RENTA) são
+    // calculados pelo sistema. Vazio entra como zero — planejado pode ser
+    // zero no banco, diferente de QT e D/M do orçado.
+    const valorPlanejado = toNumber(colH);
+    const qtdPlanejada = toNumber(colI);
+    const dmPlanejado = toNumber(colJ);
+
+    grupoAtual.itens.push({
+      ordem: grupoAtual.itens.length + 1,
+      item: nomeItem,
+      tipo_custo: tipoUpper as TipoCusto,
+      valor_unitario_orcado: valorUnitario,
+      quantidade_orcada: quantidade,
+      dias_meses_orcado: diasMeses,
+      valor_unitario_planejado:
+        valorPlanejado.ok && valorPlanejado.n > 0 ? valorPlanejado.n : 0,
+      quantidade_planejada:
+        qtdPlanejada.ok && qtdPlanejada.n > 0 ? qtdPlanejada.n : 0,
+      dias_meses_planejado:
+        dmPlanejado.ok && dmPlanejado.n > 0 ? dmPlanejado.n : 0,
+      planilha_origem: null,
+      linha_xlsx: rowNumber,
     });
-    linhasIgnoradas++;
+    linhasImportadas++;
   });
 
   if (!headerEncontrado) {
     warnings.push({
       linha: 0,
       motivo:
-        'Não encontramos a linha de header (com "PLANILHA"/"ITEM"/"R$"). Confirme se a aba está no formato padrão.',
+        'Não encontramos a linha de header (com "CATEGORIA"/"ITEM"/"R$"). Confirme se a aba está no formato padrão.',
       severidade: "ignorada",
     });
   }
 
-  // Remove grupos vazios (podem sobrar se todos os itens de um grupo forem
-  // de tipo não suportado, por exemplo).
+  // Remove grupos vazios: sobram quando um nome aparece numa linha de grupo
+  // e em nenhum item (o "CONTEUDO" sem acento do modelo), ou quando todos os
+  // itens do grupo caíram por tipo não suportado.
   const gruposComItens = grupos
     .filter((g) => g.itens.length > 0)
     .map((g, idx) => ({ ...g, ordem: idx + 1 }));
+
+  if (gruposComItens.length === 0 && viuLinhaDeGrupo) {
+    warnings.push({
+      linha: 0,
+      motivo:
+        "Encontramos linhas de grupo, mas nenhum item. Confira se a coluna A traz o agrupamento, a B o nome do item e a G o tipo de custo.",
+      severidade: "ignorada",
+    });
+  }
 
   return {
     aba: ws.name,

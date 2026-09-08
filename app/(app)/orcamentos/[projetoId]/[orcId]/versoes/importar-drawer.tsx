@@ -184,7 +184,7 @@ export function ImportarPlanilhaDrawer({
           </DialogTitle>
           <DialogDescription>
             Envie o arquivo .xlsx no formato padrão da agência (aba
-            &ldquo;Oficial&rdquo;).{" "}
+            &ldquo;Padrão&rdquo;).{" "}
             {sobrescreve
               ? "O conteúdo atual da versão será substituído pelo da planilha."
               : "Uma nova versão é criada em rascunho com os grupos e itens da planilha."}
@@ -205,7 +205,7 @@ export function ImportarPlanilhaDrawer({
                       Escolher arquivo .xlsx
                     </p>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      Até 5 MB · aba &ldquo;Oficial&rdquo; da planilha padrão
+                      Até 5 MB · aba &ldquo;Padrão&rdquo; da planilha da agência
                     </p>
                   </div>
                 </label>
@@ -222,19 +222,28 @@ export function ImportarPlanilhaDrawer({
                   <p className="font-medium text-foreground">Como o parser lê:</p>
                   <ul className="list-disc pl-4 space-y-0.5">
                     <li>
-                      <b>Grupo</b>: coluna A com o nome do grupo + coluna G com o subtotal.
+                      <b>Grupo</b>: coluna A · CATEGORIA, repetida em cada item. É ela
+                      que define o agrupamento.
                     </li>
                     <li>
-                      <b>Item</b>: coluna C com o nome do item + coluna D com valor unitário.
+                      <b>Item</b>: coluna B com o nome do item.
                     </li>
                     <li>
-                      Colunas D · R$, E · QT, F · D/M, H · tipo (A/B/C/D).
+                      Colunas C · R$, D · QT, E · D/M, G · tipo de custo.
                     </li>
                     <li>
-                      Tipos <b>F</b> ou &ldquo;A e D&rdquo; ficam de fora com aviso — só A/B/C/D suportados.
+                      Item sem R$ entra com <b>R$ 0,00</b>; QT e D/M vazios ou zerados
+                      entram como 1, com aviso.
                     </li>
                     <li>
-                      Blocos <b>PLANEJADO</b>/<b>REALIZADO</b> e linhas de subtotal/imposto/honorários/faturamento são ignorados.
+                      Tipo fora de <b>A, AR, B, C, D, F, FI</b> deixa a linha de fora, com aviso.
+                    </li>
+                    <li>
+                      Bloco <b>PLANEJADO</b> entra pelas colunas H · R$, I · QT, J · D/M.
+                    </li>
+                    <li>
+                      Bloco <b>REALIZADO</b> e linhas de subtotal/total/imposto/faturamento
+                      são ignorados. De <b>HONORÁRIOS</b> sai só o percentual (coluna E).
                     </li>
                   </ul>
                 </div>

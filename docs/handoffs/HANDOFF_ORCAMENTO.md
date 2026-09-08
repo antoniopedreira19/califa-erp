@@ -3278,3 +3278,83 @@ campo digitado, pode ficar vazia aqui e só é exigida no Confirmar, que
 acontece na planilha do job.
 
 Detalhe de banco: caíram `uniq_bv_item` e `uniq_bv_por_copia`.
+
+---
+
+## ⚠️ Nota de 2026-09-08 — o import passou a ler o layout real da planilha (decisão 063)
+
+Regra completa na
+[decisão 063](../decisions/063-import-le-o-agrupamento-pela-coluna-a.md).
+Pedido do Tiago com o arquivo `Modelo Planilha interna.xlsx` como **modelo
+do formato** — não é conteúdo para importar.
+
+### O que mudou em `lib/importacao/parser-oficial.ts`
+
+| | Antes | Agora |
+|---|---|---|
+| Aba | "Oficial" | **"Padrão"** ou "Oficial" (sem acento/caixa), senão a primeira |
+| Grupo | col A da linha de grupo | **col A de cada item** |
+| Item | col C | **col B** |
+| R$ · QT · D/M | D · E · F | **C · D · E** |
+| Tipo | col H | **col G** |
+| Planejado | I · J · K | **H · I · J** |
+| Honorários | texto "12%" | número da col E da linha HONORÁRIOS (0,12 → 12) |
+
+Vale para as **três** telas que chamam `parseOficial`: criação de
+orçamento, criação em lote e importação dentro de uma versão.
+
+⚠️ **A exportação do sistema já usava esse layout.**
+`lib/exportacao/planilha-orcamento.ts` escreve A · grupo, B · item,
+C · R$, D · QT, E · D/M, F · TT, G · tipo desde sempre — quem estava fora
+de sincronia era o import, e planilha exportada daqui não voltava. O
+parser agora aceita os dois jeitos de marcar o grupo (nome só na A, que é
+o da exportação; nome só na B com o grupo repetido na A de cada item, que
+é o do modelo), então o round-trip fecha. Testado: exportar e reimportar
+devolve os mesmos grupos, itens, tipos e valores, com zero avisos.
+
+⚠️ **QT e D/M zerados viram 1, com aviso.** `versoes_orcamento_itens` tem
+`itens_quantidade_positiva` e `itens_dias_meses_positivo` (`> 0`), e o
+modelo traz D/M = 0 em três linhas. Sem a coerção, o insert inteiro
+morre. **Efeito colateral:** o total dessas linhas deixa de ser R$ 0,00 —
+o subtotal de ESTRUTURA no modelo sai R$ 400,00 em vez de R$ 100,00.
+
+⚠️ **Item sem R$ entra com R$ 0,00** (decisão do Tiago). Importar não
+barra; **aprovar barra**. `bloqueioAprovacaoVersao` já recusava versão
+com qualquer item de orçado zerado, na tela e no servidor, e isso não
+mudou — foi só confirmado ao vivo.
+
+### Textos de tela atualizados junto
+
+O drawer (`versoes/importar-drawer.tsx`) dizia aba "Oficial", "coluna C
+com o nome do item" e "só A/B/C/D suportados". O último era **falso**
+desde que `TIPOS_CUSTO` cresceu: o código aceita **A, AR, B, C, D, F, FI**.
+As duas mensagens de "Nenhum item encontrado" também passaram a dizer
+onde olhar (coluna A, B e G).
+
+### Verificação no navegador (dev server, sessão real)
+
+Projeto **TESTE-0003/26 · "Teste Alterações"**, v2 do TESTE-0003/26-08,
+que estava vazia:
+
+| Passo | Resultado |
+|---|---|
+| Preview do modelo | aba "Padrão" · **4 grupos** (ESTRUTURA 14, A&B 2, SERVIÇOS 7, **CONTEÚDO** 3) · **26 itens** · orçado R$ 400,00 · planejado R$ 90,00 · honorários 12% · **3 ajustes** (D/M zerado nas linhas 6, 7 e 8) |
+| Confirmação | "Esta versão está vazia — nada será apagado" |
+| Depois de importar | 4 grupos / 26 itens na planilha; TIPO com A/B/C/D da coluna G; CATEGORIA vazia em todos |
+| Banco | 22 itens com orçado zerado; nenhum item com QT ou D/M abaixo de 1 |
+| Aprovar versão | **desabilitado**, com *"22 itens com R$ unitário orçado zerado. Preencha o orçado de todos os itens antes de aprovar a versão."* |
+| Console | limpo (o único erro é a extensão Trancy do navegador, não o app) |
+
+⚠️ **Dado de teste deixado no banco**, sob a autorização permanente de
+17/08: a v2 do TESTE-0003/26-08 ficou com os 26 itens do modelo. É
+rascunho, no projeto sandbox, e serve de caso pronto para a próxima
+mexida no import.
+
+⚠️ **Não exercitado**: a recusa do servidor na aprovação. A trava existe
+nas duas camadas pela mesma função (`bloqueioAprovacaoVersao`, usada pelo
+botão e por `aprovarVersao`), e o botão foi verificado desabilitado —
+mas a chamada direta à action, por fora da tela, não foi feita.
+
+`npx tsc --noEmit` e `next lint` limpos. **`npm run build` não rodou**:
+havia dev server vivo na 3000 rodando do diretório principal, e o build
+corromperia o `.next` dele.
