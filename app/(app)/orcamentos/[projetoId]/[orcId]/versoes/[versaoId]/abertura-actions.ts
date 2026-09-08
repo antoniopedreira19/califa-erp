@@ -145,9 +145,8 @@ export async function enviarJobParaAbertura(
   //
   //    Exceção, desde 08/09/2026 (decisão 057): o job que o financeiro
   //    DEVOLVEU. Reenviar é refazer o formulário sobre o MESMO job — ele
-  //    guarda a cópia da planilha, o consumo de save, os BVs, as PPs
-  //    geradas e o realizado lançado na pré-abertura, e o código não muda
-  //    para o cliente. Nesse caso o orçamento está em `job_criado`, não
+  //    guarda a cópia da planilha, o consumo de save, os BVs e as PPs já
+  //    geradas na pré-abertura, e o código não muda para o cliente. Nesse caso o orçamento está em `job_criado`, não
   //    em `aprovado`; fora dele continua valendo `aprovado`.
   const { data: jobVivo } = await supabase
     .from("jobs")
@@ -769,21 +768,22 @@ export async function cancelarEnvioParaAbertura(
   }
 
   // 1. O que a produção já registrou no job barra o cancelamento.
-  const [ppsRes, realizadoRes, copiasRes] = await Promise.all([
+  //
+  //    A conta é só de PP, e é suficiente: o realizado NÃO é digitado
+  //    desde 21/08/2026 (`jobs/[jobId]/actions-realizado.ts` guarda o
+  //    aviso) — ele é derivado das PPs pelo trigger
+  //    `recalcular_realizado_do_item`, que soma as não canceladas. Somar
+  //    o realizado aqui seria contar a mesma PP duas vezes e, pior,
+  //    mandar o usuário "zerar o realizado" numa tela onde ele não é
+  //    editável. Em job de pré-abertura o realizado é sempre zero: a PP
+  //    só pode estar `gerada`, e o trigger ignora essa.
+  const [ppsRes, copiasRes] = await Promise.all([
     supabase
       .from("pedidos_compra")
       .select("id", { count: "exact", head: true })
       .eq("job_id", job.id)
       .eq("tenant_id", session.activeTenant.id)
       .neq("status", "cancelada"),
-    supabase
-      .from("jobs_itens_realizado")
-      .select("id", { count: "exact", head: true })
-      .eq("job_id", job.id)
-      .eq("tenant_id", session.activeTenant.id)
-      .or(
-        "valor_unitario_realizado.gt.0,quantidade_realizada.gt.0,dias_meses_realizado.gt.0",
-      ),
     supabase
       .from("jobs_itens_orcado")
       .select("id, item_versao_id")
@@ -792,24 +792,13 @@ export async function cancelarEnvioParaAbertura(
   ]);
 
   const qtdPps = ppsRes.count ?? 0;
-  const qtdRealizado = realizadoRes.count ?? 0;
-  if (qtdPps > 0 || qtdRealizado > 0) {
-    const pendencias: string[] = [];
-    if (qtdPps > 0) {
-      pendencias.push(
-        qtdPps === 1 ? "cancele a PP gerada" : `cancele as ${qtdPps} PPs geradas`,
-      );
-    }
-    if (qtdRealizado > 0) {
-      pendencias.push(
-        qtdRealizado === 1
-          ? "zere o realizado lançado no item"
-          : `zere o realizado lançado em ${qtdRealizado} itens`,
-      );
-    }
+  if (qtdPps > 0) {
     return {
       ok: false,
-      message: `Antes de cancelar o envio, ${pendencias.join(" e ")} na página do job.`,
+      message:
+        qtdPps === 1
+          ? "Antes de cancelar o envio, cancele a PP gerada na aba de Pedidos de Produção do job."
+          : `Antes de cancelar o envio, cancele as ${qtdPps} PPs geradas na aba de Pedidos de Produção do job.`,
     };
   }
 

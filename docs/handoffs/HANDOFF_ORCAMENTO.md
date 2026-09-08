@@ -3134,12 +3134,27 @@ Valor, cópia da planilha, saves, BVs, PPs e realizado não são tocados.
 
 ### `cancelarEnvioParaAbertura`
 
-Só em `aguardando_abertura` ou `rejeitado_financeiro`; bloqueia com PP
-fora de `cancelada` ou realizado > 0 (mensagem diz o que desfazer);
-devolve `saves_consumos` (troca `job_item_orcado_id` por `item_versao_id`)
-e `itens_bv` (solta `job_item_orcado_id`) à versão; job → `cancelado`;
-orçamento `job_criado` → `aprovado`. Auditoria
+Só em `aguardando_abertura` ou `rejeitado_financeiro`; bloqueia com **PP
+fora de `cancelada`** (a mensagem manda cancelá-la na aba de Pedidos de
+Produção); devolve `saves_consumos` (troca `job_item_orcado_id` por
+`item_versao_id`) e `itens_bv` (solta `job_item_orcado_id`) à versão;
+job → `cancelado`; orçamento `job_criado` → `aprovado`. Auditoria
 `job.envio_abertura_cancelado`.
 
-A verificação no navegador está na nota do `HANDOFF_JOBS.md` de hoje
-(reenvio no JOB-0017, cancelamento no JOB-0014).
+⚠️ **O realizado NÃO entra no bloqueio**, embora a decisão tenha nascido
+dizendo "PP ou realizado". Ele não é digitado desde 21/08/2026: é
+derivado das PPs pelo trigger `recalcular_realizado_do_item`. Contar os
+dois seria contar a mesma PP duas vezes, e a mensagem mandava zerar uma
+célula que nenhuma tela edita. Ver a nota da decisão 057.
+
+### Pegadinha do `?abertura=revisar`
+
+Tirar o parâmetro da URL com `history.replaceState` **não funciona**: o
+router do Next ressincroniza a URL com a árvore dele na primeira server
+action, e o parâmetro volta — o formulário reabria sozinho depois do
+envio. É `router.replace` que resolve, e ele não derruba o modal (o
+estado é do `FluxoAbertura`).
+
+A verificação no navegador está na nota do `HANDOFF_JOBS.md` de hoje —
+duas rodadas, incluindo a devolução de save e de BV à versão, o bloqueio
+por PP e o gate do job já aberto.

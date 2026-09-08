@@ -466,8 +466,8 @@ export function FluxoAbertura({
             <strong className="font-mono text-foreground">{job?.codigo}</strong>{" "}
             é cancelado e o orçamento volta a{" "}
             <strong className="text-foreground">Aprovado</strong>, com o envio
-            disponível de novo. Saves e BVs voltam para a versão. PPs geradas
-            ou realizado lançado no job impedem o cancelamento.
+            disponível de novo. Saves e BVs voltam para a versão. Se houver PP
+            gerada no job, cancele-a antes.
             {erroGeral && (
               <span className="mt-3 block text-xs text-california-red">
                 {erroGeral}
