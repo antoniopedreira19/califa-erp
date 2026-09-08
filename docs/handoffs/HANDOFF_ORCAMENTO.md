@@ -3090,3 +3090,56 @@ no fechamento") e cruzadas na 028.
 | Arquivo baixado de produção (`Revisao 1`) | coluna I oculta com 10.000 no Item 4; TOTAL 112.000; **(−) PAGO COM CRÉDITO DE SALDO ANTERIOR −10.000**; IMPOSTO 19.474,18; HONORÁRIOS 12% 12.240; FATURAMENTO **133.714,18** — idêntico ao arquivo local |
 
 Nada foi gravado no banco nesta rodada: só exportação.
+
+## ⚠️ Nota de 2026-09-08 — o job devolvido volta para cá, e o envio à abertura se cancela daqui (decisão 057)
+
+**Commit:** ver `git log` desta data.
+**Migrations:** `20260908100001` e `20260908100002` — ver a nota do mesmo dia no `HANDOFF_JOBS.md`.
+**Regra:** `docs/decisions/057-rejeicao-e-cancelamento-do-envio-a-abertura.md`.
+
+A tela do orçamento passou a **ler o status do job** (`status` e
+`motivo_rejeicao` entraram no select de `jobs` em `page.tsx`, e em
+`JobExistente`). Até aqui ela dizia "Job enviado para abertura ·
+aguardando" mesmo com o job devolvido.
+
+### `FluxoAbertura` — a etapa `devolvida`
+
+| Etapa | Banner (`BannersEstado`) | Barra | Botões |
+|---|---|---|---|
+| `aprovada` | verde, "Versão v1 aprovada" | "Próximo passo: abrir o job" | Enviar Job para Abertura |
+| `enviada` | "Job enviado para abertura · JOB-NNNN" | recebimento previsto | **Cancelar envio à abertura** · Ver dados do job |
+| `devolvida` (job `rejeitado_financeiro`) | **vermelho**, "Abertura devolvida pelo financeiro · JOB-NNNN", com o **motivo** e "Ver job" | "devolvido pelo financeiro · revise e reenvie" | **Cancelar envio à abertura** · Enviar Job para Abertura |
+
+- **`?abertura=revisar`** (vindo do "Revisar abertura" da página do job)
+  abre o formulário assim que a tela monta, preenchido com o que o job
+  devolvido tinha — `inicialModal` já lia do job. O parâmetro sai da URL
+  com `router.replace`; um `history.replaceState` solto era desfeito pelo
+  router do Next na primeira server action (o parâmetro voltava).
+- **Cancelar envio à abertura** confirma num `ConfirmDialog` e chama
+  `cancelarEnvioParaAbertura` (`abertura-actions.ts`). Erro da action
+  aparece na barra, à esquerda dos botões, depois que o diálogo fecha.
+- `ConfirmarEnvioModal` ganhou `reenvio`: título "Tem certeza que quer
+  reenviar…", descrição "volta à fila do financeiro… no mesmo código" e
+  botão "Sim, reenviar job".
+
+### `enviarJobParaAbertura` — o reenvio
+
+Com um job vivo em `rejeitado_financeiro`, a action **atualiza o mesmo
+job** em vez de criar outro: contatos de cobrança substituídos primeiro
+(delete + insert), depois nome, produto, cidade, regional, datas, data
+do evento, recebimento, descritivo, GP e produtor, `status =
+aguardando_abertura` e `motivo_rejeicao = null`; nome, cidade, regional e
+datas vão para o orçamento como no envio. O orçamento fica `job_criado`.
+Valor, cópia da planilha, saves, BVs, PPs e realizado não são tocados.
+
+### `cancelarEnvioParaAbertura`
+
+Só em `aguardando_abertura` ou `rejeitado_financeiro`; bloqueia com PP
+fora de `cancelada` ou realizado > 0 (mensagem diz o que desfazer);
+devolve `saves_consumos` (troca `job_item_orcado_id` por `item_versao_id`)
+e `itens_bv` (solta `job_item_orcado_id`) à versão; job → `cancelado`;
+orçamento `job_criado` → `aprovado`. Auditoria
+`job.envio_abertura_cancelado`.
+
+A verificação no navegador está na nota do `HANDOFF_JOBS.md` de hoje
+(reenvio no JOB-0017, cancelamento no JOB-0014).

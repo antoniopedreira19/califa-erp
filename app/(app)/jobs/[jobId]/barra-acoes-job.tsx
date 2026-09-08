@@ -30,7 +30,9 @@ interface Props {
   jobId: string;
   jobCodigo: string;
   status: JobStatus;
-  transicoes: JobStatus[];
+  /** Tela do orçamento de origem, na versão aprovada. É lá que o envio à
+   *  abertura se revisa e se cancela (decisão 057). */
+  orcamentoHref: string;
   envioFaturamento: EnvioFaturamento | null;
   podeEnviarFaturamento: boolean;
   /**
@@ -65,16 +67,19 @@ interface Props {
  * encerrado). Fica FORA das abas de propósito — as ações são do job, não da
  * aba, e o desenho as mantém à mão em todas elas.
  *
- * "Cancelar job" só existe antes de o financeiro abrir o job. Depois disso
- * o cancelamento, se necessário, é ação do financeiro — não do módulo de
- * Jobs. A `atualizarStatusJob` continua aceitando o cancelamento; o que
- * muda é a superfície que o oferece.
+ * "Cancelar job" NÃO mora mais aqui (decisão 057, 08/09/2026). Antes da
+ * abertura o que se cancela é o ENVIO, e isso se faz pelo orçamento —
+ * era o botão daqui que deixava o orçamento preso em "Job criado" sem
+ * job vivo. Depois da abertura o cancelamento, se necessário, é ação do
+ * financeiro. A `atualizarStatusJob` continua aceitando o cancelamento
+ * (decisão 020); o que mudou é que nenhuma superfície do módulo de Jobs
+ * o oferece.
  */
 export function BarraAcoesJob({
   jobId,
   jobCodigo,
   status,
-  transicoes,
+  orcamentoHref,
   envioFaturamento,
   podeEnviarFaturamento,
   aberturaEmRevisao = false,
@@ -90,14 +95,12 @@ export function BarraAcoesJob({
   // design tem UMA barra com três estados, não duas empilhadas.
   const errataAberta = useModoErrataAtivo();
 
-  const aindaNaoAberto =
-    status === "aguardando_abertura" || status === "rejeitado_financeiro";
-  const transicoesVisiveis = aindaNaoAberto ? transicoes : [];
   const mostrarEncerramento =
     status === "aberto" && (envioFaturamento !== null || pagoSoPorSave);
 
   const linhas = montarLinhas({
     status,
+    orcamentoHref,
     envioFaturamento,
     faturamentoPrevisto,
     moeda,
@@ -130,10 +133,10 @@ export function BarraAcoesJob({
             moeda={moeda}
           />
         )}
-        {(transicoesVisiveis.length > 0 || mostrarEncerramento) && (
+        {mostrarEncerramento && (
           <StatusActions
             jobId={jobId}
-            transicoes={transicoesVisiveis}
+            transicoes={[]}
             mostrarEncerramento={mostrarEncerramento}
             resumoEncerramento={resumoEncerramento}
           />
@@ -145,6 +148,7 @@ export function BarraAcoesJob({
 
 function montarLinhas({
   status,
+  orcamentoHref,
   envioFaturamento,
   faturamentoPrevisto,
   moeda,
@@ -153,6 +157,7 @@ function montarLinhas({
   aberturaEmRevisao,
 }: {
   status: JobStatus;
+  orcamentoHref: string;
   envioFaturamento: EnvioFaturamento | null;
   faturamentoPrevisto: number;
   moeda: string;
@@ -172,6 +177,14 @@ function montarLinhas({
         >
           Abertura de Job
         </Link>
+        . Para cancelar o envio, use o{" "}
+        <Link
+          href={orcamentoHref}
+          prefetch={false}
+          className="font-medium text-california-red hover:underline"
+        >
+          orçamento
+        </Link>
         . Gerar PP já está liberado; o envio de PPs ao financeiro é que
         volta com a abertura.
       </>,
@@ -180,8 +193,19 @@ function montarLinhas({
 
   if (status === "rejeitado_financeiro") {
     return [
-      "Job rejeitado pelo financeiro.",
-      "Corrija o que foi apontado acima e reenvie para abertura. Gerar PP segue liberado; o envio ao financeiro volta com a abertura.",
+      "Job devolvido pelo financeiro.",
+      <>
+        Revise a abertura pelo{" "}
+        <Link
+          href={orcamentoHref}
+          prefetch={false}
+          className="font-medium text-california-red hover:underline"
+        >
+          orçamento
+        </Link>
+        , com o motivo acima, e reenvie. Gerar PP segue liberado; o envio
+        ao financeiro volta com a abertura.
+      </>,
     ];
   }
 

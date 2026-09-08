@@ -32,6 +32,7 @@ export function ConfirmarEnvioModal({
   onVoltar,
   pending,
   somenteLeitura = false,
+  reenvio = false,
   orcamentoCodigo,
   linhas,
   valorTotal,
@@ -50,6 +51,9 @@ export function ConfirmarEnvioModal({
   /** Job já enviado: some o que decide (confirmar, voltar e revisar) e
    *  fica só a leitura do que foi gravado. */
   somenteLeitura?: boolean;
+  /** Job devolvido pelo financeiro sendo reenviado (decisão 057): o
+   *  texto diz que ele volta à fila no mesmo código, não que é criado. */
+  reenvio?: boolean;
   orcamentoCodigo: string;
   linhas: { rotulo: string; valor: string; mono?: boolean }[];
   /** Valor do Job — o que vai para `jobs.valor_total`. */
@@ -80,7 +84,9 @@ export function ConfirmarEnvioModal({
           <DialogTitle className="pt-4 text-xl leading-snug">
             {somenteLeitura
               ? "Dados do job"
-              : "Tem certeza que quer enviar esse job para a abertura?"}
+              : reenvio
+                ? "Tem certeza que quer reenviar esse job para a abertura?"
+                : "Tem certeza que quer enviar esse job para a abertura?"}
           </DialogTitle>
           <DialogDescription className="pt-1 leading-relaxed">
             {somenteLeitura ? (
@@ -94,8 +100,10 @@ export function ConfirmarEnvioModal({
               </>
             ) : (
               <>
-                O job será criado e enviado ao financeiro. Nome e datas
-                alterados aqui serão gravados no orçamento{" "}
+                {reenvio
+                  ? "O job volta à fila do financeiro com os dados abaixo, no mesmo código. "
+                  : "O job será criado e enviado ao financeiro. "}
+                Nome e datas alterados aqui serão gravados no orçamento{" "}
                 <strong className="font-semibold text-foreground">
                   {orcamentoCodigo}
                 </strong>
@@ -235,7 +243,7 @@ export function ConfirmarEnvioModal({
                 ) : (
                   <Check className="h-4 w-4" />
                 )}
-                Sim, enviar job
+                {reenvio ? "Sim, reenviar job" : "Sim, enviar job"}
               </button>
             </>
           )}

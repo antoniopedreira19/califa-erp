@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
+import { checarPermissao } from "@/lib/permissoes-server";
 import { aberturaJobSchema } from "@/lib/validations/abertura-job";
 import { calcularTotaisVersao } from "@/lib/calculos/versao-totais";
 import { gerarCodigoJob } from "@/lib/codigos/jobs";
@@ -132,24 +133,48 @@ export async function enviarJobParaAbertura(
     }>();
 
   if (!orc) return { ok: false, message: "Orçamento não encontrado." };
-  if (orc.status !== "aprovado" || orc.versao_aprovada_id !== versaoId) {
+  if (orc.versao_aprovada_id !== versaoId) {
     return {
       ok: false,
       message: "O orçamento não está aprovado nesta versão.",
     };
   }
 
-  // 2. Um job ativo por orçamento (o unique index também barra; aqui é
+  // 2. Um job vivo por orçamento (o unique index também barra; aqui é
   //    só pra devolver mensagem boa antes de gastar o resto).
-  const { count: jobsDoOrcamento } = await supabase
+  //
+  //    Exceção, desde 08/09/2026 (decisão 057): o job que o financeiro
+  //    DEVOLVEU. Reenviar é refazer o formulário sobre o MESMO job — ele
+  //    guarda a cópia da planilha, o consumo de save, os BVs, as PPs
+  //    geradas e o realizado lançado na pré-abertura, e o código não muda
+  //    para o cliente. Nesse caso o orçamento está em `job_criado`, não
+  //    em `aprovado`; fora dele continua valendo `aprovado`.
+  const { data: jobVivo } = await supabase
     .from("jobs")
-    .select("id", { count: "exact", head: true })
+    .select("id, codigo, status")
     .eq("orcamento_id", orc.id)
     .eq("tenant_id", session.activeTenant.id)
-    .neq("status", "cancelado");
+    .neq("status", "cancelado")
+    .maybeSingle<{ id: string; codigo: string; status: string }>();
 
-  if ((jobsDoOrcamento ?? 0) > 0) {
+  const jobDevolvido =
+    jobVivo && jobVivo.status === "rejeitado_financeiro" ? jobVivo : null;
+
+  if (jobVivo && !jobDevolvido) {
     return { ok: false, message: "Este orçamento já tem um job ativo." };
+  }
+  if (jobDevolvido) {
+    if (orc.status !== "job_criado") {
+      return {
+        ok: false,
+        message: "O orçamento e o job devolvido estão em estados diferentes. Avise o suporte.",
+      };
+    }
+  } else if (orc.status !== "aprovado") {
+    return {
+      ok: false,
+      message: "O orçamento não está aprovado nesta versão.",
+    };
   }
 
   // 3. Produto vem do projeto; GP e produtor vêm do orçamento. O
@@ -270,6 +295,107 @@ export async function enviarJobParaAbertura(
   if (errOrcDados) {
     console.error("[abertura.orcamento_dados]", errOrcDados.message);
     return { ok: false, message: mapDbError(errOrcDados.message) };
+  }
+
+  // 5b. Reenvio do job devolvido (decisão 057): atualiza o que o
+  //     formulário decide e devolve o job à fila. Valor, cópia da
+  //     planilha, saves, BVs, PPs e realizado ficam como estão — a versão
+  //     aprovada não mudou (errata só existe depois da abertura), e o que
+  //     a produção já registrou na pré-abertura é dela.
+  if (jobDevolvido) {
+    // Contatos de cobrança PRIMEIRO: o formulário é a fonte inteira —
+    // apaga os do envio anterior e grava o que está na tela. Se isso
+    // falhar, o job continua devolvido e o usuário refaz; a ordem inversa
+    // deixaria um job na fila sem contato (foi o que aconteceu no
+    // primeiro teste, quando `jobs_contatos` ainda não aceitava DELETE).
+    const { error: errApagaContatos } = await supabase
+      .from("jobs_contatos")
+      .delete()
+      .eq("job_id", jobDevolvido.id)
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("tipo", "cobranca");
+
+    if (errApagaContatos) {
+      console.error("[abertura.reenvio_contatos_delete]", errApagaContatos.message);
+      return {
+        ok: false,
+        message: "Não foi possível atualizar os contatos de cobrança. Avise o suporte.",
+      };
+    }
+
+    const { error: errNovosContatos } = await supabase.from("jobs_contatos").insert(
+      parsed.data.contatos_cobranca.map((c, i) => ({
+        tenant_id: session.activeTenant.id,
+        job_id: jobDevolvido.id,
+        tipo: "cobranca",
+        nome: c.nome,
+        numero: c.numero,
+        email: c.email,
+        ordem: i + 1,
+        created_by: session.profile.id,
+      })),
+    );
+
+    if (errNovosContatos) {
+      console.error("[abertura.reenvio_contatos_insert]", errNovosContatos.message);
+      return {
+        ok: false,
+        message: "Não foi possível gravar os contatos de cobrança. Avise o suporte.",
+      };
+    }
+
+    const { error: errReenvio } = await supabase
+      .from("jobs")
+      .update({
+        nome: parsed.data.nome,
+        produto: produtoRes.data.nome,
+        regional_id: parsed.data.regional_id,
+        cidade: cidadeRes.data.nome,
+        data_inicio_prevista: parsed.data.data_inicio_prevista,
+        data_fim_prevista: parsed.data.data_fim_prevista,
+        data_evento: parsed.data.data_evento,
+        data_prevista_faturamento: parsed.data.data_prevista_faturamento,
+        observacoes: parsed.data.observacoes,
+        responsavel_id: orc.gp_responsavel_id,
+        produtor_id: orc.produtor_id,
+        status: "aguardando_abertura",
+        motivo_rejeicao: null,
+      })
+      .eq("id", jobDevolvido.id)
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("status", "rejeitado_financeiro");
+
+    if (errReenvio) {
+      console.error("[abertura.reenvio]", errReenvio.message);
+      return { ok: false, message: mapDbError(errReenvio.message) };
+    }
+
+    await logAuditEvent({
+      acao: "job.reenviado_para_aprovacao",
+      tenantId: session.activeTenant.id,
+      entidadeTipo: "job",
+      entidadeId: jobDevolvido.id,
+      metadata: {
+        codigo: jobDevolvido.codigo,
+        orcamento_id: orc.id,
+        versao_id: versaoId,
+        cidade_id: parsed.data.cidade_id,
+        regional_id: parsed.data.regional_id,
+        data_evento: parsed.data.data_evento,
+        data_prevista_faturamento: parsed.data.data_prevista_faturamento,
+        qtd_contatos_cobranca: parsed.data.contatos_cobranca.length,
+      },
+    });
+
+    revalidatePath(`/orcamentos/${orc.projeto_id}/${orc.id}/versoes/${versaoId}`);
+    revalidatePath(`/orcamentos/${orc.projeto_id}/${orc.id}`);
+    revalidatePath(`/orcamentos/${orc.projeto_id}`);
+    revalidatePath(`/jobs/${jobDevolvido.id}`);
+    revalidatePath("/jobs");
+    revalidatePath("/financeiro");
+    revalidatePath("/financeiro/abertura-de-job");
+
+    return { ok: true, jobId: jobDevolvido.id, codigo: jobDevolvido.codigo };
   }
 
   // 6. Cria o job. `cidade` é texto no schema de jobs — gravamos o nome
@@ -582,4 +708,230 @@ export async function enviarJobParaAbertura(
   revalidatePath("/financeiro/abertura-de-job");
 
   return { ok: true, jobId: novo.id, codigo };
+}
+
+export type CancelarEnvioResult =
+  | { ok: true }
+  | { ok: false; message: string };
+
+/**
+ * Cancela o envio à abertura, enquanto o financeiro ainda não abriu o job
+ * (decisão 057). É o inverso exato de `enviarJobParaAbertura`:
+ *
+ * - o job vai a `cancelado` — a linha fica, com auditoria, e o código
+ *   JOB-NNNN fica queimado como em qualquer job cancelado;
+ * - o consumo de save e os BVs voltam a apontar para a VERSÃO, de onde o
+ *   envio os tinha movido para a cópia do job;
+ * - o orçamento volta a `aprovado`, e a barra volta a oferecer o envio.
+ *
+ * Vale nos dois status de pré-abertura. O job devolvido pelo financeiro
+ * também precisa de uma saída além do reenvio — e o "Cancelar job" da
+ * página do job saiu de cena junto com esta action.
+ *
+ * Bloqueia, sem cascata, se a produção já registrou coisa no job: PP fora
+ * de `cancelada` (a gerada é contratação fechada com fornecedor) ou
+ * realizado lançado à mão. Quem desfaz isso é o próprio usuário, na aba
+ * de PPs e na planilha, uma por uma — cancelar o envio nunca apaga PP.
+ */
+export async function cancelarEnvioParaAbertura(
+  jobId: string,
+): Promise<CancelarEnvioResult> {
+  const session = await requireSession();
+  const gate = await checarPermissao(session, "jobs.editar_metadata");
+  if (!gate.ok) return { ok: false, message: gate.message };
+
+  const supabase = createClient();
+
+  const { data: job } = await supabase
+    .from("jobs")
+    .select("id, codigo, status, projeto_id, orcamento_id, versao_orcamento_aprovada_id")
+    .eq("id", jobId)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle<{
+      id: string;
+      codigo: string;
+      status: string;
+      projeto_id: string;
+      orcamento_id: string;
+      versao_orcamento_aprovada_id: string;
+    }>();
+
+  if (!job) return { ok: false, message: "Job não encontrado." };
+  if (
+    job.status !== "aguardando_abertura" &&
+    job.status !== "rejeitado_financeiro"
+  ) {
+    return {
+      ok: false,
+      message:
+        "O financeiro já abriu este job. O cancelamento depois da abertura é ação do financeiro.",
+    };
+  }
+
+  // 1. O que a produção já registrou no job barra o cancelamento.
+  const [ppsRes, realizadoRes, copiasRes] = await Promise.all([
+    supabase
+      .from("pedidos_compra")
+      .select("id", { count: "exact", head: true })
+      .eq("job_id", job.id)
+      .eq("tenant_id", session.activeTenant.id)
+      .neq("status", "cancelada"),
+    supabase
+      .from("jobs_itens_realizado")
+      .select("id", { count: "exact", head: true })
+      .eq("job_id", job.id)
+      .eq("tenant_id", session.activeTenant.id)
+      .or(
+        "valor_unitario_realizado.gt.0,quantidade_realizada.gt.0,dias_meses_realizado.gt.0",
+      ),
+    supabase
+      .from("jobs_itens_orcado")
+      .select("id, item_versao_id")
+      .eq("job_id", job.id)
+      .eq("tenant_id", session.activeTenant.id),
+  ]);
+
+  const qtdPps = ppsRes.count ?? 0;
+  const qtdRealizado = realizadoRes.count ?? 0;
+  if (qtdPps > 0 || qtdRealizado > 0) {
+    const pendencias: string[] = [];
+    if (qtdPps > 0) {
+      pendencias.push(
+        qtdPps === 1 ? "cancele a PP gerada" : `cancele as ${qtdPps} PPs geradas`,
+      );
+    }
+    if (qtdRealizado > 0) {
+      pendencias.push(
+        qtdRealizado === 1
+          ? "zere o realizado lançado no item"
+          : `zere o realizado lançado em ${qtdRealizado} itens`,
+      );
+    }
+    return {
+      ok: false,
+      message: `Antes de cancelar o envio, ${pendencias.join(" e ")} na página do job.`,
+    };
+  }
+
+  if (copiasRes.error) {
+    console.error("[cancelar_envio.copias]", copiasRes.error.message);
+    return { ok: false, message: "Não foi possível ler a planilha do job." };
+  }
+
+  const copias = (copiasRes.data ?? []) as { id: string; item_versao_id: string | null }[];
+  const idsCopias = copias.map((c) => c.id);
+  let savesDevolvidos = 0;
+
+  // 2. O consumo de save volta para a linha da versão. As duas pontas
+  //    nunca convivem (`chk_save_consumo_uma_ponta`), então o update troca
+  //    uma pela outra numa tacada. Poucas linhas: o normal é nenhuma.
+  if (idsCopias.length > 0) {
+    const { data: consumos, error: errConsumosLer } = await supabase
+      .from("saves_consumos")
+      .select("id, job_item_orcado_id")
+      .eq("tenant_id", session.activeTenant.id)
+      .in("job_item_orcado_id", idsCopias);
+
+    if (errConsumosLer) {
+      console.error("[cancelar_envio.saves_select]", errConsumosLer.message);
+      return { ok: false, message: "Não foi possível ler o consumo de save do job." };
+    }
+
+    const versaoPorCopia = new Map(copias.map((c) => [c.id, c.item_versao_id]));
+    savesDevolvidos = (consumos ?? []).length;
+    for (const c of (consumos ?? []) as { id: string; job_item_orcado_id: string }[]) {
+      const itemVersaoId = versaoPorCopia.get(c.job_item_orcado_id) ?? null;
+      if (!itemVersaoId) {
+        console.error("[cancelar_envio.saves_sem_versao]", c.id);
+        return {
+          ok: false,
+          message:
+            "Um consumo de save do job não tem linha correspondente na versão. Avise o suporte.",
+        };
+      }
+      const { error: errConsumo } = await supabase
+        .from("saves_consumos")
+        .update({ item_versao_id: itemVersaoId, job_item_orcado_id: null })
+        .eq("id", c.id)
+        .eq("tenant_id", session.activeTenant.id);
+      if (errConsumo) {
+        console.error("[cancelar_envio.saves_update]", errConsumo.message);
+        return {
+          ok: false,
+          message: "Não foi possível devolver o consumo de save à versão. Avise o suporte.",
+        };
+      }
+    }
+
+    // 3. Os BVs continuam com `item_versao_id` — o envio só acrescentou a
+    //    ponta da cópia. Basta soltá-la.
+    const { error: errBv } = await supabase
+      .from("itens_bv")
+      .update({ job_item_orcado_id: null })
+      .eq("tenant_id", session.activeTenant.id)
+      .in("job_item_orcado_id", idsCopias)
+      .not("item_versao_id", "is", null);
+
+    if (errBv) {
+      console.error("[cancelar_envio.bv]", errBv.message);
+      return { ok: false, message: "Não foi possível devolver os BVs à versão. Avise o suporte." };
+    }
+  }
+
+  // 4. Job cancelado. O motivo da rejeição, se houver, fica — é histórico.
+  const { error: errJob } = await supabase
+    .from("jobs")
+    .update({ status: "cancelado" })
+    .eq("id", job.id)
+    .eq("tenant_id", session.activeTenant.id)
+    .in("status", ["aguardando_abertura", "rejeitado_financeiro"]);
+
+  if (errJob) {
+    console.error("[cancelar_envio.job]", errJob.message);
+    return { ok: false, message: "Não foi possível cancelar o envio." };
+  }
+
+  // 5. Orçamento volta a `aprovado`. Só de `job_criado`: se alguém já
+  //    mexeu no status por outro caminho, não sobrescreve.
+  const { error: errOrc } = await supabase
+    .from("orcamentos")
+    .update({ status: "aprovado" })
+    .eq("id", job.orcamento_id)
+    .eq("tenant_id", session.activeTenant.id)
+    .eq("status", "job_criado");
+
+  if (errOrc) {
+    console.error("[cancelar_envio.orcamento]", errOrc.message);
+    return {
+      ok: false,
+      message:
+        "Envio cancelado, mas o orçamento não voltou a aprovado. Verifique manualmente.",
+    };
+  }
+
+  await logAuditEvent({
+    acao: "job.envio_abertura_cancelado",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "job",
+    entidadeId: job.id,
+    metadata: {
+      codigo: job.codigo,
+      status_anterior: job.status,
+      orcamento_id: job.orcamento_id,
+      versao_id: job.versao_orcamento_aprovada_id,
+      qtd_saves_devolvidos: savesDevolvidos,
+    },
+  });
+
+  revalidatePath(
+    `/orcamentos/${job.projeto_id}/${job.orcamento_id}/versoes/${job.versao_orcamento_aprovada_id}`,
+  );
+  revalidatePath(`/orcamentos/${job.projeto_id}/${job.orcamento_id}`);
+  revalidatePath(`/orcamentos/${job.projeto_id}`);
+  revalidatePath(`/jobs/${job.id}`);
+  revalidatePath("/jobs");
+  revalidatePath("/financeiro");
+  revalidatePath("/financeiro/abertura-de-job");
+
+  return { ok: true };
 }

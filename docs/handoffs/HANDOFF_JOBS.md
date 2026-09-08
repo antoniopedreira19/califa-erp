@@ -2724,3 +2724,50 @@ precisaria ter sido enviada antes). O caminho é o mesmo
 ⚠️ **Resíduo do teste:** PP-00027 ficou **cancelada** no JOB-0017 — o
 cancelamento é soft delete, então a linha permanece no histórico do job
 de teste.
+
+## ⚠️ Nota de 2026-09-08 — a rejeição volta ao orçamento; "Cancelar job" saiu da pré-abertura (decisão 057)
+
+**Commit:** ver `git log` desta data.
+**Migrations:** `20260908100001` (orçamento sem job vivo volta a `aprovado` — pegou só TESTE-0005/26-01) e `20260908100002` (`jobs_contatos` aceita DELETE).
+**Regra:** `docs/decisions/057-rejeicao-e-cancelamento-do-envio-a-abertura.md`.
+
+Pedido do Tiago em 08/09/2026, sobre o print do JOB-0014 devolvido: o
+job devolvido não se reenvia da própria página — **a abertura se revisa
+e se reenvia no orçamento**, onde o formulário mora. E o envio pode ser
+**cancelado** enquanto o financeiro não abriu, também pelo orçamento.
+
+### O que mudou na página do job
+
+| Arquivo | O quê |
+|---|---|
+| `page.tsx` | o cartão do motivo trocou "Reenviar pra aprovação" por **"Revisar abertura"**, link para `/orcamentos/[p]/[o]?v=[versão]&abertura=revisar`; explica que o formulário abre preenchido. Deixou de exigir `motivo_rejeicao` preenchido para aparecer ("— sem motivo informado") |
+| `reenviar-aprovacao-button.tsx` | **removido**, junto com a action `reenviarJobParaAprovacao` de `jobs/actions.ts` (só trocava o status, sem ninguém rever nada) |
+| `barra-acoes-job.tsx` | perdeu a prop `transicoes` e ganhou `orcamentoHref`. **Sem "Cancelar job" em nenhum status**: na pré-abertura o que se cancela é o envio, pelo orçamento; depois da abertura é ação do financeiro (020). Os dois textos de pré-abertura apontam para o orçamento |
+
+`JOB_STATUS_TRANSICOES` e `atualizarStatusJob` seguem intactos (020) —
+nenhuma superfície do módulo os chama para cancelar.
+
+### Verificado em 08/09/2026 (servidor próprio, logado no Chrome)
+
+| Job | Passo | Resultado |
+|---|---|---|
+| JOB-0014 (`rejeitado_financeiro`, projeto "Teste A") | página do job | cartão com o motivo e "Revisar abertura"; barra "Job devolvido pelo financeiro. Revise a abertura pelo orçamento…", sem botão |
+| JOB-0014 | "Revisar abertura" | abriu o orçamento com o formulário preenchido (JOB-0014, 17→31/08, recebimento 20/08); `abertura=revisar` saiu da URL |
+| JOB-0014 | reenvio, 1ª tentativa | **falhou** em "permission denied for table jobs_contatos": a tabela nasceu sem DELETE. Migration `20260908100002` + a action passou a trocar os contatos ANTES de mexer no status. Resíduo: o job ficou `aguardando_abertura` sem contato — resolvido pelo cancelamento abaixo |
+| JOB-0017 "Teste B3" (`rejeitado_financeiro`, "Teste Alterações") | reenvio, 2ª tentativa | pop-up "Tem certeza que quer reenviar…", "no mesmo código", botão "Sim, reenviar job"; gravou: `aguardando_abertura`, motivo nulo, descritivo novo, contato substituído, auditoria `job.reenviado_para_aprovacao` |
+| JOB-0017 | página do job depois | barra "Aguardando abertura… Para cancelar o envio, use o orçamento", sem botão |
+| JOB-0014 (`aguardando_abertura`) | "Cancelar envio à abertura" no orçamento | diálogo de confirmação; gravou: job `cancelado`, NOV-0002/26-02 de volta a **`aprovado`**, barra com "Enviar Job para Abertura"; auditoria `job.envio_abertura_cancelado` com `status_anterior` e `qtd_saves_devolvidos: 0` |
+
+⚠️ **Não exercitado:** o bloqueio por PP gerada ou realizado lançado
+(nenhum job de pré-abertura tinha um nem outro), o gate "o financeiro já
+abriu este job", e a devolução de saves e BVs à versão (os dois jobs de
+teste não tinham nenhum). Os três são código direto na action.
+
+⚠️ **Resíduos do teste:** JOB-0014 ficou **cancelado** e o orçamento
+NOV-0002/26-02 voltou a `aprovado`, pronto para um envio novo; JOB-0017
+está na fila do financeiro (`aguardando_abertura`) com o descritivo
+"Reenvio de teste da decisão 057 no JOB-0017.".
+
+⚠️ **Chrome MCP:** clicar em textarea por `ref` e digitar em seguida
+mandou o texto para o campo "Nome do Job" (o clique não moveu o foco).
+`form_input` por `ref` funciona; digitar, não.
