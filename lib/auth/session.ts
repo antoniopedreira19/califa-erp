@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import type {
   AppRole,
+  Empresa,
   Profile,
   SessionContext,
   Tenant,
@@ -88,6 +89,23 @@ export const loadSession = cache(async (): Promise<SessionResult> => {
   // MVP: tenant ativo = primeiro vínculo (só existe "Agência California").
   const active = memberships[0];
 
+  // Empresas do tenant + resolução da empresa ativa via cookie.
+  const { data: empresasData } = await supabase
+    .from("empresas")
+    .select("id, tenant_id, razao_social, nome_fantasia, cnpj, inscricao_estadual, inscricao_municipal, logradouro, numero, complemento, bairro, cidade, uf, cep, telefone, email, local_pagamento, instrucoes_nf, principal, ativo, created_by, created_at, updated_at")
+    .eq("tenant_id", active.tenant.id)
+    .eq("ativo", true)
+    .order("nome_fantasia", { ascending: true });
+
+  const empresas = (empresasData ?? []) as Empresa[];
+
+  const { cookies } = await import("next/headers");
+  const cookieEmpresaId = cookies().get("active_empresa_id")?.value;
+  const activeEmpresa =
+    cookieEmpresaId && cookieEmpresaId.length > 0
+      ? (empresas.find((e) => e.id === cookieEmpresaId) ?? null)
+      : null;
+
   return {
     kind: "ok",
     session: {
@@ -95,6 +113,8 @@ export const loadSession = cache(async (): Promise<SessionResult> => {
       memberships,
       activeTenant: active.tenant,
       activeRole: active.role,
+      activeEmpresa,
+      empresas,
     },
   };
 });

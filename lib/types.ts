@@ -56,6 +56,14 @@ export interface SessionContext {
   activeTenant: Tenant;
   /** Role do usuário dentro do tenant ativo. */
   activeRole: AppRole;
+  /**
+   * Empresa "ativa" — persistida no cookie `active_empresa_id`.
+   * null representa "Todas as empresas" (comportamento default do sistema
+   * antes da fase 2A).
+   */
+  activeEmpresa: Empresa | null;
+  /** Todas as empresas ativas do tenant. Alimenta dropdown de troca. */
+  empresas: Empresa[];
 }
 
 export function isAdmin(role: AppRole): boolean {
