@@ -15,6 +15,8 @@ import {
   JOB_STATUS_TRANSICOES,
   jobAceitaRealizado,
   jobAceitaAcoesPlanilha,
+  jobAceitaGerarPP,
+  jobAceitaEnvioDePP,
   PP_STATUS_EM_ABERTO,
   BV_SITUACAO_EM_ABERTO,
 } from "@/lib/types";
@@ -759,6 +761,15 @@ export async function carregarDetalheDoJob(
 
   const podeEditarRealizado = quemPodeMexer && jobAceitaRealizado(job.status);
   const podeAcoesPlanilha = quemPodeMexer && jobAceitaAcoesPlanilha(job.status);
+  // A PP se partiu em dois desde 08/09/2026 (decisão 056): GERAR vale na
+  // pré-abertura, ENVIAR ao financeiro continua esperando a abertura — e
+  // a marca `abertura_em_revisao` fecha o envio sem mexer no status
+  // (decisão 040). Errata e BV seguem em `podeAcoesPlanilha`.
+  const podeGerarPP = quemPodeMexer && jobAceitaGerarPP(job.status);
+  const podeEnviarPP =
+    quemPodeMexer &&
+    jobAceitaEnvioDePP(job.status) &&
+    job.abertura_em_revisao !== true;
   // SAVE — o crédito entre jobs. As duas leituras vão juntas: uma em
   // série apareceria no TTFB da tela mais pesada do job.
   const clienteIdDoJob: string = raw.projeto?.cliente_id ?? "";
@@ -817,5 +828,7 @@ export async function carregarDetalheDoJob(
     resumoEncerramento,
     podeEditarRealizado,
     podeAcoesPlanilha,
+    podeGerarPP,
+    podeEnviarPP,
   };
 }

@@ -116,3 +116,27 @@ abertura (nos tipos que geram PP) ou já mostra o orçado (em `A` e `D`).
 pode ver o quê; ela só não guarda mais nenhuma escrita.
 
 Ver `022-bv-liquido-e-realizado-por-pp.md`.
+
+
+---
+
+## ⚠️ Nota de 2026-09-08 — a PP saiu da coluna "❌" (decisão 056)
+
+A tabela acima diz **"Gerar PP ❌"** na pré-abertura. **Deixou de valer.**
+
+Gerar PP passou a ser permitido nos dois status de pré-abertura, junto
+com editar, cancelar e marcar "todas as PPs geradas". O que continua
+esperando a abertura é o **envio ao financeiro**.
+
+A linha que esta decisão traçou ("registrar o que aconteceu" × "gerar
+documento") não mudou de lugar por capricho: em 02/09/2026 a
+[039](039-pp-nasce-gerada-e-o-envio-ao-financeiro-e-uma-acao.md) partiu a
+PP em duas — ela nasce `gerada`, e enviar virou outra ação. A PP gerada
+não sai do job, não conta no realizado e o financeiro não a vê; ela é o
+registro de uma contratação que a produção já fechou, que é exatamente o
+que esta decisão queria liberar.
+
+**Errata e BV não se mexeram**, e `jobAceitaAcoesPlanilha` continua sendo
+o gate dos dois. A PP passou a ler `jobAceitaGerarPP` e
+`jobAceitaEnvioDePP`. Ver
+[056](056-pp-nasce-na-pre-abertura-e-o-envio-espera.md).

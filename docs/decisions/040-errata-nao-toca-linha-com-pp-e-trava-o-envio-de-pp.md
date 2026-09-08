@@ -73,4 +73,12 @@ financeiro — não. BV não mudou.
 |---|---|---|
 | Linha com PP no financeiro | `barrarLinhaComPPNoFinanceiro` (`actions-errata.ts`) | `travadasPorPP` em `job-item-realizado-table.tsx` |
 | Envio de PP em revisão | `barrarEnvioEmRevisao` (`actions-pp.ts`), em `enviarPedidoCompraAoFinanceiro` e `reenviarPedidoCompra` | `aberturaEmRevisao` no `PainelPPsItem`; texto da `BarraAcoesJob` |
+
+> ⚠️ **08/09/2026 — os dois nomes mudaram** (decisão 056). No servidor,
+> `barrarEnvioEmRevisao` virou **`barrarEnvioDePP`** e ganhou uma segunda
+> trava: o job que o financeiro ainda não abriu. Na tela, o
+> `PainelPPsItem` deixou de receber `aberturaEmRevisao: boolean` e passou
+> a receber **`envioBloqueadoPor: string | null`** — a frase pronta, para
+> ele não precisar saber qual das duas portas fechou. A regra desta
+> decisão não mudou: em revisão, gerar segue e enviar não.
 | Quem encerra a revisão | `editarRegistroDaAbertura` (`financeiro/abertura-de-job/actions.ts`), como na 030 | — |

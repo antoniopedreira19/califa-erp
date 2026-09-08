@@ -101,6 +101,7 @@ perguntas ao time durante a execução.
 | **Errata: onde grava** | O job ganha **cópia própria** dos itens orçados. A versão aprovada continua sendo o documento que o cliente aprovou e segue read-only. |
 | **Errata: o que edita** | ⚠️ **Mudou em 27/08/2026** (decisão 030). Era "só R$ unitário e tipo de custo; QT, D/M, adição e remoção ficaram fora". Agora a errata corrige **R$ unitário, QT, D/M e tipo**, **cria** linha (normal ou vermelha) e **remove** linha. |
 | **Errata: onde acontece** | ⚠️ **Mudou em 27/08/2026** (decisão 030). "Alterar orçado" abria um drawer com uma segunda tabela; agora ele liga o **modo errata** na própria Planilha Interna, e o rodapé vira a barra da errata. |
+| **PP: gerar × enviar** | ⚠️ **Mudou em 08/09/2026** (decisão 056). Gerar PP era do job já aberto; agora vale também na **pré-abertura** (`aguardando_abertura` e `rejeitado_financeiro`), junto com editar, cancelar e marcar "todas as PPs geradas". O **envio ao financeiro** é que continua esperando a abertura — a PP fica `gerada`, no job, como já ficava na revisão de abertura por errata (040). `jobAceitaAcoesPlanilha` deixou de valer para PP: nasceram `jobAceitaGerarPP` e `jobAceitaEnvioDePP` em `lib/types.ts`, e `barrarEnvioEmRevisao` virou **`barrarEnvioDePP`**, com as duas travas do envio. BV e errata **não** mudaram. |
 | **Errata: o botão e o planejado** | ⚠️ **Mudou em 07/09/2026** (decisão 054). O botão passou a se chamar **"Realizar errata"** ("Realizando errata" quando ligado). E a errata abre o **PLANEJADO** (R$ Unit., QT, D/M) da linha nova e da linha existente cujo **orçado mudou** — planejado sozinho não é errata; sem mudança no orçado as células ficam de leitura com o motivo no `title`. `A`/`D` seguem espelhando; vermelha e save seguem zeradas. O histórico (`jobs_erratas_itens`) gravou os oito números do planejado e o card de Erratas ganhou a coluna **Planejado**. |
 | **Errata: agrupamento** | ⚠️ **Mudou em 27/08/2026** (decisão 030). Era "título obrigatório e justificativa opcional". Agora é **um campo só, "Descrição da errata", obrigatório** — ele grava em `titulo`, e a coluna `justificativa` **foi removida do banco** no mesmo dia. |
 | **Errata: permissão** | Liberada pra qualquer usuário nesta fase (decisão explícita do time, com intenção de travar mais tarde). Exige job em "Aberto". ⚠️ **27/08/2026:** criar linha normal e remover linha passaram a ter gate próprio (`podeEditarLinhas`), hoje aberto para todos; criar **linha vermelha** nunca terá gate. |
@@ -2605,3 +2606,87 @@ Pedido do Tiago em 07/09/2026, em três partes:
 planejado e as oito colunas do histórico — passou por `tsc`, `eslint` e
 build, não por uma errata real. Entra no mesmo roteiro de
 `docs/design-briefs/2026-08-28-errata-teste-ponta-a-ponta.md`.
+
+
+---
+
+## ⚠️ Nota de 2026-09-08 — a PP nasce na pré-abertura (decisão 056)
+
+**Commit:** ver `git log` desta data.
+**Migration:** nenhuma — a regra é de status, não de estrutura.
+**Regra:** `docs/decisions/056-pp-nasce-na-pre-abertura-e-o-envio-espera.md`.
+
+Pedido do Tiago em 08/09/2026: **PP pode ser gerada com o job aguardando
+abertura ou aguardando revisão da abertura; só o envio ao financeiro é
+que não pode.** A metade "revisão da abertura" já valia desde a decisão
+040 — o que entrou agora é a pré-abertura.
+
+### Por que a linha da 013 se moveu
+
+A 013 pôs a PP inteira do lado de lá da linha "registrar × gerar
+documento", e naquele momento isso era uma frase só: emitir era gerar. A
+**039** partiu a PP em duas em 02/09 (nasce `gerada`; enviar é outra
+ação), e a frase da 013 passou a barrar coisa demais. A linha nova é a
+da 039.
+
+### Os dois gates
+
+| Função (`lib/types.ts`) | Status | Quem lê |
+|---|---|---|
+| `jobAceitaAcoesPlanilha` | `aberto`, `em_producao` | errata, BV — **não mudaram** |
+| `jobAceitaGerarPP` | os dois **+** `aguardando_abertura`, `rejeitado_financeiro` | `checarGatesRealizado` (gerar/editar), `cancelarPedidoCompra`, `actions-conclusao.ts` |
+| `jobAceitaEnvioDePP` | `aberto`, `em_producao` | `barrarEnvioDePP` |
+
+`barrarEnvioEmRevisao` virou **`barrarEnvioDePP`** e é a porta única do
+envio: primeiro "o job ainda não foi aberto" (056), depois "a abertura
+está em revisão" (040). Chamam-na `enviarPedidoCompraAoFinanceiro` e
+`reenviarPedidoCompra`.
+
+### Nada precisou mudar para o número não vazar
+
+Os quatro somadores de PP já ignoram a `gerada`:
+`recalcular_realizado_do_item` (`status not in ('cancelada','gerada')`),
+Contas a Pagar (`.neq("status","gerada")`), o consumo das previsões da
+abertura e a home do financeiro (`em_avaliacao`). E o job de
+pré-abertura não está nas views de fluxo de caixa.
+
+**Consequência visível:** na pré-abertura o REALIZADO da planilha fica em
+travessão mesmo com PP gerada. É a regra de sempre — realizado conta PP
+enviada.
+
+### Onde a tela mudou
+
+| Arquivo | O quê |
+|---|---|
+| `carregar-detalhe.ts` | `podeGerarPP` e `podeEnviarPP`, ao lado de `podeAcoesPlanilha` |
+| `realizado/job-realizado-section.tsx` | prop `podeGerarPP`; a faixa de pré-abertura diz que PP já pode ser gerada; `temCalha` e o botão "Concluir PPs" passam a segui-la |
+| `realizado/job-item-realizado-table.tsx` | prop `podeGerarPP` na pílula de PP da calha, na visibilidade da calha, no rodapé e em `onNovaPP`/`onEditar`. **A pílula de BV continua em `podeAcoes`** — na pré-abertura a calha mostra PP e não mostra BV |
+| `realizado/painel-pps-item.tsx` | `aberturaEmRevisao: boolean` → **`envioBloqueadoPor: string | null`**: o painel mostra a frase, não decide qual porta fechou |
+| `pps/job-pps-section.tsx` | `editable` (cancelar) segue `podeGerarPP`; o "Editar" da PP **rejeitada** ganhou `podeEnviar`, porque corrigir e reenviar é envio |
+| `barra-acoes-job.tsx` | os dois textos de pré-abertura dizem que gerar PP está liberado |
+
+### Verificado em 08/09/2026
+
+JOB-0012 "Paraquedas teste" (`aguardando_abertura`) e **JOB-0017 "Teste
+B3"** (`rejeitado_financeiro`, projeto "Teste Alterações"):
+
+| Passo | Resultado |
+|---|---|
+| Faixa e barra do job | dizem que PP pode ser gerada e que o envio espera a abertura |
+| Calha, item tipo `A` | sem "Abrir BV" — BV segue fechado na pré-abertura |
+| Calha, item tipo `B` | **"Gerar PP"** presente; o painel abre com "Nova PP para este item" |
+| PP gerada no Item c (R$ 2.000, sem anexo) | **PP-00027**, status `gerada` — o drawer já dizia "anexos: opcional para gerar · obrigatório para enviar" |
+| Painel do item | faixa âmbar "O financeiro ainda não abriu este job. O envio de PPs volta com a abertura — gerar, editar e cancelar continuam liberados", e "Enviar ao financeiro" desabilitado |
+| Coluna REALIZADO | travessão nos 7 itens, com a PP no Item c; "Em PPs emitidas R$ 0,00" |
+| Aba de PPs | PP-00027 listada, chip `GERADA`, "Cancelar" disponível |
+| **Bypass da action pelo console** | `enviarPedidoCompraAoFinanceiro` recusou: *"O financeiro devolveu este job e ele ainda não foi aberto. A PP fica gerada, no job — o envio ao financeiro volta com a abertura."* |
+| Cancelar PP-00027 | cancelada; o job ficou sem PP viva |
+
+⚠️ **Não exercitado:** o **reenvio** de PP rejeitada num job de
+pré-abertura — não existe PP rejeitada nesse estado para testar (ela
+precisaria ter sido enviada antes). O caminho é o mesmo
+`barrarEnvioDePP`, chamado logo depois do gate de gerar.
+
+⚠️ **Resíduo do teste:** PP-00027 ficou **cancelada** no JOB-0017 — o
+cancelamento é soft delete, então a linha permanece no histórico do job
+de teste.

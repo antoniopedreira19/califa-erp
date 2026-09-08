@@ -28,7 +28,8 @@ import {
   PP_ANEXO_TAMANHO_MAX_BYTES,
   PP_ANEXOS_TAMANHO_TOTAL_MAX_BYTES,
   podeCancelarPP,
-  jobAceitaAcoesPlanilha,
+  jobAceitaGerarPP,
+  jobAceitaEnvioDePP,
   type PPStatus,
   type JobStatus,
 } from "@/lib/types";
@@ -269,10 +270,14 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
     abertura_em_revisao: (jobRow as any).abertura_em_revisao === true,
   };
 
-  // PP continua exigindo o job ABERTO, mesmo agora que a planilha
-  // aparece na pré-abertura (17/08/2026): o pedido é compromisso de
-  // pagamento, e antes da abertura o job ainda pode ser devolvido.
-  if (!jobAceitaAcoesPlanilha(job.status as JobStatus)) {
+  // ⚠️ Mudou em 08/09/2026 (decisão 056). Até aqui GERAR PP exigia o job
+  // já aberto (`jobAceitaAcoesPlanilha`). Agora a pré-abertura entra: a
+  // PP gerada não sai do job, não conta no realizado e o financeiro não a
+  // vê. O que continua preso à abertura é o ENVIO — `barrarEnvioDePP`.
+  //
+  // Este gate serve a gerar, editar e cancelar; o envio e o reenvio
+  // chamam este E o de envio, nessa ordem.
+  if (!jobAceitaGerarPP(job.status as JobStatus)) {
     await logAuditEvent({
       acao: "acao_negada",
       tenantId: session.activeTenant.id,
@@ -287,7 +292,7 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
     return {
       ok: false,
       message:
-        "PP só pode ser gerada com o job em 'Aberto' ou 'Em produção'.",
+        "Job encerrado ou cancelado não gera PP — a aba de Pedidos de Produção guarda o histórico.",
     };
   }
 
@@ -493,34 +498,59 @@ async function renderizarDocumentosDaPP(args: {
 }
 
 /**
- * A errata devolveu o job ao mural: nenhuma PP sai para o financeiro até
- * a revisão da abertura ser salva (decisão 040, 02/09/2026).
+ * A porta única do ENVIO de PP ao financeiro. Duas travas, um lugar só.
  *
- * Gerar, editar e cancelar continuam liberados — é o ENVIO que fecha,
- * junto com o faturamento, que já fechava desde a decisão 030.
+ * 1. **O job ainda não foi aberto** (`aguardando_abertura` ou
+ *    `rejeitado_financeiro`). Novo em 08/09/2026, decisão 056: gerar PP
+ *    passou a valer na pré-abertura, então a trava que era do gate de
+ *    gerar precisou nascer aqui — senão soltar a geração soltaria junto
+ *    o envio, que é o que compromete dinheiro.
+ * 2. **A errata devolveu o job ao mural** (`abertura_em_revisao`) e a
+ *    revisão ainda não foi salva (decisão 040, 02/09/2026).
+ *
+ * Nos dois casos gerar, editar e cancelar continuam liberados — é o
+ * ENVIO que fecha, junto com o faturamento, que já fechava desde a 030.
+ *
+ * ⚠️ Era `barrarEnvioEmRevisao`, com só a segunda trava (decisão 040 §4).
  */
-async function barrarEnvioEmRevisao(
+async function barrarEnvioDePP(
   tenantId: string,
   ppId: string,
-  job: { id: string; abertura_em_revisao: boolean },
+  job: { id: string; status: string; abertura_em_revisao: boolean },
 ): Promise<Err | null> {
-  if (!job.abertura_em_revisao) return null;
-  await logAuditEvent({
-    acao: "acao_negada",
-    tenantId,
-    entidadeTipo: "pedido_compra",
-    entidadeId: ppId,
-    metadata: {
-      acao_tentada: "pedido_compra.enviada_financeiro",
-      motivo: "abertura_em_revisao",
-      job_id: job.id,
-    },
-  });
-  return {
-    ok: false,
-    message:
-      "A abertura deste job está em revisão no financeiro desde a última errata. Nenhuma PP pode ser enviada até a revisão ser salva — a PP fica gerada, no job.",
+  const negar = async (motivo: string, message: string): Promise<Err> => {
+    await logAuditEvent({
+      acao: "acao_negada",
+      tenantId,
+      entidadeTipo: "pedido_compra",
+      entidadeId: ppId,
+      metadata: {
+        acao_tentada: "pedido_compra.enviada_financeiro",
+        motivo,
+        job_id: job.id,
+        status_atual: job.status,
+      },
+    });
+    return { ok: false, message };
   };
+
+  if (!jobAceitaEnvioDePP(job.status as JobStatus)) {
+    return negar(
+      "job_ainda_nao_aberto",
+      job.status === "rejeitado_financeiro"
+        ? "O financeiro devolveu este job e ele ainda não foi aberto. A PP fica gerada, no job — o envio ao financeiro volta com a abertura."
+        : "O financeiro ainda não abriu este job. A PP fica gerada, no job — o envio ao financeiro volta com a abertura.",
+    );
+  }
+
+  if (job.abertura_em_revisao) {
+    return negar(
+      "abertura_em_revisao",
+      "A abertura deste job está em revisão no financeiro desde a última errata. Nenhuma PP pode ser enviada até a revisão ser salva — a PP fica gerada, no job.",
+    );
+  }
+
+  return null;
 }
 
 /**
@@ -1166,7 +1196,10 @@ export async function cancelarPedidoCompra(pp_id: string): Promise<Result> {
   }
 
   const job = (pp as unknown as { jobs: { status: string; responsavel_id: string | null } }).jobs;
-  if (!jobAceitaAcoesPlanilha(job.status as JobStatus)) {
+  // Mesmo gate de gerar (decisão 056): quem pôde gerar a PP na
+  // pré-abertura precisa poder cancelá-la lá também — senão ela ficaria
+  // presa no job até a abertura, sem caminho de volta.
+  if (!jobAceitaGerarPP(job.status as JobStatus)) {
     return { ok: false, message: "Job não está em estado editável." };
   }
 
@@ -1329,14 +1362,14 @@ export async function reenviarPedidoCompra(
   if (!gate.ok) return gate;
   const { item, job } = gate;
 
-  // Reenviar É enviar ao financeiro: vale a mesma porta da revisão de
-  // abertura (decisão 040).
-  const bloqueioRevisao = await barrarEnvioEmRevisao(
+  // Reenviar É enviar ao financeiro: vale a mesma porta do envio —
+  // pré-abertura (decisão 056) e revisão de abertura (decisão 040).
+  const bloqueioEnvio = await barrarEnvioDePP(
     session.activeTenant.id,
     pp_id,
     job,
   );
-  if (bloqueioRevisao) return bloqueioRevisao;
+  if (bloqueioEnvio) return bloqueioEnvio;
 
   const dadosParsed = dadosReenvioSchema.safeParse(dados);
   if (!dadosParsed.success) {
@@ -1797,12 +1830,12 @@ export async function enviarPedidoCompraAoFinanceiro(
   if (!gate.ok) return gate;
   const { item, job } = gate;
 
-  const bloqueioRevisao = await barrarEnvioEmRevisao(
+  const bloqueioEnvio = await barrarEnvioDePP(
     session.activeTenant.id,
     pp_id,
     job,
   );
-  if (bloqueioRevisao) return bloqueioRevisao;
+  if (bloqueioEnvio) return bloqueioEnvio;
 
   // Verba de Produção é adiantamento: sai antes de existir nota, e as
   // notas entram na prestação de contas. Nas demais, a nota do fornecedor
