@@ -19,7 +19,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
-import { jobAceitaAcoesPlanilha, type JobStatus } from "@/lib/types";
+import { jobAceitaGerarPP, type JobStatus } from "@/lib/types";
 import {
   aplicarConclusaoDoItem,
   itensSemConclusaoDoJob,
@@ -41,11 +41,17 @@ async function gateDoJob(jobId: string) {
 
   if (!job) return { ok: false as const, message: "Job não encontrado." };
 
-  if (!jobAceitaAcoesPlanilha(job.status)) {
+  // Mesmo gate de GERAR PP (decisão 056), e não o de errata/BV: "todas as
+  // PPs deste item já foram geradas" é uma afirmação sobre a geração, que
+  // desde 08/09/2026 acontece também na pré-abertura. Deixar a marcação
+  // presa ao job aberto criaria um beco: o formulário de PP pergunta
+  // "esta é a última PP deste item?" e marcaria o item na pré-abertura,
+  // sem caminho para desmarcar antes da abertura.
+  if (!jobAceitaGerarPP(job.status)) {
     return {
       ok: false as const,
       message:
-        "Os itens só podem ser marcados com o job em 'Aberto' ou 'Em produção'.",
+        "Job encerrado ou cancelado não aceita marcar itens como concluídos.",
     };
   }
 
@@ -90,7 +96,7 @@ async function gate(itemRealizadoId: string) {
 
   if (!job) return { ok: false as const, message: "Job não encontrado." };
 
-  if (!jobAceitaAcoesPlanilha(job.status)) {
+  if (!jobAceitaGerarPP(job.status)) {
     await logAuditEvent({
       acao: "acao_negada",
       tenantId: session.activeTenant.id,
@@ -105,7 +111,7 @@ async function gate(itemRealizadoId: string) {
     return {
       ok: false as const,
       message:
-        "O item só pode ser marcado com o job em 'Aberto' ou 'Em produção'.",
+        "Job encerrado ou cancelado não aceita marcar o item como concluído.",
     };
   }
 

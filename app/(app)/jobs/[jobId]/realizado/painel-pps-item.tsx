@@ -76,8 +76,13 @@ interface Props {
   pps: PPDoItem[];
   /** Soma das PPs que já chegaram ao financeiro. A gerada não entra. */
   emPPs: number;
-  /** Errata devolveu o job ao mural: o envio fica fechado. */
-  aberturaEmRevisao: boolean;
+  /** Por que o ENVIO ao financeiro está fechado, para a faixa e o
+   *  `title` do botão. Null = envio liberado.
+   *
+   *  São dois motivos, e o painel não precisa distinguir: o job ainda
+   *  não foi aberto (decisão 056) ou a errata devolveu a abertura à
+   *  revisão (decisão 040). Nos dois, gerar, editar e cancelar seguem. */
+  envioBloqueadoPor: string | null;
   /** Id da âncora do realizado — o marco "todas as PPs geradas" é
    *  gravado nela (decisão 052). */
   itemRealizadoId: string;
@@ -104,7 +109,7 @@ export function PainelPPsItem({
   totalPlanejado,
   pps,
   emPPs,
-  aberturaEmRevisao,
+  envioBloqueadoPor,
   itemRealizadoId,
   concluido,
   concluidoPorNome,
@@ -312,13 +317,11 @@ export function PainelPPsItem({
             />
           </div>
 
-          {aberturaEmRevisao && pendentes.length > 0 && (
+          {envioBloqueadoPor && pendentes.length > 0 && (
             <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5">
               <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-700" />
               <p className="text-[11.5px] leading-relaxed text-amber-800">
-                A abertura deste job está em revisão no financeiro desde a
-                última errata. O envio de PPs volta quando a revisão for salva
-                — gerar, editar e cancelar continuam liberados.
+                {envioBloqueadoPor}
               </p>
             </div>
           )}
@@ -338,7 +341,7 @@ export function PainelPPsItem({
               </span>
               {pendentes.map((pp) => {
                 const semNF = !pp.verbaProducao && !pp.temAnexo;
-                const podeEnviar = podeAgir && !semNF && !aberturaEmRevisao;
+                const podeEnviar = podeAgir && !semNF && !envioBloqueadoPor;
                 return (
                   <div
                     key={pp.id}
@@ -371,11 +374,8 @@ export function PainelPPsItem({
                           onClick={() => pedirEnvio(pp)}
                           disabled={pending || !podeEnviar}
                           title={
-                            aberturaEmRevisao
-                              ? "Abertura em revisão: o envio volta quando o financeiro salvar a revisão."
-                              : semNF
-                                ? "Anexe a NF antes de enviar."
-                                : undefined
+                            envioBloqueadoPor ??
+                            (semNF ? "Anexe a NF antes de enviar." : undefined)
                           }
                           className={cn(
                             "inline-flex items-center gap-1.5 rounded-[9px] border px-3 py-1.5 text-[11.5px] font-bold transition-colors",

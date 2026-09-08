@@ -172,7 +172,8 @@ function montarLinhas({
         >
           Abertura de Job
         </Link>
-        .
+        . Gerar PP já está liberado; o envio de PPs ao financeiro é que
+        volta com a abertura.
       </>,
     ];
   }
@@ -180,7 +181,7 @@ function montarLinhas({
   if (status === "rejeitado_financeiro") {
     return [
       "Job rejeitado pelo financeiro.",
-      "Corrija o que foi apontado acima e reenvie para abertura.",
+      "Corrija o que foi apontado acima e reenvie para abertura. Gerar PP segue liberado; o envio ao financeiro volta com a abertura.",
     ];
   }
 

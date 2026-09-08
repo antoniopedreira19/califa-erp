@@ -88,6 +88,11 @@ interface Props {
   categoriasMap: Map<string, string>;
   /** Errata, BV e Pedido de Produção — só com o job aberto. */
   podeAcoes: boolean;
+  /** GERAR, editar e cancelar PP. Separado de `podeAcoes` desde
+   *  08/09/2026 (decisão 056): a PP passou a nascer na pré-abertura,
+   *  enquanto errata e BV continuam esperando a abertura. O envio ao
+   *  financeiro é a outra metade, e ela mora no painel do item. */
+  podeGerarPP?: boolean;
   /** Job já enviado para faturamento: o valor da nota está congelado em
    *  `jobs_envio_faturamento` e nem errata nem save podem mexer nele
    *  (decisão 028, nota de 27/08/2026). O servidor já recusava — sem
@@ -122,6 +127,7 @@ export function JobRealizadoSection({
   realizadosMap,
   categoriasMap,
   podeAcoes,
+  podeGerarPP = false,
   jaEnviadoParaFaturamento = false,
   aberturaEmRevisao = false,
   ppsPorItemId,
@@ -324,7 +330,10 @@ export function JobRealizadoSection({
   // futura, o job pode ser devolvido, e a trilha tem que sumir por
   // inteiro — como o critério da Tela 2.1 pede (18/08/2026).
   const temBvLancado = itens.some((it) => bvsPorItem[it.id]);
-  const temCalha = podeAcoes || (temBvLancado && !preAbertura);
+  // `podeGerarPP` entra na conta desde 08/09/2026: na pré-abertura a
+  // calha some para o BV e fica para a PP, então a reserva de 116px
+  // precisa acompanhar as duas condições, não só `podeAcoes`.
+  const temCalha = podeAcoes || podeGerarPP || (temBvLancado && !preAbertura);
 
   return (
     // Quando dá pra gerar PP, reserva a calha da direita: a trilha de
@@ -344,8 +353,11 @@ export function JobRealizadoSection({
           <Clock className="mt-0.5 h-3.5 w-3.5 flex-none" />
           <span>
             {job.status === "aguardando_abertura"
-              ? "Job aguardando abertura pelo financeiro — erratas, BVs e pedidos de produção ficam disponíveis após a abertura, e é da PP que o realizado nasce."
-              : "Job devolvido pelo financeiro — erratas, BVs e pedidos de produção ficam disponíveis após a abertura, e é da PP que o realizado nasce."}
+              ? "Job aguardando abertura pelo financeiro — erratas e BVs ficam disponíveis após a abertura."
+              : "Job devolvido pelo financeiro — erratas e BVs ficam disponíveis após a abertura."}{" "}
+            Pedidos de produção já podem ser <strong>gerados</strong>; o envio
+            ao financeiro é que espera a abertura, e o realizado só conta PP
+            enviada.
           </span>
         </div>
       )}
@@ -437,7 +449,10 @@ export function JobRealizadoSection({
               }}
             />
           )}
-          {podeAcoes && (
+          {/* Segue a GERAÇÃO, e não a errata: "todas as PPs deste item já
+              foram geradas" é afirmação sobre gerar, e o formulário de PP
+              já faz a mesma pergunta na pré-abertura (decisão 056). */}
+          {podeGerarPP && (
             <ConcluirPPsButton
               jobId={job.id}
               itensEmAberto={itensEmAberto}
@@ -476,6 +491,7 @@ export function JobRealizadoSection({
               estaAberto={recolher.estaAberto}
               onAlternarGrupo={recolher.alternar}
               podeAcoes={podeAcoes}
+              podeGerarPP={podeGerarPP}
               preAbertura={preAbertura}
               aberturaEmRevisao={aberturaEmRevisao}
               ppsPorItemId={ppsPorItemId}

@@ -130,6 +130,11 @@ interface Props {
    *  Antes da abertura a planilha é visível e o realizado é editável,
    *  mas nada que vire documento pode ser criado. */
   podeAcoes: boolean;
+  /** GERAR, editar e cancelar PP — a metade da PP que desde 08/09/2026
+   *  vale também na pré-abertura (decisão 056). Errata e BV continuam em
+   *  `podeAcoes`; o ENVIO ao financeiro é a outra metade, e ela aparece
+   *  como `envioBloqueadoPor` no painel do item. */
+  podeGerarPP?: boolean;
   /** Job ainda não aberto pelo financeiro (`aguardando_abertura` ou
    *  `rejeitado_financeiro`). Distingue-se do job ENCERRADO, que também
    *  tem `podeAcoes` falso mas conserva os BVs lançados para consulta. */
@@ -508,6 +513,7 @@ export function JobItemRealizadoTable({
   estaAberto,
   onAlternarGrupo,
   podeAcoes,
+  podeGerarPP = false,
   preAbertura,
   aberturaEmRevisao = false,
   ppsPorItemId,
@@ -1605,6 +1611,7 @@ export function JobItemRealizadoTable({
           (gerar PP, lançar BV novo) é que desaparece. */}
       {(editando ||
         podeAcoes ||
+        podeGerarPP ||
         (!preAbertura && todosOsItens.some((i) => bvsPorItem[i.id]))) && (
         <Calha className={cn("pointer-events-none absolute left-full top-0 ml-2.5", LARGURA_CALHA)}>
           {grupos.map((grupo) =>
@@ -1707,7 +1714,7 @@ export function JobItemRealizadoTable({
                             : null
                         }
                         pp={
-                          podeAcoes && !emSave && tipoGeraDesembolso(item.tipo_custo)
+                          podeGerarPP && !emSave && tipoGeraDesembolso(item.tipo_custo)
                             ? {
                                 itemRealizadoId: realizadoId,
                                 pedidos: ppsDoItem,
@@ -1737,9 +1744,9 @@ export function JobItemRealizadoTable({
       )}
       </div>
 
-      {(podeAcoes || temRentab) && grupos.some((g) => estaAberto(g.id)) && (
+      {(podeAcoes || podeGerarPP || temRentab) && grupos.some((g) => estaAberto(g.id)) && (
         <div className="flex flex-col gap-1 rounded-b-2xl border-t border-border bg-muted/40 px-6 py-3">
-          {podeAcoes && (
+          {(podeAcoes || podeGerarPP) && (
             <span className="text-[11px] text-muted-foreground">
               O Realizado não é digitado: ele é a soma dos Pedidos de Produção
               enviados ao financeiro no item — PP só gerada ainda não conta. Em
@@ -1824,13 +1831,22 @@ export function JobItemRealizadoTable({
                 temAnexo: (pp.anexos ?? []).length > 0,
               }))}
               emPPs={emPPs}
-              aberturaEmRevisao={aberturaEmRevisao}
+              // As duas portas do ENVIO num texto só. A pré-abertura vem
+              // primeiro: num job ainda não aberto a marca de revisão nem
+              // existe, e é o motivo que o usuário precisa ler.
+              envioBloqueadoPor={
+                preAbertura
+                  ? "O financeiro ainda não abriu este job. O envio de PPs volta com a abertura — gerar, editar e cancelar continuam liberados."
+                  : aberturaEmRevisao
+                    ? "A abertura deste job está em revisão no financeiro desde a última errata. O envio de PPs volta quando a revisão for salva — gerar, editar e cancelar continuam liberados."
+                    : null
+              }
               itemRealizadoId={itemIdAtual ?? ""}
               concluido={itemConcluido}
               concluidoPorNome={concluidoPorNome}
               concluidoEmLabel={concluidoEmLabel}
               onNovaPP={
-                podeAcoes
+                podeGerarPP
                   ? () => {
                       // O painel some enquanto o formulário está aberto:
                       // dois drawers empilhados na direita brigariam pelo
@@ -1842,7 +1858,7 @@ export function JobItemRealizadoTable({
                   : null
               }
               onEditar={
-                podeAcoes
+                podeGerarPP
                   ? (pp) => {
                       const completa = ppsDoItem.find((x) => x.id === pp.id);
                       if (!completa) return;

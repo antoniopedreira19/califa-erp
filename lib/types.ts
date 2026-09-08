@@ -1061,12 +1061,53 @@ export function jobAceitaRealizado(status: JobStatus): boolean {
 }
 
 /**
- * Errata, BV e Pedido de Produção: só com o job já aberto pelo
- * financeiro. São as ações que mexem no orçado ou geram documento de
- * pagamento — antes da abertura o job ainda pode ser devolvido, e nada
- * disso pode ter saído.
+ * Errata e BV: só com o job já aberto pelo financeiro. São as ações que
+ * mexem no orçado ou comprometem comissão — antes da abertura o job
+ * ainda pode ser devolvido, e nada disso pode ter saído.
+ *
+ * ⚠️ **O Pedido de Produção saiu daqui em 08/09/2026** (decisão 056).
+ * Gerar PP passou a valer na pré-abertura; o que continua preso ao job
+ * aberto é o ENVIO ao financeiro. Ver `jobAceitaGerarPP` e
+ * `jobAceitaEnvioDePP`.
  */
 export function jobAceitaAcoesPlanilha(status: JobStatus): boolean {
+  return status === "aberto" || status === "em_producao";
+}
+
+/**
+ * Onde a PP pode ser GERADA, editada e cancelada.
+ *
+ * Inclui os dois status de pré-abertura desde 08/09/2026 (decisão 056),
+ * pela mesma razão que abriu o realizado em 17/08: a produção começa a
+ * contratar antes de o financeiro abrir o job, e obrigá-la a esperar
+ * fazia o pedido nascer fora do sistema.
+ *
+ * A PP gerada não é compromisso de pagamento: ela fica no job, não conta
+ * no realizado (`recalcular_realizado_do_item` ignora `gerada`) e o
+ * financeiro não a vê. O que compromete é o envio — e esse continua
+ * esperando a abertura, em `jobAceitaEnvioDePP`.
+ */
+export function jobAceitaGerarPP(status: JobStatus): boolean {
+  return (
+    status === "aberto" ||
+    status === "em_producao" ||
+    status === "aguardando_abertura" ||
+    status === "rejeitado_financeiro"
+  );
+}
+
+/**
+ * Onde a PP pode ser ENVIADA ao financeiro (e a rejeitada, reenviada).
+ *
+ * Só com o job já aberto: o envio põe a PP na fila de aprovação e ela
+ * vira título a pagar. Um job que o financeiro ainda não abriu — ou que
+ * ele devolveu — pode não acontecer.
+ *
+ * A marca `jobs.abertura_em_revisao` fecha a mesma porta sem mexer no
+ * status (decisão 040); as duas travas moram juntas em `barrarEnvioDePP`
+ * (`realizado/actions-pp.ts`).
+ */
+export function jobAceitaEnvioDePP(status: JobStatus): boolean {
   return status === "aberto" || status === "em_producao";
 }
 

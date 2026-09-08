@@ -26,7 +26,13 @@ interface Props {
   fornecedores: Array<{ id: string; nome: string; razao_social: string | null }>;
   empresas: Array<{ id: string; razao_social: string; principal: boolean }>;
   /** GP responsável pelo job ou admin, com o job em estado editável. */
+  /** Cancelar a PP e a trilha de ações. Desde 08/09/2026 vale também na
+   *  pré-abertura, junto com gerar (decisão 056). */
   editable: boolean;
+  /** Corrigir e REENVIAR a PP rejeitada — é envio ao financeiro, e não
+   *  segue `editable`: fica fechado na pré-abertura e enquanto a abertura
+   *  está em revisão (decisões 056 e 040). */
+  podeEnviar?: boolean;
 }
 
 type Filtro = "todas" | PPStatus;
@@ -78,6 +84,7 @@ export function JobPPsSection({
   fornecedores,
   empresas,
   editable,
+  podeEnviar = false,
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
@@ -390,7 +397,7 @@ export function JobPPsSection({
                           tem seu documento. Editar é da PP inteira, então
                           só a primeira linha o mostra. */}
                       <div className="flex items-center justify-end gap-1.5">
-                        {editable && pp.status === "rejeitada" && indice === 0 && (
+                        {podeEnviar && pp.status === "rejeitada" && indice === 0 && (
                           <button
                             type="button"
                             onClick={() => setPpEditando(pp)}

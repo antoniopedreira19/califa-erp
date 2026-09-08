@@ -136,6 +136,8 @@ export default async function JobDetailPage({
     resumoEncerramento,
     podeEditarRealizado,
     podeAcoesPlanilha,
+    podeGerarPP,
+    podeEnviarPP,
   } = detalhe;
 
 
@@ -342,6 +344,7 @@ export default async function JobDetailPage({
             realizadosMap={realizadosMap}
             categoriasMap={categoriasMap}
             podeAcoes={podeAcoesPlanilha}
+            podeGerarPP={podeGerarPP}
             jaEnviadoParaFaturamento={envioFaturamento !== null}
             aberturaEmRevisao={job.abertura_em_revisao}
             ppsPorItemId={ppsPorItemId}
@@ -358,7 +361,8 @@ export default async function JobDetailPage({
             fornecedoresPorId={fornecedoresPorId}
             fornecedores={fornecedores}
             empresas={empresas}
-            editable={podeAcoesPlanilha}
+            editable={podeGerarPP}
+            podeEnviar={podeEnviarPP}
           />
         }
         ppsChat={
