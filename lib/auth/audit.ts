@@ -99,7 +99,13 @@ export type AuditAction =
   // produção, que nasce do orçamento e a produção enxerga.
   | "projeto_financeiro.criado"
   | "job.abertura_rejeitada"
+  // Reenvio depois da rejeição: o MESMO job volta a `aguardando_abertura`
+  // com os campos do formulário refeitos (decisão 057). Até 08/09/2026 a
+  // action só trocava o status, a partir da página do job.
   | "job.reenviado_para_aprovacao"
+  // Cancelar o envio pelo orçamento, antes de o financeiro abrir: o job
+  // vai a `cancelado` e o orçamento volta a `aprovado` (decisão 057).
+  | "job.envio_abertura_cancelado"
   | "job.realizado_atualizado"
   | "job.errata_registrada"
   | "job.enviado_para_faturamento"

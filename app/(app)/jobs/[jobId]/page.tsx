@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Undo2 } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { nomeVersao } from "@/lib/nome-versao";
 import { createClient } from "@/lib/supabase/server";
@@ -28,7 +28,6 @@ import {
 } from "@/lib/calculos/versao-totais";
 import { JobEditorDrawer } from "./job-editor-drawer";
 import type { ResumoEncerramento } from "./encerrar-dialog";
-import { ReenviarAprovacaoButton } from "./reenviar-aprovacao-button";
 import { BarraAcoesJob } from "./barra-acoes-job";
 import { FichaJob } from "./ficha-job";
 import { JobRealizadoSection } from "./realizado/job-realizado-section";
@@ -110,7 +109,6 @@ export default async function JobDetailPage({
     regionais,
     responsaveis,
     contatosCobranca,
-    transicoes,
     ppsDoJob,
     ppsPorItemId,
     fornecedores,
@@ -222,15 +220,32 @@ export default async function JobDetailPage({
         </div>
       </div>
 
-      {job.status === "rejeitado_financeiro" && job.motivo_rejeicao && (
+      {/* Devolvido pelo financeiro. A revisão e o reenvio acontecem no
+          ORÇAMENTO, onde o formulário de abertura mora (decisão 057) — o
+          antigo "Reenviar pra aprovação", que só trocava o status daqui,
+          saiu em 08/09/2026. */}
+      {job.status === "rejeitado_financeiro" && (
         <div className="rounded-2xl border border-california-red/30 bg-california-red/5 p-6 shadow-soft">
           <p className="text-xs font-semibold uppercase tracking-wider text-california-red mb-2">
             Motivo da rejeição pelo financeiro
           </p>
-          <p className="text-sm text-foreground whitespace-pre-wrap">{job.motivo_rejeicao}</p>
+          <p className="text-sm text-foreground whitespace-pre-wrap">
+            {job.motivo_rejeicao?.trim() || "— sem motivo informado"}
+          </p>
+          <p className="mt-3 text-xs text-muted-foreground">
+            A abertura é revisada e reenviada pelo orçamento: o formulário
+            abre preenchido com o que foi enviado desta vez.
+          </p>
           {pode(session.activeRole, "jobs.editar_metadata") && (
             <div className="mt-4">
-              <ReenviarAprovacaoButton jobId={job.id} />
+              <Link
+                href={`/orcamentos/${job.projeto_id}/${job.orcamento_id}?v=${job.versao_orcamento_aprovada_id}&abertura=revisar`}
+                prefetch={false}
+                className="inline-flex items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white hover:bg-california-red-hover transition-colors"
+              >
+                <Undo2 className="h-4 w-4" />
+                Revisar abertura
+              </Link>
             </div>
           )}
         </div>
@@ -395,7 +410,7 @@ export default async function JobDetailPage({
         jobId={job.id}
         jobCodigo={job.codigo}
         status={job.status}
-        transicoes={transicoes}
+        orcamentoHref={`/orcamentos/${job.projeto_id}/${job.orcamento_id}?v=${job.versao_orcamento_aprovada_id}`}
         envioFaturamento={envioFaturamento}
         podeEnviarFaturamento={podeEnviarFaturamento}
         aberturaEmRevisao={job.abertura_em_revisao}

@@ -5,18 +5,24 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   AlertCircle,
+  AlertTriangle,
   ArrowRight,
   ArrowUpRight,
   Briefcase,
   Check,
   CheckCircle2,
   FileText,
+  Undo2,
 } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { formatCurrency } from "@/lib/utils";
+import type { JobStatus } from "@/lib/types";
 import { bloqueioAprovacaoVersao } from "@/lib/validations/versoes";
 import { aprovarVersao } from "../actions";
-import { enviarJobParaAbertura } from "./abertura-actions";
+import {
+  cancelarEnvioParaAbertura,
+  enviarJobParaAbertura,
+} from "./abertura-actions";
 import {
   EnviarJobModal,
   type DadosJob,
@@ -24,11 +30,16 @@ import {
 } from "./enviar-job-modal";
 import { ConfirmarEnvioModal } from "./confirmar-envio-modal";
 
-type Modal = "aprovar" | "form" | "envio" | null;
+type Modal = "aprovar" | "form" | "envio" | "cancelar_envio" | null;
 
 export interface JobExistente {
   id: string;
   codigo: string;
+  /** Só os dois status de pré-abertura chegam aqui na prática: o job
+   *  aberto vira `enviada` do mesmo jeito, e o cancelado nem é lido. */
+  status: JobStatus;
+  /** O que o financeiro escreveu ao devolver (decisão 057). */
+  motivo_rejeicao: string | null;
   data_prevista_faturamento: string | null;
   produto: string | null;
   cidade: string | null;
@@ -82,6 +93,9 @@ interface Props {
   /** Valores que pré-preenchem o modal, vindos do orçamento. */
   inicial: DadosJob;
   job: JobExistente | null;
+  /** Veio do "Revisar abertura" da página do job devolvido: abre o
+   *  formulário já preenchido assim que a tela monta. */
+  abrirRevisao?: boolean;
 }
 
 export function FluxoAbertura({
@@ -109,6 +123,7 @@ export function FluxoAbertura({
   cidadesIniciais,
   inicial,
   job,
+  abrirRevisao = false,
 }: Props) {
   const router = useRouter();
   const [modal, setModal] = React.useState<Modal>(null);
@@ -131,11 +146,34 @@ export function FluxoAbertura({
     qtdItensOrcadoZerado,
   });
   const aprovada = versaoStatus === "aprovada";
-  const etapa: "rascunho" | "aprovada" | "enviada" = job
-    ? "enviada"
+  // `devolvida` (decisão 057): o financeiro rejeitou a abertura. O job
+  // continua existindo — o reenvio refaz o formulário sobre ele —, mas a
+  // barra volta a oferecer o envio, como na etapa `aprovada`.
+  const etapa: "rascunho" | "aprovada" | "enviada" | "devolvida" = job
+    ? job.status === "rejeitado_financeiro"
+      ? "devolvida"
+      : "enviada"
     : aprovada
       ? "aprovada"
       : "rascunho";
+
+  // "Revisar abertura" da página do job: chega com `?abertura=revisar`,
+  // abre o formulário preenchido e tira o parâmetro da URL, para um
+  // reload não reabrir. Tem de ser `router.replace`: um
+  // `history.replaceState` solto é desfeito pelo router do Next na
+  // primeira server action, que ressincroniza a URL com a árvore dele
+  // (visto em 08/09/2026 — o parâmetro voltava depois do envio). A
+  // re-renderização não derruba o modal: o estado é deste componente e
+  // as listas do formulário são as mesmas.
+  const revisaoJaAberta = React.useRef(false);
+  React.useEffect(() => {
+    if (!abrirRevisao || revisaoJaAberta.current) return;
+    revisaoJaAberta.current = true;
+    if (etapa === "devolvida") setModal("form");
+    const url = new URL(window.location.href);
+    url.searchParams.delete("abertura");
+    router.replace(`${url.pathname}${url.search}`, { scroll: false });
+  }, [abrirRevisao, etapa, router]);
 
   // Estados fora do fluxo (reprovada, substituída, cancelada) não têm barra.
   if (!podeAprovar && !aprovada) return null;
@@ -207,6 +245,21 @@ export function FluxoAbertura({
         if (res.fieldErrors) setFieldErrors(res.fieldErrors);
         // Volta ao formulário pra mostrar o campo destacado.
         setModal("form");
+        return;
+      }
+      setModal(null);
+      router.refresh();
+    });
+  }
+
+  /** Cancela o envio enquanto o financeiro não abriu (decisão 057). */
+  function handleCancelarEnvio() {
+    if (!job) return;
+    setErroGeral(null);
+    startTransition(async () => {
+      const res = await cancelarEnvioParaAbertura(job.id);
+      if (!res.ok) {
+        setErroGeral(res.message);
         return;
       }
       setModal(null);
@@ -325,6 +378,29 @@ export function FluxoAbertura({
               </span>
             </>
           )}
+          {etapa === "devolvida" && job && (
+            <>
+              <span className="text-xs text-muted-foreground">
+                Job{" "}
+                <span className="font-mono font-semibold text-foreground">
+                  {job.codigo}
+                </span>{" "}
+                <strong className="text-california-red">
+                  devolvido pelo financeiro
+                </strong>
+              </span>
+              <span className="text-xs text-muted-foreground">
+                Revise a abertura com o motivo acima e reenvie
+              </span>
+            </>
+          )}
+          {/* Erro do cancelamento fica na barra: o diálogo já fechou. */}
+          {modal === null && erroGeral && (
+            <span className="flex items-start gap-1.5 text-xs font-medium text-california-red">
+              <AlertCircle className="mt-px h-3.5 w-3.5 shrink-0" />
+              {erroGeral}
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-2.5">
@@ -340,14 +416,20 @@ export function FluxoAbertura({
               Aprovar versão
             </button>
           )}
-          {etapa === "aprovada" && (
+          {/* Cancelar envio (decisão 057): só enquanto o financeiro não
+              abriu — os dois status de pré-abertura. Depois da abertura o
+              job nem chega aqui como cancelável. */}
+          {(etapa === "enviada" || etapa === "devolvida") && (
             <button
               type="button"
-              onClick={abrirFormulario}
-              className="inline-flex items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-[13px] font-semibold text-white shadow-sm hover:bg-california-red-hover hover:shadow-brand transition-all"
+              onClick={() => {
+                setErroGeral(null);
+                setModal("cancelar_envio");
+              }}
+              className="inline-flex items-center gap-2 rounded-lg border border-border bg-white px-4 py-2 text-[13px] font-semibold text-foreground hover:border-california-red/40 hover:text-california-red transition-colors"
             >
-              Enviar Job para Abertura
-              <ArrowRight className="h-4 w-4" />
+              <Undo2 className="h-4 w-4" />
+              Cancelar envio à abertura
             </button>
           )}
           {etapa === "enviada" && (
@@ -360,8 +442,44 @@ export function FluxoAbertura({
               Ver dados do job
             </button>
           )}
+          {(etapa === "aprovada" || etapa === "devolvida") && (
+            <button
+              type="button"
+              onClick={abrirFormulario}
+              className="inline-flex items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-[13px] font-semibold text-white shadow-sm hover:bg-california-red-hover hover:shadow-brand transition-all"
+            >
+              Enviar Job para Abertura
+              <ArrowRight className="h-4 w-4" />
+            </button>
+          )}
         </div>
       </div>
+
+      {/* Cancelar envio à abertura (decisão 057) */}
+      <ConfirmDialog
+        open={modal === "cancelar_envio"}
+        onOpenChange={(o) => !o && setModal(null)}
+        title="Cancelar o envio à abertura?"
+        description={
+          <>
+            O job{" "}
+            <strong className="font-mono text-foreground">{job?.codigo}</strong>{" "}
+            é cancelado e o orçamento volta a{" "}
+            <strong className="text-foreground">Aprovado</strong>, com o envio
+            disponível de novo. Saves e BVs voltam para a versão. PPs geradas
+            ou realizado lançado no job impedem o cancelamento.
+            {erroGeral && (
+              <span className="mt-3 block text-xs text-california-red">
+                {erroGeral}
+              </span>
+            )}
+          </>
+        }
+        confirmLabel="Sim, cancelar envio"
+        cancelLabel="Voltar"
+        pending={pending}
+        onConfirm={handleCancelarEnvio}
+      />
 
       {/* Pop-up 1 — confirmar aprovação */}
       <ConfirmDialog
@@ -441,6 +559,7 @@ export function FluxoAbertura({
         onConfirmar={handleEnviar}
         pending={pending}
         somenteLeitura={etapa === "enviada"}
+        reenvio={etapa === "devolvida"}
         orcamentoCodigo={orcamentoCodigo}
         linhas={resumoEnvio}
         valorTotal={valorJob}
@@ -493,7 +612,43 @@ export function BannersEstado({
         </div>
       )}
 
-      {job && (
+      {/* Devolvido pelo financeiro (decisão 057): o motivo vem para cá,
+          porque é aqui que a abertura se revisa e se reenvia. */}
+      {job && job.status === "rejeitado_financeiro" && (
+        <div className="flex flex-wrap items-start gap-4 rounded-2xl border border-california-red/30 bg-california-red/5 p-5 shadow-soft">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-california-red/10 text-california-red">
+            <AlertTriangle className="h-[18px] w-[18px]" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[15px] font-semibold text-california-red">
+              Abertura devolvida pelo financeiro ·{" "}
+              <span className="font-mono">{job.codigo}</span>
+            </p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Revise o formulário de abertura e reenvie o job. Para desistir,
+              cancele o envio.
+            </p>
+            <p className="mt-3 text-xs font-semibold uppercase tracking-wider text-california-red">
+              Motivo da rejeição
+            </p>
+            <p className="mt-1 whitespace-pre-wrap text-sm text-foreground">
+              {job.motivo_rejeicao?.trim() || "— sem motivo informado"}
+            </p>
+          </div>
+          {jobHref && (
+            <Link
+              href={jobHref}
+              prefetch={false}
+              className="ml-auto inline-flex items-center gap-2 rounded-lg border border-border bg-white px-4 py-2.5 text-[13px] font-semibold text-foreground hover:border-california-red/40 hover:text-california-red transition-colors"
+            >
+              Ver job
+              <ArrowUpRight className="h-[15px] w-[15px]" />
+            </Link>
+          )}
+        </div>
+      )}
+
+      {job && job.status !== "rejeitado_financeiro" && (
         <div className="flex flex-wrap items-center gap-4 rounded-2xl border border-border bg-card p-5 shadow-soft">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-foreground">
             <Briefcase className="h-[18px] w-[18px]" />

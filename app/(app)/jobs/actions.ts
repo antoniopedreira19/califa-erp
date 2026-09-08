@@ -261,49 +261,11 @@ export async function rejeitarAberturaJob(
   return { ok: true, id: jobId };
 }
 
-export async function reenviarJobParaAprovacao(jobId: string): Promise<ActionResult> {
-  const session = await requireSession();
-  const gate = await checarPermissao(session, "jobs.editar_metadata");
-  if (!gate.ok) return gate;
-  const supabase = createClient();
-
-  const { data: job } = await supabase
-    .from("jobs")
-    .select("id, status, projeto_id, orcamento_id")
-    .eq("id", jobId)
-    .eq("tenant_id", session.activeTenant.id)
-    .maybeSingle<{ id: string; status: JobStatus; projeto_id: string; orcamento_id: string }>();
-
-  if (!job) return { ok: false, message: "Job não encontrado." };
-  if (job.status !== "rejeitado_financeiro") {
-    return { ok: false, message: "Só jobs rejeitados podem ser reenviados." };
-  }
-
-  const { error } = await supabase
-    .from("jobs")
-    .update({
-      status: "aguardando_abertura",
-      motivo_rejeicao: null,
-    })
-    .eq("id", jobId)
-    .eq("tenant_id", session.activeTenant.id);
-
-  if (error) {
-    console.error("[jobs.reenviar]", error.message);
-    return { ok: false, message: mapJobDbError(error.message) };
-  }
-
-  await logAuditEvent({
-    acao: "job.reenviado_para_aprovacao",
-    tenantId: session.activeTenant.id,
-    entidadeTipo: "job",
-    entidadeId: jobId,
-  });
-
-  revalidatePath(`/jobs/${jobId}`);
-  revalidatePath("/jobs");
-  revalidatePath("/financeiro");
-  revalidatePath("/financeiro/abertura-de-job");
-  revalidatePath(`/orcamentos/${job.projeto_id}/${job.orcamento_id}`);
-  return { ok: true, id: jobId };
-}
+/**
+ * `reenviarJobParaAprovacao` saiu daqui em 08/09/2026 (decisão 057). O
+ * reenvio do job devolvido é refazer o formulário de abertura no
+ * ORÇAMENTO, sobre o mesmo job — `enviarJobParaAbertura`, em
+ * app/(app)/orcamentos/[projetoId]/[orcId]/versoes/[versaoId]/abertura-actions.ts.
+ * Mantida, seria um caminho paralelo que devolve o job à fila sem
+ * ninguém rever o que o financeiro apontou.
+ */

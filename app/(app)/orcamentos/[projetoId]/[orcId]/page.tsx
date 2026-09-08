@@ -130,7 +130,9 @@ export default async function OrcamentoDetailPage({
   searchParams,
 }: {
   params: { projetoId: string; orcId: string };
-  searchParams?: { v?: string | string[] };
+  /** `abertura=revisar` chega do botão "Revisar abertura" da página do
+   *  job devolvido e abre o formulário de envio já preenchido. */
+  searchParams?: { v?: string | string[]; abertura?: string | string[] };
 }) {
   const session = await requireSession();
   const supabase = createClient();
@@ -138,6 +140,10 @@ export default async function OrcamentoDetailPage({
   const versaoPedida = Array.isArray(searchParams?.v)
     ? searchParams?.v[0]
     : searchParams?.v;
+  const aberturaPedida = Array.isArray(searchParams?.abertura)
+    ? searchParams?.abertura[0]
+    : searchParams?.abertura;
+  const abrirRevisao = aberturaPedida === "revisar";
 
   // ONDA 1 — tudo que não depende de qual aba está selecionada. As
   // versões vêm com `select("*")`: a lista alimenta as abas e a linha da
@@ -199,7 +205,9 @@ export default async function OrcamentoDetailPage({
     supabase
       .from("jobs")
       .select(
-        "id, codigo, nome, produto, cidade, regional_id, data_inicio_prevista, data_fim_prevista, data_evento, data_prevista_faturamento, observacoes",
+        // `status` e `motivo_rejeicao` desde 08/09/2026 (decisão 057): é
+        // por eles que a tela sabe que o financeiro devolveu o job.
+        "id, codigo, nome, produto, cidade, regional_id, data_inicio_prevista, data_fim_prevista, data_evento, data_prevista_faturamento, observacoes, status, motivo_rejeicao",
       )
       .eq("orcamento_id", params.orcId)
       .eq("tenant_id", session.activeTenant.id)
@@ -620,6 +628,7 @@ export default async function OrcamentoDetailPage({
           savePorItem={savePorItem}
           saldosDeSave={saldosDeSave}
           job={job}
+          abrirRevisao={abrirRevisao}
           temJobAtivo={temJobAtivo}
           jobsCount={jobsCountRes.count ?? 0}
           podeCriarVersao={podeCriarVersao}
@@ -665,6 +674,7 @@ function VersaoSelecionada({
   savePorItem,
   saldosDeSave,
   job,
+  abrirRevisao,
   temJobAtivo,
   jobsCount,
   podeCriarVersao,
@@ -691,6 +701,8 @@ function VersaoSelecionada({
   savePorItem: Record<string, EstadoSaveDaLinha>;
   saldosDeSave: SaldoDeSave[];
   job: JobExistente | null;
+  /** `?abertura=revisar` — ver `FluxoAbertura`. */
+  abrirRevisao: boolean;
   temJobAtivo: boolean;
   jobsCount: number;
   podeCriarVersao: boolean;
@@ -968,6 +980,7 @@ function VersaoSelecionada({
         cidadesIniciais={cidadesIniciais}
         inicial={inicialModal}
         job={job}
+        abrirRevisao={abrirRevisao}
       />
     </>
   );

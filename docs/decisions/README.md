@@ -80,9 +80,10 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 054 | ["Realizar errata": a errata abre o planejado junto com o orçado](054-errata-abre-o-planejado-junto-com-o-orcado.md) | 2026-09-07 |
 | 055 | [O serviço entra no job, e a competência vira rateio entre trimestres](055-servico-no-job-e-rateio-de-competencia.md) | 2026-09-07 |
 | 056 | [A PP nasce na pré-abertura; o envio ao financeiro é que espera](056-pp-nasce-na-pre-abertura-e-o-envio-espera.md) | 2026-09-08 |
+| 057 | [A rejeição volta ao orçamento, e o envio à abertura se cancela de lá](057-rejeicao-e-cancelamento-do-envio-a-abertura.md) | 2026-09-08 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
 > data é a da decisão, não a da posição na fila.
 
-**Próximo número livre: 057.**
+**Próximo número livre: 058.**
