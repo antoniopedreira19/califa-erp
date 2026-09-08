@@ -3,8 +3,9 @@ import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, Lock } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
+import { pode } from "@/lib/permissoes";
 import {
-  areaDoPapel,
+  AREA_FINANCEIRO,
   jobStatusLabel,
   nomeDoJobNoFinanceiro,
   type JobStatus,
@@ -459,7 +460,8 @@ export default async function JobNoFinanceiroPage({
             jobCodigo={job.codigo}
             itens={detalhe.threadChat}
             naoLidas={detalhe.naoLidas}
-            minhaArea={areaDoPapel(session.activeRole)}
+            minhaArea={AREA_FINANCEIRO}
+            podeEnviar={pode(session.activeRole, "chat.enviar_financeiro")}
           />
         }
       />

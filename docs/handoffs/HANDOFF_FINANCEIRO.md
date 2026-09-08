@@ -3489,3 +3489,93 @@ O payload das duas actions trocou `competencia_trimestre` /
 `competencia_ano` por `competencias: [{trimestre, ano, percentual}]` e
 ganhou `servico_id`. A auditoria grava `competencia` como texto
 (`"3T/2026 50% · 4T/2026 50%"`) e `competencias` com as linhas.
+
+---
+
+# Contas a Pagar — o chat de PPs do financeiro (2026-09-08)
+
+Decisão registrada em `docs/decisions/058-chat-de-pps-na-caixa-de-entrada-do-financeiro.md`.
+
+### ⚠️ A aba "Pedidos de Produção (PPs)" ganhou um chat, e ele é multi-job
+
+O balão flutuante do canto inferior direito é o mesmo do job, mas abre
+uma **caixa de entrada**: uma conversa por job que já mandou PP ao
+financeiro (`pedidos_compra.status <> 'gerada'` — 12 dos 31 jobs em
+08/09), com busca por código, nome do job, cliente e projeto. Clicar numa
+linha abre o fio daquele job; a seta do cabeçalho volta.
+
+O FAB só renderiza com a aba de PPs ativa — ele é `fixed`, e escondê-lo
+por CSS o faria flutuar sobre Títulos e Cartão. Como a tela abre em
+"Títulos a Pagar", **o aviso de mensagem nova vive no badge ao lado do
+título da aba**: ícone de balão + nº de chats com mensagem não lida, ao
+lado do badge vermelho de "PPs em avaliação", que continua onde estava.
+
+**Os dois badges contam coisas diferentes, de propósito:** no financeiro
+o número é de CHATS com mensagem não lida; dentro do job, onde existe um
+fio só, continua sendo o de MENSAGENS.
+
+### ⚠️ A área da mensagem passou a vir da tela, não do papel
+
+`areaDoPapel()` **não existe mais**. Em lugar dela, `AREA_PRODUCAO` e
+`AREA_FINANCEIRO` (`lib/types.ts`), fixados por quem chama:
+
+| Tela | Área gravada | Gate |
+|------|--------------|------|
+| `/jobs/[jobId]` — abas PPs e Comunicação | `producao` | `chat.enviar` |
+| `/financeiro/contas-a-pagar` — chat de PPs | `financeiro` | `chat.enviar_financeiro` |
+| `/financeiro/jobs/[jobId]` — aba Comunicação | `financeiro` | `chat.enviar_financeiro` |
+
+`enviarMensagem` (Comunicação) ganhou um terceiro argumento `origem`, com
+default `producao`. Ele **não é confiança no cliente**: cada origem
+revalida o papel contra o gate do seu lado.
+
+O papel `financeiro` passou a escrever — mas só pelo lado dele. Dentro do
+módulo Jobs ele continua sem campo de escrita.
+
+**As 5 mensagens anteriores a 08/09/2026 estão todas com
+`area = 'financeiro'`**, inclusive as escritas pelo Jobs e a automática de
+reabertura de item. Não foram corrigidas: sobrescrever valor existente é
+mudança destrutiva. Quem for corrigir, faça migration própria.
+
+### Carregamento (e por que não é `revalidatePath`)
+
+- **Lista:** RPC `chat_pps_conversas(tenant)` (uma linha por job) + um
+  `select` dos nomes dos jobs, ambos dentro do `Promise.all` que a página
+  já tinha.
+- **Fio:** sob demanda, ao abrir a conversa (`abrirThreadPPs`).
+- **Nenhuma action do chat revalida a rota.** Recarregar PPs, títulos,
+  cartões e recorrências a cada mensagem seria absurdo nesta página.
+
+O estado mora em `ChatPPsProvider`, que envolve `ContasPagarTabs` e fica
+montado **independente da aba ativa** — senão o badge da aba só apareceria
+depois de a pessoa já ter clicado nela.
+
+### ⚠️ Duas armadilhas do Realtime, as duas silenciosas
+
+Custaram a verificação desta entrega e vão pegar a próxima assinatura:
+
+1. **`filter` não funciona em coluna de enum.** `filter: "escopo=eq.pps"`
+   descartou 100% dos eventos sem erro nenhum. O canal do job escapa
+   porque filtra por `job_id` (uuid) e confere o escopo no JS.
+2. **Assinar no mesmo tick do mount abre o canal como `anon`** — o token
+   chega ao Realtime de forma assíncrona, e o RLS de `jobs_mensagens`
+   descarta tudo. Diagnóstico:
+   `select claims_role from realtime.subscription` tem que dizer
+   `authenticated`. Correção: `await supabase.auth.getSession()` +
+   `realtime.setAuth(token)` **antes** do `.subscribe()`.
+
+### Verificação (2026-09-08, navegador logado)
+
+Badge da aba e do FAB, lista com as 12 conversas na ordem certa, busca
+sem acento, fio aberto com os cards de PP, envio pelos dois lados
+(mensagem do financeiro à esquerda em azul, da produção à direita em
+vermelho, mesmo usuário administrador), reordenação da lista, realtime
+chegando com o drawer aberto e o badge zerando na leitura. Rotas abertas:
+`/financeiro/contas-a-pagar`, `/jobs/[jobId]`, `/financeiro/jobs/[jobId]`,
+`/admin/usuarios/permissoes`. Console sem erro de aplicação.
+
+⚠️ **Resíduos do teste:** duas mensagens escritas pela UI no JOB-0015
+(uma por cada lado) e **três inseridas por SQL** no JOB-0029, JOB-0006 e
+JOB-0013 para exercitar o realtime — estas últimas aparecem como se
+fossem do Antonio Pedreira e o texto começa com "MENSAGEM DE TESTE DO
+REALTIME". Devem sair.

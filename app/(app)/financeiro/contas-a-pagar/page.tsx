@@ -3,6 +3,9 @@ import { ArrowLeft, FileText } from "lucide-react";
 import Link from "next/link";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
+import { pode } from "@/lib/permissoes";
+import { listarConversasPPs } from "@/lib/data/chat-pps-conversas";
+import { ChatPPsProvider } from "./chat/chat-pps-provider";
 import { PedidosCompraList, type PPRow } from "./pedidos-compra-list";
 import { ContasPagarTabs } from "./contas-pagar-tabs";
 import { TitulosPagarList, type TituloRow } from "./titulos-pagar-list";
@@ -52,6 +55,7 @@ export default async function PedidosCompraFinanceiroPage({
     desembolsosTitulosRes,
     prestacoesRes,
     devolucoesRes,
+    conversasChatPPs,
   ] = await Promise.all([
     supabase
       .from("pedidos_compra")
@@ -269,6 +273,11 @@ export default async function PedidosCompraFinanceiroPage({
         )
       `)
       .eq("tenant_id", session.activeTenant.id),
+    // Caixa de entrada do chat de PPs (decisão 058): uma linha por job que
+    // já mandou PP ao financeiro, com a última mensagem e as não lidas.
+    // Entra no mesmo `Promise.all` de propósito — em série ela somaria
+    // dois round-trips ao carregamento da tela mais pesada do sistema.
+    listarConversasPPs(supabase, session.activeTenant.id),
   ]);
 
   if (error) console.error("[financeiro.pp.list]", error.message);
@@ -1101,68 +1110,73 @@ export default async function PedidosCompraFinanceiroPage({
         </p>
       </header>
 
-      <ContasPagarTabs
-        pps={
-          <PedidosCompraList
-            rows={rows}
-            tenantId={session.activeTenant.id}
-            regionais={regionaisList}
-            cartoes={cartoesList}
-            tipos={tiposRes.data ?? []}
-            subtipos={subtiposRes.data ?? []}
-          />
-        }
-        ppsPendentesCount={ppsPendentesCountRes.count ?? 0}
-        desembolsos={<DesembolsosContasPagarList rows={desembolsosRows} />}
-        desembolsosPendentesCount={desembolsosPendentesCount}
-        titulos={
-          <TitulosPagarList
-            rows={titulosNaoCartao}
-            tenantId={session.activeTenant.id}
-            contas={contasRes.data ?? []}
-            tipos={tiposRes.data ?? []}
-            subtipos={subtiposRes.data ?? []}
-            empresas={empresasList}
-            fornecedores={fornecedoresList}
-            clientes={clientesList}
-            jobs={jobsList}
-            regionais={regionaisList}
-            cartoes={cartoesList}
-          />
-        }
-        titulosAPagarCount={titulosAPagarCount}
-        recorrentes={
-          <RecorrentesList
-            rows={recorrentesRows}
-            tenantId={session.activeTenant.id}
-            empresas={empresasList}
-            tipos={tiposRes.data ?? []}
-            subtipos={subtiposRes.data ?? []}
-            fornecedores={fornecedoresList}
-            clientes={clientesList}
-            jobs={jobsList}
-            regionais={regionaisList}
-            cartoes={cartoesList}
-          />
-        }
-        recorrentesAtivasCount={recorrentesAtivasCountRes.count ?? 0}
-        titulosCartao={
-          <TitulosCartaoList
-            rows={titulosCartao}
-            cartoes={cartoesList}
-            tipos={tiposRes.data ?? []}
-            subtipos={subtiposRes.data ?? []}
-            tenantId={session.activeTenant.id}
-            empresas={empresasList}
-            fornecedores={fornecedoresList}
-            clientes={clientesList}
-            jobs={jobsList}
-            regionais={regionaisList}
-            faturasDoCartao={faturasDoCartao}
-          />
-        }
-        titulosCartaoCount={titulosCartaoCount}
-      />
+      <ChatPPsProvider
+        conversasIniciais={conversasChatPPs}
+        podeEnviar={pode(session.activeRole, "chat.enviar_financeiro")}
+      >
+        <ContasPagarTabs
+          pps={
+            <PedidosCompraList
+              rows={rows}
+              tenantId={session.activeTenant.id}
+              regionais={regionaisList}
+              cartoes={cartoesList}
+              tipos={tiposRes.data ?? []}
+              subtipos={subtiposRes.data ?? []}
+            />
+          }
+          ppsPendentesCount={ppsPendentesCountRes.count ?? 0}
+          desembolsos={<DesembolsosContasPagarList rows={desembolsosRows} />}
+          desembolsosPendentesCount={desembolsosPendentesCount}
+          titulos={
+            <TitulosPagarList
+              rows={titulosNaoCartao}
+              tenantId={session.activeTenant.id}
+              contas={contasRes.data ?? []}
+              tipos={tiposRes.data ?? []}
+              subtipos={subtiposRes.data ?? []}
+              empresas={empresasList}
+              fornecedores={fornecedoresList}
+              clientes={clientesList}
+              jobs={jobsList}
+              regionais={regionaisList}
+              cartoes={cartoesList}
+            />
+          }
+          titulosAPagarCount={titulosAPagarCount}
+          recorrentes={
+            <RecorrentesList
+              rows={recorrentesRows}
+              tenantId={session.activeTenant.id}
+              empresas={empresasList}
+              tipos={tiposRes.data ?? []}
+              subtipos={subtiposRes.data ?? []}
+              fornecedores={fornecedoresList}
+              clientes={clientesList}
+              jobs={jobsList}
+              regionais={regionaisList}
+              cartoes={cartoesList}
+            />
+          }
+          recorrentesAtivasCount={recorrentesAtivasCountRes.count ?? 0}
+          titulosCartao={
+            <TitulosCartaoList
+              rows={titulosCartao}
+              cartoes={cartoesList}
+              tipos={tiposRes.data ?? []}
+              subtipos={subtiposRes.data ?? []}
+              tenantId={session.activeTenant.id}
+              empresas={empresasList}
+              fornecedores={fornecedoresList}
+              clientes={clientesList}
+              jobs={jobsList}
+              regionais={regionaisList}
+              faturasDoCartao={faturasDoCartao}
+            />
+          }
+          titulosCartaoCount={titulosCartaoCount}
+        />
+      </ChatPPsProvider>
     </div>
   );
 }

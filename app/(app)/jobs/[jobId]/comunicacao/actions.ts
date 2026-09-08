@@ -4,7 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
-import { areaDoPapel } from "@/lib/types";
+import { AREA_FINANCEIRO, AREA_PRODUCAO, type ChatArea } from "@/lib/types";
 import { checarPermissao } from "@/lib/permissoes-server";
 
 type Ok = { ok: true };
@@ -17,12 +17,26 @@ const textoSchema = z
   .min(1, "Escreva alguma coisa antes de enviar.")
   .max(2000, "Mensagem passa de 2000 caracteres.");
 
+/**
+ * Envia mensagem no chat de Comunicação do job.
+ *
+ * `origem` é a TELA de onde a pessoa escreveu, e é ela que decide a área
+ * da mensagem (decisão 058) — o mesmo job tem essa aba dentro de `/jobs`
+ * (lado Produção) e dentro de `/financeiro/jobs` (lado Financeiro). Não
+ * vem do cliente por confiança: cada lado tem seu gate de permissão, e um
+ * papel de produção que forjasse `origem: "financeiro"` esbarraria em
+ * `chat.enviar_financeiro`.
+ */
 export async function enviarMensagem(
   jobId: string,
   texto: string,
+  origem: ChatArea = AREA_PRODUCAO,
 ): Promise<Result> {
   const session = await requireSession();
-  const gate = await checarPermissao(session, "chat.enviar");
+  const gate = await checarPermissao(
+    session,
+    origem === AREA_FINANCEIRO ? "chat.enviar_financeiro" : "chat.enviar",
+  );
   if (!gate.ok) return gate;
   const supabase = createClient();
 
@@ -47,7 +61,7 @@ export async function enviarMensagem(
     tenant_id: session.activeTenant.id,
     job_id: jobId,
     autor_id: session.profile.id,
-    area: areaDoPapel(session.activeRole),
+    area: origem,
     texto: parsed.data,
   });
 

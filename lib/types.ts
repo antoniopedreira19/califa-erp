@@ -1453,18 +1453,21 @@ export function chatAreaLabel(a: ChatArea): string {
 }
 
 /**
- * A área de quem fala vem do papel, nunca do formulário — o rótulo
- * "Produção"/"Financeiro" só significa algo se ninguém puder se passar
- * pelo outro time.
+ * A área de quem fala vem da TELA DE ORIGEM, não do papel (decisão 058,
+ * 08/09/2026). Escreveu por `/jobs` → "Produção"; escreveu por
+ * `/financeiro/**` → "Financeiro".
  *
- * Mora aqui, e não junto das actions, porque arquivo `"use server"` exige
- * que todo export seja async.
+ * Antes vinha do papel (`areaDoPapel`), e isso quebrava no caso mais
+ * comum da agência: 19 dos 20 usuários são `administrador`, e o mapa
+ * antigo carimbava administrador como "Financeiro" — então mensagem
+ * escrita dentro do Job saía rotulada como se fosse do financeiro.
+ *
+ * Ninguém se passa pelo outro time porque a área NÃO vem do cliente: cada
+ * Server Action fixa a sua e valida o papel contra o gate daquele lado
+ * (`chat.enviar` para Produção, `chat.enviar_financeiro` para Financeiro).
  */
-export function areaDoPapel(role: string): ChatArea {
-  return role === "financeiro" || role === "administrador"
-    ? "financeiro"
-    : "producao";
-}
+export const AREA_PRODUCAO: ChatArea = "producao";
+export const AREA_FINANCEIRO: ChatArea = "financeiro";
 
 export interface JobMensagem {
   id: string;

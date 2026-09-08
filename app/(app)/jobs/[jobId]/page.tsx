@@ -11,7 +11,7 @@ import type { Job, JobStatus, Regional } from "@/lib/types";
 import {
   jobStatusLabel,
   JOB_STATUS_TRANSICOES,
-  areaDoPapel,
+  AREA_PRODUCAO,
   jobEstaCongelado,
   jobAceitaRealizado,
   jobAceitaAcoesPlanilha,
@@ -385,7 +385,7 @@ export default async function JobDetailPage({
             jobId={job.id}
             jobCodigo={job.codigo}
             itens={threadChatPPs}
-            minhaArea={areaDoPapel(session.activeRole)}
+            minhaArea={AREA_PRODUCAO}
             naoLidasIniciais={naoLidasPPs}
             podeEnviar={pode(session.activeRole, "chat.enviar")}
           />
@@ -397,7 +397,7 @@ export default async function JobDetailPage({
             jobCodigo={job.codigo}
             itens={threadChat}
             naoLidas={naoLidas}
-            minhaArea={areaDoPapel(session.activeRole)}
+            minhaArea={AREA_PRODUCAO}
             podeEnviar={pode(session.activeRole, "chat.enviar")}
           />
         }

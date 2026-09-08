@@ -22,7 +22,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { logAuditEvent } from "@/lib/auth/audit";
-import { areaDoPapel } from "@/lib/types";
+import { AREA_PRODUCAO } from "@/lib/types";
 // O recorte de quais linhas precisam responder é PURO e mora em
 // `pps-item.ts`: este arquivo puxa `logAuditEvent`, que puxa o client de
 // servidor, e a barra da planilha — que é client component — não pode
@@ -160,7 +160,7 @@ export async function aplicarConclusaoDoItem(
       tenant_id: tenantId,
       job_id: jobId,
       autor_id: profileId,
-      area: areaDoPapel(papel),
+      area: AREA_PRODUCAO,
       texto: `Item "${itemNome}" reaberto para uma nova PP. Ele estava marcado como "todas as PPs geradas", e a previsão de custo dele volta a usar o planejado até alguém marcar de novo.`,
     });
     if (erroChat) {

@@ -99,7 +99,16 @@ Legenda: **V** = ver · **E** = editar/criar · **A** = aprovar ou ação críti
 | Enviar pra faturamento / encerrar | A | A | — | — | — |
 | **Abertura financeira do job** (via `/financeiro/abertura-de-job`) | A | — | — | — | A |
 | Ver chat do job | V | V | V | V† | V |
-| Enviar mensagem no chat | E | E | E | — | — |
+| Enviar mensagem **pelo lado da Produção** (telas de `/jobs`) | E | E | E | — | — |
+| Enviar mensagem **pelo lado do Financeiro** (Contas a Pagar e `/financeiro/jobs`) | E | — | — | — | E |
+
+> **Os dois lados do chat (decisão 058, 08/09/2026).** A área da mensagem
+> — "Produção" ou "Financeiro" — vem da TELA por onde a pessoa escreveu,
+> não do papel dela. Por isso são dois recursos: `chat.enviar` fala pela
+> Produção e `chat.enviar_financeiro` fala pelo Financeiro. O papel
+> `financeiro` responde de Contas a Pagar e do job dele no financeiro, e
+> não escreve de dentro do módulo Jobs. O administrador, que atua nos
+> dois lados, fala como Produção no Jobs e como Financeiro no Financeiro.
 
 ### Financeiro
 

@@ -21,11 +21,17 @@ interface Props {
   jobCodigo: string;
   itens: ItemChat[];
   naoLidas: number;
-  /** Área de quem está logado — vem do papel, não é escolhida. */
+  /**
+   * Lado por onde esta tela fala. Vem da ROTA, não do papel (decisão
+   * 058): esta mesma aba existe em `/jobs` como "Produção" e em
+   * `/financeiro/jobs` como "Financeiro". É o rótulo do "Enviando como…"
+   * e é o que a Server Action grava na mensagem, revalidando o gate.
+   */
   minhaArea: ChatArea;
   /**
-   * Se `false`, o campo de escrita nao renderiza (Financeiro e Freelancer
-   * so leem). Fonte-verdade: `lib/permissoes.ts`, recurso `chat.enviar`.
+   * Se `false`, o campo de escrita nao renderiza. Fonte-verdade:
+   * `lib/permissoes.ts` — `chat.enviar` no lado Produção,
+   * `chat.enviar_financeiro` no lado Financeiro.
    */
   podeEnviar?: boolean;
 }
@@ -106,7 +112,7 @@ export function JobChatSection({
     setErro(null);
     setPending(true);
     try {
-      const res = await enviarMensagem(jobId, texto);
+      const res = await enviarMensagem(jobId, texto, minhaArea);
       if (!res.ok) {
         setErro(res.message);
         return false;

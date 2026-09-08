@@ -1,7 +1,10 @@
 "use client";
 
 import * as React from "react";
+import { MessagesSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ChatPPsFab } from "./chat/chat-pps-fab";
+import { useChatPPs } from "./chat/chat-pps-provider";
 
 /**
  * Cinco abas (25/08/2026, simplificação).
@@ -58,6 +61,12 @@ export function ContasPagarTabs({
   // que o financeiro faz todo dia é dar baixa, não avaliar PP.
   const [tab, setTab] = React.useState<TabKey>("titulos");
 
+  // Quantos CHATS têm mensagem não lida (decisão 058). Vem do provider, que
+  // fica montado independente da aba ativa — senão o aviso só apareceria
+  // depois de a pessoa já ter clicado na aba, que é justamente o que ele
+  // deveria provocar.
+  const { chatsNaoLidos } = useChatPPs();
+
   return (
     <div className="space-y-6">
       <div
@@ -65,7 +74,12 @@ export function ContasPagarTabs({
         aria-label="Seções de contas a pagar"
         className="flex items-center gap-1 border-b border-border"
       >
-        <TabButton active={tab === "pps"} onClick={() => setTab("pps")} count={ppsPendentesCount}>
+        <TabButton
+          active={tab === "pps"}
+          onClick={() => setTab("pps")}
+          count={ppsPendentesCount}
+          chats={chatsNaoLidos}
+        >
           Pedidos de Produção (PPs)
         </TabButton>
         <TabButton
@@ -105,6 +119,9 @@ export function ContasPagarTabs({
       >
         {pps}
       </div>
+      {/* O FAB é `fixed`: renderizar só na aba de PPs (e não escondê-lo por
+          CSS) é o que impede o botão de flutuar sobre Títulos e Cartão. */}
+      {tab === "pps" && <ChatPPsFab />}
       <div
         role="tabpanel"
         aria-hidden={tab !== "desembolsos"}
@@ -141,11 +158,15 @@ function TabButton({
   active,
   onClick,
   count,
+  chats,
   children,
 }: {
   active: boolean;
   onClick: () => void;
   count?: number;
+  /** Chats com mensagem não lida. Badge separado do `count`, com ícone,
+   *  porque os dois números respondem perguntas diferentes. */
+  chats?: number;
   children: React.ReactNode;
 }) {
   return (
@@ -170,6 +191,15 @@ function TabButton({
           )}
         >
           {count}
+        </span>
+      )}
+      {chats !== undefined && chats > 0 && (
+        <span
+          title={`${chats} ${chats === 1 ? "chat com mensagem não lida" : "chats com mensagens não lidas"}`}
+          className="inline-flex h-[18px] items-center gap-1 rounded-full bg-foreground px-1.5 text-[10px] font-bold text-white"
+        >
+          <MessagesSquare className="h-[11px] w-[11px]" />
+          {chats}
         </span>
       )}
     </button>

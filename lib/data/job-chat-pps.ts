@@ -1,9 +1,32 @@
-import type {
-  ItemChat,
-  JobMensagem,
-  PedidoCompraNaLista,
-} from "@/lib/types";
+import type { ItemChat, JobMensagem, PedidoCompra } from "@/lib/types";
 import { nomeContraparteBRPP } from "@/lib/types";
+
+/**
+ * O recorte da PP que a thread realmente lê.
+ *
+ * `PedidoCompraNaLista` satisfaz este tipo, então a aba PPs do job segue
+ * passando o que já tinha. O tipo existe para o outro chamador: o chat do
+ * financeiro (Contas a Pagar) carrega uma PP por vez e não tem por que
+ * arrastar parcelas, anexos e grupo só para desenhar um card.
+ */
+export type PPParaThreadChat = Pick<
+  PedidoCompra,
+  | "id"
+  | "codigo"
+  | "status"
+  | "servico"
+  | "valor"
+  | "fornecedor_id"
+  | "verba_producao"
+  | "prazo_pagamento"
+  | "enviada_financeiro_em"
+  | "created_at"
+  | "updated_at"
+> & {
+  emitida_por_nome: string | null;
+  enviada_financeiro_por_nome: string | null;
+  responsavel?: { nome: string | null } | null;
+};
 
 /**
  * Monta a thread do chat de PPs de um job.
@@ -51,7 +74,7 @@ function prazoEmDias(createdAt: string, prazoPagamento: string): string {
 }
 
 export function montarThreadChatPPs(
-  pps: PedidoCompraNaLista[],
+  pps: PPParaThreadChat[],
   mensagens: Array<JobMensagem & { autor_nome: string | null }>,
   moedaCode: string,
   fornecedoresPorId: Record<string, string>,
