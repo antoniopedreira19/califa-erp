@@ -32,7 +32,12 @@ function iso(ano: number, mesZeroBased: number, dia: number): string {
   return `${d.getFullYear()}-${mes}-${dd}`;
 }
 
-export default async function FluxoCaixaPage() {
+type SearchParams = { empresa?: string };
+export default async function FluxoCaixaPage({
+  searchParams,
+}: {
+  searchParams: SearchParams;
+}) {
   const session = await requireSession();
   if (
     session.activeRole !== "administrador" &&
@@ -40,6 +45,12 @@ export default async function FluxoCaixaPage() {
   ) {
     redirect("/home?reason=sem_permissao_financeira");
   }
+
+  const empresaFiltroId: string | null =
+    typeof searchParams.empresa === "string" && searchParams.empresa.length > 0
+      ? searchParams.empresa
+      : (session.activeEmpresa?.id ?? null);
+
   const supabase = createClient();
 
   const hoje = hojeISO();
@@ -48,8 +59,8 @@ export default async function FluxoCaixaPage() {
   const vespera = iso(ano, mes - 1 - 4, 0); // véspera da âncora
   const fim = iso(ano, mes - 1 + 14, 0); // fim do 13º mês à frente
 
-  const [fluxoRes, contasRes, regionaisRes, saldosRes] = await Promise.all([
-    supabase
+  const queryFluxo = (() => {
+    let q = supabase
       .from("vw_fluxo_caixa")
       .select(
         "classe, situacao, origem_tipo, origem_id, conta_bancaria_id, regional_id, data_evento, valor, natureza, descricao, job_id",
@@ -57,7 +68,24 @@ export default async function FluxoCaixaPage() {
       .eq("tenant_id", session.activeTenant.id)
       .gte("data_evento", ancora)
       .lte("data_evento", fim)
-      .order("data_evento", { ascending: true }),
+      .order("data_evento", { ascending: true });
+    if (empresaFiltroId) q = q.eq("empresa_id", empresaFiltroId);
+    return q;
+  })();
+
+  const queryRegionais = (() => {
+    let qr = supabase
+      .from("regionais")
+      .select("id, nome, empresa_id")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("ativo", true)
+      .order("nome");
+    if (empresaFiltroId) qr = qr.eq("empresa_id", empresaFiltroId);
+    return qr;
+  })();
+
+  const [fluxoRes, contasRes, regionaisRes, saldosRes] = await Promise.all([
+    queryFluxo,
     supabase
       .from("contas_bancarias")
       .select("id, nome, banco")
@@ -65,12 +93,7 @@ export default async function FluxoCaixaPage() {
       .eq("ativo", true)
       .neq("tipo", "cartao_credito")
       .order("ordem"),
-    supabase
-      .from("regionais")
-      .select("id, nome")
-      .eq("tenant_id", session.activeTenant.id)
-      .eq("ativo", true)
-      .order("nome"),
+    queryRegionais,
     // Saldo de cada conta na véspera da âncora — o ponto de partida do
     // razão. Função da migration 20260817000006.
     supabase.rpc("fc_saldos_por_conta", { p_data: vespera }),
@@ -128,6 +151,19 @@ export default async function FluxoCaixaPage() {
           previsto (títulos em aberto e previsões da abertura do job).
         </p>
       </header>
+
+      {empresaFiltroId && (
+        <div className="flex items-center gap-2 text-xs">
+          <span className="rounded-full bg-california-red/10 px-3 py-1 text-california-red font-medium">
+            Empresa: {session.empresas.find((e) => e.id === empresaFiltroId)?.nome_fantasia ?? session.empresas.find((e) => e.id === empresaFiltroId)?.razao_social ?? "—"}
+            {empresaFiltroId !== session.activeEmpresa?.id && (
+              <Link href="/financeiro/fluxo-caixa" className="ml-2 underline">
+                voltar para ativa
+              </Link>
+            )}
+          </span>
+        </div>
+      )}
 
       <FluxoCaixaView
         itens={itens}
