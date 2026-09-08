@@ -99,30 +99,24 @@ export const loadSession = cache(async (): Promise<SessionResult> => {
 
   const empresas = (empresasData ?? []) as Empresa[];
 
-  // Migração automática do cookie da Fase 2A (active_empresa_id → active_empresa_ids).
-  // Primeira request de cada user com cookie antigo: converte e apaga o velho.
+  // Leitura dos cookies de empresa ativa.
+  // NUNCA escrever cookies aqui — loadSession() roda em Server Components
+  // e Next.js só permite writes em Server Actions / Route Handlers.
+  //
+  // Compat Fase 2A: se cookie antigo (`active_empresa_id`) existe e o novo
+  // (`active_empresa_ids`) não, usa o antigo em modo somente-leitura. A
+  // migração efetiva (apagar antigo, gravar novo) acontece quando o user
+  // usa setActiveEmpresas (Server Action, pode escrever).
   const { cookies } = await import("next/headers");
   const cookieStore = cookies();
+  const cookieNovo = cookieStore.get("active_empresa_ids")?.value;
   const cookieAntigo = cookieStore.get("active_empresa_id")?.value;
-  let cookieNovo = cookieStore.get("active_empresa_ids")?.value;
-
-  if (cookieAntigo && cookieAntigo.length > 0 && !cookieNovo) {
-    cookieNovo = cookieAntigo;
-    cookieStore.set("active_empresa_ids", cookieNovo, {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      path: "/",
-    });
-    cookieStore.delete("active_empresa_id");
-  } else if (cookieAntigo) {
-    // cookie novo já existe; só apaga o velho
-    cookieStore.delete("active_empresa_id");
-  }
+  const cookieEfetivo =
+    cookieNovo && cookieNovo.length > 0 ? cookieNovo : (cookieAntigo ?? "");
 
   const idsSelecionados: string[] =
-    cookieNovo && cookieNovo.length > 0
-      ? cookieNovo.split(",").filter((id) => id.length > 0)
+    cookieEfetivo.length > 0
+      ? cookieEfetivo.split(",").filter((id) => id.length > 0)
       : [];
 
   // activeEmpresas = empresas do tenant que ainda existem E estão no cookie.
