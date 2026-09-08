@@ -57,6 +57,17 @@ export interface JobNaFila {
    */
   categoria_id: string | null;
   categoria_nome: string | null;
+  /**
+   * Serviço do job (categorias_dominio, escopo 'projeto'). Na fila vem do
+   * orçamento de origem (`orcamentos.servico_id`); no job já aberto vem
+   * de `jobs.servico_id`, que a abertura gravou — com o do orçamento como
+   * fallback para job aberto antes da decisão 055 (07/09/2026).
+   */
+  servico_id: string | null;
+  servico_nome: string | null;
+  /** O serviço que a PRODUÇÃO mandou — o do orçamento, fixo. É o que o
+   *  painel "Dados da produção" mostra, ao lado da categoria. */
+  servico_producao_nome: string | null;
   /** Agregados da planilha interna do job. */
   planilha_grupos: number;
   planilha_itens: number;
@@ -110,6 +121,9 @@ const SELECT_JOB_FILA =
   "id, codigo, nome, valor_total, faturamento_previsto, data_inicio_prevista, data_fim_prevista, " +
   "data_prevista_faturamento, observacoes, created_at, produto, cidade, projeto_id, " +
   "projeto_financeiro_id, conta_recebimento_id, conta_pagamento_id, " +
+  // `servico_id` do JOB (decisão 055). A dica `!servico_id` é obrigatória:
+  // `jobs` tem duas FKs para `categorias_dominio` desde 07/09/2026.
+  "servico_id, servico:categorias_dominio!servico_id(nome), " +
   "projeto:projetos(codigo, nome, cliente_id, cliente:clientes(nome_fantasia)), " +
   "projeto_financeiro:projetos_financeiro(codigo, nome), " +
   "regional:regionais(nome), " +
@@ -117,7 +131,9 @@ const SELECT_JOB_FILA =
   "produtor:profiles!produtor_id(nome), " +
   // `!categoria_id`: `orcamentos` tem duas FKs para `categorias_dominio`
   // desde 02/09/2026 (categoria e servico).
-  "orcamento:orcamentos(codigo, categoria_id, categoria:categorias_dominio!categoria_id(nome))";
+  "orcamento:orcamentos(codigo, categoria_id, servico_id, " +
+  "categoria:categorias_dominio!categoria_id(nome), " +
+  "servico:categorias_dominio!servico_id(nome))";
 
 /**
  * Soma o orçado e o planejado da planilha interna de vários jobs numa
@@ -217,6 +233,11 @@ function montarJobNaFila(
     orcamento_codigo: j.orcamento?.codigo ?? null,
     categoria_id: j.orcamento?.categoria_id ?? null,
     categoria_nome: j.orcamento?.categoria?.nome ?? null,
+    servico_id: j.servico_id ?? j.orcamento?.servico_id ?? null,
+    servico_nome: j.servico_id
+      ? (j.servico?.nome ?? null)
+      : (j.orcamento?.servico?.nome ?? null),
+    servico_producao_nome: j.orcamento?.servico?.nome ?? null,
     planilha_grupos: totais?.grupos ?? 0,
     planilha_itens: totais?.itens ?? 0,
     planilha_orcado: totais?.orcado ?? 0,

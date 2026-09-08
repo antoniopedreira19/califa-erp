@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { carregarJobParaAbertura } from "../dados";
 import { listarProjetosFinanceiro } from "@/lib/data/projetos-financeiro";
 import { listarContasBancarias } from "@/lib/data/contas-bancarias";
+import { servicosDoOrcamentoQuery } from "@/lib/data/servicos";
 import { formatDataHoraBr } from "../formatos";
 import { sugerirCurva, sugerirRecebimento, trimestreDe } from "../curva";
 import { AberturaForm } from "./abertura-form";
@@ -25,7 +26,7 @@ export default async function AbrirJobNoFinanceiroPage({
 
   const supabase = createClient();
 
-  const [carregado, categoriasRes, contas] = await Promise.all([
+  const [carregado, categoriasRes, contas, servicosRes] = await Promise.all([
     carregarJobParaAbertura(session.activeTenant.id, params.jobId),
     // Escopo 'orcamento': a categoria do job é a que a produção escolheu
     // no orçamento — o financeiro confere e pode trocar, mas dentro do
@@ -38,6 +39,10 @@ export default async function AbrirJobNoFinanceiroPage({
       .eq("ativo", true)
       .order("nome"),
     listarContasBancarias(session.activeTenant.id),
+    // Serviços (escopo 'projeto'): o mesmo vocabulário do orçamento. O
+    // campo chega pré-preenchido com o do orçamento de origem e pode ser
+    // trocado sem alterá-lo (decisão 055).
+    servicosDoOrcamentoQuery(supabase, session.activeTenant.id),
   ]);
 
   if (!carregado) notFound();
@@ -50,6 +55,9 @@ export default async function AbrirJobNoFinanceiroPage({
 
   if (categoriasRes.error) {
     console.error("[abertura-job.categorias]", categoriasRes.error.message);
+  }
+  if (servicosRes.error) {
+    console.error("[abertura-job.servicos]", servicosRes.error.message);
   }
 
   const { job, enviadoPorNome } = carregado;
@@ -106,6 +114,7 @@ export default async function AbrirJobNoFinanceiroPage({
     <AberturaForm
       job={job}
       categorias={categoriasRes.data ?? []}
+      servicos={servicosRes.data ?? []}
       projetos={projetos}
       contas={contas}
       custoPrevisto={custoPrevisto}

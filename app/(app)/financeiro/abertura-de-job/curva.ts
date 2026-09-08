@@ -262,3 +262,18 @@ export function foraDaCompetencia(
   if (anoData !== ano) return true;
   return trimestreDe(dataIso) !== trimestre;
 }
+
+/**
+ * A data está fora de TODAS as competências do rateio? Com o job rateado
+ * (decisão 055), uma data de previsão só é "fora" quando não cai em
+ * nenhum dos trimestres reconhecidos. Lista vazia não marca nada.
+ */
+export function foraDoRateio(
+  dataIso: string,
+  competencias: { trimestre: number; ano: number }[],
+): boolean {
+  if (competencias.length === 0) return false;
+  return competencias.every((c) =>
+    foraDaCompetencia(dataIso, c.trimestre, c.ano),
+  );
+}

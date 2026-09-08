@@ -22,7 +22,12 @@ import { JobRealizadoSection } from "@/app/(app)/jobs/[jobId]/realizado/job-real
 import { JobChatSection } from "@/app/(app)/jobs/[jobId]/comunicacao/job-chat-section";
 import { AberturaForm } from "../../abertura-de-job/[jobId]/abertura-form";
 import { carregarJobParaAbertura } from "../../abertura-de-job/dados";
-import { consumoDasPrevisoes, previsoesGravadas } from "../../abertura-de-job/consumo";
+import {
+  competenciasGravadas,
+  consumoDasPrevisoes,
+  previsoesGravadas,
+} from "../../abertura-de-job/consumo";
+import { servicosDoOrcamentoQuery } from "@/lib/data/servicos";
 import { trimestreDe } from "../../abertura-de-job/curva";
 import { formatDataHoraBr } from "../../abertura-de-job/formatos";
 import { SITUACAO_META } from "../../abertura-de-job/situacao-faturamento";
@@ -87,6 +92,8 @@ export default async function JobNoFinanceiroPage({
     consumo,
     notaRes,
     categoriasRes,
+    servicosRes,
+    competencias,
   ] = await Promise.all([
     carregarDetalheDoJob(session, params.jobId),
     carregarJobParaAbertura(tenantId, params.jobId),
@@ -115,9 +122,16 @@ export default async function JobNoFinanceiroPage({
       .eq("escopo", "orcamento")
       .eq("ativo", true)
       .order("nome"),
+    // Serviços (escopo 'projeto') do combo, e o rateio de competência
+    // gravado na abertura (decisão 055).
+    servicosDoOrcamentoQuery(supabase, tenantId),
+    competenciasGravadas(supabase, tenantId, params.jobId),
   ]);
 
   if (!detalhe || !carregadoParaAbertura) notFound();
+  if (servicosRes.error) {
+    console.error("[job-financeiro.servicos]", servicosRes.error.message);
+  }
 
   const {
     job,
@@ -200,8 +214,16 @@ export default async function JobNoFinanceiroPage({
   const baseCompetencia = job.data_inicio_prevista ?? hoje;
   const anoAtual = Number(hoje.slice(0, 4));
   const anoDoJob = job.competencia_ano ?? Number(baseCompetencia.slice(0, 4));
+  // As pílulas de ano precisam alcançar todo ano do rateio gravado —
+  // senão um job rateado em 2027 mostraria a segunda competência sem
+  // pílula acesa.
   const anos = Array.from(
-    new Set([anoAtual, anoDoJob, anoDoJob + 1]),
+    new Set([
+      anoAtual,
+      anoDoJob,
+      anoDoJob + 1,
+      ...competencias.map((c) => c.ano),
+    ]),
   ).sort((a, b) => a - b);
 
   const aguardandoEncerramento =
@@ -273,6 +295,7 @@ export default async function JobNoFinanceiroPage({
             job={jobNaFila}
             modo="leitura"
             categorias={categoriasRes.data ?? []}
+            servicos={servicosRes.data ?? []}
             projetos={projetos}
             contas={contas}
             custoPrevisto={custoPrevisto}
@@ -284,6 +307,7 @@ export default async function JobNoFinanceiroPage({
               job.competencia_trimestre ?? trimestreDe(baseCompetencia)
             }
             anoSugerido={anoDoJob}
+            competenciasIniciais={competencias}
             anos={anos}
             hojeIso={hoje}
             agoraLabel={formatDataHoraBr(new Date())}
@@ -300,12 +324,15 @@ export default async function JobNoFinanceiroPage({
                 codigo: job.codigo,
                 nome: jobNaFila.nome,
                 categoriaNome: detalhe.raw.categoria?.nome ?? null,
-                servicoNome: detalhe.raw.orcamento?.servico?.nome ?? null,
+                // O serviço do JOB, com o do orçamento como fallback —
+                // `dados.ts` da abertura já resolve (decisão 055).
+                servicoNome: jobNaFila.servico_nome,
                 produto: job.produto,
                 regionalNome: detalhe.raw.regional?.nome ?? null,
                 cidade: job.cidade,
                 competenciaTrimestre: job.competencia_trimestre,
                 competenciaAno: job.competencia_ano,
+                competencias,
                 dataInicio: job.data_inicio_prevista,
                 dataFim: job.data_fim_prevista,
                 dataAbertura: job.data_abertura_financeiro,

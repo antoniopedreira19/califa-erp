@@ -127,6 +127,7 @@ export default async function JobDetailPage({
     portaisDoCliente,
     jobsDoProjeto,
     abertoPorNome,
+    competencias,
     totaisJob,
     custoPlanejadoJob,
     custoRealizadoJob,
@@ -243,15 +244,18 @@ export default async function JobDetailPage({
                 codigo: job.codigo,
                 nome: job.nome,
                 categoriaNome: raw.categoria?.nome ?? null,
-                // Serviço do job = `orcamentos.servico_id`. Antes esta
-                // ficha lia a categoria do PROJETO, que virou legada em
-                // 02/09/2026 e fica vazia em projeto novo.
-                servicoNome: raw.orcamento?.servico?.nome ?? null,
+                // Serviço do job = `jobs.servico_id` (gravado na abertura,
+                // decisão 055), com o do orçamento como fallback. Antes
+                // esta ficha lia a categoria do PROJETO, que virou legada
+                // em 02/09/2026 e fica vazia em projeto novo.
+                servicoNome:
+                  raw.servico?.nome ?? raw.orcamento?.servico?.nome ?? null,
                 produto: job.produto,
                 regionalNome: raw.regional?.nome ?? null,
                 cidade: job.cidade,
                 competenciaTrimestre: job.competencia_trimestre,
                 competenciaAno: job.competencia_ano,
+                competencias,
                 dataInicio: job.data_inicio_prevista,
                 dataFim: job.data_fim_prevista,
                 dataAbertura: job.data_abertura_financeiro,

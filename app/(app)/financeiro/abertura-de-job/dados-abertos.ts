@@ -40,8 +40,15 @@ export interface JobAberto {
   status: JobStatus;
   valor_total: number | null;
   data_abertura_financeiro: string | null;
+  /** A PRIMEIRA competência do rateio — o que `jobs` guarda. */
   competencia_trimestre: number | null;
   competencia_ano: number | null;
+  /**
+   * Todos os anos em que o job tem competência (decisão 055): um job
+   * rateado em 4T/2026 + 1T/2027 aparece ao filtrar 2026 E 2027. Vazio só
+   * em job sem rateio gravado — aí o filtro cai no ano da coluna.
+   */
+  competencia_anos: number[];
   categoria_nome: string | null;
   projeto_id: string;
   projeto_codigo: string | null;
@@ -76,10 +83,11 @@ export interface JobAberto {
   data_inicio_prevista: string | null;
   data_fim_prevista: string | null;
   /**
-   * Serviço do job (Always On, Ativação, Fee, Interno). Mora no ORÇAMENTO
-   * de origem — `orcamentos.servico_id`, escopo `projeto` das
-   * `categorias_dominio` —, não em `jobs`, e por isso é cruzado em
-   * memória por `servicoPorOrcamento`, e não por embed.
+   * Serviço do job (Always On, Ativação, Fee, Interno). Desde a decisão
+   * 055 (07/09/2026) mora em `jobs.servico_id`, gravado na abertura; job
+   * aberto antes disso sem serviço próprio cai no do ORÇAMENTO de origem
+   * (`orcamentos.servico_id`), cruzado em memória por
+   * `servicoPorOrcamento`.
    *
    * É o campo que COLORE o Calendário de Jobs (decisão do Tiago,
    * 07/09/2026): a categoria, que o design original usava, hoje é
@@ -135,14 +143,17 @@ const SELECT_JOB_ABERTO =
   // custam junção nenhuma.
   "data_evento, data_inicio_prevista, data_fim_prevista, " +
   "competencia_trimestre, competencia_ano, projeto_id, produto, " +
-  // `orcamento_id` desce cru: o SERVIÇO do job mora no orçamento e é
-  // cruzado em memória, por `servicoPorOrcamento`. Não vem por embed de
-  // propósito — `orcamentos` tem duas FKs para `categorias_dominio`, e
+  // `servico_id` do JOB (decisão 055) e `orcamento_id` cru: o serviço do
+  // job aberto antes de 07/09/2026 mora no orçamento e é cruzado em
+  // memória, por `servicoPorOrcamento`. Nenhum dos dois vem por embed
+  // aninhado — `orcamentos` tem duas FKs para `categorias_dominio`, e
   // embed ambíguo derruba a query inteira em vez de só a coluna.
-  "orcamento_id, " +
+  "servico_id, orcamento_id, " +
   "projeto_financeiro_id, " +
   "projeto_financeiro:projetos_financeiro(codigo, nome), " +
-  "categoria:categorias_dominio(nome), " +
+  // `!categoria_id`: `jobs` também tem duas FKs para `categorias_dominio`
+  // desde a decisão 055.
+  "categoria:categorias_dominio!categoria_id(nome), " +
   "regional:regionais(nome), " +
   "responsavel:profiles!responsavel_id(nome), " +
   "projeto:projetos(codigo, nome, cliente:clientes(nome_fantasia))";
@@ -185,23 +196,53 @@ export async function listarJobsDoFinanceiro(
   // `lib/data/faturamento-por-job` — a visão agregada do projeto usa a
   // MESMA classificação, e duas cópias dela divergiriam na primeira nota
   // cancelada. Em paralelo, nunca em série (`docs/PERFORMANCE.md`).
-  const [jobsRes, esteira, caixa, servicos] = await Promise.all([
-    supabase
-      .from("jobs")
-      .select(SELECT_JOB_ABERTO)
-      .eq("tenant_id", tenantId)
-      .in("status", STATUS_NA_LISTA as unknown as string[])
-      .order("codigo", { ascending: true }),
-    faturamentoPorJob(tenantId, hoje),
-    caixaPorJob(tenantId),
-    servicoPorOrcamento(supabase, tenantId),
-  ]);
+  const [jobsRes, esteira, caixa, servicos, servicosRes, rateiosRes] =
+    await Promise.all([
+      supabase
+        .from("jobs")
+        .select(SELECT_JOB_ABERTO)
+        .eq("tenant_id", tenantId)
+        .in("status", STATUS_NA_LISTA as unknown as string[])
+        .order("codigo", { ascending: true }),
+      faturamentoPorJob(tenantId, hoje),
+      caixaPorJob(tenantId),
+      servicoPorOrcamento(supabase, tenantId),
+      // Nomes dos serviços, para resolver `jobs.servico_id` em memória.
+      supabase
+        .from("categorias_dominio")
+        .select("id, nome")
+        .eq("tenant_id", tenantId)
+        .eq("escopo", "projeto"),
+      // Os anos do rateio de cada job (decisão 055) — só para o filtro
+      // "Ano". Leitura rasa: uma linha por competência, sem embed.
+      supabase
+        .from("jobs_competencias")
+        .select("job_id, ano")
+        .eq("tenant_id", tenantId),
+    ]);
 
   const { data, error } = jobsRes;
 
   if (error) {
     console.error("[jobs-do-financeiro.listar]", error.message);
     return [];
+  }
+
+  if (servicosRes.error) {
+    console.error("[jobs-do-financeiro.servicos]", servicosRes.error.message);
+  }
+  if (rateiosRes.error) {
+    console.error("[jobs-do-financeiro.rateios]", rateiosRes.error.message);
+  }
+  const nomeDoServico = new Map<string, string>();
+  for (const s of (servicosRes.data ?? []) as { id: string; nome: string }[]) {
+    nomeDoServico.set(s.id, s.nome);
+  }
+  const anosDoRateio = new Map<string, number[]>();
+  for (const c of (rateiosRes.data ?? []) as { job_id: string; ano: number }[]) {
+    const anos = anosDoRateio.get(c.job_id) ?? [];
+    if (!anos.includes(Number(c.ano))) anos.push(Number(c.ano));
+    anosDoRateio.set(c.job_id, anos);
   }
 
   return ((data ?? []) as any[]).map((j) => {
@@ -224,6 +265,7 @@ export async function listarJobsDoFinanceiro(
       data_abertura_financeiro: j.data_abertura_financeiro,
       competencia_trimestre: j.competencia_trimestre,
       competencia_ano: j.competencia_ano,
+      competencia_anos: (anosDoRateio.get(j.id) ?? []).sort((a, b) => a - b),
       categoria_nome: j.categoria?.nome ?? null,
       projeto_id: j.projeto_id,
       projeto_codigo: j.projeto?.codigo ?? null,
@@ -238,7 +280,11 @@ export async function listarJobsDoFinanceiro(
       data_evento: j.data_evento ?? null,
       data_inicio_prevista: j.data_inicio_prevista ?? null,
       data_fim_prevista: j.data_fim_prevista ?? null,
-      servico_nome: servicos.get(j.orcamento_id) ?? null,
+      // O do job primeiro (abertura gravou); o do orçamento como fallback.
+      servico_nome:
+        (j.servico_id ? nomeDoServico.get(j.servico_id) : undefined) ??
+        servicos.get(j.orcamento_id) ??
+        null,
       situacao_faturamento: fat.situacao,
       // Sem nota nem envio, a coluna mostra o que a abertura previu.
       valor_faturamento:

@@ -50,6 +50,13 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { formatCurrency, cn } from "@/lib/utils";
+import {
+  formatPercentualRateio,
+  ordenarCompetencias,
+  rateioLabel,
+  type JobCompetencia,
+} from "@/lib/types";
+import type { ServicoOption } from "@/lib/data/servicos";
 import type { JobNaFila } from "../dados";
 import { formatDataBr, formatPeriodo } from "../formatos";
 import {
@@ -57,7 +64,7 @@ import {
   dividirEmParcelas,
   ehJanelaDePagamento,
   emCentavos,
-  foraDaCompetencia,
+  foraDoRateio,
   proximaDataRecebimento,
   proximaDataSugerida,
   somaCurva,
@@ -76,6 +83,64 @@ import { repartirPrevisao } from "@/lib/calculos/previsao-congelada";
 interface CategoriaOption {
   id: string;
   nome: string;
+}
+
+/**
+ * Uma competência do rateio na tela (decisão 055). O percentual é texto
+ * pelo mesmo motivo do valor das parcelas: quem digita "33,33" precisa
+ * ver "33,33" enquanto digita.
+ */
+interface LinhaCompetenciaForm {
+  trimestre: number;
+  ano: number;
+  pctTexto: string;
+}
+
+function parsePct(texto: string): number {
+  const n = Number.parseFloat(texto.replace(",", "."));
+  return Number.isNaN(n) ? 0 : n;
+}
+
+function pctTexto(n: number): string {
+  return (Math.round(n * 100) / 100).toLocaleString("pt-BR", {
+    maximumFractionDigits: 2,
+  });
+}
+
+function chaveComp(c: { trimestre: number; ano: number }): string {
+  return `${c.ano}-${c.trimestre}`;
+}
+
+/**
+ * Reparte 100% igualmente entre as competências, em ordem, com o
+ * centésimo de sobra nas primeiras (33,34 · 33,33 · 33,33). É o que
+ * "Igualar" faz, e o que incluir ou tirar um trimestre do rateio faz por
+ * padrão — quem quer outra proporção ajusta depois.
+ */
+function igualar(linhas: LinhaCompetenciaForm[]): LinhaCompetenciaForm[] {
+  const n = linhas.length;
+  if (n === 0) return [];
+  const base = Math.floor(10000 / n);
+  const sobra = 10000 - base * n;
+  return ordenarCompetencias(linhas).map((c, i) => ({
+    ...c,
+    pctTexto: pctTexto((base + (i < sobra ? 1 : 0)) / 100),
+  }));
+}
+
+/** O trimestre seguinte a uma competência — "Dividir" começa por ele. */
+function proximaCompetencia(c: { trimestre: number; ano: number }) {
+  return c.trimestre === 4
+    ? { trimestre: 1, ano: c.ano + 1 }
+    : { trimestre: c.trimestre + 1, ano: c.ano };
+}
+
+function paraFormComp(linhas: JobCompetencia[]): LinhaCompetenciaForm[] {
+  return ordenarCompetencias(linhas).map((c) => ({
+    trimestre: c.trimestre,
+    ano: c.ano,
+    pctTexto: pctTexto(c.percentual),
+  }));
 }
 
 /**
@@ -110,6 +175,8 @@ export type ModoAbertura = "abertura" | "leitura" | "edicao";
 interface Props {
   job: JobNaFila;
   categorias: CategoriaOption[];
+  /** Serviços (categorias_dominio, escopo 'projeto') para o combo. */
+  servicos: ServicoOption[];
   /** Projetos do financeiro do mesmo cliente, para o combo. */
   projetos: ProjetoFinanceiroOpcao[];
   /** Contas ativas do tenant, com saldo de hoje. */
@@ -126,8 +193,17 @@ interface Props {
   enviadoPorNome: string | null;
   curvaInicial: CurvaLinha[];
   recebimentoInicial: CurvaLinha[];
+  /**
+   * A competência sugerida pelo início do job. É a linha única de 100%
+   * com que a abertura começa; no job já aberto vale `competenciasIniciais`.
+   */
   trimestreSugerido: number;
   anoSugerido: number;
+  /**
+   * O rateio gravado (`jobs_competencias`, decisão 055). Só chega no job
+   * aberto; vazio ou ausente cai na competência sugerida.
+   */
+  competenciasIniciais?: JobCompetencia[];
   anos: number[];
   hojeIso: string;
   agoraLabel: string;
@@ -206,6 +282,7 @@ function paraForm(
 export function AberturaForm({
   job,
   categorias,
+  servicos,
   projetos,
   contas,
   custoPrevisto,
@@ -216,6 +293,7 @@ export function AberturaForm({
   recebimentoInicial,
   trimestreSugerido,
   anoSugerido,
+  competenciasIniciais,
   anos,
   hojeIso,
   agoraLabel,
@@ -272,8 +350,29 @@ export function AberturaForm({
   const [dropConta, setDropConta] = React.useState<
     "recebimento" | "pagamento" | null
   >(null);
-  const [trimestre, setTrimestre] = React.useState(trimestreSugerido);
-  const [ano, setAno] = React.useState(anoSugerido);
+  // Serviço: chega com o do job (gravado na abertura) ou o do orçamento
+  // de origem — `dados.ts` já resolve o fallback. Trocar aqui não altera
+  // o orçamento (decisão 055).
+  const [servicoId, setServicoId] = React.useState(() =>
+    job.servico_id && servicos.some((s) => s.id === job.servico_id)
+      ? job.servico_id
+      : "",
+  );
+  // Rateio de competência: de 1 a N linhas somando 100%. A abertura
+  // começa com a competência sugerida em 100%; o job aberto, com o que
+  // foi gravado.
+  const compsIniciais = React.useMemo<LinhaCompetenciaForm[]>(
+    () =>
+      competenciasIniciais && competenciasIniciais.length > 0
+        ? paraFormComp(competenciasIniciais)
+        : [{ trimestre: trimestreSugerido, ano: anoSugerido, pctTexto: "100" }],
+    [competenciasIniciais, trimestreSugerido, anoSugerido],
+  );
+  const [comps, setComps] = React.useState<LinhaCompetenciaForm[]>(compsIniciais);
+  // O ano das pílulas é CONTEXTO de edição: escolher 2027 e clicar num
+  // trimestre inclui 1T/2027 no rateio. Começa no ano da primeira
+  // competência.
+  const [anoAtivo, setAnoAtivo] = React.useState(compsIniciais[0].ano);
   const [curva, setCurva] = React.useState<LinhaPrevisaoForm[]>(() =>
     paraForm(curvaInicial, consumo?.custo ?? 0),
   );
@@ -321,14 +420,46 @@ export function AberturaForm({
     semRecebimento ||
     (recebimento.length > 0 && recebDatasOk && recebValoresOk && recebBate);
 
+  // ---------- Rateio de competência ----------
+  const compsOrdenadas = ordenarCompetencias(comps);
+  const compsNumericas: JobCompetencia[] = compsOrdenadas.map((c) => ({
+    trimestre: c.trimestre,
+    ano: c.ano,
+    percentual: parsePct(c.pctTexto),
+  }));
+  const somaRateio =
+    Math.round(compsNumericas.reduce((s, c) => s + c.percentual, 0) * 100) /
+    100;
+  const rateioFecha = Math.abs(somaRateio - 100) <= 0.011;
+  const rateioValoresOk = compsNumericas.every((c) => c.percentual > 0);
+  const rateioOk = comps.length > 0 && rateioValoresOk && rateioFecha;
+  const temRateio = comps.length > 1;
+  const chavesRateio = comps.map(chaveComp);
+
+  const servicoOk = servicoId !== "";
   const nomeOk = nome.trim().length >= 2;
   const projetoOk = projetoId !== "";
   const podeAbrir =
-    nomeOk && projetoOk && categoriaId !== "" && curvaOk && recebOk;
+    nomeOk &&
+    projetoOk &&
+    categoriaId !== "" &&
+    servicoOk &&
+    rateioOk &&
+    curvaOk &&
+    recebOk;
 
   const categoriaNome =
     categorias.find((c) => c.id === categoriaId)?.nome ?? "— não informada";
-  const competenciaLabel = `${trimestre}T/${ano}`;
+  const servicoNome =
+    servicos.find((s) => s.id === servicoId)?.nome ?? "— não informado";
+  const competenciaLabel = rateioLabel(compsNumericas);
+  // "3T/2026 +1": o resumo curto ao lado do rótulo do campo.
+  const competenciaResumo =
+    compsOrdenadas.length === 0
+      ? "—"
+      : `${compsOrdenadas[0].trimestre}T/${compsOrdenadas[0].ano}${
+          temRateio ? ` +${compsOrdenadas.length - 1}` : ""
+        }`;
 
   // ---------- Projeto do financeiro ----------
   const projetosVisiveis = React.useMemo(
@@ -397,6 +528,12 @@ export function AberturaForm({
       ? "Selecione o projeto do job."
       : categoriaId === ""
       ? "Selecione a categoria do job."
+      : !servicoOk
+        ? "Selecione o serviço do job."
+        : !rateioValoresOk
+          ? "Cada competência do rateio precisa de um percentual maior que zero."
+          : !rateioFecha
+            ? "O rateio de competências precisa somar 100%."
       : !semRecebimento && !recebDatasOk
         ? "Preencha a data de todas as parcelas de recebimento."
         : !semRecebimento && !recebValoresOk
@@ -411,7 +548,9 @@ export function AberturaForm({
                   ? "Cada data da curva precisa de um valor maior que zero."
                   : !curvaBate
                     ? "A curva precisa somar o custo previsto."
-                    : "Tudo pronto: nome, categoria, competência, recebimento e custos preenchidos.";
+                    : temRateio
+                      ? `Tudo pronto: nome, categoria, serviço, competência rateada em ${comps.length} trimestres, recebimento e custos preenchidos.`
+                      : "Tudo pronto: nome, categoria, serviço, competência, recebimento e custos preenchidos.";
 
   function atualizarCurva(id: string, patch: Partial<LinhaPrevisaoForm>) {
     setCurva((atual) =>
@@ -544,6 +683,54 @@ export function AberturaForm({
     });
   }
 
+  // ---------- Rateio de competência ----------
+  /** Clique numa pílula de trimestre: inclui no rateio, ou tira dele. */
+  function alternarTrimestre(t: number) {
+    const chave = chaveComp({ trimestre: t, ano: anoAtivo });
+    if (chavesRateio.includes(chave)) {
+      // A última competência não sai: o job precisa de pelo menos uma.
+      if (comps.length === 1) return;
+      setComps(igualar(comps.filter((c) => chaveComp(c) !== chave)));
+    } else {
+      setComps(igualar([...comps, { trimestre: t, ano: anoAtivo, pctTexto: "0" }]));
+    }
+  }
+
+  /** "Dividir em mais de uma competência": entra o trimestre seguinte. */
+  function dividirCompetencia() {
+    const ultima = compsOrdenadas[compsOrdenadas.length - 1];
+    const prox = proximaCompetencia(ultima);
+    setComps(igualar([...comps, { ...prox, pctTexto: "0" }]));
+    setAnoAtivo(prox.ano);
+  }
+
+  function removerCompetencia(chave: string) {
+    if (comps.length < 2) return;
+    setComps(igualar(comps.filter((c) => chaveComp(c) !== chave)));
+  }
+
+  function editarPercentual(chave: string, texto: string) {
+    const limpo = texto.replace(/[^0-9.,]/g, "").slice(0, 6);
+    setComps(
+      comps.map((c) => (chaveComp(c) === chave ? { ...c, pctTexto: limpo } : c)),
+    );
+  }
+
+  /** Presets do cabeçalho do rateio: 50/50, 60/40, 70/30 ou Igualar. */
+  function aplicarPreset(pcts: number[] | null) {
+    if (!pcts) {
+      setComps(igualar(comps));
+      return;
+    }
+    if (pcts.length !== comps.length) return;
+    setComps(
+      ordenarCompetencias(comps).map((c, i) => ({
+        ...c,
+        pctTexto: pctTexto(pcts[i]),
+      })),
+    );
+  }
+
   /** O que as duas actions recebem — os campos são os mesmos. */
   function montarPayload() {
     return {
@@ -552,8 +739,8 @@ export function AberturaForm({
       conta_recebimento_id: contaRecebId,
       conta_pagamento_id: contaPagId,
       categoria_id: categoriaId,
-      competencia_trimestre: trimestre,
-      competencia_ano: ano,
+      servico_id: servicoId,
+      competencias: compsNumericas,
       curva: semDesembolso
         ? []
         : linhasCurva.map((l) => ({
@@ -623,8 +810,13 @@ export function AberturaForm({
         ? job.categoria_id
         : "",
     );
-    setTrimestre(trimestreSugerido);
-    setAno(anoSugerido);
+    setServicoId(
+      job.servico_id && servicos.some((s) => s.id === job.servico_id)
+        ? job.servico_id
+        : "",
+    );
+    setComps(compsIniciais);
+    setAnoAtivo(compsIniciais[0].ano);
     setCurva(paraForm(curvaInicial, consumoCusto));
     setRecebimento(paraForm(recebimentoInicial, consumoReceb));
     setCriandoProjeto(false);
@@ -648,6 +840,9 @@ export function AberturaForm({
     // campo ao lado aparece no "Resumo do registro", não aqui: este
     // painel é o que a produção mandou.
     { rotulo: "Categoria", valor: job.categoria_nome ?? "— não informada" },
+    // Idem: o serviço que veio do orçamento. O que o financeiro escolher
+    // no campo Serviço aparece no "Resumo do registro".
+    { rotulo: "Serviço", valor: job.servico_producao_nome ?? "— não informado" },
     {
       rotulo: "Cidade · Regional",
       valor: [job.cidade, job.regional_nome].filter(Boolean).join(" · ") || "—",
@@ -715,8 +910,8 @@ export function AberturaForm({
             Editando o registro da abertura
           </span>
           <span className="text-[12.5px] text-muted-foreground">
-            as alterações valem só depois de salvar — a data e o usuário da
-            abertura não mudam
+            salvar reescreve serviço, categoria, projeto e competência — a
+            data e o usuário da abertura não mudam
           </span>
         </div>
       )}
@@ -752,7 +947,7 @@ export function AberturaForm({
           <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
             Confira os dados da produção ao lado — e a planilha interna do job
             — e complete o registro financeiro: nome, projeto, categoria,
-            competência e as previsões de recebimento e de custos.
+            serviço, competência e as previsões de recebimento e de custos.
           </p>
         </div>
       )}
@@ -987,58 +1182,60 @@ export function AberturaForm({
                 )}
               </div>
 
+              {/* Serviço do job (decisão 055): pré-preenchido pelo orçamento
+                  de origem, trocável aqui sem alterar o orçamento — o mesmo
+                  contrato da categoria ao lado. */}
               <div className="flex flex-col gap-1.5">
-                <span className="text-[12.5px] font-semibold">
-                  Competência <span className="text-california-red">*</span>
-                </span>
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className="inline-flex gap-0.5 rounded-lg bg-[#f1f0ec] p-[3px]">
-                    {[1, 2, 3, 4].map((t) => (
-                      <button
-                        key={t}
-                        type="button"
-                        onClick={() => setTrimestre(t)}
-                        disabled={travado}
-                        aria-pressed={trimestre === t}
-                        className={cn(
-                          "rounded-md px-3 py-1.5 text-xs font-semibold transition-colors",
-                          trimestre === t
-                            ? "bg-white text-foreground shadow-sm"
-                            : "text-muted-foreground hover:text-foreground",
-                        )}
-                      >
-                        {t}T
-                      </button>
+                <label
+                  htmlFor="servico-job"
+                  className="text-[12.5px] font-semibold"
+                >
+                  Serviço <span className="text-california-red">*</span>
+                </label>
+                <Select
+                  value={servicoId}
+                  onValueChange={setServicoId}
+                  disabled={travado}
+                >
+                  <SelectTrigger
+                    id="servico-job"
+                    className={cn(
+                      "h-[42px]",
+                      !servicoOk && !travado && "border-california-red/45",
+                    )}
+                  >
+                    <SelectValue placeholder="Selecione o serviço" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {servicos.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {s.nome}
+                      </SelectItem>
                     ))}
-                  </div>
-                  <div className="inline-flex gap-0.5 rounded-lg bg-[#f1f0ec] p-[3px]">
-                    {anos.map((a) => (
-                      <button
-                        key={a}
-                        type="button"
-                        onClick={() => setAno(a)}
-                        disabled={travado}
-                        aria-pressed={ano === a}
-                        className={cn(
-                          "rounded-md px-3 py-1.5 text-xs font-semibold transition-colors",
-                          ano === a
-                            ? "bg-white text-foreground shadow-sm"
-                            : "text-muted-foreground hover:text-foreground",
-                        )}
-                      >
-                        {a}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+                  </SelectContent>
+                </Select>
                 <span className="text-[11px] text-muted-foreground">
-                  Sugerida pelo início do job (
-                  {formatDataBr(job.data_inicio_prevista)}). É o que vai para o
-                  registro contábil.
+                  {servicoOk ? (
+                    <>
+                      Vem do orçamento{" "}
+                      <span className="font-mono">
+                        {job.orcamento_codigo ?? "—"}
+                      </span>
+                      . Pode ser trocado aqui sem alterar o orçamento.
+                    </>
+                  ) : (
+                    "Obrigatório. Vem do orçamento — troque aqui sem alterar o orçamento."
+                  )}
                 </span>
+                {servicos.length === 0 && (
+                  <span className="text-[11px] text-california-red">
+                    Nenhum serviço cadastrado. Cadastre em Cadastros ›
+                    Categorias.
+                  </span>
+                )}
               </div>
 
-              <div className="flex items-center gap-3 rounded-xl border border-border bg-muted/60 px-4 py-3 md:col-span-2">
+              <div className="flex items-center gap-3 rounded-xl border border-border bg-muted/60 px-4 py-3">
                 <Clock className="h-4 w-4 shrink-0 text-muted-foreground" />
                 <div className="min-w-0">
                   <p className="text-[12.5px] font-semibold">
@@ -1056,10 +1253,231 @@ export function AberturaForm({
                     relógio de agora aqui faria a tela afirmar que o job
                     foi aberto neste instante, toda vez que alguém abrisse
                     a aba. */}
-                <span className="ml-auto whitespace-nowrap font-mono text-[12.5px] font-semibold">
+                <span className="ml-auto whitespace-nowrap text-right font-mono text-[12.5px] font-semibold">
                   {modo === "abertura" ? agoraLabel : (abertoEmLabel ?? "—")}
                 </span>
               </div>
+
+              {/* Competência: de 1 a N trimestres (decisão 055). As pílulas
+                  de trimestre são multi-seleção dentro do ano ativo; o ano
+                  é contexto de edição — escolher 2027 e clicar num
+                  trimestre inclui 1T/2027 no rateio. */}
+              <div className="flex flex-col gap-[7px]">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-[12.5px] font-semibold">
+                    Competência <span className="text-california-red">*</span>
+                  </span>
+                  <span className="ml-auto font-mono text-[11px] font-semibold text-muted-foreground">
+                    {competenciaResumo}
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <div
+                    className={cn(
+                      "inline-flex gap-0.5 rounded-lg bg-[#f1f0ec] p-[3px]",
+                      travado && "opacity-85",
+                    )}
+                  >
+                    {[1, 2, 3, 4].map((t) => {
+                      const ligado = chavesRateio.includes(
+                        chaveComp({ trimestre: t, ano: anoAtivo }),
+                      );
+                      return (
+                        <button
+                          key={t}
+                          type="button"
+                          onClick={() => alternarTrimestre(t)}
+                          disabled={travado}
+                          aria-pressed={ligado}
+                          className={cn(
+                            "rounded-md px-3 py-1.5 text-xs font-semibold transition-colors",
+                            ligado
+                              ? "bg-white text-foreground shadow-sm"
+                              : "text-muted-foreground hover:text-foreground",
+                          )}
+                        >
+                          {t}T
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div
+                    className={cn(
+                      "inline-flex gap-0.5 rounded-lg bg-[#f1f0ec] p-[3px]",
+                      travado && "opacity-85",
+                    )}
+                  >
+                    {anos.map((a) => (
+                      <button
+                        key={a}
+                        type="button"
+                        onClick={() => setAnoAtivo(a)}
+                        disabled={travado}
+                        aria-pressed={anoAtivo === a}
+                        className={cn(
+                          "rounded-md px-3 py-1.5 text-xs font-semibold transition-colors",
+                          anoAtivo === a
+                            ? "bg-white text-foreground shadow-sm"
+                            : "text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        {a}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <span className="text-[11px] text-muted-foreground [text-wrap:pretty]">
+                  {travado
+                    ? temRateio
+                      ? `Job rateado em ${comps.length} competências, como foi registrado na abertura.`
+                      : "Registrada na abertura. É o que vai para o registro contábil."
+                    : temRateio
+                      ? `Clique num trimestre para incluir ou tirar do rateio; troque o ano para alcançar ${anos[anos.length - 1]}.`
+                      : `Sugerida pelo início do job (${formatDataBr(job.data_inicio_prevista)}). Clique em outro trimestre para ratear o job.`}
+                </span>
+                {!travado && !temRateio && (
+                  <button
+                    type="button"
+                    onClick={dividirCompetencia}
+                    className="inline-flex items-center gap-1.5 self-start rounded-lg border border-dashed border-[#d7d7d7] bg-white px-[11px] py-1.5 text-[11.5px] font-semibold text-muted-foreground transition-colors hover:border-california-red hover:text-california-red"
+                  >
+                    <Split className="h-[13px] w-[13px]" />
+                    Dividir em mais de uma competência
+                  </button>
+                )}
+              </div>
+
+              {/* Rateio entre competências: só aparece com mais de uma. Guarda
+                  só o percentual — receita e custo têm bases diferentes, e
+                  as Previsões abaixo já dizem quando o dinheiro entra e sai. */}
+              {temRateio && (
+                <div className="overflow-hidden rounded-xl border border-border bg-white md:col-span-2">
+                  <div className="flex flex-wrap items-center gap-2.5 border-b border-border bg-muted/60 px-[15px] py-[11px]">
+                    <Split className="h-[15px] w-[15px] text-california-red" />
+                    <span className="text-[12.5px] font-semibold">
+                      Rateio entre competências
+                    </span>
+                    <span className="text-[11.5px] text-muted-foreground">
+                      Divisão percentual do reconhecimento do job em{" "}
+                      {comps.length} trimestres
+                    </span>
+                    {!travado && (
+                      <div className="ml-auto flex items-center gap-1.5">
+                        {[
+                          { rotulo: "50 / 50", pcts: [50, 50] },
+                          { rotulo: "60 / 40", pcts: [60, 40] },
+                          { rotulo: "70 / 30", pcts: [70, 30] },
+                          { rotulo: "Igualar", pcts: null },
+                        ].map((p) => {
+                          const ativo = !p.pcts || comps.length === 2;
+                          return (
+                            <button
+                              key={p.rotulo}
+                              type="button"
+                              disabled={!ativo}
+                              onClick={() => aplicarPreset(p.pcts)}
+                              className={cn(
+                                "rounded-[7px] border bg-white px-2.5 py-[5px] font-mono text-[11px] font-semibold transition-colors",
+                                ativo
+                                  ? "border-border text-muted-foreground hover:border-california-red hover:text-california-red"
+                                  : "cursor-not-allowed border-[#f3f3f3] text-[#c9c9c9]",
+                              )}
+                            >
+                              {p.rotulo}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-[112px_118px_minmax(0,1fr)_34px] items-center gap-3 border-b border-[#f1f0ec] px-[15px] py-2 text-[9.5px] font-bold uppercase tracking-[0.08em] text-[#8a8a8a]">
+                    <span>Competência</span>
+                    <span>% do job</span>
+                    <span>Proporção</span>
+                    <span />
+                  </div>
+                  {compsOrdenadas.map((c) => {
+                    const chave = chaveComp(c);
+                    const pct = parsePct(c.pctTexto);
+                    return (
+                      <div
+                        key={chave}
+                        className="grid grid-cols-[112px_118px_minmax(0,1fr)_34px] items-center gap-3 border-b border-[#f6f6f6] px-[15px] py-[9px]"
+                      >
+                        <span className="font-mono text-[12.5px] font-bold">
+                          {c.trimestre}T/{c.ano}
+                        </span>
+                        <div
+                          className={cn(
+                            "flex h-[34px] items-center gap-1.5 rounded-lg border border-border px-2.5",
+                            travado ? "bg-muted/60" : "bg-white",
+                          )}
+                        >
+                          <input
+                            aria-label={`Percentual de ${c.trimestre}T/${c.ano}`}
+                            value={c.pctTexto}
+                            readOnly={travado}
+                            inputMode="decimal"
+                            onChange={(e) =>
+                              editarPercentual(chave, e.target.value)
+                            }
+                            className="w-full min-w-0 bg-transparent text-right font-mono text-[13px] font-semibold outline-none"
+                          />
+                          <span className="text-xs text-[#8a8a8a]">%</span>
+                        </div>
+                        <div className="h-1.5 overflow-hidden rounded-full bg-[#f1f0ec]">
+                          <div
+                            className="h-full rounded-full bg-california-red"
+                            style={{
+                              width: `${Math.max(0, Math.min(100, pct))}%`,
+                            }}
+                          />
+                        </div>
+                        {travado ? (
+                          <span />
+                        ) : (
+                          <button
+                            type="button"
+                            title="Remover competência"
+                            onClick={() => removerCompetencia(chave)}
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-[7px] border border-border bg-white text-[#8a8a8a] transition-colors hover:border-california-red hover:text-california-red"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                  <div className="grid grid-cols-[112px_118px_minmax(0,1fr)_34px] items-center gap-3 bg-muted/50 px-[15px] py-[11px]">
+                    <span className="text-[11px] font-bold uppercase tracking-[0.07em] text-muted-foreground">
+                      Total
+                    </span>
+                    <span
+                      className={cn(
+                        "pr-[26px] text-right font-mono text-[13px] font-bold",
+                        rateioFecha ? "text-emerald-700" : "text-california-red",
+                      )}
+                    >
+                      {formatPercentualRateio(somaRateio)}
+                    </span>
+                    <span
+                      className={cn(
+                        "text-[11.5px] [text-wrap:pretty]",
+                        rateioFecha
+                          ? "text-muted-foreground"
+                          : "text-california-red",
+                      )}
+                    >
+                      {rateioFecha
+                        ? "Rateio fecha em 100%. Recebimento e custo seguem nas datas das Previsões."
+                        : somaRateio < 100
+                          ? `Faltam ${formatPercentualRateio(100 - somaRateio)} para fechar 100%.`
+                          : `Excede 100% em ${formatPercentualRateio(somaRateio - 100)}.`}
+                    </span>
+                    <span />
+                  </div>
+                </div>
+              )}
             </div>
           </section>
 
@@ -1492,7 +1910,7 @@ export function AberturaForm({
                               : 0;
                           const fora =
                             linha.data.length === 10 &&
-                            foraDaCompetencia(linha.data, trimestre, ano);
+                            foraDoRateio(linha.data, compsNumericas);
 
                           return (
                             <tr
@@ -1538,7 +1956,7 @@ export function AberturaForm({
                                   {fora && !linha.congelada && (
                                     <span className="mt-1 inline-flex items-center gap-1 text-[10.5px] font-medium text-amber-700">
                                       <AlertTriangle className="h-2.5 w-2.5" />
-                                      Fora da competência {competenciaLabel}
+                                      Fora da competência {competenciaResumo}
                                     </span>
                                   )}
                                 </div>
@@ -1795,11 +2213,31 @@ export function AberturaForm({
             </div>
             <div className="flex items-baseline justify-between gap-3">
               <span className="text-[12.5px] text-muted-foreground">
+                Serviço
+              </span>
+              <span className="text-right text-[12.5px] font-semibold">
+                {servicoNome}
+              </span>
+            </div>
+            {/* Uma linha por competência: o rateio inteiro, com o
+                percentual de cada trimestre. */}
+            <div className="flex flex-col gap-1">
+              <span className="text-[12.5px] text-muted-foreground">
                 Competência
               </span>
-              <span className="font-mono text-[12.5px] font-semibold">
-                {competenciaLabel}
-              </span>
+              {compsNumericas.map((c) => (
+                <div
+                  key={chaveComp(c)}
+                  className="flex items-baseline justify-between gap-2.5 pl-3"
+                >
+                  <span className="font-mono text-[12.5px] font-bold">
+                    {c.trimestre}T/{c.ano}
+                  </span>
+                  <span className="font-mono text-xs font-semibold text-muted-foreground">
+                    {formatPercentualRateio(c.percentual)}
+                  </span>
+                </div>
+              ))}
             </div>
             <div className="flex items-baseline justify-between gap-3">
               <span className="text-[12.5px] text-muted-foreground">
@@ -1937,6 +2375,7 @@ export function AberturaForm({
             <ResumoLinha rotulo="Nome do job" valor={nome.trim()} />
             <ResumoLinha rotulo="Projeto" valor={projetoResumo} />
             <ResumoLinha rotulo="Categoria" valor={categoriaNome} />
+            <ResumoLinha rotulo="Serviço" valor={servicoNome} />
             <ResumoLinha rotulo="Competência" valor={competenciaLabel} mono />
             <ResumoLinha rotulo="Data de abertura" valor={agoraLabel} mono />
             <ResumoLinha

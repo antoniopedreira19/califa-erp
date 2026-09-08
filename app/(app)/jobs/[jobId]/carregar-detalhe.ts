@@ -27,6 +27,7 @@ import type {
   ItemPlanilhaJob,
   JobItemRealizado,
   JobErrataComItens,
+  JobCompetencia,
   PedidoCompra,
   PedidoCompraNaLista,
   Categoria,
@@ -63,17 +64,18 @@ export async function carregarDetalheDoJob(
   const supabase = createClient();
   const [jobRes, regionaisRes, responsaveis, contatosCobranca] =
     await Promise.all([
-    // O Serviço vem do ORÇAMENTO (`orcamentos.servico_id`), não mais da
-    // categoria do projeto: desde 02/09/2026 (migration
-    // `20260902110001`) o Serviço desceu do projeto para o orçamento e
-    // `projetos.categoria_id` ficou legada — projeto criado depois disso
-    // tem a coluna vazia, e a ficha do job mostrava "—". O `!servico_id`
-    // é obrigatório: `orcamentos` tem duas FKs para `categorias_dominio`
-    // (categoria e serviço) e sem a dica o embed fica ambíguo.
+    // O Serviço vem do JOB (`jobs.servico_id`, gravado na abertura —
+    // decisão 055, 07/09/2026), com o do ORÇAMENTO (`orcamentos.servico_id`)
+    // como fallback para job ainda na fila. Não vem mais da categoria do
+    // projeto: desde 02/09/2026 (migration `20260902110001`) o Serviço
+    // desceu do projeto para o orçamento e `projetos.categoria_id` ficou
+    // legada. As dicas `!categoria_id` / `!servico_id` são obrigatórias:
+    // `jobs` e `orcamentos` têm duas FKs cada para `categorias_dominio`,
+    // e sem elas o embed fica ambíguo.
     supabase
       .from("jobs")
       .select(
-        "id, tenant_id, empresa_id, codigo, nome, produto, cidade, data_inicio_prevista, data_fim_prevista, data_evento, data_prevista_faturamento, observacoes, responsavel_id, produtor_id, valor_total, faturamento_previsto, faturamento_save_previsto, valor_job_abertura, faturamento_previsto_abertura, abertura_em_revisao, abertura_revisao_desde, abertura_revisao_errata_id, status, motivo_rejeicao, projeto_id, orcamento_id, versao_orcamento_aprovada_id, regional_id, categoria_id, competencia_trimestre, competencia_ano, custo_previsto_total, nome_financeiro, data_abertura_financeiro, aberto_por, created_at, updated_at, responsavel:profiles!responsavel_id(id, nome), produtor:profiles!produtor_id(id, nome), regional:regionais(id, nome), categoria:categorias_dominio!categoria_id(id, nome), orcamento:orcamentos(id, codigo, nome, projeto_id, servico:categorias_dominio!servico_id(id, nome)), versao:versoes_orcamento!versao_orcamento_aprovada_id(id, numero_versao, nome, moeda, percentual_honorarios, percentual_imposto), projeto:projetos(id, codigo, nome, cliente_id, data_inicio_prevista, data_fim_prevista, cliente:clientes(id, nome_fantasia))",
+        "id, tenant_id, empresa_id, codigo, nome, produto, cidade, data_inicio_prevista, data_fim_prevista, data_evento, data_prevista_faturamento, observacoes, responsavel_id, produtor_id, valor_total, faturamento_previsto, faturamento_save_previsto, valor_job_abertura, faturamento_previsto_abertura, abertura_em_revisao, abertura_revisao_desde, abertura_revisao_errata_id, status, motivo_rejeicao, projeto_id, orcamento_id, versao_orcamento_aprovada_id, regional_id, categoria_id, servico_id, competencia_trimestre, competencia_ano, custo_previsto_total, nome_financeiro, data_abertura_financeiro, aberto_por, created_at, updated_at, responsavel:profiles!responsavel_id(id, nome), produtor:profiles!produtor_id(id, nome), regional:regionais(id, nome), categoria:categorias_dominio!categoria_id(id, nome), servico:categorias_dominio!servico_id(id, nome), orcamento:orcamentos(id, codigo, nome, projeto_id, servico:categorias_dominio!servico_id(id, nome)), versao:versoes_orcamento!versao_orcamento_aprovada_id(id, numero_versao, nome, moeda, percentual_honorarios, percentual_imposto), projeto:projetos(id, codigo, nome, cliente_id, data_inicio_prevista, data_fim_prevista, cliente:clientes(id, nome_fantasia))",
       )
       .eq("id", jobId)
       .eq("tenant_id", session.activeTenant.id)
@@ -115,6 +117,7 @@ export async function carregarDetalheDoJob(
     portaisRes,
     jobsIrmaosRes,
     abertoPorRes,
+    competenciasRes,
   ] = await Promise.all([
     supabase
       .from("versoes_orcamento_grupos")
@@ -259,6 +262,15 @@ export async function carregarDetalheDoJob(
           .eq("id", raw.aberto_por)
           .maybeSingle()
       : Promise.resolve({ data: null, error: null }),
+    // O rateio de competência do job (`jobs_competencias`, decisão 055),
+    // para a ficha listar cada trimestre com o seu percentual.
+    supabase
+      .from("jobs_competencias")
+      .select("trimestre, ano, percentual")
+      .eq("job_id", raw.id)
+      .eq("tenant_id", session.activeTenant.id)
+      .order("ano", { ascending: true })
+      .order("trimestre", { ascending: true }),
   ]);
 
   const grupos = (gruposRes.data ?? []) as VersaoOrcamentoGrupo[];
@@ -479,6 +491,7 @@ export async function carregarDetalheDoJob(
     // "sem desembolso previsto" mesmo tendo curva gravada.
     nome_financeiro: raw.nome_financeiro ?? null,
     categoria_id: raw.categoria_id ?? null,
+    servico_id: raw.servico_id ?? null,
     competencia_trimestre: raw.competencia_trimestre ?? null,
     competencia_ano: raw.competencia_ano ?? null,
     custo_previsto_total:
@@ -645,6 +658,17 @@ export async function carregarDetalheDoJob(
   const abertoPorNome =
     (abertoPorRes.data as { nome: string } | null)?.nome ?? null;
 
+  if (competenciasRes.error) {
+    console.error("[job.competencias]", competenciasRes.error.message);
+  }
+  const competencias: JobCompetencia[] = (
+    (competenciasRes.data ?? []) as any[]
+  ).map((c) => ({
+    trimestre: Number(c.trimestre),
+    ano: Number(c.ano),
+    percentual: Number(c.percentual ?? 0),
+  }));
+
   const versaoLabel = raw.versao
     ? nomeVersao(raw.orcamento?.nome ?? job.nome, raw.versao.numero_versao)
     : "—";
@@ -784,6 +808,7 @@ export async function carregarDetalheDoJob(
     portaisDoCliente,
     jobsDoProjeto,
     abertoPorNome,
+    competencias,
     totaisJob,
     custoPlanejadoJob,
     custoRealizadoJob,

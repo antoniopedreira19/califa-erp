@@ -723,6 +723,20 @@ export interface Job {
    * ficaram sem uma na migração de 19/08/2026.
    */
   categoria_id: string | null;
+  /**
+   * Serviço do job (categorias_dominio, escopo 'projeto': Always On,
+   * Ativação, Fee, Interno). Herdado do orçamento de origem na abertura,
+   * onde o financeiro pode trocá-lo sem alterar o orçamento — mesmo
+   * contrato de `categoria_id`. Vazio enquanto o job está na fila: aí
+   * vale `orcamentos.servico_id` (decisão 055, 07/09/2026).
+   */
+  servico_id: string | null;
+  /**
+   * PRIMEIRA competência do rateio (a mais antiga). O rateio completo
+   * mora em `jobs_competencias` (decisão 055): o job pode ter de 1 a N
+   * competências somando 100%. Estas duas colunas seguem gravadas para o
+   * filtro "Ano", a ficha e o aviso das previsões não quebrarem.
+   */
   competencia_trimestre: number | null;
   competencia_ano: number | null;
   /**
@@ -919,6 +933,50 @@ export function competenciaLabel(
 ): string {
   if (!trimestre || !ano) return "—";
   return `${trimestre}T/${ano}`;
+}
+
+/**
+ * Uma linha do rateio de competência do job (`jobs_competencias`,
+ * decisão 055): o percentual do reconhecimento contábil do job que cai
+ * neste trimestre. As linhas de um job somam 100.
+ */
+export interface JobCompetencia {
+  trimestre: number;
+  ano: number;
+  percentual: number;
+}
+
+/** Ordena o rateio por ano e trimestre — a ordem em que a tela lista. */
+export function ordenarCompetencias<T extends { trimestre: number; ano: number }>(
+  linhas: T[],
+): T[] {
+  return [...linhas].sort((a, b) =>
+    a.ano === b.ano ? a.trimestre - b.trimestre : a.ano - b.ano,
+  );
+}
+
+/**
+ * "3T/2026" para um job de competência única, "3T/2026 50% · 4T/2026 50%"
+ * para um job rateado. É o texto das fichas, dos resumos e da auditoria.
+ */
+export function rateioLabel(linhas: JobCompetencia[]): string {
+  if (linhas.length === 0) return "—";
+  const ordenadas = ordenarCompetencias(linhas);
+  if (ordenadas.length === 1) {
+    return competenciaLabel(ordenadas[0].trimestre, ordenadas[0].ano);
+  }
+  return ordenadas
+    .map(
+      (c) =>
+        `${competenciaLabel(c.trimestre, c.ano)} ${formatPercentualRateio(c.percentual)}`,
+    )
+    .join(" · ");
+}
+
+/** "50%" / "33,33%" — sem casas quando o percentual é inteiro. */
+export function formatPercentualRateio(pct: number): string {
+  const arredondado = Math.round(pct * 100) / 100;
+  return `${arredondado.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%`;
 }
 
 /**

@@ -70,7 +70,9 @@ const SELECT_JOB =
   "competencia_trimestre, competencia_ano, data_abertura_financeiro, produto, cidade, " +
   "data_inicio_prevista, data_fim_prevista, data_prevista_faturamento, observacoes, " +
   "projeto_id, orcamento_id, " +
-  "categoria:categorias_dominio(nome), " +
+  // `!categoria_id`: `jobs` tem duas FKs para `categorias_dominio` desde
+  // 07/09/2026 (categoria e serviço, decisão 055).
+  "categoria:categorias_dominio!categoria_id(nome), " +
   "empresa:empresas(razao_social, nome_fantasia), " +
   "regional:regionais(nome), " +
   "responsavel:profiles!responsavel_id(nome), " +
