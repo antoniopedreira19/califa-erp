@@ -197,26 +197,34 @@ export default async function PedidosCompraFinanceiroPage({
       .order("created_at", { ascending: false })
       .limit(500),
     // Recorrências (todos os status)
-    supabase
-      .from("contas_avulsas_recorrentes")
-      .select(`
-        id, descricao, valor, frequencia,
-        dia_do_mes, dia_quinzena_1, dia_quinzena_2, dia_do_ano_dia, dia_do_ano_mes,
-        proxima_data, data_fim, ativo,
-        fornecedor:fornecedores(nome, razao_social),
-        empresa:empresas(razao_social, nome_fantasia),
-        tipo:plano_contas_tipos!inner(codigo),
-        subtipo:plano_contas_subtipos!inner(nome)
-      `)
-      .eq("tenant_id", session.activeTenant.id)
-      .order("ativo", { ascending: false })
-      .order("proxima_data", { ascending: true }),
+    (async () => {
+      let q = supabase
+        .from("contas_avulsas_recorrentes")
+        .select(`
+          id, descricao, valor, frequencia,
+          dia_do_mes, dia_quinzena_1, dia_quinzena_2, dia_do_ano_dia, dia_do_ano_mes,
+          proxima_data, data_fim, ativo,
+          fornecedor:fornecedores(nome, razao_social),
+          empresa:empresas(razao_social, nome_fantasia),
+          tipo:plano_contas_tipos!inner(codigo),
+          subtipo:plano_contas_subtipos!inner(nome)
+        `)
+        .eq("tenant_id", session.activeTenant.id)
+        .order("ativo", { ascending: false })
+        .order("proxima_data", { ascending: true });
+      if (empresaFiltroId) q = q.eq("empresa_id", empresaFiltroId);
+      return q;
+    })(),
     // Contagem de recorrências ativas
-    supabase
-      .from("contas_avulsas_recorrentes")
-      .select("id", { count: "exact", head: true })
-      .eq("tenant_id", session.activeTenant.id)
-      .eq("ativo", true),
+    (async () => {
+      let q = supabase
+        .from("contas_avulsas_recorrentes")
+        .select("id", { count: "exact", head: true })
+        .eq("tenant_id", session.activeTenant.id)
+        .eq("ativo", true);
+      if (empresaFiltroId) q = q.eq("empresa_id", empresaFiltroId);
+      return q;
+    })(),
     // Regionais (para o editor de rateio no drawer da avulsa)
     supabase
       .from("regionais")
