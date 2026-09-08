@@ -352,7 +352,7 @@ test("requirePermissao lanca PermissaoNegadaError quando papel nao autoriza", as
     memberships: [],
     activeTenant: { id: "t1", nome: "Tenant", slug: "t", status: "ativo" as const, created_at: "", updated_at: "" },
     activeRole: "freelancer" as AppRole,
-    activeEmpresa: null,
+    activeEmpresas: [],
     empresas: [],
   };
   await assert.rejects(
@@ -367,7 +367,7 @@ test("requirePermissao NAO lanca quando papel autoriza", async () => {
     memberships: [],
     activeTenant: { id: "t1", nome: "Tenant", slug: "t", status: "ativo" as const, created_at: "", updated_at: "" },
     activeRole: "administrador" as AppRole,
-    activeEmpresa: null,
+    activeEmpresas: [],
     empresas: [],
   };
   await assert.doesNotReject(() =>

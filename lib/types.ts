@@ -57,12 +57,12 @@ export interface SessionContext {
   /** Role do usuário dentro do tenant ativo. */
   activeRole: AppRole;
   /**
-   * Empresa "ativa" — persistida no cookie `active_empresa_id`.
-   * null representa "Todas as empresas" (comportamento default do sistema
-   * antes da fase 2A).
+   * Empresas "ativas" — subconjunto de `empresas` derivado do cookie
+   * `active_empresa_ids`. Array vazio = "todas selecionadas" (sem
+   * filtro efetivo em queries).
    */
-  activeEmpresa: Empresa | null;
-  /** Todas as empresas ativas do tenant. Alimenta dropdown de troca. */
+  activeEmpresas: Empresa[];
+  /** Todas as empresas ativas do tenant. Alimenta o multi-select. */
   empresas: Empresa[];
 }
 
