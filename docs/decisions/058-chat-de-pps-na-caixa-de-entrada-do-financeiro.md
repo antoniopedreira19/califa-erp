@@ -103,6 +103,18 @@ atualiza. Ficam registradas porque a próxima assinatura vai esbarrar nelas.
    `authenticated`. A correção é `await supabase.auth.getSession()` e
    `realtime.setAuth(token)` antes do `.subscribe()`.
 
+## Verificação
+
+Os **quatro** pontos de escrita foram exercitados no navegador logado, com
+o mesmo usuário administrador, conferindo `jobs_mensagens.area` no banco a
+cada envio: chat de PPs em Contas a Pagar (`financeiro`), aba PPs do job
+(`producao`), aba Comunicação do job (`producao`) e aba Comunicação em
+`/financeiro/jobs` (`financeiro`). A mensagem automática de reabertura de
+item também: `producao`.
+
+Detalhe do que foi conferido, e os resíduos de teste que ficaram no banco,
+em `docs/handoffs/HANDOFF_FINANCEIRO.md`.
+
 ## O que NÃO entrou
 
 - **Backfill das 5 mensagens antigas mal rotuladas.** Sobrescrever valor
