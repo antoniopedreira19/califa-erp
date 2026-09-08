@@ -21,6 +21,11 @@
  *    aparece em vermelho na própria linha.
  *  - Com a abertura em revisão por errata (decisão 040), nada envia até o
  *    financeiro salvar a revisão. Gerar, editar e cancelar seguem.
+ *  - 08/09/2026: a PP que já foi ao financeiro ganhou as duas ações que
+ *    faltavam — "Ver formulário" (a ficha em leitura, que o PDF não
+ *    mostra: empresa emissora, parcelamento, anexos, quem enviou, motivo
+ *    da rejeição) e "Cancelar", que já era regra do servidor
+ *    (`podeCancelarPP`) e só existia na aba "Pedidos de Produção".
  */
 
 import * as React from "react";
@@ -29,6 +34,7 @@ import {
   X,
   FilePlus,
   Eye,
+  ClipboardList,
   Send,
   Pencil,
   XCircle,
@@ -40,7 +46,7 @@ import {
 import { Dialog, DrawerContent } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { cn, formatCurrency } from "@/lib/utils";
-import { ppStatusLabel, type PPStatus } from "@/lib/types";
+import { podeCancelarPP, ppStatusLabel, type PPStatus } from "@/lib/types";
 import { passaDoPlanejado } from "@/lib/calculos/pps-item";
 import {
   signedUrlPdf,
@@ -96,6 +102,10 @@ interface Props {
    *  usuário só lê — a tela do financeiro, o job congelado. */
   onNovaPP: (() => void) | null;
   onEditar: ((pp: PPDoItem) => void) | null;
+  /** Abre a ficha da PP em leitura. Diferente de `onEditar`, vale para
+   *  quem só lê: a PP que já foi ao financeiro não é editável por
+   *  ninguém, e o formulário dela precisava ficar visível. */
+  onVerFormulario: (pp: PPDoItem) => void;
   /** Mensagem de sucesso para o toast de quem abriu o painel. */
   onMensagem?: (mensagem: string) => void;
 }
@@ -116,6 +126,7 @@ export function PainelPPsItem({
   concluidoEmLabel,
   onNovaPP,
   onEditar,
+  onVerFormulario,
   onMensagem,
 }: Props) {
   const router = useRouter();
@@ -400,7 +411,7 @@ export function PainelPPsItem({
                           </BotaoIcone>
                         )}
                         <BotaoIcone
-                          titulo="Ver PP"
+                          titulo="Ver PDF"
                           onClick={() => verPdf(pp.id)}
                           disabled={pending}
                         >
@@ -428,33 +439,69 @@ export function PainelPPsItem({
               <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
                 Já no financeiro
               </span>
-              {enviadas.map((pp) => (
-                <div
-                  key={pp.id}
-                  className="flex items-center gap-2.5 rounded-xl border border-border px-3.5 py-2.5"
-                >
-                  <span className="font-mono text-[11px] font-semibold text-muted-foreground">
-                    {pp.codigo}
-                  </span>
-                  <span className="min-w-0 flex-1 truncate text-[12.5px] text-muted-foreground">
-                    {ppStatusLabel(pp.status)}
-                    <span className="text-muted-foreground/70">
-                      {" "}
-                      · {pp.fornecedorNome}
-                    </span>
-                  </span>
-                  <span className="font-mono text-[13px] font-bold">
-                    {formatCurrency(pp.valor, moeda)}
-                  </span>
-                  <BotaoIcone
-                    titulo="Ver PP"
-                    onClick={() => verPdf(pp.id)}
-                    disabled={pending}
+              {enviadas.map((pp) => {
+                const cancelavel = podeCancelarPP(pp.status);
+                return (
+                  <div
+                    key={pp.id}
+                    className="flex flex-col gap-2 rounded-xl border border-border px-3.5 py-3"
                   >
-                    <Eye className="h-3 w-3" />
-                  </BotaoIcone>
-                </div>
-              ))}
+                    <div className="flex items-center gap-2.5">
+                      <span className="font-mono text-[11px] font-semibold text-muted-foreground">
+                        {pp.codigo}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold">
+                        {pp.fornecedorNome}
+                      </span>
+                      <span className="font-mono text-[13px] font-bold">
+                        {formatCurrency(pp.valor, moeda)}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[11.5px] text-muted-foreground">
+                        {ppStatusLabel(pp.status)}
+                      </span>
+                      <span className="ml-auto inline-flex items-center gap-1.5">
+                        <BotaoIcone
+                          titulo="Ver formulário"
+                          onClick={() => onVerFormulario(pp)}
+                          disabled={pending}
+                        >
+                          <ClipboardList className="h-3 w-3" />
+                        </BotaoIcone>
+                        <BotaoIcone
+                          titulo="Ver PDF"
+                          onClick={() => verPdf(pp.id)}
+                          disabled={pending}
+                        >
+                          <Eye className="h-3 w-3" />
+                        </BotaoIcone>
+                        {/* Cancelar segue a regra do servidor
+                            (`podeCancelarPP`): em avaliação e rejeitada
+                            ainda voltam atrás; aprovada já é título a
+                            pagar e paga precisaria de estorno. Nesses
+                            dois o botão fica apagado com o motivo, em vez
+                            de sumir — some parece falta de permissão. */}
+                        {podeAgir && (
+                          <BotaoIcone
+                            titulo={
+                              cancelavel
+                                ? "Cancelar PP"
+                                : motivoSemCancelar(pp.status)
+                            }
+                            rotulo="Cancelar PP"
+                            onClick={() => setCancelando(pp)}
+                            disabled={pending || !cancelavel}
+                          >
+                            <XCircle className="h-3 w-3" />
+                          </BotaoIcone>
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
 
@@ -611,6 +658,13 @@ export function PainelPPsItem({
             <>
               <strong className="text-foreground">{cancelando?.codigo}</strong>{" "}
               será cancelada. O PDF e os anexos ficam guardados no histórico.
+              {cancelando && cancelando.status !== "gerada" && (
+                <>
+                  {" "}
+                  Ela já está no financeiro: cancelar a tira da fila de
+                  avaliação e ela deixa de contar no realizado do item.
+                </>
+              )}
             </>
           }
           confirmLabel="Cancelar PP"
@@ -624,13 +678,32 @@ export function PainelPPsItem({
   );
 }
 
+/** Por que esta PP não pode mais ser cancelada — o mesmo texto que
+ *  `cancelarPedidoCompra` devolveria se alguém insistisse. */
+function motivoSemCancelar(status: PPStatus): string {
+  switch (status) {
+    case "aprovada":
+      return "PP já aprovada pelo financeiro — é título a pagar. Peça a desaprovação antes de cancelar.";
+    case "pago":
+      return "PP já paga — cancelar exigiria estorno pelo financeiro.";
+    case "cancelada":
+      return "PP já está cancelada.";
+    default:
+      return "Esta PP não pode mais ser cancelada.";
+  }
+}
+
 function BotaoIcone({
   titulo,
+  rotulo,
   onClick,
   disabled,
   children,
 }: {
+  /** O `title` — vira a explicação inteira quando o botão está apagado. */
   titulo: string;
+  /** O nome curto para o leitor de tela, quando o `title` é uma frase. */
+  rotulo?: string;
   onClick: () => void;
   disabled?: boolean;
   children: React.ReactNode;
@@ -639,7 +712,7 @@ function BotaoIcone({
     <button
       type="button"
       title={titulo}
-      aria-label={titulo}
+      aria-label={rotulo ?? titulo}
       onClick={onClick}
       disabled={disabled}
       className="inline-flex h-[29px] w-[29px] flex-none items-center justify-center rounded-[9px] border border-border bg-card text-muted-foreground transition-colors hover:bg-muted disabled:opacity-50"

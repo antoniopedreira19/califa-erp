@@ -159,3 +159,23 @@ item?"* — e o chip da calha ganhou um ✓ verde que convive com o círculo
 vermelho das pendências de envio. A resposta é sobre o item, e é ela que
 troca a base da previsão de custo dele. Ver
 [052](052-todas-as-pps-do-item-foram-geradas.md).
+
+## ⚠️ Nota de 2026-09-08 — o "ver" e o "cancelar" chegaram ao bloco "Já no financeiro"
+
+O §2 dizia "enviar, editar, ver e cancelar são ações por PP", mas depois
+do envio sobrava só o olho do PDF. A PP em avaliação ficava sem
+formulário — ela não é mais editável, e o PDF não mostra empresa
+emissora, parcelamento, anexos, quem enviou nem o motivo da rejeição — e
+sem cancelamento, que só existia na aba "Pedidos de Produção".
+
+Cada linha do bloco ganhou **"Ver formulário"** (a ficha em leitura,
+`app/(app)/jobs/[jobId]/pps/ver-pp-drawer.tsx`, que não grava nada e não
+pede permissão) e **"Cancelar PP"**, que chama a mesma
+`cancelarPedidoCompra`. O antigo "Ver PP" virou **"Ver PDF"**, nos dois
+blocos, porque agora existem os dois "ver".
+
+Nenhuma regra nova: quem decide continua sendo `podeCancelarPP` —
+`em_avaliacao` e `rejeitada` voltam atrás, `aprovada` é título a pagar e
+`pago` precisaria de estorno. Nesses dois o botão fica apagado com o
+motivo no `title`, em vez de sumir. Pedido do Tiago em 08/09/2026; ver a
+nota do mesmo dia no handoff de Jobs.

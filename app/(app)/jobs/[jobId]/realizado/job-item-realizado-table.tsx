@@ -19,6 +19,7 @@ import { nomeContraparteBRPP } from "@/lib/types";
 import { CalhaLinha } from "./calha-linha";
 import { GerarPPDrawer } from "./gerar-pp-drawer";
 import { PainelPPsItem } from "./painel-pps-item";
+import { VerPPDrawer } from "../pps/ver-pp-drawer";
 import { somaDasPPsEmitidas, contarPendentes } from "@/lib/calculos/pps-item";
 import { ppChegouAoFinanceiro } from "@/lib/types";
 import { BvDialog } from "@/app/(app)/_bv/bv-dialog";
@@ -553,6 +554,11 @@ export function JobItemRealizadoTable({
   /** PP gerada aberta no formulário para edição. Null = gerar nova. */
   const [ppEditando, setPpEditando] =
     React.useState<PedidoCompraNaLista | null>(null);
+  /** PP aberta em LEITURA — a que já foi ao financeiro e não é mais
+   *  editável por ninguém (08/09/2026). */
+  const [ppVendo, setPpVendo] = React.useState<PedidoCompraNaLista | null>(
+    null,
+  );
   const [itemIdAtual, setItemIdAtual] = React.useState<string | null>(null);
   const [bvAberto, setBvAberto] = React.useState<ItemPlanilhaJob | null>(null);
   const [toast, setToast] = React.useState<string | null>(null);
@@ -1870,6 +1876,15 @@ export function JobItemRealizadoTable({
                     }
                   : null
               }
+              // A ficha em leitura não depende de permissão: ela não
+              // grava nada, e quem só lê o job (o financeiro, o job
+              // encerrado) também precisa do formulário da PP.
+              onVerFormulario={(pp) => {
+                const completa = ppsDoItem.find((x) => x.id === pp.id);
+                if (!completa) return;
+                setPpVendo(completa);
+                setPainelOpen(false);
+              }}
               onMensagem={setToast}
             />
 
@@ -1919,6 +1934,41 @@ export function JobItemRealizadoTable({
                   });
                 }
               }}
+            />
+
+            {/* Como o formulário de PP, a ficha fecha devolvendo para o
+                painel: os dois drawers brigariam pelo mesmo lado da tela
+                se ficassem abertos juntos. */}
+            <VerPPDrawer
+              open={ppVendo !== null}
+              onOpenChange={(aberto) => {
+                if (!aberto) {
+                  setPpVendo(null);
+                  setPainelOpen(true);
+                }
+              }}
+              pp={ppVendo}
+              contraparteNome={
+                ppVendo
+                  ? nomeContraparteBRPP({
+                      verba_producao: ppVendo.verba_producao,
+                      fornecedor: ppVendo.fornecedor_id
+                        ? {
+                            nome: nomeDoFornecedor(
+                              fornecedores,
+                              ppVendo.fornecedor_id,
+                            ),
+                          }
+                        : null,
+                      responsavel: ppVendo.responsavel,
+                    }) ||
+                    nomeDoFornecedor(fornecedores, ppVendo.fornecedor_id ?? "")
+                  : ""
+              }
+              empresaNome={
+                empresas.find((e) => e.id === ppVendo?.empresa_id)
+                  ?.razao_social ?? "—"
+              }
             />
           </>
         );
