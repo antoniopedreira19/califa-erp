@@ -3212,3 +3212,20 @@ agregada, o Exportar e o Importar da 041.
 As seções 15, 21 e as verificações de 21/08, 24/08 e 03/09 citam o
 `/multi` como tela existente. São registro do que foi feito na época e
 ficam como estão; a partir desta nota a rota não existe.
+
+### Verificação (08/09/2026, servidor próprio na 3000, logado no Chrome)
+
+Projeto "Projeto Teste" (`0-0001/26`, quatro orçamentos):
+
+- `/orcamentos/[projetoId]`: o cabeçalho da lista mostra "Visão agregada"
+  e o botão vermelho "Novo orçamento" **sem a seta e sem pop-up**; o
+  `href` é `/orcamentos/[projetoId]/novo`. O clique abre o formulário
+  "Novo orçamento" com o projeto pré-preenchido e o código previsto
+  `0-0001/26-NN`.
+- `/orcamentos/[projetoId]/multi`: **404** ("Página não encontrada").
+- `/orcamentos/[projetoId]/agregado`: abre inteira — KPIs, os quatro
+  orçamentos e o botão "Criar orçamento de job" no lugar de sempre. O
+  import de `salvarOrcamentosDoProjeto` pelo caminho novo compila e a
+  tela monta.
+- Zero erro de console nas três telas, em aba nova. `tsc`, `next lint` e
+  `npm run build` limpos.
