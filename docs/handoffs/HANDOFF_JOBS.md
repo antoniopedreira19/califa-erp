@@ -2968,3 +2968,28 @@ ficha da PP em avaliação e da aprovada com 3 parcelas, botão apagado na
 aprovada com o motivo certo, e o cancelamento de PP-00010 pelo painel —
 "Em PPs emitidas" caiu de R$ 18.000,00 para R$ 12.000,00, com
 `pedido_compra.cancelada` na auditoria.
+
+## ⚠️ Nota de 2026-09-08 — a descrição da PP saiu da linha e foi para o cartão
+
+Na aba "Pedidos de Produção" do job, a coluna "Serviço · item do job"
+mostrava a descrição do serviço e a linha de grupo/emissão **empilhadas**.
+Descrição é campo de 500 caracteres: a linha da tabela crescia até quatro
+alturas.
+
+Agora é **uma linha só**, com o ícone de formulário ao lado — o mesmo
+cartão das listas de Orçamentos e Jobs
+([051](../decisions/051-descritivo-em-cartao-nas-listas.md)). O cartão traz:
+
+- a **descrição do serviço** inteira, com as quebras de linha originais;
+- as **Especificações**, quando houver — elas não apareciam em lugar
+  nenhum fora do formulário;
+- rodapé com *"Emitida em … por …"* e, na PP parcelada, *"R$ X em Nx"*.
+
+O cabeçalho do cartão é `PP-000NN · {grupo do item}`, e por isso o grupo
+não se repete no rodapé.
+
+Detalhes que valem para quem for repetir o padrão em outra tabela: o
+texto de uma linha é `nowrap` e **precisa de teto de largura**
+(`max-w-[520px]`), senão estica a tabela em vez de cortar; e a chave do
+"um cartão por vez" é a **linha**, não a PP — PP parcelada tem uma linha
+por parcela.

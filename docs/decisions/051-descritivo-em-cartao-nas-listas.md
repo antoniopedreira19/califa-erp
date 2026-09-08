@@ -104,3 +104,38 @@ não chega, e o nó do cartão fica pendurado no DOM depois de fechado.
 desliga a animação (3 ciclos abrir/fechar, nenhum nó pendurado). Fica
 para o Tiago o olho na animação de fade em aba em primeiro plano; o
 comportamento funcional está conferido.
+
+## ⚠️ Nota de 2026-09-08 — o cartão passou a servir a lista de PPs
+
+Pedido do Tiago: na aba "Pedidos de Produção" do job, a coluna
+"Serviço · item do job" empilhava duas linhas — a descrição do serviço
+(campo de até 500 caracteres) em cima, e o grupo + a emissão embaixo. Com
+descrição de duas ou três linhas, a linha da tabela chegava a quatro
+alturas e a leitura das outras colunas se perdia.
+
+É o mesmo problema do §1, e ganhou a mesma saída: **uma linha só, com o
+ícone do cartão ao lado**. O cartão traz a descrição inteira; grupo,
+emissão e parcelamento viraram rodapé; e o `codigo`/`nome` do cabeçalho
+são a PP e o grupo dela.
+
+Duas peças novas no componente, as duas opcionais e sem efeito em quem já
+o usava:
+
+| | Para quê |
+|---|---|
+| `extra={{ rotulo, texto }}` | um SEGUNDO texto, com rótulo próprio, abaixo do principal. Na PP são as **Especificações**, que até aqui só se liam abrindo o formulário |
+| `acaoGatilho` | o que o gatilho diz no `title` e para o leitor de tela. O padrão (`Ver ${rotulo.toLowerCase()}`) virava "ver descrição da pp" |
+
+**Um detalhe de tabela que não é firula:** o texto em uma linha só é
+`nowrap`, e sem teto de largura ele esticaria a tabela inteira em vez de
+cortar. O `max-w-[520px]` no texto é o que faz o corte acontecer —
+conferido no navegador com uma descrição de 400 caracteres injetada na
+linha: reticências, e as outras colunas no lugar.
+
+**A chave do cartão aqui é a LINHA, não a PP**: uma PP parcelada ocupa uma
+linha por parcela, e chavear pela PP abriria dois cartões de uma vez.
+
+Conferido em 08/09/2026 no JOB-0031 e no JOB-0010: cartão ancorado na
+linha, um por vez (abrir o segundo fecha o primeiro), `Esc` fecha, a aba
+do job não se mexe, e o bloco de Especificações aparece na PP-00007, que
+é a única da base com o campo preenchido.

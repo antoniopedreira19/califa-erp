@@ -41,6 +41,18 @@ export interface DescritivoPopoverProps {
   texto: string | null;
   aberto: boolean;
   onAbertoChange: (aberto: boolean) => void;
+  /**
+   * Um SEGUNDO texto, com rótulo próprio, abaixo do principal — para o
+   * registro que descreve o trabalho em dois campos. Hoje é a PP:
+   * "Descrição do serviço" e "Especificações". Vazio não desenha nada.
+   */
+  extra?: { rotulo: string; texto: string | null } | null;
+  /**
+   * O que o gatilho diz no `title` e para o leitor de tela. O padrão sai
+   * do rótulo em minúsculas, que fica torto quando ele tem sigla
+   * ("ver descrição da pp").
+   */
+  acaoGatilho?: string;
   /** Linhas de rodapé, abaixo do filete. */
   rodape?: React.ReactNode;
   align?: "start" | "center" | "end";
@@ -53,9 +65,12 @@ export function DescritivoPopover({
   texto,
   aberto,
   onAbertoChange,
+  extra,
+  acaoGatilho,
   rodape,
   align = "start",
 }: DescritivoPopoverProps) {
+  const extraTexto = extra?.texto?.trim() ?? "";
   const conteudo = texto?.trim() ?? "";
   const temTexto = conteudo.length > 0;
 
@@ -76,8 +91,8 @@ export function DescritivoPopover({
   return (
     <Popover open={aberto} onOpenChange={onAbertoChange}>
       <PopoverTrigger
-        aria-label={`Ver ${rotulo.toLowerCase()}`}
-        title="Ver descritivo"
+        aria-label={acaoGatilho ?? `Ver ${rotulo.toLowerCase()}`}
+        title={acaoGatilho ?? "Ver descritivo"}
         onClick={(e) => e.stopPropagation()}
         // Idem: o Enter/Espaço que abre o cartão não pode virar navegação
         // da linha, e o Esc tem que continuar chegando no Radix.
@@ -133,6 +148,16 @@ export function DescritivoPopover({
           <p className="whitespace-pre-wrap text-[13px] leading-[1.65] text-[#4a4a4a]">
             {conteudo}
           </p>
+          {extraTexto && (
+            <div className="mt-0.5 flex flex-col gap-1 border-t border-[#F2F1ED] pt-2">
+              <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-[#a5a29b]">
+                {extra?.rotulo}
+              </span>
+              <p className="whitespace-pre-wrap text-[13px] leading-[1.65] text-[#4a4a4a]">
+                {extraTexto}
+              </p>
+            </div>
+          )}
           {rodape && (
             <div className="mt-0.5 flex flex-col gap-[7px] border-t border-[#F2F1ED] pt-2">
               {rodape}
