@@ -56,6 +56,14 @@ export interface SessionContext {
   activeTenant: Tenant;
   /** Role do usuário dentro do tenant ativo. */
   activeRole: AppRole;
+  /**
+   * Empresa "ativa" — persistida no cookie `active_empresa_id`.
+   * null representa "Todas as empresas" (comportamento default do sistema
+   * antes da fase 2A).
+   */
+  activeEmpresa: Empresa | null;
+  /** Todas as empresas ativas do tenant. Alimenta dropdown de troca. */
+  empresas: Empresa[];
 }
 
 export function isAdmin(role: AppRole): boolean {
@@ -1867,7 +1875,7 @@ export interface LancamentoFinanceiro {
   id: string;
   tenant_id: string;
   empresa_id: string;
-  regional_id: string | null;
+  regional_id: string;
   conta_bancaria_id: string;
   data_movimento: string; // YYYY-MM-DD
   valor: string; // numeric — Number(...)
@@ -2006,7 +2014,7 @@ export interface TituloReceber {
   id: string;
   tenant_id: string;
   empresa_id: string;
-  regional_id: string | null;
+  regional_id: string;
   faturamento_id: string;
   numero_parcela: number;
   valor: number;
@@ -2148,7 +2156,7 @@ export interface ContaAvulsa {
    *  linhas anteriores a 28/08/2026. */
   codigo: string | null;
   empresa_id: string;
-  regional_id: string | null;
+  regional_id: string;
   descricao: string;
   valor: string; // numeric → string do supabase-js
   natureza: NaturezaLancamento;

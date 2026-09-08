@@ -27,7 +27,7 @@ const SEM_REGIONAL = "__none__";
 
 interface Props {
   job: Job;
-  regionais: Pick<Regional, "id" | "nome">[];
+  regionais: Pick<Regional, "id" | "nome" | "empresa_id">[];
   responsaveis: Pick<Profile, "id" | "nome">[];
 }
 
@@ -41,6 +41,11 @@ export function JobEditorDrawer({ job, regionais, responsaveis }: Props) {
     job.regional_id ?? SEM_REGIONAL,
   );
   const [responsavelId, setResponsavelId] = React.useState<string>(job.responsavel_id);
+
+  const regionaisDaEmpresa = React.useMemo(
+    () => regionais.filter((r) => r.empresa_id === job.empresa_id),
+    [regionais, job.empresa_id],
+  );
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -95,7 +100,7 @@ export function JobEditorDrawer({ job, regionais, responsaveis }: Props) {
                   <SelectTrigger><SelectValue placeholder="Sem regional" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value={SEM_REGIONAL}>Sem regional</SelectItem>
-                    {regionais.map((r) => <SelectItem key={r.id} value={r.id}>{r.nome}</SelectItem>)}
+                    {regionaisDaEmpresa.map((r) => <SelectItem key={r.id} value={r.id}>{r.nome}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>

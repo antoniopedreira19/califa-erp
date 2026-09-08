@@ -189,7 +189,7 @@ interface Props {
     cliente_id: string | null;
     regional_id: string | null;
   }>;
-  regionais: Array<{ id: string; nome: string; ativo: boolean }>;
+  regionais: Array<{ id: string; nome: string; ativo: boolean; empresa_id: string }>;
   /**
    * As faturas que ainda moram nesta aba: abertas e fechadas.
    *

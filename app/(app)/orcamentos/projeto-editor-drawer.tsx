@@ -25,7 +25,7 @@ interface Props {
   empresas: { id: string; razao_social: string; nome_fantasia: string | null; principal: boolean }[];
   clientes: Pick<Cliente, "id" | "nome_fantasia" | "codigo_curto">[];
   responsaveis: Pick<Profile, "id" | "nome">[];
-  regionais: Pick<Regional, "id" | "nome">[];
+  regionais: Pick<Regional, "id" | "nome" | "empresa_id">[];
   produtos: ProdutoOption[];
   categorias: Pick<CategoriaDominio, "id" | "nome">[];
   regionaisSelecionadas: string[];

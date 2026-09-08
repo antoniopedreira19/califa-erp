@@ -85,7 +85,7 @@ export default async function ProjetoDetailPage({
     listActiveMembers(session.activeTenant.id),
     supabase
       .from("regionais")
-      .select("id, nome")
+      .select("id, nome, empresa_id")
       .eq("tenant_id", session.activeTenant.id)
       .eq("ativo", true)
       .order("nome"),
@@ -144,7 +144,7 @@ export default async function ProjetoDetailPage({
   const produtoNome: string | null = raw.produto?.nome ?? null;
   const empresaNome: string | null = raw.empresa?.nome_fantasia ?? raw.empresa?.razao_social ?? null;
 
-  const regionais = (regionaisRes.data ?? []) as Pick<Regional, "id" | "nome">[];
+  const regionais = (regionaisRes.data ?? []) as Pick<Regional, "id" | "nome" | "empresa_id">[];
   const produtos = (produtosRes.data ?? []) as ProdutoOption[];
   const categoriasProjeto = (categoriasProjRes.data ?? []) as Pick<CategoriaDominio, "id" | "nome">[];
 
