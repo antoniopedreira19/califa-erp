@@ -205,7 +205,11 @@ export default async function ProjetoNoFinanceiroPage({
             return (
               <Link
                 key={j.id}
-                href={`/financeiro/jobs/${j.id}`}
+                // Abre o job já na Planilha Interna: quem está na visão
+                // agregada do projeto e clica num job quer a planilha
+                // DAQUELE job, não a ficha (decisão do Tiago,
+                // 08/09/2026). O `?aba=` é lido em `../jobs/[jobId]/abas.ts`.
+                href={`/financeiro/jobs/${j.id}?aba=planilha`}
                 prefetch={false}
                 className="group relative grid grid-cols-[28px_auto_1fr] items-center gap-2.5 py-[5px]"
               >
@@ -291,6 +295,7 @@ export default async function ProjetoNoFinanceiroPage({
                 planilhas={planilhas}
                 moeda={moedaProjeto}
                 jobHrefBase="/financeiro/jobs"
+                jobHrefSuffix="?aba=planilha"
                 // No financeiro a coluna Save é sempre presente e não tem
                 // liga-desliga: é aqui que se confere o crédito entre
                 // jobs, e esconder a coluna esconderia o motivo de o

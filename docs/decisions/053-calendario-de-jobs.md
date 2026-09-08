@@ -88,10 +88,22 @@ foi conferir o que o financeiro gravou.
 o mesmo, nas duas arrumações (por projeto e por job). A versão original
 desta decisão dizia que ela seguiria caindo na abertura — não segue mais.
 
-Sobrou uma porta de entrada sem `?aba=`: a tela de **projeto do
-financeiro** (`/financeiro/projetos/[projetoId]`), que continua abrindo o
-job em "Abertura do Job". Não é esquecimento — não foi pedida; se um dia
-incomodar, é a mesma linha.
+⚠️ **Revisão de 08/09/2026 (2):** a **visão agregada do projeto no
+financeiro** (`/financeiro/projetos/[projetoId]` — a tela que se abre
+pelo "Visão agregada →" da faixa do projeto) também deixou de cair na
+abertura, mas em outra aba: ela manda **`?aba=planilha`**.
+
+O destino é diferente de propósito. Nas listas — calendário e
+"Visualizar Jobs" — a pergunta é QUE job é aquele, e a ficha responde.
+Ali não: quem está lendo a planilha consolidada do projeto e abre um job
+quer a planilha DAQUELE job.
+
+São três os links atingidos, todos na mesma tela: a árvore de jobs do
+cabeçalho, o "ABRIR JOB →" de cada bloco da planilha e os jobs do card
+de Totais. Os dois últimos saem do mesmo `rotaDoJob`, em
+`planilhas-do-projeto.tsx`, que ganhou um `jobHrefSuffix` opcional — a
+visão agregada da PRODUÇÃO não passa nada e segue em `?from=jobs`, como
+sempre.
 
 `?aba=` aceita as cinco abas (`abertura`, `info`, `planilha`, `fluxo`,
 `chat`); valor desconhecido cai no padrão.

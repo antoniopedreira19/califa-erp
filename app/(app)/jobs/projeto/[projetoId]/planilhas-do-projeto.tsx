@@ -26,6 +26,7 @@ export function PlanilhasDoProjeto({
   planilhas,
   moeda,
   jobHrefBase,
+  jobHrefSuffix = "",
   saveSempreVisivel = false,
 }: {
   planilhas: JobPlanilhaProjeto[];
@@ -42,6 +43,12 @@ export function PlanilhasDoProjeto({
    *  assim — só abrir a rota pega. A função é montada aqui, do lado
    *  client, onde ela é inofensiva. */
   jobHrefBase?: string;
+  /** Sufixo colado depois do id, para escolher em que aba o job abre. A
+   *  visão agregada do financeiro passa `?aba=planilha`: quem está lendo
+   *  a planilha consolidada do projeto e abre um job quer a planilha
+   *  DAQUELE job, não a ficha dele (decisão do Tiago, 08/09/2026).
+   *  Vazio ⇒ a aba padrão de cada módulo. */
+  jobHrefSuffix?: string;
   /** Financeiro: a coluna Save fica SEMPRE presente e sem liga-desliga —
    *  aquele módulo confere o crédito entre jobs, e esconder a coluna
    *  esconderia justamente o que ele foi ver. */
@@ -57,8 +64,10 @@ export function PlanilhasDoProjeto({
 
   const rotaDoJob = React.useMemo(
     () =>
-      jobHrefBase ? (id: string) => `${jobHrefBase}/${id}` : undefined,
-    [jobHrefBase],
+      jobHrefBase
+        ? (id: string) => `${jobHrefBase}/${id}${jobHrefSuffix}`
+        : undefined,
+    [jobHrefBase, jobHrefSuffix],
   );
 
   return (
