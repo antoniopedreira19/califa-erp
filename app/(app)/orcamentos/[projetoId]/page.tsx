@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, FileText, Layers } from "lucide-react";
+import { ArrowLeft, FileText, Layers, Plus } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { listActiveMembers } from "@/lib/data/members";
@@ -25,7 +25,6 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { ProjetoEditorDrawer } from "../projeto-editor-drawer";
 import type { ProdutoOption } from "../projeto-form";
-import { NovoOrcamentoMenu } from "./novo-orcamento-menu";
 import { OrcamentosList, type OrcamentoRow } from "./orcamentos-list";
 import { ImportarOrcamentosDrawer } from "../_selecao/importar-orcamentos-drawer";
 import {
@@ -456,7 +455,17 @@ export default async function ProjetoDetailPage({
                 Visão agregada
               </Link>
             )}
-            <NovoOrcamentoMenu projetoId={projeto.id} />
+            {/* Uma porta só: o orçamento nasce um a um pelo formulário. O
+                orçamento do projeto é o que a visão agregada mostra — e o
+                que "Exportar" e "Importar" levam e trazem. */}
+            <Link
+              href={`/orcamentos/${projeto.id}/novo`}
+              prefetch={false}
+              className="inline-flex flex-none items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-california-red-hover"
+            >
+              <Plus className="h-4 w-4" />
+              Novo orçamento
+            </Link>
           </div>
         </div>
         <div className="p-6">
