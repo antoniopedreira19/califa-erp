@@ -141,7 +141,7 @@ export default async function AvulsaDetalhesPage({
     // Regionais (para o editor de rateio no drawer)
     supabase
       .from("regionais")
-      .select("id, nome, ativo")
+      .select("id, nome, ativo, empresa_id")
       .eq("tenant_id", session.activeTenant.id)
       .order("nome"),
     // Rateio atual da conta (para inicializar o editor no modo editar)
@@ -234,10 +234,11 @@ export default async function AvulsaDetalhesPage({
   const subtipos = (subtiposRes.data ?? []) as PlanoContaSubtipo[];
   const contasBancarias = (contasRes.data ?? []) as import("@/lib/types").ContaBancaria[];
   const regionais = (regionaisRes.data ?? []).map(
-    (r: { id: string; nome: string; ativo: boolean }) => ({
+    (r: { id: string; nome: string; ativo: boolean; empresa_id: string }) => ({
       id: r.id,
       nome: r.nome,
       ativo: r.ativo,
+      empresa_id: r.empresa_id,
     }),
   );
   const rateioInicial = (rateioRes.data ?? []).map(
@@ -249,7 +250,7 @@ export default async function AvulsaDetalhesPage({
 
   // Mapeamento de regionais por ID (para o card de rateio)
   const regionaisPorId = new Map(
-    (regionaisRes.data ?? []).map((r: { id: string; nome: string; ativo: boolean }) => [
+    (regionaisRes.data ?? []).map((r: { id: string; nome: string; ativo: boolean; empresa_id: string }) => [
       r.id,
       { nome: r.nome, ativo: r.ativo },
     ]),

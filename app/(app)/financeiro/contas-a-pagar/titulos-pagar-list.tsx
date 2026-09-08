@@ -207,7 +207,7 @@ interface Props {
     cliente_id: string | null;
     regional_id: string | null;
   }>;
-  regionais: Array<{ id: string; nome: string; ativo: boolean }>;
+  regionais: Array<{ id: string; nome: string; ativo: boolean; empresa_id: string }>;
   /** Cartões de crédito ativos — repassados ao drawer de conta avulsa. */
   cartoes?: CartaoOption[];
 }

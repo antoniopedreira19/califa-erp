@@ -73,7 +73,7 @@ export default async function DesembolsosPage({
       .limit(500),
     supabase
       .from("regionais")
-      .select("id, nome, ativo")
+      .select("id, nome, ativo, empresa_id")
       .eq("tenant_id", session.activeTenant.id)
       .eq("ativo", true)
       .order("nome"),
@@ -108,6 +108,7 @@ export default async function DesembolsosPage({
     id: r.id,
     nome: r.nome,
     ativo: r.ativo,
+    empresa_id: r.empresa_id,
   }));
 
   return (
