@@ -23,9 +23,14 @@ export const dynamic = "force-dynamic";
 export default async function PedidosCompraFinanceiroPage({
   searchParams,
 }: {
-  searchParams?: { filtro?: string };
+  searchParams?: { filtro?: string; empresa?: string };
 }) {
   const session = await requireSession();
+
+  const empresaFiltroId: string | null =
+    typeof searchParams?.empresa === "string" && searchParams.empresa.length > 0
+      ? searchParams.empresa
+      : (session.activeEmpresa?.id ?? null);
   if (
     session.activeRole !== "administrador" &&
     session.activeRole !== "financeiro"
@@ -57,10 +62,11 @@ export default async function PedidosCompraFinanceiroPage({
     devolucoesRes,
     conversasChatPPs,
   ] = await Promise.all([
-    supabase
-      .from("pedidos_compra")
-      .select(
-        `
+    (() => {
+      let q = supabase
+        .from("pedidos_compra")
+        .select(
+          `
         id, codigo, status, valor, quantidade, servico, especificacoes,
         prazo_pagamento, prazo_pagamento_financeiro, pdf_path, created_at,
         cancelada_em, motivo_cancelamento,
@@ -83,12 +89,14 @@ export default async function PedidosCompraFinanceiroPage({
           valor, pago_em, fatura_cartao_id
         )
       `,
-      )
-      .eq("tenant_id", session.activeTenant.id)
-      // PP gerada ainda está no job, sem envio: o financeiro não a vê —
-      // nem no chip "Todas" (02/09/2026, decisão 039).
-      .neq("status", "gerada")
-      .order("created_at", { ascending: false }),
+        )
+        .eq("tenant_id", session.activeTenant.id)
+        // PP gerada ainda está no job, sem envio: o financeiro não a vê —
+        // nem no chip "Todas" (02/09/2026, decisão 039).
+        .neq("status", "gerada");
+      if (empresaFiltroId) q = q.eq("empresa_id", empresaFiltroId);
+      return q.order("created_at", { ascending: false });
+    })(),
     supabase
       .from("contas_bancarias")
       .select("*")
@@ -140,6 +148,7 @@ export default async function PedidosCompraFinanceiroPage({
           .lt("data_prevista_pagamento", hoje)
           .neq("status", "baixada");
       }
+      if (empresaFiltroId) q = q.eq("empresa_id", empresaFiltroId);
       return q;
     })(),
     // Baixas já realizadas — só o que a linha paga exibe no subtítulo
@@ -223,9 +232,10 @@ export default async function PedidosCompraFinanceiroPage({
       .order("nome"),
     // Desembolsos — todos os status para a aba de aprovação (Task 9).
     // Task 10 adiciona SELECT diferente com parcelas embed (apenas aprovada/pago).
-    supabase
-      .from("desembolsos")
-      .select(`
+    (() => {
+      let q = supabase
+        .from("desembolsos")
+        .select(`
         id, codigo, descricao, valor, status,
         data_prevista_pagamento, motivo_rejeicao, motivo_cancelamento,
         aprovada_em, rejeitada_em, cancelada_em, pago_em, created_at,
@@ -233,13 +243,16 @@ export default async function PedidosCompraFinanceiroPage({
         fornecedor:fornecedores(id, nome, razao_social),
         criador:profiles!desembolsos_criado_por_fkey(nome)
       `)
-      .eq("tenant_id", session.activeTenant.id)
-      .order("created_at", { ascending: false }),
+        .eq("tenant_id", session.activeTenant.id);
+      if (empresaFiltroId) q = q.eq("empresa_id", empresaFiltroId);
+      return q.order("created_at", { ascending: false });
+    })(),
     // Desembolsos para Títulos a Pagar — apenas aprovada|pago, com parcelas
     // embed. Query separada da de aprovação (Task 9) para não misturar filtros.
-    supabase
-      .from("desembolsos")
-      .select(`
+    (() => {
+      let q = supabase
+        .from("desembolsos")
+        .select(`
         id, codigo, descricao, status,
         empresa_id,
         fornecedor:fornecedores(nome, razao_social),
@@ -249,9 +262,11 @@ export default async function PedidosCompraFinanceiroPage({
           valor, pago_em
         )
       `)
-      .eq("tenant_id", session.activeTenant.id)
-      .in("status", ["aprovada", "pago"])
-      .order("created_at", { ascending: false }),
+        .eq("tenant_id", session.activeTenant.id)
+        .in("status", ["aprovada", "pago"]);
+      if (empresaFiltroId) q = q.eq("empresa_id", empresaFiltroId);
+      return q.order("created_at", { ascending: false });
+    })(),
     // Prestações de contas de PPs de Verba de Produção (Task 6).
     supabase
       .from("pp_verba_prestacoes")
@@ -1118,6 +1133,19 @@ export default async function PedidosCompraFinanceiroPage({
           enviá-los à conciliação.
         </p>
       </header>
+
+      {empresaFiltroId && (
+        <div className="flex items-center gap-2 text-xs">
+          <span className="rounded-full bg-california-red/10 px-3 py-1 text-california-red font-medium">
+            Empresa: {session.empresas.find((e) => e.id === empresaFiltroId)?.nome_fantasia ?? session.empresas.find((e) => e.id === empresaFiltroId)?.razao_social ?? "—"}
+            {empresaFiltroId !== session.activeEmpresa?.id && (
+              <Link href="/financeiro/contas-a-pagar" className="ml-2 underline">
+                voltar para ativa
+              </Link>
+            )}
+          </span>
+        </div>
+      )}
 
       <ChatPPsProvider
         conversasIniciais={conversasChatPPs}

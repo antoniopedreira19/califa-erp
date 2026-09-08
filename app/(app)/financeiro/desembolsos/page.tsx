@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Wallet } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
@@ -8,12 +9,17 @@ export const dynamic = "force-dynamic";
 export default async function DesembolsosPage({
   searchParams,
 }: {
-  searchParams?: { filtro?: string };
+  searchParams?: { filtro?: string; empresa?: string };
 }) {
   const session = await requireSession();
   const supabase = createClient();
   const isAdminOrFinanceiro =
     session.activeRole === "administrador" || session.activeRole === "financeiro";
+
+  const empresaFiltroId: string | null =
+    typeof searchParams?.empresa === "string" && searchParams.empresa.length > 0
+      ? searchParams.empresa
+      : (session.activeEmpresa?.id ?? null);
 
   // Base query — user comum vê só os seus
   let query = supabase
@@ -35,6 +41,10 @@ export default async function DesembolsosPage({
   // Filtro de aterrissagem da home
   if (searchParams?.filtro === "avaliacao") {
     query = query.eq("status", "em_avaliacao");
+  }
+
+  if (empresaFiltroId) {
+    query = query.eq("empresa_id", empresaFiltroId);
   }
 
   const [
@@ -125,6 +135,19 @@ export default async function DesembolsosPage({
           financeiro, o desembolso vira título a pagar.
         </p>
       </header>
+
+      {empresaFiltroId && (
+        <div className="flex items-center gap-2 text-xs">
+          <span className="rounded-full bg-california-red/10 px-3 py-1 text-california-red font-medium">
+            Empresa: {session.empresas.find((e) => e.id === empresaFiltroId)?.nome_fantasia ?? session.empresas.find((e) => e.id === empresaFiltroId)?.razao_social ?? "—"}
+            {empresaFiltroId !== session.activeEmpresa?.id && (
+              <Link href="/financeiro/desembolsos" className="ml-2 underline">
+                voltar para ativa
+              </Link>
+            )}
+          </span>
+        </div>
+      )}
 
       <DesembolsosList
         rows={(desembolsosRes.data ?? []) as unknown as DesembolsoRow[]}
