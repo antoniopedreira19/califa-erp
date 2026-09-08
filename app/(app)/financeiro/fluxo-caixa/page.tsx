@@ -1,8 +1,8 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowLeft, TrendingUp } from "lucide-react";
+import { TrendingUp } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
+import { PageHeader } from "@/components/ui/page-header";
 import { FluxoCaixaView, type FluxoItem, type ContaOpcao } from "./fluxo-caixa-view";
 
 export const dynamic = "force-dynamic";
@@ -46,10 +46,15 @@ export default async function FluxoCaixaPage({
     redirect("/home?reason=sem_permissao_financeira");
   }
 
-  const empresaFiltroId: string | null =
-    typeof searchParams.empresa === "string" && searchParams.empresa.length > 0
-      ? searchParams.empresa
-      : (session.activeEmpresa?.id ?? null);
+  const empresaFiltroIds: string[] =
+    typeof searchParams?.empresa === "string" && searchParams.empresa.length > 0
+      ? searchParams.empresa.split(",").filter((id) => id.length > 0)
+      : session.activeEmpresas.map((e) => e.id);
+
+  const activeEmpresasEfetivas =
+    empresaFiltroIds.length > 0
+      ? session.empresas.filter((e) => empresaFiltroIds.includes(e.id))
+      : [];
 
   const supabase = createClient();
 
@@ -69,7 +74,7 @@ export default async function FluxoCaixaPage({
       .gte("data_evento", ancora)
       .lte("data_evento", fim)
       .order("data_evento", { ascending: true });
-    if (empresaFiltroId) q = q.eq("empresa_id", empresaFiltroId);
+    if (empresaFiltroIds.length > 0) q = q.in("empresa_id", empresaFiltroIds);
     return q;
   })();
 
@@ -80,7 +85,7 @@ export default async function FluxoCaixaPage({
       .eq("tenant_id", session.activeTenant.id)
       .eq("ativo", true)
       .order("nome");
-    if (empresaFiltroId) qr = qr.eq("empresa_id", empresaFiltroId);
+    if (empresaFiltroIds.length > 0) qr = qr.in("empresa_id", empresaFiltroIds);
     return qr;
   })();
 
@@ -130,40 +135,15 @@ export default async function FluxoCaixaPage({
 
   return (
     <div className="space-y-8 max-w-[1560px] mx-auto">
-      <div>
-        <Link
-          href="/financeiro"
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-3 w-3" />
-          Voltar para central financeira
-        </Link>
-      </div>
-      <header className="space-y-2">
-        <div className="flex items-center gap-3">
-          <div className="rounded-lg bg-california-red/10 p-2">
-            <TrendingUp className="h-5 w-5 text-california-red" />
-          </div>
-          <h1 className="text-3xl font-bold tracking-tight">Fluxo de caixa</h1>
-        </div>
-        <p className="text-sm text-muted-foreground max-w-2xl text-pretty">
-          Do passado ao futuro: o realizado (movimentos das contas) mais o
-          previsto (títulos em aberto e previsões da abertura do job).
-        </p>
-      </header>
-
-      {empresaFiltroId && (
-        <div className="flex items-center gap-2 text-xs">
-          <span className="rounded-full bg-california-red/10 px-3 py-1 text-california-red font-medium">
-            Empresa: {session.empresas.find((e) => e.id === empresaFiltroId)?.nome_fantasia ?? session.empresas.find((e) => e.id === empresaFiltroId)?.razao_social ?? "—"}
-            {empresaFiltroId !== session.activeEmpresa?.id && (
-              <Link href="/financeiro/fluxo-caixa" className="ml-2 underline">
-                voltar para ativa
-              </Link>
-            )}
-          </span>
-        </div>
-      )}
+      <PageHeader
+        eyebrow="FINANCEIRO"
+        title="Fluxo de caixa"
+        description="Do passado ao futuro: o realizado (movimentos das contas) mais o previsto (títulos em aberto e previsões da abertura do job)."
+        icon={TrendingUp}
+        showEmpresaFilter
+        empresas={session.empresas}
+        activeEmpresas={activeEmpresasEfetivas}
+      />
 
       <FluxoCaixaView
         itens={itens}

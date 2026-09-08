@@ -1,6 +1,6 @@
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { Receipt } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
+import { PageHeader } from "@/components/ui/page-header";
 import { createClient } from "@/lib/supabase/server";
 import { calcularStatusFaturamento } from "@/lib/relatorios/faturamento-status";
 import { parseFiltros } from "./parse-filtros";
@@ -24,8 +24,25 @@ export default async function FaturamentoPage({ searchParams }: Props) {
   const supabase = createClient();
   const tenantId = session.activeTenant.id;
 
+  // Empresas ativas como default: se nenhuma empresa foi explicitamente filtrada
+  // via URL, pré-filtra pelas empresas ativas no topbar (multi-empresa).
+  const empresaFiltroIds: string[] =
+    filtros.empresasIds.length > 0
+      ? filtros.empresasIds
+      : session.activeEmpresas.map((e) => e.id);
+
+  const activeEmpresasEfetivas =
+    empresaFiltroIds.length > 0
+      ? session.empresas.filter((e) => empresaFiltroIds.includes(e.id))
+      : [];
+
+  const filtrosComDefault = {
+    ...filtros,
+    empresasIds: empresaFiltroIds,
+  };
+
   const [linhasVw, dimensoes] = await Promise.all([
-    carregarLinhas(supabase, tenantId, filtros.ano, filtros),
+    carregarLinhas(supabase, tenantId, filtros.ano, filtrosComDefault),
     carregarDimensoesRelatorio(tenantId),
   ]);
 
@@ -66,28 +83,15 @@ export default async function FaturamentoPage({ searchParams }: Props) {
 
   return (
     <div className="space-y-6">
-      <div>
-        <Link
-          href="/relatorios"
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-3 w-3" />
-          Voltar para relatórios
-        </Link>
-      </div>
-
-      <header className="space-y-2">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-california-red">
-          Relatórios · Faturamento
-        </p>
-        <h1 className="text-3xl font-bold tracking-tight">
-          Faturamento de Jobs {filtros.ano}
-        </h1>
-        <p className="text-sm text-muted-foreground max-w-2xl">
-          Compara o valor do job (contratado) com o valor efetivamente faturado.
-          Data de referência: abertura financeira do job.
-        </p>
-      </header>
+      <PageHeader
+        eyebrow="RELATÓRIOS"
+        title={`Faturamento de Jobs ${filtros.ano}`}
+        description="Compara o valor do job (contratado) com o valor efetivamente faturado. Data de referência: abertura financeira do job."
+        icon={Receipt}
+        showEmpresaFilter
+        empresas={session.empresas}
+        activeEmpresas={activeEmpresasEfetivas}
+      />
 
       <FiltrosCliente
         filtros={filtros}
