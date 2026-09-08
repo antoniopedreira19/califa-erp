@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { FolderKanban, Plus, FileText, Tags } from "lucide-react";
+import { FolderKanban, Plus, Tags } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { escolherJobDoFunil, estagioFunil } from "@/lib/calculos/funil";
@@ -7,6 +7,7 @@ import type { Cliente, JobStatus, OrcamentoStatus, Projeto } from "@/lib/types";
 import { pode } from "@/lib/permissoes";
 import { EmptyState } from "@/components/empty-state";
 import { ProjetosList, type ProjetoRow } from "./projetos-list";
+import { PageHeader } from "@/components/ui/page-header";
 
 export const dynamic = "force-dynamic";
 
@@ -19,10 +20,17 @@ export default async function ProjetosPage({
   const supabase = createClient();
   const filtro = searchParams?.filtro;
 
-  const empresaFiltroId: string | null =
+  const empresaFiltroIds: string[] =
     typeof searchParams?.empresa === "string" && searchParams.empresa.length > 0
-      ? searchParams.empresa
-      : (session.activeEmpresa?.id ?? null);
+      ? searchParams.empresa.split(",").filter((id) => id.length > 0)
+      : session.activeEmpresas.map((e) => e.id);
+
+  // Empresas efetivamente aplicadas — passa pro PageHeader como activeEmpresas
+  // (respeitando URL override, se houver).
+  const activeEmpresasEfetivas =
+    empresaFiltroIds.length > 0
+      ? session.empresas.filter((e) => empresaFiltroIds.includes(e.id))
+      : [];
 
   const [projRes, clientesRes] = await Promise.all([
     (() => {
@@ -44,7 +52,7 @@ export default async function ProjetosPage({
             "categoria:categorias_dominio(nome)",
         )
         .eq("tenant_id", session.activeTenant.id);
-      if (empresaFiltroId) q = q.eq("empresa_id", empresaFiltroId);
+      if (empresaFiltroIds.length > 0) q = q.in("empresa_id", empresaFiltroIds);
       return q.order("created_at", { ascending: false });
     })(),
     supabase
@@ -262,54 +270,35 @@ export default async function ProjetosPage({
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-        <div className="space-y-1">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-california-red">
-            Comercial
-          </p>
-          <div className="flex items-center gap-3">
-            <div className="rounded-lg bg-california-red/10 p-2">
-              <FileText className="h-5 w-5 text-california-red" />
-            </div>
-            <h1 className="text-3xl font-bold tracking-tight">Projetos &amp; Orçamentos</h1>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            Cada projeto agrupa os orçamentos de uma iniciativa do cliente.
-            Clique num projeto para ver seus orçamentos e versões.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Link
-            href="/orcamentos/categorias"
-            prefetch={false}
-            className="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2.5 text-sm font-semibold text-foreground shadow-sm hover:border-california-red/30 hover:text-california-red transition-all"
-          >
-            <Tags className="h-4 w-4" />
-            Categorias
-          </Link>
-          <Link
-            href="/orcamentos/novo"
-            prefetch={false}
-            className="inline-flex items-center justify-center gap-2 rounded-lg bg-california-red px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-california-red-hover hover:shadow-brand transition-all"
-          >
-            <Plus className="h-4 w-4" />
-            Novo projeto
-          </Link>
-        </div>
-      </header>
-
-      {empresaFiltroId && (
-        <div className="flex items-center gap-2 text-xs">
-          <span className="rounded-full bg-california-red/10 px-3 py-1 text-california-red font-medium">
-            Empresa: {session.empresas.find((e) => e.id === empresaFiltroId)?.nome_fantasia ?? session.empresas.find((e) => e.id === empresaFiltroId)?.razao_social ?? "—"}
-            {empresaFiltroId !== session.activeEmpresa?.id && (
-              <Link href="/orcamentos" className="ml-2 underline" prefetch={false}>
-                voltar para ativa
-              </Link>
-            )}
-          </span>
-        </div>
-      )}
+      <PageHeader
+        eyebrow="COMERCIAL"
+        title="Projetos & Orçamentos"
+        description="Cada projeto agrupa os orçamentos de uma iniciativa do cliente. Clique num projeto para ver seus orçamentos e versões."
+        icon={FolderKanban}
+        showEmpresaFilter
+        empresas={session.empresas}
+        activeEmpresas={activeEmpresasEfetivas}
+        actions={
+          <>
+            <Link
+              href="/orcamentos/categorias"
+              prefetch={false}
+              className="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2.5 text-sm font-semibold text-foreground shadow-sm hover:border-california-red/30 hover:text-california-red transition-all"
+            >
+              <Tags className="h-4 w-4" />
+              Categorias
+            </Link>
+            <Link
+              href="/orcamentos/novo"
+              prefetch={false}
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-california-red px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-california-red-hover hover:shadow-brand transition-all"
+            >
+              <Plus className="h-4 w-4" />
+              Novo projeto
+            </Link>
+          </>
+        }
+      />
 
       {projetos.length === 0 ? (
         <EmptyState
