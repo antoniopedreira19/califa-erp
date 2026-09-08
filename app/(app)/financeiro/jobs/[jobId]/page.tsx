@@ -359,7 +359,12 @@ export default async function JobNoFinanceiroPage({
               }}
               jobsDoProjeto={jobsDoProjetoFinanceiro}
               jobAtualId={job.id}
-              jobLinkSuffix=""
+              // Os jobs irmãos do box "Jobs do projeto" abrem na ficha,
+              // não no registro da abertura: o box mora DENTRO da ficha,
+              // e quem pula de um irmão para o outro está comparando os
+              // jobs do projeto (decisão do Tiago, 08/09/2026 — a mesma
+              // regra do calendário e de "Visualizar Jobs").
+              jobLinkSuffix="?aba=info"
               jobHrefBase="/financeiro/jobs/"
               confirmarSaidaParaOrcamento
               gpNome={detalhe.raw.responsavel?.nome ?? null}

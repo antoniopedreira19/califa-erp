@@ -3425,6 +3425,22 @@ ganhou um `jobHrefSuffix` opcional. ⚠️ Esse componente é COMPARTILHADO
 com a visão agregada da produção, que não passa o sufixo e segue em
 `/jobs/[id]?from=jobs` — conferido no navegador.
 
+Por fim, o box **"Jobs do projeto"** da ficha (os jobs irmãos) manda
+`?aba=info`, pelo `jobLinkSuffix` que a ficha já tinha. Ele mora dentro
+da ficha, e quem pula de um irmão para o outro está comparando os jobs do
+projeto. ⚠️ A ficha também é compartilhada: a produção calcula o próprio
+sufixo a partir do `?from=` e não foi tocada.
+
+**O mapa completo dos destinos, para não se perder:**
+
+| De onde se clica | Abre o job em |
+|---|---|
+| Calendário (pop-up do dia e jobs ativos) | Informações do Job |
+| "Visualizar Jobs" (por projeto e por job) | Informações do Job |
+| Ficha → box "Jobs do projeto" | Informações do Job |
+| Visão agregada do projeto (3 links) | **Planilha Interna** |
+| URL direta, sem `?aba=` | Abertura do Job |
+
 O helper `abaDaUrl` mora em `app/(app)/financeiro/jobs/[jobId]/abas.ts`,
 e não no `job-financeiro-tabs.tsx`, que é `"use client"`. Server
 component não consegue chamar função comum importada de módulo client —
