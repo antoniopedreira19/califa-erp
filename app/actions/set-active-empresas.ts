@@ -1,7 +1,6 @@
 "use server";
 
 import { cookies } from "next/headers";
-import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth/session";
 
 /**
@@ -10,7 +9,10 @@ import { requireSession } from "@/lib/auth/session";
  *   - [id1, id2, ...] → grava CSV; todos os ids precisam ser de empresas
  *     do tenant do usuário.
  *
- * Depois de gravar, revalida `/` para forçar rerun de server components.
+ * O `router.refresh()` no consumidor cuida do re-fetch da tela atual.
+ * `revalidatePath("/")` foi removido em 2026-09-08 — invalidava cache
+ * de TODAS as rotas do app a cada clique, o que somado à ausência de
+ * debounce criava latência cumulativa (28s pra 3 cliques).
  */
 export async function setActiveEmpresas(ids: string[]): Promise<void> {
   const session = await requireSession();
@@ -35,6 +37,4 @@ export async function setActiveEmpresas(ids: string[]): Promise<void> {
       path: "/",
     });
   }
-
-  revalidatePath("/");
 }
