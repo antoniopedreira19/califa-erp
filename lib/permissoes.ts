@@ -63,7 +63,6 @@ export const permissoes = {
   "cadastros.plano_contas.editar":          ["administrador", "financeiro"],
   "cadastros.cartoes.editar":               ["administrador", "financeiro"],
   "cadastros.categorias_orcamento.editar":  ["administrador"],
-  "cadastros.regionais.editar":             ["administrador"],
   "cadastros.cidades.editar":               ["administrador"],
   /**
    * Criação rápida de cidade DENTRO do combobox do orçamento (fluxo IBGE

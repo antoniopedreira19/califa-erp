@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export const regionalSchema = z.object({
+  empresa_id: z.string().uuid("Selecione a empresa."),
   nome: z
     .string()
     .trim()

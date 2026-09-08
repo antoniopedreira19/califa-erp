@@ -103,14 +103,6 @@ const LINHAS: readonly Linha[] = [
       excluir: "cadastros.categorias_orcamento.editar",
     },
   },
-  { modulo: "Cadastros", item: "Regionais",
-    permissoes: {
-      ver: "sidebar.cadastros",
-      criar: "cadastros.regionais.editar",
-      editar: "cadastros.regionais.editar",
-      excluir: "cadastros.regionais.editar",
-    },
-  },
   { modulo: "Cadastros", item: "Cidades",
     permissoes: {
       ver: "sidebar.cadastros",
