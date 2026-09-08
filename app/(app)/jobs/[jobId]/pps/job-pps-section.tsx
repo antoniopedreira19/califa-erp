@@ -2,7 +2,19 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Search, Eye, Pencil, Trash2, X } from "lucide-react";
+import {
+  Search,
+  Eye,
+  Pencil,
+  Trash2,
+  X,
+  Clock,
+  Wallet,
+} from "lucide-react";
+import {
+  DescritivoPopover,
+  DescritivoRodapeNota,
+} from "@/components/ui/descritivo-popover";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn, formatCurrency } from "@/lib/utils";
@@ -97,10 +109,18 @@ export function JobPPsSection({
   );
   const [ppCancelando, setPpCancelando] =
     React.useState<PedidoCompraNaLista | null>(null);
+  /** Qual cartão de descrição está aberto — a chave é a LINHA (a parcela),
+   *  não a PP: duas parcelas da mesma PP abririam dois cartões de uma vez.
+   *  O estado é da lista, e é ele que garante um cartão por vez (051). */
+  const [descritivoAberto, setDescritivoAberto] = React.useState<string | null>(
+    null,
+  );
 
-  // As linhas têm altura variável (o serviço quebra em 2-3 linhas conforme a
-  // largura), então a trilha não pode assumir altura fixa: mede cada <tr> e
-  // posiciona o botão correspondente no mesmo offset.
+  // A trilha não assume altura fixa: mede cada <tr> e posiciona o botão
+  // correspondente no mesmo offset. Desde 08/09/2026 o serviço cabe em uma
+  // linha só (o texto inteiro está no cartão), mas o fornecedor ainda
+  // quebra em duas — e a medição continua sendo o que mantém os botões
+  // alinhados com as linhas.
   const tbodyRef = React.useRef<HTMLTableSectionElement>(null);
   const [linhas, setLinhas] = React.useState<
     Array<{ top: number; height: number }>
@@ -342,6 +362,7 @@ export function JobPPsSection({
                 )}
                 {linhasVisiveis.map(({ pp, parcela, indice, total }) => {
                   const vencimento = parcela?.data_vencimento ?? pp.prazo_pagamento;
+                  const chaveDaLinha = parcela?.id ?? pp.id;
                   const valorLinha = parcela
                     ? Number(parcela.valor)
                     : Number(pp.valor);
@@ -362,20 +383,62 @@ export function JobPPsSection({
                         </span>
                       )}
                     </td>
+                    {/* O serviço é texto de parágrafo, e vinha empilhado
+                        com a linha da emissão: a linha da tabela crescia
+                        até quatro alturas e a leitura das colunas se
+                        perdia. Vale aqui a saída das listas de Orçamentos
+                        e Jobs (decisão 051) — uma linha só, com o texto
+                        inteiro no cartão do ícone. Grupo, emissão e
+                        parcelamento viraram rodapé do cartão. */}
                     <td className="px-3.5">
-                      <div className="flex flex-col gap-0.5">
-                        <span className="text-[13px] font-semibold">
+                      <span className="flex items-center gap-1.5">
+                        {/* `min-w-0` sem `flex-1`: o texto encolhe e corta
+                            quando não cabe, mas o ícone continua colado
+                            nele quando cabe — como nas listas. O teto de
+                            largura é o que impede a linha `nowrap` de
+                            esticar a tabela inteira: serviço é campo de
+                            500 caracteres. */}
+                        <span className="min-w-0 max-w-[520px] truncate text-[13px] font-semibold">
                           {pp.servico}
                         </span>
-                        <span className="text-[11.5px] text-muted-foreground">
-                          {pp.grupo_nome ? `${pp.grupo_nome} · ` : ""}
-                          emitida em {formatarData(pp.created_at)}
-                          {pp.emitida_por_nome ? ` por ${pp.emitida_por_nome}` : ""}
-                          {total > 1
-                            ? ` · ${formatCurrency(Number(pp.valor), "BRL")} em ${total}x`
-                            : ""}
-                        </span>
-                      </div>
+                        <DescritivoPopover
+                          rotulo="Descrição da PP"
+                          acaoGatilho="Ver a descrição da PP"
+                          codigo={pp.codigo}
+                          nome={pp.grupo_nome}
+                          texto={pp.servico}
+                          extra={{
+                            rotulo: "Especificações",
+                            texto: pp.especificacoes,
+                          }}
+                          aberto={descritivoAberto === chaveDaLinha}
+                          onAbertoChange={(v) =>
+                            setDescritivoAberto(v ? chaveDaLinha : null)
+                          }
+                          // O grupo não se repete aqui: ele já é o nome
+                          // do cartão, ao lado do código.
+                          rodape={
+                            <>
+                              <DescritivoRodapeNota
+                                icone={<Clock className="h-3 w-3 flex-none" />}
+                              >
+                                Emitida em {formatarData(pp.created_at)}
+                                {pp.emitida_por_nome
+                                  ? ` por ${pp.emitida_por_nome}`
+                                  : ""}
+                              </DescritivoRodapeNota>
+                              {total > 1 && (
+                                <DescritivoRodapeNota
+                                  icone={<Wallet className="h-3 w-3 flex-none" />}
+                                >
+                                  {formatCurrency(Number(pp.valor), "BRL")} em{" "}
+                                  {total}x
+                                </DescritivoRodapeNota>
+                              )}
+                            </>
+                          }
+                        />
+                      </span>
                     </td>
                     <td className="px-3.5 text-muted-foreground">
                       {(pp.fornecedor_id ? fornecedoresPorId[pp.fornecedor_id] : null) ?? "—"}
