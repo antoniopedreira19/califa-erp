@@ -20,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { Regional, UF } from "@/lib/types";
+import type { UF } from "@/lib/types";
 import { UFS, apenasDigitos, formatarCNPJ, formatarCEP, formatarTelefone } from "@/lib/utils/formato-fiscal";
 import { criarEmpresa, atualizarEmpresa, type ActionResult } from "./actions";
 import type { EmpresaRow } from "./empresas-list";
@@ -28,12 +28,10 @@ import type { EmpresaRow } from "./empresas-list";
 type Props =
   | {
       mode: "create";
-      regionais: Pick<Regional, "id" | "nome">[];
     }
   | {
       mode: "edit";
       empresa: EmpresaRow;
-      regionais: Pick<Regional, "id" | "nome">[];
       openInitially?: boolean;
       onClose?: () => void;
     };
@@ -47,9 +45,8 @@ export function EmpresaDrawer(props: Props) {
   const [sucesso, setSucesso] = React.useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = React.useState<Record<string, string[]>>({});
 
-  // Estado dos Selects controlados (regional, UF).
+  // Estado dos Selects controlados (UF).
   const empresa = props.mode === "edit" ? props.empresa : undefined;
-  const [regionalId, setRegionalId] = React.useState(empresa?.regional_id ?? "");
   const [uf, setUf] = React.useState<UF | "">((empresa?.uf as UF | undefined) ?? "");
   const [principal, setPrincipal] = React.useState(empresa?.principal ?? false);
 
@@ -72,7 +69,6 @@ export function EmpresaDrawer(props: Props) {
     reset();
 
     const formData = new FormData(e.currentTarget);
-    formData.set("regional_id", regionalId);
     formData.set("uf", uf);
     formData.set("principal", principal ? "true" : "false");
 
@@ -248,39 +244,19 @@ export function EmpresaDrawer(props: Props) {
               </Field>
             </Section>
 
-            <Section title="Classificação">
-              <div className="grid gap-4 md:grid-cols-2">
-                <Field label="Regional" name="regional_id" required errors={fieldErrors}>
-                  <Select value={regionalId} onValueChange={setRegionalId}>
-                    <SelectTrigger className={erroClasses("regional_id")}>
-                      <SelectValue placeholder="Selecione" />
-                    </SelectTrigger>
-                    <SelectContent
-                      side="bottom"
-                      avoidCollisions={false}
-                      className="w-[--radix-select-trigger-width]"
-                    >
-                      {props.regionais.map((r) => (
-                        <SelectItem key={r.id} value={r.id}>{r.nome}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </Field>
-                {props.mode === "create" && (
-                  <div className="flex items-end">
-                    <label className="inline-flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={principal}
-                        onChange={(e) => setPrincipal(e.target.checked)}
-                        className="h-4 w-4 rounded border-border text-california-red focus:ring-california-red"
-                      />
-                      <span>Marcar como <b>principal</b> do tenant</span>
-                    </label>
-                  </div>
-                )}
-              </div>
-            </Section>
+            {props.mode === "create" && (
+              <Section title="Classificação">
+                <label className="inline-flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={principal}
+                    onChange={(e) => setPrincipal(e.target.checked)}
+                    className="h-4 w-4 rounded border-border text-california-red focus:ring-california-red"
+                  />
+                  <span>Marcar como <b>principal</b> do tenant</span>
+                </label>
+              </Section>
+            )}
 
             {error && (
               <div className="flex items-start gap-2 rounded-xl border border-california-red/20 bg-california-red/5 px-4 py-3 text-sm text-california-red">

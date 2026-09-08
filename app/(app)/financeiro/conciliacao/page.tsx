@@ -88,7 +88,7 @@ export default async function ConciliacaoPage({
          papel_na_fatura, fatura_cartao_id,
          fornecedores(nome, razao_social),
          jobs(id, codigo, regional:regionais(nome)),
-         empresas(nome_fantasia, razao_social, regional:regionais(nome)),
+         empresas(nome_fantasia, razao_social),
          plano_contas_tipos!inner(codigo, nome),
          plano_contas_subtipos!inner(codigo, nome),
          forma_pagamento,
@@ -140,7 +140,6 @@ export default async function ConciliacaoPage({
       empresas: {
         nome_fantasia: string | null;
         razao_social: string | null;
-        regional: { nome: string } | null;
       } | null;
       plano_contas_tipos: { codigo: string; nome: string };
       plano_contas_subtipos: { codigo: string; nome: string };
@@ -229,9 +228,7 @@ export default async function ConciliacaoPage({
             ? rateio[0].regional_nome
             : rateio.length > 1
               ? null
-              : (r.jobs?.regional?.nome ??
-                 r.empresas?.regional?.nome ??
-                 null),
+              : (r.jobs?.regional?.nome ?? null),
         // A ordem é a das origens que têm identificador próprio. O
         // recebimento fica por último porque ali a origem É a nota — o
         // faturamento não tem código interno, e inventar um só faria a

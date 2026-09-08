@@ -2,7 +2,6 @@ import Link from "next/link";
 import { ArrowLeft, Building2 } from "lucide-react";
 import { requireAdmin } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
-import type { Regional } from "@/lib/types";
 import { EmpresasList, type EmpresaRow } from "./empresas-list";
 import { EmpresaDrawer } from "./empresa-drawer";
 
@@ -13,28 +12,18 @@ export default async function AdminEmpresasPage() {
   const supabase = createClient();
   const tenantId = session.activeTenant.id;
 
-  const [empRes, regRes] = await Promise.all([
-    supabase
-      .from("empresas")
-      .select(
-        "id, razao_social, nome_fantasia, cnpj, inscricao_estadual, inscricao_municipal, " +
-          "cep, logradouro, numero, complemento, bairro, cidade, uf, telefone, email, " +
-          "local_pagamento, instrucoes_nf, principal, ativo, regional_id, " +
-          "regional:regionais(id, nome)",
-      )
-      .eq("tenant_id", tenantId)
-      .order("principal", { ascending: false })
-      .order("razao_social", { ascending: true }),
-    supabase
-      .from("regionais")
-      .select("id, nome")
-      .eq("tenant_id", tenantId)
-      .eq("ativo", true)
-      .order("nome"),
-  ]);
+  const empRes = await supabase
+    .from("empresas")
+    .select(
+      "id, razao_social, nome_fantasia, cnpj, inscricao_estadual, inscricao_municipal, " +
+        "cep, logradouro, numero, complemento, bairro, cidade, uf, telefone, email, " +
+        "local_pagamento, instrucoes_nf, principal, ativo",
+    )
+    .eq("tenant_id", tenantId)
+    .order("principal", { ascending: false })
+    .order("razao_social", { ascending: true });
 
   if (empRes.error) console.error("[admin.empresas.list]", empRes.error.message);
-  if (regRes.error) console.error("[admin.empresas.regionais]", regRes.error.message);
 
   const rows: EmpresaRow[] = ((empRes.data ?? []) as any[]).map((e) => ({
     id: e.id,
@@ -56,11 +45,7 @@ export default async function AdminEmpresasPage() {
     instrucoes_nf: e.instrucoes_nf,
     principal: e.principal,
     ativo: e.ativo,
-    regional_id: e.regional_id,
-    regional_nome: e.regional?.nome ?? null,
   }));
-
-  const regionais = (regRes.data ?? []) as Pick<Regional, "id" | "nome">[];
 
   return (
     <div className="space-y-8">
@@ -88,10 +73,10 @@ export default async function AdminEmpresasPage() {
             como <b>principal</b> é usada por padrão em novos projetos.
           </p>
         </div>
-        <EmpresaDrawer mode="create" regionais={regionais} />
+        <EmpresaDrawer mode="create" />
       </header>
 
-      <EmpresasList rows={rows} regionais={regionais} />
+      <EmpresasList rows={rows} />
     </div>
   );
 }

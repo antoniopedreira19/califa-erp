@@ -13,7 +13,6 @@ import { UFS } from "@/lib/utils/formato-fiscal";
  * na trilha de auditoria.
  */
 export const empresaSchema = z.object({
-  regional_id: z.string().uuid("Selecione a regional."),
   razao_social: z
     .string()
     .trim()

@@ -5,7 +5,7 @@ import { MoreHorizontal } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { formatarCNPJ } from "@/lib/utils/formato-fiscal";
-import type { Regional, UF } from "@/lib/types";
+import type { UF } from "@/lib/types";
 import { EmpresaDrawer } from "./empresa-drawer";
 import {
   desativarEmpresa,
@@ -33,16 +33,13 @@ export interface EmpresaRow {
   instrucoes_nf: string | null;
   principal: boolean;
   ativo: boolean;
-  regional_id: string;
-  regional_nome: string | null;
 }
 
 interface Props {
   rows: EmpresaRow[];
-  regionais: Pick<Regional, "id" | "nome">[];
 }
 
-export function EmpresasList({ rows, regionais }: Props) {
+export function EmpresasList({ rows }: Props) {
   const [editar, setEditar] = React.useState<EmpresaRow | null>(null);
   const [menu, setMenu] = React.useState<string | null>(null);
   const [pending, startTransition] = React.useTransition();
@@ -68,7 +65,6 @@ export function EmpresasList({ rows, regionais }: Props) {
               <tr>
                 <th className="text-left font-semibold px-6 py-3">Razão social</th>
                 <th className="text-left font-semibold px-6 py-3">CNPJ</th>
-                <th className="text-left font-semibold px-6 py-3">Regional</th>
                 <th className="text-left font-semibold px-6 py-3">Cidade/UF</th>
                 <th className="text-left font-semibold px-6 py-3">Status</th>
                 <th className="w-10 px-6 py-3" />
@@ -99,15 +95,6 @@ export function EmpresasList({ rows, regionais }: Props) {
                   </td>
                   <td className="px-6 py-3.5 font-mono text-xs text-muted-foreground">
                     {formatarCNPJ(row.cnpj)}
-                  </td>
-                  <td className="px-6 py-3.5">
-                    {row.regional_nome ? (
-                      <Badge className="bg-slate-100 text-slate-700 hover:bg-slate-100 border-slate-200">
-                        {row.regional_nome}
-                      </Badge>
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
                   </td>
                   <td className="px-6 py-3.5 text-muted-foreground">
                     {row.cidade}/{row.uf}
@@ -191,7 +178,6 @@ export function EmpresasList({ rows, regionais }: Props) {
         <EmpresaDrawer
           mode="edit"
           empresa={editar}
-          regionais={regionais}
           openInitially
           onClose={() => setEditar(null)}
         />
