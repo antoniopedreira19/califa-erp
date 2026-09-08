@@ -13,32 +13,40 @@ export const dynamic = "force-dynamic";
 export default async function ProjetosPage({
   searchParams,
 }: {
-  searchParams?: { filtro?: string };
+  searchParams?: { filtro?: string; empresa?: string };
 }) {
   const session = await requireSession();
   const supabase = createClient();
   const filtro = searchParams?.filtro;
 
+  const empresaFiltroId: string | null =
+    typeof searchParams?.empresa === "string" && searchParams.empresa.length > 0
+      ? searchParams.empresa
+      : (session.activeEmpresa?.id ?? null);
+
   const [projRes, clientesRes] = await Promise.all([
-    supabase
-      .from("projetos")
-      .select(
-        "id, codigo, nome, campanha, status, cliente_id, produto_id, " +
-          "data_inicio_prevista, created_at, " +
-          // Descrição do projeto: alimenta o cartão do ícone na coluna
-          // Nome (handoff "Descritivos nas Listas", 04/09/2026). É texto
-          // curto — média de 80 caracteres, teto de 600 — e vem junto da
-          // linha em vez de abrir uma segunda query.
-          "descricao, " +
-          // Vínculos do recorte "Meus" (decisão 036, ampliada em
-          // 02/09/2026): designado OU criador.
-          "responsavel_id, created_by, " +
-          "cliente:clientes(id, nome_fantasia), " +
-          "produto:cliente_produtos(id, nome), " +
-          "categoria:categorias_dominio(nome)",
-      )
-      .eq("tenant_id", session.activeTenant.id)
-      .order("created_at", { ascending: false }),
+    (() => {
+      let q = supabase
+        .from("projetos")
+        .select(
+          "id, codigo, nome, campanha, status, cliente_id, produto_id, " +
+            "data_inicio_prevista, created_at, " +
+            // Descrição do projeto: alimenta o cartão do ícone na coluna
+            // Nome (handoff "Descritivos nas Listas", 04/09/2026). É texto
+            // curto — média de 80 caracteres, teto de 600 — e vem junto da
+            // linha em vez de abrir uma segunda query.
+            "descricao, " +
+            // Vínculos do recorte "Meus" (decisão 036, ampliada em
+            // 02/09/2026): designado OU criador.
+            "responsavel_id, created_by, " +
+            "cliente:clientes(id, nome_fantasia), " +
+            "produto:cliente_produtos(id, nome), " +
+            "categoria:categorias_dominio(nome)",
+        )
+        .eq("tenant_id", session.activeTenant.id);
+      if (empresaFiltroId) q = q.eq("empresa_id", empresaFiltroId);
+      return q.order("created_at", { ascending: false });
+    })(),
     supabase
       .from("clientes")
       .select("id, nome_fantasia")
@@ -289,6 +297,19 @@ export default async function ProjetosPage({
           </Link>
         </div>
       </header>
+
+      {empresaFiltroId && (
+        <div className="flex items-center gap-2 text-xs">
+          <span className="rounded-full bg-california-red/10 px-3 py-1 text-california-red font-medium">
+            Empresa: {session.empresas.find((e) => e.id === empresaFiltroId)?.nome_fantasia ?? session.empresas.find((e) => e.id === empresaFiltroId)?.razao_social ?? "—"}
+            {empresaFiltroId !== session.activeEmpresa?.id && (
+              <Link href="/orcamentos" className="ml-2 underline" prefetch={false}>
+                voltar para ativa
+              </Link>
+            )}
+          </span>
+        </div>
+      )}
 
       {projetos.length === 0 ? (
         <EmptyState
