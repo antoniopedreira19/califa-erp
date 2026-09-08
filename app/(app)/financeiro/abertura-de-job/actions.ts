@@ -22,7 +22,6 @@ import {
 } from "@/lib/types";
 import { tipoGeraDesembolso } from "@/lib/calculos/versao-totais";
 import { gerarCodigoProjetoFinanceiro } from "@/lib/codigos/projetos-financeiro";
-import { edicaoRespeitaConsumido } from "@/lib/calculos/previsao-congelada";
 import { consumoDasPrevisoes } from "./consumo";
 import { registrarFotoDaAbertura } from "./fotos";
 import { ehJanelaDePagamento, emCentavos, somaCurva } from "./curva";
@@ -745,16 +744,24 @@ export async function criarProjetoFinanceiro(
  * única prova de quem conferiu.
  *
  * ---------------------------------------------------------------------
- * A trava das previsões (Tiago, 20/08/2026)
+ * As previsões se redistribuem inteiras (Tiago, 08/09/2026 — decisão 061)
  * ---------------------------------------------------------------------
  *
- * "Só será congelado o que for consumido, e só será consumido o saldo da
- * parcela mais próxima." O consumo anda em ordem de data; o que ele já
- * cobriu não pode mudar de data nem de valor, e o saldo restante segue
- * livre para ser reagendado e redividido. A regra mora em
- * `lib/calculos/previsao-congelada.ts` e é a MESMA que a tela usa para
- * desenhar as linhas travadas — duas implementações divergiriam no
- * primeiro centavo.
+ * Até aqui valia a trava de 20/08/2026: o que PP ou nota emitida já
+ * tinha consumido ficava congelado, e só o saldo era editável
+ * (`edicaoRespeitaConsumido`). Ela caiu inteira, dos dois lados.
+ *
+ * O motivo veio de um beco real (JOB-0029): uma PP de R$ 10.000 num
+ * item planejado em R$ 8.000 consumia MAIS que a curva inteira, então
+ * todas as linhas congelavam — e a comparação da fatia congelada
+ * recusava qualquer edição, inclusive acrescentar a data que a errata
+ * exigia. Não havia saída pela tela.
+ *
+ * E a trava já protegia pouco: desde a decisão 052 o abatimento da curva
+ * é calculado POR ITEM (planejado menos as PPs que viraram título), não
+ * pela ordem cronológica das parcelas — mudar as datas não muda o quanto
+ * o fluxo abate. O "antes" também deixou de depender dela: desde a
+ * decisão 059 cada registro confirmado deixa uma foto imutável.
  *
  * O total continua fechando com o custo previsto e com o faturamento
  * previsto, exatamente como na abertura: o que a edição libera é a
@@ -963,19 +970,6 @@ export async function editarRegistroDaAbertura(
         message: `A data ${foraDeJanela.data_prevista} não é uma janela de pagamento (dias 08 e 20, ou o dia útil seguinte).`,
       };
     }
-
-    if (
-      !edicaoRespeitaConsumido(
-        curvaGuardada,
-        parsed.data.curva,
-        consumo.custo,
-      )
-    ) {
-      return {
-        ok: false,
-        message: `As PPs já emitidas consomem ${consumo.custo.toFixed(2)} da curva. Essa parte não pode mudar de data nem de valor — só o saldo restante é editável.`,
-      };
-    }
   }
 
   // ---------- Previsão de recebimento ----------
@@ -1002,19 +996,6 @@ export async function editarRegistroDaAbertura(
       return {
         ok: false,
         message: `As parcelas de recebimento somam ${somaReceb.toFixed(2)} e o faturamento previsto é ${faturamentoPrevisto.toFixed(2)}. Ajuste os valores antes de salvar.`,
-      };
-    }
-
-    if (
-      !edicaoRespeitaConsumido(
-        recebGuardado,
-        parsed.data.recebimento,
-        consumo.recebimento,
-      )
-    ) {
-      return {
-        ok: false,
-        message: `As notas já emitidas consomem ${consumo.recebimento.toFixed(2)} da previsão de recebimento. Essa parte não pode mudar de data nem de valor — só o saldo restante é editável.`,
       };
     }
   }

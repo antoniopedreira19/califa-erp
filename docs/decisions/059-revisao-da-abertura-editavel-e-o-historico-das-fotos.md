@@ -55,7 +55,7 @@ curva que a tela não deixava montar (JOB-0008, 08/09/2026).
 |---|---|
 | Os jobs já abertos não têm foto. O que fazer? | **Reconstituir do estado atual.** A migration grava a foto nº 1 de cada job aberto com o registro como está hoje, marcada `reconstituida`. Se o job já tinha sido editado, essa foto é do último estado, não do dia da abertura — o que houve antes fica na auditoria. |
 | "Editar registro" (edição livre, decisão 021) continua? | **Continua, e entra no histórico**, rotulada "edição do registro". |
-| Parcelas já consumidas (PP emitida, nota emitida) continuam travadas na revisão? | **Sim.** A revisão redistribui só o saldo — e o que a errata acrescentou. |
+| Parcelas já consumidas (PP emitida, nota emitida) continuam travadas na revisão? | ~~**Sim.** A revisão redistribui só o saldo.~~ ⚠️ **Revisto no mesmo dia:** o primeiro job real a passar pela revisão (JOB-0029) mostrou que a trava criava um beco sem saída. Ela caiu inteira — ver [061](061-as-previsoes-se-redistribuem-inteiras.md). |
 
 ## Como a lista se lê
 
