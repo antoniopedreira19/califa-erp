@@ -29,6 +29,7 @@ import {
   criarProjeto,
   type ActionResult,
 } from "./actions";
+import { ConfirmTrocaEmpresaDialog } from "@/components/ui/confirm-troca-empresa-dialog";
 
 /** Produto do cadastro do cliente. Vem com `cliente_id` porque a lista
  *  chega inteira e é filtrada no cliente conforme a seleção. */
@@ -45,7 +46,7 @@ interface Props {
   empresaPrincipalId?: string;
   clientes: Pick<Cliente, "id" | "nome_fantasia" | "codigo_curto">[];
   responsaveis: Pick<Profile, "id" | "nome">[];
-  regionais: Pick<Regional, "id" | "nome">[];
+  regionais: Pick<Regional, "id" | "nome" | "empresa_id">[];
   produtos: ProdutoOption[];
   categorias: Pick<CategoriaDominio, "id" | "nome">[];
   /** Ids já vinculados ao projeto, na ordem gravada. */
@@ -89,6 +90,8 @@ export function ProjetoForm({
   const [empresaId, setEmpresaId] = React.useState(
     projeto?.empresa_id ?? empresaPrincipalId ?? "",
   );
+  const [dialogTrocaEmpresa, setDialogTrocaEmpresa] = React.useState(false);
+  const [empresaPendente, setEmpresaPendente] = React.useState<string>("");
   const [clienteId, setClienteId] = React.useState(projeto?.cliente_id ?? "");
   const [produtoId, setProdutoId] = React.useState(projeto?.produto_id ?? "");
   const [responsavelIds, setResponsavelIds] = React.useState<string[]>(
@@ -126,6 +129,21 @@ export function ProjetoForm({
     const travados = new Set(equipeTravada);
     return [...equipeTravada, ...equipeManual.filter((id) => !travados.has(id))];
   }, [equipeTravada, equipeManual]);
+
+  const handleEmpresaChange = (nova: string) => {
+    if (nova === empresaId) return;
+    if (regionalIds.length > 0) {
+      setEmpresaPendente(nova);
+      setDialogTrocaEmpresa(true);
+    } else {
+      setEmpresaId(nova);
+    }
+  };
+
+  const confirmarTrocaEmpresa = () => {
+    setEmpresaId(empresaPendente);
+    setRegionalIds([]);
+  };
 
   // Produto é cadastrado por cliente: trocar de cliente invalida a escolha.
   const produtosDoCliente = React.useMemo(
@@ -186,7 +204,7 @@ export function ProjetoForm({
     <form onSubmit={handleSubmit} className="space-y-6">
       <div className="grid gap-4 md:grid-cols-2">
         <Field label="Empresa" name="empresa_id" required errors={fieldErrors}>
-          <Select value={empresaId} onValueChange={setEmpresaId}>
+          <Select value={empresaId} onValueChange={handleEmpresaChange}>
             <SelectTrigger className={erroClasses("empresa_id")}>
               <SelectValue placeholder="Selecione a empresa" />
             </SelectTrigger>
@@ -280,11 +298,22 @@ export function ProjetoForm({
 
         <Field label="Regionais" name="regional_ids" required errors={fieldErrors}>
           <MultiSelect
-            items={regionais.map((r) => ({ value: r.id, label: r.nome }))}
+            items={regionais
+              .filter((r) => r.empresa_id === empresaId)
+              .map((r) => ({ value: r.id, label: r.nome }))}
             value={regionalIds}
             onChange={setRegionalIds}
-            placeholder="Selecione uma ou mais regionais"
-            vazio="Nenhuma regional ativa cadastrada."
+            placeholder={
+              empresaId === ""
+                ? "Escolha a empresa primeiro"
+                : "Selecione uma ou mais regionais"
+            }
+            vazio={
+              empresaId === ""
+                ? "Escolha a empresa primeiro."
+                : "Nenhuma regional ativa desta empresa."
+            }
+            disabled={empresaId === ""}
             className={erroClasses("regional_ids")}
           />
         </Field>
@@ -429,6 +458,13 @@ export function ProjetoForm({
           )}
         </button>
       </div>
+
+      <ConfirmTrocaEmpresaDialog
+        open={dialogTrocaEmpresa}
+        onOpenChange={setDialogTrocaEmpresa}
+        onConfirm={confirmarTrocaEmpresa}
+        contexto="regionais_aliadas"
+      />
     </form>
   );
 }

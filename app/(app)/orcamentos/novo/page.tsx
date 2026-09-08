@@ -23,7 +23,7 @@ export default async function NovoProjetoPage() {
     listActiveMembers(session.activeTenant.id),
     supabase
       .from("regionais")
-      .select("id, nome")
+      .select("id, nome, empresa_id")
       .eq("tenant_id", session.activeTenant.id)
       .eq("ativo", true)
       .order("nome"),
@@ -50,7 +50,7 @@ export default async function NovoProjetoPage() {
     Cliente,
     "id" | "nome_fantasia" | "codigo_curto"
   >[];
-  const regionais = (regionaisRes.data ?? []) as Pick<Regional, "id" | "nome">[];
+  const regionais = (regionaisRes.data ?? []) as Pick<Regional, "id" | "nome" | "empresa_id">[];
   const produtos = (produtosRes.data ?? []) as ProdutoOption[];
   const categorias = (categoriasRes.data ?? []) as Pick<
     CategoriaDominio,
