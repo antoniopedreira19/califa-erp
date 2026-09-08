@@ -946,6 +946,56 @@ export interface JobCompetencia {
   percentual: number;
 }
 
+// ---------- Fotos da abertura (decisão 059) ----------
+// Cada registro da abertura confirmado no financeiro vira uma linha em
+// `jobs_aberturas`, imutável: a abertura e cada revisão de errata ou
+// edição do registro depois dela. É o que a aba "Abertura do Job" lista
+// e o que a revisão mostra como "a abertura anterior".
+
+export type TipoFotoAbertura = "abertura" | "revisao_errata" | "edicao";
+
+export interface LinhaPrevisaoFoto {
+  data_prevista: string;
+  valor: number;
+}
+
+/** Uma foto, já com os nomes resolvidos para a tela. */
+export interface FotoDaAbertura {
+  id: string;
+  /** 1 = a abertura; 2, 3, … = cada revisão ou edição depois dela. */
+  numero: number;
+  tipo: TipoFotoAbertura;
+  /** Foto nº 1 montada do estado atual na migration, não do dia da
+   *  abertura — vale para todo job aberto antes de 08/09/2026. */
+  reconstituida: boolean;
+  registradoEm: string;
+  registradoEmLabel: string;
+  registradoPorNome: string | null;
+  /** A errata que pediu a revisão, quando é uma. */
+  errata: { id: string; titulo: string } | null;
+  nomeFinanceiro: string | null;
+  projetoLabel: string | null;
+  contaRecebimentoLabel: string | null;
+  contaPagamentoLabel: string | null;
+  categoriaNome: string | null;
+  servicoNome: string | null;
+  competencias: JobCompetencia[];
+  curva: LinhaPrevisaoFoto[];
+  recebimento: LinhaPrevisaoFoto[];
+  valorJob: number | null;
+  faturamentoPrevisto: number | null;
+  custoPrevisto: number | null;
+}
+
+/** "Abertura", "Revisão 1 · errata", "Revisão 2 · edição do registro". */
+export function rotuloDaFoto(foto: FotoDaAbertura): string {
+  if (foto.numero === 1 || foto.tipo === "abertura") return "Abertura";
+  const ordinal = `Revisão ${foto.numero - 1}`;
+  return foto.tipo === "revisao_errata"
+    ? `${ordinal} · errata`
+    : `${ordinal} · edição do registro`;
+}
+
 /** Ordena o rateio por ano e trimestre — a ordem em que a tela lista. */
 export function ordenarCompetencias<T extends { trimestre: number; ano: number }>(
   linhas: T[],

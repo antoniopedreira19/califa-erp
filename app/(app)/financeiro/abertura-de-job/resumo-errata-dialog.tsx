@@ -157,8 +157,9 @@ export function ResumoErrataDialog({
                 <strong className="font-semibold text-foreground">
                   competência
                 </strong>
-                . O job segue aberto; o faturamento fica bloqueado até a revisão
-                ser salva.
+                . O formulário já abre editável, e termina em &ldquo;Registrar
+                revisão de abertura&rdquo;. O job segue aberto; o faturamento
+                fica bloqueado até a revisão ser registrada.
               </p>
 
               <div className="flex justify-end gap-2 pt-1">
@@ -185,7 +186,7 @@ export function ResumoErrataDialog({
                   className="inline-flex items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-california-red-hover"
                 >
                   <FilePenLine className="h-3.5 w-3.5" />
-                  Prosseguir para abertura
+                  Revisar abertura
                 </Link>
               </div>
             </div>

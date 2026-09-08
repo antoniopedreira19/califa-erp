@@ -24,10 +24,17 @@ import { tipoGeraDesembolso } from "@/lib/calculos/versao-totais";
 import { gerarCodigoProjetoFinanceiro } from "@/lib/codigos/projetos-financeiro";
 import { edicaoRespeitaConsumido } from "@/lib/calculos/previsao-congelada";
 import { consumoDasPrevisoes } from "./consumo";
+import { registrarFotoDaAbertura } from "./fotos";
 import { ehJanelaDePagamento, emCentavos, somaCurva } from "./curva";
 
 export type ActionResult =
-  | { ok: true; id: string }
+  | {
+      ok: true;
+      id: string;
+      /** `true` quando "Salvar" fechou uma revisão de errata — a tela
+       *  volta para a fila, como na abertura (decisão 059). */
+      revisao?: boolean;
+    }
   | { ok: false; message: string; fieldErrors?: Record<string, string[]> };
 
 /**
@@ -152,7 +159,7 @@ export async function abrirJobNoFinanceiro(
   const { data: job } = await supabase
     .from("jobs")
     .select(
-      "id, status, projeto_id, orcamento_id, faturamento_previsto, projeto:projetos(cliente_id)",
+      "id, status, projeto_id, orcamento_id, faturamento_previsto, valor_total, projeto:projetos(cliente_id)",
     )
     .eq("id", jobId)
     .eq("tenant_id", session.activeTenant.id)
@@ -162,6 +169,7 @@ export async function abrirJobNoFinanceiro(
       projeto_id: string;
       orcamento_id: string;
       faturamento_previsto: number | string | null;
+      valor_total: number | string | null;
       projeto: { cliente_id: string } | null;
     }>();
 
@@ -477,6 +485,31 @@ export async function abrirJobNoFinanceiro(
     },
   });
 
+  // A foto nº 1 (decisão 059). O job já está aberto: se a foto falhar, a
+  // abertura fica de pé e o erro vai para o log — a aba do job mostra o
+  // histórico vazio, e não um job fechado por causa do histórico.
+  await registrarFotoDaAbertura(supabase, {
+    tenantId: session.activeTenant.id,
+    jobId,
+    tipo: "abertura",
+    errataId: null,
+    profileId: session.profile.id,
+    registro: {
+      nome_financeiro: parsed.data.nome_financeiro,
+      projeto_financeiro_id: parsed.data.projeto_financeiro_id,
+      conta_recebimento_id: parsed.data.conta_recebimento_id,
+      conta_pagamento_id: parsed.data.conta_pagamento_id,
+      categoria_id: parsed.data.categoria_id,
+      servico_id: parsed.data.servico_id,
+      competencias: rateio,
+      curva: parsed.data.curva,
+      recebimento: parsed.data.recebimento,
+      valorJob: job.valor_total === null ? null : Number(job.valor_total),
+      faturamentoPrevisto,
+      custoPrevisto,
+    },
+  });
+
   revalidatePath("/financeiro");
   revalidatePath("/financeiro/abertura-de-job");
   revalidatePath(`/financeiro/abertura-de-job/${jobId}`);
@@ -767,10 +800,11 @@ export async function editarRegistroDaAbertura(
   const { data: job } = await supabase
     .from("jobs")
     .select(
-      "id, status, projeto_id, orcamento_id, faturamento_previsto, " +
+      "id, status, projeto_id, orcamento_id, faturamento_previsto, valor_total, " +
         "nome_financeiro, projeto_financeiro_id, conta_recebimento_id, " +
         "conta_pagamento_id, categoria_id, servico_id, competencia_trimestre, " +
-        "competencia_ano, projeto:projetos(cliente_id)",
+        "competencia_ano, abertura_em_revisao, abertura_revisao_errata_id, " +
+        "projeto:projetos(cliente_id)",
     )
     .eq("id", jobId)
     .eq("tenant_id", session.activeTenant.id)
@@ -784,6 +818,13 @@ export async function editarRegistroDaAbertura(
         "Só job aberto tem registro de abertura para editar. Este job está em outro estado.",
     };
   }
+
+  // Lido ANTES do update, que apaga a marca: é o que distingue "Registrar
+  // revisão de abertura" de "Editar registro" na foto e na auditoria.
+  const eraRevisao = job.abertura_em_revisao === true;
+  const errataDaRevisao = eraRevisao
+    ? ((job.abertura_revisao_errata_id as string | null) ?? null)
+    : null;
 
   const { data: categoria } = await supabase
     .from("categorias_dominio")
@@ -1109,11 +1150,12 @@ export async function editarRegistroDaAbertura(
   // decidido em 20/08/2026 para viver só na auditoria (sem bloco de
   // histórico na tela).
   await logAuditEvent({
-    acao: "job.registro_abertura_editado",
+    acao: eraRevisao ? "job.abertura_revisada" : "job.registro_abertura_editado",
     tenantId: session.activeTenant.id,
     entidadeTipo: "job",
     entidadeId: jobId,
     metadata: {
+      errata_id: errataDaRevisao,
       de: {
         nome_financeiro: job.nome_financeiro,
         projeto_financeiro_id: job.projeto_financeiro_id,
@@ -1142,10 +1184,34 @@ export async function editarRegistroDaAbertura(
     },
   });
 
+  // A foto desta confirmação (decisão 059): revisão de errata ou edição
+  // livre, com a errata pendurada quando é o caso.
+  await registrarFotoDaAbertura(supabase, {
+    tenantId: session.activeTenant.id,
+    jobId,
+    tipo: eraRevisao ? "revisao_errata" : "edicao",
+    errataId: errataDaRevisao,
+    profileId: session.profile.id,
+    registro: {
+      nome_financeiro: parsed.data.nome_financeiro,
+      projeto_financeiro_id: parsed.data.projeto_financeiro_id,
+      conta_recebimento_id: parsed.data.conta_recebimento_id,
+      conta_pagamento_id: parsed.data.conta_pagamento_id,
+      categoria_id: parsed.data.categoria_id,
+      servico_id: parsed.data.servico_id,
+      competencias: rateio,
+      curva: parsed.data.curva,
+      recebimento: parsed.data.recebimento,
+      valorJob: job.valor_total === null ? null : Number(job.valor_total),
+      faturamentoPrevisto,
+      custoPrevisto,
+    },
+  });
+
   revalidatePath("/financeiro");
   revalidatePath("/financeiro/abertura-de-job");
   revalidatePath(`/financeiro/jobs/${jobId}`);
   revalidatePath(`/jobs/${jobId}`);
 
-  return { ok: true, id: jobId };
+  return { ok: true, id: jobId, revisao: eraRevisao };
 }

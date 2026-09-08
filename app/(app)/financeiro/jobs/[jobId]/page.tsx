@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft, Lock } from "lucide-react";
+import { ArrowLeft, FilePenLine, Lock } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { pode } from "@/lib/permissoes";
@@ -22,7 +22,11 @@ import { ErratasCard } from "@/app/(app)/jobs/[jobId]/erratas-card";
 import { JobRealizadoSection } from "@/app/(app)/jobs/[jobId]/realizado/job-realizado-section";
 import { JobChatSection } from "@/app/(app)/jobs/[jobId]/comunicacao/job-chat-section";
 import { AberturaForm } from "../../abertura-de-job/[jobId]/abertura-form";
-import { carregarJobParaAbertura } from "../../abertura-de-job/dados";
+import {
+  carregarJobParaAbertura,
+  revisaoDeErrata,
+} from "../../abertura-de-job/dados";
+import { fotosDaAbertura } from "../../abertura-de-job/fotos";
 import {
   competenciasGravadas,
   consumoDasPrevisoes,
@@ -95,6 +99,7 @@ export default async function JobNoFinanceiroPage({
     categoriasRes,
     servicosRes,
     competencias,
+    fotos,
   ] = await Promise.all([
     carregarDetalheDoJob(session, params.jobId),
     carregarJobParaAbertura(tenantId, params.jobId),
@@ -127,6 +132,8 @@ export default async function JobNoFinanceiroPage({
     // gravado na abertura (decisão 055).
     servicosDoOrcamentoQuery(supabase, tenantId),
     competenciasGravadas(supabase, tenantId, params.jobId),
+    // As fotos do registro: a abertura e cada revisão (decisão 059).
+    fotosDaAbertura(supabase, tenantId, params.jobId),
   ]);
 
   if (!detalhe || !carregadoParaAbertura) notFound();
@@ -207,8 +214,24 @@ export default async function JobNoFinanceiroPage({
   );
   const situacaoMeta = SITUACAO_META[situacao];
 
-  // ---- Formulário de abertura em leitura ----
-  const custoPrevisto = Math.round((job.custo_previsto_total ?? 0) * 100) / 100;
+  // ---- Formulário de abertura em leitura (ou em revisão) ----
+  // O custo previsto é o da PLANILHA DE HOJE, não o que a abertura gravou
+  // em `custo_previsto_total`. Era o gravado até 08/09/2026, e por isso o
+  // job aberto só com custo A ("nenhum item de calha PP") continuava sem
+  // curva depois de uma errata trazer uma linha B: a tela lia zero, o
+  // servidor lia a planilha, e a revisão não tinha como incluir o
+  // desembolso novo (decisão 059). `planilha_desembolso` é a mesma conta
+  // da fila e da action: planejado dos tipos que geram PP.
+  const custoPrevisto =
+    Math.round((jobNaFila.planilha_desembolso ?? 0) * 100) / 100;
+
+  // A errata que devolveu o job ao mural, quando há uma: o formulário
+  // abre em revisão, editável, e mostra a abertura anterior no topo.
+  const emRevisao = job.abertura_em_revisao === true;
+  const revisao =
+    emRevisao && job.abertura_revisao_errata_id
+      ? await revisaoDeErrata(job.abertura_revisao_errata_id, tenantId)
+      : null;
   const faturamentoPrevisto =
     Math.round(Number(job.faturamento_previsto ?? 0) * 100) / 100;
 
@@ -262,10 +285,19 @@ export default async function JobNoFinanceiroPage({
                   Aguardando encerramento
                 </span>
               )}
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-white px-3 py-1 text-[11px] font-semibold text-muted-foreground">
-                <Lock className="h-3 w-3" />
-                Somente leitura
-              </span>
+              {/* Em revisão a aba de abertura está EDITÁVEL — dizer
+                  "somente leitura" no cabeçalho seria mentira (decisão 059). */}
+              {emRevisao ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-california-red/30 bg-california-red/[0.06] px-3 py-1 text-[11px] font-semibold text-california-red">
+                  <FilePenLine className="h-3 w-3" />
+                  Revisão da abertura pendente
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-white px-3 py-1 text-[11px] font-semibold text-muted-foreground">
+                  <Lock className="h-3 w-3" />
+                  Somente leitura
+                </span>
+              )}
             </div>
           </div>
 
@@ -294,7 +326,9 @@ export default async function JobNoFinanceiroPage({
         abertura={
           <AberturaForm
             job={jobNaFila}
-            modo="leitura"
+            modo={emRevisao ? "revisao" : "leitura"}
+            fotos={fotos}
+            revisao={revisao}
             categorias={categoriasRes.data ?? []}
             servicos={servicosRes.data ?? []}
             projetos={projetos}

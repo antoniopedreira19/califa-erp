@@ -94,6 +94,11 @@ export type AuditAction =
   // É o único lugar onde essa alteração fica registrada — decisão do
   // Tiago (20/08/2026): auditoria sim, bloco de histórico na tela não.
   | "job.registro_abertura_editado"
+  // "Registrar revisão de abertura" — a mesma gravação da edição, mas
+  // depois de uma errata devolver o job ao mural (decisão 059). Separada
+  // porque ela fecha a revisão (`abertura_em_revisao`) e libera o envio de
+  // PP e o faturamento; o metadata traz o de/para e a errata.
+  | "job.abertura_revisada"
   // Projeto criado pela própria tela de abertura, na tabela
   // `projetos_financeiro`. Não é `projeto.criado`: aquele é o projeto da
   // produção, que nasce do orçamento e a produção enxerga.
