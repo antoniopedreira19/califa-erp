@@ -2925,3 +2925,46 @@ beco, porque não existe "des-enviar PP".
 em errata**. Soma-se à trava da
 [040](../decisions/040-errata-nao-toca-linha-com-pp-e-trava-o-envio-de-pp.md),
 que já barra qualquer linha com PP no financeiro.
+
+## ⚠️ Nota de 2026-09-08 — a PP já enviada ganhou ficha e cancelamento no painel
+
+Pedido do Tiago, olhando o painel "Destrinchar realizado" de um item com
+PP em avaliação. O bloco **"Já no financeiro"** tinha só o olho do PDF: a
+PP enviada não podia mais ser aberta (`editarPedidoCompraGerada` só
+aceita a `gerada`) e não tinha como ser cancelada dali — o cancelamento
+existia, mas só na aba "Pedidos de Produção". A
+[039](../decisions/039-pp-nasce-gerada-e-o-envio-ao-financeiro-e-uma-acao.md)
+já prometia "enviar, editar, **ver** e **cancelar** por PP" no painel.
+
+Cada linha do bloco passou a ter três botões:
+
+| | O que faz |
+|---|---|
+| **Ver formulário** | abre a ficha da PP em leitura, `pps/ver-pp-drawer.tsx` |
+| **Ver PDF** | o de sempre (o rótulo era "Ver PP", que agora seria ambíguo) |
+| **Cancelar PP** | a mesma `cancelarPedidoCompra` da aba de PPs |
+
+**A ficha mostra o que o PDF não mostra:** empresa emissora, o trio
+`R$ Unit. × QT × D/M`, especificações, parcelas com o vencimento
+negociado **e a data que o financeiro programou**, anexos (cada um abre
+por URL assinada), quem gerou, quem enviou, e o motivo de uma rejeição.
+Ela não grava nada e não depende de permissão — quem só lê o job também
+precisa do formulário. Como o de PP, fecha devolvendo para o painel.
+
+**Cancelar segue a regra do servidor, sem regra nova:** `em_avaliacao` e
+`rejeitada` ainda voltam atrás; `aprovada` já é título a pagar e `pago`
+precisaria de estorno. Nesses dois o botão fica **apagado com o motivo no
+`title`**, em vez de sumir — sumir parece falta de permissão. A
+confirmação ganhou uma frase para a PP que já saiu do job: *"Ela já está
+no financeiro: cancelar a tira da fila de avaliação e ela deixa de contar
+no realizado do item."*
+
+**De quebra:** o embed de parcelas de `carregar-detalhe.ts` passou a
+trazer `data_pagamento` — é o que a ficha usa para dizer quando cada
+parcela foi programada.
+
+**Verificado no navegador** em 08/09/2026 (JOB-0015, job de teste):
+ficha da PP em avaliação e da aprovada com 3 parcelas, botão apagado na
+aprovada com o motivo certo, e o cancelamento de PP-00010 pelo painel —
+"Em PPs emitidas" caiu de R$ 18.000,00 para R$ 12.000,00, com
+`pedido_compra.cancelada` na auditoria.
