@@ -15,6 +15,11 @@ export type MultiSelectEmpresasProps = {
   empresas: Empresa[];
   selecionadas: string[];
   onSelectionChange: (ids: string[]) => void;
+  /**
+   * Chamado quando o Popover abre/fecha. Útil pra consumidores que
+   * batch-commitam mudanças no fechamento (ver PageHeaderEmpresaFilter).
+   */
+  onOpenChange?: (open: boolean) => void;
 };
 
 /**
@@ -27,7 +32,7 @@ export type MultiSelectEmpresasProps = {
  * Marcar todas / Limpar: atalhos no topo do dropdown.
  */
 export function MultiSelectEmpresas(props: MultiSelectEmpresasProps) {
-  const { empresas, selecionadas, onSelectionChange } = props;
+  const { empresas, selecionadas, onSelectionChange, onOpenChange } = props;
 
   const total = empresas.length;
   const selCount = selecionadas.length;
@@ -56,7 +61,7 @@ export function MultiSelectEmpresas(props: MultiSelectEmpresasProps) {
   };
 
   return (
-    <Popover>
+    <Popover onOpenChange={onOpenChange}>
       <PopoverTrigger asChild>
         <Button
           variant="outline"
