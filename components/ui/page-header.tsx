@@ -1,11 +1,7 @@
-"use client";
-
 import * as React from "react";
-import { useRouter } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
 import type { Empresa } from "@/lib/types";
-import { MultiSelectEmpresas } from "@/components/ui/multi-select-empresas";
-import { setActiveEmpresas } from "@/app/actions/set-active-empresas";
+import { PageHeaderEmpresaFilter } from "@/components/ui/page-header-empresa-filter";
 
 export type PageHeaderProps = {
   title: string;
@@ -13,14 +9,18 @@ export type PageHeaderProps = {
   icon?: LucideIcon;
   eyebrow?: string;
   showEmpresaFilter?: boolean;
-  /** Obrigatório se showEmpresaFilter=true. */
   empresas?: Empresa[];
-  /** Obrigatório se showEmpresaFilter=true. */
   activeEmpresas?: Empresa[];
   actions?: React.ReactNode;
   filters?: React.ReactNode;
 };
 
+/**
+ * Server component por default — passa a delegar o dropdown de empresa
+ * pra um sub-componente client isolado. Isso evita puxar
+ * useRouter + server action pra client bundle das telas que só
+ * usam título/descrição.
+ */
 export function PageHeader(props: PageHeaderProps) {
   const {
     title,
@@ -34,9 +34,8 @@ export function PageHeader(props: PageHeaderProps) {
     filters,
   } = props;
 
-  const router = useRouter();
-
   const temLinhaDeBaixo = filters || actions;
+  const temDropdown = showEmpresaFilter && empresas && activeEmpresas;
 
   return (
     <div className="space-y-4 mb-6">
@@ -62,15 +61,11 @@ export function PageHeader(props: PageHeaderProps) {
           )}
         </div>
 
-        {showEmpresaFilter && empresas && activeEmpresas && (
+        {temDropdown && (
           <div className="shrink-0 pt-1">
-            <MultiSelectEmpresas
-              empresas={empresas}
-              selecionadas={activeEmpresas.map((e) => e.id)}
-              onSelectionChange={async (ids) => {
-                await setActiveEmpresas(ids);
-                router.refresh();
-              }}
+            <PageHeaderEmpresaFilter
+              empresas={empresas!}
+              activeEmpresas={activeEmpresas!}
             />
           </div>
         )}
