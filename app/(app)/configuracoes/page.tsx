@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { pode } from "@/lib/permissoes";
+import { PageHeader } from "@/components/ui/page-header";
 
 export const dynamic = "force-dynamic";
 
@@ -20,23 +21,12 @@ export default async function ConfiguracoesPage() {
 
   return (
     <div className="space-y-8">
-      <header className="space-y-2">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-california-red">
-          Configurações
-        </p>
-        <div className="flex items-center gap-3">
-          <div className="rounded-lg bg-california-red/10 p-2">
-            <SettingsIcon className="h-5 w-5 text-california-red" />
-          </div>
-          <h1 className="text-3xl font-bold tracking-tight">
-            Configurações do sistema
-          </h1>
-        </div>
-        <p className="text-sm text-muted-foreground max-w-2xl">
-          Áreas de configuração do ERP California. Novas seções aparecem aqui
-          à medida que os módulos vão sendo liberados.
-        </p>
-      </header>
+      <PageHeader
+        eyebrow="SISTEMA"
+        title="Configurações do sistema"
+        description="Áreas de configuração do ERP California. Novas seções aparecem aqui à medida que os módulos vão sendo liberados."
+        icon={SettingsIcon}
+      />
 
       <div className="grid gap-4 md:grid-cols-2">
         {podeCadastros && (

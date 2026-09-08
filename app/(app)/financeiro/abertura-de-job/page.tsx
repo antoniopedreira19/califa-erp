@@ -7,6 +7,7 @@ import { listarJobsDoFinanceiro } from "./dados-abertos";
 import { formatEnviadoEm } from "./formatos";
 import { type FilaLinha } from "./fila-list";
 import { AberturaTabs, type Aba } from "./abertura-tabs";
+import { PageHeader } from "@/components/ui/page-header";
 
 export const dynamic = "force-dynamic";
 
@@ -62,18 +63,12 @@ export default async function AberturaDeJobPage({
           Voltar para central financeira
         </Link>
       </div>
-      <header className="space-y-2">
-        <div className="flex items-center gap-3">
-          <div className="rounded-lg bg-california-red/10 p-2">
-            <Landmark className="h-5 w-5 text-california-red" />
-          </div>
-          <h1 className="text-3xl font-bold tracking-tight">Abertura de Job</h1>
-        </div>
-        <p className="max-w-3xl text-sm text-muted-foreground">
-          Confira e abra os jobs enviados pela produção. Depois de abertos, eles
-          ficam disponíveis para acompanhamento e faturamento.
-        </p>
-      </header>
+      <PageHeader
+        eyebrow="FINANCEIRO"
+        title="Abertura de Job"
+        description="Confira e abra os jobs enviados pela produção. Depois de abertos, eles ficam disponíveis para acompanhamento e faturamento."
+        icon={Landmark}
+      />
 
       <AberturaTabs
         fila={linhas}

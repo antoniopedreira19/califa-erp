@@ -3,6 +3,7 @@ import { ArrowLeft, Receipt } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
+import { PageHeader } from "@/components/ui/page-header";
 import type { ContaBancaria, DocumentoTipo } from "@/lib/types";
 import {
   DOCUMENTO_TIPOS_FISCAIS,
@@ -378,18 +379,12 @@ export default async function ConciliacaoPage({
           Voltar para central financeira
         </Link>
       </div>
-      <header className="space-y-1">
-        <div className="flex items-center gap-3">
-          <div className="rounded-lg bg-california-red/10 p-2">
-            <Receipt className="h-5 w-5 text-california-red" />
-          </div>
-          <h1 className="text-3xl font-bold tracking-tight">Conciliação</h1>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          Extrato por conta bancária — base pra bater com o extrato do banco e
-          alimentar o DRE.
-        </p>
-      </header>
+      <PageHeader
+        eyebrow="FINANCEIRO"
+        title="Conciliação"
+        description="Extrato por conta bancária — base pra bater com o extrato do banco e alimentar o DRE."
+        icon={Receipt}
+      />
 
       <FiltrosConta
         contas={listaContas}

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { BarChart3, ArrowRight, TrendingUp, FileText, type LucideIcon } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
+import { PageHeader } from "@/components/ui/page-header";
 
 export const dynamic = "force-dynamic";
 
@@ -9,21 +10,12 @@ export default async function RelatoriosPage() {
 
   return (
     <div className="space-y-8">
-      <header className="space-y-2">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-california-red">
-          Relatórios
-        </p>
-        <div className="flex items-center gap-3">
-          <div className="rounded-lg bg-california-red/10 p-2">
-            <BarChart3 className="h-5 w-5 text-california-red" />
-          </div>
-          <h1 className="text-3xl font-bold tracking-tight">Relatórios gerenciais</h1>
-        </div>
-        <p className="text-sm text-muted-foreground max-w-2xl">
-          Dashboards de leitura sobre operação e financeiro. Novos relatórios aparecem
-          aqui à medida que os módulos vão sendo liberados.
-        </p>
-      </header>
+      <PageHeader
+        eyebrow="RELATÓRIOS"
+        title="Relatórios gerenciais"
+        description="Dashboards de leitura sobre operação e financeiro. Novos relatórios aparecem aqui à medida que os módulos vão sendo liberados."
+        icon={BarChart3}
+      />
 
       <div className="grid gap-4 md:grid-cols-2">
         <RelatorioCard

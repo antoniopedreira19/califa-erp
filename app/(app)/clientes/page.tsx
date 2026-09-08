@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { Cliente } from "@/lib/types";
 import { EmptyState } from "@/components/empty-state";
 import { ClientesList } from "./clientes-list";
+import { PageHeader } from "@/components/ui/page-header";
 
 export const dynamic = "force-dynamic";
 
@@ -35,27 +36,21 @@ export default async function ClientesPage() {
           <ArrowLeft className="h-3 w-3" />
           Voltar para cadastros
         </Link>
-        <header className="mt-3 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-          <div className="space-y-2">
-            <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-california-red/10 p-2">
-                <Users className="h-5 w-5 text-california-red" />
-              </div>
-              <h1 className="text-3xl font-bold tracking-tight">Clientes</h1>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              Empresas para as quais a agência produz orçamentos. Cliente ativo
-              aparece na criação de orçamento.
-            </p>
-          </div>
-          <Link
-            href="/clientes/novo"
-            className="inline-flex items-center justify-center gap-2 rounded-lg bg-california-red px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-california-red-hover hover:shadow-brand transition-all"
-          >
-            <Plus className="h-4 w-4" />
-            Novo cliente
-          </Link>
-        </header>
+        <PageHeader
+          eyebrow="COMERCIAL"
+          title="Clientes"
+          description="Empresas para as quais a agência produz orçamentos. Cliente ativo aparece na criação de orçamento."
+          icon={Users}
+          actions={
+            <Link
+              href="/clientes/novo"
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-california-red px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-california-red-hover hover:shadow-brand transition-all"
+            >
+              <Plus className="h-4 w-4" />
+              Novo cliente
+            </Link>
+          }
+        />
       </div>
 
       {rows.length === 0 ? (

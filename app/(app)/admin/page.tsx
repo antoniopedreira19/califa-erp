@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { requireAdmin } from "@/lib/auth/session";
 import { createServiceClient } from "@/lib/supabase/server";
+import { PageHeader } from "@/components/ui/page-header";
 
 export const dynamic = "force-dynamic";
 
@@ -34,23 +35,12 @@ export default async function AdminPage() {
 
   return (
     <div className="space-y-8">
-      <header className="space-y-2">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-california-red">
-          Administração
-        </p>
-        <div className="flex items-center gap-3">
-          <div className="rounded-lg bg-california-red/10 p-2">
-            <ShieldCheck className="h-5 w-5 text-california-red" />
-          </div>
-          <h1 className="text-3xl font-bold tracking-tight">
-            Administração
-          </h1>
-        </div>
-        <p className="text-sm text-muted-foreground max-w-2xl">
-          Gestão de acesso, papéis e regras internas do California ERP.
-          Disponível apenas para administradores.
-        </p>
-      </header>
+      <PageHeader
+        eyebrow="ADMINISTRAÇÃO"
+        title="Administração"
+        description="Gestão de acesso, papéis e regras internas do California ERP. Disponível apenas para administradores."
+        icon={ShieldCheck}
+      />
 
       <div className="grid gap-4 md:grid-cols-2">
         <AdminCard

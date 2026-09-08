@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { Fornecedor } from "@/lib/types";
 import { EmptyState } from "@/components/empty-state";
 import { FornecedoresList } from "./fornecedores-list";
+import { PageHeader } from "@/components/ui/page-header";
 
 export const dynamic = "force-dynamic";
 
@@ -32,27 +33,21 @@ export default async function FornecedoresPage() {
           <ArrowLeft className="h-3 w-3" />
           Voltar para cadastros
         </Link>
-        <header className="mt-3 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-          <div className="space-y-2">
-            <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-california-red/10 p-2">
-                <Building2 className="h-5 w-5 text-california-red" />
-              </div>
-              <h1 className="text-3xl font-bold tracking-tight">Fornecedores</h1>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              Pessoas físicas ou jurídicas que aparecem como custo nos itens
-              da versão do orçamento.
-            </p>
-          </div>
-          <Link
-            href="/fornecedores/novo"
-            className="inline-flex items-center justify-center gap-2 rounded-lg bg-california-red px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-california-red-hover hover:shadow-brand transition-all"
-          >
-            <Plus className="h-4 w-4" />
-            Novo fornecedor
-          </Link>
-        </header>
+        <PageHeader
+          eyebrow="COMERCIAL"
+          title="Fornecedores"
+          description="Pessoas físicas ou jurídicas que aparecem como custo nos itens da versão do orçamento."
+          icon={Building2}
+          actions={
+            <Link
+              href="/fornecedores/novo"
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-california-red px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-california-red-hover hover:shadow-brand transition-all"
+            >
+              <Plus className="h-4 w-4" />
+              Novo fornecedor
+            </Link>
+          }
+        />
       </div>
 
       {rows.length === 0 ? (

@@ -4,6 +4,7 @@ import { requireAdmin } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { EmpresasList, type EmpresaRow } from "./empresas-list";
 import { EmpresaDrawer } from "./empresa-drawer";
+import { PageHeader } from "@/components/ui/page-header";
 
 export const dynamic = "force-dynamic";
 
@@ -57,24 +58,13 @@ export default async function AdminEmpresasPage() {
         Voltar para Administração
       </Link>
 
-      <header className="flex items-start justify-between gap-6">
-        <div className="space-y-2">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-california-red">
-            Administração
-          </p>
-          <div className="flex items-center gap-3">
-            <div className="rounded-lg bg-california-red/10 p-2">
-              <Building2 className="h-5 w-5 text-california-red" />
-            </div>
-            <h1 className="text-3xl font-bold tracking-tight">Empresas</h1>
-          </div>
-          <p className="text-sm text-muted-foreground max-w-2xl">
-            Cadastre as pessoas jurídicas do grupo California. A empresa marcada
-            como <b>principal</b> é usada por padrão em novos projetos.
-          </p>
-        </div>
-        <EmpresaDrawer mode="create" />
-      </header>
+      <PageHeader
+        eyebrow="ADMINISTRAÇÃO"
+        title="Empresas"
+        description="Cadastre as pessoas jurídicas do grupo California. A empresa marcada como principal é usada por padrão em novos projetos."
+        icon={Building2}
+        actions={<EmpresaDrawer mode="create" />}
+      />
 
       <EmpresasList rows={rows} />
     </div>
