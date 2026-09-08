@@ -395,7 +395,14 @@ export default async function ContasReceberPage({
 
   // --- Aba Títulos a Receber ----------------------------------------------
 
-  const detalheBaixa = new Map<string, { conta: string; centro: string }>();
+  // Centro de custo e subtipo saem SEPARADOS (08/09/2026). Concatenados,
+  // viravam "01 · Geral (provisório)" — o código do TIPO colado no nome do
+  // SUBTIPO, com "Receita" fora da tela. Quem conferia a baixa lia só o
+  // subtipo e achava que era o centro de custo inteiro.
+  const detalheBaixa = new Map<
+    string,
+    { conta: string; centro: string; subtipo: string | null }
+  >();
   for (const l of (baixasRes.data ?? []) as unknown as Array<{
     titulo_receber_id: string | null;
     conta: { nome: string; banco: string } | null;
@@ -405,9 +412,8 @@ export default async function ContasReceberPage({
     if (!l.titulo_receber_id) continue;
     detalheBaixa.set(l.titulo_receber_id, {
       conta: l.conta ? `${l.conta.nome} · ${l.conta.banco}` : "—",
-      centro: l.tipo
-        ? `${l.tipo.codigo} · ${l.subtipo?.nome ?? l.tipo.nome}`
-        : "—",
+      centro: l.tipo ? `${l.tipo.codigo} · ${l.tipo.nome}` : "—",
+      subtipo: l.subtipo?.nome ?? null,
     });
   }
 
@@ -491,6 +497,7 @@ export default async function ContasReceberPage({
       inadimplente_desde: r.inadimplente_desde ?? null,
       conta_nome: baixa?.conta ?? null,
       centro_nome: baixa?.centro ?? null,
+      subtipo_nome: baixa?.subtipo ?? null,
     };
   });
 
