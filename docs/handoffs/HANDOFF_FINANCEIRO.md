@@ -3794,17 +3794,26 @@ para faxina própria — derrubar constraint é destrutivo.
 
 ### Verificação (2026-09-09, navegador logado)
 
-Dropdown de baixa listando as **três** contas ativas, incluindo a que não
-tem empresa (antes listava uma só); cadastro sem o campo Empresa, com a
-conta criada e gravada com `empresa_id = null`; listagem do cadastro com
-as três (o `!inner` teria escondido a nova) e `/financeiro/cadastros`
-contando 4 ativas; `/financeiro/abertura-de-job/[jobId]` renderizando sem
-erro. Console sem erro de aplicação — só o aviso da extensão Trancy.
+Dropdown de baixa listando as **três** contas ativas, incluindo a sem
+empresa (era uma só); cadastro sem o campo Empresa, conta criada e gravada
+com `empresa_id = null`; listagem do cadastro com as três (o `!inner`
+teria escondido a nova) e `/financeiro/cadastros` contando 4 ativas;
+seletor de conta **dentro da abertura de job** com as três; `avulsa/[id]`
+com id inexistente respondendo **404 limpo**. Console sem erro de
+aplicação — só o aviso da extensão Trancy.
 
-Ficaram **sem exercício por falta de dado**: o dialog de Contas a Receber
-(zero títulos a receber) e a página `avulsa/[id]` (zero contas avulsas). O
-seletor de conta dentro da abertura de job também não foi aberto — ele só
-aparece adiante no formulário.
+⚠️ **O seletor da abertura de job ficou incoerente e foi corrigido no
+mesmo commit.** `listarContasBancarias` montava o detalhe da linha com a
+EMPRESA da conta — o que deixava as contas antigas mostrando empresa e as
+novas mostrando outra coisa. Agora o detalhe é sempre **nome da conta +
+agência**, e o embed `empresa:empresas(...)` saiu da query.
+
+**Não exercitadas, por falta de dado:** o dialog de Contas a Receber
+(zero títulos a receber — criar um exige emitir faturamento) e o caminho
+"bom" de `avulsa/[id]` (zero contas avulsas — criar uma exige lançar
+título com rateio de regional). Nos dois a mudança foi a mesma remoção de
+recorte por empresa, e não valia criar lançamento financeiro de teste no
+banco da agência para prová-la.
 
 ⚠️ **Resíduo:** a conta "ZZ Conta Sem Empresa (teste)" ficou no banco —
 foi ela que provou a gravação. Aparece no dropdown de qualquer baixa;
