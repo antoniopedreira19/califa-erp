@@ -6,8 +6,6 @@ import { createClient } from "@/lib/supabase/server";
 import type { Cliente, ClienteProduto, ClientePortal } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { ClienteForm } from "../cliente-form";
-import { ProdutosCard } from "./produtos-card";
-import { PortaisCard } from "./portais-card";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +25,8 @@ export default async function EditarClientePage({
       .eq("tenant_id", session.activeTenant.id)
       .maybeSingle<Cliente>(),
     // O produto padrão (a marca do cliente) encabeça a lista; os demais
-    // seguem por código.
+    // seguem por código. As inativas vêm junto: desde 09/09/2026 elas
+    // aparecem no formulário, apagadas, com a opção de reativar.
     supabase
       .from("cliente_produtos")
       .select("*")
@@ -56,10 +55,11 @@ export default async function EditarClientePage({
   const portais = (portaisRes.data ?? []) as ClientePortal[];
 
   return (
-    <div className="space-y-6 max-w-3xl mx-auto">
+    <div className="mx-auto max-w-5xl space-y-5">
       <div>
         <Link
           href="/clientes"
+          prefetch={false}
           className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
           <ArrowLeft className="h-3 w-3" />
@@ -77,13 +77,10 @@ export default async function EditarClientePage({
         </div>
       </div>
 
-      <div className="rounded-2xl border border-border bg-card p-6 shadow-soft">
-        <ClienteForm cliente={cliente} />
-      </div>
-
-      <ProdutosCard clienteId={cliente.id} produtos={produtos} />
-
-      <PortaisCard clienteId={cliente.id} portais={portais} />
+      {/* O mesmo formulário da criação: mesmos campos, mesmas seções.
+          Marcas e portais são editados aqui dentro desde 09/09/2026 —
+          eram dois cartões à parte. */}
+      <ClienteForm cliente={cliente} marcas={produtos} portais={portais} />
     </div>
   );
 }

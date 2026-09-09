@@ -516,6 +516,14 @@ pelo MCP: 2 tabelas, 7 policies, `authenticated` com acesso, `anon` sem nenhum.
 
 1. **Cadastro de portais no cliente.** ✅ Entregue — `PortaisCard` em
    `/clientes/[id]`, com inativação em vez de exclusão.
+
+   > ⚠️ **09/09/2026 — o `PortaisCard` saiu.** Os portais passaram a ser
+   > editados dentro do próprio formulário de cliente, junto do resto do
+   > cadastro, e agora podem ser criados **no mesmo envio** que cria o
+   > cliente — antes só depois de ele existir. A regra de não excluir
+   > continua igual: o "X" inativa, e a linha fica no formulário com a
+   > opção de reativar. Ver
+   > [`docs/decisions/066-o-cliente-nasce-com-marcas-e-portais.md`](docs/decisions/066-o-cliente-nasce-com-marcas-e-portais.md).
 2. **A gravação não foi exercitada de ponta a ponta.** ✅ Exercitada no
    JOB-0010 (seção 25).
 3. **Etapa 2 — encerramento.** ✅ Entregue (seção 26).

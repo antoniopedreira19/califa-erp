@@ -150,6 +150,12 @@ export interface Cliente {
   cnpj: string | null;
   email: string | null;
   telefone: string | null;
+  /** E-mails adicionais, além de `email`. Sem rótulo e sem ordem
+   *  explícita: a ordem do array é a que a tela mostra (09/09/2026). */
+  emails_extras: string[];
+  /** Telefones adicionais, além de `telefone`. Só dígitos, como o
+   *  principal. */
+  telefones_extras: string[];
   observacoes: string | null;
   status: CadastroStatus;
   /** Percentual de honorários padrão do cliente. É com ele que toda versão
