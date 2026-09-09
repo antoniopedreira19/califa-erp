@@ -3,13 +3,23 @@ import { isValidCnpj, isValidCpf, onlyDigits } from "@/lib/utils";
 import { getBancoByCodigo } from "@/lib/dados/bancos-febraban";
 
 /**
- * Schema de fornecedor (PF ou PJ). Documento (CPF ou CNPJ) opcional; se
- * informado, precisa ter tamanho e dígito verificador coerentes com o
- * tipo_pessoa. Isso é validado tanto aqui quanto no CHECK do banco.
+ * Schema de fornecedor (PF ou PJ).
  *
- * Regra central: pelo menos um bloco de pagamento completo (banco OU PIX).
- * Banco parcial (qualquer campo sem todos os obrigatórios) é inválido.
- * PIX parcial (tipo sem chave ou chave sem tipo) também é inválido.
+ * O que o cadastro EXIGE (decisões do Tiago em 09/09/2026, junto do
+ * desenho novo do formulário — "Fornecedores - Novo Cadastro"):
+ *
+ *   1. **nome**, **documento** (CPF ou CNPJ), **e-mail** e **telefone**.
+ *      Os três últimos eram exigidos só no cadastro rápido de dentro da
+ *      PP (decisão 048) e agora valem para os dois caminhos: o documento
+ *      é a chave que impede cadastro repetido, e e-mail e telefone são o
+ *      que o financeiro usa para cobrar a nota.
+ *   2. **Um bloco de pagamento completo**, banco OU PIX. Bloco começado e
+ *      não terminado continua inválido, nos dois casos.
+ *
+ * O que ficou OPCIONAL: o **endereço** inteiro. Ele era obrigatório e
+ * travava o cadastro de quem só tinha os dados de pagamento à mão; segue
+ * validado quando preenchido (CEP com 8 dígitos, UF da lista), e o
+ * formulário o mantém recolhido até alguém pedir.
  */
 
 const UFS_BRASIL = [
@@ -26,35 +36,49 @@ export const fornecedorSchema = z
     tipo_pessoa: z.enum(["fisica", "juridica"]),
     nome: z.string().trim().min(2, "Informe o nome (mín. 2 caracteres).").max(200),
     razao_social: z.preprocess(nullIfEmpty, z.string().trim().max(200).nullable().optional()),
+    // Os três obrigatórios desde 09/09/2026 — o tamanho e o dígito
+    // verificador do documento continuam sendo conferidos no superRefine,
+    // contra o tipo de pessoa.
     cpf_cnpj: z.preprocess(
       (v) => (typeof v === "string" ? onlyDigits(v) : v),
-      z.string().nullable().optional().transform((v) => (v ? v : null)),
+      z.string().min(1, "Documento obrigatório."),
     ),
-    email: z.preprocess(nullIfEmpty, z.string().trim().max(200).nullable().optional())
+    email: z
+      .string({ required_error: "E-mail obrigatório." })
+      .trim()
+      .min(1, "E-mail obrigatório.")
+      .max(200)
       .refine(
-        (v) => v == null || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v),
+        (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v),
         "E-mail inválido.",
       ),
     telefone: z.preprocess(
       (v) => (typeof v === "string" ? onlyDigits(v) : v),
-      z.string().nullable().optional(),
-    )
-      .refine((v) => v == null || v === "" || v.length === 10 || v.length === 11,
-        "Telefone deve ter 10 ou 11 dígitos.")
-      .transform((v) => (v ? v : null)),
+      z.string().min(1, "Telefone obrigatório."),
+    ).refine(
+      (v) => v.length === 10 || v.length === 11,
+      "Telefone deve ter 10 ou 11 dígitos.",
+    ),
     observacoes: z.preprocess(nullIfEmpty, z.string().trim().max(2000).nullable().optional()),
 
-    // === endereço (todos obrigatórios, exceto complemento) ===
+    // === endereço (opcional desde 09/09/2026; formato ainda vale) ===
+    // As seis colunas já eram `null`-áveis no banco: o que travava o
+    // cadastro era só esta validação.
     cep: z.preprocess(
       (v) => (typeof v === "string" ? onlyDigits(v) : v),
-      z.string().min(1, "CEP obrigatório."),
-    ).refine((v) => /^[0-9]{8}$/.test(v), "CEP deve ter 8 dígitos."),
-    logradouro: z.string().trim().min(1, "Logradouro obrigatório.").max(200),
-    numero: z.string().trim().min(1, "Número obrigatório.").max(20),
+      z.string().nullable().optional().transform((v) => (v ? v : null)),
+    ).refine((v) => v == null || /^[0-9]{8}$/.test(v), "CEP deve ter 8 dígitos."),
+    logradouro: z.preprocess(nullIfEmpty, z.string().trim().max(200).nullable().optional()),
+    numero: z.preprocess(nullIfEmpty, z.string().trim().max(20).nullable().optional()),
     complemento: z.preprocess(nullIfEmpty, z.string().trim().max(100).nullable().optional()),
-    bairro: z.string().trim().min(1, "Bairro obrigatório.").max(100),
-    cidade: z.string().trim().min(1, "Cidade obrigatória.").max(100),
-    uf: z.enum(UFS_BRASIL, { errorMap: () => ({ message: "UF inválida." }) }),
+    bairro: z.preprocess(nullIfEmpty, z.string().trim().max(100).nullable().optional()),
+    cidade: z.preprocess(nullIfEmpty, z.string().trim().max(100).nullable().optional()),
+    uf: z.preprocess(
+      nullIfEmpty,
+      z.enum(UFS_BRASIL, { errorMap: () => ({ message: "UF inválida." }) })
+        .nullable()
+        .optional(),
+    ),
 
     // === banco (todos opcionais individualmente; coerência no superRefine) ===
     banco_codigo: z.preprocess(nullIfEmpty, z.string().nullable().optional()),
@@ -186,33 +210,10 @@ export type FornecedorInput = z.infer<typeof fornecedorSchema>;
 /**
  * O cadastro rápido de dentro da PP (04/09/2026, decisão 048).
  *
- * Mesmo formulário e mesmas regras do cadastro completo, com três campos
- * a mais obrigatórios: documento (CPF ou CNPJ), e-mail e telefone. O
- * documento é o que impede a duplicidade — sem ele a verificação não
- * tem o que comparar; e-mail e telefone são o que o financeiro precisa
- * para cobrar a nota do fornecedor que acabou de nascer numa PP.
- *
- * O bloco de pagamento (banco OU PIX) já é obrigatório no schema base.
+ * Ele existia para exigir três campos a mais que o cadastro pela página:
+ * documento, e-mail e telefone. Desde 09/09/2026 esses três são
+ * obrigatórios no schema base, e os dois caminhos passaram a ter a mesma
+ * régua — o alias continua exportado porque é o nome que as actions do
+ * cadastro rápido usam, e porque ele diz de onde a exigência veio.
  */
-export const fornecedorCompletoSchema = fornecedorSchema.superRefine(
-  (data, ctx) => {
-    if (!data.cpf_cnpj) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["cpf_cnpj"],
-        message:
-          data.tipo_pessoa === "fisica" ? "CPF obrigatório." : "CNPJ obrigatório.",
-      });
-    }
-    if (!data.email) {
-      ctx.addIssue({ code: "custom", path: ["email"], message: "E-mail obrigatório." });
-    }
-    if (!data.telefone) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["telefone"],
-        message: "Telefone obrigatório.",
-      });
-    }
-  },
-);
+export const fornecedorCompletoSchema = fornecedorSchema;

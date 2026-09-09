@@ -3815,6 +3815,7 @@ título com rateio de regional). Nos dois a mudança foi a mesma remoção de
 recorte por empresa, e não valia criar lançamento financeiro de teste no
 banco da agência para prová-la.
 
-⚠️ **Resíduo:** a conta "ZZ Conta Sem Empresa (teste)" ficou no banco —
-foi ela que provou a gravação. Aparece no dropdown de qualquer baixa;
-inative pelo cadastro quando não precisar mais.
+A conta "ZZ Conta Sem Empresa (teste)", criada para provar a gravação, foi
+**apagada** a pedido do Tiago depois do teste — as cinco FKs que apontam
+para `contas_bancarias` são todas `ON DELETE RESTRICT` e nenhuma tinha
+vínculo com ela. Sem resíduo.

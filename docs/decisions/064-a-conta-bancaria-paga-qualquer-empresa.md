@@ -133,6 +133,7 @@ Nos dois casos eu preferi não criar lançamento financeiro de teste no
 banco da agência para provar uma linha removida de filtro. Se valer a
 pena, o Tiago autoriza e a gente exercita.
 
-⚠️ **Resíduo:** a conta **"ZZ Conta Sem Empresa (teste)"** ficou no banco;
-foi ela que provou a gravação. Ela aparece no dropdown de qualquer baixa —
-inative pelo cadastro quando não precisar mais.
+A conta **"ZZ Conta Sem Empresa (teste)"**, criada para provar a gravação,
+foi **apagada** em 09/09/2026 a pedido do Tiago, depois de conferir as
+cinco FKs que apontam para `contas_bancarias` (todas `ON DELETE RESTRICT`)
+e que nenhuma tinha vínculo com ela. Sem resíduo.
