@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getEmpresasByTenantCached } from "@/lib/data/empresas";
 import type {
   AppRole,
   Empresa,
@@ -90,14 +91,9 @@ export const loadSession = cache(async (): Promise<SessionResult> => {
   const active = memberships[0];
 
   // Empresas do tenant + resolução da empresa ativa via cookie.
-  const { data: empresasData } = await supabase
-    .from("empresas")
-    .select("id, tenant_id, razao_social, nome_fantasia, cnpj, inscricao_estadual, inscricao_municipal, logradouro, numero, complemento, bairro, cidade, uf, cep, telefone, email, local_pagamento, instrucoes_nf, principal, ativo, created_by, created_at, updated_at")
-    .eq("tenant_id", active.tenant.id)
-    .eq("ativo", true)
-    .order("nome_fantasia", { ascending: true });
-
-  const empresas = (empresasData ?? []) as Empresa[];
+  // Cache TTL 5min (tag "empresas") — invalidado pelas actions de
+  // /admin/empresas ao criar/editar/desativar/reativar.
+  const empresas = await getEmpresasByTenantCached(active.tenant.id);
 
   // Leitura dos cookies de empresa ativa.
   // NUNCA escrever cookies aqui — loadSession() roda em Server Components

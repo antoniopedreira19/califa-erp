@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
@@ -125,6 +125,7 @@ export async function criarEmpresa(formData: FormData): Promise<ActionResult> {
 
   revalidatePath("/admin/empresas");
   revalidatePath("/admin");
+  revalidateTag("empresas");
   return { ok: true, id: data.id, message: "Empresa cadastrada." };
 }
 
@@ -170,6 +171,7 @@ export async function atualizarEmpresa(
 
   revalidatePath("/admin/empresas");
   revalidatePath("/admin");
+  revalidateTag("empresas");
   return { ok: true, id, message: "Empresa atualizada." };
 }
 
@@ -228,6 +230,7 @@ export async function marcarPrincipal(id: string): Promise<ActionResult> {
 
   revalidatePath("/admin/empresas");
   revalidatePath("/admin");
+  revalidateTag("empresas");
   return { ok: true, id, message: "Empresa marcada como principal." };
 }
 
@@ -277,6 +280,7 @@ export async function desativarEmpresa(id: string): Promise<ActionResult> {
 
   revalidatePath("/admin/empresas");
   revalidatePath("/admin");
+  revalidateTag("empresas");
   return { ok: true, id, message: "Empresa desativada." };
 }
 
@@ -464,5 +468,6 @@ export async function reativarEmpresa(id: string): Promise<ActionResult> {
 
   revalidatePath("/admin/empresas");
   revalidatePath("/admin");
+  revalidateTag("empresas");
   return { ok: true, id, message: "Empresa reativada." };
 }
