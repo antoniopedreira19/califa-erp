@@ -3880,3 +3880,51 @@ arquivo intocado, não tem relação com a mudança. Para ter sinal:
 `npx eslint --no-eslintrc -c .eslintrc.json --resolve-plugins-relative-to . --ext .ts,.tsx app components lib`.
 A raiz seria `"root": true` no `.eslintrc.json`, que é arquivo
 compartilhado — não mexi.
+
+---
+
+# ⚠️ ACHADO GRAVE — `regional_id NOT NULL` quebrou baixa, avulsa e faturamento (2026-09-09)
+
+**Não é desta frente.** Veio da migration
+`20260908170000_regional_id_not_null.sql` (08/09, outra frente), que
+tornou `regional_id` NOT NULL em três tabelas partindo da premissa —
+escrita no próprio cabeçalho dela — de que *"a UI cascata
+empresa->regional exige regional em toda tela de criacao"*. Essa premissa
+não se confirma no código de escrita: quem grava não manda a coluna.
+
+Encontrado ao tentar criar um lançamento avulso para conferir a tela
+`avulsa/[id]`. O formulário não acusa nada; o erro só aparece no log do
+servidor.
+
+### O que está quebrado
+
+| Fluxo | Quem grava | Manda `regional_id`? | Evidência |
+|---|---|---|---|
+| **Dar baixa em título** | as 9 funções `dar_baixa_*` | **não** | `insert into public.lancamentos_financeiros (tenant_id, empresa_id, conta_bancaria_id, …)` — a coluna não está na lista |
+| **Criar conta avulsa** | `criarContaAvulsa` (`actions-avulsas.ts`) | **não** | log: `[avulsa.criar] null value in column "regional_id" of relation "contas_avulsas" violates not-null constraint` |
+| **Emitir faturamento** | RPC `emitir_faturamento` | **não** | `pg_get_functiondef` não menciona a coluna |
+
+Nas três tabelas a coluna é `NOT NULL`, **sem default e sem trigger** que
+a preencha — conferido em `information_schema` e `pg_trigger`. Ou seja,
+todo `insert` falha por construção.
+
+`lancamentos_financeiros` está **vazia** (0 linhas), então não há como
+saber pelo dado se a baixa já funcionou algum dia; a prova da avulsa é
+empírica (o log acima), a das outras duas é por construção.
+
+### O que NÃO fazer
+
+Não "consertar" pegando qualquer regional. De onde ela vem é decisão de
+negócio e muda por fluxo:
+
+- a conta avulsa tem **rateio** de várias regionais (`Total: 100%`) — qual
+  vai para a coluna singular?
+- a baixa nasce de um título que já tem empresa; a regional viria do job,
+  do documento ou do rateio?
+- o faturamento cobre N jobs, que podem ser de regionais diferentes.
+
+A alternativa oposta — soltar o NOT NULL de volta — é igualmente uma
+decisão da frente que o colocou.
+
+**Status: reportado ao Tiago em 09/09/2026, aguardando decisão. Nada foi
+alterado.**
