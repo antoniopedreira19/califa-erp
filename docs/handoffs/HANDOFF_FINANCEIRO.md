@@ -4034,3 +4034,75 @@ cliente são Popover do Radix (`aria-haspopup="dialog"`) e não abrem por
 evento sintético nem por clique de `ref` de forma confiável. É limitação
 do ferramental, não do sistema. **Vale um teste manual do Tiago:** criar
 uma conta avulsa e dar baixa num título.
+
+---
+
+## Fechamento da frente de 09/09/2026 — varredura final
+
+Conferência de todas as rotas que esta frente tocou no dia, no navegador
+logado, depois da reversão do `regional_id`.
+
+| Rota | Resultado |
+|---|---|
+| `/financeiro/cadastros/contas-bancarias` | sem coluna Empresa, as contas listadas |
+| `/financeiro/cadastros` | texto novo do card, contagem certa |
+| `/financeiro/contas-a-pagar` | 5 abas com badges; dropdown de baixa lista contas de **empresas diferentes** |
+| `/financeiro/contas-a-pagar` → chat de PPs | 3 conversas — exatamente os 3 jobs com PP enviada |
+| `/financeiro/abertura-de-job/[jobId]` | seletor de conta uniforme (nome da conta em todas as linhas) |
+| `/financeiro/contas-a-receber` | renderiza |
+| `/financeiro/jobs/[jobId]` → Comunicação | "Enviando como **Financeiro**" |
+
+Banco conferido em quatro pontos: `contas_bancarias.empresa_id` nullable,
+`regional_id` nullable nas três tabelas, as duas policies de
+`contas_bancarias` tolerando `empresa_id is null`, e a RPC
+`chat_pps_conversas` de pé. Build, lint (só os 2 avisos pré-existentes de
+`combobox`) e os 34 testes de permissão passando.
+
+### ⚠️ O banco foi limpo em algum momento de 09/09
+
+De 31 jobs para **6**; `contas_avulsas`, `titulos_receber`,
+`lancamentos_financeiros` e `contas_avulsas_regionais` **zeradas**.
+
+Isso reinterpreta duas coisas registradas mais acima nesta mesma seção:
+
+- As tabelas vazias **não** significam "esse fluxo nunca rodou" — significam
+  "os dados foram limpos". A conclusão sobre o `regional_id` não muda (ela
+  vinha da leitura do código, não da contagem), mas o argumento "não há
+  como saber pelo dado se a baixa já funcionou" tem essa causa.
+- Ids de job citados em notas anteriores (JOB-0015, JOB-0016) **não
+  existem mais**. Uma rota que devolva 404 com esses ids não é regressão.
+
+### ⚠️ Drift de migrations deixado pelo vai-e-volta do dia
+
+O banco registra duas migrations que **não têm arquivo no repositório**:
+
+| Version | Nome | O que era |
+|---|---|---|
+| `20260909190110` | `conta_bancaria_deixa_de_ter_empresa` | 1ª tentativa de soltar o NOT NULL de `empresa_id` |
+| `20260909190701` | `conta_bancaria_volta_a_exigir_empresa` | a reversão dela, no mesmo dia |
+
+**As duas se anulam**, e o `20260909130001` refaz o efeito de forma
+definitiva — então rodar o repositório do zero produz o estado atual. É
+drift de histórico, não de schema. Não foram apagadas do
+`supabase_migrations` porque remover registro é destrutivo.
+
+Os prefixos dos arquivos também não batem com as `version` do banco: o
+MCP `apply_migration` gera a version pelo horário da aplicação, não pelo
+nome do arquivo. Vale saber ao comparar as duas listas.
+
+### ⚠️ 404 transitório no dev server
+
+`/financeiro/contas-a-pagar` devolveu 404 uma vez, depois de várias
+navegações client-side seguidas na mesma aba. **Não reproduz em aba
+nova** — carregou com as 5 abas e os badges. Mesmo padrão do
+`useContext` de 08/09: é o dev server, não a aplicação. Aba nova é quem
+decide.
+
+### O que ficou por conta do teste manual do Tiago
+
+O formulário de conta avulsa e a baixa de título não puderam ser
+exercitados por automação: os combos de regional, job, fornecedor e
+cliente são Popover do Radix (`aria-haspopup="dialog"`) e não abrem de
+forma confiável por `ref` click, evento sintético nem focus+Enter.
+Provado pelo banco com sondas de rollback; o caminho pela tela fica com
+ele.
