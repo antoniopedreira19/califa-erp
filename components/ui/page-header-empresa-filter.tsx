@@ -32,6 +32,11 @@ export function PageHeaderEmpresaFilter({
 }: PageHeaderEmpresaFilterProps) {
   const router = useRouter();
   const [isPending, startTransition] = React.useTransition();
+  // isCommitting cobre a janela entre "fechou popover" e "startTransition
+  // disparou". Sem ele, o await setActiveEmpresas (100-300ms de rede)
+  // ficaria sem feedback visual — sensação de travamento no clique.
+  const [isCommitting, setIsCommitting] = React.useState(false);
+  const isBusy = isPending || isCommitting;
 
   const propIdsKey = React.useMemo(
     () => activeEmpresas.map((e) => e.id).sort().join(","),
@@ -45,16 +50,16 @@ export function PageHeaderEmpresaFilter({
 
   // Sincroniza local com prop APENAS quando:
   //   - não há mudança pendente (dirty=false), E
-  //   - servidor não está processando refresh (isPending=false)
+  //   - não há commit em curso (isBusy=false)
   // Isso evita o bug antigo em que `dirty` era zerado antes do refresh
   // chegar, e o effect sobrescrevia localIds com o valor antigo do
   // servidor, causando "checkboxes que voltam".
   React.useEffect(() => {
-    if (!dirty && !isPending) {
+    if (!dirty && !isBusy) {
       setLocalIds(activeEmpresas.map((e) => e.id));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [propIdsKey, dirty, isPending]);
+  }, [propIdsKey, dirty, isBusy]);
 
   const handleSelectionChange = React.useCallback((ids: string[]) => {
     setLocalIds(ids);
@@ -65,24 +70,31 @@ export function PageHeaderEmpresaFilter({
     async (open: boolean) => {
       if (open || !dirty) return;
 
-      // Grava cookie no servidor primeiro.
+      // Liga o feedback visual IMEDIATAMENTE — antes de qualquer await —
+      // pra não haver janela cega entre o clique de fechar e a chamada
+      // do server action começar a responder.
+      setIsCommitting(true);
+
       try {
         await setActiveEmpresas(localIds);
       } catch (err) {
         console.error("[empresa-filter.commit]", err);
         setLocalIds(activeEmpresas.map((e) => e.id));
         setDirty(false);
+        setIsCommitting(false);
         return;
       }
 
-      // Refresh dentro de useTransition — isPending fica true até o
-      // servidor terminar de re-renderizar toda a árvore. Só depois
-      // liberamos o dirty pro effect fazer sync final.
+      // Cookie gravado. Agora dispara o refresh dentro de useTransition
+      // (isPending assume a barra a partir daqui) e libera o
+      // isCommitting — a barra continua visível via isBusy (isPending
+      // ainda true) até o servidor terminar.
       startTransition(() => {
         router.refresh();
       });
+      setIsCommitting(false);
       // dirty continua true — vai ser zerado pelo useEffect abaixo
-      // quando o prop finalmente refletir localIds E isPending virar false.
+      // quando o prop finalmente refletir localIds E isBusy virar false.
     },
     [dirty, localIds, router, activeEmpresas],
   );
@@ -91,12 +103,12 @@ export function PageHeaderEmpresaFilter({
   // estado local, zera dirty. Aí o effect de sync volta a agir
   // normalmente (importante pra pegar mudanças de outra aba).
   React.useEffect(() => {
-    if (!dirty || isPending) return;
+    if (!dirty || isBusy) return;
     const localKey = [...localIds].sort().join(",");
     if (localKey === propIdsKey) {
       setDirty(false);
     }
-  }, [dirty, isPending, localIds, propIdsKey]);
+  }, [dirty, isBusy, localIds, propIdsKey]);
 
   return (
     <>
@@ -106,7 +118,7 @@ export function PageHeaderEmpresaFilter({
         onSelectionChange={handleSelectionChange}
         onOpenChange={handleOpenChange}
       />
-      <RefreshFeedback active={isPending} />
+      <RefreshFeedback active={isBusy} />
     </>
   );
 }
