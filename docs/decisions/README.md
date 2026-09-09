@@ -89,9 +89,10 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 063 | [O import lê o agrupamento pela coluna A, e item sem valor entra zerado](063-import-le-o-agrupamento-pela-coluna-a.md) | 2026-09-08 |
 | 064 | [A conta bancária paga qualquer empresa, mas a empresa dela é quem dá acesso](064-a-conta-bancaria-paga-qualquer-empresa.md) | 2026-09-09 |
 | 065 | [O cadastro de fornecedor exige contato e solta o endereço](065-o-cadastro-de-fornecedor-exige-contato-e-solta-o-endereco.md) | 2026-09-09 |
+| 066 | [O cliente nasce com marcas e portais](066-o-cliente-nasce-com-marcas-e-portais.md) | 2026-09-09 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
 > data é a da decisão, não a da posição na fila.
 
-**Próximo número livre: 066.**
+**Próximo número livre: 067.**
