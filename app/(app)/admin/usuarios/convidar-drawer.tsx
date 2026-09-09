@@ -173,9 +173,9 @@ export function ConvidarUsuarioDrawer({
             <div className="pt-1 border-t border-border">
               <p className="text-[11px] text-muted-foreground pt-4 pb-2">
                 Administrador não precisa configurar acesso (vê tudo do
-                tenant). Para os demais papéis, escolha "Todas" para o
-                comportamento atual, ou "Personalizado" para restringir a
-                empresas e regionais específicas.
+                tenant). Para os demais papéis, escolha <b>Todas</b> para o
+                comportamento atual, ou <b>Personalizado</b> para restringir
+                a empresas e regionais específicas.
               </p>
               <AcessoEmpresasEditor
                 empresas={empresas}

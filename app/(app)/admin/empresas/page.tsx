@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { ArrowLeft, Building2 } from "lucide-react";
 import { requireAdmin } from "@/lib/auth/session";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import type { Regional } from "@/lib/types";
 import { EmpresaCard } from "./empresa-card";
 import { EmpresaDrawer } from "./empresa-drawer";
 import type { EmpresaRow } from "./types";
+import type { UsuarioAcesso } from "./usuarios-modal";
 import { PageHeader } from "@/components/ui/page-header";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +16,9 @@ export default async function AdminEmpresasPage() {
   const supabase = createClient();
   const tenantId = session.activeTenant.id;
 
-  const [empRes, regRes] = await Promise.all([
+  const service = createServiceClient();
+
+  const [empRes, regRes, memRes] = await Promise.all([
     supabase
       .from("empresas")
       .select(
@@ -34,10 +37,20 @@ export default async function AdminEmpresasPage() {
       .eq("tenant_id", tenantId)
       .order("ativo", { ascending: false })
       .order("nome", { ascending: true }),
+    // Fase 2B: pega empresa_members ativos deste tenant pra montar o
+    // resumo "N usuarios com acesso" nos cards das empresas. Service client
+    // evita depender da RLS (que restringe por empresa) — admin ve tudo.
+    service
+      .from("empresa_members")
+      .select("empresa_id, user_id, regional_id")
+      .eq("tenant_id", tenantId)
+      .eq("status", "ativo"),
   ]);
 
   if (empRes.error) console.error("[admin.empresas.list]", empRes.error.message);
   if (regRes.error) console.error("[admin.regionais.list]", regRes.error.message);
+  if (memRes.error)
+    console.error("[admin.empresas.list.members]", memRes.error.message);
 
   const empresas: EmpresaRow[] = ((empRes.data ?? []) as any[]).map((e) => ({
     id: e.id,
@@ -66,6 +79,84 @@ export default async function AdminEmpresasPage() {
     const arr = regionaisPorEmpresa.get(r.empresa_id) ?? [];
     arr.push(r);
     regionaisPorEmpresa.set(r.empresa_id, arr);
+  }
+
+  // Agrega empresa_members em {empresa_id -> user_id -> {escopo, regional_ids}}.
+  // - regional_id NULL = escopo "todas"
+  // - regional_id preenchido = escopo "restrito" com essas regionais
+  // - misto (uma linha NULL + linhas de regional) = manda "todas" (regra: NULL vence)
+  type Agregado = { escopo: "todas" | "restrito"; regionalIds: Set<string> };
+  const acessoPorEmpresaEUser = new Map<
+    string,
+    Map<string, Agregado>
+  >();
+  const userIdsSet = new Set<string>();
+
+  for (const m of memRes.data ?? []) {
+    const empresaId = m.empresa_id as string;
+    const userId = m.user_id as string;
+    const regionalId = m.regional_id as string | null;
+    userIdsSet.add(userId);
+
+    let porUser = acessoPorEmpresaEUser.get(empresaId);
+    if (!porUser) {
+      porUser = new Map();
+      acessoPorEmpresaEUser.set(empresaId, porUser);
+    }
+    let agg = porUser.get(userId);
+    if (!agg) {
+      agg = { escopo: "restrito", regionalIds: new Set() };
+      porUser.set(userId, agg);
+    }
+    if (regionalId === null) {
+      agg.escopo = "todas";
+      agg.regionalIds.clear();
+    } else if (agg.escopo !== "todas") {
+      agg.regionalIds.add(regionalId);
+    }
+  }
+
+  // Fetch de profiles pra montar nome/email dos users com acesso.
+  const userIds = Array.from(userIdsSet);
+  const { data: profs } = userIds.length
+    ? await service
+        .from("profiles")
+        .select("id, nome, email")
+        .in("id", userIds)
+    : { data: [] as Array<{ id: string; nome: string; email: string }> };
+  const profileById = new Map(
+    (profs ?? []).map((p) => [
+      p.id as string,
+      { nome: p.nome as string, email: p.email as string },
+    ]),
+  );
+
+  // Mapa regional_id -> nome pra renderizar no modal
+  const regionalNomeById = new Map<string, string>();
+  for (const r of (regRes.data ?? []) as Regional[]) {
+    regionalNomeById.set(r.id, r.nome);
+  }
+
+  const usuariosAcessoPorEmpresa = new Map<string, UsuarioAcesso[]>();
+  for (const [empresaId, porUser] of acessoPorEmpresaEUser.entries()) {
+    const lista: UsuarioAcesso[] = [];
+    for (const [userId, agg] of porUser.entries()) {
+      const prof = profileById.get(userId);
+      lista.push({
+        user_id: userId,
+        nome: prof?.nome ?? "—",
+        email: prof?.email ?? "—",
+        escopo: agg.escopo,
+        regionais:
+          agg.escopo === "todas"
+            ? []
+            : Array.from(agg.regionalIds)
+                .map((id) => regionalNomeById.get(id) ?? "—")
+                .sort(),
+      });
+    }
+    lista.sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+    usuariosAcessoPorEmpresa.set(empresaId, lista);
   }
 
   return (
@@ -98,6 +189,7 @@ export default async function AdminEmpresasPage() {
               key={empresa.id}
               empresa={empresa}
               regionais={regionaisPorEmpresa.get(empresa.id) ?? []}
+              usuariosAcesso={usuariosAcessoPorEmpresa.get(empresa.id) ?? []}
             />
           ))}
         </div>
