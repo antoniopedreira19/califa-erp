@@ -3358,3 +3358,31 @@ mas a chamada direta à action, por fora da tela, não foi feita.
 `npx tsc --noEmit` e `next lint` limpos. **`npm run build` não rodou**:
 havia dev server vivo na 3000 rodando do diretório principal, e o build
 corromperia o `.next` dele.
+
+## ⚠️ Nota de 2026-09-09 — o cadastro de fornecedor mudou de forma e de régua
+
+O formulário de fornecedor (o mesmo nas três telas: cadastro, edição e o
+"+" de dentro da PP) foi refeito sobre o desenho `Fornecedores - Novo
+Cadastro`. Ver [065](../decisions/065-o-cadastro-de-fornecedor-exige-contato-e-solta-o-endereco.md).
+
+O que muda para quem cadastra:
+
+| | Antes | Agora |
+|---|---|---|
+| Endereço | seis campos obrigatórios | **opcional**, recolhido atrás de "Informar endereço" |
+| CPF/CNPJ, e-mail, telefone | obrigatórios só no "+" da PP | **obrigatórios nos dois caminhos** |
+| Botão de salvar | sempre ativo, erros depois do clique | **apagado até faltar nada**, com o rodapé listando o que falta |
+| Banco e PIX | duas seções empilhadas | **abas**, com selo `preenchido` |
+
+Duas armadilhas para quem for mexer:
+
+- **As duas abas de pagamento ficam montadas** (escondidas por `hidden`),
+  e o endereço recolhido também. Desmontar apagaria o que já foi digitado
+  — e, no endereço, o `FormData` deixaria de mandar o que estava lá.
+- **O rodapé relê o formulário inteiro por `FormData` a cada tecla.** Os
+  campos seguem não controlados porque é o que o `MaskedInput` e o
+  preenchimento por CEP exigem; controlar campo a campo duplicaria estado
+  sem ganho.
+
+Editar fornecedor antigo sem e-mail ou telefone passa a pedir o campo que
+falta — são 2 registros na base de hoje.

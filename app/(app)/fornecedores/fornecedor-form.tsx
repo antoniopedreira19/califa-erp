@@ -406,6 +406,15 @@ export function FornecedorForm({
     setDuplicado(res.existe ? res.fornecedor : null);
   }
 
+  /** O documento mudou: o aviso de repetido e o erro do servidor param de
+   *  valer até a próxima conferência (que acontece ao sair do campo). */
+  function limparAvisoDoDocumento() {
+    if (duplicado) setDuplicado(null);
+    if (fieldErrors.cpf_cnpj?.length) {
+      setFieldErrors((antes) => ({ ...antes, cpf_cnpj: [] }));
+    }
+  }
+
   /** "Usar CPF/CNPJ do cadastro" — escreve o documento na chave PIX. */
   function usarDocumentoNaChave() {
     const raw = cpfCnpjRef.current?.value ?? "";
@@ -693,6 +702,10 @@ export function FornecedorForm({
                   defaultValue={initialDoc}
                   ref={cpfCnpjRef}
                   onBlur={handleDocumentoBlur}
+                  // Corrigir o documento tem de apagar o aviso na hora: com
+                  // o botão travado pelo duplicado, esperar o blur deixaria
+                  // quem está digitando sem saída aparente.
+                  onInput={limparAvisoDoDocumento}
                   className={cn(
                     duplicado &&
                       !isEdit &&
