@@ -2,6 +2,10 @@ import { cache } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getEmpresasByTenantCached } from "@/lib/data/empresas";
+import {
+  getPermissoesDoUserCached,
+  type PermissoesUser,
+} from "@/lib/data/permissoes";
 import type {
   AppRole,
   Empresa,
@@ -95,6 +99,16 @@ export const loadSession = cache(async (): Promise<SessionResult> => {
   // /admin/empresas ao criar/editar/desativar/reativar.
   const empresas = await getEmpresasByTenantCached(active.tenant.id);
 
+  // Fase 2B: materializa permissoes do user (bypass automatico de admin).
+  const perm: PermissoesUser = await getPermissoesDoUserCached(
+    profile.id,
+    active.tenant.id,
+  );
+
+  const empresasVisiveis = empresas.filter((e) =>
+    perm.empresaIds.includes(e.id),
+  );
+
   // Leitura dos cookies de empresa ativa.
   // NUNCA escrever cookies aqui — loadSession() roda em Server Components
   // e Next.js só permite writes em Server Actions / Route Handlers.
@@ -115,10 +129,11 @@ export const loadSession = cache(async (): Promise<SessionResult> => {
       ? cookieEfetivo.split(",").filter((id) => id.length > 0)
       : [];
 
-  // activeEmpresas = empresas do tenant que ainda existem E estão no cookie.
-  // Ids que sumiram (empresa desativada, deletada) são ignorados silenciosamente.
+  // activeEmpresas = empresas visiveis (permitidas) que estão no cookie.
+  // Ids que sumiram (empresa desativada, deletada, ou fora de empresasVisiveis)
+  // são ignorados silenciosamente.
   const activeEmpresas: Empresa[] = idsSelecionados
-    .map((id) => empresas.find((e) => e.id === id))
+    .map((id) => empresasVisiveis.find((e) => e.id === id))
     .filter((e): e is Empresa => e !== undefined);
 
   return {
@@ -130,6 +145,8 @@ export const loadSession = cache(async (): Promise<SessionResult> => {
       activeRole: active.role,
       activeEmpresas,
       empresas,
+      empresasVisiveis,
+      regionaisVisiveisPorEmpresa: perm.regionaisPorEmpresa,
     },
   };
 });
