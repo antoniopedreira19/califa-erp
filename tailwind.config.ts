@@ -82,9 +82,15 @@ const config: Config = {
           from: { transform: "translateY(1rem)", opacity: "0" },
           to: { transform: "translateY(0)", opacity: "1" },
         },
+        "progress-bar": {
+          "0%": { transform: "translateX(-100%)" },
+          "50%": { transform: "translateX(0%)" },
+          "100%": { transform: "translateX(100%)" },
+        },
       },
       animation: {
         "fade-in": "fade-in 400ms ease-out",
+        "progress-bar": "progress-bar 1.2s ease-in-out infinite",
       },
     },
   },
