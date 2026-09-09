@@ -1,5 +1,14 @@
 # Contas a Receber (Faturamento + Títulos) — Implementation Plan
 
+> ⚠️ **Nota de 2026-09-09 — trecho obsoleto.** Este plano foi implementado
+> (`cc8e64c`, 13/08, e `ca833cc`, 17/08), mas a baixa de título **não** ficou
+> como está descrito aqui: em vez do `BaixaAvulsaDialog` compartilhado, a
+> lista passou a usar `components/financeiro/baixa-registrada-dialog.tsx`. O
+> `components/financeiro/baixa-avulsa-dialog.tsx` foi **removido do repo em
+> 09/09/2026** por ser código morto. Todo trecho abaixo que importa ou
+> renderiza `BaixaAvulsaDialog` não vale mais — ver a nota do dia em
+> `docs/handoffs/HANDOFF_FINANCEIRO.md`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Criar o módulo `/financeiro/contas-a-receber` com duas abas (Faturamento e A Receber), consumindo automaticamente as fontes existentes (jobs abertos com `faturamento_previsto` e BVs `confirmado`) mais entrada manual de faturamento avulso, gerando títulos por parcela e alimentando `lancamentos_financeiros` (natureza=entrada) via RPCs transacionais.
