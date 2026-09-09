@@ -276,7 +276,7 @@ export default async function ProjetosPage({
         description="Cada projeto agrupa os orçamentos de uma iniciativa do cliente. Clique num projeto para ver seus orçamentos e versões."
         icon={FolderKanban}
         showEmpresaFilter
-        empresas={session.empresas}
+        empresas={session.empresasVisiveis}
         activeEmpresas={activeEmpresasEfetivas}
         actions={
           <>

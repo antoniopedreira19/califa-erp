@@ -141,7 +141,7 @@ export default async function FluxoCaixaPage({
         description="Do passado ao futuro: o realizado (movimentos das contas) mais o previsto (títulos em aberto e previsões da abertura do job)."
         icon={TrendingUp}
         showEmpresaFilter
-        empresas={session.empresas}
+        empresas={session.empresasVisiveis}
         activeEmpresas={activeEmpresasEfetivas}
       />
 
