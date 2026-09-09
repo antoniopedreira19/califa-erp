@@ -4119,18 +4119,29 @@ degradando**, não de componente resistente — e recomendou repetir com um
    Popover de regional **abriu com `.click()` simples**
    (`aria-expanded=true`, `[data-radix-popper-content-wrapper]` presente).
 
-⚠️ **A receita, então, não é sobre o Radix — é sobre a ORDEM.** Nos forms
-com cascata empresa→regional, escolha a empresa antes de qualquer coisa
-ligada a regional. Um `.click()` sintético comum basta para Select e
-Popover; `PointerEvent` completo, clique por `ref` e focus+Enter não são
-necessários. Para inputs controlados, o setter nativo
+⚠️ **A receita não é sobre o Radix.** Um `.click()` sintético comum basta
+para Select e Popover; `PointerEvent` completo, clique por `ref` e
+focus+Enter não são necessários. Para inputs controlados, o setter nativo
 (`Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set`)
-+ `new Event('input',{bubbles:true})`.
++ `new Event('input',{bubbles:true})`; e `new FocusEvent('focusout')` para
+disparar `onBlur`, que ignora `new Event('blur')`.
 
-⚠️ **E antes de culpar um componente, ponha um controle na bateria.** Um
-`<button onClick>` trivial da mesma tela. Se ele cair junto, o problema é
-o ambiente (`.next` corrompido, hidratação, build por cima do dev server),
-não o componente.
+⚠️ **O MESMO componente falhou por DUAS causas diferentes, no mesmo dia,
+em duas frentes.** Vale registrar as duas porque o sintoma é idêntico:
+
+| Caso | Causa | Sinal |
+|---|---|---|
+| Combo de regional (conta avulsa) | **pré-condição do campo** — a cascata da Fase 2A: sem empresa escolhida não há regional para listar | o resto da tela responde normalmente |
+| Combobox de banco (form de fornecedor, outra frente) | **ambiente** — página não hidratada, `.next` corrompido por build sobre o dev server | nada na tela responde, nem um `onClick` trivial |
+
+⚠️ **O controle é o que separa as duas.** Antes de culpar o componente,
+acione na MESMA bateria um `<button onClick>` trivial da mesma tela (uma
+aba, um toggle):
+
+- **controle cai junto** → é o ambiente (limpe o `.next`, suba dev server
+  novo, e não builde sobre ele — ver a nota de sessões paralelas);
+- **controle passa e o combo não** → é pré-condição do próprio campo;
+  procure de qual outro campo ele depende.
 
 **O que o fluxo completo provou** (09/09/2026, tela, ponta a ponta):
 
