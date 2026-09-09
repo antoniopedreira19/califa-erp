@@ -3981,5 +3981,56 @@ negócio e muda por fluxo:
 A alternativa oposta — soltar o NOT NULL de volta — é igualmente uma
 decisão da frente que o colocou.
 
-**Status: reportado ao Tiago em 09/09/2026, aguardando decisão. Nada foi
-alterado.**
+### RESOLVIDO em 09/09/2026 — `regional_id` voltou a ser nullable
+
+Migration `20260909180001_regional_id_volta_a_ser_nullable.sql`, decisão
+do Tiago depois do levantamento abaixo.
+
+**O que a investigação mostrou.** A coluna singular `regional_id` não é a
+fonte da regional — é o **último fallback**. Quem estabelece a ordem é a
+própria `vw_fluxo_caixa`:
+
+```sql
+FROM contas_avulsas_regionais r        -- 1) o rateio tem prioridade
+UNION ALL
+COALESCE(j.regional_id, a.regional_id) -- 2) job  3) coluna singular
+COALESCE(j.regional_id, l.regional_id)
+```
+
+A UI *exige* regional, como a spec da Fase 2A dizia — mas grava no
+**rateio** (`contas_avulsas_regionais`, N regionais com percentual) e no
+**job**, não na coluna. Tornar obrigatório o terceiro item da precedência
+inverteu a hierarquia.
+
+**Por que o sanity check da Fase 2A não pegou.** Ele foi
+`count(*) where regional_id is null` → 0 nas três tabelas. Retornou zero
+mesmo: **as três estão vazias**. Contar nulos em tabela vazia sempre dá
+zero. ⚠️ Quando a tabela está vazia, o check tem que ser sobre o CÓDIGO
+DE ESCRITA, não sobre o dado.
+
+**Por que não preenchemos a coluna.** Exigiria tocar 16 funções e 2
+actions e, pior, inventar dado: qual é a "regional" de uma avulsa rateada
+50% NE / 50% SP? Qualquer escolha grava uma meia-verdade que o DRE por
+regional — o motivo de tudo isso existir — leria errado. A view já faz a
+conta certa com o rateio.
+
+**Verificação (09/09/2026).** `information_schema` confirma `YES` nas
+três. Duas sondas em bloco `do $$ … raise exception $$` (insert + rollback
+proposital, sem gravar nada) devolveram `SONDA_OK` em `contas_avulsas` e
+em `lancamentos_financeiros` — os dois caminhos que destravam,
+respectivamente, a criação de avulsa e a baixa de título. `titulos_receber`
+não foi sondada porque exige um `faturamento_id` e não há faturamento no
+banco; a alteração ali foi a mesma linha.
+
+⚠️ **O objetivo da Fase 2A continua EM ABERTO.** Esta reversão não
+entrega a garantia de que todo lançamento tem regional — só desfaz a
+tentativa que não funcionou. A forma certa é validar que existe
+**rateio OU job**, não que a coluna singular está preenchida, e isso é um
+check/trigger de outro desenho, para escrever junto com quem fez a Fase 2A.
+
+⚠️ **Não conferido na tela.** O formulário de conta avulsa não pôde ser
+exercitado pela automação: os combos de regional, job, fornecedor e
+cliente são Popover do Radix (`aria-haspopup="dialog"`) e não abrem por
+evento sintético nem por clique de `ref` de forma confiável. É limitação
+do ferramental, não do sistema. **Vale um teste manual do Tiago:** criar
+uma conta avulsa e dar baixa num título.
