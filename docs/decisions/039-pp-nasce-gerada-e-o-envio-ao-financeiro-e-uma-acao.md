@@ -179,3 +179,34 @@ Nenhuma regra nova: quem decide continua sendo `podeCancelarPP` —
 `pago` precisaria de estorno. Nesses dois o botão fica apagado com o
 motivo no `title`, em vez de sumir. Pedido do Tiago em 08/09/2026; ver a
 nota do mesmo dia no handoff de Jobs.
+
+## ⚠️ Nota de 2026-09-09 — a ficha da PP é o FORMULÁRIO travado, com a linha do tempo no fim
+
+A ficha de ontem era uma tela nova: outra ordem, outros rótulos, outro
+desenho. O Tiago pediu o contrário, e a razão é boa — **os produtores já
+conhecem o formulário de PP**, e reaprender onde cada campo mora só para
+ler uma PP enviada é custo sem retorno.
+
+Agora `pps/ver-pp-drawer.tsx` é o `gerar-pp-drawer` espelhado campo a
+campo, na mesma ordem e com os mesmos rótulos, em caixas de leitura
+(mesma altura, borda e raio do `Input`, com o fundo do desabilitado).
+
+Duas diferenças, de propósito:
+
+1. **A pergunta "Esta é a última PP deste item?" não existe aqui.** Ela é
+   sobre o ITEM e já foi respondida na emissão ([052](052-todas-as-pps-do-item-foram-geradas.md));
+   repeti-la numa tela que não grava seria ruído.
+2. **No lugar dela entra a LINHA DO TEMPO da PP** — gerada → enviada →
+   em avaliação → aprovação → pagamento —, com o passo de hoje aceso e os
+   que ainda vêm apagados. Rejeição, aprovação, pagamento e cancelamento
+   entram quando existem, e a rejeição carrega o motivo. É o que a
+   produção pergunta depois do envio, e não estava em lugar nenhum.
+
+**O rodapé ganhou "Cancelar PP"** (decisão do Tiago), com a mesma action e
+a mesma confirmação do painel: quem abre a ficha muitas vezes veio decidir
+exatamente isso. Segue `podeCancelarPP` — em avaliação e rejeitada voltam
+atrás; aprovada é título a pagar e paga precisaria de estorno, e nesses
+dois o botão fica apagado com o motivo.
+
+`pedidos_compra.aprovada_em` entrou em `lib/types.ts` (a coluna já
+existia): é ela que acende o passo da aprovação.
