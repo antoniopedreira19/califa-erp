@@ -64,6 +64,19 @@ export interface SessionContext {
   activeEmpresas: Empresa[];
   /** Todas as empresas ativas do tenant. Alimenta o multi-select. */
   empresas: Empresa[];
+  /**
+   * Empresas que o user tem permissao de ver (backfill dá amplo a todo
+   * mundo no dia 1). Substitui `empresas` na maioria dos consumidores.
+   * Admin do tenant vê todas as ativas do tenant automaticamente (bypass).
+   */
+  empresasVisiveis: Empresa[];
+  /**
+   * Por empresa, quais regionais o user pode ver.
+   *   - "all": acesso amplo (regional_id=NULL em empresa_members)
+   *   - string[]: restrito às regionais listadas
+   * Se uma empresa nao aparece no mapa, o user nao tem acesso.
+   */
+  regionaisVisiveisPorEmpresa: Record<string, "all" | string[]>;
 }
 
 export function isAdmin(role: AppRole): boolean {
