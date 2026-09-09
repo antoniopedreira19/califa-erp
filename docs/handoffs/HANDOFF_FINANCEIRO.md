@@ -4098,11 +4098,55 @@ nova** — carregou com as 5 abas e os badges. Mesmo padrão do
 `useContext` de 08/09: é o dev server, não a aplicação. Aba nova é quem
 decide.
 
-### O que ficou por conta do teste manual do Tiago
+### ✅ Fluxo completo exercitado na tela — e a correção de um diagnóstico meu
 
-O formulário de conta avulsa e a baixa de título não puderam ser
-exercitados por automação: os combos de regional, job, fornecedor e
-cliente são Popover do Radix (`aria-haspopup="dialog"`) e não abrem de
-forma confiável por `ref` click, evento sintético nem focus+Enter.
-Provado pelo banco com sondas de rollback; o caminho pela tela fica com
-ele.
+Eu havia registrado que os combos Popover do Radix eram "intestáveis por
+automação". **Estava errado, e o erro custou várias tentativas.**
+
+A sessão do módulo de Jobs desconfiou do diagnóstico com o argumento
+certo: "funcionou duas vezes e depois parou" é assinatura de **hidratação
+degradando**, não de componente resistente — e recomendou repetir com um
+**controle na mesma bateria**. Refiz assim, e a verdade era outra:
+
+1. **Controle 1** — aba de PPs (`<button onClick>` React) respondeu a
+   `.click()` simples → a página ESTAVA hidratada.
+2. **Controle 2** — botão "Lançamento Avulso" → drawer abriu com
+   `.click()`.
+3. **Controle 3** — "Adicionar regional" → **não** criou a linha. Não por
+   hidratação: **é a cascata da Fase 2A**. Sem empresa escolhida, não há
+   regional para listar.
+4. Escolhida a empresa primeiro, `Adicionar regional` funcionou e o
+   Popover de regional **abriu com `.click()` simples**
+   (`aria-expanded=true`, `[data-radix-popper-content-wrapper]` presente).
+
+⚠️ **A receita, então, não é sobre o Radix — é sobre a ORDEM.** Nos forms
+com cascata empresa→regional, escolha a empresa antes de qualquer coisa
+ligada a regional. Um `.click()` sintético comum basta para Select e
+Popover; `PointerEvent` completo, clique por `ref` e focus+Enter não são
+necessários. Para inputs controlados, o setter nativo
+(`Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set`)
++ `new Event('input',{bubbles:true})`.
+
+⚠️ **E antes de culpar um componente, ponha um controle na bateria.** Um
+`<button onClick>` trivial da mesma tela. Se ele cair junto, o problema é
+o ambiente (`.next` corrompido, hidratação, build por cima do dev server),
+não o componente.
+
+**O que o fluxo completo provou** (09/09/2026, tela, ponta a ponta):
+
+| Passo | Resultado |
+|---|---|
+| Criar conta avulsa `AV-00001` (R$ 1, Empresa Teste, regional Teste 100%) | criada — `regional_id = null`, 1 linha de rateio |
+| Abrir `avulsa/[id]` | carrega |
+| Dropdown de conta na baixa | lista **as duas contas, de empresas diferentes** |
+| Dar baixa com a "Conta Teste" (Empresa Teste) | `status = baixada`, `pago_em` gravado |
+| Lançamento financeiro gerado | 1 linha, `origem = avulsa_baixa`, `regional_id = null`, empresa do **documento** |
+
+Ou seja: a reversão do `regional_id` destravou a criação **e** a baixa, e
+a correção do filtro por empresa vale nas duas telas. O lançamento nasceu
+com a empresa do documento e a conta de pagamento de outra empresa — que
+é exatamente a regra de 29/08.
+
+⚠️ **Resíduo:** a avulsa `AV-00001` e o lançamento dela ficaram no banco.
+São de teste (R$ 1, "ZZ Teste …", Empresa Teste) — apagar exige desfazer
+a baixa antes.
