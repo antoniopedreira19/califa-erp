@@ -89,7 +89,7 @@ export default async function FaturamentoPage({ searchParams }: Props) {
         description="Compara o valor do job (contratado) com o valor efetivamente faturado. Data de referência: abertura financeira do job."
         icon={Receipt}
         showEmpresaFilter
-        empresas={session.empresas}
+        empresas={session.empresasVisiveis}
         activeEmpresas={activeEmpresasEfetivas}
       />
 

@@ -201,7 +201,7 @@ export default async function RentabilidadePage({ searchParams }: Props) {
           description="Faturamento, resultado operacional e rentabilidade por cliente, marca ou job. Data de referência: abertura financeira do job."
           icon={BarChart3}
           showEmpresaFilter
-          empresas={session.empresas}
+          empresas={session.empresasVisiveis}
           activeEmpresas={activeEmpresasEfetivas}
         />
 

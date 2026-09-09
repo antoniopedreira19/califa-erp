@@ -354,6 +354,8 @@ test("requirePermissao lanca PermissaoNegadaError quando papel nao autoriza", as
     activeRole: "freelancer" as AppRole,
     activeEmpresas: [],
     empresas: [],
+    empresasVisiveis: [],
+    regionaisVisiveisPorEmpresa: {},
   };
   await assert.rejects(
     () => requirePermissao(sessionFake, "orcamentos.aprovar"),
@@ -369,6 +371,8 @@ test("requirePermissao NAO lanca quando papel autoriza", async () => {
     activeRole: "administrador" as AppRole,
     activeEmpresas: [],
     empresas: [],
+    empresasVisiveis: [],
+    regionaisVisiveisPorEmpresa: {},
   };
   await assert.doesNotReject(() =>
     requirePermissao(sessionFake, "orcamentos.aprovar"),

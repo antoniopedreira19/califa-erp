@@ -1,11 +1,38 @@
 "use server";
 
 import { revalidatePath, revalidateTag } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { empresaSchema } from "@/lib/validations/empresas";
 import { regionalSchema } from "@/lib/validations/regionais";
+
+/**
+ * Invalida o cache `user-permissions:{userId}` para todo user que tem
+ * empresa_members apontando pra essa empresa. Chamado ao desativar/reativar
+ * a empresa — o campo `empresasVisiveis` da sessao materializa o filtro de
+ * ativos e ficaria com dado antigo ate o TTL de 5min.
+ */
+async function invalidarPermissoesDosUsersDaEmpresa(
+  empresaId: string,
+): Promise<void> {
+  const service = createServiceClient();
+  const { data, error } = await service
+    .from("empresa_members")
+    .select("user_id")
+    .eq("empresa_id", empresaId);
+  if (error) {
+    console.warn(
+      "[empresas.invalidar-permissoes]",
+      error.message,
+    );
+    return;
+  }
+  const unique = new Set((data ?? []).map((r) => r.user_id as string));
+  for (const userId of unique) {
+    revalidateTag(`user-permissions:${userId}`);
+  }
+}
 
 export type ActionResult =
   | { ok: true; id?: string; message?: string }
@@ -281,6 +308,7 @@ export async function desativarEmpresa(id: string): Promise<ActionResult> {
   revalidatePath("/admin/empresas");
   revalidatePath("/admin");
   revalidateTag("empresas");
+  await invalidarPermissoesDosUsersDaEmpresa(id);
   return { ok: true, id, message: "Empresa desativada." };
 }
 
@@ -469,5 +497,6 @@ export async function reativarEmpresa(id: string): Promise<ActionResult> {
   revalidatePath("/admin/empresas");
   revalidatePath("/admin");
   revalidateTag("empresas");
+  await invalidarPermissoesDosUsersDaEmpresa(id);
   return { ok: true, id, message: "Empresa reativada." };
 }

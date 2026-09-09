@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { MapPin, MoreHorizontal, Plus } from "lucide-react";
+import { MapPin, MoreHorizontal, Plus, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { cn } from "@/lib/utils";
@@ -10,6 +10,7 @@ import type { Regional } from "@/lib/types";
 import { EmpresaDrawer } from "./empresa-drawer";
 import { RegionalDrawer } from "./regional-drawer";
 import type { EmpresaRow } from "./types";
+import { UsuariosAcessoModal, type UsuarioAcesso } from "./usuarios-modal";
 import {
   desativarEmpresa,
   inativarRegional,
@@ -21,6 +22,7 @@ import {
 interface Props {
   empresa: EmpresaRow;
   regionais: Regional[];
+  usuariosAcesso: UsuarioAcesso[];
 }
 
 /**
@@ -28,7 +30,7 @@ interface Props {
  * + botão "+ Regional" e menu de ações; corpo com as regionais dela.
  * Cada regional tem seu próprio menu (Editar, Inativar/Reativar).
  */
-export function EmpresaCard({ empresa, regionais }: Props) {
+export function EmpresaCard({ empresa, regionais, usuariosAcesso }: Props) {
   const [editarEmpresa, setEditarEmpresa] = React.useState(false);
   const [menuEmpresa, setMenuEmpresa] = React.useState(false);
   const [pending, startTransition] = React.useTransition();
@@ -39,6 +41,7 @@ export function EmpresaCard({ empresa, regionais }: Props) {
     acao: "inativar" | "reativar";
   } | null>(null);
   const [menuRegional, setMenuRegional] = React.useState<string | null>(null);
+  const [modalUsuariosOpen, setModalUsuariosOpen] = React.useState(false);
 
   const nomeExibicao = empresa.nome_fantasia ?? empresa.razao_social;
 
@@ -239,6 +242,44 @@ export function EmpresaCard({ empresa, regionais }: Props) {
           </ul>
         )}
       </div>
+
+      {/* Rodape: resumo de usuarios com acesso. Clicavel abre modal read-only. */}
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => setModalUsuariosOpen(true)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            setModalUsuariosOpen(true);
+          }
+        }}
+        className="border-t border-border px-6 py-3 flex items-center justify-between hover:bg-accent/40 cursor-pointer focus-visible:outline-none focus-visible:bg-accent/40"
+      >
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Users className="h-3.5 w-3.5" />
+          {usuariosAcesso.length === 0 ? (
+            <span>Nenhum usuário não-admin configurado</span>
+          ) : (
+            <span>
+              <span className="font-medium text-foreground">
+                {usuariosAcesso.length}
+              </span>{" "}
+              {usuariosAcesso.length === 1 ? "usuário" : "usuários"} com acesso
+            </span>
+          )}
+        </div>
+        <span className="text-xs font-medium text-california-red">
+          Ver detalhes →
+        </span>
+      </div>
+
+      <UsuariosAcessoModal
+        open={modalUsuariosOpen}
+        onOpenChange={setModalUsuariosOpen}
+        empresaNome={nomeExibicao}
+        usuarios={usuariosAcesso}
+      />
 
       {editarEmpresa && (
         <EmpresaDrawer
