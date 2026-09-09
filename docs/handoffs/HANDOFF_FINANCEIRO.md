@@ -3759,30 +3759,32 @@ lote de cartão já estava certa — a atualização de 29/08 tinha parado nela.
 
 A empresa que vai para o lançamento continua sendo a do **documento**.
 
-### ⚠️ Mas a empresa da conta virou CHAVE DE ACESSO no mesmo dia
+### ⚠️ E a empresa saiu do cadastro — mas cuidado com a RLS
 
-`contas_bancarias_select` e `contas_bancarias_modify` passaram a chamar
-`can_access_empresa_regional(auth.uid(), empresa_id, null)`, pela frente do
-Antonio (`20260909000001..4_empresa_members`). A função compara
-`e.id = p_empresa_id` — **com `empresa_id` nulo os dois `exists` dão
-false**.
+O campo "Empresa *" saiu do formulário, a coluna saiu da listagem e o
+schema parou de exigi-la. **A coluna FICA no banco**, nullable, a pedido
+do Tiago: vestígio para o caso de a agência voltar a dividir contas por
+empresa. Quem já tinha, manteve; a conta-espelho do cartão continua
+herdando a do cartão pelo trigger.
 
-Consequência prática, descoberta tentando soltar o NOT NULL da coluna a
-pedido do Tiago: conta sem empresa **não pode ser criada e ficaria
-invisível para todo mundo**. O `drop not null` foi revertido no mesmo dia,
-antes de qualquer linha nula existir, e o campo "Empresa *" continua no
-cadastro.
+A primeira tentativa disso **falhou no teste de gravação**, e o motivo
+importa: `contas_bancarias_select` e `_modify` chamam
+`can_access_empresa_regional(auth.uid(), empresa_id, null)`, que compara
+`e.id = p_empresa_id`. Com nulo, os dois `exists` dão **false** — a conta
+não nasce e some para todo mundo. Isso chegou no mesmo dia pela frente do
+Antonio (`20260909000001..4_empresa_members`).
 
-Quem quiser tirar a empresa do cadastro tem que, ANTES, ensinar
-`can_access_empresa_regional` a tratar `p_empresa_id is null` — e essa
-função é da outra frente.
+A correção foi **nas duas policies desta tabela**, aceitando
+`empresa_id is null` como "conta de todo mundo do tenant".
+`can_access_empresa_regional` NÃO foi tocada: ela serve **13 tabelas**
+(jobs, orcamentos, projetos, faturamentos, cartoes_credito…), quase todas
+da outra frente. Antes de mexer em qualquer coluna que essa função use,
+leia `pg_policies` da tabela.
 
-**As duas coisas convivem, e é fácil confundi-las:**
-
-| | A empresa da conta importa? |
-|---|---|
-| Pagar / dar baixa | **Não.** Qualquer conta, qualquer documento. |
-| Ver e editar a conta | **Sim.** É o que a RLS usa. |
+⚠️ **Outra armadilha do mesmo tipo:** a listagem do cadastro usava
+`empresas!inner`. Mantido, faria toda conta nova — sem empresa — sumir da
+lista **em silêncio**. Qualquer embed de `empresas` a partir de
+`contas_bancarias` tem que ser opcional daqui em diante.
 
 ### Pendência
 
@@ -3792,12 +3794,18 @@ para faxina própria — derrubar constraint é destrutivo.
 
 ### Verificação (2026-09-09, navegador logado)
 
-Dropdown de Títulos a Pagar listando as duas contas ativas (era uma só);
-cadastro de contas voltando ao estado original depois da reversão, com as
-duas contas visíveis e a coluna Empresa no lugar. Console sem erro de
-aplicação — só o aviso da extensão Trancy do Chrome.
+Dropdown de baixa listando as **três** contas ativas, incluindo a que não
+tem empresa (antes listava uma só); cadastro sem o campo Empresa, com a
+conta criada e gravada com `empresa_id = null`; listagem do cadastro com
+as três (o `!inner` teria escondido a nova) e `/financeiro/cadastros`
+contando 4 ativas; `/financeiro/abertura-de-job/[jobId]` renderizando sem
+erro. Console sem erro de aplicação — só o aviso da extensão Trancy.
 
 Ficaram **sem exercício por falta de dado**: o dialog de Contas a Receber
-(zero títulos a receber) e a página `avulsa/[id]` (zero contas avulsas). A
-mudança nos dois foi a mesma — remoção do recorte por empresa — e passa
-em `tsc`, lint e build.
+(zero títulos a receber) e a página `avulsa/[id]` (zero contas avulsas). O
+seletor de conta dentro da abertura de job também não foi aberto — ele só
+aparece adiante no formulário.
+
+⚠️ **Resíduo:** a conta "ZZ Conta Sem Empresa (teste)" ficou no banco —
+foi ela que provou a gravação. Aparece no dropdown de qualquer baixa;
+inative pelo cadastro quando não precisar mais.

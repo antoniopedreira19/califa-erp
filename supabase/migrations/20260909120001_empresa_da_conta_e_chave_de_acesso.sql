@@ -1,4 +1,19 @@
 -- =====================================================================
+-- ⚠️ SUPERADA no mesmo dia por
+--    `20260909130001_conta_bancaria_sem_empresa.sql`.
+--
+-- Este arquivo já foi commitado e publicado, então NÃO é apagado — quem
+-- puxou o main ficaria com a história furada. Ele só grava um
+-- `comment on column`, e a migration seguinte o sobrescreve; o prefixo
+-- maior garante a ordem em qualquer replay do zero.
+--
+-- O que mudou entre as duas: o Tiago alinhou com o Antonio e a empresa
+-- SAIU do cadastro de contas. A `130001` solta o NOT NULL de verdade e
+-- ajusta as duas policies de `contas_bancarias` para aceitar
+-- `empresa_id is null` — que era exatamente o bloqueio descrito abaixo.
+-- =====================================================================
+
+-- =====================================================================
 -- A empresa da conta bancária é chave de ACESSO, não trava de pagamento
 --
 -- Esta migration só documenta a coluna. Ela nasceu de uma tentativa de

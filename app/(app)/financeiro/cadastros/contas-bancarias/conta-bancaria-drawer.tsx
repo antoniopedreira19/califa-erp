@@ -22,27 +22,16 @@ import {
 } from "@/components/ui/select";
 import { DatePicker } from "@/components/ui/date-picker";
 import { criarContaBancaria, editarContaBancaria } from "./actions";
-import type { ContaBancaria, Empresa } from "@/lib/types";
-
-type EmpresaResumida = Pick<Empresa, "id" | "razao_social" | "nome_fantasia">;
-
-type ContaBancariaComEmpresa = ContaBancaria & {
-  empresas: {
-    razao_social: string;
-    nome_fantasia: string | null;
-  };
-};
+import type { ContaBancaria } from "@/lib/types";
 
 type Props =
   | {
       mode: "criar";
-      empresas: EmpresaResumida[];
       trigger?: React.ReactNode;
     }
   | {
       mode: "editar";
-      conta: ContaBancariaComEmpresa;
-      empresas: EmpresaResumida[];
+      conta: ContaBancaria;
       hasLancamentos?: boolean;
       trigger?: React.ReactNode;
       open?: boolean;
@@ -61,9 +50,9 @@ export function ContaBancariaDrawer(props: Props) {
   const conta = isEditar ? props.conta : undefined;
   const hasLancamentos = isEditar ? (props as any).hasLancamentos ?? false : false;
 
-  const [empresaId, setEmpresaId] = React.useState<string>(
-    conta?.empresa_id ?? ""
-  );
+  // Sem estado de empresa: a conta não pertence a uma empresa (decisão de
+  // 29/08/2026, aplicada ao cadastro em 09/09/2026). Ver
+  // `lib/validations/contas-bancarias.ts`.
   const [tipo, setTipo] = React.useState<string>(conta?.tipo ?? "");
 
   const isControlled =
@@ -74,11 +63,9 @@ export function ContaBancariaDrawer(props: Props) {
   // Resetar selects ao abrir em modo editar
   React.useEffect(() => {
     if (open && isEditar && conta) {
-      setEmpresaId(conta.empresa_id);
       setTipo(conta.tipo);
     }
     if (open && !isEditar) {
-      setEmpresaId("");
       setTipo("");
     }
   }, [open, isEditar, conta]);
@@ -97,7 +84,6 @@ export function ContaBancariaDrawer(props: Props) {
     setFieldErrors({});
     const formData = new FormData(e.currentTarget);
     // Injetar valores dos selects controlados
-    formData.set("empresa_id", empresaId);
     formData.set("tipo", tipo);
 
     startTransition(async () => {
@@ -148,7 +134,7 @@ export function ContaBancariaDrawer(props: Props) {
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>
             {props.mode === "criar"
-              ? "Cadastre uma nova conta bancária vinculada a uma empresa do tenant."
+              ? "Cadastre uma nova conta bancária. Ela serve a qualquer empresa — a empresa é do documento que está sendo pago."
               : "Edite os dados da conta bancária. Saldo inicial e data não podem ser alterados após lançamentos."}
           </DialogDescription>
         </DialogHeader>
@@ -157,32 +143,6 @@ export function ContaBancariaDrawer(props: Props) {
           className="flex-1 flex flex-col overflow-hidden"
         >
           <div className="flex-1 overflow-y-auto p-6 space-y-5">
-            {/* Empresa */}
-            <div className="space-y-2">
-              <Label htmlFor="empresa_id">Empresa *</Label>
-              <Select
-                value={empresaId}
-                onValueChange={setEmpresaId}
-                required
-              >
-                <SelectTrigger id="empresa_id">
-                  <SelectValue placeholder="Selecione a empresa" />
-                </SelectTrigger>
-                <SelectContent>
-                  {props.empresas.map((e) => (
-                    <SelectItem key={e.id} value={e.id}>
-                      {e.nome_fantasia ?? e.razao_social}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {fieldErrors.empresa_id?.map((msg, i) => (
-                <p key={i} className="text-xs text-california-red">
-                  {msg}
-                </p>
-              ))}
-            </div>
-
             {/* Nome */}
             <div className="space-y-2">
               <Label htmlFor="nome">Nome *</Label>

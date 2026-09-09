@@ -1,7 +1,16 @@
 import { z } from "zod";
 
+/**
+ * A conta bancária não tem empresa (decisão de 29/08/2026, aplicada ao
+ * cadastro em 09/09/2026): "as contas em si não são específicas de uma
+ * empresa". A empresa é do DOCUMENTO — vem do título e é ela que vai
+ * para o lançamento na baixa.
+ *
+ * `empresa_id` segue existindo na tabela como vestígio nullable, para o
+ * caso de a agência voltar a dividir contas por empresa. O cadastro não
+ * a envia mais, e nada deve filtrar conta por ela.
+ */
 export const contaBancariaSchema = z.object({
-  empresa_id: z.string().uuid("Selecione a empresa."),
   nome: z.string().trim().min(2, "Nome muito curto.").max(120),
   banco: z.string().trim().min(2, "Banco muito curto.").max(80),
   agencia: z.string().trim().max(20).optional().or(z.literal("")),

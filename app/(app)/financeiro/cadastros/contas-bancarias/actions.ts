@@ -23,7 +23,7 @@ async function carregarInfoConta(
 ) {
   const { data } = await supabase
     .from("contas_bancarias")
-    .select("nome, banco, empresa_id")
+    .select("nome, banco")
     .eq("id", id)
     .eq("tenant_id", tenantId)
     .single();
@@ -32,7 +32,10 @@ async function carregarInfoConta(
 
 function mapDbError(msg: string): string {
   if (msg.includes("uniq_conta_id_empresa")) {
-    return "Já existe uma conta bancária com esse identificador para esta empresa.";
+    // Constraint órfã: sobrou da FK composta que caiu em 28/08/2026 e não
+    // dispara mais (o `id` é PK gerada). A mensagem ficou genérica porque
+    // falar em empresa aqui já não descreve nada (09/09/2026).
+    return "Já existe uma conta bancária com esse identificador.";
   }
   return "Não foi possível salvar a conta bancária.";
 }
@@ -52,7 +55,6 @@ export async function criarContaBancaria(
   }
 
   const parsed = contaBancariaSchema.safeParse({
-    empresa_id: formData.get("empresa_id")?.toString() ?? "",
     nome: formData.get("nome")?.toString() ?? "",
     banco: formData.get("banco")?.toString() ?? "",
     agencia: formData.get("agencia")?.toString() ?? "",
@@ -78,7 +80,9 @@ export async function criarContaBancaria(
     .from("contas_bancarias")
     .insert({
       tenant_id: session.activeTenant.id,
-      empresa_id: d.empresa_id,
+      // Sem `empresa_id`: a conta não é de uma empresa (decisão de
+      // 29/08/2026). A coluna segue nullable como vestígio, preenchida só
+      // pelo trigger da conta-espelho do cartão.
       nome: d.nome,
       banco: d.banco,
       agencia: d.agencia || null,
@@ -102,7 +106,7 @@ export async function criarContaBancaria(
     tenantId: session.activeTenant.id,
     entidadeTipo: "conta_bancaria",
     entidadeId: data.id,
-    metadata: { nome: d.nome, banco: d.banco, empresa_id: d.empresa_id },
+    metadata: { nome: d.nome, banco: d.banco },
   });
 
   revalidatePath("/financeiro/cadastros/contas-bancarias");
@@ -126,7 +130,6 @@ export async function editarContaBancaria(
   }
 
   const parsed = contaBancariaSchema.safeParse({
-    empresa_id: formData.get("empresa_id")?.toString() ?? "",
     nome: formData.get("nome")?.toString() ?? "",
     banco: formData.get("banco")?.toString() ?? "",
     agencia: formData.get("agencia")?.toString() ?? "",
@@ -194,7 +197,8 @@ export async function editarContaBancaria(
   const { error } = await supabase
     .from("contas_bancarias")
     .update({
-      empresa_id: d.empresa_id,
+      // `empresa_id` fica de fora: quem já tinha, mantém o registro
+      // histórico; quem nasceu sem, continua sem.
       nome: d.nome,
       banco: d.banco,
       agencia: d.agencia || null,
@@ -217,7 +221,7 @@ export async function editarContaBancaria(
     tenantId: session.activeTenant.id,
     entidadeTipo: "conta_bancaria",
     entidadeId: id,
-    metadata: { nome: d.nome, banco: d.banco, empresa_id: d.empresa_id },
+    metadata: { nome: d.nome, banco: d.banco },
   });
 
   revalidatePath("/financeiro/cadastros/contas-bancarias");
@@ -283,7 +287,7 @@ export async function inativarContaBancaria(id: string): Promise<ActionResult> {
     tenantId: session.activeTenant.id,
     entidadeTipo: "conta_bancaria",
     entidadeId: id,
-    metadata: { nome: contaInfo.nome, banco: contaInfo.banco, empresa_id: contaInfo.empresa_id },
+    metadata: { nome: contaInfo.nome, banco: contaInfo.banco },
   });
 
   revalidatePath("/financeiro/cadastros/contas-bancarias");
@@ -326,7 +330,7 @@ export async function reativarContaBancaria(id: string): Promise<ActionResult> {
     tenantId: session.activeTenant.id,
     entidadeTipo: "conta_bancaria",
     entidadeId: id,
-    metadata: { nome: contaInfo.nome, banco: contaInfo.banco, empresa_id: contaInfo.empresa_id },
+    metadata: { nome: contaInfo.nome, banco: contaInfo.banco },
   });
 
   revalidatePath("/financeiro/cadastros/contas-bancarias");
