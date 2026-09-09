@@ -3754,8 +3754,9 @@ não deixava chegar até ele. Sintoma: conta recém-cadastrada não aparece
 como opção, sem mensagem nenhuma.
 
 Saiu de quatro pontos (`baixa-titulo-dialog`, `baixa-recebimento-dialog`,
-`avulsa/[id]/page.tsx` e o código morto `baixa-avulsa-dialog`). A baixa em
-lote de cartão já estava certa — a atualização de 29/08 tinha parado nela.
+`avulsa/[id]/page.tsx` e o código morto `baixa-avulsa-dialog` — este último
+removido do repo ainda em 09/09, ver a nota no fim deste arquivo). A baixa
+em lote de cartão já estava certa — a atualização de 29/08 tinha parado nela.
 
 A empresa que vai para o lançamento continua sendo a do **documento**.
 
@@ -3819,3 +3820,63 @@ A conta "ZZ Conta Sem Empresa (teste)", criada para provar a gravação, foi
 **apagada** a pedido do Tiago depois do teste — as cinco FKs que apontam
 para `contas_bancarias` são todas `ON DELETE RESTRICT` e nenhuma tinha
 vínculo com ela. Sem resíduo.
+
+---
+
+## ⚠️ Nota de 2026-09-09 — o `baixa-avulsa-dialog` saiu do repo
+
+`components/financeiro/baixa-avulsa-dialog.tsx` foi **removido**. Era código
+morto desde 17/08/2026 e só continuava no repo carregando uma cópia da lógica
+de baixa (dropdown de conta bancária + data de pagamento) — foi por isso que
+ele entrou no caminho da correção do filtro por empresa, algumas linhas acima:
+a regra revogada precisou ser tirada dele também, só para não ficar espalhada.
+O `557ef9b`, horas depois, ainda gastou uma passada nele para tirar a prop
+`empresaId` que sobrou sem uso — e já anunciava a remoção em separado. É esta.
+
+**Por que estava morto.** Nasceu inline na tela "A pagar" (`64216b6`,
+task015, 12/08), foi extraído para `components/financeiro/` no `7c7e550`
+(12/08) e chegou a ter dois consumidores — `avulsas-list.tsx` e a aba A
+Receber (`cc8e64c`, 13/08). Os dois morreram no mesmo dia, **17/08**: o
+`5f86ac0` apagou o `avulsas-list.tsx` inteiro em favor de
+`titulos-pagar-list.tsx` (baixa por parcela, usando `baixa-titulo-dialog` e
+`baixa-registrada-dialog`), e o `ca833cc` reescreveu a lista de A Receber
+para `baixa-registrada-dialog`. Não foi esquecimento — foi substituição nas
+duas pontas, por componentes que fazem mais.
+
+**Onde está a baixa avulsa de verdade:**
+`app/(app)/financeiro/contas-a-pagar/avulsa/[id]/baixar-avulsa-modal.tsx`,
+consumido por `acoes-client.tsx` e pela `page.tsx` da mesma pasta.
+
+⚠️ **Cuidado com plano velho.** O
+`docs/superpowers/plans/2026-08-13-contas-a-receber-faturamento.md` (Task 11)
+e o spec correspondente ainda trazem trecho de código mandando importar
+`BaixaAvulsaDialog`. Esse plano foi superado pela implementação do `ca833cc`,
+que foi por outro caminho. Se alguém reabrir o plano, o import não existe
+mais — os dois documentos ganharam aviso de obsolescência no lugar.
+
+### Verificação (2026-09-09, navegador logado)
+
+Conferido com dev server **do próprio worktree** (o da 3000 serve o
+checkout principal e não enxergaria a remoção — cwd confirmado por `lsof`
+no `next-server`). Todas as rotas compilaram e responderam **200**:
+`/financeiro`, `/financeiro/contas-a-pagar` (abas Títulos a Pagar e
+Cartão), `/financeiro/contas-a-receber` (abas Faturamento e Títulos a
+Receber), `/financeiro/cadastros/contas-bancarias`, e `avulsa/[id]` com id
+inexistente dando **404 limpo**.
+
+O que a remoção precisava provar foi provado no caminho vivo: a **baixa de
+título abriu** (`baixa-titulo-dialog`, o componente que substituiu o
+removido), com o dropdown listando as duas contas ativas sem recorte por
+empresa. Fechada em **Cancelar**, sem gravar nada no banco.
+
+Console de aba nova: só o aviso do React DevTools e o `trancy-version` da
+extensão. **Zero erro de aplicação.** `tsc --noEmit` limpo; ESLint 0 erros
+(os 2 avisos de `aria` em `components/ui/` são pré-existentes).
+
+⚠️ **`npm run lint` não roda de dentro do worktree** — quebra em
+`Plugin "@next/next" was conflicted`, porque o worktree fica dentro do
+checkout principal e o ESLint acha os dois `.eslintrc.json`. Falha igual em
+arquivo intocado, não tem relação com a mudança. Para ter sinal:
+`npx eslint --no-eslintrc -c .eslintrc.json --resolve-plugins-relative-to . --ext .ts,.tsx app components lib`.
+A raiz seria `"root": true` no `.eslintrc.json`, que é arquivo
+compartilhado — não mexi.

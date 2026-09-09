@@ -1,5 +1,12 @@
 # Contas a Receber — Faturamento + Títulos — design
 
+> ⚠️ **Nota de 2026-09-09 — trecho obsoleto.** A implementação não seguiu o
+> reuso do `BaixaAvulsaDialog` descrito aqui: a baixa de título usa
+> `components/financeiro/baixa-registrada-dialog.tsx`, e o
+> `components/financeiro/baixa-avulsa-dialog.tsx` foi **removido do repo em
+> 09/09/2026** por ser código morto. Ver a nota do dia em
+> `docs/handoffs/HANDOFF_FINANCEIRO.md`.
+
 **Data:** 2026-08-13
 **Status:** proposto, aguardando revisão
 
