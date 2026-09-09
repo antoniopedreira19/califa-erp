@@ -16,10 +16,19 @@ export type MultiSelectEmpresasProps = {
   selecionadas: string[];
   onSelectionChange: (ids: string[]) => void;
   /**
-   * Chamado quando o Popover abre/fecha. Útil pra consumidores que
-   * batch-commitam mudanças no fechamento (ver PageHeaderEmpresaFilter).
+   * Chamado quando o Popover abre/fecha. Consumidor usa pra saber
+   * quando commitar/reverter mudanças.
    */
   onOpenChange?: (open: boolean) => void;
+  /**
+   * Se true (default), renderiza rodapé com botão "Aplicar" — habilitado
+   * apenas quando `hasChanges=true`. Ao clicar, fecha o popover
+   * automaticamente, o que dispara `onOpenChange(false)` no consumidor
+   * (que faz o commit lá).
+   */
+  showApplyButton?: boolean;
+  /** Só habilita "Aplicar" quando há mudança pendente. */
+  hasChanges?: boolean;
 };
 
 /**
@@ -30,9 +39,19 @@ export type MultiSelectEmpresasProps = {
  *   - N (< total) selecionadas → "N selecionadas"
  *
  * Marcar todas / Limpar: atalhos no topo do dropdown.
+ * Aplicar: rodapé — dispara o fechamento explícito, feedback imediato.
  */
 export function MultiSelectEmpresas(props: MultiSelectEmpresasProps) {
-  const { empresas, selecionadas, onSelectionChange, onOpenChange } = props;
+  const {
+    empresas,
+    selecionadas,
+    onSelectionChange,
+    onOpenChange,
+    showApplyButton = true,
+    hasChanges = false,
+  } = props;
+
+  const [open, setOpen] = React.useState(false);
 
   const total = empresas.length;
   const selCount = selecionadas.length;
@@ -47,8 +66,6 @@ export function MultiSelectEmpresas(props: MultiSelectEmpresasProps) {
     return `${selCount} selecionadas`;
   }, [empresas, selecionadas, selCount, todasMarcadas]);
 
-  // Marcar todas e limpar têm o mesmo efeito prático (0 = todas).
-  // Dois botões visualmente pro operador ler o que está fazendo.
   const marcarTodas = () => onSelectionChange([]);
   const limpar = () => onSelectionChange([]);
 
@@ -60,8 +77,20 @@ export function MultiSelectEmpresas(props: MultiSelectEmpresasProps) {
     }
   };
 
+  const handleOpenChange = (next: boolean) => {
+    setOpen(next);
+    onOpenChange?.(next);
+  };
+
+  const handleApply = () => {
+    // Fechar o popover programaticamente dispara handleOpenChange(false),
+    // que chama onOpenChange(false) — consumidor detecta e commita.
+    setOpen(false);
+    onOpenChange?.(false);
+  };
+
   return (
-    <Popover onOpenChange={onOpenChange}>
+    <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
         <Button
           variant="outline"
@@ -99,6 +128,18 @@ export function MultiSelectEmpresas(props: MultiSelectEmpresasProps) {
             );
           })}
         </div>
+        {showApplyButton && (
+          <div className="pt-2 mt-2 border-t border-border">
+            <Button
+              size="sm"
+              onClick={handleApply}
+              disabled={!hasChanges}
+              className="w-full bg-california-red hover:bg-california-red/90 disabled:opacity-50"
+            >
+              {hasChanges ? "Aplicar filtro" : "Sem alterações"}
+            </Button>
+          </div>
+        )}
       </PopoverContent>
     </Popover>
   );

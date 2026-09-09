@@ -117,6 +117,7 @@ export function PageHeaderEmpresaFilter({
         selecionadas={localIds}
         onSelectionChange={handleSelectionChange}
         onOpenChange={handleOpenChange}
+        hasChanges={dirty}
       />
       <RefreshFeedback active={isBusy} />
     </>
