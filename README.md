@@ -189,6 +189,13 @@ npm run lint
 npm run typecheck
 ```
 
+O `.eslintrc.json` tem `"root": true` de propósito — **não remova**. Sem
+ele, o ESLint sobe a árvore de diretórios atrás de outra config, e um
+worktree em `.claude/worktrees/` acha o `.eslintrc.json` do repositório
+pai. O `npm run lint` então morre antes de olhar qualquer arquivo, com
+`Plugin "@next/next" was conflicted`, e falha até em arquivo intocado. Na
+raiz do repositório a linha não muda nada: não existe config acima dela.
+
 Os dois passam **e a tela ainda pode estar quebrada**: comentário JSX
 aberto e não fechado (`{/*` sem `*/}`) engole os componentes seguintes
 sem virar erro de sintaxe, e nem `tsc`, nem `next lint`, nem
