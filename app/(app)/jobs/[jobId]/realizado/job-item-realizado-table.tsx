@@ -1969,6 +1969,14 @@ export function JobItemRealizadoTable({
                 empresas.find((e) => e.id === ppVendo?.empresa_id)
                   ?.razao_social ?? "—"
               }
+              itemDescricao={itemAtual?.item ?? ""}
+              valorPlanejado={planejadoAtual}
+              emPPsEmitidas={emPPs}
+              // Cancelar daqui segue o mesmo gate de gerar e enviar: o
+              // servidor confere de novo, mas o botão não aparece para
+              // quem só lê o job.
+              podeCancelar={podeGerarPP}
+              onMensagem={setToast}
             />
           </>
         );
