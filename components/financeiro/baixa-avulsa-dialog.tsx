@@ -61,9 +61,11 @@ export function BaixaAvulsaDialog({
     setContaId("");
   }, [open]);
 
-  const contasDaEmpresa = contas.filter(
-    (c) => c.empresa_id === empresaId && c.ativo,
-  );
+  // Toda conta ativa entra, de qualquer empresa (decisão de 29/08/2026):
+  // a empresa é do documento, a conta é só o cano do dinheiro. Ver
+  // `baixa-titulo-dialog.tsx` e a migration
+  // `20260829100001_a_trava_de_empresa_sai_das_seis_ultimas`.
+  const contasAtivas = contas.filter((c) => c.ativo);
 
   function handleSubmit() {
     setErro(null);
@@ -123,12 +125,12 @@ export function BaixaAvulsaDialog({
                 <SelectValue placeholder="Selecione a conta..." />
               </SelectTrigger>
               <SelectContent>
-                {contasDaEmpresa.length === 0 ? (
+                {contasAtivas.length === 0 ? (
                   <div className="px-2 py-1.5 text-xs text-muted-foreground">
-                    Nenhuma conta ativa dessa empresa. Cadastre em /financeiro/cadastros/contas-bancarias.
+                    Nenhuma conta bancária ativa. Cadastre em /financeiro/cadastros/contas-bancarias.
                   </div>
                 ) : (
-                  contasDaEmpresa.map((c) => (
+                  contasAtivas.map((c) => (
                     <SelectItem key={c.id} value={c.id}>
                       {c.nome} · {c.banco}
                     </SelectItem>

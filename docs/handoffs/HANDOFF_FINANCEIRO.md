@@ -3738,3 +3738,66 @@ depois da errata) e o recebimento em R$ 27.273,52, a revisão foi
 registrada, o job saiu do mural e o fluxo de caixa passou a mostrar
 R$ 16.000 de previsão de custo. A foto nº 2 (`revisao_errata`) ficou
 gravada.
+
+---
+
+# A conta bancária paga qualquer empresa (2026-09-09)
+
+Decisão em `docs/decisions/064-a-conta-bancaria-paga-qualquer-empresa.md`.
+
+### ⚠️ Nada deve FILTRAR conta bancária por empresa numa tela de baixa
+
+O dropdown "Conta que realizará o pagamento" listava só contas da empresa
+do título. Isso era resíduo da trava revogada em 29/08/2026
+(`20260829100001`) — o banco já aceitava qualquer conta, a interface é que
+não deixava chegar até ele. Sintoma: conta recém-cadastrada não aparece
+como opção, sem mensagem nenhuma.
+
+Saiu de quatro pontos (`baixa-titulo-dialog`, `baixa-recebimento-dialog`,
+`avulsa/[id]/page.tsx` e o código morto `baixa-avulsa-dialog`). A baixa em
+lote de cartão já estava certa — a atualização de 29/08 tinha parado nela.
+
+A empresa que vai para o lançamento continua sendo a do **documento**.
+
+### ⚠️ Mas a empresa da conta virou CHAVE DE ACESSO no mesmo dia
+
+`contas_bancarias_select` e `contas_bancarias_modify` passaram a chamar
+`can_access_empresa_regional(auth.uid(), empresa_id, null)`, pela frente do
+Antonio (`20260909000001..4_empresa_members`). A função compara
+`e.id = p_empresa_id` — **com `empresa_id` nulo os dois `exists` dão
+false**.
+
+Consequência prática, descoberta tentando soltar o NOT NULL da coluna a
+pedido do Tiago: conta sem empresa **não pode ser criada e ficaria
+invisível para todo mundo**. O `drop not null` foi revertido no mesmo dia,
+antes de qualquer linha nula existir, e o campo "Empresa *" continua no
+cadastro.
+
+Quem quiser tirar a empresa do cadastro tem que, ANTES, ensinar
+`can_access_empresa_regional` a tratar `p_empresa_id is null` — e essa
+função é da outra frente.
+
+**As duas coisas convivem, e é fácil confundi-las:**
+
+| | A empresa da conta importa? |
+|---|---|
+| Pagar / dar baixa | **Não.** Qualquer conta, qualquer documento. |
+| Ver e editar a conta | **Sim.** É o que a RLS usa. |
+
+### Pendência
+
+`uniq_conta_id_empresa` (UNIQUE em `id, empresa_id`) é órfã: sobrou da FK
+composta que caiu em 28/08 e não garante nada, porque `id` já é a PK. Fica
+para faxina própria — derrubar constraint é destrutivo.
+
+### Verificação (2026-09-09, navegador logado)
+
+Dropdown de Títulos a Pagar listando as duas contas ativas (era uma só);
+cadastro de contas voltando ao estado original depois da reversão, com as
+duas contas visíveis e a coluna Empresa no lugar. Console sem erro de
+aplicação — só o aviso da extensão Trancy do Chrome.
+
+Ficaram **sem exercício por falta de dado**: o dialog de Contas a Receber
+(zero títulos a receber) e a página `avulsa/[id]` (zero contas avulsas). A
+mudança nos dois foi a mesma — remoção do recorte por empresa — e passa
+em `tsc`, lint e build.

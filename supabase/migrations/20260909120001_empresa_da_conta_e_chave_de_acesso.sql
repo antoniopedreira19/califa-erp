@@ -1,0 +1,32 @@
+-- =====================================================================
+-- A empresa da conta bancária é chave de ACESSO, não trava de pagamento
+--
+-- Esta migration só documenta a coluna. Ela nasceu de uma tentativa de
+-- soltar o NOT NULL de `contas_bancarias.empresa_id` em 09/09/2026 — o
+-- Tiago pediu para tirar a empresa do cadastro, já que ela não deveria
+-- limitar pagamento. A tentativa foi revertida no mesmo dia, antes de
+-- qualquer linha nula existir, porque o teste de gravação falhou.
+--
+-- O que o teste revelou: as policies `contas_bancarias_select` e
+-- `contas_bancarias_modify` chamam
+-- `can_access_empresa_regional(auth.uid(), empresa_id, null)`, que compara
+-- `e.id = p_empresa_id`. Com `empresa_id` nulo os dois `exists` dão
+-- false — a conta não pode ser criada e ficaria INVISÍVEL para todo
+-- mundo. Isso chegou no mesmo dia pela outra frente
+-- (`20260909000001..4_empresa_members`).
+--
+-- Então as duas coisas convivem, e é isso que o comentário registra:
+--
+--   * PAGAR — a empresa NÃO limita. Nenhuma função de baixa trava por
+--     empresa desde `20260829100001`, e as telas de baixa pararam de
+--     filtrar em 09/09/2026. Qualquer conta paga documento de qualquer
+--     empresa; a empresa que vai para o lançamento é a do DOCUMENTO.
+--   * VER e EDITAR a conta — a empresa É o que dá acesso, via RLS.
+--
+-- Quem for mexer nisso de novo: soltar o NOT NULL exige antes ensinar
+-- `can_access_empresa_regional` a tratar `p_empresa_id is null`, e essa
+-- função é da outra frente.
+-- =====================================================================
+
+comment on column public.contas_bancarias.empresa_id is
+  'Empresa dona do cadastro da conta. NÃO restringe pagamento: qualquer conta paga documento de qualquer empresa (decisão de 29/08/2026, migration 20260829100001) — nada deve FILTRAR conta por esta coluna nas telas de baixa. Ela É, porém, a chave de acesso da RLS (`can_access_empresa_regional`) desde 09/09/2026: define quem enxerga e edita a conta.';

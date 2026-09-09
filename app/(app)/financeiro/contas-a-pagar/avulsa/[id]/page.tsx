@@ -94,11 +94,15 @@ export default async function AvulsaDetalhesPage({
       .select("*, alterado_por_profile:profiles!alterado_por(nome)")
       .eq("conta_avulsa_id", params.id)
       .order("alterado_em", { ascending: false }),
+    // Toda conta ativa do tenant, de qualquer empresa (decisão de
+    // 29/08/2026): "as contas em si não são específicas de uma empresa".
+    // A empresa continua sendo a do documento — é ela que vai para o
+    // lançamento na baixa. O recorte por empresa que morava aqui escondia
+    // conta recém-cadastrada sem dizer por quê (09/09/2026).
     supabase
       .from("contas_bancarias")
       .select("*")
       .eq("tenant_id", session.activeTenant.id)
-      .eq("empresa_id", (conta as unknown as { empresa_id: string }).empresa_id)
       .eq("ativo", true)
       // Dinheiro não sai pela conta espelho do cartão.
       .neq("tipo", "cartao_credito"),
