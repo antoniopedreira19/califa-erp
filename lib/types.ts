@@ -1291,6 +1291,9 @@ export interface PedidoCompra {
   cancelada_em: string | null;
   motivo_cancelamento: string | null;
   // Ciclo de avaliação do financeiro
+  /** Quando o financeiro aprovou — a PP virou título a pagar (027). */
+  aprovada_em: string | null;
+  aprovada_por: string | null;
   pago_em: string | null;
   pago_por: string | null;
   rejeitada_por: string | null;
@@ -1661,6 +1664,10 @@ export interface PedidoCompraNaLista extends PedidoCompra {
   emitida_por_nome: string | null;
   /** Quem enviou ao financeiro. Nulo enquanto gerada (02/09/2026). */
   enviada_financeiro_por_nome: string | null;
+  /** A LINHA da planilha que a PP paga, e o bloco dela. Juntos são a
+   *  origem da PP no job — a coluna "Origem no job" da aba de PPs
+   *  (09/09/2026). Nulos só se a âncora do realizado sumir. */
+  item_nome: string | null;
   grupo_nome: string | null;
   /** Sempre ao menos uma, ordenada por `numero`. */
   parcelas: PedidoCompraParcela[];
