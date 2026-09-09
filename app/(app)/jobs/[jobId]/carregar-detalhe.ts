@@ -352,18 +352,21 @@ export async function carregarDetalheDoJob(
 
   if (ppsRes.error) console.error("[job.pps]", ppsRes.error.message);
 
-  // Nome do grupo por item realizado: o realizado aponta pra linha da
-  // planilha, que aponta pro grupo. A aba de PPs mostra "{grupo} · emitida
-  // em ...".
+  // A ORIGEM da PP no job: o realizado aponta pra linha da planilha, que
+  // aponta pro grupo. A aba de PPs mostra os dois juntos numa coluna
+  // desde 09/09/2026 — o item em negrito, o grupo na etiqueta abaixo.
   const grupoNomePorId = new Map(grupos.map((g) => [g.id, g.nome]));
   const itemPorId = new Map(itens.map((i) => [i.id, i]));
   const grupoPorItemRealizadoId = new Map<string, string>();
+  const itemPorItemRealizadoId = new Map<string, string>();
   for (const r of realizados) {
     const item = r.job_item_orcado_id
       ? itemPorId.get(r.job_item_orcado_id)
       : undefined;
-    const nome = item ? grupoNomePorId.get(item.grupo_id) : undefined;
+    if (!item) continue;
+    const nome = grupoNomePorId.get(item.grupo_id);
     if (nome) grupoPorItemRealizadoId.set(r.id, nome);
+    if (item.item) itemPorItemRealizadoId.set(r.id, item.item);
   }
 
   const ppsDoJob: PedidoCompraNaLista[] = (ppsRes.data ?? []).map((pp: any) => ({
@@ -376,6 +379,7 @@ export async function carregarDetalheDoJob(
     valor: Number(pp.valor),
     emitida_por_nome: pp.emitido?.nome ?? null,
     enviada_financeiro_por_nome: pp.enviado?.nome ?? null,
+    item_nome: itemPorItemRealizadoId.get(pp.item_realizado_id) ?? null,
     grupo_nome: grupoPorItemRealizadoId.get(pp.item_realizado_id) ?? null,
     parcelas: (pp.parcelas ?? [])
       .map((p: any) => ({ ...p, valor: Number(p.valor ?? 0) }))

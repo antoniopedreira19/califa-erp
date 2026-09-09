@@ -10,6 +10,7 @@ import {
   X,
   Clock,
   Wallet,
+  Layers,
 } from "lucide-react";
 import {
   DescritivoPopover,
@@ -140,9 +141,14 @@ export function JobPPsSection({
       if (filtro !== "todas" && pp.status !== filtro) return false;
       if (!termo) return true;
       const fornecedor = (pp.fornecedor_id ? fornecedoresPorId[pp.fornecedor_id] : null) ?? "";
+      // O item e o bloco entraram na busca em 09/09/2026, junto da coluna
+      // "Origem no job": procurar por "Fotógrafo" ou "TOOLKIT" é o jeito
+      // natural de achar a PP depois que a origem virou visível.
       return (
         pp.codigo.toLowerCase().includes(termo) ||
         pp.servico.toLowerCase().includes(termo) ||
+        (pp.item_nome ?? "").toLowerCase().includes(termo) ||
+        (pp.grupo_nome ?? "").toLowerCase().includes(termo) ||
         fornecedor.toLowerCase().includes(termo)
       );
     });
@@ -308,7 +314,7 @@ export function JobPPsSection({
           <input
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
-            placeholder="Buscar por código, item ou fornecedor"
+            placeholder="Buscar por código, item, bloco ou fornecedor"
             className="h-8 w-[270px] rounded-lg border border-border bg-white pl-8 pr-3 text-xs outline-none focus:border-california-red/40"
           />
         </div>
@@ -326,21 +332,28 @@ export function JobPPsSection({
       <div className="relative">
         <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-soft">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[980px] border-collapse text-[13px]">
+            {/* `table-fixed` desde 09/09/2026: com layout automático, uma
+                descrição longa esticava a tabela para fora da página e
+                obrigava a rolar para o lado até o Status. Agora as
+                larguras mandam e o texto é que se acomoda — a mesma regra
+                das planilhas (docs/09-identidade-visual-ui.md). */}
+            <table className="w-full min-w-[980px] table-fixed border-collapse text-[13px]">
               <colgroup>
-                <col className="w-[11%]" />
-                <col />
+                <col className="w-[7%]" />
+                <col className="w-[21%]" />
+                <col className="w-[21%]" />
                 <col className="w-[15%]" />
-                <col className="w-[13%]" />
-                <col className="w-[9%]" />
-                <col className="w-[11%]" />
-                <col className="w-[13%]" />
-                <col className="w-[9%]" />
+                <col className="w-[8.5%]" />
+                <col className="w-[6%]" />
+                <col className="w-[8.5%]" />
+                <col className="w-[9.5%]" />
+                <col className="w-[3.5%]" />
               </colgroup>
               <thead>
                 <tr className="border-b border-border bg-muted/50 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                   <th className="px-3.5 py-2.5 text-left">Código</th>
-                  <th className="px-3.5 py-2.5 text-left">Serviço · item do job</th>
+                  <th className="px-3.5 py-2.5 text-left">Origem no job</th>
+                  <th className="px-3.5 py-2.5 text-left">Serviço</th>
                   <th className="px-3.5 py-2.5 text-left">Fornecedor</th>
                   <th className="px-3.5 py-2.5 text-left">Vencimento</th>
                   <th className="px-3.5 py-2.5 text-left">Prazo</th>
@@ -353,7 +366,7 @@ export function JobPPsSection({
                 {linhasVisiveis.length === 0 && (
                   <tr>
                     <td
-                      colSpan={8}
+                      colSpan={9}
                       className="py-10 text-center text-sm text-muted-foreground"
                     >
                       Nenhuma PP com esse filtro.
@@ -370,53 +383,72 @@ export function JobPPsSection({
                   <tr
                     key={parcela?.id ?? pp.id}
                     className={cn(
-                      "h-[57px] border-b border-border/60 last:border-0",
+                      "border-b border-border/60 last:border-0",
                       pp.status === "cancelada" && "opacity-60",
                     )}
                   >
-                    <td className="whitespace-nowrap px-3.5 font-mono text-[11.5px]">
+                    {/* A parcela desce para baixo do código: em linha, ela
+                        empurrava a coluna e comia o espaço da origem. */}
+                    <td
+                      className="px-3.5 py-2.5 align-middle font-mono text-[11.5px] leading-tight"
+                      title={`Emitida em ${formatarData(pp.created_at)}${pp.emitida_por_nome ? ` por ${pp.emitida_por_nome}` : ""}`}
+                    >
                       {pp.codigo}
                       {total > 1 && (
-                        <span className="text-muted-foreground">
-                          {" "}
-                          · {indice + 1}/{total}
+                        <span className="block text-[10.5px] text-muted-foreground">
+                          {indice + 1}/{total}
                         </span>
                       )}
                     </td>
-                    {/* O serviço é texto de parágrafo, e vinha empilhado
-                        com a linha da emissão: a linha da tabela crescia
-                        até quatro alturas e a leitura das colunas se
-                        perdia. Vale aqui a saída das listas de Orçamentos
-                        e Jobs (decisão 051) — uma linha só, com o texto
-                        inteiro no cartão do ícone. Grupo, emissão e
-                        parcelamento viraram rodapé do cartão. */}
-                    <td className="px-3.5">
-                      <span className="flex items-center gap-1.5">
-                        {/* `min-w-0` sem `flex-1`: o texto encolhe e corta
-                            quando não cabe, mas o ícone continua colado
-                            nele quando cabe — como nas listas. O teto de
-                            largura é o que impede a linha `nowrap` de
-                            esticar a tabela inteira: serviço é campo de
-                            500 caracteres. */}
-                        <span className="min-w-0 max-w-[520px] truncate text-[13px] font-semibold">
+
+                    {/* De ONDE a PP veio, que é a primeira pergunta de quem
+                        abre esta aba (09/09/2026): a linha da planilha em
+                        cima, o bloco na etiqueta. Sem isso, duas PPs de
+                        "Sacola Personalizada" em blocos diferentes eram
+                        indistinguíveis. */}
+                    <td className="px-3.5 py-2.5 align-middle">
+                      <div className="flex flex-col gap-1">
+                        <span className="line-clamp-2 text-[13px] font-semibold leading-snug">
+                          {pp.item_nome ?? "—"}
+                        </span>
+                        {pp.grupo_nome && (
+                          <span
+                            title={pp.grupo_nome}
+                            className="inline-flex max-w-full items-center gap-1.5 self-start rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase leading-tight tracking-wide text-muted-foreground"
+                          >
+                            <Layers className="h-3 w-3 flex-none" />
+                            <span className="truncate">{pp.grupo_nome}</span>
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    {/* O serviço quebra em até DUAS linhas e para. Em uma
+                        linha só ele estica a tabela (`nowrap`) ou vira
+                        reticências em quase toda PP; em quantas quiser,
+                        a linha cresce a quatro alturas. Duas cobrem as
+                        descrições reais e mantêm a grade legível. */}
+                    <td className="px-3.5 py-2.5 align-middle">
+                      <div className="flex items-start gap-1.5">
+                        <span className="line-clamp-2 min-w-0 flex-1 text-[12.5px] leading-snug">
                           {pp.servico}
                         </span>
+                        {/* O cartão é das ESPECIFICAÇÕES (decisão do
+                            Tiago, 09/09/2026): a descrição agora se lê na
+                            própria coluna, e o campo que não aparecia em
+                            lugar nenhum fora do formulário era esse.
+                            Sem especificações o ícone fica apagado — é o
+                            comportamento nativo do componente. */}
                         <DescritivoPopover
-                          rotulo="Descrição da PP"
-                          acaoGatilho="Ver a descrição da PP"
+                          rotulo="Especificações da PP"
+                          acaoGatilho="Ver as especificações da PP"
+                          tituloVazio="Esta PP não tem especificações"
                           codigo={pp.codigo}
-                          nome={pp.grupo_nome}
-                          texto={pp.servico}
-                          extra={{
-                            rotulo: "Especificações",
-                            texto: pp.especificacoes,
-                          }}
+                          nome={pp.item_nome}
+                          texto={pp.especificacoes}
                           aberto={descritivoAberto === chaveDaLinha}
                           onAbertoChange={(v) =>
                             setDescritivoAberto(v ? chaveDaLinha : null)
                           }
-                          // O grupo não se repete aqui: ele já é o nome
-                          // do cartão, ao lado do código.
                           rodape={
                             <>
                               <DescritivoRodapeNota
@@ -438,24 +470,38 @@ export function JobPPsSection({
                             </>
                           }
                         />
-                      </span>
+                      </div>
                     </td>
-                    <td className="px-3.5 text-muted-foreground">
-                      {(pp.fornecedor_id ? fornecedoresPorId[pp.fornecedor_id] : null) ?? "—"}
+                    {/* Verba de produção não tem fornecedor: em vez do "—"
+                        de antes, a coluna diz o que a PP é e para quem
+                        vai. */}
+                    <td className="px-3.5 py-2.5 align-middle text-[12.5px] text-muted-foreground">
+                      {pp.verba_producao ? (
+                        <span className="line-clamp-2 leading-snug">
+                          <span className="italic">Verba de produção</span>
+                          {pp.responsavel?.nome ? ` · ${pp.responsavel.nome}` : ""}
+                        </span>
+                      ) : (
+                        <span className="line-clamp-2 leading-snug">
+                          {(pp.fornecedor_id
+                            ? fornecedoresPorId[pp.fornecedor_id]
+                            : null) ?? "—"}
+                        </span>
+                      )}
                     </td>
-                    <td className="whitespace-nowrap px-3.5 font-mono text-xs">
+                    <td className="whitespace-nowrap px-3.5 py-2.5 align-middle font-mono text-xs">
                       {formatarData(vencimento)}
                     </td>
-                    <td className="whitespace-nowrap px-3.5 text-muted-foreground">
+                    <td className="whitespace-nowrap px-3.5 py-2.5 align-middle text-[12.5px] text-muted-foreground">
                       {prazoEmDias(pp.created_at, vencimento)}
                     </td>
-                    <td className="whitespace-nowrap px-3.5 text-right font-mono text-[12.5px] font-semibold">
+                    <td className="whitespace-nowrap px-3.5 py-2.5 align-middle text-right font-mono text-[12.5px] font-semibold">
                       {formatCurrency(valorLinha, "BRL")}
                     </td>
-                    <td className="px-3.5">
+                    <td className="px-3.5 py-2.5 align-middle">
                       <PPStatusChip status={pp.status} />
                     </td>
-                    <td className="px-3.5">
+                    <td className="px-3.5 py-2.5 align-middle">
                       {/* Ver PDF é de CADA parcela (Tela 2.3): cada uma
                           tem seu documento. Editar é da PP inteira, então
                           só a primeira linha o mostra. */}

@@ -2993,3 +2993,57 @@ texto de uma linha é `nowrap` e **precisa de teto de largura**
 (`max-w-[520px]`), senão estica a tabela em vez de cortar; e a chave do
 "um cartão por vez" é a **linha**, não a PP — PP parcelada tem uma linha
 por parcela.
+
+## ⚠️ Nota de 2026-09-09 — a aba de PPs diz de onde a PP veio, e a ficha virou o formulário travado
+
+Duas telas revistas com o Tiago sobre um desenho apresentado antes de
+codar (variante A da proposta de 09/09). O que estava errado nas duas era
+a mesma coisa: **não dava para reconhecer o que se está lendo.**
+
+### 1. A tabela da aba "Pedidos de Produção"
+
+A coluna "Serviço · item do job" mostrava só o serviço, e a origem da PP
+(a linha da planilha, o bloco) só aparecia dentro do cartão. Duas PPs de
+"Sacola Personalizada" em blocos diferentes eram indistinguíveis.
+
+| | Antes | Agora |
+|---|---|---|
+| Origem | escondida no cartão | coluna **"Origem no job"**: o item em negrito (até 2 linhas) e o bloco numa etiqueta |
+| Serviço | uma linha `nowrap`, cortada | **até duas linhas** |
+| Grade | layout automático | **`table-fixed`** com largura por coluna — a tabela parou de sair da página |
+| Ícone | descrição + especificações | **especificações** (apagado quando não há) |
+| Parcela | ao lado do código | **abaixo** dele |
+| Fornecedor | "—" na verba de produção | *"Verba de produção · Fulano"* |
+| Busca | código, serviço, fornecedor | \+ **item e bloco** |
+
+O `table-fixed` é o ponto que não pode se perder: com layout automático,
+uma descrição de 500 caracteres estica a tabela inteira e empurra o Status
+para fora da tela. É a mesma regra que as planilhas já seguem
+(`docs/09-identidade-visual-ui.md`).
+
+`PedidoCompraNaLista` ganhou **`item_nome`**, preenchido em
+`carregar-detalhe.ts` no mesmo laço que já resolvia `grupo_nome`.
+
+### 2. A ficha da PP enviada
+
+Deixou de ser uma tela própria e passou a ser **o formulário de PP,
+travado** — mesma ordem, mesmos rótulos, campos em caixas de leitura.
+Quem gerou a PP reconhece a tela na hora. No lugar da pergunta *"Esta é a
+última PP deste item?"*, que só faz sentido na emissão, entrou a **linha
+do tempo**: gerada → enviada → em avaliação → aprovação → pagamento, com o
+passo de hoje aceso, os próximos apagados, e a rejeição com o motivo.
+
+O rodapé leva **Ver PDF da PP · Cancelar PP · Fechar**. O cancelar é a
+mesma action e a mesma confirmação do painel, e fica apagado com o motivo
+na PP aprovada ou paga.
+
+### Conferido no navegador (09/09/2026)
+
+JOB-0031 (real): a tabela cabe na página sem rolagem lateral, com a origem
+em cada linha e a verba de produção nomeada; a ficha da PP-00031 e da
+PP-00040 (parcelada, com o bloco de parcelas) abrem com a linha do tempo.
+JOB-0010: o cartão das especificações abre na PP-00007 — a única da base
+com o campo preenchido — e os outros 12 ícones ficam apagados; a ficha da
+PP-00011 (aprovada) mostra "Cancelar PP" desabilitado com o motivo certo.
+JOB-0029 (teste): o cancelamento **pela ficha** levou a PP-00014 a
+`cancelada`, com auditoria, e "Em PPs emitidas" do item caiu para R$ 0,00.

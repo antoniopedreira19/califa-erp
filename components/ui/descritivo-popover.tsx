@@ -10,8 +10,10 @@ import {
 import { cn } from "@/lib/utils";
 
 /**
- * Ícone discreto na linha que abre o descritivo num cartão ancorado
- * (handoff "Descritivos nas Listas.dc.html", 04/09/2026).
+ * Ícone discreto na linha que abre um texto longo num cartão ancorado
+ * (handoff "Descritivos nas Listas.dc.html", 04/09/2026). Serve ao
+ * descritivo do projeto e do job nas listas, e às especificações da PP na
+ * aba de Pedidos de Produção (09/09/2026).
  *
  * O cartão flutua sobre a tabela: a lista não muda de tamanho e nada mais
  * se move. Fecha com clique fora, no X ou com Esc — o clique DENTRO não
@@ -33,26 +35,27 @@ export interface DescritivoPopoverProps {
   codigo: string | null;
   nome: string | null;
   /**
-   * O texto. Vazio ou nulo apaga o ícone e desliga o clique: são os
-   * registros anteriores à obrigatoriedade (decisão 043) — 12 dos 19
-   * projetos e 27 dos 30 jobs na data do handoff. Não há backfill, então
-   * o apagado é permanente até alguém editar o registro.
+   * O texto. Vazio ou nulo apaga o ícone e desliga o clique. No
+   * descritivo são os registros anteriores à obrigatoriedade (decisão
+   * 043) — 12 dos 19 projetos e 27 dos 30 jobs na data do handoff, sem
+   * backfill; na PP é a especificação, que é campo opcional. É
+   * `tituloVazio` que diz qual dos dois o ícone apagado está contando.
    */
   texto: string | null;
   aberto: boolean;
   onAbertoChange: (aberto: boolean) => void;
   /**
-   * Um SEGUNDO texto, com rótulo próprio, abaixo do principal — para o
-   * registro que descreve o trabalho em dois campos. Hoje é a PP:
-   * "Descrição do serviço" e "Especificações". Vazio não desenha nada.
-   */
-  extra?: { rotulo: string; texto: string | null } | null;
-  /**
    * O que o gatilho diz no `title` e para o leitor de tela. O padrão sai
    * do rótulo em minúsculas, que fica torto quando ele tem sigla
-   * ("ver descrição da pp").
+   * ("ver especificações da pp").
    */
   acaoGatilho?: string;
+  /**
+   * O `title` do ícone apagado. O padrão fala do descritivo obrigatório
+   * (decisão 043); a PP sem especificações não é registro antigo, é campo
+   * opcional que ninguém preencheu.
+   */
+  tituloVazio?: string;
   /** Linhas de rodapé, abaixo do filete. */
   rodape?: React.ReactNode;
   align?: "start" | "center" | "end";
@@ -65,12 +68,11 @@ export function DescritivoPopover({
   texto,
   aberto,
   onAbertoChange,
-  extra,
   acaoGatilho,
+  tituloVazio,
   rodape,
   align = "start",
 }: DescritivoPopoverProps) {
-  const extraTexto = extra?.texto?.trim() ?? "";
   const conteudo = texto?.trim() ?? "";
   const temTexto = conteudo.length > 0;
 
@@ -80,7 +82,7 @@ export function DescritivoPopover({
     return (
       <span
         aria-hidden="true"
-        title="Registro anterior à obrigatoriedade"
+        title={tituloVazio ?? "Registro anterior à obrigatoriedade"}
         className="inline-flex h-6 w-6 flex-none items-center justify-center rounded-lg text-[#DCD8D1]"
       >
         <FileText className="h-3.5 w-3.5" />
@@ -148,16 +150,6 @@ export function DescritivoPopover({
           <p className="whitespace-pre-wrap text-[13px] leading-[1.65] text-[#4a4a4a]">
             {conteudo}
           </p>
-          {extraTexto && (
-            <div className="mt-0.5 flex flex-col gap-1 border-t border-[#F2F1ED] pt-2">
-              <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-[#a5a29b]">
-                {extra?.rotulo}
-              </span>
-              <p className="whitespace-pre-wrap text-[13px] leading-[1.65] text-[#4a4a4a]">
-                {extraTexto}
-              </p>
-            </div>
-          )}
           {rodape && (
             <div className="mt-0.5 flex flex-col gap-[7px] border-t border-[#F2F1ED] pt-2">
               {rodape}

@@ -118,13 +118,11 @@ alturas e a leitura das outras colunas se perdia.
 emissão e parcelamento viraram rodapé; e o `codigo`/`nome` do cabeçalho
 são a PP e o grupo dela.
 
-Duas peças novas no componente, as duas opcionais e sem efeito em quem já
-o usava:
-
-| | Para quê |
-|---|---|
-| `extra={{ rotulo, texto }}` | um SEGUNDO texto, com rótulo próprio, abaixo do principal. Na PP são as **Especificações**, que até aqui só se liam abrindo o formulário |
-| `acaoGatilho` | o que o gatilho diz no `title` e para o leitor de tela. O padrão (`Ver ${rotulo.toLowerCase()}`) virava "ver descrição da pp" |
+~~Duas peças novas no componente, `extra` e `acaoGatilho`.~~
+⚠️ **Revisto em 09/09/2026** — ver a nota abaixo: `extra` saiu junto com o
+cartão da descrição, e o componente ficou com `acaoGatilho` (o que o
+gatilho diz, porque o padrão virava "ver descrição da pp") e `tituloVazio`
+(o que o ícone APAGADO diz).
 
 **Um detalhe de tabela que não é firula:** o texto em uma linha só é
 `nowrap`, e sem teto de largura ele esticaria a tabela inteira em vez de
@@ -139,3 +137,29 @@ Conferido em 08/09/2026 no JOB-0031 e no JOB-0010: cartão ancorado na
 linha, um por vez (abrir o segundo fecha o primeiro), `Esc` fecha, a aba
 do job não se mexe, e o bloco de Especificações aparece na PP-00007, que
 é a única da base com o campo preenchido.
+
+## ⚠️ Nota de 2026-09-09 — na PP o cartão é das ESPECIFICAÇÕES
+
+A nota de ontem resolveu a altura da linha escondendo a descrição do
+serviço no cartão. Errou o alvo: **a descrição é o que identifica a PP** e
+tinha de continuar à vista. O Tiago mandou o oposto — a descrição volta
+para a coluna, em até duas linhas, e o ícone passa a mostrar o campo que
+não aparecia em lugar nenhum fora do formulário: as **Especificações**.
+
+| | Ontem (08/09) | Hoje (09/09) |
+|---|---|---|
+| Na linha | uma linha, `nowrap`, com reticências | até **duas linhas**, sem cortar as descrições reais |
+| No cartão | descrição inteira + especificações | **só as especificações** |
+| Sem o campo | ícone sempre ativo | **ícone apagado**, com `tituloVazio` explicando |
+
+O ícone apagado é o comportamento nativo do componente, e agora ele serve
+a dois casos com causas diferentes: o descritivo que ninguém escreveu
+antes da obrigatoriedade (decisão 043) e a especificação, que é campo
+**opcional** — é o `tituloVazio` que diz qual dos dois. Hoje 12 das 14 PPs
+do JOB-0031 estão sem especificação, então o apagado é o estado comum.
+
+**A emissão não podia depender do cartão.** Com o ícone apagado na maioria
+das linhas, *"emitida em … por …"* ficaria inacessível. Ela virou o
+`title` da célula do código, e segue no rodapé do cartão quando ele abre.
+
+`extra` saiu do componente: a PP era o único uso.
