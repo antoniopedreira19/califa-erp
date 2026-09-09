@@ -3899,38 +3899,65 @@ servidor.
 ### O que está quebrado — e o que NÃO está
 
 Nenhuma função menciona `regional_id`. O que separa quem falha de quem
-passa é se a função **insere** na tabela que ganhou o NOT NULL. Mapa
-levantado por `pg_get_functiondef` (09/09/2026):
+passa é se ela **insere** numa das três tabelas que ganharam o NOT NULL.
 
-**Falham** — inserem em `lancamentos_financeiros`:
+⚠️ **Levante isso com `regexp_matches`, não com `like`.** Duas versões
+anteriores desta seção estavam erradas porque o filtro era
+`like '%insert into public.lancamentos_financeiros%'` — com o prefixo de
+schema. Metade das funções escreve `insert into lancamentos_financeiros`
+sem o `public.`, e essas deram falso negativo. Detectar chamada em cadeia
+por `like '%nome_da_funcao%'` também erra: casa com a própria assinatura
+em `create function`. A consulta correta:
 
-| Função | Como |
-|---|---|
-| `dar_baixa_titulo`, `dar_baixa_titulo_com_plano` | insert direto |
-| `dar_baixa_pp` | insert direto |
-| `dar_baixa_avulsa` | insert direto |
-| `dar_baixa_devolucao_verba` | insert direto |
-| `estornar_baixa_pp_parcela` | insert direto |
-| `dar_baixa_pp_parcela` | **em cadeia** → chama `dar_baixa_pp` |
-| `dar_baixa_avulsa_com_plano` | **em cadeia** → chama `dar_baixa_avulsa` |
-| `dar_baixa_lote_cartao` | **em cadeia** → chama `dar_baixa_avulsa` |
+```sql
+select p.proname,
+  (select count(*) from regexp_matches(pg_get_functiondef(p.oid),
+     'insert\s+into\s+(public\.)?lancamentos_financeiros', 'gi')) as ins_lancamentos,
+  (select count(*) from regexp_matches(pg_get_functiondef(p.oid),
+     'insert\s+into\s+(public\.)?contas_avulsas', 'gi'))          as ins_avulsas,
+  (select count(*) from regexp_matches(pg_get_functiondef(p.oid),
+     'insert\s+into\s+(public\.)?titulos_receber', 'gi'))         as ins_titulos
+from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+where n.nspname = 'public' and p.prokind = 'f'
+order by 1;
+```
 
-**Falham** por outras duas tabelas:
+**FALHAM — insert direto em `lancamentos_financeiros`** (cada uma precisa
+da coluna; consertar uma NÃO conserta as outras):
+
+`dar_baixa_titulo` · `dar_baixa_titulo_com_plano` · `dar_baixa_pp` ·
+`dar_baixa_pp_parcela` · `dar_baixa_avulsa` ·
+`dar_baixa_avulsa_com_plano` · `dar_baixa_desembolso_parcela` ·
+`dar_baixa_devolucao_verba` · `dar_baixa_fatura_cartao` (2 inserts) ·
+`fechar_fatura_cartao` (3 inserts)
+
+E os estornos, que também gravam lançamento:
+`estornar_baixa_titulo` · `estornar_baixa_pp_parcela` ·
+`estornar_baixa_avulsa` · `estornar_baixa_desembolso_parcela` ·
+`estornar_baixa_devolucao_verba` · `estornar_baixa_fatura_cartao`
+
+**FALHAM — em cadeia:** `dar_baixa_lote_cartao` não insere, mas chama
+`dar_baixa_avulsa*` (confirmado procurando `perform|select|= nome(`, que
+não casa com a assinatura).
+
+**FALHAM — pelas outras duas tabelas:**
 
 | Fluxo | Tabela | Evidência |
 |---|---|---|
 | Criar conta avulsa (`criarContaAvulsa`) | `contas_avulsas` | log: `[avulsa.criar] null value in column "regional_id" … violates not-null constraint` |
-| Emitir faturamento (`emitir_faturamento`) | `titulos_receber` | insere na tabela sem a coluna |
+| Parcelar compra no cartão (`parcelar_compra_cartao`) | `contas_avulsas` (2 inserts) | levantamento acima |
+| Emitir faturamento (`emitir_faturamento`) | `titulos_receber` | levantamento acima |
 
 **NÃO estão quebrados** — não inserem em nenhuma das três:
-`aprovar_pp`, `aprovar_pp_com_data`, `aprovar_desembolso_com_data`,
-`dar_baixa_desembolso_parcela`, `dar_baixa_fatura_cartao`,
-`fechar_fatura_cartao`, `estornar_baixa_pp`.
+`aprovar_pp` · `aprovar_pp_com_data` · `aprovar_desembolso_com_data` ·
+`estornar_baixa_pp`
 
-⚠️ **A distinção que importa para o dia a dia: APROVAR PP continua
-funcionando; PAGAR não.** Quem olhar a linha do tempo da PP vai ver ela
-acender até "Aprovada" e travar no pagamento. (Recorte confirmado em
-paralelo pela sessão do módulo de Jobs, que entregou essa linha do tempo.)
+⚠️ **A distinção que importa para o dia a dia: APROVAR PP e APROVAR
+DESEMBOLSO continuam funcionando; PAGAR, ESTORNAR e FECHAR FATURA não.**
+Quem olhar a linha do tempo da PP vai ver ela acender até "Aprovada" e
+travar no pagamento. (Recorte apontado pela sessão do módulo de Jobs, que
+entregou essa linha do tempo, e que também pegou os dois erros de método
+descritos acima.)
 
 Nas três tabelas a coluna é `NOT NULL`, **sem default e sem trigger** que
 a preencha — conferido em `information_schema` e `pg_trigger`. Falha por
