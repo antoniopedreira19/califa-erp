@@ -49,7 +49,7 @@ Sumiu o filtro por empresa dos quatro pontos que ainda o tinham:
 | `components/financeiro/baixa-titulo-dialog.tsx` | Títulos a Pagar — o caso que apareceu |
 | `app/(app)/financeiro/contas-a-receber/baixa-recebimento-dialog.tsx` | Contas a Receber |
 | `app/(app)/financeiro/contas-a-pagar/avulsa/[id]/page.tsx` | filtrava já na query |
-| `components/financeiro/baixa-avulsa-dialog.tsx` | código morto, corrigido junto para não virar armadilha |
+| ~~`components/financeiro/baixa-avulsa-dialog.tsx`~~ | era código morto; corrigido junto para não virar armadilha, e **removido do repo horas depois** no `e8cafda` — ver a nota no `HANDOFF_FINANCEIRO.md` |
 
 O estado vazio também mudou de texto: dizia "Nenhuma conta ativa dessa
 empresa", que descrevia a regra revogada.
