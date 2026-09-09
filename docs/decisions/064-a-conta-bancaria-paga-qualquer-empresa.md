@@ -100,15 +100,38 @@ porque `id` já é a PK. Fica para uma faxina própria — derrubar constraint
 - Cadastro sem o campo "Empresa \*", conta criada e **gravada com
   `empresa_id = null`** — o teste que derrubou a primeira tentativa.
 - Listagem do cadastro com as três contas (o `!inner` teria escondido a
-  nova), e `/financeiro/cadastros` contando 4 ativas.
-- `/financeiro/abertura-de-job/[jobId]`, que lê contas por
-  `listarContasBancarias`, renderiza sem erro.
+  nova), e `/financeiro/cadastros` contando 4 ativas com o texto novo.
+- Seletor de conta **dentro da abertura de job** (`Recebimento em` /
+  `Pagamento em`), que lê por `listarContasBancarias`: as três contas
+  aparecem. Foi ele que revelou o ajuste do parágrafo abaixo.
+- `avulsa/[id]` com id inexistente: **404 limpo**, sem erro de aplicação —
+  a rota compila e responde (o risco de rota em branco por serialização
+  RSC está coberto).
 - Console sem erro de aplicação — só o aviso da extensão Trancy do Chrome.
 
-Ficaram **sem exercício por falta de dado**: o dialog de Contas a Receber
-(zero títulos a receber) e a página `avulsa/[id]` (zero contas avulsas). O
-seletor de conta dentro da abertura de job também não foi aberto — ele só
-aparece adiante no formulário.
+### O seletor da abertura ficou incoerente, e foi corrigido
+
+`listarContasBancarias` montava o detalhe de cada linha com a EMPRESA da
+conta. Com a mudança, o seletor passou a mostrar empresa nas contas
+antigas e o nome da conta nas novas — metade das linhas exibindo um dado
+que a decisão acabou de tornar irrelevante, e que vai desaparecer.
+
+O detalhe passou a ser sempre **nome da conta + agência**, que é uniforme
+e é o que a pessoa cadastrou. O embed `empresa:empresas(...)` saiu da
+query junto (um join a menos).
+
+### Lacunas honestas
+
+Duas superfícies não foram exercitadas, **por falta de dado**:
+
+| Onde | Por que não | Risco |
+|---|---|---|
+| `baixa-recebimento-dialog` (Contas a Receber) | zero títulos a receber; criar um exige emitir faturamento | mudança idêntica à de Títulos a Pagar, que foi exercitada |
+| caminho "bom" de `avulsa/[id]` | zero contas avulsas; criar uma exige lançar título a pagar com rateio de regional | a mudança ali foi remover UMA linha de `.eq("empresa_id", ...)`; a rota responde |
+
+Nos dois casos eu preferi não criar lançamento financeiro de teste no
+banco da agência para provar uma linha removida de filtro. Se valer a
+pena, o Tiago autoriza e a gente exercita.
 
 ⚠️ **Resíduo:** a conta **"ZZ Conta Sem Empresa (teste)"** ficou no banco;
 foi ela que provou a gravação. Ela aparece no dropdown de qualquer baixa —

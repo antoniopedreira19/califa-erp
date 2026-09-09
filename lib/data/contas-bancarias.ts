@@ -37,10 +37,12 @@ export async function listarContasBancarias(
   const [contasRes, saldosRes] = await Promise.all([
     supabase
       .from("contas_bancarias")
-      .select(
-        "id, nome, banco, agencia, numero_conta, tipo, empresa_id, " +
-          "empresa:empresas(razao_social, nome_fantasia)",
-      )
+      // Sem embed de `empresas`: desde 09/09/2026 a conta não pertence a
+      // uma empresa, e metade das linhas do seletor mostraria empresa
+      // enquanto a outra metade (as contas novas, sem empresa) mostraria
+      // outra coisa. O detalhe passou a ser o nome da conta, que é
+      // uniforme e é o que a pessoa cadastrou.
+      .select("id, nome, banco, agencia, numero_conta, tipo, empresa_id")
       .eq("tenant_id", tenantId)
       .eq("ativo", true)
       // A conta espelho do CARTÃO fica de fora: ela não recebe nem paga
@@ -70,14 +72,13 @@ export async function listarContasBancarias(
   }
 
   return ((contasRes.data ?? []) as any[]).map((c) => {
-    const empresa = c.empresa?.nome_fantasia ?? c.empresa?.razao_social ?? null;
     const conta = c.numero_conta ? `${rotuloTipo(c.tipo)} ${c.numero_conta}` : null;
 
     return {
       id: c.id,
       rotulo: [c.banco, conta].filter(Boolean).join(" · ") || c.nome,
       detalhe:
-        [empresa, c.agencia ? `ag ${c.agencia}` : null]
+        [c.nome, c.agencia ? `ag ${c.agencia}` : null]
           .filter(Boolean)
           .join(" · ") || c.nome,
       saldo: saldoPorConta.get(c.id) ?? 0,

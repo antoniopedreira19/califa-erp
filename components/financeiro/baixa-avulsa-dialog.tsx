@@ -32,7 +32,6 @@ export function BaixaAvulsaDialog({
   onOpenChange,
   descricao,
   valor,
-  empresaId,
   dataPrevista,
   contas,
   tipoLabel = "Avulsa",
@@ -43,7 +42,6 @@ export function BaixaAvulsaDialog({
   onOpenChange: (open: boolean) => void;
   descricao: string;
   valor: number;
-  empresaId: string;
   dataPrevista: string | null;
   contas: Conta[];
   tipoLabel?: string;
