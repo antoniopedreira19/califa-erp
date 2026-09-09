@@ -3896,21 +3896,49 @@ Encontrado ao tentar criar um lançamento avulso para conferir a tela
 `avulsa/[id]`. O formulário não acusa nada; o erro só aparece no log do
 servidor.
 
-### O que está quebrado
+### O que está quebrado — e o que NÃO está
 
-| Fluxo | Quem grava | Manda `regional_id`? | Evidência |
-|---|---|---|---|
-| **Dar baixa em título** | as 9 funções `dar_baixa_*` | **não** | `insert into public.lancamentos_financeiros (tenant_id, empresa_id, conta_bancaria_id, …)` — a coluna não está na lista |
-| **Criar conta avulsa** | `criarContaAvulsa` (`actions-avulsas.ts`) | **não** | log: `[avulsa.criar] null value in column "regional_id" of relation "contas_avulsas" violates not-null constraint` |
-| **Emitir faturamento** | RPC `emitir_faturamento` | **não** | `pg_get_functiondef` não menciona a coluna |
+Nenhuma função menciona `regional_id`. O que separa quem falha de quem
+passa é se a função **insere** na tabela que ganhou o NOT NULL. Mapa
+levantado por `pg_get_functiondef` (09/09/2026):
+
+**Falham** — inserem em `lancamentos_financeiros`:
+
+| Função | Como |
+|---|---|
+| `dar_baixa_titulo`, `dar_baixa_titulo_com_plano` | insert direto |
+| `dar_baixa_pp` | insert direto |
+| `dar_baixa_avulsa` | insert direto |
+| `dar_baixa_devolucao_verba` | insert direto |
+| `estornar_baixa_pp_parcela` | insert direto |
+| `dar_baixa_pp_parcela` | **em cadeia** → chama `dar_baixa_pp` |
+| `dar_baixa_avulsa_com_plano` | **em cadeia** → chama `dar_baixa_avulsa` |
+| `dar_baixa_lote_cartao` | **em cadeia** → chama `dar_baixa_avulsa` |
+
+**Falham** por outras duas tabelas:
+
+| Fluxo | Tabela | Evidência |
+|---|---|---|
+| Criar conta avulsa (`criarContaAvulsa`) | `contas_avulsas` | log: `[avulsa.criar] null value in column "regional_id" … violates not-null constraint` |
+| Emitir faturamento (`emitir_faturamento`) | `titulos_receber` | insere na tabela sem a coluna |
+
+**NÃO estão quebrados** — não inserem em nenhuma das três:
+`aprovar_pp`, `aprovar_pp_com_data`, `aprovar_desembolso_com_data`,
+`dar_baixa_desembolso_parcela`, `dar_baixa_fatura_cartao`,
+`fechar_fatura_cartao`, `estornar_baixa_pp`.
+
+⚠️ **A distinção que importa para o dia a dia: APROVAR PP continua
+funcionando; PAGAR não.** Quem olhar a linha do tempo da PP vai ver ela
+acender até "Aprovada" e travar no pagamento. (Recorte confirmado em
+paralelo pela sessão do módulo de Jobs, que entregou essa linha do tempo.)
 
 Nas três tabelas a coluna é `NOT NULL`, **sem default e sem trigger** que
-a preencha — conferido em `information_schema` e `pg_trigger`. Ou seja,
-todo `insert` falha por construção.
+a preencha — conferido em `information_schema` e `pg_trigger`. Falha por
+construção.
 
 `lancamentos_financeiros` está **vazia** (0 linhas), então não há como
 saber pelo dado se a baixa já funcionou algum dia; a prova da avulsa é
-empírica (o log acima), a das outras duas é por construção.
+empírica (o log acima), a das demais é por leitura do código.
 
 ### O que NÃO fazer
 
