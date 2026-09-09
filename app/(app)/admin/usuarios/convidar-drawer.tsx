@@ -19,8 +19,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { roleLabel, type AppRole } from "@/lib/types";
+import { roleLabel, type AppRole, type Empresa, type Regional } from "@/lib/types";
 import { convidarUsuario, type ActionResult } from "./actions";
+import {
+  AcessoEmpresasEditor,
+  type AcessoEscopo,
+  type AcessoEmpresa,
+} from "./acesso-empresas-editor";
 
 const ROLES: AppRole[] = [
   "gerente_producao",
@@ -30,7 +35,15 @@ const ROLES: AppRole[] = [
   "administrador",
 ];
 
-export function ConvidarUsuarioDrawer() {
+export type ConvidarUsuarioDrawerProps = {
+  empresas: Pick<Empresa, "id" | "razao_social" | "nome_fantasia">[];
+  regionais: Pick<Regional, "id" | "nome" | "empresa_id">[];
+};
+
+export function ConvidarUsuarioDrawer({
+  empresas,
+  regionais,
+}: ConvidarUsuarioDrawerProps) {
   const [open, setOpen] = React.useState(false);
   const [pending, startTransition] = React.useTransition();
   const [error, setError] = React.useState<string | null>(null);
@@ -39,6 +52,10 @@ export function ConvidarUsuarioDrawer() {
   >({});
   const [sucesso, setSucesso] = React.useState<string | null>(null);
   const [role, setRole] = React.useState<AppRole>("gerente_producao");
+  const [escopo, setEscopo] = React.useState<AcessoEscopo>("todas");
+  const [empresasEscolhidas, setEmpresasEscolhidas] = React.useState<
+    AcessoEmpresa[]
+  >([]);
 
   function reset() {
     setError(null);
@@ -51,6 +68,11 @@ export function ConvidarUsuarioDrawer() {
     reset();
     const formData = new FormData(e.currentTarget);
     formData.set("role", role);
+    formData.set("escopo_empresas", escopo);
+    formData.set(
+      "empresas_escolhidas",
+      JSON.stringify(empresasEscolhidas),
+    );
 
     startTransition(async () => {
       const res: ActionResult = await convidarUsuario(formData);
@@ -65,6 +87,8 @@ export function ConvidarUsuarioDrawer() {
         setOpen(false);
         reset();
         setRole("gerente_producao");
+        setEscopo("todas");
+        setEmpresasEscolhidas([]);
       }, 1200);
     });
   }
@@ -145,6 +169,25 @@ export function ConvidarUsuarioDrawer() {
                 <b>Financeiro</b> acompanha resultados.
               </p>
             </Field>
+
+            <div className="pt-1 border-t border-border">
+              <p className="text-[11px] text-muted-foreground pt-4 pb-2">
+                Administrador não precisa configurar acesso (vê tudo do
+                tenant). Para os demais papéis, escolha "Todas" para o
+                comportamento atual, ou "Personalizado" para restringir a
+                empresas e regionais específicas.
+              </p>
+              <AcessoEmpresasEditor
+                empresas={empresas}
+                regionais={regionais}
+                escopo={escopo}
+                empresasEscolhidas={empresasEscolhidas}
+                onChange={(novoEscopo, novoEmp) => {
+                  setEscopo(novoEscopo);
+                  setEmpresasEscolhidas(novoEmp);
+                }}
+              />
+            </div>
 
             {error && (
               <div className="flex items-start gap-2 rounded-xl border border-california-red/20 bg-california-red/5 px-4 py-3 text-sm text-california-red">

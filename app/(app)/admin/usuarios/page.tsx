@@ -1,37 +1,18 @@
 import Link from "next/link";
 import {
   ArrowLeft,
-  MailWarning,
-  ShieldCheck,
   Table2,
   UserPlus,
   Users,
 } from "lucide-react";
 import { requireAdmin } from "@/lib/auth/session";
 import { createServiceClient } from "@/lib/supabase/server";
-import { roleLabel, type AppRole } from "@/lib/types";
-import { Badge } from "@/components/ui/badge";
+import type { AppRole } from "@/lib/types";
 import { ConvidarUsuarioDrawer } from "./convidar-drawer";
-import { ReenviarConviteButton } from "./reenviar-convite-button";
+import { UsuariosLista, type UsuarioRow } from "./usuarios-lista";
 import { PageHeader } from "@/components/ui/page-header";
 
 export const dynamic = "force-dynamic";
-
-type AcessoStatus = "ativo" | "pendente" | "inativo";
-
-interface MemberRow {
-  user_id: string;
-  role: AppRole;
-  status: "ativo" | "inativo";
-  created_at: string;
-  acesso: AcessoStatus;
-  profile: {
-    id: string;
-    nome: string;
-    email: string;
-    ativo: boolean;
-  } | null;
-}
 
 export default async function AdminUsuariosPage() {
   const session = await requireAdmin();
@@ -39,18 +20,52 @@ export default async function AdminUsuariosPage() {
   // Usa service client para garantir a listagem completa, mesmo que a policy
   // de admin evolua no futuro. A autorização já foi feita por requireAdmin.
   const service = createServiceClient();
+  const tenantId = session.activeTenant.id;
 
-  const { data: members, error } = await service
-    .from("tenant_members")
-    .select("user_id, role, status, created_at")
-    .eq("tenant_id", session.activeTenant.id)
-    .order("created_at", { ascending: true });
+  const [
+    membersRes,
+    empresasRes,
+    regionaisRes,
+    authListingRes,
+  ] = await Promise.all([
+    service
+      .from("tenant_members")
+      .select("user_id, role, status, created_at")
+      .eq("tenant_id", tenantId)
+      .order("created_at", { ascending: true }),
+    service
+      .from("empresas")
+      .select("id, razao_social, nome_fantasia")
+      .eq("tenant_id", tenantId)
+      .eq("ativo", true)
+      .order("nome_fantasia"),
+    service
+      .from("regionais")
+      .select("id, nome, empresa_id")
+      .eq("tenant_id", tenantId)
+      .eq("ativo", true)
+      .order("nome"),
+    service.auth.admin.listUsers({ page: 1, perPage: 200 }),
+  ]);
 
-  if (error) {
-    console.error("[admin.usuarios.list.members]", error.message);
+  if (membersRes.error) {
+    console.error("[admin.usuarios.list.members]", membersRes.error.message);
+  }
+  if (empresasRes.error) {
+    console.error("[admin.usuarios.list.empresas]", empresasRes.error.message);
+  }
+  if (regionaisRes.error) {
+    console.error(
+      "[admin.usuarios.list.regionais]",
+      regionaisRes.error.message,
+    );
   }
 
-  const userIds = (members ?? []).map((m) => m.user_id);
+  const members = membersRes.data ?? [];
+  const empresas = empresasRes.data ?? [];
+  const regionais = regionaisRes.data ?? [];
+
+  const userIds = members.map((m) => m.user_id);
   const { data: profiles } = userIds.length
     ? await service
         .from("profiles")
@@ -60,23 +75,19 @@ export default async function AdminUsuariosPage() {
 
   const byId = new Map((profiles ?? []).map((p) => [p.id, p]));
 
-  // Detecta convites pendentes: usuário existe em auth.users mas ainda não
-  // confirmou o e-mail (email_confirmed_at IS NULL). O admin API pagina em
-  // até 1000 por página — para o time da Agência isso cabe folgado numa só.
   const emailConfirmadoById = new Map<string, boolean>();
-  const { data: authListing, error: authErr } = await service.auth.admin.listUsers({
-    page: 1,
-    perPage: 200,
-  });
-  if (authErr) {
-    console.error("[admin.usuarios.list.auth-users]", authErr.message);
+  if (authListingRes.error) {
+    console.error(
+      "[admin.usuarios.list.auth-users]",
+      authListingRes.error.message,
+    );
   } else {
-    for (const u of authListing?.users ?? []) {
+    for (const u of authListingRes.data?.users ?? []) {
       emailConfirmadoById.set(u.id, Boolean(u.email_confirmed_at));
     }
   }
 
-  const rows: MemberRow[] = (members ?? []).map((m) => {
+  const rows: UsuarioRow[] = members.map((m) => {
     const profile = byId.get(m.user_id) ?? null;
     const perfilAtivo = profile?.ativo ?? true;
     const vinculoAtivo = m.status === "ativo";
@@ -84,7 +95,7 @@ export default async function AdminUsuariosPage() {
     // fantasma; o admin pode tentar reenviar mesmo assim se necessário.
     const emailConfirmado = emailConfirmadoById.get(m.user_id) ?? true;
 
-    let acesso: AcessoStatus;
+    let acesso: "ativo" | "pendente" | "inativo";
     if (!perfilAtivo || !vinculoAtivo) acesso = "inativo";
     else if (!emailConfirmado) acesso = "pendente";
     else acesso = "ativo";
@@ -93,9 +104,9 @@ export default async function AdminUsuariosPage() {
       user_id: m.user_id,
       role: m.role as AppRole,
       status: m.status as "ativo" | "inativo",
-      created_at: m.created_at as string,
       acesso,
-      profile,
+      nome: profile?.nome ?? "—",
+      email: profile?.email ?? "—",
     };
   });
 
@@ -112,7 +123,7 @@ export default async function AdminUsuariosPage() {
       <PageHeader
         eyebrow="ADMINISTRAÇÃO"
         title="Usuários"
-        description="Convide novos membros do time para o California ERP. O usuário recebe um e-mail com link para definir a senha e ativar o acesso."
+        description="Convide novos membros do time para o California ERP. O usuário recebe um e-mail com link para definir a senha e ativar o acesso. Clique em uma linha para editar as permissões de acesso a empresas."
         icon={Users}
         actions={
           <>
@@ -124,87 +135,20 @@ export default async function AdminUsuariosPage() {
               <Table2 className="h-4 w-4" />
               Ver matriz de permissões
             </Link>
-            <ConvidarUsuarioDrawer />
+            <ConvidarUsuarioDrawer
+              empresas={empresas}
+              regionais={regionais}
+            />
           </>
         }
       />
 
-      <div className="rounded-2xl border border-border bg-card shadow-soft overflow-hidden">
-        {rows.length === 0 ? (
-          <div className="p-8 text-center text-sm text-muted-foreground">
-            Nenhum usuário cadastrado ainda.
-          </div>
-        ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-muted/40 text-[11px] uppercase tracking-wider text-muted-foreground">
-              <tr>
-                <th className="text-left font-semibold px-6 py-3">Nome</th>
-                <th className="text-left font-semibold px-6 py-3">E-mail</th>
-                <th className="text-left font-semibold px-6 py-3">Papel</th>
-                <th className="text-left font-semibold px-6 py-3">Status</th>
-                <th className="text-right font-semibold px-6 py-3">Ações</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {rows.map((row) => {
-                const nome = row.profile?.nome ?? "—";
-                const email = row.profile?.email ?? "—";
-                return (
-                  <tr
-                    key={row.user_id}
-                    className="hover:bg-accent/40 transition-colors"
-                  >
-                    <td className="px-6 py-3.5 font-medium text-foreground">
-                      {nome}
-                      {row.user_id === session.profile.id && (
-                        <span className="ml-2 text-[10px] font-semibold uppercase tracking-wider text-california-red">
-                          você
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-6 py-3.5 text-muted-foreground">
-                      {email}
-                    </td>
-                    <td className="px-6 py-3.5">
-                      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-foreground">
-                        {row.role === "administrador" && (
-                          <ShieldCheck className="h-3.5 w-3.5 text-california-red" />
-                        )}
-                        {roleLabel(row.role)}
-                      </span>
-                    </td>
-                    <td className="px-6 py-3.5">
-                      {row.acesso === "ativo" && (
-                        <Badge className="bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/10 border-emerald-500/20">
-                          Ativo
-                        </Badge>
-                      )}
-                      {row.acesso === "pendente" && (
-                        <Badge className="bg-amber-500/10 text-amber-700 hover:bg-amber-500/10 border-amber-500/20 inline-flex items-center gap-1">
-                          <MailWarning className="h-3 w-3" />
-                          Convite pendente
-                        </Badge>
-                      )}
-                      {row.acesso === "inativo" && (
-                        <Badge className="bg-muted text-muted-foreground hover:bg-muted border-border">
-                          Inativo
-                        </Badge>
-                      )}
-                    </td>
-                    <td className="px-6 py-3.5 text-right">
-                      {row.acesso === "pendente" ? (
-                        <ReenviarConviteButton userId={row.user_id} />
-                      ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
-      </div>
+      <UsuariosLista
+        rows={rows}
+        currentUserId={session.profile.id}
+        empresas={empresas}
+        regionais={regionais}
+      />
 
       <div className="flex items-start gap-3 rounded-xl border border-border bg-muted/30 p-4 text-xs text-muted-foreground">
         <UserPlus className="h-4 w-4 mt-0.5 shrink-0 text-california-red" />
@@ -213,8 +157,8 @@ export default async function AdminUsuariosPage() {
           <p>
             Ao convidar, o usuário recebe um e-mail para ativar a conta. Ele
             cria a própria senha na tela de ativação e já entra com o papel
-            escolhido. Ações como inativar e trocar papel serão adicionadas em
-            seguida.
+            escolhido. As permissões de acesso a empresas definidas no convite
+            são aplicadas assim que o usuário aceita.
           </p>
         </div>
       </div>
