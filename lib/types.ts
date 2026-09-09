@@ -1837,6 +1837,17 @@ export const tipoContaBancariaLabel = (t: TipoContaBancaria): string =>
 export interface ContaBancaria {
   id: string;
   tenant_id: string;
+  /**
+   * Empresa dona do CADASTRO da conta — e, desde 09/09/2026, a chave de
+   * acesso da RLS (`can_access_empresa_regional`): é ela que decide quem
+   * enxerga e edita a conta.
+   *
+   * **Ela NÃO limita pagamento, e nada deve FILTRAR conta por ela nas
+   * telas de baixa.** Qualquer conta paga documento de qualquer empresa
+   * desde 29/08/2026 (`20260829100001`); a empresa que vai para o
+   * lançamento é a do DOCUMENTO. Filtrar por aqui foi o que escondeu uma
+   * conta recém-cadastrada na baixa de títulos (09/09/2026).
+   */
   empresa_id: string;
   nome: string;
   banco: string;

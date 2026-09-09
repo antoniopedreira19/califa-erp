@@ -130,9 +130,18 @@ export function BaixaTituloDialog({
     });
   }, [open, alvo, formaPlanejada, cartaoPlanejadoId]);
 
-  const contasDaEmpresa = contas.filter(
-    (c) => c.empresa_id === alvo?.empresaId && c.ativo,
-  );
+  /**
+   * Toda conta ativa entra, de qualquer empresa (decisão do Tiago em
+   * 29/08/2026): "as contas em si não são específicas de uma empresa".
+   * A empresa é do DOCUMENTO — ela continua vindo do título e sendo
+   * gravada no lançamento. A conta é só o cano por onde o dinheiro passa.
+   *
+   * O banco já era assim desde a migration
+   * `20260829100001_a_trava_de_empresa_sai_das_seis_ultimas`; aqui a
+   * trava tinha ficado para trás, e escondia a conta recém-cadastrada sem
+   * dizer por quê (09/09/2026).
+   */
+  const contasAtivas = contas.filter((c) => c.ativo);
   const tiposAtivos = tipos.filter((t) => t.ativo);
   const subtiposDoTipo = tipoId
     ? subtipos.filter((s) => s.tipo_id === tipoId && s.ativo)
@@ -269,13 +278,13 @@ export function BaixaTituloDialog({
                 <SelectValue placeholder="Selecione a conta..." />
               </SelectTrigger>
               <SelectContent>
-                {contasDaEmpresa.length === 0 ? (
+                {contasAtivas.length === 0 ? (
                   <div className="px-2 py-1.5 text-xs text-muted-foreground">
-                    Nenhuma conta ativa dessa empresa. Cadastre em
+                    Nenhuma conta bancária ativa. Cadastre em
                     /financeiro/cadastros/contas-bancarias.
                   </div>
                 ) : (
-                  contasDaEmpresa.map((c) => (
+                  contasAtivas.map((c) => (
                     <SelectItem key={c.id} value={c.id}>
                       {c.nome} · {c.banco}
                     </SelectItem>
