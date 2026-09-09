@@ -55,7 +55,7 @@ export default async function CadastrosFinanceiroPage() {
           href="/financeiro/cadastros/contas-bancarias"
           icon={Wallet}
           title="Contas bancárias"
-          description="Contas onde os pagamentos entram e saem, com saldo inicial e empresa associada."
+          description="Contas onde os pagamentos entram e saem, com saldo inicial. Cada conta serve a qualquer empresa."
           count={contasBancariasRes.count ?? 0}
         />
         <CadastroCard

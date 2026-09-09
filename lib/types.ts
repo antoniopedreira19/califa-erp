@@ -1838,17 +1838,17 @@ export interface ContaBancaria {
   id: string;
   tenant_id: string;
   /**
-   * Empresa dona do CADASTRO da conta — e, desde 09/09/2026, a chave de
-   * acesso da RLS (`can_access_empresa_regional`): é ela que decide quem
-   * enxerga e edita a conta.
+   * VESTÍGIO (09/09/2026), mantido para o caso de a agência voltar a
+   * dividir contas por empresa. A conta NÃO pertence a uma empresa: paga
+   * documento de qualquer uma, e a empresa que vai para o lançamento é a
+   * do DOCUMENTO.
    *
-   * **Ela NÃO limita pagamento, e nada deve FILTRAR conta por ela nas
-   * telas de baixa.** Qualquer conta paga documento de qualquer empresa
-   * desde 29/08/2026 (`20260829100001`); a empresa que vai para o
-   * lançamento é a do DOCUMENTO. Filtrar por aqui foi o que escondeu uma
-   * conta recém-cadastrada na baixa de títulos (09/09/2026).
+   * Nulo em toda conta cadastrada a partir de 09/09/2026; preenchido nas
+   * antigas e na conta-espelho do cartão, que herda do cartão pelo
+   * trigger. **Nada deve FILTRAR conta por este campo** — foi o que
+   * escondeu uma conta recém-cadastrada na baixa de títulos.
    */
-  empresa_id: string;
+  empresa_id: string | null;
   nome: string;
   banco: string;
   agencia: string | null;

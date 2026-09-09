@@ -12,22 +12,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import type { ContaBancaria, Empresa } from "@/lib/types";
+import type { ContaBancaria } from "@/lib/types";
 import { tipoContaBancariaLabel } from "@/lib/types";
 import { formatCurrency } from "@/lib/utils";
 import { ContaBancariaDrawer } from "./conta-bancaria-drawer";
 import { inativarContaBancaria, reativarContaBancaria } from "./actions";
 
 type StatusFiltro = "ativas" | "inativas" | "todas";
-
-type ContaBancariaComEmpresa = ContaBancaria & {
-  empresas: {
-    razao_social: string;
-    nome_fantasia: string | null;
-  };
-};
-
-type EmpresaResumida = Pick<Empresa, "id" | "razao_social" | "nome_fantasia">;
 
 function formatDataBR(iso: string): string {
   // iso é YYYY-MM-DD — não passar por new Date() direto (desloca fuso)
@@ -37,20 +28,18 @@ function formatDataBR(iso: string): string {
 
 export function ContasBancariasList({
   contas,
-  empresas,
   canEdit,
 }: {
-  contas: ContaBancariaComEmpresa[];
-  empresas: EmpresaResumida[];
+  contas: ContaBancaria[];
   canEdit: boolean;
 }) {
   const router = useRouter();
   const [busca, setBusca] = React.useState("");
   const [status, setStatus] = React.useState<StatusFiltro>("ativas");
   const [pending, startTransition] = React.useTransition();
-  const [editando, setEditando] = React.useState<ContaBancariaComEmpresa | null>(null);
+  const [editando, setEditando] = React.useState<ContaBancaria | null>(null);
   const [confirmando, setConfirmando] = React.useState<{
-    conta: ContaBancariaComEmpresa;
+    conta: ContaBancaria;
     acao: "inativar" | "reativar";
   } | null>(null);
 
@@ -84,11 +73,7 @@ export function ContasBancariasList({
     });
   }
 
-  function nomeEmpresa(c: ContaBancariaComEmpresa): string {
-    return c.empresas.nome_fantasia ?? c.empresas.razao_social;
-  }
-
-  function agConta(c: ContaBancariaComEmpresa): string {
+  function agConta(c: ContaBancaria): string {
     if (c.agencia && c.numero_conta) return `${c.agencia} / ${c.numero_conta}`;
     if (c.agencia) return c.agencia;
     if (c.numero_conta) return c.numero_conta;
@@ -120,7 +105,7 @@ export function ContasBancariasList({
           </Select>
         </div>
         {canEdit && (
-          <ContaBancariaDrawer mode="criar" empresas={empresas} />
+          <ContaBancariaDrawer mode="criar" />
         )}
       </div>
 
@@ -140,7 +125,6 @@ export function ContasBancariasList({
                 <th className="px-4 py-3 text-left font-medium text-muted-foreground">Nome</th>
                 <th className="px-4 py-3 text-left font-medium text-muted-foreground">Banco</th>
                 <th className="px-4 py-3 text-left font-medium text-muted-foreground w-40">Ag / Conta</th>
-                <th className="px-4 py-3 text-left font-medium text-muted-foreground">Empresa</th>
                 <th className="px-4 py-3 text-right font-medium text-muted-foreground w-40">Saldo inicial</th>
                 <th className="px-4 py-3 text-left font-medium text-muted-foreground w-32">Data start</th>
                 <th className="px-4 py-3 text-left font-medium text-muted-foreground w-32">Status</th>
@@ -160,7 +144,6 @@ export function ContasBancariasList({
                   </td>
                   <td className="px-4 py-3">{c.banco}</td>
                   <td className="px-4 py-3 text-muted-foreground">{agConta(c)}</td>
-                  <td className="px-4 py-3">{nomeEmpresa(c)}</td>
                   <td className="px-4 py-3 text-right tabular-nums">
                     {formatCurrency(Number(c.saldo_inicial))}
                   </td>
@@ -209,7 +192,6 @@ export function ContasBancariasList({
         <ContaBancariaDrawer
           mode="editar"
           conta={editando}
-          empresas={empresas}
           open={!!editando}
           onOpenChange={(next) => {
             if (!next) setEditando(null);

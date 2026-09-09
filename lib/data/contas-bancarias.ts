@@ -16,9 +16,8 @@ export interface ContaBancariaOpcao {
   /** "Califa Live Marketing · ag 1234" — a segunda linha da opção. */
   detalhe: string;
   saldo: number;
-  /** Dona do cadastro e chave da RLS — nunca filtre baixa por ela. Ver
-   *  `ContaBancaria.empresa_id`. */
-  empresa_id: string;
+  /** Vestígio — ver `ContaBancaria.empresa_id`. Nunca filtre por ele. */
+  empresa_id: string | null;
 }
 
 /**
