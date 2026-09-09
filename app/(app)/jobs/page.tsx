@@ -142,7 +142,7 @@ export default async function JobsPage({
         description="Jobs vindos de orçamentos aprovados. Filtre por status e finalize os pendentes."
         icon={Briefcase}
         showEmpresaFilter
-        empresas={session.empresas}
+        empresas={session.empresasVisiveis}
         activeEmpresas={activeEmpresasEfetivas}
       />
 

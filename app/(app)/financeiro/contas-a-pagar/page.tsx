@@ -1131,7 +1131,7 @@ export default async function PedidosCompraFinanceiroPage({
         description="Pedidos de Produção, títulos a pagar e recorrências que envolvem dinheiro a sair. Aprove e rejeite os PPs; dê baixa nos títulos para enviá-los à conciliação."
         icon={Wallet}
         showEmpresaFilter
-        empresas={session.empresas}
+        empresas={session.empresasVisiveis}
         activeEmpresas={activeEmpresasEfetivas}
       />
 

@@ -134,7 +134,7 @@ export default async function DesembolsosPage({
         description="Lance suas despesas e acompanhe o status. Ao ser aprovado pelo financeiro, o desembolso vira título a pagar."
         icon={Wallet}
         showEmpresaFilter
-        empresas={session.empresas}
+        empresas={session.empresasVisiveis}
         activeEmpresas={activeEmpresasEfetivas}
       />
 
