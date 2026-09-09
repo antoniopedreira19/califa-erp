@@ -28,7 +28,7 @@ export default async function EditarFornecedorPage({
   if (!fornecedor) notFound();
 
   return (
-    <div className="space-y-6 max-w-3xl mx-auto">
+    <div className="mx-auto max-w-5xl space-y-5">
       <div>
         <Link
           href="/fornecedores"
@@ -50,9 +50,8 @@ export default async function EditarFornecedorPage({
         </div>
       </div>
 
-      <div className="rounded-2xl border border-border bg-card p-6 shadow-soft">
-        <FornecedorForm fornecedor={fornecedor} />
-      </div>
+      {/* Sem cartão em volta: o formulário traz o próprio (09/09/2026). */}
+      <FornecedorForm fornecedor={fornecedor} />
     </div>
   );
 }

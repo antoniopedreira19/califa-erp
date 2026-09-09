@@ -7,25 +7,28 @@ export default async function NovoFornecedorPage() {
   await requireSession();
 
   return (
-    <div className="space-y-6 max-w-3xl mx-auto">
+    // O cartão saiu daqui: o formulário traz o próprio, com as seções
+    // divididas por filete (desenho de 09/09/2026). A largura acompanha a
+    // coluna de explicação de cada seção.
+    <div className="mx-auto max-w-5xl space-y-5">
       <div>
         <Link
           href="/fornecedores"
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
         >
           <ArrowLeft className="h-3 w-3" />
           Voltar para fornecedores
         </Link>
-        <h1 className="mt-3 text-3xl font-bold tracking-tight">Novo fornecedor</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Cadastre o prestador para poder incluí-lo nos itens das versões de
-          orçamento.
+        <h1 className="mt-2.5 text-[28px] font-bold leading-tight tracking-tight">
+          Novo fornecedor
+        </h1>
+        <p className="mt-1 max-w-[52ch] text-[13.5px] text-muted-foreground">
+          Nome, CPF/CNPJ, contato e uma forma de pagamento são obrigatórios —
+          endereço e observações podem ficar para depois.
         </p>
       </div>
 
-      <div className="rounded-2xl border border-border bg-card p-6 shadow-soft">
-        <FornecedorForm />
-      </div>
+      <FornecedorForm />
     </div>
   );
 }
