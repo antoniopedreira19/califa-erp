@@ -4,6 +4,11 @@ import * as React from "react";
 import { Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -39,6 +44,12 @@ export interface PPRow {
   pago_em: string | null;
   pago_por_nome: string | null;
   fornecedor_id: string;
+  /**
+   * Decisão 067: o cadastro do fornecedor mudou depois que esta PP tirou a
+   * foto dos dados de pagamento. Calculado no servidor — a tela recebe só
+   * o booleano, nunca o dado bancário.
+   */
+  cadastro_do_fornecedor_mudou: boolean;
   fornecedor_nome: string;
   empresa_id: string;
   empresa_nome: string;
@@ -327,6 +338,29 @@ export function PedidosCompraList({
                 </td>
                 <td className="px-4 py-3">
                   {nomeContraparteBRPP({ verba_producao: r.verba_producao, fornecedor: r.fornecedor_nome ? { nome: r.fornecedor_nome } : null, responsavel: r.responsavel_nome ? { nome: r.responsavel_nome } : null })}
+                  {/* Asterisco da decisão 067. Aqui ele importa mais que na
+                      aba de títulos: é nesta tela que a PP é aprovada, e
+                      aprovar é o passo em que dá tempo de conferir a conta
+                      antes de o dinheiro sair. */}
+                  {r.cadastro_do_fornecedor_mudou && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span
+                          tabIndex={0}
+                          className="ml-1 cursor-help font-bold text-amber-600"
+                          aria-label="O cadastro do fornecedor mudou depois desta PP"
+                        >
+                          *
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-[280px]">
+                        Os dados de pagamento do fornecedor mudaram depois
+                        desta PP. Ela continua valendo pelos dados que estão
+                        no documento dela; o cadastro novo vale para as
+                        próximas.
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">
                   <span className="font-mono text-xs">{r.job_codigo}</span>{" "}

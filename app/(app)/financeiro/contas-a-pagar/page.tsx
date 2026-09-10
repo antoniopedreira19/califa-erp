@@ -5,6 +5,11 @@ import { PageHeader } from "@/components/ui/page-header";
 import { createClient } from "@/lib/supabase/server";
 import { pode } from "@/lib/permissoes";
 import { listarConversasPPs } from "@/lib/data/chat-pps-conversas";
+import {
+  cadastroMudouDepoisDaFoto,
+  COLUNAS_DE_PAGAMENTO,
+  type DadosDePagamento,
+} from "@/lib/data/foto-pagamento-da-pp";
 import { ChatPPsProvider } from "./chat/chat-pps-provider";
 import { PedidosCompraList, type PPRow } from "./pedidos-compra-list";
 import { ContasPagarTabs } from "./contas-pagar-tabs";
@@ -75,6 +80,11 @@ export default async function PedidosCompraFinanceiroPage({
           `
         id, codigo, status, valor, quantidade, servico, especificacoes,
         prazo_pagamento, prazo_pagamento_financeiro, pdf_path, created_at,
+        dados_pagamento_congelados_em,
+        fornecedor_banco_codigo, fornecedor_banco_nome,
+        fornecedor_agencia, fornecedor_agencia_dv,
+        fornecedor_conta, fornecedor_conta_dv, fornecedor_tipo_conta,
+        fornecedor_pix_tipo, fornecedor_pix_chave,
         cancelada_em, motivo_cancelamento,
         rejeitada_em, motivo_rejeicao, pago_em, verba_producao,
         forma_pagamento, cartao_credito_id,
@@ -182,7 +192,11 @@ export default async function PedidosCompraFinanceiroPage({
     // Fornecedores ativos (dropdown)
     supabase
       .from("fornecedores")
-      .select("id, nome, razao_social")
+      // Os nove campos de pagamento entram para o asterisco da decisão
+      // 067: comparar a foto da PP com o cadastro de hoje. Eles NÃO são
+      // enviados ao cliente — o `select` alimenta o cálculo aqui no
+      // servidor, e para a tela vai só um booleano.
+      .select(`id, nome, razao_social, ${COLUNAS_DE_PAGAMENTO}`)
       .eq("tenant_id", session.activeTenant.id)
       .eq("status", "ativo")
       .order("nome"),
@@ -339,6 +353,30 @@ export default async function PedidosCompraFinanceiroPage({
     prestacoesPorPP.set(p.pedido_compra_id, p);
   }
 
+  /**
+   * Cadastro de pagamento de cada fornecedor ativo, para o asterisco da
+   * decisão 067. Fica num Map porque o laço das PPs consulta uma vez por
+   * linha, e a lista de fornecedores já veio no `Promise.all`.
+   */
+  const cadastroDePagamentoPorFornecedor = new Map<string, DadosDePagamento>(
+    ((fornecedoresRes.data ?? []) as Array<
+      { id: string } & DadosDePagamento
+    >).map((f) => [
+      f.id,
+      {
+        banco_codigo: f.banco_codigo,
+        banco_nome: f.banco_nome,
+        agencia: f.agencia,
+        agencia_dv: f.agencia_dv,
+        conta: f.conta,
+        conta_dv: f.conta_dv,
+        tipo_conta: f.tipo_conta,
+        pix_tipo: f.pix_tipo,
+        pix_chave: f.pix_chave,
+      },
+    ]),
+  );
+
   const rows: PPRow[] = ((data ?? []) as unknown as Array<{
     id: string;
     codigo: string;
@@ -415,6 +453,20 @@ export default async function PedidosCompraFinanceiroPage({
     pago_por_nome: r.pago_por_profile?.nome ?? null,
     fornecedor_id: r.fornecedor?.id ?? "",
     fornecedor_nome: r.fornecedor?.razao_social ?? r.fornecedor?.nome ?? "",
+    /**
+     * Asterisco da decisão 067: o cadastro do fornecedor mudou depois que
+     * esta PP tirou a foto dos dados de pagamento.
+     *
+     * O cálculo é aqui no servidor, e só o booleano segue para a tela —
+     * dado bancário não precisa atravessar a fronteira para desenhar um
+     * `*`. `cadastroMudouDepoisDaFoto` já devolve `false` para PP sem
+     * foto (verba de produção, ou anterior à 067) e para status fora de
+     * `em_avaliacao`/`aprovada`/`pago`, então nada disso se repete aqui.
+     */
+    cadastro_do_fornecedor_mudou: cadastroMudouDepoisDaFoto(
+      r,
+      r.fornecedor?.id ? cadastroDePagamentoPorFornecedor.get(r.fornecedor.id) : null,
+    ),
     empresa_id: r.empresa?.id ?? "",
     empresa_nome: r.empresa?.razao_social ?? r.empresa?.nome_fantasia ?? "",
     job_id: r.job?.id ?? "",
@@ -531,6 +583,7 @@ export default async function PedidosCompraFinanceiroPage({
         origem_label: pp.codigo,
         descricao: pp.servico,
         fornecedor_nome: pp.fornecedor_nome || "—",
+        cadastro_do_fornecedor_mudou: pp.cadastro_do_fornecedor_mudou,
         job_codigo: pp.job_codigo || "—",
         data_pagamento: par.data_pagamento,
         venc_original: par.data_vencimento,
