@@ -3104,6 +3104,13 @@ Tirar, ler e comparar a foto mora em `lib/data/foto-pagamento-da-pp.ts`.
 **Toda rota nova que montar PDF de PP tem de tirar a foto junto**, ou o
 documento e a foto passam a discordar.
 
+As três rotas foram exercitadas uma a uma em 10/09/2026, trocando a
+agência do fornecedor entre elas (0001 → 0002 → 0003): a foto acompanhou
+nas três, e `dados_pagamento_congelados_em` avançou junto. O caminho
+completo passou pelas travas reais — NF obrigatória para enviar, a trava
+do `A · Repasse` (decisão 062) e o "tem certeza?" de PP acima do
+planejado.
+
 O **asterisco** é calculado no servidor, em `carregar-detalhe.ts`,
 comparando a foto com o cadastro atual campo a campo — e só em PP
 `em_avaliacao`, `aprovada` ou `pago`, porque em `gerada` e `rejeitada` o
