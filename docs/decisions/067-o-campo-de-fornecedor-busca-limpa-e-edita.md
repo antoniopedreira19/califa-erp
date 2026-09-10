@@ -177,8 +177,32 @@ E a parte 4:
 - **a foto** ficou onde estava (agência antiga) enquanto o cadastro já
   tinha a nova, e o asterisco sumiu ao desfazer a alteração;
 - **PP nova** (gerada no projeto de teste) nasceu com as dez colunas
-  preenchidas; foi cancelada depois do teste, e o cadastro do fornecedor
-  usado foi restaurado campo a campo.
+  preenchidas.
+
+**As três rotas que montam o PDF foram exercitadas uma a uma** (10/09/2026),
+cada uma com o cadastro do fornecedor mudando entre elas, para provar que a
+foto REALMENTE se re-tira e não fica presa na primeira:
+
+| Rota | Agência no cadastro | Agência na foto, depois |
+|---|---|---|
+| Emitir (PP-00051 gerada) | 0001 | 0001 |
+| Editar a gerada (mesmo PP, depois de trocar o cadastro) | 0002 | **0002** |
+| Reenviar a rejeitada (enviada, rejeitada pelo financeiro, cadastro trocado de novo, reenviada) | 0003 | **0003** |
+
+O `dados_pagamento_congelados_em` avançou nas três. O caminho completo
+passou pelas travas reais que já existiam — anexo de NF obrigatório para
+enviar, a trava do `A · Repasse` exigindo que as PPs cubram o orçado
+(decisão 062) e o "tem certeza?" de PP acima do planejado.
+
+**O filtro de status do aviso também se provou no caminho:** com PP-00051
+ainda `gerada` e depois `rejeitada`, o "tem certeza?" do cadastro citou
+**só a PP-00011** (aprovada) — nunca a de teste. É a regra pretendida: PP
+que o produtor ainda controla re-tira a foto sozinha no próximo salvar.
+
+**Limpeza:** as duas PPs de teste (PP-00050 e PP-00051) foram canceladas
+pela UI e o cadastro do fornecedor usado foi restaurado campo a campo.
+Consulta final confirmou **zero** PPs com foto divergente do cadastro —
+nenhum asterisco residual ficou na base.
 
 `npx tsc --noEmit`, `next lint` e `npm run build` limpos. Console sem erro
 de aplicação.
