@@ -79,10 +79,17 @@ export interface TituloRow {
   fornecedor_nome: string;
   /**
    * Decisão 067: o cadastro do fornecedor mudou depois que a PP tirou a
-   * foto. Só origem `pp` acende; avulsa, recorrência e cartão não têm
-   * foto e chegam sempre `false`.
+   * foto. Só origem `pp` pode acender — as outras quatro não têm foto e
+   * mandam `false` explícito.
+   *
+   * **Obrigatório de propósito.** Como opcional, um produtor que
+   * esquecesse de preencher devolveria `undefined` em silêncio, com `tsc`
+   * limpo — e `undefined && …` simplesmente não pinta nada. O asterisco
+   * sumiria sem ninguém perceber, que é exatamente o alçapão que este
+   * campo já quase caiu uma vez (o `.map` não dispara a checagem de
+   * propriedade extra do TypeScript).
    */
-  cadastro_do_fornecedor_mudou?: boolean;
+  cadastro_do_fornecedor_mudou: boolean;
   job_codigo: string;
   /** Data vigente de pagamento — o que a tela ordena e soma. */
   data_pagamento: string | null;
