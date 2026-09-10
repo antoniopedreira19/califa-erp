@@ -3398,3 +3398,20 @@ Duas armadilhas para quem for mexer:
 
 Editar fornecedor antigo sem e-mail ou telefone passa a pedir o campo que
 falta — são 2 registros na base de hoje.
+
+## ⚠️ Nota de 2026-09-09 — o BV do orçamento herdou o campo de fornecedor novo
+
+Decisão [067](../decisions/067-o-campo-de-fornecedor-busca-limpa-e-edita.md).
+O `_bv/bv-dialog.tsx` é compartilhado pelo orçamento e pelo realizado do
+job, e o campo de fornecedor dele agora **busca por nome ou documento**,
+tem **✕ para zerar** e um botão ao lado que é **"+"** com o campo vazio e
+**lápis** com alguém escolhido — o mesmo campo da PP.
+
+Consequência para esta tela: a consulta de fornecedores de
+`orcamentos/[projetoId]/[orcId]/page.tsx` passou a trazer `cpf_cnpj` além
+de `id, nome`, porque é o documento que aparece na segunda linha de cada
+opção e desempata homônimo. `FornecedorOpcao` ganhou o campo, opcional.
+
+O recém-cadastrado entra na lista **localmente** (`fornecedorNovo`) até a
+tela recarregar: `router.refresh()` no meio do preenchimento re-renderiza
+a página e zerava o formulário — a mesma pegadinha vista na PP em 04/09.

@@ -11,6 +11,7 @@ import {
   fornecedorCompletoSchema,
 } from "@/lib/validations/fornecedores";
 import { getBancoByCodigo } from "@/lib/dados/bancos-febraban";
+import type { Fornecedor } from "@/lib/types";
 import { onlyDigits } from "@/lib/utils";
 import type { PixTipoChave } from "@/lib/types";
 
@@ -21,6 +22,9 @@ export interface FornecedorResumo {
   nome: string;
   razao_social: string | null;
   status: "ativo" | "inativo";
+  /** O documento entrou em 09/09/2026: o campo de fornecedor da PP mostra
+   *  e busca por ele, e o recém-criado precisa aparecer igual aos outros. */
+  cpf_cnpj?: string | null;
 }
 
 export type ActionResult =
@@ -177,7 +181,7 @@ async function inserirFornecedor(
       tenant_id: session.activeTenant.id,
       created_by: session.profile.id,
     })
-    .select("id, nome, razao_social, status")
+    .select("id, nome, razao_social, status, cpf_cnpj")
     .single();
 
   if (error) {
@@ -218,7 +222,7 @@ async function buscarPorDocumento(
 ): Promise<FornecedorResumo | null> {
   let query = supabase
     .from("fornecedores")
-    .select("id, nome, razao_social, status")
+    .select("id, nome, razao_social, status, cpf_cnpj")
     .eq("tenant_id", tenantId)
     .eq("cpf_cnpj", documento)
     .limit(1);
@@ -260,6 +264,31 @@ export async function criarFornecedorRapido(
  * ao sair do campo, antes de a pessoa preencher o resto do cadastro.
  * Inativo também conta: o documento é um só, e o caminho é reativar.
  */
+/**
+ * O cadastro inteiro de um fornecedor, para o lápis do campo da PP abrir
+ * o formulário completo (09/09/2026). A lista que o drawer carrega tem só
+ * id, nome, razão social e documento — o suficiente para escolher, não
+ * para editar.
+ */
+export async function carregarFornecedor(
+  id: string,
+): Promise<{ ok: true; fornecedor: Fornecedor } | { ok: false; message: string }> {
+  const session = await requireSession();
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("fornecedores")
+    .select("*")
+    .eq("id", id)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle<Fornecedor>();
+
+  if (error || !data) {
+    console.error("[fornecedores.carregar]", error?.message);
+    return { ok: false, message: "Fornecedor não encontrado." };
+  }
+  return { ok: true, fornecedor: data };
+}
+
 export async function buscarFornecedorPorDocumento(
   documento: string,
   excludeId?: string,

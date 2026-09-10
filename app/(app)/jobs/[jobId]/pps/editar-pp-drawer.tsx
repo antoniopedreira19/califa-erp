@@ -9,6 +9,7 @@ import {
   Image as ImageIcon,
   Trash2,
   AlertCircle,
+  Pencil,
   Plus,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -27,18 +28,21 @@ import {
 } from "@/components/ui/select";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
+import { Combobox } from "@/components/ui/combobox";
 import { format } from "date-fns";
-import { cn, formatCurrency } from "@/lib/utils";
+import { cn, formatCurrency, formatDocumento } from "@/lib/utils";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   PP_ANEXO_MIMETYPES_ACEITOS,
   PP_ANEXO_TAMANHO_MAX_BYTES,
   PP_ANEXOS_TAMANHO_TOTAL_MAX_BYTES,
   type PPAnexoMimetype,
+  type Fornecedor,
   type PedidoCompraNaLista,
 } from "@/lib/types";
 import { valorDaPPPorUnidade } from "@/lib/calculos/pps-item";
 import { NovoFornecedorDialog } from "@/app/(app)/fornecedores/novo-fornecedor-dialog";
+import { carregarFornecedor } from "@/app/(app)/fornecedores/actions";
 import type { FornecedorResumo } from "@/app/(app)/fornecedores/actions";
 import {
   prefixoAnexosPedidoCompra,
@@ -50,7 +54,12 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   pp: PedidoCompraNaLista | null;
-  fornecedores: Array<{ id: string; nome: string; razao_social: string | null }>;
+  fornecedores: Array<{
+    id: string;
+    nome: string;
+    razao_social: string | null;
+    cpf_cnpj?: string | null;
+  }>;
   empresas: Array<{ id: string; razao_social: string; principal: boolean }>;
   onSuccess?: (codigo: string) => void;
 }
@@ -103,6 +112,13 @@ export function EditarPPDrawer({
   // muitas vezes volta porque o fornecedor estava errado, e trocar por um
   // que ainda não existe exigia abandonar a correção no meio.
   const [novoFornecedorOpen, setNovoFornecedorOpen] = React.useState(false);
+  /** Id que o LÁPIS abriu para revisão; null = cadastro novo. */
+  const [fornecedorEditando, setFornecedorEditando] = React.useState<
+    string | null
+  >(null);
+  const [nomeSugerido, setNomeSugerido] = React.useState("");
+  const [fornecedorParaEditar, setFornecedorParaEditar] =
+    React.useState<Fornecedor | null>(null);
   const [fornecedorNovo, setFornecedorNovo] =
     React.useState<FornecedorResumo | null>(null);
   const fornecedoresVisiveis = React.useMemo(() => {
@@ -113,6 +129,38 @@ export function EditarPPDrawer({
       (a.razao_social ?? a.nome).localeCompare(b.razao_social ?? b.nome),
     );
   }, [fornecedores, fornecedorNovo]);
+
+  /** Nome em cima, documento embaixo — e a busca olha os dois. */
+  const itensFornecedor = React.useMemo(
+    () =>
+      fornecedoresVisiveis.map((f) => ({
+        value: f.id,
+        label: f.razao_social ?? f.nome,
+        descricao: f.cpf_cnpj ? formatDocumento(f.cpf_cnpj) : undefined,
+      })),
+    [fornecedoresVisiveis],
+  );
+
+  /** O cadastro completo que o lápis abre, carregado sob demanda. */
+  React.useEffect(() => {
+    if (!fornecedorEditando) {
+      setFornecedorParaEditar(null);
+      return;
+    }
+    let vivo = true;
+    carregarFornecedor(fornecedorEditando).then((res) => {
+      if (!vivo) return;
+      if (res.ok) setFornecedorParaEditar(res.fornecedor);
+      else {
+        setErro(res.message);
+        setNovoFornecedorOpen(false);
+        setFornecedorEditando(null);
+      }
+    });
+    return () => {
+      vivo = false;
+    };
+  }, [fornecedorEditando]);
   // Seleção em dois tempos — o <select> nativo do Radix ainda não tem a
   // <option> nova na renderização em que o valor chega, e devolve "".
   const [fornecedorPendenteId, setFornecedorPendenteId] =
@@ -454,31 +502,60 @@ export function EditarPPDrawer({
                 <label className="text-xs font-medium">Fornecedor *</label>
                 <div className="flex items-center gap-2">
                   <div className="min-w-0 flex-1">
-                    <Select value={fornecedorId} onValueChange={setFornecedorId}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Escolha o fornecedor" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {fornecedoresVisiveis.map((f) => (
-                          <SelectItem key={f.id} value={f.id}>
-                            {f.razao_social ?? f.nome}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    {/* O mesmo combo com busca do formulário de PP
+                        (09/09/2026): a correção da rejeitada muitas vezes
+                        volta justamente porque o fornecedor estava errado. */}
+                    <Combobox
+                      items={itensFornecedor}
+                      value={fornecedorId || null}
+                      onChange={(v) => setFornecedorId(v ?? "")}
+                      placeholder="Escolha o fornecedor"
+                      buscaPlaceholder="Escreva o nome ou o documento"
+                      limpavel
+                      acaoSemResultado={{
+                        rotulo: (busca) => `Cadastrar “${busca}” como novo fornecedor`,
+                        onClick: (busca) => {
+                          setNomeSugerido(busca);
+                          setFornecedorEditando(null);
+                          setNovoFornecedorOpen(true);
+                        },
+                      }}
+                    />
                   </div>
-                  {/* Cadastro completo sem sair da correção (decisão 048). */}
+                  {/* "+" cadastra, lápis revisa o cadastro do escolhido
+                      (decisão 048 + desenho de 09/09/2026). */}
                   <button
                     type="button"
-                    onClick={() => setNovoFornecedorOpen(true)}
+                    onClick={() => {
+                      setNomeSugerido("");
+                      setFornecedorEditando(fornecedorId ? fornecedorId : null);
+                      setNovoFornecedorOpen(true);
+                    }}
                     disabled={pending}
-                    title="Cadastrar fornecedor"
-                    aria-label="Cadastrar fornecedor"
+                    title={
+                      fornecedorId
+                        ? "Editar cadastro do fornecedor"
+                        : "Cadastrar fornecedor"
+                    }
+                    aria-label={
+                      fornecedorId
+                        ? "Editar cadastro do fornecedor"
+                        : "Cadastrar fornecedor"
+                    }
                     className="inline-flex h-10 w-10 flex-none items-center justify-center rounded-lg border border-border bg-white text-california-red transition-colors hover:border-california-red/40 hover:bg-california-red/[0.06] disabled:opacity-50"
                   >
-                    <Plus className="h-[17px] w-[17px]" />
+                    {fornecedorId ? (
+                      <Pencil className="h-4 w-4" />
+                    ) : (
+                      <Plus className="h-[17px] w-[17px]" />
+                    )}
                   </button>
                 </div>
+                <p className="mt-1.5 text-[11px] leading-snug text-muted-foreground">
+                  {fornecedorId
+                    ? "O lápis abre o cadastro deste fornecedor. O ✕ limpa o campo e traz o + de volta."
+                    : "Escreva para buscar na lista. O + cadastra um fornecedor novo sem sair da PP."}
+                </p>
               </div>
 
               <div>
@@ -694,10 +771,25 @@ export function EditarPPDrawer({
         </form>
 
         <NovoFornecedorDialog
-          open={novoFornecedorOpen}
-          onOpenChange={setNovoFornecedorOpen}
+          open={
+            novoFornecedorOpen &&
+            (!fornecedorEditando || fornecedorParaEditar !== null)
+          }
+          onOpenChange={(aberto) => {
+            setNovoFornecedorOpen(aberto);
+            if (!aberto) {
+              setFornecedorEditando(null);
+              setNomeSugerido("");
+            }
+          }}
+          fornecedor={fornecedorParaEditar ?? undefined}
+          nomeInicial={nomeSugerido || undefined}
           onCriado={adotarFornecedor}
           onSelecionarExistente={adotarFornecedor}
+          onSalvo={() => {
+            setFornecedorEditando(null);
+            router.refresh();
+          }}
         />
       </DrawerContent>
     </Dialog>

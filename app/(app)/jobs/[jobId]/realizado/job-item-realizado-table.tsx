@@ -145,7 +145,7 @@ interface Props {
   aberturaEmRevisao?: boolean;
   // PP rail — várias PPs por item desde 17/08/2026 (PPs parciais).
   ppsPorItemId: Map<string, PedidoCompraNaLista[]>;
-  fornecedores: Array<Pick<Fornecedor, "id" | "nome" | "razao_social" | "status">>;
+  fornecedores: Array<Pick<Fornecedor, "id" | "nome" | "razao_social" | "status" | "cpf_cnpj">>;
   empresas: Array<Pick<Empresa, "id" | "razao_social" | "nome_fantasia" | "ativo" | "principal">>;
   /** Membros ativos do tenant — usados no combo de Responsável da Verba de Produção. */
   responsaveis: Array<{ id: string; nome: string }>;
@@ -2005,6 +2005,7 @@ export function JobItemRealizadoTable({
               fornecedores={fornecedores.map((f) => ({
                 id: f.id,
                 nome: f.razao_social ?? f.nome,
+                cpf_cnpj: f.cpf_cnpj,
               }))}
               percentualImposto={percentualImposto}
               origem="job"

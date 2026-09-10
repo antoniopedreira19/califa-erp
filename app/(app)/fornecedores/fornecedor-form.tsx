@@ -29,6 +29,7 @@ import Link from "next/link";
 import {
   AlertCircle,
   AlertTriangle,
+  Check,
   CheckCircle2,
   Info,
   Landmark,
@@ -164,39 +165,62 @@ function PixChaveInput({
 function Secao({
   titulo,
   descricao,
+  descricaoNoDialog,
   selo,
   emDialog,
   children,
 }: {
   titulo: string;
   descricao: string;
+  /** A mesma explicação, encurtada para caber na linha do título dentro do
+   *  dialog. Ausente = a seção não mostra explicação ali. */
+  descricaoNoDialog?: string;
   selo: "obrigatorio" | "opcional";
-  /** No dialog o cartão é estreito: a coluna da explicação vira uma linha. */
   emDialog: boolean;
   children: React.ReactNode;
 }) {
-  return (
-    <div
+  const seloEl = (
+    <span
       className={cn(
-        "grid gap-6 px-7 py-7",
-        emDialog ? "" : "md:grid-cols-[minmax(0,208px)_minmax(0,1fr)] md:gap-8",
+        "inline-block flex-none rounded-full px-2 py-[3px] text-[10px] font-bold uppercase tracking-wider",
+        selo === "obrigatorio"
+          ? "bg-california-red/[0.08] text-[#c2404a]"
+          : "bg-muted text-muted-foreground",
       )}
     >
+      {selo === "obrigatorio" ? "Obrigatório" : "Opcional"}
+    </span>
+  );
+
+  // No dialog o cartão tem 768px e divide espaço com a PP atrás: a coluna
+  // de explicação da página não cabe, e o cabeçalho da seção vira uma
+  // linha só — título, selo e a nota curta à direita (desenho de
+  // "Fornecedores - Novo Cadastro na PP").
+  if (emDialog) {
+    return (
+      <div className="flex flex-col gap-3.5 px-6 py-[22px]">
+        <div className="flex flex-wrap items-baseline gap-2.5">
+          <h3 className="text-[13.5px] font-bold tracking-tight">{titulo}</h3>
+          {seloEl}
+          {descricaoNoDialog && (
+            <span className="min-w-[160px] flex-1 text-right text-[11.5px] leading-snug text-muted-foreground">
+              {descricaoNoDialog}
+            </span>
+          )}
+        </div>
+        {children}
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid gap-6 px-7 py-7 md:grid-cols-[minmax(0,208px)_minmax(0,1fr)] md:gap-8">
       <div>
         <h3 className="text-[14.5px] font-bold tracking-tight">{titulo}</h3>
         <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
           {descricao}
         </p>
-        <span
-          className={cn(
-            "mt-2.5 inline-block rounded-full px-2 py-[3px] text-[10.5px] font-bold uppercase tracking-wider",
-            selo === "obrigatorio"
-              ? "bg-california-red/[0.08] text-[#c2404a]"
-              : "bg-muted text-muted-foreground",
-          )}
-        >
-          {selo === "obrigatorio" ? "Obrigatório" : "Opcional"}
-        </span>
+        <div className="mt-2.5">{seloEl}</div>
       </div>
       <div className="min-w-0">{children}</div>
     </div>
@@ -264,18 +288,36 @@ interface Props {
    * 09/09/2026 os dois exigem os mesmos campos.
    */
   modo?: "pagina" | "dialog";
+  /**
+   * O tipo de pessoa CONTROLADO de fora. No dialog do cadastro rápido ele
+   * mora no cabeçalho, ao lado do título (desenho "Fornecedores - Novo
+   * Cadastro na PP"), porque ali o espaço é do dialog e não do formulário.
+   * Sem estas duas props o formulário controla e desenha o próprio toggle.
+   */
+  tipoPessoa?: TipoPessoa;
+  onTipoPessoaChange?: (tipo: TipoPessoa) => void;
+  /** Nome já preenchido na abertura. Vem da busca do campo de fornecedor
+   *  que não achou ninguém: "Cadastrar «Fulano»" abre com o nome pronto. */
+  nomeInicial?: string;
   onCancelar?: () => void;
   onCriado?: (fornecedor: FornecedorResumo) => void;
   /** O documento já é de outro cadastro: em vez de criar, selecionar. */
   onSelecionarExistente?: (fornecedor: FornecedorResumo) => void;
+  /** Edição salva. No dialog é o que fecha e devolve o controle para a PP
+   *  (09/09/2026); na página o `router.refresh()` já basta. */
+  onSalvo?: () => void;
 }
 
 export function FornecedorForm({
   fornecedor,
   modo = "pagina",
+  tipoPessoa: tipoPessoaDeFora,
+  onTipoPessoaChange,
+  nomeInicial,
   onCancelar,
   onCriado,
   onSelecionarExistente,
+  onSalvo,
 }: Props) {
   const router = useRouter();
   const isEdit = Boolean(fornecedor);
@@ -290,8 +332,19 @@ export function FornecedorForm({
   const [error, setError] = React.useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = React.useState<Record<string, string[]>>({});
 
-  const [tipoPessoa, setTipoPessoa] = React.useState<TipoPessoa>(
+  const [tipoPessoaLocal, setTipoPessoaLocal] = React.useState<TipoPessoa>(
     fornecedor?.tipo_pessoa ?? "juridica",
+  );
+  /** Quem manda no tipo de pessoa: quem passou a prop, ou o próprio form. */
+  const controladoDeFora = tipoPessoaDeFora !== undefined;
+  const tipoPessoa = tipoPessoaDeFora ?? tipoPessoaLocal;
+  const setTipoPessoa = React.useCallback(
+    (tipo: TipoPessoa) => {
+      setDuplicado(null);
+      if (onTipoPessoaChange) onTipoPessoaChange(tipo);
+      if (!controladoDeFora) setTipoPessoaLocal(tipo);
+    },
+    [controladoDeFora, onTipoPessoaChange],
   );
   const [bancoCodigo, setBancoCodigo] = React.useState<string | null>(
     fornecedor?.banco_codigo ?? null,
@@ -547,6 +600,7 @@ export function FornecedorForm({
       }
       if (isEdit) {
         router.refresh();
+        onSalvo?.();
         return;
       }
       if (emDialog && res.fornecedor) onCriado?.(res.fornecedor);
@@ -565,7 +619,7 @@ export function FornecedorForm({
           {ehPj ? "CNPJ" : "CPF"} já cadastrado como{" "}
           <strong>{duplicado.razao_social ?? duplicado.nome}</strong>
           {duplicado.status === "inativo"
-            ? " — fornecedor inativo. Reative-o em Fornecedores para usá-lo numa PP."
+            ? " — fornecedor inativo. Reative-o em Fornecedores para poder selecioná-lo."
             : ". Use o cadastro existente em vez de criar outro."}
         </span>
       </span>
@@ -576,7 +630,7 @@ export function FornecedorForm({
           className="inline-flex items-center gap-1.5 rounded-md border border-amber-300 bg-white px-2.5 py-1 text-[11.5px] font-semibold text-amber-900 hover:bg-amber-100"
         >
           <UserCheck className="h-3.5 w-3.5" />
-          Selecionar este fornecedor
+          Usar este cadastro
         </button>
       ) : (
         <Link
@@ -620,20 +674,28 @@ export function FornecedorForm({
   );
 
   return (
-    <div className={cn("flex flex-col gap-4", emDialog ? "" : "pb-24")}>
+    <div
+      className={cn(
+        "flex flex-col",
+        emDialog ? "min-h-0 flex-1" : "gap-4 pb-24",
+      )}
+    >
       {/* O tipo de pessoa manda nos rótulos do formulário inteiro (Nome
-          fantasia/Nome, CNPJ/CPF), e por isso fica fora do cartão. */}
-      <div className="flex flex-col items-start gap-1.5 sm:items-end">
+          fantasia/Nome, CNPJ/CPF), e por isso fica fora do cartão. No
+          dialog quem o desenha é o cabeçalho, e aqui ele some. */}
+      <div
+        className={cn(
+          "flex flex-col items-start gap-1.5 sm:items-end",
+          controladoDeFora && "hidden",
+        )}
+      >
         <span className="text-[12.5px] font-semibold">Tipo de pessoa</span>
         <div className="inline-flex gap-[3px] rounded-[10px] border border-border bg-white p-[3px]">
           {(["juridica", "fisica"] as const).map((tp) => (
             <button
               type="button"
               key={tp}
-              onClick={() => {
-                setTipoPessoa(tp);
-                setDuplicado(null);
-              }}
+              onClick={() => setTipoPessoa(tp)}
               className={cn(
                 "rounded-lg px-3.5 py-2 text-[13px] font-semibold transition-colors",
                 tipoPessoa === tp
@@ -652,12 +714,19 @@ export function FornecedorForm({
         onSubmit={handleSubmit}
         onInput={relerCampos}
         onChange={relerCampos}
-        className="flex flex-col gap-4"
+        className={cn(
+          "flex flex-col",
+          emDialog ? "min-h-0 flex-1" : "gap-4",
+        )}
       >
+        {/* No dialog só ESTE bloco rola: o cabeçalho é do dialog e o
+            rodapé fica colado no pé, sempre à vista. */}
         <div
           className={cn(
-            "overflow-hidden rounded-2xl bg-white",
-            emDialog ? "border-0" : "border border-border shadow-soft",
+            "rounded-2xl bg-white",
+            emDialog
+              ? "min-h-0 flex-1 overflow-y-auto rounded-none border-0"
+              : "overflow-hidden border border-border shadow-soft",
           )}
         >
           {/* ---------------------------------------------------------- */}
@@ -679,7 +748,7 @@ export function FornecedorForm({
               >
                 <Input
                   name="nome"
-                  defaultValue={fornecedor?.nome ?? ""}
+                  defaultValue={fornecedor?.nome ?? nomeInicial ?? ""}
                   placeholder="Ex.: Cenografia Vértice"
                   autoFocus
                 />
@@ -780,6 +849,7 @@ export function FornecedorForm({
           <Secao
             titulo="Pagamento"
             descricao="Conta bancária ou chave PIX — pelo menos uma das duas. Cadastre as duas sempre que houver."
+            descricaoNoDialog="Uma das duas basta. Cadastre as duas sempre que houver."
             selo="obrigatorio"
             emDialog={emDialog}
           >
@@ -956,6 +1026,7 @@ export function FornecedorForm({
           <Secao
             titulo="Endereço"
             descricao="Usado na nota fiscal. Nada aqui bloqueia o cadastro."
+            descricaoNoDialog="Usado na nota fiscal. Nada aqui é obrigatório."
             selo="opcional"
             emDialog={emDialog}
           >
@@ -1107,6 +1178,7 @@ export function FornecedorForm({
           <Secao
             titulo="Observações"
             descricao="Especialidade, prazo habitual, quem indicou."
+            descricaoNoDialog="Especialidade, prazo habitual, quem indicou."
             selo="opcional"
             emDialog={emDialog}
           >
@@ -1120,7 +1192,12 @@ export function FornecedorForm({
         </div>
 
         {error && (
-          <div className="flex items-start gap-2 rounded-xl border border-california-red/20 bg-california-red/5 px-4 py-3 text-sm text-california-red">
+          <div
+            className={cn(
+              "flex items-start gap-2 border border-california-red/20 bg-california-red/5 px-4 py-3 text-sm text-california-red",
+              emDialog ? "flex-none border-x-0 border-b-0" : "rounded-xl",
+            )}
+          >
             <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
             <span>{error}</span>
           </div>
@@ -1131,10 +1208,10 @@ export function FornecedorForm({
         {/* ------------------------------------------------------------ */}
         <div
           className={cn(
-            "flex flex-wrap items-center justify-between gap-4 border border-border bg-white/95 px-5 py-3.5",
+            "flex flex-wrap items-center justify-between gap-4 border border-border px-5 py-3.5",
             emDialog
-              ? "-mx-6 -mb-2 rounded-none border-x-0 border-b-0"
-              : "sticky bottom-0 rounded-t-2xl border-b-0 shadow-[0_-4px_16px_-8px_rgba(0,0,0,.12)] backdrop-blur",
+              ? "flex-none rounded-none border-x-0 border-b-0 bg-muted/30"
+              : "sticky bottom-0 rounded-t-2xl border-b-0 bg-white/95 shadow-[0_-4px_16px_-8px_rgba(0,0,0,.12)] backdrop-blur",
           )}
         >
           <div className="flex min-w-0 items-center gap-2.5">
@@ -1190,7 +1267,11 @@ export function FornecedorForm({
                 </>
               ) : (
                 <>
-                  <Save className="h-[15px] w-[15px]" />
+                  {emDialog && !isEdit ? (
+                    <Check className="h-[15px] w-[15px]" />
+                  ) : (
+                    <Save className="h-[15px] w-[15px]" />
+                  )}
                   {isEdit
                     ? "Salvar alterações"
                     : emDialog
