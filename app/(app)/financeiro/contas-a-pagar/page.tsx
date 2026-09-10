@@ -655,6 +655,8 @@ export default async function PedidosCompraFinanceiroPage({
       id: a.id,
       origem: a.recorrente_id ? "recorrencia" : "avulso",
       origem_label: a.recorrente_id ? "RECORRÊNCIA" : "AVULSO",
+      // Sem foto de pagamento: o asterisco da 067 é só de PP.
+      cadastro_do_fornecedor_mudou: false,
       descricao: a.descricao,
       fornecedor_nome: a.fornecedor?.razao_social ?? a.fornecedor?.nome ?? "—",
       job_codigo: a.job?.codigo ?? "—",
@@ -748,6 +750,8 @@ export default async function PedidosCompraFinanceiroPage({
         id: par.id,
         origem: "desembolso",
         origem_label: des.codigo,
+        // Sem foto de pagamento: o asterisco da 067 é só de PP.
+        cadastro_do_fornecedor_mudou: false,
         descricao: des.descricao,
         fornecedor_nome: des.fornecedor?.razao_social ?? des.fornecedor?.nome ?? "—",
         job_codigo: des.job?.codigo ?? "—",
@@ -810,6 +814,9 @@ export default async function PedidosCompraFinanceiroPage({
       id: dev.id,
       origem: "pp_devolucao_verba",
       origem_label: `DEVOLUÇÃO ${dev.pp?.codigo ?? ""}`,
+      // A devolução é dinheiro VOLTANDO do responsável pela verba, não
+      // pagamento a fornecedor — não há foto para comparar.
+      cadastro_do_fornecedor_mudou: false,
       descricao: `Devolução verba ${dev.pp?.codigo ?? ""} — ${dev.pp?.servico ?? ""}`,
       fornecedor_nome: "",
       job_codigo: dev.pp?.job?.codigo ?? "—",
@@ -979,6 +986,8 @@ export default async function PedidosCompraFinanceiroPage({
       id: f.id,
       origem: "fatura_cartao",
       origem_label: f.codigo,
+      // Quem recebe é o cartão, não o fornecedor — sem foto.
+      cadastro_do_fornecedor_mudou: false,
       descricao: `Fatura ${cartaoNome} · fecha ${dataBR(f.competencia_fechamento)}`,
       fornecedor_nome: cartaoNome,
       job_codigo: "—",

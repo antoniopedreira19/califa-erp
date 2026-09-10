@@ -4235,6 +4235,15 @@ função já devolve `false` para PP sem `dados_pagamento_congelados_em`
 (verba de produção, ou anterior à 067) e para status fora de
 `em_avaliacao`/`aprovada`/`pago`.
 
+⚠️ **`cadastro_do_fornecedor_mudou` é obrigatório nos dois tipos, e as
+quatro origens sem foto mandam `false` explícito.** Nasceu opcional em
+`TituloRow`, o que parecia defensável (só `pp` preenche) e era o contrário
+do que devia: **opcional desliga a própria proteção**. Um produtor que
+esquecesse o campo devolveria `undefined` em silêncio, `undefined && …`
+não pinta nada, e o asterisco sumiria com `tsc` limpo — o mesmo alçapão
+que o `.map` já tinha aberto uma vez neste campo. Como obrigatório, o
+compilador aponta as cinco origens de `titulos.push` uma a uma.
+
 **Verificação (10/09/2026, ciclo completo).** Troquei a agência da PRIME
 de `0001` para `9999` no cadastro e recarreguei: o asterisco acendeu nas
 **11 parcelas da PP-00011** e na linha dela na aba de PPs, e **não**
@@ -4242,3 +4251,8 @@ acendeu em nenhuma das outras 14 linhas nem nas PPs de outros
 fornecedores. Restaurei o cadastro para `0001` e o asterisco **apagou**.
 Console sem erro de aplicação; build, lint e os 34 testes de permissão
 passando.
+
+Refeito depois de tornar o campo obrigatório, com o filtro "Todos" para
+alcançar origem não-PP: 11 asteriscos, **todos** em parcelas da PP-00011;
+o título de origem AVULSO na mesma lista **não** acendeu. Zero vazamento
+de `banco_codigo`/`pix_chave`/`agencia_dv`/`conta_dv` no HTML.
