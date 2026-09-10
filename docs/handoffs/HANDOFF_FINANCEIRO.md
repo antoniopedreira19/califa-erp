@@ -4537,3 +4537,25 @@ teclado, como está na lista.
 rejeição e com o `updated_at` do dia anterior — a bateria não escreveu
 nada no banco. Console sem erro do app (o único é `trancy-version`, de uma
 extensão do navegador). `tsc`, `next lint` e `npm run build` limpos.
+
+## ⚠️ Nota de 2026-09-10 — a PP passou a nascer em Custo Operacional (decisão 068)
+
+O centro de custo da PP só existia quando ela ia para o cartão. Fora disso
+o campo ficava nulo e a tela de Títulos a Pagar mostrava "Custo
+Operacional" por um `??` no servidor — bom para exibir, **inútil para
+somar**, e o Tiago vai destrinchar a previsão de fluxo de caixa por centro
+de custo.
+
+Agora o carimbo é do banco: um trigger `before insert` põe o tipo `02` em
+toda PP que nasce sem ele, porque `job_id` é `NOT NULL` e toda PP é custo
+de job. As 26 PPs que estavam com o campo vazio foram preenchidas — o
+backfill só tornou explícito o que a tela já exibia. **O subtipo continua
+vazio de propósito**: quem escolhe é a baixa, onde o campo já vem com o
+tipo pré-selecionado e aberto para revisão.
+
+O `??` de `page.tsx` ficou como rede de segurança, com o comentário
+atualizado para dizer que não é mais ele que decide. A PP do cartão não
+mudou: lá a aprovação escolhe tipo e subtipo, e sobrescreve.
+
+Detalhes, motivo do subtipo ficar de fora e o registro da verificação em
+`docs/decisions/068-a-pp-nasce-em-custo-operacional.md`.
