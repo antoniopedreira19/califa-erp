@@ -161,7 +161,10 @@ export async function carregarDetalheDoJob(
       .order("created_at", { ascending: false }),
     supabase
       .from("fornecedores")
-      .select("id, nome, razao_social, status")
+      // `cpf_cnpj` entrou em 09/09/2026: o campo de fornecedor da PP virou
+      // um combo com busca, e o documento é o que separa homônimos — a
+      // busca olha nome E documento, e a opção mostra os dois.
+      .select("id, nome, razao_social, status, cpf_cnpj")
       .eq("tenant_id", session.activeTenant.id)
       .eq("status", "ativo")
       .order("nome"),

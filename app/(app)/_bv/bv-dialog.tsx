@@ -2,9 +2,22 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { BadgePercent, Plus, Save, SendHorizonal, Trash2, X } from "lucide-react";
+import {
+  BadgePercent,
+  Pencil,
+  Plus,
+  Save,
+  SendHorizonal,
+  Trash2,
+  X,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Combobox } from "@/components/ui/combobox";
+import { NovoFornecedorDialog } from "@/app/(app)/fornecedores/novo-fornecedor-dialog";
+import {
+  carregarFornecedor,
+  type FornecedorResumo,
+} from "@/app/(app)/fornecedores/actions";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DatePicker } from "@/components/ui/date-picker";
 import {
@@ -13,7 +26,7 @@ import {
   DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { cn, formatCurrency } from "@/lib/utils";
+import { cn, formatCurrency, formatDocumento } from "@/lib/utils";
 import { calcularTotaisPlanejados } from "@/lib/calculos/versao-totais";
 import { bvLiquido, impostoDoBv } from "@/lib/calculos/bv-planilha";
 import {
@@ -25,6 +38,7 @@ import {
 import {
   bvSituacaoLabel,
   type BvSituacao,
+  type Fornecedor,
   type ItemBv,
   type TipoCusto,
 } from "@/lib/types";
@@ -39,6 +53,9 @@ import {
 export interface FornecedorOpcao {
   id: string;
   nome: string;
+  /** CPF/CNPJ — segunda linha da opção e chave de busca. Opcional: nem
+   *  toda tela que abre o BV carrega o documento (09/09/2026). */
+  cpf_cnpj?: string | null;
 }
 
 /** Onde o BV é gravado.
@@ -235,6 +252,65 @@ export function BvDialog({
   const [askConfirmar, setAskConfirmar] = React.useState(false);
 
   const [fornecedorId, setFornecedorId] = React.useState<string | null>(null);
+  /** O cadastro de fornecedor de dentro do BV (09/09/2026): "+" cria,
+   *  lápis revisa o escolhido. */
+  const [novoFornecedorOpen, setNovoFornecedorOpen] = React.useState(false);
+  const [fornecedorEditando, setFornecedorEditando] = React.useState<
+    string | null
+  >(null);
+  const [nomeSugerido, setNomeSugerido] = React.useState("");
+  const [fornecedorParaEditar, setFornecedorParaEditar] =
+    React.useState<Fornecedor | null>(null);
+  /** O recém-cadastrado, que ainda não está na lista que veio do
+   *  servidor. Ele fica aqui até o dialog fechar e a tela recarregar. */
+  const [fornecedorNovo, setFornecedorNovo] =
+    React.useState<FornecedorOpcao | null>(null);
+  const fornecedoresVisiveis = React.useMemo(
+    () =>
+      fornecedorNovo && !fornecedores.some((f) => f.id === fornecedorNovo.id)
+        ? [...fornecedores, fornecedorNovo].sort((x, y) =>
+            x.nome.localeCompare(y.nome, "pt-BR"),
+          )
+        : fornecedores,
+    [fornecedores, fornecedorNovo],
+  );
+  /** Nome em cima, documento embaixo — e a busca olha os dois. */
+  const itensFornecedor = React.useMemo(
+    () =>
+      fornecedoresVisiveis.map((f) => ({
+        value: f.id,
+        label: f.nome,
+        descricao: f.cpf_cnpj ? formatDocumento(f.cpf_cnpj) : undefined,
+      })),
+    [fornecedoresVisiveis],
+  );
+  React.useEffect(() => {
+    if (!fornecedorEditando) {
+      setFornecedorParaEditar(null);
+      return;
+    }
+    let vivo = true;
+    carregarFornecedor(fornecedorEditando).then((res) => {
+      if (!vivo) return;
+      if (res.ok) setFornecedorParaEditar(res.fornecedor);
+      else {
+        setNovoFornecedorOpen(false);
+        setFornecedorEditando(null);
+      }
+    });
+    return () => {
+      vivo = false;
+    };
+  }, [fornecedorEditando]);
+
+  /** Escolher um fornecedor que pode não estar na lista do servidor: o
+   *  que acabou de ser criado, ou o que o cadastro achou pelo documento.
+   *  Sem `router.refresh()` aqui — no meio do preenchimento ele
+   *  re-renderiza a tela e zera o formulário (visto na PP em 04/09). */
+  function adotarFornecedor(f: FornecedorResumo) {
+    setFornecedorNovo({ id: f.id, nome: f.nome, cpf_cnpj: f.cpf_cnpj ?? null });
+    setFornecedorId(f.id);
+  }
   const [valorRaw, setValorRaw] = React.useState("");
   const [aliquotaRaw, setAliquotaRaw] = React.useState("");
 
@@ -582,8 +658,9 @@ export function BvDialog({
                     {bvs.map((b) => {
                       const ativo = b.id === selecionadoId;
                       const nomeFornecedor =
-                        fornecedores.find((f) => f.id === b.fornecedor_id)
-                          ?.nome ?? "Sem fornecedor";
+                        fornecedoresVisiveis.find(
+                          (f) => f.id === b.fornecedor_id,
+                        )?.nome ?? "Sem fornecedor";
                       return (
                         <button
                           key={b.id}
@@ -644,22 +721,69 @@ export function BvDialog({
                     Fornecedor
                     {noJob && <span className="ml-1 text-california-red">*</span>}
                   </label>
-                  <Combobox
-                    id="bv-fornecedor"
-                    items={fornecedores.map((f) => ({
-                      value: f.id,
-                      label: f.nome,
-                    }))}
-                    value={fornecedorId}
-                    onChange={setFornecedorId}
-                    placeholder="Selecione o fornecedor"
-                    disabled={somenteLeitura || pending}
-                    className={cn(
-                      "h-11 rounded-xl",
-                      fornecedorFaltando &&
-                        "border-amber-400 ring-2 ring-amber-200",
+                  {/* Mesmo campo da PP desde 09/09/2026: busca por nome
+                      OU documento, ✕ para zerar, e o botão ao lado que é
+                      "+" com o campo vazio e lápis com alguém escolhido. */}
+                  <div className="flex items-center gap-2">
+                    <div className="min-w-0 flex-1">
+                      <Combobox
+                        id="bv-fornecedor"
+                        items={itensFornecedor}
+                        value={fornecedorId}
+                        onChange={setFornecedorId}
+                        placeholder="Selecione o fornecedor"
+                        buscaPlaceholder="Escreva o nome ou o documento"
+                        limpavel={!somenteLeitura}
+                        disabled={somenteLeitura || pending}
+                        acaoSemResultado={
+                          somenteLeitura
+                            ? undefined
+                            : {
+                                rotulo: (busca) =>
+                                  `Cadastrar “${busca}” como novo fornecedor`,
+                                onClick: (busca) => {
+                                  setNomeSugerido(busca);
+                                  setFornecedorEditando(null);
+                                  setNovoFornecedorOpen(true);
+                                },
+                              }
+                        }
+                        className={cn(
+                          "h-11 rounded-xl",
+                          fornecedorFaltando &&
+                            "border-amber-400 ring-2 ring-amber-200",
+                        )}
+                      />
+                    </div>
+                    {!somenteLeitura && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setNomeSugerido("");
+                          setFornecedorEditando(fornecedorId ?? null);
+                          setNovoFornecedorOpen(true);
+                        }}
+                        disabled={pending}
+                        title={
+                          fornecedorId
+                            ? "Editar cadastro do fornecedor"
+                            : "Cadastrar fornecedor"
+                        }
+                        aria-label={
+                          fornecedorId
+                            ? "Editar cadastro do fornecedor"
+                            : "Cadastrar fornecedor"
+                        }
+                        className="inline-flex h-11 w-11 flex-none items-center justify-center rounded-xl border border-border bg-white text-california-red transition-colors hover:border-california-red/40 hover:bg-california-red/[0.06] disabled:opacity-50"
+                      >
+                        {fornecedorId ? (
+                          <Pencil className="h-4 w-4" />
+                        ) : (
+                          <Plus className="h-[17px] w-[17px]" />
+                        )}
+                      </button>
                     )}
-                  />
+                  </div>
                   <span
                     className={cn(
                       "text-[11.5px] leading-relaxed",
@@ -901,7 +1025,8 @@ export function BvDialog({
             </strong>{" "}
             será enviado ao financeiro para cobrança do fornecedor{" "}
             <strong className="text-foreground">
-              {fornecedores.find((f) => f.id === fornecedorId)?.nome ?? "—"}
+              {fornecedoresVisiveis.find((f) => f.id === fornecedorId)?.nome ??
+                "—"}
             </strong>
             , no líquido de{" "}
             <strong className="text-foreground">
@@ -917,6 +1042,36 @@ export function BvDialog({
         cancelLabel="Voltar"
         pending={pending}
         onConfirm={handleConfirmar}
+      />
+
+      {/* O cadastro de fornecedor de dentro do BV (09/09/2026, decisão
+          067): o mesmo dialog da PP, para não haver dois formulários de
+          fornecedor com regras diferentes. */}
+      <NovoFornecedorDialog
+        // Só abre a edição quando o cadastro completo chegou: dialog
+        // vazio piscando é pior que meio segundo de espera.
+        open={
+          novoFornecedorOpen &&
+          (!fornecedorEditando || fornecedorParaEditar !== null)
+        }
+        onOpenChange={(aberto) => {
+          setNovoFornecedorOpen(aberto);
+          if (!aberto) {
+            setFornecedorEditando(null);
+            setNomeSugerido("");
+          }
+        }}
+        fornecedor={fornecedorParaEditar ?? undefined}
+        nomeInicial={nomeSugerido || undefined}
+        contexto="bv"
+        onCriado={adotarFornecedor}
+        onSelecionarExistente={adotarFornecedor}
+        // A edição não mexe na escolha: o fornecedor continua o mesmo,
+        // com o cadastro atualizado.
+        onSalvo={() => {
+          setFornecedorEditando(null);
+          router.refresh();
+        }}
       />
     </>
   );

@@ -3052,3 +3052,44 @@ com o campo preenchido — e os outros 12 ícones ficam apagados; a ficha da
 PP-00011 (aprovada) mostra "Cancelar PP" desabilitado com o motivo certo.
 JOB-0029 (teste): o cancelamento **pela ficha** levou a PP-00014 a
 `cancelada`, com auditoria, e "Em PPs emitidas" do item caiu para R$ 0,00.
+
+## ⚠️ Nota de 2026-09-09 — o campo de fornecedor da PP ganhou busca, ✕ e lápis
+
+Decisão [067](../decisions/067-o-campo-de-fornecedor-busca-limpa-e-edita.md),
+sobre os desenhos `PP - Campo Fornecedor` e `Fornecedores - Novo Cadastro
+na PP` (projeto Claude Design `69342d83`). Vale para o formulário de PP
+nova (`realizado/gerar-pp-drawer.tsx`), para o da PP rejeitada
+(`pps/editar-pp-drawer.tsx`) e para o BV (`_bv/bv-dialog.tsx`).
+
+O que mudou no campo:
+
+- **escreve para buscar.** A lista abriu uma caixa de busca que filtra sem
+  acento por **nome OU documento**, e cada opção tem duas linhas — nome em
+  cima, CPF/CNPJ embaixo. Quatro consultas passaram a trazer `cpf_cnpj`
+  junto do nome (a de `carregar-detalhe.ts`, a do BV do orçamento em
+  `orcamentos/[projetoId]/[orcId]/page.tsx` e as duas de
+  `fornecedores/actions.ts`);
+- **busca sem resultado oferece cadastrar** com o nome já preenchido;
+- **✕ dentro do campo zera a escolha**;
+- **o botão ao lado troca de cara**: "+" com o campo vazio (cadastra),
+  lápis com alguém escolhido (revisa o cadastro daquele fornecedor).
+
+O `NovoFornecedorDialog` passou a **editar** além de criar — é o mesmo
+`FornecedorForm` da página no modo `dialog`, com as réguas da decisão 065
+inteiras. Salvar não mexe na escolha nem no que já foi digitado na PP.
+Como ele abre de mais de uma tela, o texto do cabeçalho vem de um
+`contexto` (`"pp"` | `"bv"`); tela nova acrescenta a sua chave em
+`fornecedores/novo-fornecedor-dialog.tsx`.
+
+**Pendência:** o campo novo entrou só em PP e BV. Contas a pagar (avulsa e
+recorrente), contas a receber e as três telas de desembolsos seguem com o
+combo antigo. O `Combobox` já tem tudo por prop (`buscaPlaceholder`,
+`limpavel`, `acaoSemResultado`) — falta passar `cpf_cnpj` na consulta de
+cada tela e pendurar o botão ao lado.
+
+**Ponta solta que a decisão 067 registra e ninguém implementou ainda:** a
+PP precisa **congelar** banco/agência/conta/PIX no envio ao financeiro, o
+financeiro precisa pagar pela foto, e a PP cujo cadastro mudou depois
+precisa de um **asterisco**. Sem isso, o lápis deixa alguém trocar a conta
+de um fornecedor que já tem PP esperando pagamento. Toca
+`app/(app)/financeiro/**` — combinar com a frente do financeiro antes.

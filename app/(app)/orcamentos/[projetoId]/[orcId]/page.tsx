@@ -235,15 +235,16 @@ export default async function OrcamentoDetailPage({
       .eq("tenant_id", session.activeTenant.id)
       .order("nome", { ascending: true })
       .returns<Categoria[]>(),
-    // Alimenta só o select do formulário de BV: id + nome, nada do
-    // cadastro completo do fornecedor.
+    // Alimenta só o campo de fornecedor do formulário de BV: nome e
+    // documento, nada do cadastro completo. O documento entra desde
+    // 09/09/2026 porque a busca do campo olha os dois (decisão 067).
     supabase
       .from("fornecedores")
-      .select("id, nome")
+      .select("id, nome, cpf_cnpj")
       .eq("tenant_id", session.activeTenant.id)
       .eq("status", "ativo")
       .order("nome")
-      .returns<{ id: string; nome: string }[]>(),
+      .returns<{ id: string; nome: string; cpf_cnpj: string | null }[]>(),
     supabase
       .from("regionais")
       .select("id, nome")
@@ -296,6 +297,7 @@ export default async function OrcamentoDetailPage({
   const fornecedores = (fornecedoresRes.data ?? []) as {
     id: string;
     nome: string;
+    cpf_cnpj: string | null;
   }[];
   const regionais = (regionaisRes.data ?? []) as { id: string; nome: string }[];
 
@@ -690,7 +692,7 @@ function VersaoSelecionada({
   bvsBrutos: any[];
   contatosBrutos: any[];
   categorias: Categoria[];
-  fornecedores: { id: string; nome: string }[];
+  fornecedores: { id: string; nome: string; cpf_cnpj: string | null }[];
   regionais: { id: string; nome: string }[];
   regionaisDoProjeto: Pick<Regional, "id" | "nome">[];
   cidadesIniciais: CidadeOpcao[];
