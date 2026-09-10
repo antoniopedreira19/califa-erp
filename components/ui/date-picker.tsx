@@ -21,6 +21,11 @@ import { Calendar } from "@/components/ui/calendar";
  */
 export interface DatePickerProps {
   name: string;
+  /** `id` do gatilho, para um `<label htmlFor>` conseguir apontar para
+   *  ele. Opcional: os 24 call sites que não passam nada seguem como
+   *  estavam, sem `id` nenhum (10/09/2026). O `name` NÃO serve para isso
+   *  — ele vai no `<input type="hidden">`, que o rótulo não deve focar. */
+  id?: string;
   /** Valor inicial em ISO "YYYY-MM-DD" ou vazio. */
   defaultValue?: string;
   placeholder?: string;
@@ -47,6 +52,7 @@ function toIso(date: Date | null): string {
 
 export function DatePicker({
   name,
+  id,
   defaultValue,
   placeholder = "Selecione a data",
   required,
@@ -88,6 +94,7 @@ export function DatePicker({
         <PopoverTrigger asChild>
           <button
             type="button"
+            id={id}
             disabled={disabled}
             className={cn(
               "group flex h-11 w-full items-center justify-between rounded-lg border border-border bg-white px-3.5 py-2 text-sm transition-colors hover:border-california-red/40 focus-visible:outline-none focus-visible:border-california-red focus-visible:ring-2 focus-visible:ring-california-red/15 disabled:cursor-not-allowed disabled:opacity-50",

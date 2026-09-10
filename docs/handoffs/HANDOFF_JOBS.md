@@ -3134,3 +3134,25 @@ um **"tem certeza?"**: `atualizarFornecedor` devolve
 pagando pelo PDF e **não** mostram o asterisco. Aquele módulo é de outra
 frente e está em obra — combinar antes de mexer. `lerFoto` já está
 exportada para quando essa ponta for fechada.
+
+## ⚠️ Nota de 2026-09-10 — `DatePicker` aceita `id`, e os rótulos órfãos acabaram
+
+O `DatePicker` (`components/ui/date-picker.tsx`) ganhou uma prop **`id`**,
+opcional, que vai no botão do gatilho. Ela existe porque `name` NÃO serve
+para `<label htmlFor>`: o `name` vai no `<input type="hidden">`, que o
+rótulo não deve focar — então todo `<Label htmlFor="…">` apontando para um
+`DatePicker` era um rótulo órfão, que não foca nada e que o leitor de tela
+não associa.
+
+Aditiva: os 24 call sites que não passam `id` seguem exatamente como
+estavam, sem `id` nenhum.
+
+Corrigidos com ela, no `job-editor-drawer`: `data_inicio_prevista` e
+`data_fim_prevista`. E, no mesmo arquivo, `regional_id` e `responsavel_id`
+passaram a pôr o `id` no `SelectTrigger` do Radix — que é o elemento que
+recebe foco.
+
+**Uma varredura fecha o assunto:** `htmlFor` sem `id` correspondente em
+`app/**` e `components/**` deu **zero** depois disto. Se a sua tela nova
+tem `<Label htmlFor>`, confirme que o alvo existe — nem `Select` do Radix
+nem `DatePicker` ganham `id` sozinhos.

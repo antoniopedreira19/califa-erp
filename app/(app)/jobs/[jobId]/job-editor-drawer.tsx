@@ -97,7 +97,7 @@ export function JobEditorDrawer({ job, regionais, responsaveis }: Props) {
               <div className="space-y-2">
                 <Label htmlFor="regional_id">Regional</Label>
                 <Select value={regionalId} onValueChange={setRegionalId}>
-                  <SelectTrigger><SelectValue placeholder="Sem regional" /></SelectTrigger>
+                  <SelectTrigger id="regional_id"><SelectValue placeholder="Sem regional" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value={SEM_REGIONAL}>Sem regional</SelectItem>
                     {regionaisDaEmpresa.map((r) => <SelectItem key={r.id} value={r.id}>{r.nome}</SelectItem>)}
@@ -110,17 +110,17 @@ export function JobEditorDrawer({ job, regionais, responsaveis }: Props) {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="data_inicio_prevista">Data início</Label>
-                <DatePicker name="data_inicio_prevista" defaultValue={job.data_inicio_prevista ?? ""} placeholder="Selecione a data" />
+                <DatePicker id="data_inicio_prevista" name="data_inicio_prevista" defaultValue={job.data_inicio_prevista ?? ""} placeholder="Selecione a data" />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="data_fim_prevista">Data fim</Label>
-                <DatePicker name="data_fim_prevista" defaultValue={job.data_fim_prevista ?? ""} placeholder="Selecione a data" />
+                <DatePicker id="data_fim_prevista" name="data_fim_prevista" defaultValue={job.data_fim_prevista ?? ""} placeholder="Selecione a data" />
                 {fieldErrors.data_fim_prevista?.map((m, i) => <p key={i} className="text-xs text-california-red">{m}</p>)}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="responsavel_id">Responsável <span className="text-california-red">*</span></Label>
                 <Select value={responsavelId} onValueChange={setResponsavelId} required>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger id="responsavel_id"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {responsaveis.map((r) => <SelectItem key={r.id} value={r.id}>{r.nome}</SelectItem>)}
                   </SelectContent>
