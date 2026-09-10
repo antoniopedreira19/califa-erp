@@ -111,6 +111,7 @@ Regra de ouro: **se o usuário lê aquela string, ela é português correto**. S
 - Antes de criar tabela nova, defina FKs, RLS, permissões, auditoria e índices.
 - Não crie dados soltos sem referência quando houver relação de negócio clara.
 - Antes de concluir uma task, rode lint/build quando o projeto já existir.
+- **`tsc`, `lint` e `build` limpos não provam que um campo novo chegou à tela.** Tipo de linha declarado à mão (`PPRow`, `TituloRow`, `fornecedores: Array<{ id, nome }>`) montado por `.map` não dispara a checagem de propriedade extra do TypeScript: o campo calculado no servidor é descartado em silêncio, e as três checagens passam. Declarar o campo como opcional (`campo?: boolean`) desliga a mesma proteção pelo outro lado. **Passe o tipo completo ao componente**; se a linha estreita for mesmo necessária, o campo entra **obrigatório** e a origem que não tem o dado manda o valor neutro explícito. Se um campo novo "não chega" na tela, olhe as fronteiras de prop antes de olhar a consulta. Em 10/09/2026 esse mesmo padrão mordeu **três vezes num dia**, em três campos diferentes e em duas frentes de trabalho.
 
 ## Sequência de banco por task
 
