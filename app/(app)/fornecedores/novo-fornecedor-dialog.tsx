@@ -34,9 +34,15 @@ import type { FornecedorResumo } from "./actions";
 
 /** De onde o dialog foi aberto. Só muda as palavras — o formulário e as
  *  regras são os mesmos. A PP é o padrão porque foi dela que o dialog
- *  nasceu (decisão 048); o BV entrou em 09/09/2026 (decisão 067), e as
- *  demais telas com campo de fornecedor entram depois. */
-export type ContextoCadastro = "pp" | "bv";
+ *  nasceu (decisão 048); o BV entrou em 09/09/2026 e as três telas do
+ *  financeiro que escolhem fornecedor — conta avulsa, recorrência e
+ *  desembolso — em 10/09/2026 (decisão 067). */
+export type ContextoCadastro =
+  | "pp"
+  | "bv"
+  | "avulsa"
+  | "recorrente"
+  | "desembolso";
 
 const CONTEXTO: Record<
   ContextoCadastro,
@@ -44,6 +50,21 @@ const CONTEXTO: Record<
 > = {
   pp: { em: "na PP", para: "para a PP", oQueFicouAtras: "no pedido" },
   bv: { em: "no BV", para: "para o BV", oQueFicouAtras: "no BV" },
+  avulsa: {
+    em: "na conta",
+    para: "para a conta",
+    oQueFicouAtras: "na conta",
+  },
+  recorrente: {
+    em: "na recorrência",
+    para: "para a recorrência",
+    oQueFicouAtras: "na recorrência",
+  },
+  desembolso: {
+    em: "no desembolso",
+    para: "para o desembolso",
+    oQueFicouAtras: "no desembolso",
+  },
 };
 
 export function NovoFornecedorDialog({

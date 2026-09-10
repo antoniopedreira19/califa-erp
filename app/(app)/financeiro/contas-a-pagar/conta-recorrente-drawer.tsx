@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Combobox } from "@/components/ui/combobox";
+import { CampoFornecedor } from "@/app/(app)/fornecedores/campo-fornecedor";
 import { DatePicker } from "@/components/ui/date-picker";
 import { criarContaRecorrente, editarContaRecorrente } from "./actions-recorrentes";
 import { RateioRegionalEditor } from "./rateio-regional-editor";
@@ -43,7 +44,12 @@ import type {
 // ---------------------------------------------------------------------------
 
 type EmpresaResumida = { id: string; nome: string };
-type FornecedorResumido = { id: string; nome: string };
+type FornecedorResumido = {
+  id: string;
+  nome: string;
+  /** Entra na busca e vira a segunda linha da opção (decisão 067). */
+  cpf_cnpj?: string | null;
+};
 type ClienteResumido = { id: string; nome: string };
 type JobResumido = { id: string; codigo: string; nome: string; cliente_id: string | null; regional_id: string | null };
 type RegionalResumida = { id: string; nome: string; ativo: boolean; empresa_id: string };
@@ -559,21 +565,23 @@ export function ContaRecorrenteDrawer(props: Props) {
               ))}
             </div>
 
-            {/* Fornecedor — destinatário do pagamento */}
+            {/* Fornecedor — destinatário do pagamento. O mesmo campo da
+                PP desde 10/09/2026 (decisão 067): busca por nome ou
+                documento, ✕ para zerar e o botão ao lado que cadastra ou
+                abre o cadastro do escolhido. O ✕ substituiu a opção
+                "Nenhum" da lista. */}
             <div className="space-y-2">
-              <Label htmlFor="fornecedor_id">Fornecedor</Label>
-              <Combobox
-                id="fornecedor_id"
-                value={fornecedorId}
+              {/* `id` próprio: os dois drawers desta tela ficam montados
+                  ao mesmo tempo, e com o mesmo `fornecedor_id` o rótulo
+                  de um apontava para o campo do outro (10/09/2026). */}
+              <Label htmlFor="recorrente-fornecedor">Fornecedor</Label>
+              <CampoFornecedor
+                id="recorrente-fornecedor"
+                value={fornecedorId === "__none__" ? null : fornecedorId}
                 onChange={handleFornecedorChange}
+                fornecedores={props.fornecedores}
+                contexto="recorrente"
                 placeholder="Nenhum (opcional)"
-                items={[
-                  { value: "__none__", label: "Nenhum" },
-                  ...props.fornecedores.map((f) => ({
-                    value: f.id,
-                    label: f.nome,
-                  })),
-                ]}
               />
               {fieldErrors.fornecedor_id?.map((msg, i) => (
                 <p key={i} className="text-xs text-california-red">

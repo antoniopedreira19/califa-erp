@@ -216,7 +216,12 @@ interface Props {
   tipos: PlanoContaTipo[];
   subtipos: PlanoContaSubtipo[];
   empresas: Array<{ id: string; nome: string }>;
-  fornecedores: Array<{ id: string; nome: string }>;
+  /** `cpf_cnpj` é a chave de busca e a segunda linha da opção do campo
+   *  de fornecedor (decisão 067). Ele SÓ atravessa até aqui se cada
+   *  fronteira declarar o campo: tipo de prop estreito não apaga o dado
+   *  em tempo de execução, mas apaga do tipo — e o próximo `.map` no
+   *  caminho o descartaria de vez, com `tsc` limpo. */
+  fornecedores: Array<{ id: string; nome: string; cpf_cnpj?: string | null }>;
   clientes: Array<{ id: string; nome: string }>;
   jobs: Array<{
     id: string;

@@ -69,7 +69,9 @@ export default async function DesembolsosPage({
       .order("razao_social"),
     supabase
       .from("fornecedores")
-      .select("id, nome, razao_social")
+      // `cpf_cnpj` desde 10/09/2026: o campo de fornecedor busca por ele
+      // e o mostra como segunda linha da opção (decisão 067).
+      .select("id, nome, razao_social, cpf_cnpj")
       .eq("tenant_id", session.activeTenant.id)
       .eq("status", "ativo")
       .order("nome"),
@@ -106,6 +108,7 @@ export default async function DesembolsosPage({
   const fornecedoresList = (fornecedoresRes.data ?? []).map((f) => ({
     id: f.id,
     nome: f.razao_social ?? f.nome,
+    cpf_cnpj: f.cpf_cnpj,
   }));
 
   const clientesList = (clientesRes.data ?? []).map((c) => ({

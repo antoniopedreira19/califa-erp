@@ -196,7 +196,7 @@ export default async function PedidosCompraFinanceiroPage({
       // 067: comparar a foto da PP com o cadastro de hoje. Eles NÃO são
       // enviados ao cliente — o `select` alimenta o cálculo aqui no
       // servidor, e para a tela vai só um booleano.
-      .select(`id, nome, razao_social, ${COLUNAS_DE_PAGAMENTO}`)
+      .select(`id, nome, razao_social, cpf_cnpj, ${COLUNAS_DE_PAGAMENTO}`)
       .eq("tenant_id", session.activeTenant.id)
       .eq("status", "ativo")
       .order("nome"),
@@ -1080,9 +1080,13 @@ export default async function PedidosCompraFinanceiroPage({
     id: e.id,
     nome: e.razao_social ?? e.nome_fantasia ?? "",
   }));
-  const fornecedoresList = (fornecedoresRes.data ?? []).map((f: { id: string; nome: string; razao_social: string | null }) => ({
+  // `cpf_cnpj` vai para a tela (é a segunda linha da opção e a chave de
+  // busca do campo, decisão 067). Os nove campos de pagamento NÃO vão —
+  // eles ficam no servidor, alimentando só o cálculo do asterisco.
+  const fornecedoresList = (fornecedoresRes.data ?? []).map((f: { id: string; nome: string; razao_social: string | null; cpf_cnpj: string | null }) => ({
     id: f.id,
     nome: f.razao_social ?? f.nome,
+    cpf_cnpj: f.cpf_cnpj,
   }));
   const clientesList = (clientesRes.data ?? []).map((c: { id: string; nome_fantasia: string | null; razao_social: string | null }) => ({
     id: c.id,
