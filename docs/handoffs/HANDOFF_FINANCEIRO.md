@@ -4450,8 +4450,18 @@ ESC, e por mais nada.
 
 Esses três **são do visualizador do navegador**, dentro do iframe — nunca
 estiveram quebrados por si: estavam inertes junto com o resto da camada.
-Verificado com clique real depois da correção: o `+` do zoom levou o
-documento de 75% para 83%.
+
+⚠️ **Errata da primeira redação desta nota.** Escrevi aqui que "o `+` do
+zoom levou o documento de 75% para 83%" depois da correção. **Não foi
+isso.** O visualizador recalcula o zoom sozinho quando o painel muda de
+largura, e foi o que eu li — eu tinha acabado de expandir e recolher o
+painel. Repetido com o alvo medido, o `+` dentro do iframe não reagiu aos
+cliques da automação: eles chegam ao `<iframe>` (o foco do documento passa
+para ele, medido), mas não são roteados até o processo do visualizador.
+O que **está** provado, com clique real: na aba inteira, onde o PDF é o
+documento principal, o `+` levou o zoom de 100% para 110%. Dentro do
+iframe, o que se prova é que nada nosso bloqueia — `pointer-events: auto`,
+`elementFromPoint` devolvendo o próprio iframe, e o foco entrando nele.
 
 O que o visualizador não dá, e agora está no cabeçalho de cada painel:
 
@@ -4494,9 +4504,36 @@ atualizados pelo navegador. A troca se justifica quando o pedido for
 sobre a nota, sincronizar a rolagem dos dois documentos, comparar página a
 página. Aí o visualizador nativo trava, e o PDF.js passa a valer o peso.
 
-**Verificação (10/09/2026).** Fluxo real em `/financeiro/contas-a-pagar`,
-PP-00041: os dois documentos abrem sem miniaturas; o `+` do zoom responde
-(75% → 83%); expandir e voltar preservam os dois iframes; o download sai
-com o nome original nos dois painéis; clique no documento não fecha nada;
-"Fechar" fecha só a conferência e o drawer continua aberto. Console sem
-erro do app. `tsc`, `next lint` e `npm run build` limpos.
+### Registro da verificação ao vivo (10/09/2026)
+
+Bateria no Chrome do Tiago, em `/financeiro/contas-a-pagar` com a PP-00041
+e numa rota de preview temporária (apagada) para o caso de três anexos,
+que não existe no banco — nenhuma PP tem mais de um.
+
+**Com entrada real (mouse ou teclado):**
+
+- "Ver só este documento" e "Voltar ao lado a lado" — o painel vai a tela
+  cheia e volta, com os dois iframes preservados;
+- "Baixar o arquivo" nos dois painéis — os arquivos chegaram ao disco, com
+  o nome original, inclusive o do anexo, que tem acento e vírgula;
+- "Abrir em outra aba" — o PDF abriu sozinho numa aba, e ali o `+` do zoom
+  levou de 100% para 110%;
+- "Rejeitar" — o confirm abriu POR CIMA da conferência e recebeu o
+  ponteiro; "Voltar" fechou só ele, com a conferência intacta;
+- **clique dentro do documento** — o foco passa para o `<iframe>` e as duas
+  camadas seguem abertas. Era exatamente o que descartava a PP antes;
+- ESC — fecha só a conferência; o drawer fica aberto e volta a receber
+  ponteiro;
+- "Fechar" — com o foco no botão, `Enter` fechou só a conferência e
+  devolveu o drawer clicável.
+
+**Fora do alcance da automação:** os controles DENTRO do iframe (zoom,
+girar, imprimir) e o clique de mouse no canto superior direito da janela,
+que o zoom da janela de automação não alcançava. O que sustenta os
+primeiros é o parágrafo da errata acima; o "Fechar" foi provado por
+teclado, como está na lista.
+
+**Sem efeito colateral:** a PP-00041 continuou `em_avaliacao`, sem
+rejeição e com o `updated_at` do dia anterior — a bateria não escreveu
+nada no banco. Console sem erro do app (o único é `trancy-version`, de uma
+extensão do navegador). `tsc`, `next lint` e `npm run build` limpos.
