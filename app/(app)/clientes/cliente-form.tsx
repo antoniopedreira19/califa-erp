@@ -77,6 +77,12 @@ function listar(itens: string[]): string {
   return `${itens.slice(0, -1).join(", ")} e ${itens[itens.length - 1]}`;
 }
 
+/** Nome de cliente seguido de ponto final — sem duplicar o ponto de quem
+ *  já termina em abreviação ("ARENA SERRA DOURADA S.A."). */
+function comPontoFinal(nome: string): string {
+  return nome.endsWith(".") ? nome : `${nome}.`;
+}
+
 /** Chave estável de linha. O índice não serve: remover a linha do meio
  *  faria o React reaproveitar o input errado, e os campos com máscara
  *  guardam o próprio texto. */
@@ -409,7 +415,7 @@ export function ClienteForm({ cliente, marcas = [], portais = [] }: Props) {
   const textoValidacao = travadoPorCnpj
     ? "Este CNPJ já tem cadastro — não dá para criar outro."
     : travadoPorCodigo
-      ? `Este código já é de ${codigoDuplicado!.nome_fantasia}.`
+      ? `Este código já é de ${comPontoFinal(codigoDuplicado!.nome_fantasia)}`
       : pendencias.length > 0
         ? `Falta ${listar(pendencias)}.`
         : emailPrincipalInvalido || emailExtraInvalido
@@ -601,8 +607,9 @@ export function ClienteForm({ cliente, marcas = [], portais = [] }: Props) {
                     <AlertTriangle className="mt-px h-3.5 w-3.5 flex-none text-[#b45309]" />
                     <span>
                       CNPJ já cadastrado como{" "}
-                      <strong>{cnpjDuplicado.nome_fantasia}</strong>. Use o
-                      cadastro existente em vez de criar outro.
+                      <strong>{cnpjDuplicado.nome_fantasia}</strong>
+                      {cnpjDuplicado.nome_fantasia.endsWith(".") ? "" : "."} Use
+                      o cadastro existente em vez de criar outro.
                     </span>
                   </span>
                   <Link

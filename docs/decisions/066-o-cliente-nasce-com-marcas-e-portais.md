@@ -197,6 +197,30 @@ Depois, logado, nas duas telas:
 O cliente de teste ficou **inativado** (não apagado — remover linha pede
 confirmação, ver `CLAUDE.local.md`).
 
+### Segunda rodada (09/09/2026, depois da remoção dos órfãos)
+
+A primeira rodada deixou pontas: os dois ajustes abaixo tinham sido
+validados só por `tsc`/lint/build, e a tela não havia sido aberta depois
+do commit que apagou os cinco arquivos. Fechadas agora, logado:
+
+- **A tela abre igual depois da remoção** — marcas, portal e contatos no
+  lugar.
+- **Telefone adicional**, que usa `MaskedInput` dentro de lista: máscara
+  correta na tela ((11) 3333-4444) e **só dígitos no banco**
+  (`telefones_extras: ["1133334444"]`).
+- **Inativar portal**, o irmão do caso da marca: o "X" no Coupa deixou a
+  linha na tela com "Reativar", e depois de salvar ele está `ativo=false`
+  no banco — não apagado.
+- **"X" em linha nova** (ainda não gravada) **some de vez**, em vez de
+  inativar. É a distinção que separa o que nunca existiu do que tem
+  histórico.
+- **Portal pela metade trava o rodapé:** "Falta o link do portal Ariba." e,
+  com link sem protocolo, "O link do portal Ariba precisa começar com
+  http:// ou https://.".
+- **Os dois ajustes abaixo, exercitados de verdade:** com CNPJ repetido o
+  botão apaga, e **colar outro CNPJ por cima limpa o aviso na hora**, sem
+  esperar o blur. Idem para o código.
+
 ### Dois ajustes que a conferência gerou
 
 O aviso de CNPJ repetido só era limpo quando o campo caía abaixo de 14
@@ -205,13 +229,20 @@ ficaria com o aviso velho e o botão travado, sem saída aparente. Agora
 **digitar limpa o aviso na hora**, nos dois campos — a mesma escolha que a
 065 já tinha feito no fornecedor.
 
+E um acabamento que só apareceu na tela: o aviso montava *"ARENA SERRA
+DOURADA S.A.."* — ponto duplo, porque a razão social já termina em
+abreviação. Agora o ponto final só entra quando o nome não tem o dele
+(`comPontoFinal`), nos dois avisos.
+
 ### Nota de método, para a próxima vez
 
 Dois "bugs" investigados nesta rodada eram do harness, não do produto:
 `document.querySelector('form')` pega o form da **sidebar**, não o do
 cadastro (a página tem dois) — filtrar por `form:has(#cnpj)`; e clique por
 coordenada, e às vezes por `ref` envelhecido, não foca o campo, então o
-`blur` nunca dispara. Ver [[chrome-mcp-cliques-e-refs]].
+`blur` nunca dispara — o que funciona é `new FocusEvent('focusout',
+{bubbles:true})`, e conferir `document.activeElement` logo após o clique
+para separar harness de produto.
 
 ## Fora desta decisão
 
