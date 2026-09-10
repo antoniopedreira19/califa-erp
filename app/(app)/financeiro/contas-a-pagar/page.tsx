@@ -99,7 +99,7 @@ export default async function PedidosCompraFinanceiroPage({
           id, codigo, nome, regional_id,
           projeto:projetos(codigo, nome, cliente:clientes(nome_fantasia))
         ),
-        anexos:pedidos_compra_anexos(id, arquivo_nome_original, arquivo_tamanho_bytes),
+        anexos:pedidos_compra_anexos(id, arquivo_nome_original, arquivo_tamanho_bytes, created_at),
         parcelas:pedidos_compra_parcelas(
           id, numero, data_vencimento, data_pagamento, data_pagamento_primeira,
           valor, pago_em, fatura_cartao_id
@@ -421,6 +421,7 @@ export default async function PedidosCompraFinanceiroPage({
       id: string;
       arquivo_nome_original: string;
       arquivo_tamanho_bytes: number;
+      created_at: string;
     }>;
     parcelas: Array<{
       id: string;
@@ -487,7 +488,19 @@ export default async function PedidosCompraFinanceiroPage({
     verba_producao: r.verba_producao ?? false,
     responsavel_nome: r.responsavel?.nome ?? null,
     prestacao: prestacoesPorPP.get(r.id) ?? null,
-    anexos: r.anexos ?? [],
+    // Ordenados aqui, como as parcelas e pelo mesmo motivo: o embed do
+    // PostgREST não garante ordem, e a conferência de documentos numera
+    // os anexos 1, 2, 3 — a numeração precisa ser a ordem em que a
+    // produção anexou, sempre a mesma a cada carregamento (10/09/2026).
+    // `created_at` fica no servidor: a tela usa a ordem, não a data.
+    anexos: (r.anexos ?? [])
+      .slice()
+      .sort((a, b) => a.created_at.localeCompare(b.created_at))
+      .map((a) => ({
+        id: a.id,
+        arquivo_nome_original: a.arquivo_nome_original,
+        arquivo_tamanho_bytes: a.arquivo_tamanho_bytes,
+      })),
     // Ordenadas aqui: o embed do PostgREST não garante ordem, e a lista
     // e o drawer mostram "1/3, 2/3, 3/3" na sequência.
     parcelas: (r.parcelas ?? [])

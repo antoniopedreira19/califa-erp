@@ -98,6 +98,53 @@ const DrawerContent = React.forwardRef<
 ));
 DrawerContent.displayName = "DrawerContent";
 
+/**
+ * Conteúdo que ocupa a janela inteira, sem overlay próprio.
+ *
+ * Existe por causa de um defeito real: a conferência de documentos do
+ * financeiro era uma `<div class="fixed inset-0 z-[75]">` solta na árvore
+ * da página, aberta POR CIMA do drawer da PP. Só que o Radix, num modal,
+ * põe `pointer-events: none` no `<body>` e devolve `auto` apenas para o
+ * layer dele — então TUDO que fica fora do portal vira decoração: o
+ * "Fechar", os botões de anexo e o "Aprovar" daquela tela não recebiam
+ * clique nenhum, e o único jeito de sair era acertar o overlay do drawer
+ * por baixo, que fechava a PP inteira (10/09/2026).
+ *
+ * Passando pelo portal do Radix, esta camada entra na pilha de layers: ela
+ * fica clicável, o ESC fecha só ela, e um diálogo aberto a partir daqui
+ * (o "Rejeitar", por exemplo) monta depois e aparece por cima. Por isso o
+ * `z-50` é o mesmo dos outros — quem decide a ordem é a pilha, e subir o
+ * `z` aqui esconderia justamente esses diálogos.
+ *
+ * Sem `DialogOverlay`: o conteúdo já cobre a janela e pinta o próprio
+ * fundo — o overlay do Radix só somaria escuro sobre escuro.
+ */
+const FullscreenContent = React.forwardRef<
+  React.ElementRef<typeof DialogPrimitive.Content>,
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
+>(({ className, children, ...props }, ref) => (
+  <DialogPortal>
+    <DialogPrimitive.Content
+      ref={ref}
+      className={cn(
+        "fixed inset-0 z-50 flex h-full w-full flex-col outline-none",
+        // Entra com fade, sai na hora — de propósito. O Radix só desmonta
+        // o conteúdo animado quando o `animationend` chega, e navegador
+        // que não anima (aba em segundo plano, `prefers-reduced-motion`)
+        // não manda esse evento. Num diálogo comum isso deixaria um cartão
+        // esquecido no meio da tela; aqui deixaria uma cortina opaca por
+        // cima do sistema inteiro. O fade de saída não paga esse risco.
+        "data-[state=open]:animate-in data-[state=open]:fade-in-0",
+        className,
+      )}
+      {...props}
+    >
+      {children}
+    </DialogPrimitive.Content>
+  </DialogPortal>
+));
+FullscreenContent.displayName = "FullscreenContent";
+
 const DialogHeader = ({
   className,
   ...props
@@ -155,6 +202,7 @@ export {
   DialogOverlay,
   DialogContent,
   DrawerContent,
+  FullscreenContent,
   DialogHeader,
   DialogFooter,
   DialogTitle,
