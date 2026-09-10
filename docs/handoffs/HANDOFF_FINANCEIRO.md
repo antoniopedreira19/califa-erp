@@ -4208,3 +4208,37 @@ exibir a conta na própria tela em vez de só no PDF.
 Não fiz aqui de propósito: `app/(app)/financeiro/**` é de outra frente e
 está em obra — a regra de `CLAUDE.local.md` é combinar antes de escrever
 por cima.
+
+### ✅ FEITO em 2026-09-10 — o asterisco entrou nas duas telas do financeiro
+
+Aprovado pelo Tiago. Onde acende:
+
+| Tela | Onde |
+|---|---|
+| **Pedidos de Produção (PPs)** | ao lado do fornecedor. É aqui que mais importa: **aprovar é o passo em que ainda dá tempo de conferir a conta antes de o dinheiro sair** |
+| **Títulos a Pagar** | ao lado do fornecedor, em cada parcela da PP |
+
+Mesmo visual do lado do Job: `*` âmbar, `cursor-help`, `aria-label`, e um
+tooltip que diz que a PP continua valendo pela foto e que o cadastro novo
+vale para as próximas.
+
+**Como foi ligado:** a consulta de PP passou a pedir as dez colunas da
+foto; a de fornecedores, `COLUNAS_DE_PAGAMENTO`. O cálculo roda no
+`page.tsx` (servidor) com `cadastroMudouDepoisDaFoto`, e só o booleano
+`cadastro_do_fornecedor_mudou` chega ao cliente — conferido no HTML
+renderizado: **zero ocorrências** de `banco_codigo`, `pix_chave`,
+`agencia_dv`, `conta_dv` ou `tipo_conta`. Dado bancário não atravessa a
+fronteira para desenhar um `*`.
+
+O filtro de status e o caso "sem foto" **não são repetidos aqui** — a
+função já devolve `false` para PP sem `dados_pagamento_congelados_em`
+(verba de produção, ou anterior à 067) e para status fora de
+`em_avaliacao`/`aprovada`/`pago`.
+
+**Verificação (10/09/2026, ciclo completo).** Troquei a agência da PRIME
+de `0001` para `9999` no cadastro e recarreguei: o asterisco acendeu nas
+**11 parcelas da PP-00011** e na linha dela na aba de PPs, e **não**
+acendeu em nenhuma das outras 14 linhas nem nas PPs de outros
+fornecedores. Restaurei o cadastro para `0001` e o asterisco **apagou**.
+Console sem erro de aplicação; build, lint e os 34 testes de permissão
+passando.

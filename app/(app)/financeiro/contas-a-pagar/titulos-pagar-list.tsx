@@ -18,6 +18,11 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { format } from "date-fns";
 import {
   CalendarClock,
@@ -72,6 +77,12 @@ export interface TituloRow {
   origem_label: string;
   descricao: string;
   fornecedor_nome: string;
+  /**
+   * Decisão 067: o cadastro do fornecedor mudou depois que a PP tirou a
+   * foto. Só origem `pp` acende; avulsa, recorrência e cartão não têm
+   * foto e chegam sempre `false`.
+   */
+  cadastro_do_fornecedor_mudou?: boolean;
   job_codigo: string;
   /** Data vigente de pagamento — o que a tela ordena e soma. */
   data_pagamento: string | null;
@@ -685,6 +696,30 @@ export function TitulosPagarList({
                   <td className="px-3 py-3 text-xs text-muted-foreground">
                     <span className="block truncate" title={r.fornecedor_nome || "—"}>
                       {r.fornecedor_nome || "—"}
+                      {/* Asterisco da decisão 067: o cadastro do fornecedor
+                          mudou de conta depois que a PP tirou a foto. O
+                          título continua valendo pela foto — o que o
+                          asterisco diz é que o cadastro de hoje já não é o
+                          que este pedido manda pagar. */}
+                      {r.cadastro_do_fornecedor_mudou && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span
+                              tabIndex={0}
+                              className="ml-1 cursor-help font-bold text-amber-600"
+                              aria-label="O cadastro do fornecedor mudou depois desta PP"
+                            >
+                              *
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-[280px]">
+                            Os dados de pagamento do fornecedor mudaram
+                            depois desta PP. Ela continua valendo pelos
+                            dados que estão no documento dela; o cadastro
+                            novo vale para as próximas.
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
                     </span>
                   </td>
                   <td className="whitespace-nowrap px-2 py-3 text-center font-mono text-xs text-muted-foreground">
