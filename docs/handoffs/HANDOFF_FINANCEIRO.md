@@ -4256,3 +4256,38 @@ Refeito depois de tornar o campo obrigatório, com o filtro "Todos" para
 alcançar origem não-PP: 11 asteriscos, **todos** em parcelas da PP-00011;
 o título de origem AVULSO na mesma lista **não** acendeu. Zero vazamento
 de `banco_codigo`/`pix_chave`/`agencia_dv`/`conta_dv` no HTML.
+
+## ⚠️ Nota de 2026-09-10 — o campo de fornecedor novo entrou em três telas daqui
+
+Decisão [067](../decisions/067-o-campo-de-fornecedor-busca-limpa-e-edita.md),
+parte 5, a pedido do Tiago. Mudou o **campo de fornecedor** de:
+
+- `conta-avulsa-drawer.tsx` (Contas a Pagar → Títulos e Cartão, e `avulsa/[id]`)
+- `conta-recorrente-drawer.tsx` (Contas a Pagar → Recorrências, e `recorrente/[id]`)
+- `desembolso-drawer.tsx` (Desembolsos)
+
+Nada de título, baixa, rateio, empresa ou plano de contas foi tocado.
+
+O campo agora **busca por nome OU documento**, tem **✕ para zerar** e um
+botão ao lado que é **"+"** com o campo vazio e **lápis** com alguém
+escolhido — o mesmo da PP. O bloco inteiro é
+`app/(app)/fornecedores/campo-fornecedor.tsx`: **tela nova usa o
+componente, não copia o bloco.**
+
+Três coisas para saber ao mexer nesses arquivos:
+
+1. **O ✕ substituiu a opção "Nenhum"** da lista. O fornecedor continua
+   opcional; o que mudou é como se volta ao vazio. `null` no componente,
+   `"__none__"` no estado do drawer — a conversão está no call site.
+2. **`cpf_cnpj` precisa estar declarado em CADA fronteira de prop.** Seis
+   componentes intermediários diziam `Array<{ id, nome }>`; o dado
+   atravessa em tempo de execução, mas some do tipo, e o próximo `.map` o
+   descartaria de vez com `tsc` limpo — a mesma armadilha do asterisco.
+3. **`id="fornecedor_id"` era duplicado** entre os drawers de avulsa e
+   recorrência, que ficam montados ao mesmo tempo: o `<Label htmlFor>` de
+   um apontava para o campo do outro. Viraram `avulsa-fornecedor` e
+   `recorrente-fornecedor`. **Os campos de cliente e job da mesma tela têm
+   o mesmo problema e continuam como estavam** — não estavam no escopo.
+
+Contas a Receber ficou de fora de propósito: o campo de `faturar-drawer` é
+`disabled` e só exibe o fornecedor do BV.

@@ -138,23 +138,56 @@ outra frente, que está mexendo nele agora, e escrever por cima quebraria a
 regra combinada em `CLAUDE.local.md`. `lerFoto` já está exportada para
 quando essa ponta for fechada.
 
-## Pendência — as outras seis telas
+## 5. As outras telas — feito em 10/09/2026
 
-O campo novo entrou só em PP e BV. Seguem com o combo antigo, sem busca,
-sem ✕ e sem lápis:
+A pendência que esta decisão tinha registrado foi fechada. **Eram 6 telas,
+mas só 3 componentes**, porque cada drawer é montado de dois lugares:
 
-- contas a pagar avulsa;
-- contas a pagar recorrente;
-- contas a receber;
-- desembolsos (as três telas que escolhem fornecedor).
+| Componente | Telas que o montam |
+|---|---|
+| `conta-avulsa-drawer` | Contas a Pagar (Títulos e Cartão) e `avulsa/[id]` |
+| `conta-recorrente-drawer` | Contas a Pagar (Recorrências) e `recorrente/[id]` |
+| `desembolso-drawer` | Desembolsos (lista) e o drawer de novo desembolso |
 
-O `Combobox` já suporta tudo por prop (`buscaPlaceholder`, `limpavel`,
-`acaoSemResultado`); o que falta em cada tela é passar `cpf_cnpj` na
-consulta e pendurar o botão ao lado.
+**Contas a Receber ficou de fora, e está certo:** o campo de fornecedor de
+`faturar-drawer` é `disabled` com `onValueChange={() => undefined}` — ele
+só EXIBE o fornecedor do BV, que vem do próprio BV. Não é um seletor, e
+convertê-lo daria a impressão de que dá para trocar.
+
+### O bloco virou componente
+
+Três cópias novas do mesmo comportamento divergiriam na primeira correção,
+então o conjunto (busca + ✕ + botão + dialog + a lista mesclada com o
+recém-criado) saiu para `app/(app)/fornecedores/campo-fornecedor.tsx`. A
+PP e o BV continuam com a versão que montaram à mão — cada um tem a sua
+altura e o seu texto de apoio; unificar aqueles dois é trabalho para quando
+alguém mexer neles de novo.
+
+### O ✕ substituiu a opção "Nenhum"
+
+Nas três telas o fornecedor é opcional, e a lista trazia uma linha
+"Nenhum". Com o ✕ dentro do campo haveria dois jeitos de dizer a mesma
+coisa — e, pior, o ✕ apareceria ao lado da palavra "Nenhum". A linha saiu;
+quem quer voltar ao vazio usa o ✕.
+
+### Dois defeitos que a verificação expôs
+
+1. **A fronteira de tipo comia o documento.** Seis componentes
+   intermediários declaravam `fornecedores: Array<{ id, nome }>`. O dado
+   sobrevive em tempo de execução, mas o TIPO some — e o próximo `.map` no
+   caminho o descartaria de vez, com `tsc` limpo. É a mesma armadilha que
+   o financeiro achou no asterisco no mesmo dia. As seis fronteiras
+   passaram a declarar `cpf_cnpj`.
+2. **`id="fornecedor_id"` estava duplicado.** Os drawers de avulsa e de
+   recorrência ficam montados ao MESMO tempo na tela de Contas a Pagar, e
+   os dois usavam esse id — o `<Label htmlFor>` de um apontava para o
+   campo do outro. Viraram `avulsa-fornecedor` e `recorrente-fornecedor`.
+   (Os campos de cliente e job da mesma tela têm o mesmo problema e
+   continuam como estavam — fora do que esta decisão tocou.)
 
 ## Verificação
 
-Conferido no navegador logado, nas quatro superfícies que usam o campo:
+Conferido no navegador logado, nas sete superfícies que usam o campo:
 
 - **PP nova** (`gerar-pp-drawer`): busca por `62.074` achou GABRIELA pelo
   documento; "Cadastrar «Grafica Teste Califa»" abriu o dialog com o nome
@@ -203,6 +236,24 @@ que o produtor ainda controla re-tira a foto sozinha no próximo salvar.
 pela UI e o cadastro do fornecedor usado foi restaurado campo a campo.
 Consulta final confirmou **zero** PPs com foto divergente do cadastro —
 nenhum asterisco residual ficou na base.
+
+**As três telas do financeiro** (10/09/2026), cada uma aberta e operada:
+
+- **desembolso**: busca por `62.074` achou pelo documento; o lápis trouxe
+  o cadastro completo; salvar fechou o dialog e o drawer **manteve** o
+  fornecedor escolhido e a descrição digitada, apesar do `router.refresh()`;
+  o ✕ zerou e o lápis virou "+";
+- **conta avulsa**: busca por `34.631` achou pelo documento; "Cadastrar
+  «Fornecedor Inexistente Teste»" abriu o cadastro com o nome preenchido e
+  o cabeçalho lendo *"na conta"*;
+- **recorrência**: busca por `48.200` achou pelo documento; o cabeçalho leu
+  *"para a recorrência"*; o ✕ zerou e devolveu o "+".
+
+Nada foi gravado nessas três: todos os drawers foram fechados por
+"Cancelar". **Uma armadilha de teste vale registro:** o primeiro teste da
+recorrência leu *"na conta"* e parecia defeito de código — era o `id`
+duplicado, que fez o `getElementById` pegar o campo do drawer da avulsa,
+ainda montado atrás. O defeito existia, mas não era o que parecia.
 
 `npx tsc --noEmit`, `next lint` e `npm run build` limpos. Console sem erro
 de aplicação.

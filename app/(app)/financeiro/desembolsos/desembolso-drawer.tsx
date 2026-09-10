@@ -22,6 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Combobox } from "@/components/ui/combobox";
+import { CampoFornecedor } from "@/app/(app)/fornecedores/campo-fornecedor";
 import { DatePicker } from "@/components/ui/date-picker";
 import { createClient } from "@/lib/supabase/client";
 import { criarDesembolso } from "./actions";
@@ -62,7 +63,8 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   tenantId: string;
   empresas: Array<{ id: string; nome: string }>;
-  fornecedores: Array<{ id: string; nome: string }>;
+  /** `cpf_cnpj` entra na busca e vira a segunda linha da opção (067). */
+  fornecedores: Array<{ id: string; nome: string; cpf_cnpj?: string | null }>;
   clientes: Array<{ id: string; nome: string }>;
   jobs: Array<{ id: string; codigo: string; nome: string }>;
   regionais: Array<{ id: string; nome: string; ativo: boolean; empresa_id: string }>;
@@ -449,16 +451,18 @@ export function DesembolsoDrawer({
 
             {/* ── 3. Fornecedor / Cliente / Job ────────────────────── */}
             <div className="space-y-4">
+              {/* O mesmo campo da PP desde 10/09/2026 (decisão 067):
+                  busca por nome ou documento, ✕ para zerar e o botão ao
+                  lado que cadastra ou abre o cadastro do escolhido. O ✕
+                  substituiu a opção "Nenhum" da lista. */}
               <div className="space-y-2">
                 <Label>Fornecedor</Label>
-                <Combobox
-                  value={fornecedorId}
+                <CampoFornecedor
+                  value={fornecedorId === "__none__" ? null : fornecedorId}
                   onChange={(v) => setFornecedorId(v ?? "__none__")}
+                  fornecedores={fornecedores}
+                  contexto="desembolso"
                   placeholder="Nenhum (opcional)"
-                  items={[
-                    { value: "__none__", label: "Nenhum" },
-                    ...fornecedores.map((f) => ({ value: f.id, label: f.nome })),
-                  ]}
                 />
               </div>
               <div className="space-y-2">

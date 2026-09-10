@@ -23,7 +23,14 @@ import type { CartaoOption } from "@/components/financeiro/forma-pagamento-field
 // ---------------------------------------------------------------------------
 
 type EmpresaResumida = { id: string; nome: string };
-type FornecedorResumido = { id: string; nome: string };
+/** `cpf_cnpj` é a chave de busca e a segunda linha da opção do campo de
+ *  fornecedor (decisão 067) — precisa estar declarado em cada fronteira
+ *  para atravessar. */
+type FornecedorResumido = {
+  id: string;
+  nome: string;
+  cpf_cnpj?: string | null;
+};
 type ClienteResumido = { id: string; nome: string };
 type JobResumido = {
   id: string;

@@ -3081,11 +3081,18 @@ Como ele abre de mais de uma tela, o texto do cabeçalho vem de um
 `contexto` (`"pp"` | `"bv"`); tela nova acrescenta a sua chave em
 `fornecedores/novo-fornecedor-dialog.tsx`.
 
-**Pendência:** o campo novo entrou só em PP e BV. Contas a pagar (avulsa e
-recorrente), contas a receber e as três telas de desembolsos seguem com o
-combo antigo. O `Combobox` já tem tudo por prop (`buscaPlaceholder`,
-`limpavel`, `acaoSemResultado`) — falta passar `cpf_cnpj` na consulta de
-cada tela e pendurar o botão ao lado.
+**Pendência fechada em 10/09/2026:** o campo entrou também nas três telas
+do financeiro que escolhem fornecedor — conta avulsa, recorrência e
+desembolso —, que somam as 6 telas da lista original porque cada drawer é
+montado de dois lugares. Contas a Receber ficou de fora com razão: o campo
+de lá só EXIBE o fornecedor do BV, é `disabled`.
+
+Nessas três o bloco inteiro virou um componente,
+`app/(app)/fornecedores/campo-fornecedor.tsx` — busca, ✕, botão "+"/lápis,
+o dialog e a lista mesclada com o recém-criado. **Tela nova com campo de
+fornecedor deve usar esse componente**, não copiar o bloco. A PP e o BV
+seguem com a versão que montaram à mão (altura e texto de apoio próprios);
+unificar os dois fica para quem mexer neles de novo.
 
 ### A foto dos dados de pagamento, e o asterisco
 
