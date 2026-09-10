@@ -4394,13 +4394,14 @@ esquecido na tela; aqui deixaria uma **cortina opaca por cima do sistema
 inteiro**. Reproduzido em aba oculta durante a verificação, com o nó preso
 em `data-state="closed"`. O fade de saída não paga esse risco.
 
-### 2. Os anexos ganharam botões numerados — 1, 2, 3 — sempre visíveis
+### 2. Os botões numerados dos anexos voltaram a funcionar
 
-Antes os números só apareciam a partir do segundo anexo, e não clicavam
-(mesmo defeito acima). Agora:
+Eles já existiam a partir do segundo anexo, mas não clicavam (mesmo
+defeito acima). O que mudou:
 
-- **aparecem a partir do primeiro**, para que a numeração da tela seja
-  sempre a mesma que a de quem anexou — pedido do Tiago;
+- **continuam aparecendo só quando há mais de um anexo** — chegaram a
+  aparecer desde o primeiro, e o Tiago preferiu o comportamento antigo:
+  com um anexo só, o nome dele na legenda já diz tudo (10/09/2026);
 - **seguem a ordem de anexação**: `page.tsx` passou a ordenar por
   `created_at`, como já fazia com as parcelas e pelo mesmo motivo (o embed
   do PostgREST não garante ordem). O `created_at` fica no servidor: a tela
@@ -4423,3 +4424,79 @@ clique de mouse real: os eventos chegam ao botão (`pointerdown` →
 só a conferência e o drawer continua aberto e clicável. O confirm de
 "Rejeitar" aberto dali aparece por cima e recebe foco. Console sem erro do
 app. `tsc`, `next lint` e `npm run build` limpos.
+
+
+## ⚠️ Nota de 2026-09-10 — a conferência ganhou tela cheia por documento, download e o visualizador sem miniaturas
+
+Continuação da nota acima, no mesmo dia, depois que o Tiago usou a tela
+corrigida. Tudo aqui é `documentos-pp-overlay.tsx` e o `FullscreenContent`.
+
+### Clicar no documento não fecha mais nada
+
+O relato era "qualquer clique nos documentos os fecha". Era o
+`pointer-events: none` de novo: o clique atravessava o `<iframe>` e ia
+parar no overlay do drawer, que descartava a PP. Corrigido pela camada,
+mas a tela ficou **blindada por dentro** também: o `FullscreenContent`
+cancela `onPointerDownOutside`, `onFocusOutside` e `onInteractOutside`.
+
+O motivo é permanente, não defensivo à toa: **não existe "clicar fora"
+numa camada que cobre a janela inteira**, então todo dismiss por fora é
+falso positivo. E há um candidato certo a produzi-lo — clique dentro de um
+`<iframe>` acontece em OUTRO documento, o navegador tira o foco do nosso,
+e o Radix pode ler isso como interação externa. Sai pelo "Fechar" e pelo
+ESC, e por mais nada.
+
+### Zoom, impressão e download
+
+Esses três **são do visualizador do navegador**, dentro do iframe — nunca
+estiveram quebrados por si: estavam inertes junto com o resto da camada.
+Verificado com clique real depois da correção: o `+` do zoom levou o
+documento de 75% para 83%.
+
+O que o visualizador não dá, e agora está no cabeçalho de cada painel:
+
+- **Ver só este documento** (`Maximize2`) — o painel ocupa a conferência
+  inteira e o outro some. Os dois iframes seguem **montados**: esconder é
+  por CSS, porque desmontar jogaria fora página, zoom e rolagem de quem só
+  quis ampliar o documento do lado por um instante.
+- **Baixar o arquivo** — com o nome que a produção enviou. Não é um
+  `<a download href={urlAssinada}>`: `download` é ignorado quando o arquivo
+  mora em outro domínio, e URL assinada do Storage sempre mora — o link
+  abriria o PDF de novo por cima da conferência. Busca o arquivo e serve um
+  `blob:` local. Testado nos dois painéis, inclusive com nome acentuado e
+  com vírgula.
+- **Abrir em outra aba** — o documento sozinho, na aba inteira.
+
+### O visualizador abre sem a coluna de miniaturas
+
+`#navpanes=0&pagemode=none` no endereço do documento. A coluna comia um
+terço de um painel que já é metade da tela; quem quiser as miniaturas as
+traz de volta pelo ☰ do visualizador.
+
+⚠️ **A pegadinha que quase virou conclusão errada.** Trocar o `#` de um
+`<iframe>` que já carregou **não reabre o visualizador** — o documento fica
+exatamente como estava. Testando assim, cheguei a registrar que "o Chrome
+ignora os parâmetros de aparência", e cheguei a testar `<embed>` no lugar
+do `<iframe>` atrás de uma saída que não era necessária. Recarregada a tela
+inteira, o parâmetro funciona. **Para conferir parâmetro de PDF, recarregue
+a página; nunca troque o `src` de um PDF já aberto.**
+
+### Sobre trocar por um visualizador próprio (PDF.js)
+
+O Tiago perguntou se não seria melhor. **Recomendação: não agora.** O
+histórico de defeitos desta tela — clique que fecha, zoom que não responde,
+botão inerte — **não tem nenhum caso causado pelo visualizador do
+navegador**: todos foram da camada em volta. Trocar o visualizador teria
+corrigido zero deles, ao custo de reimplementar zoom, paginação, busca,
+seleção de texto, impressão e acessibilidade que hoje vêm prontos e
+atualizados pelo navegador. A troca se justifica quando o pedido for
+**alterar o documento ou o próprio ato de ler** — carimbar divergência
+sobre a nota, sincronizar a rolagem dos dois documentos, comparar página a
+página. Aí o visualizador nativo trava, e o PDF.js passa a valer o peso.
+
+**Verificação (10/09/2026).** Fluxo real em `/financeiro/contas-a-pagar`,
+PP-00041: os dois documentos abrem sem miniaturas; o `+` do zoom responde
+(75% → 83%); expandir e voltar preservam os dois iframes; o download sai
+com o nome original nos dois painéis; clique no documento não fecha nada;
+"Fechar" fecha só a conferência e o drawer continua aberto. Console sem
+erro do app. `tsc`, `next lint` e `npm run build` limpos.
