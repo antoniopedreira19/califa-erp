@@ -393,4 +393,25 @@ sintoma engana: parece botão sem handler, e o handler estava certo.
   na tela, numa cortina de tela cheia é o sistema inteiro coberto;
 - dê `DialogTitle` e `DialogDescription` à camada, como em qualquer
   diálogo, nem que seja o título que já está desenhado no cabeçalho
-  (`asChild` aproveita o elemento existente).
+  (`asChild` aproveita o elemento existente);
+- **cancele o dismiss "por fora"** (`onPointerDownOutside`,
+  `onFocusOutside`, `onInteractOutside`). Numa camada que cobre a janela
+  inteira não existe lado de fora, então todo dismiss desses é falso
+  positivo — e um `<iframe>` produz falso positivo com facilidade, porque
+  o clique nele acontece em outro documento e tira o foco do nosso. O
+  `FullscreenContent` já cancela os três.
+
+### Documento embutido (PDF e imagem)
+
+- o `<iframe>` do PDF traz de graça zoom, impressão, download, busca e
+  miniaturas — **não reimplemente**. Some com a coluna de miniaturas em
+  `#navpanes=0&pagemode=none`, que é onde ela atrapalha (painel dividido);
+- **parâmetro de PDF só vale no carregamento**: trocar o `#` de um iframe
+  já aberto não reabre o visualizador. Para testar, recarregue a página —
+  senão o parâmetro parece não funcionar quando funciona;
+- para **baixar com o nome certo**, busque o arquivo e sirva um `blob:`
+  local. `<a download>` é ignorado em arquivo de outro domínio, e URL
+  assinada de Storage sempre é de outro domínio;
+- expandir um documento **esconde o outro por CSS**, nunca desmontando o
+  iframe: desmontar perde página, zoom e rolagem de quem só quis ampliar
+  um instante.

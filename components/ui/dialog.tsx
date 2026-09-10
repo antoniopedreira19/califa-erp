@@ -126,6 +126,15 @@ const FullscreenContent = React.forwardRef<
   <DialogPortal>
     <DialogPrimitive.Content
       ref={ref}
+      // Não existe "clicar fora" numa camada que cobre a janela inteira:
+      // todo dismiss por fora daqui é falso positivo. O suspeito é o
+      // `<iframe>` — clique dentro dele acontece em OUTRO documento, o
+      // navegador tira o foco do nosso, e o Radix lê isso como interação
+      // externa e fecha a tela na cara de quem só queria dar zoom no PDF.
+      // Sai pelo "Fechar" ou pelo ESC, e por mais nada.
+      onPointerDownOutside={(e) => e.preventDefault()}
+      onFocusOutside={(e) => e.preventDefault()}
+      onInteractOutside={(e) => e.preventDefault()}
       className={cn(
         "fixed inset-0 z-50 flex h-full w-full flex-col outline-none",
         // Entra com fade, sai na hora — de propósito. O Radix só desmonta
