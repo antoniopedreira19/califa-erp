@@ -890,9 +890,12 @@ export function ContaRecorrenteDrawer(props: Props) {
 
             {/* Data de fim (opcional) */}
             <div className="space-y-2">
-              <Label htmlFor="data_fim">Data de fim (opcional)</Label>
+              <Label htmlFor="recorrente-data-fim">
+                Data de fim (opcional)
+              </Label>
               <DatePicker
                 key={isEditar ? `edit-${recorrente?.id ?? "criar"}` : "criar"}
+                id="recorrente-data-fim"
                 name="data_fim"
                 defaultValue={dataFim ?? undefined}
                 placeholder="Sem data de encerramento"
