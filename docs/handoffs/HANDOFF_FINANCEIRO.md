@@ -4167,9 +4167,9 @@ a correção do filtro por empresa vale nas duas telas. O lançamento nasceu
 com a empresa do documento e a conta de pagamento de outra empresa — que
 é exatamente a regra de 29/08.
 
-⚠️ **Resíduo:** a avulsa `AV-00001` e o lançamento dela ficaram no banco.
-São de teste (R$ 1, "ZZ Teste …", Empresa Teste) — apagar exige desfazer
-a baixa antes.
+A avulsa `AV-00001` e o lançamento dela eram dado de teste (R$ 1, Empresa
+Teste) e foram **apagados em 10/09/2026** — ver "Resíduo removido", no fim
+deste documento.
 
 ## ⚠️ Nota de 2026-09-09 — a PP passou a guardar os dados de pagamento (decisão 067)
 
@@ -4339,3 +4339,14 @@ apontando para um id que **não existe**: o `DatePicker` recebe
 Não consertei: o conserto certo é o `DatePicker` passar a aceitar `id`, e
 ele é componente compartilhado por todo o sistema — escopo maior do que a
 renomeação aprovada. Fica anotado.
+
+## ⚠️ Nota de 2026-09-10 — resíduo de teste removido do banco
+
+A avulsa `AV-00001` e o lançamento dela foram **apagados** em 10/09/2026, a
+pedido do Tiago. Ordem obrigatória, ditada pelas FKs: **lançamento
+primeiro** (`lancamentos_financeiros.conta_avulsa_id` é `ON DELETE
+RESTRICT`), depois a avulsa — o rateio, os anexos e o histórico caem por
+`CASCADE`. Conferidas antes as sete dependências possíveis (parcela filha,
+estorno de avulsa, estorno de lançamento, devolução de verba, título a
+receber, anexo, histórico): todas zeradas. As quatro tabelas ficaram em
+zero linhas e nada mais foi tocado. **Sem resíduo.**
