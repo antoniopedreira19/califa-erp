@@ -392,8 +392,27 @@ export function FornecedorForm({
   const cpfCnpjRef = React.useRef<HTMLInputElement>(null);
   const pixMaskRef = React.useRef<HTMLInputElement>(null);
 
+  // Refs adicionais para o autocomplete via BrasilAPI (CNPJ)
+  const nomeRef = React.useRef<HTMLInputElement>(null);
+  const razaoSocialRef = React.useRef<HTMLInputElement>(null);
+  const numeroRef = React.useRef<HTMLInputElement>(null);
+  const complementoRef = React.useRef<HTMLInputElement>(null);
+
+  // CEP é MaskedInput controlado internamente: para escrever nele via API
+  // usamos o truque de mudar a `key` e remontar com um novo defaultValue.
+  // Só remontamos quando o campo está vazio, então usuário não perde texto.
+  const [cepInitialValue, setCepInitialValue] = React.useState<string>(
+    fornecedor?.cep ?? "",
+  );
+  const [cepKey, setCepKey] = React.useState(0);
+
   const [cepLoading, setCepLoading] = React.useState(false);
   const [cepError, setCepError] = React.useState<string | null>(null);
+
+  // BrasilAPI (CNPJ) — busca razão social e endereço na Receita Federal
+  const [cnpjLoading, setCnpjLoading] = React.useState(false);
+  const [cnpjError, setCnpjError] = React.useState<string | null>(null);
+  const [cnpjWarning, setCnpjWarning] = React.useState<string | null>(null);
 
   /**
    * O que está digitado AGORA, para o rodapé contar o que falta.
@@ -457,15 +476,112 @@ export function FornecedorForm({
   // Documento repetido: pergunta ao servidor ao sair do campo, com o
   // tamanho certo para o tipo de pessoa. É a verificação que evita o
   // cadastro duplicado sem esperar o erro do índice único (04/09/2026).
+  // Se for CNPJ novo e não duplicado, também dispara o autocomplete da
+  // BrasilAPI para preencher razão social e endereço.
   async function handleDocumentoBlur() {
     const digits = onlyDigits(cpfCnpjRef.current?.value ?? "");
     const tamanho = tipoPessoa === "fisica" ? 11 : 14;
     if (digits.length !== tamanho) {
       setDuplicado(null);
+      setCnpjError(null);
+      setCnpjWarning(null);
       return;
     }
     const res = await buscarFornecedorPorDocumento(digits, fornecedor?.id);
     setDuplicado(res.existe ? res.fornecedor : null);
+
+    // Só preenche via BrasilAPI para CNPJ novo (não duplicado, não edição).
+    // CPF não tem consulta pública, então não faz sentido.
+    if (tipoPessoa !== "juridica" || res.existe || isEdit) return;
+    await preencherViaCnpj(digits);
+  }
+
+  // BrasilAPI: consulta o CNPJ na Receita Federal e preenche nome fantasia,
+  // razão social, CEP e endereço. Regra "só campo vazio" respeita o que
+  // já foi digitado à mão. Se a Receita retornar situação != ATIVA, avisa.
+  async function preencherViaCnpj(cnpjDigits: string) {
+    setCnpjLoading(true);
+    setCnpjError(null);
+    setCnpjWarning(null);
+    const ctrl = new AbortController();
+    // BrasilAPI bate na Receita, é mais lenta que ViaCEP (500ms a 2s típico).
+    const to = setTimeout(() => ctrl.abort(), 6000);
+
+    try {
+      const r = await fetch(
+        `https://brasilapi.com.br/api/cnpj/v1/${cnpjDigits}`,
+        { signal: ctrl.signal },
+      );
+      if (r.status === 404) {
+        setCnpjError("CNPJ não encontrado na Receita Federal.");
+        return;
+      }
+      if (!r.ok) {
+        setCnpjError(
+          "Não foi possível consultar o CNPJ agora, preencha manualmente.",
+        );
+        return;
+      }
+      const data = await r.json();
+
+      const situacao = String(
+        data.descricao_situacao_cadastral ?? "",
+      ).toUpperCase();
+      if (situacao && situacao !== "ATIVA") {
+        setCnpjWarning(
+          `Situação na Receita: ${situacao}. Confirme antes de cadastrar.`,
+        );
+      }
+
+      // Identificação
+      if (nomeRef.current && !nomeRef.current.value) {
+        nomeRef.current.value =
+          data.nome_fantasia ?? data.razao_social ?? "";
+      }
+      if (razaoSocialRef.current && !razaoSocialRef.current.value) {
+        razaoSocialRef.current.value = data.razao_social ?? "";
+      }
+
+      // Endereço — abre a seção recolhida quando temos dados a mostrar.
+      const cepFromApi = onlyDigits(String(data.cep ?? ""));
+      const temEnderecoAPI = Boolean(
+        cepFromApi ||
+          data.logradouro ||
+          data.bairro ||
+          data.municipio ||
+          data.uf,
+      );
+      if (temEnderecoAPI) setEnderecoAberto(true);
+
+      // CEP — MaskedInput controlado, remonta via key
+      const cepAtual = onlyDigits(cepRef.current?.value ?? "");
+      if (cepFromApi && !cepAtual) {
+        setCepInitialValue(cepFromApi);
+        setCepKey((k) => k + 1);
+      }
+
+      if (logradouroRef.current && !logradouroRef.current.value)
+        logradouroRef.current.value = data.logradouro ?? "";
+      if (numeroRef.current && !numeroRef.current.value)
+        numeroRef.current.value = data.numero ?? "";
+      if (complementoRef.current && !complementoRef.current.value)
+        complementoRef.current.value = data.complemento ?? "";
+      if (bairroRef.current && !bairroRef.current.value)
+        bairroRef.current.value = data.bairro ?? "";
+      if (cidadeRef.current && !cidadeRef.current.value)
+        cidadeRef.current.value = data.municipio ?? "";
+      if (ufRef.current && !ufRef.current.value && data.uf)
+        ufRef.current.value = String(data.uf).toUpperCase();
+
+      relerCampos();
+    } catch {
+      setCnpjError(
+        "Não foi possível consultar o CNPJ agora, preencha manualmente.",
+      );
+    } finally {
+      clearTimeout(to);
+      setCnpjLoading(false);
+    }
   }
 
   /** O documento mudou: o aviso de repetido e o erro do servidor param de
@@ -771,6 +887,7 @@ export function FornecedorForm({
                 <Input
                   name="nome"
                   defaultValue={fornecedor?.nome ?? nomeInicial ?? ""}
+                  ref={nomeRef}
                   placeholder="Ex.: Cenografia Vértice"
                   autoFocus
                 />
@@ -781,28 +898,37 @@ export function FornecedorForm({
                 name="cpf_cnpj"
                 required
                 hint={
-                  duplicado && !isEdit ? "já cadastrado" : "identifica o fornecedor"
+                  duplicado && !isEdit
+                    ? "já cadastrado"
+                    : ehPj
+                      ? "buscamos na Receita ao sair do campo"
+                      : "identifica o fornecedor"
                 }
                 errors={fieldErrors}
                 className="col-span-12 sm:col-span-5"
               >
-                <MaskedInput
-                  key={tipoPessoa}
-                  mask={ehPj ? "cnpj" : "cpf"}
-                  name="cpf_cnpj"
-                  defaultValue={initialDoc}
-                  ref={cpfCnpjRef}
-                  onBlur={handleDocumentoBlur}
-                  // Corrigir o documento tem de apagar o aviso na hora: com
-                  // o botão travado pelo duplicado, esperar o blur deixaria
-                  // quem está digitando sem saída aparente.
-                  onInput={limparAvisoDoDocumento}
-                  className={cn(
-                    duplicado &&
-                      !isEdit &&
-                      "border-amber-300 ring-[3px] ring-amber-500/10",
+                <div className="relative">
+                  <MaskedInput
+                    key={tipoPessoa}
+                    mask={ehPj ? "cnpj" : "cpf"}
+                    name="cpf_cnpj"
+                    defaultValue={initialDoc}
+                    ref={cpfCnpjRef}
+                    onBlur={handleDocumentoBlur}
+                    // Corrigir o documento tem de apagar o aviso na hora: com
+                    // o botão travado pelo duplicado, esperar o blur deixaria
+                    // quem está digitando sem saída aparente.
+                    onInput={limparAvisoDoDocumento}
+                    className={cn(
+                      duplicado &&
+                        !isEdit &&
+                        "border-amber-300 ring-[3px] ring-amber-500/10",
+                    )}
+                  />
+                  {cnpjLoading && (
+                    <span className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin rounded-full border-2 border-california-red/30 border-t-california-red" />
                   )}
-                />
+                </div>
                 {avisoDuplicado}
                 {/* O tamanho errado se avisa na hora; o dígito
                     verificador quem confere é o servidor. */}
@@ -812,6 +938,14 @@ export function FornecedorForm({
                       ? "CNPJ deve ter 14 dígitos."
                       : "CPF deve ter 11 dígitos."}
                   </p>
+                )}
+                {cnpjError && (
+                  <p className="text-[11.5px] text-muted-foreground">
+                    {cnpjError}
+                  </p>
+                )}
+                {cnpjWarning && (
+                  <p className="text-[11.5px] text-amber-700">{cnpjWarning}</p>
                 )}
               </Campo>
 
@@ -826,6 +960,7 @@ export function FornecedorForm({
                   <Input
                     name="razao_social"
                     defaultValue={fornecedor?.razao_social ?? ""}
+                    ref={razaoSocialRef}
                     placeholder="Nome jurídico, como na nota fiscal"
                   />
                 </Campo>
@@ -1078,9 +1213,10 @@ export function FornecedorForm({
                 >
                   <div className="relative">
                     <MaskedInput
+                      key={`cep-${cepKey}`}
                       mask="cep"
                       name="cep"
-                      defaultValue={fornecedor?.cep ?? ""}
+                      defaultValue={cepInitialValue}
                       onBlur={handleCepBlur}
                       ref={cepRef}
                     />
@@ -1117,6 +1253,7 @@ export function FornecedorForm({
                   <Input
                     name="numero"
                     defaultValue={fornecedor?.numero ?? ""}
+                    ref={numeroRef}
                     placeholder="123"
                   />
                 </Campo>
@@ -1130,6 +1267,7 @@ export function FornecedorForm({
                   <Input
                     name="complemento"
                     defaultValue={fornecedor?.complemento ?? ""}
+                    ref={complementoRef}
                     placeholder="Sala, bloco, andar…"
                   />
                 </Campo>
