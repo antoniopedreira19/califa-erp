@@ -606,9 +606,13 @@ export default async function PedidosCompraFinanceiroPage({
         parcela_total: total,
         status: par.pago_em ? "pago" : "a_pagar",
         empresa_id: pp.empresa_id,
-        // No cartão o plano de contas foi escolhido na aprovação e está na
-        // PP; fora dele, PP é custo de job → default Custo Operacional,
-        // com o subtipo em branco pro financeiro escolher na baixa.
+        // Desde 10/09/2026 o centro de custo está GRAVADO na PP: um
+        // trigger carimba Custo Operacional em toda PP que nasce sem tipo
+        // (`20260910200001_pp_nasce_em_custo_operacional`), porque toda PP
+        // é custo de job. No cartão, a aprovação sobrescreve com o que o
+        // financeiro escolheu. O `??` continua aqui como rede para as
+        // linhas que porventura escapem — não é mais ele que decide, e o
+        // subtipo segue vazio de propósito: quem escolhe é a baixa.
         plano_conta_tipo_id:
           pp.plano_conta_tipo_id ?? custoOperacionalTipoId,
         plano_conta_subtipo_id: pp.plano_conta_subtipo_id ?? null,
