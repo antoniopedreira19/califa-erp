@@ -522,7 +522,8 @@ pelo MCP: 2 tabelas, 7 policies, `authenticated` com acesso, `anon` sem nenhum.
    > cadastro, e agora podem ser criados **no mesmo envio** que cria o
    > cliente — antes só depois de ele existir. A regra de não excluir
    > continua igual: o "X" inativa, e a linha fica no formulário com a
-   > opção de reativar. Ver
+   > opção de reativar. `portais-card.tsx` e `portais-actions.ts` ficaram
+   > sem uso e **foram apagados em 09/09/2026**. Ver
    > [`docs/decisions/066-o-cliente-nasce-com-marcas-e-portais.md`](docs/decisions/066-o-cliente-nasce-com-marcas-e-portais.md).
 2. **A gravação não foi exercitada de ponta a ponta.** ✅ Exercitada no
    JOB-0010 (seção 25).

@@ -2472,6 +2472,11 @@ do formulário e sem perder o que já foi digitado.
   (`clientes/[id]/portais-actions.ts`) não têm gate de papel — ver §3 da
   decisão 050.
 
+  > ⚠️ **09/09/2026 — fechada.** O card de portais saiu da tela e o
+  > arquivo foi apagado. Os portais passaram a entrar por `criarCliente` /
+  > `atualizarCliente`, que já checam `cadastros.clientes.editar`. Ver
+  > [`docs/decisions/066-o-cliente-nasce-com-marcas-e-portais.md`](docs/decisions/066-o-cliente-nasce-com-marcas-e-portais.md).
+
 ## ⚠️ Nota de 2026-09-04 — o item diz quando parou de gerar PP (decisão 052)
 
 - **Pergunta obrigatória no formulário da PP:** *"Esta é a última PP deste

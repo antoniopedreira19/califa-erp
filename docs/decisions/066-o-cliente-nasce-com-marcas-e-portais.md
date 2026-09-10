@@ -147,12 +147,21 @@ No formulário ela é a primeira linha, travada, com o cadeado e o texto
 Extrair para um componente comum obrigaria a editar `fornecedor-form.tsx`,
 que é de outra frente — a duplicação foi o preço de não colidir.
 
-## Ficou sem uso, e não foi apagado
+## Ficou sem uso, e foi apagado (09/09/2026)
 
 `produtos-card.tsx`, `produto-drawer.tsx`, `produtos-actions.ts`,
-`portais-card.tsx` e `portais-actions.ts`. Formam um bloco fechado: só
-`clientes/[id]/page.tsx` os importava. **Apagar é decisão do Tiago** — a
-sessão parou aqui de propósito.
+`portais-card.tsx` e `portais-actions.ts`. Formavam um bloco fechado: só
+`clientes/[id]/page.tsx` os importava, e ele parou de importar nesta
+decisão. **O Tiago mandou apagar** — removidos em 09/09/2026, no mesmo
+commit desta nota.
+
+⚠️ **A remoção fecha a ponta solta da decisão 050.** `criarPortal`,
+`editarPortal` e `alternarPortal` não tinham gate de papel — só
+`requireSession`, com RLS de membro do tenant — e o §3 da 050 deixou
+registrado que precisariam de `cadastros.clientes.editar` quando os outros
+papéis entrassem. Elas deixaram de existir: os portais agora entram por
+`criarCliente` / `atualizarCliente`, que **já checam
+`cadastros.clientes.editar`**. Não sobrou caminho sem gate.
 
 ## Conferido no navegador (09/09/2026)
 

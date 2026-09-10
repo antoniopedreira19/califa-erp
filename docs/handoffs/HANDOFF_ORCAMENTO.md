@@ -595,7 +595,7 @@ Entrega 17 (seção 18) e
 
 ### 12.7 Produto padrão — a marca do cliente
 
-**Arquivos:** [`clientes/actions.ts`](app/(app)/clientes/actions.ts) · [`produtos-actions.ts`](app/(app)/clientes/[id]/produtos-actions.ts) · [`produtos-card.tsx`](app/(app)/clientes/[id]/produtos-card.tsx)
+**Arquivos:** [`clientes/actions.ts`](app/(app)/clientes/actions.ts) · [`cliente-form.tsx`](app/(app)/clientes/cliente-form.tsx)
 
 ⚠️ **09/09/2026 — o `ProdutosCard` saiu da tela e as marcas subiram para o
 formulário.** As marcas extras passaram a ser cadastradas **no mesmo envio
@@ -605,7 +605,8 @@ produto padrão continua nascendo junto com o cliente, continua acompanhando
 o nome fantasia e continua protegido pelo trigger
 `trg_cliente_produtos_padrao` — no formulário ele aparece como linha
 travada, só de leitura. `produtos-card.tsx`, `produto-drawer.tsx` e
-`produtos-actions.ts` ficaram **sem uso** e não foram apagados. Ver
+`produtos-actions.ts` ficaram sem uso e **foram apagados em 09/09/2026**.
+Ver
 [`docs/decisions/066-o-cliente-nasce-com-marcas-e-portais.md`](docs/decisions/066-o-cliente-nasce-com-marcas-e-portais.md).
 
 Com Produto obrigatório no projeto, cliente sem produto virou beco sem
