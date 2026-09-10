@@ -4350,3 +4350,76 @@ RESTRICT`), depois a avulsa — o rateio, os anexos e o histórico caem por
 estorno de avulsa, estorno de lançamento, devolução de verba, título a
 receber, anexo, histórico): todas zeradas. As quatro tabelas ficaram em
 zero linhas e nada mais foi tocado. **Sem resíduo.**
+
+## ⚠️ Nota de 2026-09-10 — a conferência de documentos volta a receber clique, e os anexos ganham número
+
+Duas coisas na **"Visualizar documentos"** da aba Pedidos de Produção
+(`documentos-pp-overlay.tsx`), a tela que põe o PDF da PP e o documento do
+fornecedor lado a lado para o financeiro aprovar.
+
+### 1. O "Fechar" não fechava — e nada ali clicava
+
+O botão existia, estava desenhado, e não fazia nada. Tampouco os botões de
+anexo ou o "Aprovar"/"Rejeitar" do rodapé daquela tela. O único jeito de
+sair era acertar um ponto sem botão nenhum — que era o overlay do drawer
+por baixo, e fechava a **PP inteira**.
+
+**Causa.** A conferência era uma `<div class="fixed inset-0 z-[75]">` solta
+na árvore da página, aberta por cima do drawer da PP. Drawer é modal do
+Radix, e modal do Radix escreve `pointer-events: none` no `<body>`,
+devolvendo `auto` só para o layer dele. Tudo que fica fora do portal vira
+desenho. Medido no navegador antes da correção: `pointer-events: none`
+computado no botão "Fechar", e `elementFromPoint` no centro dele devolvendo
+o overlay do drawer — o clique atravessava a conferência e ia parar no que
+estava atrás.
+
+**Correção.** A conferência passou a ser montada pelo `FullscreenContent`,
+primitivo novo em `components/ui/dialog.tsx`: `DialogPortal` do Radix +
+conteúdo em tela cheia, sem `DialogOverlay` próprio (o conteúdo já pinta o
+fundo; o overlay do Radix só somaria escuro sobre escuro). Com isso a
+camada entra na pilha de layers — fica clicável, o ESC fecha só ela, e o
+confirm de "Rejeitar", que monta depois, aparece por cima. O `z-50` é o
+mesmo dos outros diálogos **de propósito**: quem ordena é a pilha, e subir
+o `z` aqui esconderia justamente esse confirm.
+
+O `window.addEventListener("keydown")` que a tela tinha para o ESC saiu: era
+ele que, junto com o handler do Radix, fechava a conferência **e** o drawer
+na mesma tecla.
+
+⚠️ **Detalhe que não é decorativo.** O `FullscreenContent` entra com fade e
+sai sem animação nenhuma. O Radix só desmonta conteúdo animado quando chega
+o `animationend`, e navegador que não anima (aba em segundo plano, por
+exemplo) nunca manda esse evento. Num diálogo comum isso deixaria um cartão
+esquecido na tela; aqui deixaria uma **cortina opaca por cima do sistema
+inteiro**. Reproduzido em aba oculta durante a verificação, com o nó preso
+em `data-state="closed"`. O fade de saída não paga esse risco.
+
+### 2. Os anexos ganharam botões numerados — 1, 2, 3 — sempre visíveis
+
+Antes os números só apareciam a partir do segundo anexo, e não clicavam
+(mesmo defeito acima). Agora:
+
+- **aparecem a partir do primeiro**, para que a numeração da tela seja
+  sempre a mesma que a de quem anexou — pedido do Tiago;
+- **seguem a ordem de anexação**: `page.tsx` passou a ordenar por
+  `created_at`, como já fazia com as parcelas e pelo mesmo motivo (o embed
+  do PostgREST não garante ordem). O `created_at` fica no servidor: a tela
+  usa a ordem, não a data;
+- cada botão tem o **nome do arquivo** no `title`, e `aria-pressed` marca o
+  que está aberto;
+- o **olho** da lista de anexos do drawer abre a conferência já **naquele**
+  anexo (`anexoInicial`), em vez de sempre no primeiro.
+
+Trocar de anexo deixou de recarregar o PDF da PP: os dois lados têm effect
+próprio, e o do anexo depende do **id**, não do objeto. Antes, clicar num
+número refazia a URL assinada do pedido também — perdendo rolagem e zoom
+justamente do documento contra o qual se está comparando.
+
+**Verificação (10/09/2026).** Fluxo real em `/financeiro/contas-a-pagar`,
+PP-00041, e uma rota de preview temporária (apagada) para o caso de vários
+anexos, que não existe no banco hoje — nenhuma PP tem mais de um. Com
+clique de mouse real: os eventos chegam ao botão (`pointerdown` →
+`click`), o anexo troca, o PDF da esquerda não recarrega, o "Fechar" fecha
+só a conferência e o drawer continua aberto e clicável. O confirm de
+"Rejeitar" aberto dali aparece por cima e recebe foco. Console sem erro do
+app. `tsc`, `next lint` e `npm run build` limpos.

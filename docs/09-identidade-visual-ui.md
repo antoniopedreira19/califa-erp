@@ -359,3 +359,38 @@ a página é uma lista de N jobs e abrir tudo enterraria o consolidado.
 orçamento tinha o recurso; ao levá-lo para as outras três planilhas, a
 alternativa era quatro cópias da mesma máquina de estado — que divergem
 na primeira correção, exatamente como as cores dos blocos divergiram.
+
+## Camada por cima de um modal (regra de layer)
+
+Tela que abre **por cima de um diálogo ou drawer já aberto** — uma
+conferência em tela cheia, um visualizador, um segundo passo — tem que
+nascer de um primitivo do Radix (`DialogContent`, `DrawerContent`,
+`FullscreenContent`). Nunca de uma `<div class="fixed inset-0">` solta na
+árvore da página.
+
+**Por quê.** Modal do Radix escreve `pointer-events: none` no `<body>` e
+devolve `auto` apenas ao layer dele. Qualquer coisa desenhada fora do
+portal continua **visível e completamente inerte**: os botões aparecem, o
+cursor vira mãozinha, e o clique atravessa para o que está atrás.
+
+Em 10/09/2026 a conferência de documentos das PPs (`documentos-pp-overlay`)
+estava assim havia semanas. O "Fechar" não fechava, os botões de anexo não
+trocavam de nota e o "Aprovar" não aprovava; o único jeito de sair era
+acertar o overlay do drawer por baixo, que descartava a PP inteira. O
+sintoma engana: parece botão sem handler, e o handler estava certo.
+
+**Como fazer:**
+
+- monte pelo portal (`FullscreenContent` para tela cheia) e deixe o `z-50`
+  padrão — **quem ordena as camadas é a pilha de layers do Radix, não o
+  `z-index`**. Subir o `z` de uma camada esconde os diálogos que ela mesma
+  abre, que montam depois e ficariam por cima;
+- não registre `keydown` próprio para o ESC: o Radix já fecha só o layer do
+  topo. Handler próprio soma com o dele e fecha **dois** de uma vez;
+- camada em tela cheia **não leva animação de saída**. O Radix só desmonta
+  conteúdo animado no `animationend`, e navegador que não anima (aba em
+  segundo plano) nunca manda esse evento — o que num cartão é um esquecido
+  na tela, numa cortina de tela cheia é o sistema inteiro coberto;
+- dê `DialogTitle` e `DialogDescription` à camada, como em qualquer
+  diálogo, nem que seja o título que já está desenhado no cabeçalho
+  (`asChild` aproveita o elemento existente).

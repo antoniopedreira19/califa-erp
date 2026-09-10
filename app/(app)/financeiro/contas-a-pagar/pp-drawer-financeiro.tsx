@@ -146,6 +146,8 @@ export function PPDrawerFinanceiro({
   const [askRejeitar, setAskRejeitar] = React.useState(false);
   const [motivo, setMotivo] = React.useState("");
   const [docsAbertos, setDocsAbertos] = React.useState(false);
+  /** Qual anexo a conferência abre selecionado — ver `abrirDocs`. */
+  const [docsAnexoInicial, setDocsAnexoInicial] = React.useState(0);
   const [prestarOpen, setPrestarOpen] = React.useState(false);
 
   React.useEffect(() => {
@@ -154,8 +156,19 @@ export function PPDrawerFinanceiro({
     setErro(null);
     setMotivo("");
     setDocsAbertos(false);
+    setDocsAnexoInicial(0);
     setPrestarOpen(false);
   }, [pp]);
+
+  /**
+   * Abre a conferência lado a lado já no anexo pedido. O olho da lista
+   * de anexos abria sempre no primeiro, o que numa PP com várias notas
+   * obrigava a procurar de novo a que se acabou de clicar.
+   */
+  function abrirDocs(indice = 0) {
+    setDocsAnexoInicial(indice);
+    setDocsAbertos(true);
+  }
 
   async function abrirAnexo(anexo_id: string) {
     const res = await signedUrlAnexoPrestacao(anexo_id);
@@ -258,7 +271,7 @@ export function PPDrawerFinanceiro({
               </Badge>
               <button
                 type="button"
-                onClick={() => setDocsAbertos(true)}
+                onClick={() => abrirDocs(0)}
                 className="ml-auto inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-border bg-white px-3 py-2 text-xs font-semibold transition-colors hover:border-california-red hover:text-california-red"
               >
                 <Columns2 className="h-3.5 w-3.5" />
@@ -443,7 +456,7 @@ export function PPDrawerFinanceiro({
                   Anexos ({pp.anexos.length})
                 </h3>
                 <ul className="space-y-1">
-                  {pp.anexos.map((a) => {
+                  {pp.anexos.map((a, i) => {
                     const Icon = iconePorMime(a.arquivo_nome_original);
                     return (
                       <li
@@ -457,7 +470,8 @@ export function PPDrawerFinanceiro({
                         </span>
                         <button
                           type="button"
-                          onClick={() => setDocsAbertos(true)}
+                          onClick={() => abrirDocs(i)}
+                          title={`Conferir o anexo ${i + 1} lado a lado com a PP`}
                           className="text-california-red hover:opacity-70"
                         >
                           <Eye className="h-3.5 w-3.5" />
@@ -702,6 +716,7 @@ export function PPDrawerFinanceiro({
         ppId={pp.id}
         ppCodigo={pp.codigo}
         anexos={pp.anexos}
+        anexoInicial={docsAnexoInicial}
         rodape={
           emAvaliacao ? (
             <div className="flex flex-wrap items-center justify-end gap-2.5">
