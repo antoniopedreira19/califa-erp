@@ -5,6 +5,10 @@ import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { logAuditEvent } from "@/lib/auth/audit";
+import {
+  tirarFoto,
+  type DadosDePagamento,
+} from "@/lib/data/foto-pagamento-da-pp";
 import { checarPermissao } from "@/lib/permissoes-server";
 import { DOCUMENTO_TIPOS } from "@/lib/types";
 import { gerarCodigoPP } from "@/lib/codigos/pedidos-compra";
@@ -909,6 +913,13 @@ async function finalizarPedidoCompraImpl(
     emitida_por: session.profile.id,
     // Nasce no job. O financeiro só a vê depois do envio (02/09/2026).
     status: "gerada",
+    // A FOTO dos dados de pagamento (decisão 067). Ela sai do MESMO
+    // `fornRes.data` que vai para o PDF logo abaixo — é o PDF que o
+    // financeiro confere na hora de pagar, e foto e documento não podem
+    // divergir. Editar a PP re-monta os dois; enviada, nenhum dos dois
+    // muda mais, e é isso que "congelar" quer dizer.
+    ...tirarFoto(fornRes.data as DadosDePagamento | null),
+    dados_pagamento_congelados_em: fornRes.data ? new Date().toISOString() : null,
   });
 
   if (insertErr) {
@@ -1660,6 +1671,12 @@ export async function reenviarPedidoCompra(
       rejeitada_por: null,
       rejeitada_em: null,
       motivo_rejeicao: null,
+      // Foto nova, porque o PDF foi remontado agora com este cadastro
+      // (decisão 067). O reenvio pode inclusive ter TROCADO o fornecedor.
+      ...tirarFoto(fornRes.data as DadosDePagamento | null),
+      dados_pagamento_congelados_em: fornRes.data
+        ? new Date().toISOString()
+        : null,
     })
     .eq("id", pp_id)
     .eq("tenant_id", session.activeTenant.id);
@@ -1876,7 +1893,7 @@ export async function enviarPedidoCompraAoFinanceiro(
   const { data: ppRow, error: ppErr } = await supabase
     .from("pedidos_compra")
     .select(
-      "id, codigo, job_id, item_realizado_id, status, valor, verba_producao, anexos:pedidos_compra_anexos(id)",
+      "id, codigo, job_id, item_realizado_id, status, valor, verba_producao, fornecedor_id, anexos:pedidos_compra_anexos(id)",
     )
     .eq("id", pp_id)
     .eq("tenant_id", session.activeTenant.id)
@@ -1888,6 +1905,7 @@ export async function enviarPedidoCompraAoFinanceiro(
       status: PPStatus;
       valor: number | string;
       verba_producao: boolean;
+      fornecedor_id: string | null;
       anexos: Array<{ id: string }> | null;
     }>();
 
@@ -2289,6 +2307,12 @@ async function editarPedidoCompraGeradaImpl(
       valor,
       prazo_pagamento: parcelas[0]?.data_vencimento ?? d.prazo_pagamento,
       pdf_path: pdfPath,
+      // Foto nova junto do PDF novo (decisão 067). Verba de produção não
+      // tem fornecedor: a foto zera e o PDF nem monta o bloco bancário.
+      ...tirarFoto(fornRes.data as DadosDePagamento | null),
+      dados_pagamento_congelados_em: fornRes.data
+        ? new Date().toISOString()
+        : null,
     })
     .eq("id", pp_id)
     .eq("tenant_id", session.activeTenant.id)

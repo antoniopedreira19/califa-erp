@@ -4170,3 +4170,41 @@ com a empresa do documento e a conta de pagamento de outra empresa — que
 ⚠️ **Resíduo:** a avulsa `AV-00001` e o lançamento dela ficaram no banco.
 São de teste (R$ 1, "ZZ Teste …", Empresa Teste) — apagar exige desfazer
 a baixa antes.
+
+## ⚠️ Nota de 2026-09-09 — a PP passou a guardar os dados de pagamento (decisão 067)
+
+**Nada no financeiro mudou hoje. Esta nota é o aviso de uma ponta solta
+que sobra para este módulo.**
+
+O campo de fornecedor da PP ganhou um lápis que abre o cadastro daquele
+fornecedor (decisão
+[067](../decisions/067-o-campo-de-fornecedor-busca-limpa-e-edita.md)).
+Quem gera a PP passou a poder trocar banco, agência, conta e PIX de alguém
+que já tem PP esperando pagamento aqui.
+
+Para isso não virar pagamento na conta errada, a PP agora **fotografa** os
+nove campos de pagamento: colunas `fornecedor_banco_codigo`,
+`fornecedor_banco_nome`, `fornecedor_agencia`, `fornecedor_agencia_dv`,
+`fornecedor_conta`, `fornecedor_conta_dv`, `fornecedor_tipo_conta`,
+`fornecedor_pix_tipo`, `fornecedor_pix_chave` e
+`dados_pagamento_congelados_em`, em `pedidos_compra` (migration
+`20260909210001`, aditiva, com backfill das 16 PPs que já estavam aqui).
+A foto sai junto do PDF, e enviada a PP nada mais a re-tira.
+
+**Por que isso é seguro hoje:** este módulo nunca leu os dados bancários
+do fornecedor — todas as consultas daqui pedem `id, nome, razao_social`.
+Quem paga lê o **PDF da PP**, que já é uma foto congelada. A regra
+continua valendo sem nenhuma mudança de código aqui.
+
+**O que falta, quando esta frente quiser:** mostrar o **asterisco** ao
+lado do título a pagar quando o cadastro do fornecedor mudou depois que a
+PP tirou a foto. O cálculo já existe e é uma função pura —
+`cadastroMudouDepoisDaFoto` em `lib/data/foto-pagamento-da-pp.ts`, que
+recebe a linha da PP e os nove campos do cadastro atual (a constante
+`COLUNAS_DE_PAGAMENTO` é o `select` pronto). `lerFoto` converte a foto
+para o formato que uma tela de pagamento espera, caso o financeiro passe a
+exibir a conta na própria tela em vez de só no PDF.
+
+Não fiz aqui de propósito: `app/(app)/financeiro/**` é de outra frente e
+está em obra — a regra de `CLAUDE.local.md` é combinar antes de escrever
+por cima.

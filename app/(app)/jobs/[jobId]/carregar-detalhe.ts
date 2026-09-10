@@ -37,6 +37,11 @@ import type {
 } from "@/lib/types";
 import type { ResumoEncerramento } from "./encerrar-dialog";
 import { saldoAFaturarDoJob } from "@/lib/data/saldo-a-faturar";
+import {
+  COLUNAS_DE_PAGAMENTO,
+  cadastroMudouDepoisDaFoto,
+  type DadosDePagamento,
+} from "@/lib/data/foto-pagamento-da-pp";
 
 /**
  * Todo o detalhe de um job, carregado uma vez e servido às duas telas
@@ -372,6 +377,31 @@ export async function carregarDetalheDoJob(
     if (item.item) itemPorItemRealizadoId.set(r.id, item.item);
   }
 
+  // O asterisco da decisão 067: quais fornecedores mudaram de conta
+  // depois que uma PP deles tirou a foto.
+  //
+  // Uma consulta só, e SÓ dos fornecedores que aparecem nas PPs com foto
+  // — quase sempre um punhado. Os dados bancários morrem aqui: o que sai
+  // desta função é um booleano por PP, não a conta de ninguém.
+  const idsComFoto = Array.from(
+    new Set(
+      ((ppsRes.data ?? []) as any[])
+        .filter((pp) => pp.dados_pagamento_congelados_em && pp.fornecedor_id)
+        .map((pp) => pp.fornecedor_id as string),
+    ),
+  );
+  const pagamentoAtualPorFornecedor = new Map<string, DadosDePagamento>();
+  if (idsComFoto.length > 0) {
+    const { data: cadastros } = await supabase
+      .from("fornecedores")
+      .select(`id, ${COLUNAS_DE_PAGAMENTO}`)
+      .eq("tenant_id", session.activeTenant.id)
+      .in("id", idsComFoto);
+    for (const f of (cadastros ?? []) as any[]) {
+      pagamentoAtualPorFornecedor.set(f.id as string, f as DadosDePagamento);
+    }
+  }
+
   const ppsDoJob: PedidoCompraNaLista[] = (ppsRes.data ?? []).map((pp: any) => ({
     ...pp,
     // numeric do Postgres chega como string: sem o Number, o formulário
@@ -392,6 +422,12 @@ export async function carregarDetalheDoJob(
       arquivo_nome_original: a.arquivo_nome_original,
       arquivo_tamanho_bytes: Number(a.arquivo_tamanho_bytes ?? 0),
     })),
+    cadastro_do_fornecedor_mudou: cadastroMudouDepoisDaFoto(
+      pp,
+      pp.fornecedor_id
+        ? (pagamentoAtualPorFornecedor.get(pp.fornecedor_id) ?? null)
+        : null,
+    ),
   }));
 
   // Um item pode ter VÁRIAS PPs desde 17/08/2026 (PPs parciais), então o

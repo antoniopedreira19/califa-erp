@@ -1287,6 +1287,22 @@ export interface PedidoCompra {
    *  (02/09/2026). Nulos enquanto gerada. */
   enviada_financeiro_em: string | null;
   enviada_financeiro_por: string | null;
+  /** A FOTO dos dados de pagamento do fornecedor, tirada no envio ao
+   *  financeiro (decisão 067, 09/09/2026). O financeiro paga por ela, e
+   *  não pelo cadastro ao vivo: desde que o campo de fornecedor ganhou o
+   *  lápis, o cadastro pode mudar depois do envio. Nulos enquanto a PP
+   *  não foi enviada. Ver `lib/data/foto-pagamento-da-pp.ts`. */
+  fornecedor_banco_codigo: string | null;
+  fornecedor_banco_nome: string | null;
+  fornecedor_agencia: string | null;
+  fornecedor_agencia_dv: string | null;
+  fornecedor_conta: string | null;
+  fornecedor_conta_dv: string | null;
+  fornecedor_tipo_conta: TipoContaBancariaFornecedor | null;
+  fornecedor_pix_tipo: PixTipoChave | null;
+  fornecedor_pix_chave: string | null;
+  /** Quando a foto foi tirada — o instante do envio. Null = sem foto. */
+  dados_pagamento_congelados_em: string | null;
   // Verba de Produção (subtipo de PP — pago ao responsável em vez do fornecedor)
   verba_producao: boolean;
   responsavel_verba_id: string | null;
@@ -1684,6 +1700,13 @@ export interface PedidoCompraNaLista extends PedidoCompra {
   }>;
   /** Perfil do responsável pela verba, quando verba_producao = true. */
   responsavel?: { nome: string | null } | null;
+  /** O ASTERISCO da decisão 067: o cadastro do fornecedor mudou de banco,
+   *  agência, conta ou PIX DEPOIS que esta PP tirou a foto. A PP continua
+   *  valendo pela foto — a marca só avisa que o cadastro de hoje já não é
+   *  o que este pedido diz. Calculado no servidor comparando campo a
+   *  campo (`lib/data/foto-pagamento-da-pp.ts`), para o dado bancário não
+   *  precisar atravessar a fronteira até o cliente. */
+  cadastro_do_fornecedor_mudou: boolean;
 }
 
 export interface PedidoCompraAnexo {

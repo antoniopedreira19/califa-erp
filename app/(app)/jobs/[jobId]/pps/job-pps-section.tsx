@@ -486,6 +486,30 @@ export function JobPPsSection({
                           {(pp.fornecedor_id
                             ? fornecedoresPorId[pp.fornecedor_id]
                             : null) ?? "—"}
+                          {/* O asterisco da decisão 067: o cadastro mudou
+                              de conta depois que esta PP tirou a foto. A
+                              PP continua valendo pela foto — o que o
+                              asterisco diz é que o cadastro de hoje já não
+                              é o que este pedido manda pagar. */}
+                          {pp.cadastro_do_fornecedor_mudou && (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span
+                                  tabIndex={0}
+                                  className="ml-1 cursor-help font-bold text-amber-600"
+                                  aria-label="O cadastro do fornecedor mudou depois desta PP"
+                                >
+                                  *
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-[280px]">
+                                Os dados de pagamento do fornecedor mudaram
+                                depois desta PP. Ela continua valendo pelos
+                                dados que estão no documento dela; o cadastro
+                                novo vale para as próximas.
+                              </TooltipContent>
+                            </Tooltip>
+                          )}
                         </span>
                       )}
                     </td>

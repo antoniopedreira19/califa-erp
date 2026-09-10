@@ -3087,9 +3087,36 @@ combo antigo. O `Combobox` já tem tudo por prop (`buscaPlaceholder`,
 `limpavel`, `acaoSemResultado`) — falta passar `cpf_cnpj` na consulta de
 cada tela e pendurar o botão ao lado.
 
-**Ponta solta que a decisão 067 registra e ninguém implementou ainda:** a
-PP precisa **congelar** banco/agência/conta/PIX no envio ao financeiro, o
-financeiro precisa pagar pela foto, e a PP cujo cadastro mudou depois
-precisa de um **asterisco**. Sem isso, o lápis deixa alguém trocar a conta
-de um fornecedor que já tem PP esperando pagamento. Toca
-`app/(app)/financeiro/**` — combinar com a frente do financeiro antes.
+### A foto dos dados de pagamento, e o asterisco
+
+O lápis deixaria alguém trocar a conta de um fornecedor que já tem PP
+esperando pagamento. A saída (decisão 067, parte 4):
+
+A PP **fotografa** os nove campos de pagamento do fornecedor — colunas
+`fornecedor_*` + `dados_pagamento_congelados_em` em `pedidos_compra`,
+migration `20260909210001`. **A foto sai junto do PDF**, nas três rotas de
+`actions-pp.ts` que o montam (emitir, editar a gerada, reenviar a
+rejeitada), do MESMO `select` do fornecedor: é o PDF que o financeiro
+confere na hora de pagar, e foto e documento não podem divergir. Enviada,
+nada mais re-monta o PDF — e é aí que a foto congela.
+
+Tirar, ler e comparar a foto mora em `lib/data/foto-pagamento-da-pp.ts`.
+**Toda rota nova que montar PDF de PP tem de tirar a foto junto**, ou o
+documento e a foto passam a discordar.
+
+O **asterisco** é calculado no servidor, em `carregar-detalhe.ts`,
+comparando a foto com o cadastro atual campo a campo — e só em PP
+`em_avaliacao`, `aprovada` ou `pago`, porque em `gerada` e `rejeitada` o
+próximo salvar re-tira a foto. Chega ao cliente como o booleano
+`cadastro_do_fornecedor_mudou` de `PedidoCompraNaLista`; os dados
+bancários não atravessam. Aparece na aba de PPs (tooltip) e na ficha da PP
+em leitura (explicado por extenso).
+
+Salvar dados de pagamento de um fornecedor com PP no financeiro passa por
+um **"tem certeza?"**: `atualizarFornecedor` devolve
+`pedeConfirmacaoPagamento` e o formulário reenvia com o flag.
+
+**O que ficou de fora:** as telas de `app/(app)/financeiro/**` continuam
+pagando pelo PDF e **não** mostram o asterisco. Aquele módulo é de outra
+frente e está em obra — combinar antes de mexer. `lerFoto` já está
+exportada para quando essa ponta for fechada.
