@@ -44,6 +44,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { MaskedInput } from "@/components/ui/masked-input";
 import { Combobox } from "@/components/ui/combobox";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { BANCOS_FEBRABAN } from "@/lib/dados/bancos-febraban";
 import { onlyDigits, cn } from "@/lib/utils";
 import type {
@@ -329,6 +330,14 @@ export function FornecedorForm({
     null,
   );
   const [pending, startTransition] = React.useTransition();
+  /** O "tem certeza?" da decisão 067: os dados de pagamento mudaram e
+   *  este fornecedor tem PP no financeiro. Guarda o FormData para
+   *  reenviar tal e qual depois do sim. */
+  const [avisoPagamento, setAvisoPagamento] = React.useState<{
+    formData: FormData;
+    pps: number;
+    codigos: string[];
+  } | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = React.useState<Record<string, string[]>>({});
 
@@ -558,6 +567,43 @@ export function FornecedorForm({
         : "Pronto para criar. Endereço e observações podem ser completados depois."
       : `Falta ${listar(pendencias)}.`;
 
+  /** Grava e trata a resposta. Separado do `onSubmit` porque o "tem
+   *  certeza?" dos dados de pagamento (decisão 067) reenvia o MESMO
+   *  FormData com o flag ligado — e a essa altura o `<form>` do evento já
+   *  não está mais ao alcance. */
+  function gravar(formData: FormData, confirmarPagamento: boolean) {
+    startTransition(async () => {
+      const res: ActionResult = isEdit
+        ? await atualizarFornecedor(fornecedor!.id, formData, confirmarPagamento)
+        : emDialog
+          ? await criarFornecedorRapido(formData)
+          : await criarFornecedor(formData);
+
+      if (!res.ok) {
+        if (res.pedeConfirmacaoPagamento) {
+          setAvisoPagamento({ formData, ...res.pedeConfirmacaoPagamento });
+          return;
+        }
+        setError(res.message);
+        if (res.fieldErrors) setFieldErrors(res.fieldErrors);
+        if (res.duplicado) setDuplicado(res.duplicado);
+        const firstField = res.fieldErrors ? Object.keys(res.fieldErrors)[0] : null;
+        if (firstField) {
+          const el = document.querySelector<HTMLElement>(`[data-field="${firstField}"]`);
+          el?.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+        return;
+      }
+      setAvisoPagamento(null);
+      if (isEdit) {
+        router.refresh();
+        onSalvo?.();
+        return;
+      }
+      if (emDialog && res.fornecedor) onCriado?.(res.fornecedor);
+    });
+  }
+
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
@@ -580,31 +626,7 @@ export function FornecedorForm({
       return;
     }
 
-    startTransition(async () => {
-      const res: ActionResult = isEdit
-        ? await atualizarFornecedor(fornecedor!.id, formData)
-        : emDialog
-          ? await criarFornecedorRapido(formData)
-          : await criarFornecedor(formData);
-
-      if (!res.ok) {
-        setError(res.message);
-        if (res.fieldErrors) setFieldErrors(res.fieldErrors);
-        if (res.duplicado) setDuplicado(res.duplicado);
-        const firstField = res.fieldErrors ? Object.keys(res.fieldErrors)[0] : null;
-        if (firstField) {
-          const el = document.querySelector<HTMLElement>(`[data-field="${firstField}"]`);
-          el?.scrollIntoView({ behavior: "smooth", block: "center" });
-        }
-        return;
-      }
-      if (isEdit) {
-        router.refresh();
-        onSalvo?.();
-        return;
-      }
-      if (emDialog && res.fornecedor) onCriado?.(res.fornecedor);
-    });
+    gravar(formData, false);
   }
 
   /** O aviso de documento repetido, com a saída: usar o que já existe. */
@@ -1283,6 +1305,56 @@ export function FornecedorForm({
           </div>
         </div>
       </form>
+
+      {/* Trocar a conta de quem já tem PP no financeiro (decisão 067).
+          A PP de lá paga pela foto que guardou — o aviso existe porque
+          quem edita costuma achar que está consertando aquela PP. */}
+      <ConfirmDialog
+        open={avisoPagamento !== null}
+        onOpenChange={(aberto) => {
+          if (!aberto) setAvisoPagamento(null);
+        }}
+        title="Salvar os dados de pagamento novos?"
+        description={
+          avisoPagamento && (
+            <>
+              {avisoPagamento.pps === 1 ? (
+                <>
+                  A PP{" "}
+                  <strong className="text-foreground">
+                    {avisoPagamento.codigos[0]}
+                  </strong>{" "}
+                  já está no financeiro
+                </>
+              ) : (
+                <>
+                  <strong className="text-foreground">
+                    {avisoPagamento.pps} PPs
+                  </strong>{" "}
+                  deste fornecedor já estão no financeiro (
+                  {avisoPagamento.codigos.join(", ")}
+                  {avisoPagamento.pps > avisoPagamento.codigos.length && " …"})
+                </>
+              )}{" "}
+              e {avisoPagamento.pps === 1 ? "vai" : "vão"} ser{" "}
+              {avisoPagamento.pps === 1 ? "paga" : "pagas"} pela conta que{" "}
+              {avisoPagamento.pps === 1 ? "guardou" : "guardaram"} no envio —
+              a alteração não chega até {avisoPagamento.pps === 1 ? "ela" : "elas"}.
+              O cadastro novo vale para as <strong>próximas</strong> PPs.
+              <br />
+              <br />
+              Se o pagamento de uma PP que já está lá é que está errado, o
+              caminho é cancelá-la e emitir outra.
+            </>
+          )
+        }
+        confirmLabel="Salvar mesmo assim"
+        cancelLabel="Voltar"
+        pending={pending}
+        onConfirm={() => {
+          if (avisoPagamento) gravar(avisoPagamento.formData, true);
+        }}
+      />
     </div>
   );
 }

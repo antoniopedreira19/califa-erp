@@ -433,9 +433,36 @@ export function VerPPDrawer({
               </div>
             </div>
 
-            <CampoLido rotulo={pp.verba_producao ? "Responsável" : "Fornecedor"}>
-              {contraparteNome || "—"}
-            </CampoLido>
+            <div>
+              <CampoLido
+                rotulo={pp.verba_producao ? "Responsável" : "Fornecedor"}
+              >
+                {contraparteNome || "—"}
+                {pp.cadastro_do_fornecedor_mudou && (
+                  <span
+                    className="ml-1 font-bold text-amber-600"
+                    aria-hidden="true"
+                  >
+                    *
+                  </span>
+                )}
+              </CampoLido>
+              {/* O asterisco da decisão 067, explicado por extenso. Esta é
+                  a ficha que alguém abre justamente para conferir uma PP
+                  que já saiu do job, e a pergunta que o asterisco levanta
+                  ("então ela vai pagar errado?") precisa de resposta —
+                  não: ela paga pelo documento dela. */}
+              {pp.cadastro_do_fornecedor_mudou && (
+                <p className="mt-1.5 flex items-start gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11.5px] leading-relaxed text-amber-800">
+                  <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-none text-amber-700" />
+                  <span>
+                    Os dados de pagamento deste fornecedor mudaram depois que
+                    esta PP foi montada. Ela continua valendo pelo que está no
+                    documento dela — o cadastro novo vale para as próximas PPs.
+                  </span>
+                </p>
+              )}
+            </div>
 
             <CampoLido rotulo="Empresa emissora">{empresaNome || "—"}</CampoLido>
 

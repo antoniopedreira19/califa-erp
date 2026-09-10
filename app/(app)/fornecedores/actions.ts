@@ -12,6 +12,10 @@ import {
 } from "@/lib/validations/fornecedores";
 import { getBancoByCodigo } from "@/lib/dados/bancos-febraban";
 import type { Fornecedor } from "@/lib/types";
+import {
+  COLUNAS_DE_PAGAMENTO,
+  type DadosDePagamento,
+} from "@/lib/data/foto-pagamento-da-pp";
 import { onlyDigits } from "@/lib/utils";
 import type { PixTipoChave } from "@/lib/types";
 
@@ -36,6 +40,15 @@ export type ActionResult =
       /** O documento já pertence a este cadastro (04/09/2026). A tela
        *  oferece selecioná-lo em vez de criar outro. */
       duplicado?: FornecedorResumo;
+      /** Os dados de pagamento mudaram e este fornecedor tem PP no
+       *  financeiro (decisão 067). Não é erro: a tela mostra o "tem
+       *  certeza?" e reenvia com `confirmarComPPsNoFinanceiro`. */
+      pedeConfirmacaoPagamento?: {
+        /** Quantas PPs dele estão no financeiro agora. */
+        pps: number;
+        /** Os códigos, para o aviso citar (no máximo 5). */
+        codigos: string[];
+      };
     };
 
 function extractInput(formData: FormData) {
@@ -306,9 +319,64 @@ export async function buscarFornecedorPorDocumento(
   return existente ? { existe: true, fornecedor: existente } : { existe: false };
 }
 
+/**
+ * "Este fornecedor tem PP no financeiro e você mexeu na conta dele" —
+ * o aviso da decisão 067.
+ *
+ * Devolve `null` quando não há o que avisar: ou os nove campos de
+ * pagamento continuam iguais, ou nenhuma PP dele está no financeiro.
+ *
+ * As PPs que contam são as que saíram do job e ainda vivem lá:
+ * `em_avaliacao`, `aprovada` e `pago`. `gerada` não conta — ela ainda é
+ * do produtor e re-tira a foto quando for editada ou enviada; `cancelada`
+ * e `rejeitada` também não, porque ninguém vai pagar por elas.
+ */
+async function avisarSePagamentoMudouComPPsNoFinanceiro(
+  supabase: ReturnType<typeof createClient>,
+  tenantId: string,
+  fornecedorId: string,
+  novos: DadosDePagamento,
+): Promise<ActionResult | null> {
+  const { data: atual } = await supabase
+    .from("fornecedores")
+    .select(COLUNAS_DE_PAGAMENTO)
+    .eq("id", fornecedorId)
+    .eq("tenant_id", tenantId)
+    .maybeSingle<DadosDePagamento>();
+
+  if (!atual) return null;
+
+  const mudou = (Object.keys(novos) as Array<keyof DadosDePagamento>).some(
+    (campo) => (novos[campo] ?? null) !== (atual[campo] ?? null),
+  );
+  if (!mudou) return null;
+
+  const { data: pps } = await supabase
+    .from("pedidos_compra")
+    .select("codigo")
+    .eq("tenant_id", tenantId)
+    .eq("fornecedor_id", fornecedorId)
+    .in("status", ["em_avaliacao", "aprovada", "pago"])
+    .order("codigo");
+
+  const codigos = ((pps ?? []) as Array<{ codigo: string }>).map((p) => p.codigo);
+  if (codigos.length === 0) return null;
+
+  return {
+    ok: false,
+    message:
+      codigos.length === 1
+        ? `${codigos[0]} já está no financeiro e vai ser paga pelos dados que ela guardou. A conta nova vale para as próximas PPs.`
+        : `${codigos.length} PPs deste fornecedor já estão no financeiro e vão ser pagas pelos dados que guardaram. A conta nova vale para as próximas.`,
+    pedeConfirmacaoPagamento: { pps: codigos.length, codigos: codigos.slice(0, 5) },
+  };
+}
+
 export async function atualizarFornecedor(
   id: string,
   formData: FormData,
+  /** O usuário já viu o aviso das PPs no financeiro e mandou salvar. */
+  confirmarComPPsNoFinanceiro = false,
 ): Promise<ActionResult> {
   const session = await requireSession();
   const gate = await checarPermissao(session, "cadastros.fornecedores.editar");
@@ -334,6 +402,35 @@ export async function atualizarFornecedor(
   );
 
   const supabase = createClient();
+
+  // O "tem certeza?" dos dados de pagamento (decisão 067).
+  //
+  // Trocar banco, agência, conta ou PIX de um fornecedor que já tem PP no
+  // financeiro NÃO muda aquelas PPs — elas pagam pela foto que tiraram
+  // (`lib/data/foto-pagamento-da-pp.ts`). Justamente por isso o aviso
+  // existe: quem edita costuma estar tentando corrigir a conta de uma PP
+  // que está prestes a ser paga, e precisa saber que o conserto vale só
+  // para as próximas.
+  if (!confirmarComPPsNoFinanceiro) {
+    const aviso = await avisarSePagamentoMudouComPPsNoFinanceiro(
+      supabase,
+      session.activeTenant.id,
+      id,
+      {
+        banco_codigo: parsed.data.banco_codigo ?? null,
+        banco_nome: bancoResult.banco_nome ?? null,
+        agencia: parsed.data.agencia ?? null,
+        agencia_dv: parsed.data.agencia_dv ?? null,
+        conta: parsed.data.conta ?? null,
+        conta_dv: parsed.data.conta_dv ?? null,
+        tipo_conta: parsed.data.tipo_conta ?? null,
+        pix_tipo: parsed.data.pix_tipo ?? null,
+        pix_chave: pix_chave_normalizada ?? null,
+      },
+    );
+    if (aviso) return aviso;
+  }
+
   const { error } = await supabase
     .from("fornecedores")
     .update({
@@ -354,6 +451,7 @@ export async function atualizarFornecedor(
     tenantId: session.activeTenant.id,
     entidadeTipo: "fornecedor",
     entidadeId: id,
+    metadata: { confirmado_com_pps_no_financeiro: confirmarComPPsNoFinanceiro },
   });
 
   revalidatePath("/fornecedores");

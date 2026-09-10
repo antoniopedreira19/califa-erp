@@ -2,8 +2,9 @@
 
 **Data:** 2026-09-09
 **Status:** aceita
-**Migration:** nenhuma — só leitura de `fornecedores.cpf_cnpj`, coluna que
-já existia
+**Migration:** `20260909210001_pp_congela_dados_de_pagamento.sql` — dez
+colunas de foto em `pedidos_compra` (parte 4). O campo em si só passou a
+LER `fornecedores.cpf_cnpj`, coluna que já existia.
 **Design:** `PP - Campo Fornecedor.dc.html` e `Fornecedores - Novo Cadastro
 na PP.dc.html`, projeto Claude Design `69342d83`
 **Contexto:** o campo de fornecedor do formulário de PP (nova e rejeitada)
@@ -81,27 +82,61 @@ telas da pendência abaixo acrescentam suas chaves.
 
 ## 4. Dado de pagamento de PP já enviada: congela e marca
 
-**Isto ainda não está implementado.** A regra foi decidida nesta conversa
-e a implementação é a próxima entrega — está aqui para não se perder e
-porque ela condiciona o que o lápis pode fazer.
+O risco que o lápis cria: se alguém editar banco, agência, conta ou PIX de
+um fornecedor **depois** que uma PP dele já foi para o financeiro, a PP
+passaria a apontar para uma conta que não era a combinada.
 
-O risco que o lápis cria: o financeiro paga pelo que a PP diz. Se alguém
-editar banco, agência, conta ou PIX de um fornecedor **depois** que uma PP
-dele já foi para o financeiro, a PP passaria a apontar para uma conta que
-não era a combinada.
+A saída escolhida pelo Tiago: **congelar na PP + asterisco**.
 
-A saída escolhida pelo Tiago:
+### O que o financeiro realmente lê (a descoberta que desenhou a solução)
 
-- a PP **fotografa** banco, agência, conta e PIX no momento do envio ao
-  financeiro, e o financeiro paga **pela foto**;
-- o cadastro novo vale para as **próximas** PPs;
-- a PP cujo cadastro mudou depois ganha um **asterisco**, avisando que o
-  cadastro do fornecedor foi alterado após aquele envio;
-- salvar dado de pagamento de um fornecedor com PP no financeiro **avisa
-  antes**.
+Nenhuma tela do financeiro lê os dados bancários do fornecedor do banco —
+todas as consultas de lá pedem só `id, nome, razao_social`. **Quem paga
+lê o PDF da PP**, montado por `lib/pdf/pedido-compra.ts` e guardado no
+storage.
 
-Isso toca `app/(app)/financeiro/**`, que é território de outra frente —
-combinar antes de escrever.
+Isso muda onde a foto tem de ser tirada. Se ela saísse no envio ao
+financeiro, sairia de um cadastro que pode não ser o mesmo que gerou o
+PDF, e documento e foto discordariam. Então **a foto sai junto do PDF**,
+do MESMO `select` do fornecedor, nas três rotas que montam o documento:
+emitir a PP, editar a PP gerada e reenviar a rejeitada. O congelamento
+acontece no envio porque a partir dali nada mais re-monta o PDF.
+
+### O que entrou
+
+* **Dez colunas em `pedidos_compra`** — os nove campos de pagamento com o
+  prefixo `fornecedor_`, mais `dados_pagamento_congelados_em`. Migration
+  `20260909210001`, aditiva, com backfill das 16 PPs que já estavam no
+  financeiro (o cadastro de hoje é a única foto possível para elas, e é
+  também o que já valia).
+* **`lib/data/foto-pagamento-da-pp.ts`** — tirar, ler e comparar a foto,
+  num módulo só, para as três rotas não divergirem.
+* **O asterisco.** Calculado no servidor comparando a foto com o cadastro
+  atual **campo a campo** — não por `updated_at`, que sobe quando alguém
+  troca o telefone e não desce quando a pessoa muda e volta atrás. Ele só
+  marca PP com a foto de fato congelada (`em_avaliacao`, `aprovada`,
+  `pago`): em `gerada` e `rejeitada` o próximo salvar re-tira a foto, e
+  avisar de um descompasso que se desfaz sozinho seria ruído.
+  Aparece na aba de PPs do job, com tooltip, e na ficha da PP em leitura,
+  explicado por extenso — é lá que alguém abre para conferir uma PP que já
+  saiu do job.
+  Os dados bancários **não atravessam** para o cliente: o que sai do
+  servidor é um booleano por PP.
+* **O "tem certeza?" ao salvar o cadastro.** `atualizarFornecedor` compara
+  os nove campos e, se mudaram E o fornecedor tem PP em `em_avaliacao`,
+  `aprovada` ou `pago`, devolve `pedeConfirmacaoPagamento` em vez de
+  gravar. O aviso cita as PPs, diz que a alteração não chega até elas e
+  aponta o caminho certo quando o errado é o pagamento de uma PP que já
+  está lá: cancelar e emitir outra. A auditoria registra a confirmação.
+
+### O que ficou de fora
+
+O financeiro continua pagando pelo PDF, que é a foto na prática. Fazer as
+telas de `app/(app)/financeiro/**` lerem as colunas da foto e mostrarem o
+asterisco ao lado do título a pagar **não entrou** — aquele módulo é de
+outra frente, que está mexendo nele agora, e escrever por cima quebraria a
+regra combinada em `CLAUDE.local.md`. `lerFoto` já está exportada para
+quando essa ponta for fechada.
 
 ## Pendência — as outras seis telas
 
@@ -132,4 +167,18 @@ Conferido no navegador logado, nas quatro superfícies que usam o campo:
   vieram com o documento na segunda linha; o cabeçalho do dialog leu "no
   BV".
 
-`npx tsc --noEmit` e `next lint` limpos. Console sem erro de aplicação.
+E a parte 4:
+
+- **o "tem certeza?"**: trocar a agência de um fornecedor com PP aprovada
+  no financeiro parou o salvamento e mostrou o aviso citando a PP;
+  confirmando, gravou;
+- **o asterisco** apareceu na aba de PPs e na ficha da PP aprovada, e
+  **não** apareceu na rejeitada do mesmo fornecedor — que é a regra;
+- **a foto** ficou onde estava (agência antiga) enquanto o cadastro já
+  tinha a nova, e o asterisco sumiu ao desfazer a alteração;
+- **PP nova** (gerada no projeto de teste) nasceu com as dez colunas
+  preenchidas; foi cancelada depois do teste, e o cadastro do fornecedor
+  usado foi restaurado campo a campo.
+
+`npx tsc --noEmit`, `next lint` e `npm run build` limpos. Console sem erro
+de aplicação.
