@@ -561,7 +561,7 @@ export function ContaAvulsaDrawer(props: Props) {
           <div className="flex-1 overflow-y-auto p-6 space-y-5">
             {/* Empresa */}
             <div className="space-y-2">
-              <Label htmlFor="empresa_id">
+              <Label htmlFor="avulsa-empresa">
                 Empresa *
                 {isEditar && (
                   <span className="ml-2 text-xs text-muted-foreground font-normal">
@@ -575,7 +575,7 @@ export function ContaAvulsaDrawer(props: Props) {
                 disabled={isEditar}
                 required
               >
-                <SelectTrigger id="empresa_id">
+                <SelectTrigger id="avulsa-empresa">
                   <SelectValue placeholder="Selecione a empresa" />
                 </SelectTrigger>
                 <SelectContent>
@@ -622,9 +622,9 @@ export function ContaAvulsaDrawer(props: Props) {
 
             {/* Descrição */}
             <div className="space-y-2">
-              <Label htmlFor="descricao">Descrição *</Label>
+              <Label htmlFor="avulsa-descricao">Descrição *</Label>
               <textarea
-                id="descricao"
+                id="avulsa-descricao"
                 rows={3}
                 maxLength={500}
                 required
@@ -645,9 +645,9 @@ export function ContaAvulsaDrawer(props: Props) {
 
             {/* Valor */}
             <div className="space-y-2">
-              <Label htmlFor="valor">Valor (R$) *</Label>
+              <Label htmlFor="avulsa-valor">Valor (R$) *</Label>
               <Input
-                id="valor"
+                id="avulsa-valor"
                 type="number"
                 step="0.01"
                 min="0.01"
@@ -739,9 +739,9 @@ export function ContaAvulsaDrawer(props: Props) {
             {/* Job — vem antes de Cliente porque escolher job preenche
                 cliente automaticamente (herdado do projeto do job). */}
             <div className="space-y-2">
-              <Label htmlFor="job_id">Job</Label>
+              <Label htmlFor="avulsa-job">Job</Label>
               <Combobox
-                id="job_id"
+                id="avulsa-job"
                 value={jobId}
                 onChange={(v) => setJobId(v ?? "__none__")}
                 placeholder="Nenhum (opcional)"
@@ -788,9 +788,9 @@ export function ContaAvulsaDrawer(props: Props) {
 
             {/* Cliente — rastreabilidade de custo. Travado se job escolhido. */}
             <div className="space-y-2">
-              <Label htmlFor="cliente_id">Cliente</Label>
+              <Label htmlFor="avulsa-cliente">Cliente</Label>
               <Combobox
-                id="cliente_id"
+                id="avulsa-cliente"
                 value={clienteId}
                 onChange={handleClienteChange}
                 placeholder="Nenhum (opcional)"
@@ -826,7 +826,7 @@ export function ContaAvulsaDrawer(props: Props) {
 
             {/* Tipo do plano de contas */}
             <div className="space-y-2">
-              <Label htmlFor="plano_conta_tipo_id">Tipo *</Label>
+              <Label htmlFor="avulsa-plano-conta-tipo">Tipo *</Label>
               <Select
                 value={tipoId}
                 onValueChange={(v) => {
@@ -835,7 +835,7 @@ export function ContaAvulsaDrawer(props: Props) {
                 }}
                 required
               >
-                <SelectTrigger id="plano_conta_tipo_id">
+                <SelectTrigger id="avulsa-plano-conta-tipo">
                   <SelectValue placeholder="Selecione o tipo" />
                 </SelectTrigger>
                 <SelectContent>
@@ -855,14 +855,14 @@ export function ContaAvulsaDrawer(props: Props) {
 
             {/* Subtipo do plano de contas */}
             <div className="space-y-2">
-              <Label htmlFor="plano_conta_subtipo_id">Subtipo *</Label>
+              <Label htmlFor="avulsa-plano-conta-subtipo">Subtipo *</Label>
               <Select
                 value={subtipoId}
                 onValueChange={setSubtipoId}
                 disabled={!tipoId || subtiposFiltrados.length === 0}
                 required
               >
-                <SelectTrigger id="plano_conta_subtipo_id">
+                <SelectTrigger id="avulsa-plano-conta-subtipo">
                   <SelectValue
                     placeholder={
                       tipoId

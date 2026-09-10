@@ -460,7 +460,7 @@ export function ContaRecorrenteDrawer(props: Props) {
           <div className="flex-1 overflow-y-auto p-6 space-y-5">
             {/* Empresa */}
             <div className="space-y-2">
-              <Label htmlFor="empresa_id">
+              <Label htmlFor="recorrente-empresa">
                 Empresa *
                 {isEditar && (
                   <span className="ml-2 text-xs text-muted-foreground font-normal">
@@ -474,7 +474,7 @@ export function ContaRecorrenteDrawer(props: Props) {
                 disabled={isEditar}
                 required
               >
-                <SelectTrigger id="empresa_id">
+                <SelectTrigger id="recorrente-empresa">
                   <SelectValue placeholder="Selecione a empresa" />
                 </SelectTrigger>
                 <SelectContent>
@@ -499,9 +499,9 @@ export function ContaRecorrenteDrawer(props: Props) {
 
             {/* Descrição */}
             <div className="space-y-2">
-              <Label htmlFor="descricao">Descrição *</Label>
+              <Label htmlFor="recorrente-descricao">Descrição *</Label>
               <textarea
-                id="descricao"
+                id="recorrente-descricao"
                 rows={3}
                 maxLength={500}
                 required
@@ -522,9 +522,9 @@ export function ContaRecorrenteDrawer(props: Props) {
 
             {/* Valor */}
             <div className="space-y-2">
-              <Label htmlFor="valor">Valor (R$) *</Label>
+              <Label htmlFor="recorrente-valor">Valor (R$) *</Label>
               <Input
-                id="valor"
+                id="recorrente-valor"
                 type="number"
                 step="0.01"
                 min="0.01"
@@ -544,9 +544,9 @@ export function ContaRecorrenteDrawer(props: Props) {
             {/* Job — vem antes de Cliente porque escolher job preenche
                 cliente automaticamente (herdado do projeto do job). */}
             <div className="space-y-2">
-              <Label htmlFor="job_id">Job</Label>
+              <Label htmlFor="recorrente-job">Job</Label>
               <Combobox
-                id="job_id"
+                id="recorrente-job"
                 value={jobId}
                 onChange={(v) => setJobId(v ?? "__none__")}
                 placeholder="Nenhum (opcional)"
@@ -592,9 +592,9 @@ export function ContaRecorrenteDrawer(props: Props) {
 
             {/* Cliente — rastreabilidade de custo. Travado se job escolhido. */}
             <div className="space-y-2">
-              <Label htmlFor="cliente_id">Cliente</Label>
+              <Label htmlFor="recorrente-cliente">Cliente</Label>
               <Combobox
-                id="cliente_id"
+                id="recorrente-cliente"
                 value={clienteId}
                 onChange={handleClienteChange}
                 placeholder="Nenhum (opcional)"
@@ -630,7 +630,7 @@ export function ContaRecorrenteDrawer(props: Props) {
 
             {/* Tipo do plano de contas */}
             <div className="space-y-2">
-              <Label htmlFor="plano_conta_tipo_id">Tipo *</Label>
+              <Label htmlFor="recorrente-plano-conta-tipo">Tipo *</Label>
               <Select
                 value={tipoId}
                 onValueChange={(v) => {
@@ -639,7 +639,7 @@ export function ContaRecorrenteDrawer(props: Props) {
                 }}
                 required
               >
-                <SelectTrigger id="plano_conta_tipo_id">
+                <SelectTrigger id="recorrente-plano-conta-tipo">
                   <SelectValue placeholder="Selecione o tipo" />
                 </SelectTrigger>
                 <SelectContent>
@@ -659,14 +659,14 @@ export function ContaRecorrenteDrawer(props: Props) {
 
             {/* Subtipo do plano de contas */}
             <div className="space-y-2">
-              <Label htmlFor="plano_conta_subtipo_id">Subtipo *</Label>
+              <Label htmlFor="recorrente-plano-conta-subtipo">Subtipo *</Label>
               <Select
                 value={subtipoId}
                 onValueChange={setSubtipoId}
                 disabled={!tipoId || subtiposFiltrados.length === 0}
                 required
               >
-                <SelectTrigger id="plano_conta_subtipo_id">
+                <SelectTrigger id="recorrente-plano-conta-subtipo">
                   <SelectValue
                     placeholder={
                       tipoId

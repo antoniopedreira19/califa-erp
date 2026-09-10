@@ -4291,3 +4291,51 @@ Três coisas para saber ao mexer nesses arquivos:
 
 Contas a Receber ficou de fora de propósito: o campo de `faturar-drawer` é
 `disabled` e só exibe o fornecedor do BV.
+
+---
+
+## ⚠️ Nota de 2026-09-10 — os `id` dos drawers de Contas a Pagar viraram únicos
+
+A tela de Contas a Pagar monta o drawer de **conta avulsa** e o de **conta
+recorrente** ao mesmo tempo. Os dois usavam os mesmos `id` de campo, e
+`id` repetido é HTML inválido: `getElementById` e `<Label htmlFor>` pegam
+sempre o **primeiro** do documento — o da avulsa, renderizada antes. Todo
+rótulo do drawer de recorrência apontava para o campo da avulsa.
+
+A sessão do módulo de Jobs topou com isso testando o campo de fornecedor
+novo (decisão 067): um teste dela "falhou" e parecia bug no `contexto` da
+recorrência, quando era o `getElementById` pegando o drawer errado. Ela
+corrigiu o par do fornecedor no `037a8b1` e deixou o resto anotado. A
+varredura completa achou **sete**, não dois:
+
+`cliente_id` · `descricao` · `empresa_id` · `job_id` ·
+`plano_conta_subtipo_id` · `plano_conta_tipo_id` · `valor`
+
+Todos passaram a ser prefixados por drawer, no padrão que ela já tinha
+usado: `avulsa-empresa`, `recorrente-valor`, e assim por diante.
+
+⚠️ **O que isso NÃO era.** Registrado porque eu mesmo errei ao descrever:
+o `empresa_id` duplicado **não corrompia a cascata empresa→regional**.
+Foco não dispara `onValueChange` — a cascata só roda quando o VALOR muda,
+e o valor vem do estado React, não do DOM. O defeito era de
+`<Label htmlFor>`, leitor de tela e automação; nunca de dado. (A correção
+veio da sessão de Jobs, antes de eu commitar.)
+
+Nenhum `getElementById` do repositório usava os nomes antigos, e o payload
+dos dois drawers é montado do estado React — por isso a renomeação é
+inerte para gravação.
+
+**Verificação (10/09/2026).** Com cada drawer aberto: zero `id` duplicado
+no documento, zero `id` antigo, e os **8 rótulos de cada drawer apontando
+para um campo do próprio drawer**.
+
+### Ponta solta encontrada de passagem — um `<Label>` órfão
+
+`conta-recorrente-drawer.tsx:893` tem `<Label htmlFor="data_fim">`
+apontando para um id que **não existe**: o `DatePicker` recebe
+`name="data_fim"`, e `components/ui/date-picker.tsx` só aceita `name`, não
+`id`. É o único órfão dos dois drawers.
+
+Não consertei: o conserto certo é o `DatePicker` passar a aceitar `id`, e
+ele é componente compartilhado por todo o sistema — escopo maior do que a
+renomeação aprovada. Fica anotado.
