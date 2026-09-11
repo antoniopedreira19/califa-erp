@@ -10,9 +10,12 @@ import {
   calcularTotaisVersao,
   LINHAS_FECHAMENTO_POR_TIPO,
   somarLinhaFechamento,
+  type ParametrosInternacionais,
 } from "@/lib/calculos/versao-totais";
 import { PainelResultado } from "@/components/painel-resultado";
 import { LegendaFechamento } from "@/components/legenda-fechamento";
+import { CadeiaInternacional } from "@/app/(app)/_planilha/cadeia-internacional";
+import type { MoedaEstrangeira } from "@/app/(app)/_planilha/moeda-estrangeira";
 import {
   BotaoColunasSave,
   CabecalhoColunasSave,
@@ -22,6 +25,7 @@ import {
   type ItemPlanilhaJob,
   type ItemBv,
   type JobItemRealizado,
+  type CategoriaModeloPlanilha,
 } from "@/lib/types";
 import { blocosDoItem, somarBlocosDosItens } from "@/lib/calculos/bv-planilha";
 
@@ -39,6 +43,13 @@ interface Props {
   percentualHonorarios: number;
   percentualImposto: number;
   moeda: string;
+  /** Qual fechamento este job usa — vem do `modelo_planilha` da categoria
+   *  do ORÇAMENTO que o originou, nunca da do job (decisão 072). */
+  modeloPlanilha: CategoriaModeloPlanilha;
+  /** Parâmetros da cadeia internacional, ou `null` no nacional. */
+  internacional: ParametrosInternacionais | null;
+  /** Moeda e taxa de compra da coluna de conversão da cadeia. */
+  moedaEstrangeira: MoedaEstrangeira | null;
 }
 
 /** Taxa configurada na versão: 12 -> "12%", 19.53 -> "19,53%". */
@@ -87,18 +98,34 @@ export function JobTotaisCard({
   percentualHonorarios,
   percentualImposto,
   moeda,
+  modeloPlanilha,
+  internacional,
+  moedaEstrangeira,
 }: Props) {
   const {
     subtotaisPorTipo,
     subtotalGeral,
     honorarios,
     imposto,
+    intTaxes,
+    intTransactionCosts,
     faturamentoPrevisto,
     valorJob,
     save,
     faturamento,
     job,
-  } = calcularTotaisVersao(itens, percentualHonorarios, percentualImposto);
+  } = calcularTotaisVersao(
+    itens,
+    percentualHonorarios,
+    percentualImposto,
+    internacional,
+  );
+
+  // No internacional o rodapé do fechamento vira a cadeia: sem a linha das
+  // int. taxes, "Honorários + Impostos" não somaria o faturamento previsto
+  // logo abaixo, e o card mostraria uma conta que não fecha na vertical.
+  const ehInternacional =
+    modeloPlanilha === "internacional" && internacional !== null;
 
   // Com save, o fechamento abre em três colunas — o mesmo bloco da tela da
   // versão do orçamento. Sem ele os dois totais de baixo divergiriam sem
@@ -196,51 +223,78 @@ export function JobTotaisCard({
               </div>
             )}
             {/* Com save, estas duas são as do FATURAMENTO: são elas que
-                levam ao "Faturamento previsto" logo abaixo. */}
-            <LinhaValor
-              rotulo={`Honorários (${formatarTaxa(percentualHonorarios)})`}
-              valor={formatCurrency(
-                temSave ? faturamento.honorarios : honorarios,
-                moeda,
-              )}
-            />
-            <LinhaValor
-              rotulo={`Impostos (${formatarTaxa(percentualImposto)})`}
-              valor={formatCurrency(
-                temSave ? faturamento.imposto : imposto,
-                moeda,
-              )}
-            />
+                levam ao "Faturamento previsto" logo abaixo.
+
+                No internacional saem daqui: a cadeia mostra as MESMAS
+                parcelas, mais as duas que só existem lá. */}
+            {!ehInternacional && (
+              <>
+                <LinhaValor
+                  rotulo={`Honorários (${formatarTaxa(percentualHonorarios)})`}
+                  valor={formatCurrency(
+                    temSave ? faturamento.honorarios : honorarios,
+                    moeda,
+                  )}
+                />
+                <LinhaValor
+                  rotulo={`Impostos (${formatarTaxa(percentualImposto)})`}
+                  valor={formatCurrency(
+                    temSave ? faturamento.imposto : imposto,
+                    moeda,
+                  )}
+                />
+              </>
+            )}
             {/* Os dois fechamentos: o que a California emite nota e o que o
                 cliente se compromete a gastar no total. Diferem pelos
-                principais pagos direto ao fornecedor (A · Direto, D e F). */}
-            <div className="mt-3 flex items-baseline justify-between gap-3 border-t border-border pt-3.5">
-              <span className="text-sm font-semibold">
-                Faturamento previsto
-              </span>
-              <span className="whitespace-nowrap font-mono text-lg font-bold text-california-red">
-                {formatCurrency(faturamentoPrevisto, moeda)}
-              </span>
-            </div>
-            <div className="flex items-baseline justify-between gap-3 pt-1">
-              <span className="text-sm font-semibold">Valor do Job</span>
-              <span className="whitespace-nowrap font-mono text-lg font-bold text-foreground">
-                {formatCurrency(valorJob, moeda)}
-              </span>
-            </div>
-            {/* A explicação das duas bases saiu daqui e virou o segundo
-                tópico da legenda, no pé do card — igual ao da versão. */}
-            {temSave && (
-              <div className="flex items-baseline justify-between gap-3 pt-1">
-                <span className="text-sm font-semibold text-[#5f5d57]">
-                  Save gerado
-                </span>
-                <span className="whitespace-nowrap font-mono text-lg font-bold text-[#5f5d57]">
-                  {formatCurrency(save.totalSaveGerado, moeda)}
-                </span>
-              </div>
+                principais pagos direto ao fornecedor (A · Direto, D e F).
+
+                No internacional eles são as três últimas linhas da cadeia
+                logo abaixo, onde o caminho até o invoice está inteiro. */}
+            {!ehInternacional && (
+              <>
+                <div className="mt-3 flex items-baseline justify-between gap-3 border-t border-border pt-3.5">
+                  <span className="text-sm font-semibold">
+                    Faturamento previsto
+                  </span>
+                  <span className="whitespace-nowrap font-mono text-lg font-bold text-california-red">
+                    {formatCurrency(faturamentoPrevisto, moeda)}
+                  </span>
+                </div>
+                <div className="flex items-baseline justify-between gap-3 pt-1">
+                  <span className="text-sm font-semibold">Valor do Job</span>
+                  <span className="whitespace-nowrap font-mono text-lg font-bold text-foreground">
+                    {formatCurrency(valorJob, moeda)}
+                  </span>
+                </div>
+                {/* A explicação das duas bases saiu daqui e virou o segundo
+                    tópico da legenda, no pé do card — igual ao da versão. */}
+                {temSave && (
+                  <div className="flex items-baseline justify-between gap-3 pt-1">
+                    <span className="text-sm font-semibold text-[#5f5d57]">
+                      Save gerado
+                    </span>
+                    <span className="whitespace-nowrap font-mono text-lg font-bold text-[#5f5d57]">
+                      {formatCurrency(save.totalSaveGerado, moeda)}
+                    </span>
+                  </div>
+                )}
+              </>
             )}
           </div>
+
+          {ehInternacional && internacional && (
+            <CadeiaInternacional
+              faturamento={faturamento}
+              valorJob={valorJob}
+              saveGerado={temSave ? save.totalSaveGerado : null}
+              moeda={moeda}
+              moedaEstrangeira={moedaEstrangeira}
+              percentualHonorarios={percentualHonorarios}
+              percentualIntTaxes={internacional.percentualIntTaxes}
+              percentualImposto={percentualImposto}
+            />
+          )}
         </div>
 
         {/* O Resultado usa o custo BRUTO e mostra o BV como linha própria
@@ -249,6 +303,8 @@ export function JobTotaisCard({
         <PainelResultado
           valorJob={valorJob}
           imposto={imposto}
+          intTaxes={intTaxes}
+          intTransactionCosts={intTransactionCosts}
           orcado={totais.orcadoRentabilidade}
           custoPlanejado={totais.planejado.bruto}
           custoRealizado={totais.realizado.bruto}
@@ -260,6 +316,7 @@ export function JobTotaisCard({
       </div>
 
       <LegendaFechamento
+        internacional={ehInternacional}
         custo="custo (planejado ou realizado)"
         extra={
           temSave ? (

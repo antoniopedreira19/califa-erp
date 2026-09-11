@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { configDaPlanilha } from "@/app/(app)/_planilha/modelo-planilha";
 import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, Lock, Table2 } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
@@ -45,7 +46,11 @@ export default async function PlanilhaDaAberturaPage({
     .from("jobs")
     .select(
       "id, codigo, nome, status, empresa_id, responsavel_id, versao_orcamento_aprovada_id, " +
-        "versao:versoes_orcamento!versao_orcamento_aprovada_id(id, numero_versao, moeda, percentual_honorarios, percentual_imposto)",
+        // Os quatro últimos e o embed da categoria do ORÇAMENTO são da cadeia
+      // internacional (decisão 072): é a categoria do orçamento, e não a do
+      // job, que decide como este fechamento soma.
+      "versao:versoes_orcamento!versao_orcamento_aprovada_id(id, numero_versao, moeda, percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra), " +
+        "orcamento:orcamentos(categoria:categorias_dominio!categoria_id(modelo_planilha))",
     )
     .eq("id", params.jobId)
     .eq("tenant_id", session.activeTenant.id)
@@ -61,6 +66,13 @@ export default async function PlanilhaDaAberturaPage({
   }
 
   const versao = (raw as any).versao;
+  // Qual fechamento este job usa. Sai da categoria do ORÇAMENTO, nunca da
+  // do job (decisão 072) — e é a MESMA função que a tela da versão e a
+  // abertura usam, para as três não se lerem diferente.
+  const planilha = configDaPlanilha(
+    (raw as any).orcamento?.categoria?.modelo_planilha,
+    versao ?? {},
+  );
   const versaoAprovadaId = (raw as any).versao_orcamento_aprovada_id as string;
 
   const [gruposRes, itensRes, realizadosRes, categoriasRes, bvsRes] =
@@ -240,6 +252,9 @@ export default async function PlanilhaDaAberturaPage({
         moeda={versao?.moeda ?? "BRL"}
         percentualHonorarios={Number(versao?.percentual_honorarios ?? 0)}
         percentualImposto={Number(versao?.percentual_imposto ?? 0)}
+        modeloPlanilha={planilha.modeloPlanilha}
+        internacional={planilha.internacional}
+        moedaEstrangeira={planilha.moedaEstrangeira}
       />
     </div>
   );

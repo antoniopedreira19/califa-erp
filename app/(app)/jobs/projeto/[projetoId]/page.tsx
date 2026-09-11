@@ -157,7 +157,7 @@ export default async function ProjetoAgregadoPage({
           <div className="mt-[24px]">
             <ResumoResultado
               valorJob={resumoProjeto.valorJob}
-              imposto={resumoProjeto.imposto}
+              deducoes={resumoProjeto.imposto}
               custoPlanejado={resumoProjeto.planejado}
               custoRealizado={resumoProjeto.realizado}
               bvRealizado={resumoProjeto.bvRealizado}

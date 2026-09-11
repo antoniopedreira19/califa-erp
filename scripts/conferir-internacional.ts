@@ -21,6 +21,7 @@
  */
 import {
   calcularTotaisVersao,
+  calcularEfeitoDaMudanca,
   calcularResultadoOperacional,
   type ItemParaTotais,
 } from "../lib/calculos/versao-totais";
@@ -212,6 +213,63 @@ conferir(
 // A linha em save sai do valor do job e fica no faturamento.
 conferir("base do faturamento", s.faturamento.base, 160_000);
 conferir("base do valor do job", s.job.base, 60_000);
+
+// =====================================================================
+// 7. Errata: a soma dos efeitos por linha fecha com o delta total
+// =====================================================================
+//
+// É a propriedade que sustenta o card de Erratas: cada linha mostra o
+// próprio efeito, e a barra mostra o total. Se as duas contas divergirem,
+// o usuário vê parcelas que não somam o que está escrito embaixo.
+//
+// Vale no internacional porque cada parcela da cadeia é LINEAR na base —
+// fee, int. taxes e imposto, todas. A exceção são os custos de transação,
+// que são constante da versão e por isso ficam fora do efeito por linha.
+console.log("\n=== 7. Errata internacional: efeitos somam o delta total ===");
+const INT = { percentualIntTaxes: 18.02, intTransactionCosts: 3_000 };
+const antesItens: ItemParaTotais[] = [
+  { tipo_custo: "B", total_orcado: 80_000 },
+  { tipo_custo: "A", total_orcado: 40_000 },
+  { tipo_custo: "C", total_orcado: 25_000 },
+];
+// Uma errata que mexe em duas linhas: B sobe, A vira AR.
+const depoisItens: ItemParaTotais[] = [
+  { tipo_custo: "B", total_orcado: 95_000 },
+  { tipo_custo: "AR", total_orcado: 40_000 },
+  { tipo_custo: "C", total_orcado: 25_000 },
+];
+const tAntes = calcularTotaisVersao(antesItens, 12, 19.53, INT);
+const tDepois = calcularTotaisVersao(depoisItens, 12, 19.53, INT);
+
+const efeitos = [
+  calcularEfeitoDaMudanca(
+    { total: 80_000, tipoCusto: "B" },
+    { total: 95_000, tipoCusto: "B" },
+    12,
+    19.53,
+    INT,
+  ),
+  calcularEfeitoDaMudanca(
+    { total: 40_000, tipoCusto: "A" },
+    { total: 40_000, tipoCusto: "AR" },
+    12,
+    19.53,
+    INT,
+  ),
+];
+conferir(
+  "Σ efeitos = Δ faturamento",
+  efeitos.reduce((s, e) => s + e.faturamentoPrevisto, 0),
+  tDepois.faturamentoPrevisto - tAntes.faturamentoPrevisto,
+);
+conferir(
+  "Σ efeitos = Δ valor do job",
+  efeitos.reduce((s, e) => s + e.valorJob, 0),
+  tDepois.valorJob - tAntes.valorJob,
+);
+// Os custos de transação são constante: entram nos dois totais e se
+// cancelam no delta, e nenhum efeito de linha os carrega.
+conferir("custos de transação no total", tAntes.intTransactionCosts, 3_000);
 
 console.log(
   falhas === 0

@@ -18,6 +18,14 @@ interface Props {
    */
   valorJob: number;
   imposto: number;
+  /** Int. taxes retidas no exterior — só existem no fechamento
+   *  internacional (decisão 072). **0 no nacional**, e aí a linha nem
+   *  aparece. Obrigatória, e não opcional: quem monta o painel tem que
+   *  dizer, para o resultado não sair inflado em silêncio num job
+   *  internacional. */
+  intTaxes: number;
+  /** Custos de transação internacional. Mesma regra da de cima. */
+  intTransactionCosts: number;
   /** Total dos custos orçados — base da rentabilidade. */
   orcado: number;
   /** Custo BRUTO — com o BV ainda embutido. O BV entra logo abaixo, como
@@ -95,6 +103,8 @@ function LinhaValor({
 export function PainelResultado({
   valorJob,
   imposto,
+  intTaxes,
+  intTransactionCosts,
   orcado,
   custoPlanejado,
   custoRealizado,
@@ -117,9 +127,12 @@ export function PainelResultado({
 
   // O BV entra como REDUÇÃO do custo na conta, e como linha somando na
   // leitura. É a mesma operação escrita dos dois lados do sinal.
+  // No internacional saem do valor do job, além do imposto brasileiro, as
+  // int. taxes (retidas lá fora) e os custos de transação. No nacional as
+  // duas são 0 e a conta é a de sempre.
   const { resultadoOperacional, resultadoGeral } = calcularResultadoOperacional(
     valorJob,
-    imposto,
+    imposto + intTaxes + intTransactionCosts,
     custo - bv,
   );
   const { rentabilidade, percentual: rentabilidadePct } = calcularRentabilidade(
@@ -160,7 +173,22 @@ export function PainelResultado({
           rotulo="Valor do Job"
           valor={formatCurrency(valorJob, moeda)}
         />
-        <LinhaValor rotulo="− Impostos" valor={formatCurrency(imposto, moeda)} />
+        <LinhaValor
+          rotulo={intTaxes > 0 ? "− Impostos BR" : "− Impostos"}
+          valor={formatCurrency(imposto, moeda)}
+        />
+        {intTaxes > 0 && (
+          <LinhaValor
+            rotulo="− Int. taxes (retidas no exterior)"
+            valor={formatCurrency(intTaxes, moeda)}
+          />
+        )}
+        {intTransactionCosts > 0 && (
+          <LinhaValor
+            rotulo="− Int. transaction costs"
+            valor={formatCurrency(intTransactionCosts, moeda)}
+          />
+        )}
         <LinhaValor
           rotulo={planejada ? "− Custo planejado" : "− Custo realizado"}
           valor={temCusto ? formatCurrency(custo, moeda) : "—"}
@@ -202,7 +230,12 @@ export function PainelResultado({
           Composto por
         </p>
         <div className="mt-1 flex items-baseline justify-between gap-3 py-1">
-          <span className="text-sm font-medium">Honorários</span>
+          {/* No internacional os honorários se chamam FEE — o card do
+              orçamento já os escreve assim, e o mesmo número não pode ter
+              dois nomes nas duas telas do mesmo job (decisão 072). */}
+          <span className="text-sm font-medium">
+            {intTaxes > 0 ? "Fee" : "Honorários"}
+          </span>
           <span className="whitespace-nowrap font-mono text-[13px] font-semibold">
             {formatCurrency(honorarios, moeda)}
             {taxaHonorarios ? ` · ${taxaHonorarios}` : ""}

@@ -8,8 +8,15 @@ interface Props {
    * É a base do resultado, como no card de Totais.
    */
   valorJob: number;
-  /** Imposto embutido na receita. Sai da conta do resultado. */
-  imposto: number;
+  /**
+   * Tudo que sai do valor do job antes de sobrar resultado.
+   *
+   * No nacional é só o imposto. No internacional são imposto brasileiro +
+   * int. taxes + custos de transação — por isso o nome não é `imposto`:
+   * um prop chamado assim recebendo três coisas é como o número sai certo
+   * numa tela e errado na outra (decisão 072).
+   */
+  deducoes: number;
   /** Soma do planejado dos itens: o desembolso esperado da agência. */
   custoPlanejado: number;
   /** Soma do realizado lançado. */
@@ -41,7 +48,7 @@ interface Props {
  */
 export function ResumoResultado({
   valorJob,
-  imposto,
+  deducoes,
   custoPlanejado,
   custoRealizado,
   bvPlanejado = 0,
@@ -54,12 +61,12 @@ export function ResumoResultado({
   // percentuais diferentes para o mesmo projeto (docs/decisions/022).
   const planejado = calcularResultadoOperacional(
     valorJob,
-    imposto,
+    deducoes,
     custoPlanejado - bvPlanejado,
   );
   const realizado = calcularResultadoOperacional(
     valorJob,
-    imposto,
+    deducoes,
     custoRealizado - bvRealizado,
   );
 

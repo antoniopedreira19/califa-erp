@@ -3275,3 +3275,46 @@ planejado com R$ 9.000,00; e no JOB-0033 uma PP de verba de R$ 8.000 num
 item planejado de R$ 15.000 **enviada sem pedir confirmação** — que é o
 caso que pegaria a soma dobrada no servidor. Ficaram no projeto de teste
 a PP-00054 (gerada, JOB-0029) e a PP-00055 (em avaliação, JOB-0033).
+
+## ⚠️ Nota de 2026-09-11 — o job internacional lê pela cadeia do orçamento (decisão 072)
+
+Terceira entrega da [072](../decisions/072-orcamento-internacional.md).
+O job já **nascia** certo (segunda entrega); agora ele também **lê** certo.
+
+### O que estava errado
+
+`/jobs/[jobId]` mostrava R$ 423.016,79 num job cujo banco tinha
+R$ 515.999,99 — `carregar-detalhe.ts` fechava pela cadeia nacional.
+
+E havia um erro mais sutil no resultado: o resultado operacional é sempre
+`principal + fee − custo`, então descontar só o imposto brasileiro de um
+valor do job que já embute as int. taxes o inflava **exatamente pelo valor
+delas** — R$ 411.962,09 no lugar de R$ 337.138,51.
+
+### O que mudou
+
+| Arquivo | O quê |
+|---|---|
+| `carregar-detalhe.ts` | embed traz os parâmetros da versão + `modelo_planilha` da categoria do ORÇAMENTO; expõe `modeloPlanilha` no retorno |
+| `job-totais-card.tsx` | no internacional, o rodapé vira a **cadeia**; legenda internacional |
+| `job-realizado-section.tsx` | o `Pick<VersaoOrcamento>` cresceu, e `paraTotais` fecha pela cadeia certa |
+| `painel-resultado.tsx` | `intTaxes` e `intTransactionCosts` como linhas próprias; "Honorários" vira "Fee" |
+| `resumo-resultado.tsx` | o prop `imposto` virou **`deducoes`** |
+| `actions-errata.ts`, `save-errata-actions.ts` | a errata calcula e grava pela cadeia certa |
+| `_planilha/cadeia-internacional.tsx` | o bloco da cadeia, extraído e compartilhado com a versão do orçamento |
+
+### Por que a errata veio junto
+
+A barra mostra o delta calculado no cliente; o servidor recalcula para
+gravar. Corrigir um lado só faria o pop-up prometer um número e o banco
+guardar outro. `calcularEfeitoDaMudanca` ganhou o degrau — e os **custos
+de transação ficam fora dele**, porque são constante da versão e não
+parcela de linha. `scripts/conferir-internacional.ts` §7 testa que a soma
+dos efeitos fecha com o delta total.
+
+### Armadilha
+
+`ResumoResultado` e `PainelResultado` são de 7 telas. As agregadas passam
+`intTaxes={0}` e `intTransactionCosts={0}` **explicitamente** — elas ainda
+fecham pela cadeia nacional (entrega futura), e o zero explícito é o que
+faz o TypeScript apontar onde mexer quando a vez delas chegar.
