@@ -1,7 +1,7 @@
 # 069 — A regional do job é a fonte; o rateio só existe onde não há job
 
 **Data:** 2026-09-10
-**Status:** aceita
+**Status:** aceita · revisada em 2026-09-11 (o BV entrou)
 **Contexto:** `vw_fluxo_caixa`, `jobs`, `desembolsos`, conciliação e todo
 lançamento que alimentará o DRE por regional. Fecha a pendência deixada
 aberta pela reversão `20260909180001_regional_id_volta_a_ser_nullable.sql`.
@@ -85,9 +85,9 @@ depois, e para o caso de a escrita um dia divergir.
   "pelo menos uma linha de rateio", nem trigger de soma 100 em
   `desembolsos_regionais` — avulsa e recorrente têm.
 - **Pagamento de fatura de cartão** agrega N compras e não tem job único.
-- **Título com origem `avulso`** não tem job. O de origem `bv` **tem**:
-  `itens_bv.job_item_orcado_id` → `jobs_itens_orcado.job_id`. A view ainda
-  não percorre esse caminho.
+- **Título com origem `avulso`** não tem job — esse fica para o próximo
+  lote. O de origem `bv` **tem**, e desde 11/09/2026 a view percorre o
+  caminho (ver a revisão no fim).
 - **A conciliação** lê `lancamentos_financeiros` direto, não a view: o job
   derivado da baixa de título não aparece ali, e a linha sai sem regional.
 
@@ -96,3 +96,32 @@ depois, e para o caso de a escrita um dia divergir.
 - Migration `20260910210001_regional_do_job_e_a_fonte.sql`
 - Reversão anterior: `20260909180001_regional_id_volta_a_ser_nullable.sql`
 - `docs/handoffs/HANDOFF_FINANCEIRO.md`, seção do `regional_id`
+
+---
+
+## Revisão de 2026-09-11 — o BV se associa ao job
+
+O BV tinha ficado de fora por omissão da view, não por regra. Corrigido
+pela migration `20260911100001_bv_se_associa_ao_job.sql`, a pedido do
+Tiago: *"que o BV seja associado ao job logo, como deve"*.
+
+O caminho é `itens_bv.job_item_orcado_id` → `jobs_itens_orcado.job_id`, e
+a `vw_faturamento_pendente` **já o percorria** para listar o BV a faturar.
+Quem não percorria era a `vw_fluxo_caixa`: o CTE `fat_composicao`
+resolvia o job só para `origem_tipo = 'job'`. Com isso, o título de BV
+aparecia sem job e sem regional — e a baixa dele também, porque
+`lancamento_job` deriva o job do lançamento a partir de `fat_composicao`.
+
+**Por que o elo direto basta, e não um COALESCE com o `item_versao_id`.**
+Levantado no banco antes de escrever, nos 8 BVs existentes: os 5 que têm
+cópia no job têm o elo direto preenchido, e a rota alternativa devolve o
+MESMO job; os 3 sem elo não têm cópia no job nenhuma — são BVs de
+orçamento, cujo job ainda não existe. Some-se que só BV `confirmado`
+chega ao faturamento, e `confirmarBv` exige job aberto. BV faturado
+sempre tem job. Resolver pelas duas rotas seria inventar regra que o dado
+não pede, e faria as duas views divergirem.
+
+**Efeito colateral bom:** `fat_composicao` agrupa o faturamento por job
+também quando o item é BV. Como é ele que reparte o título entre N jobs,
+uma nota que misture faturamento de job e BV passa a dividir certo —
+antes o pedaço do BV caía todo no grupo nulo.
