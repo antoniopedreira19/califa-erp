@@ -184,15 +184,41 @@ entre a versão do orçamento e a planilha interna do job — duas cópias
 divergiriam na primeira correção, como já aconteceu neste projeto com a
 legenda e com as cores de bloco.
 
+## A visão agregada: cada linha fecha pela sua cadeia (11/09/2026)
+
+Quarta entrega. Um projeto pode ter orçamento nacional e internacional
+lado a lado, e a pergunta era como somar dois fechamentos diferentes.
+
+**A resposta já existia na tela.** O consolidado nunca foi "uma conta do
+projeto": ele é o **somatório dos fechamentos de cada orçamento**, e o
+card já avisava que "os percentuais acima são a média das taxas, porque os
+orçamentos deste projeto não usam todos as mesmas". Cadeias diferentes são
+a mesma família de problema que taxas diferentes — cada linha fecha pela
+sua, e o projeto soma.
+
+O que mudou na leitura: quando existe algum orçamento internacional, o
+fechamento ganha as linhas **Int. taxes (retidas no exterior)** e **Int.
+transaction costs**, e "Impostos" vira "Impostos BR". Sem elas, as
+parcelas não somariam o faturamento previsto logo abaixo. Num projeto só
+nacional as duas são 0 e nem aparecem.
+
+O modelo de planilha mora em `OrcamentoRascunho.modeloPlanilha`, **fora**
+de `parametros`: os de lá são colunas da versão, que o usuário edita no
+modal; este é da categoria, e ele não mexe. Por isso o modal passou a
+preservar os campos internacionais por spread — reescrever o objeto campo
+a campo é como eles seriam zerados por um formulário que nem sabe que
+existem.
+
+Conferido ao vivo: a agregada do projeto de teste subiu de
+R$ 1.003.965,22 para R$ 1.096.948,42 — **exatamente** os R$ 92.983,20 de
+int. taxes do único orçamento internacional, e nada mais.
+
 ## O que NÃO entrou
 
 A **abertura** do job entrou em 11/09/2026 (seção acima). Seguem nacionais,
 e a cadeia não vaza para eles porque o 4º parâmetro é opcional e ninguém lá
 o passa:
 
-- **visão agregada** do projeto (orçamentos e jobs) — os três pontos
-  passam `intTaxes={0}` e `intTransactionCosts={0}` **explicitamente**, de
-  propósito: quando a entrega chegar, o TypeScript aponta onde mexer;
 - **exportação** e **importação** em Excel.
 
 ## Decisões de tela

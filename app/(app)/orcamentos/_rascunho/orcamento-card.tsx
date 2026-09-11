@@ -13,7 +13,10 @@ import {
 } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { cn, formatCurrency } from "@/lib/utils";
-import type { Categoria } from "@/lib/types";
+import type {
+  Categoria,
+  CategoriaModeloPlanilha,
+} from "@/lib/types";
 import {
   ItensTable,
   type AdaptadorItens,
@@ -53,6 +56,9 @@ interface Props {
    *  gerado no servidor, no salvamento. */
   codigo: string;
   parametros: ParametrosVersao;
+  /** Qual cadeia fecha ESTE orçamento (decisão 072). Obrigatório: na visão
+   *  agregada cada card tem a sua, e um default somaria pela errada. */
+  modeloPlanilha: CategoriaModeloPlanilha;
   /** Bruto ou Líquido (− BV). O estado mora no editor: a chave vale para
    *  a página inteira, e aqui há vários orçamentos na mesma tela. */
   visao: VisaoBv;
@@ -122,9 +128,10 @@ export function JobRascunhoCard({
   bloqueio,
   badge,
   onEditarParametros,
+  modeloPlanilha,
 }: Props) {
   const [askRemover, setAskRemover] = React.useState(false);
-  const totais = totaisDoJob(job, parametros);
+  const totais = totaisDoJob(job, parametros, modeloPlanilha);
 
   // Cada card de orçamento é uma planilha própria, com seus grupos e seu
   // subtotal — por isso o "Recolher todos" mora aqui dentro, agindo só

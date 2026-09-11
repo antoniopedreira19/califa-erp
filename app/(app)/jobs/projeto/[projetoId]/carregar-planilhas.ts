@@ -1,12 +1,18 @@
 import { createClient } from "@/lib/supabase/server";
 import { calcularTotaisVersao } from "@/lib/calculos/versao-totais";
+import { configDaPlanilha } from "@/app/(app)/_planilha/modelo-planilha";
 import {
   blocosDoItem,
   realizadoVemDasPPs,
   somarBlocosDosItens,
   type BvParaConta,
 } from "@/lib/calculos/bv-planilha";
-import { nomeDoJobNoFinanceiro, type JobStatus, type TipoCusto } from "@/lib/types";
+import {
+  nomeDoJobNoFinanceiro,
+  type CategoriaModeloPlanilha,
+  type JobStatus,
+  type TipoCusto,
+} from "@/lib/types";
 import { saveDosJobs } from "@/lib/data/saves";
 import type {
   GrupoPlanilhaProjeto,
@@ -43,7 +49,11 @@ export async function carregarPlanilhasDosJobs(
     .select(
       "id, codigo, nome, nome_financeiro, status, versao_orcamento_aprovada_id, " +
         "responsavel:profiles!responsavel_id(nome), " +
-        "versao:versoes_orcamento!versao_orcamento_aprovada_id(moeda, percentual_honorarios, percentual_imposto)",
+        // Os quatro da cadeia internacional e o modelo da categoria do
+        // ORÇAMENTO (decisão 072): cada job do projeto fecha pela sua
+        // cadeia, e o consolidado soma os fechamentos.
+        "versao:versoes_orcamento!versao_orcamento_aprovada_id(moeda, percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra), " +
+          "orcamento:orcamentos(categoria:categorias_dominio!categoria_id(modelo_planilha))",
     )
     .eq("tenant_id", tenantId)
     .in("id", jobIds)
@@ -273,6 +283,8 @@ export async function carregarPlanilhasDosJobs(
       subtotalGeral,
       honorarios,
       imposto,
+      intTaxes,
+      intTransactionCosts,
       faturamentoPrevisto,
       valorJob,
       save: quebraSave,
@@ -287,6 +299,13 @@ export async function carregarPlanilhasDosJobs(
       })),
       percentualHonorarios,
       percentualImposto,
+      configDaPlanilha(
+        (j as { orcamento?: { categoria?: { modelo_planilha?: string } } })
+          .orcamento?.categoria?.modelo_planilha as
+          | CategoriaModeloPlanilha
+          | undefined,
+        j.versao ?? {},
+      ).internacional,
     );
 
     return {
@@ -320,6 +339,8 @@ export async function carregarPlanilhasDosJobs(
       subtotaisPorTipo,
       honorarios,
       imposto,
+      intTaxes,
+      intTransactionCosts,
       faturamentoPrevisto,
       valorJob,
       save: quebraSave,
