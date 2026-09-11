@@ -23,12 +23,7 @@ import {
 import { DatePicker } from "@/components/ui/date-picker";
 import { criarContaBancaria, editarContaBancaria } from "./actions";
 import type { ContaBancaria } from "@/lib/types";
-
-type EmpresaContabilSumario = {
-  id: string;
-  razao_social: string;
-  nome_fantasia: string | null;
-};
+import type { EmpresaContabilSumario } from "./types";
 
 type Props =
   | {

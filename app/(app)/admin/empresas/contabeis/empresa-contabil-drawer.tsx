@@ -180,6 +180,7 @@ export function EmpresaContabilDrawer(props: Props) {
                   errors={fieldErrors}
                 >
                   <Input
+                    id="cnpj"
                     name="cnpj"
                     defaultValue={formatarCNPJ(empresa?.cnpj)}
                     className={erroClasses("cnpj")}
@@ -206,6 +207,7 @@ export function EmpresaContabilDrawer(props: Props) {
                   errors={fieldErrors}
                 >
                   <Input
+                    id="razao_social"
                     ref={razaoSocialRef}
                     name="razao_social"
                     defaultValue={empresa?.razao_social ?? ""}
@@ -221,6 +223,7 @@ export function EmpresaContabilDrawer(props: Props) {
                   errors={fieldErrors}
                 >
                   <Input
+                    id="nome_fantasia"
                     ref={nomeFantasiaRef}
                     name="nome_fantasia"
                     defaultValue={empresa?.nome_fantasia ?? ""}
