@@ -7,6 +7,8 @@ import { logAuditEvent } from "@/lib/auth/audit";
 import { checarPermissao } from "@/lib/permissoes-server";
 import { aberturaJobSchema } from "@/lib/validations/abertura-job";
 import { calcularTotaisVersao } from "@/lib/calculos/versao-totais";
+import { configDaPlanilha } from "@/app/(app)/_planilha/modelo-planilha";
+import type { CategoriaModeloPlanilha } from "@/lib/types";
 import { gerarCodigoJob } from "@/lib/codigos/jobs";
 import type { VersaoOrcamentoItem } from "@/lib/types";
 
@@ -99,7 +101,12 @@ export async function enviarJobParaAbertura(
   const { data: versao } = await supabase
     .from("versoes_orcamento")
     .select(
-      "id, status, orcamento_id, percentual_honorarios, percentual_imposto",
+      // Os quatro últimos são da cadeia internacional (decisão 072). Sem
+      // eles o job nasceria com o fechamento NACIONAL — e `valor_total`,
+      // `faturamento_previsto` e os dois `_abertura` são GRAVADOS aqui,
+      // com os `_abertura` congelados para sempre. Erro de leitura vira
+      // erro permanente no banco.
+      "id, status, orcamento_id, percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra",
     )
     .eq("id", versaoId)
     .eq("tenant_id", session.activeTenant.id)
@@ -108,6 +115,12 @@ export async function enviarJobParaAbertura(
       status: string;
       orcamento_id: string;
       percentual_honorarios: number;
+      // Obrigatórios, nunca opcionais: linha estreita montada à mão com
+      // campo opcional é como campo novo some em silêncio (CLAUDE.md).
+      percentual_int_taxes: number;
+      int_transaction_costs: number;
+      moeda_estrangeira: string | null;
+      cambio_compra: number | null;
       percentual_imposto: number;
     }>();
 
@@ -119,7 +132,10 @@ export async function enviarJobParaAbertura(
   const { data: orc } = await supabase
     .from("orcamentos")
     .select(
-      "id, status, versao_aprovada_id, projeto_id, gp_responsavel_id, produtor_id",
+      // `!categoria_id` é obrigatório: `orcamentos` tem duas FKs para
+      // `categorias_dominio` (categoria e serviço), e o embed ambíguo
+      // derruba a query inteira em silêncio.
+      "id, status, versao_aprovada_id, projeto_id, gp_responsavel_id, produtor_id, categoria:categorias_dominio!categoria_id(modelo_planilha)",
     )
     .eq("id", versao.orcamento_id)
     .eq("tenant_id", session.activeTenant.id)
@@ -130,6 +146,7 @@ export async function enviarJobParaAbertura(
       projeto_id: string;
       gp_responsavel_id: string | null;
       produtor_id: string | null;
+      categoria: { modelo_planilha: CategoriaModeloPlanilha } | null;
     }>();
 
   if (!orc) return { ok: false, message: "Orçamento não encontrado." };
@@ -264,10 +281,17 @@ export async function enviarJobParaAbertura(
     return { ok: false, message: "Não foi possível calcular o valor do job." };
   }
 
+  // Quem decide a cadeia é a categoria do ORÇAMENTO, não a do job
+  // (decisão 072, definida em 11/09/2026). O financeiro escolhe uma
+  // categoria para o job na abertura, e ela classifica — não recalcula.
+  // Fosse a do job, trocá-la moveria o fechamento vivo por baixo de um
+  // `valor_job_abertura` que está congelado, e a tela do financeiro
+  // mostraria uma errata que ninguém fez.
   const totais = calcularTotaisVersao(
     (itensBrutos ?? []) as unknown as VersaoOrcamentoItem[],
     Number(versao.percentual_honorarios ?? 0),
     Number(versao.percentual_imposto ?? 0),
+    configDaPlanilha(orc.categoria?.modelo_planilha, versao).internacional,
   );
 
   let codigo: string;

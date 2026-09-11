@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { tipoGeraDesembolso } from "@/lib/calculos/versao-totais";
-import type { TipoCusto } from "@/lib/types";
+import type { CategoriaModeloPlanilha, TipoCusto } from "@/lib/types";
 import {
   contatosDeCobrancaPorJob,
   type ContatoCobranca,
@@ -57,6 +57,11 @@ export interface JobNaFila {
    */
   categoria_id: string | null;
   categoria_nome: string | null;
+  /** Modelo de planilha da categoria do ORÇAMENTO de origem — é ele que
+   *  decide a cadeia de cálculo do job (decisão 072). A categoria que o
+   *  financeiro escolher precisa usar o mesmo modelo; a lista da tela já
+   *  vem filtrada por ele, e a server action recusa o resto. */
+  modelo_planilha_orcamento: CategoriaModeloPlanilha;
   /**
    * Serviço do job (categorias_dominio, escopo 'projeto'). Na fila vem do
    * orçamento de origem (`orcamentos.servico_id`); no job já aberto vem
@@ -132,7 +137,7 @@ const SELECT_JOB_FILA =
   // `!categoria_id`: `orcamentos` tem duas FKs para `categorias_dominio`
   // desde 02/09/2026 (categoria e servico).
   "orcamento:orcamentos(codigo, categoria_id, servico_id, " +
-  "categoria:categorias_dominio!categoria_id(nome), " +
+  "categoria:categorias_dominio!categoria_id(nome, modelo_planilha), " +
   "servico:categorias_dominio!servico_id(nome))";
 
 /**
@@ -233,6 +238,12 @@ function montarJobNaFila(
     orcamento_codigo: j.orcamento?.codigo ?? null,
     categoria_id: j.orcamento?.categoria_id ?? null,
     categoria_nome: j.orcamento?.categoria?.nome ?? null,
+    // Orçamento antigo, sem categoria, fecha como nacional — que é o que
+    // ele sempre fez.
+    modelo_planilha_orcamento:
+      (j.orcamento?.categoria?.modelo_planilha as
+        | CategoriaModeloPlanilha
+        | undefined) ?? "nacional",
     servico_id: j.servico_id ?? j.orcamento?.servico_id ?? null,
     servico_nome: j.servico_id
       ? (j.servico?.nome ?? null)

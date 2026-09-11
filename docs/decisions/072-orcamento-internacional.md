@@ -126,12 +126,49 @@ categorias restritas a certos tipos de serviço.
 serviço, ortogonal ao `modelo_planilha`. A trava recusa mudança de `nome`,
 `escopo` e `modelo_planilha` — não impede vínculo novo noutra tabela.
 
+## O job: a cadeia é a do ORÇAMENTO (11/09/2026)
+
+Decidido pelo Tiago depois da primeira entrega, quando a abertura de job
+entrou em escopo.
+
+Na abertura, o financeiro escolhe uma categoria para o job num Select
+próprio — ela vem pré-preenchida com a do orçamento, mas pode ser trocada,
+e é gravada em `jobs.categoria_id`. Isso abria a pergunta: quem decide a
+cadeia do job, a categoria do orçamento ou a do job?
+
+**A do orçamento.** A categoria do job classifica para o financeiro; não
+recalcula. Fosse a do job, trocá-la moveria o fechamento vivo por baixo de
+um `valor_job_abertura` que é congelado no envio — e a tela do financeiro,
+que compara os dois, mostraria uma errata de ~R$ 93 mil que ninguém fez.
+
+**E a abertura trava a divergência.** `conferirCategoriaDoJob`
+(`financeiro/abertura-de-job/actions.ts`) recusa categoria cujo
+`modelo_planilha` seja diferente do orçamento, nos dois pontos que gravam
+(abrir e editar o registro da abertura). A tela já filtra o Select pelo
+modelo, mas a regra não pode depender dela.
+
+Sem isso, `abertura-actions.ts` gravaria o job pela cadeia NACIONAL — e
+`valor_total`, `faturamento_previsto` e os dois `_abertura` são escrita,
+não exibição. Os `_abertura` nunca mais mudam: erro ali é permanente.
+
+Conferido ao vivo em 11/09/2026: JOB-0008, nascido do orçamento
+0-0001/26-07, gravou **R$ 515.999,99** nas quatro colunas (seria
+R$ 423.016,79 pela nacional), e o Select da abertura oferece só
+"Internacional" — enquanto um job nacional segue oferecendo as sete
+categorias nacionais.
+
 ## O que NÃO entrou
 
-Job que nasce da versão aprovada, visão agregada do projeto, exportação e
-importação em Excel. Seguem nacionais, e a cadeia não vaza para eles porque
-o 4º parâmetro é opcional e ninguém lá o passa. Entram nas próximas
-entregas, nessa ordem (definida pelo Tiago).
+A **abertura** do job entrou em 11/09/2026 (seção acima). Seguem nacionais,
+e a cadeia não vaza para eles porque o 4º parâmetro é opcional e ninguém lá
+o passa:
+
+- **as telas do job** — detalhe, planejado, realizado e errata. ⚠️ Hoje
+  `/jobs/[jobId]` mostra o fechamento nacional de um job cujo banco já tem
+  o internacional: R$ 423.016,79 na tela contra R$ 515.999,99 gravados. É
+  a próxima entrega;
+- **visão agregada** do projeto (orçamentos e jobs);
+- **exportação** e **importação** em Excel.
 
 ## Decisões de tela
 

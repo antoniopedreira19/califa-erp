@@ -64,6 +64,62 @@ async function conferirServico(
 }
 
 /**
+ * Confere a categoria escolhida para o job na abertura.
+ *
+ * Além do escopo e do `ativo`, checa o **modelo de planilha**: ele tem que
+ * ser o mesmo do orçamento que originou o job (decisão 072, 11/09/2026).
+ *
+ * Quem calcula o job é a cadeia do ORÇAMENTO — a categoria do job
+ * classifica, não recalcula. Deixar o financeiro abrir um job internacional
+ * com categoria nacional (ou o contrário) não quebraria número nenhum, mas
+ * deixaria a tela dizendo "Categoria: Internacional" sobre um fechamento
+ * nacional. A trava evita a contradição na origem.
+ */
+async function conferirCategoriaDoJob(
+  supabase: ReturnType<typeof createClient>,
+  tenantId: string,
+  categoriaId: string,
+  orcamentoId: string,
+): Promise<string | null> {
+  const { data: categoria } = await supabase
+    .from("categorias_dominio")
+    .select("id, nome, escopo, ativo, modelo_planilha")
+    .eq("id", categoriaId)
+    .eq("tenant_id", tenantId)
+    .maybeSingle<{
+      id: string;
+      nome: string;
+      escopo: string;
+      ativo: boolean;
+      modelo_planilha: string;
+    }>();
+
+  if (!categoria || categoria.escopo !== "orcamento") {
+    return "Categoria de job inválida.";
+  }
+  if (!categoria.ativo) {
+    return "Esta categoria foi inativada. Escolha outra para abrir o job.";
+  }
+
+  // `!categoria_id` é obrigatório: `orcamentos` tem duas FKs para
+  // `categorias_dominio`, e o embed ambíguo derruba a query em silêncio.
+  const { data: orc } = await supabase
+    .from("orcamentos")
+    .select("categoria:categorias_dominio!categoria_id(nome, modelo_planilha)")
+    .eq("id", orcamentoId)
+    .eq("tenant_id", tenantId)
+    .maybeSingle<{
+      categoria: { nome: string; modelo_planilha: string } | null;
+    }>();
+
+  const modeloDoOrcamento = orc?.categoria?.modelo_planilha ?? "nacional";
+  if (categoria.modelo_planilha !== modeloDoOrcamento) {
+    return `A categoria "${categoria.nome}" usa um modelo de planilha diferente do orçamento, que é "${orc?.categoria?.nome ?? "sem categoria"}". O job fecha pela cadeia do orçamento, então a categoria dele precisa usar o mesmo modelo.`;
+  }
+  return null;
+}
+
+/**
  * Regrava o rateio de competência do job inteiro (`jobs_competencias`,
  * decisão 055): apaga e reinsere, como as previsões. Devolve a mensagem
  * de erro, ou null.
@@ -181,25 +237,15 @@ export async function abrirJobNoFinanceiro(
     };
   }
 
-  // A categoria do job é a do orçamento (escopo 'orcamento'), e do mesmo
-  // tenant. Sem esta conferência, um id de categoria de projeto passaria
-  // pela FK.
-  const { data: categoria } = await supabase
-    .from("categorias_dominio")
-    .select("id, escopo, ativo")
-    .eq("id", parsed.data.categoria_id)
-    .eq("tenant_id", session.activeTenant.id)
-    .maybeSingle<{ id: string; escopo: string; ativo: boolean }>();
-
-  if (!categoria || categoria.escopo !== "orcamento") {
-    return { ok: false, message: "Categoria de job inválida." };
-  }
-  if (!categoria.ativo) {
-    return {
-      ok: false,
-      message: "Esta categoria foi inativada. Escolha outra para abrir o job.",
-    };
-  }
+  // Escopo, `ativo` e — desde a decisão 072 — o modelo de planilha, que
+  // tem que ser o mesmo do orçamento.
+  const categoriaErro = await conferirCategoriaDoJob(
+    supabase,
+    session.activeTenant.id,
+    parsed.data.categoria_id,
+    job.orcamento_id,
+  );
+  if (categoriaErro) return { ok: false, message: categoriaErro };
 
   const servicoErro = await conferirServico(
     supabase,
@@ -833,22 +879,15 @@ export async function editarRegistroDaAbertura(
     ? ((job.abertura_revisao_errata_id as string | null) ?? null)
     : null;
 
-  const { data: categoria } = await supabase
-    .from("categorias_dominio")
-    .select("id, escopo, ativo")
-    .eq("id", parsed.data.categoria_id)
-    .eq("tenant_id", session.activeTenant.id)
-    .maybeSingle<{ id: string; escopo: string; ativo: boolean }>();
-
-  if (!categoria || categoria.escopo !== "orcamento") {
-    return { ok: false, message: "Categoria de job inválida." };
-  }
-  if (!categoria.ativo) {
-    return {
-      ok: false,
-      message: "Esta categoria foi inativada. Escolha outra.",
-    };
-  }
+  // Escopo, `ativo` e — desde a decisão 072 — o modelo de planilha, que
+  // tem que ser o mesmo do orçamento.
+  const categoriaErro = await conferirCategoriaDoJob(
+    supabase,
+    session.activeTenant.id,
+    parsed.data.categoria_id,
+    job.orcamento_id,
+  );
+  if (categoriaErro) return { ok: false, message: categoriaErro };
 
   const servicoErro = await conferirServico(
     supabase,
