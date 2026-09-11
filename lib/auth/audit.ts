@@ -208,6 +208,10 @@ export type AuditAction =
   | "verba_producao.prestacao_fechada"
   | "pp_verba_devolucao.baixada"
   | "pp_verba_devolucao.baixa_estornada"
+  | "empresa_contabil.criada"
+  | "empresa_contabil.atualizada"
+  | "empresa_contabil.desativada"
+  | "empresa_contabil.reativada"
   | "acao_negada";
 
 export interface AuditPayload {
