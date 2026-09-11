@@ -30,6 +30,14 @@ export interface ConfirmDialogProps {
   /** Nota exibida acima dos botões explicando por que confirmar está
    *  travado. Sem ela o botão morto parece defeito. */
   confirmDisabledReason?: React.ReactNode;
+  /**
+   * Camada do cartão e do véu. Só é preciso quando a confirmação é aberta
+   * de DENTRO de uma tela cheia (`FullscreenContent`), que fica acima do
+   * `z-50` padrão — sem isso o cartão monta atrás dela. Ver a escala de
+   * camadas em `components/ui/dialog.tsx` (10/09/2026).
+   */
+  contentClassName?: string;
+  overlayClassName?: string;
   onConfirm: () => void | Promise<void>;
 }
 
@@ -59,11 +67,16 @@ export function ConfirmDialog({
   pending = false,
   confirmDisabled = false,
   confirmDisabledReason,
+  contentClassName,
+  overlayClassName,
   onConfirm,
 }: ConfirmDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent
+        className={cn("sm:max-w-md", contentClassName)}
+        overlayClassName={overlayClassName}
+      >
         <DialogHeader>
           <div className="flex items-start gap-3">
             {variant === "destructive" && (
@@ -75,9 +88,21 @@ export function ConfirmDialog({
                 canto: sem isso, título longo passa por baixo do X. */}
             <div className="space-y-1 flex-1 pr-6">
               <DialogTitle>{title}</DialogTitle>
-              {description && (
-                <DialogDescription>{description}</DialogDescription>
-              )}
+              {/* `DialogDescription` do Radix renderiza um `<p>`, e metade
+                  das telas passa `description` com `<p>` e `<div>` dentro —
+                  o que é HTML inválido e o React acusa como erro de
+                  hidratação no console (visto em 10/09/2026, no confirm de
+                  rejeição da PP). Texto simples continua em `<p>`; conteúdo
+                  montado vira `<div>` pelo `asChild`, sem mudar a aparência
+                  nem o `aria-describedby`. */}
+              {description &&
+                (typeof description === "string" ? (
+                  <DialogDescription>{description}</DialogDescription>
+                ) : (
+                  <DialogDescription asChild>
+                    <div className="text-sm text-muted-foreground">{description}</div>
+                  </DialogDescription>
+                ))}
             </div>
           </div>
         </DialogHeader>

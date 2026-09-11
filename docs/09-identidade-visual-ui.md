@@ -381,10 +381,19 @@ sintoma engana: parece botão sem handler, e o handler estava certo.
 
 **Como fazer:**
 
-- monte pelo portal (`FullscreenContent` para tela cheia) e deixe o `z-50`
-  padrão — **quem ordena as camadas é a pilha de layers do Radix, não o
-  `z-index`**. Subir o `z` de uma camada esconde os diálogos que ela mesma
-  abre, que montam depois e ficariam por cima;
+- monte pelo portal (`FullscreenContent` para tela cheia) e **declare o
+  `z` explicitamente**, nesta escala: `z-50` para drawer e diálogos
+  comuns, `z-[55]` para a camada em tela cheia, `z-[60]` para o diálogo
+  aberto de dentro dela — véu junto, pelo `overlayClassName`. Diálogo que
+  pode ser aberto dos dois lugares leva `z-[60]` sempre;
+
+  ⚠️ **Aqui estava escrito o contrário, e estava errado** (corrigido em
+  10/09/2026): "deixe todo mundo em `z-50`, quem ordena é a pilha de
+  layers". Não ordena. O React insere os portais na ordem da ÁRVORE, não
+  na ordem em que abrem — o pop-up de aprovação da PP entrou no DOM
+  ANTES da tela cheia que o abriu e apareceu atrás do `<iframe>` do
+  documento: botão visível, e inalcançável. A pilha do Radix resolve
+  `pointer-events` e ESC; empilhamento visual é `z-index`, e só;
 - não registre `keydown` próprio para o ESC: o Radix já fecha só o layer do
   topo. Handler próprio soma com o dele e fecha **dois** de uma vez;
 - camada em tela cheia **não leva animação de saída**. O Radix só desmonta

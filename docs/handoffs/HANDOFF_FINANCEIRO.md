@@ -4559,3 +4559,78 @@ mudou: lá a aprovação escolhe tipo e subtipo, e sobrescreve.
 
 Detalhes, motivo do subtipo ficar de fora e o registro da verificação em
 `docs/decisions/068-a-pp-nasce-em-custo-operacional.md`.
+
+## ⚠️ Nota de 2026-09-10 — o "Aprovar" virou pop-up, e o formulário saiu do drawer
+
+Primeira parte da reforma da aprovação da PP, desenhada com o Tiago em
+10/09/2026 (as duas seguintes: a tela da PP com o dossiê à direita, e a
+auditoria da aprovação).
+
+### O defeito
+
+O "Aprovar" da conferência lado a lado **não aprovava**. Ele chamava a
+mesma função do drawer e, sem a data de pagamento, ela escrevia o aviso
+DENTRO do drawer — que naquele momento estava atrás da tela cheia. O
+clique funcionava; a resposta é que ficava escondida.
+
+### O que mudou
+
+O formulário (data de pagamento, forma, e os três campos do cartão) **saiu
+do drawer** e virou `aprovar-pp-dialog.tsx`. Os dois botões — o do drawer e
+o da conferência — abrem o mesmo pop-up, e o erro aparece nele, na camada
+de quem clicou.
+
+O botão passou a se chamar **"Seguir para a aprovação"**. O anterior
+prometia aprovar e às vezes não aprovava; este diz o que faz.
+
+**No pop-up só entra decisão.** Fornecedor, job, serviço e parcelas ficam
+na tela de trás — repeti-los faria dele um segundo drawer, que é a
+redundância que o Tiago apontou e que motivou o desenho todo. Do pedido
+ficam código e valor, para ninguém aprovar a PP errada. Fora do cartão, uma
+faixa informa que o centro de custo é Custo Operacional (decisão 068) e que
+o subtipo é escolhido na baixa.
+
+No drawer, no lugar do formulário, ficou uma linha dizendo onde a data
+passou a ser escolhida — um drawer que perde campos sem explicar parece
+defeito.
+
+### ⚠️ A escala de `z` virou explícita (e a regra anterior estava errada)
+
+Na entrega da manhã eu escrevi, aqui e em `docs/09-identidade-visual-ui.md`,
+que bastava deixar tudo em `z-50` porque "quem ordena é a pilha de layers
+do Radix". **Não ordena.** O React insere os portais na ordem da ÁRVORE,
+não na ordem em que abrem: o pop-up entrou no DOM ANTES da tela cheia que
+o abriu e, com o mesmo `z-50`, ficou **atrás do `<iframe>` do documento** —
+visível, e sem receber clique. Medido no navegador, não deduzido.
+
+A escala que passa a valer:
+
+| Camada | `z` |
+| --- | --- |
+| Drawer e diálogos comuns | `z-50` |
+| Tela cheia (`FullscreenContent`) | `z-[55]` |
+| Diálogo aberto de dentro dela | `z-[60]`, véu junto |
+
+`DialogContent` e `ConfirmDialog` ganharam `overlayClassName` /
+`contentClassName` para isso: subir só o cartão deixaria o véu atrás, e o
+diálogo flutuaria sobre uma tela que não escureceu.
+
+### De passagem: HTML inválido no ConfirmDialog
+
+O `DialogDescription` do Radix renderiza `<p>`, e metade das telas passa
+`description` com `<p>` e `<div>` dentro — o React acusava erro de
+hidratação no console a cada rejeição. Texto simples continua em `<p>`;
+conteúdo montado agora vira `<div>` pelo `asChild`, sem mudar aparência nem
+`aria-describedby`. Defeito pré-existente, corrigido porque aparecia no
+fluxo desta entrega.
+
+**Verificação (10/09/2026).** Pelos dois caminhos, no navegador: o pop-up
+abre do drawer e da conferência; "Aprovar" sem data mostra o aviso NO
+Pop-up (o drawer e a conferência ficam limpos); o pop-up fica em `z-60`
+sobre a conferência em `z-55`, com o botão "Aprovar" acessível ao
+`elementFromPoint`; o confirm de "Rejeitar" aberto da conferência também
+sobe e recebe o ponteiro. Console sem aviso de hidratação depois da
+correção. **A aprovação em si não foi executada**: a única PP em avaliação
+no banco é de job real (IMC Stella Artois) e aprovar criaria títulos de
+verdade — o caminho gravado é o mesmo `aprovarPPComData` de antes, que não
+foi tocado. `tsc`, `next lint` e `npm run build` limpos.
