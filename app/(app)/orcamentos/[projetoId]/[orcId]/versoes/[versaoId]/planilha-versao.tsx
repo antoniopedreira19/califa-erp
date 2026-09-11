@@ -17,10 +17,13 @@ import { useRouter } from "next/navigation";
 import { FolderTree } from "lucide-react";
 import type {
   Categoria,
+  CategoriaModeloPlanilha,
   ItemBv,
   VersaoOrcamentoGrupo,
   VersaoOrcamentoItem,
 } from "@/lib/types";
+import type { ParametrosInternacionais } from "@/lib/calculos/versao-totais";
+import type { MoedaEstrangeira } from "@/app/(app)/_planilha/moeda-estrangeira";
 import { type VisaoBv } from "@/lib/calculos/bv-planilha";
 import type { FornecedorOpcao } from "@/app/(app)/_bv/bv-dialog";
 import {
@@ -68,6 +71,21 @@ interface Props {
   saldosDeSave: SaldoDeSave[];
   /** Nome do grupo por id — o formulário mostra de qual grupo é a linha. */
   nomeDoGrupo: Record<string, string>;
+  // ---- MODELO DE PLANILHA (docs/decisions/072)
+  /** Qual fechamento esta versão usa. Vem da CATEGORIA do orçamento, pelo
+   *  campo `modelo_planilha` — nunca pelo nome dela.
+   *
+   *  Enum, e não booleano `internacional`: a próxima categoria com
+   *  planilha própria é um `case` a mais aqui, e não uma renomeação em
+   *  toda a árvore de props. */
+  modeloPlanilha: CategoriaModeloPlanilha;
+  /** Os dois parâmetros extras da cadeia internacional, ou `null` no
+   *  nacional — é este `null` que faz `calcularTotaisVersao` devolver o
+   *  fechamento de sempre. */
+  internacional: ParametrosInternacionais | null;
+  /** Moeda e taxa de compra da coluna calculada da planilha. `null` fora
+   *  do internacional. */
+  moedaEstrangeira: MoedaEstrangeira | null;
 }
 
 export function PlanilhaVersao({
@@ -88,6 +106,9 @@ export function PlanilhaVersao({
   savePorItem,
   saldosDeSave,
   nomeDoGrupo,
+  modeloPlanilha,
+  internacional,
+  moedaEstrangeira,
 }: Props) {
   // ⚠️ FIXA em "bruto" desde 08/09/2026 (decisão 062). O BV saiu do
   // planejado, então nesta tela as duas vistas dariam o mesmo número — e
@@ -155,6 +176,7 @@ export function PlanilhaVersao({
           savePorItem={savePorItem}
           onAbrirSave={editavel ? setLinhaAberta : undefined}
           onAlternarSave={() => setSaveVisivel((v) => !v)}
+          moedaEstrangeira={moedaEstrangeira}
           savePorPadrao={padrao}
           onAlternarSavePadrao={
             editavel
@@ -181,6 +203,9 @@ export function PlanilhaVersao({
         percentualHonorarios={percentualHonorarios}
         percentualImposto={percentualImposto}
         moeda={moeda}
+        modeloPlanilha={modeloPlanilha}
+        internacional={internacional}
+        moedaEstrangeira={moedaEstrangeira}
       />
 
       <SaveDialog

@@ -3415,3 +3415,60 @@ opção e desempata homônimo. `FornecedorOpcao` ganhou o campo, opcional.
 O recém-cadastrado entra na lista **localmente** (`fornecedorNovo`) até a
 tela recarregar: `router.refresh()` no meio do preenchimento re-renderiza
 a página e zerava o formulário — a mesma pegadinha vista na PP em 04/09.
+
+## ⚠️ Nota de 2026-09-11 — a categoria "Internacional" tem planilha e fechamento próprios (decisão 072)
+
+Decisão [070](../decisions/072-orcamento-internacional.md). Orçamento cuja
+categoria tem `modelo_planilha = 'internacional'` abre a **mesma tela**,
+num modo diferente. Não há rota nova.
+
+### O que muda na tela
+
+- **Uma coluna a mais no bloco ORÇADO**, entre D/M e Total: o total da
+  linha na moeda estrangeira, calculada (total BRL ÷ taxa de compra), com
+  cadeado no cabeçalho. Aparece também no subtotal do grupo e no total do
+  orçamento. A faixa ORÇADO passa a 5 colunas e o piso da tabela sobe para
+  1280px — **as duas coisas por flag**, então quem não pede a coluna
+  (planilha nacional, card agregado do projeto) não vê diferença.
+- **O cabeçalho da versão** troca "Moeda · Câmbio · Honorários · Impostos"
+  por "Moeda · Compra · Fee · Int. taxes · Impostos BR" (+ "Transação"
+  quando há custo). Cotação, data e venda vivem no `title` da Compra e no
+  formulário — são registro de conferência.
+- **O card de Totais** ganha o bloco "Cadeia internacional · faturamento",
+  em duas colunas (moeda | BRL), onde cada linha soma na seguinte até o
+  invoice. O rodapé nacional (Honorários → Impostos → Faturamento previsto
+  → Valor do Job) sai, porque a cadeia mostra as mesmas parcelas e mais
+  duas. No "Resultado", entram `− Int. taxes` e `− Int. transaction costs`.
+- **Os botões acima da planilha não mudam.** "Recolher todos", "Orçamento
+  de save", "Exibir" e "Importar planilha" seguem iguais.
+- **A faixa continua "RENTABILIDADE"**, por extenso, nas duas telas.
+
+### O que NÃO muda
+
+`moeda` da versão continua **BRL** — os valores são digitados em reais, e é
+esse campo que vai para `formatCurrency` na planilha inteira. `taxa_cambio`
+continua 1. Quem converte é `cambio_compra`, campo próprio.
+
+### Onde mexer
+
+| Arquivo | O quê |
+|---|---|
+| `_planilha/modelo-planilha.ts` | traduz categoria → config da planilha. **Modelo novo entra aqui** |
+| `_planilha/moeda-estrangeira.ts` | a conversão e as duas formatações (planilha sem prefixo, cadeia com) |
+| `_planilha/grade-orcamento.tsx` | `moedaEstrangeira` no `ColunasVisiveis`, larguras, `colunasDoOrcado()` |
+| `lib/calculos/versao-totais.ts` | 4º parâmetro de `calcularTotaisVersao`; `deducoesDoResultado` |
+| `versoes/[versaoId]/totais-card.tsx` | `CadeiaInternacional` |
+| `meta-versao.tsx` | os campos de câmbio e parâmetros |
+
+### Armadilhas que já morderam
+
+- **`ColunasFixas` é compartilhada** com `_totais/totais-projeto-card.tsx`,
+  que a chama sem argumentos e tem `colSpan` literais próprios. Mexer no
+  `(orcado ? 4 : 0)` em vez de usar a flag desalinha aquela tela junto.
+- **A prop `moedaEstrangeira` é obrigatória e anulável**, nunca opcional:
+  é o que obriga cada renderizador de `ItensTable` a se declarar. Opcional
+  desliga a checagem exatamente na fronteira onde o campo some calado.
+- **`LinhaDraft` precisa da mesma célula** das linhas de item, senão a
+  linha nova escorrega uma casa.
+- O trigger que trava a categoria **não pode** ser `security definer` — lá
+  dentro `current_user` vira o dono da função e a trava não dispara.

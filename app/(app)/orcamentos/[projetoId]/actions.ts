@@ -9,7 +9,11 @@ import { checarPermissao } from "@/lib/permissoes-server";
 import { orcamentoSchema } from "@/lib/validations/orcamentos";
 import { gerarCodigoOrcamento } from "@/lib/codigos/orcamentos";
 import { honorariosDoOrcamento } from "@/lib/data/clientes";
-import { ALIQUOTA_IMPOSTO_PADRAO } from "@/lib/impostos";
+import { modeloPlanilhaDoOrcamento } from "@/lib/data/modelo-planilha";
+import {
+  ALIQUOTA_IMPOSTO_PADRAO,
+  PERCENTUAL_INT_TAXES_PADRAO,
+} from "@/lib/impostos";
 
 export type ActionResult =
   | { ok: true; id?: string }
@@ -237,6 +241,10 @@ async function criarVersaoInicial(
     return null;
   }
 
+  // Qual planilha este orçamento usa — sai da categoria dele, que acabou
+  // de ser gravada (decisão 072).
+  const modelo = await modeloPlanilhaDoOrcamento(orcamentoId, tenantId);
+
   const { data, error } = await supabase
     .from("versoes_orcamento")
     .insert({
@@ -244,12 +252,25 @@ async function criarVersaoInicial(
       orcamento_id: orcamentoId,
       numero_versao: 1,
       status: "rascunho",
+      // BRL mesmo no internacional: `moeda` descreve os VALORES da
+      // planilha, que continuam em reais. A moeda de fora é
+      // `moeda_estrangeira` (decisão 072).
       moeda: "BRL",
       taxa_cambio: 1,
       percentual_honorarios: honorarios.percentual,
       // Alíquota padrão já escolhida (03/09/2026): a v1 nasce pronta para
       // aprovar, sem o passo extra de abrir "Editar" só para o imposto.
       percentual_imposto: ALIQUOTA_IMPOSTO_PADRAO,
+      // Mesma ideia no internacional: as int. taxes já vêm na praticada, e
+      // só o câmbio fica em branco — a cotação é do dia, e inventar uma
+      // seria pior do que o travessão que a coluna mostra até alguém
+      // preencher.
+      ...(modelo === "internacional"
+        ? {
+            moeda_estrangeira: "USD",
+            percentual_int_taxes: PERCENTUAL_INT_TAXES_PADRAO,
+          }
+        : {}),
       created_by: profileId,
     })
     .select("id")

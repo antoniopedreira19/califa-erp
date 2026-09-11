@@ -350,10 +350,39 @@ export interface VersaoOrcamento {
   numero_versao: number;
   nome: string | null;
   status: VersaoOrcamentoStatus;
+  /** Moeda dos VALORES da planilha. Segue **BRL inclusive no orçamento
+   *  internacional**: lá os valores continuam sendo digitados em reais, e
+   *  só a coluna calculada está na moeda de fora. É este campo que vai
+   *  para `formatCurrency` na planilha inteira. */
   moeda: string;
+  /** Taxa de câmbio de `moeda`. Segue 1. **A conversão do internacional
+   *  não passa por aqui** — é `cambio_compra`. */
   taxa_cambio: number;
+  /** Código ISO da moeda estrangeira da planilha internacional: "USD",
+   *  "GBP". `null` fora dela. Aparece no cabeçalho da coluna calculada e
+   *  na cadeia de faturamento. */
+  moeda_estrangeira: string | null;
+  /** Taxa de **compra** — a única que converte (decisão 072). Na planilha
+   *  modelo é `B15`, a cotação do dia menos 0,20. */
+  cambio_compra: number | null;
+  /** No orçamento internacional este campo é o **FEE** — mesmo lugar na
+   *  cadeia, outro nome na tela. */
   percentual_honorarios: number;
   percentual_imposto: number;
+  /** Int. taxes retidas no exterior, em gross-up sobre (base de imposto +
+   *  fee). 18,02% na planilha modelo. **Zero fora do internacional**, e é
+   *  esse zero que faz o fechamento nacional continuar o de sempre. */
+  percentual_int_taxes: number;
+  /** Custos de transação internacional, em BRL. Entram depois do total
+   *  recebido no exterior e não compõem base de imposto. */
+  int_transaction_costs: number;
+  /** Cotação do dia. Registro de conferência — quem converte é
+   *  `taxa_cambio`. */
+  cambio_cotacao: number | null;
+  /** Taxa de venda. Só registro; não entra em conta nenhuma. */
+  cambio_venda: number | null;
+  /** Data da cotação registrada em `cambio_cotacao`. */
+  cambio_data: string | null;
   /** Orçamento de save: todo item NOVO nasce marcado. É default de linha
    *  nova, não trava — desligar não desmarca o que já existe
    *  (docs/decisions/028-save-entre-jobs.md §10). */
@@ -584,12 +613,30 @@ export interface ImportacaoWarning {
  */
 export type CategoriaDominioEscopo = "projeto" | "orcamento";
 
+/**
+ * Qual fechamento a versão do orçamento desta categoria usa.
+ *
+ * **É este campo, e nunca o nome, que decide a conta.** `categorias_dominio`
+ * é lista que o usuário edita em /orcamentos/categorias; casar a cadeia
+ * internacional com a string "Internacional" quebraria no dia em que
+ * alguém renomeasse a categoria (decisão 072).
+ *
+ * Categoria com modelo ≠ `nacional` é travada no banco pelo trigger
+ * `trg_categoria_modelo_proprio_travado`: nome, escopo e o próprio modelo
+ * só mudam por migration. Ativar e desativar seguem livres.
+ *
+ * Modelo novo é **valor novo neste union + valor novo no enum do
+ * Postgres** — mudança aditiva nos dois lados.
+ */
+export type CategoriaModeloPlanilha = "nacional" | "internacional";
+
 export interface CategoriaDominio {
   id: string;
   tenant_id: string;
   escopo: CategoriaDominioEscopo;
   nome: string;
   ativo: boolean;
+  modelo_planilha: CategoriaModeloPlanilha;
   created_by: string | null;
   created_at: string;
   updated_at: string;

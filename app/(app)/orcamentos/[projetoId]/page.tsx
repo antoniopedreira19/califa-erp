@@ -10,8 +10,10 @@ import {
   calcularTotaisVersao,
   type ItemParaTotais,
 } from "@/lib/calculos/versao-totais";
+import { configDaPlanilha } from "@/app/(app)/_planilha/modelo-planilha";
 import type {
   CategoriaDominio,
+  CategoriaModeloPlanilha,
   Cliente,
   JobStatus,
   Orcamento,
@@ -70,7 +72,7 @@ export default async function ProjetoDetailPage({
         // a ter DUAS FKs para `categorias_dominio` (categoria e servico), e
         // sem desambiguar o PostgREST recusa o embed e devolve zero linhas.
         "id, codigo, nome, status, versao_aprovada_id, produtor_id, data_inicio_prevista, data_fim_prevista, created_at, " +
-          "categoria:categorias_dominio!categoria_id(nome), " +
+          "categoria:categorias_dominio!categoria_id(nome, modelo_planilha), " +
           "servico:categorias_dominio!servico_id(nome)",
       )
       .eq("projeto_id", params.projetoId)
@@ -190,6 +192,13 @@ export default async function ProjetoDetailPage({
     percentual_honorarios: number;
     percentual_imposto: number;
     created_at: string;
+    // Campos OBRIGATÓRIOS, não opcionais: é esta linha estreita montada à
+    // mão que já engoliu campo novo em silêncio três vezes num dia
+    // (CLAUDE.md). Faltando um, isto para de compilar.
+    percentual_int_taxes: number;
+    int_transaction_costs: number;
+    moeda_estrangeira: string | null;
+    cambio_compra: number | null;
   };
   const versoesPorOrcamento = new Map<string, VersaoLeve[]>();
   const jobsPorOrcamento = new Map<string, { status: JobStatus; created_at: string }[]>();
@@ -205,7 +214,13 @@ export default async function ProjetoDetailPage({
     const [versoesRes, jobsRes] = await Promise.all([
       supabase
         .from("versoes_orcamento")
-        .select("id, orcamento_id, numero_versao, percentual_honorarios, percentual_imposto, created_at")
+        // Os quatro últimos são da cadeia internacional. Sem eles, o
+        // "Valor do job" desta lista sairia pelo fechamento NACIONAL num
+        // orçamento internacional — e contradiria a tela da versão em
+        // ~R$ 93 mil no exemplo da planilha modelo (decisão 072).
+        .select(
+          "id, orcamento_id, numero_versao, percentual_honorarios, percentual_imposto, created_at, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra",
+        )
         .in("orcamento_id", orcamentoIds)
         .eq("tenant_id", session.activeTenant.id),
       supabase
@@ -269,13 +284,26 @@ export default async function ProjetoDetailPage({
         itensPorVersao.set(it.versao_orcamento_id, atuais);
       }
 
+      // Modelo de planilha por orçamento, para a conta desta lista ser a
+      // MESMA da tela da versão (decisão 072).
+      const modeloPorOrcamento = new Map<string, CategoriaModeloPlanilha>(
+        orcamentosBrutos.map((o) => [
+          o.id,
+          (o.categoria?.modelo_planilha ?? "nacional") as CategoriaModeloPlanilha,
+        ]),
+      );
+
       for (const [orcId, versao] of versaoAlvoPorOrcamento) {
         // A MESMA definição de "Valor do job" do fechamento da versão
-        // (calcularTotaisVersao): principal com valorJob + honorários + imposto.
+        // (calcularTotaisVersao): principal com valorJob + honorários +
+        // imposto — e, no internacional, mais int. taxes e custos de
+        // transação. Passar o modelo aqui é o que impede a lista de
+        // mostrar um valor e a versão outro.
         const totais = calcularTotaisVersao(
           itensPorVersao.get(versao.id) ?? [],
           Number(versao.percentual_honorarios ?? 0),
           Number(versao.percentual_imposto ?? 0),
+          configDaPlanilha(modeloPorOrcamento.get(orcId), versao).internacional,
         );
         valorJobMap.set(orcId, totais.valorJob);
         exportavelMap.set(orcId, {

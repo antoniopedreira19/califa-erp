@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Search, Power, PowerOff } from "lucide-react";
+import { Search, Lock, Power, PowerOff } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -146,10 +146,35 @@ export function CategoriasDominioList({
               {filtered.map((c) => (
                 <tr
                   key={c.id}
-                  onClick={() => setEditando(c)}
-                  className="cursor-pointer border-b border-border last:border-0 transition-colors hover:bg-muted/50"
+                  // Categoria com modelo de planilha próprio não abre o
+                  // formulário: nome e escopo são contrato de código, e a
+                  // regra também está no banco (decisão 072). Ativar e
+                  // desativar seguem no botão da direita.
+                  onClick={
+                    temModeloProprio(c) ? undefined : () => setEditando(c)
+                  }
+                  className={`border-b border-border last:border-0 transition-colors ${
+                    temModeloProprio(c)
+                      ? "bg-muted/20"
+                      : "cursor-pointer hover:bg-muted/50"
+                  }`}
                 >
-                  <td className="px-4 py-3 font-medium">{c.nome}</td>
+                  <td className="px-4 py-3 font-medium">
+                    <span className="inline-flex items-center gap-1.5">
+                      {c.nome}
+                      {temModeloProprio(c) && (
+                        <Lock
+                          className="h-3 w-3 text-muted-foreground"
+                          aria-label="Categoria travada"
+                        />
+                      )}
+                    </span>
+                    {temModeloProprio(c) && (
+                      <p className="mt-0.5 text-xs font-normal text-muted-foreground">
+                        Planilha própria · nome e escopo só mudam por migration
+                      </p>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-muted-foreground">
                     {categoriaDominioEscopoLabel(c.escopo)}
                   </td>
@@ -234,4 +259,13 @@ export function CategoriasDominioList({
       )}
     </div>
   );
+}
+
+/** A categoria carrega um modelo de planilha que não o nacional — e por
+ *  isso está travada para renomear e para mudar de escopo (decisão 072).
+ *
+ *  Lê o campo, nunca o nome: é exatamente o acoplamento que a decisão
+ *  existe para evitar. */
+function temModeloProprio(c: CategoriaDominio): boolean {
+  return c.modelo_planilha !== "nacional";
 }

@@ -18,7 +18,43 @@ function mapDbError(msg: string): string {
   if (msg.includes("categorias_dominio_nome_nao_vazio")) {
     return "Nome não pode ficar vazio.";
   }
+  // A trava do trigger `trg_categoria_modelo_proprio_travado` já vem com
+  // a frase pronta e o nome da categoria dentro. Repassá-la é melhor do
+  // que traduzi-la para um genérico.
+  if (msg.includes("modelo de planilha")) return msg;
   return "Não foi possível salvar a categoria.";
+}
+
+/**
+ * Categoria com modelo de planilha próprio não é renomeável nem muda de
+ * escopo (decisão 072).
+ *
+ * O nome dela é contrato com o time e o escopo é contrato com o código; o
+ * modelo em si nem aparece na tela. A regra também está no banco, num
+ * trigger — isto aqui é a mensagem amigável na frente dela, para o usuário
+ * ver um português inteiro em vez de um erro de Postgres.
+ *
+ * Ativar e desativar seguem livres: é reversível, não mexe em número
+ * nenhum, e é a ação legítima de "não fazemos job internacional este ano".
+ */
+async function bloqueioDeModeloProprio(
+  id: string,
+  tenantId: string,
+): Promise<{ ok: false; message: string } | null> {
+  const supabase = createClient();
+  const { data } = await supabase
+    .from("categorias_dominio")
+    .select("nome, modelo_planilha")
+    .eq("id", id)
+    .eq("tenant_id", tenantId)
+    .maybeSingle<{ nome: string; modelo_planilha: string }>();
+
+  if (!data || data.modelo_planilha === "nacional") return null;
+
+  return {
+    ok: false,
+    message: `A categoria "${data.nome}" tem modelo de planilha próprio e só pode ser alterada por migration. Você ainda pode ativá-la ou desativá-la.`,
+  };
 }
 
 export async function criarCategoriaDominio(
@@ -81,6 +117,10 @@ export async function editarCategoriaDominio(
     "cadastros.categorias_orcamento.editar",
   );
   if (!gate.ok) return gate;
+
+  const travada = await bloqueioDeModeloProprio(id, session.activeTenant.id);
+  if (travada) return travada;
+
   const parsed = categoriaDominioSchema.safeParse({
     escopo: formData.get("escopo")?.toString() ?? "",
     nome: formData.get("nome")?.toString() ?? "",

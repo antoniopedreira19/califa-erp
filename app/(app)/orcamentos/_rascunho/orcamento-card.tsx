@@ -357,6 +357,12 @@ export function JobRascunhoCard({
                   <ItensTable
                     grupos={gruposDaPlanilha}
                     moeda={parametros.moeda}
+                    // O rascunho do projeto é sempre nacional: a planilha
+                    // internacional nasce da categoria do orçamento já
+                    // gravado (decisão 072), e aqui ele ainda não existe.
+                    // Valor neutro EXPLÍCITO, não default — é o que faz o
+                    // TypeScript avisar quando o internacional chegar aqui.
+                    moedaEstrangeira={null}
                     percentualImposto={parametros.percentual_imposto}
                     visao={visao}
                     readOnly={readOnly}

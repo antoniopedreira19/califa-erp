@@ -189,12 +189,44 @@ export interface FechamentoLado {
   base: number;
   baseHonorarios: number;
   honorarios: number;
+  /** Base das **int. taxes** do fechamento internacional: os tipos com
+   *  `imposto: true` mais os honorários (lá chamados FEE). Zero quando a
+   *  versão não é internacional. */
+  baseIntTaxes: number;
+  /** **Int. taxes** retidas no exterior, em gross-up sobre `baseIntTaxes`.
+   *  Sempre 0 no fechamento nacional — é o degrau que só o internacional
+   *  tem (decisão 072). */
+  intTaxes: number;
+  /** Base do imposto brasileiro. No internacional ela já inclui as int.
+   *  taxes, porque elas compõem o total recebido no exterior. */
   baseImposto: number;
   imposto: number;
+  /** Custos de transação internacional, em BRL. Entram no total DEPOIS do
+   *  total recebido no exterior e **não** compõem base de imposto nenhum
+   *  (planilha modelo: `G11 = G8 + G9 + G10`, com `G10` calculado só
+   *  sobre `G8`). Sempre 0 no nacional. */
+  intTransactionCosts: number;
   /** Soma dos principais que este lado reconhece. */
   principal: number;
-  /** principal + honorários + imposto. */
+  /** principal + honorários + int. taxes + imposto + custos de transação.
+   *  No nacional as duas parcelas internacionais são 0, e a conta volta a
+   *  ser a de sempre: principal + honorários + imposto. */
   total: number;
+}
+
+/**
+ * Os dois parâmetros que o fechamento **internacional** acrescenta ao
+ * nacional (decisão 072).
+ *
+ * Ausente ou `null` ⇒ fechamento nacional, bit a bit o de antes de
+ * 11/09/2026.
+ */
+export interface ParametrosInternacionais {
+  /** Int. taxes retidas no exterior, em % — 18,02 na planilha modelo
+   *  (IR 17,64% + IOF 0,37%). */
+  percentualIntTaxes: number;
+  /** Custos de transação, em BRL. Valor da versão, não do item. */
+  intTransactionCosts: number;
 }
 
 /**
@@ -268,6 +300,20 @@ export interface VersaoTotais {
   baseImposto: number;
   honorarios: number;
   imposto: number;
+  /** Int. taxes embutidas no VALOR DO JOB. 0 fora do internacional. */
+  intTaxes: number;
+  /** Custos de transação internacional. 0 fora do internacional. */
+  intTransactionCosts: number;
+  /**
+   * Tudo que sai do valor do job antes de sobrar resultado: imposto
+   * brasileiro + int. taxes + custos de transação.
+   *
+   * É o segundo argumento de `calcularResultadoOperacional` — no nacional
+   * vale exatamente `imposto`, e por isso as telas de lá podem continuar
+   * passando `imposto` sem diferença de número. No internacional é este
+   * campo que faz o resultado sobrar em `fee + rentabilidade`.
+   */
+  deducoesDoResultado: number;
   /** **Faturamento previsto** — o que a California emite nota. */
   faturamentoPrevisto: number;
   /** **Valor do job** — o compromisso total do cliente. */
@@ -280,11 +326,29 @@ const zerado = () =>
     number
   >;
 
-/** Fecha UM lado: subtotais por tipo -> honorários -> imposto -> principal. */
+/**
+ * Gross-up: quanto acrescentar a `base` para que o percentual `pct` do
+ * TOTAL resultante seja exatamente o valor acrescentado.
+ *
+ * `base × taxa / (1 − taxa)` é a mesma conta que a planilha modelo
+ * escreve como `base / (1 − taxa) − base` (células `G7` e `G10`).
+ */
+function grossUp(base: number, pct: number): number {
+  const taxa = Math.max(0, Math.min(0.9999, pct / 100));
+  return taxa > 0 ? (base * taxa) / (1 - taxa) : 0;
+}
+
+/** Fecha UM lado: subtotais por tipo -> honorários -> [int. taxes] ->
+ *  imposto -> principal.
+ *
+ *  O degrau das int. taxes só existe quando `internacional` vem
+ *  preenchido; sem ele `intTaxes` é 0 e `baseImposto` volta a ser
+ *  exatamente `somarOnde("imposto") + honorarios`, como sempre foi. */
 function fecharLado(
   subtotaisPorTipo: Record<TipoCusto, number>,
   percentualHonorarios: number,
   percentualImposto: number,
+  internacional?: ParametrosInternacionais | null,
 ): FechamentoLado {
   const somarOnde = (lever: keyof RegraTipoCusto) =>
     TIPOS_CUSTO.reduce(
@@ -295,17 +359,29 @@ function fecharLado(
   const base = TIPOS_CUSTO.reduce((s, t) => s + subtotaisPorTipo[t], 0);
   const baseHonorarios = somarOnde("honorarios");
   const honorarios = baseHonorarios * (percentualHonorarios / 100);
-  const baseImposto = somarOnde("imposto") + honorarios;
-  const taxa = Math.max(0, Math.min(0.9999, percentualImposto / 100));
-  const imposto = taxa > 0 ? (baseImposto * taxa) / (1 - taxa) : 0;
+
+  // O degrau internacional. Ele entra ANTES do imposto brasileiro porque
+  // é retido lá fora: o que chega ao Brasil (o "total recebido no
+  // exterior") já o contém, e é sobre esse total que o imposto daqui
+  // corre — é a ordem da planilha modelo, G6 → G7 → G8 → G10.
+  const baseIntTaxes = internacional ? somarOnde("imposto") + honorarios : 0;
+  const intTaxes = internacional
+    ? grossUp(baseIntTaxes, internacional.percentualIntTaxes)
+    : 0;
+
+  const baseImposto = somarOnde("imposto") + honorarios + intTaxes;
+  const imposto = grossUp(baseImposto, percentualImposto);
 
   return {
     subtotaisPorTipo,
     base,
     baseHonorarios,
     honorarios,
+    baseIntTaxes,
+    intTaxes,
     baseImposto,
     imposto,
+    intTransactionCosts: internacional?.intTransactionCosts ?? 0,
     principal: 0, // preenchido por quem chama, que sabe qual alavanca usar
     total: 0,
   };
@@ -321,7 +397,16 @@ function comPrincipal(
       REGRAS_TIPO_CUSTO[t][lever] ? s + lado.subtotaisPorTipo[t] : s,
     0,
   );
-  return { ...lado, principal, total: principal + lado.honorarios + lado.imposto };
+  return {
+    ...lado,
+    principal,
+    total:
+      principal +
+      lado.honorarios +
+      lado.intTaxes +
+      lado.imposto +
+      lado.intTransactionCosts,
+  };
 }
 
 /**
@@ -343,14 +428,36 @@ function comPrincipal(
  *      imposto = base × taxa / (1 − taxa).
  *   Com %imp = 19,53 a taxa é 0,1953 e o multiplicador ≈ 0,2427.
  *
+ * ## O 4º parâmetro: fechamento internacional (decisão 072)
+ *
+ * Passando `internacional`, um degrau entra entre os honorários e o
+ * imposto brasileiro — as **int. taxes**, retidas no exterior, também em
+ * gross-up —, e os **custos de transação** se somam ao total sem compor
+ * base de imposto nenhum:
+ *
+ *     sub-total → fee → int. taxes → total recebido no exterior
+ *               → int. transaction costs → impostos BR → invoice
+ *
+ * As alavancas por tipo de custo continuam valendo: o fee corre sobre os
+ * tipos com `honorarios`, as int. taxes e o imposto sobre os com
+ * `imposto`. Com todos os itens em B — que é como a planilha
+ * internacional trabalha — a conta cai exatamente na da planilha modelo.
+ *
+ * **Sem o parâmetro nada muda**: `intTaxes` e `intTransactionCosts` são 0
+ * e o resultado é bit a bit o de antes de 11/09/2026. É o que permitiu
+ * acrescentar a cadeia sem tocar em nenhum dos ~20 call sites.
+ *
  * Validado contra a planilha oficial "[INT] SJ PEPSI CG - NE - 2026" em
  * 11/08/2026 e contra o design `Orcamento - Versao com Save.dc.html` em
- * 24/08/2026 — ver `scripts/conferir-save.ts`.
+ * 24/08/2026 — ver `scripts/conferir-save.ts`. A cadeia internacional foi
+ * validada contra "Modelo de planilha interna - Internacional 2026.xlsx"
+ * em 11/09/2026 — ver `scripts/conferir-internacional.ts`.
  */
 export function calcularTotaisVersao(
   itens: ItemParaTotais[],
   percentualHonorarios: number,
   percentualImposto: number,
+  internacional?: ParametrosInternacionais | null,
 ): VersaoTotais {
   const subtotaisPorTipo = zerado();
   const saveUsado = zerado();
@@ -396,21 +503,41 @@ export function calcularTotaisVersao(
   }
 
   const faturamento = comPrincipal(
-    fecharLado(baseFaturamento, percentualHonorarios, percentualImposto),
+    fecharLado(
+      baseFaturamento,
+      percentualHonorarios,
+      percentualImposto,
+      internacional,
+    ),
     "fatura",
   );
   const job = comPrincipal(
-    fecharLado(baseValorJob, percentualHonorarios, percentualImposto),
+    fecharLado(
+      baseValorJob,
+      percentualHonorarios,
+      percentualImposto,
+      internacional,
+    ),
     "valorJob",
   );
   const bruto = comPrincipal(
-    fecharLado(subtotaisPorTipo, percentualHonorarios, percentualImposto),
+    fecharLado(
+      subtotaisPorTipo,
+      percentualHonorarios,
+      percentualImposto,
+      internacional,
+    ),
     "valorJob",
   );
   // A planilha do cliente: base do faturamento (save gerado dentro, save
   // consumido fora), alavanca do valor do job.
   const cliente = comPrincipal(
-    fecharLado(baseFaturamento, percentualHonorarios, percentualImposto),
+    fecharLado(
+      baseFaturamento,
+      percentualHonorarios,
+      percentualImposto,
+      internacional,
+    ),
     "valorJob",
   );
 
@@ -419,8 +546,20 @@ export function calcularTotaisVersao(
 
   // O faturamento atribuível às linhas em save. Mesmo `fecharLado`, sobre
   // a base do save sozinha — e não uma fórmula nova.
+  // ⚠️ Sem os custos de transação. A fatia do save é exata porque cada
+  // parcela do fechamento é LINEAR na base — e os custos de transação
+  // não são: eles são uma constante da versão. Repassá-los aqui somaria
+  // o mesmo valor na fatia do save e na dos custos do job, e a soma
+  // deixaria de fechar com o faturamento previsto.
   const receitaDoSave = comPrincipal(
-    fecharLado(saveGerado, percentualHonorarios, percentualImposto),
+    fecharLado(
+      saveGerado,
+      percentualHonorarios,
+      percentualImposto,
+      internacional
+        ? { ...internacional, intTransactionCosts: 0 }
+        : internacional,
+    ),
     "fatura",
   ).total;
 
@@ -448,6 +587,10 @@ export function calcularTotaisVersao(
     baseImposto: job.baseImposto,
     honorarios: job.honorarios,
     imposto: job.imposto,
+    intTaxes: job.intTaxes,
+    intTransactionCosts: job.intTransactionCosts,
+    deducoesDoResultado:
+      job.imposto + job.intTaxes + job.intTransactionCosts,
     faturamentoPrevisto: faturamento.total,
     valorJob: job.total,
   };
@@ -630,6 +773,13 @@ export function calcularTotaisPlanejados(
  * do job inteiro. Usar o faturamento previsto aqui faria o resultado cair
  * pelo valor dos custos pagos direto ao fornecedor, que a agência nem
  * desembolsa (decisão do Tiago em 11/08/2026).
+ *
+ * No **internacional**, `imposto` deixa de ser a dedução inteira: passe
+ * `totais.deducoesDoResultado` (imposto BR + int. taxes + custos de
+ * transação). Como no nacional esse campo vale exatamente `imposto`, quem
+ * já passa `imposto` não precisa mudar — e quem passa `deducoesDoResultado`
+ * funciona nos dois. Desenvolvendo, o que sobra é sempre
+ * `principal + honorários − planejado`: fee + rentabilidade (decisão 072).
  *
  * Sem planejado lançado a conta não existe: retorna `null` nos dois campos
  * em vez de um número inflado (receita inteira virando "lucro").
