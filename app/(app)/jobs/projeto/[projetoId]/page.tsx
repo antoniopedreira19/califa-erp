@@ -96,7 +96,11 @@ export default async function ProjetoAgregadoPage({
     (acc, j) => ({
       valorJob: acc.valorJob + j.valorJob,
       faturamentoPrevisto: acc.faturamentoPrevisto + j.faturamentoPrevisto,
+      // As três deduções do resultado. No projeto só nacional as duas
+      // últimas são 0 e a conta é a de sempre (decisão 072).
       imposto: acc.imposto + j.imposto,
+      intTaxes: acc.intTaxes + j.intTaxes,
+      intTransactionCosts: acc.intTransactionCosts + j.intTransactionCosts,
       // Bruto, e a dedução de BV somada à parte: é assim que o painel
       // Resultado escreve a conta (custo bruto + BVs), e é o que faz o
       // resumo do cabeçalho bater com o card de Totais logo abaixo.
@@ -108,6 +112,8 @@ export default async function ProjetoAgregadoPage({
       valorJob: 0,
       faturamentoPrevisto: 0,
       imposto: 0,
+      intTaxes: 0,
+      intTransactionCosts: 0,
       planejado: 0,
       realizado: 0,
       bvRealizado: 0,
@@ -157,7 +163,11 @@ export default async function ProjetoAgregadoPage({
           <div className="mt-[24px]">
             <ResumoResultado
               valorJob={resumoProjeto.valorJob}
-              deducoes={resumoProjeto.imposto}
+              deducoes={
+                resumoProjeto.imposto +
+                resumoProjeto.intTaxes +
+                resumoProjeto.intTransactionCosts
+              }
               custoPlanejado={resumoProjeto.planejado}
               custoRealizado={resumoProjeto.realizado}
               bvRealizado={resumoProjeto.bvRealizado}

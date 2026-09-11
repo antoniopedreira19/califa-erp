@@ -51,6 +51,12 @@ export interface LinhaTotaisProjeto {
   planejado: number;
   honorarios: number;
   imposto: number;
+  /** Int. taxes e custos de transação da cadeia internacional (decisão
+   *  072). **0 no nacional.** Obrigatórios: o consolidado soma linha a
+   *  linha, e um opcional viraria `undefined + n = NaN` no primeiro
+   *  orçamento internacional do projeto. */
+  intTaxes: number;
+  intTransactionCosts: number;
   /** O que a California emite nota neste orçamento. */
   faturamentoPrevisto: number;
   /** Compromisso total do cliente neste orçamento. */
@@ -87,6 +93,15 @@ export function TotaisProjetoCard({ linhas, moeda, descricao }: Props) {
   const totalPlanejado = linhas.reduce((s, l) => s + l.planejado, 0);
   const honorarios = linhas.reduce((s, l) => s + l.honorarios, 0);
   const imposto = linhas.reduce((s, l) => s + l.imposto, 0);
+  // Um projeto pode ter orçamento nacional e internacional lado a lado:
+  // cada um fecha pela sua cadeia, e aqui as parcelas somam. As duas
+  // linhas abaixo só aparecem quando existe alguma internacional — sem
+  // elas, "Honorários + Impostos" não somaria o faturamento previsto.
+  const intTaxes = linhas.reduce((s, l) => s + l.intTaxes, 0);
+  const intTransactionCosts = linhas.reduce(
+    (s, l) => s + l.intTransactionCosts,
+    0,
+  );
   const faturamentoPrevisto = linhas.reduce(
     (s, l) => s + l.faturamentoPrevisto,
     0,
@@ -436,14 +451,30 @@ export function TotaisProjetoCard({ linhas, moeda, descricao }: Props) {
               }
               valor={formatCurrency(honorarios, moeda)}
             />
+            {/* As int. taxes entram ANTES do imposto brasileiro, como na
+                cadeia: é a ordem em que o dinheiro é retido. A linha só
+                existe quando há orçamento internacional no projeto. */}
+            {intTaxes > 0 && (
+              <LinhaValor
+                rotulo="Int. taxes (retidas no exterior)"
+                valor={formatCurrency(intTaxes, moeda)}
+              />
+            )}
             <LinhaValor
               rotulo={
                 <>
-                  Impostos <span className="text-xs">({taxaImpostos})</span>
+                  {intTaxes > 0 ? "Impostos BR" : "Impostos"}{" "}
+                  <span className="text-xs">({taxaImpostos})</span>
                 </>
               }
               valor={formatCurrency(imposto, moeda)}
             />
+            {intTransactionCosts > 0 && (
+              <LinhaValor
+                rotulo="Int. transaction costs"
+                valor={formatCurrency(intTransactionCosts, moeda)}
+              />
+            )}
             {/* Os dois fechamentos: o que a California emite nota e o que o
                 cliente se compromete a gastar no total. Diferem pelos
                 principais pagos direto ao fornecedor (A · Direto, D e F). */}
@@ -472,8 +503,8 @@ export function TotaisProjetoCard({ linhas, moeda, descricao }: Props) {
         <PainelResultado
           valorJob={valorJob}
           imposto={imposto}
-          intTaxes={0}
-          intTransactionCosts={0}
+          intTaxes={intTaxes}
+          intTransactionCosts={intTransactionCosts}
           orcado={totalOrcadoRentabilidade}
           custoPlanejado={totalPlanejado}
           custoRealizado={0}

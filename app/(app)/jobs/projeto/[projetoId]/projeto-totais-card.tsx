@@ -129,6 +129,15 @@ export function ProjetoTotaisCard({
   const totalRealizado = valorNaVisao(somaDosJobs.realizado, visao);
   const honorarios = jobs.reduce((s, j) => s + j.honorarios, 0);
   const imposto = jobs.reduce((s, j) => s + j.imposto, 0);
+  // Um projeto pode ter job nacional e internacional lado a lado: cada um
+  // fecha pela sua cadeia e aqui as parcelas somam. As linhas só aparecem
+  // quando há internacional — sem elas, "Honorários + Impostos" não
+  // somaria o faturamento previsto (decisão 072).
+  const intTaxes = jobs.reduce((s, j) => s + j.intTaxes, 0);
+  const intTransactionCosts = jobs.reduce(
+    (s, j) => s + j.intTransactionCosts,
+    0,
+  );
   const faturamentoPrevisto = jobs.reduce(
     (s, j) => s + j.faturamentoPrevisto,
     0,
@@ -466,14 +475,27 @@ export function ProjetoTotaisCard({
               }
               valor={formatCurrency(honorarios, moeda)}
             />
+            {intTaxes > 0 && (
+              <LinhaValor
+                rotulo="Int. taxes (retidas no exterior)"
+                valor={formatCurrency(intTaxes, moeda)}
+              />
+            )}
             <LinhaValor
               rotulo={
                 <>
-                  Impostos <span className="text-xs">({taxaImpostos})</span>
+                  {intTaxes > 0 ? "Impostos BR" : "Impostos"}{" "}
+                  <span className="text-xs">({taxaImpostos})</span>
                 </>
               }
               valor={formatCurrency(imposto, moeda)}
             />
+            {intTransactionCosts > 0 && (
+              <LinhaValor
+                rotulo="Int. transaction costs"
+                valor={formatCurrency(intTransactionCosts, moeda)}
+              />
+            )}
             {/* Os dois fechamentos: o que a California emite nota e o que o
                 cliente se compromete a gastar no total. Diferem pelos
                 principais pagos direto ao fornecedor (A · Direto, D e F). */}
@@ -499,8 +521,8 @@ export function ProjetoTotaisCard({
         <PainelResultado
           valorJob={valorJob}
           imposto={imposto}
-          intTaxes={0}
-          intTransactionCosts={0}
+          intTaxes={intTaxes}
+          intTransactionCosts={intTransactionCosts}
           orcado={totalOrcadoRentabilidade}
           custoPlanejado={totalPlanejado}
           custoRealizado={totalRealizado}

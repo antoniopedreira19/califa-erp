@@ -3510,3 +3510,39 @@ JOB-0008, cujo banco tem R$ 515.999,99 — `carregar-detalhe.ts`,
 `job-totais-card.tsx`, `job-realizado-section.tsx` e as duas de errata
 ainda não passam o 4º parâmetro. É a próxima entrega; o dado gravado já
 está certo.
+
+## ⚠️ Nota de 2026-09-11 — a visão agregada soma cadeias diferentes (decisão 072)
+
+Quarta entrega da [072](../decisions/072-orcamento-internacional.md). Um
+projeto pode ter orçamento nacional e internacional lado a lado.
+
+**A regra já estava na tela:** o consolidado nunca foi uma conta do
+projeto — é o somatório dos fechamentos de cada orçamento, e o card já
+avisava que os percentuais são a média das taxas. Cadeia diferente é a
+mesma família de problema que taxa diferente.
+
+### Onde mexer
+
+| Arquivo | O quê |
+|---|---|
+| `_rascunho/tipos.ts` | `ParametrosVersao` ganhou os 4 campos da versão; `OrcamentoRascunho` ganhou `modeloPlanilha` |
+| `_rascunho/rascunho.ts` | `totaisDoJob` recebe o modelo (3º argumento, obrigatório) e devolve `intTaxes`/`intTransactionCosts` |
+| `_rascunho/parametros-modal.tsx` | passou a preservar por **spread** os campos que não edita |
+| `agregado/page.tsx` | carrega os 4 campos da versão e o `modelo_planilha` da categoria |
+| `agregado/editor-agregado.tsx` | soma as deduções; orçamento novo herda o modelo da categoria escolhida |
+| `_totais/totais-projeto-card.tsx` · `jobs/projeto/projeto-totais-card.tsx` | as linhas Int. taxes / Int. transaction costs |
+| `jobs/projeto/carregar-planilhas.ts` · `tipos.ts` · `page.tsx` | o mesmo do lado dos jobs |
+
+### Por que `modeloPlanilha` fica FORA de `parametros`
+
+Os campos de `parametros` são colunas da **versão**, e o usuário os edita
+no modal de parâmetros. O modelo é da **categoria**, e ele não mexe nele.
+Misturar os dois faria o modal oferecer (ou zerar) algo que não é dele —
+foi por isso que o `onSalvar` do modal passou a usar spread.
+
+### Uma diferença que NÃO é bug
+
+A lista de orçamentos do projeto e a visão agregada podem mostrar totais
+diferentes para o mesmo projeto: a **lista** usa a versão *aprovada* quando
+existe, e a **agregada** usa a *vigente*. Orçamento com versão nova ainda
+não aprovada aparece com números diferentes nas duas — e está certo.

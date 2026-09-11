@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { configDaPlanilha } from "@/app/(app)/_planilha/modelo-planilha";
 import { servicosDoOrcamentoQuery, type ServicoOption } from "@/lib/data/servicos";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
@@ -19,6 +20,7 @@ import type {
   Regional,
   TipoCusto,
   VersaoOrcamento,
+  CategoriaModeloPlanilha,
 } from "@/lib/types";
 import { EditorAgregado } from "./editor-agregado";
 import type { OrcamentoRascunho } from "../../_rascunho/tipos";
@@ -89,6 +91,9 @@ export default async function OrcamentosAgregadoPage({
       .from("orcamentos")
       .select(
         "id, codigo, nome, status, versao_aprovada_id, categoria_id, servico_id, descritivo, regional_id, " +
+        // `!categoria_id`: `orcamentos` tem duas FKs para
+        // `categorias_dominio`, e o embed ambíguo derruba a query inteira.
+        "categoria:categorias_dominio!categoria_id(modelo_planilha), " +
           "cidade_id, cidade:cidades(nome), gp_responsavel_id, produtor_id, " +
           "data_inicio_prevista, data_fim_prevista",
       )
@@ -98,7 +103,9 @@ export default async function OrcamentosAgregadoPage({
       .order("codigo", { ascending: true }),
     supabase
       .from("categorias_dominio")
-      .select("id, nome")
+      // `modelo_planilha` vem junto: é ele que diz como o orçamento criado
+      // aqui vai fechar (decisão 072).
+      .select("id, nome, modelo_planilha")
       .eq("tenant_id", tenantId)
       .eq("escopo", "orcamento")
       .eq("ativo", true)
@@ -145,6 +152,8 @@ export default async function OrcamentosAgregadoPage({
     status: string;
     versao_aprovada_id: string | null;
     categoria_id: string | null;
+    /** Só o modelo: é ele que diz como este orçamento fecha (decisão 072). */
+    categoria: { modelo_planilha: CategoriaModeloPlanilha } | null;
     servico_id: string | null;
     descritivo: string | null;
     regional_id: string;
@@ -167,7 +176,9 @@ export default async function OrcamentosAgregadoPage({
             .from("versoes_orcamento")
             .select(
               "id, orcamento_id, numero_versao, status, moeda, taxa_cambio, " +
-                "percentual_honorarios, percentual_imposto",
+                "percentual_honorarios, percentual_imposto, " +
+                // Cadeia internacional (decisão 072).
+                "percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra",
             )
             .in(
               "orcamento_id",
@@ -208,6 +219,10 @@ export default async function OrcamentosAgregadoPage({
     taxa_cambio: number | string;
     percentual_honorarios: number | string;
     percentual_imposto: number | string;
+    percentual_int_taxes: number | string;
+    int_transaction_costs: number | string;
+    moeda_estrangeira: string | null;
+    cambio_compra: number | string | null;
   }>;
 
   const vigentePorOrcamento = new Map<string, (typeof versoes)[number]>();
@@ -375,7 +390,18 @@ export default async function OrcamentosAgregadoPage({
         taxa_cambio: num(versao?.taxa_cambio) || 1,
         percentual_honorarios: num(versao?.percentual_honorarios),
         percentual_imposto: num(versao?.percentual_imposto),
+        // Cadeia internacional (decisão 072): cada orçamento do projeto
+        // fecha pela sua, e o consolidado soma os fechamentos.
+        percentual_int_taxes: num(versao?.percentual_int_taxes),
+        int_transaction_costs: num(versao?.int_transaction_costs),
+        moeda_estrangeira: versao?.moeda_estrangeira ?? null,
+        cambio_compra:
+          versao?.cambio_compra === null || versao?.cambio_compra === undefined
+            ? null
+            : Number(versao.cambio_compra),
       },
+      modeloPlanilha: (orc.categoria?.modelo_planilha ??
+        "nacional") as CategoriaModeloPlanilha,
       origemBanco: versao
         ? {
             orcamentoId: orc.id,
@@ -423,6 +449,10 @@ export default async function OrcamentosAgregadoPage({
           ),
           orc.parametros.percentual_honorarios,
           orc.parametros.percentual_imposto,
+          // O valor que o seletor "Exportar" mostra tem que ser o mesmo da
+          // planilha exportada — e ela fecha pela cadeia do orçamento
+          // (decisão 072).
+          configDaPlanilha(orc.modeloPlanilha, orc.parametros).internacional,
         ).cliente.total
       : null;
     return {
@@ -473,7 +503,7 @@ export default async function OrcamentosAgregadoPage({
       exportaveis={exportaveis}
       categorias={(categoriasOrcRes.data ?? []) as Pick<
         CategoriaDominio,
-        "id" | "nome"
+        "id" | "nome" | "modelo_planilha"
       >[]}
       regionaisDoProjeto={regionaisDoProjeto}
       cidadesIniciais={cidadesIniciais}

@@ -1,4 +1,4 @@
-import type { TipoCusto } from "@/lib/types";
+import type { CategoriaModeloPlanilha, TipoCusto } from "@/lib/types";
 import type { EstagioFunil } from "@/lib/calculos/funil";
 import { ALIQUOTA_IMPOSTO_PADRAO } from "@/lib/impostos";
 
@@ -97,6 +97,18 @@ export interface ParametrosVersao {
   taxa_cambio: number;
   percentual_honorarios: number;
   percentual_imposto: number;
+  // ---- Cadeia internacional (decisão 072).
+  //
+  // São colunas da VERSÃO, e por isso moram aqui. O que NÃO mora aqui é o
+  // modelo de planilha: ele é da categoria do orçamento, e está em
+  // `OrcamentoRascunho.modeloPlanilha`.
+  //
+  // Obrigatórios: campo opcional num tipo montado à mão é como o valor do
+  // servidor some sem ninguém notar (CLAUDE.md).
+  percentual_int_taxes: number;
+  int_transaction_costs: number;
+  moeda_estrangeira: string | null;
+  cambio_compra: number | null;
 }
 
 // ============================================================
@@ -132,6 +144,15 @@ export interface OrcamentoRascunho extends JobRascunho {
   origemBanco?: OrigemBanco;
   /** Parâmetros próprios: na visão agregada cada orçamento tem os seus. */
   parametros: ParametrosVersao;
+  /** Qual fechamento este orçamento usa — da categoria dele (decisão 072).
+   *
+   *  Fica FORA de `parametros` de propósito: os de lá são colunas da
+   *  versão, que o usuário edita no modal; este é da categoria, e o
+   *  usuário não mexe nele. Num projeto com orçamento nacional e
+   *  internacional, cada linha fecha pela sua cadeia e o consolidado soma
+   *  os fechamentos — a mesma ideia que o card já usa para taxas
+   *  diferentes. */
+  modeloPlanilha: CategoriaModeloPlanilha;
 }
 
 // ============================================================
@@ -225,4 +246,11 @@ export const PARAMETROS_PADRAO: ParametrosVersao = {
   taxa_cambio: 1,
   percentual_honorarios: 0,
   percentual_imposto: ALIQUOTA_IMPOSTO_PADRAO,
+  // Orçamento novo nasce nacional: quem define o internacional é a
+  // categoria escolhida no formulário, e aí `criarVersaoInicial` grava os
+  // valores de partida (decisão 072).
+  percentual_int_taxes: 0,
+  int_transaction_costs: 0,
+  moeda_estrangeira: null,
+  cambio_compra: null,
 };

@@ -70,6 +70,11 @@ export interface JobPlanilhaProjeto {
   subtotaisPorTipo: Record<TipoCusto, number>;
   honorarios: number;
   imposto: number;
+  /** Int. taxes e custos de transação da cadeia internacional (decisão
+   *  072). **0 no nacional.** Obrigatórios: o card do projeto soma job a
+   *  job, e um opcional viraria NaN no primeiro job internacional. */
+  intTaxes: number;
+  intTransactionCosts: number;
   /** O que a California emite nota neste job. */
   faturamentoPrevisto: number;
   /** Compromisso total do cliente. É o "valor" do job na árvore. */

@@ -108,7 +108,7 @@ interface Props {
    *  vigente e o valor que a aba imprime, calculados sobre o que está no
    *  banco. A exportação lê o banco, não o rascunho da tela. */
   exportaveis: OrcamentoExportavel[];
-  categorias: Pick<CategoriaDominio, "id" | "nome">[];
+  categorias: Pick<CategoriaDominio, "id" | "nome" | "modelo_planilha">[];
   /** Serviço do job — escopo `projeto` de `categorias_dominio`,
    *  lista distinta das categorias acima (decisão 037). */
   servicos: Pick<CategoriaDominio, "id" | "nome">[];
@@ -325,6 +325,12 @@ export function EditorAgregado({
           ...PARAMETROS_PADRAO,
           percentual_honorarios: honorariosCliente,
         },
+        // A cadeia vem da categoria escolhida no formulário (decisão 072).
+        // Categoria não encontrada cai em nacional — o fechamento que todo
+        // orçamento sempre teve.
+        modeloPlanilha:
+          categorias.find((c) => c.id === dados.categoria_id)
+            ?.modelo_planilha ?? "nacional",
       },
     ]);
     setModal(null);
@@ -524,7 +530,7 @@ export function EditorAgregado({
 
   const linhasTodas = React.useMemo(() => {
     return orcamentos.map((orc) => {
-      const t = totaisDoJob(orc, orc.parametros);
+      const t = totaisDoJob(orc, orc.parametros, orc.modeloPlanilha);
       return {
         id: orc.id,
         codigo: codigos.get(orc.id) ?? "",
@@ -539,6 +545,8 @@ export function EditorAgregado({
         planejado: t.planejado,
         honorarios: t.honorarios,
         imposto: t.imposto,
+        intTaxes: t.intTaxes,
+        intTransactionCosts: t.intTransactionCosts,
         faturamentoPrevisto: t.faturamentoPrevisto,
         valorJob: t.valorJob,
         subtotaisPorTipo: t.subtotaisPorTipo,
@@ -587,18 +595,32 @@ export function EditorAgregado({
 
   // Os três indicadores do topo são do projeto INTEIRO — não seguem o
   // filtro de exibição (design, 03/09/2026).
+  // Cada orçamento fecha pela SUA cadeia e o consolidado soma os
+  // fechamentos — a mesma ideia com que o card já lida com taxas
+  // diferentes entre orçamentos (decisão 072).
   const resumo = linhasTodas.reduce(
     (acc, l) => ({
       faturamentoPrevisto: acc.faturamentoPrevisto + l.faturamentoPrevisto,
       valorJob: acc.valorJob + l.valorJob,
       imposto: acc.imposto + l.imposto,
+      intTaxes: acc.intTaxes + l.intTaxes,
+      intTransactionCosts: acc.intTransactionCosts + l.intTransactionCosts,
       planejado: acc.planejado + l.planejado,
     }),
-    { faturamentoPrevisto: 0, valorJob: 0, imposto: 0, planejado: 0 },
+    {
+      faturamentoPrevisto: 0,
+      valorJob: 0,
+      imposto: 0,
+      intTaxes: 0,
+      intTransactionCosts: 0,
+      planejado: 0,
+    },
   );
   const { resultadoOperacional, resultadoGeral } = calcularResultadoOperacional(
     resumo.valorJob,
-    resumo.imposto,
+    // As três deduções: no projeto só nacional as duas últimas são 0 e a
+    // conta é a de sempre.
+    resumo.imposto + resumo.intTaxes + resumo.intTransactionCosts,
     resumo.planejado,
   );
 
@@ -865,6 +887,7 @@ export function EditorAgregado({
           const bloqueio = orc.origemBanco?.bloqueio ?? null;
           return (
             <JobRascunhoCard
+              modeloPlanilha={orc.modeloPlanilha}
               savePorItem={savePorItem}
               saveVisivel={saveVisivel}
               onAlternarSave={() => setSaveVisivel((v) => !v)}

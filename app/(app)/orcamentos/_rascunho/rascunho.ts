@@ -1,4 +1,5 @@
-import type { ItemBv, TipoCusto, VersaoOrcamentoItem } from "@/lib/types";
+import type { CategoriaModeloPlanilha, ItemBv, TipoCusto, VersaoOrcamentoItem } from "@/lib/types";
+import { configDaPlanilha } from "@/app/(app)/_planilha/modelo-planilha";
 import {
   calcularTotaisVersao,
   type QuebraSave,
@@ -133,6 +134,12 @@ export interface TotaisJob {
   /** Compromisso total do cliente. */
   valorJob: number;
   imposto: number;
+  /** Int. taxes e custos de transação da cadeia internacional (decisão
+   *  072). **0 no nacional.** Obrigatórios: o consolidado do projeto soma
+   *  estes campos, e um opcional aqui viraria `undefined + n = NaN` na
+   *  primeira linha internacional. */
+  intTaxes: number;
+  intTransactionCosts: number;
   honorarios: number;
   subtotaisPorTipo: Record<TipoCusto, number>;
   /** A repartição do orçado entre save usado, save gerado e custos do job
@@ -168,6 +175,10 @@ export function divergenciaHonorarios(
 export function totaisDoJob(
   job: JobRascunho,
   parametros: ParametrosVersao,
+  /** Qual cadeia fecha este orçamento (decisão 072). Obrigatório: num
+   *  projeto com nacional e internacional cada linha fecha pela sua, e um
+   *  default aqui somaria tudo pela errada em silêncio. */
+  modeloPlanilha: CategoriaModeloPlanilha,
 ): TotaisJob {
   const itens = itensDoJob(job);
   const orcado = itens.reduce((s, it) => s + totalOrcadoDe(it), 0);
@@ -183,6 +194,8 @@ export function totaisDoJob(
     faturamentoPrevisto,
     valorJob,
     imposto,
+    intTaxes,
+    intTransactionCosts,
     honorarios,
     subtotaisPorTipo,
     save,
@@ -195,6 +208,7 @@ export function totaisDoJob(
       })),
       percentualHonorarios,
       parametros.percentual_imposto,
+      configDaPlanilha(modeloPlanilha, parametros).internacional,
     );
   return {
     orcado,
@@ -204,6 +218,8 @@ export function totaisDoJob(
     faturamentoPrevisto,
     valorJob,
     imposto,
+    intTaxes,
+    intTransactionCosts,
     honorarios,
     subtotaisPorTipo,
     save,

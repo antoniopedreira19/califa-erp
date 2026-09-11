@@ -96,6 +96,11 @@ export function ParametrosModal({
     }
 
     onSalvar({
+      // Os campos da cadeia internacional NÃO aparecem neste modal, e por
+      // isso vêm por spread: reescrever o objeto campo a campo é como eles
+      // seriam zerados por um formulário que nem sabe que existem
+      // (decisão 072).
+      ...parametros,
       moeda: moeda.trim().toUpperCase(),
       taxa_cambio: taxaNum,
       // Honorários não é editável aqui: segue o que veio do cadastro.
