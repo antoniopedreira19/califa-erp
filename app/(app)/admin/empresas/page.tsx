@@ -202,26 +202,20 @@ export default async function AdminEmpresasPage() {
     );
 
   // --- Conteúdo da aba "Contábeis" ---
-  const conteudoContabeis = (
-    <div className="space-y-6">
-      <div className="flex items-center justify-end">
-        <EmpresaContabilDrawer mode="criar" />
+  const conteudoContabeis =
+    empresasContabeis.length === 0 ? (
+      <div className="rounded-2xl border border-border bg-card p-12 text-center text-sm text-muted-foreground shadow-soft">
+        Nenhuma empresa contábil cadastrada ainda. Use{" "}
+        <span className="font-medium">+ Nova empresa contábil</span> pra
+        começar.
       </div>
-      {empresasContabeis.length === 0 ? (
-        <div className="rounded-2xl border border-border bg-card p-12 text-center text-sm text-muted-foreground shadow-soft">
-          Nenhuma empresa contábil cadastrada ainda. Use{" "}
-          <span className="font-medium">+ Nova empresa contábil</span> pra
-          começar.
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {empresasContabeis.map((ec) => (
-            <EmpresaContabilCard key={ec.id} empresa={ec} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
+    ) : (
+      <div className="space-y-4">
+        {empresasContabeis.map((ec) => (
+          <EmpresaContabilCard key={ec.id} empresa={ec} />
+        ))}
+      </div>
+    );
 
   return (
     <div className="space-y-8">
@@ -238,12 +232,13 @@ export default async function AdminEmpresasPage() {
         title="Empresas & regionais"
         description="Organograma do grupo California: empresas do tenant e as regionais que operam sob cada uma. A empresa marcada como principal é usada por padrão em novos projetos."
         icon={Building2}
-        actions={<EmpresaDrawer mode="create" />}
       />
 
       <EmpresasTabs
         empresasGerenciais={conteudoGerenciais}
         empresasContabeis={conteudoContabeis}
+        acaoGerenciais={<EmpresaDrawer mode="create" />}
+        acaoContabeis={<EmpresaContabilDrawer mode="criar" />}
       />
     </div>
   );
