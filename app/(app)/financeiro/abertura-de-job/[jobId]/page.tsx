@@ -33,7 +33,11 @@ export default async function AbrirJobNoFinanceiroPage({
     // mesmo vocabulário. Não existe lista de categoria só do financeiro.
     supabase
       .from("categorias_dominio")
-      .select("id, nome")
+      // `modelo_planilha` entra para o filtro logo abaixo — a categoria do
+      // job tem que usar o mesmo modelo do orçamento (decisão 072). Vem no
+      // select, e não numa query própria, porque esta roda em paralelo com
+      // o job e ainda não se sabe qual é o modelo aqui.
+      .select("id, nome, modelo_planilha")
       .eq("tenant_id", session.activeTenant.id)
       .eq("escopo", "orcamento")
       .eq("ativo", true)
@@ -56,6 +60,15 @@ export default async function AbrirJobNoFinanceiroPage({
   if (categoriasRes.error) {
     console.error("[abertura-job.categorias]", categoriasRes.error.message);
   }
+
+  // O job fecha pela cadeia do ORÇAMENTO (decisão 072), então a categoria
+  // dele precisa usar o mesmo modelo de planilha. Filtrar aqui é o que
+  // impede o Select de oferecer uma opção que a server action vai recusar
+  // — ela recusa de qualquer jeito, porque a regra não pode depender só
+  // da tela.
+  const categoriasDoModelo = (categoriasRes.data ?? []).filter(
+    (c) => c.modelo_planilha === carregado.job.modelo_planilha_orcamento,
+  );
   if (servicosRes.error) {
     console.error("[abertura-job.servicos]", servicosRes.error.message);
   }
@@ -113,7 +126,7 @@ export default async function AbrirJobNoFinanceiroPage({
   return (
     <AberturaForm
       job={job}
-      categorias={categoriasRes.data ?? []}
+      categorias={categoriasDoModelo}
       servicos={servicosRes.data ?? []}
       projetos={projetos}
       contas={contas}

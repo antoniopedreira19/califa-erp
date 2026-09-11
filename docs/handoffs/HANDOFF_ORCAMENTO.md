@@ -3472,3 +3472,41 @@ continua 1. Quem converte é `cambio_compra`, campo próprio.
   linha nova escorrega uma casa.
 - O trigger que trava a categoria **não pode** ser `security definer` — lá
   dentro `current_user` vira o dono da função e a trava não dispara.
+
+## ⚠️ Nota de 2026-09-11 — o job internacional nasce pela cadeia do orçamento (decisão 072)
+
+Segunda entrega da [072](../decisions/072-orcamento-internacional.md). O
+envio para abertura passou a calcular pela cadeia do **orçamento**, e não
+mais pela nacional.
+
+### Por que isto é mais grave que uma tela errada
+
+`abertura-actions.ts` **grava**: `valor_total`, `faturamento_previsto`,
+`faturamento_save_previsto` e os dois `_abertura`. Os `_abertura` são
+congelados no envio e nunca mais mudam — são a base de comparação do card
+de Erratas. Um job internacional aberto antes desta correção teria ficado
+com R$ 423.016,79 no lugar de R$ 515.999,99, para sempre. Não havia
+nenhum: a categoria nasceu no mesmo dia.
+
+### A regra, e a trava
+
+Quem decide a cadeia é a categoria do **orçamento**. A do job — que o
+financeiro escolhe na abertura e que vai para `jobs.categoria_id` —
+classifica, não recalcula. Fosse ela, trocá-la moveria o fechamento vivo
+por baixo do valor congelado e a tela do financeiro acusaria uma errata
+de ~R$ 93 mil que ninguém fez.
+
+`conferirCategoriaDoJob` (`financeiro/abertura-de-job/actions.ts`) recusa
+categoria de modelo diferente nos **dois** pontos que gravam (`abrirJobNoFinanceiro`
+e `editarRegistroDaAbertura`) — ele substituiu dois blocos de validação
+que eram cópia um do outro. A tela filtra o Select antes
+(`abertura-de-job/[jobId]/page.tsx` + `modelo_planilha_orcamento` em
+`dados.ts`), mas a regra não depende dela.
+
+### O que AINDA lê pela cadeia nacional
+
+⚠️ **As telas do job.** `/jobs/[jobId]` mostra R$ 423.016,79 para o
+JOB-0008, cujo banco tem R$ 515.999,99 — `carregar-detalhe.ts`,
+`job-totais-card.tsx`, `job-realizado-section.tsx` e as duas de errata
+ainda não passam o 4º parâmetro. É a próxima entrega; o dado gravado já
+está certo.
