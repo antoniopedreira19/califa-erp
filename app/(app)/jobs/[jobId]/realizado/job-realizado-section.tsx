@@ -57,7 +57,7 @@ import {
 } from "./concluir-pps-button";
 import {
   itemPrecisaDeConclusao,
-  somaDasPPsEmitidas,
+  somaDasPPsNaoCanceladas,
 } from "@/lib/calculos/pps-item";
 import { useRascunhoErrata } from "./errata-rascunho";
 import { ErrataBarra } from "./errata-barra";
@@ -173,7 +173,7 @@ export function JobRealizadoSection({
       if (!realizado || realizado.pps_concluidas_em != null) continue;
 
       const pps = ppsPorItemId.get(realizado.id) ?? [];
-      const emPPs = somaDasPPsEmitidas(pps);
+      const emPPs = somaDasPPsNaoCanceladas(pps);
       lista.push({
         itemRealizadoId: realizado.id,
         nome: item.item,

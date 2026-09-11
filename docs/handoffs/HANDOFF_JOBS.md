@@ -3221,3 +3221,57 @@ quiser mexer nessa conta está mexendo na 062, não nesta.
 `A` e `AR`, recusa `B`, recusa BV sem chave), com rollback e zero
 resíduo. O percurso pela tela do JOB-0029 — lançar, salvar, confirmar —
 ficou para a próxima sessão com o preview logado.
+
+---
+
+## ⚠️ Nota de 2026-09-11 — a PP gerada voltou a contar no realizado
+
+Regra em
+`docs/decisions/074-a-pp-gerada-conta-no-realizado-do-item.md`. Migration
+`20260911210001_pp_gerada_conta_no_realizado.sql`.
+
+**Isto revê o §4 da nota de 02/09 acima** ("Em PPs emitidas soma só o que
+já chegou ao financeiro"). O resto daquela nota continua valendo inteiro:
+gerar não envia, não há teto por PP, anexo é opcional para gerar e
+obrigatório para enviar.
+
+**Realizado do item = soma das PPs não canceladas.** A `gerada` conta. O
+motivo é o caso que apareceu no JOB-0025: 7 PPs, R$ 15.230,94, todas
+geradas — e a planilha inteira com realizado zerado, o painel dizendo
+"Em PPs emitidas: R$ 0,00" logo acima da lista das PPs, e o cabeçalho
+dizendo "sem realizado". Gerar PP é comprometer o item; o número não
+podia dizer que nada tinha acontecido.
+
+**O que NÃO mudou** — e é o que separa as duas leituras:
+
+| Continua só com PP enviada ao financeiro | Onde |
+|---|---|
+| Consumo que congela a previsão de custo da abertura | `financeiro/abertura-de-job/consumo.ts` |
+| Trava da errata (decisão 040) | `ppChegouAoFinanceiro`, `barrarLinhaComPPNoFinanceiro` |
+| Lista de PPs do financeiro, contas a pagar, chat do financeiro | `.neq("status", "gerada")` nas queries de lá |
+
+**Uma conta só.** `somaDasPPsEmitidas` saiu de
+`lib/calculos/pps-item.ts`; ficou `somaDasPPsNaoCanceladas`, usada pela
+tela, pelo servidor (`somaDasPPsDoItem` em `realizado/actions-pp.ts`) e
+espelhada no banco por `recalcular_realizado_do_item`.
+`ppChegouAoFinanceiro` continua em `lib/types.ts`, agora como recorte
+**exclusivo do financeiro** — leia o comentário dela antes de
+reaproveitar.
+
+⚠️ **A armadilha, se você mexer nisto:** com a `gerada` dentro da soma,
+todo `total + valorDestaPP` conta a PP duas vezes. No envio, na auditoria
+da edição e na prévia do formulário em modo edição a PP em questão
+precisa sair da base primeiro (`excetoPPId` no servidor,
+`ppEditando.valor` no cliente). No painel, `pedirEnvio` não soma mais
+nada: `emPPsDepois = emPPs`.
+
+**O envio deixou de mexer no número.** Ele muda quem responde pelo valor,
+não o valor. Por isso o pop-up virou "Este item está com X em PPs" e o
+rótulo da ficha virou "Total do item em PPs".
+
+**Conferido logado no projeto 0-0001/26** (11/09/2026): realizado e
+painel no JOB-0029; prévia da edição sem dobrar; pop-up acima do
+planejado com R$ 9.000,00; e no JOB-0033 uma PP de verba de R$ 8.000 num
+item planejado de R$ 15.000 **enviada sem pedir confirmação** — que é o
+caso que pegaria a soma dobrada no servidor. Ficaram no projeto de teste
+a PP-00054 (gerada, JOB-0029) e a PP-00055 (em avaliação, JOB-0033).
