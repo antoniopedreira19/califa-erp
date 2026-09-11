@@ -4085,13 +4085,36 @@ desembolso, recorrência e avulsa sem job; despesa sem job e sem rateio
 (sai com regional nula, e não há trigger de soma 100 em
 `desembolsos_regionais`); pagamento de fatura de cartão; e título com
 origem `avulso`. O de origem `bv` **tem** job por trás
-(`itens_bv.job_item_orcado_id` → `jobs_itens_orcado.job_id`), só que a
-view ainda não percorre esse caminho.
+(`itens_bv.job_item_orcado_id` → `jobs_itens_orcado.job_id`) e foi
+resolvido no dia seguinte — ver a nota de 11/09 logo abaixo.
 
 ⚠️ **A conciliação continua divergindo num caso.** Ela lê
 `lancamentos_financeiros` direto, não a `vw_fluxo_caixa`: o job derivado
 da baixa de título não aparece ali, e a linha sai sem regional. O rateio
 do desembolso já foi incluído no embed, e a precedência já é a nova.
+
+⚠️ **O BV entrou na regra (2026-09-11).** Migration
+`20260911100001_bv_se_associa_ao_job.sql`, a pedido do Tiago — o resto da
+lista acima segue para o próximo lote.
+
+O BV (bonificação de veiculação — a comissão que a agência recebe do
+FORNECEDOR de mídia) faturava como origem própria e parecia não ter job.
+Tem: `itens_bv.job_item_orcado_id` → `jobs_itens_orcado.job_id`, caminho
+que a `vw_faturamento_pendente` **já percorria**. A `vw_fluxo_caixa` não:
+o CTE `fat_composicao` resolvia o job só para `origem_tipo = 'job'`, então
+o **título de BV saía sem job e sem regional — e a baixa dele também**,
+porque `lancamento_job` deriva o job do lançamento a partir desse CTE.
+
+Resolvido pelo elo direto, igual à `vw_faturamento_pendente`, para as duas
+views contarem a mesma história. Conferido nos 8 BVs do banco antes de
+escrever: os 5 com cópia no job têm o elo preenchido e a rota alternativa
+(pelo `item_versao_id`) devolve o MESMO job; os 3 sem elo não têm cópia no
+job nenhuma — são BVs de orçamento, cujo job ainda não existe. E só BV
+`confirmado` chega ao faturamento, o que exige job aberto.
+
+De quebra, `fat_composicao` passou a agrupar por job também no BV — uma
+nota que misture faturamento de job e BV agora reparte o título certo
+entre os jobs; antes o pedaço do BV caía todo no grupo nulo.
 
 ---
 
