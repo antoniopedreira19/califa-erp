@@ -99,7 +99,11 @@ export default async function ConciliacaoPage({
          ),
          desembolso:desembolsos(
            codigo,
-           anexos:desembolsos_anexos(arquivo_path, documento_tipo, documento_numero)
+           anexos:desembolsos_anexos(arquivo_path, documento_tipo, documento_numero),
+           rateio:desembolsos_regionais(
+             percentual,
+             regional:regionais(nome)
+           )
          ),
          cartao:cartoes_credito(nome, ultimos_4_digitos),
          fatura:faturas_cartao(codigo),
@@ -147,7 +151,11 @@ export default async function ConciliacaoPage({
       forma_pagamento: string | null;
       fatura: { codigo: string } | null;
       pedido_compra: { codigo: string; anexos: AnexoRaw[] } | null;
-      desembolso: { codigo: string; anexos: AnexoRaw[] } | null;
+      desembolso: {
+        codigo: string;
+        anexos: AnexoRaw[];
+        rateio: Array<{ percentual: number; regional: { nome: string } | null }>;
+      } | null;
       cartao: { nome: string; ultimos_4_digitos: string } | null;
       titulo: {
         faturamento: {
@@ -205,7 +213,13 @@ export default async function ConciliacaoPage({
     };
 
     const raw = ((data ?? []) as unknown as RawRow[]).map((r) => {
-      const rateio = (r.conta_avulsa?.rateio ?? []).map((rr: { percentual: number; regional: { nome: string } | null }) => ({
+      // O rateio só existe onde não há job (decisão 069). Avulsa e
+      // desembolso são as duas origens que o carregam; nunca as duas ao
+      // mesmo tempo, porque o lançamento vem de uma origem só.
+      const rateio = [
+        ...(r.conta_avulsa?.rateio ?? []),
+        ...(r.desembolso?.rateio ?? []),
+      ].map((rr: { percentual: number; regional: { nome: string } | null }) => ({
         percentual: Number(rr.percentual),
         regional_nome: rr.regional?.nome ?? "—",
       }));
@@ -219,17 +233,18 @@ export default async function ConciliacaoPage({
           r.fornecedores?.razao_social ?? r.fornecedores?.nome ?? null,
         job_id: r.jobs?.id ?? null,
         job_codigo: r.jobs?.codigo ?? null,
-        // Mesma regra do `vw_fluxo_caixa`: a avulsa rateada manda, e o
-        // rateio de uma regional só resolve aqui mesmo; sem rateio, a
-        // regional do job; sem job, a da empresa. Com mais de uma regional
-        // isto fica nulo — a coluna diz "Rateada" e o detalhe abre a
-        // divisão, que é onde os percentuais cabem.
+        // Mesma regra da `vw_fluxo_caixa` (decisão 069, 10/09/2026): a
+        // regional do JOB manda sempre; o rateio só decide onde não há
+        // job. Com mais de uma regional isto fica nulo — a coluna diz
+        // "Rateada" e o detalhe abre a divisão, que é onde os percentuais
+        // cabem.
+        //
+        // ⚠️ Esta tela lê `lancamentos_financeiros` direto, e não a view:
+        // o job da BAIXA DE TÍTULO é derivado pelo título e não aparece
+        // aqui. Nesse caso a linha sai sem regional. Ver handoff.
         regional_nome:
-          rateio.length === 1
-            ? rateio[0].regional_nome
-            : rateio.length > 1
-              ? null
-              : (r.jobs?.regional?.nome ?? null),
+          (r.jobs?.regional?.nome ??
+            (rateio.length === 1 ? rateio[0].regional_nome : null)),
         // A ordem é a das origens que têm identificador próprio. O
         // recebimento fica por último porque ali a origem É a nota — o
         // faturamento não tem código interno, e inventar um só faria a

@@ -53,11 +53,6 @@ export const criarDesembolsoSchema = z
       .uuid()
       .nullable()
       .or(z.literal("").transform(() => null)),
-    job_id: z
-      .string()
-      .uuid()
-      .nullable()
-      .or(z.literal("").transform(() => null)),
     rateio: rateioSchema,
     parcelas: z.array(parcelaSchema).min(1, "Adicione pelo menos uma parcela.")
       .refine((ps) => new Set(ps.map((p) => p.numero)).size === ps.length,

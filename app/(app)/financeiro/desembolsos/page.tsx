@@ -57,7 +57,6 @@ export default async function DesembolsosPage({
     empresasRes,
     fornecedoresRes,
     clientesRes,
-    jobsRes,
     regionaisRes,
   ] = await Promise.all([
     query,
@@ -81,13 +80,6 @@ export default async function DesembolsosPage({
       .eq("tenant_id", session.activeTenant.id)
       .eq("status", "ativo")
       .order("nome_fantasia"),
-    supabase
-      .from("jobs")
-      .select("id, codigo, nome")
-      .eq("tenant_id", session.activeTenant.id)
-      .neq("status", "cancelado")
-      .order("created_at", { ascending: false })
-      .limit(500),
     supabase
       .from("regionais")
       .select("id, nome, ativo, empresa_id")
@@ -116,12 +108,6 @@ export default async function DesembolsosPage({
     nome: c.razao_social ?? c.nome_fantasia ?? "",
   }));
 
-  const jobsList = (jobsRes.data ?? []).map((j) => ({
-    id: j.id,
-    codigo: j.codigo,
-    nome: j.nome,
-  }));
-
   const regionaisList = (regionaisRes.data ?? []).map((r) => ({
     id: r.id,
     nome: r.nome,
@@ -147,7 +133,6 @@ export default async function DesembolsosPage({
         empresas={empresasList}
         fornecedores={fornecedoresList}
         clientes={clientesList}
-        jobs={jobsList}
         regionais={regionaisList}
         isAdminOrFinanceiro={isAdminOrFinanceiro}
       />

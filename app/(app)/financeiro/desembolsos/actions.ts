@@ -68,7 +68,6 @@ export async function criarDesembolso(input: unknown): Promise<Result> {
       valor: d.valor,
       fornecedor_id: d.fornecedor_id,
       cliente_id: d.cliente_id,
-      job_id: d.job_id,
       data_prevista_pagamento: d.data_prevista_pagamento,
       criado_por: session.profile.id,
     })

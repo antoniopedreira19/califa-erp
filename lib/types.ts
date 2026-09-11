@@ -691,7 +691,10 @@ export interface Job {
   versao_orcamento_aprovada_id: string;
   nome: string;
   produto: string | null;
-  regional_id: string | null;
+  /** NOT NULL no banco desde 10/09/2026 (decisão 069): a regional do job é
+   *  a FONTE da regional de tudo que nasce dele — PP, avulsa, título,
+   *  previsão, save. Job sem regional não existe mais. */
+  regional_id: string;
   cidade: string | null;
   data_inicio_prevista: string | null;
   data_fim_prevista: string | null;

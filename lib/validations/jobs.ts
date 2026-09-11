@@ -13,12 +13,11 @@ export const jobSchema = z
       .max(120)
       .optional()
       .transform((v) => (v && v.length > 0 ? v : null)),
-    regional_id: z
-      .string()
-      .uuid()
-      .optional()
-      .or(z.literal(""))
-      .transform((v) => (v && v.length > 0 ? v : null)),
+    /** Obrigatória desde 10/09/2026 (decisão 069). A regional do job é a
+     *  fonte da regional de tudo que nasce dele, e `jobs.regional_id` é
+     *  NOT NULL no banco — deixar limpar aqui devolveria um erro cru do
+     *  Postgres numa tela que antes salvava. */
+    regional_id: z.string().uuid("Selecione a regional."),
     cidade: z
       .string()
       .trim()

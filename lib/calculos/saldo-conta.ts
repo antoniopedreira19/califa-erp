@@ -22,9 +22,9 @@ export type LancamentoLinha = {
    *  bancária tem FK obrigatória para empresa. `null` só num caso limite
    *  de dado torto. */
   empresa_nome: string | null;
-  /** Regional do lançamento, pela MESMA regra do `vw_fluxo_caixa`: a
-   *  avulsa rateada manda; sem rateio, a regional do job; sem job, a da
-   *  empresa. `null` quando nenhuma das três existe.
+  /** Regional do lançamento, pela MESMA regra da `vw_fluxo_caixa`
+   *  (decisão 069, 10/09/2026): a regional do JOB manda sempre; o rateio
+   *  só decide onde não há job. `null` quando não há nem job nem rateio.
    *
    *  Quando a avulsa é rateada entre várias, isto vem `null` e quem conta
    *  a história é `rateio` — a coluna mostra "Rateada" e o detalhe da
