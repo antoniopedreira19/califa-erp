@@ -3172,3 +3172,52 @@ recebe foco.
 `app/**` e `components/**` deu **zero** depois disto. Se a sua tela nova
 tem `<Label htmlFor>`, confirme que o alvo existe — nem `Select` do Radix
 nem `DatePicker` ganham `id` sozinhos.
+
+---
+
+## ⚠️ Nota de 2026-09-11 — a linha nascida de errata voltou a aceitar BV (decisão 073)
+
+A [071](../decisions/071-o-bv-do-job-se-grava-pelo-item-da-versao.md),
+escrita na madrugada do mesmo dia, fechou a linha de errata para BV
+enquanto consertava a gravação — e deixou isso registrado como **pergunta
+de negócio em aberto**, não como conclusão. A resposta veio no mesmo dia e
+está na [073](../decisions/073-o-bv-nao-depende-da-versao-aprovada.md):
+
+> **O BV não depende de a linha ter vindo da versão aprovada.** Qualquer
+> linha da planilha do job aceita BV, **desde que o tipo de custo
+> permita** — `A`, `AR` e `D`.
+
+**O que isso muda para quem mexe na planilha do job:**
+
+**A chave do BV agora é marcada, e tem dois espaços.** `BvDialog` recebe
+`chaveDoItem: ChaveBvNoDialog`, não mais uma string:
+
+```ts
+// linha vinda da versão — endereça por lá, que é onde os BVs antigos moram
+{ espaco: "versao", id: item.item_versao_id }
+// linha nascida de errata — a cópia do job é o único endereço que existe
+{ espaco: "job", id: item.id }
+// editor de rascunho — chave local, nunca chega a Server Action
+{ espaco: "rascunho", id: item.id }
+```
+
+Não volte a passar `item.id` cru. Foi essa ambiguidade que produziu o bug
+da 071, e com duas chaves vivas ela passa a ter duas formas de errar.
+
+**A calha não filtra mais por `item_versao_id`.** O que decide oferecer o
+botão é `aceitaBV(item.tipo_custo)` e `em_save`. Se você precisar esconder
+o BV de alguma linha, o critério é o tipo — não a origem dela.
+
+**O banco valida pelas duas chaves.** `bv_exige_item_com_bv()` resolve o
+item pela versão **ou** pela cópia, e `chk_bv_tem_item` passou a exigir
+que pelo menos uma esteja preenchida. Um BV órfão não é mais possível.
+
+⚠️ **O realizado não mudou, e não é para mudar.** BV só entra no realizado
+— e, portanto, na rentabilidade — quando vira `confirmado`. Enquanto está
+`a_negociar` a linha mostra "BV não emitido" e não deduz nada. Quem
+quiser mexer nessa conta está mexendo na 062, não nesta.
+
+⚠️ **Falta a conferência logada.** A regra foi provada no banco (aceita
+`A` e `AR`, recusa `B`, recusa BV sem chave), com rollback e zero
+resíduo. O percurso pela tela do JOB-0029 — lançar, salvar, confirmar —
+ficou para a próxima sessão com o preview logado.

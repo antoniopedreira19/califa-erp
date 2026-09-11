@@ -7,6 +7,7 @@ import { TruncateTooltip } from "@/components/ui/truncate-tooltip";
 import { cn, formatCurrency } from "@/lib/utils";
 import { calcularRentabilidade } from "@/lib/calculos/versao-totais";
 import type {
+  ChaveBvNoDialog,
   ItemPlanilhaJob,
   JobItemRealizado,
   PedidoCompra,
@@ -1689,14 +1690,12 @@ export function JobItemRealizadoTable({
                   // oferece.
                   const emSave = item.em_save === true;
                   // Linha nascida de errata não tem item na versão
-                  // aprovada, e é por ele que o BV é endereçado: sem
-                  // `item_versao_id` não há onde gravar. Até 11/09/2026 a
-                  // calha oferecia o botão assim mesmo e o Salvar
-                  // devolvia "Item não encontrado." (decisão 071).
-                  const semItemDeVersao = item.item_versao_id === null;
+                  // aprovada — e, desde a decisão 073, isso deixou de
+                  // importar: ela se endereça pela própria cópia. Quem
+                  // decide continua sendo o TIPO DE CUSTO, que é o que
+                  // define haver comissão a negociar.
                   const mostraBv =
                     !emSave &&
-                    !semItemDeVersao &&
                     aceitaBV(item.tipo_custo) &&
                     (podeAcoes || (!preAbertura && bvsDaLinha.length > 0));
                   // Com vários BVs na linha (decisão 062), um confirmado
@@ -1993,13 +1992,15 @@ export function JobItemRealizadoTable({
           terceiro bloco é o Realizado e o rodapé ganha o Confirmar. */}
       {bvAberto &&
         (() => {
-          // O BV é gravado contra o item da VERSÃO. O `id` desta linha é
-          // o da CÓPIA (`jobs_itens_orcado`) — é ele que indexa o
-          // realizado, a PP e a própria lista de BVs, e passá-lo à action
-          // era o bug da decisão 071. A calha já não abre linha de
-          // errata; o `return null` é a mesma trava do lado do tipo.
-          const chaveDoItem = bvAberto.item_versao_id;
-          if (!chaveDoItem) return null;
+          // O `id` desta linha é o da CÓPIA (`jobs_itens_orcado`) — é ele
+          // que indexa o realizado, a PP e a própria lista de BVs.
+          // Mandá-lo cru para a action era o bug da decisão 071; agora a
+          // chave vai marcada com o espaço a que pertence. A linha vinda
+          // da versão continua endereçando por lá, que é onde os BVs
+          // antigos moram; só a nascida de errata usa a cópia (073).
+          const chaveDoItem: ChaveBvNoDialog = bvAberto.item_versao_id
+            ? { espaco: "versao", id: bvAberto.item_versao_id }
+            : { espaco: "job", id: bvAberto.id };
           const realizado = realizadosMap.get(bvAberto.id);
           const daPP = realizadoVemDasPPs(bvAberto.tipo_custo) || preAbertura;
           return (
