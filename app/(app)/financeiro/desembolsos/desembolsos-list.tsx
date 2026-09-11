@@ -37,7 +37,6 @@ interface Props {
    *  caminho o descartaria de vez, com `tsc` limpo. */
   fornecedores: Array<{ id: string; nome: string; cpf_cnpj?: string | null }>;
   clientes: Array<{ id: string; nome: string }>;
-  jobs: Array<{ id: string; codigo: string; nome: string }>;
   regionais: Array<{ id: string; nome: string; ativo: boolean; empresa_id: string }>;
   isAdminOrFinanceiro: boolean;
 }
@@ -103,7 +102,6 @@ export function DesembolsosList({
   empresas,
   fornecedores,
   clientes,
-  jobs,
   regionais,
   isAdminOrFinanceiro,
 }: Props) {
@@ -257,7 +255,6 @@ export function DesembolsosList({
         empresas={empresas}
         fornecedores={fornecedores}
         clientes={clientes}
-        jobs={jobs}
         regionais={regionais}
       />
     </div>

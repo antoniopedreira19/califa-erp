@@ -61,7 +61,6 @@ export default async function DesembolsoDetalhePage({
           empresa:empresas(razao_social, nome_fantasia),
           fornecedor:fornecedores(nome, razao_social),
           cliente:clientes(nome_fantasia, razao_social),
-          job:jobs(codigo, nome),
           criador:profiles!desembolsos_criado_por_fkey(nome),
           aprovador:profiles!desembolsos_aprovada_por_fkey(nome),
           rejeitador:profiles!desembolsos_rejeitada_por_fkey(nome),
@@ -116,7 +115,6 @@ export default async function DesembolsoDetalhePage({
     status: DesembolsoStatus;
     fornecedor_id: string | null;
     cliente_id: string | null;
-    job_id: string | null;
     data_prevista_pagamento: string | null;
     motivo_rejeicao: string | null;
     motivo_cancelamento: string | null;
@@ -134,7 +132,6 @@ export default async function DesembolsoDetalhePage({
     empresa: { razao_social: string | null; nome_fantasia: string | null } | null;
     fornecedor: { nome: string; razao_social: string | null } | null;
     cliente: { nome_fantasia: string; razao_social: string | null } | null;
-    job: { codigo: string; nome: string } | null;
     criador: { nome: string } | null;
     aprovador: { nome: string } | null;
     rejeitador: { nome: string } | null;
@@ -254,11 +251,6 @@ export default async function DesembolsoDetalhePage({
           <span className="text-muted-foreground">Cliente</span>
           <span>
             {d.cliente?.razao_social ?? d.cliente?.nome_fantasia ?? "—"}
-          </span>
-
-          <span className="text-muted-foreground">Job</span>
-          <span>
-            {d.job ? `${d.job.codigo} · ${d.job.nome}` : "—"}
           </span>
 
           <span className="text-muted-foreground">Data prevista de pagamento</span>

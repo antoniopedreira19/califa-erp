@@ -66,7 +66,6 @@ interface Props {
   /** `cpf_cnpj` entra na busca e vira a segunda linha da opção (067). */
   fornecedores: Array<{ id: string; nome: string; cpf_cnpj?: string | null }>;
   clientes: Array<{ id: string; nome: string }>;
-  jobs: Array<{ id: string; codigo: string; nome: string }>;
   regionais: Array<{ id: string; nome: string; ativo: boolean; empresa_id: string }>;
 }
 
@@ -128,7 +127,6 @@ export function DesembolsoDrawer({
   empresas,
   fornecedores,
   clientes,
-  jobs,
   regionais,
 }: Props) {
   const router = useRouter();
@@ -146,7 +144,6 @@ export function DesembolsoDrawer({
   const [descricao, setDescricao] = React.useState("");
   const [fornecedorId, setFornecedorId] = React.useState<string>("__none__");
   const [clienteId, setClienteId] = React.useState<string>("__none__");
-  const [jobId, setJobId] = React.useState<string>("__none__");
   const [valor, setValor] = React.useState("");
   const [parcelas, setParcelas] = React.useState<ParcelaLocal[]>([]);
   const [numParcelas, setNumParcelas] = React.useState("1");
@@ -185,7 +182,6 @@ export function DesembolsoDrawer({
     setDescricao("");
     setFornecedorId("__none__");
     setClienteId("__none__");
-    setJobId("__none__");
     setValor("");
     setParcelas([]);
     setNumParcelas("1");
@@ -372,7 +368,6 @@ export function DesembolsoDrawer({
       valor,
       fornecedor_id: fornecedorId === "__none__" ? null : fornecedorId,
       cliente_id: clienteId === "__none__" ? null : clienteId,
-      job_id: jobId === "__none__" ? null : jobId,
       data_prevista_pagamento: dataPrevista || null,
       rateio,
       parcelas: parcelasParaEnvio(),
@@ -449,7 +444,7 @@ export function DesembolsoDrawer({
               </p>
             </div>
 
-            {/* ── 3. Fornecedor / Cliente / Job ────────────────────── */}
+            {/* ── 3. Fornecedor / Cliente ──────────────────────────── */}
             <div className="space-y-4">
               {/* O mesmo campo da PP desde 10/09/2026 (decisão 067):
                   busca por nome ou documento, ✕ para zerar e o botão ao
@@ -474,21 +469,6 @@ export function DesembolsoDrawer({
                   items={[
                     { value: "__none__", label: "Nenhum" },
                     ...clientes.map((c) => ({ value: c.id, label: c.nome })),
-                  ]}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Job</Label>
-                <Combobox
-                  value={jobId}
-                  onChange={(v) => setJobId(v ?? "__none__")}
-                  placeholder="Nenhum (opcional)"
-                  items={[
-                    { value: "__none__", label: "Nenhum" },
-                    ...jobs.map((j) => ({
-                      value: j.id,
-                      label: `${j.codigo} — ${j.nome}`,
-                    })),
                   ]}
                 />
               </div>

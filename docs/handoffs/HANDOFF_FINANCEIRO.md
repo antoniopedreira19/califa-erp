@@ -4031,11 +4031,11 @@ respectivamente, a criação de avulsa e a baixa de título. `titulos_receber`
 não foi sondada porque exige um `faturamento_id` e não há faturamento no
 banco; a alteração ali foi a mesma linha.
 
-⚠️ **O objetivo da Fase 2A continua EM ABERTO.** Esta reversão não
-entrega a garantia de que todo lançamento tem regional — só desfaz a
-tentativa que não funcionou. A forma certa é validar que existe
-**rateio OU job**, não que a coluna singular está preenchida, e isso é um
-check/trigger de outro desenho, para escrever junto com quem fez a Fase 2A.
+⚠️ **O objetivo da Fase 2A ficou EM ABERTO até 10/09/2026.** Esta
+reversão não entregou a garantia de que todo lançamento tem regional — só
+desfez a tentativa que não funcionou. O desenho certo veio no dia
+seguinte, com o Tiago, e está na nota datada ao fim desta seção: a trava
+não é por tabela de lançamento, é no JOB. Ver decisão 069.
 
 ⚠️ **Não conferido na tela.** O formulário de conta avulsa não pôde ser
 exercitado pela automação: os combos de regional, job, fornecedor e
@@ -4043,6 +4043,55 @@ cliente são Popover do Radix (`aria-haspopup="dialog"`) e não abrem por
 evento sintético nem por clique de `ref` de forma confiável. É limitação
 do ferramental, não do sistema. **Vale um teste manual do Tiago:** criar
 uma conta avulsa e dar baixa num título.
+
+⚠️ **A trava certa: a regional do job é a fonte (2026-09-10).** Decisão do
+Tiago, registrada em `docs/decisions/069-a-regional-do-job-e-a-fonte.md` e
+aplicada pela migration `20260910210001_regional_do_job_e_a_fonte.sql`. A
+regra cabe em duas linhas:
+
+    origem em job  ->  a regional é a do job, 100%, sem divisão
+    sem job        ->  destrincha em N regionais (rateio da despesa)
+
+Com isso a garantia deixa de precisar de check por tabela de lançamento:
+**`jobs.regional_id` virou NOT NULL**, e quem nasce de job herda uma
+regional que não pode faltar. Três dos cinco caminhos de escrita já
+faziam exatamente isso — a avulsa e a recorrente com job já forçavam
+rateio único de 100% na regional do job, e recusavam job sem regional.
+
+O que o levantamento anterior não tinha achado, e esta entrega corrigiu:
+
+1. **A baixa de título entrava no DRE sem regional.** `dar_baixa_titulo`
+   grava o lançamento sem `job_id` e sem `regional_id`; a view derivava o
+   job certo pelo título → `faturamento_itens` (CTE `lancamento_job`) mas
+   descartava isso na hora da regional, que vinha de `lancamento_rateio`,
+   cego para a derivação. **Toda receita realizada** saía sem regional.
+   Agora os dois se encontram em `COALESCE(jlj.regional_id, lr.regional_id)`.
+2. **O rateio do desembolso era gravado e nunca lido.** A view usava a
+   regional do JOB do desembolso e ignorava `desembolsos_regionais`.
+   Agora lê, com fator — e precisava ler mesmo, porque o desembolso
+   deixou de ter job.
+3. **A edição do job deixava limpar a regional** (`lib/validations/jobs.ts`
+   + a opção "Sem regional" no drawer). Era o caminho que quebraria o
+   NOT NULL — corrigido no mesmo commit. Varridos todos os caminhos de
+   escrita em `jobs` antes de aplicar: 1 insert e 11 updates.
+
+**Desembolso não se vincula mais a job** — "tudo do job deverá ser lançado
+pelo job". CHECK `desembolso_nao_tem_job`; o campo saiu do formulário, do
+detalhe e da validação; a coluna ficou no banco porque removê-la é
+destrutivo.
+
+Segue em aberto, e é o próximo lote: **como** o rateio é preenchido em
+desembolso, recorrência e avulsa sem job; despesa sem job e sem rateio
+(sai com regional nula, e não há trigger de soma 100 em
+`desembolsos_regionais`); pagamento de fatura de cartão; e título com
+origem `avulso`. O de origem `bv` **tem** job por trás
+(`itens_bv.job_item_orcado_id` → `jobs_itens_orcado.job_id`), só que a
+view ainda não percorre esse caminho.
+
+⚠️ **A conciliação continua divergindo num caso.** Ela lê
+`lancamentos_financeiros` direto, não a `vw_fluxo_caixa`: o job derivado
+da baixa de título não aparece ali, e a linha sai sem regional. O rateio
+do desembolso já foi incluído no embed, e a precedência já é a nova.
 
 ---
 

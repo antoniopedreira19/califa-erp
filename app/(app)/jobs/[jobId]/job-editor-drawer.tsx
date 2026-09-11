@@ -23,7 +23,6 @@ import { DatePicker } from "@/components/ui/date-picker";
 import type { Job, Profile, Regional } from "@/lib/types";
 import { atualizarJob } from "@/app/(app)/jobs/actions";
 
-const SEM_REGIONAL = "__none__";
 
 interface Props {
   job: Job;
@@ -37,9 +36,7 @@ export function JobEditorDrawer({ job, regionais, responsaveis }: Props) {
   const [pending, startTransition] = React.useTransition();
   const [error, setError] = React.useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = React.useState<Record<string, string[]>>({});
-  const [regionalId, setRegionalId] = React.useState<string>(
-    job.regional_id ?? SEM_REGIONAL,
-  );
+  const [regionalId, setRegionalId] = React.useState<string>(job.regional_id);
   const [responsavelId, setResponsavelId] = React.useState<string>(job.responsavel_id);
 
   const regionaisDaEmpresa = React.useMemo(
@@ -52,7 +49,7 @@ export function JobEditorDrawer({ job, regionais, responsaveis }: Props) {
     setError(null);
     setFieldErrors({});
     const formData = new FormData(e.currentTarget);
-    formData.set("regional_id", regionalId === SEM_REGIONAL ? "" : regionalId);
+    formData.set("regional_id", regionalId);
     formData.set("responsavel_id", responsavelId);
     startTransition(async () => {
       const res = await atualizarJob(job.id, formData);
@@ -97,9 +94,8 @@ export function JobEditorDrawer({ job, regionais, responsaveis }: Props) {
               <div className="space-y-2">
                 <Label htmlFor="regional_id">Regional</Label>
                 <Select value={regionalId} onValueChange={setRegionalId}>
-                  <SelectTrigger id="regional_id"><SelectValue placeholder="Sem regional" /></SelectTrigger>
+                  <SelectTrigger id="regional_id"><SelectValue placeholder="Selecione a regional" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value={SEM_REGIONAL}>Sem regional</SelectItem>
                     {regionaisDaEmpresa.map((r) => <SelectItem key={r.id} value={r.id}>{r.nome}</SelectItem>)}
                   </SelectContent>
                 </Select>
