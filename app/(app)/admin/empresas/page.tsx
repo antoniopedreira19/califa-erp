@@ -8,6 +8,10 @@ import { EmpresaDrawer } from "./empresa-drawer";
 import type { EmpresaRow } from "./types";
 import type { UsuarioAcesso } from "./usuarios-modal";
 import { PageHeader } from "@/components/ui/page-header";
+import { EmpresasTabs } from "./tabs";
+import { EmpresaContabilCard } from "./contabeis/empresa-contabil-card";
+import { EmpresaContabilDrawer } from "./contabeis/empresa-contabil-drawer";
+import type { EmpresaContabilRow } from "./contabeis/types";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +22,7 @@ export default async function AdminEmpresasPage() {
 
   const service = createServiceClient();
 
-  const [empRes, regRes, memRes] = await Promise.all([
+  const [empRes, regRes, memRes, contabeisRes] = await Promise.all([
     supabase
       .from("empresas")
       .select(
@@ -45,12 +49,20 @@ export default async function AdminEmpresasPage() {
       .select("empresa_id, user_id, regional_id")
       .eq("tenant_id", tenantId)
       .eq("status", "ativo"),
+    supabase
+      .from("empresas_contabeis")
+      .select("id, razao_social, nome_fantasia, cnpj, ativo")
+      .eq("tenant_id", tenantId)
+      .order("ativo", { ascending: false })
+      .order("razao_social", { ascending: true }),
   ]);
 
   if (empRes.error) console.error("[admin.empresas.list]", empRes.error.message);
   if (regRes.error) console.error("[admin.regionais.list]", regRes.error.message);
   if (memRes.error)
     console.error("[admin.empresas.list.members]", memRes.error.message);
+  if (contabeisRes.error)
+    console.error("[admin.empresas_contabeis.list]", contabeisRes.error.message);
 
   const empresas: EmpresaRow[] = ((empRes.data ?? []) as any[]).map((e) => ({
     id: e.id,
@@ -71,6 +83,16 @@ export default async function AdminEmpresasPage() {
     local_pagamento: e.local_pagamento,
     instrucoes_nf: e.instrucoes_nf,
     principal: e.principal,
+    ativo: e.ativo,
+  }));
+
+  const empresasContabeis: EmpresaContabilRow[] = (
+    (contabeisRes.data ?? []) as any[]
+  ).map((e) => ({
+    id: e.id,
+    razao_social: e.razao_social,
+    nome_fantasia: e.nome_fantasia,
+    cnpj: e.cnpj,
     ativo: e.ativo,
   }));
 
@@ -159,6 +181,48 @@ export default async function AdminEmpresasPage() {
     usuariosAcessoPorEmpresa.set(empresaId, lista);
   }
 
+  // --- Conteúdo da aba "Gerenciais" ---
+  const conteudoGerenciais =
+    empresas.length === 0 ? (
+      <div className="rounded-2xl border border-border bg-card p-12 text-center text-sm text-muted-foreground shadow-soft">
+        Nenhuma empresa cadastrada ainda. Use{" "}
+        <span className="font-medium">+ Nova empresa</span> pra começar.
+      </div>
+    ) : (
+      <div className="space-y-4">
+        {empresas.map((empresa) => (
+          <EmpresaCard
+            key={empresa.id}
+            empresa={empresa}
+            regionais={regionaisPorEmpresa.get(empresa.id) ?? []}
+            usuariosAcesso={usuariosAcessoPorEmpresa.get(empresa.id) ?? []}
+          />
+        ))}
+      </div>
+    );
+
+  // --- Conteúdo da aba "Contábeis" ---
+  const conteudoContabeis = (
+    <div className="space-y-6">
+      <div className="flex items-center justify-end">
+        <EmpresaContabilDrawer mode="criar" />
+      </div>
+      {empresasContabeis.length === 0 ? (
+        <div className="rounded-2xl border border-border bg-card p-12 text-center text-sm text-muted-foreground shadow-soft">
+          Nenhuma empresa contábil cadastrada ainda. Use{" "}
+          <span className="font-medium">+ Nova empresa contábil</span> pra
+          começar.
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {empresasContabeis.map((ec) => (
+            <EmpresaContabilCard key={ec.id} empresa={ec} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div className="space-y-8">
       <Link
@@ -177,23 +241,10 @@ export default async function AdminEmpresasPage() {
         actions={<EmpresaDrawer mode="create" />}
       />
 
-      {empresas.length === 0 ? (
-        <div className="rounded-2xl border border-border bg-card p-12 text-center text-sm text-muted-foreground shadow-soft">
-          Nenhuma empresa cadastrada ainda. Use{" "}
-          <span className="font-medium">+ Nova empresa</span> pra começar.
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {empresas.map((empresa) => (
-            <EmpresaCard
-              key={empresa.id}
-              empresa={empresa}
-              regionais={regionaisPorEmpresa.get(empresa.id) ?? []}
-              usuariosAcesso={usuariosAcessoPorEmpresa.get(empresa.id) ?? []}
-            />
-          ))}
-        </div>
-      )}
+      <EmpresasTabs
+        empresasGerenciais={conteudoGerenciais}
+        empresasContabeis={conteudoContabeis}
+      />
     </div>
   );
 }
