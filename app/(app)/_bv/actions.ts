@@ -42,6 +42,36 @@ interface ContextoItem {
 }
 
 /**
+ * O id não é de item de versão. Antes de dizer "Item não encontrado." —
+ * que mandava investigar o lugar errado — vale uma consulta: o id quase
+ * sempre é o da CÓPIA do job, e os dois motivos possíveis pedem respostas
+ * diferentes (decisão 071).
+ */
+async function porQueNaoAchou(
+  id: string,
+  tenantId: string,
+): Promise<string> {
+  const supabase = createClient();
+  const { data } = await supabase
+    .from("jobs_itens_orcado")
+    .select("item_versao_id")
+    .eq("id", id)
+    .eq("tenant_id", tenantId)
+    .maybeSingle<{ item_versao_id: string | null }>();
+
+  if (!data) return "Item não encontrado.";
+  // A linha existe no job, mas nasceu de uma errata: ela não tem item no
+  // orçamento aprovado, e é lá que o BV mora. A calha nem oferece o botão.
+  if (!data.item_versao_id) {
+    return "Linha criada por errata não tem item no orçamento aprovado — o BV não pode ser lançado nela.";
+  }
+  // A linha tem item de versão, mas quem chamou mandou o id da cópia: é
+  // uma tela desatualizada, do jeito que a planilha do job fazia até
+  // 11/09/2026.
+  return "A tela está desatualizada — recarregue a página e lance o BV de novo.";
+}
+
+/**
  * Carrega o item e barra tudo que torna o BV inválido: tenant errado,
  * tipo de custo sem BV e versão congelada para a origem da chamada.
  */
@@ -70,7 +100,9 @@ async function carregarContexto(
     console.error("[bv.contexto]", error.message);
     return { error: "Não foi possível carregar o item." };
   }
-  if (!data?.versao) return { error: "Item não encontrado." };
+  if (!data?.versao) {
+    return { error: await porQueNaoAchou(itemVersaoId, tenantId) };
+  }
 
   // Versão cancelada não aceita BV de lugar nenhum. Aprovada só bloqueia
   // o orçamento — é o estado normal de trabalho do job.

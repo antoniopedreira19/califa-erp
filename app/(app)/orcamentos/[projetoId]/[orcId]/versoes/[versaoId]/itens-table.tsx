@@ -2075,6 +2075,11 @@ export function ItensTable({
           open
           onOpenChange={(o) => !o && setBvAberto(null)}
           item={bvAberto}
+          // Aqui as duas chaves coincidem: o `id` da linha JÁ é o do item
+          // na versão (ou, no rascunho, a chave local que o adaptador
+          // entende). Passar explícito é o que impede a tela do job de
+          // repetir o engano da decisão 071.
+          chaveDoItem={bvAberto.id}
           grupoNome={
             gruposDaTela.find((g) => g.itens.some((i) => i.id === bvAberto.id))
               ?.nome ?? ""
