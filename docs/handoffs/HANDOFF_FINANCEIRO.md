@@ -4830,10 +4830,25 @@ Vale para os DOIS lados do fio (o balão do financeiro e a aba de PPs do
 job): é a mesma conversa, montada pelo mesmo `job-chat-pps.ts` e
 desenhada pelo mesmo `components/chat/thread-pps.tsx`.
 
+⚠️ **Segunda passada, no mesmo dia.** 138px ainda era muito: o Tiago pediu
+que o card fechado mostrasse **só o ícone, o código da PP e o valor**.
+Título, "Automático · data" e contraparte desceram também para a expansão,
+e o código virou campo próprio (`codigo`) em vez de sair grudado no resumo.
+O card fechado agora é **uma linha de 49px**; expandido vai a 212px com
+tudo.
+
+**E a coluna parou de encolher.** A raiz do dossiê não tinha `flex-1`:
+com a aba Dados o conteúdo longo a esticava, mas ao abrir o Chat ela
+desabava para o tamanho do "Carregando o fio…" — uma tirinha no canto,
+que só crescia quando as mensagens chegavam. Agora ela tem a altura da
+tela desde o primeiro quadro.
+
 **Verificação (11/09/2026).** No dossiê da PP-00041: card fechado com
-138px mostrando "PP emitida · PP-00030 · MARCELA FERREIRA DE SOUSA PAES ·
-R$ 2.000,00"; expandido vai a 249px e acrescenta a descrição, o prazo de
-pagamento e quem emitiu.
+49px mostrando "PP-00030 · R$ 2.000,00"; expandido em 212px com "PP
+emitida", data, fornecedor, descrição, prazo e quem emitiu. A coluna
+mede 979px no instante em que o Chat abre (ainda em "Carregando o fio…")
+e os mesmos 979px depois de carregado — igual aos painéis dos
+documentos.
 
 ## ✅ Teste ponta a ponta da reforma da PP — 11/09/2026
 

@@ -101,7 +101,12 @@ export function PPDossie({
   }
 
   return (
-    <div className="flex min-h-0 flex-col overflow-hidden rounded-2xl bg-white">
+    // `flex-1` e não altura automática: sem ele a coluna encolhia até o
+    // tamanho do conteúdo, e a aba Chat abria como uma tirinha — cabeçalho,
+    // "Carregando o fio…" e a caixa de mensagem — que só crescia quando as
+    // mensagens chegavam. A altura agora é a da tela desde o primeiro
+    // quadro, cheia ou vazia (Tiago, 11/09/2026).
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl bg-white">
       <div className="flex flex-none items-center gap-1 border-b border-border px-2 pt-2">
         <Aba ativa={aba === "dados"} onClick={() => onAba("dados")}>
           Dados
