@@ -11,6 +11,7 @@ import { z } from "zod";
  * a envia mais, e nada deve filtrar conta por ela.
  */
 export const contaBancariaSchema = z.object({
+  empresa_contabil_id: z.string().uuid("Empresa contábil é obrigatória."),
   nome: z.string().trim().min(2, "Nome muito curto.").max(120),
   banco: z.string().trim().min(2, "Banco muito curto.").max(80),
   agencia: z.string().trim().max(20).optional().or(z.literal("")),
