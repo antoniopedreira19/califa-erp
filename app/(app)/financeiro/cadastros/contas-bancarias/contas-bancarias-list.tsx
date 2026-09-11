@@ -17,6 +17,7 @@ import { tipoContaBancariaLabel } from "@/lib/types";
 import { formatCurrency } from "@/lib/utils";
 import { ContaBancariaDrawer } from "./conta-bancaria-drawer";
 import { inativarContaBancaria, reativarContaBancaria } from "./actions";
+import type { EmpresaContabilSumario } from "./types";
 
 type StatusFiltro = "ativas" | "inativas" | "todas";
 
@@ -25,12 +26,6 @@ function formatDataBR(iso: string): string {
   const [year, month, day] = iso.split("-");
   return `${day}/${month}/${year}`;
 }
-
-type EmpresaContabilSumario = {
-  id: string;
-  razao_social: string;
-  nome_fantasia: string | null;
-};
 
 export function ContasBancariasList({
   contas,
