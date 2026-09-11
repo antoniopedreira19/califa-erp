@@ -1718,6 +1718,13 @@ export type ItemChat =
        * o fio ilegível na coluna estreita do dossiê (Tiago, 11/09/2026).
        */
       detalhe?: string | null;
+      /**
+       * Identificador curto do que o card trata — na PP, o código. Quando
+       * existe, é ELE que o card fechado mostra, junto do valor; título,
+       * data e contraparte ficam para a expansão. Card fechado precisa
+       * caber numa linha (Tiago, 11/09/2026).
+       */
+      codigo?: string | null;
       /** Consequência que não está nos números. Na errata: o job voltou ao
        *  mural de abertura. */
       nota?: string | null;

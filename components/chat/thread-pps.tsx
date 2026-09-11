@@ -107,16 +107,14 @@ function CardSistema({
         >
           <Icone className="h-[13px] w-[13px]" />
         </span>
+        {/* Card fechado cabe numa linha: identificador e valor, nada mais.
+            Título, data e contraparte descem para a expansão — com eles na
+            frente, cada card ocupava quatro linhas na coluna do dossiê e
+            afastava as mensagens umas das outras (Tiago, 11/09/2026). */}
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-baseline gap-2">
-            <span className="text-[12.5px] font-semibold">{item.titulo}</span>
-            <span className="text-[10.5px] text-muted-foreground">
-              Automático · {item.quando}
-            </span>
-          </div>
-          <p className="mt-1 line-clamp-2 text-xs leading-[1.45] text-muted-foreground">
-            {item.resumo}
-          </p>
+          <span className="block truncate text-[12.5px] font-semibold">
+            {item.codigo ?? item.titulo}
+          </span>
         </div>
         {item.valor && (
           <span
@@ -136,8 +134,22 @@ function CardSistema({
         />
       </button>
 
-      {aberto && (item.linhas.length > 0 || item.detalhe) && (
+      {aberto && (
         <div className="flex flex-col gap-[9px] border-t border-border bg-[#f5f5f5]/50 px-3.5 py-3">
+          {/* O que saiu da frente do card: o que aconteceu, quando, e com
+              quem. Só quem abriu o card quis esse nível de detalhe. */}
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+            <span className="text-[11.5px] font-semibold">{item.titulo}</span>
+            <span className="text-[10.5px] text-muted-foreground">
+              Automático · {item.quando}
+            </span>
+          </div>
+          {item.resumo && (
+            <p className="text-[11.5px] leading-[1.45] text-muted-foreground">
+              {item.resumo}
+            </p>
+          )}
+
           {/* A descrição do serviço: longa por natureza, e por isso fora do
               card fechado. Aqui ela tem a largura toda e quebra à vontade. */}
           {item.detalhe && (
