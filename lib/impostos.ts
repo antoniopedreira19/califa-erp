@@ -37,6 +37,23 @@ export const ALIQUOTAS_IMPOSTO = [19.53, 24.269914] as const;
  */
 export const ALIQUOTA_IMPOSTO_PADRAO: number = ALIQUOTAS_IMPOSTO[0];
 
+/**
+ * Int. taxes que uma versão do orçamento **internacional** já traz
+ * preenchidas (decisão 072).
+ *
+ * 18,02% = IR 17,64% + IOF 0,37%, como a planilha modelo anota ao lado da
+ * célula `G7`. É retida no exterior, em gross-up sobre sub-total + fee.
+ *
+ * Só vale onde a categoria do orçamento tem `modelo_planilha =
+ * 'internacional'`; nas demais o campo nasce em 0, e é esse 0 que faz o
+ * fechamento continuar sendo o nacional de sempre.
+ *
+ * Não é uma lista fechada como `ALIQUOTAS_IMPOSTO`: a retenção varia com o
+ * país de destino, então o campo é numérico livre. Isto aqui é só o ponto
+ * de partida.
+ */
+export const PERCENTUAL_INT_TAXES_PADRAO = 18.02;
+
 /** Valor do <SelectItem>. Number(...) reverte sem perda. */
 export function aliquotaParaValor(aliquota: number): string {
   return String(aliquota);

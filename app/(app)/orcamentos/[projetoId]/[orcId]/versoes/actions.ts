@@ -8,8 +8,13 @@ import { logAuditEvent } from "@/lib/auth/audit";
 import { pode } from "@/lib/permissoes";
 import { checarPermissao } from "@/lib/permissoes-server";
 import { honorariosDoOrcamento } from "@/lib/data/clientes";
+import { modeloPlanilhaDoOrcamento } from "@/lib/data/modelo-planilha";
 import { bloqueioAprovacaoVersao, versaoSchema } from "@/lib/validations/versoes";
-import { ALIQUOTA_IMPOSTO_PADRAO, aliquotaParaValor } from "@/lib/impostos";
+import {
+  ALIQUOTA_IMPOSTO_PADRAO,
+  PERCENTUAL_INT_TAXES_PADRAO,
+  aliquotaParaValor,
+} from "@/lib/impostos";
 import {
   itemSchema,
   camposItemEditaveis,
@@ -87,6 +92,53 @@ function extractVersaoPartial(formData: FormData): Record<string, unknown> {
     const n = Number(imp);
     if (Number.isFinite(n) && n >= 0 && n <= 100)
       partial.percentual_imposto = n;
+  }
+
+  // ---- Parâmetros do orçamento internacional (decisão 072).
+  //
+  // Só chegam da tela quando a categoria tem `modelo_planilha =
+  // 'internacional'`; nas demais o formulário nem renderiza os campos, e
+  // aí nada disto entra no update. A validação é a mesma dos de cima:
+  // vazio preserva, valor torto é ignorado em silêncio em vez de gravar
+  // NaN.
+
+  const moedaExt = formData.get("moeda_estrangeira")?.toString().trim();
+  if (moedaExt && moedaExt.length > 0) {
+    // 3 a 4 letras maiúsculas — o mesmo que o CHECK do banco aceita. Fora
+    // disso, preserva: o insert seria recusado pelo constraint e o
+    // usuário veria um erro de banco em vez de nada.
+    const sigla = moedaExt.toUpperCase().slice(0, 4);
+    if (/^[A-Z]{3,4}$/.test(sigla)) partial.moeda_estrangeira = sigla;
+  }
+
+  // As três taxas. `cambio_compra` é a que converte; as outras duas são
+  // registro. Zero é recusado em todas — taxa zerada só produziria
+  // divisão por zero na coluna da moeda.
+  for (const campo of ["cambio_cotacao", "cambio_compra", "cambio_venda"]) {
+    const bruto = formData.get(campo)?.toString().trim();
+    if (bruto && bruto.length > 0) {
+      const n = Number(bruto);
+      if (Number.isFinite(n) && n > 0) partial[campo] = n;
+    }
+  }
+
+  const dataCotacao = formData.get("cambio_data")?.toString().trim();
+  if (dataCotacao && /^\d{4}-\d{2}-\d{2}$/.test(dataCotacao)) {
+    partial.cambio_data = dataCotacao;
+  }
+
+  const intTaxes = formData.get("percentual_int_taxes")?.toString().trim();
+  if (intTaxes && intTaxes.length > 0) {
+    const n = Number(intTaxes);
+    if (Number.isFinite(n) && n >= 0 && n <= 100)
+      partial.percentual_int_taxes = n;
+  }
+
+  // Custo em BRL, não percentual: o teto é só "não negativo".
+  const itc = formData.get("int_transaction_costs")?.toString().trim();
+  if (itc && itc.length > 0) {
+    const n = Number(itc);
+    if (Number.isFinite(n) && n >= 0) partial.int_transaction_costs = n;
   }
 
   // `status` não entra: desde 17/08/2026 o status da versão é 100% do
@@ -189,11 +241,25 @@ export async function criarVersao(
 
   const numero = await proximoNumeroVersao(orcamentoId, session.activeTenant.id);
 
+  // Versão de orçamento internacional já nasce com as int. taxes
+  // preenchidas e a moeda em USD — o câmbio fica em branco de propósito,
+  // porque a cotação é do dia e ninguém aqui sabe qual é (decisão 072).
+  const modelo = await modeloPlanilhaDoOrcamento(
+    orcamentoId,
+    session.activeTenant.id,
+  );
+
   const { data, error } = await supabase
     .from("versoes_orcamento")
     .insert({
       ...parsed.data,
       percentual_honorarios: honorariosCliente.percentual,
+      ...(modelo === "internacional"
+        ? {
+            moeda_estrangeira: "USD",
+            percentual_int_taxes: PERCENTUAL_INT_TAXES_PADRAO,
+          }
+        : {}),
       tenant_id: session.activeTenant.id,
       orcamento_id: orcamentoId,
       numero_versao: numero,
@@ -361,6 +427,17 @@ export async function duplicarVersao(
       taxa_cambio: original.taxa_cambio,
       percentual_honorarios: original.percentual_honorarios,
       percentual_imposto: original.percentual_imposto,
+      // Os parâmetros internacionais seguem a mesma regra dos demais na
+      // duplicação: a cópia herda tudo da origem (decisão 072). Deixá-los
+      // de fora faria a cópia de uma versão internacional nascer com a
+      // cadeia zerada e um total diferente do que se está copiando.
+      moeda_estrangeira: original.moeda_estrangeira,
+      cambio_cotacao: original.cambio_cotacao,
+      cambio_compra: original.cambio_compra,
+      cambio_venda: original.cambio_venda,
+      cambio_data: original.cambio_data,
+      percentual_int_taxes: original.percentual_int_taxes,
+      int_transaction_costs: original.int_transaction_costs,
       created_by: session.profile.id,
     })
     .select("id")

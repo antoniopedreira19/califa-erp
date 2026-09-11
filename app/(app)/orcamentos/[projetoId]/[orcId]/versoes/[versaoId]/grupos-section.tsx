@@ -18,6 +18,7 @@ import {
   BotaoRecolherTodos,
   useGruposRecolhiveis,
 } from "@/app/(app)/_planilha/recolher-grupos";
+import type { MoedaEstrangeira } from "@/app/(app)/_planilha/moeda-estrangeira";
 
 /** Map não atravessa a fronteira server → client. A página manda os pares
  *  já montados. */
@@ -56,6 +57,10 @@ interface Props {
   /** Chave "Orçamento de save": todo item novo nasce marcado. */
   savePorPadrao?: boolean;
   onAlternarSavePadrao?: (ligado: boolean) => void;
+  /** Moeda estrangeira da planilha internacional, ou `null` na nacional
+   *  (decisão 072). Obrigatória: quem monta esta seção tem que dizer, e
+   *  não deixar o default responder por ele. */
+  moedaEstrangeira: MoedaEstrangeira | null;
 }
 
 export function GruposSection({
@@ -75,6 +80,7 @@ export function GruposSection({
   onAlternarSave,
   savePorPadrao,
   onAlternarSavePadrao,
+  moedaEstrangeira,
 }: Props) {
   // A máquina de estado mora em `_planilha/recolher-grupos`: a planilha do
   // job, a da conferência do financeiro e os blocos da visão agregada
@@ -176,6 +182,7 @@ export function GruposSection({
       <ItensTable
         grupos={grupos}
         moeda={moeda}
+        moedaEstrangeira={moedaEstrangeira}
         percentualImposto={percentualImposto}
         visao={visao}
         readOnly={readOnly}

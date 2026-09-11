@@ -23,6 +23,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { HONORARIOS_PADRAO_FALLBACK } from "@/lib/validations/clientes";
+import { configDaPlanilha } from "@/app/(app)/_planilha/modelo-planilha";
 import {
   calcularTotaisVersao,
   calcularResultadoOperacional,
@@ -170,7 +171,7 @@ export default async function OrcamentoDetailPage({
         "id, tenant_id, projeto_id, codigo, nome, status, categoria_id, servico_id, descritivo, regional_id, cidade_id, gp_responsavel_id, produtor_id, data_inicio_prevista, data_fim_prevista, versao_aprovada_id, created_by, created_at, updated_at, " +
           // `!categoria_id`: `orcamentos` tem duas FKs para `categorias_dominio`
           // desde 02/09/2026 (categoria e servico).
-          "categoria:categorias_dominio!categoria_id(nome), regional:regionais(nome), cidade:cidades(id, nome), " +
+          "categoria:categorias_dominio!categoria_id(nome, modelo_planilha), regional:regionais(nome), cidade:cidades(id, nome), " +
           "gp:profiles!gp_responsavel_id(nome), produtor:profiles!produtor_id(nome)",
       )
       .eq("id", params.orcId)
@@ -756,10 +757,20 @@ function VersaoSelecionada({
     readOnlyPeloPapel;
   const temBv = Object.keys(bvsPorItem).length > 0;
 
+  // De qual modelo é esta planilha. Sai da CATEGORIA do orçamento, pelo
+  // campo `modelo_planilha` — nunca pelo nome dela (decisão 072). É o
+  // mesmo objeto que desce para a planilha, para o card de Totais e para
+  // o cabeçalho da versão: um só lugar decide, e os três concordam.
+  const planilha = configDaPlanilha(
+    orcamentoRaw.categoria?.modelo_planilha,
+    versao,
+  );
+
   const totais = calcularTotaisVersao(
     itens,
     Number(versao.percentual_honorarios),
     Number(versao.percentual_imposto),
+    planilha.internacional,
   );
   const custoPlanejado = itens.reduce(
     (s, it) => s + Number(it.total_planejado ?? 0),
@@ -774,9 +785,12 @@ function VersaoSelecionada({
   //
   // A comissão volta a aparecer no REALIZADO, na planilha do job — que é
   // onde ela de fato acontece.
+  // `deducoesDoResultado`, e não `imposto`: no internacional saem do valor
+  // do job também as int. taxes e os custos de transação. No nacional o
+  // campo vale exatamente `imposto`, então o número não muda lá.
   const { resultadoOperacional, resultadoGeral } = calcularResultadoOperacional(
     totais.valorJob,
-    totais.imposto,
+    totais.deducoesDoResultado,
     custoPlanejado,
   );
 
@@ -854,6 +868,30 @@ function VersaoSelecionada({
             clienteNome={clienteNome}
             readOnly={versao.status === "aprovada"}
             readOnlyReason="Versão aprovada não pode ser editada."
+            internacional={
+              planilha.modeloPlanilha === "internacional"
+                ? {
+                    moedaEstrangeira: versao.moeda_estrangeira ?? "",
+                    cambioCotacao:
+                      versao.cambio_cotacao === null
+                        ? null
+                        : Number(versao.cambio_cotacao),
+                    cambioCompra:
+                      versao.cambio_compra === null
+                        ? null
+                        : Number(versao.cambio_compra),
+                    cambioVenda:
+                      versao.cambio_venda === null
+                        ? null
+                        : Number(versao.cambio_venda),
+                    cambioData: versao.cambio_data,
+                    percentualIntTaxes: Number(versao.percentual_int_taxes ?? 0),
+                    intTransactionCosts: Number(
+                      versao.int_transaction_costs ?? 0,
+                    ),
+                  }
+                : null
+            }
           />
           {pode(session.activeRole, "orcamentos.aprovar") && (
             <AprovacaoActions
@@ -952,6 +990,9 @@ function VersaoSelecionada({
           savePorItem={savePorItem}
           saldosDeSave={saldosDeSave}
           nomeDoGrupo={Object.fromEntries(grupos.map((g) => [g.id, g.nome]))}
+          modeloPlanilha={planilha.modeloPlanilha}
+          internacional={planilha.internacional}
+          moedaEstrangeira={planilha.moedaEstrangeira}
         />
       </div>
 

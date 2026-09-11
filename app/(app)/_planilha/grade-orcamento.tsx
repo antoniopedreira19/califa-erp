@@ -1,4 +1,6 @@
-/** Grade das planilhas de ORÇAMENTO — 13 colunas, 14 com a de Save.
+/** Grade das planilhas de ORÇAMENTO — 13 colunas, 14 com a de Save, 15 na
+ *  planilha internacional (que acrescenta a coluna da moeda estrangeira
+ *  dentro do bloco ORÇADO).
  *
  *  Compartilhada entre a tabela de itens, o card de Totais da versão e o
  *  card de Totais da visão agregada do projeto. As três precisam das
@@ -19,11 +21,21 @@
  */
 
 /** Quais colunas a grade desenha nesta tela. Ausente ⇒ visível: o default
- *  é a planilha inteira, que é como as agregadas e os Totais a leem. */
+ *  é a planilha inteira, que é como as agregadas e os Totais a leem.
+ *
+ *  `moedaEstrangeira` é a exceção: ela nasce **desligada**, como a de Save.
+ *  Só a planilha do orçamento internacional a pede (decisão 072), e o
+ *  default `false` é o que garante que as outras telas que compartilham
+ *  esta grade — em especial o card agregado do projeto, que chama
+ *  `ColunasFixas()` sem argumento e tem `colSpan` literais próprios —
+ *  continuem exatamente como estavam. */
 export interface ColunasVisiveis {
   save?: boolean;
   orcado?: boolean;
   rentabilidade?: boolean;
+  /** Coluna calculada com o total da linha na moeda estrangeira. Vive
+   *  DENTRO do bloco ORÇADO, entre D/M e Total — some junto com ele. */
+  moedaEstrangeira?: boolean;
 }
 
 /** Larguras fixas do grid. Sem elas cada card mede as colunas pelo próprio
@@ -35,8 +47,9 @@ export function ColunasFixas({
   save = false,
   orcado = true,
   rentabilidade = true,
+  moedaEstrangeira = false,
 }: ColunasVisiveis = {}) {
-  const l = largurasDosBlocos(orcado, rentabilidade);
+  const l = largurasDosBlocos(orcado, rentabilidade, moedaEstrangeira);
   return (
     <colgroup>
       {/* Save é a calha de estado do crédito entre jobs, à ESQUERDA de
@@ -56,6 +69,11 @@ export function ColunasFixas({
           <col className={l.unit} />
           <col className={l.qt} />
           <col className={l.dm} />
+          {/* A moeda estrangeira entra ANTES do Total, como no design: ela
+              é o total da linha convertido, e lê-se "…, D/M, isto em USD,
+              isto em BRL". Sem prefixo de moeda na célula — o cabeçalho já
+              diz qual é, e o "US$ " custaria ~34px de coluna. */}
+          {l.moeda && <col className={l.moeda} />}
           <col className={l.total} />
         </>
       )}
@@ -89,12 +107,50 @@ export function ColunasFixas({
  *
  *  Classes literais, uma combinação por vez, porque o Tailwind varre o
  *  fonte: largura montada em template string não existiria no CSS. */
-function largurasDosBlocos(orcado: boolean, rentabilidade: boolean) {
+function largurasDosBlocos(
+  orcado: boolean,
+  rentabilidade: boolean,
+  moedaEstrangeira = false,
+) {
+  // --- Internacional: o bloco ORÇADO tem 5 colunas em vez de 4.
+  //
+  // Os 72% dos blocos viram 71,5% repartidos entre 11 (ou 9) colunas em
+  // vez de 10 (ou 8) — Item, Tipo e Categoria NÃO cedem espaço, e o Item
+  // até ganha meio ponto. Quem paga a coluna nova é o piso de largura:
+  // `LARGURA_MINIMA_INTERNACIONAL` sobe de 1060px para 1280px, e a
+  // mesma fração passa a valer mais pixels. Abaixo disso o card rola na
+  // horizontal, que é o que a grade já faz.
+  //
+  // É também o que mantém a faixa **RENTABILIDADE** escrita por extenso:
+  // a 1280px os 14,5% dela dão ~186px, e o rótulo pede ~105px.
+  if (orcado && moedaEstrangeira) {
+    if (rentabilidade) {
+      return {
+        unit: "w-[9%]",
+        qt: "w-[3%]",
+        dm: "w-[3%]",
+        moeda: "w-[8%]",
+        total: "w-[9.5%]",
+        rentab: { valor: "w-[10.5%]", pct: "w-[4%]" },
+      };
+    }
+    // Sem rentabilidade: os 14,5% dela voltam para Orçado e Planejado.
+    return {
+      unit: "w-[11%]",
+      qt: "w-[4%]",
+      dm: "w-[4%]",
+      moeda: "w-[9.5%]",
+      total: "w-[12.5%]",
+      rentab: null,
+    };
+  }
+
   if (orcado && rentabilidade) {
     return {
       unit: "w-[10%]",
       qt: "w-[3.5%]",
       dm: "w-[3.5%]",
+      moeda: null,
       total: "w-[11%]",
       rentab: { valor: "w-[11.5%]", pct: "w-[4.5%]" },
     };
@@ -105,6 +161,7 @@ function largurasDosBlocos(orcado: boolean, rentabilidade: boolean) {
       unit: "w-[13%]",
       qt: "w-[4.5%]",
       dm: "w-[4.5%]",
+      moeda: null,
       total: "w-[14%]",
       rentab: null,
     };
@@ -115,6 +172,7 @@ function largurasDosBlocos(orcado: boolean, rentabilidade: boolean) {
       unit: "w-[16.5%]",
       qt: "w-[5.5%]",
       dm: "w-[5.5%]",
+      moeda: null,
       total: "w-[18%]",
       rentab: { valor: "w-[19%]", pct: "w-[7%]" },
     };
@@ -124,6 +182,7 @@ function largurasDosBlocos(orcado: boolean, rentabilidade: boolean) {
     unit: "w-[26%]",
     qt: "w-[9%]",
     dm: "w-[9%]",
+    moeda: null,
     total: "w-[28%]",
     rentab: null,
   };
@@ -140,6 +199,33 @@ export const LARGURA_MINIMA = "min-w-[1060px]";
  *  dão ~44px, e sem isso as colunas de moeda voltam a espremer. */
 export const LARGURA_MINIMA_SAVE = "min-w-[1104px]";
 
+/** Piso da planilha internacional, que tem uma coluna de moeda a mais
+ *  (decisão 072).
+ *
+ *  É aqui que a coluna nova é paga. Os blocos continuam com ~72% da
+ *  tabela, mas agora repartidos entre 11 colunas em vez de 10 — então o
+ *  que cresce é o total: 1280px em vez de 1060px. Nessa largura a coluna
+ *  da moeda tem ~102px para "283.668,01" (~85px a 13px mono), o Total
+ *  ~122px para "R$ 283.668,01", e a faixa RENTABILIDADE ~186px para um
+ *  rótulo que pede ~105px — que é o que permitiu **não** abreviar o
+ *  rótulo para "RENTA", como o design havia feito. */
+export const LARGURA_MINIMA_INTERNACIONAL = "min-w-[1280px]";
+
+/** O piso internacional com a coluna de Save aberta. */
+export const LARGURA_MINIMA_INTERNACIONAL_SAVE = "min-w-[1324px]";
+
+/** O piso certo para a combinação de flags desta tela. Evita o ternário
+ *  aninhado repetido em cada renderizador de planilha. */
+export function larguraMinima({
+  save = false,
+  moedaEstrangeira = false,
+}: ColunasVisiveis = {}): string {
+  if (moedaEstrangeira) {
+    return save ? LARGURA_MINIMA_INTERNACIONAL_SAVE : LARGURA_MINIMA_INTERNACIONAL;
+  }
+  return save ? LARGURA_MINIMA_SAVE : LARGURA_MINIMA;
+}
+
 /** Quantas colunas a grade tem — o número que os `colSpan` de linha
  *  inteira precisam. Constante em vez de literal porque ele muda com a
  *  coluna de Save e com os blocos escondidos, e um `colSpan`
@@ -148,13 +234,32 @@ export function totalDeColunas({
   save = false,
   orcado = true,
   rentabilidade = true,
+  moedaEstrangeira = false,
 }: ColunasVisiveis = {}): number {
   return (
     colunasDoRotulo({ save }) +
-    (orcado ? 4 : 0) +
+    (orcado ? colunasDoOrcado({ moedaEstrangeira }) : 0) +
     4 +
     (rentabilidade ? 2 : 0)
   );
+}
+
+/** Quantas colunas o bloco ORÇADO tem: 4 (R$ Unit., QT, D/M, Total) e 5 no
+ *  internacional, com a da moeda estrangeira no meio.
+ *
+ *  Existe como função, e não como literal repetido, porque é o `colSpan`
+ *  da faixa "ORÇADO" no cabeçalho — e faixa com `colSpan` desatualizado
+ *  desalinha a tabela inteira sem erro de compilação. */
+export function colunasDoOrcado({
+  moedaEstrangeira = false,
+}: ColunasVisiveis = {}): number {
+  return moedaEstrangeira ? 5 : 4;
+}
+
+/** O `colSpan` das células vagas do bloco ORÇADO nas linhas de grupo e de
+ *  subtotal — tudo menos a coluna do Total. */
+export function colunasVagasDoOrcado(c: ColunasVisiveis = {}): number {
+  return colunasDoOrcado(c) - 1;
 }
 
 /** Quantas colunas o rótulo à esquerda ocupa: Item, Tipo e Categoria,

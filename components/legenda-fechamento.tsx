@@ -16,9 +16,18 @@ export function LegendaFechamento({
   /** Rótulo do custo descontado no resultado. A versão do orçamento só tem
    *  planejado; o job alterna entre planejado e realizado. */
   custo = "custo planejado",
+  internacional = false,
   extra,
 }: {
   custo?: string;
+  /** A versão fecha pela cadeia internacional (decisão 072).
+   *
+   *  A legenda TEM que mudar junto: a nacional fala em "Honorários" onde a
+   *  tela escreve "Fee", não cita as int. taxes nem os custos de transação,
+   *  e descreve um resultado operacional que não é o que o card mostra.
+   *  Deixá-la como está é pior do que não ter legenda — ela explica a tela
+   *  errada com a autoridade de quem explica a certa. */
+  internacional?: boolean;
   /** Um SEGUNDO tópico, com o mesmo ícone e o mesmo peso do primeiro.
    *
    *  Existe porque a explicação do save carrega números da tela (as duas
@@ -32,6 +41,31 @@ export function LegendaFechamento({
     <>
     <div className="flex items-start gap-2 border-t border-border bg-muted/30 px-6 py-4 text-xs leading-relaxed text-muted-foreground">
       <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+      {internacional ? (
+<p>
+          <strong className="text-foreground">Fee</strong> sobre A · Direto +
+          A · Repasse + B + D + F · Externo ·{" "}
+          <strong className="text-foreground">Int. taxes</strong> retidas no
+          exterior, em <em>gross-up</em> sobre B + C + fee ·{" "}
+          <strong className="text-foreground">
+            Total recebido no exterior
+          </strong>{" "}
+          = sub-total + fee + int. taxes ·{" "}
+          <strong className="text-foreground">Impostos BR</strong> em{" "}
+          <em>gross-up</em> sobre ele ·{" "}
+          <strong className="text-foreground">
+            Faturamento previsto (Invoice)
+          </strong>{" "}
+          = total recebido no exterior + custos de transação + impostos BR ·{" "}
+          <strong className="text-foreground">Valor do Job</strong> = a mesma
+          cadeia sobre o compromisso total do cliente ·{" "}
+          <strong className="text-foreground">Resultado operacional</strong> =
+          valor do job − impostos BR − int. taxes − custos de transação −{" "}
+          {custo}, o que sobra sendo fee + rentabilidade ·{" "}
+          <strong className="text-foreground">Resultado geral</strong> =
+          resultado operacional ÷ valor do job.
+        </p>
+      ) : (
       <p>
         <strong className="text-foreground">Honorários</strong> sobre A · Direto
         + A · Repasse + B + D + F · Externo ·{" "}
@@ -47,6 +81,7 @@ export function LegendaFechamento({
         <strong className="text-foreground">Resultado geral</strong> = resultado
         operacional ÷ valor do job.
       </p>
+      )}
     </div>
     {extra && (
       <div className="flex items-start gap-2 border-t border-border bg-muted/30 px-6 py-4 text-xs leading-relaxed text-muted-foreground">

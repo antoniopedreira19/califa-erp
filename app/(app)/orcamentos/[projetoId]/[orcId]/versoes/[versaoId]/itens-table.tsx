@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, Plus, Trash2, X } from "lucide-react";
+import { ChevronDown, Lock, Plus, Trash2, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { TruncateTooltip } from "@/components/ui/truncate-tooltip";
@@ -30,12 +30,18 @@ import {
 } from "../actions";
 import {
   ColunasFixas,
-  LARGURA_MINIMA,
-  LARGURA_MINIMA_SAVE,
+  colunasDoOrcado,
   colunasDoRotulo,
+  colunasVagasDoOrcado,
+  larguraMinima,
   totalDeColunas,
   type ColunasVisiveis,
 } from "@/app/(app)/_planilha/grade-orcamento";
+import {
+  formatarTaxa,
+  naMoedaEstrangeira,
+  type MoedaEstrangeira,
+} from "@/app/(app)/_planilha/moeda-estrangeira";
 import {
   CabecalhoSaveColuna,
   CabecalhoSaveFaixa,
@@ -184,6 +190,13 @@ interface Props {
    *  Orçado também saem da ordem do Tab. PLANEJADO não é ocultável. */
   orcadoVisivel?: boolean;
   rentabilidadeVisivel?: boolean;
+  /** Moeda estrangeira da planilha internacional, ou `null` na nacional.
+   *
+   *  **Obrigatória de propósito**, e não opcional: quem renderiza esta
+   *  tabela tem que dizer explicitamente que não tem moeda estrangeira.
+   *  Prop opcional desliga a checagem do TypeScript exatamente onde ela
+   *  mais serve — a fronteira em que um campo novo some em silêncio. */
+  moedaEstrangeira: MoedaEstrangeira | null;
 }
 
 /** Campos que a grade edita — espelha o allowlist do server action. */
@@ -239,6 +252,30 @@ const COLUNAS_ORCADO: ColunaDaGrade[] = [
   { chave: "dias_meses_orcado", rotulo: "D/M", bloco: "Orçado" },
   { chave: "total_orcado", rotulo: "Total", bloco: "Orçado" },
 ];
+
+/** A coluna calculada da planilha internacional (decisão 072).
+ *
+ *  Ela entra na ordem da SELEÇÃO — setas, Tab, Home/End se ajustam
+ *  sozinhos, porque o índice numérico é derivado da chave em
+ *  `useSelecaoPlanilha`. Mas NÃO entra em `CAMPOS_ORCADO` nem em `Campo`:
+ *  é calculada, e `editorDe` já devolve `null` para chave que não conhece,
+ *  o que a torna selecionável-mas-não-editável de graça. */
+const COLUNA_MOEDA = "total_orcado_moeda";
+
+/** O bloco ORÇADO com a coluna da moeda entre D/M e Total.
+ *
+ *  A posição sai do `findIndex` pela chave, não de um índice mágico: se
+ *  amanhã alguém reordenar `COLUNAS_ORCADO`, a coluna continua colada
+ *  antes do Total, que é onde o design a põe. */
+function colunasOrcadoCom(moeda: MoedaEstrangeira | null): ColunaDaGrade[] {
+  if (!moeda) return COLUNAS_ORCADO;
+  const i = COLUNAS_ORCADO.findIndex((c) => c.chave === "total_orcado");
+  return [
+    ...COLUNAS_ORCADO.slice(0, i),
+    { chave: COLUNA_MOEDA, rotulo: moeda.codigo, bloco: "Orçado" },
+    ...COLUNAS_ORCADO.slice(i),
+  ];
+}
 const COLUNAS_PLANEJADO: ColunaDaGrade[] = [
   { chave: "valor_unitario_planejado", rotulo: "R$ Unit.", bloco: "Planejado" },
   { chave: "quantidade_planejada", rotulo: "QT", bloco: "Planejado" },
@@ -434,6 +471,7 @@ export function ItensTable({
   onAbrirSave,
   orcadoVisivel = true,
   rentabilidadeVisivel = true,
+  moedaEstrangeira,
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
@@ -503,17 +541,18 @@ export function ItensTable({
     save: saveVisivel,
     orcado: orcadoVisivel,
     rentabilidade: rentabilidadeVisivel,
+    moedaEstrangeira: moedaEstrangeira !== null,
   };
 
   /** As colunas que a seleção percorre, na ordem da tela. */
   const colunasDaGrade = React.useMemo<ColunaDaGrade[]>(
     () => [
       ...COLUNA_ITEM,
-      ...(orcadoVisivel ? COLUNAS_ORCADO : []),
+      ...(orcadoVisivel ? colunasOrcadoCom(moedaEstrangeira) : []),
       ...COLUNAS_PLANEJADO,
       ...(rentabilidadeVisivel ? COLUNAS_RENTAB : []),
     ],
-    [orcadoVisivel, rentabilidadeVisivel],
+    [orcadoVisivel, rentabilidadeVisivel, moedaEstrangeira],
   );
 
   /** Todos os itens da planilha, achatados — a navegação e a busca por
@@ -1142,7 +1181,7 @@ export function ItensTable({
           <table
             className={cn(
               "w-full table-fixed text-sm border-collapse",
-              saveVisivel ? LARGURA_MINIMA_SAVE : LARGURA_MINIMA,
+              larguraMinima(colunas),
             )}
           >
             <ColunasFixas {...colunas} />
@@ -1154,7 +1193,10 @@ export function ItensTable({
                 {saveVisivel && <CabecalhoSaveFaixa />}
                 <th colSpan={3} className={FAIXA_GRUPO} />
                 {orcadoVisivel && (
-                  <th colSpan={4} className={cn(FAIXA_ROTULO, ORCADO.faixa)}>
+                  <th
+                    colSpan={colunasDoOrcado(colunas)}
+                    className={cn(FAIXA_ROTULO, ORCADO.faixa)}
+                  >
                     ORÇADO
                   </th>
                 )}
@@ -1208,13 +1250,27 @@ export function ItensTable({
                     >
                       D/M
                     </th>
+                    {moedaEstrangeira && (
+                      <th
+                        title={`Calculada: total em ${moeda} ÷ taxa de compra (${formatarTaxa(moedaEstrangeira.compra)})`}
+                        className={cn(
+                          "text-right font-semibold px-3 py-2",
+                          ORCADO.cabecalhoMeio,
+                        )}
+                      >
+                        <span className="inline-flex items-center gap-1">
+                          {moedaEstrangeira.codigo}
+                          <Lock className="h-2.5 w-2.5 opacity-60" aria-hidden />
+                        </span>
+                      </th>
+                    )}
                     <th
                       className={cn(
                         "text-right font-semibold px-3 py-2",
                         ORCADO.cabecalhoFim,
                       )}
                     >
-                      Total
+                      {moedaEstrangeira ? `Total ${moeda}` : "Total"}
                     </th>
                   </>
                 )}
@@ -1336,7 +1392,20 @@ export function ItensTable({
                       </td>
                       {orcadoVisivel && (
                         <>
-                          <td colSpan={3} className={ORCADO.grupoVazio} />
+                          <td
+                            colSpan={colunasVagasDoOrcado(colunas) - (moedaEstrangeira ? 1 : 0)}
+                            className={ORCADO.grupoVazio}
+                          />
+                          {moedaEstrangeira && (
+                            <td
+                              className={cn(
+                                "px-3 text-right whitespace-nowrap font-mono text-[13px] font-bold",
+                                ORCADO.grupoValor,
+                              )}
+                            >
+                              {naMoedaEstrangeira(subOrcado, moedaEstrangeira)}
+                            </td>
+                          )}
                           <td
                             className={cn(
                               "px-3 text-right whitespace-nowrap font-mono text-[13px] font-bold",
@@ -1600,6 +1669,19 @@ export function ItensTable({
                                   onCancelar={() => setAtiva(null)}
                                   tdClassName={ORCADO.celulaMeio}
                                 />
+                                {moedaEstrangeira && (
+                                  <CelulaCalculada
+                                    selecao={selecao}
+                                    linhaId={item.id}
+                                    coluna={COLUNA_MOEDA}
+                                    className={cn("font-mono", ORCADO.celulaMeio)}
+                                  >
+                                    {naMoedaEstrangeira(
+                                      totais.orcado,
+                                      moedaEstrangeira,
+                                    )}
+                                  </CelulaCalculada>
+                                )}
                                 <CelulaCalculada
                                   selecao={selecao}
                                   linhaId={item.id}
@@ -1709,6 +1791,7 @@ export function ItensTable({
                     {aberto && draft?.grupoId === grupo.id && (
                       <LinhaDraft
                         draft={draft}
+                        moedaEstrangeira={moedaEstrangeira}
                         saveVisivel={saveVisivel}
                         orcadoVisivel={orcadoVisivel}
                         rentabilidadeVisivel={rentabilidadeVisivel}
@@ -1796,7 +1879,20 @@ export function ItensTable({
                 </td>
                 {orcadoVisivel && (
                   <>
-                    <td colSpan={3} className={ORCADO.subtotalVazio} />
+                    <td
+                      colSpan={colunasVagasDoOrcado(colunas) - (moedaEstrangeira ? 1 : 0)}
+                      className={ORCADO.subtotalVazio}
+                    />
+                    {moedaEstrangeira && (
+                      <td
+                        className={cn(
+                          "px-3 py-2 text-right whitespace-nowrap font-mono text-[13px] font-bold",
+                          ORCADO.subtotalValor,
+                        )}
+                      >
+                        {naMoedaEstrangeira(totalOrcado, moedaEstrangeira)}
+                      </td>
+                    )}
                     <td
                       className={cn(
                         "px-3 py-2 text-right whitespace-nowrap font-mono text-[13px] font-bold",
@@ -2315,9 +2411,13 @@ function LinhaDraft({
   saveVisivel,
   orcadoVisivel = true,
   rentabilidadeVisivel = true,
+  moedaEstrangeira,
 }: {
   draft: Draft;
   moeda: string;
+  /** A mesma da tabela: a linha nova tem que ter as MESMAS colunas das
+   *  linhas de item, senão ela escorrega uma casa. */
+  moedaEstrangeira: MoedaEstrangeira | null;
   categorias: Categoria[];
   ativa: CelulaAtiva;
   selecao: Selecao;
@@ -2456,6 +2556,16 @@ function LinhaDraft({
             onCancelar={onFechar}
             tdClassName={ORCADO.celulaMeio}
           />
+          {moedaEstrangeira && (
+            <CelulaCalculada
+              selecao={selecao}
+              linhaId={DRAFT_ID}
+              coluna={COLUNA_MOEDA}
+              className={cn("font-mono", ORCADO.celulaMeio)}
+            >
+              {naMoedaEstrangeira(totalOrcado, moedaEstrangeira)}
+            </CelulaCalculada>
+          )}
           <CelulaCalculada
             selecao={selecao}
             linhaId={DRAFT_ID}
