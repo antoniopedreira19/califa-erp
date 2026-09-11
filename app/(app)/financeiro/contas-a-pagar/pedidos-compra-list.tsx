@@ -26,7 +26,7 @@ import type {
 } from "@/lib/types";
 import type { CartaoOption } from "@/components/financeiro/forma-pagamento-field";
 import { ppStatusLabel, nomeContraparteBRPP } from "@/lib/types";
-import { PPDrawerFinanceiro } from "./pp-drawer-financeiro";
+import { PPTela } from "./pp-tela";
 
 export interface PPRow {
   id: string;
@@ -390,7 +390,11 @@ export function PedidosCompraList({
         </table>
       </div>
 
-      <PPDrawerFinanceiro
+      {/* Clicar na linha abre a TELA da PP — pedido, documento e dossiê
+          lado a lado —, e não mais um drawer que obrigava a abrir a
+          conferência num segundo passo (10/09/2026). Vale para qualquer
+          status: ver o documento de uma PP paga é pedido corriqueiro. */}
+      <PPTela
         pp={ppSelecionada}
         open={ppSelecionada !== null}
         onOpenChange={(open) => {
