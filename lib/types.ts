@@ -1711,6 +1711,13 @@ export type ItemChat =
        *  em bloco próprio, entre aspas, porque é a única parte do card que
        *  não foi derivada de número (27/08/2026). */
       descricao?: { texto: string; autor: string | null } | null;
+      /**
+       * O que o card descreve por extenso — na PP, o serviço. Fica FORA do
+       * `resumo` e só aparece quando o card é expandido: um serviço de duas
+       * linhas empurrava as mensagens para longe umas das outras e tornava
+       * o fio ilegível na coluna estreita do dossiê (Tiago, 11/09/2026).
+       */
+      detalhe?: string | null;
       /** Consequência que não está nos números. Na errata: o job voltou ao
        *  mural de abertura. */
       nota?: string | null;

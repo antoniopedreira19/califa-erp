@@ -111,7 +111,12 @@ export function montarThreadChatPPs(
       cor: "azul",
       titulo: "PP emitida",
       quando: dataHora(enviadaEm),
-      resumo: `${pp.codigo} · ${pp.servico} · ${fornecedorNome}`,
+      // O serviço saiu do resumo e virou `detalhe` (11/09/2026): ele é a
+      // parte longa do card, e no fio ele afastava as mensagens umas das
+      // outras. O resumo ficou igual ao dos cards de estado terminal, que
+      // já eram só código + contraparte.
+      resumo: `${pp.codigo} · ${fornecedorNome}`,
+      detalhe: pp.servico,
       valor: valorFmt,
       valorTom: "neutro",
       linhas: [
