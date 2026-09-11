@@ -114,7 +114,7 @@ function CardSistema({
               Automático · {item.quando}
             </span>
           </div>
-          <p className="mt-1 text-xs leading-[1.45] text-muted-foreground">
+          <p className="mt-1 line-clamp-2 text-xs leading-[1.45] text-muted-foreground">
             {item.resumo}
           </p>
         </div>
@@ -136,8 +136,15 @@ function CardSistema({
         />
       </button>
 
-      {aberto && item.linhas.length > 0 && (
+      {aberto && (item.linhas.length > 0 || item.detalhe) && (
         <div className="flex flex-col gap-[9px] border-t border-border bg-[#f5f5f5]/50 px-3.5 py-3">
+          {/* A descrição do serviço: longa por natureza, e por isso fora do
+              card fechado. Aqui ela tem a largura toda e quebra à vontade. */}
+          {item.detalhe && (
+            <p className="whitespace-pre-wrap text-[11.5px] leading-[1.5] text-foreground">
+              {item.detalhe}
+            </p>
+          )}
           {item.linhas.map((l, i) => (
             <div
               key={i}

@@ -4811,3 +4811,26 @@ e o texto "Não registrado" no quadro dos documentos; o rodapé não traz
 botões de ação, porque ela não está em avaliação. `tsc` e `next lint`
 limpos nos arquivos desta entrega. Detalhes e o tamanho honesto do
 registro em `docs/decisions/070-a-pp-congela-os-documentos-da-aprovacao.md`.
+
+## ⚠️ Nota de 2026-09-11 — o card de PP no chat esconde a descrição
+
+O fio de PPs mostrava, em cada card, `código · serviço · fornecedor`. O
+serviço é a parte longa — "Produtora de Campo em Recife no Job de Stella
+Artois" — e na coluna de 310px do dossiê ele quebrava em várias linhas,
+afastando as mensagens umas das outras e tornando o fio ilegível.
+
+Agora o resumo é `código · fornecedor`, igual ao que os cards de estado
+terminal (paga, rejeitada, cancelada) já usavam — a inconsistência era
+só do card de emissão. **A descrição virou `detalhe` e aparece ao
+expandir o card**, onde tem a largura toda e quebra à vontade. O resumo
+também ganhou `line-clamp-2`, para nome de fornecedor comprido não
+esticar o card fechado.
+
+Vale para os DOIS lados do fio (o balão do financeiro e a aba de PPs do
+job): é a mesma conversa, montada pelo mesmo `job-chat-pps.ts` e
+desenhada pelo mesmo `components/chat/thread-pps.tsx`.
+
+**Verificação (11/09/2026).** No dossiê da PP-00041: card fechado com
+138px mostrando "PP emitida · PP-00030 · MARCELA FERREIRA DE SOUSA PAES ·
+R$ 2.000,00"; expandido vai a 249px e acrescenta a descrição, o prazo de
+pagamento e quem emitiu.
