@@ -3217,10 +3217,21 @@ que pelo menos uma esteja preenchida. Um BV órfão não é mais possível.
 `a_negociar` a linha mostra "BV não emitido" e não deduz nada. Quem
 quiser mexer nessa conta está mexendo na 062, não nesta.
 
-⚠️ **Falta a conferência logada.** A regra foi provada no banco (aceita
-`A` e `AR`, recusa `B`, recusa BV sem chave), com rollback e zero
-resíduo. O percurso pela tela do JOB-0029 — lançar, salvar, confirmar —
-ficou para a próxima sessão com o preview logado.
+⚠️ **A fila do faturamento tinha o mesmo defeito, e só o percurso
+completo pegou.** A `vw_faturamento_pendente` fazia INNER JOIN em
+`versoes_orcamento_itens`: o BV de errata era confirmado e **sumia do
+contas a receber**, sem erro nenhum. Corrigido na
+`20260911110002`. É o mesmo desenho que o `carregar-detalhe.ts` já havia
+abandonado em 27/08 — a leitura da planilha foi consertada naquele dia e a
+fila ficou para trás. **Se você soltar uma chave, varra todas as views que
+leem a tabela**, não só a tela em que está mexendo.
+
+✅ **Conferido logado no JOB-0029**, ponta a ponta: lançar na linha de
+errata (grava com `item_versao_id` nulo), realizado intacto enquanto
+`a_negociar`, recusa correta sem alíquota, confirmar com 19,53%, Item 2
+caindo de R$ 10.000,00 para R$ 8.500,00, e "BV — Item 2 · R$ 1.500,00"
+aparecendo em Contas a Receber. O BV confirmado ficou como resíduo no
+projeto de teste — confirmado não se remove.
 
 ---
 

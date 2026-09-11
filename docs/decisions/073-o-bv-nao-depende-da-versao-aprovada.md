@@ -64,6 +64,13 @@ de uma regra de negócio, e estava barrando **6 linhas reais** — 2 delas no
 - Nasceu `chk_bv_tem_item`: pelo menos uma das duas chaves. As duas eram
   opcionais e nada impedia um BV órfão — invisível nas duas telas.
 
+**Banco, correção** (`20260911110002_bv_de_errata_chega_ao_faturamento.sql`),
+achada na conferência ao vivo: a `vw_faturamento_pendente` fazia **INNER
+JOIN** em `versoes_orcamento_itens`, então o BV de errata era confirmado e
+**sumia da fila do contas a receber**. Virou `LEFT JOIN`, e a descrição
+passou a ser `coalesce(v.item, jio.item)`. `vw_fluxo_caixa` e
+`vw_job_rentabilidade` já entravam pela cópia do job e não foram tocadas.
+
 `itens_bv` **não mudou de forma**: as duas colunas existem, opcionais e
 indexadas, desde 27/08/2026.
 
@@ -103,9 +110,30 @@ sobrou (10 BVs antes, 10 depois):
 
 `tsc`, `next lint` e `npm run build` limpos.
 
-## Pendência
+## Conferido logado, no JOB-0029 (2026-09-11)
 
-**Falta a conferência logada na tela.** A prova acima é da regra no banco;
-o percurso pela Planilha Interna do JOB-0029 — lançar o BV na linha de
-errata, salvar, confirmar e ver a dedução aparecer no realizado — ainda
-não foi feito. Está combinado para a próxima sessão com o preview logado.
+O percurso inteiro na Planilha Interna, na linha **Item 2** (tipo `A`,
+nascida de errata), que até hoje não oferecia o botão:
+
+| passo | resultado |
+|---|---|
+| calha | 2 botões — `Item 2` (A) e `Item 3` (AR); `Item 1` (B) sem, como deve |
+| abrir o BV | diálogo abre na linha de errata |
+| salvar R$ 1.500,00 | grava com `item_versao_id` **nulo** e `job_item_orcado_id` preenchido — o primeiro BV do sistema numa linha de errata |
+| enquanto `a_negociar` | realizado **inalterado** (R$ 24.420,00 · 58,3%) e a linha diz "BV não emitido" |
+| reabrir | o BV salvo volta na lista — a leitura também entra pela cópia |
+| confirmar sem alíquota | recusado: "Informe a alíquota…" — a trava da 062 responde, e **não** o velho "Item não encontrado." |
+| confirmar com 19,53% | `confirmado`, líquido R$ 1.207,05 |
+| realizado depois | Item 2 cai de R$ 10.000,00 para **R$ 8.500,00**, com "BV −R$ 1.500,00" na linha; resultado do job sobe para R$ 25.920,00 · 61,8% |
+| Contas a Receber | **"BV — Item 2" · JOB-0029 · R$ 1.500,00**, com o fornecedor certo |
+
+O degrau do faturamento só apareceu porque o percurso foi até o fim — é o
+achado que gerou a segunda migration. Confirmar a regra no banco não
+teria pego: o BV gravava, e sumia depois.
+
+## Resíduo deste teste
+
+`JOB-0029 · Item 2` ficou com um **BV confirmado de R$ 1.500,00**
+(fornecedor Airbnb Brasil), no `0-0001/26 · Projeto Teste`. BV confirmado
+não pode ser editado nem removido, então ele fica — e é dado de teste, no
+projeto de teste, que é onde deve ficar.
