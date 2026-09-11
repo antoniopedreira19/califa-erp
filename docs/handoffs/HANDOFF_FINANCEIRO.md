@@ -4683,3 +4683,72 @@ correção. **A aprovação em si não foi executada**: a única PP em avaliaç�
 no banco é de job real (IMC Stella Artois) e aprovar criaria títulos de
 verdade — o caminho gravado é o mesmo `aprovarPPComData` de antes, que não
 foi tocado. `tsc`, `next lint` e `npm run build` limpos.
+
+## ⚠️ Nota de 2026-09-10 — a PP virou uma tela só: pedido, documento e dossiê
+
+Segunda parte da reforma da aprovação. **O drawer da PP deixou de
+existir**: clicar na linha em "Pedidos de Produção" abre direto a tela
+cheia, com o pedido em PDF, o documento anexo e o dossiê da PP na coluna
+da direita. Vale para QUALQUER status — ver o documento de uma PP paga é
+pedido corriqueiro.
+
+### Por que uma tela só
+
+O desenho passou por três rodadas com o Tiago, e o que ele derrubou importa
+tanto quanto o que ficou:
+
+- **drawer + pop-up** (minha primeira proposta): o pop-up repetia
+  fornecedor, valor e vencimento e virava um segundo drawer. *"Estou
+  achando difícil justificar um drawer com informações presentes nas PPs e
+  que apareceram novamente no pop-up."* A redundância mudava de lugar em
+  vez de acabar;
+- **obrigar a passar pela conferência** (minha segunda): obriga a ABRIR a
+  tela, não a LER o documento. Trava que não trava, e atrapalha todo dia.
+
+Com uma tela só não há o que duplicar, e a decisão acontece onde estão as
+provas — antes o financeiro decidia numa tela e conferia em outra.
+
+### O dossiê (`pp-dossie.tsx`)
+
+Coluna de 310px à direita — o lado onde o painel de detalhe da PP sempre
+morou, e onde a mão já procura. Traz o que o drawer trazia: estado
+(cancelada/rejeitada/paga, com motivo), fornecedor ou responsável, **origem
+no job** (job, projeto e cliente, com link), **serviço** e especificações,
+valor, quantidade, vencimento original, parcelas, anexos, quem emitiu, e a
+prestação de contas da verba de produção.
+
+Duas coisas novas, pedidas pelo Tiago:
+
+- **recolhe** para uma calha de 34px, e os dois documentos tomam o espaço
+  (793px → 931px cada, medido). A calha guarda o rótulo e o caminho de
+  volta;
+- **abas Dados e Chat.** O fio do job — o mesmo do balão que já existe em
+  Contas a Pagar, um por job — divide o espaço do dossiê em vez de pedir
+  largura nova. A bolinha de não lidas fica na aba. O balão do canto
+  continua onde estava; o chat só ganhou uma segunda porta, aberta na PP
+  que motivou a conversa.
+
+Expandir um documento esconde o dossiê junto: ali a tela inteira é do
+documento.
+
+### O que saiu do repositório
+
+`pp-drawer-financeiro.tsx` e `documentos-pp-overlay.tsx` foram apagados. O
+que eles faziam está em `pp-tela.tsx` (tela, documentos, ações) e
+`pp-dossie.tsx` (a coluna). O `AprovarPPDialog` continua como estava.
+
+**Verificação (10/09/2026).** No navegador, na lista real: clicar na linha
+abre a tela em `z-[55]` com três painéis; o dossiê traz origem no job,
+serviço, valor, quantidade, vencimento original, anexos e emissão; as abas
+Dados/Chat alternam e o chat carrega o fio do job com os cards de PP;
+recolher leva as colunas a `931px 931px 34px` e voltar devolve os 310px;
+expandir o anexo deixa uma coluna de 1920px; o pop-up de aprovação abre em
+`z-[60]` por cima; fechar volta à lista sem camada aberta. Console sem erro
+do app. `tsc` e `next lint` limpos nos arquivos desta entrega.
+
+⚠️ **O `npm run build` ficou de fora desta rodada, de propósito.** Outra
+sessão está com um dev server na porta 3000 a partir deste mesmo working
+tree, e rodar build sobre ele corrompe o `.next` — aconteceu hoje, e a
+página ficou sem hidratar até o servidor se recuperar sozinho
+([[build-quebra-dev-server]] vale para sessões paralelas também, não só
+para a própria). O build entra no teste completo combinado com o Tiago.
