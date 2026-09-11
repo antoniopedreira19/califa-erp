@@ -41,10 +41,18 @@ DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 /** Dialog centered clássico. */
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
->(({ className, children, ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
+    /**
+     * Classe do véu. Existe por um motivo só: um diálogo aberto de dentro
+     * de uma camada em tela cheia precisa subir o véu JUNTO com o cartão,
+     * senão o véu fica atrás e o cartão flutua sobre uma tela que não
+     * escureceu — ver a escala de camadas no `FullscreenContent`.
+     */
+    overlayClassName?: string;
+  }
+>(({ className, overlayClassName, children, ...props }, ref) => (
   <DialogPortal>
-    <DialogOverlay />
+    <DialogOverlay className={overlayClassName} />
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
@@ -111,10 +119,22 @@ DrawerContent.displayName = "DrawerContent";
  * por baixo, que fechava a PP inteira (10/09/2026).
  *
  * Passando pelo portal do Radix, esta camada entra na pilha de layers: ela
- * fica clicável, o ESC fecha só ela, e um diálogo aberto a partir daqui
- * (o "Rejeitar", por exemplo) monta depois e aparece por cima. Por isso o
- * `z-50` é o mesmo dos outros — quem decide a ordem é a pilha, e subir o
- * `z` aqui esconderia justamente esses diálogos.
+ * fica clicável e o ESC fecha só ela.
+ *
+ * ⚠️ **A escala de `z` é explícita de propósito** (corrigido em
+ * 10/09/2026). Eu havia escrito aqui que bastava deixar todo mundo em
+ * `z-50` porque "a ordem do DOM decide". Não decide: o React insere os
+ * portais na ordem da ÁRVORE, não na ordem em que abrem, e o pop-up de
+ * aprovação apareceu ATRÁS do `<iframe>` do documento — botão visível,
+ * inalcançável. A escala que vale:
+ *
+ * - `z-50` — drawer e diálogos comuns, o padrão do sistema;
+ * - `z-[55]` — esta camada, que cobre a janela inteira;
+ * - `z-[60]` — diálogo aberto de DENTRO dela (véu junto, via
+ *   `overlayClassName`).
+ *
+ * Diálogo que pode ser aberto dos dois lugares leva `z-[60]` sempre: sobre
+ * o drawer, funciona igual.
  *
  * Sem `DialogOverlay`: o conteúdo já cobre a janela e pinta o próprio
  * fundo — o overlay do Radix só somaria escuro sobre escuro.
@@ -136,7 +156,7 @@ const FullscreenContent = React.forwardRef<
       onFocusOutside={(e) => e.preventDefault()}
       onInteractOutside={(e) => e.preventDefault()}
       className={cn(
-        "fixed inset-0 z-50 flex h-full w-full flex-col outline-none",
+        "fixed inset-0 z-[55] flex h-full w-full flex-col outline-none",
         // Entra com fade, sai na hora — de propósito. O Radix só desmonta
         // o conteúdo animado quando o `animationend` chega, e navegador
         // que não anima (aba em segundo plano, `prefers-reduced-motion`)

@@ -42,7 +42,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { DatePicker } from "@/components/ui/date-picker";
 import type { CartaoOption } from "@/components/financeiro/forma-pagamento-field";
 import type { PlanoContaTipo, PlanoContaSubtipo } from "@/lib/types";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -51,8 +50,8 @@ import { cn, formatCurrency } from "@/lib/utils";
 import { ppStatusLabel, nomeContraparteBRPP, type PPStatus } from "@/lib/types";
 import type { PPRow } from "./pedidos-compra-list";
 import { rejeitarPedidoCompraFinanceiro } from "./actions";
-import { aprovarPPComData } from "./actions-titulos";
 import { DocumentosPPOverlay } from "./documentos-pp-overlay";
+import { AprovarPPDialog } from "./aprovar-pp-dialog";
 import { PrestarContasDialog } from "./prestar-contas-dialog";
 import { signedUrlAnexoPrestacao } from "./prestacao-verba-actions";
 
@@ -119,32 +118,13 @@ export function PPDrawerFinanceiro({
   const [pending, startTransition] = React.useTransition();
   const [erro, setErro] = React.useState<string | null>(null);
   const [toast, setToast] = React.useState<string | null>(null);
-  const [dataPagamento, setDataPagamento] = React.useState<string>("");
-  // Por onde a PP vai ser paga. Escolhido AQUI, na aprovação, pelo
-  // financeiro: quem abre a PP é a produção, e ela não decide por onde o
-  // dinheiro sai (28/08/2026). Vazio = decidir depois, na baixa, uma
-  // parcela por vez — que é como sempre funcionou.
-  const [formaPagamento, setFormaPagamento] = React.useState<string>("");
-  const [cartaoId, setCartaoId] = React.useState<string>("");
-  const [tipoId, setTipoId] = React.useState<string>("");
-  const [subtipoId, setSubtipoId] = React.useState<string>("");
-  const noCartao = formaPagamento === "cartao_credito";
-
-  /**
-   * PP sempre nasce vinculada a um job, e custo de job cai em "Custo
-   * Operacional" (código 02) por convenção contábil. É o mesmo default
-   * que a tela de baixa já usava — aqui ele só chegou antes, porque no
-   * cartão não existe baixa individual onde escolher (29/08/2026).
-   *
-   * O subtipo fica em branco de propósito: ele é a escolha real do
-   * financeiro, e pré-preencher os dois faria a tela decidir sozinha.
-   */
-  const custoOperacionalId = React.useMemo(
-    () => tipos.find((t) => t.codigo === "02")?.id ?? "",
-    [tipos],
-  );
+  // A data de pagamento, a forma e os campos do cartão saíram daqui em
+  // 10/09/2026: vivem no `AprovarPPDialog`, que é quem grava. `cartoes`,
+  // `tipos` e `subtipos` continuam chegando como prop e seguem direto
+  // para ele.
   const [askRejeitar, setAskRejeitar] = React.useState(false);
   const [motivo, setMotivo] = React.useState("");
+  const [aprovarAberto, setAprovarAberto] = React.useState(false);
   const [docsAbertos, setDocsAbertos] = React.useState(false);
   /** Qual anexo a conferência abre selecionado — ver `abrirDocs`. */
   const [docsAnexoInicial, setDocsAnexoInicial] = React.useState(0);
@@ -152,9 +132,9 @@ export function PPDrawerFinanceiro({
 
   React.useEffect(() => {
     if (!pp) return;
-    setDataPagamento("");
     setErro(null);
     setMotivo("");
+    setAprovarAberto(false);
     setDocsAbertos(false);
     setDocsAnexoInicial(0);
     setPrestarOpen(false);
@@ -187,37 +167,21 @@ export function PPDrawerFinanceiro({
   // Só PP em avaliação aceita ação do financeiro. Aprovada, paga,
   // rejeitada ou cancelada viram leitura.
   const emAvaliacao = pp.status === "em_avaliacao";
-  const hoje = format(new Date(), "dd/MM/yyyy");
   // O vencimento original que ancora o deslocamento é o da 1ª parcela —
   // o mesmo `prazo_pagamento` impresso no PDF.
   const vencOriginal = pp.parcelas[0]?.data_vencimento ?? pp.prazo_pagamento;
 
-  function handleAprovar() {
-    if (!pp) return;
-    if (!dataPagamento) {
-      setErro("Escolha a data de pagamento antes de aprovar.");
-      return;
-    }
-    startTransition(async () => {
-      const res = await aprovarPPComData({
-        pp_id: pp.id,
-        data_pagamento: dataPagamento,
-        forma_pagamento: formaPagamento || null,
-        cartao_credito_id: noCartao ? cartaoId || null : null,
-        plano_conta_tipo_id: noCartao ? tipoId || null : null,
-        plano_conta_subtipo_id: noCartao ? subtipoId || null : null,
-      });
-      if (!res.ok) {
-        setErro(res.message);
-        return;
-      }
-      setDocsAbertos(false);
-      setToast(
-        `${pp.codigo} aprovada · ${pp.parcelas.length > 1 ? `${pp.parcelas.length} títulos criados` : "título criado"} para ${formatDate(dataPagamento)}.`,
-      );
-      router.refresh();
-      setTimeout(() => onOpenChange(false), 1200);
-    });
+  /**
+   * Aprovar deixou de gravar direto: quem grava é o `AprovarPPDialog`.
+   * Aqui só abre o pop-up — a data e a forma são decididas lá, junto do
+   * erro, na mesma camada de quem clicou (10/09/2026).
+   */
+  function handleAprovada(mensagem: string) {
+    setAprovarAberto(false);
+    setDocsAbertos(false);
+    setToast(mensagem);
+    router.refresh();
+    setTimeout(() => onOpenChange(false), 1200);
   }
 
   function handleConfirmarRejeitar() {
@@ -249,12 +213,12 @@ export function PPDrawerFinanceiro({
       </button>
       <button
         type="button"
-        onClick={handleAprovar}
+        onClick={() => setAprovarAberto(true)}
         disabled={pending}
         className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
       >
         <CheckCircle2 className="h-3.5 w-3.5" />
-        {pending ? "Aprovando..." : "Aprovar"}
+        Seguir para a aprovação
       </button>
     </>
   );
@@ -567,127 +531,18 @@ export function PPDrawerFinanceiro({
               </section>
             )}
 
-            {/* Data de pagamento — o campo que substituiu "Ações do
-                financeiro". Obrigatório antes de aprovar. */}
+            {/* O formulário saiu daqui em 10/09/2026 e virou o
+                `AprovarPPDialog`. Ele vivia neste ponto do drawer, e era o
+                que fazia o "Aprovar" da conferência parecer quebrado: sem a
+                data, o aviso era escrito AQUI, atrás da tela cheia. O
+                drawer voltou a ser só o dossiê da PP. */}
             {emAvaliacao && (
-              <div className="space-y-2 rounded-xl border border-border p-4">
-                <p className="text-sm font-bold">
-                  Data de pagamento <span className="text-california-red">*</span>
-                </p>
-                <p className="text-xs text-muted-foreground text-pretty">
-                  Escolha antes de aprovar. Esta data vira o vencimento do título em
-                  Títulos a Pagar; o vencimento original fica registrado.
-                  {pp.parcelas.length > 1 && (
-                    <>
-                      {" "}
-                      Como esta PP tem {pp.parcelas.length} parcelas, as demais são
-                      deslocadas pelo mesmo número de dias.
-                    </>
-                  )}
-                </p>
-                <DatePicker
-                  name="data_pagamento"
-                  defaultValue={dataPagamento || undefined}
-                  onDateChange={(d) => {
-                    setDataPagamento(d ? format(d, "yyyy-MM-dd") : "");
-                    setErro(null);
-                  }}
-                />
-                <p className="text-[11px] text-muted-foreground">
-                  Hoje é{" "}
-                  <strong className="font-semibold text-california-red">{hoje}</strong> —
-                  destacado no calendário.
-                </p>
-
-                {/* Como vai ser pago — a decisão do financeiro. Vazio
-                    mantém o comportamento de sempre: escolher na baixa,
-                    uma parcela por vez (29/08/2026). */}
-                <div className="space-y-2 border-t border-border pt-3">
-                  <p className="text-sm font-bold">Como vai ser pago</p>
-                  <select
-                    value={formaPagamento}
-                    disabled={pending}
-                    onChange={(e) => {
-                      const nova = e.target.value;
-                      setFormaPagamento(nova);
-                      setCartaoId("");
-                      // No cartão o tipo já vem em Custo Operacional; o
-                      // subtipo continua em branco, que é a escolha real.
-                      setTipoId(
-                        nova === "cartao_credito" ? custoOperacionalId : "",
-                      );
-                      setSubtipoId("");
-                      setErro(null);
-                    }}
-                    className="h-10 w-full rounded-lg border border-border bg-white px-3 text-sm outline-none focus:border-california-red disabled:opacity-50"
-                  >
-                    <option value="">Decidir na baixa, parcela a parcela</option>
-                    <option value="pix">PIX</option>
-                    <option value="transferencia">Transferência</option>
-                    <option value="boleto">Boleto</option>
-                    <option value="cartao_credito">Cartão de Crédito</option>
-                  </select>
-
-                  {noCartao && (
-                    <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
-                      <p className="text-[11.5px] leading-relaxed text-amber-900">
-                        No cartão, cada parcela entra na fatura da{" "}
-                        <strong>data dela</strong> e sai na baixa da fatura
-                        inteira — não existe baixa individual. Por isso o
-                        centro de custo é escolhido agora.
-                      </p>
-
-                      <select
-                        value={cartaoId}
-                        disabled={pending}
-                        onChange={(e) => setCartaoId(e.target.value)}
-                        className="h-9 w-full rounded-lg border border-border bg-white px-2 text-xs outline-none focus:border-california-red"
-                      >
-                        <option value="">Escolha o cartão…</option>
-                        {cartoes.map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.nome} · {c.bandeira.toUpperCase()} · ••••
-                            {c.ultimos_4_digitos}
-                          </option>
-                        ))}
-                      </select>
-
-                      <div className="grid grid-cols-2 gap-2">
-                        <select
-                          value={tipoId}
-                          disabled={pending}
-                          onChange={(e) => {
-                            setTipoId(e.target.value);
-                            setSubtipoId("");
-                          }}
-                          className="h-9 w-full rounded-lg border border-border bg-white px-2 text-xs outline-none focus:border-california-red"
-                        >
-                          <option value="">Tipo…</option>
-                          {tipos.map((t) => (
-                            <option key={t.id} value={t.id}>
-                              {t.codigo} · {t.nome}
-                            </option>
-                          ))}
-                        </select>
-                        <select
-                          value={subtipoId}
-                          disabled={pending || tipoId === ""}
-                          onChange={(e) => setSubtipoId(e.target.value)}
-                          className="h-9 w-full rounded-lg border border-border bg-white px-2 text-xs outline-none focus:border-california-red disabled:bg-muted/40"
-                        >
-                          <option value="">Subtipo…</option>
-                          {subtipos
-                            .filter((sub) => sub.tipo_id === tipoId)
-                            .map((sub) => (
-                              <option key={sub.id} value={sub.id}>
-                                {sub.codigo} · {sub.nome}
-                              </option>
-                            ))}
-                        </select>
-                      </div>
-                    </div>
-                  )}
-                </div>
+              <div className="flex items-center gap-2.5 rounded-xl border border-dashed border-border px-4 py-3.5 text-xs text-muted-foreground">
+                <CalendarClock className="h-3.5 w-3.5 flex-none" />
+                <span>
+                  A data de pagamento e a forma são escolhidas ao aprovar, no próprio
+                  pop-up de aprovação.
+                </span>
               </div>
             )}
 
@@ -721,16 +576,31 @@ export function PPDrawerFinanceiro({
           emAvaliacao ? (
             <div className="flex flex-wrap items-center justify-end gap-2.5">
               <span className="mr-auto text-xs text-white/70">
-                Data de pagamento:{" "}
+                Vencimento negociado pela produção:{" "}
                 <strong className="font-semibold text-white">
-                  {dataPagamento ? formatDate(dataPagamento) : "não escolhida"}
-                </strong>{" "}
-                · vencimento original {formatDate(vencOriginal)}
+                  {formatDate(vencOriginal)}
+                </strong>
               </span>
               {acoesAvaliacao}
             </div>
           ) : undefined
         }
+      />
+
+      <AprovarPPDialog
+        open={aprovarAberto}
+        onOpenChange={setAprovarAberto}
+        pp={{
+          id: pp.id,
+          codigo: pp.codigo,
+          valor: pp.valor,
+          vencimentoOriginal: vencOriginal,
+          parcelas: Math.max(pp.parcelas.length, 1),
+        }}
+        cartoes={cartoes}
+        tipos={tipos}
+        subtipos={subtipos}
+        onAprovada={handleAprovada}
       />
 
       {/* Dialog de prestação de contas (só verba de produção paga) */}
@@ -748,7 +618,11 @@ export function PPDrawerFinanceiro({
       )}
 
       {/* Confirm rejeitar */}
+      {/* Sobe de camada pelo mesmo motivo do `AprovarPPDialog`: "Rejeitar"
+          também é clicado de dentro da conferência em tela cheia. */}
       <ConfirmDialog
+        contentClassName="z-[60]"
+        overlayClassName="z-[60]"
         open={askRejeitar}
         onOpenChange={(o) => {
           setAskRejeitar(o);
