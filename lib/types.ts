@@ -1421,9 +1421,11 @@ export interface PedidoCompra {
  * volta pra `em_avaliacao`. Por isso ela continua contando no realizado
  * do item — quem tira uma PP do item é só o cancelamento.
  *
- * `gerada` conta só nas pendências: fora do realizado, fora do consumo
- * que congela a previsão da abertura e invisível para o financeiro.
- * (Decisão 039.)
+ * `gerada` é invisível para o financeiro e não congela a previsão da
+ * abertura (decisão 039) — mas CONTA no realizado do item desde
+ * 11/09/2026 (decisão 074): é dinheiro que o GP já comprometeu com o
+ * fornecedor, e deixá-la de fora fazia um job inteiro de PPs geradas
+ * aparecer na planilha como se nada tivesse sido feito.
  */
 export type PPStatus =
   | "gerada"
@@ -1433,9 +1435,14 @@ export type PPStatus =
   | "rejeitada"
   | "cancelada";
 
-/** A PP já chegou ao financeiro? Gerada e cancelada, não. É o recorte que
- *  pesa no realizado do item, no "Em PPs emitidas" do painel e na trava
- *  da errata (decisões 039 e 040). */
+/** A PP já chegou ao financeiro? Gerada e cancelada, não.
+ *
+ *  ⚠️ Recorte do FINANCEIRO, e só dele: a trava da errata (decisão 040) e
+ *  o consumo que congela a previsão da abertura. O realizado do item e o
+ *  "Em PPs emitidas" do painel saíram daqui em 11/09/2026 (decisão 074) e
+ *  passaram a usar `somaDasPPsNaoCanceladas`, que enxerga a gerada. Antes
+ *  de reaproveitar esta função, confira de qual dos dois lados a sua
+ *  pergunta está. */
 export function ppChegouAoFinanceiro(s: PPStatus): boolean {
   return s !== "gerada" && s !== "cancelada";
 }

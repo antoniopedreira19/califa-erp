@@ -21,7 +21,10 @@ import { CalhaLinha } from "./calha-linha";
 import { GerarPPDrawer } from "./gerar-pp-drawer";
 import { PainelPPsItem } from "./painel-pps-item";
 import { VerPPDrawer } from "../pps/ver-pp-drawer";
-import { somaDasPPsEmitidas, contarPendentes } from "@/lib/calculos/pps-item";
+import {
+  somaDasPPsNaoCanceladas,
+  contarPendentes,
+} from "@/lib/calculos/pps-item";
 import { ppChegouAoFinanceiro } from "@/lib/types";
 import { BvDialog } from "@/app/(app)/_bv/bv-dialog";
 import { acaoBv } from "@/app/(app)/_bv/bv-action-button";
@@ -1763,9 +1766,9 @@ export function JobItemRealizadoTable({
           {(podeAcoes || podeGerarPP) && (
             <span className="text-[11px] text-muted-foreground">
               O Realizado não é digitado: ele é a soma dos Pedidos de Produção
-              enviados ao financeiro no item — PP só gerada ainda não conta. Em
-              custo <strong>A</strong> e <strong>D</strong>, que não geram PP,
-              ele espelha o Orçado.
+              do item, da geração ao pagamento — só a PP cancelada sai da conta.
+              Em custo <strong>A</strong> e <strong>D</strong>, que não geram
+              PP, ele espelha o Orçado.
             </span>
           )}
           {temRentab && (
@@ -1803,8 +1806,9 @@ export function JobItemRealizadoTable({
         const ppsDoItem = itemIdAtual
           ? (ppsPorItemId.get(itemIdAtual) ?? [])
           : [];
-        // Só o que já chegou ao financeiro: a gerada conta na pendência.
-        const emPPs = somaDasPPsEmitidas(ppsDoItem);
+        // Toda PP do item que não foi cancelada — a gerada inclusive
+        // (decisão 074). É o mesmo número que o realizado da linha.
+        const emPPs = somaDasPPsNaoCanceladas(ppsDoItem);
         // O marco "todas as PPs deste item já foram geradas" mora na
         // âncora do realizado (decisão 052).
         const realizadoAtual = itemAtual

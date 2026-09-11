@@ -15,7 +15,6 @@ import { gerarCodigoPP } from "@/lib/codigos/pedidos-compra";
 import { listActiveMembers } from "@/lib/data/members";
 import {
   valorDaPPPorUnidade,
-  somaDasPPsEmitidas,
   somaDasPPsNaoCanceladas,
   passaDoPlanejado,
   exigeSomaIgualAoOrcado,
@@ -340,18 +339,21 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
 }
 
 /**
- * O que o item já tem em PPs que CHEGARAM ao financeiro — a base do teste
- * do planejado no envio (02/09/2026).
+ * O que o item já tem em PPs — a base do teste do planejado no envio
+ * (02/09/2026), no mesmo recorte que a planilha mostra.
  *
- * A gerada fica de fora: ela ainda pode ser editada ou cancelada sem
- * passar por ninguém, e contá-la faria o item parecer mais gasto do que
- * está. A rejeitada entra: vai ser corrigida e reenviada, então o
- * dinheiro segue comprometido.
+ * Toda PP que existe pesa, a `gerada` inclusive: desde 11/09/2026
+ * (decisão 074) é ela que monta o realizado do item, e o "tem certeza?"
+ * do envio precisa olhar o mesmo número que o painel exibe — senão a tela
+ * acende vermelho e o servidor deixa passar calado. Quem tira uma PP da
+ * conta é só o cancelamento.
  *
- * `excetoPPId` serve ao reenvio da rejeitada: a PP que está sendo
- * corrigida já está na soma, e não pode competir consigo mesma.
+ * `excetoPPId` é obrigatório sempre que a PP em questão JÁ EXISTE no
+ * banco — o envio, o reenvio da rejeitada, a edição: ela já está na soma
+ * e não pode competir consigo mesma. Só a geração, em que a PP ainda não
+ * foi gravada, chama sem ele.
  */
-async function somaEmitidasDoItem(
+async function somaDasPPsDoItem(
   supabase: ReturnType<typeof createClient>,
   tenantId: string,
   itemRealizadoId: string,
@@ -365,7 +367,7 @@ async function somaEmitidasDoItem(
 
   const { data } = excetoPPId ? await query.neq("id", excetoPPId) : await query;
 
-  return somaDasPPsEmitidas(
+  return somaDasPPsNaoCanceladas(
     (data ?? []).map((pp) => ({ valor: Number(pp.valor), status: pp.status })),
   );
 }
@@ -649,7 +651,11 @@ function pedirConfirmacaoAcimaDoPlanejado(
   const excedente = Math.round((emPPsDepois - planejado) * 100) / 100;
   return {
     ok: false,
-    message: `Com esta PP o item passa a ter ${brl(emPPsDepois)} em PPs, ${brl(excedente)} acima do planejado de ${brl(planejado)}. Confirme o envio.`,
+    // "Fica com", e não "passa a ter": desde 11/09/2026 a PP que está
+    // sendo enviada já conta no item antes do envio, então o número não
+    // muda quando ela vai ao financeiro — o que muda é quem responde
+    // por ele.
+    message: `Este item fica com ${brl(emPPsDepois)} em PPs, ${brl(excedente)} acima do planejado de ${brl(planejado)}. Confirme o envio.`,
     acimaDoPlanejado: { planejado, emPPsDepois, excedente },
   };
 }
@@ -775,7 +781,8 @@ async function finalizarPedidoCompraImpl(
   }
 
   // Só para o registro de auditoria: o envio refaz esta conta na hora.
-  const emPPsAntes = await somaEmitidasDoItem(
+  // Sem `exceto`: esta PP ainda não foi gravada, então não está na soma.
+  const emPPsAntes = await somaDasPPsDoItem(
     supabase,
     session.activeTenant.id,
     itemRealizadoId,
@@ -1566,7 +1573,7 @@ export async function reenviarPedidoCompra(
   // O teto saiu (02/09/2026). O que existe é a confirmação acima do
   // planejado — a soma é SEM esta PP, que já está no item e não pode
   // competir consigo mesma.
-  const emPPsSemEsta = await somaEmitidasDoItem(
+  const emPPsSemEsta = await somaDasPPsDoItem(
     supabase,
     session.activeTenant.id,
     ppRow.item_realizado_id,
@@ -1953,13 +1960,17 @@ export async function enviarPedidoCompraAoFinanceiro(
   );
   if (bloqueioAR) return bloqueioAR;
 
+  // A PP que está sendo enviada já está no item desde que foi gerada
+  // (decisão 074), então ela sai da soma aqui e volta uma linha abaixo —
+  // contá-la nas duas pontas dobraria o valor dela no teste do planejado.
   const valor = Number(ppRow.valor ?? 0);
-  const emPPsAntes = await somaEmitidasDoItem(
+  const emPPsSemEsta = await somaDasPPsDoItem(
     supabase,
     session.activeTenant.id,
     ppRow.item_realizado_id,
+    pp_id,
   );
-  const emPPsDepois = Math.round((emPPsAntes + valor) * 100) / 100;
+  const emPPsDepois = Math.round((emPPsSemEsta + valor) * 100) / 100;
   const pedidoDeConfirmacao = pedirConfirmacaoAcimaDoPlanejado(
     emPPsDepois,
     item.total_planejado,
@@ -2383,10 +2394,13 @@ async function editarPedidoCompraGeradaImpl(
       .eq("tenant_id", session.activeTenant.id);
   }
 
-  const emPPsEmitidas = await somaEmitidasDoItem(
+  // Sem esta PP, pelo mesmo motivo do envio: o metadata soma `valor` logo
+  // adiante, e ela já está gravada no item.
+  const emPPsEmitidas = await somaDasPPsDoItem(
     supabase,
     session.activeTenant.id,
     ppRow.item_realizado_id,
+    pp_id,
   );
 
   const marcacao = await aplicarConclusaoDoItem(supabase, {

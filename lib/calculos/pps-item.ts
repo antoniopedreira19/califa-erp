@@ -8,15 +8,22 @@
  * PPs não canceladas não podia passar do ORÇADO do item — aqui em
  * `saldoDoItem`/`passaDoSaldo` e no banco, no trigger
  * `pp_valida_saldo_do_item`. As duas coisas foram removidas. O que existe
- * agora é uma regra de ENVIO: quando a soma das PPs que já chegaram ao
- * financeiro, mais a que está sendo enviada, passa do PLANEJADO do item,
- * o envio pede o responsável do job (ou administrador) e uma confirmação
- * explícita. `passaDoPlanejado` é essa comparação, com a mesma folga de
+ * agora é uma regra de ENVIO: quando a soma das PPs do item passa do
+ * PLANEJADO dele, o envio pede o responsável do job (ou administrador) e
+ * uma confirmação explícita. `passaDoPlanejado` é essa comparação, com a mesma folga de
  * meio centavo que o teto tinha.
  *
  * A referência do item também mudou: era o orçado, é o planejado. É o
  * número que a produção de fato pretende gastar, e é contra ele que
  * "Em PPs emitidas" acende em vermelho.
+ *
+ * ⚠️ O RECORTE da soma mudou em 11/09/2026 (decisão 074). De 02/09 até
+ * ali, "Em PPs emitidas" e o realizado do item contavam só as PPs que
+ * tinham CHEGADO ao financeiro, e a `gerada` ficava de fora. O efeito na
+ * tela era um job inteiro de PPs geradas aparecendo como se nada tivesse
+ * sido feito — realizado zerado em toda linha e "sem realizado" no card
+ * do topo. Agora toda PP que existe no item pesa, e só o cancelamento
+ * tira. `somaDasPPsNaoCanceladas` passou a ser a conta única.
  *
  * Este arquivo continua sendo a fonte única das contas — a tela usa para
  * mostrar e a server action usa para decidir. Duas implementações é como
@@ -63,27 +70,27 @@ export interface PPParaSoma {
   status: string;
 }
 
-/** A PP já chegou ao financeiro? Gerada e cancelada ficam de fora.
- *  Espelho de `ppChegouAoFinanceiro` em `lib/types.ts`, aceitando string
- *  porque as linhas chegam cruas do banco em vários lugares. */
-function chegouAoFinanceiro(status: string): boolean {
-  return status !== "gerada" && status !== "cancelada";
-}
-
 /**
- * O que já está comprometido em PPs — o "Em PPs emitidas" do painel e do
- * formulário.
+ * O que o item tem comprometido em PPs — **todas menos as canceladas**.
  *
- * Só as PPs que CHEGARAM ao financeiro (decisão do Tiago, 02/09/2026):
- * a gerada ainda pode ser editada ou cancelada sem ninguém saber, e
- * somá-la aqui faria o item parecer mais gasto do que está. A rejeitada
- * entra: ela vai ser corrigida e reenviada, então o dinheiro segue
- * comprometido — quem tira uma PP do item é só o cancelamento.
+ * Conta única do sistema desde 11/09/2026 (decisão 074): é o
+ * "Em PPs emitidas" do painel e do formulário, é a base do realizado do
+ * item no banco (`recalcular_realizado_do_item`), é a base da
+ * confirmação de envio acima do planejado e é a trava do `AR`, no fim do
+ * arquivo. Antes eram duas contas, e a do painel não via a `gerada`.
+ *
+ * Por que a `gerada` conta: ela é dinheiro que o GP já comprometeu com o
+ * fornecedor: o item está gasto, ainda que o financeiro não tenha visto.
+ * O que ela NÃO faz é congelar previsão no financeiro nem travar errata —
+ * esses dois seguem no recorte `ppChegouAoFinanceiro` de `lib/types.ts`.
+ *
+ * A `rejeitada` conta pela regra de sempre: vai ser corrigida e
+ * reenviada. Quem tira uma PP do item é só o cancelamento.
  */
-export function somaDasPPsEmitidas(pps: PPParaSoma[]): number {
+export function somaDasPPsNaoCanceladas(pps: PPParaSoma[]): number {
   return arredondar(
     pps
-      .filter((pp) => chegouAoFinanceiro(pp.status))
+      .filter((pp) => pp.status !== "cancelada")
       .reduce((s, pp) => s + Number(pp.valor ?? 0), 0),
   );
 }
@@ -139,25 +146,6 @@ export function exigeSomaIgualAoOrcado(
   emSave: boolean,
 ): boolean {
   return tipoCusto === "AR" && !emSave;
-}
-
-/**
- * As PPs que contam para essa trava: **todas menos as canceladas**.
- *
- * Inclui a `gerada`, que ainda não foi ao financeiro. Tem que incluir:
- * a trava barra o ENVIO, então contar só as enviadas seria esperar
- * exatamente o que ela impede — o item nunca destravaria. Na prática a
- * regra diz "gere todas as PPs do item antes de enviar a primeira".
- *
- * A `rejeitada` também conta, pela regra de sempre: ela vai ser corrigida
- * e reenviada, e o dinheiro segue comprometido.
- */
-export function somaDasPPsNaoCanceladas(pps: PPParaSoma[]): number {
-  return arredondar(
-    pps
-      .filter((pp) => pp.status !== "cancelada")
-      .reduce((s, pp) => s + Number(pp.valor ?? 0), 0),
-  );
 }
 
 /**

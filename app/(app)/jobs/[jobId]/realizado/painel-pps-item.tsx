@@ -80,7 +80,9 @@ interface Props {
   totalPlanejado: number;
   /** PPs do item, sem as canceladas (o servidor já as tira do mapa). */
   pps: PPDoItem[];
-  /** Soma das PPs que já chegaram ao financeiro. A gerada não entra. */
+  /** Soma de TODAS as PPs do item menos as canceladas — a gerada entra
+   *  desde 11/09/2026 (decisão 074). É o mesmo número que o realizado da
+   *  linha na planilha, e é contra o planejado que ele acende. */
   emPPs: number;
   /** Por que o ENVIO ao financeiro está fechado, para a faixa e o
    *  `title` do botão. Null = envio liberado.
@@ -231,14 +233,17 @@ export function PainelPPsItem({
     // A mesma conta do servidor, feita antes para o pop-up abrir sem uma
     // ida ao servidor. Se os números da tela estiverem velhos, o servidor
     // devolve os dele e o pop-up abre do mesmo jeito.
-    const emPPsDepois = Math.round((emPPs + pp.valor) * 100) / 100;
-    if (passaDoPlanejado(emPPsDepois, totalPlanejado)) {
+    //
+    // `emPPs` já inclui esta PP desde 11/09/2026 (decisão 074): ela entrou
+    // na conta quando foi gerada. Somá-la de novo aqui mostraria o dobro
+    // do valor dela e pediria confirmação onde o servidor não pede.
+    if (passaDoPlanejado(emPPs, totalPlanejado)) {
       setConfirmando({
         pp,
         numeros: {
           planejado: totalPlanejado,
-          emPPsDepois,
-          excedente: Math.round((emPPsDepois - totalPlanejado) * 100) / 100,
+          emPPsDepois: emPPs,
+          excedente: Math.round((emPPs - totalPlanejado) * 100) / 100,
         },
       });
       return;
@@ -518,12 +523,13 @@ export function PainelPPsItem({
                     </h3>
                   </div>
                   <p className="text-[12.5px] leading-relaxed text-muted-foreground">
-                    Com {confirmando.pp.codigo} o item passa a ter{" "}
+                    Este item está com{" "}
                     {formatCurrency(confirmando.numeros.emPPsDepois, moeda)} em
                     PPs, {formatCurrency(confirmando.numeros.excedente, moeda)}{" "}
                     acima do planejado de{" "}
-                    {formatCurrency(confirmando.numeros.planejado, moeda)}. O
-                    envio ao financeiro é registrado no seu nome.
+                    {formatCurrency(confirmando.numeros.planejado, moeda)}.
+                    Enviar {confirmando.pp.codigo} ao financeiro é registrado no
+                    seu nome.
                   </p>
                   <div className="flex flex-col gap-1.5 rounded-[11px] border border-border bg-muted/40 px-3 py-2.5">
                     <div className="flex items-baseline justify-between gap-2.5">
@@ -536,7 +542,7 @@ export function PainelPPsItem({
                     </div>
                     <div className="flex items-baseline justify-between gap-2.5">
                       <span className="text-[11.5px] text-muted-foreground">
-                        Em PPs depois do envio
+                        Total do item em PPs
                       </span>
                       <span className="font-mono text-[12.5px] font-bold text-california-red">
                         {formatCurrency(confirmando.numeros.emPPsDepois, moeda)}

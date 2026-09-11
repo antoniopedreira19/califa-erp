@@ -61,7 +61,7 @@ interface Props {
   contraparteNome: string;
   empresaNome: string;
   /** O cartão do topo, igual ao do formulário: item, planejado e o que o
-   *  item já tem em PPs que chegaram ao financeiro. */
+   *  item já tem em PPs — todas menos as canceladas (decisão 074). */
   itemDescricao: string;
   valorPlanejado: number;
   emPPsEmitidas: number;
@@ -339,7 +339,8 @@ export function VerPPDrawer({
 
           {/* O cartão do item, como no formulário: o planejado é a
               referência da PP, e "Em PPs emitidas" é o que o item já tem
-              no financeiro (aqui já contando esta PP, que foi enviada). */}
+              em PPs — todas menos as canceladas, esta inclusive
+              (decisão 074). */}
           <div className="rounded-lg border border-border bg-muted/30 p-3">
             <p className="text-xs text-muted-foreground">Item</p>
             <p className="font-medium">{itemDescricao || pp.item_nome || "—"}</p>

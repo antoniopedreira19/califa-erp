@@ -78,9 +78,11 @@ interface Props {
   unitarioPlanejado: number;
   quantidadePlanejada: number;
   dmPlanejado: number;
-  /** O que o item já tem em PPs que CHEGARAM ao financeiro. A prévia do
-   *  cartão soma esta PP por cima. Sem teto: passar do planejado não
-   *  impede gerar — muda quem pode enviar. */
+  /** O que o item já tem em PPs — todas menos as canceladas, a gerada
+   *  inclusive (decisão 074). Na GERAÇÃO a prévia do cartão soma esta PP
+   *  por cima; na EDIÇÃO ela já está aqui dentro e o valor antigo é
+   *  descontado antes. Sem teto: passar do planejado não impede gerar —
+   *  muda quem pode enviar. */
   emPPsEmitidas: number;
   /** PP gerada sendo editada. Null = gerar uma nova (02/09/2026). */
   ppEditando: PedidoCompraNaLista | null;
@@ -530,9 +532,18 @@ export function GerarPPDrawer({
   const qtdNum = parseNumeroLocal(quantidade);
   const dmNum = parseNumeroLocal(dm);
   const valorPP = valorDaPPPorUnidade(unitNum, qtdNum, dmNum);
-  // Prévia de "Em PPs emitidas" com esta PP. A PP em edição ainda é
-  // gerada, então não está na base — não há o que descontar.
-  const previaEmPPs = Math.round((emPPsEmitidas + valorPP) * 100) / 100;
+  // Prévia de "Em PPs emitidas" com esta PP.
+  //
+  // A PP em edição ESTÁ na base desde 11/09/2026 (decisão 074) — a gerada
+  // conta no item —, então o valor gravado dela sai antes de o valor novo
+  // entrar. Sem isso, abrir uma PP de R$ 3.500 e salvar sem mexer em nada
+  // mostraria R$ 7.000. É a mesma conta que a action faz com `excetoPPId`.
+  const jaNaBase =
+    ppEditando && ppEditando.status !== "cancelada"
+      ? Number(ppEditando.valor ?? 0)
+      : 0;
+  const previaEmPPs =
+    Math.round((emPPsEmitidas - jaNaBase + valorPP) * 100) / 100;
   const passaPlanejado = valorPP > 0 && passaDoPlanejado(previaEmPPs, valorPlanejado);
   /** Anexos já gravados que continuam (modo edição). */
   const anexosMantidos = (ppEditando?.anexos ?? []).filter(
