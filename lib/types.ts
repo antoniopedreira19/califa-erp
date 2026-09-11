@@ -511,6 +511,40 @@ export function tipoCustoLabel(t: TipoCusto): string {
 
 // ---------- BV por item (bonificação do fornecedor) ----------
 
+/**
+ * Onde mora o item a que o BV se refere — e, portanto, por qual chave
+ * ele é gravado.
+ *
+ * São dois espaços de id diferentes, e confundi-los foi exatamente o bug
+ * da decisão 071: a planilha do job mandava o id da CÓPIA para uma action
+ * que procurava na VERSÃO, e o Salvar respondia "Item não encontrado."
+ * com a lista aparecendo certa na tela. Por isso a chave é marcada, e
+ * não uma string solta.
+ *
+ * - `versao`: `versoes_orcamento_itens.id` — a linha existe no orçamento
+ *   aprovado. É o caminho da tela de Orçamentos e o da maioria das
+ *   linhas do job.
+ * - `job`: `jobs_itens_orcado.id` — a linha só existe na planilha do
+ *   job. É o caso da linha nascida de errata, que a decisão 073 passou a
+ *   aceitar.
+ */
+export type ChaveItemBv =
+  | { espaco: "versao"; id: string }
+  | { espaco: "job"; id: string };
+
+/**
+ * A chave como o DIALOG a carrega — os dois espaços do servidor mais o
+ * rascunho.
+ *
+ * No editor de rascunho o item ainda não existe no banco: o BV vive no
+ * estado do React e a chave é a da linha local, que só o adaptador
+ * entende. Ela nunca chega a uma Server Action, e é por isso que fica
+ * fora de `ChaveItemBv` em vez de virar mais um caso lá dentro.
+ */
+export type ChaveBvNoDialog =
+  | ChaveItemBv
+  | { espaco: "rascunho"; id: string };
+
 /** Situação da negociação do BV com o fornecedor.
  *  `cancelado` zera o valor para efeito de conta — o registro fica no
  *  item como histórico do que foi negociado e caiu. */
@@ -547,8 +581,8 @@ export function bvSituacaoLabel(s: BvSituacao): string {
 export interface ItemBv {
   id: string;
   tenant_id: string;
-  /** Chave do BV na planilha do ORÇAMENTO. `null` só existiria em BV de
-   *  linha nascida de errata, que ainda não tem caminho de criação. */
+  /** Chave do BV na planilha do ORÇAMENTO. `null` no BV de linha nascida
+   *  de errata, que desde a decisão 073 se endereça só pela cópia do job. */
   item_versao_id: string | null;
   /** Chave do BV na planilha do JOB. Preenchida na criação do BV e no
    *  envio para abertura; é por ela que a planilha do job lê (27/08/2026). */

@@ -96,9 +96,10 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 070 | [A PP congela os documentos com que a aprovação foi feita](070-a-pp-congela-os-documentos-da-aprovacao.md) | 2026-09-10 |
 | 071 | [O BV do job se grava pelo item da versão, e a linha de errata não tem BV](071-o-bv-do-job-se-grava-pelo-item-da-versao.md) | 2026-09-11 |
 | 072 | [O orçamento internacional tem planilha própria, e quem a escolhe é a categoria](072-orcamento-internacional.md) | 2026-09-11 |
+| 073 | [O BV não depende da versão aprovada: qualquer linha do job aceita, se o tipo permitir](073-o-bv-nao-depende-da-versao-aprovada.md) | 2026-09-11 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
 > data é a da decisão, não a da posição na fila.
 
-**Próximo número livre: 073.**
+**Próximo número livre: 074.**

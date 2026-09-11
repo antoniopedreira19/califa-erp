@@ -38,6 +38,7 @@ import {
 import {
   bvSituacaoLabel,
   type BvSituacao,
+  type ChaveBvNoDialog,
   type Fornecedor,
   type ItemBv,
   type TipoCusto,
@@ -65,14 +66,13 @@ export interface FornecedorOpcao {
  *  rascunho: lá o item ainda não tem id, e a linha em `itens_bv` só nasce
  *  no "Salvar orçamentos", depois que os itens existem. */
 export interface AdaptadorBv {
-  /** `chaveDoItem` é a chave do item **no espaço de quem grava**: o id em
-   *  `versoes_orcamento_itens` nas Server Actions, a chave local da linha
-   *  no rascunho. Quem chama o dialog é que sabe qual das duas é — ver a
-   *  prop `chaveDoItem`.
+  /** `chaveDoItem` vem marcada com o espaço a que o id pertence — versão,
+   *  cópia do job ou rascunho. O adaptador de rascunho só usa o `.id`; as
+   *  Server Actions leem o espaço para saber onde procurar o item.
    *
    *  `bvId` ausente ⇒ BV novo na linha (decisão 062: vários por item). */
   salvar: (
-    chaveDoItem: string,
+    chaveDoItem: ChaveBvNoDialog,
     formData: FormData,
     bvId?: string | null,
   ) => Promise<ActionResult>;
@@ -126,9 +126,9 @@ interface Props {
    *    lá é o id da cópia em `jobs_itens_orcado`;
    *  - rascunho (com `adaptador`): a chave local da linha.
    *
-   *  Linha de job nascida de errata tem `item_versao_id` nulo e por isso
-   *  não tem BV: a calha não oferece o botão (decisão 071). */
-  chaveDoItem: string;
+   *  Linha de job nascida de errata entra com `espaco: "job"`: ela não
+   *  tem item na versão, e desde a decisão 073 é a cópia que endereça. */
+  chaveDoItem: ChaveBvNoDialog;
   grupoNome: string;
   versaoLabel: string;
   categoriaNome: string | null;
@@ -265,7 +265,16 @@ export function BvDialog({
     () =>
       adaptador ?? {
         salvar: (chave, formData, bvId) =>
-          salvarBv(chave, formData, origem, bvId),
+          // Sem adaptador o destino é o banco, e o rascunho não tem item
+          // lá para receber BV. O caso não acontece pela tela — quem abre
+          // o rascunho sempre passa adaptador —, mas a narrowing precisa
+          // existir e a recusa é mais honesta que um cast.
+          chave.espaco === "rascunho"
+            ? Promise.resolve({
+                ok: false as const,
+                message: "Salve o orçamento antes de lançar o BV.",
+              })
+            : salvarBv(chave, formData, origem, bvId),
         cancelar: (bvId) => cancelarBv(bvId, origem),
         aposEscrita: () => router.refresh(),
       },

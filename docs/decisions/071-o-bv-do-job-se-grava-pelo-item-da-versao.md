@@ -12,8 +12,16 @@ passa a ser tratado na planilha do job" prometia e que nunca funcionou.
 
 > **O BV é endereçado pelo item da VERSÃO (`versoes_orcamento_itens.id`),
 > venha a tela do orçamento ou do job.**
-> **Linha nascida de errata não tem item de versão — e por isso não tem
-> BV.**
+> ~~**Linha nascida de errata não tem item de versão — e por isso não tem
+> BV.**~~
+
+> ⚠️ **11/09/2026 — a segunda frase foi substituída pela
+> [073](073-o-bv-nao-depende-da-versao-aprovada.md), no mesmo dia.** A
+> pergunta que esta decisão deixou aberta foi respondida: o BV **não**
+> depende da versão aprovada, e a linha nascida de errata aceita BV
+> sempre que o tipo de custo permitir (`A`, `AR`, `D`). O endereço passou
+> a ser a cópia do job nesse caso. A primeira frase continua valendo — e a
+> chave agora vai **marcada** com o espaço a que pertence.
 
 ## O problema
 

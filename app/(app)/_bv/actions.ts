@@ -6,7 +6,7 @@ import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { checarPermissao } from "@/lib/permissoes-server";
 import { bvSchema } from "@/lib/validations/bv";
-import type { BvSituacao, ItemBv, JobStatus } from "@/lib/types";
+import type { BvSituacao, ChaveItemBv, ItemBv, JobStatus } from "@/lib/types";
 import { jobEstaCongelado, jobAceitaAcoesPlanilha } from "@/lib/types";
 import { aceitaBV } from "@/lib/calculos/versao-totais";
 
@@ -38,6 +38,9 @@ interface ContextoItem {
   /** A cópia deste item na planilha do job. É por ela que a planilha do
    *  job lê o BV desde 27/08/2026 — `null` enquanto o job não existe. */
   job_item_orcado_id: string | null;
+  /** O item na versão aprovada. `null` na linha nascida de errata, que
+   *  não tem correspondente lá (decisão 073). */
+  item_versao_id: string | null;
   item: string;
 }
 
@@ -60,10 +63,11 @@ async function porQueNaoAchou(
     .maybeSingle<{ item_versao_id: string | null }>();
 
   if (!data) return "Item não encontrado.";
-  // A linha existe no job, mas nasceu de uma errata: ela não tem item no
-  // orçamento aprovado, e é lá que o BV mora. A calha nem oferece o botão.
+  // A linha existe no job e nasceu de errata. Desde a decisão 073 ela
+  // ACEITA BV — mas por `job_item_orcado_id`, e quem chegou aqui mandou
+  // a chave da versão. É tela velha, não regra de negócio.
   if (!data.item_versao_id) {
-    return "Linha criada por errata não tem item no orçamento aprovado — o BV não pode ser lançado nela.";
+    return "A tela está desatualizada — recarregue a página e lance o BV de novo.";
   }
   // A linha tem item de versão, mas quem chamou mandou o id da cópia: é
   // uma tela desatualizada, do jeito que a planilha do job fazia até
@@ -71,11 +75,51 @@ async function porQueNaoAchou(
   return "A tela está desatualizada — recarregue a página e lance o BV de novo.";
 }
 
+/** As travas que dependem do ESTADO DO JOB. Valem igual venha o item da
+ *  versão ou da cópia, então moram num lugar só. */
+function barreiraDoJob(status: JobStatus): string | null {
+  // Job encerrado é histórico: nem lançar, nem confirmar, nem cancelar
+  // BV. As três ações passam por aqui.
+  if (jobEstaCongelado(status)) {
+    return "Job encerrado — o BV não pode mais ser alterado.";
+  }
+  // Pré-abertura: o job existe (a cópia nasce no envio para abertura),
+  // mas o financeiro ainda não o abriu. A planilha do job é visível nesse
+  // estado e o realizado é editável nele — o BV não: é compromisso de
+  // comissão, e o job ainda pode voltar.
+  if (!jobAceitaAcoesPlanilha(status)) {
+    return status === "rejeitado_financeiro"
+      ? "Job devolvido pelo financeiro — o BV fica disponível depois da abertura."
+      : "Job aguardando abertura pelo financeiro — o BV fica disponível depois da abertura.";
+  }
+  return null;
+}
+
+const ERRO_TIPO_SEM_BV =
+  "BV só pode ser lançado em item de custo tipo A, A · Repasse ou D.";
+
 /**
  * Carrega o item e barra tudo que torna o BV inválido: tenant errado,
- * tipo de custo sem BV e versão congelada para a origem da chamada.
+ * tipo de custo sem BV, linha em save, job congelado e versão congelada
+ * para a origem da chamada.
+ *
+ * Aceita as DUAS chaves (decisão 073). A linha que existe no orçamento
+ * aprovado entra por `versao` — o caminho de sempre. A que só existe na
+ * planilha do job, nascida de errata, entra por `job`, e aí a cópia é a
+ * única fonte de tipo, tenant e save que existe.
  */
 async function carregarContexto(
+  chave: ChaveItemBv,
+  tenantId: string,
+  origem: OrigemBv,
+): Promise<ContextoItem | { error: string }> {
+  return chave.espaco === "versao"
+    ? contextoPelaVersao(chave.id, tenantId, origem)
+    : contextoPelaCopiaDoJob(chave.id, tenantId, origem);
+}
+
+/** Caminho histórico: o item vive na versão do orçamento. */
+async function contextoPelaVersao(
   itemVersaoId: string,
   tenantId: string,
   origem: OrigemBv,
@@ -141,30 +185,9 @@ async function carregarContexto(
       }>(),
   ]);
 
-  // Job encerrado é histórico: nem lançar, nem confirmar, nem cancelar
-  // BV. As três ações passam por aqui, então a trava mora num lugar só.
-  // (`cancelado` não chega neste ponto — o filtro acima já o descarta.)
-  if (copiaRes.data && jobEstaCongelado(copiaRes.data.job.status as JobStatus)) {
-    return {
-      error: "Job encerrado — o BV não pode mais ser alterado.",
-    };
-  }
-
-  // Pré-abertura: o job existe (a cópia nasce no envio para abertura),
-  // mas o financeiro ainda não o abriu. A planilha do job passou a ser
-  // visível nesse estado em 17/08/2026 e o realizado é editável nele —
-  // o BV não: é compromisso de comissão, e o job ainda pode voltar.
-  // Sem esta trava a UI escondia o botão, mas a action aceitava.
-  if (
-    copiaRes.data &&
-    !jobAceitaAcoesPlanilha(copiaRes.data.job.status as JobStatus)
-  ) {
-    return {
-      error:
-        copiaRes.data.job.status === "rejeitado_financeiro"
-          ? "Job devolvido pelo financeiro — o BV fica disponível depois da abertura."
-          : "Job aguardando abertura pelo financeiro — o BV fica disponível depois da abertura.",
-    };
+  if (copiaRes.data) {
+    const barreira = barreiraDoJob(copiaRes.data.job.status as JobStatus);
+    if (barreira) return { error: barreira };
   }
 
   // Depois da abertura do job quem manda é a cópia: a errata pode ter
@@ -172,9 +195,7 @@ async function carregarContexto(
   // Mesma regra do trigger `bv_exige_item_com_bv`.
   const tipoEfetivo = copiaRes.data?.tipo_custo ?? data.tipo_custo;
   if (!aceitaBV(tipoEfetivo)) {
-    return {
-      error: "BV só pode ser lançado em item de custo tipo A, A · Repasse ou D.",
-    };
+    return { error: ERRO_TIPO_SEM_BV };
   }
 
   return {
@@ -183,6 +204,91 @@ async function carregarContexto(
     projeto_id: orcRes.data?.projeto_id ?? "",
     job_id: copiaRes.data?.job_id ?? null,
     job_item_orcado_id: copiaRes.data?.id ?? null,
+    item_versao_id: itemVersaoId,
+    item: data.item,
+  };
+}
+
+/**
+ * Caminho da decisão 073: o endereço é a linha da planilha do job.
+ *
+ * É por aqui que a linha nascida de errata passa — ela não tem item na
+ * versão aprovada, e a cópia responde por tudo. Uma linha que TEM item na
+ * versão também pode entrar por aqui sem estrago: o `item_versao_id` dela
+ * volta no contexto e a gravação preenche as duas chaves, como sempre.
+ */
+async function contextoPelaCopiaDoJob(
+  jobItemOrcadoId: string,
+  tenantId: string,
+  origem: OrigemBv,
+): Promise<ContextoItem | { error: string }> {
+  // A tela de Orçamentos não conhece a planilha do job, e a linha de
+  // errata não existe lá. Se veio de lá com esta chave, é chamada
+  // forjada — a trava não pode depender de o botão estar escondido.
+  if (origem === "orcamento") {
+    return {
+      error: "Esta linha só existe na planilha do job — lance o BV por lá.",
+    };
+  }
+
+  const supabase = createClient();
+
+  const { data, error } = await supabase
+    .from("jobs_itens_orcado")
+    .select(
+      "id, item, tipo_custo, em_save, item_versao_id, job_id, job:jobs!inner(status, projeto_id, orcamento_id, versao_orcamento_aprovada_id)",
+    )
+    .eq("id", jobItemOrcadoId)
+    .eq("tenant_id", tenantId)
+    .maybeSingle<{
+      id: string;
+      item: string;
+      tipo_custo: string;
+      em_save: boolean | null;
+      item_versao_id: string | null;
+      job_id: string;
+      job: {
+        status: string;
+        projeto_id: string;
+        orcamento_id: string;
+        versao_orcamento_aprovada_id: string | null;
+      };
+    }>();
+
+  if (error) {
+    console.error("[bv.contexto.job]", error.message);
+    return { error: "Não foi possível carregar o item." };
+  }
+  if (!data?.job) return { error: "Item não encontrado." };
+
+  if (data.job.status === "cancelado") {
+    return { error: "Job cancelado — o BV não pode ser alterado." };
+  }
+  const barreira = barreiraDoJob(data.job.status as JobStatus);
+  if (barreira) return { error: barreira };
+
+  // Linha em save: o serviço não acontece neste projeto, então não há
+  // fornecedor com quem negociar comissão (decisão 028 §9). No caminho da
+  // versão quem recusa é o trigger; aqui a checagem é direta porque a
+  // cópia já traz o campo.
+  if (data.em_save) {
+    return {
+      error:
+        "Linha em save não aceita BV: o serviço não acontece neste projeto.",
+    };
+  }
+
+  if (!aceitaBV(data.tipo_custo)) {
+    return { error: ERRO_TIPO_SEM_BV };
+  }
+
+  return {
+    versao_orcamento_id: data.job.versao_orcamento_aprovada_id ?? "",
+    orcamento_id: data.job.orcamento_id,
+    projeto_id: data.job.projeto_id,
+    job_id: data.job_id,
+    job_item_orcado_id: data.id,
+    item_versao_id: data.item_versao_id,
     item: data.item,
   };
 }
@@ -201,6 +307,20 @@ function revalidarAmbas(ctx: ContextoItem) {
  */
 function bvTravado(situacao: BvSituacao): boolean {
   return situacao === "confirmado" || situacao === "recebido";
+}
+
+/**
+ * De onde o BV pendura: a chave que ele gravou. Desde a decisão 073 são
+ * duas possibilidades, e `confirmarBv`/`cancelarBv` chegam pelo id do BV,
+ * não pelo do item — então a chave precisa ser derivada dele.
+ */
+function chaveDoBv(bv: {
+  item_versao_id: string | null;
+  job_item_orcado_id: string | null;
+}): ChaveItemBv | null {
+  if (bv.item_versao_id) return { espaco: "versao", id: bv.item_versao_id };
+  if (bv.job_item_orcado_id) return { espaco: "job", id: bv.job_item_orcado_id };
+  return null;
 }
 
 function mensagemTravado(situacao: BvSituacao): string {
@@ -231,7 +351,7 @@ function extractBvInput(formData: FormData) {
  * quem o move para `confirmado` é `confirmarBv`.
  */
 export async function salvarBv(
-  itemVersaoId: string,
+  chave: ChaveItemBv,
   formData: FormData,
   origem: OrigemBv = "orcamento",
   /** BV a atualizar. Ausente ⇒ lança um BV novo na linha. */
@@ -250,26 +370,30 @@ export async function salvarBv(
     };
   }
 
-  const ctx = await carregarContexto(
-    itemVersaoId,
-    session.activeTenant.id,
-    origem,
-  );
+  const ctx = await carregarContexto(chave, session.activeTenant.id, origem);
   if ("error" in ctx) return { ok: false, message: ctx.error };
 
   const supabase = createClient();
 
+  // Por qual coluna este item endereça os BVs dele. A linha da versão
+  // segue pela chave da versão — é onde os BVs antigos estão, inclusive
+  // os de antes de a cópia existir. Só a linha de errata usa a do job.
+  const colunaDoItem = ctx.item_versao_id
+    ? ("item_versao_id" as const)
+    : ("job_item_orcado_id" as const);
+  const valorDoItem = ctx.item_versao_id ?? ctx.job_item_orcado_id!;
+
   // Editando um BV específico: ele precisa existir, ser deste item e
-  // ainda estar aberto. Sem o `.eq("item_versao_id")` um id de outra
-  // linha passaria — a chave do BV é o id dele, mas quem autoriza é o
-  // item que o contexto validou.
+  // ainda estar aberto. Sem o filtro pelo item um id de outra linha
+  // passaria — a chave do BV é o id dele, mas quem autoriza é o item que
+  // o contexto validou.
   let existente: Pick<ItemBv, "id" | "situacao"> | null = null;
   if (bvId) {
     const { data } = await supabase
       .from("itens_bv")
       .select("id, situacao")
       .eq("id", bvId)
-      .eq("item_versao_id", itemVersaoId)
+      .eq(colunaDoItem, valorDoItem)
       .eq("tenant_id", session.activeTenant.id)
       .maybeSingle<Pick<ItemBv, "id" | "situacao">>();
     if (!data) return { ok: false, message: "BV não encontrado." };
@@ -286,10 +410,12 @@ export async function salvarBv(
 
   const payload = {
     tenant_id: session.activeTenant.id,
-    item_versao_id: itemVersaoId,
+    // As duas chaves, cada uma quando existe. A da versão falta na linha
+    // nascida de errata (decisão 073); a do job falta enquanto o job não
+    // nasceu. `chk_bv_tem_item` garante no banco que pelo menos uma vem.
+    ...(ctx.item_versao_id ? { item_versao_id: ctx.item_versao_id } : {}),
     // A planilha do job lê o BV por esta chave. Gravar aqui é o que
-    // impede o BV lançado no orçamento de sumir depois que o job nasce —
-    // e o `?? {}` deixa o BV pré-job em paz até a abertura preenchê-la.
+    // impede o BV lançado no orçamento de sumir depois que o job nasce.
     ...(ctx.job_item_orcado_id
       ? { job_item_orcado_id: ctx.job_item_orcado_id }
       : {}),
@@ -337,7 +463,8 @@ export async function salvarBv(
     entidadeTipo: "item_bv",
     entidadeId: salvo?.id ?? null,
     metadata: {
-      item_versao_id: itemVersaoId,
+      item_versao_id: ctx.item_versao_id,
+      job_item_orcado_id: ctx.job_item_orcado_id,
       item: ctx.item,
       valor: parsed.data.valor,
       fornecedor_id: parsed.data.fornecedor_id,
@@ -376,7 +503,9 @@ export async function confirmarBv(bvId: string): Promise<ActionResult> {
   // sempre foi.
   const { data: atual } = await supabase
     .from("itens_bv")
-    .select("id, valor, situacao, fornecedor_id, percentual_imposto, item_versao_id")
+    .select(
+      "id, valor, situacao, fornecedor_id, percentual_imposto, item_versao_id, job_item_orcado_id",
+    )
     .eq("id", bvId)
     .eq("tenant_id", session.activeTenant.id)
     .maybeSingle<
@@ -388,15 +517,16 @@ export async function confirmarBv(bvId: string): Promise<ActionResult> {
         | "fornecedor_id"
         | "percentual_imposto"
         | "item_versao_id"
+        | "job_item_orcado_id"
       >
     >();
 
-  if (!atual || atual.situacao === "cancelado" || !atual.item_versao_id) {
+  const chave = atual ? chaveDoBv(atual) : null;
+  if (!atual || atual.situacao === "cancelado" || !chave) {
     return { ok: false, message: "BV não encontrado." };
   }
 
-  const itemVersaoId = atual.item_versao_id;
-  const ctx = await carregarContexto(itemVersaoId, session.activeTenant.id, "job");
+  const ctx = await carregarContexto(chave, session.activeTenant.id, "job");
   if ("error" in ctx) return { ok: false, message: ctx.error };
 
   if (bvTravado(atual.situacao)) {
@@ -434,7 +564,8 @@ export async function confirmarBv(bvId: string): Promise<ActionResult> {
     entidadeTipo: "item_bv",
     entidadeId: atual.id,
     metadata: {
-      item_versao_id: itemVersaoId,
+      item_versao_id: ctx.item_versao_id,
+      job_item_orcado_id: ctx.job_item_orcado_id,
       item: ctx.item,
       valor: atual.valor,
       fornecedor_id: atual.fornecedor_id,
@@ -466,24 +597,25 @@ export async function cancelarBv(
 
   const { data: atual } = await supabase
     .from("itens_bv")
-    .select("id, situacao, item_versao_id")
+    .select("id, situacao, item_versao_id, job_item_orcado_id")
     .eq("id", bvId)
     .eq("tenant_id", session.activeTenant.id)
-    .maybeSingle<Pick<ItemBv, "id" | "situacao" | "item_versao_id">>();
+    .maybeSingle<
+      Pick<
+        ItemBv,
+        "id" | "situacao" | "item_versao_id" | "job_item_orcado_id"
+      >
+    >();
 
-  if (!atual || !atual.item_versao_id) {
+  const chave = atual ? chaveDoBv(atual) : null;
+  if (!atual || !chave) {
     return { ok: false, message: "BV não encontrado." };
   }
   if (bvTravado(atual.situacao)) {
     return { ok: false, message: mensagemTravado(atual.situacao) };
   }
 
-  const itemVersaoId = atual.item_versao_id;
-  const ctx = await carregarContexto(
-    itemVersaoId,
-    session.activeTenant.id,
-    origem,
-  );
+  const ctx = await carregarContexto(chave, session.activeTenant.id, origem);
   if ("error" in ctx) return { ok: false, message: ctx.error };
 
   const { data: cancelado, error } = await supabase
@@ -511,7 +643,8 @@ export async function cancelarBv(
     entidadeTipo: "item_bv",
     entidadeId: cancelado.id,
     metadata: {
-      item_versao_id: itemVersaoId,
+      item_versao_id: ctx.item_versao_id,
+      job_item_orcado_id: ctx.job_item_orcado_id,
       item: ctx.item,
       valor: cancelado.valor,
       origem,

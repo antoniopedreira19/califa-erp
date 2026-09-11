@@ -471,7 +471,10 @@ export function EditorAgregado({
 
   const adaptadorBv = React.useMemo<AdaptadorBv>(
     () => ({
-      salvar: async (itemId, formData) => {
+      salvar: async (chave, formData) => {
+        // O rascunho só usa o id: aqui a "chave" é a da linha local, e o
+        // espaço vem marcado só para o servidor saber onde procurar.
+        const itemId = chave.id;
         const alvo = acharItem(itemId);
         if (!alvo) return { ok: false, message: "Item não encontrado." };
         if (!aceitaBV(alvo.tipo_custo)) {
