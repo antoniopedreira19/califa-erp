@@ -65,9 +65,14 @@ export interface FornecedorOpcao {
  *  rascunho: lá o item ainda não tem id, e a linha em `itens_bv` só nasce
  *  no "Salvar orçamentos", depois que os itens existem. */
 export interface AdaptadorBv {
-  /** `bvId` ausente ⇒ BV novo na linha (decisão 062: vários por item). */
+  /** `chaveDoItem` é a chave do item **no espaço de quem grava**: o id em
+   *  `versoes_orcamento_itens` nas Server Actions, a chave local da linha
+   *  no rascunho. Quem chama o dialog é que sabe qual das duas é — ver a
+   *  prop `chaveDoItem`.
+   *
+   *  `bvId` ausente ⇒ BV novo na linha (decisão 062: vários por item). */
   salvar: (
-    itemId: string,
+    chaveDoItem: string,
     formData: FormData,
     bvId?: string | null,
   ) => Promise<ActionResult>;
@@ -76,9 +81,15 @@ export interface AdaptadorBv {
   aposEscrita: () => void;
 }
 
-/** O que o formulário precisa do item. `VersaoOrcamentoItem` (orçamento)
- *  e `ItemPlanilhaJob` (job) satisfazem os dois — e nos dois o `id` é o
- *  id do item na VERSÃO, que é a chave do BV. */
+/** O que o formulário precisa do item, para desenhar o cabeçalho e as
+ *  caixas de valores. `VersaoOrcamentoItem` (orçamento) e
+ *  `ItemPlanilhaJob` (job) satisfazem os dois.
+ *
+ *  **O `id` daqui NÃO é a chave do BV.** Ele significa coisas diferentes
+ *  conforme a tela — no orçamento é o item da versão, no job é a cópia em
+ *  `jobs_itens_orcado` —, e foi exatamente essa ambiguidade que deixou a
+ *  gravação do job devolvendo "Item não encontrado." (decisão 071). A
+ *  chave de gravação vem separada, na prop `chaveDoItem`. */
 export interface ItemComBv {
   id: string;
   item: string;
@@ -106,6 +117,18 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   item: ItemComBv;
+  /** A chave por onde o BV é gravado — **obrigatória e explícita**,
+   *  porque `item.id` não serve para as duas telas:
+   *
+   *  - orçamento: `versoes_orcamento_itens.id`, que é o próprio
+   *    `item.id`;
+   *  - job: `ItemPlanilhaJob.item_versao_id`, e **não** o `item.id`, que
+   *    lá é o id da cópia em `jobs_itens_orcado`;
+   *  - rascunho (com `adaptador`): a chave local da linha.
+   *
+   *  Linha de job nascida de errata tem `item_versao_id` nulo e por isso
+   *  não tem BV: a calha não oferece o botão (decisão 071). */
+  chaveDoItem: string;
   grupoNome: string;
   versaoLabel: string;
   categoriaNome: string | null;
@@ -222,6 +245,7 @@ export function BvDialog({
   open,
   onOpenChange,
   item,
+  chaveDoItem,
   grupoNome,
   versaoLabel,
   categoriaNome,
@@ -240,8 +264,8 @@ export function BvDialog({
   const acoes = React.useMemo<AdaptadorBv>(
     () =>
       adaptador ?? {
-        salvar: (itemId, formData, bvId) =>
-          salvarBv(itemId, formData, origem, bvId),
+        salvar: (chave, formData, bvId) =>
+          salvarBv(chave, formData, origem, bvId),
         cancelar: (bvId) => cancelarBv(bvId, origem),
         aposEscrita: () => router.refresh(),
       },
@@ -429,7 +453,7 @@ export function BvDialog({
 
     setErro(null);
     startTransition(async () => {
-      const res = await acoes.salvar(item.id, formData, selecionadoId);
+      const res = await acoes.salvar(chaveDoItem, formData, selecionadoId);
       if (!res.ok) {
         setErro(res.message);
         return;
@@ -472,7 +496,7 @@ export function BvDialog({
         setAskConfirmar(false);
         return;
       }
-      const salvo = await acoes.salvar(item.id, formData, selecionadoId);
+      const salvo = await acoes.salvar(chaveDoItem, formData, selecionadoId);
       if (!salvo.ok) {
         setAskConfirmar(false);
         setErro(salvo.message);

@@ -107,7 +107,7 @@ perguntas ao time durante a execução.
 | **Errata: permissão** | Liberada pra qualquer usuário nesta fase (decisão explícita do time, com intenção de travar mais tarde). Exige job em "Aberto". ⚠️ **27/08/2026:** criar linha normal e remover linha passaram a ter gate próprio (`podeEditarLinhas`), hoje aberto para todos; criar **linha vermelha** nunca terá gate. |
 | **Errata: depois de gravar** | ⚠️ **Novo em 27/08/2026** (decisão 030). Toda errata sobre job já aberto marca `jobs.abertura_em_revisao`: o job volta ao mural de abertura do financeiro e o **envio para faturamento fica fechado** até a abertura ser salva de novo. O status do job não muda. |
 | **Linha vermelha** | ⚠️ **Nova em 27/08/2026** (decisão 030). Orçado e planejado zerados (o banco cobra), só recebe realizado por PP, e é **isenta do teto do orçado** no `pp_valida_saldo_do_item`. |
-| **Chave da planilha** | ⚠️ **Mudou em 27/08/2026** (decisão 030). `ItemPlanilhaJob.id` era o id do item da VERSÃO; agora é o da **cópia do job** (`jobs_itens_orcado.id`). `jobs_itens_realizado` e `itens_bv` ganharam `job_item_orcado_id`. A linha criada por errata não existe na versão, e por isso a chave antiga não servia mais. |
+| **Chave da planilha** | ⚠️ **Mudou em 27/08/2026** (decisão 030). `ItemPlanilhaJob.id` era o id do item da VERSÃO; agora é o da **cópia do job** (`jobs_itens_orcado.id`). `jobs_itens_realizado` e `itens_bv` ganharam `job_item_orcado_id`. A linha criada por errata não existe na versão, e por isso a chave antiga não servia mais. ⚠️ **A escrita do BV ficou para trás nessa troca** e só foi consertada em 11/09/2026 (decisão 071) — ver seção 19.2. |
 | **Status do job** | "Em produção" removido — nunca separou nada. "Finalizado" virou "Encerrado". |
 | **Chat: remetente** | A área vem do **papel**, não de um toggle. No mock qualquer um escolhia, o que permitiria um GP se passar pelo financeiro. |
 | **Chat: cards automáticos** | Montados na leitura, não gravados. |
@@ -790,6 +790,22 @@ com três diferenças, todas pedidas pelo time:
 
 O item da planilha do job (`ItemPlanilhaJob.id`) **já é o id do item na
 versão**, que é a chave do BV — não houve mapeamento a fazer.
+
+> ⚠️ **Deixou de valer em 27/08/2026, e isso virou defeito
+> (2026-09-11, [decisão 071](../decisions/071-o-bv-do-job-se-grava-pelo-item-da-versao.md)).**
+> O commit `56ba52e` trocou `ItemPlanilhaJob.id` para o id da **cópia**
+> (`jobs_itens_orcado.id`) — ver a linha "Chave da planilha" na seção 2. A
+> leitura do BV foi migrada junto (`itens_bv.job_item_orcado_id`); **a
+> escrita não**. Desde aquele dia, Salvar e Confirmar na planilha do job
+> devolviam **"Item não encontrado."**, com a lista de BVs aparecendo
+> certa — e por isso **nenhum BV chegou a ser confirmado**: `confirmarBv`
+> só existe a partir do job. Corrigido: o `BvDialog` recebe a chave numa
+> prop própria e obrigatória, `chaveDoItem`, e a planilha do job passa
+> `item_versao_id`. **Linha nascida de errata não tem item de versão e
+> passou a não oferecer BV** — o botão existia mas não gravava. Ficou uma
+> pergunta de negócio em aberto: hoje são 2 linhas assim de tipo com BV
+> (JOB-0029, `A` e `AR`); se errata puder ter comissão negociada, o
+> endereçamento por `job_item_orcado_id` volta à mesa.
 
 ### 19.3 Destaque de BV sem fornecedor
 
