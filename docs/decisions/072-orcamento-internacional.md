@@ -157,17 +157,42 @@ R$ 423.016,79 pela nacional), e o Select da abertura oferece só
 "Internacional" — enquanto um job nacional segue oferecendo as sete
 categorias nacionais.
 
+## As telas do job e a errata (11/09/2026)
+
+Terceira entrega. O job passou a **ler** pela mesma cadeia com que nasce.
+
+O resultado operacional não muda com a cadeia — ele é sempre
+`principal + fee − custo` —, mas o caminho até ele sim: descontar só o
+imposto brasileiro de um valor do job que já embute as int. taxes inflava
+o resultado em exatamente o valor delas (R$ 411.962,09 em vez de
+R$ 337.138,51 no exemplo). Por isso `PainelResultado` ganhou as duas
+deduções como linhas próprias, e o prop `imposto` de `ResumoResultado`
+virou **`deducoes`**: um prop chamado `imposto` recebendo três coisas é
+como o número sai certo numa tela e errado na outra.
+
+**A errata entrou junto, e não por escopo frouxo:** a barra de errata
+mostra o delta calculado no cliente e o servidor recalcula para gravar.
+Corrigir só um lado faria o pop-up prometer um número e o banco guardar
+outro. Por isso `calcularEfeitoDaMudanca` — o efeito de UMA linha — também
+ganhou o degrau. Os **custos de transação ficam de fora dele**: são
+constante da versão, não parcela de linha, e somá-los faria cada item
+carregar o custo inteiro. `scripts/conferir-internacional.ts` §7 testa
+justamente que a soma dos efeitos fecha com o delta total.
+
+O bloco da cadeia virou `_planilha/cadeia-internacional.tsx`, compartilhado
+entre a versão do orçamento e a planilha interna do job — duas cópias
+divergiriam na primeira correção, como já aconteceu neste projeto com a
+legenda e com as cores de bloco.
+
 ## O que NÃO entrou
 
 A **abertura** do job entrou em 11/09/2026 (seção acima). Seguem nacionais,
 e a cadeia não vaza para eles porque o 4º parâmetro é opcional e ninguém lá
 o passa:
 
-- **as telas do job** — detalhe, planejado, realizado e errata. ⚠️ Hoje
-  `/jobs/[jobId]` mostra o fechamento nacional de um job cujo banco já tem
-  o internacional: R$ 423.016,79 na tela contra R$ 515.999,99 gravados. É
-  a próxima entrega;
-- **visão agregada** do projeto (orçamentos e jobs);
+- **visão agregada** do projeto (orçamentos e jobs) — os três pontos
+  passam `intTaxes={0}` e `intTransactionCosts={0}` **explicitamente**, de
+  propósito: quando a entrega chegar, o TypeScript aponta onde mexer;
 - **exportação** e **importação** em Excel.
 
 ## Decisões de tela

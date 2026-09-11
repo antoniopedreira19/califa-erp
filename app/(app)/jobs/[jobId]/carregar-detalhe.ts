@@ -5,6 +5,7 @@ import { listActiveMembers } from "@/lib/data/members";
 import { contatosDeCobrancaDoJob } from "@/lib/data/contatos-cobranca";
 import { montarThreadChat } from "@/lib/data/job-chat";
 import { montarThreadChatPPs } from "@/lib/data/job-chat-pps";
+import { configDaPlanilha } from "@/app/(app)/_planilha/modelo-planilha";
 import {
   calcularTotaisVersao,
 } from "@/lib/calculos/versao-totais";
@@ -34,6 +35,7 @@ import type {
   PedidoCompraNaLista,
   Categoria,
   ItemBv,
+  CategoriaModeloPlanilha,
 } from "@/lib/types";
 import type { ResumoEncerramento } from "./encerrar-dialog";
 import { saldoAFaturarDoJob } from "@/lib/data/saldo-a-faturar";
@@ -82,7 +84,7 @@ export async function carregarDetalheDoJob(
     supabase
       .from("jobs")
       .select(
-        "id, tenant_id, empresa_id, codigo, nome, produto, cidade, data_inicio_prevista, data_fim_prevista, data_evento, data_prevista_faturamento, observacoes, responsavel_id, produtor_id, valor_total, faturamento_previsto, faturamento_save_previsto, valor_job_abertura, faturamento_previsto_abertura, abertura_em_revisao, abertura_revisao_desde, abertura_revisao_errata_id, status, motivo_rejeicao, projeto_id, orcamento_id, versao_orcamento_aprovada_id, regional_id, categoria_id, servico_id, competencia_trimestre, competencia_ano, custo_previsto_total, nome_financeiro, data_abertura_financeiro, aberto_por, created_at, updated_at, responsavel:profiles!responsavel_id(id, nome), produtor:profiles!produtor_id(id, nome), regional:regionais(id, nome), categoria:categorias_dominio!categoria_id(id, nome), servico:categorias_dominio!servico_id(id, nome), orcamento:orcamentos(id, codigo, nome, projeto_id, servico:categorias_dominio!servico_id(id, nome)), versao:versoes_orcamento!versao_orcamento_aprovada_id(id, numero_versao, nome, moeda, percentual_honorarios, percentual_imposto), projeto:projetos(id, codigo, nome, cliente_id, data_inicio_prevista, data_fim_prevista, cliente:clientes(id, nome_fantasia))",
+        "id, tenant_id, empresa_id, codigo, nome, produto, cidade, data_inicio_prevista, data_fim_prevista, data_evento, data_prevista_faturamento, observacoes, responsavel_id, produtor_id, valor_total, faturamento_previsto, faturamento_save_previsto, valor_job_abertura, faturamento_previsto_abertura, abertura_em_revisao, abertura_revisao_desde, abertura_revisao_errata_id, status, motivo_rejeicao, projeto_id, orcamento_id, versao_orcamento_aprovada_id, regional_id, categoria_id, servico_id, competencia_trimestre, competencia_ano, custo_previsto_total, nome_financeiro, data_abertura_financeiro, aberto_por, created_at, updated_at, responsavel:profiles!responsavel_id(id, nome), produtor:profiles!produtor_id(id, nome), regional:regionais(id, nome), categoria:categorias_dominio!categoria_id(id, nome), servico:categorias_dominio!servico_id(id, nome), orcamento:orcamentos(id, codigo, nome, projeto_id, servico:categorias_dominio!servico_id(id, nome), categoria:categorias_dominio!categoria_id(modelo_planilha)), versao:versoes_orcamento!versao_orcamento_aprovada_id(id, numero_versao, nome, moeda, percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra), projeto:projetos(id, codigo, nome, cliente_id, data_inicio_prevista, data_fim_prevista, cliente:clientes(id, nome_fantasia))",
       )
       .eq("id", jobId)
       .eq("tenant_id", session.activeTenant.id)
@@ -489,7 +491,23 @@ export async function carregarDetalheDoJob(
     moeda: string;
     percentual_honorarios: number;
     percentual_imposto: number;
+    // Obrigatórios, nunca opcionais: tipo de linha estreito com campo
+    // opcional é como campo novo do servidor some calado (CLAUDE.md).
+    percentual_int_taxes: number;
+    int_transaction_costs: number;
+    moeda_estrangeira: string | null;
+    cambio_compra: number | null;
   };
+
+  // Qual fechamento este job usa. Sai da categoria do ORÇAMENTO que o
+  // originou, nunca da do job (decisão 072): a do job classifica para o
+  // financeiro, e mexer nela não pode mover um `valor_job_abertura` que
+  // está congelado.
+  const planilha = configDaPlanilha(
+    (raw.orcamento as { categoria?: { modelo_planilha?: string } } | null)
+      ?.categoria?.modelo_planilha as CategoriaModeloPlanilha | undefined,
+    versaoAprovada,
+  );
 
   const transicoes = JOB_STATUS_TRANSICOES[raw.status as JobStatus];
 
@@ -577,6 +595,7 @@ export async function carregarDetalheDoJob(
     itens,
     Number(versaoAprovada.percentual_honorarios),
     Number(versaoAprovada.percentual_imposto),
+    planilha.internacional,
   );
   // Passa pelos blocos com BV, e não pela soma crua das colunas: em `A` e
   // `D` o realizado é o ORÇADO (eles não geram PP e ficam em zero na
@@ -873,6 +892,10 @@ export async function carregarDetalheDoJob(
     jobsDoProjeto,
     abertoPorNome,
     competencias,
+    // Qual fechamento este job usa — as telas que montam `versao` à mão
+    // precisam dele para o card de Totais e para a barra de errata
+    // (decisão 072).
+    modeloPlanilha: planilha.modeloPlanilha,
     totaisJob,
     custoPlanejadoJob,
     custoRealizadoJob,

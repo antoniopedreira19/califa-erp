@@ -19,7 +19,10 @@ import type {
   ItemPlanilhaJob,
   JobItemRealizado,
   VersaoOrcamentoGrupo,
+  CategoriaModeloPlanilha,
 } from "@/lib/types";
+import type { ParametrosInternacionais } from "@/lib/calculos/versao-totais";
+import type { MoedaEstrangeira } from "@/app/(app)/_planilha/moeda-estrangeira";
 import { VISAO_BV_PADRAO, type VisaoBv } from "@/lib/calculos/bv-planilha";
 import { ChaveBrutoLiquido } from "@/app/(app)/_planilha/chave-bruto-liquido";
 import {
@@ -51,6 +54,12 @@ interface Props {
   moeda: string;
   percentualHonorarios: number;
   percentualImposto: number;
+  /** Qual fechamento este job usa — da categoria do ORÇAMENTO que o
+   *  originou (decisão 072). Obrigatórios e anuláveis: quem monta a
+   *  conferência tem que dizer, e não deixar um default responder. */
+  modeloPlanilha: CategoriaModeloPlanilha;
+  internacional: ParametrosInternacionais | null;
+  moedaEstrangeira: MoedaEstrangeira | null;
 }
 
 export function PlanilhaConferencia({
@@ -68,6 +77,9 @@ export function PlanilhaConferencia({
   moeda,
   percentualHonorarios,
   percentualImposto,
+  modeloPlanilha,
+  internacional,
+  moedaEstrangeira,
 }: Props) {
   const [visao, setVisao] = React.useState<VisaoBv>(VISAO_BV_PADRAO);
   const temSave = Object.keys(savePorItem).length > 0;
@@ -151,6 +163,9 @@ export function PlanilhaConferencia({
         percentualHonorarios={percentualHonorarios}
         percentualImposto={percentualImposto}
         moeda={moeda}
+        modeloPlanilha={modeloPlanilha}
+        internacional={internacional}
+        moedaEstrangeira={moedaEstrangeira}
       />
     </>
   );

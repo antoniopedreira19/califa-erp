@@ -27,7 +27,8 @@ import {
   calcularTotaisVersao,
   type ItemParaTotais,
 } from "@/lib/calculos/versao-totais";
-import type { TipoCusto } from "@/lib/types";
+import type { CategoriaModeloPlanilha, TipoCusto } from "@/lib/types";
+import { configDaPlanilha } from "@/app/(app)/_planilha/modelo-planilha";
 
 export type ActionResult =
   | { ok: true }
@@ -74,7 +75,7 @@ export async function registrarErrataDeSave(
   const { data: job, error: jobErr } = await supabase
     .from("jobs")
     .select(
-      "id, status, data_abertura_financeiro, versao:versoes_orcamento!jobs_versao_orcamento_aprovada_id_fkey(percentual_honorarios, percentual_imposto)",
+      "id, status, data_abertura_financeiro, versao:versoes_orcamento!jobs_versao_orcamento_aprovada_id_fkey(percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra), orcamento:orcamentos(categoria:categorias_dominio!categoria_id(modelo_planilha))",
     )
     .eq("id", jobId)
     .eq("tenant_id", tenantId)
@@ -82,7 +83,21 @@ export async function registrarErrataDeSave(
       id: string;
       status: string;
       data_abertura_financeiro: string | null;
-      versao: { percentual_honorarios: number; percentual_imposto: number } | null;
+      versao:
+        | {
+            percentual_honorarios: number;
+            percentual_imposto: number;
+            // Da cadeia internacional (decisão 072). Obrigatórios dentro do
+            // objeto: campo opcional aqui é campo que some calado.
+            percentual_int_taxes: number;
+            int_transaction_costs: number;
+            moeda_estrangeira: string | null;
+            cambio_compra: number | null;
+          }
+        | null;
+      orcamento: {
+        categoria: { modelo_planilha: CategoriaModeloPlanilha } | null;
+      } | null;
     }>();
 
   if (jobErr || !job) {
@@ -102,6 +117,17 @@ export async function registrarErrataDeSave(
 
   const pctHonorarios = Number(job.versao?.percentual_honorarios ?? 0);
   const pctImposto = Number(job.versao?.percentual_imposto ?? 0);
+  // A cadeia vem da categoria do ORÇAMENTO (decisão 072). Sem versão
+  // legível o fechamento cai no nacional, que é o degrau seguro.
+  const planilha = configDaPlanilha(
+    job.orcamento?.categoria?.modelo_planilha,
+    job.versao ?? {
+      percentual_int_taxes: 0,
+      int_transaction_costs: 0,
+      moeda_estrangeira: null,
+      cambio_compra: null,
+    },
+  );
 
   const [itensRes, grupoRes] = await Promise.all([
     supabase
@@ -174,11 +200,13 @@ export async function registrarErrataDeSave(
     itens.map((i) => paraTotais(i, false)),
     pctHonorarios,
     pctImposto,
+    planilha.internacional,
   );
   const depois = calcularTotaisVersao(
     itens.map((i) => paraTotais(i, true)),
     pctHonorarios,
     pctImposto,
+    planilha.internacional,
   );
 
   // Nada mudou de verdade: não vale um registro no histórico.

@@ -472,6 +472,8 @@ export function TotaisProjetoCard({ linhas, moeda, descricao }: Props) {
         <PainelResultado
           valorJob={valorJob}
           imposto={imposto}
+          intTaxes={0}
+          intTransactionCosts={0}
           orcado={totalOrcadoRentabilidade}
           custoPlanejado={totalPlanejado}
           custoRealizado={0}

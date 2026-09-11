@@ -184,7 +184,7 @@ export default async function ProjetoNoFinanceiroPage({
             <div className="mt-[24px]">
               <ResumoResultado
                 valorJob={resumo.valorJob}
-                imposto={resumo.imposto}
+                deducoes={resumo.imposto}
                 custoPlanejado={resumo.planejado}
                 custoRealizado={resumo.realizado}
                 bvRealizado={resumo.bvRealizado}

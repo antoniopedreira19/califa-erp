@@ -25,6 +25,7 @@ import type {
   Fornecedor,
   Empresa,
   ItemBv,
+  CategoriaModeloPlanilha,
 } from "@/lib/types";
 import { VISAO_BV_PADRAO, type VisaoBv } from "@/lib/calculos/bv-planilha";
 import { useRouter } from "next/navigation";
@@ -64,6 +65,7 @@ import { ErrataBarra } from "./errata-barra";
 import { ErrataConfirmarDialog } from "./errata-confirmar-dialog";
 import { registrarErrata } from "./actions-errata";
 import { calcularTotaisVersao } from "@/lib/calculos/versao-totais";
+import { configDaPlanilha } from "@/app/(app)/_planilha/modelo-planilha";
 import { definirModoErrata } from "../modo-errata";
 
 interface Props {
@@ -79,7 +81,23 @@ interface Props {
     | "empresa_id"
     | "responsavel_id"
   >;
-  versao: Pick<VersaoOrcamento, "id" | "numero_versao" | "moeda" | "percentual_honorarios" | "percentual_imposto">;
+  versao: Pick<
+    VersaoOrcamento,
+    | "id"
+    | "numero_versao"
+    | "moeda"
+    | "percentual_honorarios"
+    | "percentual_imposto"
+    // Da cadeia internacional (decisão 072). Vêm do `Pick`, e não escritos
+    // à mão, para o tipo acompanhar `VersaoOrcamento` sozinho.
+    | "percentual_int_taxes"
+    | "int_transaction_costs"
+    | "moeda_estrangeira"
+    | "cambio_compra"
+  >;
+  /** Qual fechamento este job usa — da categoria do ORÇAMENTO que o
+   *  originou, nunca da do job (decisão 072). */
+  modeloPlanilha: CategoriaModeloPlanilha;
   /** "Nome do Job" do orçamento — base do nome da versão. */
   nomeJob: string;
   grupos: VersaoOrcamentoGrupo[];
@@ -138,8 +156,16 @@ export function JobRealizadoSection({
   savePorItem,
   saldosDeSave,
   clienteNome,
+  modeloPlanilha,
 }: Props) {
   const router = useRouter();
+
+  // Um só lugar decide como este job fecha — o mesmo objeto vai para a
+  // barra de errata e para o card de Totais, que não podem discordar.
+  const planilha = React.useMemo(
+    () => configDaPlanilha(modeloPlanilha, versao),
+    [modeloPlanilha, versao],
+  );
   // Uma chave para a página inteira. Abre em Bruto: é a tela de sempre,
   // e quem não lida com BV nunca precisa saber que a outra existe.
   const [visao, setVisao] = React.useState<VisaoBv>(VISAO_BV_PADRAO);
@@ -204,8 +230,13 @@ export function JobRealizadoSection({
         })),
         versao.percentual_honorarios,
         versao.percentual_imposto,
+        planilha.internacional,
       ),
-    [versao.percentual_honorarios, versao.percentual_imposto],
+    [
+      versao.percentual_honorarios,
+      versao.percentual_imposto,
+      planilha.internacional,
+    ],
   );
 
   const totaisAntes = React.useMemo(() => paraTotais(itens), [paraTotais, itens]);
@@ -525,6 +556,9 @@ export function JobRealizadoSection({
             percentualHonorarios={versao.percentual_honorarios}
             percentualImposto={versao.percentual_imposto}
             moeda={versao.moeda}
+            modeloPlanilha={modeloPlanilha}
+            internacional={planilha.internacional}
+            moedaEstrangeira={planilha.moedaEstrangeira}
           />
         </>
       )}

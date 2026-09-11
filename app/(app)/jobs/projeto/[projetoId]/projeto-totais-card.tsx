@@ -499,6 +499,8 @@ export function ProjetoTotaisCard({
         <PainelResultado
           valorJob={valorJob}
           imposto={imposto}
+          intTaxes={0}
+          intTransactionCosts={0}
           orcado={totalOrcadoRentabilidade}
           custoPlanejado={totalPlanejado}
           custoRealizado={totalRealizado}

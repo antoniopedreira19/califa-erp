@@ -10,13 +10,19 @@ import {
   MENSAGEM_JA_ENVIADO,
   jobJaEnviadoParaFaturamento,
 } from "@/lib/data/envio-faturamento";
+import { configDaPlanilha } from "@/app/(app)/_planilha/modelo-planilha";
 import {
   calcularTotaisVersao,
   calcularEfeitoDaMudanca,
   TIPOS_CUSTO,
   aceitaBV,
 } from "@/lib/calculos/versao-totais";
-import type { TipoCusto, JobStatus, ErrataAcao } from "@/lib/types";
+import type {
+  TipoCusto,
+  JobStatus,
+  ErrataAcao,
+  CategoriaModeloPlanilha,
+} from "@/lib/types";
 import { jobAceitaAcoesPlanilha } from "@/lib/types";
 
 type Ok = { ok: true; errataId: string };
@@ -407,7 +413,12 @@ export async function registrarErrata(
   // ---- Percentuais vêm da versão aprovada, que não muda por errata ----
   const { data: versao, error: versaoErr } = await supabase
     .from("versoes_orcamento")
-    .select("id, percentual_honorarios, percentual_imposto")
+    // Os quatro últimos são da cadeia internacional (decisão 072): a
+    // errata GRAVA faturamento e valor do job, então errar aqui é erro no
+    // banco, não na tela.
+    .select(
+      "id, percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra, orcamento:orcamentos!inner(categoria:categorias_dominio!categoria_id(modelo_planilha))",
+    )
     .eq("id", job.versao_orcamento_aprovada_id)
     .eq("tenant_id", session.activeTenant.id)
     .maybeSingle();
@@ -418,6 +429,14 @@ export async function registrarErrata(
 
   const pctHonorarios = Number(versao.percentual_honorarios ?? 0);
   const pctImposto = Number(versao.percentual_imposto ?? 0);
+  // Quem decide a cadeia é a categoria do ORÇAMENTO (decisão 072).
+  const planilha = configDaPlanilha(
+    (versao as { orcamento?: { categoria?: { modelo_planilha?: string } } })
+      .orcamento?.categoria?.modelo_planilha as
+      | CategoriaModeloPlanilha
+      | undefined,
+    versao as never,
+  );
 
   // Depois do envio o valor da nota está congelado: mexer no orçado agora
   // faria a nota sair por um número que não é mais o do job (27/08/2026).
@@ -458,7 +477,14 @@ export async function registrarErrata(
   const efeitoDe = (
     de: { total: number; tipoCusto: TipoCusto },
     para: { total: number; tipoCusto: TipoCusto },
-  ) => calcularEfeitoDaMudanca(de, para, pctHonorarios, pctImposto);
+  ) =>
+    calcularEfeitoDaMudanca(
+      de,
+      para,
+      pctHonorarios,
+      pctImposto,
+      planilha.internacional,
+    );
 
   const mudancas: Mudanca[] = [];
 
@@ -731,6 +757,7 @@ export async function registrarErrata(
     })),
     pctHonorarios,
     pctImposto,
+    planilha.internacional,
   );
 
   const alteradasPorId = new Map(
@@ -767,6 +794,7 @@ export async function registrarErrata(
     ],
     pctHonorarios,
     pctImposto,
+    planilha.internacional,
   );
 
   // ---- Grava a errata ----

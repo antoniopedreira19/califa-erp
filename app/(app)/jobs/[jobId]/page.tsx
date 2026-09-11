@@ -208,7 +208,7 @@ export default async function JobDetailPage({
             <div className="mt-[27px]">
               <ResumoResultado
                 valorJob={totaisJob.valorJob}
-                imposto={totaisJob.imposto}
+                deducoes={totaisJob.deducoesDoResultado}
                 custoPlanejado={custoPlanejadoJob}
                 custoRealizado={custoRealizadoJob}
                 bvRealizado={bvRealizadoJob}
@@ -352,7 +352,18 @@ export default async function JobDetailPage({
               moeda: versaoAprovada.moeda,
               percentual_honorarios: Number(versaoAprovada.percentual_honorarios),
               percentual_imposto: Number(versaoAprovada.percentual_imposto),
+              percentual_int_taxes: Number(versaoAprovada.percentual_int_taxes ?? 0),
+              int_transaction_costs: Number(
+                versaoAprovada.int_transaction_costs ?? 0,
+              ),
+              moeda_estrangeira: versaoAprovada.moeda_estrangeira ?? null,
+              cambio_compra:
+                versaoAprovada.cambio_compra === null ||
+                versaoAprovada.cambio_compra === undefined
+                  ? null
+                  : Number(versaoAprovada.cambio_compra),
             }}
+            modeloPlanilha={detalhe.modeloPlanilha}
             grupos={grupos}
             itens={itens}
             realizadosMap={realizadosMap}

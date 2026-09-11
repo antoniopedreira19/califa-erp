@@ -640,9 +640,9 @@ export function calcularEfeitoDaMudanca(
   para: EstadoItemErrata,
   percentualHonorarios: number,
   percentualImposto: number,
+  internacional?: ParametrosInternacionais | null,
 ): { faturamentoPrevisto: number; valorJob: number } {
   const h = percentualHonorarios / 100;
-  const taxa = Math.max(0, Math.min(0.9999, percentualImposto / 100));
 
   const bDe = basesDoEstado(de);
   const bPara = basesDoEstado(para);
@@ -651,14 +651,30 @@ export function calcularEfeitoDaMudanca(
     (REGRAS_TIPO_CUSTO[para.tipoCusto]?.[lever] ? bPara[lado] : 0) -
     (REGRAS_TIPO_CUSTO[de.tipoCusto]?.[lever] ? bDe[lado] : 0);
 
+  // ⚠️ Os custos de transação NÃO entram aqui, nem quando `internacional`
+  // vem preenchido: eles são uma constante da versão, não uma parcela de
+  // linha. Somá-los faria cada item da errata carregar o custo inteiro, e
+  // a soma dos efeitos deixaria de fechar com o delta total.
   const fechar = (
     lado: "faturamento" | "job",
     leverPrincipal: keyof RegraTipoCusto,
   ) => {
     const deltaHonorarios = delta(lado, "honorarios") * h;
-    const deltaBaseImposto = delta(lado, "imposto") + deltaHonorarios;
-    const deltaImposto = taxa > 0 ? (deltaBaseImposto * taxa) / (1 - taxa) : 0;
-    return delta(lado, leverPrincipal) + deltaHonorarios + deltaImposto;
+    const deltaIntTaxes = internacional
+      ? grossUp(
+          delta(lado, "imposto") + deltaHonorarios,
+          internacional.percentualIntTaxes,
+        )
+      : 0;
+    const deltaBaseImposto =
+      delta(lado, "imposto") + deltaHonorarios + deltaIntTaxes;
+    const deltaImposto = grossUp(deltaBaseImposto, percentualImposto);
+    return (
+      delta(lado, leverPrincipal) +
+      deltaHonorarios +
+      deltaIntTaxes +
+      deltaImposto
+    );
   };
 
   return {
@@ -688,12 +704,14 @@ export function receitaDeFaturamentoDaLinha(
   tipoCusto: TipoCusto,
   percentualHonorarios: number,
   percentualImposto: number,
+  internacional?: ParametrosInternacionais | null,
 ): number {
   return calcularEfeitoDaMudanca(
     { total: 0, tipoCusto },
     { total, tipoCusto },
     percentualHonorarios,
     percentualImposto,
+    internacional,
   ).faturamentoPrevisto;
 }
 
