@@ -4834,3 +4834,46 @@ desenhada pelo mesmo `components/chat/thread-pps.tsx`.
 138px mostrando "PP emitida · PP-00030 · MARCELA FERREIRA DE SOUSA PAES ·
 R$ 2.000,00"; expandido vai a 249px e acrescenta a descrição, o prazo de
 pagamento e quem emitiu.
+
+## ✅ Teste ponta a ponta da reforma da PP — 11/09/2026
+
+Feito no `0-0001/26 · Projeto Teste`, JOB-0029, pelos fluxos reais da tela,
+com a **Conta Teste** na baixa. Cobre as três entregas: o carimbo de Custo
+Operacional (068), o pop-up de aprovação e a tela com dossiê, e a
+auditoria dos documentos (070).
+
+**O caminho, na ordem em que foi percorrido:**
+
+1. **Anexo** — PP-00024 estava `gerada` e sem NF; o painel do item trazia
+   "Anexe a NF antes de enviar" com o botão travado. Anexei um PDF pela
+   tela, e o anexo gravou (437 bytes).
+2. **Envio** — o botão destravou e a PP foi para `em avaliação`.
+3. **A tela nova** — clicar na linha em Contas a Pagar abriu a tela cheia
+   com os três painéis: pedido, o anexo recém-enviado (legenda
+   `nota-fiscal-teste-001.pdf`) e o dossiê com origem no job e histórico.
+4. **Aprovação pelo pop-up** — `z-[60]` sobre a tela, data 25/09/2026
+   escolhida no calendário, aprovada.
+5. **O que foi gravado:** status `aprovada`; tipo **02 · Custo
+   Operacional** com **subtipo nulo**; parcela reagendada para 25/09; e
+   `anexos_na_aprovacao` com `[{nome: "nota-fiscal-teste-001.pdf",
+   tamanho_bytes: 437}]`.
+6. **O histórico na tela** — "Emitida · Enviada ao financeiro · Aprovada",
+   cada uma com data e pessoa, e o quadro "Documentos na aprovação"
+   mostrando o arquivo conferido. Rodapé sem ações, porque a PP saiu da
+   avaliação.
+7. **Baixa** — o diálogo abriu com **"02 · Custo Operacional" já
+   preenchido** e o subtipo em aberto, exatamente como a decisão 068
+   previu. Escolhi Conta Teste, PIX e o subtipo 999.
+8. **O lançamento:** PP `pago`, conta **Conta Teste**, forma `pix`, tipo
+   `02`, subtipo `999`, R$ 4.000,00.
+
+⚠️ **O que NÃO foi exercitado:** o estado `[]` de `anexos_na_aprovacao` —
+"aprovada sem documento nenhum". Ele só nasce numa PP de verba de
+produção, que é a única que envia sem NF; cheguei a montar uma no painel
+do item e desisti no formulário, cancelando sem gerar (nenhuma PP órfã
+ficou no banco). O caminho que grava é o mesmo que acabou de gravar a
+lista — `(anexos ?? []).map(...)` devolve `[]` quando não há anexo —, mas
+o ramo da tela que escreve "Aprovada sem nenhum documento anexado" segue
+sem ter rodado com dado real.
+
+`tsc`, `next lint` e `npm run build` limpos.
