@@ -37,6 +37,9 @@ function mapDbError(msg: string): string {
     // falar em empresa aqui já não descreve nada (09/09/2026).
     return "Já existe uma conta bancária com esse identificador.";
   }
+  if (msg.includes("empresa_contabil_id")) {
+    return "Empresa contábil inválida.";
+  }
   return "Não foi possível salvar a conta bancária.";
 }
 
@@ -55,6 +58,7 @@ export async function criarContaBancaria(
   }
 
   const parsed = contaBancariaSchema.safeParse({
+    empresa_contabil_id: formData.get("empresa_contabil_id")?.toString() ?? "",
     nome: formData.get("nome")?.toString() ?? "",
     banco: formData.get("banco")?.toString() ?? "",
     agencia: formData.get("agencia")?.toString() ?? "",
@@ -83,6 +87,7 @@ export async function criarContaBancaria(
       // Sem `empresa_id`: a conta não é de uma empresa (decisão de
       // 29/08/2026). A coluna segue nullable como vestígio, preenchida só
       // pelo trigger da conta-espelho do cartão.
+      empresa_contabil_id: d.empresa_contabil_id,
       nome: d.nome,
       banco: d.banco,
       agencia: d.agencia || null,
@@ -130,6 +135,7 @@ export async function editarContaBancaria(
   }
 
   const parsed = contaBancariaSchema.safeParse({
+    empresa_contabil_id: formData.get("empresa_contabil_id")?.toString() ?? "",
     nome: formData.get("nome")?.toString() ?? "",
     banco: formData.get("banco")?.toString() ?? "",
     agencia: formData.get("agencia")?.toString() ?? "",
@@ -199,6 +205,7 @@ export async function editarContaBancaria(
     .update({
       // `empresa_id` fica de fora: quem já tinha, mantém o registro
       // histórico; quem nasceu sem, continua sem.
+      empresa_contabil_id: d.empresa_contabil_id,
       nome: d.nome,
       banco: d.banco,
       agencia: d.agencia || null,

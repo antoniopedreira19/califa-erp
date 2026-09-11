@@ -1897,6 +1897,26 @@ export interface DocumentoDoAnexo {
 export const PP_ANEXO_TAMANHO_MAX_BYTES = 8 * 1024 * 1024;
 export const PP_ANEXOS_TAMANHO_TOTAL_MAX_BYTES = 25 * 1024 * 1024;
 
+// ---------- Empresas contábeis (PJ real por CNPJ) ----------
+
+/**
+ * Pessoa jurídica contábil. Distinta de `empresas` (gerencial): a
+ * California tem 3 PJs contábeis (California LTDA, Hitlab LTDA, GoCrazy
+ * LTDA) que não batem 1:1 com as empresas gerenciais.
+ *
+ * Toda conta bancária pertence a uma PJ contábil (obrigatório).
+ */
+export interface EmpresaContabil {
+  id: string;
+  tenant_id: string;
+  razao_social: string;
+  nome_fantasia: string | null;
+  cnpj: string; // sempre 14 dígitos, sem máscara
+  ativo: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 // ---------- Task 011: contas_bancarias (lançamentos_financeiros) ----------
 
 export type TipoContaBancaria =
@@ -1916,6 +1936,8 @@ export const tipoContaBancariaLabel = (t: TipoContaBancaria): string =>
 export interface ContaBancaria {
   id: string;
   tenant_id: string;
+  /** PJ contábil (CNPJ) dona da conta. Obrigatório. */
+  empresa_contabil_id: string;
   /**
    * VESTÍGIO (09/09/2026), mantido para o caso de a agência voltar a
    * dividir contas por empresa. A conta NÃO pertence a uma empresa: paga
