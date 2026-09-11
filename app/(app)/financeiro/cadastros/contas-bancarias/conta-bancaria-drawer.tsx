@@ -23,11 +23,13 @@ import {
 import { DatePicker } from "@/components/ui/date-picker";
 import { criarContaBancaria, editarContaBancaria } from "./actions";
 import type { ContaBancaria } from "@/lib/types";
+import type { EmpresaContabilSumario } from "./types";
 
 type Props =
   | {
       mode: "criar";
       trigger?: React.ReactNode;
+      empresasContabeis: EmpresaContabilSumario[];
     }
   | {
       mode: "editar";
@@ -36,6 +38,7 @@ type Props =
       trigger?: React.ReactNode;
       open?: boolean;
       onOpenChange?: (open: boolean) => void;
+      empresasContabeis: EmpresaContabilSumario[];
     };
 
 export function ContaBancariaDrawer(props: Props) {
@@ -49,10 +52,14 @@ export function ContaBancariaDrawer(props: Props) {
   const isEditar = props.mode === "editar";
   const conta = isEditar ? props.conta : undefined;
   const hasLancamentos = isEditar ? (props as any).hasLancamentos ?? false : false;
+  const empresasContabeis = props.empresasContabeis;
 
   // Sem estado de empresa: a conta não pertence a uma empresa (decisão de
   // 29/08/2026, aplicada ao cadastro em 09/09/2026). Ver
   // `lib/validations/contas-bancarias.ts`.
+  const [empresaContabilId, setEmpresaContabilId] = React.useState<string>(
+    conta?.empresa_contabil_id ?? "",
+  );
   const [tipo, setTipo] = React.useState<string>(conta?.tipo ?? "");
 
   const isControlled =
@@ -63,9 +70,11 @@ export function ContaBancariaDrawer(props: Props) {
   // Resetar selects ao abrir em modo editar
   React.useEffect(() => {
     if (open && isEditar && conta) {
+      setEmpresaContabilId(conta.empresa_contabil_id);
       setTipo(conta.tipo);
     }
     if (open && !isEditar) {
+      setEmpresaContabilId("");
       setTipo("");
     }
   }, [open, isEditar, conta]);
@@ -84,6 +93,7 @@ export function ContaBancariaDrawer(props: Props) {
     setFieldErrors({});
     const formData = new FormData(e.currentTarget);
     // Injetar valores dos selects controlados
+    formData.set("empresa_contabil_id", empresaContabilId);
     formData.set("tipo", tipo);
 
     startTransition(async () => {
@@ -212,6 +222,28 @@ export function ContaBancariaDrawer(props: Props) {
                   </p>
                 ))}
               </div>
+            </div>
+
+            {/* Empresa contábil */}
+            <div className="space-y-2">
+              <Label htmlFor="empresa_contabil_id">Empresa contábil *</Label>
+              <Select value={empresaContabilId} onValueChange={setEmpresaContabilId} required>
+                <SelectTrigger id="empresa_contabil_id">
+                  <SelectValue placeholder="Selecione a PJ dona da conta" />
+                </SelectTrigger>
+                <SelectContent>
+                  {empresasContabeis.map((e) => (
+                    <SelectItem key={e.id} value={e.id}>
+                      {e.nome_fantasia ?? e.razao_social}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {fieldErrors.empresa_contabil_id?.map((msg, i) => (
+                <p key={i} className="text-xs text-california-red">
+                  {msg}
+                </p>
+              ))}
             </div>
 
             {/* Tipo */}

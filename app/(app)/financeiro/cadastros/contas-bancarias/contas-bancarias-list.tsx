@@ -17,6 +17,7 @@ import { tipoContaBancariaLabel } from "@/lib/types";
 import { formatCurrency } from "@/lib/utils";
 import { ContaBancariaDrawer } from "./conta-bancaria-drawer";
 import { inativarContaBancaria, reativarContaBancaria } from "./actions";
+import type { EmpresaContabilSumario } from "./types";
 
 type StatusFiltro = "ativas" | "inativas" | "todas";
 
@@ -29,9 +30,11 @@ function formatDataBR(iso: string): string {
 export function ContasBancariasList({
   contas,
   canEdit,
+  empresasContabeis,
 }: {
   contas: ContaBancaria[];
   canEdit: boolean;
+  empresasContabeis: EmpresaContabilSumario[];
 }) {
   const router = useRouter();
   const [busca, setBusca] = React.useState("");
@@ -42,6 +45,11 @@ export function ContasBancariasList({
     conta: ContaBancaria;
     acao: "inativar" | "reativar";
   } | null>(null);
+
+  const empresaContabilMap = React.useMemo(
+    () => new Map(empresasContabeis.map((e) => [e.id, e.nome_fantasia ?? e.razao_social])),
+    [empresasContabeis],
+  );
 
   const filtered = React.useMemo(() => {
     const q = busca.trim().toLowerCase();
@@ -105,7 +113,7 @@ export function ContasBancariasList({
           </Select>
         </div>
         {canEdit && (
-          <ContaBancariaDrawer mode="criar" />
+          <ContaBancariaDrawer mode="criar" empresasContabeis={empresasContabeis} />
         )}
       </div>
 
@@ -124,6 +132,7 @@ export function ContasBancariasList({
               <tr>
                 <th className="px-4 py-3 text-left font-medium text-muted-foreground">Nome</th>
                 <th className="px-4 py-3 text-left font-medium text-muted-foreground">Banco</th>
+                <th className="px-4 py-3 text-left font-medium text-muted-foreground">Contábil</th>
                 <th className="px-4 py-3 text-left font-medium text-muted-foreground w-40">Ag / Conta</th>
                 <th className="px-4 py-3 text-right font-medium text-muted-foreground w-40">Saldo inicial</th>
                 <th className="px-4 py-3 text-left font-medium text-muted-foreground w-32">Data start</th>
@@ -143,6 +152,9 @@ export function ContasBancariasList({
                     <div className="text-xs text-muted-foreground">{tipoContaBancariaLabel(c.tipo)}</div>
                   </td>
                   <td className="px-4 py-3">{c.banco}</td>
+                  <td className="px-4 py-3 text-muted-foreground">
+                    {empresaContabilMap.get(c.empresa_contabil_id) ?? "—"}
+                  </td>
                   <td className="px-4 py-3 text-muted-foreground">{agConta(c)}</td>
                   <td className="px-4 py-3 text-right tabular-nums">
                     {formatCurrency(Number(c.saldo_inicial))}
@@ -196,6 +208,7 @@ export function ContasBancariasList({
           onOpenChange={(next) => {
             if (!next) setEditando(null);
           }}
+          empresasContabeis={empresasContabeis}
         />
       )}
 
