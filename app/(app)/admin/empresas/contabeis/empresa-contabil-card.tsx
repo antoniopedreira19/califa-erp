@@ -36,7 +36,7 @@ export function EmpresaContabilCard({ empresa }: Props) {
   return (
     <div
       className={cn(
-        "rounded-2xl border border-border bg-card shadow-soft overflow-hidden",
+        "relative rounded-2xl border border-border bg-card shadow-soft",
         !empresa.ativo && "opacity-70",
       )}
     >
@@ -89,7 +89,7 @@ export function EmpresaContabilCard({ empresa }: Props) {
 
           {menu && (
             <div
-              className="absolute right-0 top-full mt-1 z-10 min-w-[180px] rounded-lg border border-border bg-white p-1 shadow-lg"
+              className="absolute right-0 top-full mt-1 z-50 min-w-[180px] rounded-lg border border-border bg-white p-1 shadow-lg"
               onMouseLeave={() => setMenu(false)}
             >
               <MenuItem
