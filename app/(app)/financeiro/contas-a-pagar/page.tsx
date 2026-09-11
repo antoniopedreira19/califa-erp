@@ -87,6 +87,7 @@ export default async function PedidosCompraFinanceiroPage({
         fornecedor_pix_tipo, fornecedor_pix_chave,
         cancelada_em, motivo_cancelamento,
         rejeitada_em, motivo_rejeicao, pago_em, verba_producao,
+        enviada_financeiro_em, aprovada_em, anexos_na_aprovacao,
         forma_pagamento, cartao_credito_id,
         fornecedor:fornecedores(id, nome, razao_social),
         responsavel:profiles!responsavel_verba_id(id, nome),
@@ -95,6 +96,8 @@ export default async function PedidosCompraFinanceiroPage({
         emitida_por_profile:profiles!emitida_por(nome),
         rejeitada_por_profile:profiles!rejeitada_por(nome),
         pago_por_profile:profiles!pago_por(nome),
+        aprovada_por_profile:profiles!aprovada_por(nome),
+        enviada_por_profile:profiles!enviada_financeiro_por(nome),
         job:jobs(
           id, codigo, nome, regional_id,
           projeto:projetos(codigo, nome, cliente:clientes(nome_fantasia))
@@ -405,6 +408,15 @@ export default async function PedidosCompraFinanceiroPage({
     cancelada_por_profile: { nome: string } | null;
     emitida_por_profile: { nome: string } | null;
     rejeitada_por_profile: { nome: string } | null;
+    enviada_financeiro_em: string | null;
+    aprovada_em: string | null;
+    anexos_na_aprovacao: Array<{
+      id: string;
+      nome: string;
+      tamanho_bytes: number;
+    }> | null;
+    aprovada_por_profile: { nome: string } | null;
+    enviada_por_profile: { nome: string } | null;
     pago_por_profile: { nome: string } | null;
     job: {
       id: string;
@@ -452,6 +464,15 @@ export default async function PedidosCompraFinanceiroPage({
     rejeitada_por_nome: r.rejeitada_por_profile?.nome ?? null,
     pago_em: r.pago_em,
     pago_por_nome: r.pago_por_profile?.nome ?? null,
+    // Linha do tempo da PP, para a seção "Histórico" do dossiê. O
+    // `anexos_na_aprovacao` distingue TRÊS coisas que não podem virar uma
+    // só: `null` (aprovada antes de 11/09/2026, sem registro), `[]`
+    // (aprovada sem documento) e a lista do que foi conferido.
+    enviada_financeiro_em: r.enviada_financeiro_em ?? null,
+    enviada_financeiro_por_nome: r.enviada_por_profile?.nome ?? null,
+    aprovada_em: r.aprovada_em ?? null,
+    aprovada_por_nome: r.aprovada_por_profile?.nome ?? null,
+    anexos_na_aprovacao: r.anexos_na_aprovacao ?? null,
     fornecedor_id: r.fornecedor?.id ?? "",
     fornecedor_nome: r.fornecedor?.razao_social ?? r.fornecedor?.nome ?? "",
     /**

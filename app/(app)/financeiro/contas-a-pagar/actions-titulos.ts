@@ -234,11 +234,45 @@ export async function aprovarPPComData(input: unknown): Promise<Result> {
     };
   }
 
+  /**
+   * A foto dos documentos conferidos (11/09/2026).
+   *
+   * Lida ANTES de aprovar, para registrar o que estava na tela na hora da
+   * decisão. Lista vazia é informação, não ausência dela: significa
+   * "aprovada sem documento nenhum" — o único registro que nenhuma outra
+   * tabela guarda, já que PP aprovada trava e o anexo não muda mais.
+   *
+   * Falha aqui não impede a aprovação: perder o registro de auditoria é
+   * ruim, travar o financeiro por causa dele é pior. O `null` que sobra
+   * fica visível na tela como "não registrado".
+   */
+  const { data: anexosAgora } = await supabase
+    .from("pedidos_compra_anexos")
+    .select("id, arquivo_nome_original, arquivo_tamanho_bytes, created_at")
+    .eq("pedido_compra_id", parsed.data.pp_id)
+    .eq("tenant_id", session.activeTenant.id)
+    .order("created_at", { ascending: true });
+
+  const anexosNaAprovacao = (anexosAgora ?? []).map((a) => ({
+    id: a.id,
+    nome: a.arquivo_nome_original,
+    tamanho_bytes: Number(a.arquivo_tamanho_bytes),
+  }));
+
   const { error } = await supabase.rpc("aprovar_pp_com_data", {
     p_pp_id: parsed.data.pp_id,
     p_data_pagamento: parsed.data.data_pagamento,
   });
   if (error) return { ok: false, message: `Falha ao aprovar: ${error.message}` };
+
+  // Depois do RPC: a aprovação é o que não pode falhar. Se este update
+  // falhar, a PP segue aprovada e a coluna fica nula — que a tela lê como
+  // "não registrado", e não como "aprovada sem documento".
+  await supabase
+    .from("pedidos_compra")
+    .update({ anexos_na_aprovacao: anexosNaAprovacao })
+    .eq("id", parsed.data.pp_id)
+    .eq("tenant_id", session.activeTenant.id);
 
   // Cartão: cada parcela entra na fatura da DATA DELA — a PP de 30/60/90
   // dias vira três itens em três faturas, pelo prazo que a produção
@@ -282,6 +316,10 @@ export async function aprovarPPComData(input: unknown): Promise<Result> {
       data_pagamento: parsed.data.data_pagamento,
       forma_pagamento: parsed.data.forma_pagamento,
       cartao_credito_id: parsed.data.cartao_credito_id,
+      // Com o que foi conferido. `0` aqui é o registro que interessa:
+      // liberou dinheiro sem documento anexado.
+      anexos_qtd: anexosNaAprovacao.length,
+      anexos: anexosNaAprovacao,
     },
   });
 

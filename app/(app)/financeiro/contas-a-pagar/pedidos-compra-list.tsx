@@ -43,6 +43,30 @@ export interface PPRow {
   rejeitada_por_nome: string | null;
   pago_em: string | null;
   pago_por_nome: string | null;
+  /**
+   * Linha do tempo da PP — a seção "Histórico" do dossiê (11/09/2026).
+   *
+   * ⚠️ Campos OBRIGATÓRIOS de propósito, e não opcionais. `PPRow` é um
+   * tipo escrito à mão, montado por `.map` no servidor: campo opcional
+   * aqui desliga a checagem que garante que ele chegou à tela, e o dado
+   * some em silêncio com `tsc`, `lint` e `build` limpos. Quem não tiver o
+   * valor manda `null` explícito.
+   */
+  enviada_financeiro_em: string | null;
+  enviada_financeiro_por_nome: string | null;
+  aprovada_em: string | null;
+  aprovada_por_nome: string | null;
+  /**
+   * Documentos anexados no instante da aprovação. Três estados
+   * diferentes, e a tela distingue os três: `null` = aprovada antes do
+   * registro existir; `[]` = aprovada SEM documento; lista = o que foi
+   * conferido.
+   */
+  anexos_na_aprovacao: Array<{
+    id: string;
+    nome: string;
+    tamanho_bytes: number;
+  }> | null;
   fornecedor_id: string;
   /**
    * Decisão 067: o cadastro do fornecedor mudou depois que esta PP tirou a
