@@ -91,10 +91,13 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 065 | [O cadastro de fornecedor exige contato e solta o endereço](065-o-cadastro-de-fornecedor-exige-contato-e-solta-o-endereco.md) | 2026-09-09 |
 | 066 | [O cliente nasce com marcas e portais](066-o-cliente-nasce-com-marcas-e-portais.md) | 2026-09-09 |
 | 067 | [O campo de fornecedor busca, limpa e edita](067-o-campo-de-fornecedor-busca-limpa-e-edita.md) | 2026-09-09 |
+| 068 | [A PP nasce carimbada em Custo Operacional](068-a-pp-nasce-em-custo-operacional.md) | 2026-09-09 |
 | 069 | [A regional do job é a fonte; o rateio só existe onde não há job](069-a-regional-do-job-e-a-fonte.md) | 2026-09-10 |
+| 070 | [A PP congela os documentos com que a aprovação foi feita](070-a-pp-congela-os-documentos-da-aprovacao.md) | 2026-09-10 |
+| 071 | [O BV do job se grava pelo item da versão, e a linha de errata não tem BV](071-o-bv-do-job-se-grava-pelo-item-da-versao.md) | 2026-09-11 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
 > data é a da decisão, não a da posição na fila.
 
-**Próximo número livre: 070.**
+**Próximo número livre: 072.**
