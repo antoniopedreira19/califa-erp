@@ -244,12 +244,7 @@ export function PPDossie({
             )}
           </Grupo>
 
-          <Grupo rotulo="Emitida">
-            <p className="text-[11.5px] text-muted-foreground">
-              {formatDate(pp.created_at)}
-              {pp.emitida_por_nome ? ` por ${pp.emitida_por_nome}` : ""}
-            </p>
-          </Grupo>
+          <Historico pp={pp} />
 
           {pp.verba_producao && (
             <Prestacao
@@ -268,6 +263,83 @@ export function PPDossie({
             podeEnviar={podeEnviar}
             onEnviou={() => void recarregar()}
           />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * A linha do tempo da PP (11/09/2026).
+ *
+ * Existe para uma pergunta que o sistema não sabia responder: **com qual
+ * documento** a PP foi aprovada. Quem aprovou e quando já estavam
+ * gravados; o que faltava era o que estava na tela na hora da decisão.
+ *
+ * O caso que mais importa aqui é o vazio: "aprovada sem documento
+ * anexado" é informação, e é diferente de "não registrado" — que é o que
+ * as 8 PPs aprovadas antes desta data mostram, porque inventar a lista
+ * atual para elas seria fabricar uma prova.
+ */
+function Historico({ pp }: { pp: PPRow }) {
+  const linhas: Array<{ quando: string | null; o_que: string; quem: string | null }> = [
+    { quando: pp.created_at, o_que: "Emitida", quem: pp.emitida_por_nome },
+    {
+      quando: pp.enviada_financeiro_em,
+      o_que: "Enviada ao financeiro",
+      quem: pp.enviada_financeiro_por_nome,
+    },
+    { quando: pp.rejeitada_em, o_que: "Rejeitada", quem: pp.rejeitada_por_nome },
+    { quando: pp.aprovada_em, o_que: "Aprovada", quem: pp.aprovada_por_nome },
+    { quando: pp.pago_em, o_que: "Paga", quem: pp.pago_por_nome },
+    { quando: pp.cancelada_em, o_que: "Cancelada", quem: pp.cancelada_por_nome },
+  ].filter((l) => l.quando != null);
+
+  const conferidos = pp.anexos_na_aprovacao;
+
+  return (
+    <div className="border-t border-border pt-3">
+      <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+        Histórico
+      </p>
+      <ul className="space-y-1.5">
+        {linhas.map((l) => (
+          <li key={l.o_que} className="flex gap-2 text-[11px] leading-snug">
+            <span className="flex-none font-mono text-muted-foreground">
+              {formatDate(l.quando)}
+            </span>
+            <span className="min-w-0">
+              <span className="font-semibold">{l.o_que}</span>
+              {l.quem ? <span className="text-muted-foreground"> · {l.quem}</span> : null}
+            </span>
+          </li>
+        ))}
+      </ul>
+
+      {pp.aprovada_em && (
+        <div className="mt-2 rounded-lg border border-border bg-muted/30 p-2">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+            Documentos na aprovação
+          </p>
+          {conferidos == null ? (
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Não registrado — esta PP foi aprovada antes de o sistema passar a
+              guardar quais documentos estavam anexados.
+            </p>
+          ) : conferidos.length === 0 ? (
+            <p className="mt-1 text-[11px] font-semibold text-california-red">
+              Aprovada sem nenhum documento anexado.
+            </p>
+          ) : (
+            <ul className="mt-1 space-y-0.5">
+              {conferidos.map((a) => (
+                <li key={a.id} className="flex gap-1.5 text-[11px] leading-snug">
+                  <FileText className="mt-0.5 h-3 w-3 flex-none text-muted-foreground" />
+                  <span className="min-w-0 break-words">{a.nome}</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
     </div>

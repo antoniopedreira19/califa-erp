@@ -4752,3 +4752,39 @@ tree, e rodar build sobre ele corrompe o `.next` — aconteceu hoje, e a
 página ficou sem hidratar até o servidor se recuperar sozinho
 ([[build-quebra-dev-server]] vale para sessões paralelas também, não só
 para a própria). O build entra no teste completo combinado com o Tiago.
+
+## ⚠️ Nota de 2026-09-11 — a aprovação passou a registrar com QUAL documento (decisão 070)
+
+Terceira e última parte da reforma da aprovação da PP.
+
+Quem aprovou e quando já estavam gravados (`aprovada_por`, `aprovada_em`,
+e o evento `pedido_compra.aprovada`). O que faltava era **com qual
+documento** — e é isso que `pedidos_compra.anexos_na_aprovacao` passa a
+guardar, lido ANTES do RPC de aprovação.
+
+**O registro é menor do que eu vendi, e isso está registrado.** O Tiago
+apontou que PP aprovada trava, e o código confirma: editar e reenviar só
+aceitam `gerada` ou `rejeitada`. Sobram dois casos, ambos reais: provar
+que uma PP foi aprovada **sem documento nenhum**, e cobrir o ciclo
+desaprovar → reenviar com outro anexo → aprovar de novo.
+
+Na tela, o dossiê ganhou a seção **Histórico**: emitida, enviada ao
+financeiro, rejeitada, aprovada, paga e cancelada — cada uma com data e
+pessoa — e, quando há aprovação, o quadro "Documentos na aprovação". Ele
+distingue **três** coisas que não podem virar uma só: `null` (aprovada
+antes do registro existir), `[]` (aprovada sem documento, em vermelho) e a
+lista do que foi conferido. O antigo grupo "Emitida" saiu: virou a
+primeira linha do histórico, para não dizer a mesma coisa duas vezes.
+
+⚠️ **Sem backfill, de propósito.** Para as PPs aprovadas antes disso não
+existe registro do que estava anexado naquele momento; preencher com a
+lista atual seria fabricar uma prova. Pelo mesmo motivo não simulei os
+estados `[]` e lista com um `UPDATE` numa PP real — eles nascem na
+primeira aprovação nova, no teste completo.
+
+**Verificação (11/09/2026).** Coluna e comentário conferidos pelo MCP. Na
+PP-00011 (aprovada em 28/08), a tela mostra o histórico com as três linhas
+e o texto "Não registrado" no quadro dos documentos; o rodapé não traz
+botões de ação, porque ela não está em avaliação. `tsc` e `next lint`
+limpos nos arquivos desta entrega. Detalhes e o tamanho honesto do
+registro em `docs/decisions/070-a-pp-congela-os-documentos-da-aprovacao.md`.
