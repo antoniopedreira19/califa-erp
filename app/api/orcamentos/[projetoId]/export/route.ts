@@ -10,7 +10,12 @@ import {
   nomeDeArquivoSeguro,
   type SecaoDaAba,
 } from "@/lib/exportacao/planilha-orcamento";
-import type { JobStatus, OrcamentoStatus, TipoCusto } from "@/lib/types";
+import type {
+  CategoriaModeloPlanilha,
+  JobStatus,
+  OrcamentoStatus,
+  TipoCusto,
+} from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -75,7 +80,11 @@ export async function GET(
       }>(),
     supabase
       .from("orcamentos")
-      .select("id, codigo, nome, status, versao_aprovada_id")
+      // `!categoria_id` é obrigatório: `orcamentos` tem duas FKs para
+      // `categorias_dominio`, e o embed ambíguo derruba a query inteira.
+      .select(
+        "id, codigo, nome, status, versao_aprovada_id, categoria:categorias_dominio!categoria_id(modelo_planilha)",
+      )
       .eq("projeto_id", params.projetoId)
       .eq("tenant_id", tenantId)
       .in("id", ids)
@@ -99,12 +108,13 @@ export async function GET(
   const projeto = projRes.data;
   const clienteNome = projeto.cliente?.nome_fantasia ?? "—";
 
-  const orcamentos = (orcsRes.data ?? []) as Array<{
+  const orcamentos = (orcsRes.data ?? []) as unknown as Array<{
     id: string;
     codigo: string;
     nome: string;
     status: OrcamentoStatus;
     versao_aprovada_id: string | null;
+    categoria: { modelo_planilha: CategoriaModeloPlanilha } | null;
   }>;
   if (orcamentos.length !== ids.length) {
     return NextResponse.json(
@@ -131,6 +141,23 @@ export async function GET(
         error: `${abertos.map((o) => o.nome).join(", ")} já ${
           abertos.length === 1 ? "é um job aberto" : "são jobs abertos"
         } e não ${abertos.length === 1 ? "pode" : "podem"} ser exportado.`,
+      },
+      { status: 400 },
+    );
+  }
+
+  // Nacional e internacional não saem na mesma planilha (decisão 072,
+  // 12/09/2026): são documentos diferentes para o cliente, com fechamento
+  // e moeda próprios. A trava do seletor é conforto; a regra é esta —
+  // quem montar a URL à mão também é recusado.
+  const modelos = new Set(
+    orcamentos.map((o) => o.categoria?.modelo_planilha ?? "nacional"),
+  );
+  if (modelos.size > 1) {
+    return NextResponse.json(
+      {
+        error:
+          "Orçamento nacional e internacional não podem ser exportados na mesma planilha. Exporte cada modelo separadamente.",
       },
       { status: 400 },
     );

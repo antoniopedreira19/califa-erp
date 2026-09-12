@@ -181,6 +181,15 @@ export default async function ProjetoDetailPage({
 
   const orcamentosBrutos = (orcsRes.data ?? []) as any[];
   const orcamentoIds = orcamentosBrutos.map((o) => o.id);
+  // Modelo de planilha por orçamento (decisão 072). Serve à conta do valor
+  // da lista — que tem que ser a MESMA da tela da versão — e à trava que
+  // impede exportar nacional e internacional na mesma planilha.
+  const modeloPorOrcamento = new Map<string, CategoriaModeloPlanilha>(
+    orcamentosBrutos.map((o) => [
+      o.id as string,
+      (o.categoria?.modelo_planilha ?? "nacional") as CategoriaModeloPlanilha,
+    ]),
+  );
 
   // Versões (contagem + escolha da versão-alvo do valor) e jobs (estágio
   // do funil) por orçamento — queries paralelas e leves, sem embed.
@@ -284,15 +293,6 @@ export default async function ProjetoDetailPage({
         itensPorVersao.set(it.versao_orcamento_id, atuais);
       }
 
-      // Modelo de planilha por orçamento, para a conta desta lista ser a
-      // MESMA da tela da versão (decisão 072).
-      const modeloPorOrcamento = new Map<string, CategoriaModeloPlanilha>(
-        orcamentosBrutos.map((o) => [
-          o.id,
-          (o.categoria?.modelo_planilha ?? "nacional") as CategoriaModeloPlanilha,
-        ]),
-      );
-
       for (const [orcId, versao] of versaoAlvoPorOrcamento) {
         // A MESMA definição de "Valor do job" do fechamento da versão
         // (calcularTotaisVersao): principal com valorJob + honorários +
@@ -342,6 +342,7 @@ export default async function ProjetoDetailPage({
       numeroVersao: exportavelMap.get(o.id)?.numeroVersao ?? null,
       estagio: o.estagio,
       valor: exportavelMap.get(o.id)?.valor ?? null,
+      modeloPlanilha: modeloPorOrcamento.get(o.id) ?? "nacional",
     }));
 
   const clientes = (clientesRes.data ?? []) as Pick<

@@ -3,6 +3,7 @@
 import * as React from "react";
 import { AlertTriangle, Download, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { CategoriaModeloPlanilha } from "@/lib/types";
 import { formatBRL } from "@/lib/format";
 import {
   estagioFunilBadgeClasses,
@@ -29,6 +30,12 @@ export interface OrcamentoExportavel {
    *  fechamento (decisão 041): linhas em save incluídas, crédito
    *  consumido de outro job abatido. `null` sem versão. */
   valor: number | null;
+  /** Modelo de planilha do orçamento, da categoria dele (decisão 072).
+   *  Nacional e internacional não saem na mesma planilha: são documentos
+   *  diferentes para o cliente, com fechamento e moeda próprios.
+   *  Obrigatório — quem monta o seletor tem que dizer, e não deixar um
+   *  default liberar a mistura em silêncio. */
+  modeloPlanilha: CategoriaModeloPlanilha;
 }
 
 interface Props {
@@ -47,6 +54,11 @@ interface Props {
  *   trava e um aviso oferece desmarcar de uma vez.
  * - **Aprovado pede confirmação.** A planilha sai da versão aprovada
  *   vigente, e quem exporta confirma que é isso que quer.
+ * - **Nacional e internacional não se misturam** (decisão 072,
+ *   12/09/2026). São documentos diferentes para o cliente — fechamento,
+ *   moeda e câmbio próprios —, e um FATURAMENTO único somando os dois não
+ *   corresponde a nenhum deles. O rodapé trava e o aviso oferece manter
+ *   um dos modelos de uma vez.
  *
  * A seleção é só desta tela: a página do projeto e a visão agregada têm
  * cada uma a sua, e nada é salvo.
@@ -77,7 +89,18 @@ export function ExportarOrcamentosMenu({ projetoId, orcamentos }: Props) {
     (o) => o.estagio === "aprovado" || o.estagio === "enviado",
   );
   const soma = marcados.reduce((t, o) => t + (o.valor ?? 0), 0);
-  const travado = abertos.length > 0;
+  const nacionaisMarcados = marcados.filter(
+    (o) => o.modeloPlanilha === "nacional",
+  );
+  const internacionaisMarcados = marcados.filter(
+    (o) => o.modeloPlanilha === "internacional",
+  );
+  const travadoPorAberto = abertos.length > 0;
+  // Pelo conjunto de modelos, e não por "tem internacional": a regra é não
+  // misturar, e um modelo novo amanhã entra nela sem mexer aqui.
+  const travadoPorMistura =
+    new Set(marcados.map((o) => o.modeloPlanilha)).size > 1;
+  const travado = travadoPorAberto || travadoPorMistura;
   const semSelecao = marcados.length === 0;
 
   const href = `/api/orcamentos/${projetoId}/export?orcamentos=${marcados
@@ -111,6 +134,21 @@ export function ExportarOrcamentosMenu({ projetoId, orcamentos }: Props) {
     o.numeroVersao === null ? o.nome : `${o.nome} - v${o.numeroVersao}`;
   const nomes = (lista: OrcamentoExportavel[]) =>
     lista.map(rotuloDe).join(", ");
+  // Na lista o modelo aparece junto do nome — é o que explica a trava
+  // quando os dois estão marcados. Nas mensagens fica de fora, para não
+  // repetir o que o próprio aviso já diz.
+  const rotuloDaLinha = (o: OrcamentoExportavel) =>
+    o.modeloPlanilha === "internacional"
+      ? `${rotuloDe(o)} · Internacional`
+      : rotuloDe(o);
+
+  function manterSo(modelo: CategoriaModeloPlanilha) {
+    setSelecionados((atuais) =>
+      atuais.filter(
+        (id) => exportaveis.find((o) => o.id === id)?.modeloPlanilha === modelo,
+      ),
+    );
+  }
 
   return (
     <div ref={ancoraRef} className="relative flex-none">
@@ -184,7 +222,7 @@ export function ExportarOrcamentosMenu({ projetoId, orcamentos }: Props) {
                       marcado={marcado}
                       alerta={marcado && o.estagio === "aberto"}
                       desabilitado={semVersao}
-                      rotulo={rotuloDe(o)}
+                      rotulo={rotuloDaLinha(o)}
                       chip={estagioFunilLabel(o.estagio)}
                       chipClasses={estagioFunilBadgeClasses(o.estagio)}
                       direita={
@@ -202,7 +240,7 @@ export function ExportarOrcamentosMenu({ projetoId, orcamentos }: Props) {
                 </p>
               </div>
 
-              {travado && (
+              {travadoPorAberto && (
                 <div className="mx-2 mb-2 flex gap-2 rounded-lg border border-california-red/25 bg-california-red/5 px-2.5 py-2">
                   <Lock className="mt-0.5 h-[13px] w-[13px] flex-none text-california-red" />
                   <div className="flex min-w-0 flex-col gap-1">
@@ -230,6 +268,36 @@ export function ExportarOrcamentosMenu({ projetoId, orcamentos }: Props) {
                         ? "Desmarcar job aberto"
                         : "Desmarcar jobs abertos"}
                     </button>
+                  </div>
+                </div>
+              )}
+
+              {travadoPorMistura && (
+                <div className="mx-2 mb-2 flex gap-2 rounded-lg border border-california-red/25 bg-california-red/5 px-2.5 py-2">
+                  <Lock className="mt-0.5 h-[13px] w-[13px] flex-none text-california-red" />
+                  <div className="flex min-w-0 flex-col gap-1">
+                    <span className="text-[11.5px] leading-relaxed text-[#a8323d] [text-wrap:pretty]">
+                      Orçamento nacional e internacional não saem na mesma
+                      planilha: são documentos diferentes para o cliente, com
+                      fechamento e moeda próprios. Exporte cada modelo
+                      separadamente.
+                    </span>
+                    <div className="flex flex-wrap gap-x-3 gap-y-1">
+                      <button
+                        type="button"
+                        onClick={() => manterSo("nacional")}
+                        className="self-start text-[11.5px] font-semibold text-california-red underline"
+                      >
+                        Manter só os nacionais ({nacionaisMarcados.length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => manterSo("internacional")}
+                        className="self-start text-[11.5px] font-semibold text-california-red underline"
+                      >
+                        Manter só os internacionais ({internacionaisMarcados.length})
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
