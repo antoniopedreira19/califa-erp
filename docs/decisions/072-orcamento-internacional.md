@@ -213,13 +213,52 @@ Conferido ao vivo: a agregada do projeto de teste subiu de
 R$ 1.003.965,22 para R$ 1.096.948,42 — **exatamente** os R$ 92.983,20 de
 int. taxes do único orçamento internacional, e nada mais.
 
+## A exportação: nacional e internacional não se misturam (12/09/2026)
+
+Quinta entrega, primeira parte. O seletor de exportação monta **uma
+planilha só**, com um FATURAMENTO único somando os orçamentos marcados. Com
+os dois modelos no mesmo arquivo, esse FATURAMENTO não corresponderia a
+nenhum documento que a California manda: o nacional fecha em reais com
+imposto e honorários; o internacional tem fee, int. taxes, int. transaction
+costs e a coluna na moeda estrangeira.
+
+O Tiago chegou a considerar exportar os dois juntos pelo fechamento
+internacional (que contém todas as linhas do nacional) e **decidiu
+separar**: não se exporta nacional com internacional. O nacional continua
+exatamente como era.
+
+- **No seletor** (`_selecao/exportar-orcamentos-menu.tsx`), a trava segue o
+  padrão da de job aberto: aviso em vermelho, Exportar desabilitado, e dois
+  atalhos — "Manter só os nacionais (n)" e "Manter só os internacionais
+  (n)". A linha do orçamento internacional leva "· Internacional" no rótulo.
+- **A regra é pelo conjunto de modelos**, não por "tem internacional": um
+  modelo novo amanhã entra nela sem mexer no seletor.
+- **Na rota** (`api/orcamentos/[projetoId]/export`), a mesma regra recusa
+  com 400 — quem montar a URL à mão também é barrado. A trava da tela é
+  conforto; a regra é a do servidor.
+- `OrcamentoExportavel.modeloPlanilha` é **obrigatório**: quem monta o
+  seletor tem que dizer o modelo, e não deixar um default liberar a mistura
+  em silêncio. As duas origens (lista do projeto e visão agregada) passam o
+  valor lido da categoria.
+
+Conferido ao vivo no projeto 0-0001/26: com os 7 orçamentos marcados, os
+dois avisos (job aberto e mistura) aparecem e o Exportar trava; "Manter só
+os internacionais" deixa 1 de 7, R$ 515.999,99, e libera. Pela rota: -04 +
+-07 → 400 com a mensagem; -04 + -06 → planilha; só -07 → planilha.
+
+⚠️ **Ainda falta o layout internacional do arquivo.** Até ele entrar, a
+planilha de um orçamento internacional sai com o fechamento **nacional**
+(sem fee/int. taxes/ITC e com o FATURAMENTO errado para o cliente).
+
 ## O que NÃO entrou
 
 A **abertura** do job entrou em 11/09/2026 (seção acima). Seguem nacionais,
 e a cadeia não vaza para eles porque o 4º parâmetro é opcional e ninguém lá
 o passa:
 
-- **exportação** e **importação** em Excel.
+- o **layout internacional** da planilha exportada (a trava de mistura já
+  entrou — seção acima);
+- a **importação** em Excel.
 
 ## Decisões de tela
 

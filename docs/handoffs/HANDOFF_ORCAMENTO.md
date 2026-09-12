@@ -3418,7 +3418,7 @@ a página e zerava o formulário — a mesma pegadinha vista na PP em 04/09.
 
 ## ⚠️ Nota de 2026-09-11 — a categoria "Internacional" tem planilha e fechamento próprios (decisão 072)
 
-Decisão [070](../decisions/072-orcamento-internacional.md). Orçamento cuja
+Decisão [072](../decisions/072-orcamento-internacional.md). Orçamento cuja
 categoria tem `modelo_planilha = 'internacional'` abre a **mesma tela**,
 num modo diferente. Não há rota nova.
 
@@ -3546,3 +3546,22 @@ A lista de orçamentos do projeto e a visão agregada podem mostrar totais
 diferentes para o mesmo projeto: a **lista** usa a versão *aprovada* quando
 existe, e a **agregada** usa a *vigente*. Orçamento com versão nova ainda
 não aprovada aparece com números diferentes nas duas — e está certo.
+
+## ⚠️ Nota de 2026-09-12 — exportar nacional com internacional é recusado (decisão 072)
+
+Quinta entrega da [072](../decisions/072-orcamento-internacional.md),
+primeira parte. Decisão do Tiago: **não se exporta orçamento nacional e
+internacional na mesma planilha.** O nacional continua exatamente como era.
+
+| Arquivo | O quê |
+|---|---|
+| `_selecao/exportar-orcamentos-menu.tsx` | `OrcamentoExportavel.modeloPlanilha` (obrigatório); aviso + Exportar travado + "Manter só os nacionais / internacionais" |
+| `[projetoId]/page.tsx` | `modeloPorOrcamento` subiu de escopo e alimenta também os exportáveis |
+| `agregado/page.tsx` | passa `orc.modeloPlanilha` aos exportáveis |
+| `api/orcamentos/[projetoId]/export/route.ts` | embed `categorias_dominio!categoria_id(modelo_planilha)` e recusa 400 com mais de um modelo |
+
+A regra é **"mais de um modelo no conjunto"**, não "tem internacional" —
+modelo novo entra nela sem mexer aqui.
+
+⚠️ **Pendente:** o arquivo exportado de um orçamento internacional ainda sai
+com o fechamento nacional. O layout internacional é a próxima parte.

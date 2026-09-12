@@ -462,6 +462,8 @@ export default async function OrcamentosAgregadoPage({
       numeroVersao: temVersao ? origem.numeroVersao : null,
       estagio: origem.estagio ?? "orcamento",
       valor,
+      // Trava a mistura de nacional com internacional no seletor (072).
+      modeloPlanilha: orc.modeloPlanilha,
     };
   });
 
