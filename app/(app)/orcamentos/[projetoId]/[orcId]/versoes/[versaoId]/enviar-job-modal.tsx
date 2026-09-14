@@ -167,6 +167,9 @@ interface Props {
   regionaisDoProjeto: { id: string; nome: string }[];
   /** Primeiras cidades do cadastro — o combobox busca o resto no servidor. */
   cidadesIniciais: CidadeOption[];
+  /** Modelo mensal (decisão 078): início e fim são o período do orçamento,
+   *  que acompanha os meses — aparecem travados. */
+  periodoTravado?: boolean;
 
   fieldErrors: Record<string, string[]>;
   erroGeral: string | null;
@@ -191,6 +194,7 @@ export function EnviarJobModal({
   herdados,
   regionaisDoProjeto,
   cidadesIniciais,
+  periodoTravado = false,
   fieldErrors,
   erroGeral,
 }: Props) {
@@ -397,6 +401,7 @@ export function EnviarJobModal({
               key={`inicio-${dados.dataInicio}`}
               name="__job_data_inicio"
               defaultValue={dados.dataInicio}
+              disabled={periodoTravado}
               onDateChange={(d) => onChange({ dataInicio: d ? toIso(d) : "" })}
               className={cn(
                 erroDe("data_inicio_prevista") &&
@@ -410,6 +415,7 @@ export function EnviarJobModal({
               key={`fim-${dados.dataFim}`}
               name="__job_data_fim"
               defaultValue={dados.dataFim}
+              disabled={periodoTravado}
               onDateChange={(d) => onChange({ dataFim: d ? toIso(d) : "" })}
               className={cn(
                 erroDe("data_fim_prevista") &&

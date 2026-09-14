@@ -44,7 +44,7 @@ import {
 } from "@/lib/data/saves";
 import type { EstadoSaveDaLinha } from "@/app/(app)/_planilha/save-coluna";
 import { ResumoRentabilidade } from "./versoes/[versaoId]/resumo-rentabilidade";
-import { mesesDaVersaoQuery } from "@/lib/data/meses-versao";
+import { mesesDaVersaoQuery, mesesSemItens } from "@/lib/data/meses-versao";
 import type { VersaoOrcamentoMes } from "@/lib/types";
 import { PlanilhaMensal } from "./planilha-mensal";
 import { AprovacaoActions } from "./versoes/[versaoId]/aprovacao-actions";
@@ -827,6 +827,12 @@ function VersaoSelecionada({
     Number(versao.percentual_imposto),
     planilha.internacional,
   );
+  // Modelo mensal (decisão 078): mês sem item bloqueia a aprovação. A
+  // mesma conta roda no servidor, sobre o banco.
+  const mesesVazios =
+    planilha.modeloPlanilha === "mensal"
+      ? mesesSemItens(meses, grupos, itens)
+      : null;
   const custoPlanejado = itens.reduce(
     (s, it) => s + Number(it.total_planejado ?? 0),
     0,
@@ -972,9 +978,9 @@ function VersaoSelecionada({
       />
 
       {/* Modelo mensal (decisão 078): régua de meses, planilha do mês ou
-          vista do trimestre. O envio para abertura, a exportação e a
-          importação chegam nas próximas entregas — por isso o fluxo de
-          abertura e o "Importar planilha" não aparecem aqui. */}
+          vista do trimestre. A exportação e a importação ainda não existem
+          para ele — por isso o "Importar planilha" não aparece aqui. O
+          fluxo de aprovação e abertura, abaixo, é o mesmo dos outros. */}
       {planilha.modeloPlanilha === "mensal" ? (
         <PlanilhaMensal
           projetoId={params.projetoId}
@@ -1075,6 +1081,8 @@ function VersaoSelecionada({
           moedaEstrangeira={planilha.moedaEstrangeira}
         />
       </div>
+      </>
+      )}
 
       <FluxoAbertura
         versaoId={versao.id}
@@ -1100,6 +1108,8 @@ function VersaoSelecionada({
               }
             : null
         }
+        mesesSemItens={mesesVazios}
+        periodoTravado={planilha.modeloPlanilha === "mensal"}
         custoPlanejado={custoPlanejado}
         faturamentoPrevisto={totais.faturamentoPrevisto}
         totalGeradoEmSave={totais.save.totalSaveGerado}
@@ -1118,8 +1128,6 @@ function VersaoSelecionada({
         job={job}
         abrirRevisao={abrirRevisao}
       />
-      </>
-      )}
     </>
   );
 }

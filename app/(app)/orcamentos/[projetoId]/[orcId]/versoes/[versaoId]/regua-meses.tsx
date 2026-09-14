@@ -31,6 +31,9 @@ export interface BlocoDaRegua {
   faturamento: number;
   /** `null` sem planejado lançado — a conta não existe. */
   resultadoGeral: number | null;
+  /** Substitui a linha do resultado geral. Na planilha do job é a
+   *  situação do faturamento do mês. */
+  detalhe?: string;
   href: string;
 }
 
@@ -41,6 +44,8 @@ export interface MesEditavel {
 }
 
 interface Props {
+  /** "Meses do orçamento" (padrão) ou "Meses do job". */
+  titulo?: string;
   moeda: string;
   /** "Julho a setembro de 2026, pelo período do orçamento". */
   descricao: string;
@@ -61,6 +66,7 @@ function formatarPct(n: number): string {
 }
 
 export function ReguaMeses({
+  titulo = "Meses do orçamento",
   moeda,
   descricao,
   trimestre,
@@ -72,7 +78,7 @@ export function ReguaMeses({
     <div className="space-y-2.5">
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <span className="text-[13px] font-bold uppercase tracking-[0.07em] text-foreground">
-          Meses do orçamento
+          {titulo}
         </span>
         <span className="text-xs text-muted-foreground">{descricao}</span>
       </div>
@@ -143,9 +149,10 @@ function Bloco({
         {formatCurrency(bloco.faturamento, moeda)}
       </span>
       <span className="whitespace-nowrap text-[11px] leading-[14px] text-muted-foreground">
-        {bloco.resultadoGeral === null
-          ? "Sem planejado"
-          : `Resultado geral ${formatarPct(bloco.resultadoGeral)}`}
+        {bloco.detalhe ??
+          (bloco.resultadoGeral === null
+            ? "Sem planejado"
+            : `Resultado geral ${formatarPct(bloco.resultadoGeral)}`)}
       </span>
     </Link>
   );

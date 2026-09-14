@@ -13,6 +13,7 @@ import { impostosDaVersaoVigente } from "@/lib/data/impostos-da-vigente";
 import {
   copiarMesesEntreVersoes,
   criarMesesDoPeriodo,
+  mesesSemItensDaVersao,
 } from "@/lib/data/meses-versao";
 import { bloqueioAprovacaoVersao, versaoSchema } from "@/lib/validations/versoes";
 import {
@@ -1482,6 +1483,19 @@ export async function aprovarVersao(versaoId: string): Promise<ActionResult> {
         .eq("valor_unitario_orcado", 0),
     ]);
 
+  // Modelo mensal (decisão 078): todo mês da versão precisa ter item. Lido
+  // do banco aqui, e não da tela: a regra não pode depender do cliente.
+  const mesesVazios =
+    orc.categoria?.modelo_planilha === "mensal"
+      ? await mesesSemItensDaVersao(supabase, session.activeTenant.id, versaoId)
+      : null;
+  if (orc.categoria?.modelo_planilha === "mensal" && mesesVazios === null) {
+    return {
+      ok: false,
+      message: "Não foi possível conferir os meses da versão. Tente de novo.",
+    };
+  }
+
   // Alíquota escolhida + item com valor. Mesma função do botão "Aprovar
   // versão", para a tela e o servidor nunca discordarem do motivo.
   const bloqueio = bloqueioAprovacaoVersao({
@@ -1500,6 +1514,7 @@ export async function aprovarVersao(versaoId: string): Promise<ActionResult> {
     qtdItens: itensCount ?? 0,
     qtdItensComValor: comValorCount ?? 0,
     qtdItensOrcadoZerado: orcadoZeradoCount ?? 0,
+    mesesSemItens: mesesVazios,
   });
 
   if (bloqueio) {

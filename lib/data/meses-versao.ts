@@ -15,6 +15,7 @@ import type { VersaoOrcamentoMes } from "@/lib/types";
 import {
   erroDoPeriodoMensal,
   mesesDoPeriodo,
+  nomeDoMes,
 } from "@/lib/calculos/meses-trimestre";
 
 type Supabase = SupabaseClient<any, any, any>;
@@ -119,4 +120,55 @@ export async function copiarMesesEntreVersoes(
     if (novo) mapa.set(m.id, novo.id);
   }
   return mapa;
+}
+
+/** Os meses sem nenhum item, pelo nome ("dezembro"), em ordem. O item mora
+ *  no grupo e o grupo no mês — mês só com grupo vazio também conta como
+ *  vazio. É a regra que bloqueia a aprovação (Tiago, 14/09/2026). */
+export function mesesSemItens(
+  meses: Pick<VersaoOrcamentoMes, "id" | "mes">[],
+  grupos: { id: string; mes_id: string | null }[],
+  itens: { grupo_id: string }[],
+): string[] {
+  const gruposComItem = new Set(itens.map((i) => i.grupo_id));
+  const mesesComItem = new Set(
+    grupos
+      .filter((g) => g.mes_id !== null && gruposComItem.has(g.id))
+      .map((g) => g.mes_id),
+  );
+  return [...meses]
+    .sort((a, b) => a.mes.localeCompare(b.mes))
+    .filter((m) => !mesesComItem.has(m.id))
+    .map((m) => nomeDoMes(m.mes));
+}
+
+/** `mesesSemItens` lido do banco, para o servidor não confiar na tela.
+ *  `null` quando a leitura falha — quem chama recusa, em vez de aprovar
+ *  sem ter conferido. */
+export async function mesesSemItensDaVersao(
+  supabase: Supabase,
+  tenantId: string,
+  versaoId: string,
+): Promise<string[] | null> {
+  const [mesesRes, gruposRes, itensRes] = await Promise.all([
+    mesesDaVersaoQuery(supabase, tenantId, versaoId),
+    supabase
+      .from("versoes_orcamento_grupos")
+      .select("id, mes_id")
+      .eq("versao_orcamento_id", versaoId)
+      .eq("tenant_id", tenantId)
+      .returns<{ id: string; mes_id: string | null }[]>(),
+    supabase
+      .from("versoes_orcamento_itens")
+      .select("grupo_id")
+      .eq("versao_orcamento_id", versaoId)
+      .eq("tenant_id", tenantId)
+      .returns<{ grupo_id: string }[]>(),
+  ]);
+  const erro = mesesRes.error ?? gruposRes.error ?? itensRes.error;
+  if (erro) {
+    console.error("[meses-versao.sem-itens]", erro.message);
+    return null;
+  }
+  return mesesSemItens(mesesRes.data ?? [], gruposRes.data ?? [], itensRes.data ?? []);
 }

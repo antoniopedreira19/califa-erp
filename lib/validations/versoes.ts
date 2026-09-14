@@ -88,6 +88,10 @@ export function bloqueioAprovacaoVersao(input: {
   /** Itens com valor_unitario_orcado = 0 — aprovar exige orçado em todos;
    *  o planejado pode ficar zerado (docs/decisions/011). */
   qtdItensOrcadoZerado: number;
+  /** Modelo mensal (decisão 078): os meses sem item, pelo nome
+   *  ("dezembro"). Obrigatório e anulável como o câmbio: `null` fora do
+   *  mensal, e quem chama tem que dizer qual é o caso. */
+  mesesSemItens: string[] | null;
 }): string | null {
   if (!isAliquotaConhecida(input.percentualImposto)) {
     return 'Escolha a alíquota de impostos da versão antes de aprovar. Use o botão "Editar" da versão.';
@@ -116,6 +120,15 @@ export function bloqueioAprovacaoVersao(input: {
   }
   if (input.qtdItensComValor === 0) {
     return "Nenhum item da planilha tem valor. Preencha ao menos um item antes de aprovar a versão.";
+  }
+  // Modelo mensal (decisão 078, Tiago em 14/09/2026): mês vazio viraria um
+  // mês de faturamento zero no job. Quem não vai usar o mês o apaga.
+  if (input.mesesSemItens && input.mesesSemItens.length > 0) {
+    const nomes = listaPtBr(input.mesesSemItens);
+    const texto = nomes.charAt(0).toUpperCase() + nomes.slice(1);
+    return input.mesesSemItens.length === 1
+      ? `${texto} não tem itens. Preencha o mês ou apague-o em "Editar meses" antes de aprovar a versão.`
+      : `${texto} não têm itens. Preencha os meses ou apague-os em "Editar meses" antes de aprovar a versão.`;
   }
   if (input.qtdItensOrcadoZerado > 0) {
     return `${input.qtdItensOrcadoZerado} ${input.qtdItensOrcadoZerado === 1 ? "item" : "itens"} com R$ unitário orçado zerado. Preencha o orçado de todos os itens antes de aprovar a versão.`;

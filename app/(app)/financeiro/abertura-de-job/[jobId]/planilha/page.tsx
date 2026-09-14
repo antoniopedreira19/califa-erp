@@ -13,6 +13,8 @@ import type {
 } from "@/lib/types";
 import { saveDoJob } from "@/lib/data/saves";
 import { PlanilhaConferencia } from "./planilha-conferencia";
+import { mesesDaVersaoQuery } from "@/lib/data/meses-versao";
+import { rotuloMesCurto } from "@/lib/calculos/meses-trimestre";
 
 export const dynamic = "force-dynamic";
 
@@ -75,7 +77,7 @@ export default async function PlanilhaDaAberturaPage({
   );
   const versaoAprovadaId = (raw as any).versao_orcamento_aprovada_id as string;
 
-  const [gruposRes, itensRes, realizadosRes, categoriasRes, bvsRes] =
+  const [gruposRes, itensRes, realizadosRes, categoriasRes, bvsRes, mesesRes] =
     await Promise.all([
     supabase
       .from("versoes_orcamento_grupos")
@@ -118,6 +120,8 @@ export default async function PlanilhaDaAberturaPage({
       .eq("copia.job_id", params.jobId)
       .eq("tenant_id", session.activeTenant.id)
       .neq("situacao", "cancelado"),
+    // Meses da versão aprovada — só o modelo mensal tem (decisão 078).
+    mesesDaVersaoQuery(supabase, session.activeTenant.id, versaoAprovadaId),
   ]);
 
   for (const [rotulo, res] of [
@@ -126,13 +130,31 @@ export default async function PlanilhaDaAberturaPage({
     ["realizado", realizadosRes],
     ["categorias", categoriasRes],
     ["bvs", bvsRes],
+    ["meses", mesesRes],
   ] as const) {
     if (res.error) {
       console.error(`[abertura-job.planilha.${rotulo}]`, res.error.message);
     }
   }
 
-  const grupos = gruposRes.data ?? [];
+  // Modelo mensal (decisão 078): a conferência mostra a planilha inteira
+  // do trimestre, então cada grupo leva o mês no nome e os grupos seguem a
+  // ordem dos meses — como na visão agregada do orçamento.
+  const meses = mesesRes.data ?? [];
+  const mesDoId = new Map(meses.map((m) => [m.id, m.mes]));
+  const grupos =
+    planilha.modeloPlanilha === "mensal" && meses.length > 0
+      ? [...(gruposRes.data ?? [])]
+          .sort((a, b) => {
+            const ma = (a.mes_id && mesDoId.get(a.mes_id)) || "";
+            const mb = (b.mes_id && mesDoId.get(b.mes_id)) || "";
+            return ma === mb ? a.ordem - b.ordem : ma.localeCompare(mb);
+          })
+          .map((g) => {
+            const mes = g.mes_id ? mesDoId.get(g.mes_id) : undefined;
+            return mes ? { ...g, nome: `${g.nome} · ${rotuloMesCurto(mes)}` } : g;
+          })
+      : (gruposRes.data ?? []);
 
   const itens: ItemPlanilhaJob[] = (itensRes.data ?? []).map((it: any) => ({
     id: it.id,

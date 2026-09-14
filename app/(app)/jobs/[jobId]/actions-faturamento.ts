@@ -168,7 +168,7 @@ export async function enviarJobParaFaturamento(
   const { data: job } = await supabase
     .from("jobs")
     .select(
-      "id, status, faturamento_previsto, abertura_em_revisao, projeto_id, orcamento_id, projeto:projetos(cliente_id)",
+      "id, status, faturamento_previsto, abertura_em_revisao, projeto_id, orcamento_id, projeto:projetos(cliente_id), orcamento:orcamentos(categoria:categorias_dominio!categoria_id(modelo_planilha))",
     )
     .eq("id", jobId)
     .eq("tenant_id", session.activeTenant.id)
@@ -180,9 +180,21 @@ export async function enviarJobParaFaturamento(
       projeto_id: string;
       orcamento_id: string;
       projeto: { cliente_id: string } | null;
+      orcamento: { categoria: { modelo_planilha: string } | null } | null;
     }>();
 
   if (!job) return { ok: false, message: "Job não encontrado." };
+
+  // Modelo mensal (decisão 078): Fee e Always On faturam mês a mês, e o
+  // envio único congelaria o trimestre inteiro. O envio por mês ainda não
+  // existe; até ele chegar, nenhum job mensal sai por aqui.
+  if (job.orcamento?.categoria?.modelo_planilha === "mensal") {
+    return {
+      ok: false,
+      message:
+        "Jobs de Fee e Always On são faturados mês a mês, e o envio por mês ainda não está disponível.",
+    };
+  }
 
   if (job.status !== "aberto") {
     return {

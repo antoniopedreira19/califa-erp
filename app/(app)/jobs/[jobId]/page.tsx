@@ -75,7 +75,7 @@ export default async function JobDetailPage({
   searchParams,
 }: {
   params: { jobId: string };
-  searchParams?: { from?: string; aba?: string };
+  searchParams?: { from?: string; aba?: string; mes?: string };
 }) {
   const session = await requireSession();
   const fromParam = searchParams?.from;
@@ -364,6 +364,15 @@ export default async function JobDetailPage({
                   : Number(versaoAprovada.cambio_compra),
             }}
             modeloPlanilha={detalhe.modeloPlanilha}
+            // Modelo mensal (decisão 078): a régua de meses troca de mês
+            // pela URL, sempre na aba da planilha.
+            meses={detalhe.meses}
+            mesPedido={searchParams?.mes}
+            hrefPlanilha={`/jobs/${job.id}?aba=planilha${
+              fromParam === "jobs" || fromParam === "financeiro"
+                ? `&from=${fromParam}`
+                : ""
+            }`}
             grupos={grupos}
             itens={itens}
             realizadosMap={realizadosMap}
@@ -434,6 +443,7 @@ export default async function JobDetailPage({
         portais={portaisDoCliente}
         moeda={versaoAprovada.moeda}
         resumoEncerramento={resumoEncerramento}
+        faturamentoPorMes={detalhe.modeloPlanilha === "mensal"}
       />
     </div>
   );
