@@ -27,7 +27,10 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { cn, formatCurrency } from "@/lib/utils";
-import { receitaDeFaturamentoDaLinha } from "@/lib/calculos/versao-totais";
+import {
+  receitaDeFaturamentoDaLinha,
+  type ParametrosInternacionais,
+} from "@/lib/calculos/versao-totais";
 import type { TipoCusto } from "@/lib/types";
 import type { SaldoDeSave } from "@/lib/data/saves";
 import type { EstadoSaveDaLinha } from "./save-coluna";
@@ -49,6 +52,10 @@ interface Props {
   moeda: string;
   percentualHonorarios: number;
   percentualImposto: number;
+  /** A cadeia internacional (decisão 072), ou `null` no nacional.
+   *  Obrigatória: sem ela o "Faturamento desta linha" de um internacional
+   *  saía pela conta nacional, sem as int. taxes. */
+  internacional: ParametrosInternacionais | null;
   clienteNome: string;
   /** Sem estas duas o formulário abre em leitura — é como o financeiro e a
    *  versão aprovada mostram o save. */
@@ -61,6 +68,12 @@ interface Props {
 interface OrigemNaTela {
   jobOrigemId: string;
   valor: number;
+}
+
+/** Percentual como o usuário lê: vírgula decimal, sem zeros sobrando
+ *  ("19,53", "12"). */
+function pct(n: number): string {
+  return Number(n).toLocaleString("pt-BR", { maximumFractionDigits: 2 });
 }
 
 function paraNumero(raw: string): number {
@@ -78,6 +91,7 @@ export function SaveDialog({
   moeda,
   percentualHonorarios,
   percentualImposto,
+  internacional,
   clienteNome,
   onMarcarSave,
   onSalvarConsumo,
@@ -112,6 +126,7 @@ export function SaveDialog({
     linha.tipoCusto,
     percentualHonorarios,
     percentualImposto,
+    internacional,
   );
   const totalConsumido = origens.reduce((s, o) => s + o.valor, 0);
   const sobra = orcado - totalConsumido;
@@ -231,6 +246,7 @@ export function SaveDialog({
               moeda={moeda}
               percentualHonorarios={percentualHonorarios}
               percentualImposto={percentualImposto}
+              internacional={internacional}
               estado={estado}
               clienteNome={clienteNome}
             />
@@ -327,6 +343,7 @@ function ModoGerar({
   moeda,
   percentualHonorarios,
   percentualImposto,
+  internacional,
   estado,
   clienteNome,
 }: {
@@ -335,6 +352,7 @@ function ModoGerar({
   moeda: string;
   percentualHonorarios: number;
   percentualImposto: number;
+  internacional: ParametrosInternacionais | null;
   estado: EstadoSaveDaLinha;
   clienteNome: string;
 }) {
@@ -371,7 +389,11 @@ function ModoGerar({
           rotulo="Faturamento desta linha"
           valor={faturamento}
           moeda={moeda}
-          nota={`orçado + honorários ${percentualHonorarios}% + impostos ${percentualImposto}%`}
+          nota={
+            internacional
+              ? `orçado + fee ${pct(percentualHonorarios)}% + int. taxes ${pct(internacional.percentualIntTaxes)}% + impostos BR ${pct(percentualImposto)}%`
+              : `orçado + honorários ${pct(percentualHonorarios)}% + impostos ${pct(percentualImposto)}%`
+          }
         />
       </div>
 

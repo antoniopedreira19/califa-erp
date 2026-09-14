@@ -421,6 +421,17 @@ internacional**, saía com "Versão aprovada do job não encontrada." sem
 gravar nada. Apareceu no teste de gravação da errata no JOB-0009; o log
 da API mostrou o 300. A dica virou `orcamentos!orcamento_id`.
 
+## O save do internacional mostrava o faturamento pela conta nacional (14/09/2026)
+
+O formulário de save (`_planilha/save-dialog.tsx`) calculava o
+"Faturamento desta linha" sem a cadeia internacional: numa linha de
+R$ 10.000,00 do JOB-0009 mostrava R$ 13.918,23 (honorários + impostos),
+quando a errata de save gravou R$ 16.977,59 (fee + int. taxes + impostos
+BR). Era só a tela — o servidor já usava a cadeia. `SaveDialog` ganhou a
+prop obrigatória `internacional`, passada pela planilha da versão, pela do
+job e pela visão agregada (pelo modelo do orçamento do card), e a nota da
+conta nomeia os degraus da cadeia, com vírgula decimal.
+
 ## Pendências fechadas depois do teste (14/09/2026)
 
 **Orçamento internacional criado pela visão agregada nasce com a cadeia.**

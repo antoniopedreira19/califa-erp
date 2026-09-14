@@ -575,6 +575,7 @@ export function JobRealizadoSection({
         moeda={versao.moeda}
         percentualHonorarios={versao.percentual_honorarios}
         percentualImposto={versao.percentual_imposto}
+        internacional={planilha.internacional}
         clienteNome={clienteNome}
         onMarcarSave={
           linhaSave && podeMexerNoSave

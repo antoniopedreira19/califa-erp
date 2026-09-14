@@ -251,6 +251,7 @@ export function PlanilhaVersao({
         moeda={moeda}
         percentualHonorarios={percentualHonorarios}
         percentualImposto={percentualImposto}
+        internacional={internacional}
         clienteNome={clienteNome}
         onMarcarSave={
           linhaAberta
