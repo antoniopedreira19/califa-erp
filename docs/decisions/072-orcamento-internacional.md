@@ -410,6 +410,17 @@ Quatro observações do teste, com as recomendações aceitas pelo Tiago:
 
 A cor, a ordem e a conta não mudaram; é só o que se lê.
 
+## ⚠️ A errata não gravava desde 11/09 (corrigido em 14/09/2026)
+
+Para ler a cadeia pelo modelo, `registrarErrata` passou a embutir o
+orçamento da versão (`orcamento:orcamentos!inner(...)`). Só que há **duas
+FKs** entre `versoes_orcamento` e `orcamentos` — a `orcamento_id` e a
+`orcamentos.versao_aprovada_id` —, e sem a dica o PostgREST responde 300
+(relação ambígua). A consulta falhava, e **toda errata, nacional ou
+internacional**, saía com "Versão aprovada do job não encontrada." sem
+gravar nada. Apareceu no teste de gravação da errata no JOB-0009; o log
+da API mostrou o 300. A dica virou `orcamentos!orcamento_id`.
+
 ## Pendências fechadas depois do teste (14/09/2026)
 
 **Orçamento internacional criado pela visão agregada nasce com a cadeia.**

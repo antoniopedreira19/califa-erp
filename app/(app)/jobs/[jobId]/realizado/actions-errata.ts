@@ -416,8 +416,14 @@ export async function registrarErrata(
     // Os quatro últimos são da cadeia internacional (decisão 072): a
     // errata GRAVA faturamento e valor do job, então errar aqui é erro no
     // banco, não na tela.
+    //
+    // ⚠️ O embed do orçamento PRECISA da dica `!orcamento_id`: há duas FKs
+    // entre `versoes_orcamento` e `orcamentos` (a `orcamento_id` e a
+    // `orcamentos.versao_aprovada_id`). Sem a dica o PostgREST recusa a
+    // consulta por ambiguidade, e toda errata saía com "Versão aprovada do
+    // job não encontrada" — de 11/09 a 14/09/2026.
     .select(
-      "id, percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra, orcamento:orcamentos!inner(categoria:categorias_dominio!categoria_id(modelo_planilha))",
+      "id, percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra, orcamento:orcamentos!orcamento_id(categoria:categorias_dominio!categoria_id(modelo_planilha))",
     )
     .eq("id", job.versao_orcamento_aprovada_id)
     .eq("tenant_id", session.activeTenant.id)
