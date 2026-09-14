@@ -11,6 +11,7 @@ import {
   type ItemParaTotais,
 } from "@/lib/calculos/versao-totais";
 import { configDaPlanilha } from "@/app/(app)/_planilha/modelo-planilha";
+import { chaveDoCambio } from "@/app/(app)/_planilha/moeda-estrangeira";
 import type {
   CategoriaDominio,
   CategoriaModeloPlanilha,
@@ -217,7 +218,10 @@ export default async function ProjetoDetailPage({
   // O que o seletor "Exportar" mostra por orçamento: a versão que sai no
   // arquivo e o FATURAMENTO que a planilha imprime — o lado `cliente`
   // (decisão 041): save gerado dentro, crédito consumido fora.
-  const exportavelMap = new Map<string, { numeroVersao: number; valor: number }>();
+  const exportavelMap = new Map<
+    string,
+    { numeroVersao: number; valor: number; chaveCambio: string | null }
+  >();
 
   if (orcamentoIds.length > 0) {
     const [versoesRes, jobsRes] = await Promise.all([
@@ -309,6 +313,10 @@ export default async function ProjetoDetailPage({
         exportavelMap.set(orcId, {
           numeroVersao: versao.numero_versao,
           valor: totais.cliente.total,
+          chaveCambio:
+            modeloPorOrcamento.get(orcId) === "internacional"
+              ? chaveDoCambio(versao.moeda_estrangeira, versao.cambio_compra)
+              : null,
         });
       }
     }
@@ -343,6 +351,7 @@ export default async function ProjetoDetailPage({
       estagio: o.estagio,
       valor: exportavelMap.get(o.id)?.valor ?? null,
       modeloPlanilha: modeloPorOrcamento.get(o.id) ?? "nacional",
+      chaveCambio: exportavelMap.get(o.id)?.chaveCambio ?? null,
     }));
 
   const clientes = (clientesRes.data ?? []) as Pick<

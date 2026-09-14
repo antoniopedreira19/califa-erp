@@ -246,9 +246,69 @@ dois avisos (job aberto e mistura) aparecem e o Exportar trava; "Manter só
 os internacionais" deixa 1 de 7, R$ 515.999,99, e libera. Pela rota: -04 +
 -07 → 400 com a mensagem; -04 + -06 → planilha; só -07 → planilha.
 
-⚠️ **Ainda falta o layout internacional do arquivo.** Até ele entrar, a
-planilha de um orçamento internacional sai com o fechamento **nacional**
-(sem fee/int. taxes/ITC e com o FATURAMENTO errado para o cliente).
+## A exportação: o layout é o da planilha que a California já usa (14/09/2026)
+
+Quinta entrega, segunda parte. Mostrei ao Tiago um layout com os rótulos
+da tela do ERP; ele decidiu **manter o layout da planilha modelo**, das
+colunas aos rótulos. O arquivo do orçamento internacional sai assim:
+
+| | A | B | C | D | E | F | G |
+|---|---|---|---|---|---|---|---|
+| 1 | nome (A1:G1, faixa azul) | | | | | | |
+| 2 | SHEET | ITEM | TT USD | BRL | QT | D/M | TT BRL |
+| grupo | nome do grupo | | US$ | | | | R$ subtotal |
+| item | | descrição | US$ | R$ unit. | qt | d/m | R$ total |
+| fechamento | | | rótulo (C:E) | | | US$ | R$ |
+
+Fechamento: **TOTAL · FEE · INT TAXES · TOTAL RECEBIDO EXTERIOR · INT
+TRANSACTION COSTS · BRAZILIAN TAXES · INVOICING**, a linha amarela
+"USD · BRL" e o câmbio no rodapé (A/B): cotação com a data, COMPRA, VENDA.
+Cores e formatos numéricos também são os do modelo.
+
+As quatro respostas do Tiago sobre o que a exportação nacional tem e o
+modelo não:
+
+| Ponto | Decisão |
+|---|---|
+| Coluna TIPO e SUB-TOTAL por tipo | **Saem.** O tipo continua gravado no ERP. |
+| Cabeçalho | **O do modelo:** uma faixa com o nome, sem "Cliente:" nem a linha ORÇAMENTO. Versão única: `código · nome - vN`; consolidado: `código · nome do projeto`. |
+| Câmbio no rodapé | **Como no modelo:** cotação + data, COMPRA e VENDA. |
+| "(−) PAGO COM CRÉDITO DE SALDO ANTERIOR" | **Só quando houver crédito**, entre TOTAL e FEE. Sem save, a planilha é a do modelo. |
+
+**Vários internacionais no mesmo arquivo** só saem com a mesma moeda e a
+mesma taxa de compra (decisão do Tiago): a planilha tem uma coluna de moeda
+e um câmbio. Trava no seletor e na rota, pela mesma `chaveDoCambio`. Se
+cotação, venda ou data divergirem com a compra igual, a linha divergente
+some do rodapé em vez de mostrar a de um só.
+
+**Coluna da moeda = TT BRL ÷ COMPRA**, a conta da tela da versão. As duas
+abas do modelo divergem aqui (a USD divide o unitário, a GBP o total); o
+rótulo "TT USD" e a tela resolvem pelo total. Sem compra gravada, a coluna
+fica vazia.
+
+**Fórmulas.** TT, subtotais, TOTAL, crédito, coluna da moeda e INVOICING
+são sempre fórmula. FEE, INT TAXES, TOTAL RECEBIDO EXTERIOR e BRAZILIAN
+TAXES só são fórmula quando a conta do modelo é exatamente a do ERP — todo
+o líquido do TOTAL entra em fee, impostos e valor do job, e as taxas são
+iguais em todas as seções. Sem a coluna TIPO a fórmula não tem como
+excluir, por exemplo, um item A; nesses casos a linha sai com o valor
+calculado pelo ERP.
+
+**A importação recusa a planilha internacional.** O importador de versão
+reconhecia o cabeçalho (ITEM, QT, D/M, TT batem) e leria as colunas
+deslocadas — o TT USD como valor unitário, o TT BRL como tipo; no de
+projeto, os itens cairiam como descartados e o diff os trataria como
+apagados. Os dois agora recusam o arquivo inteiro quando o cabeçalho tem
+"TT BRL", com a mensagem "Esta é a planilha do orçamento internacional…
+nada foi importado". Vale também para a própria planilha modelo.
+
+Conferido: as 12 células do fechamento (BRL e USD) batem com a planilha
+modelo nos arquivos gerados pelas duas rotas, com os dados reais do
+0-0001/26-07; todas as fórmulas foram reavaliadas contra o valor em cache,
+inclusive num caso com duas seções, item tipo A e crédito; a exportação
+nacional do Job 4 + Job 6 saiu idêntica à de antes; os dois importadores
+continuam lendo a nacional. **Não exercitado com dado real:** a trava de
+câmbio — o projeto de teste tem um orçamento internacional só.
 
 ## O que NÃO entrou
 
@@ -256,9 +316,10 @@ A **abertura** do job entrou em 11/09/2026 (seção acima). Seguem nacionais,
 e a cadeia não vaza para eles porque o 4º parâmetro é opcional e ninguém lá
 o passa:
 
-- o **layout internacional** da planilha exportada (a trava de mistura já
-  entrou — seção acima);
-- a **importação** em Excel.
+- a **importação** em Excel (hoje a planilha internacional é recusada —
+  seção acima);
+- a exportação com **planejado** e **realizado** (pendência combinada com
+  o Tiago).
 
 ## Decisões de tela
 

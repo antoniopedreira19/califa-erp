@@ -3563,5 +3563,35 @@ internacional na mesma planilha.** O nacional continua exatamente como era.
 A regra é **"mais de um modelo no conjunto"**, não "tem internacional" —
 modelo novo entra nela sem mexer aqui.
 
-⚠️ **Pendente:** o arquivo exportado de um orçamento internacional ainda sai
-com o fechamento nacional. O layout internacional é a próxima parte.
+## ⚠️ Nota de 2026-09-14 — a planilha exportada do internacional é a do modelo (decisão 072)
+
+O orçamento internacional exporta no layout da planilha que a California
+já usa: SHEET · ITEM · TT USD · BRL · QT · D/M · TT BRL, fechamento FEE /
+INT TAXES / TOTAL RECEBIDO EXTERIOR / INT TRANSACTION COSTS / BRAZILIAN
+TAXES / INVOICING e câmbio no rodapé. Sem coluna TIPO nem SUB-TOTAL por
+tipo; crédito só quando houver. Detalhes e as decisões na
+[072](../decisions/072-orcamento-internacional.md).
+
+| Arquivo | O quê |
+|---|---|
+| `lib/exportacao/planilha-orcamento-internacional.ts` | **novo** — `adicionarAbaOrcamentoInternacional`, `cambioDaVersao`, `cambioComum` |
+| `lib/exportacao/planilha-orcamento.ts` | **intocado** — a nacional é a de sempre |
+| `api/.../versoes/[versaoId]/export/route.ts` | escolhe a aba por `configDaPlanilha` (categoria do orçamento) |
+| `api/orcamentos/[projetoId]/export/route.ts` | idem, e recusa 400 internacionais com moeda/compra diferentes |
+| `_planilha/moeda-estrangeira.ts` | `chaveDoCambio` — a mesma chave no seletor e na rota |
+| `_selecao/exportar-orcamentos-menu.tsx` · `[projetoId]/page.tsx` · `agregado/page.tsx` | `OrcamentoExportavel.chaveCambio` (obrigatório) e o aviso da trava |
+| `lib/importacao/parser-oficial.ts` · `parser-projeto.ts` | recusam o arquivo com cabeçalho "TT BRL" |
+
+### Armadilhas
+
+- **Não mexa na nacional para caber a internacional.** São duas funções
+  com a mesma assinatura; a rota escolhe. O `scripts/conferir-save.ts`
+  continua sendo a prova de que a nacional não mudou.
+- **FEE/INT TAXES/BRAZILIAN TAXES nem sempre são fórmula.** Sem a coluna
+  TIPO, a fórmula do modelo (`TOTAL × %`) só é verdadeira quando todo item
+  entra em fee e impostos. Fora disso o arquivo grava o valor do ERP — não
+  "conserte" isso trocando por fórmula.
+- **O ExcelJS não grava cache de fórmula que dá zero** (a própria planilha
+  modelo tem isso em F9). Quem lê o arquivo sem recalcular vê vazio, não 0.
+- **Importar a internacional é a próxima entrega.** Até lá, os parsers
+  recusam; não remova a recusa sem ter as colunas certas no lugar.

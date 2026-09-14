@@ -1,6 +1,7 @@
 import ExcelJS from "exceljs";
 import type { ImportacaoWarning, TipoCusto } from "@/lib/types";
 import { TIPOS_CUSTO } from "@/lib/calculos/versao-totais";
+import { MOTIVO_LAYOUT_INTERNACIONAL } from "./parser-oficial";
 import {
   COLUNA_ID,
   MARCA_GRUPO,
@@ -129,6 +130,14 @@ function toNumber(v: unknown): { ok: boolean; n: number } {
   return Number.isFinite(n) ? { ok: true, n } : { ok: false, n: 0 };
 }
 
+/** Cabeçalho da planilha internacional (decisão 072) — ver
+ *  `parser-oficial.ts`. Lida com as colunas deste parser, o TT em moeda
+ *  viraria valor unitário e o TT BRL, tipo: as linhas existentes cairiam
+ *  como descartadas e o diff as trataria como apagadas. */
+function ehLayoutInternacional(cells: string[]): boolean {
+  return cells.slice(0, 7).some((c) => c.toLowerCase() === "tt brl");
+}
+
 function ehLinhaHeader(cells: string[]): boolean {
   const joined = cells.slice(0, 7).map((c) => c.toLowerCase()).join("|");
   return KEYWORDS_HEADER.filter((k) => joined.includes(k)).length >= 3;
@@ -199,6 +208,7 @@ export async function parsePlanilhaProjeto(
   const marcaCabecalho = marcas(normalizar(ws.getCell(1, COLUNA_ID).value));
 
   let headerEncontrado = false;
+  let layoutInternacional = false;
   let secaoAtual: SecaoLida | null = null;
   let grupoAtual: GrupoLido | null = null;
   let terminou = false;
@@ -226,7 +236,13 @@ export async function parsePlanilhaProjeto(
     linhasLidas++;
 
     if (!headerEncontrado) {
-      if (ehLinhaHeader(cells)) headerEncontrado = true;
+      if (ehLinhaHeader(cells)) {
+        headerEncontrado = true;
+        if (ehLayoutInternacional(cells)) {
+          layoutInternacional = true;
+          terminou = true;
+        }
+      }
       return;
     }
 
@@ -364,6 +380,19 @@ export async function parsePlanilhaProjeto(
     });
     linhasIgnoradas++;
   });
+
+  if (layoutInternacional) {
+    return {
+      aba: ws.name,
+      secoes: [],
+      warnings: [
+        { linha: 0, motivo: MOTIVO_LAYOUT_INTERNACIONAL, severidade: "ignorada" },
+      ],
+      linhas_lidas: linhasLidas,
+      linhas_importadas: 0,
+      linhas_ignoradas: linhasLidas,
+    };
+  }
 
   if (!headerEncontrado) {
     warnings.push({

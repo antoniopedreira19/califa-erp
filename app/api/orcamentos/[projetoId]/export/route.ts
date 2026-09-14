@@ -10,6 +10,13 @@ import {
   nomeDeArquivoSeguro,
   type SecaoDaAba,
 } from "@/lib/exportacao/planilha-orcamento";
+import {
+  adicionarAbaOrcamentoInternacional,
+  cambioComum,
+  cambioDaVersao,
+} from "@/lib/exportacao/planilha-orcamento-internacional";
+import { configDaPlanilha } from "@/app/(app)/_planilha/modelo-planilha";
+import { chaveDoCambio } from "@/app/(app)/_planilha/moeda-estrangeira";
 import type {
   CategoriaModeloPlanilha,
   JobStatus,
@@ -96,7 +103,11 @@ export async function GET(
       .in("orcamento_id", ids),
     supabase
       .from("versoes_orcamento")
-      .select("id, orcamento_id, numero_versao, status, percentual_honorarios, percentual_imposto, created_at")
+      // Os sete últimos são da planilha internacional (decisão 072).
+      .select(
+        "id, orcamento_id, numero_versao, status, percentual_honorarios, percentual_imposto, created_at, " +
+          "percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra, cambio_cotacao, cambio_venda, cambio_data",
+      )
       .eq("tenant_id", tenantId)
       .in("orcamento_id", ids)
       .neq("status", "cancelada"),
@@ -172,9 +183,18 @@ export async function GET(
     percentual_honorarios: number | string;
     percentual_imposto: number | string;
     created_at: string;
+    // Obrigatórios: linha estreita montada à mão engole campo opcional
+    // em silêncio (CLAUDE.md).
+    percentual_int_taxes: number;
+    int_transaction_costs: number;
+    moeda_estrangeira: string | null;
+    cambio_compra: number | null;
+    cambio_cotacao: number | null;
+    cambio_venda: number | null;
+    cambio_data: string | null;
   };
   const versoesPorOrcamento = new Map<string, VersaoLeve[]>();
-  for (const v of ((versoesRes.data ?? []) as VersaoLeve[])) {
+  for (const v of ((versoesRes.data ?? []) as unknown as VersaoLeve[])) {
     const atuais = versoesPorOrcamento.get(v.orcamento_id) ?? [];
     atuais.push(v);
     versoesPorOrcamento.set(v.orcamento_id, atuais);
@@ -194,6 +214,30 @@ export async function GET(
     return NextResponse.json(
       {
         error: `${semVersao.join(", ")} ainda não tem versão — nada a exportar.`,
+      },
+      { status: 400 },
+    );
+  }
+
+  // Depois da trava da mistura, todos os orçamentos são do mesmo modelo.
+  const modeloDoArquivo: CategoriaModeloPlanilha =
+    orcamentos[0]?.categoria?.modelo_planilha ?? "nacional";
+
+  // Internacionais só saem juntos com a mesma moeda e a mesma taxa de
+  // compra (decisão 072, 14/09/2026): a planilha tem UMA coluna de moeda e
+  // UM câmbio no rodapé. A mesma chave do seletor.
+  if (
+    modeloDoArquivo === "internacional" &&
+    new Set(
+      [...versaoAlvo.values()].map((v) =>
+        chaveDoCambio(v.moeda_estrangeira, v.cambio_compra),
+      ),
+    ).size > 1
+  ) {
+    return NextResponse.json(
+      {
+        error:
+          "Orçamentos internacionais com moeda ou câmbio de compra diferentes não podem ser exportados na mesma planilha. Exporte-os separadamente.",
       },
       { status: 400 },
     );
@@ -263,17 +307,38 @@ export async function GET(
     };
   });
 
-  adicionarAbaOrcamento(
-    wb,
-    "Orçamento",
-    {
-      identificacao: `${projeto.codigo} · ${projeto.nome}`,
-      clienteNome,
-      titulo: `Orçamento · ${dataBr(new Date())}`,
-      secoes,
-    },
-    { formulas: true },
-  );
+  if (modeloDoArquivo === "internacional") {
+    adicionarAbaOrcamentoInternacional(
+      wb,
+      "Orçamento",
+      {
+        nome: `${projeto.codigo} · ${projeto.nome}`,
+        cambio: cambioComum(
+          orcamentos.map((o) => cambioDaVersao(versaoAlvo.get(o.id)!)),
+        ),
+        secoes: secoes.map((secao, i) => ({
+          ...secao,
+          internacional: configDaPlanilha(
+            "internacional",
+            versaoAlvo.get(orcamentos[i].id)!,
+          ).internacional!,
+        })),
+      },
+      { formulas: true },
+    );
+  } else {
+    adicionarAbaOrcamento(
+      wb,
+      "Orçamento",
+      {
+        identificacao: `${projeto.codigo} · ${projeto.nome}`,
+        clienteNome,
+        titulo: `Orçamento · ${dataBr(new Date())}`,
+        secoes,
+      },
+      { formulas: true },
+    );
+  }
 
   // ---------- resposta ----------
   const buffer = await wb.xlsx.writeBuffer();

@@ -4,7 +4,13 @@ import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { nomeVersao } from "@/lib/nome-versao";
 import { adicionarAbaOrcamento } from "@/lib/exportacao/planilha-orcamento";
+import {
+  adicionarAbaOrcamentoInternacional,
+  cambioDaVersao,
+} from "@/lib/exportacao/planilha-orcamento-internacional";
+import { configDaPlanilha } from "@/app/(app)/_planilha/modelo-planilha";
 import type {
+  CategoriaModeloPlanilha,
   VersaoOrcamento,
   VersaoOrcamentoGrupo,
   VersaoOrcamentoItem,
@@ -39,7 +45,10 @@ export async function GET(
       .maybeSingle<VersaoOrcamento>(),
     supabase
       .from("orcamentos")
-      .select("id, codigo, nome, projeto:projetos(cliente:clientes(nome_fantasia))")
+      // `!categoria_id`: `orcamentos` tem duas FKs para `categorias_dominio`.
+      .select(
+        "id, codigo, nome, projeto:projetos(cliente:clientes(nome_fantasia)), categoria:categorias_dominio!categoria_id(modelo_planilha)",
+      )
       .eq("id", params.orcId)
       .eq("projeto_id", params.projetoId)
       .eq("tenant_id", session.activeTenant.id)
@@ -48,6 +57,7 @@ export async function GET(
         codigo: string;
         nome: string;
         projeto: { cliente: { nome_fantasia: string } | null } | null;
+        categoria: { modelo_planilha: CategoriaModeloPlanilha } | null;
       }>(),
     supabase
       .from("versoes_orcamento_grupos")
@@ -91,29 +101,57 @@ export async function GET(
   wb.creator = "California ERP";
   wb.created = new Date();
 
-  adicionarAbaOrcamento(
-    wb,
-    "Orçamento",
-    {
-      identificacao: `${orcamento.codigo} · ${orcamento.nome}`,
-      clienteNome,
-      titulo: nomeVersao(orcamento.nome, versao.numero_versao),
-      secoes: [
-        {
-          orcamentoId: orcamento.id,
-          versaoId: versao.id,
-          percentualHonorarios: Number(versao.percentual_honorarios ?? 0),
-          percentualImposto: Number(versao.percentual_imposto ?? 0),
-          grupos: grupos.map((grupo) => ({
-            id: grupo.id,
-            nome: grupo.nome,
-            itens: itens.filter((i) => i.grupo_id === grupo.id),
-          })),
-        },
-      ],
-    },
-    { formulas: true },
-  );
+  const gruposDaSecao = grupos.map((grupo) => ({
+    id: grupo.id,
+    nome: grupo.nome,
+    itens: itens.filter((i) => i.grupo_id === grupo.id),
+  }));
+
+  // O modelo vem da categoria do ORÇAMENTO (decisão 072). Internacional
+  // sai no layout da planilha que a California já usa; nacional, como
+  // sempre foi.
+  const config = configDaPlanilha(orcamento.categoria?.modelo_planilha, versao);
+  if (config.internacional) {
+    adicionarAbaOrcamentoInternacional(
+      wb,
+      "Orçamento",
+      {
+        nome: `${orcamento.codigo} · ${nomeVersao(orcamento.nome, versao.numero_versao)}`,
+        cambio: cambioDaVersao(versao),
+        secoes: [
+          {
+            orcamentoId: orcamento.id,
+            versaoId: versao.id,
+            percentualHonorarios: Number(versao.percentual_honorarios ?? 0),
+            percentualImposto: Number(versao.percentual_imposto ?? 0),
+            internacional: config.internacional,
+            grupos: gruposDaSecao,
+          },
+        ],
+      },
+      { formulas: true },
+    );
+  } else {
+    adicionarAbaOrcamento(
+      wb,
+      "Orçamento",
+      {
+        identificacao: `${orcamento.codigo} · ${orcamento.nome}`,
+        clienteNome,
+        titulo: nomeVersao(orcamento.nome, versao.numero_versao),
+        secoes: [
+          {
+            orcamentoId: orcamento.id,
+            versaoId: versao.id,
+            percentualHonorarios: Number(versao.percentual_honorarios ?? 0),
+            percentualImposto: Number(versao.percentual_imposto ?? 0),
+            grupos: gruposDaSecao,
+          },
+        ],
+      },
+      { formulas: true },
+    );
+  }
 
   // ---------- resposta ----------
   const buffer = await wb.xlsx.writeBuffer();

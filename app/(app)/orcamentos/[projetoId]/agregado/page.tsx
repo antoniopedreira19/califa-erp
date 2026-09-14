@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { configDaPlanilha } from "@/app/(app)/_planilha/modelo-planilha";
+import { chaveDoCambio } from "@/app/(app)/_planilha/moeda-estrangeira";
 import { servicosDoOrcamentoQuery, type ServicoOption } from "@/lib/data/servicos";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
@@ -464,6 +465,13 @@ export default async function OrcamentosAgregadoPage({
       valor,
       // Trava a mistura de nacional com internacional no seletor (072).
       modeloPlanilha: orc.modeloPlanilha,
+      chaveCambio:
+        orc.modeloPlanilha === "internacional"
+          ? chaveDoCambio(
+              orc.parametros.moeda_estrangeira,
+              orc.parametros.cambio_compra,
+            )
+          : null,
     };
   });
 
