@@ -4942,3 +4942,38 @@ na tela. O saldo dos dois jobs segue na aba Faturamento.
   `abertura-de-job/consumo.ts` (abatimento da previsão de recebimento).
 - "NF agrupada só com jobs de um mesmo cliente" (017 §7) não é conferido
   nem em `emitirFaturamento` nem em `emitir_faturamento`.
+
+## ⚠️ Nota de 2026-09-14 — PP urgente na aprovação e nos títulos, vencimento neutro no dossiê, e as janelas saem da curva (decisão 077)
+
+### O que mudou
+
+- **Lista de aprovação** (`pedidos-compra-list.tsx`): as urgentes em
+  avaliação sobem para o topo, com faixa vermelha e a divisória "Demais
+  PPs". A etiqueta "Urgente" aparece em avaliação e aprovada.
+- **Tela da PP:** etiqueta no cabeçalho (`pp-tela.tsx`); no dossiê
+  (`pp-dossie.tsx`), o bloco da justificativa abre a aba Dados, com quem
+  marcou e quando. O "Vencimento original" perdeu o amarelo: cinza neutro,
+  com o selo "✓ janela do dia 08/20" ou "fora das janelas".
+- **Títulos a Pagar:** o título de PP urgente sobe para o topo dos a pagar,
+  com a etiqueta e a justificativa embaixo da descrição, até ser pago.
+- **Pop-up de aprovação:** não mudou — a data continua livre (pergunta 3a).
+- **`abertura-de-job/curva.ts`:** as janelas de pagamento foram para
+  `lib/calculos/janelas-pagamento.ts`; `curva.ts` reexporta os mesmos nomes
+  e o comportamento é idêntico.
+
+### Armadilhas
+
+- `urgente` e `urgente_justificativa` são **obrigatórios** em `TituloRow`,
+  pelo mesmo motivo do asterisco da decisão 067: toda origem que não é PP
+  manda `false`/`null` explícito. As 5 montagens em `page.tsx` já mandam.
+- `pedidos_compra` ganhou mais uma FK para `profiles` (`urgente_por`). Todo
+  embed de `profiles` a partir da PP precisa da dica de coluna
+  (`profiles!urgente_por(nome)`) — já precisava, mas vale lembrar.
+
+### Conferido
+
+PP-00058 (Projeto Teste · JOB-0029, verba urgente) em avaliação no topo da
+lista com faixa, etiqueta e "Demais PPs"; tela com etiqueta, justificativa
+e "✓ janela do dia 20"; aprovada com pagamento em 16/09; título no topo de
+Títulos a Pagar com etiqueta e justificativa. Detalhe completo na decisão
+077. Ficou de dado de teste: PP-00058 aprovada, com título a pagar.

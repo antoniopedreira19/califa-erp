@@ -14,6 +14,13 @@
  */
 
 import { TOLERANCIA_CURVA } from "@/lib/validations/abertura-financeiro";
+import {
+  ehJanelaDePagamento,
+  isoParaUtc,
+  janelaSeguinte,
+  proximaJanelaDePagamento,
+  utcParaIso,
+} from "@/lib/calculos/janelas-pagamento";
 
 export interface CurvaLinha {
   /** Só para a key do React — não vai para o banco. */
@@ -24,17 +31,17 @@ export interface CurvaLinha {
 
 const DIA_MS = 86_400_000;
 
-export function isoParaUtc(iso: string | null | undefined): number | null {
-  if (!iso) return null;
-  const [ano, mes, dia] = iso.slice(0, 10).split("-").map(Number);
-  if (!ano || !mes || !dia) return null;
-  const ms = Date.UTC(ano, mes - 1, dia);
-  return Number.isNaN(ms) ? null : ms;
-}
-
-export function utcParaIso(ms: number): string {
-  return new Date(ms).toISOString().slice(0, 10);
-}
+// As datas e as janelas de pagamento moram em `lib/calculos/janelas-pagamento.ts`
+// desde 14/09/2026 (decisão 077): o prazo da PP passou a obedecer às mesmas
+// janelas, e duas cópias da regra divergiriam na primeira correção. Seguem
+// exportadas daqui para quem já importava de `curva`.
+export {
+  ehJanelaDePagamento,
+  isoParaUtc,
+  janelaSeguinte,
+  proximaJanelaDePagamento,
+  utcParaIso,
+};
 
 /** Arredonda para centavos — dinheiro nunca circula com cauda binária. */
 export function emCentavos(n: number): number {
@@ -74,59 +81,8 @@ export function redistribuirIgualmente(
 
 // ---------- Janelas de pagamento ----------
 //
-// A California paga em duas janelas por mês: dia 08 e dia 20. Caindo em
-// sábado ou domingo, vale o dia útil seguinte. As datas da curva SÓ podem
-// ser janelas — previsão em data que não é dia de pagamento é fictícia e
-// o fluxo de caixa teria que rolá-la depois (docs/decisions/004).
-//
-// Feriado ainda NÃO é tratado: não existe calendário de feriados no
-// sistema. Quando existir, o ajuste entra aqui, num lugar só.
-
-/** Sábado/domingo (em UTC) empurram para a segunda-feira seguinte. */
-function ajustarParaDiaUtil(ms: number): number {
-  const diaSemana = new Date(ms).getUTCDay();
-  if (diaSemana === 6) return ms + 2 * DIA_MS; // sábado -> segunda
-  if (diaSemana === 0) return ms + DIA_MS; // domingo -> segunda
-  return ms;
-}
-
-/** A janela (dia 08 ou 20 ajustado) de um mês, em ms UTC. */
-function janelaDoMes(ano: number, mesZeroBased: number, dia: 8 | 20): number {
-  return ajustarParaDiaUtil(Date.UTC(ano, mesZeroBased, dia));
-}
-
-/** Primeira janela de pagamento cuja data é >= a data dada. */
-export function proximaJanelaDePagamento(aPartirDeIso: string): string {
-  const base = isoParaUtc(aPartirDeIso);
-  const baseMs = base ?? Date.UTC(1970, 0, 1);
-  const d = new Date(baseMs);
-  const ano = d.getUTCFullYear();
-  const mes = d.getUTCMonth();
-  // As duas janelas deste mês e a primeira do seguinte cobrem qualquer
-  // ponto de partida — inclusive um dia 21+ ou um dia 08 que caiu em
-  // fim de semana e escorregou.
-  const candidatas = [
-    janelaDoMes(ano, mes, 8),
-    janelaDoMes(ano, mes, 20),
-    janelaDoMes(ano, mes + 1, 8),
-    janelaDoMes(ano, mes + 1, 20),
-  ];
-  const alvo = candidatas.find((ms) => ms >= baseMs) ?? candidatas[3];
-  return utcParaIso(alvo);
-}
-
-/** A janela seguinte à data dada (estritamente depois dela). */
-export function janelaSeguinte(depoisDeIso: string): string {
-  const ms = isoParaUtc(depoisDeIso);
-  if (ms === null) return proximaJanelaDePagamento(depoisDeIso);
-  return proximaJanelaDePagamento(utcParaIso(ms + DIA_MS));
-}
-
-/** A data é uma janela de pagamento válida (08/20, ajustada)? */
-export function ehJanelaDePagamento(iso: string): boolean {
-  if (!iso || iso.length < 10) return false;
-  return proximaJanelaDePagamento(iso) === iso.slice(0, 10);
-}
+// Dia 08 e dia 20; fim de semana passa para a segunda. A regra (e o aviso
+// de que feriado ainda não é tratado) está em `lib/calculos/janelas-pagamento.ts`.
 
 /** Todas as janelas dentro de [inicioIso, fimIso], em ordem. */
 function janelasNoPeriodo(inicioIso: string, fimIso: string): string[] {

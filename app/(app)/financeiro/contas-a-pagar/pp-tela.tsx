@@ -238,6 +238,14 @@ export function PPTela({
             <Badge className="border-white/25 bg-white/10 text-white">
               {ppStatusLabel(pp.status as PPStatus)}
             </Badge>
+            {pp.urgente && (
+              <Badge
+                title={pp.urgente_justificativa ?? undefined}
+                className="border-california-red bg-california-red uppercase tracking-wider text-white"
+              >
+                Urgente
+              </Badge>
+            )}
             <DialogDescription asChild>
               <span id="pp-tela-descricao" className="text-xs text-white/60">
                 Pedido, documento anexo e dados — lado a lado

@@ -122,6 +122,14 @@ export interface TituloRow {
    * desfaz. A aba Cartão mostra a linha como crédito e a subtrai da
    * fatura (29/08/2026).
    */
+  /**
+   * A PP de origem é urgente (decisão 077, pergunta 4a): a urgência não
+   * termina na aprovação — o título sobe para o topo dos "a pagar" com a
+   * mesma justificativa. Só PP tem urgência; toda outra origem manda
+   * `false` e `null`. Obrigatório, pelo mesmo motivo do asterisco acima.
+   */
+  urgente: boolean;
+  urgente_justificativa: string | null;
   estorno_de_avulsa_id: string | null;
   /**
    * A COMPRA a que esta linha pertence — ela mesma, se for compra à vista
@@ -353,6 +361,13 @@ export function TitulosPagarList({
         return casaBusca(r, q);
       })
       .sort((a, b) => {
+        // Urgente primeiro entre os "a pagar" (decisão 077, pergunta 4a):
+        // a urgência da PP segue no título até ele ser pago.
+        if (statusFiltro !== "pago") {
+          const urgenteA = a.urgente && a.status === "a_pagar";
+          const urgenteB = b.urgente && b.status === "a_pagar";
+          if (urgenteA !== urgenteB) return urgenteA ? -1 : 1;
+        }
         // Em "a pagar" o próximo vencimento vem primeiro; em "pagos" o mais
         // recente vem primeiro. "Todos": pagos abaixo, mais recente antes;
         // a pagar acima, por vencimento crescente.
@@ -702,7 +717,24 @@ export function TitulosPagarList({
                       {/* "Pago em X · conta · centro de custo" saiu daqui em
                           08/09/2026: repetia, em corpo 11 e numa segunda
                           linha, o que o olho da linha paga já abre inteiro. */}
-                      <span className="break-words font-semibold">{r.descricao}</span>
+                      <span className="break-words font-semibold">
+                        {r.urgente && r.status === "a_pagar" && (
+                          <span className="mr-1.5 inline-block rounded-md bg-california-red px-1.5 py-0.5 align-middle text-[10px] font-bold uppercase tracking-wider text-white">
+                            Urgente
+                          </span>
+                        )}
+                        {r.descricao}
+                      </span>
+                      {/* A mesma justificativa da aprovação (decisão 077,
+                          pergunta 4a) — some quando o título é pago. */}
+                      {r.urgente && r.status === "a_pagar" && r.urgente_justificativa && (
+                        <span
+                          title={r.urgente_justificativa}
+                          className="line-clamp-2 text-[11px] leading-snug text-california-red"
+                        >
+                          “{r.urgente_justificativa}”
+                        </span>
+                      )}
                     </div>
                   </td>
                   <td className="px-3 py-3 text-xs text-muted-foreground">

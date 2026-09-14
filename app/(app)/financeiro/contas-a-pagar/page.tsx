@@ -88,6 +88,7 @@ export default async function PedidosCompraFinanceiroPage({
         cancelada_em, motivo_cancelamento,
         rejeitada_em, motivo_rejeicao, pago_em, verba_producao,
         enviada_financeiro_em, aprovada_em, anexos_na_aprovacao,
+        urgente, urgente_justificativa, urgente_em,
         forma_pagamento, cartao_credito_id,
         fornecedor:fornecedores(id, nome, razao_social),
         responsavel:profiles!responsavel_verba_id(id, nome),
@@ -98,6 +99,7 @@ export default async function PedidosCompraFinanceiroPage({
         pago_por_profile:profiles!pago_por(nome),
         aprovada_por_profile:profiles!aprovada_por(nome),
         enviada_por_profile:profiles!enviada_financeiro_por(nome),
+        urgente_por_profile:profiles!urgente_por(nome),
         job:jobs(
           id, codigo, nome, regional_id,
           projeto:projetos(codigo, nome, cliente:clientes(nome_fantasia))
@@ -417,6 +419,10 @@ export default async function PedidosCompraFinanceiroPage({
     }> | null;
     aprovada_por_profile: { nome: string } | null;
     enviada_por_profile: { nome: string } | null;
+    urgente: boolean | null;
+    urgente_justificativa: string | null;
+    urgente_em: string | null;
+    urgente_por_profile: { nome: string } | null;
     pago_por_profile: { nome: string } | null;
     job: {
       id: string;
@@ -473,6 +479,12 @@ export default async function PedidosCompraFinanceiroPage({
     aprovada_em: r.aprovada_em ?? null,
     aprovada_por_nome: r.aprovada_por_profile?.nome ?? null,
     anexos_na_aprovacao: r.anexos_na_aprovacao ?? null,
+    // Pagamento urgente (decisão 077): sobe na lista de aprovação e segue
+    // no título depois de aprovada.
+    urgente: r.urgente === true,
+    urgente_justificativa: r.urgente_justificativa ?? null,
+    urgente_em: r.urgente_em ?? null,
+    urgente_por_nome: r.urgente_por_profile?.nome ?? null,
     fornecedor_id: r.fornecedor?.id ?? "",
     fornecedor_nome: r.fornecedor?.razao_social ?? r.fornecedor?.nome ?? "",
     /**
@@ -658,6 +670,9 @@ export default async function PedidosCompraFinanceiroPage({
         // Nenhuma destas origens é estorno nem parcela de cartão: as duas
         // coisas só existem em compra de cartão, que vem do laço das
         // avulsas.
+        // A urgência da PP segue no título (decisão 077, pergunta 4a).
+        urgente: pp.urgente,
+        urgente_justificativa: pp.urgente_justificativa,
         estorno_de_avulsa_id: null,
         compra_id: "",
         compra_total: 0,
@@ -721,6 +736,8 @@ export default async function PedidosCompraFinanceiroPage({
       cartao_credito_id: a.pago_em
         ? baixa?.cartao_credito_id ?? a.cartao_credito_id
         : a.cartao_credito_id,
+      urgente: false,
+      urgente_justificativa: null,
       estorno_de_avulsa_id: a.estorno_de_avulsa_id,
       // A parcela do meio pertence à cabeça; a cabeça e a compra à vista
       // pertencem a si mesmas.
@@ -821,6 +838,8 @@ export default async function PedidosCompraFinanceiroPage({
         // Nenhuma destas origens é estorno nem parcela de cartão: as duas
         // coisas só existem em compra de cartão, que vem do laço das
         // avulsas.
+        urgente: false,
+        urgente_justificativa: null,
         estorno_de_avulsa_id: null,
         compra_id: "",
         compra_total: 0,
@@ -877,6 +896,8 @@ export default async function PedidosCompraFinanceiroPage({
       // Nenhuma destas origens é estorno nem parcela de cartão: as duas
       // coisas só existem em compra de cartão, que vem do laço das
       // avulsas.
+      urgente: false,
+      urgente_justificativa: null,
       estorno_de_avulsa_id: null,
       compra_id: "",
       compra_total: 0,
@@ -1054,6 +1075,8 @@ export default async function PedidosCompraFinanceiroPage({
       // Nenhuma destas origens é estorno nem parcela de cartão: as duas
       // coisas só existem em compra de cartão, que vem do laço das
       // avulsas.
+      urgente: false,
+      urgente_justificativa: null,
       estorno_de_avulsa_id: null,
       compra_id: "",
       compra_total: 0,
