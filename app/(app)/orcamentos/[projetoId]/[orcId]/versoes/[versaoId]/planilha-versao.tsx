@@ -86,6 +86,17 @@ interface Props {
   /** Moeda e taxa de compra da coluna calculada da planilha. `null` fora
    *  do internacional. */
   moedaEstrangeira: MoedaEstrangeira | null;
+  // ---- MODELO MENSAL (docs/decisions/078)
+  /** O mês desta planilha: o "Novo grupo" nasce dentro dele. Ausente fora
+   *  do modelo mensal. */
+  mes?: { id: string; nome: string };
+  /** Esconde o card de Totais — a vista do trimestre empilha as planilhas
+   *  dos meses e fecha com um Totais só, do trimestre. */
+  semTotais?: boolean;
+  tituloTotais?: string;
+  subtituloTotais?: string;
+  /** Ação extra no estado vazio do mês ("Copiar itens de outro mês"). */
+  acaoDoVazio?: React.ReactNode;
 }
 
 export function PlanilhaVersao({
@@ -109,6 +120,11 @@ export function PlanilhaVersao({
   modeloPlanilha,
   internacional,
   moedaEstrangeira,
+  mes,
+  semTotais,
+  tituloTotais,
+  subtituloTotais,
+  acaoDoVazio,
 }: Props) {
   // ⚠️ FIXA em "bruto" desde 08/09/2026 (decisão 062). O BV saiu do
   // planejado, então nesta tela as duas vistas dariam o mesmo número — e
@@ -146,18 +162,24 @@ export function PlanilhaVersao({
         <div className="rounded-2xl border border-dashed border-border bg-muted/20 p-12 text-center">
           <FolderTree className="mx-auto mb-4 h-10 w-10 text-muted-foreground/50" />
           <p className="text-sm text-muted-foreground">
-            Nenhum grupo ainda. Crie o primeiro grupo para começar a adicionar
-            itens.
+            {mes
+              ? `Nenhum grupo em ${mes.nome} ainda. Crie o primeiro grupo ou copie os itens de outro mês.`
+              : "Nenhum grupo ainda. Crie o primeiro grupo para começar a adicionar itens."}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
             Exemplos: Equipe, Ativação, Staff, Logística...
           </p>
           {!readOnly && (
-            <div className="mt-5 flex justify-center">
+            <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
               {/* Sem nenhum grupo não há linha tracejada onde encaixar o
                   gatilho: aqui ele é a única ação da tela, e por isso vem
                   na forma sólida. */}
-              <NovoGrupoDrawer versaoId={versaoId} />
+              <NovoGrupoDrawer
+                versaoId={versaoId}
+                mesId={mes?.id}
+                nomeDoMes={mes?.nome}
+              />
+              {acaoDoVazio}
             </div>
           )}
         </div>
@@ -177,6 +199,7 @@ export function PlanilhaVersao({
           onAbrirSave={editavel ? setLinhaAberta : undefined}
           onAlternarSave={() => setSaveVisivel((v) => !v)}
           moedaEstrangeira={moedaEstrangeira}
+          rotuloTotal={mes ? `Total de ${mes.nome}` : undefined}
           savePorPadrao={padrao}
           onAlternarSavePadrao={
             editavel
@@ -190,23 +213,32 @@ export function PlanilhaVersao({
           }
           novoGrupo={
             readOnly ? undefined : (
-              <NovoGrupoDrawer versaoId={versaoId} variante="tracejada" />
+              <NovoGrupoDrawer
+                versaoId={versaoId}
+                variante="tracejada"
+                mesId={mes?.id}
+                nomeDoMes={mes?.nome}
+              />
             )
           }
         />
       )}
 
-      <TotaisCard
-        itens={itens}
-        bvsPorItem={bvsPorItem}
-        visao={visao}
-        percentualHonorarios={percentualHonorarios}
-        percentualImposto={percentualImposto}
-        moeda={moeda}
-        modeloPlanilha={modeloPlanilha}
-        internacional={internacional}
-        moedaEstrangeira={moedaEstrangeira}
-      />
+      {!semTotais && (
+        <TotaisCard
+          itens={itens}
+          bvsPorItem={bvsPorItem}
+          visao={visao}
+          percentualHonorarios={percentualHonorarios}
+          percentualImposto={percentualImposto}
+          moeda={moeda}
+          modeloPlanilha={modeloPlanilha}
+          internacional={internacional}
+          moedaEstrangeira={moedaEstrangeira}
+          titulo={tituloTotais}
+          subtitulo={subtituloTotais}
+        />
+      )}
 
       <SaveDialog
         open={linhaAberta !== null}

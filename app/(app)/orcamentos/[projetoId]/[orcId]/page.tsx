@@ -21,6 +21,7 @@ import {
   type VersaoOrcamentoItem,
 } from "@/lib/types";
 import type { CategoriaModeloPlanilha } from "@/lib/types";
+import type { CategoriaParaServico } from "@/lib/categorias-do-servico";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { HONORARIOS_PADRAO_FALLBACK } from "@/lib/validations/clientes";
@@ -43,6 +44,9 @@ import {
 } from "@/lib/data/saves";
 import type { EstadoSaveDaLinha } from "@/app/(app)/_planilha/save-coluna";
 import { ResumoRentabilidade } from "./versoes/[versaoId]/resumo-rentabilidade";
+import { mesesDaVersaoQuery } from "@/lib/data/meses-versao";
+import type { VersaoOrcamentoMes } from "@/lib/types";
+import { PlanilhaMensal } from "./planilha-mensal";
 import { AprovacaoActions } from "./versoes/[versaoId]/aprovacao-actions";
 import {
   BannersEstado,
@@ -133,7 +137,13 @@ export default async function OrcamentoDetailPage({
   params: { projetoId: string; orcId: string };
   /** `abertura=revisar` chega do botão "Revisar abertura" da página do
    *  job devolvido e abre o formulário de envio já preenchido. */
-  searchParams?: { v?: string | string[]; abertura?: string | string[] };
+  searchParams?: {
+    v?: string | string[];
+    abertura?: string | string[];
+    /** Modelo mensal (decisão 078): `2026-07` abre o mês, `trimestre` a
+     *  vista dos meses empilhados. */
+    mes?: string | string[];
+  };
 }) {
   const session = await requireSession();
   const supabase = createClient();
@@ -141,6 +151,9 @@ export default async function OrcamentoDetailPage({
   const versaoPedida = Array.isArray(searchParams?.v)
     ? searchParams?.v[0]
     : searchParams?.v;
+  const mesPedido = Array.isArray(searchParams?.mes)
+    ? searchParams?.mes[0]
+    : searchParams?.mes;
   const aberturaPedida = Array.isArray(searchParams?.abertura)
     ? searchParams?.abertura[0]
     : searchParams?.abertura;
@@ -194,9 +207,11 @@ export default async function OrcamentoDetailPage({
       .eq("tenant_id", session.activeTenant.id)
       .order("numero_versao", { ascending: false })
       .returns<VersaoOrcamento[]>(),
+    // Com modelo e serviço exclusivo: é por eles que o editor trava a
+    // categoria do Fee e do Always On (decisão 078).
     supabase
       .from("categorias_dominio")
-      .select("id, nome")
+      .select("id, nome, modelo_planilha, servico_exclusivo_id")
       .eq("tenant_id", session.activeTenant.id)
       .eq("escopo", "orcamento")
       .eq("ativo", true)
@@ -281,10 +296,8 @@ export default async function OrcamentoDetailPage({
   const empresaNome: string | null =
     projetoRaw.empresa?.nome_fantasia ?? projetoRaw.empresa?.razao_social ?? null;
   const servicos = (servicosRes.data ?? []) as ServicoOption[];
-  const categoriasOrcamento = (categoriasOrcRes.data ?? []) as Pick<
-    CategoriaDominio,
-    "id" | "nome"
-  >[];
+  const categoriasOrcamento = (categoriasOrcRes.data ??
+    []) as CategoriaParaServico[];
   // A cidade gravada no orçamento entra por fora da lista: com o combobox
   // limitado a 30, ela pode não estar entre as primeiras, e o editor
   // precisa exibi-la mesmo assim.
@@ -345,7 +358,7 @@ export default async function OrcamentoDetailPage({
   // `agregado` cobre TODAS as versões: é o resumo "N itens · R$ X" que o
   // submenu "copiar uma versão existente" mostra para cada aba.
   const versaoIds = versoesTodas.map((v) => v.id);
-  const [gruposRes, itensRes, bvsRes, agregadoRes, contatosRes] = await Promise.all([
+  const [gruposRes, itensRes, bvsRes, agregadoRes, contatosRes, mesesRes] = await Promise.all([
     versaoAtiva
       ? supabase
           .from("versoes_orcamento_grupos")
@@ -396,6 +409,11 @@ export default async function OrcamentoDetailPage({
           .eq("tipo", "cobranca")
           .order("ordem", { ascending: true })
       : Promise.resolve({ data: [], error: null }),
+    // Meses da versão — só existem no modelo mensal (decisão 078). Nos
+    // demais a lista vem vazia e ninguém a lê.
+    versaoAtiva
+      ? mesesDaVersaoQuery(supabase, session.activeTenant.id, versaoAtiva.id)
+      : Promise.resolve({ data: [] as VersaoOrcamentoMes[], error: null }),
   ]);
 
   if (gruposRes.error) console.error("[versao.grupos]", gruposRes.error.message);
@@ -496,6 +514,9 @@ export default async function OrcamentoDetailPage({
               projetoId={params.projetoId}
               orcamento={orcamento}
               categorias={categoriasOrcamento}
+              modeloPlanilhaAtual={
+                orcamentoRaw?.categoria?.modelo_planilha ?? "nacional"
+              }
               servicos={servicos}
               regionaisDoProjeto={regionaisDoProjeto}
               cidadesIniciais={cidadesIniciais}
@@ -527,6 +548,11 @@ export default async function OrcamentoDetailPage({
                 totalVersoes={versoesTodas.length}
                 podeCriarVersao={podeCriarVersao}
                 motivoBloqueio={motivoBloqueio}
+                exportarBloqueado={
+                  orcamentoRaw?.categoria?.modelo_planilha === "mensal"
+                    ? "A exportação de orçamentos de Fee e Always On ainda não está disponível."
+                    : undefined
+                }
               />
             )}
             {orcamento.status === "job_criado" && job && (
@@ -637,6 +663,8 @@ export default async function OrcamentoDetailPage({
           jobsCount={jobsCountRes.count ?? 0}
           podeCriarVersao={podeCriarVersao}
           motivoBloqueio={motivoBloqueio}
+          meses={(mesesRes.data ?? []) as VersaoOrcamentoMes[]}
+          mesPedido={mesPedido}
         />
       ) : (
         <SemVersoes
@@ -684,6 +712,8 @@ function VersaoSelecionada({
   jobsCount,
   podeCriarVersao,
   motivoBloqueio,
+  meses,
+  mesPedido,
 }: {
   params: { projetoId: string; orcId: string };
   session: Awaited<ReturnType<typeof requireSession>>;
@@ -712,6 +742,10 @@ function VersaoSelecionada({
   jobsCount: number;
   podeCriarVersao: boolean;
   motivoBloqueio?: string;
+  /** Meses da versão (modelo mensal, decisão 078); vazio nos demais. */
+  meses: VersaoOrcamentoMes[];
+  /** `?mes=` da URL. */
+  mesPedido: string | undefined;
 }) {
   const itens: VersaoOrcamentoItem[] = itensBrutos.map((it: any) => ({
     ...it,
@@ -920,6 +954,31 @@ function VersaoSelecionada({
         jobHref={job ? `/jobs/${job.id}` : null}
       />
 
+      {/* Modelo mensal (decisão 078): régua de meses, planilha do mês ou
+          vista do trimestre. O envio para abertura, a exportação e a
+          importação chegam nas próximas entregas — por isso o fluxo de
+          abertura e o "Importar planilha" não aparecem aqui. */}
+      {planilha.modeloPlanilha === "mensal" ? (
+        <PlanilhaMensal
+          projetoId={params.projetoId}
+          orcamentoId={params.orcId}
+          versao={versao}
+          grupos={grupos}
+          itens={itens}
+          meses={meses}
+          mesPedido={mesPedido}
+          inicioPrevisto={orcamento.data_inicio_prevista}
+          readOnly={readOnly}
+          categorias={categorias}
+          bvsPorItem={bvsPorItem}
+          fornecedores={fornecedores}
+          clienteNome={clienteNome}
+          savePorItem={savePorItem}
+          saldosDeSave={saldosDeSave}
+          planilha={planilha}
+        />
+      ) : (
+      <>
       {/* Barra de ação — "Novo grupo" saiu daqui em 24/08/2026: ele agora
           vive na linha tracejada do pé da planilha, que é onde o grupo
           novo de fato nasce (handoff "Grupos Unificados"). */}
@@ -1042,6 +1101,8 @@ function VersaoSelecionada({
         job={job}
         abrirRevisao={abrirRevisao}
       />
+      </>
+      )}
     </>
   );
 }

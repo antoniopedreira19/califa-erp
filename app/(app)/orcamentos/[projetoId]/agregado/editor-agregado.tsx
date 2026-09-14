@@ -38,6 +38,7 @@ import type {
   VersaoOrcamentoItem,
 } from "@/lib/types";
 import type { CidadeOption } from "../../cidade-combobox";
+import type { CategoriaParaServico } from "@/lib/categorias-do-servico";
 import type { AdaptadorItens } from "../[orcId]/versoes/[versaoId]/itens-table";
 import type { AdaptadorBv, FornecedorOpcao } from "@/app/(app)/_bv/bv-dialog";
 import { ResumoRentabilidade } from "../[orcId]/versoes/[versaoId]/resumo-rentabilidade";
@@ -108,7 +109,13 @@ interface Props {
    *  vigente e o valor que a aba imprime, calculados sobre o que está no
    *  banco. A exportação lê o banco, não o rascunho da tela. */
   exportaveis: OrcamentoExportavel[];
-  categorias: Pick<CategoriaDominio, "id" | "nome" | "modelo_planilha">[];
+  /** Só as categorias que se criam por aqui: as exclusivas de um serviço
+   *  (Fee, Always On) ficam de fora — orçamento mensal nasce na tela do
+   *  orçamento (decisão 078). */
+  categorias: CategoriaParaServico[];
+  /** TODAS as categorias de orçamento, só para o rótulo dos cards: o
+   *  orçamento de Fee aparece aqui em consulta e precisa do nome dela. */
+  nomesDeCategoria: Pick<CategoriaDominio, "id" | "nome">[];
   /** Serviço do job — escopo `projeto` de `categorias_dominio`,
    *  lista distinta das categorias acima (decisão 037). */
   servicos: Pick<CategoriaDominio, "id" | "nome">[];
@@ -167,6 +174,7 @@ export function EditorAgregado({
   inicial,
   exportaveis,
   categorias,
+  nomesDeCategoria,
   servicos,
   regionaisDoProjeto,
   cidadesIniciais,
@@ -239,11 +247,11 @@ export function EditorAgregado({
   // ---------- rótulos ----------
   const nomePor = React.useMemo(
     () => ({
-      categoria: new Map(categorias.map((c) => [c.id, c.nome])),
+      categoria: new Map(nomesDeCategoria.map((c) => [c.id, c.nome])),
       regional: new Map(regionaisDoProjeto.map((r) => [r.id, r.nome])),
       gp: new Map(gpsDoProjeto.map((g) => [g.id, g.nome])),
     }),
-    [categorias, regionaisDoProjeto, gpsDoProjeto],
+    [nomesDeCategoria, regionaisDoProjeto, gpsDoProjeto],
   );
 
   function descricao(orc: OrcamentoRascunho): string {

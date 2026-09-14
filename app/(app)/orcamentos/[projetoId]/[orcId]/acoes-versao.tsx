@@ -28,6 +28,9 @@ interface Props {
   /** Orçamento que ainda aceita versão nova (nem job criado, nem cancelado). */
   podeCriarVersao: boolean;
   motivoBloqueio?: string;
+  /** Presente ⇒ "Exportar" fica desabilitado com este motivo. Hoje só o
+   *  modelo mensal usa (decisão 078): a exportação dele ainda não existe. */
+  exportarBloqueado?: string;
 }
 
 type Popover = null | "exportar" | "duplicar";
@@ -56,6 +59,7 @@ export function AcoesVersao({
   totalVersoes,
   podeCriarVersao,
   motivoBloqueio,
+  exportarBloqueado,
 }: Props) {
   const router = useRouter();
   const [popover, setPopover] = React.useState<Popover>(null);
@@ -141,6 +145,8 @@ export function AcoesVersao({
           icone={<Download className="h-3.5 w-3.5" />}
           rotulo="Exportar"
           ativo={popover === "exportar"}
+          desabilitado={Boolean(exportarBloqueado)}
+          motivo={exportarBloqueado}
           onClick={() => setPopover((p) => (p === "exportar" ? null : "exportar"))}
         />
         <BotaoAcao

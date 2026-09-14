@@ -9,6 +9,10 @@ import { pode } from "@/lib/permissoes";
 import { checarPermissao } from "@/lib/permissoes-server";
 import { honorariosDoOrcamento } from "@/lib/data/clientes";
 import { modeloPlanilhaDoOrcamento } from "@/lib/data/modelo-planilha";
+import {
+  copiarMesesEntreVersoes,
+  criarMesesDoPeriodo,
+} from "@/lib/data/meses-versao";
 import { bloqueioAprovacaoVersao, versaoSchema } from "@/lib/validations/versoes";
 import {
   ALIQUOTA_IMPOSTO_PADRAO,
@@ -211,10 +215,16 @@ export async function criarVersao(
 
   const { data: orc } = await supabase
     .from("orcamentos")
-    .select("id, status, projeto_id")
+    .select("id, status, projeto_id, data_inicio_prevista, data_fim_prevista")
     .eq("id", orcamentoId)
     .eq("tenant_id", session.activeTenant.id)
-    .maybeSingle<{ id: string; status: string; projeto_id: string }>();
+    .maybeSingle<{
+      id: string;
+      status: string;
+      projeto_id: string;
+      data_inicio_prevista: string | null;
+      data_fim_prevista: string | null;
+    }>();
 
   if (!orc) return { ok: false, message: "Orçamento não encontrado." };
   if (orc.status === "job_criado" || orc.status === "cancelado") {
@@ -272,6 +282,22 @@ export async function criarVersao(
   if (error) {
     console.error("[versoes.criar]", error.message);
     return { ok: false, message: mapVersaoDbError(error.message) };
+  }
+
+  // Versão nova do modelo mensal nasce com os meses do período do
+  // orçamento, vazios (decisão 078). Se não der, a tela oferece o "Editar
+  // meses" — a versão não é desfeita por isso.
+  if (modelo === "mensal") {
+    const meses = await criarMesesDoPeriodo(supabase, {
+      tenantId: session.activeTenant.id,
+      versaoId: data.id,
+      profileId: session.profile.id,
+      inicio: orc.data_inicio_prevista,
+      fim: orc.data_fim_prevista,
+    });
+    if (!meses.ok) {
+      console.error("[versoes.criar.meses]", meses.message);
+    }
   }
 
   await logAuditEvent({
@@ -449,10 +475,20 @@ export async function duplicarVersao(
     return { ok: false, message: mapVersaoDbError(error?.message ?? "") };
   }
 
+  // Os meses vão antes dos grupos: no modelo mensal cada grupo aponta para
+  // o mês da própria versão (decisão 078). Nos demais modelos não há mês e
+  // o mapa sai vazio.
+  const mesMap = await copiarMesesEntreVersoes(supabase, {
+    tenantId: session.activeTenant.id,
+    origemId: versaoId,
+    destinoId: nova.id,
+    profileId: session.profile.id,
+  });
+
   // Duplica grupos e mapeia old_id → new_id pra reatribuir os itens.
   const { data: gruposOriginais } = await supabase
     .from("versoes_orcamento_grupos")
-    .select("id, nome, ordem")
+    .select("id, nome, ordem, mes_id")
     .eq("versao_orcamento_id", versaoId)
     .eq("tenant_id", session.activeTenant.id)
     .order("ordem");
@@ -464,6 +500,7 @@ export async function duplicarVersao(
       versao_orcamento_id: nova.id,
       nome: g.nome,
       ordem: g.ordem,
+      mes_id: g.mes_id ? (mesMap.get(g.mes_id) ?? null) : null,
     }));
     const { data: novosGrupos, error: gErr } = await supabase
       .from("versoes_orcamento_grupos")
@@ -713,6 +750,10 @@ function mapGrupoDbError(msg: string): string {
   if (msg.includes("uniq_grupo_nome_por_versao")) {
     return "Já existe um grupo com esse nome nesta versão.";
   }
+  // Modelo mensal: o nome é único dentro do MÊS (decisão 078).
+  if (msg.includes("uniq_grupo_nome_por_mes")) {
+    return "Já existe um grupo com esse nome neste mês.";
+  }
   if (msg.includes("grupos_nome_nao_vazio")) {
     return "Nome do grupo não pode ficar vazio.";
   }
@@ -747,6 +788,35 @@ export async function criarGrupo(
   }
 
   const supabase = createClient();
+
+  // No modelo mensal o grupo nasce DENTRO de um mês da versão (decisão
+  // 078): sem mês ele ficaria fora de todas as abas da régua, invisível.
+  // Nos demais modelos o campo é ignorado.
+  const modelo = await modeloPlanilhaDoOrcamento(
+    versao.orcamento_id,
+    session.activeTenant.id,
+  );
+  let mesId: string | null = null;
+  if (modelo === "mensal") {
+    const pedido = formData.get("mes_id")?.toString() ?? "";
+    const { data: mes } = pedido
+      ? await supabase
+          .from("versoes_orcamento_meses")
+          .select("id")
+          .eq("id", pedido)
+          .eq("versao_orcamento_id", versaoId)
+          .eq("tenant_id", session.activeTenant.id)
+          .maybeSingle<{ id: string }>()
+      : { data: null };
+    if (!mes) {
+      return {
+        ok: false,
+        message: "Escolha o mês do grupo antes de criá-lo.",
+      };
+    }
+    mesId = mes.id;
+  }
+
   const ordem = await proximaOrdemGrupo(versaoId, session.activeTenant.id);
 
   const { data, error } = await supabase
@@ -756,6 +826,7 @@ export async function criarGrupo(
       versao_orcamento_id: versaoId,
       nome: parsed.data.nome,
       ordem,
+      mes_id: mesId,
     })
     .select("id")
     .single();

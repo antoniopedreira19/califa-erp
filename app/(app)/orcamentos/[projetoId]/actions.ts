@@ -10,10 +10,21 @@ import { orcamentoSchema } from "@/lib/validations/orcamentos";
 import { gerarCodigoOrcamento } from "@/lib/codigos/orcamentos";
 import { honorariosDoOrcamento } from "@/lib/data/clientes";
 import { modeloPlanilhaDoOrcamento } from "@/lib/data/modelo-planilha";
+import { criarMesesDoPeriodo } from "@/lib/data/meses-versao";
 import {
   ALIQUOTA_IMPOSTO_PADRAO,
   PERCENTUAL_INT_TAXES_PADRAO,
 } from "@/lib/impostos";
+import {
+  erroDoParServicoCategoria,
+  type CategoriaParaServico,
+} from "@/lib/categorias-do-servico";
+import {
+  erroDoPeriodoMensal,
+  mesesDoPeriodo,
+  trimestreDe,
+} from "@/lib/calculos/meses-trimestre";
+import type { CategoriaModeloPlanilha } from "@/lib/types";
 
 export type ActionResult =
   | { ok: true; id?: string }
@@ -56,6 +67,83 @@ function mapDbError(msg: string): string {
     return "Cidade inválida.";
   }
   return "Não foi possível salvar. Tente novamente.";
+}
+
+/**
+ * Serviço × categoria (decisão 078): o serviço com categoria exclusiva
+ * (Fee, Always On) só aceita a dele, e a categoria exclusiva só vale para o
+ * serviço dela. O formulário já filtra; esta é a porta que não depende da
+ * tela. Devolve também o modelo de planilha da categoria, que as regras
+ * seguintes usam.
+ *
+ * Lê TODAS as categorias do escopo, inclusive as inativas: a exclusividade
+ * de um serviço não deixa de existir porque alguém desativou a categoria.
+ */
+async function conferirServicoECategoria(
+  supabase: ReturnType<typeof createClient>,
+  tenantId: string,
+  servicoId: string,
+  categoriaId: string,
+): Promise<
+  | { ok: true; modelo: CategoriaModeloPlanilha }
+  | { ok: false; message: string; fieldErrors?: Record<string, string[]> }
+> {
+  const [catRes, servRes] = await Promise.all([
+    supabase
+      .from("categorias_dominio")
+      .select("id, nome, modelo_planilha, servico_exclusivo_id")
+      .eq("tenant_id", tenantId)
+      .eq("escopo", "orcamento")
+      .returns<CategoriaParaServico[]>(),
+    supabase
+      .from("categorias_dominio")
+      .select("id, nome")
+      .eq("id", servicoId)
+      .eq("tenant_id", tenantId)
+      .eq("escopo", "projeto")
+      .maybeSingle<{ id: string; nome: string }>(),
+  ]);
+
+  const categorias = catRes.data ?? [];
+  const categoria = categorias.find((c) => c.id === categoriaId);
+  if (!categoria) {
+    return {
+      ok: false,
+      message: "Categoria inválida.",
+      fieldErrors: { categoria_id: ["Selecione a categoria."] },
+    };
+  }
+  if (!servRes.data) {
+    return {
+      ok: false,
+      message: "Serviço inválido.",
+      fieldErrors: { servico_id: ["Selecione o serviço."] },
+    };
+  }
+  const erro = erroDoParServicoCategoria(
+    servicoId,
+    categoria,
+    categorias,
+    servRes.data.nome,
+  );
+  if (erro) {
+    return { ok: false, message: erro, fieldErrors: { categoria_id: [erro] } };
+  }
+  return { ok: true, modelo: categoria.modelo_planilha };
+}
+
+function recusaDoPeriodoMensal(
+  inicio: string | null,
+  fim: string | null,
+): { ok: false; message: string; fieldErrors: Record<string, string[]> } | null {
+  const erro = erroDoPeriodoMensal(inicio, fim);
+  return erro
+    ? {
+        ok: false,
+        message: "Verifique os campos destacados.",
+        fieldErrors: { data_fim_prevista: [erro] },
+      }
+    : null;
 }
 
 async function assertProjetoDoTenant(
@@ -152,6 +240,23 @@ export async function criarOrcamento(
   const chk = await assertProjetoDoTenant(supabase, projetoId, session.activeTenant.id);
   if (!chk.ok) return chk;
 
+  const par = await conferirServicoECategoria(
+    supabase,
+    session.activeTenant.id,
+    parsed.data.servico_id,
+    parsed.data.categoria_id,
+  );
+  if (!par.ok) return par;
+  // Fee e Always On: o período é obrigatório e cabe num trimestre — é dele
+  // que os meses da v1 nascem (decisão 078).
+  if (par.modelo === "mensal") {
+    const recusa = recusaDoPeriodoMensal(
+      parsed.data.data_inicio_prevista,
+      parsed.data.data_fim_prevista,
+    );
+    if (recusa) return recusa;
+  }
+
   const vinculo = await assertRegionalEGpDoProjeto(
     supabase,
     projetoId,
@@ -205,7 +310,15 @@ export async function criarOrcamento(
   //
   // Sem alíquota de propósito: escolher imposto é decisão de fechamento,
   // não de abertura, e quem cobra é a aprovação (docs/decisions/006).
-  const versaoId = await criarVersaoInicial(data.id, session.activeTenant.id, session.profile.id);
+  const versaoId = await criarVersaoInicial(
+    data.id,
+    session.activeTenant.id,
+    session.profile.id,
+    {
+      inicio: parsed.data.data_inicio_prevista,
+      fim: parsed.data.data_fim_prevista,
+    },
+  );
 
   if (!versaoId) {
     // O orçamento existe e é válido sem versão — é o estado que a tela de
@@ -227,6 +340,8 @@ async function criarVersaoInicial(
   orcamentoId: string,
   tenantId: string,
   profileId: string,
+  /** Período do orçamento — no modelo mensal, é dele que os meses nascem. */
+  periodo: { inicio: string | null; fim: string | null },
 ): Promise<string | null> {
   const supabase = createClient();
 
@@ -281,22 +396,38 @@ async function criarVersaoInicial(
     return null;
   }
 
-  // A v1 já nasce com um grupo: a tela da versão abre com a linha "Novo
-  // item" pronta, sem obrigar o clique em "Novo grupo" antes de digitar.
-  // Mesmo nome default do "Criar planilha" do editor multi. Falha aqui
-  // não desfaz o orçamento nem a versão — o usuário cria o grupo na mão,
-  // mesmo degrau seguro do versaoId null acima. Item vazio NÃO é criado:
-  // item persistido tem validação de conteúdo.
-  const { error: grupoErr } = await supabase
-    .from("versoes_orcamento_grupos")
-    .insert({
-      tenant_id: tenantId,
-      versao_orcamento_id: data.id,
-      nome: "Novo grupo",
-      ordem: 1,
+  if (modelo === "mensal") {
+    // Modelo mensal (decisão 078): a v1 nasce com os meses do período, e
+    // SEM grupo — cada mês abre com o próprio "Novo grupo", e um grupo
+    // solto no primeiro mês seria só uma linha a mais para renomear.
+    const meses = await criarMesesDoPeriodo(supabase, {
+      tenantId,
+      versaoId: data.id,
+      profileId,
+      inicio: periodo.inicio,
+      fim: periodo.fim,
     });
-  if (grupoErr) {
-    console.error("[orcamentos.criar.v1.grupo]", grupoErr.message);
+    if (!meses.ok) {
+      console.error("[orcamentos.criar.v1.meses]", meses.message);
+    }
+  } else {
+    // A v1 já nasce com um grupo: a tela da versão abre com a linha "Novo
+    // item" pronta, sem obrigar o clique em "Novo grupo" antes de digitar.
+    // Mesmo nome default do "Criar planilha" do editor multi. Falha aqui
+    // não desfaz o orçamento nem a versão — o usuário cria o grupo na mão,
+    // mesmo degrau seguro do versaoId null acima. Item vazio NÃO é criado:
+    // item persistido tem validação de conteúdo.
+    const { error: grupoErr } = await supabase
+      .from("versoes_orcamento_grupos")
+      .insert({
+        tenant_id: tenantId,
+        versao_orcamento_id: data.id,
+        nome: "Novo grupo",
+        ordem: 1,
+      });
+    if (grupoErr) {
+      console.error("[orcamentos.criar.v1.grupo]", grupoErr.message);
+    }
   }
 
   await logAuditEvent({
@@ -332,11 +463,22 @@ export async function atualizarOrcamento(
 
   const { data: atual } = await supabase
     .from("orcamentos")
-    .select("status")
+    .select(
+      "status, servico_id, categoria_id, data_inicio_prevista, data_fim_prevista, " +
+        // `!categoria_id`: `orcamentos` tem duas FKs para `categorias_dominio`.
+        "categoria:categorias_dominio!categoria_id(modelo_planilha)",
+    )
     .eq("id", orcId)
     .eq("projeto_id", projetoId)
     .eq("tenant_id", session.activeTenant.id)
-    .maybeSingle<{ status: string }>();
+    .maybeSingle<{
+      status: string;
+      servico_id: string | null;
+      categoria_id: string | null;
+      data_inicio_prevista: string | null;
+      data_fim_prevista: string | null;
+      categoria: { modelo_planilha: CategoriaModeloPlanilha } | null;
+    }>();
 
   if (!atual) {
     return { ok: false, message: "Orçamento não encontrado." };
@@ -358,8 +500,75 @@ export async function atualizarOrcamento(
   );
   if (!vinculo.ok) return vinculo;
 
+  // O par serviço × categoria só é conferido quando muda: os orçamentos
+  // antigos com serviço Fee e categoria nacional ficam como estão
+  // (decisão do Tiago, 14/09/2026).
+  const modeloAtual: CategoriaModeloPlanilha =
+    atual.categoria?.modelo_planilha ?? "nacional";
+  let modeloNovo = modeloAtual;
+  const parMudou =
+    parsed.data.servico_id !== atual.servico_id ||
+    parsed.data.categoria_id !== atual.categoria_id;
+  if (parMudou) {
+    const par = await conferirServicoECategoria(
+      supabase,
+      session.activeTenant.id,
+      parsed.data.servico_id,
+      parsed.data.categoria_id,
+    );
+    if (!par.ok) return par;
+    modeloNovo = par.modelo;
+  }
+
+  const inicio = parsed.data.data_inicio_prevista;
+  const fim = parsed.data.data_fim_prevista;
+  if (modeloNovo === "mensal") {
+    const recusa = recusaDoPeriodoMensal(inicio, fim);
+    if (recusa) return recusa;
+  }
+
+  // Entrar ou sair do modelo mensal muda a estrutura de todas as versões.
+  // A tela pede a confirmação; sem ela, nada é gravado.
+  const trocaDeModelo = (modeloAtual === "mensal") !== (modeloNovo === "mensal");
+  if (trocaDeModelo && formData.get("confirmar_troca_modelo") !== "1") {
+    return {
+      ok: false,
+      message: "Confirme a troca de planilha antes de salvar.",
+    };
+  }
+
+  // Mensal que continua mensal e muda de TRIMESTRE: o trimestre é a
+  // identidade do orçamento, então só passa com os meses sem itens — e
+  // aí os meses são refeitos pelo período novo (decisão 078).
+  const trocaDeTrimestre =
+    !trocaDeModelo && modeloNovo === "mensal"
+      ? await trimestreMudou(supabase, session.activeTenant.id, orcId, inicio!, atual)
+      : null;
+  if (trocaDeTrimestre && trocaDeTrimestre.itens > 0) {
+    return {
+      ok: false,
+      message:
+        "Para mudar o período para outro trimestre, os meses precisam estar sem itens. Apague os itens ou crie um orçamento novo para o outro trimestre.",
+      fieldErrors: {
+        data_fim_prevista: ["Período em outro trimestre com itens lançados."],
+      },
+    };
+  }
+
   const { codigo, ...rest } = parsed.data;
-  const payload = codigo ? { ...rest, codigo } : rest;
+  const base = codigo ? { ...rest, codigo } : rest;
+  // Na troca de modelo serviço e categoria são gravados pela RPC, junto
+  // com a estrutura das versões — gravá-los antes deixaria o orçamento com
+  // a categoria nova e a planilha velha se a RPC falhasse, e a trava do par
+  // serviço × categoria no banco recusaria o serviço novo com a categoria
+  // velha.
+  const payload = trocaDeModelo
+    ? Object.fromEntries(
+        Object.entries(base).filter(
+          ([k]) => k !== "categoria_id" && k !== "servico_id",
+        ),
+      )
+    : base;
 
   const { error } = await supabase
     .from("orcamentos")
@@ -373,14 +582,158 @@ export async function atualizarOrcamento(
     return { ok: false, message: mapDbError(error.message) };
   }
 
+  if (trocaDeModelo) {
+    const { error: trocaErr } = await supabase.rpc(
+      "trocar_modelo_mensal_do_orcamento",
+      {
+        p_orcamento_id: orcId,
+        p_servico_id: parsed.data.servico_id,
+        p_categoria_id: parsed.data.categoria_id,
+        p_meses:
+          modeloNovo === "mensal" ? mesesDoPeriodo({ inicio: inicio!, fim: fim! }) : [],
+      },
+    );
+    if (trocaErr) {
+      console.error("[orcamentos.atualizar.troca_modelo]", trocaErr.message);
+      revalidatePath(`/orcamentos/${projetoId}/${orcId}`);
+      return {
+        ok: false,
+        message:
+          "Os demais campos foram salvos, mas a troca de planilha não foi feita. Tente de novo.",
+      };
+    }
+    await logAuditEvent({
+      acao: "orcamento.modelo_planilha_trocado",
+      tenantId: session.activeTenant.id,
+      entidadeTipo: "orcamento",
+      entidadeId: orcId,
+      metadata: {
+        de: modeloAtual,
+        para: modeloNovo,
+        categoria_de: atual.categoria_id,
+        categoria_para: parsed.data.categoria_id,
+      },
+    });
+  }
+
+  if (trocaDeTrimestre) {
+    await refazerMesesDoOrcamento(supabase, {
+      tenantId: session.activeTenant.id,
+      profileId: session.profile.id,
+      versaoIds: trocaDeTrimestre.versaoIds,
+      inicio: inicio!,
+      fim: fim!,
+    });
+  }
+
   await logAuditEvent({
     acao: "orcamento.editado",
     tenantId: session.activeTenant.id,
     entidadeTipo: "orcamento",
     entidadeId: orcId,
+    metadata: trocaDeTrimestre
+      ? { meses_refeitos: true, periodo: { inicio, fim } }
+      : undefined,
   });
 
   revalidatePath(`/orcamentos/${projetoId}`);
   revalidatePath(`/orcamentos/${projetoId}/${orcId}`);
   return { ok: true, id: orcId };
+}
+
+/**
+ * O período novo de um orçamento mensal caiu em outro trimestre? Compara
+ * com os meses que as versões já têm (ou, sem mês, com o período antigo).
+ * `null` quando o trimestre é o mesmo.
+ */
+async function trimestreMudou(
+  supabase: ReturnType<typeof createClient>,
+  tenantId: string,
+  orcamentoId: string,
+  inicioNovo: string,
+  atual: { data_inicio_prevista: string | null },
+): Promise<{ versaoIds: string[]; itens: number } | null> {
+  const { data: versoes } = await supabase
+    .from("versoes_orcamento")
+    .select("id")
+    .eq("orcamento_id", orcamentoId)
+    .eq("tenant_id", tenantId)
+    .returns<{ id: string }[]>();
+  const versaoIds = (versoes ?? []).map((v) => v.id);
+  if (versaoIds.length === 0) return null;
+
+  const [mesRes, itensRes] = await Promise.all([
+    supabase
+      .from("versoes_orcamento_meses")
+      .select("mes")
+      .in("versao_orcamento_id", versaoIds)
+      .eq("tenant_id", tenantId)
+      .order("mes", { ascending: true })
+      .limit(1)
+      .maybeSingle<{ mes: string }>(),
+    supabase
+      .from("versoes_orcamento_itens")
+      .select("id", { count: "exact", head: true })
+      .in("versao_orcamento_id", versaoIds)
+      .eq("tenant_id", tenantId),
+  ]);
+
+  const referencia = mesRes.data?.mes ?? atual.data_inicio_prevista;
+  if (!referencia) return null;
+  const antes = trimestreDe(referencia);
+  const depois = trimestreDe(inicioNovo);
+  if (antes.ano === depois.ano && antes.trimestre === depois.trimestre) {
+    return null;
+  }
+  return { versaoIds, itens: itensRes.count ?? 0 };
+}
+
+/** Troca os meses de todas as versões pelos do período novo. Só roda com
+ *  as versões sem itens (conferido antes): os grupos que sobram são vazios
+ *  e saem junto com os meses. */
+async function refazerMesesDoOrcamento(
+  supabase: ReturnType<typeof createClient>,
+  {
+    tenantId,
+    profileId,
+    versaoIds,
+    inicio,
+    fim,
+  }: {
+    tenantId: string;
+    profileId: string;
+    versaoIds: string[];
+    inicio: string;
+    fim: string;
+  },
+) {
+  const { error: gErr } = await supabase
+    .from("versoes_orcamento_grupos")
+    .delete()
+    .in("versao_orcamento_id", versaoIds)
+    .not("mes_id", "is", null)
+    .eq("tenant_id", tenantId);
+  if (gErr) {
+    console.error("[orcamentos.refazer_meses.grupos]", gErr.message);
+    return;
+  }
+  const { error: mErr } = await supabase
+    .from("versoes_orcamento_meses")
+    .delete()
+    .in("versao_orcamento_id", versaoIds)
+    .eq("tenant_id", tenantId);
+  if (mErr) {
+    console.error("[orcamentos.refazer_meses.meses]", mErr.message);
+    return;
+  }
+  for (const versaoId of versaoIds) {
+    const r = await criarMesesDoPeriodo(supabase, {
+      tenantId,
+      versaoId,
+      profileId,
+      inicio,
+      fim,
+    });
+    if (!r.ok) console.error("[orcamentos.refazer_meses.criar]", r.message);
+  }
 }

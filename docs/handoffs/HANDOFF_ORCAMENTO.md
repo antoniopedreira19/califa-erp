@@ -3652,3 +3652,70 @@ importação do projeto: id oculto, e sem id grupo + descrição.
   arquivo e relê a versão, como o resto da importação. Se a versão mudar
   entre os dois, vale o que está no banco na hora de gravar.
 
+## ⚠️ Nota de 2026-09-14 — Fee e Always On: orçamento por trimestre, dividido em meses (decisão 078)
+
+Categoria com `modelo_planilha = 'mensal'` (Fee e Always On, exclusivas dos
+serviços de mesmo nome) abre a planilha em meses. Regras, modelo de dados e
+o que fica para as entregas 2 e 3 na
+[078](../decisions/078-orcamento-mensal-fee-e-always-on.md).
+
+| Arquivo | O quê |
+|---|---|
+| `lib/calculos/meses-trimestre.ts` (+ teste) | trimestre, meses do período, período que acompanha os meses, rótulos |
+| `lib/categorias-do-servico.ts` | quais categorias um serviço aceita — formulário e servidor usam a mesma função |
+| `lib/data/meses-versao.ts` | cria os meses do período e copia meses entre versões |
+| `[projetoId]/actions.ts` | par serviço × categoria, período do mensal, v1 com meses e sem grupo, troca de modelo com confirmação, troca de trimestre |
+| `[projetoId]/orcamento-form.tsx` | categoria travada pelo serviço, período obrigatório no mensal, confirmação "tem certeza" da troca de planilha |
+| `versoes/meses-actions.ts` | adicionar, apagar e copiar mês (RPCs) |
+| `versoes/actions.ts` | nova versão com meses, duplicar copia meses, grupo nasce no mês |
+| `[orcId]/planilha-mensal.tsx` | régua, mês com Totais do mês, trimestre empilhado com Totais do trimestre |
+| `versoes/[versaoId]/regua-meses.tsx` · `copiar-itens-mes.tsx` · `trimestre-empilhado.tsx` | os três pedaços client da tela |
+| `agregado/page.tsx` · `agregado/actions.ts` | mensal só consulta; grupo com o mês no nome; sem Fee/Always On para criar |
+| `abertura-actions.ts` · rotas de export · `importar-actions.ts` (versão e projeto) · `acoes-versao.tsx` | recusas do mensal até as próximas entregas |
+
+### Armadilhas
+
+- **O mês mora no GRUPO.** Item não tem mês; quem precisa do mês de um item
+  passa pelo `grupo_id`. Grupo sem `mes_id` numa versão mensal fica fora de
+  todas as abas da régua — por isso `criarGrupo` exige o mês nesse modelo.
+- **Nome de grupo é único por mês, não por versão**, no modelo mensal
+  (`uniq_grupo_nome_por_mes`). O índice por versão virou parcial e manteve
+  o nome.
+- **A calha de ações fica fora do frame da tabela.** Na vista do
+  trimestre a planilha de cada mês vai ABAIXO do cabeçalho do mês, nunca
+  dentro de um card com `overflow-hidden`, ou BV/PP/lixeira são cortados.
+- **O editor da visão agregada regrava grupos sem saber de meses.** O
+  mensal é recusado lá na tela E em `aplicarEdicao`; não tire uma das duas.
+- **A trava do par serviço × categoria é trigger no banco** e só confere
+  quando serviço ou categoria mudam — é isso que deixa os orçamentos antigos
+  com serviço Fee e categoria nacional continuarem editáveis.
+- **"Par original" não é "par antigo".** No formulário, o par que o
+  orçamento já tinha só destrava a categoria quando ela NÃO é a exclusiva
+  do serviço. Sem essa conferência, editar um orçamento Fee/Fee mostrava a
+  categoria como lista de uma opção, e não travada como na criação.
+- **A agregada filtra Fee e Always On da lista de criação, não dos
+  rótulos.** O card do orçamento mensal procura o nome da categoria em
+  `nomesDeCategoria` (todas); usar a lista filtrada apaga "Fee" do card.
+- **O rodapé da planilha do mês é "Total de outubro"** (`rotuloTotal`, que
+  desce de `PlanilhaVersao` por `GruposSection` até a `ItensTable`).
+
+Conferido no navegador em 14/09/2026, no `0-0001/26-09 · Teste Fee 4T/2026`:
+criação com meses out–dez e sem grupo padrão; grupo e item no mês; cópia
+out → nov; apagar e readicionar dezembro com o período acompanhando
+(31/12 → 30/11 → 31/12); trimestre somando os meses; auditoria dos três
+eventos; confirmação da troca de planilha (cancelada, nada gravado); card
+em consulta na agregada; orçamento antigo Always On/Conteúdo com a
+categoria aberta.
+
+### Pendências do modelo mensal
+
+- **Não testado ainda:** a troca de planilha CONFIRMADA (entrando e saindo
+  do mensal — só a confirmação foi vista, e cancelada) e a recusa do
+  servidor no envio para abertura (a tela nem mostra o botão; testar pelo
+  console, como em `bypass` de Server Action).
+- **Entrega 2:** abertura e planilha do job por mês.
+- **Entrega 3:** envio para faturamento por mês, barra no rodapé do job,
+  devolução, fluxo de caixa mensal, encerramento.
+- **Depois:** exportação e importação de planilha do mensal (hoje recusadas
+  na versão, no projeto e fora do seletor de exportação); edição do mensal
+  pela visão agregada (hoje só consulta); filtro de trimestres na agregada.

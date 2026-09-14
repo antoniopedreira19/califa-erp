@@ -150,6 +150,17 @@ export async function enviarJobParaAbertura(
     }>();
 
   if (!orc) return { ok: false, message: "Orçamento não encontrado." };
+  // Modelo mensal (decisão 078): o job de Fee e Always On nasce com
+  // faturamento por mês, que ainda não existe na abertura. Recusar aqui,
+  // antes de qualquer escrita, é o que impede um job mensal de nascer pela
+  // cadeia do envio único.
+  if (orc.categoria?.modelo_planilha === "mensal") {
+    return {
+      ok: false,
+      message:
+        "O envio para abertura de orçamentos de Fee e Always On ainda não está disponível.",
+    };
+  }
   if (orc.versao_aprovada_id !== versaoId) {
     return {
       ok: false,

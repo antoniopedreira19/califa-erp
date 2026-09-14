@@ -363,6 +363,13 @@ async function analisar(
     // Planilha de um modelo não entra em orçamento de outro (decisão do
     // Tiago, 14/09/2026): as colunas e a cadeia não são as mesmas.
     const modeloDoOrcamento = orcamento.categoria?.modelo_planilha ?? "nacional";
+    // Modelo mensal (decisão 078): a planilha não diz de que mês é cada
+    // grupo, então nada entra nele por aqui.
+    if (modeloDoOrcamento === "mensal") {
+      return recusar(
+        "Orçamento de Fee ou Always On: a importação de planilha ainda não está disponível para ele — nada entra nele.",
+      );
+    }
     if (modeloDoOrcamento !== leitura.modelo) {
       return recusar(
         leitura.modelo === "internacional"

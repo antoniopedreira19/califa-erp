@@ -164,6 +164,16 @@ export async function GET(
   const modelos = new Set(
     orcamentos.map((o) => o.categoria?.modelo_planilha ?? "nacional"),
   );
+  // Modelo mensal (decisão 078): ainda sem layout de exportação.
+  if (modelos.has("mensal")) {
+    return NextResponse.json(
+      {
+        error:
+          "A exportação de orçamentos de Fee e Always On ainda não está disponível.",
+      },
+      { status: 400 },
+    );
+  }
   if (modelos.size > 1) {
     return NextResponse.json(
       {

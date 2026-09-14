@@ -30,6 +30,12 @@ interface Props {
    *  `"solida"` continua para o estado vazio, em que ele é a única ação
    *  da tela e precisa ser o botão primário. */
   variante?: "solida" | "tracejada";
+  /** Mês em que o grupo nasce — obrigatório no modelo mensal (decisão
+   *  078), ausente nos demais. */
+  mesId?: string;
+  /** "julho" — entra na descrição do diálogo, para quem cria saber em
+   *  qual mês o grupo vai morar. */
+  nomeDoMes?: string;
 }
 
 const GATILHO_SOLIDO =
@@ -40,6 +46,8 @@ export function NovoGrupoDrawer({
   disabled,
   disabledReason,
   variante = "solida",
+  mesId,
+  nomeDoMes,
 }: Props) {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
@@ -52,6 +60,7 @@ export function NovoGrupoDrawer({
     setError(null);
     setFieldError(null);
     const formData = new FormData(e.currentTarget);
+    if (mesId) formData.set("mes_id", mesId);
 
     startTransition(async () => {
       const res: ActionResult = await criarGrupo(versaoId, formData);
@@ -88,7 +97,9 @@ export function NovoGrupoDrawer({
         <DialogHeader>
           <DialogTitle>Novo grupo</DialogTitle>
           <DialogDescription>
-            Grupos organizam os itens da versão (ex.: Equipe, Ativação, Staff...).
+            {nomeDoMes
+              ? `O grupo nasce em ${nomeDoMes}. Grupos organizam os itens do mês (ex.: Equipe, Verbas do projeto...).`
+              : "Grupos organizam os itens da versão (ex.: Equipe, Ativação, Staff...)."}
           </DialogDescription>
         </DialogHeader>
 

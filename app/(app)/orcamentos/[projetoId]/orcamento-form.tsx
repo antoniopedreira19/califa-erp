@@ -15,18 +15,27 @@ import {
 } from "@/components/ui/select";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Textarea } from "@/components/ui/textarea";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Lock } from "lucide-react";
+import { format } from "date-fns";
 import { OBSERVACOES_MAX } from "@/lib/validations/abertura-job";
 import {
   ORCAMENTO_STATUS_EDITAVEIS,
   orcamentoStatusLabel,
   type CategoriaDominio,
+  type CategoriaModeloPlanilha,
   type Orcamento,
   type OrcamentoStatus,
   type Profile,
   type Regional,
 } from "@/lib/types";
 import { orcamentoSchema } from "@/lib/validations/orcamentos";
+import {
+  categoriasDoServico,
+  servicoTemCategoriaExclusiva,
+  type CategoriaParaServico,
+} from "@/lib/categorias-do-servico";
+import { erroDoPeriodoMensal } from "@/lib/calculos/meses-trimestre";
 import { CidadeCombobox, type CidadeOption } from "../cidade-combobox";
 import {
   atualizarOrcamento,
@@ -56,11 +65,19 @@ export interface DadosOrcamento {
 interface Props {
   projetoId: string;
   orcamento?: Orcamento;
-  categorias: Pick<CategoriaDominio, "id" | "nome">[];
+  /** Categorias de escopo `orcamento`, com o modelo de planilha e o
+   *  serviço exclusivo (decisão 078): é por eles que o formulário sabe
+   *  travar a categoria do Fee e do Always On. */
+  categorias: CategoriaParaServico[];
   /** Opções de Serviço — `categorias_dominio` de escopo `projeto`. Lista
    *  diferente das categorias acima; o campo desceu do projeto em
    *  02/09/2026. */
   servicos: Pick<CategoriaDominio, "id" | "nome">[];
+  /** Modelo de planilha que o orçamento em edição usa HOJE. Vem de fora
+   *  porque a categoria atual pode estar inativa e fora da lista acima —
+   *  e é comparando com ele que o formulário pede a confirmação da troca
+   *  de planilha. Ausente na criação. */
+  modeloPlanilhaAtual?: CategoriaModeloPlanilha;
   /** Nome e código do projeto de origem. O campo aparece travado no
    *  formulário: quem chegou aqui já escolheu o projeto. */
   projetoNome?: string;
@@ -89,11 +106,15 @@ interface Props {
   rotuloSubmit?: string;
 }
 
+/** Qual confirmação a troca de categoria pede, se pedir. */
+type TrocaDePlanilha = "entra_no_mensal" | "sai_do_mensal" | null;
+
 export function OrcamentoForm({
   projetoId,
   orcamento,
   categorias,
   servicos,
+  modeloPlanilhaAtual,
   projetoNome,
   projetoCodigo,
   regionaisDoProjeto,
@@ -131,6 +152,64 @@ export function OrcamentoForm({
   );
   const [gpId, setGpId] = React.useState(orcamento?.gp_responsavel_id ?? "");
   const [produtorId, setProdutorId] = React.useState(orcamento?.produtor_id ?? "");
+  // O período entra em estado só para a conferência do modelo mensal: o
+  // DatePicker continua mandando o valor pelo campo escondido de sempre.
+  const [inicio, setInicio] = React.useState(orcamento?.data_inicio_prevista ?? "");
+  const [fim, setFim] = React.useState(orcamento?.data_fim_prevista ?? "");
+
+  // Confirmação da troca de planilha — o FormData espera aqui até o "Sim".
+  const [troca, setTroca] = React.useState<TrocaDePlanilha>(null);
+  const formPendente = React.useRef<FormData | null>(null);
+
+  // O par serviço × categoria que o orçamento JÁ tinha fica como está
+  // (decisão do Tiago, 14/09/2026): os orçamentos antigos com serviço Fee e
+  // categoria nacional não são forçados a trocar só porque alguém abriu o
+  // editor. A trava vale para orçamento novo e para quem muda o serviço.
+  const parOriginal =
+    isEdit &&
+    servicoId === orcamento!.servico_id &&
+    categoriaId === orcamento!.categoria_id;
+
+  // O par original só destrava quando é um par antigo (serviço Fee com
+  // categoria nacional). Se o orçamento já está na categoria exclusiva do
+  // serviço, a edição mostra a mesma trava da criação.
+  const categoriaTravada =
+    servicoTemCategoriaExclusiva(servicoId, categorias) &&
+    (!parOriginal ||
+      categorias.find((c) => c.id === categoriaId)?.servico_exclusivo_id ===
+        servicoId);
+  const opcoesDeCategoria = React.useMemo(() => {
+    const permitidas = categoriasDoServico(servicoId, categorias);
+    if (parOriginal && !permitidas.some((c) => c.id === categoriaId)) {
+      const atual = categorias.find((c) => c.id === categoriaId);
+      return atual ? [...permitidas, atual] : permitidas;
+    }
+    return permitidas;
+  }, [servicoId, categorias, parOriginal, categoriaId]);
+
+  const categoriaEscolhida = categorias.find((c) => c.id === categoriaId);
+  const servicoEscolhido = servicos.find((s) => s.id === servicoId);
+  const modeloEscolhido: CategoriaModeloPlanilha =
+    categoriaEscolhida?.modelo_planilha ??
+    (parOriginal ? (modeloPlanilhaAtual ?? "nacional") : "nacional");
+  const ehMensal = modeloEscolhido === "mensal";
+
+  function handleServico(novo: string) {
+    setServicoId(novo);
+    // Voltou ao serviço original: a categoria original volta junto.
+    if (isEdit && novo === orcamento!.servico_id) {
+      setCategoriaId(orcamento!.categoria_id ?? "");
+      return;
+    }
+    const permitidas = categoriasDoServico(novo, categorias);
+    if (servicoTemCategoriaExclusiva(novo, categorias)) {
+      // Serviço com categoria própria: com uma só, ela entra sozinha e o
+      // campo trava. (Com mais de uma, o Select mostra só as dele.)
+      setCategoriaId(permitidas.length === 1 ? permitidas[0].id : "");
+      return;
+    }
+    if (!permitidas.some((c) => c.id === categoriaId)) setCategoriaId("");
+  }
 
   /** Realce do campo com erro. Os Selects não usam `required`: o Radix
    *  monta um <select> nativo escondido e o navegador barraria o envio
@@ -139,6 +218,26 @@ export function OrcamentoForm({
     fieldErrors[name]?.length
       ? "border-california-red ring-2 ring-california-red/15"
       : "";
+
+  function enviar(formData: FormData) {
+    startTransition(async () => {
+      // Criar redireciona no SERVIDOR e o cliente recebe `undefined`; só
+      // editar volta um resultado. Testar `res.ok` direto quebra a tela.
+      const res: ActionResult | void = isEdit
+        ? await atualizarOrcamento(projetoId, orcamento!.id, formData)
+        : await criarOrcamento(projetoId, formData);
+
+      if (res && !res.ok) {
+        setError(res.message);
+        if (res.fieldErrors) setFieldErrors(res.fieldErrors);
+        return;
+      }
+      if (isEdit) {
+        router.refresh();
+        onSuccess?.();
+      }
+    });
+  }
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -152,6 +251,20 @@ export function OrcamentoForm({
     formData.set("cidade_id", cidade?.id ?? "");
     formData.set("gp_responsavel_id", gpId);
     formData.set("produtor_id", produtorId);
+
+    // Fee e Always On: o período é obrigatório e cabe num trimestre, porque
+    // é dele que os meses nascem (decisão 078). O servidor confere de novo.
+    if (ehMensal) {
+      const erroPeriodo = erroDoPeriodoMensal(
+        formData.get("data_inicio_prevista")?.toString() || null,
+        formData.get("data_fim_prevista")?.toString() || null,
+      );
+      if (erroPeriodo) {
+        setError("Verifique os campos destacados.");
+        setFieldErrors({ data_fim_prevista: [erroPeriodo] });
+        return;
+      }
+    }
 
     // Modo rascunho: a mesma validação, sem ida ao servidor. O que sai
     // daqui entra na lista do editor e só vira registro no salvamento.
@@ -181,23 +294,19 @@ export function OrcamentoForm({
       return;
     }
 
-    startTransition(async () => {
-      // Criar redireciona no SERVIDOR e o cliente recebe `undefined`; só
-      // editar volta um resultado. Testar `res.ok` direto quebra a tela.
-      const res: ActionResult | void = isEdit
-        ? await atualizarOrcamento(projetoId, orcamento!.id, formData)
-        : await criarOrcamento(projetoId, formData);
-
-      if (res && !res.ok) {
-        setError(res.message);
-        if (res.fieldErrors) setFieldErrors(res.fieldErrors);
+    // Trocar de/para Fee ou Always On muda a estrutura da planilha — pede
+    // confirmação antes de gravar (decisão do Tiago, 14/09/2026).
+    if (isEdit && categoriaEscolhida) {
+      const eraMensal = modeloPlanilhaAtual === "mensal";
+      if (eraMensal !== ehMensal) {
+        formData.set("confirmar_troca_modelo", "1");
+        formPendente.current = formData;
+        setTroca(ehMensal ? "entra_no_mensal" : "sai_do_mensal");
         return;
       }
-      if (isEdit) {
-        router.refresh();
-        onSuccess?.();
-      }
-    });
+    }
+
+    enviar(formData);
   }
 
   return (
@@ -251,7 +360,7 @@ export function OrcamentoForm({
             deste job, não a iniciativa inteira do cliente. A lista é a de
             escopo `projeto`, diferente da Categoria ao lado. */}
         <Field label="Serviço" name="servico_id" required errors={fieldErrors}>
-          <Select value={servicoId} onValueChange={setServicoId}>
+          <Select value={servicoId} onValueChange={handleServico}>
             <SelectTrigger className={erroClasses("servico_id")}>
               <SelectValue placeholder="Selecione um serviço" />
             </SelectTrigger>
@@ -266,18 +375,37 @@ export function OrcamentoForm({
         </Field>
 
         <Field label="Categoria" name="categoria_id" required errors={fieldErrors}>
-          <Select value={categoriaId} onValueChange={setCategoriaId}>
-            <SelectTrigger className={erroClasses("categoria_id")}>
-              <SelectValue placeholder="Selecione a categoria" />
-            </SelectTrigger>
-            <SelectContent>
-              {categorias.map((c) => (
-                <SelectItem key={c.id} value={c.id}>
-                  {c.nome}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {categoriaTravada && opcoesDeCategoria.length === 1 ? (
+            // Serviço com categoria própria (Fee, Always On): o campo é o
+            // travado cinza do Projeto, e não um Select de uma opção só —
+            // aprovado no design em 14/09/2026.
+            <>
+              <div className="flex h-10 items-center justify-between gap-2 rounded-md border border-border bg-muted/50 px-3 text-sm font-medium text-muted-foreground">
+                <span className="truncate">{opcoesDeCategoria[0].nome}</span>
+                <Lock className="h-3.5 w-3.5 flex-none" aria-hidden="true" />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Definida pelo serviço. {servicoEscolhido?.nome ?? "Este serviço"} usa
+                a categoria {opcoesDeCategoria[0].nome}
+                {opcoesDeCategoria[0].modelo_planilha === "mensal"
+                  ? " e a planilha mensal."
+                  : "."}
+              </p>
+            </>
+          ) : (
+            <Select value={categoriaId} onValueChange={setCategoriaId}>
+              <SelectTrigger className={erroClasses("categoria_id")}>
+                <SelectValue placeholder="Selecione a categoria" />
+              </SelectTrigger>
+              <SelectContent>
+                {opcoesDeCategoria.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.nome}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
         </Field>
 
         <Field label="Regional" name="regional_id" required errors={fieldErrors}>
@@ -375,21 +503,43 @@ export function OrcamentoForm({
           </Select>
         </Field>
 
-        <Field label="Início previsto" name="data_inicio_prevista" errors={fieldErrors}>
+        <Field
+          label="Início previsto"
+          name="data_inicio_prevista"
+          required={ehMensal}
+          errors={fieldErrors}
+        >
           <DatePicker
             name="data_inicio_prevista"
             defaultValue={orcamento?.data_inicio_prevista ?? ""}
             placeholder="Selecione a data"
+            onDateChange={(d) => setInicio(d ? format(d, "yyyy-MM-dd") : "")}
           />
         </Field>
 
-        <Field label="Fim previsto" name="data_fim_prevista" errors={fieldErrors}>
+        <Field
+          label="Fim previsto"
+          name="data_fim_prevista"
+          required={ehMensal}
+          errors={fieldErrors}
+        >
           <DatePicker
             name="data_fim_prevista"
             defaultValue={orcamento?.data_fim_prevista ?? ""}
             placeholder="Selecione a data"
+            onDateChange={(d) => setFim(d ? format(d, "yyyy-MM-dd") : "")}
           />
         </Field>
+
+        {ehMensal && (
+          <p className="-mt-2 text-xs text-muted-foreground md:col-span-2">
+            O período define o trimestre do orçamento: início e fim no mesmo
+            trimestre, e os meses da planilha nascem dele.
+            {inicio && fim && !erroDoPeriodoMensal(inicio, fim)
+              ? " Os meses podem ser editados depois, na planilha."
+              : ""}
+          </p>
+        )}
 
         {/* Descritivo — última linha, largura inteira. Escrito aqui, no
             calor da negociação, ele PRÉ-PREENCHE o Descritivo do envio
@@ -477,6 +627,50 @@ export function OrcamentoForm({
           )}
         </button>
       </div>
+
+      <ConfirmDialog
+        open={troca !== null}
+        onOpenChange={(aberto) => {
+          if (!aberto) {
+            setTroca(null);
+            formPendente.current = null;
+          }
+        }}
+        title={
+          troca === "sai_do_mensal"
+            ? "Tem certeza que quer trocar a planilha?"
+            : "Tem certeza que quer passar para a planilha mensal?"
+        }
+        description={
+          troca === "sai_do_mensal" ? (
+            <>
+              A categoria {categoriaEscolhida?.nome} não usa a planilha mensal.
+              Por causa da mudança no tipo de planilha,{" "}
+              <strong>todo o orçamento depois do primeiro mês será apagado</strong>:
+              só o primeiro mês permanece, e os grupos e itens dele passam a
+              valer para o orçamento inteiro, em todas as versões. Não dá para
+              desfazer.
+            </>
+          ) : (
+            <>
+              Com a categoria {categoriaEscolhida?.nome}, o orçamento passa a
+              ser dividido nos meses do período. Os grupos e itens que já
+              existem vão para o primeiro mês, em todas as versões.
+            </>
+          )
+        }
+        confirmLabel={
+          troca === "sai_do_mensal" ? "Sim, trocar e apagar" : "Sim, trocar"
+        }
+        variant={troca === "sai_do_mensal" ? "destructive" : "default"}
+        pending={pending}
+        onConfirm={() => {
+          const dados = formPendente.current;
+          setTroca(null);
+          formPendente.current = null;
+          if (dados) enviar(dados);
+        }}
+      />
     </form>
   );
 }
