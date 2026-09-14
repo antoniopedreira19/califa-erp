@@ -53,6 +53,7 @@ import {
   FluxoAbertura,
   type JobExistente,
 } from "./versoes/[versaoId]/fluxo-abertura";
+import { proximoCodigoDeJob } from "@/lib/codigos/jobs";
 
 export const dynamic = "force-dynamic";
 
@@ -177,7 +178,7 @@ export default async function OrcamentoDetailPage({
     categoriasRes,
     fornecedoresRes,
     regionaisRes,
-    jobsCountRes,
+    codigosDeJobRes,
   ] = await Promise.all([
     supabase
       .from("orcamentos")
@@ -268,10 +269,14 @@ export default async function OrcamentoDetailPage({
       .eq("tenant_id", session.activeTenant.id)
       .eq("ativo", true)
       .order("nome"),
+    // Prévia do código do próximo job: o maior JOB-NNNN do tenant + 1, a
+    // mesma conta de `gerarCodigoJob` (a contagem de jobs errava quando
+    // havia job apagado — 14/09/2026).
     supabase
       .from("jobs")
-      .select("id", { count: "exact", head: true })
-      .eq("tenant_id", session.activeTenant.id),
+      .select("codigo")
+      .eq("tenant_id", session.activeTenant.id)
+      .like("codigo", "JOB-%"),
   ]);
 
   if (orcRes.error) console.error("[orcamentos.detail]", orcRes.error.message);
@@ -664,7 +669,11 @@ export default async function OrcamentoDetailPage({
           job={job}
           abrirRevisao={abrirRevisao}
           temJobAtivo={temJobAtivo}
-          jobsCount={jobsCountRes.count ?? 0}
+          proximoCodigoJob={proximoCodigoDeJob(
+            ((codigosDeJobRes.data ?? []) as { codigo: string }[]).map(
+              (j) => j.codigo,
+            ),
+          )}
           podeCriarVersao={podeCriarVersao}
           motivoBloqueio={motivoBloqueio}
           meses={(mesesRes.data ?? []) as VersaoOrcamentoMes[]}
@@ -717,7 +726,7 @@ function VersaoSelecionada({
   job,
   abrirRevisao,
   temJobAtivo,
-  jobsCount,
+  proximoCodigoJob,
   podeCriarVersao,
   motivoBloqueio,
   meses,
@@ -747,7 +756,8 @@ function VersaoSelecionada({
   /** `?abertura=revisar` — ver `FluxoAbertura`. */
   abrirRevisao: boolean;
   temJobAtivo: boolean;
-  jobsCount: number;
+  /** Prévia do código do job — o definitivo é gerado no envio. */
+  proximoCodigoJob: string;
   podeCriarVersao: boolean;
   motivoBloqueio?: string;
   /** Meses da versão (modelo mensal, decisão 078); vazio nos demais. */
@@ -841,7 +851,6 @@ function VersaoSelecionada({
 
   // Preview do código: o definitivo é gerado no insert. Serve só pra tela
   // não mostrar campo vazio — se outro job entrar antes, o número muda.
-  const proximoCodigoJob = `JOB-${(jobsCount + 1).toString().padStart(4, "0")}`;
 
   const contatosDoJob = contatosBrutos.map((c) => ({
     nome: (c.nome as string | null) ?? "",
