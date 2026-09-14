@@ -3772,3 +3772,12 @@ internacional — o modelo mensal fecha pela cadeia nacional.
 "Exibir", ela sai junto — `larguraMinimaJob` e `totalDeColunasJob` só a
 contam com `orcado` ligado.
 
+## ⚠️ Nota de 2026-09-14 — importação não engole mais item chamado "Total…" (decisão 063)
+
+`lib/importacao/parser-oficial.ts` · `ehLinhaResumo`: a linha de fechamento
+passa a exigir as colunas **A e B vazias** (antes, só a A). Na exportação
+do ERP a A dos itens é vazia, e item com "total", "imposto", "honorários",
+"subtotal" ou "faturamento" no nome sumia da importação da versão (e da
+visão agregada) sem aviso. O `parser-projeto.ts` não tinha o defeito: ele
+só procura o rótulo na coluna E, que no item é o D/M.
+
