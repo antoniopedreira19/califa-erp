@@ -124,7 +124,9 @@ no servidor.
 
 Pela mesma razão, **NF agrupada só cobre jobs de um mesmo cliente**: com
 mais de um, o formulário **não abre** e o erro aparece na barra de
-seleção, nomeando os clientes encontrados.
+seleção, nomeando os clientes encontrados. Desde 14/09/2026 a tela conta
+os clientes pelo id e `emitir_faturamento` recusa de novo no banco — ver a
+nota no fim e a [079](079-a-nota-fiscal-so-cobre-jobs-de-um-cliente.md).
 
 ### 8. Não existe NF programada
 
@@ -224,3 +226,20 @@ cliente" é conferido pela lista e pelo drawer; nem `emitirFaturamento` nem
 `emitir_faturamento` recusam itens de clientes diferentes — uma simulação
 com rollback em 14/09/2026 emitiu uma nota com JOB-0029 e JOB-0010, de
 clientes distintos. Pendência também registrada na 075.
+
+---
+
+## ⚠️ Nota de 2026-09-14, mais tarde — o §7 passou a valer no banco (decisão 079)
+
+A pendência da nota anterior foi fechada no mesmo dia.
+`emitir_faturamento` recusa item de job ou de save cujo cliente não seja
+o da nota, conferindo pelo job do item e pelo job da parcela
+(`20260914000002_nf_agrupada_so_de_um_cliente.sql`). A mesma simulação de
+JOB-0029 + JOB-0010 agora volta "Uma nota fiscal cobre apenas jobs de um
+mesmo cliente: JOB-0010 é do cliente teste, e a nota é do cliente
+Pevetech."
+
+E a trava da tela, que o §7 descreve, comparava os clientes **pelo nome** —
+o cadastro tem dois clientes "teste". Passou a comparar `cliente_id`.
+Evidências e alternativas descartadas na
+[079](079-a-nota-fiscal-so-cobre-jobs-de-um-cliente.md).

@@ -4941,7 +4941,8 @@ na tela. O saldo dos dois jobs segue na aba Faturamento.
   `financeiro/jobs/[jobId]/fluxo-do-job.ts` (prazos) e
   `abertura-de-job/consumo.ts` (abatimento da previsão de recebimento).
 - "NF agrupada só com jobs de um mesmo cliente" (017 §7) não é conferido
-  nem em `emitirFaturamento` nem em `emitir_faturamento`.
+  nem em `emitirFaturamento` nem em `emitir_faturamento`. ⚠️ **Fechada no
+  mesmo dia** — ver a nota da decisão 079, no fim deste arquivo.
 
 ## ⚠️ Nota de 2026-09-14 — PP urgente na aprovação e nos títulos, vencimento neutro no dossiê, e as janelas saem da curva (decisão 077)
 
@@ -5059,3 +5060,53 @@ Regras em [078](../decisions/078-orcamento-mensal-fee-e-always-on.md), seção "
   - "aguardando encerramento" só aparece com todos os meses enviados.
 - **Prazos do job** (`carregarPrazosDosJobs`): notas pelos itens, a primeira emissão marca o faturamento, e no mensal o último recebimento considera também a previsão dos meses ainda sem nota.
 - **Home do GP:** "prontos pra faturar" e "prontos pra encerrar" são contados em memória, por mês.
+
+## ⚠️ Nota de 2026-09-14 — a nota fiscal só cobre jobs de um mesmo cliente, conferido no banco (decisão 079)
+
+Regra, evidências e a escolha do Tiago na
+[079](../decisions/079-a-nota-fiscal-so-cobre-jobs-de-um-cliente.md). A
+decisão nasceu 076 e foi renumerada antes de subir, porque a 076 já era da
+importação da versão; os comentários internos de `emitir_faturamento` no
+banco ainda dizem "076".
+
+### O que estava errado
+
+A regra da 017 §7 só existia na aba Faturamento, e **comparava os clientes
+pelo nome**. O cadastro tem dois clientes "teste": com os dois na fila, a
+tela abriria a nota agrupada, e o drawer gravaria tudo no cliente da
+primeira linha. Nem a action nem a RPC conferiam. Simulação com rollback:
+a RPC aceitou nota Pevetech com JOB-0029 (Pevetech) + JOB-0010 ("teste").
+
+### O que mudou
+
+| Arquivo | O quê |
+|---|---|
+| `supabase/migrations/20260914000002_nf_agrupada_so_de_um_cliente.sql` | `emitir_faturamento` recusa item de `job`/`save` cujo cliente (pelo job do item **e** pelo job da parcela) não é o `cliente_id` da nota, ou cujo job não é do tenant |
+| `app/(app)/financeiro/contas-a-receber/faturamento-list.tsx` | `clientesSelecionados` agrupa por `cliente_id`; homônimos aparecem com os jobs de cada um na mensagem |
+
+A action `emitirFaturamento` **não mudou**: a recusa da RPC chega à tela
+como "Falha ao emitir: Uma nota fiscal cobre apenas jobs de um mesmo
+cliente: JOB-0010 é do cliente teste, e a nota é do cliente Pevetech." Pôr
+uma consulta própria na action repetiria a mesma conferência (escolha do
+Tiago).
+
+### Conferido
+
+- Banco, como `authenticated` e com rollback: clientes misturados
+  **recusados**; mesmo cliente (JOB-0029 + JOB-0033) **aceito**; item do
+  JOB-0029 com a parcela do JOB-0010 **recusado**. Nenhuma nota ficou (segue
+  só a `TESTE-ESTEIRA`).
+- Função viva: SECURITY DEFINER, `search_path=public`, `execute` para
+  `authenticated` e não para `anon`. Advisors sem alerta novo.
+- Navegador, aba Faturamento › Faturamento Agrupado, sem emitir nota:
+  JOB-0010 + JOB-0029 → chip "2 clientes diferentes" e o erro nomeando
+  "teste; Pevetech…", formulário não abre; JOB-0029 + JOB-0033 → chip com o
+  nome do cliente e o formulário abre (fechado sem emitir). Os homônimos não
+  puderam ser exercitados: só um "teste" tem job na fila.
+- `tsc`, `next lint` e `npm run build` limpos.
+
+### Pendências registradas (não mexidas)
+
+- A RPC não recusa BV misturado com job (só a action), não confere a role
+  de quem chama e não compara a empresa emissora com a do job.
+- Os dois clientes "teste" duplicados continuam no cadastro.
