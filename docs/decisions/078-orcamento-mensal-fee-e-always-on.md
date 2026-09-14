@@ -168,7 +168,7 @@ O que mudou:
   foram enviados.
 - **Mês sem faturamento** (sem item, por exemplo depois de uma errata):
   situação própria, "Sem faturamento". Não tem o que enviar e não segura o
-  encerramento nem a liquidação.
+  encerramento nem a liquidação (confirmado pelo Tiago em 14/09/2026).
 - **Errata e save travam só o mês enviado**, na tela (tabela do mês sem
   errata e sem save, com aviso na régua) e no servidor
   (`registrarErrata`, `salvarSaveDaErrata`). O botão da errata só some
@@ -186,7 +186,8 @@ O que mudou:
   `vw_saves_por_job` só conta o save de mês já enviado.
 - **Esteira e telas do financeiro:**
   - o job mensal com mês ainda não enviado ou não faturado inteiro não
-    liquida (`faltaFaturar`), mesmo com as notas pagas;
+    liquida (`faltaFaturar`), mesmo com as notas pagas: fica em "Faturado"
+    (confirmado pelo Tiago em 14/09/2026);
   - a fila do contas a receber mostra o mês de cada linha, e a PO e a
     instrução da nota do botão `i` e da gaveta de faturar são as do mês;
   - a página do job no financeiro lê as notas pelos itens (antes um
