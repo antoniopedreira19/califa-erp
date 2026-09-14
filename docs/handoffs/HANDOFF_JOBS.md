@@ -3329,3 +3329,65 @@ dos efeitos fecha com o delta total.
 `intTaxes={0}` e `intTransactionCosts={0}` **explicitamente** — elas ainda
 fecham pela cadeia nacional (entrega futura), e o zero explícito é o que
 faz o TypeScript apontar onde mexer quando a vez delas chegar.
+
+---
+
+## ⚠️ Nota de 2026-09-14 — o envio para faturamento não deixa mais envio sem parcela, e o card da home para de contar job já enviado (decisão 075)
+
+Duas falhas achadas na leitura do fluxo de envio para faturamento,
+confirmadas antes de corrigir. Regra e evidências na
+[075](../decisions/075-a-esteira-reconhece-a-nota-pelos-itens.md).
+
+### 1. O envio grava numa transação só
+
+**O que estava errado.** `enviarJobParaFaturamento` fazia dois INSERTs
+(envio, depois parcelas). Se o segundo falhasse, a action tentava apagar o
+primeiro com um DELETE que o banco recusa — `authenticated` não tem DELETE
+em `jobs_envio_faturamento`, porque envio é evento, não rascunho — e não
+conferia o erro. O job ficava com envio e sem parcela: fora da fila do
+financeiro e, pelo `unique (job_id)`, sem poder ser reenviado.
+
+Reproduzido como `authenticated` numa transação com rollback, no JOB-0033:
+data de parcela `2026-02-30` (passa no regex do Zod, o Postgres recusa) →
+envio gravado, parcelas recusadas, DELETE `42501`, reenvio `23505`.
+
+**O que mudou.**
+
+| Arquivo | O quê |
+|---|---|
+| `supabase/migrations/20260914000001_envio_faturamento_numa_transacao.sql` | RPC `enviar_job_para_faturamento(payload jsonb)`, **SECURITY INVOKER**, que grava envio e parcelas juntos e recusa envio sem parcela. `execute` só para `authenticated` |
+| `app/(app)/jobs/[jobId]/actions-faturamento.ts` | os dois INSERTs e o DELETE saíram; a action chama a RPC. As regras (job aberto, errata, valor relido, soma, portal) ficam onde estavam |
+
+Nenhum DELETE foi aberto para o cliente. A unicidade do envio por job fica
+como está — a frente Fee/Always On (vários envios por job) não foi
+antecipada.
+
+**Conferido.** Pela action real, chamada do navegador com a mesma data
+inválida: "Não foi possível enviar o job para faturamento. Nada foi
+gravado — confira as parcelas e tente de novo.", o log do servidor com
+`date/time field value out of range`, e **0 envios e 0 parcelas** no
+JOB-0033. Em seguida o envio de verdade, pelo drawer: 1 envio de
+R$ 113.897,60, 1 parcela vencendo em 30/09/2026, auditoria
+`job.enviado_para_faturamento` gravada.
+
+### 2. "Jobs prontos pra enviar pra faturamento" exclui quem já foi enviado
+
+**O que estava errado.** A consulta do card em `lib/home/carregar.ts`
+(home do Gerente de Produção) filtrava job aberto, com previsão positiva e
+sem errata pendente — mas não olhava o envio. No Projeto Teste o card
+dizia **2**, contando o JOB-0029, que já tinha sido enviado.
+
+**O que mudou.** Anti-join do PostgREST: embed do envio e `is null` sobre
+ele. Subtítulo: "Seus jobs abertos com previsão positiva, ainda não
+enviados".
+
+**Conferido.** Nenhum perfil tem a role `gerente_producao` hoje, então a
+home foi aberta por uma rota temporária que renderiza a mesma
+`HomeGerenteProducao` (apagada antes do commit): **2 → 1** com a correção
+(só o JOB-0033), e o card **some** depois de enviar o JOB-0033.
+
+⚠️ **Não mexido, e registrado:** o link do card
+(`/jobs?filtro=faturamento_pronto&meus=1`) continua abrindo a lista sem
+filtro — é o TODO que já estava em `app/(app)/jobs/page.tsx`. E o card
+vizinho, "Jobs prontos pra encerrar", diz "Seus jobs com faturamento
+emitido" mas conta job **enviado**, não faturado.

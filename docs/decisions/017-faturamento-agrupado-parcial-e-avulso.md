@@ -195,3 +195,32 @@ em vez de carregar os títulos gravados. NF emitida em 2× reabria dizendo
 Corrigido em 18/08/2026 (sem migration): `FaturadoRow` passou a carregar
 as parcelas reais — valor e vencimento, em ordem — e o drawer as usa no
 modo leitura. Ver entrega 38 do `HANDOFF_FINANCEIRO.md`.
+
+---
+
+## ⚠️ Nota de 2026-09-14 — a esteira lia a nota por `origem_id` (decisão 075)
+
+O §2 manda ler `faturamento_itens` para saber o que uma nota cobre. A
+esteira do faturamento (`lib/data/faturamento-por-job.ts`) não seguia: ela
+casava a nota com o job por `faturamentos.origem_id`. E o `origem_id` do
+cabeçalho fica nulo **sempre que a nota tem mais de um item** — não só na
+NF agrupada, mas também na nota de um job só com item de saldo em save ou
+com duas parcelas dele. Um job faturado assim continuava "Enviado" na
+lista do financeiro, com a nota já emitida.
+
+Corrigido em 14/09/2026: a esteira lê os itens, soma a parte de cada job e
+junta as várias notas de um mesmo job. As regras de situação e de recebido
+numa nota agrupada estão na
+[075](075-a-esteira-reconhece-a-nota-pelos-itens.md).
+
+**Ainda leem `origem_id` do cabeçalho**, com a mesma cegueira, e ficaram
+como pendência registrada na 075: o badge e o prazo de
+`/financeiro/jobs/[jobId]` (`page.tsx`, que usa `.maybeSingle()` e erra
+com duas notas), os prazos de `fluxo-do-job.ts` e o abatimento da previsão
+de recebimento em `abertura-de-job/consumo.ts`.
+
+**E o §7 só vale na tela.** "NF agrupada só cobre jobs de um mesmo
+cliente" é conferido pela lista e pelo drawer; nem `emitirFaturamento` nem
+`emitir_faturamento` recusam itens de clientes diferentes — uma simulação
+com rollback em 14/09/2026 emitiu uma nota com JOB-0029 e JOB-0010, de
+clientes distintos. Pendência também registrada na 075.

@@ -536,15 +536,23 @@ export async function carregarHomeGerenteProducao(
       .eq("tenant_id", tenantId)
       .in("status", ["em_revisao", "enviada_cliente"])
       .eq("orcamento.gp_responsavel_id", userId),
-    // ESTRITO: meus jobs abertos com faturamento previsto > 0 e sem errata pendente.
+    // ESTRITO: meus jobs abertos com faturamento previsto > 0, sem errata
+    // pendente e AINDA NÃO ENVIADOS. Sem o último filtro o card contava
+    // também o job já enviado — que não tem mais nada a enviar (decisão
+    // 075, 14/09/2026). Anti-join do PostgREST: embed do envio (1 por job,
+    // `unique (job_id)`) e `is null` sobre ele.
     supabase
       .from("jobs")
-      .select("id", { count: "exact", head: true })
+      .select("id, envio:jobs_envio_faturamento(id)", {
+        count: "exact",
+        head: true,
+      })
       .eq("tenant_id", tenantId)
       .eq("responsavel_id", userId)
       .eq("status", "aberto")
       .gt("faturamento_previsto", 0)
-      .or("abertura_em_revisao.is.null,abertura_em_revisao.eq.false"),
+      .or("abertura_em_revisao.is.null,abertura_em_revisao.eq.false")
+      .is("envio", null),
     // ESTRITO: meus jobs abertos com envio de faturamento registrado.
     // Adendo §3: jobs_envio_faturamento NAO tem coluna status;
     // a presenca do registro ja indica envio. Remove .eq("envios.status",…).
@@ -615,7 +623,7 @@ export async function carregarHomeGerenteProducao(
     {
       titulo: "Jobs prontos pra enviar pra faturamento",
       contagem: jobsProntosPraFaturar.count ?? 0,
-      subtitulo: "Seus jobs abertos com previsão positiva",
+      subtitulo: "Seus jobs abertos com previsão positiva, ainda não enviados",
       href: "/jobs?filtro=faturamento_pronto&meus=1",
       icone: Mail,
     },

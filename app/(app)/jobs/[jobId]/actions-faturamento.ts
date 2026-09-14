@@ -278,52 +278,51 @@ export async function enviarJobParaFaturamento(
     portalUrl = portal.url;
   }
 
-  const { data: novo, error } = await supabase
-    .from("jobs_envio_faturamento")
-    .insert({
-      tenant_id: session.activeTenant.id,
-      job_id: jobId,
-      valor_faturado: valor,
-      numero_po: parsed.data.numero_po,
-      data_faturamento: parsed.data.data_faturamento,
-      descricao_nf: parsed.data.descricao_nf,
-      portal_id: parsed.data.portal_id,
-      portal_url: portalUrl,
-      enviado_por: session.profile.id,
-    })
-    .select("id")
-    .single();
-
-  if (error || !novo) {
-    console.error("[job.enviarFaturamento]", error?.message);
-    return {
-      ok: false,
-      message: "Não foi possível enviar o job para faturamento.",
-    };
-  }
-
-  const { error: erroParcelas } = await supabase
-    .from("jobs_envio_faturamento_parcelas")
-    .insert(
-      parsed.data.parcelas.map((p) => ({
+  // Envio e parcelas numa transação só (decisão 075, 14/09/2026). Eram dois
+  // INSERTs do PostgREST — duas transações —, e o "desfazer" do primeiro
+  // era um DELETE que o banco recusa: `jobs_envio_faturamento` não tem
+  // DELETE para `authenticated`, porque envio é evento, não rascunho. Se
+  // as parcelas falhassem, o envio ficava gravado sem parcela (invisível
+  // na fila do financeiro, que lê as parcelas) e o `unique (job_id)`
+  // impedia o GP de reenviar. A RPC é SECURITY INVOKER: RLS e GRANT
+  // continuam valendo; ela só empacota os dois INSERTs.
+  const { data: envioId, error } = await supabase.rpc(
+    "enviar_job_para_faturamento",
+    {
+      payload: {
         tenant_id: session.activeTenant.id,
-        envio_id: novo.id,
         job_id: jobId,
-        ordem: p.ordem,
-        valor: p.valor,
-        data_vencimento: p.data_vencimento,
-      })),
-    );
+        valor_faturado: valor,
+        numero_po: parsed.data.numero_po,
+        data_faturamento: parsed.data.data_faturamento,
+        descricao_nf: parsed.data.descricao_nf,
+        portal_id: parsed.data.portal_id,
+        portal_url: portalUrl,
+        enviado_por: session.profile.id,
+        parcelas: parsed.data.parcelas.map((p) => ({
+          ordem: p.ordem,
+          valor: p.valor,
+          data_vencimento: p.data_vencimento,
+        })),
+      },
+    },
+  );
 
-  // Envio sem parcela não aparece na fila do financeiro — a view lê as
-  // parcelas, não o envio. Desfazemos o envio para o job não ficar num
-  // limbo de "enviado, mas invisível".
-  if (erroParcelas) {
-    console.error("[job.enviarFaturamento.parcelas]", erroParcelas.message);
-    await supabase.from("jobs_envio_faturamento").delete().eq("id", novo.id);
+  if (error || !envioId) {
+    console.error("[job.enviarFaturamento]", error?.message);
+    // Dois cliques quase juntos passam os dois pela conferência de "já
+    // enviado" acima; o segundo esbarra no unique e merece a mesma frase.
+    if (error?.message.includes("jobs_envio_faturamento_job_id_key")) {
+      return {
+        ok: false,
+        message: "Este job já foi enviado para faturamento.",
+      };
+    }
     return {
       ok: false,
-      message: "Não foi possível gravar as parcelas de faturamento.",
+      message:
+        "Não foi possível enviar o job para faturamento. Nada foi gravado — " +
+        "confira as parcelas e tente de novo.",
     };
   }
 
@@ -349,5 +348,5 @@ export async function enviarJobParaFaturamento(
   revalidatePath(`/financeiro/jobs/${jobId}`);
   revalidatePath("/financeiro/contas-a-receber");
 
-  return { ok: true, id: novo.id };
+  return { ok: true, id: envioId as string };
 }

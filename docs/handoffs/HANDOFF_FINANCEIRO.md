@@ -4892,3 +4892,53 @@ o ramo da tela que escreve "Aprovada sem nenhum documento anexado" segue
 sem ter rodado com dado real.
 
 `tsc`, `next lint` e `npm run build` limpos.
+
+---
+
+## ⚠️ Nota de 2026-09-14 — a esteira do faturamento reconhece a nota pelos itens (decisão 075)
+
+Regra, evidências e as escolhas do Tiago na
+[075](../decisions/075-a-esteira-reconhece-a-nota-pelos-itens.md). O
+envio atômico e o card da home estão no `HANDOFF_JOBS.md`, nota de mesma
+data.
+
+### O que estava errado
+
+`lib/data/faturamento-por-job.ts` achava a nota de um job por
+`faturamentos.origem_id` — que fica **nulo em toda nota com mais de um
+item** (017 §2). Job faturado em NF agrupada, em nota com saldo em save ou
+em nota com duas parcelas dele continuava **Enviado** na lista de jobs do
+financeiro. E um job em duas notas perdia uma delas (o mapa guardava uma
+por job).
+
+### O que mudou
+
+| Arquivo | O quê |
+|---|---|
+| `lib/calculos/esteira-faturamento.ts` | `consolidarNotasDoJob`: parte do job somada, números "101 · 102", nota inteira decide a situação, recebido rateado |
+| `lib/calculos/esteira-faturamento.test.ts` | 9 casos com os números do Projeto Teste |
+| `lib/data/faturamento-por-job.ts` | lê `faturamento_itens` (tipos `job` e `save`, nota emitida) em vez de `faturamentos.origem_id` |
+
+Quem lê: `/financeiro/abertura-de-job` › Visualizar Jobs (situação, coluna
+Faturamento, "NF …", chips e totais de Liquidado/Inadimplente). A visão do
+projeto importa só `STATUS_NA_LISTA` de `dados-abertos.ts` e não usa a
+esteira.
+
+### Conferido
+
+NF agrupada simbólica **`TESTE-ESTEIRA`** (R$ 2,00: R$ 1,00 do JOB-0029 +
+R$ 1,00 do JOB-0033) emitida pela aba Faturamento. Com o código antigo, os
+dois jobs apareciam **ENVIADO**; com o novo, **FATURADO · R$ 1,00 · NF
+TESTE-ESTEIRA** cada um. Console sem erro.
+
+⚠️ **Essa NF e o título de R$ 2,00 ficam no banco** — não há cancelamento
+na tela. O saldo dos dois jobs segue na aba Faturamento.
+
+### Pendências registradas (não mexidas)
+
+- Ainda casam nota e job por `origem_id`: `financeiro/jobs/[jobId]/page.tsx`
+  (badge e prazo; `.maybeSingle()` **erra com duas notas**),
+  `financeiro/jobs/[jobId]/fluxo-do-job.ts` (prazos) e
+  `abertura-de-job/consumo.ts` (abatimento da previsão de recebimento).
+- "NF agrupada só com jobs de um mesmo cliente" (017 §7) não é conferido
+  nem em `emitirFaturamento` nem em `emitir_faturamento`.
