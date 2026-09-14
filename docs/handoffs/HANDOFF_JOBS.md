@@ -3391,3 +3391,16 @@ home foi aberta por uma rota temporária que renderiza a mesma
 filtro — é o TODO que já estava em `app/(app)/jobs/page.tsx`. E o card
 vizinho, "Jobs prontos pra encerrar", diz "Seus jobs com faturamento
 emitido" mas conta job **enviado**, não faturado.
+
+## ⚠️ Nota de 2026-09-14 — o cabeçalho do job no financeiro deduz as int. taxes (decisão 072)
+
+`app/(app)/financeiro/jobs/[jobId]/page.tsx` passava `deducoes={totaisJob.imposto}`
+ao `ResumoResultado`: num job internacional o resultado operacional do topo
+não descontava int. taxes nem custos de transação (JOB-0009: R$ 379.782,71
+no financeiro contra R$ 237.896,34 na página de Jobs). Agora lê
+`totaisJob.deducoesDoResultado`, como a página de Jobs.
+
+**Armadilha:** o `ResumoResultado` aparece nas duas páginas do job. Quem
+mexer num lado confere o outro — a prop se chama `deducoes`, e não
+`imposto`, justamente porque no internacional ela é a soma das três.
+

@@ -305,7 +305,9 @@ export default async function JobNoFinanceiroPage({
             <div className="mt-[10px]">
               <ResumoResultado
                 valorJob={totaisJob.valorJob}
-                deducoes={totaisJob.imposto}
+                // No internacional são impostos BR + int. taxes + custos de
+                // transação (decisão 072) — o mesmo campo da página de Jobs.
+                deducoes={totaisJob.deducoesDoResultado}
                 custoPlanejado={custoPlanejadoJob}
                 custoRealizado={custoRealizadoJob}
                 bvRealizado={bvRealizadoJob}
