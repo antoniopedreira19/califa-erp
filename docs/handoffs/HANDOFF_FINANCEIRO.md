@@ -4977,3 +4977,36 @@ lista com faixa, etiqueta e "Demais PPs"; tela com etiqueta, justificativa
 e "✓ janela do dia 20"; aprovada com pagamento em 16/09; título no topo de
 Títulos a Pagar com etiqueta e justificativa. Detalhe completo na decisão
 077. Ficou de dado de teste: PP-00058 aprovada, com título a pagar.
+
+## ⚠️ Nota de 2026-09-14 — verba sem documento na aprovação fica neutra, e duas regras para depois
+
+### O que mudou
+
+No dossiê, em Histórico › "Documentos na aprovação", a PP de **verba de
+produção** aprovada sem anexo mostra "Aprovada sem documento — PP de verba
+de produção." em cinza. Fora da verba continua o vermelho "Aprovada sem
+nenhum documento anexado." — lá é alerta de verdade.
+
+Na prática só a verba chega à aprovação sem documento: o envio exige a NF
+fora da verba, e o reenvio exige anexo. Em 14/09/2026 nenhuma PP de
+fornecedor estava no financeiro sem anexo; a única aprovada sem documento
+era a PP-00058 (verba, Projeto Teste).
+
+### Pendências registradas (não implementadas)
+
+1. **PP aprovada que não deve seguir:** o financeiro **apenas reprova**
+   (Tiago, 14/09/2026) — não cancela direto nem desaprova para "em
+   avaliação". A produção não cancela PP aprovada; fala com o financeiro. O
+   fluxo, em Títulos a Pagar, está por desenhar, incluindo o destino do
+   título a pagar já criado.
+2. **Verba de produção e encerramento do job:** as NFs da verba precisam
+   estar anexadas, e qualquer saldo não justificado por documento,
+   estornado, para o job poder encerrar. **O que existe hoje:** a prestação
+   de contas (`fecharPrestacaoVerba`) exige ao menos uma NF e o valor gasto,
+   e a sobra vira devolução (`pp_verba_devolucoes`, que aparece em Títulos a
+   Pagar). **O que falta:** `levantarImpedimentos`
+   (`app/(app)/jobs/[jobId]/actions-encerramento.ts`) não olha prestação nem
+   devolução — só PP gerada, em avaliação ou aprovada, BV em aberto, envio
+   ao faturamento, saldo a faturar e itens sem marcação. Uma verba paga sem
+   prestação de contas, ou com devolução ainda não baixada, não impede
+   encerrar.

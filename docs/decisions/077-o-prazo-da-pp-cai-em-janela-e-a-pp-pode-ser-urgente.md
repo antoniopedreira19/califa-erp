@@ -171,11 +171,17 @@ urgentes; nenhum dado mudou. RLS e GRANT da tabela já cobrem as colunas.
   curta e justificativa vazia. Ao gerar (reserva no Item 1): prazo 24/09,
   prazo 08/09, 2ª parcela em 22/10 e justificativa curta.
 
-**Ainda não exercitado por fora da tela:** o reenvio da rejeitada (o
-Projeto Teste não tem PP rejeitada com anexo, e o reenvio exige anexo antes
-de chegar à trava — que roda antes de qualquer gravação, pela leitura do
-código) e o caminho da 6a no servidor (data gravada fora da janela que não
-muda passa) — não há PP assim no Projeto Teste.
+- **Reenvio da rejeitada:** a PP-00059 foi criada pela tela no Item 1 do
+  JOB-0029 (fornecedor, com um print de teste como anexo), enviada e
+  rejeitada pelo financeiro. Por fora da tela, `reenviarPedidoCompra`
+  recusou prazo 24/09, prazo 08/09, justificativa curta e justificativa
+  vazia, sem gravar. Pela tela, o calendário do reenvio só acendeu 08 e 20
+  em outubro; o reenvio com prazo 08/10 e urgente saiu, e o banco mostra
+  a PP em avaliação, prazo e parcela em 08/10, urgente marcada por Tiago
+  Mendonça. Ela subiu para o topo da lista de aprovação.
+
+**Ainda não exercitado:** o caminho da 6a no servidor (data gravada fora da
+janela, que não muda, passa) — não há PP assim no Projeto Teste.
 
 ## O que ficou de fora
 

@@ -3478,9 +3478,16 @@ cancelar", prometendo um caminho que a produção não tem (`desaprovarPP`
 existe sem tela). Agora diz "Para cancelar, fale com o financeiro." — no
 servidor, no painel do item e na ficha da PP.
 
-**Pendente, do lado do financeiro:** o fluxo de cancelar (ou desaprovar)
-PP aprovada em Títulos a Pagar, guardado para depois. Ele é só do
-financeiro.
+**Pendente, do lado do financeiro:** o fluxo para a PP aprovada que não deve
+seguir, guardado para depois. Resposta do Tiago (14/09/2026): **o
+financeiro apenas reprova** — não cancela direto nem desaprova de volta para
+"em avaliação". O que acontece com o título a pagar já criado entra no
+desenho desse fluxo.
+
+**Pendência registrada no mesmo dia, do lado do encerramento:** o job só
+deveria encerrar com as NFs das PPs de verba de produção anexadas e o saldo
+não justificado por documento estornado. Hoje o encerramento não olha isso
+— ver a nota de 14/09/2026 no `HANDOFF_FINANCEIRO.md`.
 
 ## ⚠️ Nota de 2026-09-14 — o código do job segue o maior, não a contagem
 
