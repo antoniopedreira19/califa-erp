@@ -3781,3 +3781,36 @@ do ERP a A dos itens é vazia, e item com "total", "imposto", "honorários",
 visão agregada) sem aviso. O `parser-projeto.ts` não tinha o defeito: ele
 só procura o rótulo na coluna E, que no item é o D/M.
 
+## ⚠️ Nota de 2026-09-14 — o código do projeto segue o maior do prefixo, não a contagem do cliente
+
+**O que estava errado:** `gerarCodigoProjeto` (`lib/codigos/projetos.ts`)
+calculava o sequencial como a *quantidade* de projetos do cliente no ano
++ 1, e isso colidia com código que já existia por dois caminhos:
+
+1. **Buraco na numeração.** Pevetech tinha 5 projetos em 2026
+   (0-0001/26, PEVETE-0001, 0003, 0004 e 0006): a contagem dava
+   PEVETE-0006/26, que já existe — **nenhum projeto novo da Pevetech era
+   criado** (`uniq_projetos_codigo_por_tenant`).
+2. **Projeto que troca de cliente.** `atualizarProjeto` grava `cliente_id`
+   e o código fica: HITLAB guarda NOV-0001/26 e SEBRAE guarda NOV-0004/26.
+   Contando por cliente, o Novo não os enxerga, e a sequência dele esbarra
+   neles (o Novo tem 1 projeto hoje, NOV-0003; o segundo seria NOV-0002,
+   o terceiro NOV-0003 — já existe).
+
+E um terceiro, menor: o ano saía de `new Date(dataInicio).getFullYear()`,
+que em fuso atrás de UTC transforma 01/01/2026 em 2025.
+
+**O que mudou** (regra escolhida pelo Tiago em 14/09/2026): o sequencial é
+o **maior entre** a contagem de projetos do cliente no ano + 1 (o número
+continua dizendo quantos projetos o cliente tem) e o **maior número já
+usado naquela sigla e ano, em qualquer cliente**, + 1 (o espaço que o
+índice único protege). Nunca colide, e número não volta a ser usado. O ano
+sai do texto da data. `gerarCodigoProjetoFinanceiro` usa a mesma função
+(`proximoCodigoDeProjeto`) sobre `projetos_financeiro`, que tinha o
+problema 1 com o cliente Novo (NOV-0001 e NOV-0003 → a contagem dava
+NOV-0003).
+
+Com os dados de 14/09/2026, os próximos códigos de 2026 ficam: produção —
+Pevetech PEVETE-0007, Novo NOV-0005, HITLAB HIT-0002, SEBRAE SEBRAE-0002,
+AMBEV AMB-0003; financeiro — Novo NOV-0004, Pevetech PEVETE-0007, AMBEV
+AMB-0003. Os códigos existentes não mudam.
