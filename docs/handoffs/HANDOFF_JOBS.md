@@ -3508,3 +3508,38 @@ código que não seria o gravado.
 **Os códigos de projeto tinham a mesma armadilha** e foram corrigidos no
 mesmo dia — ver a nota "o código do projeto segue o maior do prefixo" no
 HANDOFF_ORCAMENTO.
+
+## ⚠️ Nota de 2026-09-14 — a errata voltou a gravar, e o teste de ponta a ponta dela no job internacional (decisão 072)
+
+**Defeito corrigido.** De 11/09 (`ef5f297`) a 14/09 (`386ebe8`) nenhuma
+errata gravava, nacional ou internacional: `registrarErrata` embutia
+`orcamentos!inner(...)` a partir de `versoes_orcamento`, e o par tem duas
+FKs (`orcamento_id` e `orcamentos.versao_aprovada_id`). O PostgREST
+respondia 300 e a tela mostrava "Versão aprovada do job não encontrada."
+A dica virou `orcamentos!orcamento_id`. O mesmo embed ambíguo estava em
+`lib/data/saves.ts` (`saveDaVersao`, destino do consumo de save) e foi
+corrigido junto — sem consumo de save no banco, esse ficou sem teste real.
+
+**Formulário de save do internacional** (`03e52ee`): o "Faturamento desta
+linha" saía pela conta nacional; `SaveDialog` ganhou a prop obrigatória
+`internacional`.
+
+**Teste de ponta a ponta, no JOB-0009 (0-0001/26-08, internacional):**
+
+| Passo | Resultado |
+|---|---|
+| Errata: Passagem 4.500 → 5.000, nova "Hospedagem no exterior" (A, planejado 2.800), linha vermelha | pop-up e banco ao centavo com `calcularTotaisVersao`: valor do job 983.723,28, faturamento 980.723,28; âncoras de realizado criadas |
+| Mural de abertura | faixa "Erratas · 1" com "Revisar abertura" |
+| Envio para faturamento | botão some; a action chamada direto recusa e audita `abertura_em_revisao` |
+| PP na linha vermelha | PP-00060 gerada (sem teto); "Gerar e enviar" travado pela revisão |
+| Errata de save (Passagem) | valor do job 966.745,69, receita de save 16.977,59 |
+| Travas (action chamada direto, nada gravou) | remover linha com PP, com BV e em save; mudar orçado da linha vermelha |
+| Revisão da abertura | recebimento e curva redistribuídos (980.723,28 · 400.000,00); marca limpa, envio de volta, "Revisão 1 · errata" no financeiro |
+
+**Não exercitado:** trava de save consumido (nenhum `saves_consumos` no
+banco) e errata antes da abertura (a action exige job aberto).
+
+**Observação em aberto (regra de negócio, com o Tiago):** com duas erratas
+antes da revisão, o resumo do mural e o cabeçalho da revisão mostram só a
+última (`abertura_revisao_errata_id`); a primeira não aparece na
+conferência do financeiro.

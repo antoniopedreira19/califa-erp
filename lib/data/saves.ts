@@ -217,8 +217,11 @@ export async function saveDaVersao(
       idsVersao.length
         ? supabase
             .from("versoes_orcamento_itens")
+            // `!orcamento_id`: há duas FKs entre `versoes_orcamento` e
+            // `orcamentos`, e sem a dica o PostgREST recusa a consulta por
+            // ambiguidade (300) — o destino do consumo sumia em silêncio.
             .select(
-              "id, versoes_orcamento!inner(orcamentos!inner(jobs(id, codigo)))",
+              "id, versoes_orcamento!inner(orcamentos!orcamento_id(jobs(id, codigo)))",
             )
             .in("id", idsVersao)
         : Promise.resolve({ data: [] as any[] }),
