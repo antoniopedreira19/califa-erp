@@ -14,7 +14,8 @@
  *
  * 1. **Uma NF agrupada só cobre jobs de um mesmo cliente.** Com mais de
  *    um cliente na seleção o formulário NÃO abre — o erro aparece na
- *    própria barra de seleção, nomeando os clientes.
+ *    própria barra de seleção, nomeando os clientes. A conta é pelo
+ *    `cliente_id`, e `emitir_faturamento` recusa de novo no banco (079).
  * 2. **BV nunca entra em NF agrupada**, porque a contraparte dele é o
  *    fornecedor. O checkbox da linha fica desabilitado.
  */
@@ -360,10 +361,19 @@ export function FaturamentoList({
     () => pendentes.filter((p) => sel[chaveLinha(p)]),
     [pendentes, sel],
   );
-  const clientesSelecionados = React.useMemo(
-    () => Array.from(new Set(selecionados.map((p) => p.contraparte_nome))),
-    [selecionados],
-  );
+  // Agrupa pelo id, não pelo nome: o cadastro tem clientes homônimos (dois
+  // "teste" em 14/09/2026), e pelo nome os dois passavam como um só e
+  // abriam a nota agrupada (decisão 079).
+  const clientesSelecionados = React.useMemo(() => {
+    const porId = new Map<string, { nome: string; codigos: string[] }>();
+    for (const p of selecionados) {
+      const chave = p.cliente_id ?? p.fornecedor_id ?? p.contraparte_nome;
+      const atual = porId.get(chave) ?? { nome: p.contraparte_nome, codigos: [] };
+      if (p.codigo && !atual.codigos.includes(p.codigo)) atual.codigos.push(p.codigo);
+      porId.set(chave, atual);
+    }
+    return Array.from(porId.values());
+  }, [selecionados]);
   const misto = clientesSelecionados.length > 1;
   const totalSelecionado = selecionados.reduce((s, p) => s + p.saldo, 0);
 
@@ -413,10 +423,17 @@ export function FaturamentoList({
       return;
     }
     if (misto) {
+      // Homônimos só se distinguem pelos jobs: "teste, teste" não diz nada.
+      const rotulos = clientesSelecionados.map((c) =>
+        clientesSelecionados.filter((o) => o.nome === c.nome).length > 1 &&
+        c.codigos.length > 0
+          ? `${c.nome} — ${c.codigos.join(", ")}`
+          : c.nome,
+      );
       setErroTitulo("Não é possível agrupar jobs de clientes diferentes");
       setErroDetalhe(
         `A seleção tem ${clientesSelecionados.length} clientes ` +
-          `(${clientesSelecionados.join(", ")}). Uma nota fiscal cobre apenas jobs ` +
+          `(${rotulos.join("; ")}). Uma nota fiscal cobre apenas jobs ` +
           "de um mesmo cliente — desmarque os jobs dos outros clientes para continuar.",
       );
       return;
@@ -920,7 +937,7 @@ export function FaturamentoList({
                 <Building2 className="h-3 w-3" />
                 {misto
                   ? `${clientesSelecionados.length} clientes diferentes`
-                  : clientesSelecionados[0]}
+                  : clientesSelecionados[0].nome}
               </span>
             )}
             <div className="ml-auto flex items-center gap-2">

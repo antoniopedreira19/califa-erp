@@ -171,7 +171,9 @@ Autorizado pelo Tiago nesta sessão. **Não há cancelamento de NF na tela**
 - **017 §7 só vale na tela.** Nem `emitirFaturamento` nem
   `emitir_faturamento` recusam itens de clientes diferentes numa nota — a
   simulação da falha 2 emitiu uma com JOB-0029 e JOB-0010, de clientes
-  distintos.
+  distintos. ⚠️ **Fechada em 14/09/2026 pela
+  [079](079-a-nota-fiscal-so-cobre-jobs-de-um-cliente.md):** a RPC recusa, e
+  a tela passou a comparar `cliente_id`.
 - **Situação "faturado" com nota parcial.** Job com qualquer nota emitida
   vira Faturado, mesmo com saldo a faturar (é o caso dos dois jobs de
   teste, com R$ 1,00). Regra anterior, não alterada.
