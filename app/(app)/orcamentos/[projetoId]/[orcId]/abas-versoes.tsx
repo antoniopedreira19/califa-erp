@@ -12,7 +12,8 @@ import {
 } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import { nomeVersao } from "@/lib/nome-versao";
-import type { VersaoOrcamentoStatus } from "@/lib/types";
+import type {
+  CategoriaModeloPlanilha, VersaoOrcamentoStatus } from "@/lib/types";
 import { duplicarVersao } from "./versoes/actions";
 import { NovaVersaoDrawer } from "./versoes/nova-versao-drawer";
 import { ImportarPlanilhaDrawer } from "./versoes/importar-drawer";
@@ -39,6 +40,8 @@ interface Props {
   motivoBloqueio?: string;
   honorariosCliente: number;
   clienteNome: string | null;
+  /** Modelo do orçamento — segue para o "Importar planilha" (decisão 072). */
+  modeloPlanilha: CategoriaModeloPlanilha;
 }
 
 type Menu = null | "raiz" | "copiar";
@@ -69,6 +72,7 @@ export function AbasVersoes({
   motivoBloqueio,
   honorariosCliente,
   clienteNome,
+  modeloPlanilha,
 }: Props) {
   const [menu, setMenu] = React.useState<Menu>(null);
   const [novaAberta, setNovaAberta] = React.useState(false);
@@ -300,6 +304,7 @@ export function AbasVersoes({
       <ImportarPlanilhaDrawer
         projetoId={projetoId}
         orcamentoId={orcamentoId}
+        modeloPlanilha={modeloPlanilha}
         aberto={importarAberto}
         onAbertoChange={setImportarAberto}
         semGatilho

@@ -1,7 +1,10 @@
 import ExcelJS from "exceljs";
-import type { ImportacaoWarning, TipoCusto } from "@/lib/types";
+import type {
+  CategoriaModeloPlanilha,
+  ImportacaoWarning,
+  TipoCusto,
+} from "@/lib/types";
 import { TIPOS_CUSTO } from "@/lib/calculos/versao-totais";
-import { MOTIVO_LAYOUT_INTERNACIONAL } from "./parser-oficial";
 import {
   COLUNA_ID,
   MARCA_GRUPO,
@@ -34,6 +37,12 @@ import {
  *   - ITEM   : H começa com `it:`, OU (B com texto e C numérica).
  *   - RESUMO : E contém SUB-TOTAL / TOTAL / IMPOSTO / HONORÁRIOS /
  *              FATURAMENTO — encerra a leitura.
+ *
+ * **Exportação internacional** (decisão 072, 14/09/2026): A · SHEET,
+ * B · ITEM, C · TT USD, D · BRL (unitário), E · QT, F · D/M, G · TT BRL, e
+ * os mesmos ids na H. Sem coluna de tipo: a linha sai com `tipo_custo`
+ * `null`, e o diff mantém o tipo da linha casada ou usa B na nova. O
+ * fechamento tem o rótulo na C, com A e B vazias.
  */
 
 const KEYWORDS_RESUMO = [
@@ -52,7 +61,9 @@ export interface ItemLido {
   /** Id do item na versão exportada, ou `null` (linha nova, ou id apagado). */
   itemId: string | null;
   item: string;
-  tipo_custo: TipoCusto;
+  /** `null` na planilha internacional, que não tem coluna de tipo: vale o
+   *  da linha casada, e B na linha nova (decisão do Tiago, 14/09/2026). */
+  tipo_custo: TipoCusto | null;
   valor_unitario_orcado: number;
   quantidade_orcada: number;
   dias_meses_orcado: number;
@@ -76,6 +87,9 @@ export interface SecaoLida {
 
 export interface LeituraProjeto {
   aba: string;
+  /** Modelo da planilha, pelo cabeçalho — conferido contra o de cada
+   *  orçamento na análise (decisão 072). */
+  modelo: CategoriaModeloPlanilha;
   secoes: SecaoLida[];
   warnings: ImportacaoWarning[];
   linhas_lidas: number;
@@ -131,11 +145,17 @@ function toNumber(v: unknown): { ok: boolean; n: number } {
 }
 
 /** Cabeçalho da planilha internacional (decisão 072) — ver
- *  `parser-oficial.ts`. Lida com as colunas deste parser, o TT em moeda
- *  viraria valor unitário e o TT BRL, tipo: as linhas existentes cairiam
- *  como descartadas e o diff as trataria como apagadas. */
+ *  `parser-oficial.ts`. Decide as colunas: lida com as do nacional, o TT
+ *  em moeda viraria unitário e o TT BRL, tipo — as linhas cairiam como
+ *  descartadas e o diff as trataria como apagadas. */
 function ehLayoutInternacional(cells: string[]): boolean {
   return cells.slice(0, 7).some((c) => c.toLowerCase() === "tt brl");
+}
+
+/** Fechamento internacional: rótulo (texto, não número) na C com A e B
+ *  vazias. Nas linhas de item e de grupo a C é o TT USD. */
+function ehFechamentoInternacional(cells: string[], c: unknown): boolean {
+  return cells[0] === "" && cells[1] === "" && cells[2] !== "" && !toNumber(c).ok;
 }
 
 function ehLinhaHeader(cells: string[]): boolean {
@@ -193,6 +213,7 @@ export async function parsePlanilhaProjeto(
   if (!ws) {
     return {
       aba: "",
+      modelo: "nacional",
       secoes,
       warnings: [
         { linha: 0, motivo: "Planilha sem abas legíveis.", severidade: "ignorada" },
@@ -238,23 +259,32 @@ export async function parsePlanilhaProjeto(
     if (!headerEncontrado) {
       if (ehLinhaHeader(cells)) {
         headerEncontrado = true;
-        if (ehLayoutInternacional(cells)) {
-          layoutInternacional = true;
-          terminou = true;
-        }
+        layoutInternacional = ehLayoutInternacional(cells);
       }
       return;
     }
 
-    if (ehLinhaResumo(cells)) {
+    if (
+      layoutInternacional
+        ? ehFechamentoInternacional(cells, row.getCell(3).value)
+        : ehLinhaResumo(cells)
+    ) {
       terminou = true;
       linhasIgnoradas++;
       return;
     }
 
-    const [colA, colB, colC, colD, colE, , colG] = cells;
+    // Colunas do orçado: C/D/E no nacional, D/E/F no internacional.
+    const [colA, colB, , , , , colG] = cells;
+    const colUnit = layoutInternacional ? 4 : 3;
+    const colQt = colUnit + 1;
+    const colDm = colUnit + 2;
+    const letraDe = (col: number) => String.fromCharCode(64 + col);
+    const colC = cells[colUnit - 1];
+    const colD = cells[colQt - 1];
+    const colE = cells[colDm - 1];
     const m = marcas(h);
-    const valorC = toNumber(row.getCell(3).value);
+    const valorC = toNumber(row.getCell(colUnit).value);
 
     // SEÇÃO: a marca do orçamento decide; sem marca, uma linha só com
     // texto na A e nada em B/C/F seria grupo, então a seção sem id só
@@ -305,7 +335,7 @@ export async function parsePlanilhaProjeto(
       }
 
       const tipoUpper = colG.toUpperCase().trim();
-      if (!TIPOS_VALIDOS.includes(tipoUpper as TipoCusto)) {
+      if (!layoutInternacional && !TIPOS_VALIDOS.includes(tipoUpper as TipoCusto)) {
         warnings.push({
           linha: rowNumber,
           coluna: "G",
@@ -322,7 +352,7 @@ export async function parsePlanilhaProjeto(
       if (!valorC.ok) {
         warnings.push({
           linha: rowNumber,
-          coluna: "C",
+          coluna: letraDe(colUnit),
           motivo: `Valor unitário inválido ("${colC}") — linha descartada.`,
           severidade: "ignorada",
         });
@@ -330,12 +360,12 @@ export async function parsePlanilhaProjeto(
         return;
       }
 
-      const qt = toNumber(row.getCell(4).value);
-      const dm = toNumber(row.getCell(5).value);
+      const qt = toNumber(row.getCell(colQt).value);
+      const dm = toNumber(row.getCell(colDm).value);
       if (!qt.ok && colD !== "") {
         warnings.push({
           linha: rowNumber,
-          coluna: "D",
+          coluna: letraDe(colQt),
           motivo: `Quantidade inválida ("${colD}") — assumida 1.`,
           severidade: "ajuste",
         });
@@ -343,7 +373,7 @@ export async function parsePlanilhaProjeto(
       if (!dm.ok && colE !== "") {
         warnings.push({
           linha: rowNumber,
-          coluna: "E",
+          coluna: letraDe(colDm),
           motivo: `Dias/meses inválido ("${colE}") — assumido 1.`,
           severidade: "ajuste",
         });
@@ -363,7 +393,7 @@ export async function parsePlanilhaProjeto(
       grupoAtual.itens.push({
         itemId: m.itemId,
         item: colB,
-        tipo_custo: tipoUpper as TipoCusto,
+        tipo_custo: layoutInternacional ? null : (tipoUpper as TipoCusto),
         valor_unitario_orcado: valorC.n,
         quantidade_orcada: qt.ok ? qt.n : 1,
         dias_meses_orcado: dm.ok ? dm.n : 1,
@@ -381,19 +411,6 @@ export async function parsePlanilhaProjeto(
     linhasIgnoradas++;
   });
 
-  if (layoutInternacional) {
-    return {
-      aba: ws.name,
-      secoes: [],
-      warnings: [
-        { linha: 0, motivo: MOTIVO_LAYOUT_INTERNACIONAL, severidade: "ignorada" },
-      ],
-      linhas_lidas: linhasLidas,
-      linhas_importadas: 0,
-      linhas_ignoradas: linhasLidas,
-    };
-  }
-
   if (!headerEncontrado) {
     warnings.push({
       linha: 0,
@@ -405,6 +422,7 @@ export async function parsePlanilhaProjeto(
 
   return {
     aba: ws.name,
+    modelo: layoutInternacional ? "internacional" : "nacional",
     secoes,
     warnings,
     linhas_lidas: linhasLidas,

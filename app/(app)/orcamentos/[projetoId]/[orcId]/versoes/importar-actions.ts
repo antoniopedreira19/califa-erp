@@ -5,7 +5,13 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { honorariosDoOrcamento } from "@/lib/data/clientes";
-import { parseOficial, type ParseResultado } from "@/lib/importacao/parser-oficial";
+import {
+  parseOficial,
+  recusaPorModelo,
+  type ParseResultado,
+} from "@/lib/importacao/parser-oficial";
+import { PERCENTUAL_INT_TAXES_PADRAO } from "@/lib/impostos";
+import type { CategoriaModeloPlanilha } from "@/lib/types";
 import { extrairArquivoXlsx } from "@/lib/importacao/arquivo";
 
 const BUCKET = "orcamento-importacoes";
@@ -47,14 +53,23 @@ const extractArquivo = extrairArquivoXlsx;
 async function verificarOrcamento(
   orcamentoId: string,
   tenantId: string,
-): Promise<{ ok: true; projeto_id: string } | { ok: false; message: string }> {
+): Promise<
+  | { ok: true; projeto_id: string; modelo: CategoriaModeloPlanilha }
+  | { ok: false; message: string }
+> {
   const supabase = createClient();
   const { data: orc, error } = await supabase
     .from("orcamentos")
-    .select("id, status, projeto_id")
+    // `!categoria_id`: `orcamentos` tem duas FKs para `categorias_dominio`.
+    .select("id, status, projeto_id, categoria:categorias_dominio!categoria_id(modelo_planilha)")
     .eq("id", orcamentoId)
     .eq("tenant_id", tenantId)
-    .maybeSingle<{ id: string; status: string; projeto_id: string }>();
+    .maybeSingle<{
+      id: string;
+      status: string;
+      projeto_id: string;
+      categoria: { modelo_planilha: CategoriaModeloPlanilha } | null;
+    }>();
 
   if (error || !orc) {
     return { ok: false, message: "Orçamento não encontrado." };
@@ -65,7 +80,11 @@ async function verificarOrcamento(
       message: `Orçamento em estado ${orc.status} não aceita nova versão.`,
     };
   }
-  return { ok: true, projeto_id: orc.projeto_id };
+  return {
+    ok: true,
+    projeto_id: orc.projeto_id,
+    modelo: orc.categoria?.modelo_planilha ?? "nacional",
+  };
 }
 
 /**
@@ -109,6 +128,10 @@ export async function previewImportacao(
         "Não conseguimos ler o arquivo. Verifique se é a planilha padrão salva como .xlsx.",
     };
   }
+
+  // Modelo errado é recusado antes de qualquer contagem (decisão 072).
+  const recusaPreview = recusaPorModelo(parsed.modelo, check.modelo);
+  if (recusaPreview) return { ok: false, message: recusaPreview };
 
   if (parsed.grupos.length === 0) {
     return {
@@ -194,6 +217,9 @@ export async function confirmarImportacao(
     };
   }
 
+  const recusaConfirmar = recusaPorModelo(parsed.modelo, check.modelo);
+  if (recusaConfirmar) return { ok: false, message: recusaConfirmar };
+
   if (parsed.grupos.length === 0) {
     return {
       ok: false,
@@ -236,6 +262,16 @@ export async function confirmarImportacao(
       // (decisão 044, 03/09/2026). A padrão de 19,53% vale para versão
       // que nasce do zero, não para planilha que veio de fora.
       percentual_imposto: 0,
+      // Internacional (decisão 072): nasce como qualquer versão nova dele —
+      // USD e as int. taxes praticadas — e com o câmbio EM BRANCO, por
+      // decisão do Tiago (14/09/2026): a cotação é do dia e é preenchida
+      // na tela; sem ela a versão não aprova.
+      ...(check.modelo === "internacional"
+        ? {
+            moeda_estrangeira: "USD",
+            percentual_int_taxes: PERCENTUAL_INT_TAXES_PADRAO,
+          }
+        : {}),
       created_by: session.profile.id,
     })
     .select("id")
@@ -473,6 +509,11 @@ export async function sobrescreverVersaoComPlanilha(
     console.error("[importacao.sobrescrever.parse]", err);
     return { ok: false, message: "Falha ao processar o arquivo." };
   }
+
+  // Antes de apagar qualquer coisa: planilha do modelo errado não troca o
+  // conteúdo da versão (decisão 072).
+  const recusaSobrescrever = recusaPorModelo(parsed.modelo, check.modelo);
+  if (recusaSobrescrever) return { ok: false, message: recusaSobrescrever };
 
   // Planilha vazia não apaga nada: seria destruir o que existe em troca
   // de nada, e o usuário não pediu isso — ele pediu para TROCAR.

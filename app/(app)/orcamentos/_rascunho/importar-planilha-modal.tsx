@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { parsePlanilhaRascunho, type ParseRascunhoResult } from "./actions";
 import type { GrupoPayload } from "./tipos";
+import type { CategoriaModeloPlanilha } from "@/lib/types";
 
 export interface PlanilhaLida {
   arquivo: File;
@@ -24,6 +25,9 @@ interface Props {
   /** Código previsto do orçamento — deixa claro que a importação vale só
    *  para este job, e não para os outros do rascunho. */
   codigo: string;
+  /** Modelo do orçamento que recebe a planilha: a de outro modelo é
+   *  recusada (decisão 072). Obrigatório para não cair no nacional. */
+  modeloPlanilha: CategoriaModeloPlanilha;
   onImportado: (planilha: PlanilhaLida) => void;
 }
 
@@ -39,6 +43,7 @@ export function ImportarPlanilhaModal({
   open,
   onOpenChange,
   codigo,
+  modeloPlanilha,
   onImportado,
 }: Props) {
   const [pending, startTransition] = React.useTransition();
@@ -62,6 +67,7 @@ export function ImportarPlanilhaModal({
 
     const formData = new FormData();
     formData.set("arquivo", file);
+    formData.set("modelo_planilha", modeloPlanilha);
     startTransition(async () => {
       const res = await parsePlanilhaRascunho(formData);
       if (!res.ok) {
@@ -126,7 +132,9 @@ export function ImportarPlanilhaModal({
                 : "Clique para selecionar o arquivo"}
             </span>
             <span className="text-xs text-muted-foreground">
-              .xlsx no modelo padrão de orçamento
+              {modeloPlanilha === "internacional"
+                ? ".xlsx no modelo internacional (SHEET · ITEM · TT USD · BRL · QT · D/M · TT BRL)"
+                : ".xlsx no modelo padrão de orçamento"}
             </span>
           </label>
           <input

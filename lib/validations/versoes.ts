@@ -60,8 +60,28 @@ export type VersaoInput = z.infer<typeof versaoSchema>;
  * Aprovar trava os valores da versão e é o que alimenta o job, então os três
  * pontos abaixo não podem passar batido.
  */
+/** O câmbio de uma versão internacional, como a aprovação o confere. */
+export interface CambioParaAprovar {
+  moeda: string | null;
+  compra: number | string | null;
+  cotacao: number | string | null;
+  venda: number | string | null;
+  /** `yyyy-mm-dd`. */
+  data: string | null;
+}
+
+/** "a", "a e b", "a, b e c". */
+function listaPtBr(itens: string[]): string {
+  if (itens.length <= 1) return itens.join("");
+  return `${itens.slice(0, -1).join(", ")} e ${itens[itens.length - 1]}`;
+}
+
 export function bloqueioAprovacaoVersao(input: {
   percentualImposto: number;
+  /** Câmbio da versão quando o orçamento é internacional; `null` no
+   *  nacional. Obrigatório: quem chama tem que dizer qual é o caso, e um
+   *  default não pode liberar a aprovação em silêncio. */
+  cambioInternacional: CambioParaAprovar | null;
   qtdItens: number;
   /** Itens com total_orcado > 0 — linha começada e não preenchida dá 0. */
   qtdItensComValor: number;
@@ -71,6 +91,25 @@ export function bloqueioAprovacaoVersao(input: {
 }): string | null {
   if (!isAliquotaConhecida(input.percentualImposto)) {
     return 'Escolha a alíquota de impostos da versão antes de aprovar. Use o botão "Editar" da versão.';
+  }
+  // Internacional (decisão 072, 14/09/2026, pedido do Tiago): o câmbio
+  // inteiro — moeda, data da cotação, cotação, compra e venda — tem que
+  // estar preenchido. Aprovar trava a versão e alimenta o job; sem compra
+  // a coluna em moeda e a cadeia do cliente não têm como existir.
+  if (input.cambioInternacional) {
+    const c = input.cambioInternacional;
+    const positivo = (v: number | string | null) =>
+      v !== null && v !== "" && Number(v) > 0;
+    const faltando = [
+      (c.moeda ?? "").trim() === "" ? "moeda" : null,
+      !c.data ? "data da cotação" : null,
+      !positivo(c.cotacao) ? "cotação" : null,
+      !positivo(c.compra) ? "compra" : null,
+      !positivo(c.venda) ? "venda" : null,
+    ].filter((f): f is string => f !== null);
+    if (faltando.length > 0) {
+      return `Preencha o câmbio da versão antes de aprovar — falta ${listaPtBr(faltando)}. Use o botão "Editar" da versão.`;
+    }
   }
   if (input.qtdItens === 0) {
     return "Adicione ao menos 1 item antes de aprovar a versão.";

@@ -294,13 +294,7 @@ iguais em todas as seções. Sem a coluna TIPO a fórmula não tem como
 excluir, por exemplo, um item A; nesses casos a linha sai com o valor
 calculado pelo ERP.
 
-**A importação recusa a planilha internacional.** O importador de versão
-reconhecia o cabeçalho (ITEM, QT, D/M, TT batem) e leria as colunas
-deslocadas — o TT USD como valor unitário, o TT BRL como tipo; no de
-projeto, os itens cairiam como descartados e o diff os trataria como
-apagados. Os dois agora recusam o arquivo inteiro quando o cabeçalho tem
-"TT BRL", com a mensagem "Esta é a planilha do orçamento internacional…
-nada foi importado". Vale também para a própria planilha modelo.
+**A importação recusava a planilha internacional** até a sexta entrega (seção seguinte), que passou a lê-la: o importador de versão aceitaria o cabeçalho e leria as colunas deslocadas.
 
 Conferido: as 12 células do fechamento (BRL e USD) batem com a planilha
 modelo nos arquivos gerados pelas duas rotas, com os dados reais do
@@ -310,14 +304,71 @@ nacional do Job 4 + Job 6 saiu idêntica à de antes; os dois importadores
 continuam lendo a nacional. **Não exercitado com dado real:** a trava de
 câmbio — o projeto de teste tem um orçamento internacional só.
 
+## A importação: a planilha internacional entra pelas três portas (14/09/2026)
+
+Sexta entrega. As três portas de importação passaram a ler a planilha
+internacional — a planilha modelo e a exportação do ERP:
+
+- **Versão** — "Importar planilha" da tela do orçamento (versão nova) e da
+  versão (sobrescrever), por `parser-oficial.ts`;
+- **Projeto** — "Importar" da página do projeto, por `parser-projeto.ts` e
+  `diff-projeto.ts`;
+- **Visão agregada** — "Importar planilha" do card sem planilha, que joga
+  no rascunho, também por `parser-oficial.ts`.
+
+As regras, decididas pelo Tiago:
+
+| Ponto | Decisão |
+|---|---|
+| Coluna A · SHEET | É o grupo, como a CATEGORIA/PLANILHA do nacional. |
+| Tipo de custo | A planilha não tem. Linha **nova** entra como **B**; linha **casada pelo id** (reimportação da exportação) **mantém o tipo gravado**. Tipo ausente nunca conta como alteração. |
+| Versão nova pelo "Importar planilha" | **Câmbio em branco.** Nasce como qualquer versão internacional nova (USD, int. taxes 18,02%, ITC 0); fee do cadastro do cliente e Impostos BR em branco, como na importação nacional. O "sobrescrever" preserva os parâmetros, e a importação do projeto herda da vigente. |
+| Planilha do modelo errado | **Recusada**, nas três portas: internacional em orçamento nacional e nacional em internacional. |
+
+Colunas lidas: D · BRL (unitário), E · QT, F · D/M. TT USD e TT BRL são
+calculados e ficam de fora. O PLANEJADO (H · R$, I · QT, J · D/M) entra
+como no nacional, **menos** quando a H traz o id oculto da exportação — ali
+a H é id e a I, crédito consumido. A leitura para no primeiro rótulo do
+fechamento (TOTAL, FEE…): embaixo só há fechamento, legenda e câmbio.
+Linha com valor e sem nome na B é descartada com aviso, e um aviso único
+diz quantas linhas entraram como B.
+
+**Dois defeitos corrigidos no caminho:**
+
+- A importação do **projeto** criava a v+1 copiando só moeda, taxa,
+  honorários, imposto e save da vigente — um orçamento internacional perdia
+  int. taxes, ITC, moeda estrangeira e câmbio em silêncio. Agora herda os
+  sete campos.
+- O "Importar planilha" com **versão nova** num internacional criava a
+  versão como nacional (int. taxes 0, sem moeda estrangeira).
+
+**Aprovar versão internacional exige o câmbio completo** (pedido do Tiago
+no meio desta entrega): moeda, data da cotação, cotação, compra e venda.
+A regra mora em `bloqueioAprovacaoVersao`, a mesma função do botão e do
+servidor, e a mensagem diz o que falta. A **moeda** entrou na lista por
+conta minha — sem ela o câmbio não tem a que se referir; é fácil tirar se
+o Tiago discordar.
+
+Conferido:
+- parsers e diff por script, com a exportação real, a planilha modelo (em
+  branco e preenchida), a recusa por modelo e a regressão nacional;
+- no navegador, no 0-0001/26: o -08 sobrescrito pelo drawer da versão com
+  a planilha do -07 (item B, parâmetros preservados, importação
+  registrada); o -06, nacional, recusou o mesmo arquivo; a importação do
+  projeto criou a v2 do -08 com o câmbio completo e as int. taxes
+  herdados, QT 1 → 2 e a linha nova como B; o "Aprovar versão" do -08
+  ficou travado com o câmbio incompleto e liberou com ele completo.
+
+**Não exercitado no navegador:** a porta da visão agregada — o botão só
+aparece em card sem planilha, e o projeto de teste não tinha nenhum. O
+caminho é o mesmo parser e a mesma recusa, cobertos pelo script.
+
 ## O que NÃO entrou
 
 A **abertura** do job entrou em 11/09/2026 (seção acima). Seguem nacionais,
 e a cadeia não vaza para eles porque o 4º parâmetro é opcional e ninguém lá
 o passa:
 
-- a **importação** em Excel (hoje a planilha internacional é recusada —
-  seção acima);
 - a exportação com **planejado** e **realizado** (pendência combinada com
   o Tiago).
 

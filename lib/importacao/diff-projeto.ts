@@ -20,6 +20,9 @@ import type { GrupoLido, ItemLido, SecaoLida } from "./parser-projeto";
  * - Só o CONTEÚDO orçado conta como alteração: descrição, tipo, R$, QT,
  *   D/M, grupo (mover, renomear, criar, apagar) e linhas novas/apagadas.
  *   Reordenar linhas sem mudar nada não gera versão.
+ * - Planilha internacional não traz tipo (`tipo_custo` `null`): a linha
+ *   casada **mantém o tipo gravado** e a nova entra como **B** (decisão do
+ *   Tiago, 14/09/2026). Tipo ausente nunca conta como alteração.
  */
 
 export interface ItemAtual {
@@ -177,12 +180,13 @@ export function planejarSecao(
       const { origem, porDescricao } = casarItem(item, plano.origem);
       if (porDescricao) casadasPorDescricao++;
       orcadoDepois += totalOrcado(item);
+      const tipo: TipoCusto = item.tipo_custo ?? origem?.tipo_custo ?? "B";
 
       let situacao: SituacaoItem = "novo";
       if (origem) {
         const mudou =
           origem.item.trim() !== item.item.trim() ||
-          origem.tipo_custo !== item.tipo_custo ||
+          origem.tipo_custo !== tipo ||
           !iguais(origem.valor_unitario_orcado, item.valor_unitario_orcado) ||
           !iguais(origem.quantidade_orcada, item.quantidade_orcada) ||
           !iguais(origem.dias_meses_orcado, item.dias_meses_orcado) ||
@@ -198,7 +202,7 @@ export function planejarSecao(
         situacao,
         origem,
         item: item.item.trim(),
-        tipo_custo: item.tipo_custo,
+        tipo_custo: tipo,
         valor_unitario_orcado: item.valor_unitario_orcado,
         quantidade_orcada: item.quantidade_orcada,
         dias_meses_orcado: item.dias_meses_orcado,

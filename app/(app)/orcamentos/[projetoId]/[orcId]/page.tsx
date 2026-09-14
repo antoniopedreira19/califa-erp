@@ -20,6 +20,7 @@ import {
   type VersaoOrcamentoGrupo,
   type VersaoOrcamentoItem,
 } from "@/lib/types";
+import type { CategoriaModeloPlanilha } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { HONORARIOS_PADRAO_FALLBACK } from "@/lib/validations/clientes";
@@ -607,6 +608,7 @@ export default async function OrcamentoDetailPage({
         motivoBloqueio={motivoBloqueio}
         honorariosCliente={honorariosCliente}
         clienteNome={clienteNome}
+        modeloPlanilha={orcamentoRaw?.categoria?.modelo_planilha ?? "nacional"}
       />
 
       {versaoAtiva ? (
@@ -640,6 +642,7 @@ export default async function OrcamentoDetailPage({
         <SemVersoes
           projetoId={params.projetoId}
           orcamentoId={orcamento.id}
+          modeloPlanilha={orcamentoRaw?.categoria?.modelo_planilha ?? "nacional"}
           honorariosCliente={honorariosCliente}
           clienteNome={clienteNome}
           podeCriarVersao={podeCriarVersao}
@@ -937,6 +940,7 @@ function VersaoSelecionada({
             <ImportarPlanilhaDrawer
               projetoId={params.projetoId}
               orcamentoId={params.orcId}
+              modeloPlanilha={planilha.modeloPlanilha}
               modo="sobrescrever"
               versaoId={versao.id}
               conteudoAtual={{
@@ -1009,6 +1013,17 @@ function VersaoSelecionada({
           itens.filter((i) => Number(i.valor_unitario_orcado) === 0).length
         }
         percentualImposto={Number(versao.percentual_imposto)}
+        cambioInternacional={
+          planilha.modeloPlanilha === "internacional"
+            ? {
+                moeda: versao.moeda_estrangeira,
+                compra: versao.cambio_compra,
+                cotacao: versao.cambio_cotacao,
+                venda: versao.cambio_venda,
+                data: versao.cambio_data,
+              }
+            : null
+        }
         custoPlanejado={custoPlanejado}
         faturamentoPrevisto={totais.faturamentoPrevisto}
         totalGeradoEmSave={totais.save.totalSaveGerado}
@@ -1035,6 +1050,7 @@ function VersaoSelecionada({
 function SemVersoes({
   projetoId,
   orcamentoId,
+  modeloPlanilha,
   honorariosCliente,
   clienteNome,
   podeCriarVersao,
@@ -1042,6 +1058,7 @@ function SemVersoes({
 }: {
   projetoId: string;
   orcamentoId: string;
+  modeloPlanilha: CategoriaModeloPlanilha;
   honorariosCliente: number;
   clienteNome: string | null;
   podeCriarVersao: boolean;
@@ -1068,6 +1085,7 @@ function SemVersoes({
         <ImportarPlanilhaDrawer
           projetoId={projetoId}
           orcamentoId={orcamentoId}
+          modeloPlanilha={modeloPlanilha}
           disabled={!podeCriarVersao}
           disabledReason={motivoBloqueio}
         />

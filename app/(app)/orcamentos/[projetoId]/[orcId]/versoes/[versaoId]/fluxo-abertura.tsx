@@ -17,7 +17,10 @@ import {
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { formatCurrency } from "@/lib/utils";
 import type { JobStatus } from "@/lib/types";
-import { bloqueioAprovacaoVersao } from "@/lib/validations/versoes";
+import {
+  bloqueioAprovacaoVersao,
+  type CambioParaAprovar,
+} from "@/lib/validations/versoes";
 import { aprovarVersao } from "../actions";
 import {
   cancelarEnvioParaAbertura,
@@ -67,6 +70,9 @@ interface Props {
   qtdItensOrcadoZerado: number;
   /** Alíquota gravada na versão, para checar se saiu do seletor. */
   percentualImposto: number;
+  /** Câmbio da versão internacional — aprovar exige todos os campos
+   *  (decisão 072). `null` no nacional. */
+  cambioInternacional: CambioParaAprovar | null;
   custoPlanejado: number;
   /** O que a California emite nota. */
   faturamentoPrevisto: number;
@@ -109,6 +115,7 @@ export function FluxoAbertura({
   qtdItensComValor,
   qtdItensOrcadoZerado,
   percentualImposto,
+  cambioInternacional,
   custoPlanejado,
   faturamentoPrevisto,
   totalGeradoEmSave,
@@ -141,6 +148,7 @@ export function FluxoAbertura({
   // o motivo pelo qual o servidor recusaria.
   const bloqueio = bloqueioAprovacaoVersao({
     percentualImposto,
+    cambioInternacional,
     qtdItens,
     qtdItensComValor,
     qtdItensOrcadoZerado,
