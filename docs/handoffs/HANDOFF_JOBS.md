@@ -3481,3 +3481,23 @@ servidor, no painel do item e na ficha da PP.
 **Pendente, do lado do financeiro:** o fluxo de cancelar (ou desaprovar)
 PP aprovada em Títulos a Pagar, guardado para depois. Ele é só do
 financeiro.
+
+## ⚠️ Nota de 2026-09-14 — o código do job segue o maior, não a contagem
+
+**O que quebrou:** `gerarCodigoJob` (`lib/codigos/jobs.ts`) calculava o
+próximo código como a *quantidade* de jobs do tenant + 1. Com job apagado a
+contagem fica abaixo do maior código: o tenant tinha 9 jobs (JOB-0007 a
+0010, 0024, 0025, 0029, 0031 e 0033), e depois que o JOB-0009 foi criado,
+todo envio para abertura passou a tentar o JOB-0010 — que já existia — e
+caía em `uniq_jobs_codigo_por_tenant` ("Já existe um job com este código").
+Ninguém conseguia enviar job para abertura.
+
+**O que mudou:** o próximo código é o **maior** `JOB-NNNN` do tenant + 1
+(`proximoCodigoDeJob`). Código de job apagado não volta a ser usado — pode
+estar em documento antigo (Tiago, 14/09/2026). A prévia do código no modal
+de envio (`[orcId]/page.tsx`) usa a mesma função, e deixou de mostrar um
+código que não seria o gravado.
+
+**Armadilha que continua:** `lib/codigos/projetos.ts` e
+`lib/codigos/projetos-financeiro.ts` usam a mesma conta de contagem + 1 e
+quebram do mesmo jeito se um projeto for apagado. Não mexidos.
