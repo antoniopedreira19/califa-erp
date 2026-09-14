@@ -689,7 +689,7 @@ export function PainelPPsItem({
 function motivoSemCancelar(status: PPStatus): string {
   switch (status) {
     case "aprovada":
-      return "PP já aprovada pelo financeiro — é título a pagar. Peça a desaprovação antes de cancelar.";
+      return "PP já aprovada pelo financeiro — é título a pagar. Para cancelar, fale com o financeiro.";
     case "pago":
       return "PP já paga — cancelar exigiria estorno pelo financeiro.";
     case "cancelada":

@@ -159,10 +159,23 @@ urgentes; nenhum dado mudou. RLS e GRANT da tabela já cobrem as colunas.
 - **Funções de janela:** 14 casos-limite passaram (domingo, virada de ano,
   escada que não vira "janela do 9", reexport de `curva.ts`).
 
-**Não conferido:** a ordenação de Títulos a Pagar isolada (o título urgente
-também era o de data mais próxima) e a recusa do servidor para data fora da
-janela chamada por fora da tela — a regra está nas três actions, mas só a
-tela foi exercitada.
+**Conferido depois, no mesmo dia:**
+
+- **Ordenação isolada:** a data do título da PP-00058 foi levada a
+  10/09/2027, depois do título comum da PP-00011 (09/08/2027), e o urgente
+  continuou em cima — em "A pagar" e em "Todos". A data voltou a 16/09/2026
+  pelo mesmo diálogo.
+- **Servidor chamado por fora da tela** (console do navegador, transporte
+  real da action): 9 recusas, nada gravado. Ao editar a gerada (PP-00056):
+  prazo 24/09, 2ª parcela em 21/10, prazo passado 08/09, justificativa
+  curta e justificativa vazia. Ao gerar (reserva no Item 1): prazo 24/09,
+  prazo 08/09, 2ª parcela em 22/10 e justificativa curta.
+
+**Ainda não exercitado por fora da tela:** o reenvio da rejeitada (o
+Projeto Teste não tem PP rejeitada com anexo, e o reenvio exige anexo antes
+de chegar à trava — que roda antes de qualquer gravação, pela leitura do
+código) e o caminho da 6a no servidor (data gravada fora da janela que não
+muda passa) — não há PP assim no Projeto Teste.
 
 ## O que ficou de fora
 
