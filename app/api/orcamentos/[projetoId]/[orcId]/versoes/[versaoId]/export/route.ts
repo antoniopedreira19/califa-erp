@@ -107,6 +107,18 @@ export async function GET(
     itens: itens.filter((i) => i.grupo_id === grupo.id),
   }));
 
+  // Modelo mensal (decisão 078): a planilha exportada ainda não conhece
+  // meses — sairia com os grupos dos três meses misturados numa lista só.
+  if (orcamento.categoria?.modelo_planilha === "mensal") {
+    return NextResponse.json(
+      {
+        error:
+          "A exportação de orçamentos de Fee e Always On ainda não está disponível.",
+      },
+      { status: 400 },
+    );
+  }
+
   // O modelo vem da categoria do ORÇAMENTO (decisão 072). Internacional
   // sai no layout da planilha que a California já usa; nacional, como
   // sempre foi.

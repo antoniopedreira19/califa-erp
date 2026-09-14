@@ -23,6 +23,8 @@ import type {
   VersaoOrcamento,
   CategoriaModeloPlanilha,
 } from "@/lib/types";
+import type { CategoriaParaServico } from "@/lib/categorias-do-servico";
+import { rotuloMesCurto } from "@/lib/calculos/meses-trimestre";
 import { EditorAgregado } from "./editor-agregado";
 import type { OrcamentoRascunho } from "../../_rascunho/tipos";
 import type { OrcamentoExportavel } from "../../_selecao/exportar-orcamentos-menu";
@@ -36,7 +38,13 @@ const STATUS_FORA = ["cancelado", "recusado"];
 function motivoBloqueio(
   statusOrcamento: string,
   statusVersao: string,
+  modelo: CategoriaModeloPlanilha,
 ): string | null {
+  // O editor daqui não conhece meses (decisão 078): o orçamento mensal
+  // aparece para consulta e soma no total do projeto.
+  if (modelo === "mensal") {
+    return "Orçamento de Fee ou Always On: os meses são editados na tela do orçamento. Aqui ele aparece só para consulta e soma no total do projeto.";
+  }
   if (statusOrcamento === "job_criado") {
     return "Este orçamento já virou job e foi enviado ao financeiro. A planilha passa a ser tratada na tela do job.";
   }
@@ -105,8 +113,9 @@ export default async function OrcamentosAgregadoPage({
     supabase
       .from("categorias_dominio")
       // `modelo_planilha` vem junto: é ele que diz como o orçamento criado
-      // aqui vai fechar (decisão 072).
-      .select("id, nome, modelo_planilha")
+      // aqui vai fechar (decisão 072). `servico_exclusivo_id` separa as
+      // categorias do Fee e do Always On, que não nascem por aqui (078).
+      .select("id, nome, modelo_planilha, servico_exclusivo_id")
       .eq("tenant_id", tenantId)
       .eq("escopo", "orcamento")
       .eq("ativo", true)
@@ -238,11 +247,11 @@ export default async function OrcamentosAgregadoPage({
 
   const versaoIds = [...vigentePorOrcamento.values()].map((v) => v.id);
 
-  const [gruposRes, itensRes, bvsRes] = await Promise.all([
+  const [gruposRes, itensRes, bvsRes, mesesRes] = await Promise.all([
     versaoIds.length > 0
       ? supabase
           .from("versoes_orcamento_grupos")
-          .select("id, nome, versao_orcamento_id, ordem")
+          .select("id, nome, versao_orcamento_id, ordem, mes_id")
           .eq("tenant_id", tenantId)
           .in("versao_orcamento_id", versaoIds)
           .order("ordem", { ascending: true })
@@ -271,7 +280,23 @@ export default async function OrcamentosAgregadoPage({
           .neq("situacao", "cancelado")
           .in("item.versao_orcamento_id", versaoIds)
       : Promise.resolve({ data: [] as any[] }),
+    // Meses do modelo mensal: só para o nome do grupo dizer de que mês ele
+    // é — nesta tela os grupos dos três meses aparecem numa lista só.
+    versaoIds.length > 0
+      ? supabase
+          .from("versoes_orcamento_meses")
+          .select("id, mes")
+          .eq("tenant_id", tenantId)
+          .in("versao_orcamento_id", versaoIds)
+      : Promise.resolve({ data: [] as any[] }),
   ]);
+
+  const mesPorId = new Map<string, string>(
+    ((mesesRes.data ?? []) as { id: string; mes: string }[]).map((m) => [
+      m.id,
+      m.mes,
+    ]),
+  );
 
   const bvPorItem = new Map(
     ((bvsRes.data ?? []) as any[]).map((b) => [
@@ -352,9 +377,10 @@ export default async function OrcamentosAgregadoPage({
   const gruposPorVersao = new Map<string, any[]>();
   for (const g of (gruposRes.data ?? []) as any[]) {
     const lista = gruposPorVersao.get(g.versao_orcamento_id) ?? [];
+    const mes = g.mes_id ? mesPorId.get(g.mes_id) : undefined;
     lista.push({
       id: g.id,
-      nome: g.nome,
+      nome: mes ? `${g.nome} · ${rotuloMesCurto(mes)}` : g.nome,
       itens: itensPorGrupo.get(g.id) ?? [],
     });
     gruposPorVersao.set(g.versao_orcamento_id, lista);
@@ -364,7 +390,11 @@ export default async function OrcamentosAgregadoPage({
     const versao = vigentePorOrcamento.get(orc.id);
     const grupos = versao ? (gruposPorVersao.get(versao.id) ?? []) : [];
     const bloqueio = versao
-      ? motivoBloqueio(orc.status, versao.status)
+      ? motivoBloqueio(
+          orc.status,
+          versao.status,
+          orc.categoria?.modelo_planilha ?? "nacional",
+        )
       : "Este orçamento ainda não tem nenhuma versão. Crie a primeira na tela do orçamento.";
 
     return {
@@ -432,7 +462,11 @@ export default async function OrcamentosAgregadoPage({
   // save gerado dentro, crédito consumido fora. Calculado
   // aqui, sobre o que está GRAVADO — a exportação lê o banco, e a tela
   // pode estar com alteração ainda não salva.
-  const exportaveis: OrcamentoExportavel[] = inicial.map((orc) => {
+  // O orçamento mensal fica fora do seletor "Exportar": a exportação dele
+  // ainda não existe (decisão 078), e a rota recusaria.
+  const exportaveis: OrcamentoExportavel[] = inicial
+    .filter((orc) => orc.modeloPlanilha !== "mensal")
+    .map((orc) => {
     const origem = orc.origemBanco!;
     const temVersao = origem.versaoId !== "";
     const valor = temVersao
@@ -491,9 +525,22 @@ export default async function OrcamentosAgregadoPage({
     "id" | "nome"
   >[];
 
+  // Fee e Always On não nascem pela agregada (decisão 078): o editor daqui
+  // não conhece meses. Saem da lista as categorias exclusivas de um serviço
+  // E os serviços que têm categoria exclusiva — sobrar o serviço Fee com a
+  // categoria Evento seria abrir de novo a porta que a trava fechou.
+  const categoriasOrcamento = (categoriasOrcRes.data ?? []) as CategoriaParaServico[];
+  const servicosComCategoriaPropria = new Set(
+    categoriasOrcamento
+      .map((c) => c.servico_exclusivo_id)
+      .filter((id): id is string => id !== null),
+  );
+
   return (
     <EditorAgregado
-      servicos={(servicosRes.data ?? []) as ServicoOption[]}
+      servicos={((servicosRes.data ?? []) as ServicoOption[]).filter(
+        (s) => !servicosComCategoriaPropria.has(s.id),
+      )}
       savePorItem={savePorItem}
       saldosDeSave={saldosDeSave}
       nomeDoGrupo={nomeDoGrupo}
@@ -511,10 +558,10 @@ export default async function OrcamentosAgregadoPage({
       orcamentosExistentes={orcamentos.length}
       inicial={inicial}
       exportaveis={exportaveis}
-      categorias={(categoriasOrcRes.data ?? []) as Pick<
-        CategoriaDominio,
-        "id" | "nome" | "modelo_planilha"
-      >[]}
+      categorias={categoriasOrcamento.filter(
+        (c) => c.servico_exclusivo_id === null,
+      )}
+      nomesDeCategoria={categoriasOrcamento}
       regionaisDoProjeto={regionaisDoProjeto}
       cidadesIniciais={cidadesIniciais}
       gpsDoProjeto={gpsDoProjeto}

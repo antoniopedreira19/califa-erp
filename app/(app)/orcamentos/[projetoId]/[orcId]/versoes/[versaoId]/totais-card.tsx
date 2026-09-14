@@ -55,6 +55,11 @@ interface Props {
   /** Moeda estrangeira da coluna da esquerda da cadeia. `null` no
    *  nacional, e aí a cadeia inteira não é renderizada. */
   moedaEstrangeira: MoedaEstrangeira | null;
+  /** Título do card. No modelo mensal ele diz de quê são os totais —
+   *  "Totais de julho", "Totais do trimestre" (decisão 078). */
+  titulo?: string;
+  /** Linha de apoio sob o título. */
+  subtitulo?: string;
 }
 
 export function TotaisCard({
@@ -67,6 +72,8 @@ export function TotaisCard({
   modeloPlanilha,
   internacional,
   moedaEstrangeira,
+  titulo = "Totais",
+  subtitulo,
 }: Props) {
   const {
     subtotaisPorTipo,
@@ -156,12 +163,13 @@ export function TotaisCard({
         <Calculator className="h-5 w-5 text-california-red" />
         <div>
           <h2 className="text-lg font-semibold leading-none tracking-tight">
-            Totais
+            {titulo}
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            {ehInternacional
-              ? "Fechamento internacional · valores calculados a partir dos itens."
-              : "Orçado × Planejado · valores calculados a partir dos itens."}
+            {subtitulo ??
+              (ehInternacional
+                ? "Fechamento internacional · valores calculados a partir dos itens."
+                : "Orçado × Planejado · valores calculados a partir dos itens.")}
           </p>
         </div>
       </div>

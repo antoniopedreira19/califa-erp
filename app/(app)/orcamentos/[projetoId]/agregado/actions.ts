@@ -206,7 +206,11 @@ async function aplicarEdicao(
   const [orcRes, versaoRes] = await Promise.all([
     supabase
       .from("orcamentos")
-      .select("id, codigo, nome, status, projeto_id")
+      .select(
+        "id, codigo, nome, status, projeto_id, " +
+          // `!categoria_id`: `orcamentos` tem duas FKs para `categorias_dominio`.
+          "categoria:categorias_dominio!categoria_id(modelo_planilha)",
+      )
       .eq("id", alvo.orcamentoId)
       .eq("tenant_id", tenantId)
       .maybeSingle<{
@@ -215,6 +219,7 @@ async function aplicarEdicao(
         nome: string;
         status: string;
         projeto_id: string;
+        categoria: { modelo_planilha: string } | null;
       }>(),
     supabase
       .from("versoes_orcamento")
@@ -243,6 +248,15 @@ async function aplicarEdicao(
     return {
       ok: false,
       message: `${orcamento.codigo}: versão aprovada não permite alterar itens.`,
+    };
+  }
+  // O orçamento mensal é só consulta nesta tela (decisão 078): o
+  // reconciliador abaixo regrava grupos sem saber de meses, e apagaria o
+  // mês de cada grupo que tocasse.
+  if (orcamento.categoria?.modelo_planilha === "mensal") {
+    return {
+      ok: false,
+      message: `${orcamento.codigo}: orçamento de Fee ou Always On é editado na tela do orçamento, mês a mês.`,
     };
   }
 

@@ -42,6 +42,15 @@ export type AuditAction =
   // leva os itens do grupo junto, então o metadata guarda quantos foram —
   // é o único rastro de que aquelas linhas existiram.
   | "grupo_orcamento.removido"
+  // Modelo mensal — Fee e Always On (decisão 078). Apagar um mês leva
+  // grupos e itens junto; o metadata guarda quantos, e o período que o
+  // orçamento passou a ter.
+  | "versao_orcamento.mes_adicionado"
+  | "versao_orcamento.mes_removido"
+  | "versao_orcamento.mes_copiado"
+  // Troca de categoria que entra ou sai do modelo mensal: muda a estrutura
+  // de todas as versões, e saindo apaga os meses depois do primeiro.
+  | "orcamento.modelo_planilha_trocado"
   // SAVE — o crédito entre jobs (docs/decisions/028-save-entre-jobs.md).
   // Registrado porque marcar uma linha ou definir um consumo move
   // faturamento previsto e valor do job, e move dinheiro entre jobs.

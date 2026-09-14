@@ -7,6 +7,7 @@ import { listActiveMembers } from "@/lib/data/members";
 import { listarCidadesIniciais } from "@/lib/data/cidades";
 import type { CategoriaDominio, Profile, Regional } from "@/lib/types";
 import { OrcamentoForm } from "../orcamento-form";
+import type { CategoriaParaServico } from "@/lib/categorias-do-servico";
 
 export const dynamic = "force-dynamic";
 
@@ -33,9 +34,11 @@ export default async function NovoOrcamentoPage({
         .eq("id", params.projetoId)
         .eq("tenant_id", session.activeTenant.id)
         .maybeSingle(),
+      // Com modelo e serviço exclusivo: o formulário trava a categoria do
+      // Fee e do Always On por eles (decisão 078).
       supabase
         .from("categorias_dominio")
-        .select("id, nome")
+        .select("id, nome, modelo_planilha, servico_exclusivo_id")
         .eq("tenant_id", session.activeTenant.id)
         .eq("escopo", "orcamento")
         .eq("ativo", true)
@@ -69,7 +72,7 @@ export default async function NovoOrcamentoPage({
 
   if (!projeto) notFound();
 
-  const categorias = (categoriasRes.data ?? []) as Pick<CategoriaDominio, "id" | "nome">[];
+  const categorias = (categoriasRes.data ?? []) as CategoriaParaServico[];
   const servicos = (servicosRes.data ?? []) as Pick<CategoriaDominio, "id" | "nome">[];
 
   const regionaisDoProjeto = ((regionaisRes.data ?? []) as any[])

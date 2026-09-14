@@ -10,17 +10,23 @@ import {
 } from "@/components/ui/dialog";
 import type {
   CategoriaDominio,
+  CategoriaModeloPlanilha,
   Orcamento,
   Profile,
   Regional,
 } from "@/lib/types";
+import type { CategoriaParaServico } from "@/lib/categorias-do-servico";
 import type { CidadeOption } from "../cidade-combobox";
 import { OrcamentoForm } from "./orcamento-form";
 
 interface Props {
   projetoId: string;
   orcamento: Orcamento;
-  categorias: Pick<CategoriaDominio, "id" | "nome">[];
+  /** Com modelo de planilha e serviço exclusivo — ver `OrcamentoForm`. */
+  categorias: CategoriaParaServico[];
+  /** Modelo que o orçamento usa hoje: é contra ele que o formulário pede a
+   *  confirmação da troca de planilha (decisão 078). */
+  modeloPlanilhaAtual: CategoriaModeloPlanilha;
   /** Serviço do job — escopo `projeto` de `categorias_dominio`,
    *  lista distinta das categorias acima (decisão 037). */
   servicos: Pick<CategoriaDominio, "id" | "nome">[];
@@ -37,6 +43,7 @@ export function OrcamentoEditorDrawer({
   projetoId,
   orcamento,
   categorias,
+  modeloPlanilhaAtual,
   servicos,
   regionaisDoProjeto,
   cidadesIniciais,
@@ -84,6 +91,7 @@ export function OrcamentoEditorDrawer({
               projetoId={projetoId}
               orcamento={orcamento}
               categorias={categorias}
+              modeloPlanilhaAtual={modeloPlanilhaAtual}
               servicos={servicos}
               regionaisDoProjeto={regionaisDoProjeto}
               cidadesIniciais={cidadesIniciais}

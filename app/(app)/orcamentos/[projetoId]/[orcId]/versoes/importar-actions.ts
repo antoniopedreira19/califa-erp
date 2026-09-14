@@ -192,6 +192,15 @@ async function verificarOrcamento(
       message: `Orçamento em estado ${orc.status} não aceita nova versão.`,
     };
   }
+  // Modelo mensal (decisão 078): a planilha importada não diz de que mês é
+  // cada grupo — os itens cairiam fora de todos os meses.
+  if (orc.categoria?.modelo_planilha === "mensal") {
+    return {
+      ok: false,
+      message:
+        "A importação de planilha ainda não está disponível para orçamentos de Fee e Always On.",
+    };
+  }
   return {
     ok: true,
     projeto_id: orc.projeto_id,

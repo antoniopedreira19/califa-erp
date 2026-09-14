@@ -61,6 +61,9 @@ interface Props {
    *  (decisão 072). Obrigatória: quem monta esta seção tem que dizer, e
    *  não deixar o default responder por ele. */
   moedaEstrangeira: MoedaEstrangeira | null;
+  /** Rótulo do pé da tabela. Ausente ⇒ "Total do orçamento"; no modelo
+   *  mensal é o do mês ("Total de outubro"). */
+  rotuloTotal?: string;
 }
 
 export function GruposSection({
@@ -81,6 +84,7 @@ export function GruposSection({
   savePorPadrao,
   onAlternarSavePadrao,
   moedaEstrangeira,
+  rotuloTotal,
 }: Props) {
   // A máquina de estado mora em `_planilha/recolher-grupos`: a planilha do
   // job, a da conferência do financeiro e os blocos da visão agregada
@@ -203,6 +207,7 @@ export function GruposSection({
         onAbrirSave={onAbrirSave}
         orcadoVisivel={orcadoVisivel}
         rentabilidadeVisivel={rentabilidadeVisivel}
+        rotuloTotal={rotuloTotal}
       />
     </div>
   );

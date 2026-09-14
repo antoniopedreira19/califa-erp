@@ -400,6 +400,23 @@ export interface VersaoOrcamentoGrupo {
   versao_orcamento_id: string;
   nome: string;
   ordem: number;
+  /** Mês do grupo no modelo mensal (`versoes_orcamento_meses`). `null` nos
+   *  modelos nacional e internacional. Os itens herdam o mês pelo grupo —
+   *  não existe mês no item (decisão 078). */
+  mes_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Um mês da versão de orçamento do modelo mensal (decisão 078). De 1 a 3
+ *  por versão, todos no mesmo trimestre civil — o banco confere. */
+export interface VersaoOrcamentoMes {
+  id: string;
+  tenant_id: string;
+  versao_orcamento_id: string;
+  /** Primeiro dia do mês de referência, `YYYY-MM-01`. */
+  mes: string;
+  created_by: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -661,8 +678,12 @@ export type CategoriaDominioEscopo = "projeto" | "orcamento";
  *
  * Modelo novo é **valor novo neste union + valor novo no enum do
  * Postgres** — mudança aditiva nos dois lados.
+ *
+ * `mensal` (decisão 078): Fee e Always On. A versão tem de 1 a 3 meses do
+ * mesmo trimestre civil, cada um com seus grupos; o fechamento de cada mês
+ * é o nacional.
  */
-export type CategoriaModeloPlanilha = "nacional" | "internacional";
+export type CategoriaModeloPlanilha = "nacional" | "internacional" | "mensal";
 
 export interface CategoriaDominio {
   id: string;
@@ -671,6 +692,11 @@ export interface CategoriaDominio {
   nome: string;
   ativo: boolean;
   modelo_planilha: CategoriaModeloPlanilha;
+  /** Categoria de orçamento que só vale para UM serviço (decisão 078):
+   *  preenchida, o orçamento com esta categoria precisa ter este serviço,
+   *  e o serviço só aceita as categorias exclusivas dele. Nas categorias
+   *  de escopo `projeto` (os serviços) é sempre `null`. */
+  servico_exclusivo_id: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
