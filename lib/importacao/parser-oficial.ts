@@ -31,11 +31,11 @@ import { TIPOS_CUSTO } from "@/lib/calculos/versao-totais";
  * O parser aceita os dois — ver "Classificação de linha".
  *
  * Classificação de linha (depois do header):
- *   - RESUMO : coluna A vazia + SUB-TOTAL/TOTAL/IMPOSTO/HONORÁRIOS/
- *              FATURAMENTO em A..E. Ignorada; é dela que sai o % de
+ *   - RESUMO : colunas A e B vazias + SUB-TOTAL/TOTAL/IMPOSTO/HONORÁRIOS/
+ *              FATURAMENTO em C..E. Ignorada; é dela que sai o % de
  *              honorários (coluna E, ver `extrairPercentualHonorarios`).
- *              A exigência de "A vazia" protege item cujo NOME contenha
- *              uma dessas palavras — item sempre tem a coluna A ou o tipo.
+ *              A exigência de "A e B vazias" protege item cujo NOME
+ *              contenha uma dessas palavras — o nome do item mora na B.
  *   - GRUPO  : sem valor em C e sem tipo em G, com nome só em A (formato da
  *              exportação) ou só em B (formato do modelo). Cria o grupo e
  *              passa a ser o grupo corrente.
@@ -271,14 +271,19 @@ function ehLinhaHeader(cells: string[]): boolean {
 /**
  * Linha de fechamento (SUB-TOTAL, TOTAL, IMPOSTO, HONORÁRIOS, FATURAMENTO).
  *
- * Exige a coluna A vazia: no layout novo o fechamento fica em C..E com A e B
- * vazias, e essa exigência impede que um ITEM chamado, por exemplo, "TOTEM
- * DE TOTAL" seja engolido — item sempre tem a coluna A preenchida (modelo)
- * ou o tipo em G (exportação).
+ * Exige as colunas A e B vazias. O rótulo do fechamento nunca morou na B —
+ * fica na C no modelo, na E na exportação do ERP e ficava na D no layout
+ * antigo —, e a B é onde mora o nome do item.
+ *
+ * Até 14/09/2026 só a A era exigida, e isso não protegia a exportação do
+ * ERP, em que a A dos itens é vazia: "Total de horas", "Honorários do
+ * locutor" ou "Imposto de importação" viravam fechamento e sumiam da
+ * importação em silêncio. É a mesma regra do internacional
+ * (`lerLinhaInternacional`).
  */
 function ehLinhaResumo(cells: string[]): boolean {
-  if (cells[0] !== "") return false;
-  const alvo = cells.slice(0, 5).map((s) => s.toLowerCase());
+  if (cells[0] !== "" || cells[1] !== "") return false;
+  const alvo = cells.slice(2, 5).map((s) => s.toLowerCase());
   return alvo.some((c) => KEYWORDS_RESUMO.some((k) => c.includes(k)));
 }
 

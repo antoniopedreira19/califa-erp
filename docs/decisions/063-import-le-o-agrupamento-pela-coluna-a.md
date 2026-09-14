@@ -59,6 +59,24 @@ os dois sem ambiguidade:
 Grupo que aparece numa linha de grupo mas em nenhum item é descartado no
 fim — é o que faz o "CONTEUDO" sem acento sumir sozinho.
 
+### ⚠️ Linha de fechamento exige A **e** B vazias (14/09/2026)
+
+A regra original exigia só a coluna A vazia para ler SUB-TOTAL, TOTAL,
+IMPOSTO, HONORÁRIOS ou FATURAMENTO como fechamento. Isso protegia o modelo
+(item com A preenchida), mas não a **exportação do ERP**, em que a A dos
+itens é vazia: item chamado "Total de horas", "Honorários do locutor" ou
+"Imposto de importação" virava fechamento e sumia da importação sem aviso
+— e o D/M dele ainda podia ser lido como o % de honorários.
+
+Agora o fechamento exige **A e B vazias**, com o rótulo procurado em C..E.
+O rótulo nunca morou na B (C no modelo, E na exportação, D no layout
+antigo); a B é o nome do item. É a mesma regra do internacional (072).
+
+Conferido por script, com a mesma planilha lida pelas duas regras: no
+formato da exportação, a antiga importava 1 de 6 itens e lia honorários
+de 100%; a nova importa os 6, com 15%. No formato do modelo as duas dão
+6 de 6 e 12%.
+
 ## QT e D/M zerados viram 1, com aviso
 
 Achado ao conferir o banco: `versoes_orcamento_itens` tem
