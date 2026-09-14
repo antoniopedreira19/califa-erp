@@ -367,6 +367,12 @@ Conferido:
   projeto criou a v2 do -08 com o câmbio completo e as int. taxes
   herdados, QT 1 → 2 e a linha nova como B; o "Aprovar versão" do -08
   ficou travado com o câmbio incompleto e liberou com ele completo.
+- no navegador, em 14/09/2026, a recusa no "Importar" da página do
+  projeto: planilha nacional com duas seções — uma com o id do -08
+  (internacional), outra com o do -11 (nacional). O preview marcou o -08
+  como "não entra" ("Este orçamento é internacional, e a planilha está no
+  modelo nacional — nada entra nele.") e seguiu com o -11 para a v2. A
+  importação foi cancelada; nada gravou.
 
 **Não exercitado no navegador:** a porta da visão agregada — o botão só
 aparece em card sem planilha, e o projeto de teste não tinha nenhum. O
