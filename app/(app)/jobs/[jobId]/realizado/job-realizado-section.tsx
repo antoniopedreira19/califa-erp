@@ -26,6 +26,7 @@ import type {
   Empresa,
   ItemBv,
   CategoriaModeloPlanilha,
+  VersaoOrcamentoMes,
 } from "@/lib/types";
 import { VISAO_BV_PADRAO, type VisaoBv } from "@/lib/calculos/bv-planilha";
 import { useRouter } from "next/navigation";
@@ -64,9 +65,23 @@ import { useRascunhoErrata } from "./errata-rascunho";
 import { ErrataBarra } from "./errata-barra";
 import { ErrataConfirmarDialog } from "./errata-confirmar-dialog";
 import { registrarErrata } from "./actions-errata";
-import { calcularTotaisVersao } from "@/lib/calculos/versao-totais";
+import {
+  calcularResultadoOperacional,
+  calcularTotaisVersao,
+} from "@/lib/calculos/versao-totais";
 import { configDaPlanilha } from "@/app/(app)/_planilha/modelo-planilha";
 import { definirModoErrata } from "../modo-errata";
+import {
+  nomeDoMes,
+  rotuloMes,
+  rotuloMesCurto,
+} from "@/lib/calculos/meses-trimestre";
+import { ReguaMeses } from "@/app/(app)/orcamentos/[projetoId]/[orcId]/versoes/[versaoId]/regua-meses";
+import { TrimestreEmpilhado } from "@/app/(app)/orcamentos/[projetoId]/[orcId]/versoes/[versaoId]/trimestre-empilhado";
+
+/** Referência estável para o default: um `[]` novo a cada render mudaria
+ *  as dependências dos `useMemo` abaixo. */
+const SEM_MESES: VersaoOrcamentoMes[] = [];
 
 interface Props {
   job: Pick<
@@ -98,6 +113,15 @@ interface Props {
   /** Qual fechamento este job usa — da categoria do ORÇAMENTO que o
    *  originou, nunca da do job (decisão 072). */
   modeloPlanilha: CategoriaModeloPlanilha;
+  // ---- MODELO MENSAL (decisão 078)
+  /** Os meses da versão aprovada. Vazio fora do modelo mensal. */
+  meses?: VersaoOrcamentoMes[];
+  /** `?mes=` da URL: `trimestre`, `2026-07` ou ausente (primeiro mês). */
+  mesPedido?: string;
+  /** Link da própria página já na aba da planilha, sem o `mes` — a régua
+   *  acrescenta `&mes=`. Sem ele a régua não tem para onde navegar, e o
+   *  job mensal aparece na planilha inteira. */
+  hrefPlanilha?: string;
   /** "Nome do Job" do orçamento — base do nome da versão. */
   nomeJob: string;
   grupos: VersaoOrcamentoGrupo[];
@@ -157,6 +181,9 @@ export function JobRealizadoSection({
   saldosDeSave,
   clienteNome,
   modeloPlanilha,
+  meses = SEM_MESES,
+  mesPedido,
+  hrefPlanilha,
 }: Props) {
   const router = useRouter();
 
@@ -352,6 +379,59 @@ export function JobRealizadoSection({
     }));
   }, [grupos, errata.itens]);
 
+  // MODELO MENSAL (decisão 078): a planilha do job se reparte nos meses da
+  // versão aprovada. O mês mora no GRUPO da versão, e o item do job aponta
+  // para ele — nada de mês foi copiado para o job. As contas saem do
+  // rascunho da errata, como o resto da tela, para a régua acompanhar o que
+  // se digita.
+  const mensal =
+    modeloPlanilha === "mensal" && meses.length > 0 && hrefPlanilha !== undefined;
+  const dadosDosMeses = React.useMemo(() => {
+    if (!mensal) return [];
+    const mesDoGrupo = new Map(grupos.map((g) => [g.id, g.mes_id]));
+    return meses.map((m) => {
+      const gruposDoMes = gruposDaPlanilha.filter(
+        (g) => mesDoGrupo.get(g.id) === m.id,
+      );
+      const itensDoMes = gruposDoMes.flatMap((g) => g.itens);
+      const totais = paraTotais(itensDoMes);
+      const custoPlanejado = itensDoMes.reduce(
+        (s, it) => s + Number(it.total_planejado ?? 0),
+        0,
+      );
+      const resultado = calcularResultadoOperacional(
+        totais.valorJob,
+        totais.deducoesDoResultado,
+        custoPlanejado,
+      );
+      return {
+        mes: m,
+        chave: m.mes.slice(0, 7),
+        grupos: gruposDoMes,
+        itens: itensDoMes,
+        faturamento: totais.faturamentoPrevisto,
+        custoPlanejado,
+        resultadoOperacional: resultado.resultadoOperacional,
+        resultadoGeral: resultado.resultadoGeral,
+      };
+    });
+  }, [mensal, meses, grupos, gruposDaPlanilha, paraTotais]);
+  // Sem `?mes=`, abre no primeiro mês — como a planilha do orçamento.
+  const mesSelecionado =
+    !mensal || mesPedido === "trimestre"
+      ? null
+      : (dadosDosMeses.find((d) => d.chave === mesPedido) ??
+        dadosDosMeses[0] ??
+        null);
+  const descricaoDosMeses =
+    dadosDosMeses.length === 1
+      ? rotuloMes(dadosDosMeses[0].mes.mes)
+      : dadosDosMeses.length > 1
+        ? `${rotuloMesCurto(dadosDosMeses[0].mes.mes)} a ${nomeDoMes(
+            dadosDosMeses[dadosDosMeses.length - 1].mes.mes,
+          )} de ${dadosDosMeses[0].mes.mes.slice(0, 4)}`
+        : "";
+
   // A trilha lateral aparece quando há ação (BV/PP) OU quando há BV
   // lançado para consultar num job sem ação — é a mesma condição que a
   // tabela usa para desenhá-la, e a reserva tem que acompanhar as duas.
@@ -365,6 +445,77 @@ export function JobRealizadoSection({
   // calha some para o BV e fica para a PP, então a reserva de 116px
   // precisa acompanhar as duas condições, não só `podeAcoes`.
   const temCalha = podeAcoes || podeGerarPP || (temBvLancado && !preAbertura);
+
+  /** Uma tabela da planilha — a inteira, ou os grupos de um mês no modelo
+   *  mensal. A errata é a MESMA em todos os recortes: o rascunho mora nesta
+   *  seção, e cada tabela mostra só os grupos que recebe. */
+  function tabela(gruposDoTrecho: GrupoDoJob[], rotuloTotal?: string) {
+    // Um card para a planilha inteira — antes era um por grupo. Sem
+    // `overflow-hidden`: a calha de ações precisa escapar do frame, e são
+    // os filhos que arredondam os cantos.
+    return (
+      <div className="rounded-2xl border border-border bg-card shadow-soft">
+        <JobItemRealizadoTable
+          jobId={job.id}
+          grupos={gruposDoTrecho}
+          rotuloTotal={rotuloTotal}
+          realizadosMap={realizadosMap}
+          categoriasMap={categoriasMap}
+          moeda={versao.moeda}
+          moedaEstrangeira={planilha.moedaEstrangeira}
+          percentualImposto={versao.percentual_imposto}
+          visao={visao}
+          estaAberto={recolher.estaAberto}
+          onAlternarGrupo={recolher.alternar}
+          podeAcoes={podeAcoes}
+          podeGerarPP={podeGerarPP}
+          preAbertura={preAbertura}
+          aberturaEmRevisao={aberturaEmRevisao}
+          ppsPorItemId={ppsPorItemId}
+          fornecedores={fornecedores}
+          empresas={empresas}
+          responsaveis={responsaveis}
+          jobEmpresaId={job.empresa_id ?? ""}
+          jobResponsavelId={job.responsavel_id ?? ""}
+          bvsPorItem={bvsPorItem}
+          versaoLabel={`v${versao.numero_versao}`}
+          saveVisivel={temSave}
+          onAlternarSave={() => setSaveLigado((v) => !v)}
+          savePorItem={savePorItem}
+          onAbrirSave={
+            podeMexerNoSave && !errata.ativo ? setLinhaSave : undefined
+          }
+          errata={podeErrata ? errata : undefined}
+          orcadoVisivel={orcadoVisivel}
+          rentabPlanejadaVisivel={rentabPlanejada}
+          rentabRealizadaVisivel={rentabRealizada}
+        />
+      </div>
+    );
+  }
+
+  function cardDeTotais(
+    itensDoTrecho: ItemPlanilhaJob[],
+    titulo?: string,
+    subtitulo?: string,
+  ) {
+    return (
+      <JobTotaisCard
+        itens={itensDoTrecho}
+        realizadosMap={realizadosMap}
+        bvsPorItem={bvsPorItem}
+        jobAberto={!preAbertura}
+        percentualHonorarios={versao.percentual_honorarios}
+        percentualImposto={versao.percentual_imposto}
+        moeda={versao.moeda}
+        modeloPlanilha={modeloPlanilha}
+        internacional={planilha.internacional}
+        moedaEstrangeira={planilha.moedaEstrangeira}
+        titulo={titulo}
+        subtitulo={subtitulo}
+      />
+    );
+  }
 
   return (
     // Quando dá pra gerar PP, reserva a calha da direita: a trilha de
@@ -505,65 +656,83 @@ export function JobRealizadoSection({
             A versão aprovada não tem grupos.
           </p>
         </div>
+      ) : mensal ? (
+        <>
+          <ReguaMeses
+            titulo="Meses do job"
+            moeda={versao.moeda}
+            descricao={descricaoDosMeses}
+            trimestre={{
+              chave: "trimestre",
+              rotulo: "Trimestre",
+              faturamento: dadosDosMeses.reduce((s, d) => s + d.faturamento, 0),
+              resultadoGeral: null,
+              // O envio para faturamento por mês ainda não existe: nenhum
+              // mês foi faturado, e todos estão a enviar.
+              detalhe: "Nenhum mês faturado",
+              href: `${hrefPlanilha}&mes=trimestre`,
+            }}
+            meses={dadosDosMeses.map((d) => ({
+              chave: d.mes.id,
+              rotulo: rotuloMesCurto(d.mes.mes),
+              faturamento: d.faturamento,
+              resultadoGeral: d.resultadoGeral,
+              detalhe: "A enviar",
+              href: `${hrefPlanilha}&mes=${d.chave}`,
+            }))}
+            selecionado={mesSelecionado?.mes.id ?? "trimestre"}
+            editar={null}
+          />
+          {mesSelecionado ? (
+            <>
+              {tabela(
+                mesSelecionado.grupos,
+                `Total de ${nomeDoMes(mesSelecionado.mes.mes)}`,
+              )}
+              <DicasDeTeclado editavel={errata.ativo} />
+              {cardDeTotais(
+                mesSelecionado.itens,
+                `Totais de ${nomeDoMes(mesSelecionado.mes.mes)}`,
+                "Orçado × Planejado × Realizado · valores calculados a partir dos itens do mês.",
+              )}
+            </>
+          ) : (
+            <>
+              <TrimestreEmpilhado
+                moeda={versao.moeda}
+                meses={dadosDosMeses.map((d) => ({
+                  id: d.mes.id,
+                  titulo: rotuloMes(d.mes.mes),
+                  nome: nomeDoMes(d.mes.mes),
+                  resumo: `${d.grupos.length} ${
+                    d.grupos.length === 1 ? "grupo" : "grupos"
+                  } · ${d.itens.length} ${d.itens.length === 1 ? "item" : "itens"}`,
+                  faturamento: d.faturamento,
+                  custoPlanejado: d.custoPlanejado,
+                  resultadoOperacional: d.resultadoOperacional,
+                  resultadoGeral: d.resultadoGeral,
+                  href: `${hrefPlanilha}&mes=${d.chave}`,
+                  conteudo: tabela(d.grupos, `Total de ${nomeDoMes(d.mes.mes)}`),
+                }))}
+              />
+              <DicasDeTeclado editavel={errata.ativo} />
+              {cardDeTotais(
+                dadosDosMeses.flatMap((d) => d.itens),
+                "Totais do trimestre",
+                "Orçado × Planejado × Realizado · soma dos meses.",
+              )}
+            </>
+          )}
+        </>
       ) : (
         <>
-          {/* Um card para a planilha inteira — antes era um por grupo.
-              Sem `overflow-hidden`: a calha de ações precisa escapar do
-              frame, e são os filhos que arredondam os cantos. */}
-          <div className="rounded-2xl border border-border bg-card shadow-soft">
-            <JobItemRealizadoTable
-              jobId={job.id}
-              grupos={gruposDaPlanilha}
-              realizadosMap={realizadosMap}
-              categoriasMap={categoriasMap}
-              moeda={versao.moeda}
-              moedaEstrangeira={planilha.moedaEstrangeira}
-              percentualImposto={versao.percentual_imposto}
-              visao={visao}
-              estaAberto={recolher.estaAberto}
-              onAlternarGrupo={recolher.alternar}
-              podeAcoes={podeAcoes}
-              podeGerarPP={podeGerarPP}
-              preAbertura={preAbertura}
-              aberturaEmRevisao={aberturaEmRevisao}
-              ppsPorItemId={ppsPorItemId}
-              fornecedores={fornecedores}
-              empresas={empresas}
-              responsaveis={responsaveis}
-              jobEmpresaId={job.empresa_id ?? ""}
-              jobResponsavelId={job.responsavel_id ?? ""}
-              bvsPorItem={bvsPorItem}
-              versaoLabel={`v${versao.numero_versao}`}
-              saveVisivel={temSave}
-              onAlternarSave={() => setSaveLigado((v) => !v)}
-              savePorItem={savePorItem}
-              onAbrirSave={
-                podeMexerNoSave && !errata.ativo ? setLinhaSave : undefined
-              }
-              errata={podeErrata ? errata : undefined}
-              orcadoVisivel={orcadoVisivel}
-              rentabPlanejadaVisivel={rentabPlanejada}
-              rentabRealizadaVisivel={rentabRealizada}
-            />
-          </div>
+          {tabela(gruposDaPlanilha)}
           {/* Fora do card, como na planilha do orçamento. Fora da errata a
               planilha é só leitura: só as setas. */}
           <DicasDeTeclado editavel={errata.ativo} />
-          <JobTotaisCard
-            itens={errata.itens}
-            realizadosMap={realizadosMap}
-            bvsPorItem={bvsPorItem}
-            jobAberto={!preAbertura}
-            percentualHonorarios={versao.percentual_honorarios}
-            percentualImposto={versao.percentual_imposto}
-            moeda={versao.moeda}
-            modeloPlanilha={modeloPlanilha}
-            internacional={planilha.internacional}
-            moedaEstrangeira={planilha.moedaEstrangeira}
-          />
+          {cardDeTotais(errata.itens)}
         </>
       )}
-
       <SaveDialog
         open={linhaSave !== null}
         onOpenChange={(aberto) => !aberto && setLinhaSave(null)}

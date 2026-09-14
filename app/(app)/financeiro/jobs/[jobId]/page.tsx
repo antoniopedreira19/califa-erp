@@ -71,7 +71,7 @@ export default async function JobNoFinanceiroPage({
    * está procurando QUE job é aquele na agenda, não o registro da
    * abertura (decisão do Tiago, 07/09/2026).
    */
-  searchParams?: { aba?: string };
+  searchParams?: { aba?: string; mes?: string };
 }) {
   const session = await requireSession();
   if (
@@ -475,6 +475,11 @@ export default async function JobNoFinanceiroPage({
                   : Number(versaoAprovada.cambio_compra),
             }}
             modeloPlanilha={detalhe.modeloPlanilha}
+            // Modelo mensal (decisão 078): a mesma régua de meses da tela do
+            // GP, trocando de mês pela URL sem sair da aba da planilha.
+            meses={detalhe.meses}
+            mesPedido={searchParams?.mes}
+            hrefPlanilha={`/financeiro/jobs/${job.id}?aba=planilha`}
             grupos={detalhe.grupos}
             itens={detalhe.itens}
             realizadosMap={detalhe.realizadosMap}

@@ -3709,13 +3709,9 @@ categoria aberta.
 
 ### Pendências do modelo mensal
 
-- **Não testado ainda:** a troca de planilha CONFIRMADA (entrando e saindo
-  do mensal — só a confirmação foi vista, e cancelada) e a recusa do
-  servidor no envio para abertura (a tela nem mostra o botão; testar pelo
-  console, como em `bypass` de Server Action).
-- **Entrega 2:** abertura e planilha do job por mês.
 - **Entrega 3:** envio para faturamento por mês, barra no rodapé do job,
-  devolução, fluxo de caixa mensal, encerramento.
+  devolução, fluxo de caixa mensal, encerramento, e a trava de errata e
+  save por mês.
 - **Depois:** exportação e importação de planilha do mensal (hoje recusadas
   na versão, no projeto e fora do seletor de exportação); edição do mensal
   pela visão agregada (hoje só consulta); filtro de trimestres na agregada.
@@ -3814,3 +3810,38 @@ Com os dados de 14/09/2026, os próximos códigos de 2026 ficam: produção —
 Pevetech PEVETE-0007, Novo NOV-0005, HITLAB HIT-0002, SEBRAE SEBRAE-0002,
 AMBEV AMB-0003; financeiro — Novo NOV-0004, Pevetech PEVETE-0007, AMBEV
 AMB-0003. Os códigos existentes não mudam.
+
+## ⚠️ Nota de 2026-09-14 — Fee e Always On: aprovação e envio para abertura (decisão 078, entrega 2)
+
+**Na branch `feat/planilha-mensal`, sem merge:** vai para o main junto com a
+entrega 3 (Tiago, 14/09/2026). Regras na
+[078](../decisions/078-orcamento-mensal-fee-e-always-on.md); o lado do job
+no HANDOFF_JOBS.
+
+| Arquivo | O quê |
+|---|---|
+| `lib/validations/versoes.ts` | `bloqueioAprovacaoVersao` ganhou `mesesSemItens` (obrigatório; `null` fora do mensal) |
+| `lib/data/meses-versao.ts` | `mesesSemItens` (a tela conta sobre o que já buscou) e `mesesSemItensDaVersao` (o servidor relê o banco) |
+| `versoes/actions.ts` | `aprovarVersao` recusa mês sem item |
+| `[orcId]/page.tsx` | `FluxoAbertura` saiu da bifurcação do mensal: a barra de aprovação e abertura aparece nos três modelos |
+| `fluxo-abertura.tsx` · `enviar-job-modal.tsx` | `mesesSemItens` e `periodoTravado` (início e fim desabilitados no modal) |
+| `abertura-actions.ts` | a recusa do mensal saiu; no lugar, início e fim precisam ser os do período do orçamento |
+
+### Conferido
+
+No `0-0001/26-09 · Teste Fee 4T/2026`:
+- **Mês vazio:** com dezembro vazio, a barra travou "Aprovar versão" com "Dezembro não tem itens…", e `aprovarVersao` chamada pelo console recusou com a mesma frase.
+- **Aprovação:** dezembro foi preenchido copiando novembro, e a versão foi aprovada pela tela.
+- **Datas:** no modal de envio, início e fim vieram desabilitados. `enviarJobParaAbertura` chamada pelo console com outra data de início recusou.
+- **Envio:** pela tela criou o **JOB-0034**, depois do hotfix do código de job. Os três itens copiados apontam para os grupos de outubro, novembro e dezembro, e o orçamento foi a `job_criado`.
+
+No `0-0001/26-10 · Teste troca de planilha`, a troca de planilha foi confirmada nos dois sentidos:
+- **Nacional → Fee:** os grupos foram para o 1º mês.
+- **Fee → Evento:** só o 1º mês ficou, e o item de novembro foi apagado.
+
+As duas trocas ficaram na auditoria.
+
+### Armadilhas
+
+- **O `FluxoAbertura` fica fora da bifurcação mensal × outros.** Até a entrega 2 ele estava dentro do ramo não mensal, e versão de Fee/Always On não tinha como ser aprovada pela tela. Ele precisa ser o último filho da página, por causa do `sticky`.
+- **Mês só com grupo vazio conta como mês sem item.**

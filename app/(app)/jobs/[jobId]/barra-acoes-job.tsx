@@ -54,6 +54,9 @@ interface Props {
   portais: PortalOption[];
   moeda: string;
   resumoEncerramento: ResumoEncerramento | null;
+  /** Fee e Always On (modelo mensal, decisão 078): faturam mês a mês, e o
+   *  envio único não aparece. A barra diz por quê. */
+  faturamentoPorMes?: boolean;
 }
 
 /**
@@ -90,6 +93,7 @@ export function BarraAcoesJob({
   portais,
   moeda,
   resumoEncerramento,
+  faturamentoPorMes = false,
 }: Props) {
   // Enquanto a errata está aberta quem fala no rodapé é a barra dela: o
   // design tem UMA barra com três estados, não duas empilhadas.
@@ -107,6 +111,7 @@ export function BarraAcoesJob({
     mostrarEncerramento,
     pagoSoPorSave,
     aberturaEmRevisao,
+    faturamentoPorMes,
   });
 
   if (errataAberta) return null;
@@ -155,6 +160,7 @@ function montarLinhas({
   mostrarEncerramento,
   pagoSoPorSave,
   aberturaEmRevisao,
+  faturamentoPorMes,
 }: {
   status: JobStatus;
   orcamentoHref: string;
@@ -164,6 +170,7 @@ function montarLinhas({
   mostrarEncerramento: boolean;
   pagoSoPorSave: boolean;
   aberturaEmRevisao: boolean;
+  faturamentoPorMes: boolean;
 }): React.ReactNode[] {
   if (status === "aguardando_abertura") {
     return [
@@ -286,6 +293,8 @@ function montarLinhas({
         {formatCurrency(faturamentoPrevisto, moeda)}
       </strong>
     </>,
-    "Enviar para faturamento libera o financeiro a emitir a nota. O encerramento fica disponível depois disso.",
+    faturamentoPorMes
+      ? "Fee e Always On são faturados mês a mês. O envio de cada mês para faturamento ainda não está disponível."
+      : "Enviar para faturamento libera o financeiro a emitir a nota. O encerramento fica disponível depois disso.",
   ];
 }

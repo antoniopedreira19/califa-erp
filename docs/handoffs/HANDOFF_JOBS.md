@@ -3543,3 +3543,38 @@ banco) e errata antes da abertura (a action exige job aberto).
 antes da revisão, o resumo do mural e o cabeçalho da revisão mostram só a
 última (`abertura_revisao_errata_id`); a primeira não aparece na
 conferência do financeiro.
+
+## ⚠️ Nota de 2026-09-14 — Fee e Always On: a planilha do job por mês (decisão 078, entrega 2)
+
+**Na branch `feat/planilha-mensal`, sem merge:** vai para o main junto com a
+entrega 3 (Tiago, 14/09/2026). Regras na
+[078](../decisions/078-orcamento-mensal-fee-e-always-on.md).
+
+**O job não ganhou coluna nem tabela.** `jobs_itens_orcado.grupo_id` aponta
+para o grupo da versão aprovada, e o grupo tem `mes_id`: as telas do job
+leem os meses da versão aprovada (`mesesDaVersaoQuery`).
+
+| Arquivo | O quê |
+|---|---|
+| `carregar-detalhe.ts` | meses da versão aprovada no `Promise.all`; `podeEnviarFaturamento` falso no mensal |
+| `realizado/job-realizado-section.tsx` | régua "Meses do job", planilha e Totais do mês, trimestre empilhado; `tabela()` e `cardDeTotais()` servem os três recortes |
+| `realizado/job-totais-card.tsx` | `titulo` e `subtitulo` |
+| `jobs/[jobId]/page.tsx` · `financeiro/jobs/[jobId]/page.tsx` | `meses`, `mesPedido` (`?mes=`) e `hrefPlanilha` (sempre com `aba=planilha`) |
+| `actions-faturamento.ts` · `barra-acoes-job.tsx` | envio único para faturamento recusado para job mensal, antes até da conferência de status; a barra diz que o faturamento é mês a mês |
+| `abertura-de-job/[jobId]/planilha/page.tsx` · `jobs/projeto/[projetoId]/carregar-planilhas.ts` | planilha inteira, com o mês no nome do grupo e os grupos na ordem dos meses |
+
+### Conferido (JOB-0034 · Teste Fee 4T/2026)
+
+- **Régua:** Trimestre R$ 50.105,63 ("Nenhum mês faturado") e os três meses com R$ 16.701,88 ("A enviar").
+- **Mês:** outubro abre por padrão, com "Total de outubro" e "Totais de outubro".
+- **Trimestre:** `?mes=trimestre` empilha os meses e fecha com "Totais do trimestre" (Sub-total B R$ 36.000,00).
+- **Conferência do financeiro:** "Equipe · Outubro", "· Novembro" e "· Dezembro", nessa ordem.
+- **Competência:** sugerida como 4T/2026 100% na abertura, sem código novo — ela sai de `data_inicio_prevista`, que no mensal é o período travado.
+- **Envio único para faturamento:** `enviarJobParaFaturamento` chamado pelo console para o JOB-0034 recusou com "Jobs de Fee e Always On são faturados mês a mês…" — antes da conferência de status, sem gravar nada.
+
+### Armadilhas
+
+- **A régua usa `?mes=` e só aparece com `hrefPlanilha`.** Sem ele, a seção mostra a planilha inteira. As duas telas que montam a seção passam o link.
+- **A errata é uma só para todos os recortes.** Cada tabela recebe só os grupos do mês, mas o rascunho é da seção inteira: a barra da errata e o "antes × depois" contam o job todo.
+- **Errata e save ainda NÃO travam por mês.** Quem trava um mês é o envio dele para faturamento, que chega na entrega 3.
+- **`ReguaMeses` e `TrimestreEmpilhado` moram em `orcamentos/[projetoId]/[orcId]/versoes/[versaoId]/`.** A seção do job importa de lá.

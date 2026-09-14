@@ -73,6 +73,12 @@ interface Props {
   /** Câmbio da versão internacional — aprovar exige todos os campos
    *  (decisão 072). `null` no nacional. */
   cambioInternacional: CambioParaAprovar | null;
+  /** Modelo mensal (decisão 078): os meses sem item, que bloqueiam a
+   *  aprovação. `null` fora do mensal. */
+  mesesSemItens: string[] | null;
+  /** Modelo mensal: início e fim vêm do período do orçamento, e o modal os
+   *  mostra travados (Tiago, 14/09/2026). */
+  periodoTravado: boolean;
   custoPlanejado: number;
   /** O que a California emite nota. */
   faturamentoPrevisto: number;
@@ -116,6 +122,8 @@ export function FluxoAbertura({
   qtdItensOrcadoZerado,
   percentualImposto,
   cambioInternacional,
+  mesesSemItens,
+  periodoTravado,
   custoPlanejado,
   faturamentoPrevisto,
   totalGeradoEmSave,
@@ -152,6 +160,7 @@ export function FluxoAbertura({
     qtdItens,
     qtdItensComValor,
     qtdItensOrcadoZerado,
+    mesesSemItens,
   });
   const aprovada = versaoStatus === "aprovada";
   // `devolvida` (decisão 057): o financeiro rejeitou a abertura. O job
@@ -551,6 +560,7 @@ export function FluxoAbertura({
         herdados={herdados}
         regionaisDoProjeto={regionaisDoProjeto}
         cidadesIniciais={cidadesIniciais}
+        periodoTravado={periodoTravado}
         fieldErrors={fieldErrors}
         erroGeral={erroGeral}
       />

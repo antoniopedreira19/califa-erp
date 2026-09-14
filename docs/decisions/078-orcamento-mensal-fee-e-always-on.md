@@ -1,7 +1,7 @@
 # 078 — Fee e Always On: um orçamento por trimestre, dividido em meses
 
 **Data:** 2026-09-14
-**Status:** aceita — entrega 1 de 3 (orçamento)
+**Status:** aceita — entregas 1 (orçamento) e 2 (aprovação, abertura e planilha do job) de 3
 **Contexto:** `categorias_dominio`, `versoes_orcamento_meses` (nova),
 `versoes_orcamento_grupos.mes_id`, a tela da versão do orçamento e o
 formulário do orçamento. Pedido do Tiago em 12/09/2026, com a planilha
@@ -95,19 +95,56 @@ tabela: vão por RPC (`adicionar_mes_na_versao`, `remover_mes_da_versao`,
 SECURITY INVOKER. O período novo é calculado em TypeScript
 (`periodoQueAcompanhaOsMeses`, com testes) e gravado junto.
 
-## O que ainda não existe (próximas entregas)
+## Entrega 2 — aprovação, abertura e planilha do job (14/09/2026)
 
-- **Entrega 2:** abertura e planilha do job por mês (errata e save travando
-  por mês, competência pré-preenchida no trimestre).
+Decisões do Tiago em 14/09/2026:
+
+1. **Mês sem item bloqueia a aprovação.** A mesma função
+   (`bloqueioAprovacaoVersao`) desabilita o botão com o motivo e recusa em
+   `aprovarVersao`, que relê meses, grupos e itens do banco.
+2. **As datas de início e fim do envio à abertura ficam travadas no período
+   do orçamento.** O modal as mostra desabilitadas e `enviarJobParaAbertura`
+   recusa datas diferentes: o envio grava as datas de volta no orçamento, e
+   uma data nova desalinharia os meses.
+3. **Data do evento e data prevista para recebimento seguem como hoje** —
+   uma de cada, obrigatórias. O recebimento mês a mês é da entrega 3.
+4. **A entrega 2 só vai para o main junto com a entrega 3.** Sozinha, ela
+   deixaria abrir job de Fee/Always On sem conseguir faturar nenhum mês.
+
+O que mudou:
+
+- A barra de aprovação e abertura aparece na tela do orçamento mensal (até
+  aqui ela não aparecia, e versão mensal não tinha como ser aprovada).
+- **O job não ganhou coluna nem tabela.** O item do job aponta para o grupo
+  da versão aprovada (`jobs_itens_orcado.grupo_id`), e o grupo tem o mês;
+  as telas do job leem os meses da versão aprovada.
+- Planilha interna do job (tela do GP e do financeiro): régua "Meses do
+  job" — Trimestre e um bloco por mês, com o faturamento previsto e a
+  situação do envio —, planilha e Totais do mês, trimestre empilhado com os
+  Totais do trimestre. O mês mora na URL: `?aba=planilha&mes=2026-10`.
+- Conferência da abertura e visão agregada de jobs: a planilha inteira, com
+  o mês no nome do grupo e os grupos na ordem dos meses.
+- **O envio único para faturamento é recusado para job mensal** (tela e
+  `enviarJobParaFaturamento`): congelaria o trimestre inteiro. A barra do
+  job diz que o faturamento é mês a mês.
+- Competência: nenhum código novo. O pré-preenchimento sai de
+  `data_inicio_prevista`, que no mensal é o período travado — cai 100% no
+  trimestre.
+- **Errata e save travando por mês ficam para a entrega 3**: quem trava um
+  mês é o envio dele para faturamento, que ainda não existe. Até lá errata
+  e save do job mensal seguem as regras de sempre.
+
+## O que ainda não existe
+
 - **Entrega 3:** um envio para faturamento por mês, feito pelo GP quando o
   cliente valida (enviar já autoriza), barra de faturamento no rodapé do
   job, devolução pelo financeiro, fluxo de caixa mês a mês, encerramento
   com todos os meses faturados.
 - **Depois:** exportação e importação de planilha do modelo mensal.
 
-Até lá, para orçamento mensal: o envio para abertura é recusado no
-servidor, "Exportar" fica desabilitado (e as rotas recusam), a importação é
-recusada, e o seletor de exportação do projeto não o lista.
+Até lá, para o modelo mensal: o envio único para faturamento é recusado,
+"Exportar" fica desabilitado (e as rotas recusam), a importação é recusada,
+e o seletor de exportação do projeto não o lista.
 
 ## Migrations
 

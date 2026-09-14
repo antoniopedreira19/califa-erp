@@ -335,8 +335,8 @@ export function PlanilhaMensal({
       <div className="flex items-start gap-2 rounded-xl border border-border bg-muted/30 px-4 py-3 text-xs text-muted-foreground">
         <Info className="mt-0.5 h-3.5 w-3.5 flex-none" />
         <p>
-          O envio para abertura, a exportação e a importação de planilha de
-          orçamentos de Fee e Always On ainda não estão disponíveis.
+          A exportação e a importação de planilha de orçamentos de Fee e
+          Always On ainda não estão disponíveis.
         </p>
       </div>
     </>

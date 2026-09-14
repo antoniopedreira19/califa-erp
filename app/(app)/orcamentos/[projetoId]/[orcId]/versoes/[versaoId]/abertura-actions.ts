@@ -135,7 +135,7 @@ export async function enviarJobParaAbertura(
       // `!categoria_id` é obrigatório: `orcamentos` tem duas FKs para
       // `categorias_dominio` (categoria e serviço), e o embed ambíguo
       // derruba a query inteira em silêncio.
-      "id, status, versao_aprovada_id, projeto_id, gp_responsavel_id, produtor_id, categoria:categorias_dominio!categoria_id(modelo_planilha)",
+      "id, status, versao_aprovada_id, projeto_id, gp_responsavel_id, produtor_id, data_inicio_prevista, data_fim_prevista, categoria:categorias_dominio!categoria_id(modelo_planilha)",
     )
     .eq("id", versao.orcamento_id)
     .eq("tenant_id", session.activeTenant.id)
@@ -146,19 +146,29 @@ export async function enviarJobParaAbertura(
       projeto_id: string;
       gp_responsavel_id: string | null;
       produtor_id: string | null;
+      data_inicio_prevista: string | null;
+      data_fim_prevista: string | null;
       categoria: { modelo_planilha: CategoriaModeloPlanilha } | null;
     }>();
 
   if (!orc) return { ok: false, message: "Orçamento não encontrado." };
-  // Modelo mensal (decisão 078): o job de Fee e Always On nasce com
-  // faturamento por mês, que ainda não existe na abertura. Recusar aqui,
-  // antes de qualquer escrita, é o que impede um job mensal de nascer pela
-  // cadeia do envio único.
-  if (orc.categoria?.modelo_planilha === "mensal") {
+  // Modelo mensal (decisão 078): as datas do job são o período do
+  // orçamento, que acompanha os meses — o modal as mostra travadas (Tiago,
+  // 14/09/2026). Aceitar outra data aqui desalinharia job, orçamento e
+  // meses, porque o passo 5 grava as datas de volta no orçamento.
+  if (
+    orc.categoria?.modelo_planilha === "mensal" &&
+    (parsed.data.data_inicio_prevista !== orc.data_inicio_prevista ||
+      parsed.data.data_fim_prevista !== orc.data_fim_prevista)
+  ) {
     return {
       ok: false,
       message:
-        "O envio para abertura de orçamentos de Fee e Always On ainda não está disponível.",
+        "No Fee e no Always On, as datas de início e fim vêm do período do orçamento e não mudam no envio para abertura.",
+      fieldErrors: {
+        data_inicio_prevista: ["Definida pelo período do orçamento."],
+        data_fim_prevista: ["Definida pelo período do orçamento."],
+      },
     };
   }
   if (orc.versao_aprovada_id !== versaoId) {

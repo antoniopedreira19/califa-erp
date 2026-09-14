@@ -19,6 +19,7 @@ import type {
   ItemPlanilhaProjeto,
   JobPlanilhaProjeto,
 } from "./tipos";
+import { rotuloMesCurto } from "@/lib/calculos/meses-trimestre";
 
 /**
  * Monta a planilha consolidada de um conjunto de jobs — um bloco por job,
@@ -72,11 +73,11 @@ export async function carregarPlanilhasDosJobs(
   // Orçado vem da CÓPIA de cada job (`jobs_itens_orcado`), não da versão:
   // a errata altera a cópia, e a visão agregada precisa bater com a
   // Planilha Interna do job — a versão aprovada segue congelada.
-  const [gruposRes, itensRes, realizadosRes, categoriasRes, bvsRes] =
+  const [gruposRes, itensRes, realizadosRes, categoriasRes, bvsRes, mesesRes] =
     await Promise.all([
     supabase
       .from("versoes_orcamento_grupos")
-      .select("id, nome, versao_orcamento_id, ordem")
+      .select("id, nome, versao_orcamento_id, ordem, mes_id")
       .eq("tenant_id", tenantId)
       .in("versao_orcamento_id", versaoIds)
       .order("ordem", { ascending: true }),
@@ -112,6 +113,13 @@ export async function carregarPlanilhasDosJobs(
       .eq("tenant_id", tenantId)
       .in("copia.job_id", jobIds)
       .neq("situacao", "cancelado"),
+    // Meses das versões aprovadas (modelo mensal, decisão 078). Vazio
+    // quando nenhum job do recorte é de Fee ou Always On.
+    supabase
+      .from("versoes_orcamento_meses")
+      .select("id, mes")
+      .eq("tenant_id", tenantId)
+      .in("versao_orcamento_id", versaoIds),
   ]);
 
   if (gruposRes.error) {
@@ -140,11 +148,35 @@ export async function carregarPlanilhasDosJobs(
     categoriasMap.set(c.id, c.nome);
   }
 
-  const gruposPorVersao = new Map<string, { id: string; nome: string }[]>();
+  if (mesesRes.error) {
+    console.error("[planilhas-do-projeto.meses]", mesesRes.error.message);
+  }
+  const mesDoId = new Map<string, string>(
+    ((mesesRes.data ?? []) as { id: string; mes: string }[]).map((m) => [m.id, m.mes]),
+  );
+
+  // Modelo mensal (decisão 078): o bloco do job mostra o trimestre inteiro,
+  // então o grupo leva o mês no nome e os grupos seguem a ordem dos meses.
+  // Grupo sem mês (os outros modelos) fica como sempre foi.
+  const gruposPorVersao = new Map<
+    string,
+    { id: string; nome: string; mes: string; ordem: number }[]
+  >();
   for (const g of (gruposRes.data ?? []) as any[]) {
+    const mes = g.mes_id ? mesDoId.get(g.mes_id) : undefined;
     const arr = gruposPorVersao.get(g.versao_orcamento_id) ?? [];
-    arr.push({ id: g.id, nome: g.nome });
+    arr.push({
+      id: g.id,
+      nome: mes ? `${g.nome} · ${rotuloMesCurto(mes)}` : g.nome,
+      mes: mes ?? "",
+      ordem: Number(g.ordem ?? 0),
+    });
     gruposPorVersao.set(g.versao_orcamento_id, arr);
+  }
+  for (const arr of gruposPorVersao.values()) {
+    arr.sort((a, b) =>
+      a.mes === b.mes ? a.ordem - b.ordem : a.mes.localeCompare(b.mes),
+    );
   }
 
   const itensPorJob = new Map<string, any[]>();

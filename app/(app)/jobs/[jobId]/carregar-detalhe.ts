@@ -44,6 +44,7 @@ import {
   cadastroMudouDepoisDaFoto,
   type DadosDePagamento,
 } from "@/lib/data/foto-pagamento-da-pp";
+import { mesesDaVersaoQuery } from "@/lib/data/meses-versao";
 
 /**
  * Todo o detalhe de um job, carregado uma vez e servido às duas telas
@@ -127,6 +128,7 @@ export async function carregarDetalheDoJob(
     jobsIrmaosRes,
     abertoPorRes,
     competenciasRes,
+    mesesRes,
   ] = await Promise.all([
     supabase
       .from("versoes_orcamento_grupos")
@@ -286,7 +288,13 @@ export async function carregarDetalheDoJob(
       .eq("tenant_id", session.activeTenant.id)
       .order("ano", { ascending: true })
       .order("trimestre", { ascending: true }),
+    // Meses da versão aprovada (decisão 078). Só o modelo mensal tem; nos
+    // outros a lista vem vazia, e a planilha é a de sempre.
+    mesesDaVersaoQuery(supabase, session.activeTenant.id, versaoAprovadaId),
   ]);
+
+  if (mesesRes.error) console.error("[job.meses]", mesesRes.error.message);
+  const meses = mesesRes.data ?? [];
 
   const grupos = (gruposRes.data ?? []) as VersaoOrcamentoGrupo[];
   if (itensRes.error) console.error("[job.orcado]", itensRes.error.message);
@@ -690,11 +698,15 @@ export async function carregarDetalheDoJob(
   // portal sao informacao da producao. So Admin e Gerente de Producao
   // podem enviar/aprovar (matriz `jobs.enviar_faturamento`); os demais
   // papeis nao veem o botao.
+  //
+  // Fee e Always On (modelo mensal, decisão 078) faturam mês a mês: o
+  // envio único não vale para eles, e a action também recusa.
   const podeEnviarFaturamento =
     pode(session.activeRole, "jobs.enviar_faturamento") &&
     job.status === "aberto" &&
     envioFaturamento === null &&
-    totaisJob.faturamentoPrevisto > 0;
+    totaisJob.faturamentoPrevisto > 0 &&
+    planilha.modeloPlanilha !== "mensal";
 
   // Job pago INTEIRAMENTE por saldo de save: faturamento previsto zero e
   // consumo registrado. Ele pula a etapa de faturamento e se comporta
@@ -896,6 +908,7 @@ export async function carregarDetalheDoJob(
     // precisam dele para o card de Totais e para a barra de errata
     // (decisão 072).
     modeloPlanilha: planilha.modeloPlanilha,
+    meses,
     totaisJob,
     custoPlanejadoJob,
     custoRealizadoJob,

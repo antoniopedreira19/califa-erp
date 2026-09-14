@@ -50,6 +50,10 @@ interface Props {
   internacional: ParametrosInternacionais | null;
   /** Moeda e taxa de compra da coluna de conversão da cadeia. */
   moedaEstrangeira: MoedaEstrangeira | null;
+  /** Modelo mensal (decisão 078): "Totais de julho", "Totais do
+   *  trimestre". */
+  titulo?: string;
+  subtitulo?: string;
 }
 
 /** Taxa configurada na versão: 12 -> "12%", 19.53 -> "19,53%". */
@@ -101,6 +105,8 @@ export function JobTotaisCard({
   modeloPlanilha,
   internacional,
   moedaEstrangeira,
+  titulo = "Totais",
+  subtitulo = "Orçado × Planejado × Realizado · valores calculados a partir dos itens.",
 }: Props) {
   const {
     subtotaisPorTipo,
@@ -159,12 +165,9 @@ export function JobTotaisCard({
         <Calculator className="h-5 w-5 text-california-red" />
         <div>
           <h2 className="text-lg font-semibold leading-none tracking-tight">
-            Totais
+            {titulo}
           </h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Orçado × Planejado × Realizado · valores calculados a partir dos
-            itens.
-          </p>
+          <p className="mt-1 text-sm text-muted-foreground">{subtitulo}</p>
         </div>
       </div>
 
