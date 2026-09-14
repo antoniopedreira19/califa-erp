@@ -1,33 +1,45 @@
 import { createClient } from "@/lib/supabase/server";
 import {
-  classificarFaturamento,
+  consolidarNotasDoJob,
+  type NotaDoJob,
   type SituacaoFaturamento,
+  type TituloDaNota,
 } from "@/lib/calculos/esteira-faturamento";
 
 /**
  * Onde cada job está na esteira do faturamento, para um lote de jobs.
  *
- * Três leituras rasas e o cruzamento em memória: os envios, as notas e os
- * títulos delas. Embed de `faturamentos` dentro de `jobs` não existe (a
- * ligação é polimórfica, por `origem_tipo`/`origem_id`) e embed pesado é
- * o anti-padrão que `docs/PERFORMANCE.md` proíbe.
+ * Leituras rasas em paralelo e o cruzamento em memória: os envios, os
+ * itens das notas emitidas e os títulos delas. Embed de `faturamentos`
+ * dentro de `jobs` não existe (a ligação é polimórfica) e embed pesado é o
+ * anti-padrão que `docs/PERFORMANCE.md` proíbe — o único embed aqui é o
+ * cabeçalho da nota em cada item, uma linha por item.
  *
  * Módulo próprio desde 20/08/2026, quando a visão agregada do projeto no
  * financeiro passou a precisar da mesma classificação que a lista de jobs
  * abertos. Duas cópias dessa conta divergiriam na primeira nota
  * cancelada.
+ *
+ * ⚠️ Desde 14/09/2026 (decisão 075) a nota de um job se reconhece pelos
+ * ITENS (`faturamento_itens.origem_id`), não mais por
+ * `faturamentos.origem_id`. O cabeçalho fica com `origem_id` nulo sempre
+ * que a nota tem mais de um item (decisão 017 §2) — NF agrupada, nota de
+ * um job com saldo em save, nota com duas parcelas do mesmo job —, e a
+ * leitura antiga deixava esses jobs em "enviado" com a nota já emitida.
  */
 export interface FaturamentoDoJob {
   situacao: SituacaoFaturamento;
   /**
-   * O número da coluna Faturamento: valor da nota quando ela existe,
-   * valor enviado quando só houve envio, e nulo quando nenhum dos dois
-   * aconteceu (aí quem decide o fallback é quem chamou).
+   * O número da coluna Faturamento: a PARTE do job nas notas emitidas
+   * (nunca o total de uma NF agrupada), valor enviado quando só houve
+   * envio, e nulo quando nenhum dos dois aconteceu (aí quem decide o
+   * fallback é quem chamou).
    */
   valor: number | null;
+  /** Todas as notas do job, em ordem de emissão: "101 · 102". */
   numero_nf: string | null;
   data_envio: string | null;
-  /** Quanto já foi recebido — soma dos títulos pagos da nota. */
+  /** Quanto já foi recebido — rateado pela parte do job em cada nota. */
   valor_recebido: number;
   /** Vencimento em aberto mais antigo. É o que data a inadimplência. */
   vencimento_em_aberto: string | null;
@@ -39,18 +51,24 @@ export async function faturamentoPorJob(
 ): Promise<Map<string, FaturamentoDoJob>> {
   const supabase = createClient();
 
-  const [enviosRes, notasRes, titulosRes, saveOnlyRes] = await Promise.all([
+  const [enviosRes, itensRes, titulosRes, saveOnlyRes] = await Promise.all([
     supabase
       .from("jobs_envio_faturamento")
       .select("job_id, valor_faturado, enviado_em")
       .eq("tenant_id", tenantId),
-    // Nota cancelada não conta como faturada — o job volta a esperar.
+    // Os itens de job e de save das notas emitidas. Nos dois tipos o
+    // `origem_id` do item é o job (o CHECK `chk_fat_item_origem` o exige
+    // preenchido) — é a mesma chave que a aba Faturamento usa para listar
+    // os jobs cobertos por uma nota. Nota cancelada não conta como
+    // faturada: o job volta a esperar.
     supabase
-      .from("faturamentos")
-      .select("id, origem_id, numero_nf, valor_total")
+      .from("faturamento_itens")
+      .select(
+        "faturamento_id, origem_id, valor, faturamento:faturamentos!inner(numero_nf, data_emissao, valor_total, status)",
+      )
       .eq("tenant_id", tenantId)
-      .eq("origem_tipo", "job")
-      .eq("status", "emitido"),
+      .in("origem_tipo", ["job", "save"])
+      .eq("faturamento.status", "emitido"),
     // Título cancelado fica de fora: não é dinheiro a receber nem
     // recebido, então não pesa em liquidado nem em inadimplente.
     supabase
@@ -71,8 +89,8 @@ export async function faturamentoPorJob(
   if (enviosRes.error) {
     console.error("[faturamento-por-job.envios]", enviosRes.error.message);
   }
-  if (notasRes.error) {
-    console.error("[faturamento-por-job.notas]", notasRes.error.message);
+  if (itensRes.error) {
+    console.error("[faturamento-por-job.itens]", itensRes.error.message);
   }
   if (titulosRes.error) {
     console.error("[faturamento-por-job.titulos]", titulosRes.error.message);
@@ -86,22 +104,30 @@ export async function faturamentoPorJob(
     });
   }
 
-  const notaPorJob = new Map<
+  // Cabeçalho de cada nota e, por job, quanto de cada nota é dele. Um job
+  // pode estar em várias notas (uma por parcela do envio), e uma nota pode
+  // cobrir vários jobs (NF agrupada) — os dois mapas cobrem os dois lados.
+  const cabecalhoPorNota = new Map<
     string,
-    { id: string; numero: string | null; valor: number }
+    { numero: string | null; data_emissao: string | null; valor_total: number }
   >();
-  for (const n of (notasRes.data ?? []) as any[]) {
-    notaPorJob.set(n.origem_id, {
-      id: n.id,
-      numero: n.numero_nf ?? null,
-      valor: Number(n.valor_total ?? 0),
+  const partesPorJob = new Map<string, Map<string, number>>();
+  for (const it of (itensRes.data ?? []) as any[]) {
+    if (!it.origem_id || !it.faturamento) continue;
+    cabecalhoPorNota.set(it.faturamento_id, {
+      numero: it.faturamento.numero_nf ?? null,
+      data_emissao: it.faturamento.data_emissao ?? null,
+      valor_total: Number(it.faturamento.valor_total ?? 0),
     });
+    const partes = partesPorJob.get(it.origem_id) ?? new Map<string, number>();
+    partes.set(
+      it.faturamento_id,
+      (partes.get(it.faturamento_id) ?? 0) + Number(it.valor ?? 0),
+    );
+    partesPorJob.set(it.origem_id, partes);
   }
 
-  const titulosPorNota = new Map<
-    string,
-    { valor: number; vencimento: string; status: string }[]
-  >();
+  const titulosPorNota = new Map<string, TituloDaNota[]>();
   for (const t of (titulosRes.data ?? []) as any[]) {
     const arr = titulosPorNota.get(t.faturamento_id) ?? [];
     arr.push({
@@ -127,34 +153,40 @@ export async function faturamentoPorJob(
   // `aguardando_envio`.
   const jobIds = new Set<string>([
     ...envioPorJob.keys(),
-    ...notaPorJob.keys(),
+    ...partesPorJob.keys(),
     ...saveOnly,
   ]);
 
   const mapa = new Map<string, FaturamentoDoJob>();
   for (const jobId of jobIds) {
-    const nota = notaPorJob.get(jobId);
     const envio = envioPorJob.get(jobId);
-    const titulos = nota ? (titulosPorNota.get(nota.id) ?? []) : [];
 
-    const emAberto = titulos.filter((t) => t.status !== "pago");
-    const valorRecebido = titulos
-      .filter((t) => t.status === "pago")
-      .reduce((s, t) => s + t.valor, 0);
+    const notas: NotaDoJob[] = [];
+    for (const [notaId, parte] of partesPorJob.get(jobId) ?? []) {
+      const cabecalho = cabecalhoPorNota.get(notaId);
+      if (!cabecalho) continue;
+      notas.push({
+        id: notaId,
+        ...cabecalho,
+        parte_do_job: parte,
+        titulos: titulosPorNota.get(notaId) ?? [],
+      });
+    }
+
+    const consolidado = consolidarNotasDoJob(
+      notas,
+      !!envio,
+      hoje,
+      saveOnly.has(jobId) && !envio,
+    );
 
     mapa.set(jobId, {
-      situacao: classificarFaturamento(
-        !!nota,
-        !!envio,
-        titulos,
-        hoje,
-        saveOnly.has(jobId) && !envio,
-      ),
-      valor: nota?.valor ?? envio?.valor ?? null,
-      numero_nf: nota?.numero ?? null,
+      situacao: consolidado.situacao,
+      valor: consolidado.valor_faturado ?? envio?.valor ?? null,
+      numero_nf: consolidado.numeros_nf,
       data_envio: envio?.em ?? null,
-      valor_recebido: valorRecebido,
-      vencimento_em_aberto: emAberto.map((t) => t.vencimento).sort()[0] ?? null,
+      valor_recebido: consolidado.valor_recebido,
+      vencimento_em_aberto: consolidado.vencimento_em_aberto,
     });
   }
 
