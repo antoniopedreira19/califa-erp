@@ -3505,6 +3505,6 @@ estar em documento antigo (Tiago, 14/09/2026). A prévia do código no modal
 de envio (`[orcId]/page.tsx`) usa a mesma função, e deixou de mostrar um
 código que não seria o gravado.
 
-**Armadilha que continua:** `lib/codigos/projetos.ts` e
-`lib/codigos/projetos-financeiro.ts` usam a mesma conta de contagem + 1 e
-quebram do mesmo jeito se um projeto for apagado. Não mexidos.
+**Os códigos de projeto tinham a mesma armadilha** e foram corrigidos no
+mesmo dia — ver a nota "o código do projeto segue o maior do prefixo" no
+HANDOFF_ORCAMENTO.
