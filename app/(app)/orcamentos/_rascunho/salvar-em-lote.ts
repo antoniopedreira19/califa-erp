@@ -6,6 +6,8 @@ import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { checarPermissao } from "@/lib/permissoes-server";
 import { honorariosDoProjeto } from "@/lib/data/clientes";
+import { modeloPlanilhaDoOrcamento } from "@/lib/data/modelo-planilha";
+import { PERCENTUAL_INT_TAXES_PADRAO } from "@/lib/impostos";
 import { extrairArquivoXlsx } from "@/lib/importacao/arquivo";
 import {
   parseOficial,
@@ -322,6 +324,10 @@ export async function salvarOrcamentosDoProjeto(
       return { ok: false, message: mapDbError(orcErr?.message ?? "") };
     }
 
+    // Qual planilha o orçamento usa — da categoria que acabou de ser gravada
+    // (decisão 072). Lido no servidor: o rascunho não decide isso.
+    const modelo = await modeloPlanilhaDoOrcamento(orcamento.id, tenantId);
+
     const { data: versao, error: versaoErr } = await supabase
       .from("versoes_orcamento")
       .insert({
@@ -337,6 +343,15 @@ export async function salvarOrcamentosDoProjeto(
         // editor avisa antes, e `avisos` repete depois de gravar.
         percentual_honorarios: honorarios,
         percentual_imposto: imposto,
+        // Internacional nasce como no "Novo orçamento" (`criarVersaoInicial`):
+        // USD e as int. taxes praticadas, com o câmbio em branco. Até
+        // 14/09/2026 a v1 criada por aqui saía com a cadeia zerada.
+        ...(modelo === "internacional"
+          ? {
+              moeda_estrangeira: "USD",
+              percentual_int_taxes: PERCENTUAL_INT_TAXES_PADRAO,
+            }
+          : {}),
         created_by: session.profile.id,
       })
       .select("id")

@@ -46,8 +46,10 @@ interface Props {
   taxaCambio: number;
   percentualHonorarios: number;
   percentualImposto: number;
-  /** Só `administrador` diverge do padrão do cliente. A server action
-   *  recusa de novo, mesmo que alguém contorne a tela. */
+  /** `orcamentos.editar_impostos`. Trava o fee e — no internacional, desde
+   *  14/09/2026 — também Impostos BR e int. taxes, que mudam o valor
+   *  cobrado do cliente. A server action recusa de novo, mesmo que alguém
+   *  contorne a tela. */
   podeEditarHonorarios: boolean;
   clienteNome?: string | null;
   /** Versão congelada (aprovada/cancelada) não abre o modo de edição. */
@@ -95,6 +97,9 @@ export function MetaVersao({
   const [imposto, setImposto] = React.useState(() =>
     valorInicialAliquota(percentualImposto),
   );
+  // Internacional sem a permissão: Impostos BR e int. taxes ficam só de
+  // leitura e não são enviados (decisão do Tiago, 14/09/2026).
+  const travarImpostos = internacional !== null && !podeEditarHonorarios;
 
   // Trocar de aba remonta os valores: o estado do seletor tem que
   // acompanhar, senão a alíquota da versão anterior fica na tela.
@@ -117,7 +122,9 @@ export function MetaVersao({
     const formData = new FormData(e.currentTarget);
     // O Select é controlado e não tem `name`. Em branco preserva a
     // alíquota atual — escolher só é obrigatório na aprovação.
-    if (imposto !== "") formData.set("percentual_imposto", imposto);
+    if (imposto !== "" && !travarImpostos) {
+      formData.set("percentual_imposto", imposto);
+    }
 
     startTransition(async () => {
       const res: ActionResult = await atualizarVersao(versaoId, formData);
@@ -331,9 +338,16 @@ export function MetaVersao({
         {internacional && (
           <CampoEdicao
             rotulo="Int. taxes"
+            travado={travarImpostos}
             dica="Retidas no exterior, em gross-up sobre sub-total + fee. Na planilha modelo, 18,02% = IR 17,64% + IOF 0,37%."
           >
-            <input
+            {travarImpostos ? (
+              /* Sem `name`: o campo não é enviado. */
+              <span className="inline-flex h-7 items-center rounded-md border border-border bg-muted/50 px-2 text-sm font-medium text-muted-foreground">
+                {formatarPercentual(internacional.percentualIntTaxes)}%
+              </span>
+            ) : (
+              <input
               name="percentual_int_taxes"
               type="number"
               step="0.01"
@@ -342,10 +356,24 @@ export function MetaVersao({
               defaultValue={internacional.percentualIntTaxes}
               className="no-spinner h-7 w-[76px] rounded-md border border-border bg-white px-2 text-sm font-medium text-foreground outline-none focus:border-california-red/50"
             />
+            )}
           </CampoEdicao>
         )}
 
-        <CampoEdicao rotulo={internacional ? "Impostos BR" : "Impostos"}>
+        <CampoEdicao
+          rotulo={internacional ? "Impostos BR" : "Impostos"}
+          travado={travarImpostos}
+          dica={
+            travarImpostos
+              ? "Só administrador ou gerente de produção altera os impostos da versão internacional."
+              : undefined
+          }
+        >
+          {travarImpostos ? (
+            <span className="inline-flex h-7 items-center rounded-md border border-border bg-muted/50 px-2 text-sm font-medium text-muted-foreground">
+              {formatarPercentual(percentualImposto)}%
+            </span>
+          ) : (
           <Select value={imposto} onValueChange={setImposto}>
             <SelectTrigger className="h-7 w-[136px] bg-white text-sm">
               <SelectValue placeholder="Selecione" />
@@ -358,6 +386,7 @@ export function MetaVersao({
               ))}
             </SelectContent>
           </Select>
+          )}
         </CampoEdicao>
 
         {internacional && (

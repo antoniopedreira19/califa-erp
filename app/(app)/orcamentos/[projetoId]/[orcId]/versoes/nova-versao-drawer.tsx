@@ -33,6 +33,10 @@ interface Props {
    *  server action relê o percentual do cadastro na hora de gravar. */
   honorariosCliente: number;
   clienteNome: string | null;
+  /** Orçamento internacional e quem cria sem `orcamentos.editar_impostos`:
+   *  Impostos BR e int. taxes vêm da versão vigente (decisão do Tiago,
+   *  14/09/2026) e o campo fica só de leitura. A action decide de novo. */
+  travarImpostos: boolean;
   /** Bloqueia o botão em orçamentos que não aceitam mais versão. */
   disabled?: boolean;
   disabledReason?: string;
@@ -48,6 +52,7 @@ export function NovaVersaoDrawer({
   orcamentoId,
   honorariosCliente,
   clienteNome,
+  travarImpostos,
   disabled,
   disabledReason,
   aberto,
@@ -77,7 +82,9 @@ export function NovaVersaoDrawer({
     // O Select é controlado e não tem `name`: o valor entra aqui. Ele abre
     // preenchido com a alíquota padrão, mas o `if` continua — se algum dia
     // o campo voltar a poder ficar vazio, quem decide o default é a action.
-    if (imposto !== "") formData.set("percentual_imposto", imposto);
+    if (imposto !== "" && !travarImpostos) {
+      formData.set("percentual_imposto", imposto);
+    }
 
     startTransition(async () => {
       // Sucesso redireciona no SERVIDOR para a versão criada, e aí o cliente
@@ -165,7 +172,15 @@ export function NovaVersaoDrawer({
                 name="percentual_imposto"
                 errors={fieldErrors}
               >
-                <Select value={imposto} onValueChange={setImposto}>
+{travarImpostos ? (
+                  <Input
+                    value="Da versão vigente"
+                    readOnly
+                    disabled
+                    className="bg-muted/50 text-muted-foreground"
+                  />
+                ) : (
+                                  <Select value={imposto} onValueChange={setImposto}>
                   <SelectTrigger id="percentual_imposto">
                     <SelectValue placeholder="Selecione a alíquota" />
                   </SelectTrigger>
@@ -177,6 +192,7 @@ export function NovaVersaoDrawer({
                     ))}
                   </SelectContent>
                 </Select>
+                )}
               </Field>
             </div>
 

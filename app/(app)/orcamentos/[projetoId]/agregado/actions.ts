@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { checarPermissao } from "@/lib/permissoes-server";
+import { pode } from "@/lib/permissoes";
 import { grupoSchema } from "@/lib/validations/grupos";
 import { itemSchema } from "@/lib/validations/itens";
 import { bvSchema } from "@/lib/validations/bv";
@@ -114,7 +115,13 @@ export async function salvarAlteracoesDoProjeto(
   // ---------- Edições ----------
   const ids: Record<string, string> = {};
   for (const alvo of editados) {
-    const res = await aplicarEdicao(alvo, projetoId, tenantId, session.profile.id);
+    const res = await aplicarEdicao(
+      alvo,
+      projetoId,
+      tenantId,
+      session.profile.id,
+      pode(session.activeRole, "orcamentos.editar_impostos"),
+    );
     if (!res.ok) return res;
     Object.assign(ids, res.ids);
   }
@@ -199,6 +206,8 @@ async function aplicarEdicao(
   projetoId: string,
   tenantId: string,
   profileId: string,
+  /** `orcamentos.editar_impostos` — trava os Impostos BR do internacional. */
+  podeEditarImpostos: boolean,
 ): Promise<SalvarAlteracoesResult> {
   const supabase = createClient();
 
@@ -223,10 +232,15 @@ async function aplicarEdicao(
       }>(),
     supabase
       .from("versoes_orcamento")
-      .select("id, orcamento_id, status")
+      .select("id, orcamento_id, status, percentual_imposto")
       .eq("id", alvo.versaoId)
       .eq("tenant_id", tenantId)
-      .maybeSingle<{ id: string; orcamento_id: string; status: string }>(),
+      .maybeSingle<{
+        id: string;
+        orcamento_id: string;
+        status: string;
+        percentual_imposto: number | string;
+      }>(),
   ]);
 
   const orcamento = orcRes.data;
@@ -264,6 +278,21 @@ async function aplicarEdicao(
   // `percentual_honorarios` NÃO entra aqui de propósito: em versão que já
   // existe ele só muda pelo "Editar" da tela da versão, e só com role
   // `administrador` (decisão de 11/08/2026). Esta tela preserva o gravado.
+  // Internacional (decisão do Tiago, 14/09/2026): Impostos BR seguem a
+  // trava do fee. Sem a permissão, mudar a alíquota aqui é recusado — o
+  // modal já mostra o campo travado, e esta é a regra de verdade.
+  const impostoNovo = faixaPercentual(alvo.parametros.percentual_imposto);
+  if (
+    orcamento.categoria?.modelo_planilha === "internacional" &&
+    !podeEditarImpostos &&
+    Math.abs(Number(versao.percentual_imposto) - impostoNovo) > 1e-6
+  ) {
+    return {
+      ok: false,
+      message: `${orcamento.codigo}: só administrador ou gerente de produção altera os Impostos BR de orçamento internacional.`,
+    };
+  }
+
   const { error: paramErr } = await supabase
     .from("versoes_orcamento")
     .update({
@@ -272,7 +301,7 @@ async function aplicarEdicao(
         Number(alvo.parametros.taxa_cambio) > 0
           ? Number(alvo.parametros.taxa_cambio)
           : 1,
-      percentual_imposto: faixaPercentual(alvo.parametros.percentual_imposto),
+      percentual_imposto: impostoNovo,
     })
     .eq("id", versao.id)
     .eq("tenant_id", tenantId);

@@ -398,6 +398,38 @@ Quatro observações do teste, com as recomendações aceitas pelo Tiago:
 
 A cor, a ordem e a conta não mudaram; é só o que se lê.
 
+## Pendências fechadas depois do teste (14/09/2026)
+
+**Orçamento internacional criado pela visão agregada nasce com a cadeia.**
+O "Salvar alterações" da visão agregada (`salvarOrcamentosDoProjeto`) criava
+a v1 só com moeda, câmbio, honorários e imposto — um internacional nascia
+com int. taxes 0% e sem moeda estrangeira, ao contrário do "Novo
+orçamento" (`criarVersaoInicial`). Agora o servidor lê o modelo da categoria
+gravada e aplica os mesmos padrões (USD e 18,02%, câmbio em branco), e o
+rascunho já nasce com eles, para os Totais da tela baterem com o que será
+salvo.
+
+**Impostos BR e int. taxes seguem a trava do fee — só no internacional.**
+Decisão do Tiago: os dois percentuais mudam o valor cobrado do cliente, e
+quem não tem `orcamentos.editar_impostos` (administrador e gerente de
+produção têm) não os altera. Câmbio e ITC continuam com quem edita a
+versão. O imposto das versões nacionais fica como sempre foi.
+
+| Onde | Sem a permissão |
+|---|---|
+| "Editar" da versão (`atualizarVersao` + `meta-versao`) | campos só de leitura; o servidor recusa a mudança |
+| Modal de parâmetros da visão agregada (`aplicarEdicao` + `parametros-modal`) | Impostos BR só de leitura; a gravação recusa a mudança |
+| "Nova versão" (`criarVersao` + `nova-versao-drawer`) | Impostos BR e int. taxes **vêm da versão vigente**; sem vigente, os padrões |
+| "Importar planilha" com versão nova (`confirmarImportacao`) | idem — sem isso a versão nasceria com o imposto em branco e ninguém sem a permissão conseguiria aprovar |
+
+A regra de "vir da vigente" também é do Tiago: herdar dos padrões
+desfaria em silêncio um valor que um administrador tenha ajustado. O helper
+é `lib/data/impostos-da-vigente.ts`.
+
+⚠️ Os usuários do tenant estão todos com o papel de administrador, então o
+caminho travado foi conferido pelo código e pelo tsc, não com um login sem
+a permissão.
+
 ## O que NÃO entrou
 
 A **abertura** do job entrou em 11/09/2026 (seção acima). Seguem nacionais,

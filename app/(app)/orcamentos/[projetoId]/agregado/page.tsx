@@ -3,6 +3,7 @@ import { configDaPlanilha } from "@/app/(app)/_planilha/modelo-planilha";
 import { chaveDoCambio } from "@/app/(app)/_planilha/moeda-estrangeira";
 import { servicosDoOrcamentoQuery, type ServicoOption } from "@/lib/data/servicos";
 import { requireSession } from "@/lib/auth/session";
+import { pode } from "@/lib/permissoes";
 import { createClient } from "@/lib/supabase/server";
 import { saveDaVersao, saldosDeSaveDoCliente } from "@/lib/data/saves";
 import type { SaldoDeSave } from "@/lib/data/saves";
@@ -551,6 +552,7 @@ export default async function OrcamentosAgregadoPage({
         cliente: projeto.cliente?.nome_fantasia ?? null,
         responsavel: projeto.responsavel?.nome ?? null,
       }}
+      podeEditarImpostos={pode(session.activeRole, "orcamentos.editar_impostos")}
       honorariosCliente={Number(
         projeto.cliente?.percentual_honorarios_padrao ??
           HONORARIOS_PADRAO_FALLBACK,

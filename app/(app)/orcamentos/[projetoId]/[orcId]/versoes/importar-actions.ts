@@ -11,6 +11,8 @@ import {
   type ParseResultado,
 } from "@/lib/importacao/parser-oficial";
 import { PERCENTUAL_INT_TAXES_PADRAO } from "@/lib/impostos";
+import { pode } from "@/lib/permissoes";
+import { impostosDaVersaoVigente } from "@/lib/data/impostos-da-vigente";
 import { escolherVersaoVigente } from "@/lib/calculos/versao-vigente";
 import type { GrupoAtual, ItemAtual } from "@/lib/importacao/diff-projeto";
 import {
@@ -426,6 +428,13 @@ export async function confirmarImportacao(
             moeda_estrangeira: "USD",
             percentual_int_taxes: PERCENTUAL_INT_TAXES_PADRAO,
           }
+        : {}),
+      // Sem a permissão de editar impostos, Impostos BR e int. taxes vêm da
+      // vigente (decisão do Tiago, 14/09/2026). Sem isso a versão nasceria
+      // com o imposto em branco e quem importou não conseguiria aprovar.
+      ...(check.modelo === "internacional" &&
+      !pode(session.activeRole, "orcamentos.editar_impostos")
+        ? await impostosDaVersaoVigente(orcamentoId, tenantId)
         : {}),
       created_by: session.profile.id,
     })

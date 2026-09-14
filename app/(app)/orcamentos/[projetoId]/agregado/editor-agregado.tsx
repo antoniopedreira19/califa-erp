@@ -1,5 +1,6 @@
 "use client";
 
+import { PERCENTUAL_INT_TAXES_PADRAO } from "@/lib/impostos";
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -101,6 +102,9 @@ interface Props {
   /** Honorários do cadastro do cliente. Vale para os orçamentos criados
    *  aqui; os que já existem mantêm o percentual gravado na versão. */
   honorariosCliente: number;
+  /** `orcamentos.editar_impostos` — trava os Impostos BR do internacional
+   *  no modal de parâmetros (decisão do Tiago, 14/09/2026). */
+  podeEditarImpostos: boolean;
   /** Quantos orçamentos o projeto já tem — base do código previsto dos novos. */
   orcamentosExistentes: number;
   /** Estado inicial, montado no servidor a partir da versão vigente. */
@@ -170,6 +174,7 @@ export function EditorAgregado({
   saldosDeSave,
   nomeDoGrupo,
   honorariosCliente,
+  podeEditarImpostos,
   orcamentosExistentes,
   inicial,
   exportaveis,
@@ -315,6 +320,12 @@ export function EditorAgregado({
 
   function criarOrcamento(dados: DadosOrcamento) {
     const id = novoId("orc");
+    // A cadeia vem da categoria escolhida no formulário (decisão 072).
+    // Categoria não encontrada cai em nacional — o fechamento que todo
+    // orçamento sempre teve.
+    const modeloPlanilha =
+      categorias.find((c) => c.id === dados.categoria_id)?.modelo_planilha ??
+      "nacional";
     // O orçamento recém-criado sempre aparece, mesmo com a tela filtrada:
     // ninguém cria um orçamento para não vê-lo.
     setExibidos((atuais) => [...atuais, id]);
@@ -332,13 +343,16 @@ export function EditorAgregado({
         parametros: {
           ...PARAMETROS_PADRAO,
           percentual_honorarios: honorariosCliente,
+          // Os mesmos valores de partida que o servidor grava ao salvar —
+          // senão os Totais do rascunho mostrariam a cadeia sem int. taxes.
+          ...(modeloPlanilha === "internacional"
+            ? {
+                moeda_estrangeira: "USD",
+                percentual_int_taxes: PERCENTUAL_INT_TAXES_PADRAO,
+              }
+            : {}),
         },
-        // A cadeia vem da categoria escolhida no formulário (decisão 072).
-        // Categoria não encontrada cai em nacional — o fechamento que todo
-        // orçamento sempre teve.
-        modeloPlanilha:
-          categorias.find((c) => c.id === dados.categoria_id)
-            ?.modelo_planilha ?? "nacional",
+        modeloPlanilha,
       },
     ]);
     setModal(null);
@@ -1056,6 +1070,10 @@ export function EditorAgregado({
             mutarOrcamento(orcParametros.id, (o) => ({ ...o, parametros: p }))
           }
           clienteNome={projeto.cliente ?? "cliente"}
+          travarImposto={
+            orcParametros.modeloPlanilha === "internacional" &&
+            !podeEditarImpostos
+          }
         />
       )}
 
