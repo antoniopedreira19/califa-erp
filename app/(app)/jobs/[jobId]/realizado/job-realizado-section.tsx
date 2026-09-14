@@ -517,6 +517,7 @@ export function JobRealizadoSection({
               realizadosMap={realizadosMap}
               categoriasMap={categoriasMap}
               moeda={versao.moeda}
+              moedaEstrangeira={planilha.moedaEstrangeira}
               percentualImposto={versao.percentual_imposto}
               visao={visao}
               estaAberto={recolher.estaAberto}

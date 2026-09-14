@@ -87,6 +87,11 @@ import {
   type EstadoSaveDaLinha,
 } from "@/app/(app)/_planilha/save-coluna";
 import { AlcaDaColunaSave } from "@/app/(app)/_planilha/exibir-colunas";
+import {
+  formatarTaxa,
+  naMoedaEstrangeira,
+  type MoedaEstrangeira,
+} from "@/app/(app)/_planilha/moeda-estrangeira";
 import { aceitaBV, tipoGeraDesembolso } from "@/lib/calculos/versao-totais";
 import {
   BLOCO_ZERO,
@@ -120,6 +125,12 @@ interface Props {
   /** id da categoria -> nome. Itens sem categoria caem no travessão. */
   categoriasMap: Map<string, string>;
   moeda: string;
+  /** A coluna na moeda estrangeira do job internacional (decisão 072):
+   *  o total orçado ÷ a taxa de compra, no ORÇADO, entre D/M e Total —
+   *  como na planilha da versão. `null` no nacional e no internacional
+   *  sem câmbio. Obrigatória de propósito: quem renderiza a tabela diz
+   *  explicitamente que não tem moeda. */
+  moedaEstrangeira: MoedaEstrangeira | null;
   /** Alíquota do job — vira o BV líquido, que é o que a vista Líquido
    *  desconta. */
   percentualImposto: number;
@@ -256,6 +267,20 @@ const COLUNAS_ORCADO: ColunaDaGrade[] = [
   { chave: "dias_meses_orcado", rotulo: "D/M", bloco: "Orçado" },
   { chave: "total_orcado", rotulo: "Total", bloco: "Orçado" },
 ];
+/** A coluna da moeda estrangeira: selecionável pelas setas, nunca
+ *  editável — `editorDe` devolve `null` para chave que não conhece. */
+const COLUNA_MOEDA = "total_orcado_moeda";
+
+/** O ORÇADO com a coluna da moeda colada antes do Total. */
+function colunasOrcadoCom(moeda: MoedaEstrangeira | null): ColunaDaGrade[] {
+  if (!moeda) return COLUNAS_ORCADO;
+  const i = COLUNAS_ORCADO.findIndex((c) => c.chave === "total_orcado");
+  return [
+    ...COLUNAS_ORCADO.slice(0, i),
+    { chave: COLUNA_MOEDA, rotulo: moeda.codigo, bloco: "Orçado" },
+    ...COLUNAS_ORCADO.slice(i),
+  ];
+}
 const COLUNAS_PLANEJADO: ColunaDaGrade[] = [
   { chave: "valor_unitario_planejado", rotulo: "R$ Unit.", bloco: "Planejado" },
   { chave: "quantidade_planejada", rotulo: "QT", bloco: "Planejado" },
@@ -514,6 +539,7 @@ export function JobItemRealizadoTable({
   realizadosMap,
   categoriasMap,
   moeda,
+  moedaEstrangeira,
   percentualImposto,
   visao,
   estaAberto,
@@ -550,6 +576,7 @@ export function JobItemRealizadoTable({
     orcado: orcadoVisivel,
     rentabPlanejada: rentabPlanejadaVisivel,
     rentabRealizada: rentabRealizadaVisivel,
+    moedaEstrangeira: moedaEstrangeira !== null,
   };
   const temRentab = rentabPlanejadaVisivel || rentabRealizadaVisivel;
   // Rail lateral PP
@@ -739,13 +766,13 @@ export function JobItemRealizadoTable({
   const colunasDaGrade = React.useMemo<ColunaDaGrade[]>(
     () => [
       ...COLUNAS_NEUTRAS,
-      ...(orcadoVisivel ? COLUNAS_ORCADO : []),
+      ...(orcadoVisivel ? colunasOrcadoCom(moedaEstrangeira) : []),
       ...COLUNAS_PLANEJADO,
       ...(rentabPlanejadaVisivel ? COLUNAS_RENTAB_PLAN : []),
       ...COLUNAS_REALIZADO,
       ...(rentabRealizadaVisivel ? COLUNAS_RENTAB_REAL : []),
     ],
-    [orcadoVisivel, rentabPlanejadaVisivel, rentabRealizadaVisivel],
+    [orcadoVisivel, rentabPlanejadaVisivel, rentabRealizadaVisivel, moedaEstrangeira],
   );
 
   /** As linhas na ordem da tela; grupo recolhido fica fora. */
@@ -901,7 +928,10 @@ export function JobItemRealizadoTable({
               {saveVisivel && <CabecalhoSaveFaixa />}
               <th colSpan={3} className={FAIXA_GRUPO} />
               {orcadoVisivel && (
-                <th colSpan={4} className={cn(FAIXA_ROTULO, ORCADO.faixa)}>
+                <th
+                  colSpan={moedaEstrangeira ? 5 : 4}
+                  className={cn(FAIXA_ROTULO, ORCADO.faixa)}
+                >
                   ORÇADO
                 </th>
               )}
@@ -932,7 +962,20 @@ export function JobItemRealizadoTable({
                   <th className={cn("text-right font-semibold px-3 py-2", ORCADO.cabecalhoAbre)}>R$ Unit.</th>
                   <th className={cn("text-right font-semibold px-3 py-2", ORCADO.cabecalhoMeio)}>QT</th>
                   <th className={cn("text-right font-semibold px-3 py-2", ORCADO.cabecalhoMeio)}>D/M</th>
-                  <th className={cn("text-right font-semibold px-3 py-2", ORCADO.cabecalhoFim)}>Total</th>
+                  {moedaEstrangeira && (
+                    <th
+                      title={`Calculada: total em ${moeda} ÷ taxa de compra (${formatarTaxa(moedaEstrangeira.compra)})`}
+                      className={cn("text-right font-semibold px-3 py-2", ORCADO.cabecalhoMeio)}
+                    >
+                      <span className="inline-flex items-center gap-1">
+                        {moedaEstrangeira.codigo}
+                        <Lock className="h-2.5 w-2.5 opacity-60" aria-hidden />
+                      </span>
+                    </th>
+                  )}
+                  <th className={cn("text-right font-semibold px-3 py-2", ORCADO.cabecalhoFim)}>
+                    {moedaEstrangeira ? `Total ${moeda}` : "Total"}
+                  </th>
                 </>
               )}
               {/* Planejado — com a rentabilidade ligada, o Total deixa de
@@ -1014,6 +1057,16 @@ export function JobItemRealizadoTable({
                     {orcadoVisivel && (
                       <>
                         <td colSpan={3} className={ORCADO.grupoVazio} />
+                        {moedaEstrangeira && (
+                          <td
+                            className={cn(
+                              "px-3 text-right whitespace-nowrap font-mono text-[13px] font-bold",
+                              ORCADO.grupoValor,
+                            )}
+                          >
+                            {naMoedaEstrangeira(sub.orcado, moedaEstrangeira)}
+                          </td>
+                        )}
                         <td
                           className={cn(
                             "px-3 text-right whitespace-nowrap font-mono text-[13px] font-bold",
@@ -1322,6 +1375,23 @@ export function JobItemRealizadoTable({
                             {celulaOrcado("unitario", "valor_unitario_orcado", ORCADO.celulaAbre)}
                             {celulaOrcado("quantidade", "quantidade_orcada", ORCADO.celulaMeio)}
                             {celulaOrcado("diasMeses", "dias_meses_orcado", ORCADO.celulaMeio)}
+                            {moedaEstrangeira && (
+                              <CelulaJob
+                                nav={nav(COLUNA_MOEDA)}
+                                moldura={moldura(COLUNA_MOEDA)}
+                                className={cn(
+                                  "text-right font-mono whitespace-nowrap",
+                                  item.linha_vermelha
+                                    ? ERRATA.celulaVermelhaApagada
+                                    : ORCADO.celulaMeio,
+                                )}
+                              >
+                                {naMoedaEstrangeira(
+                                  Number(item.total_orcado ?? 0),
+                                  moedaEstrangeira,
+                                )}
+                              </CelulaJob>
+                            )}
                             <CelulaJob
                               nav={nav("total_orcado")}
                               moldura={moldura("total_orcado")}
@@ -1505,6 +1575,16 @@ export function JobItemRealizadoTable({
               {orcadoVisivel && (
                 <>
                   <td colSpan={3} className={ORCADO.subtotalVazio} />
+                  {moedaEstrangeira && (
+                    <td
+                      className={cn(
+                        "px-3 py-2 text-right whitespace-nowrap font-mono text-[13px] font-bold",
+                        ORCADO.subtotalValor,
+                      )}
+                    >
+                      {naMoedaEstrangeira(totais.orcado, moedaEstrangeira)}
+                    </td>
+                  )}
                   <td
                     className={cn(
                       "px-3 py-2 text-right whitespace-nowrap font-mono text-[13px] font-bold",

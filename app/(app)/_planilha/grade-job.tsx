@@ -1,5 +1,6 @@
 /** Grade da planilha interna de um JOB — 15 colunas, 16 com a de Save,
- *  mais 2 por bloco de rentabilidade ligado (até 20).
+ *  mais 2 por bloco de rentabilidade ligado (até 20), mais 1 com a moeda
+ *  estrangeira do internacional.
  *
  *  Só a tabela de itens (`job-item-realizado-table.tsx`) usa esta grade:
  *  o card de Totais do job é o fechamento em duas colunas, sem tabela.
@@ -23,6 +24,10 @@ export interface ColunasJobVisiveis {
   orcado?: boolean;
   rentabPlanejada?: boolean;
   rentabRealizada?: boolean;
+  /** A coluna na moeda estrangeira do job internacional (decisão 072),
+   *  dentro do ORÇADO, entre D/M e Total — a mesma posição da planilha da
+   *  versão. Só existe com o Orçado visível. */
+  moedaEstrangeira?: boolean;
 }
 
 /** Os pesos de cada coluna — os mesmos percentuais que a grade sempre
@@ -51,6 +56,9 @@ const PESO = {
    *  líquido"), e "RENTAB." sozinho pede ~55px + padding. Com 5% ele
    *  ainda vazava para a coluna vizinha em produção (04/09/2026). */
   rentabPct: 5.5,
+  /** A coluna da moeda estrangeira — número sem prefixo, do tamanho do
+   *  Total. */
+  moeda: 8.5,
 } as const;
 
 /** Soma dos pesos no estado de sempre: 18 + 4 + 8,5 + 3 × 22. */
@@ -61,14 +69,16 @@ function larguras({
   orcado = true,
   rentabPlanejada = false,
   rentabRealizada = false,
+  moedaEstrangeira = false,
 }: ColunasJobVisiveis): number[] {
   const bloco = [PESO.unit, PESO.qt, PESO.dm, PESO.total];
+  const orcadoComMoeda = [PESO.unit, PESO.qt, PESO.dm, PESO.moeda, PESO.total];
   const rentab = [PESO.rentabValor, PESO.rentabPct];
   const pesos = [
     ...(save ? [PESO.save, PESO.itemComSave] : [PESO.item]),
     PESO.tipo,
     PESO.categoria,
-    ...(orcado ? bloco : []),
+    ...(orcado ? (moedaEstrangeira ? orcadoComMoeda : bloco) : []),
     ...bloco,
     ...(rentabPlanejada ? rentab : []),
     ...bloco,
@@ -85,7 +95,13 @@ function larguras({
  *  string não existiria no CSS. `<col>` com `width` inline é a forma
  *  que o próprio `table-fixed` espera. */
 export function ColunasJob(colunas: ColunasJobVisiveis = {}) {
-  const { save = false, orcado = true, rentabPlanejada = false, rentabRealizada = false } = colunas;
+  const {
+    save = false,
+    orcado = true,
+    rentabPlanejada = false,
+    rentabRealizada = false,
+    moedaEstrangeira = false,
+  } = colunas;
   const l = larguras(colunas);
   let i = 0;
   const col = () => <col key={i} style={{ width: `${l[i++]}%` }} />;
@@ -102,8 +118,8 @@ export function ColunasJob(colunas: ColunasJobVisiveis = {}) {
       <col style={{ width: `${l[i++]}%` }} />
       {col()}
       {col()}
-      {/* Orçado */}
-      {orcado && bloco()}
+      {/* Orçado — no internacional, com a coluna da moeda antes do Total */}
+      {orcado && (moedaEstrangeira ? [col(), col(), col(), col(), col()] : bloco())}
       {/* Planejado, com a rentabilidade planejada colada nele */}
       {bloco()}
       {rentabPlanejada && rentab()}
@@ -126,11 +142,14 @@ export function larguraMinimaJob({
   orcado = true,
   rentabPlanejada = false,
   rentabRealizada = false,
+  moedaEstrangeira = false,
 }: ColunasJobVisiveis = {}): number {
   return (
     1160 +
     (save ? 40 : 0) -
     (orcado ? 0 : 256) +
+    // A moeda estrangeira pede o mesmo que um Total: "111.242,36" a 13px.
+    (orcado && moedaEstrangeira ? 100 : 0) +
     (rentabPlanejada ? 170 : 0) +
     (rentabRealizada ? 170 : 0)
   );
@@ -142,10 +161,11 @@ export function totalDeColunasJob({
   orcado = true,
   rentabPlanejada = false,
   rentabRealizada = false,
+  moedaEstrangeira = false,
 }: ColunasJobVisiveis = {}): number {
   return (
     colunasDoRotuloJob({ save }) +
-    (orcado ? 4 : 0) +
+    (orcado ? 4 + (moedaEstrangeira ? 1 : 0) : 0) +
     4 +
     (rentabPlanejada ? 2 : 0) +
     4 +

@@ -128,6 +128,7 @@ export function PlanilhaConferencia({
           realizadosMap={realizadosMap}
           categoriasMap={categoriasMap}
           moeda={moeda}
+          moedaEstrangeira={moedaEstrangeira}
           percentualImposto={percentualImposto}
           visao={visao}
           estaAberto={recolher.estaAberto}
