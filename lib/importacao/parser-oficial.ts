@@ -94,6 +94,10 @@ const ABAS_CONHECIDAS = ["padrao", "oficial"];
 
 export interface ParseItem {
   ordem: number;
+  /** Id do item quando a planilha é a exportação do ERP (`it:` na coluna
+   *  oculta H). É por ele que a importação acha a linha da versão anterior
+   *  para herdar o planejado; sem ele, vale grupo + descrição. */
+  item_id: string | null;
   item: string;
   tipo_custo: TipoCusto;
   valor_unitario_orcado: number;
@@ -110,6 +114,8 @@ export interface ParseItem {
 }
 
 export interface ParseGrupo {
+  /** Id do grupo na exportação do ERP (`grp:` na coluna H), quando há. */
+  grupo_id: string | null;
   nome: string;
   ordem: number;
   itens: ParseItem[];
@@ -120,6 +126,9 @@ export interface ParseResultado {
   /** De qual modelo é a planilha, pelo cabeçalho. Quem importa confere
    *  contra o modelo do orçamento e recusa a troca (decisão 072). */
   modelo: CategoriaModeloPlanilha;
+  /** Algum item trouxe planejado. É o que sugere, na tela, de onde o
+   *  planejado da versão deve vir: da planilha ou da versão anterior. */
+  tem_planejado: boolean;
   grupos: ParseGrupo[];
   warnings: ImportacaoWarning[];
   percentual_honorarios: number | null;
@@ -244,6 +253,15 @@ function ehMarcaDeId(h: string): boolean {
   return /^(orc|v|grp|it):/.test(h);
 }
 
+/** O id de uma marca da coluna H — `marcaDe("grp:abc", "grp:")` → "abc". */
+function marcaDe(h: string, prefixo: "grp:" | "it:"): string | null {
+  const parte = h
+    .split("|")
+    .map((p) => p.trim())
+    .find((p) => p.startsWith(prefixo));
+  return parte ? parte.slice(prefixo.length) || null : null;
+}
+
 function ehLinhaHeader(cells: string[]): boolean {
   const joined = cells.slice(0, 8).map((c) => c.toLowerCase()).join("|");
   const hits = KEYWORDS_HEADER.filter((k) => joined.includes(k)).length;
@@ -310,6 +328,7 @@ export async function parseOficial(
       aba: "",
       grupos: [],
       modelo: "nacional",
+      tem_planejado: false,
       warnings: [
         {
           linha: 0,
@@ -340,10 +359,18 @@ export async function parseOficial(
   let viuLinhaDeGrupo = false;
 
   /** Acha o grupo pelo nome ou cria um novo, preservando a ordem de entrada. */
-  function grupoPorNome(nome: string): ParseGrupo {
+  function grupoPorNome(nome: string, grupoId: string | null = null): ParseGrupo {
     const existente = grupos.find((g) => g.nome === nome);
-    if (existente) return existente;
-    const novo: ParseGrupo = { nome, ordem: grupos.length + 1, itens: [] };
+    if (existente) {
+      existente.grupo_id ??= grupoId;
+      return existente;
+    }
+    const novo: ParseGrupo = {
+      grupo_id: grupoId,
+      nome,
+      ordem: grupos.length + 1,
+      itens: [],
+    };
     grupos.push(novo);
     return novo;
   }
@@ -407,7 +434,7 @@ export async function parseOficial(
     // GRUPO: sem unitário, com nome só na A (exportação e modelo) ou só na B.
     const nomeSoEmUmaColuna = (colA === "") !== (colB === "");
     if (!unitario.ok && nomeSoEmUmaColuna) {
-      grupoAtual = grupoPorNome(colA !== "" ? colA : colB);
+      grupoAtual = grupoPorNome(colA !== "" ? colA : colB, marcaDe(colH, "grp:"));
       viuLinhaDeGrupo = true;
       linhasIgnoradas++;
       return;
@@ -451,6 +478,7 @@ export async function parseOficial(
 
     grupoAtual.itens.push({
       ordem: grupoAtual.itens.length + 1,
+      item_id: marcaDe(colH, "it:"),
       item: colB,
       // Sem coluna de tipo: B, a conta do modelo (decisão do Tiago).
       tipo_custo: "B",
@@ -513,7 +541,7 @@ export async function parseOficial(
     const nomeSoEmUmaColuna = (colA === "") !== (colB === "");
     if (!valorC.ok && !temTipoValido && nomeSoEmUmaColuna) {
       const nome = colA !== "" ? colA : colB;
-      grupoAtual = grupoPorNome(nome);
+      grupoAtual = grupoPorNome(nome, marcaDe(colH, "grp:"));
       viuLinhaDeGrupo = true;
       linhasIgnoradas++;
       return;
@@ -650,12 +678,18 @@ export async function parseOficial(
     // Bloco PLANEJADO: H · R$, I · QT, J · D/M. K (TT) e L (RENTA) são
     // calculados pelo sistema. Vazio entra como zero — planejado pode ser
     // zero no banco, diferente de QT e D/M do orçado.
-    const valorPlanejado = toNumber(colH);
-    const qtdPlanejada = toNumber(colI);
-    const dmPlanejado = toNumber(colJ);
+    // Na exportação do ERP a H é o id oculto e a I, o crédito consumido —
+    // nada disso é planejado. Até 14/09/2026 a I entrava como quantidade
+    // planejada.
+    const semPlanejado = { ok: false, n: 0 };
+    const hEhId = ehMarcaDeId(colH);
+    const valorPlanejado = hEhId ? semPlanejado : toNumber(colH);
+    const qtdPlanejada = hEhId ? semPlanejado : toNumber(colI);
+    const dmPlanejado = hEhId ? semPlanejado : toNumber(colJ);
 
     grupoAtual.itens.push({
       ordem: grupoAtual.itens.length + 1,
+      item_id: marcaDe(colH, "it:"),
       item: nomeItem,
       tipo_custo: tipoUpper as TipoCusto,
       valor_unitario_orcado: valorUnitario,
@@ -711,6 +745,9 @@ export async function parseOficial(
   return {
     aba: ws.name,
     modelo: layoutInternacional ? "internacional" : "nacional",
+    tem_planejado: gruposComItens.some((g) =>
+      g.itens.some((it) => it.valor_unitario_planejado > 0),
+    ),
     grupos: gruposComItens,
     warnings,
     percentual_honorarios: percentualHonorarios,

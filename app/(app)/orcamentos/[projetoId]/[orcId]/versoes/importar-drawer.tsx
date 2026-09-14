@@ -94,6 +94,11 @@ export function ImportarPlanilhaDrawer({
   // Em `sobrescrever`, confirmar o preview não grava: abre o aviso do que
   // será apagado. Ninguém perde uma planilha por um clique só.
   const [confirmandoTroca, setConfirmandoTroca] = React.useState(false);
+  // De onde vem o planejado da versão (decisão do Tiago, 14/09/2026).
+  // Sugerido pelo arquivo quando o preview chega; quem importa confirma.
+  const [origemPlanejado, setOrigemPlanejado] = React.useState<
+    "anterior" | "planilha"
+  >("planilha");
   const inputRef = React.useRef<HTMLInputElement>(null);
 
   function reset() {
@@ -102,6 +107,7 @@ export function ImportarPlanilhaDrawer({
     setPreview(null);
     setArquivo(null);
     setConfirmandoTroca(false);
+    setOrigemPlanejado("planilha");
     if (inputRef.current) inputRef.current.value = "";
   }
 
@@ -114,6 +120,8 @@ export function ImportarPlanilhaDrawer({
 
     const fd = new FormData();
     fd.set("arquivo", file);
+    // No sobrescrever, o planejado anterior é o da própria versão.
+    if (sobrescreve && versaoId) fd.set("versao_id", versaoId);
     const res = await previewImportacao(orcamentoId, fd);
 
     if (!res.ok) {
@@ -123,6 +131,14 @@ export function ImportarPlanilhaDrawer({
     }
 
     setPreview(res.preview);
+    // Planilha só com o orçado sugere manter o planejado da anterior; a
+    // que traz planejado sugere o dela.
+    setOrigemPlanejado(
+      res.preview.planejado.versao_anterior !== null &&
+        !res.preview.planejado.planilha_tem_planejado
+        ? "anterior"
+        : "planilha",
+    );
     setStage("preview");
   }
 
@@ -138,6 +154,7 @@ export function ImportarPlanilhaDrawer({
 
     const fd = new FormData();
     fd.set("arquivo", arquivo);
+    fd.set("origem_planejado", origemPlanejado);
     const res =
       sobrescreve && versaoId
         ? await sobrescreverVersaoComPlanilha(versaoId, fd)
@@ -310,11 +327,20 @@ export function ImportarPlanilhaDrawer({
               <AvisoDeSubstituicao
                 atual={conteudoAtual}
                 itensNovos={preview.linhas_importadas}
+                planejadoDaVersao={
+                  preview.planejado.versao_anterior !== null &&
+                  origemPlanejado === "anterior"
+                }
               />
             )}
 
             {stage === "preview" && preview && !confirmandoTroca && (
-              <PreviewPanel preview={preview} arquivoNome={arquivo?.name ?? ""} />
+              <PreviewPanel
+                preview={preview}
+                arquivoNome={arquivo?.name ?? ""}
+                origemPlanejado={origemPlanejado}
+                onOrigemPlanejado={setOrigemPlanejado}
+              />
             )}
 
             {stage === "saving" && (
@@ -386,9 +412,12 @@ export function ImportarPlanilhaDrawer({
 function AvisoDeSubstituicao({
   atual,
   itensNovos,
+  planejadoDaVersao,
 }: {
   atual?: { grupos: number; itens: number; bvs: number };
   itensNovos: number;
+  /** A escolha foi manter o planejado desta versão nas linhas casadas. */
+  planejadoDaVersao: boolean;
 }) {
   const grupos = atual?.grupos ?? 0;
   const itens = atual?.itens ?? 0;
@@ -435,7 +464,47 @@ function AvisoDeSubstituicao({
         planilha. Alíquota, honorários, moeda e câmbio da versão{" "}
         <strong className="text-foreground">não mudam</strong>.
       </p>
+      <p className="text-[13px] text-muted-foreground">
+        {planejadoDaVersao
+          ? "O planejado desta versão continua nas linhas casadas; as demais entram zeradas."
+          : "O planejado vem da planilha."}
+      </p>
     </div>
+  );
+}
+
+function OpcaoPlanejado({
+  marcado,
+  onEscolher,
+  titulo,
+  detalhe,
+}: {
+  marcado: boolean;
+  onEscolher: () => void;
+  titulo: string;
+  detalhe: string;
+}) {
+  return (
+    <label
+      className={cn(
+        "flex cursor-pointer items-start gap-3 rounded-lg border px-3 py-2.5 transition-colors",
+        marcado
+          ? "border-california-red/40 bg-california-red/5"
+          : "border-border hover:bg-accent",
+      )}
+    >
+      <input
+        type="radio"
+        name="origem-planejado"
+        checked={marcado}
+        onChange={onEscolher}
+        className="mt-0.5 accent-california-red"
+      />
+      <span className="space-y-0.5">
+        <span className="block text-sm font-medium text-foreground">{titulo}</span>
+        <span className="block text-xs text-muted-foreground">{detalhe}</span>
+      </span>
+    </label>
   );
 }
 
@@ -471,15 +540,25 @@ function LinhaDoEstrago({
 function PreviewPanel({
   preview,
   arquivoNome,
+  origemPlanejado,
+  onOrigemPlanejado,
 }: {
   preview: Preview;
   arquivoNome: string;
+  origemPlanejado: "anterior" | "planilha";
+  onOrigemPlanejado: (origem: "anterior" | "planilha") => void;
 }) {
+  const p = preview.planejado;
+  const perguntar = p.versao_anterior !== null;
+  const herdando = perguntar && origemPlanejado === "anterior";
+  const planejadoDoGrupo = (g: Preview["grupos"][number]) =>
+    herdando ? g.total_planejado_herdado : g.total_planejado;
   const totalOrcadoGeral = preview.grupos.reduce((s, g) => s + g.total_bruto, 0);
   const totalPlanejadoGeral = preview.grupos.reduce(
-    (s, g) => s + g.total_planejado,
+    (s, g) => s + planejadoDoGrupo(g),
     0,
   );
+  const semPar = p.total_itens - p.casadas;
   const totalItens = preview.grupos.reduce((s, g) => s + g.itens_count, 0);
   const temPlanejado = totalPlanejadoGeral > 0;
   const rentabilidadeGeral = totalOrcadoGeral - totalPlanejadoGeral;
@@ -503,6 +582,40 @@ function PreviewPanel({
           </p>
         </div>
       </div>
+
+      {perguntar && (
+        <fieldset className="space-y-2 rounded-xl border border-border p-4">
+          <legend className="px-1 text-xs font-semibold text-foreground">
+            Planejado
+          </legend>
+          <OpcaoPlanejado
+            marcado={origemPlanejado === "anterior"}
+            onEscolher={() => onOrigemPlanejado("anterior")}
+            titulo={`Manter o planejado da v${p.versao_anterior}`}
+            detalhe={`${p.casadas} de ${p.total_itens} ${
+              p.total_itens === 1 ? "linha casada" : "linhas casadas"
+            } com a v${p.versao_anterior}${
+              p.por_descricao > 0
+                ? ` (${p.por_descricao} pela descrição, sem o id da exportação)`
+                : ""
+            }.${
+              semPar > 0
+                ? ` ${semPar === 1 ? "A outra entra zerada" : `As outras ${semPar} entram zeradas`}.`
+                : ""
+            }`}
+          />
+          <OpcaoPlanejado
+            marcado={origemPlanejado === "planilha"}
+            onEscolher={() => onOrigemPlanejado("planilha")}
+            titulo="Usar o planejado da planilha"
+            detalhe={
+              p.planilha_tem_planejado
+                ? "Os valores das colunas H · R$, I · QT e J · D/M."
+                : "A planilha só tem o orçado: o planejado de todas as linhas fica zerado."
+            }
+          />
+        </fieldset>
+      )}
 
       {/* Contagens */}
       <div className="grid grid-cols-2 gap-3">
@@ -570,8 +683,9 @@ function PreviewPanel({
         </div>
         <ul className="divide-y divide-border">
           {preview.grupos.map((g) => {
-            const rentab = g.total_bruto - g.total_planejado;
-            const grupoTemPlan = g.total_planejado > 0;
+            const planejadoGrupo = planejadoDoGrupo(g);
+            const rentab = g.total_bruto - planejadoGrupo;
+            const grupoTemPlan = planejadoGrupo > 0;
             return (
               <li
                 key={`${g.ordem}-${g.nome}`}
@@ -597,7 +711,7 @@ function PreviewPanel({
                       className="font-mono text-xs whitespace-nowrap text-blue-800"
                       title="Total planejado"
                     >
-                      {formatCurrency(g.total_planejado, "BRL")}
+                      {formatCurrency(planejadoGrupo, "BRL")}
                     </span>
                     <span
                       className={

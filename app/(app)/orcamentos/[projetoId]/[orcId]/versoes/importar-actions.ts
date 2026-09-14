@@ -11,6 +11,13 @@ import {
   type ParseResultado,
 } from "@/lib/importacao/parser-oficial";
 import { PERCENTUAL_INT_TAXES_PADRAO } from "@/lib/impostos";
+import { escolherVersaoVigente } from "@/lib/calculos/versao-vigente";
+import type { GrupoAtual, ItemAtual } from "@/lib/importacao/diff-projeto";
+import {
+  casarComAnterior,
+  linhasParaGravar,
+  type OrigemDoPlanejado,
+} from "@/lib/importacao/planejado-anterior";
 import type { CategoriaModeloPlanilha } from "@/lib/types";
 import { extrairArquivoXlsx } from "@/lib/importacao/arquivo";
 
@@ -27,7 +34,19 @@ export type PreviewResult =
           itens_count: number;
           total_bruto: number;
           total_planejado: number;
+          /** Planejado do grupo se a versão herdar o da anterior. */
+          total_planejado_herdado: number;
         }[];
+        /** A pergunta "planejado da versão anterior ou da planilha". */
+        planejado: {
+          /** Número da versão de onde o planejado pode vir. `null` sem
+           *  versão anterior — a pergunta não aparece e vale a planilha. */
+          versao_anterior: number | null;
+          casadas: number;
+          por_descricao: number;
+          total_itens: number;
+          planilha_tem_planejado: boolean;
+        };
         warnings: ParseResultado["warnings"];
         /** % que a planilha traz. Não é o que vai ser aplicado — serve para
          *  avisar quem importou quando difere do cadastro do cliente. */
@@ -49,6 +68,99 @@ export type ConfirmResult =
   | { ok: false; message: string };
 
 const extractArquivo = extrairArquivoXlsx;
+
+/** O que a tela escolheu. Sem escolha — ou sem versão anterior — vale a
+ *  planilha, que é o comportamento de antes. */
+function origemDoPlanejado(formData: FormData): OrigemDoPlanejado {
+  return formData.get("origem_planejado") === "anterior" ? "anterior" : "planilha";
+}
+
+const numero = (v: unknown) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+};
+
+/**
+ * A versão de onde vem o planejado: a pedida (no sobrescrever, a própria
+ * versão) ou a vigente do orçamento (aprovada, senão a mais recente — a
+ * regra da exportação e da importação do projeto). Com grupos e itens no
+ * formato que o casamento usa. `null` quando o orçamento não tem versão.
+ */
+async function versaoAnterior(
+  orcamentoId: string,
+  tenantId: string,
+  versaoIdPedida: string | null,
+): Promise<{
+  id: string;
+  numero_versao: number;
+  grupos: GrupoAtual[];
+  itens: ItemAtual[];
+} | null> {
+  const supabase = createClient();
+  const [{ data: orc }, { data: versoes }] = await Promise.all([
+    supabase
+      .from("orcamentos")
+      .select("versao_aprovada_id")
+      .eq("id", orcamentoId)
+      .eq("tenant_id", tenantId)
+      .maybeSingle<{ versao_aprovada_id: string | null }>(),
+    supabase
+      .from("versoes_orcamento")
+      .select("id, numero_versao, status, created_at")
+      .eq("orcamento_id", orcamentoId)
+      .eq("tenant_id", tenantId)
+      .returns<{ id: string; numero_versao: number; status: string; created_at: string }[]>(),
+  ]);
+
+  const vivas = (versoes ?? []).filter((v) => v.status !== "cancelada");
+  const alvo = versaoIdPedida
+    ? (versoes ?? []).find((v) => v.id === versaoIdPedida) ?? null
+    : escolherVersaoVigente(vivas, orc?.versao_aprovada_id);
+  if (!alvo) return null;
+
+  const [{ data: grupos }, { data: itens }] = await Promise.all([
+    supabase
+      .from("versoes_orcamento_grupos")
+      .select("id, nome, ordem")
+      .eq("versao_orcamento_id", alvo.id)
+      .eq("tenant_id", tenantId),
+    supabase
+      .from("versoes_orcamento_itens")
+      .select(
+        "id, grupo_id, ordem, item, tipo_custo, categoria_id, planilha_origem, " +
+          "valor_unitario_orcado, quantidade_orcada, dias_meses_orcado, " +
+          "valor_unitario_planejado, quantidade_planejada, dias_meses_planejado, em_save",
+      )
+      .eq("versao_orcamento_id", alvo.id)
+      .eq("tenant_id", tenantId),
+  ]);
+
+  return {
+    id: alvo.id,
+    numero_versao: alvo.numero_versao,
+    grupos: ((grupos ?? []) as any[]).map((g) => ({
+      id: g.id,
+      nome: g.nome,
+      ordem: numero(g.ordem),
+    })),
+    itens: ((itens ?? []) as any[]).map((it) => ({
+      id: it.id,
+      grupo_id: it.grupo_id,
+      ordem: numero(it.ordem),
+      item: it.item,
+      tipo_custo: it.tipo_custo,
+      valor_unitario_orcado: numero(it.valor_unitario_orcado),
+      quantidade_orcada: numero(it.quantidade_orcada),
+      dias_meses_orcado: numero(it.dias_meses_orcado),
+      valor_unitario_planejado: numero(it.valor_unitario_planejado),
+      quantidade_planejada: numero(it.quantidade_planejada),
+      dias_meses_planejado: numero(it.dias_meses_planejado),
+      categoria_id: it.categoria_id ?? null,
+      planilha_origem: it.planilha_origem ?? null,
+      em_save: it.em_save === true,
+    })),
+  };
+}
 
 async function verificarOrcamento(
   orcamentoId: string,
@@ -142,9 +254,20 @@ export async function previewImportacao(
     };
   }
 
+  // A versão nova herda da vigente; o sobrescrever manda a própria versão.
+  const versaoIdDoForm = formData.get("versao_id");
+  const anterior = await versaoAnterior(
+    orcamentoId,
+    session.activeTenant.id,
+    typeof versaoIdDoForm === "string" && versaoIdDoForm !== "" ? versaoIdDoForm : null,
+  );
+  const casamento = anterior
+    ? casarComAnterior(parsed.grupos, anterior.grupos, anterior.itens)
+    : null;
+
   const preview = {
     aba: parsed.aba,
-    grupos: parsed.grupos.map((g) => ({
+    grupos: parsed.grupos.map((g, gi) => ({
       nome: g.nome,
       ordem: g.ordem,
       itens_count: g.itens.length,
@@ -161,7 +284,15 @@ export async function previewImportacao(
             it.dias_meses_planejado,
         0,
       ),
+      total_planejado_herdado: casamento?.planejadoHerdadoPorGrupo[gi] ?? 0,
     })),
+    planejado: {
+      versao_anterior: anterior?.numero_versao ?? null,
+      casadas: casamento?.casadas ?? 0,
+      por_descricao: casamento?.porDescricao ?? 0,
+      total_itens: casamento?.totalItens ?? 0,
+      planilha_tem_planejado: parsed.tem_planejado,
+    },
     warnings: parsed.warnings,
     percentual_honorarios: parsed.percentual_honorarios,
     percentual_honorarios_cliente: honorariosCliente.percentual,
@@ -219,6 +350,21 @@ export async function confirmarImportacao(
 
   const recusaConfirmar = recusaPorModelo(parsed.modelo, check.modelo);
   if (recusaConfirmar) return { ok: false, message: recusaConfirmar };
+
+  // Planejado: da vigente ou da planilha. Lido ANTES de criar a versão
+  // nova — depois dela, a "mais recente" seria a própria.
+  const anteriorConfirmar = await versaoAnterior(orcamentoId, session.activeTenant.id, null);
+  const origemPlanejado: OrigemDoPlanejado = anteriorConfirmar
+    ? origemDoPlanejado(formData)
+    : "planilha";
+  const linhas = linhasParaGravar(
+    parsed.grupos,
+    anteriorConfirmar
+      ? casarComAnterior(parsed.grupos, anteriorConfirmar.grupos, anteriorConfirmar.itens).origens
+      : null,
+    origemPlanejado,
+    check.modelo === "internacional",
+  );
 
   if (parsed.grupos.length === 0) {
     return {
@@ -319,17 +465,16 @@ export async function confirmarImportacao(
   // 5) Criar itens em bulk.
   const itensParaInserir: any[] = [];
   let ordemGlobal = 0;
-  for (const grupo of parsed.grupos) {
+  parsed.grupos.forEach((grupo, gi) => {
     const grupoId = grupoIdPorNome.get(`${grupo.nome}#${grupo.ordem}`);
-    if (!grupoId) continue;
-    for (const it of grupo.itens) {
+    if (!grupoId) return;
+    for (const it of linhas[gi]) {
       ordemGlobal++;
-
       itensParaInserir.push({
         tenant_id: tenantId,
         versao_orcamento_id: versaoId,
         grupo_id: grupoId,
-        categoria_id: null,
+        categoria_id: it.categoria_id,
         ordem: ordemGlobal,
         planilha_origem: `linha ${it.linha_xlsx}`,
         item: it.item,
@@ -340,9 +485,11 @@ export async function confirmarImportacao(
         valor_unitario_planejado: it.valor_unitario_planejado,
         quantidade_planejada: it.quantidade_planejada,
         dias_meses_planejado: it.dias_meses_planejado,
+        // Só a linha que herdou traz a marca; a nova fica no default.
+        ...(it.em_save !== null ? { em_save: it.em_save } : {}),
       });
     }
-  }
+  });
 
   const { error: itensErr } = await service
     .from("versoes_orcamento_itens")
@@ -409,6 +556,7 @@ export async function confirmarImportacao(
       arquivo_nome: arq.nome,
       linhas_importadas: parsed.linhas_importadas,
       warnings_count: parsed.warnings.length,
+      origem_planejado: origemPlanejado,
       ...(parsed.percentual_honorarios !== null &&
       parsed.percentual_honorarios !== honorariosCliente.percentual
         ? {
@@ -515,6 +663,20 @@ export async function sobrescreverVersaoComPlanilha(
   const recusaSobrescrever = recusaPorModelo(parsed.modelo, check.modelo);
   if (recusaSobrescrever) return { ok: false, message: recusaSobrescrever };
 
+  // Planejado: o desta versão ou o da planilha. Lido ANTES de apagar.
+  const anteriorSobrescrever = await versaoAnterior(orcamentoId, tenantId, versaoId);
+  const origemPlanejado: OrigemDoPlanejado = anteriorSobrescrever
+    ? origemDoPlanejado(formData)
+    : "planilha";
+  const linhas = linhasParaGravar(
+    parsed.grupos,
+    anteriorSobrescrever
+      ? casarComAnterior(parsed.grupos, anteriorSobrescrever.grupos, anteriorSobrescrever.itens).origens
+      : null,
+    origemPlanejado,
+    check.modelo === "internacional",
+  );
+
   // Planilha vazia não apaga nada: seria destruir o que existe em troca
   // de nada, e o usuário não pediu isso — ele pediu para TROCAR.
   if (parsed.grupos.length === 0) {
@@ -589,16 +751,16 @@ export async function sobrescreverVersaoComPlanilha(
 
   const itensParaInserir: any[] = [];
   let ordemGlobal = 0;
-  for (const grupo of parsed.grupos) {
+  parsed.grupos.forEach((grupo, gi) => {
     const grupoId = grupoIdPorNome.get(`${grupo.nome}#${grupo.ordem}`);
-    if (!grupoId) continue;
-    for (const it of grupo.itens) {
+    if (!grupoId) return;
+    for (const it of linhas[gi]) {
       ordemGlobal++;
       itensParaInserir.push({
         tenant_id: tenantId,
         versao_orcamento_id: versaoId,
         grupo_id: grupoId,
-        categoria_id: null,
+        categoria_id: it.categoria_id,
         ordem: ordemGlobal,
         planilha_origem: `linha ${it.linha_xlsx}`,
         item: it.item,
@@ -609,9 +771,11 @@ export async function sobrescreverVersaoComPlanilha(
         valor_unitario_planejado: it.valor_unitario_planejado,
         quantidade_planejada: it.quantidade_planejada,
         dias_meses_planejado: it.dias_meses_planejado,
+        // Só a linha que herdou traz a marca; a nova fica no default.
+        ...(it.em_save !== null ? { em_save: it.em_save } : {}),
       });
     }
-  }
+  });
 
   const { error: itensErr } = await service
     .from("versoes_orcamento_itens")
@@ -673,6 +837,7 @@ export async function sobrescreverVersaoComPlanilha(
       arquivo_nome: arq.nome,
       linhas_importadas: parsed.linhas_importadas,
       warnings_count: parsed.warnings.length,
+      origem_planejado: origemPlanejado,
     },
   });
 

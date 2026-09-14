@@ -3625,3 +3625,30 @@ outro. Regras e conferência na
   aqui.
 - **Campo novo da versão tem que entrar na v+1 da importação do projeto.**
   Foi assim que as int. taxes sumiam: a lista de campos copiados é à mão.
+
+## ⚠️ Nota de 2026-09-14 — o "Importar planilha" da versão pergunta de onde vem o planejado (decisão 076)
+
+[076](../decisions/076-a-importacao-da-versao-pergunta-de-onde-vem-o-planejado.md).
+Nova versão e sobrescrever perguntam: **manter o planejado da versão
+anterior** (vigente, ou a própria no sobrescrever) nas linhas casadas, ou
+**usar o da planilha**. A tela vem marcada pelo arquivo. O casamento é o da
+importação do projeto: id oculto, e sem id grupo + descrição.
+
+| Arquivo | O quê |
+|---|---|
+| `lib/importacao/planejado-anterior.ts` | **novo** — `casarComAnterior`, `linhasParaGravar` |
+| `lib/importacao/parser-oficial.ts` | `item_id`, `grupo_id`, `tem_planejado`; H com id não é planejado |
+| `versoes/importar-actions.ts` | `versaoAnterior`; preview com o casamento; as escritas leem `origem_planejado` |
+| `versoes/importar-drawer.tsx` | a pergunta e os totais conforme a escolha |
+
+### Armadilhas
+
+- **Case antes de gravar.** Na versão nova, a vigente é lida antes do
+  insert (depois, a mais recente seria a própria); no sobrescrever, antes
+  do delete.
+- **A visão agregada não pergunta**: o botão dela só existe em card sem
+  planilha, então nunca há planejado anterior. Não é esquecimento.
+- **O preview e a escrita casam cada um por si** — a escrita reparseia o
+  arquivo e relê a versão, como o resto da importação. Se a versão mudar
+  entre os dois, vale o que está no banco na hora de gravar.
+
