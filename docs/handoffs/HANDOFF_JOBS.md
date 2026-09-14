@@ -3461,3 +3461,23 @@ por NF, por job não aberto (JOB-0007) e por AR sem fechar o orçado, e
 liberado na verba (PP-00058 saiu direto para o financeiro). Detalhe na
 decisão 077. Ficaram de dado de teste: PP-00056 (gerada, urgente, 3
 parcelas) e PP-00057 (verba gerada no Item 3, que passa do planejado).
+
+## ⚠️ Nota de 2026-09-14 — PP aprovada: a produção não cancela, fala com o financeiro
+
+Regra confirmada pelo Tiago: a produção **não** cancela PP já aprovada (o
+título a pagar existe), nem em Títulos a Pagar nem no job — ela se comunica
+com o financeiro.
+
+**Já era assim no código** (`podeCancelarPP`: gerada, em avaliação e
+rejeitada) e **conferido**: no painel do item o botão de cancelar da
+PP-00058 aprovada fica desabilitado, e `cancelarPedidoCompra` chamado por
+fora da tela recusa.
+
+**O que mudou:** o motivo exibido dizia "Peça a desaprovação antes de
+cancelar", prometendo um caminho que a produção não tem (`desaprovarPP`
+existe sem tela). Agora diz "Para cancelar, fale com o financeiro." — no
+servidor, no painel do item e na ficha da PP.
+
+**Pendente, do lado do financeiro:** o fluxo de cancelar (ou desaprovar)
+PP aprovada em Títulos a Pagar, guardado para depois. Ele é só do
+financeiro.

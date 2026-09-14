@@ -1367,7 +1367,9 @@ export async function cancelarPedidoCompra(pp_id: string): Promise<Result> {
 
   // PP gerada, em avaliação ou rejeitada pode ser cancelada. Paga, não: o
   // dinheiro já saiu, e desfazer isso é estorno, não cancelamento.
-  // Aprovada também não: ela já é título a pagar (decisão 027).
+  // Aprovada também não: ela já é título a pagar (decisão 027), e quem
+  // decide o que fazer com ela é o financeiro — a produção pede a ele
+  // (Tiago, 14/09/2026).
   if (!podeCancelarPP(pp.status as PPStatus)) {
     return {
       ok: false,
@@ -1375,7 +1377,7 @@ export async function cancelarPedidoCompra(pp_id: string): Promise<Result> {
         pp.status === "cancelada"
           ? "PP já está cancelada."
           : pp.status === "aprovada"
-            ? "PP já foi aprovada pelo financeiro — é título a pagar. Peça a desaprovação antes de cancelar."
+            ? "PP já foi aprovada pelo financeiro — é título a pagar. Para cancelar, fale com o financeiro."
             : "PP já foi paga — cancelar exigiria estorno pelo financeiro.",
     };
   }

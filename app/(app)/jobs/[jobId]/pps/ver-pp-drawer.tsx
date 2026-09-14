@@ -276,7 +276,7 @@ export function VerPPDrawer({
   const cancelavel = podeCancelarPP(pp.status);
   const motivoSemCancelar =
     pp.status === "aprovada"
-      ? "PP já aprovada pelo financeiro — é título a pagar. Peça a desaprovação antes de cancelar."
+      ? "PP já aprovada pelo financeiro — é título a pagar. Para cancelar, fale com o financeiro."
       : pp.status === "pago"
         ? "PP já paga — cancelar exigiria estorno pelo financeiro."
         : "Esta PP não pode mais ser cancelada.";
