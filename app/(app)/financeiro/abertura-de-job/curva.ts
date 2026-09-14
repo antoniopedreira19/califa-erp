@@ -29,6 +29,12 @@ export interface CurvaLinha {
   valor: number;
 }
 
+/** Linha da previsão de recebimento. `mes` só existe no job mensal — Fee
+ *  e Always On (decisão 078): o mês de referência daquela entrada. */
+export interface RecebimentoLinha extends CurvaLinha {
+  mes: string | null;
+}
+
 const DIA_MS = 86_400_000;
 
 // As datas e as janelas de pagamento moram em `lib/calculos/janelas-pagamento.ts`
@@ -178,13 +184,14 @@ export function sugerirRecebimento(
   total: number,
   dataFaturamento: string | null | undefined,
   hojeIso: string,
-): CurvaLinha[] {
+): RecebimentoLinha[] {
   if (total <= 0) return [];
   return [
     {
       id: "recebimento-1",
       data: (dataFaturamento ?? hojeIso).slice(0, 10),
       valor: emCentavos(total),
+      mes: null,
     },
   ];
 }

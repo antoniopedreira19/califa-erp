@@ -3578,3 +3578,33 @@ leem os meses da versão aprovada (`mesesDaVersaoQuery`).
 - **A errata é uma só para todos os recortes.** Cada tabela recebe só os grupos do mês, mas o rascunho é da seção inteira: a barra da errata e o "antes × depois" contam o job todo.
 - **Errata e save ainda NÃO travam por mês.** Quem trava um mês é o envio dele para faturamento, que chega na entrega 3.
 - **`ReguaMeses` e `TrimestreEmpilhado` moram em `orcamentos/[projetoId]/[orcId]/versoes/[versaoId]/`.** A seção do job importa de lá.
+
+## ⚠️ Nota de 2026-09-14 — Fee e Always On: faturamento por mês (decisão 078, entrega 3)
+
+Regras e modelo em [078](../decisions/078-orcamento-mensal-fee-e-always-on.md), seção "Entrega 3".
+
+**O que mudou no job:**
+
+- **Barra de faturamento por mês no rodapé** (`barra-faturamento-mensal.tsx`), no lugar da barra de sempre quando o job mensal está aberto. Recolhida, mostra a situação de cada mês e o botão do mês mais antigo a enviar. Expandida, mostra uma linha por mês com "Enviar faturamento" ou "Ver envio". O encerramento aparece nela quando todos os meses com faturamento foram enviados.
+- **`EnviarFaturamentoDrawer` em modo mês** (prop `mes`): título, textos e valor do mês; o vencimento nasce vazio. `enviarJobParaFaturamento` exige `mes` no mensal e o recusa nos outros jobs. O valor é relido no servidor (`lerFaturamentoPorMesDoJob`).
+- **Travas por mês:**
+  - errata e save travam só nas tabelas dos meses enviados, com aviso na régua;
+  - no servidor, `registrarErrata` e `salvarSaveDaErrata` recusam mês enviado (`mesesEnviadosDoJob`);
+  - `jobJaEnviadoParaFaturamento` passou a olhar só o envio sem mês.
+- **Encerramento:** `levantarImpedimentos` devolve `mesesSemEnvio` (só meses com faturamento). A situação `sem_faturamento` cobre mês sem item.
+- **`carregarDetalheDoJob`** devolve `envios` (todos, com parcelas) e `faturamentoMensal` (`montarFaturamentoMensal`). `envioFaturamento` continua sendo só o envio sem mês.
+
+**Testado em 14/09/2026 no JOB-0034** (`0-0001/26-09 · Teste Fee 4T/2026`), tudo pela tela, dev server na 3011:
+
+- Aberto no financeiro com dia do recebimento 20: as previsões ficaram 20/11/2026, 20/12/2026 e 20/01/2027, cada uma com R$ 16.701,88, `mes` e `valor_save` 0. A auditoria registrou 3 parcelas.
+- Envio de outubro: PO de teste, 1 parcela vencendo em 20/11/2026. O banco gravou `mes` 2026-10-01 e `valor_save` 0, e a auditoria registrou o mês.
+  - A barra passou para Out "Na fila" e o botão para "Enviar faturamento de novembro".
+  - A régua mostrou "Outubro já foi enviado para faturamento: errata e save ficam travados nesse mês. Novembro e dezembro continuam editáveis."
+- Fila e fluxo de caixa depois do envio:
+  - `vw_faturamento_pendente` trouxe a linha com `mes_referencia`;
+  - no `vw_fluxo_caixa`, a previsão de outubro saiu e deu lugar à parcela do envio, e novembro e dezembro seguiram previstos;
+  - o contas a receber mostrou "Outubro de 2026" e "total do mês".
+- Chamadas diretas pelo console:
+  - `registrarErrata` em outubro, com os mesmos valores, foi recusada pela trava do mês. Nada foi gravado.
+  - `levantarImpedimentos` listou `mesesSemEnvio: novembro, dezembro`.
+- **Não testado no navegador:** emissão de nota do mês (as situações "Faturado parcial" e "Faturado" estão cobertas por teste unitário), o save por mês e o encerramento com todos os meses faturados.

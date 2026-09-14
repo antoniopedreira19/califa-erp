@@ -61,6 +61,8 @@ import type { ContatoCobranca } from "@/lib/data/contatos-cobranca";
 import type { PlanoContaTipo, PlanoContaSubtipo } from "@/lib/types";
 import { emitirFaturamento, uploadNfPdf, urlAnexoNf } from "./actions";
 import type { FaturamentoPendenteRow, FaturadoRow } from "./faturamento-list";
+import { chaveInfoDoEnvio } from "./chave-info";
+import { rotuloMes } from "@/lib/calculos/meses-trimestre";
 
 export type DrawerState =
   | { modo: "origem"; linhas: FaturamentoPendenteRow[] }
@@ -213,7 +215,11 @@ export function FaturarDrawer({
     // Job único: nasce com o que o GP mandou. Sem instrução — envio
     // anterior a 31/08/2026 ou BV, que não tem envio — cai no nome do job,
     // que é o que a tela sugeria antes.
-    const info = primeira ? infoPorJob[primeira.origem_id] : undefined;
+    // Job mensal (decisão 078): a instrução é a do MÊS da linha.
+    const info = primeira
+      ? (infoPorJob[chaveInfoDoEnvio(primeira.origem_id, primeira.mes_referencia)] ??
+        infoPorJob[primeira.origem_id])
+      : undefined;
     return info?.descricaoNf?.trim() || primeira?.descricao || "";
   });
   const [anexoPath, setAnexoPath] = React.useState<string | null>(
@@ -698,8 +704,14 @@ export function FaturarDrawer({
                             onClick={() =>
                               setInfo(
                                 montarInfo(
-                                  l.job_id,
-                                  `${l.codigo ?? l.descricao} · parcela ${l.parcela_numero}/${l.parcela_total}`,
+                                  // Job mensal (decisão 078): a PO e a
+                                  // instrução são as do mês da linha.
+                                  l.job_id
+                                    ? chaveInfoDoEnvio(l.job_id, l.mes_referencia)
+                                    : null,
+                                  `${l.codigo ?? l.descricao}${
+                                    l.mes_referencia ? ` · ${rotuloMes(l.mes_referencia)}` : ""
+                                  } · parcela ${l.parcela_numero}/${l.parcela_total}`,
                                   {
                                     quebra: quebra.save > 0.004 ? quebra : null,
                                     codigoJob: l.codigo,

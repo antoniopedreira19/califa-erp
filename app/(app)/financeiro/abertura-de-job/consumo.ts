@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { emCentavos } from "./curva";
-import type { CurvaLinha } from "./curva";
+import type { CurvaLinha, RecebimentoLinha } from "./curva";
 import type { JobCompetencia } from "@/lib/types";
 
 /**
@@ -82,7 +82,7 @@ export async function previsoesGravadas(
   supabase: SupabaseClient,
   tenantId: string,
   jobId: string,
-): Promise<{ curva: CurvaLinha[]; recebimento: CurvaLinha[] }> {
+): Promise<{ curva: CurvaLinha[]; recebimento: RecebimentoLinha[] }> {
   const [curvaRes, recebRes] = await Promise.all([
     supabase
       .from("jobs_previsao_custo")
@@ -92,7 +92,7 @@ export async function previsoesGravadas(
       .order("data_prevista", { ascending: true }),
     supabase
       .from("jobs_previsao_recebimento")
-      .select("id, data_prevista, valor")
+      .select("id, data_prevista, valor, mes")
       .eq("job_id", jobId)
       .eq("tenant_id", tenantId)
       .order("data_prevista", { ascending: true }),
@@ -114,7 +114,14 @@ export async function previsoesGravadas(
 
   return {
     curva: paraLinhas(curvaRes.data ?? []),
-    recebimento: paraLinhas(recebRes.data ?? []),
+    // O mês de referência (job mensal, decisão 078) segue junto: é por ele
+    // que o formulário casa cada linha com o mês.
+    recebimento: ((recebRes.data ?? []) as any[]).map((l) => ({
+      id: l.id as string,
+      data: l.data_prevista as string,
+      valor: Number(l.valor ?? 0),
+      mes: (l.mes as string | null) ?? null,
+    })),
   };
 }
 

@@ -190,3 +190,18 @@ test("vencer hoje não é inadimplência (regra antiga preservada)", () => {
     "faturado",
   );
 });
+
+test("job mensal com mês a faturar não liquida, mesmo com as notas pagas (078)", () => {
+  const pago = [{ valor: 100, vencimento: "2026-10-20", status: "pago" }];
+  assert.equal(classificarFaturamento(true, true, pago, "2026-11-01"), "liquidado");
+  assert.equal(
+    classificarFaturamento(true, true, pago, "2026-11-01", false, true),
+    "faturado",
+  );
+  // Vencido continua vencendo antes de tudo.
+  const vencido = [{ valor: 100, vencimento: "2026-10-20", status: "em_aberto" }];
+  assert.equal(
+    classificarFaturamento(true, true, vencido, "2026-11-01", false, true),
+    "inadimplente",
+  );
+});

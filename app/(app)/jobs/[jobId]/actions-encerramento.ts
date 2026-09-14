@@ -12,6 +12,9 @@ import {
   type JobStatus,
 } from "@/lib/types";
 import { itensSemConclusaoDoJob } from "./realizado/conclusao-item";
+import { mesesDaVersaoQuery } from "@/lib/data/meses-versao";
+import { nomeDoMes } from "@/lib/calculos/meses-trimestre";
+import { lerFaturamentoPorMesDoJob } from "@/lib/data/faturamento-mensal";
 
 export type ActionResult =
   | { ok: true; id: string }
@@ -26,6 +29,10 @@ export interface ImpedimentosEncerramento {
   ppsEmAberto: { codigo: string; status: string }[];
   bvsEmAberto: { item: string; situacao: string }[];
   semEnvioFaturamento: boolean;
+  /** Modelo mensal (decisão 078): os meses ainda sem envio para
+   *  faturamento, pelo nome ("dezembro"). O job só encerra com todos
+   *  enviados — e faturados, pelo saldo abaixo. Vazio fora do mensal. */
+  mesesSemEnvio: string[];
   /** Quanto do envio ainda não virou nota emitida. Zero = tudo faturado. */
   saldoAFaturar: number;
   /** Itens de custo que ainda não disseram se sairá mais PP deles
@@ -65,8 +72,15 @@ export async function levantarImpedimentos(
 ): Promise<ImpedimentosEncerramento> {
   const supabase = createClient();
 
-  const [ppsRes, bvsRes, envioRes, saldoAFaturar, semMarcacaoRes] =
-    await Promise.all([
+  const [
+    ppsRes,
+    bvsRes,
+    envioRes,
+    saldoAFaturar,
+    semMarcacaoRes,
+    versaoRes,
+    mesesRes,
+  ] = await Promise.all([
     supabase
       .from("pedidos_compra")
       .select("codigo, status")
@@ -83,17 +97,55 @@ export async function levantarImpedimentos(
       .eq("tenant_id", tenantId)
       .eq("copia.job_id", jobId)
       .in("situacao", BV_SITUACAO_EM_ABERTO),
+    // Um envio por job, ou um por mês no modelo mensal.
     supabase
       .from("jobs_envio_faturamento")
-      .select("id")
+      .select("id, mes")
       .eq("job_id", jobId)
-      .eq("tenant_id", tenantId)
-      .maybeSingle(),
+      .eq("tenant_id", tenantId),
     saldoAFaturarDoJob(tenantId, jobId),
     // Mesma consulta que o botão "Concluir PPs" da barra usa para saber
     // quem ele vai marcar — o recorte mora num lugar só (decisão 052).
     itensSemConclusaoDoJob(supabase, tenantId, jobId),
+    // O modelo sai da categoria do ORÇAMENTO (decisão 072), e os meses da
+    // versão aprovada dizem quais envios o job mensal precisa ter.
+    supabase
+      .from("versoes_orcamento")
+      .select("id, percentual_honorarios, percentual_imposto, orcamento:orcamentos!orcamento_id(categoria:categorias_dominio!categoria_id(modelo_planilha))")
+      .eq("id", versaoAprovadaId)
+      .eq("tenant_id", tenantId)
+      .maybeSingle<{
+        id: string;
+        percentual_honorarios: number | string | null;
+        percentual_imposto: number | string | null;
+        orcamento: { categoria: { modelo_planilha: string } | null } | null;
+      }>(),
+    mesesDaVersaoQuery(supabase, tenantId, versaoAprovadaId),
   ]);
+
+  const envios = (envioRes.data ?? []) as { id: string; mes: string | null }[];
+  const mensal = versaoRes.data?.orcamento?.categoria?.modelo_planilha === "mensal";
+  const mesesEnviados = new Set(envios.map((e) => e.mes).filter((m): m is string => m !== null));
+  // Mês que não fatura nada (só custo pago direto pelo cliente) não tem o
+  // que enviar. Sem o faturamento de cada mês — leitura que falhou —, a
+  // conta cai para todos os meses da versão: trava a mais, nunca a menos.
+  const faturamentoDosMeses = mensal
+    ? await lerFaturamentoPorMesDoJob(supabase, {
+        tenantId,
+        jobId,
+        versaoAprovadaId,
+        percentualHonorarios: Number(versaoRes.data?.percentual_honorarios ?? 0),
+        percentualImposto: Number(versaoRes.data?.percentual_imposto ?? 0),
+      })
+    : null;
+  const mesesQuePrecisamDeEnvio = faturamentoDosMeses
+    ? faturamentoDosMeses.filter((m) => m.faturamento > 0).map((m) => m.mes)
+    : (mesesRes.data ?? []).map((m) => m.mes);
+  const mesesSemEnvio = mensal
+    ? mesesQuePrecisamDeEnvio
+        .filter((mes) => !mesesEnviados.has(mes))
+        .map((mes) => nomeDoMes(mes))
+    : [];
 
   return {
     ppsEmAberto: ((ppsRes.data ?? []) as any[]).map((p) => ({
@@ -104,7 +156,10 @@ export async function levantarImpedimentos(
       item: b.copia?.item ?? "Item",
       situacao: b.situacao,
     })),
-    semEnvioFaturamento: !envioRes.data,
+    semEnvioFaturamento: mensal
+      ? envios.length === 0
+      : !envios.some((e) => e.mes === null),
+    mesesSemEnvio,
     saldoAFaturar,
     itensSemMarcacao: semMarcacaoRes.map((i) => ({ item: i.nome })),
   };
@@ -198,9 +253,22 @@ export async function encerrarJob(jobId: string): Promise<ActionResult> {
     imp.ppsEmAberto.length > 0 ||
     imp.bvsEmAberto.length > 0 ||
     imp.saldoAFaturar > 0 ||
-    imp.itensSemMarcacao.length > 0
+    imp.itensSemMarcacao.length > 0 ||
+    imp.mesesSemEnvio.length > 0
   ) {
     const partes: string[] = [];
+    // Modelo mensal: mês sem envio é o primeiro que falta — sem ele nem
+    // existe saldo a faturar daquele mês para aparecer abaixo.
+    if (imp.mesesSemEnvio.length > 0) {
+      const meses = imp.mesesSemEnvio;
+      const lista =
+        meses.length === 1
+          ? meses[0]
+          : `${meses.slice(0, -1).join(", ")} e ${meses[meses.length - 1]}`;
+      partes.push(
+        `${lista} ${meses.length === 1 ? "ainda sem envio" : "ainda sem envio"} para faturamento`,
+      );
+    }
     if (imp.ppsEmAberto.length > 0) {
       partes.push(
         `${imp.ppsEmAberto.length} ${imp.ppsEmAberto.length === 1 ? "PP sem baixa" : "PPs sem baixa"} (${imp.ppsEmAberto
@@ -239,6 +307,7 @@ export async function encerrarJob(jobId: string): Promise<ActionResult> {
         bvs_em_aberto: imp.bvsEmAberto.length,
         saldo_a_faturar: imp.saldoAFaturar,
         itens_sem_marcacao: imp.itensSemMarcacao.length,
+        meses_sem_envio: imp.mesesSemEnvio,
       },
     });
     const marcacaoPendente =
@@ -246,7 +315,9 @@ export async function encerrarJob(jobId: string): Promise<ActionResult> {
         ? " Marque nos itens que faltam, pelo painel do item na Planilha Interna, que todas as PPs deles já foram geradas."
         : "";
     const comoResolver =
-      imp.saldoAFaturar > 0
+      imp.mesesSemEnvio.length > 0
+        ? " Envie os meses que faltam para faturamento; o financeiro emite as notas deles antes do encerramento."
+        : imp.saldoAFaturar > 0
         ? imp.ppsEmAberto.length > 0 || imp.bvsEmAberto.length > 0
           ? " Dê baixa nos documentos e peça ao financeiro a nota do saldo."
           : " O financeiro precisa emitir a nota do saldo antes do encerramento."

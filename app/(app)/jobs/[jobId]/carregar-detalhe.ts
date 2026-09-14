@@ -45,6 +45,12 @@ import {
   type DadosDePagamento,
 } from "@/lib/data/foto-pagamento-da-pp";
 import { mesesDaVersaoQuery } from "@/lib/data/meses-versao";
+import {
+  montarFaturamentoMensal,
+  type EnvioDoJobComParcelas,
+  type ItemDeNotaDaParcela,
+  type MesDeFaturamento,
+} from "@/lib/calculos/faturamento-por-mes";
 
 /**
  * Todo o detalhe de um job, carregado uma vez e servido às duas telas
@@ -245,15 +251,18 @@ export async function carregarDetalheDoJob(
       .eq("profile_id", session.profile.id)
       .eq("escopo", "pps")
       .maybeSingle(),
-    // Envio para faturamento: existe no máximo um por job. É ele que
-    // decide entre mostrar "Enviar para faturamento" e liberar o
-    // encerramento.
+    // Envios para faturamento: um por job — ou um por MÊS nos jobs do
+    // modelo mensal (Fee e Always On, decisão 078). O envio único (sem
+    // mês) decide entre mostrar "Enviar para faturamento" e liberar o
+    // encerramento; os mensais alimentam a barra de faturamento por mês.
     supabase
       .from("jobs_envio_faturamento")
-      .select("id, valor_faturado, data_faturamento, numero_po, descricao_nf, portal_url, enviado_em")
+      .select(
+        "id, mes, valor_faturado, valor_save, data_faturamento, numero_po, descricao_nf, portal_url, enviado_em, parcelas:jobs_envio_faturamento_parcelas(id, ordem, valor, data_vencimento)",
+      )
       .eq("job_id", jobId)
       .eq("tenant_id", session.activeTenant.id)
-      .maybeSingle(),
+      .order("mes", { ascending: true, nullsFirst: true }),
     // Portais do cliente, para o formulário de envio.
     supabase
       .from("cliente_portais")
@@ -303,7 +312,19 @@ export async function carregarDetalheDoJob(
     console.error("[job.envio-faturamento]", envioFaturamentoRes.error.message);
   }
 
-  const envioFaturamento = (envioFaturamentoRes.data as any) ?? null;
+  const envios: EnvioDoJobComParcelas[] = (
+    (envioFaturamentoRes.data ?? []) as any[]
+  ).map((e) => ({
+    ...e,
+    valor_faturado: Number(e.valor_faturado ?? 0),
+    valor_save: e.valor_save === null ? null : Number(e.valor_save),
+    parcelas: ((e.parcelas ?? []) as any[])
+      .map((par) => ({ ...par, valor: Number(par.valor ?? 0) }))
+      .sort((a, b) => a.ordem - b.ordem),
+  }));
+  // O envio único dos jobs que não são mensais — o de sempre.
+  const envioFaturamento = envios.find((e) => e.mes === null) ?? null;
+  const enviosMensais = envios.filter((e) => e.mes !== null);
   // Só os portais do cliente DESTE job — a consulta traz os do tenant e o
   // filtro por cliente é feito aqui, com o id que já veio no `raw`.
   const portaisDoCliente = ((portaisRes.data ?? []) as any[])
@@ -707,6 +728,12 @@ export async function carregarDetalheDoJob(
     envioFaturamento === null &&
     totaisJob.faturamentoPrevisto > 0 &&
     planilha.modeloPlanilha !== "mensal";
+  // O envio de cada mês (modelo mensal): mesma matriz e job aberto. Qual
+  // mês pode ir sai da barra, pela situação de cada um.
+  const podeEnviarFaturamentoMensal =
+    pode(session.activeRole, "jobs.enviar_faturamento") &&
+    job.status === "aberto" &&
+    planilha.modeloPlanilha === "mensal";
 
   // Job pago INTEIRAMENTE por saldo de save: faturamento previsto zero e
   // consumo registrado. Ele pula a etapa de faturamento e se comporta
@@ -764,9 +791,45 @@ export async function carregarDetalheDoJob(
   // Só é lido quando há resumo a montar; nas outras abas seria uma ida ao
   // banco por nada.
   const saldoAFaturar =
-    job.status === "aberto" && envioFaturamento
+    job.status === "aberto" && (envioFaturamento || enviosMensais.length > 0)
       ? await saldoAFaturarDoJob(session.activeTenant.id, jobId)
       : 0;
+
+  // Faturamento por mês (modelo mensal, decisão 078): o valor de cada mês
+  // pela conta da planilha, o envio dele e quanto já virou nota emitida.
+  // A leitura das notas só acontece quando há envio mensal.
+  const idsParcelasMensais = enviosMensais.flatMap((e) =>
+    e.parcelas.map((par) => par.id),
+  );
+  const notasDasParcelasRes =
+    idsParcelasMensais.length > 0
+      ? await supabase
+          .from("faturamento_itens")
+          .select(
+            "envio_parcela_id, valor, faturamento:faturamentos!inner(numero_nf, data_emissao, status)",
+          )
+          .eq("tenant_id", session.activeTenant.id)
+          .eq("faturamento.status", "emitido")
+          .in("envio_parcela_id", idsParcelasMensais)
+      : { data: [], error: null };
+  if (notasDasParcelasRes.error) {
+    console.error("[job.notas-das-parcelas]", notasDasParcelasRes.error.message);
+  }
+  const faturamentoMensal: MesDeFaturamento[] =
+    planilha.modeloPlanilha === "mensal"
+      ? montarFaturamentoMensal({
+          meses,
+          grupos,
+          itens,
+          percentualHonorarios: Number(versaoAprovada.percentual_honorarios),
+          percentualImposto: Number(versaoAprovada.percentual_imposto),
+          envios: enviosMensais,
+          itensDeNota: (notasDasParcelasRes.data ?? []) as unknown as ItemDeNotaDaParcela[],
+        })
+      : [];
+  const todosOsMesesEnviados =
+    faturamentoMensal.length > 0 &&
+    faturamentoMensal.every((m) => m.envio !== null || m.situacao === "sem_faturamento");
 
   const ppsEmAberto = ppsDoJob
     .filter((pp) => PP_STATUS_EM_ABERTO.includes(pp.status))
@@ -799,7 +862,8 @@ export async function carregarDetalheDoJob(
     .map((it) => ({ item: it.item }));
 
   const resumoEncerramento: ResumoEncerramento | null =
-    job.status === "aberto" && (envioFaturamento || pagoSoPorSave)
+    job.status === "aberto" &&
+    (envioFaturamento || pagoSoPorSave || todosOsMesesEnviados)
       ? {
           faturamentoAbertura: job.faturamento_previsto_abertura,
           // "Faturamento" do fechamento é o faturamento previsto de agora,
@@ -810,7 +874,7 @@ export async function carregarDetalheDoJob(
           // faturamento previsto também é zero.
           valorEnviado: envioFaturamento
             ? Number(envioFaturamento.valor_faturado)
-            : 0,
+            : enviosMensais.reduce((s, e) => s + e.valor_faturado, 0),
           orcado: totaisJob.subtotalGeral,
           honorarios: totaisJob.honorarios,
           imposto: totaisJob.imposto,
@@ -899,6 +963,7 @@ export async function carregarDetalheDoJob(
     naoLidasPPs,
     envioFaturamento,
     podeEnviarFaturamento,
+    podeEnviarFaturamentoMensal,
     pagoSoPorSave,
     portaisDoCliente,
     jobsDoProjeto,
@@ -909,6 +974,8 @@ export async function carregarDetalheDoJob(
     // (decisão 072).
     modeloPlanilha: planilha.modeloPlanilha,
     meses,
+    envios,
+    faturamentoMensal,
     totaisJob,
     custoPlanejadoJob,
     custoRealizadoJob,

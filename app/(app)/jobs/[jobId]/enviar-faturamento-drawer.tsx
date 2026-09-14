@@ -78,6 +78,18 @@ interface Props {
   dataPrevistaFaturamento: string | null;
   portais: PortalOption[];
   moeda: string;
+  /** Modelo mensal (decisão 078): o mês que este envio leva. O valor é o
+   *  faturamento DAQUELE mês e o vencimento nasce vazio (Tiago, 14/09/2026). */
+  mes?: { iso: string; nome: string };
+  /** Texto do botão que abre o formulário. */
+  rotuloBotao?: string;
+  /** Botão em contorno, para as linhas da barra de faturamento expandida. */
+  botaoContorno?: boolean;
+}
+
+/** "setembro" → "Setembro", para abrir frase. */
+function comMaiuscula(texto: string): string {
+  return texto.charAt(0).toUpperCase() + texto.slice(1);
 }
 
 function hojeIso(): string {
@@ -107,6 +119,9 @@ export function EnviarFaturamentoDrawer({
   dataPrevistaFaturamento,
   portais,
   moeda,
+  mes,
+  rotuloBotao,
+  botaoContorno = false,
 }: Props) {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
@@ -119,12 +134,15 @@ export function EnviarFaturamentoDrawer({
 
   const [numeroPo, setNumeroPo] = React.useState("");
   const [dataFaturamento, setDataFaturamento] = React.useState(
-    dataPrevistaFaturamento ?? hojeIso(),
+    mes ? "" : (dataPrevistaFaturamento ?? hojeIso()),
   );
   const [descricaoNf, setDescricaoNf] = React.useState("");
   const [portalId, setPortalId] = React.useState(SEM_PORTAL);
   const [parcelas, setParcelas] = React.useState<ParcelaEnvio[]>(() => [
-    { valor: valorFaturado, data_vencimento: dataPrevistaFaturamento ?? hojeIso() },
+    {
+      valor: valorFaturado,
+      data_vencimento: mes ? "" : (dataPrevistaFaturamento ?? hojeIso()),
+    },
   ]);
 
   // Cadastro do portal sem sair do envio (decisão 050, 04/09/2026). A
@@ -234,6 +252,7 @@ export function EnviarFaturamentoDrawer({
         data_faturamento: dataFaturamento,
         descricao_nf: descricaoNf.trim(),
         portal_id: portalId === SEM_PORTAL ? null : portalId,
+        mes: mes?.iso ?? null,
         parcelas: parcelas.map((p, i) => ({
           ordem: i + 1,
           valor: p.valor,
@@ -259,20 +278,29 @@ export function EnviarFaturamentoDrawer({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex h-9 items-center gap-2 whitespace-nowrap rounded-[10px] bg-california-red px-4 text-[13px] font-semibold text-white transition-colors hover:bg-california-red-hover"
+        className={cn(
+          "inline-flex items-center gap-2 whitespace-nowrap rounded-[10px] font-semibold transition-colors",
+          botaoContorno
+            ? "h-8 border border-border bg-white px-3 text-xs text-foreground hover:border-california-red/40 hover:text-california-red"
+            : "h-9 bg-california-red px-4 text-[13px] text-white hover:bg-california-red-hover",
+        )}
       >
-        <Send className="h-4 w-4" />
-        Enviar job para faturamento
+        <Send className={botaoContorno ? "h-3.5 w-3.5" : "h-4 w-4"} />
+        {rotuloBotao ?? "Enviar job para faturamento"}
       </button>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DrawerContent>
           <DialogHeader className="border-b border-border p-6">
-            <DialogTitle>Enviar {jobCodigo} para faturamento</DialogTitle>
+            <DialogTitle>
+              {mes
+                ? `Enviar ${mes.nome} de ${jobCodigo} para faturamento`
+                : `Enviar ${jobCodigo} para faturamento`}
+            </DialogTitle>
             <DialogDescription>
-              O job entra na fila de faturamento do financeiro com estas
-              informações. O valor vem do faturamento previsto e não é
-              editável aqui.
+              {mes
+                ? `${comMaiuscula(mes.nome)} entra na fila de faturamento do financeiro com estas informações. O valor vem do faturamento de ${mes.nome} na planilha e não é editável aqui.`
+                : "O job entra na fila de faturamento do financeiro com estas informações. O valor vem do faturamento previsto e não é editável aqui."}
             </DialogDescription>
           </DialogHeader>
 
@@ -285,11 +313,13 @@ export function EnviarFaturamentoDrawer({
                 </span>
                 <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-white px-2.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
                   <Lock className="h-2.5 w-2.5" />
-                  Do faturamento previsto
+                  {mes ? `Do faturamento de ${mes.nome}` : "Do faturamento previsto"}
                 </span>
               </div>
               <p className="text-xs text-muted-foreground">
-                Já considera as erratas registradas até agora.
+                {mes
+                  ? "Já considera as erratas registradas até agora no mês."
+                  : "Já considera as erratas registradas até agora."}
                 {valorSave > 0.005 && (
                   <>
                     {" "}
@@ -331,8 +361,9 @@ export function EnviarFaturamentoDrawer({
                 onDateChange={(d) => handleDataFaturamento(d ? isoLocal(d) : "")}
               />
               <p className="text-xs text-muted-foreground">
-                Nasce da data prevista na abertura do job. Ajuste se o
-                acordo com o cliente for outro.
+                {mes
+                  ? "Vencimento da 1ª parcela, conforme o acordo com o cliente."
+                  : "Nasce da data prevista na abertura do job. Ajuste se o acordo com o cliente for outro."}
               </p>
               {fieldErrors.data_faturamento?.map((m, i) => (
                 <p key={i} className="text-xs text-california-red">
@@ -346,7 +377,9 @@ export function EnviarFaturamentoDrawer({
             <div className="space-y-3 rounded-xl border border-border bg-muted/20 p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <Label className="text-[11px] uppercase tracking-wider">
-                  Em quantas notas este job será faturado
+                  {mes
+                    ? "Em quantas notas este mês será faturado"
+                    : "Em quantas notas este job será faturado"}
                 </Label>
                 <div className="flex gap-1">
                   {[1, 2, 3, 6].map((n) => (
@@ -454,7 +487,10 @@ export function EnviarFaturamentoDrawer({
 
               <p className="text-xs text-muted-foreground">
                 Cada parcela vira uma linha em Contas a Receber e é faturada
-                em nota própria. Deixe 1× se o job for faturado de uma vez.
+                em nota própria.{" "}
+                {mes
+                  ? "Deixe 1× se o mês for faturado de uma vez."
+                  : "Deixe 1× se o job for faturado de uma vez."}
               </p>
             </div>
 
@@ -664,10 +700,15 @@ export function EnviarFaturamentoDrawer({
       <ConfirmDialog
         open={confirmar}
         onOpenChange={(o) => !o && setConfirmar(false)}
-        title={`Enviar ${jobCodigo} para faturamento?`}
+        title={
+          mes
+            ? `Enviar ${mes.nome} de ${jobCodigo} para faturamento?`
+            : `Enviar ${jobCodigo} para faturamento?`
+        }
         description={
           <>
-            O job entra na fila de faturamento do financeiro no valor de{" "}
+            {mes ? comMaiuscula(mes.nome) : "O job"} entra na fila de
+            faturamento do financeiro no valor de{" "}
             <strong>{formatCurrency(valorFaturado, moeda)}</strong>
             {parcelas.length > 1 ? (
               <>
@@ -680,7 +721,10 @@ export function EnviarFaturamentoDrawer({
             <strong>
               {dataFaturamento.split("-").reverse().join("/")}
             </strong>
-            . Depois disso o job fica pronto para ser encerrado.
+            .{" "}
+            {mes
+              ? `O envio é definitivo: errata e save de ${mes.nome} ficam travados, e os outros meses seguem editáveis.`
+              : "Depois disso o job fica pronto para ser encerrado."}
           </>
         }
         confirmLabel="Sim, enviar"

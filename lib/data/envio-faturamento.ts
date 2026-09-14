@@ -22,7 +22,9 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-/** `true` quando o job já foi enviado para faturamento. */
+/** `true` quando o job já teve o envio ÚNICO para faturamento. Nos jobs
+ *  do modelo mensal cada mês tem o seu envio, e a porta fecha por mês —
+ *  ver `mesesEnviadosDoJob`. */
 export async function jobJaEnviadoParaFaturamento(
   supabase: SupabaseClient,
   jobId: string,
@@ -32,8 +34,43 @@ export async function jobJaEnviadoParaFaturamento(
     .from("jobs_envio_faturamento")
     .select("id", { count: "exact", head: true })
     .eq("job_id", jobId)
-    .eq("tenant_id", tenantId);
+    .eq("tenant_id", tenantId)
+    .is("mes", null);
   return (count ?? 0) > 0;
+}
+
+/** Os meses (primeiro dia, `yyyy-mm-dd`) de um job do modelo mensal que
+ *  já foram enviados para faturamento — Fee e Always On (decisão 078).
+ *  Errata e save travam só nesses meses; os outros seguem editáveis. */
+export async function mesesEnviadosDoJob(
+  supabase: SupabaseClient,
+  jobId: string,
+  tenantId: string,
+): Promise<Set<string>> {
+  const { data, error } = await supabase
+    .from("jobs_envio_faturamento")
+    .select("mes")
+    .eq("job_id", jobId)
+    .eq("tenant_id", tenantId)
+    .not("mes", "is", null);
+  if (error) {
+    // Sem saber o que foi enviado, trava tudo: é o lado seguro da porta.
+    console.error("[envio-faturamento.meses]", error.message);
+    throw new Error("Não foi possível conferir os meses enviados para faturamento.");
+  }
+  return new Set(((data ?? []) as { mes: string }[]).map((e) => e.mes));
+}
+
+/** A frase da porta mensal, com os meses que ela fecha ("outubro"). */
+export function mensagemMesJaEnviado(nomesDosMeses: string[]): string {
+  const lista =
+    nomesDosMeses.length <= 1
+      ? nomesDosMeses.join("")
+      : `${nomesDosMeses.slice(0, -1).join(", ")} e ${nomesDosMeses[nomesDosMeses.length - 1]}`;
+  const texto = lista.charAt(0).toUpperCase() + lista.slice(1);
+  return nomesDosMeses.length === 1
+    ? `${texto} já foi enviado para faturamento e o valor da nota daquele mês está congelado: não há errata nem save nele. Os outros meses seguem editáveis.`
+    : `${texto} já foram enviados para faturamento e o valor das notas desses meses está congelado: não há errata nem save neles. Os outros meses seguem editáveis.`;
 }
 
 /** A mensagem única das duas portas — errata e save falam igual. */

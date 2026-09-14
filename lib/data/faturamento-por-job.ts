@@ -51,10 +51,10 @@ export async function faturamentoPorJob(
 ): Promise<Map<string, FaturamentoDoJob>> {
   const supabase = createClient();
 
-  const [enviosRes, itensRes, titulosRes, saveOnlyRes] = await Promise.all([
+  const [enviosRes, itensRes, titulosRes, saveOnlyRes, mesesPrevistosRes] = await Promise.all([
     supabase
       .from("jobs_envio_faturamento")
-      .select("job_id, valor_faturado, enviado_em")
+      .select("job_id, mes, valor_faturado, enviado_em")
       .eq("tenant_id", tenantId),
     // Os itens de job e de save das notas emitidas. Nos dois tipos o
     // `origem_id` do item é o job (o CHECK `chk_fat_item_origem` o exige
@@ -84,6 +84,14 @@ export async function faturamentoPorJob(
       .eq("tenant_id", tenantId)
       .gt("save_consumido", 0)
       .lte("jobs.faturamento_previsto", 0.004),
+    // Os meses que o job mensal fatura (decisão 078): uma linha por mês com
+    // faturamento na previsão de recebimento. É contra eles que se sabe se
+    // falta mês a enviar.
+    supabase
+      .from("jobs_previsao_recebimento")
+      .select("job_id, mes")
+      .eq("tenant_id", tenantId)
+      .not("mes", "is", null),
   ]);
 
   if (enviosRes.error) {
@@ -96,12 +104,28 @@ export async function faturamentoPorJob(
     console.error("[faturamento-por-job.titulos]", titulosRes.error.message);
   }
 
-  const envioPorJob = new Map<string, { valor: number; em: string }>();
+  // Um envio por job — ou um por mês nos jobs do modelo mensal (decisão
+  // 078). Com vários, o valor enviado é a soma e a data é a do primeiro.
+  const envioPorJob = new Map<
+    string,
+    { valor: number; em: string; mensais: number }
+  >();
   for (const e of (enviosRes.data ?? []) as any[]) {
+    const atual = envioPorJob.get(e.job_id);
     envioPorJob.set(e.job_id, {
-      valor: Number(e.valor_faturado ?? 0),
-      em: e.enviado_em,
+      valor: (atual?.valor ?? 0) + Number(e.valor_faturado ?? 0),
+      em: atual && atual.em < e.enviado_em ? atual.em : e.enviado_em,
+      mensais: (atual?.mensais ?? 0) + (e.mes ? 1 : 0),
     });
+  }
+  if (mesesPrevistosRes.error) {
+    console.error("[faturamento-por-job.meses]", mesesPrevistosRes.error.message);
+  }
+  const mesesPorJob = new Map<string, Set<string>>();
+  for (const p of (mesesPrevistosRes.data ?? []) as any[]) {
+    const meses = mesesPorJob.get(p.job_id) ?? new Set<string>();
+    meses.add(p.mes);
+    mesesPorJob.set(p.job_id, meses);
   }
 
   // Cabeçalho de cada nota e, por job, quanto de cada nota é dele. Um job
@@ -173,11 +197,21 @@ export async function faturamentoPorJob(
       });
     }
 
+    // Job mensal: só liquida com todos os meses enviados e as notas
+    // cobrindo tudo o que foi enviado.
+    const mensais = envio?.mensais ?? 0;
+    const parteNasNotas = notas.reduce((s, n) => s + n.parte_do_job, 0);
+    const faltaFaturar =
+      mensais > 0 &&
+      (mensais < (mesesPorJob.get(jobId)?.size ?? 0) ||
+        parteNasNotas < (envio?.valor ?? 0) - 0.01);
+
     const consolidado = consolidarNotasDoJob(
       notas,
       !!envio,
       hoje,
       saveOnly.has(jobId) && !envio,
+      faltaFaturar,
     );
 
     mapa.set(jobId, {

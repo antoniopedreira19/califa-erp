@@ -54,6 +54,10 @@ export function classificarFaturamento(
    *  §11). Sem isto ele ficaria eternamente em "aguardando envio",
    *  travado dos dois lados. */
   nadaAFaturar = false,
+  /** Job mensal — Fee e Always On (decisão 078) — com mês ainda não
+   *  enviado ou não faturado inteiro. As notas emitidas até aqui podem estar
+   *  todas pagas, mas o job não recebeu tudo: fica em `faturado`. */
+  faltaFaturar = false,
 ): SituacaoFaturamento {
   if (nadaAFaturar && !temNota) return "faturado";
   if (!temNota) return temEnvio ? "enviado" : "aguardando_envio";
@@ -64,7 +68,9 @@ export function classificarFaturamento(
   // outras já tenham sido recebidas. Por isso `inadimplente` é testado
   // antes de `liquidado`.
   if (emAberto.some((t) => t.vencimento < hoje)) return "inadimplente";
-  if (titulos.length > 0 && emAberto.length === 0) return "liquidado";
+  if (titulos.length > 0 && emAberto.length === 0) {
+    return faltaFaturar ? "faturado" : "liquidado";
+  }
 
   // Nota emitida e nada vencido. Inclui a nota cujas parcelas ainda não
   // foram geradas: já faturada, ainda sem cobrança montada.
@@ -129,6 +135,7 @@ export function consolidarNotasDoJob(
   temEnvio: boolean,
   hoje: string,
   nadaAFaturar = false,
+  faltaFaturar = false,
 ): NotasConsolidadas {
   const ordenadas = [...notas].sort(
     (a, b) =>
@@ -158,6 +165,7 @@ export function consolidarNotasDoJob(
       titulos,
       hoje,
       nadaAFaturar,
+      faltaFaturar,
     ),
     valor_faturado:
       ordenadas.length > 0

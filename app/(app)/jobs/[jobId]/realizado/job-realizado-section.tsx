@@ -12,7 +12,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Clock, ClipboardList } from "lucide-react";
+import { Clock, ClipboardList, Lock } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import { nomeVersao } from "@/lib/nome-versao";
 import type {
@@ -78,6 +78,26 @@ import {
 } from "@/lib/calculos/meses-trimestre";
 import { ReguaMeses } from "@/app/(app)/orcamentos/[projetoId]/[orcId]/versoes/[versaoId]/regua-meses";
 import { TrimestreEmpilhado } from "@/app/(app)/orcamentos/[projetoId]/[orcId]/versoes/[versaoId]/trimestre-empilhado";
+import type {
+  MesDeFaturamento,
+  SituacaoDoMes,
+} from "@/lib/calculos/faturamento-por-mes";
+
+const SEM_FATURAMENTO_MENSAL: MesDeFaturamento[] = [];
+
+/** O texto da situação do mês na régua — o mesmo da barra do rodapé. */
+const ROTULO_DA_SITUACAO: Record<SituacaoDoMes, string> = {
+  a_enviar: "A enviar",
+  na_fila: "Na fila do financeiro",
+  faturado_parcial: "Faturado parcial",
+  faturado: "Faturado",
+  sem_faturamento: "Sem faturamento",
+};
+
+function listaDeMeses(nomes: string[]): string {
+  if (nomes.length <= 1) return nomes.join("");
+  return `${nomes.slice(0, -1).join(", ")} e ${nomes[nomes.length - 1]}`;
+}
 
 /** Referência estável para o default: um `[]` novo a cada render mudaria
  *  as dependências dos `useMemo` abaixo. */
@@ -122,6 +142,9 @@ interface Props {
    *  acrescenta `&mes=`. Sem ele a régua não tem para onde navegar, e o
    *  job mensal aparece na planilha inteira. */
   hrefPlanilha?: string;
+  /** O envio e as notas de cada mês (entrega 3). Mês enviado trava errata
+   *  e save só nele. */
+  faturamentoMensal?: MesDeFaturamento[];
   /** "Nome do Job" do orçamento — base do nome da versão. */
   nomeJob: string;
   grupos: VersaoOrcamentoGrupo[];
@@ -184,6 +207,7 @@ export function JobRealizadoSection({
   meses = SEM_MESES,
   mesPedido,
   hrefPlanilha,
+  faturamentoMensal = SEM_FATURAMENTO_MENSAL,
 }: Props) {
   const router = useRouter();
 
@@ -315,11 +339,23 @@ export function JobRealizadoSection({
   // porta de `AlterarOrcadoButton`. O financeiro chega aqui com
   // `podeAcoes` falso e lê sem editar. Depois do envio para faturamento
   // as duas portas fecham juntas, pelo mesmo motivo.
-  const podeErrata = podeAcoes && !jaEnviadoParaFaturamento;
+  //
+  // Modelo mensal (decisão 078): a porta fecha por MÊS. Só as tabelas dos
+  // meses já enviados perdem errata e save; o botão da errata só trava
+  // quando todos os meses foram enviados.
+  const mesesEnviados = React.useMemo(
+    () => new Set(faturamentoMensal.filter((m) => m.envio !== null).map((m) => m.mesId)),
+    [faturamentoMensal],
+  );
+  const todosOsMesesEnviados =
+    faturamentoMensal.length > 0 && mesesEnviados.size === faturamentoMensal.length;
+  const podeErrata = podeAcoes && !jaEnviadoParaFaturamento && !todosOsMesesEnviados;
   const podeMexerNoSave = podeErrata;
   const motivoErrataTravada = jaEnviadoParaFaturamento
     ? "Job já enviado para faturamento: o valor da nota está congelado e não há mais errata. Fale com o financeiro antes da emissão da nota."
-    : null;
+    : todosOsMesesEnviados
+      ? "Todos os meses do job já foram enviados para faturamento: o valor das notas está congelado e não há mais errata."
+      : null;
 
   // Cmd+Z / Ctrl+Z desfaz um passo do rascunho da errata.
   //
@@ -423,6 +459,27 @@ export function JobRealizadoSection({
       : (dadosDosMeses.find((d) => d.chave === mesPedido) ??
         dadosDosMeses[0] ??
         null);
+  const faturamentoDoMes = new Map(faturamentoMensal.map((m) => [m.mesId, m]));
+  const faturadosNoTrimestre = faturamentoMensal.filter(
+    (m) => m.situacao === "faturado",
+  ).length;
+  // "Julho e agosto já foram enviados para faturamento: errata e save ficam
+  // travados nesses meses. Setembro continua editável." (design aprovado).
+  const avisoDosMesesEnviados = (() => {
+    if (!mensal || mesesEnviados.size === 0) return null;
+    const enviados = dadosDosMeses.filter((d) => mesesEnviados.has(d.mes.id));
+    const livres = dadosDosMeses.filter((d) => !mesesEnviados.has(d.mes.id));
+    const nomesEnviados = listaDeMeses(enviados.map((d) => nomeDoMes(d.mes.mes)));
+    const inicio = nomesEnviados.charAt(0).toUpperCase() + nomesEnviados.slice(1);
+    const parte1 =
+      enviados.length === 1
+        ? `${inicio} já foi enviado para faturamento: errata e save ficam travados nesse mês.`
+        : `${inicio} já foram enviados para faturamento: errata e save ficam travados nesses meses.`;
+    if (livres.length === 0) return parte1;
+    const nomesLivres = listaDeMeses(livres.map((d) => nomeDoMes(d.mes.mes)));
+    const livresInicio = nomesLivres.charAt(0).toUpperCase() + nomesLivres.slice(1);
+    return `${parte1} ${livresInicio} ${livres.length === 1 ? "continua editável" : "continuam editáveis"}.`;
+  })();
   const descricaoDosMeses =
     dadosDosMeses.length === 1
       ? rotuloMes(dadosDosMeses[0].mes.mes)
@@ -449,7 +506,11 @@ export function JobRealizadoSection({
   /** Uma tabela da planilha — a inteira, ou os grupos de um mês no modelo
    *  mensal. A errata é a MESMA em todos os recortes: o rascunho mora nesta
    *  seção, e cada tabela mostra só os grupos que recebe. */
-  function tabela(gruposDoTrecho: GrupoDoJob[], rotuloTotal?: string) {
+  function tabela(
+    gruposDoTrecho: GrupoDoJob[],
+    rotuloTotal?: string,
+    mesEnviado = false,
+  ) {
     // Um card para a planilha inteira — antes era um por grupo. Sem
     // `overflow-hidden`: a calha de ações precisa escapar do frame, e são
     // os filhos que arredondam os cantos.
@@ -483,9 +544,11 @@ export function JobRealizadoSection({
           onAlternarSave={() => setSaveLigado((v) => !v)}
           savePorItem={savePorItem}
           onAbrirSave={
-            podeMexerNoSave && !errata.ativo ? setLinhaSave : undefined
+            podeMexerNoSave && !errata.ativo && !mesEnviado
+                  ? setLinhaSave
+                  : undefined
           }
-          errata={podeErrata ? errata : undefined}
+          errata={podeErrata && !mesEnviado ? errata : undefined}
           orcadoVisivel={orcadoVisivel}
           rentabPlanejadaVisivel={rentabPlanejada}
           rentabRealizadaVisivel={rentabRealizada}
@@ -667,9 +730,12 @@ export function JobRealizadoSection({
               rotulo: "Trimestre",
               faturamento: dadosDosMeses.reduce((s, d) => s + d.faturamento, 0),
               resultadoGeral: null,
-              // O envio para faturamento por mês ainda não existe: nenhum
-              // mês foi faturado, e todos estão a enviar.
-              detalhe: "Nenhum mês faturado",
+              detalhe:
+                faturadosNoTrimestre === 0
+                  ? "Nenhum mês faturado"
+                  : `${faturadosNoTrimestre} de ${dadosDosMeses.length} ${
+                      dadosDosMeses.length === 1 ? "mês faturado" : "meses faturados"
+                    }`,
               href: `${hrefPlanilha}&mes=trimestre`,
             }}
             meses={dadosDosMeses.map((d) => ({
@@ -677,17 +743,27 @@ export function JobRealizadoSection({
               rotulo: rotuloMesCurto(d.mes.mes),
               faturamento: d.faturamento,
               resultadoGeral: d.resultadoGeral,
-              detalhe: "A enviar",
+              detalhe:
+                ROTULO_DA_SITUACAO[
+                  faturamentoDoMes.get(d.mes.id)?.situacao ?? "a_enviar"
+                ],
               href: `${hrefPlanilha}&mes=${d.chave}`,
             }))}
             selecionado={mesSelecionado?.mes.id ?? "trimestre"}
             editar={null}
           />
+          {avisoDosMesesEnviados && (
+            <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-800">
+              <Lock className="mt-0.5 h-3.5 w-3.5 flex-none" />
+              <span>{avisoDosMesesEnviados}</span>
+            </div>
+          )}
           {mesSelecionado ? (
             <>
               {tabela(
                 mesSelecionado.grupos,
                 `Total de ${nomeDoMes(mesSelecionado.mes.mes)}`,
+                mesesEnviados.has(mesSelecionado.mes.id),
               )}
               <DicasDeTeclado editavel={errata.ativo} />
               {cardDeTotais(
@@ -712,7 +788,11 @@ export function JobRealizadoSection({
                   resultadoOperacional: d.resultadoOperacional,
                   resultadoGeral: d.resultadoGeral,
                   href: `${hrefPlanilha}&mes=${d.chave}`,
-                  conteudo: tabela(d.grupos, `Total de ${nomeDoMes(d.mes.mes)}`),
+                  conteudo: tabela(
+                    d.grupos,
+                    `Total de ${nomeDoMes(d.mes.mes)}`,
+                    mesesEnviados.has(d.mes.id),
+                  ),
                 }))}
               />
               <DicasDeTeclado editavel={errata.ativo} />
