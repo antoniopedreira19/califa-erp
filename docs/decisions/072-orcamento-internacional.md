@@ -184,6 +184,15 @@ entre a versão do orçamento e a planilha interna do job — duas cópias
 divergiriam na primeira correção, como já aconteceu neste projeto com a
 legenda e com as cores de bloco.
 
+**Correção de 14/09/2026 — cabeçalho do job no financeiro.** O teste de
+ponta a ponta achou `financeiro/jobs/[jobId]/page.tsx` passando
+`deducoes={totaisJob.imposto}` ao resumo do topo: o "Resultado op.
+(planejado)" do JOB-0009 saía R$ 379.782,71 (38,8%) no financeiro e
+R$ 237.896,34 (24,3%) na página de Jobs — a diferença exata das int.
+taxes. Passou a ler `totaisJob.deducoesDoResultado`, o mesmo campo da
+página de Jobs. A aba Planilha Interna dos dois lados já estava certa; só
+o cabeçalho do financeiro divergia.
+
 ## A visão agregada: cada linha fecha pela sua cadeia (11/09/2026)
 
 Quarta entrega. Um projeto pode ter orçamento nacional e internacional
