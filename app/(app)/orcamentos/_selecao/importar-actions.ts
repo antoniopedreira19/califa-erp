@@ -19,7 +19,13 @@ import {
 } from "@/lib/importacao/diff-projeto";
 import { escolherJobDoFunil, estagioFunil } from "@/lib/calculos/funil";
 import { escolherVersaoVigente } from "@/lib/calculos/versao-vigente";
-import type { ImportacaoWarning, JobStatus, OrcamentoStatus, TipoCusto } from "@/lib/types";
+import type {
+  CategoriaModeloPlanilha,
+  ImportacaoWarning,
+  JobStatus,
+  OrcamentoStatus,
+  TipoCusto,
+} from "@/lib/types";
 import { cancelarAprovacaoVersao } from "../[projetoId]/[orcId]/versoes/actions";
 
 const BUCKET = "orcamento-importacoes";
@@ -99,6 +105,7 @@ interface OrcamentoRow {
   nome: string;
   status: OrcamentoStatus;
   versao_aprovada_id: string | null;
+  categoria: { modelo_planilha: CategoriaModeloPlanilha } | null;
 }
 
 interface VersaoRow {
@@ -112,6 +119,15 @@ interface VersaoRow {
   percentual_imposto: number | string;
   save_por_padrao: boolean;
   created_at: string;
+  // A cadeia internacional (decisão 072). Obrigatórios: é esta linha
+  // estreita que deixava a versão nova nascer sem eles.
+  percentual_int_taxes: number | string;
+  int_transaction_costs: number | string;
+  moeda_estrangeira: string | null;
+  cambio_compra: number | string | null;
+  cambio_cotacao: number | string | null;
+  cambio_venda: number | string | null;
+  cambio_data: string | null;
 }
 
 interface Analise {
@@ -193,7 +209,10 @@ async function analisar(
     ids.length > 0
       ? supabase
           .from("orcamentos")
-          .select("id, codigo, nome, status, versao_aprovada_id")
+          // `!categoria_id`: `orcamentos` tem duas FKs para `categorias_dominio`.
+          .select(
+            "id, codigo, nome, status, versao_aprovada_id, categoria:categorias_dominio!categoria_id(modelo_planilha)",
+          )
           .eq("projeto_id", projetoId)
           .eq("tenant_id", tenantId)
           .in("id", ids)
@@ -210,7 +229,9 @@ async function analisar(
           .from("versoes_orcamento")
           .select(
             "id, orcamento_id, numero_versao, status, moeda, taxa_cambio, " +
-              "percentual_honorarios, percentual_imposto, save_por_padrao, created_at",
+              "percentual_honorarios, percentual_imposto, save_por_padrao, created_at, " +
+              "percentual_int_taxes, int_transaction_costs, moeda_estrangeira, " +
+              "cambio_compra, cambio_cotacao, cambio_venda, cambio_data",
           )
           .eq("tenant_id", tenantId)
           .in("orcamento_id", ids)
@@ -218,7 +239,7 @@ async function analisar(
   ]);
 
   const orcamentos = new Map(
-    ((orcsRes.data ?? []) as OrcamentoRow[]).map((o) => [o.id, o]),
+    ((orcsRes.data ?? []) as unknown as OrcamentoRow[]).map((o) => [o.id, o]),
   );
   const jobsPorOrcamento = new Map<string, { status: JobStatus; created_at: string }[]>();
   for (const j of ((jobsRes.data ?? []) as any[])) {
@@ -227,7 +248,7 @@ async function analisar(
     jobsPorOrcamento.set(j.orcamento_id, atuais);
   }
   const versoesPorOrcamento = new Map<string, VersaoRow[]>();
-  for (const v of ((versoesRes.data ?? []) as VersaoRow[])) {
+  for (const v of ((versoesRes.data ?? []) as unknown as VersaoRow[])) {
     const atuais = versoesPorOrcamento.get(v.orcamento_id) ?? [];
     atuais.push(v);
     versoesPorOrcamento.set(v.orcamento_id, atuais);
@@ -338,6 +359,17 @@ async function analisar(
       return recusar("Orçamento repetido na planilha — só a primeira seção conta.");
     }
     jaVistos.add(orcamento.id);
+
+    // Planilha de um modelo não entra em orçamento de outro (decisão do
+    // Tiago, 14/09/2026): as colunas e a cadeia não são as mesmas.
+    const modeloDoOrcamento = orcamento.categoria?.modelo_planilha ?? "nacional";
+    if (modeloDoOrcamento !== leitura.modelo) {
+      return recusar(
+        leitura.modelo === "internacional"
+          ? "A planilha é internacional, e este orçamento é nacional — nada entra nele."
+          : "Este orçamento é internacional, e a planilha está no modelo nacional — nada entra nele.",
+      );
+    }
 
     const estagio = estagioFunil(
       orcamento.status,
@@ -499,6 +531,17 @@ export async function confirmarImportacaoProjeto(
         percentual_honorarios: num(vigente.percentual_honorarios),
         percentual_imposto: num(vigente.percentual_imposto),
         save_por_padrao: vigente.save_por_padrao === true,
+        // A cadeia internacional herda como o resto (decisão 072). Antes de
+        // 14/09/2026 ficava de fora, e um orçamento internacional perdia
+        // int. taxes, ITC e câmbio em silêncio a cada importação. No
+        // nacional são 0 e nulos — copiar é inofensivo.
+        percentual_int_taxes: num(vigente.percentual_int_taxes),
+        int_transaction_costs: num(vigente.int_transaction_costs),
+        moeda_estrangeira: vigente.moeda_estrangeira,
+        cambio_compra: vigente.cambio_compra,
+        cambio_cotacao: vigente.cambio_cotacao,
+        cambio_venda: vigente.cambio_venda,
+        cambio_data: vigente.cambio_data,
         created_by: session.profile.id,
       })
       .select("id")

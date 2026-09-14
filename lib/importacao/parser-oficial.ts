@@ -1,5 +1,9 @@
 import ExcelJS from "exceljs";
-import type { ImportacaoWarning, TipoCusto } from "@/lib/types";
+import type {
+  CategoriaModeloPlanilha,
+  ImportacaoWarning,
+  TipoCusto,
+} from "@/lib/types";
 import { TIPOS_CUSTO } from "@/lib/calculos/versao-totais";
 
 /**
@@ -48,6 +52,20 @@ import { TIPOS_CUSTO } from "@/lib/calculos/versao-totais";
  *      orçado zerado é o salvar do rascunho, na tela, não o parser.
  *   3. A coluna A só agrupa: `categoria_id` continua nascendo vazia.
  *   4. O % de honorários vem da coluna E da linha HONORÁRIOS (0,12 → 12).
+ *
+ * **Planilha internacional** (decisão 072, 14/09/2026): cabeçalho SHEET ·
+ * ITEM · TT USD · BRL · QT · D/M · TT BRL — a planilha modelo e a
+ * exportação do ERP. Lida por `lerLinhaInternacional`, com as regras do
+ * Tiago:
+ *   - SHEET (coluna A) é o agrupamento, como a CATEGORIA do nacional;
+ *   - o unitário é a D (BRL), QT a E, D/M a F; TT USD e TT BRL são
+ *     calculados e não são lidos;
+ *   - não há coluna de tipo: toda linha entra como **B · Bi-trib.** (a
+ *     conta do modelo), e o tipo se ajusta na tela;
+ *   - o PLANEJADO da planilha interna (H · R$, I · QT, J · D/M) entra como
+ *     no nacional — menos quando a H traz o id oculto da exportação;
+ *   - a leitura para no primeiro rótulo do fechamento (TOTAL, FEE…): o que
+ *     vem embaixo é fechamento, legenda e câmbio.
  *
  * Grupo vazio (nome que aparece numa linha de grupo mas em nenhum item) é
  * descartado no fim. É o que resolve o "CONTEUDO" sem acento da linha de
@@ -99,6 +117,9 @@ export interface ParseGrupo {
 
 export interface ParseResultado {
   aba: string;
+  /** De qual modelo é a planilha, pelo cabeçalho. Quem importa confere
+   *  contra o modelo do orçamento e recusa a troca (decisão 072). */
+  modelo: CategoriaModeloPlanilha;
   grupos: ParseGrupo[];
   warnings: ImportacaoWarning[];
   percentual_honorarios: number | null;
@@ -194,17 +215,34 @@ function semAcento(s: string): string {
  * Cabeçalho da planilha INTERNACIONAL (decisão 072): SHEET · ITEM · TT USD
  * · BRL · QT · D/M · TT BRL — a exportada pelo ERP e a planilha modelo.
  *
- * Ela passaria em `ehLinhaHeader` (ITEM, QT, D/M e TT batem), e as colunas
- * seriam lidas deslocadas: o total em moeda viraria valor unitário e o
- * TT BRL, tipo de custo. Até a importação internacional existir, o arquivo
- * é recusado inteiro em vez de importado errado.
+ * Ela também passa em `ehLinhaHeader` (ITEM, QT, D/M e TT batem): é esta
+ * checagem que decide qual leitura vale, porque as colunas são outras.
  */
-function ehLayoutInternacional(cells: string[]): boolean {
+export function ehLayoutInternacional(cells: string[]): boolean {
   return cells.slice(0, 8).some((c) => c.toLowerCase() === "tt brl");
 }
 
-export const MOTIVO_LAYOUT_INTERNACIONAL =
-  "Esta é a planilha do orçamento internacional (colunas TT USD · BRL · TT BRL). A importação dela ainda não está disponível — nada foi importado.";
+/**
+ * Por que a planilha não serve para este orçamento — ou `null`.
+ *
+ * A importação recusa planilha de um modelo em orçamento de outro
+ * (decisão do Tiago, 14/09/2026): as colunas não significam a mesma coisa,
+ * e a cadeia de fechamento também não.
+ */
+export function recusaPorModelo(
+  daPlanilha: CategoriaModeloPlanilha,
+  doOrcamento: CategoriaModeloPlanilha,
+): string | null {
+  if (daPlanilha === doOrcamento) return null;
+  return daPlanilha === "internacional"
+    ? "Esta é uma planilha internacional (SHEET · ITEM · TT USD · BRL · QT · D/M · TT BRL), e o orçamento é nacional. Nada foi importado."
+    : "Este orçamento é internacional, e a planilha está no modelo nacional. Envie a planilha internacional (SHEET · ITEM · TT USD · BRL · QT · D/M · TT BRL). Nada foi importado.";
+}
+
+/** Id oculto que a exportação grava na coluna H (`orc:`, `v:`, `grp:`, `it:`). */
+function ehMarcaDeId(h: string): boolean {
+  return /^(orc|v|grp|it):/.test(h);
+}
 
 function ehLinhaHeader(cells: string[]): boolean {
   const joined = cells.slice(0, 8).map((c) => c.toLowerCase()).join("|");
@@ -271,6 +309,7 @@ export async function parseOficial(
     return {
       aba: "",
       grupos: [],
+      modelo: "nacional",
       warnings: [
         {
           linha: 0,
@@ -293,6 +332,8 @@ export async function parseOficial(
 
   let headerEncontrado = false;
   let layoutInternacional = false;
+  /** Internacional: o fechamento encerra a leitura. */
+  let fimDaInternacional = false;
   let linhasLidas = 0;
   let linhasImportadas = 0;
   let linhasIgnoradas = 0;
@@ -307,8 +348,126 @@ export async function parseOficial(
     return novo;
   }
 
+  /** Unitário, QT ou D/M internacional, com as mesmas guardas do nacional:
+   *  unitário inválido ou negativo vira 0; QT e D/M precisam ser positivos
+   *  (CHECK do banco) e viram 1. */
+  function numeroDaLinha(
+    v: unknown,
+    bruto: string,
+    col: number,
+    rowNumber: number,
+    tipo: "unitario" | "quantidade" | "dias",
+  ): number {
+    const lido = toNumber(v);
+    const padrao = tipo === "unitario" ? 0 : 1;
+    const rotulo =
+      tipo === "unitario" ? "Valor unitário" : tipo === "quantidade" ? "Quantidade" : "Dias/meses";
+    const assumido = tipo === "unitario" ? "assumido R$ 0,00" : tipo === "quantidade" ? "assumida 1" : "assumido 1";
+    if (!lido.ok) {
+      if (bruto !== "") {
+        warnings.push({
+          linha: rowNumber,
+          coluna: letra(col),
+          motivo: `${rotulo} inválido ("${bruto}") — ${assumido}.`,
+          severidade: "ajuste",
+        });
+      }
+      return padrao;
+    }
+    const minimoOk = tipo === "unitario" ? lido.n >= 0 : lido.n > 0;
+    if (!minimoOk) {
+      warnings.push({
+        linha: rowNumber,
+        coluna: letra(col),
+        motivo:
+          tipo === "unitario"
+            ? `Valor unitário negativo (${bruto}) — assumido R$ 0,00.`
+            : `${rotulo} ${bruto || "0"} não é aceito (precisa ser maior que zero) — ${assumido}.`,
+        severidade: "ajuste",
+      });
+      return padrao;
+    }
+    return lido.n;
+  }
+
+  /** Uma linha da planilha internacional, depois do cabeçalho. */
+  function lerLinhaInternacional(cells: string[], row: ExcelJS.Row, rowNumber: number) {
+    const [colA, colB, colC, colD, colE, colF, , colH] = cells;
+
+    // Fechamento: A e B vazias e um rótulo em C (TOTAL, FEE, INT TAXES…).
+    // Nas linhas de item a C é o TT USD, que é número.
+    if (colA === "" && colB === "" && colC !== "" && !toNumber(row.getCell(3).value).ok) {
+      fimDaInternacional = true;
+      linhasIgnoradas++;
+      return;
+    }
+
+    const unitario = toNumber(row.getCell(4).value);
+
+    // GRUPO: sem unitário, com nome só na A (exportação e modelo) ou só na B.
+    const nomeSoEmUmaColuna = (colA === "") !== (colB === "");
+    if (!unitario.ok && nomeSoEmUmaColuna) {
+      grupoAtual = grupoPorNome(colA !== "" ? colA : colB);
+      viuLinhaDeGrupo = true;
+      linhasIgnoradas++;
+      return;
+    }
+    if (colA === "" && colB === "" && !unitario.ok) {
+      linhasIgnoradas++;
+      return;
+    }
+    // A coluna A é o grupo — sem nome na B não há item.
+    if (colB === "") {
+      warnings.push({
+        linha: rowNumber,
+        coluna: letra(2),
+        motivo: "Linha com valor mas sem nome de item na coluna B — descartada.",
+        severidade: "ignorada",
+      });
+      linhasIgnoradas++;
+      return;
+    }
+
+    if (colA !== "") {
+      grupoAtual = grupoPorNome(colA);
+    } else if (!grupoAtual) {
+      grupoAtual = grupoPorNome("Sem grupo");
+      warnings.push({
+        linha: rowNumber,
+        coluna: letra(1),
+        motivo:
+          "Item sem agrupamento na coluna A e sem grupo anterior — agrupado em 'Sem grupo'.",
+        severidade: "ajuste",
+      });
+    }
+
+    // Planejado só na planilha interna: na exportação a H é o id oculto e
+    // a I, o crédito consumido — nada disso é planejado.
+    const temPlanejado = !ehMarcaDeId(colH);
+    const planejado = (col: number) => {
+      const v = toNumber(row.getCell(col).value);
+      return temPlanejado && v.ok && v.n > 0 ? v.n : 0;
+    };
+
+    grupoAtual.itens.push({
+      ordem: grupoAtual.itens.length + 1,
+      item: colB,
+      // Sem coluna de tipo: B, a conta do modelo (decisão do Tiago).
+      tipo_custo: "B",
+      valor_unitario_orcado: numeroDaLinha(row.getCell(4).value, colD, 4, rowNumber, "unitario"),
+      quantidade_orcada: numeroDaLinha(row.getCell(5).value, colE, 5, rowNumber, "quantidade"),
+      dias_meses_orcado: numeroDaLinha(row.getCell(6).value, colF, 6, rowNumber, "dias"),
+      valor_unitario_planejado: planejado(8),
+      quantidade_planejada: planejado(9),
+      dias_meses_planejado: planejado(10),
+      planilha_origem: null,
+      linha_xlsx: rowNumber,
+    });
+    linhasImportadas++;
+  }
+
   ws.eachRow({ includeEmpty: false }, (row, rowNumber) => {
-    if (layoutInternacional) return;
+    if (fimDaInternacional) return;
     // Lê colunas A–L (12 colunas): até J basta para orçado + planejado, e as
     // duas a mais mantêm a checagem de "linha vazia" honesta.
     const cells: string[] = [];
@@ -325,6 +484,11 @@ export async function parseOficial(
         headerEncontrado = true;
         layoutInternacional = ehLayoutInternacional(cells);
       }
+      return;
+    }
+
+    if (layoutInternacional) {
+      lerLinhaInternacional(cells, row, rowNumber);
       return;
     }
 
@@ -509,18 +673,14 @@ export async function parseOficial(
     linhasImportadas++;
   });
 
-  if (layoutInternacional) {
-    return {
-      aba: ws.name,
-      grupos: [],
-      warnings: [
-        { linha: 0, motivo: MOTIVO_LAYOUT_INTERNACIONAL, severidade: "ignorada" },
-      ],
-      percentual_honorarios: null,
-      linhas_lidas: linhasLidas,
-      linhas_importadas: 0,
-      linhas_ignoradas: linhasLidas,
-    };
+  // Um aviso só, e não um por linha: a planilha internacional não tem
+  // coluna de tipo, então todas as linhas entraram como B.
+  if (layoutInternacional && linhasImportadas > 0) {
+    warnings.unshift({
+      linha: 0,
+      motivo: `A planilha internacional não tem coluna de tipo: ${linhasImportadas === 1 ? "a linha entrou" : `as ${linhasImportadas} linhas entraram`} como B · Bi-trib. Confira o tipo na tela.`,
+      severidade: "ajuste",
+    });
   }
 
   if (!headerEncontrado) {
@@ -550,6 +710,7 @@ export async function parseOficial(
 
   return {
     aba: ws.name,
+    modelo: layoutInternacional ? "internacional" : "nacional",
     grupos: gruposComItens,
     warnings,
     percentual_honorarios: percentualHonorarios,

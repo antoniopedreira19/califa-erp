@@ -3593,5 +3593,35 @@ tipo; crédito só quando houver. Detalhes e as decisões na
   "conserte" isso trocando por fórmula.
 - **O ExcelJS não grava cache de fórmula que dá zero** (a própria planilha
   modelo tem isso em F9). Quem lê o arquivo sem recalcular vê vazio, não 0.
-- **Importar a internacional é a próxima entrega.** Até lá, os parsers
-  recusam; não remova a recusa sem ter as colunas certas no lugar.
+- **A importação da internacional entrou em 14/09/2026** (nota abaixo): a
+  recusa desta nota foi trocada pela leitura das colunas certas.
+
+## ⚠️ Nota de 2026-09-14 — a planilha internacional importa, e aprovar exige câmbio (decisão 072)
+
+As três portas de importação leem a planilha internacional (versão, projeto
+e visão agregada), e a planilha de um modelo é recusada em orçamento do
+outro. Regras e conferência na
+[072](../decisions/072-orcamento-internacional.md).
+
+| Arquivo | O quê |
+|---|---|
+| `lib/importacao/parser-oficial.ts` | `lerLinhaInternacional`; `ParseResultado.modelo`; `recusaPorModelo` |
+| `lib/importacao/parser-projeto.ts` | colunas D/E/F no internacional; `ItemLido.tipo_custo` pode ser `null`; `LeituraProjeto.modelo` |
+| `lib/importacao/diff-projeto.ts` | tipo `null` → o da linha casada, ou B na nova |
+| `versoes/importar-actions.ts` | recusa por modelo nas três ações; versão nova internacional nasce com USD e int. taxes |
+| `_selecao/importar-actions.ts` | recusa por modelo por seção; a v+1 herda os sete campos internacionais |
+| `_rascunho/actions.ts` · `importar-planilha-modal.tsx` · `editor-agregado.tsx` | o modal manda o modelo esperado |
+| `versoes/importar-drawer.tsx` · `abas-versoes.tsx` · `[orcId]/page.tsx` | `modeloPlanilha` obrigatório no drawer e instruções por modelo |
+| `lib/validations/versoes.ts` · `versoes/actions.ts` · `fluxo-abertura.tsx` | `cambioInternacional` obrigatório em `bloqueioAprovacaoVersao` |
+
+### Armadilhas
+
+- **`tipo_custo` `null` só existe entre o parser do projeto e o diff.**
+  Quem grava lê `ItemPlanejado.tipo_custo`, que o diff sempre resolve.
+- **A H da planilha é ambígua**: planejado na planilha interna, id oculto
+  na exportação. O parser internacional só lê planejado quando a H não é
+  `orc:`/`v:`/`grp:`/`it:`. O nacional ainda lê a I da exportação (crédito
+  consumido) como quantidade planejada — defeito antigo, não corrigido
+  aqui.
+- **Campo novo da versão tem que entrar na v+1 da importação do projeto.**
+  Foi assim que as int. taxes sumiam: a lista de campos copiados é à mão.

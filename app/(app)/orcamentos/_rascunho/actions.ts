@@ -4,9 +4,10 @@ import { requireSession } from "@/lib/auth/session";
 import { extrairArquivoXlsx } from "@/lib/importacao/arquivo";
 import {
   parseOficial,
+  recusaPorModelo,
   type ParseResultado,
 } from "@/lib/importacao/parser-oficial";
-import type { ImportacaoWarning } from "@/lib/types";
+import type { CategoriaModeloPlanilha, ImportacaoWarning } from "@/lib/types";
 import type { GrupoPayload } from "./tipos";
 
 // ============================================================
@@ -51,6 +52,14 @@ export async function parsePlanilhaRascunho(
         "Não conseguimos ler o arquivo. Verifique se é a planilha padrão salva como .xlsx.",
     };
   }
+
+  // O editor manda o modelo do orçamento que recebe a planilha. Aqui nada
+  // é gravado, então o campo é conforto de tela: quem salva é o "Salvar
+  // orçamentos", que não lê este resultado.
+  const modeloEsperado: CategoriaModeloPlanilha =
+    formData.get("modelo_planilha") === "internacional" ? "internacional" : "nacional";
+  const recusa = recusaPorModelo(parsed.modelo, modeloEsperado);
+  if (recusa) return { ok: false, message: recusa };
 
   if (parsed.grupos.length === 0) {
     return {

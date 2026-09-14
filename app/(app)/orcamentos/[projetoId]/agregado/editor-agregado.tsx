@@ -1031,6 +1031,7 @@ export function EditorAgregado({
           open
           onOpenChange={(o) => !o && setModal(null)}
           codigo={codigos.get(orcImportando.id) ?? ""}
+          modeloPlanilha={orcImportando.modeloPlanilha}
           onImportado={(planilha) =>
             aplicarImportacao(orcImportando.id, planilha)
           }

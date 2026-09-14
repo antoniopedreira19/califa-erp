@@ -21,6 +21,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { TruncateTooltip } from "@/components/ui/truncate-tooltip";
 import { cn, formatCurrency } from "@/lib/utils";
+import type { CategoriaModeloPlanilha } from "@/lib/types";
 import {
   previewImportacao,
   confirmarImportacao,
@@ -44,6 +45,9 @@ export type ModoImportacao = "nova-versao" | "sobrescrever";
 interface Props {
   projetoId: string;
   orcamentoId: string;
+  /** Modelo do orçamento (decisão 072). Muda as instruções da tela; o
+   *  servidor recusa planilha do outro modelo. Obrigatório. */
+  modeloPlanilha: CategoriaModeloPlanilha;
   disabled?: boolean;
   disabledReason?: string;
   modo?: ModoImportacao;
@@ -67,6 +71,7 @@ type Stage = "select" | "loading" | "preview" | "saving";
 export function ImportarPlanilhaDrawer({
   projetoId,
   orcamentoId,
+  modeloPlanilha,
   disabled,
   disabledReason,
   modo = "nova-versao",
@@ -77,6 +82,7 @@ export function ImportarPlanilhaDrawer({
   semGatilho,
 }: Props) {
   const sobrescreve = modo === "sobrescrever";
+  const internacional = modeloPlanilha === "internacional";
   const router = useRouter();
   const [openInterno, setOpenInterno] = React.useState(false);
   const open = aberto ?? openInterno;
@@ -183,8 +189,9 @@ export function ImportarPlanilhaDrawer({
               : "Importar planilha de orçamento"}
           </DialogTitle>
           <DialogDescription>
-            Envie o arquivo .xlsx no formato padrão da agência (aba
-            &ldquo;Padrão&rdquo;).{" "}
+            {internacional
+              ? "Envie o arquivo .xlsx no modelo internacional (SHEET · ITEM · TT USD · BRL · QT · D/M · TT BRL). "
+              : <>Envie o arquivo .xlsx no formato padrão da agência (aba &ldquo;Padrão&rdquo;).{" "}</>}
             {sobrescreve
               ? "O conteúdo atual da versão será substituído pelo da planilha."
               : "Uma nova versão é criada em rascunho com os grupos e itens da planilha."}
@@ -205,7 +212,9 @@ export function ImportarPlanilhaDrawer({
                       Escolher arquivo .xlsx
                     </p>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      Até 5 MB · aba &ldquo;Padrão&rdquo; da planilha da agência
+                      {internacional
+                        ? "Até 5 MB · planilha internacional"
+                        : <>Até 5 MB · aba &ldquo;Padrão&rdquo; da planilha da agência</>}
                     </p>
                   </div>
                 </label>
@@ -220,6 +229,36 @@ export function ImportarPlanilhaDrawer({
 
                 <div className="rounded-xl border border-border bg-muted/30 p-4 text-xs text-muted-foreground space-y-1.5">
                   <p className="font-medium text-foreground">Como o parser lê:</p>
+                  {internacional ? (
+                    <ul className="list-disc pl-4 space-y-0.5">
+                      <li>
+                        <b>Grupo</b>: coluna A · SHEET, repetida em cada item ou numa
+                        linha de grupo.
+                      </li>
+                      <li>
+                        <b>Item</b>: coluna B com o nome do item.
+                      </li>
+                      <li>
+                        Colunas D · BRL (unitário), E · QT, F · D/M. TT USD e TT BRL
+                        são calculados e não são lidos.
+                      </li>
+                      <li>
+                        A planilha não tem tipo de custo: todo item entra como{" "}
+                        <b>B · Bi-trib.</b> — ajuste na tela depois.
+                      </li>
+                      <li>
+                        Item sem BRL entra com <b>R$ 0,00</b>; QT e D/M vazios ou zerados
+                        entram como 1, com aviso.
+                      </li>
+                      <li>
+                        Bloco <b>PLANEJADO</b> entra pelas colunas H · R$, I · QT, J · D/M.
+                      </li>
+                      <li>
+                        O fechamento (TOTAL, FEE, INT TAXES…) e o câmbio do rodapé são
+                        ignorados: câmbio e parâmetros são os da versão.
+                      </li>
+                    </ul>
+                  ) : (
                   <ul className="list-disc pl-4 space-y-0.5">
                     <li>
                       <b>Grupo</b>: coluna A · CATEGORIA, repetida em cada item. É ela
@@ -246,6 +285,7 @@ export function ImportarPlanilhaDrawer({
                       são ignorados. De <b>HONORÁRIOS</b> sai só o percentual (coluna E).
                     </li>
                   </ul>
+                  )}
                 </div>
 
                 {erro && (

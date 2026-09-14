@@ -22,6 +22,7 @@ import {
 } from "@/lib/validations/itens";
 import { grupoSchema } from "@/lib/validations/grupos";
 import type {
+  CategoriaModeloPlanilha,
   TipoCusto,
   VersaoOrcamento,
   VersaoOrcamentoGrupo,
@@ -1288,7 +1289,9 @@ export async function aprovarVersao(versaoId: string): Promise<ActionResult> {
   // 1. Fetch versão + orçamento (com projeto_id pra revalidatePath)
   const { data: versao, error: errVer } = await supabase
     .from("versoes_orcamento")
-    .select("id, status, orcamento_id, tenant_id, percentual_imposto")
+    .select(
+      "id, status, orcamento_id, tenant_id, percentual_imposto, moeda_estrangeira, cambio_compra, cambio_cotacao, cambio_venda, cambio_data",
+    )
     .eq("id", versaoId)
     .eq("tenant_id", session.activeTenant.id)
     .maybeSingle<{
@@ -1297,6 +1300,11 @@ export async function aprovarVersao(versaoId: string): Promise<ActionResult> {
       orcamento_id: string;
       tenant_id: string;
       percentual_imposto: number;
+      moeda_estrangeira: string | null;
+      cambio_compra: number | string | null;
+      cambio_cotacao: number | string | null;
+      cambio_venda: number | string | null;
+      cambio_data: string | null;
     }>();
 
   if (errVer || !versao) {
@@ -1314,10 +1322,15 @@ export async function aprovarVersao(versaoId: string): Promise<ActionResult> {
   // 2. Fetch orçamento pra validar status + projeto_id
   const { data: orc } = await supabase
     .from("orcamentos")
-    .select("status, projeto_id")
+    // `!categoria_id`: `orcamentos` tem duas FKs para `categorias_dominio`.
+    .select("status, projeto_id, categoria:categorias_dominio!categoria_id(modelo_planilha)")
     .eq("id", versao.orcamento_id)
     .eq("tenant_id", session.activeTenant.id)
-    .maybeSingle<{ status: string; projeto_id: string }>();
+    .maybeSingle<{
+      status: string;
+      projeto_id: string;
+      categoria: { modelo_planilha: CategoriaModeloPlanilha } | null;
+    }>();
 
   if (!orc) {
     return { ok: false, message: "Orçamento não encontrado." };
@@ -1361,6 +1374,17 @@ export async function aprovarVersao(versaoId: string): Promise<ActionResult> {
   // versão", para a tela e o servidor nunca discordarem do motivo.
   const bloqueio = bloqueioAprovacaoVersao({
     percentualImposto: Number(versao.percentual_imposto),
+    // Internacional exige o câmbio inteiro (decisão 072, 14/09/2026).
+    cambioInternacional:
+      orc.categoria?.modelo_planilha === "internacional"
+        ? {
+            moeda: versao.moeda_estrangeira,
+            compra: versao.cambio_compra,
+            cotacao: versao.cambio_cotacao,
+            venda: versao.cambio_venda,
+            data: versao.cambio_data,
+          }
+        : null,
     qtdItens: itensCount ?? 0,
     qtdItensComValor: comValorCount ?? 0,
     qtdItensOrcadoZerado: orcadoZeradoCount ?? 0,
