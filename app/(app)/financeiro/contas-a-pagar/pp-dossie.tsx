@@ -368,9 +368,18 @@ function Historico({ pp }: { pp: PPRow }) {
               guardar quais documentos estavam anexados.
             </p>
           ) : conferidos.length === 0 ? (
-            <p className="mt-1 text-[11px] font-semibold text-california-red">
-              Aprovada sem nenhum documento anexado.
-            </p>
+            // Verba de produção sai sem nota — as notas vêm na prestação de
+            // contas —, então nela "sem documento" é o normal e não leva o
+            // vermelho de alerta (Tiago, 14/09/2026).
+            pp.verba_producao ? (
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Aprovada sem documento — PP de verba de produção.
+              </p>
+            ) : (
+              <p className="mt-1 text-[11px] font-semibold text-california-red">
+                Aprovada sem nenhum documento anexado.
+              </p>
+            )
           ) : (
             <ul className="mt-1 space-y-0.5">
               {conferidos.map((a) => (
