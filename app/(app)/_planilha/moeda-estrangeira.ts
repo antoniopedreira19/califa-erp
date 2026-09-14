@@ -79,3 +79,22 @@ export function emMoedaEstrangeira(
     ? "—"
     : `${moeda?.codigo ?? ""} ${v.toLocaleString("pt-BR", FORMATO)}`.trim();
 }
+
+/**
+ * A identidade do câmbio de uma versão internacional: moeda + taxa de
+ * compra. Dois orçamentos com chaves diferentes não saem na mesma planilha
+ * exportada — ela tem UMA coluna de moeda e UM câmbio no rodapé (decisão
+ * 072, 14/09/2026). O seletor de exportação e a rota comparam por aqui,
+ * para as duas travas não divergirem.
+ */
+export function chaveDoCambio(
+  moeda: string | null | undefined,
+  compra: number | string | null | undefined,
+): string {
+  const codigo = (moeda ?? "").trim().toUpperCase();
+  const taxa =
+    compra === null || compra === undefined || compra === ""
+      ? ""
+      : Number(compra).toFixed(4);
+  return `${codigo}|${taxa}`;
+}

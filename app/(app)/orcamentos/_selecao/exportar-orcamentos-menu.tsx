@@ -36,6 +36,10 @@ export interface OrcamentoExportavel {
    *  Obrigatório — quem monta o seletor tem que dizer, e não deixar um
    *  default liberar a mistura em silêncio. */
   modeloPlanilha: CategoriaModeloPlanilha;
+  /** Moeda + taxa de compra da versão que sai (`chaveDoCambio`), `null`
+   *  no nacional. Internacionais com chaves diferentes não saem juntos: a
+   *  planilha tem uma coluna de moeda e um câmbio só (decisão 072). */
+  chaveCambio: string | null;
 }
 
 interface Props {
@@ -54,6 +58,9 @@ interface Props {
  *   trava e um aviso oferece desmarcar de uma vez.
  * - **Aprovado pede confirmação.** A planilha sai da versão aprovada
  *   vigente, e quem exporta confirma que é isso que quer.
+ * - **Internacionais só saem juntos com a mesma moeda e a mesma taxa
+ *   de compra** (decisão 072, 14/09/2026): a planilha tem uma coluna de
+ *   moeda e um câmbio no rodapé.
  * - **Nacional e internacional não se misturam** (decisão 072,
  *   12/09/2026). São documentos diferentes para o cliente — fechamento,
  *   moeda e câmbio próprios —, e um FATURAMENTO único somando os dois não
@@ -100,7 +107,11 @@ export function ExportarOrcamentosMenu({ projetoId, orcamentos }: Props) {
   // misturar, e um modelo novo amanhã entra nela sem mexer aqui.
   const travadoPorMistura =
     new Set(marcados.map((o) => o.modeloPlanilha)).size > 1;
-  const travado = travadoPorAberto || travadoPorMistura;
+  // Só depois da mistura: com nacional marcado o aviso certo é o de cima.
+  const travadoPorCambio =
+    !travadoPorMistura &&
+    new Set(internacionaisMarcados.map((o) => o.chaveCambio ?? "")).size > 1;
+  const travado = travadoPorAberto || travadoPorMistura || travadoPorCambio;
   const semSelecao = marcados.length === 0;
 
   const href = `/api/orcamentos/${projetoId}/export?orcamentos=${marcados
@@ -299,6 +310,17 @@ export function ExportarOrcamentosMenu({ projetoId, orcamentos }: Props) {
                       </button>
                     </div>
                   </div>
+                </div>
+              )}
+
+              {travadoPorCambio && (
+                <div className="mx-2 mb-2 flex gap-2 rounded-lg border border-california-red/25 bg-california-red/5 px-2.5 py-2">
+                  <Lock className="mt-0.5 h-[13px] w-[13px] flex-none text-california-red" />
+                  <span className="text-[11.5px] leading-relaxed text-[#a8323d] [text-wrap:pretty]">
+                    Orçamentos internacionais com moeda ou câmbio de compra
+                    diferentes não saem na mesma planilha: ela tem uma coluna
+                    de moeda e um câmbio só. Exporte-os separadamente.
+                  </span>
                 </div>
               )}
 

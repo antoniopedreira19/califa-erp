@@ -190,6 +190,22 @@ function semAcento(s: string): string {
 
 // ---------- helpers de classificação ----------
 
+/**
+ * Cabeçalho da planilha INTERNACIONAL (decisão 072): SHEET · ITEM · TT USD
+ * · BRL · QT · D/M · TT BRL — a exportada pelo ERP e a planilha modelo.
+ *
+ * Ela passaria em `ehLinhaHeader` (ITEM, QT, D/M e TT batem), e as colunas
+ * seriam lidas deslocadas: o total em moeda viraria valor unitário e o
+ * TT BRL, tipo de custo. Até a importação internacional existir, o arquivo
+ * é recusado inteiro em vez de importado errado.
+ */
+function ehLayoutInternacional(cells: string[]): boolean {
+  return cells.slice(0, 8).some((c) => c.toLowerCase() === "tt brl");
+}
+
+export const MOTIVO_LAYOUT_INTERNACIONAL =
+  "Esta é a planilha do orçamento internacional (colunas TT USD · BRL · TT BRL). A importação dela ainda não está disponível — nada foi importado.";
+
 function ehLinhaHeader(cells: string[]): boolean {
   const joined = cells.slice(0, 8).map((c) => c.toLowerCase()).join("|");
   const hits = KEYWORDS_HEADER.filter((k) => joined.includes(k)).length;
@@ -276,6 +292,7 @@ export async function parseOficial(
   let percentualHonorarios: number | null = null;
 
   let headerEncontrado = false;
+  let layoutInternacional = false;
   let linhasLidas = 0;
   let linhasImportadas = 0;
   let linhasIgnoradas = 0;
@@ -291,6 +308,7 @@ export async function parseOficial(
   }
 
   ws.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+    if (layoutInternacional) return;
     // Lê colunas A–L (12 colunas): até J basta para orçado + planejado, e as
     // duas a mais mantêm a checagem de "linha vazia" honesta.
     const cells: string[] = [];
@@ -303,7 +321,10 @@ export async function parseOficial(
 
     // Header?
     if (!headerEncontrado) {
-      if (ehLinhaHeader(cells)) headerEncontrado = true;
+      if (ehLinhaHeader(cells)) {
+        headerEncontrado = true;
+        layoutInternacional = ehLayoutInternacional(cells);
+      }
       return;
     }
 
@@ -487,6 +508,20 @@ export async function parseOficial(
     });
     linhasImportadas++;
   });
+
+  if (layoutInternacional) {
+    return {
+      aba: ws.name,
+      grupos: [],
+      warnings: [
+        { linha: 0, motivo: MOTIVO_LAYOUT_INTERNACIONAL, severidade: "ignorada" },
+      ],
+      percentual_honorarios: null,
+      linhas_lidas: linhasLidas,
+      linhas_importadas: 0,
+      linhas_ignoradas: linhasLidas,
+    };
+  }
 
   if (!headerEncontrado) {
     warnings.push({
