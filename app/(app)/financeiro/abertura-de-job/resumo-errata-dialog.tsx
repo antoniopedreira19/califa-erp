@@ -1,7 +1,12 @@
 "use client";
 
 /**
- * O resumo da errata, no mural de abertura.
+ * O resumo das erratas, no mural de abertura.
+ *
+ * Desde 14/09/2026 (decisão do Tiago) mostra TODAS as erratas que a
+ * revisão vai tratar — as registradas depois da última foto da abertura —,
+ * com o efeito somado no topo e cada uma listada embaixo. Antes mostrava só
+ * a última, e a primeira de duas erratas sumia da conferência.
  *
  * É só o essencial para o financeiro decidir se entra na revisão agora — o
  * detalhe linha a linha fica na planilha do job. A conferência de valores
@@ -77,6 +82,38 @@ function Par({
   );
 }
 
+/** "1 alterada · 2 novas · 0 removidas". */
+function linhasAfetadas(l: {
+  linhasAlteradas: number;
+  linhasNovas: number;
+  linhasRemovidas: number;
+}): string {
+  return (
+    `${l.linhasAlteradas} alterada${l.linhasAlteradas === 1 ? "" : "s"} · ` +
+    `${l.linhasNovas} nova${l.linhasNovas === 1 ? "" : "s"} · ` +
+    `${l.linhasRemovidas} removida${l.linhasRemovidas === 1 ? "" : "s"}`
+  );
+}
+
+/** O efeito de uma errata num número: "+R$ 2.243,47", na cor do delta. */
+function Delta({
+  antes,
+  depois,
+}: {
+  antes: number | null;
+  depois: number | null;
+}) {
+  if (antes === null || depois === null) return <span>não registrado</span>;
+  const delta = depois - antes;
+  return (
+    <span className={cn("font-mono font-bold", corDoDelta(delta))}>
+      {delta === 0
+        ? formatCurrency(0)
+        : `${delta > 0 ? "+" : "−"}${formatCurrency(Math.abs(delta))}`}
+    </span>
+  );
+}
+
 export function ResumoErrataDialog({
   job,
   onOpenChange,
@@ -85,6 +122,8 @@ export function ResumoErrataDialog({
   onOpenChange: (aberto: boolean) => void;
 }) {
   const r = job?.revisao ?? null;
+  const quantas = r?.erratas.length ?? 0;
+  const unica = quantas === 1 ? r!.erratas[0] : null;
 
   return (
     <Dialog open={job !== null && r !== null} onOpenChange={onOpenChange}>
@@ -98,27 +137,36 @@ export function ResumoErrataDialog({
                 </div>
                 <div className="min-w-0">
                   <DialogTitle className="text-[19px]">
-                    Resumo da errata
+                    {quantas > 1
+                      ? `Resumo das ${quantas} erratas`
+                      : "Resumo da errata"}
                   </DialogTitle>
                   <DialogDescription className="pt-1.5 text-[13px] leading-relaxed">
                     <span className="font-mono font-semibold text-[#b3323c]">
                       {job.codigo}
                     </span>{" "}
-                    {job.nome} · {r.autorNome ?? "—"} · {dataHora(r.em)}
+                    {job.nome}
+                    {unica
+                      ? ` · ${unica.autorNome ?? "—"} · ${dataHora(unica.em)}`
+                      : quantas > 1
+                        ? ` · desde ${dataHora(r.erratas[0].em)}`
+                        : ""}
                   </DialogDescription>
                 </div>
               </div>
             </DialogHeader>
 
             <div className="space-y-4 pt-1">
-              <div className="rounded-xl border border-border bg-muted/30 px-3.5 py-3">
-                <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
-                  Descrição
-                </p>
-                <p className="mt-1 text-[12.5px] italic leading-relaxed text-foreground">
-                  “{r.descricao}”
-                </p>
-              </div>
+              {unica && (
+                <div className="rounded-xl border border-border bg-muted/30 px-3.5 py-3">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
+                    Descrição
+                  </p>
+                  <p className="mt-1 text-[12.5px] italic leading-relaxed text-foreground">
+                    “{unica.descricao}”
+                  </p>
+                </div>
+              )}
 
               <div className="rounded-xl border border-border px-3.5 py-2">
                 <Par
@@ -136,13 +184,46 @@ export function ResumoErrataDialog({
                     Linhas afetadas
                   </span>
                   <span className="text-[12.5px] font-semibold text-foreground">
-                    {r.linhasAlteradas} alterada
-                    {r.linhasAlteradas === 1 ? "" : "s"} · {r.linhasNovas} nova
-                    {r.linhasNovas === 1 ? "" : "s"} · {r.linhasRemovidas}{" "}
-                    removida{r.linhasRemovidas === 1 ? "" : "s"}
+                    {linhasAfetadas(r)}
                   </span>
                 </div>
               </div>
+
+              {/* Com mais de uma, cada errata na ordem em que aconteceu —
+                  o topo é o efeito somado, isto é o que aconteceu. */}
+              {quantas > 1 && (
+                <div className="rounded-xl border border-border">
+                  <p className="border-b border-border px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
+                    Erratas desta revisão · da mais antiga à mais recente
+                  </p>
+                  <ol className="divide-y divide-border">
+                    {r.erratas.map((e, i) => (
+                      <li key={e.errataId} className="px-3.5 py-2.5">
+                        <p className="text-[12.5px] leading-relaxed text-foreground">
+                          <span className="font-mono text-[11.5px] font-bold text-muted-foreground">
+                            {i + 1}.
+                          </span>{" "}
+                          <span className="italic">“{e.descricao}”</span>
+                        </p>
+                        <p className="mt-0.5 text-[11.5px] text-muted-foreground">
+                          {e.autorNome ?? "—"} · {dataHora(e.em)} ·{" "}
+                          {linhasAfetadas(e)}
+                        </p>
+                        <p className="mt-0.5 flex flex-wrap gap-x-3 text-[11.5px] text-muted-foreground">
+                          <span>
+                            faturamento{" "}
+                            <Delta antes={e.faturamentoAntes} depois={e.faturamentoDepois} />
+                          </span>
+                          <span>
+                            valor do job{" "}
+                            <Delta antes={e.valorJobAntes} depois={e.valorJobDepois} />
+                          </span>
+                        </p>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              )}
 
               <p className="text-[12px] leading-relaxed text-muted-foreground">
                 Na tela de abertura você reconfere{" "}
@@ -157,6 +238,9 @@ export function ResumoErrataDialog({
                 <strong className="font-semibold text-foreground">
                   competência
                 </strong>
+                {quantas > 1
+                  ? " sobre os números depois de todas as erratas acima"
+                  : ""}
                 . O formulário já abre editável, e termina em &ldquo;Registrar
                 revisão de abertura&rdquo;. O job segue aberto; o faturamento
                 fica bloqueado até a revisão ser registrada.

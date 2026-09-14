@@ -5010,3 +5010,30 @@ era a PP-00058 (verba, Projeto Teste).
    ao faturamento, saldo a faturar e itens sem marcação. Uma verba paga sem
    prestação de contas, ou com devolução ainda não baixada, não impede
    encerrar.
+
+## ⚠️ Nota de 2026-09-14 — a revisão da abertura mostra todas as erratas pendentes (decisão 059)
+
+| Arquivo | O quê |
+|---|---|
+| `abertura-de-job/dados.ts` | `RevisaoDeErrata` passa a ter `erratas: ErrataDaRevisao[]` e os totais da primeira à última; `revisoesPendentes` (duas queries para a fila inteira) e `revisaoPendenteDoJob` substituem `revisaoDeErrata`; job em revisão fica na faixa "Erratas" mesmo sem conseguir ler as erratas |
+| `abertura-de-job/resumo-errata-dialog.tsx` | "Resumo das N erratas" com o efeito somado e a lista |
+| `abertura-de-job/[jobId]/historico-abertura.tsx` | faixa da revisão com todas; histórico e foto em leitura com `foto.erratas` |
+| `abertura-de-job/fotos.ts` · `lib/types.ts` | `FotoDaAbertura.erratas` (lista) no lugar de `errata` — as da janela entre a foto anterior e esta |
+| `abertura-de-job/actions.ts` | auditoria com `erratas_ids` |
+| `financeiro/jobs/[jobId]/page.tsx` | lê a revisão pendente pelo job |
+| `jobs/[jobId]/realizado/actions-errata.ts` · `save-errata-actions.ts` | `abertura_revisao_desde` só é gravado na primeira errata pendente |
+
+### Armadilhas
+
+- **"Pendente" é janela de data, não coluna.** Quem criar um caminho que
+  grave foto em `jobs_aberturas` sem ser abertura ou revisão fecha a
+  janela e esconde erratas ainda não conferidas.
+- **`abertura_revisao_errata_id` continua sendo só a última.** Não use
+  para listar o que a revisão trata.
+
+Junto, a pedido do Tiago: o card "versões aguardando revisão" da home do
+GP (`lib/home/carregar.ts`) usava `orcamentos!inner` a partir de
+`versoes_orcamento` — o mesmo embed ambíguo da errata — e voltava 300
+(contagem vazia). Virou `orcamentos!orcamento_id!inner`; conferido no
+navegador com a mesma consulta: 200 e 1 versão, contra 300 da antiga.
+

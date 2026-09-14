@@ -529,7 +529,11 @@ export async function carregarHomeGerenteProducao(
     // "enviada_cliente" EXISTE no enum — incluido agora
     supabase
       .from("versoes_orcamento")
-      .select("id, orcamento:orcamentos!inner(gp_responsavel_id)", {
+      // `!orcamento_id`: há duas FKs entre `versoes_orcamento` e
+      // `orcamentos` (a `orcamento_id` e a `orcamentos.versao_aprovada_id`).
+      // Sem a dica o PostgREST responde 300 por ambiguidade e o card
+      // contava nada (corrigido em 14/09/2026).
+      .select("id, orcamento:orcamentos!orcamento_id!inner(gp_responsavel_id)", {
         count: "exact",
         head: true,
       })

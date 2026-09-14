@@ -152,7 +152,7 @@ export async function fotosDaAbertura(
     new Set([...ids("categoria_id"), ...ids("servico_id")]),
   );
   const perfilIds = ids("registrado_por");
-  const errataIds = ids("errata_id");
+  const temRevisao = linhas.some((l) => l.tipo === "revisao_errata");
 
   const vazio = Promise.resolve({ data: [] as any[], error: null });
   const [projetosRes, contasRes, dominioRes, perfisRes, erratasRes] =
@@ -178,8 +178,16 @@ export async function fotosDaAbertura(
       perfilIds.length
         ? supabase.from("profiles").select("id, nome").in("id", perfilIds)
         : vazio,
-      errataIds.length
-        ? supabase.from("jobs_erratas").select("id, titulo").in("id", errataIds)
+      // Todas as erratas do job: cada revisão mostra as que aconteceram
+      // entre a foto anterior e ela — não só a última, que é a única
+      // que a coluna `errata_id` guarda.
+      temRevisao
+        ? supabase
+            .from("jobs_erratas")
+            .select("id, titulo, created_at")
+            .eq("tenant_id", tenantId)
+            .eq("job_id", jobId)
+            .order("created_at", { ascending: true })
         : vazio,
     ]);
 
@@ -201,9 +209,27 @@ export async function fotosDaAbertura(
   const perfis = new Map(
     ((perfisRes.data ?? []) as any[]).map((p) => [p.id as string, p.nome as string]),
   );
-  const erratas = new Map(
-    ((erratasRes.data ?? []) as any[]).map((e) => [e.id as string, e.titulo as string]),
-  );
+  const erratasDoJob = ((erratasRes.data ?? []) as any[]).map((e) => ({
+    id: e.id as string,
+    titulo: e.titulo as string,
+    em: new Date(e.created_at as string).getTime(),
+  }));
+  /** As erratas que a foto `i` tratou: depois da foto anterior e até ela.
+   *  Sem nenhuma na janela (dado anterior a esta regra), cai na única que
+   *  a coluna guardou. */
+  const erratasDaFoto = (i: number): { id: string; titulo: string }[] => {
+    const l = linhas[i];
+    if (l.tipo !== "revisao_errata") return [];
+    const ate = new Date(l.registrado_em as string).getTime();
+    const desde =
+      i > 0 ? new Date(linhas[i - 1].registrado_em as string).getTime() : -Infinity;
+    const naJanela = erratasDoJob
+      .filter((e) => e.em > desde && e.em <= ate)
+      .map(({ id, titulo }) => ({ id, titulo }));
+    if (naJanela.length > 0) return naJanela;
+    const guardada = erratasDoJob.find((e) => e.id === l.errata_id);
+    return guardada ? [{ id: guardada.id, titulo: guardada.titulo }] : [];
+  };
 
   const previsao = (v: unknown): LinhaPrevisaoFoto[] =>
     Array.isArray(v)
@@ -213,7 +239,7 @@ export async function fotosDaAbertura(
         }))
       : [];
 
-  return linhas.map((l) => ({
+  return linhas.map((l, i) => ({
     id: l.id as string,
     numero: Number(l.numero),
     tipo: l.tipo as TipoFotoAbertura,
@@ -223,9 +249,7 @@ export async function fotosDaAbertura(
     registradoPorNome: l.registrado_por
       ? (perfis.get(l.registrado_por) ?? null)
       : null,
-    errata: l.errata_id
-      ? { id: l.errata_id as string, titulo: erratas.get(l.errata_id) ?? "" }
-      : null,
+    erratas: erratasDaFoto(i),
     nomeFinanceiro: (l.nome_financeiro as string | null) ?? null,
     projetoLabel: l.projeto_financeiro_id
       ? (projetos.get(l.projeto_financeiro_id) ?? null)

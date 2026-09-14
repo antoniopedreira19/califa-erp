@@ -75,7 +75,7 @@ export async function registrarErrataDeSave(
   const { data: job, error: jobErr } = await supabase
     .from("jobs")
     .select(
-      "id, status, data_abertura_financeiro, versao:versoes_orcamento!jobs_versao_orcamento_aprovada_id_fkey(percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra), orcamento:orcamentos(categoria:categorias_dominio!categoria_id(modelo_planilha))",
+      "id, status, data_abertura_financeiro, abertura_em_revisao, versao:versoes_orcamento!jobs_versao_orcamento_aprovada_id_fkey(percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra), orcamento:orcamentos(categoria:categorias_dominio!categoria_id(modelo_planilha))",
     )
     .eq("id", jobId)
     .eq("tenant_id", tenantId)
@@ -83,6 +83,7 @@ export async function registrarErrataDeSave(
       id: string;
       status: string;
       data_abertura_financeiro: string | null;
+      abertura_em_revisao: boolean | null;
       versao:
         | {
             percentual_honorarios: number;
@@ -344,7 +345,11 @@ export async function registrarErrataDeSave(
       ...(devolveAoMural
         ? {
             abertura_em_revisao: true,
-            abertura_revisao_desde: new Date().toISOString(),
+            // "Desde" é a PRIMEIRA errata ainda não revisada — a revisão
+            // trata todas (decisão do Tiago, 14/09/2026).
+            ...(job.abertura_em_revisao === true
+              ? {}
+              : { abertura_revisao_desde: new Date().toISOString() }),
             abertura_revisao_errata_id: errata.id,
           }
         : {}),
