@@ -11,6 +11,8 @@ import {
   AlertTriangle,
   Pencil,
   Plus,
+  Lock,
+  Send,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Dialog, DrawerContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -30,6 +32,7 @@ import {
   PP_ANEXO_MIMETYPES_ACEITOS,
   PP_ANEXO_TAMANHO_MAX_BYTES,
   PP_ANEXOS_TAMANHO_TOTAL_MAX_BYTES,
+  PP_URGENTE_JUSTIFICATIVA_MIN,
   type PPAnexoMimetype,
   type DocumentoDoAnexo,
   type Fornecedor,
@@ -40,15 +43,28 @@ import {
   dividirEmParcelas,
   parcelasFecham,
   passaDoPlanejado,
-  proximoVencimento,
+  faltaParaFecharOOrcado,
 } from "@/lib/calculos/pps-item";
+import {
+  ehJanelaDePagamento,
+  hojeEmSaoPauloIso,
+  janelaSeguinte,
+  vencimentosNasJanelas,
+} from "@/lib/calculos/janelas-pagamento";
 import { carregarFornecedor } from "@/app/(app)/fornecedores/actions";
 import {
   reservarPedidoCompra,
   finalizarPedidoCompra,
   prefixoAnexosPedidoCompra,
   editarPedidoCompraGerada,
+  enviarPedidoCompraAoFinanceiro,
 } from "./actions-pp";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import {
+  AvisoPrazoForaDaJanela,
+  UrgenciaPPField,
+  diaForaDaJanela,
+} from "./prazo-e-urgencia-pp";
 import { NovoFornecedorDialog } from "@/app/(app)/fornecedores/novo-fornecedor-dialog";
 import type { FornecedorResumo } from "@/app/(app)/fornecedores/actions";
 
@@ -91,7 +107,21 @@ interface Props {
    *  zero, porque gerar PP num item marcado exige reabri-lo antes
    *  (decisão 052). */
   itemConcluido: boolean;
-  onSuccess?: (codigo: string, modo: "gerada" | "editada") => void;
+  /** Por que o envio ao financeiro está fechado neste job — o mesmo texto
+   *  do painel do item (decisões 040 e 056). Null = liberado, e o rodapé
+   *  oferece "Gerar e enviar ao financeiro" (decisão 077). */
+  envioBloqueadoPor: string | null;
+  /** O orçado que as PPs do item precisam fechar antes de ir ao
+   *  financeiro — só no AR fora do save (decisão 062). Null = o item não
+   *  tem essa trava. */
+  orcadoAFechar: number | null;
+  /** `aviso` chega quando a PP foi salva mas o envio pedido junto não
+   *  saiu: ela segue gerada, e a frase diz por quê. */
+  onSuccess?: (
+    codigo: string,
+    modo: "gerada" | "editada" | "enviada",
+    aviso?: string,
+  ) => void;
 }
 
 /** Uma linha do parcelamento no formulário. */
@@ -116,6 +146,10 @@ import { DocumentoDoAnexoField } from "@/components/financeiro/documento-do-anex
 
 const BUCKET = "pedidos-compra";
 
+/** O teto do servidor (decisão 077, pergunta 7a): 1 a 6 nos botões e
+ *  "Mais de 6…" até 24. */
+const MAX_PARCELAS = 24;
+
 function sanitizeName(name: string): string {
   return name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 100);
 }
@@ -125,14 +159,18 @@ function iconePorMime(mime: string): typeof FileText {
   return FileText;
 }
 
+/** A primeira janela de pagamento depois de hoje (decisão 077). Era hoje
+ *  + 15 dias, uma data que quase nunca caía numa janela. */
 function defaultPrazoPagamento(): string {
-  const d = new Date();
-  d.setDate(d.getDate() + 15);
-  return format(d, "yyyy-MM-dd");
+  return janelaSeguinte(hojeEmSaoPauloIso());
 }
 
 function dateToIso(date: Date | null): string {
   return date ? format(date, "yyyy-MM-dd") : "";
+}
+
+function isoParaBr(iso: string): string {
+  return iso ? iso.slice(0, 10).split("-").reverse().join("/") : "—";
 }
 
 /** Fator (QT, D/M) sem zeros à direita: "2", não "2,000". */
@@ -176,6 +214,8 @@ export function GerarPPDrawer({
   emPPsEmitidas,
   itemConcluido,
   ppEditando,
+  envioBloqueadoPor,
+  orcadoAFechar,
   onSuccess,
 }: Props) {
   const editando = ppEditando !== null;
@@ -299,6 +339,19 @@ export function GerarPPDrawer({
   // Parcelas: sempre ao menos uma, e a primeira acompanha o "Prazo de
   // pagamento" — ela É o prazo, não uma linha extra.
   const [parcelas, setParcelas] = React.useState<ParcelaLocal[]>([]);
+  /** "Mais de 6…" escolhido: o número passa a ser digitado (7 a 24). */
+  const [maisDeSeis, setMaisDeSeis] = React.useState(false);
+  const [parcelasTexto, setParcelasTexto] = React.useState("7");
+  /** Prazo gravado da PP em edição: a data anterior à regra das janelas
+   *  pode continuar como está (decisão 077, pergunta 6a). */
+  const [prazoOriginal, setPrazoOriginal] = React.useState<string | null>(null);
+  // Pagamento urgente (decisão 077).
+  const [urgente, setUrgente] = React.useState(false);
+  const [justificativa, setJustificativa] = React.useState("");
+  const [faltaJustificativa, setFaltaJustificativa] = React.useState(false);
+  /** "Gerar e enviar" acima do planejado: o "tem certeza?" vem antes de
+   *  gravar, com a mesma conta que o painel do item faz. */
+  const [confirmandoEnvio, setConfirmandoEnvio] = React.useState(false);
 
   const [anexos, setAnexos] = React.useState<AnexoLocal[]>([]);
   /** Anexos já gravados da PP em edição que o GP marcou para remover.
@@ -342,6 +395,8 @@ export function GerarPPDrawer({
     setAnexos([]);
     setRemovidos(new Set());
     setDrawerKey((k) => k + 1);
+    setFaltaJustificativa(false);
+    setConfirmandoEnvio(false);
 
     if (ppEditando) {
       // Edição abre COM o que a PP já tem — o GP está consertando um
@@ -352,6 +407,12 @@ export function GerarPPDrawer({
       setResponsavelId(ppEditando.responsavel_verba_id ?? "");
       setEmpresaId(ppEditando.empresa_id);
       setPrazoPagamento(ppEditando.prazo_pagamento.slice(0, 10));
+      setPrazoOriginal(ppEditando.prazo_pagamento.slice(0, 10));
+      setUrgente(ppEditando.urgente === true);
+      setJustificativa(ppEditando.urgente_justificativa ?? "");
+      const parcelasGravadas = Math.max((ppEditando.parcelas ?? []).length, 1);
+      setMaisDeSeis(parcelasGravadas > 6);
+      setParcelasTexto(String(Math.max(parcelasGravadas, 7)));
       setServico(ppEditando.servico);
       setUnitario(formatUnitario(ppEditando.valor_unitario));
       setQuantidade(formatFator(ppEditando.quantidade));
@@ -383,6 +444,11 @@ export function GerarPPDrawer({
     setResponsavelId("");
     setEmpresaId(defaultEmpresaId);
     setPrazoPagamento(defaultPrazoPagamento());
+    setPrazoOriginal(null);
+    setUrgente(false);
+    setJustificativa("");
+    setMaisDeSeis(false);
+    setParcelasTexto("7");
     setServico("");
     setUnitario("");
     setQuantidade("");
@@ -550,19 +616,15 @@ export function GerarPPDrawer({
     (a) => !removidos.has(a.id),
   );
 
-  /** Refaz as parcelas mantendo as datas que já existem. */
+  /**
+   * Refaz as parcelas: datas derivadas da janela do 1º vencimento, mês a
+   * mês, e valor dividido igualmente (decisão 077, pergunta 5a). As datas
+   * não se editam mais uma a uma — o que move a escada é o prazo.
+   */
   const montarParcelas = React.useCallback(
-    (n: number, primeiraData: string, valor: number, atuais: ParcelaLocal[]) => {
+    (n: number, primeiraData: string, valor: number) => {
       const valores = dividirEmParcelas(valor, n);
-      const datas: string[] = [];
-      let corrente = primeiraData;
-      for (let i = 0; i < n; i++) {
-        // A 1ª é sempre o "Prazo de pagamento". Da 2ª em diante mantém o
-        // que o usuário já tinha ajustado; só as novas nascem de +1 mês.
-        datas.push(i === 0 ? primeiraData : (atuais[i]?.data_vencimento ?? corrente));
-        corrente = proximoVencimento(datas[i]);
-      }
-      return datas.map((data, i) => ({
+      return vencimentosNasJanelas(primeiraData, n).map((data, i) => ({
         data_vencimento: data,
         valor: valores[i].toFixed(2).replace(".", ","),
       }));
@@ -570,20 +632,24 @@ export function GerarPPDrawer({
     [],
   );
 
-  function mudarNumeroDeParcelas(bruto: string) {
-    const n = Math.max(1, Math.min(36, Math.floor(Number(bruto) || 1)));
+  const numeroDeParcelas = Math.max(parcelas.length, 1);
+
+  function mudarNumeroDeParcelas(bruto: number) {
+    const n = Math.max(1, Math.min(MAX_PARCELAS, Math.floor(bruto) || 1));
     if (n === 1) {
       setParcelas([]);
       return;
     }
-    setParcelas(montarParcelas(n, prazoPagamento, valorPP, parcelas));
+    // Mesmo número: nada muda, e os valores já ajustados ficam.
+    if (n === parcelas.length) return;
+    setParcelas(montarParcelas(n, prazoPagamento, valorPP));
   }
 
   function mudarPrazo(iso: string) {
     setPrazoPagamento(iso);
     if (parcelas.length > 0) {
       // Mover a 1ª data reconstrói a escada: as seguintes acompanham.
-      setParcelas(montarParcelas(parcelas.length, iso, valorPP, []));
+      setParcelas(montarParcelas(parcelas.length, iso, valorPP));
     }
   }
 
@@ -628,71 +694,134 @@ export function GerarPPDrawer({
     }));
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  const hoje = hojeEmSaoPauloIso();
+
+  /** Por que o "Gerar e enviar" não está liberado — as travas do envio
+   *  que dá para saber daqui, na ordem do servidor: job, NF e o AR que não
+   *  fecha o orçado. O servidor checa tudo de novo; isto só evita oferecer
+   *  um botão que ia falhar (o AR escapou no primeiro teste, 14/09/2026).
+   *  Null = liberado. */
+  const semNFParaEnviar =
+    !verbaProducao &&
+    anexos.filter((a) => a.status === "ok").length + anexosMantidos.length === 0;
+  const faltaParaFecharAR =
+    orcadoAFechar !== null ? faltaParaFecharOOrcado(previaEmPPs, orcadoAFechar) : 0;
+  const envioTravadoPor =
+    envioBloqueadoPor ??
+    (semNFParaEnviar
+      ? "Anexe a NF do fornecedor para gerar e enviar de uma vez."
+      : faltaParaFecharAR > 0
+        ? `Em custo A · Repasse as PPs precisam fechar o orçado do item antes de ir ao financeiro — faltam ${formatCurrency(faltaParaFecharAR, "BRL")}. Gere as que faltam e envie todas juntas.`
+        : null);
+
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    // Dois botões de envio no mesmo formulário: quem diz qual foi é o
+    // `submitter`. Enter num campo usa o primeiro, "Gerar PP" — o seguro.
+    const submitter = (e.nativeEvent as SubmitEvent).submitter;
+    const enviar = submitter?.getAttribute("data-acao") === "enviar";
+    if (enviar && envioTravadoPor) {
+      setErro(envioTravadoPor);
+      return;
+    }
+    if (!validar()) return;
+    if (enviar && passaPlanejado) {
+      setConfirmandoEnvio(true);
+      return;
+    }
+    salvar(enviar, false);
+  }
+
+  /** As checagens do formulário. Devolve false e escreve o erro. */
+  function validar(): boolean {
     setErro(null);
-    if (!ppId || !itemRealizadoId) return;
+    if (!ppId || !itemRealizadoId) return false;
     if (verbaProducao && !responsavelId) {
       setErro("Escolha um responsável.");
-      return;
+      return false;
     }
     if (ultimaPP === null) {
       setFaltaResposta(true);
       setErro("Responda se esta é a última PP deste item.");
-      return;
+      return false;
     }
     if (!verbaProducao && !fornecedorId) {
       setErro("Escolha um fornecedor.");
-      return;
+      return false;
     }
     if (!empresaId) {
       setErro("Escolha uma empresa emissora.");
-      return;
+      return false;
     }
     if (!prazoPagamento) {
       setErro("Prazo de pagamento é obrigatório.");
-      return;
+      return false;
     }
     if (!servico.trim()) {
       setErro("Serviço é obrigatório.");
-      return;
+      return false;
     }
     if (unitNum <= 0) {
       setErro("R$ Unit. deve ser um número positivo.");
-      return;
+      return false;
     }
     if (qtdNum <= 0) {
       setErro("QT deve ser um número positivo.");
-      return;
+      return false;
     }
     if (dmNum <= 0) {
       setErro("D/M deve ser um número positivo.");
-      return;
+      return false;
     }
     if (valorPP <= 0) {
       setErro("O valor desta PP ficaria zerado. Confira R$ Unit., QT e D/M.");
-      return;
+      return false;
     }
     const parcelasEnvio = parcelasParaEnvio();
     if (parcelasEnvio.some((p) => !p.data_vencimento)) {
       setErro("Toda parcela precisa de uma data de vencimento.");
-      return;
+      return false;
     }
     if (!parcelasFecham(parcelasEnvio.map((p) => p.valor), valorPP)) {
       setErro(
         `A soma das parcelas precisa fechar com o valor da PP (${formatCurrency(valorPP, "BRL")}).`,
       );
-      return;
+      return false;
     }
     // O anexo deixou de travar a geração (02/09/2026): a PP pode nascer
     // sem nota e ficar no job. Quem exige a NF é o envio ao financeiro,
     // no painel do item. Verba de Produção segue sem anexo nos dois
     // momentos — é adiantamento, e as notas entram na prestação de contas.
-    const anexosOk = anexos.filter((a) => a.status === "ok");
     if (anexos.some((a) => a.status === "uploading" || a.status === "selecionado")) {
       setErro("Aguarde os uploads terminarem antes de continuar.");
-      return;
+      return false;
     }
+
+    if (urgente && justificativa.trim().length < PP_URGENTE_JUSTIFICATIVA_MIN) {
+      setFaltaJustificativa(true);
+      setErro(
+        `Justifique o pagamento urgente (mín. ${PP_URGENTE_JUSTIFICATIVA_MIN} caracteres).`,
+      );
+      return false;
+    }
+    // O calendário já só acende janelas; isto cobre a data digitada por
+    // outro caminho. O servidor checa de novo.
+    if (
+      prazoPagamento !== prazoOriginal &&
+      (prazoPagamento < hoje || !ehJanelaDePagamento(prazoPagamento))
+    ) {
+      setErro(
+        "O prazo de pagamento precisa ser uma janela a partir de hoje: dia 08 ou 20 — caindo em fim de semana, na segunda-feira seguinte.",
+      );
+      return false;
+    }
+    return true;
+  }
+
+  function salvar(enviar: boolean, confirmado: boolean) {
+    if (!ppId || !itemRealizadoId || ultimaPP === null) return;
+    const parcelasEnvio = parcelasParaEnvio();
+    const anexosOk = anexos.filter((a) => a.status === "ok");
 
     // Lock síncrono contra double-submit (pending do useTransition ativa 1
     // render depois — clique duplo rápido passa pelo disabled=pending).
@@ -709,6 +838,8 @@ export function GerarPPDrawer({
           quantidade: qtdNum,
           dias_meses: dmNum,
           especificacoes: especificacoes.trim() || null,
+          urgente,
+          urgente_justificativa: urgente ? justificativa.trim() : null,
           parcelas: parcelasEnvio,
         };
         const dados = verbaProducao
@@ -754,6 +885,7 @@ export function GerarPPDrawer({
 
         if (!res.ok) {
           setErro(res.message);
+          setConfirmandoEnvio(false);
           return;
         }
 
@@ -762,7 +894,28 @@ export function GerarPPDrawer({
         // ser priorizado corretamente pelo React scheduler — dentro dele o
         // re-render dos server components fica low-priority e demora.
         abortedRef.current = true;
-        onSuccess?.(res.codigo, ppEditando ? "editada" : "gerada");
+        const modo = ppEditando ? "editada" : "gerada";
+        if (!enviar) {
+          onSuccess?.(res.codigo, modo);
+          onOpenChange(false);
+          return;
+        }
+        // Gravou; agora o envio, pela MESMA action do painel do item — as
+        // travas do servidor valem aqui igual. Se ele não sair, a PP fica
+        // gerada, que é um estado válido, e a mensagem diz por quê.
+        const envio = await enviarPedidoCompraAoFinanceiro(ppId, confirmado);
+        if (envio.ok) {
+          onSuccess?.(res.codigo, "enviada");
+        } else {
+          onSuccess?.(
+            res.codigo,
+            modo,
+            envio.acimaDoPlanejado
+              ? "O envio passa do planejado do item e pede confirmação — envie pelo painel do item."
+              : `O envio não saiu: ${envio.message}`,
+          );
+        }
+        setConfirmandoEnvio(false);
         onOpenChange(false);
       } finally {
         submittingRef.current = false;
@@ -794,6 +947,32 @@ export function GerarPPDrawer({
               : "Gerar Pedido de Produção"}
           </DialogTitle>
         </DialogHeader>
+
+        <ConfirmDialog
+          open={confirmandoEnvio}
+          onOpenChange={(aberto) => !aberto && setConfirmandoEnvio(false)}
+          title="Enviar acima do planejado?"
+          description={
+            <>
+              Com esta PP o item passa a ter{" "}
+              <strong className="font-mono text-foreground">
+                {formatCurrency(previaEmPPs, "BRL")}
+              </strong>{" "}
+              em PPs,{" "}
+              <strong className="font-mono text-foreground">
+                {formatCurrency(previaEmPPs - valorPlanejado, "BRL")}
+              </strong>{" "}
+              acima do planejado de {formatCurrency(valorPlanejado, "BRL")}. O
+              envio ao financeiro é registrado no seu nome.
+            </>
+          }
+          confirmLabel={editando ? "Sim, salvar e enviar" : "Sim, gerar e enviar"}
+          cancelLabel="Voltar"
+          pending={pending}
+          onConfirm={() => {
+            if (validar()) salvar(true, true);
+          }}
+        />
 
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
           <div className="flex-1 space-y-4 p-6 overflow-y-auto">
@@ -1060,9 +1239,10 @@ export function GerarPPDrawer({
               </div>
 
               {/* Prazo e Parcelas dividem a linha: o prazo é o vencimento
-                  da 1ª parcela, e o número ao lado diz em quantas vezes
-                  o fornecedor recebe. */}
-              <div className="grid grid-cols-2 gap-3">
+                  da 1ª parcela, e o seletor ao lado diz em quantas vezes o
+                  fornecedor recebe. Desde 14/09/2026 os dois obedecem às
+                  janelas de pagamento (decisão 077). */}
+              <div className="grid grid-cols-[190px_1fr] gap-3">
                 <div>
                   <label className="text-xs font-medium">Prazo de pagamento *</label>
                   <DatePicker
@@ -1070,49 +1250,113 @@ export function GerarPPDrawer({
                     name="prazo_pagamento"
                     defaultValue={prazoPagamento}
                     onDateChange={(date) => mudarPrazo(dateToIso(date))}
+                    dateDisabled={diaForaDaJanela(hoje, prazoOriginal)}
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-medium">Parcelas</label>
-                  <Input
-                    value={String(Math.max(parcelas.length, 1))}
-                    onChange={(e) => mudarNumeroDeParcelas(e.target.value)}
-                    className="no-spinner"
-                    inputMode="numeric"
-                  />
+                  <span className="text-xs font-medium">Parcelas</span>
+                  <div
+                    role="radiogroup"
+                    aria-label="Parcelas"
+                    className="flex h-11 items-center gap-1.5"
+                  >
+                    {[1, 2, 3, 4, 5, 6].map((n) => {
+                      const ativo = !maisDeSeis && numeroDeParcelas === n;
+                      return (
+                        <button
+                          key={n}
+                          type="button"
+                          role="radio"
+                          aria-checked={ativo}
+                          onClick={() => {
+                            setMaisDeSeis(false);
+                            mudarNumeroDeParcelas(n);
+                          }}
+                          disabled={pending}
+                          className={cn(
+                            "h-9 w-9 flex-none rounded-lg border font-mono text-[13px] font-semibold transition-colors disabled:opacity-50",
+                            ativo
+                              ? "border-foreground bg-foreground text-white"
+                              : "border-border bg-white hover:bg-muted/60",
+                          )}
+                        >
+                          {n}
+                        </button>
+                      );
+                    })}
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={maisDeSeis}
+                      onClick={() => {
+                        setMaisDeSeis(true);
+                        if (numeroDeParcelas < 7) {
+                          setParcelasTexto("7");
+                          mudarNumeroDeParcelas(7);
+                        } else {
+                          setParcelasTexto(String(numeroDeParcelas));
+                        }
+                      }}
+                      disabled={pending}
+                      className={cn(
+                        "h-9 flex-none rounded-lg border px-2.5 text-[12.5px] font-semibold transition-colors disabled:opacity-50",
+                        maisDeSeis
+                          ? "border-foreground bg-foreground text-white"
+                          : "border-border bg-white hover:bg-muted/60",
+                      )}
+                    >
+                      Mais de 6…
+                    </button>
+                    {maisDeSeis && (
+                      <Input
+                        aria-label={`Número de parcelas (7 a ${MAX_PARCELAS})`}
+                        value={parcelasTexto}
+                        onChange={(e) => {
+                          const texto = e.target.value.replace(/\D/g, "").slice(0, 2);
+                          setParcelasTexto(texto);
+                          const n = Number(texto);
+                          if (n >= 7 && n <= MAX_PARCELAS) mudarNumeroDeParcelas(n);
+                        }}
+                        onBlur={() => {
+                          const n = Math.max(
+                            7,
+                            Math.min(MAX_PARCELAS, Number(parcelasTexto) || 7),
+                          );
+                          setParcelasTexto(String(n));
+                          mudarNumeroDeParcelas(n);
+                        }}
+                        className="no-spinner h-9 w-14 text-center font-mono"
+                        inputMode="numeric"
+                      />
+                    )}
+                  </div>
+                  {maisDeSeis && (
+                    <p className="text-[11px] text-muted-foreground">
+                      De 7 a {MAX_PARCELAS} parcelas.
+                    </p>
+                  )}
                 </div>
               </div>
+              <AvisoPrazoForaDaJanela prazo={prazoPagamento} original={prazoOriginal} />
 
               {parcelas.length > 1 && (
                 <div className="space-y-2 rounded-lg border border-border bg-muted/20 p-3">
-                  <p className="text-[11px] text-muted-foreground">
-                    Vencimentos sugeridos de mês em mês e valores divididos
-                    igualmente — os dois são editáveis. A soma tem que fechar
-                    com o valor da PP.
-                  </p>
                   {parcelas.map((p, i) => (
-                    <div key={i} className="grid grid-cols-[28px_1fr_1fr] items-center gap-2">
+                    <div key={i} className="grid grid-cols-[36px_1fr_1fr] items-center gap-2">
                       <span className="font-mono text-[11px] text-muted-foreground">
                         {i + 1}/{parcelas.length}
                       </span>
-                      <DatePicker
-                        key={`parcela-${drawerKey}-${i}`}
-                        name={`parcela_${i}_vencimento`}
-                        defaultValue={p.data_vencimento}
-                        // A 1ª acompanha o Prazo de pagamento acima: mudar
-                        // nos dois lugares deixaria os dois campos brigando.
-                        disabled={i === 0}
-                        onDateChange={(date) =>
-                          setParcelas((prev) =>
-                            prev.map((q, j) =>
-                              j === i
-                                ? { ...q, data_vencimento: dateToIso(date) }
-                                : q,
-                            ),
-                          )
-                        }
-                      />
+                      {/* Data travada (pergunta 5a): ela é a janela do prazo
+                          no mês da parcela, e muda junto com ele. */}
+                      <div
+                        title="A data acompanha a janela do prazo de pagamento."
+                        className="flex h-10 items-center justify-between rounded-lg border border-border bg-muted/40 px-3 font-mono text-[13px]"
+                      >
+                        {isoParaBr(p.data_vencimento)}
+                        <Lock className="h-3.5 w-3.5 text-muted-foreground/70" />
+                      </div>
                       <Input
+                        aria-label={`Valor da parcela ${i + 1}`}
                         value={p.valor}
                         onChange={(e) =>
                           setParcelas((prev) =>
@@ -1127,7 +1371,9 @@ export function GerarPPDrawer({
                     </div>
                   ))}
                   <div className="flex items-center justify-between border-t border-border pt-2 text-[11px]">
-                    <span className="text-muted-foreground">Soma das parcelas</span>
+                    <span className="text-muted-foreground">
+                      Mesma janela, mês a mês · soma das parcelas
+                    </span>
                     <span
                       className={cn(
                         "font-mono font-semibold",
@@ -1146,6 +1392,18 @@ export function GerarPPDrawer({
                   </div>
                 </div>
               )}
+
+              <UrgenciaPPField
+                urgente={urgente}
+                justificativa={justificativa}
+                onUrgenteChange={(ligado) => {
+                  setUrgente(ligado);
+                  if (!ligado) setFaltaJustificativa(false);
+                }}
+                onJustificativaChange={setJustificativa}
+                destacarFalta={faltaJustificativa}
+                disabled={pending}
+              />
             </div>
 
             {/* Servico */}
@@ -1384,13 +1642,11 @@ export function GerarPPDrawer({
             </span>
           </div>
 
-          <div className="flex items-center justify-between gap-3 px-6 py-4 border-t border-border">
-            <span className="max-w-[280px] text-[11px] leading-snug text-muted-foreground">
-              {editando
-                ? "Salvar mantém a PP como gerada — ela segue no job até ser enviada."
-                : "A PP é criada como gerada. O envio ao financeiro é uma ação separada, no painel do item."}
-            </span>
-            <span className="flex flex-none items-center gap-2">
+          {/* Dois caminhos (decisão 077): gerar e deixar no job, ou gerar e
+              já enviar. Com o envio travado o principal volta a ser "Gerar
+              PP", e a frase diz por quê — botão cinza mudo parece defeito. */}
+          <div className="flex flex-col gap-2 border-t border-border px-6 py-4">
+            <div className="flex flex-wrap items-center justify-end gap-2">
               <button
                 type="button"
                 onClick={() => onOpenChange(false)}
@@ -1401,13 +1657,19 @@ export function GerarPPDrawer({
               </button>
               <button
                 type="submit"
+                data-acao="gerar"
                 disabled={
                   pending ||
                   !ppId ||
                   anexos.some((a) => a.status === "uploading") ||
                   (verbaProducao ? !responsavelId : !fornecedorId)
                 }
-                className="rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white hover:bg-california-red-hover disabled:opacity-50"
+                className={cn(
+                  "rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50",
+                  envioTravadoPor
+                    ? "bg-california-red text-white hover:bg-california-red-hover"
+                    : "border border-border bg-white hover:bg-accent",
+                )}
               >
                 {pending
                   ? editando
@@ -1417,7 +1679,34 @@ export function GerarPPDrawer({
                     ? "Salvar alterações"
                     : "Gerar PP"}
               </button>
-            </span>
+              <button
+                type="submit"
+                data-acao="enviar"
+                disabled={
+                  pending ||
+                  !ppId ||
+                  envioTravadoPor !== null ||
+                  anexos.some((a) => a.status === "uploading") ||
+                  (verbaProducao ? !responsavelId : !fornecedorId)
+                }
+                title={envioTravadoPor ?? undefined}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold",
+                  envioTravadoPor
+                    ? "cursor-not-allowed border border-border bg-muted text-muted-foreground/70"
+                    : "bg-california-red text-white hover:bg-california-red-hover disabled:opacity-50",
+                )}
+              >
+                <Send className="h-3.5 w-3.5" />
+                {editando ? "Salvar e enviar ao financeiro" : "Gerar e enviar ao financeiro"}
+              </button>
+            </div>
+            {envioTravadoPor && (
+              <p className="flex items-start justify-end gap-1.5 text-right text-[11px] leading-snug text-muted-foreground">
+                <AlertTriangle className="mt-0.5 h-3 w-3 flex-none text-amber-600" />
+                {envioTravadoPor}
+              </p>
+            )}
           </div>
         </form>
 

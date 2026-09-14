@@ -1431,6 +1431,13 @@ export interface PedidoCompra {
   rejeitada_por: string | null;
   rejeitada_em: string | null;
   motivo_rejeicao: string | null;
+  /** Pagamento urgente, marcado pela produção (decisão 077). */
+  urgente: boolean;
+  /** Obrigatória quando urgente — mínimo de 10 caracteres, garantido pela
+   *  constraint `pedidos_compra_urgente_justificada`. */
+  urgente_justificativa: string | null;
+  urgente_por: string | null;
+  urgente_em: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -1977,6 +1984,11 @@ export interface DocumentoDoAnexo {
 
 export const PP_ANEXO_TAMANHO_MAX_BYTES = 8 * 1024 * 1024;
 export const PP_ANEXOS_TAMANHO_TOTAL_MAX_BYTES = 25 * 1024 * 1024;
+
+/** Mínimo da justificativa de PP urgente — o mesmo do motivo de rejeição
+ *  (decisão 077, pergunta 7a). A constraint `pedidos_compra_urgente_justificada`
+ *  repete o número no banco. */
+export const PP_URGENTE_JUSTIFICATIVA_MIN = 10;
 
 // ---------- Empresas contábeis (PJ real por CNPJ) ----------
 

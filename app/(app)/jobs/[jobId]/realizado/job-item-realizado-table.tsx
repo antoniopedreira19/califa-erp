@@ -24,6 +24,7 @@ import { VerPPDrawer } from "../pps/ver-pp-drawer";
 import {
   somaDasPPsNaoCanceladas,
   contarPendentes,
+  exigeSomaIgualAoOrcado,
 } from "@/lib/calculos/pps-item";
 import { ppChegouAoFinanceiro } from "@/lib/types";
 import { BvDialog } from "@/app/(app)/_bv/bv-dialog";
@@ -574,10 +575,12 @@ export function JobItemRealizadoTable({
     Map<string, { codigo: string }>
   >(new Map());
 
-  // Auto-dismiss do toast após 4s
+  // Auto-dismiss do toast após 4s — ou 12s quando a frase é longa: a de
+  // um envio que não saiu traz o motivo, e em 4s não dá para ler (visto no
+  // teste da decisão 077, 14/09/2026).
   React.useEffect(() => {
     if (!toast) return;
-    const t = setTimeout(() => setToast(null), 4000);
+    const t = setTimeout(() => setToast(null), toast.length > 120 ? 12000 : 4000);
     return () => clearTimeout(t);
   }, [toast]);
 
@@ -1815,6 +1818,14 @@ export function JobItemRealizadoTable({
           ? realizadosMap.get(itemAtual.id)
           : undefined;
         const itemConcluido = realizadoAtual?.pps_concluidas_em != null;
+        // AR fora do save: as PPs precisam fechar o orçado antes de ir ao
+        // financeiro (decisão 062). O formulário usa isto para não oferecer
+        // um "Gerar e enviar" que o servidor recusaria.
+        const orcadoAFechar =
+          itemAtual &&
+          exigeSomaIgualAoOrcado(itemAtual.tipo_custo, itemAtual.em_save === true)
+            ? Number(itemAtual.total_orcado ?? 0)
+            : null;
         const concluidoPorNome =
           responsaveis.find((r) => r.id === realizadoAtual?.pps_concluidas_por)
             ?.nome ?? null;
@@ -1823,6 +1834,16 @@ export function JobItemRealizadoTable({
               "pt-BR",
             )
           : null;
+
+        // As duas portas do ENVIO num texto só, para o painel do item e
+        // para o "Gerar e enviar" do formulário (decisão 077). A
+        // pré-abertura vem primeiro: num job ainda não aberto a marca de
+        // revisão nem existe, e é o motivo que o usuário precisa ler.
+        const envioBloqueadoPor = preAbertura
+          ? "O financeiro ainda não abriu este job. O envio de PPs volta com a abertura — gerar, editar e cancelar continuam liberados."
+          : aberturaEmRevisao
+            ? "A abertura deste job está em revisão no financeiro desde a última errata. O envio de PPs volta quando a revisão for salva — gerar, editar e cancelar continuam liberados."
+            : null;
 
         return (
           <>
@@ -1849,16 +1870,7 @@ export function JobItemRealizadoTable({
                 temAnexo: (pp.anexos ?? []).length > 0,
               }))}
               emPPs={emPPs}
-              // As duas portas do ENVIO num texto só. A pré-abertura vem
-              // primeiro: num job ainda não aberto a marca de revisão nem
-              // existe, e é o motivo que o usuário precisa ler.
-              envioBloqueadoPor={
-                preAbertura
-                  ? "O financeiro ainda não abriu este job. O envio de PPs volta com a abertura — gerar, editar e cancelar continuam liberados."
-                  : aberturaEmRevisao
-                    ? "A abertura deste job está em revisão no financeiro desde a última errata. O envio de PPs volta quando a revisão for salva — gerar, editar e cancelar continuam liberados."
-                    : null
-              }
+              envioBloqueadoPor={envioBloqueadoPor}
               itemRealizadoId={itemIdAtual ?? ""}
               concluido={itemConcluido}
               concluidoPorNome={concluidoPorNome}
@@ -1925,18 +1937,34 @@ export function JobItemRealizadoTable({
               emPPsEmitidas={emPPs}
               ppEditando={ppEditando}
               itemConcluido={itemConcluido}
-              onSuccess={(codigo, modo) => {
+              envioBloqueadoPor={envioBloqueadoPor}
+              orcadoAFechar={orcadoAFechar}
+              onSuccess={(codigo, modo, aviso) => {
                 if (modo === "editada") {
-                  setToast(`${codigo} salva — segue gerada, no job.`);
+                  setToast(
+                    aviso
+                      ? `${codigo} salva — segue gerada, no job. ${aviso}`
+                      : `${codigo} salva — segue gerada, no job.`,
+                  );
                   return;
                 }
-                setToast(
-                  `Pedido de Produção ${codigo} gerado. Envie ao financeiro pelo painel do item.`,
-                );
+                if (modo === "enviada") {
+                  setToast(
+                    ppEditando
+                      ? `${codigo} salva e enviada ao financeiro.`
+                      : `Pedido de Produção ${codigo} gerado e enviado ao financeiro.`,
+                  );
+                } else {
+                  setToast(
+                    aviso
+                      ? `Pedido de Produção ${codigo} gerado — segue no job. ${aviso}`
+                      : `Pedido de Produção ${codigo} gerado. Envie ao financeiro pelo painel do item.`,
+                  );
+                }
                 // Estado otimista: o chip da calha já conta a PP nova antes
                 // do router.refresh() completar. Some sozinho quando a PP
                 // real chega via prop (ppsPorItemId do server).
-                if (itemIdAtual) {
+                if (!ppEditando && itemIdAtual) {
                   setPpsOtimistas((prev) => {
                     const next = new Map(prev);
                     next.set(itemIdAtual, { codigo });

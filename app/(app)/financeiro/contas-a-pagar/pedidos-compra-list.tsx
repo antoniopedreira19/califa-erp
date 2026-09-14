@@ -57,6 +57,15 @@ export interface PPRow {
   aprovada_em: string | null;
   aprovada_por_nome: string | null;
   /**
+   * Pagamento urgente (decisão 077). Obrigatório, como o histórico acima:
+   * opcional aqui, a marca sumiria da lista em silêncio com `tsc` limpo.
+   * PP sem urgência manda `false` e `null` explícitos.
+   */
+  urgente: boolean;
+  urgente_justificativa: string | null;
+  urgente_em: string | null;
+  urgente_por_nome: string | null;
+  /**
    * Documentos anexados no instante da aprovação. Três estados
    * diferentes, e a tela distingue os três: `null` = aprovada antes do
    * registro existir; `[]` = aprovada SEM documento; lista = o que foi
@@ -245,6 +254,14 @@ export function PedidosCompraList({
     });
   }, [rowsPorRegional, filtro, busca]);
 
+  /** As urgentes em avaliação sobem para o topo, com faixa própria, seja
+   *  qual for a ordem do resto (decisão 077). Busca e filtros continuam
+   *  valendo para elas. */
+  const [urgentes, demais] = React.useMemo(() => {
+    const topo = (r: PPRow) => r.urgente && r.status === "em_avaliacao";
+    return [filtrados.filter(topo), filtrados.filter((r) => !topo(r))];
+  }, [filtrados]);
+
   const regionaisOrdenadas = React.useMemo(
     () => [...regionais].filter((r) => r.ativo).sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")),
     [regionais],
@@ -338,9 +355,19 @@ export function PedidosCompraList({
                 </td>
               </tr>
             )}
-            {filtrados.map((r) => (
+            {[...urgentes, ...demais].map((r, i) => (
+              <React.Fragment key={r.id}>
+              {i === urgentes.length && urgentes.length > 0 && (
+                <tr className="border-b border-border bg-muted/30">
+                  <td
+                    colSpan={8}
+                    className="px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground"
+                  >
+                    Demais PPs
+                  </td>
+                </tr>
+              )}
               <tr
-                key={r.id}
                 role="button"
                 tabIndex={0}
                 onClick={() => setPpSelecionada(r)}
@@ -350,10 +377,26 @@ export function PedidosCompraList({
                     setPpSelecionada(r);
                   }
                 }}
-                className="border-b border-border last:border-0 hover:bg-accent/40 transition-colors cursor-pointer focus-visible:outline-none focus-visible:bg-accent/40"
+                className={cn(
+                  "border-b border-border last:border-0 hover:bg-accent/40 transition-colors cursor-pointer focus-visible:outline-none focus-visible:bg-accent/40",
+                  i < urgentes.length && "bg-california-red/[0.04]",
+                )}
               >
-                <td className="whitespace-nowrap px-4 py-3 font-mono text-xs font-bold text-california-red">
+                <td
+                  className={cn(
+                    "whitespace-nowrap px-4 py-3 font-mono text-xs font-bold text-california-red",
+                    i < urgentes.length && "border-l-[3px] border-l-california-red",
+                  )}
+                >
                   <span>{r.codigo}</span>
+                  {r.urgente && (r.status === "em_avaliacao" || r.status === "aprovada") && (
+                    <span
+                      title={r.urgente_justificativa ?? undefined}
+                      className="ml-2 rounded-md bg-california-red px-1.5 py-0.5 font-sans text-[10px] font-bold uppercase tracking-wider text-white"
+                    >
+                      Urgente
+                    </span>
+                  )}
                   {r.verba_producao && (
                     <span className="ml-2 rounded-md bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
                       Verba
@@ -409,6 +452,7 @@ export function PedidosCompraList({
                   </Badge>
                 </td>
               </tr>
+              </React.Fragment>
             ))}
           </tbody>
         </table>

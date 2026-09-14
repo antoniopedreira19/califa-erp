@@ -36,11 +36,21 @@ import {
   PP_ANEXO_MIMETYPES_ACEITOS,
   PP_ANEXO_TAMANHO_MAX_BYTES,
   PP_ANEXOS_TAMANHO_TOTAL_MAX_BYTES,
+  PP_URGENTE_JUSTIFICATIVA_MIN,
   type PPAnexoMimetype,
   type Fornecedor,
   type PedidoCompraNaLista,
 } from "@/lib/types";
 import { valorDaPPPorUnidade } from "@/lib/calculos/pps-item";
+import {
+  ehJanelaDePagamento,
+  hojeEmSaoPauloIso,
+} from "@/lib/calculos/janelas-pagamento";
+import {
+  AvisoPrazoForaDaJanela,
+  UrgenciaPPField,
+  diaForaDaJanela,
+} from "../realizado/prazo-e-urgencia-pp";
 import { NovoFornecedorDialog } from "@/app/(app)/fornecedores/novo-fornecedor-dialog";
 import { carregarFornecedor } from "@/app/(app)/fornecedores/actions";
 import type { FornecedorResumo } from "@/app/(app)/fornecedores/actions";
@@ -181,6 +191,11 @@ export function EditarPPDrawer({
   }
   const [empresaId, setEmpresaId] = React.useState("");
   const [prazoPagamento, setPrazoPagamento] = React.useState("");
+  // Pagamento urgente (decisão 077): a correção da rejeitada pode marcar,
+  // desmarcar ou reescrever a justificativa, como a edição da gerada.
+  const [urgente, setUrgente] = React.useState(false);
+  const [justificativa, setJustificativa] = React.useState("");
+  const [faltaJustificativa, setFaltaJustificativa] = React.useState(false);
   const [servico, setServico] = React.useState("");
   // Mesmo trio da emissão (01/09/2026): a correção precisa refazer a
   // MESMA conta, senão reenviar sem mexer em nada reescreveria o valor.
@@ -203,6 +218,9 @@ export function EditarPPDrawer({
   );
 
   const ppId = pp?.id ?? null;
+  const hoje = hojeEmSaoPauloIso();
+  /** O prazo gravado pode continuar fora das janelas (decisão 077, 6a). */
+  const prazoOriginal = pp ? pp.prazo_pagamento.slice(0, 10) : null;
 
   /** Prévia do valor corrigido — a mesma conta que o servidor refaz. */
   const valorCorrigido = valorDaPPPorUnidade(
@@ -219,7 +237,10 @@ export function EditarPPDrawer({
     setFornecedorId(pp.fornecedor_id ?? "");
     setFornecedorPendenteId(null);
     setEmpresaId(pp.empresa_id);
-    setPrazoPagamento(pp.prazo_pagamento);
+    setPrazoPagamento(pp.prazo_pagamento.slice(0, 10));
+    setUrgente(pp.urgente === true);
+    setJustificativa(pp.urgente_justificativa ?? "");
+    setFaltaJustificativa(false);
     setServico(pp.servico);
     // Correção nasce com o que a PP já tem — diferente da emissão, onde
     // os campos abrem vazios: aqui o GP está consertando um documento
@@ -342,6 +363,20 @@ export function EditarPPDrawer({
     if (!fornecedorId) return setErro("Escolha um fornecedor.");
     if (!empresaId) return setErro("Escolha uma empresa emissora.");
     if (!prazoPagamento) return setErro("Prazo de pagamento é obrigatório.");
+    if (
+      prazoPagamento !== prazoOriginal &&
+      (prazoPagamento < hoje || !ehJanelaDePagamento(prazoPagamento))
+    ) {
+      return setErro(
+        "O prazo de pagamento precisa ser uma janela a partir de hoje: dia 08 ou 20 — caindo em fim de semana, na segunda-feira seguinte.",
+      );
+    }
+    if (urgente && justificativa.trim().length < PP_URGENTE_JUSTIFICATIVA_MIN) {
+      setFaltaJustificativa(true);
+      return setErro(
+        `Justifique o pagamento urgente (mín. ${PP_URGENTE_JUSTIFICATIVA_MIN} caracteres).`,
+      );
+    }
     if (!servico.trim()) return setErro("Descrição do serviço é obrigatória.");
 
     const unitNum = Number(unitario.replace(",", "."));
@@ -386,6 +421,8 @@ export function EditarPPDrawer({
             quantidade: qtdNum,
             dias_meses: dmNum,
             especificacoes: especificacoes.trim() || null,
+            urgente,
+            urgente_justificativa: urgente ? justificativa.trim() : null,
           },
           novosOk.map((a) => ({
             anexo_id: a.anexo_id,
@@ -582,8 +619,28 @@ export function EditarPPDrawer({
                   name="prazo_pagamento"
                   defaultValue={prazoPagamento}
                   onDateChange={(date) => setPrazoPagamento(dateToIso(date))}
+                  dateDisabled={diaForaDaJanela(hoje, prazoOriginal)}
                 />
+                <AvisoPrazoForaDaJanela prazo={prazoPagamento} original={prazoOriginal} />
+                {(pp.parcelas ?? []).length > 1 && (
+                  <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
+                    Trocar o prazo refaz as {(pp.parcelas ?? []).length} parcelas na
+                    mesma janela, mês a mês.
+                  </p>
+                )}
               </div>
+
+              <UrgenciaPPField
+                urgente={urgente}
+                justificativa={justificativa}
+                onUrgenteChange={(ligado) => {
+                  setUrgente(ligado);
+                  if (!ligado) setFaltaJustificativa(false);
+                }}
+                onJustificativaChange={setJustificativa}
+                destacarFalta={faltaJustificativa}
+                disabled={pending}
+              />
             </div>
 
             <div className="space-y-3">

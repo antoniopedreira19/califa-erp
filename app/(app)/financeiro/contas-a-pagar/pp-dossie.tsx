@@ -16,6 +16,7 @@
 import * as React from "react";
 import Link from "next/link";
 import {
+  AlertTriangle,
   CalendarClock,
   ExternalLink,
   FileText,
@@ -25,6 +26,7 @@ import {
 } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import { ppStatusLabel, nomeContraparteBRPP } from "@/lib/types";
+import { qualJanela } from "@/lib/calculos/janelas-pagamento";
 import type { PPRow } from "./pedidos-compra-list";
 import { useChatPPs } from "./chat/chat-pps-provider";
 import { ChatPPsConversa } from "./chat/chat-pps-conversa";
@@ -100,6 +102,13 @@ export function PPDossie({
     else onErro(res.message);
   }
 
+  const vencimentoOriginal = (
+    pp.parcelas[0]?.data_vencimento ?? pp.prazo_pagamento ?? ""
+  ).slice(0, 10);
+  /** O selo do vencimento: janela do 08, do 20, ou nenhuma — a PP gerada
+   *  antes da regra de 14/09/2026 (decisão 077). */
+  const janelaDoVencimento = vencimentoOriginal ? qualJanela(vencimentoOriginal) : null;
+
   return (
     // `flex-1` e não altura automática: sem ele a coluna encolhia até o
     // tamanho do conteúdo, e a aba Chat abria como uma tirinha — cabeçalho,
@@ -118,6 +127,23 @@ export function PPDossie({
 
       {aba === "dados" ? (
         <div className="min-h-0 flex-1 space-y-3.5 overflow-y-auto p-3.5">
+          {/* A justificativa abre o dossiê (decisão 077) — por isso o
+              vencimento perdeu o amarelo: dois alertas disputariam o olho. */}
+          {pp.urgente && (
+            <div className="rounded-xl border border-california-red/30 bg-california-red/[0.06] px-3 py-2.5">
+              <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-california-red">
+                <AlertTriangle className="h-3.5 w-3.5 flex-none" />
+                Pagamento urgente
+              </p>
+              <p className="mt-1 whitespace-pre-wrap text-[12.5px] leading-snug">
+                “{pp.urgente_justificativa}”
+              </p>
+              <p className="mt-1 text-[10.5px] text-muted-foreground">
+                Marcado por {pp.urgente_por_nome ?? "—"} · {formatDateTime(pp.urgente_em)}
+              </p>
+            </div>
+          )}
+
           <Estados pp={pp} />
 
           <Grupo rotulo={pp.verba_producao ? "Responsável" : "Fornecedor"}>
@@ -172,19 +198,29 @@ export function PPDossie({
             </Grupo>
           </div>
 
-          <div className="flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5">
-            <CalendarClock className="h-4 w-4 flex-none text-amber-800" />
-            <div className="min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-amber-800">
+          <div className="flex items-center gap-3 rounded-xl border border-border bg-muted/30 px-3 py-2.5">
+            <CalendarClock className="h-4 w-4 flex-none text-muted-foreground" />
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                 Vencimento original
               </p>
               <p className="font-mono text-[15px] font-bold leading-tight">
-                {formatDate(pp.parcelas[0]?.data_vencimento ?? pp.prazo_pagamento)}
+                {formatDate(vencimentoOriginal || null)}
               </p>
-              <p className="text-[10.5px] text-amber-900/70">
+              <p className="text-[10.5px] text-muted-foreground">
                 Negociado pela produção com o fornecedor.
               </p>
             </div>
+            {vencimentoOriginal &&
+              (janelaDoVencimento ? (
+                <span className="flex-none rounded-md bg-emerald-50 px-1.5 py-0.5 text-[10.5px] font-semibold text-emerald-700">
+                  ✓ janela do dia {janelaDoVencimento === 8 ? "08" : "20"}
+                </span>
+              ) : (
+                <span className="flex-none rounded-md bg-muted px-1.5 py-0.5 text-[10.5px] font-semibold text-muted-foreground">
+                  fora das janelas
+                </span>
+              ))}
           </div>
 
           {pp.parcelas.length > 1 && (

@@ -3404,3 +3404,60 @@ no financeiro contra R$ 237.896,34 na página de Jobs). Agora lê
 mexer num lado confere o outro — a prop se chama `deducoes`, e não
 `imposto`, justamente porque no internacional ela é a soma das três.
 
+
+## ⚠️ Nota de 2026-09-14 — prazo da PP só em janela, parcelas por seletor, PP urgente e "Gerar e enviar" (decisão 077)
+
+### O que mudou no formulário da PP
+
+- **Prazo de pagamento:** o calendário só acende os dias 08 e 20 (fim de
+  semana passa para a segunda) e nunca o passado. A sugestão é a primeira
+  janela depois de hoje — era hoje + 15 dias.
+- **Parcelas:** seletor de 1 a 6 e "Mais de 6…", que abre o número de 7 a
+  24. As datas ficam travadas na mesma janela do 1º vencimento, mês a mês;
+  os valores seguem editáveis.
+- **Pagamento urgente:** interruptor logo abaixo; ligado, pede
+  Justificativa com pelo menos 10 caracteres.
+- **Rodapé:** "Gerar PP" e "Gerar e enviar ao financeiro" ("Salvar e enviar
+  ao financeiro" na edição). O segundo só fica liberado quando o envio pelo
+  painel do item também estaria; travado, a frase diz por quê.
+- **Correção da rejeitada** (`pps/editar-pp-drawer.tsx`): o mesmo
+  calendário de janelas, o aviso da PP anterior à regra e a urgência.
+
+### Onde mora
+
+- `lib/calculos/janelas-pagamento.ts` — a regra das janelas, agora também
+  da abertura de job.
+- `realizado/prazo-e-urgencia-pp.tsx` — calendário, aviso e bloco de
+  urgência, divididos pelos dois formulários.
+- `realizado/actions-pp.ts` — `validarVencimentosNasJanelas` e
+  `camposDeUrgencia` nas três portas (gerar, editar gerada, reenviar);
+  `MAX_PARCELAS` 36 → 24.
+- `job-item-realizado-table.tsx` calcula `envioBloqueadoPor` uma vez e passa
+  ao painel do item e ao formulário.
+
+### Armadilhas
+
+- **A PP anterior à regra passa no servidor com a data gravada**, comparada
+  posição a posição. Não "corrija" validando todas as datas: as PPs
+  editáveis com prazo fora da janela ficariam impossíveis de salvar — é a
+  pergunta 6a.
+- `proximoVencimento` (+1 mês) em `lib/calculos/pps-item.ts` deixou de ser
+  usado pela PP. Continua exportado; o drawer de desembolsos tem uma cópia
+  própria.
+- Feriado não é tratado (pergunta 1a).
+- **O envio tem quatro travas, não três.** Além de job, revisão e NF, o AR
+  fora do save só envia com as PPs fechando o orçado (decisão 062,
+  `barrarARComOrcadoEmAberto`). O formulário recebe `orcadoAFechar` da
+  tabela para não oferecer "Gerar e enviar" nesse caso; quem acrescentar
+  trava nova ao servidor acrescenta aqui também, senão o botão aparece e o
+  envio volta recusado. O painel do item não pré-checa o AR (deixa o
+  servidor responder) — não mexido.
+
+### Conferido
+
+No Projeto Teste (JOB-0029): janelas, parcelas travadas, "Mais de 6…",
+justificativa curta barrada na tela e no banco, "Gerar e enviar" travado
+por NF, por job não aberto (JOB-0007) e por AR sem fechar o orçado, e
+liberado na verba (PP-00058 saiu direto para o financeiro). Detalhe na
+decisão 077. Ficaram de dado de teste: PP-00056 (gerada, urgente, 3
+parcelas) e PP-00057 (verba gerada no Item 3, que passa do planejado).

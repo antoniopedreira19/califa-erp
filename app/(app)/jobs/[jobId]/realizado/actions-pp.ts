@@ -10,7 +10,7 @@ import {
   type DadosDePagamento,
 } from "@/lib/data/foto-pagamento-da-pp";
 import { checarPermissao } from "@/lib/permissoes-server";
-import { DOCUMENTO_TIPOS } from "@/lib/types";
+import { DOCUMENTO_TIPOS, PP_URGENTE_JUSTIFICATIVA_MIN } from "@/lib/types";
 import { gerarCodigoPP } from "@/lib/codigos/pedidos-compra";
 import { listActiveMembers } from "@/lib/data/members";
 import {
@@ -21,7 +21,6 @@ import {
   faltaParaFecharOOrcado,
   parcelasFecham,
   dividirEmParcelas,
-  proximoVencimento,
 } from "@/lib/calculos/pps-item";
 import { aplicarConclusaoDoItem } from "./conclusao-item";
 // NÃO importar renderPedidoCompraPDF estaticamente. O módulo pedido-compra.ts
@@ -40,6 +39,11 @@ import {
   type JobStatus,
   type TipoCusto,
 } from "@/lib/types";
+import {
+  ehJanelaDePagamento,
+  hojeEmSaoPauloIso,
+  vencimentosNasJanelas,
+} from "@/lib/calculos/janelas-pagamento";
 
 const BUCKET = "pedidos-compra";
 const PDF_TTL_SEGUNDOS = 3600;
@@ -78,9 +82,10 @@ const dataSchema = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, "Data deve estar em YYYY-MM-DD");
 
-/** Teto de parcelas: 36 é 3 anos de mensais — acima disso é erro de
- *  digitação, não parcelamento. Vale contra payload sem fim. */
-const MAX_PARCELAS = 36;
+/** Teto de parcelas: 24 (decisão 077, pergunta 7a). O formulário oferece
+ *  1 a 6 e "Mais de 6…" até 24; o maior parcelamento gravado até
+ *  14/09/2026 tinha 12. Vale também contra payload sem fim. */
+const MAX_PARCELAS = 24;
 
 const dadosBaseSchema = z.object({
   empresa_id: z.string().uuid(),
@@ -97,6 +102,10 @@ const dadosBaseSchema = z.object({
   quantidade: z.number().positive(),
   dias_meses: z.number().positive(),
   especificacoes: z.string().max(2000).nullable().optional(),
+  // Pagamento urgente (decisão 077). O mínimo da justificativa é checado
+  // em `camposDeUrgencia`, e a constraint do banco repete a regra.
+  urgente: z.boolean().default(false),
+  urgente_justificativa: z.string().max(1000).nullable().optional(),
   // Uma linha por parcela, sempre — PP sem parcelamento manda 1.
   parcelas: z
     .array(z.object({ data_vencimento: dataSchema, valor: z.number().positive() }))
@@ -128,6 +137,8 @@ const dadosCamposBase = z.object({
   quantidade: z.number().positive(),
   dias_meses: z.number().positive(),
   especificacoes: z.string().max(2000).nullable().optional(),
+  urgente: z.boolean().default(false),
+  urgente_justificativa: z.string().max(1000).nullable().optional(),
 });
 
 /** O reenvio corrige a PP mas não redefine o parcelamento:
@@ -148,6 +159,78 @@ const dadosReenvioSchema = dadosCamposBase.and(
 );
 
 const dadosSchema = dadosBaseSchema;
+
+/** Ver `PP_URGENTE_JUSTIFICATIVA_MIN` — a tela usa o mesmo número. */
+const MIN_JUSTIFICATIVA_URGENTE = PP_URGENTE_JUSTIFICATIVA_MIN;
+
+type CamposDeUrgencia = {
+  urgente: boolean;
+  urgente_justificativa: string | null;
+  urgente_por: string | null;
+  urgente_em: string | null;
+};
+
+/**
+ * Os quatro campos de urgência a gravar, ou o erro (decisão 077).
+ *
+ * Quem MARCOU e quando só mudam na virada: a PP passa a ser urgente, ou
+ * deixa de ser. Corrigir a justificativa de uma PP que já era urgente não
+ * troca o autor da marca.
+ */
+function camposDeUrgencia(
+  d: { urgente?: boolean; urgente_justificativa?: string | null },
+  anterior: { urgente: boolean; urgente_por: string | null; urgente_em: string | null } | null,
+  profileId: string,
+): { ok: true; campos: CamposDeUrgencia } | { ok: false; message: string } {
+  if (!d.urgente) {
+    return {
+      ok: true,
+      campos: { urgente: false, urgente_justificativa: null, urgente_por: null, urgente_em: null },
+    };
+  }
+  const justificativa = (d.urgente_justificativa ?? "").trim();
+  if (justificativa.length < MIN_JUSTIFICATIVA_URGENTE) {
+    return {
+      ok: false,
+      message: `Justifique o pagamento urgente (mín. ${MIN_JUSTIFICATIVA_URGENTE} caracteres).`,
+    };
+  }
+  const jaEraUrgente = anterior?.urgente === true;
+  return {
+    ok: true,
+    campos: {
+      urgente: true,
+      urgente_justificativa: justificativa,
+      urgente_por: jaEraUrgente ? anterior.urgente_por : profileId,
+      urgente_em: jaEraUrgente ? anterior.urgente_em : new Date().toISOString(),
+    },
+  };
+}
+
+/**
+ * Prazo e parcelas só em janela de pagamento (decisão 077): dia 08 ou 20,
+ * e fim de semana passa para a segunda. Nunca no passado.
+ *
+ * A data que já estava gravada e não mudou passa, mesmo fora da regra: é a
+ * PP gerada antes de 14/09/2026, que só precisa obedecer quando alguém
+ * trocar a data (pergunta 6a). Sem esta checagem aqui, a regra dependeria
+ * só do calendário da tela.
+ */
+function validarVencimentosNasJanelas(datas: string[], gravadas: string[]): string | null {
+  const hoje = hojeEmSaoPauloIso();
+  for (let i = 0; i < datas.length; i++) {
+    const data = datas[i].slice(0, 10);
+    if (gravadas[i]?.slice(0, 10) === data) continue;
+    const br = data.split("-").reverse().join("/");
+    if (data < hoje) {
+      return `O vencimento ${br} já passou. Escolha uma janela de pagamento a partir de hoje.`;
+    }
+    if (!ehJanelaDePagamento(data)) {
+      return `${br} não é uma janela de pagamento. A California paga nos dias 08 e 20 — caindo em fim de semana, na segunda-feira seguinte.`;
+    }
+  }
+  return null;
+}
 
 const anexoUploadedSchema = z.object({
   anexo_id: z.string().uuid(),
@@ -762,6 +845,15 @@ async function finalizarPedidoCompraImpl(
   }
   const d = dadosParsed.data;
 
+  // ---- Janelas de pagamento e urgência (decisão 077) ----
+  const erroJanela = validarVencimentosNasJanelas(
+    d.parcelas.map((p) => p.data_vencimento),
+    [],
+  );
+  if (erroJanela) return { ok: false, message: erroJanela };
+  const urgencia = camposDeUrgencia(d, null, session.profile.id);
+  if (!urgencia.ok) return urgencia;
+
   // ---- Valor da PP ----
   // O valor é o produto do trio que o GP digitou: R$ Unit. × QT × D/M. É
   // recalculado aqui de propósito — o cliente manda os três fatores, nunca
@@ -912,6 +1004,7 @@ async function finalizarPedidoCompraImpl(
     quantidade: d.quantidade,
     dias_meses: d.dias_meses,
     especificacoes: d.especificacoes ?? null,
+    ...urgencia.campos,
     valor,
     // Continua sendo o vencimento da 1ª parcela: é o que as views do
     // financeiro leem hoje, e o que a Tela 3.2 vai reorganizar.
@@ -1423,7 +1516,7 @@ export async function reenviarPedidoCompra(
   const { data: ppRow, error: ppErr } = await supabase
     .from("pedidos_compra")
     .select(
-      "id, tenant_id, codigo, job_id, item_realizado_id, status, pdf_path, prazo_pagamento_financeiro, verba_producao",
+      "id, tenant_id, codigo, job_id, item_realizado_id, status, pdf_path, prazo_pagamento_financeiro, verba_producao, urgente, urgente_por, urgente_em",
     )
     .eq("id", pp_id)
     .eq("tenant_id", session.activeTenant.id)
@@ -1597,17 +1690,36 @@ export async function reenviarPedidoCompra(
     .order("numero", { ascending: true });
 
   const parcelas = parcelasAtuais ?? [];
+
+  // ---- Janelas de pagamento e urgência (decisão 077) ----
+  // O reenvio só troca o prazo; manter o de antes passa, mesmo fora da
+  // regra — é a PP anterior a ela.
+  const erroJanela = validarVencimentosNasJanelas(
+    [d.prazo_pagamento],
+    parcelas.length > 0 ? [parcelas[0].data_vencimento] : [],
+  );
+  if (erroJanela) return { ok: false, message: erroJanela };
+  const urgencia = camposDeUrgencia(
+    d,
+    ppRow as unknown as { urgente: boolean; urgente_por: string | null; urgente_em: string | null },
+    session.profile.id,
+  );
+  if (!urgencia.ok) return urgencia;
+
   const valores = dividirEmParcelas(valor, Math.max(parcelas.length, 1));
   const primeiraMudou =
     parcelas.length > 0 &&
     parcelas[0].data_vencimento.slice(0, 10) !== d.prazo_pagamento;
+  // Prazo novo refaz a escada pela MESMA janela, mês a mês — era "+1 mês"
+  // a partir da data, que tirava as parcelas seguintes das janelas.
+  const vencimentosNovos = primeiraMudou
+    ? vencimentosNasJanelas(d.prazo_pagamento, parcelas.length)
+    : [];
 
   const parcelasNovas = parcelas.map((parcela, i) => {
-    let data = parcela.data_vencimento.slice(0, 10);
-    if (primeiraMudou) {
-      data = d.prazo_pagamento;
-      for (let k = 0; k < i; k++) data = proximoVencimento(data);
-    }
+    const data = primeiraMudou
+      ? vencimentosNovos[i]
+      : parcela.data_vencimento.slice(0, 10);
     return {
       id: parcela.id,
       numero: parcela.numero,
@@ -1673,6 +1785,7 @@ export async function reenviarPedidoCompra(
       especificacoes: d.especificacoes ?? null,
       valor,
       prazo_pagamento: d.prazo_pagamento,
+      ...urgencia.campos,
       pdf_path: pdfPath,
       status: "em_avaliacao",
       rejeitada_por: null,
@@ -2080,7 +2193,7 @@ async function editarPedidoCompraGeradaImpl(
 
   const { data: ppRow, error: ppErr } = await supabase
     .from("pedidos_compra")
-    .select("id, codigo, job_id, item_realizado_id, status, pdf_path")
+    .select("id, codigo, job_id, item_realizado_id, status, pdf_path, urgente, urgente_por, urgente_em")
     .eq("id", pp_id)
     .eq("tenant_id", session.activeTenant.id)
     .maybeSingle();
@@ -2106,6 +2219,27 @@ async function editarPedidoCompraGeradaImpl(
     };
   }
   const d = dadosParsed.data;
+
+  // ---- Janelas de pagamento e urgência (decisão 077) ----
+  // As datas gravadas entram na comparação: a PP gerada antes da regra só
+  // precisa de janela na data que o GP trocar.
+  const { data: parcelasGravadas } = await supabase
+    .from("pedidos_compra_parcelas")
+    .select("data_vencimento")
+    .eq("pedido_compra_id", pp_id)
+    .eq("tenant_id", session.activeTenant.id)
+    .order("numero", { ascending: true });
+  const erroJanela = validarVencimentosNasJanelas(
+    d.parcelas.map((p) => p.data_vencimento),
+    (parcelasGravadas ?? []).map((p) => String(p.data_vencimento)),
+  );
+  if (erroJanela) return { ok: false, message: erroJanela };
+  const urgencia = camposDeUrgencia(
+    d,
+    ppRow as unknown as { urgente: boolean; urgente_por: string | null; urgente_em: string | null },
+    session.profile.id,
+  );
+  if (!urgencia.ok) return urgencia;
 
   const valor = valorDaPPPorUnidade(d.valor_unitario, d.quantidade, d.dias_meses);
   if (valor <= 0) {
@@ -2315,6 +2449,7 @@ async function editarPedidoCompraGeradaImpl(
       quantidade: d.quantidade,
       dias_meses: d.dias_meses,
       especificacoes: d.especificacoes ?? null,
+      ...urgencia.campos,
       valor,
       prazo_pagamento: parcelas[0]?.data_vencimento ?? d.prazo_pagamento,
       pdf_path: pdfPath,
