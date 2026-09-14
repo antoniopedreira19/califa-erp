@@ -83,6 +83,7 @@ import {
 } from "../../_selecao/exportar-orcamentos-menu";
 import { type VisaoBv } from "@/lib/calculos/bv-planilha";
 import type { EstadoSaveDaLinha } from "@/app/(app)/_planilha/save-coluna";
+import { configDaPlanilha } from "@/app/(app)/_planilha/modelo-planilha";
 import { SAVE_VAZIO } from "@/app/(app)/_planilha/save-coluna";
 import { SaveDialog, type LinhaDoSave } from "@/app/(app)/_planilha/save-dialog";
 import type { SaldoDeSave } from "@/lib/data/saves";
@@ -212,6 +213,8 @@ export function EditorAgregado({
   const [linhaSave, setLinhaSave] = React.useState<{
     item: VersaoOrcamentoItem;
     parametros: ParametrosVersao;
+    /** Decide a cadeia do "Faturamento desta linha" (decisão 072). */
+    modeloPlanilha: OrcamentoRascunho["modeloPlanilha"];
   } | null>(null);
   const [orcamentos, setOrcamentos] =
     React.useState<OrcamentoRascunho[]>(inicial);
@@ -917,7 +920,11 @@ export function EditorAgregado({
               onAbrirSave={
                 orc.origemBanco && !bloqueio
                   ? (item) =>
-                      setLinhaSave({ item, parametros: orc.parametros })
+                      setLinhaSave({
+                        item,
+                        parametros: orc.parametros,
+                        modeloPlanilha: orc.modeloPlanilha,
+                      })
                   : undefined
               }
               key={orc.id}
@@ -1115,6 +1122,12 @@ export function EditorAgregado({
         moeda={linhaSave?.parametros.moeda ?? "BRL"}
         percentualHonorarios={linhaSave?.parametros.percentual_honorarios ?? 0}
         percentualImposto={linhaSave?.parametros.percentual_imposto ?? 0}
+        internacional={
+          linhaSave
+            ? configDaPlanilha(linhaSave.modeloPlanilha, linhaSave.parametros)
+                .internacional
+            : null
+        }
         clienteNome={projeto.cliente ?? "cliente"}
         onMarcarSave={
           linhaSave
