@@ -367,6 +367,7 @@ export default async function JobDetailPage({
             // Modelo mensal (decisão 078): a régua de meses troca de mês
             // pela URL, sempre na aba da planilha.
             meses={detalhe.meses}
+            faturamentoMensal={detalhe.faturamentoMensal}
             mesPedido={searchParams?.mes}
             hrefPlanilha={`/jobs/${job.id}?aba=planilha${
               fromParam === "jobs" || fromParam === "financeiro"
@@ -444,6 +445,8 @@ export default async function JobDetailPage({
         moeda={versaoAprovada.moeda}
         resumoEncerramento={resumoEncerramento}
         faturamentoPorMes={detalhe.modeloPlanilha === "mensal"}
+        faturamentoMensal={detalhe.faturamentoMensal}
+        podeEnviarFaturamentoMensal={detalhe.podeEnviarFaturamentoMensal}
       />
     </div>
   );

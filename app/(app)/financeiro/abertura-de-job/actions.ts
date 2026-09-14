@@ -12,7 +12,11 @@ import {
   type AberturaFinanceiraInput,
   type CriarProjetoFinanceiroInput,
   type EdicaoRegistroAberturaInput,
+  type PrevisaoRecebimentoLinhaInput,
 } from "@/lib/validations/abertura-financeiro";
+import { lerFaturamentoMensalPeloJob } from "@/lib/data/faturamento-mensal";
+import { nomeDoMes } from "@/lib/calculos/meses-trimestre";
+import { formatCurrency } from "@/lib/utils";
 import {
   ordenarCompetencias,
   rateioLabel,
@@ -156,6 +160,84 @@ async function gravarRateio(
     return insertErro.message;
   }
   return null;
+}
+
+interface LinhaDeRecebimento {
+  data_prevista: string;
+  valor: number;
+  mes: string | null;
+  valor_save: number | null;
+}
+
+/**
+ * A previsão de recebimento conferida contra o modelo do job.
+ *
+ * Job mensal — Fee e Always On (decisão 078, entrega 3): uma linha por mês
+ * que tem faturamento, no valor do mês pela planilha, relido do banco. O
+ * financeiro informa o dia e revisa a data; o valor não é dele (Tiago,
+ * 14/09/2026). A parte de save do mês vai junto, para o fluxo de caixa
+ * separar a receita própria.
+ *
+ * Os outros jobs seguem como sempre, e não aceitam linha com mês.
+ */
+async function conferirRecebimentoPorMes(
+  supabase: ReturnType<typeof createClient>,
+  tenantId: string,
+  jobId: string,
+  linhas: PrevisaoRecebimentoLinhaInput[],
+): Promise<{ erro: string } | { mensal: boolean; linhas: LinhaDeRecebimento[] }> {
+  const leitura = await lerFaturamentoMensalPeloJob(supabase, tenantId, jobId);
+  if (!leitura) {
+    return { erro: "Não foi possível ler o modelo de planilha do job." };
+  }
+  if (!leitura.mensal) {
+    if (linhas.some((l) => l.mes)) {
+      return {
+        erro: "Só job de Fee ou Always On tem previsão de recebimento por mês.",
+      };
+    }
+    return {
+      mensal: false,
+      linhas: linhas.map((l) => ({
+        data_prevista: l.data_prevista,
+        valor: l.valor,
+        mes: null,
+        valor_save: null,
+      })),
+    };
+  }
+  if (!leitura.meses) {
+    return { erro: "Não foi possível ler o faturamento dos meses do job." };
+  }
+
+  const comFaturamento = leitura.meses.filter((m) => m.faturamento > 0);
+  const porMes = new Map(linhas.map((l) => [l.mes ?? "", l]));
+  const casam =
+    porMes.size === linhas.length &&
+    linhas.length === comFaturamento.length &&
+    comFaturamento.every((m) => porMes.has(m.mes));
+  if (!casam) {
+    return {
+      erro: "A previsão de recebimento deste job é uma linha por mês. Recarregue a página e confira os meses.",
+    };
+  }
+  for (const m of comFaturamento) {
+    const linha = porMes.get(m.mes)!;
+    if (Math.abs(linha.valor - m.faturamento) >= TOLERANCIA_CURVA) {
+      return {
+        erro: `O recebimento de ${nomeDoMes(m.mes)} precisa ser o faturamento do mês, ${formatCurrency(m.faturamento)}. Recarregue a página: a planilha pode ter mudado.`,
+      };
+    }
+  }
+  return {
+    mensal: true,
+    linhas: comFaturamento.map((m) => ({
+      data_prevista: porMes.get(m.mes)!.data_prevista,
+      valor: m.faturamento,
+      mes: m.mes,
+      valor_save: Math.min(m.save, m.faturamento),
+    })),
+  };
 }
 
 /**
@@ -346,6 +428,16 @@ export async function abrirJobNoFinanceiro(
     };
   }
 
+  const recebimentoConferido = await conferirRecebimentoPorMes(
+    supabase,
+    session.activeTenant.id,
+    jobId,
+    parsed.data.recebimento,
+  );
+  if ("erro" in recebimentoConferido) {
+    return { ok: false, message: recebimentoConferido.erro };
+  }
+
   if (!semRecebimento) {
     if (parsed.data.recebimento.length === 0) {
       return {
@@ -355,7 +447,10 @@ export async function abrirJobNoFinanceiro(
     }
 
     const somaReceb = somaCurva(parsed.data.recebimento);
-    if (Math.abs(somaReceb - faturamentoPrevisto) >= TOLERANCIA_CURVA) {
+    if (
+      !recebimentoConferido.mensal &&
+      Math.abs(somaReceb - faturamentoPrevisto) >= TOLERANCIA_CURVA
+    ) {
       return {
         ok: false,
         message: `As parcelas de recebimento somam ${somaReceb.toFixed(2)} e o faturamento previsto é ${faturamentoPrevisto.toFixed(2)}. Ajuste os valores antes de abrir.`,
@@ -468,7 +563,13 @@ export async function abrirJobNoFinanceiro(
       ? Promise.resolve({ error: null })
       : supabase
           .from("jobs_previsao_recebimento")
-          .insert(parsed.data.recebimento.map(linhaPrevisao)),
+          .insert(
+            recebimentoConferido.linhas.map((l, i) => ({
+              ...linhaPrevisao(l, i),
+              mes: l.mes,
+              valor_save: l.valor_save,
+            })),
+          ),
   ]);
 
   const curvaErro = curvaRes.error;
@@ -1049,6 +1150,16 @@ export async function editarRegistroDaAbertura(
     };
   }
 
+  const recebimentoConferido = await conferirRecebimentoPorMes(
+    supabase,
+    session.activeTenant.id,
+    jobId,
+    parsed.data.recebimento,
+  );
+  if ("erro" in recebimentoConferido) {
+    return { ok: false, message: recebimentoConferido.erro };
+  }
+
   if (!semRecebimento) {
     if (parsed.data.recebimento.length === 0) {
       return {
@@ -1058,7 +1169,10 @@ export async function editarRegistroDaAbertura(
     }
 
     const somaReceb = somaCurva(parsed.data.recebimento);
-    if (Math.abs(somaReceb - faturamentoPrevisto) >= TOLERANCIA_CURVA) {
+    if (
+      !recebimentoConferido.mensal &&
+      Math.abs(somaReceb - faturamentoPrevisto) >= TOLERANCIA_CURVA
+    ) {
       return {
         ok: false,
         message: `As parcelas de recebimento somam ${somaReceb.toFixed(2)} e o faturamento previsto é ${faturamentoPrevisto.toFixed(2)}. Ajuste os valores antes de salvar.`,
@@ -1165,7 +1279,13 @@ export async function editarRegistroDaAbertura(
       ? Promise.resolve({ error: null })
       : supabase
           .from("jobs_previsao_recebimento")
-          .insert(parsed.data.recebimento.map(linhaPrevisao)),
+          .insert(
+            recebimentoConferido.linhas.map((l, i) => ({
+              ...linhaPrevisao(l, i),
+              mes: l.mes,
+              valor_save: l.valor_save,
+            })),
+          ),
   ]);
 
   if (curvaRes.error || recebRes.error) {

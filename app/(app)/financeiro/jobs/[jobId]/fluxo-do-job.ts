@@ -192,16 +192,21 @@ export async function carregarPrazosDosJobs(
       .select("id, data_abertura_financeiro, data_prevista_faturamento")
       .eq("tenant_id", tenantId)
       .in("id", jobIds),
+    // As notas emitidas do job pelos ITENS (decisão 075): o cabeçalho fica
+    // com `origem_id` nulo na nota com mais de um item, e o job mensal
+    // (decisão 078) tem uma nota ou mais por mês.
     supabase
-      .from("faturamentos")
-      .select("id, origem_id, data_emissao")
+      .from("faturamento_itens")
+      .select(
+        "faturamento_id, origem_id, faturamento:faturamentos!inner(data_emissao, status)",
+      )
       .eq("tenant_id", tenantId)
-      .eq("origem_tipo", "job")
-      .eq("status", "emitido")
+      .in("origem_tipo", ["job", "save"])
+      .eq("faturamento.status", "emitido")
       .in("origem_id", jobIds),
     supabase
       .from("jobs_previsao_recebimento")
-      .select("job_id, data_prevista")
+      .select("job_id, data_prevista, mes")
       .eq("tenant_id", tenantId)
       .in("job_id", jobIds),
   ]);
@@ -209,14 +214,18 @@ export async function carregarPrazosDosJobs(
   if (jobsRes.error) console.error("[prazos.jobs]", jobsRes.error.message);
   if (notasRes.error) console.error("[prazos.notas]", notasRes.error.message);
 
-  const notaPorJob = new Map<string, { id: string; emissao: string | null }>();
-  for (const n of (notasRes.data ?? []) as any[]) {
-    notaPorJob.set(n.origem_id, { id: n.id, emissao: n.data_emissao });
+  // Por job, cada nota com a data de emissão.
+  const notasPorJob = new Map<string, Map<string, string | null>>();
+  for (const it of (notasRes.data ?? []) as any[]) {
+    if (!it.origem_id || !it.faturamento) continue;
+    const notas = notasPorJob.get(it.origem_id) ?? new Map<string, string | null>();
+    notas.set(it.faturamento_id, it.faturamento.data_emissao ?? null);
+    notasPorJob.set(it.origem_id, notas);
   }
 
   // Vencimentos dos títulos das notas — quando existem, mandam sobre a
   // previsão da abertura, que é o palpite anterior.
-  const notaIds = [...notaPorJob.values()].map((n) => n.id);
+  const notaIds = [...notasPorJob.values()].flatMap((notas) => [...notas.keys()]);
   const titulosRes = notaIds.length
     ? await supabase
         .from("titulos_receber")
@@ -234,25 +243,41 @@ export async function carregarPrazosDosJobs(
   }
 
   const previsaoPorJob = new Map<string, string[]>();
+  const jobsMensais = new Set<string>();
   for (const p of (previsoesRes.data ?? []) as any[]) {
     const arr = previsaoPorJob.get(p.job_id) ?? [];
     arr.push(p.data_prevista);
     previsaoPorJob.set(p.job_id, arr);
+    if (p.mes) jobsMensais.add(p.job_id);
   }
 
   return ((jobsRes.data ?? []) as any[]).map((j) => {
     const abertura = j.data_abertura_financeiro?.slice(0, 10) ?? null;
-    const nota = notaPorJob.get(j.id);
-    const faturamento =
-      nota?.emissao?.slice(0, 10) ?? j.data_prevista_faturamento ?? null;
+    const notas = notasPorJob.get(j.id) ?? new Map<string, string | null>();
+    // A primeira nota emitida é quando o job começou a faturar.
+    const primeiraEmissao =
+      [...notas.values()]
+        .filter((e): e is string => !!e)
+        .map((e) => e.slice(0, 10))
+        .sort()[0] ?? null;
+    const faturamento = primeiraEmissao ?? j.data_prevista_faturamento ?? null;
 
+    const vencimentos = [...notas.keys()].flatMap(
+      (id) => vencimentosPorNota.get(id) ?? [],
+    );
+    const previsoes = previsaoPorJob.get(j.id) ?? [];
+    // No job mensal os meses ainda sem nota seguem pela previsão: o último
+    // recebimento é o mais tardio entre títulos e previsão.
     const ultimoRecebimento =
-      (nota ? (vencimentosPorNota.get(nota.id) ?? []) : [])
+      (jobsMensais.has(j.id)
+        ? [...vencimentos, ...previsoes]
+        : vencimentos.length > 0
+          ? vencimentos
+          : previsoes
+      )
         .slice()
         .sort()
-        .at(-1) ??
-      (previsaoPorJob.get(j.id) ?? []).slice().sort().at(-1) ??
-      null;
+        .at(-1) ?? null;
 
     return {
       jobId: j.id as string,

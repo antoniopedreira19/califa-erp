@@ -22,6 +22,7 @@ import type {
   PlanoContaSubtipo,
   TituloReceberStatus,
 } from "@/lib/types";
+import { chaveInfoDoEnvio } from "./chave-info";
 
 export const dynamic = "force-dynamic";
 
@@ -162,7 +163,7 @@ export default async function ContasReceberPage({
     // onda paralela, sem custo de ida e volta extra.
     supabase
       .from("jobs_envio_faturamento")
-      .select("job_id, numero_po, descricao_nf")
+      .select("job_id, mes, numero_po, descricao_nf")
       .eq("tenant_id", tenantId),
   ]);
 
@@ -220,16 +221,35 @@ export default async function ContasReceberPage({
    * cai nos vazios do modal, que são estado legítimo e não erro.
    */
   const infoPorJob: Record<string, InfoJob> = {};
-  for (const e of (enviosRes.data ?? []) as unknown as Array<{
+  const envios = (enviosRes.data ?? []) as unknown as Array<{
     job_id: string;
+    mes: string | null;
     numero_po: string | null;
     descricao_nf: string | null;
-  }>) {
-    infoPorJob[e.job_id] = {
+  }>;
+  // Job mensal (decisão 078): cada mês na chave dele. A chave só do job,
+  // que a nota já emitida consulta, junta as POs dos meses.
+  const posDosMesesPorJob = new Map<string, Set<string>>();
+  for (const e of envios) {
+    infoPorJob[chaveInfoDoEnvio(e.job_id, e.mes)] = {
       po: e.numero_po,
       descricaoNf: e.descricao_nf,
       contatos: contatosPorJob.get(e.job_id) ?? [],
     };
+    if (e.mes) {
+      const pos = posDosMesesPorJob.get(e.job_id) ?? new Set<string>();
+      if (e.numero_po) pos.add(e.numero_po);
+      posDosMesesPorJob.set(e.job_id, pos);
+    }
+  }
+  for (const [jobId, pos] of posDosMesesPorJob) {
+    if (!infoPorJob[jobId]) {
+      infoPorJob[jobId] = {
+        po: pos.size > 0 ? [...pos].join(" · ") : null,
+        descricaoNf: null,
+        contatos: contatosPorJob.get(jobId) ?? [],
+      };
+    }
   }
   // Job com contato mas sem envio ainda não aparece na fila de faturamento,
   // então não precisa de entrada — mas a nota já emitida pode reabrir em
@@ -253,6 +273,8 @@ export default async function ContasReceberPage({
       // onde ele saiu (view revista em 31/08/2026).
       job_id: (r.job_id as string | null) ?? null,
       envio_parcela_id: (r.envio_parcela_id as string | null) ?? null,
+      // Mês do envio no job mensal (decisão 078); nulo nos outros.
+      mes_referencia: (r.mes_referencia as string | null) ?? null,
       empresa_id: (r.empresa_id as string | null) ?? "",
       codigo: (r.codigo as string | null) ?? null,
       descricao: r.descricao as string,

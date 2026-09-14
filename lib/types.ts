@@ -971,8 +971,10 @@ export interface ClientePortal {
 /**
  * A liberação do job pela produção para o financeiro faturar.
  *
- * Um por job. Enquanto não existe, o job não aparece na fila de
- * faturamento — a `vw_faturamento_pendente` exige este registro.
+ * Um por job — ou, nos jobs do modelo mensal (Fee e Always On, decisão
+ * 078), um por MÊS (`mes`). Enquanto não existe, o job (ou o mês) não
+ * aparece na fila de faturamento — a `vw_faturamento_pendente` exige este
+ * registro.
  */
 export interface JobEnvioFaturamento {
   id: string;
@@ -1000,6 +1002,12 @@ export interface JobEnvioFaturamento {
   portal_url: string | null;
   enviado_em: string;
   enviado_por: string | null;
+  /** Mês de referência (primeiro dia) no modelo mensal. Nulo no envio
+   *  único dos outros jobs. */
+  mes: string | null;
+  /** Parte do `valor_faturado` que é receita de save do mês. Só nos
+   *  envios com mês; nos outros vale `jobs.faturamento_save_previsto`. */
+  valor_save: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -1054,6 +1062,12 @@ export interface JobPrevisaoRecebimento {
   ordem: number;
   data_prevista: string;
   valor: number;
+  /** Mês de referência no modelo mensal (decisão 078): uma linha por mês,
+   *  que o envio daquele mês substitui no fluxo de caixa. Nulo nos outros
+   *  jobs. */
+  mes: string | null;
+  /** Receita de save do mês dentro de `valor`. Só nas linhas com mês. */
+  valor_save: number | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;

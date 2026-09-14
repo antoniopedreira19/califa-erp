@@ -12,6 +12,13 @@ import {
   type EnvioFaturamentoInput,
 } from "@/lib/validations/envio-faturamento";
 import type { JobStatus } from "@/lib/types";
+import { lerFaturamentoPorMesDoJob } from "@/lib/data/faturamento-mensal";
+import { nomeDoMes } from "@/lib/calculos/meses-trimestre";
+
+/** "outubro" → "Outubro", para abrir frase. */
+function comMaiuscula(texto: string): string {
+  return texto.charAt(0).toUpperCase() + texto.slice(1);
+}
 
 export type ActionResult =
   | { ok: true; id: string }
@@ -168,7 +175,7 @@ export async function enviarJobParaFaturamento(
   const { data: job } = await supabase
     .from("jobs")
     .select(
-      "id, status, faturamento_previsto, abertura_em_revisao, projeto_id, orcamento_id, projeto:projetos(cliente_id), orcamento:orcamentos(categoria:categorias_dominio!categoria_id(modelo_planilha))",
+      "id, status, faturamento_previsto, abertura_em_revisao, projeto_id, orcamento_id, versao_orcamento_aprovada_id, projeto:projetos(cliente_id), orcamento:orcamentos(categoria:categorias_dominio!categoria_id(modelo_planilha)), versao:versoes_orcamento!versao_orcamento_aprovada_id(percentual_honorarios, percentual_imposto)",
     )
     .eq("id", jobId)
     .eq("tenant_id", session.activeTenant.id)
@@ -180,21 +187,36 @@ export async function enviarJobParaFaturamento(
       projeto_id: string;
       orcamento_id: string;
       projeto: { cliente_id: string } | null;
+      versao_orcamento_aprovada_id: string;
       orcamento: { categoria: { modelo_planilha: string } | null } | null;
+      versao: {
+        percentual_honorarios: number | string;
+        percentual_imposto: number | string;
+      } | null;
     }>();
 
   if (!job) return { ok: false, message: "Job não encontrado." };
 
-  // Modelo mensal (decisão 078): Fee e Always On faturam mês a mês, e o
-  // envio único congelaria o trimestre inteiro. O envio por mês ainda não
-  // existe; até ele chegar, nenhum job mensal sai por aqui.
-  if (job.orcamento?.categoria?.modelo_planilha === "mensal") {
+  // Modelo mensal (decisão 078): Fee e Always On são enviados para
+  // faturamento MÊS A MÊS — cada envio leva o mês. Os outros jobs seguem
+  // com o envio único, sem mês. O envio único num job mensal congelaria o
+  // trimestre inteiro.
+  const mensal = job.orcamento?.categoria?.modelo_planilha === "mensal";
+  const mes = parsed.data.mes ?? null;
+  if (mensal && !mes) {
     return {
       ok: false,
       message:
-        "Jobs de Fee e Always On são faturados mês a mês, e o envio por mês ainda não está disponível.",
+        "Jobs de Fee e Always On são enviados para faturamento mês a mês: escolha o mês a enviar.",
     };
   }
+  if (!mensal && mes) {
+    return {
+      ok: false,
+      message: "Só jobs de Fee e Always On são enviados para faturamento por mês.",
+    };
+  }
+  const nomeMes = mes ? nomeDoMes(mes) : null;
 
   if (job.status !== "aberto") {
     return {
@@ -229,12 +251,43 @@ export async function enviarJobParaFaturamento(
     };
   }
 
-  const valor = Number(job.faturamento_previsto ?? 0);
+  // O valor a faturar é relido aqui, nunca o do navegador: o faturamento
+  // previsto do job no envio único, ou o faturamento DO MÊS recalculado dos
+  // itens da cópia do job (com as erratas) no modelo mensal.
+  let valor: number;
+  let valorSave: number | null = null;
+  if (mes) {
+    const porMes = await lerFaturamentoPorMesDoJob(supabase, {
+      tenantId: session.activeTenant.id,
+      jobId,
+      versaoAprovadaId: job.versao_orcamento_aprovada_id,
+      percentualHonorarios: Number(job.versao?.percentual_honorarios ?? 0),
+      percentualImposto: Number(job.versao?.percentual_imposto ?? 0),
+    });
+    if (!porMes) {
+      return {
+        ok: false,
+        message: "Não foi possível calcular o faturamento do mês. Tente de novo.",
+      };
+    }
+    const doMes = porMes.find((m) => m.mes === mes);
+    if (!doMes) {
+      return {
+        ok: false,
+        message: "Este mês não faz parte do orçamento aprovado do job.",
+      };
+    }
+    valor = doMes.faturamento;
+    valorSave = doMes.save;
+  } else {
+    valor = Number(job.faturamento_previsto ?? 0);
+  }
   if (!(valor > 0)) {
     return {
       ok: false,
-      message:
-        "Este job está sem faturamento previsto — não há valor a faturar.",
+      message: nomeMes
+        ? `${comMaiuscula(nomeMes)} está sem faturamento — não há valor a faturar.`
+        : "Este job está sem faturamento previsto — não há valor a faturar.",
     };
   }
 
@@ -251,19 +304,23 @@ export async function enviarJobParaFaturamento(
     };
   }
 
-  // Envio é único por job (unique em job_id). Conferir antes devolve
-  // mensagem legível em vez de erro de constraint.
-  const { data: jaEnviado } = await supabase
+  // Um envio por job — ou por job + mês no modelo mensal (índices únicos
+  // parciais). Conferir antes devolve mensagem legível em vez de erro de
+  // constraint.
+  const consultaEnvio = supabase
     .from("jobs_envio_faturamento")
     .select("id")
-    .eq("job_id", jobId)
-    .maybeSingle<{ id: string }>();
+    .eq("job_id", jobId);
+  const { data: jaEnviado } = await (mes
+    ? consultaEnvio.eq("mes", mes)
+    : consultaEnvio.is("mes", null)
+  ).maybeSingle<{ id: string }>();
 
+  const mensagemJaEnviado = nomeMes
+    ? `${comMaiuscula(nomeMes)} deste job já foi enviado para faturamento.`
+    : "Este job já foi enviado para faturamento.";
   if (jaEnviado) {
-    return {
-      ok: false,
-      message: "Este job já foi enviado para faturamento.",
-    };
+    return { ok: false, message: mensagemJaEnviado };
   }
 
   // O portal precisa ser do cliente DESTE job — a lista do formulário não
@@ -311,6 +368,8 @@ export async function enviarJobParaFaturamento(
         portal_id: parsed.data.portal_id,
         portal_url: portalUrl,
         enviado_por: session.profile.id,
+        mes,
+        valor_save: valorSave,
         parcelas: parsed.data.parcelas.map((p) => ({
           ordem: p.ordem,
           valor: p.valor,
@@ -324,11 +383,8 @@ export async function enviarJobParaFaturamento(
     console.error("[job.enviarFaturamento]", error?.message);
     // Dois cliques quase juntos passam os dois pela conferência de "já
     // enviado" acima; o segundo esbarra no unique e merece a mesma frase.
-    if (error?.message.includes("jobs_envio_faturamento_job_id_key")) {
-      return {
-        ok: false,
-        message: "Este job já foi enviado para faturamento.",
-      };
+    if (error?.message.includes("uniq_envio_faturamento_job")) {
+      return { ok: false, message: mensagemJaEnviado };
     }
     return {
       ok: false,
@@ -350,6 +406,8 @@ export async function enviarJobParaFaturamento(
       tem_po: parsed.data.numero_po !== null,
       tem_portal: parsed.data.portal_id !== null,
       qtd_parcelas: parsed.data.parcelas.length,
+      mes,
+      valor_save: valorSave,
     },
   });
 

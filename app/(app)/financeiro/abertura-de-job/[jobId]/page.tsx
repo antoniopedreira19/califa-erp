@@ -8,6 +8,7 @@ import { servicosDoOrcamentoQuery } from "@/lib/data/servicos";
 import { formatDataHoraBr } from "../formatos";
 import { sugerirCurva, sugerirRecebimento, trimestreDe } from "../curva";
 import { AberturaForm } from "./abertura-form";
+import { lerFaturamentoMensalPeloJob } from "@/lib/data/faturamento-mensal";
 
 export const dynamic = "force-dynamic";
 
@@ -78,10 +79,15 @@ export default async function AbrirJobNoFinanceiroPage({
   // Depende do cliente que veio do job — por isso fora do Promise.all
   // acima. O combo lista só projetos do mesmo cliente: agrupar clientes
   // diferentes sob um projeto faria o total somar dinheiro de dois.
-  const projetos = await listarProjetosFinanceiro(
-    session.activeTenant.id,
-    job.cliente_id,
-  );
+  //
+  // O faturamento de cada mês também depende do job: no Fee e no Always On
+  // (decisão 078) a previsão de recebimento é uma linha por mês.
+  const [projetos, faturamentoMensal] = await Promise.all([
+    listarProjetosFinanceiro(session.activeTenant.id, job.cliente_id),
+    job.modelo_planilha_orcamento === "mensal"
+      ? lerFaturamentoMensalPeloJob(supabase, session.activeTenant.id, job.id)
+      : Promise.resolve(null),
+  ]);
 
   const agora = new Date();
   const hojeIso = agora.toISOString().slice(0, 10);
@@ -145,6 +151,7 @@ export default async function AbrirJobNoFinanceiroPage({
         job.data_prevista_faturamento,
         hojeIso,
       )}
+      faturamentoPorMes={faturamentoMensal?.mensal ? faturamentoMensal.meses : null}
       trimestreSugerido={trimestreDe(baseCompetencia)}
       anoSugerido={anoSugerido}
       anos={anos}

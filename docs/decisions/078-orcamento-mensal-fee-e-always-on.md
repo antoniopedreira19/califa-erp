@@ -134,17 +134,73 @@ O que mudou:
   mês é o envio dele para faturamento, que ainda não existe. Até lá errata
   e save do job mensal seguem as regras de sempre.
 
+## Entrega 3 — faturamento por mês (14/09/2026)
+
+**Respostas do Tiago:**
+
+- **Sem devolução.** Hoje o financeiro não devolve envio para faturamento, e
+  o mensal segue igual: o envio de um mês é definitivo. O desenho perdeu o
+  estado "Devolvido" e o "Revisar e reenviar". (O envio à abertura continua
+  um só por orçamento, isto é, por trimestre.)
+- **Previsão de recebimento: uma linha por mês.** Na abertura, o financeiro
+  informa só o **dia do recebimento**. Cada mês recebe nesse dia do **mês
+  seguinte** (outubro → 20/11), e a data de cada mês continua editável na
+  abertura e na revisão, como hoje.
+- **Mudanças no banco confirmadas** (abaixo).
+
+**Como ficou:**
+
+- **Um envio por mês.** `jobs_envio_faturamento` ganha `mes` (primeiro dia
+  do mês; nulo nos outros jobs) e `valor_save`. O `unique (job_id)` virou
+  dois índices parciais: um envio sem mês por job, e um por mês. A RPC
+  `enviar_job_para_faturamento` grava os dois campos.
+- **O valor do envio é o faturamento do mês** pela conta da planilha
+  (`calcularTotaisVersao` sobre os itens do mês, com as erratas), relido no
+  servidor. O vencimento nasce vazio. Várias parcelas por mês, somando o
+  valor do mês. `enviarJobParaFaturamento` exige o mês no job mensal e o
+  recusa nos outros.
+- **Barra no rodapé do job**, recolhida e expandida. Recolhida: a situação
+  de cada mês e o botão do mês mais antigo ainda a enviar. Expandida: uma
+  linha por mês com valor, situação, detalhe, "Enviar faturamento" ou
+  "Ver envio". As situações são *A enviar → Na fila do financeiro →
+  Faturado parcial → Faturado*, calculadas pelas notas emitidas sobre as
+  parcelas do envio. O botão de encerrar aparece quando todos os meses
+  foram enviados.
+- **Mês sem faturamento** (sem item, por exemplo depois de uma errata):
+  situação própria, "Sem faturamento". Não tem o que enviar e não segura o
+  encerramento nem a liquidação.
+- **Errata e save travam só o mês enviado**, na tela (tabela do mês sem
+  errata e sem save, com aviso na régua) e no servidor
+  (`registrarErrata`, `salvarSaveDaErrata`). O botão da errata só some
+  quando todos os meses foram enviados.
+- **Encerramento:** o job mensal só encerra com todos os meses com
+  faturamento enviados (`mesesSemEnvio`) e o saldo a faturar zerado.
+- **Abertura do financeiro:** a previsão de recebimento do mensal é uma
+  linha por mês com faturamento, no valor do mês (travado). A action relê o
+  faturamento de cada mês, confere uma linha por mês e grava `mes` e
+  `valor_save` em `jobs_previsao_recebimento`.
+- **Fluxo de caixa:** `vw_fluxo_caixa` esconde a previsão de um mês só
+  quando aquele mês foi enviado; a receita própria sai de
+  `valor - valor_save` da linha. `vw_faturamento_pendente` tira o save do
+  envio mensal pelo `valor_save` e expõe `mes_referencia`.
+  `vw_saves_por_job` só conta o save de mês já enviado.
+- **Esteira e telas do financeiro:**
+  - o job mensal com mês ainda não enviado ou não faturado inteiro não
+    liquida (`faltaFaturar`), mesmo com as notas pagas;
+  - a fila do contas a receber mostra o mês de cada linha, e a PO e a
+    instrução da nota do botão `i` e da gaveta de faturar são as do mês;
+  - a página do job no financeiro lê as notas pelos itens (antes um
+    `.maybeSingle()` dava erro com mais de uma nota);
+  - a home do GP conta "prontos pra faturar" e "prontos pra encerrar" por
+    mês.
+
 ## O que ainda não existe
 
-- **Entrega 3:** um envio para faturamento por mês, feito pelo GP quando o
-  cliente valida (enviar já autoriza), barra de faturamento no rodapé do
-  job, devolução pelo financeiro, fluxo de caixa mês a mês, encerramento
-  com todos os meses faturados.
-- **Depois:** exportação e importação de planilha do modelo mensal.
-
-Até lá, para o modelo mensal: o envio único para faturamento é recusado,
-"Exportar" fica desabilitado (e as rotas recusam), a importação é recusada,
-e o seletor de exportação do projeto não o lista.
+- Exportação e importação de planilha do modelo mensal. Até lá,
+  "Exportar" fica desabilitado (e as rotas recusam), a importação é
+  recusada, e o seletor de exportação do projeto não o lista.
+- Edição do mensal pela visão agregada (hoje só consulta) e filtro de
+  trimestres nela.
 
 ## Migrations
 
@@ -164,3 +220,8 @@ e o seletor de exportação do projeto não o lista.
   no mesmo dia (pagamento urgente da PP, já aplicada no banco). O Tiago
   decidiu que ela fica com a 077 e esta passa a ser a 078; os comentários
   do banco foram regravados de novo.
+- `20260914200008_envio_faturamento_por_mes.sql` — `mes` e `valor_save` no
+  envio para faturamento e na previsão de recebimento, os índices parciais
+  no lugar do `unique (job_id)` (autorizado pelo Tiago), a RPC do envio e
+  as três views (`vw_faturamento_pendente`, `vw_fluxo_caixa`,
+  `vw_saves_por_job`). Entrega 3.

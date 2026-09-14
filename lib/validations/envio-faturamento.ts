@@ -69,6 +69,14 @@ export const envioFaturamentoSchema = z.object({
   parcelas: z
     .array(parcelaFaturamentoSchema)
     .min(1, "Informe ao menos uma parcela de faturamento."),
+  // Mês de referência do envio nos jobs do modelo mensal — Fee e Always On
+  // (decisão 078): o primeiro dia do mês. Ausente no envio único dos
+  // outros jobs; a action confere qual dos dois o job pede.
+  mes: z
+    .string()
+    .regex(/^\d{4}-\d{2}-01$/, "Mês de referência inválido.")
+    .nullable()
+    .optional(),
 });
 
 export type EnvioFaturamentoInput = z.infer<typeof envioFaturamentoSchema>;

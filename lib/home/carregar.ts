@@ -518,8 +518,7 @@ export async function carregarHomeGerenteProducao(
 
   const [
     versoesAguardandoMim,
-    jobsProntosPraFaturar,
-    jobsProntosPraEncerrar,
+    meusJobsNaEsteira,
     jobsFaturamentoProximo,
     mensagensNaoLidas,
     meusJobsAndamento,
@@ -540,35 +539,23 @@ export async function carregarHomeGerenteProducao(
       .eq("tenant_id", tenantId)
       .in("status", ["em_revisao", "enviada_cliente"])
       .eq("orcamento.gp_responsavel_id", userId),
-    // ESTRITO: meus jobs abertos com faturamento previsto > 0, sem errata
-    // pendente e AINDA NÃO ENVIADOS. Sem o último filtro o card contava
-    // também o job já enviado — que não tem mais nada a enviar (decisão
-    // 075, 14/09/2026). Anti-join do PostgREST: embed do envio (1 por job,
-    // `unique (job_id)`) e `is null` sobre ele.
+    // ESTRITO: meus jobs abertos com os envios e os meses da previsão de
+    // recebimento — base dos cards "prontos pra faturar" e "prontos pra
+    // encerrar" (`contarProntosPraFaturar`, `contarProntosPraEncerrar`). A
+    // conta passou para a memória com a decisão 078: o job mensal tem um
+    // envio por mês, e o anti-join do PostgREST (`envio is null`) deixava de
+    // contá-lo depois do primeiro mês enviado. Leitura rasa: só as colunas
+    // `mes` dos embeds, poucas linhas por job.
     supabase
       .from("jobs")
-      .select("id, envio:jobs_envio_faturamento(id)", {
-        count: "exact",
-        head: true,
-      })
+      .select(
+        "id, faturamento_previsto, abertura_em_revisao, " +
+          "envios:jobs_envio_faturamento(mes), previsoes:jobs_previsao_recebimento(mes)",
+      )
       .eq("tenant_id", tenantId)
       .eq("responsavel_id", userId)
       .eq("status", "aberto")
-      .gt("faturamento_previsto", 0)
-      .or("abertura_em_revisao.is.null,abertura_em_revisao.eq.false")
-      .is("envio", null),
-    // ESTRITO: meus jobs abertos com envio de faturamento registrado.
-    // Adendo §3: jobs_envio_faturamento NAO tem coluna status;
-    // a presenca do registro ja indica envio. Remove .eq("envios.status",…).
-    supabase
-      .from("jobs")
-      .select("id, envios:jobs_envio_faturamento!inner(id)", {
-        count: "exact",
-        head: true,
-      })
-      .eq("tenant_id", tenantId)
-      .eq("responsavel_id", userId)
-      .eq("status", "aberto"),
+      .not("previsoes.mes", "is", null),
     // CONTEXTO: jobs proximos do vencimento nos meus projetos
     // "aberto" + "em_producao" (enum real)
     semProjetos
@@ -626,14 +613,14 @@ export async function carregarHomeGerenteProducao(
     },
     {
       titulo: "Jobs prontos pra enviar pra faturamento",
-      contagem: jobsProntosPraFaturar.count ?? 0,
+      contagem: contarProntosPraFaturar(meusJobsNaEsteira),
       subtitulo: "Seus jobs abertos com previsão positiva, ainda não enviados",
       href: "/jobs?filtro=faturamento_pronto&meus=1",
       icone: Mail,
     },
     {
       titulo: "Jobs prontos pra encerrar",
-      contagem: jobsProntosPraEncerrar.count ?? 0,
+      contagem: contarProntosPraEncerrar(meusJobsNaEsteira),
       subtitulo: "Seus jobs com faturamento emitido",
       href: "/jobs?filtro=encerrar_pronto&meus=1",
       icone: Receipt,
@@ -801,4 +788,46 @@ export async function carregarHomeProdutor(
   ];
 
   return { pendencias, kpis };
+}
+
+// ---------------------------------------------------------------------------
+// Cards de faturamento da home do GP (decisão 078)
+
+interface JobNaEsteiraDoGp {
+  faturamento_previsto: number | string | null;
+  abertura_em_revisao: boolean | null;
+  envios: { mes: string | null }[] | null;
+  previsoes: { mes: string | null }[] | null;
+}
+
+function jobsNaEsteira(res: { data: unknown; error?: { message: string } | null }) {
+  if (res.error) console.error("[home.gp.esteira]", res.error.message);
+  return ((res.data ?? []) as JobNaEsteiraDoGp[]).map((j) => {
+    const envios = j.envios ?? [];
+    return {
+      ...j,
+      envios,
+      // Meses que o job mensal fatura: uma linha por mês na previsão de
+      // recebimento. Zero nos outros jobs.
+      meses: new Set((j.previsoes ?? []).map((p) => p.mes).filter(Boolean)).size,
+      mensaisEnviados: envios.filter((e) => e.mes !== null).length,
+    };
+  });
+}
+
+/** Com faturamento previsto, sem errata pendente e com o que enviar: o job
+ *  sem envio, ou o mensal com mês ainda sem envio. */
+function contarProntosPraFaturar(res: { data: unknown; error?: { message: string } | null }): number {
+  return jobsNaEsteira(res).filter((j) => {
+    if (j.abertura_em_revisao === true) return false;
+    if (!(Number(j.faturamento_previsto ?? 0) > 0)) return false;
+    return j.meses > 0 ? j.mensaisEnviados < j.meses : j.envios.length === 0;
+  }).length;
+}
+
+/** Com o envio registrado — no mensal, o de todos os meses. */
+function contarProntosPraEncerrar(res: { data: unknown; error?: { message: string } | null }): number {
+  return jobsNaEsteira(res).filter((j) =>
+    j.meses > 0 ? j.mensaisEnviados >= j.meses : j.envios.length > 0,
+  ).length;
 }

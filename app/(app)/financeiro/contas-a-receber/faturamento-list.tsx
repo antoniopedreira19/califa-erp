@@ -47,6 +47,8 @@ import {
   InfoFaturamentoModal,
   type InfoFaturamento,
 } from "@/components/financeiro/info-faturamento-modal";
+import { rotuloMes } from "@/lib/calculos/meses-trimestre";
+import { chaveInfoDoEnvio } from "./chave-info";
 
 // ---------------------------------------------------------------------------
 // Tipos das linhas
@@ -61,6 +63,9 @@ export interface FaturamentoPendenteRow {
   job_id: string | null;
   /** Parcela do envio que esta linha representa. Nulo em BV. */
   envio_parcela_id: string | null;
+  /** Mês do envio no job mensal — Fee e Always On (decisão 078). Nulo nos
+   *  outros jobs e em BV. */
+  mes_referencia: string | null;
   empresa_id: string;
   codigo: string | null;
   descricao: string;
@@ -266,6 +271,7 @@ export function FaturamentoList({
   function infoDaPendente(p: FaturamentoPendenteRow): InfoFaturamento {
     const referencia =
       `${p.codigo ?? p.descricao} · ${p.contraparte_nome}` +
+      (p.mes_referencia ? ` · ${rotuloMes(p.mes_referencia)}` : "") +
       ` · parcela ${p.parcela_numero}/${p.parcela_total}`;
     if (p.origem_tipo === "bv") {
       return {
@@ -276,7 +282,10 @@ export function FaturamentoList({
         ehBv: true,
       };
     }
-    const dados = p.job_id ? infoPorJob[p.job_id] : undefined;
+    const dados = p.job_id
+      ? (infoPorJob[chaveInfoDoEnvio(p.job_id, p.mes_referencia)] ??
+        infoPorJob[p.job_id])
+      : undefined;
     return {
       referencia,
       pos: [{ job: p.codigo ?? "", po: dados?.po ?? null }],
@@ -689,6 +698,11 @@ export function FaturamentoList({
                           {p.codigo}
                         </span>
                       )}
+                      {p.mes_referencia && (
+                        <span className="text-[11px] font-semibold text-muted-foreground">
+                          {rotuloMes(p.mes_referencia)}
+                        </span>
+                      )}
                     </div>
                   </td>
                   {/* Só o nome. O contato de cobrança mudou para o botão `i`
@@ -712,7 +726,7 @@ export function FaturamentoList({
                         {formatMoney(p.saldo_job)}
                       </span>
                       <span className="text-[10.5px] text-muted-foreground">
-                        total do job
+                        {p.mes_referencia ? "total do mês" : "total do job"}
                       </span>
                     </div>
                   </td>

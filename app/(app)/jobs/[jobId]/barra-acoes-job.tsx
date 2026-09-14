@@ -13,6 +13,8 @@ import { StatusActions } from "./status-actions";
 import { EnviarFaturamentoDrawer, type PortalOption } from "./enviar-faturamento-drawer";
 import { useModoErrataAtivo } from "./modo-errata";
 import type { ResumoEncerramento } from "./encerrar-dialog";
+import { BarraFaturamentoMensal } from "./barra-faturamento-mensal";
+import type { MesDeFaturamento } from "@/lib/calculos/faturamento-por-mes";
 
 function formatData(iso: string | null): string {
   if (!iso) return "—";
@@ -57,6 +59,10 @@ interface Props {
   /** Fee e Always On (modelo mensal, decisão 078): faturam mês a mês, e o
    *  envio único não aparece. A barra diz por quê. */
   faturamentoPorMes?: boolean;
+  /** Os meses do job mensal com o envio e as notas de cada um. Com o job
+   *  aberto, a barra de faturamento por mês toma o lugar desta. */
+  faturamentoMensal?: MesDeFaturamento[];
+  podeEnviarFaturamentoMensal?: boolean;
 }
 
 /**
@@ -94,6 +100,8 @@ export function BarraAcoesJob({
   moeda,
   resumoEncerramento,
   faturamentoPorMes = false,
+  faturamentoMensal = [],
+  podeEnviarFaturamentoMensal = false,
 }: Props) {
   // Enquanto a errata está aberta quem fala no rodapé é a barra dela: o
   // design tem UMA barra com três estados, não duas empilhadas.
@@ -115,6 +123,40 @@ export function BarraAcoesJob({
   });
 
   if (errataAberta) return null;
+
+  // Modelo mensal com o job aberto: a barra de faturamento por mês (design
+  // aprovado em 14/09/2026). O encerramento aparece nela quando todos os
+  // meses foram enviados — e trava pelo saldo até todos estarem faturados.
+  if (faturamentoPorMes && status === "aberto" && faturamentoMensal.length > 0) {
+    const todosEnviados = faturamentoMensal.every(
+      (m) => m.envio !== null || m.situacao === "sem_faturamento",
+    );
+    return (
+      <BarraFaturamentoMensal
+        jobId={jobId}
+        jobCodigo={jobCodigo}
+        meses={faturamentoMensal}
+        podeEnviar={podeEnviarFaturamentoMensal}
+        bloqueio={
+          aberturaEmRevisao
+            ? "Uma errata mexeu no orçado depois da abertura e o financeiro ainda não reconferiu o job. O envio dos meses volta quando a revisão for salva na Abertura de Job."
+            : null
+        }
+        portais={portais}
+        moeda={moeda}
+        acaoExtra={
+          todosEnviados ? (
+            <StatusActions
+              jobId={jobId}
+              transicoes={[]}
+              mostrarEncerramento
+              resumoEncerramento={resumoEncerramento}
+            />
+          ) : null
+        }
+      />
+    );
+  }
 
   return (
     <div className="sticky bottom-0 z-20 -mx-1 flex flex-wrap items-center justify-between gap-4 rounded-t-2xl border border-b-0 border-border bg-white/95 px-5 py-2 shadow-[0_-4px_16px_-8px_rgba(0,0,0,0.12)] backdrop-blur">

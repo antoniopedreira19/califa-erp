@@ -59,6 +59,11 @@ import {
 } from "@/lib/types";
 import type { ServicoOption } from "@/lib/data/servicos";
 import type { JobNaFila, RevisaoDeErrata } from "../dados";
+import {
+  dataDeRecebimentoDoMes,
+  type FaturamentoDoMes,
+} from "@/lib/calculos/faturamento-por-mes";
+import { nomeDoMes } from "@/lib/calculos/meses-trimestre";
 import { formatDataBr, formatPeriodo } from "../formatos";
 import {
   curvaFecha,
@@ -70,6 +75,7 @@ import {
   proximaDataSugerida,
   somaCurva,
   type CurvaLinha,
+  type RecebimentoLinha,
 } from "../curva";
 import {
   abrirJobNoFinanceiro,
@@ -156,6 +162,8 @@ interface LinhaPrevisaoForm {
   id: string;
   data: string;
   valorTexto: string;
+  /** Mês de referência — só no recebimento do job mensal (decisão 078). */
+  mes: string | null;
 }
 
 /**
@@ -194,7 +202,14 @@ interface Props {
   /** Quem clicou em "Enviar job para abertura" na tela da versão. */
   enviadoPorNome: string | null;
   curvaInicial: CurvaLinha[];
-  recebimentoInicial: CurvaLinha[];
+  recebimentoInicial: RecebimentoLinha[];
+  /**
+   * Fee e Always On (decisão 078): o faturamento de cada mês. Quando vem,
+   * a previsão de recebimento é uma linha por mês com faturamento, no
+   * valor do mês; o financeiro informa o dia e revisa as datas. Nulo nos
+   * outros jobs.
+   */
+  faturamentoPorMes: FaturamentoDoMes[] | null;
   /**
    * A competência sugerida pelo início do job. É a linha única de 100%
    * com que a abertura começa; no job já aberto vale `competenciasIniciais`.
@@ -258,7 +273,42 @@ function paraForm(linhas: CurvaLinha[]): LinhaPrevisaoForm[] {
     id: l.id,
     data: l.data,
     valorTexto: formatMoedaTexto(l.valor),
+    mes: null,
   }));
+}
+
+/**
+ * O recebimento do job mensal: uma linha por mês com faturamento, no
+ * valor do mês. A data vem da previsão gravada daquele mês; na abertura
+ * nasce vazia, esperando o dia (Tiago, 14/09/2026).
+ */
+function recebimentoMensalParaForm(
+  meses: FaturamentoDoMes[],
+  gravadas: RecebimentoLinha[],
+): LinhaPrevisaoForm[] {
+  return meses
+    .filter((m) => m.faturamento > 0)
+    .map((m) => ({
+      id: `recebimento-${m.mes}`,
+      data: gravadas.find((g) => g.mes === m.mes)?.data ?? "",
+      valorTexto: formatMoedaTexto(m.faturamento),
+      mes: m.mes,
+    }));
+}
+
+/** O dia comum às datas gravadas, para o campo "Dia do recebimento". Datas
+ *  com dias diferentes (revisadas uma a uma) deixam o campo vazio. */
+function diaComumDoRecebimento(linhas: RecebimentoLinha[]): string {
+  const dias = new Set(
+    linhas.filter((l) => l.mes && l.data.length === 10).map((l) => l.data.slice(8, 10)),
+  );
+  return dias.size === 1 ? String(Number([...dias][0])) : "";
+}
+
+/** "2026-10-01" → "Out": a coluna # do recebimento mensal. */
+function mesCurto(mes: string): string {
+  const nome = nomeDoMes(mes);
+  return nome.charAt(0).toUpperCase() + nome.slice(1, 3);
 }
 
 export function AberturaForm({
@@ -273,6 +323,7 @@ export function AberturaForm({
   enviadoPorNome,
   curvaInicial,
   recebimentoInicial,
+  faturamentoPorMes,
   trimestreSugerido,
   anoSugerido,
   competenciasIniciais,
@@ -362,9 +413,19 @@ export function AberturaForm({
   const [curva, setCurva] = React.useState<LinhaPrevisaoForm[]>(() =>
     paraForm(curvaInicial),
   );
+  const mensal = faturamentoPorMes !== null;
+  const recebimentoDoServidor = () =>
+    faturamentoPorMes
+      ? recebimentoMensalParaForm(faturamentoPorMes, recebimentoInicial)
+      : paraForm(recebimentoInicial);
   const [recebimento, setRecebimento] = React.useState<LinhaPrevisaoForm[]>(
-    () => paraForm(recebimentoInicial),
+    recebimentoDoServidor,
   );
+  const [diaRecebimento, setDiaRecebimento] = React.useState(() =>
+    diaComumDoRecebimento(recebimentoInicial),
+  );
+  // Os seletores de data são não controlados: aplicar o dia os remonta.
+  const [rodadaDoDia, setRodadaDoDia] = React.useState(0);
   const [confirmarAberto, setConfirmarAberto] = React.useState(false);
   const [reprovarAberto, setReprovarAberto] = React.useState(false);
   const [erro, setErro] = React.useState<string | null>(null);
@@ -390,12 +451,18 @@ export function AberturaForm({
 
   // ---------- Previsão de recebimento ----------
   const linhasReceb = recebimento.map((l) => ({
+    mes: l.mes,
     data: l.data,
     valor: parseMoeda(l.valorTexto),
   }));
   const somaDoRecebimento = somaCurva(linhasReceb);
-  const recebBate = curvaFecha(linhasReceb, faturamentoPrevisto);
-  const difReceb = emCentavos(somaDoRecebimento - faturamentoPrevisto);
+  // No mensal as linhas fecham com a soma dos meses, que pode diferir do
+  // total do job por centavos de arredondamento.
+  const totalDoRecebimento = faturamentoPorMes
+    ? somaCurva(faturamentoPorMes.map((m) => ({ valor: m.faturamento })))
+    : faturamentoPrevisto;
+  const recebBate = curvaFecha(linhasReceb, totalDoRecebimento);
+  const difReceb = emCentavos(somaDoRecebimento - totalDoRecebimento);
 
   // Espelho do custo zero: job sem faturamento previsto (tudo pago
   // direto pelo cliente ao fornecedor) abre sem previsão de entrada.
@@ -505,7 +572,9 @@ export function AberturaForm({
           : !rateioFecha
             ? "O rateio de competências precisa somar 100%."
       : !semRecebimento && !recebDatasOk
-        ? "Preencha a data de todas as parcelas de recebimento."
+        ? mensal
+          ? "Informe o dia do recebimento, ou a data de cada mês."
+          : "Preencha a data de todas as parcelas de recebimento."
         : !semRecebimento && !recebValoresOk
           ? "Cada parcela de recebimento precisa de um valor maior que zero."
           : !semRecebimento && !recebBate
@@ -572,8 +641,24 @@ export function AberturaForm({
           hojeIso,
         ),
         valorTexto: "0,00",
+        mes: null,
       },
     ]);
+  }
+
+  /** "Dia do recebimento": cada mês recebe nesse dia do mês seguinte. As
+   *  datas continuam editáveis uma a uma depois. */
+  function aplicarDiaDoRecebimento(texto: string) {
+    const limpo = texto.replace(/\D/g, "").slice(0, 2);
+    setDiaRecebimento(limpo);
+    const dia = Number(limpo);
+    if (!limpo || dia < 1 || dia > 31) return;
+    setRecebimento((atual) =>
+      atual.map((l) =>
+        l.mes ? { ...l, data: dataDeRecebimentoDoMes(l.mes, dia) } : l,
+      ),
+    );
+    setRodadaDoDia((r) => r + 1);
   }
 
   function adicionarParcelaRecebimento() {
@@ -587,6 +672,7 @@ export function AberturaForm({
           hojeIso,
         ),
         valorTexto: "0,00",
+        mes: null,
       },
     ]);
   }
@@ -712,6 +798,7 @@ export function AberturaForm({
         : linhasReceb.map((l) => ({
             data_prevista: l.data,
             valor: l.valor,
+            mes: l.mes,
           })),
     };
   }
@@ -800,7 +887,9 @@ export function AberturaForm({
     setComps(compsIniciais);
     setAnoAtivo(compsIniciais[0].ano);
     setCurva(paraForm(curvaInicial));
-    setRecebimento(paraForm(recebimentoInicial));
+    setRecebimento(recebimentoDoServidor());
+    setDiaRecebimento(diaComumDoRecebimento(recebimentoInicial));
+    setRodadaDoDia((r) => r + 1);
     setCriandoProjeto(false);
     setProjetoAberto(false);
     setDropConta(null);
@@ -1571,10 +1660,42 @@ export function AberturaForm({
                           <p className="text-[11px] font-bold uppercase tracking-[0.07em] text-emerald-700">
                             Parcelas de recebimento
                           </p>
-                          <span className="text-[11.5px] text-muted-foreground">
-                            Recebimento previsto para{" "}
-                            {formatDataBr(job.data_prevista_faturamento)}
-                          </span>
+                          {mensal ? (
+                            <span className="inline-flex flex-wrap items-center gap-2 text-[11.5px] text-muted-foreground">
+                              <label
+                                htmlFor="dia-recebimento"
+                                className="font-semibold text-foreground"
+                              >
+                                Dia do recebimento
+                              </label>
+                              {travado ? (
+                                <span className="font-mono font-semibold text-foreground">
+                                  {diaRecebimento || "—"}
+                                </span>
+                              ) : (
+                                <input
+                                  id="dia-recebimento"
+                                  value={diaRecebimento}
+                                  onChange={(e) =>
+                                    aplicarDiaDoRecebimento(e.target.value)
+                                  }
+                                  inputMode="numeric"
+                                  placeholder="20"
+                                  aria-label="Dia do recebimento"
+                                  className="h-7 w-12 rounded-md border border-border bg-white text-center font-mono text-[12.5px] font-semibold text-foreground outline-none focus:border-california-red"
+                                />
+                              )}
+                              <span>
+                                · uma linha por mês, recebida no mês seguinte.
+                                Revise a data de cada mês se precisar.
+                              </span>
+                            </span>
+                          ) : (
+                            <span className="text-[11.5px] text-muted-foreground">
+                              Recebimento previsto para{" "}
+                              {formatDataBr(job.data_prevista_faturamento)}
+                            </span>
+                          )}
                           {!semRecebimento && (
                             <span className="ml-auto inline-flex items-center gap-2">
                               <span
@@ -1596,7 +1717,7 @@ export function AberturaForm({
                                     ? `Sobra de ${formatCurrency(Math.abs(difReceb))}`
                                     : `Falta ${formatCurrency(Math.abs(difReceb))}`}
                               </span>
-                              {!travado && (
+                              {!travado && !mensal && (
                                 <button
                                   type="button"
                                   onClick={distribuirRecebimento}
@@ -1661,7 +1782,9 @@ export function AberturaForm({
                               className="border-b border-b-[#f4f2f2]"
                             >
                               <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">
-                                {`R${String(i + 1).padStart(2, "0")}`}
+                                {linha.mes
+                                  ? mesCurto(linha.mes)
+                                  : `R${String(i + 1).padStart(2, "0")}`}
                               </td>
                               <td className="px-4 py-2.5">
                                 <div className="w-[190px]">
@@ -1673,6 +1796,7 @@ export function AberturaForm({
                                        é o cliente, não o calendário com que a
                                        California paga fornecedor. */
                                     <DatePicker
+                                      key={`${linha.id}-${rodadaDoDia}`}
                                       name={`recebimento-data-${linha.id}`}
                                       defaultValue={linha.data}
                                       className="h-9 text-[13px]"
@@ -1688,7 +1812,8 @@ export function AberturaForm({
                                 </div>
                               </td>
                               <td className="px-4 py-2.5">
-                                {travado ? (
+                                {/* No mensal o valor é o faturamento do mês. */}
+                                {travado || linha.mes ? (
                                   <p className="text-right font-mono text-[13px] font-semibold">
                                     {formatCurrency(valor)}
                                   </p>
@@ -1724,7 +1849,7 @@ export function AberturaForm({
                                   : "—"}
                               </td>
                               <td className="px-4 py-2.5">
-                                {travado ? null : (
+                                {travado || linha.mes ? null : (
                                   <button
                                     type="button"
                                     onClick={() =>
@@ -1751,7 +1876,7 @@ export function AberturaForm({
                         <tr className="border-b border-border bg-muted/40">
                           <td className="px-4 py-2.5" />
                           <td className="px-4 py-2.5">
-                            {!travado && (
+                            {!travado && !mensal && (
                               <button
                                 type="button"
                                 onClick={adicionarParcelaRecebimento}

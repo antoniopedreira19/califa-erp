@@ -9,7 +9,10 @@ import { checarPermissao } from "@/lib/permissoes-server";
 import {
   MENSAGEM_JA_ENVIADO,
   jobJaEnviadoParaFaturamento,
+  mensagemMesJaEnviado,
+  mesesEnviadosDoJob,
 } from "@/lib/data/envio-faturamento";
+import { nomeDoMes } from "@/lib/calculos/meses-trimestre";
 import { configDaPlanilha } from "@/app/(app)/_planilha/modelo-planilha";
 import {
   calcularTotaisVersao,
@@ -446,8 +449,12 @@ export async function registrarErrata(
 
   // Depois do envio o valor da nota está congelado: mexer no orçado agora
   // faria a nota sair por um número que não é mais o do job (27/08/2026).
+  // No modelo mensal (decisão 078) a porta fecha por MÊS — a conferência
+  // fica mais abaixo, quando os grupos das linhas já estão lidos.
+  const mensal = planilha.modeloPlanilha === "mensal";
   if (
-    await jobJaEnviadoParaFaturamento(supabase, jobId, session.activeTenant.id)
+    !mensal &&
+    (await jobJaEnviadoParaFaturamento(supabase, jobId, session.activeTenant.id))
   ) {
     return { ok: false, message: MENSAGEM_JA_ENVIADO };
   }
@@ -473,12 +480,57 @@ export async function registrarErrata(
   // Nome do grupo entra congelado no histórico.
   const { data: grupos } = await supabase
     .from("versoes_orcamento_grupos")
-    .select("id, nome")
+    .select("id, nome, mes_id")
     .eq("versao_orcamento_id", job.versao_orcamento_aprovada_id)
     .eq("tenant_id", session.activeTenant.id);
   const nomeDoGrupo = new Map(
     (grupos ?? []).map((g: any) => [g.id as string, g.nome as string]),
   );
+
+  // Modelo mensal (decisão 078): errata não toca linha de mês já enviado
+  // para faturamento — nem corrige, nem remove, nem cria linha nova num
+  // grupo desse mês. Os outros meses seguem editáveis.
+  if (mensal) {
+    let enviados: Set<string>;
+    try {
+      enviados = await mesesEnviadosDoJob(supabase, jobId, session.activeTenant.id);
+    } catch {
+      return {
+        ok: false,
+        message: "Não foi possível conferir os meses enviados para faturamento. Tente de novo.",
+      };
+    }
+    if (enviados.size > 0) {
+      const { data: mesesDaVersao } = await supabase
+        .from("versoes_orcamento_meses")
+        .select("id, mes")
+        .eq("versao_orcamento_id", job.versao_orcamento_aprovada_id)
+        .eq("tenant_id", session.activeTenant.id);
+      const mesDoId = new Map(
+        (mesesDaVersao ?? []).map((m: any) => [m.id as string, m.mes as string]),
+      );
+      const mesDoGrupo = new Map(
+        (grupos ?? []).map((g: any) => [
+          g.id as string,
+          g.mes_id ? (mesDoId.get(g.mes_id) ?? null) : null,
+        ]),
+      );
+      const tocados = new Set<string>();
+      const conferir = (grupoId: string | undefined) => {
+        const mes = grupoId ? mesDoGrupo.get(grupoId) : null;
+        if (mes && enviados.has(mes)) tocados.add(mes);
+      };
+      for (const alt of alteracoes) conferir(porId.get(alt.job_item_orcado_id)?.grupo_id);
+      for (const id of remocoes) conferir(porId.get(id)?.grupo_id);
+      for (const nova of novas) conferir(nova.grupo_id);
+      if (tocados.size > 0) {
+        return {
+          ok: false,
+          message: mensagemMesJaEnviado([...tocados].sort().map(nomeDoMes)),
+        };
+      }
+    }
+  }
 
   const efeitoDe = (
     de: { total: number; tipoCusto: TipoCusto },

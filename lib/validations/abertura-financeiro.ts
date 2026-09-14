@@ -49,6 +49,14 @@ export const previsaoRecebimentoSchema = z
       valor: z
         .number({ invalid_type_error: "Informe o valor da parcela." })
         .positive("Cada parcela de recebimento precisa de um valor maior que zero."),
+      /** Só no job mensal — Fee e Always On (decisão 078): o mês de
+       *  referência da linha, `yyyy-mm-01`. A action confere contra os
+       *  meses do job e regrava o valor pelo faturamento do mês. */
+      mes: z
+        .string()
+        .regex(/^\d{4}-\d{2}-01$/, "Mês de referência inválido.")
+        .nullable()
+        .optional(),
     }),
   )
   .max(60, "Máximo de 60 parcelas de recebimento.");

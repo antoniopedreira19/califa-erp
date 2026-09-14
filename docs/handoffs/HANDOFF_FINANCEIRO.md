@@ -5037,3 +5037,25 @@ GP (`lib/home/carregar.ts`) usava `orcamentos!inner` a partir de
 (contagem vazia). Virou `orcamentos!orcamento_id!inner`; conferido no
 navegador com a mesma consulta: 200 e 1 versão, contra 300 da antiga.
 
+## ⚠️ Nota de 2026-09-14 — Fee e Always On no financeiro (decisão 078, entrega 3)
+
+Regras em [078](../decisions/078-orcamento-mensal-fee-e-always-on.md), seção "Entrega 3".
+
+- **Abertura do job mensal:**
+  - a previsão de recebimento é uma linha por mês com faturamento, no valor do mês (travado);
+  - o financeiro informa o "Dia do recebimento" e cada mês cai nesse dia do mês seguinte; a data de cada linha segue editável;
+  - `conferirRecebimentoPorMes` (em `abertura-de-job/actions.ts`) relê o faturamento dos meses (`lerFaturamentoMensalPeloJob`), confere uma linha por mês e grava `mes` e `valor_save`, na abertura e na edição/revisão;
+  - no mensal, a soma é conferida mês a mês, não contra o total do job (há centavos de arredondamento).
+- **Contas a receber:**
+  - a fila mostra o mês da linha (`mes_referencia`) e "total do mês";
+  - PO e instrução da nota no botão `i` e na gaveta de faturar saem da chave do mês (`chave-info.ts`);
+  - a chave só do job junta as POs dos meses para a nota já emitida.
+- **Esteira:**
+  - `classificarFaturamento` e `consolidarNotasDoJob` ganharam `faltaFaturar`: o job mensal com mês não enviado ou não faturado inteiro fica em "faturado", nunca em "liquidado";
+  - `faturamentoPorJob` calcula isso pelos meses da previsão de recebimento.
+- **Página do job no financeiro:**
+  - as notas passam a ser lidas pelos itens (decisão 075); o `.maybeSingle()` antigo dava erro com mais de uma nota;
+  - o selo considera os envios por mês;
+  - "aguardando encerramento" só aparece com todos os meses enviados.
+- **Prazos do job** (`carregarPrazosDosJobs`): notas pelos itens, a primeira emissão marca o faturamento, e no mensal o último recebimento considera também a previsão dos meses ainda sem nota.
+- **Home do GP:** "prontos pra faturar" e "prontos pra encerrar" são contados em memória, por mês.

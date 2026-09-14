@@ -22,6 +22,7 @@ import { ErratasCard } from "@/app/(app)/jobs/[jobId]/erratas-card";
 import { JobRealizadoSection } from "@/app/(app)/jobs/[jobId]/realizado/job-realizado-section";
 import { JobChatSection } from "@/app/(app)/jobs/[jobId]/comunicacao/job-chat-section";
 import { AberturaForm } from "../../abertura-de-job/[jobId]/abertura-form";
+import { lerFaturamentoMensalPeloJob } from "@/lib/data/faturamento-mensal";
 import {
   carregarJobParaAbertura,
   revisaoPendenteDoJob,
@@ -98,6 +99,7 @@ export default async function JobNoFinanceiroPage({
     servicosRes,
     competencias,
     fotos,
+    faturamentoMensalDoJob,
   ] = await Promise.all([
     carregarDetalheDoJob(session, params.jobId),
     carregarJobParaAbertura(tenantId, params.jobId),
@@ -105,16 +107,17 @@ export default async function JobNoFinanceiroPage({
     carregarLinhasDeFluxo(tenantId, [params.jobId]),
     carregarPrazosDosJobs(tenantId, [params.jobId]),
     previsoesGravadas(supabase, tenantId, params.jobId),
-    // Nota emitida do job: decide o badge de faturamento e datou o prazo
-    // de recebimento.
+    // Notas emitidas do job: decidem o badge de faturamento. Pelos ITENS
+    // (decisão 075) — o cabeçalho fica com `origem_id` nulo na nota com
+    // mais de um item —, e várias: uma por parcela, ou por mês no job
+    // mensal (decisão 078), onde o `.maybeSingle()` antigo dava erro.
     supabase
-      .from("faturamentos")
-      .select("id, valor_total, data_emissao")
+      .from("faturamento_itens")
+      .select("faturamento_id, faturamento:faturamentos!inner(status)")
       .eq("tenant_id", tenantId)
-      .eq("origem_tipo", "job")
       .eq("origem_id", params.jobId)
-      .eq("status", "emitido")
-      .maybeSingle(),
+      .in("origem_tipo", ["job", "save"])
+      .eq("faturamento.status", "emitido"),
     // Vocabulário do combo de categoria do formulário de abertura: o
     // mesmo escopo 'orcamento' que a fila usa. Não existe lista de
     // categoria só do financeiro.
@@ -131,6 +134,8 @@ export default async function JobNoFinanceiroPage({
     competenciasGravadas(supabase, tenantId, params.jobId),
     // As fotos do registro: a abertura e cada revisão (decisão 059).
     fotosDaAbertura(supabase, tenantId, params.jobId),
+    // Fee e Always On (decisão 078): a previsão de recebimento é por mês.
+    lerFaturamentoMensalPeloJob(supabase, tenantId, params.jobId),
   ]);
 
   if (!detalhe || !carregadoParaAbertura) notFound();
@@ -181,20 +186,22 @@ export default async function JobNoFinanceiroPage({
   }));
 
   // ---- Badge de faturamento: mesma classificação da lista ----
-  const nota = notaRes.data as {
-    id: string;
-    valor_total: number | string;
-    data_emissao: string | null;
-  } | null;
+  if (notaRes.error) {
+    console.error("[job-financeiro.notas]", notaRes.error.message);
+  }
+  const notaIds = Array.from(
+    new Set(((notaRes.data ?? []) as any[]).map((i) => i.faturamento_id as string)),
+  );
 
-  const titulosRes = nota
-    ? await supabase
-        .from("titulos_receber")
-        .select("valor, data_vencimento, status, pago_em")
-        .eq("tenant_id", tenantId)
-        .eq("faturamento_id", nota.id)
-        .neq("status", "cancelado")
-    : { data: [], error: null };
+  const titulosRes =
+    notaIds.length > 0
+      ? await supabase
+          .from("titulos_receber")
+          .select("valor, data_vencimento, status, pago_em")
+          .eq("tenant_id", tenantId)
+          .in("faturamento_id", notaIds)
+          .neq("status", "cancelado")
+      : { data: [], error: null };
 
   const titulos = ((titulosRes.data ?? []) as any[]).map((t) => ({
     valor: Number(t.valor ?? 0),
@@ -203,11 +210,19 @@ export default async function JobNoFinanceiroPage({
   }));
 
   const hoje = new Date().toISOString().slice(0, 10);
+  // Job mensal (decisão 078): enviado desde o primeiro mês, e só liquida
+  // com todos os meses faturados.
+  const mesesDoJob = detalhe.faturamentoMensal;
+  const faltaFaturarMes = mesesDoJob.some(
+    (m) => m.situacao !== "faturado" && m.situacao !== "sem_faturamento",
+  );
   const situacao = classificarFaturamento(
-    Boolean(nota),
-    detalhe.envioFaturamento !== null,
+    notaIds.length > 0,
+    detalhe.envioFaturamento !== null || detalhe.envios.length > 0,
     titulos,
     hoje,
+    false,
+    faltaFaturarMes,
   );
   const situacaoMeta = SITUACAO_META[situacao];
 
@@ -252,7 +267,12 @@ export default async function JobNoFinanceiroPage({
   ).sort((a, b) => a - b);
 
   const aguardandoEncerramento =
-    job.status === "aberto" && detalhe.envioFaturamento !== null;
+    job.status === "aberto" &&
+    (detalhe.envioFaturamento !== null ||
+      (mesesDoJob.length > 0 &&
+        mesesDoJob.every(
+          (m) => m.envio !== null || m.situacao === "sem_faturamento",
+        )));
 
   return (
     <div className="mx-auto max-w-[1452px] space-y-5 min-[1600px]:mr-6">
@@ -340,6 +360,9 @@ export default async function JobNoFinanceiroPage({
             enviadoPorNome={carregadoParaAbertura.enviadoPorNome}
             curvaInicial={previsoes.curva}
             recebimentoInicial={previsoes.recebimento}
+            faturamentoPorMes={
+              faturamentoMensalDoJob?.mensal ? faturamentoMensalDoJob.meses : null
+            }
             trimestreSugerido={
               job.competencia_trimestre ?? trimestreDe(baseCompetencia)
             }
@@ -478,6 +501,7 @@ export default async function JobNoFinanceiroPage({
             // Modelo mensal (decisão 078): a mesma régua de meses da tela do
             // GP, trocando de mês pela URL sem sair da aba da planilha.
             meses={detalhe.meses}
+            faturamentoMensal={detalhe.faturamentoMensal}
             mesPedido={searchParams?.mes}
             hrefPlanilha={`/financeiro/jobs/${job.id}?aba=planilha`}
             grupos={detalhe.grupos}

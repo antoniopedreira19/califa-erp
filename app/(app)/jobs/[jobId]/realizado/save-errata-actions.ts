@@ -22,7 +22,10 @@ import { checarPermissao } from "@/lib/permissoes-server";
 import {
   MENSAGEM_JA_ENVIADO,
   jobJaEnviadoParaFaturamento,
+  mensagemMesJaEnviado,
+  mesesEnviadosDoJob,
 } from "@/lib/data/envio-faturamento";
+import { nomeDoMes } from "@/lib/calculos/meses-trimestre";
 import {
   calcularTotaisVersao,
   type ItemParaTotais,
@@ -112,7 +115,10 @@ export async function registrarErrataDeSave(
     };
   }
 
-  if (await jobJaEnviadoParaFaturamento(supabase, jobId, tenantId)) {
+  // No modelo mensal (decisão 078) a porta fecha por MÊS: a conferência
+  // fica depois de achar a linha, porque depende do grupo dela.
+  const mensal = job.orcamento?.categoria?.modelo_planilha === "mensal";
+  if (!mensal && (await jobJaEnviadoParaFaturamento(supabase, jobId, tenantId))) {
     return { ok: false, message: MENSAGEM_JA_ENVIADO };
   }
 
@@ -140,7 +146,7 @@ export async function registrarErrataDeSave(
       .eq("tenant_id", tenantId),
     supabase
       .from("versoes_orcamento_grupos")
-      .select("id, nome")
+      .select("id, nome, mes_id")
       .eq("tenant_id", tenantId),
   ]);
 
@@ -152,6 +158,33 @@ export async function registrarErrataDeSave(
   const itens = itensRes.data as unknown as ItemDoJob[];
   const alvo = itens.find((i) => i.id === jobItemOrcadoId);
   if (!alvo) return { ok: false, message: "Linha não encontrada neste job." };
+
+  // Modelo mensal: linha de mês já enviado para faturamento não muda.
+  if (mensal) {
+    let enviados: Set<string>;
+    try {
+      enviados = await mesesEnviadosDoJob(supabase, jobId, tenantId);
+    } catch {
+      return {
+        ok: false,
+        message: "Não foi possível conferir os meses enviados para faturamento. Tente de novo.",
+      };
+    }
+    const grupoDaLinha = ((grupoRes.data ?? []) as { id: string; mes_id: string | null }[]).find(
+      (g) => g.id === alvo.grupo_id,
+    );
+    if (enviados.size > 0 && grupoDaLinha?.mes_id) {
+      const { data: mesDaLinha } = await supabase
+        .from("versoes_orcamento_meses")
+        .select("mes")
+        .eq("id", grupoDaLinha.mes_id)
+        .eq("tenant_id", tenantId)
+        .maybeSingle<{ mes: string }>();
+      if (mesDaLinha && enviados.has(mesDaLinha.mes)) {
+        return { ok: false, message: mensagemMesJaEnviado([nomeDoMes(mesDaLinha.mes)]) };
+      }
+    }
+  }
 
   const totalConsumo =
     mudanca.tipo === "consumo"
