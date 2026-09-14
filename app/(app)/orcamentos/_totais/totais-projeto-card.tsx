@@ -1,5 +1,7 @@
 "use client";
 
+import type { CategoriaModeloPlanilha } from "@/lib/types";
+
 import * as React from "react";
 import { Calculator } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
@@ -11,6 +13,10 @@ import {
   type QuebraSave,
 } from "@/lib/calculos/versao-totais";
 import { PainelResultado } from "@/components/painel-resultado";
+import {
+  cadeiaDoConjunto,
+  rotuloDosHonorarios,
+} from "@/app/(app)/_planilha/modelo-planilha";
 import { LegendaFechamento } from "@/components/legenda-fechamento";
 import {
   BotaoColunasSave,
@@ -57,6 +63,10 @@ export interface LinhaTotaisProjeto {
    *  orçamento internacional do projeto. */
   intTaxes: number;
   intTransactionCosts: number;
+  /** Modelo de planilha do orçamento (decisão 072). É por ele — e não pelo
+   *  valor das int. taxes — que o card decide mostrar a cadeia
+   *  internacional. Obrigatório. */
+  modeloPlanilha: CategoriaModeloPlanilha;
   /** O que a California emite nota neste orçamento. */
   faturamentoPrevisto: number;
   /** Compromisso total do cliente neste orçamento. */
@@ -102,6 +112,10 @@ export function TotaisProjetoCard({ linhas, moeda, descricao }: Props) {
     (s, l) => s + l.intTransactionCosts,
     0,
   );
+  // Pelo MODELO, não pelo valor: um internacional com int. taxes 0%
+  // continua mostrando as linhas dele (decisão 072, 14/09/2026).
+  const cadeia = cadeiaDoConjunto(linhas.map((l) => l.modeloPlanilha));
+  const temInternacional = cadeia !== "nacional";
   const faturamentoPrevisto = linhas.reduce(
     (s, l) => s + l.faturamentoPrevisto,
     0,
@@ -446,7 +460,8 @@ export function TotaisProjetoCard({ linhas, moeda, descricao }: Props) {
             <LinhaValor
               rotulo={
                 <>
-                  Honorários <span className="text-xs">({taxaHonorarios})</span>
+                  {rotuloDosHonorarios(cadeia)}{" "}
+                  <span className="text-xs">({taxaHonorarios})</span>
                 </>
               }
               valor={formatCurrency(honorarios, moeda)}
@@ -454,7 +469,7 @@ export function TotaisProjetoCard({ linhas, moeda, descricao }: Props) {
             {/* As int. taxes entram ANTES do imposto brasileiro, como na
                 cadeia: é a ordem em que o dinheiro é retido. A linha só
                 existe quando há orçamento internacional no projeto. */}
-            {intTaxes > 0 && (
+            {temInternacional && (
               <LinhaValor
                 rotulo="Int. taxes (retidas no exterior)"
                 valor={formatCurrency(intTaxes, moeda)}
@@ -463,13 +478,13 @@ export function TotaisProjetoCard({ linhas, moeda, descricao }: Props) {
             <LinhaValor
               rotulo={
                 <>
-                  {intTaxes > 0 ? "Impostos BR" : "Impostos"}{" "}
+                  {temInternacional ? "Impostos BR" : "Impostos"}{" "}
                   <span className="text-xs">({taxaImpostos})</span>
                 </>
               }
               valor={formatCurrency(imposto, moeda)}
             />
-            {intTransactionCosts > 0 && (
+            {temInternacional && (
               <LinhaValor
                 rotulo="Int. transaction costs"
                 valor={formatCurrency(intTransactionCosts, moeda)}
@@ -497,12 +512,20 @@ export function TotaisProjetoCard({ linhas, moeda, descricao }: Props) {
                 projeto não usam todos as mesmas.
               </p>
             )}
+            {cadeia === "mista" && (
+              <p className="mt-2.5 text-[11.5px] text-muted-foreground">
+                Int. taxes e custos de transação vêm só dos orçamentos
+                internacionais, cada um pela sua cadeia; os nacionais fecham
+                sem eles.
+              </p>
+            )}
           </div>
         </div>
 
         <PainelResultado
           valorJob={valorJob}
           imposto={imposto}
+          cadeia={cadeia}
           intTaxes={intTaxes}
           intTransactionCosts={intTransactionCosts}
           orcado={totalOrcadoRentabilidade}
@@ -516,7 +539,7 @@ export function TotaisProjetoCard({ linhas, moeda, descricao }: Props) {
       </div>
 
       <div className="overflow-hidden rounded-b-2xl">
-        <LegendaFechamento />
+        <LegendaFechamento internacional={cadeia === "internacional"} />
       </div>
     </div>
   );

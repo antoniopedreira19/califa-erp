@@ -6,6 +6,10 @@ import {
   calcularRentabilidade,
   calcularResultadoOperacional,
 } from "@/lib/calculos/versao-totais";
+import {
+  rotuloDosHonorarios,
+  type CadeiaDoResultado,
+} from "@/app/(app)/_planilha/modelo-planilha";
 
 interface Props {
   /**
@@ -18,11 +22,16 @@ interface Props {
    */
   valorJob: number;
   imposto: number;
+  /** Qual cadeia o painel mostra — decidida pelo MODELO, não pelo valor
+   *  (decisão 072, 14/09/2026). Fora do nacional, "Int. taxes" e "Int.
+   *  transaction costs" aparecem sempre, mesmo zeradas. Obrigatória: é
+   *  ela que impede um internacional com int. taxes 0% de parecer
+   *  nacional. */
+  cadeia: CadeiaDoResultado;
   /** Int. taxes retidas no exterior — só existem no fechamento
-   *  internacional (decisão 072). **0 no nacional**, e aí a linha nem
-   *  aparece. Obrigatória, e não opcional: quem monta o painel tem que
-   *  dizer, para o resultado não sair inflado em silêncio num job
-   *  internacional. */
+   *  internacional (decisão 072). **0 no nacional.** Obrigatória, e não
+   *  opcional: quem monta o painel tem que dizer, para o resultado não
+   *  sair inflado em silêncio num job internacional. */
   intTaxes: number;
   /** Custos de transação internacional. Mesma regra da de cima. */
   intTransactionCosts: number;
@@ -103,6 +112,7 @@ function LinhaValor({
 export function PainelResultado({
   valorJob,
   imposto,
+  cadeia,
   intTaxes,
   intTransactionCosts,
   orcado,
@@ -118,6 +128,7 @@ export function PainelResultado({
     somentePlanejada ? "planejada" : "realizada",
   );
   const planejada = somentePlanejada || visao === "planejada";
+  const internacional = cadeia !== "nacional";
 
   const custo = planejada ? custoPlanejado : custoRealizado;
   // Planejada não tem BV (decisão 062): a comissão só entra onde ela
@@ -174,16 +185,16 @@ export function PainelResultado({
           valor={formatCurrency(valorJob, moeda)}
         />
         <LinhaValor
-          rotulo={intTaxes > 0 ? "− Impostos BR" : "− Impostos"}
+          rotulo={internacional ? "− Impostos BR" : "− Impostos"}
           valor={formatCurrency(imposto, moeda)}
         />
-        {intTaxes > 0 && (
+        {internacional && (
           <LinhaValor
             rotulo="− Int. taxes (retidas no exterior)"
             valor={formatCurrency(intTaxes, moeda)}
           />
         )}
-        {intTransactionCosts > 0 && (
+        {internacional && (
           <LinhaValor
             rotulo="− Int. transaction costs"
             valor={formatCurrency(intTransactionCosts, moeda)}
@@ -234,7 +245,7 @@ export function PainelResultado({
               orçamento já os escreve assim, e o mesmo número não pode ter
               dois nomes nas duas telas do mesmo job (decisão 072). */}
           <span className="text-sm font-medium">
-            {intTaxes > 0 ? "Fee" : "Honorários"}
+            {rotuloDosHonorarios(cadeia)}
           </span>
           <span className="whitespace-nowrap font-mono text-[13px] font-semibold">
             {formatCurrency(honorarios, moeda)}

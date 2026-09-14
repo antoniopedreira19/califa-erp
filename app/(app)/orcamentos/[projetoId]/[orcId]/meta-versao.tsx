@@ -137,13 +137,16 @@ export function MetaVersao({
           <>
             {/* A moeda dos VALORES continua BRL e por isso não vem aqui:
                 o que muda de versão para versão no internacional é a moeda
-                de fora e a taxa que converte. Cotação, venda e data são
-                registro de conferência — vivem no `title` e no formulário,
-                para a linha não virar um parágrafo. */}
+                de fora e o câmbio. Cotação, data e venda ficam à vista,
+                com travessão quando vazias: desde 14/09/2026 aprovar exige
+                o câmbio inteiro, e quem lê a linha tem que ver o que falta
+                sem abrir o "Editar". */}
             <Campo
               rotulo="Moeda"
               valor={internacional.moedaEstrangeira || "—"}
             />
+            <Separador />
+            <Campo rotulo="Cotação" valor={cotacaoComData(internacional)} />
             <Separador />
             <Campo
               rotulo="Compra"
@@ -152,7 +155,15 @@ export function MetaVersao({
                   ? formatarTaxa(internacional.cambioCompra)
                   : "—"
               }
-              dica={dicaDoCambio(internacional)}
+            />
+            <Separador />
+            <Campo
+              rotulo="Venda"
+              valor={
+                internacional.cambioVenda
+                  ? formatarTaxa(internacional.cambioVenda)
+                  : "—"
+              }
             />
             <Separador />
             <Campo
@@ -435,17 +446,12 @@ function TaxaInput({ name, valor }: { name: string; valor: number | null }) {
   );
 }
 
-/** O que o hover da "Compra" mostra: o que ficou registrado e não entra em
- *  conta nenhuma. Devolve `undefined` quando não há nada a contar, para o
- *  campo não ganhar cursor de ajuda sem ajuda. */
-function dicaDoCambio(i: MetaInternacional): string | undefined {
-  const partes: string[] = [];
-  if (i.cambioCotacao) {
-    const emData = i.cambioData ? ` em ${formatarData(i.cambioData)}` : "";
-    partes.push(`Cotação ${formatarTaxa(i.cambioCotacao)}${emData}`);
-  }
-  if (i.cambioVenda) partes.push(`Venda ${formatarTaxa(i.cambioVenda)}`);
-  return partes.length > 0 ? partes.join(" · ") : undefined;
+/** "5,3000 em 14/09/2026" — a cotação e o dia dela, que só se leem
+ *  juntos. O que faltar vira travessão, para a linha mostrar o buraco. */
+function cotacaoComData(i: MetaInternacional): string {
+  const cotacao = i.cambioCotacao ? formatarTaxa(i.cambioCotacao) : "—";
+  if (!i.cambioCotacao && !i.cambioData) return "—";
+  return `${cotacao} em ${i.cambioData ? formatarData(i.cambioData) : "—"}`;
 }
 
 /** ISO → dd/mm/aaaa, sem `Date`: `new Date("2026-06-02")` é UTC e volta

@@ -1,3 +1,4 @@
+import type { CategoriaModeloPlanilha } from "@/lib/types";
 // Formato que a visão agregada do projeto monta no servidor e entrega pronto
 // pros cards. Os valores já vêm calculados: nem o card do job nem o card de
 // Totais refazem conta, só formatam.
@@ -56,6 +57,9 @@ export interface JobPlanilhaProjeto {
   codigo: string;
   nome: string;
   status: JobStatus;
+  /** Modelo de planilha do orçamento que originou o job (decisão 072).
+   *  Decide, pelo modelo e não pelo valor, a cadeia do card do projeto. */
+  modeloPlanilha: CategoriaModeloPlanilha;
   responsavel: string | null;
   moeda: string;
   percentualHonorarios: number;

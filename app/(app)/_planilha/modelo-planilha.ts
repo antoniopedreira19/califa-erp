@@ -68,3 +68,30 @@ export function configDaPlanilha(
       codigo !== "" && compra > 0 ? { codigo, compra } : null,
   };
 }
+
+/**
+ * Qual cadeia um resultado mostra (decisão 072, 14/09/2026): pelo MODELO dos
+ * orçamentos ou jobs somados, e não pelo valor das int. taxes — um
+ * internacional com int. taxes 0% continua sendo internacional, e as linhas
+ * dele aparecem zeradas, como na planilha modelo e na exportação.
+ *
+ * `mista` é o projeto com nacional e internacional lado a lado: as linhas
+ * internacionais aparecem (somam só os internacionais) e os honorários se
+ * chamam "Honorários / Fee".
+ */
+export type CadeiaDoResultado = "nacional" | "internacional" | "mista";
+
+export function cadeiaDoConjunto(
+  modelos: CategoriaModeloPlanilha[],
+): CadeiaDoResultado {
+  const internacionais = modelos.filter((m) => m === "internacional").length;
+  if (internacionais === 0) return "nacional";
+  return internacionais === modelos.length ? "internacional" : "mista";
+}
+
+/** O nome dos honorários em cada cadeia: FEE é o da planilha internacional. */
+export function rotuloDosHonorarios(cadeia: CadeiaDoResultado): string {
+  if (cadeia === "internacional") return "Fee";
+  if (cadeia === "mista") return "Honorários / Fee";
+  return "Honorários";
+}

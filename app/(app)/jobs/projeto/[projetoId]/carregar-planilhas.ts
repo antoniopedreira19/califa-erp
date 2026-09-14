@@ -275,6 +275,12 @@ export async function carregarPlanilhasDosJobs(
 
     const percentualHonorarios = num(j.versao?.percentual_honorarios);
     const percentualImposto = num(j.versao?.percentual_imposto);
+    // O modelo é o da categoria do ORÇAMENTO que originou o job (decisão 072).
+    const modeloPlanilha: CategoriaModeloPlanilha =
+      ((j as { orcamento?: { categoria?: { modelo_planilha?: string } } })
+        .orcamento?.categoria?.modelo_planilha as
+        | CategoriaModeloPlanilha
+        | undefined) ?? "nacional";
 
     // Mesma função da tela da versão e do card de Totais do job: o
     // fechamento do projeto é a soma dos fechamentos, não uma conta nova.
@@ -299,13 +305,7 @@ export async function carregarPlanilhasDosJobs(
       })),
       percentualHonorarios,
       percentualImposto,
-      configDaPlanilha(
-        (j as { orcamento?: { categoria?: { modelo_planilha?: string } } })
-          .orcamento?.categoria?.modelo_planilha as
-          | CategoriaModeloPlanilha
-          | undefined,
-        j.versao ?? {},
-      ).internacional,
+      configDaPlanilha(modeloPlanilha, j.versao ?? {}).internacional,
     );
 
     return {
@@ -315,6 +315,7 @@ export async function carregarPlanilhasDosJobs(
       // dela. Mesmo contrato de `nome_financeiro` vs `nome`.
       nome: opts.usarNomeFinanceiro ? nomeDoJobNoFinanceiro(j) : j.nome,
       status: j.status as JobStatus,
+      modeloPlanilha,
       responsavel: j.responsavel?.nome ?? null,
       moeda: j.versao?.moeda ?? "BRL",
       percentualHonorarios,

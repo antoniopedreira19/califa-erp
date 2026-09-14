@@ -303,6 +303,7 @@ export function JobTotaisCard({
         <PainelResultado
           valorJob={valorJob}
           imposto={imposto}
+          cadeia={modeloPlanilha === "internacional" ? "internacional" : "nacional"}
           intTaxes={intTaxes}
           intTransactionCosts={intTransactionCosts}
           orcado={totais.orcadoRentabilidade}

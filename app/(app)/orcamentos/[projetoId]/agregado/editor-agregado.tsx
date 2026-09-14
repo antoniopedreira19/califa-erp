@@ -543,6 +543,7 @@ export function EditorAgregado({
         id: orc.id,
         codigo: codigos.get(orc.id) ?? "",
         nome: orc.nome,
+        modeloPlanilha: orc.modeloPlanilha,
         detalhe: orc.origemBanco
           ? `v${orc.origemBanco.numeroVersao}${
               orc.origemBanco.statusVersao === "aprovada" ? " · aprovada" : ""
