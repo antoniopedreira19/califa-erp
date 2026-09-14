@@ -879,6 +879,33 @@ export async function editarRegistroDaAbertura(
     ? ((job.abertura_revisao_errata_id as string | null) ?? null)
     : null;
 
+  // Todas as erratas que esta revisão trata (decisão do Tiago, 14/09/2026):
+  // as registradas depois da última foto da abertura. `errataDaRevisao`
+  // segue sendo a última, que é a que a foto guarda; a lista inteira vai
+  // para a auditoria. Lida ANTES de gravar a foto nova, que fecha a janela.
+  let erratasDaRevisao: string[] = [];
+  if (eraRevisao) {
+    const { data: fotoAnterior } = await supabase
+      .from("jobs_aberturas")
+      .select("registrado_em")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("job_id", jobId)
+      .order("registrado_em", { ascending: false })
+      .limit(1)
+      .maybeSingle<{ registrado_em: string }>();
+    let pendentes = supabase
+      .from("jobs_erratas")
+      .select("id")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("job_id", jobId)
+      .order("created_at", { ascending: true });
+    if (fotoAnterior?.registrado_em) {
+      pendentes = pendentes.gt("created_at", fotoAnterior.registrado_em);
+    }
+    const { data: ids } = await pendentes;
+    erratasDaRevisao = ((ids ?? []) as Array<{ id: string }>).map((e) => e.id);
+  }
+
   // Escopo, `ativo` e — desde a decisão 072 — o modelo de planilha, que
   // tem que ser o mesmo do orçamento.
   const categoriaErro = await conferirCategoriaDoJob(
@@ -1176,6 +1203,7 @@ export async function editarRegistroDaAbertura(
     entidadeId: jobId,
     metadata: {
       errata_id: errataDaRevisao,
+      erratas_ids: erratasDaRevisao,
       de: {
         nome_financeiro: job.nome_financeiro,
         projeto_financeiro_id: job.projeto_financeiro_id,

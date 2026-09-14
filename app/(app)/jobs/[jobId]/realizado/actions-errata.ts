@@ -377,7 +377,7 @@ export async function registrarErrata(
   const { data: job, error: jobErr } = await supabase
     .from("jobs")
     .select(
-      "id, tenant_id, status, versao_orcamento_aprovada_id, projeto_id, orcamento_id, data_abertura_financeiro",
+      "id, tenant_id, status, versao_orcamento_aprovada_id, projeto_id, orcamento_id, data_abertura_financeiro, abertura_em_revisao",
     )
     .eq("id", jobId)
     .eq("tenant_id", session.activeTenant.id)
@@ -1077,7 +1077,12 @@ export async function registrarErrata(
       ...(devolveAoMural
         ? {
             abertura_em_revisao: true,
-            abertura_revisao_desde: new Date().toISOString(),
+            // "Desde" é a PRIMEIRA errata ainda não revisada: a revisão
+            // trata todas as que se acumularam (decisão do Tiago,
+            // 14/09/2026). Só a última errata é que troca.
+            ...(job.abertura_em_revisao === true
+              ? {}
+              : { abertura_revisao_desde: new Date().toISOString() }),
             abertura_revisao_errata_id: errata.id,
           }
         : {}),

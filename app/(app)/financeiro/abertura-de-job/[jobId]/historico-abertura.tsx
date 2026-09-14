@@ -114,9 +114,14 @@ export function HistoricoDaAbertura({
               <span className="text-[12.5px] font-semibold">
                 {rotuloDaFoto(foto)}
               </span>
-              {foto.errata && foto.errata.titulo && (
-                <span className="max-w-[360px] truncate text-[12px] italic text-muted-foreground">
-                  “{foto.errata.titulo}”
+              {foto.erratas.length > 0 && (
+                <span
+                  title={foto.erratas.map((e) => `“${e.titulo}”`).join(" · ")}
+                  className="max-w-[360px] truncate text-[12px] italic text-muted-foreground"
+                >
+                  {foto.erratas.length === 1
+                    ? `“${foto.erratas[0].titulo}”`
+                    : `${foto.erratas.length} erratas · ${foto.erratas.map((e) => `“${e.titulo}”`).join(" · ")}`}
                 </span>
               )}
               <span className="font-mono text-[11.5px] text-muted-foreground">
@@ -175,6 +180,19 @@ export function HistoricoDaAbertura({
 // A faixa da revisão: a errata e a abertura anterior
 // ---------------------------------------------------------------------
 
+/** "1 alterada · 2 novas · 0 removidas". */
+function linhasAfetadas(l: {
+  linhasAlteradas: number;
+  linhasNovas: number;
+  linhasRemovidas: number;
+}): string {
+  return (
+    `${l.linhasAlteradas} alterada${l.linhasAlteradas === 1 ? "" : "s"} · ` +
+    `${l.linhasNovas} nova${l.linhasNovas === 1 ? "" : "s"} · ` +
+    `${l.linhasRemovidas} removida${l.linhasRemovidas === 1 ? "" : "s"}`
+  );
+}
+
 export function ResumoDaAberturaAnterior({
   foto,
   revisao,
@@ -199,23 +217,53 @@ export function ResumoDaAberturaAnterior({
         </span>
       </div>
 
-      {revisao && (
+      {/* TODAS as erratas desde a última foto (decisão do Tiago,
+          14/09/2026): a revisão trata todas, e o financeiro precisa saber
+          exatamente o que mudou desde a abertura que ele conferiu. */}
+      {revisao && revisao.erratas.length > 1 && (
         <p className="mt-1.5 text-[12px] leading-relaxed text-muted-foreground">
-          Errata{" "}
-          <span className="italic text-foreground">“{revisao.descricao}”</span>
-          {revisao.autorNome ? ` · ${revisao.autorNome}` : ""} ·{" "}
-          {formatDataHoraBr(revisao.em)} · faturamento previsto{" "}
+          <span className="font-semibold text-foreground">
+            {revisao.erratas.length} erratas
+          </span>{" "}
+          desde a abertura anterior · faturamento previsto{" "}
           <span className="font-mono line-through">
             {formatCurrency(revisao.faturamentoAntes ?? 0)}
           </span>{" "}
           <span className="font-mono font-semibold text-foreground">
             {formatCurrency(revisao.faturamentoDepois ?? 0)}
           </span>{" "}
-          · {revisao.linhasAlteradas} alterada
-          {revisao.linhasAlteradas === 1 ? "" : "s"} · {revisao.linhasNovas} nova
-          {revisao.linhasNovas === 1 ? "" : "s"} · {revisao.linhasRemovidas}{" "}
-          removida{revisao.linhasRemovidas === 1 ? "" : "s"}
+          · {linhasAfetadas(revisao)}
         </p>
+      )}
+      {revisao && revisao.erratas.length > 0 && (
+        <ol
+          className={
+            revisao.erratas.length > 1 ? "mt-1 space-y-0.5 pl-1" : "mt-1.5"
+          }
+        >
+          {revisao.erratas.map((e, i) => (
+            <li
+              key={e.errataId}
+              className="text-[12px] leading-relaxed text-muted-foreground"
+            >
+              {revisao.erratas.length > 1 ? (
+                <span className="font-mono text-[11px] font-bold">{i + 1}. </span>
+              ) : (
+                "Errata "
+              )}
+              <span className="italic text-foreground">“{e.descricao}”</span>
+              {e.autorNome ? ` · ${e.autorNome}` : ""} ·{" "}
+              {formatDataHoraBr(e.em)} · faturamento previsto{" "}
+              <span className="font-mono line-through">
+                {formatCurrency(e.faturamentoAntes ?? 0)}
+              </span>{" "}
+              <span className="font-mono font-semibold text-foreground">
+                {formatCurrency(e.faturamentoDepois ?? 0)}
+              </span>{" "}
+              · {linhasAfetadas(e)}
+            </li>
+          ))}
+        </ol>
       )}
 
       <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-border bg-white px-3.5 py-2.5">
@@ -382,12 +430,12 @@ export function FotoDaAberturaDialog({
                   </DialogTitle>
                   <DialogDescription className="pt-1 text-[12.5px] leading-relaxed">
                     Registrada em {quandoEQuem(foto)}
-                    {foto.errata?.titulo ? (
+                    {foto.erratas.length > 0 ? (
                       <>
                         {" "}
-                        · errata{" "}
+                        · {foto.erratas.length === 1 ? "errata" : "erratas"}{" "}
                         <span className="italic text-foreground">
-                          “{foto.errata.titulo}”
+                          {foto.erratas.map((e) => `“${e.titulo}”`).join(" · ")}
                         </span>
                       </>
                     ) : null}

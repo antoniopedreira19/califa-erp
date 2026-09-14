@@ -24,7 +24,7 @@ import { JobChatSection } from "@/app/(app)/jobs/[jobId]/comunicacao/job-chat-se
 import { AberturaForm } from "../../abertura-de-job/[jobId]/abertura-form";
 import {
   carregarJobParaAbertura,
-  revisaoDeErrata,
+  revisaoPendenteDoJob,
 } from "../../abertura-de-job/dados";
 import { fotosDaAbertura } from "../../abertura-de-job/fotos";
 import {
@@ -222,13 +222,17 @@ export default async function JobNoFinanceiroPage({
   const custoPrevisto =
     Math.round((jobNaFila.planilha_desembolso ?? 0) * 100) / 100;
 
-  // A errata que devolveu o job ao mural, quando há uma: o formulário
-  // abre em revisão, editável, e mostra a abertura anterior no topo.
+  // As erratas que devolveram o job ao mural — TODAS as que ainda não
+  // foram revisadas (decisão do Tiago, 14/09/2026): o formulário abre em
+  // revisão, editável, e mostra as erratas e a abertura anterior no topo.
   const emRevisao = job.abertura_em_revisao === true;
-  const revisao =
-    emRevisao && job.abertura_revisao_errata_id
-      ? await revisaoDeErrata(job.abertura_revisao_errata_id, tenantId)
-      : null;
+  const revisao = emRevisao
+    ? await revisaoPendenteDoJob(
+        params.jobId,
+        job.data_abertura_financeiro ?? null,
+        tenantId,
+      )
+    : null;
   const faturamentoPrevisto =
     Math.round(Number(job.faturamento_previsto ?? 0) * 100) / 100;
 

@@ -99,7 +99,8 @@ export interface JobNaFila {
  * errata mexeu no orçado, e previsão de recebimento, curva de desembolso e
  * competência foram calculadas sobre os números antigos (27/08/2026).
  */
-export interface RevisaoDeErrata {
+/** Uma errata que a revisão da abertura trata. */
+export interface ErrataDaRevisao {
   errataId: string;
   /** A descrição escrita no pop-up de confirmação da errata. */
   descricao: string;
@@ -109,6 +110,30 @@ export interface RevisaoDeErrata {
   faturamentoDepois: number | null;
   valorJobAntes: number;
   valorJobDepois: number;
+  linhasAlteradas: number;
+  linhasNovas: number;
+  linhasRemovidas: number;
+}
+
+/**
+ * O que a revisão da abertura trata: TODAS as erratas registradas depois
+ * da última foto da abertura (a abertura ou a revisão anterior), da mais
+ * antiga à mais recente.
+ *
+ * Decisão do Tiago em 14/09/2026. Até ali o mural e a revisão mostravam só
+ * a última errata (`jobs.abertura_revisao_errata_id`): com duas erratas
+ * antes da revisão, a primeira sumia da conferência do financeiro — no
+ * teste do JOB-0009, a errata de três linhas desapareceu atrás da de save.
+ *
+ * Os totais vão da PRIMEIRA errata ("antes", o número que a abertura
+ * anterior conhecia) à ÚLTIMA ("depois", o número que a revisão confere).
+ */
+export interface RevisaoDeErrata {
+  erratas: ErrataDaRevisao[];
+  faturamentoAntes: number | null;
+  faturamentoDepois: number | null;
+  valorJobAntes: number | null;
+  valorJobDepois: number | null;
   linhasAlteradas: number;
   linhasNovas: number;
   linhasRemovidas: number;
@@ -330,7 +355,7 @@ export async function listarFilaDeAbertura(
   // parcial próprio (`idx_jobs_abertura_em_revisao`).
   const { data, error } = await supabase
     .from("jobs")
-    .select(`${SELECT_JOB_FILA}, abertura_em_revisao, abertura_revisao_desde, abertura_revisao_errata_id`)
+    .select(`${SELECT_JOB_FILA}, abertura_em_revisao, abertura_revisao_desde, abertura_revisao_errata_id, data_abertura_financeiro`)
     .eq("tenant_id", tenantId)
     .or("status.eq.aguardando_abertura,abertura_em_revisao.is.true")
     .order("created_at", { ascending: true });
@@ -345,10 +370,14 @@ export async function listarFilaDeAbertura(
   const [totais, contatos, revisoes] = await Promise.all([
     totaisDasPlanilhas(ids),
     contatosDeCobrancaPorJob(ids, tenantId),
-    revisoesDeErrata(
+    revisoesPendentes(
       linhas
-        .filter((j) => j.abertura_revisao_errata_id)
-        .map((j) => j.abertura_revisao_errata_id as string),
+        .filter((j) => j.abertura_em_revisao === true)
+        .map((j) => ({
+          id: j.id as string,
+          data_abertura_financeiro:
+            (j.data_abertura_financeiro as string | null) ?? null,
+        })),
       tenantId,
     ),
   ]);
@@ -358,58 +387,120 @@ export async function listarFilaDeAbertura(
       j,
       totais.get(j.id),
       contatos.get(j.id),
-      j.abertura_revisao_errata_id
-        ? (revisoes.get(j.abertura_revisao_errata_id) ?? null)
+      // Em revisão o job fica na faixa "Erratas" mesmo que a leitura das
+      // erratas falhe — cair em "Aberturas novas" mandaria abrir de novo
+      // um job que já está aberto.
+      j.abertura_em_revisao === true
+        ? (revisoes.get(j.id) ?? resumirRevisao([]))
         : null,
     ),
   );
 }
 
-/**
- * As erratas que devolveram jobs ao mural, numa query só.
- *
- * Uma por job — a última, que é a que `jobs.abertura_revisao_errata_id`
- * guarda. Os itens vêm no mesmo embed porque o mural mostra "1 alterada ·
- * 0 novas · 0 removidas", e uma query por job seria N+1 na tela mais
- * movimentada do financeiro (docs/PERFORMANCE.md, anti-padrão I).
- */
-/** A errata que devolveu UM job ao mural — a página do job usa no modo
- *  de revisão (decisão 059). */
-export async function revisaoDeErrata(
-  errataId: string,
+/** A revisão pendente de UM job — a página do job no financeiro usa no
+ *  modo de revisão (decisão 059). */
+export async function revisaoPendenteDoJob(
+  jobId: string,
+  dataAberturaFinanceiro: string | null,
   tenantId: string,
-): Promise<RevisaoDeErrata | null> {
-  const mapa = await revisoesDeErrata([errataId], tenantId);
-  return mapa.get(errataId) ?? null;
+): Promise<RevisaoDeErrata> {
+  const mapa = await revisoesPendentes(
+    [{ id: jobId, data_abertura_financeiro: dataAberturaFinanceiro }],
+    tenantId,
+  );
+  return mapa.get(jobId) ?? resumirRevisao([]);
 }
 
-async function revisoesDeErrata(
-  errataIds: string[],
+function resumirRevisao(erratas: ErrataDaRevisao[]): RevisaoDeErrata {
+  const primeira = erratas[0];
+  const ultima = erratas[erratas.length - 1];
+  const soma = (
+    campo: "linhasAlteradas" | "linhasNovas" | "linhasRemovidas",
+  ) => erratas.reduce((t, e) => t + e[campo], 0);
+  return {
+    erratas,
+    faturamentoAntes: primeira?.faturamentoAntes ?? null,
+    faturamentoDepois: ultima?.faturamentoDepois ?? null,
+    valorJobAntes: primeira ? primeira.valorJobAntes : null,
+    valorJobDepois: ultima ? ultima.valorJobDepois : null,
+    linhasAlteradas: soma("linhasAlteradas"),
+    linhasNovas: soma("linhasNovas"),
+    linhasRemovidas: soma("linhasRemovidas"),
+  };
+}
+
+/**
+ * As erratas pendentes de revisão de vários jobs, em duas queries — o
+ * mural é a tela mais movimentada do financeiro, e uma query por job seria
+ * N+1 (docs/PERFORMANCE.md, anti-padrão I).
+ *
+ * "Pendente" = registrada depois da última foto da abertura do job. Toda
+ * errata em job aberto devolve o job ao mural, e toda gravação do registro
+ * com o job em revisão É a revisão (`editarRegistroDaAbertura`), então a
+ * janela entre a última foto e agora contém exatamente as erratas que
+ * ninguém conferiu ainda. Sem foto, vale a data de abertura.
+ */
+async function revisoesPendentes(
+  jobs: Array<{ id: string; data_abertura_financeiro: string | null }>,
   tenantId: string,
 ): Promise<Map<string, RevisaoDeErrata>> {
   const mapa = new Map<string, RevisaoDeErrata>();
-  if (errataIds.length === 0) return mapa;
+  if (jobs.length === 0) return mapa;
 
   const supabase = createClient();
-  const { data, error } = await supabase
-    .from("jobs_erratas")
-    .select(
-      "id, titulo, created_at, valor_job_antes, valor_job_depois, " +
-        "faturamento_previsto_antes, faturamento_previsto_depois, " +
-        "autor:profiles!created_by(nome), itens:jobs_erratas_itens(acao)",
-    )
-    .eq("tenant_id", tenantId)
-    .in("id", errataIds);
+  const ids = jobs.map((j) => j.id);
 
-  if (error) {
-    console.error("[abertura-job.revisoes]", error.message);
+  const [fotosRes, erratasRes] = await Promise.all([
+    supabase
+      .from("jobs_aberturas")
+      .select("job_id, registrado_em")
+      .eq("tenant_id", tenantId)
+      .in("job_id", ids),
+    supabase
+      .from("jobs_erratas")
+      .select(
+        "id, job_id, titulo, created_at, valor_job_antes, valor_job_depois, " +
+          "faturamento_previsto_antes, faturamento_previsto_depois, " +
+          "autor:profiles!created_by(nome), itens:jobs_erratas_itens(acao)",
+      )
+      .eq("tenant_id", tenantId)
+      .in("job_id", ids)
+      .order("created_at", { ascending: true }),
+  ]);
+
+  if (fotosRes.error) {
+    console.error("[abertura-job.revisoes.fotos]", fotosRes.error.message);
+  }
+  if (erratasRes.error) {
+    console.error("[abertura-job.revisoes]", erratasRes.error.message);
     return mapa;
   }
 
-  for (const e of (data ?? []) as any[]) {
+  // O limite de cada job: a foto mais recente, ou a data de abertura.
+  const limite = new Map<string, number>();
+  for (const j of jobs) {
+    if (j.data_abertura_financeiro) {
+      limite.set(j.id, new Date(j.data_abertura_financeiro).getTime());
+    }
+  }
+  for (const f of (fotosRes.data ?? []) as Array<{
+    job_id: string;
+    registrado_em: string;
+  }>) {
+    const t = new Date(f.registrado_em).getTime();
+    if (t > (limite.get(f.job_id) ?? -Infinity)) limite.set(f.job_id, t);
+  }
+
+  const porJob = new Map<string, ErrataDaRevisao[]>();
+  for (const e of (erratasRes.data ?? []) as any[]) {
+    const desde = limite.get(e.job_id);
+    if (desde !== undefined && new Date(e.created_at).getTime() <= desde) {
+      continue;
+    }
     const itens = (e.itens ?? []) as Array<{ acao: string }>;
     const conta = (a: string) => itens.filter((i) => i.acao === a).length;
-    mapa.set(e.id, {
+    const lista = porJob.get(e.job_id) ?? [];
+    lista.push({
       errataId: e.id,
       descricao: e.titulo,
       autorNome: e.autor?.nome ?? null,
@@ -428,7 +519,11 @@ async function revisoesDeErrata(
       linhasNovas: conta("nova"),
       linhasRemovidas: conta("removida"),
     });
+    porJob.set(e.job_id, lista);
   }
 
+  for (const j of jobs) {
+    mapa.set(j.id, resumirRevisao(porJob.get(j.id) ?? []));
+  }
   return mapa;
 }

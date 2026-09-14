@@ -77,6 +77,41 @@ Os totais da foto reconstituída vêm dos valores congelados na abertura
 (`valor_job_abertura`, `faturamento_previsto_abertura`) quando existem —
 são eles que dizem sobre que base a abertura foi feita.
 
+## ⚠️ A revisão trata TODAS as erratas pendentes (14/09/2026)
+
+Decisão do Tiago, depois do teste de ponta a ponta da errata no JOB-0009:
+com duas erratas antes da revisão, o mural, o resumo e a faixa da revisão
+mostravam só a última (`jobs.abertura_revisao_errata_id`) — a errata de
+três linhas sumiu atrás da de save. Nas palavras dele, a revisão deve
+mostrar todas, "para que a revisão já trate das modificações mais
+recentes, e para que o financeiro seja notificado de tudo que foi
+alterado no momento de atualização da abertura".
+
+> **Pendente = registrada depois da última foto da abertura** (a abertura
+> ou a revisão anterior). Sem foto, depois da data de abertura.
+
+Toda errata em job aberto devolve o job ao mural, e toda gravação do
+registro com o job em revisão é a revisão, então essa janela contém
+exatamente as erratas que ninguém conferiu. O que muda:
+
+| Onde | Antes | Agora |
+|---|---|---|
+| Resumo do mural | a última errata | "Resumo das N erratas": efeito somado (faturamento e valor do job da primeira à última, linhas somadas) e cada errata em ordem, com o próprio efeito |
+| Faixa da revisão | a última errata | as N erratas, com a linha somada quando há mais de uma |
+| Histórico de fotos | a errata guardada na foto | as erratas entre a foto anterior e esta ("2 erratas · …") |
+| Auditoria `job.abertura_revisada` | `errata_id` | `errata_id` (a última) + `erratas_ids` (todas) |
+| `jobs.abertura_revisao_desde` | sobrescrito a cada errata | fica na PRIMEIRA errata pendente |
+
+Sem migration: `errata_id` da foto e `abertura_revisao_errata_id` seguem
+guardando a última errata; a lista sai da janela de datas. Foto antiga sem
+errata na janela cai na errata guardada.
+
+Conferido no JOB-0009: duas erratas pela action (hospedagem 3.000 → 3.200
+e "Seguro viagem"), mural com "Resumo das 2 erratas" (+R$ 885,26 de
+faturamento = 36,38 + 848,88), faixa da revisão com as duas, revisão
+registrada, auditoria com os dois ids, e o histórico com a Revisão 2 e a
+Revisão 1 listando cada uma as suas duas erratas.
+
 ## Onde a regra mora
 
 | | Arquivo |

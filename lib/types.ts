@@ -1116,8 +1116,10 @@ export interface FotoDaAbertura {
   registradoEm: string;
   registradoEmLabel: string;
   registradoPorNome: string | null;
-  /** A errata que pediu a revisão, quando é uma. */
-  errata: { id: string; titulo: string } | null;
+  /** As erratas que esta revisão tratou, da mais antiga à mais recente —
+   *  as registradas entre a foto anterior e esta (decisão do Tiago,
+   *  14/09/2026). Vazia na abertura e na edição livre do registro. */
+  erratas: { id: string; titulo: string }[];
   nomeFinanceiro: string | null;
   projetoLabel: string | null;
   contaRecebimentoLabel: string | null;
