@@ -42,6 +42,8 @@ interface Props {
   clienteNome: string | null;
   /** Modelo do orçamento — segue para o "Importar planilha" (decisão 072). */
   modeloPlanilha: CategoriaModeloPlanilha;
+  /** Segue para o "Nova versão": impostos do internacional sem a permissão. */
+  travarImpostos: boolean;
 }
 
 type Menu = null | "raiz" | "copiar";
@@ -73,6 +75,7 @@ export function AbasVersoes({
   honorariosCliente,
   clienteNome,
   modeloPlanilha,
+  travarImpostos,
 }: Props) {
   const [menu, setMenu] = React.useState<Menu>(null);
   const [novaAberta, setNovaAberta] = React.useState(false);
@@ -297,6 +300,7 @@ export function AbasVersoes({
         orcamentoId={orcamentoId}
         honorariosCliente={honorariosCliente}
         clienteNome={clienteNome}
+        travarImpostos={travarImpostos}
         aberto={novaAberta}
         onAbertoChange={setNovaAberta}
         semGatilho

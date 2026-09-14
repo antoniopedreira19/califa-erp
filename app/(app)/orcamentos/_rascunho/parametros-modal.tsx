@@ -32,6 +32,10 @@ interface Props {
   onSalvar: (parametros: ParametrosVersao) => void;
   /** Nome do cliente do projeto, para o rótulo do campo travado. */
   clienteNome?: string;
+  /** Orçamento internacional e quem edita sem `orcamentos.editar_impostos`:
+   *  Impostos BR só de leitura (decisão do Tiago, 14/09/2026). A gravação
+   *  recusa de novo. */
+  travarImposto: boolean;
 }
 
 /** Aceita "19,53" e "19.53". */
@@ -62,6 +66,7 @@ export function ParametrosModal({
   parametros,
   onSalvar,
   clienteNome,
+  travarImposto,
 }: Props) {
   const [moeda, setMoeda] = React.useState(parametros.moeda);
   const [taxa, setTaxa] = React.useState(paraEdicao(parametros.taxa_cambio));
@@ -169,7 +174,15 @@ export function ParametrosModal({
             </div>
             <div className="space-y-2">
               <Label htmlFor="percentual_imposto">Impostos (%)</Label>
-              <Select value={imposto} onValueChange={setImposto}>
+{travarImposto ? (
+                <Input
+                  value={`${paraEdicao(parametros.percentual_imposto)}%`}
+                  readOnly
+                  disabled
+                  className="bg-muted/50 text-muted-foreground"
+                />
+              ) : (
+                              <Select value={imposto} onValueChange={setImposto}>
                 <SelectTrigger id="percentual_imposto">
                   <SelectValue placeholder="Selecione a alíquota" />
                 </SelectTrigger>
@@ -181,6 +194,13 @@ export function ParametrosModal({
                   ))}
                 </SelectContent>
               </Select>
+              )}
+              {travarImposto && (
+                <p className="text-[11px] leading-snug text-muted-foreground">
+                  Só administrador ou gerente de produção altera os impostos de
+                  orçamento internacional.
+                </p>
+              )}
             </div>
           </div>
 

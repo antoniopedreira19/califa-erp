@@ -3738,3 +3738,25 @@ aberto no handoff de jobs).
 **Armadilha:** `cadeiaDoConjunto` trata `mensal` (decisão 078) como não
 internacional — o modelo mensal fecha pela cadeia nacional.
 
+## ⚠️ Nota de 2026-09-14 — impostos do internacional travados, e a visão agregada cria o internacional com a cadeia (decisão 072)
+
+| Arquivo | O quê |
+|---|---|
+| `_rascunho/salvar-em-lote.ts` | v1 do internacional com USD e int. taxes 18,02%, lendo o modelo da categoria no servidor |
+| `agregado/editor-agregado.tsx` | rascunho internacional nasce com os mesmos padrões; passa `travarImposto` ao modal |
+| `lib/data/impostos-da-vigente.ts` | **novo** — Impostos BR e int. taxes da vigente (ou padrões) |
+| `versoes/actions.ts` | `atualizarVersao` recusa, `criarVersao` herda da vigente, sem `orcamentos.editar_impostos` |
+| `versoes/importar-actions.ts` | versão nova importada herda da vigente sem a permissão |
+| `agregado/actions.ts` | `aplicarEdicao` recusa mudar Impostos BR do internacional sem a permissão |
+| `meta-versao.tsx` · `nova-versao-drawer.tsx` · `parametros-modal.tsx` · `abas-versoes.tsx` · `[orcId]/page.tsx` · `agregado/page.tsx` | campos travados na tela |
+
+### Armadilhas
+
+- **A trava é só do internacional.** O imposto das versões nacionais segue
+  livre para quem edita a versão — decisão explícita do Tiago.
+- **São quatro portas.** Quem criar um quinto caminho que grave
+  `percentual_imposto` ou `percentual_int_taxes` de versão internacional
+  precisa da mesma checagem — a tela travada não basta.
+- **Não dá para testar o travado com os usuários atuais**: todos são
+  administradores.
+

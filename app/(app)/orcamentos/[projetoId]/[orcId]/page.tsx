@@ -635,6 +635,10 @@ export default async function OrcamentoDetailPage({
         honorariosCliente={honorariosCliente}
         clienteNome={clienteNome}
         modeloPlanilha={orcamentoRaw?.categoria?.modelo_planilha ?? "nacional"}
+        travarImpostos={
+          (orcamentoRaw?.categoria?.modelo_planilha ?? "nacional") === "internacional" &&
+          !pode(session.activeRole, "orcamentos.editar_impostos")
+        }
       />
 
       {versaoAtiva ? (
@@ -671,6 +675,10 @@ export default async function OrcamentoDetailPage({
           projetoId={params.projetoId}
           orcamentoId={orcamento.id}
           modeloPlanilha={orcamentoRaw?.categoria?.modelo_planilha ?? "nacional"}
+          travarImpostos={
+            (orcamentoRaw?.categoria?.modelo_planilha ?? "nacional") === "internacional" &&
+          !pode(session.activeRole, "orcamentos.editar_impostos")
+          }
           honorariosCliente={honorariosCliente}
           clienteNome={clienteNome}
           podeCriarVersao={podeCriarVersao}
@@ -1112,6 +1120,7 @@ function SemVersoes({
   projetoId,
   orcamentoId,
   modeloPlanilha,
+  travarImpostos,
   honorariosCliente,
   clienteNome,
   podeCriarVersao,
@@ -1120,6 +1129,7 @@ function SemVersoes({
   projetoId: string;
   orcamentoId: string;
   modeloPlanilha: CategoriaModeloPlanilha;
+  travarImpostos: boolean;
   honorariosCliente: number;
   clienteNome: string | null;
   podeCriarVersao: boolean;
@@ -1140,6 +1150,7 @@ function SemVersoes({
           orcamentoId={orcamentoId}
           honorariosCliente={honorariosCliente}
           clienteNome={clienteNome}
+          travarImpostos={travarImpostos}
           disabled={!podeCriarVersao}
           disabledReason={motivoBloqueio}
         />

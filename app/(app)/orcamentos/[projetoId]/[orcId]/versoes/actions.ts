@@ -9,6 +9,7 @@ import { pode } from "@/lib/permissoes";
 import { checarPermissao } from "@/lib/permissoes-server";
 import { honorariosDoOrcamento } from "@/lib/data/clientes";
 import { modeloPlanilhaDoOrcamento } from "@/lib/data/modelo-planilha";
+import { impostosDaVersaoVigente } from "@/lib/data/impostos-da-vigente";
 import {
   copiarMesesEntreVersoes,
   criarMesesDoPeriodo,
@@ -260,6 +261,15 @@ export async function criarVersao(
     session.activeTenant.id,
   );
 
+  // Sem a permissão de editar impostos, a versão nova de um internacional
+  // herda Impostos BR e int. taxes da vigente (decisão do Tiago,
+  // 14/09/2026) — o que veio do formulário é ignorado.
+  const impostosTravados =
+    modelo === "internacional" &&
+    !pode(session.activeRole, "orcamentos.editar_impostos")
+      ? await impostosDaVersaoVigente(orcamentoId, session.activeTenant.id)
+      : null;
+
   const { data, error } = await supabase
     .from("versoes_orcamento")
     .insert({
@@ -271,6 +281,7 @@ export async function criarVersao(
             percentual_int_taxes: PERCENTUAL_INT_TAXES_PADRAO,
           }
         : {}),
+      ...(impostosTravados ?? {}),
       tenant_id: session.activeTenant.id,
       orcamento_id: orcamentoId,
       numero_versao: numero,
@@ -325,13 +336,15 @@ export async function atualizarVersao(
 
   const { data: atual } = await supabase
     .from("versoes_orcamento")
-    .select("orcamento_id, status, percentual_honorarios")
+    .select("orcamento_id, status, percentual_honorarios, percentual_imposto, percentual_int_taxes")
     .eq("id", versaoId)
     .eq("tenant_id", session.activeTenant.id)
     .maybeSingle<{
       orcamento_id: string;
       status: string;
       percentual_honorarios: number;
+      percentual_imposto: number | string;
+      percentual_int_taxes: number | string;
     }>();
 
   if (!atual) return { ok: false, message: "Versão não encontrada." };
@@ -360,6 +373,34 @@ export async function atualizarVersao(
     };
   }
   if (!honorariosMudou) delete updates.percentual_honorarios;
+
+  // Internacional (decisão do Tiago, 14/09/2026): Impostos BR e int. taxes
+  // mudam o valor cobrado do cliente e seguem a mesma trava do fee. No
+  // nacional o imposto continua com quem edita a versão.
+  const modeloDaVersao = await modeloPlanilhaDoOrcamento(
+    atual.orcamento_id,
+    session.activeTenant.id,
+  );
+  if (modeloDaVersao === "internacional") {
+    const impostoMudou =
+      typeof updates.percentual_imposto === "number" &&
+      Math.abs(Number(atual.percentual_imposto) - updates.percentual_imposto) > 1e-6;
+    const intTaxesMudou =
+      typeof updates.percentual_int_taxes === "number" &&
+      Math.abs(Number(atual.percentual_int_taxes) - updates.percentual_int_taxes) > 1e-6;
+    if (
+      (impostoMudou || intTaxesMudou) &&
+      !pode(session.activeRole, "orcamentos.editar_impostos")
+    ) {
+      return {
+        ok: false,
+        message:
+          "Só administrador ou gerente de produção altera os Impostos BR e as int. taxes da versão internacional.",
+      };
+    }
+    if (!impostoMudou) delete updates.percentual_imposto;
+    if (!intTaxesMudou) delete updates.percentual_int_taxes;
+  }
 
   const { error } = await supabase
     .from("versoes_orcamento")
