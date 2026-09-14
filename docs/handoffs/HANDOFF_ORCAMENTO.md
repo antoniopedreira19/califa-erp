@@ -3760,3 +3760,15 @@ internacional — o modelo mensal fecha pela cadeia nacional.
 - **Não dá para testar o travado com os usuários atuais**: todos são
   administradores.
 
+## ⚠️ Nota de 2026-09-14 — coluna USD na planilha do job (decisão 072)
+
+| Arquivo | O quê |
+|---|---|
+| `_planilha/grade-job.tsx` | `ColunasJobVisiveis.moedaEstrangeira`: um `<col>` a mais no ORÇADO, peso próprio, piso +100px e `totalDeColunasJob` + 1 |
+| `jobs/[jobId]/realizado/job-item-realizado-table.tsx` | prop **obrigatória** `moedaEstrangeira`; faixa ORÇADO com 5, cabeçalho com cadeado, célula no item, no grupo e no total; `COLUNA_MOEDA` na navegação |
+| `jobs/[jobId]/realizado/job-realizado-section.tsx` · `financeiro/abertura-de-job/[jobId]/planilha/planilha-conferencia.tsx` | passam a moeda de `configDaPlanilha` |
+
+**Armadilha:** a coluna vive dentro do ORÇADO. Com o bloco escondido pelo
+"Exibir", ela sai junto — `larguraMinimaJob` e `totalDeColunasJob` só a
+contam com `orcado` ligado.
+

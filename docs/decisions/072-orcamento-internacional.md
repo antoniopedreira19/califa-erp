@@ -393,8 +393,14 @@ Quatro observações do teste, com as recomendações aceitas pelo Tiago:
   mesma cadeia, e o rodapé ganhou "Int. taxes e custos de transação vêm só
   dos internacionais, cada um pela sua cadeia; os nacionais fecham sem
   eles". Projeto só internacional usa a legenda internacional.
-- **Coluna USD na planilha do job** — aceita, e fica para depois: a tabela
-  do job estava com trabalho aberto de outra frente no dia.
+- **Coluna USD na planilha do job.** A planilha interna do job (e a
+  conferência do financeiro, que é a mesma tabela) ganhou a coluna na moeda
+  estrangeira no ORÇADO, entre D/M e Total, com o Total rotulado "Total
+  BRL" — a mesma forma da planilha da versão. Total orçado da linha ÷
+  compra, também no grupo e no total; selecionável pelas setas, nunca
+  editável, nem na errata. Sem câmbio (ou no nacional) a coluna não existe.
+  Os cards da visão agregada ficam sem ela: somam jobs de câmbios
+  diferentes.
 
 A cor, a ordem e a conta não mudaram; é só o que se lê.
 
