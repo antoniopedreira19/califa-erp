@@ -3719,3 +3719,22 @@ categoria aberta.
 - **Depois:** exportação e importação de planilha do mensal (hoje recusadas
   na versão, no projeto e fora do seletor de exportação); edição do mensal
   pela visão agregada (hoje só consulta); filtro de trimestres na agregada.
+
+## ⚠️ Nota de 2026-09-14 — o resultado mostra a cadeia pelo modelo (decisão 072)
+
+Ajustes de leitura depois do teste de ponta a ponta do internacional. Vale
+também para as telas de job (a nota fica aqui para não colidir com trabalho
+aberto no handoff de jobs).
+
+| Arquivo | O quê |
+|---|---|
+| `_planilha/modelo-planilha.ts` | `CadeiaDoResultado`, `cadeiaDoConjunto`, `rotuloDosHonorarios` |
+| `components/painel-resultado.tsx` | prop obrigatória `cadeia`; linhas internacionais e "Fee" pela cadeia |
+| `jobs/[jobId]/realizado/job-totais-card.tsx` | passa a cadeia do modelo do job |
+| `_totais/totais-projeto-card.tsx` · `jobs/projeto/.../projeto-totais-card.tsx` | `modeloPlanilha` em cada linha/job; "Honorários / Fee", linhas e rodapé pela cadeia |
+| `agregado/editor-agregado.tsx` · `jobs/projeto/.../carregar-planilhas.ts` · `tipos.ts` | levam o `modeloPlanilha` até os cards |
+| `[orcId]/meta-versao.tsx` | leitura com Cotação (e data), Compra e Venda |
+
+**Armadilha:** `cadeiaDoConjunto` trata `mensal` (decisão 078) como não
+internacional — o modelo mensal fecha pela cadeia nacional.
+

@@ -372,6 +372,32 @@ Conferido:
 aparece em card sem planilha, e o projeto de teste não tinha nenhum. O
 caminho é o mesmo parser e a mesma recusa, cobertos pelo script.
 
+## Ajustes de leitura depois do teste de ponta a ponta (14/09/2026)
+
+Quatro observações do teste, com as recomendações aceitas pelo Tiago:
+
+- **Cabeçalho da versão mostra o câmbio inteiro.** A linha de leitura passou
+  a trazer "Cotação 5,3000 em 14/09/2026 · Compra · Venda", com travessão no
+  que falta. Desde que aprovar exige o câmbio completo, esconder cotação,
+  venda e data num `title` fazia a pessoa descobrir o que falta só tentando
+  aprovar.
+- **As linhas internacionais do resultado seguem o MODELO, não o valor.**
+  `PainelResultado` ganhou a prop obrigatória `cadeia` (`nacional`,
+  `internacional` ou `mista`, de `cadeiaDoConjunto` em `modelo-planilha.ts`).
+  Fora do nacional, "Int. taxes" e "Int. transaction costs" aparecem sempre,
+  mesmo zeradas — como na planilha modelo e na exportação. Antes, um
+  internacional com int. taxes 0% aparecia com cara de nacional e o ITC
+  zerado sumia.
+- **Visão agregada com nacional e internacional: "Honorários / Fee".** Os
+  cards de totais das duas visões agregadas (orçamentos e jobs) seguem a
+  mesma cadeia, e o rodapé ganhou "Int. taxes e custos de transação vêm só
+  dos internacionais, cada um pela sua cadeia; os nacionais fecham sem
+  eles". Projeto só internacional usa a legenda internacional.
+- **Coluna USD na planilha do job** — aceita, e fica para depois: a tabela
+  do job estava com trabalho aberto de outra frente no dia.
+
+A cor, a ordem e a conta não mudaram; é só o que se lê.
+
 ## O que NÃO entrou
 
 A **abertura** do job entrou em 11/09/2026 (seção acima). Seguem nacionais,

@@ -20,6 +20,10 @@ import {
   type VisaoBv,
 } from "@/lib/calculos/bv-planilha";
 import { PainelResultado } from "@/components/painel-resultado";
+import {
+  cadeiaDoConjunto,
+  rotuloDosHonorarios,
+} from "@/app/(app)/_planilha/modelo-planilha";
 import { LegendaFechamento } from "@/components/legenda-fechamento";
 import {
   BotaoColunasSave,
@@ -134,6 +138,9 @@ export function ProjetoTotaisCard({
   // quando há internacional — sem elas, "Honorários + Impostos" não
   // somaria o faturamento previsto (decisão 072).
   const intTaxes = jobs.reduce((s, j) => s + j.intTaxes, 0);
+  // Pelo MODELO, não pelo valor (decisão 072, 14/09/2026).
+  const cadeia = cadeiaDoConjunto(jobs.map((j) => j.modeloPlanilha));
+  const temInternacional = cadeia !== "nacional";
   const intTransactionCosts = jobs.reduce(
     (s, j) => s + j.intTransactionCosts,
     0,
@@ -470,12 +477,13 @@ export function ProjetoTotaisCard({
             <LinhaValor
               rotulo={
                 <>
-                  Honorários <span className="text-xs">({taxaHonorarios})</span>
+                  {rotuloDosHonorarios(cadeia)}{" "}
+                  <span className="text-xs">({taxaHonorarios})</span>
                 </>
               }
               valor={formatCurrency(honorarios, moeda)}
             />
-            {intTaxes > 0 && (
+            {temInternacional && (
               <LinhaValor
                 rotulo="Int. taxes (retidas no exterior)"
                 valor={formatCurrency(intTaxes, moeda)}
@@ -484,13 +492,13 @@ export function ProjetoTotaisCard({
             <LinhaValor
               rotulo={
                 <>
-                  {intTaxes > 0 ? "Impostos BR" : "Impostos"}{" "}
+                  {temInternacional ? "Impostos BR" : "Impostos"}{" "}
                   <span className="text-xs">({taxaImpostos})</span>
                 </>
               }
               valor={formatCurrency(imposto, moeda)}
             />
-            {intTransactionCosts > 0 && (
+            {temInternacional && (
               <LinhaValor
                 rotulo="Int. transaction costs"
                 valor={formatCurrency(intTransactionCosts, moeda)}
@@ -515,12 +523,20 @@ export function ProjetoTotaisCard({
               Somatório do fechamento de cada job — cada versão aprovada tem
               suas próprias taxas.
             </p>
+            {cadeia === "mista" && (
+              <p className="mt-1.5 text-[11.5px] text-muted-foreground">
+                Int. taxes e custos de transação vêm só dos jobs
+                internacionais, cada um pela sua cadeia; os nacionais fecham
+                sem eles.
+              </p>
+            )}
           </div>
         </div>
 
         <PainelResultado
           valorJob={valorJob}
           imposto={imposto}
+          cadeia={cadeia}
           intTaxes={intTaxes}
           intTransactionCosts={intTransactionCosts}
           orcado={totalOrcadoRentabilidade}
@@ -531,7 +547,10 @@ export function ProjetoTotaisCard({
         />
       </div>
 
-      <LegendaFechamento custo="custo (planejado ou realizado)" />
+      <LegendaFechamento
+        custo="custo (planejado ou realizado)"
+        internacional={cadeia === "internacional"}
+      />
     </div>
   );
 }
