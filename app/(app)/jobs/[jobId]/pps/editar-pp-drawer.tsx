@@ -71,6 +71,8 @@ interface Props {
     cpf_cnpj?: string | null;
   }>;
   empresas: Array<{ id: string; razao_social: string; principal: boolean }>;
+  /** Membros ativos do tenant — a verba escolhe o responsável aqui. */
+  responsaveis: Array<{ id: string; nome: string }>;
   onSuccess?: (codigo: string) => void;
 }
 
@@ -108,6 +110,7 @@ export function EditarPPDrawer({
   pp,
   fornecedores,
   empresas,
+  responsaveis,
   onSuccess,
 }: Props) {
   const router = useRouter();
@@ -118,6 +121,9 @@ export function EditarPPDrawer({
   const [erro, setErro] = React.useState<string | null>(null);
 
   const [fornecedorId, setFornecedorId] = React.useState("");
+  // Verba de produção: o responsável faz o papel do fornecedor, e a correção
+  // pode trocá-lo (decisão 083, 7b).
+  const [responsavelId, setResponsavelId] = React.useState("");
   // O mesmo cadastro rápido da emissão (decisão 048): a PP rejeitada
   // muitas vezes volta porque o fornecedor estava errado, e trocar por um
   // que ainda não existe exigia abandonar a correção no meio.
@@ -221,6 +227,8 @@ export function EditarPPDrawer({
   const hoje = hojeEmSaoPauloIso();
   /** O prazo gravado pode continuar fora das janelas (decisão 077, 6a). */
   const prazoOriginal = pp ? pp.prazo_pagamento.slice(0, 10) : null;
+  /** O modo vem da PP e não muda na correção (decisão 083, 7b). */
+  const ehVerba = pp?.verba_producao === true;
 
   /** Prévia do valor corrigido — a mesma conta que o servidor refaz. */
   const valorCorrigido = valorDaPPPorUnidade(
@@ -238,6 +246,7 @@ export function EditarPPDrawer({
     setFornecedorPendenteId(null);
     setEmpresaId(pp.empresa_id);
     setPrazoPagamento(pp.prazo_pagamento.slice(0, 10));
+    setResponsavelId(pp.responsavel_verba_id ?? "");
     setUrgente(pp.urgente === true);
     setJustificativa(pp.urgente_justificativa ?? "");
     setFaltaJustificativa(false);
@@ -360,7 +369,11 @@ export function EditarPPDrawer({
     setErro(null);
     if (!ppId) return;
 
-    if (!fornecedorId) return setErro("Escolha um fornecedor.");
+    if (ehVerba) {
+      if (!responsavelId) return setErro("Escolha o responsável pela verba.");
+    } else if (!fornecedorId) {
+      return setErro("Escolha um fornecedor.");
+    }
     if (!empresaId) return setErro("Escolha uma empresa emissora.");
     if (!prazoPagamento) return setErro("Prazo de pagamento é obrigatório.");
     if (
@@ -397,7 +410,8 @@ export function EditarPPDrawer({
     }
 
     const novosOk = anexosNovos.filter((a) => a.status === "ok");
-    if (anexosMantidos.length + novosOk.length === 0) {
+    // Verba de produção segue sem anexo obrigatório, como na emissão.
+    if (!ehVerba && anexosMantidos.length + novosOk.length === 0) {
       return setErro("Pelo menos um anexo é obrigatório.");
     }
 
@@ -409,11 +423,19 @@ export function EditarPPDrawer({
         const res = await reenviarPedidoCompra(
           ppId,
           {
-            // PP editada via este drawer é sempre não-verba: o formulário
-            // de edição não suporta troca de modo ainda (Task futura).
-            verba_producao: false as const,
-            fornecedor_id: fornecedorId,
-            responsavel_verba_id: null,
+            // O modo vem da PP: verba leva responsável, PP normal leva
+            // fornecedor. A correção não troca de modo (decisão 083, 7b).
+            ...(ehVerba
+              ? {
+                  verba_producao: true as const,
+                  fornecedor_id: null,
+                  responsavel_verba_id: responsavelId,
+                }
+              : {
+                  verba_producao: false as const,
+                  fornecedor_id: fornecedorId,
+                  responsavel_verba_id: null,
+                }),
             empresa_id: empresaId,
             prazo_pagamento: prazoPagamento,
             servico: servico.trim(),
@@ -532,68 +554,93 @@ export function EditarPPDrawer({
 
             <div className="space-y-3">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Fornecedor &amp; Empresa
+                {ehVerba ? "Responsável & Empresa" : "Fornecedor & Empresa"}
               </h3>
 
-              <div>
-                <label className="text-xs font-medium">Fornecedor *</label>
-                <div className="flex items-center gap-2">
-                  <div className="min-w-0 flex-1">
-                    {/* O mesmo combo com busca do formulário de PP
-                        (09/09/2026): a correção da rejeitada muitas vezes
-                        volta justamente porque o fornecedor estava errado. */}
-                    <Combobox
-                      items={itensFornecedor}
-                      value={fornecedorId || null}
-                      onChange={(v) => setFornecedorId(v ?? "")}
-                      placeholder="Escolha o fornecedor"
-                      buscaPlaceholder="Escreva o nome ou o documento"
-                      limpavel
-                      acaoSemResultado={{
-                        rotulo: (busca) => `Cadastrar “${busca}” como novo fornecedor`,
-                        onClick: (busca) => {
-                          setNomeSugerido(busca);
-                          setFornecedorEditando(null);
-                          setNovoFornecedorOpen(true);
-                        },
-                      }}
-                    />
-                  </div>
-                  {/* "+" cadastra, lápis revisa o cadastro do escolhido
-                      (decisão 048 + desenho de 09/09/2026). */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setNomeSugerido("");
-                      setFornecedorEditando(fornecedorId ? fornecedorId : null);
-                      setNovoFornecedorOpen(true);
-                    }}
-                    disabled={pending}
-                    title={
-                      fornecedorId
-                        ? "Editar cadastro do fornecedor"
-                        : "Cadastrar fornecedor"
-                    }
-                    aria-label={
-                      fornecedorId
-                        ? "Editar cadastro do fornecedor"
-                        : "Cadastrar fornecedor"
-                    }
-                    className="inline-flex h-10 w-10 flex-none items-center justify-center rounded-lg border border-border bg-white text-california-red transition-colors hover:border-california-red/40 hover:bg-california-red/[0.06] disabled:opacity-50"
-                  >
-                    {fornecedorId ? (
-                      <Pencil className="h-4 w-4" />
-                    ) : (
-                      <Plus className="h-[17px] w-[17px]" />
-                    )}
-                  </button>
+              {/* Verba de produção: o responsável faz o papel do fornecedor,
+                  e a correção pode trocá-lo (decisão 083, 7b). */}
+              {ehVerba && (
+                <div>
+                  <label className="text-xs font-medium">Responsável *</label>
+                  <Select value={responsavelId} onValueChange={setResponsavelId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Escolha um responsável" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {responsaveis.map((r) => (
+                        <SelectItem key={r.id} value={r.id}>
+                          {r.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="mt-1.5 text-[11px] leading-snug text-muted-foreground">
+                    Quem recebe a verba e presta contas dela depois (decisão 081).
+                  </p>
                 </div>
-                <p className="mt-1.5 text-[11px] leading-snug text-muted-foreground">
-                  {fornecedorId
-                    ? "O lápis abre o cadastro deste fornecedor. O ✕ limpa o campo e traz o + de volta."
-                    : "Escreva para buscar na lista. O + cadastra um fornecedor novo sem sair da PP."}
-                </p>
-              </div>
+              )}
+
+              {!ehVerba && (
+                <div>
+                  <label className="text-xs font-medium">Fornecedor *</label>
+                  <div className="flex items-center gap-2">
+                    <div className="min-w-0 flex-1">
+                      {/* O mesmo combo com busca do formulário de PP
+                          (09/09/2026): a correção da rejeitada muitas vezes
+                          volta justamente porque o fornecedor estava errado. */}
+                      <Combobox
+                        items={itensFornecedor}
+                        value={fornecedorId || null}
+                        onChange={(v) => setFornecedorId(v ?? "")}
+                        placeholder="Escolha o fornecedor"
+                        buscaPlaceholder="Escreva o nome ou o documento"
+                        limpavel
+                        acaoSemResultado={{
+                          rotulo: (busca) => `Cadastrar “${busca}” como novo fornecedor`,
+                          onClick: (busca) => {
+                            setNomeSugerido(busca);
+                            setFornecedorEditando(null);
+                            setNovoFornecedorOpen(true);
+                          },
+                        }}
+                      />
+                    </div>
+                    {/* "+" cadastra, lápis revisa o cadastro do escolhido
+                        (decisão 048 + desenho de 09/09/2026). */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNomeSugerido("");
+                        setFornecedorEditando(fornecedorId ? fornecedorId : null);
+                        setNovoFornecedorOpen(true);
+                      }}
+                      disabled={pending}
+                      title={
+                        fornecedorId
+                          ? "Editar cadastro do fornecedor"
+                          : "Cadastrar fornecedor"
+                      }
+                      aria-label={
+                        fornecedorId
+                          ? "Editar cadastro do fornecedor"
+                          : "Cadastrar fornecedor"
+                      }
+                      className="inline-flex h-10 w-10 flex-none items-center justify-center rounded-lg border border-border bg-white text-california-red transition-colors hover:border-california-red/40 hover:bg-california-red/[0.06] disabled:opacity-50"
+                    >
+                      {fornecedorId ? (
+                        <Pencil className="h-4 w-4" />
+                      ) : (
+                        <Plus className="h-[17px] w-[17px]" />
+                      )}
+                    </button>
+                  </div>
+                  <p className="mt-1.5 text-[11px] leading-snug text-muted-foreground">
+                    {fornecedorId
+                      ? "O lápis abre o cadastro deste fornecedor. O ✕ limpa o campo e traz o + de volta."
+                      : "Escreva para buscar na lista. O + cadastra um fornecedor novo sem sair da PP."}
+                  </p>
+                </div>
+              )}
 
               <div>
                 <label className="text-xs font-medium">Empresa emissora *</label>

@@ -1533,16 +1533,9 @@ export async function reenviarPedidoCompra(
     };
   }
 
-  // PP de Verba de Produção não pode ser reenviada por este formulário —
-  // o form de edição hoje pressupõe fornecedor. Se surgir demanda real de
-  // reenviar verba, é task própria (form condicional pro modo verba).
-  if (ppRow.verba_producao) {
-    return {
-      ok: false,
-      message:
-        "PP de Verba de Produção não pode ser reenviada neste momento. Cancele e emita uma nova.",
-    };
-  }
+  // Verba de produção também se corrige e reenvia (decisão 083, 7b): o
+  // formulário troca fornecedor por responsável, e o resto do caminho é o
+  // mesmo. O MODO não muda aqui — quem nasceu verba continua verba.
 
   // Reusa os mesmos gates da emissão: job editável + responsável ou admin.
   const gate = await checarGatesRealizado(ppRow.item_realizado_id);
@@ -1592,7 +1585,8 @@ export async function reenviarPedidoCompra(
   const removidos = new Set(anexosRemovidosIds);
   const mantidos = (anexosAtuais ?? []).filter((a) => !removidos.has(a.id));
 
-  if (mantidos.length + anexosParsed.data.length < 1) {
+  // Verba de produção não tem anexo obrigatório — nem na emissão, nem aqui.
+  if (!ppRow.verba_producao && mantidos.length + anexosParsed.data.length < 1) {
     return { ok: false, message: "Pelo menos um anexo é obrigatório." };
   }
 
@@ -1624,15 +1618,29 @@ export async function reenviarPedidoCompra(
     }
   }
 
-  // ---- FKs ----
-  const [fornRes, empRes] = await Promise.all([
-    supabase
-      .from("fornecedores")
-      .select("*")
-      .eq("id", d.fornecedor_id)
-      .eq("tenant_id", session.activeTenant.id)
-      .eq("status", "ativo")
-      .maybeSingle(),
+  // ---- FKs (fornecedor OU responsável da verba, + empresa) ----
+  // O modo vem da PP gravada, não do formulário: a correção não transforma
+  // verba em PP de fornecedor nem o contrário (decisão 083, 7b).
+  const ehVerba = ppRow.verba_producao === true;
+  if (d.verba_producao !== ehVerba) {
+    return {
+      ok: false,
+      message: ehVerba
+        ? "Esta PP é de verba de produção — a correção não troca o modo."
+        : "Esta PP tem fornecedor — a correção não a transforma em verba.",
+    };
+  }
+
+  const [fornRes, empRes, responsavelRes] = await Promise.all([
+    ehVerba
+      ? Promise.resolve({ data: null })
+      : supabase
+          .from("fornecedores")
+          .select("*")
+          .eq("id", d.fornecedor_id as string)
+          .eq("tenant_id", session.activeTenant.id)
+          .eq("status", "ativo")
+          .maybeSingle(),
     supabase
       .from("empresas")
       .select("*")
@@ -1640,10 +1648,20 @@ export async function reenviarPedidoCompra(
       .eq("tenant_id", session.activeTenant.id)
       .eq("ativo", true)
       .maybeSingle(),
+    // Mesma fonte que a tela usa para montar a lista (membros ativos do
+    // tenant), como na emissão — senão o formulário oferece nome que o
+    // servidor recusa.
+    ehVerba
+      ? listActiveMembers(session.activeTenant.id).then((membros) => ({
+          data: membros.find((m) => m.id === d.responsavel_verba_id) ?? null,
+        }))
+      : Promise.resolve({ data: null }),
   ]);
 
-  if (!fornRes.data)
+  if (!ehVerba && !fornRes.data)
     return { ok: false, message: "Fornecedor inválido ou inativo." };
+  if (ehVerba && !responsavelRes.data)
+    return { ok: false, message: "Responsável inválido ou não encontrado." };
   if (!empRes.data)
     return { ok: false, message: "Empresa emissora inválida ou inativa." };
 
@@ -1746,11 +1764,13 @@ export async function reenviarPedidoCompra(
         quantidade: d.quantidade,
         especificacoes: d.especificacoes ?? null,
         valor,
-        verba_producao: false,
+        verba_producao: ehVerba,
       },
       empresa: empRes.data,
       fornecedor: fornRes.data,
-      responsavelVerbaNome: null,
+      responsavelVerbaNome: ehVerba
+        ? ((responsavelRes.data as { nome?: string } | null)?.nome ?? null)
+        : null,
       job: { nome: job.nome, produto: job.produto ?? "" },
       contexto,
       parcelas: parcelasNovas,
@@ -1778,7 +1798,9 @@ export async function reenviarPedidoCompra(
   const { error: updErr } = await supabase
     .from("pedidos_compra")
     .update({
-      fornecedor_id: d.fornecedor_id,
+      // Verba: fornecedor null, responsável preenchido. PP normal: o oposto.
+      fornecedor_id: ehVerba ? null : (d.fornecedor_id ?? null),
+      responsavel_verba_id: ehVerba ? (d.responsavel_verba_id ?? null) : null,
       empresa_id: d.empresa_id,
       servico: d.servico,
       valor_unitario: d.valor_unitario,
@@ -1867,11 +1889,14 @@ export async function reenviarPedidoCompra(
       .remove(paraRemover.map((a) => a.arquivo_path));
   }
 
-  await supabase
-    .from("jobs_itens_realizado")
-    .update({ fornecedor_id: d.fornecedor_id })
-    .eq("id", ppRow.item_realizado_id)
-    .eq("tenant_id", session.activeTenant.id);
+  // O item guarda o fornecedor da última PP; verba não tem o que guardar.
+  if (!ehVerba) {
+    await supabase
+      .from("jobs_itens_realizado")
+      .update({ fornecedor_id: d.fornecedor_id })
+      .eq("id", ppRow.item_realizado_id)
+      .eq("tenant_id", session.activeTenant.id);
+  }
 
   await logAuditEvent({
     acao: "pedido_compra.reenviada",
@@ -1881,7 +1906,9 @@ export async function reenviarPedidoCompra(
     metadata: {
       pp_codigo: ppRow.codigo,
       valor,
-      fornecedor_id: d.fornecedor_id,
+      verba_producao: ehVerba,
+      fornecedor_id: ehVerba ? null : (d.fornecedor_id ?? null),
+      responsavel_verba_id: ehVerba ? (d.responsavel_verba_id ?? null) : null,
       job_id: job.id,
       anexos_adicionados: anexosParsed.data.length,
       anexos_removidos: paraRemover.length,
