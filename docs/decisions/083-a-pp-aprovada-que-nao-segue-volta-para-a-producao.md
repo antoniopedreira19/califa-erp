@@ -111,10 +111,29 @@ Airbnb Brasil, com anexo):
 **Não conferido pela tela:** a recusa por fatura de cartão (só pelo banco,
 com rollback), porque não há fatura fechada com PP no projeto de teste.
 
-## 6. O que ficou de fora
+## 6. A verba de produção também se corrige e reenvia (7b, 15/09/2026)
 
-- **Reenviar PP de verba de produção** (7b): o formulário de correção
-  pressupõe fornecedor, e a verba rejeitada hoje manda cancelar e emitir
-  outra. O Tiago pediu que a verba seja reenviada de maneira análoga às PPs
-  normais — entra como trabalho próprio, logo em seguida.
+Até aqui a verba rejeitada mandava cancelar e emitir outra: a gaveta de
+correção pressupunha fornecedor. Agora ela atende os dois modos.
+
+- Na correção, a verba mostra **Responsável** no lugar do fornecedor, e a
+  produção **pode trocá-lo** — é quem recebe a verba e presta contas dela
+  depois ([081](081-a-producao-presta-contas-da-verba-e-o-financeiro-aprova.md)).
+- **Anexo continua não exigido** na verba, como na emissão.
+- O **modo não muda**: verba continua verba, PP de fornecedor continua com
+  fornecedor. O servidor recusa a troca, e não só a tela.
+- O PDF é regerado com o nome do responsável, como na emissão.
+- Vale para a verba rejeitada em avaliação e para a que o financeiro
+  reprovou depois de aprovada — as duas caem no mesmo lugar.
+
+**Conferido em 15/09/2026** (JOB-0029 · PP-00066, verba de R$ 150,00 para o
+Financeiro Teste): rejeitada com o pedido de trocar o responsável, a gaveta
+abriu em modo verba (cabeçalho "Responsável & Empresa", sem fornecedor, sem
+anexo obrigatório, com o motivo no topo). Trocado para **GP Teste** e
+reenviada: a PP voltou para "em avaliação", com o responsável novo, fornecedor
+nulo, a rejeição limpa, o PDF regerado e a auditoria registrando
+`verba_producao` e o responsável.
+
+## 7. O que ficou de fora
+
 - A revisão maior do encerramento e do faturamento, que segue pendente.

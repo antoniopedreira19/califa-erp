@@ -5382,3 +5382,6 @@ e agora existe o caminho de volta: **o financeiro reprova**.
   encerramento do job (decisão 083, 8b).
 - O papel é conferido **dentro** da função do banco, além da action: a RPC é
   executável por qualquer usuário autenticado.
+- **Verba reprovada volta corrigida** (083 §6): a produção corrige a verba
+  rejeitada na aba de PPs, inclusive trocando o responsável, e ela reaparece
+  aqui em "Em avaliação" — não é mais "cancele e emita outra".

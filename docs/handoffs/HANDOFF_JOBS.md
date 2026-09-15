@@ -3758,6 +3758,10 @@ planilha da versão.
   abre como sempre — inclusive para mudar o prazo, que volta a ser o
   vencimento negociado com o fornecedor (as datas do financeiro são
   desfeitas).
-- Verba de produção segue **sem** reenvio (o formulário pressupõe fornecedor):
-  a verba rejeitada se cancela e se emite outra. Está combinado torná-la
-  reenviável em seguida.
+- **Verba de produção também se corrige e reenvia** (083 §6): a gaveta
+  (`pps/editar-pp-drawer.tsx`) ganhou o modo verba — Responsável no lugar do
+  fornecedor, **trocável** na correção, e sem anexo obrigatório. O
+  `reenviarPedidoCompra` deixou de recusar verba, valida o responsável pela
+  mesma fonte da emissão (`listActiveMembers`) e **recusa troca de modo**:
+  quem nasceu verba continua verba. A aba de PPs passou a receber
+  `responsaveis` da página para montar o seletor.

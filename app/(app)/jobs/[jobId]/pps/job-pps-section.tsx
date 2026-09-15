@@ -43,6 +43,9 @@ interface Props {
   fornecedoresPorId: Record<string, string>;
   fornecedores: Array<{ id: string; nome: string; razao_social: string | null }>;
   empresas: Array<{ id: string; razao_social: string; principal: boolean }>;
+  /** Membros ativos — a correção da PP de verba escolhe o responsável aqui
+   *  (decisão 083, 7b). */
+  responsaveis: Array<{ id: string; nome: string }>;
   /** GP responsável pelo job ou admin, com o job em estado editável. */
   /** Cancelar a PP e a trilha de ações. Desde 08/09/2026 vale também na
    *  pré-abertura, junto com gerar (decisão 056). */
@@ -108,6 +111,7 @@ export function JobPPsSection({
   fornecedoresPorId,
   fornecedores,
   empresas,
+  responsaveis,
   editable,
   podeEnviar = false,
   podePrestarContas,
@@ -689,6 +693,7 @@ export function JobPPsSection({
         pp={ppEditando}
         fornecedores={fornecedores}
         empresas={empresas}
+        responsaveis={responsaveis}
         onSuccess={(codigo) =>
           setToast(`${codigo} corrigida e reenviada para avaliação.`)
         }

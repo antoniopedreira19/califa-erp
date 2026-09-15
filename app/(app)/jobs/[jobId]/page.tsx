@@ -399,6 +399,7 @@ export default async function JobDetailPage({
             fornecedoresPorId={fornecedoresPorId}
             fornecedores={fornecedores}
             empresas={empresas}
+            responsaveis={responsaveis}
             editable={podeGerarPP}
             podeEnviar={podeEnviarPP}
             podePrestarContas={ppsQuePossoPrestarContas}
