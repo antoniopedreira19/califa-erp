@@ -75,7 +75,11 @@ antigo); a B é o nome do item. É a mesma regra do internacional (072).
 Conferido por script, com a mesma planilha lida pelas duas regras: no
 formato da exportação, a antiga importava 1 de 6 itens e lia honorários
 de 100%; a nova importa os 6, com 15%. No formato do modelo as duas dão
-6 de 6 e 12%.
+6 de 6 e 12%. Pela tela, em 15/09/2026, no "Importar planilha" da versão
+do 0-0001/26-11: a planilha no formato da exportação com "Total de horas
+de edição", "Honorários do locutor" e "Imposto de importação do
+equipamento" mostrou os 4 itens, R$ 4.400,00 e 15% de honorários
+(cancelado sem gravar).
 
 ## QT e D/M zerados viram 1, com aviso
 
