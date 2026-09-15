@@ -3289,6 +3289,42 @@ caso que pegaria a soma dobrada no servidor. As PPs criadas para o teste
 em seguida, e o realizado dos dois itens voltou sozinho ao valor anterior
 — o que conferiu também o trigger no sentido do cancelamento.
 
+**Segunda rodada de conferência, em produção (15/09/2026).** O que a
+primeira não cobriu foi fechado no `0-0001/26`, JOB-0033, Item 3
+(planejado R$ 15.000), e os números decisivos vieram da auditoria, não da
+tela:
+
+| Caminho | Evidência | O que a soma dobrada daria |
+|---|---|---|
+| Salvar a edição de uma PP gerada (8.000 → 9.000) | `pedido_compra.editada` com `acima_do_planejado: false` | `true` (9.000 + 9.000 > 15.000) |
+| Enviar ao financeiro | `enviada_financeiro` com `em_pps_emitidas_depois: 9000` | 18.000 |
+| Reenviar uma PP rejeitada (6.000 → 4.000) | `reenviada` com `em_pps_emitidas_depois: 4000` | 10.000 |
+
+Também conferidos: a lista do **Concluir PPs** conta a PP ainda `gerada`
+("Item 3 · 1 PP · R$ 8.000,00"); a **rejeitada** segue contando no
+realizado; o **cancelamento** devolve o item a zero; e as três telas que
+só LEEM o realizado — visão agregada do projeto, job no financeiro e
+relatório de rentabilidade — subiram exatamente o valor da PP e voltaram
+à linha de base depois do cancelamento. Zero divergências no banco ao
+fim (realizado × soma das PPs não canceladas, com as devoluções de verba
+descontadas).
+
+⚠️ **Duas coisas achadas no caminho, nenhuma delas da 074:**
+
+1. **PP de Verba de Produção rejeitada não pode ser reenviada.**
+   `reenviarPedidoCompra` recusa com "Cancele e emita uma nova" — o
+   formulário de edição pressupõe fornecedor. É limitação conhecida e
+   comentada no código, mas com a 081 (prestação de contas da verba) vale
+   decidir se continua aceitável.
+2. **O anexo sobe para o bucket no instante em que é selecionado**, não
+   no "Gerar PP". Desistir do formulário depois de anexar deixa o arquivo
+   órfão em `pedidos-compra`, e o `DELETE` direto em `storage.objects` é
+   bloqueado pelo Supabase — a limpeza é pelo painel.
+
+Para o teste do reenvio foi preciso reativar o fornecedor "Teste
+Alterações Fornecedor 048" (os sete fornecedores de teste estão
+inativos); ele foi **desativado de novo** ao fim.
+
 ## ⚠️ Nota de 2026-09-11 — o job internacional lê pela cadeia do orçamento (decisão 072)
 
 Terceira entrega da [072](../decisions/072-orcamento-internacional.md).
