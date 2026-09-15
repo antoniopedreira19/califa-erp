@@ -4133,9 +4133,57 @@ desembolso, parcelas e divisão em três requisições separadas. O estorno
 comportaram-se como esperado, sem resíduo. Detalhe na decisão 069,
 revisão de 15/09.
 
-Avulsa e recorrente continuam garantidas só pelo formulário: nascem
-aprovadas e a edição troca a divisão em duas requisições. Escolha levada
-ao Tiago.
+Avulsa e recorrente ficaram, nesse momento, garantidas só pelo
+formulário: nascem aprovadas e a edição trocava a divisão em duas
+requisições. Resolvido no mesmo dia — nota abaixo.
+
+⚠️ **Avulsa e recorrente sem job, rateio na criação e recorrência 30 dias
+antes (2026-09-15).** Decisão 082. Três regras do Tiago:
+
+1. **Avulsa e recorrente não têm job**, como o desembolso: "tudo do job
+   deverá estar contabilizado em sua planilha". O campo saiu dos dois
+   drawers, dos detalhes, das validações e das ações; CHECK no banco. A
+   página de Contas a Pagar deixou de buscar até 500 jobs só para o drawer.
+2. **O rateio é definido na criação.** Despesa e rateio passaram a ser
+   gravados numa transação só (`criar_conta_avulsa`,
+   `criar_conta_recorrente` e as duas `substituir_rateio_*`, todas
+   SECURITY INVOKER), e só por isso o banco consegue exigir: constraint
+   triggers adiados impedem despesa sem nenhuma linha de rateio no fim da
+   transação. O estorno de compra no cartão também nasce com o rateio da
+   compra na mesma transação — antes a cópia podia falhar e deixar o
+   estorno sem regional.
+3. **A recorrência vira título 30 dias antes do vencimento** (entre "só a
+   próxima", "virada do mês" e "30 dias", com exemplo por frequência). A
+   tela gera na hora ao criar, editar e reativar; a rotina das 6h cobre o
+   resto. O que vem depois é **previsão na `vw_fluxo_caixa`**, calculada na
+   leitura ("Recorrência prevista"). Editar a recorrência muda as
+   previsões e não os títulos já criados. No cartão, a ocorrência grava
+   `data_compra` com o dia da cobrança — senão cairia na fatura errada.
+
+Quatro migrations, `20260915210001` a `210004`. A **`210003` (sem job +
+trava) só foi aplicada depois do push**, porque com o código antigo no ar
+ela recusaria toda criação de avulsa. A `210002` alterou a
+`vw_fluxo_caixa` pelo método da `20260915150003` — parte da definição
+viva e acrescenta um ramo —, porque outras frentes a redefinem com
+frequência. A `210004` fechou permissões apontadas pelos advisors,
+inclusive `gerar_ocorrencias_recorrentes` (a rotina de todos os tenants),
+que estava executável por `authenticated` contra o que a `20260831160001`
+registrou.
+
+No fluxo de caixa o grupo "Só previsão (abertura do job)" virou "Só
+previsão (jobs e recorrências)", porque deixou de ser só da abertura.
+
+**Conferido.** Sonda com rollback em 14 casos (trava, job barrado,
+mensal, quinzenal, anual, data de fim, cartão, recorrência sem rateio,
+sessão exigida) e, no navegador logado, pelos fluxos reais: drawers sem
+Job; avulsa criada com rateio; recorrência criada com o título de 25/09
+aparecendo na hora; 12 previsões no fluxo; edição de valor mudando as
+previsões e mantendo o título; build, tsc e lint limpos.
+
+**Dado de teste que ficou**, todo na Empresa Teste, regional Teste:
+`AV-00001` (avulsa, R$ 1), a recorrência "Teste 069 — recorrência sem job"
+(**pausada**, para a rotina não gerar mais nada) e a ocorrência `AV-00002`
+(R$ 2, 25/09). Apagar é decisão do Tiago.
 
 ---
 

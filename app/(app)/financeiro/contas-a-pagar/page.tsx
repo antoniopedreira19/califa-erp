@@ -68,7 +68,6 @@ export default async function PedidosCompraFinanceiroPage({
     empresasRes,
     fornecedoresRes,
     clientesRes,
-    jobsRes,
     recorrentesRes,
     recorrentesAtivasCountRes,
     regionaisRes,
@@ -163,8 +162,7 @@ export default async function PedidosCompraFinanceiroPage({
           plano_conta_tipo_id, plano_conta_subtipo_id,
           forma_pagamento, cartao_credito_id,
           estorno_de_avulsa_id, parcela_numero, parcela_total, parcela_de_avulsa_id,
-          fornecedor:fornecedores(nome, razao_social),
-          job:jobs(codigo)
+          fornecedor:fornecedores(nome, razao_social)
         `)
         .eq("tenant_id", session.activeTenant.id)
         .order("data_prevista_pagamento", { ascending: true })
@@ -218,15 +216,6 @@ export default async function PedidosCompraFinanceiroPage({
       .eq("tenant_id", session.activeTenant.id)
       .eq("status", "ativo")
       .order("nome_fantasia"),
-    // Jobs não cancelados — inclui cliente_id do projeto e regional_id do job
-    // para auto-preencher cliente/rateio no drawer quando job é escolhido.
-    supabase
-      .from("jobs")
-      .select("id, codigo, nome, regional_id, projeto:projetos!inner(cliente_id)")
-      .eq("tenant_id", session.activeTenant.id)
-      .neq("status", "cancelado")
-      .order("created_at", { ascending: false })
-      .limit(500),
     // Recorrências (todos os status)
     (async () => {
       let q = supabase
@@ -295,7 +284,6 @@ export default async function PedidosCompraFinanceiroPage({
         id, codigo, descricao, status,
         empresa_id,
         fornecedor:fornecedores(nome, razao_social),
-        job:jobs(codigo),
         parcelas:desembolsos_parcelas(
           id, numero, data_vencimento, data_pagamento, data_pagamento_primeira,
           valor, pago_em
@@ -685,7 +673,6 @@ export default async function PedidosCompraFinanceiroPage({
     parcela_total: number | null;
     parcela_de_avulsa_id: string | null;
     fornecedor: { nome: string | null; razao_social: string | null } | null;
-    job: { codigo: string } | null;
   }>) {
     const baixa = baixaPorAvulsa.get(a.id);
     titulos.push({
@@ -696,7 +683,8 @@ export default async function PedidosCompraFinanceiroPage({
       cadastro_do_fornecedor_mudou: false,
       descricao: a.descricao,
       fornecedor_nome: a.fornecedor?.razao_social ?? a.fornecedor?.nome ?? "—",
-      job_codigo: a.job?.codigo ?? "—",
+      // Avulsa e recorrência não têm job desde 15/09/2026 (decisão 069).
+      job_codigo: "—",
       data_pagamento: a.data_pagamento ?? a.data_prevista_pagamento,
       venc_original: a.data_prevista_pagamento,
       data_pagamento_primeira: a.data_pagamento_primeira,
@@ -772,7 +760,6 @@ export default async function PedidosCompraFinanceiroPage({
     status: "aprovada" | "pago";
     empresa_id: string;
     fornecedor: { nome: string | null; razao_social: string | null } | null;
-    job: { codigo: string } | null;
     parcelas: Array<{
       id: string;
       numero: number;
@@ -794,7 +781,8 @@ export default async function PedidosCompraFinanceiroPage({
         cadastro_do_fornecedor_mudou: false,
         descricao: des.descricao,
         fornecedor_nome: des.fornecedor?.razao_social ?? des.fornecedor?.nome ?? "—",
-        job_codigo: des.job?.codigo ?? "—",
+        // Desembolso não tem job desde 10/09/2026 (decisão 069).
+        job_codigo: "—",
         data_pagamento: par.data_pagamento,
         venc_original: par.data_vencimento,
         data_pagamento_primeira: par.data_pagamento_primeira,
@@ -803,9 +791,9 @@ export default async function PedidosCompraFinanceiroPage({
         parcela_total: total,
         status: par.pago_em ? "pago" : "a_pagar",
         empresa_id: des.empresa_id,
-        // Desembolso com job → default Custo Operacional. Sem job, o
-        // financeiro decide o tipo na baixa.
-        plano_conta_tipo_id: des.job ? custoOperacionalTipoId : null,
+        // Desembolso é despesa sem job (decisão 069): o financeiro decide
+        // o tipo na baixa.
+        plano_conta_tipo_id: null,
         plano_conta_subtipo_id: null,
         pago_em: par.pago_em,
         conta_nome: baixa?.conta ?? null,
@@ -1150,25 +1138,6 @@ export default async function PedidosCompraFinanceiroPage({
     id: c.id,
     nome: c.razao_social ?? c.nome_fantasia ?? "",
   }));
-  const jobsList = (jobsRes.data ?? []).map(
-    (j: {
-      id: string;
-      codigo: string;
-      nome: string;
-      regional_id: string | null;
-      projeto: { cliente_id: string } | { cliente_id: string }[] | null;
-    }) => {
-      // PostgREST embed self-referencial pode vir como array — normaliza.
-      const proj = Array.isArray(j.projeto) ? j.projeto[0] : j.projeto;
-      return {
-        id: j.id,
-        codigo: j.codigo,
-        nome: j.nome,
-        cliente_id: proj?.cliente_id ?? null,
-        regional_id: j.regional_id ?? null,
-      };
-    },
-  );
 
   const regionaisList = (regionaisRes.data ?? []).map(
     (r: { id: string; nome: string; ativo: boolean; empresa_id: string }) => ({
@@ -1287,7 +1256,6 @@ export default async function PedidosCompraFinanceiroPage({
               empresas={empresasList}
               fornecedores={fornecedoresList}
               clientes={clientesList}
-              jobs={jobsList}
               regionais={regionaisList}
               cartoes={cartoesList}
             />
@@ -1302,7 +1270,6 @@ export default async function PedidosCompraFinanceiroPage({
               subtipos={subtiposRes.data ?? []}
               fornecedores={fornecedoresList}
               clientes={clientesList}
-              jobs={jobsList}
               regionais={regionaisList}
               cartoes={cartoesList}
             />
@@ -1318,7 +1285,6 @@ export default async function PedidosCompraFinanceiroPage({
               empresas={empresasList}
               fornecedores={fornecedoresList}
               clientes={clientesList}
-              jobs={jobsList}
               regionais={regionaisList}
               faturasDoCartao={faturasDoCartao}
             />

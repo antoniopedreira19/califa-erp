@@ -73,7 +73,6 @@ export default async function RecorrenteDetalhesPage({
       empresa:empresas(razao_social, nome_fantasia),
       fornecedor:fornecedores(nome, razao_social),
       cliente:clientes(nome_fantasia, razao_social),
-      job:jobs(codigo, nome),
       tipo:plano_contas_tipos(codigo, nome),
       subtipo:plano_contas_subtipos(nome)
     `)
@@ -91,7 +90,6 @@ export default async function RecorrenteDetalhesPage({
     subtiposRes,
     fornecedoresRes,
     clientesRes,
-    jobsRes,
     rateioRes,
     regionaisRes,
     cartoesRes,
@@ -132,13 +130,6 @@ export default async function RecorrenteDetalhesPage({
       .eq("tenant_id", session.activeTenant.id)
       .eq("status", "ativo")
       .order("nome_fantasia"),
-    supabase
-      .from("jobs")
-      .select("id, codigo, nome, regional_id, projeto:projetos!inner(cliente_id)")
-      .eq("tenant_id", session.activeTenant.id)
-      .neq("status", "cancelado")
-      .order("created_at", { ascending: false })
-      .limit(500),
     // Rateio de regional desta recorrência
     supabase
       .from("contas_avulsas_recorrentes_regionais")
@@ -179,22 +170,6 @@ export default async function RecorrenteDetalhesPage({
       nome: (cl.razao_social ?? cl.nome_fantasia) as string,
     }),
   );
-  const jobs = ((jobsRes.data ?? []) as Array<{
-    id: string;
-    codigo: string;
-    nome: string;
-    regional_id: string | null;
-    projeto: { cliente_id: string } | { cliente_id: string }[] | null;
-  }>).map((j) => {
-    const proj = Array.isArray(j.projeto) ? j.projeto[0] : j.projeto;
-    return {
-      id: j.id,
-      codigo: j.codigo,
-      nome: j.nome,
-      cliente_id: proj?.cliente_id ?? null,
-      regional_id: j.regional_id ?? null,
-    };
-  });
   const tipos = (tiposRes.data ?? []) as PlanoContaTipo[];
   const subtipos = (subtiposRes.data ?? []) as PlanoContaSubtipo[];
 
@@ -277,7 +252,6 @@ export default async function RecorrenteDetalhesPage({
     valor: string;
     fornecedor_id: string | null;
     cliente_id: string | null;
-    job_id: string | null;
     plano_conta_tipo_id: string;
     plano_conta_subtipo_id: string;
     frequencia: ContaAvulsaRecorrente["frequencia"];
@@ -297,7 +271,6 @@ export default async function RecorrenteDetalhesPage({
     empresa: { razao_social: string | null; nome_fantasia: string | null } | null;
     fornecedor: { nome: string; razao_social: string | null } | null;
     cliente: { nome_fantasia: string; razao_social: string | null } | null;
-    job: { codigo: string; nome: string } | null;
     tipo: { codigo: string; nome: string } | null;
     subtipo: { nome: string } | null;
   };
@@ -311,7 +284,6 @@ export default async function RecorrenteDetalhesPage({
     valor: r.valor,
     fornecedor_id: r.fornecedor_id,
     cliente_id: r.cliente_id,
-    job_id: r.job_id,
     plano_conta_tipo_id: r.plano_conta_tipo_id,
     plano_conta_subtipo_id: r.plano_conta_subtipo_id,
     frequencia: r.frequencia,
@@ -375,7 +347,6 @@ export default async function RecorrenteDetalhesPage({
                   subtipos={subtipos}
                   fornecedores={fornecedores}
                   clientes={clientes}
-                  jobs={jobs}
                   regionais={regionaisList}
                   cartoes={cartoesList}
                   rateioInicial={rateioInicial}
@@ -420,11 +391,6 @@ export default async function RecorrenteDetalhesPage({
           <span className="text-muted-foreground">Cliente</span>
           <span>{r.cliente?.razao_social ?? r.cliente?.nome_fantasia ?? "—"}</span>
 
-          <span className="text-muted-foreground">Job</span>
-          <span>
-            {r.job ? `${r.job.codigo} · ${r.job.nome}` : "—"}
-          </span>
-
           <span className="text-muted-foreground">Plano de contas</span>
           <span>
             {r.tipo ? (
@@ -452,7 +418,11 @@ export default async function RecorrenteDetalhesPage({
             </span>
           </span>
 
-          <span className="text-muted-foreground">Próxima data</span>
+          {/* `proxima_data` é a primeira ocorrência que ainda NÃO virou
+              título: desde 15/09/2026 a ocorrência vira título 30 dias antes
+              do vencimento, e o que vem depois é previsão no fluxo de caixa.
+              As que já viraram título estão no histórico abaixo. */}
+          <span className="text-muted-foreground">Próxima prevista</span>
           <span className="font-mono">{formatDate(r.proxima_data)}</span>
 
           <span className="text-muted-foreground">Data de fim</span>

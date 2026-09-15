@@ -248,13 +248,6 @@ interface Props {
    *  caminho o descartaria de vez, com `tsc` limpo. */
   fornecedores: Array<{ id: string; nome: string; cpf_cnpj?: string | null }>;
   clientes: Array<{ id: string; nome: string }>;
-  jobs: Array<{
-    id: string;
-    codigo: string;
-    nome: string;
-    cliente_id: string | null;
-    regional_id: string | null;
-  }>;
   regionais: Array<{ id: string; nome: string; ativo: boolean; empresa_id: string }>;
   /** Cartões de crédito ativos — repassados ao drawer de conta avulsa. */
   cartoes?: CartaoOption[];
@@ -269,7 +262,6 @@ export function TitulosPagarList({
   empresas,
   fornecedores,
   clientes,
-  jobs,
   regionais,
   cartoes = [],
 }: Props) {
@@ -576,7 +568,6 @@ export function TitulosPagarList({
             subtipos={subtipos}
             fornecedores={fornecedores}
             clientes={clientes}
-            jobs={jobs}
             regionais={regionais}
             cartoes={cartoes}
             onCriadaParaBaixa={(id) => {

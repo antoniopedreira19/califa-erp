@@ -187,13 +187,6 @@ interface Props {
    *  caminho o descartaria de vez, com `tsc` limpo. */
   fornecedores: Array<{ id: string; nome: string; cpf_cnpj?: string | null }>;
   clientes: Array<{ id: string; nome: string }>;
-  jobs: Array<{
-    id: string;
-    codigo: string;
-    nome: string;
-    cliente_id: string | null;
-    regional_id: string | null;
-  }>;
   regionais: Array<{ id: string; nome: string; ativo: boolean; empresa_id: string }>;
   /**
    * As faturas que ainda moram nesta aba: abertas e fechadas.
@@ -258,7 +251,6 @@ export function TitulosCartaoList({
   empresas,
   fornecedores,
   clientes,
-  jobs,
   regionais,
   faturasDoCartao,
 }: Props) {
@@ -425,7 +417,6 @@ export function TitulosCartaoList({
           subtipos={subtipos}
           fornecedores={fornecedores}
           clientes={clientes}
-          jobs={jobs}
           regionais={regionais}
           cartoes={cartoes}
           cartaoPreSelecionadoId={

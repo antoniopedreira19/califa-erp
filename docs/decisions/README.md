@@ -105,9 +105,10 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 079 | [A nota fiscal só cobre jobs de um mesmo cliente, e quem confere é o banco](079-a-nota-fiscal-so-cobre-jobs-de-um-cliente.md) | 2026-09-14 |
 | 080 | [Quem emite a nota e quem confirma o BV, conferido no servidor e no banco](080-quem-emite-a-nota-e-quem-confirma-o-bv.md) | 2026-09-15 |
 | 081 | [A produção presta contas da verba, e o financeiro aprova](081-a-producao-presta-contas-da-verba-e-o-financeiro-aprova.md) | 2026-09-15 |
+| 082 | [A despesa sem job nasce com o rateio, e a recorrência vira título 30 dias antes](082-a-despesa-sem-job-nasce-com-rateio-e-a-recorrencia-vira-titulo-30-dias-antes.md) | 2026-09-15 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
 > data é a da decisão, não a da posição na fila.
 
-**Próximo número livre: 082.**
+**Próximo número livre: 083.**

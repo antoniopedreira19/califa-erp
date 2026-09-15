@@ -667,7 +667,7 @@ export async function darBaixaTitulo(input: unknown): Promise<Result> {
 
   const { data: avulsa } = await supabase
     .from("contas_avulsas")
-    .select("id, status, descricao, valor, job_id, recorrente_id")
+    .select("id, status, descricao, valor, recorrente_id")
     .eq("id", d.id)
     .eq("tenant_id", session.activeTenant.id)
     .maybeSingle();
@@ -711,7 +711,7 @@ export async function darBaixaTitulo(input: unknown): Promise<Result> {
     },
   });
 
-  revalidarFinanceiro(avulsa.job_id);
+  revalidarFinanceiro();
   return { ok: true };
 }
 

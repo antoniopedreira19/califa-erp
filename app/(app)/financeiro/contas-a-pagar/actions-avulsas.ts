@@ -102,9 +102,12 @@ export async function criarContaAvulsa(input: unknown): Promise<Result> {
     console.error("[avulsa.codigo]", errCodigo.message);
   }
 
-  const { data: conta, error } = await supabase
-    .from("contas_avulsas")
-    .insert({
+  // A conta e o rateio nascem juntos, numa transação só (decisão 069,
+  // revisão de 15/09/2026). O banco recusa conta avulsa sem rateio — e só
+  // consegue recusar se as duas coisas chegarem na mesma transação. Antes
+  // eram duas requisições, com a conta apagada à mão se o rateio falhasse.
+  const { data: contaId, error } = await supabase.rpc("criar_conta_avulsa", {
+    p_dados: {
       tenant_id: session.activeTenant.id,
       codigo: (codigo as string | null) ?? null,
       empresa_id: d.empresa_id,
@@ -119,14 +122,13 @@ export async function criarContaAvulsa(input: unknown): Promise<Result> {
       data_pagamento_primeira: d.data_prevista_pagamento,
       fornecedor_id: d.fornecedor_id,
       cliente_id: d.cliente_id,
-      job_id: d.job_id,
       plano_conta_tipo_id: d.plano_conta_tipo_id,
       plano_conta_subtipo_id: d.plano_conta_subtipo_id,
       forma_pagamento: d.forma_pagamento,
       cartao_credito_id: d.cartao_credito_id,
       // O dia da compra escolhe a fatura; o estorno diz qual compra ele
       // desfaz. Do estorno, o gatilho `avulsa_estorno_herda_da_compra`
-      // sobrescreve natureza, empresa, plano de contas, job, fornecedor e
+      // sobrescreve natureza, empresa, plano de contas, fornecedor e
       // cliente com os da compra — mandar aqui é conveniência de tela, a
       // palavra final é do banco (29/08/2026).
       data_compra: d.data_compra,
@@ -141,15 +143,15 @@ export async function criarContaAvulsa(input: unknown): Promise<Result> {
       // financeiro, que é exatamente quem aprovaria depois.
       aprovada_em: new Date().toISOString(),
       aprovada_por: session.profile.id,
-    })
-    .select("id")
-    .single();
+    },
+    p_rateio: d.rateio,
+  });
 
-  if (error || !conta) {
+  if (error || !contaId) {
     console.error("[avulsa.criar]", error?.message);
     return { ok: false, message: error?.message ?? "Falha ao criar conta avulsa." };
   }
-
+  const conta = { id: contaId as string };
 
   // Anexos em bulk
   if (d.anexos.length > 0) {
@@ -171,46 +173,6 @@ export async function criarContaAvulsa(input: unknown): Promise<Result> {
       // Não aborta — conta criada, só perdeu anexos. Log e segue.
       console.error("[avulsa.criar.anexos]", anexErr.message);
     }
-  }
-
-  // Rateio regional
-  // Se tem job, força rateio único 100% na regional do job.
-  let rateioFinal = d.rateio;
-  if (d.job_id) {
-    const { data: jobRow } = await supabase
-      .from("jobs")
-      .select("regional_id")
-      .eq("id", d.job_id)
-      .eq("tenant_id", session.activeTenant.id)
-      .maybeSingle();
-    if (!jobRow?.regional_id) {
-      // Compensa: apaga a conta criada.
-      await supabase.from("contas_avulsas").delete().eq("id", conta.id);
-      return {
-        ok: false,
-        message: "Job selecionado não tem regional associada.",
-      };
-    }
-    rateioFinal = [{ regional_id: jobRow.regional_id, percentual: 100 }];
-  }
-
-  const rateioRows = rateioFinal.map((r) => ({
-    tenant_id: session.activeTenant.id,
-    conta_avulsa_id: conta.id,
-    regional_id: r.regional_id,
-    percentual: r.percentual,
-  }));
-  const { error: rateioErr } = await supabase
-    .from("contas_avulsas_regionais")
-    .insert(rateioRows);
-
-  if (rateioErr) {
-    // Compensação: apaga a conta que foi criada (cascade cuida do resto).
-    await supabase.from("contas_avulsas").delete().eq("id", conta.id);
-    return {
-      ok: false,
-      message: `Falha ao salvar rateio: ${rateioErr.message}`,
-    };
   }
 
   // Compra parcelada no cartão: o valor que veio é o TOTAL, e a RPC
@@ -314,7 +276,6 @@ export async function editarContaAvulsa(
     "data_prevista_pagamento",
     "fornecedor_id",
     "cliente_id",
-    "job_id",
     "plano_conta_tipo_id",
     "plano_conta_subtipo_id",
     "forma_pagamento",
@@ -358,23 +319,7 @@ export async function editarContaAvulsa(
     .eq("conta_avulsa_id", id)
     .eq("tenant_id", session.activeTenant.id);
 
-  // Se tem job, força rateio único 100% na regional do job.
-  let rateioNovo = d.rateio;
-  if (d.job_id) {
-    const { data: jobRow } = await supabase
-      .from("jobs")
-      .select("regional_id")
-      .eq("id", d.job_id)
-      .eq("tenant_id", session.activeTenant.id)
-      .maybeSingle();
-    if (!jobRow?.regional_id) {
-      return {
-        ok: false,
-        message: "Job selecionado não tem regional associada.",
-      };
-    }
-    rateioNovo = [{ regional_id: jobRow.regional_id, percentual: 100 }];
-  }
+  const rateioNovo = d.rateio;
 
   // Normaliza pra comparar
   function normalizar(
@@ -413,7 +358,6 @@ export async function editarContaAvulsa(
           : {}),
         fornecedor_id: d.fornecedor_id,
         cliente_id: d.cliente_id,
-        job_id: d.job_id,
         plano_conta_tipo_id: d.plano_conta_tipo_id,
         plano_conta_subtipo_id: d.plano_conta_subtipo_id,
         forma_pagamento: d.forma_pagamento,
@@ -447,42 +391,16 @@ export async function editarContaAvulsa(
 
   // Rateio regional: delete-all + insert-all se mudou
   if (rateioMudou) {
-    const { error: delErr } = await supabase
-      .from("contas_avulsas_regionais")
-      .delete()
-      .eq("conta_avulsa_id", id)
-      .eq("tenant_id", session.activeTenant.id);
-    if (delErr) {
+    // Apaga e grava numa transação só: a conta nunca fica sem rateio no
+    // meio da troca — e o banco recusaria se ficasse (15/09/2026).
+    const { error: rateioErr } = await supabase.rpc(
+      "substituir_rateio_conta_avulsa",
+      { p_conta_avulsa_id: id, p_rateio: rateioNovo },
+    );
+    if (rateioErr) {
       return {
         ok: false,
-        message: `Falha ao apagar rateio antigo: ${delErr.message}`,
-      };
-    }
-
-    const novasRows = rateioNovo.map((r) => ({
-      tenant_id: session.activeTenant.id,
-      conta_avulsa_id: id,
-      regional_id: r.regional_id,
-      percentual: r.percentual,
-    }));
-    const { error: insErr } = await supabase
-      .from("contas_avulsas_regionais")
-      .insert(novasRows);
-    if (insErr) {
-      // Compensação: restaura rateio anterior para não deixar a conta sem rateio.
-      if ((rateioAtual ?? []).length > 0) {
-        await supabase.from("contas_avulsas_regionais").insert(
-          (rateioAtual ?? []).map((r) => ({
-            tenant_id: session.activeTenant.id,
-            conta_avulsa_id: id,
-            regional_id: r.regional_id,
-            percentual: r.percentual,
-          })),
-        );
-      }
-      return {
-        ok: false,
-        message: `Falha ao salvar rateio: ${insErr.message}`,
+        message: `Falha ao salvar rateio: ${rateioErr.message}`,
       };
     }
 

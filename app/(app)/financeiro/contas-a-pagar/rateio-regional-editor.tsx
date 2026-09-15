@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Plus, X, MapPin } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import { Combobox } from "@/components/ui/combobox";
 import type { RateioLinhaInput } from "@/lib/types";
 
@@ -16,8 +16,6 @@ interface Props {
   linhas: RateioLinhaInput[];
   onChange: (linhas: RateioLinhaInput[]) => void;
   regionais: RegionalOption[];
-  /** Se informado, força 1 linha travada em 100% na regional do job. */
-  jobRegionalId?: string | null;
   disabled?: boolean;
 }
 
@@ -35,22 +33,8 @@ export function RateioRegionalEditor({
   linhas,
   onChange,
   regionais,
-  jobRegionalId,
   disabled = false,
 }: Props) {
-  // Se job selecionado, força 1 linha 100% na regional do job.
-  React.useEffect(() => {
-    if (jobRegionalId) {
-      if (
-        linhas.length !== 1 ||
-        linhas[0]?.regional_id !== jobRegionalId ||
-        linhas[0]?.percentual !== 100
-      ) {
-        onChange([{ regional_id: jobRegionalId, percentual: 100 }]);
-      }
-    }
-  }, [jobRegionalId, linhas, onChange]);
-
   const regionaisAtivas = regionais.filter((r) => r.ativo);
   const regionalPorId = new Map(regionais.map((r) => [r.id, r]));
 
@@ -84,30 +68,6 @@ export function RateioRegionalEditor({
       ...linhas,
       { regional_id: "", percentual: Number(restante.toFixed(2)) },
     ]);
-  }
-
-  // Caso especial: job selecionado, renderiza 1 linha read-only.
-  if (jobRegionalId) {
-    const jobReg = regionalPorId.get(jobRegionalId);
-    return (
-      <div className="space-y-2">
-        <label className="text-sm font-semibold text-foreground">
-          Rateio de regional *
-        </label>
-        <div className="rounded-lg border border-border bg-muted/40 p-3">
-          <div className="flex items-center gap-2 text-sm">
-            <MapPin className="h-4 w-4 text-muted-foreground" />
-            <span className="font-medium">
-              {jobReg?.nome ?? "Regional do job"}
-            </span>
-            <span className="ml-auto font-mono text-xs">100.00%</span>
-          </div>
-          <p className="mt-2 text-xs text-muted-foreground">
-            Regional herdada do job. Para ratear, remova o job.
-          </p>
-        </div>
-      </div>
-    );
   }
 
   return (

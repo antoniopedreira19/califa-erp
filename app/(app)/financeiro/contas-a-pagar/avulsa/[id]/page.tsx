@@ -58,7 +58,6 @@ export default async function AvulsaDetalhesPage({
       empresa:empresas(razao_social, nome_fantasia),
       fornecedor:fornecedores(nome, razao_social),
       cliente:clientes(nome_fantasia, razao_social),
-      job:jobs(codigo, nome),
       tipo:plano_contas_tipos(codigo, nome),
       subtipo:plano_contas_subtipos(nome),
       conta_bancaria:contas_bancarias!conta_bancaria_baixa_id(nome, banco),
@@ -80,7 +79,6 @@ export default async function AvulsaDetalhesPage({
     subtiposRes,
     fornecedoresRes,
     clientesRes,
-    jobsRes,
     regionaisRes,
     rateioRes,
     cartoesRes,
@@ -137,13 +135,6 @@ export default async function AvulsaDetalhesPage({
       .eq("tenant_id", session.activeTenant.id)
       .eq("status", "ativo")
       .order("nome_fantasia"),
-    supabase
-      .from("jobs")
-      .select("id, codigo, nome, regional_id, projeto:projetos!inner(cliente_id)")
-      .eq("tenant_id", session.activeTenant.id)
-      .neq("status", "cancelado")
-      .order("created_at", { ascending: false })
-      .limit(500),
     // Regionais (para o editor de rateio no drawer)
     supabase
       .from("regionais")
@@ -180,7 +171,6 @@ export default async function AvulsaDetalhesPage({
     status: ContaAvulsaStatus;
     fornecedor_id: string | null;
     cliente_id: string | null;
-    job_id: string | null;
     plano_conta_tipo_id: string;
     plano_conta_subtipo_id: string;
     pago_em: string | null;
@@ -195,7 +185,6 @@ export default async function AvulsaDetalhesPage({
     empresa: { razao_social: string | null; nome_fantasia: string | null } | null;
     fornecedor: { nome: string; razao_social: string | null } | null;
     cliente: { nome_fantasia: string; razao_social: string | null } | null;
-    job: { codigo: string; nome: string } | null;
     tipo: { codigo: string; nome: string } | null;
     subtipo: { nome: string } | null;
     conta_bancaria: { nome: string; banco: string } | null;
@@ -220,22 +209,6 @@ export default async function AvulsaDetalhesPage({
       nome: (cl.razao_social ?? cl.nome_fantasia) as string,
     }),
   );
-  const jobs = ((jobsRes.data ?? []) as Array<{
-    id: string;
-    codigo: string;
-    nome: string;
-    regional_id: string | null;
-    projeto: { cliente_id: string } | { cliente_id: string }[] | null;
-  }>).map((j) => {
-    const proj = Array.isArray(j.projeto) ? j.projeto[0] : j.projeto;
-    return {
-      id: j.id,
-      codigo: j.codigo,
-      nome: j.nome,
-      cliente_id: proj?.cliente_id ?? null,
-      regional_id: j.regional_id ?? null,
-    };
-  });
   const tipos = (tiposRes.data ?? []) as PlanoContaTipo[];
   const subtipos = (subtiposRes.data ?? []) as PlanoContaSubtipo[];
   const contasBancarias = (contasRes.data ?? []) as import("@/lib/types").ContaBancaria[];
@@ -295,7 +268,6 @@ export default async function AvulsaDetalhesPage({
     status: c.status,
     fornecedor_id: c.fornecedor_id,
     cliente_id: c.cliente_id,
-    job_id: c.job_id,
     plano_conta_tipo_id: c.plano_conta_tipo_id,
     plano_conta_subtipo_id: c.plano_conta_subtipo_id,
     pago_em: c.pago_em,
@@ -357,7 +329,6 @@ export default async function AvulsaDetalhesPage({
                   subtipos={subtipos}
                   fornecedores={fornecedores}
                   clientes={clientes}
-                  jobs={jobs}
                   regionais={regionais}
                   rateioInicial={rateioInicial}
                   cartoes={cartoes}
@@ -410,11 +381,6 @@ export default async function AvulsaDetalhesPage({
 
           <span className="text-muted-foreground">Cliente</span>
           <span>{c.cliente?.razao_social ?? c.cliente?.nome_fantasia ?? "—"}</span>
-
-          <span className="text-muted-foreground">Job</span>
-          <span>
-            {c.job ? `${c.job.codigo} · ${c.job.nome}` : "—"}
-          </span>
 
           <span className="text-muted-foreground">Plano de contas</span>
           <span>

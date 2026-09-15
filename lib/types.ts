@@ -2503,7 +2503,8 @@ export interface ContaAvulsaRecorrente {
   valor: string; // numeric → string do supabase-js
   fornecedor_id: string | null;
   cliente_id: string | null;
-  job_id: string | null;
+  // Sem `job_id` desde 15/09/2026 (decisão 069): a coluna existe no banco,
+  // barrada por CHECK, e a regional vem só do rateio.
   plano_conta_tipo_id: string;
   plano_conta_subtipo_id: string;
   frequencia: FrequenciaRecorrencia;
@@ -2547,7 +2548,8 @@ export interface ContaAvulsa {
   status: ContaAvulsaStatus;
   fornecedor_id: string | null;
   cliente_id: string | null;
-  job_id: string | null;
+  // Sem `job_id` desde 15/09/2026 (decisão 069): a coluna existe no banco,
+  // barrada por CHECK, e a regional vem só do rateio.
   plano_conta_tipo_id: string;
   plano_conta_subtipo_id: string;
   pago_em: string | null;
