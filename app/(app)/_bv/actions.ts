@@ -493,7 +493,9 @@ export async function salvarBv(
  */
 export async function confirmarBv(bvId: string): Promise<ActionResult> {
   const session = await requireSession();
-  const gate = await checarPermissao(session, "orcamentos.editar");
+  // Confirmar é do GP e do administrador (decisão 080). Lançar e negociar o
+  // BV continuam abertos a quem edita o orçamento/job.
+  const gate = await checarPermissao(session, "jobs.confirmar_bv");
   if (!gate.ok) return gate;
 
   const supabase = createClient();

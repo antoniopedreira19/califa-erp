@@ -150,6 +150,10 @@ interface Props {
   /** Contexto congelado (versão aprovada no orçamento, job encerrado):
    *  o BV é consultado, nunca gravado. */
   readOnly?: boolean;
+  /** Quem pode confirmar o BV e mandá-lo ao contas a receber —
+   *  `jobs.confirmar_bv`, administrador e GP (decisão 080). Obrigatória:
+   *  o orçamento, onde o Confirmar não existe, manda `false`. */
+  podeConfirmar: boolean;
   /** Ausente ⇒ grava direto nas Server Actions. */
   adaptador?: AdaptadorBv;
 }
@@ -256,6 +260,7 @@ export function BvDialog({
   origem,
   realizado,
   readOnly,
+  podeConfirmar,
   adaptador,
 }: Props) {
   const router = useRouter();
@@ -475,6 +480,7 @@ export function BvDialog({
   /** Confirmar exige fornecedor: é quem vai devolver o valor, e sem nome
    *  não existe cobrança. A trava também vale no servidor. */
   function handlePedirConfirmacao() {
+    if (!podeConfirmar) return;
     if (!fornecedorId) {
       setErro("Informe o fornecedor antes de confirmar o BV.");
       return;
@@ -978,6 +984,12 @@ export function BvDialog({
               )}
 
               <div className="flex items-center gap-2.5">
+                {noJob && !somenteLeitura && !podeConfirmar && (
+                  <span className="max-w-[15rem] text-right text-[11.5px] leading-snug text-muted-foreground">
+                    A confirmação do BV é do administrador ou do gerente de
+                    produção.
+                  </span>
+                )}
                 <button
                   type="button"
                   onClick={() => onOpenChange(false)}
@@ -1002,7 +1014,7 @@ export function BvDialog({
                     {pending ? "Salvando..." : noJob ? "Salvar" : "Salvar BV"}
                   </button>
                 )}
-                {noJob && !somenteLeitura && (
+                {noJob && !somenteLeitura && podeConfirmar && (
                   <button
                     type="button"
                     onClick={handlePedirConfirmacao}

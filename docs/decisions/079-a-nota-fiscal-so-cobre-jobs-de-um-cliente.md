@@ -99,7 +99,9 @@ duas vezes no servidor; e só a tela por id, que não atende o `CLAUDE.md`.)*
 
 ## O que ficou de fora, de propósito
 
-- **BV misturado com job:** a action recusa, a RPC não.
+- **BV misturado com job:** a action recusa, a RPC não. ⚠️ **Fechada em
+  15/09/2026 pela [080](080-quem-emite-a-nota-e-quem-confirma-o-bv.md)**,
+  junto com BV sozinho na nota do cliente e BV em nota de outro fornecedor.
 - **Empresa emissora diferente da empresa do job:** a simulação usou uma
   empresa diferente da do JOB-0010, e nada reclamou. Não se sabe se é
   regra.
@@ -107,5 +109,10 @@ duas vezes no servidor; e só a tela por id, que não atende o `CLAUDE.md`.)*
   e não só o cliente). O drawer sempre manda os dois do mesmo job.
 - **A RPC não confere a role de quem chama.** Qualquer membro do tenant
   pode chamá-la direto pelo PostgREST; a trava de admin/financeiro está só
-  na action. Hoje todos os perfis do tenant são `administrador`.
-- **Os dois clientes "teste" duplicados** continuam no cadastro.
+  na action. Hoje todos os perfis do tenant são `administrador`. ⚠️ **Estava
+  errado já em 14/09:** havia financeiro, GP, produtor e freelancers.
+  **Fechada em 15/09/2026 pela
+  [080](080-quem-emite-a-nota-e-quem-confirma-o-bv.md)** — só administrador e
+  financeiro emitem.
+- **Os dois clientes "teste" duplicados** continuam no cadastro. ⚠️ **Em
+  15/09/2026 o sem CNPJ virou "Teste 22"** (080).

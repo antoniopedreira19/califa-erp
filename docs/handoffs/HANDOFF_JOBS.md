@@ -3629,3 +3629,27 @@ Regras e modelo em [078](../decisions/078-orcamento-mensal-fee-e-always-on.md), 
 **Varredura dos outros arquivos `"use server"`:** este era o único export que recebia `tenantId`. As actions que não chamam `requireSession()` diretamente passam por `requireAdmin()` ou por um helper do próprio arquivo (`checarGateFinanceiro`, `gateDoJob`, `checarGatesRealizado`) que chama a sessão.
 
 **Ponto de atenção que continua:** a tela e a action calculam os impedimentos por caminhos diferentes. A tela usa `carregar-detalhe.ts`, em memória; a action usa `levantarImpedimentos`, relendo o banco. As duas precisam mudar juntas quando a regra do encerramento mudar.
+
+## ⚠️ Nota de 2026-09-15 — confirmar o BV passou a ser só do administrador e do GP (decisão 080)
+
+Regra na [080](../decisions/080-quem-emite-a-nota-e-quem-confirma-o-bv.md). A parte do banco (quem emite nota, BV só na nota do fornecedor) está no `HANDOFF_FINANCEIRO.md`, nota de mesma data.
+
+**O que estava errado.** `confirmarBv` exigia `orcamentos.editar`, que vale para administrador, GP **e produtor**. Pela regra do Tiago, confirmar é do GP.
+
+**O que mudou:**
+
+| Arquivo | O quê |
+|---|---|
+| `lib/permissoes.ts` · `lib/permissoes.test.ts` | permissão nova `jobs.confirmar_bv` (administrador, gerente_producao) e o teste dela |
+| `app/(app)/_bv/actions.ts` | `confirmarBv` exige `jobs.confirmar_bv` |
+| `app/(app)/jobs/[jobId]/carregar-detalhe.ts` | `podeConfirmarBv` = quem pode mexer no job (`podeAcoesPlanilha`) **e** tem a permissão |
+| `jobs/[jobId]/page.tsx` → `job-realizado-section.tsx` → `job-item-realizado-table.tsx` → `_bv/bv-dialog.tsx` | a prop desce **obrigatória** até o diálogo (`podeConfirmar`); sem ela o botão Confirmar some e o rodapé diz "A confirmação do BV é do administrador ou do gerente de produção." |
+| `financeiro/jobs/[jobId]/page.tsx` · `planilha-conferencia.tsx` · `orcamentos/.../itens-table.tsx` | mandam `false` (leitura pura, ou orçamento, onde o Confirmar não existe) |
+
+Lançar, editar e negociar o BV não mudou: segue em `podeAcoesPlanilha`.
+
+**Conferido:** `tsc`, `next lint`, `npm run build` e `lib/permissoes.test.ts` (35/35) limpos. No navegador, logado como administrador, planilha do JOB-0029 (Projeto Teste) › Item 3 › "Adicionar BV": o rodapé mostra Cancelar, Salvar e **Confirmar**, sem o aviso de permissão — a prop chegou à tela. Fechado sem salvar; nenhum BV criado ou alterado no banco.
+
+**Não testado no navegador:** a visão do produtor — não dá para entrar com outra conta nesta sessão. Fica coberta pelo teste da matriz e pela trava da action.
+
+**Pendência registrada (não mexida):** a policy de UPDATE de `itens_bv` deixa qualquer membro do tenant alterar o BV direto pela API, inclusive a situação — o que contorna `confirmarBv`.

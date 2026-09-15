@@ -136,6 +136,7 @@ export default async function JobDetailPage({
     podeAcoesPlanilha,
     podeGerarPP,
     podeEnviarPP,
+    podeConfirmarBv,
   } = detalhe;
 
 
@@ -380,6 +381,7 @@ export default async function JobDetailPage({
             categoriasMap={categoriasMap}
             podeAcoes={podeAcoesPlanilha}
             podeGerarPP={podeGerarPP}
+            podeConfirmarBv={podeConfirmarBv}
             jaEnviadoParaFaturamento={envioFaturamento !== null}
             aberturaEmRevisao={job.abertura_em_revisao}
             ppsPorItemId={ppsPorItemId}

@@ -2098,6 +2098,8 @@ export function ItensTable({
           percentualImposto={percentualImposto}
           origem="orcamento"
           readOnly={readOnly}
+          // O Confirmar só existe na planilha do job.
+          podeConfirmar={false}
           adaptador={adaptadorBv}
         />
       )}

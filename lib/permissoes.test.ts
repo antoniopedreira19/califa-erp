@@ -378,3 +378,11 @@ test("requirePermissao NAO lanca quando papel autoriza", async () => {
     requirePermissao(sessionFake, "orcamentos.aprovar"),
   );
 });
+
+test("confirmar BV: administrador e GP confirmam; produtor, freelancer e financeiro nao (decisao 080)", () => {
+  assert.equal(pode("administrador", "jobs.confirmar_bv"), true);
+  assert.equal(pode("gerente_producao", "jobs.confirmar_bv"), true);
+  assert.equal(pode("produtor", "jobs.confirmar_bv"), false);
+  assert.equal(pode("freelancer", "jobs.confirmar_bv"), false);
+  assert.equal(pode("financeiro", "jobs.confirmar_bv"), false);
+});

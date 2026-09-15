@@ -509,6 +509,7 @@ export default async function JobNoFinanceiroPage({
             realizadosMap={detalhe.realizadosMap}
             categoriasMap={detalhe.categoriasMap}
             podeAcoes={false}
+            podeConfirmarBv={false}
             ppsPorItemId={detalhe.ppsPorItemId}
             fornecedores={detalhe.fornecedores}
             empresas={detalhe.empresas}

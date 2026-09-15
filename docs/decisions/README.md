@@ -103,9 +103,10 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 077 | [O prazo da PP só cai em janela de pagamento, e a PP pode ser urgente](077-o-prazo-da-pp-cai-em-janela-e-a-pp-pode-ser-urgente.md) | 2026-09-14 |
 | 078 | [Fee e Always On: um orçamento por trimestre, dividido em meses](078-orcamento-mensal-fee-e-always-on.md) | 2026-09-14 |
 | 079 | [A nota fiscal só cobre jobs de um mesmo cliente, e quem confere é o banco](079-a-nota-fiscal-so-cobre-jobs-de-um-cliente.md) | 2026-09-14 |
+| 080 | [Quem emite a nota e quem confirma o BV, conferido no servidor e no banco](080-quem-emite-a-nota-e-quem-confirma-o-bv.md) | 2026-09-15 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
 > data é a da decisão, não a da posição na fila.
 
-**Próximo número livre: 080.**
+**Próximo número livre: 081.**
