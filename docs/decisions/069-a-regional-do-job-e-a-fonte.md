@@ -1,7 +1,7 @@
 # 069 — A regional do job é a fonte; o rateio só existe onde não há job
 
 **Data:** 2026-09-10
-**Status:** aceita · revisada em 2026-09-11 (o BV entrou)
+**Status:** aceita · revisada em 2026-09-11 (o BV entrou) e em 2026-09-15 (rateio conferido e reforço no banco)
 **Contexto:** `vw_fluxo_caixa`, `jobs`, `desembolsos`, conciliação e todo
 lançamento que alimentará o DRE por regional. Fecha a pendência deixada
 aberta pela reversão `20260909180001_regional_id_volta_a_ser_nullable.sql`.
@@ -79,12 +79,16 @@ depois, e para o caso de a escrita um dia divergir.
 
 ## Em aberto
 
-- **Como o rateio é preenchido** em desembolso, recorrência e avulsa sem
-  job. É o próximo lote.
-- **Despesa sem job e sem rateio** sai com regional nula. Não há trava de
-  "pelo menos uma linha de rateio", nem trigger de soma 100 em
-  `desembolsos_regionais` — avulsa e recorrente têm.
-- **Pagamento de fatura de cartão** agrega N compras e não tem job único.
+- ~~**Como o rateio é preenchido** em desembolso, recorrência e avulsa sem
+  job.~~ Conferido em 15/09/2026: já estava certo nos três (ver a revisão
+  de 15/09 no fim).
+- **Despesa sem job e sem rateio.** Desembolso resolvido em 15/09/2026
+  (soma 100% no banco e rateio exigido na aprovação). Avulsa e recorrente
+  seguem garantidas só pelo formulário — escolha levada ao Tiago.
+- ~~**Pagamento de fatura de cartão** agrega N compras e não tem job
+  único.~~ Não é furo: cada compra vira lançamento próprio com o rateio da
+  avulsa. O par de lançamentos do pagamento é transferência entre contas e
+  tem que ficar FORA do DRE, não ser rateado.
 - **Título com origem `avulso`** não tem job — esse fica para o próximo
   lote. O de origem `bv` **tem**, e desde 11/09/2026 a view percorre o
   caminho (ver a revisão no fim).
@@ -125,3 +129,46 @@ não pede, e faria as duas views divergirem.
 também quando o item é BV. Como é ele que reparte o título entre N jobs,
 uma nota que misture faturamento de job e BV passa a dividir certo —
 antes o pedaço do BV caía todo no grupo nulo.
+
+---
+
+## Revisão de 2026-09-15 — rateio conferido, tarefa encerrada, e reforço no banco
+
+**O rateio da despesa sem job já estava certo nos três tipos.** Conferido
+da gravação até a leitura na `vw_fluxo_caixa`, e o Tiago encerrou a
+tarefa:
+
+| | Formulário | Linhas derivadas | Previsto | Realizado |
+|---|---|---|---|---|
+| Avulsa | mín. 1 regional, soma 100%; com job força 100% na do job | parcelas do cartão e estorno de compra copiam a divisão | por percentual | lançamento com `conta_avulsa_id` herda a divisão |
+| Recorrente | igual à avulsa | a rotina diária copia a divisão da recorrente para cada ocorrência | por percentual | igual à avulsa |
+| Desembolso | mín. 1 regional, soma 100%; sem job | — | por percentual | lançamento com `desembolso_id` herda a divisão |
+
+Compra no cartão também está coberta: `fechar_fatura_cartao` cria um
+lançamento por compra, com a avulsa de cada uma. Editar a divisão de uma
+recorrente vale para as ocorrências geradas dali em diante.
+
+**Reforço no banco — desembolso** (migration
+`20260915200001_reforco_rateio_desembolso.sql`):
+
+1. `trg_desembolso_rateio_soma` — soma 100% conferida no fim da
+   transação, espelho exato da avulsa e da recorrente (aceita zero linhas).
+2. `trg_desembolso_aprovado_exige_rateio` — a transição `em_avaliacao` →
+   `aprovada` é barrada sem nenhuma linha de rateio.
+
+A exigência de "ao menos uma linha" mora **na aprovação**, e não na
+criação, porque a tela grava desembolso, parcelas e divisão em três
+requisições separadas: uma trava no insert quebraria toda criação — o erro
+de 08/09. A aprovação é sempre posterior e é o momento em que o desembolso
+entra no fluxo de caixa. O estorno de baixa (`pago` → `aprovada`) não é
+barrado.
+
+Verificado com sonda em transação desfeita: soma 60% barrada, aprovação
+sem rateio barrada, 33,33 + 33,33 + 33,34 aceito, aprovação com rateio
+aceita, caminho do estorno livre. Nenhum resíduo.
+
+**Avulsa e recorrente ficaram de fora do reforço, de propósito.** As duas
+nascem aprovadas (não há etapa entre criar e entrar no fluxo) e a edição
+apaga a divisão numa requisição e grava a nova em outra. Não há ponto
+seguro equivalente sem mudar comportamento — a escolha foi levada ao
+Tiago.
