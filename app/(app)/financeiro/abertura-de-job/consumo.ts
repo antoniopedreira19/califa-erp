@@ -2,16 +2,17 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { emCentavos } from "./curva";
 import type { CurvaLinha, RecebimentoLinha } from "./curva";
 import type { JobCompetencia } from "@/lib/types";
+import { notasEmitidasDosJobs } from "@/lib/data/faturamento-por-job";
 
 /**
  * Quanto de cada previsão do job já foi consumido, e as previsões
  * guardadas.
  *
- * Módulo próprio (e não dentro de `actions.ts`) porque os dois lados
- * precisam do MESMO número: a Server Action, para recusar edição que
- * mexa no que já foi gasto, e a tela do job aberto, para desenhar as
- * linhas com cadeado. Em arquivo `"use server"` toda export vira Server
- * Action — daí morar aqui.
+ * Desde a decisão 061 o consumo não trava mais nada: a edição do registro
+ * (`editarRegistroDaAbertura`) só o grava na auditoria, em
+ * `consumido_na_edicao`, como retrato do que já tinha virado PP e nota na
+ * hora da edição. Módulo próprio (e não dentro de `actions.ts`) porque em
+ * arquivo `"use server"` toda export vira Server Action.
  *
  * O que conta como consumo:
  *
@@ -20,8 +21,11 @@ import type { JobCompetencia } from "@/lib/types";
  *     decisão 039) — ela ainda pode ser editada ou cancelada sem passar
  *     por ninguém. Mesma conta do card de PPs da página do job
  *     (`pps-card.tsx`): `em_avaliacao`, `aprovada` e `pago` pesam.
- *   * RECEBIMENTO — notas emitidas do job. Nota cancelada não conta, pelo
- *     mesmo motivo que não conta na esteira de faturamento.
+ *   * RECEBIMENTO — a PARTE do job nas notas emitidas, lida pelos itens
+ *     (decisão 075, nota de 15/09/2026), a mesma da coluna Faturamento da
+ *     esteira. Até então somava o total das notas cujo cabeçalho apontava o
+ *     job, e a nota com mais de um item (NF agrupada, save, duas parcelas)
+ *     ficava de fora. Nota cancelada não conta.
  */
 export interface ConsumoDasPrevisoes {
   custo: number;
@@ -33,26 +37,17 @@ export async function consumoDasPrevisoes(
   tenantId: string,
   jobId: string,
 ): Promise<ConsumoDasPrevisoes> {
-  const [ppsRes, notasRes] = await Promise.all([
+  const [ppsRes, notasPorJob] = await Promise.all([
     supabase
       .from("pedidos_compra")
       .select("valor, status")
       .eq("job_id", jobId)
       .eq("tenant_id", tenantId),
-    supabase
-      .from("faturamentos")
-      .select("valor_total")
-      .eq("tenant_id", tenantId)
-      .eq("origem_tipo", "job")
-      .eq("origem_id", jobId)
-      .eq("status", "emitido"),
+    notasEmitidasDosJobs(tenantId, [jobId]),
   ]);
 
   if (ppsRes.error) {
     console.error("[abertura-job.consumo-pps]", ppsRes.error.message);
-  }
-  if (notasRes.error) {
-    console.error("[abertura-job.consumo-notas]", notasRes.error.message);
   }
 
   const custo = (
@@ -66,9 +61,10 @@ export async function consumoDasPrevisoes(
     )
     .reduce((s, p) => s + Number(p.valor ?? 0), 0);
 
-  const recebimento = (
-    (notasRes.data ?? []) as { valor_total: number | string }[]
-  ).reduce((s, n) => s + Number(n.valor_total ?? 0), 0);
+  const recebimento = (notasPorJob.get(jobId) ?? []).reduce(
+    (s, n) => s + n.parte_do_job,
+    0,
+  );
 
   return { custo: emCentavos(custo), recebimento: emCentavos(recebimento) };
 }

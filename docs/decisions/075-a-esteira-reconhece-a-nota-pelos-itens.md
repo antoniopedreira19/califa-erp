@@ -1,7 +1,8 @@
 # 075 — A esteira reconhece a nota pelos itens, e o envio para faturamento grava numa transação só
 
 **Data:** 2026-09-14
-**Status:** aceita
+**Status:** aceita · revisada em 2026-09-15 (as três leituras pendentes e
+os prazos por média ponderada — nota no fim)
 **Contexto:** fluxo de envio para faturamento, do botão do job à esteira do
 financeiro. Três falhas apareceram na **leitura** do código durante uma
 pesquisa do fluxo; nenhuma tinha sido vista em execução. Cada uma foi
@@ -168,6 +169,9 @@ Autorizado pelo Tiago nesta sessão. **Não há cancelamento de NF na tela**
     recebimento dos jobs.
   - `app/(app)/financeiro/abertura-de-job/consumo.ts` — abatimento da
     previsão de recebimento da abertura pela nota emitida.
+
+  ⚠️ **Fechadas em 15/09/2026** — ver a nota no fim. O `consumo.ts` não
+  abatia previsão nenhuma desde a 061: só grava um número na auditoria.
 - **017 §7 só vale na tela.** Nem `emitirFaturamento` nem
   `emitir_faturamento` recusam itens de clientes diferentes numa nota — a
   simulação da falha 2 emitiu uma com JOB-0029 e JOB-0010, de clientes
@@ -183,3 +187,91 @@ Autorizado pelo Tiago nesta sessão. **Não há cancelamento de NF na tela**
 - **O link do card** (`/jobs?filtro=faturamento_pronto`) segue sem filtro
   (TODO antigo em `app/(app)/jobs/page.tsx`), e o card "Jobs prontos pra
   encerrar" diz "com faturamento emitido" mas conta job enviado.
+
+---
+
+## ⚠️ Nota de 2026-09-15 — as três leituras pendentes, e os prazos por média ponderada
+
+Antes de corrigir, o Tiago pediu para conferir se a troca era mesmo
+necessária ou se seria redundante.
+
+### O que se confirmou
+
+| Leitura | Achado |
+|---|---|
+| Selo da página do job (`financeiro/jobs/[jobId]/page.tsx`) | No navegador, com o código de 14/09: JOB-0029 **ENVIADO** na página e **FATURADO** na lista. A 078 (`cdc3219`, 14/09) já tinha passado a ler as notas pelos itens; sobrou a **cópia** da classificação, com o mensal lido por outro caminho (meses da planilha na página, meses da previsão de recebimento na lista) |
+| Prazos (`fluxo-do-job.ts`) | Projeto Teste mostrava **25 / 0 / 25** dias — as datas previstas, com a nota já emitida. A 078 trocou a leitura para os itens e usou a **primeira emissão**, regra que só estava no código |
+| `abertura-de-job/consumo.ts` | Desde a [061](061-as-previsoes-se-redistribuem-inteiras.md) não trava nada: só grava `consumido_na_edicao` na auditoria de "Editar registro", e nada no código lê o campo. Somava `valor_total` pelo cabeçalho: **R$ 0,00** no JOB-0029, com a `TESTE-ESTEIRA` emitida |
+| `vw_fluxo_caixa` | Já lia `faturamento_itens` (`fat_composicao`). Nada a corrigir |
+| Banco | 1 nota emitida no tenant inteiro, a de teste. Nenhum dado real afetado |
+
+### As regras escolhidas (Tiago, 15/09/2026)
+
+**Selo:** a página usa `faturamentoPorJob` com filtro pelo job. Não há mais
+cópia da classificação.
+
+**Consumo:** o recebimento é a **parte do job** nas notas emitidas — a mesma
+da coluna Faturamento.
+
+**Prazos** (`lib/calculos/prazos-do-job.ts`):
+
+| Pergunta | Resposta |
+|---|---|
+| Job em várias notas: qual data de faturamento? | **média ponderada das emissões**, peso = parte do job em cada nota |
+| O peso é sobre o quê? | sobre o que **já foi faturado** do job — não sobre o faturamento previsto. Com o job todo faturado, os dois dão o mesmo número |
+| E o recebimento? | **média ponderada dos vencimentos**, pagos ou não; peso = valor do título × parte do job ÷ total da nota. Os subtítulos dos cards viraram "abertura → faturamento", "faturamento → recebimento" e "abertura → recebimento" |
+| Job sem nota | como antes: data prevista de faturamento → **última** parcela prevista |
+| Job mensal (078) | a mesma regra: os meses ainda sem nota não entram nos prazos |
+
+As datas médias são arredondadas para o dia antes de medir, então
+faturamento + recebimento é sempre o total.
+
+Exemplos (os dos testes):
+
+| Caso | Prazos (faturamento / recebimento / total) |
+|---|---|
+| JOB-0033 (aberto em 10/09): NF 101 com 75% em 14/09 (vence 30/09), NF 102 com 25% em 15/10 (vence 30/10) | **12 / 16 / 28** |
+| NFs agrupadas meio a meio, A em 14/09 e B em 15/10 — só a A emitida | JOB-0029 **13** · JOB-0033 **4** de faturamento |
+| As duas emitidas (títulos em 30/09 e 30/10) | JOB-0029 **29 / 15 / 44** · JOB-0033 **20 / 15 / 35** |
+| JOB-0034 (Fee, sem nota) | **108 / 20 / 128** |
+
+*(Descartadas: primeira emissão, 4 / 46 / 50 no primeiro exemplo; última
+emissão, 35 / 15 / 50; peso sobre o faturamento previsto, que deixaria o
+JOB-0029 em 29 / 0 / 29 com a nota de R$ 1,00; emissão média até o último
+vencimento, 12 / 38 / 50; média das parcelas previstas no job sem nota,
+que dá **−11** dias de recebimento no JOB-0034, porque as parcelas começam
+antes da data prevista de faturamento; travessão no job sem nota, que
+apagaria os cards de quase todos os jobs; e o mensal completando o
+recebimento com a previsão dos meses sem nota, 47 / 50 / 97 contra
+47 / 20 / 67 com a nota de outubro emitida.)*
+
+### A correção
+
+| Arquivo | O quê |
+|---|---|
+| `lib/data/faturamento-por-job.ts` | `notasEmitidasDosJobs(tenantId, jobIds?)` — a leitura das notas pelos itens, com os títulos, dividida pelas quatro telas; `faturamentoPorJob` ganha o filtro `jobIds`, aplicado também a envios, save e meses da previsão |
+| `lib/calculos/prazos-do-job.ts` + `.test.ts` | a regra dos prazos, com a média em centavos e dias inteiros (em ponto flutuante, 27,5 dias virava 27,4999 e caía no dia anterior); 8 casos |
+| `financeiro/jobs/[jobId]/page.tsx` | o selo vem de `faturamentoPorJob`; o "aguardando encerramento" do mensal continua pelos meses da planilha |
+| `financeiro/jobs/[jobId]/fluxo-do-job.ts` | `carregarPrazosDosJobs` lê `notasEmitidasDosJobs` e chama a regra |
+| `components/financeiro/fluxo-caixa-jobs.tsx` | subtítulos neutros dos cards de prazo |
+| `abertura-de-job/consumo.ts` | recebimento pela parte do job; comentário do cadeado, obsoleto desde a 061, reescrito |
+
+Duas diferenças que o selo da página ganha, sem caso no banco hoje: o job
+pago só por save passa a aparecer **Faturado**, como já aparecia na lista; e
+o mensal segue a regra de meses da lista.
+
+### Conferido (15/09/2026)
+
+Dev server do worktree, com a `TESTE-ESTEIRA` já emitida. Nada gravado.
+
+| Tela | Antes | Depois |
+|---|---|---|
+| JOB-0029 · selo e prazos | ENVIADO · 29 / 0 / 29 | **FATURADO · 13 / 16 / 29** |
+| JOB-0033 · selo e prazos | ENVIADO · 20 / 0 / 20 | **FATURADO · 4 / 16 / 20** |
+| JOB-0034 (mensal, sem nota) | ENVIADO · 108 / 20 / 128 | igual |
+| Projeto Teste › Fluxo de Caixa do Projeto (média) | 25 / 0 / 25 | **9 / 16 / 25** |
+| Visualizar Jobs | FATURADO nos dois | igual |
+| Auditoria de "Editar registro", pelo banco | recebimento R$ 0,00 | **R$ 1,00** (JOB-0029 e JOB-0033) |
+
+Console sem erro. Testes da esteira e dos prazos (18), `tsc`, `next lint`
+e `npm run build` limpos.

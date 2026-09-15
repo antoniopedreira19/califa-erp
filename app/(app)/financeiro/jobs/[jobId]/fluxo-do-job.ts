@@ -5,6 +5,8 @@ import {
   type MatrizFluxo,
 } from "@/lib/calculos/fluxo-caixa-matriz";
 import type { PrazosDoJob } from "@/components/financeiro/fluxo-caixa-jobs";
+import { calcularPrazosDoJob } from "@/lib/calculos/prazos-do-job";
+import { notasEmitidasDosJobs } from "@/lib/data/faturamento-por-job";
 
 /**
  * As linhas de fluxo de caixa de um conjunto de jobs.
@@ -167,16 +169,17 @@ function rotuloDaOrigem(origem: string): string {
 }
 
 /**
- * Os três prazos de cada job, em dias corridos.
+ * Os três prazos de cada job, em dias corridos. Sem a ponta que fecha o
+ * prazo, o campo é nulo e a tela mostra travessão.
  *
- * Todos saem de data REAL. Sem a ponta que fecha o prazo, o campo é nulo
- * e a tela mostra travessão — número inventado aqui viraria indicador de
- * gestão.
+ * A regra mora em `lib/calculos/prazos-do-job.ts` (decisão 075, nota de
+ * 15/09/2026): emissão e vencimento médios, ponderados pela parte do job
+ * nas notas emitidas; sem nota, o previsto da abertura. Até 15/09 valiam a
+ * primeira emissão e o último vencimento, e o job mensal somava a previsão
+ * dos meses ainda sem nota.
  *
- *   faturamento — abertura → emissão da nota (ou faturamento previsto)
- *   recebimento — faturamento → último vencimento (ou última parcela
- *                 prevista)
- *   total       — abertura → último recebimento
+ * As notas vêm de `notasEmitidasDosJobs` — a mesma leitura pelos itens da
+ * esteira, com os títulos de cada nota.
  */
 export async function carregarPrazosDosJobs(
   tenantId: string,
@@ -186,112 +189,39 @@ export async function carregarPrazosDosJobs(
 
   const supabase = createClient();
 
-  const [jobsRes, notasRes, previsoesRes] = await Promise.all([
+  const [jobsRes, notasPorJob, previsoesRes] = await Promise.all([
     supabase
       .from("jobs")
       .select("id, data_abertura_financeiro, data_prevista_faturamento")
       .eq("tenant_id", tenantId)
       .in("id", jobIds),
-    // As notas emitidas do job pelos ITENS (decisão 075): o cabeçalho fica
-    // com `origem_id` nulo na nota com mais de um item, e o job mensal
-    // (decisão 078) tem uma nota ou mais por mês.
-    supabase
-      .from("faturamento_itens")
-      .select(
-        "faturamento_id, origem_id, faturamento:faturamentos!inner(data_emissao, status)",
-      )
-      .eq("tenant_id", tenantId)
-      .in("origem_tipo", ["job", "save"])
-      .eq("faturamento.status", "emitido")
-      .in("origem_id", jobIds),
+    notasEmitidasDosJobs(tenantId, jobIds),
     supabase
       .from("jobs_previsao_recebimento")
-      .select("job_id, data_prevista, mes")
+      .select("job_id, data_prevista")
       .eq("tenant_id", tenantId)
       .in("job_id", jobIds),
   ]);
 
   if (jobsRes.error) console.error("[prazos.jobs]", jobsRes.error.message);
-  if (notasRes.error) console.error("[prazos.notas]", notasRes.error.message);
-
-  // Por job, cada nota com a data de emissão.
-  const notasPorJob = new Map<string, Map<string, string | null>>();
-  for (const it of (notasRes.data ?? []) as any[]) {
-    if (!it.origem_id || !it.faturamento) continue;
-    const notas = notasPorJob.get(it.origem_id) ?? new Map<string, string | null>();
-    notas.set(it.faturamento_id, it.faturamento.data_emissao ?? null);
-    notasPorJob.set(it.origem_id, notas);
-  }
-
-  // Vencimentos dos títulos das notas — quando existem, mandam sobre a
-  // previsão da abertura, que é o palpite anterior.
-  const notaIds = [...notasPorJob.values()].flatMap((notas) => [...notas.keys()]);
-  const titulosRes = notaIds.length
-    ? await supabase
-        .from("titulos_receber")
-        .select("faturamento_id, data_vencimento")
-        .eq("tenant_id", tenantId)
-        .neq("status", "cancelado")
-        .in("faturamento_id", notaIds)
-    : { data: [], error: null };
-
-  const vencimentosPorNota = new Map<string, string[]>();
-  for (const t of (titulosRes.data ?? []) as any[]) {
-    const arr = vencimentosPorNota.get(t.faturamento_id) ?? [];
-    arr.push(t.data_vencimento);
-    vencimentosPorNota.set(t.faturamento_id, arr);
+  if (previsoesRes.error) {
+    console.error("[prazos.previsoes]", previsoesRes.error.message);
   }
 
   const previsaoPorJob = new Map<string, string[]>();
-  const jobsMensais = new Set<string>();
   for (const p of (previsoesRes.data ?? []) as any[]) {
     const arr = previsaoPorJob.get(p.job_id) ?? [];
     arr.push(p.data_prevista);
     previsaoPorJob.set(p.job_id, arr);
-    if (p.mes) jobsMensais.add(p.job_id);
   }
 
-  return ((jobsRes.data ?? []) as any[]).map((j) => {
-    const abertura = j.data_abertura_financeiro?.slice(0, 10) ?? null;
-    const notas = notasPorJob.get(j.id) ?? new Map<string, string | null>();
-    // A primeira nota emitida é quando o job começou a faturar.
-    const primeiraEmissao =
-      [...notas.values()]
-        .filter((e): e is string => !!e)
-        .map((e) => e.slice(0, 10))
-        .sort()[0] ?? null;
-    const faturamento = primeiraEmissao ?? j.data_prevista_faturamento ?? null;
-
-    const vencimentos = [...notas.keys()].flatMap(
-      (id) => vencimentosPorNota.get(id) ?? [],
-    );
-    const previsoes = previsaoPorJob.get(j.id) ?? [];
-    // No job mensal os meses ainda sem nota seguem pela previsão: o último
-    // recebimento é o mais tardio entre títulos e previsão.
-    const ultimoRecebimento =
-      (jobsMensais.has(j.id)
-        ? [...vencimentos, ...previsoes]
-        : vencimentos.length > 0
-          ? vencimentos
-          : previsoes
-      )
-        .slice()
-        .sort()
-        .at(-1) ?? null;
-
-    return {
-      jobId: j.id as string,
-      faturamento: diasEntre(abertura, faturamento),
-      recebimento: diasEntre(faturamento, ultimoRecebimento),
-      total: diasEntre(abertura, ultimoRecebimento),
-    };
-  });
-}
-
-function diasEntre(de: string | null, ate: string | null): number | null {
-  if (!de || !ate) return null;
-  const d1 = new Date(`${de.slice(0, 10)}T00:00:00Z`).getTime();
-  const d2 = new Date(`${ate.slice(0, 10)}T00:00:00Z`).getTime();
-  if (Number.isNaN(d1) || Number.isNaN(d2)) return null;
-  return Math.round((d2 - d1) / 86_400_000);
+  return ((jobsRes.data ?? []) as any[]).map((j) => ({
+    jobId: j.id as string,
+    ...calcularPrazosDoJob({
+      abertura: j.data_abertura_financeiro ?? null,
+      faturamentoPrevisto: j.data_prevista_faturamento ?? null,
+      notas: notasPorJob.get(j.id) ?? [],
+      previsoesRecebimento: previsaoPorJob.get(j.id) ?? [],
+    }),
+  }));
 }

@@ -4940,6 +4940,8 @@ na tela. O saldo dos dois jobs segue na aba Faturamento.
   (badge e prazo; `.maybeSingle()` **erra com duas notas**),
   `financeiro/jobs/[jobId]/fluxo-do-job.ts` (prazos) e
   `abertura-de-job/consumo.ts` (abatimento da previsão de recebimento).
+  ⚠️ **Fechadas em 15/09/2026** — nota "as três leituras pendentes da 075",
+  no fim deste arquivo.
 - "NF agrupada só com jobs de um mesmo cliente" (017 §7) não é conferido
   nem em `emitirFaturamento` nem em `emitir_faturamento`. ⚠️ **Fechada no
   mesmo dia** — ver a nota da decisão 079, no fim deste arquivo.
@@ -5058,7 +5060,7 @@ Regras em [078](../decisions/078-orcamento-mensal-fee-e-always-on.md), seção "
   - as notas passam a ser lidas pelos itens (decisão 075); o `.maybeSingle()` antigo dava erro com mais de uma nota;
   - o selo considera os envios por mês;
   - "aguardando encerramento" só aparece com todos os meses enviados.
-- **Prazos do job** (`carregarPrazosDosJobs`): notas pelos itens, a primeira emissão marca o faturamento, e no mensal o último recebimento considera também a previsão dos meses ainda sem nota.
+- **Prazos do job** (`carregarPrazosDosJobs`): notas pelos itens. ⚠️ **Mudou em 15/09/2026:** a "primeira emissão" e o "último recebimento com a previsão dos meses sem nota" deram lugar à emissão e ao vencimento médios, e o mensal segue a mesma regra dos outros jobs — nota "as três leituras pendentes da 075", no fim deste arquivo.
 - **Home do GP:** "prontos pra faturar" e "prontos pra encerrar" são contados em memória, por mês.
 
 ## ⚠️ Nota de 2026-09-14 — a nota fiscal só cobre jobs de um mesmo cliente, conferido no banco (decisão 079)
@@ -5157,3 +5159,51 @@ emitir: …".
   tenant (baixas, estornos, aprovar PP, cancelar nota, cartão).
 - A RPC não exige BV `confirmado`; `emitido_por` vem do payload.
 - Empresa emissora da nota × empresa do job, sem regra.
+
+## ⚠️ Nota de 2026-09-15 — as três leituras pendentes da 075: selo, prazos e consumo pelos itens
+
+Regras, evidências, números e as escolhas do Tiago na nota de 15/09 da
+[075](../decisions/075-a-esteira-reconhece-a-nota-pelos-itens.md). Sem
+migration.
+
+### O que estava errado
+
+- **Selo da página do job:** a 078 já lia as notas pelos itens, mas a página
+  mantinha uma cópia da classificação da lista, com o mensal lido pelos
+  meses da planilha em vez dos da previsão. Com o código de 14/09, o
+  JOB-0029 aparecia ENVIADO na página e FATURADO na lista.
+- **Prazos:** usavam a primeira emissão e o último vencimento. O Projeto
+  Teste mostrava 25 / 0 / 25 dias com a nota já emitida.
+- **Consumo da abertura:** o recebimento gravado na auditoria de "Editar
+  registro" somava o total das notas pelo cabeçalho — R$ 0,00 no JOB-0029.
+
+### O que mudou
+
+| Arquivo | O quê |
+|---|---|
+| `lib/data/faturamento-por-job.ts` | `notasEmitidasDosJobs(tenantId, jobIds?)`: notas pelos itens com os títulos, usada pela esteira, pelo selo, pelos prazos e pelo consumo; `faturamentoPorJob` aceita `jobIds` e filtra também envios, save e meses da previsão |
+| `lib/calculos/prazos-do-job.ts` + `.test.ts` | prazos por emissão e vencimento médios ponderados pela parte do job; sem nota, data prevista → última parcela prevista; mensal com a mesma regra |
+| `financeiro/jobs/[jobId]/page.tsx` | selo de `faturamentoPorJob` com o filtro do job; "aguardando encerramento" do mensal sem mudança |
+| `financeiro/jobs/[jobId]/fluxo-do-job.ts` | `carregarPrazosDosJobs` sobre `notasEmitidasDosJobs` e a regra nova |
+| `components/financeiro/fluxo-caixa-jobs.tsx` | subtítulos dos cards: "abertura → faturamento", "faturamento → recebimento", "abertura → recebimento" |
+| `abertura-de-job/consumo.ts` | recebimento = parte do job nas notas emitidas |
+
+### Armadilhas
+
+- **A média é em centavos e dias inteiros.** Em ponto flutuante, 27,5 dias
+  vira 27,4999… e o arredondamento cai no dia anterior. Não troque por
+  `Math.round(soma / pesos)`.
+- **`faturamentoPorJob` com `jobIds` precisa filtrar a previsão de
+  recebimento também.** Sem isso, a contagem de meses do mensal sai do
+  tenant inteiro e o `faltaFaturar` nunca bate.
+- **Com `jobIds`, os títulos são lidos depois das notas** (por
+  `faturamento_id`); sem filtro, em paralelo e do tenant inteiro. Uma
+  chamada a mais só no caminho filtrado.
+
+### Conferido
+
+Dev server do worktree, sem gravar nada: JOB-0029 FATURADO e 13 / 16 / 29;
+JOB-0033 FATURADO e 4 / 16 / 20; JOB-0034 (mensal, sem nota) ENVIADO e
+108 / 20 / 128, como antes; média do Projeto Teste 9 / 16 / 25; Visualizar
+Jobs igual; recebimento da auditoria R$ 1,00 pelo banco. Console sem erro.
+Testes (18), `tsc`, `next lint` e `npm run build` limpos.
