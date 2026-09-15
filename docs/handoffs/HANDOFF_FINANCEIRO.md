@@ -5350,3 +5350,35 @@ prestação). Dela continua valendo só a pendência do encerramento.
 - **Encerramento do job:** a verba paga que não está "Concluída" trava o
   encerramento (081 §7). O estorno pendente conta: o job só fecha depois da
   baixa do estorno aqui em Títulos a Pagar.
+
+## ⚠️ Nota de 2026-09-15 — o financeiro reprova a PP aprovada, e ela volta para a produção (decisão 083)
+
+A produção não cancela PP aprovada — ela já é título a pagar (decisão 027) —,
+e agora existe o caminho de volta: **o financeiro reprova**.
+
+### O que mudou
+
+- **Tela cheia da PP** (`pp-tela.tsx`), status aprovada: rodapé com
+  "Reprovar PP" e o pop-up de motivo (mín. 10 caracteres). O dossiê da
+  aprovada deixou de dizer "sem ação do financeiro nesta tela".
+- **Action** `reprovarPPAprovada` (`actions.ts`), sobre a RPC
+  `reprovar_pp_aprovada`. A `desaprovarPP` e a RPC `desaprovar_pp` saíram:
+  devolviam para "em avaliação", não tinham tela e deixavam parcela paga,
+  fatura de cartão e datas da aprovação para trás.
+- **O que a reprovação desfaz:** datas de pagamento (inclusive a primeira,
+  por uma exceção nova na trigger `congela_data_pagamento_primeira`), forma,
+  cartão, plano de contas e os documentos congelados na aprovação. O
+  vencimento negociado com o fornecedor fica.
+- **O que ela recusa:** parcela já paga (estorne a baixa antes) e parcela em
+  fatura de cartão que não esteja aberta (reabra a fatura antes).
+- **Migrations:** `20260915230001_pp_aprovada_volta_para_a_producao.sql` e
+  `20260915230002_primeira_data_sai_com_a_aprovacao_desfeita.sql`.
+
+### Armadilhas
+
+- **A PP reprovada vira `rejeitada`**, e não um status novo — é a mesma caixa
+  da rejeição de quem estava em avaliação. Quem lê status de PP não precisa
+  aprender nada novo; quem conta pendência, sim: rejeitada agora trava o
+  encerramento do job (decisão 083, 8b).
+- O papel é conferido **dentro** da função do banco, além da action: a RPC é
+  executável por qualquer usuário autenticado.

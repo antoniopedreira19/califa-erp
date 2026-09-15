@@ -192,8 +192,8 @@ export function EncerrarDialog({ jobId, resumo, open, onOpenChange }: Props) {
               {ppsEmAberto.length > 0 && (
                 <p className="text-muted-foreground">
                   {ppsEmAberto.length === 1
-                    ? "1 PP sem baixa"
-                    : `${ppsEmAberto.length} PPs sem baixa`}
+                    ? "1 PP em aberto"
+                    : `${ppsEmAberto.length} PPs em aberto`}
                   : {ppsEmAberto.map((p) => p.codigo).join(", ")}.
                 </p>
               )}
@@ -236,8 +236,9 @@ export function EncerrarDialog({ jobId, resumo, open, onOpenChange }: Props) {
               )}
               {(ppsEmAberto.length > 0 || bvsEmAberto.length > 0) && (
                 <p className="text-muted-foreground">
-                  Dê baixa nesses documentos — pagamento da PP, recebimento do
-                  BV — e volte aqui.
+                  Resolva esses documentos — a PP rejeitada volta para a
+                  produção corrigir ou cancelar, a aprovada espera a baixa, e o
+                  BV espera o recebimento.
                 </p>
               )}
               {verbasEmAberto.length > 0 && (
