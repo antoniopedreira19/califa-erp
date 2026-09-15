@@ -61,9 +61,10 @@ interface Props {
  * - **Internacionais só saem juntos com a mesma moeda e a mesma taxa
  *   de compra** (decisão 072, 14/09/2026): a planilha tem uma coluna de
  *   moeda e um câmbio no rodapé.
- * - **Nacional e internacional não se misturam** (decisão 072,
- *   12/09/2026). São documentos diferentes para o cliente — fechamento,
- *   moeda e câmbio próprios —, e um FATURAMENTO único somando os dois não
+ * - **Modelos não se misturam** (decisões 072 e 078). Nacional,
+ *   internacional e Fee ou Always On são documentos diferentes para o
+ *   cliente — fechamento, moeda e câmbio próprios, e o mensal com um
+ *   fechamento por mês —, e um FATURAMENTO único somando os dois não
  *   corresponde a nenhum deles. O rodapé trava e o aviso oferece manter
  *   um dos modelos de uma vez.
  *
@@ -102,6 +103,7 @@ export function ExportarOrcamentosMenu({ projetoId, orcamentos }: Props) {
   const internacionaisMarcados = marcados.filter(
     (o) => o.modeloPlanilha === "internacional",
   );
+  const mensaisMarcados = marcados.filter((o) => o.modeloPlanilha === "mensal");
   const travadoPorAberto = abertos.length > 0;
   // Pelo conjunto de modelos, e não por "tem internacional": a regra é não
   // misturar, e um modelo novo amanhã entra nela sem mexer aqui.
@@ -151,7 +153,9 @@ export function ExportarOrcamentosMenu({ projetoId, orcamentos }: Props) {
   const rotuloDaLinha = (o: OrcamentoExportavel) =>
     o.modeloPlanilha === "internacional"
       ? `${rotuloDe(o)} · Internacional`
-      : rotuloDe(o);
+      : o.modeloPlanilha === "mensal"
+        ? `${rotuloDe(o)} · Fee ou Always On`
+        : rotuloDe(o);
 
   function manterSo(modelo: CategoriaModeloPlanilha) {
     setSelecionados((atuais) =>
@@ -288,26 +292,39 @@ export function ExportarOrcamentosMenu({ projetoId, orcamentos }: Props) {
                   <Lock className="mt-0.5 h-[13px] w-[13px] flex-none text-california-red" />
                   <div className="flex min-w-0 flex-col gap-1">
                     <span className="text-[11.5px] leading-relaxed text-[#a8323d] [text-wrap:pretty]">
-                      Orçamento nacional e internacional não saem na mesma
-                      planilha: são documentos diferentes para o cliente, com
-                      fechamento e moeda próprios. Exporte cada modelo
-                      separadamente.
+                      Orçamentos de modelos diferentes não saem na mesma
+                      planilha: nacional, internacional e Fee ou Always On
+                      são documentos diferentes para o cliente, com
+                      fechamento próprio. Exporte cada modelo separadamente.
                     </span>
                     <div className="flex flex-wrap gap-x-3 gap-y-1">
-                      <button
-                        type="button"
-                        onClick={() => manterSo("nacional")}
-                        className="self-start text-[11.5px] font-semibold text-california-red underline"
-                      >
-                        Manter só os nacionais ({nacionaisMarcados.length})
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => manterSo("internacional")}
-                        className="self-start text-[11.5px] font-semibold text-california-red underline"
-                      >
-                        Manter só os internacionais ({internacionaisMarcados.length})
-                      </button>
+                      {nacionaisMarcados.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => manterSo("nacional")}
+                          className="self-start text-[11.5px] font-semibold text-california-red underline"
+                        >
+                          Manter só os nacionais ({nacionaisMarcados.length})
+                        </button>
+                      )}
+                      {internacionaisMarcados.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => manterSo("internacional")}
+                          className="self-start text-[11.5px] font-semibold text-california-red underline"
+                        >
+                          Manter só os internacionais ({internacionaisMarcados.length})
+                        </button>
+                      )}
+                      {mensaisMarcados.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => manterSo("mensal")}
+                          className="self-start text-[11.5px] font-semibold text-california-red underline"
+                        >
+                          Manter só os de Fee e Always On ({mensaisMarcados.length})
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>

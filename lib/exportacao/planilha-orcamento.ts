@@ -47,18 +47,18 @@ import type { TipoCusto } from "@/lib/types";
  */
 
 // Paleta California pra bater visualmente com o app.
-const BLUE_HEADER = "FF4A7CB8"; // azul da linha de header do template
-const BLUE_GROUP = "FF9BB8DE"; // azul claro dos grupos e subtotais
-const WHITE = "FFFFFFFF";
-const BLACK = "FF000000";
-const BORDER: Partial<ExcelJS.Borders> = {
+export const BLUE_HEADER = "FF4A7CB8"; // azul da linha de header do template
+export const BLUE_GROUP = "FF9BB8DE"; // azul claro dos grupos e subtotais
+export const WHITE = "FFFFFFFF";
+export const BLACK = "FF000000";
+export const BORDER: Partial<ExcelJS.Borders> = {
   top: { style: "thin", color: { argb: "FFCCCCCC" } },
   bottom: { style: "thin", color: { argb: "FFCCCCCC" } },
   left: { style: "thin", color: { argb: "FFCCCCCC" } },
   right: { style: "thin", color: { argb: "FFCCCCCC" } },
 };
 
-const FORMATO_MOEDA = '"R$" #,##0.00';
+export const FORMATO_MOEDA = '"R$" #,##0.00';
 
 /** Coluna escondida com o id da linha. */
 export const COLUNA_ID = 8; // H
@@ -69,6 +69,12 @@ export const MARCA_ORCAMENTO = "orc:";
 export const MARCA_VERSAO = "v:";
 export const MARCA_GRUPO = "grp:";
 export const MARCA_ITEM = "it:";
+/** Mês do modelo mensal (decisão 078): `mes:2026-10-01` no título do bloco
+ *  do mês. Pela DATA, e não pelo id do mês — o id muda de uma versão para
+ *  outra, e a planilha exportada da v1 precisa casar com os meses da v2. */
+export const MARCA_MES = "mes:";
+/** Início do resumo da planilha mensal — encerra a leitura. */
+export const MARCA_RESUMO = "resumo:";
 
 export interface ItemDaAba {
   /** Id do item na versão — vai na coluna oculta. */
@@ -224,6 +230,115 @@ export function adicionarAbaOrcamento(
 ): ExcelJS.Worksheet {
   const formulas = opcoes.formulas === true;
 
+  const unica = dados.secoes.length === 1 ? dados.secoes[0] : null;
+  const ws = prepararAbaOrcamento(wb, nomeAba, {
+    identificacao: dados.identificacao,
+    clienteNome: dados.clienteNome,
+    titulo: dados.titulo,
+    marcaDaLinha1:
+      unica && unica.titulo === undefined && unica.orcamentoId
+        ? marcasDaSecao(unica)
+        : undefined,
+  });
+
+  // -------- Seções, grupos e itens --------
+  // Faixa com conteúdo (da primeira linha de seção/grupo à última linha
+  // de item), para as fórmulas do fechamento. As linhas de seção e de
+  // grupo têm a coluna do tipo vazia, então o SUMIF só pega item.
+  let primeiraLinha: number | null = null;
+  let ultimaLinha: number | null = null;
+  const faixas: FaixaDaSecao[] = [];
+
+  for (const secao of dados.secoes) {
+    const inicioSecao = ws.rowCount + 1;
+
+    if (secao.titulo !== undefined) {
+      const sRow = escreverTituloDeSecao(ws, secao.titulo, marcasDaSecao(secao));
+      primeiraLinha ??= sRow.number;
+      ultimaLinha = sRow.number;
+    }
+
+    const r = escreverGrupos(ws, secao.grupos, formulas);
+    if (r.primeira !== null) {
+      primeiraLinha ??= r.primeira;
+      ultimaLinha = r.ultima;
+    }
+
+    if (secao.titulo !== undefined) {
+      // Subtotal da seção: a soma das linhas de grupo dela.
+      const sRef = `${F}${inicioSecao}`;
+      if (formulas && r.linhasDeGrupo.length > 0) {
+        definirFormula(
+          ws,
+          sRef,
+          r.linhasDeGrupo.map((r) => `${F}${r}`).join("+"),
+          r.subtotal,
+        );
+      } else {
+        ws.getCell(sRef).value = r.subtotal;
+      }
+    }
+
+    if (ws.rowCount >= inicioSecao) {
+      faixas.push({
+        de: inicioSecao,
+        ate: ws.rowCount,
+        percentualHonorarios: Number(secao.percentualHonorarios ?? 0),
+        percentualImposto: Number(secao.percentualImposto ?? 0),
+      });
+    }
+  }
+
+  escreverFechamento(ws, {
+    secoes: dados.secoes,
+    faixas,
+    conteudo:
+      primeiraLinha !== null && ultimaLinha !== null
+        ? { de: primeiraLinha, ate: ultimaLinha }
+        : null,
+    formulas,
+  });
+
+  return ws;
+}
+
+// ---------------------------------------------------------------------------
+// As peças da aba — compartilhadas com a planilha mensal (decisão 078), que
+// repete grupos e fechamento uma vez por mês.
+
+/** Faixa de linhas de uma seção (ou de um mês), com os percentuais dela. */
+export interface FaixaDaSecao {
+  de: number;
+  ate: number;
+  percentualHonorarios: number;
+  percentualImposto: number;
+}
+
+/** `orc:<id>|v:<id>` — a coluna oculta do título da seção. */
+export function marcasDaSecao(secao: {
+  orcamentoId?: string;
+  versaoId?: string;
+}): string {
+  return [
+    secao.orcamentoId ? `${MARCA_ORCAMENTO}${secao.orcamentoId}` : "",
+    secao.versaoId ? `${MARCA_VERSAO}${secao.versaoId}` : "",
+  ]
+    .filter(Boolean)
+    .join("|");
+}
+
+/** A aba com as colunas e as três linhas de cabeçalho congeladas. */
+export function prepararAbaOrcamento(
+  wb: ExcelJS.Workbook,
+  nomeAba: string,
+  cabecalho: {
+    identificacao: string;
+    clienteNome: string;
+    titulo: string;
+    /** Ids da versão única, na coluna oculta da linha 1. */
+    marcaDaLinha1?: string;
+  },
+): ExcelJS.Worksheet {
   const ws = wb.addWorksheet(nomeDeAbaSeguro(nomeAba), {
     views: [{ state: "frozen", ySplit: 3 }],
   });
@@ -245,9 +360,9 @@ export function adicionarAbaOrcamento(
 
   // -------- Linha 1: cabeçalho de identificação --------
   ws.getRow(1).values = [
-    dados.identificacao,
-    `Cliente: ${dados.clienteNome}`,
-    dados.titulo,
+    cabecalho.identificacao,
+    `Cliente: ${cabecalho.clienteNome}`,
+    cabecalho.titulo,
     "",
     "",
     "",
@@ -263,14 +378,8 @@ export function adicionarAbaOrcamento(
   // Exportação de versão única: a seção não tem linha de título, então
   // os ids do orçamento e da versão vão na coluna oculta da linha 1 — é
   // de lá que a importação do projeto os lê.
-  const unica = dados.secoes.length === 1 ? dados.secoes[0] : null;
-  if (unica && unica.titulo === undefined && unica.orcamentoId) {
-    ws.getCell(1, COLUNA_ID).value = [
-      `${MARCA_ORCAMENTO}${unica.orcamentoId}`,
-      unica.versaoId ? `${MARCA_VERSAO}${unica.versaoId}` : "",
-    ]
-      .filter(Boolean)
-      .join("|");
+  if (cabecalho.marcaDaLinha1) {
+    ws.getCell(1, COLUNA_ID).value = cabecalho.marcaDaLinha1;
   }
 
   // -------- Linha 2: título "ORÇAMENTO" merged em C..F --------
@@ -308,168 +417,167 @@ export function adicionarAbaOrcamento(
     cell.border = BORDER;
   });
 
-  // -------- Seções, grupos e itens --------
-  // Faixa com conteúdo (da primeira linha de seção/grupo à última linha
-  // de item), para as fórmulas do fechamento. As linhas de seção e de
-  // grupo têm a coluna do tipo vazia, então o SUMIF só pega item.
-  let primeiraLinha: number | null = null;
-  let ultimaLinha: number | null = null;
+  return ws;
+}
 
-  interface FaixaDaSecao {
-    de: number;
-    ate: number;
-    percentualHonorarios: number;
-    percentualImposto: number;
+/** Linha de título em faixa azul-escura, com as marcas na coluna oculta.
+ *  É o título da seção (um orçamento) e, na planilha mensal, o do mês. */
+export function escreverTituloDeSecao(
+  ws: ExcelJS.Worksheet,
+  titulo: string,
+  marcas: string,
+): ExcelJS.Row {
+  const sRow = ws.addRow([titulo, "", "", "", "", 0, "", marcas]);
+  sRow.height = 22;
+  for (let col = 1; col <= 7; col++) {
+    const cell = sRow.getCell(col);
+    cell.font = { name: "Calibri", size: 11, bold: true, color: { argb: WHITE } };
+    cell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: BLUE_HEADER },
+    };
+    cell.border = BORDER;
+    cell.alignment =
+      col === 6
+        ? { horizontal: "right", vertical: "middle" }
+        : { vertical: "middle" };
+    if (col === 6) cell.numFmt = FORMATO_MOEDA;
   }
-  const faixas: FaixaDaSecao[] = [];
+  return sRow;
+}
 
-  for (const secao of dados.secoes) {
-    const inicioSecao = ws.rowCount + 1;
-    const linhasDeGrupo: number[] = [];
-    let subtotalSecao = 0;
+/** Grupos e itens em sequência. Devolve as linhas de grupo, a primeira e a
+ *  última linha escritas e o subtotal. */
+export function escreverGrupos(
+  ws: ExcelJS.Worksheet,
+  grupos: GrupoDaAba[],
+  formulas: boolean,
+): {
+  linhasDeGrupo: number[];
+  primeira: number | null;
+  ultima: number | null;
+  subtotal: number;
+} {
+  const linhasDeGrupo: number[] = [];
+  let primeira: number | null = null;
+  let ultima: number | null = null;
+  let subtotal = 0;
 
-    if (secao.titulo !== undefined) {
-      const marcas = [
-        secao.orcamentoId ? `${MARCA_ORCAMENTO}${secao.orcamentoId}` : "",
-        secao.versaoId ? `${MARCA_VERSAO}${secao.versaoId}` : "",
-      ]
-        .filter(Boolean)
-        .join("|");
-      const sRow = ws.addRow([secao.titulo, "", "", "", "", 0, "", marcas]);
-      sRow.height = 22;
-      for (let col = 1; col <= 7; col++) {
-        const cell = sRow.getCell(col);
-        cell.font = { name: "Calibri", size: 11, bold: true, color: { argb: WHITE } };
-        cell.fill = {
-          type: "pattern",
-          pattern: "solid",
-          fgColor: { argb: BLUE_HEADER },
-        };
-        cell.border = BORDER;
-        cell.alignment =
-          col === 6
-            ? { horizontal: "right", vertical: "middle" }
-            : { vertical: "middle" };
-        if (col === 6) cell.numFmt = FORMATO_MOEDA;
+  for (const grupo of grupos) {
+    const subtotalGrupo = grupo.itens.reduce((s, i) => s + i.total_orcado, 0);
+    subtotal += subtotalGrupo;
+
+    const gRow = ws.addRow([
+      grupo.nome,
+      "",
+      "",
+      "",
+      "",
+      subtotalGrupo,
+      "",
+      grupo.id ? `${MARCA_GRUPO}${grupo.id}` : "",
+    ]);
+    gRow.height = 20;
+    for (let col = 1; col <= 7; col++) {
+      const cell = gRow.getCell(col);
+      cell.font = { name: "Calibri", size: 11, bold: true, color: { argb: BLACK } };
+      cell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: BLUE_GROUP },
+      };
+      cell.border = BORDER;
+      if (col === 6) {
+        cell.numFmt = FORMATO_MOEDA;
+        cell.alignment = { horizontal: "right", vertical: "middle" };
+      } else {
+        cell.alignment = { vertical: "middle" };
       }
-      primeiraLinha ??= sRow.number;
-      ultimaLinha = sRow.number;
     }
+    linhasDeGrupo.push(gRow.number);
+    primeira ??= gRow.number;
+    ultima = gRow.number;
 
-    for (const grupo of secao.grupos) {
-      const subtotalGrupo = grupo.itens.reduce((s, i) => s + i.total_orcado, 0);
-      subtotalSecao += subtotalGrupo;
-
-      const gRow = ws.addRow([
-        grupo.nome,
+    const primeiroItem = gRow.number + 1;
+    for (const it of grupo.itens) {
+      const row = ws.addRow([
         "",
-        "",
-        "",
-        "",
-        subtotalGrupo,
-        "",
-        grupo.id ? `${MARCA_GRUPO}${grupo.id}` : "",
+        it.item,
+        it.valor_unitario_orcado,
+        it.quantidade_orcada,
+        it.dias_meses_orcado,
+        it.total_orcado,
+        it.tipo_custo,
+        it.id ? `${MARCA_ITEM}${it.id}` : "",
+        // Consumo não passa do total nem é negativo — a mesma guarda
+        // de `calcularTotaisVersao`. Linha em save não consome.
+        it.em_save
+          ? 0
+          : Math.min(
+              Math.max(Number(it.save_consumido ?? 0), 0),
+              it.total_orcado,
+            ),
       ]);
-      gRow.height = 20;
+      row.height = 18;
       for (let col = 1; col <= 7; col++) {
-        const cell = gRow.getCell(col);
-        cell.font = { name: "Calibri", size: 11, bold: true, color: { argb: BLACK } };
-        cell.fill = {
-          type: "pattern",
-          pattern: "solid",
-          fgColor: { argb: BLUE_GROUP },
-        };
+        const cell = row.getCell(col);
+        cell.font = { name: "Calibri", size: 10, color: { argb: BLACK } };
         cell.border = BORDER;
-        if (col === 6) {
+        cell.alignment = { vertical: "middle" };
+        if (col === 3 || col === 6) {
           cell.numFmt = FORMATO_MOEDA;
           cell.alignment = { horizontal: "right", vertical: "middle" };
-        } else {
-          cell.alignment = { vertical: "middle" };
+        } else if (col === 4 || col === 5) {
+          cell.alignment = { horizontal: "center", vertical: "middle" };
+        } else if (col === 7) {
+          cell.alignment = { horizontal: "center", vertical: "middle" };
+          cell.font = { name: "Calibri", size: 10, bold: true };
         }
       }
-      linhasDeGrupo.push(gRow.number);
-      primeiraLinha ??= gRow.number;
-      ultimaLinha = gRow.number;
-
-      const primeiroItem = gRow.number + 1;
-      for (const it of grupo.itens) {
-        const row = ws.addRow([
-          "",
-          it.item,
-          it.valor_unitario_orcado,
-          it.quantidade_orcada,
-          it.dias_meses_orcado,
-          it.total_orcado,
-          it.tipo_custo,
-          it.id ? `${MARCA_ITEM}${it.id}` : "",
-          // Consumo não passa do total nem é negativo — a mesma guarda
-          // de `calcularTotaisVersao`. Linha em save não consome.
-          it.em_save
-            ? 0
-            : Math.min(
-                Math.max(Number(it.save_consumido ?? 0), 0),
-                it.total_orcado,
-              ),
-        ]);
-        row.height = 18;
-        for (let col = 1; col <= 7; col++) {
-          const cell = row.getCell(col);
-          cell.font = { name: "Calibri", size: 10, color: { argb: BLACK } };
-          cell.border = BORDER;
-          cell.alignment = { vertical: "middle" };
-          if (col === 3 || col === 6) {
-            cell.numFmt = FORMATO_MOEDA;
-            cell.alignment = { horizontal: "right", vertical: "middle" };
-          } else if (col === 4 || col === 5) {
-            cell.alignment = { horizontal: "center", vertical: "middle" };
-          } else if (col === 7) {
-            cell.alignment = { horizontal: "center", vertical: "middle" };
-            cell.font = { name: "Calibri", size: 10, bold: true };
-          }
-        }
-        if (formulas) {
-          const r = row.number;
-          definirFormula(ws, `${F}${r}`, `C${r}*D${r}*E${r}`, it.total_orcado);
-        }
-        ultimaLinha = row.number;
+      if (formulas) {
+        const r = row.number;
+        definirFormula(ws, `${F}${r}`, `C${r}*D${r}*E${r}`, it.total_orcado);
       }
-
-      if (formulas && grupo.itens.length > 0) {
-        const ultimoItem = primeiroItem + grupo.itens.length - 1;
-        definirFormula(
-          ws,
-          `${F}${gRow.number}`,
-          `SUM(${F}${primeiroItem}:${F}${ultimoItem})`,
-          subtotalGrupo,
-        );
-      }
+      ultima = row.number;
     }
 
-    if (secao.titulo !== undefined) {
-      // Subtotal da seção: a soma das linhas de grupo dela.
-      const sRef = `${F}${inicioSecao}`;
-      if (formulas && linhasDeGrupo.length > 0) {
-        definirFormula(
-          ws,
-          sRef,
-          linhasDeGrupo.map((r) => `${F}${r}`).join("+"),
-          subtotalSecao,
-        );
-      } else {
-        ws.getCell(sRef).value = subtotalSecao;
-      }
-    }
-
-    if (ws.rowCount >= inicioSecao) {
-      faixas.push({
-        de: inicioSecao,
-        ate: ws.rowCount,
-        percentualHonorarios: Number(secao.percentualHonorarios ?? 0),
-        percentualImposto: Number(secao.percentualImposto ?? 0),
-      });
+    if (formulas && grupo.itens.length > 0) {
+      const ultimoItem = primeiroItem + grupo.itens.length - 1;
+      definirFormula(
+        ws,
+        `${F}${gRow.number}`,
+        `SUM(${F}${primeiroItem}:${F}${ultimoItem})`,
+        subtotalGrupo,
+      );
     }
   }
 
+  return { linhasDeGrupo, primeira, ultima, subtotal };
+}
+
+/**
+ * O fechamento: SUB-TOTAL por tipo, TOTAL, crédito, IMPOSTO, HONORÁRIOS e
+ * FATURAMENTO, com fórmulas sobre a faixa de conteúdo. Na planilha mensal
+ * roda uma vez por mês, com o rótulo "FATURAMENTO DE OUTUBRO".
+ */
+export function escreverFechamento(
+  ws: ExcelJS.Worksheet,
+  {
+    secoes,
+    faixas,
+    conteudo,
+    formulas,
+    rotuloFaturamento = "FATURAMENTO",
+  }: {
+    secoes: Pick<SecaoDaAba, "grupos" | "percentualHonorarios" | "percentualImposto">[];
+    faixas: FaixaDaSecao[];
+    /** Da primeira linha de título/grupo à última de item; `null` sem conteúdo. */
+    conteudo: Faixa | null;
+    formulas: boolean;
+    rotuloFaturamento?: string;
+  },
+): { linhaFaturamento: number; faturamento: number } {
   // -------- Bloco de totais no final --------
   // A planilha enviada ao cliente segue mostrando só o VALOR DO JOB, no
   // rótulo FATURAMENTO que ela sempre teve: é o total que o cliente se
@@ -495,7 +603,7 @@ export function adicionarAbaOrcamento(
   let honorarios = 0;
   let imposto = 0;
   let valorJob = 0;
-  for (const secao of dados.secoes) {
+  for (const secao of secoes) {
     const totais = calcularTotaisVersao(
       secao.grupos.flatMap((g) => g.itens),
       Number(secao.percentualHonorarios ?? 0),
@@ -519,9 +627,9 @@ export function adicionarAbaOrcamento(
   const honorariosUniforme = percentuaisHonorarios.length <= 1;
   const impostoUniforme = percentuaisImposto.length <= 1;
   const honorPct =
-    faixas[0]?.percentualHonorarios ?? dados.secoes[0]?.percentualHonorarios ?? 0;
+    faixas[0]?.percentualHonorarios ?? secoes[0]?.percentualHonorarios ?? 0;
   const impPct =
-    faixas[0]?.percentualImposto ?? dados.secoes[0]?.percentualImposto ?? 0;
+    faixas[0]?.percentualImposto ?? secoes[0]?.percentualImposto ?? 0;
 
   // 1 linha vazia
   ws.addRow([]);
@@ -565,7 +673,7 @@ export function adicionarAbaOrcamento(
     },
     {
       chave: "faturamento",
-      label: "FATURAMENTO",
+      label: rotuloFaturamento,
       value: valorJob,
       bold: true,
       faturamento: true,
@@ -638,10 +746,7 @@ export function adicionarAbaOrcamento(
   }
 
   if (formulas) {
-    const temConteudo = primeiraLinha !== null && ultimaLinha !== null;
-    const faixaToda = temConteudo
-      ? { de: primeiraLinha!, ate: ultimaLinha! }
-      : null;
+    const faixaToda = conteudo;
 
     // SUB-TOTAL por tipo: soma dos TT cujo tipo (coluna G) é a letra,
     // na planilha inteira.
@@ -755,5 +860,5 @@ export function adicionarAbaOrcamento(
     );
   }
 
-  return ws;
+  return { linhaFaturamento, faturamento: valorJob };
 }

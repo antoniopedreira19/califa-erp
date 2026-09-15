@@ -83,6 +83,8 @@ export function ImportarPlanilhaDrawer({
 }: Props) {
   const sobrescreve = modo === "sobrescrever";
   const internacional = modeloPlanilha === "internacional";
+  // Fee e Always On (decisão 078): um bloco por mês na planilha.
+  const mensal = modeloPlanilha === "mensal";
   const router = useRouter();
   const [openInterno, setOpenInterno] = React.useState(false);
   const open = aberto ?? openInterno;
@@ -208,7 +210,9 @@ export function ImportarPlanilhaDrawer({
           <DialogDescription>
             {internacional
               ? "Envie o arquivo .xlsx no modelo internacional (SHEET · ITEM · TT USD · BRL · QT · D/M · TT BRL). "
-              : <>Envie o arquivo .xlsx no formato padrão da agência (aba &ldquo;Padrão&rdquo;).{" "}</>}
+              : mensal
+                ? <>Envie a planilha exportada deste orçamento ou a planilha interna da agência, com um bloco por mês.{" "}</>
+                : <>Envie o arquivo .xlsx no formato padrão da agência (aba &ldquo;Padrão&rdquo;).{" "}</>}
             {sobrescreve
               ? "O conteúdo atual da versão será substituído pelo da planilha."
               : "Uma nova versão é criada em rascunho com os grupos e itens da planilha."}
@@ -231,7 +235,9 @@ export function ImportarPlanilhaDrawer({
                     <p className="mt-1 text-xs text-muted-foreground">
                       {internacional
                         ? "Até 5 MB · planilha internacional"
-                        : <>Até 5 MB · aba &ldquo;Padrão&rdquo; da planilha da agência</>}
+                        : mensal
+                          ? "Até 5 MB · um bloco por mês"
+                          : <>Até 5 MB · aba &ldquo;Padrão&rdquo; da planilha da agência</>}
                     </p>
                   </div>
                 </label>
@@ -243,6 +249,30 @@ export function ImportarPlanilhaDrawer({
                   className="hidden"
                   onChange={handleFileChange}
                 />
+
+                {mensal && (
+                  <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-4 text-xs text-blue-900 space-y-1.5">
+                    <p className="font-medium">Orçamento de Fee ou Always On</p>
+                    <ul className="list-disc pl-4 space-y-0.5">
+                      <li>
+                        Um <b>bloco por mês</b>, com o título do mês:
+                        &ldquo;OUTUBRO DE 2026&rdquo; na planilha exportada ou
+                        &ldquo;OUTUBRO - …&rdquo; na planilha interna. Os grupos
+                        do bloco entram naquele mês.
+                      </li>
+                      <li>
+                        Os meses <b>não mudam pela planilha</b>: mês do trimestre que
+                        o orçamento não tem, ou mês do orçamento sem bloco, recusa a
+                        importação. Crie ou apague meses em &ldquo;Editar meses&rdquo;.
+                      </li>
+                      <li>Blocos de meses fora do trimestre do orçamento ficam de fora, com aviso.</li>
+                      <li>
+                        Na planilha interna, R$, QT, DIAS e o planejado são achados
+                        pelo cabeçalho, e o fechamento de cada mês é ignorado.
+                      </li>
+                    </ul>
+                  </div>
+                )}
 
                 <div className="rounded-xl border border-border bg-muted/30 p-4 text-xs text-muted-foreground space-y-1.5">
                   <p className="font-medium text-foreground">Como o parser lê:</p>
@@ -340,6 +370,7 @@ export function ImportarPlanilhaDrawer({
                 arquivoNome={arquivo?.name ?? ""}
                 origemPlanejado={origemPlanejado}
                 onOrigemPlanejado={setOrigemPlanejado}
+                mensal={mensal}
               />
             )}
 
@@ -542,11 +573,15 @@ function PreviewPanel({
   arquivoNome,
   origemPlanejado,
   onOrigemPlanejado,
+  mensal,
 }: {
   preview: Preview;
   arquivoNome: string;
   origemPlanejado: "anterior" | "planilha";
   onOrigemPlanejado: (origem: "anterior" | "planilha") => void;
+  /** Fee e Always On (decisão 078): o planejado da planilha interna não
+   *  mora nas colunas fixas — o texto da opção diz de onde ele vem. */
+  mensal: boolean;
 }) {
   const p = preview.planejado;
   const perguntar = p.versao_anterior !== null;
@@ -610,7 +645,9 @@ function PreviewPanel({
             titulo="Usar o planejado da planilha"
             detalhe={
               p.planilha_tem_planejado
-                ? "Os valores das colunas H · R$, I · QT e J · D/M."
+                ? mensal
+                  ? "Os valores do bloco PLANEJADO da planilha — na planilha interna, pelas colunas do cabeçalho."
+                  : "Os valores das colunas H · R$, I · QT e J · D/M."
                 : "A planilha só tem o orçado: o planejado de todas as linhas fica zerado."
             }
           />

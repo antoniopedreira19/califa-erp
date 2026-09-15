@@ -11,6 +11,7 @@
  *  14/09/2026 (canvas "Planilha Fee e Always On").
  */
 
+import type { ReactNode } from "react";
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -59,6 +60,9 @@ interface Props {
     meses: MesEditavel[];
     disponiveis: { mes: string; rotulo: string }[];
   } | null;
+  /** Ação da versão ao lado do "Editar meses" — o "Importar planilha" do
+   *  orçamento mensal (decisão 078, 15/09/2026). */
+  acao?: ReactNode;
 }
 
 function formatarPct(n: number): string {
@@ -73,6 +77,7 @@ export function ReguaMeses({
   meses,
   selecionado,
   editar,
+  acao,
 }: Props) {
   return (
     <div className="space-y-2.5">
@@ -97,9 +102,10 @@ export function ReguaMeses({
             ativo={selecionado === m.chave}
           />
         ))}
-        {editar && (
-          <div className="flex items-center pl-1">
-            <EditarMeses {...editar} />
+        {(editar || acao) && (
+          <div className="flex items-center gap-2 pl-1">
+            {editar && <EditarMeses {...editar} />}
+            {acao}
           </div>
         )}
       </div>

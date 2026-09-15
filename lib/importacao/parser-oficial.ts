@@ -5,6 +5,8 @@ import type {
   TipoCusto,
 } from "@/lib/types";
 import { TIPOS_CUSTO } from "@/lib/calculos/versao-totais";
+import { isoDoMes, mesDoRotulo } from "@/lib/calculos/meses-trimestre";
+import { MARCA_MES, MARCA_RESUMO } from "@/lib/exportacao/planilha-orcamento";
 
 /**
  * Parser da planilha padrão da Agência California.
@@ -71,6 +73,19 @@ import { TIPOS_CUSTO } from "@/lib/calculos/versao-totais";
  * descartado no fim. É o que resolve o "CONTEUDO" sem acento da linha de
  * grupo contra o "CONTEÚDO" com acento da coluna A dos itens: sobra um só,
  * o que tem itens.
+ *
+ * **Orçamento mensal** (decisão 078, 15/09/2026), com `parseOficial(buf,
+ * { mensal: true })`: a planilha tem um bloco por mês, e o grupo é do mês do
+ * bloco. Duas origens:
+ *   - a exportação do ERP — título "OUTUBRO DE 2026" com `mes:2026-10-01`
+ *     na H, fechamento de cada mês e o resumo (`resumo:` na H), onde a
+ *     leitura para;
+ *   - a planilha interna da agência (a aba SUL) — título "JANEIRO - 1877/1"
+ *     na B, sem ano, cabeçalho repetido a cada mês, NOME/CONTRATO/UNI entre
+ *     o ITEM e o R$ (as colunas saem do cabeçalho) e o fechamento com o
+ *     rótulo na coluna do R$ e anotações na B.
+ * O casamento do bloco com o mês da versão é da importação
+ * (`meses-da-planilha.ts`): aqui só se lê.
  */
 
 const KEYWORDS_RESUMO = [
@@ -117,8 +132,25 @@ export interface ParseGrupo {
   /** Id do grupo na exportação do ERP (`grp:` na coluna H), quando há. */
   grupo_id: string | null;
   nome: string;
+  /** Mês do bloco no modelo mensal (decisão 078): o número (1–12) lido do
+   *  título, e o ISO quando a marca ou o título trazem o ano — a importação
+   *  completa pelos meses da versão. Nulos nos outros modelos. */
+  mes_numero: number | null;
+  mes: string | null;
   ordem: number;
   itens: ParseItem[];
+}
+
+/** Um bloco de mês lido (modelo mensal). */
+export interface ParseMes {
+  /** 1 a 12. */
+  numero: number;
+  /** Ano, quando a marca ou o título o trazem; a planilha interna não traz. */
+  ano: number | null;
+  /** `YYYY-MM-01` quando há ano. */
+  mes: string | null;
+  rotulo: string;
+  linha_xlsx: number;
 }
 
 export interface ParseResultado {
@@ -130,6 +162,8 @@ export interface ParseResultado {
    *  planejado da versão deve vir: da planilha ou da versão anterior. */
   tem_planejado: boolean;
   grupos: ParseGrupo[];
+  /** Os blocos de mês, em ordem. Vazio fora do modo mensal. */
+  meses: ParseMes[];
   warnings: ImportacaoWarning[];
   percentual_honorarios: number | null;
   linhas_lidas: number;
@@ -243,6 +277,14 @@ export function recusaPorModelo(
   doOrcamento: CategoriaModeloPlanilha,
 ): string | null {
   if (daPlanilha === doOrcamento) return null;
+  // Mensal (decisão 078): a planilha precisa dos blocos de mês, e a planilha
+  // de blocos só serve ao orçamento de Fee ou Always On.
+  if (doOrcamento === "mensal") {
+    return 'Este orçamento é de Fee ou Always On, e a planilha não tem blocos de mês ("OUTUBRO DE 2026" ou "OUTUBRO - …"). Envie a exportação do orçamento ou a planilha interna com um bloco por mês. Nada foi importado.';
+  }
+  if (daPlanilha === "mensal") {
+    return `Esta planilha é de um orçamento de Fee ou Always On, com um bloco por mês, e o orçamento é ${doOrcamento}. Nada foi importado.`;
+  }
   return daPlanilha === "internacional"
     ? "Esta é uma planilha internacional (SHEET · ITEM · TT USD · BRL · QT · D/M · TT BRL), e o orçamento é nacional. Nada foi importado."
     : "Este orçamento é internacional, e a planilha está no modelo nacional. Envie a planilha internacional (SHEET · ITEM · TT USD · BRL · QT · D/M · TT BRL). Nada foi importado.";
@@ -250,7 +292,7 @@ export function recusaPorModelo(
 
 /** Id oculto que a exportação grava na coluna H (`orc:`, `v:`, `grp:`, `it:`). */
 function ehMarcaDeId(h: string): boolean {
-  return /^(orc|v|grp|it):/.test(h);
+  return /^(orc|v|grp|it|mes|resumo):/.test(h);
 }
 
 /** O id de uma marca da coluna H — `marcaDe("grp:abc", "grp:")` → "abc". */
@@ -313,11 +355,74 @@ function extrairPercentualHonorarios(
   return Number.isFinite(n) ? n : null;
 }
 
+/** Colunas do orçado e do planejado (1 = A). */
+interface Colunas {
+  rs: number;
+  qt: number;
+  dm: number;
+  tipo: number;
+  prs: number;
+  pqt: number;
+  pdm: number;
+}
+
+/** As do modelo e da exportação do ERP. */
+const COLUNAS_PADRAO: Colunas = { rs: 3, qt: 4, dm: 5, tipo: 7, prs: 8, pqt: 9, pdm: 10 };
+
+/**
+ * Onde estão R$, QT, D/M (ou DIAS), o tipo e o planejado, pelo cabeçalho.
+ * Só o mensal usa: a planilha interna (aba SUL) põe NOME, CONTRATO e UNI
+ * entre o ITEM e o R$. O tipo é a coluna sem título logo depois do TT. O
+ * que o cabeçalho não disser fica no padrão.
+ */
+function colunasDoCabecalho(cells: string[]): Colunas {
+  const baixo = cells.map((c) => c.toLowerCase().trim());
+  const achar = (nomes: string[], depoisDaColuna: number): number | null => {
+    const i = baixo.findIndex((c, idx) => idx >= depoisDaColuna && nomes.includes(c));
+    return i >= 0 ? i + 1 : null;
+  };
+  const rs = achar(["r$"], 0);
+  if (!rs) return COLUNAS_PADRAO;
+  const qt = achar(["qt"], rs) ?? rs + 1;
+  const dm = achar(["d/m", "dias"], qt) ?? qt + 1;
+  const tt = achar(["tt"], dm) ?? dm + 1;
+  const prs = achar(["r$"], tt);
+  const pqt = prs ? (achar(["qt"], prs) ?? prs + 1) : COLUNAS_PADRAO.pqt;
+  const pdm = prs ? (achar(["d/m", "dias"], pqt) ?? pqt + 1) : COLUNAS_PADRAO.pdm;
+  return { rs, qt, dm, tipo: tt + 1, prs: prs ?? COLUNAS_PADRAO.prs, pqt, pdm };
+}
+
+/** A aba tem cabeçalho e ao menos um título de mês (ou a marca `mes:`). */
+function abaTemBlocosDeMes(ws: ExcelJS.Worksheet): boolean {
+  let cabecalho = false;
+  let mes = false;
+  ws.eachRow({ includeEmpty: false }, (row) => {
+    if (cabecalho && mes) return;
+    const cells: string[] = [];
+    for (let c = 1; c <= 8; c++) cells.push(normalizar(row.getCell(c).value));
+    if (!cabecalho && ehLinhaHeader(cells)) cabecalho = true;
+    if (
+      !mes &&
+      (cells[7].startsWith(MARCA_MES) ||
+        ((cells[0] !== "" || cells[1] !== "") &&
+          (mesDoRotulo(cells[1]) ?? mesDoRotulo(cells[0])) !== null))
+    ) {
+      mes = true;
+    }
+  });
+  return cabecalho && mes;
+}
+
 // ---------- parser principal ----------
 
 export async function parseOficial(
   buffer: ArrayBuffer | Buffer,
+  opcoes: {
+    /** Orçamento de Fee ou Always On: lê os blocos de mês (decisão 078). */
+    mensal?: boolean;
+  } = {},
 ): Promise<ParseResultado> {
+  const mensal = opcoes.mensal === true;
   const wb = new ExcelJS.Workbook();
   // ExcelJS.xlsx.load aceita ArrayBuffer/Buffer. Tipagem antiga do ExcelJS
   // não bate com o Buffer generic novo do @types/node — cast explícito.
@@ -326,12 +431,30 @@ export async function parseOficial(
   let ws = wb.worksheets.find((w) =>
     ABAS_CONHECIDAS.includes(semAcento(w.name)),
   );
+  // Mensal: a planilha interna tem uma aba por regional (SUL, SP…) com os
+  // blocos de mês, e costuma vir junto de abas de controle. Vale a primeira
+  // que tiver blocos; havendo mais de uma, o aviso diz qual foi lida.
+  const avisosDaAba: ImportacaoWarning[] = [];
+  if (!ws && mensal) {
+    const comMeses = wb.worksheets.filter(abaTemBlocosDeMes);
+    ws = comMeses[0];
+    if (comMeses.length > 1) {
+      avisosDaAba.push({
+        linha: 0,
+        motivo: `A planilha tem ${comMeses.length} abas com blocos de mês (${comMeses
+          .map((w) => w.name)
+          .join(", ")}); foi lida a "${comMeses[0].name}". Para importar outra, envie um arquivo só com ela.`,
+        severidade: "ajuste",
+      });
+    }
+  }
   if (!ws) ws = wb.worksheets[0];
 
   if (!ws) {
     return {
       aba: "",
       grupos: [],
+      meses: [],
       modelo: "nacional",
       tem_planejado: false,
       warnings: [
@@ -348,7 +471,7 @@ export async function parseOficial(
     };
   }
 
-  const warnings: ImportacaoWarning[] = [];
+  const warnings: ImportacaoWarning[] = [...avisosDaAba];
   const grupos: ParseGrupo[] = [];
   /** Último grupo resolvido — é ele que recolhe item com a coluna A vazia. */
   let grupoAtual: ParseGrupo | null = null;
@@ -363,9 +486,23 @@ export async function parseOficial(
   let linhasIgnoradas = 0;
   let viuLinhaDeGrupo = false;
 
+  // ---------- modelo mensal (decisão 078) ----------
+  const meses: ParseMes[] = [];
+  let mesAtual: ParseMes | null = null;
+  /** A marca `mes:` apareceu — mesmo fora do modo mensal, para a recusa. */
+  let viuMarcaDeMes = false;
+  let fimDoMensal = false;
+  let col: Colunas = COLUNAS_PADRAO;
+
   /** Acha o grupo pelo nome ou cria um novo, preservando a ordem de entrada. */
   function grupoPorNome(nome: string, grupoId: string | null = null): ParseGrupo {
-    const existente = grupos.find((g) => g.nome === nome);
+    // No mensal o mesmo nome em meses diferentes são grupos diferentes.
+    const existente = grupos.find(
+      (g) =>
+        g.nome === nome &&
+        g.mes_numero === (mesAtual?.numero ?? null) &&
+        g.mes === (mesAtual?.mes ?? null),
+    );
     if (existente) {
       existente.grupo_id ??= grupoId;
       return existente;
@@ -373,6 +510,8 @@ export async function parseOficial(
     const novo: ParseGrupo = {
       grupo_id: grupoId,
       nome,
+      mes_numero: mesAtual?.numero ?? null,
+      mes: mesAtual?.mes ?? null,
       ordem: grupos.length + 1,
       itens: [],
     };
@@ -499,23 +638,89 @@ export async function parseOficial(
     linhasImportadas++;
   }
 
+  /**
+   * Mensal: título de mês, fim no resumo, cabeçalho repetido e fechamento
+   * do mês. `true` quando a linha foi resolvida aqui.
+   */
+  function lerLinhaMensal(cells: string[], row: ExcelJS.Row, rowNumber: number): boolean {
+    const colH = cells[7];
+    if (colH.startsWith(MARCA_RESUMO)) {
+      fimDoMensal = true;
+      linhasIgnoradas++;
+      return true;
+    }
+
+    const valorRs = toNumber(row.getCell(col.rs).value);
+    const tipoValido = TIPOS_VALIDOS.includes(
+      cells[col.tipo - 1].toUpperCase().trim() as TipoCusto,
+    );
+    const marca = colH.startsWith(MARCA_MES)
+      ? colH.slice(MARCA_MES.length).split("|")[0].trim()
+      : "";
+    const porMarca = /^\d{4}-\d{2}-01$/.test(marca) ? marca : null;
+    const porTitulo =
+      !porMarca && !valorRs.ok && !tipoValido
+        ? (mesDoRotulo(cells[1]) ?? mesDoRotulo(cells[0]))
+        : null;
+    if (porMarca || porTitulo) {
+      const numero = porMarca ? Number(porMarca.slice(5, 7)) : porTitulo!.numero;
+      const ano = porMarca ? Number(porMarca.slice(0, 4)) : porTitulo!.ano;
+      mesAtual = {
+        numero,
+        ano,
+        mes: ano !== null ? isoDoMes(ano, numero) : null,
+        rotulo: cells[1] !== "" && mesDoRotulo(cells[1]) ? cells[1] : cells[0],
+        linha_xlsx: rowNumber,
+      };
+      meses.push(mesAtual);
+      grupoAtual = null;
+      linhasIgnoradas++;
+      return true;
+    }
+
+    if (!headerEncontrado) return false;
+
+    // O cabeçalho se repete a cada mês na planilha interna.
+    if (ehLinhaHeader(cells)) {
+      linhasIgnoradas++;
+      return true;
+    }
+
+    // Fechamento do mês na planilha interna: o rótulo entre a C e a coluna
+    // do R$, sem valor nela. A B pode trazer anotação ("Conta para Sobra",
+    // "Limite Faturamento"), por isso ela não conta aqui.
+    if (cells[0] === "" && !valorRs.ok) {
+      const rotulos = cells.slice(2, col.rs).map((s) => s.toLowerCase());
+      if (rotulos.some((c) => KEYWORDS_RESUMO.some((k) => c.includes(k)))) {
+        linhasIgnoradas++;
+        return true;
+      }
+    }
+    return false;
+  }
+
   ws.eachRow({ includeEmpty: false }, (row, rowNumber) => {
-    if (fimDaInternacional) return;
+    if (fimDaInternacional || fimDoMensal) return;
     // Lê colunas A–L (12 colunas): até J basta para orçado + planejado, e as
     // duas a mais mantêm a checagem de "linha vazia" honesta.
+    // No mensal, A–P: a planilha interna leva o planejado até a M.
     const cells: string[] = [];
-    for (let c = 1; c <= 12; c++) {
+    for (let c = 1; c <= (mensal ? 16 : 12); c++) {
       cells.push(normalizar(row.getCell(c).value));
     }
 
     if (cells.every((c) => c === "")) return;
     linhasLidas++;
 
+    if (cells[7].startsWith(MARCA_MES)) viuMarcaDeMes = true;
+    if (mensal && !layoutInternacional && lerLinhaMensal(cells, row, rowNumber)) return;
+
     // Header?
     if (!headerEncontrado) {
       if (ehLinhaHeader(cells)) {
         headerEncontrado = true;
         layoutInternacional = ehLayoutInternacional(cells);
+        if (mensal && !layoutInternacional) col = colunasDoCabecalho(cells);
       }
       return;
     }
@@ -535,7 +740,17 @@ export async function parseOficial(
       return;
     }
 
-    const [colA, colB, colC, colD, colE, , colG, colH, colI, colJ] = cells;
+    // Colunas pelo cabeçalho: fixas no modelo e na exportação, deslocadas na
+    // planilha interna do mensal. A H é sempre a do id oculto.
+    const [colA, colB] = cells;
+    const colC = cells[col.rs - 1];
+    const colD = cells[col.qt - 1];
+    const colE = cells[col.dm - 1];
+    const colG = cells[col.tipo - 1];
+    const colH = cells[7];
+    const colPlanejadoRs = cells[col.prs - 1];
+    const colI = cells[col.pqt - 1];
+    const colJ = cells[col.pdm - 1];
     const valorC = toNumber(colC);
     const tipoUpper = colG.toUpperCase().trim();
     const temTipoValido = TIPOS_VALIDOS.includes(tipoUpper as TipoCusto);
@@ -582,7 +797,7 @@ export async function parseOficial(
     if (!temTipoValido) {
       warnings.push({
         linha: rowNumber,
-        coluna: letra(7),
+        coluna: letra(col.tipo),
         motivo:
           tipoUpper === ""
             ? `Tipo de custo ausente na coluna G — linha descartada. Aceitos: ${TIPOS_VALIDOS.join(", ")}.`
@@ -621,7 +836,7 @@ export async function parseOficial(
     if (!valorC.ok && colC !== "") {
       warnings.push({
         linha: rowNumber,
-        coluna: letra(3),
+        coluna: letra(col.rs),
         motivo: `Valor unitário inválido ("${colC}") — assumido R$ 0,00.`,
         severidade: "ajuste",
       });
@@ -629,7 +844,7 @@ export async function parseOficial(
     if (valorUnitario < 0) {
       warnings.push({
         linha: rowNumber,
-        coluna: letra(3),
+        coluna: letra(col.rs),
         motivo: `Valor unitário negativo (${colC}) — assumido R$ 0,00.`,
         severidade: "ajuste",
       });
@@ -646,7 +861,7 @@ export async function parseOficial(
     if (!qtd.ok && colD !== "") {
       warnings.push({
         linha: rowNumber,
-        coluna: letra(4),
+        coluna: letra(col.qt),
         motivo: `Quantidade inválida ("${colD}") — assumida 1.`,
         severidade: "ajuste",
       });
@@ -654,7 +869,7 @@ export async function parseOficial(
     if (quantidade <= 0) {
       warnings.push({
         linha: rowNumber,
-        coluna: letra(4),
+        coluna: letra(col.qt),
         motivo: `Quantidade ${colD || "0"} não é aceita (precisa ser maior que zero) — assumida 1.`,
         severidade: "ajuste",
       });
@@ -665,7 +880,7 @@ export async function parseOficial(
     if (!dm.ok && colE !== "") {
       warnings.push({
         linha: rowNumber,
-        coluna: letra(5),
+        coluna: letra(col.dm),
         motivo: `Dias/meses inválido ("${colE}") — assumido 1.`,
         severidade: "ajuste",
       });
@@ -673,7 +888,7 @@ export async function parseOficial(
     if (diasMeses <= 0) {
       warnings.push({
         linha: rowNumber,
-        coluna: letra(5),
+        coluna: letra(col.dm),
         motivo: `Dias/meses ${colE || "0"} não é aceito (precisa ser maior que zero) — assumido 1.`,
         severidade: "ajuste",
       });
@@ -688,7 +903,7 @@ export async function parseOficial(
     // planejada.
     const semPlanejado = { ok: false, n: 0 };
     const hEhId = ehMarcaDeId(colH);
-    const valorPlanejado = hEhId ? semPlanejado : toNumber(colH);
+    const valorPlanejado = hEhId ? semPlanejado : toNumber(colPlanejadoRs);
     const qtdPlanejada = hEhId ? semPlanejado : toNumber(colI);
     const dmPlanejado = hEhId ? semPlanejado : toNumber(colJ);
 
@@ -749,11 +964,16 @@ export async function parseOficial(
 
   return {
     aba: ws.name,
-    modelo: layoutInternacional ? "internacional" : "nacional",
+    modelo: layoutInternacional
+      ? "internacional"
+      : meses.length > 0 || viuMarcaDeMes
+        ? "mensal"
+        : "nacional",
     tem_planejado: gruposComItens.some((g) =>
       g.itens.some((it) => it.valor_unitario_planejado > 0),
     ),
     grupos: gruposComItens,
+    meses,
     warnings,
     percentual_honorarios: percentualHonorarios,
     linhas_lidas: linhasLidas,

@@ -22,6 +22,17 @@ import {
 } from "@/lib/importacao/planejado-anterior";
 import type { CategoriaModeloPlanilha } from "@/lib/types";
 import { extrairArquivoXlsx } from "@/lib/importacao/arquivo";
+import { casarBlocosComMeses } from "@/lib/importacao/meses-da-planilha";
+import {
+  copiarMesesEntreVersoes,
+  criarMesesDoPeriodo,
+  mesesDaVersaoQuery,
+} from "@/lib/data/meses-versao";
+import {
+  erroDoPeriodoMensal,
+  mesesDoPeriodo,
+  rotuloMesCurto,
+} from "@/lib/calculos/meses-trimestre";
 
 const BUCKET = "orcamento-importacoes";
 
@@ -97,6 +108,8 @@ async function versaoAnterior(
   numero_versao: number;
   grupos: GrupoAtual[];
   itens: ItemAtual[];
+  /** Meses da versão (modelo mensal, decisão 078); vazio nos outros. */
+  meses: { id: string; mes: string }[];
 } | null> {
   const supabase = createClient();
   const [{ data: orc }, { data: versoes }] = await Promise.all([
@@ -120,10 +133,10 @@ async function versaoAnterior(
     : escolherVersaoVigente(vivas, orc?.versao_aprovada_id);
   if (!alvo) return null;
 
-  const [{ data: grupos }, { data: itens }] = await Promise.all([
+  const [{ data: grupos }, { data: itens }, { data: meses }] = await Promise.all([
     supabase
       .from("versoes_orcamento_grupos")
-      .select("id, nome, ordem")
+      .select("id, nome, ordem, mes_id")
       .eq("versao_orcamento_id", alvo.id)
       .eq("tenant_id", tenantId),
     supabase
@@ -135,15 +148,19 @@ async function versaoAnterior(
       )
       .eq("versao_orcamento_id", alvo.id)
       .eq("tenant_id", tenantId),
+    mesesDaVersaoQuery(supabase, tenantId, alvo.id),
   ]);
+  const mesPorId = new Map((meses ?? []).map((m) => [m.id, m.mes]));
 
   return {
     id: alvo.id,
     numero_versao: alvo.numero_versao,
+    meses: (meses ?? []).map((m) => ({ id: m.id, mes: m.mes })),
     grupos: ((grupos ?? []) as any[]).map((g) => ({
       id: g.id,
       nome: g.nome,
       ordem: numero(g.ordem),
+      mes: g.mes_id ? (mesPorId.get(g.mes_id) ?? null) : null,
     })),
     itens: ((itens ?? []) as any[]).map((it) => ({
       id: it.id,
@@ -168,20 +185,30 @@ async function verificarOrcamento(
   orcamentoId: string,
   tenantId: string,
 ): Promise<
-  | { ok: true; projeto_id: string; modelo: CategoriaModeloPlanilha }
+  | {
+      ok: true;
+      projeto_id: string;
+      modelo: CategoriaModeloPlanilha;
+      /** Período do orçamento — os meses da versão nova do mensal sem vigente. */
+      periodo: { inicio: string | null; fim: string | null };
+    }
   | { ok: false; message: string }
 > {
   const supabase = createClient();
   const { data: orc, error } = await supabase
     .from("orcamentos")
     // `!categoria_id`: `orcamentos` tem duas FKs para `categorias_dominio`.
-    .select("id, status, projeto_id, categoria:categorias_dominio!categoria_id(modelo_planilha)")
+    .select(
+      "id, status, projeto_id, data_inicio_prevista, data_fim_prevista, categoria:categorias_dominio!categoria_id(modelo_planilha)",
+    )
     .eq("id", orcamentoId)
     .eq("tenant_id", tenantId)
     .maybeSingle<{
       id: string;
       status: string;
       projeto_id: string;
+      data_inicio_prevista: string | null;
+      data_fim_prevista: string | null;
       categoria: { modelo_planilha: CategoriaModeloPlanilha } | null;
     }>();
 
@@ -194,19 +221,31 @@ async function verificarOrcamento(
       message: `Orçamento em estado ${orc.status} não aceita nova versão.`,
     };
   }
-  // Modelo mensal (decisão 078): a planilha importada não diz de que mês é
-  // cada grupo — os itens cairiam fora de todos os meses.
-  if (orc.categoria?.modelo_planilha === "mensal") {
-    return {
-      ok: false,
-      message:
-        "A importação de planilha ainda não está disponível para orçamentos de Fee e Always On.",
-    };
-  }
   return {
     ok: true,
     projeto_id: orc.projeto_id,
     modelo: orc.categoria?.modelo_planilha ?? "nacional",
+    periodo: { inicio: orc.data_inicio_prevista, fim: orc.data_fim_prevista },
+  };
+}
+
+/**
+ * Modelo mensal (decisão 078): os meses em que a planilha cai. Os da versão
+ * de onde vem o planejado — a própria no sobrescrever, a vigente na versão
+ * nova, que os copia — e, sem versão nenhuma, os do período do orçamento.
+ */
+function mesesDeDestino(
+  anterior: { meses: { mes: string }[] } | null,
+  periodo: { inicio: string | null; fim: string | null },
+): { ok: true; datas: string[] } | { ok: false; message: string } {
+  if (anterior && anterior.meses.length > 0) {
+    return { ok: true, datas: anterior.meses.map((m) => m.mes) };
+  }
+  const erro = erroDoPeriodoMensal(periodo.inicio, periodo.fim);
+  if (erro) return { ok: false, message: `${erro} Nada foi importado.` };
+  return {
+    ok: true,
+    datas: mesesDoPeriodo({ inicio: periodo.inicio!, fim: periodo.fim! }),
   };
 }
 
@@ -242,7 +281,7 @@ export async function previewImportacao(
 
   let parsed: ParseResultado;
   try {
-    parsed = await parseOficial(arq.buffer);
+    parsed = await parseOficial(arq.buffer, { mensal: check.modelo === "mensal" });
   } catch (err) {
     console.error("[importacao.preview.parse]", err);
     return {
@@ -272,6 +311,33 @@ export async function previewImportacao(
     session.activeTenant.id,
     typeof versaoIdDoForm === "string" && versaoIdDoForm !== "" ? versaoIdDoForm : null,
   );
+  // Mensal: cada bloco da planilha num mês da versão; meses a mais ou a
+  // menos recusam (decisão 078, 15/09/2026).
+  if (check.modelo === "mensal") {
+    const destino = mesesDeDestino(anterior, check.periodo);
+    if (!destino.ok) return { ok: false, message: destino.message };
+    const casados = casarBlocosComMeses(parsed.grupos, parsed.meses, destino.datas);
+    if (!casados.ok) return { ok: false, message: casados.message };
+    parsed = {
+      ...parsed,
+      grupos: casados.grupos,
+      warnings: [...parsed.warnings, ...casados.avisos],
+      // A contagem segue os meses aceitos: item de bloco fora do trimestre
+      // não entra, e a confirmação não pode prometer mais itens do que grava.
+      linhas_importadas: casados.grupos.reduce((s, g) => s + g.itens.length, 0),
+      linhas_ignoradas:
+        parsed.linhas_ignoradas +
+        parsed.linhas_importadas -
+        casados.grupos.reduce((s, g) => s + g.itens.length, 0),
+    };
+    if (parsed.grupos.length === 0) {
+      return {
+        ok: false,
+        message: "Nenhum item nos meses do orçamento. Confira os blocos de mês da planilha.",
+      };
+    }
+  }
+
   const casamento = anterior
     ? casarComAnterior(parsed.grupos, anterior.grupos, anterior.itens)
     : null;
@@ -279,7 +345,8 @@ export async function previewImportacao(
   const preview = {
     aba: parsed.aba,
     grupos: parsed.grupos.map((g, gi) => ({
-      nome: g.nome,
+      // No mensal o nome diz de que mês é o grupo.
+      nome: g.mes ? `${g.nome} · ${rotuloMesCurto(g.mes)}` : g.nome,
       ordem: g.ordem,
       itens_count: g.itens.length,
       total_bruto: g.itens.reduce(
@@ -350,7 +417,7 @@ export async function confirmarImportacao(
 
   let parsed: ParseResultado;
   try {
-    parsed = await parseOficial(arq.buffer);
+    parsed = await parseOficial(arq.buffer, { mensal: check.modelo === "mensal" });
   } catch (err) {
     console.error("[importacao.confirmar.parse]", err);
     return {
@@ -365,6 +432,29 @@ export async function confirmarImportacao(
   // Planejado: da vigente ou da planilha. Lido ANTES de criar a versão
   // nova — depois dela, a "mais recente" seria a própria.
   const anteriorConfirmar = await versaoAnterior(orcamentoId, session.activeTenant.id, null);
+
+  // Mensal (decisão 078): os mesmos meses do preview — os da vigente, que a
+  // versão nova copia, ou os do período do orçamento.
+  let datasDoMensal: string[] = [];
+  if (check.modelo === "mensal") {
+    const destino = mesesDeDestino(anteriorConfirmar, check.periodo);
+    if (!destino.ok) return { ok: false, message: destino.message };
+    const casados = casarBlocosComMeses(parsed.grupos, parsed.meses, destino.datas);
+    if (!casados.ok) return { ok: false, message: casados.message };
+    parsed = {
+      ...parsed,
+      grupos: casados.grupos,
+      warnings: [...parsed.warnings, ...casados.avisos],
+      // A contagem segue os meses aceitos: item de bloco fora do trimestre
+      // não entra, e a confirmação não pode prometer mais itens do que grava.
+      linhas_importadas: casados.grupos.reduce((s, g) => s + g.itens.length, 0),
+      linhas_ignoradas:
+        parsed.linhas_ignoradas +
+        parsed.linhas_importadas -
+        casados.grupos.reduce((s, g) => s + g.itens.length, 0),
+    };
+    datasDoMensal = destino.datas;
+  }
   const origemPlanejado: OrigemDoPlanejado = anteriorConfirmar
     ? origemDoPlanejado(formData)
     : "planilha";
@@ -451,12 +541,47 @@ export async function confirmarImportacao(
 
   const versaoId = novaVersao.id as string;
 
-  // 3) Criar grupos.
+  // 3) Mensal: os meses da versão nova, antes dos grupos que apontam para
+  //    eles — copiados da vigente ou criados do período.
+  const mesIdPorData = new Map<string, string>();
+  if (check.modelo === "mensal") {
+    if (anteriorConfirmar && anteriorConfirmar.meses.length > 0) {
+      const copiados = await copiarMesesEntreVersoes(service, {
+        tenantId,
+        origemId: anteriorConfirmar.id,
+        destinoId: versaoId,
+        profileId: session.profile.id,
+      });
+      for (const m of anteriorConfirmar.meses) {
+        const novo = copiados.get(m.id);
+        if (novo) mesIdPorData.set(m.mes, novo);
+      }
+    } else {
+      const criados = await criarMesesDoPeriodo(service, {
+        tenantId,
+        versaoId,
+        profileId: session.profile.id,
+        inicio: check.periodo.inicio,
+        fim: check.periodo.fim,
+      });
+      if (criados.ok) {
+        const { data: novos } = await mesesDaVersaoQuery(service, tenantId, versaoId);
+        for (const m of novos ?? []) mesIdPorData.set(m.mes, m.id);
+      }
+    }
+    if (datasDoMensal.some((d) => !mesIdPorData.has(d))) {
+      await service.from("versoes_orcamento").delete().eq("id", versaoId);
+      return { ok: false, message: "Não foi possível criar os meses da versão." };
+    }
+  }
+
+  // 4) Criar grupos.
   const gruposParaInserir = parsed.grupos.map((g) => ({
     tenant_id: tenantId,
     versao_orcamento_id: versaoId,
     nome: g.nome,
     ordem: g.ordem,
+    mes_id: g.mes ? (mesIdPorData.get(g.mes) ?? null) : null,
   }));
 
   const { data: gruposCriados, error: gruposErr } = await service
@@ -670,7 +795,7 @@ export async function sobrescreverVersaoComPlanilha(
 
   let parsed: ParseResultado;
   try {
-    parsed = await parseOficial(arq.buffer);
+    parsed = await parseOficial(arq.buffer, { mensal: check.modelo === "mensal" });
   } catch (err) {
     console.error("[importacao.sobrescrever.parse]", err);
     return { ok: false, message: "Falha ao processar o arquivo." };
@@ -683,6 +808,30 @@ export async function sobrescreverVersaoComPlanilha(
 
   // Planejado: o desta versão ou o da planilha. Lido ANTES de apagar.
   const anteriorSobrescrever = await versaoAnterior(orcamentoId, tenantId, versaoId);
+
+  // Mensal (decisão 078): os meses são os da própria versão. Casados ANTES
+  // de apagar qualquer coisa — mês a mais ou a menos não troca o conteúdo.
+  const mesIdDaVersao = new Map(
+    (anteriorSobrescrever?.meses ?? []).map((m) => [m.mes, m.id]),
+  );
+  if (check.modelo === "mensal") {
+    const casados = casarBlocosComMeses(parsed.grupos, parsed.meses, [
+      ...mesIdDaVersao.keys(),
+    ]);
+    if (!casados.ok) return { ok: false, message: casados.message };
+    parsed = {
+      ...parsed,
+      grupos: casados.grupos,
+      warnings: [...parsed.warnings, ...casados.avisos],
+      // A contagem segue os meses aceitos: item de bloco fora do trimestre
+      // não entra, e a confirmação não pode prometer mais itens do que grava.
+      linhas_importadas: casados.grupos.reduce((s, g) => s + g.itens.length, 0),
+      linhas_ignoradas:
+        parsed.linhas_ignoradas +
+        parsed.linhas_importadas -
+        casados.grupos.reduce((s, g) => s + g.itens.length, 0),
+    };
+  }
   const origemPlanejado: OrigemDoPlanejado = anteriorSobrescrever
     ? origemDoPlanejado(formData)
     : "planilha";
@@ -749,6 +898,7 @@ export async function sobrescreverVersaoComPlanilha(
         versao_orcamento_id: versaoId,
         nome: g.nome,
         ordem: g.ordem,
+        mes_id: g.mes ? (mesIdDaVersao.get(g.mes) ?? null) : null,
       })),
     )
     .select("id, nome, ordem");

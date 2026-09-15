@@ -341,11 +341,8 @@ export default async function ProjetoDetailPage({
 
   // Cancelado fica fora do seletor de exportação: saiu da mesa e a visão
   // agregada também não o lista.
-  // O modelo mensal também fica fora: a exportação dele ainda não existe
-  // (decisão 078), e a rota recusaria.
   const exportaveis: OrcamentoExportavel[] = orcamentos
     .filter((o) => o.estagio !== "cancelado")
-    .filter((o) => modeloPorOrcamento.get(o.id) !== "mensal")
     .map((o) => ({
       id: o.id,
       codigo: o.codigo,

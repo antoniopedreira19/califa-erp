@@ -42,6 +42,7 @@ import { TotaisCard } from "./versoes/[versaoId]/totais-card";
 import { ReguaMeses } from "./versoes/[versaoId]/regua-meses";
 import { CopiarItensDoMes } from "./versoes/[versaoId]/copiar-itens-mes";
 import { TrimestreEmpilhado } from "./versoes/[versaoId]/trimestre-empilhado";
+import { ImportarPlanilhaDrawer } from "./versoes/importar-drawer";
 
 /** `2026-07` — a chave do mês na URL. */
 function chaveDoMes(mes: string): string {
@@ -68,6 +69,10 @@ interface Props {
   savePorItem: Record<string, EstadoSaveDaLinha>;
   saldosDeSave: SaldoDeSave[];
   planilha: ConfigDaPlanilha;
+  /** "Importar planilha" da versão (decisão 078, 15/09/2026): troca o
+   *  conteúdo de todos os meses de uma vez, por isso mora na régua e não
+   *  no mês. `null` esconde. */
+  importacao: { disabled: boolean; disabledReason?: string } | null;
 }
 
 export function PlanilhaMensal({
@@ -87,6 +92,7 @@ export function PlanilhaMensal({
   savePorItem,
   saldosDeSave,
   planilha,
+  importacao,
 }: Props) {
   const base = `/orcamentos/${projetoId}/${orcamentoId}?v=${versao.id}`;
   const honorarios = Number(versao.percentual_honorarios);
@@ -245,6 +251,24 @@ export function PlanilhaMensal({
         }))}
         selecionado={selecionado}
         editar={editar}
+        acao={
+          importacao && !readOnly ? (
+            <ImportarPlanilhaDrawer
+              projetoId={projetoId}
+              orcamentoId={orcamentoId}
+              modeloPlanilha={planilha.modeloPlanilha}
+              modo="sobrescrever"
+              versaoId={versao.id}
+              conteudoAtual={{
+                grupos: grupos.length,
+                itens: itens.length,
+                bvs: Object.keys(bvsPorItem).length,
+              }}
+              disabled={importacao.disabled}
+              disabledReason={importacao.disabledReason}
+            />
+          ) : null
+        }
       />
 
       {mesAtual ? (

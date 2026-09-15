@@ -463,11 +463,7 @@ export default async function OrcamentosAgregadoPage({
   // save gerado dentro, crédito consumido fora. Calculado
   // aqui, sobre o que está GRAVADO — a exportação lê o banco, e a tela
   // pode estar com alteração ainda não salva.
-  // O orçamento mensal fica fora do seletor "Exportar": a exportação dele
-  // ainda não existe (decisão 078), e a rota recusaria.
-  const exportaveis: OrcamentoExportavel[] = inicial
-    .filter((orc) => orc.modeloPlanilha !== "mensal")
-    .map((orc) => {
+  const exportaveis: OrcamentoExportavel[] = inicial.map((orc) => {
     const origem = orc.origemBanco!;
     const temVersao = origem.versaoId !== "";
     const valor = temVersao

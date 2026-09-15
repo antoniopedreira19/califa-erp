@@ -15,6 +15,10 @@ import {
   cambioComum,
   cambioDaVersao,
 } from "@/lib/exportacao/planilha-orcamento-internacional";
+import {
+  adicionarAbaOrcamentoMensal,
+  mesesDaVersaoParaAba,
+} from "@/lib/exportacao/planilha-orcamento-mensal";
 import { configDaPlanilha } from "@/app/(app)/_planilha/modelo-planilha";
 import { chaveDoCambio } from "@/app/(app)/_planilha/moeda-estrangeira";
 import type {
@@ -164,21 +168,14 @@ export async function GET(
   const modelos = new Set(
     orcamentos.map((o) => o.categoria?.modelo_planilha ?? "nacional"),
   );
-  // Modelo mensal (decisão 078): ainda sem layout de exportação.
-  if (modelos.has("mensal")) {
-    return NextResponse.json(
-      {
-        error:
-          "A exportação de orçamentos de Fee e Always On ainda não está disponível.",
-      },
-      { status: 400 },
-    );
-  }
+  // Fee e Always On (decisão 078) entram na mesma regra: só com outros
+  // mensais (Tiago, 15/09/2026).
   if (modelos.size > 1) {
     return NextResponse.json(
       {
-        error:
-          "Orçamento nacional e internacional não podem ser exportados na mesma planilha. Exporte cada modelo separadamente.",
+        error: modelos.has("mensal")
+          ? "Orçamento de Fee ou Always On só sai na mesma planilha que outros de Fee ou Always On. Exporte cada modelo separadamente."
+          : "Orçamento nacional e internacional não podem ser exportados na mesma planilha. Exporte cada modelo separadamente.",
       },
       { status: 400 },
     );
@@ -254,10 +251,10 @@ export async function GET(
   }
 
   const versaoIds = [...versaoAlvo.values()].map((v) => v.id);
-  const [gruposRes, itensRes] = await Promise.all([
+  const [gruposRes, itensRes, mesesRes] = await Promise.all([
     supabase
       .from("versoes_orcamento_grupos")
-      .select("id, versao_orcamento_id, nome, ordem")
+      .select("id, versao_orcamento_id, nome, ordem, mes_id")
       .eq("tenant_id", tenantId)
       .in("versao_orcamento_id", versaoIds)
       .order("ordem", { ascending: true }),
@@ -271,12 +268,30 @@ export async function GET(
       .eq("tenant_id", tenantId)
       .in("versao_orcamento_id", versaoIds)
       .order("ordem", { ascending: true }),
+    // Meses das versões — só o modelo mensal os tem (decisão 078).
+    modeloDoArquivo === "mensal"
+      ? supabase
+          .from("versoes_orcamento_meses")
+          .select("id, versao_orcamento_id, mes")
+          .eq("tenant_id", tenantId)
+          .in("versao_orcamento_id", versaoIds)
+      : Promise.resolve({ data: [] as any[] }),
   ]);
 
-  const gruposPorVersao = new Map<string, { id: string; nome: string }[]>();
+  const mesesPorVersao = new Map<string, { id: string; mes: string }[]>();
+  for (const m of ((mesesRes.data ?? []) as any[])) {
+    const atuais = mesesPorVersao.get(m.versao_orcamento_id) ?? [];
+    atuais.push({ id: m.id as string, mes: m.mes as string });
+    mesesPorVersao.set(m.versao_orcamento_id, atuais);
+  }
+
+  const gruposPorVersao = new Map<
+    string,
+    { id: string; nome: string; mesId: string | null }[]
+  >();
   for (const g of ((gruposRes.data ?? []) as any[])) {
     const atuais = gruposPorVersao.get(g.versao_orcamento_id) ?? [];
-    atuais.push({ id: g.id, nome: g.nome });
+    atuais.push({ id: g.id, nome: g.nome, mesId: g.mes_id ?? null });
     gruposPorVersao.set(g.versao_orcamento_id, atuais);
   }
   const itensPorGrupo = new Map<string, any[]>();
@@ -317,7 +332,41 @@ export async function GET(
     };
   });
 
-  if (modeloDoArquivo === "internacional") {
+  if (modeloDoArquivo === "mensal") {
+    // Fee e Always On (decisão 078): cada orçamento com os seus meses — de
+    // trimestres diferentes, se for o caso —, cada mês com o seu fechamento
+    // e o resumo no fim.
+    adicionarAbaOrcamentoMensal(
+      wb,
+      "Orçamento",
+      {
+        identificacao: `${projeto.codigo} · ${projeto.nome}`,
+        clienteNome,
+        titulo: `Orçamento · ${dataBr(new Date())}`,
+        secoes: orcamentos.map((o) => {
+          const versao = versaoAlvo.get(o.id)!;
+          return {
+            titulo: `${o.codigo} · ${nomeVersao(o.nome, versao.numero_versao)}`,
+            rotuloNoResumo: o.codigo,
+            orcamentoId: o.id,
+            versaoId: versao.id,
+            percentualHonorarios: Number(versao.percentual_honorarios ?? 0),
+            percentualImposto: Number(versao.percentual_imposto ?? 0),
+            meses: mesesDaVersaoParaAba(
+              mesesPorVersao.get(versao.id) ?? [],
+              (gruposPorVersao.get(versao.id) ?? []).map((g) => ({
+                id: g.id,
+                nome: g.nome,
+                mesId: g.mesId,
+                itens: itensPorGrupo.get(g.id) ?? [],
+              })),
+            ),
+          };
+        }),
+      },
+      { formulas: true },
+    );
+  } else if (modeloDoArquivo === "internacional") {
     adicionarAbaOrcamentoInternacional(
       wb,
       "Orçamento",

@@ -9,9 +9,12 @@ import {
   COLUNA_ID,
   MARCA_GRUPO,
   MARCA_ITEM,
+  MARCA_MES,
   MARCA_ORCAMENTO,
+  MARCA_RESUMO,
   MARCA_VERSAO,
 } from "@/lib/exportacao/planilha-orcamento";
+import { isoDoMes, mesDoRotulo } from "@/lib/calculos/meses-trimestre";
 
 /**
  * Parser da planilha que o próprio ERP exportou — a do projeto
@@ -43,6 +46,12 @@ import {
  * os mesmos ids na H. Sem coluna de tipo: a linha sai com `tipo_custo`
  * `null`, e o diff mantém o tipo da linha casada ou usa B na nova. O
  * fechamento tem o rótulo na C, com A e B vazias.
+ *
+ * **Exportação mensal** (decisão 078, 15/09/2026): o layout do nacional,
+ * com um bloco por mês. O título do mês carrega `mes:2026-10-01` na H e
+ * abre o mês dos grupos seguintes; cada mês tem o seu fechamento, que aqui
+ * é pulado até o título do próximo mês (ou da próxima seção). O título do
+ * resumo, com `resumo:` na H, encerra a leitura.
  */
 
 const KEYWORDS_RESUMO = [
@@ -73,7 +82,17 @@ export interface ItemLido {
 export interface GrupoLido {
   grupoId: string | null;
   nome: string;
+  /** Mês do bloco (`YYYY-MM-01`) na planilha mensal; `null` nos outros. */
+  mes: string | null;
   itens: ItemLido[];
+  linha_xlsx: number;
+}
+
+export interface MesLido {
+  /** `YYYY-MM-01`, da marca `mes:` ou do título com ano; `null` quando o
+   *  título não dá para ler — a análise recusa o orçamento. */
+  mes: string | null;
+  rotulo: string;
   linha_xlsx: number;
 }
 
@@ -82,13 +101,15 @@ export interface SecaoLida {
   versaoId: string | null;
   titulo: string;
   grupos: GrupoLido[];
+  /** Os blocos de mês da seção, em ordem. Vazio fora do modelo mensal. */
+  meses: MesLido[];
   linha_xlsx: number;
 }
 
 export interface LeituraProjeto {
   aba: string;
-  /** Modelo da planilha, pelo cabeçalho — conferido contra o de cada
-   *  orçamento na análise (decisão 072). */
+  /** Modelo da planilha, pelo cabeçalho (ou pelos blocos de mês, no
+   *  mensal) — conferido contra o de cada orçamento na análise. */
   modelo: CategoriaModeloPlanilha;
   secoes: SecaoLida[];
   warnings: ImportacaoWarning[];
@@ -174,12 +195,16 @@ function marcas(h: string): {
   versaoId: string | null;
   grupoId: string | null;
   itemId: string | null;
+  mes: string | null;
+  resumo: boolean;
 } {
   const out = {
     orcamentoId: null as string | null,
     versaoId: null as string | null,
     grupoId: null as string | null,
     itemId: null as string | null,
+    mes: null as string | null,
+    resumo: false,
   };
   for (const parte of h.split("|")) {
     const p = parte.trim();
@@ -187,6 +212,10 @@ function marcas(h: string): {
     else if (p.startsWith(MARCA_VERSAO)) out.versaoId = p.slice(MARCA_VERSAO.length) || null;
     else if (p.startsWith(MARCA_GRUPO)) out.grupoId = p.slice(MARCA_GRUPO.length) || null;
     else if (p.startsWith(MARCA_ITEM)) out.itemId = p.slice(MARCA_ITEM.length) || null;
+    else if (p.startsWith(MARCA_MES)) {
+      const iso = p.slice(MARCA_MES.length);
+      out.mes = /^\d{4}-\d{2}-01$/.test(iso) ? iso : null;
+    } else if (p.startsWith(MARCA_RESUMO)) out.resumo = true;
   }
   return out;
 }
@@ -230,6 +259,11 @@ export async function parsePlanilhaProjeto(
 
   let headerEncontrado = false;
   let layoutInternacional = false;
+  /** Algum bloco de mês apareceu: o fechamento deixa de encerrar a leitura. */
+  let layoutMensal = false;
+  /** Entre o fechamento de um mês e o título do próximo. */
+  let emFechamento = false;
+  let mesAtual: string | null = null;
   let secaoAtual: SecaoLida | null = null;
   let grupoAtual: GrupoLido | null = null;
   let terminou = false;
@@ -240,6 +274,7 @@ export async function parsePlanilhaProjeto(
       versaoId: marcaCabecalho.versaoId,
       titulo: normalizar(ws.getCell(1, 1).value),
       grupos: [],
+      meses: [],
       linha_xlsx: linha,
     };
     secoes.push(secaoAtual);
@@ -264,13 +299,50 @@ export async function parsePlanilhaProjeto(
       return;
     }
 
+    const marcaDaLinha = marcas(h);
+
+    // Resumo da planilha mensal: o que vem embaixo não é conteúdo.
+    if (marcaDaLinha.resumo) {
+      terminou = true;
+      linhasIgnoradas++;
+      return;
+    }
+
+    // MÊS (decisão 078): a marca `mes:` abre o bloco. Sem a marca (coluna
+    // oculta apagada), vale o título com ano — mas só depois de um bloco
+    // marcado, para um grupo chamado "Julho de 2026" num nacional
+    // continuar sendo grupo.
+    const rotuloDoMes =
+      !marcaDaLinha.mes && layoutMensal && cells[1] === "" && !marcaDaLinha.orcamentoId
+        ? mesDoRotulo(cells[0])
+        : null;
+    if (marcaDaLinha.mes || rotuloDoMes?.ano) {
+      layoutMensal = true;
+      emFechamento = false;
+      if (!secaoAtual) abrirSecaoImplicita(rowNumber);
+      mesAtual =
+        marcaDaLinha.mes ??
+        (rotuloDoMes?.ano ? isoDoMes(rotuloDoMes.ano, rotuloDoMes.numero) : null);
+      secaoAtual!.meses.push({ mes: mesAtual, rotulo: cells[0], linha_xlsx: rowNumber });
+      grupoAtual = null;
+      return;
+    }
+
+    // Entre o fechamento de um mês e o título do próximo só há fechamento.
+    if (emFechamento && !marcaDaLinha.orcamentoId) {
+      linhasIgnoradas++;
+      return;
+    }
+
     if (
       layoutInternacional
         ? ehFechamentoInternacional(cells, row.getCell(3).value)
         : ehLinhaResumo(cells)
     ) {
-      terminou = true;
       linhasIgnoradas++;
+      // No mensal o fechamento é do mês, e o próximo bloco continua.
+      if (layoutMensal) emFechamento = true;
+      else terminou = true;
       return;
     }
 
@@ -295,10 +367,13 @@ export async function parsePlanilhaProjeto(
         versaoId: m.versaoId,
         titulo: colA,
         grupos: [],
+        meses: [],
         linha_xlsx: rowNumber,
       };
       secoes.push(secaoAtual);
       grupoAtual = null;
+      mesAtual = null;
+      emFechamento = false;
       return;
     }
 
@@ -308,6 +383,7 @@ export async function parsePlanilhaProjeto(
       grupoAtual = {
         grupoId: m.grupoId,
         nome: colA !== "" ? colA : "Sem nome",
+        mes: mesAtual,
         itens: [],
         linha_xlsx: rowNumber,
       };
@@ -322,6 +398,7 @@ export async function parsePlanilhaProjeto(
         grupoAtual = {
           grupoId: null,
           nome: "Sem grupo",
+          mes: mesAtual,
           itens: [],
           linha_xlsx: rowNumber,
         };
@@ -422,7 +499,7 @@ export async function parsePlanilhaProjeto(
 
   return {
     aba: ws.name,
-    modelo: layoutInternacional ? "internacional" : "nacional",
+    modelo: layoutInternacional ? "internacional" : layoutMensal ? "mensal" : "nacional",
     secoes,
     warnings,
     linhas_lidas: linhasLidas,

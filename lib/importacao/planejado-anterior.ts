@@ -73,9 +73,11 @@ export function casarComAnterior(
       versaoId: null,
       titulo: "",
       linha_xlsx: 0,
+      meses: [],
       grupos: grupos.map((g) => ({
         grupoId: g.grupo_id,
         nome: g.nome,
+        mes: g.mes,
         linha_xlsx: 0,
         itens: g.itens.map((it) => ({
           itemId: it.item_id,
