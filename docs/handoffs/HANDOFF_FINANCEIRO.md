@@ -5265,5 +5265,6 @@ prestação). Dela continua valendo só a pendência do encerramento.
   dossiê dizem "Sem gasto", e o estorno aprovado é a verba inteira.
   `enviar_prestacao_verba` ganhou `p_sem_gasto`; a assinatura de dois
   argumentos saiu.
-- **Pendência:** a trava da verba no encerramento do job vai com a revisão do
-  encerramento e do faturamento.
+- **Encerramento do job:** a verba paga que não está "Concluída" trava o
+  encerramento (081 §7). O estorno pendente conta: o job só fecha depois da
+  baixa do estorno aqui em Títulos a Pagar.

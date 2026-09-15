@@ -9,8 +9,13 @@ import { saldoAFaturarDoJob } from "@/lib/data/saldo-a-faturar";
 import {
   PP_STATUS_EM_ABERTO,
   BV_SITUACAO_EM_ABERTO,
+  situacaoDaVerba,
+  situacaoVerbaLabel,
+  verbaPendenteNoEncerramento,
   type JobStatus,
+  type SituacaoVerba,
 } from "@/lib/types";
+import { devolucaoDaVerba, prestacaoDaVerba } from "@/lib/data/prestacao-da-verba";
 import { itensSemConclusaoDoJob } from "./realizado/conclusao-item";
 import { mesesDaVersaoQuery } from "@/lib/data/meses-versao";
 import { nomeDoMes } from "@/lib/calculos/meses-trimestre";
@@ -27,6 +32,8 @@ function formatarBRL(n: number): string {
 /** O que impede o encerramento agora. Vazio = pode encerrar. */
 export interface ImpedimentosEncerramento {
   ppsEmAberto: { codigo: string; status: string }[];
+  /** Verbas pagas que ainda não fecharam (decisão 081, pergunta 10a). */
+  verbasEmAberto: { codigo: string; situacao: Exclude<SituacaoVerba, "concluida"> }[];
   bvsEmAberto: { item: string; situacao: string }[];
   semEnvioFaturamento: boolean;
   /** Modelo mensal (decisão 078): os meses ainda sem envio para
@@ -80,6 +87,7 @@ async function levantarImpedimentos(
 
   const [
     ppsRes,
+    verbasRes,
     bvsRes,
     envioRes,
     saldoAFaturar,
@@ -93,6 +101,20 @@ async function levantarImpedimentos(
       .eq("job_id", jobId)
       .eq("tenant_id", tenantId)
       .in("status", PP_STATUS_EM_ABERTO),
+    // Verba paga que não fechou (decisão 081, pergunta 10a): sem prestação
+    // aprovada, ou com o estorno do saldo ainda por baixar. As dicas de FK
+    // são as de `SELECT_PRESTACAO_DA_VERBA` — sem elas o embed é ambíguo.
+    supabase
+      .from("pedidos_compra")
+      .select(
+        "codigo, status, verba_producao, " +
+          "prestacao:pp_verba_prestacoes!pp_verba_prestacoes_pedido_compra_id_fkey(status, valor_devolvido), " +
+          "devolucao:pp_verba_devolucoes!pp_verba_devolucoes_pedido_compra_id_fkey(pago_em)",
+      )
+      .eq("job_id", jobId)
+      .eq("tenant_id", tenantId)
+      .eq("verba_producao", true)
+      .eq("status", "pago"),
     // BV pendura na CÓPIA do job desde 27/08/2026 — pelo caminho antigo
     // (versão aprovada) o BV de uma linha criada por errata ficaria de
     // fora, e o job encerraria com comissão em aberto. O `!inner` aqui é
@@ -158,6 +180,21 @@ async function levantarImpedimentos(
       codigo: p.codigo,
       status: p.status,
     })),
+    // Leitura que falhou trava a mais, nunca a menos: sem saber da verba,
+    // o job não encerra.
+    verbasEmAberto: verbasRes.error
+      ? [{ codigo: "Verbas de produção", situacao: "aguardando_prestacao" }]
+      : ((verbasRes.data ?? []) as any[]).flatMap((pp) => {
+          const situacao = situacaoDaVerba({
+            verba_producao: pp.verba_producao === true,
+            status: pp.status,
+            prestacao: prestacaoDaVerba(pp.prestacao),
+            devolucao: devolucaoDaVerba(pp.devolucao),
+          });
+          return verbaPendenteNoEncerramento(situacao)
+            ? [{ codigo: pp.codigo as string, situacao }]
+            : [];
+        }),
     bvsEmAberto: ((bvsRes.data ?? []) as any[]).map((b) => ({
       item: b.copia?.item ?? "Item",
       situacao: b.situacao,
@@ -257,6 +294,7 @@ export async function encerrarJob(jobId: string): Promise<ActionResult> {
 
   if (
     imp.ppsEmAberto.length > 0 ||
+    imp.verbasEmAberto.length > 0 ||
     imp.bvsEmAberto.length > 0 ||
     imp.saldoAFaturar > 0 ||
     imp.itensSemMarcacao.length > 0 ||
@@ -279,6 +317,13 @@ export async function encerrarJob(jobId: string): Promise<ActionResult> {
       partes.push(
         `${imp.ppsEmAberto.length} ${imp.ppsEmAberto.length === 1 ? "PP sem baixa" : "PPs sem baixa"} (${imp.ppsEmAberto
           .map((p) => p.codigo)
+          .join(", ")})`,
+      );
+    }
+    if (imp.verbasEmAberto.length > 0) {
+      partes.push(
+        `${imp.verbasEmAberto.length} ${imp.verbasEmAberto.length === 1 ? "verba de produção não concluída" : "verbas de produção não concluídas"} (${imp.verbasEmAberto
+          .map((v) => `${v.codigo}: ${situacaoVerbaLabel(v.situacao).toLowerCase()}`)
           .join(", ")})`,
       );
     }
@@ -310,12 +355,17 @@ export async function encerrarJob(jobId: string): Promise<ActionResult> {
       metadata: {
         acao_tentada: "job.encerrado",
         pps_em_aberto: imp.ppsEmAberto.length,
+        verbas_em_aberto: imp.verbasEmAberto.map((v) => v.codigo),
         bvs_em_aberto: imp.bvsEmAberto.length,
         saldo_a_faturar: imp.saldoAFaturar,
         itens_sem_marcacao: imp.itensSemMarcacao.length,
         meses_sem_envio: imp.mesesSemEnvio,
       },
     });
+    const verbaPendente =
+      imp.verbasEmAberto.length > 0
+        ? " A produção presta contas da verba na aba de PPs; o financeiro aprova e dá baixa no estorno do que não foi gasto."
+        : "";
     const marcacaoPendente =
       imp.itensSemMarcacao.length > 0
         ? " Marque nos itens que faltam, pelo painel do item na Planilha Interna, que todas as PPs deles já foram geradas."
@@ -327,10 +377,12 @@ export async function encerrarJob(jobId: string): Promise<ActionResult> {
         ? imp.ppsEmAberto.length > 0 || imp.bvsEmAberto.length > 0
           ? " Dê baixa nos documentos e peça ao financeiro a nota do saldo."
           : " O financeiro precisa emitir a nota do saldo antes do encerramento."
-        : " Dê baixa antes.";
+        : imp.ppsEmAberto.length > 0 || imp.bvsEmAberto.length > 0
+        ? " Dê baixa antes."
+        : "";
     return {
       ok: false,
-      message: `Não é possível encerrar: ${partes.join(" e ")}.${comoResolver}${marcacaoPendente}`,
+      message: `Não é possível encerrar: ${partes.join(" e ")}.${comoResolver}${verbaPendente}${marcacaoPendente}`,
     };
   }
 

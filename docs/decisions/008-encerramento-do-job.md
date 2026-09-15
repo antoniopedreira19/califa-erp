@@ -77,6 +77,10 @@ As três travas foram exercitadas contra um job já encerrado, chamando as
 actions direto — não só conferindo que a interface esconde o botão. Ver
 `HANDOFF_FINANCEIRO.md`, seção 31.
 
+⚠️ **15/09/2026 — verba de produção.** A verba paga também trava enquanto
+não estiver concluída (prestação aprovada e estorno baixado). Ver decisão
+[081](081-a-producao-presta-contas-da-verba-e-o-financeiro-aprova.md) §7.
+
 ## Consequências
 
 - A ordem do fluxo passa a ser rígida: abrir → produzir → enviar para

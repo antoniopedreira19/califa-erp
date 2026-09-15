@@ -1955,6 +1955,14 @@ export function verbaAguardaProducao(s: SituacaoVerba | null): boolean {
   return s === "aguardando_prestacao" || s === "prestacao_reprovada";
 }
 
+/** Verba paga que ainda não fechou — prestação por enviar, em avaliação ou
+ *  reprovada, ou estorno do saldo por baixar. Trava o encerramento do job
+ *  (decisão 081, pergunta 10a). A verba ainda sem baixa não passa por aqui:
+ *  ela já trava como PP em aberto. */
+export function verbaPendenteNoEncerramento(s: SituacaoVerba | null): s is Exclude<SituacaoVerba, "concluida"> {
+  return s !== null && s !== "concluida";
+}
+
 export interface PedidoCompraAnexo {
   id: string;
   tenant_id: string;

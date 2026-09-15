@@ -3674,6 +3674,11 @@ Lançar, editar e negociar o BV não mudou: segue em `podeAcoesPlanilha`.
   "Preste contas na aba de PPs".
 - **Chat de PPs** (`lib/data/job-chat-pps.ts`): cartões de prestação enviada,
   reprovada e aprovada, também no chat do financeiro.
+- **Encerramento** (`actions-encerramento.ts`, `encerrar-dialog.tsx`): verba
+  paga que não está "Concluída" trava, listada com a situação (081 §7). A
+  tela usa `verbasEmAberto` do resumo, montado de `ppsDoJob` com
+  `verbaPendenteNoEncerramento`; o servidor lê de novo, com as mesmas dicas
+  de FK, e trava se a leitura falhar.
 - **Dados** (`carregar-detalhe.ts`): a PP traz `prestacao` e `devolucao` pelo
   trecho único `SELECT_PRESTACAO_DA_VERBA` (`lib/data/prestacao-da-verba.ts`), e
   a página recebe `ppsQuePossoPrestarContas`.
