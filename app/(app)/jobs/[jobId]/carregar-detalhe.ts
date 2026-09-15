@@ -5,6 +5,11 @@ import { listActiveMembers } from "@/lib/data/members";
 import { contatosDeCobrancaDoJob } from "@/lib/data/contatos-cobranca";
 import { montarThreadChat } from "@/lib/data/job-chat";
 import { montarThreadChatPPs } from "@/lib/data/job-chat-pps";
+import {
+  SELECT_PRESTACAO_DA_VERBA,
+  devolucaoDaVerba,
+  prestacaoDaVerba,
+} from "@/lib/data/prestacao-da-verba";
 import { configDaPlanilha } from "@/app/(app)/_planilha/modelo-planilha";
 import {
   calcularTotaisVersao,
@@ -169,7 +174,9 @@ export async function carregarDetalheDoJob(
     supabase
       .from("pedidos_compra")
       .select(
-        "*, emitido:profiles!emitida_por(nome), enviado:profiles!enviada_financeiro_por(nome), responsavel:profiles!responsavel_verba_id(nome), anexos:pedidos_compra_anexos(id, arquivo_nome_original, arquivo_tamanho_bytes), parcelas:pedidos_compra_parcelas(id, tenant_id, pedido_compra_id, numero, data_vencimento, data_pagamento, valor, pdf_path, pago_em, pago_por, created_at, updated_at, created_by)",
+        "*, emitido:profiles!emitida_por(nome), enviado:profiles!enviada_financeiro_por(nome), responsavel:profiles!responsavel_verba_id(nome), anexos:pedidos_compra_anexos(id, arquivo_nome_original, arquivo_tamanho_bytes), parcelas:pedidos_compra_parcelas(id, tenant_id, pedido_compra_id, numero, data_vencimento, data_pagamento, valor, pdf_path, pago_em, pago_por, created_at, updated_at, created_by), " +
+          // Prestação de contas da verba e estorno do saldo (decisão 081).
+          SELECT_PRESTACAO_DA_VERBA,
       )
       .eq("job_id", raw.id)
       .eq("tenant_id", session.activeTenant.id)
@@ -453,6 +460,8 @@ export async function carregarDetalheDoJob(
       arquivo_nome_original: a.arquivo_nome_original,
       arquivo_tamanho_bytes: Number(a.arquivo_tamanho_bytes ?? 0),
     })),
+    prestacao: prestacaoDaVerba(pp.prestacao),
+    devolucao: devolucaoDaVerba(pp.devolucao),
     cadastro_do_fornecedor_mudou: cadastroMudouDepoisDaFoto(
       pp,
       pp.fornecedor_id
@@ -914,6 +923,18 @@ export async function carregarDetalheDoJob(
   // a marca `abertura_em_revisao` fecha o envio sem mexer no status
   // (decisão 040). Errata e BV seguem em `podeAcoesPlanilha`.
   const podeGerarPP = quemPodeMexer && jobAceitaGerarPP(job.status);
+  // Quem presta contas de cada verba (decisão 081, pergunta 6a): o
+  // responsável por ela, o responsável do job ou um administrador. A função
+  // do banco checa de novo; aqui é só para mostrar o botão a quem pode.
+  const ppsQuePossoPrestarContas = ppsDoJob
+    .filter(
+      (pp) =>
+        pp.verba_producao &&
+        (session.activeRole === "administrador" ||
+          pp.responsavel_verba_id === session.profile.id ||
+          job.responsavel_id === session.profile.id),
+    )
+    .map((pp) => pp.id);
   // Confirmar o BV é do GP e do administrador (decisão 080). Lançar e
   // negociar seguem em `podeAcoesPlanilha`, para quem pode mexer no job.
   const podeConfirmarBv =
@@ -991,5 +1012,6 @@ export async function carregarDetalheDoJob(
     podeGerarPP,
     podeEnviarPP,
     podeConfirmarBv,
+    ppsQuePossoPrestarContas,
   };
 }

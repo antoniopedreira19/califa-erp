@@ -1,4 +1,9 @@
-import type { ItemChat, JobMensagem, PedidoCompra } from "@/lib/types";
+import type {
+  ItemChat,
+  JobMensagem,
+  PedidoCompra,
+  PrestacaoDaVerba,
+} from "@/lib/types";
 import { nomeContraparteBRPP } from "@/lib/types";
 
 /**
@@ -26,6 +31,9 @@ export type PPParaThreadChat = Pick<
   emitida_por_nome: string | null;
   enviada_financeiro_por_nome: string | null;
   responsavel?: { nome: string | null } | null;
+  /** Prestação de contas da verba (decisão 081). Obrigatório: os dois
+   *  chamadores precisam trazê-la, senão os cartões somem em silêncio. */
+  prestacao: PrestacaoDaVerba | null;
 };
 
 /**
@@ -184,6 +192,88 @@ export function montarThreadChatPPs(
         valorTom: "neutro",
         linhas: [],
         em: pp.updated_at,
+      });
+    }
+  }
+
+  // ---- Prestação de contas da verba (decisão 081). Como os cartões de
+  // cima, um só, do estado ATUAL — sem histórico de transições: a
+  // prestação reprovada e reenviada volta a mostrar "enviada".
+  for (const pp of pps) {
+    const pr = pp.prestacao;
+    if (!pp.verba_producao || !pr) continue;
+    const contraparte =
+      nomeContraparteBRPP({
+        verba_producao: pp.verba_producao,
+        fornecedor: null,
+        responsavel: pp.responsavel,
+      }) || "Verba de produção";
+    const gastoFmt = moeda(pr.valor_gasto, moedaCode);
+    const saldoFmt = moeda(pr.valor_devolvido, moedaCode);
+    if (pr.status === "em_avaliacao") {
+      itens.push({
+        tipo: "sistema",
+        id: `pp-prestacao-enviada-${pp.id}`,
+        icone: "file-text",
+        cor: "azul",
+        titulo: "Prestação de contas enviada",
+        quando: dataHora(pr.enviada_em),
+        codigo: pp.codigo,
+        resumo: contraparte,
+        valor: gastoFmt,
+        valorTom: "neutro",
+        linhas: [
+          {
+            texto: "Documentos",
+            valor: String(pr.documentos.length),
+            tom: "texto",
+          },
+          { texto: "Saldo a devolver", valor: saldoFmt, tom: "texto" },
+          ...(pr.enviada_por_nome
+            ? ([{ texto: "Enviada por", valor: pr.enviada_por_nome, tom: "texto" }] as const)
+            : []),
+        ],
+        em: pr.enviada_em,
+      });
+    } else if (pr.status === "reprovada" && pr.reprovada_em) {
+      itens.push({
+        tipo: "sistema",
+        id: `pp-prestacao-reprovada-${pp.id}`,
+        icone: "x-circle",
+        cor: "vermelho",
+        titulo: "Prestação de contas reprovada",
+        quando: dataHora(pr.reprovada_em),
+        codigo: pp.codigo,
+        resumo: contraparte,
+        detalhe: pr.motivo_reprovacao,
+        valor: gastoFmt,
+        valorTom: "negativo",
+        linhas: pr.reprovada_por_nome
+          ? [{ texto: "Reprovada por", valor: pr.reprovada_por_nome, tom: "texto" }]
+          : [],
+        em: pr.reprovada_em,
+      });
+    } else if (pr.status === "aprovada" && pr.aprovada_em) {
+      itens.push({
+        tipo: "sistema",
+        id: `pp-prestacao-aprovada-${pp.id}`,
+        icone: "check-circle",
+        cor: "verde",
+        titulo: "Prestação de contas aprovada",
+        quando: dataHora(pr.aprovada_em),
+        codigo: pp.codigo,
+        resumo: contraparte,
+        valor: gastoFmt,
+        valorTom: "positivo",
+        linhas: [
+          ...(pr.valor_devolvido > 0
+            ? ([{ texto: "Estorno de verba", valor: saldoFmt, tom: "texto" }] as const)
+            : []),
+          ...(pr.aprovada_por_nome
+            ? ([{ texto: "Aprovada por", valor: pr.aprovada_por_nome, tom: "texto" }] as const)
+            : []),
+        ],
+        em: pr.aprovada_em,
       });
     }
   }

@@ -43,7 +43,7 @@ import {
 } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { cn, formatCurrency } from "@/lib/utils";
-import { podeCancelarPP, type PedidoCompraNaLista } from "@/lib/types";
+import { podeCancelarPP, type PedidoCompraNaLista, situacaoDaVerba, situacaoVerbaLabel } from "@/lib/types";
 import { PPStatusChip } from "./pp-status-chip";
 import {
   signedUrlPdf,
@@ -184,12 +184,14 @@ function passosDaPP(pp: PedidoCompraNaLista): Passo[] {
     });
   }
 
+  const situacaoVerba = situacaoDaVerba(pp);
+
   if (pp.pago_em) {
     passos.push({
       chave: "pago",
       titulo: "Paga",
       quando: formatData(pp.pago_em),
-      estado: "agora",
+      estado: situacaoVerba ? "feito" : "agora",
     });
   } else if (pp.status === "em_avaliacao" || pp.status === "aprovada") {
     passos.push({
@@ -197,6 +199,38 @@ function passosDaPP(pp: PedidoCompraNaLista): Passo[] {
       titulo: "Pagamento",
       quando: null,
       estado: "futuro",
+    });
+  }
+
+  // Verba paga: a prestação de contas é o passo seguinte (decisão 081). Só
+  // leitura aqui — ela se faz na aba de PPs (pergunta 5a).
+  if (situacaoVerba) {
+    const pr = pp.prestacao;
+    passos.push({
+      chave: "prestacao",
+      titulo:
+        situacaoVerba === "aguardando_prestacao"
+          ? "Prestação de contas"
+          : situacaoVerbaLabel(situacaoVerba),
+      detalhe:
+        situacaoVerba === "aguardando_prestacao"
+          ? "preste contas na aba de PPs"
+          : situacaoVerba === "prestacao_reprovada"
+            ? `${pr?.motivo_reprovacao ?? "reprovada pelo financeiro"} — corrija na aba de PPs`
+            : situacaoVerba === "prestacao_em_avaliacao"
+              ? "com o financeiro"
+              : situacaoVerba === "devolucao_pendente"
+                ? `estorno de verba de ${formatCurrency(pr?.valor_devolvido ?? 0, "BRL")} aguardando a devolução`
+                : "prestação aprovada",
+      quando:
+        situacaoVerba === "aguardando_prestacao" || !pr
+          ? null
+          : situacaoVerba === "prestacao_reprovada"
+            ? formatDataHora(pr.reprovada_em ?? pr.enviada_em)
+            : situacaoVerba === "prestacao_em_avaliacao"
+              ? formatDataHora(pr.enviada_em)
+              : formatDataHora(pr.aprovada_em ?? pr.enviada_em),
+      estado: situacaoVerba === "concluida" ? "feito" : "agora",
     });
   }
 

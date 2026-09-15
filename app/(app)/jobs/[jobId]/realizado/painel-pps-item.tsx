@@ -46,7 +46,14 @@ import {
 import { Dialog, DrawerContent } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { cn, formatCurrency } from "@/lib/utils";
-import { podeCancelarPP, ppStatusLabel, type PPStatus } from "@/lib/types";
+import {
+  podeCancelarPP,
+  ppStatusLabel,
+  situacaoVerbaLabel,
+  verbaAguardaProducao,
+  type PPStatus,
+  type SituacaoVerba,
+} from "@/lib/types";
 import { passaDoPlanejado } from "@/lib/calculos/pps-item";
 import {
   signedUrlPdf,
@@ -68,6 +75,9 @@ export interface PPDoItem {
   verbaProducao: boolean;
   /** Tem pelo menos um anexo. Fora da verba, é o que libera o envio. */
   temAnexo: boolean;
+  /** Onde a verba está depois de paga (decisão 081). Só leitura aqui: a
+   *  prestação de contas é feita na aba de PPs (pergunta 5a). */
+  situacaoVerba: SituacaoVerba | null;
 }
 
 interface Props {
@@ -465,7 +475,14 @@ export function PainelPPsItem({
 
                     <div className="flex items-center gap-1.5">
                       <span className="text-[11.5px] text-muted-foreground">
-                        {ppStatusLabel(pp.status)}
+                        {pp.situacaoVerba
+                          ? situacaoVerbaLabel(pp.situacaoVerba)
+                          : ppStatusLabel(pp.status)}
+                        {verbaAguardaProducao(pp.situacaoVerba) && (
+                          <span className="block text-[10.5px] font-semibold text-amber-800">
+                            Preste contas na aba de PPs
+                          </span>
+                        )}
                       </span>
                       <span className="ml-auto inline-flex items-center gap-1.5">
                         <BotaoIcone

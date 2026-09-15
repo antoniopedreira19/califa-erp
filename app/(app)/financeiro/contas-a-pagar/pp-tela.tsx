@@ -50,14 +50,19 @@ import {
 } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
-import { ppStatusLabel, type PPStatus } from "@/lib/types";
+import { cn, formatCurrency } from "@/lib/utils";
+import { ppStatusLabel, situacaoDaVerba, type PPStatus } from "@/lib/types";
 import type { CartaoOption } from "@/components/financeiro/forma-pagamento-field";
 import type { PlanoContaTipo, PlanoContaSubtipo } from "@/lib/types";
 import type { PPRow } from "./pedidos-compra-list";
 import { PPDossie, type AbaDossie } from "./pp-dossie";
 import { AprovarPPDialog } from "./aprovar-pp-dialog";
-import { PrestarContasDialog } from "./prestar-contas-dialog";
+import { AprovarPrestacaoDialog } from "./aprovar-prestacao-dialog";
+import {
+  reprovarPrestacaoVerba,
+  signedUrlAnexoPrestacao,
+} from "./prestacao-verba-actions";
+import { SituacaoVerbaChip } from "@/components/financeiro/situacao-verba-chip";
 import { rejeitarPedidoCompraFinanceiro } from "./actions";
 import {
   signedUrlPdf,
@@ -102,7 +107,6 @@ export function PPTela({
   pp,
   open,
   onOpenChange,
-  tenantId,
   cartoes,
   tipos,
   subtipos,
@@ -129,11 +133,18 @@ export function PPTela({
   const [aprovarAberto, setAprovarAberto] = React.useState(false);
   const [askRejeitar, setAskRejeitar] = React.useState(false);
   const [motivo, setMotivo] = React.useState("");
-  const [prestarOpen, setPrestarOpen] = React.useState(false);
+  const [aprovarPrestacaoAberto, setAprovarPrestacaoAberto] = React.useState(false);
+  const [askReprovar, setAskReprovar] = React.useState(false);
   const [pending, startTransition] = React.useTransition();
 
   const ppId = pp?.id ?? null;
-  const anexo = pp?.anexos[anexoAtivo] ?? null;
+  // Na verba com prestação, o painel do meio mostra os documentos da
+  // prestação: a PP de verba não tem anexo próprio (decisão 081).
+  const documentosDaPrestacao =
+    pp?.verba_producao && pp.prestacao ? pp.prestacao.documentos : null;
+  const ehPrestacao = documentosDaPrestacao != null;
+  const listaDocumentos = documentosDaPrestacao ?? pp?.anexos ?? [];
+  const anexo = listaDocumentos[anexoAtivo] ?? null;
   const anexoId = anexo?.id ?? null;
 
   React.useEffect(() => {
@@ -182,7 +193,9 @@ export function PPTela({
     setCarregandoAnexo(true);
     setUrlAnexo(null);
     (async () => {
-      const res = await signedUrlAnexo(anexoId);
+      const res = ehPrestacao
+        ? await signedUrlAnexoPrestacao(anexoId)
+        : await signedUrlAnexo(anexoId);
       if (cancelado) return;
       if (res.ok) setUrlAnexo(res.url);
       else setErro(res.message);
@@ -191,11 +204,14 @@ export function PPTela({
     return () => {
       cancelado = true;
     };
-  }, [open, anexoId]);
+  }, [open, anexoId, ehPrestacao]);
 
   if (!pp) return null;
 
   const emAvaliacao = pp.status === "em_avaliacao";
+  const situacao = situacaoDaVerba(pp);
+  const prestacaoEmAvaliacao =
+    pp.verba_producao && pp.prestacao?.status === "em_avaliacao";
   const anexoEhImagem =
     anexo != null && /\.(png|jpe?g|webp|gif)$/i.test(anexo.arquivo_nome_original);
 
@@ -204,6 +220,23 @@ export function PPTela({
     setToast(mensagem);
     router.refresh();
     setTimeout(() => onOpenChange(false), 1200);
+  }
+
+  function handleConfirmarReprovar() {
+    if (!pp) return;
+    startTransition(async () => {
+      const res = await reprovarPrestacaoVerba({ pp_id: pp.id, motivo });
+      if (!res.ok) {
+        setErro(res.message);
+        setAskReprovar(false);
+        return;
+      }
+      setAskReprovar(false);
+      setMotivo("");
+      setToast(`Prestação de ${res.codigo} reprovada — voltou para a produção corrigir.`);
+      router.refresh();
+      setTimeout(() => onOpenChange(false), 1200);
+    });
   }
 
   function handleConfirmarRejeitar() {
@@ -238,6 +271,7 @@ export function PPTela({
             <Badge className="border-white/25 bg-white/10 text-white">
               {ppStatusLabel(pp.status as PPStatus)}
             </Badge>
+            {situacao && <SituacaoVerbaChip situacao={situacao} />}
             {pp.urgente && (
               <Badge
                 title={pp.urgente_justificativa ?? undefined}
@@ -310,8 +344,11 @@ export function PPTela({
 
             <PainelDocumento
               icone={<Paperclip className="h-4 w-4 text-violet-700" />}
-              titulo="Documento anexo"
-              legenda={anexo?.arquivo_nome_original ?? "Nenhum anexo enviado"}
+              titulo={ehPrestacao ? "Documentos da prestação" : "Documento anexo"}
+              legenda={
+                anexo?.arquivo_nome_original ??
+                (ehPrestacao ? "Nenhum documento" : "Nenhum anexo enviado")
+              }
               oculto={expandido === "pp"}
               url={urlAnexo}
               nomeArquivo={anexo?.arquivo_nome_original ?? ""}
@@ -324,9 +361,9 @@ export function PPTela({
                 /* Numerados na ordem em que a produção anexou. Só aparecem
                    quando há o que escolher: com um anexo só, o nome dele na
                    legenda já diz tudo (Tiago, 10/09/2026). */
-                pp.anexos.length > 1 ? (
+                listaDocumentos.length > 1 ? (
                   <div className="flex items-center gap-1">
-                    {pp.anexos.map((a, i) => (
+                    {listaDocumentos.map((a, i) => (
                       <button
                         key={a.id}
                         type="button"
@@ -347,7 +384,13 @@ export function PPTela({
               }
             >
               {!anexo ? (
-                <Vazio texto="A produção não enviou documento nesta PP." />
+                <Vazio
+                  texto={
+                    ehPrestacao
+                      ? "A prestação não tem documento."
+                      : "A produção não enviou documento nesta PP."
+                  }
+                />
               ) : urlAnexo ? (
                 anexoEhImagem ? (
                   <div className="flex h-full w-full items-center justify-center overflow-auto bg-muted/40 p-3">
@@ -395,7 +438,6 @@ export function PPTela({
                     onAba={setAba}
                     anexoAtivo={anexoAtivo}
                     onAnexo={setAnexoAtivo}
-                    onPrestarContas={() => setPrestarOpen(true)}
                     onErro={setErro}
                   />
                 </div>
@@ -428,6 +470,38 @@ export function PPTela({
               <button
                 type="button"
                 onClick={() => setAprovarAberto(true)}
+                disabled={pending}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
+              >
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                Seguir para a aprovação
+              </button>
+            </div>
+          )}
+
+          {prestacaoEmAvaliacao && pp.prestacao && (
+            <div className="flex flex-none flex-wrap items-center gap-2.5 pt-3">
+              <span className="mr-auto text-xs text-white/70">
+                Prestação enviada
+                {pp.prestacao.enviada_por_nome ? ` por ${pp.prestacao.enviada_por_nome}` : ""} ·
+                gasto{" "}
+                <strong className="font-semibold text-white">
+                  {formatCurrency(pp.prestacao.valor_gasto, "BRL")}
+                </strong>{" "}
+                de {formatCurrency(pp.valor, "BRL")}
+              </span>
+              <button
+                type="button"
+                onClick={() => setAskReprovar(true)}
+                disabled={pending}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-california-red/40 bg-white px-3.5 py-2 text-sm font-semibold text-california-red transition-colors hover:bg-california-red/5 disabled:opacity-50"
+              >
+                <Ban className="h-3.5 w-3.5" />
+                Reprovar prestação
+              </button>
+              <button
+                type="button"
+                onClick={() => setAprovarPrestacaoAberto(true)}
                 disabled={pending}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
               >
@@ -506,18 +580,73 @@ export function PPTela({
         onConfirm={handleConfirmarRejeitar}
       />
 
-      {pp.verba_producao && (
-        <PrestarContasDialog
-          open={prestarOpen}
-          onOpenChange={setPrestarOpen}
-          pp={{ id: pp.id, codigo: pp.codigo, valor: pp.valor, servico: pp.servico }}
-          tenantId={tenantId}
-          onSuccess={() => {
-            setPrestarOpen(false);
-            router.refresh();
-          }}
-        />
-      )}
+      <AprovarPrestacaoDialog
+        open={aprovarPrestacaoAberto}
+        onOpenChange={setAprovarPrestacaoAberto}
+        prestacao={
+          pp.prestacao
+            ? {
+                id: pp.id,
+                codigo: pp.codigo,
+                valor: pp.valor,
+                gasto: pp.prestacao.valor_gasto,
+                saldo: pp.prestacao.valor_devolvido,
+                documentos: pp.prestacao.documentos.length,
+                centroDeCusto:
+                  tipos.find((t) => t.id === pp.plano_conta_tipo_id)?.nome ??
+                  "Custo Operacional",
+              }
+            : null
+        }
+        onAprovada={(mensagem) => {
+          setAprovarPrestacaoAberto(false);
+          handleAprovada(mensagem);
+        }}
+      />
+
+      {/* `z-[60]`: aberto de dentro da tela cheia, que está em `z-[55]`. */}
+      <ConfirmDialog
+        contentClassName="z-[60]"
+        overlayClassName="z-[60]"
+        open={askReprovar}
+        onOpenChange={(o) => {
+          setAskReprovar(o);
+          if (!o) setMotivo("");
+        }}
+        title={`Reprovar a prestação de ${pp.codigo}?`}
+        description={
+          <div className="space-y-3">
+            <p>
+              A prestação volta para a produção, que vê o motivo, corrige os
+              documentos e reenvia. Nenhum estorno é criado.
+            </p>
+            <div>
+              <label htmlFor="pp-tela-motivo-prestacao" className="text-xs font-medium">
+                Motivo * (mín. 10 caracteres)
+              </label>
+              <textarea
+                id="pp-tela-motivo-prestacao"
+                value={motivo}
+                onChange={(e) => setMotivo(e.target.value)}
+                maxLength={500}
+                rows={3}
+                className="mt-1 w-full rounded border border-border p-2 text-sm"
+                placeholder="Ex: a NF 889 está ilegível e o recibo não tem data. Reenvie os dois."
+              />
+            </div>
+          </div>
+        }
+        confirmLabel="Reprovar prestação"
+        variant="destructive"
+        pending={pending}
+        confirmDisabled={motivo.trim().length < 10}
+        confirmDisabledReason={
+          motivo.trim().length < 10
+            ? "Escreva o motivo (mín. 10 caracteres) para liberar a reprovação."
+            : undefined
+        }
+        onConfirm={handleConfirmarReprovar}
+      />
     </>
   );
 }

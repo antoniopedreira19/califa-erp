@@ -214,7 +214,7 @@ export function BaixaTituloDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <CreditCard className="h-5 w-5 text-emerald-600" />
-            {alvo.isDevolucao ? "Baixar devolução" : "Dar baixa no pagamento"}
+            {alvo.isDevolucao ? "Baixar estorno de verba" : "Dar baixa no pagamento"}
           </DialogTitle>
         </DialogHeader>
 

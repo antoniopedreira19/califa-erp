@@ -11,6 +11,7 @@ import {
   Clock,
   Wallet,
   Layers,
+  Receipt,
 } from "lucide-react";
 import {
   DescritivoPopover,
@@ -24,6 +25,8 @@ import {
   type PedidoCompraNaLista,
   type PedidoCompraParcela,
   type PPStatus,
+  situacaoDaVerba,
+  verbaAguardaProducao,
 } from "@/lib/types";
 import {
   cancelarPedidoCompra,
@@ -31,6 +34,8 @@ import {
   signedUrlPdf,
 } from "../realizado/actions-pp";
 import { PPStatusChip } from "./pp-status-chip";
+import { PrestarContasDrawer } from "./prestar-contas-drawer";
+import { SituacaoVerbaChip } from "@/components/financeiro/situacao-verba-chip";
 import { EditarPPDrawer } from "./editar-pp-drawer";
 
 interface Props {
@@ -46,9 +51,14 @@ interface Props {
    *  segue `editable`: fica fechado na pré-abertura e enquanto a abertura
    *  está em revisão (decisões 056 e 040). */
   podeEnviar?: boolean;
+  /** PPs de verba em que quem está logado presta contas (decisão 081):
+   *  responsável pela verba, responsável do job ou administrador. */
+  podePrestarContas: string[];
 }
 
-type Filtro = "todas" | PPStatus;
+/** "aguardando_prestacao" junta verba sem prestação e prestação reprovada:
+ *  nos dois casos a próxima ação é da produção (decisão 081, 4a). */
+type Filtro = "todas" | PPStatus | "aguardando_prestacao";
 
 /** Uma linha da tabela = uma PARCELA de uma PP. `parcela: null` só
  *  acontece se o embed vier vazio — nenhuma PP fica sem parcela. */
@@ -64,12 +74,14 @@ const CHIPS: Array<{ key: Filtro; label: string }> = [
   { key: "gerada", label: "Gerada" },
   { key: "em_avaliacao", label: "Em avaliação" },
   { key: "pago", label: "Pago" },
+  { key: "aguardando_prestacao", label: "Aguardando prestação" },
   { key: "rejeitada", label: "Rejeitado" },
   { key: "cancelada", label: "Cancelada" },
 ];
 
 /** Largura reservada pra trilha de cancelar, fora do frame da tabela. */
-const LARGURA_TRILHA = 104;
+// 140 desde a decisão 081: "Corrigir prestação" é o botão mais largo da trilha.
+const LARGURA_TRILHA = 140;
 
 function formatarData(iso: string | null): string {
   if (!iso) return "—";
@@ -98,6 +110,7 @@ export function JobPPsSection({
   empresas,
   editable,
   podeEnviar = false,
+  podePrestarContas,
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
@@ -109,6 +122,8 @@ export function JobPPsSection({
     null,
   );
   const [ppCancelando, setPpCancelando] =
+    React.useState<PedidoCompraNaLista | null>(null);
+  const [ppPrestando, setPpPrestando] =
     React.useState<PedidoCompraNaLista | null>(null);
   /** Qual cartão de descrição está aberto — a chave é a LINHA (a parcela),
    *  não a PP: duas parcelas da mesma PP abririam dois cartões de uma vez.
@@ -135,10 +150,19 @@ export function JobPPsSection({
     return () => clearTimeout(t);
   }, [toast]);
 
+  const aguardandoPrestacao = React.useMemo(
+    () => pps.filter((pp) => verbaAguardaProducao(situacaoDaVerba(pp))).length,
+    [pps],
+  );
+
   const visiveis = React.useMemo(() => {
     const termo = busca.trim().toLowerCase();
     return pps.filter((pp) => {
-      if (filtro !== "todas" && pp.status !== filtro) return false;
+      if (filtro === "aguardando_prestacao") {
+        if (!verbaAguardaProducao(situacaoDaVerba(pp))) return false;
+      } else if (filtro !== "todas" && pp.status !== filtro) {
+        return false;
+      }
       if (!termo) return true;
       const fornecedor = (pp.fornecedor_id ? fornecedoresPorId[pp.fornecedor_id] : null) ?? "";
       // O item e o bloco entraram na busca em 09/09/2026, junto da coluna
@@ -307,6 +331,9 @@ export function JobPPsSection({
             )}
           >
             {c.label}
+            {c.key === "aguardando_prestacao" && aguardandoPrestacao > 0
+              ? ` · ${aguardandoPrestacao}`
+              : ""}
           </button>
         ))}
         <div className="relative ml-auto">
@@ -379,6 +406,7 @@ export function JobPPsSection({
                   const valorLinha = parcela
                     ? Number(parcela.valor)
                     : Number(pp.valor);
+                  const situacao = situacaoDaVerba(pp);
                   return (
                   <tr
                     key={parcela?.id ?? pp.id}
@@ -523,7 +551,12 @@ export function JobPPsSection({
                       {formatCurrency(valorLinha, "BRL")}
                     </td>
                     <td className="px-3.5 py-2.5 align-middle">
-                      <PPStatusChip status={pp.status} />
+                      {/* Verba paga: o chip diz onde a prestação está (081). */}
+                      {situacao ? (
+                        <SituacaoVerbaChip situacao={situacao} />
+                      ) : (
+                        <PPStatusChip status={pp.status} />
+                      )}
                     </td>
                     <td className="px-3.5 py-2.5 align-middle">
                       {/* Ver PDF é de CADA parcela (Tela 2.3): cada uma
@@ -568,35 +601,56 @@ export function JobPPsSection({
 
         {/* Cancelar mora fora do frame, igual "Ver PP" / "Gerar PP" da
             Planilha Interna. Só aparece pra PP que ainda dá pra cancelar. */}
-        {editable && (
+        {(editable || podePrestarContas.length > 0) && (
           <div
             className="absolute left-full ml-2.5"
             style={{ width: LARGURA_TRILHA, top: offsetThead }}
           >
             {linhasVisiveis.map(({ pp, parcela, indice }, i) => {
               const pos = linhas[i];
-              // Cancelar é da PP inteira: só na linha da 1ª parcela.
-              if (!pos || indice > 0 || !podeCancelarPP(pp.status)) return null;
+              // Cancelar e prestar contas são da PP inteira: só na linha da
+              // 1ª parcela. Verba paga nunca é cancelável, então os dois não
+              // disputam a mesma linha.
+              const situacaoDaLinha = situacaoDaVerba(pp);
+              const prestar =
+                indice === 0 &&
+                podePrestarContas.includes(pp.id) &&
+                verbaAguardaProducao(situacaoDaLinha);
+              const cancelar = editable && indice === 0 && podeCancelarPP(pp.status);
+              if (!pos || (!prestar && !cancelar)) return null;
               return (
                 <div
                   key={parcela?.id ?? pp.id}
                   className="absolute inset-x-0 flex items-center"
                   style={{ top: pos.top, height: pos.height }}
                 >
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        type="button"
-                        onClick={() => setPpCancelando(pp)}
-                        disabled={pending}
-                        className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-border bg-white px-2.5 py-1 text-[11px] font-semibold text-california-red transition-colors hover:border-california-red/30 hover:bg-california-red/[0.06] disabled:opacity-50"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                        Cancelar
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent>Cancelar {pp.codigo}</TooltipContent>
-                  </Tooltip>
+                  {prestar ? (
+                    <button
+                      type="button"
+                      onClick={() => setPpPrestando(pp)}
+                      className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg bg-california-red px-2.5 py-1 text-[11px] font-semibold text-white transition-colors hover:bg-california-red-hover"
+                    >
+                      <Receipt className="h-3.5 w-3.5" />
+                      {situacaoDaLinha === "prestacao_reprovada"
+                        ? "Corrigir prestação"
+                        : "Prestar contas"}
+                    </button>
+                  ) : (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          onClick={() => setPpCancelando(pp)}
+                          disabled={pending}
+                          className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-border bg-white px-2.5 py-1 text-[11px] font-semibold text-california-red transition-colors hover:border-california-red/30 hover:bg-california-red/[0.06] disabled:opacity-50"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          Cancelar
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent>Cancelar {pp.codigo}</TooltipContent>
+                    </Tooltip>
+                  )}
                 </div>
               );
             })}
@@ -620,6 +674,13 @@ export function JobPPsSection({
         variant="destructive"
         pending={pending}
         onConfirm={handleCancelarConfirm}
+      />
+
+      <PrestarContasDrawer
+        open={ppPrestando !== null}
+        onOpenChange={(o) => !o && setPpPrestando(null)}
+        pp={ppPrestando}
+        onSuccess={setToast}
       />
 
       <EditarPPDrawer

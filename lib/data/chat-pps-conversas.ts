@@ -1,6 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ChatArea, ItemChat, JobMensagem } from "@/lib/types";
 import {
+  SELECT_PRESTACAO_DA_VERBA,
+  prestacaoDaVerba,
+} from "@/lib/data/prestacao-da-verba";
+import {
   montarThreadChatPPs,
   type PPParaThreadChat,
 } from "@/lib/data/job-chat-pps";
@@ -159,7 +163,8 @@ export async function carregarThreadPPs(
           "fornecedor:fornecedores(id, nome, razao_social), " +
           "emitido:profiles!emitida_por(nome), " +
           "enviado:profiles!enviada_financeiro_por(nome), " +
-          "responsavel:profiles!responsavel_verba_id(nome)",
+          "responsavel:profiles!responsavel_verba_id(nome), " +
+          SELECT_PRESTACAO_DA_VERBA,
       )
       .eq("job_id", jobId)
       .eq("tenant_id", tenantId)
@@ -200,6 +205,7 @@ export async function carregarThreadPPs(
       emitida_por_nome: pp.emitido?.nome ?? null,
       enviada_financeiro_por_nome: pp.enviado?.nome ?? null,
       responsavel: pp.responsavel ?? null,
+      prestacao: prestacaoDaVerba(pp.prestacao),
     };
   });
 
