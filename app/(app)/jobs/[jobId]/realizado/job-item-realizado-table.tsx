@@ -152,6 +152,9 @@ interface Props {
    *  `podeAcoes`; o ENVIO ao financeiro é a outra metade, e ela aparece
    *  como `envioBloqueadoPor` no painel do item. */
   podeGerarPP?: boolean;
+  /** Confirmar o BV — `jobs.confirmar_bv`, administrador e GP (decisão
+   *  080). Só vale junto de `podeAcoes`; telas de leitura mandam `false`. */
+  podeConfirmarBv: boolean;
   /** Job ainda não aberto pelo financeiro (`aguardando_abertura` ou
    *  `rejeitado_financeiro`). Distingue-se do job ENCERRADO, que também
    *  tem `podeAcoes` falso mas conserva os BVs lançados para consulta. */
@@ -546,6 +549,7 @@ export function JobItemRealizadoTable({
   onAlternarGrupo,
   podeAcoes,
   podeGerarPP = false,
+  podeConfirmarBv,
   preAbertura,
   aberturaEmRevisao = false,
   ppsPorItemId,
@@ -2150,6 +2154,7 @@ export function JobItemRealizadoTable({
                 total: blocosPorItem.get(bvAberto.id)?.realizado.bruto ?? 0,
               }}
               readOnly={!podeAcoes}
+              podeConfirmar={podeAcoes && podeConfirmarBv}
             />
           );
         })()}

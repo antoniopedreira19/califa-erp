@@ -106,6 +106,9 @@ export const permissoes = {
   "jobs.emitir_pp":               ["administrador", "gerente_producao", "produtor"],
   "jobs.cancelar_pp":             ["administrador", "gerente_producao", "produtor"],
   "jobs.enviar_faturamento":      ["administrador", "gerente_producao"],
+  /** Confirmar o BV e mandá-lo ao contas a receber (decisão 080). Lançar e
+   *  negociar o BV continua em `jobs.editar`; confirmar é do GP. */
+  "jobs.confirmar_bv":            ["administrador", "gerente_producao"],
   "jobs.encerrar":                ["administrador", "gerente_producao"],
   /** Abrir job no financeiro — via /financeiro/abertura-de-job. */
   "jobs.abrir_financeiro":        ["administrador", "financeiro"],

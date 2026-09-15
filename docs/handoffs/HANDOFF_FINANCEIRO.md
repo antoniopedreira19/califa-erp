@@ -5110,5 +5110,50 @@ Tiago).
 ### Pendências registradas (não mexidas)
 
 - A RPC não recusa BV misturado com job (só a action), não confere a role
-  de quem chama e não compara a empresa emissora com a do job.
-- Os dois clientes "teste" duplicados continuam no cadastro.
+  de quem chama e não compara a empresa emissora com a do job. ⚠️ **BV e
+  perfil fechados em 15/09/2026** (nota seguinte); a empresa emissora segue
+  aberta.
+- Os dois clientes "teste" duplicados continuam no cadastro. ⚠️ **O sem CNPJ
+  virou "Teste 22" em 15/09/2026** (nota seguinte).
+
+## ⚠️ Nota de 2026-09-15 — só admin e financeiro emitem, e o BV só sai em nota do próprio fornecedor (decisão 080)
+
+Regras, evidências e as escolhas do Tiago na
+[080](../decisions/080-quem-emite-a-nota-e-quem-confirma-o-bv.md). A parte
+de "quem confirma o BV" está no `HANDOFF_JOBS.md`, nota de mesma data.
+
+### O que estava errado
+
+`emitir_faturamento` só conferia se quem chama é do tenant. Chamada direta
+pela API: o "GP Teste" emitiu nota; um BV entrou na nota da Pevetech, com
+job ou sozinho; e o BV da AIRBNB entrou na nota de outro fornecedor. Todas
+aceitas (simulação com rollback).
+
+### O que mudou
+
+| Onde | O quê |
+|---|---|
+| `supabase/migrations/20260915000002_emitir_faturamento_perfil_e_bv.sql` | a RPC exige role `administrador` ou `financeiro` ativa no tenant da nota; BV só como item único de nota de BV; BV do tenant e do fornecedor da nota |
+| cadastro de clientes (dado, sem código) | cliente `93afec64` "teste" (sem CNPJ, código `teste22`) → **"Teste 22"**, marca principal junto; auditoria `cliente.editado`. Por SQL, porque a tela exige CNPJ |
+
+A action `emitirFaturamento` não mudou: as recusas chegam como "Falha ao
+emitir: …".
+
+### Conferido
+
+- Depois, com rollback: GP Teste **recusado**; Financeiro Teste **aceito**;
+  job + BV, BV sozinho na nota do cliente e BV de outro fornecedor
+  **recusados**; BV na nota do próprio fornecedor **aceito**; clientes
+  misturados (079) seguem **recusados**.
+- Função viva com as três travas, SECURITY DEFINER, `execute` para
+  `authenticated` e não para `anon`. Advisors sem alerta novo.
+- Cliente e marca "Teste 22"; o outro "Teste" intacto; auditoria gravada.
+- `tsc`, `next lint`, `npm run build` e `lib/permissoes.test.ts` (35/35)
+  limpos.
+
+### Pendências registradas (não mexidas)
+
+- As outras RPCs SECURITY DEFINER do financeiro seguem conferindo só o
+  tenant (baixas, estornos, aprovar PP, cancelar nota, cartão).
+- A RPC não exige BV `confirmado`; `emitido_por` vem do payload.
+- Empresa emissora da nota × empresa do job, sem regra.

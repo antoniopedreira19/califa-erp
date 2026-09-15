@@ -158,6 +158,9 @@ interface Props {
    *  enquanto errata e BV continuam esperando a abertura. O envio ao
    *  financeiro é a outra metade, e ela mora no painel do item. */
   podeGerarPP?: boolean;
+  /** Confirmar o BV — `jobs.confirmar_bv`, administrador e GP (decisão
+   *  080). Telas de leitura mandam `false`. */
+  podeConfirmarBv: boolean;
   /** Job já enviado para faturamento: o valor da nota está congelado em
    *  `jobs_envio_faturamento` e nem errata nem save podem mexer nele
    *  (decisão 028, nota de 27/08/2026). O servidor já recusava — sem
@@ -193,6 +196,7 @@ export function JobRealizadoSection({
   categoriasMap,
   podeAcoes,
   podeGerarPP = false,
+  podeConfirmarBv,
   jaEnviadoParaFaturamento = false,
   aberturaEmRevisao = false,
   ppsPorItemId,
@@ -530,6 +534,7 @@ export function JobRealizadoSection({
           onAlternarGrupo={recolher.alternar}
           podeAcoes={podeAcoes}
           podeGerarPP={podeGerarPP}
+          podeConfirmarBv={podeConfirmarBv}
           preAbertura={preAbertura}
           aberturaEmRevisao={aberturaEmRevisao}
           ppsPorItemId={ppsPorItemId}

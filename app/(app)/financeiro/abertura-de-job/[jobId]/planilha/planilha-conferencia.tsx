@@ -135,6 +135,7 @@ export function PlanilhaConferencia({
           onAlternarGrupo={recolher.alternar}
           // Leitura pura: nem errata, nem BV, nem PP.
           podeAcoes={false}
+          podeConfirmarBv={false}
           // Esta rota só existe enquanto o job aguarda abertura (já
           // aberto, ela redireciona para /jobs/[jobId]) — e nela a
           // calha lateral não aparece de jeito nenhum.

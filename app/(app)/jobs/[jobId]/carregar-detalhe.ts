@@ -914,6 +914,10 @@ export async function carregarDetalheDoJob(
   // a marca `abertura_em_revisao` fecha o envio sem mexer no status
   // (decisão 040). Errata e BV seguem em `podeAcoesPlanilha`.
   const podeGerarPP = quemPodeMexer && jobAceitaGerarPP(job.status);
+  // Confirmar o BV é do GP e do administrador (decisão 080). Lançar e
+  // negociar seguem em `podeAcoesPlanilha`, para quem pode mexer no job.
+  const podeConfirmarBv =
+    podeAcoesPlanilha && pode(session.activeRole, "jobs.confirmar_bv");
   const podeEnviarPP =
     quemPodeMexer &&
     jobAceitaEnvioDePP(job.status) &&
@@ -986,5 +990,6 @@ export async function carregarDetalheDoJob(
     podeAcoesPlanilha,
     podeGerarPP,
     podeEnviarPP,
+    podeConfirmarBv,
   };
 }
