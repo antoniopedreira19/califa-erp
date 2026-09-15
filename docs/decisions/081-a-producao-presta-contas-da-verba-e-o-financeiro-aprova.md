@@ -78,6 +78,21 @@ quem lê "pago" (fluxo de caixa, encerramento) continua lendo:
 - **Chat de PPs:** cartões recolhidos de prestação enviada, reprovada e
   aprovada.
 
+### 6. Devolução total, sem documento (15/09/2026)
+
+Pedido do Tiago no mesmo dia: a verba que não teve gasto nenhum também se
+presta, e volta inteira.
+
+- Na gaveta de prestar contas, **"Não houve gasto — a verba volta inteira"**
+  esconde os documentos e envia a prestação **sem documento**, com gasto
+  R$ 0,00.
+- O caminho no financeiro é o mesmo: conferir, reprovar com motivo ou aprovar
+  com a data prevista. Aprovada, o **estorno de verba é a verba inteira**.
+- Reprovada, a correção abre de novo com "não houve gasto" marcado — a
+  produção pode manter ou trocar por documentos.
+- O banco não aceita as duas coisas misturadas: "sem gasto" com documento é
+  recusado, e prestação sem documento só vai com "sem gasto" marcado.
+
 ## Banco
 
 - `20260915150001_verba_prestacao_com_aprovacao.sql` — `status`, autoria da
@@ -92,6 +107,9 @@ quem lê "pago" (fluxo de caixa, encerramento) continua lendo:
 - `20260915150003_estorno_de_verba_nas_views.sql` — o mesmo rótulo em
   `vw_a_pagar` e `vw_fluxo_caixa`, trocado sobre a definição que estava no
   banco (colunas, natureza e GRANTs iguais).
+- `20260915170001_verba_devolucao_total_sem_documento.sql` — o gasto da
+  prestação aceita zero, e `enviar_prestacao_verba` ganha `p_sem_gasto`
+  (a assinatura antiga sai; a Server Action é a única chamada).
 - `fechada_em` / `fechada_por` ficaram com o nome e passaram a significar
   "enviada (a última vez)".
 
@@ -136,12 +154,32 @@ Tudo pelos fluxos da tela, com a Conta Teste nas baixas:
 pagas — regra que veio de 26/08 e não mudou) e as permissões pela tela com um
 usuário que não é administrador (só pelo banco, simulando o login).
 
+## Conferido em 15/09/2026 — devolução total (Projeto Teste · JOB-0029 · PP-00061)
+
+Verba de R$ 300,00 gerada, aprovada e baixada na Conta Teste pelas telas:
+
+- **Gaveta:** enviar sem documento e sem marcar foi recusado ("Anexe ao menos
+  um documento — NF ou recibo."). Marcado "Não houve gasto", os documentos
+  somem e o envio sai: "Devolução total de PP-00061 enviada ao financeiro.".
+  No banco: em avaliação, gasto R$ 0,00, R$ 300,00 a devolver, nenhum
+  documento, auditoria com `sem_gasto`. A PP deixou o filtro "Aguardando
+  prestação" e perdeu o botão.
+- **Financeiro:** o filtro "Prestações" mostrou Gasto R$ 0,00 e Saldo
+  R$ 300,00; a tela cheia, "Sem gasto" no meio e no dossiê. O pop-up disse
+  "sem gasto: a verba volta inteira" e estorno de −R$ 300,00.
+- **Aprovação** com data prevista 22/09: estorno de R$ 300,00 criado,
+  documentos conferidos gravados como lista vazia, e o realizado do item
+  caiu de R$ 5.750,00 para R$ 5.450,00.
+- **Baixa do estorno** na Conta Teste: entrada de R$ 300,00. A verba ficou
+  "Concluída" em Títulos a Pagar e na aba de PPs; o estorno, "Devolvido".
+- **Servidor por fora da tela** (transação desfeita): "sem gasto" com
+  documento e lista vazia sem marcar foram recusados com a mensagem certa.
+- **Ajuste que o teste pediu:** o aviso de erro continuava na gaveta depois
+  de marcar "não houve gasto"; agora some na troca.
+
 ## O que ficou de fora
 
 - **Trava no encerramento do job** (10a): vai com a revisão do encerramento
   e do faturamento — todas as PPs pagas, e a verba com prestação aprovada e
   estorno baixado.
 - **Prazo para prestar contas** (8a).
-- **Verba sem gasto nenhum**: a prestação exige ao menos um documento com
-  valor, então a verba toda devolvida ainda não tem como ser prestada. A
-  confirmar com o Tiago.

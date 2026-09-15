@@ -347,7 +347,7 @@ export function PPTela({
               titulo={ehPrestacao ? "Documentos da prestação" : "Documento anexo"}
               legenda={
                 anexo?.arquivo_nome_original ??
-                (ehPrestacao ? "Nenhum documento" : "Nenhum anexo enviado")
+                (ehPrestacao ? "Sem gasto" : "Nenhum anexo enviado")
               }
               oculto={expandido === "pp"}
               url={urlAnexo}
@@ -387,7 +387,7 @@ export function PPTela({
                 <Vazio
                   texto={
                     ehPrestacao
-                      ? "A prestação não tem documento."
+                      ? "Sem gasto: a produção devolve a verba inteira."
                       : "A produção não enviou documento nesta PP."
                   }
                 />

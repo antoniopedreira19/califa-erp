@@ -575,6 +575,11 @@ function Prestacao({
               <p className="text-foreground/80">“{pr.motivo_reprovacao}”</p>
             </div>
           )}
+          {pr.documentos.length === 0 && (
+            <p className="rounded-lg border border-dashed border-border p-2 text-[11px] text-muted-foreground">
+              Sem gasto — a produção devolve a verba inteira, sem documento.
+            </p>
+          )}
           <ul className="space-y-1">
             {pr.documentos.map((d, i) => (
               <li key={d.id}>
