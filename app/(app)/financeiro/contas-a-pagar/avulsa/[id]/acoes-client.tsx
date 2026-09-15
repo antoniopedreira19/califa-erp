@@ -42,7 +42,6 @@ interface EditarProps {
    *  caminho o descartaria de vez, com `tsc` limpo. */
   fornecedores: Array<{ id: string; nome: string; cpf_cnpj?: string | null }>;
   clientes: Array<{ id: string; nome: string }>;
-  jobs: Array<{ id: string; codigo: string; nome: string; cliente_id: string | null; regional_id: string | null }>;
   regionais: Array<{ id: string; nome: string; ativo: boolean; empresa_id: string }>;
   rateioInicial?: RateioLinhaInput[];
   cartoes?: CartaoOption[];
@@ -56,7 +55,6 @@ export function EditarAvulsaButton({
   subtipos,
   fornecedores,
   clientes,
-  jobs,
   regionais,
   rateioInicial,
   cartoes,
@@ -82,7 +80,6 @@ export function EditarAvulsaButton({
         subtipos={subtipos}
         fornecedores={fornecedores}
         clientes={clientes}
-        jobs={jobs}
         regionais={regionais}
         rateioInicial={rateioInicial}
         cartoes={cartoes}

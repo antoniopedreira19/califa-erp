@@ -54,11 +54,6 @@ const baseRecorrenteFields = {
     .uuid()
     .nullable()
     .or(z.literal("").transform(() => null)),
-  job_id: z
-    .string()
-    .uuid()
-    .nullable()
-    .or(z.literal("").transform(() => null)),
   plano_conta_tipo_id: z.string().uuid("Selecione o tipo."),
   plano_conta_subtipo_id: z.string().uuid("Selecione o subtipo."),
   frequencia: z.enum(["quinzenal", "mensal", "anual"]),

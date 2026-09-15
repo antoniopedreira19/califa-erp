@@ -1,7 +1,7 @@
 # 069 — A regional do job é a fonte; o rateio só existe onde não há job
 
 **Data:** 2026-09-10
-**Status:** aceita · revisada em 2026-09-11 (o BV entrou) e em 2026-09-15 (rateio conferido e reforço no banco)
+**Status:** aceita · revisada em 2026-09-11 (o BV entrou) e em 2026-09-15 (rateio conferido, reforço no banco e a [082](082-a-despesa-sem-job-nasce-com-rateio-e-a-recorrencia-vira-titulo-30-dias-antes.md))
 **Contexto:** `vw_fluxo_caixa`, `jobs`, `desembolsos`, conciliação e todo
 lançamento que alimentará o DRE por regional. Fecha a pendência deixada
 aberta pela reversão `20260909180001_regional_id_volta_a_ser_nullable.sql`.
@@ -82,9 +82,10 @@ depois, e para o caso de a escrita um dia divergir.
 - ~~**Como o rateio é preenchido** em desembolso, recorrência e avulsa sem
   job.~~ Conferido em 15/09/2026: já estava certo nos três (ver a revisão
   de 15/09 no fim).
-- **Despesa sem job e sem rateio.** Desembolso resolvido em 15/09/2026
-  (soma 100% no banco e rateio exigido na aprovação). Avulsa e recorrente
-  seguem garantidas só pelo formulário — escolha levada ao Tiago.
+- ~~**Despesa sem job e sem rateio.**~~ Resolvido em 15/09/2026. Desembolso:
+  soma 100% no banco e rateio exigido na aprovação. Avulsa e recorrente:
+  deixaram de ter job e passaram a nascer com o rateio numa transação só,
+  com trava no banco — ver a [082](082-a-despesa-sem-job-nasce-com-rateio-e-a-recorrencia-vira-titulo-30-dias-antes.md).
 - ~~**Pagamento de fatura de cartão** agrega N compras e não tem job
   único.~~ Não é furo: cada compra vira lançamento próprio com o rateio da
   avulsa. O par de lançamentos do pagamento é transferência entre contas e
@@ -167,8 +168,12 @@ Verificado com sonda em transação desfeita: soma 60% barrada, aprovação
 sem rateio barrada, 33,33 + 33,33 + 33,34 aceito, aprovação com rateio
 aceita, caminho do estorno livre. Nenhum resíduo.
 
-**Avulsa e recorrente ficaram de fora do reforço, de propósito.** As duas
-nascem aprovadas (não há etapa entre criar e entrar no fluxo) e a edição
-apaga a divisão numa requisição e grava a nova em outra. Não há ponto
-seguro equivalente sem mudar comportamento — a escolha foi levada ao
-Tiago.
+**Avulsa e recorrente ficaram de fora deste reforço, de propósito.** As
+duas nascem aprovadas (não há etapa entre criar e entrar no fluxo) e a
+edição apaga a divisão numa requisição e grava a nova em outra.
+
+⚠️ **Resolvido no mesmo dia pela [082](082-a-despesa-sem-job-nasce-com-rateio-e-a-recorrencia-vira-titulo-30-dias-antes.md) (2026-09-15).** O Tiago decidiu
+que avulsa e recorrente também não têm job, que o rateio é definido na
+criação, e que a recorrência vira título 30 dias antes do vencimento. A
+despesa e o rateio passaram a ser gravados numa transação só, o que
+permitiu a trava no banco que aqui não cabia.

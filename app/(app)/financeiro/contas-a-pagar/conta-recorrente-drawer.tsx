@@ -51,7 +51,6 @@ type FornecedorResumido = {
   cpf_cnpj?: string | null;
 };
 type ClienteResumido = { id: string; nome: string };
-type JobResumido = { id: string; codigo: string; nome: string; cliente_id: string | null; regional_id: string | null };
 type RegionalResumida = { id: string; nome: string; ativo: boolean; empresa_id: string };
 
 // ---------------------------------------------------------------------------
@@ -78,7 +77,6 @@ type Props =
       subtipos: PlanoContaSubtipo[];
       fornecedores: FornecedorResumido[];
       clientes: ClienteResumido[];
-      jobs: JobResumido[];
       regionais: RegionalResumida[];
       cartoes: CartaoOption[];
       trigger?: React.ReactNode;
@@ -92,7 +90,6 @@ type Props =
       subtipos: PlanoContaSubtipo[];
       fornecedores: FornecedorResumido[];
       clientes: ClienteResumido[];
-      jobs: JobResumido[];
       regionais: RegionalResumida[];
       cartoes: CartaoOption[];
       rateioInicial?: RateioLinhaInput[];
@@ -146,9 +143,6 @@ export function ContaRecorrenteDrawer(props: Props) {
   );
   const [clienteId, setClienteId] = React.useState<string>(
     recorrente?.cliente_id ?? "__none__",
-  );
-  const [jobId, setJobId] = React.useState<string>(
-    recorrente?.job_id ?? "__none__",
   );
   const [tipoId, setTipoId] = React.useState<string>(
     recorrente?.plano_conta_tipo_id ?? "",
@@ -205,7 +199,6 @@ export function ContaRecorrenteDrawer(props: Props) {
       setValor(String(Number(recorrente.valor)));
       setFornecedorId(recorrente.fornecedor_id ?? "__none__");
       setClienteId(recorrente.cliente_id ?? "__none__");
-      setJobId(recorrente.job_id ?? "__none__");
       setTipoId(recorrente.plano_conta_tipo_id);
       setSubtipoId(recorrente.plano_conta_subtipo_id);
       setFrequencia(recorrente.frequencia);
@@ -227,7 +220,6 @@ export function ContaRecorrenteDrawer(props: Props) {
       setValor("");
       setFornecedorId("__none__");
       setClienteId("__none__");
-      setJobId("__none__");
       setTipoId("");
       setSubtipoId("");
       setFrequencia("mensal");
@@ -272,20 +264,8 @@ export function ContaRecorrenteDrawer(props: Props) {
   }, [frequencia]);
 
   // ---------------------------------------------------------------------------
-  // Handlers fornecedor / cliente / job
+  // Handlers fornecedor / cliente
   // ---------------------------------------------------------------------------
-
-  const jobSelecionado = React.useMemo(
-    () => (jobId !== "__none__" ? props.jobs.find((j) => j.id === jobId) ?? null : null),
-    [jobId, props.jobs],
-  );
-  const clienteTravadoPeloJob = !!jobSelecionado?.cliente_id;
-
-  React.useEffect(() => {
-    if (jobSelecionado?.cliente_id) {
-      setClienteId(jobSelecionado.cliente_id);
-    }
-  }, [jobSelecionado]);
 
   // Rateio derivado: soma e validade
   const somaRateio = rateio.reduce((s, l) => s + l.percentual, 0);
@@ -316,7 +296,6 @@ export function ContaRecorrenteDrawer(props: Props) {
   }
 
   function handleClienteChange(v: string | null) {
-    if (clienteTravadoPeloJob) return;
     setClienteId(v ?? "__none__");
   }
 
@@ -360,7 +339,6 @@ export function ContaRecorrenteDrawer(props: Props) {
       valor,
       fornecedor_id: fornecedorId === "__none__" ? null : fornecedorId,
       cliente_id: clienteId === "__none__" ? null : clienteId,
-      job_id: jobId === "__none__" ? null : jobId,
       plano_conta_tipo_id: tipoId,
       plano_conta_subtipo_id: subtipoId,
       frequencia,
@@ -541,29 +519,8 @@ export function ContaRecorrenteDrawer(props: Props) {
               ))}
             </div>
 
-            {/* Job — vem antes de Cliente porque escolher job preenche
-                cliente automaticamente (herdado do projeto do job). */}
-            <div className="space-y-2">
-              <Label htmlFor="recorrente-job">Job</Label>
-              <Combobox
-                id="recorrente-job"
-                value={jobId}
-                onChange={(v) => setJobId(v ?? "__none__")}
-                placeholder="Nenhum (opcional)"
-                items={[
-                  { value: "__none__", label: "Nenhum" },
-                  ...props.jobs.map((j) => ({
-                    value: j.id,
-                    label: `${j.codigo} — ${j.nome}`,
-                  })),
-                ]}
-              />
-              {fieldErrors.job_id?.map((msg, i) => (
-                <p key={i} className="text-xs text-california-red">
-                  {msg}
-                </p>
-              ))}
-            </div>
+            {/* Sem campo de Job desde 15/09/2026 (decisão 069): a
+                recorrência é despesa sem job, com rateio. */}
 
             {/* Fornecedor — destinatário do pagamento. O mesmo campo da
                 PP desde 10/09/2026 (decisão 067): busca por nome ou
@@ -590,7 +547,7 @@ export function ContaRecorrenteDrawer(props: Props) {
               ))}
             </div>
 
-            {/* Cliente — rastreabilidade de custo. Travado se job escolhido. */}
+            {/* Cliente — rastreabilidade de custo. */}
             <div className="space-y-2">
               <Label htmlFor="recorrente-cliente">Cliente</Label>
               <Combobox
@@ -598,7 +555,6 @@ export function ContaRecorrenteDrawer(props: Props) {
                 value={clienteId}
                 onChange={handleClienteChange}
                 placeholder="Nenhum (opcional)"
-                disabled={clienteTravadoPeloJob}
                 items={[
                   { value: "__none__", label: "Nenhum" },
                   ...props.clientes.map((c) => ({
@@ -607,11 +563,6 @@ export function ContaRecorrenteDrawer(props: Props) {
                   })),
                 ]}
               />
-              {clienteTravadoPeloJob && (
-                <p className="text-xs text-muted-foreground">
-                  Cliente herdado do projeto do job. Para alterar, mude ou remova o job.
-                </p>
-              )}
               {fieldErrors.cliente_id?.map((msg, i) => (
                 <p key={i} className="text-xs text-california-red">
                   {msg}
@@ -624,7 +575,6 @@ export function ContaRecorrenteDrawer(props: Props) {
               linhas={rateio}
               onChange={setRateio}
               regionais={props.regionais.filter((r) => r.empresa_id === empresaId)}
-              jobRegionalId={jobSelecionado?.regional_id ?? null}
               disabled={pending}
             />
 

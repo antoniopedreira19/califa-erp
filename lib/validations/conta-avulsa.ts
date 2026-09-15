@@ -112,17 +112,14 @@ export const criarContaAvulsaSchema = z
       .default(null),
     // Fornecedor = destinatário do pagamento; Cliente = rastreabilidade de
     // custo (a qual cliente esse gasto pertence). Podem coexistir.
+    // Job não existe aqui desde 15/09/2026 (decisão 069): tudo do job entra
+    // pela planilha dele, e a avulsa é despesa sem job, com rateio.
     fornecedor_id: z
       .string()
       .uuid()
       .nullable()
       .or(z.literal("").transform(() => null)),
     cliente_id: z
-      .string()
-      .uuid()
-      .nullable()
-      .or(z.literal("").transform(() => null)),
-    job_id: z
       .string()
       .uuid()
       .nullable()
@@ -183,11 +180,6 @@ const baseFields = {
     .nullable()
     .or(z.literal("").transform(() => null)),
   cliente_id: z
-    .string()
-    .uuid()
-    .nullable()
-    .or(z.literal("").transform(() => null)),
-  job_id: z
     .string()
     .uuid()
     .nullable()

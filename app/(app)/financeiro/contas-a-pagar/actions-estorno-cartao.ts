@@ -8,7 +8,7 @@
  * como uma conta avulsa de natureza `entrada`, apontando para a compra —
  * como a devolução de verba aponta para a PP.
  *
- * ⚠️ Quase nada é decidido aqui. Empresa, plano de contas, job,
+ * ⚠️ Quase nada é decidido aqui. Empresa, plano de contas,
  * fornecedor e cliente são COPIADOS da compra pelo gatilho
  * `avulsa_estorno_herda_da_compra`, no banco, e o teto do valor é
  * validado lá também. Esta action escolhe o cartão e a descrição, cuida
@@ -43,7 +43,6 @@ interface CompraRow {
   plano_conta_subtipo_id: string;
   fornecedor_id: string | null;
   cliente_id: string | null;
-  job_id: string | null;
 }
 
 const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
@@ -101,7 +100,7 @@ export async function estornarCompraCartao(input: unknown): Promise<Result> {
     .select(
       "id, codigo, descricao, valor, empresa_id, cartao_credito_id, " +
         "forma_pagamento, estorno_de_avulsa_id, plano_conta_tipo_id, " +
-        "plano_conta_subtipo_id, fornecedor_id, cliente_id, job_id",
+        "plano_conta_subtipo_id, fornecedor_id, cliente_id",
     )
     .eq("id", d.compra_id)
     .eq("tenant_id", session.activeTenant.id)
@@ -134,9 +133,25 @@ export async function estornarCompraCartao(input: unknown): Promise<Result> {
     d.descricao?.trim() ||
     `Estorno · ${compra.codigo ?? ""} ${compra.descricao}`.trim().slice(0, 500);
 
-  const { data: estorno, error } = await supabase
-    .from("contas_avulsas")
-    .insert({
+  // O estorno herda o rateio da compra e nasce com ele, numa transação só
+  // (decisão 069, revisão de 15/09/2026): conta avulsa sem rateio o banco
+  // recusa. Antes a cópia vinha numa segunda requisição e, se falhasse, o
+  // estorno ficava sem regional na Conciliação.
+  const { data: rateio } = await supabase
+    .from("contas_avulsas_regionais")
+    .select("regional_id, percentual")
+    .eq("conta_avulsa_id", compra.id);
+
+  if (!rateio || rateio.length === 0) {
+    return {
+      ok: false,
+      message:
+        "A compra não tem rateio de regional. Corrija a compra antes de lançar o estorno.",
+    };
+  }
+
+  const { data: estornoId, error } = await supabase.rpc("criar_conta_avulsa", {
+    p_dados: {
       tenant_id: session.activeTenant.id,
       codigo: (codigo as string | null) ?? null,
       descricao,
@@ -151,50 +166,27 @@ export async function estornarCompraCartao(input: unknown): Promise<Result> {
       estorno_de_avulsa_id: compra.id,
       data_compra: d.data_estorno,
       // Daqui para baixo, o gatilho sobrescreve com os valores da compra.
-      // Mandamos assim mesmo porque as colunas são NOT NULL e o insert
-      // precisa passar pelo PostgREST antes de o gatilho rodar.
+      // Mandamos assim mesmo porque as colunas são NOT NULL.
       natureza: "entrada",
       empresa_id: compra.empresa_id,
       plano_conta_tipo_id: compra.plano_conta_tipo_id,
       plano_conta_subtipo_id: compra.plano_conta_subtipo_id,
       fornecedor_id: compra.fornecedor_id,
       cliente_id: compra.cliente_id,
-      job_id: compra.job_id,
-    })
-    .select("id")
-    .single();
+    },
+    p_rateio: rateio.map((r) => ({
+      regional_id: r.regional_id,
+      percentual: Number(r.percentual),
+    })),
+  });
 
-  if (error || !estorno) {
+  if (error || !estornoId) {
     console.error("[cartao.estorno]", error?.message);
     // A mensagem do banco já diz quanto sobra para estornar — é mais útil
     // que qualquer texto genérico aqui.
     return { ok: false, message: limparMensagem(error?.message ?? "") };
   }
-
-  // O rateio de regional acompanha o da compra: sem ele o estorno some da
-  // coluna Regional da Conciliação enquanto a compra aparece nela.
-  const { data: rateio } = await supabase
-    .from("contas_avulsas_regionais")
-    .select("regional_id, percentual")
-    .eq("conta_avulsa_id", compra.id);
-
-  if (rateio && rateio.length > 0) {
-    const { error: errRateio } = await supabase
-      .from("contas_avulsas_regionais")
-      .insert(
-        rateio.map((r) => ({
-          tenant_id: session.activeTenant.id,
-          conta_avulsa_id: estorno.id,
-          regional_id: r.regional_id,
-          percentual: r.percentual,
-        })),
-      );
-    if (errRateio) {
-      // Não derruba o estorno: ele é íntegro sem o rateio, e perder o
-      // crédito por causa de um rótulo seria pior.
-      console.error("[cartao.estorno.rateio]", errRateio.message);
-    }
-  }
+  const estorno = { id: estornoId as string };
 
   await logAuditEvent({
     acao: "cartao.estorno_lancado",

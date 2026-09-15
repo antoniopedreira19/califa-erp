@@ -32,13 +32,6 @@ type FornecedorResumido = {
   cpf_cnpj?: string | null;
 };
 type ClienteResumido = { id: string; nome: string };
-type JobResumido = {
-  id: string;
-  codigo: string;
-  nome: string;
-  cliente_id: string | null;
-  regional_id: string | null;
-};
 
 // ---------------------------------------------------------------------------
 // EditarRecorrenteButton
@@ -53,7 +46,6 @@ interface EditarProps {
   subtipos: PlanoContaSubtipo[];
   fornecedores: FornecedorResumido[];
   clientes: ClienteResumido[];
-  jobs: JobResumido[];
   regionais: Array<{ id: string; nome: string; ativo: boolean; empresa_id: string }>;
   cartoes: CartaoOption[];
   rateioInicial?: RateioLinhaInput[];
@@ -67,7 +59,6 @@ export function EditarRecorrenteButton({
   subtipos,
   fornecedores,
   clientes,
-  jobs,
   regionais,
   cartoes,
   rateioInicial,
@@ -93,7 +84,6 @@ export function EditarRecorrenteButton({
         subtipos={subtipos}
         fornecedores={fornecedores}
         clientes={clientes}
-        jobs={jobs}
         regionais={regionais}
         cartoes={cartoes}
         rateioInicial={rateioInicial}

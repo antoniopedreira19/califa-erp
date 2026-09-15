@@ -116,6 +116,8 @@ const ROTULO_ORIGEM: Record<string, string> = {
   previsao_custo: "Cronograma de desembolsos",
   previsao_recebimento: "Previsão de recebimento",
   envio_parcela: "Faturamento previsto",
+  // A ocorrência da recorrência que ainda não virou título (15/09/2026).
+  previsao_recorrente: "Recorrência prevista",
 };
 
 /** O que a linha é, em português, para a composição da célula. */

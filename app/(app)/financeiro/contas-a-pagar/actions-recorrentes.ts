@@ -55,6 +55,22 @@ async function checarGateFinanceiro(
   return { ok: true, session, supabase };
 }
 
+/**
+ * Gera como título o que vence dentro da antecedência (30 dias, decisão de
+ * 15/09/2026), sem esperar a rotina diária das 6h. Não repete data que já
+ * virou título. Falha aqui não desfaz a recorrência: a rotina tenta de novo
+ * no dia seguinte, e a previsão já aparece no fluxo de caixa.
+ */
+async function gerarOcorrencias(
+  supabase: ReturnType<typeof createClient>,
+  recorrenteId: string,
+) {
+  const { error } = await supabase.rpc("gerar_ocorrencias_da_recorrente", {
+    p_recorrente_id: recorrenteId,
+  });
+  if (error) console.error("[recorrente.gerar_ocorrencias]", error.message);
+}
+
 export async function criarContaRecorrente(input: unknown): Promise<Result> {
   const parsed = criarContaRecorrenteSchema.safeParse(input);
   if (!parsed.success) {
@@ -116,16 +132,16 @@ export async function criarContaRecorrente(input: unknown): Promise<Result> {
     };
   }
 
-  const { data: rec, error } = await supabase
-    .from("contas_avulsas_recorrentes")
-    .insert({
+  // A recorrência e o rateio nascem juntos, numa transação só (decisão 069,
+  // revisão de 15/09/2026): o banco recusa recorrência sem rateio.
+  const { data: recId, error } = await supabase.rpc("criar_conta_recorrente", {
+    p_dados: {
       tenant_id: session.activeTenant.id,
       empresa_id: d.empresa_id,
       descricao: d.descricao,
       valor: d.valor,
       fornecedor_id: d.fornecedor_id,
       cliente_id: d.cliente_id,
-      job_id: d.job_id,
       plano_conta_tipo_id: d.plano_conta_tipo_id,
       plano_conta_subtipo_id: d.plano_conta_subtipo_id,
       frequencia: d.frequencia,
@@ -139,56 +155,20 @@ export async function criarContaRecorrente(input: unknown): Promise<Result> {
       forma_pagamento: d.forma_pagamento ?? null,
       cartao_credito_id: d.cartao_credito_id ?? null,
       criado_por: session.profile.id,
-    })
-    .select("id")
-    .single();
+    },
+    p_rateio: d.rateio,
+  });
 
-  if (error || !rec) {
+  if (error || !recId) {
     return {
       ok: false,
       message: `Falha ao criar recorrência: ${error?.message ?? "erro"}`,
     };
   }
+  const rec = { id: recId as string };
 
-  // Rateio regional
-  let rateioFinal = d.rateio;
-  if (d.job_id) {
-    const { data: jobRow } = await supabase
-      .from("jobs")
-      .select("regional_id")
-      .eq("id", d.job_id)
-      .eq("tenant_id", session.activeTenant.id)
-      .maybeSingle();
-    if (!jobRow?.regional_id) {
-      await supabase
-        .from("contas_avulsas_recorrentes")
-        .delete()
-        .eq("id", rec.id);
-      return {
-        ok: false,
-        message: "Job selecionado não tem regional associada.",
-      };
-    }
-    rateioFinal = [{ regional_id: jobRow.regional_id, percentual: 100 }];
-  }
-
-  const rateioRows = rateioFinal.map((r) => ({
-    tenant_id: session.activeTenant.id,
-    recorrente_id: rec.id,
-    regional_id: r.regional_id,
-    percentual: r.percentual,
-  }));
-  const { error: rateioErr } = await supabase
-    .from("contas_avulsas_recorrentes_regionais")
-    .insert(rateioRows);
-
-  if (rateioErr) {
-    await supabase
-      .from("contas_avulsas_recorrentes")
-      .delete()
-      .eq("id", rec.id);
-    return { ok: false, message: `Falha ao salvar rateio: ${rateioErr.message}` };
-  }
+  // O que vence em até 30 dias já nasce título.
+  await gerarOcorrencias(supabase, rec.id);
 
   await logAuditEvent({
     acao: "conta_recorrente.criada",
@@ -278,7 +258,6 @@ export async function editarContaRecorrente(
     valor: d.valor,
     fornecedor_id: d.fornecedor_id,
     cliente_id: d.cliente_id,
-    job_id: d.job_id,
     plano_conta_tipo_id: d.plano_conta_tipo_id,
     plano_conta_subtipo_id: d.plano_conta_subtipo_id,
     frequencia: d.frequencia,
@@ -308,22 +287,7 @@ export async function editarContaRecorrente(
     .eq("recorrente_id", id)
     .eq("tenant_id", session.activeTenant.id);
 
-  let rateioNovo = d.rateio;
-  if (d.job_id) {
-    const { data: jobRow } = await supabase
-      .from("jobs")
-      .select("regional_id")
-      .eq("id", d.job_id)
-      .eq("tenant_id", session.activeTenant.id)
-      .maybeSingle();
-    if (!jobRow?.regional_id) {
-      return {
-        ok: false,
-        message: "Job selecionado não tem regional associada.",
-      };
-    }
-    rateioNovo = [{ regional_id: jobRow.regional_id, percentual: 100 }];
-  }
+  const rateioNovo = d.rateio;
 
   function normalizar(
     rows: Array<{ regional_id: string; percentual: number | string }>,
@@ -337,36 +301,14 @@ export async function editarContaRecorrente(
   const depoisStr = normalizar(rateioNovo);
 
   if (antesStr !== depoisStr) {
-    const { error: delErr } = await supabase
-      .from("contas_avulsas_recorrentes_regionais")
-      .delete()
-      .eq("recorrente_id", id)
-      .eq("tenant_id", session.activeTenant.id);
-    if (delErr)
-      return { ok: false, message: `Falha ao apagar rateio: ${delErr.message}` };
-
-    const novasRows = rateioNovo.map((r) => ({
-      tenant_id: session.activeTenant.id,
-      recorrente_id: id,
-      regional_id: r.regional_id,
-      percentual: r.percentual,
-    }));
-    const { error: insErr } = await supabase
-      .from("contas_avulsas_recorrentes_regionais")
-      .insert(novasRows);
-    if (insErr) {
-      // Compensação: restaura rateio anterior para não deixar a recorrência sem rateio.
-      if ((rateioAtual ?? []).length > 0) {
-        await supabase.from("contas_avulsas_recorrentes_regionais").insert(
-          (rateioAtual ?? []).map((r) => ({
-            tenant_id: session.activeTenant.id,
-            recorrente_id: id,
-            regional_id: r.regional_id,
-            percentual: r.percentual,
-          })),
-        );
-      }
-      return { ok: false, message: `Falha ao salvar rateio: ${insErr.message}` };
+    // Apaga e grava numa transação só (15/09/2026): a recorrência nunca
+    // fica sem rateio no meio da troca.
+    const { error: rateioErr } = await supabase.rpc(
+      "substituir_rateio_conta_recorrente",
+      { p_recorrente_id: id, p_rateio: rateioNovo },
+    );
+    if (rateioErr) {
+      return { ok: false, message: `Falha ao salvar rateio: ${rateioErr.message}` };
     }
 
     await logAuditEvent({
@@ -380,6 +322,11 @@ export async function editarContaRecorrente(
       },
     });
   }
+
+  // Frequência, valor ou data de fim podem ter mudado: o que agora vence em
+  // até 30 dias vira título já. Os títulos criados antes ficam como estão —
+  // editar a recorrência muda as previsões, não o que já é título.
+  await gerarOcorrencias(supabase, id);
 
   await logAuditEvent({
     acao: "conta_recorrente.editada",
@@ -461,6 +408,8 @@ export async function reativarContaRecorrente(id: string): Promise<Result> {
     .eq("tenant_id", session.activeTenant.id);
 
   if (error) return { ok: false, message: `Falha ao reativar: ${error.message}` };
+
+  await gerarOcorrencias(supabase, id);
 
   await logAuditEvent({
     acao: "conta_recorrente.reativada",

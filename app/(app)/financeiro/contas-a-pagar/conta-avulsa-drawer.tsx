@@ -78,7 +78,6 @@ type FornecedorResumido = {
   cpf_cnpj?: string | null;
 };
 type ClienteResumido = { id: string; nome: string };
-type JobResumido = { id: string; codigo: string; nome: string; cliente_id: string | null; regional_id: string | null };
 type RegionalResumida = { id: string; nome: string; ativo: boolean; empresa_id: string };
 
 // ---------------------------------------------------------------------------
@@ -94,7 +93,6 @@ type Props =
       subtipos: PlanoContaSubtipo[];
       fornecedores: FornecedorResumido[];
       clientes: ClienteResumido[];
-      jobs: JobResumido[];
       regionais: RegionalResumida[];
       /** Cartões de crédito ativos. Se omitido, combobox de cartão não aparece. */
       cartoes?: CartaoOption[];
@@ -123,7 +121,6 @@ type Props =
       subtipos: PlanoContaSubtipo[];
       fornecedores: FornecedorResumido[];
       clientes: ClienteResumido[];
-      jobs: JobResumido[];
       regionais: RegionalResumida[];
       /** Cartões de crédito ativos. Se omitido, combobox de cartão não aparece. */
       cartoes?: CartaoOption[];
@@ -201,9 +198,6 @@ export function ContaAvulsaDrawer(props: Props) {
   const [clienteId, setClienteId] = React.useState<string>(
     conta?.cliente_id ?? "__none__",
   );
-  const [jobId, setJobId] = React.useState<string>(
-    conta?.job_id ?? "__none__",
-  );
   const [tipoId, setTipoId] = React.useState<string>(
     conta?.plano_conta_tipo_id ?? "",
   );
@@ -256,7 +250,6 @@ export function ContaAvulsaDrawer(props: Props) {
       setDataPrevista(conta.data_prevista_pagamento ?? "");
       setFornecedorId(conta.fornecedor_id ?? "__none__");
       setClienteId(conta.cliente_id ?? "__none__");
-      setJobId(conta.job_id ?? "__none__");
       setTipoId(conta.plano_conta_tipo_id);
       setSubtipoId(conta.plano_conta_subtipo_id);
       setFormaPagamento(conta.forma_pagamento ?? null);
@@ -272,7 +265,6 @@ export function ContaAvulsaDrawer(props: Props) {
       setDataPrevista("");
       setFornecedorId("__none__");
       setClienteId("__none__");
-      setJobId("__none__");
       setTipoId("");
       setSubtipoId("");
       // Vindo do atalho da aba Cartão, o drawer já abre no cartão certo.
@@ -309,27 +301,11 @@ export function ContaAvulsaDrawer(props: Props) {
   // Handlers fornecedor / cliente (mutuamente exclusivos)
   // ---------------------------------------------------------------------------
 
-  // Cliente é auto-preenchido e travado quando um job é escolhido — o
-  // cliente vem do projeto do job. Se job = "Nenhum", cliente volta a ser
-  // editável livremente. Fornecedor é independente do job.
-  const jobSelecionado = React.useMemo(
-    () => (jobId !== "__none__" ? props.jobs.find((j) => j.id === jobId) ?? null : null),
-    [jobId, props.jobs],
-  );
-  const clienteTravadoPeloJob = !!jobSelecionado?.cliente_id;
-
-  React.useEffect(() => {
-    if (jobSelecionado?.cliente_id) {
-      setClienteId(jobSelecionado.cliente_id);
-    }
-  }, [jobSelecionado]);
-
   function handleFornecedorChange(v: string | null) {
     setFornecedorId(v ?? "__none__");
   }
 
   function handleClienteChange(v: string | null) {
-    if (clienteTravadoPeloJob) return;
     setClienteId(v ?? "__none__");
   }
 
@@ -452,7 +428,6 @@ export function ContaAvulsaDrawer(props: Props) {
       estorno_de_avulsa_id: null,
       fornecedor_id: fornecedorId === "__none__" ? null : fornecedorId,
       cliente_id: clienteId === "__none__" ? null : clienteId,
-      job_id: jobId === "__none__" ? null : jobId,
       plano_conta_tipo_id: tipoId,
       plano_conta_subtipo_id: subtipoId,
       forma_pagamento: formaPagamento,
@@ -516,7 +491,7 @@ export function ContaAvulsaDrawer(props: Props) {
   const ofereceBaixaDireta =
     props.mode === "criar" && typeof props.onCriadaParaBaixa === "function";
 
-  // Rateio válido: pelo menos 1 linha e soma = 100 (ou job selecionado, que trava em 100%)
+  // Rateio válido: pelo menos 1 linha e soma = 100
   const somaRateio = rateio.reduce((s, l) => s + l.percentual, 0);
   const rateioValido =
     rateio.length > 0 && Math.abs(somaRateio - 100) < 0.01;
@@ -736,29 +711,8 @@ export function ContaAvulsaDrawer(props: Props) {
             </div>
             )}
 
-            {/* Job — vem antes de Cliente porque escolher job preenche
-                cliente automaticamente (herdado do projeto do job). */}
-            <div className="space-y-2">
-              <Label htmlFor="avulsa-job">Job</Label>
-              <Combobox
-                id="avulsa-job"
-                value={jobId}
-                onChange={(v) => setJobId(v ?? "__none__")}
-                placeholder="Nenhum (opcional)"
-                items={[
-                  { value: "__none__", label: "Nenhum" },
-                  ...props.jobs.map((j) => ({
-                    value: j.id,
-                    label: `${j.codigo} — ${j.nome}`,
-                  })),
-                ]}
-              />
-              {fieldErrors.job_id?.map((msg, i) => (
-                <p key={i} className="text-xs text-california-red">
-                  {msg}
-                </p>
-              ))}
-            </div>
+            {/* Sem campo de Job desde 15/09/2026 (decisão 069): tudo do
+                job entra pela planilha dele, e a avulsa é despesa sem job. */}
 
             {/* Fornecedor — destinatário do pagamento.
                 Desde 10/09/2026 é o mesmo campo da PP (decisão 067):
@@ -786,7 +740,7 @@ export function ContaAvulsaDrawer(props: Props) {
               ))}
             </div>
 
-            {/* Cliente — rastreabilidade de custo. Travado se job escolhido. */}
+            {/* Cliente — rastreabilidade de custo. */}
             <div className="space-y-2">
               <Label htmlFor="avulsa-cliente">Cliente</Label>
               <Combobox
@@ -794,7 +748,6 @@ export function ContaAvulsaDrawer(props: Props) {
                 value={clienteId}
                 onChange={handleClienteChange}
                 placeholder="Nenhum (opcional)"
-                disabled={clienteTravadoPeloJob}
                 items={[
                   { value: "__none__", label: "Nenhum" },
                   ...props.clientes.map((c) => ({
@@ -803,11 +756,6 @@ export function ContaAvulsaDrawer(props: Props) {
                   })),
                 ]}
               />
-              {clienteTravadoPeloJob && (
-                <p className="text-xs text-muted-foreground">
-                  Cliente herdado do projeto do job. Para alterar, mude ou remova o job.
-                </p>
-              )}
               {fieldErrors.cliente_id?.map((msg, i) => (
                 <p key={i} className="text-xs text-california-red">
                   {msg}
@@ -820,7 +768,6 @@ export function ContaAvulsaDrawer(props: Props) {
               linhas={rateio}
               onChange={setRateio}
               regionais={props.regionais.filter((r) => r.empresa_id === empresaId)}
-              jobRegionalId={jobSelecionado?.regional_id ?? null}
               disabled={pending}
             />
 
