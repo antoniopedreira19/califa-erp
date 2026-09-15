@@ -28,8 +28,8 @@ interface Props {
   /** Orçamento que ainda aceita versão nova (nem job criado, nem cancelado). */
   podeCriarVersao: boolean;
   motivoBloqueio?: string;
-  /** Presente ⇒ "Exportar" fica desabilitado com este motivo. Hoje só o
-   *  modelo mensal usa (decisão 078): a exportação dele ainda não existe. */
+  /** Presente ⇒ "Exportar" fica desabilitado com este motivo. O modelo
+   *  mensal usou até 15/09/2026, quando a exportação dele entrou (078). */
   exportarBloqueado?: string;
 }
 

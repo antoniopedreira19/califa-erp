@@ -5,6 +5,11 @@ import { createClient } from "@/lib/supabase/server";
 import { nomeVersao } from "@/lib/nome-versao";
 import { adicionarAbaOrcamento } from "@/lib/exportacao/planilha-orcamento";
 import {
+  adicionarAbaOrcamentoMensal,
+  mesesDaVersaoParaAba,
+} from "@/lib/exportacao/planilha-orcamento-mensal";
+import { mesesDaVersaoQuery } from "@/lib/data/meses-versao";
+import {
   adicionarAbaOrcamentoInternacional,
   cambioDaVersao,
 } from "@/lib/exportacao/planilha-orcamento-internacional";
@@ -107,23 +112,46 @@ export async function GET(
     itens: itens.filter((i) => i.grupo_id === grupo.id),
   }));
 
-  // Modelo mensal (decisão 078): a planilha exportada ainda não conhece
-  // meses — sairia com os grupos dos três meses misturados numa lista só.
-  if (orcamento.categoria?.modelo_planilha === "mensal") {
-    return NextResponse.json(
-      {
-        error:
-          "A exportação de orçamentos de Fee e Always On ainda não está disponível.",
-      },
-      { status: 400 },
-    );
-  }
-
   // O modelo vem da categoria do ORÇAMENTO (decisão 072). Internacional
   // sai no layout da planilha que a California já usa; nacional, como
   // sempre foi.
   const config = configDaPlanilha(orcamento.categoria?.modelo_planilha, versao);
-  if (config.internacional) {
+  if (orcamento.categoria?.modelo_planilha === "mensal") {
+    // Fee e Always On (decisão 078, 15/09/2026): cada mês com o seu
+    // fechamento e o resumo do trimestre no fim.
+    const { data: meses } = await mesesDaVersaoQuery(
+      supabase,
+      session.activeTenant.id,
+      versao.id,
+    );
+    adicionarAbaOrcamentoMensal(
+      wb,
+      "Orçamento",
+      {
+        identificacao: `${orcamento.codigo} · ${orcamento.nome}`,
+        clienteNome,
+        titulo: nomeVersao(orcamento.nome, versao.numero_versao),
+        secoes: [
+          {
+            orcamentoId: orcamento.id,
+            versaoId: versao.id,
+            percentualHonorarios: Number(versao.percentual_honorarios ?? 0),
+            percentualImposto: Number(versao.percentual_imposto ?? 0),
+            meses: mesesDaVersaoParaAba(
+              meses ?? [],
+              grupos.map((grupo) => ({
+                id: grupo.id,
+                nome: grupo.nome,
+                mesId: grupo.mes_id ?? null,
+                itens: itens.filter((i) => i.grupo_id === grupo.id),
+              })),
+            ),
+          },
+        ],
+      },
+      { formulas: true },
+    );
+  } else if (config.internacional) {
     adicionarAbaOrcamentoInternacional(
       wb,
       "Orçamento",

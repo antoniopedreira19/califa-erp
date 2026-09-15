@@ -143,6 +143,29 @@ export function rotuloMesCurto(iso: string): string {
   return `${nome.charAt(0).toUpperCase()}${nome.slice(1)}`;
 }
 
+/**
+ * O mês de um título de bloco de planilha: "OUTUBRO DE 2026" (a
+ * exportação do ERP) ou "JANEIRO - 1877/1" (a planilha interna, com o
+ * número do orçamento da agência e sem ano). Sem acento e sem caixa —
+ * "MARÇO" e "Marco" valem. `null` quando o texto não é um título de mês.
+ */
+export function mesDoRotulo(
+  texto: string,
+): { numero: number; ano: number | null } | null {
+  const semAcento = (s: string) =>
+    s.normalize("NFD").replace(/[̀-ͯ]/g, "").trim().toLowerCase();
+  const m = semAcento(texto).match(/^([a-z]+)(?:\s+de\s+(\d{4}))?(?:\s*[-–—]\s*.*)?$/);
+  if (!m) return null;
+  const numero = NOMES_MESES.map(semAcento).indexOf(m[1]) + 1;
+  if (numero === 0) return null;
+  return { numero, ano: m[2] ? Number(m[2]) : null };
+}
+
+/** `2026-10-01` a partir do ano e do número do mês. */
+export function isoDoMes(ano: number, numero: number): string {
+  return `${ano}-${doisDigitos(numero)}-01`;
+}
+
 /** "julho" — no meio de uma frase ("Totais de julho"). */
 export function nomeDoMes(iso: string): string {
   return NOMES_MESES[partes(iso).mes - 1];

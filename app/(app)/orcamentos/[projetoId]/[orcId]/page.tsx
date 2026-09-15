@@ -553,11 +553,6 @@ export default async function OrcamentoDetailPage({
                 totalVersoes={versoesTodas.length}
                 podeCriarVersao={podeCriarVersao}
                 motivoBloqueio={motivoBloqueio}
-                exportarBloqueado={
-                  orcamentoRaw?.categoria?.modelo_planilha === "mensal"
-                    ? "A exportação de orçamentos de Fee e Always On ainda não está disponível."
-                    : undefined
-                }
               />
             )}
             {orcamento.status === "job_criado" && job && (
@@ -978,9 +973,10 @@ function VersaoSelecionada({
       />
 
       {/* Modelo mensal (decisão 078): régua de meses, planilha do mês ou
-          vista do trimestre. A exportação e a importação ainda não existem
-          para ele — por isso o "Importar planilha" não aparece aqui. O
-          fluxo de aprovação e abertura, abaixo, é o mesmo dos outros. */}
+          vista do trimestre. O "Importar planilha" da versão fica na régua,
+          ao lado do "Editar meses": a planilha troca todos os meses de uma
+          vez (15/09/2026). O fluxo de aprovação e abertura, abaixo, é o
+          mesmo dos outros. */}
       {planilha.modeloPlanilha === "mensal" ? (
         <PlanilhaMensal
           projetoId={params.projetoId}
@@ -999,6 +995,14 @@ function VersaoSelecionada({
           savePorItem={savePorItem}
           saldosDeSave={saldosDeSave}
           planilha={planilha}
+          importacao={{
+            disabled: temJobAtivo || !podeCriarVersao,
+            disabledReason: temJobAtivo
+              ? versao.status === "aprovada"
+                ? "Esta versão já gerou um job e não pode ser sobrescrita."
+                : "O orçamento já gerou um job — nenhuma versão dele aceita ser sobrescrita."
+              : motivoBloqueio,
+          }}
         />
       ) : (
       <>

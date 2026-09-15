@@ -27,6 +27,8 @@ import type {
   TipoCusto,
 } from "@/lib/types";
 import { cancelarAprovacaoVersao } from "../[projetoId]/[orcId]/versoes/actions";
+import { copiarMesesEntreVersoes } from "@/lib/data/meses-versao";
+import { conferirMesesDaSecao } from "@/lib/importacao/meses-da-planilha";
 
 const BUCKET = "orcamento-importacoes";
 
@@ -137,6 +139,8 @@ interface Analise {
   /** Maior número de versão do orçamento, cancelada inclusive. */
   ultimoNumero: number;
   plano: PlanoDaSecao | null;
+  /** Meses da vigente (modelo mensal) — a versão nova os copia. */
+  mesesDaVigente: { id: string; mes: string }[];
   resumo: ResumoOrcamentoImportado;
 }
 
@@ -265,11 +269,11 @@ async function analisar(
   }
 
   const versaoIds = [...vigentes.values()].map((v) => v.id);
-  const [gruposRes, itensRes] = await Promise.all([
+  const [gruposRes, itensRes, mesesRes] = await Promise.all([
     versaoIds.length > 0
       ? supabase
           .from("versoes_orcamento_grupos")
-          .select("id, versao_orcamento_id, nome, ordem")
+          .select("id, versao_orcamento_id, nome, ordem, mes_id")
           .eq("tenant_id", tenantId)
           .in("versao_orcamento_id", versaoIds)
           .order("ordem", { ascending: true })
@@ -286,12 +290,35 @@ async function analisar(
           .in("versao_orcamento_id", versaoIds)
           .order("ordem", { ascending: true })
       : Promise.resolve({ data: [] as any[] }),
+    // Meses das vigentes: só o modelo mensal os tem (decisão 078).
+    versaoIds.length > 0
+      ? supabase
+          .from("versoes_orcamento_meses")
+          .select("id, versao_orcamento_id, mes")
+          .eq("tenant_id", tenantId)
+          .in("versao_orcamento_id", versaoIds)
+          .order("mes", { ascending: true })
+      : Promise.resolve({ data: [] as any[] }),
   ]);
+
+  const mesesPorVersao = new Map<string, { id: string; mes: string }[]>();
+  const mesPorId = new Map<string, string>();
+  for (const m of ((mesesRes.data ?? []) as any[])) {
+    const atuais = mesesPorVersao.get(m.versao_orcamento_id) ?? [];
+    atuais.push({ id: m.id, mes: m.mes });
+    mesesPorVersao.set(m.versao_orcamento_id, atuais);
+    mesPorId.set(m.id, m.mes);
+  }
 
   const gruposPorVersao = new Map<string, GrupoAtual[]>();
   for (const g of ((gruposRes.data ?? []) as any[])) {
     const atuais = gruposPorVersao.get(g.versao_orcamento_id) ?? [];
-    atuais.push({ id: g.id, nome: g.nome, ordem: num(g.ordem) });
+    atuais.push({
+      id: g.id,
+      nome: g.nome,
+      ordem: num(g.ordem),
+      mes: g.mes_id ? (mesPorId.get(g.mes_id) ?? null) : null,
+    });
     gruposPorVersao.set(g.versao_orcamento_id, atuais);
   }
   const itensPorVersao = new Map<string, ItemAtual[]>();
@@ -340,6 +367,7 @@ async function analisar(
       vigente: null,
       ultimoNumero: 0,
       plano: null,
+      mesesDaVigente: [],
       resumo: { ...base, motivo },
     });
 
@@ -363,18 +391,15 @@ async function analisar(
     // Planilha de um modelo não entra em orçamento de outro (decisão do
     // Tiago, 14/09/2026): as colunas e a cadeia não são as mesmas.
     const modeloDoOrcamento = orcamento.categoria?.modelo_planilha ?? "nacional";
-    // Modelo mensal (decisão 078): a planilha não diz de que mês é cada
-    // grupo, então nada entra nele por aqui.
-    if (modeloDoOrcamento === "mensal") {
-      return recusar(
-        "Orçamento de Fee ou Always On: a importação de planilha ainda não está disponível para ele — nada entra nele.",
-      );
-    }
     if (modeloDoOrcamento !== leitura.modelo) {
       return recusar(
-        leitura.modelo === "internacional"
-          ? "A planilha é internacional, e este orçamento é nacional — nada entra nele."
-          : "Este orçamento é internacional, e a planilha está no modelo nacional — nada entra nele.",
+        modeloDoOrcamento === "mensal"
+          ? "Orçamento de Fee ou Always On, e a planilha não tem os blocos de mês — nada entra nele."
+          : leitura.modelo === "mensal"
+            ? "A planilha é de orçamento de Fee ou Always On, com um bloco por mês, e este orçamento não é — nada entra nele."
+            : leitura.modelo === "internacional"
+              ? "A planilha é internacional, e este orçamento é nacional — nada entra nele."
+              : "Este orçamento é internacional, e a planilha está no modelo nacional — nada entra nele.",
       );
     }
 
@@ -396,6 +421,19 @@ async function analisar(
     const vigente = vigentes.get(orcamento.id) ?? null;
     if (!vigente) {
       return recusar("Sem versão para comparar. Crie a primeira na tela do orçamento.");
+    }
+
+    // Mensal (decisão 078): os blocos de mês da planilha têm que ser os
+    // meses da vigente — mês não se cria nem se apaga pela planilha (Tiago,
+    // 15/09/2026). Orçamentos de trimestres diferentes convivem no arquivo:
+    // cada seção confere com os meses do seu orçamento.
+    const mesesDaVigente = mesesPorVersao.get(vigente.id) ?? [];
+    if (modeloDoOrcamento === "mensal") {
+      const erroDosMeses = conferirMesesDaSecao(
+        secao.meses,
+        mesesDaVigente.map((m) => m.mes),
+      );
+      if (erroDosMeses) return recusar(erroDosMeses);
     }
     const ultimoNumero = (versoesPorOrcamento.get(orcamento.id) ?? []).reduce(
       (m, v) => Math.max(m, num(v.numero_versao)),
@@ -420,7 +458,7 @@ async function analisar(
       resumo: plano.resumo,
     };
 
-    return { secao, orcamento, vigente, ultimoNumero, plano, resumo };
+    return { secao, orcamento, vigente, ultimoNumero, plano, mesesDaVigente, resumo };
   });
 
   return { ok: true, arquivo: arq, leitura, analises };
@@ -563,12 +601,36 @@ export async function confirmarImportacaoProjeto(
       await service.from("versoes_orcamento").delete().eq("id", versaoId);
     };
 
-    // 2) Grupos, na ordem da planilha.
+    // 2) Mensal (decisão 078): os meses da vigente vão antes dos grupos, e
+    //    cada grupo aponta para o mês da versão nova, casado pela data.
+    const mesIdPorData = new Map<string, string>();
+    if (orcamento.categoria?.modelo_planilha === "mensal") {
+      const copiados = await copiarMesesEntreVersoes(supabase, {
+        tenantId,
+        origemId: vigente.id,
+        destinoId: versaoId,
+        profileId: session.profile.id,
+      });
+      for (const m of alvo.mesesDaVigente) {
+        const novo = copiados.get(m.id);
+        if (novo) mesIdPorData.set(m.mes, novo);
+      }
+      const faltouMes =
+        mesIdPorData.size !== alvo.mesesDaVigente.length ||
+        plano.grupos.some((g) => !g.mes || !mesIdPorData.has(g.mes));
+      if (faltouMes) {
+        await desfazer();
+        return falhar(`${orcamento.codigo}: não foi possível copiar os meses da versão.`);
+      }
+    }
+
+    // 3) Grupos, na ordem da planilha.
     const gruposParaInserir = plano.grupos.map((g, i) => ({
       tenant_id: tenantId,
       versao_orcamento_id: versaoId,
       nome: g.nome,
       ordem: i + 1,
+      mes_id: g.mes ? (mesIdPorData.get(g.mes) ?? null) : null,
     }));
     const { data: gruposCriados, error: gruposErr } =
       gruposParaInserir.length > 0
@@ -586,7 +648,7 @@ export async function confirmarImportacaoProjeto(
       (gruposCriados as { id: string; ordem: number }[]).map((g) => [g.ordem, g.id]),
     );
 
-    // 3) Itens: casado mantém planejado, categoria, rastro e a marca de
+    // 4) Itens: casado mantém planejado, categoria, rastro e a marca de
     //    save; novo nasce com planejado zerado (decisão do Tiago) e com a
     //    marca de save que a versão dá a linha nova.
     const itensParaInserir: any[] = [];
@@ -629,7 +691,7 @@ export async function confirmarImportacaoProjeto(
       }
     }
 
-    // 4) Orçamento aprovado: a aprovação é desfeita pelo mesmo caminho
+    // 5) Orçamento aprovado: a aprovação é desfeita pelo mesmo caminho
     //    do "Cancelar aprovação" da tela. Depois da versão, e não antes:
     //    se falhar aqui, sobra um rascunho a mais num orçamento ainda
     //    aprovado, que é inofensivo — o contrário deixaria o orçamento
@@ -646,7 +708,7 @@ export async function confirmarImportacaoProjeto(
       aprovacaoDesfeita = true;
     }
 
-    // 5) Registro da importação e auditoria.
+    // 6) Registro da importação e auditoria.
     const { error: impErr } = await service.from("orcamento_importacoes").insert({
       tenant_id: tenantId,
       orcamento_id: orcamento.id,

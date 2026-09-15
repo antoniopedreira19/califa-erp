@@ -46,6 +46,9 @@ export interface GrupoAtual {
   id: string;
   nome: string;
   ordem: number;
+  /** Mês do grupo (`YYYY-MM-01`) no modelo mensal; `null` nos outros. Pela
+   *  data, que casa entre versões — o id do mês muda a cada versão. */
+  mes: string | null;
 }
 
 export type SituacaoItem = "igual" | "alterado" | "novo";
@@ -67,7 +70,11 @@ export interface ItemPlanejado {
 export interface GrupoPlanejado {
   origem: GrupoAtual | null;
   nome: string;
+  /** Mês do bloco em que o grupo aparece na planilha (modelo mensal). */
+  mes: string | null;
   renomeado: boolean;
+  /** Grupo casado pelo id que foi parar no bloco de outro mês. */
+  mudouDeMes: boolean;
   itens: ItemPlanejado[];
 }
 
@@ -79,6 +86,8 @@ export interface ResumoDoPlano {
   gruposNovos: number;
   gruposApagados: number;
   gruposRenomeados: number;
+  /** Grupos que a planilha pôs no bloco de outro mês (modelo mensal). */
+  gruposMudadosDeMes: number;
   /** Linhas casadas sem id — a reserva por descrição entrou em ação. */
   casadasPorDescricao: number;
   orcadoAntes: number;
@@ -121,8 +130,13 @@ export function planejarSecao(
       gruposUsados.add(lido.grupoId);
       return grupoPorId.get(lido.grupoId)!;
     }
+    // Pelo nome, só dentro do mesmo mês: "Equipe" de outubro não é o
+    // "Equipe" de novembro (decisão 078).
     const porNome = gruposAtuais.find(
-      (g) => !gruposUsados.has(g.id) && chave(g.nome) === chave(lido.nome),
+      (g) =>
+        !gruposUsados.has(g.id) &&
+        chave(g.nome) === chave(lido.nome) &&
+        (g.mes ?? null) === (lido.mes ?? null),
     );
     if (porNome) {
       gruposUsados.add(porNome.id);
@@ -136,7 +150,9 @@ export function planejarSecao(
     return {
       origem,
       nome: lido.nome.trim(),
+      mes: lido.mes ?? null,
       renomeado: origem !== null && origem.nome.trim() !== lido.nome.trim(),
+      mudouDeMes: origem !== null && (origem.mes ?? null) !== (lido.mes ?? null),
       itens: [],
     };
   });
@@ -216,6 +232,7 @@ export function planejarSecao(
   const gruposApagados = gruposAtuais.filter((g) => !gruposUsados.has(g.id));
   const gruposNovos = gruposPlanejados.filter((g) => g.origem === null).length;
   const gruposRenomeados = gruposPlanejados.filter((g) => g.renomeado).length;
+  const gruposMudadosDeMes = gruposPlanejados.filter((g) => g.mudouDeMes).length;
   const orcadoAntes = itensAtuais.reduce((s, i) => s + totalOrcado(i), 0);
 
   const alterado =
@@ -224,7 +241,8 @@ export function planejarSecao(
     apagados.length > 0 ||
     gruposNovos > 0 ||
     gruposApagados.length > 0 ||
-    gruposRenomeados > 0;
+    gruposRenomeados > 0 ||
+    gruposMudadosDeMes > 0;
 
   return {
     grupos: gruposPlanejados,
@@ -239,6 +257,7 @@ export function planejarSecao(
       gruposNovos,
       gruposApagados: gruposApagados.length,
       gruposRenomeados,
+      gruposMudadosDeMes,
       casadasPorDescricao,
       orcadoAntes,
       orcadoDepois,

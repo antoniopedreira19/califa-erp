@@ -3845,3 +3845,26 @@ As duas trocas ficaram na auditoria.
 
 - **O `FluxoAbertura` fica fora da bifurcação mensal × outros.** Até a entrega 2 ele estava dentro do ramo não mensal, e versão de Fee/Always On não tinha como ser aprovada pela tela. Ele precisa ser o último filho da página, por causa do `sticky`.
 - **Mês só com grupo vazio conta como mês sem item.**
+
+## ⚠️ Nota de 2026-09-15 — Fee e Always On: exportar e importar planilha (decisão 078)
+
+Regras em [078](../decisions/078-orcamento-mensal-fee-e-always-on.md), seção "Excel do mensal".
+
+**O que mudou:**
+
+- **Exportação:** `lib/exportacao/planilha-orcamento-mensal.ts` gera a planilha do mensal — um bloco por mês com o fechamento até "FATURAMENTO DE <MÊS>" e o "RESUMO DO TRIMESTRE" no fim. As duas rotas (`versoes/[versaoId]/export` e `[projetoId]/export`) passaram a gerar o mensal; a do projeto só junta mensal com mensal. O "Exportar" da versão destravou e o mensal voltou aos seletores do projeto e da agregada.
+- **`lib/exportacao/planilha-orcamento.ts` refatorado** em peças exportadas (`prepararAbaOrcamento`, `escreverTituloDeSecao`, `escreverGrupos`, `escreverFechamento`, `marcasDaSecao`). A exportação nacional e as leituras dos dois parsers foram comparadas célula a célula antes e depois (script no scratchpad da sessão): idênticas, fora os campos novos de mês.
+- **Marcas ocultas novas:** `mes:YYYY-MM-01` (título do mês) e `resumo:` (fim da leitura).
+- **Importação do projeto:** `parser-projeto.ts` lê o mês de cada grupo e atravessa o fechamento de cada mês; `planejarSecao` casa grupo pelo nome só no mesmo mês e conta grupo que mudou de mês (`gruposMudadosDeMes`); `conferirMesesDaSecao` recusa meses diferentes dos da vigente; a v+1 copia os meses antes dos grupos. `GrupoAtual` e `GrupoLido` ganharam `mes` obrigatório.
+- **"Importar planilha" da versão:** `parseOficial(buf, { mensal: true })` e `casarBlocosComMeses` (`lib/importacao/meses-da-planilha.ts`). O botão do mensal fica na régua de meses, ao lado do "Editar meses" (`ReguaMeses` ganhou o slot `acao`).
+- **Testes:** `lib/importacao/mensal.test.ts` (8) — fechamento por mês, volta pelos dois parsers, diff com mês, conferência de meses, planilha no layout da aba SUL e recusa sem blocos.
+
+**Testado em 15/09/2026** (dev server na 3011, Projeto Teste):
+
+- Exportação da versão do `0-0001/26-09` pela rota: três meses, cada um fechando em R$ 16.701,88, resumo R$ 50.105,63 — o faturamento do JOB-0034.
+- `0-0001/26-13 · Teste Excel Fee 4T/2026` criado pela action do formulário (período 4T/2026). A v1 foi sobrescrita pelo drawer com uma planilha no layout da aba SUL: 4 grupos nos meses certos, tipo, orçado e planejado da planilha, janeiro fora do trimestre ignorado com aviso.
+- Exportação do projeto com o `-13`, editada (novembro R$ 9.000 → R$ 9.900 e um item novo em dezembro) e importada pelo "Importar" do projeto: v2 com os meses copiados, planejado de novembro preservado (R$ 8.000), item novo com planejado zero; preview "1 alterada · 1 nova · R$ 30.500,00 → R$ 33.400,00".
+- A mesma exportação com dezembro marcado como janeiro de 2027 foi recusada no preview, sem gravar nada.
+- A planilha real "INTERNA - DRE + Planilhas Ânima 2026.xlsx" lida por script: aba SUL (com aviso das abas SP, NENO e MGRJ), 12 meses, EQUIPE e VERBA por mês.
+
+**Em aberto:** na planilha interna, QT 0 marca item que não é cobrado no mês (Gerente de Projeto e Produtor em janeiro na aba SUL). O parser troca QT 0 por 1, regra antiga do nacional, e o orçado de janeiro sai R$ 15.000 acima do TOTAL da própria planilha. Pergunta levada ao Tiago.

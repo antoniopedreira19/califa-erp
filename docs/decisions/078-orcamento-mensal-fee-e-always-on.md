@@ -195,11 +195,67 @@ O que mudou:
   - a home do GP conta "prontos pra faturar" e "prontos pra encerrar" por
     mês.
 
+## Excel do mensal — exportar e importar (15/09/2026)
+
+**Respostas do Tiago:**
+
+- **Layout da exportação:** uma aba; cada mês é um bloco com os grupos e o
+  **fechamento do mês**, até "FATURAMENTO DE OUTUBRO" — o valor que o envio
+  daquele mês leva ao financeiro, como na aba SUL da planilha interna. No
+  fim, o **RESUMO DO TRIMESTRE** com o faturamento de cada mês e o do
+  trimestre.
+- **Exportação pelo projeto:** o mensal sai **só com outros mensais** — a
+  regra "modelos não se misturam" da 072. Orçamentos de **trimestres
+  diferentes** saem e voltam juntos, cada um com os seus meses.
+- **Os meses não mudam pela planilha:** bloco de mês que a versão não tem,
+  ou mês da versão sem bloco, recusa o orçamento. Criar ou apagar mês
+  continua só pelo "Editar meses". Dentro do mês, a regra de sempre.
+- **Planilha interna** (blocos "OUTUBRO - …", como a aba SUL) também entra
+  pelo "Importar planilha" da versão, casada pelo **nome do mês**; bloco de
+  mês fora do trimestre fica de fora, com aviso.
+
+**Como ficou:**
+
+- **Marcas na coluna oculta H:** `mes:2026-10-01` no título do mês — pela
+  data, que casa entre versões (o id do mês muda a cada versão) — e
+  `resumo:` no título do resumo, onde a leitura termina. `orc:`, `v:`,
+  `grp:` e `it:` como na 041.
+- **Gerador:** `lib/exportacao/planilha-orcamento-mensal.ts`, montado com as
+  peças do nacional, que saíram de `adicionarAbaOrcamento` para funções
+  exportadas (`prepararAbaOrcamento`, `escreverTituloDeSecao`,
+  `escreverGrupos`, `escreverFechamento`). A exportação nacional foi
+  comparada célula a célula antes e depois: idêntica.
+- **Rotas:** a da versão e a do projeto geram o mensal; a do projeto recusa
+  mensal junto de outro modelo.
+- **Importação do projeto** (`parser-projeto.ts`, `diff-projeto.ts`,
+  `_selecao/importar-actions.ts`): o parser dá o mês de cada grupo e pula o
+  fechamento de cada mês; `planejarSecao` casa grupo pelo nome só dentro do
+  mesmo mês e conta grupo que mudou de mês como alteração;
+  `conferirMesesDaSecao` recusa meses diferentes dos da vigente; a versão
+  nova copia os meses da vigente antes dos grupos.
+- **"Importar planilha" da versão** (`parser-oficial.ts`,
+  `meses-da-planilha.ts`, `versoes/importar-actions.ts`):
+  `parseOficial(buf, { mensal: true })` reconhece o título do mês (marca ou
+  nome), acha R$, QT, DIAS e o planejado pelo cabeçalho (a aba SUL põe NOME,
+  CONTRATO e UNI antes do R$ e o planejado em K–M), pula o cabeçalho
+  repetido e o fechamento de cada mês e, com várias abas de blocos, lê a
+  primeira e avisa quais existem. `casarBlocosComMeses` casa os blocos com
+  os meses da versão sobrescrita, da vigente (que a versão nova copia) ou,
+  sem versão, do período. O preview mostra o grupo com o mês
+  ("EQUIPE · Outubro").
+- **Telas:** o mensal voltou aos seletores "Exportar" do projeto e da
+  agregada ("· Fee ou Always On"; o aviso de mistura oferece "Manter só os de
+  Fee e Always On"), o "Exportar" da versão destravou, e o "Importar
+  planilha" do mensal fica na régua de meses, ao lado do "Editar meses" —
+  a planilha troca todos os meses de uma vez, então não é ação de um mês.
+
+**Decisões de tela minhas:** cada mês lista SUB-TOTAL de todos os tipos,
+como o nacional (a fórmula do TOTAL depende da faixa contígua); o título da
+seção do projeto mostra a soma dos faturamentos dos meses; no resumo do
+projeto cada linha nomeia o orçamento ("0-0001/26-09 · Outubro de 2026").
+
 ## O que ainda não existe
 
-- Exportação e importação de planilha do modelo mensal. Até lá,
-  "Exportar" fica desabilitado (e as rotas recusam), a importação é
-  recusada, e o seletor de exportação do projeto não o lista.
 - Edição do mensal pela visão agregada (hoje só consulta) e filtro de
   trimestres nela.
 
