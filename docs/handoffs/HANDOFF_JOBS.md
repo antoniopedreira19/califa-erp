@@ -3284,8 +3284,10 @@ rótulo da ficha virou "Total do item em PPs".
 painel no JOB-0029; prévia da edição sem dobrar; pop-up acima do
 planejado com R$ 9.000,00; e no JOB-0033 uma PP de verba de R$ 8.000 num
 item planejado de R$ 15.000 **enviada sem pedir confirmação** — que é o
-caso que pegaria a soma dobrada no servidor. Ficaram no projeto de teste
-a PP-00054 (gerada, JOB-0029) e a PP-00055 (em avaliação, JOB-0033).
+caso que pegaria a soma dobrada no servidor. As PPs criadas para o teste
+(PP-00054 no JOB-0029, PP-00055 no JOB-0033) foram canceladas pela tela
+em seguida, e o realizado dos dois itens voltou sozinho ao valor anterior
+— o que conferiu também o trigger no sentido do cancelamento.
 
 ## ⚠️ Nota de 2026-09-11 — o job internacional lê pela cadeia do orçamento (decisão 072)
 
