@@ -249,6 +249,15 @@ O que mudou:
   planilha" do mensal fica na régua de meses, ao lado do "Editar meses" —
   a planilha troca todos os meses de uma vez, então não é ação de um mês.
 
+**QT 0 vale** (Tiago, 15/09/2026). Na planilha interna, QT 0 marca o item
+listado no mês sem cobrança (o Gerente de Projeto de janeiro na aba SUL). A
+importação trocava o 0 por 1 — regra antiga, por causa da check
+`itens_quantidade_positiva` — e o orçado do mês saía acima do da planilha
+(R$ 57.727,43 contra R$ 42.727,43). Agora a quantidade orçada aceita zero no
+banco (`itens_quantidade_nao_negativa`, migration `20260915100001`), no
+schema do item e nos dois parsers; só QT negativo vira 1. **O padrão de item
+novo continua 1.** D/M segue > 0 e a quantidade da PP não mudou.
+
 **Decisões de tela minhas:** cada mês lista SUB-TOTAL de todos os tipos,
 como o nacional (a fórmula do TOTAL depende da faixa contígua); o título da
 seção do projeto mostra a soma dos faturamentos dos meses; no resumo do
@@ -282,3 +291,6 @@ projeto cada linha nomeia o orçamento ("0-0001/26-09 · Outubro de 2026").
   no lugar do `unique (job_id)` (autorizado pelo Tiago), a RPC do envio e
   as três views (`vw_faturamento_pendente`, `vw_fluxo_caixa`,
   `vw_saves_por_job`). Entrega 3.
+- `20260915100001_quantidade_orcada_aceita_zero.sql` — troca
+  `itens_quantidade_positiva` (> 0) por `itens_quantidade_nao_negativa`
+  (>= 0) em `versoes_orcamento_itens`. Alarga a regra: nada é regravado.

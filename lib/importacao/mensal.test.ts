@@ -333,3 +333,37 @@ test("planilha sem blocos de mês não entra no orçamento mensal", async () => 
   const casados = casarBlocosComMeses(parsed.grupos, parsed.meses, ["2026-10-01"]);
   assert.equal(casados.ok, false);
 });
+
+test("QT 0 é aceito: item listado sem cobrança no mês (15/09/2026)", async () => {
+  // Planilha interna do mensal, como a aba SUL.
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet("SUL");
+  ws.getCell("A1").value = "Atualizado";
+  ws.getCell("B1").value = "OUTUBRO - 2552/1";
+  const cab: Record<string, string> = { A: "PLANILHA", B: "ITEM", F: "R$", G: "QT", H: "DIAS", I: "TT", K: "R$", L: "QT", M: "DIAS", N: "TT" };
+  for (const [c, v] of Object.entries(cab)) ws.getCell(`${c}2`).value = v;
+  const item: Record<string, unknown> = { A: "EQUIPE", B: "Gerente de Projeto", F: 9000, G: 0, H: 1, I: 0, J: "B", K: 9000, L: 0, M: 1, N: 0 };
+  for (const [c, v] of Object.entries(item)) ws.getCell(`${c}3`).value = v as any;
+  const mensal = await parseOficial(Buffer.from(await wb.xlsx.writeBuffer()), { mensal: true });
+  const [linha] = mensal.grupos[0].itens;
+  assert.equal(linha.quantidade_orcada, 0);
+  assert.equal(linha.valor_unitario_orcado, 9000);
+  assert.ok(!mensal.warnings.some((w) => /Quantidade/.test(w.motivo)), JSON.stringify(mensal.warnings));
+
+  // No modelo nacional também, e o padrão de QT vazio continua 1.
+  const wbN = new ExcelJS.Workbook();
+  const wsN = wbN.addWorksheet("Padrão");
+  wsN.addRow(["CATEGORIA", "ITEM", "R$", "QT", "D/M", "TT"]);
+  wsN.addRow(["Equipe", "Sem cobrança", 1000, 0, 1, 0, "B"]);
+  wsN.addRow(["Equipe", "Sem quantidade", 1000, null, 1, 1000, "B"]);
+  wsN.addRow(["Equipe", "Negativa", 1000, -2, 1, 0, "B"]);
+  const nacional = await parseOficial(Buffer.from(await wbN.xlsx.writeBuffer()));
+  assert.deepEqual(
+    nacional.grupos[0].itens.map((i) => [i.item, i.quantidade_orcada]),
+    [
+      ["Sem cobrança", 0],
+      ["Sem quantidade", 1],
+      ["Negativa", 1],
+    ],
+  );
+});

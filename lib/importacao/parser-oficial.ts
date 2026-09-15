@@ -545,7 +545,8 @@ export async function parseOficial(
       }
       return padrao;
     }
-    const minimoOk = tipo === "unitario" ? lido.n >= 0 : lido.n > 0;
+    // QT zero vale desde 15/09/2026 (decisão 078); D/M continua > 0.
+    const minimoOk = tipo === "dias" ? lido.n > 0 : lido.n >= 0;
     if (!minimoOk) {
       warnings.push({
         linha: rowNumber,
@@ -553,7 +554,9 @@ export async function parseOficial(
         motivo:
           tipo === "unitario"
             ? `Valor unitário negativo (${bruto}) — assumido R$ 0,00.`
-            : `${rotulo} ${bruto || "0"} não é aceito (precisa ser maior que zero) — ${assumido}.`,
+            : tipo === "quantidade"
+              ? `Quantidade negativa (${bruto}) — assumida 1.`
+              : `${rotulo} ${bruto || "0"} não é aceito (precisa ser maior que zero) — ${assumido}.`,
         severidade: "ajuste",
       });
       return padrao;
@@ -851,9 +854,10 @@ export async function parseOficial(
       valorUnitario = 0;
     }
 
-    // QT e D/M precisam ser POSITIVOS: o banco tem CHECK
-    // `itens_quantidade_positiva` e `itens_dias_meses_positivo`. Zero ou
-    // negativo derrubaria o insert inteiro, então vira 1 com aviso.
+    // D/M precisa ser POSITIVO (CHECK `itens_dias_meses_positivo`): zero ou
+    // negativo derrubaria o insert inteiro, então vira 1 com aviso. QT zero
+    // vale desde 15/09/2026 (decisão 078) — na planilha interna ele marca o
+    // item que não é cobrado no mês —, e só QT negativo vira 1.
     const qtd = toNumber(colD);
     const dm = toNumber(colE);
 
@@ -866,11 +870,11 @@ export async function parseOficial(
         severidade: "ajuste",
       });
     }
-    if (quantidade <= 0) {
+    if (quantidade < 0) {
       warnings.push({
         linha: rowNumber,
         coluna: letra(col.qt),
-        motivo: `Quantidade ${colD || "0"} não é aceita (precisa ser maior que zero) — assumida 1.`,
+        motivo: `Quantidade negativa (${colD}) — assumida 1.`,
         severidade: "ajuste",
       });
       quantidade = 1;
