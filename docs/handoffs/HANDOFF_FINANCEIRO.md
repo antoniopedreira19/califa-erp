@@ -5066,8 +5066,10 @@ Regras em [078](../decisions/078-orcamento-mensal-fee-e-always-on.md), seção "
 Regra, evidências e a escolha do Tiago na
 [079](../decisions/079-a-nota-fiscal-so-cobre-jobs-de-um-cliente.md). A
 decisão nasceu 076 e foi renumerada antes de subir, porque a 076 já era da
-importação da versão; os comentários internos de `emitir_faturamento` no
-banco ainda dizem "076".
+importação da versão. Os comentários internos de `emitir_faturamento` no
+banco ficaram dizendo "076" até 15/09/2026, quando a
+`20260915000001_emitir_faturamento_comentario_079.sql` os trocou por 079 —
+só o comentário, a lógica é a mesma.
 
 ### O que estava errado
 
