@@ -4088,10 +4088,11 @@ origem `avulso`. O de origem `bv` **tem** job por trás
 (`itens_bv.job_item_orcado_id` → `jobs_itens_orcado.job_id`) e foi
 resolvido no dia seguinte — ver a nota de 11/09 logo abaixo.
 
-⚠️ **A conciliação continua divergindo num caso.** Ela lê
-`lancamentos_financeiros` direto, não a `vw_fluxo_caixa`: o job derivado
-da baixa de título não aparece ali, e a linha sai sem regional. O rateio
-do desembolso já foi incluído no embed, e a precedência já é a nova.
+⚠️ **A conciliação divergia num caso.** Ela lê `lancamentos_financeiros`
+direto, não a `vw_fluxo_caixa`: o job derivado da baixa de título não
+aparece ali, e a linha saía sem regional. O rateio do desembolso já foi
+incluído no embed, e a precedência já é a nova. **Corrigido em 15/09 — nota
+abaixo.**
 
 ⚠️ **O BV entrou na regra (2026-09-11).** Migration
 `20260911100001_bv_se_associa_ao_job.sql`, a pedido do Tiago — o resto da
@@ -4184,6 +4185,39 @@ previsões e mantendo o título; build, tsc e lint limpos.
 `AV-00001` (avulsa, R$ 1), a recorrência "Teste 069 — recorrência sem job"
 (**pausada**, para a rotina não gerar mais nada) e a ocorrência `AV-00002`
 (R$ 2, 25/09). Apagar é decisão do Tiago.
+
+⚠️ **A regional da baixa de título na Conciliação (2026-09-15).** O
+lançamento da baixa não tem job nem regional na tabela — `dar_baixa_titulo`
+grava os dois nulos, e o job é derivado da nota. A tela já resolvia esse job
+pela view `vw_lancamento_origens`, que é como a coluna Job mostra o link ou
+"Múltiplos"; faltava levar a regional junto. Agora a mesma leitura traz
+`jobs.regional`, e a regra fecha:
+
+- uma regional só nas origens → o nome aparece na coluna;
+- mais de uma → a divisão, com o percentual que cada regional representa do
+  valor recebido;
+- job direto ou rateio próprio (avulsa, desembolso) continuam mandando antes.
+
+Nada de consulta nova: a regional sai da leitura que a tela já fazia, e Job
+e Regional passam a concordar por construção.
+
+Junto veio a migration `20260915220001`: a `vw_lancamento_origens` resolvia
+o job só para item de origem `job` — a mesma omissão que a `vw_fluxo_caixa`
+tinha com o BV até 11/09. Agora resolve o BV pelo caminho
+`itens_bv.job_item_orcado_id` → `jobs_itens_orcado.job_id`, e as duas views
+devolvem os mesmos jobs, regionais e valores.
+
+**Conferido.** Sonda com rollback: com um item de BV acrescentado à nota, as
+duas views devolveram `JOB-0010 (NE) 1,00 | JOB-0029 (Teste) 0,50 |
+JOB-0033 (Teste) 0,50`, iguais entre si. E na tela, com baixa real do título
+de teste (NF TESTE-ESTEIRA, R$ 2, que cobre JOB-0029 e JOB-0033): o detalhe
+do lançamento mostra **Regional: Teste** e "De onde vem este dinheiro" com
+os dois jobs de R$ 1,00. Antes mostrava travessão. `tsc`, lint e build
+limpos.
+
+⚠️ **O título de teste ficou PAGO.** A baixa foi feita pela tela para
+exercitar o caso; para voltar ao estado anterior, é estornar pela
+Conciliação ou pela aba Títulos a Receber.
 
 ---
 

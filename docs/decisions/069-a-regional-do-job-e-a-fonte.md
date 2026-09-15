@@ -93,8 +93,11 @@ depois, e para o caso de a escrita um dia divergir.
 - **Título com origem `avulso`** não tem job — esse fica para o próximo
   lote. O de origem `bv` **tem**, e desde 11/09/2026 a view percorre o
   caminho (ver a revisão no fim).
-- **A conciliação** lê `lancamentos_financeiros` direto, não a view: o job
-  derivado da baixa de título não aparece ali, e a linha sai sem regional.
+- ~~**A conciliação** lê `lancamentos_financeiros` direto, não a view: o
+  job derivado da baixa de título não aparece ali, e a linha sai sem
+  regional.~~ Resolvido em 15/09/2026: a regional da baixa de título passou
+  a sair das origens da nota (`vw_lancamento_origens`), as mesmas que a
+  coluna Job já usava.
 
 ## Referências
 
