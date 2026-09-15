@@ -93,6 +93,30 @@ presta, e volta inteira.
 - O banco não aceita as duas coisas misturadas: "sem gasto" com documento é
   recusado, e prestação sem documento só vai com "sem gasto" marcado.
 
+### 7. A trava no encerramento do job (10a, 15/09/2026)
+
+- O job **não encerra** enquanto houver verba paga que não fechou:
+  prestação por enviar, em avaliação ou reprovada, ou estorno do saldo por
+  baixar. Só a verba **Concluída** libera — prestação aprovada e, quando
+  sobrou saldo, o estorno baixado (o dinheiro de volta na conta).
+- A verba ainda sem baixa não muda: ela já travava como PP sem baixa
+  (decisão [008](008-encerramento-do-job.md)).
+- O resumo de fechamento lista cada verba com a situação dela, na mesma
+  caixa das PPs, BVs e saldo a faturar, e diz o caminho: a produção presta
+  contas na aba de PPs, o financeiro aprova e dá baixa no estorno.
+- O servidor refaz a conta em `encerrarJob`; se a leitura das verbas falhar,
+  o job não encerra.
+- Sem mudança de banco: a situação é a mesma `situacaoDaVerba` das telas.
+
+**Conferido em 15/09/2026** (JOB-0029 · PP-00062, verba de R$ 100,00, baixas
+na Conta Teste): antes da verba nova, com PP-00058 e PP-00061 concluídas,
+nenhuma linha de verba no resumo. Paga a PP-00062, o resumo e o
+`encerrarJob` chamado pelo console listaram "PP-00062 (aguardando
+prestação)"; com a prestação enviada, "(prestação em avaliação)"; aprovada,
+"(devolução pendente)"; baixado o estorno, a linha sumiu da tela e da
+mensagem do servidor. O caso em que **só** a verba trava não foi exercitado:
+o JOB-0029 tem outras pendências (PPs, BV, nota e marcação dos itens).
+
 ## Banco
 
 - `20260915150001_verba_prestacao_com_aprovacao.sql` — `status`, autoria da
@@ -179,7 +203,4 @@ Verba de R$ 300,00 gerada, aprovada e baixada na Conta Teste pelas telas:
 
 ## O que ficou de fora
 
-- **Trava no encerramento do job** (10a): vai com a revisão do encerramento
-  e do faturamento — todas as PPs pagas, e a verba com prestação aprovada e
-  estorno baixado.
 - **Prazo para prestar contas** (8a).

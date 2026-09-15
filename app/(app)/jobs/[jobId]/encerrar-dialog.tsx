@@ -11,6 +11,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { formatCurrency } from "@/lib/utils";
+import { situacaoVerbaLabel, type SituacaoVerba } from "@/lib/types";
 import { calcularResultadoOperacional } from "@/lib/calculos/versao-totais";
 import { encerrarJob } from "./actions-encerramento";
 
@@ -36,6 +37,10 @@ export interface ResumoEncerramento {
   moeda: string;
   /** PPs sem baixa e BVs não recebidos — travam o encerramento. */
   ppsEmAberto: { codigo: string; status: string }[];
+  /** Verbas de produção pagas que ainda não fecharam: prestação por
+   *  enviar, em avaliação ou reprovada, ou estorno por baixar (decisão 081,
+   *  pergunta 10a). */
+  verbasEmAberto: { codigo: string; situacao: Exclude<SituacaoVerba, "concluida"> }[];
   bvsEmAberto: { item: string; situacao: string }[];
   /** Quanto do envio ainda não virou nota emitida — também trava. */
   saldoAFaturar: number;
@@ -115,6 +120,7 @@ export function EncerrarDialog({ jobId, resumo, open, onOpenChange }: Props) {
   const {
     moeda,
     ppsEmAberto,
+    verbasEmAberto,
     bvsEmAberto,
     saldoAFaturar,
     itensSemMarcacao,
@@ -125,6 +131,7 @@ export function EncerrarDialog({ jobId, resumo, open, onOpenChange }: Props) {
 
   const travado =
     ppsEmAberto.length > 0 ||
+    verbasEmAberto.length > 0 ||
     bvsEmAberto.length > 0 ||
     saldoAFaturar > 0 ||
     itensSemMarcacao.length > 0;
@@ -198,6 +205,18 @@ export function EncerrarDialog({ jobId, resumo, open, onOpenChange }: Props) {
                   : {bvsEmAberto.map((b) => b.item).join(", ")}.
                 </p>
               )}
+              {verbasEmAberto.length > 0 && (
+                <p className="text-muted-foreground">
+                  {verbasEmAberto.length === 1
+                    ? "1 verba de produção ainda não concluída"
+                    : `${verbasEmAberto.length} verbas de produção ainda não concluídas`}
+                  :{" "}
+                  {verbasEmAberto
+                    .map((v) => `${v.codigo} (${situacaoVerbaLabel(v.situacao).toLowerCase()})`)
+                    .join(", ")}
+                  .
+                </p>
+              )}
               {saldoAFaturar > 0 && (
                 <p className="text-muted-foreground">
                   <strong className="font-mono text-california-red">
@@ -219,6 +238,12 @@ export function EncerrarDialog({ jobId, resumo, open, onOpenChange }: Props) {
                 <p className="text-muted-foreground">
                   Dê baixa nesses documentos — pagamento da PP, recebimento do
                   BV — e volte aqui.
+                </p>
+              )}
+              {verbasEmAberto.length > 0 && (
+                <p className="text-muted-foreground">
+                  A produção presta contas da verba na aba de PPs; o financeiro
+                  aprova e dá baixa no estorno do que não foi gasto.
                 </p>
               )}
               {itensSemMarcacao.length > 0 && (
