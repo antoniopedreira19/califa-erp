@@ -19,13 +19,14 @@ import { cn } from "@/lib/utils";
 import type {
   PPStatus,
   FormaPagamento,
-  PPVerbaPrestacao,
-  PPVerbaPrestacaoAnexo,
+  PrestacaoDaVerba,
+  DevolucaoDaVerba,
   PlanoContaTipo,
   PlanoContaSubtipo,
 } from "@/lib/types";
 import type { CartaoOption } from "@/components/financeiro/forma-pagamento-field";
-import { ppStatusLabel, nomeContraparteBRPP } from "@/lib/types";
+import { ppStatusLabel, nomeContraparteBRPP, situacaoDaVerba } from "@/lib/types";
+import { SituacaoVerbaChip } from "@/components/financeiro/situacao-verba-chip";
 import { PPTela } from "./pp-tela";
 
 export interface PPRow {
@@ -119,13 +120,13 @@ export interface PPRow {
   /** Nome do responsável pela verba — preenchido quando verba_producao = true. */
   responsavel_nome: string | null;
   /**
-   * Prestação de contas vinculada (só existe se a PP for verba + já foi
-   * prestada). Null quando não foi prestada ainda.
+   * Prestação de contas da verba (decisão 081): enviada pela produção,
+   * conferida aqui. Null fora da verba ou enquanto a produção não enviou.
+   * Obrigatória no tipo — opcional, o `.map` da página a descartaria.
    */
-  prestacao?: (Omit<PPVerbaPrestacao, "tenant_id" | "fechada_por"> & {
-    fechada_por_profile: { nome: string } | null;
-    anexos: Array<Pick<PPVerbaPrestacaoAnexo, "id" | "arquivo_nome_original" | "arquivo_tamanho_bytes" | "arquivo_mimetype">>;
-  }) | null;
+  prestacao: PrestacaoDaVerba | null;
+  /** Estorno de verba criado na aprovação, quando sobrou saldo. */
+  devolucao: DevolucaoDaVerba | null;
   anexos: Array<{
     id: string;
     arquivo_nome_original: string;
@@ -184,10 +185,13 @@ function formatMoney(n: number): string {
   return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
-type FiltroStatus = PPStatus | "todas";
+/** "prestacoes": prestação de contas de verba esperando conferência
+ *  (decisão 081). A PP dela está "pago"; o que se aprova é a prestação. */
+type FiltroStatus = PPStatus | "todas" | "prestacoes";
 
 const STATUS_FILTROS: Array<{ key: FiltroStatus; label: string }> = [
   { key: "em_avaliacao", label: "Em avaliação" },
+  { key: "prestacoes", label: "Prestações" },
   { key: "aprovada", label: "Aprovadas" },
   { key: "pago", label: "Pagas" },
   { key: "rejeitada", label: "Rejeitadas" },
@@ -229,6 +233,7 @@ export function PedidosCompraList({
   const contagens = React.useMemo(() => {
     const c: Record<FiltroStatus, number> = {
       todas: rowsPorRegional.length,
+      prestacoes: 0,
       gerada: 0,
       em_avaliacao: 0,
       aprovada: 0,
@@ -236,14 +241,21 @@ export function PedidosCompraList({
       rejeitada: 0,
       cancelada: 0,
     };
-    for (const r of rowsPorRegional) c[r.status]++;
+    for (const r of rowsPorRegional) {
+      c[r.status]++;
+      if (r.prestacao?.status === "em_avaliacao") c.prestacoes++;
+    }
     return c;
   }, [rowsPorRegional]);
 
   const filtrados = React.useMemo(() => {
     const q = busca.trim().toLowerCase();
     return rowsPorRegional.filter((r) => {
-      if (filtro !== "todas" && r.status !== filtro) return false;
+      if (filtro === "prestacoes") {
+        if (r.prestacao?.status !== "em_avaliacao") return false;
+      } else if (filtro !== "todas" && r.status !== filtro) {
+        return false;
+      }
       if (q === "") return true;
       return (
         r.codigo.toLowerCase().includes(q) ||
@@ -338,10 +350,12 @@ export function PedidosCompraList({
               <th className="px-4 py-3 font-semibold">Código</th>
               <th className="px-4 py-3 font-semibold">Fornecedor</th>
               <th className="px-4 py-3 font-semibold">Job</th>
-              <th className="px-4 py-3 font-semibold">Emissão</th>
-              <th className="px-4 py-3 font-semibold text-right">Valor</th>
-              <th className="px-4 py-3 font-semibold">Prazo original</th>
-              <th className="px-4 py-3 font-semibold">Parcela</th>
+              {/* No filtro de prestações as colunas contam a prestação:
+                  quando chegou, a verba, o gasto e o saldo (decisão 081). */}
+              <th className="px-4 py-3 font-semibold">{filtro === "prestacoes" ? "Enviada em" : "Emissão"}</th>
+              <th className="px-4 py-3 font-semibold text-right">{filtro === "prestacoes" ? "Verba" : "Valor"}</th>
+              <th className="px-4 py-3 font-semibold">{filtro === "prestacoes" ? "Gasto" : "Prazo original"}</th>
+              <th className="px-4 py-3 font-semibold">{filtro === "prestacoes" ? "Saldo" : "Parcela"}</th>
               <th className="px-4 py-3 font-semibold">Status</th>
             </tr>
           </thead>
@@ -433,23 +447,43 @@ export function PedidosCompraList({
                   <span className="font-mono text-xs">{r.job_codigo}</span>{" "}
                   <span>{r.job_nome}</span>
                 </td>
-                <td className="px-4 py-3 text-muted-foreground">{formatDate(r.created_at)}</td>
+                <td className="px-4 py-3 text-muted-foreground">
+                  {formatDate(filtro === "prestacoes" ? (r.prestacao?.enviada_em ?? null) : r.created_at)}
+                </td>
                 <td className="px-4 py-3 text-right tabular-nums font-semibold">
                   {formatMoney(r.valor)}
                 </td>
-                <td className="px-4 py-3 text-muted-foreground">{formatDate(r.prazo_pagamento)}</td>
+                <td className="px-4 py-3 text-muted-foreground">
+                  {filtro === "prestacoes" ? (
+                    <span className="font-mono text-xs font-semibold text-foreground">
+                      {formatMoney(r.prestacao?.valor_gasto ?? 0)}
+                    </span>
+                  ) : (
+                    formatDate(r.prazo_pagamento)
+                  )}
+                </td>
                 {/* Parcela: a PP parcelada aparece como "1/3" — quantas vezes
                     o financeiro vai pagar. Cada parcela vira uma linha
                     própria na aba "Títulos a Pagar". */}
                 <td className="px-4 py-3">
-                  <span className="rounded-md border border-border bg-muted px-2 py-0.5 font-mono text-xs font-semibold">
-                    1/{Math.max(r.parcelas.length, 1)}
-                  </span>
+                  {filtro === "prestacoes" ? (
+                    <span className="font-mono text-xs font-semibold text-teal-700">
+                      {formatMoney(r.prestacao?.valor_devolvido ?? 0)}
+                    </span>
+                  ) : (
+                    <span className="rounded-md border border-border bg-muted px-2 py-0.5 font-mono text-xs font-semibold">
+                      1/{Math.max(r.parcelas.length, 1)}
+                    </span>
+                  )}
                 </td>
                 <td className="px-4 py-3">
-                  <Badge className={cn("border", statusBadgeClasses(r.status))}>
-                    {ppStatusLabel(r.status)}
-                  </Badge>
+                  {situacaoDaVerba(r) ? (
+                    <SituacaoVerbaChip situacao={situacaoDaVerba(r)!} />
+                  ) : (
+                    <Badge className={cn("border", statusBadgeClasses(r.status))}>
+                      {ppStatusLabel(r.status)}
+                    </Badge>
+                  )}
                 </td>
               </tr>
               </React.Fragment>

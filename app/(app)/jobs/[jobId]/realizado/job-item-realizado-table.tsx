@@ -16,7 +16,7 @@ import type {
   Empresa,
   ItemBv,
 } from "@/lib/types";
-import { nomeContraparteBRPP } from "@/lib/types";
+import { nomeContraparteBRPP, situacaoDaVerba } from "@/lib/types";
 import { CalhaLinha } from "./calha-linha";
 import { GerarPPDrawer } from "./gerar-pp-drawer";
 import { PainelPPsItem } from "./painel-pps-item";
@@ -1952,6 +1952,7 @@ export function JobItemRealizadoTable({
                 valor: Number(pp.valor ?? 0),
                 verbaProducao: pp.verba_producao === true,
                 temAnexo: (pp.anexos ?? []).length > 0,
+                situacaoVerba: situacaoDaVerba(pp),
               }))}
               emPPs={emPPs}
               envioBloqueadoPor={envioBloqueadoPor}

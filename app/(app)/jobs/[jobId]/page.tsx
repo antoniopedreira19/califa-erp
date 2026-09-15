@@ -137,6 +137,7 @@ export default async function JobDetailPage({
     podeGerarPP,
     podeEnviarPP,
     podeConfirmarBv,
+    ppsQuePossoPrestarContas,
   } = detalhe;
 
 
@@ -400,6 +401,7 @@ export default async function JobDetailPage({
             empresas={empresas}
             editable={podeGerarPP}
             podeEnviar={podeEnviarPP}
+            podePrestarContas={ppsQuePossoPrestarContas}
           />
         }
         ppsChat={

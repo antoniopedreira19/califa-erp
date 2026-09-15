@@ -1861,6 +1861,98 @@ export interface PedidoCompraNaLista extends PedidoCompra {
    *  campo (`lib/data/foto-pagamento-da-pp.ts`), para o dado bancário não
    *  precisar atravessar a fronteira até o cliente. */
   cadastro_do_fornecedor_mudou: boolean;
+  /** Prestação de contas da verba (decisão 081). Null fora da verba ou
+   *  enquanto a produção não enviou. Obrigatório, e não opcional: campo
+   *  opcional em tipo de linha deixa o `.map` descartá-lo em silêncio. */
+  prestacao: PrestacaoDaVerba | null;
+  /** Estorno de verba criado na aprovação, quando sobrou saldo. */
+  devolucao: DevolucaoDaVerba | null;
+}
+
+/**
+ * A prestação de contas da verba como as telas a leem — a produção (aba de
+ * PPs), o financeiro (aprovação e Títulos a Pagar) e o chat de PPs. Um
+ * formato só, montado por `lib/data/prestacao-da-verba.ts`.
+ */
+export interface PrestacaoDaVerba {
+  id: string;
+  status: PPVerbaPrestacaoStatus;
+  valor_gasto: number;
+  valor_devolvido: number;
+  enviada_em: string;
+  enviada_por_nome: string | null;
+  motivo_reprovacao: string | null;
+  reprovada_em: string | null;
+  reprovada_por_nome: string | null;
+  aprovada_em: string | null;
+  aprovada_por_nome: string | null;
+  /** Na ordem em que foram anexados. */
+  documentos: Array<{
+    id: string;
+    arquivo_nome_original: string;
+    arquivo_tamanho_bytes: number;
+    arquivo_mimetype: string;
+    documento_tipo: DocumentoTipo;
+    documento_numero: string | null;
+    valor: number;
+  }>;
+}
+
+export interface DevolucaoDaVerba {
+  id: string;
+  valor: number;
+  /** Data prevista da devolução, escolhida pelo financeiro na aprovação. */
+  data_pagamento: string;
+  pago_em: string | null;
+}
+
+/**
+ * Onde a verba de produção está depois de paga (decisão 081). É uma camada
+ * por cima do status "pago" da PP — o status da PP não muda, e quem lê
+ * "pago" (fluxo de caixa, encerramento) continua lendo.
+ */
+export type SituacaoVerba =
+  | "aguardando_prestacao"
+  | "prestacao_em_avaliacao"
+  | "prestacao_reprovada"
+  | "devolucao_pendente"
+  | "concluida";
+
+export function situacaoDaVerba(pp: {
+  verba_producao: boolean;
+  status: PPStatus;
+  prestacao: Pick<PrestacaoDaVerba, "status" | "valor_devolvido"> | null;
+  devolucao: Pick<DevolucaoDaVerba, "pago_em"> | null;
+}): SituacaoVerba | null {
+  if (!pp.verba_producao || pp.status !== "pago") return null;
+  if (!pp.prestacao) return "aguardando_prestacao";
+  if (pp.prestacao.status === "em_avaliacao") return "prestacao_em_avaliacao";
+  if (pp.prestacao.status === "reprovada") return "prestacao_reprovada";
+  if (Number(pp.prestacao.valor_devolvido) > 0 && !pp.devolucao?.pago_em) {
+    return "devolucao_pendente";
+  }
+  return "concluida";
+}
+
+export function situacaoVerbaLabel(s: SituacaoVerba): string {
+  switch (s) {
+    case "aguardando_prestacao":
+      return "Aguardando prestação";
+    case "prestacao_em_avaliacao":
+      return "Prestação em avaliação";
+    case "prestacao_reprovada":
+      return "Prestação reprovada";
+    case "devolucao_pendente":
+      return "Devolução pendente";
+    case "concluida":
+      return "Concluída";
+  }
+}
+
+/** A próxima ação é da produção. O filtro "Aguardando prestação" junta as
+ *  duas situações (decisão 081, pergunta 4a); o chip da linha diferencia. */
+export function verbaAguardaProducao(s: SituacaoVerba | null): boolean {
+  return s === "aguardando_prestacao" || s === "prestacao_reprovada";
 }
 
 export interface PedidoCompraAnexo {
@@ -1891,14 +1983,34 @@ export interface PPVerbaDevolucao {
   updated_at: string;
 }
 
+/** Estado da prestação de contas da verba (decisão 081). */
+export type PPVerbaPrestacaoStatus = "em_avaliacao" | "reprovada" | "aprovada";
+
 export interface PPVerbaPrestacao {
   id: string;
   tenant_id: string;
   pedido_compra_id: string;
+  /** Soma dos valores dos documentos — nunca passa do valor da PP. */
   valor_gasto: number;
+  /** Saldo não comprovado; vira estorno de verba só na aprovação. */
   valor_devolvido: number;
+  /** Quando e quem ENVIOU a prestação (a última vez). O nome vem do
+   *  desenho de 26/08/2026, em que o financeiro "fechava" a prestação. */
   fechada_em: string;
   fechada_por: string;
+  status: PPVerbaPrestacaoStatus;
+  motivo_reprovacao: string | null;
+  reprovada_em: string | null;
+  reprovada_por: string | null;
+  aprovada_em: string | null;
+  aprovada_por: string | null;
+  documentos_na_aprovacao: Array<{
+    id: string;
+    nome: string;
+    documento_tipo: DocumentoTipo;
+    documento_numero: string | null;
+    valor: number;
+  }> | null;
 }
 
 export interface PPVerbaPrestacaoAnexo {
@@ -1911,6 +2023,11 @@ export interface PPVerbaPrestacaoAnexo {
   arquivo_mimetype: string;
   created_by: string | null;
   created_at: string;
+  /** Só NF e recibo comprovam gasto da verba (decisão 081, 3b). */
+  documento_tipo: DocumentoTipo;
+  documento_numero: string | null;
+  /** Quanto este documento comprova. */
+  valor: number;
 }
 
 /**

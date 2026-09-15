@@ -1,3 +1,9 @@
+import {
+  SELECT_PRESTACAO_DA_VERBA,
+  devolucaoDaVerba,
+  prestacaoDaVerba,
+} from "@/lib/data/prestacao-da-verba";
+import { situacaoDaVerba } from "@/lib/types";
 import { redirect } from "next/navigation";
 import { Wallet } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
@@ -69,7 +75,6 @@ export default async function PedidosCompraFinanceiroPage({
     cartoesRes,
     desembolsosRes,
     desembolsosTitulosRes,
-    prestacoesRes,
     devolucoesRes,
     conversasChatPPs,
   ] = await Promise.all([
@@ -104,6 +109,7 @@ export default async function PedidosCompraFinanceiroPage({
           id, codigo, nome, regional_id,
           projeto:projetos(codigo, nome, cliente:clientes(nome_fantasia))
         ),
+        ${SELECT_PRESTACAO_DA_VERBA},
         anexos:pedidos_compra_anexos(id, arquivo_nome_original, arquivo_tamanho_bytes, created_at),
         parcelas:pedidos_compra_parcelas(
           id, numero, data_vencimento, data_pagamento, data_pagamento_primeira,
@@ -300,15 +306,6 @@ export default async function PedidosCompraFinanceiroPage({
       if (empresaFiltroIds.length > 0) q = q.in("empresa_id", empresaFiltroIds);
       return q.order("created_at", { ascending: false });
     })(),
-    // Prestações de contas de PPs de Verba de Produção (Task 6).
-    supabase
-      .from("pp_verba_prestacoes")
-      .select(`
-        id, pedido_compra_id, valor_gasto, valor_devolvido, fechada_em,
-        fechada_por_profile:profiles!fechada_por(nome),
-        anexos:pp_verba_prestacoes_anexos(id, arquivo_nome_original, arquivo_tamanho_bytes, arquivo_mimetype)
-      `)
-      .eq("tenant_id", session.activeTenant.id),
     // Devoluções de verba de produção — todas (a_pagar + pagas), para a
     // aba Títulos a Pagar (Task 11). Fetch direto na tabela, sem view.
     supabase
@@ -317,6 +314,8 @@ export default async function PedidosCompraFinanceiroPage({
         id, tenant_id, empresa_id, valor, data_pagamento, data_pagamento_primeira,
         pago_em, pago_por,
         pp:pedidos_compra!pedido_compra_id(id, codigo, servico, job_id,
+          plano_conta_tipo_id, plano_conta_subtipo_id,
+          responsavel:profiles!responsavel_verba_id(nome),
           job:jobs(id, codigo, nome)
         )
       `)
@@ -335,28 +334,8 @@ export default async function PedidosCompraFinanceiroPage({
   if (cartoesRes.error) console.error("[financeiro.cartoes.list]", cartoesRes.error.message);
   if (desembolsosRes.error) console.error("[financeiro.desembolsos.list]", desembolsosRes.error.message);
   if (desembolsosTitulosRes.error) console.error("[financeiro.desembolsos_titulos.list]", desembolsosTitulosRes.error.message);
-  if (prestacoesRes.error) console.error("[financeiro.prestacoes.list]", prestacoesRes.error.message);
   if (devolucoesRes.error) console.error("[financeiro.devolucoes.list]", devolucoesRes.error.message);
 
-  // Mapa pedido_compra_id → prestação (com anexos e profile de quem fechou)
-  type PrestacaoComAnexos = {
-    id: string;
-    pedido_compra_id: string;
-    valor_gasto: number;
-    valor_devolvido: number;
-    fechada_em: string;
-    fechada_por_profile: { nome: string } | null;
-    anexos: Array<{
-      id: string;
-      arquivo_nome_original: string;
-      arquivo_tamanho_bytes: number;
-      arquivo_mimetype: string;
-    }>;
-  };
-  const prestacoesPorPP = new Map<string, PrestacaoComAnexos>();
-  for (const p of (prestacoesRes.data ?? []) as unknown as PrestacaoComAnexos[]) {
-    prestacoesPorPP.set(p.pedido_compra_id, p);
-  }
 
   /**
    * Cadastro de pagamento de cada fornecedor ativo, para o asterisco da
@@ -412,6 +391,8 @@ export default async function PedidosCompraFinanceiroPage({
     rejeitada_por_profile: { nome: string } | null;
     enviada_financeiro_em: string | null;
     aprovada_em: string | null;
+    prestacao: unknown;
+    devolucao: unknown;
     anexos_na_aprovacao: Array<{
       id: string;
       nome: string;
@@ -520,7 +501,9 @@ export default async function PedidosCompraFinanceiroPage({
     plano_conta_subtipo_id: r.plano_conta_subtipo_id ?? null,
     verba_producao: r.verba_producao ?? false,
     responsavel_nome: r.responsavel?.nome ?? null,
-    prestacao: prestacoesPorPP.get(r.id) ?? null,
+    // Prestação da verba e estorno do saldo, no formato único (decisão 081).
+    prestacao: prestacaoDaVerba(r.prestacao),
+    devolucao: devolucaoDaVerba(r.devolucao),
     // Ordenados aqui, como as parcelas e pelo mesmo motivo: o embed do
     // PostgREST não garante ordem, e a conferência de documentos numera
     // os anexos 1, 2, 3 — a numeração precisa ser a ordem em que a
@@ -671,6 +654,7 @@ export default async function PedidosCompraFinanceiroPage({
         // coisas só existem em compra de cartão, que vem do laço das
         // avulsas.
         // A urgência da PP segue no título (decisão 077, pergunta 4a).
+        verba_situacao: situacaoDaVerba(pp),
         urgente: pp.urgente,
         urgente_justificativa: pp.urgente_justificativa,
         estorno_de_avulsa_id: null,
@@ -736,6 +720,7 @@ export default async function PedidosCompraFinanceiroPage({
       cartao_credito_id: a.pago_em
         ? baixa?.cartao_credito_id ?? a.cartao_credito_id
         : a.cartao_credito_id,
+      verba_situacao: null,
       urgente: false,
       urgente_justificativa: null,
       estorno_de_avulsa_id: a.estorno_de_avulsa_id,
@@ -838,6 +823,7 @@ export default async function PedidosCompraFinanceiroPage({
         // Nenhuma destas origens é estorno nem parcela de cartão: as duas
         // coisas só existem em compra de cartão, que vem do laço das
         // avulsas.
+        verba_situacao: null,
         urgente: false,
         urgente_justificativa: null,
         estorno_de_avulsa_id: null,
@@ -863,6 +849,9 @@ export default async function PedidosCompraFinanceiroPage({
       codigo: string;
       servico: string;
       job_id: string | null;
+      plano_conta_tipo_id: string | null;
+      plano_conta_subtipo_id: string | null;
+      responsavel: { nome: string } | null;
       job: { id: string; codigo: string; nome: string } | null;
     } | null;
   }>) {
@@ -870,12 +859,16 @@ export default async function PedidosCompraFinanceiroPage({
     titulos.push({
       id: dev.id,
       origem: "pp_devolucao_verba",
-      origem_label: `DEVOLUÇÃO ${dev.pp?.codigo ?? ""}`,
+      origem_label: `ESTORNO ${dev.pp?.codigo ?? ""}`,
       // A devolução é dinheiro VOLTANDO do responsável pela verba, não
       // pagamento a fornecedor — não há foto para comparar.
       cadastro_do_fornecedor_mudou: false,
-      descricao: `Devolução verba ${dev.pp?.codigo ?? ""} — ${dev.pp?.servico ?? ""}`,
-      fornecedor_nome: "",
+      // "Estorno de verba" desde a decisão 081 (pergunta 6a). Nas telas ele
+      // é despesa negativa; no banco segue positivo e, na baixa, entrada.
+      descricao: `Estorno de verba ${dev.pp?.codigo ?? ""} — ${dev.pp?.servico ?? ""}`,
+      fornecedor_nome: dev.pp?.responsavel?.nome
+        ? `Verba — ${dev.pp.responsavel.nome}`
+        : "",
       job_codigo: dev.pp?.job?.codigo ?? "—",
       data_pagamento: dev.data_pagamento,
       venc_original: dev.data_pagamento_primeira,
@@ -885,8 +878,10 @@ export default async function PedidosCompraFinanceiroPage({
       parcela_total: 1,
       status: dev.pago_em ? "pago" : "a_pagar",
       empresa_id: dev.empresa_id,
-      plano_conta_tipo_id: null,
-      plano_conta_subtipo_id: null,
+      // Já nasce no centro de custo da PP (decisão 081, 8a): o estorno abate
+      // o mesmo custo que a verba lançou.
+      plano_conta_tipo_id: dev.pp?.plano_conta_tipo_id ?? custoOperacionalTipoId,
+      plano_conta_subtipo_id: dev.pp?.plano_conta_subtipo_id ?? null,
       pago_em: dev.pago_em,
       conta_nome: baixa?.conta ?? null,
       centro_nome: baixa?.centro ?? null,
@@ -896,6 +891,7 @@ export default async function PedidosCompraFinanceiroPage({
       // Nenhuma destas origens é estorno nem parcela de cartão: as duas
       // coisas só existem em compra de cartão, que vem do laço das
       // avulsas.
+      verba_situacao: null,
       urgente: false,
       urgente_justificativa: null,
       estorno_de_avulsa_id: null,
@@ -1075,6 +1071,7 @@ export default async function PedidosCompraFinanceiroPage({
       // Nenhuma destas origens é estorno nem parcela de cartão: as duas
       // coisas só existem em compra de cartão, que vem do laço das
       // avulsas.
+      verba_situacao: null,
       urgente: false,
       urgente_justificativa: null,
       estorno_de_avulsa_id: null,

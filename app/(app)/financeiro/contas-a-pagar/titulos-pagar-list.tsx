@@ -35,6 +35,8 @@ import {
   Search,
   Wallet,
 } from "lucide-react";
+import { verbaAguardaProducao } from "@/lib/types";
+import { SituacaoVerbaChip } from "@/components/financeiro/situacao-verba-chip";
 import { cn } from "@/lib/utils";
 import { DatePicker } from "@/components/ui/date-picker";
 import type {
@@ -44,6 +46,7 @@ import type {
   PlanoContaTipo,
   PlanoContaSubtipo,
   TituloPagarStatus,
+  SituacaoVerba,
 } from "@/lib/types";
 import type { CartaoOption } from "@/components/financeiro/forma-pagamento-field";
 import { ContaAvulsaDrawer } from "./conta-avulsa-drawer";
@@ -123,6 +126,12 @@ export interface TituloRow {
    * fatura (29/08/2026).
    */
   /**
+   * Onde a verba de produção está depois de paga (decisão 081) — só no
+   * título de PP de verba; toda outra linha manda `null`. É o que alimenta
+   * o status próprio e o filtro "Aguardando prestação".
+   */
+  verba_situacao: SituacaoVerba | null;
+  /**
    * A PP de origem é urgente (decisão 077, pergunta 4a): a urgência não
    * termina na aprovação — o título sobe para o topo dos "a pagar" com a
    * mesma justificativa. Só PP tem urgência; toda outra origem manda
@@ -186,7 +195,7 @@ const CHIP_ORIGEM: Array<{ key: "todas" | OrigemTitulo; label: string }> = [
   { key: "avulso", label: "Avulsos" },
   { key: "recorrencia", label: "Recorrências" },
   { key: "desembolso", label: "Desembolsos" },
-  { key: "pp_devolucao_verba", label: "Devoluções de verba" },
+  { key: "pp_devolucao_verba", label: "Estornos de verba" },
   { key: "fatura_cartao", label: "Faturas de cartão" },
 ];
 
@@ -206,7 +215,7 @@ function origemChipClass(origem: OrigemTitulo): string {
       // foi classificado item a item no fechamento.
       return "border-slate-300 bg-slate-100 text-slate-700";
     case "pp_devolucao_verba":
-      return "border-emerald-200 bg-emerald-50 text-emerald-700";
+      return "border-teal-200 bg-teal-50 text-teal-800";
   }
 }
 
@@ -214,7 +223,15 @@ function origemChipClass(origem: OrigemTitulo): string {
 // Componente
 // ---------------------------------------------------------------------------
 
-type StatusFiltro = "a_pagar" | "pago" | "todos";
+/** "aguardando_prestacao": título de verba paga cuja prestação depende da
+ *  produção — sem prestação ou reprovada (decisão 081, 4a). */
+type StatusFiltro = "a_pagar" | "aguardando_prestacao" | "pago" | "todos";
+
+/** O estorno de verba é despesa negativa nas telas (decisão 081, 8a): no
+ *  banco segue positivo, aqui abate as somas. */
+function valorComSinal(r: TituloRow): number {
+  return r.origem === "pp_devolucao_verba" ? -r.valor : r.valor;
+}
 
 interface Props {
   /** Base bruta — inclui a_pagar e pago (não cartão). Filtro é interno. */
@@ -271,7 +288,11 @@ export function TitulosPagarList({
   const rows = React.useMemo(
     () =>
       rowsBruto.filter((r) =>
-        statusFiltro === "todos" ? true : r.status === statusFiltro,
+        statusFiltro === "todos"
+          ? true
+          : statusFiltro === "aguardando_prestacao"
+            ? verbaAguardaProducao(r.verba_situacao)
+            : r.status === statusFiltro,
       ),
     [rowsBruto, statusFiltro],
   );
@@ -322,7 +343,7 @@ export function TitulosPagarList({
 
   // Filtro de período só se aplica quando o filtro de status inclui pagos.
   // Filtra por `pago_em`. Em "a_pagar" os inputs ficam ocultos, retorna true.
-  const mostraPeriodo = statusFiltro !== "a_pagar";
+  const mostraPeriodo = statusFiltro === "pago" || statusFiltro === "todos";
   const casaPeriodo = React.useCallback(
     (r: TituloRow) => {
       if (!mostraPeriodo) return true;
@@ -392,6 +413,11 @@ export function TitulosPagarList({
   // recorte do chip: é panorama do caixa. O corte de "mês" segue o mês
   // corrente local (America/Sao_Paulo). "Total pago (filtro)" respeita o
   // período quando ele está ativo.
+  const aguardandoPrestacao = React.useMemo(
+    () => rowsBruto.filter((r) => verbaAguardaProducao(r.verba_situacao)).length,
+    [rowsBruto],
+  );
+
   const resumo = React.useMemo(() => {
     const hoje = hojeISO();
     const limite = somaDiasISO(hoje, 7);
@@ -399,18 +425,18 @@ export function TitulosPagarList({
     const aPagar = rowsBruto.filter((r) => r.status === "a_pagar");
     const pagos = rowsBruto.filter((r) => r.status === "pago");
     return {
-      emAberto: aPagar.reduce((s, r) => s + r.valor, 0),
+      emAberto: aPagar.reduce((s, r) => s + valorComSinal(r), 0),
       semana: aPagar
         .filter(
           (r) =>
             r.data_pagamento && r.data_pagamento >= hoje && r.data_pagamento <= limite,
         )
-        .reduce((s, r) => s + r.valor, 0),
-      pagosHoje: pagos.filter((r) => r.pago_em === hoje).reduce((s, r) => s + r.valor, 0),
+        .reduce((s, r) => s + valorComSinal(r), 0),
+      pagosHoje: pagos.filter((r) => r.pago_em === hoje).reduce((s, r) => s + valorComSinal(r), 0),
       pagosMes: pagos
         .filter((r) => (r.pago_em ?? "").slice(0, 7) === mesAtual)
-        .reduce((s, r) => s + r.valor, 0),
-      totalPago: pagos.filter((r) => casaPeriodo(r)).reduce((s, r) => s + r.valor, 0),
+        .reduce((s, r) => s + valorComSinal(r), 0),
+      totalPago: pagos.filter((r) => casaPeriodo(r)).reduce((s, r) => s + valorComSinal(r), 0),
     };
   }, [rowsBruto, casaPeriodo]);
 
@@ -425,7 +451,7 @@ export function TitulosPagarList({
               : baixando.origem === "desembolso"
                 ? `Desembolso ${baixando.origem_label}`
                 : baixando.origem === "pp_devolucao_verba"
-                  ? `Devolução verba ${baixando.origem_label}`
+                  ? `Estorno de verba ${baixando.origem_label.replace(/^ESTORNO /, "")}`
                   : baixando.origem === "fatura_cartao"
                     ? `Fatura de cartão ${baixando.origem_label}`
                     : "Lançamento avulso",
@@ -451,7 +477,7 @@ export function TitulosPagarList({
               : conferindo.origem === "desembolso"
                 ? `Desembolso ${conferindo.origem_label}`
                 : conferindo.origem === "pp_devolucao_verba"
-                  ? `Devolução verba ${conferindo.origem_label}`
+                  ? `Estorno de verba ${conferindo.origem_label.replace(/^ESTORNO /, "")}`
                   : conferindo.origem === "fatura_cartao"
                     ? `Fatura de cartão ${conferindo.origem_label}`
                     : "Lançamento avulso",
@@ -475,7 +501,7 @@ export function TitulosPagarList({
             : editando.origem === "desembolso"
               ? `Desembolso ${editando.origem_label}`
               : editando.origem === "pp_devolucao_verba"
-                ? `Devolução verba ${editando.origem_label}`
+                ? `Estorno de verba ${editando.origem_label.replace(/^ESTORNO /, "")}`
                 : editando.origem_label,
         vencOriginal: editando.venc_original,
         primeiraData: editando.data_pagamento_primeira,
@@ -494,6 +520,15 @@ export function TitulosPagarList({
           ativo={statusFiltro === "a_pagar"}
           onClick={() => setStatusFiltro("a_pagar")}
           label="A pagar"
+        />
+        <StatusChip
+          ativo={statusFiltro === "aguardando_prestacao"}
+          onClick={() => setStatusFiltro("aguardando_prestacao")}
+          label={
+            aguardandoPrestacao > 0
+              ? `Aguardando prestação · ${aguardandoPrestacao}`
+              : "Aguardando prestação"
+          }
         />
         <StatusChip
           ativo={statusFiltro === "pago"}
@@ -781,24 +816,41 @@ export function TitulosPagarList({
                   </td>
                   <td className={cn(
                     "whitespace-nowrap px-3 py-3 text-right font-semibold tabular-nums",
-                    r.origem === "pp_devolucao_verba" && "text-emerald-700",
+                    r.origem === "pp_devolucao_verba" && "text-teal-700",
                   )}>
-                    {r.origem === "pp_devolucao_verba" ? `+${formatMoney(r.valor)}` : formatMoney(r.valor)}
+                    {/* Despesa negativa (decisão 081, 8a). */}
+                    {r.origem === "pp_devolucao_verba" ? `−${formatMoney(r.valor)}` : formatMoney(r.valor)}
                   </td>
                   <td className="px-2 py-3 text-center font-mono text-xs text-muted-foreground">
                     {r.parcela_numero}/{r.parcela_total}
                   </td>
                   <td className="px-2 py-3 text-center">
-                    <span
-                      className={cn(
-                        "inline-flex items-center whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide",
-                        pago
-                          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                          : "border-[#fde68a] bg-[#fffbeb] text-[#92400e]",
-                      )}
-                    >
-                      {pago ? "Pago" : "A pagar"}
-                    </span>
+                    {r.verba_situacao ? (
+                      // Verba paga: o status é o da prestação (decisão 081).
+                      <SituacaoVerbaChip
+                        situacao={r.verba_situacao}
+                        className="whitespace-normal text-center leading-tight"
+                      />
+                    ) : (
+                      <span
+                        className={cn(
+                          "inline-flex items-center whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide",
+                          r.origem === "pp_devolucao_verba" && !pago
+                            ? "whitespace-normal border-teal-200 bg-teal-50 text-center leading-tight text-teal-800"
+                            : pago
+                              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                              : "border-[#fde68a] bg-[#fffbeb] text-[#92400e]",
+                        )}
+                      >
+                        {r.origem === "pp_devolucao_verba"
+                          ? pago
+                            ? "Devolvido"
+                            : "Devolução pendente"
+                          : pago
+                            ? "Pago"
+                            : "A pagar"}
+                      </span>
+                    )}
                   </td>
                   <td className="px-3 py-3 text-center">
                     {pago ? (

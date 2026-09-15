@@ -3653,3 +3653,36 @@ Lançar, editar e negociar o BV não mudou: segue em `podeAcoesPlanilha`.
 **Não testado no navegador:** a visão do produtor — não dá para entrar com outra conta nesta sessão. Fica coberta pelo teste da matriz e pela trava da action.
 
 **Pendência registrada (não mexida):** a policy de UPDATE de `itens_bv` deixa qualquer membro do tenant alterar o BV direto pela API, inclusive a situação — o que contorna `confirmarBv`.
+
+## ⚠️ Nota de 2026-09-15 — a produção presta contas da verba na aba de PPs (decisão 081)
+
+### O que mudou
+
+- **Aba de PPs** (`pps/job-pps-section.tsx`): filtro "Aguardando prestação"
+  (verba sem prestação e prestação reprovada), chip de situação na linha, e
+  "Prestar contas" / "Corrigir prestação" na trilha, onde já ficava o
+  "Cancelar". A trilha passou de 104 para 140 px.
+- **Gaveta** (`pps/prestar-contas-drawer.tsx`): documentos NF ou recibo, cada
+  um com número e valor; o gasto é a soma e não passa da verba. Reprovada, abre
+  com o motivo e com o que foi enviado.
+- **Actions** (`pps/actions-prestacao.ts`): prefixo de upload, envio pela
+  função `enviar_prestacao_verba`, link do documento. Na correção, o arquivo do
+  documento que sai é apagado do Storage depois que o envio é aceito.
+- **Planilha interna e ficha da PP:** a situação da verba em leitura, com
+  "Preste contas na aba de PPs".
+- **Chat de PPs** (`lib/data/job-chat-pps.ts`): cartões de prestação enviada,
+  reprovada e aprovada, também no chat do financeiro.
+- **Dados** (`carregar-detalhe.ts`): a PP traz `prestacao` e `devolucao` pelo
+  trecho único `SELECT_PRESTACAO_DA_VERBA` (`lib/data/prestacao-da-verba.ts`), e
+  a página recebe `ppsQuePossoPrestarContas`.
+
+### Armadilhas
+
+- **O embed da prestação precisa das dicas de FK.** `pp_verba_devolucoes`
+  aponta para a PP e para a prestação, o que abre um segundo caminho entre as
+  duas; sem `!pp_verba_prestacoes_pedido_compra_id_fkey` o PostgREST recusa e a
+  tela fica vazia em silêncio. Use o trecho de `lib/data/prestacao-da-verba.ts`.
+- `prestacao` e `devolucao` são **obrigatórios** em `PedidoCompraNaLista` e
+  `PPParaThreadChat` — opcional, o `.map` os descartaria sem erro.
+- A situação é **derivada** (`situacaoDaVerba` em `lib/types.ts`). O status da
+  PP continua "pago"; não crie status novo na PP.

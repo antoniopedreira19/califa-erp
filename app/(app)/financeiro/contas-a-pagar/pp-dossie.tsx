@@ -22,17 +22,21 @@ import {
   FileText,
   Image as ImageIcon,
   Lock,
-  Paperclip,
 } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
-import { ppStatusLabel, nomeContraparteBRPP } from "@/lib/types";
+import {
+  documentoTipoLabel,
+  nomeContraparteBRPP,
+  ppStatusLabel,
+  situacaoDaVerba,
+} from "@/lib/types";
+import { SituacaoVerbaChip } from "@/components/financeiro/situacao-verba-chip";
 import { qualJanela } from "@/lib/calculos/janelas-pagamento";
 import type { PPRow } from "./pedidos-compra-list";
 import { useChatPPs } from "./chat/chat-pps-provider";
 import { ChatPPsConversa } from "./chat/chat-pps-conversa";
 import { abrirThreadPPs, marcarConversaPPsLida } from "./chat/actions";
 import type { ThreadPPsDoJob } from "@/lib/data/chat-pps-conversas";
-import { signedUrlAnexoPrestacao } from "./prestacao-verba-actions";
 
 function formatDate(iso: string | null): string {
   if (!iso) return "—";
@@ -58,7 +62,6 @@ export function PPDossie({
   onAba,
   anexoAtivo,
   onAnexo,
-  onPrestarContas,
   onErro,
 }: {
   pp: PPRow;
@@ -67,7 +70,6 @@ export function PPDossie({
   /** Índice do anexo aberto no painel do meio — a lista marca qual é. */
   anexoAtivo: number;
   onAnexo: (i: number) => void;
-  onPrestarContas: () => void;
   onErro: (mensagem: string) => void;
 }) {
   const { conversas, zerarNaoLidas, recarregar, podeEnviar } = useChatPPs();
@@ -95,12 +97,6 @@ export function PPDossie({
       ativo = false;
     };
   }, [aba, pp.job_id, ultimaEm, zerarNaoLidas]);
-
-  async function abrirAnexoPrestacao(anexoId: string) {
-    const res = await signedUrlAnexoPrestacao(anexoId);
-    if (res.ok) window.open(res.url, "_blank");
-    else onErro(res.message);
-  }
 
   const vencimentoOriginal = (
     pp.parcelas[0]?.data_vencimento ?? pp.prazo_pagamento ?? ""
@@ -246,6 +242,9 @@ export function PPDossie({
             </Grupo>
           )}
 
+          {/* Verba não tem anexo próprio: os documentos dela são os da
+              prestação, no bloco abaixo (decisão 081). */}
+          {(!pp.verba_producao || pp.anexos.length > 0) && (
           <Grupo rotulo={`Anexos (${pp.anexos.length})`}>
             {pp.anexos.length === 0 ? (
               <p className="text-[11.5px] text-muted-foreground">
@@ -284,15 +283,12 @@ export function PPDossie({
               </ul>
             )}
           </Grupo>
+          )}
 
           <Historico pp={pp} />
 
           {pp.verba_producao && (
-            <Prestacao
-              pp={pp}
-              onPrestarContas={onPrestarContas}
-              onAbrirAnexo={abrirAnexoPrestacao}
-            />
+            <Prestacao pp={pp} anexoAtivo={anexoAtivo} onDocumento={onAnexo} />
           )}
         </div>
       ) : (
@@ -538,112 +534,105 @@ function Caixa({
 /** Verba de produção: o dinheiro sai antes da nota, e volta aqui. */
 function Prestacao({
   pp,
-  onPrestarContas,
-  onAbrirAnexo,
+  anexoAtivo,
+  onDocumento,
 }: {
   pp: PPRow;
-  onPrestarContas: () => void;
-  onAbrirAnexo: (anexoId: string) => void;
+  /** Índice do documento aberto no painel do meio. */
+  anexoAtivo: number;
+  onDocumento: (i: number) => void;
 }) {
+  const situacao = situacaoDaVerba(pp);
+  const pr = pp.prestacao;
+  const brl = (n: number) => formatCurrency(n, "BRL");
   return (
     <section className="rounded-xl border border-border p-3">
-      <p className="text-xs font-bold">Prestação de contas</p>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-bold">Prestação de contas</p>
+        {situacao && <SituacaoVerbaChip situacao={situacao} />}
+      </div>
 
-      {pp.status !== "pago" && !pp.prestacao && (
+      {pp.status !== "pago" && (
         <p className="mt-1.5 text-[11.5px] text-muted-foreground">
           A prestação abre depois que a verba for paga.
         </p>
       )}
 
-      {pp.status === "pago" && !pp.prestacao && (
-        <div className="mt-2">
-          <p className="mb-2 text-[11.5px] text-muted-foreground">
-            Verba paga e ainda sem prestação.
-          </p>
-          <button
-            type="button"
-            onClick={onPrestarContas}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-california-red px-3 py-1.5 text-[11.5px] font-semibold text-white transition-opacity hover:opacity-90"
-          >
-            <Paperclip className="h-3.5 w-3.5" />
-            Prestar contas
-          </button>
-        </div>
+      {pp.status === "pago" && !pr && (
+        <p className="mt-1.5 text-[11.5px] text-muted-foreground">
+          Verba paga. Quem presta contas é a produção, na aba de PPs do job.
+        </p>
       )}
 
-      {pp.prestacao && (
+      {pr && (
         <div className="mt-2 space-y-2">
-          <p className="text-[11px] text-muted-foreground">
-            Fechada em {formatDate(pp.prestacao.fechada_em)}
-            {pp.prestacao.fechada_por_profile?.nome
-              ? ` por ${pp.prestacao.fechada_por_profile.nome}`
-              : ""}
-            .
-          </p>
-          <div className="grid grid-cols-3 gap-1.5">
-            <Numero rotulo="Valor da PP" valor={formatCurrency(pp.valor, "BRL")} />
-            <Numero
-              rotulo="Gasto"
-              valor={formatCurrency(Number(pp.prestacao.valor_gasto), "BRL")}
-            />
-            <Numero
-              rotulo="Devolvido"
-              valor={formatCurrency(Number(pp.prestacao.valor_devolvido), "BRL")}
-              destaque
-            />
-          </div>
-          {pp.prestacao.anexos.length > 0 && (
-            <div>
-              <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                Notas anexadas
+          {pr.status === "reprovada" && pr.motivo_reprovacao && (
+            <div className="rounded-lg border border-california-red/30 bg-california-red/5 p-2 text-[11px]">
+              <p className="font-semibold text-california-red">
+                Reprovada{pr.reprovada_por_nome ? ` por ${pr.reprovada_por_nome}` : ""} ·{" "}
+                {formatDateTime(pr.reprovada_em)}
               </p>
-              <ul className="space-y-1">
-                {pp.prestacao.anexos.map((a) => (
-                  <li
-                    key={a.id}
-                    className="flex items-center gap-2 rounded border border-border p-1.5 text-[11px]"
-                  >
-                    <FileText className="h-3.5 w-3.5 flex-none text-muted-foreground" />
-                    <button
-                      type="button"
-                      onClick={() => onAbrirAnexo(a.id)}
-                      className="min-w-0 flex-1 truncate text-left text-california-red underline hover:opacity-80"
-                    >
-                      {a.arquivo_nome_original}
-                    </button>
-                  </li>
-                ))}
-              </ul>
+              <p className="text-foreground/80">“{pr.motivo_reprovacao}”</p>
             </div>
           )}
+          <ul className="space-y-1">
+            {pr.documentos.map((d, i) => (
+              <li key={d.id}>
+                <button
+                  type="button"
+                  onClick={() => onDocumento(i)}
+                  aria-pressed={i === anexoAtivo}
+                  title={`Ver ${d.arquivo_nome_original} ao lado da PP`}
+                  className={cn(
+                    "grid w-full grid-cols-[14px_minmax(0,1fr)_auto] items-baseline gap-1.5 rounded-lg border p-1.5 text-left text-[11px] transition-colors",
+                    i === anexoAtivo
+                      ? "border-california-red bg-california-red/5"
+                      : "border-border hover:bg-muted",
+                  )}
+                >
+                  <span className="font-mono text-muted-foreground">{i + 1}</span>
+                  <span className="truncate">
+                    {documentoTipoLabel(d.documento_tipo)}
+                    {d.documento_numero ? ` ${d.documento_numero}` : ""} · {d.arquivo_nome_original}
+                  </span>
+                  <span className="font-mono font-semibold">{brl(d.valor)}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+          <div className="space-y-1 border-t border-border pt-2 text-[11px]">
+            <div className="flex justify-between font-semibold">
+              <span>Gasto comprovado</span>
+              <span className="font-mono">{brl(pr.valor_gasto)}</span>
+            </div>
+            <div className="flex justify-between text-muted-foreground">
+              <span>Verba</span>
+              <span className="font-mono">{brl(pp.valor)}</span>
+            </div>
+            {pr.valor_devolvido > 0 && (
+              <div className="flex justify-between rounded-md bg-teal-50 px-2 py-1 font-semibold text-teal-800">
+                <span>{pp.devolucao ? "Estorno de verba" : "Saldo → estorno"}</span>
+                <span className="font-mono">−{brl(pr.valor_devolvido)}</span>
+              </div>
+            )}
+            {pp.devolucao && (
+              <p className="text-muted-foreground">
+                {pp.devolucao.pago_em
+                  ? `Devolvido em ${formatDate(pp.devolucao.pago_em)}.`
+                  : `Devolução prevista para ${formatDate(pp.devolucao.data_pagamento)}.`}
+              </p>
+            )}
+          </div>
+          <p className="text-[10.5px] text-muted-foreground">
+            Enviada{pr.enviada_por_nome ? ` por ${pr.enviada_por_nome}` : ""} ·{" "}
+            {formatDateTime(pr.enviada_em)}
+            {pr.aprovada_em
+              ? ` · aprovada${pr.aprovada_por_nome ? ` por ${pr.aprovada_por_nome}` : ""} em ${formatDateTime(pr.aprovada_em)}`
+              : ""}
+          </p>
         </div>
       )}
     </section>
   );
 }
 
-function Numero({
-  rotulo,
-  valor,
-  destaque,
-}: {
-  rotulo: string;
-  valor: string;
-  destaque?: boolean;
-}) {
-  return (
-    <div className="rounded border border-border bg-muted/20 p-1.5 text-center">
-      <p className="text-[9px] uppercase tracking-wider text-muted-foreground">
-        {rotulo}
-      </p>
-      <p
-        className={cn(
-          "mt-0.5 font-mono text-[11px] font-semibold",
-          destaque && "text-emerald-700",
-        )}
-      >
-        {valor}
-      </p>
-    </div>
-  );
-}

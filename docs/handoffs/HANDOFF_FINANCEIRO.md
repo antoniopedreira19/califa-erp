@@ -5207,3 +5207,38 @@ JOB-0033 FATURADO e 4 / 16 / 20; JOB-0034 (mensal, sem nota) ENVIADO e
 108 / 20 / 128, como antes; média do Projeto Teste 9 / 16 / 25; Visualizar
 Jobs igual; recebimento da auditoria R$ 1,00 pelo banco. Console sem erro.
 Testes (18), `tsc`, `next lint` e `npm run build` limpos.
+
+## ⚠️ Nota de 2026-09-15 — o financeiro aprova a prestação da verba, e o saldo vira estorno de verba (decisão 081)
+
+A nota de 14/09 sobre verba descrevia o fluxo antigo (o financeiro fechava a
+prestação). Dela continua valendo só a pendência do encerramento.
+
+### O que mudou
+
+- **Aprovação:** filtro "Prestações" na aba Pedidos de Produção, com Enviada em,
+  Verba, Gasto e Saldo. A tela cheia mostra "Documentos da prestação" no painel
+  do meio, o bloco da prestação no dossiê e o rodapé "Reprovar prestação" /
+  "Seguir para a aprovação". O pop-up é `aprovar-prestacao-dialog.tsx` (data
+  prevista da devolução).
+- **Actions** (`prestacao-verba-actions.ts`): `aprovarPrestacaoVerba` e
+  `reprovarPrestacaoVerba`. O `fecharPrestacaoVerba` e o
+  `prestar-contas-dialog.tsx` saíram.
+- **Títulos a Pagar:** status "Aguardando prestação" com filtro próprio; o
+  título pago da verba mostra a situação. O estorno de verba aparece com −R$,
+  abate as somas (`valorComSinal`) e já nasce no centro de custo da PP; a baixa
+  diz "Baixar estorno de verba".
+- **Banco:** migrations `20260915150001`–`150003`. `fechar_prestacao_verba_pp`
+  foi removida; o realizado desconta só prestação aprovada; o rótulo "Estorno de
+  verba" está nas views, na baixa e no estorno da baixa.
+
+### Armadilhas
+
+- **O estorno é negativo só nas telas.** No banco segue positivo e, na baixa,
+  entrada — é o dinheiro voltando, e a conciliação bate com o extrato (decisão
+  081, pergunta 8a). Não afrouxe `chk_valor_positivo` dos lançamentos.
+- A prestação e os documentos só se gravam pelas funções: as policies de
+  INSERT direto saíram.
+- `fechada_em` / `fechada_por` significam "enviada (a última vez) / por quem".
+- **Pendências:** a trava da verba no encerramento do job vai com a revisão do
+  encerramento e do faturamento; verba sem gasto nenhum ainda não tem como ser
+  prestada (a prestação exige um documento com valor).
