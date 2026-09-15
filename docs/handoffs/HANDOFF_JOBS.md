@@ -3695,3 +3695,18 @@ Lançar, editar e negociar o BV não mudou: segue em `podeAcoesPlanilha`.
   `PPParaThreadChat` — opcional, o `.map` os descartaria sem erro.
 - A situação é **derivada** (`situacaoDaVerba` em `lib/types.ts`). O status da
   PP continua "pago"; não crie status novo na PP.
+
+## ⚠️ Nota de 2026-09-15 — o que ficou pendente da frente do internacional e da errata
+
+Verificação final da sessão: build completa limpa no main; conferidos pela
+tela a coluna USD com o Orçado escondido, a importação com itens "Total…",
+a porta da visão agregada e o formulário de save do internacional na
+planilha da versão.
+
+**Pendente, por decisão do Tiago:**
+
+| O quê | Por que não foi testado | Quando testar |
+|---|---|---|
+| Trava de remoção de linha com save consumido (`barrarRemocao`) e o destino do consumo em `lib/data/saves.ts` (`saveDaVersao`, embed corrigido em 14/09) | O saldo de save só existe depois do envio do job de origem ao faturamento (`20260901100001`), e o envio é definitivo | O Tiago vai trocar essa trava por um **fluxo de aprovação do save**; os dois testes entram nele |
+| Texto do formulário de save sem saldo ("O crédito nasce quando um job dele é aberto…") | Está errado para a regra de hoje, mas o Tiago pediu para não mexer | Muda junto com o fluxo de aprovação do save |
+| Trava de Impostos BR e int. taxes do internacional sem `orcamentos.editar_impostos` | Todos os usuários são administradores | Depois que o Tiago redefinir os acessos, com um usuário sem a permissão |
