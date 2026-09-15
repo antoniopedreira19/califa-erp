@@ -6,7 +6,8 @@
 -- outra frente já tinha a 076 no main. Os dois comentários "076:" DENTRO
 -- da função ficaram como foram aplicados no banco em 14/09/2026 — mudar só
 -- o arquivo faria o repositório divergir da definição viva. Onde se lê
--- "076" dentro da função, leia-se 079.
+-- "076" dentro da função, leia-se 079. (Acertados no banco pela
+-- 20260915000001_emitir_faturamento_comentario_079.sql.)
 --
 -- Uma nota fiscal só cobre jobs de um mesmo cliente. Até aqui a regra só
 -- existia na tela: `faturarSelecionados` (faturamento-list.tsx) não abria o

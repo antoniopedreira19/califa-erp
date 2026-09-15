@@ -4,7 +4,9 @@
 **Status:** aceita
 **Número:** nasceu 076 e foi renumerada para 079 em 15/09/2026, antes de
 subir — outra frente já tinha a 076 no `main`. Os comentários internos de
-`emitir_faturamento` no banco ainda dizem "076"; leia-se 079.
+`emitir_faturamento` no banco ficaram dizendo "076" até serem acertados
+para 079, no mesmo dia, pela
+`20260915000001_emitir_faturamento_comentario_079.sql`.
 **Contexto:** emissão de nota na aba Faturamento de
 `/financeiro/contas-a-receber`. Fecha a pendência registrada na
 [075](075-a-esteira-reconhece-a-nota-pelos-itens.md) e na nota de 14/09 da
