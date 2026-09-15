@@ -5260,6 +5260,10 @@ prestação). Dela continua valendo só a pendência do encerramento.
 - A prestação e os documentos só se gravam pelas funções: as policies de
   INSERT direto saíram.
 - `fechada_em` / `fechada_por` significam "enviada (a última vez) / por quem".
-- **Pendências:** a trava da verba no encerramento do job vai com a revisão do
-  encerramento e do faturamento; verba sem gasto nenhum ainda não tem como ser
-  prestada (a prestação exige um documento com valor).
+- **Verba sem gasto** (migration `20260915170001`): a prestação pode ir sem
+  documento, com gasto R$ 0,00, só com "não houve gasto" marcado. O pop-up e o
+  dossiê dizem "Sem gasto", e o estorno aprovado é a verba inteira.
+  `enviar_prestacao_verba` ganhou `p_sem_gasto`; a assinatura de dois
+  argumentos saiu.
+- **Pendência:** a trava da verba no encerramento do job vai com a revisão do
+  encerramento e do faturamento.

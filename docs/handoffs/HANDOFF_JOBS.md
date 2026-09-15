@@ -3664,7 +3664,9 @@ Lançar, editar e negociar o BV não mudou: segue em `podeAcoesPlanilha`.
   "Cancelar". A trilha passou de 104 para 140 px.
 - **Gaveta** (`pps/prestar-contas-drawer.tsx`): documentos NF ou recibo, cada
   um com número e valor; o gasto é a soma e não passa da verba. Reprovada, abre
-  com o motivo e com o que foi enviado.
+  com o motivo e com o que foi enviado. **"Não houve gasto — a verba volta
+  inteira"** esconde os documentos e envia sem nenhum (migration
+  `20260915170001`); reprovada sem documento, reabre com a opção marcada.
 - **Actions** (`pps/actions-prestacao.ts`): prefixo de upload, envio pela
   função `enviar_prestacao_verba`, link do documento. Na correção, o arquivo do
   documento que sai é apagado do Storage depois que o envio é aceito.

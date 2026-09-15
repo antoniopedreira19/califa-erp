@@ -223,11 +223,13 @@ export function montarThreadChatPPs(
         valor: gastoFmt,
         valorTom: "neutro",
         linhas: [
-          {
-            texto: "Documentos",
-            valor: String(pr.documentos.length),
-            tom: "texto",
-          },
+          pr.documentos.length === 0
+            ? { texto: "Sem gasto", valor: "devolução total", tom: "texto" as const }
+            : {
+                texto: "Documentos",
+                valor: String(pr.documentos.length),
+                tom: "texto" as const,
+              },
           { texto: "Saldo a devolver", valor: saldoFmt, tom: "texto" },
           ...(pr.enviada_por_nome
             ? ([{ texto: "Enviada por", valor: pr.enviada_por_nome, tom: "texto" }] as const)

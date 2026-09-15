@@ -59,13 +59,30 @@ const documentoSchema = z.object({
     .max(999_999_999, "Valor fora do esperado."),
 });
 
-const envioSchema = z.object({
-  pp_id: z.string().uuid(),
-  documentos: z
-    .array(documentoSchema)
-    .min(1, "Anexe ao menos um documento — NF ou recibo.")
-    .max(60, "Documentos demais numa prestação só."),
-});
+const envioSchema = z
+  .object({
+    pp_id: z.string().uuid(),
+    /** "Não houve gasto": a prestação vai sem documento e a verba volta
+     *  inteira. Explícito — lista vazia sem marcar continua recusada. */
+    sem_gasto: z.boolean().default(false),
+    documentos: z.array(documentoSchema).max(60, "Documentos demais numa prestação só."),
+  })
+  .superRefine((v, ctx) => {
+    if (!v.sem_gasto && v.documentos.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Anexe ao menos um documento — NF ou recibo.",
+        path: ["documentos"],
+      });
+    }
+    if (v.sem_gasto && v.documentos.length > 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Sem gasto, a prestação vai sem documento.",
+        path: ["documentos"],
+      });
+    }
+  });
 
 /** Onde o navegador sobe os arquivos: a policy do bucket exige o tenant
  *  na primeira pasta. */
@@ -100,7 +117,7 @@ export async function enviarPrestacaoVerba(
       message: parsed.error.issues[0]?.message ?? "Dados inválidos.",
     };
   }
-  const { pp_id, documentos } = parsed.data;
+  const { pp_id, documentos, sem_gasto } = parsed.data;
   const session = await requireSession();
   const supabase = createClient();
 
@@ -123,6 +140,7 @@ export async function enviarPrestacaoVerba(
 
   const { error } = await supabase.rpc("enviar_prestacao_verba", {
     p_pp_id: pp_id,
+    p_sem_gasto: sem_gasto,
     p_documentos: documentos.map((d) => ({
       id: d.id,
       path: d.path,
@@ -159,6 +177,7 @@ export async function enviarPrestacaoVerba(
     metadata: {
       pp_codigo: pp.codigo,
       reenvio: antes != null,
+      sem_gasto,
       documentos: documentos.length,
       valor_gasto: gastoCentavos / 100,
       saldo: Math.round(Number(pp.valor) * 100 - gastoCentavos) / 100,

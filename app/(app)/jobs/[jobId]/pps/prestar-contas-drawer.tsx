@@ -114,6 +114,8 @@ export function PrestarContasDrawer({
   const [docs, setDocs] = React.useState<DocumentoLocal[]>([]);
   const [erro, setErro] = React.useState<string | null>(null);
   const [tentouEnviar, setTentouEnviar] = React.useState(false);
+  /** "Não houve gasto": vai sem documento, e a verba volta inteira. */
+  const [semGasto, setSemGasto] = React.useState(false);
   const submittingRef = React.useRef(false);
   const sucessoRef = React.useRef(false);
   const inputRef = React.useRef<HTMLInputElement>(null);
@@ -129,6 +131,10 @@ export function PrestarContasDrawer({
     setErro(null);
     setTentouEnviar(false);
     setPrefixo(null);
+    // Reprovada sem documento é uma devolução total que voltou: reabre marcada.
+    setSemGasto(
+      pp.prestacao?.status === "reprovada" && pp.prestacao.documentos.length === 0,
+    );
     setDocs(
       pp.prestacao?.status === "reprovada"
         ? pp.prestacao.documentos.map((d) => ({
@@ -170,7 +176,9 @@ export function PrestarContasDrawer({
   const ppAtual = pp;
 
   const validos = docs.filter((d) => d.status === "ok");
-  const gastoCentavos = validos.reduce((s, d) => s + Math.round(lerValor(d.valor) * 100), 0);
+  const gastoCentavos = semGasto
+    ? 0
+    : validos.reduce((s, d) => s + Math.round(lerValor(d.valor) * 100), 0);
   const verbaCentavos = Math.round(Number(ppAtual.valor) * 100);
   const saldoCentavos = verbaCentavos - gastoCentavos;
   const passouDaVerba = saldoCentavos < 0;
@@ -270,27 +278,33 @@ export function PrestarContasDrawer({
       setErro("Aguarde os arquivos terminarem de subir.");
       return;
     }
-    if (docs.some((d) => d.status === "erro")) {
-      setErro("Remova os arquivos que não subiram antes de enviar.");
-      return;
-    }
-    if (validos.length === 0) {
-      setErro("Anexe ao menos um documento — NF ou recibo.");
-      return;
-    }
-    if (validos.some((d) => !d.tipo)) {
-      setErro("Diga se cada documento é NF ou recibo.");
-      return;
-    }
-    if (validos.some((d) => lerValor(d.valor) <= 0)) {
-      setErro("Informe o valor de cada documento.");
-      return;
-    }
-    if (passouDaVerba) {
-      setErro(
-        `Os documentos somam ${reais(gastoCentavos)}, acima da verba de ${reais(verbaCentavos)}. Retire documentos até fechar dentro da verba — o excedente precisa de uma PP nova.`,
-      );
-      return;
+    if (!semGasto) {
+      if (docs.some((d) => d.status === "enviando")) {
+        setErro("Aguarde os arquivos terminarem de subir.");
+        return;
+      }
+      if (docs.some((d) => d.status === "erro")) {
+        setErro("Remova os arquivos que não subiram antes de enviar.");
+        return;
+      }
+      if (validos.length === 0) {
+        setErro("Anexe ao menos um documento — NF ou recibo.");
+        return;
+      }
+      if (validos.some((d) => !d.tipo)) {
+        setErro("Diga se cada documento é NF ou recibo.");
+        return;
+      }
+      if (validos.some((d) => lerValor(d.valor) <= 0)) {
+        setErro("Informe o valor de cada documento.");
+        return;
+      }
+      if (passouDaVerba) {
+        setErro(
+          `Os documentos somam ${reais(gastoCentavos)}, acima da verba de ${reais(verbaCentavos)}. Retire documentos até fechar dentro da verba — o excedente precisa de uma PP nova.`,
+        );
+        return;
+      }
     }
     if (submittingRef.current) return;
     submittingRef.current = true;
@@ -298,7 +312,8 @@ export function PrestarContasDrawer({
       try {
         const res = await enviarPrestacaoVerba({
           pp_id: ppAtual.id,
-          documentos: validos.map((d) => ({
+          sem_gasto: semGasto,
+          documentos: (semGasto ? [] : validos).map((d) => ({
             id: d.gravadoId,
             path: d.gravadoId ? null : d.path,
             nome_original: d.gravadoId ? null : d.nome,
@@ -314,8 +329,18 @@ export function PrestarContasDrawer({
           return;
         }
         sucessoRef.current = true;
+        if (semGasto) {
+          // Arquivo novo que subiu antes de marcar "não houve gasto" não foi
+          // para a prestação: sai do Storage. O gravado, a action já tirou.
+          const soltos = docs
+            .filter((d) => !d.gravadoId && d.path && d.status === "ok")
+            .map((d) => d.path as string);
+          if (soltos.length > 0) await supabase.storage.from(BUCKET).remove(soltos);
+        }
         onSuccess(
-          res.reenvio
+          semGasto
+            ? `Devolução total de ${res.codigo} enviada ao financeiro.`
+            : res.reenvio
             ? `Prestação de ${res.codigo} corrigida e reenviada ao financeiro.`
             : `Prestação de ${res.codigo} enviada ao financeiro.`,
         );
@@ -385,125 +410,155 @@ export function PrestarContasDrawer({
               <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 Documentos do gasto
               </h3>
-              {docs.length === 0 && (
-                <p className="text-[12px] text-muted-foreground">Nenhum documento ainda.</p>
-              )}
-              {docs.map((d, i) => {
-                const Icone = d.mimetype.startsWith("image/") ? ImageIcon : FileText;
-                const marcaTipo = tentouEnviar && d.status === "ok" && !d.tipo;
-                const marcaValor = tentouEnviar && d.status === "ok" && lerValor(d.valor) <= 0;
-                return (
-                  <div
-                    key={d.chave}
+              <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-border bg-white p-3">
+                <input
+                  type="checkbox"
+                  checked={semGasto}
+                  onChange={(e) => {
+                    setSemGasto(e.target.checked);
+                    setErro(null);
+                  }}
+                  disabled={pending}
+                  className="mt-0.5 h-4 w-4 flex-none accent-california-red"
+                />
+                <span className="text-[12.5px]">
+                  <span className="font-semibold">Não houve gasto — a verba volta inteira</span>
+                  <span className="block text-[11px] text-muted-foreground">
+                    A prestação vai sem documento, e a aprovação cria o estorno de{" "}
+                    {formatCurrency(Number(ppAtual.valor), "BRL")}.
+                  </span>
+                  {semGasto && docs.length > 0 && (
+                    <span className="mt-1 block text-[11px] font-semibold text-amber-800">
+                      {docs.length === 1
+                        ? "O documento anexado sai da prestação ao enviar."
+                        : `Os ${docs.length} documentos anexados saem da prestação ao enviar.`}
+                    </span>
+                  )}
+                </span>
+              </label>
+              {!semGasto && (
+                <>
+                  {docs.length === 0 && (
+                    <p className="text-[12px] text-muted-foreground">Nenhum documento ainda.</p>
+                  )}
+                  {docs.map((d, i) => {
+                    const Icone = d.mimetype.startsWith("image/") ? ImageIcon : FileText;
+                    const marcaTipo = tentouEnviar && d.status === "ok" && !d.tipo;
+                    const marcaValor = tentouEnviar && d.status === "ok" && lerValor(d.valor) <= 0;
+                    return (
+                      <div
+                        key={d.chave}
+                        className={cn(
+                          "grid grid-cols-[minmax(0,1.2fr)_minmax(0,1.1fr)_112px_28px] items-center gap-2 rounded-lg border bg-white p-2.5",
+                          d.status === "erro" ? "border-california-red/40" : "border-border",
+                        )}
+                      >
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <Icone className="h-3.5 w-3.5 flex-none text-muted-foreground" />
+                            <span className="truncate text-[12px] font-semibold" title={d.nome}>
+                              {i + 1} · {d.nome}
+                            </span>
+                            {d.gravadoId && (
+                              <button
+                                type="button"
+                                onClick={() => abrirGravado(d.gravadoId as string)}
+                                title="Abrir o documento enviado"
+                                aria-label={`Abrir ${d.nome}`}
+                                className="flex-none text-muted-foreground hover:text-california-red"
+                              >
+                                <ExternalLink className="h-3 w-3" />
+                              </button>
+                            )}
+                          </div>
+                          <p
+                            className={cn(
+                              "text-[10.5px]",
+                              d.status === "erro" ? "text-california-red" : "text-muted-foreground",
+                            )}
+                          >
+                            {d.status === "enviando"
+                              ? "subindo…"
+                              : d.status === "erro"
+                                ? d.mensagem
+                                : formatarTamanho(d.tamanho)}
+                          </p>
+                        </div>
+                        <div className="flex gap-1.5">
+                          <select
+                            value={d.tipo}
+                            onChange={(e) => mudar(d.chave, { tipo: e.target.value as TipoFiscal | "" })}
+                            disabled={pending || d.status === "erro"}
+                            aria-label={`Tipo do documento ${i + 1}`}
+                            className={cn(
+                              "h-9 w-[84px] flex-none rounded-lg border bg-white px-2 text-xs outline-none focus:border-california-red",
+                              marcaTipo ? "border-california-red" : "border-border",
+                            )}
+                          >
+                            <option value="">Tipo…</option>
+                            <option value="nota_fiscal">NF</option>
+                            <option value="recibo">Recibo</option>
+                          </select>
+                          <Input
+                            value={d.numero}
+                            onChange={(e) => mudar(d.chave, { numero: e.target.value })}
+                            disabled={pending || d.status === "erro"}
+                            placeholder="Número"
+                            aria-label={`Número do documento ${i + 1}`}
+                            maxLength={60}
+                            className="h-9 min-w-0 text-xs"
+                          />
+                        </div>
+                        <Input
+                          value={d.valor}
+                          onChange={(e) => mudar(d.chave, { valor: e.target.value })}
+                          disabled={pending || d.status === "erro"}
+                          placeholder="0,00"
+                          inputMode="decimal"
+                          aria-label={`Valor do documento ${i + 1}`}
+                          className={cn(
+                            "no-spinner h-9 text-right font-mono text-xs",
+                            marcaValor && "border-california-red",
+                          )}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => remover(d)}
+                          disabled={pending}
+                          title="Remover documento"
+                          aria-label={`Remover ${d.nome}`}
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-md text-california-red hover:bg-california-red/10 disabled:opacity-50"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    );
+                  })}
+
+                  <label
                     className={cn(
-                      "grid grid-cols-[minmax(0,1.2fr)_minmax(0,1.1fr)_112px_28px] items-center gap-2 rounded-lg border bg-white p-2.5",
-                      d.status === "erro" ? "border-california-red/40" : "border-border",
+                      "flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-border p-3 text-[12px] text-muted-foreground transition-colors hover:border-california-red/40",
+                      (pending || !prefixo) && "cursor-not-allowed opacity-60",
                     )}
                   >
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <Icone className="h-3.5 w-3.5 flex-none text-muted-foreground" />
-                        <span className="truncate text-[12px] font-semibold" title={d.nome}>
-                          {i + 1} · {d.nome}
-                        </span>
-                        {d.gravadoId && (
-                          <button
-                            type="button"
-                            onClick={() => abrirGravado(d.gravadoId as string)}
-                            title="Abrir o documento enviado"
-                            aria-label={`Abrir ${d.nome}`}
-                            className="flex-none text-muted-foreground hover:text-california-red"
-                          >
-                            <ExternalLink className="h-3 w-3" />
-                          </button>
-                        )}
-                      </div>
-                      <p
-                        className={cn(
-                          "text-[10.5px]",
-                          d.status === "erro" ? "text-california-red" : "text-muted-foreground",
-                        )}
-                      >
-                        {d.status === "enviando"
-                          ? "subindo…"
-                          : d.status === "erro"
-                            ? d.mensagem
-                            : formatarTamanho(d.tamanho)}
-                      </p>
-                    </div>
-                    <div className="flex gap-1.5">
-                      <select
-                        value={d.tipo}
-                        onChange={(e) => mudar(d.chave, { tipo: e.target.value as TipoFiscal | "" })}
-                        disabled={pending || d.status === "erro"}
-                        aria-label={`Tipo do documento ${i + 1}`}
-                        className={cn(
-                          "h-9 w-[84px] flex-none rounded-lg border bg-white px-2 text-xs outline-none focus:border-california-red",
-                          marcaTipo ? "border-california-red" : "border-border",
-                        )}
-                      >
-                        <option value="">Tipo…</option>
-                        <option value="nota_fiscal">NF</option>
-                        <option value="recibo">Recibo</option>
-                      </select>
-                      <Input
-                        value={d.numero}
-                        onChange={(e) => mudar(d.chave, { numero: e.target.value })}
-                        disabled={pending || d.status === "erro"}
-                        placeholder="Número"
-                        aria-label={`Número do documento ${i + 1}`}
-                        maxLength={60}
-                        className="h-9 min-w-0 text-xs"
-                      />
-                    </div>
-                    <Input
-                      value={d.valor}
-                      onChange={(e) => mudar(d.chave, { valor: e.target.value })}
-                      disabled={pending || d.status === "erro"}
-                      placeholder="0,00"
-                      inputMode="decimal"
-                      aria-label={`Valor do documento ${i + 1}`}
-                      className={cn(
-                        "no-spinner h-9 text-right font-mono text-xs",
-                        marcaValor && "border-california-red",
-                      )}
+                    <Upload className="h-4 w-4" />
+                    Anexar documentos · PDF, JPG, PNG ou WEBP, até 8 MB cada
+                    <input
+                      ref={inputRef}
+                      type="file"
+                      multiple
+                      accept={PP_ANEXO_MIMETYPES_ACEITOS.join(",")}
+                      className="hidden"
+                      disabled={pending || !prefixo}
+                      onChange={(e) => adicionarArquivos(e.target.files)}
                     />
-                    <button
-                      type="button"
-                      onClick={() => remover(d)}
-                      disabled={pending}
-                      title="Remover documento"
-                      aria-label={`Remover ${d.nome}`}
-                      className="inline-flex h-7 w-7 items-center justify-center rounded-md text-california-red hover:bg-california-red/10 disabled:opacity-50"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                );
-              })}
-
-              <label
-                className={cn(
-                  "flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-border p-3 text-[12px] text-muted-foreground transition-colors hover:border-california-red/40",
-                  (pending || !prefixo) && "cursor-not-allowed opacity-60",
-                )}
-              >
-                <Upload className="h-4 w-4" />
-                Anexar documentos · PDF, JPG, PNG ou WEBP, até 8 MB cada
-                <input
-                  ref={inputRef}
-                  type="file"
-                  multiple
-                  accept={PP_ANEXO_MIMETYPES_ACEITOS.join(",")}
-                  className="hidden"
-                  disabled={pending || !prefixo}
-                  onChange={(e) => adicionarArquivos(e.target.files)}
-                />
-              </label>
-              <p className="text-[11px] text-muted-foreground">
-                Cada documento — NF ou recibo — leva o número e o valor que ele comprova. O gasto é a
-                soma, não se digita à parte.
-              </p>
+                  </label>
+                  <p className="text-[11px] text-muted-foreground">
+                    Cada documento — NF ou recibo — leva o número e o valor que ele comprova. O gasto é a
+                    soma, não se digita à parte.
+                  </p>
+                </>
+              )}
             </div>
 
             <div className="space-y-1.5 border-t border-border pt-3 text-[12.5px]">

@@ -97,8 +97,14 @@ export function AprovarPrestacaoDialog({
             <span className="font-mono text-california-red">{alvo.codigo}</span>
           </DialogTitle>
           <DialogDescription>
-            Verba de {brl(alvo.valor)} · {alvo.documentos}{" "}
-            {alvo.documentos === 1 ? "documento conferido" : "documentos conferidos"}.
+            {alvo.documentos === 0 ? (
+              <>Verba de {brl(alvo.valor)} · sem gasto: a verba volta inteira.</>
+            ) : (
+              <>
+                Verba de {brl(alvo.valor)} · {alvo.documentos}{" "}
+                {alvo.documentos === 1 ? "documento conferido" : "documentos conferidos"}.
+              </>
+            )}
           </DialogDescription>
         </DialogHeader>
 
