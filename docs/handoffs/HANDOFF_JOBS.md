@@ -3608,3 +3608,24 @@ Regras e modelo em [078](../decisions/078-orcamento-mensal-fee-e-always-on.md), 
   - `registrarErrata` em outubro, com os mesmos valores, foi recusada pela trava do mês. Nada foi gravado.
   - `levantarImpedimentos` listou `mesesSemEnvio: novembro, dezembro`.
 - **Não testado no navegador:** emissão de nota do mês (as situações "Faturado parcial" e "Faturado" estão cobertas por teste unitário), o save por mês e o encerramento com todos os meses faturados.
+
+## ⚠️ Nota de 2026-09-15 — `levantarImpedimentos` deixou de ser Server Action
+
+**O problema (achado em 14/09/2026).** `levantarImpedimentos(tenantId, jobId, versaoAprovadaId)` era exportada de `actions-encerramento.ts`, que é arquivo `"use server"`. Todo export async de arquivo assim vira Server Action pública. Ela foi chamada pelo console do navegador com um `tenantId` qualquer, e não conferia sessão nem permissão.
+
+**Por que não havia vazamento** (conferido em 15/09):
+
+- sem login, o `middleware.ts` redireciona antes de a action rodar;
+- as nove tabelas lidas têm RLS por participação no tenant (`is_tenant_member` ou `current_tenant_ids()`), e `anon` não tem SELECT em nenhuma;
+- nada na cadeia usa `createServiceClient`, e a função só lê;
+- existe um tenant só.
+
+**O que mudou:** saiu o `export`, e nada mais. O único chamador é a própria `encerrarJob`, que já tira o tenant da sessão e a versão aprovada do job no banco. A regra do encerramento, a tela e o dialog não mudaram.
+
+**O que ficou de fora de propósito:** `requireSession()` e checagem de permissão dentro da função, e a mudança dela para `lib/data/`. Com a função fora do alcance do navegador, os dois repetiriam o que a `encerrarJob` e a RLS já garantem.
+
+**Efeito no teste:** a chamada pelo console usada no teste de 14/09 ("`levantarImpedimentos` listou `mesesSemEnvio`") não existe mais. Para ver os impedimentos, use o dialog de encerramento, que lê o resumo montado em `carregar-detalhe.ts`, ou a mensagem de recusa da `encerrarJob`. **Cuidado:** `encerrarJob` pelo console **encerra de verdade** quando não há impedimento.
+
+**Varredura dos outros arquivos `"use server"`:** este era o único export que recebia `tenantId`. As actions que não chamam `requireSession()` diretamente passam por `requireAdmin()` ou por um helper do próprio arquivo (`checarGateFinanceiro`, `gateDoJob`, `checarGatesRealizado`) que chama a sessão.
+
+**Ponto de atenção que continua:** a tela e a action calculam os impedimentos por caminhos diferentes. A tela usa `carregar-detalhe.ts`, em memória; a action usa `levantarImpedimentos`, relendo o banco. As duas precisam mudar juntas quando a regra do encerramento mudar.

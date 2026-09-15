@@ -42,9 +42,15 @@ export interface ImpedimentosEncerramento {
 }
 
 /**
- * Levanta os impedimentos do encerramento — usado tanto pela tela (para
- * explicar antes de o usuário tentar) quanto pela action (que refaz a
- * conta antes de gravar).
+ * Levanta os impedimentos do encerramento, para `encerrarJob` refazer a
+ * conta antes de gravar. A tela não passa por aqui: o resumo do dialog é
+ * montado em `carregar-detalhe.ts`, com os dados que a página já carregou.
+ *
+ * NÃO EXPORTAR (15/09/2026). Todo export async de arquivo "use server"
+ * vira Server Action, chamável pelo navegador com qualquer argumento — e
+ * esta recebe `tenantId` e `versaoAprovadaId` confiando em quem chama. O
+ * único chamador é `encerrarJob`, que tira o tenant da sessão e a versão
+ * do próprio job no banco.
  *
  * Regra do time (13/08/2026): job não encerra com PP ou BV em aberto.
  * "Em aberto" é PP que ainda não foi paga e BV que ainda não foi
@@ -65,7 +71,7 @@ export interface ImpedimentosEncerramento {
  * faltava faturar, sem aviso e sem caminho de volta — aconteceu com o
  * JOB-0027, encerrado com R$ 30.073,32 em duas parcelas nunca emitidas.
  */
-export async function levantarImpedimentos(
+async function levantarImpedimentos(
   tenantId: string,
   jobId: string,
   versaoAprovadaId: string,
