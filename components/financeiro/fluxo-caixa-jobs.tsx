@@ -129,10 +129,14 @@ export function FluxoCaixaJobs({
     };
   };
 
+  // Subtítulos neutros desde 15/09/2026: com nota, as pontas são a emissão
+  // e o vencimento MÉDIOS; sem nota, o previsto da abertura, até a última
+  // parcela. "Último recebimento" deixou de ser verdade nos dois casos
+  // (regra em `lib/calculos/prazos-do-job.ts`, decisão 075).
   const cardsDePrazo = [
     { rotulo: "Prazo de faturamento", ...media("faturamento"), fim: "abertura → faturamento" },
-    { rotulo: "Prazo de recebimento (do faturamento)", ...media("recebimento"), fim: "faturamento → último recebimento" },
-    { rotulo: "Prazo de recebimento do job", ...media("total"), fim: "abertura → último recebimento" },
+    { rotulo: "Prazo de recebimento (do faturamento)", ...media("recebimento"), fim: "faturamento → recebimento" },
+    { rotulo: "Prazo de recebimento do job", ...media("total"), fim: "abertura → recebimento" },
   ];
 
   const subLinhas = (tom: NaturezaFluxo) => {

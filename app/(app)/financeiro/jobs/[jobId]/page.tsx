@@ -13,7 +13,10 @@ import {
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { ResumoResultado } from "@/components/resumo-resultado";
-import { classificarFaturamento } from "@/lib/calculos/esteira-faturamento";
+import {
+  FATURAMENTO_VAZIO,
+  faturamentoPorJob,
+} from "@/lib/data/faturamento-por-job";
 import { listarProjetosFinanceiro } from "@/lib/data/projetos-financeiro";
 import { listarContasBancarias } from "@/lib/data/contas-bancarias";
 import { carregarDetalheDoJob } from "@/app/(app)/jobs/[jobId]/carregar-detalhe";
@@ -84,6 +87,7 @@ export default async function JobNoFinanceiroPage({
 
   const supabase = createClient();
   const tenantId = session.activeTenant.id;
+  const hoje = new Date().toISOString().slice(0, 10);
 
   // Todas independentes entre si — em paralelo, nunca em série
   // (`docs/PERFORMANCE.md`).
@@ -94,7 +98,7 @@ export default async function JobNoFinanceiroPage({
     linhasDeFluxo,
     prazosDoJob,
     previsoes,
-    notaRes,
+    esteira,
     categoriasRes,
     servicosRes,
     competencias,
@@ -107,17 +111,8 @@ export default async function JobNoFinanceiroPage({
     carregarLinhasDeFluxo(tenantId, [params.jobId]),
     carregarPrazosDosJobs(tenantId, [params.jobId]),
     previsoesGravadas(supabase, tenantId, params.jobId),
-    // Notas emitidas do job: decidem o badge de faturamento. Pelos ITENS
-    // (decisão 075) — o cabeçalho fica com `origem_id` nulo na nota com
-    // mais de um item —, e várias: uma por parcela, ou por mês no job
-    // mensal (decisão 078), onde o `.maybeSingle()` antigo dava erro.
-    supabase
-      .from("faturamento_itens")
-      .select("faturamento_id, faturamento:faturamentos!inner(status)")
-      .eq("tenant_id", tenantId)
-      .eq("origem_id", params.jobId)
-      .in("origem_tipo", ["job", "save"])
-      .eq("faturamento.status", "emitido"),
+    // O selo de faturamento: a esteira de "Visualizar Jobs", só deste job.
+    faturamentoPorJob(tenantId, hoje, [params.jobId]),
     // Vocabulário do combo de categoria do formulário de abertura: o
     // mesmo escopo 'orcamento' que a fila usa. Não existe lista de
     // categoria só do financeiro.
@@ -185,46 +180,19 @@ export default async function JobNoFinanceiroPage({
     status: j.status as JobStatus,
   }));
 
-  // ---- Badge de faturamento: mesma classificação da lista ----
-  if (notaRes.error) {
-    console.error("[job-financeiro.notas]", notaRes.error.message);
-  }
-  const notaIds = Array.from(
-    new Set(((notaRes.data ?? []) as any[]).map((i) => i.faturamento_id as string)),
-  );
-
-  const titulosRes =
-    notaIds.length > 0
-      ? await supabase
-          .from("titulos_receber")
-          .select("valor, data_vencimento, status, pago_em")
-          .eq("tenant_id", tenantId)
-          .in("faturamento_id", notaIds)
-          .neq("status", "cancelado")
-      : { data: [], error: null };
-
-  const titulos = ((titulosRes.data ?? []) as any[]).map((t) => ({
-    valor: Number(t.valor ?? 0),
-    vencimento: t.data_vencimento as string,
-    status: t.status as string,
-  }));
-
-  const hoje = new Date().toISOString().slice(0, 10);
-  // Job mensal (decisão 078): enviado desde o primeiro mês, e só liquida
-  // com todos os meses faturados.
-  const mesesDoJob = detalhe.faturamentoMensal;
-  const faltaFaturarMes = mesesDoJob.some(
-    (m) => m.situacao !== "faturado" && m.situacao !== "sem_faturamento",
-  );
-  const situacao = classificarFaturamento(
-    notaIds.length > 0,
-    detalhe.envioFaturamento !== null || detalhe.envios.length > 0,
-    titulos,
-    hoje,
-    false,
-    faltaFaturarMes,
-  );
+  // ---- Selo de faturamento: a MESMA conta da lista ----
+  // Até 15/09/2026 a página refazia a classificação numa cópia própria,
+  // que lia os meses do job mensal pela planilha enquanto a lista os lê
+  // pela previsão de recebimento — as duas podiam discordar do mesmo job.
+  // Agora é `faturamentoPorJob` com o filtro deste job: notas pelos itens
+  // (decisão 075), envios por mês e o mensal que não liquida com mês por
+  // faturar (decisão 078), e o job pago só por save (decisão 028 §11).
+  const situacao = (esteira.get(params.jobId) ?? FATURAMENTO_VAZIO).situacao;
   const situacaoMeta = SITUACAO_META[situacao];
+
+  // Job mensal (decisão 078): os meses da planilha, para o "aguardando
+  // encerramento" abaixo.
+  const mesesDoJob = detalhe.faturamentoMensal;
 
   // ---- Formulário de abertura em leitura (ou em revisão) ----
   // O custo previsto é o da PLANILHA DE HOJE, não o que a abertura gravou
