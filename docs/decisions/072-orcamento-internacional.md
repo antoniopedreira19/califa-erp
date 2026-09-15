@@ -374,9 +374,11 @@ Conferido:
   modelo nacional — nada entra nele.") e seguiu com o -11 para a v2. A
   importação foi cancelada; nada gravou.
 
-**Não exercitado no navegador:** a porta da visão agregada — o botão só
-aparece em card sem planilha, e o projeto de teste não tinha nenhum. O
-caminho é o mesmo parser e a mesma recusa, cobertos pelo script.
+**A porta da visão agregada, conferida em 15/09/2026:** num card novo de
+categoria Internacional, só no rascunho, a planilha nacional foi recusada
+("Este orçamento é internacional, e a planilha está no modelo nacional…
+Nada foi importado.") e a internacional entrou com 2 grupos (SHEET), 3
+itens em B e R$ 33.000,00. O rascunho foi descartado sem salvar.
 
 ## Ajustes de leitura depois do teste de ponta a ponta (14/09/2026)
 
