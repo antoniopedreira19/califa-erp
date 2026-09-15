@@ -4116,6 +4116,27 @@ De quebra, `fat_composicao` passou a agrupar por job também no BV — uma
 nota que misture faturamento de job e BV agora reparte o título certo
 entre os jobs; antes o pedaço do BV caía todo no grupo nulo.
 
+⚠️ **Rateio conferido e reforço do desembolso no banco (2026-09-15).**
+Conferido tipo por tipo, da gravação à `vw_fluxo_caixa`: avulsa,
+recorrente e desembolso sem job **já dividiam certo** — pela regional
+escolhida ou pelos percentuais — inclusive nas parcelas do cartão, no
+estorno de compra, nas ocorrências da recorrente e no fechamento da fatura
+(um lançamento por compra). O Tiago encerrou a tarefa. O pagamento da
+fatura é um par de transferência entre contas, sem regional: no DRE fica
+fora, não é rateado.
+
+Reforço aplicado pela migration `20260915200001_reforco_rateio_desembolso.sql`:
+soma 100% em `desembolsos_regionais` (espelho da avulsa) e **rateio
+exigido na aprovação do desembolso**. Na criação não dá: a tela grava
+desembolso, parcelas e divisão em três requisições separadas. O estorno
+(`pago` → `aprovada`) passa livre. Sonda com rollback: os cinco casos
+comportaram-se como esperado, sem resíduo. Detalhe na decisão 069,
+revisão de 15/09.
+
+Avulsa e recorrente continuam garantidas só pelo formulário: nascem
+aprovadas e a edição troca a divisão em duas requisições. Escolha levada
+ao Tiago.
+
 ---
 
 ## Fechamento da frente de 09/09/2026 — varredura final
