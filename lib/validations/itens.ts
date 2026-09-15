@@ -19,9 +19,11 @@ export const itemSchema = z.object({
     .number({ invalid_type_error: "Valor inválido." })
     .nonnegative("Não pode ser negativo.")
     .default(0),
+  // Zero vale desde 15/09/2026 (decisão 078): item listado sem cobrança
+  // no mês, como na planilha interna. O padrão de item novo segue 1.
   quantidade_orcada: z.coerce
     .number({ invalid_type_error: "Quantidade inválida." })
-    .positive("Quantidade deve ser maior que zero.")
+    .nonnegative("Quantidade não pode ser negativa.")
     .default(1),
   dias_meses_orcado: z.coerce
     .number({ invalid_type_error: "Dias/meses inválido." })

@@ -294,8 +294,8 @@ export function ImportarPlanilhaDrawer({
                         <b>B · Bi-trib.</b> — ajuste na tela depois.
                       </li>
                       <li>
-                        Item sem BRL entra com <b>R$ 0,00</b>; QT e D/M vazios ou zerados
-                        entram como 1, com aviso.
+                        Item sem BRL entra com <b>R$ 0,00</b>; QT vazio entra como 1 e QT 0 fica 0;
+                        D/M vazio ou zerado entra como 1, com aviso.
                       </li>
                       <li>
                         Bloco <b>PLANEJADO</b> entra pelas colunas H · R$, I · QT, J · D/M.
@@ -318,8 +318,8 @@ export function ImportarPlanilhaDrawer({
                       Colunas C · R$, D · QT, E · D/M, G · tipo de custo.
                     </li>
                     <li>
-                      Item sem R$ entra com <b>R$ 0,00</b>; QT e D/M vazios ou zerados
-                      entram como 1, com aviso.
+                      Item sem R$ entra com <b>R$ 0,00</b>; QT vazio entra como 1 e QT 0 fica 0;
+                      D/M vazio ou zerado entra como 1, com aviso.
                     </li>
                     <li>
                       Tipo fora de <b>A, AR, B, C, D, F, FI</b> deixa a linha de fora, com aviso.

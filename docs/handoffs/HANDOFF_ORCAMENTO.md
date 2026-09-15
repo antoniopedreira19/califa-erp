@@ -3867,4 +3867,4 @@ Regras em [078](../decisions/078-orcamento-mensal-fee-e-always-on.md), seção "
 - A mesma exportação com dezembro marcado como janeiro de 2027 foi recusada no preview, sem gravar nada.
 - A planilha real "INTERNA - DRE + Planilhas Ânima 2026.xlsx" lida por script: aba SUL (com aviso das abas SP, NENO e MGRJ), 12 meses, EQUIPE e VERBA por mês.
 
-**Em aberto:** na planilha interna, QT 0 marca item que não é cobrado no mês (Gerente de Projeto e Produtor em janeiro na aba SUL). O parser troca QT 0 por 1, regra antiga do nacional, e o orçado de janeiro sai R$ 15.000 acima do TOTAL da própria planilha. Pergunta levada ao Tiago.
+**QT 0 vale (decisão do Tiago, 15/09/2026):** na planilha interna, QT 0 marca item listado sem cobrança no mês. A migration `20260915100001` trocou `itens_quantidade_positiva` (> 0) por `itens_quantidade_nao_negativa` (>= 0); `itemSchema` aceita zero e os dois parsers deixaram de trocar 0 por 1 (só QT negativo vira 1). O padrão de item novo continua 1; D/M segue > 0; a quantidade da PP não mudou. Teste em `mensal.test.ts`.
