@@ -239,9 +239,9 @@ export default async function ConciliacaoPage({
         // "Rateada" e o detalhe abre a divisão, que é onde os percentuais
         // cabem.
         //
-        // ⚠️ Esta tela lê `lancamentos_financeiros` direto, e não a view:
-        // o job da BAIXA DE TÍTULO é derivado pelo título e não aparece
-        // aqui. Nesse caso a linha sai sem regional. Ver handoff.
+        // A BAIXA DE TÍTULO não tem job no lançamento (ele é derivado da
+        // nota): a regional dela é resolvida mais abaixo, pelas origens —
+        // as mesmas que a coluna Job já usava (15/09/2026).
         regional_nome:
           (r.jobs?.regional?.nome ??
             (rateio.length === 1 ? rateio[0].regional_nome : null)),
@@ -301,6 +301,9 @@ export default async function ConciliacaoPage({
       string,
       Array<{ tipo: "job" | "save"; job_id: string | null; codigo: string | null; nome: string | null; valor: number }>
     >();
+    /** Valor por regional, para a baixa de título — cujo job é derivado da
+     *  nota e não está no lançamento. */
+    const regionaisPorLancamento = new Map<string, Map<string, number>>();
     if (ids.length > 0) {
       // Sem embed: `vw_lancamento_origens` é VIEW, e o PostgREST não tem
       // chave estrangeira para inferir o join com `jobs` a partir dela —
@@ -324,10 +327,14 @@ export default async function ConciliacaoPage({
             .filter((id: string | null): id is string => !!id),
         ),
       ];
+      // `regional` entra aqui desde 15/09/2026: é por ela que a coluna
+      // Regional da baixa de título deixa de sair vazia. A mesma leitura
+      // que já dava o job da nota dá a regional dele — Job e Regional
+      // passam a concordar por construção (decisão 069).
       const { data: jobsDasOrigens } = jobIds.length
         ? await supabase
             .from("jobs")
-            .select("id, codigo, nome")
+            .select("id, codigo, nome, regional:regionais(nome)")
             .eq("tenant_id", session.activeTenant.id)
             .in("id", jobIds)
         : { data: [] as any[] };
@@ -338,6 +345,19 @@ export default async function ConciliacaoPage({
       for (const o of (origens ?? []) as any[]) {
         const lista = origensPorLancamento.get(o.lancamento_id) ?? [];
         const alvo = jobPorId.get(o.tipo === "save" ? o.save_job_id : o.job_id);
+        // Quanto desta baixa pertence a cada regional. O save entra pela
+        // regional do job que GEROU o save, que é de onde o dinheiro vem.
+        const regionalDoJob = alvo?.regional?.nome ?? null;
+        if (regionalDoJob) {
+          const porRegional =
+            regionaisPorLancamento.get(o.lancamento_id) ??
+            new Map<string, number>();
+          porRegional.set(
+            regionalDoJob,
+            (porRegional.get(regionalDoJob) ?? 0) + Number(o.valor ?? 0),
+          );
+          regionaisPorLancamento.set(o.lancamento_id, porRegional);
+        }
         lista.push({
           tipo: o.tipo,
           job_id: alvo?.id ?? null,
@@ -365,16 +385,38 @@ export default async function ConciliacaoPage({
     }
 
     linhas = derivarSaldo(
-      raw.map((r) => ({
-        ...r,
-        estornada:
-          r.origem === "pp_baixa_estornada" ||
-          r.origem === "avulsa_baixa_estornada" ||
-          (r.papel_na_fatura === "pagamento" &&
-            r.fatura_cartao_id !== null &&
-            faturasComEstorno.has(r.fatura_cartao_id)),
-        origens: origensPorLancamento.get(r.id) ?? [],
-      })),
+      raw.map((r) => {
+        // Baixa de título: sem job direto e sem rateio próprio, a regional
+        // vem das origens da nota. Uma só regional vira o nome na coluna;
+        // mais de uma vira a divisão, com o percentual que cada uma
+        // representa do valor recebido (15/09/2026).
+        const porRegional = regionaisPorLancamento.get(r.id);
+        const pelasOrigens =
+          r.regional_nome === null && r.rateio.length === 0 && porRegional
+            ? [...porRegional.entries()]
+            : [];
+        const totalOrigens = pelasOrigens.reduce((acc, [, v]) => acc + v, 0);
+
+        return {
+          ...r,
+          regional_nome:
+            pelasOrigens.length === 1 ? pelasOrigens[0][0] : r.regional_nome,
+          rateio:
+            pelasOrigens.length > 1 && totalOrigens > 0
+              ? pelasOrigens.map(([nome, valor]) => ({
+                  regional_nome: nome,
+                  percentual: Number(((valor / totalOrigens) * 100).toFixed(2)),
+                }))
+              : r.rateio,
+          estornada:
+            r.origem === "pp_baixa_estornada" ||
+            r.origem === "avulsa_baixa_estornada" ||
+            (r.papel_na_fatura === "pagamento" &&
+              r.fatura_cartao_id !== null &&
+              faturasComEstorno.has(r.fatura_cartao_id)),
+          origens: origensPorLancamento.get(r.id) ?? [],
+        };
+      }),
       saldoAnterior,
     );
     creditos = linhas.reduce((acc, l) => acc + l.credito, 0);

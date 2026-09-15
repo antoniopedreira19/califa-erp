@@ -112,7 +112,8 @@ da abertura. No fluxo por job o rótulo antigo continua certo.
 - Pagamento e ajuste da fatura de cartão (próximo lote).
 - Recebimento avulso: a emissão da nota sem job passa a pedir regional
   (lote seguinte).
-- A conciliação lê `lancamentos_financeiros` direto (ver a 069).
+- ~~A conciliação lê `lancamentos_financeiros` direto (ver a 069).~~
+  Resolvido em 15/09/2026, na mesma frente — ver a 069.
 
 ## Referências
 
