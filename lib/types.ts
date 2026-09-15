@@ -1233,11 +1233,15 @@ export const ENCERRAMENTO_INDISPONIVEL =
 
 /** PP que ainda não saiu do caixa — impede o encerramento do job.
  *  A gerada entra (02/09/2026): é um rascunho que ninguém enviou nem
- *  cancelou, e o job não fecha com pendência solta. */
+ *  cancelou, e o job não fecha com pendência solta.
+ *  A rejeitada entra (decisão 083, 15/09/2026): ela volta a ser pendência da
+ *  produção, que corrige e reenvia ou cancela — e é para onde vai a PP
+ *  aprovada que o financeiro reprova. Só a cancelada não é compromisso. */
 export const PP_STATUS_EM_ABERTO: PPStatus[] = [
   "gerada",
   "em_avaliacao",
   "aprovada",
+  "rejeitada",
 ];
 
 /** BV que ainda não foi recebido — impede o encerramento do job. */

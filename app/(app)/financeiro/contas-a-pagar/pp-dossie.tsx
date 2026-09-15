@@ -489,6 +489,20 @@ function Estados({ pp }: { pp: PPRow }) {
       </Caixa>
     );
   }
+  // Aprovada tem, sim, ação nesta tela desde a decisão 083: o financeiro
+  // devolve a PP para a produção pelo rodapé. Os outros status (gerada,
+  // cancelada) seguem sem nada a fazer aqui.
+  if (pp.status === "aprovada") {
+    return (
+      <div className="flex items-center gap-2 rounded-lg border border-dashed border-border px-3 py-2 text-[11px] text-muted-foreground">
+        <Lock className="h-3.5 w-3.5 flex-none" />
+        <span>
+          Aprovada — já é título a pagar. Para devolvê-la à produção, use
+          &ldquo;Reprovar PP&rdquo; no rodapé.
+        </span>
+      </div>
+    );
+  }
   if (pp.status !== "em_avaliacao") {
     return (
       <div className="flex items-center gap-2 rounded-lg border border-dashed border-border px-3 py-2 text-[11px] text-muted-foreground">

@@ -315,7 +315,7 @@ export async function encerrarJob(jobId: string): Promise<ActionResult> {
     }
     if (imp.ppsEmAberto.length > 0) {
       partes.push(
-        `${imp.ppsEmAberto.length} ${imp.ppsEmAberto.length === 1 ? "PP sem baixa" : "PPs sem baixa"} (${imp.ppsEmAberto
+        `${imp.ppsEmAberto.length} ${imp.ppsEmAberto.length === 1 ? "PP em aberto" : "PPs em aberto"} (${imp.ppsEmAberto
           .map((p) => p.codigo)
           .join(", ")})`,
       );

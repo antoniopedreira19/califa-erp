@@ -3746,3 +3746,18 @@ planilha da versão.
 | Trava de remoção de linha com save consumido (`barrarRemocao`) e o destino do consumo em `lib/data/saves.ts` (`saveDaVersao`, embed corrigido em 14/09) | O saldo de save só existe depois do envio do job de origem ao faturamento (`20260901100001`), e o envio é definitivo | O Tiago vai trocar essa trava por um **fluxo de aprovação do save**; os dois testes entram nele |
 | Texto do formulário de save sem saldo ("O crédito nasce quando um job dele é aberto…") | Está errado para a regra de hoje, mas o Tiago pediu para não mexer | Muda junto com o fluxo de aprovação do save |
 | Trava de Impostos BR e int. taxes do internacional sem `orcamentos.editar_impostos` | Todos os usuários são administradores | Depois que o Tiago redefinir os acessos, com um usuário sem a permissão |
+
+## ⚠️ Nota de 2026-09-15 — a PP rejeitada trava o encerramento, e a reprovada volta como rejeitada (decisão 083)
+
+- `PP_STATUS_EM_ABERTO` ganhou **`rejeitada`**: ela voltou a ser pendência da
+  produção, e o job não encerra enquanto ninguém corrigir e reenviar ou
+  cancelar. Só a cancelada fica fora da conta. O resumo de fechamento passou a
+  dizer "PPs em aberto" (antes, "PPs sem baixa").
+- A PP que o financeiro **reprova** depois de aprovada cai na mesma caixa: ela
+  volta como `rejeitada`, com o motivo, e a gaveta de correção da aba de PPs
+  abre como sempre — inclusive para mudar o prazo, que volta a ser o
+  vencimento negociado com o fornecedor (as datas do financeiro são
+  desfeitas).
+- Verba de produção segue **sem** reenvio (o formulário pressupõe fornecedor):
+  a verba rejeitada se cancela e se emite outra. Está combinado torná-la
+  reenviável em seguida.

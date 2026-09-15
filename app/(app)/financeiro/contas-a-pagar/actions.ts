@@ -19,7 +19,7 @@
  * `estornarBaixaParcela`, em `actions-titulos.ts`, ao lado da baixa que
  * ele reverte.
  *
- * `rejeitarPedidoCompraFinanceiro` e `desaprovarPP` seguem em uso.
+ * `rejeitarPedidoCompraFinanceiro` e `reprovarPPAprovada` seguem em uso.
  */
 
 import { z } from "zod";
@@ -431,52 +431,67 @@ export async function aprovarPP(pp_id: string): Promise<Result> {
   return { ok: true };
 }
 
-const desaprovarSchema = z.object({
+const reprovarAprovadaSchema = z.object({
   pp_id: z.string().uuid(),
   motivo: motivoSchema,
 });
 
 /**
- * Desaprova a PP: devolve pra em_avaliacao. Usado quando a aprovação foi
- * feita por engano ou apareceu informação nova que exige reavaliação.
+ * Reprova uma PP já aprovada: ela volta para `rejeitada`, com motivo, e a
+ * produção corrige e reenvia ou cancela (decisão 083, 1a).
+ *
+ * A produção não cancela PP aprovada — ela é título a pagar (decisão 027) —,
+ * então este é o único caminho de volta, e ele é do financeiro (6a).
+ *
+ * A regra mora na RPC `reprovar_pp_aprovada`: ela recusa PP com parcela paga
+ * ou em fatura de cartão não aberta, desfaz as datas e as escolhas da
+ * aprovação e checa o papel de novo. Substitui `desaprovarPP`, que devolvia a
+ * PP para "em avaliação" e não tinha tela nenhuma.
  */
-export async function desaprovarPP(input: unknown): Promise<Result> {
-  const parsed = desaprovarSchema.safeParse(input);
+export async function reprovarPPAprovada(input: unknown): Promise<Result> {
+  const parsed = reprovarAprovadaSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, message: parsed.error.issues[0]?.message ?? "Entrada inválida." };
   }
-  const gate = await checarGateFinanceiro(parsed.data.pp_id, "pedido_compra.desaprovada");
+  const gate = await checarGateFinanceiro(parsed.data.pp_id, "pedido_compra.reprovada");
   if (!gate.ok) return gate;
   const { session, supabase } = gate;
 
   const { data: pp } = await supabase
     .from("pedidos_compra")
-    .select("id, status, codigo, job_id")
+    .select("id, status, codigo, job_id, valor")
     .eq("id", parsed.data.pp_id)
     .eq("tenant_id", session.activeTenant.id)
     .maybeSingle();
 
   if (!pp) return { ok: false, message: "PP não encontrada." };
   if (pp.status !== "aprovada") {
-    return { ok: false, message: "Só PP aprovada pode ser desaprovada." };
+    return {
+      ok: false,
+      message:
+        pp.status === "pago"
+          ? "PP já foi paga — o caminho aqui é estornar a baixa, não reprovar."
+          : "Só PP aprovada pode ser reprovada.",
+    };
   }
 
-  const { error } = await supabase.rpc("desaprovar_pp", {
+  const { error } = await supabase.rpc("reprovar_pp_aprovada", {
     p_pp_id: parsed.data.pp_id,
     p_motivo: parsed.data.motivo,
   });
   if (error) {
-    return { ok: false, message: `Falha ao desaprovar: ${error.message}` };
+    return { ok: false, message: error.message };
   }
 
   await logAuditEvent({
-    acao: "pedido_compra.desaprovada",
+    acao: "pedido_compra.reprovada",
     tenantId: session.activeTenant.id,
     entidadeTipo: "pedido_compra",
     entidadeId: parsed.data.pp_id,
     metadata: {
       pp_codigo: pp.codigo,
       job_id: pp.job_id,
+      valor: Number(pp.valor),
       motivo: parsed.data.motivo,
     },
   });
@@ -484,5 +499,7 @@ export async function desaprovarPP(input: unknown): Promise<Result> {
   revalidatePath("/financeiro/contas-a-pagar");
   revalidatePath("/financeiro/fluxo-caixa");
   revalidatePath("/financeiro");
+  revalidatePath(`/jobs/${pp.job_id}`);
   return { ok: true };
 }
+
