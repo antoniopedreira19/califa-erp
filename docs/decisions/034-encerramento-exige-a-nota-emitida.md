@@ -1,5 +1,11 @@
 # 034 — O job não encerra com saldo a faturar
 
+> ⚠️ **Superada em 16/09/2026 pela [decisão 087](087-faturamento-e-encerramento-correm-separados.md).**
+> O saldo a faturar deixou de travar o encerramento: a fila de faturamento e o
+> fluxo de caixa passaram a enxergar o job encerrado, e o job fica
+> **finalizado** quando a última nota sai. A pendência abaixo foi fechada como
+> sem objeto.
+
 **Data:** 2026-08-31
 **Decidido por:** Tiago
 
@@ -91,6 +97,12 @@ mesma data.
 `JOB-0009` (R$ 149,12) estão fora da fila hoje. A trava impede novos
 casos; não conserta os antigos. Trazê-los de volta é reabrir o job — o que
 a decisão 008 não prevê — ou faturar por fora. Precisa de decisão.
+
+> ⚠️ **Fechada em 16/09/2026 como sem objeto** ([decisão 087](087-faturamento-e-encerramento-correm-separados.md) §5).
+> Os dois eram testes do Tiago (o JOB-0009 antigo, "Teste Orçamento 2", e o
+> JOB-0027, "Consome o Save") e foram apagados da tabela `jobs`, sem envio,
+> parcela, nota ou título restante; os códigos foram reaproveitados. Com a
+> 087 o job encerrado continua na fila, e o caso não se repete.
 
 ## Onde está escrito
 

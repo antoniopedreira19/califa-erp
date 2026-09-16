@@ -175,6 +175,12 @@ O que mudou:
   quando todos os meses foram enviados.
 - **Encerramento:** o job mensal só encerra com todos os meses com
   faturamento enviados (`mesesSemEnvio`) e o saldo a faturar zerado.
+
+  > ⚠️ **Revisto em 16/09/2026 ([decisão 087](087-faturamento-e-encerramento-correm-separados.md)).**
+  > O job mensal encerra com mês ainda por enviar e sem nota (resposta b do
+  > Tiago): o envio dos meses continua aceito depois do encerramento, e o job
+  > fica finalizado quando o último mês é faturado. A barra por mês virou a
+  > trilha "Faturamento", com a trilha "Encerramento" abaixo.
 - **Abertura do financeiro:** a previsão de recebimento do mensal é uma
   linha por mês com faturamento, no valor do mês (travado). A action relê o
   faturamento de cada mês, confere uma linha por mês e grava `mes` e

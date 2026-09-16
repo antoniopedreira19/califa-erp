@@ -8,6 +8,10 @@
  * Recolhida: a situação de cada mês e o botão do mês mais antigo ainda a
  * enviar. Expandida: uma linha por mês, com o envio e as notas.
  *
+ * Desde 16/09/2026 (decisão 087) é a trilha "Faturamento" da barra, com a
+ * trilha "Encerramento" logo abaixo: o encerramento não espera os meses,
+ * e o envio dos meses continua depois do job encerrado.
+ *
  * Não existe devolução: o envio de um mês é definitivo, como o envio único
  * de hoje (Tiago, 14/09/2026). Por isso o desenho perdeu o estado
  * "Devolvido" e o "Revisar e reenviar".
@@ -15,90 +19,22 @@
 
 import * as React from "react";
 import { ChevronDown, ChevronUp, FileText } from "lucide-react";
-import { cn, formatCurrency } from "@/lib/utils";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import type {
-  MesDeFaturamento,
-  SituacaoDoMes,
-} from "@/lib/calculos/faturamento-por-mes";
+import { formatCurrency } from "@/lib/utils";
+import type { MesDeFaturamento } from "@/lib/calculos/faturamento-por-mes";
 import { nomeDoMes, rotuloMes } from "@/lib/calculos/meses-trimestre";
 import {
   EnviarFaturamentoDrawer,
   type PortalOption,
 } from "./enviar-faturamento-drawer";
-
-const SITUACAO: Record<
-  SituacaoDoMes,
-  { rotulo: string; curto: string; classes: string }
-> = {
-  a_enviar: {
-    rotulo: "A enviar",
-    curto: "A enviar",
-    classes: "border-border bg-muted text-muted-foreground",
-  },
-  na_fila: {
-    rotulo: "Na fila do financeiro",
-    curto: "Na fila",
-    classes: "border-amber-200 bg-amber-50 text-amber-700",
-  },
-  faturado_parcial: {
-    rotulo: "Faturado parcial",
-    curto: "Parcial",
-    classes: "border-blue-200 bg-blue-50 text-blue-700",
-  },
-  faturado: {
-    rotulo: "Faturado",
-    curto: "Faturado",
-    classes: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  },
-  sem_faturamento: {
-    rotulo: "Sem faturamento",
-    curto: "Sem fatur.",
-    classes: "border-dashed border-border bg-white text-muted-foreground",
-  },
-};
-
-/** "2026-10-20" → "20/10/2026". */
-function data(iso: string): string {
-  return iso.slice(0, 10).split("-").reverse().join("/");
-}
-
-/** "2026-10-20" → "20/10". */
-function diaMes(iso: string | null): string {
-  if (!iso) return "—";
-  const [, m, d] = iso.slice(0, 10).split("-");
-  return `${d}/${m}`;
-}
-
-/** Instante do envio no fuso de quem olha. */
-function dataDoEnvio(instante: string): string {
-  return new Date(instante).toLocaleDateString("pt-BR");
-}
-
-function listaPtBr(itens: string[]): string {
-  if (itens.length <= 1) return itens.join("");
-  return `${itens.slice(0, -1).join(", ")} e ${itens[itens.length - 1]}`;
-}
-
-function Chip({ situacao, curto = false }: { situacao: SituacaoDoMes; curto?: boolean }) {
-  const s = SITUACAO[situacao];
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-semibold",
-        s.classes,
-      )}
-    >
-      {curto ? s.curto : s.rotulo}
-    </span>
-  );
-}
+import {
+  ChipSituacao,
+  VerEnvioFaturamentoDialog,
+  dataBr,
+  dataDoEnvio,
+  diaMes,
+  listaPtBr,
+} from "./envio-faturamento-ui";
+import { TextoTrilha, TrilhaBarra } from "./trilha-barra";
 
 function detalheDoMes(m: MesDeFaturamento, moeda: string): string {
   const envio = m.envio;
@@ -112,8 +48,8 @@ function detalheDoMes(m: MesDeFaturamento, moeda: string): string {
   if (m.situacao === "na_fila") {
     return `Enviado em ${dataDoEnvio(envio.enviado_em)} · ${
       n === 1
-        ? `1 parcela, vencimento ${primeira ? data(primeira) : "—"}`
-        : `${n} parcelas, a primeira vencendo em ${primeira ? data(primeira) : "—"}`
+        ? `1 parcela, vencimento ${primeira ? dataBr(primeira) : "—"}`
+        : `${n} parcelas, a primeira vencendo em ${primeira ? dataBr(primeira) : "—"}`
     }`;
   }
   if (m.situacao === "faturado_parcial") {
@@ -131,15 +67,17 @@ interface Props {
   jobId: string;
   jobCodigo: string;
   meses: MesDeFaturamento[];
-  /** Permissão de enviar para faturamento, com o job aberto. */
+  /** Permissão de enviar para faturamento, com o job aberto ou encerrado. */
   podeEnviar: boolean;
   /** Motivo que fecha o envio de todos os meses agora (abertura em
    *  revisão depois de errata). Nulo quando não há. */
   bloqueio: string | null;
   portais: PortalOption[];
   moeda: string;
-  /** O botão de encerramento, quando ele existe. */
-  acaoExtra?: React.ReactNode;
+  /** A trilha "Encerramento", abaixo da de faturamento (decisão 087). */
+  trilhaEncerramento?: React.ReactNode;
+  /** Job já encerrado: os meses ainda se enviam, mas nada mais se edita. */
+  jobEncerrado?: boolean;
 }
 
 export function BarraFaturamentoMensal({
@@ -150,27 +88,25 @@ export function BarraFaturamentoMensal({
   bloqueio,
   portais,
   moeda,
-  acaoExtra,
+  trilhaEncerramento,
+  jobEncerrado = false,
 }: Props) {
   const [aberta, setAberta] = React.useState(false);
   const [envioAberto, setEnvioAberto] = React.useState<MesDeFaturamento | null>(
     null,
   );
 
-  const enviados = meses.filter((m) => m.envio !== null).length;
+  const enviados = meses.filter((m) => m.envio !== null);
   const total = meses.reduce((s, m) => s + m.faturamento, 0);
+  const somaEnviada = enviados.reduce(
+    (s, m) => s + (m.envio?.valor_faturado ?? 0),
+    0,
+  );
   // O botão da barra recolhida é sempre o do mês mais antigo ainda a
   // enviar (design aprovado em 14/09/2026).
   const proximo = meses.find((m) => m.situacao === "a_enviar") ?? null;
   const podeEnviarMes = (m: MesDeFaturamento) =>
     podeEnviar && !bloqueio && m.situacao === "a_enviar" && m.faturamento > 0;
-
-  const quemFatura =
-    meses.length === 3
-      ? "os três meses estiverem faturados"
-      : meses.length === 2
-        ? "os dois meses estiverem faturados"
-        : "o mês estiver faturado";
 
   function botaoEnviar(m: MesDeFaturamento, contorno: boolean) {
     const nome = nomeDoMes(m.mes);
@@ -187,11 +123,17 @@ export function BarraFaturamentoMensal({
         mes={{ iso: m.mes, nome }}
         rotuloBotao={contorno ? "Enviar faturamento" : `Enviar faturamento de ${nome}`}
         botaoContorno={contorno}
+        jobEncerrado={jobEncerrado}
       />
     );
   }
 
-  const envio = envioAberto?.envio ?? null;
+  const resumo =
+    enviados.length === 0
+      ? "Envie cada mês quando o cliente validar."
+      : `${enviados.length} de ${meses.length} ${
+          meses.length === 1 ? "mês enviado" : "meses enviados"
+        } · ${formatCurrency(somaEnviada, moeda)} de ${formatCurrency(total, moeda)} na fila.`;
 
   return (
     <div className="sticky bottom-0 z-20 -mx-1 rounded-t-2xl border border-b-0 border-border bg-white/95 shadow-[0_-4px_16px_-8px_rgba(0,0,0,0.12)] backdrop-blur">
@@ -200,7 +142,7 @@ export function BarraFaturamentoMensal({
           <div className="mb-1 flex flex-wrap items-center justify-between gap-3">
             <p className="text-xs text-muted-foreground">
               <strong className="text-foreground">Faturamento por mês</strong> ·{" "}
-              {enviados} de {meses.length}{" "}
+              {enviados.length} de {meses.length}{" "}
               {meses.length === 1 ? "mês enviado" : "meses enviados"} · faturamento
               previsto{" "}
               <span className="font-mono font-semibold text-foreground">
@@ -220,7 +162,7 @@ export function BarraFaturamentoMensal({
                 <span className="w-[140px] whitespace-nowrap font-mono text-sm font-semibold">
                   {formatCurrency(m.envio?.valor_faturado ?? m.faturamento, moeda)}
                 </span>
-                <Chip situacao={m.situacao} />
+                <ChipSituacao situacao={m.situacao} />
                 <span className="min-w-0 flex-1 text-xs text-muted-foreground">
                   {detalheDoMes(m, moeda)}
                 </span>
@@ -242,125 +184,59 @@ export function BarraFaturamentoMensal({
         </div>
       )}
 
-      <div className="flex flex-wrap items-center justify-between gap-4 px-5 py-2">
-        <div className="flex min-w-0 flex-1 flex-col gap-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs font-semibold text-foreground">
-              Faturamento por mês
+      <TrilhaBarra
+        rotulo="Faturamento"
+        acoes={
+          <>
+            <button
+              type="button"
+              onClick={() => setAberta((v) => !v)}
+              aria-expanded={aberta}
+              className="inline-flex h-9 items-center gap-1.5 whitespace-nowrap rounded-[10px] border border-border bg-white px-3.5 text-[13px] font-semibold text-foreground transition-colors hover:border-california-red/40 hover:text-california-red"
+            >
+              {aberta ? (
+                <>
+                  <ChevronDown className="h-4 w-4" /> Recolher
+                </>
+              ) : (
+                <>
+                  <ChevronUp className="h-4 w-4" /> Ver todos os meses
+                </>
+              )}
+            </button>
+            {proximo && podeEnviarMes(proximo) && botaoEnviar(proximo, false)}
+          </>
+        }
+      >
+        {meses.map((m) => (
+          <span key={m.mesId} className="inline-flex items-center gap-1 text-[11px]">
+            <span className="font-semibold text-muted-foreground">
+              {nomeDoMes(m.mes).slice(0, 1).toUpperCase() + nomeDoMes(m.mes).slice(1, 3)}
             </span>
-            {meses.map((m) => (
-              <span key={m.mesId} className="inline-flex items-center gap-1 text-[11px]">
-                <span className="font-semibold text-muted-foreground">
-                  {nomeDoMes(m.mes).slice(0, 1).toUpperCase() + nomeDoMes(m.mes).slice(1, 3)}
-                </span>
-                <Chip situacao={m.situacao} curto />
-              </span>
-            ))}
-          </div>
-          <span className="text-xs text-muted-foreground">
-            {bloqueio ??
-              `Envie cada mês quando o cliente validar. O encerramento fica disponível quando ${quemFatura}.`}
+            <ChipSituacao situacao={m.situacao} curto />
           </span>
-        </div>
-        <div className="flex flex-wrap items-center gap-2.5">
-          <button
-            type="button"
-            onClick={() => setAberta((v) => !v)}
-            aria-expanded={aberta}
-            className="inline-flex h-9 items-center gap-1.5 whitespace-nowrap rounded-[10px] border border-border bg-white px-3.5 text-[13px] font-semibold text-foreground transition-colors hover:border-california-red/40 hover:text-california-red"
-          >
-            {aberta ? (
-              <>
-                <ChevronDown className="h-4 w-4" /> Recolher
-              </>
-            ) : (
-              <>
-                <ChevronUp className="h-4 w-4" /> Ver todos os meses
-              </>
-            )}
-          </button>
-          {proximo && podeEnviarMes(proximo) && botaoEnviar(proximo, false)}
-          {acaoExtra}
-        </div>
-      </div>
+        ))}
+        <TextoTrilha>{bloqueio ?? resumo}</TextoTrilha>
+      </TrilhaBarra>
 
-      <Dialog open={envioAberto !== null} onOpenChange={(o) => !o && setEnvioAberto(null)}>
-        <DialogContent className="sm:max-w-lg">
-          {envioAberto && envio && (
-            <>
-              <DialogHeader>
-                <DialogTitle>
-                  Envio de {nomeDoMes(envioAberto.mes)} · {jobCodigo}
-                </DialogTitle>
-                <DialogDescription>
-                  Enviado para faturamento em {dataDoEnvio(envio.enviado_em)}. O envio
-                  é definitivo: não há errata nem save neste mês.
-                </DialogDescription>
-              </DialogHeader>
-              <dl className="space-y-3 text-sm">
-                <div className="flex items-baseline justify-between gap-3">
-                  <dt className="text-muted-foreground">Valor enviado</dt>
-                  <dd className="font-mono font-semibold">
-                    {formatCurrency(envio.valor_faturado, moeda)}
-                  </dd>
-                </div>
-                <div className="flex items-baseline justify-between gap-3">
-                  <dt className="text-muted-foreground">Situação</dt>
-                  <dd>
-                    <Chip situacao={envioAberto.situacao} />
-                  </dd>
-                </div>
-                <div className="flex items-baseline justify-between gap-3">
-                  <dt className="text-muted-foreground">Número da PO</dt>
-                  <dd>{envio.numero_po ?? "—"}</dd>
-                </div>
-                <div className="flex items-baseline justify-between gap-3">
-                  <dt className="text-muted-foreground">Portal</dt>
-                  <dd className="truncate">{envio.portal_url ?? "Sem portal"}</dd>
-                </div>
-                <div className="space-y-1">
-                  <dt className="text-muted-foreground">Descrição da nota fiscal</dt>
-                  <dd className="whitespace-pre-wrap rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs">
-                    {envio.descricao_nf ?? "—"}
-                  </dd>
-                </div>
-                <div className="space-y-1">
-                  <dt className="text-muted-foreground">Parcelas</dt>
-                  <dd className="divide-y divide-border rounded-lg border border-border">
-                    {envio.parcelas.map((par) => (
-                      <div
-                        key={par.id}
-                        className="flex items-center justify-between gap-3 px-3 py-1.5 text-xs"
-                      >
-                        <span className="font-mono text-muted-foreground">
-                          {par.ordem}/{envio.parcelas.length}
-                        </span>
-                        <span className="font-mono font-semibold">
-                          {formatCurrency(par.valor, moeda)}
-                        </span>
-                        <span>vence {data(par.data_vencimento)}</span>
-                      </div>
-                    ))}
-                  </dd>
-                </div>
-                {envioAberto.notas.length > 0 && (
-                  <div className="space-y-1">
-                    <dt className="text-muted-foreground">Notas emitidas</dt>
-                    <dd className="text-xs">
-                      {listaPtBr(
-                        envioAberto.notas.map(
-                          (nota) =>
-                            `NF ${nota.numero ?? "—"} · ${formatCurrency(nota.valor, moeda)} (${diaMes(nota.dataEmissao)})`,
-                        ),
-                      )}
-                    </dd>
-                  </div>
-                )}
-              </dl>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
+      {trilhaEncerramento}
+
+      <VerEnvioFaturamentoDialog
+        aberto={envioAberto !== null}
+        onOpenChange={(o) => !o && setEnvioAberto(null)}
+        titulo={
+          envioAberto ? `Envio de ${nomeDoMes(envioAberto.mes)} · ${jobCodigo}` : ""
+        }
+        descricao={
+          envioAberto?.envio
+            ? `Enviado para faturamento em ${dataDoEnvio(envioAberto.envio.enviado_em)}. O envio é definitivo: não há errata nem save neste mês.`
+            : ""
+        }
+        envio={envioAberto?.envio ?? null}
+        situacao={envioAberto?.situacao ?? "a_enviar"}
+        notas={envioAberto?.notas ?? []}
+        moeda={moeda}
+      />
     </div>
   );
 }

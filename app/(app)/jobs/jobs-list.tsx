@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/select";
 import { ChaveMeusTodos } from "@/components/ui/chave-meus-todos";
 import { cn } from "@/lib/utils";
-import { jobStatusLabel, type JobStatus } from "@/lib/types";
+import { jobStatusLabel, type JobStatus, jobStatusBadgeClasses } from "@/lib/types";
 
 export interface JobRow {
   id: string;
@@ -61,25 +61,11 @@ const STATUS_FILTROS: JobStatus[] = [
   "rejeitado_financeiro",
   "aberto",
   "encerrado",
+  "finalizado",
   "cancelado",
 ];
 
-function statusBadgeClasses(status: JobStatus): string {
-  switch (status) {
-    case "aberto":
-      return "bg-blue-50 text-blue-700 border-blue-200";
-    case "em_producao":
-      return "bg-amber-50 text-amber-700 border-amber-200";
-    case "encerrado":
-      return "bg-emerald-50 text-emerald-700 border-emerald-200";
-    case "cancelado":
-      return "bg-slate-100 text-slate-500 border-slate-200";
-    case "aguardando_abertura":
-      return "bg-yellow-50 text-yellow-700 border-yellow-200";
-    case "rejeitado_financeiro":
-      return "bg-red-50 text-red-700 border-red-200";
-  }
-}
+const statusBadgeClasses = jobStatusBadgeClasses;
 
 function formatDate(iso: string | null): string {
   if (!iso) return "—";

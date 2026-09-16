@@ -549,12 +549,14 @@ export async function carregarHomeGerenteProducao(
     supabase
       .from("jobs")
       .select(
-        "id, faturamento_previsto, abertura_em_revisao, " +
+        "id, status, faturamento_previsto, abertura_em_revisao, " +
           "envios:jobs_envio_faturamento(mes), previsoes:jobs_previsao_recebimento(mes)",
       )
       .eq("tenant_id", tenantId)
       .eq("responsavel_id", userId)
-      .eq("status", "aberto")
+      // O encerrado ainda não enviado continua "pronto pra faturar" desde a
+      // decisão 087 (16/09/2026): faturamento e encerramento correm separados.
+      .in("status", ["aberto", "encerrado"])
       .not("previsoes.mes", "is", null),
     // CONTEXTO: jobs proximos do vencimento nos meus projetos
     // "aberto" + "em_producao" (enum real)
@@ -614,7 +616,7 @@ export async function carregarHomeGerenteProducao(
     {
       titulo: "Jobs prontos pra enviar pra faturamento",
       contagem: contarProntosPraFaturar(meusJobsNaEsteira),
-      subtitulo: "Seus jobs abertos com previsão positiva, ainda não enviados",
+      subtitulo: "Seus jobs abertos ou encerrados com previsão positiva, ainda não enviados",
       href: "/jobs?filtro=faturamento_pronto&meus=1",
       icone: Mail,
     },
@@ -794,6 +796,7 @@ export async function carregarHomeProdutor(
 // Cards de faturamento da home do GP (decisão 078)
 
 interface JobNaEsteiraDoGp {
+  status: string;
   faturamento_previsto: number | string | null;
   abertura_em_revisao: boolean | null;
   envios: { mes: string | null }[] | null;
@@ -825,9 +828,19 @@ function contarProntosPraFaturar(res: { data: unknown; error?: { message: string
   }).length;
 }
 
-/** Com o envio registrado — no mensal, o de todos os meses. */
+/** Com o envio registrado — no mensal, o de todos os meses.
+ *
+ *  ⚠️ Critério anterior à decisão 087 (16/09/2026): desde então o
+ *  encerramento não espera o envio, e "pronto pra encerrar" deveria ser o
+ *  job aberto sem PP, BV, verba ou item pendente. Ficou restrito ao job
+ *  aberto até o Tiago definir o card — o filtro da lista também não existe
+ *  (`app/(app)/jobs/page.tsx`, TODO `encerrar_pronto`). */
 function contarProntosPraEncerrar(res: { data: unknown; error?: { message: string } | null }): number {
   return jobsNaEsteira(res).filter((j) =>
-    j.meses > 0 ? j.mensaisEnviados >= j.meses : j.envios.length > 0,
+    j.status !== "aberto"
+      ? false
+      : j.meses > 0
+        ? j.mensaisEnviados >= j.meses
+        : j.envios.length > 0,
   ).length;
 }

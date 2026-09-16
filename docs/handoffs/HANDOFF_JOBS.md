@@ -3774,3 +3774,41 @@ planilha da versão.
   mesma fonte da emissão (`listActiveMembers`) e **recusa troca de modo**:
   quem nasceu verba continua verba. A aba de PPs passou a receber
   `responsaveis` da página para montar o seletor.
+
+## ⚠️ Nota de 2026-09-16 — faturamento e encerramento correm separados, e o job fica finalizado (decisão 087)
+
+Regra completa em `docs/decisions/087-faturamento-e-encerramento-correm-separados.md`.
+
+- **O encerramento não espera o faturamento.** Nem o envio, nem a nota. Trava só
+  o que é da produção: PP em aberto, BV não recebido, verba não concluída e item
+  sem marcação. A exceção do save (028 §11) saiu do `encerrarJob`.
+- **Status novo `finalizado`**: encerrado E faturado. Quem grava é o banco —
+  no encerramento de um job já faturado ou na nota que zera o saldo de um
+  encerrado. Nota cancelada não volta o job a encerrado.
+- **O envio para faturamento continua aceito no job encerrado**
+  (`jobAceitaEnvioParaFaturamento`), inclusive o dos meses no mensal.
+- **Barra do job com duas trilhas** (`barra-acoes-job.tsx` + `trilha-barra.tsx`):
+  Faturamento (situação, "Ver envio" ou "Enviar job para faturamento"; no
+  mensal, a barra por mês) e Encerramento ("N pendências" / "Liberado" /
+  "Encerrado · por quem e quando", "Enviar job para encerramento" ou "Ver
+  envio"). `status-actions.tsx` e `encerrar-dialog.tsx` foram removidos.
+- **Envio para encerramento** (`enviar-encerramento-dialog.tsx`): moldura do
+  "Enviar job para abertura", pendências em vermelho, "Falta faturar — mas isso
+  não trava" em amarelo e o `JobTotaisCard` com `somenteRealizada` e
+  `colunasSaveAbertas`. O número muda: o card soma o BV, o resumo antigo não
+  somava (JOB-0033: R$ 95.950,00 → R$ 100.450,00).
+- **"Ver envio para faturamento" no job normal**, com o mesmo pop-up do mensal
+  (`envio-faturamento-ui.tsx`), agora com 640 px. Formulário de envio com 620 px,
+  campo da descrição da NF com 8 linhas e contador.
+- **Selo do status num lugar só**, `jobStatusBadgeClasses`: Encerrado violeta,
+  Finalizado verde.
+- `jobs.encerrado_em`, `encerrado_por` e `finalizado_em` entraram no tipo `Job`.
+
+Conferido em 16/09/2026 no Projeto Teste: JOB-0034 encerrado com novembro e
+dezembro por enviar (outubro continuou na fila), novembro enviado depois do
+encerramento, trava do servidor pelo console no JOB-0033, e o `finalizado` dos
+dois gatilhos por simulação desfeita no banco.
+
+**Pendente:** o fluxo em que o financeiro confirma o encerramento (a desenhar
+depois desta entrega) e a definição do card "Jobs prontos pra encerrar" da
+home do GP, que ainda usa o critério antigo.

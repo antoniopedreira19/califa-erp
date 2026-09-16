@@ -11,12 +11,14 @@ import { createClient } from "@/lib/supabase/server";
  * título.
  *
  * A conta é a mesma da `vw_faturamento_pendente` — `valor - já faturado`,
- * nunca negativo —, escrita aqui porque a view filtra `status = 'aberto'`
- * e o encerramento precisa justamente saber o saldo de um job que está
- * prestes a deixar de ser aberto (31/08/2026).
+ * nunca negativo —, escrita aqui para a tela do job ler o saldo de um job
+ * só, sem varrer a fila inteira (31/08/2026).
  *
- * Módulo próprio, e não uma cópia dentro da action: quem mostra a trava é
- * a tela do job e quem a aplica é o servidor. Duas contas divergiriam na
+ * ⚠️ Desde 16/09/2026 (decisão 087) o saldo NÃO trava mais o encerramento:
+ * a fila enxerga o job encerrado, e o fechamento mostra o saldo como aviso.
+ *
+ * Módulo próprio, e não uma cópia dentro da action: a tela do job e o
+ * servidor leem o mesmo número. Duas contas divergiriam na
  * primeira nota parcial — foi o que aconteceu com a classificação da
  * esteira antes de virar `lib/data/faturamento-por-job.ts`.
  */

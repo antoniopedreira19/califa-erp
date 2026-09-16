@@ -16,7 +16,7 @@ import {
   BotaoRecolherTodos,
   useGruposRecolhiveis,
 } from "@/app/(app)/_planilha/recolher-grupos";
-import { jobStatusLabel, type JobStatus } from "@/lib/types";
+import { jobStatusLabel, type JobStatus, jobStatusBadgeClasses } from "@/lib/types";
 import type { JobPlanilhaProjeto } from "./tipos";
 import { RentabilidadeNoVao } from "@/app/(app)/_planilha/rentabilidade-inline";
 import {
@@ -41,22 +41,7 @@ import {
 
 const GRADE_NEUTRA = "border-r border-r-[#f1f1f1]";
 
-function statusBadgeClasses(status: JobStatus): string {
-  switch (status) {
-    case "aberto":
-      return "border-blue-200 bg-blue-50 text-blue-700";
-    case "em_producao":
-      return "border-amber-200 bg-amber-50 text-amber-700";
-    case "encerrado":
-      return "border-emerald-200 bg-emerald-50 text-emerald-700";
-    case "cancelado":
-      return "border-slate-200 bg-slate-100 text-slate-500";
-    case "aguardando_abertura":
-      return "border-yellow-200 bg-yellow-50 text-yellow-700";
-    case "rejeitado_financeiro":
-      return "border-red-200 bg-red-50 text-red-700";
-  }
-}
+const statusBadgeClasses = jobStatusBadgeClasses;
 
 function formatarPercentual(p: number): string {
   return `${p.toFixed(1).replace(".", ",")}%`;

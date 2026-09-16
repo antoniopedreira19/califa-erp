@@ -20,6 +20,7 @@ import { blocosDoItem, somarBlocosDosItens } from "@/lib/calculos/bv-planilha";
 import {
   JOB_STATUS_TRANSICOES,
   jobAceitaRealizado,
+  jobAceitaEnvioParaFaturamento,
   jobAceitaAcoesPlanilha,
   jobAceitaGerarPP,
   jobAceitaEnvioDePP,
@@ -44,7 +45,7 @@ import type {
   ItemBv,
   CategoriaModeloPlanilha,
 } from "@/lib/types";
-import type { ResumoEncerramento } from "./encerrar-dialog";
+import type { FechamentoDoJob } from "./enviar-encerramento-dialog";
 import { saldoAFaturarDoJob } from "@/lib/data/saldo-a-faturar";
 import {
   COLUNAS_DE_PAGAMENTO,
@@ -52,9 +53,12 @@ import {
   type DadosDePagamento,
 } from "@/lib/data/foto-pagamento-da-pp";
 import { mesesDaVersaoQuery } from "@/lib/data/meses-versao";
+import { nomeDoMes } from "@/lib/calculos/meses-trimestre";
 import {
+  montarFaturamentoDoEnvioUnico,
   montarFaturamentoMensal,
   type EnvioDoJobComParcelas,
+  type FaturamentoDoEnvioUnico,
   type ItemDeNotaDaParcela,
   type MesDeFaturamento,
 } from "@/lib/calculos/faturamento-por-mes";
@@ -98,7 +102,7 @@ export async function carregarDetalheDoJob(
     supabase
       .from("jobs")
       .select(
-        "id, tenant_id, empresa_id, codigo, nome, produto, cidade, data_inicio_prevista, data_fim_prevista, data_evento, data_prevista_faturamento, observacoes, responsavel_id, produtor_id, valor_total, faturamento_previsto, faturamento_save_previsto, valor_job_abertura, faturamento_previsto_abertura, abertura_em_revisao, abertura_revisao_desde, abertura_revisao_errata_id, status, motivo_rejeicao, projeto_id, orcamento_id, versao_orcamento_aprovada_id, regional_id, categoria_id, servico_id, competencia_trimestre, competencia_ano, custo_previsto_total, nome_financeiro, data_abertura_financeiro, aberto_por, created_at, updated_at, responsavel:profiles!responsavel_id(id, nome), produtor:profiles!produtor_id(id, nome), regional:regionais(id, nome), categoria:categorias_dominio!categoria_id(id, nome), servico:categorias_dominio!servico_id(id, nome), orcamento:orcamentos(id, codigo, nome, projeto_id, servico:categorias_dominio!servico_id(id, nome), categoria:categorias_dominio!categoria_id(modelo_planilha)), versao:versoes_orcamento!versao_orcamento_aprovada_id(id, numero_versao, nome, moeda, percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra), projeto:projetos(id, codigo, nome, cliente_id, data_inicio_prevista, data_fim_prevista, cliente:clientes(id, nome_fantasia))",
+        "id, tenant_id, empresa_id, codigo, nome, produto, cidade, data_inicio_prevista, data_fim_prevista, data_evento, data_prevista_faturamento, observacoes, responsavel_id, produtor_id, valor_total, faturamento_previsto, faturamento_save_previsto, valor_job_abertura, faturamento_previsto_abertura, abertura_em_revisao, abertura_revisao_desde, abertura_revisao_errata_id, status, encerrado_em, encerrado_por, finalizado_em, motivo_rejeicao, projeto_id, orcamento_id, versao_orcamento_aprovada_id, regional_id, categoria_id, servico_id, competencia_trimestre, competencia_ano, custo_previsto_total, nome_financeiro, data_abertura_financeiro, aberto_por, created_at, updated_at, responsavel:profiles!responsavel_id(id, nome), produtor:profiles!produtor_id(id, nome), encerrado_por_perfil:profiles!encerrado_por(nome), regional:regionais(id, nome), categoria:categorias_dominio!categoria_id(id, nome), servico:categorias_dominio!servico_id(id, nome), orcamento:orcamentos(id, codigo, nome, projeto_id, servico:categorias_dominio!servico_id(id, nome), categoria:categorias_dominio!categoria_id(modelo_planilha)), versao:versoes_orcamento!versao_orcamento_aprovada_id(id, numero_versao, nome, moeda, percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra), projeto:projetos(id, codigo, nome, cliente_id, data_inicio_prevista, data_fim_prevista, cliente:clientes(id, nome_fantasia))",
       )
       .eq("id", jobId)
       .eq("tenant_id", session.activeTenant.id)
@@ -592,6 +596,9 @@ export async function carregarDetalheDoJob(
     data_prevista_faturamento: raw.data_prevista_faturamento ?? null,
     observacoes: raw.observacoes ?? null,
     status: raw.status,
+    encerrado_em: raw.encerrado_em ?? null,
+    encerrado_por: raw.encerrado_por ?? null,
+    finalizado_em: raw.finalizado_em ?? null,
     motivo_rejeicao: raw.motivo_rejeicao ?? null,
     // Registro financeiro da abertura. A página de Jobs não exibe estes
     // campos, mas a tela do job no financeiro exibe — e o formulário de
@@ -733,9 +740,12 @@ export async function carregarDetalheDoJob(
   //
   // Fee e Always On (modelo mensal, decisão 078) faturam mês a mês: o
   // envio único não vale para eles, e a action também recusa.
+  //
+  // O job encerrado ainda não faturado continua enviando (decisão 087):
+  // faturamento e encerramento correm separados desde 16/09/2026.
   const podeEnviarFaturamento =
     pode(session.activeRole, "jobs.enviar_faturamento") &&
-    job.status === "aberto" &&
+    jobAceitaEnvioParaFaturamento(job.status) &&
     envioFaturamento === null &&
     totaisJob.faturamentoPrevisto > 0 &&
     planilha.modeloPlanilha !== "mensal";
@@ -743,7 +753,7 @@ export async function carregarDetalheDoJob(
   // mês pode ir sai da barra, pela situação de cada um.
   const podeEnviarFaturamentoMensal =
     pode(session.activeRole, "jobs.enviar_faturamento") &&
-    job.status === "aberto" &&
+    jobAceitaEnvioParaFaturamento(job.status) &&
     planilha.modeloPlanilha === "mensal";
 
   // Job pago INTEIRAMENTE por saldo de save: faturamento previsto zero e
@@ -792,28 +802,21 @@ export async function carregarDetalheDoJob(
     ? nomeVersao(raw.orcamento?.nome ?? job.nome, raw.versao.numero_versao)
     : "—";
 
-  // Resumo de fechamento. Só existe depois do envio para faturamento —
-  // antes disso não há o que encerrar. Os impedimentos saem dos dados que
-  // a página já carregou (nenhuma query nova); o servidor refaz a conta
-  // na hora de gravar, porque esta tela pode estar velha.
   // Saldo a faturar: as parcelas do envio que ainda não viraram nota
-  // emitida. Trava o encerramento junto com PP e BV desde 31/08/2026 —
-  // job encerrado sai de `vw_faturamento_pendente` e não volta.
-  // Só é lido quando há resumo a montar; nas outras abas seria uma ida ao
-  // banco por nada.
+  // emitida. Desde 16/09/2026 (decisão 087) ele NÃO trava o encerramento —
+  // aparece no fechamento como aviso, e o job encerrado continua na fila de
+  // faturamento. Só é lido quando existe envio: sem envio não há parcela.
   const saldoAFaturar =
-    job.status === "aberto" && (envioFaturamento || enviosMensais.length > 0)
+    envios.length > 0
       ? await saldoAFaturarDoJob(session.activeTenant.id, jobId)
       : 0;
 
-  // Faturamento por mês (modelo mensal, decisão 078): o valor de cada mês
-  // pela conta da planilha, o envio dele e quanto já virou nota emitida.
-  // A leitura das notas só acontece quando há envio mensal.
-  const idsParcelasMensais = enviosMensais.flatMap((e) =>
-    e.parcelas.map((par) => par.id),
-  );
+  // As notas emitidas sobre as parcelas de TODOS os envios — do mensal, por
+  // mês, e do envio único do job normal, que ganhou o mesmo "Ver envio" na
+  // decisão 087. Uma leitura só, e só quando há envio.
+  const idsParcelas = envios.flatMap((e) => e.parcelas.map((par) => par.id));
   const notasDasParcelasRes =
-    idsParcelasMensais.length > 0
+    idsParcelas.length > 0
       ? await supabase
           .from("faturamento_itens")
           .select(
@@ -821,7 +824,7 @@ export async function carregarDetalheDoJob(
           )
           .eq("tenant_id", session.activeTenant.id)
           .eq("faturamento.status", "emitido")
-          .in("envio_parcela_id", idsParcelasMensais)
+          .in("envio_parcela_id", idsParcelas)
       : { data: [], error: null };
   if (notasDasParcelasRes.error) {
     console.error("[job.notas-das-parcelas]", notasDasParcelasRes.error.message);
@@ -841,6 +844,27 @@ export async function carregarDetalheDoJob(
   const todosOsMesesEnviados =
     faturamentoMensal.length > 0 &&
     faturamentoMensal.every((m) => m.envio !== null || m.situacao === "sem_faturamento");
+
+  // O faturamento do job que não é mensal: o envio único, as notas e a
+  // situação — a trilha "Faturamento" da barra e o "Ver envio" (decisão 087).
+  const faturamentoEnvioUnico: FaturamentoDoEnvioUnico | null =
+    planilha.modeloPlanilha === "mensal"
+      ? null
+      : montarFaturamentoDoEnvioUnico({
+          envio: envioFaturamento,
+          itensDeNota: (notasDasParcelasRes.data ?? []) as unknown as ItemDeNotaDaParcela[],
+          semFaturamento: totaisJob.faturamentoPrevisto <= 0.004,
+        });
+
+  // Todo o faturamento do job já saiu em nota — a mesma conta que o banco
+  // faz em `job_esta_faturado` para gravar `finalizado`. Serve à tela; quem
+  // decide o status é o banco.
+  const faturamentoCompleto =
+    planilha.modeloPlanilha === "mensal"
+      ? todosOsMesesEnviados && saldoAFaturar <= 0.01
+      : faturamentoEnvioUnico !== null &&
+        (faturamentoEnvioUnico.situacao === "sem_faturamento" ||
+          (envioFaturamento !== null && saldoAFaturar <= 0.01));
 
   const ppsEmAberto = ppsDoJob
     .filter((pp) => PP_STATUS_EM_ABERTO.includes(pp.status))
@@ -879,34 +903,33 @@ export async function carregarDetalheDoJob(
     )
     .map((it) => ({ item: it.item }));
 
-  const resumoEncerramento: ResumoEncerramento | null =
-    job.status === "aberto" &&
-    (envioFaturamento || pagoSoPorSave || todosOsMesesEnviados)
+  // O fechamento do job (decisão 087): o que ainda trava o envio para
+  // encerramento, o que falta faturar (aviso, não trava) e, depois de
+  // encerrado, quem enviou e quando. Existe para todo job que já passou pela
+  // abertura — o encerramento não espera mais o envio para faturamento.
+  const fechamento: FechamentoDoJob | null =
+    job.status === "aberto" ||
+    job.status === "em_producao" ||
+    job.status === "encerrado" ||
+    job.status === "finalizado"
       ? {
-          faturamentoAbertura: job.faturamento_previsto_abertura,
-          // "Faturamento" do fechamento é o faturamento previsto de agora,
-          // recalculado dos itens — não o número congelado na abertura.
-          faturamentoFechamento: totaisJob.faturamentoPrevisto,
-          // Sem envio (job que pulou a etapa) não há valor mandado
-          // faturar: zero, e o dialog não acusa divergência porque o
-          // faturamento previsto também é zero.
-          valorEnviado: envioFaturamento
-            ? Number(envioFaturamento.valor_faturado)
-            : enviosMensais.reduce((s, e) => s + e.valor_faturado, 0),
-          orcado: totaisJob.subtotalGeral,
-          honorarios: totaisJob.honorarios,
-          imposto: totaisJob.imposto,
-          percentualHonorarios: Number(versaoAprovada.percentual_honorarios),
-          percentualImposto: Number(versaoAprovada.percentual_imposto),
-          valorJob: totaisJob.valorJob,
-          custoRealizado: custoRealizadoJob,
-          saveConsumido: saveConsumidoNoJob,
-          moeda: versaoAprovada.moeda,
           ppsEmAberto,
           verbasEmAberto,
           bvsEmAberto,
-          saldoAFaturar,
           itensSemMarcacao,
+          saldoAFaturar,
+          semEnvio:
+            planilha.modeloPlanilha !== "mensal" &&
+            envioFaturamento === null &&
+            faturamentoEnvioUnico?.situacao !== "sem_faturamento",
+          mesesSemEnvio: faturamentoMensal
+            .filter((m) => m.situacao === "a_enviar")
+            .map((m) => nomeDoMes(m.mes)),
+          faturamentoCompleto,
+          encerradoEm: job.encerrado_em,
+          encerradoPorNome:
+            (raw.encerrado_por_perfil as { nome: string } | null)?.nome ?? null,
+          finalizadoEm: job.finalizado_em,
         }
       : null;
 
@@ -1016,7 +1039,14 @@ export async function carregarDetalheDoJob(
     custoRealizadoJob,
     bvPlanejadoJob,
     bvRealizadoJob,
-    resumoEncerramento,
+    fechamento,
+    // Quem pode enviar para encerramento (matriz `jobs.encerrar`). O
+    // servidor confere de novo em `encerrarJob`.
+    podeEncerrar: pode(session.activeRole, "jobs.encerrar"),
+    faturamentoEnvioUnico,
+    faturamentoCompleto,
+    internacional: planilha.internacional,
+    moedaEstrangeira: planilha.moedaEstrangeira,
     podeEditarRealizado,
     podeAcoesPlanilha,
     podeGerarPP,

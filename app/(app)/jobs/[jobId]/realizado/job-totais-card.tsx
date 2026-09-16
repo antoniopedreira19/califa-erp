@@ -54,6 +54,12 @@ interface Props {
    *  trimestre". */
   titulo?: string;
   subtitulo?: string;
+  /** Fechamento do job (decisão 087): o Resultado fica travado no
+   *  realizado, sem o seletor Planejada/Realizada. */
+  somenteRealizada?: boolean;
+  /** Abre as colunas de save já expandidas. No fechamento elas aparecem
+   *  por padrão (Tiago, 16/09/2026); o botão continua lá para recolher. */
+  colunasSaveAbertas?: boolean;
 }
 
 /** Taxa configurada na versão: 12 -> "12%", 19.53 -> "19,53%". */
@@ -107,6 +113,8 @@ export function JobTotaisCard({
   moedaEstrangeira,
   titulo = "Totais",
   subtitulo = "Orçado × Planejado × Realizado · valores calculados a partir dos itens.",
+  somenteRealizada = false,
+  colunasSaveAbertas = false,
 }: Props) {
   const {
     subtotaisPorTipo,
@@ -140,7 +148,7 @@ export function JobTotaisCard({
 
   // Mesma divisão e mesmo padrão FECHADO do card da versão do orçamento —
   // as duas telas mostram o mesmo fechamento e não podem se ler diferente.
-  const [colunasSave, setColunasSave] = React.useState(false);
+  const [colunasSave, setColunasSave] = React.useState(colunasSaveAbertas);
   const quebrarPorSave = temSave && colunasSave;
 
   // Planejado e realizado passam pelos blocos com BV: o número que o card
@@ -315,6 +323,7 @@ export function JobTotaisCard({
           bvRealizado={totais.realizado.deducaoBv}
           honorarios={honorarios}
           taxaHonorarios={formatarTaxa(percentualHonorarios)}
+          somenteRealizada={somenteRealizada}
           moeda={moeda}
         />
       </div>

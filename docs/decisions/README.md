@@ -110,9 +110,10 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 084 | [O ajuste da fatura do cartão vira compra da fatura, com rateio](084-o-ajuste-da-fatura-do-cartao-vira-compra-com-rateio.md) | 2026-09-15 |
 | 085 | [A tela principal ocupa a largura do layout](085-a-tela-principal-ocupa-a-largura-do-layout.md) | 2026-09-16 |
 | 086 | [A nota avulsa nasce com rateio de regional](086-a-nota-avulsa-nasce-com-rateio-de-regional.md) | 2026-09-16 |
+| 087 | [Faturamento e encerramento correm separados, e o job fica finalizado quando os dois terminam](087-faturamento-e-encerramento-correm-separados.md) | 2026-09-16 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
 > data é a da decisão, não a da posição na fila.
 
-**Próximo número livre: 087.**
+**Próximo número livre: 088.**

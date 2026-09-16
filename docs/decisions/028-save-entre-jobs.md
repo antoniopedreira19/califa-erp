@@ -206,6 +206,11 @@ decisão 008 §1 só deixa encerrar quem foi enviado.
 **Exceção explícita:** job com faturamento previsto zero **e** consumo de
 save encerra direto. Não há nota a emitir — ela saiu no job de origem.
 
+> ⚠️ **16/09/2026 ([decisão 087](087-faturamento-e-encerramento-correm-separados.md)).**
+> A exceção deixou de ser necessária: nenhum job precisa mais do envio para
+> encerrar. O job pago só por save encerra como qualquer outro e, como não
+> tem nada a faturar, fica **finalizado** no mesmo instante.
+
 ## Por que o saldo não leva honorários e imposto
 
 A alternativa era um saldo de R$ 41.009,07 — o faturamento cheio da linha.

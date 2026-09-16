@@ -104,6 +104,10 @@ presta, e volta inteira.
 - O resumo de fechamento lista cada verba com a situação dela, na mesma
   caixa das PPs, BVs e saldo a faturar, e diz o caminho: a produção presta
   contas na aba de PPs, o financeiro aprova e dá baixa no estorno.
+
+  > ⚠️ **16/09/2026 ([decisão 087](087-faturamento-e-encerramento-correm-separados.md)).**
+  > A trava da verba continua. O saldo a faturar saiu da caixa vermelha e
+  > virou aviso, e o resumo de fechamento virou o card de Totais.
 - O servidor refaz a conta em `encerrarJob`; se a leitura das verbas falhar,
   o job não encerra.
 - Sem mudança de banco: a situação é a mesma `situacaoDaVerba` das telas.
