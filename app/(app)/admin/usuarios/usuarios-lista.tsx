@@ -4,6 +4,7 @@ import * as React from "react";
 import { MailWarning, ShieldCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ReenviarConviteButton } from "./reenviar-convite-button";
+import { AlterarStatusButton } from "./alterar-status-button";
 import { EditarUsuarioDrawer } from "./editar-drawer";
 import { roleLabel, type AppRole, type Empresa, type Regional } from "@/lib/types";
 
@@ -13,6 +14,7 @@ export type UsuarioRow = {
   user_id: string;
   role: AppRole;
   status: "ativo" | "inativo";
+  profileAtivo: boolean;
   acesso: AcessoStatus;
   nome: string;
   email: string;
@@ -108,6 +110,30 @@ export function UsuariosLista({
                   >
                     {row.acesso === "pendente" ? (
                       <ReenviarConviteButton userId={row.user_id} />
+                    ) : row.user_id === currentUserId ? (
+                      // Não deixa admin inativar a si mesmo pela tela — o
+                      // server bloqueia, mas escondemos o botão pra não dar
+                      // a impressão de que é uma ação disponível.
+                      <span className="text-xs text-muted-foreground">—</span>
+                    ) : !row.profileAtivo ? (
+                      // Conta desativada no sistema (profiles.ativo=false).
+                      // Não é escopo desta tela reativar isso — é decisão
+                      // global (fora do MVP).
+                      <span className="text-[11px] text-muted-foreground">
+                        Desativado no sistema
+                      </span>
+                    ) : row.acesso === "ativo" ? (
+                      <AlterarStatusButton
+                        userId={row.user_id}
+                        userNome={row.nome}
+                        statusAtual="ativo"
+                      />
+                    ) : row.status === "inativo" ? (
+                      <AlterarStatusButton
+                        userId={row.user_id}
+                        userNome={row.nome}
+                        statusAtual="inativo"
+                      />
                     ) : (
                       <span className="text-xs text-muted-foreground">—</span>
                     )}
