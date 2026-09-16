@@ -18,7 +18,13 @@ const PopoverContent = React.forwardRef<
       align={align}
       sideOffset={sideOffset}
       className={cn(
-        "z-50 rounded-xl border border-border bg-white p-3 text-foreground shadow-elevated outline-none",
+        // z-[70]: ACIMA dos diálogos (16/09/2026). A escala do ERP é
+        // 50 (tela) / 55 (tela cheia) / 60 (diálogo aberto de dentro de
+        // outra camada) — e o popover pertence sempre ao que está por cima,
+        // não à página. Em z-50 o calendário do DatePicker abria ATRÁS do
+        // diálogo de aprovar PP (z-[60]): dava para clicar por script, mas
+        // não com o mouse, e a data ficava impossível de escolher.
+        "z-[70] rounded-xl border border-border bg-white p-3 text-foreground shadow-elevated outline-none",
         "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
         className,
       )}

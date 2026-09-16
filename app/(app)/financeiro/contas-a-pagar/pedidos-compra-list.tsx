@@ -8,6 +8,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { MultiSelectRegionais } from "@/components/ui/multi-select-regionais";
 import {
   Select,
   SelectContent,
@@ -219,16 +220,19 @@ export function PedidosCompraList({
   subtipos,
 }: PedidosCompraListProps) {
   const [filtro, setFiltro] = React.useState<FiltroStatus>("em_avaliacao");
-  const [filtroRegional, setFiltroRegional] = React.useState<string>("todas");
+  // Vazio = todas as regionais (16/09/2026: o filtro virou múltiplo).
+  const [regionaisFiltro, setRegionaisFiltro] = React.useState<string[]>([]);
   const [busca, setBusca] = React.useState("");
   const [ppSelecionada, setPpSelecionada] = React.useState<PPRow | null>(null);
 
   // Regional recorta o universo ANTES das contagens de status, senão os
   // chips mostram números que não batem com o que o usuário vê na tabela.
   const rowsPorRegional = React.useMemo(() => {
-    if (filtroRegional === "todas") return rows;
-    return rows.filter((r) => r.regional_id === filtroRegional);
-  }, [rows, filtroRegional]);
+    if (regionaisFiltro.length === 0) return rows;
+    return rows.filter(
+      (r) => r.regional_id !== null && regionaisFiltro.includes(r.regional_id),
+    );
+  }, [rows, regionaisFiltro]);
 
   const contagens = React.useMemo(() => {
     const c: Record<FiltroStatus, number> = {
@@ -313,22 +317,11 @@ export function PedidosCompraList({
             );
           })}
           <div className="ml-auto flex items-center gap-2">
-            <Select value={filtroRegional} onValueChange={setFiltroRegional}>
-              <SelectTrigger
-                aria-label="Filtrar por regional"
-                className="h-9 w-[190px] px-3 text-sm"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todas">Todas as regionais</SelectItem>
-                {regionaisOrdenadas.map((r) => (
-                  <SelectItem key={r.id} value={r.id}>
-                    {r.nome}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <MultiSelectRegionais
+              regionais={regionaisOrdenadas}
+              selecionadas={regionaisFiltro}
+              onSelectionChange={setRegionaisFiltro}
+            />
             <div className="relative w-56">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <input
