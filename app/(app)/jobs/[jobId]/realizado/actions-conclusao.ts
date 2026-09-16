@@ -22,6 +22,7 @@ import { logAuditEvent } from "@/lib/auth/audit";
 import { jobAceitaGerarPP, type JobStatus } from "@/lib/types";
 import {
   aplicarConclusaoDoItem,
+  faltaDosARsSemFechar,
   itensSemConclusaoDoJob,
 } from "./conclusao-item";
 
@@ -178,12 +179,23 @@ export async function reabrirItemParaNovaPP(
   return { ok: true };
 }
 
+/** Item `A · Repasse` que o lote deixou em aberto, e quanto falta nele. */
+export interface ItemPuladoNoLote {
+  nome: string;
+  falta: number;
+}
+
 /**
  * "Concluir PPs" — o marco aplicado à planilha inteira, de uma vez.
  *
  * A lista de quem será marcado é refeita AQUI, com
  * `itensSemConclusaoDoJob`: a tela pode estar velha, e o que ela mostra
  * no aviso é explicação, não a regra. Item já marcado não é tocado.
+ *
+ * Item `A · Repasse` cujas PPs ainda não cobrem o orçado **fica de fora**
+ * e volta em `pulados`, com quanto falta (decisão 062; opção do Tiago em
+ * 16/09/2026: pular e avisar, em vez de recusar o lote inteiro). Os
+ * demais são marcados normalmente.
  *
  * Um UPDATE só e um evento de auditoria só, com a lista no metadata —
  * são N linhas mudando juntas, e passar item a item pelo
@@ -192,7 +204,10 @@ export async function reabrirItemParaNovaPP(
  */
 export async function concluirPPsDoJob(
   jobId: string,
-): Promise<{ ok: true; marcados: number } | { ok: false; message: string }> {
+): Promise<
+  | { ok: true; marcados: number; pulados: ItemPuladoNoLote[] }
+  | { ok: false; message: string }
+> {
   const g = await gateDoJob(jobId);
   if (!g.ok) return g;
 
@@ -202,8 +217,18 @@ export async function concluirPPsDoJob(
     jobId,
   );
 
-  if (pendentes.length === 0) {
-    return { ok: true, marcados: 0 };
+  const faltas = await faltaDosARsSemFechar(
+    g.supabase,
+    g.session.activeTenant.id,
+    pendentes,
+  );
+  const marcaveis = pendentes.filter((p) => !faltas.has(p.itemRealizadoId));
+  const pulados: ItemPuladoNoLote[] = pendentes
+    .filter((p) => faltas.has(p.itemRealizadoId))
+    .map((p) => ({ nome: p.nome, falta: faltas.get(p.itemRealizadoId) ?? 0 }));
+
+  if (marcaveis.length === 0) {
+    return { ok: true, marcados: 0, pulados };
   }
 
   const { error } = await g.supabase
@@ -217,7 +242,7 @@ export async function concluirPPsDoJob(
     .is("pps_concluidas_em", null)
     .in(
       "id",
-      pendentes.map((p) => p.itemRealizadoId),
+      marcaveis.map((p) => p.itemRealizadoId),
     );
 
   if (error) {
@@ -231,13 +256,14 @@ export async function concluirPPsDoJob(
     entidadeTipo: "job",
     entidadeId: jobId,
     metadata: {
-      total: pendentes.length,
-      itens: pendentes.map((p) => p.nome),
-      item_realizado_ids: pendentes.map((p) => p.itemRealizadoId),
+      total: marcaveis.length,
+      itens: marcaveis.map((p) => p.nome),
+      item_realizado_ids: marcaveis.map((p) => p.itemRealizadoId),
+      pulados_ar: pulados,
       origem: "barra_planilha",
     },
   });
 
   revalidatePath(`/jobs/${jobId}`);
-  return { ok: true, marcados: pendentes.length };
+  return { ok: true, marcados: marcaveis.length, pulados };
 }

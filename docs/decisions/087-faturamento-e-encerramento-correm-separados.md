@@ -253,9 +253,70 @@ Por simulação no banco, numa transação desfeita (sem nota real):
 - `tsc`, `next lint` (só o aviso antigo do `multi-select`), `next build` e os
   81 testes limpos de novo.
 
-**Não conferido na tela:** o pop-up num job **nacional** com save — não há job
+~~**Não conferido na tela:** o pop-up num job **nacional** com save — não há job
 aberto assim no Projeto Teste (o JOB-0007 está aguardando abertura). O card é o
-mesmo componente que já abre as colunas de save no internacional.
+mesmo componente que já abre as colunas de save no internacional.~~ Conferido
+no teste real abaixo.
+
+### Teste real de ponta a ponta (16/09/2026, depois do push)
+
+Tudo pelas telas, no Chrome do Tiago: Projeto Teste, Empresa Teste, Conta
+Teste e o fornecedor "Teste Alterações Fornecedor 048", reativado pelo
+cadastro para isso.
+
+**JOB-0007 (nacional com save) — faturado antes, finalizado no encerramento:**
+
+1. Aberto pelo financeiro (projeto financeiro "Teste · PEVETE-0003/26").
+2. **PP normal** PP-00067 (Item 1, R$ 1.500,00, NF anexada) e **PP de verba**
+   PP-00068 (Item 2, R$ 800,00), as duas geradas e enviadas de uma vez,
+   aprovadas com pagamento em 16/09 e baixadas na Conta Teste por PIX.
+3. **Prestação da verba** pela produção: NF de R$ 500,00; aprovada pelo
+   financeiro; estorno de R$ 300,00 baixado na Conta Teste. O realizado do
+   item caiu de R$ 800,00 para R$ 500,00.
+4. **Dois BVs** (Item 5, R$ 3.000,00; Item6, R$ 2.000,00) com o fornecedor de
+   teste e alíquota de 10%, confirmados, com nota emitida para o fornecedor e
+   recebidos — os dois passaram a `recebido`.
+5. Itens marcados, **envio para faturamento** de R$ 252.653,78 (R$ 190.021,74
+   próprio + R$ 62.632,04 de save, com os dois itens na mesma parcela), nota
+   emitida e título recebido. O job continuou `aberto`.
+6. **Pop-up de encerramento** liberado: colunas de save abertas, "Save gerado
+   R$ 45.000,00" no fim, Resultado travado em Realizada, sem caixa de
+   pendência nem de falta de faturamento.
+7. Enviado para encerramento → **`finalizado` direto**, com `encerrado_em`,
+   `encerrado_por`, `finalizado_em` e a auditoria `job.finalizado`
+   `{"momento": "encerramento"}` por Tiago Mendonça. Selo verde no cabeçalho;
+   trilhas "Faturado" e "Encerrado".
+
+**JOB-0034 (mensal, já encerrado) — finalizado na última nota:**
+
+1. Dezembro enviado depois do encerramento (vencimento 18/01/2027).
+2. Notas de outubro e de novembro emitidas: o job seguiu `encerrado`.
+3. Nota de dezembro → **`finalizado`**, com a auditoria `job.finalizado`
+   `{"momento": "emissao_da_nota", "faturamento_id": …}`. A fila ficou sem o
+   job. Os três títulos foram recebidos na Conta Teste.
+
+**Conciliação da Conta Teste (16/09/2026):** saldo anterior R$ 93.050,00,
+créditos R$ 308.059,42, débitos R$ 2.300,00, saldo final R$ 398.809,42. As nove
+linhas trazem o job, o centro de custo e a Empresa Teste — inclusive o
+recebimento das notas, que chega ao job pelos itens da nota.
+
+**Fluxo de caixa:** os nove movimentos aparecem no geral da Empresa Teste. No
+fluxo do JOB-0007 as entradas são R$ 195.321,74: a parte própria da nota, os
+dois BVs e o estorno da verba. Os R$ 62.632,04 do save entram numa linha à
+parte, "saldo em save", sem job — é o desenho da decisão 028, que leva esse
+dinheiro ao job que consumir o crédito. Nenhuma previsão ficou pendurada nos
+dois jobs finalizados.
+
+**Corrigido no caminho (mesmo commit desta seção):**
+
+- **A alíquota do BV não voltava nos diálogos** (decisão 062). As consultas
+  do job, do orçamento e da planilha da abertura não traziam
+  `percentual_imposto`: o campo reabria vazio, o "Confirmar" pedia a alíquota
+  de novo, e salvar o BV sem redigitar gravava a alíquota como nula.
+- **A 1ª parcela do envio para faturamento não mostrava a data escolhida**
+  (decisão 078). Mudar a "Data de faturamento" levava a data para a parcela
+  no estado, mas o campo da parcela seguia vazio (mensal) ou com a data
+  antiga (job normal). O envio saía com a data certa; a tela mostrava outra.
 
 ## 7. Pendências
 
@@ -265,9 +326,23 @@ mesmo componente que já abre as colunas de save no internacional.
   envio registrado, critério anterior a esta decisão. O certo seria job aberto
   sem PP, BV, verba ou item pendente; o filtro `encerrar_pronto` da lista nunca
   foi implementado. Precisa de definição.
-- **Janela entre migration e deploy:** as migrations valem para o app que está
+- ~~**Janela entre migration e deploy:** as migrations valem para o app que está
   no ar, que não conhece `finalizado`. Nenhum job aberto está todo faturado
-  hoje, então nenhum deveria virar finalizado antes do deploy.
+  hoje, então nenhum deveria virar finalizado antes do deploy.~~ Fechada: o
+  deploy do `74d4a9a` terminou na Vercel em 16/09/2026.
+- ~~**O "Concluir PPs" em lote fura a trava do A · Repasse** (decisão 062).
+  `concluirPPsDoJob` marca os itens com um UPDATE só e não passa por
+  `aplicarConclusaoDoItem`, onde a trava mora — ao contrário do que diz o
+  comentário dela. No teste, o Item6 do JOB-0007 (AR, orçado R$ 15.000,00)
+  ficou concluído sem PP nenhuma, e o job encerrou. Falta o Tiago decidir se
+  o lote pula esses itens (e diz quais) ou recusa tudo.~~ **Resolvido em
+  16/09/2026 — o lote pula e avisa** (opção do Tiago). Ver 062 §6. O Item6 do
+  JOB-0007 segue concluído sem PP: o job está finalizado e não se reabre pela
+  tela.
+- **"Editar registro" num job encerrado ou finalizado:** a aba Abertura do Job
+  no financeiro oferece o botão, mas o servidor recusa ("Só job aberto tem
+  registro de abertura para editar"). Já era assim com o encerrado antes da
+  087.
 - O centavo do JOB-0034 (meses R$ 50.105,64 × planilha R$ 50.105,63) é
   arredondamento anterior a esta decisão.
 - **Selo "Enviado" do mensal no Visualizar Jobs:** o JOB-0034, com 2 de 3 meses

@@ -39,6 +39,10 @@ import type { TipoCusto } from "@/lib/types";
 export interface ItemSemConclusao {
   itemRealizadoId: string;
   nome: string;
+  tipoCusto: TipoCusto;
+  emSave: boolean;
+  /** O orçado da CÓPIA do job — é contra ele que o `AR` fecha (062). */
+  totalOrcado: number;
 }
 
 /**
@@ -52,7 +56,9 @@ export async function itensSemConclusaoDoJob(
 ): Promise<ItemSemConclusao[]> {
   const { data, error } = await supabase
     .from("jobs_itens_realizado")
-    .select("id, copia:jobs_itens_orcado!inner(item, tipo_custo, em_save)")
+    .select(
+      "id, copia:jobs_itens_orcado!inner(item, tipo_custo, em_save, total_orcado)",
+    )
     .eq("tenant_id", tenantId)
     .eq("job_id", jobId)
     .is("pps_concluidas_em", null)
@@ -64,10 +70,69 @@ export async function itensSemConclusaoDoJob(
     return [];
   }
 
-  return ((data ?? []) as any[]).map((linha) => ({
-    itemRealizadoId: linha.id as string,
-    nome: (linha.copia?.item as string) ?? "Item",
-  }));
+  return ((data ?? []) as any[]).map((linha) => {
+    const copia = Array.isArray(linha.copia) ? linha.copia[0] : linha.copia;
+    return {
+      itemRealizadoId: linha.id as string,
+      nome: (copia?.item as string) ?? "Item",
+      tipoCusto: copia?.tipo_custo as TipoCusto,
+      emSave: copia?.em_save === true,
+      totalOrcado: Number(copia?.total_orcado ?? 0),
+    };
+  });
+}
+
+/**
+ * Quanto falta em PPs para cada item `A · Repasse` da lista fechar o
+ * orçado (decisão 062). Só entram no mapa os que AINDA NÃO fecham.
+ *
+ * É a mesma conta de `aplicarConclusaoDoItem`, para o "Concluir PPs" da
+ * barra, que marca a planilha inteira num UPDATE só e por isso não passa
+ * por aquela função. Até 16/09/2026 o lote não fazia esta conta e marcava
+ * o `AR` sem PP nenhuma — foi assim que o Item6 do JOB-0007 fechou.
+ *
+ * Leitura que falha trava a mais: todo `AR` da lista sai como bloqueado,
+ * com a falta igual ao orçado.
+ */
+export async function faltaDosARsSemFechar(
+  supabase: SupabaseClient,
+  tenantId: string,
+  itens: ItemSemConclusao[],
+): Promise<Map<string, number>> {
+  const ars = itens.filter((i) => exigeSomaIgualAoOrcado(i.tipoCusto, i.emSave));
+  const faltas = new Map<string, number>();
+  if (ars.length === 0) return faltas;
+
+  const { data, error } = await supabase
+    .from("pedidos_compra")
+    .select("item_realizado_id, valor, status")
+    .eq("tenant_id", tenantId)
+    .in(
+      "item_realizado_id",
+      ars.map((i) => i.itemRealizadoId),
+    );
+
+  if (error) {
+    console.error("[item.conclusao.ar]", error.message);
+    for (const i of ars) faltas.set(i.itemRealizadoId, i.totalOrcado);
+    return faltas;
+  }
+
+  const ppsPorItem = new Map<string, { valor: number; status: string }[]>();
+  for (const pp of (data ?? []) as any[]) {
+    const lista = ppsPorItem.get(pp.item_realizado_id) ?? [];
+    lista.push({ valor: Number(pp.valor), status: pp.status as string });
+    ppsPorItem.set(pp.item_realizado_id, lista);
+  }
+
+  for (const i of ars) {
+    const falta = faltaParaFecharOOrcado(
+      somaDasPPsNaoCanceladas(ppsPorItem.get(i.itemRealizadoId) ?? []),
+      i.totalOrcado,
+    );
+    if (falta > 0) faltas.set(i.itemRealizadoId, falta);
+  }
+  return faltas;
 }
 
 export interface AplicarConclusaoArgs {
@@ -133,10 +198,10 @@ export async function aplicarConclusaoDoItem(
   if (jaMarcado === concluido) return { ok: true, mudou: false };
 
   // A trava do `A · Repasse` (decisão 062): o item não fecha enquanto as
-  // PPs não cobrirem o orçado. Mora AQUI, e não em cada chamador, porque
-  // os três caminhos de marcação passam por esta função — o formulário da
-  // PP, o painel do item e o "Concluir PPs" da barra, que marca a
-  // planilha inteira de uma vez.
+  // PPs não cobrirem o orçado. Mora AQUI para o formulário da PP e o
+  // painel do item. O "Concluir PPs" da barra NÃO passa por esta função
+  // (marca num UPDATE só): ele aplica a mesma conta por
+  // `faltaDosARsSemFechar` e pula o `AR` que não fecha (16/09/2026).
   //
   // O embed é `!inner` e 1:1, mas o PostgREST devolve objeto ou array
   // conforme a inferência da FK: normalizar aqui evita a trava sumir em

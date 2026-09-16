@@ -24,6 +24,12 @@ Decisões do Tiago em 08/09/2026.
 5. **A alíquota virou campo do BV**, opcional enquanto se negocia e
    obrigatória para confirmar (que é o envio ao contas a receber).
 
+   > ⚠️ **16/09/2026:** até esta data as telas do job, do orçamento e da
+   > planilha da abertura não carregavam a alíquota salva. O diálogo reabria
+   > o campo vazio, o "Confirmar" pedia de novo, e salvar sem redigitar a
+   > gravava como nula. Corrigido no teste real da
+   > [decisão 087](087-faturamento-e-encerramento-correm-separados.md) §6.
+
 E, fora do BV: **em custo `A · Repasse` a soma das PPs do item precisa
 cobrir o orçado** antes de qualquer PP dele sair para o financeiro e
 antes de o item poder ser marcado como concluído.
@@ -182,6 +188,19 @@ fornecedor.
 
 Na prática: **gere todas as PPs do item `AR` antes de enviar a primeira.**
 
+> ⚠️ **16/09/2026 — o "Concluir PPs" em lote furava a trava.** O botão da
+> barra da Planilha Interna marca a planilha inteira num UPDATE só e não
+> passava pela função da trava; o Item6 do JOB-0007 (AR, orçado
+> R$ 15.000,00) fechou sem PP nenhuma no teste da
+> [decisão 087](087-faturamento-e-encerramento-correm-separados.md).
+> **Decisão do Tiago (entre pular e avisar, ou recusar o lote inteiro):
+> pular e avisar.** O lote marca os demais itens e deixa em aberto o `AR`
+> que ainda não fecha; o aviso do botão mostra esse item num quadro "Fica de
+> fora", com quanto falta em PPs, e o servidor refaz a conta
+> (`faltaDosARsSemFechar` em `conclusao-item.ts`) e registra os pulados na
+> auditoria (`pulados_ar`). Se só sobrar `AR` sem fechar, o aviso diz
+> "Nenhum item pode ser concluído agora" e não marca nada.
+
 **Só `AR`.** Em `B`, `C`, `F` e `FI` o orçado é preço, e gastar menos que
 ele é lucro legítimo — eles seguem como a [039](039-pp-nasce-gerada-e-o-envio-ao-financeiro-e-uma-acao.md)
 deixou, sem teto e sem piso. Linha em **save** fica de fora: ela não
@@ -221,7 +240,7 @@ barra qualquer linha com PP no financeiro, de qualquer tipo.
 | Contas do BV (fonte única) | `lib/calculos/bv-planilha.ts` — `deducaoBvDoRealizado`, `temBvPendente`, `blocosDoItem` (recebe LISTA de BVs) |
 | A trava do `AR` | `lib/calculos/pps-item.ts` — `exigeSomaIgualAoOrcado`, `somaDasPPsNaoCanceladas`, `faltaParaFecharOOrcado` |
 | Envio de PP | `actions-pp.ts` — `barrarARComOrcadoEmAberto`, antes da conta do planejado |
-| Marco "PPs concluídas" | `conclusao-item.ts` — na gravação, que é por onde os três caminhos passam |
+| Marco "PPs concluídas" | `conclusao-item.ts` — `aplicarConclusaoDoItem` (formulário da PP e painel do item) e `faltaDosARsSemFechar` (o "Concluir PPs" em lote, desde 16/09/2026) |
 | Errata do `AR` concluído | `actions-errata.ts` — `barrarARConcluido` |
 | BV por id | `app/(app)/_bv/actions.ts` — `salvarBv(…, bvId?)`, `confirmarBv(bvId)`, `cancelarBv(bvId)` |
 | Lista e alíquota no formulário | `app/(app)/_bv/bv-dialog.tsx` |

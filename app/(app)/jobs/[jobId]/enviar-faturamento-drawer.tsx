@@ -433,6 +433,10 @@ export function EnviarFaturamentoDrawer({
                       }
                     />
                     <DatePicker
+                      // O DatePicker só lê `defaultValue` ao montar. A data de
+                      // faturamento arrasta a 1ª parcela no estado; sem a chave,
+                      // o campo seguia mostrando a data antiga (16/09/2026).
+                      key={i === 0 ? `venc-0-${dataFaturamento}` : undefined}
                       name={`venc-parcela-${i}`}
                       defaultValue={p.data_vencimento}
                       onDateChange={(d) =>
