@@ -437,7 +437,7 @@ sobravam 1164px para uma tabela que pedia 1280 — 116px cortados sempre.
 
 Três ajustes, medidos no browser:
 
-1. Página do job vai a **`max-w-[1440px]`** — mais que o padrão do app, porque é
+1. Página do job vai a **`max-w-[1440px]`** (até 16/09/2026; ver nota abaixo) — mais que o padrão do app, porque é
    a tela com tabela de 15 colunas, mas sem ir ao máximo de 1600.
 2. Calha da Planilha Interna: `pr-[114px]` → **`pr-[104px]`**. Os 10px de respiro
    da trilha podem invadir o padding do layout sem encostar na borda.
@@ -449,7 +449,7 @@ Três ajustes, medidos no browser:
 Resultado medido: 0px de corte em 1920, 1680 e 1440 (1px sub-pixel). Abaixo de
 ~1400px a tabela volta a rolar horizontalmente, que é o comportamento correto.
 
-A página ainda ganha `min-[1600px]:mr-6`: a partir de 1600px, onde passa a
+A página ganhou `min-[1600px]:mr-6` (até 16/09/2026): a partir de 1600px, onde passa a
 sobrar folga dos dois lados, o conteúdo desloca 24px pra direita — encosta um
 pouco mais na borda e afasta da sidebar (folga de 226px à esquerda contra 178px
 à direita, em 1920). O breakpoint é necessário: aplicar a margem em telas
@@ -457,6 +457,15 @@ menores roubaria 24px da tabela e ela voltaria a cortar.
 
 > A tela de **versão do orçamento** tem a mesma tabela larga e segue em
 > `max-w-7xl` — provavelmente sofre do mesmo corte. Não foi tocada aqui.
+
+⚠️ **A página do job perdeu a largura própria (2026-09-16).** Os itens 1 e o
+`min-[1600px]:mr-6` acima não valem mais: a página do job (e as de job e
+projeto no financeiro) não tem `max-w` nem `mx-auto`, e ocupa a largura do
+layout — 1616px, centralizada, com o teto do layout subindo de 1600 para
+1680px no mesmo dia ([decisão 085](../decisions/085-a-tela-principal-ocupa-a-largura-do-layout.md)).
+A calha e as larguras de coluna seguem como estão. Medido em viewport de
+1840px no JOB-0029: planilha com 1498px (era 1418), calha dentro da página,
+sem rolagem horizontal.
 
 ---
 

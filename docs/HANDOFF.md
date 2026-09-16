@@ -12,7 +12,7 @@ Antes de qualquer coisa:
 
 1. **`docs/PERFORMANCE.md` é obrigatório**. Toda mudança em `app/(app)/**` ou `lib/supabase/**` passa pelo checklist do guia. Já custamos 2 regressões severas por não respeitar isso — não repita. `CLAUDE.md` também tem as regras não-negociáveis no topo.
 
-2. **`docs/09-identidade-visual-ui.md`**: leia as seções **"Larguras de layout (padrão)"** e **"Header padrão da página"** antes de criar/editar qualquer page. Só 3 larguras permitidas (`max-w-3xl` form / `max-w-7xl` detalhe / `max-w-2xl` texto) e todo header tem icon+kicker/breadcrumb+title. Sair do padrão sem justificativa é dívida técnica.
+2. **`docs/09-identidade-visual-ui.md`**: leia as seções **"Larguras de layout (padrão)"** e **"Header padrão da página"** antes de criar/editar qualquer page. Tela principal não tem largura própria — usa a do layout (decisão 085, 16/09/2026); formulário `max-w-3xl`, texto `max-w-2xl` e todo header tem icon+kicker/breadcrumb+title. Sair do padrão sem justificativa é dívida técnica.
 
 3. **Fixes de perf ainda válidos (não regride):**
    - `prefetch={false}` nos `<Link>` das listas de versão, orçamento, cliente, fornecedor, job.

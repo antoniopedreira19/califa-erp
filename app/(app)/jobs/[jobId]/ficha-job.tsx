@@ -145,7 +145,7 @@ export function FichaJob({
           Descritivo do job
         </p>
         {/* 104ch: o texto para de crescer antes de virar linha larga demais
-            para o olho voltar ao começo, mesmo com a tela em 1452px. */}
+            para o olho voltar ao começo, mesmo com a tela na largura cheia. */}
         <p
           className={cn(
             "mt-1.5 max-w-[104ch] whitespace-pre-wrap text-base leading-[1.55]",
