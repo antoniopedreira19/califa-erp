@@ -90,9 +90,12 @@ depois, e para o caso de a escrita um dia divergir.
   único.~~ Não é furo: cada compra vira lançamento próprio com o rateio da
   avulsa. O par de lançamentos do pagamento é transferência entre contas e
   tem que ficar FORA do DRE, não ser rateado.
-- **Título com origem `avulso`** não tem job — esse fica para o próximo
-  lote. O de origem `bv` **tem**, e desde 11/09/2026 a view percorre o
-  caminho (ver a revisão no fim).
+- ~~**Título com origem `avulso`** não tem job — esse fica para o próximo
+  lote.~~ Resolvido em 16/09/2026: a nota avulsa nasce com rateio de
+  regional, e o título e a baixa se dividem por ele — ver a
+  [086](086-a-nota-avulsa-nasce-com-rateio-de-regional.md). O de origem `bv`
+  **tem** job, e desde 11/09/2026 a view percorre o caminho (ver a revisão
+  no fim).
 - ~~**A conciliação** lê `lancamentos_financeiros` direto, não a view: o
   job derivado da baixa de título não aparece ali, e a linha sai sem
   regional.~~ Resolvido em 15/09/2026: a regional da baixa de título passou

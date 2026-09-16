@@ -54,6 +54,7 @@ export default async function ContasReceberPage({
     fornecedoresRes,
     jobsRes,
     enviosRes,
+    regionaisRes,
   ] = await Promise.all([
     supabase
       .from("vw_faturamento_pendente")
@@ -67,7 +68,8 @@ export default async function ContasReceberPage({
         id, numero_nf, data_emissao, valor_total, descricao, cnae, anexo_nf_path,
         empresa_id, origem_tipo, cliente_id, fornecedor_id,
         plano_conta_tipo_id, plano_conta_subtipo_id,
-        itens:faturamento_itens(id, origem_tipo, origem_id, envio_parcela_id, valor)
+        itens:faturamento_itens(id, origem_tipo, origem_id, envio_parcela_id, valor),
+        rateio:faturamentos_regionais(percentual, regional:regionais(nome))
       `)
       .eq("tenant_id", tenantId)
       .eq("status", "emitido")
@@ -148,9 +150,8 @@ export default async function ContasReceberPage({
       .eq("tenant_id", tenantId)
       .eq("status", "ativo")
       .order("nome"),
-    // Códigos dos jobs cobertos pelas notas e a lista do "Job de
-    // referência" do avulso. Limite alto o bastante para o histórico e
-    // baixo o bastante para não virar varredura.
+    // Códigos dos jobs cobertos pelas notas. Limite alto o bastante para o
+    // histórico e baixo o bastante para não virar varredura.
     supabase
       .from("jobs")
       .select("id, codigo, nome")
@@ -165,6 +166,13 @@ export default async function ContasReceberPage({
       .from("jobs_envio_faturamento")
       .select("job_id, mes, numero_po, descricao_nf")
       .eq("tenant_id", tenantId),
+    // As regionais do rateio da nota avulsa (decisão 086). O drawer oferece
+    // só as da empresa emissora; inativas vêm para a nota antiga ler certo.
+    supabase
+      .from("regionais")
+      .select("id, nome, ativo, empresa_id")
+      .eq("tenant_id", tenantId)
+      .order("nome"),
   ]);
 
   for (const [nome, res] of [
@@ -172,6 +180,7 @@ export default async function ContasReceberPage({
     ["faturados", faturadosRes],
     ["titulos", titulosRes],
     ["envios", enviosRes],
+    ["regionais", regionaisRes],
   ] as const) {
     if (res.error) console.error(`[cr.${nome}]`, res.error.message);
   }
@@ -203,6 +212,12 @@ export default async function ContasReceberPage({
   const nomeCliente = new Map(clientesList.map((c) => [c.id, c.nome]));
   const nomeFornecedor = new Map(fornecedoresList.map((f) => [f.id, f.nome]));
   const jobPorId = new Map(jobsList.map((j) => [j.id, j]));
+  const regionaisList = (regionaisRes.data ?? []) as Array<{
+    id: string;
+    nome: string;
+    ativo: boolean;
+    empresa_id: string;
+  }>;
 
   // Quem cobrar, por job (docs/decisions/012). Uma query só para a tela
   // inteira — depende de `jobsList`, por isso não cabe na onda paralela
@@ -313,6 +328,7 @@ export default async function ContasReceberPage({
     fornecedor_id: string | null;
     plano_conta_tipo_id: string | null;
     plano_conta_subtipo_id: string | null;
+    rateio: Array<{ percentual: string | number; regional: { nome: string } | null }>;
     itens: Array<{
       id: string;
       origem_tipo: "job" | "bv" | "avulso" | "save";
@@ -382,6 +398,12 @@ export default async function ContasReceberPage({
       qtd_parcelas: parc?.qtd ?? 1,
       primeiro_vencimento: parc?.primeiroVenc ?? null,
       parcelas: parc?.parcelas ?? [],
+      rateio: (f.rateio ?? [])
+        .map((r) => ({
+          regional_nome: r.regional?.nome ?? "—",
+          percentual: Number(r.percentual),
+        }))
+        .sort((a, b) => b.percentual - a.percentual),
       cnae: f.cnae,
       // Jobs DISTINTOS da nota, na ordem dos itens. O item de save aponta o
       // mesmo job do item próprio, então o Set é o que impede a PO de
@@ -565,7 +587,7 @@ export default async function ContasReceberPage({
             empresas={empresasList}
             clientes={clientesList}
             fornecedores={fornecedoresList}
-            jobs={jobsList}
+            regionais={regionaisList}
             proximoNf={proximoNf}
             infoPorJob={infoPorJob}
           />

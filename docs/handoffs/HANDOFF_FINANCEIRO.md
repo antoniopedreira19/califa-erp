@@ -5463,3 +5463,33 @@ Medido em viewport de 1840px: as cinco telas com 1616px e sem rolagem horizontal
 Conferido em 16/09/2026, viewport de 1840px: o texto do cabeçalho começa no mesmo pixel do conteúdo em Título (437), Fornecedor (744) e Job (982), e Valor termina junto (1446); o fornecedor "PRIME COMUNICACAO E MARKETING" aparece inteiro e o job quebra em duas linhas. Em 1440px, alinhado igual; o fornecedor longo trunca com reticências (e o nome inteiro no `title`), como antes, e o botão Baixar cabe na coluna.
 
 A aba **Cartão** segue mostrando só o código do job — o pedido foi para Títulos a Pagar.
+
+## ⚠️ Nota de 2026-09-16 — a nota avulsa nasce com rateio de regional (decisão 086)
+
+A nota fiscal sem job (**Faturamento avulso**, em Contas a Receber) entrava no
+fluxo de caixa e no DRE sem regional: pela 069 a regional da receita vem do
+job da nota, e a avulsa não tem job. Agora ela leva **rateio de regional**,
+definido na emissão, como a despesa sem job (082).
+
+O que muda na tela:
+
+- depois de **Empresa emissora** aparece **Rateio de regional**, o mesmo editor
+  das despesas; ele só oferece as regionais da empresa escolhida, e trocar de
+  empresa limpa as que não são dela;
+- a emissão recusa regional em branco e soma diferente de 100%;
+- **o "Job de referência" saiu do faturamento avulso**: não era gravado em
+  lugar nenhum, e receita de job sai pela nota do job;
+- a nota reaberta em leitura mostra a divisão; na **Conciliação**, o detalhe
+  do recebimento mostra a divisão em "Regional".
+
+No banco: tabela `faturamentos_regionais` (só leitura para o app; a escrita é
+de `emitir_faturamento`), travas de "só nota avulsa" e "soma 100", e
+`vw_fluxo_caixa` dividindo o título previsto e a baixa (com o estorno) pelo
+rateio da nota.
+
+**Pendências desta nota:**
+
+- `20260916110002_nota_avulsa_exige_rateio.sql` — a trava que **exige** rateio
+  na nota avulsa — só é aplicada depois do deploy deste código.
+- Dados de teste: a nota **TESTE-086** (R$ 1.000,00, Pevetech, parcela 1
+  recebida na Conta Teste) e o PDF de teste no storage `faturamentos-nf`.
