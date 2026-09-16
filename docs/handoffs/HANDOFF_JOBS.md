@@ -3809,6 +3809,13 @@ dezembro por enviar (outubro continuou na fila), novembro enviado depois do
 encerramento, trava do servidor pelo console no JOB-0033, e o `finalizado` dos
 dois gatilhos por simulação desfeita no banco.
 
+Segunda conferência, geral, antes do push (16/09/2026): pop-up de encerramento
+no JOB-0009 (internacional com save) e no modo "ver" de um finalizado, lista de
+jobs, Visualizar Jobs, fluxo de caixa do JOB-0034 e a auditoria
+`job.finalizado` com usuário, pelos dois gatilhos. Detalhes na 087 §6. Na mesma
+passada, os cards "Jobs com faturamento próximo" da home (administrador e GP)
+passaram a contar o job `encerrado`, como a lista que eles abrem.
+
 **Pendente:** o fluxo em que o financeiro confirma o encerramento (a desenhar
 depois desta entrega) e a definição do card "Jobs prontos pra encerrar" da
 home do GP, que ainda usa o critério antigo.
