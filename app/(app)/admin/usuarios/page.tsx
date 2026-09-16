@@ -123,7 +123,7 @@ export default async function AdminUsuariosPage() {
       <PageHeader
         eyebrow="ADMINISTRAÇÃO"
         title="Usuários"
-        description="Convide novos membros do time para o California ERP. O usuário recebe um e-mail com link para definir a senha e ativar o acesso. Clique em uma linha para editar as permissões de acesso a empresas."
+        description="Convide novos membros do time para o California ERP. O usuário recebe um e-mail com link para definir a senha e ativar o acesso. Clique em uma linha para editar o papel e as permissões de acesso a empresas."
         icon={Users}
         actions={
           <>

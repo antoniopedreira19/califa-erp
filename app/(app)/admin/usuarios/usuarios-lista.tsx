@@ -124,6 +124,8 @@ export function UsuariosLista({
           userId={editando.user_id}
           userNome={editando.nome}
           userEmail={editando.email}
+          userRole={editando.role}
+          isSelf={editando.user_id === currentUserId}
           empresas={empresas}
           regionais={regionais}
           open={editando !== null}

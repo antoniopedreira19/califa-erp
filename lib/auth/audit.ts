@@ -9,6 +9,7 @@ export type AuditAction =
   | "usuario.membership_criada"
   | "usuario.membership_atualizada"
   | "usuario.reenvio_convite"
+  | "usuario.papel_alterado"
   // ações reservadas para tasks futuras (registradas aqui para consistência):
   | "cliente.criado"
   | "cliente.editado"
