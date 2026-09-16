@@ -617,9 +617,9 @@ export function TitulosCartaoList({
                     <thead>
                       <tr className="border-b border-border bg-muted/30 text-center text-[11px] uppercase tracking-wider text-muted-foreground">
                         <th className="w-[9%] px-2 py-3 font-semibold text-left">Origem</th>
-                        <th className="w-[25%] px-3 py-3 font-semibold text-left">Descrição</th>
+                        <th className="w-[21%] px-3 py-3 font-semibold text-left">Descrição</th>
                         <th className="w-[16%] px-3 py-3 font-semibold text-left">Fornecedor</th>
-                        <th className="w-[7%] px-2 py-3 font-semibold">Job</th>
+                        <th className="w-[11%] px-2 py-3 font-semibold text-left">Job</th>
                         <th className="w-[10%] px-2 py-3 font-semibold">Vencimento</th>
                         <th className="w-[7%] px-2 py-3 font-semibold">Status</th>
                         <th className="w-[10%] px-3 py-3 font-semibold text-right">Valor</th>
@@ -695,9 +695,10 @@ export function TitulosCartaoList({
                                   {r.fornecedor_nome}
                                 </span>
                               </td>
-                              {/* Job */}
-                              <td className="whitespace-nowrap px-2 py-3 text-center font-mono text-xs text-muted-foreground">
-                                {r.job_codigo}
+                              {/* Job: código e nome, como em Títulos a Pagar e na aba de PPs. */}
+                              <td className="break-words px-2 py-3 text-xs text-muted-foreground">
+                                <span className="font-mono">{r.job_codigo}</span>
+                                {r.job_nome && <> <span>{r.job_nome}</span></>}
                               </td>
                               {/* Vencimento */}
                               <td className="whitespace-nowrap px-2 py-3 text-center font-mono text-xs">
