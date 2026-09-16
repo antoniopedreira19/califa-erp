@@ -899,6 +899,9 @@ export default async function PedidosCompraFinanceiroPage({
     .select(
       "id, codigo, cartao_credito_id, competencia_fechamento, data_vencimento, " +
         "status, valor_cobrado, itens:contas_avulsas(valor, status, natureza), " +
+        // A empresa do cartão decide quais regionais podem ratear o ajuste
+        // do fechamento (decisão 084).
+        "cartao:cartoes_credito!inner(empresa_id), " +
         // A fatura tem duas fontes de item desde 29/08/2026: conta avulsa
         // e parcela de PP aprovada no cartão. Somar só a primeira faria a
         // faixa não bater com a tabela.
@@ -940,6 +943,7 @@ export default async function PedidosCompraFinanceiroPage({
       id: f.id,
       codigo: f.codigo,
       cartao_credito_id: f.cartao_credito_id,
+      empresa_id: f.cartao?.empresa_id ?? null,
       competencia_fechamento: f.competencia_fechamento,
       data_vencimento: f.data_vencimento,
       // Com sinal: o estorno é 'entrada' e ABATE a fatura. Somar tudo

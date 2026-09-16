@@ -107,9 +107,10 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 081 | [A produção presta contas da verba, e o financeiro aprova](081-a-producao-presta-contas-da-verba-e-o-financeiro-aprova.md) | 2026-09-15 |
 | 082 | [A despesa sem job nasce com o rateio, e a recorrência vira título 30 dias antes](082-a-despesa-sem-job-nasce-com-rateio-e-a-recorrencia-vira-titulo-30-dias-antes.md) | 2026-09-15 |
 | 083 | [A PP aprovada que não segue volta para a produção](083-a-pp-aprovada-que-nao-segue-volta-para-a-producao.md) | 2026-09-15 |
+| 084 | [O ajuste da fatura do cartão vira compra da fatura, com rateio](084-o-ajuste-da-fatura-do-cartao-vira-compra-com-rateio.md) | 2026-09-15 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
 > data é a da decisão, não a da posição na fila.
 
-**Próximo número livre: 084.**
+**Próximo número livre: 086.**

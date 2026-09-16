@@ -5385,3 +5385,36 @@ e agora existe o caminho de volta: **o financeiro reprova**.
 - **Verba reprovada volta corrigida** (083 §6): a produção corrige a verba
   rejeitada na aba de PPs, inclusive trocando o responsável, e ela reaparece
   aqui em "Em avaliação" — não é mais "cancele e emita outra".
+
+## ⚠️ Nota de 2026-09-15 — o ajuste da fatura do cartão vira compra da fatura, com rateio (decisão 084)
+
+A diferença entre a soma das compras e o valor cobrado pelo banco **não é mais
+um lançamento solto**. Ela nasce como conta avulsa do cartão, com plano de
+contas e rateio de regional, e entra no fechamento como qualquer outra compra.
+
+O que muda no diálogo **Fechar fatura**:
+
+- havendo diferença, aparece o primeiro item já montado — valor igual à
+  diferença e rateio **sugerido** na proporção em que as regionais gastaram
+  nesta fatura (avulsa pelo rateio dela, parcela de PP pela regional do job);
+- **Adicionar item** abre outra linha, para quando o que faltou foram várias
+  compras que ninguém registrou; cada uma com descrição, plano de contas,
+  valor e rateio próprios;
+- o rodapé mostra "Falta distribuir R$ X" / "Diferença distribuída ✓", e o
+  botão de fechar só libera quando a soma dos itens fecha a diferença;
+- fatura sem nenhum item com regional abre a linha **em branco** — não há de
+  onde sugerir, e aí o financeiro diz de quem é;
+- diferença **para baixo** é recusada com a orientação de estornar a compra:
+  crédito no cartão só existe apontando para a compra que ele desfaz.
+
+Reabrir não ganhou regra nova: os itens do ajuste são compras da fatura,
+voltam para `aprovada` com as outras e podem ser editados ou apagados na
+lista.
+
+O par de lançamentos do **pagamento** da fatura (saída no banco, entrada na
+conta espelho) segue sendo transferência: sem regional e fora do DRE. Quem
+entra no DRE são as compras, uma a uma — e agora também o ajuste.
+
+**Pendência desta nota:** a assinatura antiga de `fechar_fatura_cartao`
+(`p_ajuste_tipo_id`, `p_ajuste_subtipo_id`, `p_ajuste_descricao`) continua no
+banco e sai numa migration própria depois que o código novo estiver no ar.

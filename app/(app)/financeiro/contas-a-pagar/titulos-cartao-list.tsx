@@ -891,6 +891,7 @@ export function TitulosCartaoList({
         }
         tipos={tipos}
         subtipos={subtipos}
+        regionais={regionais}
         onOpenChange={(aberto) => !aberto && setFechandoFatura(null)}
       />
 
