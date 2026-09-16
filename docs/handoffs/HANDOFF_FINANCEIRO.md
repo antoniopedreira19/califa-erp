@@ -5427,3 +5427,27 @@ Contas a Pagar (era `max-w-7xl`, 1280px), Job e Projeto no financeiro (eram `max
 Medido em viewport de 1840px: as cinco telas com 1616px e sem rolagem horizontal. Em Títulos a Pagar, nenhuma célula truncada (o fornecedor "PRIME COMUNICACAO E MARKETING" cortava em 1280). A matriz do Fluxo de Caixa (1555px) passou a caber inteira, sem rolar dentro da caixa.
 
 **Ficaram de fora**, como pendência do Tiago: Desembolsos (1280px) e Cartões de Crédito (1024px), telas da frente do Antonio, e os detalhes de conta avulsa, recorrência e desembolso (1280px), que são páginas de leitura.
+
+## ⚠️ Nota de 2026-09-16 — camada dos seletores, pop-up de aprovar PP e filtro de regionais
+
+### O que mudou
+
+- **`PopoverContent` e `SelectContent` em `z-[70]`** (`components/ui/popover.tsx`,
+  `components/ui/select.tsx`). Estavam em `z-50` e abriam ATRÁS de diálogo
+  `z-[60]`: no pop-up de aprovar PP a data de pagamento não era clicável com o
+  mouse. A regra está em `docs/09-identidade-visual-ui.md`, seção "Camada por
+  cima de um modal".
+- **Pop-up de aprovar PP** (`aprovar-pp-dialog.tsx`): "Como vai ser pago",
+  cartão, tipo e subtipo usam o `Select` do sistema, e não mais `<select>`
+  nativo. O título ganhou `pr-8`, porque o "X" de fechar cobria o valor da PP.
+- **Filtro de regionais múltiplo** na lista de PPs
+  (`components/ui/multi-select-regionais.tsx`), no desenho do de empresas, sem
+  "Aplicar": vale a cada clique. O filtro de empresas do cabeçalho já era
+  múltiplo.
+
+### Armadilhas
+
+- `<select>` nativo dentro de diálogo era contorno do bug de camada. Não é mais
+  necessário — use o `Select` do sistema.
+- O "Decidir na baixa" é valor vazio no estado; o Radix não aceita item com
+  `value=""`, por isso o pop-up usa o rótulo `DECIDIR` e traduz para `""`.

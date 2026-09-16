@@ -146,7 +146,10 @@ export function AprovarPPDialog({
           documento: visível, e sem receber clique. */}
       <DialogContent className="z-[60] max-w-md" overlayClassName="z-[60]">
         <DialogHeader>
-          <DialogTitle className="flex flex-wrap items-baseline gap-2">
+          {/* `pr-8`: o "X" de fechar é absoluto no canto (16px da borda,
+              24px de largura) e cobria o valor empurrado para a direita
+              (16/09/2026). O recuo tira o valor de baixo dele. */}
+          <DialogTitle className="flex flex-wrap items-baseline gap-2 pr-8">
             <span>Aprovar</span>
             <span className="font-mono text-california-red">{pp.codigo}</span>
             <span className="ml-auto font-mono text-sm font-semibold text-muted-foreground">
