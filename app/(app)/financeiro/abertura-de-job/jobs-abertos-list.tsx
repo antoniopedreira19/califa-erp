@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight, ChevronRight, FolderTree, List, Search } from "lucide-react";
 import { formatCurrency, cn } from "@/lib/utils";
-import { jobStatusLabel } from "@/lib/types";
+import { jobStatusBadgeClasses, jobStatusLabel } from "@/lib/types";
 import type { JobAberto } from "./dados-abertos";
 import { SITUACAO_META } from "./situacao-faturamento";
 
@@ -220,7 +220,14 @@ function NomeDoJob({ j }: { j: JobAberto }) {
             outro. Um badge em toda linha seria ruído — a maioria é
             aberta. */}
         {j.status !== "aberto" && (
-          <span className="inline-flex items-center rounded-full border border-[#ddd6fe] bg-[#f5f3ff] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.05em] text-[#6d28d9]">
+          <span
+            className={cn(
+              "inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.05em]",
+              // Mesma cor do selo em todo o sistema (decisão 087): encerrado
+              // violeta — a cor que esta marca já tinha — e finalizado verde.
+              jobStatusBadgeClasses(j.status),
+            )}
+          >
             {jobStatusLabel(j.status)}
           </span>
         )}

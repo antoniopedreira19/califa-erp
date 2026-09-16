@@ -5497,3 +5497,25 @@ rateio da nota.
   recebida na Conta Teste) e o PDF de teste no storage `faturamentos-nf`.~~
   Apagados em 16/09/2026 (nota, títulos, lançamento, item, rateio e os dois
   PDFs).
+
+## ⚠️ Nota de 2026-09-16 — o job encerrado continua na fila e no fluxo de caixa (decisão 087)
+
+Regra completa em `docs/decisions/087-faturamento-e-encerramento-correm-separados.md`.
+
+- **`vw_faturamento_pendente`**: o braço de job aceita `aberto`, `encerrado` e
+  `finalizado`. O job encerrado entra na fila "como os outros jobs"; o
+  finalizado entra para a nota cancelada ser reemitida.
+- **`vw_fluxo_caixa`**: as quatro partes de recebimento previsto de job valem
+  para encerrado e finalizado; o cronograma de desembolsos segue só com aberto
+  e em produção.
+- **`cancelar_faturamento`**: a trava da nota com save consumido por job
+  encerrado vale também para finalizado.
+- **Gatilho novo em `faturamento_itens`** (AFTER INSERT): a nota que zera o saldo
+  de um job encerrado grava `finalizado`. A `emitir_faturamento` não foi tocada.
+  Cancelar a nota não devolve o job a encerrado — o financeiro emite outra.
+- **Cabeçalho do job no financeiro**: o selo segue o status (era sempre azul) e
+  "Aguardando encerramento" passou a marcar o job aberto já todo faturado.
+- **"Visualizar Jobs"** lista também os finalizados.
+
+As três alterações de banco foram feitas por troca de trecho na definição viva,
+com contagem de âncoras, como a da decisão 086 no mesmo dia.

@@ -11,6 +11,13 @@ nele muda.
 
 ### 1. Só encerra o que já foi faturado
 
+> ⚠️ **Revisto em 16/09/2026 ([decisão 087](087-faturamento-e-encerramento-correm-separados.md)).**
+> O encerramento não espera mais o envio para faturamento nem a nota:
+> faturamento e encerramento correm separados, e o job fica **finalizado**
+> quando os dois terminam. O que continua travando é só o da produção (§2,
+> mais verba e item sem marcação). O resumo de fechamento (§3) virou o card
+> de Totais da Planilha Interna, com o realizado.
+
 O botão "Enviar job para encerramento" só existe depois que a produção
 enviou o job para faturamento (`jobs_envio_faturamento`). Antes disso não
 há o que encerrar — o número final ainda não saiu da agência.

@@ -75,6 +75,13 @@ interface Props {
    * mostraria uma coluna de travessões como se fosse resultado.
    */
   somentePlanejada?: boolean;
+  /**
+   * O contrário de `somentePlanejada`: trava a ótica em REALIZADA e troca o
+   * seletor por um rótulo. É o fechamento do job (decisão 087) — no envio
+   * para encerramento o realizado já está completo, e a leitura planejada
+   * não tem mais o que dizer.
+   */
+  somenteRealizada?: boolean;
   moeda: string;
 }
 
@@ -122,12 +129,14 @@ export function PainelResultado({
   honorarios,
   taxaHonorarios,
   somentePlanejada,
+  somenteRealizada,
   moeda,
 }: Props) {
   const [visao, setVisao] = React.useState<Visao>(
     somentePlanejada ? "planejada" : "realizada",
   );
-  const planejada = somentePlanejada || visao === "planejada";
+  const planejada =
+    !somenteRealizada && (somentePlanejada || visao === "planejada");
   const internacional = cadeia !== "nacional";
 
   const custo = planejada ? custoPlanejado : custoRealizado;
@@ -161,7 +170,13 @@ export function PainelResultado({
         <p className="text-[13px] font-bold uppercase tracking-wider">
           Resultado
         </p>
-        {!somentePlanejada && (
+        {somenteRealizada ? (
+          <span className="inline-flex rounded-full bg-[#f1f0ec] p-[3px]">
+            <span className="rounded-full bg-white px-3.5 py-[5px] text-xs font-semibold text-foreground shadow-[0_1px_2px_rgba(0,0,0,0.08)]">
+              Realizada
+            </span>
+          </span>
+        ) : !somentePlanejada && (
           <div className="inline-flex gap-0.5 rounded-full bg-[#f1f0ec] p-[3px]">
             <BotaoVisao
               ativo={planejada}

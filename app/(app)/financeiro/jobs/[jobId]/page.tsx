@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { pode } from "@/lib/permissoes";
 import {
   AREA_FINANCEIRO,
+  jobStatusBadgeClasses,
   jobStatusLabel,
   nomeDoJobNoFinanceiro,
   type JobStatus,
@@ -190,10 +191,6 @@ export default async function JobNoFinanceiroPage({
   const situacao = (esteira.get(params.jobId) ?? FATURAMENTO_VAZIO).situacao;
   const situacaoMeta = SITUACAO_META[situacao];
 
-  // Job mensal (decisão 078): os meses da planilha, para o "aguardando
-  // encerramento" abaixo.
-  const mesesDoJob = detalhe.faturamentoMensal;
-
   // ---- Formulário de abertura em leitura (ou em revisão) ----
   // O custo previsto é o da PLANILHA DE HOJE, não o que a abertura gravou
   // em `custo_previsto_total`. Era o gravado até 08/09/2026, e por isso o
@@ -234,13 +231,11 @@ export default async function JobNoFinanceiroPage({
     ]),
   ).sort((a, b) => a - b);
 
+  // Desde 16/09/2026 (decisão 087) faturamento e encerramento correm
+  // separados. "Aguardando encerramento" é o job que já foi todo faturado e
+  // só falta a produção encerrar — antes era qualquer job já enviado.
   const aguardandoEncerramento =
-    job.status === "aberto" &&
-    (detalhe.envioFaturamento !== null ||
-      (mesesDoJob.length > 0 &&
-        mesesDoJob.every(
-          (m) => m.envio !== null || m.situacao === "sem_faturamento",
-        )));
+    job.status === "aberto" && detalhe.faturamentoCompleto;
 
   return (
     <div className="space-y-5">
@@ -263,7 +258,7 @@ export default async function JobNoFinanceiroPage({
               <h1 className="text-2xl font-bold tracking-tight">
                 {jobNaFila.nome}
               </h1>
-              <Badge className="border border-blue-200 bg-blue-50 text-blue-700">
+              <Badge className={cn("border", jobStatusBadgeClasses(job.status as JobStatus))}>
                 {jobStatusLabel(job.status as JobStatus)}
               </Badge>
               <Badge className={cn("border", situacaoMeta.classes)}>
@@ -407,9 +402,7 @@ export default async function JobNoFinanceiroPage({
                 versaoLabel: detalhe.versaoLabel,
               }}
               contatos={detalhe.contatosCobranca}
-              statusBadgeClasses={() =>
-                "bg-blue-50 text-blue-700 border-blue-200"
-              }
+              statusBadgeClasses={jobStatusBadgeClasses}
             />
 
             <ErratasCard

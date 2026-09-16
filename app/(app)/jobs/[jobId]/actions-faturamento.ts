@@ -11,7 +11,11 @@ import {
   type ClientePortalInput,
   type EnvioFaturamentoInput,
 } from "@/lib/validations/envio-faturamento";
-import type { JobStatus } from "@/lib/types";
+import {
+  jobAceitaEnvioParaFaturamento,
+  jobStatusLabel,
+  type JobStatus,
+} from "@/lib/types";
 import { lerFaturamentoPorMesDoJob } from "@/lib/data/faturamento-mensal";
 import { nomeDoMes } from "@/lib/calculos/meses-trimestre";
 
@@ -218,12 +222,14 @@ export async function enviarJobParaFaturamento(
   }
   const nomeMes = mes ? nomeDoMes(mes) : null;
 
-  if (job.status !== "aberto") {
+  // Desde 16/09/2026 (decisão 087) o job encerrado ainda não faturado
+  // continua enviando: faturamento e encerramento correm separados.
+  if (!jobAceitaEnvioParaFaturamento(job.status)) {
     return {
       ok: false,
       message:
-        "Só job aberto pode ser enviado para faturamento. Este está em " +
-        `${job.status}.`,
+        "Só job aberto ou encerrado pode ser enviado para faturamento. Este está " +
+        `${jobStatusLabel(job.status).toLowerCase()}.`,
     };
   }
 

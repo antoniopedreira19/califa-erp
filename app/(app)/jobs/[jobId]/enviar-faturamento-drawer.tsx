@@ -85,6 +85,9 @@ interface Props {
   rotuloBotao?: string;
   /** Botão em contorno, para as linhas da barra de faturamento expandida. */
   botaoContorno?: boolean;
+  /** O job já foi encerrado (decisão 087): o envio continua aceito, mas
+   *  nenhum mês segue editável — a confirmação não pode dizer o contrário. */
+  jobEncerrado?: boolean;
 }
 
 /** "setembro" → "Setembro", para abrir frase. */
@@ -122,6 +125,7 @@ export function EnviarFaturamentoDrawer({
   mes,
   rotuloBotao,
   botaoContorno = false,
+  jobEncerrado = false,
 }: Props) {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
@@ -290,7 +294,10 @@ export function EnviarFaturamentoDrawer({
       </button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DrawerContent>
+        {/* 620 px e não os 512 do padrão (16/09/2026): a descrição da nota
+            aceita até 2.000 caracteres, e o campo de 3 linhas num painel
+            estreito escondia quase todo o texto. */}
+        <DrawerContent className="sm:max-w-[620px]">
           <DialogHeader className="border-b border-border p-6">
             <DialogTitle>
               {mes
@@ -501,12 +508,15 @@ export function EnviarFaturamentoDrawer({
               </Label>
               <Textarea
                 id="descricao-nf"
-                rows={3}
+                rows={8}
                 value={descricaoNf}
                 onChange={(e) => setDescricaoNf(e.target.value)}
                 maxLength={2000}
                 placeholder="Ex.: Serviços de produção audiovisual referentes à campanha X, conforme PO 4500123456."
               />
+              <p className="text-right text-[11px] text-muted-foreground">
+                {descricaoNf.length.toLocaleString("pt-BR")} de 2.000 caracteres
+              </p>
               <p className="text-xs text-muted-foreground">
                 É este texto que o financeiro vai copiar para a nota. Escreva
                 como o cliente exige ver — se a nota voltar por descrição
@@ -723,8 +733,12 @@ export function EnviarFaturamentoDrawer({
             </strong>
             .{" "}
             {mes
-              ? `O envio é definitivo: errata e save de ${mes.nome} ficam travados, e os outros meses seguem editáveis.`
-              : "Depois disso o job fica pronto para ser encerrado."}
+              ? jobEncerrado
+                ? `O envio é definitivo. O job já está encerrado: nenhum mês aceita errata nem save.`
+                : `O envio é definitivo: errata e save de ${mes.nome} ficam travados, e os outros meses seguem editáveis.`
+              : // O envio não libera mais o encerramento (decisão 087): as
+                // duas frentes correm separadas.
+                "O envio é definitivo: depois dele não há errata nem save neste job."}
           </>
         }
         confirmLabel="Sim, enviar"

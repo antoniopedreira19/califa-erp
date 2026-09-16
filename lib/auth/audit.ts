@@ -130,6 +130,7 @@ export type AuditAction =
   | "job.errata_registrada"
   | "job.enviado_para_faturamento"
   | "job.encerrado"
+  | "job.finalizado"
   | "cliente_portal.criado"
   | "cliente_portal.editado"
   | "cliente_portal.removido"

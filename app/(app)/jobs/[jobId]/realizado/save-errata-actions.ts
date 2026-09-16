@@ -108,7 +108,7 @@ export async function registrarErrataDeSave(
     console.error("[save.errata.job]", jobErr?.message);
     return { ok: false, message: "Job não encontrado." };
   }
-  if (job.status === "encerrado") {
+  if (job.status === "encerrado" || job.status === "finalizado") {
     return {
       ok: false,
       message: "Job encerrado não aceita errata: os números dele estão congelados.",

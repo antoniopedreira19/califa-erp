@@ -5,29 +5,22 @@ import { createClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { checarPermissao } from "@/lib/permissoes-server";
-import { saldoAFaturarDoJob } from "@/lib/data/saldo-a-faturar";
 import {
   PP_STATUS_EM_ABERTO,
   BV_SITUACAO_EM_ABERTO,
   situacaoDaVerba,
   situacaoVerbaLabel,
   verbaPendenteNoEncerramento,
+  jobStatusLabel,
   type JobStatus,
   type SituacaoVerba,
 } from "@/lib/types";
 import { devolucaoDaVerba, prestacaoDaVerba } from "@/lib/data/prestacao-da-verba";
 import { itensSemConclusaoDoJob } from "./realizado/conclusao-item";
-import { mesesDaVersaoQuery } from "@/lib/data/meses-versao";
-import { nomeDoMes } from "@/lib/calculos/meses-trimestre";
-import { lerFaturamentoPorMesDoJob } from "@/lib/data/faturamento-mensal";
 
 export type ActionResult =
-  | { ok: true; id: string }
+  | { ok: true; id: string; status: JobStatus }
   | { ok: false; message: string };
-
-function formatarBRL(n: number): string {
-  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
 
 /** O que impede o encerramento agora. Vazio = pode encerrar. */
 export interface ImpedimentosEncerramento {
@@ -35,13 +28,6 @@ export interface ImpedimentosEncerramento {
   /** Verbas pagas que ainda não fecharam (decisão 081, pergunta 10a). */
   verbasEmAberto: { codigo: string; situacao: Exclude<SituacaoVerba, "concluida"> }[];
   bvsEmAberto: { item: string; situacao: string }[];
-  semEnvioFaturamento: boolean;
-  /** Modelo mensal (decisão 078): os meses ainda sem envio para
-   *  faturamento, pelo nome ("dezembro"). O job só encerra com todos
-   *  enviados — e faturados, pelo saldo abaixo. Vazio fora do mensal. */
-  mesesSemEnvio: string[];
-  /** Quanto do envio ainda não virou nota emitida. Zero = tudo faturado. */
-  saldoAFaturar: number;
   /** Itens de custo que ainda não disseram se sairá mais PP deles
    *  (decisão 052). Só as linhas de calha PP — A e D não geram PP e não
    *  têm o que marcar. */
@@ -50,51 +36,36 @@ export interface ImpedimentosEncerramento {
 
 /**
  * Levanta os impedimentos do encerramento, para `encerrarJob` refazer a
- * conta antes de gravar. A tela não passa por aqui: o resumo do dialog é
- * montado em `carregar-detalhe.ts`, com os dados que a página já carregou.
+ * conta antes de gravar. A tela não passa por aqui: o fechamento é montado
+ * em `carregar-detalhe.ts`, com os dados que a página já carregou.
  *
  * NÃO EXPORTAR (15/09/2026). Todo export async de arquivo "use server"
  * vira Server Action, chamável pelo navegador com qualquer argumento — e
- * esta recebe `tenantId` e `versaoAprovadaId` confiando em quem chama. O
- * único chamador é `encerrarJob`, que tira o tenant da sessão e a versão
- * do próprio job no banco.
+ * esta recebe `tenantId` confiando em quem chama. O único chamador é
+ * `encerrarJob`, que tira o tenant da sessão.
  *
  * Regra do time (13/08/2026): job não encerra com PP ou BV em aberto.
  * "Em aberto" é PP que ainda não foi paga e BV que ainda não foi
- * recebido — rejeitada e cancelada não contam, porque não são
- * compromisso nem desembolso.
+ * recebido — cancelada não conta, porque não é compromisso nem desembolso
+ * (a rejeitada conta desde a decisão 083).
  *
- * E não encerra com item de custo em aberto (04/09/2026, decisão 052):
- * toda linha que gera PP precisa dizer que não sairá mais PP dela — até
- * a que nunca gerou nenhuma, porque "não vai gerar" também é resposta.
- * Enquanto falta resposta, a previsão de custo do job ainda conta com
- * dinheiro que ninguém sabe se vai sair, e a margem do fechamento seria
- * um chute.
+ * E não encerra com item de custo em aberto (04/09/2026, decisão 052), nem
+ * com verba de produção não concluída (decisão 081 §7).
  *
- * E não encerra com saldo a faturar (31/08/2026). Até aqui o portão era
- * só o ENVIO: bastava a produção ter mandado o job para a fila, mesmo
- * que nenhuma nota tivesse saído. Como `vw_faturamento_pendente` filtra
- * `status = 'aberto'`, o job encerrado sumia da fila levando junto o que
- * faltava faturar, sem aviso e sem caminho de volta — aconteceu com o
- * JOB-0027, encerrado com R$ 30.073,32 em duas parcelas nunca emitidas.
+ * ⚠️ O FATURAMENTO SAIU DAQUI em 16/09/2026 (decisão 087). Até então o job
+ * só encerrava enviado para faturamento (decisão 008 §1) e sem saldo a
+ * faturar (decisão 034), porque o job encerrado sumia da fila de
+ * faturamento. Agora a fila e o fluxo de caixa enxergam o job encerrado,
+ * faturamento e encerramento correm separados, e o job fica FINALIZADO
+ * quando os dois terminam — quem marca é o banco.
  */
 async function levantarImpedimentos(
   tenantId: string,
   jobId: string,
-  versaoAprovadaId: string,
 ): Promise<ImpedimentosEncerramento> {
   const supabase = createClient();
 
-  const [
-    ppsRes,
-    verbasRes,
-    bvsRes,
-    envioRes,
-    saldoAFaturar,
-    semMarcacaoRes,
-    versaoRes,
-    mesesRes,
-  ] = await Promise.all([
+  const [ppsRes, verbasRes, bvsRes, semMarcacaoRes] = await Promise.all([
     supabase
       .from("pedidos_compra")
       .select("codigo, status")
@@ -125,63 +96,19 @@ async function levantarImpedimentos(
       .eq("tenant_id", tenantId)
       .eq("copia.job_id", jobId)
       .in("situacao", BV_SITUACAO_EM_ABERTO),
-    // Um envio por job, ou um por mês no modelo mensal.
-    supabase
-      .from("jobs_envio_faturamento")
-      .select("id, mes")
-      .eq("job_id", jobId)
-      .eq("tenant_id", tenantId),
-    saldoAFaturarDoJob(tenantId, jobId),
     // Mesma consulta que o botão "Concluir PPs" da barra usa para saber
     // quem ele vai marcar — o recorte mora num lugar só (decisão 052).
     itensSemConclusaoDoJob(supabase, tenantId, jobId),
-    // O modelo sai da categoria do ORÇAMENTO (decisão 072), e os meses da
-    // versão aprovada dizem quais envios o job mensal precisa ter.
-    supabase
-      .from("versoes_orcamento")
-      .select("id, percentual_honorarios, percentual_imposto, orcamento:orcamentos!orcamento_id(categoria:categorias_dominio!categoria_id(modelo_planilha))")
-      .eq("id", versaoAprovadaId)
-      .eq("tenant_id", tenantId)
-      .maybeSingle<{
-        id: string;
-        percentual_honorarios: number | string | null;
-        percentual_imposto: number | string | null;
-        orcamento: { categoria: { modelo_planilha: string } | null } | null;
-      }>(),
-    mesesDaVersaoQuery(supabase, tenantId, versaoAprovadaId),
   ]);
 
-  const envios = (envioRes.data ?? []) as { id: string; mes: string | null }[];
-  const mensal = versaoRes.data?.orcamento?.categoria?.modelo_planilha === "mensal";
-  const mesesEnviados = new Set(envios.map((e) => e.mes).filter((m): m is string => m !== null));
-  // Mês que não fatura nada (só custo pago direto pelo cliente) não tem o
-  // que enviar. Sem o faturamento de cada mês — leitura que falhou —, a
-  // conta cai para todos os meses da versão: trava a mais, nunca a menos.
-  const faturamentoDosMeses = mensal
-    ? await lerFaturamentoPorMesDoJob(supabase, {
-        tenantId,
-        jobId,
-        versaoAprovadaId,
-        percentualHonorarios: Number(versaoRes.data?.percentual_honorarios ?? 0),
-        percentualImposto: Number(versaoRes.data?.percentual_imposto ?? 0),
-      })
-    : null;
-  const mesesQuePrecisamDeEnvio = faturamentoDosMeses
-    ? faturamentoDosMeses.filter((m) => m.faturamento > 0).map((m) => m.mes)
-    : (mesesRes.data ?? []).map((m) => m.mes);
-  const mesesSemEnvio = mensal
-    ? mesesQuePrecisamDeEnvio
-        .filter((mes) => !mesesEnviados.has(mes))
-        .map((mes) => nomeDoMes(mes))
-    : [];
-
   return {
-    ppsEmAberto: ((ppsRes.data ?? []) as any[]).map((p) => ({
-      codigo: p.codigo,
-      status: p.status,
-    })),
-    // Leitura que falhou trava a mais, nunca a menos: sem saber da verba,
-    // o job não encerra.
+    // Leitura que falhou trava a mais, nunca a menos.
+    ppsEmAberto: ppsRes.error
+      ? [{ codigo: "Pedidos de Produção", status: "gerada" }]
+      : ((ppsRes.data ?? []) as any[]).map((p) => ({
+          codigo: p.codigo,
+          status: p.status,
+        })),
     verbasEmAberto: verbasRes.error
       ? [{ codigo: "Verbas de produção", situacao: "aguardando_prestacao" }]
       : ((verbasRes.data ?? []) as any[]).flatMap((pp) => {
@@ -195,27 +122,34 @@ async function levantarImpedimentos(
             ? [{ codigo: pp.codigo as string, situacao }]
             : [];
         }),
-    bvsEmAberto: ((bvsRes.data ?? []) as any[]).map((b) => ({
-      item: b.copia?.item ?? "Item",
-      situacao: b.situacao,
-    })),
-    semEnvioFaturamento: mensal
-      ? envios.length === 0
-      : !envios.some((e) => e.mes === null),
-    mesesSemEnvio,
-    saldoAFaturar,
+    bvsEmAberto: bvsRes.error
+      ? [{ item: "BVs", situacao: "confirmado" }]
+      : ((bvsRes.data ?? []) as any[]).map((b) => ({
+          item: b.copia?.item ?? "Item",
+          situacao: b.situacao,
+        })),
     itensSemMarcacao: semMarcacaoRes.map((i) => ({ item: i.nome })),
   };
 }
 
 /**
- * Encerra o job.
+ * Envia o job para encerramento.
  *
- * A partir daqui o job é histórico: não aceita edição, PP nova, BV novo
- * nem lançamento de realizado (`jobEstaCongelado`).
+ * A partir daqui o job é histórico: não aceita edição, PP nova, BV novo nem
+ * lançamento de realizado (`jobEstaCongelado`). O ENVIO PARA FATURAMENTO
+ * continua aceito — o job pode ser encerrado antes de ser faturado
+ * (decisão 087).
+ *
+ * Se todo o faturamento já saiu em nota, o banco grava `finalizado` no
+ * lugar de `encerrado` (gatilho `trg_jobs_finaliza_ao_encerrar`); a action
+ * devolve o status que ficou.
  *
  * Os impedimentos são refeitos aqui dentro — a tela pode ter sido
  * carregada antes de alguém emitir uma PP.
+ *
+ * ⚠️ Hoje o envio encerra na hora. O Tiago definiu em 16/09/2026 que ele
+ * vira um pedido que o financeiro confirma; esse fluxo será desenhado
+ * depois desta entrega.
  */
 export async function encerrarJob(jobId: string): Promise<ActionResult> {
   const session = await requireSession();
@@ -225,9 +159,7 @@ export async function encerrarJob(jobId: string): Promise<ActionResult> {
 
   const { data: job } = await supabase
     .from("jobs")
-    .select(
-      "id, status, projeto_id, orcamento_id, versao_orcamento_aprovada_id, faturamento_previsto",
-    )
+    .select("id, status, projeto_id, orcamento_id, faturamento_previsto")
     .eq("id", jobId)
     .eq("tenant_id", session.activeTenant.id)
     .maybeSingle<{
@@ -235,7 +167,6 @@ export async function encerrarJob(jobId: string): Promise<ActionResult> {
       status: JobStatus;
       projeto_id: string;
       orcamento_id: string;
-      versao_orcamento_aprovada_id: string;
       faturamento_previsto: number | string | null;
     }>();
 
@@ -244,75 +175,19 @@ export async function encerrarJob(jobId: string): Promise<ActionResult> {
   if (job.status !== "aberto") {
     return {
       ok: false,
-      message: `Só job aberto pode ser encerrado. Este está em ${job.status}.`,
+      message: `Só job aberto pode ser enviado para encerramento. Este está ${jobStatusLabel(job.status).toLowerCase()}.`,
     };
   }
 
-  const imp = await levantarImpedimentos(
-    session.activeTenant.id,
-    jobId,
-    job.versao_orcamento_aprovada_id,
-  );
-
-  if (imp.semEnvioFaturamento) {
-    // EXCEÇÃO DO SAVE (decisão 028 §11). Um job pago inteiramente por
-    // saldo de save tem faturamento previsto ZERO — e aí ele trava dos
-    // dois lados: `enviarJobParaFaturamento` recusa valor zero, e a
-    // decisão 008 §1 só encerra quem foi enviado. O job ficaria aberto
-    // para sempre.
-    //
-    // Não há nota a emitir: ela já saiu no job que gerou o crédito. A
-    // condição é dupla de propósito — faturamento zero E consumo de save
-    // —, porque job com faturamento zero e SEM save é outra coisa (um
-    // orçado vazio, que continua tendo de passar pelo faturamento).
-    const previsto = Number(job.faturamento_previsto ?? 0);
-    const { count: consumosDeSave } = await supabase
-      .from("saves_consumos")
-      .select("id", { count: "exact", head: true })
-      .eq("tenant_id", session.activeTenant.id)
-      .in(
-        "job_item_orcado_id",
-        (
-          await supabase
-            .from("jobs_itens_orcado")
-            .select("id")
-            .eq("job_id", jobId)
-            .eq("tenant_id", session.activeTenant.id)
-        ).data?.map((o) => o.id) ?? [],
-      );
-
-    const pagoSoPorSave = previsto <= 0.004 && (consumosDeSave ?? 0) > 0;
-
-    if (!pagoSoPorSave) {
-      return {
-        ok: false,
-        message:
-          "Este job ainda não foi enviado para faturamento. Envie antes de encerrar.",
-      };
-    }
-  }
+  const imp = await levantarImpedimentos(session.activeTenant.id, jobId);
 
   if (
     imp.ppsEmAberto.length > 0 ||
     imp.verbasEmAberto.length > 0 ||
     imp.bvsEmAberto.length > 0 ||
-    imp.saldoAFaturar > 0 ||
-    imp.itensSemMarcacao.length > 0 ||
-    imp.mesesSemEnvio.length > 0
+    imp.itensSemMarcacao.length > 0
   ) {
     const partes: string[] = [];
-    // Modelo mensal: mês sem envio é o primeiro que falta — sem ele nem
-    // existe saldo a faturar daquele mês para aparecer abaixo.
-    if (imp.mesesSemEnvio.length > 0) {
-      const meses = imp.mesesSemEnvio;
-      const lista =
-        meses.length === 1
-          ? meses[0]
-          : `${meses.slice(0, -1).join(", ")} e ${meses[meses.length - 1]}`;
-      partes.push(
-        `${lista} ${meses.length === 1 ? "ainda sem envio" : "ainda sem envio"} para faturamento`,
-      );
-    }
     if (imp.ppsEmAberto.length > 0) {
       partes.push(
         `${imp.ppsEmAberto.length} ${imp.ppsEmAberto.length === 1 ? "PP em aberto" : "PPs em aberto"} (${imp.ppsEmAberto
@@ -331,12 +206,6 @@ export async function encerrarJob(jobId: string): Promise<ActionResult> {
       partes.push(
         `${imp.bvsEmAberto.length} ${imp.bvsEmAberto.length === 1 ? "BV não recebido" : "BVs não recebidos"}`,
       );
-    }
-    // O saldo a faturar entra na MESMA lista, e não numa trava à parte,
-    // para quem tenta encerrar ver de uma vez tudo o que falta — em vez
-    // de resolver a PP, tentar de novo e esbarrar na nota.
-    if (imp.saldoAFaturar > 0) {
-      partes.push(`${formatarBRL(imp.saldoAFaturar)} ainda a faturar`);
     }
     if (imp.itensSemMarcacao.length > 0) {
       partes.push(
@@ -357,47 +226,53 @@ export async function encerrarJob(jobId: string): Promise<ActionResult> {
         pps_em_aberto: imp.ppsEmAberto.length,
         verbas_em_aberto: imp.verbasEmAberto.map((v) => v.codigo),
         bvs_em_aberto: imp.bvsEmAberto.length,
-        saldo_a_faturar: imp.saldoAFaturar,
         itens_sem_marcacao: imp.itensSemMarcacao.length,
-        meses_sem_envio: imp.mesesSemEnvio,
       },
     });
-    const verbaPendente =
-      imp.verbasEmAberto.length > 0
-        ? " A produção presta contas da verba na aba de PPs; o financeiro aprova e dá baixa no estorno do que não foi gasto."
-        : "";
-    const marcacaoPendente =
-      imp.itensSemMarcacao.length > 0
-        ? " Marque nos itens que faltam, pelo painel do item na Planilha Interna, que todas as PPs deles já foram geradas."
-        : "";
-    const comoResolver =
-      imp.mesesSemEnvio.length > 0
-        ? " Envie os meses que faltam para faturamento; o financeiro emite as notas deles antes do encerramento."
-        : imp.saldoAFaturar > 0
-        ? imp.ppsEmAberto.length > 0 || imp.bvsEmAberto.length > 0
-          ? " Dê baixa nos documentos e peça ao financeiro a nota do saldo."
-          : " O financeiro precisa emitir a nota do saldo antes do encerramento."
-        : imp.ppsEmAberto.length > 0 || imp.bvsEmAberto.length > 0
-        ? " Dê baixa antes."
-        : "";
+    const comoResolver: string[] = [];
+    if (imp.ppsEmAberto.length > 0 || imp.bvsEmAberto.length > 0) {
+      comoResolver.push("Dê baixa nos documentos antes.");
+    }
+    if (imp.verbasEmAberto.length > 0) {
+      comoResolver.push(
+        "A produção presta contas da verba na aba de PPs; o financeiro aprova e dá baixa no estorno do que não foi gasto.",
+      );
+    }
+    if (imp.itensSemMarcacao.length > 0) {
+      comoResolver.push(
+        "Marque nos itens que faltam, pelo painel do item na Planilha Interna, que todas as PPs deles já foram geradas.",
+      );
+    }
     return {
       ok: false,
-      message: `Não é possível encerrar: ${partes.join(" e ")}.${comoResolver}${verbaPendente}${marcacaoPendente}`,
+      message: `Não é possível enviar para encerramento: ${partes.join(" e ")}. ${comoResolver.join(" ")}`.trim(),
     };
   }
 
-  const { error } = await supabase
+  const { data: gravado, error } = await supabase
     .from("jobs")
-    .update({ status: "encerrado" })
+    .update({
+      status: "encerrado",
+      encerrado_em: new Date().toISOString(),
+      encerrado_por: session.profile.id,
+    })
     .eq("id", jobId)
     .eq("tenant_id", session.activeTenant.id)
     // Trava de corrida: se o job saiu de `aberto` entre a leitura e o
     // update, nada é gravado.
-    .eq("status", "aberto");
+    .eq("status", "aberto")
+    .select("status")
+    .maybeSingle<{ status: JobStatus }>();
 
   if (error) {
     console.error("[job.encerrar]", error.message);
-    return { ok: false, message: "Não foi possível encerrar o job." };
+    return { ok: false, message: "Não foi possível enviar o job para encerramento." };
+  }
+  if (!gravado) {
+    return {
+      ok: false,
+      message: "O job mudou de situação enquanto esta tela estava aberta. Recarregue e confira.",
+    };
   }
 
   await logAuditEvent({
@@ -407,6 +282,9 @@ export async function encerrarJob(jobId: string): Promise<ActionResult> {
     entidadeId: jobId,
     metadata: {
       faturamento: Number(job.faturamento_previsto ?? 0),
+      // O gatilho do banco troca `encerrado` por `finalizado` quando todo o
+      // faturamento já saiu em nota — e registra `job.finalizado`.
+      finalizado: gravado.status === "finalizado",
     },
   });
 
@@ -414,8 +292,9 @@ export async function encerrarJob(jobId: string): Promise<ActionResult> {
   revalidatePath("/jobs");
   revalidatePath("/financeiro");
   revalidatePath("/financeiro/abertura-de-job");
+  revalidatePath("/financeiro/contas-a-receber");
   revalidatePath(`/financeiro/jobs/${jobId}`);
   revalidatePath(`/orcamentos/${job.projeto_id}/${job.orcamento_id}`);
 
-  return { ok: true, id: jobId };
+  return { ok: true, id: jobId, status: gravado.status };
 }

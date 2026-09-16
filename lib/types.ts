@@ -786,7 +786,8 @@ export type JobStatus =
   | "aberto"
   | "em_producao"
   | "encerrado"
-  | "cancelado";
+  | "cancelado"
+  | "finalizado";
 
 export interface Job {
   id: string;
@@ -853,6 +854,14 @@ export interface Job {
    */
   observacoes: string | null;
   status: JobStatus;
+  /** Quando a produção enviou o job para encerramento (decisão 087). */
+  encerrado_em: string | null;
+  /** Quem enviou o job para encerramento (decisão 087). */
+  encerrado_por: string | null;
+  /** Quando o job ficou faturado E encerrado — e virou `finalizado`
+   *  (decisão 087). Quem marca é o banco: no encerramento, se o job já
+   *  estiver faturado, ou na emissão da nota que zera o saldo. */
+  finalizado_em: string | null;
   motivo_rejeicao: string | null;
   /**
    * Nome do job NO FINANCEIRO. Quando nulo, vale `nome` (o da produção).
@@ -1219,14 +1228,18 @@ export const JOB_STATUS_TRANSICOES: Record<JobStatus, JobStatus[]> = {
   em_producao: ["cancelado"],
   encerrado: [],
   cancelado: [],
+  finalizado: [],
 };
 
 /**
- * `encerrado` continua FORA de `JOB_STATUS_TRANSICOES` de propósito, mesmo
- * agora que o fluxo existe (13/08/2026): encerrar não é troca de status
- * solta. Exige o job já enviado para faturamento, nenhuma PP e nenhum BV
- * em aberto, e passa pelo resumo de fechamento. Quem faz é a action
+ * `encerrado` e `finalizado` continuam FORA de `JOB_STATUS_TRANSICOES` de
+ * propósito: encerrar não é troca de status solta. Exige nenhuma PP, BV,
+ * verba ou item em aberto, e passa pelo fechamento. Quem faz é a action
  * `encerrarJob`, não `atualizarStatusJob`.
+ *
+ * ⚠️ Desde 16/09/2026 (decisão 087) o encerramento NÃO espera o
+ * faturamento: nem o envio, nem a nota. `finalizado` é quem marca o fim das
+ * duas coisas, e quem o grava é o banco.
  */
 export const ENCERRAMENTO_INDISPONIVEL =
   "Encerre pelo resumo de fechamento, na barra de ações do rodapé";
@@ -1253,11 +1266,38 @@ export const BV_SITUACAO_EM_ABERTO: BvSituacao[] = [
 /**
  * Job encerrado é histórico: não aceita edição, PP nova, BV novo nem
  * lançamento de realizado. A regra mora aqui para as telas e as actions
- * lerem do mesmo lugar.
+ * lerem do mesmo lugar. O finalizado é encerrado e faturado — congelado do
+ * mesmo jeito (decisão 087).
+ *
+ * O ENVIO PARA FATURAMENTO não é edição: continua aceito no job encerrado,
+ * que pode ter sido fechado antes de ser faturado (`jobAceitaEnvioParaFaturamento`).
  */
 export function jobEstaCongelado(status: JobStatus): boolean {
-  return status === "encerrado" || status === "cancelado";
+  return (
+    status === "encerrado" || status === "finalizado" || status === "cancelado"
+  );
 }
+
+/**
+ * Onde o job ainda pode ser enviado para faturamento (inteiro, ou um mês
+ * no modelo mensal). Desde 16/09/2026 (decisão 087) faturamento e
+ * encerramento correm separados: o job encerrado ainda não faturado
+ * continua enviando. O finalizado já foi todo enviado e faturado.
+ */
+export function jobAceitaEnvioParaFaturamento(status: JobStatus): boolean {
+  return status === "aberto" || status === "encerrado";
+}
+
+/**
+ * Onde o job está na fila de faturamento do financeiro — o mesmo filtro da
+ * `vw_faturamento_pendente` (migration 20260916170003). O finalizado entra
+ * porque uma nota dele pode ser cancelada e reemitida.
+ */
+export const JOB_STATUS_NA_FILA_DE_FATURAMENTO: JobStatus[] = [
+  "aberto",
+  "encerrado",
+  "finalizado",
+];
 
 /**
  * Onde o REALIZADO pode ser lançado. Desde 17/08/2026 inclui os dois
@@ -1340,6 +1380,34 @@ export function jobStatusLabel(s: JobStatus): string {
       return "Encerrado";
     case "cancelado":
       return "Cancelado";
+    case "finalizado":
+      return "Finalizado";
+  }
+}
+
+/**
+ * Cor do selo de status do job — um lugar só desde 16/09/2026 (decisão
+ * 087). Eram cinco cópias da mesma função, uma por tela, e o `encerrado`
+ * mudou de cor junto com a chegada do `finalizado`: verde passou a ser do
+ * job faturado E encerrado; o encerrado que ainda espera nota é violeta,
+ * como já era a marca de status na lista de jobs do financeiro.
+ */
+export function jobStatusBadgeClasses(status: JobStatus): string {
+  switch (status) {
+    case "aberto":
+      return "border-blue-200 bg-blue-50 text-blue-700";
+    case "em_producao":
+      return "border-amber-200 bg-amber-50 text-amber-700";
+    case "encerrado":
+      return "border-violet-200 bg-violet-50 text-violet-700";
+    case "finalizado":
+      return "border-emerald-200 bg-emerald-50 text-emerald-700";
+    case "cancelado":
+      return "border-slate-200 bg-slate-100 text-slate-500";
+    case "aguardando_abertura":
+      return "border-yellow-200 bg-yellow-50 text-yellow-700";
+    case "rejeitado_financeiro":
+      return "border-red-200 bg-red-50 text-red-700";
   }
 }
 

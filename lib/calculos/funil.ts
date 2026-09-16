@@ -46,6 +46,7 @@ export function estagioFunil(
     case "aberto":
     case "em_producao":
     case "encerrado":
+    case "finalizado":
       return "aberto";
     case "cancelado":
       return "cancelado";

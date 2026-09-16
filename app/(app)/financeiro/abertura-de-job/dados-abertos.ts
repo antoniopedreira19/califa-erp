@@ -171,6 +171,8 @@ export const STATUS_NA_LISTA = [
   "aberto",
   "em_producao",
   "encerrado",
+  // Faturado e encerrado (decisão 087, 16/09/2026).
+  "finalizado",
 ] as const;
 
 /**

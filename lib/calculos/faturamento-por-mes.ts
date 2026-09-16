@@ -179,27 +179,6 @@ export function montarFaturamentoMensal({
   const envioPorMes = new Map(
     envios.filter((e) => e.mes !== null).map((e) => [e.mes as string, e]),
   );
-  const envioDaParcela = new Map<string, string>();
-  for (const e of envios) for (const par of e.parcelas) envioDaParcela.set(par.id, e.id);
-
-  const faturadoPorEnvio = new Map<string, number>();
-  const notasPorEnvio = new Map<string, Map<string, NotaDoMes>>();
-  for (const it of itensDeNota) {
-    const envioId = envioDaParcela.get(it.envio_parcela_id);
-    if (!envioId) continue;
-    const valor = Number(it.valor ?? 0);
-    faturadoPorEnvio.set(envioId, (faturadoPorEnvio.get(envioId) ?? 0) + valor);
-    const chave = `${it.faturamento?.numero_nf ?? "—"}|${it.faturamento?.data_emissao ?? ""}`;
-    const notas = notasPorEnvio.get(envioId) ?? new Map<string, NotaDoMes>();
-    const nota = notas.get(chave) ?? {
-      numero: it.faturamento?.numero_nf ?? null,
-      dataEmissao: it.faturamento?.data_emissao ?? null,
-      valor: 0,
-    };
-    nota.valor = centavos(nota.valor + valor);
-    notas.set(chave, nota);
-    notasPorEnvio.set(envioId, notas);
-  }
 
   return faturamentoPorMes(
     meses,
@@ -209,14 +188,69 @@ export function montarFaturamentoMensal({
     percentualImposto,
   ).map((m) => {
     const envio = envioPorMes.get(m.mes) ?? null;
-    const faturado = envio ? centavos(faturadoPorEnvio.get(envio.id) ?? 0) : 0;
-    const notas = envio
-      ? [...(notasPorEnvio.get(envio.id)?.values() ?? [])].sort((a, b) =>
-          (a.dataEmissao ?? "").localeCompare(b.dataEmissao ?? ""),
-        )
-      : [];
+    const { faturado, notas } = notasDoEnvio(envio, itensDeNota);
     const situacao: SituacaoDoMes =
       !envio && m.faturamento <= 0 ? "sem_faturamento" : situacaoDoMes(envio, faturado);
     return { ...m, envio, faturado, notas, situacao };
   });
+}
+
+/**
+ * Quanto do envio já saiu em nota EMITIDA, e quais notas — uma por número e
+ * data de emissão, somando os itens que cobrem parcelas do mesmo envio.
+ * Serve ao envio de cada mês e ao envio único do job normal, que desde a
+ * decisão 087 (16/09/2026) ganhou o mesmo "Ver envio" do mensal.
+ */
+export function notasDoEnvio(
+  envio: EnvioDoJobComParcelas | null,
+  itensDeNota: ItemDeNotaDaParcela[],
+): { faturado: number; notas: NotaDoMes[] } {
+  if (!envio) return { faturado: 0, notas: [] };
+  const parcelas = new Set(envio.parcelas.map((par) => par.id));
+  let faturado = 0;
+  const notas = new Map<string, NotaDoMes>();
+  for (const it of itensDeNota) {
+    if (!parcelas.has(it.envio_parcela_id)) continue;
+    const valor = Number(it.valor ?? 0);
+    faturado += valor;
+    const chave = `${it.faturamento?.numero_nf ?? "—"}|${it.faturamento?.data_emissao ?? ""}`;
+    const nota = notas.get(chave) ?? {
+      numero: it.faturamento?.numero_nf ?? null,
+      dataEmissao: it.faturamento?.data_emissao ?? null,
+      valor: 0,
+    };
+    nota.valor = centavos(nota.valor + valor);
+    notas.set(chave, nota);
+  }
+  return {
+    faturado: centavos(faturado),
+    notas: [...notas.values()].sort((a, b) =>
+      (a.dataEmissao ?? "").localeCompare(b.dataEmissao ?? ""),
+    ),
+  };
+}
+
+/** O faturamento do job que não é mensal: um envio só (decisão 087). */
+export interface FaturamentoDoEnvioUnico {
+  envio: EnvioDoJobComParcelas | null;
+  faturado: number;
+  notas: NotaDoMes[];
+  situacao: SituacaoDoMes;
+}
+
+export function montarFaturamentoDoEnvioUnico({
+  envio,
+  itensDeNota,
+  semFaturamento,
+}: {
+  envio: EnvioDoJobComParcelas | null;
+  itensDeNota: ItemDeNotaDaParcela[];
+  /** Nada a faturar: faturamento previsto zero, como o job pago só por
+   *  save (decisão 028 §11). */
+  semFaturamento: boolean;
+}): FaturamentoDoEnvioUnico {
+  const { faturado, notas } = notasDoEnvio(envio, itensDeNota);
+  const situacao: SituacaoDoMes =
+    !envio && semFaturamento ? "sem_faturamento" : situacaoDoMes(envio, faturado);
+  return { envio, faturado, notas, situacao };
 }

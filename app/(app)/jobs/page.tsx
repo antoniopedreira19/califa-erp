@@ -88,7 +88,8 @@ export default async function JobsPage({
     em7.setDate(em7.getDate() + 7);
     const em7iso = em7.toISOString().slice(0, 10);
     jobsQuery = jobsQuery
-      .eq("status", "aberto")
+      // O encerrado ainda fatura (decisão 087, 16/09/2026).
+      .in("status", ["aberto", "encerrado"])
       .gte("data_prevista_faturamento", hoje)
       .lte("data_prevista_faturamento", em7iso);
   } else if (filtro === "realizado_pendente") {

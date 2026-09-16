@@ -16,8 +16,7 @@ import {
   jobAceitaRealizado,
   jobAceitaAcoesPlanilha,
   PP_STATUS_EM_ABERTO,
-  BV_SITUACAO_EM_ABERTO,
-} from "@/lib/types";
+  BV_SITUACAO_EM_ABERTO, jobStatusBadgeClasses } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { ResumoResultado } from "@/components/resumo-resultado";
 import { cn } from "@/lib/utils";
@@ -27,7 +26,6 @@ import {
   calcularTotaisRealizado,
 } from "@/lib/calculos/versao-totais";
 import { JobEditorDrawer } from "./job-editor-drawer";
-import type { ResumoEncerramento } from "./encerrar-dialog";
 import { BarraAcoesJob } from "./barra-acoes-job";
 import { FichaJob } from "./ficha-job";
 import { JobRealizadoSection } from "./realizado/job-realizado-section";
@@ -53,22 +51,7 @@ import type {
 
 export const dynamic = "force-dynamic";
 
-function statusBadgeClasses(status: JobStatus): string {
-  switch (status) {
-    case "aberto":
-      return "bg-blue-50 text-blue-700 border-blue-200";
-    case "em_producao":
-      return "bg-amber-50 text-amber-700 border-amber-200";
-    case "encerrado":
-      return "bg-emerald-50 text-emerald-700 border-emerald-200";
-    case "cancelado":
-      return "bg-slate-100 text-slate-500 border-slate-200";
-    case "aguardando_abertura":
-      return "bg-yellow-50 text-yellow-700 border-yellow-200";
-    case "rejeitado_financeiro":
-      return "bg-red-50 text-red-700 border-red-200";
-  }
-}
+const statusBadgeClasses = jobStatusBadgeClasses;
 
 export default async function JobDetailPage({
   params,
@@ -131,7 +114,6 @@ export default async function JobDetailPage({
     custoRealizadoJob,
     bvPlanejadoJob,
     bvRealizadoJob,
-    resumoEncerramento,
     podeEditarRealizado,
     podeAcoesPlanilha,
     podeGerarPP,
@@ -424,7 +406,6 @@ export default async function JobDetailPage({
         jobCodigo={job.codigo}
         status={job.status}
         orcamentoHref={`/orcamentos/${job.projeto_id}/${job.orcamento_id}?v=${job.versao_orcamento_aprovada_id}`}
-        envioFaturamento={envioFaturamento}
         podeEnviarFaturamento={podeEnviarFaturamento}
         aberturaEmRevisao={job.abertura_em_revisao}
         faturamentoPrevisto={totaisJob.faturamentoPrevisto}
@@ -436,10 +417,28 @@ export default async function JobDetailPage({
         dataPrevistaFaturamento={job.data_prevista_faturamento}
         portais={portaisDoCliente}
         moeda={versaoAprovada.moeda}
-        resumoEncerramento={resumoEncerramento}
         faturamentoPorMes={detalhe.modeloPlanilha === "mensal"}
         faturamentoMensal={detalhe.faturamentoMensal}
         podeEnviarFaturamentoMensal={detalhe.podeEnviarFaturamentoMensal}
+        faturamentoEnvioUnico={detalhe.faturamentoEnvioUnico}
+        fechamento={detalhe.fechamento}
+        podeEncerrar={detalhe.podeEncerrar}
+        // O card de Totais do fechamento (decisão 087) usa os mesmos dados
+        // da Planilha Interna — nenhuma consulta nova.
+        totais={{
+          itens,
+          realizadosMap,
+          bvsPorItem,
+          jobAberto:
+            job.status !== "aguardando_abertura" &&
+            job.status !== "rejeitado_financeiro",
+          percentualHonorarios: Number(versaoAprovada.percentual_honorarios),
+          percentualImposto: Number(versaoAprovada.percentual_imposto),
+          moeda: versaoAprovada.moeda,
+          modeloPlanilha: detalhe.modeloPlanilha,
+          internacional: detalhe.internacional,
+          moedaEstrangeira: detalhe.moedaEstrangeira,
+        }}
       />
     </div>
   );
