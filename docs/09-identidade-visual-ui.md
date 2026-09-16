@@ -89,6 +89,20 @@ Case study: em 2026-07-30 (Task 008), a tela de job foi de `max-w-5xl` (1024px) 
 
 Case study 2: em 2026-09-16, numa janela de ~1840px, 26 telas já não tinham largura própria (1536px) e as outras usavam 1280, 1370, 1452 e 1560 — cada uma com a sua justificativa comentada no código. Contas a Pagar deixava ~256px a mais de vazio que Jobs. A saída foi tirar o número de cada tela, e não escolher um número novo para todas. Depois, o teto do layout subiu de 1600 para 1680px (1616 de conteúdo), para reduzir a margem lateral de ~112 para ~74px nessa janela.
 
+## Alinhamento do cabeçalho de tabela
+
+**O cabeçalho da coluna segue o alinhamento do conteúdo dela** — mesma direção e mesmo padding lateral no `<th>` e no `<td>`:
+
+| Conteúdo | Alinhamento |
+|---|---|
+| Texto (título, descrição, fornecedor, cliente, job) | esquerda |
+| Dinheiro e números somáveis | direita, `tabular-nums` |
+| Data, código curto, parcela, selo de status, botão de ação | centro — ou esquerda, desde que o `<th>` acompanhe |
+
+**Proibido:** pôr `text-center` na `<tr>` do `<thead>` e deixar as células de texto à esquerda (ou as de valor à direita). Com a coluna estreita a diferença passa despercebida; quando a página alarga, o rótulo fica solto no meio da coluna e o conteúdo, colado na borda.
+
+Case study: em 2026-09-16, depois de a página ganhar largura (decisão 085), o Tiago viu em produção o "TÍTULO" de Títulos a Pagar centralizado sobre um "Teste" colado à esquerda. Todos os cabeçalhos daquela tabela eram centralizados; Título e Fornecedor alinhavam à esquerda e Valor à direita. A aba Cartão, na mesma tela, já fazia certo. Uma varredura automática nas 40 rotas (com todas as abas) comparou a posição do texto do cabeçalho com a do conteúdo de cada coluna e não achou outro caso.
+
 ## Cores das planilhas (blocos de dado)
 
 As planilhas de orçamento e de job são lidas em blocos verticais, não coluna a coluna. **Uma cor por bloco, a mesma em todo o produto** — o leitor aprende a cor uma vez e ela vale da grade de itens ao card de Totais, do orçamento individual à visão agregada.

@@ -5451,3 +5451,15 @@ Medido em viewport de 1840px: as cinco telas com 1616px e sem rolagem horizontal
   necessário — use o `Select` do sistema.
 - O "Decidir na baixa" é valor vazio no estado; o Radix não aceita item com
   `value=""`, por isso o pop-up usa o rótulo `DECIDIR` e traduz para `""`.
+
+## ⚠️ Nota de 2026-09-16 — Títulos a Pagar: cabeçalho alinhado ao conteúdo e o nome do job na coluna Job
+
+**Alinhamento.** Todos os cabeçalhos da tabela eram centralizados (`text-center` na `<tr>` do `<thead>`), mas Título e Fornecedor alinham à esquerda e Valor à direita. Com a página mais larga (decisão 085), o "TÍTULO" ficou visivelmente solto sobre o texto da coluna. Agora `<th>` de Título, Fornecedor e Job é `text-left`, e o de Valor é `text-right` — o mesmo que a aba Cartão já fazia. A regra ficou em `docs/09-identidade-visual-ui.md`, seção "Alinhamento do cabeçalho de tabela".
+
+**Job.** A coluna mostra código e nome (`JOB-0010 MICHELOB - IMC 2026`), como a aba de PPs. `TituloRow.job_nome` é obrigatório: PP e estorno de verba mandam o nome do job; avulsa, recorrência, desembolso e fatura mandam `""`. A busca também encontra o título pelo nome do job.
+
+**Larguras.** Job foi de 8% para 12%; Data Pgto. (10 → 9%) e Parcela (6 → 5%) cederam, e Título foi de 21 para 19%. Fornecedor segue em 15%.
+
+Conferido em 16/09/2026, viewport de 1840px: o texto do cabeçalho começa no mesmo pixel do conteúdo em Título (437), Fornecedor (744) e Job (982), e Valor termina junto (1446); o fornecedor "PRIME COMUNICACAO E MARKETING" aparece inteiro e o job quebra em duas linhas. Em 1440px, alinhado igual; o fornecedor longo trunca com reticências (e o nome inteiro no `title`), como antes, e o botão Baixar cabe na coluna.
+
+A aba **Cartão** segue mostrando só o código do job — o pedido foi para Títulos a Pagar.
