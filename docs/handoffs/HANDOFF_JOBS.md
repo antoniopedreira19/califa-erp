@@ -3819,3 +3819,33 @@ passaram a contar o job `encerrado`, como a lista que eles abrem.
 **Pendente:** o fluxo em que o financeiro confirma o encerramento (a desenhar
 depois desta entrega) e a definição do card "Jobs prontos pra encerrar" da
 home do GP, que ainda usa o critério antigo.
+
+## ⚠️ Nota de 2026-09-16 — teste real da 087 de ponta a ponta, e duas correções
+
+Detalhes e números na 087 §6 ("Teste real de ponta a ponta").
+
+- **JOB-0007** (nacional com save): aberto, PP normal e PP de verba pagas na
+  Conta Teste, prestação da verba com estorno, dois BVs recebidos, faturado e
+  recebido, e **finalizado no encerramento**. **JOB-0034** (mensal): dezembro
+  enviado depois do encerramento e **finalizado na nota de dezembro**. Os dois
+  estão finalizados — não servem mais para testar nada que edite.
+- **Corrigido — alíquota do BV** (062): `carregar-detalhe.ts`, a página do
+  orçamento e a planilha da abertura passaram a trazer `percentual_imposto`
+  dos BVs. Sem isso o diálogo reabria a alíquota vazia e salvar de novo a
+  apagava.
+- **Corrigido — data da 1ª parcela no envio para faturamento** (078): o campo
+  da parcela passa a acompanhar a "Data de faturamento"
+  (`enviar-faturamento-drawer.tsx`).
+- **Corrigido — "Concluir PPs" em lote e o A · Repasse** (062 §6): o lote
+  marcava item AR sem as PPs cobrirem o orçado (o Item6 do JOB-0007 ficou
+  assim, e segue — o job está finalizado). Por decisão do Tiago, o lote agora
+  **pula e avisa**: `concluirPPsDoJob` usa `faltaDosARsSemFechar`, devolve
+  `pulados` e grava `pulados_ar` na auditoria; o aviso do botão
+  (`concluir-pps-button.tsx`) mostra o quadro "Fica de fora" com quanto falta.
+  Conferido no JOB-0029: marcou o Item 1 (B) e deixou o Item 3 (AR, faltam
+  R$ 1.000,00); a ação chamada pelo console com a tela velha devolveu
+  `marcados: 0` e o Item 3 em `pulados`; o painel do item segue recusando. No
+  JOB-0033 o aviso mostrou 5 itens e o Item 2 (AR, faltam R$ 22.000,00) de
+  fora — sem marcar nada.
+- O fornecedor "Teste Alterações Fornecedor 048" foi **reativado** para o teste
+  e ficou ativo; os BVs do JOB-0007 trocaram o fornecedor "Antonio" por ele.

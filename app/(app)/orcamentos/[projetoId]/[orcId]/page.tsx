@@ -389,7 +389,7 @@ export default async function OrcamentoDetailPage({
           .from("itens_bv")
           .select(
             "id, tenant_id, item_versao_id, fornecedor_id, valor, prazo_repasse, " +
-              "situacao, created_by, created_at, updated_at, " +
+              "percentual_imposto, situacao, created_by, created_at, updated_at, " +
               "item:versoes_orcamento_itens!inner(versao_orcamento_id)",
           )
           .eq("item.versao_orcamento_id", versaoAtiva.id)

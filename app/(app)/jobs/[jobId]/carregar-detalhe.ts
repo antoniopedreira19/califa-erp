@@ -238,11 +238,15 @@ export async function carregarDetalheDoJob(
     // Continua sendo o mesmo registro que a tela de Orçamentos abre — quem
     // veio da versão tem as duas chaves preenchidas. O `!inner` é filtro,
     // não embed.
+    //
+    // `percentual_imposto` entrou em 16/09/2026: sem ela o diálogo do BV
+    // abria a alíquota salva vazia, o "Confirmar" pedia de novo, e salvar
+    // o BV sem redigitar gravava a alíquota como nula.
     supabase
       .from("itens_bv")
       .select(
         "id, tenant_id, item_versao_id, job_item_orcado_id, fornecedor_id, valor, prazo_repasse, " +
-          "situacao, created_by, created_at, updated_at, " +
+          "percentual_imposto, situacao, created_by, created_at, updated_at, " +
           "copia:jobs_itens_orcado!inner(job_id)",
       )
       .eq("copia.job_id", jobId)

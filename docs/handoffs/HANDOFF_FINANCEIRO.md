@@ -5519,3 +5519,21 @@ Regra completa em `docs/decisions/087-faturamento-e-encerramento-correm-separado
 
 As três alterações de banco foram feitas por troca de trecho na definição viva,
 com contagem de âncoras, como a da decisão 086 no mesmo dia.
+
+## ⚠️ Nota de 2026-09-16 — teste real do financeiro com a 087
+
+Detalhes na 087 §6 ("Teste real de ponta a ponta"). Tudo pelas telas, na
+Empresa Teste e na Conta Teste:
+
+- **Abertura** do JOB-0007; **aprovação e baixa** de PP normal (PP-00067) e de
+  PP de verba (PP-00068); **aprovação da prestação** e **baixa do estorno** da
+  verba; **notas e recebimentos** do JOB-0007, dos dois BVs e dos três meses do
+  JOB-0034. As notas de teste têm número sem dígito (`TESTE-FINALIZA-…`,
+  `TESTE-BV-…`) para não mexer na sugestão do próximo número.
+- **Conciliação** da Conta Teste em 16/09: saldo final R$ 398.809,42, as nove
+  linhas com job, centro de custo e empresa. **Fluxo de caixa** geral e do job
+  batem; o save da nota do JOB-0007 fica na linha "saldo em save" (decisão 028).
+- **Corrigido:** a planilha da abertura (`abertura-de-job/[jobId]/planilha`)
+  passou a trazer a alíquota dos BVs, como o job e o orçamento.
+- **Observado:** "Editar registro" aparece na Abertura do Job de um job
+  encerrado ou finalizado, e o servidor recusa ao salvar. Já era assim antes.

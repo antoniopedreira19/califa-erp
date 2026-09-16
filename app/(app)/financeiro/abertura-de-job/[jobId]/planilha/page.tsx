@@ -114,7 +114,7 @@ export default async function PlanilhaDaAberturaPage({
       .from("itens_bv")
       .select(
         "id, tenant_id, item_versao_id, job_item_orcado_id, fornecedor_id, valor, prazo_repasse, " +
-          "situacao, created_by, created_at, updated_at, " +
+          "percentual_imposto, situacao, created_by, created_at, updated_at, " +
           "copia:jobs_itens_orcado!inner(job_id)",
       )
       .eq("copia.job_id", params.jobId)

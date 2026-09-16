@@ -58,6 +58,8 @@ import {
   type ItemEmAberto,
 } from "./concluir-pps-button";
 import {
+  exigeSomaIgualAoOrcado,
+  faltaParaFecharOOrcado,
   itemPrecisaDeConclusao,
   somaDasPPsNaoCanceladas,
 } from "@/lib/calculos/pps-item";
@@ -255,6 +257,11 @@ export function JobRealizadoSection({
 
       const pps = ppsPorItemId.get(realizado.id) ?? [];
       const emPPs = somaDasPPsNaoCanceladas(pps);
+      // `A · Repasse` só fecha com as PPs cobrindo o orçado (decisão 062):
+      // o botão mostra quanto falta e o deixa de fora do lote.
+      const faltaAR = exigeSomaIgualAoOrcado(item.tipo_custo, item.em_save === true)
+        ? faltaParaFecharOOrcado(emPPs, Number(item.total_orcado ?? 0))
+        : 0;
       lista.push({
         itemRealizadoId: realizado.id,
         nome: item.item,
@@ -262,6 +269,8 @@ export function JobRealizadoSection({
           pps.length === 0
             ? "nenhuma PP"
             : `${pps.length} ${pps.length === 1 ? "PP" : "PPs"} · ${formatCurrency(emPPs, versao.moeda)}`,
+        faltaAR,
+        faltaARTexto: formatCurrency(faltaAR, versao.moeda),
       });
     }
     return lista;
