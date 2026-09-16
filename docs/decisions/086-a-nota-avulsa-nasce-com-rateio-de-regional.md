@@ -122,5 +122,9 @@ rateio, seguiu passando.
 
 ## 6. O que ficou de fora
 
-- Os dados de teste da nota TESTE-086 (a nota, a baixa da parcela 1 e o PDF
-  de teste no storage), esperando a decisão de apagar.
+- ~~Os dados de teste da nota TESTE-086 (a nota, a baixa da parcela 1 e o PDF
+  de teste no storage), esperando a decisão de apagar.~~ Apagados em
+  16/09/2026, com a autorização do Tiago: a nota, os dois títulos, o
+  lançamento da baixa, o item e o rateio (numa transação só, conferindo as
+  contagens antes), e os dois PDFs de teste pela API do Storage. A nota não
+  tem exclusão pela tela, por isso o SQL.
