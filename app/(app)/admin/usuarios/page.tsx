@@ -104,6 +104,7 @@ export default async function AdminUsuariosPage() {
       user_id: m.user_id,
       role: m.role as AppRole,
       status: m.status as "ativo" | "inativo",
+      profileAtivo: perfilAtivo,
       acesso,
       nome: profile?.nome ?? "—",
       email: profile?.email ?? "—",

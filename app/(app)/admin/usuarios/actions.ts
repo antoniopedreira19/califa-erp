@@ -756,3 +756,131 @@ export async function atualizarPapel(
 
   return { ok: true, message: "Papel atualizado." };
 }
+
+/**
+ * Ativa ou inativa o vínculo (tenant_members) de um usuário no tenant ativo.
+ *
+ * "Inativar" aqui = remover o acesso ao ERP sem apagar a conta. A RPC
+ * `get_session_context` já filtra por `tenant_members.status = 'ativo'`, então
+ * o próximo request do usuário inativado cai em `sem_tenant` e é redirecionado
+ * pelo `requireSession`. Reativar restaura o acesso sem re-convite.
+ *
+ * NÃO mexemos em `profiles.ativo` — esse campo tem escopo global (afeta todos
+ * os tenants futuros) e representa "conta desativada no sistema", uma decisão
+ * diferente de "não faz mais parte deste tenant".
+ *
+ * Regras de segurança:
+ * 1. requireAdmin.
+ * 2. Escopo por tenant.
+ * 3. Não pode inativar a si mesmo (evita auto-lockout do próprio admin).
+ * 4. Last-admin lockout ao inativar administrador (mesma regra de
+ *    `atualizarPapel`).
+ */
+export async function alterarStatusMembership(
+  userId: string,
+  novoStatus: "ativo" | "inativo",
+): Promise<ActionResult> {
+  const session = await requireAdmin();
+  const tenantId = session.activeTenant.id;
+
+  if (typeof userId !== "string" || userId.length === 0) {
+    return { ok: false, message: "ID do usuário inválido." };
+  }
+
+  if (novoStatus !== "ativo" && novoStatus !== "inativo") {
+    return { ok: false, message: "Status inválido." };
+  }
+
+  if (userId === session.profile.id && novoStatus === "inativo") {
+    return {
+      ok: false,
+      message: "Você não pode inativar seu próprio acesso.",
+    };
+  }
+
+  const service = createServiceClient();
+
+  const { data: member, error: memberErr } = await service
+    .from("tenant_members")
+    .select("id, role, status")
+    .eq("tenant_id", tenantId)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (memberErr) {
+    console.error(
+      "[admin.usuarios.alterarStatus.select-member]",
+      memberErr.message,
+    );
+    return { ok: false, message: "Não foi possível verificar o vínculo." };
+  }
+
+  if (!member) {
+    return { ok: false, message: "Usuário não pertence a este tenant." };
+  }
+
+  const statusAtual = member.status as "ativo" | "inativo";
+  if (statusAtual === novoStatus) {
+    return { ok: true, message: "Status já está definido." };
+  }
+
+  // Last-admin lockout: inativar um admin não pode deixar o tenant sem admin
+  // ativo.
+  if (
+    novoStatus === "inativo" &&
+    (member.role as AppRole) === "administrador"
+  ) {
+    const { count, error: countErr } = await service
+      .from("tenant_members")
+      .select("id", { count: "exact", head: true })
+      .eq("tenant_id", tenantId)
+      .eq("role", "administrador")
+      .eq("status", "ativo");
+
+    if (countErr) {
+      console.error(
+        "[admin.usuarios.alterarStatus.count-admins]",
+        countErr.message,
+      );
+      return {
+        ok: false,
+        message: "Não foi possível verificar o número de administradores.",
+      };
+    }
+
+    if ((count ?? 0) <= 1) {
+      return {
+        ok: false,
+        message:
+          "Este é o último administrador ativo do tenant. Promova outro usuário a administrador antes de inativar este.",
+      };
+    }
+  }
+
+  const { error: updErr } = await service
+    .from("tenant_members")
+    .update({ status: novoStatus })
+    .eq("tenant_id", tenantId)
+    .eq("user_id", userId);
+
+  if (updErr) {
+    console.error("[admin.usuarios.alterarStatus.update]", updErr.message);
+    return { ok: false, message: "Falha ao atualizar o status." };
+  }
+
+  await logAuditEvent({
+    acao: "tenant_member.status_alterado",
+    tenantId,
+    entidadeTipo: "tenant_member",
+    entidadeId: userId,
+    metadata: { de: statusAtual, para: novoStatus },
+  });
+
+  revalidateTag(`user-permissions:${userId}`);
+  revalidatePath("/admin/usuarios");
+
+  return {
+    ok: true,
+    message: novoStatus === "inativo" ? "Usuário inativado." : "Usuário reativado.",
+  };
+}
