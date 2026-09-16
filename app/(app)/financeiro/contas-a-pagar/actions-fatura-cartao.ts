@@ -20,8 +20,21 @@ import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { logAuditEvent } from "@/lib/auth/audit";
+import { rateioSchema } from "@/lib/validations/conta-avulsa";
 
 type Result = { ok: true } | { ok: false; message: string };
+
+const ajusteSchema = z.object({
+  descricao: z.string().trim().max(200).nullable().default(null),
+  tipo_id: z.string().uuid("Escolha o tipo do plano de contas."),
+  subtipo_id: z.string().uuid("Escolha o subtipo do plano de contas."),
+  valor: z
+    .number({ invalid_type_error: "Informe o valor do item." })
+    .positive("O valor do item precisa ser maior que zero."),
+  // O mesmo rateio de qualquer despesa sem job (decisão 082): o banco
+  // recusa a compra sem ele, e a soma tem que dar 100.
+  rateio: rateioSchema,
+});
 
 const schema = z.object({
   fatura_id: z.string().uuid(),
@@ -31,17 +44,9 @@ const schema = z.object({
   valor_cobrado: z.number({
     invalid_type_error: "Informe o valor cobrado pelo banco.",
   }),
-  ajuste_tipo_id: z
-    .string()
-    .uuid()
-    .nullable()
-    .or(z.literal("").transform(() => null)),
-  ajuste_subtipo_id: z
-    .string()
-    .uuid()
-    .nullable()
-    .or(z.literal("").transform(() => null)),
-  ajuste_descricao: z.string().trim().max(200).nullable().default(null),
+  // A diferença para o valor cobrado vira compra da fatura — uma ou
+  // várias (decisão 084). Vazio quando a fatura já fecha no valor.
+  ajustes: z.array(ajusteSchema).default([]),
 });
 
 const reabrirSchema = z.object({
@@ -99,9 +104,7 @@ export async function fecharFaturaCartao(input: unknown): Promise<Result> {
   const { error } = await supabase.rpc("fechar_fatura_cartao", {
     p_fatura_id: d.fatura_id,
     p_valor_cobrado: d.valor_cobrado,
-    p_ajuste_tipo_id: d.ajuste_tipo_id,
-    p_ajuste_subtipo_id: d.ajuste_subtipo_id,
-    p_ajuste_descricao: d.ajuste_descricao,
+    p_ajustes: d.ajustes,
   });
 
   if (error) {
@@ -120,13 +123,56 @@ export async function fecharFaturaCartao(input: unknown): Promise<Result> {
     metadata: {
       codigo: fatura.codigo,
       valor_cobrado: d.valor_cobrado,
-      teve_ajuste: d.ajuste_tipo_id !== null,
+      itens_de_ajuste: d.ajustes.length,
+      valor_do_ajuste: d.ajustes.reduce((s, a) => s + a.valor, 0),
     },
   });
 
   revalidatePath("/financeiro/contas-a-pagar");
   revalidatePath("/financeiro/conciliacao");
   return { ok: true };
+}
+
+/**
+ * O rateio que o fechamento sugere para o ajuste.
+ *
+ * É a proporção em que as regionais gastaram NESTA fatura — a compra
+ * avulsa entra pelo rateio dela, a parcela de PP entra pela regional do
+ * job (decisão 069). Volta vazio quando a fatura não tem nenhum item com
+ * regional; aí o diálogo abre a linha em branco e o financeiro diz de quem
+ * é.
+ *
+ * Fica numa action própria, chamada quando o diálogo abre, porque é um
+ * número que quase nunca é usado — carregá-lo junto da página pesaria uma
+ * tela inteira por causa de um caso de borda.
+ */
+export async function rateioProporcionalDaFatura(
+  faturaId: string,
+): Promise<
+  | { ok: true; linhas: Array<{ regional_id: string; percentual: number }> }
+  | { ok: false; message: string }
+> {
+  await requireSession();
+  const supabase = createClient();
+
+  const { data, error } = await supabase.rpc("rateio_proporcional_da_fatura", {
+    p_fatura_id: faturaId,
+  });
+
+  if (error) {
+    console.error("[fatura_cartao.rateio_proporcional]", error.message);
+    return { ok: false, message: limparMensagem(error.message) };
+  }
+
+  const linhas = ((data ?? []) as Array<{
+    regional_id: string;
+    percentual: number | string;
+  }>).map((l) => ({
+    regional_id: l.regional_id,
+    percentual: Number(l.percentual),
+  }));
+
+  return { ok: true, linhas };
 }
 
 /** O Postgres prefixa a mensagem; o usuário só quer a frase. */

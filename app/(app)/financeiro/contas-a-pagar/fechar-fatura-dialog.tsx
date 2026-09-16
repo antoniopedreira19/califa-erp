@@ -8,14 +8,21 @@
  * fechamento. IOF, anuidade e juros aparecem em toda fatura e ninguém os
  * lança; sem um lugar para eles, a fatura nunca bateria com o extrato.
  *
- * Por isso o campo de plano de contas do ajuste só aparece quando há
- * diferença — e aí ele é obrigatório, porque um ajuste sem classificação
- * some do DRE.
+ * Desde a decisão 084 a diferença não vira mais um lançamento solto: ela
+ * nasce como COMPRA da própria fatura, com plano de contas e rateio de
+ * regional, igual a qualquer outra. E pode ser mais de uma — quando o que
+ * faltou foram duas compras que ninguém lançou, cada uma entra com a sua
+ * descrição, o seu plano de contas e o seu rateio. Um ajuste só é o mesmo
+ * caminho, com uma linha.
+ *
+ * O rateio de cada linha vem preenchido na proporção em que as regionais
+ * gastaram nesta fatura, e é editável. Fatura sem nenhum item com regional
+ * abre a linha em branco, para o financeiro dizer de quem é.
  */
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, CreditCard } from "lucide-react";
+import { AlertCircle, CreditCard, Plus, Trash2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -26,13 +33,23 @@ import {
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { formatCurrency, cn } from "@/lib/utils";
-import type { PlanoContaTipo, PlanoContaSubtipo } from "@/lib/types";
-import { fecharFaturaCartao } from "./actions-fatura-cartao";
+import type {
+  PlanoContaTipo,
+  PlanoContaSubtipo,
+  RateioLinhaInput,
+} from "@/lib/types";
+import { RateioRegionalEditor } from "./rateio-regional-editor";
+import {
+  fecharFaturaCartao,
+  rateioProporcionalDaFatura,
+} from "./actions-fatura-cartao";
 
 export interface FaturaDoCartao {
   id: string;
   codigo: string;
   cartao_credito_id: string;
+  /** A empresa do cartão: é ela que decide quais regionais podem ratear. */
+  empresa_id: string | null;
   competencia_fechamento: string;
   data_vencimento: string;
   /**
@@ -46,12 +63,30 @@ export interface FaturaDoCartao {
   status: "aberta" | "fechada";
 }
 
+interface RegionalOption {
+  id: string;
+  nome: string;
+  ativo: boolean;
+  empresa_id: string;
+}
+
 interface Props {
   fatura: FaturaDoCartao | null;
   cartaoNome: string;
   tipos: PlanoContaTipo[];
   subtipos: PlanoContaSubtipo[];
+  regionais: RegionalOption[];
   onOpenChange: (aberto: boolean) => void;
+}
+
+/** Uma linha do ajuste: uma compra que a fatura vai ganhar. */
+interface AjusteLinha {
+  chave: string;
+  descricao: string;
+  tipoId: string;
+  subtipoId: string;
+  valorTexto: string;
+  rateio: RateioLinhaInput[];
 }
 
 function formatData(iso: string): string {
@@ -67,51 +102,143 @@ function paraNumero(raw: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+function paraTexto(n: number): string {
+  return n.toFixed(2).replace(".", ",");
+}
+
+const TOLERANCIA = 0.005;
+
+function rateioCompleto(linhas: RateioLinhaInput[]): boolean {
+  if (linhas.length === 0) return false;
+  if (linhas.some((l) => !l.regional_id)) return false;
+  const soma = linhas.reduce((s, l) => s + l.percentual, 0);
+  return Math.abs(soma - 100) < 0.01;
+}
+
 export function FecharFaturaDialog({
   fatura,
   cartaoNome,
   tipos,
   subtipos,
+  regionais,
   onOpenChange,
 }: Props) {
   const router = useRouter();
   const [valorTexto, setValorTexto] = React.useState("");
-  const [tipoId, setTipoId] = React.useState("");
-  const [subtipoId, setSubtipoId] = React.useState("");
-  const [descricao, setDescricao] = React.useState("");
+  const [linhas, setLinhas] = React.useState<AjusteLinha[]>([]);
+  const [proporcional, setProporcional] = React.useState<RateioLinhaInput[]>([]);
+  // A sugestão vem do servidor. Enquanto ela não chega, a primeira linha
+  // não nasce: nascendo antes, ela nasceria em branco e a sugestão nunca
+  // mais se aplicaria (a linha já existe, e o efeito não sobrescreve o que
+  // o financeiro pode ter digitado).
+  const [rateioCarregado, setRateioCarregado] = React.useState(false);
   const [erro, setErro] = React.useState<string | null>(null);
   const [salvando, setSalvando] = React.useState(false);
 
+  const regionaisDaEmpresa = React.useMemo(
+    () =>
+      fatura?.empresa_id
+        ? regionais.filter((r) => r.empresa_id === fatura.empresa_id)
+        : regionais,
+    [regionais, fatura?.empresa_id],
+  );
+
   React.useEffect(() => {
-    if (fatura) {
-      // Abre com o valor do sistema: na fatura sem IOF nem anuidade ele já
-      // é o valor certo, e o financeiro só confere e confirma.
-      setValorTexto(String(fatura.soma_itens.toFixed(2)).replace(".", ","));
-      setTipoId("");
-      setSubtipoId("");
-      setDescricao("");
-      setErro(null);
-    }
+    if (!fatura) return;
+    // Abre com o valor do sistema: na fatura sem IOF nem anuidade ele já
+    // é o valor certo, e o financeiro só confere e confirma.
+    setValorTexto(paraTexto(fatura.soma_itens));
+    setLinhas([]);
+    setProporcional([]);
+    setRateioCarregado(false);
+    setErro(null);
+
+    // O rateio sugerido vem do banco (proporção em que as regionais
+    // gastaram NESTA fatura) e só é buscado quando o diálogo abre — não
+    // vale pesar a página inteira por um número que quase sempre não é
+    // usado.
+    let vivo = true;
+    void rateioProporcionalDaFatura(fatura.id).then((r) => {
+      if (!vivo) return;
+      if (r.ok) setProporcional(r.linhas);
+      // Falhando a sugestão, a linha ainda precisa nascer — em branco, que
+      // é o mesmo caminho da fatura sem nenhum item com regional.
+      setRateioCarregado(true);
+    });
+    return () => {
+      vivo = false;
+    };
   }, [fatura]);
 
   const valorCobrado = paraNumero(valorTexto);
   const diferenca =
     fatura && valorCobrado !== null ? valorCobrado - fatura.soma_itens : 0;
-  const temDiferenca = Math.abs(diferenca) > 0.005;
+  const temDiferenca = Math.abs(diferenca) > TOLERANCIA;
+  // Diferença para baixo é crédito no cartão, e crédito no cartão só
+  // existe como estorno de uma compra (29/08/2026). O banco recusa, e
+  // aqui a tela explica antes de o financeiro tentar.
+  const diferencaParaBaixo = temDiferenca && diferenca < 0;
 
-  const subtiposDoTipo = React.useMemo(
-    () => subtipos.filter((s) => s.tipo_id === tipoId),
-    [subtipos, tipoId],
+  const somaLinhas = linhas.reduce(
+    (s, l) => s + (paraNumero(l.valorTexto) ?? 0),
+    0,
   );
+  const restante = diferenca - somaLinhas;
+
+  function novaLinha(valorSugerido: number): AjusteLinha {
+    return {
+      chave: Math.random().toString(36).slice(2),
+      descricao: "",
+      tipoId: "",
+      subtipoId: "",
+      valorTexto: valorSugerido > 0 ? paraTexto(valorSugerido) : "",
+      // Já nasce com a proporção da fatura; em branco quando não há
+      // nenhum item com regional para se basear.
+      rateio:
+        proporcional.length > 0
+          ? proporcional.map((p) => ({ ...p }))
+          : [{ regional_id: "", percentual: 100 }],
+    };
+  }
+
+  // A primeira linha aparece sozinha assim que a diferença existe: é o
+  // caso comum (um ajuste só, com o rateio já sugerido).
+  React.useEffect(() => {
+    if (temDiferenca && diferenca > 0 && linhas.length === 0 && rateioCarregado) {
+      setLinhas([novaLinha(diferenca)]);
+    }
+    if (!temDiferenca && linhas.length > 0) {
+      setLinhas([]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [temDiferenca, diferenca, proporcional, rateioCarregado]);
+
+  function alterarLinha(chave: string, patch: Partial<AjusteLinha>) {
+    setLinhas((atual) =>
+      atual.map((l) => (l.chave === chave ? { ...l, ...patch } : l)),
+    );
+  }
 
   // Zero e negativo passam: com estorno maior que as compras do mês a
   // fatura é credora e o banco não cobra nada (29/08/2026).
   const credora = valorCobrado !== null && valorCobrado <= 0;
 
+  const linhasCompletas =
+    linhas.length > 0 &&
+    linhas.every(
+      (l) =>
+        l.tipoId !== "" &&
+        l.subtipoId !== "" &&
+        (paraNumero(l.valorTexto) ?? 0) > 0 &&
+        rateioCompleto(l.rateio),
+    );
+
   const podeFechar =
     fatura !== null &&
     valorCobrado !== null &&
-    (!temDiferenca || (tipoId !== "" && subtipoId !== "")) &&
+    !diferencaParaBaixo &&
+    (!temDiferenca ||
+      (linhasCompletas && Math.abs(restante) < TOLERANCIA)) &&
     !salvando;
 
   async function confirmar() {
@@ -122,9 +249,15 @@ export function FecharFaturaDialog({
     const r = await fecharFaturaCartao({
       fatura_id: fatura.id,
       valor_cobrado: valorCobrado,
-      ajuste_tipo_id: temDiferenca ? tipoId : null,
-      ajuste_subtipo_id: temDiferenca ? subtipoId : null,
-      ajuste_descricao: descricao.trim() || null,
+      ajustes: temDiferenca
+        ? linhas.map((l) => ({
+            descricao: l.descricao.trim() || null,
+            tipo_id: l.tipoId,
+            subtipo_id: l.subtipoId,
+            valor: paraNumero(l.valorTexto) ?? 0,
+            rateio: l.rateio,
+          }))
+        : [],
     });
 
     setSalvando(false);
@@ -138,7 +271,7 @@ export function FecharFaturaDialog({
 
   return (
     <Dialog open={fatura !== null} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[88vh] max-w-[520px] overflow-y-auto">
+      <DialogContent className="max-h-[88vh] max-w-[620px] overflow-y-auto">
         {fatura && (
           <>
             <DialogHeader>
@@ -214,67 +347,181 @@ export function FecharFaturaDialog({
                 </p>
               </div>
 
-              {temDiferenca && (
+              {diferencaParaBaixo && (
+                <div
+                  role="alert"
+                  className="flex items-start gap-2 rounded-xl border border-california-red/30 bg-california-red/5 px-3.5 py-3"
+                >
+                  <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-none text-california-red" />
+                  <span className="text-[12px] leading-relaxed text-foreground">
+                    O banco cobrou <strong>menos</strong> que a soma das
+                    compras. Diferença para baixo é estorno: registre o
+                    estorno da compra correspondente (botão{" "}
+                    <strong>Estornar</strong>, na compra) e feche de novo.
+                  </span>
+                </div>
+              )}
+
+              {temDiferenca && !diferencaParaBaixo && (
                 <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-3">
                   <p className="text-[12.5px] leading-relaxed text-amber-900">
                     A diferença de{" "}
                     <strong className="font-mono font-semibold">
                       {formatCurrency(Math.abs(diferenca))}
                     </strong>{" "}
-                    vira um lançamento próprio. Classifique-a — é o IOF, a
-                    anuidade, o juro ou uma compra que ninguém lançou.
+                    entra na fatura como compra. É o IOF, a anuidade, o juro
+                    — ou compras que ninguém lançou, e aí cada uma entra na
+                    sua linha.
                   </p>
 
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-1">
-                      <Label htmlFor="ajuste_tipo">Tipo *</Label>
-                      <select
-                        id="ajuste_tipo"
-                        value={tipoId}
-                        onChange={(e) => {
-                          setTipoId(e.target.value);
-                          setSubtipoId("");
-                        }}
-                        className="h-10 w-full rounded-lg border border-border bg-white px-2 text-sm outline-none focus:border-california-red"
+                  {linhas.map((linha, idx) => {
+                    const subtiposDoTipo = subtipos.filter(
+                      (s) => s.tipo_id === linha.tipoId,
+                    );
+                    return (
+                      <div
+                        key={linha.chave}
+                        className="space-y-3 rounded-lg border border-amber-200 bg-white px-3 py-3"
                       >
-                        <option value="">Selecione…</option>
-                        {tipos.map((t) => (
-                          <option key={t.id} value={t.id}>
-                            {t.codigo} · {t.nome}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="space-y-1">
-                      <Label htmlFor="ajuste_subtipo">Subtipo *</Label>
-                      <select
-                        id="ajuste_subtipo"
-                        value={subtipoId}
-                        disabled={tipoId === ""}
-                        onChange={(e) => setSubtipoId(e.target.value)}
-                        className="h-10 w-full rounded-lg border border-border bg-white px-2 text-sm outline-none focus:border-california-red disabled:bg-muted/40"
-                      >
-                        <option value="">Selecione…</option>
-                        {subtiposDoTipo.map((s) => (
-                          <option key={s.id} value={s.id}>
-                            {s.codigo} · {s.nome}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11.5px] font-semibold uppercase tracking-wide text-muted-foreground">
+                            Item {idx + 1}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setLinhas((atual) =>
+                                atual.filter((l) => l.chave !== linha.chave),
+                              )
+                            }
+                            disabled={linhas.length <= 1}
+                            className="rounded p-1 text-muted-foreground transition-colors hover:bg-california-red/10 hover:text-california-red disabled:opacity-30"
+                            aria-label="Remover item"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
 
-                  <div className="space-y-1">
-                    <Label htmlFor="ajuste_descricao">
-                      Descrição do ajuste
-                    </Label>
-                    <Input
-                      id="ajuste_descricao"
-                      value={descricao}
-                      onChange={(e) => setDescricao(e.target.value)}
-                      maxLength={200}
-                      placeholder="Ex.: IOF e anuidade"
-                    />
+                        <div className="grid grid-cols-[1fr_auto] gap-2">
+                          <div className="space-y-1">
+                            <Label htmlFor={`aj_desc_${linha.chave}`}>
+                              Descrição
+                            </Label>
+                            <Input
+                              id={`aj_desc_${linha.chave}`}
+                              value={linha.descricao}
+                              onChange={(e) =>
+                                alterarLinha(linha.chave, {
+                                  descricao: e.target.value,
+                                })
+                              }
+                              maxLength={200}
+                              placeholder="Ex.: IOF e anuidade"
+                            />
+                          </div>
+                          <div className="w-32 space-y-1">
+                            <Label htmlFor={`aj_valor_${linha.chave}`}>
+                              Valor *
+                            </Label>
+                            <Input
+                              id={`aj_valor_${linha.chave}`}
+                              inputMode="decimal"
+                              value={linha.valorTexto}
+                              onChange={(e) =>
+                                alterarLinha(linha.chave, {
+                                  valorTexto: e.target.value,
+                                })
+                              }
+                              placeholder="0,00"
+                              className="text-right font-mono"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="space-y-1">
+                            <Label htmlFor={`aj_tipo_${linha.chave}`}>
+                              Tipo *
+                            </Label>
+                            <select
+                              id={`aj_tipo_${linha.chave}`}
+                              value={linha.tipoId}
+                              onChange={(e) =>
+                                alterarLinha(linha.chave, {
+                                  tipoId: e.target.value,
+                                  subtipoId: "",
+                                })
+                              }
+                              className="h-10 w-full rounded-lg border border-border bg-white px-2 text-sm outline-none focus:border-california-red"
+                            >
+                              <option value="">Selecione…</option>
+                              {tipos.map((t) => (
+                                <option key={t.id} value={t.id}>
+                                  {t.codigo} · {t.nome}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="space-y-1">
+                            <Label htmlFor={`aj_subtipo_${linha.chave}`}>
+                              Subtipo *
+                            </Label>
+                            <select
+                              id={`aj_subtipo_${linha.chave}`}
+                              value={linha.subtipoId}
+                              disabled={linha.tipoId === ""}
+                              onChange={(e) =>
+                                alterarLinha(linha.chave, {
+                                  subtipoId: e.target.value,
+                                })
+                              }
+                              className="h-10 w-full rounded-lg border border-border bg-white px-2 text-sm outline-none focus:border-california-red disabled:bg-muted/40"
+                            >
+                              <option value="">Selecione…</option>
+                              {subtiposDoTipo.map((s) => (
+                                <option key={s.id} value={s.id}>
+                                  {s.codigo} · {s.nome}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+
+                        <RateioRegionalEditor
+                          linhas={linha.rateio}
+                          onChange={(novas) =>
+                            alterarLinha(linha.chave, { rateio: novas })
+                          }
+                          regionais={regionaisDaEmpresa}
+                          disabled={salvando}
+                        />
+                      </div>
+                    );
+                  })}
+
+                  <div className="flex items-center justify-between">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setLinhas((atual) => [...atual, novaLinha(restante)])
+                      }
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-900 transition-colors hover:border-california-red hover:text-california-red"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Adicionar item
+                    </button>
+                    <span
+                      className={cn(
+                        "font-mono text-[12.5px] font-bold",
+                        Math.abs(restante) < TOLERANCIA
+                          ? "text-emerald-700"
+                          : "text-california-red",
+                      )}
+                    >
+                      {Math.abs(restante) < TOLERANCIA
+                        ? "Diferença distribuída ✓"
+                        : `Falta distribuir ${formatCurrency(restante)}`}
+                    </span>
                   </div>
                 </div>
               )}
