@@ -5489,7 +5489,9 @@ rateio da nota.
 
 **Pendências desta nota:**
 
-- `20260916110002_nota_avulsa_exige_rateio.sql` — a trava que **exige** rateio
-  na nota avulsa — só é aplicada depois do deploy deste código.
+- ~~`20260916110002_nota_avulsa_exige_rateio.sql` — a trava que **exige**
+  rateio na nota avulsa — só é aplicada depois do deploy deste código.~~
+  Aplicada em 16/09/2026, depois do deploy de ff395c7: nota avulsa sem rateio
+  não entra mais, e o rateio dela não pode ser zerado.
 - Dados de teste: a nota **TESTE-086** (R$ 1.000,00, Pevetech, parcela 1
   recebida na Conta Teste) e o PDF de teste no storage `faturamentos-nf`.
