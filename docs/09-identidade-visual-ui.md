@@ -386,6 +386,14 @@ sintoma engana: parece botão sem handler, e o handler estava certo.
   comuns, `z-[55]` para a camada em tela cheia, `z-[60]` para o diálogo
   aberto de dentro dela — véu junto, pelo `overlayClassName`. Diálogo que
   pode ser aberto dos dois lugares leva `z-[60]` sempre;
+- `z-[70]` — **conteúdo flutuante que pertence à camada de cima**: o
+  `PopoverContent` e o `SelectContent` (16/09/2026). Eles ficavam em
+  `z-50`, e dentro de um diálogo `z-[60]` abriam ATRÁS dele: no pop-up de
+  aprovar PP dava para clicar o calendário por script, mas não com o
+  mouse — a data era impossível de escolher. Era também por isso que aquele
+  diálogo usava `<select>` nativo do sistema operacional como contorno.
+  Contorno não é mais necessário: dentro de diálogo, use o `Select` do
+  sistema como em qualquer outra tela;
 
   ⚠️ **Aqui estava escrito o contrário, e estava errado** (corrigido em
   10/09/2026): "deixe todo mundo em `z-50`, quem ordena é a pilha de

@@ -29,10 +29,21 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { DatePicker } from "@/components/ui/date-picker";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { formatCurrency } from "@/lib/utils";
 import type { CartaoOption } from "@/components/financeiro/forma-pagamento-field";
 import type { PlanoContaTipo, PlanoContaSubtipo } from "@/lib/types";
 import { aprovarPPComData } from "./actions-titulos";
+
+/** Radix não aceita `value=""` num item; este é o rótulo da ausência de
+ *  escolha ("decidir na baixa"), traduzido para "" no estado. */
+const DECIDIR = "decidir";
 
 interface PPParaAprovar {
   id: string;
@@ -191,11 +202,14 @@ export function AprovarPPDialog({
 
           <div className="space-y-2 border-t border-border pt-3">
             <p className="text-sm font-bold">Como vai ser pago</p>
-            <select
-              value={formaPagamento}
+            {/* Seletor do sistema, e não o nativo do sistema operacional
+                (16/09/2026). "Decidir na baixa" é a ausência de escolha, e o
+                Radix não aceita item de valor vazio — daí o rótulo DECIDIR. */}
+            <Select
+              value={formaPagamento === "" ? DECIDIR : formaPagamento}
               disabled={pending}
-              onChange={(e) => {
-                const nova = e.target.value;
+              onValueChange={(v) => {
+                const nova = v === DECIDIR ? "" : v;
                 setFormaPagamento(nova);
                 setCartaoId("");
                 // No cartão o tipo já entra em Custo Operacional; o subtipo
@@ -204,14 +218,18 @@ export function AprovarPPDialog({
                 setSubtipoId("");
                 setErro(null);
               }}
-              className="h-10 w-full rounded-lg border border-border bg-white px-3 text-sm outline-none focus:border-california-red disabled:opacity-50"
             >
-              <option value="">Decidir na baixa, parcela a parcela</option>
-              <option value="pix">PIX</option>
-              <option value="transferencia">Transferência</option>
-              <option value="boleto">Boleto</option>
-              <option value="cartao_credito">Cartão de Crédito</option>
-            </select>
+              <SelectTrigger aria-label="Como vai ser pago" className="h-10 w-full text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={DECIDIR}>Decidir na baixa, parcela a parcela</SelectItem>
+                <SelectItem value="pix">PIX</SelectItem>
+                <SelectItem value="transferencia">Transferência</SelectItem>
+                <SelectItem value="boleto">Boleto</SelectItem>
+                <SelectItem value="cartao_credito">Cartão de Crédito</SelectItem>
+              </SelectContent>
+            </Select>
 
             {noCartao && (
               <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
@@ -221,52 +239,61 @@ export function AprovarPPDialog({
                   isso o centro de custo é escolhido agora.
                 </p>
 
-                <select
-                  value={cartaoId}
+                <Select
+                  value={cartaoId === "" ? undefined : cartaoId}
                   disabled={pending}
-                  onChange={(e) => setCartaoId(e.target.value)}
-                  className="h-9 w-full rounded-lg border border-border bg-white px-2 text-xs outline-none focus:border-california-red"
+                  onValueChange={setCartaoId}
                 >
-                  <option value="">Escolha o cartão…</option>
-                  {cartoes.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.nome} · {c.bandeira.toUpperCase()} · ••••{c.ultimos_4_digitos}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger aria-label="Cartão" className="h-9 w-full text-xs">
+                    <SelectValue placeholder="Escolha o cartão…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {cartoes.map((c) => (
+                      <SelectItem key={c.id} value={c.id} className="text-xs">
+                        {c.nome} · {c.bandeira.toUpperCase()} · ••••{c.ultimos_4_digitos}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
 
                 <div className="grid grid-cols-2 gap-2">
-                  <select
-                    value={tipoId}
+                  <Select
+                    value={tipoId === "" ? undefined : tipoId}
                     disabled={pending}
-                    onChange={(e) => {
-                      setTipoId(e.target.value);
+                    onValueChange={(v) => {
+                      setTipoId(v);
                       setSubtipoId("");
                     }}
-                    className="h-9 w-full rounded-lg border border-border bg-white px-2 text-xs outline-none focus:border-california-red"
                   >
-                    <option value="">Tipo…</option>
-                    {tipos.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.codigo} · {t.nome}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    value={subtipoId}
-                    disabled={pending || tipoId === ""}
-                    onChange={(e) => setSubtipoId(e.target.value)}
-                    className="h-9 w-full rounded-lg border border-border bg-white px-2 text-xs outline-none focus:border-california-red disabled:bg-muted/40"
-                  >
-                    <option value="">Subtipo…</option>
-                    {subtipos
-                      .filter((sub) => sub.tipo_id === tipoId)
-                      .map((sub) => (
-                        <option key={sub.id} value={sub.id}>
-                          {sub.codigo} · {sub.nome}
-                        </option>
+                    <SelectTrigger aria-label="Tipo do plano de contas" className="h-9 w-full text-xs">
+                      <SelectValue placeholder="Tipo…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {tipos.map((t) => (
+                        <SelectItem key={t.id} value={t.id} className="text-xs">
+                          {t.codigo} · {t.nome}
+                        </SelectItem>
                       ))}
-                  </select>
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={subtipoId === "" ? undefined : subtipoId}
+                    disabled={pending || tipoId === ""}
+                    onValueChange={setSubtipoId}
+                  >
+                    <SelectTrigger aria-label="Subtipo do plano de contas" className="h-9 w-full text-xs">
+                      <SelectValue placeholder="Subtipo…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {subtipos
+                        .filter((sub) => sub.tipo_id === tipoId)
+                        .map((sub) => (
+                          <SelectItem key={sub.id} value={sub.id} className="text-xs">
+                            {sub.codigo} · {sub.nome}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
             )}
