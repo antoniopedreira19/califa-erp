@@ -94,6 +94,12 @@ export interface TituloRow {
    */
   cadastro_do_fornecedor_mudou: boolean;
   job_codigo: string;
+  /**
+   * Nome do job, ao lado do código, como na aba de PPs (16/09/2026).
+   * Obrigatório pelo mesmo motivo do campo acima: origem sem job (avulsa,
+   * recorrência, desembolso, fatura) manda `""` explícito.
+   */
+  job_nome: string;
   /** Data vigente de pagamento — o que a tela ordena e soma. */
   data_pagamento: string | null;
   /** Prazo negociado pela produção (PP) ou informado na criação (avulsa). */
@@ -329,6 +335,7 @@ export function TitulosPagarList({
       r.descricao.toLowerCase().includes(q) ||
       r.fornecedor_nome.toLowerCase().includes(q) ||
       r.job_codigo.toLowerCase().includes(q) ||
+      r.job_nome.toLowerCase().includes(q) ||
       r.origem_label.toLowerCase().includes(q),
     [],
   );
@@ -648,19 +655,25 @@ export function TitulosPagarList({
 
       {/* Tabela — table-fixed para caber na largura da página sem scroll horizontal.
           Larguras em % para escalar com o container; Título e Fornecedor
-          absorvem sobra e truncam quando precisa. */}
+          absorvem sobra e truncam quando precisa.
+
+          O cabeçalho segue o alinhamento do conteúdo da coluna, como na
+          aba Cartão: texto (Título, Fornecedor, Job) à esquerda, dinheiro à
+          direita, o resto centralizado. Até 16/09/2026 todos os cabeçalhos
+          eram centralizados, e com a página mais larga o "Título" ficava
+          visivelmente solto do texto embaixo dele. */}
       <div className="rounded-2xl border border-border bg-card shadow-soft">
         <table className="w-full table-fixed text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/30 text-center text-[11px] uppercase tracking-wider text-muted-foreground">
-              <th className="w-[10%] px-2 py-3 font-semibold">Data Pgto.</th>
+              <th className="w-[9%] px-2 py-3 font-semibold">Data Pgto.</th>
               <th className="w-[8%] px-2 py-3 font-semibold">Venc. Orig.</th>
-              <th className="w-[21%] px-3 py-3 font-semibold">Título</th>
-              <th className="w-[15%] px-3 py-3 font-semibold">Fornecedor</th>
-              <th className="w-[8%] px-2 py-3 font-semibold">Job</th>
+              <th className="w-[19%] px-3 py-3 text-left font-semibold">Título</th>
+              <th className="w-[15%] px-3 py-3 text-left font-semibold">Fornecedor</th>
+              <th className="w-[12%] px-2 py-3 text-left font-semibold">Job</th>
               <th className="w-[9%] px-2 py-3 font-semibold">Origem</th>
-              <th className="w-[9%] px-3 py-3 font-semibold">Valor</th>
-              <th className="w-[6%] px-2 py-3 font-semibold">Parcela</th>
+              <th className="w-[9%] px-3 py-3 text-right font-semibold">Valor</th>
+              <th className="w-[5%] px-2 py-3 font-semibold">Parcela</th>
               <th className="w-[7%] px-2 py-3 font-semibold">Status</th>
               <th className="w-[7%] px-3 py-3 font-semibold">Ação</th>
             </tr>
@@ -792,8 +805,10 @@ export function TitulosPagarList({
                       )}
                     </span>
                   </td>
-                  <td className="whitespace-nowrap px-2 py-3 text-center font-mono text-xs text-muted-foreground">
-                    {r.job_codigo}
+                  {/* Código e nome, como na aba de PPs. */}
+                  <td className="break-words px-2 py-3 text-xs text-muted-foreground">
+                    <span className="font-mono">{r.job_codigo}</span>
+                    {r.job_nome && <> <span>{r.job_nome}</span></>}
                   </td>
                   <td className="px-2 py-3 text-center">
                     <span

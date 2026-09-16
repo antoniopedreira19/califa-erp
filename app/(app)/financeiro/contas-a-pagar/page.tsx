@@ -602,6 +602,7 @@ export default async function PedidosCompraFinanceiroPage({
         fornecedor_nome: pp.fornecedor_nome || "—",
         cadastro_do_fornecedor_mudou: pp.cadastro_do_fornecedor_mudou,
         job_codigo: pp.job_codigo || "—",
+        job_nome: pp.job_nome,
         data_pagamento: par.data_pagamento,
         venc_original: par.data_vencimento,
         data_pagamento_primeira: par.data_pagamento_primeira,
@@ -685,6 +686,7 @@ export default async function PedidosCompraFinanceiroPage({
       fornecedor_nome: a.fornecedor?.razao_social ?? a.fornecedor?.nome ?? "—",
       // Avulsa e recorrência não têm job desde 15/09/2026 (decisão 069).
       job_codigo: "—",
+      job_nome: "",
       data_pagamento: a.data_pagamento ?? a.data_prevista_pagamento,
       venc_original: a.data_prevista_pagamento,
       data_pagamento_primeira: a.data_pagamento_primeira,
@@ -783,6 +785,7 @@ export default async function PedidosCompraFinanceiroPage({
         fornecedor_nome: des.fornecedor?.razao_social ?? des.fornecedor?.nome ?? "—",
         // Desembolso não tem job desde 10/09/2026 (decisão 069).
         job_codigo: "—",
+        job_nome: "",
         data_pagamento: par.data_pagamento,
         venc_original: par.data_vencimento,
         data_pagamento_primeira: par.data_pagamento_primeira,
@@ -858,6 +861,7 @@ export default async function PedidosCompraFinanceiroPage({
         ? `Verba — ${dev.pp.responsavel.nome}`
         : "",
       job_codigo: dev.pp?.job?.codigo ?? "—",
+      job_nome: dev.pp?.job?.nome ?? "",
       data_pagamento: dev.data_pagamento,
       venc_original: dev.data_pagamento_primeira,
       data_pagamento_primeira: dev.data_pagamento_primeira,
@@ -1038,6 +1042,7 @@ export default async function PedidosCompraFinanceiroPage({
       descricao: `Fatura ${cartaoNome} · fecha ${dataBR(f.competencia_fechamento)}`,
       fornecedor_nome: cartaoNome,
       job_codigo: "—",
+      job_nome: "",
       data_pagamento: f.data_vencimento,
       venc_original: f.data_vencimento,
       data_pagamento_primeira: f.data_vencimento,
