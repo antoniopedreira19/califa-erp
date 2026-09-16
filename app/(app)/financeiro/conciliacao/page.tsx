@@ -108,7 +108,10 @@ export default async function ConciliacaoPage({
          cartao:cartoes_credito(nome, ultimos_4_digitos),
          fatura:faturas_cartao(codigo),
          titulo:titulos_receber!lancamentos_financeiros_titulo_receber_id_fkey(
-           faturamento:faturamentos(numero_nf, serie, anexo_nf_path)
+           faturamento:faturamentos(
+             numero_nf, serie, anexo_nf_path,
+             rateio:faturamentos_regionais(percentual, regional:regionais(nome))
+           )
          ),
          conta_avulsa:contas_avulsas!conta_avulsa_id(
            codigo,
@@ -162,6 +165,7 @@ export default async function ConciliacaoPage({
           numero_nf: string | null;
           serie: string | null;
           anexo_nf_path: string | null;
+          rateio: Array<{ percentual: number; regional: { nome: string } | null }>;
         } | null;
       } | null;
       conta_avulsa: {
@@ -213,12 +217,13 @@ export default async function ConciliacaoPage({
     };
 
     const raw = ((data ?? []) as unknown as RawRow[]).map((r) => {
-      // O rateio só existe onde não há job (decisão 069). Avulsa e
-      // desembolso são as duas origens que o carregam; nunca as duas ao
-      // mesmo tempo, porque o lançamento vem de uma origem só.
+      // O rateio só existe onde não há job (decisão 069). Avulsa,
+      // desembolso e a nota avulsa (086) são as origens que o carregam;
+      // nunca duas ao mesmo tempo, porque o lançamento vem de uma origem só.
       const rateio = [
         ...(r.conta_avulsa?.rateio ?? []),
         ...(r.desembolso?.rateio ?? []),
+        ...(r.titulo?.faturamento?.rateio ?? []),
       ].map((rr: { percentual: number; regional: { nome: string } | null }) => ({
         percentual: Number(rr.percentual),
         regional_nome: rr.regional?.nome ?? "—",

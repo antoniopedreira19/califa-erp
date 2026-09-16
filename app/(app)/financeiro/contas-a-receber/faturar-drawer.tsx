@@ -58,7 +58,12 @@ import {
   type InfoFaturamento,
 } from "@/components/financeiro/info-faturamento-modal";
 import type { ContatoCobranca } from "@/lib/data/contatos-cobranca";
-import type { PlanoContaTipo, PlanoContaSubtipo } from "@/lib/types";
+import type {
+  PlanoContaTipo,
+  PlanoContaSubtipo,
+  RateioLinhaInput,
+} from "@/lib/types";
+import { RateioRegionalEditor } from "../contas-a-pagar/rateio-regional-editor";
 import { emitirFaturamento, uploadNfPdf, urlAnexoNf } from "./actions";
 import type { FaturamentoPendenteRow, FaturadoRow } from "./faturamento-list";
 import { chaveInfoDoEnvio } from "./chave-info";
@@ -71,8 +76,6 @@ export type DrawerState =
 
 type Parcela = { valor: number; data_vencimento: string };
 
-const SEM_JOB = "__sem_job__";
-
 interface Props {
   state: DrawerState;
   onClose: () => void;
@@ -82,7 +85,11 @@ interface Props {
   empresas: Array<{ id: string; nome: string }>;
   clientes: Array<{ id: string; nome: string }>;
   fornecedores: Array<{ id: string; nome: string }>;
-  jobs: Array<{ id: string; codigo: string; nome: string }>;
+  /**
+   * Todas as regionais do tenant. O rateio da nota avulsa só oferece as da
+   * empresa emissora (decisão 086).
+   */
+  regionais: Array<{ id: string; nome: string; ativo: boolean; empresa_id: string }>;
   proximoNf: string;
   /**
    * O que o envio para faturamento trouxe de cada job — PO, a instrução do
@@ -116,7 +123,7 @@ export function FaturarDrawer({
   empresas,
   clientes,
   fornecedores,
-  jobs,
+  regionais,
   proximoNf,
   infoPorJob,
 }: Props) {
@@ -233,9 +240,29 @@ export function FaturarDrawer({
   // Campos do avulso
   const [avClienteId, setAvClienteId] = React.useState("");
   const [avValor, setAvValor] = React.useState(0);
-  const [avJobId, setAvJobId] = React.useState(SEM_JOB);
   const [avTipoId, setAvTipoId] = React.useState("");
   const [avSubtipoId, setAvSubtipoId] = React.useState("");
+  // Rateio de regional da nota avulsa (decisão 086). Nasce com uma linha em
+  // branco, como a despesa sem job: não há de onde sugerir.
+  const [avRateio, setAvRateio] = React.useState<RateioLinhaInput[]>([
+    { regional_id: "", percentual: 100 },
+  ]);
+  const regionaisDaEmpresa = React.useMemo(
+    () => regionais.filter((r) => r.empresa_id === empresaId),
+    [regionais, empresaId],
+  );
+  // Trocar a empresa emissora limpa as regionais que não são dela: o banco
+  // recusaria, e a linha mostraria um nome que a lista não oferece.
+  React.useEffect(() => {
+    if (!avulso) return;
+    setAvRateio((atual) =>
+      atual.map((l) =>
+        l.regional_id && !regionaisDaEmpresa.some((r) => r.id === l.regional_id)
+          ? { ...l, regional_id: "" }
+          : l,
+      ),
+    );
+  }, [avulso, regionaisDaEmpresa]);
 
   const totalNf = avulso
     ? avValor
@@ -384,6 +411,17 @@ export function FaturarDrawer({
       setErro("No faturamento avulso, informe o cliente e o centro de custo.");
       return;
     }
+    if (avulso) {
+      if (avRateio.length === 0 || avRateio.some((l) => !l.regional_id)) {
+        setErro("No faturamento avulso, escolha a regional de cada linha do rateio.");
+        return;
+      }
+      const somaRateio = avRateio.reduce((s, l) => s + l.percentual, 0);
+      if (Math.abs(somaRateio - 100) >= 0.01) {
+        setErro("O rateio de regional da nota precisa somar 100%.");
+        return;
+      }
+    }
     if (!avulso) {
       const excedidos = itensAtivos.filter(
         (l) => (valores[l.envio_parcela_id ?? l.origem_id] ?? 0) > l.saldo + 0.01,
@@ -479,6 +517,7 @@ export function FaturarDrawer({
         anexo_nf_path: anexoPath,
         plano_conta_tipo_id: avulso ? avTipoId : null,
         plano_conta_subtipo_id: avulso ? avSubtipoId : null,
+        rateio: avulso ? avRateio : [],
         itens,
         parcelas: parcelas.map((p, i) => ({
           numero: i + 1,
@@ -793,26 +832,7 @@ export function FaturarDrawer({
                   />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3.5">
-                <div className="space-y-1.5">
-                  <Label>Job de referência</Label>
-                  <Select value={avJobId} onValueChange={setAvJobId}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={SEM_JOB}>Nenhum (opcional)</SelectItem>
-                      {jobs.map((j) => (
-                        <SelectItem key={j.id} value={j.id}>
-                          {j.codigo} — {j.nome}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-[11px] text-muted-foreground">
-                    Só para rastreio no DRE — não consome saldo a faturar do job.
-                  </p>
-                </div>
+              <div>
                 <div className="space-y-1.5">
                   <Label>Centro de custo {obrigatorio}</Label>
                   <div className="grid grid-cols-2 gap-2">
@@ -903,6 +923,55 @@ export function FaturarDrawer({
               )}
             </div>
           </div>
+
+          {/* Rateio de regional da nota avulsa (decisão 086). Fica depois da
+              empresa emissora porque depende dela: só as regionais da empresa
+              entram. A nota de job não tem — a receita fica na regional do
+              job. */}
+          {avulso && (
+            <div className="space-y-1.5">
+              {empresaId ? (
+                <RateioRegionalEditor
+                  linhas={avRateio}
+                  onChange={setAvRateio}
+                  regionais={regionaisDaEmpresa}
+                  disabled={pending}
+                />
+              ) : (
+                <>
+                  <Label>Rateio de regional {obrigatorio}</Label>
+                  <p className="rounded-lg border border-dashed border-border bg-muted/50 px-3 py-2.5 text-[12.5px] text-muted-foreground">
+                    Escolha a empresa emissora para ver as regionais dela.
+                  </p>
+                </>
+              )}
+            </div>
+          )}
+
+          {leitura && nota?.origem_tipo === "avulso" && (
+            <div className="space-y-1.5">
+              <Label>Rateio de regional</Label>
+              {nota.rateio.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {nota.rateio.map((r) => (
+                    <span
+                      key={r.regional_nome}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-muted/50 px-3 py-1.5 text-[12.5px]"
+                    >
+                      {r.regional_nome}
+                      <span className="font-mono font-semibold">
+                        {r.percentual.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%
+                      </span>
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-[12.5px] text-muted-foreground">
+                  Nota emitida antes do rateio de regional existir — sem divisão registrada.
+                </p>
+              )}
+            </div>
+          )}
 
           {/* NF e emissão */}
           <div className="grid grid-cols-2 gap-3.5">

@@ -110,8 +110,9 @@ da abertura. No fluxo por job o rótulo antigo continua certo.
 ## Em aberto
 
 - Pagamento e ajuste da fatura de cartão (próximo lote).
-- Recebimento avulso: a emissão da nota sem job passa a pedir regional
-  (lote seguinte).
+- ~~Recebimento avulso: a emissão da nota sem job passa a pedir regional
+  (lote seguinte).~~ Resolvido em 16/09/2026 — ver a
+  [086](086-a-nota-avulsa-nasce-com-rateio-de-regional.md).
 - ~~A conciliação lê `lancamentos_financeiros` direto (ver a 069).~~
   Resolvido em 15/09/2026, na mesma frente — ver a 069.
 

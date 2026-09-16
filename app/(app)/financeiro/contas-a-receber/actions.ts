@@ -1,6 +1,7 @@
 "use server";
 
 import { z } from "zod";
+import { rateioSchema } from "@/lib/validations/conta-avulsa";
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
@@ -133,6 +134,12 @@ const emitirSchema = z.object({
   plano_conta_subtipo_id: z.string().uuid().nullable(),
   itens: z.array(itemSchema).min(1, "A nota precisa cobrir ao menos um item."),
   parcelas: z.array(parcelaSchema).min(1, "A nota precisa de ao menos uma parcela."),
+  // Rateio de regional da nota avulsa (decisão 086). A nota de job ou de BV
+  // não leva: a receita fica na regional do job. A forma completa (regional
+  // escolhida, soma 100, sem repetir) é conferida abaixo só para o avulso.
+  rateio: z
+    .array(z.object({ regional_id: z.string(), percentual: z.number() }))
+    .default([]),
 });
 
 export async function emitirFaturamento(
@@ -165,6 +172,23 @@ export async function emitirFaturamento(
   }
   if (d.origem_tipo === "avulso" && (!d.plano_conta_tipo_id || !d.plano_conta_subtipo_id)) {
     return { ok: false, message: "No faturamento avulso, informe o centro de custo." };
+  }
+  // A nota sem job não tem de onde tirar regional: o rateio vem com ela,
+  // como na despesa sem job (082). A RPC confere de novo, com a empresa.
+  if (d.origem_tipo === "avulso") {
+    const rateio = rateioSchema.safeParse(d.rateio);
+    if (!rateio.success) {
+      return {
+        ok: false,
+        message: `Rateio de regional: ${rateio.error.issues[0]?.message ?? "a soma dos percentuais deve ser 100,00."}`,
+      };
+    }
+  } else if (d.rateio.length > 0) {
+    return {
+      ok: false,
+      message:
+        "Só a nota avulsa leva rateio de regional: a nota de job ou de BV fica na regional do job.",
+    };
   }
 
   // BV nunca entra em NF agrupada: a contraparte dele é o fornecedor.
@@ -213,6 +237,7 @@ export async function emitirFaturamento(
       emitido_por: session.profile.id,
       itens: d.itens,
       parcelas: d.parcelas,
+      rateio: d.origem_tipo === "avulso" ? d.rateio : [],
     },
   });
 
@@ -230,6 +255,7 @@ export async function emitirFaturamento(
       qtd_itens: d.itens.length,
       qtd_parcelas: d.parcelas.length,
       agrupada: d.itens.length > 1,
+      regionais_no_rateio: d.rateio.length,
     },
   });
 

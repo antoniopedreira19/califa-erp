@@ -112,6 +112,9 @@ export interface FaturadoRow {
    *  parcela sintética com o total da NF, e uma nota 2× aparecia como
    *  1× (corrigido em 18/08/2026). */
   parcelas: Array<{ numero: number; valor: number; data_vencimento: string }>;
+  /** Rateio de regional da nota avulsa (decisão 086), para o formulário em
+   *  leitura. Vazio na nota de job ou de BV, que ficam na regional do job. */
+  rateio: Array<{ regional_nome: string; percentual: number }>;
   /** Jobs DISTINTOS que a nota cobre, na ordem dos itens — o botão `i`
    *  mostra a PO de cada um. Vazio no avulso. */
   jobs_cobertos: Array<{ job_id: string; codigo: string }>;
@@ -169,7 +172,8 @@ interface Props {
   empresas: Array<{ id: string; nome: string }>;
   clientes: Array<{ id: string; nome: string }>;
   fornecedores: Array<{ id: string; nome: string }>;
-  jobs: Array<{ id: string; codigo: string; nome: string }>;
+  /** Regionais do tenant, para o rateio da nota avulsa (decisão 086). */
+  regionais: Array<{ id: string; nome: string; ativo: boolean; empresa_id: string }>;
   proximoNf: string;
   /** PO, instrução do GP e contatos, por job — o conteúdo do botão `i`. */
   infoPorJob: Record<string, InfoJob>;
@@ -183,7 +187,7 @@ export function FaturamentoList({
   empresas,
   clientes,
   fornecedores,
-  jobs,
+  regionais,
   proximoNf,
   infoPorJob,
 }: Props) {
@@ -984,7 +988,7 @@ export function FaturamentoList({
           empresas={empresas}
           clientes={clientes}
           fornecedores={fornecedores}
-          jobs={jobs}
+          regionais={regionais}
           infoPorJob={infoPorJob}
           proximoNf={proximoNf}
         />
