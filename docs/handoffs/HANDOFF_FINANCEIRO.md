@@ -5415,6 +5415,7 @@ O par de lançamentos do **pagamento** da fatura (saída no banco, entrada na
 conta espelho) segue sendo transferência: sem regional e fora do DRE. Quem
 entra no DRE são as compras, uma a uma — e agora também o ajuste.
 
-**Pendência desta nota:** a assinatura antiga de `fechar_fatura_cartao`
-(`p_ajuste_tipo_id`, `p_ajuste_subtipo_id`, `p_ajuste_descricao`) continua no
-banco e sai numa migration própria depois que o código novo estiver no ar.
+A assinatura antiga de `fechar_fatura_cartao` (`p_ajuste_tipo_id`,
+`p_ajuste_subtipo_id`, `p_ajuste_descricao`) ficou no banco até o deploy de
+d229bbf e saiu em `20260916100001_fechar_fatura_sem_a_assinatura_antiga.sql`
+(16/09/2026). Só existe a assinatura com `p_ajustes`.
