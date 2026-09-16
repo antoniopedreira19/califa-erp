@@ -2,8 +2,8 @@
 
 **Data:** 2026-09-16
 **Decidido por:** Tiago
-**Migrations:** `20260916110001_nota_avulsa_nasce_com_rateio.sql` (aplicada) e
-`20260916110002_nota_avulsa_exige_rateio.sql` (entra depois do deploy)
+**Migrations:** `20260916110001_nota_avulsa_nasce_com_rateio.sql` e
+`20260916110002_nota_avulsa_exige_rateio.sql` (esta depois do deploy de ff395c7)
 
 Último lote da garantia de regional em todo lançamento, depois da
 [069](069-a-regional-do-job-e-a-fonte.md) (a regional vem do job), da
@@ -72,9 +72,11 @@ realizado saem divididos por regional.
   (com o estorno) de nota com rateio se dividem por ela. Troca por trecho
   exato, com a migration parando se a view tiver mudado por baixo.
 
-`20260916110002_nota_avulsa_exige_rateio.sql` — **aplicar só depois do
-deploy**: nota avulsa sem rateio não entra mais. Antes do deploy ela quebraria
-a emissão avulsa da versão no ar, que não manda rateio — a ordem que faltou
+`20260916110002_nota_avulsa_exige_rateio.sql` — aplicada em 16/09/2026,
+**depois** do deploy de ff395c7: nota avulsa sem rateio não entra mais, e o
+rateio de uma nota avulsa não pode ser zerado. Conferida no fim da transação,
+porque a nota nasce antes das linhas do rateio. Antes do deploy ela quebraria
+a emissão avulsa da versão no ar, que não mandava rateio — a ordem que faltou
 em 08/09/2026 e que a 084 seguiu.
 
 ## 5. Conferido em 16/09/2026
@@ -112,8 +114,13 @@ rateio ("Só a nota avulsa leva rateio de regional…") e regional de outra
 empresa, barrada pelo banco ("A regional Agency não é da empresa emissora da
 nota.").
 
+**A trava que exige o rateio**, testada em transação desfeita antes de
+aplicar e de novo depois: nota avulsa com rateio passou; sem rateio, recusada
+("Toda nota avulsa precisa de rateio de regional. Informe ao menos uma
+regional."); apagar todo o rateio da TESTE-086, recusado; nota de job sem
+rateio, seguiu passando.
+
 ## 6. O que ficou de fora
 
-- A migration que **exige** o rateio, esperando o deploy.
 - Os dados de teste da nota TESTE-086 (a nota, a baixa da parcela 1 e o PDF
   de teste no storage), esperando a decisão de apagar.
