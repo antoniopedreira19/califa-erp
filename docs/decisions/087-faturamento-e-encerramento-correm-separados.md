@@ -215,6 +215,48 @@ Por simulação no banco, numa transação desfeita (sem nota real):
 
 `tsc`, `next lint`, `next build` e os 81 testes limpos.
 
+### Segunda conferência, geral (16/09/2026, antes do push)
+
+- **Pop-up de encerramento no internacional com save** (JOB-0009, por rota
+  temporária já apagada, sem enviar nada): pendências em vermelho (PP-00060, o
+  BV da hospedagem, 3 itens), "Falta faturar" com o job ainda não enviado,
+  colunas Save usado · Save gerado · Custos do job abertas, cadeia
+  internacional em USD e BRL, "Save gerado USD 1.960,78 · R$ 10.000,00" no fim,
+  Resultado travado em "Realizada" e o botão desabilitado.
+- **Modo "ver" num job finalizado** (JOB-0033 com o estado simulado na mesma
+  rota): sem caixa de pendência nem de faturamento, só "Fechar", rodapé
+  "Finalizado em 16/09/2026: faturado e encerrado."; a trilha de Encerramento
+  mostra "Encerrado · por quem e quando" ao lado da trilha de Faturamento.
+- **"Ver envio" do encerramento no JOB-0034 real:** "Totais do trimestre",
+  rodapé "O faturamento deste job ainda está em andamento na fila do
+  financeiro."
+- **Lista de jobs:** selo "Encerrado" violeta no JOB-0034 e "Finalizado" no
+  filtro de status. **Visualizar Jobs do financeiro:** selo violeta.
+- **Fluxo de caixa do job (financeiro) no JOB-0034 encerrado:** entradas
+  previstas de R$ 16.701,88 em 11/2026, 12/2026 e 01/2027 — a
+  `vw_fluxo_caixa` enxerga o encerrado.
+- **Auditoria `job.finalizado` com usuário**, por simulação desfeita com
+  `request.jwt.claims` do Tiago: a nota do saldo grava
+  `{"momento": "emissao_da_nota", "faturamento_id": …}` e o encerramento de um
+  job já faturado grava `{"momento": "encerramento"}`, os dois com o
+  `actor_user_id`. Conferido depois: nenhuma nota nem auditoria restante.
+- **Banco, pelas definições:** a fila e as quatro previsões de recebimento do
+  fluxo aceitam `encerrado` e `finalizado`; o cronograma de desembolsos segue
+  só `aberto`/`em_producao`; nenhuma outra view, função ou policy filtra status
+  de job. Migrations registradas no Supabase como `job_status_finalizado`,
+  `encerramento_e_finalizado` e `encerrado_na_fila_e_no_fluxo`.
+- **Corrigido nesta conferência:** os cards "Jobs com faturamento próximo" da
+  home (administrador e GP) contavam `aberto`/`em_producao`, mas a lista que
+  eles abrem passou a mostrar `aberto`/`encerrado`. A contagem agora inclui o
+  `encerrado` (`lib/home/carregar.ts`). Nenhum job vence nos próximos 7 dias
+  hoje, então o número na tela não mudou.
+- `tsc`, `next lint` (só o aviso antigo do `multi-select`), `next build` e os
+  81 testes limpos de novo.
+
+**Não conferido na tela:** o pop-up num job **nacional** com save — não há job
+aberto assim no Projeto Teste (o JOB-0007 está aguardando abertura). O card é o
+mesmo componente que já abre as colunas de save no internacional.
+
 ## 7. Pendências
 
 - **Fluxo de confirmação do encerramento pelo financeiro** (regra 6) — a
@@ -223,10 +265,12 @@ Por simulação no banco, numa transação desfeita (sem nota real):
   envio registrado, critério anterior a esta decisão. O certo seria job aberto
   sem PP, BV, verba ou item pendente; o filtro `encerrar_pronto` da lista nunca
   foi implementado. Precisa de definição.
-- **A auditoria `job.finalizado` gravada pelos gatilhos** só foi conferida no
-  código: a simulação roda sem usuário, e nenhum job real ficou finalizado.
 - **Janela entre migration e deploy:** as migrations valem para o app que está
   no ar, que não conhece `finalizado`. Nenhum job aberto está todo faturado
   hoje, então nenhum deveria virar finalizado antes do deploy.
 - O centavo do JOB-0034 (meses R$ 50.105,64 × planilha R$ 50.105,63) é
   arredondamento anterior a esta decisão.
+- **Selo "Enviado" do mensal no Visualizar Jobs:** o JOB-0034, com 2 de 3 meses
+  enviados, aparece como "Enviado · R$ 33.403,76". É a esteira da decisão 078,
+  anterior a esta, e não foi mexida; fica a pergunta se o mês por enviar
+  deveria aparecer ali.

@@ -104,12 +104,14 @@ export async function carregarHomeAdmin(
       .select("id", { count: "exact", head: true })
       .eq("tenant_id", tenantId)
       .eq("status", "em_avaliacao"),
-    // jobs em andamento: "aberto" ou "em_producao" (enum real)
+    // jobs em andamento: "aberto" ou "em_producao" (enum real). O encerrado
+    // ainda fatura desde a decisão 087 (16/09/2026) e entra na conta, como na
+    // lista que o card abre (`/jobs?filtro=faturamento_proximo`).
     supabase
       .from("jobs")
       .select("id", { count: "exact", head: true })
       .eq("tenant_id", tenantId)
-      .in("status", ["aberto", "em_producao"])
+      .in("status", ["aberto", "em_producao", "encerrado"])
       .gte("data_prevista_faturamento", hoje)
       .lte("data_prevista_faturamento", em7dias),
     // orcamentos parados: "em_revisao" + "enviado_cliente" (enum real)
@@ -559,7 +561,8 @@ export async function carregarHomeGerenteProducao(
       .in("status", ["aberto", "encerrado"])
       .not("previsoes.mes", "is", null),
     // CONTEXTO: jobs proximos do vencimento nos meus projetos
-    // "aberto" + "em_producao" (enum real)
+    // "aberto" + "em_producao" (enum real) + "encerrado", que ainda fatura
+    // desde a decisão 087 (16/09/2026)
     semProjetos
       ? Promise.resolve({ count: 0 })
       : supabase
@@ -567,7 +570,7 @@ export async function carregarHomeGerenteProducao(
           .select("id", { count: "exact", head: true })
           .eq("tenant_id", tenantId)
           .in("projeto_id", projetoIds)
-          .in("status", ["aberto", "em_producao"])
+          .in("status", ["aberto", "em_producao", "encerrado"])
           .gte("data_prevista_faturamento", hoje)
           .lte("data_prevista_faturamento", em7dias),
     // CONTEXTO: mensagens no chat dos jobs onde participo
