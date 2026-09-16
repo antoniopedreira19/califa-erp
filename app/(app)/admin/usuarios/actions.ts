@@ -2,11 +2,24 @@
 
 import { revalidatePath, revalidateTag } from "next/cache";
 import { headers } from "next/headers";
+import { z } from "zod";
 import { createServiceClient } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { conviteSchema } from "@/lib/validations/convite";
 import type { AppRole } from "@/lib/types";
+
+const APP_ROLES = [
+  "administrador",
+  "gerente_producao",
+  "financeiro",
+  "produtor",
+  "freelancer",
+] as const;
+
+const roleSchema = z.enum(APP_ROLES, {
+  errorMap: () => ({ message: "Selecione um papel válido." }),
+});
 
 export type ActionResult =
   | { ok: true; id?: string; message?: string }
@@ -612,4 +625,134 @@ export async function atualizarPermissoes(
   revalidatePath("/admin/empresas");
 
   return { ok: true, message: "Permissões atualizadas." };
+}
+
+/**
+ * Altera o papel (role) de um usuário dentro do tenant ativo.
+ *
+ * Regras de segurança:
+ * 1. requireAdmin — só admin pode chamar.
+ * 2. Escopo por tenant — update é filtrado por tenant_id + user_id, para
+ *    evitar que admin de um tenant altere papel de usuário de outro.
+ * 3. Validação do valor com zod contra o enum AppRole.
+ * 4. Last-admin lockout — se a mudança tirar o último administrador ativo
+ *    do tenant, bloqueia com mensagem clara.
+ * 5. Auditoria com valor antes e depois.
+ *
+ * Mantém `profiles.role` em sincronia com `tenant_members.role` — MVP tem
+ * 1 tenant por usuário, mesmo padrão do fluxo de convite.
+ */
+export async function atualizarPapel(
+  userId: string,
+  novaRole: AppRole,
+): Promise<ActionResult> {
+  const session = await requireAdmin();
+  const tenantId = session.activeTenant.id;
+
+  if (typeof userId !== "string" || userId.length === 0) {
+    return { ok: false, message: "ID do usuário inválido." };
+  }
+
+  const parsed = roleSchema.safeParse(novaRole);
+  if (!parsed.success) {
+    return { ok: false, message: "Selecione um papel válido." };
+  }
+  const role = parsed.data;
+
+  const service = createServiceClient();
+
+  const { data: member, error: memberErr } = await service
+    .from("tenant_members")
+    .select("id, role, status")
+    .eq("tenant_id", tenantId)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (memberErr) {
+    console.error(
+      "[admin.usuarios.atualizarPapel.select-member]",
+      memberErr.message,
+    );
+    return { ok: false, message: "Não foi possível verificar o vínculo." };
+  }
+
+  if (!member) {
+    return { ok: false, message: "Usuário não pertence a este tenant." };
+  }
+
+  const papelAtual = member.role as AppRole;
+
+  if (papelAtual === role) {
+    return { ok: true, message: "Papel já está definido." };
+  }
+
+  // Last-admin lockout: se está saindo de administrador, garante que sobra
+  // pelo menos um administrador ativo no tenant.
+  if (papelAtual === "administrador") {
+    const { count, error: countErr } = await service
+      .from("tenant_members")
+      .select("id", { count: "exact", head: true })
+      .eq("tenant_id", tenantId)
+      .eq("role", "administrador")
+      .eq("status", "ativo");
+
+    if (countErr) {
+      console.error(
+        "[admin.usuarios.atualizarPapel.count-admins]",
+        countErr.message,
+      );
+      return {
+        ok: false,
+        message: "Não foi possível verificar o número de administradores.",
+      };
+    }
+
+    const adminsAtivos = count ?? 0;
+    const alvoContaComoAdmin = member.status === "ativo" ? 1 : 0;
+    if (adminsAtivos - alvoContaComoAdmin < 1) {
+      return {
+        ok: false,
+        message:
+          "Este é o último administrador ativo do tenant. Promova outro usuário a administrador antes de rebaixar este.",
+      };
+    }
+  }
+
+  const { error: updMemberErr } = await service
+    .from("tenant_members")
+    .update({ role })
+    .eq("tenant_id", tenantId)
+    .eq("user_id", userId);
+
+  if (updMemberErr) {
+    console.error(
+      "[admin.usuarios.atualizarPapel.update-member]",
+      updMemberErr.message,
+    );
+    return { ok: false, message: "Falha ao atualizar o papel." };
+  }
+
+  const { error: updProfileErr } = await service
+    .from("profiles")
+    .update({ role })
+    .eq("id", userId);
+  if (updProfileErr) {
+    console.warn(
+      "[admin.usuarios.atualizarPapel.sync-profile-role]",
+      updProfileErr.message,
+    );
+  }
+
+  await logAuditEvent({
+    acao: "usuario.papel_alterado",
+    tenantId,
+    entidadeTipo: "tenant_member",
+    entidadeId: userId,
+    metadata: { de: papelAtual, para: role },
+  });
+
+  revalidateTag(`user-permissions:${userId}`);
+  revalidatePath("/admin/usuarios");
+
+  return { ok: true, message: "Papel atualizado." };
 }
