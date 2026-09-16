@@ -1,0 +1,17 @@
+-- Remove a assinatura antiga de fechar_fatura_cartao (decisão 084).
+--
+-- A 20260915240001 criou a assinatura nova, com a diferença virando uma ou
+-- mais compras da fatura (p_ajustes jsonb), e deixou a antiga viva ao lado
+-- dela de propósito: a versão do app que estava no ar ainda chamava
+-- `p_ajuste_tipo_id`, `p_ajuste_subtipo_id` e `p_ajuste_descricao`, e tirar a
+-- função antes do deploy derrubaria o fechamento de fatura — foi o que
+-- aconteceu em 08/09/2026, quando a trava chegou antes do código.
+--
+-- O código novo foi para o main em d229bbf e o deploy da Vercel concluiu em
+-- 16/09/2026. Nenhum arquivo do app usa mais os parâmetros antigos.
+--
+-- Por que remover e não deixar: a assinatura antiga ainda fechava a fatura
+-- com o ajuste como lançamento solto, SEM regional — exatamente o buraco no
+-- DRE que a 084 fecha. Como toda RPC liberada para `authenticated`, ela era
+-- chamável direto do navegador.
+drop function public.fechar_fatura_cartao(uuid, numeric, uuid, uuid, text);

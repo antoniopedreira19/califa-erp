@@ -2,7 +2,7 @@
 
 **Data:** 2026-09-15
 **Decidido por:** Tiago
-**Migration:** `20260915240001_o_ajuste_da_fatura_vira_compra.sql`
+**Migrations:** `20260915240001_o_ajuste_da_fatura_vira_compra.sql`, `20260916100001_fechar_fatura_sem_a_assinatura_antiga.sql`
 
 Terceiro lote da garantia de regional em todo lançamento, depois da
 [069](069-a-regional-do-job-e-a-fonte.md) (a regional vem do job) e da
@@ -90,9 +90,12 @@ de fechar só libera quando bate.
 - GRANT para `authenticated`, nada para `anon`.
 
 A assinatura antiga (`p_ajuste_tipo_id`, `p_ajuste_subtipo_id`,
-`p_ajuste_descricao`) **fica no banco por ora** e sai numa migration própria,
-depois que o código que chama a nova estiver no ar. É a ordem que faltou em
-08/09/2026, quando a trava chegou antes do código e derrubou seis fluxos.
+`p_ajuste_descricao`) ficou no banco até o código novo estar no ar — é a ordem
+que faltou em 08/09/2026, quando a trava chegou antes do código e derrubou seis
+fluxos. Com o deploy de d229bbf concluído, ela saiu em
+`20260916100001_fechar_fatura_sem_a_assinatura_antiga.sql` (16/09/2026): ainda
+fechava a fatura com o ajuste solto e sem regional, e era chamável direto do
+navegador.
 
 ## 6. Conferido em 15/09/2026
 
