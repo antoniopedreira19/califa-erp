@@ -1221,7 +1221,7 @@ export default async function PedidosCompraFinanceiroPage({
   );
 
   return (
-    <div className="space-y-8 max-w-7xl mx-auto">
+    <div className="space-y-8">
       <PageHeader
         eyebrow="FINANCEIRO"
         title="Contas a Pagar"

@@ -490,12 +490,9 @@ export default async function OrcamentoDetailPage({
       ? `${formatDate(orcamento.data_inicio_prevista)} → ${formatDate(orcamento.data_fim_prevista)}`
       : null;
 
-  // 1370 e não max-w-7xl (1280): quando o "+BV" quadrado virou a pílula
-  // "Adicionar BV" a calha da direita passou de 64px para 154px, e os 90px
-  // a mais vieram da folga que sobrava nas laterais da tela — não da
-  // planilha.
+  // Sem largura própria: tela principal ocupa a largura do layout (decisão 085).
   return (
-    <div className="space-y-6 max-w-[1370px] mx-auto">
+    <div className="space-y-6">
       <div>
         <Link
           href={`/orcamentos/${params.projetoId}`}

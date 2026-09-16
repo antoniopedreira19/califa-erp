@@ -243,7 +243,7 @@ export default async function JobNoFinanceiroPage({
         )));
 
   return (
-    <div className="mx-auto max-w-[1452px] space-y-5 min-[1600px]:mr-6">
+    <div className="space-y-5">
       <div>
         <Link
           href="/financeiro/abertura-de-job?aba=abertos"

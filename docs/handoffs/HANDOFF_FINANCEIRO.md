@@ -5419,3 +5419,11 @@ A assinatura antiga de `fechar_fatura_cartao` (`p_ajuste_tipo_id`,
 `p_ajuste_subtipo_id`, `p_ajuste_descricao`) ficou no banco até o deploy de
 d229bbf e saiu em `20260916100001_fechar_fatura_sem_a_assinatura_antiga.sql`
 (16/09/2026). Só existe a assinatura com `p_ajustes`.
+
+## ⚠️ Nota de 2026-09-16 — as telas do financeiro perderam a largura própria (decisão 085)
+
+Contas a Pagar (era `max-w-7xl`, 1280px), Job e Projeto no financeiro (eram `max-w-[1452px]` com `min-[1600px]:mr-6`), Contas a Receber e Fluxo de Caixa (eram `max-w-[1560px]`) não têm mais `max-w` nem `mx-auto` no container: ocupam a largura do layout, cujo teto subiu no mesmo dia de 1600 para 1680px (1616px de conteúdo, em janela a partir de ~1756px).
+
+Medido em viewport de 1840px: as cinco telas com 1616px e sem rolagem horizontal. Em Títulos a Pagar, nenhuma célula truncada (o fornecedor "PRIME COMUNICACAO E MARKETING" cortava em 1280). A matriz do Fluxo de Caixa (1555px) passou a caber inteira, sem rolar dentro da caixa.
+
+**Ficaram de fora**, como pendência do Tiago: Desembolsos (1280px) e Cartões de Crédito (1024px), telas da frente do Antonio, e os detalhes de conta avulsa, recorrência e desembolso (1280px), que são páginas de leitura.

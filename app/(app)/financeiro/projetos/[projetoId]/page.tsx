@@ -155,7 +155,7 @@ export default async function ProjetoNoFinanceiroPage({
   }, {});
 
   return (
-    <div className="mx-auto flex max-w-[1452px] flex-col gap-6 min-[1600px]:mr-6">
+    <div className="flex flex-col gap-6">
       <div>
         <Link
           href="/financeiro/abertura-de-job?aba=abertos"

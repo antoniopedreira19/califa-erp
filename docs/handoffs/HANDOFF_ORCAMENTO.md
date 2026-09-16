@@ -3868,3 +3868,7 @@ Regras em [078](../decisions/078-orcamento-mensal-fee-e-always-on.md), seção "
 - A planilha real "INTERNA - DRE + Planilhas Ânima 2026.xlsx" lida por script: aba SUL (com aviso das abas SP, NENO e MGRJ), 12 meses, EQUIPE e VERBA por mês.
 
 **QT 0 vale (decisão do Tiago, 15/09/2026):** na planilha interna, QT 0 marca item listado sem cobrança no mês. A migration `20260915100001` trocou `itens_quantidade_positiva` (> 0) por `itens_quantidade_nao_negativa` (>= 0); `itemSchema` aceita zero e os dois parsers deixaram de trocar 0 por 1 (só QT negativo vira 1). O padrão de item novo continua 1; D/M segue > 0; a quantidade da PP não mudou. Teste em `mensal.test.ts`.
+
+## ⚠️ Nota de 2026-09-16 — as telas de projeto e de orçamento perderam a largura própria (decisão 085)
+
+`/orcamentos/[projetoId]` (era `max-w-7xl`, 1280px) e `/orcamentos/[projetoId]/[orcId]` (era `max-w-[1370px]`) não têm mais `max-w` nem `mx-auto` no container: ocupam a largura do layout, cujo teto subiu no mesmo dia de 1600 para 1680px (1616px de conteúdo). A regra de larguras de `docs/09-identidade-visual-ui.md` foi revista junto — tela principal não define largura; formulário continua `max-w-3xl`. Medido em viewport de 1840px no `0-0001/26`: as duas telas com 1616px e sem rolagem horizontal (com o teto antigo, a planilha do orçamento tinha 1410px e a calha ficava dentro da página).

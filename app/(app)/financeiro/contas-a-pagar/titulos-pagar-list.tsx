@@ -646,7 +646,7 @@ export function TitulosPagarList({
         )}
       </div>
 
-      {/* Tabela — table-fixed para caber no max-w-7xl sem scroll horizontal.
+      {/* Tabela — table-fixed para caber na largura da página sem scroll horizontal.
           Larguras em % para escalar com o container; Título e Fornecedor
           absorvem sobra e truncam quando precisa. */}
       <div className="rounded-2xl border border-border bg-card shadow-soft">
