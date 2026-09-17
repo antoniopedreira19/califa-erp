@@ -348,6 +348,10 @@ A conta é pelo que a lista pode ter em produção, não pelo que ela tem hoje.
   curto do cliente, que não pode ficar à vista porque um cliente pode ter
   mais de um CNPJ, logo mais de um código.
 - Campo sem `<Label>` ao lado leva `ariaLabel`.
+- O ✕ de limpar e a seta do gatilho andam **juntos, colados na direita**:
+  soltos como irmãos do texto, o `justify-between` espalha os três e o ✕
+  para no meio do campo com qualquer nome curto (corrigido em 17/09/2026,
+  depois de aparecer assim no Cliente e no Fornecedor da PP).
 - A célula de seleção da planilha não muda: ela está amarrada à navegação
   por teclado da decisão 046.
 
