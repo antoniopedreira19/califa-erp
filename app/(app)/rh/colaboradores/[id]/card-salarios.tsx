@@ -14,6 +14,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DatePicker } from "@/components/ui/date-picker";
+import { MoedaInput } from "@/components/ui/moeda-input";
 import type { ColaboradorSalario } from "@/lib/types";
 import {
   registrarMudancaSalarial,
@@ -111,14 +112,8 @@ export function CardSalarios({
 
             <form onSubmit={handleMudanca} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="valor">Novo valor mensal (R$)</Label>
-                <Input
-                  id="valor"
-                  name="valor"
-                  required
-                  inputMode="decimal"
-                  placeholder="3000,00"
-                />
+                <Label htmlFor="valor">Novo valor mensal</Label>
+                <MoedaInput id="valor" name="valor" required />
               </div>
 
               <div className="space-y-2">
@@ -254,13 +249,12 @@ export function CardSalarios({
             </DialogHeader>
             <form onSubmit={handleCorrigir} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="valor">Novo valor mensal (R$)</Label>
-                <Input
+                <Label htmlFor="valor">Novo valor mensal</Label>
+                <MoedaInput
                   id="valor"
                   name="valor"
                   required
-                  inputMode="decimal"
-                  defaultValue={vigente ? formatarInputMoeda(vigente.valor) : ""}
+                  defaultValue={vigente ? String(vigente.valor) : ""}
                 />
               </div>
               {error && (
@@ -307,10 +301,3 @@ function formatarMoeda(valor: string | number): string {
   }).format(n);
 }
 
-function formatarInputMoeda(valor: string): string {
-  const n = Number(valor);
-  return new Intl.NumberFormat("pt-BR", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(n);
-}
