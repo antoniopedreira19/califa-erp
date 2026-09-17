@@ -103,6 +103,10 @@ duplicar.
 - **`BaixaLoteCartaoDialog`** (`app/(app)/financeiro/contas-a-pagar/baixa-lote-cartao-dialog.tsx`)
   recebeu a mesma troca, mas **nenhuma tela o importa** — é componente
   órfão. Fica registrado para remoção.
+  ⚠️ **17/09/2026:** removido, junto com a action `darBaixaLoteCartao`
+  (`actions-cartao.ts`), que só ele chamava. A troca para Combobox foi junto
+  e não faz falta — a baixa da fatura de cartão sai hoje por "Fechar fatura"
+  mais o `baixa-titulo-dialog`.
 - **Editar PP de verba**: o campo Responsável só aparece em PP de verba, e
   o botão Editar só em PP rejeitada. Não existe PP de verba rejeitada no
   banco, então esse caminho não foi exercitado na tela — o bloco é o mesmo
