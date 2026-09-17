@@ -72,6 +72,32 @@ se perde. É o mesmo que o link "Cadastrar agora" já fazia. O cadastro
 rápido de cliente e de marca dentro do próprio formulário está desenhado e
 aguarda decisão — quando entrar, ele substitui esse salto.
 
+⚠️ **17/09/2026, ainda no mesmo dia — o Tiago já decidiu o destino final
+do "+":** ele não vai levar para a ficha do cliente. Vai abrir o **dialog
+de cadastro rápido**, na seção Marcas, igual ao "+" do fornecedor na PP.
+A navegação atual é provisória e cai junto com a entrega do dialog.
+
+## 4b. Todo cliente tem marca padrão — agora garantido pelo banco
+
+⚠️ **17/09/2026.** O número dos 150 clientes sem marca levou à segunda
+decisão do dia: *"isso nunca deveria acontecer, porque todo cliente deve
+ser cadastrado com uma marca padrão"*. Duas migrations:
+
+- `20260917160001_marca_padrao_para_clientes_antigos.sql` — backfill.
+  Criou a PRD-01 (nome = nome fantasia) para os 150 clientes que estavam
+  sem nenhuma. Depois dela: 157 clientes, 157 marcas padrão, zero sem.
+- `20260917160002_marca_padrao_nasce_com_o_cliente.sql` — o trigger
+  `trg_clientes_marca_padrao`, que cria a PRD-01 na MESMA transação do
+  INSERT do cliente.
+
+Antes disso, quem criava a marca padrão era só a server action, em dois
+INSERTs sem transação: o segundo falhando deixava cliente sem marca, e
+qualquer caminho fora daquele formulário nascia torto. Regra crítica não
+mora só no frontend (CLAUDE.md). A action continua criando as marcas
+extras (PRD-02+) e agora **encontra** a padrão em vez de criá-la — com um
+insert de reserva, que os índices únicos já existentes impedem de
+duplicar.
+
 ## 5. O que ficou de fora
 
 - **`BaixaLoteCartaoDialog`** (`app/(app)/financeiro/contas-a-pagar/baixa-lote-cartao-dialog.tsx`)
