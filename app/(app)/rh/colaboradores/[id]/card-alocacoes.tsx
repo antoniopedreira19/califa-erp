@@ -433,6 +433,7 @@ function agruparHistorico(
   chave: string;
   data_inicio: string;
   data_fim: string | null;
+  ultimo_created_at: string;
   linhas: AlocacaoRow[];
 }[] {
   const mapa = new Map<
@@ -441,22 +442,33 @@ function agruparHistorico(
       chave: string;
       data_inicio: string;
       data_fim: string | null;
+      ultimo_created_at: string;
       linhas: AlocacaoRow[];
     }
   >();
   for (const l of linhas) {
     const chave = `${l.data_inicio}__${l.data_fim ?? "vigente"}`;
-    if (!mapa.has(chave)) {
+    const atual = mapa.get(chave);
+    if (!atual) {
       mapa.set(chave, {
         chave,
         data_inicio: l.data_inicio,
         data_fim: l.data_fim,
-        linhas: [],
+        ultimo_created_at: l.created_at,
+        linhas: [l],
       });
+    } else {
+      atual.linhas.push(l);
+      if (l.created_at > atual.ultimo_created_at) {
+        atual.ultimo_created_at = l.created_at;
+      }
     }
-    mapa.get(chave)!.linhas.push(l);
   }
-  return Array.from(mapa.values()).sort((a, b) =>
-    b.data_inicio.localeCompare(a.data_inicio),
-  );
+  // Ordena por data_inicio DESC; empate resolve por created_at DESC (mais
+  // recente primeiro). Necessário quando dois swaps caem no mesmo dia.
+  return Array.from(mapa.values()).sort((a, b) => {
+    const porData = b.data_inicio.localeCompare(a.data_inicio);
+    if (porData !== 0) return porData;
+    return b.ultimo_created_at.localeCompare(a.ultimo_created_at);
+  });
 }

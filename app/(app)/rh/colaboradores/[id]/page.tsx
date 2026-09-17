@@ -46,13 +46,15 @@ export default async function ColaboradorDetalhePage({
         )
         .eq("colaborador_id", params.id)
         .eq("tenant_id", session.activeTenant.id)
-        .order("data_inicio", { ascending: false }),
+        .order("data_inicio", { ascending: false })
+        .order("created_at", { ascending: false }),
       supabase
         .from("colaboradores_salarios")
         .select("*")
         .eq("colaborador_id", params.id)
         .eq("tenant_id", session.activeTenant.id)
-        .order("data_inicio", { ascending: false }),
+        .order("data_inicio", { ascending: false })
+        .order("created_at", { ascending: false }),
       supabase
         .from("empresas")
         .select("id, nome_fantasia")
@@ -117,9 +119,6 @@ export default async function ColaboradorDetalhePage({
           Voltar para colaboradores
         </Link>
         <header className="mt-3">
-          <p className="text-xs font-semibold uppercase tracking-wider text-california-red mb-1">
-            RH · Colaborador
-          </p>
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div>
               <div className="flex items-center gap-3 flex-wrap">
