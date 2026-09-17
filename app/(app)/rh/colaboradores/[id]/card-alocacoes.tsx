@@ -330,64 +330,85 @@ export function CardAlocacoes({
         </Dialog>
       </div>
 
-      {/* Vigentes */}
+      {/* Timeline unificada: vigentes em destaque + histórico agrupado por período */}
       <div className="mt-5">
-        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-          Vigentes
-        </p>
-        {vigentes.length === 0 ? (
-          <p className="mt-2 text-sm text-muted-foreground">
-            Sem alocação vigente.
+        {alocacoes.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            Nenhuma alocação registrada ainda.
           </p>
         ) : (
-          <ul className="mt-2 space-y-1.5">
-            {vigentes.map((a) => (
-              <li
-                key={a.id}
-                className="flex items-center justify-between rounded-lg border border-border bg-background px-3 py-2 text-sm"
-              >
-                <span>
-                  <span className="font-medium">{a.empresa.nome_fantasia}</span>{" "}
-                  <span className="text-muted-foreground">
-                    · {a.regional.nome}
+          <ol className="space-y-2">
+            {/* Bloco vigente (destaque) */}
+            {vigentes.length > 0 && (
+              <li className="rounded-xl border-2 border-california-red/40 bg-california-red/5 px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-california-red px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white">
+                    <span className="h-1.5 w-1.5 rounded-full bg-white" />
+                    Vigente
                   </span>
-                </span>
-                <span className="font-semibold tabular-nums text-california-red">
-                  {Number(a.percentual).toFixed(2).replace(".", ",")}%
-                </span>
+                  <span className="text-xs text-muted-foreground">
+                    desde{" "}
+                    {formatarData(
+                      vigentes
+                        .map((v) => v.data_inicio)
+                        .sort()
+                        .reverse()[0]!,
+                    )}
+                  </span>
+                </div>
+                <ul className="mt-2 space-y-1">
+                  {vigentes.map((a) => (
+                    <li
+                      key={a.id}
+                      className="flex items-center justify-between rounded-lg bg-white/60 px-3 py-1.5 text-sm"
+                    >
+                      <span>
+                        <span className="font-medium">
+                          {a.empresa.nome_fantasia}
+                        </span>{" "}
+                        <span className="text-muted-foreground">
+                          · {a.regional.nome}
+                        </span>
+                      </span>
+                      <span className="font-semibold tabular-nums text-california-red">
+                        {Number(a.percentual).toFixed(2).replace(".", ",")}%
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </li>
+            )}
+
+            {/* Grupos históricos: agrupa linhas por (data_inicio, data_fim) */}
+            {agruparHistorico(historico).map((grupo) => (
+              <li
+                key={grupo.chave}
+                className="rounded-lg border border-border bg-muted/20 px-4 py-2.5"
+              >
+                <p className="text-xs tabular-nums text-muted-foreground">
+                  {formatarData(grupo.data_inicio)} →{" "}
+                  {grupo.data_fim ? formatarData(grupo.data_fim) : "vigente"}
+                </p>
+                <ul className="mt-1 space-y-0.5">
+                  {grupo.linhas.map((a) => (
+                    <li
+                      key={a.id}
+                      className="flex items-center justify-between text-xs text-muted-foreground"
+                    >
+                      <span>
+                        {a.empresa.nome_fantasia} · {a.regional.nome}
+                      </span>
+                      <span className="tabular-nums font-medium">
+                        {Number(a.percentual).toFixed(2).replace(".", ",")}%
+                      </span>
+                    </li>
+                  ))}
+                </ul>
               </li>
             ))}
-          </ul>
+          </ol>
         )}
       </div>
-
-      {/* Histórico */}
-      {historico.length > 0 && (
-        <div className="mt-5">
-          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            Histórico
-          </p>
-          <ul className="mt-2 space-y-1.5">
-            {historico.map((a) => (
-              <li
-                key={a.id}
-                className="flex items-center justify-between rounded-lg border border-dashed border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground"
-              >
-                <span>
-                  {a.empresa.nome_fantasia} · {a.regional.nome} ·{" "}
-                  <span className="tabular-nums">
-                    {Number(a.percentual).toFixed(2).replace(".", ",")}%
-                  </span>
-                </span>
-                <span className="tabular-nums">
-                  {formatarData(a.data_inicio)} →{" "}
-                  {a.data_fim ? formatarData(a.data_fim) : "vigente"}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
     </div>
   );
 }
@@ -396,4 +417,46 @@ function formatarData(iso: string): string {
   const [ano, mes, dia] = iso.split("-");
   if (!ano || !mes || !dia) return iso;
   return `${dia}/${mes}/${ano}`;
+}
+
+/**
+ * Agrupa linhas históricas de alocação por (data_inicio, data_fim). Cada
+ * swap atômico gera N linhas com o mesmo par de datas — juntas elas
+ * formam o "estado" da alocação naquele período. Se alguém tiver inserido
+ * linhas isoladas (sem swap), elas caem em grupos próprios.
+ *
+ * Retorna ordenado por data_inicio DESC (mais recente no topo).
+ */
+function agruparHistorico(
+  linhas: AlocacaoRow[],
+): {
+  chave: string;
+  data_inicio: string;
+  data_fim: string | null;
+  linhas: AlocacaoRow[];
+}[] {
+  const mapa = new Map<
+    string,
+    {
+      chave: string;
+      data_inicio: string;
+      data_fim: string | null;
+      linhas: AlocacaoRow[];
+    }
+  >();
+  for (const l of linhas) {
+    const chave = `${l.data_inicio}__${l.data_fim ?? "vigente"}`;
+    if (!mapa.has(chave)) {
+      mapa.set(chave, {
+        chave,
+        data_inicio: l.data_inicio,
+        data_fim: l.data_fim,
+        linhas: [],
+      });
+    }
+    mapa.get(chave)!.linhas.push(l);
+  }
+  return Array.from(mapa.values()).sort((a, b) =>
+    b.data_inicio.localeCompare(a.data_inicio),
+  );
 }
