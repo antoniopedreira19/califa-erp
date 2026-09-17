@@ -176,69 +176,70 @@ export function CardSalarios({
       </div>
 
       <div className="mt-5">
-        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-          Vigente
-        </p>
-        {vigente ? (
-          <div className="mt-2 flex items-center justify-between rounded-lg border border-border bg-background px-3 py-2 text-sm">
-            <div>
-              <span className="font-semibold text-lg tabular-nums text-foreground">
-                {formatarMoeda(vigente.valor)}
-              </span>
-              <span className="ml-2 text-xs text-muted-foreground">
-                desde {formatarData(vigente.data_inicio)}
-              </span>
-            </div>
-            {isAdmin && (
-              <button
-                type="button"
-                onClick={() => {
-                  setError(null);
-                  setOpenCorrigir(true);
-                }}
-                className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-                title="Corrigir digitação (não gera histórico — apenas admin)"
-              >
-                <Pencil className="h-3 w-3" />
-                Corrigir
-              </button>
-            )}
-          </div>
+        {!vigente && historico.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            Nenhum salário registrado ainda.
+          </p>
         ) : (
-          <p className="mt-2 text-sm text-muted-foreground">
-            Sem salário vigente registrado.
-          </p>
-        )}
-      </div>
+          <ol className="relative space-y-2">
+            {vigente && (
+              <li className="rounded-xl border-2 border-california-red/40 bg-california-red/5 px-4 py-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-california-red px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white">
+                      <span className="h-1.5 w-1.5 rounded-full bg-white" />
+                      Vigente
+                    </span>
+                    <div className="mt-2 text-2xl font-bold tabular-nums text-foreground">
+                      {formatarMoeda(vigente.valor)}
+                    </div>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      Desde {formatarData(vigente.data_inicio)}
+                      {vigente.motivo ? ` · ${vigente.motivo}` : ""}
+                    </p>
+                  </div>
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setError(null);
+                        setOpenCorrigir(true);
+                      }}
+                      className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-white/70 hover:text-foreground transition-colors"
+                      title="Corrigir digitação (não gera histórico — apenas admin)"
+                    >
+                      <Pencil className="h-3 w-3" />
+                      Corrigir
+                    </button>
+                  )}
+                </div>
+              </li>
+            )}
 
-      {historico.length > 0 && (
-        <div className="mt-5">
-          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            Histórico
-          </p>
-          <ul className="mt-2 space-y-1.5">
             {historico.map((s) => (
               <li
                 key={s.id}
-                className="flex items-center justify-between rounded-lg border border-dashed border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground"
+                className="rounded-lg border border-border bg-muted/20 px-4 py-2.5"
               >
-                <span className="tabular-nums">
-                  <span className="font-medium text-foreground">
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="text-base font-semibold tabular-nums text-foreground">
                     {formatarMoeda(s.valor)}
                   </span>
-                  {s.motivo && (
-                    <span className="ml-2">· {s.motivo}</span>
-                  )}
-                </span>
-                <span className="tabular-nums">
-                  {formatarData(s.data_inicio)} →{" "}
-                  {s.data_fim ? formatarData(s.data_fim) : "vigente"}
-                </span>
+                  <span className="text-xs tabular-nums text-muted-foreground">
+                    {formatarData(s.data_inicio)} →{" "}
+                    {s.data_fim ? formatarData(s.data_fim) : "vigente"}
+                  </span>
+                </div>
+                {s.motivo && (
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {s.motivo}
+                  </p>
+                )}
               </li>
             ))}
-          </ul>
-        </div>
-      )}
+          </ol>
+        )}
+      </div>
 
       {/* Modal de correção (só admin) */}
       {isAdmin && (
