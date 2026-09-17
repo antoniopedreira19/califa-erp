@@ -4,6 +4,8 @@ import {
   type ParametrosInternacionais,
 } from "@/lib/calculos/versao-totais";
 import {
+  AZUL_IDENT,
+  AZUL_ORCADO,
   COLUNA_CONSUMIDO,
   COLUNA_ID,
   MARCA_GRUPO,
@@ -54,10 +56,10 @@ import {
  * pelo ERP — um número certo parado é melhor que uma fórmula errada viva.
  */
 
-const AZUL = "FF3D85C6";
-const CINZA = "FFD9D9D9";
-const AMARELO = "FFFFFF00";
-const CREME = "FFFFF2CC";
+// Tons do modelo, um por parte (decisão 088): o amarelo do INVOICING e da
+// linha USD · BRL e o creme da cotação saíram a pedido do Tiago em
+// 17/09/2026 — o destaque do fechamento já vem do negrito e da faixa.
+const AZUL = AZUL_ORCADO;
 const BRANCO = "FFFFFFFF";
 const PRETO = "FF000000";
 const BORDA: Partial<ExcelJS.Borders> = {
@@ -154,7 +156,7 @@ function formatoDaMoeda(codigo: string): string {
 }
 
 /** Como o rodapé do modelo chama a cotação: "Dolar 02/06/26", "Libra 10/09". */
-function nomeDaMoeda(codigo: string): string {
+export function nomeDaMoeda(codigo: string): string {
   switch (codigo) {
     case "USD":
       return "Dólar";
@@ -258,10 +260,13 @@ export function adicionarAbaOrcamentoInternacional(
   const celulasDaMoeda: { linha: number; coluna: "C" | "F"; brl: number }[] = [];
 
   // -------- Linha 1: nome --------
+  // A faixa do nome é a identificação da planilha, e usa o tom das colunas
+  // PLANILHA e ITEM. A internacional do cliente segue sem "Cliente:" e sem
+  // a linha ORÇAMENTO, como a decisão 072 definiu.
   ws.getRow(1).values = [dados.nome, "", "", "", "", "", ""];
   ws.mergeCells("A1:G1");
   ws.getRow(1).height = 22;
-  pintar(ws.getCell("A1"), { fundo: AZUL, negrito: true, cor: BRANCO, tamanho: 12 });
+  pintar(ws.getCell("A1"), { fundo: AZUL_IDENT, negrito: true, cor: BRANCO, tamanho: 12 });
   const unica = dados.secoes.length === 1 ? dados.secoes[0] : null;
   if (unica && unica.titulo === undefined && unica.orcamentoId) {
     ws.getCell(1, COLUNA_ID).value = [
@@ -278,7 +283,7 @@ export function adicionarAbaOrcamentoInternacional(
   header.height = 20;
   for (let col = 1; col <= 7; col++) {
     pintar(header.getCell(col), {
-      fundo: AZUL,
+      fundo: col <= 2 ? AZUL_IDENT : AZUL,
       negrito: true,
       cor: BRANCO,
       horizontal: col <= 2 ? "left" : "center",
@@ -335,8 +340,9 @@ export function adicionarAbaOrcamentoInternacional(
       gRow.height = 20;
       for (let col = 1; col <= 7; col++) {
         pintar(gRow.getCell(col), {
-          fundo: CINZA,
+          fundo: col <= 2 ? AZUL_IDENT : AZUL,
           negrito: true,
+          cor: BRANCO,
           formato: col === 3 ? formatoMoeda : col === 7 ? FORMATO_BRL : undefined,
           horizontal: col === 3 || col === 7 ? "right" : undefined,
         });
@@ -350,7 +356,8 @@ export function adicionarAbaOrcamentoInternacional(
       const primeiroItem = gRow.number + 1;
       for (const it of grupo.itens) {
         const row = ws.addRow([
-          "",
+          // A coluna A repete o grupo em cada item (decisão 088).
+          grupo.nome,
           it.item,
           null,
           it.valor_unitario_orcado,
@@ -500,12 +507,14 @@ export function adicionarAbaOrcamentoInternacional(
   for (const l of linhasDoFechamento) {
     const row = ws.addRow(["", "", l.rotulo, "", "", null, l.valor]);
     row.height = 20;
+    ws.mergeCells(`A${row.number}:B${row.number}`);
     ws.mergeCells(`C${row.number}:E${row.number}`);
+    pintar(row.getCell(1), { fundo: AZUL_IDENT });
     pintar(row.getCell(3), { fundo: AZUL, negrito: true, cor: BRANCO, horizontal: "left" });
     pintar(row.getCell(6), {
-      fundo: l.chave === "invoicing" ? AMARELO : AZUL,
+      fundo: AZUL,
       negrito: true,
-      cor: l.chave === "invoicing" ? PRETO : BRANCO,
+      cor: BRANCO,
       formato: formatoMoeda,
       horizontal: "right",
     });
@@ -520,9 +529,16 @@ export function adicionarAbaOrcamentoInternacional(
     linha[l.chave] = row.number;
   }
 
+  // Só as duas células da legenda ficam pintadas, como o Tiago pediu em
+  // 17/09/2026 — o resto da linha fica limpo.
   const legenda = ws.addRow(["", "", "", "", "", cambio.moeda, "BRL"]);
   for (const col of [6, 7]) {
-    pintar(legenda.getCell(col), { fundo: AMARELO, negrito: true, horizontal: "center" });
+    pintar(legenda.getCell(col), {
+      fundo: AZUL,
+      negrito: true,
+      cor: BRANCO,
+      horizontal: "center",
+    });
   }
 
   // -------- Câmbio --------
@@ -530,7 +546,7 @@ export function adicionarAbaOrcamentoInternacional(
   if (cambio.cotacao !== null) {
     const r = ws.addRow([`${nomeDaMoeda(cambio.moeda)} ${dataCurta(cambio.data)}`.trim(), cambio.cotacao]);
     pintar(r.getCell(1), {});
-    pintar(r.getCell(2), { fundo: CREME, formato: FORMATO_TAXA, horizontal: "right" });
+    pintar(r.getCell(2), { formato: FORMATO_TAXA, horizontal: "right" });
   }
   const linhaCompra = ws.addRow(["COMPRA", compra ?? ""]);
   pintar(linhaCompra.getCell(1), {});

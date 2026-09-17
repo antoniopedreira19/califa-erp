@@ -70,6 +70,12 @@ interface Props {
  *
  * A seleção é só desta tela: a página do projeto e a visão agregada têm
  * cada uma a sua, e nada é salvo.
+ *
+ * **Para o cliente ou Interna** (decisão 088, 17/09/2026). A interna traz
+ * o orçado e o planejado, fecha no valor do job e **aceita job aberto**:
+ * ali a planilha é a do orçamento aprovado, que é o que se olha
+ * internamente quando o job já existe. O realizado sai pelo Exportar do
+ * próprio job.
  */
 export function ExportarOrcamentosMenu({ projetoId, orcamentos }: Props) {
   const exportaveis = React.useMemo(
@@ -77,6 +83,8 @@ export function ExportarOrcamentosMenu({ projetoId, orcamentos }: Props) {
     [orcamentos],
   );
   const [aberto, setAberto] = React.useState(false);
+  const [modo, setModo] = React.useState<"cliente" | "interna">("cliente");
+  const interna = modo === "interna";
   const [confirmando, setConfirmando] = React.useState(false);
   const [selecionados, setSelecionados] = React.useState<string[]>(() =>
     exportaveis.map((o) => o.id),
@@ -104,7 +112,8 @@ export function ExportarOrcamentosMenu({ projetoId, orcamentos }: Props) {
     (o) => o.modeloPlanilha === "internacional",
   );
   const mensaisMarcados = marcados.filter((o) => o.modeloPlanilha === "mensal");
-  const travadoPorAberto = abertos.length > 0;
+  // Job aberto só trava a planilha do cliente.
+  const travadoPorAberto = abertos.length > 0 && !interna;
   // Pelo conjunto de modelos, e não por "tem internacional": a regra é não
   // misturar, e um modelo novo amanhã entra nela sem mexer aqui.
   const travadoPorMistura =
@@ -116,9 +125,10 @@ export function ExportarOrcamentosMenu({ projetoId, orcamentos }: Props) {
   const travado = travadoPorAberto || travadoPorMistura || travadoPorCambio;
   const semSelecao = marcados.length === 0;
 
-  const href = `/api/orcamentos/${projetoId}/export?orcamentos=${marcados
-    .map((o) => encodeURIComponent(o.id))
-    .join(",")}`;
+  const href =
+    `/api/orcamentos/${projetoId}/export?orcamentos=${marcados
+      .map((o) => encodeURIComponent(o.id))
+      .join(",")}` + (interna ? "&modo=interna" : "");
 
   function alternar(id: string) {
     setSelecionados((atuais) =>
@@ -136,7 +146,9 @@ export function ExportarOrcamentosMenu({ projetoId, orcamentos }: Props) {
 
   function exportar() {
     if (travado || semSelecao) return;
-    if (aprovados.length > 0) {
+    // A confirmação existe para não mandar ao cliente o que ele já
+    // aprovou. Na interna a versão aprovada é justamente o que se quer.
+    if (aprovados.length > 0 && !interna) {
       setConfirmando(true);
       return;
     }
@@ -222,6 +234,24 @@ export function ExportarOrcamentosMenu({ projetoId, orcamentos }: Props) {
             </div>
           ) : (
             <>
+              <div className="mx-1.5 mt-1.5 grid grid-cols-2 gap-1 rounded-lg bg-[#f1f1ef] p-1">
+                {(["cliente", "interna"] as const).map((valor) => (
+                  <button
+                    key={valor}
+                    type="button"
+                    onClick={() => setModo(valor)}
+                    className={cn(
+                      "rounded-md px-2 py-1 text-[11.5px] font-semibold transition-colors",
+                      modo === valor
+                        ? "bg-white text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {valor === "cliente" ? "Para o cliente" : "Interna"}
+                  </button>
+                ))}
+              </div>
+
               <div className="p-1.5">
                 {orcamentos.length === 0 && (
                   <p className="px-2 py-3 text-[12px] text-muted-foreground">
@@ -235,7 +265,7 @@ export function ExportarOrcamentosMenu({ projetoId, orcamentos }: Props) {
                     <LinhaOrcamento
                       key={o.id}
                       marcado={marcado}
-                      alerta={marcado && o.estagio === "aberto"}
+                      alerta={marcado && o.estagio === "aberto" && !interna}
                       desabilitado={semVersao}
                       rotulo={rotuloDaLinha(o)}
                       chip={estagioFunilLabel(o.estagio)}
@@ -248,10 +278,23 @@ export function ExportarOrcamentosMenu({ projetoId, orcamentos }: Props) {
                   );
                 })}
                 <p className="mx-1.5 mb-1 mt-0.5 text-[10.5px] leading-relaxed text-muted-foreground">
-                  Uma planilha só: os orçamentos marcados entram em sequência,
-                  com um fechamento único — para o cliente, um orçamento. O
-                  valor é o FATURAMENTO de cada um: linhas em save incluídas
-                  e o que é pago com crédito de outro job já abatido.
+                  {interna ? (
+                    <>
+                      A planilha interna traz o orçado e o planejado de cada
+                      orçamento, com rentabilidade e resultado operacional, e
+                      fecha no valor do job. Não enviar ao cliente. O valor ao
+                      lado continua sendo o faturamento de cada um, como na
+                      página do projeto.
+                    </>
+                  ) : (
+                    <>
+                      Uma planilha só: os orçamentos marcados entram em
+                      sequência, com um fechamento único — para o cliente, um
+                      orçamento. O valor é o FATURAMENTO de cada um: linhas em
+                      save incluídas e o que é pago com crédito de outro job já
+                      abatido.
+                    </>
+                  )}
                 </p>
               </div>
 
@@ -284,6 +327,20 @@ export function ExportarOrcamentosMenu({ projetoId, orcamentos }: Props) {
                         : "Desmarcar jobs abertos"}
                     </button>
                   </div>
+                </div>
+              )}
+
+              {interna && abertos.length > 0 && (
+                <div className="mx-2 mb-2 flex gap-2 rounded-lg border border-border bg-[#fafafa] px-2.5 py-2">
+                  <AlertTriangle className="mt-0.5 h-[13px] w-[13px] flex-none text-amber-700" />
+                  <span className="text-[11.5px] leading-relaxed text-muted-foreground [text-wrap:pretty]">
+                    {nomes(abertos)}{" "}
+                    {abertos.length === 1 ? "já é um job aberto" : "já são jobs abertos"}
+                    : {abertos.length === 1 ? "sai" : "saem"} com o orçado e o
+                    planejado da versão aprovada, sem o realizado, e não{" "}
+                    {abertos.length === 1 ? "volta" : "voltam"} pelo Importar. O
+                    realizado sai pelo Exportar do job.
+                  </span>
                 </div>
               )}
 
