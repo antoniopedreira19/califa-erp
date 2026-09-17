@@ -3959,3 +3959,73 @@ do cliente com vários orçamentos). Testes em
 
 **Permissão:** `orcamentos.exportar` para a interna do orçamento, conferida
 na rota (a planilha do cliente segue sem checagem própria, como era).
+
+---
+
+## ⚠️ Correção (2026-09-17) — o GP não conseguia enviar job para abertura
+
+**Relato:** um GP abriu "Enviar job para abertura" no orçamento
+`AMB-0003/26-01`, não conseguiu concluir e mandou um print com campos em
+vermelho. Conferido no navegador **logado com o papel `gerente_producao`**
+(não como administrador) — é o que revelou a causa.
+
+**O que ele via, e ninguém mais:**
+
+- `GP Responsável` e `Produtor Responsável` como "— não informado";
+- a faixa âmbar "Complete antes de abrir o job: GP responsável (no
+  orçamento), Produtor responsável (no orçamento)";
+- **"Confirmar dados" inerte**: `handleConfirmar` sai cedo quando
+  `herdadosIncompletos` devolve algo, e a faixa fica no fim de um
+  formulário que rola — longe do botão. Sem mensagem, sem toast.
+
+**Causa (banco, não tela).** A RLS de `profiles` só liberava o perfil dos
+colegas para `administrador`. Para GP, produtor, financeiro e freelancer
+**todo embed `profiles!...(nome)` voltava nulo** — 42 consultas no app. O
+formulário usava o *nome* do GP como prova de que o orçamento estava
+completo; sem nome, cadastro "incompleto". Enquanto todos eram
+administrador o defeito não existia na prática.
+
+**Correções:**
+
+1. `supabase/migrations/20260917190001_perfil_do_colega_visivel_no_tenant.sql`
+   — política `profiles_select_membros_do_tenant`: membro ativo lê o
+   perfil dos demais membros ativos do mesmo tenant, por
+   `public.e_colega_de_tenant(uuid)` (`SECURITY DEFINER`, porque a policy
+   não enxerga o que a RLS de `tenant_members` esconde). Aditiva: a
+   política antiga de administrador continua no lugar, agora como
+   subconjunto. Detalhes em `docs/02-seguranca-auth-rls.md`.
+2. `enviar-job-modal.tsx` — `HerdadosJob` ganhou `produtoId`, `gpId` e
+   `produtorId` (**obrigatórios**, nunca opcionais), e
+   `herdadosIncompletos` passou a olhar os ids. É exatamente o que
+   `enviarJobParaAbertura` confere no servidor (`projeto.produto_id`,
+   `orc.gp_responsavel_id`, `orc.produtor_id`). **Trava de tela não se
+   apoia em nome** — nome depende de leitura; id, não.
+3. `page.tsx` do orçamento — `produto_id` cru entrou no `select` do
+   projeto, ao lado do embed `produto`.
+
+**Contato de cobrança — asterisco por campo.** O rótulo "Contato de
+cobrança \*" sozinho não dizia qual das três caixas era obrigatória. A
+seção ganhou cabeçalho de colunas: **Nome \*** · **Número · opcional** ·
+**E-mail \***. O cabeçalho some abaixo de `md`, onde a grade vira uma
+coluna só; ali quem informa é o placeholder. `apoio` perdeu o "Número é
+opcional", que virou redundante.
+
+**Verificação (navegador, ao vivo):**
+
+- Como **GP** (usuário de teste `gerente_producao`), viewport 1024×768 —
+  a mesma geometria do print: nomes preenchidos, faixa âmbar some,
+  cabeçalho com os asteriscos, os quatro calendários abrem (viram para
+  cima quando não cabem embaixo) e o envio criou **JOB-0036**
+  (`aguardando_abertura`, `created_by` = o GP, 1 contato gravado).
+  Cancelado em seguida pelo fluxo real — orçamento voltou a `aprovado`.
+- Como **administrador**: mesma tela sem regressão (asteriscos, nomes,
+  sem faixa).
+- Lista de Projetos & Orçamentos vista pelo GP: a coluna "GP RESPONSÁVEL"
+  voltou a trazer nome (Debora Brito, Lufa, Tiago…) — antes vinha vazia
+  para qualquer não-administrador.
+- `tsc --noEmit`, `next lint` e `npm run build` limpos.
+
+**Ponta solta:** a faixa âmbar continua no fim do formulário. Se um
+orçamento realmente estiver sem marca/GP/produtor, o "Confirmar dados"
+segue calado para quem não rolar até lá. Vale um aviso junto do botão —
+não entrou aqui para manter a correção pequena.
