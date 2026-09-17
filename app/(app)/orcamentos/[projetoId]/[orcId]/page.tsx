@@ -196,7 +196,10 @@ export default async function OrcamentoDetailPage({
     supabase
       .from("projetos")
       .select(
-        "id, codigo, nome, campanha, cliente_id, cliente:clientes(id, nome_fantasia, percentual_honorarios_padrao), responsavel:profiles!responsavel_id(id, nome), empresa:empresas(nome_fantasia, razao_social), produto:cliente_produtos(nome)",
+        // `produto_id` cru além do embed `produto`: é ele que o servidor
+        // confere para deixar abrir o job, e é ele que o modal usa para
+        // decidir se a Marca está cadastrada (17/09/2026).
+        "id, codigo, nome, campanha, cliente_id, produto_id, cliente:clientes(id, nome_fantasia, percentual_honorarios_padrao), responsavel:profiles!responsavel_id(id, nome), empresa:empresas(nome_fantasia, razao_social), produto:cliente_produtos(nome)",
       )
       .eq("id", params.projetoId)
       .eq("tenant_id", session.activeTenant.id)
@@ -896,6 +899,13 @@ function VersaoSelecionada({
     produtorNome: orcamentoRaw.produtor?.nome ?? null,
     // Categoria do job = a do orçamento, sempre.
     categoriaNome: orcamentoRaw.categoria?.nome ?? null,
+    // Ids: são eles que travam o envio no modal, nunca os nomes acima —
+    // nome depende da RLS de `profiles` e já deixou GP sem conseguir
+    // enviar job (ver `HerdadosJob`). Vêm sempre do cadastro de hoje,
+    // que é o que o servidor relê na hora de gravar.
+    produtoId: (projetoRaw?.produto_id as string | null) ?? null,
+    gpId: (orcamentoRaw.gp_responsavel_id as string | null) ?? null,
+    produtorId: (orcamentoRaw.produtor_id as string | null) ?? null,
   };
 
   return (
