@@ -19,6 +19,7 @@ import {
   Wallet,
   BarChart3,
   Settings,
+  Users,
 } from "lucide-react";
 
 type NavLink = {
@@ -69,6 +70,12 @@ const links: NavLink[] = [
     label: "Relatórios",
     icon: BarChart3,
     permissao: "sidebar.relatorios",
+  },
+  {
+    href: "/rh",
+    label: "RH",
+    icon: Users,
+    permissao: "sidebar.rh",
   },
 ];
 
