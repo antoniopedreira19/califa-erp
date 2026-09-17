@@ -351,6 +351,22 @@ A conta é pelo que a lista pode ter em produção, não pelo que ela tem hoje.
 - A célula de seleção da planilha não muda: ela está amarrada à navegação
   por teclado da decisão 046.
 
+### Campo obrigatório: o asterisco é a única marcação
+
+⚠️ **17/09/2026 (Tiago).** Campo obrigatório leva `*` vermelho no rótulo.
+Campo opcional **não leva nada**: a ausência do asterisco já diz isso.
+Nada de "· opcional" no rótulo ou no placeholder — vira a mesma informação
+duas ou três vezes na mesma caixa.
+
+O asterisco fica **no rótulo do campo**, não só no da seção. Um grupo com
+várias caixas — o "Contato de cobrança" da abertura do job, com Nome,
+Número e E-mail — precisa de rótulo por coluna, senão o `*` do título do
+grupo não diz qual delas é obrigatória. Foi o que confundiu um GP em
+17/09/2026.
+
+O rodapé do diálogo explica a convenção uma vez:
+"Campos com `*` são obrigatórios."
+
 ## Restrições
 
 - Não criar uma identidade visual nova.

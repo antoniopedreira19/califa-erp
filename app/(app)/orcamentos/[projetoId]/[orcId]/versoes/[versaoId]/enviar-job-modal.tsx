@@ -502,12 +502,16 @@ export function EnviarJobModal({
               {/* Cabeçalho das colunas. O asterisco do rótulo "Contato de
                   cobrança" sozinho não dizia QUAL das três caixas era
                   obrigatória — e nome e e-mail são, número não (relato de
-                  um GP em 17/09/2026). Some abaixo de `md`, onde a grade
-                  vira uma coluna só e os rótulos empilhariam longe das
-                  caixas; ali quem informa é o placeholder. */}
+                  um GP em 17/09/2026). Coluna sem asterisco já quer dizer
+                  opcional: escrever "· opcional" no Número seria repetir.
+
+                  Some abaixo de `md`, onde a grade vira uma coluna só e os
+                  rótulos empilhariam longe das caixas — nessa largura o
+                  diálogo inteiro já degrada (as 3 colunas viram 1), e ele
+                  é de uso desktop. */}
               <div className="hidden gap-2 md:grid md:grid-cols-[1fr_1fr_1fr_36px]">
                 <RotuloContato texto="Nome" obrigatorio />
-                <RotuloContato texto="Número" opcional />
+                <RotuloContato texto="Número" />
                 <RotuloContato texto="E-mail" obrigatorio />
                 <span aria-hidden />
               </div>
@@ -534,7 +538,7 @@ export function EnviarJobModal({
                     value={c.numero}
                     onChange={(e) => alterarContato(i, { numero: e.target.value })}
                     maxLength={40}
-                    placeholder="Número · opcional"
+                    placeholder="Número"
                     aria-label={`Número do contato ${i + 1}`}
                   />
                   <Input
@@ -751,22 +755,21 @@ function Campo({
   );
 }
 
-/** Rótulo de coluna do contato de cobrança. Mesma gramática do `Campo`:
- *  asterisco vermelho no obrigatório, "· opcional" em cinza no resto. */
+/** Rótulo de coluna do contato de cobrança. Só o asterisco vermelho do
+ *  obrigatório: coluna sem asterisco JÁ quer dizer opcional, e escrever
+ *  "· opcional" no Número era dizer a mesma coisa duas vezes (Tiago,
+ *  17/09/2026). Vale para o placeholder também. */
 function RotuloContato({
   texto,
   obrigatorio,
-  opcional,
 }: {
   texto: string;
   obrigatorio?: boolean;
-  opcional?: boolean;
 }) {
   return (
     <span className="text-xs font-medium text-muted-foreground">
       {texto}
       {obrigatorio && <span className="ml-1 text-california-red">*</span>}
-      {opcional && <span className="ml-1.5 font-normal">· opcional</span>}
     </span>
   );
 }
