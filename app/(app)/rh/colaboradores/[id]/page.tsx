@@ -107,7 +107,7 @@ export default async function ColaboradorDetalhePage({
   const isAdmin = session.activeRole === "administrador";
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
+    <div className="space-y-6 max-w-7xl mx-auto">
       <div>
         <Link
           href="/rh/colaboradores"
