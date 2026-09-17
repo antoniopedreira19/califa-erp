@@ -4005,10 +4005,19 @@ administrador o defeito não existia na prática.
 
 **Contato de cobrança — asterisco por campo.** O rótulo "Contato de
 cobrança \*" sozinho não dizia qual das três caixas era obrigatória. A
-seção ganhou cabeçalho de colunas: **Nome \*** · **Número · opcional** ·
-**E-mail \***. O cabeçalho some abaixo de `md`, onde a grade vira uma
-coluna só; ali quem informa é o placeholder. `apoio` perdeu o "Número é
-opcional", que virou redundante.
+seção ganhou cabeçalho de colunas: **Nome \*** · **Número** ·
+**E-mail \***.
+
+⚠️ **O asterisco é a única marcação — "opcional" não se escreve** (Tiago,
+17/09/2026). A primeira versão trazia "Número · opcional" no rótulo e no
+placeholder; coluna sem asterisco já quer dizer opcional, então era a
+mesma informação três vezes. `RotuloContato` ficou só com `obrigatorio`, e
+o placeholder do número é "Número". A linha de apoio também perdeu o
+"Número é opcional". Vale para qualquer campo novo desta tela.
+
+O cabeçalho some abaixo de `md`, onde a grade vira uma coluna só e os
+rótulos ficariam longe das caixas — nessa largura o diálogo inteiro já
+degrada (3 colunas viram 1) e ele é de uso desktop.
 
 **Verificação (navegador, ao vivo):**
 
