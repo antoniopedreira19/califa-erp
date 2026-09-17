@@ -1047,6 +1047,10 @@ export async function carregarDetalheDoJob(
     // Quem pode enviar para encerramento (matriz `jobs.encerrar`). O
     // servidor confere de novo em `encerrarJob`.
     podeEncerrar: pode(session.activeRole, "jobs.encerrar"),
+    // Exportar a planilha interna do job (decisão 088): quem vê a tela
+    // exporta. O freelancer, que só tem `jobs.ver_restrito`, fica de fora,
+    // e a rota confere de novo.
+    podeExportarInterna: pode(session.activeRole, "jobs.ver"),
     faturamentoEnvioUnico,
     faturamentoCompleto,
     internacional: planilha.internacional,

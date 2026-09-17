@@ -7,6 +7,7 @@ import type {
 import { TIPOS_CUSTO } from "@/lib/calculos/versao-totais";
 import { isoDoMes, mesDoRotulo } from "@/lib/calculos/meses-trimestre";
 import { MARCA_MES, MARCA_RESUMO } from "@/lib/exportacao/planilha-orcamento";
+import { acharColunaDeMarcas, RECUSA_INTERNA_DO_JOB } from "./coluna-marcas";
 
 /**
  * Parser da planilha padrão da Agência California.
@@ -86,6 +87,13 @@ import { MARCA_MES, MARCA_RESUMO } from "@/lib/exportacao/planilha-orcamento";
  *     rótulo na coluna do R$ e anotações na B.
  * O casamento do bloco com o mês da versão é da importação
  * (`meses-da-planilha.ts`): aqui só se lê.
+ *
+ * **Planilha interna do ERP** (decisão 088, 17/09/2026): é o layout deste
+ * modelo — orçado em A..G, planejado em H..L —, com o REALIZADO em M..Q e
+ * a coluna das marcas depois dele, e não na H. `acharColunaDeMarcas` diz
+ * onde ela está, pela marca `interna:…` da linha 1; a do JOB é recusada
+ * logo na entrada, porque o realizado nasce das PPs. Quem manda a coluna
+ * H entrar como PLANEJADO, aqui, é não haver marca de id nela.
  */
 
 const KEYWORDS_RESUMO = [
@@ -471,6 +479,24 @@ export async function parseOficial(
     };
   }
 
+  // A coluna das marcas (`grp:`, `it:`, `mes:`…) é a H na planilha do
+  // cliente e vai para depois do último bloco na interna (decisão 088).
+  const colunaDeMarcas = acharColunaDeMarcas(ws);
+  if (colunaDeMarcas.interna === "job") {
+    return {
+      aba: ws.name,
+      grupos: [],
+      meses: [],
+      modelo: "nacional",
+      tem_planejado: false,
+      warnings: [{ linha: 0, motivo: RECUSA_INTERNA_DO_JOB, severidade: "ignorada" }],
+      percentual_honorarios: null,
+      linhas_lidas: 0,
+      linhas_importadas: 0,
+      linhas_ignoradas: 0,
+    };
+  }
+
   const warnings: ImportacaoWarning[] = [...avisosDaAba];
   const grupos: ParseGrupo[] = [];
   /** Último grupo resolvido — é ele que recolhe item com a coluna A vazia. */
@@ -565,8 +591,14 @@ export async function parseOficial(
   }
 
   /** Uma linha da planilha internacional, depois do cabeçalho. */
-  function lerLinhaInternacional(cells: string[], row: ExcelJS.Row, rowNumber: number) {
-    const [colA, colB, colC, colD, colE, colF, , colH] = cells;
+  function lerLinhaInternacional(
+    cells: string[],
+    row: ExcelJS.Row,
+    rowNumber: number,
+    /** Conteúdo da coluna oculta das marcas desta linha. */
+    marcasDaLinha: string,
+  ) {
+    const [colA, colB, colC, colD, colE, colF] = cells;
 
     // Fechamento: A e B vazias e um rótulo em C (TOTAL, FEE, INT TAXES…).
     // Nas linhas de item a C é o TT USD, que é número.
@@ -578,10 +610,13 @@ export async function parseOficial(
 
     const unitario = toNumber(row.getCell(4).value);
 
-    // GRUPO: sem unitário, com nome só na A (exportação e modelo) ou só na B.
-    const nomeSoEmUmaColuna = (colA === "") !== (colB === "");
+    // GRUPO: sem unitário, com nome só na A (exportação e modelo) ou só na
+    // B. Título mesclado conta como nome só na A: na interna a faixa do
+    // título atravessa a planilha, e a B devolve o texto da A.
+    const nomeSoEmUmaColuna =
+      (colA !== "" && colA === colB) || (colA === "") !== (colB === "");
     if (!unitario.ok && nomeSoEmUmaColuna) {
-      grupoAtual = grupoPorNome(colA !== "" ? colA : colB, marcaDe(colH, "grp:"));
+      grupoAtual = grupoPorNome(colA !== "" ? colA : colB, marcaDe(marcasDaLinha, "grp:"));
       viuLinhaDeGrupo = true;
       linhasIgnoradas++;
       return;
@@ -615,9 +650,10 @@ export async function parseOficial(
       });
     }
 
-    // Planejado só na planilha interna: na exportação a H é o id oculto e
-    // a I, o crédito consumido — nada disso é planejado.
-    const temPlanejado = !ehMarcaDeId(colH);
+    // Planejado só nas planilhas que o trazem: na exportação para o
+    // cliente a H é o id oculto e a I, o crédito consumido — nada disso é
+    // planejado. Na interna a H é mesmo o R$ planejado.
+    const temPlanejado = !ehMarcaDeId(cells[7]);
     const planejado = (col: number) => {
       const v = toNumber(row.getCell(col).value);
       return temPlanejado && v.ok && v.n > 0 ? v.n : 0;
@@ -625,7 +661,7 @@ export async function parseOficial(
 
     grupoAtual.itens.push({
       ordem: grupoAtual.itens.length + 1,
-      item_id: marcaDe(colH, "it:"),
+      item_id: marcaDe(marcasDaLinha, "it:"),
       item: colB,
       // Sem coluna de tipo: B, a conta do modelo (decisão do Tiago).
       tipo_custo: "B",
@@ -645,9 +681,13 @@ export async function parseOficial(
    * Mensal: título de mês, fim no resumo, cabeçalho repetido e fechamento
    * do mês. `true` quando a linha foi resolvida aqui.
    */
-  function lerLinhaMensal(cells: string[], row: ExcelJS.Row, rowNumber: number): boolean {
-    const colH = cells[7];
-    if (colH.startsWith(MARCA_RESUMO)) {
+  function lerLinhaMensal(
+    cells: string[],
+    row: ExcelJS.Row,
+    rowNumber: number,
+    marcasDaLinha: string,
+  ): boolean {
+    if (marcasDaLinha.startsWith(MARCA_RESUMO)) {
       fimDoMensal = true;
       linhasIgnoradas++;
       return true;
@@ -657,8 +697,8 @@ export async function parseOficial(
     const tipoValido = TIPOS_VALIDOS.includes(
       cells[col.tipo - 1].toUpperCase().trim() as TipoCusto,
     );
-    const marca = colH.startsWith(MARCA_MES)
-      ? colH.slice(MARCA_MES.length).split("|")[0].trim()
+    const marca = marcasDaLinha.startsWith(MARCA_MES)
+      ? marcasDaLinha.slice(MARCA_MES.length).split("|")[0].trim()
       : "";
     const porMarca = /^\d{4}-\d{2}-01$/.test(marca) ? marca : null;
     const porTitulo =
@@ -672,7 +712,10 @@ export async function parseOficial(
         numero,
         ano,
         mes: ano !== null ? isoDoMes(ano, numero) : null,
-        rotulo: cells[1] !== "" && mesDoRotulo(cells[1]) ? cells[1] : cells[0],
+        rotulo:
+          cells[1] !== "" && cells[1] !== cells[0] && mesDoRotulo(cells[1])
+            ? cells[1]
+            : cells[0],
         linha_xlsx: rowNumber,
       };
       meses.push(mesAtual);
@@ -715,8 +758,15 @@ export async function parseOficial(
     if (cells.every((c) => c === "")) return;
     linhasLidas++;
 
-    if (cells[7].startsWith(MARCA_MES)) viuMarcaDeMes = true;
-    if (mensal && !layoutInternacional && lerLinhaMensal(cells, row, rowNumber)) return;
+    const marcasDaLinha = normalizar(row.getCell(colunaDeMarcas.coluna).value);
+    if (marcasDaLinha.startsWith(MARCA_MES)) viuMarcaDeMes = true;
+    if (
+      mensal &&
+      !layoutInternacional &&
+      lerLinhaMensal(cells, row, rowNumber, marcasDaLinha)
+    ) {
+      return;
+    }
 
     // Header?
     if (!headerEncontrado) {
@@ -729,7 +779,7 @@ export async function parseOficial(
     }
 
     if (layoutInternacional) {
-      lerLinhaInternacional(cells, row, rowNumber);
+      lerLinhaInternacional(cells, row, rowNumber, marcasDaLinha);
       return;
     }
 
@@ -750,7 +800,6 @@ export async function parseOficial(
     const colD = cells[col.qt - 1];
     const colE = cells[col.dm - 1];
     const colG = cells[col.tipo - 1];
-    const colH = cells[7];
     const colPlanejadoRs = cells[col.prs - 1];
     const colI = cells[col.pqt - 1];
     const colJ = cells[col.pdm - 1];
@@ -761,10 +810,11 @@ export async function parseOficial(
     // GRUPO: sem valor unitário e sem tipo, com nome em exatamente UMA das
     // duas primeiras colunas — `A` é o formato da exportação, `B` o do
     // modelo. Nas duas, ou em nenhuma, não é linha de grupo.
-    const nomeSoEmUmaColuna = (colA === "") !== (colB === "");
+    const nomeSoEmUmaColuna =
+      (colA !== "" && colA === colB) || (colA === "") !== (colB === "");
     if (!valorC.ok && !temTipoValido && nomeSoEmUmaColuna) {
       const nome = colA !== "" ? colA : colB;
-      grupoAtual = grupoPorNome(nome, marcaDe(colH, "grp:"));
+      grupoAtual = grupoPorNome(nome, marcaDe(marcasDaLinha, "grp:"));
       viuLinhaDeGrupo = true;
       linhasIgnoradas++;
       return;
@@ -906,14 +956,16 @@ export async function parseOficial(
     // nada disso é planejado. Até 14/09/2026 a I entrava como quantidade
     // planejada.
     const semPlanejado = { ok: false, n: 0 };
-    const hEhId = ehMarcaDeId(colH);
+    // Quem decide é a própria coluna do R$ planejado: id ali significa
+    // planilha do cliente; na interna ela traz o planejado de verdade.
+    const hEhId = ehMarcaDeId(colPlanejadoRs);
     const valorPlanejado = hEhId ? semPlanejado : toNumber(colPlanejadoRs);
     const qtdPlanejada = hEhId ? semPlanejado : toNumber(colI);
     const dmPlanejado = hEhId ? semPlanejado : toNumber(colJ);
 
     grupoAtual.itens.push({
       ordem: grupoAtual.itens.length + 1,
-      item_id: marcaDe(colH, "it:"),
+      item_id: marcaDe(marcasDaLinha, "it:"),
       item: nomeItem,
       tipo_custo: tipoUpper as TipoCusto,
       valor_unitario_orcado: valorUnitario,

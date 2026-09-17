@@ -6,7 +6,6 @@ import type {
 } from "@/lib/types";
 import { TIPOS_CUSTO } from "@/lib/calculos/versao-totais";
 import {
-  COLUNA_ID,
   MARCA_GRUPO,
   MARCA_ITEM,
   MARCA_MES,
@@ -15,6 +14,7 @@ import {
   MARCA_VERSAO,
 } from "@/lib/exportacao/planilha-orcamento";
 import { isoDoMes, mesDoRotulo } from "@/lib/calculos/meses-trimestre";
+import { acharColunaDeMarcas, RECUSA_INTERNA_DO_JOB } from "./coluna-marcas";
 
 /**
  * Parser da planilha que o próprio ERP exportou — a do projeto
@@ -39,7 +39,8 @@ import { isoDoMes, mesDoRotulo } from "@/lib/calculos/meses-trimestre";
  *   - GRUPO  : H começa com `grp:`, OU (A com texto e C vazia).
  *   - ITEM   : H começa com `it:`, OU (B com texto e C numérica).
  *   - RESUMO : E contém SUB-TOTAL / TOTAL / IMPOSTO / HONORÁRIOS /
- *              FATURAMENTO — encerra a leitura.
+ *              FATURAMENTO — fecha a seção; a leitura recomeça no título
+ *              do próximo orçamento (ou do próximo mês).
  *
  * **Exportação internacional** (decisão 072, 14/09/2026): A · SHEET,
  * B · ITEM, C · TT USD, D · BRL (unitário), E · QT, F · D/M, G · TT BRL, e
@@ -47,11 +48,20 @@ import { isoDoMes, mesDoRotulo } from "@/lib/calculos/meses-trimestre";
  * `null`, e o diff mantém o tipo da linha casada ou usa B na nova. O
  * fechamento tem o rótulo na C, com A e B vazias.
  *
+ * **Exportação interna** (decisão 088, 17/09/2026): o mesmo orçado nas
+ * colunas A..G, com PLANEJADO e REALIZADO à direita e a coluna das marcas
+ * depois deles — quem a encontra é `acharColunaDeMarcas`, pela marca
+ * `interna:…` da linha 1. A interna do JOB é recusada aqui mesmo: o
+ * realizado nasce das PPs, não da planilha. A interna do ORÇAMENTO volta
+ * normalmente, e como cada mês repete a faixa e o cabeçalho (o desenho da
+ * aba SUL), as repetições são ignoradas.
+ *
  * **Exportação mensal** (decisão 078, 15/09/2026): o layout do nacional,
  * com um bloco por mês. O título do mês carrega `mes:2026-10-01` na H e
  * abre o mês dos grupos seguintes; cada mês tem o seu fechamento, que aqui
  * é pulado até o título do próximo mês (ou da próxima seção). O título do
- * resumo, com `resumo:` na H, encerra a leitura.
+ * resumo, com `resumo:` na H, fecha a seção: o que vem embaixo dele é
+ * resumo, e só o título do próximo orçamento recomeça a leitura.
  */
 
 const KEYWORDS_RESUMO = [
@@ -179,6 +189,14 @@ function ehFechamentoInternacional(cells: string[], c: unknown): boolean {
   return cells[0] === "" && cells[1] === "" && cells[2] !== "" && !toNumber(c).ok;
 }
 
+/** Faixa de bloco — "ORÇAMENTO" na C, com A e B vazias. Na interna vêm
+ *  também PLANEJADO e REALIZADO, fora das sete primeiras colunas. */
+function ehLinhaFaixa(cells: string[]): boolean {
+  if (cells[0] !== "" || cells[1] !== "") return false;
+  const c = cells[2].toUpperCase();
+  return c === "ORÇAMENTO" || c === "ORCAMENTO";
+}
+
 function ehLinhaHeader(cells: string[]): boolean {
   const joined = cells.slice(0, 7).map((c) => c.toLowerCase()).join("|");
   return KEYWORDS_HEADER.filter((k) => joined.includes(k)).length >= 3;
@@ -253,9 +271,26 @@ export async function parsePlanilhaProjeto(
     };
   }
 
+  // A coluna das marcas é a H na planilha do cliente e vai para depois do
+  // último bloco visível na interna (decisão 088).
+  const colunaDeMarcas = acharColunaDeMarcas(ws);
+  if (colunaDeMarcas.interna === "job") {
+    return {
+      aba: ws.name,
+      modelo: "nacional",
+      secoes: [],
+      warnings: [{ linha: 0, motivo: RECUSA_INTERNA_DO_JOB, severidade: "ignorada" }],
+      linhas_lidas: 0,
+      linhas_importadas: 0,
+      linhas_ignoradas: 0,
+    };
+  }
+
   // A exportação de versão única não tem linha de seção: os ids do
-  // orçamento e da versão ficam na coluna H da linha 1.
-  const marcaCabecalho = marcas(normalizar(ws.getCell(1, COLUNA_ID).value));
+  // orçamento e da versão ficam nessa coluna, na linha 1.
+  const marcaCabecalho = marcas(
+    normalizar(ws.getCell(1, colunaDeMarcas.coluna).value),
+  );
 
   let headerEncontrado = false;
   let layoutInternacional = false;
@@ -266,7 +301,6 @@ export async function parsePlanilhaProjeto(
   let mesAtual: string | null = null;
   let secaoAtual: SecaoLida | null = null;
   let grupoAtual: GrupoLido | null = null;
-  let terminou = false;
 
   const abrirSecaoImplicita = (linha: number) => {
     secaoAtual = {
@@ -282,28 +316,36 @@ export async function parsePlanilhaProjeto(
   };
 
   ws.eachRow({ includeEmpty: false }, (row, rowNumber) => {
-    if (terminou) return;
-
     const cells: string[] = [];
     for (let c = 1; c <= 7; c++) cells.push(normalizar(row.getCell(c).value));
-    const h = normalizar(row.getCell(COLUNA_ID).value);
+    const h = normalizar(row.getCell(colunaDeMarcas.coluna).value);
 
     if (cells.every((c) => c === "")) return;
     linhasLidas++;
 
-    if (!headerEncontrado) {
-      if (ehLinhaHeader(cells)) {
+    const marcaDaLinha = marcas(h);
+
+    // O primeiro cabeçalho decide o layout; os seguintes são repetição —
+    // a planilha mensal e a interna repetem faixa e cabeçalho a cada mês.
+    if (ehLinhaHeader(cells)) {
+      if (!headerEncontrado) {
         headerEncontrado = true;
         layoutInternacional = ehLayoutInternacional(cells);
       }
       return;
     }
+    if (ehLinhaFaixa(cells)) return;
 
-    const marcaDaLinha = marcas(h);
+    // Antes do primeiro cabeçalho só passam o título da seção e o do mês:
+    // no mensal e na interna eles vêm ACIMA da faixa (o desenho da aba
+    // SUL). O resto é identificação.
+    if (!headerEncontrado && !marcaDaLinha.mes && !marcaDaLinha.orcamentoId) return;
 
-    // Resumo da planilha mensal: o que vem embaixo não é conteúdo.
+    // Resumo (do trimestre, no mensal, ou do arquivo inteiro na interna do
+    // projeto): o que vem embaixo dele não é conteúdo — mas o título do
+    // orçamento seguinte pode vir, e ele recomeça a leitura.
     if (marcaDaLinha.resumo) {
-      terminou = true;
+      emFechamento = true;
       linhasIgnoradas++;
       return;
     }
@@ -313,7 +355,11 @@ export async function parsePlanilhaProjeto(
     // marcado, para um grupo chamado "Julho de 2026" num nacional
     // continuar sendo grupo.
     const rotuloDoMes =
-      !marcaDaLinha.mes && layoutMensal && cells[1] === "" && !marcaDaLinha.orcamentoId
+      !marcaDaLinha.mes &&
+      layoutMensal &&
+      // Na interna o título do mês é mesclado, e a B devolve o texto da A.
+      (cells[1] === "" || cells[1] === cells[0]) &&
+      !marcaDaLinha.orcamentoId
         ? mesDoRotulo(cells[0])
         : null;
     if (marcaDaLinha.mes || rotuloDoMes?.ano) {
@@ -334,15 +380,20 @@ export async function parsePlanilhaProjeto(
       return;
     }
 
+    // O título da seção nunca é fechamento — e na interna ele é mesclado
+    // de ponta a ponta, então o rótulo aparece em toda a linha.
     if (
-      layoutInternacional
+      !marcaDaLinha.orcamentoId &&
+      (layoutInternacional
         ? ehFechamentoInternacional(cells, row.getCell(3).value)
-        : ehLinhaResumo(cells)
+        : ehLinhaResumo(cells))
     ) {
       linhasIgnoradas++;
-      // No mensal o fechamento é do mês, e o próximo bloco continua.
-      if (layoutMensal) emFechamento = true;
-      else terminou = true;
+      // O fechamento encerra a SEÇÃO, não o arquivo: no mensal vem o
+      // próximo mês, e na interna do projeto (decisão 088) cada orçamento
+      // tem o seu, com o do orçamento seguinte logo abaixo. O que encerra
+      // a leitura é a marca `resumo:`, lá em cima.
+      emFechamento = true;
       return;
     }
 

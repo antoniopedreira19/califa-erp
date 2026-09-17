@@ -3849,3 +3849,34 @@ Detalhes e números na 087 §6 ("Teste real de ponta a ponta").
   fora — sem marcar nada.
 - O fornecedor "Teste Alterações Fornecedor 048" foi **reativado** para o teste
   e ficou ativo; os BVs do JOB-0007 trocaram o fornecedor "Antonio" por ele.
+
+## ⚠️ Nota de 2026-09-17 — A Planilha Interna do job tem Exportar (decisão 088)
+
+[Decisão 088](../decisions/088-a-planilha-interna-sai-pelo-exportar.md).
+Botão **Exportar** na barra da Planilha Interna, logo depois do "Exibir"
+(`realizado/exportar-interna-button.tsx`), com o popover de confirmação no
+mesmo formato do "Exportar esta versão?" do orçamento. Vale nas duas telas
+que mostram a planilha (`/jobs/[jobId]` e `/financeiro/jobs/[jobId]`).
+
+- **Rota:** `GET /api/jobs/[jobId]/export` → `interna-<código>.xlsx`, aba
+  "Interna". Permissão `jobs.ver` — quem vê a tela exporta; o freelancer,
+  que só tem `jobs.ver_restrito`, não.
+- **O que sai:** o orçado da CÓPIA do job (com as erratas), o planejado e o
+  realizado na visão **Líquido (− BV)**, a mesma da tela. Cada item traz
+  sublinhas em itálico: uma por PP não cancelada, uma por devolução de
+  verba (negativa) e uma por BV `confirmado`/`recebido` (negativa). Elas
+  são agrupadas pelo recurso de tópicos do Excel, com o botão de recolher
+  na linha do item.
+- **As contas não foram reescritas:** `lib/exportacao/interna-do-job.ts`
+  passa por `blocosDoItem` (BV só no realizado, `A` e `D` espelhando o
+  orçado, pré-abertura zerada) e por `calcularTotaisVersao`. Se a tela
+  mudar de conta, o export acompanha sozinho — não duplique a regra aqui.
+- **Não volta pelo Importar:** a marca `interna:job` na linha 1 da coluna
+  oculta faz os dois parsers recusarem o arquivo, com mensagem própria. O
+  realizado nasce das PPs.
+- **Mensal:** um bloco por mês, com o fechamento de cada mês e o resumo do
+  trimestre.
+
+Conferido em 17/09/2026 no JOB-0029 (planejado R$ 8.420,00 · 20,1%;
+realizado R$ 11.470,00 · 27,4% — iguais ao cabeçalho da tela), no JOB-0009
+(internacional, com save) e no JOB-0034 (mensal).

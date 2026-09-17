@@ -3912,3 +3912,50 @@ Regras em [078](../decisions/078-orcamento-mensal-fee-e-always-on.md), seção "
 - **Remoção:** o grupo removido pela agregada saiu do banco (`grupos_removidos: 1`), e o `-13` voltou ao estado de antes.
 - **Orçamento travado:** o `0-0001/26-09` (job criado) aparece só para consulta, com os meses empilhados, sem "Novo grupo" e sem o link.
 - **Não exercitado:** a recusa do servidor para um grupo novo sem mês (payload forjado) foi conferida só pelo código.
+
+## ⚠️ Nota de 2026-09-17 — O Exportar ganhou o modo "Interna" (decisão 088)
+
+[Decisão 088](../decisions/088-a-planilha-interna-sai-pelo-exportar.md). A
+exportação **para o cliente não mudou**: sem `?modo=interna` as duas rotas
+(`/api/orcamentos/[projetoId]/export` e a da versão) devolvem exatamente a
+planilha de sempre.
+
+**O que é novo no orçamento:**
+
+- **Popover da versão** (`acoes-versao.tsx`): duas opções, "Para o cliente"
+  (marcada por padrão) e "Interna". A segunda acrescenta `?modo=interna` ao
+  link, e o arquivo sai como `interna-<código>-v<n>.xlsx`, aba "Interna".
+- **Menu do projeto e da agregada** (`exportar-orcamentos-menu.tsx`):
+  segmento "Para o cliente | Interna" no topo. No modo Interna o **job
+  aberto entra** (sai a versão aprovada, sem realizado) e o aviso vermelho
+  vira uma nota explicando o que sai; a confirmação de "orçamento aprovado"
+  não aparece, porque ali a versão aprovada é justamente o que se quer. As
+  travas de mistura de modelo e de câmbio continuam valendo.
+- **A planilha do cliente ganhou** (aprovado junto): seis sub-totais por
+  tipo (A com AR, e F separado de FI), o nome do grupo repetido na coluna A
+  de cada item, a paleta de um tom por parte e o fim do amarelo do
+  internacional. Ela continua fechando no FATURAMENTO.
+
+**O que a interna traz:** orçado (A..G), planejado (H..L) com rentabilidade
+por linha, e o fechamento com os seis sub-totais, TOTAL, IMPOSTO,
+HONORÁRIOS e VALOR DO JOB — mais as linhas de save quando existem. No
+mensal, um bloco por mês (faixa do mês, faixas e cabeçalho repetidos) e o
+resumo do trimestre por tipo de custo. **Com mais de um orçamento no
+arquivo**, cada um fecha no seu valor do job e o arquivo termina numa faixa
+"RESUMO" com o VALOR DO JOB TOTAL (`somarFechamentosInternos`) — a do
+cliente continua com um fechamento único agregado.
+
+**Importação:** a interna do orçamento **volta pelo Importar**. A coluna
+oculta dos ids não é mais necessariamente a H — `acharColunaDeMarcas`
+(`lib/importacao/coluna-marcas.ts`) acha a coluna pela marca `interna:…` da
+linha 1 e cai na H quando não há marca, então as planilhas já enviadas
+continuam entrando. ⚠️ Quem mexer nos parsers precisa saber de três
+mudanças: faixa e cabeçalho repetidos são ignorados; o título da seção e o
+do mês passam **antes** do primeiro cabeçalho; e o fechamento — inclusive o
+do RESUMO — encerra a **seção**, não o arquivo (é o que permite um
+fechamento por orçamento na interna do projeto, e o que conserta a mensal
+do cliente com vários orçamentos). Testes em
+`lib/importacao/interna.test.ts`.
+
+**Permissão:** `orcamentos.exportar` para a interna do orçamento, conferida
+na rota (a planilha do cliente segue sem checagem própria, como era).

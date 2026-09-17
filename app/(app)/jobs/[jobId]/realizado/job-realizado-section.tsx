@@ -53,6 +53,7 @@ import {
 } from "./job-item-realizado-table";
 import { JobTotaisCard } from "./job-totais-card";
 import { AlterarOrcadoButton } from "./alterar-orcado-button";
+import { ExportarInternaButton } from "./exportar-interna-button";
 import {
   ConcluirPPsButton,
   type ItemEmAberto,
@@ -186,6 +187,9 @@ interface Props {
   saldosDeSave: SaldoDeSave[];
   /** Nome do cliente — aparece no texto do formulário de save. */
   clienteNome: string;
+  /** Exportar a planilha interna do job (decisão 088). Quem vê a tela
+   *  exporta; o freelancer, que só tem a visão restrita, não. */
+  podeExportarInterna?: boolean;
 }
 
 export function JobRealizadoSection({
@@ -197,6 +201,7 @@ export function JobRealizadoSection({
   realizadosMap,
   categoriasMap,
   podeAcoes,
+  podeExportarInterna = false,
   podeGerarPP = false,
   podeConfirmarBv,
   jaEnviadoParaFaturamento = false,
@@ -692,6 +697,15 @@ export function JobRealizadoSection({
               },
             ]}
           />
+          {podeExportarInterna && (
+            <ExportarInternaButton
+              jobId={job.id}
+              codigo={job.codigo}
+              nome={job.nome}
+              qtdGrupos={grupos.length}
+              qtdItens={itens.length}
+            />
+          )}
           {podeAcoes && (
             <AlterarOrcadoButton
               ativo={errata.ativo}

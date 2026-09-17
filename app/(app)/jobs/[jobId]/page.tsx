@@ -116,6 +116,7 @@ export default async function JobDetailPage({
     bvRealizadoJob,
     podeEditarRealizado,
     podeAcoesPlanilha,
+    podeExportarInterna,
     podeGerarPP,
     podeEnviarPP,
     podeConfirmarBv,
@@ -351,6 +352,7 @@ export default async function JobDetailPage({
             realizadosMap={realizadosMap}
             categoriasMap={categoriasMap}
             podeAcoes={podeAcoesPlanilha}
+            podeExportarInterna={podeExportarInterna}
             podeGerarPP={podeGerarPP}
             podeConfirmarBv={podeConfirmarBv}
             jaEnviadoParaFaturamento={envioFaturamento !== null}
