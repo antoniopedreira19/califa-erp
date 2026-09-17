@@ -119,11 +119,15 @@ interface LinhaPortal {
 // ---------------------------------------------------------------------------
 
 function Secao({
+  id,
   titulo,
   descricao,
   selo,
   children,
 }: {
+  /** Âncora da seção. O campo Marca do projeto chega aqui por
+   *  `/clientes/<id>#marcas` (17/09/2026). */
+  id?: string;
   titulo: string;
   descricao: React.ReactNode;
   selo: string;
@@ -131,7 +135,10 @@ function Secao({
 }) {
   const obrigatorio = selo === "Obrigatório";
   return (
-    <div className="grid gap-6 px-7 py-7 md:grid-cols-[minmax(0,208px)_minmax(0,1fr)] md:gap-8">
+    <div
+      id={id}
+      className="grid scroll-mt-6 gap-6 px-7 py-7 md:grid-cols-[minmax(0,208px)_minmax(0,1fr)] md:gap-8"
+    >
       <div>
         <h3 className="text-[14.5px] font-bold tracking-tight">{titulo}</h3>
         <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
@@ -772,6 +779,7 @@ export function ClienteForm({ cliente, marcas = [], portais = [] }: Props) {
         {/* Marcas                                                      */}
         {/* ---------------------------------------------------------- */}
         <Secao
+          id="marcas"
           titulo="Marcas"
           descricao={
             <>

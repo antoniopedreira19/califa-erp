@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { AlertCircle, Save } from "lucide-react";
+import { AlertCircle, Plus, Save } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/select";
 import { DatePicker } from "@/components/ui/date-picker";
 import { MultiSelect } from "@/components/ui/multi-select";
+import { Combobox } from "@/components/ui/combobox";
 import { Textarea } from "@/components/ui/textarea";
 import { DESCRICAO_MAX } from "@/lib/validations/projetos";
 import type {
@@ -145,6 +146,19 @@ export function ProjetoForm({
     setRegionalIds([]);
   };
 
+  /** Só o nome fantasia aparece. O código curto entra na BUSCA e não na
+   *  lista (decisão do Tiago, 17/09/2026): cliente com mais de um CNPJ
+   *  tem mais de um código, e mostrar um deles na linha mentiria. */
+  const clientesOpcoes = React.useMemo(
+    () =>
+      clientes.map((c) => ({
+        value: c.id,
+        label: c.nome_fantasia,
+        busca: c.codigo_curto,
+      })),
+    [clientes],
+  );
+
   // Produto é cadastrado por cliente: trocar de cliente invalida a escolha.
   const produtosDoCliente = React.useMemo(
     () => produtos.filter((p) => p.cliente_id === clienteId),
@@ -238,55 +252,74 @@ export function ProjetoForm({
           />
         </Field>
 
+        {/* Combobox, não Select: são 157 clientes ativos e a lista rolada
+            era o que mais custava tempo aqui. A busca ignora acento e
+            olha também o código curto, que é o prefixo do número do
+            projeto — quem lembra "AMBEV" acha pelo código. */}
         <Field label="Cliente" name="cliente_id" required errors={fieldErrors}>
-          <Select value={clienteId} onValueChange={handleClienteChange}>
-            <SelectTrigger className={erroClasses("cliente_id")}>
-              <SelectValue placeholder="Selecione um cliente ativo" />
-            </SelectTrigger>
-            <SelectContent>
-              {clientes.map((c) => (
-                <SelectItem key={c.id} value={c.id}>
-                  {c.nome_fantasia}{" "}
-                  <span className="text-muted-foreground">({c.codigo_curto})</span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <Combobox
+            items={clientesOpcoes}
+            value={clienteId || null}
+            onChange={(v) => handleClienteChange(v ?? "")}
+            placeholder="Selecione um cliente ativo"
+            buscaPlaceholder="Escreva o nome ou o código do cliente"
+            className={erroClasses("cliente_id")}
+          />
         </Field>
 
         <Field label="Marca" name="produto_id" required errors={fieldErrors}>
-          <Select
-            value={produtoId}
-            onValueChange={setProdutoId}
-            disabled={!clienteId || produtosDoCliente.length === 0}
-          >
-            <SelectTrigger className={erroClasses("produto_id")}>
-              <SelectValue
-                placeholder={
-                  !clienteId
-                    ? "Selecione o cliente primeiro"
-                    : produtosDoCliente.length === 0
-                      ? "Nenhuma marca cadastrada"
-                      : "Selecione a marca"
-                }
-              />
-            </SelectTrigger>
-            <SelectContent>
-              {produtosDoCliente.map((p) => (
-                <SelectItem key={p.id} value={p.id}>
-                  {p.nome}{" "}
-                  <span className="font-mono text-xs text-muted-foreground">
-                    {p.codigo}
-                  </span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {/* O "+" ao lado abre a ficha do cliente já na seção Marcas.
+              Ele aparece assim que há cliente escolhido — e não só quando
+              a lista está vazia: dos 157 clientes ativos, 150 ainda não
+              têm marca nenhuma (17/09/2026), e quem precisa de uma marca
+              nova não deveria ter de sair procurando onde se cadastra. */}
+          <div className="flex items-center gap-2">
+            <div className="min-w-0 flex-1">
+              <Select
+                value={produtoId}
+                onValueChange={setProdutoId}
+                disabled={!clienteId || produtosDoCliente.length === 0}
+              >
+                <SelectTrigger className={erroClasses("produto_id")}>
+                  <SelectValue
+                    placeholder={
+                      !clienteId
+                        ? "Selecione o cliente primeiro"
+                        : produtosDoCliente.length === 0
+                          ? "Nenhuma marca cadastrada"
+                          : "Selecione a marca"
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {produtosDoCliente.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.nome}{" "}
+                      <span className="font-mono text-xs text-muted-foreground">
+                        {p.codigo}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {clienteId && (
+              <Link
+                href={`/clientes/${clienteId}#marcas`}
+                prefetch={false}
+                title="Cadastrar marca deste cliente"
+                aria-label="Cadastrar marca deste cliente"
+                className="inline-flex h-10 w-10 flex-none items-center justify-center rounded-lg border border-border bg-white text-california-red transition-colors hover:border-california-red/40 hover:bg-california-red/[0.06]"
+              >
+                <Plus className="h-[17px] w-[17px]" />
+              </Link>
+            )}
+          </div>
           {clienteId && produtosDoCliente.length === 0 && (
             <p className="text-xs text-muted-foreground">
               Este cliente ainda não tem marcas.{" "}
               <Link
-                href={`/clientes/${clienteId}`}
+                href={`/clientes/${clienteId}#marcas`}
                 prefetch={false}
                 className="font-medium text-california-red hover:underline"
               >
