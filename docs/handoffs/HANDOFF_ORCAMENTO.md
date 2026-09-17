@@ -616,6 +616,31 @@ marca** — a matriz, quando não há outras marcas no guarda-chuva.
 
 - `cliente_produtos.padrao` (boolean) + índice parcial único por cliente. **A identificação é a coluna, não a convenção "nome igual ao do cliente"** — convenção não é garantia.
 - `criarCliente` grava o padrão junto, com código `PRD-01`. Se esse insert falhar, a action **avisa em vez de redirecionar em silêncio**: o cliente já está gravado e PostgREST não dá transação para desfazer. Mesmo padrão da mensagem "Job criado, mas a planilha interna não foi montada".
+
+⚠️ **17/09/2026 — quem cria a marca padrão agora é o BANCO.** O "avisa em
+vez de redirecionar" acima era o remendo de um buraco real: eram dois
+INSERTs sem transação, e **150 dos 157 clientes ativos estavam sem marca
+nenhuma** (os cadastrados antes de 09/09/2026, quando a action passou a
+criá-la). O campo Marca do projeto é obrigatório e só lista marcas do
+cliente, então escolher quase qualquer cliente travava ali.
+
+- `20260917160001_marca_padrao_para_clientes_antigos.sql` — backfill:
+  PRD-01 com o nome fantasia para quem não tinha nenhuma. Depois dela,
+  157 de 157.
+- `20260917160002_marca_padrao_nasce_com_o_cliente.sql` — o trigger
+  `trg_clientes_marca_padrao`, que cria a PRD-01 na MESMA transação do
+  INSERT do cliente, venha ele de onde vier.
+- A action passou a **encontrar** a padrão em vez de criá-la, com um
+  insert de reserva para a janela entre deploy e migration. Os índices
+  únicos que já existiam impedem a duplicata.
+
+⚠️ **17/09/2026 — o cliente se cadastra sem sair do formulário de
+projeto** (decisão 089). O campo Cliente virou `CampoCliente`, gêmeo do
+`CampoFornecedor` da PP: busca por nome ou código, "+" cadastra, lápis
+edita, e o "+" ao lado de Marca abre o mesmo dialog na seção Marcas. O
+dialog usa o MESMO `ClienteForm` da página, em `modo="dialog"` — inclusive
+a regra de **inativar em vez de apagar** marca e portal já gravados. A
+tela `/clientes` não mudou.
 - O backfill cobre **todos os clientes, inclusive os que já tinham outros produtos** — promove o homônimo quando existe, senão cria com o próximo `PRD-NN` livre.
 - **Imutável:** não pode ser apagado, inativado, despromovido, trocar de cliente nem mudar de código. A única alteração de nome permitida é a que acompanha o nome fantasia.
 
