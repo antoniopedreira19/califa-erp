@@ -1646,6 +1646,15 @@ export function GerarPPDrawer({
                   );
                 })}
               </div>
+              {/* A mensagem de erro do formulário fica no topo, e depois da
+                  rolagem até aqui ela some de vista: quem tenta gerar sem
+                  responder via só a borda vermelha, sem o motivo
+                  (17/09/2026). */}
+              {faltaResposta && (
+                <span className="text-[11.5px] font-semibold text-california-red">
+                  Responda se esta é a última PP deste item.
+                </span>
+              )}
               <span className="text-[11px] leading-snug text-muted-foreground">
                 {ultimaPP === true
                   ? `A previsão de custo deste item deixa de usar o planejado (${formatCurrency(valorPlanejado, "BRL")}) e passa a valer o que as PPs dizem (${formatCurrency(previaEmPPs, "BRL")}).`

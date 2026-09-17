@@ -2508,6 +2508,14 @@ do formulário e sem perder o que já foi digitado.
   item?"*, último campo antes dos botões. Sem resposta, "Gerar PP" não
   passa (`ultimaPPDoItem` em `finalizarPedidoCompra` e
   `editarPedidoCompraGerada`). A correção da PP **rejeitada** não pergunta.
+
+  ⚠️ **17/09/2026:** ela saiu do bloco fixo acima dos botões e passou a
+  **rolar com o formulário**, depois dos anexos — a regra é a mesma, e só
+  a posição mudou. Como agora pode estar fora de vista, quem tenta gerar
+  sem responder é levado até ela (`refUltimaPP` + `scrollIntoView`
+  instantâneo — `smooth` não roda em aba fora do primeiro plano), e a
+  mensagem de erro aparece **junto da pergunta**, não só no topo do
+  formulário.
 - **Botão no painel do item:** "Marcar: todas as PPs geradas", no rodapé,
   sem abrir formulário. Serve para o item antigo, para a resposta dada
   errado e para o custo que **nunca** vai gerar PP.
