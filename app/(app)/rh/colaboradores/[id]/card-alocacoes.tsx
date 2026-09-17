@@ -69,7 +69,10 @@ export function CardAlocacoes({
           key: `${v.id}-${i}`,
           empresa_id: v.empresa_id,
           regional_id: v.regional_id,
-          percentual: v.percentual,
+          // Supabase-js pode devolver numeric como number OU string dependendo
+          // do driver. Normalizamos para string aqui, para que o Input e o
+          // .replace() do parse funcionem em qualquer caso.
+          percentual: String(v.percentual),
         })),
       );
     } else {
@@ -89,7 +92,8 @@ export function CardAlocacoes({
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const somaAtual = linhas.reduce(
-    (acc, l) => acc + (Number(l.percentual.replace(",", ".")) || 0),
+    (acc, l) =>
+      acc + (Number(String(l.percentual).replace(",", ".")) || 0),
     0,
   );
   const somaOk = Math.abs(somaAtual - 100) < 0.01;
@@ -138,7 +142,9 @@ export function CardAlocacoes({
           empresa_id: l.empresa_id,
           regional_id: l.regional_id,
           percentual: (
-            Math.round(Number(l.percentual.replace(",", ".")) * 100) / 100
+            Math.round(
+              Number(String(l.percentual).replace(",", ".")) * 100,
+            ) / 100
           ).toFixed(2),
         })),
         dataMudanca,
