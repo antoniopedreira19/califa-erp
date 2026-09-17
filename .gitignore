@@ -18,11 +18,10 @@ node_modules
 *.pem
 Thumbs.db
 
-# debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.pnpm-debug.log*
+# debug — catch-all pra logs órfãos do dev-loop (start.log, dev-server.log,
+# arquivos com path Windows corrompido tipo "C:tmpdev-server.log" que caem na
+# raiz por engano). Nenhum .log é rastreado no projeto por design.
+*.log
 
 # local env files
 .env
