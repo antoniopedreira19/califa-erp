@@ -331,6 +331,26 @@ Usar shadcn/ui como base e adaptar ao padrão visual do RH:
 - tooltips quando necessário;
 - ícones lucide-react em ações.
 
+### Campo de escolha: quando é Select e quando é Combobox
+
+⚠️ **17/09/2026 (decisão 089):** escolha única cuja lista pode passar de
+~15 itens usa `Combobox` (`components/ui/combobox.tsx`), que tem busca.
+A conta é pelo que a lista pode ter em produção, não pelo que ela tem hoje.
+
+- Onde o Combobox entra **no lugar de um Select**, passe
+  `COMBOBOX_COMO_SELECT` no `className`: o Combobox nasceu na PP com
+  `h-10`, o Select do resto do sistema é `h-11` com `border-border` e
+  `px-3.5`, e sem isso o campo fica mais baixo que os vizinhos.
+- Lista curta e fechada continua `Select` — empresa, regionais da empresa,
+  marcas do cliente, forma de pagamento, status.
+- `ComboboxItem.descricao` é a segunda linha **visível** (o CPF/CNPJ do
+  fornecedor). `ComboboxItem.busca` filtra **sem aparecer** — é o código
+  curto do cliente, que não pode ficar à vista porque um cliente pode ter
+  mais de um CNPJ, logo mais de um código.
+- Campo sem `<Label>` ao lado leva `ariaLabel`.
+- A célula de seleção da planilha não muda: ela está amarrada à navegação
+  por teclado da decisão 046.
+
 ## Restrições
 
 - Não criar uma identidade visual nova.
