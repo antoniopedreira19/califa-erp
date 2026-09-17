@@ -154,36 +154,47 @@ export function Combobox({
               className,
             )}
           >
-            <span className={cn("truncate text-left", !selected && "text-muted-foreground")}>
+            <span
+              className={cn(
+                "min-w-0 flex-1 truncate text-left",
+                !selected && "text-muted-foreground",
+              )}
+            >
               {selected ? selected.label : placeholder}
             </span>
-            {/* Zerar a escolha sem abrir a lista. Vai como <span> porque o
-                gatilho já é um <button> e um botão dentro de outro é HTML
-                inválido — o clique é interceptado antes de abrir o popover. */}
-            {limpavel && selected && !disabled && (
-              <span
-                role="button"
-                tabIndex={0}
-                aria-label="Limpar seleção"
-                title="Limpar seleção"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  onChange(null);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
+            {/* Os dois ícones andam JUNTOS, colados na direita. Soltos como
+                irmãos do texto, o `justify-between` do gatilho espalhava os
+                três e o ✕ parava no meio do campo — visível em qualquer
+                nome curto, "AMBEV" à esquerda e o ✕ no vazio (17/09/2026). */}
+            <span className="flex flex-none items-center gap-1.5">
+              {/* Zerar a escolha sem abrir a lista. Vai como <span> porque o
+                  gatilho já é um <button> e um botão dentro de outro é HTML
+                  inválido — o clique é interceptado antes de abrir o popover. */}
+              {limpavel && selected && !disabled && (
+                <span
+                  role="button"
+                  tabIndex={0}
+                  aria-label="Limpar seleção"
+                  title="Limpar seleção"
+                  onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
                     onChange(null);
-                  }
-                }}
-                className="inline-flex h-5 w-5 flex-none items-center justify-center rounded-md bg-muted text-muted-foreground transition-colors hover:bg-california-red/10 hover:text-california-red"
-              >
-                <X className="h-3 w-3" />
-              </span>
-            )}
-            <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onChange(null);
+                    }
+                  }}
+                  className="inline-flex h-5 w-5 flex-none items-center justify-center rounded-md bg-muted text-muted-foreground transition-colors hover:bg-california-red/10 hover:text-california-red"
+                >
+                  <X className="h-3 w-3" />
+                </span>
+              )}
+              <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
+            </span>
           </button>
         </PopoverTrigger>
         <PopoverContent
