@@ -18,6 +18,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { DatePicker } from "@/components/ui/date-picker";
+import { Combobox, COMBOBOX_COMO_SELECT } from "@/components/ui/combobox";
 import {
   Select,
   SelectTrigger,
@@ -250,54 +251,38 @@ export function BaixaLoteCartaoDialog({
               <span className="text-california-red">*</span>
             </label>
             <div className="grid grid-cols-2 gap-3">
-              <Select
-                value={tipoId || undefined}
-                onValueChange={handleTipo}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Tipo..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {tiposAtivos.length === 0 ? (
-                    <div className="px-2 py-1.5 text-xs text-muted-foreground">
-                      Nenhum tipo cadastrado.
-                    </div>
-                  ) : (
-                    tiposAtivos.map((t) => (
-                      <SelectItem key={t.id} value={t.id}>
-                        {t.codigo} · {t.nome}
-                      </SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
-              <Select
-                value={subtipoId || undefined}
-                onValueChange={(v) => {
-                  setSubtipoId(v);
+              <Combobox
+                items={tiposAtivos.map((t) => ({
+                  value: t.id,
+                  label: `${t.codigo} · ${t.nome}`,
+                }))}
+                value={tipoId || null}
+                onChange={(v) => handleTipo(v ?? "")}
+                placeholder={
+                  tiposAtivos.length === 0 ? "Nenhum tipo cadastrado" : "Tipo..."
+                }
+                buscaPlaceholder="Escreva o código ou o nome"
+                disabled={tiposAtivos.length === 0}
+                className={COMBOBOX_COMO_SELECT}
+              />
+              <Combobox
+                items={subtiposDoTipo.map((s) => ({ value: s.id, label: s.nome }))}
+                value={subtipoId || null}
+                onChange={(v) => {
+                  setSubtipoId(v ?? "");
                   setErro(null);
                 }}
-                disabled={!tipoId}
-              >
-                <SelectTrigger>
-                  <SelectValue
-                    placeholder={tipoId ? "Subtipo..." : "Escolha o tipo primeiro"}
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {subtiposDoTipo.length === 0 ? (
-                    <div className="px-2 py-1.5 text-xs text-muted-foreground">
-                      Nenhum subtipo cadastrado.
-                    </div>
-                  ) : (
-                    subtiposDoTipo.map((s) => (
-                      <SelectItem key={s.id} value={s.id}>
-                        {s.nome}
-                      </SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
+                disabled={!tipoId || subtiposDoTipo.length === 0}
+                placeholder={
+                  !tipoId
+                    ? "Escolha o tipo primeiro"
+                    : subtiposDoTipo.length === 0
+                      ? "Nenhum subtipo cadastrado"
+                      : "Subtipo..."
+                }
+                buscaPlaceholder="Escreva o nome do subtipo"
+                className={COMBOBOX_COMO_SELECT}
+              />
             </div>
             <p className="text-[11px] text-muted-foreground">
               Define onde o custo entra no DRE.

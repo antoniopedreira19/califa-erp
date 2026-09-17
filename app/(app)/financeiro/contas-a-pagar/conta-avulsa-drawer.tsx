@@ -28,7 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Combobox } from "@/components/ui/combobox";
+import { Combobox, COMBOBOX_COMO_SELECT } from "@/components/ui/combobox";
 import { CampoFornecedor } from "@/app/(app)/fornecedores/campo-fornecedor";
 import { DatePicker } from "@/components/ui/date-picker";
 import { createClient } from "@/lib/supabase/client";
@@ -774,25 +774,21 @@ export function ContaAvulsaDrawer(props: Props) {
             {/* Tipo do plano de contas */}
             <div className="space-y-2">
               <Label htmlFor="avulsa-plano-conta-tipo">Tipo *</Label>
-              <Select
-                value={tipoId}
-                onValueChange={(v) => {
-                  setTipoId(v);
+              <Combobox
+                id="avulsa-plano-conta-tipo"
+                items={tiposAtivos.map((t) => ({
+                  value: t.id,
+                  label: `${t.codigo} — ${t.nome}`,
+                }))}
+                value={tipoId || null}
+                onChange={(v) => {
+                  setTipoId(v ?? "");
                   setSubtipoId("");
                 }}
-                required
-              >
-                <SelectTrigger id="avulsa-plano-conta-tipo">
-                  <SelectValue placeholder="Selecione o tipo" />
-                </SelectTrigger>
-                <SelectContent>
-                  {tiposAtivos.map((t) => (
-                    <SelectItem key={t.id} value={t.id}>
-                      {t.codigo} — {t.nome}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                placeholder="Selecione o tipo"
+                buscaPlaceholder="Escreva o código ou o nome"
+                className={COMBOBOX_COMO_SELECT}
+              />
               {fieldErrors.plano_conta_tipo_id?.map((msg, i) => (
                 <p key={i} className="text-xs text-california-red">
                   {msg}
@@ -803,31 +799,25 @@ export function ContaAvulsaDrawer(props: Props) {
             {/* Subtipo do plano de contas */}
             <div className="space-y-2">
               <Label htmlFor="avulsa-plano-conta-subtipo">Subtipo *</Label>
-              <Select
-                value={subtipoId}
-                onValueChange={setSubtipoId}
+              <Combobox
+                id="avulsa-plano-conta-subtipo"
+                items={subtiposFiltrados.map((s) => ({
+                  value: s.id,
+                  label: s.nome,
+                }))}
+                value={subtipoId || null}
+                onChange={(v) => setSubtipoId(v ?? "")}
                 disabled={!tipoId || subtiposFiltrados.length === 0}
-                required
-              >
-                <SelectTrigger id="avulsa-plano-conta-subtipo">
-                  <SelectValue
-                    placeholder={
-                      tipoId
-                        ? subtiposFiltrados.length === 0
-                          ? "Nenhum subtipo disponível"
-                          : "Selecione o subtipo"
-                        : "Selecione o tipo primeiro"
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {subtiposFiltrados.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>
-                      {s.nome}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                placeholder={
+                  tipoId
+                    ? subtiposFiltrados.length === 0
+                      ? "Nenhum subtipo disponível"
+                      : "Selecione o subtipo"
+                    : "Selecione o tipo primeiro"
+                }
+                buscaPlaceholder="Escreva o nome do subtipo"
+                className={COMBOBOX_COMO_SELECT}
+              />
               {fieldErrors.plano_conta_subtipo_id?.map((msg, i) => (
                 <p key={i} className="text-xs text-california-red">
                   {msg}

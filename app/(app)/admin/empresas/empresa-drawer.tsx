@@ -13,15 +13,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import type { UF } from "@/lib/types";
 import { UFS, apenasDigitos, formatarCNPJ, formatarCEP, formatarTelefone } from "@/lib/utils/formato-fiscal";
+import { Combobox, COMBOBOX_COMO_SELECT } from "@/components/ui/combobox";
+import { cn } from "@/lib/utils";
 import { criarEmpresa, atualizarEmpresa, type ActionResult } from "./actions";
 import type { EmpresaRow } from "./types";
 
@@ -198,20 +193,15 @@ export function EmpresaDrawer(props: Props) {
                 </div>
                 <div className="md:col-span-2">
                   <Field label="UF" name="uf" required errors={fieldErrors}>
-                    <Select value={uf} onValueChange={(v) => setUf(v as UF)}>
-                      <SelectTrigger className={erroClasses("uf")}>
-                        <SelectValue placeholder="Selecione" />
-                      </SelectTrigger>
-                      <SelectContent
-                        side="bottom"
-                        avoidCollisions={false}
-                        className="w-[--radix-select-trigger-width]"
-                      >
-                        {UFS.map((u) => (
-                          <SelectItem key={u} value={u}>{u}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Combobox
+                      ariaLabel="UF"
+                      items={UFS.map((u) => ({ value: u, label: u }))}
+                      value={uf || null}
+                      onChange={(v) => setUf((v ?? "") as UF)}
+                      placeholder="Selecione"
+                      buscaPlaceholder="UF"
+                      className={cn(COMBOBOX_COMO_SELECT, erroClasses("uf"))}
+                    />
                   </Field>
                 </div>
               </div>

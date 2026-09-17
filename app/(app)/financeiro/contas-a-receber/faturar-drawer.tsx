@@ -37,6 +37,7 @@ import {
 } from "lucide-react";
 import { Dialog, DrawerContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DatePicker } from "@/components/ui/date-picker";
+import { Combobox, COMBOBOX_COMO_SELECT } from "@/components/ui/combobox";
 import {
   Select,
   SelectTrigger,
@@ -807,18 +808,14 @@ export function FaturarDrawer({
               <div className="grid grid-cols-2 gap-3.5">
                 <div className="space-y-1.5">
                   <Label>Cliente {obrigatorio}</Label>
-                  <Select value={avClienteId} onValueChange={setAvClienteId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione o cliente" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {clientes.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>
-                          {c.nome}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Combobox
+                    items={clientes.map((c) => ({ value: c.id, label: c.nome }))}
+                    value={avClienteId || null}
+                    onChange={(v) => setAvClienteId(v ?? "")}
+                    placeholder="Selecione o cliente"
+                    buscaPlaceholder="Escreva o nome do cliente"
+                    className={COMBOBOX_COMO_SELECT}
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="av-valor">Valor total da NF {obrigatorio}</Label>
@@ -836,44 +833,37 @@ export function FaturarDrawer({
                 <div className="space-y-1.5">
                   <Label>Centro de custo {obrigatorio}</Label>
                   <div className="grid grid-cols-2 gap-2">
-                    <Select
-                      value={avTipoId}
-                      onValueChange={(v) => {
-                        setAvTipoId(v);
+                    <Combobox
+                      items={tiposAtivos.map((t) => ({
+                        value: t.id,
+                        label: `${t.codigo} · ${t.nome}`,
+                      }))}
+                      value={avTipoId || null}
+                      onChange={(v) => {
+                        const novo = v ?? "";
+                        setAvTipoId(novo);
                         setAvSubtipoId((atual) =>
-                          subtipos.find((s) => s.id === atual)?.tipo_id === v ? atual : "",
+                          subtipos.find((s) => s.id === atual)?.tipo_id === novo
+                            ? atual
+                            : "",
                         );
                       }}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Tipo..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {tiposAtivos.map((t) => (
-                          <SelectItem key={t.id} value={t.id}>
-                            {t.codigo} · {t.nome}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Select
-                      value={avSubtipoId}
-                      onValueChange={setAvSubtipoId}
+                      placeholder="Tipo..."
+                      buscaPlaceholder="Escreva o código ou o nome"
+                      className={COMBOBOX_COMO_SELECT}
+                    />
+                    <Combobox
+                      items={subtiposDoTipo.map((s) => ({
+                        value: s.id,
+                        label: s.nome,
+                      }))}
+                      value={avSubtipoId || null}
+                      onChange={(v) => setAvSubtipoId(v ?? "")}
                       disabled={!avTipoId}
-                    >
-                      <SelectTrigger>
-                        <SelectValue
-                          placeholder={avTipoId ? "Subtipo..." : "Escolha o tipo"}
-                        />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {subtiposDoTipo.map((s) => (
-                          <SelectItem key={s.id} value={s.id}>
-                            {s.nome}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      placeholder={avTipoId ? "Subtipo..." : "Escolha o tipo"}
+                      buscaPlaceholder="Escreva o nome do subtipo"
+                      className={COMBOBOX_COMO_SELECT}
+                    />
                   </div>
                 </div>
               </div>
