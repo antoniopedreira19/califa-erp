@@ -72,10 +72,32 @@ se perde. É o mesmo que o link "Cadastrar agora" já fazia. O cadastro
 rápido de cliente e de marca dentro do próprio formulário está desenhado e
 aguarda decisão — quando entrar, ele substitui esse salto.
 
-⚠️ **17/09/2026, ainda no mesmo dia — o Tiago já decidiu o destino final
-do "+":** ele não vai levar para a ficha do cliente. Vai abrir o **dialog
-de cadastro rápido**, na seção Marcas, igual ao "+" do fornecedor na PP.
-A navegação atual é provisória e cai junto com a entrega do dialog.
+✅ **17/09/2026, entregue — o cadastro rápido de cliente.** O "+" não leva
+mais para fora do formulário. O campo virou `CampoCliente`
+(`app/(app)/clientes/campo-cliente.tsx`), gêmeo do `CampoFornecedor` da
+PP, e o que ele abre é o `NovoClienteDialog`, com o MESMO `ClienteForm` da
+página no modo `dialog` — nada de um segundo formulário para divergir na
+primeira correção:
+
+- **campo vazio → "+" cadastra**; **cliente escolhido → lápis edita**; o ✕
+  do campo devolve o "+". A busca sem resultado oferece *Cadastrar "…"
+  como cliente*, e o nome digitado já chega preenchido.
+- **O "+" ao lado de Marca abre o mesmo dialog na seção Marcas**, com uma
+  linha nova em branco e o foco nela.
+- **Criar devolve o cliente escolhido no campo, com a marca já na lista**
+  — `criarCliente` ganhou `semRedirect` e devolve o id; o campo relê o
+  cadastro (`carregarCliente`) e entrega as marcas ativas a quem o usa. Sem
+  `router.refresh()`: ele zeraria o formulário do projeto no meio do
+  preenchimento (a mesma armadilha que a PP encontrou em 04/09/2026).
+- **Na edição, marca e portal já gravados INATIVAM, não somem** (pedido do
+  Tiago ao aprovar o desenho). É o comportamento que o formulário completo
+  já tinha, e veio junto por ser o mesmo componente: o ✕ vira "Reativar", e
+  a linha continua no banco para os jobs que a usam.
+
+Conferido no navegador, com gravação real: cliente criado pelo dialog
+nasceu com a PRD-01 do trigger e ficou escolhido; marca acrescentada pelo
+"+" apareceu no campo Marca sem recarregar; e inativar deixou
+`ativo = false` no banco, sumindo só da lista de escolha.
 
 ## 4b. Todo cliente tem marca padrão — agora garantido pelo banco
 
