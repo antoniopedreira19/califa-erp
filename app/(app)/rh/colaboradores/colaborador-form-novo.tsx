@@ -6,6 +6,7 @@ import { AlertCircle, CheckCircle2, Info } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MaskedInput } from "@/components/ui/masked-input";
+import { MoedaInput } from "@/components/ui/moeda-input";
 import { DatePicker } from "@/components/ui/date-picker";
 import {
   Select,
@@ -427,16 +428,10 @@ export function ColaboradorFormNovo({
         <div className="grid gap-5 md:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="salario_valor">
-              Salário / Pró-labore mensal (R$){" "}
+              Salário / Pró-labore mensal{" "}
               <span className="text-california-red">*</span>
             </Label>
-            <Input
-              id="salario_valor"
-              name="salario_valor"
-              required
-              placeholder="3000,00"
-              inputMode="decimal"
-            />
+            <MoedaInput id="salario_valor" name="salario_valor" required />
             {fieldErrors.valor?.map((msg, i) => (
               <p key={i} className="text-xs text-california-red">
                 {msg}
