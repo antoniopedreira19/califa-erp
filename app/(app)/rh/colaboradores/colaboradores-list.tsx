@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Search } from "lucide-react";
+import { Search, GraduationCap, Plus } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -31,8 +31,10 @@ type TipoFiltro = "todos" | TipoContratacao;
 
 export function ColaboradoresList({
   colaboradores,
+  niveisAtivosCount,
 }: {
   colaboradores: ColaboradorRow[];
+  niveisAtivosCount: number;
 }) {
   const router = useRouter();
   const [busca, setBusca] = React.useState("");
@@ -56,43 +58,64 @@ export function ColaboradoresList({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div className="flex flex-1 items-center gap-3 flex-wrap">
-          <div className="relative flex-1 max-w-md min-w-[240px]">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Buscar por nome, função ou nível..."
-              value={busca}
-              onChange={(e) => setBusca(e.target.value)}
-              className="pl-9"
-            />
-          </div>
-          <Select
-            value={status}
-            onValueChange={(v) => setStatus(v as StatusFiltro)}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative flex-1 max-w-md min-w-[240px]">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Buscar por nome, função ou nível..."
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        <Select
+          value={status}
+          onValueChange={(v) => setStatus(v as StatusFiltro)}
+        >
+          <SelectTrigger className="w-40">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ativos">Ativos</SelectItem>
+            <SelectItem value="inativos">Inativos</SelectItem>
+            <SelectItem value="todos">Todos</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={tipo} onValueChange={(v) => setTipo(v as TipoFiltro)}>
+          <SelectTrigger className="w-48">
+            <SelectValue placeholder="Tipo de contratação" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todos">Todos os tipos</SelectItem>
+            <SelectItem value="pj">PJ</SelectItem>
+            <SelectItem value="mei">MEI</SelectItem>
+            <SelectItem value="clt_recibo">CLT + Recibo</SelectItem>
+            <SelectItem value="clt">CLT</SelectItem>
+            <SelectItem value="estagio">Estágio</SelectItem>
+          </SelectContent>
+        </Select>
+        <div className="ml-auto flex items-center gap-2">
+          <Link
+            href="/rh/colaboradores/niveis"
+            prefetch={false}
+            className="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2.5 text-sm font-semibold text-foreground shadow-sm hover:border-california-red/30 hover:text-california-red transition-all"
           >
-            <SelectTrigger className="w-40">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="ativos">Ativos</SelectItem>
-              <SelectItem value="inativos">Inativos</SelectItem>
-              <SelectItem value="todos">Todos</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={tipo} onValueChange={(v) => setTipo(v as TipoFiltro)}>
-            <SelectTrigger className="w-48">
-              <SelectValue placeholder="Tipo de contratação" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="todos">Todos os tipos</SelectItem>
-              <SelectItem value="pj">PJ</SelectItem>
-              <SelectItem value="mei">MEI</SelectItem>
-              <SelectItem value="clt_recibo">CLT + Recibo</SelectItem>
-              <SelectItem value="clt">CLT</SelectItem>
-              <SelectItem value="estagio">Estágio</SelectItem>
-            </SelectContent>
-          </Select>
+            <GraduationCap className="h-4 w-4" />
+            Níveis
+            {niveisAtivosCount > 0 && (
+              <span className="ml-1 text-xs font-medium text-muted-foreground">
+                ({niveisAtivosCount})
+              </span>
+            )}
+          </Link>
+          <Link
+            href="/rh/colaboradores/novo"
+            prefetch={false}
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-california-red px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-california-red-hover hover:shadow-brand transition-all"
+          >
+            <Plus className="h-4 w-4" />
+            Novo colaborador
+          </Link>
         </div>
       </div>
 
