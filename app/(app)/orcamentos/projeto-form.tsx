@@ -15,7 +15,11 @@ import {
 } from "@/components/ui/select";
 import { DatePicker } from "@/components/ui/date-picker";
 import { MultiSelect } from "@/components/ui/multi-select";
-import { Combobox } from "@/components/ui/combobox";
+import {
+  CampoCliente,
+  type ClienteDoCampo,
+  type MarcaNova,
+} from "@/app/(app)/clientes/campo-cliente";
 import { Textarea } from "@/components/ui/textarea";
 import { DESCRICAO_MAX } from "@/lib/validations/projetos";
 import type {
@@ -146,23 +150,48 @@ export function ProjetoForm({
     setRegionalIds([]);
   };
 
-  /** Só o nome fantasia aparece. O código curto entra na BUSCA e não na
-   *  lista (decisão do Tiago, 17/09/2026): cliente com mais de um CNPJ
-   *  tem mais de um código, e mostrar um deles na linha mentiria. */
-  const clientesOpcoes = React.useMemo(
-    () =>
-      clientes.map((c) => ({
-        value: c.id,
-        label: c.nome_fantasia,
-        busca: c.codigo_curto,
-      })),
-    [clientes],
+  /**
+   * Cliente e marcas viram estado porque o cadastro rápido grava sem
+   * recarregar a tela: o cliente criado no dialog precisa entrar na lista
+   * e a marca que nasceu com ele precisa estar no campo Marca na mesma
+   * hora (17/09/2026). `router.refresh()` resolveria — e zeraria o
+   * formulário no meio do preenchimento.
+   */
+  const [clientesLocais, setClientesLocais] = React.useState<ClienteDoCampo[]>(
+    () => clientes,
   );
+  const [produtosLocais, setProdutosLocais] = React.useState<ProdutoOption[]>(
+    () => produtos,
+  );
+  /** Ligado pelo "+" do campo Marca; o CampoCliente desliga ao abrir. */
+  const [abrirMarcasDoCliente, setAbrirMarcasDoCliente] = React.useState(false);
+
+  React.useEffect(() => setClientesLocais(clientes), [clientes]);
+  React.useEffect(() => setProdutosLocais(produtos), [produtos]);
+
+  function absorverCadastro(cliente: ClienteDoCampo, marcas: MarcaNova[]) {
+    setClientesLocais((atual) =>
+      atual.some((c) => c.id === cliente.id)
+        ? atual.map((c) => (c.id === cliente.id ? { ...c, ...cliente } : c))
+        : [...atual, cliente].sort((a, b) =>
+            a.nome_fantasia.localeCompare(b.nome_fantasia, "pt-BR"),
+          ),
+    );
+    setProdutosLocais((atual) => [
+      ...atual.filter((p) => p.cliente_id !== cliente.id),
+      ...marcas.map((m) => ({
+        id: m.id,
+        nome: m.nome,
+        codigo: m.codigo,
+        cliente_id: cliente.id,
+      })),
+    ]);
+  }
 
   // Produto é cadastrado por cliente: trocar de cliente invalida a escolha.
   const produtosDoCliente = React.useMemo(
-    () => produtos.filter((p) => p.cliente_id === clienteId),
-    [produtos, clienteId],
+    () => produtosLocais.filter((p) => p.cliente_id === clienteId),
+    [produtosLocais, clienteId],
   );
 
   function handleClienteChange(novoClienteId: string) {
@@ -256,14 +285,18 @@ export function ProjetoForm({
             era o que mais custava tempo aqui. A busca ignora acento e
             olha também o código curto, que é o prefixo do número do
             projeto — quem lembra "AMBEV" acha pelo código. */}
+        {/* Busca por nome ou código, e o botão ao lado cadastra (campo
+            vazio) ou edita (cliente escolhido) sem sair do formulário —
+            decisão 089, no molde do campo de fornecedor da PP. */}
         <Field label="Cliente" name="cliente_id" required errors={fieldErrors}>
-          <Combobox
-            items={clientesOpcoes}
+          <CampoCliente
             value={clienteId || null}
             onChange={(v) => handleClienteChange(v ?? "")}
-            placeholder="Selecione um cliente ativo"
-            buscaPlaceholder="Escreva o nome ou o código do cliente"
+            clientes={clientesLocais}
+            onCadastroMudou={absorverCadastro}
             className={erroClasses("cliente_id")}
+            abrirMarcas={abrirMarcasDoCliente}
+            onAbrirMarcasResolvido={() => setAbrirMarcasDoCliente(false)}
           />
         </Field>
 
@@ -304,27 +337,27 @@ export function ProjetoForm({
               </Select>
             </div>
             {clienteId && (
-              <Link
-                href={`/clientes/${clienteId}#marcas`}
-                prefetch={false}
+              <button
+                type="button"
+                onClick={() => setAbrirMarcasDoCliente(true)}
                 title="Cadastrar marca deste cliente"
                 aria-label="Cadastrar marca deste cliente"
                 className="inline-flex h-10 w-10 flex-none items-center justify-center rounded-lg border border-border bg-white text-california-red transition-colors hover:border-california-red/40 hover:bg-california-red/[0.06]"
               >
                 <Plus className="h-[17px] w-[17px]" />
-              </Link>
+              </button>
             )}
           </div>
           {clienteId && produtosDoCliente.length === 0 && (
             <p className="text-xs text-muted-foreground">
               Este cliente ainda não tem marcas.{" "}
-              <Link
-                href={`/clientes/${clienteId}#marcas`}
-                prefetch={false}
+              <button
+                type="button"
+                onClick={() => setAbrirMarcasDoCliente(true)}
                 className="font-medium text-california-red hover:underline"
               >
                 Cadastrar agora
-              </Link>
+              </button>
             </p>
           )}
         </Field>

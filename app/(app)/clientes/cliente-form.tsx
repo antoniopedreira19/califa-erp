@@ -122,7 +122,9 @@ function Secao({
   id,
   titulo,
   descricao,
+  descricaoNoDialog,
   selo,
+  emDialog,
   children,
 }: {
   /** Âncora da seção. O campo Marca do projeto chega aqui por
@@ -130,10 +132,49 @@ function Secao({
   id?: string;
   titulo: string;
   descricao: React.ReactNode;
+  /** A mesma explicação, encurtada para caber na linha do título dentro do
+   *  dialog. Ausente = a seção não mostra explicação ali. */
+  descricaoNoDialog?: string;
   selo: string;
+  emDialog?: boolean;
   children: React.ReactNode;
 }) {
   const obrigatorio = selo === "Obrigatório";
+  const seloEl = (
+    <span
+      className={cn(
+        "inline-block flex-none rounded-full px-2 py-[3px] font-bold uppercase tracking-wider",
+        emDialog ? "text-[10px]" : "mt-2.5 text-[10.5px]",
+        obrigatorio
+          ? "bg-california-red/[0.08] text-[#c2404a]"
+          : "bg-muted text-muted-foreground",
+      )}
+    >
+      {selo}
+    </span>
+  );
+
+  // No dialog o cartão tem 768px e divide espaço com o formulário do
+  // projeto atrás: a coluna de explicação não cabe, e o cabeçalho da seção
+  // vira uma linha só — título, selo e a nota curta à direita. É o mesmo
+  // que o formulário de fornecedor faz na PP (17/09/2026).
+  if (emDialog) {
+    return (
+      <div id={id} className="flex scroll-mt-4 flex-col gap-3.5 px-6 py-[22px]">
+        <div className="flex flex-wrap items-baseline gap-2.5">
+          <h3 className="text-[13.5px] font-bold tracking-tight">{titulo}</h3>
+          {seloEl}
+          {descricaoNoDialog && (
+            <span className="min-w-[160px] flex-1 text-right text-[11.5px] leading-snug text-muted-foreground">
+              {descricaoNoDialog}
+            </span>
+          )}
+        </div>
+        {children}
+      </div>
+    );
+  }
+
   return (
     <div
       id={id}
@@ -144,16 +185,7 @@ function Secao({
         <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
           {descricao}
         </p>
-        <span
-          className={cn(
-            "mt-2.5 inline-block rounded-full px-2 py-[3px] text-[10.5px] font-bold uppercase tracking-wider",
-            obrigatorio
-              ? "bg-california-red/[0.08] text-[#c2404a]"
-              : "bg-muted text-muted-foreground",
-          )}
-        >
-          {selo}
-        </span>
+        {seloEl}
       </div>
       <div className="min-w-0">{children}</div>
     </div>
@@ -245,11 +277,40 @@ interface Props {
   /** Todas as marcas do cliente, inclusive a padrão e as inativas. */
   marcas?: ClienteProduto[];
   portais?: ClientePortal[];
+  /**
+   * `pagina` é a tela de /clientes. `dialog` é o cadastro rápido de dentro
+   * do formulário de projeto (17/09/2026): mesmo formulário, seções em
+   * linha única, rodapé próprio, e o resultado volta por callback em vez
+   * de redirecionar.
+   */
+  modo?: "pagina" | "dialog";
+  /** Só no dialog: nome já preenchido, vindo do "Cadastrar «…»" da busca. */
+  nomeInicial?: string;
+  /** Só no dialog: rola até a seção Marcas e abre uma linha nova nela —
+   *  é o "+" ao lado do campo Marca do projeto. */
+  focoMarcas?: boolean;
+  /** Só no dialog, na criação: o cliente recém-gravado. */
+  onCriado?: (cliente: { id: string; nome_fantasia: string }) => void;
+  /** Só no dialog, na edição: o cadastro foi salvo. */
+  onSalvo?: () => void;
+  /** Só no dialog: fechar sem gravar. */
+  onCancelar?: () => void;
 }
 
-export function ClienteForm({ cliente, marcas = [], portais = [] }: Props) {
+export function ClienteForm({
+  cliente,
+  marcas = [],
+  portais = [],
+  modo = "pagina",
+  nomeInicial,
+  focoMarcas,
+  onCriado,
+  onSalvo,
+  onCancelar,
+}: Props) {
   const router = useRouter();
   const isEdit = Boolean(cliente);
+  const emDialog = modo === "dialog";
 
   const marcaPrincipalSalva = marcas.find((m) => m.padrao) ?? null;
 
@@ -260,7 +321,9 @@ export function ClienteForm({ cliente, marcas = [], portais = [] }: Props) {
   >({});
 
   // --- Identificação -------------------------------------------------------
-  const [nome, setNome] = React.useState(cliente?.nome_fantasia ?? "");
+  const [nome, setNome] = React.useState(
+    cliente?.nome_fantasia ?? nomeInicial ?? "",
+  );
   const [codigo, setCodigo] = React.useState(cliente?.codigo_curto ?? "");
   /** Na edição o código já existe: nunca se sugere sozinho por cima. */
   const [codigoEditado, setCodigoEditado] = React.useState(isEdit);
@@ -282,8 +345,8 @@ export function ClienteForm({ cliente, marcas = [], portais = [] }: Props) {
   );
 
   // --- Marcas e portais ----------------------------------------------------
-  const [linhasMarca, setLinhasMarca] = React.useState<LinhaMarca[]>(() =>
-    marcas
+  const [linhasMarca, setLinhasMarca] = React.useState<LinhaMarca[]>(() => {
+    const doBanco = marcas
       .filter((m) => !m.padrao)
       .map((m) => ({
         uid: novoUid(),
@@ -291,8 +354,13 @@ export function ClienteForm({ cliente, marcas = [], portais = [] }: Props) {
         codigo: m.codigo,
         nome: m.nome,
         ativo: m.ativo,
-      })),
-  );
+      }));
+    // Quem clicou no "+" ao lado da Marca quer CADASTRAR uma: a linha em
+    // branco já entra pronta, com o foco nela (17/09/2026).
+    return focoMarcas
+      ? [...doBanco, { uid: novoUid(), nome: "", ativo: true }]
+      : doBanco;
+  });
   const [linhasPortal, setLinhasPortal] = React.useState<LinhaPortal[]>(() =>
     portais.map((p) => ({
       uid: novoUid(),
@@ -439,9 +507,11 @@ export function ClienteForm({ cliente, marcas = [], portais = [] }: Props) {
 
   const rotuloSalvar = isEdit
     ? "Salvar alterações"
-    : marcasNovas > 0
-      ? `Criar cliente e ${marcasNovas} ${marcasNovas === 1 ? "marca" : "marcas"}`
-      : "Criar cliente";
+    : emDialog
+      ? "Criar e usar no projeto"
+      : marcasNovas > 0
+        ? `Criar cliente e ${marcasNovas} ${marcasNovas === 1 ? "marca" : "marcas"}`
+        : "Criar cliente";
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -485,28 +555,74 @@ export function ClienteForm({ cliente, marcas = [], portais = [] }: Props) {
     startTransition(async () => {
       const res: ActionResult = isEdit
         ? await atualizarCliente(cliente!.id, formData)
-        : await criarCliente(formData);
+        : await criarCliente(formData, { semRedirect: emDialog });
 
       if (!res.ok) {
         setError(res.message);
         if (res.fieldErrors) setFieldErrors(res.fieldErrors);
         return;
       }
-      // criar já redireciona no server; atualizar dá refresh.
+
+      // No dialog quem decide o que acontece é quem o abriu: criar devolve
+      // o cliente para ficar escolhido no projeto, salvar só avisa. Sem
+      // `router.refresh()` aqui — ele re-renderiza a tela de trás e zera o
+      // formulário do projeto no meio do preenchimento (visto na PP em
+      // 04/09/2026).
+      if (emDialog) {
+        if (isEdit) onSalvo?.();
+        else if (res.id) {
+          onCriado?.({ id: res.id, nome_fantasia: nome.trim() });
+        }
+        return;
+      }
+
+      // Fora do dialog: criar já redirecionou no server; atualizar dá refresh.
       if (isEdit) router.refresh();
     });
   }
 
+  /** O "+" ao lado da Marca abre o dialog já na seção Marcas, com o foco
+   *  na linha nova que o estado inicial criou. */
+  React.useEffect(() => {
+    if (!emDialog || !focoMarcas) return;
+    const t = setTimeout(() => {
+      const secao = document.getElementById("marcas");
+      secao?.scrollIntoView({ block: "center" });
+      const campo = secao?.querySelector<HTMLInputElement>(
+        'input[placeholder^="Nome da marca"]:not([disabled])',
+      );
+      campo?.focus();
+    }, 120);
+    return () => clearTimeout(t);
+  }, [emDialog, focoMarcas]);
+
   const nomeMarcaPrincipal = nome.trim() || "Defina o nome fantasia acima";
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-4 pb-24">
-      <div className="overflow-hidden rounded-2xl border border-border bg-white shadow-soft">
+    <form
+      onSubmit={handleSubmit}
+      className={cn(
+        "flex flex-col",
+        emDialog ? "min-h-0 flex-1" : "gap-4 pb-24",
+      )}
+    >
+      {/* No dialog só ESTE bloco rola: o cabeçalho é do dialog e o rodapé
+          fica colado no pé, sempre à vista. */}
+      <div
+        className={cn(
+          "bg-white",
+          emDialog
+            ? "min-h-0 flex-1 overflow-y-auto"
+            : "overflow-hidden rounded-2xl border border-border shadow-soft",
+        )}
+      >
         {/* ---------------------------------------------------------- */}
         {/* Identificação                                               */}
         {/* ---------------------------------------------------------- */}
         <Secao
           titulo="Identificação"
+          descricaoNoDialog="Nome, código e CNPJ — o CNPJ é a chave que impede cadastro repetido."
+          emDialog={emDialog}
           descricao="Como o cliente aparece nas listas, nos projetos e no código dos jobs."
           selo="Obrigatório"
         >
@@ -781,6 +897,8 @@ export function ClienteForm({ cliente, marcas = [], portais = [] }: Props) {
         <Secao
           id="marcas"
           titulo="Marcas"
+          descricaoNoDialog="Cada marca vira uma opção no campo Marca do projeto."
+          emDialog={emDialog}
           descricao={
             <>
               Cada marca vira uma opção no campo <strong>Marca</strong> do
@@ -897,6 +1015,8 @@ export function ClienteForm({ cliente, marcas = [], portais = [] }: Props) {
         {/* ---------------------------------------------------------- */}
         <Secao
           titulo="Portais de fornecedor"
+          descricaoNoDialog="Onde a nota deste cliente é lançada — um cliente pode ter mais de um."
+          emDialog={emDialog}
           descricao="Onde a nota deste cliente é lançada. Aparecem no envio do job para faturamento — um cliente pode ter mais de um."
           selo="Opcional"
         >
@@ -1001,6 +1121,8 @@ export function ClienteForm({ cliente, marcas = [], portais = [] }: Props) {
         {/* ---------------------------------------------------------- */}
         <Secao
           titulo="Honorários"
+          descricaoNoDialog="Toda versão de orçamento deste cliente nasce com este percentual."
+          emDialog={emDialog}
           descricao="Toda versão de orçamento deste cliente nasce com o percentual já preenchido e travado."
           selo="Obrigatório"
         >
@@ -1038,6 +1160,7 @@ export function ClienteForm({ cliente, marcas = [], portais = [] }: Props) {
         {/* ---------------------------------------------------------- */}
         <Secao
           titulo="Observações"
+          emDialog={emDialog}
           descricao="Contato-chave, particularidades da conta, o que a equipe precisa saber."
           selo="Opcional"
         >
@@ -1051,7 +1174,14 @@ export function ClienteForm({ cliente, marcas = [], portais = [] }: Props) {
       </div>
 
       {error && (
-        <div className="flex items-start gap-2 rounded-xl border border-california-red/20 bg-california-red/5 px-4 py-3 text-sm text-california-red">
+        <div
+          className={cn(
+            "flex items-start gap-2 border border-california-red/20 bg-california-red/5 text-sm text-california-red",
+            emDialog
+              ? "mx-6 mb-3 mt-3 rounded-xl px-4 py-3"
+              : "rounded-xl px-4 py-3",
+          )}
+        >
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
           <span>{error}</span>
         </div>
@@ -1060,7 +1190,14 @@ export function ClienteForm({ cliente, marcas = [], portais = [] }: Props) {
       {/* ------------------------------------------------------------ */}
       {/* Rodapé: o que falta, e os dois botões                         */}
       {/* ------------------------------------------------------------ */}
-      <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-4 rounded-t-2xl border border-b-0 border-border bg-white/95 px-5 py-3.5 shadow-[0_-4px_16px_-8px_rgba(0,0,0,.12)] backdrop-blur">
+      <div
+        className={cn(
+          "flex flex-wrap items-center justify-between gap-4",
+          emDialog
+            ? "flex-none border-t border-border bg-card px-6 py-4"
+            : "sticky bottom-0 rounded-t-2xl border border-b-0 border-border bg-white/95 px-5 py-3.5 shadow-[0_-4px_16px_-8px_rgba(0,0,0,.12)] backdrop-blur",
+        )}
+      >
         <div className="flex min-w-0 items-center gap-2.5">
           {pronto ? (
             <CheckCircle2 className="h-4 w-4 flex-none text-emerald-700" />
@@ -1078,13 +1215,23 @@ export function ClienteForm({ cliente, marcas = [], portais = [] }: Props) {
         </div>
 
         <div className="flex flex-none items-center gap-2.5">
-          <Link
-            href="/clientes"
-            prefetch={false}
-            className="rounded-lg border border-border bg-white px-[18px] py-2.5 text-[13.5px] font-semibold text-foreground transition-colors hover:bg-accent"
-          >
-            Cancelar
-          </Link>
+          {emDialog ? (
+            <button
+              type="button"
+              onClick={onCancelar}
+              className="rounded-lg border border-border bg-white px-[18px] py-2.5 text-[13.5px] font-semibold text-foreground transition-colors hover:bg-accent"
+            >
+              Cancelar
+            </button>
+          ) : (
+            <Link
+              href="/clientes"
+              prefetch={false}
+              className="rounded-lg border border-border bg-white px-[18px] py-2.5 text-[13.5px] font-semibold text-foreground transition-colors hover:bg-accent"
+            >
+              Cancelar
+            </Link>
+          )}
           <button
             type="submit"
             disabled={pending || !pronto}

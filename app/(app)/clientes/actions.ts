@@ -7,6 +7,7 @@ import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { checarPermissao } from "@/lib/permissoes-server";
 import { onlyDigits } from "@/lib/utils";
+import type { Cliente, ClienteProduto, ClientePortal } from "@/lib/types";
 import {
   clienteSchema,
   emailsExtrasSchema,
@@ -260,7 +261,16 @@ function codigoMarca(seq: number): string {
   return `PRD-${seq.toString().padStart(2, "0")}`;
 }
 
-export async function criarCliente(formData: FormData): Promise<ActionResult> {
+/**
+ * `semRedirect`: o cadastro rápido de dentro do formulário de projeto
+ * (17/09/2026). Ali não há para onde redirecionar — o dialog fecha e o
+ * cliente novo precisa VOLTAR, com id, para ficar escolhido no campo.
+ * A tela de clientes continua redirecionando, como sempre.
+ */
+export async function criarCliente(
+  formData: FormData,
+  opcoes?: { semRedirect?: boolean },
+): Promise<ActionResult> {
   const session = await requireSession();
   const gate = await checarPermissao(session, "cadastros.clientes.editar");
   if (!gate.ok) return gate;
@@ -440,7 +450,60 @@ export async function criarCliente(formData: FormData): Promise<ActionResult> {
     }
   }
 
+  if (opcoes?.semRedirect) return { ok: true, id: data.id };
+
   redirect("/clientes");
+}
+
+/**
+ * O cadastro COMPLETO de um cliente, para o dialog de edição rápida abrir
+ * preenchido — a lista que alimenta o campo do projeto traz só id, nome e
+ * código (17/09/2026). Mesmo formato que a página de edição recebe.
+ */
+export async function carregarCliente(id: string): Promise<
+  | {
+      ok: true;
+      cliente: Cliente;
+      marcas: ClienteProduto[];
+      portais: ClientePortal[];
+    }
+  | { ok: false; message: string }
+> {
+  const session = await requireSession();
+  const supabase = createClient();
+
+  const [clienteRes, marcasRes, portaisRes] = await Promise.all([
+    supabase
+      .from("clientes")
+      .select("*")
+      .eq("id", id)
+      .eq("tenant_id", session.activeTenant.id)
+      .maybeSingle(),
+    supabase
+      .from("cliente_produtos")
+      .select("*")
+      .eq("cliente_id", id)
+      .eq("tenant_id", session.activeTenant.id)
+      .order("codigo"),
+    supabase
+      .from("cliente_portais")
+      .select("*")
+      .eq("cliente_id", id)
+      .eq("tenant_id", session.activeTenant.id)
+      .order("nome"),
+  ]);
+
+  if (clienteRes.error || !clienteRes.data) {
+    console.error("[clientes.carregar]", clienteRes.error?.message);
+    return { ok: false, message: "Cliente não encontrado." };
+  }
+
+  return {
+    ok: true,
+    cliente: clienteRes.data as Cliente,
+    marcas: (marcasRes.data ?? []) as ClienteProduto[],
+    portais: (portaisRes.data ?? []) as ClientePortal[],
+  };
 }
 
 /**
