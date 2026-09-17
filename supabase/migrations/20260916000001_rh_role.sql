@@ -1,0 +1,27 @@
+-- =====================================================================
+-- RH — Fase 1a: adiciona 'rh' ao enum public.app_role
+--
+-- POR QUE ESTA MIGRATION EXISTE
+--
+-- Primeira das duas migrations que preparam o terreno do módulo RH.
+-- Isolada de propósito: em Postgres, ALTER TYPE ... ADD VALUE precisa
+-- ser committed antes que o novo valor possa ser AVALIADO em outra
+-- expressão SQL (erro 55P04: "New enum values must be committed before
+-- they can be used"). A tentativa de criar o helper is_tenant_rh(uuid)
+-- na mesma migration falhou porque o literal 'rh' seria avaliado no
+-- plano do CREATE FUNCTION, dentro da mesma transação.
+--
+-- A migration 20260916000002_rh_helper.sql cria o helper depois que
+-- este ALTER TYPE está committed.
+--
+-- Aditivo do começo ao fim: um único ALTER TYPE ADD VALUE IF NOT EXISTS,
+-- nenhum DROP, nenhum dado tocado.
+--
+-- Enum passa a ter, nesta ordem:
+--   administrador, gerente_producao, financeiro, produtor, freelancer, rh
+--
+-- Ver docs/modulos/rh/03-modelo-de-dados.md — seção "Role 'rh' e helper
+-- de banco".
+-- =====================================================================
+
+alter type public.app_role add value if not exists 'rh';
