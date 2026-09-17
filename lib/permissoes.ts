@@ -38,6 +38,8 @@ export const permissoes = {
   "sidebar.desembolsos":         ["administrador", "gerente_producao", "produtor", "financeiro"],
   "sidebar.relatorios":          ["administrador", "financeiro"],
   "sidebar.administracao":       ["administrador"],
+  /** Modulo RH: cadastro de colaboradores, alocacao, salario, niveis. */
+  "sidebar.rh":                  ["administrador", "rh"],
 
   // ==================================================================
   // Chave "Meus/Todos" nas listas (Projetos, Orcamentos, Jobs)
@@ -150,6 +152,15 @@ export const permissoes = {
   // Relatorios
   // ==================================================================
   "relatorios.ver":               ["administrador", "financeiro"],
+
+  // ==================================================================
+  // RH — modulo 2026-09-16 (colaboradores, alocacao, salario, niveis)
+  // Gate role-especifico: administrador OR rh. Financeiro entra em fase
+  // futura para consumir snapshot da folha (migration aditiva).
+  // ==================================================================
+  "rh.colaboradores.ver":         ["administrador", "rh"],
+  "rh.colaboradores.editar":      ["administrador", "rh"],
+  "rh.niveis.editar":             ["administrador", "rh"],
 } as const satisfies Record<string, readonly AppRole[]>;
 
 /** Chaves validas da matriz — usada como tipo em consumidores. */

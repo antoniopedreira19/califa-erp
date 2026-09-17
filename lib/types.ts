@@ -8,7 +8,8 @@ export type AppRole =
   | "gerente_producao"
   | "financeiro"
   | "produtor"
-  | "freelancer";
+  | "freelancer"
+  | "rh";
 
 export type TenantStatus = "ativo" | "inativo";
 
@@ -95,6 +96,8 @@ export function roleLabel(role: AppRole): string {
       return "Produtor";
     case "freelancer":
       return "Freelancer";
+    case "rh":
+      return "RH";
   }
 }
 
@@ -2831,4 +2834,131 @@ export interface DesembolsoParcela {
   pago_por: string | null;
   created_at: string;
   updated_at: string;
+}
+
+// ---------- Módulo RH (2026-09-16) ----------
+//
+// Fundação do módulo de Recursos Humanos. Ver docs/modulos/rh/*.
+// Todas as tabelas têm RLS gate `is_tenant_admin(tenant_id) OR
+// is_tenant_rh(tenant_id)` — só administrador e rh acessam.
+
+export type TipoContratacao =
+  | "pj"
+  | "mei"
+  | "clt_recibo"
+  | "clt"
+  | "estagio";
+
+export function tipoContratacaoLabel(tipo: TipoContratacao): string {
+  switch (tipo) {
+    case "pj":
+      return "PJ";
+    case "mei":
+      return "MEI";
+    case "clt_recibo":
+      return "CLT + Recibo";
+    case "clt":
+      return "CLT";
+    case "estagio":
+      return "Estágio";
+  }
+}
+
+/** Catálogo tenant-wide de níveis de cargo (hierarquia, não faixa salarial). */
+export interface Nivel {
+  id: string;
+  tenant_id: string;
+  codigo: string;
+  descricao: string | null;
+  ordem: number | null;
+  ativo: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Cadastro mestre de colaboradores. Dados fixos que não mudam com
+ *  alocação (Camada 1) nem com folha (Camada 2). */
+export interface Colaborador {
+  id: string;
+  tenant_id: string;
+  nome: string;
+  email: string | null;
+  tipo_contratacao: TipoContratacao;
+  /** 11 dígitos (PF) ou 14 dígitos (PJ). Opcional no cadastro rápido. */
+  cpf_cnpj: string | null;
+  funcao: string;
+  nivel_id: string | null;
+  /** Link opcional para fornecedor com mesmo documento. Reusa dados
+   *  bancários/PIX na baixa da folha. */
+  fornecedor_id: string | null;
+  data_admissao: string;
+  data_encerramento: string | null;
+  status: CadastroStatus;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Camada 1 — alocação vigente do colaborador em par (empresa, regional).
+ *  N linhas simultâneas por colaborador, somando percentual=100 quando
+ *  data_fim IS NULL (constraint trigger deferrable initially deferred). */
+export interface ColaboradorAlocacao {
+  id: string;
+  tenant_id: string;
+  colaborador_id: string;
+  empresa_id: string;
+  regional_id: string;
+  /** numeric(5,2) — chega como string do Supabase-js. Converter com Number. */
+  percentual: string;
+  data_inicio: string;
+  data_fim: string | null;
+  motivo: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+/** Histórico salarial. Cada linha é uma mudança. Salário vigente =
+ *  linha com data_fim IS NULL (unique parcial garante uma só). Este
+ *  histórico já é a "movimentação salarial". */
+export interface ColaboradorSalario {
+  id: string;
+  tenant_id: string;
+  colaborador_id: string;
+  /** numeric(14,2) — chega como string do Supabase-js. */
+  valor: string;
+  data_inicio: string;
+  data_fim: string | null;
+  motivo: string | null;
+  aprovado_por: string | null;
+  created_by: string;
+  created_at: string;
+}
+
+/** Camada 2 — snapshot da folha por competência. ESQUELETO no MVP;
+ *  motor da folha é fase futura. Nenhuma UI escreve aqui ainda. */
+export interface FolhaPagamento {
+  id: string;
+  tenant_id: string;
+  colaborador_id: string;
+  competencia_ano: number;
+  competencia_mes: number;
+  salario_base: string;
+  /** text no MVP — vira enum próprio quando o motor da folha existir. */
+  status: string;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Snapshot da alocação (Camada 1) usada no rateio de uma folha.
+ *  Editável pelo financeiro antes de aprovar. ESQUELETO no MVP. */
+export interface FolhaPagamentoAlocacao {
+  id: string;
+  tenant_id: string;
+  folha_id: string;
+  empresa_id: string;
+  regional_id: string;
+  percentual: string;
+  created_at: string;
 }

@@ -228,6 +228,19 @@ export type AuditAction =
   | "empresa_contabil.atualizada"
   | "empresa_contabil.desativada"
   | "empresa_contabil.reativada"
+  // ---- Módulo RH (2026-09-16) ----
+  | "nivel.criado"
+  | "nivel.editado"
+  | "nivel.inativado"
+  | "nivel.reativado"
+  | "colaborador.criado"
+  | "colaborador.editado"
+  | "colaborador.inativado"
+  | "colaborador.reativado"
+  | "colaborador.alocacao_aberta"
+  | "colaborador.alocacao_fechada"
+  | "colaborador.salario_mudou"
+  | "colaborador.salario_corrigido"
   | "acao_negada";
 
 export interface AuditPayload {
