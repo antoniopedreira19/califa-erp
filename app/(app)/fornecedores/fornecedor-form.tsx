@@ -388,7 +388,11 @@ export function FornecedorForm({
   const logradouroRef = React.useRef<HTMLInputElement>(null);
   const bairroRef = React.useRef<HTMLInputElement>(null);
   const cidadeRef = React.useRef<HTMLInputElement>(null);
-  const ufRef = React.useRef<HTMLSelectElement>(null);
+  /** A UF é o ÚNICO campo controlado deste formulário: o Combobox não
+   *  existe em modo não controlado. O `name` continua emitindo um input
+   *  escondido, então o `FormData` que lê o resto do form não muda
+   *  (17/09/2026). */
+  const [uf, setUf] = React.useState<string>(fornecedor?.uf ?? "");
   const cpfCnpjRef = React.useRef<HTMLInputElement>(null);
   const pixMaskRef = React.useRef<HTMLInputElement>(null);
 
@@ -462,8 +466,7 @@ export function FornecedorForm({
         bairroRef.current.value = data.bairro ?? "";
       if (cidadeRef.current && !cidadeRef.current.value)
         cidadeRef.current.value = data.localidade ?? "";
-      if (ufRef.current && !ufRef.current.value && data.uf)
-        ufRef.current.value = data.uf;
+      if (data.uf) setUf((atual) => atual || String(data.uf).toUpperCase());
       relerCampos();
     } catch {
       setCepError("Não foi possível consultar o CEP, preencha manualmente.");
@@ -570,8 +573,7 @@ export function FornecedorForm({
         bairroRef.current.value = data.bairro ?? "";
       if (cidadeRef.current && !cidadeRef.current.value)
         cidadeRef.current.value = data.municipio ?? "";
-      if (ufRef.current && !ufRef.current.value && data.uf)
-        ufRef.current.value = String(data.uf).toUpperCase();
+      if (data.uf) setUf((atual) => atual || String(data.uf).toUpperCase());
 
       relerCampos();
     } catch {
@@ -1304,19 +1306,17 @@ export function FornecedorForm({
                   errors={fieldErrors}
                   className="col-span-3"
                 >
-                  <select
+                  <Combobox
+                    id="uf"
                     name="uf"
-                    defaultValue={fornecedor?.uf ?? ""}
-                    ref={ufRef}
-                    className={SELECT_CLASS}
-                  >
-                    <option value="">—</option>
-                    {UFS.map((uf) => (
-                      <option key={uf} value={uf}>
-                        {uf}
-                      </option>
-                    ))}
-                  </select>
+                    items={UFS.map((u) => ({ value: u, label: u }))}
+                    value={uf || null}
+                    onChange={(v) => setUf(v ?? "")}
+                    placeholder="—"
+                    buscaPlaceholder="UF"
+                    limpavel
+                    className="h-11 border-border px-3"
+                  />
                 </Campo>
               </div>
 

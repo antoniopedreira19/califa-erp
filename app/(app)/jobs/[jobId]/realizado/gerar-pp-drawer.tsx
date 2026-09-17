@@ -26,7 +26,7 @@ import {
 import { format } from "date-fns";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
-import { Combobox } from "@/components/ui/combobox";
+import { Combobox, COMBOBOX_COMO_SELECT } from "@/components/ui/combobox";
 import { cn, formatCurrency, formatDocumento } from "@/lib/utils";
 import {
   PP_ANEXO_MIMETYPES_ACEITOS,
@@ -1139,18 +1139,17 @@ export function GerarPPDrawer({
               {verbaProducao ? (
                 <div>
                   <label className="text-xs font-medium">Responsável *</label>
-                  <Select value={responsavelId} onValueChange={setResponsavelId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Escolha um responsável" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {responsaveis.map((r) => (
-                        <SelectItem key={r.id} value={r.id}>
-                          {r.nome}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Combobox
+                    items={responsaveis.map((r) => ({
+                      value: r.id,
+                      label: r.nome,
+                    }))}
+                    value={responsavelId || null}
+                    onChange={(v) => setResponsavelId(v ?? "")}
+                    placeholder="Escolha um responsável"
+                    buscaPlaceholder="Escreva o nome"
+                    className={COMBOBOX_COMO_SELECT}
+                  />
                 </div>
               ) : (
                 <div>

@@ -13,13 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Combobox, COMBOBOX_COMO_SELECT } from "@/components/ui/combobox";
 import { criarSubtipo, atualizarSubtipo } from "./actions";
 import type { PlanoContaTipo, PlanoContaSubtipo } from "@/lib/types";
 
@@ -177,23 +171,19 @@ export function SubtipoDrawer(props: Props) {
             {/* Tipo */}
             <div className="space-y-2">
               <Label htmlFor="tipo_id">Tipo *</Label>
-              <Select
-                value={tipoId}
-                onValueChange={handleTipoChange}
-                required
+              <Combobox
+                id="tipo_id"
+                items={tiposAtivos.map((t) => ({
+                  value: t.id,
+                  label: `${t.codigo} · ${t.nome}`,
+                }))}
+                value={tipoId || null}
+                onChange={(v) => handleTipoChange(v ?? "")}
                 disabled={codigoBloqueado}
-              >
-                <SelectTrigger id="tipo_id">
-                  <SelectValue placeholder="Selecione o tipo" />
-                </SelectTrigger>
-                <SelectContent>
-                  {tiposAtivos.map((t) => (
-                    <SelectItem key={t.id} value={t.id}>
-                      {t.codigo} · {t.nome}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                placeholder="Selecione o tipo"
+                buscaPlaceholder="Escreva o código ou o nome"
+                className={COMBOBOX_COMO_SELECT}
+              />
               {fieldErrors.tipo_id?.map((msg, i) => (
                 <p key={i} className="text-xs text-california-red">
                   {msg}
