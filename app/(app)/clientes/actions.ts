@@ -301,31 +301,51 @@ export async function criarCliente(formData: FormData): Promise<ActionResult> {
   // saída o beco de cliente sem produto, já que Produto é obrigatório no
   // formulário de projeto desde 06/08/2026.
   //
-  // Código fixo em PRD-01: cliente recém-criado tem zero produtos, então
-  // não vale gastar a query de contagem.
+  // Desde 17/09/2026 quem CRIA a PRD-01 é o banco, no trigger
+  // `trg_clientes_marca_padrao`, na mesma transação do INSERT do cliente:
+  // eram dois INSERTs sem transação, e o segundo falhando deixava cliente
+  // sem marca — 150 dos 157 clientes ativos estavam assim. Aqui só
+  // buscamos a marca que o trigger criou.
+  //
+  // O insert de reserva continua no código porque a action precisa rodar
+  // certo também no minuto entre o deploy e a migration do trigger, e
+  // porque o índice único `cliente_produtos_uma_padrao_por_cliente`
+  // impede que os dois caminhos gerem duas padrões.
   //
   // Desde 09/09/2026 as marcas extras vêm no mesmo envio do formulário —
   // antes só dava para cadastrá-las depois, na tela de edição.
-  const { data: produto, error: errProduto } = await supabase
+  let { data: produto, error: errProduto } = await supabase
     .from("cliente_produtos")
-    .insert({
-      tenant_id: session.activeTenant.id,
-      cliente_id: data.id,
-      nome: cliente.nome_fantasia,
-      codigo: "PRD-01",
-      padrao: true,
-      created_by: session.profile.id,
-    })
     .select("id")
-    .single();
+    .eq("cliente_id", data.id)
+    .eq("padrao", true)
+    .maybeSingle();
+
+  if (!errProduto && !produto) {
+    ({ data: produto, error: errProduto } = await supabase
+      .from("cliente_produtos")
+      .insert({
+        tenant_id: session.activeTenant.id,
+        cliente_id: data.id,
+        nome: cliente.nome_fantasia,
+        codigo: "PRD-01",
+        padrao: true,
+        created_by: session.profile.id,
+      })
+      .select("id")
+      .single());
+  }
 
   revalidatePath("/clientes");
 
   // O cliente já está gravado — PostgREST não dá transação para desfazer.
   // Avisamos em vez de redirecionar em silêncio para um cliente que não
   // abre projeto.
-  if (errProduto) {
-    console.error("[clientes.criar.produto_padrao]", errProduto.message);
+  if (errProduto || !produto) {
+    console.error(
+      "[clientes.criar.produto_padrao]",
+      errProduto?.message ?? "marca padrão não encontrada",
+    );
     return {
       ok: false,
       message:
