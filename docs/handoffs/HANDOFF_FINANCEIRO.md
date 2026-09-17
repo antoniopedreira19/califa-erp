@@ -2413,9 +2413,13 @@ selecionado. Com `dar_baixa_avulsa_com_plano` passando a recusar forma
 cartão, aquele botão só terminaria em erro.
 
 `baixa-lote-cartao-dialog.tsx` e `darBaixaLoteCartao` (em
-`actions-cartao.ts`) ficaram órfãos — nada importa mais nenhum dos dois.
-Foram deixados no repositório para o Tiago decidir se apaga. A RPC
-`dar_baixa_lote_cartao` continua no banco pelo mesmo motivo.
+`actions-cartao.ts`) ficaram órfãos — nada importava mais nenhum dos dois.
+
+⚠️ **17/09/2026:** os dois arquivos foram **removidos do repositório**, com
+autorização do Tiago. O dialog era o único importador de `actions-cartao.ts`,
+e o arquivo inteiro existia só para `darBaixaLoteCartao` — saíram no mesmo
+commit. A RPC `dar_baixa_lote_cartao` **continua no banco**: dropar objeto de
+banco é destrutivo e a migration é de outra frente.
 
 ### Fechar: o ajuste é obrigatório quando há diferença
 
