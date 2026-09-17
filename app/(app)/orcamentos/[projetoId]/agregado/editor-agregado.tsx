@@ -227,7 +227,10 @@ export function EditorAgregado({
   );
   const [modal, setModal] = React.useState<Modal>(null);
   const [erro, setErro] = React.useState<string | null>(null);
-  const [askSair, setAskSair] = React.useState(false);
+  /** Para onde ir depois do "Sair sem salvar?": a lista do projeto (o
+   *  Cancelar) ou a tela de um orçamento (o "Editar meses" do mensal).
+   *  `null` = pergunta fechada. */
+  const [askSair, setAskSair] = React.useState<string | null>(null);
   const [salvando, startSalvar] = React.useTransition();
 
   /** O XLSX de cada orçamento importado nesta sessão. Fora do estado
@@ -342,6 +345,8 @@ export function EditorAgregado({
         grupos: [],
         arquivoNome: null,
         percentualHonorariosDetectado: null,
+        // Orçamento novo nunca é mensal por aqui (decisão 078).
+        meses: [],
         // Orçamento novo nasce com os honorários do cadastro do cliente.
         parametros: {
           ...PARAMETROS_PADRAO,
@@ -376,6 +381,7 @@ export function EditorAgregado({
         {
           id: novoId("g"),
           nome: "Novo grupo",
+          mesId: null,
           itens: [{ ...ITEM_VAZIO, id: novoId("it") }],
         },
       ],
@@ -392,20 +398,25 @@ export function EditorAgregado({
       grupos: planilha.grupos.map((g: GrupoPayload) => ({
         id: novoId("g"),
         nome: g.nome,
+        mesId: null,
         itens: g.itens.map((it) => ({ ...it, id: novoId("it"), bv: null })),
       })),
     }));
     setErro(null);
   }
 
-  function novoGrupo(id: string) {
+  /** `mesId`: o mês em que o grupo nasce, no orçamento de Fee ou Always On
+   *  (decisão 078); `null` nos outros. O número do nome conta só os grupos
+   *  daquele mês — o nome é único dentro do mês. */
+  function novoGrupo(id: string, mesId: string | null) {
     mutarOrcamento(id, (o) => ({
       ...o,
       grupos: [
         ...o.grupos,
         {
           id: novoId("g"),
-          nome: `Novo grupo ${o.grupos.length + 1}`,
+          nome: `Novo grupo ${o.grupos.filter((g) => g.mesId === mesId).length + 1}`,
+          mesId,
           itens: [{ ...ITEM_VAZIO, id: novoId("it") }],
         },
       ],
@@ -677,6 +688,7 @@ export function EditorAgregado({
           id: g.id.startsWith("g-") ? null : g.id,
           localId: g.id,
           nome: g.nome,
+          mesId: g.mesId,
           itens: g.itens.map((it) => ({
             id: it.id.startsWith("it-") ? null : it.id,
             localId: it.id,
@@ -929,6 +941,19 @@ export function EditorAgregado({
               }
               key={orc.id}
               job={orc}
+              meses={orc.meses}
+              hrefOrcamento={
+                orc.origemBanco
+                  ? `/orcamentos/${projeto.id}/${orc.origemBanco.orcamentoId}?v=${orc.origemBanco.versaoId}`
+                  : null
+              }
+              onAbrirOrcamento={(evento, href) => {
+                // Com alteração por salvar, o link passa pela mesma
+                // pergunta do Cancelar em vez de descartar calado.
+                if (!sujo) return;
+                evento.preventDefault();
+                setAskSair(href);
+              }}
               codigo={codigo}
               parametros={orc.parametros}
               visao={visao}
@@ -956,7 +981,7 @@ export function EditorAgregado({
                 setModal({ tipo: "importar", orcamentoId: orc.id })
               }
               onCriarPlanilha={() => criarPlanilha(orc.id)}
-              onNovoGrupo={() => novoGrupo(orc.id)}
+              onNovoGrupo={(mesId) => novoGrupo(orc.id, mesId)}
               onRenomearGrupo={(grupoId, nome) =>
                 mutarOrcamento(orc.id, (o) => ({
                   ...o,
@@ -998,7 +1023,9 @@ export function EditorAgregado({
           <button
             type="button"
             onClick={() =>
-              sujo ? setAskSair(true) : router.push(`/orcamentos/${projeto.id}`)
+              sujo
+                ? setAskSair(`/orcamentos/${projeto.id}`)
+                : router.push(`/orcamentos/${projeto.id}`)
             }
             className="inline-flex items-center rounded-xl border border-border bg-white px-4 py-2.5 text-[13px] font-semibold text-foreground transition-colors hover:bg-accent"
           >
@@ -1085,17 +1112,18 @@ export function EditorAgregado({
       )}
 
       <ConfirmDialog
-        open={askSair}
-        onOpenChange={setAskSair}
+        open={askSair !== null}
+        onOpenChange={(aberto) => !aberto && setAskSair(null)}
         title="Sair sem salvar?"
         description="As alterações feitas nesta tela serão perdidas. Nada foi gravado ainda."
         confirmLabel="Sair sem salvar"
         cancelLabel="Continuar editando"
         variant="destructive"
         onConfirm={() => {
-          setAskSair(false);
+          const destino = askSair ?? `/orcamentos/${projeto.id}`;
+          setAskSair(null);
           setBaseline(assinatura(orcamentos));
-          router.push(`/orcamentos/${projeto.id}`);
+          router.push(destino);
         }}
       />
 

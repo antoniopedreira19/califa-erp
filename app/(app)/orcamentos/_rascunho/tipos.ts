@@ -51,6 +51,10 @@ export interface ItemRascunho {
 export interface GrupoRascunho {
   id: string;
   nome: string;
+  /** Mês do grupo no orçamento de Fee ou Always On (decisão 078): o id em
+   *  `versoes_orcamento_meses`. `null` nos outros modelos. Obrigatório — o
+   *  grupo sem mês some de todas as telas do mensal. */
+  mesId: string | null;
   itens: ItemRascunho[];
 }
 
@@ -153,6 +157,11 @@ export interface OrcamentoRascunho extends JobRascunho {
    *  os fechamentos — a mesma ideia que o card já usa para taxas
    *  diferentes. */
   modeloPlanilha: CategoriaModeloPlanilha;
+  /** Os meses da versão, no orçamento de Fee ou Always On (decisão 078):
+   *  o card os empilha, cada um com a sua planilha. Vazio nos outros
+   *  modelos. Na agregada eles não mudam — criar, apagar e copiar mês é da
+   *  tela do orçamento (Tiago, 16/09/2026). */
+  meses: { id: string; mes: string }[];
 }
 
 // ============================================================
@@ -219,6 +228,10 @@ export interface GrupoEdicaoPayload {
   id: string | null;
   localId: string;
   nome: string;
+  /** Mês do grupo no mensal (decisão 078). O servidor só o usa no grupo
+   *  NOVO, e confere que é um mês da versão; o grupo que já existe fica no
+   *  mês gravado. */
+  mesId: string | null;
   itens: ItemEdicaoPayload[];
 }
 

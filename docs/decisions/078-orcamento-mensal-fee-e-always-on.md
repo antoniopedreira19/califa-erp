@@ -48,9 +48,10 @@ uma lista só de grupos e itens.
 9. **Os 5 orçamentos que já tinham serviço Fee/Always On com categoria
    nacional ficam como estão.** A trava só confere o par quando serviço ou
    categoria mudam.
-10. **Na visão agregada do projeto o orçamento mensal é só consulta**: soma
-    no total do contrato, mas o editor de lá não conhece meses. Também não
-    se cria Fee/Always On por lá.
+10. **Na visão agregada do projeto o orçamento mensal edita grupos e itens
+    dentro dos meses** (desde 16/09/2026; até então era só consulta). Os
+    meses em si, a cópia de itens entre meses e a criação de Fee/Always On
+    continuam na tela do orçamento — ver "Edição pela visão agregada".
 11. Visual: régua de meses (Trimestre + um bloco por mês); o mês abre a
     planilha e os Totais dele; o Trimestre abre os meses empilhados e os
     Totais do trimestre. "Ano consolidado" em tabela foi rejeitado; o
@@ -269,10 +270,49 @@ como o nacional (a fórmula do TOTAL depende da faixa contígua); o título da
 seção do projeto mostra a soma dos faturamentos dos meses; no resumo do
 projeto cada linha nomeia o orçamento ("0-0001/26-09 · Outubro de 2026").
 
+## Edição pela visão agregada (16/09/2026)
+
+**As respostas do Tiago:**
+
+- **Layout:** os meses empilhados dentro do card do orçamento, como a vista
+  Trimestre. Cada mês é um bloco recolhível com o faturamento do mês no
+  cabeçalho e a planilha dele embaixo; o "Novo grupo" fica dentro do mês. O
+  primeiro mês nasce aberto.
+- **Meses:** a agregada edita só grupos e itens. Editar meses e copiar
+  itens entre meses ficam na tela do orçamento; o card tem o atalho
+  "Editar meses na tela do orçamento".
+- **Criar:** Fee e Always On continuam sendo criados só pela tela do
+  orçamento.
+
+**Como funciona:**
+
+- `GrupoRascunho.mesId` e `GrupoEdicaoPayload.mesId` são obrigatórios
+  (`null` fora do mensal), e `OrcamentoRascunho.meses` traz os meses da
+  versão. O nome do grupo deixou de carregar o sufixo "· Out".
+- O faturamento no cabeçalho do mês é `totaisDoJob` sobre os grupos do mês:
+  a mesma conta da régua da tela do orçamento.
+- **Servidor** (`aplicarEdicao`):
+  - um grupo novo do mensal só é gravado se `mesId` for um mês da própria
+    versão, senão a gravação é recusada;
+  - um grupo que já existe fica no mês gravado, venha o que vier no payload;
+  - fora do mensal, `mes_id` é sempre nulo;
+  - a auditoria `versao_orcamento.editada` passou a levar `modelo`.
+- **"Editar meses na tela do orçamento":** com alteração por salvar, o link
+  abre a mesma pergunta "Sair sem salvar?" do Cancelar.
+- **Travas:** as de status continuam valendo (orçamento que virou job ou
+  foi aprovado fica só consulta, com os meses empilhados).
+
+**Decisões de tela minhas:**
+
+- O número do "Novo grupo N" conta só os grupos do mês, porque o nome é
+  único por mês (`uniq_grupo_nome_por_mes`).
+- O botão diz "Novo grupo em outubro" e o pé da tabela diz "Total de
+  outubro".
+- Um mês sem grupos mostra "Nenhum grupo em outubro ainda." com o botão.
+
 ## O que ainda não existe
 
-- Edição do mensal pela visão agregada (hoje só consulta) e filtro de
-  trimestres nela.
+- Filtro de trimestres na visão agregada.
 
 ## Migrations
 

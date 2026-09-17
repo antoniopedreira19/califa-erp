@@ -3872,3 +3872,43 @@ Regras em [078](../decisions/078-orcamento-mensal-fee-e-always-on.md), seção "
 ## ⚠️ Nota de 2026-09-16 — as telas de projeto e de orçamento perderam a largura própria (decisão 085)
 
 `/orcamentos/[projetoId]` (era `max-w-7xl`, 1280px) e `/orcamentos/[projetoId]/[orcId]` (era `max-w-[1370px]`) não têm mais `max-w` nem `mx-auto` no container: ocupam a largura do layout, cujo teto subiu no mesmo dia de 1600 para 1680px (1616px de conteúdo). A regra de larguras de `docs/09-identidade-visual-ui.md` foi revista junto — tela principal não define largura; formulário continua `max-w-3xl`. Medido em viewport de 1840px no `0-0001/26`: as duas telas com 1616px e sem rolagem horizontal (com o teto antigo, a planilha do orçamento tinha 1410px e a calha ficava dentro da página).
+
+## ⚠️ Nota de 2026-09-16 — Fee e Always On: edição pela visão agregada (decisão 078)
+
+Regras em [078](../decisions/078-orcamento-mensal-fee-e-always-on.md), seção "Edição pela visão agregada". Até esta data o orçamento mensal era só consulta na agregada. Agora ele edita grupos e itens dentro dos meses.
+
+**O que mudou:**
+
+- **`_rascunho/tipos.ts`:** `GrupoRascunho.mesId` e `GrupoEdicaoPayload.mesId` são obrigatórios (`null` fora do mensal), e `OrcamentoRascunho.meses` traz os meses da versão.
+- **`agregado/page.tsx`:**
+  - lê `versoes_orcamento_meses` por versão;
+  - o nome do grupo perdeu o sufixo "· Out";
+  - `motivoBloqueio` não trava mais o mensal pelo modelo (as travas de status continuam).
+- **`agregado/actions.ts` (`aplicarEdicao`):**
+  - saiu a recusa do mensal;
+  - o grupo novo do mensal precisa de um `mesId` da própria versão e grava `mes_id`;
+  - o grupo que já existe não muda de mês;
+  - a auditoria leva `modelo`.
+- **`_rascunho/orcamento-card.tsx`:** no mensal, o card empilha um bloco recolhível por mês, cada um com:
+  - o faturamento do mês no cabeçalho;
+  - uma `ItensTable` com "Total de <mês>" e "Novo grupo em <mês>";
+  - o link "Editar meses na tela do orçamento".
+
+  O convite "Importar planilha / Criar planilha" não aparece no mensal.
+- **`agregado/editor-agregado.tsx`:**
+  - `novoGrupo(orcId, mesId)`;
+  - `mesId` no payload;
+  - `askSair` passou a guardar o destino, e o link do card usa a mesma pergunta "Sair sem salvar?" do Cancelar.
+
+**Testado em 16/09/2026** (dev server do worktree na 3012, Projeto Teste, `0-0001/26-13` v2):
+
+- **Leitura:** a agregada mostra os três meses com os faturamentos da régua da tela do orçamento (outubro R$ 16.254,50, novembro R$ 13.779,05, dezembro R$ 16.005,96).
+- **Criação:**
+  - "Novo grupo em novembro" com o item "Mídia paga" (A; R$ 1.500 orçado, R$ 1.200 planejado);
+  - o cabeçalho de novembro foi a R$ 14.002,73, o mesmo valor que a régua mostrou depois de salvo;
+  - no banco, o grupo ficou com `mes` 2026-11-01 e os outros quatro grupos continuaram nos meses deles;
+  - auditoria `origem: visao_agregada`, `modelo: mensal`.
+- **Aviso de saída:** com a alteração por salvar, o link "Editar meses" abriu "Sair sem salvar?".
+- **Remoção:** o grupo removido pela agregada saiu do banco (`grupos_removidos: 1`), e o `-13` voltou ao estado de antes.
+- **Orçamento travado:** o `0-0001/26-09` (job criado) aparece só para consulta, com os meses empilhados, sem "Novo grupo" e sem o link.
+- **Não exercitado:** a recusa do servidor para um grupo novo sem mês (payload forjado) foi conferida só pelo código.
