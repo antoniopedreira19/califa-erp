@@ -59,31 +59,6 @@ export default async function ColaboradoresPage() {
         title="Colaboradores"
         description="Cadastro do quadro atual e inativos. Nível de cargo, alocação por empresa e regional, histórico salarial."
         icon={Users}
-        actions={
-          <>
-            <Link
-              href="/rh/colaboradores/niveis"
-              prefetch={false}
-              className="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2.5 text-sm font-semibold text-foreground shadow-sm hover:border-california-red/30 hover:text-california-red transition-all"
-            >
-              <GraduationCap className="h-4 w-4" />
-              Níveis
-              {niveisAtivosCount > 0 && (
-                <span className="ml-1 text-xs font-medium text-muted-foreground">
-                  ({niveisAtivosCount})
-                </span>
-              )}
-            </Link>
-            <Link
-              href="/rh/colaboradores/novo"
-              prefetch={false}
-              className="inline-flex items-center justify-center gap-2 rounded-lg bg-california-red px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-california-red-hover hover:shadow-brand transition-all"
-            >
-              <Plus className="h-4 w-4" />
-              Novo colaborador
-            </Link>
-          </>
-        }
       />
 
       {linhas.length === 0 ? (
@@ -103,7 +78,10 @@ export default async function ColaboradoresPage() {
           }
         />
       ) : (
-        <ColaboradoresList colaboradores={linhas} />
+        <ColaboradoresList
+          colaboradores={linhas}
+          niveisAtivosCount={niveisAtivosCount}
+        />
       )}
     </div>
   );
