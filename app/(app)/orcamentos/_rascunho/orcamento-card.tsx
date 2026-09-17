@@ -1,7 +1,9 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import {
+  CalendarRange,
   ChevronRight,
   FolderPlus,
   FolderTree,
@@ -22,6 +24,7 @@ import {
   type AdaptadorItens,
   type GrupoDaPlanilha,
 } from "../[projetoId]/[orcId]/versoes/[versaoId]/itens-table";
+import { nomeDoMes, rotuloMes } from "@/lib/calculos/meses-trimestre";
 import type { AdaptadorBv, FornecedorOpcao } from "@/app/(app)/_bv/bv-dialog";
 import type { VisaoBv } from "@/lib/calculos/bv-planilha";
 import {
@@ -51,6 +54,18 @@ import {
 
 interface Props {
   job: JobRascunho;
+  /** Meses da versão no orçamento de Fee ou Always On (decisão 078); vazio
+   *  nos outros. Com meses, o card empilha um bloco por mês. */
+  meses: { id: string; mes: string }[];
+  /** A tela do orçamento, para onde vai o "Editar meses" (os meses não
+   *  mudam na agregada). `null` no orçamento ainda não salvo. */
+  hrefOrcamento: string | null;
+  /** Chamado no clique do link acima; o editor cancela a navegação quando
+   *  há alteração por salvar e pergunta antes. */
+  onAbrirOrcamento: (
+    evento: React.MouseEvent<HTMLAnchorElement>,
+    href: string,
+  ) => void;
   /** Código previsto ("PROJ-0001/26-03"). Vem do editor porque depende da
    *  posição na lista: remover um job renumera os de baixo. O definitivo é
    *  gerado no servidor, no salvamento. */
@@ -72,7 +87,8 @@ interface Props {
   onRemover: () => void;
   onImportar: () => void;
   onCriarPlanilha: () => void;
-  onNovoGrupo: () => void;
+  /** O mês em que o grupo nasce (mensal) ou `null`. */
+  onNovoGrupo: (mesId: string | null) => void;
   onRenomearGrupo: (grupoId: string, nome: string) => void;
   onRemoverGrupo: (grupoId: string) => void;
   /** Preenchido, a planilha é consulta e o card explica o porquê. */
@@ -106,6 +122,9 @@ interface Props {
  */
 export function JobRascunhoCard({
   job,
+  meses,
+  hrefOrcamento,
+  onAbrirOrcamento,
   codigo,
   parametros,
   visao,
@@ -180,6 +199,26 @@ export function JobRascunhoCard({
     return mapa;
   }, [job.grupos]);
   const readOnly = Boolean(bloqueio);
+
+  // Fee e Always On (decisão 078; layout escolhido pelo Tiago em
+  // 16/09/2026): os meses empilhados, como a vista Trimestre da tela do
+  // orçamento. Nasce com o primeiro mês aberto.
+  const mensal = modeloPlanilha === "mensal";
+  const mesesOrdenados = React.useMemo(
+    () => [...meses].sort((a, b) => a.mes.localeCompare(b.mes)),
+    [meses],
+  );
+  const [mesesAbertos, setMesesAbertos] = React.useState<Set<string>>(
+    () => new Set(mesesOrdenados[0] ? [mesesOrdenados[0].id] : []),
+  );
+  function alternarMes(id: string) {
+    setMesesAbertos((atual) => {
+      const novo = new Set(atual);
+      if (novo.has(id)) novo.delete(id);
+      else novo.add(id);
+      return novo;
+    });
+  }
   // Orçamento congelado sem planilha não tem o que oferecer: não dá para
   // importar nem criar, então mostra o motivo em vez dos dois botões.
   const semPlanilha = job.origem === null && job.grupos.length === 0;
@@ -276,7 +315,163 @@ export function JobRascunhoCard({
         // página. Quem tem recuo é o resto do painel (`mx-5`). A calha da
         // trilha de ações é reservada pelo editor, para os dois de uma vez.
         <div className="flex flex-col gap-4 rounded-b-2xl border-t border-border bg-muted/20 py-5">
-          {semPlanilha ? (
+          {mensal ? (
+            <>
+              {bloqueio && (
+                <div className="mx-5 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs leading-relaxed text-amber-800">
+                  <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  <span>{bloqueio}</span>
+                </div>
+              )}
+              <div className="mx-5 flex flex-wrap items-center justify-between gap-3">
+                <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+                  <CalendarRange className="h-4 w-4 text-california-red" />
+                  {mesesOrdenados.length}{" "}
+                  {mesesOrdenados.length === 1 ? "mês" : "meses"} ·{" "}
+                  {job.grupos.length}{" "}
+                  {job.grupos.length === 1 ? "grupo" : "grupos"} · {nItens}{" "}
+                  {nItens === 1 ? "item" : "itens"}
+                </span>
+                <div className="flex items-center gap-2.5">
+                  {hrefOrcamento && !readOnly && (
+                    <Link
+                      href={hrefOrcamento}
+                      prefetch={false}
+                      onClick={(evento) => onAbrirOrcamento(evento, hrefOrcamento)}
+                      className="text-xs font-semibold text-muted-foreground underline-offset-2 transition-colors hover:text-california-red hover:underline"
+                    >
+                      Editar meses na tela do orçamento
+                    </Link>
+                  )}
+                  {job.grupos.length > 0 && (
+                    <BotaoRecolherTodos
+                      algumAberto={recolher.algumAberto}
+                      onAlternarTodos={recolher.alternarTodos}
+                    />
+                  )}
+                </div>
+              </div>
+
+              {mesesOrdenados.length === 0 && (
+                <div className="mx-5 rounded-2xl border border-dashed border-border bg-card px-8 py-7 text-center text-sm text-muted-foreground">
+                  Esta versão ainda não tem meses. Os meses são criados na tela
+                  do orçamento.
+                </div>
+              )}
+
+              {mesesOrdenados.map((m) => {
+                const gruposDoMes = job.grupos.filter((g) => g.mesId === m.id);
+                const idsDoMes = new Set(gruposDoMes.map((g) => g.id));
+                const itensDoMes = contarItens(gruposDoMes);
+                const nome = nomeDoMes(m.mes);
+                const aberto = mesesAbertos.has(m.id);
+                // O mesmo faturamento da régua da tela do orçamento: a conta
+                // da versão sobre os itens do mês.
+                const faturamentoDoMes = totaisDoJob(
+                  { ...job, grupos: gruposDoMes },
+                  parametros,
+                  modeloPlanilha,
+                ).faturamentoPrevisto;
+                const botaoNovoGrupo = readOnly ? undefined : (
+                  <button
+                    type="button"
+                    onClick={() => onNovoGrupo(m.id)}
+                    className={BOTAO_NOVO_GRUPO}
+                  >
+                    <FolderPlus className="h-3.5 w-3.5" />
+                    Novo grupo em {nome}
+                  </button>
+                );
+                return (
+                  <div key={m.id} className="flex flex-col gap-3">
+                    <div className="mx-5 flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-2.5">
+                      <button
+                        type="button"
+                        onClick={() => alternarMes(m.id)}
+                        aria-expanded={aberto}
+                        className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
+                      >
+                        <ChevronRight
+                          className={cn(
+                            "h-3.5 w-3.5 flex-none text-muted-foreground transition-transform duration-150",
+                            aberto && "rotate-90",
+                          )}
+                        />
+                        <span className="text-sm font-bold tracking-tight">
+                          {rotuloMes(m.mes)}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {gruposDoMes.length}{" "}
+                          {gruposDoMes.length === 1 ? "grupo" : "grupos"} ·{" "}
+                          {itensDoMes} {itensDoMes === 1 ? "item" : "itens"}
+                        </span>
+                      </button>
+                      <div className="text-right">
+                        <p className="text-[9.5px] font-bold uppercase tracking-wider text-muted-foreground">
+                          Faturamento
+                        </p>
+                        <p className="whitespace-nowrap font-mono text-sm font-bold">
+                          {formatCurrency(faturamentoDoMes, parametros.moeda)}
+                        </p>
+                      </div>
+                    </div>
+
+                    {aberto &&
+                      (gruposDoMes.length === 0 ? (
+                        <div className="mx-5 flex flex-col items-center gap-3 rounded-2xl border border-dashed border-border bg-card px-8 py-6 text-center">
+                          <p className="text-sm text-muted-foreground">
+                            Nenhum grupo em {nome} ainda.
+                          </p>
+                          {botaoNovoGrupo}
+                        </div>
+                      ) : (
+                        <div>
+                          <ItensTable
+                            grupos={gruposDaPlanilha.filter((g) => idsDoMes.has(g.id))}
+                            moeda={parametros.moeda}
+                            moedaEstrangeira={null}
+                            percentualImposto={parametros.percentual_imposto}
+                            visao={visao}
+                            readOnly={readOnly}
+                            categorias={categorias}
+                            savePorItem={savePorItem}
+                            saveVisivel={saveVisivel}
+                            onAlternarSave={onAlternarSave}
+                            onAbrirSave={onAbrirSave}
+                            estaAberto={recolher.estaAberto}
+                            onAlternarGrupo={recolher.alternar}
+                            nomeDoGrupo={(g) => (
+                              <NomeDoGrupoRascunho
+                                grupo={grupoPorId.get(g.id) ?? { ...g, mesId: m.id, itens: [] }}
+                                readOnly={readOnly}
+                                onRenomear={(novoNome) => onRenomearGrupo(g.id, novoNome)}
+                              />
+                            )}
+                            acoesDoGrupo={
+                              readOnly
+                                ? undefined
+                                : (g) => (
+                                    <AcoesDoGrupoRascunho
+                                      grupo={grupoPorId.get(g.id) ?? { ...g, mesId: m.id, itens: [] }}
+                                      onRemover={() => onRemoverGrupo(g.id)}
+                                    />
+                                  )
+                            }
+                            novoGrupo={botaoNovoGrupo}
+                            bvsPorItem={bvsPorItem}
+                            fornecedores={fornecedores}
+                            versaoLabel="v1"
+                            adaptador={adaptador}
+                            adaptadorBv={adaptadorBv}
+                            rotuloTotal={`Total de ${nome}`}
+                          />
+                        </div>
+                      ))}
+                  </div>
+                );
+              })}
+            </>
+          ) : semPlanilha ? (
             <div className="mx-5 flex flex-col items-center gap-3.5 rounded-2xl border border-dashed border-border bg-card px-8 py-7 text-center">
               <p className="max-w-md text-sm leading-relaxed text-muted-foreground">
                 {readOnly
@@ -345,7 +540,7 @@ export function JobRascunhoCard({
                   </p>
                   <button
                     type="button"
-                    onClick={onNovoGrupo}
+                    onClick={() => onNovoGrupo(null)}
                     className={BOTAO_NOVO_GRUPO}
                   >
                     <FolderPlus className="h-3.5 w-3.5" />
@@ -382,7 +577,7 @@ export function JobRascunhoCard({
                     onAlternarGrupo={recolher.alternar}
                     nomeDoGrupo={(g) => (
                       <NomeDoGrupoRascunho
-                        grupo={grupoPorId.get(g.id) ?? { ...g, itens: [] }}
+                        grupo={grupoPorId.get(g.id) ?? { ...g, mesId: null, itens: [] }}
                         readOnly={readOnly}
                         onRenomear={(nome) => onRenomearGrupo(g.id, nome)}
                       />
@@ -392,7 +587,7 @@ export function JobRascunhoCard({
                         ? undefined
                         : (g) => (
                             <AcoesDoGrupoRascunho
-                              grupo={grupoPorId.get(g.id) ?? { ...g, itens: [] }}
+                              grupo={grupoPorId.get(g.id) ?? { ...g, mesId: null, itens: [] }}
                               onRemover={() => onRemoverGrupo(g.id)}
                             />
                           )
@@ -401,7 +596,7 @@ export function JobRascunhoCard({
                       readOnly ? undefined : (
                         <button
                           type="button"
-                          onClick={onNovoGrupo}
+                          onClick={() => onNovoGrupo(null)}
                           className={BOTAO_NOVO_GRUPO}
                         >
                           <FolderPlus className="h-3.5 w-3.5" />

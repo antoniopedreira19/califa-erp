@@ -25,7 +25,6 @@ import type {
   CategoriaModeloPlanilha,
 } from "@/lib/types";
 import type { CategoriaParaServico } from "@/lib/categorias-do-servico";
-import { rotuloMesCurto } from "@/lib/calculos/meses-trimestre";
 import { EditorAgregado } from "./editor-agregado";
 import type { OrcamentoRascunho } from "../../_rascunho/tipos";
 import type { OrcamentoExportavel } from "../../_selecao/exportar-orcamentos-menu";
@@ -39,13 +38,10 @@ const STATUS_FORA = ["cancelado", "recusado"];
 function motivoBloqueio(
   statusOrcamento: string,
   statusVersao: string,
-  modelo: CategoriaModeloPlanilha,
 ): string | null {
-  // O editor daqui não conhece meses (decisão 078): o orçamento mensal
-  // aparece para consulta e soma no total do projeto.
-  if (modelo === "mensal") {
-    return "Orçamento de Fee ou Always On: os meses são editados na tela do orçamento. Aqui ele aparece só para consulta e soma no total do projeto.";
-  }
+  // O orçamento de Fee ou Always On (decisão 078) se edita aqui desde
+  // 16/09/2026: grupos e itens dentro dos meses que ele já tem. Os meses em
+  // si continuam na tela do orçamento.
   if (statusOrcamento === "job_criado") {
     return "Este orçamento já virou job e foi enviado ao financeiro. A planilha passa a ser tratada na tela do job.";
   }
@@ -281,23 +277,27 @@ export default async function OrcamentosAgregadoPage({
           .neq("situacao", "cancelado")
           .in("item.versao_orcamento_id", versaoIds)
       : Promise.resolve({ data: [] as any[] }),
-    // Meses do modelo mensal: só para o nome do grupo dizer de que mês ele
-    // é — nesta tela os grupos dos três meses aparecem numa lista só.
+    // Meses do modelo mensal (decisão 078): o card empilha um bloco por mês,
+    // cada um com os grupos dele.
     versaoIds.length > 0
       ? supabase
           .from("versoes_orcamento_meses")
-          .select("id, mes")
+          .select("id, mes, versao_orcamento_id")
           .eq("tenant_id", tenantId)
           .in("versao_orcamento_id", versaoIds)
       : Promise.resolve({ data: [] as any[] }),
   ]);
 
-  const mesPorId = new Map<string, string>(
-    ((mesesRes.data ?? []) as { id: string; mes: string }[]).map((m) => [
-      m.id,
-      m.mes,
-    ]),
-  );
+  const mesesPorVersao = new Map<string, { id: string; mes: string }[]>();
+  for (const m of (mesesRes.data ?? []) as {
+    id: string;
+    mes: string;
+    versao_orcamento_id: string;
+  }[]) {
+    const lista = mesesPorVersao.get(m.versao_orcamento_id) ?? [];
+    lista.push({ id: m.id, mes: m.mes });
+    mesesPorVersao.set(m.versao_orcamento_id, lista);
+  }
 
   const bvPorItem = new Map(
     ((bvsRes.data ?? []) as any[]).map((b) => [
@@ -378,10 +378,10 @@ export default async function OrcamentosAgregadoPage({
   const gruposPorVersao = new Map<string, any[]>();
   for (const g of (gruposRes.data ?? []) as any[]) {
     const lista = gruposPorVersao.get(g.versao_orcamento_id) ?? [];
-    const mes = g.mes_id ? mesPorId.get(g.mes_id) : undefined;
     lista.push({
       id: g.id,
-      nome: mes ? `${g.nome} · ${rotuloMesCurto(mes)}` : g.nome,
+      nome: g.nome,
+      mesId: g.mes_id ?? null,
       itens: itensPorGrupo.get(g.id) ?? [],
     });
     gruposPorVersao.set(g.versao_orcamento_id, lista);
@@ -391,11 +391,7 @@ export default async function OrcamentosAgregadoPage({
     const versao = vigentePorOrcamento.get(orc.id);
     const grupos = versao ? (gruposPorVersao.get(versao.id) ?? []) : [];
     const bloqueio = versao
-      ? motivoBloqueio(
-          orc.status,
-          versao.status,
-          orc.categoria?.modelo_planilha ?? "nacional",
-        )
+      ? motivoBloqueio(orc.status, versao.status)
       : "Este orçamento ainda não tem nenhuma versão. Crie a primeira na tela do orçamento.";
 
     return {
@@ -415,6 +411,7 @@ export default async function OrcamentosAgregadoPage({
       aberto: bloqueio === null,
       origem: grupos.length > 0 ? "manual" : null,
       grupos,
+      meses: versao ? (mesesPorVersao.get(versao.id) ?? []) : [],
       arquivoNome: null,
       percentualHonorariosDetectado: null,
       parametros: {

@@ -264,15 +264,10 @@ async function aplicarEdicao(
       message: `${orcamento.codigo}: versão aprovada não permite alterar itens.`,
     };
   }
-  // O orçamento mensal é só consulta nesta tela (decisão 078): o
-  // reconciliador abaixo regrava grupos sem saber de meses, e apagaria o
-  // mês de cada grupo que tocasse.
-  if (orcamento.categoria?.modelo_planilha === "mensal") {
-    return {
-      ok: false,
-      message: `${orcamento.codigo}: orçamento de Fee ou Always On é editado na tela do orçamento, mês a mês.`,
-    };
-  }
+  // O orçamento de Fee ou Always On (decisão 078) se edita aqui desde
+  // 16/09/2026: o grupo novo nasce num mês da versão, e o grupo que já
+  // existe fica no mês gravado. Os meses em si não mudam por esta tela.
+  const mensal = orcamento.categoria?.modelo_planilha === "mensal";
 
   // ---------- Parâmetros da versão ----------
   // `percentual_honorarios` NÃO entra aqui de propósito: em versão que já
@@ -318,7 +313,7 @@ async function aplicarEdicao(
   const [gruposRes, itensRes] = await Promise.all([
     supabase
       .from("versoes_orcamento_grupos")
-      .select("id, nome, ordem")
+      .select("id, nome, ordem, mes_id")
       .eq("versao_orcamento_id", versao.id)
       .eq("tenant_id", tenantId),
     supabase
@@ -336,8 +331,27 @@ async function aplicarEdicao(
     id: string;
     nome: string;
     ordem: number;
+    mes_id: string | null;
   }[];
   const itensAtuais = (itensRes.data ?? []) as unknown as ItemAtual[];
+
+  // Os meses da versão: é neles que o grupo novo do mensal pode nascer.
+  const mesesDaVersao = new Set<string>();
+  if (mensal) {
+    const { data: meses, error: mesesErr } = await supabase
+      .from("versoes_orcamento_meses")
+      .select("id")
+      .eq("versao_orcamento_id", versao.id)
+      .eq("tenant_id", tenantId);
+    if (mesesErr) {
+      console.error("[agregado.meses]", mesesErr.message);
+      return {
+        ok: false,
+        message: `${orcamento.codigo}: não foi possível ler os meses da versão.`,
+      };
+    }
+    for (const m of (meses ?? []) as { id: string }[]) mesesDaVersao.add(m.id);
+  }
 
   const bvsRes =
     itensAtuais.length > 0
@@ -401,6 +415,14 @@ async function aplicarEdicao(
         }
       }
     } else {
+      // Mensal: o grupo novo precisa de um mês desta versão. Nos outros
+      // modelos o mês é sempre nulo, venha o que vier no payload.
+      if (mensal && (!grupo.mesId || !mesesDaVersao.has(grupo.mesId))) {
+        return {
+          ok: false,
+          message: `${orcamento.codigo}: o grupo "${nome}" não está num mês deste orçamento. Recarregue a tela.`,
+        };
+      }
       const { data, error } = await supabase
         .from("versoes_orcamento_grupos")
         .insert({
@@ -408,6 +430,7 @@ async function aplicarEdicao(
           versao_orcamento_id: versao.id,
           nome,
           ordem,
+          mes_id: mensal ? grupo.mesId : null,
         })
         .select("id")
         .single();
@@ -588,6 +611,7 @@ async function aplicarEdicao(
     metadata: {
       orcamento_id: orcamento.id,
       origem: "visao_agregada",
+      modelo: orcamento.categoria?.modelo_planilha ?? "nacional",
       grupos: alvo.grupos.length,
       itens: ordemItem,
       itens_removidos: itensRemovidos.length,
