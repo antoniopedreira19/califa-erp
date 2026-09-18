@@ -5,7 +5,8 @@
 **Migrations:** `20260918180001_remove_clientes_de_teste.sql` e
 `20260918180002_codigos_de_cliente_no_padrao_de_tres_letras.sql`,
 `...80003_beats_vai_para_a_ambev_e_nov_vai_para_o_sebrae.sql` e
-`...80004_marca_dos_jobs_do_beats_vira_beats.sql`.
+`...80004_marca_dos_jobs_do_beats_vira_beats.sql` e
+`...80005_projetos_com_sigla_zero.sql`.
 
 ---
 
@@ -219,6 +220,47 @@ BEATS.
 
 > **Campo de texto copiado na abertura não aparece numa varredura de
 > FK.** Depois de mover um projeto de cliente, abra um job na tela.
+
+### 5d. ✅ Os projetos com sigla "0"
+
+Três projetos carregavam `0-` no lugar da sigla do cliente — resquício de
+códigos escritos à mão. **Olhando os jobs de cada um, não eram o mesmo
+caso:**
+
+| tabela | código | nome | cliente | jobs |
+|---|---|---|---|---|
+| produção | `0-0002/26` | IMC STELLA ARTOIS | AMBEV | JOB-0031 |
+| financeiro | `0-0002/26` | Stella Artois Unificado | AMBEV | JOB-0031 |
+| financeiro | `0-0001/26` | Projeto Teste 1 | **AMBEV** | JOB-0029, JOB-0033 |
+
+Os dois primeiros são o par do **mesmo trabalho**, os dois já na AMBEV:
+só a sigla errava. Viraram `AMB-0005/26` nas duas tabelas — o maior AMB
+era o 0004 (o Beats), e o número seguinte é o 0005, pela regra que o
+Tiago fixou.
+
+O terceiro era outra coisa. **Os jobs JOB-0029 e JOB-0033, na PRODUÇÃO,
+estão em `PEV-0007/26`, do Pevetech** — o mesmo trabalho apontava para
+clientes diferentes nas duas tabelas. Trocar só a sigla para `AMB`
+consolidaria o erro; ele foi para o **Pevetech** e recebeu o código do
+par de produção, `PEV-0007/26`.
+
+Depois disso, uma varredura das duas tabelas: **zero projetos com sigla
+"0"** e **zero jobs com cliente descasado** entre produção e financeiro.
+
+### 5e. ⏸ Sobrou uma: a "Operação HitLab 2026"
+
+É a última divergência entre a sigla e o cliente, e ficou de fora porque
+não é sigla "0" e mexe em trabalho real (3 orçamentos):
+
+| tabela | código | cliente | o que está errado |
+|---|---|---|---|
+| produção | `NOV-0001/26` | **HITLAB** (HIT) | a sigla é `NOV`, do tempo em que o cadastro era o "Novo" |
+| financeiro | `NOO-0001/26` | **"Novo"** (NOO) | o cliente ficou no rascunho; deveria ser o HITLAB |
+
+Consertar seria o mesmo movimento do Beats: o projeto financeiro passa
+para o HITLAB, e os dois viram `HIT-000X/26`. **Aguardando a decisão do
+Tiago** — e, junto com ela, o que fazer com o cliente "Novo", que ficaria
+sem nada.
 
 ## 6. O que foi conferido
 
