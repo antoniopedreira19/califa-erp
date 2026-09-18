@@ -515,6 +515,13 @@ export function ClienteForm({
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    // No modo dialog este form vive DENTRO do formulário de projeto na
+    // árvore React — o portal do Radix tira do DOM, não da árvore, e o
+    // React propaga pela árvore. Sem isto, salvar o cliente submetia o
+    // projeto atrás: os campos do projeto apareciam pintados de vermelho,
+    // e com o projeto completo ele teria sido CRIADO sem ninguém pedir
+    // (18/09/2026).
+    e.stopPropagation();
     setError(null);
     setFieldErrors({});
 
