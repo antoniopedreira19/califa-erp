@@ -69,6 +69,7 @@ interface Props {
   /** `cadastros.clientes.editar`. Sem ela, o campo Cliente não oferece
    *  cadastrar nem editar, e a Marca perde o "+" (18/09/2026). */
   podeCadastrarCliente?: boolean;
+  podeEditarCliente?: boolean;
   onSuccess?: () => void;
   onCancel?: () => void;
 }
@@ -88,6 +89,7 @@ export function ProjetoForm({
   produtoresDosOrcamentos,
   criadorId,
   podeCadastrarCliente = false,
+  podeEditarCliente = false,
   onSuccess,
   onCancel,
 }: Props) {
@@ -299,6 +301,7 @@ export function ProjetoForm({
             clientes={clientesLocais}
             onCadastroMudou={absorverCadastro}
             podeCadastrar={podeCadastrarCliente}
+            podeEditar={podeEditarCliente}
             className={erroClasses("cliente_id")}
             abrirMarcas={abrirMarcasDoCliente}
             onAbrirMarcasResolvido={() => setAbrirMarcasDoCliente(false)}
@@ -308,9 +311,13 @@ export function ProjetoForm({
         <Field label="Marca" name="produto_id" required errors={fieldErrors}>
           {/* O "+" ao lado abre a ficha do cliente já na seção Marcas.
               Ele aparece assim que há cliente escolhido — e não só quando
-              a lista está vazia: dos 157 clientes ativos, 150 ainda não
-              têm marca nenhuma (17/09/2026), e quem precisa de uma marca
-              nova não deveria ter de sair procurando onde se cadastra. */}
+              a lista está vazia.
+
+              Gate `podeEditarCliente`, e não `podeCadastrarCliente`: isto
+              abre o cadastro de um cliente que JÁ existe, que é
+              `cadastros.clientes.editar` (só administrador). Criar cliente
+              novo, com as marcas dele, é `…inline` e o GP e o produtor
+              têm — ver decisão 089 §6. */}
           <div className="flex items-center gap-2">
             <div className="min-w-0 flex-1">
               <Select
@@ -341,7 +348,7 @@ export function ProjetoForm({
                 </SelectContent>
               </Select>
             </div>
-            {clienteId && podeCadastrarCliente && (
+            {clienteId && podeEditarCliente && (
               <button
                 type="button"
                 onClick={() => setAbrirMarcasDoCliente(true)}
@@ -356,7 +363,7 @@ export function ProjetoForm({
           {clienteId && produtosDoCliente.length === 0 && (
             <p className="text-xs text-muted-foreground">
               Este cliente ainda não tem marcas.{" "}
-              {podeCadastrarCliente ? (
+              {podeEditarCliente ? (
                 <button
                   type="button"
                   onClick={() => setAbrirMarcasDoCliente(true)}

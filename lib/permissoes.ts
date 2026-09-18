@@ -51,6 +51,14 @@ export const permissoes = {
   // Cadastros globais
   // ==================================================================
   "cadastros.clientes.editar":              ["administrador"],
+  /**
+   * Cadastro rapido de cliente DENTRO do formulario de projeto (decisao
+   * 089, liberado em 18/09/2026). Espelha `cadastros.fornecedores.inline`:
+   * quem cria orcamento precisa poder cadastrar o cliente que o orcamento
+   * pede, sem esperar um administrador. Vale so para CRIAR — abrir o
+   * cadastro de um cliente que ja existe continua em `.editar`.
+   */
+  "cadastros.clientes.inline":              ["administrador", "gerente_producao", "produtor"],
   "cadastros.fornecedores.editar":          ["administrador"],
   /** Cadastro rapido de fornecedor DENTRO do fluxo de PP (drawer inline). */
   "cadastros.fornecedores.inline":          ["administrador", "gerente_producao", "produtor"],

@@ -4071,23 +4071,38 @@ não entrou aqui para manter a correção pequena.
 Complemento da [decisão 089](../decisions/089-lista-longa-se-busca-e-o-codigo-do-cliente-nao-aparece.md)
 (§6), no formulário de projeto (`/orcamentos/novo` e a edição).
 
-`cadastros.clientes.editar` é **só do administrador**. Para quem não a tem,
-o `CampoCliente` agora esconde o **"+"**, o **lápis** e o atalho
-*"Cadastrar «…» como cliente"* da busca sem resultado — em vez de abrir o
-cadastro e recusar no fim, como fazia. O "+" ao lado de **Marca** e o link
-*"Cadastrar agora"* seguem a mesma prop (`podeCadastrarCliente`), e o texto
-vira *"Peça a um administrador para cadastrar."*
+São **duas permissões**, e o gate segue o papel do botão:
+
+| | quem tem | o que controla |
+|---|---|---|
+| `cadastros.clientes.inline` | Admin, **GP, Produtor** | o "+" do campo Cliente e o atalho *"Cadastrar «…» como cliente"* da busca sem resultado |
+| `cadastros.clientes.editar` | só Admin | o **lápis** (abre a ficha do cliente escolhido) e o **"+" ao lado de Marca**, que abre a mesma ficha na seção Marcas |
 
 A **busca do campo continua igual para todo mundo** — o GP e o produtor
-escolhem cliente normalmente, e é só o cadastro que some.
+escolhem cliente normalmente.
 
-⚠️ **Ponta solta, para o Tiago decidir:** o GP e o produtor criam orçamento
-(`orcamentos.criar`) mas não cadastram cliente. Com cliente novo, o projeto
-para até um administrador cadastrar. O fornecedor já resolveu isso com um
-gate próprio (`cadastros.fornecedores.inline`, Admin/GP/Produtor); o
-cliente não tem equivalente. Criar `cadastros.clientes.inline` é decisão de
-negócio — não foi feito por conta própria.
+Quem não tem o gate não vê o botão, em vez de abrir o cadastro e ler "Você
+não tem permissão para essa ação" no fim, como fazia. O texto de apoio
+muda junto: *"Peça a um administrador para cadastrar."*
 
-Conferido em 18/09/2026 como **GP Teste Claude**: `botoesDeCadastro: []`,
-campo presente, busca funcionando, e "Nenhum resultado." **sem** o atalho
-de cadastrar. Como administrador, os botões continuam onde estavam.
+⚠️ **O `.inline` só CRIA.** Um cliente que já existe continua sendo do
+administrador — inclusive para acrescentar marca. E **155 dos 157 clientes
+ativos têm exatamente uma marca** (a PRD-01 do backfill, com o nome do
+cliente): o GP que precisar de uma segunda marca num cliente antigo ainda
+depende de um administrador. Cliente NOVO nasce com quantas marcas ele
+quiser, porque é tudo INSERT do mesmo `criarCliente`.
+
+**Sem migration:** a RLS de `clientes`, `cliente_produtos` e
+`cliente_portais` é por tenant e não olha papel. Só o gate da action
+mudou.
+
+⚠️ **Bug corrigido junto:** o submit do dialog subia para o formulário de
+projeto (portal do Radix sai do DOM, não da árvore React). Ver decisão 089
+§7 — todo formulário que possa abrir dentro de outro leva
+`e.stopPropagation()`.
+
+Conferido em 18/09/2026 como **GP Teste Claude**, com gravação real: o "+"
+aparece, o cliente é criado (`created_by` = o GP) já com a PRD-01 do
+trigger, fica escolhido no campo e a marca chega na lista sem recarregar;
+o lápis e o "+" da Marca não aparecem. Os clientes de teste foram
+inativados. Como administrador, tudo continua onde estava.

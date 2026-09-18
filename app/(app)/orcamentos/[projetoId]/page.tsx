@@ -383,6 +383,10 @@ export default async function ProjetoDetailPage({
             <ProjetoEditorDrawer
               podeCadastrarCliente={pode(
                 session.activeRole,
+                "cadastros.clientes.inline",
+              )}
+              podeEditarCliente={pode(
+                session.activeRole,
                 "cadastros.clientes.editar",
               )}
               projeto={projeto}
