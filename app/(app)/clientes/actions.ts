@@ -272,7 +272,12 @@ export async function criarCliente(
   opcoes?: { semRedirect?: boolean },
 ): Promise<ActionResult> {
   const session = await requireSession();
-  const gate = await checarPermissao(session, "cadastros.clientes.editar");
+  // CRIAR usa o gate largo (`inline`, liberado em 18/09/2026): Admin, GP e
+  // Produtor. Quem cria orcamento precisa poder cadastrar o cliente que o
+  // orcamento pede — e cliente novo nao mexe no cadastro de ninguem.
+  // Abrir o cadastro de um cliente que JA existe (atualizarCliente,
+  // inativar, reativar) continua em `cadastros.clientes.editar`.
+  const gate = await checarPermissao(session, "cadastros.clientes.inline");
   if (!gate.ok) return gate;
 
   const payload = parsePayload(formData);

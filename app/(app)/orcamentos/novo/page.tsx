@@ -87,6 +87,10 @@ export default async function NovoProjetoPage() {
           criadorId={session.profile.id}
           podeCadastrarCliente={pode(
             session.activeRole,
+            "cadastros.clientes.inline",
+          )}
+          podeEditarCliente={pode(
+            session.activeRole,
             "cadastros.clientes.editar",
           )}
         />

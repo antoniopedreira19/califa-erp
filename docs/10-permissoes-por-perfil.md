@@ -64,6 +64,7 @@ Legenda: **V** = ver · **E** = editar/criar · **A** = aprovar ou ação críti
 | Ação | ADM | GP | PROD | FREE | FIN |
 |---|:---:|:---:|:---:|:---:|:---:|
 | Clientes (via tela `/clientes`) | E | — | — | — | — |
+| **Cliente via "cadastro inline"** (dentro do formulário de projeto) | E | E | E | — | — |
 | Fornecedores (via tela `/fornecedores`) | E | — | — | — | — |
 | **Fornecedor via "cadastro inline"** (dentro de PP) | E | E | E | — | — |
 | Empresas do tenant | E | — | — | — | — |
@@ -72,6 +73,13 @@ Legenda: **V** = ver · **E** = editar/criar · **A** = aprovar ou ação críti
 | Categorias de orçamento, regionais, cidades | E | — | — | — | — |
 | Usuários e permissões | E | — | — | — | — |
 | Auditoria (feed de eventos) | V | — | — | — | — |
+
+⚠️ **O "cadastro inline" só CRIA (18/09/2026).** `cadastros.clientes.inline`
+e `cadastros.fornecedores.inline` liberam o "+" de dentro do fluxo — quem
+cria orçamento precisa do cliente que ele pede, quem gera PP precisa do
+fornecedor. **Abrir o cadastro de um que já existe continua em `.editar`,
+só do administrador**: é o lápis do campo, e no projeto também o "+" ao
+lado de Marca, que abre a ficha do cliente escolhido. Ver decisão 089 §6.
 
 ### Orçamento
 

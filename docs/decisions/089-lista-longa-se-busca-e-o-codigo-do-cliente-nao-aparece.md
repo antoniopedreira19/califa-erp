@@ -148,7 +148,7 @@ fim.
 | campo | "+" (criar) | lápis (editar) | atalho "Cadastrar «…»" |
 |---|---|---|---|
 | Fornecedor da PP | `cadastros.fornecedores.inline` — Admin, GP, Produtor | `cadastros.fornecedores.editar` — só Admin | segue o "+" |
-| Cliente do projeto | `cadastros.clientes.editar` — só Admin | idem | segue o "+" |
+| Cliente do projeto | `cadastros.clientes.inline` — Admin, GP, Produtor | `cadastros.clientes.editar` — só Admin | segue o "+" |
 
 **A armadilha, e ela quase passou:** a primeira versão desta mudança usou
 `cadastros.fornecedores.editar` para os dois papéis do botão, e com isso
@@ -163,15 +163,60 @@ Quando o botão some, o texto de apoio embaixo do campo muda junto, para
 a pessoa saber o caminho em vez de procurar o botão: *"Escreva para
 buscar na lista. Cadastro de fornecedor é com o administrador."*
 
-**Fica em aberto, para o Tiago decidir:** não existe
-`cadastros.clientes.inline`. O GP e o produtor criam orçamento
-(`orcamentos.criar`) mas não cadastram cliente, então, com cliente novo,
-o projeto para até um administrador cadastrar. Espelhar o fornecedor — um
-gate `inline` para Admin, GP e Produtor — resolveria; é decisão de
-negócio, não de tela.
+✅ **18/09/2026, decidido pelo Tiago: `cadastros.clientes.inline` existe.**
+Admin, GP e Produtor. O GP e o produtor criam orçamento
+(`orcamentos.criar`) e agora cadastram o cliente que o orçamento pede, sem
+esperar um administrador. Só a action `criarCliente` mudou de gate;
+`atualizarCliente`, `inativarCliente` e `reativarCliente` seguem em
+`.editar`. A RLS de `clientes`, `cliente_produtos` e `cliente_portais` já
+era por tenant e não olha papel — **não houve migration**.
+
+⚠️ **O "+" ao lado de Marca continua sendo do administrador**, porque ele
+abre a ficha de um cliente que JÁ existe, e isso é `atualizarCliente`.
+Consequência a considerar: **155 dos 157 clientes ativos têm exatamente
+uma marca** (a PRD-01 do backfill, com o nome do cliente — conferido em
+18/09/2026). O GP que precisar de uma segunda marca num cliente antigo
+ainda depende de um administrador. Criar cliente novo, com quantas marcas
+quiser, funciona — é tudo INSERT do mesmo `criarCliente`.
 
 Conferido no navegador em 18/09/2026, entrando como **GP Teste Claude**
 (`gerente_producao`) e como administrador, nas duas telas. Para o GP ver
 a planilha do job foi preciso passar o JOB-0033 (projeto de teste
 `0-0001/26`) para ele — `quemPodeMexer` exige ser o responsável —, e o
 responsável foi devolvido ao Tiago no fim.
+
+## 7. O submit do dialog subia para o formulário de trás
+
+⚠️ **18/09/2026 — achado ao testar o item 6.** Criar o cliente pelo dialog
+**submetia o formulário de projeto atrás dele**: a tela voltava com todos
+os campos pintados de vermelho ("Selecione um cliente válido", "Informe o
+nome do projeto"…), porque a validação do projeto rodou com o `cliente_id`
+ainda vazio.
+
+O portal do Radix tira o dialog do DOM, **não da árvore React** — e o React
+propaga pela árvore. O `<form>` do `ClienteForm` é descendente do `<form>`
+do projeto ali, então o `onSubmit` de um chamava o do outro.
+`e.preventDefault()` não resolve: ele impede a navegação, não a subida.
+
+A correção é `e.stopPropagation()` no `handleSubmit` do `ClienteForm` — e o
+mesmo foi posto no `FornecedorForm`. **O fornecedor escapava por sorte:**
+o `NovoFornecedorDialog` do "Gerar PP" é renderizado depois do `</form>`
+da PP (linha 1760 contra 1758), fora da árvore do form. Mover esse bloco
+para dentro do form bastaria para o cadastro do fornecedor emitir a PP
+junto.
+
+**O dano não foi só cosmético.** No caso observado a validação barrou, e
+nada foi gravado — o cliente ainda não estava no campo. Mas com o
+formulário de projeto já completo (que é o caso de quem usa o lápis, ou o
+"+" da Marca), o submit teria passado e **o projeto seria criado sem
+ninguém pedir**.
+
+É a mesma armadilha da [051](051-descritivo-em-cartao-nas-listas.md) (o
+Radix em linha clicável), agora em `submit` em vez de `click`:
+**formulário dentro de dialog dentro de formulário para a propagação,
+sempre.**
+
+Conferido antes e depois, como GP, em `/orcamentos/novo` com o nome do
+projeto preenchido: antes, 5 mensagens de erro do projeto; depois,
+nenhuma, o cliente escolhido no campo, a PRD-01 na lista de Marca e
+**nenhum projeto criado**.

@@ -48,6 +48,7 @@ export function CampoCliente({
   onCadastroMudou,
   disabled,
   podeCadastrar = true,
+  podeEditar = true,
   placeholder = "Selecione um cliente ativo",
   className,
   alturaBotao = "h-10 w-10 rounded-lg",
@@ -69,12 +70,20 @@ export function CampoCliente({
   onCadastroMudou?: (cliente: ClienteDoCampo, marcas: MarcaNova[]) => void;
   disabled?: boolean;
   /**
-   * Quem não tem `cadastros.clientes.editar` não vê o "+", o lápis nem o
-   * atalho "Cadastrar «…»" da busca. A action barra de qualquer jeito —
-   * mas o GP preenchia o cadastro inteiro para só então ler "Você não tem
-   * permissão para essa ação" (18/09/2026).
+   * São DUAS permissões, como no campo de fornecedor da PP (18/09/2026):
+   *
+   *  * criar pelo dialog é `cadastros.clientes.inline` — Admin, GP e
+   *    Produtor, porque quem cria orçamento precisa do cliente que ele
+   *    pede. Vale para o "+" e para o atalho "Cadastrar «…»" da busca;
+   *  * abrir o cadastro de um cliente que JÁ existe é
+   *    `cadastros.clientes.editar`, só do administrador. É o lápis.
+   *
+   * A action barra dos dois lados de qualquer jeito. Aqui é para a pessoa
+   * não preencher o cadastro inteiro e só então ler "Você não tem
+   * permissão para essa ação".
    */
   podeCadastrar?: boolean;
+  podeEditar?: boolean;
   placeholder?: string;
   className?: string;
   alturaBotao?: string;
@@ -145,15 +154,17 @@ export function CampoCliente({
     };
   }, [clienteEditando]);
 
-  /** O "+" do campo Marca, que vive fora daqui. */
+  /** O "+" do campo Marca, que vive fora daqui. Ele abre o cadastro de um
+   *  cliente que já existe, então obedece a `podeEditar` — quem o mostra
+   *  usa o mesmo gate, e isto é o cinto de segurança. */
   React.useEffect(() => {
-    if (!abrirMarcas || !value) return;
+    if (!abrirMarcas || !value || !podeEditar) return;
     setNomeSugerido("");
     setFocoMarcas(true);
     setClienteEditando(value);
     setDialogAberto(true);
     onAbrirMarcasResolvido?.();
-  }, [abrirMarcas, value, onAbrirMarcasResolvido]);
+  }, [abrirMarcas, value, podeEditar, onAbrirMarcasResolvido]);
 
   function abrirCadastro(nome: string) {
     setNomeSugerido(nome);
@@ -216,8 +227,9 @@ export function CampoCliente({
         </div>
         {/* "+" cadastra, lápis revisa o cadastro do escolhido. É o MESMO
             botão trocando de ícone — e o ✕ do campo é o que devolve o "+"
-            depois de alguém ter sido escolhido. */}
-        {!disabled && podeCadastrar && (
+            depois de alguém ter sido escolhido. Como são permissões
+            diferentes, o gate segue o PAPEL do botão, não o botão. */}
+        {!disabled && (value ? podeEditar : podeCadastrar) && (
           <button
             type="button"
             onClick={() => (value ? abrirEdicao() : abrirCadastro(""))}
