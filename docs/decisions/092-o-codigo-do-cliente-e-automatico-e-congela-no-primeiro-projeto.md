@@ -3,8 +3,9 @@
 **Data:** 2026-09-18
 **Decidido por:** Tiago
 **Migrations:** `20260918180001_remove_clientes_de_teste.sql` e
-`20260918180002_codigos_de_cliente_no_padrao_de_tres_letras.sql`.
-Falta só o SEBRAE — ver §5c.
+`20260918180002_codigos_de_cliente_no_padrao_de_tres_letras.sql`,
+`...80003_beats_vai_para_a_ambev_e_nov_vai_para_o_sebrae.sql` e
+`...80004_marca_dos_jobs_do_beats_vira_beats.sql`.
 
 ---
 
@@ -176,18 +177,48 @@ mudou de código (a FK é por id).
 `CLAUDE.local.md` manda usar para todo teste, agora é **`PEV-0007/26`** —
 mesmo projeto, mesmo cliente, mesmos 14 orçamentos e 8 jobs.
 
-### 5c. ⏸ O SEBRAE — `NOV` está ocupado
+### 5c. ✅ O SEBRAE virou NOV — e o Beats virou da AMBEV
 
 O Tiago pediu `SEBRAE → NOV`, alinhando o cliente ao projeto
-`NOV-0004/26` que ele já tem. Mas **`NOV` é do cliente "Novo"**, que tem o
-projeto `NOV-0003/26` ("Beats Esquenta Festivals").
+`NOV-0004/26` que ele já tinha. Mas `NOV` era do cliente **"Novo"**, dono
+do projeto `NOV-0003/26` ("Beats Esquenta Festivals").
 
-As datas explicam a bagunça: o projeto do SEBRAE foi criado em **27/08**,
-e o cliente SEBRAE só existe desde **28/08**. O projeto nasceu sob o
-"Novo" — um cadastro sem CNPJ, com cara de rascunho — e foi transferido
-depois, deixando a sigla para trás.
+As datas contam a história: o projeto do SEBRAE foi criado em **27/08**, e
+o cliente SEBRAE só existe desde **28/08**. E o "Beats" nasceu em 26/08
+sob o "Novo" — um cadastro de rascunho, sem CNPJ — como teste, e virou
+trabalho de verdade: 3 orçamentos e 2 jobs. Nas palavras do Tiago, *"ainda
+precisa alterar o seu cadastro para que fique correto"*.
 
-Enquanto os dois clientes existirem, um deles não pode ser `NOV`.
+**Migration `20260918180003`, em três movimentos que dependem um do
+outro:**
+
+```
+1. Beats Esquenta Festivals  →  cliente AMBEV, marca BEATS (PRD-02)
+     NOV-0003/26     → AMB-0004/26      (produção e financeiro)
+     NOV-0003/26-01..03 → AMB-0004/26-01..03
+
+2. cliente "Novo"            →  libera a sigla, vira NOO (a regra da §2)
+     NOV-0001/26 "Operação HitLab 2026" → NOO-0001/26   (financeiro)
+
+3. cliente SEBRAE            →  recebe NOV
+     NOV-0004/26 fica CERTO sem mudar
+```
+
+A marca BEATS já existia na AMBEV (`PRD-02`) — não foi preciso criar. E
+nada mais pendia do "Novo": zero faturamento, lançamento, conta avulsa ou
+desembolso. Jobs e orçamentos não guardam `cliente_id` próprio, então
+mover o projeto moveu tudo que pende dele.
+
+⚠️ **Menos uma coisa, que só a TELA mostrou** e virou a migration
+`20260918180004`: **`jobs.produto` é texto**, uma cópia do nome da marca
+tirada na abertura do job, e não uma FK. A varredura do banco por
+`produto_id`/`marca_id` em `jobs` não achou nada, e o UPDATE do projeto
+não a alcançou. Aberto o JOB-0024 no navegador, lá estava: *"Marca
+**Novo**"* — e o JOB-0025 dizia *"AMBEV"*. Os dois passaram a dizer
+BEATS.
+
+> **Campo de texto copiado na abertura não aparece numa varredura de
+> FK.** Depois de mover um projeto de cliente, abra um job na tela.
 
 ## 6. O que foi conferido
 
