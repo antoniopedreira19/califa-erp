@@ -62,7 +62,7 @@ import type { Cliente, ClienteProduto, ClientePortal } from "@/lib/types";
 import {
   atualizarCliente,
   buscarClientePorCnpj,
-  buscarClientePorCodigo,
+  sugerirCodigoCliente,
   criarCliente,
   type ActionResult,
   type ClienteResumo,
@@ -278,6 +278,14 @@ interface Props {
   marcas?: ClienteProduto[];
   portais?: ClientePortal[];
   /**
+   * Já existe projeto deste cliente? É o que congela o código curto: ele
+   * virou a sigla dos códigos de projeto já emitidos. Cliente novo não
+   * tem projeto, então o default `false` é o certo para a criação — e as
+   * duas telas de edição passam o valor de verdade. O servidor confere
+   * de novo em `atualizarCliente`, que é onde a trava vale.
+   */
+  temProjeto?: boolean;
+  /**
    * `pagina` é a tela de /clientes. `dialog` é o cadastro rápido de dentro
    * do formulário de projeto (17/09/2026): mesmo formulário, seções em
    * linha única, rodapé próprio, e o resultado volta por callback em vez
@@ -298,6 +306,7 @@ export function ClienteForm({
   cliente,
   marcas = [],
   portais = [],
+  temProjeto = false,
   modo = "pagina",
   nomeInicial,
   onCriado,
@@ -320,9 +329,14 @@ export function ClienteForm({
   const [nome, setNome] = React.useState(
     cliente?.nome_fantasia ?? nomeInicial ?? "",
   );
+  /**
+   * O código não é mais digitado (18/09/2026): sai do nome fantasia pela
+   * regra de `lib/codigos/cliente-curto.ts`, e o servidor escolhe o
+   * primeiro livre. Na edição ele começa com o que está gravado e só
+   * muda se o nome mudar — e mesmo assim não, quando o cliente já tem
+   * projeto: a sigla está dentro dos códigos de projeto já emitidos.
+   */
   const [codigo, setCodigo] = React.useState(cliente?.codigo_curto ?? "");
-  /** Na edição o código já existe: nunca se sugere sozinho por cima. */
-  const [codigoEditado, setCodigoEditado] = React.useState(isEdit);
   const [cnpj, setCnpj] = React.useState(onlyDigits(cliente?.cnpj ?? ""));
   const [email, setEmail] = React.useState(cliente?.email ?? "");
   const [telefone, setTelefone] = React.useState(
@@ -370,21 +384,32 @@ export function ClienteForm({
   // --- Quem já usa este CNPJ / este código ---------------------------------
   const [cnpjDuplicado, setCnpjDuplicado] =
     React.useState<ClienteResumo | null>(null);
-  const [codigoDuplicado, setCodigoDuplicado] =
-    React.useState<ClienteResumo | null>(null);
 
   /**
-   * O código sugerido acompanha o nome fantasia enquanto ninguém digitar
-   * por cima: só letras, seis primeiras, maiúsculas — o desenho.
+   * O código vem do servidor, que é quem sabe o que está ocupado. Pede a
+   * cada parada de digitação no nome — e nunca quando o cliente já tem
+   * projeto, porque aí a sigla está congelada.
    */
-  const codigoSugerido = codigoEditado
-    ? codigo
-    : nome
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .replace(/[^A-Za-z]/g, "")
-        .slice(0, 6)
-        .toUpperCase();
+  const codigoTravado = isEdit && temProjeto;
+
+  React.useEffect(() => {
+    if (codigoTravado) return;
+    const limpo = nome.trim();
+    if (limpo === "") {
+      setCodigo("");
+      return;
+    }
+    let vivo = true;
+    const t = setTimeout(() => {
+      sugerirCodigoCliente(limpo, cliente?.id).then((res) => {
+        if (vivo) setCodigo(res.codigo);
+      });
+    }, 350);
+    return () => {
+      vivo = false;
+      clearTimeout(t);
+    };
+  }, [nome, codigoTravado, cliente?.id]);
 
   async function conferirCnpj(digits: string) {
     if (digits.length !== 14) {
@@ -395,28 +420,9 @@ export function ClienteForm({
     setCnpjDuplicado(res.existe ? res.cliente : null);
   }
 
-  async function conferirCodigo(valor: string) {
-    const limpo = valor.trim();
-    if (limpo === "") {
-      setCodigoDuplicado(null);
-      return;
-    }
-    const res = await buscarClientePorCodigo(limpo, cliente?.id);
-    setCodigoDuplicado(res.existe ? res.cliente : null);
-  }
-
-  /** O código sugerido nunca passa pelo blur de um campo que a pessoa não
-   *  tocou — então é aqui que ele é conferido. */
-  React.useEffect(() => {
-    if (codigoEditado) return;
-    const t = setTimeout(() => void conferirCodigo(codigoSugerido), 400);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [codigoSugerido, codigoEditado]);
-
   // --- O que falta — a conta do rodapé -------------------------------------
   const nomeOk = nome.trim().length >= 2;
-  const codigoOk = codigoSugerido.trim() !== "";
+  const codigoOk = codigo.trim() !== "";
   const cnpjOk = cnpj.length === 14;
   const honNumero = Number(honorarios.replace(",", "."));
   const honOk =
@@ -463,12 +469,10 @@ export function ClienteForm({
   })();
 
   const travadoPorCnpj = Boolean(cnpjDuplicado);
-  const travadoPorCodigo = Boolean(codigoDuplicado);
 
   const pronto =
     pendencias.length === 0 &&
     !travadoPorCnpj &&
-    !travadoPorCodigo &&
     !emailPrincipalInvalido &&
     !telefonePrincipalInvalido &&
     !emailExtraInvalido &&
@@ -481,9 +485,7 @@ export function ClienteForm({
 
   const textoValidacao = travadoPorCnpj
     ? "Este CNPJ já tem cadastro — não dá para criar outro."
-    : travadoPorCodigo
-      ? `Este código já é de ${comPontoFinal(codigoDuplicado!.nome_fantasia)}`
-      : pendencias.length > 0
+    : pendencias.length > 0
         ? `Falta ${listar(pendencias)}.`
         : emailPrincipalInvalido || emailExtraInvalido
           ? "Confira o e-mail — o formato não está válido."
@@ -519,7 +521,7 @@ export function ClienteForm({
 
     const formData = new FormData(e.currentTarget);
     formData.set("nome_fantasia", nome);
-    formData.set("codigo_curto", codigoSugerido.trim());
+    formData.set("codigo_curto", codigo.trim());
     formData.set("cnpj", cnpj);
     formData.set("email", email);
     formData.set("telefone", telefone);
@@ -628,40 +630,27 @@ export function ClienteForm({
               />
             </Campo>
 
+            {/* O código deixou de ser digitado (18/09/2026): ele sai do
+                nome fantasia e o servidor escolhe o primeiro livre. Fica
+                à vista porque é o prefixo do código de projeto, e quem
+                cadastra precisa saber qual saiu. */}
             <Campo
               label="Código"
               name="codigo_curto"
-              required
-              hint="único por cliente"
+              hint={codigoTravado ? "definido" : "automático"}
               errors={fieldErrors}
               className="col-span-12 sm:col-span-5"
             >
-              <Input
-                id="codigo_curto"
-                value={codigoSugerido}
-                onChange={(e) => {
-                  setCodigo(e.target.value);
-                  setCodigoEditado(true);
-                  setCodigoDuplicado(null);
-                }}
-                onBlur={(e) => void conferirCodigo(e.target.value)}
-                placeholder="Ex.: AMBEV"
-                maxLength={50}
-                className={cn(
-                  "tracking-[0.02em]",
-                  codigoDuplicado &&
-                    "border-[#f2cd8a] ring-2 ring-amber-500/[0.12]",
-                )}
-              />
-              <span
-                className={cn(
-                  "text-[11px] leading-relaxed",
-                  codigoDuplicado ? "text-[#92400e]" : "text-muted-foreground",
-                )}
-              >
-                {codigoDuplicado
-                  ? "Este código já é de outro cliente — troque para salvar."
-                  : "Vira o prefixo dos códigos de projeto e job."}
+              <div className="flex h-11 items-center gap-2 rounded-lg border border-border bg-muted/40 px-3.5">
+                <Lock className="h-3.5 w-3.5 flex-none text-muted-foreground" />
+                <span className="truncate font-mono text-[13px] tracking-[0.04em]">
+                  {codigo || "—"}
+                </span>
+              </div>
+              <span className="text-[11px] leading-relaxed text-muted-foreground">
+                {codigoTravado
+                  ? "Este cliente já tem projeto: a sigla está nos códigos já emitidos e não muda mais."
+                  : "Vem do nome fantasia e vira o prefixo dos códigos de projeto."}
               </span>
             </Campo>
 
