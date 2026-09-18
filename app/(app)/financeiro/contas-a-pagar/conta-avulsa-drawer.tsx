@@ -660,22 +660,27 @@ export function ContaAvulsaDrawer(props: Props) {
 
                 <div className="space-y-2 pt-1">
                   <Label htmlFor="parcelas">Parcelas</Label>
-                  <select
+                  {/* 24 opções e dentro de um drawer: `<select>` nativo não
+                      aplica a escolha aqui (decisão 090). */}
+                  <Combobox
                     id="parcelas"
-                    value={parcelas}
+                    items={Array.from({ length: 24 }, (_, i) => i + 1).map(
+                      (n) => ({
+                        value: String(n),
+                        label:
+                          (n === 1 ? "À vista" : `${n}x`) +
+                          (n > 1 && valorNumero > 0
+                            ? ` de ${formatCurrency(valorNumero / n)}`
+                            : ""),
+                      }),
+                    )}
+                    value={parcelas || null}
+                    onChange={(v) => setParcelas(v ?? "1")}
                     disabled={pending}
-                    onChange={(e) => setParcelas(e.target.value)}
-                    className="h-10 w-full rounded-lg border border-border bg-white px-3 text-sm outline-none focus:border-california-red disabled:opacity-50"
-                  >
-                    {Array.from({ length: 24 }, (_, i) => i + 1).map((n) => (
-                      <option key={n} value={String(n)}>
-                        {n === 1 ? "À vista" : `${n}x`}
-                        {n > 1 && valorNumero > 0
-                          ? ` de ${formatCurrency(valorNumero / n)}`
-                          : ""}
-                      </option>
-                    ))}
-                  </select>
+                    placeholder="À vista"
+                    buscaPlaceholder="Escreva o número de parcelas"
+                    className="border-border"
+                  />
                   <p className="text-xs leading-relaxed text-muted-foreground">
                     O valor acima é o <strong>total</strong> da compra. Cada
                     parcela cai numa fatura, uma por mês — o resto da divisão
