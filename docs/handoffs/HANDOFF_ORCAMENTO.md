@@ -4164,8 +4164,16 @@ jobs. O `CLAUDE.local.md` ainda cita o nome antigo.
 mesma sigla do cliente; deixá-la de fora partiria o cadastro em dois.
 Quatro linhas mudaram lá, e nenhum job mudou de código.
 
-⏸ **Falta o SEBRAE.** O pedido era `SEBRAE → NOV`, mas `NOV` é do cliente
-"Novo". Decisão 092 §5c.
+✅ **O SEBRAE virou `NOV`**, e para isso o "Beats Esquenta Festivals"
+saiu do cliente de rascunho "Novo" e passou a ser da **AMBEV, marca
+BEATS** — `NOV-0003/26` virou `AMB-0004/26`, com os 3 orçamentos e os 2
+jobs. O "Novo" virou `NOO`. Decisão 092 §5c.
+
+⚠️ **`jobs.produto` é TEXTO**, copiado do nome da marca na abertura do
+job, e não uma FK. Mover um projeto de cliente NÃO o alcança, e uma
+varredura do banco por `produto_id`/`marca_id` em `jobs` não acha nada —
+foi a tela do JOB-0024 que mostrou "Marca Novo" depois da mudança.
+**Depois de mover projeto de cliente, abra um job.**
 
 Conferido no navegador em 18/09/2026, com gravação real no Pevetech (nome
 alterado e restaurado; o código continuou `PEVETE`), e como GP — a sidebar
