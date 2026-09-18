@@ -4175,6 +4175,21 @@ varredura do banco por `produto_id`/`marca_id` em `jobs` não acha nada —
 foi a tela do JOB-0024 que mostrou "Marca Novo" depois da mudança.
 **Depois de mover projeto de cliente, abra um job.**
 
+✅ **Os projetos com sigla `0-` também saíram** (decisão 092 §5d). Eram
+três, e os jobs mostraram que não eram o mesmo caso: dois eram o par do
+IMC Stella Artois, que só errava a sigla (viraram `AMB-0005/26`); o
+terceiro, "Projeto Teste 1" no financeiro, tinha os jobs do `PEV-0007/26`
+e estava no cliente ERRADO — foi para o Pevetech.
+
+> **Para achar esse tipo de erro, compare o cliente do par pelas duas
+> tabelas.** `projetos` e `projetos_financeiro` guardam o mesmo trabalho,
+> e o job é o que os liga: `j.projeto_id` x `j.projeto_financeiro_id`.
+> Hoje não há nenhum descasado.
+
+⏸ **Sobrou a "Operação HitLab 2026"** — `NOV-0001/26` na produção (cliente
+HITLAB, sigla do antigo "Novo") e `NOO-0001/26` no financeiro (cliente
+"Novo"). Decisão 092 §5e.
+
 Conferido no navegador em 18/09/2026, com gravação real no Pevetech (nome
 alterado e restaurado; o código continuou `PEVETE`), e como GP — a sidebar
 já diz "GERENTE DE PROJETO".
