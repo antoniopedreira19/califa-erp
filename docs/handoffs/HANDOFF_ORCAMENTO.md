@@ -4076,7 +4076,13 @@ São **duas permissões**, e o gate segue o papel do botão:
 | | quem tem | o que controla |
 |---|---|---|
 | `cadastros.clientes.inline` | Admin, **GP, Produtor** | o "+" do campo Cliente e o atalho *"Cadastrar «…» como cliente"* da busca sem resultado |
-| `cadastros.clientes.editar` | só Admin | o **lápis** (abre a ficha do cliente escolhido) e o **"+" ao lado de Marca**, que abre a mesma ficha na seção Marcas |
+| `cadastros.clientes.editar` | só Admin | o **lápis**, que abre a ficha do cliente escolhido |
+
+O **"+" ao lado de Marca** também é `.inline` (Admin, GP, Produtor): ele
+deixou de abrir a ficha do cliente e agora abre o `NovaMarcaDialog` — um
+campo, e a gravação é `adicionarMarcaAoCliente`, que só INSERE. A marca
+criada entra na lista e fica escolhida. Renomear e inativar marca seguem
+no cadastro do cliente, com o administrador.
 
 A **busca do campo continua igual para todo mundo** — o GP e o produtor
 escolhem cliente normalmente.
@@ -4085,12 +4091,18 @@ Quem não tem o gate não vê o botão, em vez de abrir o cadastro e ler "Você
 não tem permissão para essa ação" no fim, como fazia. O texto de apoio
 muda junto: *"Peça a um administrador para cadastrar."*
 
-⚠️ **O `.inline` só CRIA.** Um cliente que já existe continua sendo do
-administrador — inclusive para acrescentar marca. E **155 dos 157 clientes
-ativos têm exatamente uma marca** (a PRD-01 do backfill, com o nome do
-cliente): o GP que precisar de uma segunda marca num cliente antigo ainda
-depende de um administrador. Cliente NOVO nasce com quantas marcas ele
-quiser, porque é tudo INSERT do mesmo `criarCliente`.
+⚠️ **O `.inline` só CRIA.** Editar o cadastro de um cliente que já existe
+continua sendo do administrador. O que o GP e o produtor ganharam é criar
+cliente e acrescentar marca — que era o caso comum: **155 dos 157 clientes
+ativos têm exatamente uma marca**, a PRD-01 do backfill.
+
+⚠️ **Duas armadilhas que só a tela mostrou**, e que valem para qualquer
+campo com "+" ao lado: o `Select` do Radix **descarta um `value` cuja
+opção ainda não existe** (por isso a marca nova é escolhida em dois
+tempos, num efeito); e um efeito que **avisa o pai e depois espera uma
+promessa não pode ter cleanup que cancele** — o aviso re-roda o efeito, o
+cleanup mata a resposta, e o dialog não abre sem erro nenhum. Decisão 089
+§6b.
 
 **Sem migration:** a RLS de `clientes`, `cliente_produtos` e
 `cliente_portais` é por tenant e não olha papel. Só o gate da action
@@ -4104,5 +4116,7 @@ projeto (portal do Radix sai do DOM, não da árvore React). Ver decisão 089
 Conferido em 18/09/2026 como **GP Teste Claude**, com gravação real: o "+"
 aparece, o cliente é criado (`created_by` = o GP) já com a PRD-01 do
 trigger, fica escolhido no campo e a marca chega na lista sem recarregar;
-o lápis e o "+" da Marca não aparecem. Os clientes de teste foram
-inativados. Como administrador, tudo continua onde estava.
+o "+" da Marca abre o dialog de uma linha e a marca criada fica escolhida
+(PRD-02 e PRD-03 no cliente "Teste"); o lápis não aparece. Os clientes e
+as marcas de teste foram inativados. Como administrador, os dois botões
+continuam lá.

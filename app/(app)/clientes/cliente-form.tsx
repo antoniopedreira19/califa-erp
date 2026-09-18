@@ -286,9 +286,6 @@ interface Props {
   modo?: "pagina" | "dialog";
   /** Só no dialog: nome já preenchido, vindo do "Cadastrar «…»" da busca. */
   nomeInicial?: string;
-  /** Só no dialog: rola até a seção Marcas e abre uma linha nova nela —
-   *  é o "+" ao lado do campo Marca do projeto. */
-  focoMarcas?: boolean;
   /** Só no dialog, na criação: o cliente recém-gravado. */
   onCriado?: (cliente: { id: string; nome_fantasia: string }) => void;
   /** Só no dialog, na edição: o cadastro foi salvo. */
@@ -303,7 +300,6 @@ export function ClienteForm({
   portais = [],
   modo = "pagina",
   nomeInicial,
-  focoMarcas,
   onCriado,
   onSalvo,
   onCancelar,
@@ -355,11 +351,7 @@ export function ClienteForm({
         nome: m.nome,
         ativo: m.ativo,
       }));
-    // Quem clicou no "+" ao lado da Marca quer CADASTRAR uma: a linha em
-    // branco já entra pronta, com o foco nela (17/09/2026).
-    return focoMarcas
-      ? [...doBanco, { uid: novoUid(), nome: "", ativo: true }]
-      : doBanco;
+    return doBanco;
   });
   const [linhasPortal, setLinhasPortal] = React.useState<LinhaPortal[]>(() =>
     portais.map((p) => ({
@@ -587,21 +579,6 @@ export function ClienteForm({
       if (isEdit) router.refresh();
     });
   }
-
-  /** O "+" ao lado da Marca abre o dialog já na seção Marcas, com o foco
-   *  na linha nova que o estado inicial criou. */
-  React.useEffect(() => {
-    if (!emDialog || !focoMarcas) return;
-    const t = setTimeout(() => {
-      const secao = document.getElementById("marcas");
-      secao?.scrollIntoView({ block: "center" });
-      const campo = secao?.querySelector<HTMLInputElement>(
-        'input[placeholder^="Nome da marca"]:not([disabled])',
-      );
-      campo?.focus();
-    }, 120);
-    return () => clearTimeout(t);
-  }, [emDialog, focoMarcas]);
 
   const nomeMarcaPrincipal = nome.trim() || "Defina o nome fantasia acima";
 
