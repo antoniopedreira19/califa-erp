@@ -7,13 +7,13 @@
  * sugestão antiga (6 primeiras letras do nome). A sugestão passou a ser o
  * que a agência de fato escreve.
  *
- * O desempate é **a próxima letra do alfabeto na última posição**, e não
- * um número: o código aparece no código do projeto, e três letras se leem
- * melhor que duas e um dígito.
+ * O desempate é **a próxima letra DO NOME na última posição** — não a do
+ * alfabeto, e não um número. Assim a sigla continua sendo uma abreviação
+ * do cliente, e não um contador: quem lê `BRD` reconhece o BRADESCO.
  *
  *   BRADESCO EST UNIF     → BRA
- *   BRADESCO AG SALVADOR  → BRB   (BRA ocupado)
- *   BRAINVEST ASSESSORIA  → BRC   (BRA e BRB ocupados)
+ *   BRADESCO AG SALVADOR  → BRD   (BRA ocupado; a 4ª letra do nome)
+ *   BRAINVEST ASSESSORIA  → BRI   (BRA ocupado; a 4ª letra DESTE nome)
  */
 
 /** Só letras, sem acento, maiúsculas — a base de onde a sigla sai. */
@@ -29,12 +29,12 @@ export function letrasDoNome(nome: string): string {
  *  "C&A" é CA, e não CAX: inventar letra que o nome não tem confunde. */
 export const TAMANHO_CODIGO = 3;
 
-const ALFABETO = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
-
 /**
  * Os candidatos a código, na ordem em que devem ser tentados: primeiro a
- * sigla do nome; depois ela com a última letra trocada, A→Z; e, se as 26
- * estiverem ocupadas, com um dígito no fim.
+ * sigla do nome; depois ela com a última posição percorrendo o **resto
+ * das letras do nome**; e, se o nome acabar, com um dígito no fim.
+ *
+ *   PEVETECH → PEV, PEE, PET, PEC, PEH, PEV2, PEV3…
  *
  * Nome sem letra nenhuma ("37.699.074") devolve lista vazia — quem chama
  * decide o que fazer, porque aqui não há o que inventar.
@@ -46,14 +46,15 @@ export function candidatosDeCodigo(nome: string): string[] {
   const base = letras.slice(0, TAMANHO_CODIGO);
   const fora: string[] = [base];
 
-  // Nome curto demais para ter uma última letra "sobrando" não desempata
-  // por letra — vai direto para o dígito, senão "CA" viraria "CB", que é
-  // outro nome.
+  // O desempate troca só a ÚLTIMA posição, e o que entra nela são as
+  // letras seguintes do próprio nome, na ordem em que aparecem. Nome
+  // curto demais ("C&A" → CA) não tem resto para percorrer e vai direto
+  // ao dígito — "CB" seria outro nome, não uma abreviação deste.
   if (base.length === TAMANHO_CODIGO) {
     const prefixo = base.slice(0, TAMANHO_CODIGO - 1);
-    for (const letra of ALFABETO) {
+    for (const letra of letras.slice(TAMANHO_CODIGO)) {
       const candidato = prefixo + letra;
-      if (candidato !== base) fora.push(candidato);
+      if (!fora.includes(candidato)) fora.push(candidato);
     }
   }
 

@@ -2,8 +2,9 @@
 
 **Data:** 2026-09-18
 **Decidido por:** Tiago
-**Migrations:** nenhuma ainda — o backfill dos 9 cadastros fora do padrão
-está descrito em §5 e **aguarda aprovação**.
+**Migrations:** `20260918180001_remove_clientes_de_teste.sql` (os 3
+cadastros ZZ). O backfill dos 6 que restam está em §5 e **aguarda uma
+decisão sobre a numeração dos projetos**.
 
 ---
 
@@ -42,14 +43,22 @@ gerador não alcança:
 ## 2. A regra
 
 > **O código sai do nome fantasia e ninguém digita.** Três letras, sem
-> acento, maiúsculas. Se já existir, o desempate é **a próxima letra do
-> alfabeto na última posição**.
+> acento, maiúsculas. Se já existir, o desempate é **a próxima letra DO
+> NOME na última posição** — não a do alfabeto.
 
 ```
 BRADESCO EST UNIF     → BRA
-BRADESCO AG SALVADOR  → BRB   (BRA ocupado)
-BRAINVEST ASSESSORIA  → BRC   (BRA e BRB ocupados)
+BRADESCO AG SALVADOR  → BRD   (BRA ocupado; a 4ª letra do nome)
+BRAINVEST ASSESSORIA  → BRI   (BRA ocupado; a 4ª letra DESTE nome)
 C&A                   → CA    (o nome não tem 3 letras)
+```
+
+A fila inteira de um nome, para ver a mecânica:
+
+```
+PEVETECH  →  PEV  PEE  PET  PEC  PEH  PEV2  PEV3 …
+              ↑    ↑    ↑    ↑    ↑
+            base   E    T    C    H   ← as letras seguintes do nome
 ```
 
 - **A conta mora em `lib/codigos/cliente-curto.ts` (2a)**, sem banco:
@@ -57,9 +66,10 @@ C&A                   → CA    (o nome não tem 3 letras)
   escolhe. Quem consulta o que está ocupado é a action
   `sugerirCodigoCliente`, que lê os códigos do tenant de uma vez — 160
   linhas de uma coluna — e devolve o primeiro livre.
-- **O desempate é letra, não número (2b)**, escolha do Tiago: o código
-  aparece dentro do código do projeto, e três letras se leem melhor que
-  duas e um dígito. Esgotadas as 26, aí sim entra dígito.
+- **O desempate vem do nome, não do alfabeto (2b)**, escolha do Tiago: a
+  sigla continua sendo uma abreviação do cliente em vez de virar um
+  contador — quem lê `BRD` reconhece o BRADESCO, e `BRB` não diria nada.
+  Esgotadas as letras do nome, aí sim entra dígito (`PEV2`).
 - **Nome com menos de 3 letras vira o que tem (2c)**: "C&A" é CA, não
   CAX. Inventar letra que o nome não tem atrapalha quem procura.
 - **O campo continua à vista, em leitura (2d).** Ele é o prefixo do
@@ -93,48 +103,70 @@ de uma troca não para no projeto.
 - O campo perdeu `required` no rótulo: ele nunca fica vazio por culpa de
   quem preenche.
 
-## 5. ⏸ O backfill dos 9 fora do padrão — aguardando aprovação
+## 5. ⏸ O backfill dos 6 que restam
 
-Nove cadastros não têm 3 letras. O Tiago pediu que fossem normalizados,
-**com os projetos acompanhando**. O plano, calculado com a regra da §2
-contra os 160 códigos reais:
+✅ **Os 3 cadastros de teste (`ZZGP`, `ZZGP2`, `ZZTEST`) foram apagados**
+(migration `20260918180001`), autorizado pelo Tiago. Não tinham projeto,
+orçamento, faturamento nem lançamento.
 
-| cliente | hoje | vira | projetos que mudam de código |
+⚠️ Apagar cliente exige cuidado, e a migration registra o porquê: a FK
+`cliente_produtos_cliente_id_fkey` é **RESTRICT** e a marca padrão é
+protegida por `trg_cliente_produtos_padrao`, que recusa qualquer DELETE
+dela. As duas juntas tornam o cadastro indelével pelo caminho normal — e
+é assim que deve ser para cliente de verdade. A trigger foi desligada e
+religada **dentro da mesma transação**.
+
+Sobram **6 cadastros fora do padrão de 3 letras**. O plano, calculado com
+a regra da §2 contra os códigos reais, na ordem alfabética em que seria
+aplicado:
+
+| cliente | hoje | vira | por quê |
 |---|---|---|---|
-| Pevetech | PEVETE | **PEV** | `PEVETE-0001/26`, `-0003/26`, `-0004/26`, `-0006/26` |
-| SEBRAE | SEBRAE | **SEB** | ⚠️ ver abaixo |
-| INSTITUTO FEIRA PRETA | FP | **INA** | — (sem projeto) |
-| SMARTFIT | SF | **SMA** | — |
-| Teste | TESTE | **TES** | — |
-| Teste 22 | teste22 | **TEA** | `teste22-0001/26` |
+| INSTITUTO FEIRA PRETA | FP | **INT** | INS é do Instituto Cidades Invisíveis; T é a 4ª letra |
+| Pevetech | PEVETE | **PEV** | livre |
+| SEBRAE | SEBRAE | **SEB** | livre |
+| SMARTFIT | SF | **SMA** | livre |
+| Teste | TESTE | **TES** | livre |
+| Teste 22 | teste22 | **TET** | TES acabou de ir para o "Teste"; T é a letra seguinte |
 
-Mais os 3 cadastros de teste inativos (`ZZGP`, `ZZGP2`, `ZZTEST`), que
-valeria **apagar** em vez de renomear.
-
-**Os jobs não mudam:** o código do job é global (`JOB-0033`), não carrega
+**Os jobs não mudam:** o código do job é global (`JOB-0033`) e não carrega
 a sigla do cliente. **Os orçamentos mudam**, porque o código deles começa
 com o do projeto.
 
-⚠️ **Dois casos que a regra não resolve sozinha, e que ficaram de fora:**
+### 5b. A colisão do Pevetech
 
-1. **`NOV-0004/26`, do SEBRAE.** A sigla já é outra hoje — nem "SEBRAE"
-   nem "SEB". O cadastro foi renomeado em algum momento e o projeto ficou
-   para trás. Renomear para `SEB-0004/26` conserta uma divergência que
-   ninguém pediu para consertar.
-2. **`0-0001/26`, do Pevetech** — o projeto de teste, com sigla "0" de
-   propósito, e 14 orçamentos pendurados nele. Não deve virar `PEV-0001`.
+O Tiago decidiu que a regra vale também para os dois casos que eu tinha
+separado — `NOV-0004/26` (SEBRAE) e `0-0001/26` (Pevetech). Aplicá-la ao
+pé da letra, porém, produz **dois projetos com o mesmo código**:
+
+| projeto | criado | orçamentos | jobs | viraria |
+|---|---|---|---|---|
+| `PEVETE-0001/26` | 28/07 | 2 (`ORC-0002`, `ORC-0003`) | 0 | `PEV-0001/26` |
+| `PEVETE-0003/26` | 30/07 | 1 | 0 | `PEV-0003/26` |
+| `PEVETE-0004/26` | 30/07 | 1 | 0 | `PEV-0004/26` |
+| `PEVETE-0006/26` | 11/08 | 1 | 0 | `PEV-0006/26` |
+| `0-0001/26` | 01/09 | **14** | **8** | `PEV-0001/26` ⚠️ **já existe** |
+
+O `0-0001/26` é o projeto de teste, e a sigla dele ("0") nunca saiu do
+gerador — foi escrita à mão. O número 0001 dele não conversa com a
+numeração do Pevetech.
+
+**Aguardando a decisão do Tiago** entre manter os números e dar ao
+`0-0001/26` o primeiro livre do ano (`PEV-0002/26`), ou renumerar os
+cinco em sequência por data (`PEV-0001` a `PEV-0005`), o que mudaria o
+código de quatro projetos que já circulam.
 
 ## 6. O que foi conferido
 
 No navegador, em 18/09/2026, logado:
 
-- **Cadastro novo:** "Bradesco Seguros Teste" → **BRB**, campo em leitura,
-  com cadeado (BRA já é do BRADESCO EST UNIF).
+- **Cadastro novo:** "Bradesco Seguros Teste" → **BRD**, campo em leitura,
+  com cadeado (BRA já é do BRADESCO EST UNIF, e D é a 4ª letra do nome).
 - **Dentro do projeto**, no dialog de cadastro rápido: "Ambev Nordeste
-  Teste" → **AMA** (AMB ocupado).
-- **Edição sem projeto** (ALVO): o código acompanha o nome — trocar para
-  "Instituto Feira Preta Dois" deu **INA**, porque INS é do INSTITUTO
-  CIDADES INVISIVEIS.
+  Teste" → **AME** (AMB ocupado; E é a 4ª letra de "Ambev").
+- **Edição sem projeto** (ALVO): o código acompanha o nome.
+- E, no mesmo campo: "C&A Nordeste" → **CAN** — a base já tem 3 letras,
+  então o nome curto não vira exceção.
 - **Edição com projeto** (Pevetech): campo travado, e **gravação real** —
   renomeei o cliente para "Pevetech Renomeado Teste", salvei, e o código
   continuou `PEVETE`. O nome foi restaurado em seguida.
