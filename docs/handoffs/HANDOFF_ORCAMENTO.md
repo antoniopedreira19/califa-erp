@@ -4120,3 +4120,41 @@ o "+" da Marca abre o dialog de uma linha e a marca criada fica escolhida
 (PRD-02 e PRD-03 no cliente "Teste"); o lápis não aparece. Os clientes e
 as marcas de teste foram inativados. Como administrador, os dois botões
 continuam lá.
+
+---
+
+## ⚠️ Nota de 2026-09-18 (2) — Acessos revistos, e o código do cliente virou automático
+
+Quatro mudanças pedidas pelo Tiago no mesmo dia.
+
+**1. Quem cadastra cliente.** O **produtor saiu**: `cadastros.clientes.inline`
+é de Administrador e GP. Cliente é relação comercial da agência, e quem a
+abre é o GP. O produtor continua criando orçamento e escolhendo cliente da
+lista — o que some é o "+".
+
+**2. Quem cadastra fornecedor.** O **freelancer entrou**:
+`cadastros.fornecedores.inline` é de Admin, GP, Produtor e Freelancer. Ele
+edita o realizado dos jobs dele e esbarra no mesmo fornecedor fora da
+lista.
+
+**3. "Gerente de Produção" virou "Gerente de Projeto"** na tela. O
+identificador do banco continua `gerente_producao` — é valor de enum em
+uso, e trocá-lo mexeria em dado de todas as frentes. Mudou o `roleLabel`
+(`lib/types.ts`) e as 6 mensagens que citavam o papel por extenso.
+
+**4. O código do cliente não é mais digitado.** Três letras tiradas do
+nome fantasia, desempate pela próxima letra do alfabeto, e **congelado
+assim que o cliente tem projeto** — a sigla está dentro dos códigos de
+projeto já emitidos. Ver [decisão 092](../decisions/092-o-codigo-do-cliente-e-automatico-e-congela-no-primeiro-projeto.md),
+que traz os números da base: **dos 160 clientes, 151 já usavam 3 letras e
+só 5 batiam com a sugestão antiga, de 6**.
+
+⏸ **O backfill dos 9 cadastros fora do padrão está descrito e aguarda
+aprovação** (decisão 092 §5). Ele renomeia códigos de projeto e de
+orçamento, e dois casos ficaram de fora porque a regra não os resolve
+sozinha: `NOV-0004/26` (do SEBRAE, com sigla que já não é a dele) e
+`0-0001/26` (o projeto de teste, com sigla "0" de propósito).
+
+Conferido no navegador em 18/09/2026, com gravação real no Pevetech (nome
+alterado e restaurado; o código continuou `PEVETE`), e como GP — a sidebar
+já diz "GERENTE DE PROJETO".

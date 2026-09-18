@@ -7,6 +7,7 @@ import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { checarPermissao } from "@/lib/permissoes-server";
 import { onlyDigits } from "@/lib/utils";
+import { proximoCodigoLivre } from "@/lib/codigos/cliente-curto";
 import type { Cliente, ClienteProduto, ClientePortal } from "@/lib/types";
 import {
   clienteSchema,
@@ -254,6 +255,39 @@ export async function buscarClientePorCodigo(
       status: data.status as ClienteResumo["status"],
     },
   };
+}
+
+/**
+ * O código curto que o cliente vai receber, já sem colisão (18/09/2026).
+ *
+ * O campo deixou de ser digitado: a sigla sai do nome fantasia pela regra
+ * de `lib/codigos/cliente-curto.ts` e esta action escolhe o primeiro
+ * candidato livre. Ler todos os códigos do tenant é barato (160 linhas de
+ * uma coluna) e evita um ida-e-volta por tentativa.
+ *
+ * Continua sujeito a corrida, como os outros geradores do sistema: duas
+ * pessoas cadastrando ao mesmo tempo podem pedir a mesma sigla, e quem
+ * recusa é o índice `uniq_clientes_codigo_curto_por_tenant`.
+ */
+export async function sugerirCodigoCliente(
+  nome: string,
+  excludeId?: string,
+): Promise<{ codigo: string }> {
+  const session = await requireSession();
+  const supabase = createClient();
+
+  let query = supabase
+    .from("clientes")
+    .select("codigo_curto")
+    .eq("tenant_id", session.activeTenant.id);
+  if (excludeId) query = query.neq("id", excludeId);
+
+  const { data } = await query;
+  const ocupados = (data ?? [])
+    .map((c: { codigo_curto: string | null }) => c.codigo_curto ?? "")
+    .filter(Boolean);
+
+  return { codigo: proximoCodigoLivre(nome, ocupados) };
 }
 
 /** PRD-02, PRD-03… a partir de quantas marcas o cliente já tem. Sujeito a
@@ -557,13 +591,17 @@ export async function carregarCliente(id: string): Promise<
       cliente: Cliente;
       marcas: ClienteProduto[];
       portais: ClientePortal[];
+      /** Já existe projeto deste cliente? É o que fecha o código curto —
+       *  ele virou a sigla dos códigos de projeto, e trocá-lo depois
+       *  deixa os antigos com uma sigla e os novos com outra. */
+      temProjeto: boolean;
     }
   | { ok: false; message: string }
 > {
   const session = await requireSession();
   const supabase = createClient();
 
-  const [clienteRes, marcasRes, portaisRes] = await Promise.all([
+  const [clienteRes, marcasRes, portaisRes, projetosRes] = await Promise.all([
     supabase
       .from("clientes")
       .select("*")
@@ -582,6 +620,12 @@ export async function carregarCliente(id: string): Promise<
       .eq("cliente_id", id)
       .eq("tenant_id", session.activeTenant.id)
       .order("nome"),
+    // `head: true` — interessa só se existe alguma, não quais.
+    supabase
+      .from("projetos")
+      .select("id", { count: "exact", head: true })
+      .eq("cliente_id", id)
+      .eq("tenant_id", session.activeTenant.id),
   ]);
 
   if (clienteRes.error || !clienteRes.data) {
@@ -594,6 +638,7 @@ export async function carregarCliente(id: string): Promise<
     cliente: clienteRes.data as Cliente,
     marcas: (marcasRes.data ?? []) as ClienteProduto[],
     portais: (portaisRes.data ?? []) as ClientePortal[],
+    temProjeto: (projetosRes.count ?? 0) > 0,
   };
 }
 
@@ -790,21 +835,45 @@ export async function atualizarCliente(
   const supabase = createClient();
 
   // Nome anterior, lido antes do update: é ele que identifica o produto
-  // homônimo criado por padrão — ver abaixo.
-  const { data: anterior } = await supabase
-    .from("clientes")
-    .select("nome_fantasia, percentual_honorarios_padrao")
-    .eq("id", id)
-    .eq("tenant_id", session.activeTenant.id)
-    .maybeSingle<{
-      nome_fantasia: string;
-      percentual_honorarios_padrao: number;
-    }>();
+  // homônimo criado por padrão — ver abaixo. E o código curto anterior,
+  // que pode estar congelado.
+  const [anteriorRes, projetosRes] = await Promise.all([
+    supabase
+      .from("clientes")
+      .select("nome_fantasia, percentual_honorarios_padrao, codigo_curto")
+      .eq("id", id)
+      .eq("tenant_id", session.activeTenant.id)
+      .maybeSingle<{
+        nome_fantasia: string;
+        percentual_honorarios_padrao: number;
+        codigo_curto: string;
+      }>(),
+    supabase
+      .from("projetos")
+      .select("id", { count: "exact", head: true })
+      .eq("cliente_id", id)
+      .eq("tenant_id", session.activeTenant.id),
+  ]);
+  const anterior = anteriorRes.data;
+
+  /**
+   * O código curto NÃO muda depois do primeiro projeto (18/09/2026).
+   *
+   * Ele é a sigla dentro do código do projeto (`AMB-0001/26`), e o
+   * gerador conta os próximos a partir dela: trocar a sigla deixaria os
+   * projetos antigos com uma e os novos com outra, e a numeração
+   * recomeçaria. A tela já mostra o campo em leitura — isto é a trava de
+   * verdade, porque regra crítica não mora no frontend.
+   */
+  const temProjeto = (projetosRes.count ?? 0) > 0;
+  const codigoParaGravar =
+    temProjeto && anterior ? anterior.codigo_curto : cliente.codigo_curto;
 
   const { error } = await supabase
     .from("clientes")
     .update({
       ...cliente,
+      codigo_curto: codigoParaGravar,
       emails_extras: emailsExtras,
       telefones_extras: telefonesExtras,
     })
