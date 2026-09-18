@@ -2,9 +2,9 @@
 
 **Data:** 2026-09-18
 **Decidido por:** Tiago
-**Migrations:** `20260918180001_remove_clientes_de_teste.sql` (os 3
-cadastros ZZ). O backfill dos 6 que restam está em §5 e **aguarda uma
-decisão sobre a numeração dos projetos**.
+**Migrations:** `20260918180001_remove_clientes_de_teste.sql` e
+`20260918180002_codigos_de_cliente_no_padrao_de_tres_letras.sql`.
+Falta só o SEBRAE — ver §5c.
 
 ---
 
@@ -76,24 +76,35 @@ PEVETECH  →  PEV  PEE  PET  PEC  PEH  PEV2  PEV3 …
   código de projeto, e quem cadastra precisa saber qual saiu — esconder
   seria pior que travar.
 
-## 3. E congela no primeiro projeto
+## 3. E é gerado UMA vez, na criação
 
-> **Depois que o cliente tem projeto, o código não muda mais.**
+> **Numa edição, o código nunca muda.** Nem com projeto, nem sem.
 
-O código é a sigla dentro do código do projeto (`AMB-0001/26`), e o
-gerador do próximo número **conta a partir dela**. Trocar a sigla deixaria
-os projetos antigos com uma e os novos com outra, e a numeração
-recomeçaria do zero — dois projetos diferentes com o mesmo número.
+A primeira versão regenerava pelo nome enquanto não houvesse projeto. O
+Tiago fechou mais que isso ao decidir os casos da §5, e com razão:
 
-- Sem projeto, o código acompanha o nome fantasia enquanto ele é digitado.
-- Com projeto, o campo diz *"Este cliente já tem projeto: a sigla está
-  nos códigos já emitidos e não muda mais."*
-- **A trava de verdade é no servidor** (`atualizarCliente`), que relê o
-  código gravado e ignora o que veio do formulário quando há projeto.
-  Regra crítica não mora no frontend (CLAUDE.md).
+- **Com projeto**, a sigla está dentro dos códigos já emitidos
+  (`PEV-0001/26`), e o gerador do próximo número **conta a partir dela**.
+  Trocá-la deixaria os antigos com uma sigla e os novos com outra, e a
+  numeração recomeçaria — dois projetos com o mesmo código.
+- **Sem projeto**, o código ainda é uma escolha que alguém fez. Metade da
+  base é apelido — `FP` para INSTITUTO FEIRA PRETA, `MEL` para
+  EBAZAR.COM.BR —, e regenerar pelo nome apagaria isso na primeira
+  correção de acento no cadastro.
 
-O orçamento também carrega a sigla (`PEVETE-0003/26-01`), então o efeito
-de uma troca não para no projeto.
+O campo mostra o motivo: *"Este cliente já tem projeto: a sigla está nos
+códigos já emitidos e não muda mais"*, ou *"A sigla foi definida no
+cadastro e não muda sozinha"*.
+
+**A trava de verdade é no servidor** (`atualizarCliente`), que relê o
+código gravado e ignora o que veio do formulário. Regra crítica não mora
+no frontend (CLAUDE.md). **Corrigir um código é trabalho de migration**,
+com o de/para à vista — foi assim que os desta decisão foram feitos.
+
+O orçamento também carrega a sigla (`PEV-0003/26-01`), então o efeito de
+uma troca não para no projeto. E `projetos_financeiro`, a tabela paralela
+do financeiro, usa a MESMA sigla: ela entra em qualquer correção, senão o
+cadastro se parte em dois.
 
 ## 4. O que saiu junto
 
@@ -103,58 +114,80 @@ de uma troca não para no projeto.
 - O campo perdeu `required` no rótulo: ele nunca fica vazio por culpa de
   quem preenche.
 
-## 5. ⏸ O backfill dos 6 que restam
+## 5. ✅ O backfill, decidido caso a caso
 
-✅ **Os 3 cadastros de teste (`ZZGP`, `ZZGP2`, `ZZTEST`) foram apagados**
-(migration `20260918180001`), autorizado pelo Tiago. Não tinham projeto,
-orçamento, faturamento nem lançamento.
+O Tiago olhou a lista dos que fugiam das 3 letras e decidiu um a um — e é
+por isso que a §3 fechou o campo de vez: **o código é escolha, não
+consequência do nome.**
 
-⚠️ Apagar cliente exige cuidado, e a migration registra o porquê: a FK
-`cliente_produtos_cliente_id_fkey` é **RESTRICT** e a marca padrão é
-protegida por `trg_cliente_produtos_padrao`, que recusa qualquer DELETE
-dela. As duas juntas tornam o cadastro indelével pelo caminho normal — e
-é assim que deve ser para cliente de verdade. A trigger foi desligada e
-religada **dentro da mesma transação**.
+| cliente | hoje | decisão |
+|---|---|---|
+| INSTITUTO FEIRA PRETA | `FP` | **fica FP** |
+| SMARTFIT | `SF` | **fica SF** |
+| Pevetech | `PEVETE` | vira **PEV** |
+| Teste | `TESTE` | vira **TES** |
+| Teste 22 | `teste22` | vira **TET** |
+| SEBRAE | `SEBRAE` | ⏸ ver §5c |
 
-Sobram **6 cadastros fora do padrão de 3 letras**. O plano, calculado com
-a regra da §2 contra os códigos reais, na ordem alfabética em que seria
-aplicado:
+Duas migrations, ambas aplicadas e conferidas em 18/09/2026:
 
-| cliente | hoje | vira | por quê |
-|---|---|---|---|
-| INSTITUTO FEIRA PRETA | FP | **INT** | INS é do Instituto Cidades Invisíveis; T é a 4ª letra |
-| Pevetech | PEVETE | **PEV** | livre |
-| SEBRAE | SEBRAE | **SEB** | livre |
-| SMARTFIT | SF | **SMA** | livre |
-| Teste | TESTE | **TES** | livre |
-| Teste 22 | teste22 | **TET** | TES acabou de ir para o "Teste"; T é a letra seguinte |
+**`20260918180001`** apagou os 3 cadastros de teste (`ZZGP`, `ZZGP2`,
+`ZZTEST`), sem projeto nem lançamento. ⚠️ Apagar cliente não é trivial: a
+FK `cliente_produtos_cliente_id_fkey` é **RESTRICT** e a marca padrão tem
+`trg_cliente_produtos_padrao`, que recusa qualquer DELETE dela — o
+cadastro é indelével pelo caminho normal, e é assim que deve ser para
+cliente de verdade. A trigger foi desligada e religada **dentro da mesma
+transação**, e conferida ativa depois (`tgenabled = 'O'`).
 
-**Os jobs não mudam:** o código do job é global (`JOB-0033`) e não carrega
-a sigla do cliente. **Os orçamentos mudam**, porque o código deles começa
-com o do projeto.
+**`20260918180002`** renomeou os três códigos e tudo que os carregava:
 
-### 5b. A colisão do Pevetech
+```
+Pevetech   PEVETE → PEV
+  PEVETE-0001/26 → PEV-0001/26     PEVETE-0003/26-01 → PEV-0003/26-01
+  PEVETE-0003/26 → PEV-0003/26     PEVETE-0004/26-01 → PEV-0004/26-01
+  PEVETE-0004/26 → PEV-0004/26     PEVETE-0006/26-01 → PEV-0006/26-01
+  PEVETE-0006/26 → PEV-0006/26
+  0-0001/26      → PEV-0007/26     0-0001/26-01..14  → PEV-0007/26-01..14
 
-O Tiago decidiu que a regra vale também para os dois casos que eu tinha
-separado — `NOV-0004/26` (SEBRAE) e `0-0001/26` (Pevetech). Aplicá-la ao
-pé da letra, porém, produz **dois projetos com o mesmo código**:
+Teste 22   teste22 → TET
+  teste22-0001/26 → TET-0001/26    teste22-0001/26-01 → TET-0001/26-01
 
-| projeto | criado | orçamentos | jobs | viraria |
-|---|---|---|---|---|
-| `PEVETE-0001/26` | 28/07 | 2 (`ORC-0002`, `ORC-0003`) | 0 | `PEV-0001/26` |
-| `PEVETE-0003/26` | 30/07 | 1 | 0 | `PEV-0003/26` |
-| `PEVETE-0004/26` | 30/07 | 1 | 0 | `PEV-0004/26` |
-| `PEVETE-0006/26` | 11/08 | 1 | 0 | `PEV-0006/26` |
-| `0-0001/26` | 01/09 | **14** | **8** | `PEV-0001/26` ⚠️ **já existe** |
+Teste      TESTE → TES             (sem projeto)
+```
 
-O `0-0001/26` é o projeto de teste, e a sigla dele ("0") nunca saiu do
-gerador — foi escrita à mão. O número 0001 dele não conversa com a
-numeração do Pevetech.
+- **O `0-0001/26` virou `PEV-0007/26`**, e não `PEV-0001/26`: a sigla "0"
+  e o número 0001 dele foram escritos à mão e não conversavam com a
+  numeração do cliente. Sendo o mais recente dos cinco (01/09), entrou
+  como o **próximo da sequência**, depois do 0006 — escolha do Tiago.
+- **Os jobs não mudaram.** O código do job é global (`JOB-0033`) e não
+  carrega a sigla.
+- **`ORC-0002` e `ORC-0003`** ficaram como estão: são do formato antigo,
+  sem sigla.
 
-**Aguardando a decisão do Tiago** entre manter os números e dar ao
-`0-0001/26` o primeiro livre do ano (`PEV-0002/26`), ou renumerar os
-cinco em sequência por data (`PEV-0001` a `PEV-0005`), o que mudaria o
-código de quatro projetos que já circulam.
+⚠️ **`projetos_financeiro` foi junto, e isso merece registro.** É a tabela
+da outra frente, mas tem projetos próprios com a MESMA sigla, gerada pelo
+mesmo `codigo_curto` (`gerarCodigoProjetoFinanceiro`). Deixá-la de fora
+partiria o cadastro em dois: os projetos financeiros do Pevetech ficariam
+`PEVETE-` com o cliente já em `PEV`, e o próximo código gerado lá sairia
+`PEV-`, recriando a divergência. Quatro linhas mudaram lá, e nenhum job
+mudou de código (a FK é por id).
+
+⚠️ **O projeto de teste mudou de nome.** O `0-0001/26`, que o
+`CLAUDE.local.md` manda usar para todo teste, agora é **`PEV-0007/26`** —
+mesmo projeto, mesmo cliente, mesmos 14 orçamentos e 8 jobs.
+
+### 5c. ⏸ O SEBRAE — `NOV` está ocupado
+
+O Tiago pediu `SEBRAE → NOV`, alinhando o cliente ao projeto
+`NOV-0004/26` que ele já tem. Mas **`NOV` é do cliente "Novo"**, que tem o
+projeto `NOV-0003/26` ("Beats Esquenta Festivals").
+
+As datas explicam a bagunça: o projeto do SEBRAE foi criado em **27/08**,
+e o cliente SEBRAE só existe desde **28/08**. O projeto nasceu sob o
+"Novo" — um cadastro sem CNPJ, com cara de rascunho — e foi transferido
+depois, deixando a sigla para trás.
+
+Enquanto os dois clientes existirem, um deles não pode ser `NOV`.
 
 ## 6. O que foi conferido
 
@@ -164,9 +197,11 @@ No navegador, em 18/09/2026, logado:
   com cadeado (BRA já é do BRADESCO EST UNIF, e D é a 4ª letra do nome).
 - **Dentro do projeto**, no dialog de cadastro rápido: "Ambev Nordeste
   Teste" → **AME** (AMB ocupado; E é a 4ª letra de "Ambev").
-- **Edição sem projeto** (ALVO): o código acompanha o nome.
 - E, no mesmo campo: "C&A Nordeste" → **CAN** — a base já tem 3 letras,
   então o nome curto não vira exceção.
-- **Edição com projeto** (Pevetech): campo travado, e **gravação real** —
-  renomeei o cliente para "Pevetech Renomeado Teste", salvei, e o código
-  continuou `PEVETE`. O nome foi restaurado em seguida.
+- **Edição** (Pevetech): campo travado, e **gravação real** — renomeei o
+  cliente para "Pevetech Renomeado Teste", salvei, e o código continuou
+  `PEVETE`. O nome foi restaurado em seguida.
+- **Depois do backfill**, na lista de Projetos & Orçamentos: o projeto de
+  teste aparece como `PEV-0007/26` com os 14 orçamentos, e nenhuma tela
+  mostra mais `PEVETE-`, `teste22-` ou `0-0001/26`.

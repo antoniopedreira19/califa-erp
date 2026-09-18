@@ -836,38 +836,37 @@ export async function atualizarCliente(
 
   // Nome anterior, lido antes do update: é ele que identifica o produto
   // homônimo criado por padrão — ver abaixo. E o código curto anterior,
-  // que pode estar congelado.
-  const [anteriorRes, projetosRes] = await Promise.all([
-    supabase
-      .from("clientes")
-      .select("nome_fantasia, percentual_honorarios_padrao, codigo_curto")
-      .eq("id", id)
-      .eq("tenant_id", session.activeTenant.id)
-      .maybeSingle<{
-        nome_fantasia: string;
-        percentual_honorarios_padrao: number;
-        codigo_curto: string;
-      }>(),
-    supabase
-      .from("projetos")
-      .select("id", { count: "exact", head: true })
-      .eq("cliente_id", id)
-      .eq("tenant_id", session.activeTenant.id),
-  ]);
-  const anterior = anteriorRes.data;
+  // que é o que fica.
+  const { data: anterior } = await supabase
+    .from("clientes")
+    .select("nome_fantasia, percentual_honorarios_padrao, codigo_curto")
+    .eq("id", id)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle<{
+      nome_fantasia: string;
+      percentual_honorarios_padrao: number;
+      codigo_curto: string;
+    }>();
 
   /**
-   * O código curto NÃO muda depois do primeiro projeto (18/09/2026).
+   * O código curto NÃO muda numa edição. Nunca (18/09/2026).
    *
-   * Ele é a sigla dentro do código do projeto (`AMB-0001/26`), e o
-   * gerador conta os próximos a partir dela: trocar a sigla deixaria os
-   * projetos antigos com uma e os novos com outra, e a numeração
-   * recomeçaria. A tela já mostra o campo em leitura — isto é a trava de
-   * verdade, porque regra crítica não mora no frontend.
+   * Duas razões, e a segunda sozinha já bastaria:
+   *
+   *  * com projeto, a sigla está dentro dos códigos já emitidos
+   *    (`PEV-0001/26`), e o gerador conta os próximos a partir dela —
+   *    trocá-la deixaria os antigos com uma sigla e os novos com outra;
+   *  * sem projeto, o código ainda é uma escolha que alguém fez, e metade
+   *    da base é apelido (EBAZAR.COM.BR é MEL). Regenerar pelo nome
+   *    apagaria isso na primeira correção de acento.
+   *
+   * A tela mostra o campo em leitura; isto é a trava de verdade, porque
+   * regra crítica não mora no frontend. Corrigir um código é trabalho de
+   * migration, com o de/para à vista.
    */
-  const temProjeto = (projetosRes.count ?? 0) > 0;
-  const codigoParaGravar =
-    temProjeto && anterior ? anterior.codigo_curto : cliente.codigo_curto;
+  const codigoParaGravar = anterior
+    ? anterior.codigo_curto
+    : cliente.codigo_curto;
 
   const { error } = await supabase
     .from("clientes")
