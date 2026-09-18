@@ -368,6 +368,15 @@ Ao conferir, lembre que o Radix Select renderiza um `<select>` escondido
 (`aria-hidden="true"`, `tabIndex="-1"`) para o formulário — procurar
 `select` no DOM acha esses e dá falso positivo.
 
+⚠️ **18/09/2026 — formulário dentro de dialog para o submit.** O portal
+do Radix tira o dialog do DOM, **não da árvore React**, e o React propaga
+pela árvore: o `onSubmit` de um formulário aberto num dialog chama o
+`onSubmit` do formulário que está por trás. `e.preventDefault()` não
+segura isso — ele impede a navegação, não a subida. **Todo `handleSubmit`
+de formulário que possa abrir dentro de outro leva `e.stopPropagation()`**
+(`ClienteForm`, `FornecedorForm`). Sem isso, salvar o cadastro rápido
+submete o formulário de trás — e, se ele estiver completo, grava.
+
 ### Campo obrigatório: o asterisco é a única marcação
 
 ⚠️ **17/09/2026 (Tiago).** Campo obrigatório leva `*` vermelho no rótulo.

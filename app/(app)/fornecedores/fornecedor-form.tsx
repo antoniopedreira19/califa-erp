@@ -741,6 +741,12 @@ export function FornecedorForm({
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    // Mesmo cuidado do `ClienteForm`: o React propaga o submit pela
+    // ÁRVORE, e o portal do Radix não a interrompe. Hoje o
+    // `NovoFornecedorDialog` do "Gerar PP" é renderizado depois do
+    // `</form>` da PP e escapa por sorte — mudar isso de lugar bastaria
+    // para o cadastro do fornecedor passar a emitir a PP junto.
+    e.stopPropagation();
     setError(null);
     setFieldErrors({});
 
