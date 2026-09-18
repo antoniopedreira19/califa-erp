@@ -284,7 +284,7 @@ async function aplicarEdicao(
   ) {
     return {
       ok: false,
-      message: `${orcamento.codigo}: só administrador ou gerente de produção altera os Impostos BR de orçamento internacional.`,
+      message: `${orcamento.codigo}: só administrador ou gerente de projeto altera os Impostos BR de orçamento internacional.`,
     };
   }
 
