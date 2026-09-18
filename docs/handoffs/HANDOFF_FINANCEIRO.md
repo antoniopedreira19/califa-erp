@@ -5541,3 +5541,33 @@ Empresa Teste e na Conta Teste:
   passou a trazer a alíquota dos BVs, como o job e o orçamento.
 - **Observado:** "Editar registro" aparece na Abertura do Job de um job
   encerrado ou finalizado, e o servidor recusa ao salvar. Já era assim antes.
+
+## ⚠️ Nota de 2026-09-18 — a conciliação começa pela lista de contas (091)
+
+`/financeiro/conciliacao` não abre mais no extrato da primeira conta. Sem
+`?conta=`, a rota agora é a **lista de todas as contas**: faixa de
+consolidado (saldo, entradas, saídas, resultado, lançamentos do período),
+saldo por tipo de conta e por empresa com percentual, e uma tabela
+agrupada por empresa contábil com subtotal. Clicar na linha abre o extrato
+de sempre, já com o período — a rota é a mesma, então os
+`revalidatePath("/financeiro/conciliacao")` e os links com `&highlight=`
+continuam valendo.
+
+Três coisas que mudaram junto, detalhadas na
+[decisão 091](../decisions/091-a-conciliacao-comeca-pela-lista-de-contas.md):
+
+- **A conta-espelho do cartão saiu** da lista e do consolidado — fatura é
+  passivo, não saldo em banco. A conciliação era a última tela do
+  financeiro que ainda a mostrava. Por link direto (`?conta=<id>`) o
+  extrato dela continua abrindo. **Pendente:** levar a conciliação do
+  cartão para a aba Cartões de Contas a Pagar (fatura × conta que pagou,
+  expansível nos itens).
+- **Conta inativa aparece na lista, com selo, mas fora de toda soma** — o
+  saldo dela sai em cinza e uma linha diz o que ficou de fora.
+- **Os agregados vêm da função `conciliacao_resumo_contas`** (migration
+  `20260918100001`), uma linha por conta, somada no Postgres.
+
+Conferido na tela, logado: lista com as 10 contas ativas (saldo
+consolidado R$ 498.309,42, batendo com o SQL), clique abrindo o extrato da
+Conta Teste com as 29 linhas, troca de período, busca, link direto da
+conta do cartão e `?conta=` inválido caindo na lista.
