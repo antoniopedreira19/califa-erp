@@ -161,6 +161,9 @@ interface Props {
    *  enquanto errata e BV continuam esperando a abertura. O envio ao
    *  financeiro é a outra metade, e ela mora no painel do item. */
   podeGerarPP?: boolean;
+  /** `cadastros.fornecedores.editar` — repassado à tabela. */
+  podeCadastrarFornecedor?: boolean;
+  podeEditarFornecedor?: boolean;
   /** Confirmar o BV — `jobs.confirmar_bv`, administrador e GP (decisão
    *  080). Telas de leitura mandam `false`. */
   podeConfirmarBv: boolean;
@@ -203,6 +206,8 @@ export function JobRealizadoSection({
   podeAcoes,
   podeExportarInterna = false,
   podeGerarPP = false,
+  podeCadastrarFornecedor = false,
+  podeEditarFornecedor = false,
   podeConfirmarBv,
   jaEnviadoParaFaturamento = false,
   aberturaEmRevisao = false,
@@ -548,6 +553,8 @@ export function JobRealizadoSection({
           onAlternarGrupo={recolher.alternar}
           podeAcoes={podeAcoes}
           podeGerarPP={podeGerarPP}
+          podeCadastrarFornecedor={podeCadastrarFornecedor}
+          podeEditarFornecedor={podeEditarFornecedor}
           podeConfirmarBv={podeConfirmarBv}
           preAbertura={preAbertura}
           aberturaEmRevisao={aberturaEmRevisao}

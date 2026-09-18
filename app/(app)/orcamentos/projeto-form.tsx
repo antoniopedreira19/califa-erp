@@ -66,6 +66,9 @@ interface Props {
   produtoresDosOrcamentos?: string[];
   /** Quem criou o projeto. Na criação é quem está logado. */
   criadorId?: string;
+  /** `cadastros.clientes.editar`. Sem ela, o campo Cliente não oferece
+   *  cadastrar nem editar, e a Marca perde o "+" (18/09/2026). */
+  podeCadastrarCliente?: boolean;
   onSuccess?: () => void;
   onCancel?: () => void;
 }
@@ -84,6 +87,7 @@ export function ProjetoForm({
   equipeSelecionada,
   produtoresDosOrcamentos,
   criadorId,
+  podeCadastrarCliente = false,
   onSuccess,
   onCancel,
 }: Props) {
@@ -294,6 +298,7 @@ export function ProjetoForm({
             onChange={(v) => handleClienteChange(v ?? "")}
             clientes={clientesLocais}
             onCadastroMudou={absorverCadastro}
+            podeCadastrar={podeCadastrarCliente}
             className={erroClasses("cliente_id")}
             abrirMarcas={abrirMarcasDoCliente}
             onAbrirMarcasResolvido={() => setAbrirMarcasDoCliente(false)}
@@ -336,7 +341,7 @@ export function ProjetoForm({
                 </SelectContent>
               </Select>
             </div>
-            {clienteId && (
+            {clienteId && podeCadastrarCliente && (
               <button
                 type="button"
                 onClick={() => setAbrirMarcasDoCliente(true)}
@@ -351,13 +356,19 @@ export function ProjetoForm({
           {clienteId && produtosDoCliente.length === 0 && (
             <p className="text-xs text-muted-foreground">
               Este cliente ainda não tem marcas.{" "}
-              <button
-                type="button"
-                onClick={() => setAbrirMarcasDoCliente(true)}
-                className="font-medium text-california-red hover:underline"
-              >
-                Cadastrar agora
-              </button>
+              {podeCadastrarCliente ? (
+                <button
+                  type="button"
+                  onClick={() => setAbrirMarcasDoCliente(true)}
+                  className="font-medium text-california-red hover:underline"
+                >
+                  Cadastrar agora
+                </button>
+              ) : (
+                <span className="font-medium">
+                  Peça a um administrador para cadastrar.
+                </span>
+              )}
             </p>
           )}
         </Field>

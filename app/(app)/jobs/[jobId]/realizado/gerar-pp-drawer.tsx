@@ -83,6 +83,11 @@ interface Props {
   empresas: Array<{ id: string; razao_social: string; principal: boolean }>;
   /** Membros ativos do tenant — exibidos quando switch Verba de Produção está ON. */
   responsaveis: Array<{ id: string; nome: string }>;
+  /** `cadastros.fornecedores.editar`. Sem ela, o "+" e o lápis somem: a
+   *  action já barrava, mas o GP preenchia o cadastro inteiro para só
+   *  então ler "Você não tem permissão para essa ação" (18/09/2026). */
+  podeCadastrarFornecedor?: boolean;
+  podeEditarFornecedor?: boolean;
   defaultEmpresaId: string;
   itemDescricao: string;
   /** PLANEJADO do item — a referência da PP desde 02/09/2026 (era o
@@ -205,6 +210,8 @@ export function GerarPPDrawer({
   fornecedores,
   empresas,
   responsaveis,
+  podeCadastrarFornecedor = false,
+  podeEditarFornecedor = false,
   defaultEmpresaId,
   itemDescricao,
   valorPlanejado,
@@ -1175,21 +1182,34 @@ export function GerarPPDrawer({
                         placeholder="Escolha o fornecedor"
                         buscaPlaceholder="Escreva o nome ou o documento"
                         limpavel
-                        acaoSemResultado={{
-                          rotulo: (busca) => `Cadastrar “${busca}” como novo fornecedor`,
-                          onClick: (busca) => {
-                            setNomeSugerido(busca);
-                            setFornecedorEditando(null);
-                            setNovoFornecedorOpen(true);
-                          },
-                        }}
+                        acaoSemResultado={
+                          podeCadastrarFornecedor
+                            ? {
+                                rotulo: (busca) =>
+                                  `Cadastrar “${busca}” como novo fornecedor`,
+                                onClick: (busca) => {
+                                  setNomeSugerido(busca);
+                                  setFornecedorEditando(null);
+                                  setNovoFornecedorOpen(true);
+                                },
+                              }
+                            : undefined
+                        }
                       />
                     </div>
                     {/* O MESMO botão, dois papéis: "+" cadastra sem sair
                         da PP (decisão 048); com um fornecedor escolhido
                         ele vira o lápis e abre o cadastro dele para
                         revisão. O ✕ de dentro do campo é o caminho de
-                        volta para o "+". */}
+                        volta para o "+".
+
+                        São duas permissões diferentes (18/09/2026): criar
+                        aqui é `cadastros.fornecedores.inline`, que o GP e
+                        o produtor têm porque a PP é o fluxo deles; abrir
+                        para editar é `cadastros.fornecedores.editar`, que
+                        é só do administrador. Por isso o gate segue o
+                        papel do botão, e não o botão. */}
+                    {(fornecedorId ? podeEditarFornecedor : podeCadastrarFornecedor) && (
                     <button
                       type="button"
                       onClick={() => {
@@ -1218,11 +1238,16 @@ export function GerarPPDrawer({
                         <Plus className="h-[17px] w-[17px]" />
                       )}
                     </button>
+                    )}
                   </div>
                   <p className="mt-1.5 text-[11px] leading-snug text-muted-foreground">
                     {fornecedorId
-                      ? "O lápis abre o cadastro deste fornecedor. O ✕ limpa o campo e traz o + de volta."
-                      : "Escreva para buscar na lista. O + cadastra um fornecedor novo sem sair da PP."}
+                      ? podeEditarFornecedor
+                        ? "O lápis abre o cadastro deste fornecedor. O ✕ limpa o campo e traz o + de volta."
+                        : "O ✕ limpa o campo. Revisar o cadastro de um fornecedor é com o administrador."
+                      : podeCadastrarFornecedor
+                      ? "Escreva para buscar na lista. O + cadastra um fornecedor novo sem sair da PP."
+                      : "Escreva para buscar na lista. Cadastro de fornecedor é com o administrador."}
                   </p>
                 </div>
               )}
