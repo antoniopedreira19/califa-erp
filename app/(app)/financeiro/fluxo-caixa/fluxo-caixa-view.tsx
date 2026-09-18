@@ -32,6 +32,13 @@
 import * as React from "react";
 import { Info, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 // ---------------------------------------------------------------------------
 // Tipos
@@ -404,38 +411,39 @@ export function FluxoCaixaView({
         </CampoFiltro>
 
         <CampoFiltro rotulo="Horizonte">
-          <Select
+          <FiltroSelect
+            ariaLabel="Horizonte"
             value={String(horizonte)}
             onChange={(v) => setHorizonte(Number(v))}
-          >
-            {[6, 9, 12].map((n) => (
-              <option key={n} value={n}>
-                +{n} {unidade}
-              </option>
-            ))}
-          </Select>
+            itens={[6, 9, 12].map((n) => ({
+              valor: String(n),
+              rotulo: `+${n} ${unidade}`,
+            }))}
+          />
         </CampoFiltro>
 
         <CampoFiltro rotulo="Conta bancária" className="min-w-[200px]">
-          <Select value={conta} onChange={setConta}>
-            <option value="todas">Todas agregadas</option>
-            {contas.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.nome}
-              </option>
-            ))}
-          </Select>
+          <FiltroSelect
+            ariaLabel="Conta bancária"
+            value={conta}
+            onChange={setConta}
+            itens={[
+              { valor: "todas", rotulo: "Todas agregadas" },
+              ...contas.map((c) => ({ valor: c.id, rotulo: c.nome })),
+            ]}
+          />
         </CampoFiltro>
 
         <CampoFiltro rotulo="Regional">
-          <Select value={regional} onChange={setRegional}>
-            <option value="todas">Todas</option>
-            {regionais.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.nome}
-              </option>
-            ))}
-          </Select>
+          <FiltroSelect
+            ariaLabel="Regional"
+            value={regional}
+            onChange={setRegional}
+            itens={[
+              { valor: "todas", rotulo: "Todas" },
+              ...regionais.map((r) => ({ valor: r.id, rotulo: r.nome })),
+            ]}
+          />
         </CampoFiltro>
 
         <div className="flex-1" />
@@ -794,23 +802,36 @@ function CampoFiltro({
   );
 }
 
-function Select({
+/** Filtro da barra: lista do sistema, não `<select>` nativo — o menu do
+ *  sistema operacional destoa do resto e não funciona dentro de dialog
+ *  (decisão 090). */
+function FiltroSelect({
   value,
   onChange,
-  children,
+  itens,
+  ariaLabel,
 }: {
   value: string;
   onChange: (v: string) => void;
-  children: React.ReactNode;
+  itens: { valor: string; rotulo: string }[];
+  ariaLabel: string;
 }) {
   return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="h-[34px] cursor-pointer rounded-[9px] border border-border bg-card px-2.5 text-[13px] text-foreground outline-none focus:ring-2 focus:ring-california-red/30"
-    >
-      {children}
-    </select>
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger
+        aria-label={ariaLabel}
+        className="h-[34px] rounded-[9px] border-border bg-card px-2.5 text-[13px]"
+      >
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {itens.map((i) => (
+          <SelectItem key={i.valor} value={i.valor}>
+            {i.rotulo}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
 

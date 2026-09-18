@@ -58,10 +58,39 @@ Os dois campos de lista do cadastro de fornecedor — **Tipo de chave** e
 resto do ERP. Resolve o relato da produção de raiz: a lista é DOM, dentro
 do dialog, e não depende do menu do sistema operacional.
 
-Restam `<select>` nativos em outras telas (calendário de jobs, fatura de
-cartão, conta avulsa, cartão de crédito, fluxo de caixa, prestação de
-contas, documento do anexo). Eles estão mapeados e esperam a sua decisão
-— nenhum deles vive dentro de um dialog, que é onde o defeito aparece.
+⚠️ **18/09/2026 — não resta nenhum.** O Tiago mandou fazer todos, a
+começar pelos de risco. Os 11 `<select>` nativos do sistema viraram
+`Select` ou `Combobox`, pela mesma conta da [089](089-lista-longa-se-busca-e-o-codigo-do-cliente-nao-aparece.md):
+lista que pode passar de ~15 itens vai de Combobox (com busca), o resto
+vai de Select.
+
+| tela | campo | virou | conferido na tela |
+|---|---|---|---|
+| Cadastro de fornecedor | Tipo de chave, Tipo de conta | Select | ✅ (dentro da PP, como GP) |
+| Prestação de contas | Tipo do documento | Select | ❌ — ver abaixo |
+| Anexo (PP, conta avulsa, desembolso) | Tipo do documento | Select | ✅ (anexo na PP) |
+| Fatura de cartão | Tipo, Subtipo | Combobox | ❌ — ver abaixo |
+| Conta avulsa | Parcelas (24) | Combobox | ✅ |
+| Cartão de crédito | Empresa do cartão | Select | ✅ |
+| Calendário de jobs | Regional, GP | Combobox | ✅ (Regional) |
+| Calendário de jobs | Agrupamento, Ordenação | Select | ✅ (Agrupamento) |
+| Fluxo de caixa | Conta, período, visão | Select | ✅ |
+
+**Dois não puderam ser abertos na tela, por falta de estado no banco**, e
+ficam registrados como tal: **Fechar fatura de cartão** (não existe fatura
+de cartão em aberto) e **Prestação de contas** (não existe PP de verba
+paga sem prestação já feita). Os dois são Select/Combobox iguais aos que
+foram exercitados, no mesmo formato, com `tsc`, `lint` e `build` limpos —
+mas ninguém clicou neles.
+
+**Cuidado ao conferir:** o Radix Select renderiza um `<select>` nativo
+escondido (`aria-hidden="true"`, `tabIndex="-1"`, `position:absolute`)
+para o formulário. Procurar `document.querySelectorAll('select')` acha
+esses e dá falso positivo — filtre pelos dois atributos.
+
+**O `<select>` nativo não volta.** A regra está em
+`docs/09-identidade-visual-ui.md`: campo de escolha do ERP é `Select` ou
+`Combobox`, nunca o menu do sistema operacional.
 
 ## 4. A base já estava certa
 

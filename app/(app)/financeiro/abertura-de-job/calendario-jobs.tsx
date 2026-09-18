@@ -20,6 +20,14 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Combobox } from "@/components/ui/combobox";
 import type { JobAberto } from "./dados-abertos";
 import {
   SEMANA,
@@ -770,57 +778,62 @@ export function CalendarioJobs({
                 className="h-8 w-[252px] rounded-lg border border-border bg-white pl-8 pr-2.5 text-[12.5px] font-medium outline-none focus:border-california-red/40"
               />
             </div>
-            <select
+            {/* Listas do sistema, não `<select>` nativo: o calendário mora
+                dentro de um dialog, e ali o menu do sistema operacional não
+                aplica a escolha (decisão 090). A lista de GPs e a de
+                regionais crescem, então vão de Combobox, com busca. */}
+            <Combobox
+              ariaLabel="Regional"
+              items={opcoesRegional.map((o) => ({
+                value: o,
+                label: o === TODAS ? "Todas as regionais" : o,
+              }))}
               value={regional}
-              onChange={(e) => setRegional(e.target.value)}
-              aria-label="Regional"
+              onChange={(v) => setRegional(v ?? TODAS)}
+              buscaPlaceholder="Escreva o nome da regional"
               className={classeCampo}
-            >
-              {opcoesRegional.map((o) => (
-                <option key={o} value={o}>
-                  {o === TODAS ? "Todas as regionais" : o}
-                </option>
-              ))}
-            </select>
-            <select
+            />
+            <Combobox
+              ariaLabel="GP"
+              items={opcoesGp.map((o) => ({
+                value: o,
+                label: o === TODOS ? "Todos os GPs" : o,
+              }))}
               value={gp}
-              onChange={(e) => setGp(e.target.value)}
-              aria-label="GP"
+              onChange={(v) => setGp(v ?? TODOS)}
+              buscaPlaceholder="Escreva o nome do GP"
               className={classeCampo}
-            >
-              {opcoesGp.map((o) => (
-                <option key={o} value={o}>
-                  {o === TODOS ? "Todos os GPs" : o}
-                </option>
-              ))}
-            </select>
-            <select
+            />
+            <Select
               value={agrupamento}
-              onChange={(e) => {
-                setAgrupamento(e.target.value as Agrupamento);
+              onValueChange={(v) => {
+                setAgrupamento(v as Agrupamento);
                 setFechados(new Set());
               }}
-              aria-label="Agrupamento"
-              className={classeCampo}
             >
-              {AGRUPAMENTOS.map((o) => (
-                <option key={o.valor} value={o.valor}>
-                  {o.rotulo}
-                </option>
-              ))}
-            </select>
-            <select
-              value={ordem}
-              onChange={(e) => setOrdem(e.target.value as Ordem)}
-              aria-label="Ordenação"
-              className={classeCampo}
-            >
-              {ORDENS.map((o) => (
-                <option key={o.valor} value={o.valor}>
-                  {o.rotulo}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger aria-label="Agrupamento" className={classeCampo}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {AGRUPAMENTOS.map((o) => (
+                  <SelectItem key={o.valor} value={o.valor}>
+                    {o.rotulo}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={ordem} onValueChange={(v) => setOrdem(v as Ordem)}>
+              <SelectTrigger aria-label="Ordenação" className={classeCampo}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {ORDENS.map((o) => (
+                  <SelectItem key={o.valor} value={o.valor}>
+                    {o.rotulo}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             {temFiltro && (
               <button type="button" onClick={limparFiltros} className={classeBotao}>
                 <X className="h-3 w-3" />
