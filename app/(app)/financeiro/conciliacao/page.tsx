@@ -15,6 +15,8 @@ import {
 } from "@/lib/calculos/saldo-conta";
 import { FiltrosConta } from "./filtros-conta";
 import { ConciliacaoList } from "./conciliacao-list";
+import { HubConciliacao } from "./hub";
+import { lerPeriodo } from "./hub-periodo";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +28,7 @@ export default async function ConciliacaoPage({
     de?: string;
     ate?: string;
     highlight?: string;
+    periodo?: string;
   };
 }) {
   const session = await requireSession();
@@ -38,17 +41,48 @@ export default async function ConciliacaoPage({
 
   const supabase = createClient();
 
+  // Sem conta escolhida, esta rota é a PÁGINA INICIAL da conciliação
+  // (decisão 091) — antes ela abria direto no extrato da primeira conta.
+  // Com `?conta=`, segue no extrato de sempre: os
+  // `revalidatePath("/financeiro/conciliacao")` das baixas e os links com
+  // `&highlight=` continuam valendo sem mudança nenhuma.
+  //
+  // O id é conferido antes de entrar na consulta: `?conta=qualquer-coisa`
+  // faria o PostgREST recusar a query inteira, e a tela apareceria vazia
+  // em vez de mostrar a lista.
+  const contaId =
+    searchParams.conta &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      searchParams.conta,
+    )
+      ? searchParams.conta
+      : null;
+
+  if (!contaId) {
+    return (
+      <HubConciliacao
+        supabase={supabase}
+        tenantId={session.activeTenant.id}
+        periodo={lerPeriodo(searchParams.periodo)}
+      />
+    );
+  }
+
   const { data: contas } = await supabase
     .from("contas_bancarias")
     .select("*")
     .eq("tenant_id", session.activeTenant.id)
     .eq("ativo", true)
+    // A conta-espelho do cartão saiu da conciliação (decisão 091): fatura
+    // é passivo, não saldo em banco — as outras telas do financeiro já a
+    // filtram assim. Ela continua abrindo por link direto, e nesse caso
+    // precisa aparecer no seletor, senão o campo fica vazio.
+    .or(`tipo.neq.cartao_credito,id.eq.${contaId}`)
     .order("ordem")
     .order("nome")
     .returns<ContaBancaria[]>();
 
   const listaContas = contas ?? [];
-  const contaId = searchParams.conta ?? listaContas[0]?.id ?? null;
 
   // Default: mês corrente
   const hoje = new Date();
@@ -434,11 +468,11 @@ export default async function ConciliacaoPage({
     <div className="space-y-6">
       <div>
         <Link
-          href="/financeiro"
+          href="/financeiro/conciliacao"
           className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
           <ArrowLeft className="h-3 w-3" />
-          Voltar para central financeira
+          Voltar para a lista de contas
         </Link>
       </div>
       <PageHeader
@@ -476,21 +510,6 @@ export default async function ConciliacaoPage({
         </>
       )}
 
-      {!contaId && (
-        <div className="rounded-xl border border-dashed border-border py-16 text-center">
-          <p className="text-sm text-muted-foreground">
-            Nenhuma conta bancária cadastrada. Vá em{" "}
-            <Link
-              href="/financeiro/cadastros/contas-bancarias"
-              prefetch={false}
-              className="text-california-red hover:underline"
-            >
-              cadastros
-            </Link>{" "}
-            pra criar a primeira.
-          </p>
-        </div>
-      )}
     </div>
   );
 }
