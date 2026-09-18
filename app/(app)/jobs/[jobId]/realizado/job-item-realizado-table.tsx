@@ -152,6 +152,9 @@ interface Props {
    *  `podeAcoes`; o ENVIO ao financeiro é a outra metade, e ela aparece
    *  como `envioBloqueadoPor` no painel do item. */
   podeGerarPP?: boolean;
+  /** `cadastros.fornecedores.editar` — o "+" do campo Fornecedor. */
+  podeCadastrarFornecedor?: boolean;
+  podeEditarFornecedor?: boolean;
   /** Confirmar o BV — `jobs.confirmar_bv`, administrador e GP (decisão
    *  080). Só vale junto de `podeAcoes`; telas de leitura mandam `false`. */
   podeConfirmarBv: boolean;
@@ -549,6 +552,8 @@ export function JobItemRealizadoTable({
   onAlternarGrupo,
   podeAcoes,
   podeGerarPP = false,
+  podeCadastrarFornecedor = false,
+  podeEditarFornecedor = false,
   podeConfirmarBv,
   preAbertura,
   aberturaEmRevisao = false,
@@ -1996,6 +2001,8 @@ export function JobItemRealizadoTable({
             />
 
             <GerarPPDrawer
+              podeCadastrarFornecedor={podeCadastrarFornecedor}
+              podeEditarFornecedor={podeEditarFornecedor}
               open={drawerOpen}
               onOpenChange={(aberto) => {
                 setDrawerOpen(aberto);

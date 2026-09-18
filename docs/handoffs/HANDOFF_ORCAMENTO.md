@@ -4063,3 +4063,31 @@ degrada (3 colunas viram 1) e ele é de uso desktop.
 orçamento realmente estiver sem marca/GP/produtor, o "Confirmar dados"
 segue calado para quem não rolar até lá. Vale um aviso junto do botão —
 não entrou aqui para manter a correção pequena.
+
+---
+
+## ⚠️ Nota de 2026-09-18 — O "+" do Cliente só aparece para quem pode cadastrar
+
+Complemento da [decisão 089](../decisions/089-lista-longa-se-busca-e-o-codigo-do-cliente-nao-aparece.md)
+(§6), no formulário de projeto (`/orcamentos/novo` e a edição).
+
+`cadastros.clientes.editar` é **só do administrador**. Para quem não a tem,
+o `CampoCliente` agora esconde o **"+"**, o **lápis** e o atalho
+*"Cadastrar «…» como cliente"* da busca sem resultado — em vez de abrir o
+cadastro e recusar no fim, como fazia. O "+" ao lado de **Marca** e o link
+*"Cadastrar agora"* seguem a mesma prop (`podeCadastrarCliente`), e o texto
+vira *"Peça a um administrador para cadastrar."*
+
+A **busca do campo continua igual para todo mundo** — o GP e o produtor
+escolhem cliente normalmente, e é só o cadastro que some.
+
+⚠️ **Ponta solta, para o Tiago decidir:** o GP e o produtor criam orçamento
+(`orcamentos.criar`) mas não cadastram cliente. Com cliente novo, o projeto
+para até um administrador cadastrar. O fornecedor já resolveu isso com um
+gate próprio (`cadastros.fornecedores.inline`, Admin/GP/Produtor); o
+cliente não tem equivalente. Criar `cadastros.clientes.inline` é decisão de
+negócio — não foi feito por conta própria.
+
+Conferido em 18/09/2026 como **GP Teste Claude**: `botoesDeCadastro: []`,
+campo presente, busca funcionando, e "Nenhum resultado." **sem** o atalho
+de cadastrar. Como administrador, os botões continuam onde estavam.

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, FileText, Layers, Plus } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
+import { pode } from "@/lib/permissoes";
 import { createClient } from "@/lib/supabase/server";
 import { listActiveMembers } from "@/lib/data/members";
 import { listEmpresasAtivas } from "@/lib/data/empresas";
@@ -380,6 +381,10 @@ export default async function ProjetoDetailPage({
               {projetoStatusLabel(projeto.status)}
             </Badge>
             <ProjetoEditorDrawer
+              podeCadastrarCliente={pode(
+                session.activeRole,
+                "cadastros.clientes.editar",
+              )}
               projeto={projeto}
               empresas={empresas}
               clientes={clientes}

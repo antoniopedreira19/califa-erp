@@ -133,3 +133,45 @@ duplicar.
   o botão Editar só em PP rejeitada. Não existe PP de verba rejeitada no
   banco, então esse caminho não foi exercitado na tela — o bloco é o mesmo
   do "Gerar PP", que foi.
+
+## 6. Quem vê o "+" e quem vê o lápis
+
+⚠️ **18/09/2026.** O campo com botão ao lado — `CampoCliente` no projeto,
+o campo Fornecedor da PP — passou a esconder o botão de quem não pode
+usá-lo. O que existia antes era só a trava do servidor: o GP preenchia o
+cadastro inteiro e lia **"Você não tem permissão para essa ação"** no
+fim.
+
+> **Criar e editar são DUAS permissões, e o gate segue o papel do botão,
+> não o botão.**
+
+| campo | "+" (criar) | lápis (editar) | atalho "Cadastrar «…»" |
+|---|---|---|---|
+| Fornecedor da PP | `cadastros.fornecedores.inline` — Admin, GP, Produtor | `cadastros.fornecedores.editar` — só Admin | segue o "+" |
+| Cliente do projeto | `cadastros.clientes.editar` — só Admin | idem | segue o "+" |
+
+**A armadilha, e ela quase passou:** a primeira versão desta mudança usou
+`cadastros.fornecedores.editar` para os dois papéis do botão, e com isso
+tirava do GP e do produtor o cadastro rápido da PP — que é a
+[048](048-fornecedor-nasce-de-dentro-da-pp.md) inteira, feita
+para eles. A permissão certa já existia (`…inline`, criada justamente
+para esse fluxo) e o gate da action já era ela. **Antes de esconder um
+botão por permissão, leia qual permissão a action daquele botão checa** —
+não a do módulo, a daquela action.
+
+Quando o botão some, o texto de apoio embaixo do campo muda junto, para
+a pessoa saber o caminho em vez de procurar o botão: *"Escreva para
+buscar na lista. Cadastro de fornecedor é com o administrador."*
+
+**Fica em aberto, para o Tiago decidir:** não existe
+`cadastros.clientes.inline`. O GP e o produtor criam orçamento
+(`orcamentos.criar`) mas não cadastram cliente, então, com cliente novo,
+o projeto para até um administrador cadastrar. Espelhar o fornecedor — um
+gate `inline` para Admin, GP e Produtor — resolveria; é decisão de
+negócio, não de tela.
+
+Conferido no navegador em 18/09/2026, entrando como **GP Teste Claude**
+(`gerente_producao`) e como administrador, nas duas telas. Para o GP ver
+a planilha do job foi preciso passar o JOB-0033 (projeto de teste
+`0-0001/26`) para ele — `quemPodeMexer` exige ser o responsável —, e o
+responsável foi devolvido ao Tiago no fim.

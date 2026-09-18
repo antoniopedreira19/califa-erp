@@ -47,6 +47,7 @@ export function CampoCliente({
   clientes,
   onCadastroMudou,
   disabled,
+  podeCadastrar = true,
   placeholder = "Selecione um cliente ativo",
   className,
   alturaBotao = "h-10 w-10 rounded-lg",
@@ -67,6 +68,13 @@ export function CampoCliente({
    */
   onCadastroMudou?: (cliente: ClienteDoCampo, marcas: MarcaNova[]) => void;
   disabled?: boolean;
+  /**
+   * Quem não tem `cadastros.clientes.editar` não vê o "+", o lápis nem o
+   * atalho "Cadastrar «…»" da busca. A action barra de qualquer jeito —
+   * mas o GP preenchia o cadastro inteiro para só então ler "Você não tem
+   * permissão para essa ação" (18/09/2026).
+   */
+  podeCadastrar?: boolean;
   placeholder?: string;
   className?: string;
   alturaBotao?: string;
@@ -197,7 +205,7 @@ export function CampoCliente({
             disabled={disabled}
             className={className}
             acaoSemResultado={
-              disabled
+              disabled || !podeCadastrar
                 ? undefined
                 : {
                     rotulo: (busca) => `Cadastrar “${busca}” como cliente`,
@@ -209,7 +217,7 @@ export function CampoCliente({
         {/* "+" cadastra, lápis revisa o cadastro do escolhido. É o MESMO
             botão trocando de ícone — e o ✕ do campo é o que devolve o "+"
             depois de alguém ter sido escolhido. */}
-        {!disabled && (
+        {!disabled && podeCadastrar && (
           <button
             type="button"
             onClick={() => (value ? abrirEdicao() : abrirCadastro(""))}

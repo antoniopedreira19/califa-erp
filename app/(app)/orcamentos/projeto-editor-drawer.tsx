@@ -34,6 +34,8 @@ interface Props {
   equipeSelecionada?: string[];
   /** Produtores dos orçamentos do projeto — entram na Equipe travados. */
   produtoresDosOrcamentos?: string[];
+  /** `cadastros.clientes.editar` — ver o ProjetoForm. */
+  podeCadastrarCliente?: boolean;
 }
 
 export function ProjetoEditorDrawer({
@@ -48,6 +50,7 @@ export function ProjetoEditorDrawer({
   responsaveisSelecionados,
   equipeSelecionada,
   produtoresDosOrcamentos,
+  podeCadastrarCliente,
 }: Props) {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
@@ -101,6 +104,7 @@ export function ProjetoEditorDrawer({
 
           <div className="flex-1 overflow-y-auto px-6 py-6">
             <ProjetoForm
+              podeCadastrarCliente={podeCadastrarCliente}
               projeto={projeto}
               empresas={empresas}
               clientes={clientes}

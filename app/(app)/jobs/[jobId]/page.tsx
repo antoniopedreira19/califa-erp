@@ -118,6 +118,8 @@ export default async function JobDetailPage({
     podeAcoesPlanilha,
     podeExportarInterna,
     podeGerarPP,
+    podeCadastrarFornecedor,
+    podeEditarFornecedor,
     podeEnviarPP,
     podeConfirmarBv,
     ppsQuePossoPrestarContas,
@@ -304,6 +306,8 @@ export default async function JobDetailPage({
         }
         planilha={
           <JobRealizadoSection
+            podeCadastrarFornecedor={podeCadastrarFornecedor}
+            podeEditarFornecedor={podeEditarFornecedor}
             savePorItem={detalhe.savePorItem}
             saldosDeSave={detalhe.saldosDeSave}
             clienteNome={detalhe.clienteNome}
