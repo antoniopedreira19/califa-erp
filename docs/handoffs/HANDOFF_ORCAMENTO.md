@@ -4149,11 +4149,23 @@ projeto já emitidos. Ver [decisão 092](../decisions/092-o-codigo-do-cliente-e-
 que traz os números da base: **dos 160 clientes, 151 já usavam 3 letras e
 só 5 batiam com a sugestão antiga, de 6**.
 
-⏸ **O backfill dos 9 cadastros fora do padrão está descrito e aguarda
-aprovação** (decisão 092 §5). Ele renomeia códigos de projeto e de
-orçamento, e dois casos ficaram de fora porque a regra não os resolve
-sozinha: `NOV-0004/26` (do SEBRAE, com sigla que já não é a dele) e
-`0-0001/26` (o projeto de teste, com sigla "0" de propósito).
+✅ **O backfill foi aplicado** (migrations `20260918180001` e
+`...80002`), com o Tiago decidindo caso a caso — `FP` e `SF` ficaram com
+duas letras, de propósito. É essa decisão que fechou o campo de vez: o
+código é escolha de quem cadastra, não consequência do nome, e por isso
+**numa edição ele nunca muda**. Corrigir um código é trabalho de
+migration.
+
+⚠️ **O projeto de teste mudou de código: `0-0001/26` agora é
+`PEV-0007/26`** — mesmo projeto, mesmo cliente, mesmos 14 orçamentos e 8
+jobs. O `CLAUDE.local.md` ainda cita o nome antigo.
+
+⚠️ **`projetos_financeiro` entrou junto.** É da outra frente, mas usa a
+mesma sigla do cliente; deixá-la de fora partiria o cadastro em dois.
+Quatro linhas mudaram lá, e nenhum job mudou de código.
+
+⏸ **Falta o SEBRAE.** O pedido era `SEBRAE → NOV`, mas `NOV` é do cliente
+"Novo". Decisão 092 §5c.
 
 Conferido no navegador em 18/09/2026, com gravação real no Pevetech (nome
 alterado e restaurado; o código continuou `PEVETE`), e como GP — a sidebar

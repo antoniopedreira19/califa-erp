@@ -386,11 +386,17 @@ export function ClienteForm({
     React.useState<ClienteResumo | null>(null);
 
   /**
-   * O código vem do servidor, que é quem sabe o que está ocupado. Pede a
-   * cada parada de digitação no nome — e nunca quando o cliente já tem
-   * projeto, porque aí a sigla está congelada.
+   * O código vem do servidor, que é quem sabe o que está ocupado, e é
+   * gerado **só na criação**.
+   *
+   * Na edição ele nunca muda (18/09/2026, decisão do Tiago): metade dos
+   * códigos da base é apelido escolhido a mão — EBAZAR.COM.BR é MEL,
+   * BEACH PARK é CBP, INSTITUTO FEIRA PRETA é FP —, e regenerar pelo nome
+   * apagaria essa escolha na primeira vez que alguém corrigisse um acento
+   * no cadastro. Com projeto, então, nem se discute: a sigla está dentro
+   * dos códigos já emitidos.
    */
-  const codigoTravado = isEdit && temProjeto;
+  const codigoTravado = isEdit;
 
   React.useEffect(() => {
     if (codigoTravado) return;
@@ -648,9 +654,11 @@ export function ClienteForm({
                 </span>
               </div>
               <span className="text-[11px] leading-relaxed text-muted-foreground">
-                {codigoTravado
-                  ? "Este cliente já tem projeto: a sigla está nos códigos já emitidos e não muda mais."
-                  : "Vem do nome fantasia e vira o prefixo dos códigos de projeto."}
+                {!codigoTravado
+                  ? "Vem do nome fantasia e vira o prefixo dos códigos de projeto."
+                  : temProjeto
+                    ? "Este cliente já tem projeto: a sigla está nos códigos já emitidos e não muda mais."
+                    : "A sigla foi definida no cadastro e não muda sozinha."}
               </span>
             </Campo>
 
