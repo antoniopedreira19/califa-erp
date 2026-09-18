@@ -92,6 +92,20 @@ esses e dá falso positivo — filtre pelos dois atributos.
 `docs/09-identidade-visual-ui.md`: campo de escolha do ERP é `Select` ou
 `Combobox`, nunca o menu do sistema operacional.
 
+## 3b. O CPF/CNPJ já é validado por dígito verificador
+
+⚠️ **18/09/2026.** Fica registrado porque a dúvida apareceu e custou uma
+apuração: **o dígito verificador do documento JÁ é conferido**, no cadastro
+de fornecedor e no de cliente, pelo `isValidCnpj`/`isValidCpf` de
+`lib/utils.ts`, chamados dentro dos schemas Zod. Os dois últimos dígitos
+do CPF e do CNPJ são calculados a partir dos outros (módulo 11), e é isso
+que pega erro de digitação — dois números trocados não fecham a conta.
+
+Conferida a base inteira em 18/09/2026: dos **157 clientes e 30
+fornecedores** com documento gravado, **nenhum** tem dígito verificador
+errado. Para o CNAB, que leva o CNPJ do favorecido, isso já está de pé —
+o que faltava era o formato da chave PIX, que é o assunto desta decisão.
+
 ## 4. A base já estava certa
 
 Conferido antes de mexer: os 23 fornecedores com chave PIX estavam todos
