@@ -17,6 +17,7 @@ import {
   type DadosDePagamento,
 } from "@/lib/data/foto-pagamento-da-pp";
 import { onlyDigits } from "@/lib/utils";
+import { normalizarChavePix } from "@/lib/pix";
 import type { PixTipoChave } from "@/lib/types";
 
 /** O que o combo de fornecedor precisa saber de um cadastro — é o que o
@@ -94,24 +95,6 @@ function deriveBancoNome(
   return { ok: true, banco_nome: banco.nome };
 }
 
-function normalizePixChave(
-  pix_tipo: string | null | undefined,
-  pix_chave: string | null | undefined,
-): string | null | undefined {
-  if (!pix_tipo || !pix_chave) return pix_chave;
-  switch (pix_tipo) {
-    case "cpf":
-    case "cnpj":
-    case "telefone":
-      return onlyDigits(pix_chave);
-    case "email":
-    case "aleatoria":
-      return pix_chave.trim().toLowerCase();
-    default:
-      return pix_chave;
-  }
-}
-
 function mapDbError(msg: string): string {
   if (msg.includes("uniq_fornecedores_documento_por_tenant")) {
     return "Já existe um fornecedor com este documento neste tenant.";
@@ -155,7 +138,7 @@ async function inserirFornecedor(
     return { ok: false, message: bancoResult.message };
   }
 
-  const pix_chave_normalizada = normalizePixChave(
+  const pix_chave_normalizada = normalizarChavePix(
     parsed.data.pix_tipo,
     parsed.data.pix_chave,
   );
@@ -396,7 +379,7 @@ export async function atualizarFornecedor(
     return { ok: false, message: bancoResult.message };
   }
 
-  const pix_chave_normalizada = normalizePixChave(
+  const pix_chave_normalizada = normalizarChavePix(
     parsed.data.pix_tipo,
     parsed.data.pix_chave,
   );
@@ -466,7 +449,7 @@ export async function verificarPixDuplicado(
 ): Promise<{ existe: true; id: string; nome: string } | { existe: false }> {
   const chaveLimpa =
     pixTipo && chave
-      ? normalizePixChave(pixTipo, chave) ?? chave.trim()
+      ? normalizarChavePix(pixTipo, chave) ?? chave.trim()
       : chave.trim();
   if (!chaveLimpa) return { existe: false };
 

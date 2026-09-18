@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { isValidCnpj, isValidCpf, onlyDigits } from "@/lib/utils";
+import { telefonePixSemDdi, evpValido } from "@/lib/pix";
 import { getBancoByCodigo } from "@/lib/dados/bancos-febraban";
 
 /**
@@ -179,15 +180,24 @@ export const fornecedorSchema = z
             ctx.addIssue({ code: "custom", path: ["pix_chave"], message: "E-mail inválido." });
           break;
         case "telefone": {
-          const d = onlyDigits(chave);
+          // O `+55` pode já vir (valor gravado) ou não (recém-digitado):
+          // o que conta são os 10/11 dígitos do número.
+          const d = telefonePixSemDdi(chave);
           if (d.length !== 10 && d.length !== 11)
             ctx.addIssue({ code: "custom", path: ["pix_chave"], message: "Telefone deve ter 10 ou 11 dígitos." });
           break;
         }
         case "aleatoria": {
-          const limpa = chave.replace(/-/g, "");
-          if (limpa.length < 32 || limpa.length > 36 || !/^[a-zA-Z0-9]+$/.test(limpa))
-            ctx.addIssue({ code: "custom", path: ["pix_chave"], message: "Chave aleatória inválida." });
+          // A aleatória do PIX é um EVP: 32 hexadecimais, com ou sem os
+          // hífens. Aceitar "qualquer coisa de 32 a 36 caracteres" deixava
+          // passar chave que o banco recusa no arquivo de pagamento
+          // (18/09/2026).
+          if (!evpValido(chave))
+            ctx.addIssue({
+              code: "custom",
+              path: ["pix_chave"],
+              message: "Chave aleatória inválida — são 32 caracteres de 0-9 e a-f.",
+            });
           break;
         }
       }

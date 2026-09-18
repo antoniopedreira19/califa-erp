@@ -355,6 +355,14 @@ A conta é pelo que a lista pode ter em produção, não pelo que ela tem hoje.
 - A célula de seleção da planilha não muda: ela está amarrada à navegação
   por teclado da decisão 046.
 
+⚠️ **18/09/2026 — `<select>` nativo não entra em dialog.** O menu de um
+`<select>` é desenhado pelo sistema operacional e briga com o foco do
+Radix: dentro do dialog de cadastro rápido de fornecedor, a produção
+escolhia o tipo de chave PIX e a escolha não aplicava. Campo de lista
+usa `Select` (poucas opções) ou `Combobox` (muitas) — nunca `<select>`.
+Fora de dialog o nativo funciona, mas destoa do resto: os que restam
+estão mapeados na decisão 090.
+
 ### Campo obrigatório: o asterisco é a única marcação
 
 ⚠️ **17/09/2026 (Tiago).** Campo obrigatório leva `*` vermelho no rótulo.
