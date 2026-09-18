@@ -365,7 +365,7 @@ export function MetaVersao({
           travado={travarImpostos}
           dica={
             travarImpostos
-              ? "Só administrador ou gerente de produção altera os impostos da versão internacional."
+              ? "Só administrador ou gerente de projeto altera os impostos da versão internacional."
               : undefined
           }
         >

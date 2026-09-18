@@ -197,7 +197,7 @@ export function ParametrosModal({
               )}
               {travarImposto && (
                 <p className="text-[11px] leading-snug text-muted-foreground">
-                  Só administrador ou gerente de produção altera os impostos de
+                  Só administrador ou gerente de projeto altera os impostos de
                   orçamento internacional.
                 </p>
               )}

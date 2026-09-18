@@ -181,7 +181,7 @@ export function EditarUsuarioDrawer(props: EditarUsuarioDrawerProps) {
             </Select>
             <p className="text-[11px] text-muted-foreground">
               <b>Administrador</b> gerencia usuários e regras.{" "}
-              <b>Gerente de Produção</b> opera orçamentos e jobs.{" "}
+              <b>Gerente de Projeto</b> opera orçamentos e jobs.{" "}
               <b>Financeiro</b> acompanha resultados.
             </p>
             {isSelf && userRole === "administrador" && role !== "administrador" && (
