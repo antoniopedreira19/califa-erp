@@ -13,6 +13,7 @@ import {
   emailsExtrasSchema,
   telefonesExtrasSchema,
   marcasSchema,
+  marcaLinhaSchema,
   portaisSchema,
   HONORARIOS_PADRAO_FALLBACK,
   type MarcaLinha,
@@ -458,6 +459,91 @@ export async function criarCliente(
   if (opcoes?.semRedirect) return { ok: true, id: data.id };
 
   redirect("/clientes");
+}
+
+/**
+ * Acrescenta UMA marca a um cliente que já existe — o "+" ao lado do campo
+ * Marca no formulário de projeto (18/09/2026, decisão 089 §6).
+ *
+ * Deliberadamente estreita. `atualizarCliente` grava o cadastro inteiro e
+ * por isso é do administrador; aqui o GP e o produtor só INSEREM uma linha
+ * em `cliente_produtos`, e é essa diferença que justifica o gate
+ * `cadastros.clientes.inline`. Nada de renomear, inativar ou tocar no
+ * cadastro do cliente — quem precisa disso vai em `/clientes/<id>`.
+ */
+export async function adicionarMarcaAoCliente(
+  clienteId: string,
+  nome: string,
+): Promise<
+  | { ok: true; marca: { id: string; nome: string; codigo: string } }
+  | { ok: false; message: string }
+> {
+  const session = await requireSession();
+  const gate = await checarPermissao(session, "cadastros.clientes.inline");
+  if (!gate.ok) return gate;
+
+  const parsed = marcaLinhaSchema
+    .pick({ nome: true })
+    .safeParse({ nome });
+  if (!parsed.success) {
+    return {
+      ok: false,
+      message:
+        parsed.error.flatten().fieldErrors.nome?.[0] ??
+        "Informe o nome da marca.",
+    };
+  }
+
+  const supabase = createClient();
+
+  // O cliente precisa ser deste tenant — a RLS já garante, mas sem esta
+  // leitura um id de fora voltaria como "erro ao salvar" em vez de dizer
+  // o que houve.
+  const { data: cliente } = await supabase
+    .from("clientes")
+    .select("id")
+    .eq("id", clienteId)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle<{ id: string }>();
+
+  if (!cliente) {
+    return { ok: false, message: "Cliente não encontrado." };
+  }
+
+  // A numeração continua de onde parou, contando INATIVAS também: o
+  // código é único por cliente, e reaproveitar número colide.
+  const { data: existentes, error: errLista } = await supabase
+    .from("cliente_produtos")
+    .select("id")
+    .eq("cliente_id", clienteId)
+    .eq("tenant_id", session.activeTenant.id);
+
+  if (errLista) {
+    console.error("[clientes.marca_inline.listar]", errLista.message);
+    return { ok: false, message: "Não foi possível ler as marcas do cliente." };
+  }
+
+  const { data, error } = await supabase
+    .from("cliente_produtos")
+    .insert({
+      tenant_id: session.activeTenant.id,
+      cliente_id: clienteId,
+      nome: parsed.data.nome,
+      codigo: codigoMarca((existentes?.length ?? 0) + 1),
+      ativo: true,
+      created_by: session.profile.id,
+    })
+    .select("id, nome, codigo")
+    .single<{ id: string; nome: string; codigo: string }>();
+
+  if (error) {
+    console.error("[clientes.marca_inline.criar]", error.message);
+    return { ok: false, message: mapMarcaDbError(error.message) };
+  }
+
+  revalidatePath("/clientes");
+  revalidatePath(`/clientes/${clienteId}`);
+  return { ok: true, marca: data };
 }
 
 /**

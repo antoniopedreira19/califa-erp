@@ -34,7 +34,6 @@ export function NovoClienteDialog({
   marcas,
   portais,
   nomeInicial,
-  focoMarcas,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -49,8 +48,6 @@ export function NovoClienteDialog({
   portais?: ClientePortal[];
   /** Nome já preenchido — vem do "Cadastrar «…»" da busca. */
   nomeInicial?: string;
-  /** Abre na seção Marcas, com uma linha nova — é o "+" do campo Marca. */
-  focoMarcas?: boolean;
 }) {
   const editando = Boolean(cliente);
 
@@ -77,13 +74,12 @@ export function NovoClienteDialog({
             todo em `useState` de inicialização, então reabrir sem remontar
             traria o cliente anterior. */}
         <ClienteForm
-          key={`${cliente?.id ?? "novo"}-${nomeInicial ?? ""}-${focoMarcas ? "marcas" : ""}`}
+          key={`${cliente?.id ?? "novo"}-${nomeInicial ?? ""}`}
           modo="dialog"
           cliente={cliente}
           marcas={marcas}
           portais={portais}
           nomeInicial={nomeInicial}
-          focoMarcas={focoMarcas}
           onCriado={onCriado}
           onSalvo={onSalvo}
           onCancelar={() => onOpenChange(false)}

@@ -194,11 +194,35 @@ export function ProjetoForm({
     ]);
   }
 
+  /** A marca criada pelo "+" ao lado do campo Marca. Entra na lista e fica
+   *  escolhida — quem clicou ali queria usá-la agora. */
+  const [marcaPendente, setMarcaPendente] = React.useState<string | null>(null);
+
+  function absorverMarca(marca: { id: string; nome: string; codigo: string }) {
+    if (!clienteId) return;
+    setProdutosLocais((atual) => [
+      ...atual,
+      { ...marca, cliente_id: clienteId },
+    ]);
+    setMarcaPendente(marca.id);
+  }
+
   // Produto é cadastrado por cliente: trocar de cliente invalida a escolha.
   const produtosDoCliente = React.useMemo(
     () => produtosLocais.filter((p) => p.cliente_id === clienteId),
     [produtosLocais, clienteId],
   );
+
+  /** Escolher a marca nova é em DOIS tempos, de propósito: o `Select` do
+   *  Radix descarta um `value` cuja `<SelectItem>` ainda não existe, e
+   *  chama `onValueChange("")` em silêncio. Por isso a escolha espera a
+   *  opção aparecer na lista, no render seguinte. */
+  React.useEffect(() => {
+    if (!marcaPendente) return;
+    if (!produtosDoCliente.some((p) => p.id === marcaPendente)) return;
+    setProdutoId(marcaPendente);
+    setMarcaPendente(null);
+  }, [marcaPendente, produtosDoCliente]);
 
   function handleClienteChange(novoClienteId: string) {
     setClienteId(novoClienteId);
@@ -305,19 +329,19 @@ export function ProjetoForm({
             className={erroClasses("cliente_id")}
             abrirMarcas={abrirMarcasDoCliente}
             onAbrirMarcasResolvido={() => setAbrirMarcasDoCliente(false)}
+            onMarcaCriada={absorverMarca}
           />
         </Field>
 
         <Field label="Marca" name="produto_id" required errors={fieldErrors}>
-          {/* O "+" ao lado abre a ficha do cliente já na seção Marcas.
-              Ele aparece assim que há cliente escolhido — e não só quando
-              a lista está vazia.
+          {/* O "+" ao lado abre um dialog de UMA marca — não a ficha do
+              cliente, como abria até 18/09/2026. Ele aparece assim que há
+              cliente escolhido, e não só quando a lista está vazia.
 
-              Gate `podeEditarCliente`, e não `podeCadastrarCliente`: isto
-              abre o cadastro de um cliente que JÁ existe, que é
-              `cadastros.clientes.editar` (só administrador). Criar cliente
-              novo, com as marcas dele, é `…inline` e o GP e o produtor
-              têm — ver decisão 089 §6. */}
+              Gate `podeCadastrarCliente` (`cadastros.clientes.inline`,
+              Admin/GP/Produtor): a gravação é `adicionarMarcaAoCliente`,
+              que só INSERE. Renomear e inativar marca continuam no
+              cadastro do cliente, com o administrador — decisão 089 §6. */}
           <div className="flex items-center gap-2">
             <div className="min-w-0 flex-1">
               <Select
@@ -348,7 +372,7 @@ export function ProjetoForm({
                 </SelectContent>
               </Select>
             </div>
-            {clienteId && podeEditarCliente && (
+            {clienteId && podeCadastrarCliente && (
               <button
                 type="button"
                 onClick={() => setAbrirMarcasDoCliente(true)}
@@ -363,7 +387,7 @@ export function ProjetoForm({
           {clienteId && produtosDoCliente.length === 0 && (
             <p className="text-xs text-muted-foreground">
               Este cliente ainda não tem marcas.{" "}
-              {podeEditarCliente ? (
+              {podeCadastrarCliente ? (
                 <button
                   type="button"
                   onClick={() => setAbrirMarcasDoCliente(true)}

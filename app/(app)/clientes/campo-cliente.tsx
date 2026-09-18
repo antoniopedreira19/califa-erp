@@ -20,6 +20,7 @@ import { Combobox } from "@/components/ui/combobox";
 import { cn } from "@/lib/utils";
 import type { Cliente, ClienteProduto, ClientePortal } from "@/lib/types";
 import { NovoClienteDialog } from "./novo-cliente-dialog";
+import { NovaMarcaDialog } from "./nova-marca-dialog";
 import { carregarCliente } from "./actions";
 
 /** O mínimo que a tela precisa carregar para alimentar o campo. */
@@ -54,6 +55,7 @@ export function CampoCliente({
   alturaBotao = "h-10 w-10 rounded-lg",
   abrirMarcas,
   onAbrirMarcasResolvido,
+  onMarcaCriada,
 }: {
   id?: string;
   /** `null` = nenhum cliente escolhido. */
@@ -87,17 +89,23 @@ export function CampoCliente({
   placeholder?: string;
   className?: string;
   alturaBotao?: string;
-  /** Ligado por fora pelo "+" do campo Marca: abre o dialog do cliente
-   *  escolhido já na seção Marcas. */
+  /** Ligado por fora pelo "+" do campo Marca: abre o dialog de UMA marca
+   *  nova para o cliente escolhido (18/09/2026). Antes abria a ficha
+   *  completa, que é do administrador — ver decisão 089 §6. */
   abrirMarcas?: boolean;
   onAbrirMarcasResolvido?: () => void;
+  /** A marca recém-criada, para o campo Marca de fora escolhê-la. */
+  onMarcaCriada?: (marca: { id: string; nome: string; codigo: string }) => void;
 }) {
   const [dialogAberto, setDialogAberto] = React.useState(false);
   const [clienteEditando, setClienteEditando] = React.useState<string | null>(
     null,
   );
   const [nomeSugerido, setNomeSugerido] = React.useState("");
-  const [focoMarcas, setFocoMarcas] = React.useState(false);
+  /** O dialog de marca nova, que é outro — e bem menor — que o do
+   *  cadastro do cliente. */
+  const [marcaAberta, setMarcaAberta] = React.useState(false);
+  const [marcasDoCliente, setMarcasDoCliente] = React.useState(0);
   const [cadastro, setCadastro] = React.useState<{
     cliente: Cliente;
     marcas: ClienteProduto[];
@@ -154,21 +162,28 @@ export function CampoCliente({
     };
   }, [clienteEditando]);
 
-  /** O "+" do campo Marca, que vive fora daqui. Ele abre o cadastro de um
-   *  cliente que já existe, então obedece a `podeEditar` — quem o mostra
-   *  usa o mesmo gate, e isto é o cinto de segurança. */
+  /** O "+" do campo Marca, que vive fora daqui. Ele abre o dialog de UMA
+   *  marca (18/09/2026): só INSERE, e por isso segue `podeCadastrar` — o
+   *  GP monta o projeto e precisa da marca que o projeto pede.
+   *
+   *  Conta as marcas antes de abrir, INCLUSIVE as inativas, para o dialog
+   *  dizer o código certo: `PRD-NN` é único por cliente e a numeração não
+   *  reaproveita número de marca desativada. */
   React.useEffect(() => {
-    if (!abrirMarcas || !value || !podeEditar) return;
-    setNomeSugerido("");
-    setFocoMarcas(true);
-    setClienteEditando(value);
-    setDialogAberto(true);
+    if (!abrirMarcas || !value || !podeCadastrar) return;
+    // Avisar que o pedido foi recebido desliga `abrirMarcas` lá fora, o
+    // que re-roda ESTE efeito. Por isso ele não tem cleanup que cancele:
+    // o cleanup do render anterior matava o carregamento que o próprio
+    // efeito tinha acabado de começar, e o dialog nunca abria.
     onAbrirMarcasResolvido?.();
-  }, [abrirMarcas, value, podeEditar, onAbrirMarcasResolvido]);
+    carregarCliente(value).then((res) => {
+      setMarcasDoCliente(res.ok ? res.marcas.length : 0);
+      setMarcaAberta(true);
+    });
+  }, [abrirMarcas, value, podeCadastrar, onAbrirMarcasResolvido]);
 
   function abrirCadastro(nome: string) {
     setNomeSugerido(nome);
-    setFocoMarcas(false);
     setClienteEditando(null);
     setDialogAberto(true);
   }
@@ -196,7 +211,6 @@ export function CampoCliente({
 
   function abrirEdicao() {
     setNomeSugerido("");
-    setFocoMarcas(false);
     setClienteEditando(value);
     setDialogAberto(true);
   }
@@ -258,14 +272,12 @@ export function CampoCliente({
           if (!aberto) {
             setClienteEditando(null);
             setNomeSugerido("");
-            setFocoMarcas(false);
           }
         }}
         cliente={cadastro?.cliente}
         marcas={cadastro?.marcas}
         portais={cadastro?.portais}
         nomeInicial={nomeSugerido || undefined}
-        focoMarcas={focoMarcas}
         onCriado={(novo) => {
           const item: ClienteDoCampo = {
             id: novo.id,
@@ -283,11 +295,25 @@ export function CampoCliente({
         onSalvo={() => {
           const atual = visiveis.find((c) => c.id === clienteEditando);
           setDialogAberto(false);
-          setFocoMarcas(false);
           if (atual) avisarCadastro(atual);
           setClienteEditando(null);
         }}
       />
+
+      {/* O "+" do campo Marca. Só existe com cliente escolhido, e só
+          acrescenta — ver o cabeçalho de `nova-marca-dialog.tsx`. */}
+      {value && (
+        <NovaMarcaDialog
+          open={marcaAberta}
+          onOpenChange={setMarcaAberta}
+          clienteId={value}
+          clienteNome={
+            visiveis.find((c) => c.id === value)?.nome_fantasia ?? "cliente"
+          }
+          marcasExistentes={marcasDoCliente}
+          onCriada={(marca) => onMarcaCriada?.(marca)}
+        />
+      )}
     </>
   );
 }

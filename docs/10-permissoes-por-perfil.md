@@ -65,6 +65,7 @@ Legenda: **V** = ver · **E** = editar/criar · **A** = aprovar ou ação críti
 |---|:---:|:---:|:---:|:---:|:---:|
 | Clientes (via tela `/clientes`) | E | — | — | — | — |
 | **Cliente via "cadastro inline"** (dentro do formulário de projeto) | E | E | E | — | — |
+| **Marca via "cadastro inline"** (o "+" do campo Marca do projeto) | E | E | E | — | — |
 | Fornecedores (via tela `/fornecedores`) | E | — | — | — | — |
 | **Fornecedor via "cadastro inline"** (dentro de PP) | E | E | E | — | — |
 | Empresas do tenant | E | — | — | — | — |
@@ -76,10 +77,12 @@ Legenda: **V** = ver · **E** = editar/criar · **A** = aprovar ou ação críti
 
 ⚠️ **O "cadastro inline" só CRIA (18/09/2026).** `cadastros.clientes.inline`
 e `cadastros.fornecedores.inline` liberam o "+" de dentro do fluxo — quem
-cria orçamento precisa do cliente que ele pede, quem gera PP precisa do
-fornecedor. **Abrir o cadastro de um que já existe continua em `.editar`,
-só do administrador**: é o lápis do campo, e no projeto também o "+" ao
-lado de Marca, que abre a ficha do cliente escolhido. Ver decisão 089 §6.
+cria orçamento precisa do cliente e da marca que ele pede, quem gera PP
+precisa do fornecedor. **Abrir o cadastro de quem já existe continua em
+`.editar`, só do administrador**: é o lápis do campo. O "+" da Marca
+também é `inline` porque abre um dialog de uma linha que só insere, e não
+a ficha do cliente — renomear e inativar marca seguem com o
+administrador, em `/clientes/<id>`. Ver decisão 089 §6 e §6b.
 
 ### Orçamento
 

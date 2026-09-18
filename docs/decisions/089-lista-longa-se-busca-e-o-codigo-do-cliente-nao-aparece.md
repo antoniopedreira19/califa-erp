@@ -149,6 +149,7 @@ fim.
 |---|---|---|---|
 | Fornecedor da PP | `cadastros.fornecedores.inline` — Admin, GP, Produtor | `cadastros.fornecedores.editar` — só Admin | segue o "+" |
 | Cliente do projeto | `cadastros.clientes.inline` — Admin, GP, Produtor | `cadastros.clientes.editar` — só Admin | segue o "+" |
+| **Marca do projeto** | `cadastros.clientes.inline` — Admin, GP, Produtor | não tem lápis — ver §6b | — |
 
 **A armadilha, e ela quase passou:** a primeira versão desta mudança usou
 `cadastros.fornecedores.editar` para os dois papéis do botão, e com isso
@@ -171,19 +172,60 @@ esperar um administrador. Só a action `criarCliente` mudou de gate;
 `.editar`. A RLS de `clientes`, `cliente_produtos` e `cliente_portais` já
 era por tenant e não olha papel — **não houve migration**.
 
-⚠️ **O "+" ao lado de Marca continua sendo do administrador**, porque ele
-abre a ficha de um cliente que JÁ existe, e isso é `atualizarCliente`.
-Consequência a considerar: **155 dos 157 clientes ativos têm exatamente
-uma marca** (a PRD-01 do backfill, com o nome do cliente — conferido em
-18/09/2026). O GP que precisar de uma segunda marca num cliente antigo
-ainda depende de um administrador. Criar cliente novo, com quantas marcas
-quiser, funciona — é tudo INSERT do mesmo `criarCliente`.
+O motivo de fechar isso agora: **155 dos 157 clientes ativos têm
+exatamente uma marca** — a PRD-01 do backfill, com o nome do cliente
+(conferido em 18/09/2026). Cliente novo o GP cria; marca nova em cliente
+antigo é o caso comum, e é o §6b.
 
 Conferido no navegador em 18/09/2026, entrando como **GP Teste Claude**
 (`gerente_producao`) e como administrador, nas duas telas. Para o GP ver
 a planilha do job foi preciso passar o JOB-0033 (projeto de teste
 `0-0001/26`) para ele — `quemPodeMexer` exige ser o responsável —, e o
 responsável foi devolvido ao Tiago no fim.
+
+## 6b. O "+" da Marca virou um dialog de uma linha
+
+⚠️ **18/09/2026, pedido do Tiago:** *"o + em marca também deve estar
+presente para os GPs e Produtores"*.
+
+Ele não podia simplesmente aparecer. Até aqui esse "+" abria a **ficha
+completa do cliente** na seção Marcas, e a ficha grava por
+`atualizarCliente` — cadastro inteiro, e por isso do administrador.
+Mostrar o botão sem mais nada levaria o GP a preencher e ler "Você não tem
+permissão para essa ação", que é exatamente o que o §6 acabou de tirar.
+
+> **O botão abre `NovaMarcaDialog`** (`app/(app)/clientes/nova-marca-dialog.tsx`):
+> um campo, "Criar marca", e a gravação é `adicionarMarcaAoCliente`, que
+> só INSERE em `cliente_produtos`.
+
+- **Vale para todo mundo**, administrador incluído (escolha do Tiago entre
+  as duas opções apresentadas). O administrador que quiser renomear ou
+  inativar marca vai em `/clientes/<id>`, que é onde isso sempre esteve —
+  e o dialog diz isso na linha de ajuda.
+- **Só acrescenta.** Renomear e inativar marca de outro continuam em
+  `cadastros.clientes.editar`. Inativar esconde a marca de todas as
+  seleções, inclusive das outras pessoas — não é operação de quem está
+  montando um projeto.
+- **A numeração conta as INATIVAS.** `PRD-NN` é único por cliente; se a
+  contagem pulasse as desativadas, o código colidiria. O dialog diz qual
+  vai sair ("Vai entrar como PRD-03") lendo o cadastro antes de abrir.
+- **A marca nova entra na lista e fica escolhida** — mas em DOIS tempos:
+  o `Select` do Radix descarta um `value` cuja `<SelectItem>` ainda não
+  existe e chama `onValueChange("")` calado. A escolha espera a opção
+  aparecer, num efeito.
+
+⚠️ **Armadilha do efeito que avisa e cancela a si mesmo.** A primeira
+versão fazia `onAbrirMarcasResolvido?.()` (que desliga `abrirMarcas` lá
+fora) e, em seguida, um `carregarCliente(...)` com cleanup de
+`vivo = false`. Desligar a prop re-roda o efeito, o cleanup do render
+anterior dispara, e a resposta chegava com `vivo = false`: **o dialog
+nunca abria, sem erro nenhum no console.** Efeito que avisa o pai e depois
+espera uma promessa não pode ter cleanup que cancele.
+
+Conferido em 18/09/2026, como GP Teste Claude e como administrador: o GP
+vê o "+" e não vê o lápis; o administrador vê os dois. Marca criada pelo
+GP no cliente "Teste" (`created_by` = o GP, PRD-02 e PRD-03), escolhida
+sozinha no campo, sem submeter o projeto. As duas foram inativadas no fim.
 
 ## 7. O submit do dialog subia para o formulário de trás
 
