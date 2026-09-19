@@ -4186,9 +4186,14 @@ e estava no cliente ERRADO — foi para o Pevetech.
 > e o job é o que os liga: `j.projeto_id` x `j.projeto_financeiro_id`.
 > Hoje não há nenhum descasado.
 
-⏸ **Sobrou a "Operação HitLab 2026"** — `NOV-0001/26` na produção (cliente
-HITLAB, sigla do antigo "Novo") e `NOO-0001/26` no financeiro (cliente
-"Novo"). Decisão 092 §5e.
+✅ **A "Operação HitLab 2026" também** — os dois lados viraram
+`HIT-0001/26`, do HITLAB (092 §5e). **Com ela, a varredura não acha mais
+nenhuma divergência entre a sigla do projeto e o código do cliente**, nas
+duas tabelas.
+
+⏸ **O cliente "Novo" (`NOO`) ficou sem projeto nenhum.** É o cadastro de
+rascunho que originou as três correções do dia; o que fazer com ele
+aguarda o Tiago (092 §5f).
 
 Conferido no navegador em 18/09/2026, com gravação real no Pevetech (nome
 alterado e restaurado; o código continuou `PEVETE`), e como GP — a sidebar

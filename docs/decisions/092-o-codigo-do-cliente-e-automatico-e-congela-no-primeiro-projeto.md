@@ -6,7 +6,8 @@
 `20260918180002_codigos_de_cliente_no_padrao_de_tres_letras.sql`,
 `...80003_beats_vai_para_a_ambev_e_nov_vai_para_o_sebrae.sql` e
 `...80004_marca_dos_jobs_do_beats_vira_beats.sql` e
-`...80005_projetos_com_sigla_zero.sql`.
+`...80005_projetos_com_sigla_zero.sql` e
+`...80006_operacao_hitlab_fica_com_a_sigla_hit.sql`.
 
 ---
 
@@ -247,20 +248,33 @@ par de produção, `PEV-0007/26`.
 Depois disso, uma varredura das duas tabelas: **zero projetos com sigla
 "0"** e **zero jobs com cliente descasado** entre produção e financeiro.
 
-### 5e. ⏸ Sobrou uma: a "Operação HitLab 2026"
+### 5e. ✅ A "Operação HitLab 2026"
 
-É a última divergência entre a sigla e o cliente, e ficou de fora porque
-não é sigla "0" e mexe em trabalho real (3 orçamentos):
+A última divergência entre sigla e cliente, e a terceira herança do
+cadastro de rascunho "Novo" no mesmo dia:
 
-| tabela | código | cliente | o que está errado |
-|---|---|---|---|
-| produção | `NOV-0001/26` | **HITLAB** (HIT) | a sigla é `NOV`, do tempo em que o cadastro era o "Novo" |
-| financeiro | `NOO-0001/26` | **"Novo"** (NOO) | o cliente ficou no rascunho; deveria ser o HITLAB |
+| tabela | estava | o que errava |
+|---|---|---|
+| produção | `NOV-0001/26`, cliente **HITLAB** | a sigla, do tempo do "Novo" |
+| financeiro | `NOO-0001/26`, cliente **"Novo"** | o cliente, que nunca saiu do rascunho |
 
-Consertar seria o mesmo movimento do Beats: o projeto financeiro passa
-para o HITLAB, e os dois viram `HIT-000X/26`. **Aguardando a decisão do
-Tiago** — e, junto com ela, o que fazer com o cliente "Novo", que ficaria
-sem nada.
+*"Nesse caso o cliente É Hitlab"* — os dois viraram **`HIT-0001/26`**, do
+HITLAB, com os 3 orçamentos (todos em rascunho) acompanhando. O número é
+0001 porque o HITLAB não tinha projeto em nenhuma das duas tabelas.
+
+**Depois desta, a varredura não acha mais nenhuma divergência entre a
+sigla do projeto e o código do cliente, nas duas tabelas.**
+
+### 5f. ⏸ O cliente "Novo" ficou vazio
+
+O `NOO` agora não tem projeto nenhum, em nenhuma das tabelas. Ele é um
+cadastro de rascunho — sem CNPJ, nome "Novo" — e foi a origem das três
+correções desta seção: o Beats era dele, o `NOV-0004/26` do SEBRAE nasceu
+sob ele, e a Operação HitLab ficou meio dele meio do HITLAB.
+
+**Aguardando o Tiago.** Inativar resolve o sintoma (ele some das
+seleções); apagar exige o mesmo cuidado da `20260918180001` — a FK é
+RESTRICT e a marca padrão é protegida por trigger.
 
 ## 6. O que foi conferido
 
