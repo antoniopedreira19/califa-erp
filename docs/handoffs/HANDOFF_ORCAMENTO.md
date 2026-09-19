@@ -4191,9 +4191,14 @@ e estava no cliente ERRADO — foi para o Pevetech.
 nenhuma divergência entre a sigla do projeto e o código do cliente**, nas
 duas tabelas.
 
-⏸ **O cliente "Novo" (`NOO`) ficou sem projeto nenhum.** É o cadastro de
-rascunho que originou as três correções do dia; o que fazer com ele
-aguarda o Tiago (092 §5f).
+✅ **O cliente "Novo" foi apagado** (092 §5f). Era o cadastro de rascunho
+— sem CNPJ, nome "Novo" — que originou as três correções do dia. Restam
+156 clientes, todos com marca padrão.
+
+> **O cadastro de rascunho é a origem, não o sintoma.** As três
+> divergências de sigla vieram de projetos abertos sob um cliente genérico
+> e transferidos depois. Cadastrar o cliente de verdade na hora é o que o
+> "+" do campo Cliente passou a permitir ao GP (decisão 089 §6).
 
 Conferido no navegador em 18/09/2026, com gravação real no Pevetech (nome
 alterado e restaurado; o código continuou `PEVETE`), e como GP — a sidebar

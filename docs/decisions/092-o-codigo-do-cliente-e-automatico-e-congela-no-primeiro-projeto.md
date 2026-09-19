@@ -7,7 +7,8 @@
 `...80003_beats_vai_para_a_ambev_e_nov_vai_para_o_sebrae.sql` e
 `...80004_marca_dos_jobs_do_beats_vira_beats.sql` e
 `...80005_projetos_com_sigla_zero.sql` e
-`...80006_operacao_hitlab_fica_com_a_sigla_hit.sql`.
+`...80006_operacao_hitlab_fica_com_a_sigla_hit.sql` e
+`...80007_remove_o_cliente_de_rascunho_novo.sql`.
 
 ---
 
@@ -265,16 +266,27 @@ HITLAB, com os 3 orçamentos (todos em rascunho) acompanhando. O número é
 **Depois desta, a varredura não acha mais nenhuma divergência entre a
 sigla do projeto e o código do cliente, nas duas tabelas.**
 
-### 5f. ⏸ O cliente "Novo" ficou vazio
+### 5f. ✅ O cliente "Novo" foi apagado
 
-O `NOO` agora não tem projeto nenhum, em nenhuma das tabelas. Ele é um
-cadastro de rascunho — sem CNPJ, nome "Novo" — e foi a origem das três
-correções desta seção: o Beats era dele, o `NOV-0004/26` do SEBRAE nasceu
-sob ele, e a Operação HitLab ficou meio dele meio do HITLAB.
+Com os três projetos nos clientes certos, o `NOO` ficou sem nada — e o
+Tiago mandou apagar. Ele era um cadastro sem CNPJ, com o nome literalmente
+"Novo", e foi a origem das três correções acima.
 
-**Aguardando o Tiago.** Inativar resolve o sintoma (ele some das
-seleções); apagar exige o mesmo cuidado da `20260918180001` — a FK é
-RESTRICT e a marca padrão é protegida por trigger.
+Conferido uma tabela por vez antes do DELETE: **0 projetos, 0
+projetos_financeiro, 0 portais, 0 contas avulsas, 0 recorrentes, 0
+desembolsos, 0 faturamentos, 0 lançamentos**. Restava só a marca padrão,
+que nasce junto de todo cliente — e a única FK que aponta para
+`cliente_produtos` é `projetos.produto_id`, que não tinha linha dele.
+
+Mesmo cuidado da `20260918180001`: a trigger da marca padrão desligada e
+religada dentro da mesma transação. Depois: **156 clientes, zero marcas
+órfãs, zero clientes sem marca padrão, trigger ativa** (`tgenabled='O'`).
+
+> **O cadastro de rascunho é a origem do problema, não o sintoma.** As
+> três divergências de sigla desta decisão vieram de projetos abertos sob
+> um cliente genérico e transferidos depois. O caminho certo é cadastrar o
+> cliente de verdade na hora — que é justamente o que o "+" do campo
+> Cliente passou a permitir ao GP (decisão 089 §6).
 
 ## 6. O que foi conferido
 
