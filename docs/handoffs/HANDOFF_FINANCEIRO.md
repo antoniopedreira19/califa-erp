@@ -5637,3 +5637,12 @@ projeta PP e avulsa com cartão por `proxima_fatura_cartao`, tira delas o
 legado já roteado e ganha o ramo `fatura_cartao` (aberta/fechada, no
 vencimento, por regional). A tela do Fluxo de caixa exclui a conta-espelho
 do escopo "todas" (`contasCartaoIds`). Tudo em 093 §10.
+
+⚠️ **20/09/2026, antes do push — teste geral no código integrado (093
+§11).** Rebase sobre o main do Antonio (folha mensal), ciclo completo na
+Empresa Teste com cartão próprio ("ZZ Teste Empresa Teste"): recorrência,
+avulso, desembolso e PP baixados no cartão, fatura FC-00005 fechada e paga
+pela Conta Teste, conciliação e fluxo conferidos. Ficou registrado que o
+desembolso não tem intenção de cartão na aprovação (o fluxo o projeta pela
+data do título até a baixa) e que a FC-00004 do ZZ Fatia 2 está vazia por
+efeito colateral de consulta.

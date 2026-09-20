@@ -405,3 +405,48 @@ Observação que ficou: o painel do navegador embutido recarrega a aba na
 URL de lançamento quando o dev server compila outra rota — o que
 derrubava a sessão de teste para `/home` no meio de um diálogo. Não é do
 app.
+
+## 11. Teste geral, integrado ao main (20/09/2026, à noite)
+
+Antes do push, a branch foi rebaseada sobre o `main` do Antonio (folha
+mensal do RH e a aba "Folhas de Pagamento" em Contas a Pagar — os dois
+mexeram em `contas-pagar-tabs.tsx` e `page.tsx`, conflitos resolvidos
+mantendo os dois lados; `"folhas"` entrou no `TabKey` do módulo puro) e o
+ciclo inteiro foi refeito no código integrado, **na Empresa Teste, com um
+cartão dela** ("ZZ Teste Empresa Teste", fecha 25 · vence 5, cadastrado
+pela tela; conta-espelho criada junto) e a fatura paga pela Conta Teste.
+
+| passo | resultado conferido (tela + banco + `vw_fluxo_caixa`) |
+|---|---|
+| Recorrência mensal (dia 25, R$ 30) com cartão | ocorrência AV-00004 nasce `aprovada`, sem fatura, em Títulos a Pagar; fluxo a projeta em **05/10** (pela fatura), e as ocorrências futuras em 05/11, 05/12… |
+| Lançamento avulso (R$ 80) pela aba Cartão, cartão pré-selecionado | AV-00005 sem fatura; `data_prevista` 05/10 pelo gatilho; fluxo 05/10 |
+| Desembolso DES-00001 (R$ 60) → aprovação com data 25/09 | título em Títulos a Pagar; fluxo em **25/09** — desembolso não tem intenção de cartão na aprovação (ver abaixo) |
+| PP-00060 (R$ 250) aprovada com cartão ZZ Fatia 2 | título 21/09, fluxo 05/10 |
+| Baixa dos quatro no cartão da Empresa Teste (na PP, o cartão foi **trocado** na baixa) | FC-00005 (set/26) nasce com 4 lançamentos `item` (80 + 30 + 60 + 250 = 420); PP e desembolso `pago`; os quatro somem do fluxo e entra "Fatura ZZ Teste Empresa Teste · FC-00005 · 09/26" em 05/10 |
+| Aba Cartão | capa com os dois cartões (420 e a FC-00004 vazia do Fatia 2); FC-00005 com as quatro origens, KPIs, acumulado 80 → 110 → 170 → 420; Excel 200 |
+| Estorno da baixa da ocorrência (fatura aberta) | AV-00004 volta a `aprovada` sem fatura; fatura 390; fluxo volta a projetar a ocorrência em 05/10; baixa refeita pré-preenchida |
+| Fechar FC-00005 (soma 420, diferença 0) | `fechada`; título FC-00005 em Títulos a Pagar; fluxo mantém a fatura em 05/10 |
+| Baixa da fatura pela Conta Teste (transferência) | `paga`; saída de R$ 420 na Conta Teste + contrapartida na conta-espelho; fatura sai do fluxo; "Já movimentado" de set/26 sobe 10.202 → 10.732 (= FC-00003 + FC-00005), sem contar a conta-espelho |
+| Conciliação da Conta Teste | linha do pagamento abre em "02 · Custo Operacional · 4 itens · 420,00" com os quatro itens (avulso, recorrência, desembolso, PP com link do job) |
+
+**O que ficou anotado:**
+
+- **Desembolso não tem intenção de cartão.** A aprovação pede só a data;
+  a baixa aceita cartão e o item entra na fatura normalmente, mas até lá
+  o fluxo projeta pela data do título (25/09 aqui), não pela fatura. PP e
+  avulsa têm a intenção; desembolso e recorrência-gerada seguem regras
+  próprias. Incluir `forma_pagamento`/`cartao_credito_id` no desembolso é
+  decisão do Tiago — não foi feito.
+- **FC-00004 (out/26, ZZ Teste Fatia 2) está vazia:** foi criada por
+  efeito colateral de uma consulta de verificação minha
+  (`select fatura_aberta_do_cartao(...)` — a função INSERE a fatura quando
+  não existe). Sem item, sem valor; apagar é decisão do Tiago (linha do
+  banco). A capa do Fatia 2 mostra essa como "em curso" porque é a aberta
+  mais antiga.
+- No dialog de baixa, o Radix Select aceita trigger + digitar + Enter
+  (funcionou para PIX e falhou para "Cartão"/"Conta Teste" com espaço); o
+  Combobox do plano de contas não aceita Enter — o item se escolhe pelo
+  clique. Só vale para automação de teste.
+- `descricaoDaFatura` limpava "PP " antes de tirar "Cartão · " e a linha
+  saía "PP PP-00060"; a ordem foi invertida, e a expansão da conciliação
+  passou a limpar por origem também.

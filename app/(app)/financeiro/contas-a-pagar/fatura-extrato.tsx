@@ -212,8 +212,10 @@ export function FaturaExtrato({
   );
 }
 
+// "Cartão · " sai antes: só então "PP PP-00060 1/1" vira "PP-00060 1/1",
+// como na conciliação.
 function descricaoDaFatura(descricao: string, origem: string): string {
-  return limparDescricaoDaFatura(limparPrefixoDescricao(descricao, origem));
+  return limparPrefixoDescricao(limparDescricaoDaFatura(descricao), origem);
 }
 
 function formatDate(iso: string): string {

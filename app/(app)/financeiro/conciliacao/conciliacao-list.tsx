@@ -283,7 +283,7 @@ function LinhasDaFatura({
                   </td>
                   <td />
                   <td className="px-3 py-1.5 pl-8">
-                    {limparDescricaoDaFatura(it.descricao)}
+                    {limparPrefixoDescricao(limparDescricaoDaFatura(it.descricao), it.origem)}
                     {it.papel === "ajuste" && (
                       <span className="ml-1.5 rounded border border-slate-300 bg-slate-100 px-1 py-0.5 text-[9px] font-semibold uppercase text-slate-700">
                         ajuste
