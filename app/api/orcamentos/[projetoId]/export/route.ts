@@ -19,6 +19,13 @@ import {
   adicionarAbaOrcamentoMensal,
   mesesDaVersaoParaAba,
 } from "@/lib/exportacao/planilha-orcamento-mensal";
+import { adicionarAbaInterna, type SecaoInterna } from "@/lib/exportacao/planilha-interna";
+import {
+  cambioDaInterna,
+  secaoInternaDaVersao,
+} from "@/lib/exportacao/interna-da-versao";
+import { somarFechamentosInternos } from "@/lib/exportacao/montar-interna";
+import { pode } from "@/lib/permissoes";
 import { configDaPlanilha } from "@/app/(app)/_planilha/modelo-planilha";
 import { chaveDoCambio } from "@/app/(app)/_planilha/moeda-estrangeira";
 import type {
@@ -52,6 +59,12 @@ function dataBr(d: Date): string {
  * As travas do seletor valem aqui também, porque a regra não pode morar
  * só na tela: orçamento que já é job aberto não sai no arquivo, e
  * orçamento sem versão não tem o que exportar.
+ *
+ * `?modo=interna` troca a planilha do cliente pela **interna** (decisão
+ * 088): o mesmo orçado com o PLANEJADO ao lado, fechando no valor do job.
+ * Aí o job aberto **sai** — é a versão aprovada dele que interessa
+ * internamente (resposta P2 do Tiago) —, e a planilha do cliente segue
+ * exatamente como era.
  */
 export async function GET(
   req: Request,
@@ -60,6 +73,15 @@ export async function GET(
   const session = await requireSession();
   const tenantId = session.activeTenant.id;
   const supabase = createClient();
+
+  // A interna mostra margem: só quem exporta orçamento a baixa (P13).
+  const interna = new URL(req.url).searchParams.get("modo") === "interna";
+  if (interna && !pode(session.activeRole, "orcamentos.exportar")) {
+    return NextResponse.json(
+      { error: "Você não tem permissão para exportar a planilha interna." },
+      { status: 403 },
+    );
+  }
 
   const pedido = new URL(req.url).searchParams.get("orcamentos") ?? "";
   const ids = Array.from(
@@ -145,12 +167,14 @@ export async function GET(
     atuais.push({ status: j.status as JobStatus, created_at: j.created_at });
     jobsPorOrcamento.set(j.orcamento_id, atuais);
   }
+  // Job aberto só barra a planilha do cliente: a interna do orçamento é
+  // justamente o que se olha quando o job já existe (P2).
   const abertos = orcamentos.filter(
     (o) =>
       estagioFunil(o.status, escolherJobDoFunil(jobsPorOrcamento.get(o.id) ?? [])) ===
       "aberto",
   );
-  if (abertos.length > 0) {
+  if (abertos.length > 0 && !interna) {
     return NextResponse.json(
       {
         error: `${abertos.map((o) => o.nome).join(", ")} já ${
@@ -263,7 +287,11 @@ export async function GET(
       .select(
         "id, versao_orcamento_id, grupo_id, ordem, item, tipo_custo, " +
           "valor_unitario_orcado, quantidade_orcada, dias_meses_orcado, total_orcado, " +
-          "em_save, save_consumido",
+          "em_save, save_consumido" +
+          // O planejado só a interna usa; a planilha do cliente não o lê.
+          (interna
+            ? ", valor_unitario_planejado, quantidade_planejada, dias_meses_planejado, total_planejado"
+            : ""),
       )
       .eq("tenant_id", tenantId)
       .in("versao_orcamento_id", versaoIds)
@@ -307,6 +335,14 @@ export async function GET(
       total_orcado: Number(it.total_orcado ?? 0),
       em_save: it.em_save === true,
       save_consumido: Number(it.save_consumido ?? 0),
+      ...(interna
+        ? {
+            valor_unitario_planejado: Number(it.valor_unitario_planejado ?? 0),
+            quantidade_planejada: Number(it.quantidade_planejada ?? 0),
+            dias_meses_planejado: Number(it.dias_meses_planejado ?? 0),
+            total_planejado: Number(it.total_planejado ?? 0),
+          }
+        : {}),
     });
     itensPorGrupo.set(it.grupo_id, atuais);
   }
@@ -332,7 +368,68 @@ export async function GET(
     };
   });
 
-  if (modeloDoArquivo === "mensal") {
+  if (interna) {
+    const secoesInternas: SecaoInterna[] = orcamentos.map((o) => {
+      const versao = versaoAlvo.get(o.id)!;
+      const gruposDaVersao = (gruposPorVersao.get(versao.id) ?? []).map((g) => ({
+        id: g.id,
+        nome: g.nome,
+        mesId: g.mesId,
+        itens: itensPorGrupo.get(g.id) ?? [],
+      }));
+      return secaoInternaDaVersao({
+        titulo: `${o.codigo} · ${nomeVersao(o.nome, versao.numero_versao)}`,
+        orcamentoId: o.id,
+        versaoId: versao.id,
+        percentualHonorarios: Number(versao.percentual_honorarios ?? 0),
+        percentualImposto: Number(versao.percentual_imposto ?? 0),
+        internacional:
+          modeloDoArquivo === "internacional"
+            ? configDaPlanilha("internacional", versao).internacional
+            : null,
+        ...(modeloDoArquivo === "mensal"
+          ? {
+              meses: mesesDaVersaoParaAba(
+                mesesPorVersao.get(versao.id) ?? [],
+                gruposDaVersao,
+              ),
+            }
+          : {
+              grupos: gruposDaVersao.map(({ id, nome, itens }) => ({
+                id,
+                nome,
+                itens,
+              })),
+            }),
+      });
+    });
+
+    adicionarAbaInterna(wb, "Interna", {
+      identificacao: `${projeto.codigo} · ${projeto.nome}`,
+      clienteNome,
+      titulo: `Planilha interna · ${dataBr(new Date())}`,
+      marca: "interna:orcamento",
+      modelo:
+        modeloDoArquivo === "mensal"
+          ? "mensal"
+          : modeloDoArquivo === "internacional"
+            ? "internacional"
+            : "nacional",
+      ...(modeloDoArquivo === "internacional"
+        ? cambioDaInterna(
+            cambioComum(orcamentos.map((o) => cambioDaVersao(versaoAlvo.get(o.id)!))),
+          )
+        : {}),
+      comRealizado: false,
+      secoes: secoesInternas,
+      // Com mais de um orçamento, o arquivo fecha num resumo no fim —
+      // cada um com o seu fechamento, e o total depois deles.
+      fechamentoTotal:
+        secoesInternas.length > 1
+          ? somarFechamentosInternos(secoesInternas.map((s) => s.fechamento))
+          : null,
+    });
+  } else if (modeloDoArquivo === "mensal") {
     // Fee e Always On (decisão 078): cada orçamento com os seus meses — de
     // trimestres diferentes, se for o caso —, cada mês com o seu fechamento
     // e o resumo no fim.
@@ -401,7 +498,9 @@ export async function GET(
 
   // ---------- resposta ----------
   const buffer = await wb.xlsx.writeBuffer();
-  const nomeArquivo = nomeDeArquivoSeguro(`orcamentos-${projeto.codigo}.xlsx`);
+  const nomeArquivo = nomeDeArquivoSeguro(
+    `${interna ? "interna" : "orcamentos"}-${projeto.codigo}.xlsx`,
+  );
 
   return new NextResponse(buffer as ArrayBuffer, {
     status: 200,

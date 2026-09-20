@@ -1,11 +1,13 @@
 import type ExcelJS from "exceljs";
 import { nomeDoMes, rotuloMes } from "@/lib/calculos/meses-trimestre";
 import {
-  BLACK,
-  BLUE_GROUP,
-  BLUE_HEADER,
+  AZUL_IDENT,
+  AZUL_ORCADO,
   BORDER,
+  CINZA_MES,
   COLUNA_ID,
+  escreverFaixa,
+  escreverFaixaECabecalho,
   escreverFechamento,
   escreverGrupos,
   escreverTituloDeSecao,
@@ -15,6 +17,7 @@ import {
   marcasDaSecao,
   prepararAbaOrcamento,
   WHITE,
+  type FaixaDaSecao,
   type GrupoDaAba,
   type OpcoesDaAba,
 } from "./planilha-orcamento";
@@ -79,32 +82,6 @@ export function mesesDaVersaoParaAba<G extends GrupoDaAba & { mesId: string | nu
     }));
 }
 
-function pintarLinha(
-  row: ExcelJS.Row,
-  { escura, negrito }: { escura: boolean; negrito: boolean },
-) {
-  row.height = 20;
-  for (let col = 1; col <= 7; col++) {
-    const cell = row.getCell(col);
-    cell.fill = {
-      type: "pattern",
-      pattern: "solid",
-      fgColor: { argb: escura ? BLUE_HEADER : BLUE_GROUP },
-    };
-    cell.border = BORDER;
-    cell.font = {
-      name: "Calibri",
-      size: 11,
-      bold: negrito,
-      color: { argb: escura ? WHITE : BLACK },
-    };
-    cell.alignment =
-      col === 5 || col === 6
-        ? { horizontal: "right", vertical: "middle" }
-        : { vertical: "middle" };
-    if (col === 6) cell.numFmt = FORMATO_MOEDA;
-  }
-}
 
 export function adicionarAbaOrcamentoMensal(
   wb: ExcelJS.Workbook,
@@ -116,18 +93,31 @@ export function adicionarAbaOrcamentoMensal(
   const F = "F";
 
   const unica = dados.secoes.length === 1 ? dados.secoes[0] : null;
-  const ws = prepararAbaOrcamento(wb, nomeAba, {
-    identificacao: dados.identificacao,
-    clienteNome: dados.clienteNome,
-    titulo: dados.titulo,
-    marcaDaLinha1:
-      unica && unica.titulo === undefined && unica.orcamentoId
-        ? marcasDaSecao(unica)
-        : undefined,
-  });
+  // A faixa e o cabeçalho não ficam no topo: no mensal eles vêm dentro de
+  // cada mês, embaixo da linha do mês (decisão 088, como a aba SUL).
+  const ws = prepararAbaOrcamento(
+    wb,
+    nomeAba,
+    {
+      identificacao: dados.identificacao,
+      clienteNome: dados.clienteNome,
+      titulo: dados.titulo,
+      marcaDaLinha1:
+        unica && unica.titulo === undefined && unica.orcamentoId
+          ? marcasDaSecao(unica)
+          : undefined,
+    },
+    false,
+  );
 
   const variasSecoes = dados.secoes.length > 1;
-  const resumo: { rotulo: string; linha: number; valor: number }[] = [];
+  // O resumo do trimestre soma as linhas de SUB-TOTAL de cada mês, e as
+  // taxas de cada mês entram como faixa própria — é o que evita o SUMIF
+  // contar duas vezes o fechamento que já existe dentro de cada bloco.
+  const faixasDosMeses: FaixaDaSecao[] = [];
+  const subtotaisDosMeses: Record<string, number[]> = {};
+  let primeiraLinhaDoArquivo: number | null = null;
+  let ultimaLinhaDoArquivo: number | null = null;
 
   for (const secao of dados.secoes) {
     const tituloDaSecao =
@@ -142,10 +132,13 @@ export function adicionarAbaOrcamentoMensal(
         ws,
         rotuloMes(mes.mes).toUpperCase(),
         `${MARCA_MES}${mes.mes}`,
+        CINZA_MES,
       );
       // O título do mês não mostra valor: o faturamento dele está no
       // fechamento logo abaixo.
       ws.getCell(tituloDoMes.number, 6).value = null;
+      // Faixa e cabeçalho abaixo do mês, como na aba SUL.
+      escreverFaixaECabecalho(ws);
 
       const r = escreverGrupos(ws, mes.grupos, formulas);
       const ultima = r.ultima ?? tituloDoMes.number;
@@ -175,14 +168,17 @@ export function adicionarAbaOrcamentoMensal(
         linha: fechamento.linhaFaturamento,
         valor: fechamento.faturamento,
       });
-      resumo.push({
-        rotulo:
-          variasSecoes && secao.rotuloNoResumo
-            ? `${secao.rotuloNoResumo} · ${rotuloMes(mes.mes)}`
-            : rotuloMes(mes.mes),
-        linha: fechamento.linhaFaturamento,
-        valor: fechamento.faturamento,
+      faixasDosMeses.push({
+        de: tituloDoMes.number,
+        ate: ultima,
+        percentualHonorarios: Number(secao.percentualHonorarios ?? 0),
+        percentualImposto: Number(secao.percentualImposto ?? 0),
       });
+      for (const [letra, linha] of Object.entries(fechamento.linhasSubtotal)) {
+        (subtotaisDosMeses[letra] ??= []).push(linha);
+      }
+      primeiraLinhaDoArquivo ??= tituloDoMes.number;
+      ultimaLinhaDoArquivo = ultima;
     }
 
     // O título da seção mostra o faturamento do orçamento: a soma dos meses.
@@ -200,43 +196,35 @@ export function adicionarAbaOrcamentoMensal(
   }
 
   // -------- Resumo --------
-  const tituloResumo = ws.addRow([
+  // O resumo fecha por custo, como o card "Totais do trimestre" da tela
+  // (decisão 088). As linhas de cada mês saíram: o valor do mês já está no
+  // fechamento do próprio bloco.
+  const tituloResumo = escreverTituloDeSecao(
+    ws,
     variasSecoes ? "RESUMO" : "RESUMO DO TRIMESTRE",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-  ]);
-  ws.getCell(tituloResumo.number, COLUNA_ID).value = `${MARCA_RESUMO}trimestre`;
-  pintarLinha(tituloResumo, { escura: true, negrito: true });
+    `${MARCA_RESUMO}trimestre`,
+    CINZA_MES,
+  );
+  ws.getCell(tituloResumo.number, 6).value = null;
+  escreverFaixa(ws);
 
-  for (const linha of resumo) {
-    const row = ws.addRow(["", "", "", "", linha.rotulo, linha.valor, ""]);
-    pintarLinha(row, { escura: false, negrito: false });
-    if (formulas) {
-      row.getCell(6).value = { formula: `${F}${linha.linha}`, result: linha.valor };
-    }
-  }
-
-  const total = resumo.reduce((s, l) => s + l.valor, 0);
-  const totalRow = ws.addRow([
-    "",
-    "",
-    "",
-    "",
-    variasSecoes ? "FATURAMENTO TOTAL" : "FATURAMENTO DO TRIMESTRE",
-    total,
-    "",
-  ]);
-  pintarLinha(totalRow, { escura: true, negrito: true });
-  if (formulas && resumo.length > 0) {
-    totalRow.getCell(6).value = {
-      formula: resumo.map((l) => `${F}${l.linha}`).join("+"),
-      result: total,
-    };
-  }
+  escreverFechamento(ws, {
+    secoes: dados.secoes.map((secao) => ({
+      grupos: secao.meses.flatMap((mes) => mes.grupos),
+      percentualHonorarios: secao.percentualHonorarios,
+      percentualImposto: secao.percentualImposto,
+    })),
+    faixas: faixasDosMeses,
+    conteudo:
+      primeiraLinhaDoArquivo !== null && ultimaLinhaDoArquivo !== null
+        ? { de: primeiraLinhaDoArquivo, ate: ultimaLinhaDoArquivo }
+        : null,
+    formulas,
+    rotuloFaturamento: variasSecoes
+      ? "FATURAMENTO TOTAL"
+      : "FATURAMENTO DO TRIMESTRE",
+    subtotaisPorLinhas: subtotaisDosMeses,
+  });
 
   return ws;
 }

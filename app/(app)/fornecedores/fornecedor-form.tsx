@@ -43,6 +43,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { MaskedInput } from "@/components/ui/masked-input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { PIX_TIPOS, PIX_AJUDA, chavePixParaExibir } from "@/lib/pix";
 import { Combobox } from "@/components/ui/combobox";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { BANCOS_FEBRABAN } from "@/lib/dados/bancos-febraban";
@@ -76,8 +84,6 @@ const BANCO_ITEMS = BANCOS_FEBRABAN.map((b) => ({
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-const SELECT_CLASS =
-  "flex h-11 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-foreground hover:border-california-red/40 focus-visible:outline-none focus-visible:border-california-red focus-visible:ring-2 focus-visible:ring-california-red/15 transition-colors";
 
 /** "nome, CNPJ e e-mail" — a lista do rodapé, com o "e" antes do último. */
 function listar(itens: string[]): string {
@@ -358,6 +364,11 @@ export function FornecedorForm({
   const [bancoCodigo, setBancoCodigo] = React.useState<string | null>(
     fornecedor?.banco_codigo ?? null,
   );
+  /** Controlado desde 18/09/2026, quando o `<select>` nativo saiu. O
+   *  valor entra no envio pelo `formData.set` do `handleSubmit`. */
+  const [tipoConta, setTipoConta] = React.useState<string>(
+    fornecedor?.tipo_conta ?? "",
+  );
   const [pixTipo, setPixTipo] = React.useState<PixTipoChave | "">(
     fornecedor?.pix_tipo ?? "",
   );
@@ -388,7 +399,11 @@ export function FornecedorForm({
   const logradouroRef = React.useRef<HTMLInputElement>(null);
   const bairroRef = React.useRef<HTMLInputElement>(null);
   const cidadeRef = React.useRef<HTMLInputElement>(null);
-  const ufRef = React.useRef<HTMLSelectElement>(null);
+  /** A UF é o ÚNICO campo controlado deste formulário: o Combobox não
+   *  existe em modo não controlado. O `name` continua emitindo um input
+   *  escondido, então o `FormData` que lê o resto do form não muda
+   *  (17/09/2026). */
+  const [uf, setUf] = React.useState<string>(fornecedor?.uf ?? "");
   const cpfCnpjRef = React.useRef<HTMLInputElement>(null);
   const pixMaskRef = React.useRef<HTMLInputElement>(null);
 
@@ -421,6 +436,12 @@ export function FornecedorForm({
    * exigem): a cada tecla o formulário inteiro é relido por `FormData`.
    * É uma leitura barata e evita duplicar cada campo num state.
    */
+  /** Borda vermelha no gatilho do Select, como os Inputs já fazem. */
+  const erroClasses = (name: string) =>
+    fieldErrors[name]?.length
+      ? "border-california-red ring-2 ring-california-red/15"
+      : "";
+
   const formRef = React.useRef<HTMLFormElement>(null);
   const [campos, setCampos] = React.useState<Record<string, string>>({});
   const relerCampos = React.useCallback(() => {
@@ -462,8 +483,7 @@ export function FornecedorForm({
         bairroRef.current.value = data.bairro ?? "";
       if (cidadeRef.current && !cidadeRef.current.value)
         cidadeRef.current.value = data.localidade ?? "";
-      if (ufRef.current && !ufRef.current.value && data.uf)
-        ufRef.current.value = data.uf;
+      if (data.uf) setUf((atual) => atual || String(data.uf).toUpperCase());
       relerCampos();
     } catch {
       setCepError("Não foi possível consultar o CEP, preencha manualmente.");
@@ -570,8 +590,7 @@ export function FornecedorForm({
         bairroRef.current.value = data.bairro ?? "";
       if (cidadeRef.current && !cidadeRef.current.value)
         cidadeRef.current.value = data.municipio ?? "";
-      if (ufRef.current && !ufRef.current.value && data.uf)
-        ufRef.current.value = String(data.uf).toUpperCase();
+      if (data.uf) setUf((atual) => atual || String(data.uf).toUpperCase());
 
       relerCampos();
     } catch {
@@ -661,7 +680,7 @@ export function FornecedorForm({
       (campos.agencia ?? "").trim() &&
       (campos.conta ?? "").trim() &&
       (campos.conta_dv ?? "").trim() &&
-      (campos.tipo_conta ?? "").trim(),
+      tipoConta.trim(),
   );
   const pixOk = Boolean(pixTipo && pixChave.trim());
 
@@ -722,12 +741,19 @@ export function FornecedorForm({
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    // Mesmo cuidado do `ClienteForm`: o React propaga o submit pela
+    // ÁRVORE, e o portal do Radix não a interrompe. Hoje o
+    // `NovoFornecedorDialog` do "Gerar PP" é renderizado depois do
+    // `</form>` da PP e escapa por sorte — mudar isso de lugar bastaria
+    // para o cadastro do fornecedor passar a emitir a PP junto.
+    e.stopPropagation();
     setError(null);
     setFieldErrors({});
 
     const formData = new FormData(e.currentTarget);
     formData.set("tipo_pessoa", tipoPessoa);
     formData.set("banco_codigo", bancoCodigo ?? "");
+    formData.set("tipo_conta", tipoConta);
     formData.set("pix_tipo", pixTipo);
     formData.set("pix_chave", pixChave);
     formData.set("cpf_cnpj", onlyDigits(formData.get("cpf_cnpj")?.toString() ?? ""));
@@ -1099,16 +1125,23 @@ export function FornecedorForm({
                   errors={fieldErrors}
                   className="col-span-12 sm:col-span-4"
                 >
-                  <select
-                    name="tipo_conta"
-                    defaultValue={fornecedor?.tipo_conta ?? ""}
-                    className={SELECT_CLASS}
-                  >
-                    <option value="">Selecione</option>
-                    <option value="corrente">Conta corrente</option>
-                    <option value="poupanca">Conta poupança</option>
-                    <option value="pagamento">Conta de pagamento</option>
-                  </select>
+                  {/* Idem: lista do sistema. O valor vai ao servidor pelo
+                      `formData.set` do envio, como o resto dos campos
+                      controlados deste formulário. */}
+                  <Select value={tipoConta} onValueChange={setTipoConta}>
+                    <SelectTrigger
+                      id="tipo_conta"
+                      aria-label="Tipo de conta"
+                      className={erroClasses("tipo_conta")}
+                    >
+                      <SelectValue placeholder="Selecione" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="corrente">Conta corrente</SelectItem>
+                      <SelectItem value="poupanca">Conta poupança</SelectItem>
+                      <SelectItem value="pagamento">Conta de pagamento</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </Campo>
               </div>
 
@@ -1121,22 +1154,34 @@ export function FornecedorForm({
                   errors={fieldErrors}
                   className="col-span-12 sm:col-span-4"
                 >
-                  <select
+                  {/* Lista do sistema, não o `<select>` nativo: dentro do
+                      dialog de cadastro rápido (o "+" da PP) o menu do
+                      sistema operacional brigava com o foco do Radix e a
+                      produção não conseguia escolher o tipo — relato de
+                      18/09/2026. */}
+                  <Select
                     value={pixTipo}
-                    onChange={(e) => {
-                      setPixTipo(e.target.value as PixTipoChave | "");
+                    onValueChange={(v) => {
+                      setPixTipo(v as PixTipoChave);
                       setPixChave("");
                       setPixWarning(null);
                     }}
-                    className={SELECT_CLASS}
                   >
-                    <option value="">Selecione</option>
-                    <option value="cnpj">CNPJ</option>
-                    <option value="cpf">CPF</option>
-                    <option value="email">E-mail</option>
-                    <option value="telefone">Telefone</option>
-                    <option value="aleatoria">Chave aleatória</option>
-                  </select>
+                    <SelectTrigger
+                      id="pix_tipo"
+                      aria-label="Tipo de chave PIX"
+                      className={erroClasses("pix_tipo")}
+                    >
+                      <SelectValue placeholder="Selecione" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PIX_TIPOS.map((t) => (
+                        <SelectItem key={t.valor} value={t.valor}>
+                          {t.rotulo}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </Campo>
 
                 <Campo
@@ -1159,11 +1204,20 @@ export function FornecedorForm({
                   <PixChaveInput
                     key={pixTipo}
                     tipo={pixTipo}
-                    initialValue={pixChave}
+                    initialValue={chavePixParaExibir(pixTipo, pixChave)}
                     onDigitsChange={setPixChave}
                     onRawChange={setPixChave}
                     maskRef={pixMaskRef}
                   />
+                  {/* O alvo do formato, por tipo: o arquivo de pagamento
+                      (CNAB) leva a chave exatamente como o DICT a guarda,
+                      então quem digita precisa saber o que vai ser gravado
+                      (18/09/2026). */}
+                  {pixTipo && (
+                    <span className="text-[11.5px] leading-snug text-muted-foreground">
+                      {PIX_AJUDA[pixTipo]}
+                    </span>
+                  )}
                   {pixWarning && (
                     <div className="mt-0.5 flex items-start gap-1.5 text-[11.5px] text-amber-700">
                       <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
@@ -1304,19 +1358,17 @@ export function FornecedorForm({
                   errors={fieldErrors}
                   className="col-span-3"
                 >
-                  <select
+                  <Combobox
+                    id="uf"
                     name="uf"
-                    defaultValue={fornecedor?.uf ?? ""}
-                    ref={ufRef}
-                    className={SELECT_CLASS}
-                  >
-                    <option value="">—</option>
-                    {UFS.map((uf) => (
-                      <option key={uf} value={uf}>
-                        {uf}
-                      </option>
-                    ))}
-                  </select>
+                    items={UFS.map((u) => ({ value: u, label: u }))}
+                    value={uf || null}
+                    onChange={(v) => setUf(v ?? "")}
+                    placeholder="—"
+                    buscaPlaceholder="UF"
+                    limpavel
+                    className="h-11 border-border px-3"
+                  />
                 </Campo>
               </div>
 

@@ -58,7 +58,14 @@ ninguém vai gastar.
 
 1. **No formulário da PP**, como pergunta obrigatória: *"Esta é a última
    PP deste item?"*, último campo antes dos botões. Sem resposta, não
-   gera. Vale para gerar e para editar uma PP ainda gerada — a correção
+   gera.
+
+   ⚠️ **17/09/2026 — ela deixou de ficar presa acima dos botões.** Era um
+   bloco fixo, sempre à vista, que comia altura do formulário; agora rola
+   junto com o resto, depois dos anexos. **A regra não mudou**: continua
+   obrigatória, com as mesmas consequências, e quem tenta gerar sem
+   responder recebe o mesmo erro — e a tela rola até a pergunta, para ela
+   não ficar fora de vista. Vale para gerar e para editar uma PP ainda gerada — a correção
    da PP **rejeitada** não pergunta, porque ali se conserta um documento
    que já existe.
 2. **No painel "Destrinchar realizado"**, no botão verde do rodapé, sem

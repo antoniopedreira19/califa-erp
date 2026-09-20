@@ -19,6 +19,13 @@
 
 import * as React from "react";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   DOCUMENTO_TIPOS,
   documentoTipoLabel,
   type DocumentoDoAnexo,
@@ -43,31 +50,37 @@ export function DocumentoDoAnexoField({
 }: Props) {
   return (
     <div className="flex items-center gap-2">
-      {/* `select` nativo, e não o do Radix: esta linha vive DENTRO de um
-          drawer que já é um portal, e um popover aninhado ali fecha o
-          drawer inteiro no primeiro clique fora. */}
-      <select
+      {/* Era `<select>` nativo por medo de popover aninhado fechar o
+          drawer. O medo era de antes de 31/08/2026, quando o Popover
+          passou a empilhar o próprio lock de rolagem dentro de diálogo —
+          e o `<select>` nativo cobrou o preço em 18/09/2026: dentro de
+          drawer o menu do sistema operacional não aplica a escolha
+          (decisão 090). Conferido no drawer, com o campo em uso. */}
+      <Select
         value={valor.tipo ?? SEM_TIPO}
         disabled={disabled}
-        aria-label={`Tipo do documento de ${descricaoArquivo}`}
-        onChange={(e) =>
+        onValueChange={(v) =>
           onChange({
             ...valor,
-            tipo:
-              e.target.value === SEM_TIPO
-                ? null
-                : (e.target.value as DocumentoTipo),
+            tipo: v === SEM_TIPO ? null : (v as DocumentoTipo),
           })
         }
-        className="h-8 rounded-lg border border-border bg-white px-2 text-xs text-foreground outline-none focus:border-california-red disabled:opacity-50"
       >
-        <option value={SEM_TIPO}>Tipo…</option>
-        {DOCUMENTO_TIPOS.map((t) => (
-          <option key={t} value={t}>
-            {documentoTipoLabel(t)}
-          </option>
-        ))}
-      </select>
+        <SelectTrigger
+          aria-label={`Tipo do documento de ${descricaoArquivo}`}
+          className="h-8 w-[104px] flex-none px-2 text-xs"
+        >
+          <SelectValue placeholder="Tipo…" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={SEM_TIPO}>Tipo…</SelectItem>
+          {DOCUMENTO_TIPOS.map((t) => (
+            <SelectItem key={t} value={t}>
+              {documentoTipoLabel(t)}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
 
       <input
         value={valor.numero ?? ""}

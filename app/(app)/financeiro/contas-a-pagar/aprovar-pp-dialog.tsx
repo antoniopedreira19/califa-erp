@@ -29,6 +29,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { DatePicker } from "@/components/ui/date-picker";
+import { Combobox } from "@/components/ui/combobox";
 import {
   Select,
   SelectContent,
@@ -260,43 +261,37 @@ export function AprovarPPDialog({
                 </Select>
 
                 <div className="grid grid-cols-2 gap-2">
-                  <Select
-                    value={tipoId === "" ? undefined : tipoId}
-                    disabled={pending}
-                    onValueChange={(v) => {
-                      setTipoId(v);
+                  <Combobox
+                    ariaLabel="Tipo do plano de contas"
+                    items={tipos.map((t) => ({
+                      value: t.id,
+                      label: `${t.codigo} · ${t.nome}`,
+                    }))}
+                    value={tipoId || null}
+                    onChange={(v) => {
+                      setTipoId(v ?? "");
                       setSubtipoId("");
                     }}
-                  >
-                    <SelectTrigger aria-label="Tipo do plano de contas" className="h-9 w-full text-xs">
-                      <SelectValue placeholder="Tipo…" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {tipos.map((t) => (
-                        <SelectItem key={t.id} value={t.id} className="text-xs">
-                          {t.codigo} · {t.nome}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Select
-                    value={subtipoId === "" ? undefined : subtipoId}
+                    disabled={pending}
+                    placeholder="Tipo…"
+                    buscaPlaceholder="Escreva o código ou o nome"
+                    className="h-9 w-full border-border px-3.5 text-xs"
+                  />
+                  <Combobox
+                    ariaLabel="Subtipo do plano de contas"
+                    items={subtipos
+                      .filter((sub) => sub.tipo_id === tipoId)
+                      .map((sub) => ({
+                        value: sub.id,
+                        label: `${sub.codigo} · ${sub.nome}`,
+                      }))}
+                    value={subtipoId || null}
+                    onChange={(v) => setSubtipoId(v ?? "")}
                     disabled={pending || tipoId === ""}
-                    onValueChange={setSubtipoId}
-                  >
-                    <SelectTrigger aria-label="Subtipo do plano de contas" className="h-9 w-full text-xs">
-                      <SelectValue placeholder="Subtipo…" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {subtipos
-                        .filter((sub) => sub.tipo_id === tipoId)
-                        .map((sub) => (
-                          <SelectItem key={sub.id} value={sub.id} className="text-xs">
-                            {sub.codigo} · {sub.nome}
-                          </SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
+                    placeholder="Subtipo…"
+                    buscaPlaceholder="Escreva o código ou o nome"
+                    className="h-9 w-full border-border px-3.5 text-xs"
+                  />
                 </div>
               </div>
             )}

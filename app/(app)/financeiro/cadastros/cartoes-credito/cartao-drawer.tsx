@@ -23,6 +23,9 @@ import {
 import { criarCartao, atualizarCartao } from "./actions";
 import type { CartaoCredito, BandeiraCartao } from "@/lib/types";
 
+/** Chave da opção "nenhuma": o Radix Select não aceita item com valor vazio. */
+const SEM_EMPRESA = "__sem_empresa__";
+
 export type EmpresaOpcao = { id: string; nome: string };
 
 type Props =
@@ -83,6 +86,12 @@ export function CartaoDrawer(props: Props) {
     setOpen(next);
   }
 
+  /** O Radix recusa `value=""` num item, então "nenhuma" tem chave
+   *  própria e vira `undefined` no envio. */
+  const [empresaId, setEmpresaId] = React.useState<string>(
+    cartao?.empresa_id ?? SEM_EMPRESA,
+  );
+
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
@@ -106,7 +115,7 @@ export function CartaoDrawer(props: Props) {
       dono,
       dia_vencimento_fatura: isNaN(dia) ? undefined : dia,
       dia_fechamento_fatura: isNaN(diaFecha) ? undefined : diaFecha,
-      empresa_id: formData.get("empresa_id")?.toString() || undefined,
+      empresa_id: empresaId === SEM_EMPRESA ? undefined : empresaId,
       ...(isEditar && cartao ? { id: cartao.id } : {}),
     };
 
@@ -213,19 +222,24 @@ export function CartaoDrawer(props: Props) {
                 de cada despesa vem do item (28/08/2026). */}
             <div className="space-y-2">
               <Label htmlFor="empresa_id">Empresa do cartão</Label>
-              <select
-                id="empresa_id"
-                name="empresa_id"
-                defaultValue={cartao?.empresa_id ?? ""}
-                className="h-10 w-full rounded-lg border border-border bg-white px-3 text-sm outline-none focus:border-california-red"
-              >
-                <option value="">Nenhuma em especial</option>
-                {props.empresas.map((e) => (
-                  <option key={e.id} value={e.id}>
-                    {e.nome}
-                  </option>
-                ))}
-              </select>
+              {/* Sem `name`: o valor vai ao servidor pelo estado, no
+                  `handleSubmit` — o `<select>` nativo saiu porque não
+                  aplica a escolha dentro do drawer (decisão 090). */}
+              <Select value={empresaId} onValueChange={setEmpresaId}>
+                <SelectTrigger id="empresa_id" aria-label="Empresa do cartão">
+                  <SelectValue placeholder="Nenhuma em especial" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={SEM_EMPRESA}>
+                    Nenhuma em especial
+                  </SelectItem>
+                  {props.empresas.map((e) => (
+                    <SelectItem key={e.id} value={e.id}>
+                      {e.nome}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <p className="text-[11px] leading-relaxed text-muted-foreground">
                 Só informativo. O cartão pode pagar despesa de qualquer
                 empresa — quem define a empresa da despesa é o lançamento.

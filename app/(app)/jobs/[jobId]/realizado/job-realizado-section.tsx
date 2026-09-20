@@ -53,6 +53,7 @@ import {
 } from "./job-item-realizado-table";
 import { JobTotaisCard } from "./job-totais-card";
 import { AlterarOrcadoButton } from "./alterar-orcado-button";
+import { ExportarInternaButton } from "./exportar-interna-button";
 import {
   ConcluirPPsButton,
   type ItemEmAberto,
@@ -160,6 +161,9 @@ interface Props {
    *  enquanto errata e BV continuam esperando a abertura. O envio ao
    *  financeiro é a outra metade, e ela mora no painel do item. */
   podeGerarPP?: boolean;
+  /** `cadastros.fornecedores.editar` — repassado à tabela. */
+  podeCadastrarFornecedor?: boolean;
+  podeEditarFornecedor?: boolean;
   /** Confirmar o BV — `jobs.confirmar_bv`, administrador e GP (decisão
    *  080). Telas de leitura mandam `false`. */
   podeConfirmarBv: boolean;
@@ -186,6 +190,9 @@ interface Props {
   saldosDeSave: SaldoDeSave[];
   /** Nome do cliente — aparece no texto do formulário de save. */
   clienteNome: string;
+  /** Exportar a planilha interna do job (decisão 088). Quem vê a tela
+   *  exporta; o freelancer, que só tem a visão restrita, não. */
+  podeExportarInterna?: boolean;
 }
 
 export function JobRealizadoSection({
@@ -197,7 +204,10 @@ export function JobRealizadoSection({
   realizadosMap,
   categoriasMap,
   podeAcoes,
+  podeExportarInterna = false,
   podeGerarPP = false,
+  podeCadastrarFornecedor = false,
+  podeEditarFornecedor = false,
   podeConfirmarBv,
   jaEnviadoParaFaturamento = false,
   aberturaEmRevisao = false,
@@ -543,6 +553,8 @@ export function JobRealizadoSection({
           onAlternarGrupo={recolher.alternar}
           podeAcoes={podeAcoes}
           podeGerarPP={podeGerarPP}
+          podeCadastrarFornecedor={podeCadastrarFornecedor}
+          podeEditarFornecedor={podeEditarFornecedor}
           podeConfirmarBv={podeConfirmarBv}
           preAbertura={preAbertura}
           aberturaEmRevisao={aberturaEmRevisao}
@@ -692,6 +704,15 @@ export function JobRealizadoSection({
               },
             ]}
           />
+          {podeExportarInterna && (
+            <ExportarInternaButton
+              jobId={job.id}
+              codigo={job.codigo}
+              nome={job.nome}
+              qtdGrupos={grupos.length}
+              qtdItens={itens.length}
+            />
+          )}
           {podeAcoes && (
             <AlterarOrcadoButton
               ativo={errata.ativo}

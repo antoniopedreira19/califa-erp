@@ -331,6 +331,68 @@ Usar shadcn/ui como base e adaptar ao padrão visual do RH:
 - tooltips quando necessário;
 - ícones lucide-react em ações.
 
+### Campo de escolha: quando é Select e quando é Combobox
+
+⚠️ **17/09/2026 (decisão 089):** escolha única cuja lista pode passar de
+~15 itens usa `Combobox` (`components/ui/combobox.tsx`), que tem busca.
+A conta é pelo que a lista pode ter em produção, não pelo que ela tem hoje.
+
+- Onde o Combobox entra **no lugar de um Select**, passe
+  `COMBOBOX_COMO_SELECT` no `className`: o Combobox nasceu na PP com
+  `h-10`, o Select do resto do sistema é `h-11` com `border-border` e
+  `px-3.5`, e sem isso o campo fica mais baixo que os vizinhos.
+- Lista curta e fechada continua `Select` — empresa, regionais da empresa,
+  marcas do cliente, forma de pagamento, status.
+- `ComboboxItem.descricao` é a segunda linha **visível** (o CPF/CNPJ do
+  fornecedor). `ComboboxItem.busca` filtra **sem aparecer** — é o código
+  curto do cliente, que não pode ficar à vista porque um cliente pode ter
+  mais de um CNPJ, logo mais de um código.
+- Campo sem `<Label>` ao lado leva `ariaLabel`.
+- O ✕ de limpar e a seta do gatilho andam **juntos, colados na direita**:
+  soltos como irmãos do texto, o `justify-between` espalha os três e o ✕
+  para no meio do campo com qualquer nome curto (corrigido em 17/09/2026,
+  depois de aparecer assim no Cliente e no Fornecedor da PP).
+- A célula de seleção da planilha não muda: ela está amarrada à navegação
+  por teclado da decisão 046.
+
+⚠️ **18/09/2026 — `<select>` nativo não entra no ERP.** O menu de um
+`<select>` é desenhado pelo sistema operacional e briga com o foco do
+Radix: dentro do dialog de cadastro rápido de fornecedor, a produção
+escolhia o tipo de chave PIX e a escolha não aplicava. Campo de lista
+usa `Select` (poucas opções) ou `Combobox` (muitas) — nunca `<select>`.
+Fora de dialog o nativo funciona, mas destoa do resto, e no mesmo dia os
+**11 que existiam foram convertidos** (mapa na decisão 090). Não resta
+nenhum: se aparecer um, é regressão.
+
+Ao conferir, lembre que o Radix Select renderiza um `<select>` escondido
+(`aria-hidden="true"`, `tabIndex="-1"`) para o formulário — procurar
+`select` no DOM acha esses e dá falso positivo.
+
+⚠️ **18/09/2026 — formulário dentro de dialog para o submit.** O portal
+do Radix tira o dialog do DOM, **não da árvore React**, e o React propaga
+pela árvore: o `onSubmit` de um formulário aberto num dialog chama o
+`onSubmit` do formulário que está por trás. `e.preventDefault()` não
+segura isso — ele impede a navegação, não a subida. **Todo `handleSubmit`
+de formulário que possa abrir dentro de outro leva `e.stopPropagation()`**
+(`ClienteForm`, `FornecedorForm`). Sem isso, salvar o cadastro rápido
+submete o formulário de trás — e, se ele estiver completo, grava.
+
+### Campo obrigatório: o asterisco é a única marcação
+
+⚠️ **17/09/2026 (Tiago).** Campo obrigatório leva `*` vermelho no rótulo.
+Campo opcional **não leva nada**: a ausência do asterisco já diz isso.
+Nada de "· opcional" no rótulo ou no placeholder — vira a mesma informação
+duas ou três vezes na mesma caixa.
+
+O asterisco fica **no rótulo do campo**, não só no da seção. Um grupo com
+várias caixas — o "Contato de cobrança" da abertura do job, com Nome,
+Número e E-mail — precisa de rótulo por coluna, senão o `*` do título do
+grupo não diz qual delas é obrigatória. Foi o que confundiu um GP em
+17/09/2026.
+
+O rodapé do diálogo explica a convenção uma vez:
+"Campos com `*` são obrigatórios."
+
 ## Restrições
 
 - Não criar uma identidade visual nova.

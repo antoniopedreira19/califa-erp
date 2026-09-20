@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/select";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
-import { Combobox } from "@/components/ui/combobox";
+import { Combobox, COMBOBOX_COMO_SELECT } from "@/components/ui/combobox";
 import { format } from "date-fns";
 import { cn, formatCurrency, formatDocumento } from "@/lib/utils";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -562,18 +562,17 @@ export function EditarPPDrawer({
               {ehVerba && (
                 <div>
                   <label className="text-xs font-medium">Responsável *</label>
-                  <Select value={responsavelId} onValueChange={setResponsavelId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Escolha um responsável" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {responsaveis.map((r) => (
-                        <SelectItem key={r.id} value={r.id}>
-                          {r.nome}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Combobox
+                    items={responsaveis.map((r) => ({
+                      value: r.id,
+                      label: r.nome,
+                    }))}
+                    value={responsavelId || null}
+                    onChange={(v) => setResponsavelId(v ?? "")}
+                    placeholder="Escolha um responsável"
+                    buscaPlaceholder="Escreva o nome"
+                    className={COMBOBOX_COMO_SELECT}
+                  />
                   <p className="mt-1.5 text-[11px] leading-snug text-muted-foreground">
                     Quem recebe a verba e presta contas dela depois (decisão 081).
                   </p>

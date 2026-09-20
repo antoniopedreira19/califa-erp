@@ -147,6 +147,7 @@ export default async function JobNoFinanceiroPage({
     custoRealizadoJob,
     bvPlanejadoJob,
     bvRealizadoJob,
+    podeExportarInterna,
   } =
     detalhe;
 
@@ -470,6 +471,7 @@ export default async function JobNoFinanceiroPage({
             realizadosMap={detalhe.realizadosMap}
             categoriasMap={detalhe.categoriasMap}
             podeAcoes={false}
+            podeExportarInterna={podeExportarInterna}
             podeConfirmarBv={false}
             ppsPorItemId={detalhe.ppsPorItemId}
             fornecedores={detalhe.fornecedores}

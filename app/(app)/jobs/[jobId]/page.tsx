@@ -116,7 +116,10 @@ export default async function JobDetailPage({
     bvRealizadoJob,
     podeEditarRealizado,
     podeAcoesPlanilha,
+    podeExportarInterna,
     podeGerarPP,
+    podeCadastrarFornecedor,
+    podeEditarFornecedor,
     podeEnviarPP,
     podeConfirmarBv,
     ppsQuePossoPrestarContas,
@@ -303,6 +306,8 @@ export default async function JobDetailPage({
         }
         planilha={
           <JobRealizadoSection
+            podeCadastrarFornecedor={podeCadastrarFornecedor}
+            podeEditarFornecedor={podeEditarFornecedor}
             savePorItem={detalhe.savePorItem}
             saldosDeSave={detalhe.saldosDeSave}
             clienteNome={detalhe.clienteNome}
@@ -351,6 +356,7 @@ export default async function JobDetailPage({
             realizadosMap={realizadosMap}
             categoriasMap={categoriasMap}
             podeAcoes={podeAcoesPlanilha}
+            podeExportarInterna={podeExportarInterna}
             podeGerarPP={podeGerarPP}
             podeConfirmarBv={podeConfirmarBv}
             jaEnviadoParaFaturamento={envioFaturamento !== null}

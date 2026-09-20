@@ -15,7 +15,25 @@ export interface ComboboxItem {
    * digita quando não lembra o nome exato (09/09/2026).
    */
   descricao?: string;
+  /**
+   * Texto que entra na busca mas NÃO aparece na lista. É o código curto
+   * do cliente (17/09/2026): quem digita "PNB" precisa achar CASAS
+   * PERNAMBUCANAS, mas o código não pode ficar à vista — cliente com mais
+   * de um CNPJ tem mais de um código, e a linha mentiria.
+   */
+  busca?: string;
 }
+
+/**
+ * Classes que fazem o gatilho do Combobox ficar igual a um `SelectTrigger`.
+ *
+ * O Combobox nasceu no campo de fornecedor da PP, com `h-10` e
+ * `border-input`; o Select do resto do sistema é `h-11`, `border-border` e
+ * `px-3.5`. Onde o Combobox ENTRA NO LUGAR de um Select — e ainda divide a
+ * linha com outros — é esta constante que impede a barra de filtros de
+ * ficar com um campo mais baixo que os vizinhos (17/09/2026).
+ */
+export const COMBOBOX_COMO_SELECT = "h-11 border-border px-3.5";
 
 interface ComboboxProps {
   items: ReadonlyArray<ComboboxItem>;
@@ -26,6 +44,9 @@ interface ComboboxProps {
   className?: string;
   id?: string;
   name?: string;
+  /** Rótulo para o leitor de tela, onde o campo não tem `<Label>` ao lado
+   *  (é o caso dos pares Tipo/Subtipo da aprovação de PP). */
+  ariaLabel?: string;
   /** Texto do campo de busca dentro do popover. */
   buscaPlaceholder?: string;
   /**
@@ -54,6 +75,7 @@ export function Combobox({
   className,
   id,
   name,
+  ariaLabel,
   buscaPlaceholder = "Buscar...",
   limpavel,
   acaoSemResultado,
@@ -92,7 +114,8 @@ export function Combobox({
     return items.filter(
       (i) =>
         normalizar(i.label).includes(q) ||
-        (i.descricao ? normalizar(i.descricao).includes(q) : false),
+        (i.descricao ? normalizar(i.descricao).includes(q) : false) ||
+        (i.busca ? normalizar(i.busca).includes(q) : false),
     );
   }, [items, query]);
 
@@ -120,6 +143,7 @@ export function Combobox({
             type="button"
             id={id}
             role="combobox"
+            aria-label={ariaLabel}
             aria-expanded={open}
             aria-controls={listaId}
             disabled={disabled}
@@ -130,36 +154,47 @@ export function Combobox({
               className,
             )}
           >
-            <span className={cn("truncate text-left", !selected && "text-muted-foreground")}>
+            <span
+              className={cn(
+                "min-w-0 flex-1 truncate text-left",
+                !selected && "text-muted-foreground",
+              )}
+            >
               {selected ? selected.label : placeholder}
             </span>
-            {/* Zerar a escolha sem abrir a lista. Vai como <span> porque o
-                gatilho já é um <button> e um botão dentro de outro é HTML
-                inválido — o clique é interceptado antes de abrir o popover. */}
-            {limpavel && selected && !disabled && (
-              <span
-                role="button"
-                tabIndex={0}
-                aria-label="Limpar seleção"
-                title="Limpar seleção"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  onChange(null);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
+            {/* Os dois ícones andam JUNTOS, colados na direita. Soltos como
+                irmãos do texto, o `justify-between` do gatilho espalhava os
+                três e o ✕ parava no meio do campo — visível em qualquer
+                nome curto, "AMBEV" à esquerda e o ✕ no vazio (17/09/2026). */}
+            <span className="flex flex-none items-center gap-1.5">
+              {/* Zerar a escolha sem abrir a lista. Vai como <span> porque o
+                  gatilho já é um <button> e um botão dentro de outro é HTML
+                  inválido — o clique é interceptado antes de abrir o popover. */}
+              {limpavel && selected && !disabled && (
+                <span
+                  role="button"
+                  tabIndex={0}
+                  aria-label="Limpar seleção"
+                  title="Limpar seleção"
+                  onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
                     onChange(null);
-                  }
-                }}
-                className="inline-flex h-5 w-5 flex-none items-center justify-center rounded-md bg-muted text-muted-foreground transition-colors hover:bg-california-red/10 hover:text-california-red"
-              >
-                <X className="h-3 w-3" />
-              </span>
-            )}
-            <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onChange(null);
+                    }
+                  }}
+                  className="inline-flex h-5 w-5 flex-none items-center justify-center rounded-md bg-muted text-muted-foreground transition-colors hover:bg-california-red/10 hover:text-california-red"
+                >
+                  <X className="h-3 w-3" />
+                </span>
+              )}
+              <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
+            </span>
           </button>
         </PopoverTrigger>
         <PopoverContent

@@ -281,13 +281,29 @@ test("Produtor faz TUDO em job/orcamento menos aprovar/enviar_faturamento/encerr
   assert.equal(pode("produtor", "jobs.encerrar"), false);
 });
 
-test("GP e Produtor cadastram fornecedor INLINE (exceção do PP)", () => {
+test("GP, Produtor e Freelancer cadastram fornecedor INLINE (exceção do PP)", () => {
   const inline = getRolesFor("cadastros.fornecedores.inline");
   assert.ok(inline.includes("gerente_producao"));
   assert.ok(inline.includes("produtor"));
+  // Freelancer entrou em 18/09/2026: ele edita o realizado dos jobs dele
+  // e esbarra no mesmo fornecedor fora da lista.
+  assert.ok(inline.includes("freelancer"));
+  assert.equal(pode("financeiro", "cadastros.fornecedores.inline"), false);
   // Mas nao via a tela cheia
   assert.equal(pode("gerente_producao", "cadastros.fornecedores.editar"), false);
   assert.equal(pode("produtor", "cadastros.fornecedores.editar"), false);
+  assert.equal(pode("freelancer", "cadastros.fornecedores.editar"), false);
+});
+
+test("So Administrador e GP cadastram cliente INLINE (decisao do Tiago, 18/09/2026)", () => {
+  const inline = new Set(getRolesFor("cadastros.clientes.inline"));
+  assert.deepEqual(inline, new Set(["administrador", "gerente_producao"]));
+  // Produtor cria orcamento, mas nao abre cliente novo.
+  assert.equal(pode("produtor", "cadastros.clientes.inline"), false);
+  assert.equal(pode("freelancer", "cadastros.clientes.inline"), false);
+  assert.equal(pode("financeiro", "cadastros.clientes.inline"), false);
+  // E o inline nunca vira a tela cheia.
+  assert.equal(pode("gerente_producao", "cadastros.clientes.editar"), false);
 });
 
 test("Quem envia job para faturamento cadastra portal do cliente INLINE (decisao 050)", () => {

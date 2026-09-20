@@ -616,6 +616,31 @@ marca** — a matriz, quando não há outras marcas no guarda-chuva.
 
 - `cliente_produtos.padrao` (boolean) + índice parcial único por cliente. **A identificação é a coluna, não a convenção "nome igual ao do cliente"** — convenção não é garantia.
 - `criarCliente` grava o padrão junto, com código `PRD-01`. Se esse insert falhar, a action **avisa em vez de redirecionar em silêncio**: o cliente já está gravado e PostgREST não dá transação para desfazer. Mesmo padrão da mensagem "Job criado, mas a planilha interna não foi montada".
+
+⚠️ **17/09/2026 — quem cria a marca padrão agora é o BANCO.** O "avisa em
+vez de redirecionar" acima era o remendo de um buraco real: eram dois
+INSERTs sem transação, e **150 dos 157 clientes ativos estavam sem marca
+nenhuma** (os cadastrados antes de 09/09/2026, quando a action passou a
+criá-la). O campo Marca do projeto é obrigatório e só lista marcas do
+cliente, então escolher quase qualquer cliente travava ali.
+
+- `20260917160001_marca_padrao_para_clientes_antigos.sql` — backfill:
+  PRD-01 com o nome fantasia para quem não tinha nenhuma. Depois dela,
+  157 de 157.
+- `20260917160002_marca_padrao_nasce_com_o_cliente.sql` — o trigger
+  `trg_clientes_marca_padrao`, que cria a PRD-01 na MESMA transação do
+  INSERT do cliente, venha ele de onde vier.
+- A action passou a **encontrar** a padrão em vez de criá-la, com um
+  insert de reserva para a janela entre deploy e migration. Os índices
+  únicos que já existiam impedem a duplicata.
+
+⚠️ **17/09/2026 — o cliente se cadastra sem sair do formulário de
+projeto** (decisão 089). O campo Cliente virou `CampoCliente`, gêmeo do
+`CampoFornecedor` da PP: busca por nome ou código, "+" cadastra, lápis
+edita, e o "+" ao lado de Marca abre o mesmo dialog na seção Marcas. O
+dialog usa o MESMO `ClienteForm` da página, em `modo="dialog"` — inclusive
+a regra de **inativar em vez de apagar** marca e portal já gravados. A
+tela `/clientes` não mudou.
 - O backfill cobre **todos os clientes, inclusive os que já tinham outros produtos** — promove o homônimo quando existe, senão cria com o próximo `PRD-NN` livre.
 - **Imutável:** não pode ser apagado, inativado, despromovido, trocar de cliente nem mudar de código. A única alteração de nome permitida é a que acompanha o nome fantasia.
 
@@ -3912,3 +3937,269 @@ Regras em [078](../decisions/078-orcamento-mensal-fee-e-always-on.md), seção "
 - **Remoção:** o grupo removido pela agregada saiu do banco (`grupos_removidos: 1`), e o `-13` voltou ao estado de antes.
 - **Orçamento travado:** o `0-0001/26-09` (job criado) aparece só para consulta, com os meses empilhados, sem "Novo grupo" e sem o link.
 - **Não exercitado:** a recusa do servidor para um grupo novo sem mês (payload forjado) foi conferida só pelo código.
+
+## ⚠️ Nota de 2026-09-17 — O Exportar ganhou o modo "Interna" (decisão 088)
+
+[Decisão 088](../decisions/088-a-planilha-interna-sai-pelo-exportar.md). A
+exportação **para o cliente não mudou**: sem `?modo=interna` as duas rotas
+(`/api/orcamentos/[projetoId]/export` e a da versão) devolvem exatamente a
+planilha de sempre.
+
+**O que é novo no orçamento:**
+
+- **Popover da versão** (`acoes-versao.tsx`): duas opções, "Para o cliente"
+  (marcada por padrão) e "Interna". A segunda acrescenta `?modo=interna` ao
+  link, e o arquivo sai como `interna-<código>-v<n>.xlsx`, aba "Interna".
+- **Menu do projeto e da agregada** (`exportar-orcamentos-menu.tsx`):
+  segmento "Para o cliente | Interna" no topo. No modo Interna o **job
+  aberto entra** (sai a versão aprovada, sem realizado) e o aviso vermelho
+  vira uma nota explicando o que sai; a confirmação de "orçamento aprovado"
+  não aparece, porque ali a versão aprovada é justamente o que se quer. As
+  travas de mistura de modelo e de câmbio continuam valendo.
+- **A planilha do cliente ganhou** (aprovado junto): seis sub-totais por
+  tipo (A com AR, e F separado de FI), o nome do grupo repetido na coluna A
+  de cada item, a paleta de um tom por parte e o fim do amarelo do
+  internacional. Ela continua fechando no FATURAMENTO.
+
+**O que a interna traz:** orçado (A..G), planejado (H..L) com rentabilidade
+por linha, e o fechamento com os seis sub-totais, TOTAL, IMPOSTO,
+HONORÁRIOS e VALOR DO JOB — mais as linhas de save quando existem. No
+mensal, um bloco por mês (faixa do mês, faixas e cabeçalho repetidos) e o
+resumo do trimestre por tipo de custo. **Com mais de um orçamento no
+arquivo**, cada um fecha no seu valor do job e o arquivo termina numa faixa
+"RESUMO" com o VALOR DO JOB TOTAL (`somarFechamentosInternos`) — a do
+cliente continua com um fechamento único agregado.
+
+**Importação:** a interna do orçamento **volta pelo Importar**. A coluna
+oculta dos ids não é mais necessariamente a H — `acharColunaDeMarcas`
+(`lib/importacao/coluna-marcas.ts`) acha a coluna pela marca `interna:…` da
+linha 1 e cai na H quando não há marca, então as planilhas já enviadas
+continuam entrando. ⚠️ Quem mexer nos parsers precisa saber de três
+mudanças: faixa e cabeçalho repetidos são ignorados; o título da seção e o
+do mês passam **antes** do primeiro cabeçalho; e o fechamento — inclusive o
+do RESUMO — encerra a **seção**, não o arquivo (é o que permite um
+fechamento por orçamento na interna do projeto, e o que conserta a mensal
+do cliente com vários orçamentos). Testes em
+`lib/importacao/interna.test.ts`.
+
+**Permissão:** `orcamentos.exportar` para a interna do orçamento, conferida
+na rota (a planilha do cliente segue sem checagem própria, como era).
+
+---
+
+## ⚠️ Correção (2026-09-17) — o GP não conseguia enviar job para abertura
+
+**Relato:** um GP abriu "Enviar job para abertura" no orçamento
+`AMB-0003/26-01`, não conseguiu concluir e mandou um print com campos em
+vermelho. Conferido no navegador **logado com o papel `gerente_producao`**
+(não como administrador) — é o que revelou a causa.
+
+**O que ele via, e ninguém mais:**
+
+- `GP Responsável` e `Produtor Responsável` como "— não informado";
+- a faixa âmbar "Complete antes de abrir o job: GP responsável (no
+  orçamento), Produtor responsável (no orçamento)";
+- **"Confirmar dados" inerte**: `handleConfirmar` sai cedo quando
+  `herdadosIncompletos` devolve algo, e a faixa fica no fim de um
+  formulário que rola — longe do botão. Sem mensagem, sem toast.
+
+**Causa (banco, não tela).** A RLS de `profiles` só liberava o perfil dos
+colegas para `administrador`. Para GP, produtor, financeiro e freelancer
+**todo embed `profiles!...(nome)` voltava nulo** — 42 consultas no app. O
+formulário usava o *nome* do GP como prova de que o orçamento estava
+completo; sem nome, cadastro "incompleto". Enquanto todos eram
+administrador o defeito não existia na prática.
+
+**Correções:**
+
+1. `supabase/migrations/20260917190001_perfil_do_colega_visivel_no_tenant.sql`
+   — política `profiles_select_membros_do_tenant`: membro ativo lê o
+   perfil dos demais membros ativos do mesmo tenant, por
+   `public.e_colega_de_tenant(uuid)` (`SECURITY DEFINER`, porque a policy
+   não enxerga o que a RLS de `tenant_members` esconde). Aditiva: a
+   política antiga de administrador continua no lugar, agora como
+   subconjunto. Detalhes em `docs/02-seguranca-auth-rls.md`.
+2. `enviar-job-modal.tsx` — `HerdadosJob` ganhou `produtoId`, `gpId` e
+   `produtorId` (**obrigatórios**, nunca opcionais), e
+   `herdadosIncompletos` passou a olhar os ids. É exatamente o que
+   `enviarJobParaAbertura` confere no servidor (`projeto.produto_id`,
+   `orc.gp_responsavel_id`, `orc.produtor_id`). **Trava de tela não se
+   apoia em nome** — nome depende de leitura; id, não.
+3. `page.tsx` do orçamento — `produto_id` cru entrou no `select` do
+   projeto, ao lado do embed `produto`.
+
+**Contato de cobrança — asterisco por campo.** O rótulo "Contato de
+cobrança \*" sozinho não dizia qual das três caixas era obrigatória. A
+seção ganhou cabeçalho de colunas: **Nome \*** · **Número** ·
+**E-mail \***.
+
+⚠️ **O asterisco é a única marcação — "opcional" não se escreve** (Tiago,
+17/09/2026). A primeira versão trazia "Número · opcional" no rótulo e no
+placeholder; coluna sem asterisco já quer dizer opcional, então era a
+mesma informação três vezes. `RotuloContato` ficou só com `obrigatorio`, e
+o placeholder do número é "Número". A linha de apoio também perdeu o
+"Número é opcional". Vale para qualquer campo novo desta tela.
+
+O cabeçalho some abaixo de `md`, onde a grade vira uma coluna só e os
+rótulos ficariam longe das caixas — nessa largura o diálogo inteiro já
+degrada (3 colunas viram 1) e ele é de uso desktop.
+
+**Verificação (navegador, ao vivo):**
+
+- Como **GP** (usuário de teste `gerente_producao`), viewport 1024×768 —
+  a mesma geometria do print: nomes preenchidos, faixa âmbar some,
+  cabeçalho com os asteriscos, os quatro calendários abrem (viram para
+  cima quando não cabem embaixo) e o envio criou **JOB-0036**
+  (`aguardando_abertura`, `created_by` = o GP, 1 contato gravado).
+  Cancelado em seguida pelo fluxo real — orçamento voltou a `aprovado`.
+- Como **administrador**: mesma tela sem regressão (asteriscos, nomes,
+  sem faixa).
+- Lista de Projetos & Orçamentos vista pelo GP: a coluna "GP RESPONSÁVEL"
+  voltou a trazer nome (Debora Brito, Lufa, Tiago…) — antes vinha vazia
+  para qualquer não-administrador.
+- `tsc --noEmit`, `next lint` e `npm run build` limpos.
+
+**Ponta solta:** a faixa âmbar continua no fim do formulário. Se um
+orçamento realmente estiver sem marca/GP/produtor, o "Confirmar dados"
+segue calado para quem não rolar até lá. Vale um aviso junto do botão —
+não entrou aqui para manter a correção pequena.
+
+---
+
+## ⚠️ Nota de 2026-09-18 — O "+" do Cliente só aparece para quem pode cadastrar
+
+Complemento da [decisão 089](../decisions/089-lista-longa-se-busca-e-o-codigo-do-cliente-nao-aparece.md)
+(§6), no formulário de projeto (`/orcamentos/novo` e a edição).
+
+São **duas permissões**, e o gate segue o papel do botão:
+
+| | quem tem | o que controla |
+|---|---|---|
+| `cadastros.clientes.inline` | Admin, **GP, Produtor** | o "+" do campo Cliente e o atalho *"Cadastrar «…» como cliente"* da busca sem resultado |
+| `cadastros.clientes.editar` | só Admin | o **lápis**, que abre a ficha do cliente escolhido |
+
+O **"+" ao lado de Marca** também é `.inline` (Admin, GP, Produtor): ele
+deixou de abrir a ficha do cliente e agora abre o `NovaMarcaDialog` — um
+campo, e a gravação é `adicionarMarcaAoCliente`, que só INSERE. A marca
+criada entra na lista e fica escolhida. Renomear e inativar marca seguem
+no cadastro do cliente, com o administrador.
+
+A **busca do campo continua igual para todo mundo** — o GP e o produtor
+escolhem cliente normalmente.
+
+Quem não tem o gate não vê o botão, em vez de abrir o cadastro e ler "Você
+não tem permissão para essa ação" no fim, como fazia. O texto de apoio
+muda junto: *"Peça a um administrador para cadastrar."*
+
+⚠️ **O `.inline` só CRIA.** Editar o cadastro de um cliente que já existe
+continua sendo do administrador. O que o GP e o produtor ganharam é criar
+cliente e acrescentar marca — que era o caso comum: **155 dos 157 clientes
+ativos têm exatamente uma marca**, a PRD-01 do backfill.
+
+⚠️ **Duas armadilhas que só a tela mostrou**, e que valem para qualquer
+campo com "+" ao lado: o `Select` do Radix **descarta um `value` cuja
+opção ainda não existe** (por isso a marca nova é escolhida em dois
+tempos, num efeito); e um efeito que **avisa o pai e depois espera uma
+promessa não pode ter cleanup que cancele** — o aviso re-roda o efeito, o
+cleanup mata a resposta, e o dialog não abre sem erro nenhum. Decisão 089
+§6b.
+
+**Sem migration:** a RLS de `clientes`, `cliente_produtos` e
+`cliente_portais` é por tenant e não olha papel. Só o gate da action
+mudou.
+
+⚠️ **Bug corrigido junto:** o submit do dialog subia para o formulário de
+projeto (portal do Radix sai do DOM, não da árvore React). Ver decisão 089
+§7 — todo formulário que possa abrir dentro de outro leva
+`e.stopPropagation()`.
+
+Conferido em 18/09/2026 como **GP Teste Claude**, com gravação real: o "+"
+aparece, o cliente é criado (`created_by` = o GP) já com a PRD-01 do
+trigger, fica escolhido no campo e a marca chega na lista sem recarregar;
+o "+" da Marca abre o dialog de uma linha e a marca criada fica escolhida
+(PRD-02 e PRD-03 no cliente "Teste"); o lápis não aparece. Os clientes e
+as marcas de teste foram inativados. Como administrador, os dois botões
+continuam lá.
+
+---
+
+## ⚠️ Nota de 2026-09-18 (2) — Acessos revistos, e o código do cliente virou automático
+
+Quatro mudanças pedidas pelo Tiago no mesmo dia.
+
+**1. Quem cadastra cliente.** O **produtor saiu**: `cadastros.clientes.inline`
+é de Administrador e GP. Cliente é relação comercial da agência, e quem a
+abre é o GP. O produtor continua criando orçamento e escolhendo cliente da
+lista — o que some é o "+".
+
+**2. Quem cadastra fornecedor.** O **freelancer entrou**:
+`cadastros.fornecedores.inline` é de Admin, GP, Produtor e Freelancer. Ele
+edita o realizado dos jobs dele e esbarra no mesmo fornecedor fora da
+lista.
+
+**3. "Gerente de Produção" virou "Gerente de Projeto"** na tela. O
+identificador do banco continua `gerente_producao` — é valor de enum em
+uso, e trocá-lo mexeria em dado de todas as frentes. Mudou o `roleLabel`
+(`lib/types.ts`) e as 6 mensagens que citavam o papel por extenso.
+
+**4. O código do cliente não é mais digitado.** Três letras tiradas do
+nome fantasia, desempate pela próxima letra do alfabeto, e **congelado
+assim que o cliente tem projeto** — a sigla está dentro dos códigos de
+projeto já emitidos. Ver [decisão 092](../decisions/092-o-codigo-do-cliente-e-automatico-e-congela-no-primeiro-projeto.md),
+que traz os números da base: **dos 160 clientes, 151 já usavam 3 letras e
+só 5 batiam com a sugestão antiga, de 6**.
+
+✅ **O backfill foi aplicado** (migrations `20260918180001` e
+`...80002`), com o Tiago decidindo caso a caso — `FP` e `SF` ficaram com
+duas letras, de propósito. É essa decisão que fechou o campo de vez: o
+código é escolha de quem cadastra, não consequência do nome, e por isso
+**numa edição ele nunca muda**. Corrigir um código é trabalho de
+migration.
+
+⚠️ **O projeto de teste mudou de código: `0-0001/26` agora é
+`PEV-0007/26`** — mesmo projeto, mesmo cliente, mesmos 14 orçamentos e 8
+jobs. O `CLAUDE.local.md` ainda cita o nome antigo.
+
+⚠️ **`projetos_financeiro` entrou junto.** É da outra frente, mas usa a
+mesma sigla do cliente; deixá-la de fora partiria o cadastro em dois.
+Quatro linhas mudaram lá, e nenhum job mudou de código.
+
+✅ **O SEBRAE virou `NOV`**, e para isso o "Beats Esquenta Festivals"
+saiu do cliente de rascunho "Novo" e passou a ser da **AMBEV, marca
+BEATS** — `NOV-0003/26` virou `AMB-0004/26`, com os 3 orçamentos e os 2
+jobs. O "Novo" virou `NOO`. Decisão 092 §5c.
+
+⚠️ **`jobs.produto` é TEXTO**, copiado do nome da marca na abertura do
+job, e não uma FK. Mover um projeto de cliente NÃO o alcança, e uma
+varredura do banco por `produto_id`/`marca_id` em `jobs` não acha nada —
+foi a tela do JOB-0024 que mostrou "Marca Novo" depois da mudança.
+**Depois de mover projeto de cliente, abra um job.**
+
+✅ **Os projetos com sigla `0-` também saíram** (decisão 092 §5d). Eram
+três, e os jobs mostraram que não eram o mesmo caso: dois eram o par do
+IMC Stella Artois, que só errava a sigla (viraram `AMB-0005/26`); o
+terceiro, "Projeto Teste 1" no financeiro, tinha os jobs do `PEV-0007/26`
+e estava no cliente ERRADO — foi para o Pevetech.
+
+> **Para achar esse tipo de erro, compare o cliente do par pelas duas
+> tabelas.** `projetos` e `projetos_financeiro` guardam o mesmo trabalho,
+> e o job é o que os liga: `j.projeto_id` x `j.projeto_financeiro_id`.
+> Hoje não há nenhum descasado.
+
+✅ **A "Operação HitLab 2026" também** — os dois lados viraram
+`HIT-0001/26`, do HITLAB (092 §5e). **Com ela, a varredura não acha mais
+nenhuma divergência entre a sigla do projeto e o código do cliente**, nas
+duas tabelas.
+
+✅ **O cliente "Novo" foi apagado** (092 §5f). Era o cadastro de rascunho
+— sem CNPJ, nome "Novo" — que originou as três correções do dia. Restam
+156 clientes, todos com marca padrão.
+
+> **O cadastro de rascunho é a origem, não o sintoma.** As três
+> divergências de sigla vieram de projetos abertos sob um cliente genérico
+> e transferidos depois. Cadastrar o cliente de verdade na hora é o que o
+> "+" do campo Cliente passou a permitir ao GP (decisão 089 §6).
+
+Conferido no navegador em 18/09/2026, com gravação real no Pevetech (nome
+alterado e restaurado; o código continuou `PEVETE`), e como GP — a sidebar
+já diz "GERENTE DE PROJETO".

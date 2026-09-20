@@ -960,6 +960,28 @@ export async function carregarDetalheDoJob(
   // a marca `abertura_em_revisao` fecha o envio sem mexer no status
   // (decisão 040). Errata e BV seguem em `podeAcoesPlanilha`.
   const podeGerarPP = quemPodeMexer && jobAceitaGerarPP(job.status);
+  /**
+   * O "+" e o lápis do campo Fornecedor da PP são DUAS permissões, e não
+   * uma (18/09/2026):
+   *
+   *  * criar pelo drawer é `cadastros.fornecedores.inline` — o gate mais
+   *    largo da decisão 048, que existe justamente para o GP e o produtor
+   *    cadastrarem sem sair da PP;
+   *  * abrir o cadastro para editar é `cadastros.fornecedores.editar`,
+   *    que é só do administrador.
+   *
+   * A action barra dos dois lados de qualquer jeito. Aqui é para a pessoa
+   * não preencher o cadastro inteiro e só então ler "Você não tem
+   * permissão para essa ação".
+   */
+  const podeCadastrarFornecedor = pode(
+    session.activeRole,
+    "cadastros.fornecedores.inline",
+  );
+  const podeEditarFornecedor = pode(
+    session.activeRole,
+    "cadastros.fornecedores.editar",
+  );
   // Quem presta contas de cada verba (decisão 081, pergunta 6a): o
   // responsável por ela, o responsável do job ou um administrador. A função
   // do banco checa de novo; aqui é só para mostrar o botão a quem pode.
@@ -1047,6 +1069,10 @@ export async function carregarDetalheDoJob(
     // Quem pode enviar para encerramento (matriz `jobs.encerrar`). O
     // servidor confere de novo em `encerrarJob`.
     podeEncerrar: pode(session.activeRole, "jobs.encerrar"),
+    // Exportar a planilha interna do job (decisão 088): quem vê a tela
+    // exporta. O freelancer, que só tem `jobs.ver_restrito`, fica de fora,
+    // e a rota confere de novo.
+    podeExportarInterna: pode(session.activeRole, "jobs.ver"),
     faturamentoEnvioUnico,
     faturamentoCompleto,
     internacional: planilha.internacional,
@@ -1054,6 +1080,8 @@ export async function carregarDetalheDoJob(
     podeEditarRealizado,
     podeAcoesPlanilha,
     podeGerarPP,
+    podeCadastrarFornecedor,
+    podeEditarFornecedor,
     podeEnviarPP,
     podeConfirmarBv,
     ppsQuePossoPrestarContas,
