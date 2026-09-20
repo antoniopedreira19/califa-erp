@@ -2935,17 +2935,49 @@ export interface ColaboradorSalario {
   created_at: string;
 }
 
-/** Camada 2 — snapshot da folha por competência. ESQUELETO no MVP;
- *  motor da folha é fase futura. Nenhuma UI escreve aqui ainda. */
+/** Camada 2 — snapshot da folha por competência. Uma linha = 1
+ *  colaborador × 1 competência. Ver docs/modulos/rh/20-folha-mensal.md. */
+export type FolhaLinhaStatus =
+  | "rascunho"
+  | "enviada"
+  | "aprovada"
+  | "pendente_correcao"
+  | "paga";
+
+export function folhaLinhaStatusLabel(s: FolhaLinhaStatus): string {
+  switch (s) {
+    case "rascunho":
+      return "Rascunho";
+    case "enviada":
+      return "Enviada";
+    case "aprovada":
+      return "Aprovada";
+    case "pendente_correcao":
+      return "Pendente";
+    case "paga":
+      return "Paga";
+  }
+}
+
 export interface FolhaPagamento {
   id: string;
   tenant_id: string;
   colaborador_id: string;
   competencia_ano: number;
   competencia_mes: number;
+  /** Valor MANUAL que será pago. Não é vigente da Camada 1. */
   salario_base: string;
-  /** text no MVP — vira enum próprio quando o motor da folha existir. */
-  status: string;
+  status: FolhaLinhaStatus;
+  motivo_pendencia: string | null;
+  enviada_em: string | null;
+  enviada_por: string | null;
+  aprovada_em: string | null;
+  aprovada_por: string | null;
+  reprovada_em: string | null;
+  reprovada_por: string | null;
+  data_pagamento: string | null;
+  paga_em: string | null;
+  paga_por: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;

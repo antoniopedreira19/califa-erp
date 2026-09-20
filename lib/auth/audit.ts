@@ -241,6 +241,14 @@ export type AuditAction =
   | "colaborador.alocacao_fechada"
   | "colaborador.salario_mudou"
   | "colaborador.salario_corrigido"
+  // Folha mensal (subsistema RH, 2026-09-18)
+  | "folha.gerada"
+  | "folha.linha.editada_rh"
+  | "folha.linha.editada_financeiro"
+  | "folha.linha.enviada"
+  | "folha.linha.aprovada"
+  | "folha.linha.reprovada"
+  | "folha.linha.paga"
   | "acao_negada";
 
 export interface AuditPayload {
