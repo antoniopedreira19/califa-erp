@@ -1,6 +1,5 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Receipt, Info } from "lucide-react";
+import { Receipt } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/page-header";
@@ -8,6 +7,7 @@ import { EmptyState } from "@/components/empty-state";
 import { pode } from "@/lib/permissoes";
 import type { FolhaLinhaStatus } from "@/lib/types";
 import { FolhasList, type CompetenciaResumo } from "./folhas-list";
+import { NovaFolhaModal } from "./nova-folha-modal";
 
 export const dynamic = "force-dynamic";
 
@@ -79,25 +79,19 @@ export default async function FolhasPage() {
         title="Folhas de pagamento"
         description="Uma folha por competência. Cada linha é um colaborador; carrega salário base e rateio de alocação. RH gera, financeiro aprova."
         icon={Receipt}
+        actions={podeGerar ? <NovaFolhaModal /> : undefined}
       />
-
-      {/* Aviso de rodada 1 — geração real chega na Rodada 2 */}
-      {podeGerar && (
-        <div className="flex items-start gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
-          <Info className="h-4 w-4 mt-0.5 shrink-0" />
-          <span>
-            Geração da folha entra em breve. Estrutura de banco e listagem
-            estão prontas — próxima entrega libera o botão &ldquo;Nova
-            folha&rdquo; e a revisão pelo RH.
-          </span>
-        </div>
-      )}
 
       {competencias.length === 0 ? (
         <EmptyState
           icon={Receipt}
           title="Nenhuma folha registrada ainda"
-          description="Assim que a geração for liberada, a folha do mês atual aparece aqui como rascunho pronto para revisão."
+          description={
+            podeGerar
+              ? "Clique em Nova folha para gerar a primeira competência."
+              : "Aguarde o RH gerar a primeira folha."
+          }
+          action={podeGerar ? <NovaFolhaModal /> : undefined}
         />
       ) : (
         <FolhasList competencias={competencias} />
