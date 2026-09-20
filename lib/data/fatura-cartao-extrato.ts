@@ -360,6 +360,9 @@ export type ItemDoCentro = {
   /** Com sinal: estorno de compra negativo. */
   valor: number;
   papel: PapelDoItem;
+  /** `origem` do lançamento (`pp_baixa`, `avulsa_baixa`…): a tela limpa o
+   *  prefixo da descrição por ela, como na conciliação. */
+  origem: string;
 };
 
 export type CentroDaFatura = {
@@ -403,6 +406,7 @@ export function agruparPorCentro(extrato: ExtratoDaFatura): DetalheDaFatura {
       subtipo_nome: it.subtipo_nome,
       valor,
       papel: it.papel,
+      origem: it.origem,
     });
     mapa.set(chave, centro);
   }
