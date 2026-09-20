@@ -5592,3 +5592,32 @@ Levantamento que ficou registrado no caminho: quem marca os itens como
 pagos é o **fechamento** da fatura, não a baixa; e a parcela deixada como
 "decidir na baixa" ainda aceita cartão como forma na baixa, gerando saída
 direta da conta bancária sem passar por fatura.
+
+## ⚠️ Nota de 2026-09-20 — 093, Entrega 1: a baixa é a porta da fatura
+
+Implementada e testada de ponta a ponta (branch
+`feat/cartao-confirma-na-baixa-093`, migration
+`20260920100001_o_item_entra_na_fatura_na_baixa.sql`). O que muda para quem
+mexe no módulo:
+
+- **Aprovar PP com cartão não roteia mais.** Grava forma, cartão e plano
+  na PP; a parcela vai para Títulos a Pagar sem fatura.
+  `rotear_pp_para_cartao` é legado.
+- **A baixa com forma "cartão" é o que coloca o item na fatura** — pela
+  data do pagamento informada, via `cartao_lancar_item` (lançamento
+  `item` na conta-espelho, sem conta bancária). O dialog de baixa já vem
+  com a forma e o cartão da intenção.
+- **Fechar não marca mais item como pago**; soma lançamentos `item`/`ajuste`
+  + o legado pendente. **Reabrir desfaz só os ajustes.** Estorno de baixa
+  de item em fatura aberta tira o item da fatura; fatura fechada exige
+  reabrir antes.
+- **Estorno de compra** vira lançamento de entrada na fatura aberta na
+  hora (gatilho AFTER INSERT).
+- `TituloRow` ganhou `forma_prevista` e `cartao_previsto_id`;
+  `BaixaRegistradaAlvo` ganhou `viaCartao` — os três obrigatórios.
+
+Tudo exercitado no Projeto Teste (agora **PEV-0007/26**, renumerado pela
+092) com o cartão ZZ Teste Fatia 2: a tabela do que foi conferido está na
+[093 §8c](../decisions/093-o-item-entra-na-fatura-na-confirmacao-do-pagamento.md).
+Faltam as Entregas 2 (nova aba Cartão) e 3 (conciliação em dois níveis e
+`vw_fluxo_caixa` projetando pela fatura).

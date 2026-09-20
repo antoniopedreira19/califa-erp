@@ -127,6 +127,15 @@ export interface TituloRow {
   /** Cartão de crédito associado. Null para PP ou formas sem cartão. */
   cartao_credito_id: string | null;
   /**
+   * Intenção registrada na aprovação da PP ou no cadastro da avulsa
+   * (decisão 093). Serve para PRÉ-PREENCHER a baixa, e só: não decide em
+   * que aba a linha aparece — isso é `forma_pagamento`, que é a forma
+   * REALIZADA (ou "cartão" quando a linha já está numa fatura). Sem isto
+   * a PP aprovada "no cartão" chegava na baixa pedindo a forma de novo.
+   */
+  forma_prevista: FormaPagamento | null;
+  cartao_previsto_id: string | null;
+  /**
    * Preenchido quando ESTA linha é um estorno — o id da compra que ela
    * desfaz. A aba Cartão mostra a linha como crédito e a subtrai da
    * fatura (29/08/2026).
@@ -488,6 +497,7 @@ export function TitulosPagarList({
         subtipoNome: conferindo.subtipo_nome,
         dataPagamento: conferindo.data_pagamento,
         vencOriginal: conferindo.venc_original,
+        viaCartao: conferindo.forma_pagamento === "cartao_credito",
       }
     : null;
 
@@ -915,8 +925,8 @@ export function TitulosPagarList({
         tipos={tipos}
         subtipos={subtipos}
         cartoes={cartoes}
-        formaPlanejada={baixando?.forma_pagamento ?? null}
-        cartaoPlanejadoId={baixando?.cartao_credito_id ?? null}
+        formaPlanejada={baixando?.forma_pagamento ?? baixando?.forma_prevista ?? null}
+        cartaoPlanejadoId={baixando?.cartao_credito_id ?? baixando?.cartao_previsto_id ?? null}
         pending={pending}
         erro={erroAcao}
         onConfirm={(payload) => {

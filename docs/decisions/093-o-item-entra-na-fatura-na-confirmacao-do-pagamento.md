@@ -2,9 +2,11 @@
 
 **Data:** 2026-09-18
 **Decidido por:** Tiago
-**Status:** decidida e **fechada no desenho** (canvas "Cartões — estado
-atual e proposta") — **ainda não implementada**.
-**Migrations:** nenhuma ainda.
+**Status:** decidida e fechada no desenho (canvas "Cartões — estado
+atual e proposta"). **Entrega 1 (banco + baixa) implementada e testada em
+20/09/2026** — ver §8. Entregas 2 (aba Cartão) e 3 (conciliação em dois
+níveis + fluxo de caixa) ainda por fazer.
+**Migrations:** `20260920100001_o_item_entra_na_fatura_na_baixa.sql`.
 
 ---
 
@@ -167,3 +169,98 @@ forma no diálogo de baixa, e nesse caminho gera saída direta na conta
 bancária, sem passar por fatura nenhuma — o oposto do que a regra do cartão
 manda. Com a decisão 093 os dois caminhos passam pelo mesmo lugar; até lá,
 fica registrado que ele existe.
+
+⚠️ **20/09/2026 — resolvido pela Entrega 1.** A baixa com forma "cartão"
+passou a ser o único caminho para dentro da fatura, venha a parcela com
+intenção de cartão ou como "decidir na baixa" (§8).
+
+## 8. Entrega 1 — banco e baixa (20/09/2026)
+
+Implementada em branch própria (`feat/cartao-confirma-na-baixa-093`),
+testada de ponta a ponta no navegador e conferida no banco. A regra
+organizadora que a migration segue:
+
+> **Pertencer à fatura = ter lançamento `item`/`ajuste` na conta-espelho do
+> cartão com aquele `fatura_cartao_id`.** O `fatura_cartao_id` da avulsa ou
+> da parcela é só um ponteiro para esse lançamento.
+
+### 8a. O que mudou no banco
+
+- **`cartao_lancar_item(...)`** — helper `security definer` que resolve a
+  fatura pela data (`fatura_aberta_do_cartao`) e grava o lançamento na
+  conta-espelho, com `forma_pagamento = cartao_credito`, `papel_na_fatura`
+  e `fatura_cartao_id`. Só as RPCs chamam; `revoke` de `public`, `anon` e
+  `authenticated`.
+- **`dar_baixa_pp_parcela` / `dar_baixa_avulsa_com_plano` /
+  `dar_baixa_desembolso_parcela`** — com forma cartão: sem conta bancária,
+  chamam o helper, marcam pago com `fatura_cartao_id`. Item legado já
+  roteado (fatura setada, não pago) continua recusando a baixa própria:
+  entra no fechamento, como antes.
+- **`aprovar` da PP** (`actions-titulos.ts`) — deixou de chamar
+  `rotear_pp_para_cartao` (agora comentada como LEGADO); grava
+  `forma_pagamento`, `cartao_credito_id` e o plano de contas na PP. A
+  parcela nasce sem fatura e vai para Títulos a Pagar.
+- **`avulsa_entra_na_fatura`** (gatilho) — não amarra mais à fatura no
+  cadastro. Continua validando fatura explícita e, quando a avulsa nasce
+  sem `data_prevista_pagamento`, preenche com o vencimento projetado por
+  `proxima_fatura_cartao` (antes era o roteamento que fazia isso).
+- **`avulsa_estorno_lanca_no_cartao`** (gatilho AFTER INSERT, novo) — o
+  estorno de compra vira lançamento de **entrada** na fatura aberta na
+  hora e nasce `baixada`.
+- **`fechar_fatura_cartao`** — a prevista soma lançamentos `item`/`ajuste`
+  + pendentes legados; os ajustes de diferença entram pelo helper com
+  papel `ajuste`; **não marca mais item como pago**. O legado pendente é
+  convertido em lançamento na data da competência.
+- **`reabrir_fatura_cartao`** — desfaz só os ajustes (avulsa volta a
+  `aprovada` apontando para a fatura; lançamento apagado). Item confirmado
+  fica.
+- **`estornar_baixa_*`** — item em fatura **aberta**: apaga o lançamento,
+  limpa `pago_em`/`fatura_cartao_id`, audita
+  `pedido_compra.parcela_saiu_da_fatura` / `conta_avulsa.saiu_da_fatura`.
+  Fatura fechada ou paga: recusa ("Reabra a fatura, ou estorne o
+  pagamento dela").
+
+### 8b. O que mudou na tela
+
+- **Dialog de baixa** — com forma cartão esconde a conta bancária, ignora a
+  data sugerida e avisa em qual fatura o item entra ("Entra na fatura de
+  set/26 — fecha 25/09, vence 05/10"). Vem pré-preenchido com a forma e o
+  cartão da intenção (`forma_prevista`/`cartao_previsto_id`, campos novos
+  e **obrigatórios** em `TituloRow`).
+- **Baixa registrada** — `viaCartao` (obrigatório em
+  `BaixaRegistradaAlvo`) troca o aviso do estorno: "sai da fatura do
+  cartão… sem mexer em conta bancária. Se a fatura já fechou, reabra-a
+  antes". Contas a Receber manda `false`.
+- Textos de **Fechar fatura**, **Reabrir fatura**, **Aprovar PP** e o
+  rodapé da aba Cartão reescritos para a regra nova.
+- O botão continua **"Dar baixa"** / "Confirmar baixa" (Tiago,
+  19/09/2026): a baixa é do pagamento, que aconteceu; o que muda é onde o
+  dinheiro sai.
+
+### 8c. O que foi exercitado (Projeto Teste PEV-0007/26, cartão ZZ Teste Fatia 2)
+
+| fluxo | resultado conferido no banco |
+|---|---|
+| Avulsa AV-00001 cadastrada com cartão | `fatura_cartao_id` nulo; aparece em Títulos a Pagar, não na aba Cartão |
+| Baixa com cartão em 20/09 | FC-00003 criada (fecha 25/09, vence 05/10); lançamento `item` R$ 150 na conta-espelho; avulsa `baixada`; nenhum lançamento em conta bancária |
+| Estorno dessa baixa | lançamento apagado; avulsa `aprovada`, sem fatura; volta a Títulos a Pagar; FC-00003 com 0 itens |
+| Estorno de compra (R$ 50) | AV-00002 `baixada`, lançamento de **entrada** R$ 50 na FC-00003 na hora; faixa "2 itens · R$ 100,00" |
+| Fechar FC-00003 com valor cobrado R$ 110 | ajuste AV-00003 (R$ 10, 11 · Despesa com Juros) `baixada` com lançamento `ajuste` na competência; soma = 110; título FC-00003 em Títulos a Pagar |
+| Reabrir FC-00003 | só o ajuste desfeito (avulsa `aprovada`, lançamento apagado); AV-00001 e AV-00002 continuam pagos e na fatura; audit `ajustes_apagados: 1` |
+| PP-00060 enviada e **aprovada com cartão** | PP `forma_pagamento = cartao_credito`, cartão e plano gravados; parcela **sem fatura**, em Títulos a Pagar; nada na aba Cartão |
+| Baixa da parcela com cartão | dialog já veio com cartão e ZZ; parcela paga na FC-00003; lançamento `item` R$ 250 com `pedido_compra_parcela_id`; PP `pago` |
+| Estorno da baixa da parcela | lançamento apagado, parcela sem `pago_em`/fatura, PP `aprovada`; audit `parcela_saiu_da_fatura` + `parcela_baixa_estornada` |
+
+Observações que ficaram:
+
+- O dialog de baixa de **parcela de PP** não pré-preenche o subtipo gravado
+  na aprovação (o tipo vem). Comportamento anterior à 093, ligado à ordem
+  de carga do Combobox; não foi mexido.
+- AV-00001 ficou com `data_pagamento` nulo (criada antes do complemento do
+  gatilho); a coluna Vencimento da aba mostra "—". Só esse registro.
+- O toast da baixa segue "enviado para a conciliação" — vale também para o
+  cartão (extrato da conta-espelho), mas pode ganhar texto próprio na
+  Entrega 2.
+- Depois do teste, `git`/dado: FC-00003 aberta com AV-00001, AV-00002 e o
+  ajuste AV-00003 pendente; PP-00060 aprovada com intenção de cartão e em
+  aberto — estado bom para exercitar as Entregas 2 e 3.
