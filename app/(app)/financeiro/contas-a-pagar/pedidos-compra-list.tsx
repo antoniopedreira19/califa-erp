@@ -473,7 +473,7 @@ export function PedidosCompraList({
                   {situacaoDaVerba(r) ? (
                     <SituacaoVerbaChip situacao={situacaoDaVerba(r)!} />
                   ) : (
-                    <Badge className={cn("border", statusBadgeClasses(r.status))}>
+                    <Badge className={cn("whitespace-nowrap border", statusBadgeClasses(r.status))}>
                       {ppStatusLabel(r.status)}
                     </Badge>
                   )}
