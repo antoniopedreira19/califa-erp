@@ -5654,3 +5654,15 @@ vem pré-preenchida, o fluxo projeta pela fatura); `fatura_aberta_do_cartao`
 virou leitura `stable` sem efeito colateral e a escrita passou a se chamar
 `garantir_fatura_aberta_do_cartao` (chamada por `cartao_lancar_item` e pelo
 legado `rotear_pp_para_cartao`). A FC-00004 vazia foi apagada.
+
+⚠️ **20/09/2026, acabamentos da 093 (§13):** a baixa de parcela de PP abre
+com o **subtipo** da aprovação (a consulta de PPs da página não trazia
+`plano_conta_tipo_id`/`plano_conta_subtipo_id`); o toast da baixa no
+cartão nomeia a fatura em que o item entrou **de fato** — `darBaixaTitulo`
+agora devolve `fatura` (código e competência; `null` fora do cartão), lida
+do lançamento criado, porque a competência da data pode já ter fechado; o
+badge da aba Cartão conta fatura aberta com o fechamento já passado, no
+fuso de São Paulo; `cartao` e `competencia` ficam na URL ao trocar de aba;
+e o filtro por "forma prevista" em Títulos a Pagar foi **descartado**
+(093 §6) — a pergunta que ele responderia é do Fluxo de caixa. Testado com
+a PP-00078 do Projeto Teste, que entrou na FC-00006.

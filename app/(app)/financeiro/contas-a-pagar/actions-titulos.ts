@@ -25,6 +25,29 @@ type Ok = { ok: true };
 type Err = { ok: false; message: string };
 type Result = Ok | Err;
 
+/**
+ * A fatura em que o item da baixa entrou DE FATO (093 §13). Não é a da
+ * data do pagamento quando aquela competência já fechou: o banco rola para
+ * a próxima aberta, e só ele sabe qual foi. `null` = baixa fora do cartão.
+ * Obrigatório no retorno (não opcional) para nenhum ramo esquecer de dizer.
+ */
+export type FaturaDaBaixa = { codigo: string; competencia_fechamento: string };
+type ResultBaixa = { ok: true; fatura: FaturaDaBaixa | null } | Err;
+
+async function faturaDoLancamento(
+  supabase: ReturnType<typeof createClient>,
+  lancamentoId: unknown,
+): Promise<FaturaDaBaixa | null> {
+  if (typeof lancamentoId !== "string") return null;
+  const { data } = await supabase
+    .from("lancamentos_financeiros")
+    .select("fatura:faturas_cartao!fatura_cartao_id(codigo, competencia_fechamento)")
+    .eq("id", lancamentoId)
+    .maybeSingle();
+  const f = (data as { fatura: FaturaDaBaixa | FaturaDaBaixa[] | null } | null)?.fatura ?? null;
+  return Array.isArray(f) ? f[0] ?? null : f;
+}
+
 const dataSchema = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, "Data deve estar em YYYY-MM-DD.");
@@ -425,7 +448,7 @@ const baixaSchema = z
  * centro de custo — o par tipo/subtipo do plano de contas — é
  * obrigatório e vai gravado no lançamento.
  */
-export async function darBaixaTitulo(input: unknown): Promise<Result> {
+export async function darBaixaTitulo(input: unknown): Promise<ResultBaixa> {
   const parsed = baixaSchema.safeParse(input);
   if (!parsed.success) {
     return {
@@ -524,7 +547,7 @@ export async function darBaixaTitulo(input: unknown): Promise<Result> {
     });
 
     revalidarFinanceiro(parcela.pedido.job_id);
-    return { ok: true };
+    return { ok: true, fatura: await faturaDoLancamento(supabase, lancId) };
   }
 
   if (d.origem === "desembolso") {
@@ -583,7 +606,7 @@ export async function darBaixaTitulo(input: unknown): Promise<Result> {
     });
 
     revalidarFinanceiro();
-    return { ok: true };
+    return { ok: true, fatura: await faturaDoLancamento(supabase, lancId) };
   }
 
   // ---- Fatura de cartão: a transferência banco -> cartão ----
@@ -627,7 +650,7 @@ export async function darBaixaTitulo(input: unknown): Promise<Result> {
     });
 
     revalidarFinanceiro(null);
-    return { ok: true };
+    return { ok: true, fatura: null };
   }
 
   if (d.origem === "pp_devolucao_verba") {
@@ -676,7 +699,7 @@ export async function darBaixaTitulo(input: unknown): Promise<Result> {
     });
 
     revalidarFinanceiro(devolucao.pp?.job_id);
-    return { ok: true };
+    return { ok: true, fatura: null };
   }
 
   const { data: avulsa } = await supabase
@@ -726,7 +749,7 @@ export async function darBaixaTitulo(input: unknown): Promise<Result> {
   });
 
   revalidarFinanceiro();
-  return { ok: true };
+  return { ok: true, fatura: await faturaDoLancamento(supabase, lancId) };
 }
 
 // ---------------------------------------------------------------------

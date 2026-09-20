@@ -165,6 +165,12 @@ o estorno de compra e a conciliação seguem como estão. A mudança é só
   dos filtros de origem — o fio que resta da Previsão Cartão, sem tela
   nova. Não entra na primeira entrega.
 
+  ⚠️ **20/09/2026 — descartado, pela mesma razão da Previsão Cartão**
+  (Tiago). Depois da 093 a intenção serve a duas coisas: pré-preencher a
+  baixa e dar ao fluxo de caixa a data certa. "Quanto ainda vai virar
+  fatura, e quando" é pergunta do Fluxo de caixa, que agora responde com a
+  data da fatura; um filtro a mais em Títulos a Pagar só somaria ruído.
+
 ## 7. Ponto solto encontrado no levantamento
 
 A parcela que ficou como "decidir na baixa" **aceita hoje** cartão como
@@ -484,3 +490,44 @@ FC-00004 fica como buraco na numeração.
 Conferido: a mesma leitura que criou a FC-00004 agora devolve NULL e não
 deixa fatura nova; a baixa continua criando a fatura quando precisa
 (FC-00006, out/26, nasceu na baixa do DES-00002).
+
+## 13. Acabamentos (20/09/2026)
+
+Os cinco pontos que sobraram dos §8c/§9c, fechados a pedido do Tiago:
+
+- **Subtipo da PP na baixa.** A consulta de PPs da página não trazia
+  `plano_conta_tipo_id`/`plano_conta_subtipo_id`: o tipo aparecia só pelo
+  padrão "Custo Operacional" (decisão 068) e o subtipo escolhido na
+  aprovação nunca chegava ao dialog. As duas colunas entraram no select;
+  a baixa da parcela abre com tipo e subtipo da aprovação.
+- **Toast da baixa no cartão** diz o que aconteceu: "Confirmado no cartão
+  · R$ 120,00 entrou na fatura de out/26 do ZZ Teste Empresa Teste
+  (FC-00006)". Fora do cartão segue "enviado para a conciliação".
+  ⚠️ A fatura do toast vem do **servidor**, não da data: `darBaixaTitulo`
+  devolve `fatura` (código e competência, lida do lançamento que a RPC
+  criou; `null` fora do cartão, campo obrigatório no retorno). A primeira
+  versão calculava pela data do pagamento e, no teste, diria "set/26" para
+  um item que entrou na de out/26 — a de setembro já estava paga e o banco
+  rolou para a próxima aberta. O dialog pode avisar "se já fechou, cai na
+  seguinte" porque fala antes; o toast fala depois e tem de dizer o fato.
+- **Badge da aba Cartão** conta o que pede ação: fatura **aberta com o dia
+  de fechamento já passado** (precisa ser fechada), com o "hoje" no fuso
+  de São Paulo. O legado "a pagar", que tende a zero desde a 093, saiu da
+  conta. Conferido só pelo zero: em 20/09 nenhuma fatura aberta tinha
+  passado do fechamento, e a aba aparece sem badge.
+- **URL ao trocar de aba:** `cartao` e `competencia` ficam na URL ao sair
+  do Cartão, e a página aceita o cartão com qualquer `?tab=`. A aba já
+  guardava a fatura em memória; agora um recarregamento devolve a mesma
+  tela.
+- **AV-00001** recebeu `data_prevista_pagamento`, `data_pagamento` e
+  `data_pagamento_primeira` = 05/10/2026 (o vencimento da FC-00003, a
+  fatura dela) — correção pontual de dado, só preenchendo o que estava
+  vazio; era o único registro criado antes do complemento do gatilho.
+
+**Teste (20/09/2026, navegador, fluxos reais).** PP-00078 (R$ 120, JOB-0009
+do Projeto Teste) gerada e enviada pela planilha do job, aprovada com
+cartão "ZZ Teste Empresa Teste" e subtipo "Geral (provisório)"; a baixa
+abriu com forma, cartão, tipo **e subtipo** preenchidos; confirmada, o
+toast nomeou a FC-00006 (out/26), que passou a somar R$ 165 em dois itens.
+URL: da fatura aberta para Títulos a Pagar os parâmetros ficaram, e o F5
+seguido de um clique em Cartão devolveu a mesma fatura.

@@ -44,7 +44,8 @@ interface Props {
   folhasPendentesCount: number;
   /** Conteúdo da aba de títulos no cartão (todos os status). */
   titulosCartao: React.ReactNode;
-  /** Quantos títulos de cartão estão a pagar — vira badge. */
+  /** Quantas faturas de cartão passaram do dia de fechamento sem serem
+   *  fechadas — vira badge (093 §13). */
   titulosCartaoCount: number;
   /**
    * A aba pedida na URL (`?tab=cartao`). A aba Cartão navega por
@@ -85,17 +86,14 @@ export function ContasPagarTabs({
 
   // Trocar de aba pelo clique escreve a URL sem ir ao servidor
   // (`replaceState` é integrado ao App Router desde o Next 14.1): o link
-  // fica copiável e o "voltar" não quebra. Ao sair do Cartão, `cartao` e
-  // `competencia` saem junto — pertencem àquela aba.
+  // fica copiável e o "voltar" não quebra. `cartao` e `competencia` FICAM
+  // ao sair do Cartão (093 §13): a aba guarda a fatura em memória, e a URL
+  // tem de dizer a mesma coisa — senão um F5 voltava para a capa.
   function setTab(proxima: TabKey) {
     setTabState(proxima);
     if (typeof window === "undefined") return;
     const url = new URL(window.location.href);
     url.searchParams.set("tab", proxima);
-    if (proxima !== "cartao") {
-      url.searchParams.delete("cartao");
-      url.searchParams.delete("competencia");
-    }
     window.history.replaceState(window.history.state, "", url.toString());
   }
 

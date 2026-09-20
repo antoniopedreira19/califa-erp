@@ -54,6 +54,7 @@ import {
   BaixaTituloDialog,
   type BaixaTituloAlvo,
 } from "@/components/financeiro/baixa-titulo-dialog";
+import { lerCompetencia, rotuloCurto } from "@/lib/cartoes/competencia";
 import {
   BaixaRegistradaDialog,
   type BaixaRegistradaAlvo,
@@ -952,8 +953,21 @@ export function TitulosPagarList({
             }
             setBaixando(null);
             setErroAcao(null);
+            // No cartão nada foi para a conciliação de conta bancária: o
+            // item entrou numa fatura, e o toast diz em qual (093 §13). A
+            // fatura vem do SERVIDOR — a da data do pagamento pode já ter
+            // fechado, e aí o banco rola para a próxima aberta.
+            const cartao =
+              payload.forma_pagamento === "cartao_credito"
+                ? cartoes.find((c) => c.id === payload.cartao_credito_id) ?? null
+                : null;
+            const competencia = res.fatura
+              ? lerCompetencia(res.fatura.competencia_fechamento.slice(0, 7))
+              : null;
             setToast(
-              `Baixa registrada · ${formatMoney(alvo.valor)} enviado para a conciliação.`,
+              res.fatura
+                ? `Confirmado no cartão · ${formatMoney(alvo.valor)} entrou na fatura${competencia ? ` de ${rotuloCurto(competencia)}` : ""}${cartao ? ` do ${cartao.nome}` : ""} (${res.fatura.codigo}).`
+                : `Baixa registrada · ${formatMoney(alvo.valor)} enviado para a conciliação.`,
             );
             router.refresh();
           });
