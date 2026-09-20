@@ -208,7 +208,7 @@ export function DesembolsosContasPagarList({ rows }: DesembolsosContasPagarListP
                 </td>
 
                 <td className="px-4 py-3">
-                  <Badge className={cn("border", statusBadgeClasses(r.status))}>
+                  <Badge className={cn("whitespace-nowrap border", statusBadgeClasses(r.status))}>
                     {desembolsoStatusLabel(r.status)}
                   </Badge>
                   {/* Motivo em leitura */}
