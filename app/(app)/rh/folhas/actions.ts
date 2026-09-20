@@ -437,3 +437,134 @@ export async function editarLinhaFolhaRh(
   revalidatePath(`/rh/folhas/${chaveCompetencia}`);
   return { ok: true, id: folhaId };
 }
+
+/**
+ * Envia uma linha de folha do RH para o financeiro. Muda status de
+ * rascunho|pendente_correcao → enviada. Limpa motivo_pendencia se
+ * estava em pendente_correcao.
+ */
+export async function enviarLinhaFolha(
+  folhaId: string,
+): Promise<ActionResult> {
+  const session = await requireSession();
+  const gate = await checarPermissao(session, "rh.folhas.editar_rh");
+  if (!gate.ok) return gate;
+
+  const supabase = createClient();
+  const tenantId = session.activeTenant.id;
+
+  const { data: folha, error: folhaError } = await supabase
+    .from("folhas_pagamento")
+    .select("id, status, competencia_ano, competencia_mes, colaborador_id")
+    .eq("id", folhaId)
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+  if (folhaError || !folha) {
+    return { ok: false, message: "Linha da folha não encontrada." };
+  }
+  if (folha.status !== "rascunho" && folha.status !== "pendente_correcao") {
+    return {
+      ok: false,
+      message: `Linha em status "${folha.status}" não pode ser enviada.`,
+    };
+  }
+
+  const { error: upError } = await supabase
+    .from("folhas_pagamento")
+    .update({
+      status: "enviada",
+      motivo_pendencia: null,
+      enviada_em: new Date().toISOString(),
+      enviada_por: session.profile.id,
+    })
+    .eq("id", folhaId);
+  if (upError) {
+    console.error("[folha.enviar]", upError.message);
+    return { ok: false, message: "Não foi possível enviar." };
+  }
+
+  await logAuditEvent({
+    acao: "folha.linha.enviada",
+    tenantId,
+    entidadeTipo: "folha",
+    entidadeId: folhaId,
+    metadata: {
+      colaborador_id: folha.colaborador_id,
+      competencia: `${folha.competencia_ano}-${String(folha.competencia_mes).padStart(2, "0")}`,
+      status_anterior: folha.status,
+    },
+  });
+
+  const chave = `${folha.competencia_ano}-${String(folha.competencia_mes).padStart(2, "0")}`;
+  revalidatePath("/rh");
+  revalidatePath("/rh/folhas");
+  revalidatePath(`/rh/folhas/${chave}`);
+  revalidatePath("/financeiro/contas-a-pagar");
+  return { ok: true, id: folhaId };
+}
+
+/**
+ * Envia todas as linhas em rascunho|pendente_correcao de uma competência.
+ * Ação em lote. Retorna quantas foram enviadas.
+ */
+export async function enviarFolhaInteira(
+  ano: number,
+  mes: number,
+): Promise<
+  ActionResult<{ enviadas: number; falhas: number }>
+> {
+  const session = await requireSession();
+  const gate = await checarPermissao(session, "rh.folhas.editar_rh");
+  if (!gate.ok) return gate;
+
+  const supabase = createClient();
+  const tenantId = session.activeTenant.id;
+
+  const { data: linhas, error } = await supabase
+    .from("folhas_pagamento")
+    .select("id")
+    .eq("tenant_id", tenantId)
+    .eq("competencia_ano", ano)
+    .eq("competencia_mes", mes)
+    .in("status", ["rascunho", "pendente_correcao"]);
+
+  if (error) {
+    console.error("[folha.enviar_tudo.list]", error.message);
+    return { ok: false, message: "Falha ao listar linhas." };
+  }
+
+  const ids = ((linhas ?? []) as { id: string }[]).map((l) => l.id);
+  if (ids.length === 0) {
+    return { ok: true, enviadas: 0, falhas: 0 };
+  }
+
+  const { error: upError } = await supabase
+    .from("folhas_pagamento")
+    .update({
+      status: "enviada",
+      motivo_pendencia: null,
+      enviada_em: new Date().toISOString(),
+      enviada_por: session.profile.id,
+    })
+    .in("id", ids);
+
+  if (upError) {
+    console.error("[folha.enviar_tudo.up]", upError.message);
+    return { ok: false, message: "Falha ao enviar em lote." };
+  }
+
+  await logAuditEvent({
+    acao: "folha.linha.enviada",
+    tenantId,
+    entidadeTipo: "folha",
+    entidadeId: `${ano}-${String(mes).padStart(2, "0")}`,
+    metadata: { competencia: `${ano}-${mes}`, quantidade: ids.length, lote: true },
+  });
+
+  const chave = `${ano}-${String(mes).padStart(2, "0")}`;
+  revalidatePath("/rh");
+  revalidatePath("/rh/folhas");
+  revalidatePath(`/rh/folhas/${chave}`);
+  revalidatePath("/financeiro/contas-a-pagar");
+  return { ok: true, enviadas: ids.length, falhas: 0 };
+}

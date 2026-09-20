@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/select";
 import type { Empresa } from "@/lib/types";
 import { folhaLinhaStatusLabel } from "@/lib/types";
-import { editarLinhaFolhaRh } from "../actions";
+import { editarLinhaFolhaRh, enviarLinhaFolha } from "../actions";
 import type { FolhaLinha } from "./folha-competencia-view";
 
 type LinhaEdit = {
@@ -300,7 +300,7 @@ export function EditarLinhaFolhaDrawer({
             )}
           </div>
 
-          <div className="flex items-center justify-end gap-3 border-t border-border p-4">
+          <div className="flex items-center justify-between gap-3 border-t border-border p-4">
             <button
               type="button"
               onClick={() => onOpenChange(false)}
@@ -309,13 +309,33 @@ export function EditarLinhaFolhaDrawer({
               {modoEdicao ? "Cancelar" : "Fechar"}
             </button>
             {modoEdicao && (
-              <button
-                type="submit"
-                disabled={pending || !somaOk}
-                className="rounded-lg bg-california-red px-4 py-2 text-sm font-medium text-white hover:bg-california-red/90 disabled:opacity-50 transition-colors"
-              >
-                {pending ? "Salvando..." : "Salvar"}
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    startTransition(async () => {
+                      const res = await enviarLinhaFolha(linha.id);
+                      if (!res.ok) {
+                        setError(res.message);
+                        return;
+                      }
+                      onOpenChange(false);
+                      router.refresh();
+                    });
+                  }}
+                  disabled={pending}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-600 bg-white px-4 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 transition-colors"
+                >
+                  Enviar pro financeiro
+                </button>
+                <button
+                  type="submit"
+                  disabled={pending || !somaOk}
+                  className="rounded-lg bg-california-red px-4 py-2 text-sm font-medium text-white hover:bg-california-red/90 disabled:opacity-50 transition-colors"
+                >
+                  {pending ? "Salvando..." : "Salvar"}
+                </button>
+              </div>
             )}
           </div>
         </form>
