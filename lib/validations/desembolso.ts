@@ -87,10 +87,29 @@ export const criarDesembolsoSchema = z
 
 export type CriarDesembolsoInput = z.infer<typeof criarDesembolsoSchema>;
 
-export const aprovarDesembolsoSchema = z.object({
-  desembolso_id: z.string().uuid(),
-  data_pagamento: z.string().regex(dateRegex, "Data em YYYY-MM-DD."),
-});
+export const aprovarDesembolsoSchema = z
+  .object({
+    desembolso_id: z.string().uuid(),
+    data_pagamento: z.string().regex(dateRegex, "Data em YYYY-MM-DD."),
+    // A INTENÇÃO de pagamento (decisão 093, §12): como a PP, o financeiro
+    // pode dizer na aprovação por onde o desembolso vai sair. Cartão aqui
+    // não amarra a fatura — isso acontece na baixa; serve para pré-preencher
+    // a baixa e para a previsão de caixa cair no vencimento da fatura.
+    forma_pagamento: z
+      .enum(["pix", "transferencia", "boleto", "cartao_credito"])
+      .nullable()
+      .optional(),
+    cartao_credito_id: z.string().uuid().nullable().optional(),
+  })
+  .superRefine((v, ctx) => {
+    if (v.forma_pagamento === "cartao_credito" && !v.cartao_credito_id) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["cartao_credito_id"],
+        message: "Escolha o cartão de crédito.",
+      });
+    }
+  });
 
 export const rejeitarDesembolsoSchema = z.object({
   desembolso_id: z.string().uuid(),

@@ -151,6 +151,20 @@ export async function aprovarDesembolsoComData(input: unknown): Promise<Result> 
   });
   if (error) return { ok: false, message: `Falha ao aprovar: ${error.message}` };
 
+  // A intenção de pagamento fica no desembolso (decisão 093, §12), como na
+  // PP: pré-preenche a baixa e faz a previsão de caixa cair no vencimento
+  // da fatura do cartão. Nada de fatura é gravado aqui — isso é da baixa.
+  const forma = parsed.data.forma_pagamento ?? null;
+  const cartao = forma === "cartao_credito" ? parsed.data.cartao_credito_id ?? null : null;
+  const { error: erroIntencao } = await gate.supabase
+    .from("desembolsos")
+    .update({ forma_pagamento: forma, cartao_credito_id: cartao })
+    .eq("id", desembolso.id)
+    .eq("tenant_id", gate.session.activeTenant.id);
+  if (erroIntencao) {
+    console.error("[desembolso.aprovar.intencao]", erroIntencao.message);
+  }
+
   await logAuditEvent({
     acao: "desembolso.aprovada",
     tenantId: gate.session.activeTenant.id,
@@ -160,6 +174,8 @@ export async function aprovarDesembolsoComData(input: unknown): Promise<Result> 
       codigo: desembolso.codigo,
       valor: Number(desembolso.valor),
       data_pagamento: parsed.data.data_pagamento,
+      forma_pagamento: forma,
+      cartao_credito_id: cartao,
     },
   });
 

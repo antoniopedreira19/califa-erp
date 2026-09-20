@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import type { DesembolsoStatus } from "@/lib/types";
 import { desembolsoStatusLabel } from "@/lib/types";
 import { AprovarDesembolsoDialog } from "./aprovar-desembolso-dialog";
+import type { CartaoOption } from "@/components/financeiro/forma-pagamento-field";
 import { RejeitarDesembolsoDialog, type ModoDialog } from "./rejeitar-desembolso-dialog";
 
 // ---------- Tipo da row (vindo do SELECT com joins) ----------
@@ -71,6 +72,8 @@ const FILTROS: Array<{ key: FiltroStatus; label: string }> = [
 
 interface DesembolsosContasPagarListProps {
   rows: DesembolsoRow[];
+  /** Para a intenção de pagamento na aprovação (decisão 093, §12). */
+  cartoes: CartaoOption[];
 }
 
 interface DialogState {
@@ -78,7 +81,8 @@ interface DialogState {
   tipo: "aprovar" | "rejeitar" | "cancelar" | null;
 }
 
-export function DesembolsosContasPagarList({ rows }: DesembolsosContasPagarListProps) {
+export function DesembolsosContasPagarList({ rows,
+  cartoes }: DesembolsosContasPagarListProps) {
   const [filtro, setFiltro] = React.useState<FiltroStatus>("em_avaliacao");
   const [dialog, setDialog] = React.useState<DialogState>({ desembolso: null, tipo: null });
 
@@ -283,6 +287,7 @@ export function DesembolsosContasPagarList({ rows }: DesembolsosContasPagarListP
       {/* Dialogs */}
       <AprovarDesembolsoDialog
         desembolso={desembolsoParaAprovar}
+        cartoes={cartoes}
         open={dialog.tipo === "aprovar" && dialog.desembolso !== null}
         onOpenChange={(open) => { if (!open) fecharDialog(); }}
       />

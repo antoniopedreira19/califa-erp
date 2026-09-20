@@ -316,7 +316,7 @@ export default async function PedidosCompraFinanceiroPage({
         .from("desembolsos")
         .select(`
         id, codigo, descricao, status,
-        empresa_id,
+        empresa_id, forma_pagamento, cartao_credito_id,
         fornecedor:fornecedores(nome, razao_social),
         parcelas:desembolsos_parcelas(
           id, numero, data_vencimento, data_pagamento, data_pagamento_primeira,
@@ -836,6 +836,8 @@ export default async function PedidosCompraFinanceiroPage({
     descricao: string;
     status: "aprovada" | "pago";
     empresa_id: string;
+    forma_pagamento: FormaPagamento | null;
+    cartao_credito_id: string | null;
     fornecedor: { nome: string | null; razao_social: string | null } | null;
     parcelas: Array<{
       id: string;
@@ -886,8 +888,10 @@ export default async function PedidosCompraFinanceiroPage({
         cartao_credito_id: par.pago_em
           ? baixa?.cartao_credito_id ?? null
           : null,
-        forma_prevista: null,
-        cartao_previsto_id: null,
+        // A intenção registrada na aprovação (decisão 093, §12): pré-preenche
+        // a baixa; a fatura só existe depois dela.
+        forma_prevista: des.forma_pagamento ?? null,
+        cartao_previsto_id: des.cartao_credito_id ?? null,
       fatura_cartao_id: null,
         // Nenhuma destas origens é estorno nem parcela de cartão: as duas
         // coisas só existem em compra de cartão, que vem do laço das
@@ -1467,7 +1471,7 @@ export default async function PedidosCompraFinanceiroPage({
             />
           }
           ppsPendentesCount={ppsPendentesCountRes.count ?? 0}
-          desembolsos={<DesembolsosContasPagarList rows={desembolsosRows} />}
+          desembolsos={<DesembolsosContasPagarList rows={desembolsosRows} cartoes={cartoesList} />}
           desembolsosPendentesCount={desembolsosPendentesCount}
           titulos={
             <TitulosPagarList
