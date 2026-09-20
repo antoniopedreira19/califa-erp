@@ -1,3 +1,4 @@
+import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
 import {
   SELECT_PRESTACAO_DA_VERBA,
   devolucaoDaVerba,
@@ -80,9 +81,11 @@ export default async function PedidosCompraFinanceiroPage({
   // A aba Cartão com um cartão escolhido (decisão 093, entrega 2). O id é
   // conferido antes de entrar na consulta: `?cartao=qualquer-coisa` faria
   // o PostgREST recusar a query, e a tela abriria vazia sem dizer por quê.
+  // Vale com qualquer `?tab=`: ao sair da aba Cartão os parâmetros ficam
+  // na URL (093 §13), e um recarregamento devolve a fatura que estava
+  // aberta. A consulta do extrato só roda quando eles existem.
   const cartaoSelId =
-    searchParams?.tab === "cartao" &&
-    searchParams.cartao &&
+    searchParams?.cartao &&
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
       searchParams.cartao,
     )
@@ -128,6 +131,7 @@ export default async function PedidosCompraFinanceiroPage({
         enviada_financeiro_em, aprovada_em, anexos_na_aprovacao,
         urgente, urgente_justificativa, urgente_em,
         forma_pagamento, cartao_credito_id,
+        plano_conta_tipo_id, plano_conta_subtipo_id,
         fornecedor:fornecedores(id, nome, razao_social),
         responsavel:profiles!responsavel_verba_id(id, nome),
         empresa:empresas(id, razao_social, nome_fantasia),
@@ -1192,8 +1196,16 @@ export default async function PedidosCompraFinanceiroPage({
   const titulosCartao = titulos.filter(
     (t) => t.forma_pagamento === "cartao_credito",
   );
-  // Badge da aba: só os "a pagar" (o padrão do filtro).
-  const titulosCartaoCount = titulosCartao.filter((t) => t.status === "a_pagar").length;
+  // Badge da aba (093 §13): o que espera o financeiro no cartão é FECHAR a
+  // fatura cujo dia de fechamento já passou — não o legado "a pagar", que
+  // tende a zero desde a 093. Mesmo critério dos outros badges: pendência
+  // de ação, não volume.
+  // Fuso da casa: o servidor roda em UTC e, depois das 21h, o "hoje" dele
+  // já é amanhã — a fatura que fecha hoje contaria como vencida.
+  const hojeISO = hojeEmSaoPauloIso();
+  const titulosCartaoCount = faturasDoCartao.filter(
+    (f) => f.status === "aberta" && f.competencia_fechamento < hojeISO,
+  ).length;
 
   // Aba "Títulos a Pagar" — TODOS os não-cartão (a pagar + pagos). Filtro
   // de status também é interno, padrão "a pagar".
