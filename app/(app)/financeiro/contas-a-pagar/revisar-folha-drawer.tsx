@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Trash2 } from "lucide-react";
+import { AlertCircle, Trash2, CheckCircle2, XCircle } from "lucide-react";
 import {
   Dialog,
   DialogHeader,
@@ -22,46 +22,46 @@ import {
 } from "@/components/ui/select";
 import type { Empresa } from "@/lib/types";
 import { folhaLinhaStatusLabel } from "@/lib/types";
-import { editarLinhaFolhaRh, enviarLinhaFolha } from "../actions";
-import type { FolhaLinha } from "./folha-competencia-view";
+import {
+  aprovarLinhaFolha,
+  reprovarLinhaFolha,
+} from "./actions-folhas";
+import type { FolhaLinhaFinanceiro } from "./folhas-pagar-list";
 
-type LinhaEdit = {
+type AlocEdit = {
   key: string;
   empresa_id: string;
   regional_id: string;
   percentual: string;
 };
 
-export function EditarLinhaFolhaDrawer({
+export function RevisarFolhaDrawer({
   linha,
   empresas,
   regionais,
-  podeEditar,
   open,
   onOpenChange,
 }: {
-  linha: FolhaLinha;
+  linha: FolhaLinhaFinanceiro;
   empresas: Pick<Empresa, "id" | "nome_fantasia">[];
   regionais: { id: string; nome: string; empresa_id: string }[];
-  podeEditar: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
   const [error, setError] = React.useState<string | null>(null);
-  const [valor, setValor] = React.useState<string>("");
-  const [alocacoes, setAlocacoes] = React.useState<LinhaEdit[]>([]);
-
-  const modoEdicao =
-    podeEditar &&
-    (linha.status === "rascunho" || linha.status === "pendente_correcao");
+  const [alocacoes, setAlocacoes] = React.useState<AlocEdit[]>([]);
+  const [modoReprova, setModoReprova] = React.useState(false);
+  const [motivoReprova, setMotivoReprova] = React.useState("");
+  const [salarioBase, setSalarioBase] = React.useState<string>("");
 
   React.useEffect(() => {
     if (!open) return;
     setError(null);
-    // valor: MoedaInput usa defaultValue não-controlado; passo via key
-    setValor(linha.salario_base);
+    setModoReprova(false);
+    setMotivoReprova("");
+    setSalarioBase(linha.salario_base);
     setAlocacoes(
       linha.alocacoes.map((a, i) => ({
         key: `${a.id}-${i}`,
@@ -72,18 +72,19 @@ export function EditarLinhaFolhaDrawer({
     );
   }, [open, linha]);
 
+  const podeAgir = linha.status === "enviada";
+
   const soma = alocacoes.reduce(
     (acc, a) => acc + (Number(String(a.percentual).replace(",", ".")) || 0),
     0,
   );
   const somaOk = Math.abs(soma - 100) < 0.01;
 
-  function atualizar(index: number, patch: Partial<LinhaEdit>) {
+  function atualizar(index: number, patch: Partial<AlocEdit>) {
     setAlocacoes((prev) =>
       prev.map((a, i) => (i === index ? { ...a, ...patch } : a)),
     );
   }
-
   function adicionar() {
     setAlocacoes((prev) => [
       ...prev,
@@ -95,35 +96,28 @@ export function EditarLinhaFolhaDrawer({
       },
     ]);
   }
-
   function remover(index: number) {
     setAlocacoes((prev) => prev.filter((_, i) => i !== index));
   }
 
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
+  function handleAprovar() {
     setError(null);
-
-    if (!modoEdicao) return;
-
-    const formData = new FormData(e.currentTarget);
-    const salarioBase = formData.get("salario_base")?.toString() ?? "";
-
-    if (!salarioBase) {
-      setError("Informe o valor da folha.");
-      return;
-    }
+    if (!podeAgir) return;
     if (!somaOk) {
-      setError(`Soma dos percentuais precisa dar 100 (atual: ${soma.toFixed(2)}).`);
+      setError(`Soma precisa dar 100 (atual: ${soma.toFixed(2)}).`);
       return;
     }
     if (alocacoes.some((a) => !a.empresa_id || !a.regional_id)) {
       setError("Toda alocação precisa de empresa e regional.");
       return;
     }
+    if (!salarioBase) {
+      setError("Valor obrigatório.");
+      return;
+    }
 
     startTransition(async () => {
-      const res = await editarLinhaFolhaRh(linha.id, {
+      const res = await aprovarLinhaFolha(linha.id, {
         salario_base: salarioBase,
         alocacoes: alocacoes.map((a) => ({
           empresa_id: a.empresa_id,
@@ -143,41 +137,52 @@ export function EditarLinhaFolhaDrawer({
     });
   }
 
+  function handleReprovar(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (motivoReprova.trim().length < 3) {
+      setError("Escreva o motivo (mínimo 3 caracteres).");
+      return;
+    }
+
+    startTransition(async () => {
+      const res = await reprovarLinhaFolha(linha.id, motivoReprova.trim());
+      if (!res.ok) {
+        setError(res.message);
+        return;
+      }
+      onOpenChange(false);
+      router.refresh();
+    });
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DrawerContent>
         <DialogHeader className="border-b border-border p-6">
           <DialogTitle>{linha.colaborador.nome}</DialogTitle>
           <DialogDescription>
-            {linha.colaborador.funcao}
-            {linha.colaborador.nivel_codigo
-              ? ` · Nível ${linha.colaborador.nivel_codigo}`
-              : ""}{" "}
-            · Status atual:{" "}
+            {linha.colaborador.funcao} · Status atual:{" "}
             <span className="font-semibold text-foreground">
               {folhaLinhaStatusLabel(linha.status)}
             </span>
           </DialogDescription>
         </DialogHeader>
 
-        <form
-          onSubmit={handleSubmit}
-          className="flex-1 flex flex-col overflow-hidden"
-        >
+        <div className="flex-1 flex flex-col overflow-hidden">
           <div className="flex-1 overflow-y-auto p-6 space-y-5">
-            {linha.status === "pendente_correcao" && linha.motivo_pendencia && (
-              <div className="flex items-start gap-2 rounded-lg border border-california-red/30 bg-california-red/5 p-3 text-sm text-california-red">
-                <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
-                <div>
-                  <p className="font-semibold">Motivo da pendência</p>
-                  <p>{linha.motivo_pendencia}</p>
-                </div>
-              </div>
-            )}
-
-            {!modoEdicao && (
-              <div className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-                Esta linha está em <strong>{folhaLinhaStatusLabel(linha.status)}</strong> e não pode ser editada pelo RH agora.
+            {!podeAgir && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                {linha.status === "pendente_correcao"
+                  ? "Aguardando o RH corrigir e reenviar. Não há ação sua neste momento."
+                  : `Linha em status ${folhaLinhaStatusLabel(linha.status)} — sem ação disponível.`}
+                {linha.status === "pendente_correcao" &&
+                  linha.motivo_pendencia && (
+                    <div className="mt-2">
+                      <strong>Motivo que você registrou:</strong>{" "}
+                      {linha.motivo_pendencia}
+                    </div>
+                  )}
               </div>
             )}
 
@@ -186,13 +191,21 @@ export function EditarLinhaFolhaDrawer({
               <MoedaInput
                 key={linha.id + linha.salario_base}
                 id="salario_base"
-                name="salario_base"
                 defaultValue={linha.salario_base}
-                disabled={!modoEdicao}
+                disabled={!podeAgir || modoReprova}
+                onCentavosChange={(centavos) => {
+                  if (!centavos) {
+                    setSalarioBase("");
+                    return;
+                  }
+                  const inteiros = centavos.slice(0, -2) || "0";
+                  const dec = centavos.slice(-2).padStart(2, "0");
+                  setSalarioBase(`${inteiros}.${dec}`);
+                }}
               />
               <p className="text-xs text-muted-foreground">
-                Valor exato que será pago neste mês. Substitui o vigente do
-                colaborador só nesta folha.
+                Se você mudar o valor, a próxima folha do colaborador vai
+                nascer com este valor (propaga pra Camada 1).
               </p>
             </div>
 
@@ -202,9 +215,7 @@ export function EditarLinhaFolhaDrawer({
                 {alocacoes.map((a, i) => {
                   const regionaisDaEmpresa = regionais
                     .filter((r) => r.empresa_id === a.empresa_id)
-                    .sort((x, y) =>
-                      x.nome.localeCompare(y.nome, "pt-BR"),
-                    );
+                    .sort((x, y) => x.nome.localeCompare(y.nome, "pt-BR"));
                   return (
                     <div
                       key={a.key}
@@ -215,7 +226,7 @@ export function EditarLinhaFolhaDrawer({
                         onValueChange={(v) =>
                           atualizar(i, { empresa_id: v, regional_id: "" })
                         }
-                        disabled={!modoEdicao}
+                        disabled={!podeAgir || modoReprova}
                       >
                         <SelectTrigger>
                           <SelectValue placeholder="Empresa" />
@@ -231,7 +242,7 @@ export function EditarLinhaFolhaDrawer({
                       <Select
                         value={a.regional_id}
                         onValueChange={(v) => atualizar(i, { regional_id: v })}
-                        disabled={!modoEdicao || !a.empresa_id}
+                        disabled={!podeAgir || modoReprova || !a.empresa_id}
                       >
                         <SelectTrigger>
                           <SelectValue placeholder="Regional" />
@@ -250,7 +261,7 @@ export function EditarLinhaFolhaDrawer({
                           onChange={(e) =>
                             atualizar(i, { percentual: e.target.value })
                           }
-                          disabled={!modoEdicao}
+                          disabled={!podeAgir || modoReprova}
                           placeholder="0,00"
                           className="pr-7"
                           inputMode="decimal"
@@ -262,7 +273,9 @@ export function EditarLinhaFolhaDrawer({
                       <button
                         type="button"
                         onClick={() => remover(i)}
-                        disabled={!modoEdicao || alocacoes.length === 1}
+                        disabled={
+                          !podeAgir || modoReprova || alocacoes.length === 1
+                        }
                         className="rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-california-red transition-colors disabled:opacity-30"
                         title="Remover"
                       >
@@ -272,7 +285,7 @@ export function EditarLinhaFolhaDrawer({
                   );
                 })}
               </div>
-              {modoEdicao && (
+              {podeAgir && !modoReprova && (
                 <div className="flex items-center justify-between pt-1">
                   <button
                     type="button"
@@ -290,7 +303,29 @@ export function EditarLinhaFolhaDrawer({
                   </p>
                 </div>
               )}
+              <p className="text-xs text-muted-foreground">
+                Ao aprovar, cada linha de alocação vira um título em{" "}
+                &ldquo;Títulos a Pagar&rdquo; com o valor rateado.
+              </p>
             </div>
+
+            {modoReprova && podeAgir && (
+              <form onSubmit={handleReprovar} className="space-y-2">
+                <Label htmlFor="motivo">Motivo da pendência</Label>
+                <Input
+                  id="motivo"
+                  autoFocus
+                  required
+                  maxLength={500}
+                  value={motivoReprova}
+                  onChange={(e) => setMotivoReprova(e.target.value)}
+                  placeholder="Ex.: PIX errado, salário fora do combinado"
+                />
+                <p className="text-xs text-muted-foreground">
+                  O RH vai receber este motivo, corrigir e reenviar.
+                </p>
+              </form>
+            )}
 
             {error && (
               <div className="flex items-start gap-2 rounded-lg border border-california-red/20 bg-california-red/5 px-3 py-2 text-xs text-california-red">
@@ -306,39 +341,56 @@ export function EditarLinhaFolhaDrawer({
               onClick={() => onOpenChange(false)}
               className="rounded-lg px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-muted transition-colors"
             >
-              {modoEdicao ? "Cancelar" : "Fechar"}
+              Fechar
             </button>
-            {modoEdicao && (
+
+            {podeAgir && (
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    startTransition(async () => {
-                      const res = await enviarLinhaFolha(linha.id);
-                      if (!res.ok) {
-                        setError(res.message);
-                        return;
-                      }
-                      onOpenChange(false);
-                      router.refresh();
-                    });
-                  }}
-                  disabled={pending}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-600 bg-white px-4 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 transition-colors"
-                >
-                  Enviar pro financeiro
-                </button>
-                <button
-                  type="submit"
-                  disabled={pending || !somaOk}
-                  className="rounded-lg bg-california-red px-4 py-2 text-sm font-medium text-white hover:bg-california-red/90 disabled:opacity-50 transition-colors"
-                >
-                  {pending ? "Salvando..." : "Salvar"}
-                </button>
+                {modoReprova ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setModoReprova(false)}
+                      className="rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-muted transition-colors"
+                    >
+                      Voltar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleReprovar as any}
+                      disabled={pending || motivoReprova.trim().length < 3}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white hover:bg-california-red/90 disabled:opacity-50 transition-colors"
+                    >
+                      <XCircle className="h-4 w-4" />
+                      Enviar reprovação
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setModoReprova(true)}
+                      disabled={pending}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-california-red/30 bg-white px-4 py-2 text-sm font-semibold text-california-red hover:bg-california-red/5 disabled:opacity-50 transition-colors"
+                    >
+                      <XCircle className="h-4 w-4" />
+                      Reprovar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleAprovar}
+                      disabled={pending || !somaOk}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+                    >
+                      <CheckCircle2 className="h-4 w-4" />
+                      {pending ? "Aprovando..." : "Aprovar"}
+                    </button>
+                  </>
+                )}
               </div>
             )}
           </div>
-        </form>
+        </div>
       </DrawerContent>
     </Dialog>
   );

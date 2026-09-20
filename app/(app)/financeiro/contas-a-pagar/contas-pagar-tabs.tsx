@@ -37,13 +37,23 @@ interface Props {
   recorrentes: React.ReactNode;
   /** Contagem de recorrências ativas — vira badge. */
   recorrentesAtivasCount: number;
+  /** Conteúdo da aba de folhas de pagamento (linhas aguardando aprovação). */
+  folhas: React.ReactNode;
+  /** Contagem de linhas em "enviada" ou "pendente_correcao" — vira badge. */
+  folhasPendentesCount: number;
   /** Conteúdo da aba de títulos no cartão (todos os status). */
   titulosCartao: React.ReactNode;
   /** Quantos títulos de cartão estão a pagar — vira badge. */
   titulosCartaoCount: number;
 }
 
-type TabKey = "pps" | "desembolsos" | "titulos" | "cartao" | "recorrentes";
+type TabKey =
+  | "pps"
+  | "desembolsos"
+  | "titulos"
+  | "cartao"
+  | "recorrentes"
+  | "folhas";
 
 export function ContasPagarTabs({
   pps,
@@ -54,6 +64,8 @@ export function ContasPagarTabs({
   titulosAPagarCount,
   recorrentes,
   recorrentesAtivasCount,
+  folhas,
+  folhasPendentesCount,
   titulosCartao,
   titulosCartaoCount,
 }: Props) {
@@ -95,6 +107,13 @@ export function ContasPagarTabs({
           count={recorrentesAtivasCount}
         >
           Recorrências
+        </TabButton>
+        <TabButton
+          active={tab === "folhas"}
+          onClick={() => setTab("folhas")}
+          count={folhasPendentesCount}
+        >
+          Folhas de Pagamento
         </TabButton>
         <TabButton
           active={tab === "titulos"}
@@ -142,6 +161,13 @@ export function ContasPagarTabs({
         className={cn(tab === "recorrentes" ? "" : "hidden")}
       >
         {recorrentes}
+      </div>
+      <div
+        role="tabpanel"
+        aria-hidden={tab !== "folhas"}
+        className={cn(tab === "folhas" ? "" : "hidden")}
+      >
+        {folhas}
       </div>
       <div
         role="tabpanel"

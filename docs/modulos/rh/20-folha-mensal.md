@@ -193,7 +193,6 @@ Novas ações previstas em `AuditAction`:
 
 1. **Rodada 1** ✅ **entregue em 2026-09-18** — documentação (este arquivo) + migration `20260918000001` + card no hub + listagem `/rh/folhas` vazia com aviso de "geração em breve". Commit `fa2ab44`.
 2. **Rodada 2** ✅ **entregue em 2026-09-18** — `gerarFolha` (idempotente, snapshot da Camada 1, pula colaboradores sem salário/alocação vigente e retorna quem foi pulado) + `editarLinhaFolhaRh` (só rascunho e pendente_correcao; swap atômico das alocações validado pelo constraint trigger) + modal "Nova folha" na listagem + `/rh/folhas/[competencia]` com tabela + drawer de edição. Commit `ac6ba2f`.
-3. **Rodada 3** 🔜 envio pro financeiro + aprovação/reprovação + propagação para Camada 1. UI do financeiro entra como aba nova em `/financeiro/contas-a-pagar` (posição: entre Recorrências e Títulos a Pagar). Ver ADR 088.
-4. **Rodada 4** 🔜 fase futura — integração com contas a pagar (aprovação gera `contas_avulsas` rateadas pelo percentual de alocação).
+3. **Rodada 3** ✅ **entregue em 2026-09-18** — envio pro financeiro (RH), aba nova "Folhas de Pagamento" em `/financeiro/contas-a-pagar` entre Recorrências e Títulos a Pagar, drawer de aprovação/reprovação (com edição de valor e alocação antes de aprovar). Aprovação gera N `contas_avulsas` rateadas por alocação (`folha_id` FK adicionada — migration `20260918000002`), propaga edição pra Camada 1 (D5) e some da aba Folhas — vira título em Títulos a Pagar. Reprovação exige motivo e volta linha pra RH em `pendente_correcao`. Rodadas 3 e 4 fundidas conforme decisão de UI.
 
 Cada rodada encerra com commit próprio.

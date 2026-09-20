@@ -24,6 +24,7 @@ import { TitulosCartaoList } from "./titulos-cartao-list";
 import type { FaturaDoCartao } from "./fechar-fatura-dialog";
 import { RecorrentesList, type RecorrenteRow } from "./recorrentes-list";
 import { DesembolsosContasPagarList, type DesembolsoRow } from "./desembolsos-list";
+import { FolhasPagarList, type FolhaLinhaFinanceiro } from "./folhas-pagar-list";
 import type { PPStatus, PlanoContaTipo, PlanoContaSubtipo, ContaBancaria, FormaPagamento, BandeiraCartao, DesembolsoStatus } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -76,6 +77,7 @@ export default async function PedidosCompraFinanceiroPage({
     desembolsosTitulosRes,
     devolucoesRes,
     conversasChatPPs,
+    folhasRes,
   ] = await Promise.all([
     (() => {
       let q = supabase
@@ -313,6 +315,18 @@ export default async function PedidosCompraFinanceiroPage({
     // Entra no mesmo `Promise.all` de propósito — em série ela somaria
     // dois round-trips ao carregamento da tela mais pesada do sistema.
     listarConversasPPs(supabase, session.activeTenant.id),
+    // Folhas de pagamento: só as que precisam da atenção do financeiro
+    // (enviada + pendente_correcao). Aprovadas já viraram contas_avulsas
+    // e aparecem em Títulos a Pagar.
+    supabase
+      .from("folhas_pagamento")
+      .select(
+        "id, competencia_ano, competencia_mes, salario_base, status, motivo_pendencia, colaborador:colaboradores(id, nome, funcao, tipo_contratacao), alocacoes:folhas_pagamento_alocacoes(id, empresa_id, regional_id, percentual, empresa:empresas(nome_fantasia), regional:regionais(nome))",
+      )
+      .eq("tenant_id", session.activeTenant.id)
+      .in("status", ["enviada", "pendente_correcao"])
+      .order("competencia_ano", { ascending: false })
+      .order("competencia_mes", { ascending: false }),
   ]);
 
   if (error) console.error("[financeiro.pp.list]", error.message);
@@ -1225,6 +1239,47 @@ export default async function PedidosCompraFinanceiroPage({
     }),
   );
 
+  // -------------------------------------------------------------------
+  // Folhas de pagamento — mapeamento pra tab "Folhas de Pagamento"
+  // -------------------------------------------------------------------
+  const folhasParaTab: FolhaLinhaFinanceiro[] = ((folhasRes.data ?? []) as any[]).map(
+    (l) => ({
+      id: l.id,
+      competencia_ano: l.competencia_ano,
+      competencia_mes: l.competencia_mes,
+      salario_base: String(l.salario_base),
+      status: l.status,
+      motivo_pendencia: l.motivo_pendencia,
+      colaborador: {
+        id: l.colaborador?.id ?? "",
+        nome: l.colaborador?.nome ?? "—",
+        funcao: l.colaborador?.funcao ?? "—",
+        tipo_contratacao: l.colaborador?.tipo_contratacao ?? "clt",
+      },
+      alocacoes: ((l.alocacoes ?? []) as any[]).map((a) => ({
+        id: a.id,
+        empresa_id: a.empresa_id,
+        regional_id: a.regional_id,
+        percentual: String(a.percentual),
+        empresa_nome: a.empresa?.nome_fantasia ?? "",
+        regional_nome: a.regional?.nome ?? "",
+      })),
+    }),
+  );
+  const empresasParaFolha = (empresasRes.data ?? []).map(
+    (e: { id: string; nome_fantasia: string | null; razao_social: string | null }) => ({
+      id: e.id,
+      nome_fantasia: e.nome_fantasia ?? e.razao_social ?? "",
+    }),
+  );
+  const regionaisParaFolha = (regionaisRes.data ?? []).map(
+    (r: { id: string; nome: string; empresa_id: string }) => ({
+      id: r.id,
+      nome: r.nome,
+      empresa_id: r.empresa_id,
+    }),
+  );
+
   return (
     <div className="space-y-8">
       <PageHeader
@@ -1284,6 +1339,14 @@ export default async function PedidosCompraFinanceiroPage({
             />
           }
           recorrentesAtivasCount={recorrentesAtivasCountRes.count ?? 0}
+          folhas={
+            <FolhasPagarList
+              linhas={folhasParaTab}
+              empresas={empresasParaFolha}
+              regionais={regionaisParaFolha}
+            />
+          }
+          folhasPendentesCount={folhasParaTab.length}
           titulosCartao={
             <TitulosCartaoList
               rows={titulosCartao}
