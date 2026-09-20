@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Pencil, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { Combobox, COMBOBOX_COMO_SELECT } from "@/components/ui/combobox";
 import {
   DescritivoPopover,
   DescritivoRodapeNota,
@@ -200,17 +201,19 @@ export function ProjetosList({
             className="pl-9"
           />
         </div>
-        <Select value={clienteFiltro} onValueChange={setClienteFiltro}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="todos">Todos os clientes</SelectItem>
-            {clientes.map((c) => (
-              <SelectItem key={c.id} value={c.id}>{c.nome_fantasia}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {/* Combobox e não Select: são 157 clientes ativos, e rolar a lista
+            inteira era o passo mais lento da barra (17/09/2026). */}
+        <Combobox
+          ariaLabel="Filtrar por cliente"
+          items={[
+            { value: "todos", label: "Todos os clientes" },
+            ...clientes.map((c) => ({ value: c.id, label: c.nome_fantasia })),
+          ]}
+          value={clienteFiltro}
+          onChange={(v) => setClienteFiltro(v ?? "todos")}
+          buscaPlaceholder="Escreva o nome do cliente"
+          className={cn(COMBOBOX_COMO_SELECT, "w-[180px]")}
+        />
         <Select value={produtoFiltro} onValueChange={setProdutoFiltro}>
           <SelectTrigger className="w-[180px]">
             <SelectValue />

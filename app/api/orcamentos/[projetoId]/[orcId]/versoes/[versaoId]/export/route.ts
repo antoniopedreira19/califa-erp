@@ -13,6 +13,12 @@ import {
   adicionarAbaOrcamentoInternacional,
   cambioDaVersao,
 } from "@/lib/exportacao/planilha-orcamento-internacional";
+import { adicionarAbaInterna } from "@/lib/exportacao/planilha-interna";
+import {
+  cambioDaInterna,
+  secaoInternaDaVersao,
+} from "@/lib/exportacao/interna-da-versao";
+import { pode } from "@/lib/permissoes";
 import { configDaPlanilha } from "@/app/(app)/_planilha/modelo-planilha";
 import type {
   CategoriaModeloPlanilha,
@@ -31,13 +37,28 @@ export const dynamic = "force-dynamic";
  * (`app/api/orcamentos/[projetoId]/export`). Esta rota só busca a versão
  * e monta o workbook com uma seção sem título. Com fórmulas e ids
  * ocultos, como a do projeto (decisão 041).
+ *
+ * `?modo=interna` troca a planilha do cliente pela **interna** (decisão
+ * 088): o mesmo orçado, com o PLANEJADO ao lado e o fechamento que termina
+ * no valor do job. Sem o parâmetro, nada muda — é a planilha de sempre,
+ * que continua indo para o cliente.
  */
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: { projetoId: string; orcId: string; versaoId: string } },
 ) {
   const session = await requireSession();
   const supabase = createClient();
+
+  // A interna mostra margem: só quem exporta orçamento a baixa (decisão
+  // 088, P13). A planilha do cliente segue como sempre foi.
+  const interna = new URL(req.url).searchParams.get("modo") === "interna";
+  if (interna && !pode(session.activeRole, "orcamentos.exportar")) {
+    return NextResponse.json(
+      { error: "Você não tem permissão para exportar a planilha interna." },
+      { status: 403 },
+    );
+  }
 
   // ---------- fetch dados ----------
   const [versaoRes, orcRes, gruposRes, itensRes] = await Promise.all([
@@ -96,6 +117,11 @@ export async function GET(
     quantidade_orcada: Number(it.quantidade_orcada ?? 1),
     dias_meses_orcado: Number(it.dias_meses_orcado ?? 1),
     total_orcado: Number(it.total_orcado ?? 0),
+    // O planejado só a interna usa; na planilha do cliente ele é ignorado.
+    valor_unitario_planejado: Number(it.valor_unitario_planejado ?? 0),
+    quantidade_planejada: Number(it.quantidade_planejada ?? 0),
+    dias_meses_planejado: Number(it.dias_meses_planejado ?? 0),
+    total_planejado: Number(it.total_planejado ?? 0),
   })) as VersaoOrcamentoItem[];
 
   // Nome do cliente via embed projeto → cliente
@@ -116,14 +142,44 @@ export async function GET(
   // sai no layout da planilha que a California já usa; nacional, como
   // sempre foi.
   const config = configDaPlanilha(orcamento.categoria?.modelo_planilha, versao);
-  if (orcamento.categoria?.modelo_planilha === "mensal") {
+  const mensal = orcamento.categoria?.modelo_planilha === "mensal";
+  const mesesDaVersao = mensal
+    ? ((
+        await mesesDaVersaoQuery(supabase, session.activeTenant.id, versao.id)
+      ).data ?? [])
+    : [];
+  const gruposComMes = grupos.map((grupo) => ({
+    id: grupo.id,
+    nome: grupo.nome,
+    mesId: grupo.mes_id ?? null,
+    itens: itens.filter((i) => i.grupo_id === grupo.id),
+  }));
+
+  if (interna) {
+    adicionarAbaInterna(wb, "Interna", {
+      identificacao: `${orcamento.codigo} · ${orcamento.nome}`,
+      clienteNome,
+      titulo: `${nomeVersao(orcamento.nome, versao.numero_versao)} · planilha interna`,
+      marca: "interna:orcamento",
+      modelo: mensal ? "mensal" : config.internacional ? "internacional" : "nacional",
+      ...(config.internacional ? cambioDaInterna(cambioDaVersao(versao)) : {}),
+      comRealizado: false,
+      secoes: [
+        secaoInternaDaVersao({
+          orcamentoId: orcamento.id,
+          versaoId: versao.id,
+          percentualHonorarios: Number(versao.percentual_honorarios ?? 0),
+          percentualImposto: Number(versao.percentual_imposto ?? 0),
+          internacional: config.internacional,
+          ...(mensal
+            ? { meses: mesesDaVersaoParaAba(mesesDaVersao, gruposComMes) }
+            : { grupos: gruposDaSecao }),
+        }),
+      ],
+    });
+  } else if (mensal) {
     // Fee e Always On (decisão 078, 15/09/2026): cada mês com o seu
     // fechamento e o resumo do trimestre no fim.
-    const { data: meses } = await mesesDaVersaoQuery(
-      supabase,
-      session.activeTenant.id,
-      versao.id,
-    );
     adicionarAbaOrcamentoMensal(
       wb,
       "Orçamento",
@@ -137,15 +193,7 @@ export async function GET(
             versaoId: versao.id,
             percentualHonorarios: Number(versao.percentual_honorarios ?? 0),
             percentualImposto: Number(versao.percentual_imposto ?? 0),
-            meses: mesesDaVersaoParaAba(
-              meses ?? [],
-              grupos.map((grupo) => ({
-                id: grupo.id,
-                nome: grupo.nome,
-                mesId: grupo.mes_id ?? null,
-                itens: itens.filter((i) => i.grupo_id === grupo.id),
-              })),
-            ),
+            meses: mesesDaVersaoParaAba(mesesDaVersao, gruposComMes),
           },
         ],
       },
@@ -196,7 +244,7 @@ export async function GET(
   // ---------- resposta ----------
   const buffer = await wb.xlsx.writeBuffer();
 
-  const nomeArquivo = `orcamento-${orcamento.codigo}-v${versao.numero_versao}.xlsx`;
+  const nomeArquivo = `${interna ? "interna" : "orcamento"}-${orcamento.codigo}-v${versao.numero_versao}.xlsx`;
 
   return new NextResponse(buffer as ArrayBuffer, {
     status: 200,

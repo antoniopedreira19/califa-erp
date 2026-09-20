@@ -32,6 +32,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn, formatCurrency } from "@/lib/utils";
 import {
   PP_ANEXO_MIMETYPES_ACEITOS,
@@ -485,20 +492,30 @@ export function PrestarContasDrawer({
                           </p>
                         </div>
                         <div className="flex gap-1.5">
-                          <select
-                            value={d.tipo}
-                            onChange={(e) => mudar(d.chave, { tipo: e.target.value as TipoFiscal | "" })}
+                          {/* Select do sistema: o menu do `<select>` nativo
+                              não aplica a escolha dentro de drawer
+                              (decisão 090). */}
+                          <Select
+                            value={d.tipo || undefined}
+                            onValueChange={(v) =>
+                              mudar(d.chave, { tipo: v as TipoFiscal })
+                            }
                             disabled={pending || d.status === "erro"}
-                            aria-label={`Tipo do documento ${i + 1}`}
-                            className={cn(
-                              "h-9 w-[84px] flex-none rounded-lg border bg-white px-2 text-xs outline-none focus:border-california-red",
-                              marcaTipo ? "border-california-red" : "border-border",
-                            )}
                           >
-                            <option value="">Tipo…</option>
-                            <option value="nota_fiscal">NF</option>
-                            <option value="recibo">Recibo</option>
-                          </select>
+                            <SelectTrigger
+                              aria-label={`Tipo do documento ${i + 1}`}
+                              className={cn(
+                                "h-9 w-[84px] flex-none px-2 text-xs",
+                                marcaTipo ? "border-california-red" : "border-border",
+                              )}
+                            >
+                              <SelectValue placeholder="Tipo…" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="nota_fiscal">NF</SelectItem>
+                              <SelectItem value="recibo">Recibo</SelectItem>
+                            </SelectContent>
+                          </Select>
                           <Input
                             value={d.numero}
                             onChange={(e) => mudar(d.chave, { numero: e.target.value })}

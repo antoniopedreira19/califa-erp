@@ -14,7 +14,7 @@ O enum `app_role` no banco define 5 papéis operacionais:
 | Chave | Rótulo | Descrição |
 |---|---|---|
 | `administrador` | Administrador | Sócio/diretor. Faz tudo, gerencia usuários, empresas, auditoria. Superset de todas as roles. |
-| `gerente_producao` | Gerente de Produção | Dono comercial/operacional do trabalho. Fala com cliente, aprova orçamento, aprova envio a faturamento e encerramento. |
+| `gerente_producao` | Gerente de Projeto | Dono comercial/operacional do trabalho. Fala com cliente, aprova orçamento, aprova envio a faturamento e encerramento. |
 | `produtor` | Produtor | Braço direito do GP. Faz tudo em orçamento e job **menos aprovar**. |
 | `freelancer` | Freelancer | Escopo restrito: só vê projetos onde é participante (via `projeto_responsaveis`). Vê orçamento em modo espectador do bruto (sem BV/totais/save). Edita apenas o realizado dos jobs dele. |
 | `financeiro` | Financeiro | Controla o caixa: contas a pagar/receber, conciliação, fluxo, desembolsos, abertura de job. Cadastra bancos, plano de contas, cartões. **Read-only em orçamento e job.** |
@@ -55,6 +55,13 @@ Legenda: ✓ = item visível · — = item oculto · RO = read-only (vê mas nã
 
 **Definição de "Meus":** qualquer entrada em `projeto_responsaveis` (papel `gp` OU `equipe`) OU derivados (criador do projeto, produtor de algum orçamento do projeto).
 
+⚠️ **18/09/2026 — o papel `gerente_producao` passou a se chamar "Gerente
+de Projeto" na tela.** O identificador no banco continua `gerente_producao`
+(é valor de enum em uso, e renomeá-lo mexeria em dado de todas as frentes);
+só o rótulo mudou, em `roleLabel` (`lib/types.ts`) e nas mensagens que o
+citam. Se o nome técnico incomodar, a troca do enum é uma migration à
+parte, com aviso.
+
 ## Ações por papel
 
 Legenda: **V** = ver · **E** = editar/criar · **A** = aprovar ou ação crítica · **—** = nada
@@ -64,14 +71,32 @@ Legenda: **V** = ver · **E** = editar/criar · **A** = aprovar ou ação críti
 | Ação | ADM | GP | PROD | FREE | FIN |
 |---|:---:|:---:|:---:|:---:|:---:|
 | Clientes (via tela `/clientes`) | E | — | — | — | — |
+| **Cliente via "cadastro inline"** (dentro do formulário de projeto) | E | E | — | — | — |
+| **Marca via "cadastro inline"** (o "+" do campo Marca do projeto) | E | E | — | — | — |
 | Fornecedores (via tela `/fornecedores`) | E | — | — | — | — |
-| **Fornecedor via "cadastro inline"** (dentro de PP) | E | E | E | — | — |
+| **Fornecedor via "cadastro inline"** (dentro de PP) | E | E | E | E | — |
 | Empresas do tenant | E | — | — | — | — |
 | Contas bancárias | E | — | — | — | E |
 | Plano de contas, cartões de crédito | E | — | — | — | E |
 | Categorias de orçamento, regionais, cidades | E | — | — | — | — |
 | Usuários e permissões | E | — | — | — | — |
 | Auditoria (feed de eventos) | V | — | — | — | — |
+
+⚠️ **Quem cadastra o quê, revisto em 18/09/2026 (Tiago).** O **produtor
+saiu** do cadastro de cliente e de marca: cliente é relação comercial da
+agência, e quem a abre é o GP. O **freelancer entrou** no de fornecedor:
+ele edita o realizado dos jobs dele e esbarra no mesmo fornecedor que
+ainda não está na lista. Nos dois casos é o gate `inline`, nunca a tela
+cheia de cadastros.
+
+⚠️ **O "cadastro inline" só CRIA (18/09/2026).** `cadastros.clientes.inline`
+e `cadastros.fornecedores.inline` liberam o "+" de dentro do fluxo — quem
+cria orçamento precisa do cliente e da marca que ele pede, quem gera PP
+precisa do fornecedor. **Abrir o cadastro de quem já existe continua em
+`.editar`, só do administrador**: é o lápis do campo. O "+" da Marca
+também é `inline` porque abre um dialog de uma linha que só insere, e não
+a ficha do cliente — renomear e inativar marca seguem com o
+administrador, em `/clientes/<id>`. Ver decisão 089 §6 e §6b.
 
 ### Orçamento
 
@@ -252,7 +277,7 @@ Somem: Contas a pagar/receber vencidas (0) · Desembolsos em avaliação (0).
 
 **Números do mês:** Saldo em bancos R$ 100.000,00 · Previsto a pagar R$ 8.200,00 · Previsto a receber R$ 0,00.
 
-### Gerente de Produção (`gp_teste@califa-erp.local`)
+### Gerente de Projeto (`gp_teste@califa-erp.local`)
 
 **Aguardando você** — 1 card visível:
 

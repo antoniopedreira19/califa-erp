@@ -51,9 +51,24 @@ export const permissoes = {
   // Cadastros globais
   // ==================================================================
   "cadastros.clientes.editar":              ["administrador"],
+  /**
+   * Cadastro rapido de cliente DENTRO do formulario de projeto (decisao
+   * 089, liberado em 18/09/2026). Vale so para CRIAR — abrir o cadastro de
+   * um cliente que ja existe continua em `.editar`.
+   *
+   * NAO inclui produtor (decisao do Tiago, 18/09/2026): cliente e relacao
+   * comercial da agencia, e quem a abre e o GP. O fornecedor, que e o
+   * oposto (nasce da necessidade da producao), tem o gate mais largo.
+   */
+  "cadastros.clientes.inline":              ["administrador", "gerente_producao"],
   "cadastros.fornecedores.editar":          ["administrador"],
-  /** Cadastro rapido de fornecedor DENTRO do fluxo de PP (drawer inline). */
-  "cadastros.fornecedores.inline":          ["administrador", "gerente_producao", "produtor"],
+  /**
+   * Cadastro rapido de fornecedor DENTRO do fluxo de PP (drawer inline).
+   * Inclui freelancer desde 18/09/2026 (decisao do Tiago): ele edita o
+   * realizado dos jobs dele (`jobs.editar_realizado`) e esbarra no mesmo
+   * fornecedor que ainda nao esta na lista.
+   */
+  "cadastros.fornecedores.inline":          ["administrador", "gerente_producao", "produtor", "freelancer"],
   /**
    * Cadastro rapido de portal de fornecedor do cliente DENTRO do envio do
    * job para faturamento (decisao 050). Espelha `jobs.enviar_faturamento`:

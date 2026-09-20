@@ -370,7 +370,7 @@ export async function atualizarVersao(
     return {
       ok: false,
       message:
-        "Só administrador ou gerente de produção altera os honorários da versão. O padrão vem do cadastro do cliente.",
+        "Só administrador ou gerente de projeto altera os honorários da versão. O padrão vem do cadastro do cliente.",
     };
   }
   if (!honorariosMudou) delete updates.percentual_honorarios;
@@ -396,7 +396,7 @@ export async function atualizarVersao(
       return {
         ok: false,
         message:
-          "Só administrador ou gerente de produção altera os Impostos BR e as int. taxes da versão internacional.",
+          "Só administrador ou gerente de projeto altera os Impostos BR e as int. taxes da versão internacional.",
       };
     }
     if (!impostoMudou) delete updates.percentual_imposto;

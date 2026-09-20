@@ -26,7 +26,7 @@ import {
 import { format } from "date-fns";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
-import { Combobox } from "@/components/ui/combobox";
+import { Combobox, COMBOBOX_COMO_SELECT } from "@/components/ui/combobox";
 import { cn, formatCurrency, formatDocumento } from "@/lib/utils";
 import {
   PP_ANEXO_MIMETYPES_ACEITOS,
@@ -83,6 +83,11 @@ interface Props {
   empresas: Array<{ id: string; razao_social: string; principal: boolean }>;
   /** Membros ativos do tenant — exibidos quando switch Verba de Produção está ON. */
   responsaveis: Array<{ id: string; nome: string }>;
+  /** `cadastros.fornecedores.editar`. Sem ela, o "+" e o lápis somem: a
+   *  action já barrava, mas o GP preenchia o cadastro inteiro para só
+   *  então ler "Você não tem permissão para essa ação" (18/09/2026). */
+  podeCadastrarFornecedor?: boolean;
+  podeEditarFornecedor?: boolean;
   defaultEmpresaId: string;
   itemDescricao: string;
   /** PLANEJADO do item — a referência da PP desde 02/09/2026 (era o
@@ -205,6 +210,8 @@ export function GerarPPDrawer({
   fornecedores,
   empresas,
   responsaveis,
+  podeCadastrarFornecedor = false,
+  podeEditarFornecedor = false,
   defaultEmpresaId,
   itemDescricao,
   valorPlanejado,
@@ -320,6 +327,9 @@ export function GerarPPDrawer({
   // "ainda não respondeu", e é o que segura o botão de gerar.
   const [ultimaPP, setUltimaPP] = React.useState<boolean | null>(null);
   const [faltaResposta, setFaltaResposta] = React.useState(false);
+  /** A pergunta agora rola com o formulário: quem tenta gerar sem
+   *  responder precisa ser levado até ela (17/09/2026). */
+  const refUltimaPP = React.useRef<HTMLDivElement>(null);
   const [responsavelId, setResponsavelId] = React.useState<string>("");
   const [empresaId, setEmpresaId] = React.useState<string>(defaultEmpresaId);
   const [prazoPagamento, setPrazoPagamento] = React.useState<string>(defaultPrazoPagamento());
@@ -743,6 +753,10 @@ export function GerarPPDrawer({
     if (ultimaPP === null) {
       setFaltaResposta(true);
       setErro("Responda se esta é a última PP deste item.");
+      // `behavior` padrão (instantâneo): o suave depende de animação, e
+      // animação não roda em aba fora do primeiro plano — o campo ficava
+      // fora de vista com o erro na tela.
+      refUltimaPP.current?.scrollIntoView({ block: "center" });
       return false;
     }
     if (!verbaProducao && !fornecedorId) {
@@ -1139,18 +1153,17 @@ export function GerarPPDrawer({
               {verbaProducao ? (
                 <div>
                   <label className="text-xs font-medium">Responsável *</label>
-                  <Select value={responsavelId} onValueChange={setResponsavelId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Escolha um responsável" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {responsaveis.map((r) => (
-                        <SelectItem key={r.id} value={r.id}>
-                          {r.nome}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Combobox
+                    items={responsaveis.map((r) => ({
+                      value: r.id,
+                      label: r.nome,
+                    }))}
+                    value={responsavelId || null}
+                    onChange={(v) => setResponsavelId(v ?? "")}
+                    placeholder="Escolha um responsável"
+                    buscaPlaceholder="Escreva o nome"
+                    className={COMBOBOX_COMO_SELECT}
+                  />
                 </div>
               ) : (
                 <div>
@@ -1169,21 +1182,34 @@ export function GerarPPDrawer({
                         placeholder="Escolha o fornecedor"
                         buscaPlaceholder="Escreva o nome ou o documento"
                         limpavel
-                        acaoSemResultado={{
-                          rotulo: (busca) => `Cadastrar “${busca}” como novo fornecedor`,
-                          onClick: (busca) => {
-                            setNomeSugerido(busca);
-                            setFornecedorEditando(null);
-                            setNovoFornecedorOpen(true);
-                          },
-                        }}
+                        acaoSemResultado={
+                          podeCadastrarFornecedor
+                            ? {
+                                rotulo: (busca) =>
+                                  `Cadastrar “${busca}” como novo fornecedor`,
+                                onClick: (busca) => {
+                                  setNomeSugerido(busca);
+                                  setFornecedorEditando(null);
+                                  setNovoFornecedorOpen(true);
+                                },
+                              }
+                            : undefined
+                        }
                       />
                     </div>
                     {/* O MESMO botão, dois papéis: "+" cadastra sem sair
                         da PP (decisão 048); com um fornecedor escolhido
                         ele vira o lápis e abre o cadastro dele para
                         revisão. O ✕ de dentro do campo é o caminho de
-                        volta para o "+". */}
+                        volta para o "+".
+
+                        São duas permissões diferentes (18/09/2026): criar
+                        aqui é `cadastros.fornecedores.inline`, que o GP e
+                        o produtor têm porque a PP é o fluxo deles; abrir
+                        para editar é `cadastros.fornecedores.editar`, que
+                        é só do administrador. Por isso o gate segue o
+                        papel do botão, e não o botão. */}
+                    {(fornecedorId ? podeEditarFornecedor : podeCadastrarFornecedor) && (
                     <button
                       type="button"
                       onClick={() => {
@@ -1212,11 +1238,16 @@ export function GerarPPDrawer({
                         <Plus className="h-[17px] w-[17px]" />
                       )}
                     </button>
+                    )}
                   </div>
                   <p className="mt-1.5 text-[11px] leading-snug text-muted-foreground">
                     {fornecedorId
-                      ? "O lápis abre o cadastro deste fornecedor. O ✕ limpa o campo e traz o + de volta."
-                      : "Escreva para buscar na lista. O + cadastra um fornecedor novo sem sair da PP."}
+                      ? podeEditarFornecedor
+                        ? "O lápis abre o cadastro deste fornecedor. O ✕ limpa o campo e traz o + de volta."
+                        : "O ✕ limpa o campo. Revisar o cadastro de um fornecedor é com o administrador."
+                      : podeCadastrarFornecedor
+                      ? "Escreva para buscar na lista. O + cadastra um fornecedor novo sem sair da PP."
+                      : "Escreva para buscar na lista. Cadastro de fornecedor é com o administrador."}
                   </p>
                 </div>
               )}
@@ -1571,75 +1602,91 @@ export function GerarPPDrawer({
                 </ul>
               )}
             </div>
-          </div>
+            {/* A pergunta que fecha (ou mantém aberto) o item. Ela não é
+                sobre esta PP: é sobre o ITEM, e é o que troca a base da
+                previsão de custo dele no fluxo de caixa (decisão 052).
 
-          {/* A pergunta que fecha (ou mantém aberto) o item — último
-              campo antes dos botões, como o design pede. Ela não é sobre
-              esta PP: é sobre o ITEM, e é o que troca a base da previsão
-              de custo dele no fluxo de caixa (decisão 052). */}
-          <div className="flex flex-col gap-2 border-t border-border px-6 pb-5 pt-4">
-            <span className="text-xs font-medium">
-              Esta é a última PP deste item? *
-            </span>
-            <div className="grid grid-cols-2 gap-2.5">
-              {[
-                { valor: false, rotulo: "Não, ainda faltam PPs" },
-                { valor: true, rotulo: "Sim, é a última" },
-              ].map((opcao) => {
-                const escolhida = ultimaPP === opcao.valor;
-                return (
-                  <button
-                    key={opcao.rotulo}
-                    type="button"
-                    role="radio"
-                    aria-checked={escolhida}
-                    onClick={() => {
-                      setUltimaPP(opcao.valor);
-                      setFaltaResposta(false);
-                    }}
-                    disabled={pending}
-                    className={cn(
-                      "flex items-center gap-2.5 rounded-[10px] border px-3 py-2.5 text-left text-[13px] font-semibold transition-colors disabled:opacity-50",
-                      escolhida && opcao.valor
-                        ? "border-emerald-600 bg-emerald-50"
-                        : escolhida
-                          ? "border-foreground bg-muted"
-                          : faltaResposta
-                            ? "border-california-red bg-white"
-                            : "border-border bg-white hover:bg-muted/60",
-                    )}
-                  >
-                    <span
+                Desde 17/09/2026 ela ROLA com o resto do formulário em vez
+                de ficar presa acima dos botões: continua obrigatória, com
+                as mesmas regras, e quem tenta gerar sem responder é levado
+                até ela. */}
+            <div
+              ref={refUltimaPP}
+              className="flex scroll-mt-4 flex-col gap-2 border-t border-border pt-4"
+            >
+              <span className="text-xs font-medium">
+                Esta é a última PP deste item? *
+              </span>
+              <div className="grid grid-cols-2 gap-2.5">
+                {[
+                  { valor: false, rotulo: "Não, ainda faltam PPs" },
+                  { valor: true, rotulo: "Sim, é a última" },
+                ].map((opcao) => {
+                  const escolhida = ultimaPP === opcao.valor;
+                  return (
+                    <button
+                      key={opcao.rotulo}
+                      type="button"
+                      role="radio"
+                      aria-checked={escolhida}
+                      onClick={() => {
+                        setUltimaPP(opcao.valor);
+                        setFaltaResposta(false);
+                      }}
+                      disabled={pending}
                       className={cn(
-                        "inline-flex h-[15px] w-[15px] flex-none items-center justify-center rounded-full border-[1.5px]",
-                        escolhida
-                          ? opcao.valor
-                            ? "border-emerald-700"
-                            : "border-foreground"
-                          : "border-[#C9C4B8]",
+                        "flex items-center gap-2.5 rounded-[10px] border px-3 py-2.5 text-left text-[13px] font-semibold transition-colors disabled:opacity-50",
+                        escolhida && opcao.valor
+                          ? "border-emerald-600 bg-emerald-50"
+                          : escolhida
+                            ? "border-foreground bg-muted"
+                            : faltaResposta
+                              ? "border-california-red bg-white"
+                              : "border-border bg-white hover:bg-muted/60",
                       )}
                     >
                       <span
                         className={cn(
-                          "h-[7px] w-[7px] rounded-full",
+                          "inline-flex h-[15px] w-[15px] flex-none items-center justify-center rounded-full border-[1.5px]",
                           escolhida
                             ? opcao.valor
-                              ? "bg-emerald-700"
-                              : "bg-foreground"
-                            : "bg-transparent",
+                              ? "border-emerald-700"
+                              : "border-foreground"
+                            : "border-[#C9C4B8]",
                         )}
-                      />
-                    </span>
-                    {opcao.rotulo}
-                  </button>
-                );
-              })}
+                      >
+                        <span
+                          className={cn(
+                            "h-[7px] w-[7px] rounded-full",
+                            escolhida
+                              ? opcao.valor
+                                ? "bg-emerald-700"
+                                : "bg-foreground"
+                              : "bg-transparent",
+                          )}
+                        />
+                      </span>
+                      {opcao.rotulo}
+                    </button>
+                  );
+                })}
+              </div>
+              {/* A mensagem de erro do formulário fica no topo, e depois da
+                  rolagem até aqui ela some de vista: quem tenta gerar sem
+                  responder via só a borda vermelha, sem o motivo
+                  (17/09/2026). */}
+              {faltaResposta && (
+                <span className="text-[11.5px] font-semibold text-california-red">
+                  Responda se esta é a última PP deste item.
+                </span>
+              )}
+              <span className="text-[11px] leading-snug text-muted-foreground">
+                {ultimaPP === true
+                  ? `A previsão de custo deste item deixa de usar o planejado (${formatCurrency(valorPlanejado, "BRL")}) e passa a valer o que as PPs dizem (${formatCurrency(previaEmPPs, "BRL")}).`
+                  : "Enquanto houver PP por vir, a previsão de custo do item segue pelo planejado."}
+              </span>
             </div>
-            <span className="text-[11px] leading-snug text-muted-foreground">
-              {ultimaPP === true
-                ? `A previsão de custo deste item deixa de usar o planejado (${formatCurrency(valorPlanejado, "BRL")}) e passa a valer o que as PPs dizem (${formatCurrency(previaEmPPs, "BRL")}).`
-                : "Enquanto houver PP por vir, a previsão de custo do item segue pelo planejado."}
-            </span>
+
           </div>
 
           {/* Dois caminhos (decisão 077): gerar e deixar no job, ou gerar e

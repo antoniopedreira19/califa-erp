@@ -89,7 +89,10 @@ export function roleLabel(role: AppRole): string {
     case "administrador":
       return "Administrador";
     case "gerente_producao":
-      return "Gerente de Produção";
+      // O identificador do banco continua `gerente_producao` (enum em uso);
+      // o rótulo virou "Gerente de Projeto" em 18/09/2026, a pedido do
+      // Tiago — é o nome que a agência usa.
+      return "Gerente de Projeto";
     case "financeiro":
       return "Financeiro";
     case "produtor":

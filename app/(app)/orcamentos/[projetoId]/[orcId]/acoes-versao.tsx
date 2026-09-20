@@ -35,6 +35,9 @@ interface Props {
 
 type Popover = null | "exportar" | "duplicar";
 
+/** Para o cliente (o de sempre) ou a planilha interna (decisão 088). */
+type ModoDeExportacao = "cliente" | "interna";
+
 /**
  * Exportar, Duplicar e Cancelar — as três ações que incidem sobre a ABA
  * selecionada, e não sobre o orçamento.
@@ -63,6 +66,7 @@ export function AcoesVersao({
 }: Props) {
   const router = useRouter();
   const [popover, setPopover] = React.useState<Popover>(null);
+  const [modo, setModo] = React.useState<ModoDeExportacao>("cliente");
   const [confirmandoDeletar, setConfirmandoDeletar] = React.useState(false);
   const [pending, startTransition] = React.useTransition();
   const [erro, setErro] = React.useState<string | null>(null);
@@ -98,7 +102,11 @@ export function AcoesVersao({
   ];
   const conteudoFrase =
     conteudo.slice(0, -1).join(", ") + " e " + conteudo[conteudo.length - 1];
-  const exportHref = `/api/orcamentos/${projetoId}/${orcamentoId}/versoes/${versaoId}/export`;
+  // "Para o cliente" vem sempre marcado: a planilha de sempre é o padrão,
+  // e a interna é escolha explícita de quem exporta (decisão 088).
+  const exportHref =
+    `/api/orcamentos/${projetoId}/${orcamentoId}/versoes/${versaoId}/export` +
+    (modo === "interna" ? "?modo=interna" : "");
 
   // Versão aprovada não mostra o botão — não é "desabilitado com motivo",
   // é uma ação que não existe ali (decisão do Tiago). Apagá-la esvaziaria
@@ -185,6 +193,22 @@ export function AcoesVersao({
                 ? `A aba selecionada é ${titulo}. Uma nova versão (v${proximoNumero}) será criada com os mesmos grupos, itens, honorários e impostos.`
                 : `A planilha será gerada a partir da aba selecionada — ${titulo} · ${versaoStatusLabel(status).toLowerCase()} · ${resumo}.`}
             </p>
+            {popover === "exportar" && (
+              <div className="mt-3 space-y-1.5">
+                <OpcaoDeModo
+                  marcado={modo === "cliente"}
+                  onEscolher={() => setModo("cliente")}
+                  titulo="Para o cliente"
+                  detalhe="Só o orçado, com o fechamento que vai para o cliente."
+                />
+                <OpcaoDeModo
+                  marcado={modo === "interna"}
+                  onEscolher={() => setModo("interna")}
+                  titulo="Interna"
+                  detalhe="Orçado e planejado, com rentabilidade e resultado operacional. Não enviar ao cliente."
+                />
+              </div>
+            )}
             <div className="mt-3.5 flex items-center justify-end gap-2">
               <button
                 type="button"
@@ -245,6 +269,46 @@ export function AcoesVersao({
         onConfirm={handleDeletar}
       />
     </>
+  );
+}
+
+/** Uma das duas planilhas, no popover do Exportar. */
+function OpcaoDeModo({
+  marcado,
+  onEscolher,
+  titulo,
+  detalhe,
+}: {
+  marcado: boolean;
+  onEscolher: () => void;
+  titulo: string;
+  detalhe: string;
+}) {
+  return (
+    <label
+      className={cn(
+        "flex cursor-pointer items-start gap-2.5 rounded-lg border px-3 py-2 transition-colors",
+        marcado
+          ? "border-california-red/40 bg-california-red/5"
+          : "border-border hover:bg-accent",
+      )}
+    >
+      <input
+        type="radio"
+        name="modo-exportacao"
+        checked={marcado}
+        onChange={onEscolher}
+        className="mt-0.5 accent-california-red"
+      />
+      <span className="space-y-0.5">
+        <span className="block text-[12.5px] font-semibold text-foreground">
+          {titulo}
+        </span>
+        <span className="block text-[11.5px] leading-snug text-muted-foreground">
+          {detalhe}
+        </span>
+      </span>
+    </label>
   );
 }
 

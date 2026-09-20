@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { AlertCircle, Save } from "lucide-react";
+import { AlertCircle, Plus, Save } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -15,6 +15,11 @@ import {
 } from "@/components/ui/select";
 import { DatePicker } from "@/components/ui/date-picker";
 import { MultiSelect } from "@/components/ui/multi-select";
+import {
+  CampoCliente,
+  type ClienteDoCampo,
+  type MarcaNova,
+} from "@/app/(app)/clientes/campo-cliente";
 import { Textarea } from "@/components/ui/textarea";
 import { DESCRICAO_MAX } from "@/lib/validations/projetos";
 import type {
@@ -61,6 +66,10 @@ interface Props {
   produtoresDosOrcamentos?: string[];
   /** Quem criou o projeto. Na criação é quem está logado. */
   criadorId?: string;
+  /** `cadastros.clientes.editar`. Sem ela, o campo Cliente não oferece
+   *  cadastrar nem editar, e a Marca perde o "+" (18/09/2026). */
+  podeCadastrarCliente?: boolean;
+  podeEditarCliente?: boolean;
   onSuccess?: () => void;
   onCancel?: () => void;
 }
@@ -79,6 +88,8 @@ export function ProjetoForm({
   equipeSelecionada,
   produtoresDosOrcamentos,
   criadorId,
+  podeCadastrarCliente = false,
+  podeEditarCliente = false,
   onSuccess,
   onCancel,
 }: Props) {
@@ -145,11 +156,73 @@ export function ProjetoForm({
     setRegionalIds([]);
   };
 
+  /**
+   * Cliente e marcas viram estado porque o cadastro rápido grava sem
+   * recarregar a tela: o cliente criado no dialog precisa entrar na lista
+   * e a marca que nasceu com ele precisa estar no campo Marca na mesma
+   * hora (17/09/2026). `router.refresh()` resolveria — e zeraria o
+   * formulário no meio do preenchimento.
+   */
+  const [clientesLocais, setClientesLocais] = React.useState<ClienteDoCampo[]>(
+    () => clientes,
+  );
+  const [produtosLocais, setProdutosLocais] = React.useState<ProdutoOption[]>(
+    () => produtos,
+  );
+  /** Ligado pelo "+" do campo Marca; o CampoCliente desliga ao abrir. */
+  const [abrirMarcasDoCliente, setAbrirMarcasDoCliente] = React.useState(false);
+
+  React.useEffect(() => setClientesLocais(clientes), [clientes]);
+  React.useEffect(() => setProdutosLocais(produtos), [produtos]);
+
+  function absorverCadastro(cliente: ClienteDoCampo, marcas: MarcaNova[]) {
+    setClientesLocais((atual) =>
+      atual.some((c) => c.id === cliente.id)
+        ? atual.map((c) => (c.id === cliente.id ? { ...c, ...cliente } : c))
+        : [...atual, cliente].sort((a, b) =>
+            a.nome_fantasia.localeCompare(b.nome_fantasia, "pt-BR"),
+          ),
+    );
+    setProdutosLocais((atual) => [
+      ...atual.filter((p) => p.cliente_id !== cliente.id),
+      ...marcas.map((m) => ({
+        id: m.id,
+        nome: m.nome,
+        codigo: m.codigo,
+        cliente_id: cliente.id,
+      })),
+    ]);
+  }
+
+  /** A marca criada pelo "+" ao lado do campo Marca. Entra na lista e fica
+   *  escolhida — quem clicou ali queria usá-la agora. */
+  const [marcaPendente, setMarcaPendente] = React.useState<string | null>(null);
+
+  function absorverMarca(marca: { id: string; nome: string; codigo: string }) {
+    if (!clienteId) return;
+    setProdutosLocais((atual) => [
+      ...atual,
+      { ...marca, cliente_id: clienteId },
+    ]);
+    setMarcaPendente(marca.id);
+  }
+
   // Produto é cadastrado por cliente: trocar de cliente invalida a escolha.
   const produtosDoCliente = React.useMemo(
-    () => produtos.filter((p) => p.cliente_id === clienteId),
-    [produtos, clienteId],
+    () => produtosLocais.filter((p) => p.cliente_id === clienteId),
+    [produtosLocais, clienteId],
   );
+
+  /** Escolher a marca nova é em DOIS tempos, de propósito: o `Select` do
+   *  Radix descarta um `value` cuja `<SelectItem>` ainda não existe, e
+   *  chama `onValueChange("")` em silêncio. Por isso a escolha espera a
+   *  opção aparecer na lista, no render seguinte. */
+  React.useEffect(() => {
+    if (!marcaPendente) return;
+    if (!produtosDoCliente.some((p) => p.id === marcaPendente)) return;
+    setProdutoId(marcaPendente);
+    setMarcaPendente(null);
+  }, [marcaPendente, produtosDoCliente]);
 
   function handleClienteChange(novoClienteId: string) {
     setClienteId(novoClienteId);
@@ -238,60 +311,95 @@ export function ProjetoForm({
           />
         </Field>
 
+        {/* Combobox, não Select: são 157 clientes ativos e a lista rolada
+            era o que mais custava tempo aqui. A busca ignora acento e
+            olha também o código curto, que é o prefixo do número do
+            projeto — quem lembra "AMBEV" acha pelo código. */}
+        {/* Busca por nome ou código, e o botão ao lado cadastra (campo
+            vazio) ou edita (cliente escolhido) sem sair do formulário —
+            decisão 089, no molde do campo de fornecedor da PP. */}
         <Field label="Cliente" name="cliente_id" required errors={fieldErrors}>
-          <Select value={clienteId} onValueChange={handleClienteChange}>
-            <SelectTrigger className={erroClasses("cliente_id")}>
-              <SelectValue placeholder="Selecione um cliente ativo" />
-            </SelectTrigger>
-            <SelectContent>
-              {clientes.map((c) => (
-                <SelectItem key={c.id} value={c.id}>
-                  {c.nome_fantasia}{" "}
-                  <span className="text-muted-foreground">({c.codigo_curto})</span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <CampoCliente
+            value={clienteId || null}
+            onChange={(v) => handleClienteChange(v ?? "")}
+            clientes={clientesLocais}
+            onCadastroMudou={absorverCadastro}
+            podeCadastrar={podeCadastrarCliente}
+            podeEditar={podeEditarCliente}
+            className={erroClasses("cliente_id")}
+            abrirMarcas={abrirMarcasDoCliente}
+            onAbrirMarcasResolvido={() => setAbrirMarcasDoCliente(false)}
+            onMarcaCriada={absorverMarca}
+          />
         </Field>
 
         <Field label="Marca" name="produto_id" required errors={fieldErrors}>
-          <Select
-            value={produtoId}
-            onValueChange={setProdutoId}
-            disabled={!clienteId || produtosDoCliente.length === 0}
-          >
-            <SelectTrigger className={erroClasses("produto_id")}>
-              <SelectValue
-                placeholder={
-                  !clienteId
-                    ? "Selecione o cliente primeiro"
-                    : produtosDoCliente.length === 0
-                      ? "Nenhuma marca cadastrada"
-                      : "Selecione a marca"
-                }
-              />
-            </SelectTrigger>
-            <SelectContent>
-              {produtosDoCliente.map((p) => (
-                <SelectItem key={p.id} value={p.id}>
-                  {p.nome}{" "}
-                  <span className="font-mono text-xs text-muted-foreground">
-                    {p.codigo}
-                  </span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {/* O "+" ao lado abre um dialog de UMA marca — não a ficha do
+              cliente, como abria até 18/09/2026. Ele aparece assim que há
+              cliente escolhido, e não só quando a lista está vazia.
+
+              Gate `podeCadastrarCliente` (`cadastros.clientes.inline`,
+              Admin/GP/Produtor): a gravação é `adicionarMarcaAoCliente`,
+              que só INSERE. Renomear e inativar marca continuam no
+              cadastro do cliente, com o administrador — decisão 089 §6. */}
+          <div className="flex items-center gap-2">
+            <div className="min-w-0 flex-1">
+              <Select
+                value={produtoId}
+                onValueChange={setProdutoId}
+                disabled={!clienteId || produtosDoCliente.length === 0}
+              >
+                <SelectTrigger className={erroClasses("produto_id")}>
+                  <SelectValue
+                    placeholder={
+                      !clienteId
+                        ? "Selecione o cliente primeiro"
+                        : produtosDoCliente.length === 0
+                          ? "Nenhuma marca cadastrada"
+                          : "Selecione a marca"
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {produtosDoCliente.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.nome}{" "}
+                      <span className="font-mono text-xs text-muted-foreground">
+                        {p.codigo}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {clienteId && podeCadastrarCliente && (
+              <button
+                type="button"
+                onClick={() => setAbrirMarcasDoCliente(true)}
+                title="Cadastrar marca deste cliente"
+                aria-label="Cadastrar marca deste cliente"
+                className="inline-flex h-10 w-10 flex-none items-center justify-center rounded-lg border border-border bg-white text-california-red transition-colors hover:border-california-red/40 hover:bg-california-red/[0.06]"
+              >
+                <Plus className="h-[17px] w-[17px]" />
+              </button>
+            )}
+          </div>
           {clienteId && produtosDoCliente.length === 0 && (
             <p className="text-xs text-muted-foreground">
               Este cliente ainda não tem marcas.{" "}
-              <Link
-                href={`/clientes/${clienteId}`}
-                prefetch={false}
-                className="font-medium text-california-red hover:underline"
-              >
-                Cadastrar agora
-              </Link>
+              {podeCadastrarCliente ? (
+                <button
+                  type="button"
+                  onClick={() => setAbrirMarcasDoCliente(true)}
+                  className="font-medium text-california-red hover:underline"
+                >
+                  Cadastrar agora
+                </button>
+              ) : (
+                <span className="font-medium">
+                  Peça a um administrador para cadastrar.
+                </span>
+              )}
             </p>
           )}
         </Field>

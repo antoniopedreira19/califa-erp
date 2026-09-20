@@ -7,11 +7,14 @@ import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { checarPermissao } from "@/lib/permissoes-server";
 import { onlyDigits } from "@/lib/utils";
+import { proximoCodigoLivre } from "@/lib/codigos/cliente-curto";
+import type { Cliente, ClienteProduto, ClientePortal } from "@/lib/types";
 import {
   clienteSchema,
   emailsExtrasSchema,
   telefonesExtrasSchema,
   marcasSchema,
+  marcaLinhaSchema,
   portaisSchema,
   HONORARIOS_PADRAO_FALLBACK,
   type MarcaLinha,
@@ -254,15 +257,62 @@ export async function buscarClientePorCodigo(
   };
 }
 
+/**
+ * O código curto que o cliente vai receber, já sem colisão (18/09/2026).
+ *
+ * O campo deixou de ser digitado: a sigla sai do nome fantasia pela regra
+ * de `lib/codigos/cliente-curto.ts` e esta action escolhe o primeiro
+ * candidato livre. Ler todos os códigos do tenant é barato (160 linhas de
+ * uma coluna) e evita um ida-e-volta por tentativa.
+ *
+ * Continua sujeito a corrida, como os outros geradores do sistema: duas
+ * pessoas cadastrando ao mesmo tempo podem pedir a mesma sigla, e quem
+ * recusa é o índice `uniq_clientes_codigo_curto_por_tenant`.
+ */
+export async function sugerirCodigoCliente(
+  nome: string,
+  excludeId?: string,
+): Promise<{ codigo: string }> {
+  const session = await requireSession();
+  const supabase = createClient();
+
+  let query = supabase
+    .from("clientes")
+    .select("codigo_curto")
+    .eq("tenant_id", session.activeTenant.id);
+  if (excludeId) query = query.neq("id", excludeId);
+
+  const { data } = await query;
+  const ocupados = (data ?? [])
+    .map((c: { codigo_curto: string | null }) => c.codigo_curto ?? "")
+    .filter(Boolean);
+
+  return { codigo: proximoCodigoLivre(nome, ocupados) };
+}
+
 /** PRD-02, PRD-03… a partir de quantas marcas o cliente já tem. Sujeito a
  *  corrida — o unique index captura a colisão. */
 function codigoMarca(seq: number): string {
   return `PRD-${seq.toString().padStart(2, "0")}`;
 }
 
-export async function criarCliente(formData: FormData): Promise<ActionResult> {
+/**
+ * `semRedirect`: o cadastro rápido de dentro do formulário de projeto
+ * (17/09/2026). Ali não há para onde redirecionar — o dialog fecha e o
+ * cliente novo precisa VOLTAR, com id, para ficar escolhido no campo.
+ * A tela de clientes continua redirecionando, como sempre.
+ */
+export async function criarCliente(
+  formData: FormData,
+  opcoes?: { semRedirect?: boolean },
+): Promise<ActionResult> {
   const session = await requireSession();
-  const gate = await checarPermissao(session, "cadastros.clientes.editar");
+  // CRIAR usa o gate largo (`inline`, liberado em 18/09/2026): Admin, GP e
+  // Produtor. Quem cria orcamento precisa poder cadastrar o cliente que o
+  // orcamento pede — e cliente novo nao mexe no cadastro de ninguem.
+  // Abrir o cadastro de um cliente que JA existe (atualizarCliente,
+  // inativar, reativar) continua em `cadastros.clientes.editar`.
+  const gate = await checarPermissao(session, "cadastros.clientes.inline");
   if (!gate.ok) return gate;
 
   const payload = parsePayload(formData);
@@ -301,31 +351,51 @@ export async function criarCliente(formData: FormData): Promise<ActionResult> {
   // saída o beco de cliente sem produto, já que Produto é obrigatório no
   // formulário de projeto desde 06/08/2026.
   //
-  // Código fixo em PRD-01: cliente recém-criado tem zero produtos, então
-  // não vale gastar a query de contagem.
+  // Desde 17/09/2026 quem CRIA a PRD-01 é o banco, no trigger
+  // `trg_clientes_marca_padrao`, na mesma transação do INSERT do cliente:
+  // eram dois INSERTs sem transação, e o segundo falhando deixava cliente
+  // sem marca — 150 dos 157 clientes ativos estavam assim. Aqui só
+  // buscamos a marca que o trigger criou.
+  //
+  // O insert de reserva continua no código porque a action precisa rodar
+  // certo também no minuto entre o deploy e a migration do trigger, e
+  // porque o índice único `cliente_produtos_uma_padrao_por_cliente`
+  // impede que os dois caminhos gerem duas padrões.
   //
   // Desde 09/09/2026 as marcas extras vêm no mesmo envio do formulário —
   // antes só dava para cadastrá-las depois, na tela de edição.
-  const { data: produto, error: errProduto } = await supabase
+  let { data: produto, error: errProduto } = await supabase
     .from("cliente_produtos")
-    .insert({
-      tenant_id: session.activeTenant.id,
-      cliente_id: data.id,
-      nome: cliente.nome_fantasia,
-      codigo: "PRD-01",
-      padrao: true,
-      created_by: session.profile.id,
-    })
     .select("id")
-    .single();
+    .eq("cliente_id", data.id)
+    .eq("padrao", true)
+    .maybeSingle();
+
+  if (!errProduto && !produto) {
+    ({ data: produto, error: errProduto } = await supabase
+      .from("cliente_produtos")
+      .insert({
+        tenant_id: session.activeTenant.id,
+        cliente_id: data.id,
+        nome: cliente.nome_fantasia,
+        codigo: "PRD-01",
+        padrao: true,
+        created_by: session.profile.id,
+      })
+      .select("id")
+      .single());
+  }
 
   revalidatePath("/clientes");
 
   // O cliente já está gravado — PostgREST não dá transação para desfazer.
   // Avisamos em vez de redirecionar em silêncio para um cliente que não
   // abre projeto.
-  if (errProduto) {
-    console.error("[clientes.criar.produto_padrao]", errProduto.message);
+  if (errProduto || !produto) {
+    console.error(
+      "[clientes.criar.produto_padrao]",
+      errProduto?.message ?? "marca padrão não encontrada",
+    );
     return {
       ok: false,
       message:
@@ -420,7 +490,156 @@ export async function criarCliente(formData: FormData): Promise<ActionResult> {
     }
   }
 
+  if (opcoes?.semRedirect) return { ok: true, id: data.id };
+
   redirect("/clientes");
+}
+
+/**
+ * Acrescenta UMA marca a um cliente que já existe — o "+" ao lado do campo
+ * Marca no formulário de projeto (18/09/2026, decisão 089 §6).
+ *
+ * Deliberadamente estreita. `atualizarCliente` grava o cadastro inteiro e
+ * por isso é do administrador; aqui o GP e o produtor só INSEREM uma linha
+ * em `cliente_produtos`, e é essa diferença que justifica o gate
+ * `cadastros.clientes.inline`. Nada de renomear, inativar ou tocar no
+ * cadastro do cliente — quem precisa disso vai em `/clientes/<id>`.
+ */
+export async function adicionarMarcaAoCliente(
+  clienteId: string,
+  nome: string,
+): Promise<
+  | { ok: true; marca: { id: string; nome: string; codigo: string } }
+  | { ok: false; message: string }
+> {
+  const session = await requireSession();
+  const gate = await checarPermissao(session, "cadastros.clientes.inline");
+  if (!gate.ok) return gate;
+
+  const parsed = marcaLinhaSchema
+    .pick({ nome: true })
+    .safeParse({ nome });
+  if (!parsed.success) {
+    return {
+      ok: false,
+      message:
+        parsed.error.flatten().fieldErrors.nome?.[0] ??
+        "Informe o nome da marca.",
+    };
+  }
+
+  const supabase = createClient();
+
+  // O cliente precisa ser deste tenant — a RLS já garante, mas sem esta
+  // leitura um id de fora voltaria como "erro ao salvar" em vez de dizer
+  // o que houve.
+  const { data: cliente } = await supabase
+    .from("clientes")
+    .select("id")
+    .eq("id", clienteId)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle<{ id: string }>();
+
+  if (!cliente) {
+    return { ok: false, message: "Cliente não encontrado." };
+  }
+
+  // A numeração continua de onde parou, contando INATIVAS também: o
+  // código é único por cliente, e reaproveitar número colide.
+  const { data: existentes, error: errLista } = await supabase
+    .from("cliente_produtos")
+    .select("id")
+    .eq("cliente_id", clienteId)
+    .eq("tenant_id", session.activeTenant.id);
+
+  if (errLista) {
+    console.error("[clientes.marca_inline.listar]", errLista.message);
+    return { ok: false, message: "Não foi possível ler as marcas do cliente." };
+  }
+
+  const { data, error } = await supabase
+    .from("cliente_produtos")
+    .insert({
+      tenant_id: session.activeTenant.id,
+      cliente_id: clienteId,
+      nome: parsed.data.nome,
+      codigo: codigoMarca((existentes?.length ?? 0) + 1),
+      ativo: true,
+      created_by: session.profile.id,
+    })
+    .select("id, nome, codigo")
+    .single<{ id: string; nome: string; codigo: string }>();
+
+  if (error) {
+    console.error("[clientes.marca_inline.criar]", error.message);
+    return { ok: false, message: mapMarcaDbError(error.message) };
+  }
+
+  revalidatePath("/clientes");
+  revalidatePath(`/clientes/${clienteId}`);
+  return { ok: true, marca: data };
+}
+
+/**
+ * O cadastro COMPLETO de um cliente, para o dialog de edição rápida abrir
+ * preenchido — a lista que alimenta o campo do projeto traz só id, nome e
+ * código (17/09/2026). Mesmo formato que a página de edição recebe.
+ */
+export async function carregarCliente(id: string): Promise<
+  | {
+      ok: true;
+      cliente: Cliente;
+      marcas: ClienteProduto[];
+      portais: ClientePortal[];
+      /** Já existe projeto deste cliente? É o que fecha o código curto —
+       *  ele virou a sigla dos códigos de projeto, e trocá-lo depois
+       *  deixa os antigos com uma sigla e os novos com outra. */
+      temProjeto: boolean;
+    }
+  | { ok: false; message: string }
+> {
+  const session = await requireSession();
+  const supabase = createClient();
+
+  const [clienteRes, marcasRes, portaisRes, projetosRes] = await Promise.all([
+    supabase
+      .from("clientes")
+      .select("*")
+      .eq("id", id)
+      .eq("tenant_id", session.activeTenant.id)
+      .maybeSingle(),
+    supabase
+      .from("cliente_produtos")
+      .select("*")
+      .eq("cliente_id", id)
+      .eq("tenant_id", session.activeTenant.id)
+      .order("codigo"),
+    supabase
+      .from("cliente_portais")
+      .select("*")
+      .eq("cliente_id", id)
+      .eq("tenant_id", session.activeTenant.id)
+      .order("nome"),
+    // `head: true` — interessa só se existe alguma, não quais.
+    supabase
+      .from("projetos")
+      .select("id", { count: "exact", head: true })
+      .eq("cliente_id", id)
+      .eq("tenant_id", session.activeTenant.id),
+  ]);
+
+  if (clienteRes.error || !clienteRes.data) {
+    console.error("[clientes.carregar]", clienteRes.error?.message);
+    return { ok: false, message: "Cliente não encontrado." };
+  }
+
+  return {
+    ok: true,
+    cliente: clienteRes.data as Cliente,
+    marcas: (marcasRes.data ?? []) as ClienteProduto[],
+    portais: (portaisRes.data ?? []) as ClientePortal[],
+    temProjeto: (projetosRes.count ?? 0) > 0,
+  };
 }
 
 /**
@@ -616,21 +835,44 @@ export async function atualizarCliente(
   const supabase = createClient();
 
   // Nome anterior, lido antes do update: é ele que identifica o produto
-  // homônimo criado por padrão — ver abaixo.
+  // homônimo criado por padrão — ver abaixo. E o código curto anterior,
+  // que é o que fica.
   const { data: anterior } = await supabase
     .from("clientes")
-    .select("nome_fantasia, percentual_honorarios_padrao")
+    .select("nome_fantasia, percentual_honorarios_padrao, codigo_curto")
     .eq("id", id)
     .eq("tenant_id", session.activeTenant.id)
     .maybeSingle<{
       nome_fantasia: string;
       percentual_honorarios_padrao: number;
+      codigo_curto: string;
     }>();
+
+  /**
+   * O código curto NÃO muda numa edição. Nunca (18/09/2026).
+   *
+   * Duas razões, e a segunda sozinha já bastaria:
+   *
+   *  * com projeto, a sigla está dentro dos códigos já emitidos
+   *    (`PEV-0001/26`), e o gerador conta os próximos a partir dela —
+   *    trocá-la deixaria os antigos com uma sigla e os novos com outra;
+   *  * sem projeto, o código ainda é uma escolha que alguém fez, e metade
+   *    da base é apelido (EBAZAR.COM.BR é MEL). Regenerar pelo nome
+   *    apagaria isso na primeira correção de acento.
+   *
+   * A tela mostra o campo em leitura; isto é a trava de verdade, porque
+   * regra crítica não mora no frontend. Corrigir um código é trabalho de
+   * migration, com o de/para à vista.
+   */
+  const codigoParaGravar = anterior
+    ? anterior.codigo_curto
+    : cliente.codigo_curto;
 
   const { error } = await supabase
     .from("clientes")
     .update({
       ...cliente,
+      codigo_curto: codigoParaGravar,
       emails_extras: emailsExtras,
       telefones_extras: telefonesExtras,
     })

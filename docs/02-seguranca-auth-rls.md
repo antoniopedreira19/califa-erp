@@ -28,6 +28,35 @@ A tabela `profiles` complementa o usuário do Auth com dados de aplicação:
 - `created_at`
 - `updated_at`
 
+### ⚠️ Quem lê o perfil de quem (17/09/2026)
+
+Até esta data o SELECT em `profiles` tinha duas portas: o próprio perfil
+(`profiles_select_self`) e — **só para `administrador`** — os perfis do
+mesmo tenant. Enquanto todo mundo era administrador ninguém notou. Com GP,
+produtor, financeiro e freelancer de verdade, **todo embed
+`profiles!...(nome)` passou a voltar nulo para eles** (são 42 consultas no
+app: GP e produtor do orçamento e do job, "criado por", "aprovada por",
+"pago por", responsável da verba…). O sintoma que estourou: um GP não
+conseguia enviar job para abertura, porque o formulário lia "GP
+Responsável — não informado" e concluía que o cadastro estava incompleto.
+
+Agora vale `profiles_select_membros_do_tenant`: **membro ativo enxerga o
+perfil dos demais membros ativos do mesmo tenant**, via a função
+`public.e_colega_de_tenant(uuid)`.
+
+Duas armadilhas que valem para qualquer policy nova:
+
+- **Policy não enxerga o que a RLS da tabela vizinha esconde.** A
+  expressão de uma policy roda com os privilégios de quem consulta. Um
+  `exists` sobre `tenant_members` dentro da policy de `profiles` só via a
+  linha de quem estava lendo — a RLS de `tenant_members` é self + admin.
+  Por isso a checagem mora num `SECURITY DEFINER`, como `is_tenant_member`
+  e `is_tenant_admin`.
+- **Trava de tela não se apoia em nome.** Nome depende de leitura; id não.
+  O formulário de abertura passou a olhar `produto_id`,
+  `gp_responsavel_id` e `produtor_id` — exatamente o que o servidor
+  confere em `enviarJobParaAbertura`.
+
 ## Tenants
 
 Mesmo que por bastante tempo exista apenas a Agência California, o banco deve nascer preparado para múltiplas empresas.

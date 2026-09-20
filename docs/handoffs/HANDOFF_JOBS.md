@@ -2508,6 +2508,14 @@ do formulário e sem perder o que já foi digitado.
   item?"*, último campo antes dos botões. Sem resposta, "Gerar PP" não
   passa (`ultimaPPDoItem` em `finalizarPedidoCompra` e
   `editarPedidoCompraGerada`). A correção da PP **rejeitada** não pergunta.
+
+  ⚠️ **17/09/2026:** ela saiu do bloco fixo acima dos botões e passou a
+  **rolar com o formulário**, depois dos anexos — a regra é a mesma, e só
+  a posição mudou. Como agora pode estar fora de vista, quem tenta gerar
+  sem responder é levado até ela (`refUltimaPP` + `scrollIntoView`
+  instantâneo — `smooth` não roda em aba fora do primeiro plano), e a
+  mensagem de erro aparece **junto da pergunta**, não só no topo do
+  formulário.
 - **Botão no painel do item:** "Marcar: todas as PPs geradas", no rodapé,
   sem abrir formulário. Serve para o item antigo, para a resposta dada
   errado e para o custo que **nunca** vai gerar PP.
@@ -3849,3 +3857,79 @@ Detalhes e números na 087 §6 ("Teste real de ponta a ponta").
   fora — sem marcar nada.
 - O fornecedor "Teste Alterações Fornecedor 048" foi **reativado** para o teste
   e ficou ativo; os BVs do JOB-0007 trocaram o fornecedor "Antonio" por ele.
+
+## ⚠️ Nota de 2026-09-17 — A Planilha Interna do job tem Exportar (decisão 088)
+
+[Decisão 088](../decisions/088-a-planilha-interna-sai-pelo-exportar.md).
+Botão **Exportar** na barra da Planilha Interna, logo depois do "Exibir"
+(`realizado/exportar-interna-button.tsx`), com o popover de confirmação no
+mesmo formato do "Exportar esta versão?" do orçamento. Vale nas duas telas
+que mostram a planilha (`/jobs/[jobId]` e `/financeiro/jobs/[jobId]`).
+
+- **Rota:** `GET /api/jobs/[jobId]/export` → `interna-<código>.xlsx`, aba
+  "Interna". Permissão `jobs.ver` — quem vê a tela exporta; o freelancer,
+  que só tem `jobs.ver_restrito`, não.
+- **O que sai:** o orçado da CÓPIA do job (com as erratas), o planejado e o
+  realizado na visão **Líquido (− BV)**, a mesma da tela. Cada item traz
+  sublinhas em itálico: uma por PP não cancelada, uma por devolução de
+  verba (negativa) e uma por BV `confirmado`/`recebido` (negativa). Elas
+  são agrupadas pelo recurso de tópicos do Excel, com o botão de recolher
+  na linha do item.
+- **As contas não foram reescritas:** `lib/exportacao/interna-do-job.ts`
+  passa por `blocosDoItem` (BV só no realizado, `A` e `D` espelhando o
+  orçado, pré-abertura zerada) e por `calcularTotaisVersao`. Se a tela
+  mudar de conta, o export acompanha sozinho — não duplique a regra aqui.
+- **Não volta pelo Importar:** a marca `interna:job` na linha 1 da coluna
+  oculta faz os dois parsers recusarem o arquivo, com mensagem própria. O
+  realizado nasce das PPs.
+- **Mensal:** um bloco por mês, com o fechamento de cada mês e o resumo do
+  trimestre.
+
+Conferido em 17/09/2026 no JOB-0029 (planejado R$ 8.420,00 · 20,1%;
+realizado R$ 11.470,00 · 27,4% — iguais ao cabeçalho da tela), no JOB-0009
+(internacional, com save) e no JOB-0034 (mensal).
+
+---
+
+## ⚠️ Nota de 2026-09-18 — O campo Fornecedor da PP: dropdown do sistema e dois gates
+
+Duas mudanças no campo Fornecedor do "Gerar PP", vindas de um relato da
+produção (*"n to conseguindo cadastrar o tipo de chave"*).
+
+**1. Nenhum `<select>` nativo dentro de dialog.** O cadastro rápido de
+fornecedor tinha **Tipo de chave** e **Tipo de conta** como `<select>` do
+sistema operacional, e dentro do dialog o menu do SO brigava com o foco do
+Radix: abria e não aplicava a escolha. Os dois viraram `Select` do ERP.
+A chave PIX passou a ser gravada no canônico do DICT
+([decisão 090](../decisions/090-a-chave-pix-e-gravada-no-formato-do-banco.md)),
+porque o arquivo de remessa CNAB leva a chave exatamente como o DICT a
+guarda. O anexo da PP (**Tipo do documento**) também deixou de ser nativo.
+
+**2. O "+" e o lápis obedecem a permissões diferentes.** Até aqui só o
+servidor barrava, e o GP descobria depois de preencher o cadastro inteiro.
+Agora:
+
+- **"+" (criar) → `cadastros.fornecedores.inline`** — Admin, GP e Produtor.
+  É o gate da [048](../decisions/048-fornecedor-nasce-de-dentro-da-pp.md),
+  feito para a produção cadastrar sem sair da PP. **Ele continua valendo
+  para o GP: a PP é o fluxo dele.**
+- **Lápis (editar) → `cadastros.fornecedores.editar`** — só administrador.
+- O atalho *"Cadastrar «…» como novo fornecedor"* da busca sem resultado
+  segue o "+".
+
+A prop chega pela cadeia `carregar-detalhe.ts` → `page.tsx` →
+`job-realizado-section` → `job-item-realizado-table` → `gerar-pp-drawer`,
+como `podeCadastrarFornecedor` e `podeEditarFornecedor`. As telas do
+financeiro que reaproveitam a seção são leitura pura (`podeAcoes={false}`)
+e não passam nada — o default fechado não tira botão de ninguém lá.
+
+⚠️ **Se for esconder outro botão por permissão, leia qual permissão a
+action DAQUELE botão checa.** A primeira versão desta mudança usou
+`…editar` para os dois papéis e teria tirado do GP e do produtor o
+cadastro rápido inteiro. Só o teste logado como GP pegou.
+
+Conferido em 18/09/2026 no JOB-0033 (projeto de teste `0-0001/26`), como
+GP Teste Claude e como administrador: GP vê o "+" e não vê o lápis; o
+administrador vê os dois. Para o GP enxergar a planilha foi preciso passá-lo
+a responsável do job (`quemPodeMexer` exige isso) — e o responsável voltou
+a ser o Tiago no fim. Nenhuma PP e nenhum fornecedor foram gravados.

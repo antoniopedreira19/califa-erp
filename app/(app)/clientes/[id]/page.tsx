@@ -17,7 +17,7 @@ export default async function EditarClientePage({
   const session = await requireSession();
   const supabase = createClient();
 
-  const [clienteRes, produtosRes, portaisRes] = await Promise.all([
+  const [clienteRes, produtosRes, portaisRes, projetosRes] = await Promise.all([
     supabase
       .from("clientes")
       .select("*")
@@ -43,6 +43,13 @@ export default async function EditarClientePage({
       .eq("tenant_id", session.activeTenant.id)
       .order("ativo", { ascending: false })
       .order("nome"),
+    // Só interessa se existe algum: é o que congela o código curto, que
+    // virou a sigla dos códigos de projeto já emitidos (18/09/2026).
+    supabase
+      .from("projetos")
+      .select("id", { count: "exact", head: true })
+      .eq("cliente_id", params.id)
+      .eq("tenant_id", session.activeTenant.id),
   ]);
 
   const cliente = clienteRes.data;
@@ -53,6 +60,7 @@ export default async function EditarClientePage({
 
   const produtos = (produtosRes.data ?? []) as ClienteProduto[];
   const portais = (portaisRes.data ?? []) as ClientePortal[];
+  const temProjeto = (projetosRes.count ?? 0) > 0;
 
   return (
     <div className="mx-auto max-w-5xl space-y-5">
@@ -80,7 +88,12 @@ export default async function EditarClientePage({
       {/* O mesmo formulário da criação: mesmos campos, mesmas seções.
           Marcas e portais são editados aqui dentro desde 09/09/2026 —
           eram dois cartões à parte. */}
-      <ClienteForm cliente={cliente} marcas={produtos} portais={portais} />
+      <ClienteForm
+        cliente={cliente}
+        marcas={produtos}
+        portais={portais}
+        temProjeto={temProjeto}
+      />
     </div>
   );
 }

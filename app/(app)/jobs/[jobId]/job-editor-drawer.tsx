@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Combobox, COMBOBOX_COMO_SELECT } from "@/components/ui/combobox";
 import {
   Select,
   SelectContent,
@@ -115,12 +116,15 @@ export function JobEditorDrawer({ job, regionais, responsaveis }: Props) {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="responsavel_id">Responsável <span className="text-california-red">*</span></Label>
-                <Select value={responsavelId} onValueChange={setResponsavelId} required>
-                  <SelectTrigger id="responsavel_id"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {responsaveis.map((r) => <SelectItem key={r.id} value={r.id}>{r.nome}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <Combobox
+                  id="responsavel_id"
+                  items={responsaveis.map((r) => ({ value: r.id, label: r.nome }))}
+                  value={responsavelId || null}
+                  onChange={(v) => setResponsavelId(v ?? "")}
+                  placeholder="Escolha um responsável"
+                  buscaPlaceholder="Escreva o nome"
+                  className={COMBOBOX_COMO_SELECT}
+                />
               </div>
             </div>
             {error && (

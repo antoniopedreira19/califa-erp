@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
+import { pode } from "@/lib/permissoes";
 import { createClient } from "@/lib/supabase/server";
 import { listActiveMembers } from "@/lib/data/members";
 import { listEmpresasAtivas, getEmpresaPrincipal } from "@/lib/data/empresas";
@@ -84,6 +85,14 @@ export default async function NovoProjetoPage() {
           produtos={produtos}
           categorias={categorias}
           criadorId={session.profile.id}
+          podeCadastrarCliente={pode(
+            session.activeRole,
+            "cadastros.clientes.inline",
+          )}
+          podeEditarCliente={pode(
+            session.activeRole,
+            "cadastros.clientes.editar",
+          )}
         />
       </div>
     </div>

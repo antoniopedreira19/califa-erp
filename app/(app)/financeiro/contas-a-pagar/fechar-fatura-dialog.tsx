@@ -31,6 +31,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Combobox } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
 import { formatCurrency, cn } from "@/lib/utils";
 import type {
@@ -443,47 +444,53 @@ export function FecharFaturaDialog({
                             <Label htmlFor={`aj_tipo_${linha.chave}`}>
                               Tipo *
                             </Label>
-                            <select
+                            {/* Combobox e não `<select>`: o menu nativo não
+                                aplica a escolha dentro de dialog, e o plano
+                                de contas tem 62 subtipos (decisões 089 e
+                                090). */}
+                            <Combobox
                               id={`aj_tipo_${linha.chave}`}
-                              value={linha.tipoId}
-                              onChange={(e) =>
+                              items={tipos.map((t) => ({
+                                value: t.id,
+                                label: `${t.codigo} · ${t.nome}`,
+                              }))}
+                              value={linha.tipoId || null}
+                              onChange={(v) =>
                                 alterarLinha(linha.chave, {
-                                  tipoId: e.target.value,
+                                  tipoId: v ?? "",
                                   subtipoId: "",
                                 })
                               }
-                              className="h-10 w-full rounded-lg border border-border bg-white px-2 text-sm outline-none focus:border-california-red"
-                            >
-                              <option value="">Selecione…</option>
-                              {tipos.map((t) => (
-                                <option key={t.id} value={t.id}>
-                                  {t.codigo} · {t.nome}
-                                </option>
-                              ))}
-                            </select>
+                              placeholder="Selecione…"
+                              buscaPlaceholder="Escreva o código ou o nome"
+                              className="h-10 border-border px-2"
+                            />
                           </div>
                           <div className="space-y-1">
                             <Label htmlFor={`aj_subtipo_${linha.chave}`}>
                               Subtipo *
                             </Label>
-                            <select
+                            <Combobox
                               id={`aj_subtipo_${linha.chave}`}
-                              value={linha.subtipoId}
-                              disabled={linha.tipoId === ""}
-                              onChange={(e) =>
+                              items={subtiposDoTipo.map((s) => ({
+                                value: s.id,
+                                label: `${s.codigo} · ${s.nome}`,
+                              }))}
+                              value={linha.subtipoId || null}
+                              onChange={(v) =>
                                 alterarLinha(linha.chave, {
-                                  subtipoId: e.target.value,
+                                  subtipoId: v ?? "",
                                 })
                               }
-                              className="h-10 w-full rounded-lg border border-border bg-white px-2 text-sm outline-none focus:border-california-red disabled:bg-muted/40"
-                            >
-                              <option value="">Selecione…</option>
-                              {subtiposDoTipo.map((s) => (
-                                <option key={s.id} value={s.id}>
-                                  {s.codigo} · {s.nome}
-                                </option>
-                              ))}
-                            </select>
+                              disabled={linha.tipoId === ""}
+                              placeholder={
+                                linha.tipoId === ""
+                                  ? "Escolha o tipo primeiro"
+                                  : "Selecione…"
+                              }
+                              buscaPlaceholder="Escreva o código ou o nome"
+                              className="h-10 border-border px-2"
+                            />
                           </div>
                         </div>
 

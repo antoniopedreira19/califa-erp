@@ -79,6 +79,27 @@ export interface HerdadosJob {
   /** Categoria do job, herdada do orçamento (categorias_dominio, escopo
    *  'orcamento'). É a mesma que o financeiro vê na abertura. */
   categoriaNome: string | null;
+
+  /**
+   * Ids do que o servidor exige para abrir o job — marca no projeto, GP e
+   * produtor no orçamento.
+   *
+   * Obrigatórios, nunca opcionais: são eles que travam o envio, e campo
+   * opcional em tipo montado à mão é como um campo some em silêncio
+   * (CLAUDE.md).
+   *
+   * ⚠️ O bloqueio olha para o ID, e NUNCA para o nome (17/09/2026). O
+   * nome vem de `profiles`, e ler o perfil de um colega depende da RLS:
+   * até esta data só administrador conseguia, então para um GP o nome
+   * voltava nulo, o formulário concluía "cadastro incompleto" e o
+   * "Confirmar dados" não fazia nada — com o orçamento completo. A RLS
+   * foi corrigida na migration `20260917190001`, e o ID aqui garante que
+   * um tropeço de leitura não volte a travar o envio: o servidor confere
+   * exatamente estes três ids em `enviarJobParaAbertura`.
+   */
+  produtoId: string | null;
+  gpId: string | null;
+  produtorId: string | null;
 }
 
 /** Campos que o Zod do servidor valida — as chaves batem com `fieldErrors`. */
@@ -127,12 +148,16 @@ export function faltamCampos(d: DadosJob): Record<CampoObrigatorio, boolean> {
 
 /** Falta algo herdado? Então o projeto/orçamento está incompleto e a
  *  abertura não tem como gravar o job. Cidade e regional não entram: são
- *  campos do formulário desde 12/08/2026 e o usuário resolve na hora. */
+ *  campos do formulário desde 12/08/2026 e o usuário resolve na hora.
+ *
+ *  Espelha, item a item, a checagem do servidor em
+ *  `enviarJobParaAbertura` — que olha `projeto.produto_id`,
+ *  `orcamento.gp_responsavel_id` e `orcamento.produtor_id`. */
 export function herdadosIncompletos(h: HerdadosJob): string[] {
   const faltando: string[] = [];
-  if (!h.produtoNome) faltando.push("Marca (no projeto)");
-  if (!h.gpNome) faltando.push("GP responsável (no orçamento)");
-  if (!h.produtorNome) faltando.push("Produtor responsável (no orçamento)");
+  if (!h.produtoId) faltando.push("Marca (no projeto)");
+  if (!h.gpId) faltando.push("GP responsável (no orçamento)");
+  if (!h.produtorId) faltando.push("Produtor responsável (no orçamento)");
   return faltando;
 }
 
@@ -471,9 +496,25 @@ export function EnviarJobModal({
             obrigatorio
             className="md:col-span-3"
             erro={erroContatos}
-            apoio="Quem recebe a cobrança no cliente. Número é opcional."
+            apoio="Quem recebe a cobrança no cliente."
           >
             <div className="space-y-2">
+              {/* Cabeçalho das colunas. O asterisco do rótulo "Contato de
+                  cobrança" sozinho não dizia QUAL das três caixas era
+                  obrigatória — e nome e e-mail são, número não (relato de
+                  um GP em 17/09/2026). Coluna sem asterisco já quer dizer
+                  opcional: escrever "· opcional" no Número seria repetir.
+
+                  Some abaixo de `md`, onde a grade vira uma coluna só e os
+                  rótulos empilhariam longe das caixas — nessa largura o
+                  diálogo inteiro já degrada (as 3 colunas viram 1), e ele
+                  é de uso desktop. */}
+              <div className="hidden gap-2 md:grid md:grid-cols-[1fr_1fr_1fr_36px]">
+                <RotuloContato texto="Nome" obrigatorio />
+                <RotuloContato texto="Número" />
+                <RotuloContato texto="E-mail" obrigatorio />
+                <span aria-hidden />
+              </div>
               {dados.contatos.map((c, i) => (
                 <div
                   // Índice como chave: as linhas não têm id antes de
@@ -497,7 +538,7 @@ export function EnviarJobModal({
                     value={c.numero}
                     onChange={(e) => alterarContato(i, { numero: e.target.value })}
                     maxLength={40}
-                    placeholder="Número · opcional"
+                    placeholder="Número"
                     aria-label={`Número do contato ${i + 1}`}
                   />
                   <Input
@@ -711,6 +752,25 @@ function Campo({
         <p className="text-xs text-muted-foreground">{apoio}</p>
       ) : null}
     </div>
+  );
+}
+
+/** Rótulo de coluna do contato de cobrança. Só o asterisco vermelho do
+ *  obrigatório: coluna sem asterisco JÁ quer dizer opcional, e escrever
+ *  "· opcional" no Número era dizer a mesma coisa duas vezes (Tiago,
+ *  17/09/2026). Vale para o placeholder também. */
+function RotuloContato({
+  texto,
+  obrigatorio,
+}: {
+  texto: string;
+  obrigatorio?: boolean;
+}) {
+  return (
+    <span className="text-xs font-medium text-muted-foreground">
+      {texto}
+      {obrigatorio && <span className="ml-1 text-california-red">*</span>}
+    </span>
   );
 }
 
