@@ -5571,3 +5571,24 @@ Conferido na tela, logado: lista com as 10 contas ativas (saldo
 consolidado R$ 498.309,42, batendo com o SQL), clique abrindo o extrato da
 Conta Teste com as 29 linhas, troca de período, busca, link direto da
 conta do cartão e `?conta=` inválido caindo na lista.
+
+## ⚠️ Nota de 2026-09-18 — o cartão vai virar confirmação na baixa (093)
+
+Decisão tomada, **ainda não implementada**: o cartão escolhido na aprovação
+da PP (ou no cadastro da avulsa) passa a ser **intenção**, que alimenta a
+previsão de fluxo de caixa; o item só entra na fatura quando o pagamento é
+confirmado, e nesse momento a forma ainda pode mudar. Hoje é o contrário —
+`rotear_pp_para_cartao` na aprovação e o gatilho `avulsa_entra_na_fatura` no
+cadastro já amarram o item à fatura, e desfazer passa por reabrir fatura ou
+reprovar a PP.
+
+A [decisão 093](../decisions/093-o-item-entra-na-fatura-na-confirmacao-do-pagamento.md)
+detalha o que a implementação precisa resolver junto: a previsão continuar
+caindo no vencimento da fatura sem gravar vínculo, o gesto de confirmar não
+se chamar "baixa" (ele não tira dinheiro do banco) e o fechamento passar a
+listar os itens previstos que ninguém confirmou.
+
+Levantamento que ficou registrado no caminho: quem marca os itens como
+pagos é o **fechamento** da fatura, não a baixa; e a parcela deixada como
+"decidir na baixa" ainda aceita cartão como forma na baixa, gerando saída
+direta da conta bancária sem passar por fatura.
