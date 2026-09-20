@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Users, ArrowRight, type LucideIcon } from "lucide-react";
+import { Users, ArrowRight, Receipt, type LucideIcon } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/page-header";
@@ -15,14 +15,26 @@ export default async function CentralRHPage() {
 
   const supabase = createClient();
 
-  const [colaboradoresAtivosRes] = await Promise.all([
+  const hoje = new Date();
+  const anoAtual = hoje.getFullYear();
+  const mesAtual = hoje.getMonth() + 1;
+
+  const [colaboradoresAtivosRes, pendenciasRes] = await Promise.all([
     supabase
       .from("colaboradores")
       .select("id", { count: "exact", head: true })
       .eq("tenant_id", session.activeTenant.id)
       .eq("status", "ativo"),
+    supabase
+      .from("folhas_pagamento")
+      .select("id", { count: "exact", head: true })
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("competencia_ano", anoAtual)
+      .eq("competencia_mes", mesAtual)
+      .eq("status", "pendente_correcao"),
   ]);
   const colaboradoresAtivos = colaboradoresAtivosRes.count ?? 0;
+  const pendenciasNoMes = pendenciasRes.count ?? 0;
 
   return (
     <div className="space-y-8">
@@ -42,7 +54,19 @@ export default async function CentralRHPage() {
           count={colaboradoresAtivos}
           countLabel={colaboradoresAtivos === 1 ? "ativo" : "ativos"}
         />
-        {/* Próximos cards: Benefícios, Férias, Turnover, Folha */}
+        <RhCard
+          href="/rh/folhas"
+          icon={Receipt}
+          title="Folha do mês"
+          description="Geração e revisão da folha mensal. RH edita e envia; financeiro aprova, reprova ou paga cada linha. Pendências voltam pro RH corrigir."
+          count={pendenciasNoMes}
+          countLabel={
+            pendenciasNoMes === 1
+              ? "pendência no mês atual"
+              : "pendências no mês atual"
+          }
+        />
+        {/* Próximos cards: Benefícios, Férias, Turnover */}
       </div>
     </div>
   );

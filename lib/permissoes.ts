@@ -161,6 +161,13 @@ export const permissoes = {
   "rh.colaboradores.ver":         ["administrador", "rh"],
   "rh.colaboradores.editar":      ["administrador", "rh"],
   "rh.niveis.editar":             ["administrador", "rh"],
+  /**
+   * Folha mensal — RH gera, edita e envia; financeiro aprova, reprova
+   * e paga. Admin cobre os dois lados. Ver docs/modulos/rh/20-folha-mensal.md.
+   */
+  "rh.folhas.ver":                ["administrador", "rh", "financeiro"],
+  "rh.folhas.editar_rh":          ["administrador", "rh"],
+  "rh.folhas.aprovar_financeiro": ["administrador", "financeiro"],
 } as const satisfies Record<string, readonly AppRole[]>;
 
 /** Chaves validas da matriz — usada como tipo em consumidores. */
