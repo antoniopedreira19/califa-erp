@@ -16,12 +16,15 @@
  *   ficava sob a descrição saiu, como em Títulos a Pagar e em Contas a
  *   Receber.
  *
- * ⚠️ Aqui NÃO se dá baixa. Item de cartão não sai da conta bancária um a
- * um: ele espera a fatura fechar e sai na baixa dela, uma só, na aba
- * Títulos a Pagar. A seleção múltipla e o "Baixar" em lote que existiam
- * nesta tela faziam o contrário — um lançamento no banco por item — e
- * foram removidos em 28/08/2026, junto com a trava que o banco passou a
- * impor em `dar_baixa_avulsa_com_plano`.
+ * ⚠️ Aqui NÃO se dá baixa. Desde a decisão 093 (20/09/2026) o item chega
+ * aqui JÁ confirmado: a baixa em Títulos a Pagar, com forma "cartão", é o
+ * que o coloca na fatura (lançamento na conta-espelho, sem tocar na conta
+ * bancária). O dinheiro sai uma vez só, na baixa da fatura fechada. A
+ * seleção múltipla e o "Baixar" em lote que existiam nesta tela faziam o
+ * contrário — um lançamento no banco por item — e foram removidos em
+ * 28/08/2026. O que ainda aparece como "A pagar" aqui é legado roteado na
+ * aprovação (antes da 093) ou ajuste de um fechamento reaberto: entra na
+ * fatura quando ela fechar.
  */
 
 import * as React from "react";
@@ -792,9 +795,9 @@ export function TitulosCartaoList({
       {/* ------------------------------------------------------------------ */}
       <p className="flex items-center gap-2 text-xs text-muted-foreground">
         <Info className="h-3.5 w-3.5" />
-        Item de cartão não se baixa aqui. Ele espera a fatura fechar — e a
-        fatura fechada vira um título único em &ldquo;Títulos a Pagar&rdquo;,
-        onde a baixa acontece uma vez só.
+        Item confirmado aqui já está na fatura. O dinheiro sai uma vez só:
+        a fatura fechada vira um título único em &ldquo;Títulos a
+        Pagar&rdquo;, e é lá que a baixa dela acontece.
       </p>
 
       {/* Dialog de conferência da baixa (para linhas pagas). Espelha o
@@ -827,6 +830,7 @@ export function TitulosCartaoList({
                 subtipoNome: conferindo.subtipo_nome,
                 dataPagamento: conferindo.data_pagamento,
                 vencOriginal: conferindo.venc_original,
+                viaCartao: conferindo.forma_pagamento === "cartao_credito",
               } as BaixaRegistradaAlvo)
             : null
         }

@@ -69,7 +69,7 @@ export function ReabrirFaturaDialog({ fatura, onOpenChange, onSucesso }: Props) 
     }
     onOpenChange(false);
     onSucesso(
-      `${fatura.codigo} reaberta — os itens voltaram a "a pagar" e ela recebe compra de novo.`,
+      `${fatura.codigo} reaberta — os itens confirmados ficam, e ela recebe compra de novo.`,
     );
     router.refresh();
   }
@@ -104,15 +104,14 @@ export function ReabrirFaturaDialog({ fatura, onOpenChange, onSucesso }: Props) 
             <div className="space-y-4 pt-1">
               <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-3 text-[12.5px] leading-relaxed text-amber-900">
                 <p>
-                  <strong>O que reabrir faz:</strong> apaga os lançamentos que
-                  o fechamento criou na conta do cartão, devolve os itens para
-                  &ldquo;a pagar&rdquo; e tira o título de Títulos a Pagar. A
-                  fatura volta a receber compra — inclusive retroativa.
+                  <strong>O que reabrir faz:</strong> apaga só o que o
+                  fechamento criou — os itens de diferença — e tira o título de
+                  Títulos a Pagar. Os itens confirmados na baixa continuam na
+                  fatura, e ela volta a receber compra — inclusive retroativa.
                 </p>
                 <p>
                   Nada disso mexe em dinheiro: a fatura ainda não foi paga, e
-                  os lançamentos do fechamento são recriados inteiros quando
-                  você fechar de novo.
+                  a diferença é recriada quando você fechar de novo.
                 </p>
               </div>
 

@@ -162,7 +162,7 @@ export default async function PedidosCompraFinanceiroPage({
           data_pagamento, data_pagamento_primeira, status,
           pago_em, created_at, empresa_id, recorrente_id,
           plano_conta_tipo_id, plano_conta_subtipo_id,
-          forma_pagamento, cartao_credito_id,
+          forma_pagamento, cartao_credito_id, fatura_cartao_id,
           estorno_de_avulsa_id, parcela_numero, parcela_total, parcela_de_avulsa_id,
           fornecedor:fornecedores(nome, razao_social)
         `)
@@ -648,11 +648,16 @@ export default async function PedidosCompraFinanceiroPage({
           : par.pago_em
             ? baixa?.forma_pagamento ?? null
             : null,
+        // Na fatura, o cartão é o da BAIXA quando ela existe (decisão 093:
+        // o financeiro pode trocar o cartão na hora de pagar); só a
+        // parcela roteada antes da 093 fica com o da PP.
         cartao_credito_id: par.fatura_cartao_id
-          ? pp.cartao_credito_id ?? null
+          ? baixa?.cartao_credito_id ?? pp.cartao_credito_id ?? null
           : par.pago_em
             ? baixa?.cartao_credito_id ?? null
             : null,
+        forma_prevista: pp.forma_pagamento ?? null,
+        cartao_previsto_id: pp.cartao_credito_id ?? null,
         // Nenhuma destas origens é estorno nem parcela de cartão: as duas
         // coisas só existem em compra de cartão, que vem do laço das
         // avulsas.
@@ -683,6 +688,7 @@ export default async function PedidosCompraFinanceiroPage({
     plano_conta_subtipo_id: string;
     forma_pagamento: FormaPagamento | null;
     cartao_credito_id: string | null;
+    fatura_cartao_id: string | null;
     estorno_de_avulsa_id: string | null;
     parcela_numero: number | null;
     parcela_total: number | null;
@@ -718,12 +724,22 @@ export default async function PedidosCompraFinanceiroPage({
       subtipo_nome: baixa?.subtipo ?? null,
       // Se paga, prefere a forma registrada na baixa (realizado); senão,
       // usa a forma planejada da origem (avulsa/recorrência).
+      // A avulsa "no cartão" só é da aba Cartão quando ESTÁ numa fatura —
+      // paga, ou roteada antes da 093. A intenção do cadastro vai em
+      // `forma_prevista` e pré-preenche a baixa, que é onde ela vira
+      // fatura de verdade (decisão 093).
       forma_pagamento: a.pago_em
         ? baixa?.forma_pagamento ?? a.forma_pagamento
-        : a.forma_pagamento,
+        : a.fatura_cartao_id
+          ? "cartao_credito"
+          : null,
       cartao_credito_id: a.pago_em
         ? baixa?.cartao_credito_id ?? a.cartao_credito_id
-        : a.cartao_credito_id,
+        : a.fatura_cartao_id
+          ? a.cartao_credito_id
+          : null,
+      forma_prevista: a.forma_pagamento,
+      cartao_previsto_id: a.cartao_credito_id,
       verba_situacao: null,
       urgente: false,
       urgente_justificativa: null,
@@ -825,6 +841,8 @@ export default async function PedidosCompraFinanceiroPage({
         cartao_credito_id: par.pago_em
           ? baixa?.cartao_credito_id ?? null
           : null,
+        forma_prevista: null,
+        cartao_previsto_id: null,
         // Nenhuma destas origens é estorno nem parcela de cartão: as duas
         // coisas só existem em compra de cartão, que vem do laço das
         // avulsas.
@@ -894,6 +912,8 @@ export default async function PedidosCompraFinanceiroPage({
       subtipo_nome: baixa?.subtipo ?? null,
       forma_pagamento: dev.pago_em ? baixa?.forma_pagamento ?? null : null,
       cartao_credito_id: dev.pago_em ? baixa?.cartao_credito_id ?? null : null,
+      forma_prevista: null,
+      cartao_previsto_id: null,
       // Nenhuma destas origens é estorno nem parcela de cartão: as duas
       // coisas só existem em compra de cartão, que vem do laço das
       // avulsas.
@@ -923,7 +943,12 @@ export default async function PedidosCompraFinanceiroPage({
         // A fatura tem duas fontes de item desde 29/08/2026: conta avulsa
         // e parcela de PP aprovada no cartão. Somar só a primeira faria a
         // faixa não bater com a tabela.
-        "parcelas_pp:pedidos_compra_parcelas(valor, pago_em)",
+        "parcelas_pp:pedidos_compra_parcelas(valor, pago_em), " +
+        // Desde a 093 o item confirmado na baixa JÁ é lançamento na fatura
+        // aberta (papel item/ajuste). Sem esta perna a faixa dizia "0 itens"
+        // para uma fatura com compra dentro, e o fechamento abria com a
+        // soma errada.
+        "lancamentos:lancamentos_financeiros!fatura_cartao_id(valor, natureza, papel_na_fatura)",
     )
     .eq("tenant_id", session.activeTenant.id)
     // Fechada entra junto: ela ainda mora na aba Cartão, com o botão de
@@ -947,6 +972,18 @@ export default async function PedidosCompraFinanceiroPage({
       valor: number;
       pago_em: string | null;
     }>;
+    // Os itens que já são lançamento (confirmados na baixa, estornos de
+    // compra, ajustes de um fechamento anterior). Assinados: estorno é
+    // entrada e abate.
+    const lancs = ((f.lancamentos ?? []) as Array<{
+      valor: number;
+      natureza: "entrada" | "saida";
+      papel_na_fatura: string | null;
+    }>).filter((l) => l.papel_na_fatura === "item" || l.papel_na_fatura === "ajuste");
+    const somaLancs = lancs.reduce(
+      (s, l) => s + (l.natureza === "entrada" ? -Number(l.valor ?? 0) : Number(l.valor ?? 0)),
+      0,
+    );
     // Na aberta os itens estão em "aprovada" (e a parcela de PP com
     // pago_em nulo); na fechada os dois já viraram lançamento. Contar só
     // os abertos numa fatura fechada daria zero itens e zero reais.
@@ -968,9 +1005,13 @@ export default async function PedidosCompraFinanceiroPage({
       // como positivo inflaria o total e faria o fechamento pedir um
       // ajuste que não existe (29/08/2026). Na fechada quem manda é o
       // valor cobrado, que já embute o ajuste.
+      // Aberta: o que já é lançamento + o legado ainda pendente (avulsa
+      // aprovada e parcela sem pago_em, roteadas antes da 093). Fechada:
+      // o valor cobrado, que já embute o ajuste.
       soma_itens: fechada
         ? Number(f.valor_cobrado ?? 0)
-        : itens.reduce(
+        : somaLancs +
+          itens.reduce(
             (s, i) =>
               s +
               (i.natureza === "entrada"
@@ -981,7 +1022,7 @@ export default async function PedidosCompraFinanceiroPage({
           // Parcela de PP é sempre saída: não há estorno de PP no cartão
           // (decidido em 29/08/2026).
           parcelasPP.reduce((s, p) => s + Number(p.valor ?? 0), 0),
-      qtd_itens: itens.length + parcelasPP.length,
+      qtd_itens: (fechada ? 0 : lancs.length) + itens.length + parcelasPP.length,
       status: f.status as "aberta" | "fechada",
     };
   });
@@ -1079,6 +1120,8 @@ export default async function PedidosCompraFinanceiroPage({
       // banco. Sem isto ela cairia na aba Cartão junto com os itens dela.
       forma_pagamento: null,
       cartao_credito_id: null,
+      forma_prevista: null,
+      cartao_previsto_id: null,
       // Nenhuma destas origens é estorno nem parcela de cartão: as duas
       // coisas só existem em compra de cartão, que vem do laço das
       // avulsas.

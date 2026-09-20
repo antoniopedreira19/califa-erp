@@ -61,6 +61,10 @@ export interface BaixaRegistradaAlvo {
    *  ficar completa sem obrigar a fechar o modal. */
   dataPagamento: string | null;
   vencOriginal: string | null;
+  /** A baixa foi no cartão (decisão 093): o item está numa fatura, não
+   *  saiu da conta bancária, e o estorno o tira da fatura em vez de gerar
+   *  lançamento reverso. Obrigatório para o chamador não esquecer. */
+  viaCartao: boolean;
 }
 
 function formatarData(iso: string | null): string {
@@ -191,10 +195,23 @@ export function BaixaRegistradaDialog({
             <p className="flex items-start gap-2 text-sm text-foreground">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-california-red" />
               <span>
-                O título volta para{" "}
-                <span className="font-semibold">{voltaPara}</span> e um
-                lançamento reverso é gerado na mesma conta bancária, mantendo
-                o histórico contábil. O motivo fica no log de auditoria.
+                {alvo.viaCartao ? (
+                  <>
+                    O título volta para{" "}
+                    <span className="font-semibold">{voltaPara}</span> e sai da
+                    fatura do cartão — o lançamento dele na conta do cartão é
+                    apagado, sem mexer em conta bancária. Se a fatura já
+                    fechou, reabra-a antes. O motivo fica no log de auditoria.
+                  </>
+                ) : (
+                  <>
+                    O título volta para{" "}
+                    <span className="font-semibold">{voltaPara}</span> e um
+                    lançamento reverso é gerado na mesma conta bancária,
+                    mantendo o histórico contábil. O motivo fica no log de
+                    auditoria.
+                  </>
+                )}
               </span>
             </p>
             <div className="space-y-1">
