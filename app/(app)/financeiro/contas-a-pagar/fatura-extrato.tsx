@@ -26,6 +26,7 @@ import {
   trimestreDe,
 } from "@/app/(app)/financeiro/conciliacao/conciliacao-list";
 import type { TituloRow } from "./titulos-pagar-list";
+import { limparDescricaoDaFatura } from "@/lib/cartoes/descricao-fatura";
 
 /** A chave que liga a linha do extrato ao título de onde ela veio. */
 export function chaveDoTitulo(t: TituloRow): string | null {
@@ -211,18 +212,8 @@ export function FaturaExtrato({
   );
 }
 
-/**
- * Dentro da fatura o prefixo "Cartão · " que o lançamento carrega é
- * redundante — tudo aqui é cartão —, e o estorno gravado antes de
- * 20/09/2026 saiu "Estorno · Estorno · …" (o gatilho prefixava uma
- * descrição que a tela já tinha prefixado). Só apresentação: o dado fica
- * como está.
- */
 function descricaoDaFatura(descricao: string, origem: string): string {
-  let d = limparPrefixoDescricao(descricao, origem);
-  if (d.startsWith("Cartão · ")) d = d.slice("Cartão · ".length);
-  while (d.startsWith("Estorno · Estorno · ")) d = d.slice("Estorno · ".length);
-  return d;
+  return limparDescricaoDaFatura(limparPrefixoDescricao(descricao, origem));
 }
 
 function formatDate(iso: string): string {

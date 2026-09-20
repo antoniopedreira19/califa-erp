@@ -5626,5 +5626,14 @@ exportação em `/api/financeiro/cartao/faturas/[id]/export`;
 `titulos-cartao-list.tsx` saiu. O mapeador de linha do extrato da
 Conciliação agora mora em `lib/data/lancamento-linha.ts` e é o mesmo da
 fatura (`lib/data/fatura-cartao-extrato.ts`). A aba viaja em `?tab=`;
-`lerTab` fica em módulo puro (`contas-pagar-tab-url.ts`). Falta a Entrega
-3 (conciliação em dois níveis e `vw_fluxo_caixa` projetando pela fatura).
+`lerTab` fica em módulo puro (`contas-pagar-tab-url.ts`).
+
+⚠️ **20/09/2026, à noite — Entrega 3 no ar (mesma branch): a 093 está
+completa.** A conciliação abre o pagamento da fatura em dois níveis
+(centro de custo → itens; `agruparPorCentro` em
+`lib/data/fatura-cartao-extrato.ts`, `LinhasDaFatura` em
+`conciliacao-list.tsx`). A `vw_fluxo_caixa` (migration 20260920100003)
+projeta PP e avulsa com cartão por `proxima_fatura_cartao`, tira delas o
+legado já roteado e ganha o ramo `fatura_cartao` (aberta/fechada, no
+vencimento, por regional). A tela do Fluxo de caixa exclui a conta-espelho
+do escopo "todas" (`contasCartaoIds`). Tudo em 093 §10.

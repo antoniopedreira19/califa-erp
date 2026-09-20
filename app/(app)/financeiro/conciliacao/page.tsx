@@ -10,6 +10,11 @@ import {
   montarLinhasDeLancamentos,
 } from "@/lib/data/lancamento-linha";
 import {
+  agruparPorCentro,
+  carregarExtratoDaFatura,
+  type DetalheDaFatura,
+} from "@/lib/data/fatura-cartao-extrato";
+import {
   calcularSaldoAnterior,
   derivarSaldo,
 } from "@/lib/calculos/saldo-conta";
@@ -99,6 +104,7 @@ export default async function ConciliacaoPage({
 
   let saldoAnterior = 0;
   let linhas: ReturnType<typeof derivarSaldo> = [];
+  const detalhesFatura: Record<string, DetalheDaFatura> = {};
   let creditos = 0;
   let debitos = 0;
 
@@ -133,14 +139,34 @@ export default async function ConciliacaoPage({
     // A tradução de linha crua para linha do extrato mora em
     // `lib/data/lancamento-linha.ts` desde 20/09/2026: a fatura do cartão
     // (aba Cartão, decisão 093) usa a MESMA, porque é o mesmo extrato.
-    linhas = derivarSaldo(
-      await montarLinhasDeLancamentos(
-        supabase,
-        session.activeTenant.id,
-        data ?? [],
-      ),
-      saldoAnterior,
+    const semSaldo = await montarLinhasDeLancamentos(
+      supabase,
+      session.activeTenant.id,
+      data ?? [],
     );
+    linhas = derivarSaldo(semSaldo, saldoAnterior);
+
+    // O pagamento de uma fatura de cartão abre em dois níveis — centro de
+    // custo e, dentro dele, os itens (decisão 093, entrega 3). Só a perna
+    // do BANCO (esta conta) e só o pagamento vivo: o estorno é a linha
+    // reversa, e não se expande. Uma leitura por fatura paga no período.
+    const pagamentos = semSaldo.filter(
+      (l) => l.papel_na_fatura === "pagamento" && l.fatura_cartao_id !== null,
+    );
+    const faturaIds = [...new Set(pagamentos.map((l) => l.fatura_cartao_id as string))];
+    const extratos = await Promise.all(
+      faturaIds.map((id) =>
+        carregarExtratoDaFatura(supabase, session.activeTenant.id, id),
+      ),
+    );
+    const detalhePorFatura = new Map<string, DetalheDaFatura>();
+    extratos.forEach((e, i) => {
+      if (e) detalhePorFatura.set(faturaIds[i], agruparPorCentro(e));
+    });
+    for (const l of pagamentos) {
+      const d = detalhePorFatura.get(l.fatura_cartao_id as string);
+      if (d) detalhesFatura[l.id] = d;
+    }
     creditos = linhas.reduce((acc, l) => acc + l.credito, 0);
     debitos = linhas.reduce((acc, l) => acc + l.debito, 0);
   }
@@ -189,7 +215,11 @@ export default async function ConciliacaoPage({
             <SaldoCard label="Saldo final" valor={saldoFinal} destaque />
           </div>
 
-          <ConciliacaoList linhas={linhas} highlight={searchParams.highlight} />
+          <ConciliacaoList
+            linhas={linhas}
+            highlight={searchParams.highlight}
+            detalhesFatura={detalhesFatura}
+          />
         </>
       )}
 

@@ -2,12 +2,13 @@
 
 **Data:** 2026-09-18
 **Decidido por:** Tiago
-**Status:** decidida e fechada no desenho (canvas "Cartões — estado
-atual e proposta"). **Entregas 1 (banco + baixa) e 2 (nova aba Cartão)
-implementadas e testadas em 20/09/2026** — §8 e §9. Entrega 3
-(conciliação em dois níveis + fluxo de caixa) ainda por fazer.
+**Status:** decidida, desenhada e **implementada por inteiro em
+20/09/2026** — entregas 1 (banco + baixa, §8), 2 (aba Cartão, §9) e 3
+(conciliação em dois níveis + fluxo de caixa, §10), todas testadas no
+navegador.
 **Migrations:** `20260920100001_o_item_entra_na_fatura_na_baixa.sql`,
-`20260920100002_estorno_de_compra_sem_prefixo_duplicado.sql`.
+`20260920100002_estorno_de_compra_sem_prefixo_duplicado.sql`,
+`20260920100003_fluxo_projeta_cartao_pela_fatura.sql`.
 
 ---
 
@@ -347,3 +348,60 @@ competência.
 Fica para depois: a coluna Ação em fatura **paga** mostra só a baixa
 registrada (o estorno da baixa exige reabrir, e a RPC recusa com a
 mensagem certa); o badge da aba continua contando o legado "a pagar".
+
+## 10. Entrega 3 — a conciliação em dois níveis e o fluxo pela fatura (20/09/2026)
+
+### 10a. A conciliação abre o pagamento da fatura
+
+No extrato da conta que pagou, a linha do pagamento da fatura ganhou uma
+seta: abre primeiro por **centro de custo** (tipo do plano de contas, com
+o total e a quantidade de itens) e, dentro de cada um, os **itens** —
+data, crédito/débito, descrição, fornecedor, job, subtipo. As linhas
+seguem as colunas da linha-mãe (valor sob Débito, nome sob Descrição), e o
+rodapé "Total da fatura · N itens" fecha com o débito do pagamento. Só a
+perna do banco e só o pagamento vivo (o estorno é a linha reversa, e não
+se expande). Os itens vêm de `carregarExtratoDaFatura` agrupados por
+`agruparPorCentro` — uma leitura por fatura paga no período.
+
+### 10b. O fluxo de caixa projeta pela fatura
+
+Migration `20260920100003`, no padrão de troca de trechos da definição
+viva da `vw_fluxo_caixa`:
+
+- **PP e avulsa com intenção de cartão** passam a cair no vencimento da
+  fatura em que a compra cai — `proxima_fatura_cartao(cartao, data)`,
+  com `data_pagamento` da parcela e `data_compra` da avulsa como base —
+  em vez da data do título. Nada é gravado; se a forma mudar na baixa, a
+  previsão muda junto.
+- **O que já pertence a uma fatura sai dos ramos de PP e avulsa** (a
+  parcela e a avulsa legadas, roteadas antes da 093) — senão entrariam
+  duas vezes.
+- **Ramo novo `fatura_cartao`**: cada fatura aberta ou fechada vira uma
+  saída prevista, classe `titulo`, no vencimento — uma linha por
+  regional, rateada pelos itens (lançamentos `item`/`ajuste` + legado
+  pendente). Fatura credora não entra; a paga vira o lançamento do banco.
+  Rótulo "Fatura de cartão" na composição.
+- **A conta-espelho sai do escopo "todas as contas"** na tela do Fluxo de
+  caixa: o item confirmado no cartão já está na previsão como fatura, e o
+  lançamento dele na conta-espelho não é dinheiro que saiu. Os
+  lançamentos continuam na view — o fluxo do job precisa deles —; quem os
+  tira do caixa é a tela, pela lista de contas de cartão que a página
+  passa.
+
+Cada real aparece num estado só, como a tabela do §3 previa: título
+previsto (pela intenção) → linha da fatura (confirmado) → realizado
+(baixa da fatura).
+
+### 10c. Conferido (20/09/2026)
+
+| o quê | resultado |
+|---|---|
+| View, por SQL | PP-00060 saiu de 21/09 para **05/10**; parcela 12/12 da PP-00011 (venc. 09/08/2027) para 05/09/2027; a parcela 3 legada saiu do ramo de PP e a FC-00002 apareceu em 05/12 (R$ 200); FC-00003 em 05/10 em duas regionais (100 + 10) |
+| Fluxo de caixa, na tela | "Títulos em aberto (a pagar)": out/26 R$ 360 (fatura 110 + PP-00060 250), dez/26 R$ 200; a composição lista "Fatura ZZ Teste Fatia 2 · FC-00003 · 09/26 · rateada em 2 regionais" |
+| Fechar FC-00003 e pagar pela Conta Teste (PIX) | fatura `paga`; saída de R$ 110 na Conta Teste e contrapartida na conta-espelho; a fatura saiu do ramo do fluxo; a aba Cartão mostra "paga em 20/09 · Conta Teste" |
+| Conciliação da Conta Teste | a linha "Fatura FC-00003 · ZZ Teste Fatia 2 · 2 centros de custo" abre em "02 · Custo Operacional · 2 itens · 100,00" (150 e −50) e "11 · Despesa com Juros · 1 item · 10,00"; total 110 = débito |
+
+Observação que ficou: o painel do navegador embutido recarrega a aba na
+URL de lançamento quando o dev server compila outra rota — o que
+derrubava a sessão de teste para `/home` no meio de um diálogo. Não é do
+app.

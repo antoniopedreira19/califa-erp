@@ -344,3 +344,78 @@ export async function carregarExtratoDaFatura(
 
   return { fatura, itens, kpis, pagamento };
 }
+
+// ---------------------------------------------------------------------------
+// A fatura vista de dentro do pagamento (decisão 093, entrega 3)
+// ---------------------------------------------------------------------------
+
+export type ItemDoCentro = {
+  id: string;
+  data: string;
+  descricao: string;
+  fornecedor_nome: string | null;
+  job_id: string | null;
+  job_codigo: string | null;
+  subtipo_nome: string;
+  /** Com sinal: estorno de compra negativo. */
+  valor: number;
+  papel: PapelDoItem;
+};
+
+export type CentroDaFatura = {
+  tipo_codigo: string;
+  tipo_nome: string;
+  total: number;
+  itens: ItemDoCentro[];
+};
+
+/** O que a linha do pagamento da fatura abre na conciliação: primeiro por
+ *  centro de custo, dentro de cada um os itens. O total fecha com o
+ *  débito da linha. */
+export type DetalheDaFatura = {
+  fatura_id: string;
+  codigo: string;
+  competencia_fechamento: string;
+  data_vencimento: string;
+  total: number;
+  centros: CentroDaFatura[];
+};
+
+export function agruparPorCentro(extrato: ExtratoDaFatura): DetalheDaFatura {
+  const mapa = new Map<string, CentroDaFatura>();
+  for (const it of extrato.itens) {
+    const chave = `${it.tipo_codigo}|${it.tipo_nome}`;
+    const centro = mapa.get(chave) ?? {
+      tipo_codigo: it.tipo_codigo,
+      tipo_nome: it.tipo_nome,
+      total: 0,
+      itens: [],
+    };
+    const valor = it.debito - it.credito;
+    centro.total += valor;
+    centro.itens.push({
+      id: it.id,
+      data: it.data_movimento,
+      descricao: it.descricao,
+      fornecedor_nome: it.fornecedor_nome,
+      job_id: it.job_id,
+      job_codigo: it.job_codigo,
+      subtipo_nome: it.subtipo_nome,
+      valor,
+      papel: it.papel,
+    });
+    mapa.set(chave, centro);
+  }
+  // Maior centro primeiro — é o que se procura quando a fatura surpreende.
+  const centros = [...mapa.values()].sort(
+    (a, b) => b.total - a.total || a.tipo_codigo.localeCompare(b.tipo_codigo),
+  );
+  return {
+    fatura_id: extrato.fatura.id,
+    codigo: extrato.fatura.codigo,
+    competencia_fechamento: extrato.fatura.competencia_fechamento,
+    data_vencimento: extrato.fatura.data_vencimento,
+    total: extrato.kpis.total,
+    centros,
+  };
+}

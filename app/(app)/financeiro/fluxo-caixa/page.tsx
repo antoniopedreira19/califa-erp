@@ -93,10 +93,9 @@ export default async function FluxoCaixaPage({
     queryFluxo,
     supabase
       .from("contas_bancarias")
-      .select("id, nome, banco")
+      .select("id, nome, banco, tipo")
       .eq("tenant_id", session.activeTenant.id)
       .eq("ativo", true)
-      .neq("tipo", "cartao_credito")
       .order("ordem"),
     queryRegionais,
     // Saldo de cada conta na véspera da âncora — o ponto de partida do
@@ -120,10 +119,19 @@ export default async function FluxoCaixaPage({
     job_id: (r.job_id as string | null) ?? null,
   }));
 
-  const contas: ContaOpcao[] = (contasRes.data ?? []).map((c) => ({
-    id: c.id as string,
-    nome: `${c.nome as string} · ${c.banco as string}`,
-  }));
+  // A conta-espelho do cartão não é dinheiro em banco: fica fora do
+  // seletor e do escopo "todas" (decisão 093, entrega 3). Os lançamentos
+  // dela continuam na view — o fluxo do job precisa deles —, e quem os
+  // tira do caixa é a tela, por esta lista.
+  const contas: ContaOpcao[] = (contasRes.data ?? [])
+    .filter((c) => c.tipo !== "cartao_credito")
+    .map((c) => ({
+      id: c.id as string,
+      nome: `${c.nome as string} · ${c.banco as string}`,
+    }));
+  const contasCartaoIds = (contasRes.data ?? [])
+    .filter((c) => c.tipo === "cartao_credito")
+    .map((c) => c.id as string);
 
   const saldoAncora: Record<string, number> = {};
   for (const linha of (saldosRes.data ?? []) as {
@@ -148,6 +156,7 @@ export default async function FluxoCaixaPage({
       <FluxoCaixaView
         itens={itens}
         contas={contas}
+        contasCartaoIds={contasCartaoIds}
         regionais={regionaisRes.data ?? []}
         saldoAncora={saldoAncora}
         ancora={ancora}
