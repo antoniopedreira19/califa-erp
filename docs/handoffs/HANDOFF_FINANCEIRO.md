@@ -5646,3 +5646,11 @@ pela Conta Teste, conciliação e fluxo conferidos. Ficou registrado que o
 desembolso não tem intenção de cartão na aprovação (o fluxo o projeta pela
 data do título até a baixa) e que a FC-00004 do ZZ Fatia 2 está vazia por
 efeito colateral de consulta.
+
+⚠️ **20/09/2026, depois do push — os dois pontos acima foram resolvidos
+(093 §12, migration 20260920100004):** o desembolso ganhou
+`forma_pagamento`/`cartao_credito_id` (aprovação pede a intenção, a baixa
+vem pré-preenchida, o fluxo projeta pela fatura); `fatura_aberta_do_cartao`
+virou leitura `stable` sem efeito colateral e a escrita passou a se chamar
+`garantir_fatura_aberta_do_cartao` (chamada por `cartao_lancar_item` e pelo
+legado `rotear_pp_para_cartao`). A FC-00004 vazia foi apagada.

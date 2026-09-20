@@ -8,7 +8,8 @@
 navegador.
 **Migrations:** `20260920100001_o_item_entra_na_fatura_na_baixa.sql`,
 `20260920100002_estorno_de_compra_sem_prefixo_duplicado.sql`,
-`20260920100003_fluxo_projeta_cartao_pela_fatura.sql`.
+`20260920100003_fluxo_projeta_cartao_pela_fatura.sql`,
+`20260920100004_desembolso_com_intencao_e_fatura_sem_efeito_colateral.sql`.
 
 ---
 
@@ -431,18 +432,13 @@ pela tela; conta-espelho criada junto) e a fatura paga pela Conta Teste.
 
 **O que ficou anotado:**
 
-- **Desembolso não tem intenção de cartão.** A aprovação pede só a data;
-  a baixa aceita cartão e o item entra na fatura normalmente, mas até lá
-  o fluxo projeta pela data do título (25/09 aqui), não pela fatura. PP e
-  avulsa têm a intenção; desembolso e recorrência-gerada seguem regras
-  próprias. Incluir `forma_pagamento`/`cartao_credito_id` no desembolso é
-  decisão do Tiago — não foi feito.
-- **FC-00004 (out/26, ZZ Teste Fatia 2) está vazia:** foi criada por
-  efeito colateral de uma consulta de verificação minha
-  (`select fatura_aberta_do_cartao(...)` — a função INSERE a fatura quando
-  não existe). Sem item, sem valor; apagar é decisão do Tiago (linha do
-  banco). A capa do Fatia 2 mostra essa como "em curso" porque é a aberta
-  mais antiga.
+- **Desembolso não tinha intenção de cartão** — a aprovação pedia só a
+  data, e até a baixa o fluxo projetava pela data do título (25/09 aqui).
+  ⚠️ Resolvido em seguida, com o aval do Tiago: §12.
+- **FC-00004 (out/26, ZZ Teste Fatia 2) ficou vazia**, criada por efeito
+  colateral de uma consulta de verificação (`select
+  fatura_aberta_do_cartao(...)` — a função inseria a fatura quando não
+  existia). ⚠️ Resolvido em seguida: §12.
 - No dialog de baixa, o Radix Select aceita trigger + digitar + Enter
   (funcionou para PIX e falhou para "Cartão"/"Conta Teste" com espaço); o
   Combobox do plano de contas não aceita Enter — o item se escolhe pelo
@@ -450,3 +446,41 @@ pela tela; conta-espelho criada junto) e a fatura paga pela Conta Teste.
 - `descricaoDaFatura` limpava "PP " antes de tirar "Cartão · " e a linha
   saía "PP PP-00060"; a ordem foi invertida, e a expansão da conciliação
   passou a limpar por origem também.
+
+## 12. Desembolso com intenção, e a leitura da fatura sem efeito colateral (20/09/2026)
+
+Dois acertos pedidos pelo Tiago depois do teste geral, na migration
+`20260920100004`:
+
+**a) O desembolso ganhou a intenção de pagamento.** `desembolsos` tem
+`forma_pagamento` e `cartao_credito_id`; o dialog de aprovação passou a
+ter "Como vai ser pago" (padrão "Decidir na baixa") e, no cartão, o
+seletor do cartão e um aviso de em qual fatura a previsão cai pela data
+escolhida. A action grava a intenção depois da RPC de aprovação (nada de
+fatura — isso segue sendo da baixa); o título do desembolso chega à baixa
+com `forma_prevista`/`cartao_previsto_id`, que pré-preenchem forma e
+cartão; e a `vw_fluxo_caixa` projeta a parcela do desembolso com intenção
+de cartão em `proxima_fatura_cartao(cartao, data_pagamento)`, como PP e
+avulsa. O centro de custo continua sendo escolhido na baixa (desembolso
+não tem plano de contas próprio, decisão 069).
+
+Conferido: DES-00002 (R$ 45) aprovado com cartão ZZ Teste Empresa Teste e
+data 28/09 → fluxo em **05/11** (28/09 é depois do fechamento do dia 25,
+então a fatura que fecha 25/10); a baixa abriu com Cartão de Crédito e o
+cartão já escolhidos; confirmada em 20/09 (set/26 já paga), o item caiu
+na fatura de out/26, criada na hora pela função de escrita (abaixo).
+
+**b) `fatura_aberta_do_cartao` virou leitura de verdade.** A função
+inseria a fatura quando ela não existia — um `select` de conferência
+criou a FC-00004 vazia. Agora é `stable` e devolve NULL quando a fatura
+daquela competência (ou a próxima aberta) ainda não existe; quem precisa
+CRIAR chama `garantir_fatura_aberta_do_cartao`, com o corpo antigo. Os
+dois únicos criadores foram repontados na própria migration, por troca de
+trecho conferida: `cartao_lancar_item` (a baixa) e o legado
+`rotear_pp_para_cartao`. A FC-00004 foi apagada (zero lançamentos, zero
+avulsas, zero parcelas — conferido antes) com o aval do Tiago; o código
+FC-00004 fica como buraco na numeração.
+
+Conferido: a mesma leitura que criou a FC-00004 agora devolve NULL e não
+deixa fatura nova; a baixa continua criando a fatura quando precisa
+(FC-00006, out/26, nasceu na baixa do DES-00002).

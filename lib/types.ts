@@ -2822,6 +2822,10 @@ export interface Desembolso {
   pago_por: string | null;
   created_at: string;
   updated_at: string;
+  /** Intenção de pagamento registrada na aprovação (decisão 093, §12).
+   *  Cartão aqui não amarra a fatura — isso é da baixa. */
+  forma_pagamento: FormaPagamento | null;
+  cartao_credito_id: string | null;
 }
 
 export interface DesembolsoParcela {
