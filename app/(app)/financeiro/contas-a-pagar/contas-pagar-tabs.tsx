@@ -5,6 +5,7 @@ import { MessagesSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ChatPPsFab } from "./chat/chat-pps-fab";
 import { useChatPPs } from "./chat/chat-pps-provider";
+import type { TabKey } from "./contas-pagar-tab-url";
 
 /**
  * Cinco abas (25/08/2026, simplificação).
@@ -45,15 +46,15 @@ interface Props {
   titulosCartao: React.ReactNode;
   /** Quantos títulos de cartão estão a pagar — vira badge. */
   titulosCartaoCount: number;
+  /**
+   * A aba pedida na URL (`?tab=cartao`). A aba Cartão navega por
+   * `?cartao=&competencia=` (decisão 093, entrega 2), e cada ida ao
+   * servidor volta com a página inteira — sem isto a tela voltaria para
+   * "Títulos a Pagar" a cada troca de competência.
+   */
+  tabInicial?: TabKey;
 }
 
-type TabKey =
-  | "pps"
-  | "desembolsos"
-  | "titulos"
-  | "cartao"
-  | "recorrentes"
-  | "folhas";
 
 export function ContasPagarTabs({
   pps,
@@ -68,10 +69,35 @@ export function ContasPagarTabs({
   folhasPendentesCount,
   titulosCartao,
   titulosCartaoCount,
+  tabInicial,
 }: Props) {
   // Abre em "Títulos a Pagar": é a aba central de saída de dinheiro, e o
-  // que o financeiro faz todo dia é dar baixa, não avaliar PP.
-  const [tab, setTab] = React.useState<TabKey>("titulos");
+  // que o financeiro faz todo dia é dar baixa, não avaliar PP. A URL
+  // manda quando diz qual aba quer.
+  const [tab, setTabState] = React.useState<TabKey>(tabInicial ?? "titulos");
+
+  // A navegação interna da aba Cartão empurra `?tab=cartao&cartao=…` e o
+  // servidor re-renderiza a página: o estado local sobrevive, mas a aba
+  // pedida pode ter mudado (link direto, voltar do navegador).
+  React.useEffect(() => {
+    if (tabInicial) setTabState(tabInicial);
+  }, [tabInicial]);
+
+  // Trocar de aba pelo clique escreve a URL sem ir ao servidor
+  // (`replaceState` é integrado ao App Router desde o Next 14.1): o link
+  // fica copiável e o "voltar" não quebra. Ao sair do Cartão, `cartao` e
+  // `competencia` saem junto — pertencem àquela aba.
+  function setTab(proxima: TabKey) {
+    setTabState(proxima);
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", proxima);
+    if (proxima !== "cartao") {
+      url.searchParams.delete("cartao");
+      url.searchParams.delete("competencia");
+    }
+    window.history.replaceState(window.history.state, "", url.toString());
+  }
 
   // Quantos CHATS têm mensagem não lida (decisão 058). Vem do provider, que
   // fica montado independente da aba ativa — senão o aviso só apareceria

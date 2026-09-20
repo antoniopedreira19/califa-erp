@@ -136,6 +136,14 @@ export interface TituloRow {
   forma_prevista: FormaPagamento | null;
   cartao_previsto_id: string | null;
   /**
+   * A fatura a que a linha pertence, quando pertence a alguma: item
+   * confirmado na baixa, ou legado roteado antes da 093 que entra no
+   * fechamento. É por ela que a aba Cartão liga a linha do extrato da
+   * fatura às ações (estornar compra, ver a baixa). Obrigatório: origem
+   * sem fatura manda `null`.
+   */
+  fatura_cartao_id: string | null;
+  /**
    * Preenchido quando ESTA linha é um estorno — o id da compra que ela
    * desfaz. A aba Cartão mostra a linha como crédito e a subtrai da
    * fatura (29/08/2026).

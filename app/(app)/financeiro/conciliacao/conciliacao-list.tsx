@@ -169,7 +169,7 @@ export function ConciliacaoList({
  * rejeitada — a distinção confundia mais do que ajudava. O popover se
  * adapta: seções de save/rateio só aparecem quando existem.
  */
-function DetalhesPopover({
+export function DetalhesPopover({
   linha,
   temSave,
   temRateio,
@@ -401,7 +401,7 @@ function formatDate(iso: string): string {
  * 4. Nenhum job em nenhum lugar → "Não Vinculado" (fatura de cartão,
  *    lançamento manual, ajuste, etc).
  */
-function derivarJobParaColuna(
+export function derivarJobParaColuna(
   linha: LancamentoLinha,
 ):
   | { tipo: "link"; id: string; codigo: string }
@@ -429,7 +429,7 @@ function derivarJobParaColuna(
  * tela. Remove só quando bate com o tipo de origem, pra não estropiar
  * descrições que legitimamente começam com essas letras.
  */
-function limparPrefixoDescricao(descricao: string, origem: string): string {
+export function limparPrefixoDescricao(descricao: string, origem: string): string {
   if (origem.startsWith("pp_") && descricao.startsWith("PP ")) {
     return descricao.slice(3);
   }
@@ -439,7 +439,7 @@ function limparPrefixoDescricao(descricao: string, origem: string): string {
   return descricao;
 }
 
-function trimestreDe(iso: string): string {
+export function trimestreDe(iso: string): string {
   const m = parseInt(iso.slice(5, 7), 10);
   if (m <= 3) return "T1";
   if (m <= 6) return "T2";

@@ -5619,5 +5619,12 @@ mexe no módulo:
 Tudo exercitado no Projeto Teste (agora **PEV-0007/26**, renumerado pela
 092) com o cartão ZZ Teste Fatia 2: a tabela do que foi conferido está na
 [093 §8c](../decisions/093-o-item-entra-na-fatura-na-confirmacao-do-pagamento.md).
-Faltam as Entregas 2 (nova aba Cartão) e 3 (conciliação em dois níveis e
-`vw_fluxo_caixa` projetando pela fatura).
+⚠️ **20/09/2026, mais tarde — Entrega 2 no ar (mesma branch).** A aba
+Cartão virou capa + fatura como extrato (093 §9): `cartao-tab.tsx`,
+`cartao-capa.tsx`, `cartao-fatura.tsx`, `fatura-extrato.tsx`; rota de
+exportação em `/api/financeiro/cartao/faturas/[id]/export`;
+`titulos-cartao-list.tsx` saiu. O mapeador de linha do extrato da
+Conciliação agora mora em `lib/data/lancamento-linha.ts` e é o mesmo da
+fatura (`lib/data/fatura-cartao-extrato.ts`). A aba viaja em `?tab=`;
+`lerTab` fica em módulo puro (`contas-pagar-tab-url.ts`). Falta a Entrega
+3 (conciliação em dois níveis e `vw_fluxo_caixa` projetando pela fatura).

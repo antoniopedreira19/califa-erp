@@ -3,10 +3,11 @@
 **Data:** 2026-09-18
 **Decidido por:** Tiago
 **Status:** decidida e fechada no desenho (canvas "Cartões — estado
-atual e proposta"). **Entrega 1 (banco + baixa) implementada e testada em
-20/09/2026** — ver §8. Entregas 2 (aba Cartão) e 3 (conciliação em dois
-níveis + fluxo de caixa) ainda por fazer.
-**Migrations:** `20260920100001_o_item_entra_na_fatura_na_baixa.sql`.
+atual e proposta"). **Entregas 1 (banco + baixa) e 2 (nova aba Cartão)
+implementadas e testadas em 20/09/2026** — §8 e §9. Entrega 3
+(conciliação em dois níveis + fluxo de caixa) ainda por fazer.
+**Migrations:** `20260920100001_o_item_entra_na_fatura_na_baixa.sql`,
+`20260920100002_estorno_de_compra_sem_prefixo_duplicado.sql`.
 
 ---
 
@@ -264,3 +265,85 @@ Observações que ficaram:
 - Depois do teste, `git`/dado: FC-00003 aberta com AV-00001, AV-00002 e o
   ajuste AV-00003 pendente; PP-00060 aprovada com intenção de cartão e em
   aberto — estado bom para exercitar as Entregas 2 e 3.
+
+## 9. Entrega 2 — a aba Cartão (20/09/2026)
+
+A aba deixou de ser a lista de títulos agrupada por cartão e virou o que o
+desenho aprovado em 19/09 mostra (artboards "Fusao-B-C" e
+"Capa-Muitos-Cartoes"): **a capa é a porta, e dentro do cartão a fatura é
+o extrato.** Mesmo padrão da Conciliação (091): sem cartão na URL, a capa;
+com `?tab=cartao&cartao=<id>&competencia=AAAA-MM`, a fatura daquela
+competência.
+
+### 9a. O que a tela faz
+
+- **Capa** (`cartao-capa.tsx`): um card por cartão ativo com a fatura em
+  curso — a aberta mais antiga (é a que se fecha primeiro), senão a
+  fechada que espera baixa —, competência, status e "Abrir". Até cinco
+  cartões, grade; de seis em diante, lista com busca e o filtro "Só com
+  fatura aberta". Total em faturas abertas e "Lançar pagamento" no topo.
+- **Dentro do cartão** (`cartao-fatura.tsx`): cabeçalho de uma linha —
+  "‹ Cartões", seletor de cartão com a fatura em curso de cada um, setas
+  de competência, calendário de faturas com o ano dentro (valor em cada
+  mês que tem fatura), código e status da fatura ("aberta · fecha … ·
+  vence …", "fechada · aguardando baixa", "paga em … · conta") — e, à
+  direita, Lançar pagamento (já com o cartão), **Exportar** e
+  Fechar/Reabrir fatura. Quatro números: compras, estornos, ajustes do
+  fechamento (com o legado pendente ao lado) e total. Competência sem
+  fatura abre um estado vazio, não some.
+- **A tabela** (`fatura-extrato.tsx`): Data · Crédito · Débito ·
+  **Acumulado** · Descrição · Fornecedor · Job · Centro de Custo ·
+  Trimestre · Empresa · detalhes (o mesmo popover da conciliação) · Ação
+  (estornar compra, ver a baixa registrada). O item que ainda não é
+  lançamento — legado roteado antes da 093, ou ajuste de um fechamento
+  reaberto — entra esmaecido, com a marca "entra no fechamento", para a
+  soma da tela bater com a faixa e com o que o fechamento vai cobrar.
+- **Exportar** (`/api/financeiro/cartao/faturas/[id]/export`): a mesma
+  tabela em Excel, com origem, regional e a situação de cada item.
+- As faturas **pagas** voltaram a ser visíveis: pelo calendário e pelas
+  setas. A aba antiga as escondia assim que eram pagas.
+
+### 9b. Como foi feito
+
+- **Uma fonte para o extrato.** A tradução de lançamento cru para linha do
+  extrato, que morava inline na página da Conciliação, saiu para
+  `lib/data/lancamento-linha.ts` e passou a servir as duas telas — a
+  fatura é literalmente o mesmo extrato, recortado por `fatura_cartao_id`.
+  `lib/data/fatura-cartao-extrato.ts` lê os lançamentos `item`/`ajuste`
+  da fatura, junta o legado pendente (avulsa `aprovada` e parcela sem
+  `pago_em` que apontam para ela) e calcula acumulado e os quatro números;
+  tela e exportação leem daí.
+- **A aba viaja na URL.** `contas-pagar-tabs.tsx` abre na aba pedida por
+  `?tab=` e, ao trocar de aba pelo clique, escreve a URL com
+  `history.replaceState` (sem ida ao servidor); ao sair do Cartão,
+  `cartao` e `competencia` saem junto. `lerTab` mora num módulo puro
+  (`contas-pagar-tab-url.ts`): função exportada de módulo `"use client"`
+  chega ao servidor como referência e quebra em tempo de execução — foi o
+  primeiro erro da tela.
+- **As ações continuam as mesmas.** `TituloRow` ganhou
+  `fatura_cartao_id` (obrigatório) e a linha do extrato é ligada ao título
+  pela origem (`avulso:<id>`, `pp:<id da parcela>`, `desembolso:<id>`);
+  estornar compra, ver/estornar baixa, fechar e reabrir usam os diálogos e
+  as actions que já existiam. `titulos-cartao-list.tsx` foi removido.
+- `avulsa_estorno_lanca_no_cartao` deixou de prefixar "Estorno · " numa
+  descrição que já vinha prefixada (migration 20260920100002); a tela
+  colapsa a repetição do que já foi gravado e esconde o "Cartão · " do
+  lançamento, redundante dentro da fatura.
+
+### 9c. Conferido no navegador (20/09/2026)
+
+| o quê | resultado |
+|---|---|
+| `?tab=cartao` | capa com ZZ Teste Fatia 2 · R$ 110,00 · set/26 · aberta; total em abertas R$ 110 |
+| Abrir o cartão | URL ganha `cartao=`; FC-00003 aberta; KPIs 150 / 50 / 0 (+10 pendente) / 110; três linhas com acumulado 150 → 100 → 110; ajuste marcado "entra no fechamento" |
+| Calendário | set 110 · nov 200, os outros vazios; clicar "nov" abre FC-00002 com a parcela legada da PP-00011 (R$ 200, pendente) |
+| Seta ‹ a partir de nov | out/26 sem fatura: estado vazio, Exportar desabilitado, sem Fechar |
+| "‹ Cartões" | volta à capa, URL `?tab=cartao` |
+| Trocar de aba | `?tab=titulos` sem `cartao`; voltar ao Cartão → `?tab=cartao` |
+| Exportar | 200, `.xlsx`, `Fatura FC-00003 - ZZ Teste Fatia 2 - 2026-09.xlsx` |
+| Fechar fatura / Baixa registrada / Estornar compra / Lançar pagamento | abrem da nova tela com os dados certos (soma 110 e diferença 0; conta ZZ; já estornado R$ 50; cartão pré-selecionado) |
+| Conciliação (Conta Teste) | extrato igual ao de antes da extração do mapeador |
+
+Fica para depois: a coluna Ação em fatura **paga** mostra só a baixa
+registrada (o estorno da baixa exige reabrir, e a RPC recusa com a
+mensagem certa); o badge da aba continua contando o legado "a pagar".

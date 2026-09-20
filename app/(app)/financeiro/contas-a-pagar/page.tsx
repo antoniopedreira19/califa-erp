@@ -19,8 +19,19 @@ import {
 import { ChatPPsProvider } from "./chat/chat-pps-provider";
 import { PedidosCompraList, type PPRow } from "./pedidos-compra-list";
 import { ContasPagarTabs } from "./contas-pagar-tabs";
+import { lerTab } from "./contas-pagar-tab-url";
 import { TitulosPagarList, type TituloRow } from "./titulos-pagar-list";
-import { TitulosCartaoList } from "./titulos-cartao-list";
+import { CartaoTab, type CartaoDaCapa, type FaturaTela } from "./cartao-tab";
+import {
+  carregarExtratoDaFatura,
+  type StatusFatura,
+} from "@/lib/data/fatura-cartao-extrato";
+import {
+  chaveCompetencia,
+  competenciaAtual,
+  competenciaDaData,
+  lerCompetencia,
+} from "@/lib/cartoes/competencia";
 import type { FaturaDoCartao } from "./fechar-fatura-dialog";
 import { RecorrentesList, type RecorrenteRow } from "./recorrentes-list";
 import { DesembolsosContasPagarList, type DesembolsoRow } from "./desembolsos-list";
@@ -35,7 +46,15 @@ export const dynamic = "force-dynamic";
 export default async function PedidosCompraFinanceiroPage({
   searchParams,
 }: {
-  searchParams?: { filtro?: string; empresa?: string };
+  searchParams?: {
+    filtro?: string;
+    empresa?: string;
+    /** Aba Cartão (decisão 093, entrega 2): `tab=cartao`, o cartão e a
+     *  competência `AAAA-MM` da fatura em tela. */
+    tab?: string;
+    cartao?: string;
+    competencia?: string;
+  };
 }) {
   const session = await requireSession();
 
@@ -58,6 +77,18 @@ export default async function PedidosCompraFinanceiroPage({
 
   const supabase = createClient();
 
+  // A aba Cartão com um cartão escolhido (decisão 093, entrega 2). O id é
+  // conferido antes de entrar na consulta: `?cartao=qualquer-coisa` faria
+  // o PostgREST recusar a query, e a tela abriria vazia sem dizer por quê.
+  const cartaoSelId =
+    searchParams?.tab === "cartao" &&
+    searchParams.cartao &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      searchParams.cartao,
+    )
+      ? searchParams.cartao
+      : null;
+
   const [
     { data, error },
     contasRes,
@@ -78,6 +109,7 @@ export default async function PedidosCompraFinanceiroPage({
     devolucoesRes,
     conversasChatPPs,
     folhasRes,
+    faturasDoCartaoSelRes,
   ] = await Promise.all([
     (() => {
       let q = supabase
@@ -327,6 +359,17 @@ export default async function PedidosCompraFinanceiroPage({
       .in("status", ["enviada", "pendente_correcao"])
       .order("competencia_ano", { ascending: false })
       .order("competencia_mes", { ascending: false }),
+    // Aba Cartão com cartão escolhido: TODAS as faturas dele, de qualquer
+    // status, para o calendário e as setas de competência. Fora dela, a
+    // consulta nem sai.
+    cartaoSelId
+      ? supabase
+          .from("faturas_cartao")
+          .select("id, codigo, competencia_fechamento, data_vencimento, status, valor_cobrado")
+          .eq("tenant_id", session.activeTenant.id)
+          .eq("cartao_credito_id", cartaoSelId)
+          .order("competencia_fechamento", { ascending: true })
+      : Promise.resolve({ data: null, error: null }),
   ]);
 
   if (error) console.error("[financeiro.pp.list]", error.message);
@@ -658,6 +701,7 @@ export default async function PedidosCompraFinanceiroPage({
             : null,
         forma_prevista: pp.forma_pagamento ?? null,
         cartao_previsto_id: pp.cartao_credito_id ?? null,
+        fatura_cartao_id: par.fatura_cartao_id ?? null,
         // Nenhuma destas origens é estorno nem parcela de cartão: as duas
         // coisas só existem em compra de cartão, que vem do laço das
         // avulsas.
@@ -740,6 +784,7 @@ export default async function PedidosCompraFinanceiroPage({
           : null,
       forma_prevista: a.forma_pagamento,
       cartao_previsto_id: a.cartao_credito_id,
+      fatura_cartao_id: a.fatura_cartao_id,
       verba_situacao: null,
       urgente: false,
       urgente_justificativa: null,
@@ -843,6 +888,7 @@ export default async function PedidosCompraFinanceiroPage({
           : null,
         forma_prevista: null,
         cartao_previsto_id: null,
+      fatura_cartao_id: null,
         // Nenhuma destas origens é estorno nem parcela de cartão: as duas
         // coisas só existem em compra de cartão, que vem do laço das
         // avulsas.
@@ -914,6 +960,7 @@ export default async function PedidosCompraFinanceiroPage({
       cartao_credito_id: dev.pago_em ? baixa?.cartao_credito_id ?? null : null,
       forma_prevista: null,
       cartao_previsto_id: null,
+      fatura_cartao_id: null,
       // Nenhuma destas origens é estorno nem parcela de cartão: as duas
       // coisas só existem em compra de cartão, que vem do laço das
       // avulsas.
@@ -1122,6 +1169,7 @@ export default async function PedidosCompraFinanceiroPage({
       cartao_credito_id: null,
       forma_prevista: null,
       cartao_previsto_id: null,
+      fatura_cartao_id: null,
       // Nenhuma destas origens é estorno nem parcela de cartão: as duas
       // coisas só existem em compra de cartão, que vem do laço das
       // avulsas.
@@ -1322,6 +1370,74 @@ export default async function PedidosCompraFinanceiroPage({
       empresa_id: r.empresa_id,
     }),
   );
+  // ---- Aba Cartão (decisão 093, entrega 2) ----
+  //
+  // A capa: um card por cartão ativo com a fatura EM CURSO — a aberta mais
+  // antiga (é a que o financeiro fecha primeiro; `faturasDoCartao` já vem
+  // nessa ordem), senão a fechada que espera baixa. A soma é a mesma da
+  // faixa que o fechamento usa.
+  const capa: CartaoDaCapa[] = cartoesList.map((cartao) => {
+    const minhas = faturasDoCartao.filter((f) => f.cartao_credito_id === cartao.id);
+    const emCurso =
+      minhas.find((f) => f.status === "aberta") ??
+      minhas.find((f) => f.status === "fechada") ??
+      null;
+    return {
+      cartao,
+      emCurso: emCurso
+        ? {
+            id: emCurso.id,
+            codigo: emCurso.codigo,
+            competencia: chaveCompetencia(competenciaDaData(emCurso.competencia_fechamento)),
+            status: emCurso.status,
+            total: emCurso.soma_itens,
+            qtd_itens: emCurso.qtd_itens,
+            fecha: emCurso.competencia_fechamento,
+            vence: emCurso.data_vencimento,
+          }
+        : null,
+    };
+  });
+
+  // Dentro do cartão: a fatura da competência pedida, como extrato. Sem
+  // competência na URL, a da fatura em curso; sem fatura nenhuma, o mês de
+  // hoje. A leitura do extrato é a única ida ao banco fora do
+  // `Promise.all` — depende de saber QUAL fatura tem aquela competência.
+  let tela: FaturaTela | null = null;
+  if (cartaoSelId && cartoesList.some((c) => c.id === cartaoSelId)) {
+    if (faturasDoCartaoSelRes.error) {
+      console.error("[contas-a-pagar.faturas-do-cartao]", faturasDoCartaoSelRes.error.message);
+    }
+    const somaAberta = new Map(faturasDoCartao.map((f) => [f.id, f.soma_itens]));
+    const faturasSel = (
+      (faturasDoCartaoSelRes.data ?? []) as Array<{
+        id: string;
+        codigo: string;
+        competencia_fechamento: string;
+        data_vencimento: string;
+        status: string;
+        valor_cobrado: number | string | null;
+      }>
+    ).map((f) => ({
+      id: f.id,
+      codigo: f.codigo,
+      competencia: chaveCompetencia(competenciaDaData(f.competencia_fechamento)),
+      status: f.status as StatusFatura,
+      // Aberta: a soma viva dos itens. Fechada ou paga: o que o banco cobrou.
+      total: f.status === "aberta" ? somaAberta.get(f.id) ?? 0 : Number(f.valor_cobrado ?? 0),
+    }));
+    const emCursoDoCartao = capa.find((c) => c.cartao.id === cartaoSelId)?.emCurso ?? null;
+    const competencia =
+      lerCompetencia(searchParams?.competencia) ??
+      (emCursoDoCartao ? lerCompetencia(emCursoDoCartao.competencia) : null) ??
+      competenciaAtual();
+    const chave = chaveCompetencia(competencia);
+    const faturaSel = faturasSel.find((f) => f.competencia === chave) ?? null;
+    const extrato = faturaSel
+      ? await carregarExtratoDaFatura(supabase, session.activeTenant.id, faturaSel.id)
+      : null;
+    tela = { cartaoId: cartaoSelId, competencia: chave, extrato, faturas: faturasSel };
+  }
 
   return (
     <div className="space-y-8">
@@ -1391,9 +1507,12 @@ export default async function PedidosCompraFinanceiroPage({
           }
           folhasPendentesCount={folhasParaTab.length}
           titulosCartao={
-            <TitulosCartaoList
-              rows={titulosCartao}
+            <CartaoTab
               cartoes={cartoesList}
+              capa={capa}
+              tela={tela}
+              faturasDoCartao={faturasDoCartao}
+              titulos={titulosCartao}
               tipos={tiposRes.data ?? []}
               subtipos={subtiposRes.data ?? []}
               tenantId={session.activeTenant.id}
@@ -1401,10 +1520,10 @@ export default async function PedidosCompraFinanceiroPage({
               fornecedores={fornecedoresList}
               clientes={clientesList}
               regionais={regionaisList}
-              faturasDoCartao={faturasDoCartao}
             />
           }
           titulosCartaoCount={titulosCartaoCount}
+          tabInicial={lerTab(searchParams?.tab)}
         />
       </ChatPPsProvider>
     </div>
