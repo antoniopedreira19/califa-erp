@@ -9,6 +9,7 @@ import {
   colaboradorSchema,
   alocacaoInicialSchema,
   salarioSchema,
+  dadosBancariosColaboradorSchema,
 } from "@/lib/validations/rh-colaboradores";
 
 type ActionResult<T = { id: string }> =
@@ -282,6 +283,79 @@ export async function inativarColaborador(
     entidadeTipo: "colaborador",
     entidadeId: id,
     metadata: { data_encerramento: dataEncerramento },
+  });
+
+  revalidatePath("/rh");
+  revalidatePath("/rh/colaboradores");
+  revalidatePath(`/rh/colaboradores/${id}`);
+  return { ok: true, id };
+}
+
+/**
+ * Salva dados bancários (banco/agência/conta/PIX) do colaborador. Usados
+ * pelo gerador de remessa CNAB — módulo pgto-remessa. Todos os campos
+ * são opcionais; o gate de completude é a hora de gerar remessa.
+ */
+export async function salvarDadosBancariosColaborador(
+  id: string,
+  formData: FormData,
+): Promise<ActionResult> {
+  const session = await requireSession();
+  const gate = await checarPermissao(session, "rh.colaboradores.editar");
+  if (!gate.ok) return gate;
+
+  const parsed = dadosBancariosColaboradorSchema.safeParse({
+    banco_codigo: formData.get("banco_codigo")?.toString() ?? "",
+    banco_nome: formData.get("banco_nome")?.toString() ?? "",
+    agencia: formData.get("agencia")?.toString() ?? "",
+    agencia_dv: formData.get("agencia_dv")?.toString() ?? "",
+    conta: formData.get("conta")?.toString() ?? "",
+    conta_dv: formData.get("conta_dv")?.toString() ?? "",
+    tipo_conta: formData.get("tipo_conta")?.toString() || undefined,
+    pix_tipo: formData.get("pix_tipo")?.toString() || undefined,
+    pix_chave: formData.get("pix_chave")?.toString() ?? "",
+  });
+  if (!parsed.success) {
+    return {
+      ok: false,
+      message: "Verifique os campos destacados.",
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
+
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("colaboradores")
+    .update({
+      banco_codigo: parsed.data.banco_codigo,
+      banco_nome: parsed.data.banco_nome,
+      agencia: parsed.data.agencia,
+      agencia_dv: parsed.data.agencia_dv,
+      conta: parsed.data.conta,
+      conta_dv: parsed.data.conta_dv,
+      tipo_conta: parsed.data.tipo_conta,
+      pix_tipo: parsed.data.pix_tipo,
+      pix_chave: parsed.data.pix_chave,
+    })
+    .eq("id", id)
+    .eq("tenant_id", session.activeTenant.id);
+
+  if (error) {
+    console.error("[rh.colaborador.dados_bancarios]", error.message);
+    return { ok: false, message: "Não foi possível salvar os dados bancários." };
+  }
+
+  await logAuditEvent({
+    acao: "colaborador.dados_bancarios_editados",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "colaborador",
+    entidadeId: id,
+    metadata: {
+      tem_banco: parsed.data.banco_codigo !== null,
+      tem_pix: parsed.data.pix_chave !== null,
+      banco_codigo: parsed.data.banco_codigo,
+      pix_tipo: parsed.data.pix_tipo,
+    },
   });
 
   revalidatePath("/rh");

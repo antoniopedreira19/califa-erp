@@ -181,3 +181,112 @@ export const salarioSchema = z.object({
 });
 
 export type SalarioInput = z.infer<typeof salarioSchema>;
+
+/**
+ * Dados bancários do colaborador para pagamento por remessa CNAB.
+ * Todos os campos são opcionais no cadastro — o gate de completude é
+ * a hora de gerar remessa, não o cadastro. Módulo pgto-remessa.
+ */
+export const TIPOS_CONTA_BANCARIA = ["corrente", "poupanca", "pagamento"] as const;
+export const TIPOS_CHAVE_PIX = [
+  "cpf",
+  "cnpj",
+  "email",
+  "telefone",
+  "aleatoria",
+] as const;
+
+const somenteDigitos = (v: string | undefined) =>
+  (v ?? "").replace(/\D/g, "");
+
+export const dadosBancariosColaboradorSchema = z
+  .object({
+    banco_codigo: z
+      .string()
+      .trim()
+      .optional()
+      .transform((v) => somenteDigitos(v))
+      .transform((v) => (v.length > 0 ? v : null))
+      .refine(
+        (v) => v === null || v.length === 3,
+        "Código do banco precisa ter 3 dígitos.",
+      ),
+    banco_nome: z
+      .string()
+      .trim()
+      .max(200, "Máximo 200 caracteres.")
+      .optional()
+      .transform((v) => (v && v.length > 0 ? v : null)),
+    agencia: z
+      .string()
+      .trim()
+      .optional()
+      .transform((v) => somenteDigitos(v))
+      .transform((v) => (v.length > 0 ? v : null))
+      .refine(
+        (v) => v === null || (v.length >= 1 && v.length <= 5),
+        "Agência precisa ter até 5 dígitos.",
+      ),
+    agencia_dv: z
+      .string()
+      .trim()
+      .max(1, "Máximo 1 caractere.")
+      .optional()
+      .transform((v) => (v && v.length > 0 ? v.toUpperCase() : null)),
+    conta: z
+      .string()
+      .trim()
+      .optional()
+      .transform((v) => somenteDigitos(v))
+      .transform((v) => (v.length > 0 ? v : null))
+      .refine(
+        (v) => v === null || (v.length >= 1 && v.length <= 12),
+        "Conta precisa ter até 12 dígitos.",
+      ),
+    conta_dv: z
+      .string()
+      .trim()
+      .max(1, "Máximo 1 caractere.")
+      .optional()
+      .transform((v) => (v && v.length > 0 ? v.toUpperCase() : null)),
+    tipo_conta: z
+      .enum(TIPOS_CONTA_BANCARIA)
+      .optional()
+      .transform((v) => v ?? null),
+    pix_tipo: z
+      .enum(TIPOS_CHAVE_PIX)
+      .optional()
+      .transform((v) => v ?? null),
+    pix_chave: z
+      .string()
+      .trim()
+      .max(200, "Máximo 200 caracteres.")
+      .optional()
+      .transform((v) => (v && v.length > 0 ? v : null)),
+  })
+  .superRefine((val, ctx) => {
+    // Se preencheu conta, agência é obrigatória (e vice-versa)
+    const bancoParcial =
+      (val.banco_codigo || val.agencia || val.conta) &&
+      !(val.banco_codigo && val.agencia && val.conta);
+    if (bancoParcial) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "Se for cadastrar conta bancária, preencha banco, agência e conta.",
+        path: ["banco_codigo"],
+      });
+    }
+    // Se preencheu chave PIX, tipo é obrigatório (e vice-versa)
+    if ((val.pix_tipo && !val.pix_chave) || (val.pix_chave && !val.pix_tipo)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Preencha tipo e chave PIX juntos.",
+        path: ["pix_chave"],
+      });
+    }
+  });
+
+export type DadosBancariosColaboradorInput = z.infer<
+  typeof dadosBancariosColaboradorSchema
+>;

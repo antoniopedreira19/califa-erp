@@ -241,6 +241,7 @@ export type AuditAction =
   | "colaborador.alocacao_fechada"
   | "colaborador.salario_mudou"
   | "colaborador.salario_corrigido"
+  | "colaborador.dados_bancarios_editados"
   // Folha mensal (subsistema RH, 2026-09-18)
   | "folha.gerada"
   | "folha.linha.editada_rh"

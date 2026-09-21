@@ -2946,6 +2946,19 @@ export interface Colaborador {
   data_admissao: string;
   data_encerramento: string | null;
   status: CadastroStatus;
+  /** Dados bancários e PIX — mesmo shape que `fornecedores` já usa.
+   *  Todos nullable: pré-folha o cadastro pode estar incompleto. O gate
+   *  de completude é o gerador CNAB, não o cadastro. Adicionado em
+   *  21/09/2026 pelo módulo pgto-remessa (fase 4). */
+  banco_codigo: string | null;
+  banco_nome: string | null;
+  agencia: string | null;
+  agencia_dv: string | null;
+  conta: string | null;
+  conta_dv: string | null;
+  tipo_conta: TipoContaBancariaFornecedor | null;
+  pix_tipo: PixTipoChave | null;
+  pix_chave: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
