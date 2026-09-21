@@ -113,9 +113,14 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 087 | [Faturamento e encerramento correm separados, e o job fica finalizado quando os dois terminam](087-faturamento-e-encerramento-correm-separados.md) | 2026-09-16 |
 | 089 | [Lista longa se busca, e o código do cliente não aparece nela](089-lista-longa-se-busca-e-o-codigo-do-cliente-nao-aparece.md) | 2026-09-17 |
 | 090 | [A chave PIX é gravada no formato que o banco aceita](090-a-chave-pix-e-gravada-no-formato-do-banco.md) | 2026-09-18 |
+| 093 | [Folha mensal em duas camadas, valor manual e propagação pela aprovação](093-folha-mensal-em-duas-camadas.md) | 2026-09-18 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
 > data é a da decisão, não a da posição na fila.
+> A 093 nasceu como 088 em 2026-09-18 sem consulta a este índice (que
+> estava desatualizado apontando "próximo: 091" quando 088, 091 e 092 já
+> haviam sido tomadas); foi renumerada em 2026-09-19 assim que a colisão
+> foi detectada.
 
-**Próximo número livre: 091.**
+**Próximo número livre: 094.**
