@@ -9,6 +9,7 @@ import * as React from "react";
 import { Calculator } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import { LegendaFechamento } from "@/components/legenda-fechamento";
+import { PercentualDoJob } from "@/components/percentual-do-job";
 import {
   BotaoColunasSave,
   CabecalhoColunasSave,
@@ -18,6 +19,7 @@ import {
   calcularTotaisVersao,
   calcularRentabilidade,
   calcularResultadoOperacional,
+  composicaoDoResultadoGeral,
   LINHAS_FECHAMENTO_POR_TIPO,
   somarLinhaFechamento,
   type FechamentoLado,
@@ -156,6 +158,14 @@ export function TotaisCard({
     deducoesDoResultado,
     totais.planejado.bruto,
   );
+
+  // As duas parcelas de "Composto por" na base do Resultado geral.
+  const composicao = composicaoDoResultadoGeral({
+    valorJob,
+    honorarios,
+    rentabilidade,
+    resultadoOperacional,
+  });
 
   return (
     <div className="rounded-2xl border border-border bg-card shadow-soft">
@@ -364,14 +374,31 @@ export function TotaisCard({
           </div>
 
           <div className="mt-2.5 rounded-xl border border-border bg-muted/30 px-3.5 pt-2.5 pb-3">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Composto por
-            </p>
+            {/* Duas porcentagens por linha, em lugares diferentes de
+                propósito (21/09/2026). Junto do rótulo fica a taxa PRÓPRIA
+                da parcela — a do contrato, e a rentabilidade sobre o orçado.
+                Na coluna da direita, a parcela em % do VALOR DO JOB: é a
+                mesma base do Resultado geral logo abaixo, e as duas somam
+                nele. Antes as duas de cima ficavam à direita, cada uma na
+                sua base, e a soma não dava o número de baixo. */}
+            <div className="flex items-baseline justify-between gap-3">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Composto por
+              </p>
+              <p className="text-[9px] font-normal text-muted-foreground/80">
+                % do valor do job
+              </p>
+            </div>
             <div className="mt-1 flex items-baseline justify-between gap-3 py-1">
-              <span className="text-sm font-medium">{rotuloHonorarios}</span>
+              <span className="text-sm font-medium">
+                {rotuloHonorarios}{" "}
+                <span className="font-mono text-xs font-normal text-muted-foreground">
+                  {formatarPercentual(percentualHonorarios)}
+                </span>
+              </span>
               <span className="whitespace-nowrap font-mono text-sm font-semibold">
-                {formatCurrency(honorarios, moeda)} ·{" "}
-                {formatarPercentual(percentualHonorarios)}
+                {formatCurrency(honorarios, moeda)}
+                <PercentualDoJob valor={composicao.honorariosPct} />
               </span>
             </div>
             <div className="flex items-baseline justify-between gap-3 border-t border-border pt-1.5">
@@ -380,6 +407,14 @@ export function TotaisCard({
                 <span className="font-normal text-muted-foreground">
                   (orçado × planejado)
                 </span>
+                {temPlanejado && percentualRentabilidade !== null && (
+                  <>
+                    {" "}
+                    <span className="font-mono text-xs font-normal text-muted-foreground">
+                      {formatarPercentual(percentualRentabilidade)}
+                    </span>
+                  </>
+                )}
               </span>
               {/* Preto como a linha de honorários — as duas parcelas do
                   resultado operacional se leem juntas. Prejuízo continua
@@ -391,13 +426,10 @@ export function TotaisCard({
                   temPlanejado && rentabilidade < 0 && "text-california-red",
                 )}
               >
-                {temPlanejado
-                  ? `${formatCurrency(rentabilidade, moeda)}${
-                      percentualRentabilidade === null
-                        ? ""
-                        : ` · ${formatarPercentual(percentualRentabilidade)}`
-                    }`
-                  : "—"}
+                {temPlanejado ? formatCurrency(rentabilidade, moeda) : "—"}
+                <PercentualDoJob
+                  valor={temPlanejado ? composicao.rentabilidadePct : null}
+                />
               </span>
             </div>
           </div>

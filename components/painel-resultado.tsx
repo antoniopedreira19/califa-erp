@@ -5,7 +5,9 @@ import { cn, formatCurrency } from "@/lib/utils";
 import {
   calcularRentabilidade,
   calcularResultadoOperacional,
+  composicaoDoResultadoGeral,
 } from "@/lib/calculos/versao-totais";
+import { PercentualDoJob } from "@/components/percentual-do-job";
 import {
   rotuloDosHonorarios,
   type CadeiaDoResultado,
@@ -160,6 +162,15 @@ export function PainelResultado({
     custo - bv,
   );
 
+  // As duas parcelas de "Composto por" na base do Resultado geral. Segue a
+  // ótica: troca junto com o custo quando o seletor muda.
+  const composicao = composicaoDoResultadoGeral({
+    valorJob,
+    honorarios,
+    rentabilidade,
+    resultadoOperacional,
+  });
+
   // Sem o seletor não há duas óticas para distinguir — o rótulo fica igual
   // ao da tela da versão do orçamento, sem sufixo.
   const sufixo = somentePlanejada ? "" : planejada ? "planejado" : "realizado";
@@ -252,19 +263,38 @@ export function PainelResultado({
       </div>
 
       <div className="mt-2.5 rounded-xl border border-border bg-muted/40 px-3.5 pb-3 pt-2.5">
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-          Composto por
-        </p>
+        {/* Duas porcentagens por linha, em lugares diferentes de propósito
+            (21/09/2026) — a mesma leitura do card de Totais do orçamento.
+            Junto do rótulo, a taxa PRÓPRIA da parcela (a do contrato; a
+            rentabilidade sobre o orçado). Na coluna da direita, a parcela em
+            % do VALOR DO JOB: a base do Resultado geral logo abaixo, onde as
+            duas somam. */}
+        <div className="flex items-baseline justify-between gap-3">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Composto por
+          </p>
+          <p className="text-[9px] font-normal text-muted-foreground/80">
+            % do valor do job
+          </p>
+        </div>
         <div className="mt-1 flex items-baseline justify-between gap-3 py-1">
           {/* No internacional os honorários se chamam FEE — o card do
               orçamento já os escreve assim, e o mesmo número não pode ter
               dois nomes nas duas telas do mesmo job (decisão 072). */}
           <span className="text-sm font-medium">
             {rotuloDosHonorarios(cadeia)}
+            {taxaHonorarios && (
+              <>
+                {" "}
+                <span className="font-mono text-xs font-normal text-muted-foreground">
+                  {taxaHonorarios}
+                </span>
+              </>
+            )}
           </span>
           <span className="whitespace-nowrap font-mono text-[13px] font-semibold">
             {formatCurrency(honorarios, moeda)}
-            {taxaHonorarios ? ` · ${taxaHonorarios}` : ""}
+            <PercentualDoJob valor={composicao.honorariosPct} />
           </span>
         </div>
         <div className="flex items-baseline justify-between gap-3 border-t border-border pt-1.5">
@@ -273,17 +303,24 @@ export function PainelResultado({
             <span className="font-normal text-muted-foreground">
               (orçado × {planejada ? "planejado" : "realizado"})
             </span>
+            {temCusto && rentabilidadePct !== null && (
+              <>
+                {" "}
+                <span className="font-mono text-xs font-normal text-muted-foreground">
+                  {formatarPercentual(rentabilidadePct)}
+                </span>
+              </>
+            )}
           </span>
           <span className="whitespace-nowrap font-mono text-[13px] font-semibold">
             {temCusto ? (
-              <>
-                {formatCurrency(rentabilidade, moeda)}
-                {rentabilidadePct !== null &&
-                  ` · ${formatarPercentual(rentabilidadePct)}`}
-              </>
+              formatCurrency(rentabilidade, moeda)
             ) : (
               <span className="text-muted-foreground">—</span>
             )}
+            <PercentualDoJob
+              valor={temCusto ? composicao.rentabilidadePct : null}
+            />
           </span>
         </div>
       </div>
