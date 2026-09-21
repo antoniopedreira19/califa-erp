@@ -2263,6 +2263,23 @@ export interface EmpresaContabil {
   nome_fantasia: string | null;
   cnpj: string; // sempre 14 dígitos, sem máscara
   ativo: boolean;
+  /** Config CNAB Santander — adicionada em 21/09/2026 pelo módulo
+   *  pgto-remessa (fase 4.2). Todos nullable: só empresas com convênio
+   *  contratado + homologado vão preencher. Gerador rejeita remessa
+   *  se algum campo obrigatório estiver null. */
+  convenio_cnab_santander: string | null;
+  agencia_debito: string | null;
+  agencia_debito_dv: string | null;
+  conta_debito: string | null;
+  conta_debito_dv: string | null;
+  /** Próximo sequencial a usar. Começa em 11 (banco trata 1-10 como
+   *  teste, Nota G010 do manual). Incrementado atomicamente pelo
+   *  gerador. */
+  sequencial_arquivo: number | null;
+  endereco_logradouro: string | null;
+  endereco_cidade: string | null;
+  endereco_cep: string | null;
+  endereco_uf: string | null;
   created_at: string;
   updated_at: string;
 }
