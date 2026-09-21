@@ -49,9 +49,17 @@ export type CnabOrigemTipo =
   | "recorrente"
   | "desembolso";
 
+/** Escolha do usuário sobre como pagar este item específico.
+ *  Se omitido, cai na regra padrão: PIX se cadastrado, senão banco. */
+export type CnabFormaEscolhida = "pix" | "banco";
+
 export interface CnabItemInput {
   origemTipo: CnabOrigemTipo;
   origemId: string;
+  /** Se preenchido, força a forma escolhida. Se o destinatário não
+   *  tem os dados exigidos por essa forma, o item vai pra rejeitados
+   *  com motivo específico. */
+  formaEscolhida?: CnabFormaEscolhida;
 }
 
 export interface GerarRemessaCnabInput {
@@ -261,6 +269,7 @@ export async function gerarRemessaCnab(
       resolvido.data,
       dados.data,
       input.dataPagamento,
+      item.formaEscolhida,
     );
     if (!pgto.ok) {
       rejeitados.push({
@@ -621,14 +630,36 @@ function montarPagamento(
   origem: OrigemResolvida,
   dados: DadosBancariosDestinatario,
   dataPagamento: string,
+  formaEscolhida?: CnabFormaEscolhida,
 ): Result<Pagamento> {
-  // Prioridade: PIX chave > TED/Crédito conta (bancos preenchidos)
-  const temPix = dados.pixTipo && dados.pixChave;
-  const temBanco = dados.bancoCodigo && dados.agencia && dados.conta && dados.contaDv;
+  const temPix = !!(dados.pixTipo && dados.pixChave);
+  const temBanco = !!(
+    dados.bancoCodigo &&
+    dados.agencia &&
+    dados.conta &&
+    dados.contaDv
+  );
 
   const seuNumero = origem.origemId.replace(/-/g, "").slice(0, 20);
 
-  if (temPix) {
+  // Regra de decisão:
+  //   • formaEscolhida="pix"   → força PIX; rejeita se sem chave
+  //   • formaEscolhida="banco" → força TED/CC; rejeita se sem banco
+  //   • formaEscolhida omitida → padrão: PIX se cadastrado, senão banco
+  const usarPix =
+    formaEscolhida === "pix"
+      ? true
+      : formaEscolhida === "banco"
+        ? false
+        : temPix;
+
+  if (usarPix) {
+    if (!temPix) {
+      return {
+        ok: false,
+        message: "Forma PIX escolhida, mas destinatário não tem chave PIX cadastrada.",
+      };
+    }
     return {
       ok: true,
       data: {
@@ -645,37 +676,39 @@ function montarPagamento(
     };
   }
 
-  if (temBanco) {
-    const bancoEhSantander = dados.bancoCodigo === "033";
+  if (!temBanco) {
     return {
-      ok: true,
-      data: {
-        tipo: bancoEhSantander ? "credito_conta" : "ted",
-        bancoFavorecido: dados.bancoCodigo!,
-        agenciaFavorecida: dados.agencia!,
-        agenciaFavorecidaDv: dados.agenciaDv,
-        contaFavorecida: dados.conta!,
-        contaFavorecidaDv: dados.contaDv!,
-        tipoContaFavorecida: dados.tipoConta ?? "corrente",
-        finalidadeTED: bancoEhSantander ? undefined : "00005", // Pagto Fornecedores
-        seuNumero,
-        dataPagamento,
-        valor: origem.valor,
-        nomeFavorecido: dados.nome,
-        documentoFavorecido: dados.documento,
-        favorecidoEhCnpj: dados.ehCnpj,
-        favorecidoLogradouro: dados.endereco?.logradouro,
-        favorecidoCidade: dados.endereco?.cidade,
-        favorecidoCep: dados.endereco?.cep,
-        favorecidoUf: dados.endereco?.uf,
-      },
+      ok: false,
+      message:
+        formaEscolhida === "banco"
+          ? "Forma banco escolhida, mas destinatário não tem banco+agência+conta+DV cadastrados."
+          : "Destinatário sem chave PIX nem dados bancários completos.",
     };
   }
 
+  const bancoEhSantander = dados.bancoCodigo === "033";
   return {
-    ok: false,
-    message:
-      "Destinatário sem chave PIX nem dados bancários completos (banco+agência+conta+DV).",
+    ok: true,
+    data: {
+      tipo: bancoEhSantander ? "credito_conta" : "ted",
+      bancoFavorecido: dados.bancoCodigo!,
+      agenciaFavorecida: dados.agencia!,
+      agenciaFavorecidaDv: dados.agenciaDv,
+      contaFavorecida: dados.conta!,
+      contaFavorecidaDv: dados.contaDv!,
+      tipoContaFavorecida: dados.tipoConta ?? "corrente",
+      finalidadeTED: bancoEhSantander ? undefined : "00005", // Pagto Fornecedores
+      seuNumero,
+      dataPagamento,
+      valor: origem.valor,
+      nomeFavorecido: dados.nome,
+      documentoFavorecido: dados.documento,
+      favorecidoEhCnpj: dados.ehCnpj,
+      favorecidoLogradouro: dados.endereco?.logradouro,
+      favorecidoCidade: dados.endereco?.cidade,
+      favorecidoCep: dados.endereco?.cep,
+      favorecidoUf: dados.endereco?.uf,
+    },
   };
 }
 
