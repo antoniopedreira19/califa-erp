@@ -177,8 +177,10 @@ export const LINHA_NOVO_GRUPO =
 
 /** O gatilho que mora nessa linha. Tracejado e leve de propósito: ali
  *  dentro um botão sólido seria o elemento mais pesado da planilha e
- *  competiria com os números. As duas origens de "Novo grupo" — o drawer
- *  da versão e o botão local do rascunho — usam esta mesma forma. */
+ *  competiria com os números. As duas origens de "Novo grupo" — o
+ *  gatilho da versão (`NovoGrupoInline`, que desde 21/09/2026 vira o campo
+ *  de nome no próprio lugar, sem diálogo) e o botão local do rascunho —
+ *  usam esta mesma forma. */
 export const BOTAO_NOVO_GRUPO =
   "inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-dashed border-california-red bg-california-red/5 px-3 py-1.5 text-xs font-semibold text-california-red transition-colors hover:bg-california-red/10 disabled:cursor-not-allowed disabled:opacity-50";
 
