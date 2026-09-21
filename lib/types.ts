@@ -2757,7 +2757,9 @@ export interface ContaAvulsa {
  * nasce da união de duas fontes, e a origem se deduz assim:
  *
  *   pp                 → parcela de `pedidos_compra_parcelas` de PP aprovada
- *   avulso             → `contas_avulsas` com `recorrente_id` nulo
+ *   avulso             → `contas_avulsas` sem `folha_id` nem `recorrente_id`
+ *   folha              → `contas_avulsas` com `folha_id` preenchido
+ *                        (materialização de folha aprovada — ADR 002)
  *   recorrencia        → `contas_avulsas` com `recorrente_id` preenchido
  *                        (a ocorrência que `gerar_ocorrencias_recorrentes` cria)
  *   desembolso         → parcela de `desembolsos_parcelas` de desembolso aprovado
@@ -2767,6 +2769,7 @@ export interface ContaAvulsa {
 export type OrigemTitulo =
   | "pp"
   | "avulso"
+  | "folha"
   | "recorrencia"
   | "desembolso"
   | "pp_devolucao_verba"
@@ -2778,6 +2781,7 @@ export type OrigemTitulo =
 export const origemTituloLabel = (o: OrigemTitulo, ppCodigo?: string | null): string =>
   o === "pp" ? (ppCodigo ?? "PP")
     : o === "avulso" ? "AVULSO"
+    : o === "folha" ? "FOLHA"
     : o === "recorrencia" ? "RECORRÊNCIA"
     : o === "desembolso" ? "DESEMBOLSO"
     : o === "fatura_cartao" ? "FATURA CARTÃO"

@@ -217,6 +217,7 @@ const CHIP_ORIGEM: Array<{ key: "todas" | OrigemTitulo; label: string }> = [
   { key: "todas", label: "Todas as origens" },
   { key: "pp", label: "PPs" },
   { key: "avulso", label: "Avulsos" },
+  { key: "folha", label: "Folhas" },
   { key: "recorrencia", label: "Recorrências" },
   { key: "desembolso", label: "Desembolsos" },
   { key: "pp_devolucao_verba", label: "Estornos de verba" },
@@ -230,6 +231,10 @@ function origemChipClass(origem: OrigemTitulo): string {
       return "border-border bg-muted text-muted-foreground";
     case "avulso":
       return "border-violet-200 bg-violet-50 text-violet-700";
+    case "folha":
+      // Rosa: folha é despesa recorrente com humano, merece
+      // identidade visual própria pra separar da avulsa (violeta).
+      return "border-rose-200 bg-rose-50 text-rose-700";
     case "recorrencia":
       return "border-blue-200 bg-blue-50 text-blue-700";
     case "desembolso":
@@ -388,6 +393,7 @@ export function TitulosPagarList({
       todas: base.length,
       pp: base.filter((r) => r.origem === "pp").length,
       avulso: base.filter((r) => r.origem === "avulso").length,
+      folha: base.filter((r) => r.origem === "folha").length,
       recorrencia: base.filter((r) => r.origem === "recorrencia").length,
       desembolso: base.filter((r) => r.origem === "desembolso").length,
       pp_devolucao_verba: base.filter((r) => r.origem === "pp_devolucao_verba").length,
