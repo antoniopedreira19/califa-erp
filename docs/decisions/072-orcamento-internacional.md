@@ -476,7 +476,7 @@ do valor do job (095), que foi aprovado depois do design.
 
 | Parte | Como ficou |
 |---|---|
-| Cadeia | Caixa no azul do ORÇADO, com ícone de globo; USD em azul; o percentual e "(Invoice)" em tom apagado; fios entre os trechos; Faturamento previsto em vermelho nas duas moedas |
+| Cadeia | Caixa no azul do ORÇADO, com ícone de globo; USD em azul; o percentual e "(Invoice)" em tom apagado; fios entre os trechos; Faturamento previsto em vermelho nas duas moedas. Os parênteses de Int. taxes e Impostos BR trazem só o percentual — o "· gross-up" do design saiu a pedido do Tiago; a legenda continua explicando o gross-up |
 | Valor do job | Caixa própria sob a cadeia, com USD e BRL; a linha "Save gerado" só existe com save |
 | Sub-totais por tipo | Tipo sem custo apagado, tipo com custo e o total em negrito (só no internacional) |
 | Texto das duas bases | O "A mesma cadeia sobre a base do valor do job…" do design virou o segundo tópico da legenda, como no nacional — só com save. A frase do design para o caso sem save não entrou: sem save, nada de save aparece |
