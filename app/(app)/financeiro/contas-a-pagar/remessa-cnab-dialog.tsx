@@ -433,35 +433,19 @@ export function ExportarRemessaCnabDialog({
                                 className="px-3 py-2 text-xs"
                                 onClick={(e) => e.stopPropagation()}
                               >
-                                {t.temPix && t.temBanco ? (
-                                  <select
-                                    value={formaPorTitulo.get(chave) ?? "pix"}
-                                    onChange={(e) => {
-                                      const novaForma = e.target.value as CnabFormaEscolhida;
-                                      setFormaPorTitulo((prev) => {
-                                        const m = new Map(prev);
-                                        m.set(chave, novaForma);
-                                        return m;
-                                      });
-                                    }}
-                                    className="rounded border border-border bg-white px-2 py-1 text-xs focus:border-california-red focus:outline-none"
-                                  >
-                                    <option value="pix">PIX</option>
-                                    <option value="banco">TED/Crédito</option>
-                                  </select>
-                                ) : t.temPix ? (
-                                  <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-emerald-700">
-                                    PIX
-                                  </span>
-                                ) : t.temBanco ? (
-                                  <span className="rounded bg-blue-50 px-1.5 py-0.5 text-blue-700">
-                                    TED/Crédito
-                                  </span>
-                                ) : (
-                                  <span className="rounded bg-muted px-1.5 py-0.5 text-muted-foreground">
-                                    Sem dados
-                                  </span>
-                                )}
+                                <FormaSeletor
+                                  chave={chave}
+                                  temPix={t.temPix}
+                                  temBanco={t.temBanco}
+                                  valor={formaPorTitulo.get(chave)}
+                                  onChange={(nova) => {
+                                    setFormaPorTitulo((prev) => {
+                                      const m = new Map(prev);
+                                      m.set(chave, nova);
+                                      return m;
+                                    });
+                                  }}
+                                />
                               </td>
                               <td className="px-3 py-2 text-right tabular-nums">
                                 {formatBRL(t.valor)}
@@ -527,5 +511,79 @@ export function ExportarRemessaCnabDialog({
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** Seletor de forma de pagamento por título:
+ *   • Se tem PIX + banco: dois chips clicáveis (PIX / TED). O selecionado
+ *     fica sólido colorido; o outro fica outline cinza pra convidar clique.
+ *   • Se tem só um dos dois: badge fixo colorido.
+ *   • Se não tem nada: "Sem dados" cinza.
+ */
+function FormaSeletor({
+  chave,
+  temPix,
+  temBanco,
+  valor,
+  onChange,
+}: {
+  chave: string;
+  temPix: boolean;
+  temBanco: boolean;
+  /** Undefined = default. Se ambos temPix+temBanco, default é "pix". */
+  valor: CnabFormaEscolhida | undefined;
+  onChange: (nova: CnabFormaEscolhida) => void;
+}) {
+  if (temPix && temBanco) {
+    const escolhida = valor ?? "pix";
+    return (
+      <div className="inline-flex rounded-md border border-border bg-white p-0.5">
+        <button
+          type="button"
+          onClick={() => onChange("pix")}
+          aria-pressed={escolhida === "pix"}
+          className={
+            "rounded-[4px] px-2 py-0.5 text-[11px] font-semibold transition-colors " +
+            (escolhida === "pix"
+              ? "bg-emerald-100 text-emerald-800"
+              : "text-muted-foreground hover:bg-muted")
+          }
+        >
+          PIX
+        </button>
+        <button
+          type="button"
+          onClick={() => onChange("banco")}
+          aria-pressed={escolhida === "banco"}
+          className={
+            "rounded-[4px] px-2 py-0.5 text-[11px] font-semibold transition-colors " +
+            (escolhida === "banco"
+              ? "bg-blue-100 text-blue-800"
+              : "text-muted-foreground hover:bg-muted")
+          }
+        >
+          TED
+        </button>
+      </div>
+    );
+  }
+  if (temPix) {
+    return (
+      <span className="inline-flex rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+        PIX
+      </span>
+    );
+  }
+  if (temBanco) {
+    return (
+      <span className="inline-flex rounded-md bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700">
+        TED
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex rounded-md bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
+      Sem dados
+    </span>
   );
 }
