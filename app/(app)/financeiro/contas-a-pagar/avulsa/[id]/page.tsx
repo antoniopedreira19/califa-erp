@@ -270,6 +270,7 @@ export default async function AvulsaDetalhesPage({
     cliente_id: c.cliente_id,
     colaborador_id: (c.colaborador_id as string | null) ?? null,
     folha_id: (c.folha_id as string | null) ?? null,
+    codigo_barras: (c.codigo_barras as string | null) ?? null,
     plano_conta_tipo_id: c.plano_conta_tipo_id,
     plano_conta_subtipo_id: c.plano_conta_subtipo_id,
     pago_em: c.pago_em,
