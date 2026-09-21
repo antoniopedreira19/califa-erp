@@ -13,7 +13,13 @@ import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { ResumoResultado } from "@/components/resumo-resultado";
 import { cn, formatCurrency } from "@/lib/utils";
-import { jobStatusLabel, type JobStatus, jobStatusBadgeClasses } from "@/lib/types";
+import {
+  jobStatusLabel,
+  jobStatusExibido,
+  type JobStatus,
+  type JobStatusExibido,
+  jobStatusBadgeClasses,
+} from "@/lib/types";
 import { carregarPlanilhasDosJobs } from "./carregar-planilhas";
 import { PlanilhasDoProjeto } from "./planilhas-do-projeto";
 
@@ -43,7 +49,7 @@ export default async function ProjetoAgregadoPage({
   const { data: jobsRaw } = await supabase
     .from("jobs")
     .select(
-      "id, codigo, nome, status, versao_orcamento_aprovada_id, " +
+      "id, codigo, nome, status, faturamento_enviado_em, versao_orcamento_aprovada_id, " +
         "responsavel:profiles!responsavel_id(nome), " +
         "versao:versoes_orcamento!versao_orcamento_aprovada_id(moeda, percentual_honorarios, percentual_imposto)",
     )
@@ -52,19 +58,27 @@ export default async function ProjetoAgregadoPage({
     .neq("status", "cancelado")
     .order("codigo", { ascending: true });
 
-  const jobs = (jobsRaw ?? []) as unknown as Array<{
-    id: string;
-    codigo: string;
-    nome: string;
-    status: JobStatus;
-    versao_orcamento_aprovada_id: string;
+  // Nesta tela o status só vira selo e contagem, então já sai como o status
+  // EXIBIDO: "Em faturamento" é o aberto com o envio completo (decisão 094).
+  const jobs = (
+    (jobsRaw ?? []) as unknown as Array<{
+      id: string;
+      codigo: string;
+      nome: string;
+      status: JobStatus;
+      faturamento_enviado_em: string | null;
+      versao_orcamento_aprovada_id: string;
     responsavel: { nome: string } | null;
     versao: {
       moeda: string;
       percentual_honorarios: number | string;
       percentual_imposto: number | string;
     } | null;
-  }>;
+    }>
+  ).map((j) => ({
+    ...j,
+    status: jobStatusExibido(j.status, j.faturamento_enviado_em),
+  }));
 
   if (jobs.length === 0) notFound();
 
@@ -231,7 +245,7 @@ export default async function ProjetoAgregadoPage({
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
             {Object.entries(statusMix)
-              .map(([s, n]) => `${n} ${jobStatusLabel(s as JobStatus).toLowerCase()}`)
+              .map(([s, n]) => `${n} ${jobStatusLabel(s as JobStatusExibido).toLowerCase()}`)
               .join(" · ")}
           </p>
         </div>

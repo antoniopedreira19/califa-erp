@@ -42,8 +42,9 @@ export interface MetaInternacional {
 
 interface Props {
   versaoId: string;
+  /** Moeda dos valores da planilha — sempre BRL. Só formata o custo de
+   *  transação do internacional; o nacional não a mostra mais. */
   moeda: string;
-  taxaCambio: number;
   percentualHonorarios: number;
   percentualImposto: number;
   /** `orcamentos.editar_impostos`. Trava o fee e — no internacional, desde
@@ -63,11 +64,13 @@ interface Props {
 }
 
 /**
- * Linha de parâmetros da versão ativa — Moeda, Câmbio, Honorários e
- * Impostos — com edição no próprio lugar.
+ * Linha de parâmetros da versão ativa — Honorários e Impostos no nacional;
+ * moeda de fora, câmbio, fee e taxas no internacional — com edição no
+ * próprio lugar. Moeda e Câmbio do nacional saíram em 21/09/2026: a
+ * planilha nacional é sempre em reais.
  *
- * Substitui o `VersaoEditorDrawer` nesta tela: com as versões em abas, os
- * quatro campos são o que muda de aba para aba, e abrir um drawer para
+ * Substitui o `VersaoEditorDrawer` nesta tela: com as versões em abas, estes
+ * campos são o que muda de aba para aba, e abrir um drawer para
  * trocar uma alíquota tirava o usuário da planilha que ele está lendo. O
  * botão "Editar" fica à direita de Impostos e transforma a linha inteira
  * em formulário; nada mais da tela se mexe.
@@ -80,7 +83,6 @@ interface Props {
 export function MetaVersao({
   versaoId,
   moeda,
-  taxaCambio,
   percentualHonorarios,
   percentualImposto,
   podeEditarHonorarios,
@@ -199,10 +201,9 @@ export function MetaVersao({
           </>
         ) : (
           <>
-            <Campo rotulo="Moeda" valor={moeda} />
-            <Separador />
-            <Campo rotulo="Câmbio" valor={formatarTaxa(taxaCambio)} />
-            <Separador />
+            {/* Moeda e Câmbio saíram daqui em 21/09/2026: planilha nacional
+                é sempre em reais, e "BRL · 1,0000" era ruído em toda versão.
+                Só o internacional mostra moeda e câmbio, no ramo de cima. */}
             <Campo
               rotulo="Honorários"
               valor={`${formatarPercentual(percentualHonorarios)}%`}
@@ -283,30 +284,10 @@ export function MetaVersao({
               <TaxaInput name="cambio_venda" valor={internacional.cambioVenda} />
             </CampoEdicao>
           </>
-        ) : (
-          <>
-            <CampoEdicao rotulo="Moeda">
-              <input
-                name="moeda"
-                defaultValue={moeda}
-                maxLength={3}
-                autoFocus
-                className="h-7 w-[62px] rounded-md border border-border bg-white px-2 text-sm font-medium uppercase text-foreground outline-none focus:border-california-red/50"
-              />
-            </CampoEdicao>
-
-            <CampoEdicao rotulo="Câmbio">
-              <input
-                name="taxa_cambio"
-                type="number"
-                step="0.0001"
-                min="0.0001"
-                defaultValue={taxaCambio}
-                className="no-spinner h-7 w-[92px] rounded-md border border-border bg-white px-2 text-sm font-medium text-foreground outline-none focus:border-california-red/50"
-              />
-            </CampoEdicao>
-          </>
-        )}
+        ) : null}
+        {/* No nacional não há `moeda` nem `taxa_cambio` para editar (21/09/2026):
+            a server action preserva o valor atual de campo que não é enviado,
+            como já acontecia no internacional. */}
 
         <CampoEdicao
           rotulo={internacional ? "Fee" : "Honorários"}
@@ -325,6 +306,9 @@ export function MetaVersao({
               min="0"
               max="100"
               defaultValue={percentualHonorarios}
+              // No nacional é o primeiro campo da linha; no internacional o
+              // foco já nasce na Moeda.
+              autoFocus={!internacional}
               className="no-spinner h-7 w-[76px] rounded-md border border-border bg-white px-2 text-sm font-medium text-foreground outline-none focus:border-california-red/50"
             />
           ) : (

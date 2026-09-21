@@ -30,7 +30,8 @@ import { listaPtBr } from "./envio-faturamento-ui";
  *
  * O que trava o envio para encerramento é só o que é da produção: PP em
  * aberto, verba não concluída, BV não recebido e item sem marcação. O
- * faturamento aparece como aviso — o job encerrado continua na fila.
+ * envio para faturamento que falta aparece como aviso — o job encerrado
+ * continua enviando.
  */
 export interface FechamentoDoJob {
   /** PPs sem baixa e rejeitadas (decisão 083) — travam. */
@@ -40,14 +41,14 @@ export interface FechamentoDoJob {
   bvsEmAberto: { item: string; situacao: string }[];
   /** Itens de custo que ainda não disseram se sai mais PP (decisão 052). */
   itensSemMarcacao: { item: string }[];
-  /** Quanto do envio ainda não virou nota emitida. Não trava. */
-  saldoAFaturar: number;
   /** Job normal ainda não enviado para faturamento. Não trava. */
   semEnvio: boolean;
   /** Mensal: os meses ainda por enviar, pelo nome. Não travam. */
   mesesSemEnvio: string[];
-  /** Todo o faturamento já saiu em nota — o job fica finalizado ao encerrar. */
-  faturamentoCompleto: boolean;
+  /** Todo o faturamento já foi enviado ao financeiro (ou o job não tem o que
+   *  faturar) — o job fica finalizado ao encerrar. Desde 20/09/2026 (decisão
+   *  094) o que conta é o ENVIO: a nota é controle do financeiro. */
+  faturamentoTodoEnviado: boolean;
   encerradoEm: string | null;
   encerradoPorNome: string | null;
   finalizadoEm: string | null;
@@ -135,10 +136,9 @@ export function EnviarEncerramentoDialog({
     verbasEmAberto,
     bvsEmAberto,
     itensSemMarcacao,
-    saldoAFaturar,
     semEnvio,
     mesesSemEnvio,
-    faturamentoCompleto,
+    faturamentoTodoEnviado,
   } = fechamento;
   const travado = modo === "enviar" && pendenciasDoFechamento(fechamento) > 0;
   const mensal = totais.modeloPlanilha === "mensal";
@@ -156,19 +156,18 @@ export function EnviarEncerramentoDialog({
     });
   }
 
-  // O que falta faturar, dito uma vez só. Não trava — o job encerrado
-  // segue na fila de faturamento.
-  const faltaFaturar: string | null = faturamentoCompleto
+  // O que falta ENVIAR para faturamento, dito uma vez só. Não trava — o job
+  // encerrado continua enviando, e vira finalizado no envio que completar o
+  // faturamento (decisão 094). Nota emitida ou não é assunto do financeiro.
+  const faltaEnviar: string | null = faturamentoTodoEnviado
     ? null
-    : mensal
-      ? mesesSemEnvio.length > 0
-        ? `${maiuscula(listaPtBr(mesesSemEnvio))} ${
-            mesesSemEnvio.length === 1 ? "ainda não foi enviado" : "ainda não foram enviados"
-          } para faturamento${saldoAFaturar > 0 ? `, e ${formatCurrency(saldoAFaturar, totais.moeda)} já enviados ainda não viraram nota` : ""}. O envio dos meses continua disponível depois do encerramento, e o job segue na fila até a última nota.`
-        : `${formatCurrency(saldoAFaturar, totais.moeda)} ainda não viraram nota. O job continua na fila do financeiro depois de encerrado.`
+    : mensal && mesesSemEnvio.length > 0
+      ? `${maiuscula(listaPtBr(mesesSemEnvio))} ${
+          mesesSemEnvio.length === 1 ? "ainda não foi enviado" : "ainda não foram enviados"
+        } para faturamento. O envio dos meses continua disponível depois do encerramento, e o job fica finalizado quando o último mês for enviado.`
       : semEnvio
-        ? "O job ainda não foi enviado para faturamento. O envio continua disponível depois do encerramento, e o job entra na fila do financeiro normalmente."
-        : `${formatCurrency(saldoAFaturar, totais.moeda)} ainda não viraram nota. O job continua na fila do financeiro depois de encerrado.`;
+        ? "O job ainda não foi enviado para faturamento. O envio continua disponível depois do encerramento, e o job fica finalizado quando for enviado."
+        : "Ainda falta enviar parte do faturamento deste job. O envio continua disponível depois do encerramento, e o job fica finalizado quando ele estiver completo.";
 
   const titulo =
     modo === "enviar"
@@ -187,10 +186,8 @@ export function EnviarEncerramentoDialog({
         ? "O resultado usa o custo realizado dos meses: todas as PPs pagas e todos os BVs recebidos."
         : "O resultado usa o custo realizado: todas as PPs pagas e todos os BVs recebidos."
       : fechamento.finalizadoEm
-        ? `Finalizado em ${dataBrDeInstante(fechamento.finalizadoEm)}: faturado e encerrado.`
-        : faturamentoCompleto
-          ? "Faturamento concluído."
-          : "O faturamento deste job ainda está em andamento na fila do financeiro.";
+        ? `Finalizado em ${dataBrDeInstante(fechamento.finalizadoEm)}: encerrado e enviado para faturamento.`
+        : "O job fica finalizado quando todo o faturamento for enviado para o financeiro.";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -273,14 +270,14 @@ export function EnviarEncerramentoDialog({
             </div>
           )}
 
-          {modo === "enviar" && faltaFaturar && (
+          {modo === "enviar" && faltaEnviar && (
             <div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3.5">
               <FileText className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
               <div className="min-w-0 space-y-1.5 text-[12.5px] leading-relaxed">
                 <p className="font-semibold text-amber-700">
-                  Falta faturar — mas isso não trava o encerramento.
+                  Falta enviar para faturamento — mas isso não trava o encerramento.
                 </p>
-                <p className="text-muted-foreground">{faltaFaturar}</p>
+                <p className="text-muted-foreground">{faltaEnviar}</p>
               </div>
             </div>
           )}

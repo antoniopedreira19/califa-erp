@@ -35,6 +35,7 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import { formatCurrency } from "@/lib/utils";
+import { proximaFatura } from "@/lib/cartoes/proxima-fatura";
 import type { ContaBancaria, FormaPagamento, PlanoContaTipo, PlanoContaSubtipo } from "@/lib/types";
 import {
   FormaPagamentoField,
@@ -97,7 +98,9 @@ export function BaixaTituloDialog({
   erro: string | null;
   onConfirm: (payload: {
     pago_em: string;
-    conta_bancaria_id: string;
+    /** `null` quando a forma é cartão: o item entra na fatura, e nada
+     *  sai de conta bancária nenhuma (decisão 093). */
+    conta_bancaria_id: string | null;
     plano_conta_tipo_id: string;
     plano_conta_subtipo_id: string;
     /** `null` quando `alvo.isDevolucao` — a RPC de devolução não usa. */
@@ -156,23 +159,28 @@ export function BaixaTituloDialog({
     );
   }
 
-  function handleFormaPagamento(
-    v: FormaPagamentoValue,
-    opts?: { dataPagamentoSugerida?: string },
-  ) {
+  function handleFormaPagamento(v: FormaPagamentoValue) {
+    // A data sugerida pelo campo (vencimento da fatura) NÃO entra aqui:
+    // na baixa, a data é a do pagamento de fato, e é ela que decide em
+    // qual fatura o item cai (decisão 093). Aceitar a sugestão jogaria o
+    // item na fatura seguinte.
     setFormaPagamento(v);
     setErroLocal(null);
-    // Se o cartão sugere uma data de pagamento, usa ela.
-    if (opts?.dataPagamentoSugerida) {
-      setPagoEm(opts.dataPagamentoSugerida);
-    }
   }
+
+  const noCartao = formaPagamento.forma_pagamento === "cartao_credito";
+  const cartaoEscolhido = noCartao
+    ? cartoes.find((c) => c.id === formaPagamento.cartao_credito_id) ?? null
+    : null;
+  const faturaDestino = descreverFaturaDestino(cartaoEscolhido, pagoEm);
 
   function handleSubmit() {
     setErroLocal(null);
-    if (!pagoEm || !contaId) {
+    if (!pagoEm || (!noCartao && !contaId)) {
       setErroLocal(
-        "Informe a data e a conta que realizará o pagamento.",
+        noCartao
+          ? "Informe a data do pagamento."
+          : "Informe a data e a conta que realizará o pagamento.",
       );
       return;
     }
@@ -198,7 +206,7 @@ export function BaixaTituloDialog({
     }
     onConfirm({
       pago_em: pagoEm,
-      conta_bancaria_id: contaId,
+      conta_bancaria_id: noCartao ? null : contaId,
       plano_conta_tipo_id: tipoId,
       plano_conta_subtipo_id: subtipoId,
       forma_pagamento: isDevolucao ? null : formaPagamento.forma_pagamento,
@@ -261,6 +269,37 @@ export function BaixaTituloDialog({
             />
           </div>
 
+          {!alvo.isDevolucao && (
+            <FormaPagamentoField
+              cartoes={cartoes}
+              value={formaPagamento}
+              onChange={handleFormaPagamento}
+              disabled={pending}
+              obrigatorio
+              semCartao={alvo.semCartao === true}
+            />
+          )}
+
+          {noCartao && (
+            <div className="flex items-start gap-2 rounded-lg border border-california-red/30 bg-california-red/5 p-3 text-xs text-foreground">
+              <CreditCard className="mt-0.5 h-3.5 w-3.5 shrink-0 text-california-red" />
+              <span>
+                {faturaDestino ? (
+                  <>
+                    Entra na fatura de{" "}
+                    <strong className="font-semibold">{faturaDestino.competencia}</strong>
+                    {" — "}fecha {faturaDestino.fecha}, vence {faturaDestino.vence}.{" "}
+                  </>
+                ) : (
+                  <>Escolha o cartão para ver em qual fatura o item entra. </>
+                )}
+                Nada sai da conta bancária agora: o dinheiro sai na baixa da fatura.
+                Se essa competência já tiver fechado, o item cai na seguinte.
+              </span>
+            </div>
+          )}
+
+          {!noCartao && (
           <div className="space-y-1">
             <label className="text-xs font-semibold">
               {alvo.isDevolucao
@@ -294,16 +333,6 @@ export function BaixaTituloDialog({
               </SelectContent>
             </Select>
           </div>
-
-          {!alvo.isDevolucao && (
-            <FormaPagamentoField
-              cartoes={cartoes}
-              value={formaPagamento}
-              onChange={handleFormaPagamento}
-              disabled={pending}
-              obrigatorio
-              semCartao={alvo.semCartao === true}
-            />
           )}
 
           <div className="space-y-1">
@@ -353,9 +382,19 @@ export function BaixaTituloDialog({
           <div className="flex items-start gap-2 rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">
             <ArrowRightLeft className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600" />
             <span>
-              Ao confirmar, o pagamento é registrado e enviado para a{" "}
-              <strong className="font-semibold text-foreground">Conciliação</strong>{" "}
-              com a conta e o centro de custo escolhidos.
+              {noCartao ? (
+                <>
+                  Ao confirmar, o item passa a pertencer à fatura do cartão e
+                  aparece no extrato dele, na aba{" "}
+                  <strong className="font-semibold text-foreground">Cartão</strong>.
+                </>
+              ) : (
+                <>
+                  Ao confirmar, o pagamento é registrado e enviado para a{" "}
+                  <strong className="font-semibold text-foreground">Conciliação</strong>{" "}
+                  com a conta e o centro de custo escolhidos.
+                </>
+              )}
             </span>
           </div>
         </div>
@@ -386,4 +425,46 @@ export function BaixaTituloDialog({
 function formatarData(iso: string): string {
   const [ano, mes, dia] = iso.slice(0, 10).split("-");
   return `${dia}/${mes}/${ano}`;
+}
+
+/**
+ * Em qual fatura o item vai cair, pela data do pagamento e pelo cartão
+ * (decisão 093). Espelha `fatura_aberta_do_cartao` + `proxima_fatura_cartao`
+ * do banco: dia do pagamento depois do fechamento → competência seguinte.
+ * Não sabe se aquela competência já fechou — o texto avisa que, nesse
+ * caso, o item rola para a próxima.
+ */
+function descreverFaturaDestino(
+  cartao: CartaoOption | null,
+  pagoEmISO: string,
+): { competencia: string; fecha: string; vence: string } | null {
+  if (!cartao || !pagoEmISO) return null;
+  const [a, m, d] = pagoEmISO.split("-").map(Number);
+  if (!a || !m || !d) return null;
+  const data = new Date(a, m - 1, d);
+  const fecha = cartao.dia_fechamento_fatura ?? cartao.dia_vencimento_fatura;
+
+  let mesComp = data.getMonth();
+  let anoComp = data.getFullYear();
+  if (data.getDate() > fecha) {
+    mesComp += 1;
+    if (mesComp > 11) {
+      mesComp = 0;
+      anoComp += 1;
+    }
+  }
+  const ultimoDia = new Date(anoComp, mesComp + 1, 0).getDate();
+  const fechamento = new Date(anoComp, mesComp, Math.min(fecha, ultimoDia));
+  const vencimento = proximaFatura(
+    cartao.dia_vencimento_fatura,
+    data,
+    cartao.dia_fechamento_fatura,
+  );
+
+  const MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+  return {
+    competencia: `${MESES[mesComp]}/${String(anoComp).slice(2)}`,
+    fecha: format(fechamento, "dd/MM/yyyy"),
+    vence: format(vencimento, "dd/MM/yyyy"),
+  };
 }

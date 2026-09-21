@@ -238,9 +238,11 @@ export function AprovarPPDialog({
             {noCartao && (
               <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
                 <p className="text-[11.5px] leading-relaxed text-amber-900">
-                  No cartão, cada parcela entra na fatura da <strong>data dela</strong>{" "}
-                  e sai na baixa da fatura inteira — não existe baixa individual. Por
-                  isso o centro de custo é escolhido agora.
+                  O cartão aqui é a intenção: a parcela entra na fatura quando o
+                  pagamento for confirmado em Títulos a Pagar, pela{" "}
+                  <strong>data informada na baixa</strong>, e o dinheiro sai uma
+                  vez só, na baixa da fatura inteira. O centro de custo é
+                  escolhido agora para o item já chegar classificado à fatura.
                 </p>
 
                 <Select

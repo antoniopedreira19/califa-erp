@@ -54,6 +54,7 @@ import {
   BaixaTituloDialog,
   type BaixaTituloAlvo,
 } from "@/components/financeiro/baixa-titulo-dialog";
+import { lerCompetencia, rotuloCurto } from "@/lib/cartoes/competencia";
 import {
   BaixaRegistradaDialog,
   type BaixaRegistradaAlvo,
@@ -126,6 +127,23 @@ export interface TituloRow {
   forma_pagamento: FormaPagamento | null;
   /** Cartão de crédito associado. Null para PP ou formas sem cartão. */
   cartao_credito_id: string | null;
+  /**
+   * Intenção registrada na aprovação da PP ou no cadastro da avulsa
+   * (decisão 093). Serve para PRÉ-PREENCHER a baixa, e só: não decide em
+   * que aba a linha aparece — isso é `forma_pagamento`, que é a forma
+   * REALIZADA (ou "cartão" quando a linha já está numa fatura). Sem isto
+   * a PP aprovada "no cartão" chegava na baixa pedindo a forma de novo.
+   */
+  forma_prevista: FormaPagamento | null;
+  cartao_previsto_id: string | null;
+  /**
+   * A fatura a que a linha pertence, quando pertence a alguma: item
+   * confirmado na baixa, ou legado roteado antes da 093 que entra no
+   * fechamento. É por ela que a aba Cartão liga a linha do extrato da
+   * fatura às ações (estornar compra, ver a baixa). Obrigatório: origem
+   * sem fatura manda `null`.
+   */
+  fatura_cartao_id: string | null;
   /**
    * Preenchido quando ESTA linha é um estorno — o id da compra que ela
    * desfaz. A aba Cartão mostra a linha como crédito e a subtrai da
@@ -488,6 +506,7 @@ export function TitulosPagarList({
         subtipoNome: conferindo.subtipo_nome,
         dataPagamento: conferindo.data_pagamento,
         vencOriginal: conferindo.venc_original,
+        viaCartao: conferindo.forma_pagamento === "cartao_credito",
       }
     : null;
 
@@ -915,8 +934,8 @@ export function TitulosPagarList({
         tipos={tipos}
         subtipos={subtipos}
         cartoes={cartoes}
-        formaPlanejada={baixando?.forma_pagamento ?? null}
-        cartaoPlanejadoId={baixando?.cartao_credito_id ?? null}
+        formaPlanejada={baixando?.forma_pagamento ?? baixando?.forma_prevista ?? null}
+        cartaoPlanejadoId={baixando?.cartao_credito_id ?? baixando?.cartao_previsto_id ?? null}
         pending={pending}
         erro={erroAcao}
         onConfirm={(payload) => {
@@ -934,8 +953,21 @@ export function TitulosPagarList({
             }
             setBaixando(null);
             setErroAcao(null);
+            // No cartão nada foi para a conciliação de conta bancária: o
+            // item entrou numa fatura, e o toast diz em qual (093 §13). A
+            // fatura vem do SERVIDOR — a da data do pagamento pode já ter
+            // fechado, e aí o banco rola para a próxima aberta.
+            const cartao =
+              payload.forma_pagamento === "cartao_credito"
+                ? cartoes.find((c) => c.id === payload.cartao_credito_id) ?? null
+                : null;
+            const competencia = res.fatura
+              ? lerCompetencia(res.fatura.competencia_fechamento.slice(0, 7))
+              : null;
             setToast(
-              `Baixa registrada · ${formatMoney(alvo.valor)} enviado para a conciliação.`,
+              res.fatura
+                ? `Confirmado no cartão · ${formatMoney(alvo.valor)} entrou na fatura${competencia ? ` de ${rotuloCurto(competencia)}` : ""}${cartao ? ` do ${cartao.nome}` : ""} (${res.fatura.codigo}).`
+                : `Baixa registrada · ${formatMoney(alvo.valor)} enviado para a conciliação.`,
             );
             router.refresh();
           });

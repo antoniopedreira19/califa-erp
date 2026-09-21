@@ -542,10 +542,11 @@ export function FecharFaturaDialog({
                 </p>
               ) : (
                 <p className="text-[11.5px] leading-relaxed text-muted-foreground">
-                  Fechar transforma cada item num lançamento na conta do
-                  cartão, com o plano de contas dele, e faz a fatura descer
-                  para Títulos a Pagar como um título único. Depois disso ela
-                  não recebe mais compra.
+                  Fechar registra o valor cobrado pelo banco e faz a fatura
+                  descer para Títulos a Pagar como um título único. Os itens
+                  já estão lançados na conta do cartão desde a confirmação;
+                  só a diferença, se houver, vira lançamento agora. Depois
+                  disso ela não recebe mais compra.
                 </p>
               )}
 

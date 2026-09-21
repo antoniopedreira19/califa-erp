@@ -14,7 +14,11 @@ import {
 } from "@/lib/calculos/versao-totais";
 import { PainelResultado } from "@/components/painel-resultado";
 import { LegendaFechamento } from "@/components/legenda-fechamento";
-import { CadeiaInternacional } from "@/app/(app)/_planilha/cadeia-internacional";
+import {
+  CadeiaInternacional,
+  NotaDaConversao,
+  TextoSaveInternacional,
+} from "@/app/(app)/_planilha/cadeia-internacional";
 import type { MoedaEstrangeira } from "@/app/(app)/_planilha/moeda-estrangeira";
 import {
   BotaoColunasSave,
@@ -331,8 +335,16 @@ export function JobTotaisCard({
       <LegendaFechamento
         internacional={ehInternacional}
         custo="custo (planejado ou realizado)"
+        nota={
+          ehInternacional ? (
+            <NotaDaConversao moedaEstrangeira={moedaEstrangeira} />
+          ) : undefined
+        }
         extra={
           temSave ? (
+            ehInternacional ? (
+              <TextoSaveInternacional job={job} moeda={moeda} />
+            ) : (
             <>
               Os honorários e impostos do fechamento correm sobre{" "}
               <strong className="text-foreground">
@@ -349,6 +361,7 @@ export function JobTotaisCard({
               {formatCurrency(job.honorarios, moeda)}, impostos{" "}
               {formatCurrency(job.imposto, moeda)}.
             </>
+            )
           ) : undefined
         }
       />

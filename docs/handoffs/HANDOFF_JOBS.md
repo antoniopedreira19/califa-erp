@@ -3933,3 +3933,36 @@ GP Teste Claude e como administrador: GP vê o "+" e não vê o lápis; o
 administrador vê os dois. Para o GP enxergar a planilha foi preciso passá-lo
 a responsável do job (`quemPodeMexer` exige isso) — e o responsável voltou
 a ser o Tiago no fim. Nenhuma PP e nenhum fornecedor foram gravados.
+
+## ⚠️ Nota de 2026-09-20 — o selo "Em faturamento", e o Finalizado vale pelo envio (decisão 094)
+
+Regra completa em `docs/decisions/094-em-faturamento-e-o-finalizado-vale-pelo-envio.md`.
+Revê a nota de 16/09 (decisão 087) num ponto só: **quem decide o `finalizado`.**
+
+### O que mudou
+
+- Para o módulo Jobs a ação de faturamento é o **envio**, não a nota. Nota
+  emitida, cancelada ou reemitida é controle do financeiro.
+- **Finalizado = encerrado + todo o faturamento enviado.** O gatilho da nota
+  (`trg_faturamento_itens_finaliza_job`) saiu; entrou
+  `trg_envio_faturamento_marca_job` em `jobs_envio_faturamento`.
+- **"Em faturamento"** é o job `aberto` com `jobs.faturamento_enviado_em`
+  preenchido (no mensal, só no último mês enviado). É selo calculado:
+  `jobStatusExibido()` em `lib/types.ts`. O status gravado continua `aberto` e
+  nenhuma trava mudou — PP, realizado e BV seguem liberados.
+- Job sem faturamento previsto nunca é carimbado: segue "Aberto" e finaliza
+  direto no encerramento.
+- O aviso do envio para encerramento fala do que falta **enviar**, não do que
+  falta virar nota.
+
+### Armadilhas
+
+- **Não compare `status === "em_faturamento"` em regra de negócio**: esse valor
+  não existe no banco. Trava lê `job.status`; selo lê o status exibido.
+- O status exibido nasce **no carregador**. Tela nova que mostre o selo do job
+  precisa trazer `faturamento_enviado_em` no `select` — sem ele o selo cai em
+  "Aberto" calado.
+- `faturamento_enviado_em` é do banco: um UPDATE direto na coluna é
+  recalculado pelo gatilho `trg_jobs_carimba_faturamento_enviado`.
+- O job **finalizado pode ter nota por emitir**. Ele continua na
+  `vw_faturamento_pendente` — não o tire de lá.

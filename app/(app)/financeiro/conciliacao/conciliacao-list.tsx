@@ -1,8 +1,10 @@
 "use client";
 import * as React from "react";
 import Link from "next/link";
-import { CreditCard, ExternalLink, Info } from "lucide-react";
+import { ChevronRight, CreditCard, ExternalLink, Info } from "lucide-react";
 import type { LancamentoLinha } from "@/lib/calculos/saldo-conta";
+import type { DetalheDaFatura } from "@/lib/data/fatura-cartao-extrato";
+import { limparDescricaoDaFatura } from "@/lib/cartoes/descricao-fatura";
 import {
   Popover,
   PopoverContent,
@@ -14,11 +16,25 @@ import { abrirDocumentoDoLancamento } from "./actions-documento";
 export function ConciliacaoList({
   linhas,
   highlight,
+  detalhesFatura = {},
 }: {
   linhas: LancamentoLinha[];
   highlight?: string;
+  /** Por id do lançamento: o que o pagamento de uma fatura de cartão abre
+   *  — centro de custo → itens (decisão 093, entrega 3). */
+  detalhesFatura?: Record<string, DetalheDaFatura>;
 }) {
   const rowRefs = React.useRef<Record<string, HTMLTableRowElement | null>>({});
+  // Duas camadas de abertura: a linha do pagamento, e cada centro dentro
+  // dela. Chaves: id do lançamento, e `${lancamento}|${tipo}`.
+  const [abertos, setAbertos] = React.useState<Set<string>>(() => new Set());
+  const alternar = (chave: string) =>
+    setAbertos((prev) => {
+      const prox = new Set(prev);
+      if (prox.has(chave)) prox.delete(chave);
+      else prox.add(chave);
+      return prox;
+    });
 
   React.useEffect(() => {
     if (!highlight) return;
@@ -74,13 +90,18 @@ export function ConciliacaoList({
             const temRateio = l.rateio.length > 1;
             const temOrigensMultiplas = l.origens.length > 1;
             const jobParaColuna = derivarJobParaColuna(l);
+            const detalhe = detalhesFatura[l.id];
+            const aberta = !!detalhe && abertos.has(l.id);
             return (
+              <React.Fragment key={l.id}>
               <tr
-                key={l.id}
                 ref={(el) => {
                   rowRefs.current[l.id] = el;
                 }}
-                className="border-b border-border last:border-0 transition-colors hover:bg-muted/30"
+                className={cn(
+                  "border-b border-border last:border-0 transition-colors hover:bg-muted/30",
+                  aberta && "bg-muted/20",
+                )}
               >
                 <td className="whitespace-nowrap px-3 py-2 font-mono text-xs">
                   {formatDate(l.data_movimento)}
@@ -100,7 +121,29 @@ export function ConciliacaoList({
                     estornada && "text-muted-foreground line-through",
                   )}
                 >
-                  {limparPrefixoDescricao(l.descricao, l.origem)}
+                  {detalhe ? (
+                    <button
+                      type="button"
+                      onClick={() => alternar(l.id)}
+                      aria-expanded={aberta}
+                      aria-label={aberta ? "Recolher os itens da fatura" : "Ver os itens da fatura"}
+                      className="inline-flex items-center gap-1.5 text-left hover:text-california-red"
+                    >
+                      <ChevronRight
+                        className={cn(
+                          "h-3.5 w-3.5 shrink-0 text-california-red transition-transform",
+                          aberta && "rotate-90",
+                        )}
+                      />
+                      <span>{limparPrefixoDescricao(l.descricao, l.origem)}</span>
+                      <span className="text-[10px] text-muted-foreground">
+                        · {detalhe.centros.length}{" "}
+                        {detalhe.centros.length === 1 ? "centro de custo" : "centros de custo"}
+                      </span>
+                    </button>
+                  ) : (
+                    limparPrefixoDescricao(l.descricao, l.origem)
+                  )}
                 </td>
                 <td className="px-3 py-2 text-xs">
                   {l.fornecedor_nome ?? (
@@ -151,11 +194,137 @@ export function ConciliacaoList({
                     sendo lidas pelo popover pra decidir qual seção mostrar,
                     mas o ESTILO do botão não muda mais entre linhas. */}
               </tr>
+              {aberta && detalhe && (
+                <LinhasDaFatura
+                  lancamentoId={l.id}
+                  detalhe={detalhe}
+                  abertos={abertos}
+                  alternar={alternar}
+                />
+              )}
+              </React.Fragment>
             );
           })}
         </tbody>
       </table>
     </div>
+  );
+}
+
+/**
+ * O pagamento da fatura aberto em dois níveis (decisão 093, entrega 3):
+ * uma linha por CENTRO DE CUSTO, com o total dele, e dentro de cada um os
+ * ITENS — data, descrição, fornecedor, job, subtipo, valor. O rodapé
+ * confere: a soma dos centros é o débito da linha do pagamento.
+ *
+ * Linhas de tabela, não uma tabela dentro da célula: assim as colunas de
+ * valor ficam na mesma vertical do Débito da linha-mãe.
+ */
+function LinhasDaFatura({
+  lancamentoId,
+  detalhe,
+  abertos,
+  alternar,
+}: {
+  lancamentoId: string;
+  detalhe: DetalheDaFatura;
+  abertos: Set<string>;
+  alternar: (chave: string) => void;
+}) {
+  // As células seguem as colunas da linha-mãe: valor sob DÉBITO (o que
+  // fecha com o pagamento), nome sob DESCRIÇÃO, fornecedor, job e o
+  // subtipo sob CENTRO DE CUSTO. Sem isso os números ficavam soltos na
+  // borda direita e o olho não batia a soma.
+  return (
+    <>
+      {detalhe.centros.map((c) => {
+        const chave = `${lancamentoId}|${c.tipo_codigo}`;
+        const abertoCentro = abertos.has(chave);
+        return (
+          <React.Fragment key={chave}>
+            <tr className="border-b border-border/60 bg-muted/10 text-xs">
+              <td colSpan={2} />
+              <td className="whitespace-nowrap px-3 py-1.5 text-right font-mono font-semibold">
+                {formatMoney(c.total)}
+              </td>
+              <td />
+              <td colSpan={7} className="px-3 py-1.5">
+                <button
+                  type="button"
+                  onClick={() => alternar(chave)}
+                  aria-expanded={abertoCentro}
+                  className="inline-flex items-center gap-1.5 pl-4 font-medium hover:text-california-red"
+                >
+                  <ChevronRight
+                    className={cn(
+                      "h-3 w-3 shrink-0 text-muted-foreground transition-transform",
+                      abertoCentro && "rotate-90",
+                    )}
+                  />
+                  <span className="font-mono text-muted-foreground">{c.tipo_codigo}</span>
+                  <span>{c.tipo_nome}</span>
+                  <span className="text-[10px] text-muted-foreground">
+                    · {c.itens.length} {c.itens.length === 1 ? "item" : "itens"}
+                  </span>
+                </button>
+              </td>
+            </tr>
+            {abertoCentro &&
+              c.itens.map((it) => (
+                <tr key={it.id} className="border-b border-border/40 bg-muted/5 text-[11.5px]">
+                  <td className="whitespace-nowrap px-3 py-1.5 pl-6 font-mono text-muted-foreground">
+                    {formatDate(it.data)}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-1.5 text-right font-mono text-emerald-700">
+                    {it.valor < 0 ? formatMoney(-it.valor) : ""}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-1.5 text-right font-mono">
+                    {it.valor > 0 ? formatMoney(it.valor) : ""}
+                  </td>
+                  <td />
+                  <td className="px-3 py-1.5 pl-8">
+                    {limparPrefixoDescricao(limparDescricaoDaFatura(it.descricao), it.origem)}
+                    {it.papel === "ajuste" && (
+                      <span className="ml-1.5 rounded border border-slate-300 bg-slate-100 px-1 py-0.5 text-[9px] font-semibold uppercase text-slate-700">
+                        ajuste
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-3 py-1.5 text-muted-foreground">
+                    {it.fornecedor_nome ?? "—"}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-1.5 font-mono">
+                    {it.job_id && it.job_codigo ? (
+                      <Link
+                        href={`/jobs/${it.job_id}?from=financeiro`}
+                        prefetch={false}
+                        className="text-california-red hover:underline"
+                      >
+                        {it.job_codigo}
+                      </Link>
+                    ) : (
+                      <span className="font-sans italic text-muted-foreground/70">—</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-1.5 text-muted-foreground">{it.subtipo_nome}</td>
+                  <td colSpan={3} />
+                </tr>
+              ))}
+          </React.Fragment>
+        );
+      })}
+      <tr className="border-b border-border bg-muted/10 text-xs">
+        <td colSpan={2} />
+        <td className="whitespace-nowrap px-3 py-1.5 text-right font-mono font-bold">
+          {formatMoney(detalhe.total)}
+        </td>
+        <td />
+        <td colSpan={7} className="px-3 py-1.5 pl-7 text-muted-foreground">
+          Total da fatura {detalhe.codigo} · fecha {formatDate(detalhe.competencia_fechamento)} ·{" "}
+          {detalhe.centros.reduce((s, c) => s + c.itens.length, 0)} itens
+        </td>
+      </tr>
+    </>
   );
 }
 
@@ -169,7 +338,7 @@ export function ConciliacaoList({
  * rejeitada — a distinção confundia mais do que ajudava. O popover se
  * adapta: seções de save/rateio só aparecem quando existem.
  */
-function DetalhesPopover({
+export function DetalhesPopover({
   linha,
   temSave,
   temRateio,
@@ -401,7 +570,7 @@ function formatDate(iso: string): string {
  * 4. Nenhum job em nenhum lugar → "Não Vinculado" (fatura de cartão,
  *    lançamento manual, ajuste, etc).
  */
-function derivarJobParaColuna(
+export function derivarJobParaColuna(
   linha: LancamentoLinha,
 ):
   | { tipo: "link"; id: string; codigo: string }
@@ -429,7 +598,7 @@ function derivarJobParaColuna(
  * tela. Remove só quando bate com o tipo de origem, pra não estropiar
  * descrições que legitimamente começam com essas letras.
  */
-function limparPrefixoDescricao(descricao: string, origem: string): string {
+export function limparPrefixoDescricao(descricao: string, origem: string): string {
   if (origem.startsWith("pp_") && descricao.startsWith("PP ")) {
     return descricao.slice(3);
   }
@@ -439,7 +608,7 @@ function limparPrefixoDescricao(descricao: string, origem: string): string {
   return descricao;
 }
 
-function trimestreDe(iso: string): string {
+export function trimestreDe(iso: string): string {
   const m = parseInt(iso.slice(5, 7), 10);
   if (m <= 3) return "T1";
   if (m <= 6) return "T2";

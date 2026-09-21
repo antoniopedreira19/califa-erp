@@ -7,6 +7,7 @@ import { pode } from "@/lib/permissoes";
 import {
   AREA_FINANCEIRO,
   jobStatusBadgeClasses,
+  jobStatusExibido,
   jobStatusLabel,
   nomeDoJobNoFinanceiro,
   type JobStatus,
@@ -235,6 +236,12 @@ export default async function JobNoFinanceiroPage({
   // Desde 16/09/2026 (decisão 087) faturamento e encerramento correm
   // separados. "Aguardando encerramento" é o job que já foi todo faturado e
   // só falta a produção encerrar — antes era qualquer job já enviado.
+  // O selo de status é o mesmo da produção: "Em faturamento" para o aberto
+  // com o envio completo (decisão 094).
+  const statusExibido = jobStatusExibido(
+    job.status as JobStatus,
+    job.faturamento_enviado_em,
+  );
   const aguardandoEncerramento =
     job.status === "aberto" && detalhe.faturamentoCompleto;
 
@@ -259,8 +266,8 @@ export default async function JobNoFinanceiroPage({
               <h1 className="text-2xl font-bold tracking-tight">
                 {jobNaFila.nome}
               </h1>
-              <Badge className={cn("border", jobStatusBadgeClasses(job.status as JobStatus))}>
-                {jobStatusLabel(job.status as JobStatus)}
+              <Badge className={cn("border", jobStatusBadgeClasses(statusExibido))}>
+                {jobStatusLabel(statusExibido)}
               </Badge>
               <Badge className={cn("border", situacaoMeta.classes)}>
                 {situacaoMeta.rotulo}
