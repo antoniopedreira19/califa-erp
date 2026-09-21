@@ -4271,3 +4271,31 @@ Ajuste final do Tiago, no mesmo dia: os parênteses de Int. taxes e Impostos
 BR na cadeia mostram só o percentual ("(18,02%)", "(19,53%)"), sem o
 "· gross-up" do design. Aprovado assim.
 
+---
+
+## ⚠️ Nota de 2026-09-21 (3) — "Novo grupo" deixou de abrir diálogo
+
+Pedido do Tiago: criar grupo tem que ser como renomear o primeiro grupo — o
+campo abre no próprio lugar, sem pop-up.
+
+- `novo-grupo-drawer.tsx` virou **`novo-grupo-inline.tsx`** (`NovoGrupoInline`).
+  O gatilho "Novo grupo" se transforma no campo de nome, com a mesma forma do
+  renomear de `NomeDoGrupo` (`grupo-linha.tsx`): campo de 28px, ✓ vermelho, ✕,
+  **Enter cria, Esc desiste**, erro na própria linha. Vale para as duas
+  variantes — a tracejada (linha "o grupo novo entra aqui", onde o grupo
+  aparece depois de confirmar) e a sólida do estado vazio.
+- **O grupo só é criado na confirmação.** Não existe grupo provisório gravado
+  com nome padrão: o nome é único por versão (`uniq_grupo_nome_por_versao`), e
+  um "Novo grupo" esquecido travaria o próximo. Desistir não deixa rastro. A
+  server action (`criarGrupo`) não mudou.
+- No modelo mensal o mês, que aparecia na descrição do diálogo, foi para o
+  texto do campo ("Nome do grupo em julho"); o `mes_id` segue indo no envio.
+- Os editores de rascunho (`_rascunho`, visão agregada) não mudaram: lá o
+  grupo já nascia local, como "Novo grupo N", sem diálogo.
+
+**Conferido na tela** (`TES-0001/26-03`, rascunho): abre sem diálogo e com
+foco; Esc fecha sem criar; nome repetido mostra "Já existe um grupo com esse
+nome nesta versão." na linha; nome novo cria o grupo no lugar da linha
+tracejada e o botão volta. O grupo do teste foi removido pela lixeira. tsc e
+lint limpos.
+
