@@ -33,9 +33,7 @@ export default async function ColaboradorDetalhePage({
     await Promise.all([
       supabase
         .from("colaboradores")
-        .select(
-          "*, nivel:niveis(id, codigo, descricao), fornecedor:fornecedores(id, nome)",
-        )
+        .select("*, nivel:niveis(id, codigo, descricao)")
         .eq("id", params.id)
         .eq("tenant_id", session.activeTenant.id)
         .maybeSingle(),
@@ -80,7 +78,6 @@ export default async function ColaboradorDetalhePage({
 
   const colab = colabRes.data as Colaborador & {
     nivel: Pick<Nivel, "id" | "codigo" | "descricao"> | null;
-    fornecedor: { id: string; nome: string } | null;
   };
 
   const alocacoes = (alocacoesRes.data ?? []) as (ColaboradorAlocacao & {

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, CheckCircle2, Info } from "lucide-react";
+import { AlertCircle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MaskedInput } from "@/components/ui/masked-input";
@@ -17,10 +17,7 @@ import {
 } from "@/components/ui/select";
 import type { Empresa, Nivel } from "@/lib/types";
 import { tipoContratacaoLabel } from "@/lib/types";
-import {
-  criarColaborador,
-  buscarFornecedorPorDocumento,
-} from "./actions";
+import { criarColaborador } from "./actions";
 
 type RegionalOption = { id: string; nome: string; empresa_id: string };
 type NivelOption = Pick<Nivel, "id" | "codigo" | "descricao">;
@@ -51,65 +48,22 @@ export function ColaboradorFormNovo({
   const [regionalId, setRegionalId] = React.useState<string>("");
   const [nivelSel, setNivelSel] = React.useState<string>(NONE_SENTINEL);
   const [cpfCnpj, setCpfCnpj] = React.useState<string>("");
-  const [dataAdmissao, setDataAdmissao] = React.useState<string>(
-    hoje(),
-  );
+  const [dataAdmissao, setDataAdmissao] = React.useState<string>(hoje());
 
-  // Auto-match com fornecedor
-  const [fornecedorMatch, setFornecedorMatch] = React.useState<
-    { id: string; nome: string } | null
-  >(null);
-  const [vincularFornecedor, setVincularFornecedor] = React.useState(false);
-  const [criarFornecedor, setCriarFornecedor] = React.useState(false);
-  const [buscando, setBuscando] = React.useState(false);
-
-  const isPJ = tipoContratacao === "pj" || tipoContratacao === "mei" || tipoContratacao === "clt_recibo";
+  const isPJ =
+    tipoContratacao === "pj" ||
+    tipoContratacao === "mei" ||
+    tipoContratacao === "clt_recibo";
   const documentoLabel = isPJ ? "CNPJ" : "CPF";
   const documentoMask = isPJ ? "cnpj" : "cpf";
-  const documentoDigitosEsperados = isPJ ? 14 : 11;
 
   const regionaisDaEmpresa = regionais
     .filter((r) => r.empresa_id === empresaId)
     .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
 
-  // Auto-match: quando CPF/CNPJ completo, busca em fornecedores
-  React.useEffect(() => {
-    const digitos = cpfCnpj.replace(/\D/g, "");
-    if (digitos.length !== documentoDigitosEsperados) {
-      setFornecedorMatch(null);
-      setVincularFornecedor(false);
-      setCriarFornecedor(false);
-      return;
-    }
-    let cancelado = false;
-    setBuscando(true);
-    buscarFornecedorPorDocumento(digitos)
-      .then((res) => {
-        if (cancelado) return;
-        if (res.ok) {
-          setFornecedorMatch(res.fornecedor);
-          if (res.fornecedor) {
-            setVincularFornecedor(true);
-            setCriarFornecedor(false);
-          } else {
-            setVincularFornecedor(false);
-          }
-        }
-      })
-      .finally(() => {
-        if (!cancelado) setBuscando(false);
-      });
-    return () => {
-      cancelado = true;
-    };
-  }, [cpfCnpj, documentoDigitosEsperados]);
-
   // Ao trocar de PJ → PF ou vice-versa, zera o documento pra evitar formato errado
   React.useEffect(() => {
     setCpfCnpj("");
-    setFornecedorMatch(null);
-    setVincularFornecedor(false);
-    setCriarFornecedor(false);
   }, [tipoContratacao]);
 
   // Ao trocar de empresa, zera a regional (evita regional de outra empresa)
@@ -131,12 +85,6 @@ export function ColaboradorFormNovo({
     formData.set("regional_id", regionalId);
     formData.set("cpf_cnpj", cpfCnpj);
     formData.set("data_admissao", dataAdmissao);
-    if (vincularFornecedor && fornecedorMatch) {
-      formData.set("fornecedor_id", fornecedorMatch.id);
-    } else {
-      formData.delete("fornecedor_id");
-    }
-    formData.set("criar_fornecedor", criarFornecedor ? "1" : "0");
 
     startTransition(async () => {
       const res = await criarColaborador(formData);
@@ -224,45 +172,6 @@ export function ColaboradorFormNovo({
                 {msg}
               </p>
             ))}
-            {buscando && (
-              <p className="text-xs text-muted-foreground">
-                Verificando se {documentoLabel} já está cadastrado como fornecedor…
-              </p>
-            )}
-            {fornecedorMatch && (
-              <label className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800">
-                <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" />
-                <span className="flex-1">
-                  Fornecedor já cadastrado:{" "}
-                  <strong>{fornecedorMatch.nome}</strong>. Dados bancários /
-                  PIX serão reaproveitados na baixa da folha.
-                  <span className="mt-1 flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={vincularFornecedor}
-                      onChange={(e) => setVincularFornecedor(e.target.checked)}
-                    />
-                    Vincular ao fornecedor existente
-                  </span>
-                </span>
-              </label>
-            )}
-            {!fornecedorMatch && isPJ && cpfCnpj.replace(/\D/g, "").length === 14 && (
-              <label className="flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800">
-                <Info className="h-4 w-4 mt-0.5 shrink-0" />
-                <span className="flex-1">
-                  CNPJ ainda não está cadastrado como fornecedor.
-                  <span className="mt-1 flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={criarFornecedor}
-                      onChange={(e) => setCriarFornecedor(e.target.checked)}
-                    />
-                    Criar fornecedor a partir deste cadastro
-                  </span>
-                </span>
-              </label>
-            )}
           </div>
 
           <div className="space-y-2">

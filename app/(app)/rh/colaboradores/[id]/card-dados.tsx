@@ -15,7 +15,6 @@ import { EditarDadosDrawer } from "./editar-dados-drawer";
 type Props = {
   colaborador: Colaborador & {
     nivel: Pick<Nivel, "id" | "codigo" | "descricao"> | null;
-    fornecedor: { id: string; nome: string } | null;
   };
   empresas: Pick<Empresa, "id" | "nome_fantasia">[];
   regionais: { id: string; nome: string; empresa_id: string }[];
@@ -102,15 +101,6 @@ export function CardDados({ colaborador, niveis }: Props) {
           )}
         />
         <Info label="E-mail" value={colaborador.email ?? "—"} />
-        <Info
-          label="Fornecedor vinculado"
-          value={colaborador.fornecedor?.nome ?? "—"}
-          hint={
-            colaborador.fornecedor
-              ? "Dados bancários / PIX reaproveitados na baixa da folha."
-              : null
-          }
-        />
         <Info label="Admissão" value={formatarData(colaborador.data_admissao)} />
         <Info
           label="Encerramento"

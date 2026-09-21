@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Pencil, CheckCircle2 } from "lucide-react";
+import { AlertCircle, Pencil } from "lucide-react";
 import {
   Dialog,
   DialogTrigger,
@@ -24,10 +24,7 @@ import {
 } from "@/components/ui/select";
 import type { Colaborador, Nivel } from "@/lib/types";
 import { tipoContratacaoLabel } from "@/lib/types";
-import {
-  editarColaborador,
-  buscarFornecedorPorDocumento,
-} from "../actions";
+import { editarColaborador } from "../actions";
 
 const NONE_SENTINEL = "__none__";
 
@@ -35,9 +32,7 @@ export function EditarDadosDrawer({
   colaborador,
   niveis,
 }: {
-  colaborador: Colaborador & {
-    fornecedor: { id: string; nome: string } | null;
-  };
+  colaborador: Colaborador;
   niveis: Pick<Nivel, "id" | "codigo" | "descricao">[];
 }) {
   const router = useRouter();
@@ -60,12 +55,6 @@ export function EditarDadosDrawer({
   const [dataAdmissao, setDataAdmissao] = React.useState<string>(
     colaborador.data_admissao,
   );
-  const [fornecedorId, setFornecedorId] = React.useState<string | null>(
-    colaborador.fornecedor_id,
-  );
-  const [fornecedorMatch, setFornecedorMatch] = React.useState<
-    { id: string; nome: string } | null
-  >(colaborador.fornecedor);
 
   const isPJ =
     tipoContratacao === "pj" ||
@@ -73,21 +62,6 @@ export function EditarDadosDrawer({
     tipoContratacao === "clt_recibo";
   const documentoLabel = isPJ ? "CNPJ" : "CPF";
   const documentoMask = isPJ ? "cnpj" : "cpf";
-  const documentoDigitosEsperados = isPJ ? 14 : 11;
-
-  React.useEffect(() => {
-    if (!open) return;
-    const digitos = cpfCnpj.replace(/\D/g, "");
-    if (digitos.length !== documentoDigitosEsperados) return;
-    let cancelado = false;
-    buscarFornecedorPorDocumento(digitos).then((res) => {
-      if (cancelado) return;
-      if (res.ok) setFornecedorMatch(res.fornecedor);
-    });
-    return () => {
-      cancelado = true;
-    };
-  }, [open, cpfCnpj, documentoDigitosEsperados]);
 
   function handleOpenChange(next: boolean) {
     if (!next) {
@@ -98,8 +72,6 @@ export function EditarDadosDrawer({
       setNivelSel(colaborador.nivel_id ?? NONE_SENTINEL);
       setCpfCnpj(colaborador.cpf_cnpj ?? "");
       setDataAdmissao(colaborador.data_admissao);
-      setFornecedorId(colaborador.fornecedor_id);
-      setFornecedorMatch(colaborador.fornecedor);
     }
     setOpen(next);
   }
@@ -114,8 +86,6 @@ export function EditarDadosDrawer({
     formData.set("data_admissao", dataAdmissao);
     if (nivelSel === NONE_SENTINEL) formData.delete("nivel_id");
     else formData.set("nivel_id", nivelSel);
-    if (fornecedorId) formData.set("fornecedor_id", fornecedorId);
-    else formData.delete("fornecedor_id");
 
     startTransition(async () => {
       const res = await editarColaborador(colaborador.id, formData);
@@ -214,26 +184,6 @@ export function EditarDadosDrawer({
                     {msg}
                   </p>
                 ))}
-                {fornecedorMatch && (
-                  <div className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-2 text-xs text-emerald-800">
-                    <CheckCircle2 className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-                    <span className="flex-1">
-                      Fornecedor: <strong>{fornecedorMatch.nome}</strong>
-                      <label className="mt-1 flex items-center gap-1.5">
-                        <input
-                          type="checkbox"
-                          checked={fornecedorId === fornecedorMatch.id}
-                          onChange={(e) =>
-                            setFornecedorId(
-                              e.target.checked ? fornecedorMatch.id : null,
-                            )
-                          }
-                        />
-                        Vincular ao fornecedor
-                      </label>
-                    </span>
-                  </div>
-                )}
               </div>
 
               <div className="space-y-2">
