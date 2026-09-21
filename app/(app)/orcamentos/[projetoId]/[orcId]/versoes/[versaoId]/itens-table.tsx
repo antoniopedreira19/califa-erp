@@ -1864,7 +1864,9 @@ export function ItensTable({
                     <div className="flex items-center gap-2.5">
                       {novoGrupo}
                       <span className="text-[11px] text-muted-foreground">
-                        o grupo novo entra aqui, no fim da ordem
+                        {gruposDaTela.length === 0
+                          ? "dê um nome ao primeiro agrupamento para lançar os itens"
+                          : "o grupo novo entra aqui, no fim da ordem"}
                       </span>
                     </div>
                   </td>

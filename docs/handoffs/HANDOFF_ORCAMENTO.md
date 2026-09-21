@@ -4299,3 +4299,36 @@ nome nesta versão." na linha; nome novo cria o grupo no lugar da linha
 tracejada e o botão volta. O grupo do teste foi removido pela lixeira. tsc e
 lint limpos.
 
+---
+
+## ⚠️ Nota de 2026-09-21 (4) — Planilha vazia já abre pedindo o primeiro agrupamento (decisão 098)
+
+Continuação da nota (3), agora valendo para todo modelo — inclusive Fee e
+Always On, mês a mês.
+
+- **`planilha-versao.tsx`** — o cartão "Nenhum grupo ainda" com botão saiu. A
+  planilha editável sem agrupamento renderiza a própria `GruposSection`
+  (cabeçalho, linha tracejada, total), e o `NovoGrupoInline` nasce **aberto**
+  (`abrirDeInicio`), com "Nomeie o agrupamento" ao fundo. A `key`
+  (`mês:vazia?`) faz o estado renascer ao trocar de mês na régua. Só a versão
+  TRAVADA sem agrupamento mostra aviso ("Nenhum agrupamento nesta versão."). A
+  prop `acaoDoVazio`, que ninguém passava, foi removida; a variante "sólida"
+  do gatilho também, por falta de uso.
+- **`[projetoId]/actions.ts` (`criarVersaoInicial`)** — a v1 nacional **deixou
+  de gravar o "Novo grupo" padrão**. Nenhum modelo nasce com agrupamento: ele
+  só existe depois de nomeado. Os meses do modelo mensal seguem nascendo do
+  período, sem grupo — que é o que o "Copiar itens de outro mês"
+  (`copiar_mes_da_versao`) exige do destino. Por isso não houve migration nem
+  backfill.
+- **`grupos-section.tsx`** — "Recolher todos" some enquanto não há
+  agrupamento (ele leria "Expandir todos").
+- **`itens-table.tsx`** — o texto de apoio da linha tracejada, sem
+  agrupamento, vira "dê um nome ao primeiro agrupamento para lançar os itens".
+
+**Conferido na tela:** `HIT-0001/26-03` (Always On, 3 meses vazios — só
+leitura): julho abre com a planilha e o campo; trocar para agosto reabre o
+campo com foco e o rótulo do mês. Orçamento novo de Ativação criado pelo
+formulário (`TES-0001/26-06`): nasceu com 0 grupos, abriu com o campo focado,
+e nomear criou o agrupamento com a linha "Novo item" e o "Recolher todos" de
+volta. tsc e lint limpos.
+

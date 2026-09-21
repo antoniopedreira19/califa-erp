@@ -95,8 +95,6 @@ interface Props {
   semTotais?: boolean;
   tituloTotais?: string;
   subtituloTotais?: string;
-  /** Ação extra no estado vazio do mês ("Copiar itens de outro mês"). */
-  acaoDoVazio?: React.ReactNode;
 }
 
 export function PlanilhaVersao({
@@ -124,7 +122,6 @@ export function PlanilhaVersao({
   semTotais,
   tituloTotais,
   subtituloTotais,
-  acaoDoVazio,
 }: Props) {
   // ⚠️ FIXA em "bruto" desde 08/09/2026 (decisão 062). O BV saiu do
   // planejado, então nesta tela as duas vistas dariam o mesmo número — e
@@ -158,30 +155,19 @@ export function PlanilhaVersao({
 
   return (
     <>
-      {grupos.length === 0 ? (
+      {/* Planilha sem agrupamento só mostra o aviso quando está TRAVADA:
+          ali não há o que fazer. Editável, ela abre como qualquer outra —
+          cabeçalho, linha tracejada e total — com o campo do primeiro
+          agrupamento já em edição (21/09/2026). Vale igual para o mês vazio
+          do modelo mensal. */}
+      {grupos.length === 0 && readOnly ? (
         <div className="rounded-2xl border border-dashed border-border bg-muted/20 p-12 text-center">
           <FolderTree className="mx-auto mb-4 h-10 w-10 text-muted-foreground/50" />
           <p className="text-sm text-muted-foreground">
             {mes
-              ? `Nenhum grupo em ${mes.nome} ainda. Crie o primeiro grupo ou copie os itens de outro mês.`
-              : "Nenhum grupo ainda. Crie o primeiro grupo para começar a adicionar itens."}
+              ? `Nenhum agrupamento em ${mes.nome}.`
+              : "Nenhum agrupamento nesta versão."}
           </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Exemplos: Equipe, Ativação, Staff, Logística...
-          </p>
-          {!readOnly && (
-            <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
-              {/* Sem nenhum grupo não há linha tracejada onde encaixar o
-                  gatilho: aqui ele é a única ação da tela, e por isso vem
-                  na forma sólida. */}
-              <NovoGrupoInline
-                versaoId={versaoId}
-                mesId={mes?.id}
-                nomeDoMes={mes?.nome}
-              />
-              {acaoDoVazio}
-            </div>
-          )}
         </div>
       ) : (
         <GruposSection
@@ -214,8 +200,12 @@ export function PlanilhaVersao({
           novoGrupo={
             readOnly ? undefined : (
               <NovoGrupoInline
+                // A `key` faz o estado renascer quando o mês da régua muda
+                // ou quando a planilha deixa de estar vazia: sem ela o
+                // campo ficaria como estava no mês anterior.
+                key={`${mes?.id ?? "versao"}:${grupos.length === 0}`}
                 versaoId={versaoId}
-                variante="tracejada"
+                abrirDeInicio={grupos.length === 0}
                 mesId={mes?.id}
                 nomeDoMes={mes?.nome}
               />
