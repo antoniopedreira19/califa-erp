@@ -18,65 +18,13 @@ Ver também:
   - Revisão pelo financeiro em aba **"Folhas de Pagamento"** dentro de `/financeiro/contas-a-pagar`.
   - Aprovação com edição opcional; ao aprovar, gera `contas_avulsas` rateadas por alocação **e** propaga edição pra Camada 1.
   - Reprovação com motivo obrigatório; volta linha pra RH em `pendente_correcao`.
+- ✅ **Design & UX P0 (entregue em 2026-09-22)** — D1/D2/D3 implementados:
+  - Listagem `/rh/folhas` enxuta com status agregado (rascunho/enviada/concluída) derivado das linhas.
+  - Detalhe `/rh/folhas/[competencia]` com faixa de 6 cards (Total destaque + Colaboradores + Enviadas + Pendências + Aprovadas + Pagas); tabela mantém badge granular.
+  - `/rh/colaboradores` com faixa de 4 cards (Ativos + Folha do mês + Admissões + Demissões).
+  - Handoff: [`2026-09-22-rh-design-ux-folha-e-colaboradores.md`](../../handoffs/2026-09-22-rh-design-ux-folha-e-colaboradores.md).
 
-## P0 — Próxima entrega: **Design & UX**
-
-Decisões já travadas pelo usuário no fechamento de 2026-09-21. **Não replanejar — implementar direto.**
-
-### D1. Listagem de folhas (`/rh/folhas`) — enxugar
-
-Hoje a tabela mostra 5 colunas de status (rascunho/enviada/pendente/aprovada/paga). Isso é ruído — nesse nível o usuário só quer saber "em que ponto está a folha do mês".
-
-**Novo layout da linha:**
-
-| Competência | Colaboradores | Total (R$) | Status |
-|---|---|---|---|
-| Setembro/2026 | 22 | R$ 145.320,00 | Rascunho / Enviada / Concluída |
-
-**Regra do status agregado** (derivado das linhas, sem coluna nova no banco):
-
-```
-concluída  = TODAS as linhas em `paga`
-rascunho   = NENHUMA linha foi ainda enviada (todas em `rascunho`)
-enviada    = qualquer outro estado (é o "em andamento")
-```
-
-`pendente_correcao` e `aprovada` continuam existindo no banco mas ficam agrupados como "enviada" nesta visão — a granularidade fina só aparece dentro da folha (D2).
-
-### D2. Detalhe da folha (`/rh/folhas/[competencia]`) — cards de resumo + tabela mantendo status por linha
-
-**Cards agregados no topo da página** (acima da tabela):
-
-- **Total da folha** — `sum(salario_base)` das linhas
-- **Colaboradores** — contagem total
-- **Enviadas** — linhas em `enviada`
-- **Pendências** — linhas em `pendente_correcao` (destaca em vermelho se > 0)
-- **Aprovadas** — linhas em `aprovada`
-- **Pagas** — linhas em `paga`
-
-Sugestão de layout: grid de 4-6 cards pequenos + card principal grande do total.
-
-**Tabela** continua por linha com badge de status por linha — a granularidade fina é aqui, não na listagem.
-
-### D3. Cards de estado atual na lista de colaboradores (`/rh/colaboradores`)
-
-**Row de cards no topo da página** (antes dos filtros):
-
-- **Colaboradores ativos** — `count where status='ativo'`
-- **Valor da folha atual** — `sum(salario_base)` das linhas de `folhas_pagamento` na competência do mês corrente. Se não gerou ainda, "—" com hint "Folha não gerada".
-- **Admissões no mês** — `count where data_admissao between primeiro_dia e último_dia do mês corrente`
-- **Demissões no mês** — `count where data_encerramento between primeiro_dia e último_dia do mês corrente`
-
-Sugestão: 4 cards horizontais com número grande + label + comparativo opcional (ex: "3 admissões · +1 vs mês anterior").
-
-### Notas de implementação
-
-- **Status agregado é lógica de servidor** — computa via query única com `count(*) filter (where status = 'paga')` etc, ou lê todas as linhas e agrega em `Map`. Recomendação: aggregate query no SQL pra manter payload enxuto.
-- **Não persistir status agregado** — é sempre derivado das linhas. Se persistir, precisa trigger de sincronização, complexidade desnecessária.
-- **Divergência de vocabulário** — "concluída" na UI passa a significar o que o banco chama "todas em paga". Vale ADR curto explicando a divergência controlada.
-- **Cards da `/rh/colaboradores`** — 4 queries agregadas em `Promise.all`, todas com `head:true, count:'exact'`. Zero embed pesado.
-
-## P1 — Após D1/D2/D3, escolher
+## P1 — Próxima entrega: escolher entre
 
 ### 1. Import da planilha Excel atual
 
