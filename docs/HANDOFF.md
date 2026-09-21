@@ -72,6 +72,7 @@ Ordem: mais recente primeiro. Cada linha aponta para um arquivo em `docs/handoff
 
 | Data | Entrega | Handoff |
 |---|---|---|
+| 2026-09-21 | RH · fechamento de ciclo + backlog vivo consolidado | [2026-09-21-rh-fechamento-de-ciclo.md](handoffs/2026-09-21-rh-fechamento-de-ciclo.md) |
 | 2026-09-18 | Folha Mensal · Rodada 3 (envio, aprovação, geração de títulos) | [2026-09-18-folha-mensal-rodada-3.md](handoffs/2026-09-18-folha-mensal-rodada-3.md) |
 | 2026-09-18 | Folha Mensal · Rodadas 1 e 2 (modelo + edição) | [2026-09-18-folha-mensal-rodadas-1-e-2.md](handoffs/2026-09-18-folha-mensal-rodadas-1-e-2.md) |
 | 2026-09-17 | RH · Fundação + UI (Rodadas A e B) | [2026-09-17-rh-fundacao-e-ui.md](handoffs/2026-09-17-rh-fundacao-e-ui.md) |
@@ -92,7 +93,17 @@ Documentos gigantes por domínio, evoluem continuamente. Não são log cronológ
 
 ## 4. Próximos passos (backlog vivo)
 
-### 🔴 Prioridade 1 — Task 006 (Administração) — completar
+### 🔴 Prioridade 1 — RH · Design & UX (decisões já travadas, implementar direto)
+
+Detalhado em [`docs/modulos/rh/30-proximos-passos.md`](modulos/rh/30-proximos-passos.md) §P0. Resumo:
+
+- **Listagem `/rh/folhas`** enxuta: uma linha por competência com **Colaboradores · Total (R$) · Status agregado** (só 3: rascunho / enviada / concluída, derivados das linhas — sem coluna nova no banco).
+- **Detalhe `/rh/folhas/[competencia]`** ganha cards de resumo no topo (total, contagem, enviadas, pendências, aprovadas, pagas). Tabela por linha mantém badge granular.
+- **Cards de estado atual** na `/rh/colaboradores`: colaboradores ativos, valor da folha atual, admissões no mês, demissões no mês.
+
+Ordem seguinte no módulo (P1): import da planilha atual, estorno de folha aprovada, benefícios. Depois P2 (férias, turnover, holerite PDF, autoserviço).
+
+### 🔴 Prioridade 2 — Task 006 (Administração) — completar
 
 Convite está feito. Backlog:
 - Inativar/reativar membership (soft-delete de vínculo).
@@ -101,7 +112,7 @@ Convite está feito. Backlog:
 - **Feed de auditoria** (`audit_events` do tenant) — dados já são gravados, falta UI de leitura.
 - **MFA obrigatório pra admin** — configuração no Supabase Dashboard.
 
-### 🟡 Prioridade 2 — Pedidos de Compra fase 2 (fluxo financeiro)
+### 🟡 Prioridade 3 — Pedidos de Compra fase 2 (fluxo financeiro)
 
 Extensão natural da fase 1. Adicionar:
 - Coluna `status pp_status` em `pedidos_compra` (enum: `emitida`, `aprovada`, `baixada`, `reprovada`).
@@ -110,7 +121,7 @@ Extensão natural da fase 1. Adicionar:
 - Regra: PP `emitida` pode ser cancelada por GP/admin; PP `aprovada` só admin/financeiro cancela (e antes precisa estornar baixa se aplicável).
 - Audit: `pedido_compra.aprovada`, `pedido_compra.reprovada`, `pedido_compra.baixada`, `pedido_compra.estornada`.
 
-### 🟢 Prioridade 3 — Títulos financeiros + conciliação
+### 🟢 Prioridade 4 — Títulos financeiros + conciliação
 
 Próxima peça lógica após fase 2:
 
@@ -120,14 +131,14 @@ realizado → pedidos_compra → titulos_financeiros → conciliação bancária
 
 `pedidos_compra` (emitida/aprovada/baixada) gera `titulos_financeiros` com datas de vencimento e valores. Sem isso, o realizado hoje é só um número num item.
 
-### 🟢 Prioridade 4 — Dashboards e relatórios
+### 🟢 Prioridade 5 — Dashboards e relatórios
 
 - KPIs por projeto (rentabilidade real vs orçada).
 - Rentabilidade por fase de job (planejado × realizado ao longo do tempo).
 - Cash flow projetado.
 - Contas a pagar / DRE (dependem de pedidos_compra + títulos).
 
-### 🟢 Prioridade 5 — Dívidas técnicas registradas
+### 🟢 Prioridade 6 — Dívidas técnicas registradas
 
 - **Swap principal↔sub-job atômico**: hoje são 3 statements sequenciais em `criarJob`/`atualizarHierarquiaJob`. Mover pra função Postgres com transação real. Recovery hoje é SQL manual.
 - **`finalizado` ref stale** também em `versoes/.../itens-table.tsx` — mesmo bug do `CelulaRealNum` que consertei no realizado (commit `1787a5c`). Aplicar `useEffect(() => { if (editando) finalizado.current = false }, [editando])`.
