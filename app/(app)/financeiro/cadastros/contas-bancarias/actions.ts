@@ -4,7 +4,10 @@ import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { createClient } from "@/lib/supabase/server";
-import { contaBancariaSchema } from "@/lib/validations/contas-bancarias";
+import {
+  contaBancariaSchema,
+  configCnabContaBancariaSchema,
+} from "@/lib/validations/contas-bancarias";
 
 type ActionResult =
   | { ok: true; id: string }
@@ -299,6 +302,78 @@ export async function inativarContaBancaria(id: string): Promise<ActionResult> {
 
   revalidatePath("/financeiro/cadastros/contas-bancarias");
   revalidatePath("/cadastros");
+  return { ok: true, id };
+}
+
+/**
+ * Salva a configuração CNAB Santander da conta bancária. Necessária pra
+ * o módulo pgto-remessa gerar arquivos de remessa a partir desta conta.
+ * ADR 004: convênio e sequencial vivem em contas_bancarias, não em
+ * empresas_contabeis.
+ */
+export async function salvarConfigCnabContaBancaria(
+  id: string,
+  formData: FormData,
+): Promise<ActionResult> {
+  const session = await requireSession();
+
+  if (!temPermissao(session.activeRole)) {
+    await logAuditEvent({
+      acao: "acao_negada",
+      tenantId: session.activeTenant.id,
+      metadata: { acao_tentada: "conta_bancaria.config_cnab_editada" },
+    });
+    return { ok: false, message: "Sem permissão." };
+  }
+
+  const parsed = configCnabContaBancariaSchema.safeParse({
+    convenio_cnab_santander:
+      formData.get("convenio_cnab_santander")?.toString() ?? "",
+    agencia: formData.get("agencia")?.toString() ?? "",
+    agencia_dv: formData.get("agencia_dv")?.toString() ?? "",
+    numero_conta: formData.get("numero_conta")?.toString() ?? "",
+    numero_conta_dv: formData.get("numero_conta_dv")?.toString() ?? "",
+    sequencial_arquivo: formData.get("sequencial_arquivo")?.toString() ?? "",
+  });
+  if (!parsed.success) {
+    return {
+      ok: false,
+      message: "Verifique os campos destacados.",
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
+
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("contas_bancarias")
+    .update({
+      agencia: parsed.data.agencia,
+      agencia_dv: parsed.data.agencia_dv,
+      numero_conta: parsed.data.numero_conta,
+      numero_conta_dv: parsed.data.numero_conta_dv,
+      convenio_cnab_santander: parsed.data.convenio_cnab_santander,
+      sequencial_arquivo: parsed.data.sequencial_arquivo,
+    })
+    .eq("id", id)
+    .eq("tenant_id", session.activeTenant.id);
+
+  if (error) {
+    console.error("[contas_bancarias.config_cnab]", error.message);
+    return { ok: false, message: "Não foi possível salvar a configuração." };
+  }
+
+  await logAuditEvent({
+    acao: "conta_bancaria.config_cnab_editada",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "conta_bancaria",
+    entidadeId: id,
+    metadata: {
+      tem_convenio: parsed.data.convenio_cnab_santander !== null,
+      sequencial: parsed.data.sequencial_arquivo,
+    },
+  });
+
+  revalidatePath("/financeiro/cadastros/contas-bancarias");
   return { ok: true, id };
 }
 
