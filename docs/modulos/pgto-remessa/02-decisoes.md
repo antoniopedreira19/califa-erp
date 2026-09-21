@@ -224,6 +224,63 @@ A fase 4.2 (ADR 003) botou convênio, agência+DV, conta+DV e sequencial em `emp
 
 ---
 
-## ADR 005 — [reservado]
+## ADR 005 — Origem "folha" separada de "avulso" em `vw_a_pagar`
 
-*Próxima decisão será na fase 5 (geração): estrutura do server action, formato do storage, política de retry, política de cancelamento de arquivo gerado.*
+**Data:** 2026-09-21
+**Status:** Aplicado
+**Migration:** [`20260921230001_origem_folha_em_vw_a_pagar.sql`](../../../supabase/migrations/20260921230001_origem_folha_em_vw_a_pagar.sql)
+
+### Contexto
+
+Quando a folha é aprovada, [`aprovarLinhaFolha`](../../../app/(app)/financeiro/contas-a-pagar/actions-folhas.ts) materializa `contas_avulsas` com `folha_id` preenchido (ADR 002). Ao consultar `vw_a_pagar`, essas linhas apareciam com `origem_tipo='avulsa'` — o CASE original só olhava `recorrente_id` (`WHEN recorrente_id IS NOT NULL THEN 'recorrente' ELSE 'avulsa'`).
+
+Feedback do Antonio na tela de Contas a Pagar: badge "AVULSO" na coluna Origem confundia porque folha e avulsa são conceitos diferentes. O gestor precisa distinguir na hora de decidir o que exportar em remessa, e a distinção existe no dado (`folha_id`), mas não estava exposta.
+
+### Decisão
+
+CASE de 3 braços na view — folha ganha origem própria:
+
+```sql
+CASE
+  WHEN a.folha_id IS NOT NULL THEN 'folha'
+  WHEN a.recorrente_id IS NOT NULL THEN 'recorrente'
+  ELSE 'avulsa'
+END
+```
+
+Propagação em toda a stack:
+- `OrigemTitulo` type em `lib/types.ts` ganha `"folha"`
+- `origemTituloLabel` retorna `"FOLHA"`
+- `CHIP_ORIGEM` em `titulos-pagar-list.tsx` ganha `{ key: "folha", label: "Folhas" }`
+- `origemChipClass` retorna cor rosa (`rose-50`/`rose-700`) — separa visualmente do violeta usado pra "AVULSO"
+- Contagem por origem no filtro inclui `folha: N`
+- `cnab_remessas_itens.chk_origem_tipo` relaxado pra aceitar `'folha'` (era só 4 valores)
+- Server action `gerarRemessaCnab` grava `origem_tipo='folha'` direto no INSERT (removido downcast pra `'avulsa'` que era workaround do CHECK antigo)
+- `CnabOrigemTipo` type em `actions-cnab.ts` ganha `"folha"`
+
+### Justificativa
+
+1. **Semântica correta.** Folha aprovada não é despesa avulsa. Uma vem de motor de folha com rateio e histórico; a outra é lançamento manual do financeiro.
+2. **UX de remessa CNAB.** Na hora de gerar `.REM`, o gestor pode filtrar "só folhas" pra pagar todos os colaboradores do mês numa leva, e "só avulsos" pra separar contas de aluguel/luz/etc.
+3. **Rastreio em `cnab_remessas_itens`.** Com `origem_tipo='folha'` gravado, o histórico de remessas passa a distinguir quantos títulos por origem foram enviados — útil pra relatório futuro.
+4. **Custo mínimo.** Migration ~10 linhas; propagação no código é cirúrgica (só CASE, type, labels, chip, badge). Zero backfill (a view é derivada).
+
+### Consequências
+
+- Contas avulsas com `folha_id IS NOT NULL` que já existiam (as 2 do teste E2E do "Teste") **automaticamente** aparecem como "FOLHA" — a view é recalculada por consulta.
+- Nenhuma dupla contagem: chip "Folhas" mostra o que antes ia pra "Avulsos". Contador da aba principal (badge no tab header) permanece igual, agrupando todos.
+- Lógica de estorno de compra em `page.tsx` (que filtrava por `origem === "avulso" || "recorrencia"`) foi atualizada pra incluir `"folha"` — mesmo comportamento contábil, mesma família contas_avulsas.
+- Server action de remessa agora grava origem real em `cnab_remessas_itens`, sem downcast.
+
+### Verificação
+
+- Migration aplicada via MCP. `vw_a_pagar` recompilada; teste em SQL confirmou que as 2 contas avulsas geradas pela folha do "Teste" apareceram com `origem_tipo='folha'`.
+- CHECK atualizado; INSERT de teste com `origem_tipo='folha'` aceito.
+- `tsc --noEmit` limpo.
+- `next lint` limpo nos diretórios tocados.
+
+---
+
+## ADR 006 — [reservado]
+
+*Próxima decisão será a fase 6 (persistência do arquivo em Storage) ou a fase 2 do módulo (parse do `.RET`).*

@@ -26,6 +26,7 @@ Substituir o pagamento manual (um a um, dentro do internet banking) por **geraç
   - **ADR 002** (2026-09-21): `contas_avulsas.colaborador_id` como destinatário primeiro-classe + escopo do MVP travado.
   - **ADR 003** (2026-09-21): fase 4 (modelagem) fechada — 3 migrations aditivas: colaborador ganha shape bancário, empresa contábil ganha config CNAB, tabelas de rastreio + código de barras.
   - **ADR 004** (2026-09-21): **corrige erro de design do ADR 003** — config CNAB (convênio, agência+conta+DVs, sequencial) migra pra `contas_bancarias`. Endereço fica em `empresas_contabeis`. `cnab_remessas.empresa_contabil_id` vira `conta_bancaria_id`.
+  - **ADR 005** (2026-09-21): origem `"folha"` separada de `"avulso"` em `vw_a_pagar` — folha aprovada materializa em contas_avulsas, mas ganha identidade própria em toda a stack (chip novo, badge rosa, rastreio em cnab_remessas_itens).
 
 ### Fase 3 — Visão (fechada em 2026-09-21)
 - [`01-visao-geral.md`](01-visao-geral.md) — objetivo, escopo do MVP (boleto + PIX chave + TED; fornecedor + colaborador; California Filmes primeiro; sem retorno CNAB), fora de escopo, permissões, critérios de aceite, roadmap pós-MVP
@@ -33,31 +34,52 @@ Substituir o pagamento manual (um a um, dentro do internet banking) por **geraç
 ### Fase 4 — Modelagem (fechada em 2026-09-21)
 - [`03-modelo-de-dados.md`](03-modelo-de-dados.md) — migrations aplicadas em ordem, tabelas tocadas, o que falta (backfill de dados + fase 5)
 
-### Fase 5 — Fluxos (a fazer)
-- `04-fluxo-geracao.md` — montagem do arquivo `.REM` (header → lote → segmentos → trailer), regras de padding, sanitização de acento, controle de sequencial, homologação Santander
-- `05-fluxo-retorno.md` — parse do arquivo `.RET`, códigos de ocorrência, baixa automática dos títulos pagos
+### Fase 5 — Fluxos (parcialmente fechada)
+- [`04-fluxo-geracao.md`](04-fluxo-geracao.md) — geração do arquivo `.REM`: biblioteca pura → server action → UI → download. Documenta as 3 camadas do fluxo com responsabilidades claras.
+- `05-fluxo-retorno.md` (a fazer, fase 2 do módulo) — parse do arquivo `.RET`, códigos de ocorrência, baixa automática dos títulos pagos
 
 ### Fase 6 — Integração (a fazer)
 - `06-integracao-financeiro.md` — onde o botão "Exportar remessa" mora, como o multi-select lê `vw_a_pagar`, como o retorno reflete em `pedidos_compra_parcelas`, `contas_avulsas`, `desembolsos_parcelas`
 
 ### Backlog vivo
-- `30-proximos-passos.md` — a fazer / rodando / feito, atualizado a cada fechamento de rodada
+- [`30-proximos-passos.md`](30-proximos-passos.md) — a fazer / rodando / feito, atualizado a cada fechamento de rodada
 
 ## Estado atual
 
 - **Fase 1 (descoberta)**: fechada. Manual do Santander lido, banco levantado via MCP, gap identificado.
-- **Fase 2 (decisões)**: ADR 001, 002, 003 travados.
+- **Fase 2 (decisões)**: ADRs 001–005 travados.
 - **Fase 3 (visão)**: fechada. MVP: boleto + PIX chave + TED; fornecedor + colaborador (via motor de folha existente); California Filmes; sem retorno CNAB.
-- **Fase 4 (modelagem)**: fechada. 7 migrations aplicadas em 2026-09-21:
-  - `20260921100001_colaborador_sem_vinculo_fornecedor.sql` (ADR 001)
-  - `20260921120001_contas_avulsas_colaborador_id.sql` (ADR 002)
-  - `20260921140001_colaboradores_dados_bancarios.sql` (ADR 003 §4.1)
-  - `20260921160001_empresas_contabeis_config_cnab.sql` (ADR 003 §4.2 — **revertida pelo ADR 004**)
-  - `20260921180001_cnab_estruturas_do_arquivo.sql` (ADR 003 §4.3)
-  - `20260921200001_config_cnab_migra_para_conta_bancaria.sql` (ADR 004)
-  - `20260921200002_cnab_remessas_conta_bancaria_id.sql` (ADR 004)
-- **Backfill parcial feito** em 2026-09-21: config CNAB da conta `California Santander` (convênio, agência, conta, DVs, sequencial=13) preenchidos com os dados extraídos de um arquivo `.REM` antigo já aceito pelo Santander. Endereço fiscal da California Filmes preenchido (Salvador/BA). Falta backfill dos dados bancários de fornecedores e colaborador.
-- **Nada de código-gerador ainda.** Nenhum arquivo `.REM` foi gerado. Próximos passos: **fase 5 (geração)** — server action que valida elegibilidade dos títulos selecionados, monta as linhas de 240 bytes, sanitiza acento, incrementa sequencial, grava `cnab_remessas` + `cnab_remessas_itens`, e faz download do `.REM`.
+- **Fase 4 (modelagem)**: fechada.
+- **Fase 5 (geração)**: fechada. Biblioteca + server action + UI + download prontos e testados.
+
+### Migrations aplicadas em 2026-09-21 (ordem cronológica)
+
+1. `20260921100001_colaborador_sem_vinculo_fornecedor.sql` (ADR 001)
+2. `20260921120001_contas_avulsas_colaborador_id.sql` (ADR 002)
+3. `20260921140001_colaboradores_dados_bancarios.sql` (ADR 003 §4.1)
+4. `20260921160001_empresas_contabeis_config_cnab.sql` (ADR 003 §4.2 — **revertida pelo ADR 004**)
+5. `20260921180001_cnab_estruturas_do_arquivo.sql` (ADR 003 §4.3)
+6. `20260921200001_config_cnab_migra_para_conta_bancaria.sql` (ADR 004)
+7. `20260921200002_cnab_remessas_conta_bancaria_id.sql` (ADR 004)
+8. `20260921220001_rpc_alocar_sequencial_cnab.sql` (fase 5.2)
+9. `20260921230001_origem_folha_em_vw_a_pagar.sql` (ADR 005)
+
+### Código de geração (fase 5)
+
+- **Biblioteca**: [`lib/cnab/santander/`](../../../lib/cnab/santander/) — funções puras testadas contra fixture do `PE000013.TXT`. `npm run test:cnab` roda 12 casos verdes.
+- **Server action**: [`gerarRemessaCnab`](../../../app/(app)/financeiro/contas-a-pagar/actions-cnab.ts) valida, resolve destinatário, aloca sequencial atomicamente via RPC, monta arquivo, grava rastreio, retorna Base64.
+- **UI**: [`remessa-cnab-dialog.tsx`](../../../app/(app)/financeiro/contas-a-pagar/remessa-cnab-dialog.tsx) — modal centralizado com multi-select, botão "Exportar remessa Santander" na toolbar da aba Títulos a Pagar.
+
+### Backfill parcial
+
+- Config CNAB da conta `California Santander` (convênio `00334682004906997169`, ag. 4682, cc. 13005989-7, sequencial 13) preenchida com dados do `PE000013.TXT` (arquivo antigo aceito pelo Santander).
+- Endereço fiscal da California Filmes preenchido (Salvador/BA).
+- Dados bancários do colaborador de teste (`Teste`, CPF 86098531528): PIX (CPF) + banco Nubank (260) ag. 0001 / cc. 14720239-6.
+- E2E preparado até o botão de geração: salário do "Teste" reduzido pra R$ 1, folha 09/2026 aprovada, 2 `contas_avulsas` materializadas (rateio 50/50) prontas pra virar o primeiro `.REM` real.
+
+### O que ainda falta
+
+Ver [`30-proximos-passos.md`](30-proximos-passos.md) — backlog vivo com prioridades e escopo.
 
 ## Regras deste módulo
 
