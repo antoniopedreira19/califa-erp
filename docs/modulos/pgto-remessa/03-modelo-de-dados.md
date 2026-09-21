@@ -11,8 +11,10 @@ Ordem cronológica. Todas aditivas (a única destrutiva do módulo é a do ADR 0
 | 1 | [`20260921100001_colaborador_sem_vinculo_fornecedor.sql`](../../../supabase/migrations/20260921100001_colaborador_sem_vinculo_fornecedor.sql) | Remove `colaboradores.fornecedor_id` (ADR 001). |
 | 2 | [`20260921120001_contas_avulsas_colaborador_id.sql`](../../../supabase/migrations/20260921120001_contas_avulsas_colaborador_id.sql) | `contas_avulsas.colaborador_id` + `vw_a_pagar` recriada (ADR 002). |
 | 3 | [`20260921140001_colaboradores_dados_bancarios.sql`](../../../supabase/migrations/20260921140001_colaboradores_dados_bancarios.sql) | Colaborador ganha `banco_*` + `pix_*` (9 colunas nullable). |
-| 4 | [`20260921160001_empresas_contabeis_config_cnab.sql`](../../../supabase/migrations/20260921160001_empresas_contabeis_config_cnab.sql) | Empresa contábil ganha config CNAB (convênio, agência+conta débito, sequencial, endereço). |
+| 4 | [`20260921160001_empresas_contabeis_config_cnab.sql`](../../../supabase/migrations/20260921160001_empresas_contabeis_config_cnab.sql) | Empresa contábil ganha config CNAB — **revertida em 20260921200001**. |
 | 5 | [`20260921180001_cnab_estruturas_do_arquivo.sql`](../../../supabase/migrations/20260921180001_cnab_estruturas_do_arquivo.sql) | `codigo_barras` em PP+avulsa + tabelas `cnab_remessas` e `cnab_remessas_itens` com RLS. |
+| 6 | [`20260921200001_config_cnab_migra_para_conta_bancaria.sql`](../../../supabase/migrations/20260921200001_config_cnab_migra_para_conta_bancaria.sql) | **Corrige o erro de design da #4**: config CNAB migra pra `contas_bancarias`. Endereço fica em `empresas_contabeis` (ADR 004). |
+| 7 | [`20260921200002_cnab_remessas_conta_bancaria_id.sql`](../../../supabase/migrations/20260921200002_cnab_remessas_conta_bancaria_id.sql) | `cnab_remessas.empresa_contabil_id` → `conta_bancaria_id` (ADR 004). |
 
 ## Tabelas tocadas
 
@@ -36,24 +38,31 @@ Enums reaproveitados de `fornecedores` — bate 1:1 com o CNAB (G013 B / G032).
 
 Sem CHECK exigindo "banco OR pix". Validação vive no schema Zod do formulário (`dadosBancariosColaboradorSchema`), pra manter cadastro rápido pré-folha e centralizar erro em UI.
 
-### `empresas_contabeis` — ganhou config CNAB
+### `empresas_contabeis` — ganhou endereço fiscal
 
-Novas colunas, todas nullable:
+Novas colunas, todas nullable — **endereço fiscal do CNPJ**, usado no header do arquivo como identificação do titular do débito:
 
 ```sql
-convenio_cnab_santander text     -- 20 pos alfanumérico, fornecido pelo Santander
-agencia_debito          text     -- agência da conta Santander de débito
-agencia_debito_dv       text
-conta_debito            text     -- conta corrente Santander de débito
-conta_debito_dv         text
-sequencial_arquivo      integer  -- >= 11 obrigatoriamente (schema Zod)
 endereco_logradouro     text
 endereco_cidade         text
 endereco_cep            text
 endereco_uf             character(2)
 ```
 
-O gerador CNAB rejeita empresa contábil sem `convenio_cnab_santander`, sem agência+conta+DVs de débito, sem sequencial preenchido. Pra MVP, só California Filmes (`19437976000154`) precisa disso setado.
+> **Nota histórica:** a migration `20260921160001` original também colocou convênio, agência+conta débito, DVs e sequencial aqui. **Corrigida no ADR 004** — esses campos migraram pra `contas_bancarias`. Endereço permanece porque é característica do CNPJ, não da conta.
+
+### `contas_bancarias` — ganhou DVs + config CNAB (ADR 004)
+
+Novas colunas, todas nullable:
+
+```sql
+agencia_dv                  text      -- DV da agência (1 char, pode ser letra)
+numero_conta_dv             text      -- DV da conta
+convenio_cnab_santander     text      -- 20 pos alfanumérico, fornecido pelo Santander
+sequencial_arquivo          integer   -- CHECK >= 11 quando preenchido
+```
+
+Cada conta bancária tem sua própria série de sequencial e seu próprio convênio. Uma PJ pode ter N contas Santander cada uma com convênio distinto (raro mas possível). O gerador CNAB rejeita conta sem `convenio_cnab_santander` ou sem `sequencial_arquivo` preenchidos.
 
 ### `contas_avulsas` — ganhou `colaborador_id`, `codigo_barras` (+ `folha_id` no tipo)
 
@@ -76,14 +85,14 @@ Cabeçalho de cada arquivo `.REM` gerado. Uma linha por arquivo.
 ```sql
 id                     uuid PK
 tenant_id              uuid FK tenants
-empresa_contabil_id    uuid FK empresas_contabeis
-sequencial_arquivo     integer NOT NULL   -- unique (empresa_contabil_id, sequencial)
+conta_bancaria_id      uuid FK contas_bancarias   -- ADR 004, era empresa_contabil_id
+sequencial_arquivo     integer NOT NULL           -- unique (conta_bancaria_id, sequencial)
 data_geracao           timestamptz NOT NULL default now()
-hash_arquivo           text NOT NULL      -- sha256 hex, dedup + auditoria
-path_storage           text               -- Supabase Storage; null durante geração
+hash_arquivo           text NOT NULL              -- sha256 hex, dedup + auditoria
+path_storage           text                       -- Supabase Storage; null durante geração
 qtd_itens              integer NOT NULL
 valor_total            numeric(16,2) NOT NULL
-status                 text NOT NULL      -- gerado | enviado_banco | processado | cancelado
+status                 text NOT NULL              -- gerado | enviado_banco | processado | cancelado
 gerado_por             uuid FK auth.users
 observacoes            text
 ```
@@ -91,9 +100,9 @@ observacoes            text
 Constraints:
 - `chk_cnab_remessas_status` — status ∈ {gerado, enviado_banco, processado, cancelado}
 - `chk_cnab_remessas_sequencial_positivo` — sequencial >= 11
-- `uniq_cnab_remessas_sequencial` — unique (empresa_contabil_id, sequencial_arquivo)
+- `uniq_cnab_remessas_sequencial` — unique (conta_bancaria_id, sequencial_arquivo)
 
-Índices: `(tenant_id, data_geracao desc)`, `(empresa_contabil_id, sequencial desc)`.
+Índices: `(tenant_id, data_geracao desc)`, `(conta_bancaria_id, sequencial desc)`.
 
 RLS: `is_tenant_member` gate. GRANT SELECT/INSERT/UPDATE para `authenticated`.
 
@@ -128,7 +137,8 @@ RLS igual ao de `cnab_remessas`. Cascade em delete garante que apagar remessa ap
 
 ## O que ainda falta
 
-- **Backfill de config CNAB de California Filmes** — precisa ser feito pelo admin depois de contratar o convênio Santander. Não entra em migration (é dado, não schema).
+- ✅ **Backfill de config CNAB da California Santander** — feito em 21/09/2026 com os dados extraídos do arquivo `PE000013.TXT` (arquivo antigo aceito pelo Santander). Convênio `00334682004906997169`, agência 4682, conta 13005989-7, sequencial 13.
+- **Backfill de endereço fiscal da California Filmes** — feito também em 21/09/2026 (Salvador/BA).
 - **Backfill de dados bancários dos 24 fornecedores + 1 colaborador** — trabalho manual do cadastro, não do módulo.
 - **Server action de geração** (fase 5) — não faz parte do modelo, mas depende dele.
 - **`ativo` em `cnab_remessas` e política de exclusão** — decisão adiada. Por enquanto, cancelamento é via status='cancelado'; delete físico não existe.

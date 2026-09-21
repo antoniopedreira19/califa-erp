@@ -180,6 +180,50 @@ Convênio Santander (20 pos), agência+conta de débito com DVs, sequencial de a
 
 ---
 
-## ADR 004 — [reservado]
+## ADR 004 — Config CNAB pertence à conta bancária, não à empresa contábil
+
+**Data:** 2026-09-21
+**Status:** Aplicado
+**Migrations:**
+- [`20260921200001_config_cnab_migra_para_conta_bancaria.sql`](../../../supabase/migrations/20260921200001_config_cnab_migra_para_conta_bancaria.sql)
+- [`20260921200002_cnab_remessas_conta_bancaria_id.sql`](../../../supabase/migrations/20260921200002_cnab_remessas_conta_bancaria_id.sql)
+
+### Contexto
+
+A fase 4.2 (ADR 003) botou convênio, agência+DV, conta+DV e sequencial em `empresas_contabeis`. Ao olhar a tela de contas bancárias no dia seguinte, o Antonio pescou o erro: cada linha da tela é uma conta específica (BB California, Bradesco California, California Santander, Paypal California, Conta Teste, etc), e uma PJ contábil tem VÁRIAS contas. Convênio Santander é contratado por conta — se a California algum dia contratar um segundo convênio numa outra conta, o modelo original obrigaria duplicar em `empresas_contabeis`.
+
+### Decisão
+
+- **Migra** de `empresas_contabeis` pra `contas_bancarias`: `convenio_cnab_santander`, agência (+ novo `agencia_dv`), conta (+ novo `numero_conta_dv`), `sequencial_arquivo`.
+- **Mantém** em `empresas_contabeis` o endereço fiscal (`endereco_logradouro`, `endereco_cidade`, `endereco_cep`, `endereco_uf`) — é característica do CNPJ, aparece no header do arquivo como identificação do titular do débito.
+- **Renomeia** `cnab_remessas.empresa_contabil_id` → `cnab_remessas.conta_bancaria_id`. Cada arquivo é gerado a partir de UMA conta específica.
+- **Unique constraint** de `cnab_remessas` passa a ser `(conta_bancaria_id, sequencial_arquivo)`. Cada conta tem sua própria série independente.
+
+### Justificativa
+
+1. **Semântica correta.** Convênio bancário é contratado por conta, não por CNPJ. A tabela `contas_bancarias` já existia justamente pra representar uma conta específica dentro de um banco, com `banco`, `agencia`, `numero_conta`, `empresa_contabil_id` FK — tudo o que faltava era complementar com DVs e config de remessa.
+2. **Flexibilidade futura.** Uma PJ pode ter conta corrente Santander + conta poupança Santander, cada uma com convênio distinto. Uma PJ pode ter conta Santander + conta BB com convênios simultâneos (multi-banco na fase futura do módulo). Nas duas hipóteses, `contas_bancarias.convenio_*` funciona; `empresas_contabeis.convenio_*` obrigaria duplicação.
+3. **Sequencial por conta.** O banco controla sequencial de arquivo por convênio, e convênio é por conta. Sequencial em `contas_bancarias` casa exatamente com como o banco enxerga.
+4. **Custo baixo agora.** Nenhum registro em `cnab_remessas`; 1 registro de backfill em `empresas_contabeis` (California Filmes) — refeito na conta correta (`California Santander`) no mesmo commit. Endereço fiscal (Salvador/BA) permanece em `empresas_contabeis` sem mexer.
+
+### Consequências
+
+- Server action `salvarConfigCnabEmpresaContabil` removida. Nova `salvarConfigCnabContaBancaria` em `app/(app)/financeiro/cadastros/contas-bancarias/actions.ts`.
+- Drawer `admin/empresas/contabeis/config-cnab-drawer.tsx` deletado. Novo drawer em `app/(app)/financeiro/cadastros/contas-bancarias/config-cnab-drawer.tsx`.
+- Card de empresa contábil perdeu o item de menu "Configurar CNAB Santander" e o indicador verde "CNAB Santander configurado".
+- Lista de contas bancárias ganhou botão de ícone Landmark na coluna de ações (verde quando configurado, cinza quando não) — só aparece quando `banco` contém "santander". Reduz ruído visual em contas de outros bancos.
+- Auditoria: `empresa_contabil.config_cnab_editada` removida; `conta_bancaria.config_cnab_editada` adicionada.
+- Schema Zod `configCnabSantanderSchema` renomeado para `configCnabContaBancariaSchema` e mudou de arquivo (`lib/validations/empresas-contabeis.ts` → `lib/validations/contas-bancarias.ts`). Campos renomeados: `agencia_debito`/`conta_debito` → `agencia`/`numero_conta` (reusa os nomes existentes na tabela `contas_bancarias`).
+- Backfill refeito na conta `California Santander` (id `18f505b2-81ad-4076-83d7-6a020b6f79ae`) via MCP: agência 4682, conta 13005989-7, convênio 00334682004906997169, sequencial 13.
+
+### Verificação
+
+- Migrations aplicadas via MCP e conferidas via `information_schema`.
+- `tsc --noEmit` limpo.
+- `next lint` limpo nos diretórios tocados.
+
+---
+
+## ADR 005 — [reservado]
 
 *Próxima decisão será na fase 5 (geração): estrutura do server action, formato do storage, política de retry, política de cancelamento de arquivo gerado.*

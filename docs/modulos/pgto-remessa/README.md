@@ -25,6 +25,7 @@ Substituir o pagamento manual (um a um, dentro do internet banking) por **geraç
   - **ADR 001** (2026-09-21): colaborador deixa de reaproveitar banco via `fornecedor_id`.
   - **ADR 002** (2026-09-21): `contas_avulsas.colaborador_id` como destinatário primeiro-classe + escopo do MVP travado.
   - **ADR 003** (2026-09-21): fase 4 (modelagem) fechada — 3 migrations aditivas: colaborador ganha shape bancário, empresa contábil ganha config CNAB, tabelas de rastreio + código de barras.
+  - **ADR 004** (2026-09-21): **corrige erro de design do ADR 003** — config CNAB (convênio, agência+conta+DVs, sequencial) migra pra `contas_bancarias`. Endereço fica em `empresas_contabeis`. `cnab_remessas.empresa_contabil_id` vira `conta_bancaria_id`.
 
 ### Fase 3 — Visão (fechada em 2026-09-21)
 - [`01-visao-geral.md`](01-visao-geral.md) — objetivo, escopo do MVP (boleto + PIX chave + TED; fornecedor + colaborador; California Filmes primeiro; sem retorno CNAB), fora de escopo, permissões, critérios de aceite, roadmap pós-MVP
@@ -47,13 +48,16 @@ Substituir o pagamento manual (um a um, dentro do internet banking) por **geraç
 - **Fase 1 (descoberta)**: fechada. Manual do Santander lido, banco levantado via MCP, gap identificado.
 - **Fase 2 (decisões)**: ADR 001, 002, 003 travados.
 - **Fase 3 (visão)**: fechada. MVP: boleto + PIX chave + TED; fornecedor + colaborador (via motor de folha existente); California Filmes; sem retorno CNAB.
-- **Fase 4 (modelagem)**: fechada. 5 migrations aplicadas em 2026-09-21:
+- **Fase 4 (modelagem)**: fechada. 7 migrations aplicadas em 2026-09-21:
   - `20260921100001_colaborador_sem_vinculo_fornecedor.sql` (ADR 001)
   - `20260921120001_contas_avulsas_colaborador_id.sql` (ADR 002)
   - `20260921140001_colaboradores_dados_bancarios.sql` (ADR 003 §4.1)
-  - `20260921160001_empresas_contabeis_config_cnab.sql` (ADR 003 §4.2)
+  - `20260921160001_empresas_contabeis_config_cnab.sql` (ADR 003 §4.2 — **revertida pelo ADR 004**)
   - `20260921180001_cnab_estruturas_do_arquivo.sql` (ADR 003 §4.3)
-- **Nada de código-gerador ainda.** Nenhum arquivo `.REM` foi gerado. Próximos passos: **fase 5 (geração)** — server action que valida elegibilidade dos títulos selecionados, monta as linhas de 240 bytes, sanitiza acento, incrementa sequencial, grava `cnab_remessas` + `cnab_remessas_itens`, e faz download do `.REM`. Antes da fase 5, é necessário **backfill manual**: config CNAB da California Filmes (após contratar convênio Santander) + dados bancários de fornecedores e colaborador.
+  - `20260921200001_config_cnab_migra_para_conta_bancaria.sql` (ADR 004)
+  - `20260921200002_cnab_remessas_conta_bancaria_id.sql` (ADR 004)
+- **Backfill parcial feito** em 2026-09-21: config CNAB da conta `California Santander` (convênio, agência, conta, DVs, sequencial=13) preenchidos com os dados extraídos de um arquivo `.REM` antigo já aceito pelo Santander. Endereço fiscal da California Filmes preenchido (Salvador/BA). Falta backfill dos dados bancários de fornecedores e colaborador.
+- **Nada de código-gerador ainda.** Nenhum arquivo `.REM` foi gerado. Próximos passos: **fase 5 (geração)** — server action que valida elegibilidade dos títulos selecionados, monta as linhas de 240 bytes, sanitiza acento, incrementa sequencial, grava `cnab_remessas` + `cnab_remessas_itens`, e faz download do `.REM`.
 
 ## Regras deste módulo
 
