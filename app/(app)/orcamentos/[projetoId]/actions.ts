@@ -396,10 +396,16 @@ async function criarVersaoInicial(
     return null;
   }
 
+  // Nenhum modelo nasce mais com agrupamento gravado (21/09/2026). A v1
+  // nacional trazia um "Novo grupo" para a tela abrir pronta; hoje quem faz
+  // isso é a própria tela, que abre a planilha vazia com o campo do primeiro
+  // agrupamento em edição ("Nomeie o agrupamento" — `NovoGrupoInline`). O
+  // agrupamento só passa a existir com nome: nas palavras do Tiago, "nada
+  // poderá ser feito com um agrupamento sem nome". De quebra, o mês vazio
+  // continua sem grupo no banco, que é o que o "Copiar itens de outro mês"
+  // exige do destino.
   if (modelo === "mensal") {
-    // Modelo mensal (decisão 078): a v1 nasce com os meses do período, e
-    // SEM grupo — cada mês abre com o próprio "Novo grupo", e um grupo
-    // solto no primeiro mês seria só uma linha a mais para renomear.
+    // Modelo mensal (decisão 078): a v1 nasce com os meses do período.
     const meses = await criarMesesDoPeriodo(supabase, {
       tenantId,
       versaoId: data.id,
@@ -409,24 +415,6 @@ async function criarVersaoInicial(
     });
     if (!meses.ok) {
       console.error("[orcamentos.criar.v1.meses]", meses.message);
-    }
-  } else {
-    // A v1 já nasce com um grupo: a tela da versão abre com a linha "Novo
-    // item" pronta, sem obrigar o clique em "Novo grupo" antes de digitar.
-    // Mesmo nome default do "Criar planilha" do editor multi. Falha aqui
-    // não desfaz o orçamento nem a versão — o usuário cria o grupo na mão,
-    // mesmo degrau seguro do versaoId null acima. Item vazio NÃO é criado:
-    // item persistido tem validação de conteúdo.
-    const { error: grupoErr } = await supabase
-      .from("versoes_orcamento_grupos")
-      .insert({
-        tenant_id: tenantId,
-        versao_orcamento_id: data.id,
-        nome: "Novo grupo",
-        ordem: 1,
-      });
-    if (grupoErr) {
-      console.error("[orcamentos.criar.v1.grupo]", grupoErr.message);
     }
   }
 

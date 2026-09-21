@@ -112,10 +112,17 @@ export function GruposSection({
   return (
     <div>
       <div className="mb-3 flex items-center justify-between gap-3">
-        <BotaoRecolherTodos
-          algumAberto={recolher.algumAberto}
-          onAlternarTodos={recolher.alternarTodos}
-        />
+        {/* Sem agrupamento não há o que recolher — e o botão leria
+            "Expandir todos", porque nenhum grupo está aberto. O `span`
+            segura o lugar para as chaves continuarem à direita. */}
+        {secoes.length > 0 ? (
+          <BotaoRecolherTodos
+            algumAberto={recolher.algumAberto}
+            onAlternarTodos={recolher.alternarTodos}
+          />
+        ) : (
+          <span />
+        )}
         <div className="flex items-center gap-3">
           {onAlternarSavePadrao && (
             <ChaveOrcamentoDeSave
