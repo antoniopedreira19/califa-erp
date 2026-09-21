@@ -8,7 +8,7 @@ import {
   jobStatusLabel,
   ordenarCompetencias,
 } from "@/lib/types";
-import type { JobCompetencia, JobStatus } from "@/lib/types";
+import type { JobCompetencia, JobStatus, JobStatusExibido } from "@/lib/types";
 import type { ContatoCobranca } from "@/lib/data/contatos-cobranca";
 
 /** "17/08/2026" a partir de um `date` ou de um `timestamptz` do banco. */
@@ -70,7 +70,8 @@ export interface JobIrmao {
   id: string;
   codigo: string;
   nome: string;
-  status: JobStatus;
+  /** O status do SELO — inclui o "Em faturamento" calculado (decisão 094). */
+  status: JobStatusExibido;
 }
 
 export interface OrigemDaFicha {
@@ -108,7 +109,7 @@ interface Props {
   produtorNome: string | null;
   origem: OrigemDaFicha;
   contatos: ContatoCobranca[];
-  statusBadgeClasses: (status: JobStatus) => string;
+  statusBadgeClasses: (status: JobStatusExibido) => string;
 }
 
 /**

@@ -70,6 +70,9 @@ interface RegionalOpcao {
 interface Props {
   itens: FluxoItem[];
   contas: ContaOpcao[];
+  /** As contas-espelho de cartão: movimento nelas não é dinheiro que saiu
+   *  do banco, e sai do escopo "todas" (decisão 093, entrega 3). */
+  contasCartaoIds: string[];
   regionais: RegionalOpcao[];
   /** Saldo de cada conta na véspera da âncora — o ponto de partida. */
   saldoAncora: Record<string, number>;
@@ -224,6 +227,7 @@ function campoDe(item: FluxoItem): Campo {
 export function FluxoCaixaView({
   itens,
   contas,
+  contasCartaoIds,
   regionais,
   saldoAncora,
   ancora,
@@ -232,6 +236,7 @@ export function FluxoCaixaView({
   const [nivel, setNivel] = React.useState<Nivel>("mes");
   const [horizonte, setHorizonte] = React.useState(6);
   const [conta, setConta] = React.useState<string>("todas");
+  const contasCartao = React.useMemo(() => new Set(contasCartaoIds), [contasCartaoIds]);
   const [regional, setRegional] = React.useState<string>("todas");
   // Drill-down aberto por padrão (`detalharPadrao` ON no protótipo).
   const [abertas, setAbertas] = React.useState({ entrada: true, saida: true });
@@ -265,8 +270,13 @@ export function FluxoCaixaView({
       0,
     );
 
+    // "Todas" é todas as contas de BANCO: o item confirmado no cartão vive
+    // na conta-espelho e já está na previsão como fatura; contá-lo aqui
+    // seria pagar duas vezes. Previsto (sem conta) entra sempre.
     const noEscopoDeConta = (i: FluxoItem) =>
-      conta === "todas" ? true : i.conta_bancaria_id === conta;
+      conta === "todas"
+        ? i.conta_bancaria_id === null || !contasCartao.has(i.conta_bancaria_id)
+        : i.conta_bancaria_id === conta;
 
     let saldoAbertura = saldoBase;
     let saldoHoje = saldoBase;
@@ -350,6 +360,7 @@ export function FluxoCaixaView({
     conta,
     regional,
     contas,
+    contasCartao,
     saldoAncora,
     ancora,
     hoje,

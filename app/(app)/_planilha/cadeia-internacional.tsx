@@ -1,17 +1,27 @@
 "use client";
 
-/** A cadeia de faturamento do orçamento internacional — o bloco de sete
- *  linhas do card de Totais (decisão 072).
+/** A cadeia de faturamento do orçamento internacional — o bloco do card de
+ *  Totais (decisão 072).
  *
  *  Compartilhado entre a versão do orçamento e a planilha interna do job:
  *  os dois mostram o MESMO fechamento, e duas cópias divergiriam na
  *  primeira correção — que é exatamente o que este projeto já viu
  *  acontecer com a legenda e com as cores de bloco.
+ *
+ *  Desenho: "Orcamento Internacional - Planilha e Totais" (Claude Design
+ *  `69342d83`), aplicado por inteiro em 21/09/2026 — a caixa azul da
+ *  cadeia até o invoice, e o Valor do job numa caixa própria abaixo dela.
+ *  A explicação das duas bases, que no design fica sob o Valor do job, é
+ *  um tópico da legenda no pé do card (`TextoSaveInternacional`), como no
+ *  nacional; e a nota de conversão também desceu para a legenda
+ *  (`NotaDaConversao`), que é onde o design a coloca.
  */
 
 import * as React from "react";
+import { Globe } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import type { FechamentoLado } from "@/lib/calculos/versao-totais";
+import { CADEIA_INTERNACIONAL } from "./blocos";
 import {
   emMoedaEstrangeira,
   formatarTaxa,
@@ -65,113 +75,199 @@ export function CadeiaInternacional({
   const totalRecebidoExterior =
     faturamento.principal + faturamento.honorarios + faturamento.intTaxes;
 
+  // As duas caixas usam as MESMAS colunas: o valor do job fica alinhado
+  // sob o invoice, na moeda e em BRL.
+  const colunas = moedaEstrangeira
+    ? "grid-cols-[minmax(0,1fr)_auto_auto]"
+    : "grid-cols-[minmax(0,1fr)_auto]";
+
   return (
-    <div className="mt-5 border-t border-border pt-4">
-      <p className="mb-3 text-[13px] font-bold uppercase tracking-[0.07em] text-foreground">
-        Cadeia internacional · faturamento
-      </p>
+    <>
       <div
         className={cn(
-          "grid items-baseline gap-x-4 gap-y-1.5",
-          moedaEstrangeira
-            ? "grid-cols-[minmax(0,1fr)_auto_auto]"
-            : "grid-cols-[minmax(0,1fr)_auto]",
+          "mt-5 overflow-hidden rounded-xl border",
+          CADEIA_INTERNACIONAL.caixa,
         )}
       >
-        <span />
-        {moedaEstrangeira && (
-          <span className="text-right text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-            {moedaEstrangeira.codigo}
-          </span>
-        )}
-        <span className="text-right text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-          BRL
-        </span>
+        <div
+          className={cn(
+            "flex items-center gap-[7px] border-b px-4 pb-2.5 pt-[11px]",
+            CADEIA_INTERNACIONAL.fio,
+          )}
+        >
+          <Globe
+            className={cn("h-[13px] w-[13px]", CADEIA_INTERNACIONAL.texto)}
+            aria-hidden
+          />
+          <p
+            className={cn(
+              "text-[11px] font-bold uppercase tracking-[0.08em]",
+              CADEIA_INTERNACIONAL.texto,
+            )}
+          >
+            Cadeia internacional · faturamento
+          </p>
+        </div>
 
-        <LinhaCadeia
-          label="Sub-total faturável"
-          valor={faturamento.principal}
-          moeda={moeda}
-          moedaEstrangeira={moedaEstrangeira}
-        />
-        <LinhaCadeia
-          label={`Fee (${formatPct(percentualHonorarios)}%)`}
-          valor={faturamento.honorarios}
-          moeda={moeda}
-          moedaEstrangeira={moedaEstrangeira}
-        />
-        <LinhaCadeia
-          label={`Int. taxes (${formatPct(percentualIntTaxes)}% · gross-up)`}
-          valor={faturamento.intTaxes}
-          moeda={moeda}
-          moedaEstrangeira={moedaEstrangeira}
-        />
-        <LinhaCadeia
-          label="Total recebido no exterior"
-          valor={totalRecebidoExterior}
-          moeda={moeda}
-          moedaEstrangeira={moedaEstrangeira}
-          somatorio
-        />
-        <LinhaCadeia
-          label="Int. transaction costs"
-          valor={faturamento.intTransactionCosts}
-          moeda={moeda}
-          moedaEstrangeira={moedaEstrangeira}
-        />
-        <LinhaCadeia
-          label={`Impostos BR (${formatPct(percentualImposto)}% · gross-up)`}
-          valor={faturamento.imposto}
-          moeda={moeda}
-          moedaEstrangeira={moedaEstrangeira}
-        />
-        <LinhaCadeia
-          label="Faturamento previsto (Invoice)"
-          valor={faturamento.total}
-          moeda={moeda}
-          moedaEstrangeira={moedaEstrangeira}
-          destaque
-        />
-        <LinhaCadeia
-          label="Valor do Job"
-          valor={valorJob}
-          moeda={moeda}
-          moedaEstrangeira={moedaEstrangeira}
-          forte
-        />
-        {saveGerado !== null && (
+        <div
+          className={cn(
+            "grid items-baseline gap-x-[18px] gap-y-[9px] px-4 pb-[15px] pt-3",
+            colunas,
+          )}
+        >
+          <span />
+          {moedaEstrangeira && (
+            <span
+              className={cn(
+                "text-right text-[9px] font-bold uppercase tracking-[0.07em]",
+                CADEIA_INTERNACIONAL.textoSuave,
+              )}
+            >
+              {moedaEstrangeira.codigo}
+            </span>
+          )}
+          <span className="text-right text-[9px] font-bold uppercase tracking-[0.07em] text-[#8a8880]">
+            BRL
+          </span>
+
           <LinhaCadeia
-            label="Save gerado"
-            valor={saveGerado}
+            rotulo="Sub-total faturável"
+            valor={faturamento.principal}
             moeda={moeda}
             moedaEstrangeira={moedaEstrangeira}
-            forte
-            cor="text-[#5f5d57]"
+            tipo="base"
           />
+          <LinhaCadeia
+            rotulo="Fee"
+            detalhe={`(${formatPct(percentualHonorarios)}%)`}
+            valor={faturamento.honorarios}
+            moeda={moeda}
+            moedaEstrangeira={moedaEstrangeira}
+          />
+          <LinhaCadeia
+            rotulo="Int. taxes"
+            detalhe={`(${formatPct(percentualIntTaxes)}% · gross-up)`}
+            valor={faturamento.intTaxes}
+            moeda={moeda}
+            moedaEstrangeira={moedaEstrangeira}
+          />
+          <LinhaCadeia
+            rotulo="Total recebido no exterior"
+            valor={totalRecebidoExterior}
+            moeda={moeda}
+            moedaEstrangeira={moedaEstrangeira}
+            tipo="somatorio"
+          />
+          <LinhaCadeia
+            rotulo="Int. transaction costs"
+            valor={faturamento.intTransactionCosts}
+            moeda={moeda}
+            moedaEstrangeira={moedaEstrangeira}
+          />
+          <LinhaCadeia
+            rotulo="Impostos BR"
+            detalhe={`(${formatPct(percentualImposto)}% · gross-up)`}
+            valor={faturamento.imposto}
+            moeda={moeda}
+            moedaEstrangeira={moedaEstrangeira}
+          />
+          <LinhaCadeia
+            rotulo="Faturamento previsto"
+            detalhe="(Invoice)"
+            valor={faturamento.total}
+            moeda={moeda}
+            moedaEstrangeira={moedaEstrangeira}
+            tipo="invoice"
+          />
+        </div>
+      </div>
+
+      {/* O Valor do job fica FORA da caixa azul: ele não é um degrau da
+          cadeia do faturamento, é a mesma cadeia sobre outra base. */}
+      <div
+        className={cn(
+          "mt-3 grid items-baseline gap-x-[18px] gap-y-[9px] rounded-xl border border-[#e5e4e0] bg-[#fbfbfa] px-4 pb-[15px] pt-[13px]",
+          colunas,
+        )}
+      >
+        <span className="text-sm font-bold text-foreground">Valor do job</span>
+        {moedaEstrangeira && (
+          <span
+            className={cn(
+              "whitespace-nowrap text-right font-mono text-base font-bold",
+              CADEIA_INTERNACIONAL.texto,
+            )}
+          >
+            {emMoedaEstrangeira(valorJob, moedaEstrangeira)}
+          </span>
+        )}
+        <span className="whitespace-nowrap text-right font-mono text-sm font-bold text-foreground">
+          {formatCurrency(valorJob, moeda)}
+        </span>
+        {saveGerado !== null && (
+          <>
+            <span className="text-[13.5px] text-[#5f5d57]">Save gerado</span>
+            {moedaEstrangeira && (
+              <span className="whitespace-nowrap text-right font-mono text-[13px] text-[#8a8880]">
+                {emMoedaEstrangeira(saveGerado, moedaEstrangeira)}
+              </span>
+            )}
+            <span className="whitespace-nowrap text-right font-mono text-[13px] text-[#5f5d57]">
+              {formatCurrency(saveGerado, moeda)}
+            </span>
+          </>
         )}
       </div>
-      <p className="mt-3 text-[11.5px] leading-relaxed text-muted-foreground">
-        Fee sobre o sub-total da base · int. taxes em gross-up sobre
-        sub-total&nbsp;+&nbsp;fee · impostos BR em gross-up sobre o total
-        recebido no exterior · os custos de transação entram depois dele e
-        não compõem base de imposto.{" "}
-        {moedaEstrangeira ? (
-          <>
-            Conversão para{" "}
-            <strong className="text-foreground">
-              {moedaEstrangeira.codigo}
-            </strong>{" "}
-            pela taxa de compra ({formatarTaxa(moedaEstrangeira.compra)}).
-          </>
-        ) : (
-          <strong className="text-foreground">
-            Preencha a taxa de compra em &quot;Editar&quot;, no cabeçalho da
-            versão, para ver os valores na moeda estrangeira e a coluna dela
-            na planilha.
-          </strong>
-        )}
-      </p>
-    </div>
+    </>
+  );
+}
+
+/**
+ * A última frase da legenda do internacional: de onde vem a coluna na
+ * moeda estrangeira — ou, sem a taxa de compra, o que falta preencher.
+ * Estava num parágrafo sob a cadeia; o design a põe no pé do card.
+ */
+export function NotaDaConversao({
+  moedaEstrangeira,
+}: {
+  moedaEstrangeira: MoedaEstrangeira | null;
+}) {
+  return moedaEstrangeira ? (
+    <>
+      Conversão para{" "}
+      <strong className="text-foreground">{moedaEstrangeira.codigo}</strong>{" "}
+      pela taxa de compra ({formatarTaxa(moedaEstrangeira.compra)}).
+    </>
+  ) : (
+    <strong className="text-foreground">
+      Preencha a taxa de compra em &quot;Editar&quot;, no cabeçalho da versão,
+      para ver os valores na moeda estrangeira e a coluna dela na planilha.
+    </strong>
+  );
+}
+
+/**
+ * O tópico do save na legenda do internacional: a mesma cadeia sobre a
+ * base do valor do job, com os números da tela. Só existe com save — sem
+ * ele as duas bases são a mesma e não há o que explicar.
+ */
+export function TextoSaveInternacional({
+  job,
+  moeda,
+}: {
+  job: FechamentoLado;
+  moeda: string;
+}) {
+  return (
+    <>
+      A <strong className="text-foreground">mesma cadeia</strong> sobre a base
+      do valor do job ({formatCurrency(job.base, moeda)}): fee{" "}
+      {formatCurrency(job.honorarios, moeda)}, int. taxes{" "}
+      {formatCurrency(job.intTaxes, moeda)}, impostos BR{" "}
+      {formatCurrency(job.imposto, moeda)}. A linha em save fica no
+      faturamento e sai do job; a linha paga por crédito de outro job faz o
+      contrário.
+    </>
   );
 }
 
@@ -179,67 +275,91 @@ export function CadeiaInternacional({
  *
  *  Fragmento de três células, e não um `<div>` próprio: as três colunas
  *  são do grid do pai, e envolvê-las quebraria o alinhamento vertical que
- *  faz a coluna somar na vertical. */
+ *  faz a coluna somar na vertical. Cada célula leva o próprio fio, e o
+ *  espaço entre colunas deixa os três fios separados, como no design. */
 function LinhaCadeia({
-  label,
+  rotulo,
+  detalhe,
   valor,
   moeda,
   moedaEstrangeira,
-  somatorio,
-  destaque,
-  forte,
-  cor,
+  tipo = "comum",
 }: {
-  label: string;
+  rotulo: string;
+  /** Parêntese em tom apagado: o percentual, "(Invoice)". */
+  detalhe?: string;
   valor: number;
   moeda: string;
   moedaEstrangeira: MoedaEstrangeira | null;
-  /** Fecha um trecho da cadeia (o total recebido no exterior). */
-  somatorio?: boolean;
-  /** O invoice — o número que a nota cobra. */
-  destaque?: boolean;
-  /** Valor do job e save gerado: negrito, sem a borda do somatório. */
-  forte?: boolean;
-  cor?: string;
+  /** `base` abre a cadeia; `somatorio` fecha o trecho no exterior;
+   *  `invoice` é o número que a nota cobra. */
+  tipo?: "comum" | "base" | "somatorio" | "invoice";
 }) {
-  const borda = somatorio || destaque ? "mt-1 border-t border-border pt-2" : "";
-  const peso = destaque || forte || somatorio ? "font-semibold" : "";
+  const fio =
+    tipo === "somatorio"
+      ? cn("border-t pt-2.5", CADEIA_INTERNACIONAL.fio)
+      : tipo === "invoice"
+        ? cn("border-t pt-[11px]", CADEIA_INTERNACIONAL.fioForte)
+        : "";
+
+  const rotuloClasse =
+    tipo === "invoice"
+      ? "text-sm font-bold text-foreground"
+      : tipo === "comum"
+        ? "text-[13.5px] text-muted-foreground"
+        : "text-[13.5px] font-semibold text-foreground";
+
+  const moedaClasse =
+    tipo === "invoice"
+      ? "text-base font-bold text-california-red"
+      : tipo === "somatorio"
+        ? cn("text-[13px] font-bold", CADEIA_INTERNACIONAL.texto)
+        : tipo === "base"
+          ? cn("text-[13px] font-semibold", CADEIA_INTERNACIONAL.texto)
+          : cn("text-[13px]", CADEIA_INTERNACIONAL.valor);
+
+  const brlClasse =
+    tipo === "invoice"
+      ? "text-sm font-bold text-[#c0333d]"
+      : tipo === "somatorio"
+        ? "text-[13px] font-semibold text-foreground"
+        : "text-[13px] text-[#3f3d38]";
+
   return (
     <>
-      <span
-        className={cn(
-          "text-sm",
-          borda,
-          peso || "text-muted-foreground",
-          cor,
+      <span className={cn(rotuloClasse, fio)}>
+        {rotulo}
+        {detalhe && (
+          <>
+            {" "}
+            <span
+              className={
+                tipo === "invoice"
+                  ? "font-medium text-[#8a8880]"
+                  : "text-[#a9a7a1]"
+              }
+            >
+              {detalhe}
+            </span>
+          </>
         )}
-      >
-        {label}
       </span>
       {moedaEstrangeira && (
         <span
           className={cn(
-            "whitespace-nowrap text-right font-mono text-[13px] text-muted-foreground",
-            borda,
-            peso,
-            cor,
+            "whitespace-nowrap text-right font-mono",
+            moedaClasse,
+            fio,
           )}
         >
           {emMoedaEstrangeira(valor, moedaEstrangeira)}
         </span>
       )}
       <span
-        className={cn(
-          "whitespace-nowrap text-right font-mono text-[13px]",
-          borda,
-          peso,
-          destaque && "text-base font-bold text-california-red",
-          cor,
-        )}
+        className={cn("whitespace-nowrap text-right font-mono", brlClasse, fio)}
       >
         {formatCurrency(valor, moeda)}
       </span>
     </>
   );
 }
-

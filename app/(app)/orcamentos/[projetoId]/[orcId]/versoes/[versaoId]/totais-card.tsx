@@ -9,6 +9,7 @@ import * as React from "react";
 import { Calculator } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import { LegendaFechamento } from "@/components/legenda-fechamento";
+import { PercentualDoJob } from "@/components/percentual-do-job";
 import {
   BotaoColunasSave,
   CabecalhoColunasSave,
@@ -18,13 +19,18 @@ import {
   calcularTotaisVersao,
   calcularRentabilidade,
   calcularResultadoOperacional,
+  composicaoDoResultadoGeral,
   LINHAS_FECHAMENTO_POR_TIPO,
   somarLinhaFechamento,
   type FechamentoLado,
   type ParametrosInternacionais,
 } from "@/lib/calculos/versao-totais";
 import { type MoedaEstrangeira } from "@/app/(app)/_planilha/moeda-estrangeira";
-import { CadeiaInternacional } from "@/app/(app)/_planilha/cadeia-internacional";
+import {
+  CadeiaInternacional,
+  NotaDaConversao,
+  TextoSaveInternacional,
+} from "@/app/(app)/_planilha/cadeia-internacional";
 import {
   type CategoriaModeloPlanilha,
   type ItemBv,
@@ -157,6 +163,14 @@ export function TotaisCard({
     totais.planejado.bruto,
   );
 
+  // As duas parcelas de "Composto por" na base do Resultado geral.
+  const composicao = composicaoDoResultadoGeral({
+    valorJob,
+    honorarios,
+    rentabilidade,
+    resultadoOperacional,
+  });
+
   return (
     <div className="rounded-2xl border border-border bg-card shadow-soft">
       <div className="flex items-center gap-2 border-b border-border p-6">
@@ -190,7 +204,10 @@ export function TotaisCard({
               />
             )}
           </div>
-          <div className="space-y-1.5">
+          {/* No internacional o espaçamento e o realce dos sub-totais são
+              os do design "Orcamento Internacional - Planilha e Totais":
+              tipo sem custo apagado, tipo com custo em negrito. */}
+          <div className={ehInternacional ? "space-y-[9px]" : "space-y-1.5"}>
             {quebrarPorSave && <CabecalhoColunasSave />}
             {LINHAS_FECHAMENTO_POR_TIPO.map((linha) =>
               quebrarPorSave ? (
@@ -208,6 +225,7 @@ export function TotaisCard({
                   label={linha.label}
                   value={somarLinhaFechamento(subtotaisPorTipo, linha.tipos)}
                   moeda={moeda}
+                  realce={ehInternacional}
                 />
               ),
             )}
@@ -226,6 +244,7 @@ export function TotaisCard({
                 value={subtotalGeral}
                 moeda={moeda}
                 destaque
+                realce={ehInternacional}
               />
             )}
             {/* Com save, estas duas são as do FATURAMENTO: são elas que
@@ -328,7 +347,8 @@ export function TotaisCard({
             {ehInternacional && (
               <>
                 <Linha
-                  label="− Int. taxes (retidas no exterior)"
+                  label="− Int. taxes"
+                  detalhe="(retidas no exterior)"
                   value={intTaxes}
                   moeda={moeda}
                 />
@@ -364,14 +384,31 @@ export function TotaisCard({
           </div>
 
           <div className="mt-2.5 rounded-xl border border-border bg-muted/30 px-3.5 pt-2.5 pb-3">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Composto por
-            </p>
+            {/* Duas porcentagens por linha, em lugares diferentes de
+                propósito (21/09/2026). Junto do rótulo fica a taxa PRÓPRIA
+                da parcela — a do contrato, e a rentabilidade sobre o orçado.
+                Na coluna da direita, a parcela em % do VALOR DO JOB: é a
+                mesma base do Resultado geral logo abaixo, e as duas somam
+                nele. Antes as duas de cima ficavam à direita, cada uma na
+                sua base, e a soma não dava o número de baixo. */}
+            <div className="flex items-baseline justify-between gap-3">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Composto por
+              </p>
+              <p className="text-[9px] font-normal text-muted-foreground/80">
+                % do valor do job
+              </p>
+            </div>
             <div className="mt-1 flex items-baseline justify-between gap-3 py-1">
-              <span className="text-sm font-medium">{rotuloHonorarios}</span>
+              <span className="text-sm font-medium">
+                {rotuloHonorarios}{" "}
+                <span className="font-mono text-xs font-normal text-muted-foreground">
+                  {formatarPercentual(percentualHonorarios)}
+                </span>
+              </span>
               <span className="whitespace-nowrap font-mono text-sm font-semibold">
-                {formatCurrency(honorarios, moeda)} ·{" "}
-                {formatarPercentual(percentualHonorarios)}
+                {formatCurrency(honorarios, moeda)}
+                <PercentualDoJob valor={composicao.honorariosPct} />
               </span>
             </div>
             <div className="flex items-baseline justify-between gap-3 border-t border-border pt-1.5">
@@ -380,6 +417,14 @@ export function TotaisCard({
                 <span className="font-normal text-muted-foreground">
                   (orçado × planejado)
                 </span>
+                {temPlanejado && percentualRentabilidade !== null && (
+                  <>
+                    {" "}
+                    <span className="font-mono text-xs font-normal text-muted-foreground">
+                      {formatarPercentual(percentualRentabilidade)}
+                    </span>
+                  </>
+                )}
               </span>
               {/* Preto como a linha de honorários — as duas parcelas do
                   resultado operacional se leem juntas. Prejuízo continua
@@ -391,13 +436,10 @@ export function TotaisCard({
                   temPlanejado && rentabilidade < 0 && "text-california-red",
                 )}
               >
-                {temPlanejado
-                  ? `${formatCurrency(rentabilidade, moeda)}${
-                      percentualRentabilidade === null
-                        ? ""
-                        : ` · ${formatarPercentual(percentualRentabilidade)}`
-                    }`
-                  : "—"}
+                {temPlanejado ? formatCurrency(rentabilidade, moeda) : "—"}
+                <PercentualDoJob
+                  valor={temPlanejado ? composicao.rentabilidadePct : null}
+                />
               </span>
             </div>
           </div>
@@ -463,8 +505,16 @@ export function TotaisCard({
       <div className="overflow-hidden rounded-b-2xl">
         <LegendaFechamento
           internacional={ehInternacional}
+          nota={
+            ehInternacional ? (
+              <NotaDaConversao moedaEstrangeira={moedaEstrangeira} />
+            ) : undefined
+          }
           extra={
             temSave ? (
+              ehInternacional ? (
+                <TextoSaveInternacional job={job} moeda={moeda} />
+              ) : (
               <>
                 Os honorários e impostos do fechamento correm sobre{" "}
                 <strong className="text-foreground">
@@ -486,6 +536,7 @@ export function TotaisCard({
                 )}
                 .
               </>
+              )
             ) : undefined
           }
         />
@@ -508,15 +559,24 @@ function formatPct(n: number): string {
 
 function Linha({
   label,
+  detalhe,
   value,
   moeda,
   destaque,
+  realce,
 }: {
   label: string;
+  /** Parêntese em tom apagado depois do rótulo: "(retidas no exterior)". */
+  detalhe?: string;
   value: number;
   moeda: string;
   destaque?: boolean;
+  /** O tratamento dos sub-totais do design internacional: valor zerado
+   *  apagado, valor com custo em negrito, e o total em negrito cheio.
+   *  Ausente ⇒ a linha é exatamente a de sempre (o nacional não muda). */
+  realce?: boolean;
 }) {
+  const zerado = Math.abs(value) < 0.005;
   return (
     <div
       className={cn(
@@ -527,15 +587,31 @@ function Linha({
       <span
         className={cn(
           "text-sm",
-          destaque ? "font-semibold" : "text-muted-foreground",
+          destaque
+            ? realce
+              ? "font-bold"
+              : "font-semibold"
+            : realce && !zerado
+              ? "font-medium text-foreground"
+              : "text-muted-foreground",
         )}
       >
         {label}
+        {detalhe && (
+          <>
+            {" "}
+            <span className="text-[#a9a7a1]">{detalhe}</span>
+          </>
+        )}
       </span>
       <span
         className={cn(
           "whitespace-nowrap font-mono text-[13px]",
-          destaque ? "text-sm font-semibold" : "",
+          destaque
+            ? realce
+              ? "text-sm font-bold"
+              : "text-sm font-semibold"
+            : realce && (zerado ? "text-sm text-[#b8b6b1]" : "text-sm font-semibold"),
         )}
       >
         {formatCurrency(value, moeda)}

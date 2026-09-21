@@ -5571,3 +5571,98 @@ Conferido na tela, logado: lista com as 10 contas ativas (saldo
 consolidado R$ 498.309,42, batendo com o SQL), clique abrindo o extrato da
 Conta Teste com as 29 linhas, troca de período, busca, link direto da
 conta do cartão e `?conta=` inválido caindo na lista.
+
+## ⚠️ Nota de 2026-09-18 — o cartão vai virar confirmação na baixa (093)
+
+Decisão tomada, **ainda não implementada**: o cartão escolhido na aprovação
+da PP (ou no cadastro da avulsa) passa a ser **intenção**, que alimenta a
+previsão de fluxo de caixa; o item só entra na fatura quando o pagamento é
+confirmado, e nesse momento a forma ainda pode mudar. Hoje é o contrário —
+`rotear_pp_para_cartao` na aprovação e o gatilho `avulsa_entra_na_fatura` no
+cadastro já amarram o item à fatura, e desfazer passa por reabrir fatura ou
+reprovar a PP.
+
+A [decisão 093](../decisions/093-o-item-entra-na-fatura-na-confirmacao-do-pagamento.md)
+detalha o que a implementação precisa resolver junto: a previsão continuar
+caindo no vencimento da fatura sem gravar vínculo, o gesto de confirmar não
+se chamar "baixa" (ele não tira dinheiro do banco) e o fechamento passar a
+listar os itens previstos que ninguém confirmou.
+
+Levantamento que ficou registrado no caminho: quem marca os itens como
+pagos é o **fechamento** da fatura, não a baixa; e a parcela deixada como
+"decidir na baixa" ainda aceita cartão como forma na baixa, gerando saída
+direta da conta bancária sem passar por fatura.
+
+## ⚠️ Nota de 2026-09-20 — 093, Entrega 1: a baixa é a porta da fatura
+
+Implementada e testada de ponta a ponta (branch
+`feat/cartao-confirma-na-baixa-093`, migration
+`20260920100001_o_item_entra_na_fatura_na_baixa.sql`). O que muda para quem
+mexe no módulo:
+
+- **Aprovar PP com cartão não roteia mais.** Grava forma, cartão e plano
+  na PP; a parcela vai para Títulos a Pagar sem fatura.
+  `rotear_pp_para_cartao` é legado.
+- **A baixa com forma "cartão" é o que coloca o item na fatura** — pela
+  data do pagamento informada, via `cartao_lancar_item` (lançamento
+  `item` na conta-espelho, sem conta bancária). O dialog de baixa já vem
+  com a forma e o cartão da intenção.
+- **Fechar não marca mais item como pago**; soma lançamentos `item`/`ajuste`
+  + o legado pendente. **Reabrir desfaz só os ajustes.** Estorno de baixa
+  de item em fatura aberta tira o item da fatura; fatura fechada exige
+  reabrir antes.
+- **Estorno de compra** vira lançamento de entrada na fatura aberta na
+  hora (gatilho AFTER INSERT).
+- `TituloRow` ganhou `forma_prevista` e `cartao_previsto_id`;
+  `BaixaRegistradaAlvo` ganhou `viaCartao` — os três obrigatórios.
+
+Tudo exercitado no Projeto Teste (agora **PEV-0007/26**, renumerado pela
+092) com o cartão ZZ Teste Fatia 2: a tabela do que foi conferido está na
+[093 §8c](../decisions/093-o-item-entra-na-fatura-na-confirmacao-do-pagamento.md).
+⚠️ **20/09/2026, mais tarde — Entrega 2 no ar (mesma branch).** A aba
+Cartão virou capa + fatura como extrato (093 §9): `cartao-tab.tsx`,
+`cartao-capa.tsx`, `cartao-fatura.tsx`, `fatura-extrato.tsx`; rota de
+exportação em `/api/financeiro/cartao/faturas/[id]/export`;
+`titulos-cartao-list.tsx` saiu. O mapeador de linha do extrato da
+Conciliação agora mora em `lib/data/lancamento-linha.ts` e é o mesmo da
+fatura (`lib/data/fatura-cartao-extrato.ts`). A aba viaja em `?tab=`;
+`lerTab` fica em módulo puro (`contas-pagar-tab-url.ts`).
+
+⚠️ **20/09/2026, à noite — Entrega 3 no ar (mesma branch): a 093 está
+completa.** A conciliação abre o pagamento da fatura em dois níveis
+(centro de custo → itens; `agruparPorCentro` em
+`lib/data/fatura-cartao-extrato.ts`, `LinhasDaFatura` em
+`conciliacao-list.tsx`). A `vw_fluxo_caixa` (migration 20260920100003)
+projeta PP e avulsa com cartão por `proxima_fatura_cartao`, tira delas o
+legado já roteado e ganha o ramo `fatura_cartao` (aberta/fechada, no
+vencimento, por regional). A tela do Fluxo de caixa exclui a conta-espelho
+do escopo "todas" (`contasCartaoIds`). Tudo em 093 §10.
+
+⚠️ **20/09/2026, antes do push — teste geral no código integrado (093
+§11).** Rebase sobre o main do Antonio (folha mensal), ciclo completo na
+Empresa Teste com cartão próprio ("ZZ Teste Empresa Teste"): recorrência,
+avulso, desembolso e PP baixados no cartão, fatura FC-00005 fechada e paga
+pela Conta Teste, conciliação e fluxo conferidos. Ficou registrado que o
+desembolso não tem intenção de cartão na aprovação (o fluxo o projeta pela
+data do título até a baixa) e que a FC-00004 do ZZ Fatia 2 está vazia por
+efeito colateral de consulta.
+
+⚠️ **20/09/2026, depois do push — os dois pontos acima foram resolvidos
+(093 §12, migration 20260920100004):** o desembolso ganhou
+`forma_pagamento`/`cartao_credito_id` (aprovação pede a intenção, a baixa
+vem pré-preenchida, o fluxo projeta pela fatura); `fatura_aberta_do_cartao`
+virou leitura `stable` sem efeito colateral e a escrita passou a se chamar
+`garantir_fatura_aberta_do_cartao` (chamada por `cartao_lancar_item` e pelo
+legado `rotear_pp_para_cartao`). A FC-00004 vazia foi apagada.
+
+⚠️ **20/09/2026, acabamentos da 093 (§13):** a baixa de parcela de PP abre
+com o **subtipo** da aprovação (a consulta de PPs da página não trazia
+`plano_conta_tipo_id`/`plano_conta_subtipo_id`); o toast da baixa no
+cartão nomeia a fatura em que o item entrou **de fato** — `darBaixaTitulo`
+agora devolve `fatura` (código e competência; `null` fora do cartão), lida
+do lançamento criado, porque a competência da data pode já ter fechado; o
+badge da aba Cartão conta fatura aberta com o fechamento já passado, no
+fuso de São Paulo; `cartao` e `competencia` ficam na URL ao trocar de aba;
+e o filtro por "forma prevista" em Títulos a Pagar foi **descartado**
+(093 §6) — a pergunta que ele responderia é do Fluxo de caixa. Testado com
+a PP-00078 do Projeto Teste, que entrou na FC-00006.

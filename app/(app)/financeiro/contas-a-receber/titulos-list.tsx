@@ -260,6 +260,8 @@ export function TitulosList({
         subtipoNome: conferindo.subtipo_nome,
         dataPagamento: conferindo.pago_em,
         vencOriginal: conferindo.data_vencimento,
+        // Recebimento nunca é no cartão: o estorno gera o reverso na conta.
+        viaCartao: false,
       }
     : null;
 

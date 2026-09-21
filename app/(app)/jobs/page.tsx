@@ -3,6 +3,7 @@ import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { listEmpresasAtivas } from "@/lib/data/empresas";
 import { pode } from "@/lib/permissoes";
+import { jobStatusExibido } from "@/lib/types";
 import { JobsList, type JobRow } from "./jobs-list";
 import { PageHeader } from "@/components/ui/page-header";
 
@@ -57,7 +58,7 @@ export default async function JobsPage({
   let jobsQuery = supabase
     .from("jobs")
     .select(
-      "id, codigo, nome, status, valor_total, data_inicio_prevista, empresa_id, projeto_id, " +
+      "id, codigo, nome, status, faturamento_enviado_em, valor_total, data_inicio_prevista, empresa_id, projeto_id, " +
         // Produto e Regional saem do PRÓPRIO job, não do projeto (decisão
         // do Tiago, 01/09/2026): os dois divergem na base — o JOB-0003 é
         // "Ativação de marca" num projeto "Pevetech".
@@ -117,7 +118,9 @@ export default async function JobsPage({
     id: r.id,
     codigo: r.codigo,
     nome: r.nome,
-    status: r.status,
+    // O selo e o filtro da lista usam o status exibido: "Em faturamento" é
+    // o aberto com o envio completo (decisão 094).
+    status: jobStatusExibido(r.status, r.faturamento_enviado_em ?? null),
     valor_total: r.valor_total !== null ? Number(r.valor_total) : null,
     data_inicio_prevista: r.data_inicio_prevista,
     projeto_id: r.projeto_id,

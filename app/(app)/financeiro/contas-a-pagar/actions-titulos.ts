@@ -25,6 +25,29 @@ type Ok = { ok: true };
 type Err = { ok: false; message: string };
 type Result = Ok | Err;
 
+/**
+ * A fatura em que o item da baixa entrou DE FATO (093 §13). Não é a da
+ * data do pagamento quando aquela competência já fechou: o banco rola para
+ * a próxima aberta, e só ele sabe qual foi. `null` = baixa fora do cartão.
+ * Obrigatório no retorno (não opcional) para nenhum ramo esquecer de dizer.
+ */
+export type FaturaDaBaixa = { codigo: string; competencia_fechamento: string };
+type ResultBaixa = { ok: true; fatura: FaturaDaBaixa | null } | Err;
+
+async function faturaDoLancamento(
+  supabase: ReturnType<typeof createClient>,
+  lancamentoId: unknown,
+): Promise<FaturaDaBaixa | null> {
+  if (typeof lancamentoId !== "string") return null;
+  const { data } = await supabase
+    .from("lancamentos_financeiros")
+    .select("fatura:faturas_cartao!fatura_cartao_id(codigo, competencia_fechamento)")
+    .eq("id", lancamentoId)
+    .maybeSingle();
+  const f = (data as { fatura: FaturaDaBaixa | FaturaDaBaixa[] | null } | null)?.fatura ?? null;
+  return Array.isArray(f) ? f[0] ?? null : f;
+}
+
 const dataSchema = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, "Data deve estar em YYYY-MM-DD.");
@@ -175,7 +198,7 @@ const aprovarSchema = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message:
-            "No cartão, o centro de custo é escolhido agora: não haverá baixa individual onde escolhê-lo.",
+            "No cartão, escolha o centro de custo agora: ele pré-preenche a baixa.",
           path: ["plano_conta_subtipo_id"],
         });
       }
@@ -274,34 +297,34 @@ export async function aprovarPPComData(input: unknown): Promise<Result> {
     .eq("id", parsed.data.pp_id)
     .eq("tenant_id", session.activeTenant.id);
 
-  // Cartão: cada parcela entra na fatura da DATA DELA — a PP de 30/60/90
-  // dias vira três itens em três faturas, pelo prazo que a produção
-  // negociou (29/08/2026). Em função separada, e não em parâmetros novos
-  // de `aprovar_pp_com_data`, porque aquela é da outra frente.
-  if (parsed.data.forma_pagamento === "cartao_credito") {
-    const { error: errCartao } = await supabase.rpc("rotear_pp_para_cartao", {
-      p_pp_id: parsed.data.pp_id,
-      p_cartao_id: parsed.data.cartao_credito_id,
-      p_tipo_id: parsed.data.plano_conta_tipo_id,
-      p_subtipo_id: parsed.data.plano_conta_subtipo_id,
-    });
-    if (errCartao) {
+  // Intenção de pagamento (decisão 093): fica na PP para a baixa
+  // pré-preencher e para a previsão de caixa projetar pela fatura. NÃO
+  // roteia mais parcela para fatura — o item só entra no cartão quando o
+  // financeiro confirma o pagamento, na baixa, e ali ainda pode trocar.
+  if (parsed.data.forma_pagamento) {
+    const { error: errIntencao } = await supabase
+      .from("pedidos_compra")
+      .update({
+        forma_pagamento: parsed.data.forma_pagamento,
+        cartao_credito_id: parsed.data.cartao_credito_id,
+        ...(parsed.data.forma_pagamento === "cartao_credito"
+          ? {
+              plano_conta_tipo_id: parsed.data.plano_conta_tipo_id,
+              plano_conta_subtipo_id: parsed.data.plano_conta_subtipo_id,
+            }
+          : {}),
+      })
+      .eq("id", parsed.data.pp_id)
+      .eq("tenant_id", session.activeTenant.id);
+    if (errIntencao) {
       // A PP já está aprovada neste ponto. Não desfaço a aprovação: ela é
-      // válida, só não foi para o cartão — e a mensagem diz isso, para o
-      // financeiro repetir o roteamento em vez de reaprovar.
-      console.error("[pp.rotear_cartao]", errCartao.message);
+      // válida, só ficou sem a forma registrada — e a mensagem diz isso.
+      console.error("[pp.intencao_pagamento]", errIntencao.message);
       return {
         ok: false,
-        message: `PP aprovada, mas não foi para o cartão: ${errCartao.message}`,
+        message: `PP aprovada, mas a forma de pagamento não foi registrada: ${errIntencao.message}`,
       };
     }
-  } else if (parsed.data.forma_pagamento) {
-    // Fora do cartão a forma fica registrada como intenção; a baixa
-    // individual continua podendo mudá-la.
-    await supabase
-      .from("pedidos_compra")
-      .update({ forma_pagamento: parsed.data.forma_pagamento })
-      .eq("id", parsed.data.pp_id);
   }
 
   await logAuditEvent({
@@ -337,7 +360,14 @@ const baixaSchema = z
     /** Id da parcela (origem `pp`) ou da conta avulsa (demais origens). */
     id: z.string().uuid(),
     pago_em: dataSchema,
-    conta_bancaria_id: z.string().uuid("Selecione a conta que realizará o pagamento."),
+    // Nula quando a forma é cartão (decisão 093): o item entra na fatura e
+    // nada sai de conta bancária nenhuma. Nas demais formas, obrigatória —
+    // o superRefine abaixo cobra.
+    conta_bancaria_id: z
+      .string()
+      .uuid("Selecione a conta que realizará o pagamento.")
+      .nullable()
+      .or(z.literal("").transform(() => null)),
     plano_conta_tipo_id: z.string().uuid("Selecione o centro de custo do pagamento."),
     plano_conta_subtipo_id: z
       .string()
@@ -355,6 +385,13 @@ const baixaSchema = z
       .or(z.literal("").transform(() => null)),
   })
   .superRefine((data, ctx) => {
+    if (data.forma_pagamento !== "cartao_credito" && !data.conta_bancaria_id) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Selecione a conta que realizará o pagamento.",
+        path: ["conta_bancaria_id"],
+      });
+    }
     // Devolução de verba: forma_pagamento vem null e cartão também. Não
     // exige nada.
     // Fatura de cartão: quem paga é o banco, e o que ela quita é o próprio
@@ -411,7 +448,7 @@ const baixaSchema = z
  * centro de custo — o par tipo/subtipo do plano de contas — é
  * obrigatório e vai gravado no lançamento.
  */
-export async function darBaixaTitulo(input: unknown): Promise<Result> {
+export async function darBaixaTitulo(input: unknown): Promise<ResultBaixa> {
   const parsed = baixaSchema.safeParse(input);
   if (!parsed.success) {
     return {
@@ -478,7 +515,7 @@ export async function darBaixaTitulo(input: unknown): Promise<Result> {
     const { data: lancId, error } = await supabase.rpc("dar_baixa_pp_parcela", {
       p_parcela_id: d.id,
       p_pago_em: d.pago_em,
-      p_conta_bancaria_id: d.conta_bancaria_id,
+      p_conta_bancaria_id: d.conta_bancaria_id ?? null,
       p_plano_conta_tipo_id: d.plano_conta_tipo_id,
       p_plano_conta_subtipo_id: d.plano_conta_subtipo_id,
       p_criado_por: session.profile.id,
@@ -510,7 +547,7 @@ export async function darBaixaTitulo(input: unknown): Promise<Result> {
     });
 
     revalidarFinanceiro(parcela.pedido.job_id);
-    return { ok: true };
+    return { ok: true, fatura: await faturaDoLancamento(supabase, lancId) };
   }
 
   if (d.origem === "desembolso") {
@@ -538,7 +575,7 @@ export async function darBaixaTitulo(input: unknown): Promise<Result> {
     const { data: lancId, error } = await supabase.rpc("dar_baixa_desembolso_parcela", {
       p_parcela_id: d.id,
       p_pago_em: d.pago_em,
-      p_conta_bancaria_id: d.conta_bancaria_id,
+      p_conta_bancaria_id: d.conta_bancaria_id ?? null,
       p_plano_conta_tipo_id: d.plano_conta_tipo_id,
       p_plano_conta_subtipo_id: d.plano_conta_subtipo_id,
       p_criado_por: session.profile.id,
@@ -569,7 +606,7 @@ export async function darBaixaTitulo(input: unknown): Promise<Result> {
     });
 
     revalidarFinanceiro();
-    return { ok: true };
+    return { ok: true, fatura: await faturaDoLancamento(supabase, lancId) };
   }
 
   // ---- Fatura de cartão: a transferência banco -> cartão ----
@@ -588,7 +625,7 @@ export async function darBaixaTitulo(input: unknown): Promise<Result> {
     const { data: ids, error } = await supabase.rpc("dar_baixa_fatura_cartao", {
       p_fatura_id: d.id,
       p_pago_em: d.pago_em,
-      p_conta_bancaria_id: d.conta_bancaria_id,
+      p_conta_bancaria_id: d.conta_bancaria_id ?? null,
       p_plano_conta_tipo_id: d.plano_conta_tipo_id,
       p_plano_conta_subtipo_id: d.plano_conta_subtipo_id,
     });
@@ -613,7 +650,7 @@ export async function darBaixaTitulo(input: unknown): Promise<Result> {
     });
 
     revalidarFinanceiro(null);
-    return { ok: true };
+    return { ok: true, fatura: null };
   }
 
   if (d.origem === "pp_devolucao_verba") {
@@ -636,7 +673,7 @@ export async function darBaixaTitulo(input: unknown): Promise<Result> {
     const { data: lancId, error } = await supabase.rpc("dar_baixa_devolucao_verba", {
       p_devolucao_id: d.id,
       p_pago_em: d.pago_em,
-      p_conta_bancaria_id: d.conta_bancaria_id,
+      p_conta_bancaria_id: d.conta_bancaria_id ?? null,
       p_plano_conta_tipo_id: d.plano_conta_tipo_id,
       p_plano_conta_subtipo_id: d.plano_conta_subtipo_id,
       p_criado_por: session.profile.id,
@@ -662,7 +699,7 @@ export async function darBaixaTitulo(input: unknown): Promise<Result> {
     });
 
     revalidarFinanceiro(devolucao.pp?.job_id);
-    return { ok: true };
+    return { ok: true, fatura: null };
   }
 
   const { data: avulsa } = await supabase
@@ -712,7 +749,7 @@ export async function darBaixaTitulo(input: unknown): Promise<Result> {
   });
 
   revalidarFinanceiro();
-  return { ok: true };
+  return { ok: true, fatura: await faturaDoLancamento(supabase, lancId) };
 }
 
 // ---------------------------------------------------------------------

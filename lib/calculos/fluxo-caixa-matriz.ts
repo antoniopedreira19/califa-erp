@@ -118,6 +118,10 @@ const ROTULO_ORIGEM: Record<string, string> = {
   envio_parcela: "Faturamento previsto",
   // A ocorrência da recorrência que ainda não virou título (15/09/2026).
   previsao_recorrente: "Recorrência prevista",
+  // A fatura de cartão aberta ou fechada, no vencimento dela (decisão
+  // 093, entrega 3): o que já foi confirmado no cartão e ainda não saiu
+  // do banco.
+  fatura_cartao: "Fatura de cartão",
 };
 
 /** O que a linha é, em português, para a composição da célula. */

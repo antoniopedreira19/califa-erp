@@ -25,13 +25,14 @@ import {
 } from "@/components/ui/select";
 import { ChaveMeusTodos } from "@/components/ui/chave-meus-todos";
 import { cn } from "@/lib/utils";
-import { jobStatusLabel, type JobStatus, jobStatusBadgeClasses } from "@/lib/types";
+import { jobStatusLabel, type JobStatusExibido, jobStatusBadgeClasses } from "@/lib/types";
 
 export interface JobRow {
   id: string;
   codigo: string;
   nome: string;
-  status: JobStatus;
+  /** Status do selo — inclui o "Em faturamento" calculado (decisão 094). */
+  status: JobStatusExibido;
   valor_total: number | null;
   data_inicio_prevista: string | null;
   projeto_id: string;
@@ -56,10 +57,11 @@ export interface JobRow {
   empresa_nome: string | null;
 }
 
-const STATUS_FILTROS: JobStatus[] = [
+const STATUS_FILTROS: JobStatusExibido[] = [
   "aguardando_abertura",
   "rejeitado_financeiro",
   "aberto",
+  "em_faturamento",
   "encerrado",
   "finalizado",
   "cancelado",

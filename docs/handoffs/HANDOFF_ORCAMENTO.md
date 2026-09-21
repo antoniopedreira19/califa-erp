@@ -4203,3 +4203,67 @@ duas tabelas.
 Conferido no navegador em 18/09/2026, com gravação real no Pevetech (nome
 alterado e restaurado; o código continuou `PEVETE`), e como GP — a sidebar
 já diz "GERENTE DE PROJETO".
+
+---
+
+## ⚠️ Nota de 2026-09-21 — "Composto por" em % do valor do job; Moeda e Câmbio fora do nacional (decisão 095)
+
+**O que mudou na tela da versão:**
+
+- **Linha de parâmetros (`meta-versao.tsx`)** — no nacional ficam só
+  **Honorários** e **Impostos**, na leitura e no "Editar". Moeda e Câmbio
+  saíram: planilha nacional é sempre em reais (no banco, as 15 versões eram
+  `BRL` / `1,0000`). O internacional não mudou. A prop `taxaCambio` do
+  `MetaVersao` deixou de existir; `moeda` fica só para formatar o custo de
+  transação do internacional. As colunas `moeda` e `taxa_cambio` continuam no
+  banco e a `atualizarVersao` continua aceitando-as — campo não enviado
+  preserva o valor, como já era no internacional.
+- **Card de Totais → "Composto por"** — a coluna da direita virou a parcela em
+  **% do valor do job** (com legenda), e soma no Resultado geral:
+  9,1% + 16,4% = 25,5% no `TES-0001/26-01` v3. A taxa de honorários (12,0%) e a
+  rentabilidade sobre o orçado (21,5%) foram para junto do rótulo de cada
+  linha. Antes as duas ficavam à direita, cada uma numa base, e a soma (33,5)
+  não batia com o número de baixo.
+- A mesma mudança entrou no `components/painel-resultado.tsx` (Totais do job e
+  visões agregadas), para o bloco não ter duas leituras entre orçamento e job.
+
+**Onde está a conta:** `composicaoDoResultadoGeral` em
+`lib/calculos/versao-totais.ts`, com o ajuste de arredondamento que faz a soma
+bater com o Resultado geral escrito na tela (decisão 095 §3). Testes:
+`node --import tsx --test lib/calculos/composicao-resultado.test.ts`. A coluna
+é o componente `components/percentual-do-job.tsx`, de largura fixa, para as
+duas porcentagens caírem uma sob a outra.
+
+**Conferido:** tsc e lint limpos; na tela, `TES-0001/26-01` v3 (leitura e modo
+"Editar") e JOB-0025 (8,6% + 71,1% = 79,7%). O painel do navegador estava
+oculto na sessão, então a conferência foi pelo DOM e pelas medidas, sem
+captura de tela.
+
+---
+
+## ⚠️ Nota de 2026-09-21 (2) — Só a alíquota de 19,53% fica disponível (decisão 096)
+
+`ALIQUOTAS_IMPOSTO` (`lib/impostos.ts`) passou a `[19.53]`: a de 24,269914 saiu
+dos quatro seletores e da trava da aprovação, que leem da mesma lista. Nenhuma
+versão no banco a usava (14 em 19,53, 1 zerada) — nenhum dado mudou. Para
+trazê-la de volta basta recolocar o valor no array; a coluna já comporta os
+seis decimais. Conferido na tela: o seletor da linha de parâmetros do
+`TES-0001/26-01` v3 abre só com "19,53%".
+
+## ⚠️ Nota de 2026-09-21 — o card de Totais do internacional segue o design (decisão 072)
+
+| Arquivo | O quê |
+|---|---|
+| `_planilha/cadeia-internacional.tsx` | a cadeia numa caixa azul com globo e o Valor do job numa caixa própria (com "Save gerado" só com save); a nota sob a cadeia saiu. Novas exportações: `NotaDaConversao` e `TextoSaveInternacional`, para a legenda |
+| `_planilha/blocos.ts` | `CADEIA_INTERNACIONAL`: as cores da caixa, a partir do azul do ORÇADO |
+| `components/legenda-fechamento.tsx` | prop `nota`, a frase que fecha o primeiro tópico (a conversão para a moeda estrangeira) |
+| `versoes/[versaoId]/totais-card.tsx` | sub-totais do internacional com o realce do design; "(retidas no exterior)" apagado; legenda com a nota e, com save, o tópico da mesma cadeia |
+| `jobs/[jobId]/realizado/job-totais-card.tsx` | a mesma nota e o mesmo tópico de save na legenda do job internacional |
+
+Conferido no navegador no `TES-0001/26-03` (internacional, compra 5,50):
+sem save, o card sai com a caixa azul, o Valor do job de R$ 8.488,80 e a
+conversão no fim da legenda; marcando a única linha como save (e
+desmarcando depois), aparecem o "Save gerado" de R$ 5.000,00, o botão Save
+e o tópico da mesma cadeia. A planilha do job internacional não foi aberta
+no navegador — não há job internacional no projeto de teste hoje.
+
