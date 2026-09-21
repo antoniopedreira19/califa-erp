@@ -819,6 +819,54 @@ export function calcularResultadoOperacional(
 }
 
 /**
+ * As duas parcelas do bloco "Composto por", em % do VALOR DO JOB
+ * (21/09/2026).
+ *
+ * O bloco mostrava `honorários · 12,0%` e `rentabilidade · 21,5%` — cada
+ * percentual na sua própria base (a taxa do contrato; o orçado). Logo
+ * abaixo vinha o Resultado geral, 25,5%, em % do valor do job, e a leitura
+ * natural era somar os dois de cima e estranhar que não desse o de baixo.
+ * Agora os dois de cima usam a MESMA base do de baixo, e somam nele. A taxa
+ * de honorários e a rentabilidade sobre o orçado continuam na tela, ao lado
+ * do rótulo de cada linha.
+ *
+ * Arredondamento: os três números saem com uma casa, e arredondar três
+ * números separadamente pode deixar a soma 0,1 fora. Quando as parcelas
+ * fecham o resultado operacional — que é o caso de sempre: o que sobra é
+ * `fee + rentabilidade` (decisão 072) —, a rentabilidade é o Resultado geral
+ * JÁ ARREDONDADO menos os honorários já arredondados. O desvio máximo é de
+ * 0,05 ponto, e a soma bate com o que está escrito embaixo. Se um dia as
+ * parcelas não fecharem, cada uma sai pelo próprio valor, sem ajuste.
+ *
+ * `null` onde não há conta: valor do job zerado, ou planejado/realizado
+ * ainda vazio (o mesmo critério de `calcularResultadoOperacional`).
+ */
+export function composicaoDoResultadoGeral(args: {
+  valorJob: number;
+  honorarios: number;
+  rentabilidade: number;
+  resultadoOperacional: number | null;
+}): { honorariosPct: number | null; rentabilidadePct: number | null } {
+  const { valorJob, honorarios, rentabilidade, resultadoOperacional } = args;
+  if (!(valorJob > 0)) return { honorariosPct: null, rentabilidadePct: null };
+
+  // `toFixed`, e não `Math.round`: é o mesmo arredondamento de quem
+  // escreve o Resultado geral na tela, e a soma tem que bater com ELE.
+  const umaCasa = (n: number) => Number(n.toFixed(1));
+  const honorariosPct = umaCasa((honorarios / valorJob) * 100);
+  if (resultadoOperacional === null) {
+    return { honorariosPct, rentabilidadePct: null };
+  }
+
+  const fecha =
+    Math.abs(honorarios + rentabilidade - resultadoOperacional) < 0.01;
+  const rentabilidadePct = fecha
+    ? umaCasa(umaCasa((resultadoOperacional / valorJob) * 100) - honorariosPct)
+    : umaCasa((rentabilidade / valorJob) * 100);
+  return { honorariosPct, rentabilidadePct };
+}
+
+/**
  * Soma dos totais realizados por item.
  * Usado pelo card de Totais do job e por subtotal do grupo.
  */

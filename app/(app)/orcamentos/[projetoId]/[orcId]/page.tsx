@@ -920,7 +920,6 @@ function VersaoSelecionada({
           <MetaVersao
             versaoId={versao.id}
             moeda={versao.moeda}
-            taxaCambio={Number(versao.taxa_cambio)}
             percentualHonorarios={Number(versao.percentual_honorarios)}
             percentualImposto={Number(versao.percentual_imposto)}
             // Honorarios nasce do cadastro do cliente; divergir dele nesta

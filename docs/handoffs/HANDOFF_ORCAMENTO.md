@@ -4203,3 +4203,39 @@ duas tabelas.
 Conferido no navegador em 18/09/2026, com gravação real no Pevetech (nome
 alterado e restaurado; o código continuou `PEVETE`), e como GP — a sidebar
 já diz "GERENTE DE PROJETO".
+
+---
+
+## ⚠️ Nota de 2026-09-21 — "Composto por" em % do valor do job; Moeda e Câmbio fora do nacional (decisão 095)
+
+**O que mudou na tela da versão:**
+
+- **Linha de parâmetros (`meta-versao.tsx`)** — no nacional ficam só
+  **Honorários** e **Impostos**, na leitura e no "Editar". Moeda e Câmbio
+  saíram: planilha nacional é sempre em reais (no banco, as 15 versões eram
+  `BRL` / `1,0000`). O internacional não mudou. A prop `taxaCambio` do
+  `MetaVersao` deixou de existir; `moeda` fica só para formatar o custo de
+  transação do internacional. As colunas `moeda` e `taxa_cambio` continuam no
+  banco e a `atualizarVersao` continua aceitando-as — campo não enviado
+  preserva o valor, como já era no internacional.
+- **Card de Totais → "Composto por"** — a coluna da direita virou a parcela em
+  **% do valor do job** (com legenda), e soma no Resultado geral:
+  9,1% + 16,4% = 25,5% no `TES-0001/26-01` v3. A taxa de honorários (12,0%) e a
+  rentabilidade sobre o orçado (21,5%) foram para junto do rótulo de cada
+  linha. Antes as duas ficavam à direita, cada uma numa base, e a soma (33,5)
+  não batia com o número de baixo.
+- A mesma mudança entrou no `components/painel-resultado.tsx` (Totais do job e
+  visões agregadas), para o bloco não ter duas leituras entre orçamento e job.
+
+**Onde está a conta:** `composicaoDoResultadoGeral` em
+`lib/calculos/versao-totais.ts`, com o ajuste de arredondamento que faz a soma
+bater com o Resultado geral escrito na tela (decisão 095 §3). Testes:
+`node --import tsx --test lib/calculos/composicao-resultado.test.ts`. A coluna
+é o componente `components/percentual-do-job.tsx`, de largura fixa, para as
+duas porcentagens caírem uma sob a outra.
+
+**Conferido:** tsc e lint limpos; na tela, `TES-0001/26-01` v3 (leitura e modo
+"Editar") e JOB-0025 (8,6% + 71,1% = 79,7%). O painel do navegador estava
+oculto na sessão, então a conferência foi pelo DOM e pelas medidas, sem
+captura de tela.
+
