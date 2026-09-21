@@ -37,6 +37,11 @@ import type { FaturaDoCartao } from "./fechar-fatura-dialog";
 import { RecorrentesList, type RecorrenteRow } from "./recorrentes-list";
 import { DesembolsosContasPagarList, type DesembolsoRow } from "./desembolsos-list";
 import { FolhasPagarList, type FolhaLinhaFinanceiro } from "./folhas-pagar-list";
+import {
+  ExportarRemessaCnabDialog,
+  type ContaSantanderElegivel,
+  type TituloElegivelParaRemessa,
+} from "./remessa-cnab-dialog";
 import type { PPStatus, PlanoContaTipo, PlanoContaSubtipo, ContaBancaria, FormaPagamento, BandeiraCartao, DesembolsoStatus } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -113,6 +118,8 @@ export default async function PedidosCompraFinanceiroPage({
     conversasChatPPs,
     folhasRes,
     faturasDoCartaoSelRes,
+    cnabAPagarRes,
+    cnabColaboradoresRes,
   ] = await Promise.all([
     (() => {
       let q = supabase
@@ -374,6 +381,18 @@ export default async function PedidosCompraFinanceiroPage({
           .eq("cartao_credito_id", cartaoSelId)
           .order("competencia_fechamento", { ascending: true })
       : Promise.resolve({ data: null, error: null }),
+    // CNAB: títulos a pagar (saída) via vw_a_pagar — pra o Dialog de remessa.
+    supabase
+      .from("vw_a_pagar")
+      .select("origem_tipo, origem_id, descricao, valor, fornecedor_id, colaborador_id")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("natureza", "saida"),
+    // CNAB: colaboradores ativos com dados bancários — enriquecimento do Dialog.
+    supabase
+      .from("colaboradores")
+      .select("id, nome, cpf_cnpj, banco_codigo, agencia, conta, pix_chave")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("status", "ativo"),
   ]);
 
   if (error) console.error("[financeiro.pp.list]", error.message);
@@ -1455,6 +1474,110 @@ export default async function PedidosCompraFinanceiroPage({
     tela = { cartaoId: cartaoSelId, competencia: chave, extrato, faturas: faturasSel };
   }
 
+  // -------------------------------------------------------------------
+  // CNAB: dados pra o Dialog de "Exportar remessa Santander"
+  // -------------------------------------------------------------------
+  const contasSantander: ContaSantanderElegivel[] = ((contasRes.data ?? []) as ContaBancaria[])
+    .filter(
+      (c) =>
+        c.ativo &&
+        c.banco.toLowerCase().includes("santander") &&
+        c.convenio_cnab_santander !== null &&
+        c.agencia !== null &&
+        c.numero_conta !== null &&
+        c.numero_conta_dv !== null,
+    )
+    .map((c) => ({
+      id: c.id,
+      nome: c.nome,
+      agencia: c.agencia!,
+      numero_conta: c.numero_conta!,
+      numero_conta_dv: c.numero_conta_dv!,
+    }));
+
+  const fornecedorBancoMap = new Map<
+    string,
+    { nome: string; temPix: boolean; temBanco: boolean }
+  >();
+  for (const f of (fornecedoresRes.data ?? []) as Array<{
+    id: string;
+    nome: string;
+    banco_codigo: string | null;
+    agencia: string | null;
+    conta: string | null;
+    conta_dv: string | null;
+    pix_chave: string | null;
+  }>) {
+    fornecedorBancoMap.set(f.id, {
+      nome: f.nome,
+      temPix: !!f.pix_chave,
+      temBanco: !!(f.banco_codigo && f.agencia && f.conta && f.conta_dv),
+    });
+  }
+  const colaboradorBancoMap = new Map<
+    string,
+    { nome: string; temPix: boolean; temBanco: boolean }
+  >();
+  for (const c of (cnabColaboradoresRes.data ?? []) as Array<{
+    id: string;
+    nome: string;
+    banco_codigo: string | null;
+    agencia: string | null;
+    conta: string | null;
+    pix_chave: string | null;
+  }>) {
+    colaboradorBancoMap.set(c.id, {
+      nome: c.nome,
+      temPix: !!c.pix_chave,
+      temBanco: !!(c.banco_codigo && c.agencia && c.conta),
+    });
+  }
+
+  const titulosCnab: TituloElegivelParaRemessa[] = ((cnabAPagarRes.data ?? []) as Array<{
+    origem_tipo: string;
+    origem_id: string;
+    descricao: string;
+    valor: string | number;
+    fornecedor_id: string | null;
+    colaborador_id: string | null;
+  }>)
+    .map((row) => {
+      let destinatario: { nome: string; temPix: boolean; temBanco: boolean } | null =
+        null;
+      let destinatarioTipo: "fornecedor" | "colaborador" | null = null;
+      if (row.colaborador_id) {
+        destinatario = colaboradorBancoMap.get(row.colaborador_id) ?? null;
+        destinatarioTipo = "colaborador";
+      } else if (row.fornecedor_id) {
+        destinatario = fornecedorBancoMap.get(row.fornecedor_id) ?? null;
+        destinatarioTipo = "fornecedor";
+      }
+      if (!destinatario || !destinatarioTipo) return null;
+      // A view expõe "avulsa"/"recorrente"/"pp"/"desembolso" — todos válidos.
+      const origemTipo = row.origem_tipo as
+        | "pp"
+        | "avulsa"
+        | "recorrente"
+        | "desembolso";
+      const linha: TituloElegivelParaRemessa = {
+        origemTipo,
+        origemId: row.origem_id,
+        descricao: row.descricao,
+        valor: Number(row.valor),
+        destinatarioNome: destinatario.nome,
+        destinatarioTipo,
+        temPix: destinatario.temPix,
+        temBanco: destinatario.temBanco,
+      };
+      return linha;
+    })
+    .filter((t): t is TituloElegivelParaRemessa => t !== null)
+    .sort((a, b) =>
+      a.destinatarioNome.localeCompare(b.destinatarioNome, "pt-BR"),
+    );
+
+  const canGerarRemessa = pode(session.activeRole, "financeiro.contas_pagar");
+
   return (
     <div className="space-y-8">
       <PageHeader
@@ -1465,6 +1588,13 @@ export default async function PedidosCompraFinanceiroPage({
         showEmpresaFilter
         empresas={session.empresasVisiveis}
         activeEmpresas={activeEmpresasEfetivas}
+        actions={
+          <ExportarRemessaCnabDialog
+            contasSantander={contasSantander}
+            titulos={titulosCnab}
+            canGerar={canGerarRemessa}
+          />
+        }
       />
 
       <ChatPPsProvider
