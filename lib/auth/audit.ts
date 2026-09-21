@@ -172,6 +172,7 @@ export type AuditAction =
   | "conta_bancaria.inativada"
   | "conta_bancaria.reativada"
   | "conta_bancaria.config_cnab_editada"
+  | "cnab.remessa_gerada"
   | "plano_conta_tipo.criado"
   | "plano_conta_tipo.atualizado"
   | "plano_conta_tipo.inativado"
