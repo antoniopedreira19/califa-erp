@@ -15,6 +15,8 @@ Ordem cronológica. Todas aditivas (a única destrutiva do módulo é a do ADR 0
 | 5 | [`20260921180001_cnab_estruturas_do_arquivo.sql`](../../../supabase/migrations/20260921180001_cnab_estruturas_do_arquivo.sql) | `codigo_barras` em PP+avulsa + tabelas `cnab_remessas` e `cnab_remessas_itens` com RLS. |
 | 6 | [`20260921200001_config_cnab_migra_para_conta_bancaria.sql`](../../../supabase/migrations/20260921200001_config_cnab_migra_para_conta_bancaria.sql) | **Corrige o erro de design da #4**: config CNAB migra pra `contas_bancarias`. Endereço fica em `empresas_contabeis` (ADR 004). |
 | 7 | [`20260921200002_cnab_remessas_conta_bancaria_id.sql`](../../../supabase/migrations/20260921200002_cnab_remessas_conta_bancaria_id.sql) | `cnab_remessas.empresa_contabil_id` → `conta_bancaria_id` (ADR 004). |
+| 8 | [`20260921220001_rpc_alocar_sequencial_cnab.sql`](../../../supabase/migrations/20260921220001_rpc_alocar_sequencial_cnab.sql) | RPC `alocar_sequencial_cnab` (SECURITY DEFINER) — aloca sequencial atomicamente pra evitar race em geração concorrente. Fase 5.2. |
+| 9 | [`20260921230001_origem_folha_em_vw_a_pagar.sql`](../../../supabase/migrations/20260921230001_origem_folha_em_vw_a_pagar.sql) | `vw_a_pagar` recriada com CASE de 3 braços (folha > recorrente > avulsa) + CHECK de `cnab_remessas_itens.origem_tipo` relaxado pra aceitar `'folha'` (ADR 005). |
 
 ## Tabelas tocadas
 
@@ -74,9 +76,21 @@ Cada conta bancária tem sua própria série de sequencial e seu próprio convê
 
 Mesma coisa que em `contas_avulsas`: 44 dígitos, CHECK, preenchido só se boleto.
 
-### `vw_a_pagar` — recriada expondo `colaborador_id`
+### `vw_a_pagar` — recriada expondo `colaborador_id` + origem `folha`
 
-Coluna nova no fim da projeção (Postgres não deixa reordenar em `CREATE OR REPLACE VIEW`). NULL nas origens que não são conta avulsa; valor real quando origem é `avulsa`/`recorrente`.
+**Colaborador_id (ADR 002)**: coluna nova no fim da projeção (Postgres não deixa reordenar em `CREATE OR REPLACE VIEW`). NULL nas origens que não são conta avulsa; valor real quando origem é `avulsa`/`folha`/`recorrente`.
+
+**Origem folha (ADR 005)**: o CASE que decide `origem_tipo` do bloco de `contas_avulsas` ganhou 3 braços em vez de 2 — folha ganha origem própria, distinta de avulsa e recorrência:
+
+```sql
+CASE
+  WHEN a.folha_id IS NOT NULL THEN 'folha'
+  WHEN a.recorrente_id IS NOT NULL THEN 'recorrente'
+  ELSE 'avulsa'
+END AS origem_tipo
+```
+
+Consumo no código: `OrigemTitulo` type em `lib/types.ts`, `origemTituloLabel`, chip novo "Folhas" em `titulos-pagar-list.tsx`, badge rosa (`rose-50`/`rose-700`) na coluna Origem, contagem própria no filtro.
 
 ### `cnab_remessas` — nova tabela
 
