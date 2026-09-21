@@ -36,7 +36,7 @@ import {
 } from "@/app/(app)/_planilha/save-dialog";
 import type { SaldoDeSave } from "@/lib/data/saves";
 import { GruposSection } from "./grupos-section";
-import { NovoGrupoDrawer } from "./novo-grupo-drawer";
+import { NovoGrupoInline } from "./novo-grupo-inline";
 import { TotaisCard } from "./totais-card";
 import {
   definirSavePorPadrao,
@@ -174,7 +174,7 @@ export function PlanilhaVersao({
               {/* Sem nenhum grupo não há linha tracejada onde encaixar o
                   gatilho: aqui ele é a única ação da tela, e por isso vem
                   na forma sólida. */}
-              <NovoGrupoDrawer
+              <NovoGrupoInline
                 versaoId={versaoId}
                 mesId={mes?.id}
                 nomeDoMes={mes?.nome}
@@ -213,7 +213,7 @@ export function PlanilhaVersao({
           }
           novoGrupo={
             readOnly ? undefined : (
-              <NovoGrupoDrawer
+              <NovoGrupoInline
                 versaoId={versaoId}
                 variante="tracejada"
                 mesId={mes?.id}
