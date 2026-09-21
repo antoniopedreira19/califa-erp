@@ -72,6 +72,7 @@ Ordem: mais recente primeiro. Cada linha aponta para um arquivo em `docs/handoff
 
 | Data | Entrega | Handoff |
 |---|---|---|
+| 2026-09-22 | RH · Design & UX da folha e da lista de colaboradores (D1/D2/D3) | [2026-09-22-rh-design-ux-folha-e-colaboradores.md](handoffs/2026-09-22-rh-design-ux-folha-e-colaboradores.md) |
 | 2026-09-21 | RH · fechamento de ciclo + backlog vivo consolidado | [2026-09-21-rh-fechamento-de-ciclo.md](handoffs/2026-09-21-rh-fechamento-de-ciclo.md) |
 | 2026-09-18 | Folha Mensal · Rodada 3 (envio, aprovação, geração de títulos) | [2026-09-18-folha-mensal-rodada-3.md](handoffs/2026-09-18-folha-mensal-rodada-3.md) |
 | 2026-09-18 | Folha Mensal · Rodadas 1 e 2 (modelo + edição) | [2026-09-18-folha-mensal-rodadas-1-e-2.md](handoffs/2026-09-18-folha-mensal-rodadas-1-e-2.md) |
