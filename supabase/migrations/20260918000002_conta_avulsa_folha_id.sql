@@ -24,7 +24,7 @@
 -- vieram de folha) permanecem sem folha_id. Não há default; a coluna
 -- é populada explicitamente pelo aprovador da linha de folha.
 --
--- Ver docs/decisions/088-folha-mensal-em-duas-camadas.md.
+-- Ver docs/decisions/093-folha-mensal-em-duas-camadas.md.
 -- =====================================================================
 
 alter table public.contas_avulsas
