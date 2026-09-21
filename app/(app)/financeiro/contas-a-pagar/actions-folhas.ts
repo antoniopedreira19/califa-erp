@@ -279,10 +279,12 @@ export async function aprovarLinhaFolha(
     }));
   }
 
-  // 4) Carrega colaborador (nome + tipo_contratacao + fornecedor_id) para gerar contas_avulsas
+  // 4) Carrega colaborador (nome + tipo_contratacao) pra gerar contas_avulsas.
+  // O destinatário do pagamento é o próprio colaborador (contas_avulsas.colaborador_id),
+  // não mais um fornecedor sombra — ver ADR 001/002 do módulo pgto-remessa.
   const { data: colab, error: colabError } = await supabase
     .from("colaboradores")
-    .select("id, nome, tipo_contratacao, fornecedor_id")
+    .select("id, nome, tipo_contratacao")
     .eq("id", folha.colaborador_id)
     .maybeSingle();
   if (colabError || !colab) {
@@ -373,7 +375,7 @@ export async function aprovarLinhaFolha(
         data_pagamento_primeira: dataPrevistaPagamento,
         plano_conta_tipo_id: tipoRow.id,
         plano_conta_subtipo_id: subtipoRow.id,
-        fornecedor_id: colab.fornecedor_id,
+        colaborador_id: colab.id,
         folha_id: folhaId,
         parcela_numero: 1,
         parcela_total: 1,

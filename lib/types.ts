@@ -2664,6 +2664,15 @@ export interface ContaAvulsa {
   status: ContaAvulsaStatus;
   fornecedor_id: string | null;
   cliente_id: string | null;
+  /** Destinatário quando a origem é folha ou repasse direto a
+   *  colaborador. Adicionado em 21/09/2026 pelo módulo pgto-remessa
+   *  (ADR 002) — complementa (não substitui) fornecedor_id/cliente_id:
+   *  no fluxo de folha, colaborador_id é preenchido e fornecedor_id
+   *  fica null. */
+  colaborador_id: string | null;
+  /** Preenchido quando esta avulsa foi materializada por uma linha de
+   *  folha_pagamento aprovada. Aponta pra folhas_pagamento.id. */
+  folha_id: string | null;
   // Sem `job_id` desde 15/09/2026 (decisão 069): a coluna existe no banco,
   // barrada por CHECK, e a regional vem só do rateio.
   plano_conta_tipo_id: string;
