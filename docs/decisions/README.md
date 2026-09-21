@@ -115,9 +115,10 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 090 | [A chave PIX é gravada no formato que o banco aceita](090-a-chave-pix-e-gravada-no-formato-do-banco.md) | 2026-09-18 |
 | 094 | [O selo "Em faturamento", e o Finalizado passa a valer pelo envio](094-em-faturamento-e-o-finalizado-vale-pelo-envio.md) | 2026-09-20 |
 | 095 | ["Composto por" em % do valor do job, e Moeda/Câmbio fora do nacional](095-composto-por-em-percentual-do-valor-do-job.md) | 2026-09-21 |
+| 096 | [Só a alíquota de 19,53% fica disponível](096-so-a-aliquota-de-19-53.md) | 2026-09-21 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
 > data é a da decisão, não a da posição na fila.
 
-**Próximo número livre: 096.** (091, 092 e 093 existem na pasta e ainda não estão nesta tabela.)
+**Próximo número livre: 097.** (091, 092 e 093 existem na pasta e ainda não estão nesta tabela.)

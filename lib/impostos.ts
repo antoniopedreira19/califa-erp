@@ -15,16 +15,22 @@
  * valores travam e viram job: ver `bloqueioAprovacaoVersao` em
  * lib/validations/versoes.ts.
  *
- * Os seis decimais de 24,269914 só cabem porque a coluna virou numeric(10,6)
- * na migration 20260813000002_imposto_seis_casas.sql. Antes dela o banco
- * arredondava para 24,270.
+ * ⚠️ 21/09/2026 — a alíquota de **24,269914 saiu da lista**, a pedido do
+ * Tiago: por ora só a de 19,53 é praticada, e a outra "talvez faça um
+ * retorno". Nenhuma versão no banco a usava (14 em 19,53 e 1 zerada), então
+ * nada ficou órfão. **Para trazê-la de volta basta recolocar `24.269914`
+ * neste array** — os quatro seletores (parâmetros do rascunho, nova versão,
+ * edição da versão e a linha de parâmetros) e a trava da aprovação
+ * (`isAliquotaConhecida`) leem daqui, e a coluna já comporta os seis
+ * decimais: virou numeric(10,6) na migration
+ * 20260813000002_imposto_seis_casas.sql (antes o banco arredondava para
+ * 24,270).
  */
-export const ALIQUOTAS_IMPOSTO = [19.53, 24.269914] as const;
+export const ALIQUOTAS_IMPOSTO = [19.53] as const;
 
 /**
  * Alíquota que já vem escolhida quando uma versão nasce do zero
- * (03/09/2026 — decisão 044). É a praticada na maioria dos jobs; a de
- * 24,269914 é a exceção, e quem precisa dela troca no seletor.
+ * (03/09/2026 — decisão 044). Desde 21/09/2026 é também a única da lista.
  *
  * Onde vale: orçamento novo — `criarVersaoInicial` (formulário) e
  * `PARAMETROS_PADRAO` (editores multi e agregado) — e versão nova de
