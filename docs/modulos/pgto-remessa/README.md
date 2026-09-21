@@ -21,10 +21,12 @@ Substituir o pagamento manual (um a um, dentro do internet banking) por **geraç
 - [`00-descoberta.md`](00-descoberta.md) — o que o Santander exige (leitura crítica do manual CNAB 240 v11.7) + retrato do banco atual (via MCP) + gap consolidado
 
 ### Fase 2 — Decisões (viva, cresce por rodada)
-- [`02-decisoes.md`](02-decisoes.md) — decision log do módulo (ADRs). ADR 001 já entrou: colaborador deixa de reaproveitar dados bancários via `fornecedor_id`.
+- [`02-decisoes.md`](02-decisoes.md) — decision log do módulo (ADRs).
+  - **ADR 001** (2026-09-21): colaborador deixa de reaproveitar banco via `fornecedor_id`.
+  - **ADR 002** (2026-09-21): `contas_avulsas.colaborador_id` como destinatário primeiro-classe + escopo do MVP travado.
 
-### Fase 3 — Visão (a fazer)
-- `01-visao-geral.md` — objetivo, escopo do MVP, fora de escopo, permissões, critérios de aceite
+### Fase 3 — Visão (fechada em 2026-09-21)
+- [`01-visao-geral.md`](01-visao-geral.md) — objetivo, escopo do MVP (boleto + PIX chave + TED; fornecedor + colaborador; California Filmes primeiro; sem retorno CNAB), fora de escopo, permissões, critérios de aceite, roadmap pós-MVP
 
 ### Fase 4 — Modelagem (a fazer)
 - `03-modelo-de-dados.md` — migrations em ordem: campos bancários em colaboradores, `contas_avulsas.colaborador_id`, config CNAB em empresas contábeis, `cnab_remessas` + `cnab_remessas_itens`
@@ -42,8 +44,11 @@ Substituir o pagamento manual (um a um, dentro do internet banking) por **geraç
 ## Estado atual
 
 - **Fase 1 (descoberta)**: fechada. Manual do Santander lido, banco levantado via MCP, gap identificado.
-- **Fase 2 (decisões)**: ADR 001 travado — colaborador desvinculado de fornecedor. Migration aplicada em 2026-09-21 (`20260921100001_colaborador_sem_vinculo_fornecedor.sql`).
-- **Nada mais implementado no código ainda.** Nenhum arquivo de remessa foi gerado. Próximos passos: fechar visão (escopo MVP), depois modelagem (migrations aditivas), depois gerador.
+- **Fase 2 (decisões)**: ADR 001 e ADR 002 travados. Duas migrations aplicadas em 2026-09-21:
+  - `20260921100001_colaborador_sem_vinculo_fornecedor.sql` (ADR 001)
+  - `20260921120001_contas_avulsas_colaborador_id.sql` (ADR 002)
+- **Fase 3 (visão)**: fechada em 2026-09-21. MVP definido: boleto + PIX chave + TED; fornecedor + colaborador (via motor de folha existente); California Filmes primeiro; sem retorno CNAB no MVP.
+- **Nada mais implementado no código ainda.** Nenhum arquivo de remessa foi gerado. Próximos passos: **fase 4 (modelagem)** — migrations aditivas de campos bancários em colaboradores, config CNAB em empresas contábeis, `cnab_remessas` + `cnab_remessas_itens`, `codigo_barras` em avulsas e PP parcelas.
 
 ## Regras deste módulo
 
