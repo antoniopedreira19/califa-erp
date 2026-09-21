@@ -124,6 +124,62 @@ Cliente fica fora do MVP. Volta em fase 2 se surgir demanda concreta.
 
 ---
 
-## ADR 003 — [reservado]
+## ADR 003 — Fase 4 (modelagem) fechada: 3 migrations aditivas
 
-*Próxima decisão será durante a fase 2 (modelagem): shape exato dos campos bancários em colaboradores e da configuração CNAB em empresas_contabeis.*
+**Data:** 2026-09-21
+**Status:** Aplicado
+**Migrations:**
+- [`20260921140001_colaboradores_dados_bancarios.sql`](../../../supabase/migrations/20260921140001_colaboradores_dados_bancarios.sql)
+- [`20260921160001_empresas_contabeis_config_cnab.sql`](../../../supabase/migrations/20260921160001_empresas_contabeis_config_cnab.sql)
+- [`20260921180001_cnab_estruturas_do_arquivo.sql`](../../../supabase/migrations/20260921180001_cnab_estruturas_do_arquivo.sql)
+
+### Contexto
+
+Escopo do MVP definido no ADR 002 (boleto + PIX chave + TED; fornecedor + colaborador; California Filmes; sem retorno). Faltava desenhar o modelo de dados que suporta o gerador CNAB da fase 5.
+
+### Decisão
+
+Três migrations aditivas, cada uma independente da outra e commitável isolada. Detalhe completo em [`03-modelo-de-dados.md`](03-modelo-de-dados.md); resumo:
+
+**4.1 — Colaborador ganha shape bancário (9 colunas).**
+Mesmo shape que `fornecedores` já tem (`banco_*`, `pix_*`, `tipo_conta`). Enums reaproveitados (`tipo_conta_bancaria`, `pix_tipo_chave`), sem migration nova de tipo. Validação vive no schema Zod, não no CHECK do banco — evita restrição prematura e mantém cadastro rápido funcionando.
+
+**4.2 — Empresas contábeis ganham config CNAB (10 colunas).**
+Convênio Santander (20 pos), agência+conta de débito com DVs, sequencial de arquivo (obrigatório >= 11), endereço. Todos nullable. Só California Filmes vai ser preenchida no MVP.
+
+**4.3 — Código de barras + tabelas de rastreio.**
+- `codigo_barras text` em `pedidos_compra_parcelas` e `contas_avulsas`, com CHECK de 44 dígitos.
+- `cnab_remessas` — cabeçalho por arquivo, com sequencial único por empresa contábil e hash SHA256 do conteúdo.
+- `cnab_remessas_itens` — 1 linha por título incluído, com "nosso número" atribuído pelo gerador e `ocorrencia_retorno` que fica null até a fase 2 processar o `.RET`.
+- RLS `is_tenant_member`; GRANT SELECT/INSERT/UPDATE `authenticated`.
+
+### Justificativa das opções
+
+- **Cada migration commitável isolada**: se homologação Santander falhar e tivermos que revisar layout, dá pra reverter 4.3 sem tocar em 4.1/4.2 (que servem pra outras coisas do sistema — folha, config bancária, etc).
+- **Nenhum CHECK cross-tabelas**: por exemplo, "colaborador só entra em contas_avulsas se folha_id preenchido" seria útil, mas restringiria casos legítimos (repasse manual a colaborador fora de folha) e amarraria migrations futuras. Ficam como regras na server action, não no banco.
+- **Enum vs text pra `status` e `origem_tipo`**: escolhido text com CHECK. Mudar valor em enum vira migration destrutiva; CHECK vira `ALTER TABLE DROP + ADD CONSTRAINT`, mais barato. Perde autocomplete no PostgREST mas ganha flexibilidade.
+- **`ocorrencia_retorno` como text**: até 2 dígitos (`00`, `AT`, `HF`), mas fica text pra caber múltiplas ocorrências separadas por vírgula no futuro se preciso.
+- **Sem tabela `cnab_retornos` no MVP**: retorno fica pra fase 2. Reprocessar depois é fácil — a tabela nasce, a coluna `ocorrencia_retorno` já existe pra UPDATE.
+
+### Consequências
+
+**Estado do módulo depois desta fase:**
+- Banco pronto pra receber o gerador CNAB.
+- UI: colaborador e empresa contábil já têm forms de cadastro dos dados necessários.
+- Falta:
+  - Backfill manual da config CNAB de California Filmes (fora de migration).
+  - Backfill manual de banco/PIX dos 24 fornecedores + 1 colaborador.
+  - Server action de geração de arquivo (fase 5).
+  - Botão "Exportar remessa" na tela de Contas a Pagar.
+
+**Verificação:**
+- Todas as 3 migrations aplicadas via MCP, conferido via `information_schema.columns` e `information_schema.tables`.
+- `tsc --noEmit` limpo.
+- `next lint` limpo (warning pré-existente em `components/ui/multi-select.tsx` não é desta fase).
+- 3 commits limpos no repo (`37e51c2`, `1bc43af`, `7cd9ccd`).
+
+---
+
+## ADR 004 — [reservado]
+
+*Próxima decisão será na fase 5 (geração): estrutura do server action, formato do storage, política de retry, política de cancelamento de arquivo gerado.*
