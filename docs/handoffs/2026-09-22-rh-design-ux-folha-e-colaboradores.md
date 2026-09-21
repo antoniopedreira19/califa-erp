@@ -24,8 +24,25 @@ Nenhuma. Todo o trabalho é derivação em runtime dos dados que já existem no 
 - `2c3e18b` — feat(rh): cards de resumo no detalhe da folha por competência
 - `c649d0f` — feat(rh): cards de estado atual na lista de colaboradores
 
+### Rodada 2 (mesma sessão) — resposta à crítica de "muito cinza / cards desorganizados"
+
+- `f818d72` — feat(rh): redesign do detalhe da folha (cards balanceados + tabs + regional)
+- `ef6ee64` — feat(rh): KPIs anuais na listagem de folhas + card visual consistente
+- `39e8a0c` — feat(rh): delta vs mês anterior nos cards de colaboradores
+
+**O que mudou na Rodada 2:**
+
+- **Grid quebrado corrigido** — o detalhe da folha tinha `col-span-2` no Total + 5 cards de 1 col = 7 células em grid-6, e "Pagas" caía sozinha na 2ª linha. Substituído por 4 cards iguais.
+- **Análise no card** — Total, Colaboradores e Folha do mês ganham delta vs mês anterior (% ou absoluto, com seta ↑/↓ colorida). Ativos usa cálculo sem histórico: `ativos_hoje − admissões + demissões`. Demissões inverte a cor (subir é ruim).
+- **Barra de progresso do fluxo** — o quarto card do detalhe substitui os 4 antigos (Enviadas/Aprovadas/Pagas/Pendências) por uma barra empilhada horizontal — verde no fim, cinza no começo, vermelho no meio quando tem pendência. Leitura instantânea de onde a folha está.
+- **Tabs de status** — o Select "Todos (1)" do detalhe da folha virou tabs no padrão Financeiro (Todos · Rascunho · Enviada · Pendente · Aprovada · Paga), cada uma com badge de contagem colorido.
+- **Filtro de regional client-side** — dropdown ao lado da busca no detalhe da folha; filtra linhas cujas alocações pertençam à regional selecionada.
+- **Visual consistente** — todos os cards e cards de tabela agora usam `rounded-2xl + bg-card + shadow-soft` + ícone lucide em quadradinho `bg-california-red/10`. Antes eram `rounded-xl + bg-background` sem ícone, o que dava a impressão de "menos importante" que o Financeiro.
+- **Layout do detalhe da folha corrigido** — removido `max-w-7xl mx-auto` (violava a decisão 085 — tela principal não tem largura própria).
+
 ## Pontos de atenção pra próxima sessão
 
+- **Filtro por empresa no PageHeader ficou de fora da Rodada 2** — foi discutido, mas a semântica em RH não é 1:1 com Financeiro (colaborador tem alocação múltipla; linha de folha idem). Aplicar `showEmpresaFilter` em `/rh/colaboradores` e `/rh/folhas/[competencia]` exige decidir se filtra por "alocação vigente em X" ou "pelo menos uma alocação em X". Se voltar como P0 na próxima, alinhar com Kika primeiro.
 - **P1 já está desbloqueado.** A ordem sugerida em `30-proximos-passos.md` é: (1) import da planilha atual — destrava a Kika usar de verdade; (2) estorno de folha aprovada — remove necessidade de SQL manual; (3) benefícios. Peça pra escolher qual antes de codar.
 - **Status agregado como lógica de servidor:** hoje ele é computado depois da listagem completa das linhas de `folhas_pagamento` do tenant. Para poucos meses × ~22 colaboradores o payload é minúsculo. Se a lista crescer (histórico longo, mais tenants), migrar pra RPC com `count(*) filter (where status = 'X')` por competência — está mapeado nas notas de implementação da D1.
 - **Card "Folha do mês atual" precisa da folha gerada.** Se a Kika abrir `/rh/colaboradores` no dia 1 antes de gerar a folha, o card aparece "—" com "Folha não gerada". É comportamento esperado; se virar friction, o próximo passo é um CTA "Gerar folha" dentro do card.
