@@ -101,9 +101,27 @@ Três `empresas_contabeis` cadastradas:
 A view `vw_a_pagar` já unifica quatro origens:
 
 1. **`pedidos_compra_parcelas`** — parcela de PP com `status='aprovada'`, `pago_em is null`. Tem `fornecedor_id` e — sacada importante — **congela os dados bancários do fornecedor na aprovação** (`fornecedor_banco_codigo`, `fornecedor_agencia`, `fornecedor_pix_chave`, `dados_pagamento_congelados_em`). Isso é ouro pro CNAB: pagamento fica imune a mudança do cadastro depois.
-2. **`contas_avulsas`** com `status='aprovada'` e `pago_em is null` — pode ter `fornecedor_id` ou `cliente_id`, e `folha_id` quando materializa uma folha aprovada.
+2. **`contas_avulsas`** com `status='aprovada'` e `pago_em is null` — pode ter `fornecedor_id`, `cliente_id`, `colaborador_id` (adicionado em 21/09/2026) e `folha_id`.
 3. **`desembolsos_parcelas`** — parcela com desembolso `status='aprovada'` ou `'pago'`. Pode ter `fornecedor_id` ou `cliente_id`.
 4. **`pp_verba_devolucoes`** — natureza=entrada. Fica **fora** do CNAB de pagamento (é dinheiro voltando pro caixa).
+
+### 3.4 Fluxo folha → contas a pagar (achado em 21/09/2026, pós-descoberta inicial)
+
+Existe motor pronto e testado que materializa folha aprovada em `contas_avulsas`. Documentado aqui como correção do retrato inicial, que subestimou esse fluxo:
+
+- RH cria linha em `folhas_pagamento` com colaborador + salário + alocação (percentual por empresa/regional).
+- RH envia → `status='enviada'`.
+- Financeiro revisa em `/financeiro/contas-a-pagar` (tab "Folhas de Pagamento") — vê valor sugerido, pode editar o valor e as alocações antes de aprovar.
+- Aprovação chama a server action [`aprovarLinhaFolha`](../../../app/(app)/financeiro/contas-a-pagar/actions-folhas.ts) que:
+  1. Aplica edições (se houve).
+  2. Cria **N `contas_avulsas`** (uma por alocação, valor rateado pelo percentual), com `status='aprovada'`, `folha_id` preenchido, `colaborador_id` preenchido (novo campo — antes era `fornecedor_id = colab.fornecedor_id` via ADR 001, removido em 21/09).
+  3. Propaga edições pra Camada 1 (histórico salarial + alocação vigente) se houve mudança.
+  4. Marca a linha da folha como `aprovada`.
+- Idempotência garantida: se já existem `contas_avulsas` pra essa folha, a rotina recusa reaprovar sem estorno.
+
+Consequência pro módulo: colaborador **NÃO precisa de "conta avulsa manual"** pra entrar no CNAB. O motor de folha já entrega prontinho no `vw_a_pagar` — o gerador CNAB só precisa saber ler `colaborador_id` além de `fornecedor_id`.
+
+### 3.5 Volumes reais
 
 Volumes hoje: 0 títulos em aberto. Sistema ainda em fase inicial; volumetria real vai aparecer em produção.
 
@@ -123,7 +141,7 @@ O que falta pro primeiro arquivo `.REM` sair:
 
 **Blocker 2 — Colaborador sem shape bancário.** Precisa ganhar `banco_codigo`, `agencia`, `conta`, etc, mesmo shape que fornecedor já tem. Fase 1 resolve.
 
-**Blocker 3 — `contas_avulsas` não sabe pra quem depositar quando a origem é folha.** Hoje tem `folha_id` mas não `colaborador_id`. Uma folha rateada em N linhas precisa saber qual colaborador é destino de cada linha. Fase 1 resolve.
+**Blocker 3 — ~~`contas_avulsas` não sabe pra quem depositar quando a origem é folha~~ RESOLVIDO em 21/09/2026 (hotfix ADR 002).** Coluna `contas_avulsas.colaborador_id` adicionada, `vw_a_pagar` recriada expondo a coluna, `aprovarLinhaFolha` corrigida pra gravar `colaborador_id = colab.id` (antes era `fornecedor_id = colab.fornecedor_id` — que sumiu no ADR 001).
 
 **Blocker 4 — Boleto/tributo sem código de barras no modelo.** `pedidos_compra` e `contas_avulsas` não têm `codigo_barras` (44 dígitos) nem `linha_digitavel`. Precisa migration aditiva. Fase 2 resolve.
 
