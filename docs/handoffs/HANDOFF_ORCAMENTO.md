@@ -4239,3 +4239,14 @@ duas porcentagens caírem uma sob a outra.
 oculto na sessão, então a conferência foi pelo DOM e pelas medidas, sem
 captura de tela.
 
+---
+
+## ⚠️ Nota de 2026-09-21 (2) — Só a alíquota de 19,53% fica disponível (decisão 096)
+
+`ALIQUOTAS_IMPOSTO` (`lib/impostos.ts`) passou a `[19.53]`: a de 24,269914 saiu
+dos quatro seletores e da trava da aprovação, que leem da mesma lista. Nenhuma
+versão no banco a usava (14 em 19,53, 1 zerada) — nenhum dado mudou. Para
+trazê-la de volta basta recolocar o valor no array; a coluna já comporta os
+seis decimais. Conferido na tela: o seletor da linha de parâmetros do
+`TES-0001/26-01` v3 abre só com "19,53%".
+
