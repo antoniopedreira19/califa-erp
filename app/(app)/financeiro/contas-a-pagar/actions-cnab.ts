@@ -42,7 +42,12 @@ import type {
 // Tipos públicos da action
 // ---------------------------------------------------------------------
 
-export type CnabOrigemTipo = "pp" | "avulsa" | "recorrente" | "desembolso";
+export type CnabOrigemTipo =
+  | "pp"
+  | "avulsa"
+  | "folha"
+  | "recorrente"
+  | "desembolso";
 
 export interface CnabItemInput {
   origemTipo: CnabOrigemTipo;
@@ -345,7 +350,7 @@ export async function gerarRemessaCnab(
   const itensParaGravar = elegiveis.map((e) => ({
     tenant_id: tenantId,
     remessa_id: remessaRow.id,
-    origem_tipo: e.origem.origemTipo === "recorrente" ? "avulsa" : e.origem.origemTipo,
+    origem_tipo: e.origem.origemTipo,
     origem_id: e.origem.origemId,
     forma_pagamento: formaPagamentoParaPagamento(e.pagamento),
     destinatario_tipo: e.origem.destinatarioTipo,
@@ -400,7 +405,11 @@ async function resolverOrigem(
   tenantId: string,
   item: CnabItemInput,
 ): Promise<Result<OrigemResolvida>> {
-  if (item.origemTipo === "avulsa" || item.origemTipo === "recorrente") {
+  if (
+    item.origemTipo === "avulsa" ||
+    item.origemTipo === "recorrente" ||
+    item.origemTipo === "folha"
+  ) {
     const { data, error } = await supabase
       .from("contas_avulsas")
       .select(

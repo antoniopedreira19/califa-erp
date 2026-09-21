@@ -203,7 +203,7 @@ export default async function PedidosCompraFinanceiroPage({
         .select(`
           id, descricao, valor, natureza, data_prevista_pagamento,
           data_pagamento, data_pagamento_primeira, status,
-          pago_em, created_at, empresa_id, recorrente_id,
+          pago_em, created_at, empresa_id, recorrente_id, folha_id,
           plano_conta_tipo_id, plano_conta_subtipo_id,
           forma_pagamento, cartao_credito_id, fatura_cartao_id,
           estorno_de_avulsa_id, parcela_numero, parcela_total, parcela_de_avulsa_id,
@@ -751,6 +751,7 @@ export default async function PedidosCompraFinanceiroPage({
     pago_em: string | null;
     empresa_id: string;
     recorrente_id: string | null;
+    folha_id: string | null;
     plano_conta_tipo_id: string;
     plano_conta_subtipo_id: string;
     forma_pagamento: FormaPagamento | null;
@@ -765,8 +766,16 @@ export default async function PedidosCompraFinanceiroPage({
     const baixa = baixaPorAvulsa.get(a.id);
     titulos.push({
       id: a.id,
-      origem: a.recorrente_id ? "recorrencia" : "avulso",
-      origem_label: a.recorrente_id ? "RECORRÊNCIA" : "AVULSO",
+      origem: a.folha_id
+        ? "folha"
+        : a.recorrente_id
+          ? "recorrencia"
+          : "avulso",
+      origem_label: a.folha_id
+        ? "FOLHA"
+        : a.recorrente_id
+          ? "RECORRÊNCIA"
+          : "AVULSO",
       // Sem foto de pagamento: o asterisco da 067 é só de PP.
       cadastro_do_fornecedor_mudou: false,
       descricao: a.descricao,
@@ -830,7 +839,12 @@ export default async function PedidosCompraFinanceiroPage({
     const estornadoPorCompra = new Map<string, number>();
 
     for (const t of titulos) {
-      if (t.origem !== "avulso" && t.origem !== "recorrencia") continue;
+      if (
+        t.origem !== "avulso" &&
+        t.origem !== "recorrencia" &&
+        t.origem !== "folha"
+      )
+        continue;
       if (t.estorno_de_avulsa_id) {
         estornadoPorCompra.set(
           t.estorno_de_avulsa_id,
@@ -846,7 +860,12 @@ export default async function PedidosCompraFinanceiroPage({
     }
 
     for (const t of titulos) {
-      if (t.origem !== "avulso" && t.origem !== "recorrencia") continue;
+      if (
+        t.origem !== "avulso" &&
+        t.origem !== "recorrencia" &&
+        t.origem !== "folha"
+      )
+        continue;
       t.compra_total = totalPorCompra.get(t.compra_id) ?? t.valor;
       t.estornado = estornadoPorCompra.get(t.compra_id) ?? 0;
     }
@@ -1553,10 +1572,11 @@ export default async function PedidosCompraFinanceiroPage({
         destinatarioTipo = "fornecedor";
       }
       if (!destinatario || !destinatarioTipo) return null;
-      // A view expõe "avulsa"/"recorrente"/"pp"/"desembolso" — todos válidos.
+      // A view expõe "pp"/"avulsa"/"folha"/"recorrente"/"desembolso" — todos válidos.
       const origemTipo = row.origem_tipo as
         | "pp"
         | "avulsa"
+        | "folha"
         | "recorrente"
         | "desembolso";
       const linha: TituloElegivelParaRemessa = {
