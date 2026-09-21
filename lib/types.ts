@@ -2934,9 +2934,6 @@ export interface Colaborador {
   cpf_cnpj: string | null;
   funcao: string;
   nivel_id: string | null;
-  /** Link opcional para fornecedor com mesmo documento. Reusa dados
-   *  bancários/PIX na baixa da folha. */
-  fornecedor_id: string | null;
   data_admissao: string;
   data_encerramento: string | null;
   status: CadastroStatus;

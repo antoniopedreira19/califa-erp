@@ -35,42 +35,6 @@ function mapColaboradorDbError(msg: string): string {
 }
 
 /**
- * Busca fornecedor existente por documento (CPF/CNPJ, dígitos puros).
- * Usado no cadastro para auto-match: se já existe fornecedor com esse
- * documento, o form oferece vincular pra reusar dados bancários/PIX.
- */
-export async function buscarFornecedorPorDocumento(
-  cpfCnpj: string,
-): Promise<
-  | { ok: true; fornecedor: { id: string; nome: string } | null }
-  | { ok: false; message: string }
-> {
-  const session = await requireSession();
-  const gate = await checarPermissao(session, "rh.colaboradores.editar");
-  if (!gate.ok) return gate;
-
-  const digitos = (cpfCnpj ?? "").replace(/\D/g, "");
-  if (digitos.length !== 11 && digitos.length !== 14) {
-    return { ok: true, fornecedor: null };
-  }
-
-  const supabase = createClient();
-  const { data, error } = await supabase
-    .from("fornecedores")
-    .select("id, nome")
-    .eq("tenant_id", session.activeTenant.id)
-    .eq("cpf_cnpj", digitos)
-    .maybeSingle();
-
-  if (error) {
-    console.error("[rh.buscar_fornecedor]", error.message);
-    return { ok: false, message: "Erro ao buscar fornecedor." };
-  }
-
-  return { ok: true, fornecedor: data ?? null };
-}
-
-/**
  * Cadastra colaborador com alocação inicial (100%) e salário inicial em
  * transação lógica: se qualquer inserção falhar, faz rollback manual.
  *
@@ -82,9 +46,6 @@ export async function buscarFornecedorPorDocumento(
  *   3. Insere salário inicial
  *   Se 2 ou 3 falhar → deleta colaborador (cascade limpa alocação/salário
  *   já criados; trigger de soma=100 é deferrable, então não bloqueia).
- *
- * Opcional: se `criar_fornecedor` = "1", cria também um fornecedor com o
- * mesmo documento (só para PJ/MEI/CLT+Recibo) e vincula ao colaborador.
  */
 export async function criarColaborador(
   formData: FormData,
@@ -100,7 +61,6 @@ export async function criarColaborador(
     cpf_cnpj: formData.get("cpf_cnpj")?.toString() ?? "",
     funcao: formData.get("funcao")?.toString() ?? "",
     nivel_id: formData.get("nivel_id")?.toString() ?? "",
-    fornecedor_id: formData.get("fornecedor_id")?.toString() ?? "",
     data_admissao: formData.get("data_admissao")?.toString() ?? "",
   });
   if (!colaboradorParsed.success) {
@@ -137,57 +97,9 @@ export async function criarColaborador(
     };
   }
 
-  const criarFornecedor =
-    formData.get("criar_fornecedor")?.toString() === "1" &&
-    colaboradorParsed.data.cpf_cnpj !== null &&
-    colaboradorParsed.data.fornecedor_id === null;
-
   const supabase = createClient();
 
-  // 1) Criar fornecedor primeiro (se pedido), pra ter o id na inserção do colaborador
-  let novoFornecedorId: string | null = null;
-  if (criarFornecedor) {
-    const tipo = colaboradorParsed.data.tipo_contratacao;
-    const tipoPessoa =
-      tipo === "clt" || tipo === "estagio" ? "fisica" : "juridica";
-    const { data: fornData, error: fornError } = await supabase
-      .from("fornecedores")
-      .insert({
-        tenant_id: session.activeTenant.id,
-        tipo_pessoa: tipoPessoa,
-        nome: colaboradorParsed.data.nome,
-        cpf_cnpj: colaboradorParsed.data.cpf_cnpj,
-        created_by: session.profile.id,
-      })
-      .select("id")
-      .single();
-    if (fornError) {
-      console.error("[rh.colaborador.criar.fornecedor]", fornError.message);
-      return {
-        ok: false,
-        message:
-          fornError.message.includes("uniq_fornecedores_documento_por_tenant")
-            ? "Já existe um fornecedor com esse documento. Vincule ao existente em vez de criar novo."
-            : "Não foi possível criar o fornecedor.",
-      };
-    }
-    novoFornecedorId = fornData.id;
-    await logAuditEvent({
-      acao: "fornecedor.criado",
-      tenantId: session.activeTenant.id,
-      entidadeTipo: "fornecedor",
-      entidadeId: novoFornecedorId,
-      metadata: {
-        nome: colaboradorParsed.data.nome,
-        origem: "rh_colaborador",
-      },
-    });
-  }
-
-  const fornecedorIdFinal =
-    novoFornecedorId ?? colaboradorParsed.data.fornecedor_id;
-
-  // 2) Insere colaborador
+  // 1) Insere colaborador
   const { data: colabData, error: colabError } = await supabase
     .from("colaboradores")
     .insert({
@@ -198,7 +110,6 @@ export async function criarColaborador(
       cpf_cnpj: colaboradorParsed.data.cpf_cnpj,
       funcao: colaboradorParsed.data.funcao,
       nivel_id: colaboradorParsed.data.nivel_id,
-      fornecedor_id: fornecedorIdFinal,
       data_admissao: colaboradorParsed.data.data_admissao,
       status: "ativo",
       created_by: session.profile.id,
@@ -214,7 +125,7 @@ export async function criarColaborador(
   const colaboradorId = colabData.id;
   const service = createServiceClient();
 
-  // 3) Alocação inicial 100%
+  // 2) Alocação inicial 100%
   const { error: alocError } = await supabase
     .from("colaboradores_alocacoes")
     .insert({
@@ -233,7 +144,7 @@ export async function criarColaborador(
     return { ok: false, message: mapColaboradorDbError(alocError.message) };
   }
 
-  // 4) Salário inicial
+  // 3) Salário inicial
   const { error: salError } = await supabase
     .from("colaboradores_salarios")
     .insert({
@@ -290,7 +201,6 @@ export async function editarColaborador(
     cpf_cnpj: formData.get("cpf_cnpj")?.toString() ?? "",
     funcao: formData.get("funcao")?.toString() ?? "",
     nivel_id: formData.get("nivel_id")?.toString() ?? "",
-    fornecedor_id: formData.get("fornecedor_id")?.toString() ?? "",
     data_admissao: formData.get("data_admissao")?.toString() ?? "",
   });
   if (!parsed.success) {
@@ -311,7 +221,6 @@ export async function editarColaborador(
       cpf_cnpj: parsed.data.cpf_cnpj,
       funcao: parsed.data.funcao,
       nivel_id: parsed.data.nivel_id,
-      fornecedor_id: parsed.data.fornecedor_id,
       data_admissao: parsed.data.data_admissao,
     })
     .eq("id", id)

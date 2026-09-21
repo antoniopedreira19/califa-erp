@@ -1,0 +1,60 @@
+-- =====================================================================
+-- Colaborador deixa de reaproveitar dados bancários via fornecedores
+-- =====================================================================
+--
+-- POR QUE ESTA MIGRATION EXISTE
+--
+-- A migration original de RH (20260916000005) criou colaboradores com um
+-- FK opcional para fornecedores (colaboradores.fornecedor_id) cujo único
+-- propósito, documentado no comentário da coluna, era "reuso de dados
+-- bancários/PIX na baixa da folha". Era um atalho consciente pra não
+-- duplicar campos bancários enquanto a fase da folha era esqueleto.
+--
+-- Ao começar o módulo de pagamento por remessa CNAB (Santander 240),
+-- essa decisão foi revisitada e revertida. Motivos:
+--
+--   1. Semântica: fornecedor de produção e colaborador PJ são conceitos
+--      de negócio distintos. Fornecedor aparece no autocomplete de
+--      Pedido de Produção; colaborador PJ não deveria (nem operacional,
+--      nem contabilmente — NF de PJ não é serviço de produção).
+--
+--   2. Ciclo de vida diferente: colaborador tem admissão, demissão,
+--      alocação por regional/empresa e histórico salarial. Fornecedor
+--      não tem nada disso. RLS é diferente: colaborador é gate rh+admin,
+--      fornecedor é gate is_tenant_member.
+--
+--   3. Risco de dado divergente: se um freelancer virasse fornecedor E
+--      colaborador PJ com bancos replicados, na hora que ele troca a
+--      conta, ficava ambíguo quem atualiza qual. Uma fonte por papel
+--      elimina a ambiguidade.
+--
+--   4. Ninguém preencheu essa FK em produção (0/1 colaboradores com
+--      fornecedor_id não-nulo). Não há dado a migrar; é seguro dropar.
+--
+-- Registrado como ADR 001 do módulo pgto-remessa em
+-- docs/modulos/pgto-remessa/02-decisoes.md.
+--
+-- O QUE MUDA
+--
+--   • Índice idx_colaboradores_fornecedor removido.
+--   • Coluna colaboradores.fornecedor_id removida (a FK cai junto pelo
+--     PostgreSQL — CASCADE implícito do DROP COLUMN sobre constraint).
+--   • Comment on column removido junto com a coluna (nada a fazer).
+--
+-- O QUE FICA
+--
+--   • Nenhuma outra tabela é tocada. Fornecedores e suas FKs pra PP,
+--     contas_avulsas, desembolsos, itens_bv seguem intactos.
+--   • Frontend (form de cadastro, drawer de edição, card de dados,
+--     validations, types) atualizado no mesmo commit — regra do
+--     CLAUDE.md: migration que mexe em coluna usada pelo frontend
+--     termina atualizando o tipo correspondente.
+--
+-- Destrutiva mas segura: sem dado a perder. Confirmada explicitamente
+-- pelo Antonio antes da aplicação.
+-- =====================================================================
+
+drop index if exists public.idx_colaboradores_fornecedor;
+
+alter table public.colaboradores
+  drop column if exists fornecedor_id;
