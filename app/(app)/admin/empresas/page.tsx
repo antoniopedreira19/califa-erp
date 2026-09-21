@@ -51,7 +51,12 @@ export default async function AdminEmpresasPage() {
       .eq("status", "ativo"),
     supabase
       .from("empresas_contabeis")
-      .select("id, razao_social, nome_fantasia, cnpj, ativo")
+      .select(
+        "id, razao_social, nome_fantasia, cnpj, ativo, " +
+          "convenio_cnab_santander, agencia_debito, agencia_debito_dv, " +
+          "conta_debito, conta_debito_dv, sequencial_arquivo, " +
+          "endereco_logradouro, endereco_cidade, endereco_cep, endereco_uf",
+      )
       .eq("tenant_id", tenantId)
       .order("ativo", { ascending: false })
       .order("razao_social", { ascending: true }),
@@ -94,6 +99,16 @@ export default async function AdminEmpresasPage() {
     nome_fantasia: e.nome_fantasia,
     cnpj: e.cnpj,
     ativo: e.ativo,
+    convenio_cnab_santander: e.convenio_cnab_santander ?? null,
+    agencia_debito: e.agencia_debito ?? null,
+    agencia_debito_dv: e.agencia_debito_dv ?? null,
+    conta_debito: e.conta_debito ?? null,
+    conta_debito_dv: e.conta_debito_dv ?? null,
+    sequencial_arquivo: e.sequencial_arquivo ?? null,
+    endereco_logradouro: e.endereco_logradouro ?? null,
+    endereco_cidade: e.endereco_cidade ?? null,
+    endereco_cep: e.endereco_cep ?? null,
+    endereco_uf: e.endereco_uf ?? null,
   }));
 
   const regionaisPorEmpresa = new Map<string, Regional[]>();

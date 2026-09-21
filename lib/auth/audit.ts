@@ -226,6 +226,7 @@ export type AuditAction =
   | "pp_verba_devolucao.baixa_estornada"
   | "empresa_contabil.criada"
   | "empresa_contabil.atualizada"
+  | "empresa_contabil.config_cnab_editada"
   | "empresa_contabil.desativada"
   | "empresa_contabil.reativada"
   // ---- Módulo RH (2026-09-16) ----
