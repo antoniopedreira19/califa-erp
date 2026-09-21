@@ -534,60 +534,36 @@ export function TitulosPagarList({
 
   return (
     <div className="space-y-4">
-      {/* Filtro de status — chip principal. Padrão "A pagar". */}
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-          Status
-        </span>
-        <StatusChip
-          ativo={statusFiltro === "a_pagar"}
-          onClick={() => setStatusFiltro("a_pagar")}
-          label="A pagar"
-        />
-        <StatusChip
-          ativo={statusFiltro === "aguardando_prestacao"}
-          onClick={() => setStatusFiltro("aguardando_prestacao")}
-          label={
-            aguardandoPrestacao > 0
-              ? `Aguardando prestação · ${aguardandoPrestacao}`
-              : "Aguardando prestação"
-          }
-        />
-        <StatusChip
-          ativo={statusFiltro === "pago"}
-          onClick={() => setStatusFiltro("pago")}
-          label="Pagos"
-        />
-        <StatusChip
-          ativo={statusFiltro === "todos"}
-          onClick={() => setStatusFiltro("todos")}
-          label="Todos"
-        />
-      </div>
-
-      {/* Origem + busca + botão de lançamento avulso. */}
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div className="flex flex-1 flex-wrap items-center gap-2">
-          {CHIP_ORIGEM.map((c) => (
-            <Chip
-              key={c.key}
-              ativo={filtroOrigem === c.key}
-              onClick={() => setFiltroOrigem(c.key)}
-              label={c.label}
-              count={contagemOrigem[c.key]}
-            />
-          ))}
-
-          <div className="relative ml-auto min-w-[240px] max-w-md flex-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <input
-              type="text"
-              value={busca}
-              onChange={(e) => setBusca(e.target.value)}
-              placeholder="Buscar por título, fornecedor ou job..."
-              className="w-full rounded-lg border border-border bg-white py-2 pl-9 pr-3 text-sm focus:border-california-red focus:outline-none"
-            />
-          </div>
+      {/* Linha 1: Status (esquerda) + botões de ação (direita extrema). */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Status
+          </span>
+          <StatusChip
+            ativo={statusFiltro === "a_pagar"}
+            onClick={() => setStatusFiltro("a_pagar")}
+            label="A pagar"
+          />
+          <StatusChip
+            ativo={statusFiltro === "aguardando_prestacao"}
+            onClick={() => setStatusFiltro("aguardando_prestacao")}
+            label={
+              aguardandoPrestacao > 0
+                ? `Aguardando prestação · ${aguardandoPrestacao}`
+                : "Aguardando prestação"
+            }
+          />
+          <StatusChip
+            ativo={statusFiltro === "pago"}
+            onClick={() => setStatusFiltro("pago")}
+            label="Pagos"
+          />
+          <StatusChip
+            ativo={statusFiltro === "todos"}
+            onClick={() => setStatusFiltro("todos")}
+            label="Todos"
+          />
         </div>
 
         {statusFiltro !== "pago" && (
@@ -620,6 +596,29 @@ export function TitulosPagarList({
             />
           </div>
         )}
+      </div>
+
+      {/* Linha 2: busca (esquerda) + filtros de origem (após a busca). */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative min-w-[240px] max-w-sm flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <input
+            type="text"
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            placeholder="Buscar por título, fornecedor ou job..."
+            className="w-full rounded-lg border border-border bg-white py-2 pl-9 pr-3 text-sm focus:border-california-red focus:outline-none"
+          />
+        </div>
+        {CHIP_ORIGEM.map((c) => (
+          <Chip
+            key={c.key}
+            ativo={filtroOrigem === c.key}
+            onClick={() => setFiltroOrigem(c.key)}
+            label={c.label}
+            count={contagemOrigem[c.key]}
+          />
+        ))}
       </div>
 
       {/* Faixa de resumo — panorama do caixa. Itens fixos; o período só
