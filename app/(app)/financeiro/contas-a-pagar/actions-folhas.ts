@@ -114,7 +114,7 @@ export async function reprovarLinhaFolha(
  *   3. Propaga edições pra Camada 1 se houve alteração
  *   4. Muda status para 'aprovada'
  *
- * Ver docs/decisions/093-folha-mensal-em-duas-camadas.md.
+ * Ver docs/decisions/097-folha-mensal-em-duas-camadas.md.
  */
 export async function aprovarLinhaFolha(
   folhaId: string,

@@ -113,17 +113,20 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 087 | [Faturamento e encerramento correm separados, e o job fica finalizado quando os dois terminam](087-faturamento-e-encerramento-correm-separados.md) | 2026-09-16 |
 | 089 | [Lista longa se busca, e o código do cliente não aparece nela](089-lista-longa-se-busca-e-o-codigo-do-cliente-nao-aparece.md) | 2026-09-17 |
 | 090 | [A chave PIX é gravada no formato que o banco aceita](090-a-chave-pix-e-gravada-no-formato-do-banco.md) | 2026-09-18 |
-| 093 | [Folha mensal em duas camadas, valor manual e propagação pela aprovação](093-folha-mensal-em-duas-camadas.md) | 2026-09-18 |
 | 094 | [O selo "Em faturamento", e o Finalizado passa a valer pelo envio](094-em-faturamento-e-o-finalizado-vale-pelo-envio.md) | 2026-09-20 |
 | 095 | ["Composto por" em % do valor do job, e Moeda/Câmbio fora do nacional](095-composto-por-em-percentual-do-valor-do-job.md) | 2026-09-21 |
 | 096 | [Só a alíquota de 19,53% fica disponível](096-so-a-aliquota-de-19-53.md) | 2026-09-21 |
+| 097 | [Folha mensal em duas camadas, valor manual e propagação pela aprovação](097-folha-mensal-em-duas-camadas.md) | 2026-09-18 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
 > data é a da decisão, não a da posição na fila.
-> A 093 nasceu como 088 em 2026-09-18 sem consulta a este índice (que
+> A 097 nasceu como 088 em 2026-09-18 sem consulta a este índice (que
 > estava desatualizado apontando "próximo: 091" quando 088, 091 e 092 já
-> haviam sido tomadas); foi renumerada em 2026-09-19 assim que a colisão
-> foi detectada.
+> haviam sido tomadas); em 19/09/2026 foi renumerada localmente pra 093,
+> mas o merge com a frente do Cartão revelou que 093 também estava
+> tomado (ADR de Cartão vem de 2026-09 com fases §11..§13). Renumerada
+> definitivamente pra 097 no pull de 21/09/2026 — a data é a da decisão
+> original, não a da posição final.
 
-**Próximo número livre: 097.** (091 e 092 existem na pasta e ainda não estão nesta tabela.)
+**Próximo número livre: 098.** (091 e 092 existem na pasta e ainda não estão nesta tabela.)
