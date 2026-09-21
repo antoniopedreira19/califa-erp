@@ -343,3 +343,22 @@ export const SELECAO = {
   dicas: "mt-2 flex flex-wrap items-center gap-2.5 px-1 text-[11px] text-muted-foreground",
   tecla: "font-mono font-semibold text-foreground",
 } as const;
+
+/** A cadeia internacional do card de Totais (decisão 072) — a caixa azul do
+ *  design "Orcamento Internacional - Planilha e Totais". O azul é o do
+ *  ORÇADO de propósito: a coluna na moeda estrangeira mora nesse bloco da
+ *  planilha, e o card de Totais fala a mesma cor. */
+export const CADEIA_INTERNACIONAL = {
+  /** A caixa inteira: fio e fundo do ORÇADO. */
+  caixa: "border-[#cfe0f7] bg-[#f7fbff]",
+  /** Fio sob o título e antes do "Total recebido no exterior". */
+  fio: "border-[#dfeafb]",
+  /** Fio antes do "Faturamento previsto" — o mais forte da caixa. */
+  fioForte: "border-[#b9d1f4]",
+  /** Título e valores fortes na moeda estrangeira. */
+  texto: ORCADO.texto,
+  /** Cabeçalho da coluna da moeda estrangeira. */
+  textoSuave: ORCADO.textoSuave,
+  /** Valores comuns na moeda estrangeira. */
+  valor: "text-[#2f6fdb]",
+} as const;

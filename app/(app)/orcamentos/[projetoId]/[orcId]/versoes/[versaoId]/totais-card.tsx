@@ -26,7 +26,11 @@ import {
   type ParametrosInternacionais,
 } from "@/lib/calculos/versao-totais";
 import { type MoedaEstrangeira } from "@/app/(app)/_planilha/moeda-estrangeira";
-import { CadeiaInternacional } from "@/app/(app)/_planilha/cadeia-internacional";
+import {
+  CadeiaInternacional,
+  NotaDaConversao,
+  TextoSaveInternacional,
+} from "@/app/(app)/_planilha/cadeia-internacional";
 import {
   type CategoriaModeloPlanilha,
   type ItemBv,
@@ -200,7 +204,10 @@ export function TotaisCard({
               />
             )}
           </div>
-          <div className="space-y-1.5">
+          {/* No internacional o espaçamento e o realce dos sub-totais são
+              os do design "Orcamento Internacional - Planilha e Totais":
+              tipo sem custo apagado, tipo com custo em negrito. */}
+          <div className={ehInternacional ? "space-y-[9px]" : "space-y-1.5"}>
             {quebrarPorSave && <CabecalhoColunasSave />}
             {LINHAS_FECHAMENTO_POR_TIPO.map((linha) =>
               quebrarPorSave ? (
@@ -218,6 +225,7 @@ export function TotaisCard({
                   label={linha.label}
                   value={somarLinhaFechamento(subtotaisPorTipo, linha.tipos)}
                   moeda={moeda}
+                  realce={ehInternacional}
                 />
               ),
             )}
@@ -236,6 +244,7 @@ export function TotaisCard({
                 value={subtotalGeral}
                 moeda={moeda}
                 destaque
+                realce={ehInternacional}
               />
             )}
             {/* Com save, estas duas são as do FATURAMENTO: são elas que
@@ -338,7 +347,8 @@ export function TotaisCard({
             {ehInternacional && (
               <>
                 <Linha
-                  label="− Int. taxes (retidas no exterior)"
+                  label="− Int. taxes"
+                  detalhe="(retidas no exterior)"
                   value={intTaxes}
                   moeda={moeda}
                 />
@@ -495,8 +505,16 @@ export function TotaisCard({
       <div className="overflow-hidden rounded-b-2xl">
         <LegendaFechamento
           internacional={ehInternacional}
+          nota={
+            ehInternacional ? (
+              <NotaDaConversao moedaEstrangeira={moedaEstrangeira} />
+            ) : undefined
+          }
           extra={
             temSave ? (
+              ehInternacional ? (
+                <TextoSaveInternacional job={job} moeda={moeda} />
+              ) : (
               <>
                 Os honorários e impostos do fechamento correm sobre{" "}
                 <strong className="text-foreground">
@@ -518,6 +536,7 @@ export function TotaisCard({
                 )}
                 .
               </>
+              )
             ) : undefined
           }
         />
@@ -540,15 +559,24 @@ function formatPct(n: number): string {
 
 function Linha({
   label,
+  detalhe,
   value,
   moeda,
   destaque,
+  realce,
 }: {
   label: string;
+  /** Parêntese em tom apagado depois do rótulo: "(retidas no exterior)". */
+  detalhe?: string;
   value: number;
   moeda: string;
   destaque?: boolean;
+  /** O tratamento dos sub-totais do design internacional: valor zerado
+   *  apagado, valor com custo em negrito, e o total em negrito cheio.
+   *  Ausente ⇒ a linha é exatamente a de sempre (o nacional não muda). */
+  realce?: boolean;
 }) {
+  const zerado = Math.abs(value) < 0.005;
   return (
     <div
       className={cn(
@@ -559,15 +587,31 @@ function Linha({
       <span
         className={cn(
           "text-sm",
-          destaque ? "font-semibold" : "text-muted-foreground",
+          destaque
+            ? realce
+              ? "font-bold"
+              : "font-semibold"
+            : realce && !zerado
+              ? "font-medium text-foreground"
+              : "text-muted-foreground",
         )}
       >
         {label}
+        {detalhe && (
+          <>
+            {" "}
+            <span className="text-[#a9a7a1]">{detalhe}</span>
+          </>
+        )}
       </span>
       <span
         className={cn(
           "whitespace-nowrap font-mono text-[13px]",
-          destaque ? "text-sm font-semibold" : "",
+          destaque
+            ? realce
+              ? "text-sm font-bold"
+              : "text-sm font-semibold"
+            : realce && (zerado ? "text-sm text-[#b8b6b1]" : "text-sm font-semibold"),
         )}
       >
         {formatCurrency(value, moeda)}

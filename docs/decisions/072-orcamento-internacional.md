@@ -466,6 +466,31 @@ desfaria em silêncio um valor que um administrador tenha ajustado. O helper
 caminho travado foi conferido pelo código e pelo tsc, não com um login sem
 a permissão.
 
+## ⚠️ O card de Totais do internacional segue o design (21/09/2026)
+
+O card da versão tinha a cadeia como uma lista simples, com o Valor do job
+dentro dela e uma nota de conversão logo abaixo — não era o desenho
+"Orcamento Internacional - Planilha e Totais" (Claude Design `69342d83`).
+Pedido do Tiago: deixar igual ao design, mantendo o "Composto por" em %
+do valor do job (095), que foi aprovado depois do design.
+
+| Parte | Como ficou |
+|---|---|
+| Cadeia | Caixa no azul do ORÇADO, com ícone de globo; USD em azul; o percentual e "(Invoice)" em tom apagado; fios entre os trechos; Faturamento previsto em vermelho nas duas moedas |
+| Valor do job | Caixa própria sob a cadeia, com USD e BRL; a linha "Save gerado" só existe com save |
+| Sub-totais por tipo | Tipo sem custo apagado, tipo com custo e o total em negrito (só no internacional) |
+| Texto das duas bases | O "A mesma cadeia sobre a base do valor do job…" do design virou o segundo tópico da legenda, como no nacional — só com save. A frase do design para o caso sem save não entrou: sem save, nada de save aparece |
+| Nota de conversão | Saiu de sob a cadeia e fecha a legenda, onde o design a põe |
+
+Duas diferenças de propósito em relação ao design: o "Composto por" é o da
+095, e a linha "− Int. transaction costs" do Resultado continua sempre
+visível (decisão de 14/09), onde o design só a mostra com valor.
+
+A cadeia é compartilhada com a planilha interna do job
+(`job-totais-card.tsx`), que recebe o mesmo desenho, a mesma nota e o
+mesmo tópico de save. As cores da caixa moram em `CADEIA_INTERNACIONAL`,
+em `_planilha/blocos.ts`, feitas do azul do ORÇADO.
+
 ## O que NÃO entrou
 
 A **abertura** do job entrou em 11/09/2026 (seção acima). Seguem nacionais,
