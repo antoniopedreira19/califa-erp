@@ -19,8 +19,11 @@ O RH da California é hoje uma planilha Excel com múltiplas abas (Colaboradores
 ### Fase 3 — Modelagem (fechada para o MVP)
 - [`03-modelo-de-dados.md`](03-modelo-de-dados.md) — tabelas, enums, constraints, RLS, GRANTs, ordem sugerida de migration
 
-### Subsistema Folha Mensal (discovery + design fechados, 2026-09-18)
-- [`20-folha-mensal.md`](20-folha-mensal.md) — geração da folha mensal, revisão pelo RH, envio, aprovação/reprovação pelo financeiro, propagação para Camada 1. Não integra com contas a pagar no MVP.
+### Subsistema Folha Mensal (Rodadas 1, 2 e 3 entregues em 2026-09-18)
+- [`20-folha-mensal.md`](20-folha-mensal.md) — geração da folha mensal, revisão pelo RH, envio, aprovação/reprovação pelo financeiro, propagação para Camada 1. Rodadas 3 e 4 fundidas: aprovar já gera títulos em Contas a Pagar (via `contas_avulsas`).
+
+### Backlog vivo (atualizado a cada fechamento de rodada)
+- [`30-proximos-passos.md`](30-proximos-passos.md) — estado atual + P0 (**Design & UX**, decisões já travadas) + P1 (import, estorno, benefícios, notificação) + P2 (férias, turnover, holerite PDF, autoserviço, encargos CLT).
 
 ### Fase 4 — Fluxos e regras (a fazer, fase 2+)
 - `04-fluxos-operacionais.md` — cadastro, benefícios, folha mensal, rescisão
