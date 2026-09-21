@@ -68,6 +68,12 @@ E três pedidos de tela:
 
 ### O status `finalizado` e quem o grava
 
+> ⚠️ **Revisto em 20/09/2026 pela [094](094-em-faturamento-e-o-finalizado-vale-pelo-envio.md).**
+> O `finalizado` passou a valer pelo ENVIO para faturamento completo, não pela
+> nota emitida: o gatilho da nota saiu, entrou um no envio, e o job aberto com
+> o envio completo ganhou o selo "Em faturamento". O texto abaixo é o de
+> 16/09/2026.
+
 - `job_status` ganhou `finalizado` (migration sozinha).
 - `jobs.encerrado_em`, `jobs.encerrado_por` (FK para `profiles`, com índice) e
   `jobs.finalizado_em`.

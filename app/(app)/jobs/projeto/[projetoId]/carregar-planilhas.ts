@@ -8,6 +8,7 @@ import {
   type BvParaConta,
 } from "@/lib/calculos/bv-planilha";
 import {
+  jobStatusExibido,
   nomeDoJobNoFinanceiro,
   type CategoriaModeloPlanilha,
   type JobStatus,
@@ -48,7 +49,7 @@ export async function carregarPlanilhasDosJobs(
   const { data: jobsRaw, error: jobsErro } = await supabase
     .from("jobs")
     .select(
-      "id, codigo, nome, nome_financeiro, status, versao_orcamento_aprovada_id, " +
+      "id, codigo, nome, nome_financeiro, status, faturamento_enviado_em, versao_orcamento_aprovada_id, " +
         "responsavel:profiles!responsavel_id(nome), " +
         // Os quatro da cadeia internacional e o modelo da categoria do
         // ORÇAMENTO (decisão 072): cada job do projeto fecha pela sua
@@ -346,7 +347,12 @@ export async function carregarPlanilhasDosJobs(
       // No financeiro o bloco leva o nome do financeiro; na produção, o
       // dela. Mesmo contrato de `nome_financeiro` vs `nome`.
       nome: opts.usarNomeFinanceiro ? nomeDoJobNoFinanceiro(j) : j.nome,
-      status: j.status as JobStatus,
+      // Só vira selo no card: "Em faturamento" é o aberto com o envio
+      // completo (decisão 094).
+      status: jobStatusExibido(
+        j.status as JobStatus,
+        (j.faturamento_enviado_em as string | null) ?? null,
+      ),
       modeloPlanilha,
       responsavel: j.responsavel?.nome ?? null,
       moeda: j.versao?.moeda ?? "BRL",

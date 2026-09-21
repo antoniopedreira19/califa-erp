@@ -24,6 +24,7 @@ import {
   jobAceitaAcoesPlanilha,
   jobAceitaGerarPP,
   jobAceitaEnvioDePP,
+  jobStatusExibido,
   PP_STATUS_EM_ABERTO,
   situacaoDaVerba,
   verbaPendenteNoEncerramento,
@@ -102,7 +103,7 @@ export async function carregarDetalheDoJob(
     supabase
       .from("jobs")
       .select(
-        "id, tenant_id, empresa_id, codigo, nome, produto, cidade, data_inicio_prevista, data_fim_prevista, data_evento, data_prevista_faturamento, observacoes, responsavel_id, produtor_id, valor_total, faturamento_previsto, faturamento_save_previsto, valor_job_abertura, faturamento_previsto_abertura, abertura_em_revisao, abertura_revisao_desde, abertura_revisao_errata_id, status, encerrado_em, encerrado_por, finalizado_em, motivo_rejeicao, projeto_id, orcamento_id, versao_orcamento_aprovada_id, regional_id, categoria_id, servico_id, competencia_trimestre, competencia_ano, custo_previsto_total, nome_financeiro, data_abertura_financeiro, aberto_por, created_at, updated_at, responsavel:profiles!responsavel_id(id, nome), produtor:profiles!produtor_id(id, nome), encerrado_por_perfil:profiles!encerrado_por(nome), regional:regionais(id, nome), categoria:categorias_dominio!categoria_id(id, nome), servico:categorias_dominio!servico_id(id, nome), orcamento:orcamentos(id, codigo, nome, projeto_id, servico:categorias_dominio!servico_id(id, nome), categoria:categorias_dominio!categoria_id(modelo_planilha)), versao:versoes_orcamento!versao_orcamento_aprovada_id(id, numero_versao, nome, moeda, percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra), projeto:projetos(id, codigo, nome, cliente_id, data_inicio_prevista, data_fim_prevista, cliente:clientes(id, nome_fantasia))",
+        "id, tenant_id, empresa_id, codigo, nome, produto, cidade, data_inicio_prevista, data_fim_prevista, data_evento, data_prevista_faturamento, observacoes, responsavel_id, produtor_id, valor_total, faturamento_previsto, faturamento_save_previsto, valor_job_abertura, faturamento_previsto_abertura, abertura_em_revisao, abertura_revisao_desde, abertura_revisao_errata_id, status, encerrado_em, encerrado_por, finalizado_em, faturamento_enviado_em, motivo_rejeicao, projeto_id, orcamento_id, versao_orcamento_aprovada_id, regional_id, categoria_id, servico_id, competencia_trimestre, competencia_ano, custo_previsto_total, nome_financeiro, data_abertura_financeiro, aberto_por, created_at, updated_at, responsavel:profiles!responsavel_id(id, nome), produtor:profiles!produtor_id(id, nome), encerrado_por_perfil:profiles!encerrado_por(nome), regional:regionais(id, nome), categoria:categorias_dominio!categoria_id(id, nome), servico:categorias_dominio!servico_id(id, nome), orcamento:orcamentos(id, codigo, nome, projeto_id, servico:categorias_dominio!servico_id(id, nome), categoria:categorias_dominio!categoria_id(modelo_planilha)), versao:versoes_orcamento!versao_orcamento_aprovada_id(id, numero_versao, nome, moeda, percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra), projeto:projetos(id, codigo, nome, cliente_id, data_inicio_prevista, data_fim_prevista, cliente:clientes(id, nome_fantasia))",
       )
       .eq("id", jobId)
       .eq("tenant_id", session.activeTenant.id)
@@ -292,7 +293,7 @@ export async function carregarDetalheDoJob(
     // índice `idx_jobs_projeto`; quatro colunas, sem embed.
     supabase
       .from("jobs")
-      .select("id, codigo, nome, status")
+      .select("id, codigo, nome, status, faturamento_enviado_em")
       .eq("projeto_id", raw.projeto_id)
       .eq("tenant_id", session.activeTenant.id)
       .order("codigo", { ascending: true }),
@@ -603,6 +604,7 @@ export async function carregarDetalheDoJob(
     encerrado_em: raw.encerrado_em ?? null,
     encerrado_por: raw.encerrado_por ?? null,
     finalizado_em: raw.finalizado_em ?? null,
+    faturamento_enviado_em: raw.faturamento_enviado_em ?? null,
     motivo_rejeicao: raw.motivo_rejeicao ?? null,
     // Registro financeiro da abertura. A página de Jobs não exibe estes
     // campos, mas a tela do job no financeiro exibe — e o formulário de
@@ -785,7 +787,11 @@ export async function carregarDetalheDoJob(
     id: j.id as string,
     codigo: j.codigo as string,
     nome: j.nome as string,
-    status: j.status as JobStatus,
+    // Só vira selo: "Em faturamento" é o aberto com o envio completo (094).
+    status: jobStatusExibido(
+      j.status as JobStatus,
+      (j.faturamento_enviado_em as string | null) ?? null,
+    ),
   }));
 
   const abertoPorNome =
@@ -860,9 +866,10 @@ export async function carregarDetalheDoJob(
           semFaturamento: totaisJob.faturamentoPrevisto <= 0.004,
         });
 
-  // Todo o faturamento do job já saiu em nota — a mesma conta que o banco
-  // faz em `job_esta_faturado` para gravar `finalizado`. Serve à tela; quem
-  // decide o status é o banco.
+  // Todo o faturamento do job já saiu em nota. ⚠️ Desde 20/09/2026 (decisão
+  // 094) isto NÃO decide mais o status: o `finalizado` vale pelo envio
+  // (`jobs.faturamento_enviado_em`). Fica para o "Aguardando encerramento"
+  // do cabeçalho do job no financeiro, que é quem controla a nota.
   const faturamentoCompleto =
     planilha.modeloPlanilha === "mensal"
       ? todosOsMesesEnviados && saldoAFaturar <= 0.01
@@ -921,7 +928,6 @@ export async function carregarDetalheDoJob(
           verbasEmAberto,
           bvsEmAberto,
           itensSemMarcacao,
-          saldoAFaturar,
           semEnvio:
             planilha.modeloPlanilha !== "mensal" &&
             envioFaturamento === null &&
@@ -929,7 +935,11 @@ export async function carregarDetalheDoJob(
           mesesSemEnvio: faturamentoMensal
             .filter((m) => m.situacao === "a_enviar")
             .map((m) => nomeDoMes(m.mes)),
-          faturamentoCompleto,
+          // O carimbo é do banco (decisão 094). Job sem faturamento previsto
+          // nunca é carimbado, mas finaliza direto no encerramento.
+          faturamentoTodoEnviado:
+            job.faturamento_enviado_em !== null ||
+            totaisJob.faturamentoPrevisto <= 0.004,
           encerradoEm: job.encerrado_em,
           encerradoPorNome:
             (raw.encerrado_por_perfil as { nome: string } | null)?.nome ?? null,

@@ -113,9 +113,10 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 087 | [Faturamento e encerramento correm separados, e o job fica finalizado quando os dois terminam](087-faturamento-e-encerramento-correm-separados.md) | 2026-09-16 |
 | 089 | [Lista longa se busca, e o código do cliente não aparece nela](089-lista-longa-se-busca-e-o-codigo-do-cliente-nao-aparece.md) | 2026-09-17 |
 | 090 | [A chave PIX é gravada no formato que o banco aceita](090-a-chave-pix-e-gravada-no-formato-do-banco.md) | 2026-09-18 |
+| 094 | [O selo "Em faturamento", e o Finalizado passa a valer pelo envio](094-em-faturamento-e-o-finalizado-vale-pelo-envio.md) | 2026-09-20 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
 > data é a da decisão, não a da posição na fila.
 
-**Próximo número livre: 091.**
+**Próximo número livre: 095.** (091, 092 e 093 existem na pasta e ainda não estão nesta tabela.)
