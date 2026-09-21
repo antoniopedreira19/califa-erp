@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus, AlertCircle, CheckCircle2 } from "lucide-react";
 import {
@@ -108,13 +109,18 @@ export function NovaFolhaModal() {
         pulados_sem_salario: res.pulados_sem_salario,
         pulados_sem_alocacao: res.pulados_sem_alocacao,
       });
-      router.refresh();
+      // Sem router.refresh() aqui: se o user for pra "Abrir folha", a
+      // navegação já traz dados novos. Se ele fechar, o refresh acontece
+      // no Fechar (função handleFechar). Assim evitamos re-SSR da lista
+      // enquanto o user ainda está decidindo o próximo passo.
     });
   }
 
-  function irParaCompetencia() {
-    setOpen(false);
-    router.push(`/rh/folhas/${selecionada.chave}`);
+  function handleFechar() {
+    handleOpenChange(false);
+    // Refresh só quando o user opta por ficar na lista — assim a nova
+    // competência aparece imediatamente sem trabalho de SSR desperdiçado.
+    if (resultado) router.refresh();
   }
 
   return (
@@ -181,18 +187,24 @@ export function NovaFolhaModal() {
             <div className="flex items-center justify-end gap-2 border-t border-border pt-4">
               <button
                 type="button"
-                onClick={() => handleOpenChange(false)}
+                onClick={handleFechar}
                 className="rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-muted transition-colors"
               >
                 Fechar
               </button>
-              <button
-                type="button"
-                onClick={irParaCompetencia}
+              {/* <Link> em vez de router.push: Next pré-busca a rota
+                  destino assim que este botão aparece (prefetch=true),
+                  então o clique é quase instantâneo. Fechar o modal via
+                  onClick antes da navegação evita o "modal preso" que
+                  acontecia com router.push síncrono. */}
+              <Link
+                href={`/rh/folhas/${selecionada.chave}`}
+                prefetch={true}
+                onClick={() => setOpen(false)}
                 className="rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white hover:bg-california-red/90 transition-colors"
               >
                 Abrir folha
-              </button>
+              </Link>
             </div>
           </div>
         ) : (

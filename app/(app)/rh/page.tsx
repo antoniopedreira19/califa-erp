@@ -57,7 +57,7 @@ export default async function CentralRHPage() {
         <RhCard
           href="/rh/folhas"
           icon={Receipt}
-          title="Folha de Pagamento"
+          title="Folhas de pagamento"
           description="Geração e revisão da folha mensal. RH edita e envia; financeiro aprova, reprova ou paga cada linha. Pendências voltam pro RH corrigir."
           count={pendenciasNoMes}
           countLabel={

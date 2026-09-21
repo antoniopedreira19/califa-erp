@@ -295,9 +295,12 @@ export async function gerarFolha(input: {
     },
   });
 
-  revalidatePath("/rh");
+  // Só revalida a lista: /rh/folhas. O hub /rh e a página da competência
+  // não precisam ser marcados stale aqui — o hub não muda visualmente com
+  // folha recém-criada (contagem no card é de pendências, não rascunhos),
+  // e a página da competência é hidratada no primeiro acesso. Marcar
+  // essas duas é trabalho de SSR gasto sem ninguém esperando.
   revalidatePath("/rh/folhas");
-  revalidatePath(`/rh/folhas/${ano}-${String(mes).padStart(2, "0")}`);
   return {
     ok: true,
     criadas: paraCriar.length,
