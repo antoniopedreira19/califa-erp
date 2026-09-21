@@ -146,7 +146,7 @@ export function CadeiaInternacional({
           />
           <LinhaCadeia
             rotulo="Int. taxes"
-            detalhe={`(${formatPct(percentualIntTaxes)}% · gross-up)`}
+            detalhe={`(${formatPct(percentualIntTaxes)}%)`}
             valor={faturamento.intTaxes}
             moeda={moeda}
             moedaEstrangeira={moedaEstrangeira}
@@ -166,7 +166,7 @@ export function CadeiaInternacional({
           />
           <LinhaCadeia
             rotulo="Impostos BR"
-            detalhe={`(${formatPct(percentualImposto)}% · gross-up)`}
+            detalhe={`(${formatPct(percentualImposto)}%)`}
             valor={faturamento.imposto}
             moeda={moeda}
             moedaEstrangeira={moedaEstrangeira}

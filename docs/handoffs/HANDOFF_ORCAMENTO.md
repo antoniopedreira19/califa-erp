@@ -4267,3 +4267,7 @@ desmarcando depois), aparecem o "Save gerado" de R$ 5.000,00, o botão Save
 e o tópico da mesma cadeia. A planilha do job internacional não foi aberta
 no navegador — não há job internacional no projeto de teste hoje.
 
+Ajuste final do Tiago, no mesmo dia: os parênteses de Int. taxes e Impostos
+BR na cadeia mostram só o percentual ("(18,02%)", "(19,53%)"), sem o
+"· gross-up" do design. Aprovado assim.
+
