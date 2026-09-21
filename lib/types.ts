@@ -1946,6 +1946,10 @@ export interface PedidoCompraParcela {
   data_pagamento_primeira: string | null;
   pago_em: string | null;
   pago_por: string | null;
+  /** 44 dígitos do código de barras do boleto que paga esta parcela.
+   *  Preenchido quando forma_pagamento da PP é 'boleto'. Adicionado em
+   *  21/09/2026 pelo módulo pgto-remessa (fase 4.3). */
+  codigo_barras: string | null;
   created_at: string;
   updated_at: string;
   created_by: string | null;
@@ -2690,6 +2694,10 @@ export interface ContaAvulsa {
   /** Preenchido quando esta avulsa foi materializada por uma linha de
    *  folha_pagamento aprovada. Aponta pra folhas_pagamento.id. */
   folha_id: string | null;
+  /** 44 dígitos do código de barras do boleto que paga esta avulsa.
+   *  Preenchido quando forma_pagamento é 'boleto'. Adicionado em
+   *  21/09/2026 pelo módulo pgto-remessa (fase 4.3). */
+  codigo_barras: string | null;
   // Sem `job_id` desde 15/09/2026 (decisão 069): a coluna existe no banco,
   // barrada por CHECK, e a regional vem só do rateio.
   plano_conta_tipo_id: string;
@@ -3073,5 +3081,66 @@ export interface FolhaPagamentoAlocacao {
   empresa_id: string;
   regional_id: string;
   percentual: string;
+  created_at: string;
+}
+
+// ---------- Módulo pgto-remessa: arquivos CNAB (fase 4.3, 21/09/2026) ----
+
+export type CnabRemessaStatus =
+  | "gerado"
+  | "enviado_banco"
+  | "processado"
+  | "cancelado";
+
+/** Cabeçalho de cada arquivo .REM gerado. Uma linha = um arquivo. */
+export interface CnabRemessa {
+  id: string;
+  tenant_id: string;
+  empresa_contabil_id: string;
+  /** Sequencial único por empresa contábil. Começa em 11. */
+  sequencial_arquivo: number;
+  data_geracao: string;
+  /** SHA256 hex do conteúdo do arquivo (240 bytes × N linhas). */
+  hash_arquivo: string;
+  /** Path no Supabase Storage. Null enquanto o upload não terminou. */
+  path_storage: string | null;
+  qtd_itens: number;
+  valor_total: string; // numeric → string do supabase-js
+  status: CnabRemessaStatus;
+  gerado_por: string;
+  observacoes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type CnabOrigemTipo = "pp" | "avulsa" | "recorrente" | "desembolso";
+export type CnabDestinatarioTipo =
+  | "fornecedor"
+  | "colaborador"
+  | "cliente";
+export type CnabFormaPagamentoRemessa =
+  | "boleto"
+  | "pix"
+  | "transferencia";
+
+/** Cada título incluído em uma remessa. Amarra origem → arquivo. */
+export interface CnabRemessaItem {
+  id: string;
+  tenant_id: string;
+  remessa_id: string;
+  origem_tipo: CnabOrigemTipo;
+  /** Id da parcela/avulsa/desembolso. */
+  origem_id: string;
+  forma_pagamento: CnabFormaPagamentoRemessa;
+  destinatario_tipo: CnabDestinatarioTipo;
+  destinatario_id: string;
+  valor: string; // numeric → string
+  data_pagamento: string; // YYYY-MM-DD
+  /** "Nosso número" atribuido pelo gerador — único dentro do convênio. */
+  numero_documento_banco: string | null;
+  /** Código de 2 dígitos do retorno CNAB (fase 2 do módulo). Null enquanto
+   *  não processado. */
+  ocorrencia_retorno: string | null;
+  ocorrencia_data: string | null;
   created_at: string;
 }
