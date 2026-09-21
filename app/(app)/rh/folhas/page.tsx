@@ -1,5 +1,6 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Receipt } from "lucide-react";
+import { Receipt, ArrowLeft } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/page-header";
@@ -74,6 +75,15 @@ export default async function FolhasPage() {
 
   return (
     <div className="space-y-6">
+      <Link
+        href="/rh"
+        prefetch={false}
+        className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <ArrowLeft className="h-3 w-3" />
+        Voltar para RH
+      </Link>
+
       <PageHeader
         eyebrow="RH"
         title="Folhas de pagamento"

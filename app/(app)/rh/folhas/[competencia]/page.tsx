@@ -53,11 +53,15 @@ export default async function FolhaCompetenciaPage({
 
   const supabase = createClient();
 
+  // Passo 1: folhas + empresas + regionais em paralelo (sem embed pesado).
+  // Empresas (4) e regionais (9) do tenant são pequenas — vira Map local
+  // pra hidratar o snapshot de alocação sem embed aninhado, que era o que
+  // deixava a query pesada (docs/PERFORMANCE.md §C — N+1 / embed pesado).
   const [linhasRes, empresasRes, regionaisRes] = await Promise.all([
     supabase
       .from("folhas_pagamento")
       .select(
-        "id, salario_base, status, motivo_pendencia, colaborador:colaboradores(id, nome, funcao, tipo_contratacao, nivel:niveis(codigo)), alocacoes:folhas_pagamento_alocacoes(id, empresa_id, regional_id, percentual, empresa:empresas(nome_fantasia), regional:regionais(nome))",
+        "id, salario_base, status, motivo_pendencia, colaborador_id",
       )
       .eq("tenant_id", session.activeTenant.id)
       .eq("competencia_ano", ano)
@@ -81,29 +85,108 @@ export default async function FolhaCompetenciaPage({
     console.error("[folha.competencia.linhas]", linhasRes.error.message);
   }
 
-  const linhas = ((linhasRes.data ?? []) as any[]).map(
-    (l): FolhaLinha => ({
+  const folhasRaw = (linhasRes.data ?? []) as {
+    id: string;
+    salario_base: string | number;
+    status: FolhaLinhaStatus;
+    motivo_pendencia: string | null;
+    colaborador_id: string;
+  }[];
+
+  const folhaIds = folhasRaw.map((f) => f.id);
+  const colaboradorIds = Array.from(
+    new Set(folhasRaw.map((f) => f.colaborador_id)),
+  );
+
+  // Passo 2: colaboradores + alocacoes em paralelo (in-clauses baseados
+  // no passo 1). Só campos necessários pra render — sem tipos aninhados.
+  const [colaboradoresRes, alocacoesRes] = await Promise.all([
+    colaboradorIds.length > 0
+      ? supabase
+          .from("colaboradores")
+          .select(
+            "id, nome, funcao, tipo_contratacao, nivel:niveis(codigo)",
+          )
+          .in("id", colaboradorIds)
+      : Promise.resolve({ data: [] as any[], error: null }),
+    folhaIds.length > 0
+      ? supabase
+          .from("folhas_pagamento_alocacoes")
+          .select("id, folha_id, empresa_id, regional_id, percentual")
+          .in("folha_id", folhaIds)
+      : Promise.resolve({ data: [] as any[], error: null }),
+  ]);
+
+  const colaboradorPorId = new Map<
+    string,
+    {
+      id: string;
+      nome: string;
+      funcao: string;
+      tipo_contratacao: string;
+      nivel_codigo: string | null;
+    }
+  >();
+  for (const c of ((colaboradoresRes.data ?? []) as any[])) {
+    colaboradorPorId.set(c.id, {
+      id: c.id,
+      nome: c.nome,
+      funcao: c.funcao,
+      tipo_contratacao: c.tipo_contratacao,
+      nivel_codigo: c.nivel?.codigo ?? null,
+    });
+  }
+
+  const empresaNomePorId = new Map<string, string>();
+  for (const e of ((empresasRes.data ?? []) as any[])) {
+    empresaNomePorId.set(e.id, e.nome_fantasia);
+  }
+  const regionalNomePorId = new Map<string, string>();
+  for (const r of ((regionaisRes.data ?? []) as any[])) {
+    regionalNomePorId.set(r.id, r.nome);
+  }
+
+  const alocacoesPorFolha = new Map<
+    string,
+    {
+      id: string;
+      empresa_id: string;
+      regional_id: string;
+      percentual: string;
+      empresa_nome: string;
+      regional_nome: string;
+    }[]
+  >();
+  for (const a of ((alocacoesRes.data ?? []) as any[])) {
+    const lista = alocacoesPorFolha.get(a.folha_id) ?? [];
+    lista.push({
+      id: a.id,
+      empresa_id: a.empresa_id,
+      regional_id: a.regional_id,
+      percentual: String(a.percentual),
+      empresa_nome: empresaNomePorId.get(a.empresa_id) ?? "",
+      regional_nome: regionalNomePorId.get(a.regional_id) ?? "",
+    });
+    alocacoesPorFolha.set(a.folha_id, lista);
+  }
+
+  const linhas: FolhaLinha[] = folhasRaw.map((l) => {
+    const c = colaboradorPorId.get(l.colaborador_id);
+    return {
       id: l.id,
       salario_base: String(l.salario_base),
-      status: l.status as FolhaLinhaStatus,
+      status: l.status,
       motivo_pendencia: l.motivo_pendencia,
       colaborador: {
-        id: l.colaborador?.id ?? "",
-        nome: l.colaborador?.nome ?? "—",
-        funcao: l.colaborador?.funcao ?? "—",
-        tipo_contratacao: l.colaborador?.tipo_contratacao ?? "clt",
-        nivel_codigo: l.colaborador?.nivel?.codigo ?? null,
+        id: c?.id ?? "",
+        nome: c?.nome ?? "—",
+        funcao: c?.funcao ?? "—",
+        tipo_contratacao: (c?.tipo_contratacao ?? "clt") as any,
+        nivel_codigo: c?.nivel_codigo ?? null,
       },
-      alocacoes: ((l.alocacoes ?? []) as any[]).map((a) => ({
-        id: a.id,
-        empresa_id: a.empresa_id,
-        regional_id: a.regional_id,
-        percentual: String(a.percentual),
-        empresa_nome: a.empresa?.nome_fantasia ?? "",
-        regional_nome: a.regional?.nome ?? "",
-      })),
-    }),
-  );
+      alocacoes: alocacoesPorFolha.get(l.id) ?? [],
+    };
+  });
 
   const empresas = (empresasRes.data ?? []) as Pick<Empresa, "id" | "nome_fantasia">[];
   const regionais = (regionaisRes.data ?? []) as {
