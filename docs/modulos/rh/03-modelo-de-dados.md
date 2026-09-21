@@ -1,5 +1,14 @@
 # 03 — Modelo de Dados (MVP)
 
+> ⚠️ **Este documento é o desenho original do MVP (setembro/2026) e está parcialmente stale.** Duas mudanças aplicadas em 2026-09-21 pelo módulo pgto-remessa alteraram o shape de `colaboradores`:
+>
+> - **`colaboradores.fornecedor_id` foi removido** (ADR 001 do pgto-remessa) — mas ele ainda aparece descrito abaixo. Ignore.
+> - **`colaboradores` ganhou 9 colunas nullable** de dados bancários (`banco_codigo`, `banco_nome`, `agencia`, `agencia_dv`, `conta`, `conta_dv`, `tipo_conta`, `pix_tipo`, `pix_chave`) — ADR 003 do pgto-remessa. Não estão descritas abaixo.
+>
+> Fontes-verdade atualizadas: [`../pgto-remessa/02-decisoes.md`](../pgto-remessa/02-decisoes.md) (ADRs 001/002/003/004) e [`../pgto-remessa/03-modelo-de-dados.md`](../pgto-remessa/03-modelo-de-dados.md).
+>
+> A decisão de não reescrever esse arquivo foi consciente: ele documenta o MVP como foi entregue e serve de referência histórica pras rodadas 1/2/3 da folha. Se causar confusão, é candidato a refactor numa sessão futura.
+
 Especificação das tabelas, enums, constraints, índices, RLS e GRANTs do MVP do RH. Este documento **não é a migration** — é o desenho que a migration vai executar. Toda decisão aqui é rastreável a `00-descoberta.md` §6 e `01-visao-geral.md`.
 
 Regras invioláveis herdadas do projeto (ver `docs/FLUXO-BANCO.md` e `CLAUDE.md`):

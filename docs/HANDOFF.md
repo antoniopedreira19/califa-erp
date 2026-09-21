@@ -62,9 +62,18 @@ Admin cadastrado: `antonio@pevetech.com.br` (role `administrador` no tenant `age
 20260916000001..000008  rh_fundacao
 20260918000001  rh_folha_mensal
 20260918000002  contas_avulsas_folha_id
+20260921100001  colaborador_sem_vinculo_fornecedor
+20260921120001  contas_avulsas_colaborador_id
+20260921140001  colaboradores_dados_bancarios
+20260921160001  empresas_contabeis_config_cnab             (revertida pelo ADR 004 do pgto-remessa)
+20260921180001  cnab_estruturas_do_arquivo
+20260921200001  config_cnab_migra_para_conta_bancaria
+20260921200002  cnab_remessas_conta_bancaria_id
+20260921220001  rpc_alocar_sequencial_cnab
+20260921230001  origem_folha_em_vw_a_pagar
 ```
 
-Última: `20260918000002`.
+Última: `20260921230001`.
 
 ## 2. Sessões recentes (índice cronológico)
 
@@ -72,7 +81,8 @@ Ordem: mais recente primeiro. Cada linha aponta para um arquivo em `docs/handoff
 
 | Data | Entrega | Handoff |
 |---|---|---|
-| 2026-09-22 | RH · Design & UX da folha e da lista de colaboradores (D1/D2/D3) | [2026-09-22-rh-design-ux-folha-e-colaboradores.md](handoffs/2026-09-22-rh-design-ux-folha-e-colaboradores.md) |
+| 2026-09-23 | pgto-remessa aberto (CNAB Santander) + impactos no RH documentados | [2026-09-23-pgto-remessa-e-impactos-no-rh.md](handoffs/2026-09-23-pgto-remessa-e-impactos-no-rh.md) |
+| 2026-09-22 | RH · Design & UX da folha e da lista de colaboradores (D1/D2/D3) + Rodada 2 (visual polish) | [2026-09-22-rh-design-ux-folha-e-colaboradores.md](handoffs/2026-09-22-rh-design-ux-folha-e-colaboradores.md) |
 | 2026-09-21 | RH · fechamento de ciclo + backlog vivo consolidado | [2026-09-21-rh-fechamento-de-ciclo.md](handoffs/2026-09-21-rh-fechamento-de-ciclo.md) |
 | 2026-09-18 | Folha Mensal · Rodada 3 (envio, aprovação, geração de títulos) | [2026-09-18-folha-mensal-rodada-3.md](handoffs/2026-09-18-folha-mensal-rodada-3.md) |
 | 2026-09-18 | Folha Mensal · Rodadas 1 e 2 (modelo + edição) | [2026-09-18-folha-mensal-rodadas-1-e-2.md](handoffs/2026-09-18-folha-mensal-rodadas-1-e-2.md) |
